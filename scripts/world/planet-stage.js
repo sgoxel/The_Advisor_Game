@@ -2862,8 +2862,8 @@ function ensureLocalStaticMaterials(){
   localStaticMaterials={
     road:make("LocalRoad",.22,.14,.075),square:make("LocalSquare",.42,.32,.19),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
-    roofWorn:make("LocalRoofWorn",.38,.27,.16),roofDamaged:make("LocalRoofDamaged",.105,.070,.052),
-    roofRepair:make("LocalRoofRepair",.48,.255,.095),roofOvergrown:make("LocalRoofOvergrown",.26,.22,.11),
+    roofWorn:make("LocalRoofWorn",.42,.36,.28),roofDamaged:make("LocalRoofDamaged",.11,.07,.05),
+    roofRepair:make("LocalRoofRepair",.65,.38,.15),roofOvergrown:make("LocalRoofOvergrown",.23,.30,.11),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.31,.14,.30),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3448,8 +3448,8 @@ function updateCanonicalNpcMotion(){
 function canonicalRoofMaterialForState(state,side,landmark){
   const visualState=String(state||"normal");
   if(visualState==="worn")return localStaticMaterials.roofWorn;
-  if(visualState==="damaged")return localStaticMaterials.roofDamaged;
-  if(visualState==="repaired")return side==="left"?localStaticMaterials.roofRepair:(landmark?localStaticMaterials.landmark:localStaticMaterials.roof);
+  if(visualState==="damaged")return side==="left"?localStaticMaterials.roofDamaged:localStaticMaterials.roofWorn;
+  if(visualState==="repaired")return localStaticMaterials.roofRepair;
   if(visualState==="overgrown")return localStaticMaterials.roofOvergrown;
   return landmark?localStaticMaterials.landmark:localStaticMaterials.roof;
 }
@@ -3989,38 +3989,31 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const roofCenter=ground+physicalHeight*s+.025;
     const leftEast=east-w*.20,rightEast=east+w*.20;
     if(item.visualState==="worn"){
-      // Both real roof planes are visibly faded/desaturated. A handful of
-      // short raised shingle losses break the surface irregularly without
-      // becoming long overlay stripes or a second roof.
-      orientedBox(leftEast-w*.10,north-d*.24,roofCenter+.002,Math.max(.42,w*.075),.040,Math.max(.72,d*.14),C.wearDark,-24);
-      orientedBox(leftEast+w*.12,north+d*.18,roofCenter+.004,Math.max(.34,w*.060),.036,Math.max(.58,d*.11),C.weather,-24);
-      orientedBox(rightEast+w*.08,north-d*.08,roofCenter+.004,Math.max(.38,w*.065),.038,Math.max(.66,d*.13),C.wear,24);
-      orientedBox(rightEast-w*.12,north+d*.31,roofCenter+.003,Math.max(.30,w*.052),.034,Math.max(.52,d*.10),C.wearDark,24);
+      // Wear is carried primarily by the two real roof planes: a desaturated,
+      // sun-bleached surface plus only two short missing-shingle runs.
+      orientedBox(leftEast-w*.10,north-d*.18,roofCenter+.003,Math.max(.30,w*.052),.036,Math.max(.60,d*.11),C.wearDark,-24);
+      orientedBox(rightEast+w*.08,north+d*.22,roofCenter+.003,Math.max(.28,w*.048),.034,Math.max(.54,d*.10),C.weather,24);
     }else if(item.visualState==="damaged"){
-      // The canonical left plane itself loses its outer eave strip. These
-      // short charred members sit on that broken edge; debris stays grounded.
-      orientedBox(leftEast-w*.12,north-d*.28,roofCenter-.006,Math.max(.28,w*.050),.090,Math.max(.76,d*.15),C.char,-24);
-      orientedBox(leftEast-w*.13,north+d*.05,roofCenter-.003,Math.max(.24,w*.044),.078,Math.max(.62,d*.12),C.burn,-24);
-      orientedBox(leftEast-w*.11,north+d*.31,roofCenter-.005,Math.max(.20,w*.038),.070,Math.max(.48,d*.09),C.ash,-24);
-      groundBox(east-w*.58,north+d*.38,.02,.82,.26,.64,C.debris);
-      groundBox(east-w*.66,north-d*.18,.02,.60,.22,.84,C.char);
+      // One real roof plane is charred and loses an outer eave strip; the
+      // opposite plane stays faded rather than becoming a second black slab.
+      // Two short broken rafters define the exposed edge and debris is grounded.
+      orientedBox(leftEast-w*.12,north-d*.20,roofCenter-.004,Math.max(.22,w*.040),.080,Math.max(.70,d*.13),C.char,-24);
+      orientedBox(leftEast-w*.11,north+d*.20,roofCenter-.004,Math.max(.20,w*.036),.072,Math.max(.58,d*.11),C.burn,-24);
+      groundBox(east-w*.58,north+d*.34,.02,.72,.22,.58,C.debris);
+      groundBox(east-w*.64,north-d*.18,.02,.54,.20,.72,C.char);
     }else if(item.visualState==="repaired"){
-      // The left canonical plane is the fresh replacement surface. Small
-      // staggered join battens/board ends stay fully inside that silhouette.
-      orientedBox(leftEast-w*.09,north-d*.27,roofCenter+.008,Math.max(.24,w*.043),.044,Math.max(.72,d*.14),C.newWoodLight,-24);
-      orientedBox(leftEast+w*.09,north-d*.02,roofCenter+.009,Math.max(.22,w*.040),.042,Math.max(.58,d*.11),C.repairDark,-24);
-      orientedBox(leftEast-w*.04,north+d*.25,roofCenter+.010,Math.max(.20,w*.036),.040,Math.max(.66,d*.13),C.newWoodLight,-24);
+      // Both real roof planes are now fresh replacement timber so recovery is
+      // unmistakable from the fixed camera. Two darker join battens remain
+      // inside the same roof silhouette and read as construction seams.
+      orientedBox(leftEast-w*.05,north-d*.16,roofCenter+.008,Math.max(.18,w*.032),.040,Math.max(.82,d*.15),C.repairDark,-24);
+      orientedBox(rightEast+w*.05,north+d*.16,roofCenter+.008,Math.max(.18,w*.032),.040,Math.max(.82,d*.15),C.repairDark,24);
     }else if(item.visualState==="overgrown"){
-      // Both canonical roof planes keep an aged olive-brown base. Moss grows
-      // as several small attached islands near real eaves, with two narrow
-      // vines continuing down the facade and a minimal grounded termination.
-      orientedBox(leftEast-w*.10,north-d*.24,roofCenter+.006,Math.max(.50,w*.090),.036,Math.max(.64,d*.12),C.moss,-24);
-      orientedBox(leftEast+w*.12,north+d*.16,roofCenter+.007,Math.max(.40,w*.072),.034,Math.max(.52,d*.10),C.greenLight,-24);
-      orientedBox(rightEast+w*.08,north-d*.02,roofCenter+.007,Math.max(.44,w*.078),.034,Math.max(.58,d*.11),C.green,24);
-      orientedBox(rightEast-w*.11,north+d*.29,roofCenter+.006,Math.max(.34,w*.060),.032,Math.max(.46,d*.09),C.moss,24);
-      orientedBox(east-w*.24,north+d*.50,ground+physicalHeight*s*.54,Math.max(.16,w*.028),Math.max(2.25,physicalHeight*.62),.15,C.green,0);
-      orientedBox(east+w*.10,north+d*.505,ground+physicalHeight*s*.45,Math.max(.13,w*.024),Math.max(1.75,physicalHeight*.48),.14,C.greenLight,0);
-      groundBox(east-w*.22,north+d*.56,.018,Math.max(.62,w*.11),.08,Math.max(.54,d*.10),C.moss);
+      // The two real roof planes become an aged olive surface. Growth reads
+      // through attached eave/facade vines rather than detached square patches.
+      orientedBox(east-w*.25,north+d*.50,ground+physicalHeight*s*.55,Math.max(.16,w*.028),Math.max(2.45,physicalHeight*.66),.14,C.green,0);
+      orientedBox(east+w*.10,north+d*.505,ground+physicalHeight*s*.46,Math.max(.13,w*.024),Math.max(1.90,physicalHeight*.52),.13,C.greenLight,0);
+      orientedBox(east-w*.03,north-d*.505,ground+physicalHeight*s*.43,Math.max(.12,w*.022),Math.max(1.65,physicalHeight*.46),.12,C.moss,0);
+      groundBox(east-w*.22,north+d*.56,.018,Math.max(.58,w*.10),.07,Math.max(.50,d*.09),C.moss);
     }
   }
   if(positions.length){
