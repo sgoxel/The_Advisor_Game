@@ -2304,32 +2304,74 @@ function buildLocalWildernessMesh(plan,frame,reveal){
 }
 function buildLocalFaunaMesh(kind,size,unit){
   const positions=[],normals=[],colors=[],indices=[],s=size/unit;
-  const palette=kind==="waterbird"?[.78,.78,.62]:kind==="bird"?[.32,.25,.13]:kind==="hare"?[.57,.43,.25]:[.52,.31,.13];
+  const palette=kind==="waterbird"?[.76,.77,.65]:kind==="bird"?[.31,.26,.16]:kind==="hare"?[.57,.43,.27]:[.53,.31,.14];
+  const dark=kind==="waterbird"?[.36,.40,.34]:kind==="bird"?[.17,.15,.11]:kind==="hare"?[.35,.26,.18]:[.31,.18,.09];
+  const light=kind==="waterbird"?[.88,.87,.72]:kind==="bird"?[.58,.47,.27]:kind==="hare"?[.79,.68,.52]:[.78,.60,.37];
   const push=(x,y,z,color=palette)=>{positions.push(x,y,z);normals.push(0,1,0);colors.push(Math.round(color[0]*255),Math.round(color[1]*255),Math.round(color[2]*255),255);return positions.length/3-1;};
-  const quad=(a,b,c,d)=>indices.push(a,b,c,a,c,d);
-  const box=(cx,cy,cz,sx,sy,sz,color=palette)=>{
-    const x=sx*.5,y=sy*.5,z=sz*.5,v=[
-      push(cx-x,cy-y,cz-z,color),push(cx+x,cy-y,cz-z,color),push(cx+x,cy+y,cz-z,color),push(cx-x,cy+y,cz-z,color),
-      push(cx-x,cy-y,cz+z,color),push(cx+x,cy-y,cz+z,color),push(cx+x,cy+y,cz+z,color),push(cx-x,cy+y,cz+z,color)
-    ];
-    quad(v[0],v[1],v[2],v[3]);quad(v[4],v[7],v[6],v[5]);quad(v[0],v[4],v[5],v[1]);quad(v[3],v[2],v[6],v[7]);quad(v[1],v[5],v[6],v[2]);quad(v[0],v[3],v[7],v[4]);
+  const tri=(a,b,c)=>indices.push(a,b,c);
+  // Reusable rounded low-poly primitive. The old implementation assembled
+  // wildlife from rectangular boxes, so even correct behavior read as props.
+  // Five latitude bands and eight radial segments keep each animal cheap while
+  // giving it a tapered, light-reactive silhouette from the gameplay camera.
+  const ellipsoid=(cx,cy,cz,rx,ry,rz,color=palette,segments=8,rings=5)=>{
+    const base=positions.length/3;
+    for(let ring=0;ring<=rings;ring++){
+      const phi=-Math.PI*.5+(ring/rings)*Math.PI,cp=Math.cos(phi),sp=Math.sin(phi);
+      for(let segment=0;segment<segments;segment++){
+        const theta=(segment/segments)*Math.PI*2;
+        push(cx+Math.cos(theta)*cp*rx,cy+sp*ry,cz+Math.sin(theta)*cp*rz,color);
+      }
+    }
+    for(let ring=0;ring<rings;ring++)for(let segment=0;segment<segments;segment++){
+      const next=(segment+1)%segments;
+      const a=base+ring*segments+segment,b=base+ring*segments+next;
+      const d=base+(ring+1)*segments+segment,c=base+(ring+1)*segments+next;
+      // Reverse the parametric winding so the outside faces remain front-facing.
+      tri(a,c,b);tri(a,d,c);
+    }
+  };
+  const pyramidY=(cx,baseY,cz,rx,rz,height,color=palette)=>{
+    const a=push(cx-rx,baseY,cz-rz,color),b=push(cx+rx,baseY,cz-rz,color),c=push(cx+rx,baseY,cz+rz,color),d=push(cx-rx,baseY,cz+rz,color),tip=push(cx,baseY+height,cz,color);
+    tri(a,c,b);tri(a,d,c);tri(a,b,tip);tri(b,c,tip);tri(c,d,tip);tri(d,a,tip);
+  };
+  const pyramidX=(baseX,cy,cz,ry,rz,length,color=palette)=>{
+    const a=push(baseX,cy-ry,cz-rz,color),b=push(baseX,cy+ry,cz-rz,color),c=push(baseX,cy+ry,cz+rz,color),d=push(baseX,cy-ry,cz+rz,color),tip=push(baseX+length,cy,cz,color);
+    tri(a,b,c);tri(a,c,d);tri(a,tip,b);tri(b,tip,c);tri(c,tip,d);tri(d,tip,a);
   };
   if(kind==="deer"){
-    box(0,s*.72,0,s*1.35,s*.62,s*.55);
-    box(s*.52,s*1.08,0,s*.28,s*.72,s*.30);
-    box(s*.82,s*1.38,0,s*.52,s*.38,s*.38);
-    for(const x of [-s*.42,s*.42])for(const z of [-s*.18,s*.18])box(x,s*.30,z,s*.12,s*.60,s*.12,[.36,.20,.09]);
-    box(s*.94,s*1.62,-s*.13,s*.10,s*.28,s*.10);box(s*.94,s*1.62,s*.13,s*.10,s*.28,s*.10);
+    // Long rounded torso + distinct neck/head/muzzle reads as an animal instead
+    // of one giant brown slab while preserving the existing physical envelope.
+    ellipsoid(-s*.08,s*.76,0,s*.70,s*.34,s*.31,palette,10,5);
+    ellipsoid(s*.45,s*1.05,0,s*.24,s*.48,s*.22,dark,8,5);
+    ellipsoid(s*.70,s*1.38,0,s*.34,s*.25,s*.24,palette,8,5);
+    ellipsoid(s*.98,s*1.32,0,s*.25,s*.14,s*.16,dark,8,4);
+    for(const x of [-s*.42,s*.36])for(const z of [-s*.19,s*.19])ellipsoid(x,s*.34,z,s*.075,s*.34,s*.07,dark,6,4);
+    pyramidY(s*.66,s*1.55,-s*.14,s*.09,s*.055,s*.26,dark);
+    pyramidY(s*.66,s*1.55,s*.14,s*.09,s*.055,s*.26,dark);
+    ellipsoid(-s*.79,s*.83,0,s*.22,s*.11,s*.11,light,6,4);
   }else if(kind==="hare"){
-    box(0,s*.48,0,s*.90,s*.58,s*.58);
-    box(s*.40,s*.72,0,s*.48,s*.46,s*.44);
-    box(s*.43,s*1.08,-s*.11,s*.11,s*.58,s*.12);box(s*.43,s*1.08,s*.11,s*.11,s*.58,s*.12);
-    box(-s*.34,s*.24,-s*.18,s*.30,s*.20,s*.18);box(-s*.34,s*.24,s*.18,s*.30,s*.20,s*.18);
+    ellipsoid(-s*.10,s*.46,0,s*.47,s*.31,s*.32,palette,9,5);
+    ellipsoid(s*.31,s*.64,0,s*.30,s*.25,s*.25,light,8,5);
+    ellipsoid(s*.39,s*1.03,-s*.105,s*.085,s*.34,s*.085,dark,6,5);
+    ellipsoid(s*.39,s*1.03,s*.105,s*.085,s*.34,s*.085,dark,6,5);
+    ellipsoid(-s*.38,s*.22,-s*.19,s*.23,s*.12,s*.13,dark,6,4);
+    ellipsoid(-s*.38,s*.22,s*.19,s*.23,s*.12,s*.13,dark,6,4);
+    ellipsoid(-s*.54,s*.50,0,s*.15,s*.15,s*.15,[.88,.82,.70],7,4);
   }else{
-    box(0,s*.44,0,s*.76,s*.36,s*.42);
-    box(s*.42,s*.57,0,s*.34,s*.32,s*.30);
-    box(-s*.04,s*.48,-s*.42,s*.58,s*.08,s*.58);box(-s*.04,s*.48,s*.42,s*.58,s*.08,s*.58);
-    if(kind==="waterbird"){box(-s*.18,s*.18,-s*.12,s*.08,s*.36,s*.08,[.45,.28,.10]);box(-s*.18,s*.18,s*.12,s*.08,s*.36,s*.08,[.45,.28,.10]);}
+    const water=kind==="waterbird";
+    ellipsoid(-s*.04,s*.48,0,s*.42,s*.22,s*.28,palette,9,5);
+    ellipsoid(s*.39,s*(water?.67:.59),0,s*(water?.20:.18),s*(water?.20:.18),s*(water?.19:.18),light,8,4);
+    if(water)ellipsoid(s*.25,s*.61,0,s*.12,s*.30,s*.13,light,7,5);
+    pyramidX(s*.53,s*(water?.66:.58),0,s*.07,s*.095,s*.28,water?[.72,.48,.12]:[.66,.49,.20]);
+    // Broad, thin rounded wings give both idle and takeoff frames a clear bird
+    // silhouette without new draw calls or per-frame mesh deformation.
+    ellipsoid(-s*.07,s*.53,-s*.34,s*.37,s*.075,s*.42,dark,8,4);
+    ellipsoid(-s*.07,s*.53,s*.34,s*.37,s*.075,s*.42,dark,8,4);
+    pyramidX(-s*.34,s*.47,0,s*.09,s*.20,-s*.34,dark);
+    if(water){
+      ellipsoid(-s*.12,s*.20,-s*.105,s*.045,s*.22,s*.045,[.43,.28,.12],6,4);
+      ellipsoid(-s*.12,s*.20,s*.105,s*.045,s*.22,s*.045,[.43,.28,.12],6,4);
+    }
   }
   normals.fill(0);
   for(let i=0;i<indices.length;i+=3){
