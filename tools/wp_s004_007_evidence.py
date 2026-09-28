@@ -45,14 +45,50 @@ def candidate_professions():
       }).filter(x=>x&&x.plan?.valid&&x.visible).slice(0,4);
     """,PRIORITY)
 
-def prepare(profession):
+def prepare_focus(profession):
     return driver.execute_script("""
       const profession=arguments[0],stage=PlanetStage.snapshot(),seed=stage.activeSeed;
       const samples=WorkCycles.evidenceSamples(seed,profession);
       let sample=samples.find(s=>s.targetSource==="work-choreography")||
         samples.find(s=>s.targetSource==="outdoor-worksite")||null;
       if(!sample)return {ok:false,reason:"no-visible-sample",profession,seed,samples};
+      // Focus/LOD preparation must settle before the resident is advanced.
+      // Otherwise rebuilding local presentation can clear the exact NPC entities
+      // after the worker already reached the requested choreography step.
       PlanetStage.applyAuthoritativeFantasyTime(sample.when,"WP-S004-007 evidence");
+      PlanetStage.setWorldTileFocus(sample.target.x,sample.target.y);
+      PlanetStage.setScaleIndex(8);
+      return {ok:true,seed,sample,verify:WorkCycles.verify(seed),work:WorkCycles.snapshot(seed)};
+    """,profession)
+
+def resource_state():
+    return driver.execute_script("""
+      const s=PlanetStage.snapshot(),rb=s.projection.resourceBudget||{},ls=s.projection.localStatic||{};
+      return {
+        ready:Boolean(s.ready),preparing:Boolean(rb.preparing),standInActive:Boolean(rb.standInActive),
+        pendingPreparationCount:Number(rb.pendingPreparationCount||0),
+        requestedSignature:rb.requestedSignature||null,activeSignature:rb.activeSignature||null,
+        scaleIndex:Number(s.zoom.scaleIndex),scaleLabel:s.zoom.scaleLabel,
+        tier:ls.revealTier,localStaticActive:Boolean(ls.active),localBuildingCount:Number(ls.buildingCount||0)
+      };
+    """)
+
+def resource_ready():
+    state=resource_state()
+    requested=state.get("requestedSignature")
+    active=state.get("activeSignature")
+    signature_ready=(not requested) or (bool(active) and str(active)==str(requested))
+    return (
+        state["ready"] and not state["preparing"] and not state["standInActive"] and
+        state["pendingPreparationCount"]==0 and signature_ready and state["scaleIndex"]==8 and
+        state["tier"] in ("refined","full") and state["localStaticActive"] and
+        state["localBuildingCount"]>0
+    )
+
+def activate(info):
+    return driver.execute_script("""
+      const info=arguments[0],sample=info.sample,seed=info.seed;
+      PlanetStage.applyAuthoritativeFantasyTime(sample.when,"WP-S004-007 evidence settled");
       ResidentMovement.reset(seed);
       let state=null;
       for(let i=0;i<260;i++){
@@ -60,22 +96,25 @@ def prepare(profession):
         state=ResidentMovement.get(sample.residentId);
         if(state?.status==="arrived"&&state?.workCycle?.stepId===sample.stepId)break;
       }
-      PlanetStage.setWorldTileFocus(sample.target.x,sample.target.y);
-      PlanetStage.setScaleIndex(8);
-      return {ok:true,seed,sample,state,verify:WorkCycles.verify(seed),work:WorkCycles.snapshot(seed)};
-    """,profession)
+      return {...info,state,verify:WorkCycles.verify(seed),work:WorkCycles.snapshot(seed)};
+    """,info)
 
 def visual_state(resident_id,building_id):
     return driver.execute_script("""
       const residentId=arguments[0],buildingId=arguments[1],s=PlanetStage.snapshot();
       const exact=PlanetStage.workCycleEvidenceState(residentId),rb=s.projection.resourceBudget||{},ls=s.projection.localStatic||{},np=s.npcPresentation||{};
+      const targets=PlanetStage.inspectionTargets?.()||[];
+      const npcTarget=targets.find(x=>x.type==="npc"&&String(x.id)===String(residentId))||null;
+      const buildingTarget=buildingId?targets.find(x=>x.type==="building"&&String(x.id)===String(buildingId))||null:null;
       const workplaceKnown=Boolean(!buildingId||(s.buildingActivity?.buildings||[]).some(x=>String(x.id)===String(buildingId)));
       return {
-        settled:Boolean(!rb.preparing&&!rb.standInActive),
-        requestedSignature:rb.requestedSignature,localStaticSignature:ls.signature,preparing:Boolean(rb.preparing),
+        settled:Boolean(!rb.preparing&&!rb.standInActive&&Number(rb.pendingPreparationCount||0)===0&&
+          (!rb.requestedSignature||(rb.activeSignature&&String(rb.activeSignature)===String(rb.requestedSignature)))),
+        requestedSignature:rb.requestedSignature,activeSignature:rb.activeSignature,localStaticSignature:ls.signature,
+        preparing:Boolean(rb.preparing),pendingPreparationCount:Number(rb.pendingPreparationCount||0),
         standInActive:Boolean(rb.standInActive),scaleIndex:s.zoom.scaleIndex,scaleLabel:s.zoom.scaleLabel,
         tier:ls.revealTier,localStaticActive:Boolean(ls.active),localBuildingCount:Number(ls.buildingCount||0),
-        workplaceKnown,exact,
+        workplaceKnown,npcInspectionBounds:npcTarget?.bounds||null,workplaceInspectionBounds:buildingTarget?.bounds||null,exact,
         exactToolActive:Boolean(exact?.toolEnabled&&(np.activeWorkCycleResidentIds||[]).includes(String(residentId))),
         activeWorkCycleResidentIds:np.activeWorkCycleResidentIds||[],
         activeWorkCycleToolCount:Number(np.activeWorkCycleToolCount||0),
@@ -86,9 +125,13 @@ def visual_state(resident_id,building_id):
 def visual_ready(info):
     state=visual_state(info["sample"]["residentId"],info["sample"].get("buildingId"))
     exact=state.get("exact") or {}
+    npc_bounds=state.get("npcInspectionBounds")
+    building_id=info["sample"].get("buildingId")
+    workplace_bounds=state.get("workplaceInspectionBounds")
     return (
         state["settled"] and state["scaleIndex"]==8 and state["tier"] in ("refined","full") and
         state["localStaticActive"] and state["localBuildingCount"]>0 and state["workplaceKnown"] and
+        bool(npc_bounds) and (not building_id or bool(workplace_bounds)) and
         exact.get("visible") and exact.get("inViewport") and state["exactToolActive"] and
         exact.get("movementStatus")=="arrived" and
         (exact.get("workCycle") or {}).get("stepId")==info["sample"]["stepId"]
@@ -131,11 +174,16 @@ try:
 
     for idx,candidate in enumerate(candidates):
         profession=candidate["profession"]
-        info=prepare(profession)
+        info=prepare_focus(profession)
         if not info.get("ok"):
             raise RuntimeError(f"prepare failed: {info}")
-        if info["state"].get("status")!="arrived":
-            raise RuntimeError(f"worker failed to arrive before visual wait: {info['state']}")
+        try:
+            wait.until(lambda _d: resource_ready())
+        except TimeoutException:
+            raise RuntimeError("resource readiness timeout for "+profession+": "+json.dumps(resource_state()))
+        info=activate(info)
+        if (info.get("state") or {}).get("status")!="arrived":
+            raise RuntimeError(f"worker failed to arrive after settled resource focus: {info.get('state')}")
         try:
             wait.until(lambda _d: visual_ready(info))
         except TimeoutException:
