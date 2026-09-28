@@ -2548,15 +2548,26 @@ function createEnvironmentReactionGroup(kind,index){
   const group=new pc.Entity("EnvironmentReaction-"+kind+"-"+index),children=[];
   environmentalReactionRoot.addChild(group);
   if(kind==="dust"){
-    const specs=[[-.46,.34,-.12,.90,.64,.74],[.04,.48,.06,1.16,.86,.96],[.54,.30,-.16,.82,.56,.70]];
+    // Three overlapping translucent flattened lobes read as one brief dust puff
+    // instead of three opaque stones. Keep the existing fixed pooled drawables.
+    const specs=[[-.54,.26,-.12,1.30,.38,1.04],[.02,.36,.06,1.55,.48,1.20],[.60,.24,-.16,1.16,.34,.92]];
     for(let i=0;i<specs.length;i++){
       const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"sphere",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5]);
+      e.render.castShadows=false;e.render.receiveShadows=false;
       children.push(e);
     }
   }else if(kind==="grassBend"){
-    const specs=[[-.50,.45,-.16,-60],[-.16,.50,.14,-48],[.18,.47,-.10,50],[.52,.42,.16,62]];
+    // Rounded, overlapping blades form a small bent tuft/fan rather than four
+    // rigid box sticks. This reuses the shared cylinder mesh and pool budget.
+    const specs=[
+      [-.38,.30,-.14,-58,-16,.24,.74],
+      [-.12,.34,.14,-34,10,.27,.84],
+      [.14,.32,-.10,34,-8,.26,.80],
+      [.40,.28,.16,58,14,.23,.70]
+    ];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"box",environmentalReactionMaterials.grass,q[0],q[1],q[2],.14,.92,.095,0,0,q[3]);
+      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"cylinder",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[5],q[6],.13,0,q[4],q[3]);
+      e.render.castShadows=false;
       children.push(e);
     }
   }else{
@@ -2572,8 +2583,8 @@ function createEnvironmentReactionGroup(kind,index){
 function ensureEnvironmentReactionPool(){
   if(environmentalReactionRoot||!pc||!tangentPatch)return Boolean(environmentalReactionRoot);
   environmentalReactionMaterials={
-    dust:environmentReactionMaterial("EnvironmentDust",.74,.58,.36,.76),
-    grass:environmentReactionMaterial("EnvironmentBentGrass",.28,.66,.15,.98),
+    dust:environmentReactionMaterial("EnvironmentDust",.76,.62,.40,.34),
+    grass:environmentReactionMaterial("EnvironmentBentGrass",.24,.58,.12,.95),
     footprint:environmentReactionMaterial("EnvironmentFootprint",.28,.15,.055,.90)
   };
   environmentalReactionRoot=new pc.Entity("LocalEnvironmentalReactions");
@@ -2644,8 +2655,8 @@ function updateEnvironmentalReactions(){
     visibleCount++;activeDrawCallEstimate+=slot.children.length;
     const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),t=clamp(age/slot.lifetimeMs,0,1),ground=localGroundHeightUnits(east,north,frame);
     let scale=1,liftMeters=.035;
-    if(slot.kind==="dust"){scale=.90+t*.48;liftMeters=.18+t*.50;}
-    else if(slot.kind==="grassBend"){scale=1-t*.12;liftMeters=.075;}
+    if(slot.kind==="dust"){scale=.92+t*.70;liftMeters=.12+t*.38;}
+    else if(slot.kind==="grassBend"){scale=1-t*.18;liftMeters=.055;}
     else{scale=1-t*.06;liftMeters=.055;}
     slot.group.setLocalPosition(east/unit,ground+liftMeters/unit,-north/unit);
     slot.group.setLocalScale(scale/unit,scale/unit,scale/unit);
