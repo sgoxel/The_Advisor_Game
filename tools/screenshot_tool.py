@@ -6456,19 +6456,18 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
         label,kind,biome,mode,viewport=plan[min(frame_index,len(plan)-1)]
         target_w,target_h=int(viewport[0]),int(viewport[1])
-        driver.set_window_size(target_w,target_h);time.sleep(.15)
-        # Selenium sizes the browser outer window, while the acceptance proof
-        # records the actual gameplay viewport (window.innerWidth/innerHeight).
-        # Compensate for runner chrome so the requested phone dimensions are
-        # truthful inner viewports rather than weakening the validator.
+        # Size by the browser's own outer-vs-inner chrome delta. Using
+        # WebDriver get_window_size() here can lag one resize on headless Chrome
+        # and caused the old compensator to oscillate by exactly 143 px.
         for _ in range(3):
+            metrics=driver.execute_script("return {iw:innerWidth,ih:innerHeight,ow:outerWidth,oh:outerHeight}")
+            chrome_w=max(0,int(metrics.get("ow") or 0)-int(metrics.get("iw") or 0))
+            chrome_h=max(0,int(metrics.get("oh") or 0)-int(metrics.get("ih") or 0))
+            driver.set_window_size(max(320,target_w+chrome_w),max(240,target_h+chrome_h))
+            time.sleep(.18)
             inner=driver.execute_script("return {w:innerWidth,h:innerHeight}")
-            dw=target_w-int(inner.get("w") or 0);dh=target_h-int(inner.get("h") or 0)
-            if abs(dw)<=1 and abs(dh)<=1:
+            if abs(int(inner.get("w") or 0)-target_w)<=1 and abs(int(inner.get("h") or 0)-target_h)<=1:
                 break
-            outer=driver.get_window_size()
-            driver.set_window_size(max(320,int(outer.get("width") or target_w)+dw),max(240,int(outer.get("height") or target_h)+dh))
-            time.sleep(.12)
         inner=driver.execute_script("return {w:innerWidth,h:innerHeight}")
         if abs(int(inner.get("w") or 0)-target_w)>1 or abs(int(inner.get("h") or 0)-target_h)>1:
             raise RuntimeError(f"Unable to establish requested wildlife inner viewport {viewport}: {inner}")
@@ -6554,7 +6553,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 return Number((wr.triggerByKind||{})[kind]||0)>before &&
                        (wr.actors||[]).some(a=>a.id===id&&["flee","takeoff","return"].includes(a.state));
             """,kind,before,str(actor["id"])))
-            time.sleep(.12)
+            time.sleep(.30)
 
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),wr=s.wildlifeReaction||{},r=s.projection?.resourceBudget||{},kind=arguments[1],targetId=arguments[2];
