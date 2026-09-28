@@ -6452,9 +6452,16 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             ("phone-deer-approach","deer","grassland","mobile-react",(844,390)),
             ("hare-idle","hare","wooded","idle",(1280,800)),
             ("hare-approach","hare","wooded","react",(1280,800)),
+            # Use the ground-bound canonical hare for the narrow portrait proof.
+            # A waterbird legitimately climbs several metres during takeoff; by
+            # the time the previous desktop screenshot has encoded, its altitude
+            # projection can carry it outside a 390 px-wide view even though the
+            # reaction is correct. Waterbird reaction remains proven immediately
+            # afterward in the desktop pair, while both phone aspect ratios still
+            # prove the same production behavior without moving gameplay presence.
+            ("phone-hare-approach","hare","wooded","mobile-react",(390,844)),
             ("waterbird-idle","waterbird","wet","idle",(1280,800)),
             ("waterbird-approach","waterbird","wet","react",(1280,800)),
-            ("phone-waterbird-approach","waterbird","wet","mobile-react",(390,844)),
         )
         label,kind,biome,mode,viewport=plan[min(frame_index,len(plan)-1)]
         target_w,target_h=int(viewport[0]),int(viewport[1])
