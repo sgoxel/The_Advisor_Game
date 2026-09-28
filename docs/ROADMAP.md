@@ -138,7 +138,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S004-004` — Autonomous Indoor/Outdoor Route Execution + Visible Movement — COMPLETED
 - `WP-S004-004-001` — NPC Building Approach, Occlusion + Separation — COMPLETED
 - `WP-S004-005` — Interior Action Execution + Character State Presentation — COMPLETED
-- `WP-S004-006` — Local NPC Social Encounters + Group Activity — IN PROGRESS (functional + visual accepted; deployment verification pending)
+- `WP-S004-006` — Local NPC Social Encounters + Group Activity — COMPLETED
 - `WP-S004-007` — Profession-Specific Visible Work Cycles + Workplace Choreography
 - `WP-S004-008` — Contextual NPC Reactions + Local Social Boundaries
 - `WP-S004-009` — Time-of-Day Settlement Activity Rhythm
