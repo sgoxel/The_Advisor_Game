@@ -2898,26 +2898,31 @@ function sharedLocalPrimitive(type){
       box(.60,.67,-.575,.22,.18,.055,wood);
       box(.57,.80,-.575,.30,.045,.045,wood);
     }else if(type==="activity-forge-accessory"){
-      const soot=[72,66,61,255],iron=[90,83,76,255],ember=[255,116,28,255];
-      // High chimney/hood clears the roof silhouette; the small T-shaped anvil
-      // remains grounded just outside the front wall. The two silhouettes make
-      // a working forge legible without a broad colored apron.
-      box(.28,1.02,.16,.16,.72,.16,soot);
-      box(.28,1.38,.16,.25,.10,.25,soot);
-      box(-.20,.12,-.70,.10,.24,.10,iron);
-      box(-.20,.245,-.70,.34,.10,.16,iron);
-      box(-.33,.245,-.70,.12,.075,.11,iron);
-      box(.02,.08,-.69,.18,.07,.18,ember);
+      const soot=[58,54,50,255],iron=[92,86,78,255],ember=[255,104,24,255],hot=[255,206,112,255];
+      // Keep the forge legible from the fixed steep camera by letting the stack
+      // and hood break the front roof/eave silhouette. The anvil remains a small
+      // grounded secondary cue; no broad colored apron is used.
+      box(.28,1.06,-.20,.14,.66,.14,soot);
+      box(.28,1.40,-.20,.24,.09,.24,soot);
+      box(-.20,.70,-.585,.34,.22,.11,iron);
+      box(-.20,.63,-.648,.24,.07,.07,hot);
+      box(-.24,.13,-.69,.10,.25,.10,iron);
+      box(-.24,.255,-.69,.34,.10,.15,iron);
+      box(-.37,.255,-.69,.12,.075,.10,iron);
+      box(.03,.075,-.69,.16,.065,.16,ember);
     }else{
-      const warm=[255,232,146,255],hot=[255,248,205,255],frame=[106,70,39,255];
-      // Small paired gable/window openings plus one bracket lantern. There is no
-      // broad facade slab: only believable openings remain visible at night.
-      box(-.19,.63,-.515,.22,.22,.026,warm);
-      box(.19,.63,-.515,.22,.22,.026,hot);
-      box(-.19,.63,-.535,.025,.26,.035,frame);
-      box(.19,.63,-.535,.025,.26,.035,frame);
-      box(.42,.48,-.60,.055,.26,.055,frame);
-      box(.42,.36,-.62,.12,.12,.12,hot);
+      const warm=[255,224,118,255],hot=[255,248,205,255],frame=[89,61,36,255];
+      // Two tiny lit dormer/window boxes rise through the roof silhouette, so
+      // the state reads as occupied architecture rather than a detached marker.
+      // A restrained eave lantern reinforces the entrance without becoming a
+      // full facade overlay.
+      box(-.19,1.035,-.18,.25,.25,.20,frame);
+      box(.19,1.035,-.18,.25,.25,.20,frame);
+      box(-.19,1.025,-.292,.17,.14,.035,warm);
+      box(.19,1.025,-.292,.17,.14,.035,hot);
+      box(.40,.56,-.61,.045,.25,.045,frame);
+      box(.40,.43,-.635,.11,.13,.11,hot);
+      box(.40,.52,-.635,.15,.035,.035,frame);
     }
     mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
   }else{
