@@ -6579,7 +6579,11 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 # new terrain resource: the ready parent/stand-in remains on
                 # screen while the bounded focus request prepares.
                 driver.execute_script("""
-                    const x=BigInt(arguments[0])+3n,y=BigInt(arguments[1]);
+                    // Approach from one canonical tile away. This still exceeds
+                    // the production 0.6 m movement gate and remains far inside
+                    // every species trigger radius, while keeping the reacting
+                    // actor inside narrow portrait framing after the phone resize.
+                    const x=BigInt(arguments[0])+1n,y=BigInt(arguments[1]);
                     window.PlanetStage.setWorldTileFocus(String(x),String(y));window.PlanetStage.setZoomScalar(1);
                 """,str(tile["x"]),str(tile["y"]))
                 WebDriverWait(driver,12.0).until(lambda d:d.execute_script("""
