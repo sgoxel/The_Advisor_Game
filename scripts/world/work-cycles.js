@@ -262,7 +262,7 @@ function evidenceSamples(seedValue,profession){
     samples.push(Object.freeze({
       residentId:resident.id,residentName:resident.displayName||resident.name,profession:resident.profession,
       stepId:step.id,stepIndex:phase.index,label:step.label,target:step.target,targetSource:step.targetSource,
-      interactionObjectId:step.interactionObjectId,action:step.action,
+      buildingId:step.buildingId,interactionObjectId:step.interactionObjectId,interactionObjectType:step.interactionObjectType,action:step.action,
       when:Object.freeze({year:1100,month:1,day:1,hour:Math.floor(minute/60),minute:minute%60,second:0})
     }));
   }
