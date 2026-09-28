@@ -3663,21 +3663,23 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,-1.25,.15,2.1,.90,.70,C.wood);
       box(anchor,b,1.15,.05,1.6,1.15,.15,C.green);
     }else if(fn==="lodging"){
-      box(anchor,b,0,0,6.4,4.2,.07,[.44,.33,.18]);
-      // Stable gate + compact horse silhouette make lodging readable as an inn
-      // yard instead of a generic fence. The opposite side keeps two tables.
-      box(anchor,b,-2.30,.95,.24,.24,1.65,C.wood);
-      box(anchor,b,-.55,.95,.24,.24,1.65,C.wood);
-      box(anchor,b,-1.42,.95,3.70,.22,.24,C.wood,1.38);
-      box(anchor,b,-1.52,.10,1.75,.62,.72,[.33,.18,.08],.48);
-      box(anchor,b,-.82,.10,.38,.42,.62,[.36,.20,.09],.78);
-      box(anchor,b,-.58,.10,.48,.42,.38,[.36,.20,.09],1.05);
-      box(anchor,b,-2.02,.08,.16,.18,.82,[.25,.14,.07],.05);
-      box(anchor,b,-1.28,.08,.16,.18,.82,[.25,.14,.07],.05);
-      box(anchor,b,.85,.28,1.45,1.05,.16,C.woodLight,.70);
-      box(anchor,b,2.10,.28,1.45,1.05,.16,C.woodLight,.70);
-      box(anchor,b,1.47,1.45,.20,.20,1.75,C.wood);
-      box(anchor,b,1.47,1.45,1.05,.12,.62,[.71,.48,.20],1.42);
+      box(anchor,b,0,0,6.8,4.2,.07,[.48,.36,.18]);
+      // Broad stable-yard footprint: straw pad + U-shaped rails remain readable
+      // from the fixed near-top-down camera without becoming a floating icon.
+      box(anchor,b,-1.45,-.05,3.75,2.20,.10,[.60,.46,.18],.06);
+      box(anchor,b,-2.92,.76,.20,3.55,.56,C.wood,.12);
+      box(anchor,b,.02,.76,.20,3.55,.56,C.wood,.12);
+      box(anchor,b,-1.45,1.78,3.15,.20,.56,C.wood,.12);
+      // Low, elongated horse silhouette plus neck/head makes the stable purpose
+      // legible in plan view instead of depending on height-only detail.
+      box(anchor,b,-1.58,-.22,2.30,.82,.70,[.28,.14,.06],.20);
+      box(anchor,b,-.54,-.06,.52,.58,.58,[.31,.16,.07],.42);
+      box(anchor,b,-.28,.02,.62,.52,.38,[.34,.18,.08],.78);
+      // Two inn-yard tables and a tall hanging sign distinguish lodging from farm.
+      box(anchor,b,1.05,.18,1.55,1.10,.18,C.woodLight,.62);
+      box(anchor,b,2.28,.18,1.55,1.10,.18,C.woodLight,.62);
+      box(anchor,b,1.67,1.42,.22,.22,1.82,C.wood);
+      box(anchor,b,1.67,1.42,1.12,.14,.68,[.78,.54,.22],1.46);
     }else if(fn==="market"){
       box(anchor,b,0,0,6.8,4.0,.07,[.47,.36,.18]);
       box(anchor,b,0,.15,5.4,1.15,.78,C.woodLight);
@@ -3690,20 +3692,23 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,-2.45,.10,.20,.20,2.30,C.wood);
       box(anchor,b,2.45,.10,.20,.20,2.30,C.wood);
     }else if(fn==="craft"){
-      box(anchor,b,0,0,6.4,4.2,.07,[.27,.23,.18]);
-      // Raised T-profile anvil on a stump.
-      box(anchor,b,.35,.15,.55,.72,.92,C.wood,.05);
-      box(anchor,b,.35,.15,2.15,.62,.30,[.18,.20,.20],.92);
-      box(anchor,b,-.42,.15,.72,.86,.34,[.22,.24,.24],1.08);
-      // Forge hood/chimney rises well above the yard silhouette.
-      box(anchor,b,-1.80,.55,1.55,1.18,.78,[.18,.17,.15],.42);
-      box(anchor,b,-1.80,.55,.72,.72,2.55,C.stone,1.10);
-      box(anchor,b,-1.80,.55,1.02,1.02,.24,[.12,.12,.11],3.56);
-      box(anchor,b,-1.80,.02,.78,.42,.20,[.82,.23,.06],.62);
-      // Fuel/ore pile stays grounded and irregular.
-      box(anchor,b,1.82,.42,1.55,1.02,.62,C.wood,.02);
-      box(anchor,b,2.16,.18,.72,.76,.48,[.24,.25,.23],.10);
-      box(anchor,b,1.42,.10,.62,.68,.38,[.18,.19,.18],.08);
+      box(anchor,b,0,0,6.8,4.2,.07,[.24,.22,.19]);
+      // Dark forge apron and bright hearth form a broad top-down smithy footprint.
+      box(anchor,b,-1.72,.34,2.45,2.05,.12,[.18,.17,.15],.08);
+      box(anchor,b,-1.72,.20,1.48,1.18,.42,[.31,.30,.27],.20);
+      box(anchor,b,-1.72,.08,.84,.56,.16,[.86,.28,.06],.62);
+      // Oversized low T-anvil silhouette: broad cap + stem on a stump, readable
+      // in plan view while remaining ordinary physical yard geometry.
+      box(anchor,b,.32,.05,.78,.86,.72,C.wood,.05);
+      box(anchor,b,.32,.05,2.55,.72,.30,[.16,.18,.18],.76);
+      box(anchor,b,-.50,.05,.82,1.12,.30,[.20,.22,.22],.78);
+      // Forge hood/chimney supplies the vertical smithy cue without carrying it.
+      box(anchor,b,-1.72,.58,.82,.82,2.45,C.stone,1.00);
+      box(anchor,b,-1.72,.58,1.08,1.08,.22,[.11,.11,.10],3.43);
+      // Fuel and ore split into contrasting grounded piles on the work side.
+      box(anchor,b,1.88,.42,1.72,1.02,.58,C.wood,.02);
+      box(anchor,b,2.18,.02,.86,.82,.50,[.25,.26,.24],.10);
+      box(anchor,b,1.45,-.12,.76,.72,.42,[.14,.15,.15],.08);
     }else if(fn==="storage"){
       box(anchor,b,0,0,6.4,3.8,.07,[.42,.35,.24]);
       box(anchor,b,-1.75,.10,1.45,1.45,1.20,C.crate);
