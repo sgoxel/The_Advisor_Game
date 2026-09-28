@@ -8,6 +8,7 @@ const DESKTOP_PARTICLE_LIMIT=96;
 const TABLET_PARTICLE_LIMIT=64;
 const PHONE_PARTICLE_LIMIT=40;
 const EVIDENCE_QUERY_KEY="weatherEvidence";
+const WEATHER_CACHE_LIMIT=32;
 
 let overlay=null;
 let ctx=null;
@@ -28,10 +29,18 @@ let lastWidth=0;
 let lastHeight=0;
 let lastDpr=1;
 let hidden=false;
+let spatialContextCacheKey="";
+let spatialContextCacheRegion=null;
+let weatherCache=new Map();
+let spatialContextCacheHits=0;
+let weatherCacheHits=0;
+let canvasFilterWrites=0;
+let lastCanvasFilter="";
+let lastCanvasFilterCanvas=null;
 
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function round(v,digits=4){const f=10**digits;return Math.round(Number(v)*f)/f}
-function currentSeed(stage){return String(window.SeedSystem?.getCampaign?.()?.seed||stage?.activeSeed||window.SeedSystem?.getSettings?.()?.seed||"")}
+function currentSeed(stage){return String(stage?.activeSeed||window.SeedSystem?.getCampaign?.()?.seed||window.SeedSystem?.getSettings?.()?.seed||"")}
 function evidenceMode(){try{return new URLSearchParams(location.search).get(EVIDENCE_QUERY_KEY)==="1"}catch{return false}}
 function fantasyNow(){return evidenceStamp||window.GameTime?.getNow?.()||null}
 function stampKey(stamp){
@@ -56,8 +65,7 @@ function deviceClass(){
   if(short<=900||coarse)return "tablet";
   return "desktop";
 }
-function particleLimit(){
-  const cls=deviceClass();
+function particleLimit(cls=deviceClass()){
   const base=cls==="phone"?PHONE_PARTICLE_LIMIT:cls==="tablet"?TABLET_PARTICLE_LIMIT:DESKTOP_PARTICLE_LIMIT;
   return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches?Math.min(24,base):base;
 }
@@ -67,12 +75,20 @@ function focusContext(tileOverride=null,stampOverride=null){
   const seed=currentSeed(stage);if(!seed)return null;
   const tile=tileOverride||stage.canonicalFocus?.worldTile||{x:"0",y:"0"};
   const stamp=stampOverride||fantasyNow();if(!stamp)return null;
-  const region=window.RegionProfile?.at?.(seed,String(tile.x),String(tile.y))||null;
+  const normalizedTile=Object.freeze({x:String(tile.x),y:String(tile.y)});
+  const spatialKey=[seed,normalizedTile.x,normalizedTile.y].join("|");
+  let region=null;
+  if(spatialKey===spatialContextCacheKey&&spatialContextCacheRegion){
+    region=spatialContextCacheRegion;spatialContextCacheHits++;
+  }else{
+    region=window.RegionProfile?.at?.(seed,normalizedTile.x,normalizedTile.y)||null;
+    if(region){spatialContextCacheKey=spatialKey;spatialContextCacheRegion=region}
+  }
   if(!region)return null;
-  const lat=Number(stage.canonicalFocus?.latitudeDegrees||0)*Math.PI/180,lon=Number(stage.canonicalFocus?.longitudeDegrees||0)*Math.PI/180;
-  const geo=window.PlanetGeography?.create?.(seed)||null;
-  const surface=geo?.sampleLatLon?.(lat,lon)||null;
-  return Object.freeze({stage,seed,tile:Object.freeze({x:String(tile.x),y:String(tile.y)}),stamp,region,surface});
+  // Weather currently depends on immutable RegionProfile + fantasy time only.
+  // Do not resample PlanetGeography on every presentation poll when that sample
+  // is not an input to weather truth.
+  return Object.freeze({stage,seed,tile:normalizedTile,stamp,region});
 }
 function seasonFactor(month){
   const m=Math.max(1,Math.min(12,Number(month)||1));
@@ -87,6 +103,10 @@ function chooseWeather(context){
   const bucket=Math.floor((Number(stamp.hour)||0)/PERIOD_HOURS);
   const period=[stamp.year,stamp.month,stamp.day,bucket].join(":");
   const regionalKey=[context.region.id,context.region.revision,period].join("|");
+  const cacheKey=context.seed+"|"+regionalKey;
+  if(weatherCache.has(cacheKey)){
+    const cached=weatherCache.get(cacheKey);weatherCache.delete(cacheKey);weatherCache.set(cacheKey,cached);weatherCacheHits++;return cached;
+  }
   const roll=foundationUnit(context.seed,"regional-weather:state:"+regionalKey);
   const intensityRoll=foundationUnit(context.seed,"regional-weather:intensity:"+regionalKey);
   const directionRoll=foundationUnit(context.seed,"regional-weather:wind-direction:"+regionalKey);
@@ -112,13 +132,16 @@ function chooseWeather(context){
   const wetness=precipitation>0?clamp(.32+precipitation*.62,0,1):state==="fog"?.16:0;
   const shelterPreferred=(state==="rain"&&intensity>=.55)||state==="storm";
   const signature="RW|"+context.seed+"|"+regionalKey+"|"+state+"|"+Math.round(intensity*1000);
-  return Object.freeze({
+  const result=Object.freeze({
     state,intensity:round(intensity),precipitation:round(precipitation),fog:round(fog),wetness:round(wetness),windIntensity:round(windIntensity),windDirectionDegrees:round(directionRoll*360,2),shelterPreferred,
     periodHours:PERIOD_HOURS,periodBucket:bucket,periodKey:period,regionalKey,signature,
     regionId:context.region.id,regionName:context.region.name,regionRevision:context.region.revision,
     climate:String(i.climate||"unknown"),averageMoisturePercent:Number(i.averageMoisturePercent||0),averageTemperatureC:Number(i.averageTemperatureC||0),waterAccess:Number(i.waterAccess||0),
     authority:"SEED + RegionProfile + fantasy time",deterministic:true
   });
+  weatherCache.set(cacheKey,result);
+  while(weatherCache.size>WEATHER_CACHE_LIMIT)weatherCache.delete(weatherCache.keys().next().value);
+  return result;
 }
 function previewAt(tile,stamp){const c=focusContext(tile,stamp);return chooseWeather(c)}
 function findEvidenceTimes(states,tile=null,baseStamp=null,maxDays=180){
@@ -149,9 +172,9 @@ function resizeOverlay(){
   if(w===lastWidth&&h===lastHeight&&dpr===lastDpr)return;
   lastWidth=w;lastHeight=h;lastDpr=dpr;overlay.width=w;overlay.height=h;
 }
-function initParticles(weather){
-  const count=weather&&(weather.precipitation>0||weather.state==="windy"||weather.state==="fog")?particleLimit():0,arr=[];
-  const seed=currentSeed(window.PlanetStage?.snapshot?.()||{});
+function initParticles(weather,seedValue,limit=particleLimit()){
+  const count=weather&&(weather.precipitation>0||weather.state==="windy"||weather.state==="fog")?limit:0,arr=[];
+  const seed=String(seedValue||"");
   for(let index=0;index<count;index++){
     const prefix="regional-weather:particle:"+weather.signature+":"+index+":";
     const u=foundationUnit(seed,prefix+"x")??0;
@@ -201,7 +224,9 @@ function updateCanvasFilter(weather){
   else if(weather.state==="fog")filter="brightness(1.03) saturate(.70) contrast(.88)";
   else if(weather.state==="storm")filter="brightness(.74) saturate(.70) contrast(1.08)";
   else if(weather.state==="windy")filter="brightness(.98) saturate(.94)";
-  canvas.style.transition="filter .35s ease";canvas.style.filter=filter;
+  if(canvas===lastCanvasFilterCanvas&&filter===lastCanvasFilter)return;
+  if(canvas!==lastCanvasFilterCanvas){canvas.style.transition="filter .35s ease";lastCanvasFilterCanvas=canvas}
+  canvas.style.filter=filter;lastCanvasFilter=filter;canvasFilterWrites++;
 }
 function scheduleHook(context,weather){
   // Weather exposes a bounded read-only preference to schedule/AI consumers.
@@ -226,21 +251,23 @@ function ensureFrameLoop(){if(!raf&&!hidden&&lastSnapshot?.active)raf=requestAni
 function refresh(){
   const started=performance.now(),context=focusContext(),weather=chooseWeather(context);
   const root=document.getElementById("planetStageRoot")||document.querySelector(".planet-stage-root"),active=Boolean(context&&weather&&root?.dataset?.ready==="true");
+  const cls=deviceClass(),limit=particleLimit(cls);
   if(active)ensureOverlay();
-  if(weather&&weather.signature!==lastStateKey){lastStateKey=weather.signature;initParticles(weather)}
+  if(weather&&weather.signature!==lastStateKey){lastStateKey=weather.signature;initParticles(weather,context?.seed,limit)}
   if(weather)updateCanvasFilter(weather);
   const hook=context&&weather?scheduleHook(context,weather):Object.freeze({available:false,preferShelter:false,candidateResidentCount:0,totalResidentCount:0,applied:false,mutation:false,fallbackSafe:true});
   updateCount++;lastUpdateMs=performance.now()-started;maxUpdateMs=Math.max(maxUpdateMs,lastUpdateMs);
-  const limit=particleLimit(),particleCount=weather?(weather.precipitation>0?Math.min(limit,Math.max(12,Math.round(limit*weather.precipitation))):weather.state==="windy"?Math.min(limit,42):weather.state==="fog"?Math.min(limit,24):0):0;
+  const particleCount=weather?(weather.precipitation>0?Math.min(limit,Math.max(12,Math.round(limit*weather.precipitation))):weather.state==="windy"?Math.min(limit,42):weather.state==="fog"?Math.min(limit,24):0):0;
   if(particles.length!==particleCount&&weather){particles=particles.slice(0,particleCount);while(particles.length<particleCount){const index=particles.length,prefix="regional-weather:particle:"+weather.signature+":"+index+":";particles.push({u:foundationUnit(context.seed,prefix+"x")||0,v:foundationUnit(context.seed,prefix+"y")||0,speed:foundationUnit(context.seed,prefix+"speed")||0,size:foundationUnit(context.seed,prefix+"size")||0})}}
   lastSnapshot=Object.freeze({
     version:VERSION,active,ready:Boolean(context&&weather),weather,weatherState:weather?.state||"pending",weatherSignature:weather?.signature||null,
     fantasyTime:context?Object.freeze({...context.stamp}):null,fantasyTimeKey:context?stampKey(context.stamp):null,evidenceTimeOverride:Boolean(evidenceStamp),evidenceMode:evidenceMode(),
     region:context?Object.freeze({id:context.region.id,name:context.region.name,revision:context.region.revision,parentCountryId:context.region.parentCountryId,climate:context.region.identity?.climate||"unknown"}):null,
-    focusTile:context?.tile||null,updateIntervalMs:UPDATE_INTERVAL_MS,periodHours:PERIOD_HOURS,deviceClass:deviceClass(),particleLimit:limit,activeParticleCount:particleCount,particlePoolSize:particles.length,
+    focusTile:context?.tile||null,updateIntervalMs:UPDATE_INTERVAL_MS,periodHours:PERIOD_HOURS,deviceClass:cls,particleLimit:limit,activeParticleCount:particleCount,particlePoolSize:particles.length,
     pooledParticles:true,cameraLocalParticles:true,canvasOverlay:true,overlayZIndex:3,mapLabelsRemainAbove:true,
     fogAlpha:weather?.fog||0,wetness:weather?.wetness||0,windMotionIntensity:weather?.windIntensity||0,
     scheduleHook:hook,audioHints:Object.freeze({rainGain:round((weather?.precipitation||0)*.18),windGain:round((weather?.windIntensity||0)*.12),waterAmbienceBoost:round((weather?.state==="rain"||weather?.state==="storm")?.08:0)}),
+    cacheTelemetry:Object.freeze({spatialContextHits:spatialContextCacheHits,weatherHits:weatherCacheHits,weatherEntries:weatherCache.size,weatherLimit:WEATHER_CACHE_LIMIT,canvasFilterWrites}),
     updateCount,frameCount,lastUpdateMs:round(lastUpdateMs),maxUpdateMs:round(maxUpdateMs),lastFrameMs:round(lastFrameMs),maxFrameMs:round(maxFrameMs),
     authoritativeSources:Object.freeze(["SeedSystem campaign SEED","RegionProfile.at","GameTime.getNow","PlanetStage.canonicalFocus","PRNG.foundationUint32"]),
     deterministicState:true,regional:true,presentationOnly:true,simulationAuthority:false,terrainMutation:false,scheduleMutation:false,fullWorldScan:false,perFrameWorldScan:false
@@ -259,6 +286,7 @@ function shutdown(){
   if(timer){clearInterval(timer);timer=null}if(raf){cancelAnimationFrame(raf);raf=0}resizeObserver?.disconnect?.();resizeObserver=null;
   const canvas=document.getElementById("planetCanvas");if(canvas)canvas.style.filter="";
   overlay?.remove?.();overlay=null;ctx=null;particles=[];lastSnapshot=null;lastStateKey="";
+  spatialContextCacheKey="";spatialContextCacheRegion=null;weatherCache.clear();lastCanvasFilter="";lastCanvasFilterCanvas=null;
 }
 function bootstrap(){
   refresh();timer=setInterval(()=>{if(!document.hidden)refresh()},UPDATE_INTERVAL_MS);
