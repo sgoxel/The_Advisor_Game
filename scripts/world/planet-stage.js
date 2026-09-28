@@ -3638,8 +3638,11 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     // screen-scale until the refined resource atomically activates.
     const semanticHoldScale=standInActive&&Number(dims.presentationCompensation||1)>1
       ? 1/Number(dims.presentationCompensation||1):1;
+    // Child-local Y is terrain-normal/elevation. Compensate only the tangent-plane
+    // axes so the previous-ready semantic world keeps its ground contact while
+    // the terrain stand-in is magnified during an asynchronous child handoff.
     for(const rootNode of [localStaticRoot,localNpcRoot,localBuildingActivityRoot]){
-      if(rootNode?.setLocalScale)rootNode.setLocalScale(semanticHoldScale,semanticHoldScale,semanticHoldScale);
+      if(rootNode?.setLocalScale)rootNode.setLocalScale(semanticHoldScale,1,semanticHoldScale);
     }
     localResources.standInSemanticScale=Number(semanticHoldScale.toFixed(6));
     tangentPatch.setLocalPosition(offset.east/dims.metersPerUnit*patchScale,offset.north/dims.metersPerUnit*patchScale,DISPLAY_RADIUS_UNITS+.002);
