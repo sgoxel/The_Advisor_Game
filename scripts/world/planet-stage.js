@@ -3282,7 +3282,11 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
   const sideBasis=side=>side==="N"?{ox:0,on:-1,tx:1,tn:0}:side==="S"?{ox:0,on:1,tx:-1,tn:0}:side==="W"?{ox:-1,on:0,tx:0,tn:-1}:{ox:1,on:0,tx:0,tn:1};
   const anchorFor=record=>{
     const b=record.bounds,access=record.entrance||record.access||null,opposite=access?.side==="S"?"N":access?.side==="N"?"S":access?.side==="E"?"W":access?.side==="W"?"E":"N";
-    const order=[opposite,...["N","S","W","E"].filter(x=>x!==opposite&&x!==access?.side),access?.side].filter(Boolean);
+    // The dimetric gameplay camera reads S/E exterior space most clearly. Prefer
+    // the other visible side from an S/E entrance, then fall back to the hidden
+    // opposite side only when canonical road/building clearance requires it.
+    const preferred=access?.side==="S"?"E":access?.side==="E"?"S":access?.side==="N"?"E":access?.side==="W"?"S":"S";
+    const order=[preferred,opposite,...["S","E","N","W"].filter(x=>x!==preferred&&x!==opposite&&x!==access?.side),access?.side].filter(Boolean);
     for(const side of order){
       const basis=sideBasis(side),cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
       const half=side==="N"||side==="S"?(Number(b.maxY)-Number(b.minY)+1)/2:(Number(b.maxX)-Number(b.minX)+1)/2;
@@ -3313,7 +3317,12 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
     }else if(fn==="market"){
       box(anchor,b,0,0,6.8,4.0,.07,[.47,.36,.18]);
       box(anchor,b,0,.15,5.4,1.15,.78,C.woodLight);
-      box(anchor,b,0,.10,6.0,3.15,.22,[.78,.48,.13],2.25);
+      box(anchor,b,0,.10,6.0,3.15,.18,[.82,.62,.24],2.25);
+      // Three raised cloth strips make the canopy read as a market stall from
+      // the near-top-down view instead of one anonymous tan rectangle.
+      box(anchor,b,-1.75,.10,1.25,3.18,.07,[.57,.18,.08],2.44);
+      box(anchor,b,0,.10,1.25,3.18,.07,[.89,.72,.33],2.44);
+      box(anchor,b,1.75,.10,1.25,3.18,.07,[.57,.18,.08],2.44);
       box(anchor,b,-2.45,.10,.20,.20,2.30,C.wood);
       box(anchor,b,2.45,.10,.20,.20,2.30,C.wood);
     }else if(fn==="craft"){
@@ -3330,11 +3339,13 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,1.45,.10,1.45,1.45,1.48,C.crate);
       box(anchor,b,1.2,1.25,3.1,1.55,.48,C.wood);
     }else if(fn==="farm"){
-      box(anchor,b,0,0,7.2,5.4,.06,[.37,.27,.11]);
-      box(anchor,b,-2.0,0,1.15,5.0,.13,C.soil);
-      box(anchor,b,0,0,1.15,5.0,.13,C.green);
-      box(anchor,b,2.0,0,1.15,5.0,.13,C.soil);
-      box(anchor,b,0,1.75,2.5,1.55,1.00,C.hay);
+      box(anchor,b,0,0,7.4,5.6,.06,[.31,.24,.10]);
+      box(anchor,b,-2.45,0,.82,5.15,.16,[.52,.36,.10]);
+      box(anchor,b,-1.22,0,.82,5.15,.16,[.20,.43,.10]);
+      box(anchor,b,0,0,.82,5.15,.16,[.55,.38,.10]);
+      box(anchor,b,1.22,0,.82,5.15,.16,[.20,.43,.10]);
+      box(anchor,b,2.45,0,.82,5.15,.16,[.55,.38,.10]);
+      box(anchor,b,0,1.85,2.6,1.65,1.05,C.hay);
     }else if(fn==="civic"){
       box(anchor,b,0,0,6.6,4.2,.07,[.50,.46,.35]);
       box(anchor,b,0,.15,4.2,.32,1.65,C.civic);
@@ -3347,7 +3358,8 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,0,.15,4.6,.75,.82,C.woodLight);
       box(anchor,b,-1.8,.15,.34,1.65,.92,C.wood);
       box(anchor,b,1.8,.15,.34,1.65,.92,C.wood);
-      box(anchor,b,0,1.35,3.7,.70,.55,C.wood);
+      box(anchor,b,0,1.25,4.3,.62,.52,C.wood);
+      box(anchor,b,0,1.25,.62,3.25,.52,C.woodLight);
     }
     return propCount-propsBefore;
   };
