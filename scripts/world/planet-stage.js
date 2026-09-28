@@ -5616,7 +5616,15 @@ async function buildScene(){  const started=performance.now();
   surfaceMaterial=new pc.StandardMaterial();
   surfaceMaterial.name="SeededPlanetSurface";
   surfaceMaterial.diffuse.set(1,1,1);
-  surfaceMaterial.diffuseMap=await makeGeographyTexture();
+  if(EVIDENCE_FAST_START){
+    // Trusted local evidence never renders the globe. Avoid the full 640x320
+    // equirectangular geography texture build; canonical PlanetGeography is
+    // still initialized above and local tangent resources sample it normally.
+    startupScheduler.evidenceGlobeTextureSkipped=true;
+    surfaceMaterial.diffuseMap=null;
+  }else{
+    surfaceMaterial.diffuseMap=await makeGeographyTexture();
+  }
   surfaceMaterial.gloss=0.16;
   surfaceMaterial.metalness=0;
   surfaceMaterial.specular.set(0.18,0.22,0.25);
