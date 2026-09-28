@@ -4641,6 +4641,25 @@ function stitchSurroundCenterToDetail(detail,surround,spanFactor){
     }
   }
 }
+function carveNestedRingCenterAlpha(pixels,innerCoverageRatio){
+  const size=Number(pixels?.size||0),data=pixels?.data,ratio=Math.max(1,Number(innerCoverageRatio||1));
+  if(!size||!data||ratio<=1)return;
+  // Coarser presentation layers are true rings, not full quads stacked under
+  // transparent children. Inside the finer layer's world footprint, use the
+  // complement of that child's standard edge feather. This keeps the combined
+  // opacity near one through the handoff while preventing transparent-sort
+  // order from painting the coarser texture across the focus patch.
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const u=(x+.5)/size,v=(y+.5)/size,innerU=(u-.5)*ratio+.5,innerV=(v-.5)*ratio+.5;
+    let innerCoverage=0;
+    if(innerU>0&&innerU<1&&innerV>0&&innerV<1){
+      const edge=Math.min(innerU,1-innerU,innerV,1-innerV);
+      innerCoverage=smoothstep01(clamp(edge/.18,0,1));
+    }
+    const i=(y*size+x)*4;
+    data[i+3]=Math.round(Number(data[i+3]||0)*(1-innerCoverage));
+  }
+}
 function* localResourceSteps(job){
   const meshData=yield* tangentMeshSteps(job);
   const size=LOCAL_DETAIL_LEVELS[job.levelIndex].textureSize;
@@ -4654,6 +4673,8 @@ function* localResourceSteps(job){
   const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,size,false);
   stitchSurroundCenterToDetail(detail,medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
   stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
+  carveNestedRingCenterAlpha(medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
+  carveNestedRingCenterAlpha(surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
   return {meshData,detail,medium,surround};
 }
 function textureFromPixels(pixels){
@@ -5006,7 +5027,7 @@ function activateLocalDetailResource(signature,fromCache){
     horizonSkirt.render.meshInstances=[new pc.MeshInstance(resource.skirtMesh,horizonSkirtMaterial,horizonSkirt)];
     localResources.surroundSpanFactor=LOCAL_SURROUND_SPAN_FACTOR;localResources.surroundWidthMeters=Number((resource.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundHeightMeters=Number((resource.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundWorldMatched=true;
   }
-  horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.98;horizonSkirtMaterial.update();
+  horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.opacityMap=resource.surroundTexture;horizonSkirtMaterial.opacityMapChannel="a";horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.98;horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;horizonSkirtMaterial.depthWrite=false;horizonSkirtMaterial.update();
   rebuildLocalStaticPresentation(resource);
   if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);
   trimLocalResourceCache();
@@ -5028,7 +5049,7 @@ async function warmLocalRepresentationShaders(){
   const quad=skirtMeshForDims({patchWidth:1,patchHeight:1,metersPerUnit:10},1);quad.incRefCount();
   tangentPatchMaterial.diffuseMap=texture;tangentPatchMaterial.emissiveMap=texture;tangentPatchMaterial.opacityMap=texture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.opacity=.5;tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
   focusRingMaterial.diffuseMap=texture;focusRingMaterial.emissiveMap=texture;focusRingMaterial.opacityMap=texture;focusRingMaterial.opacityMapChannel="a";focusRingMaterial.opacity=.5;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
-  horizonSkirtMaterial.diffuseMap=texture;horizonSkirtMaterial.emissiveMap=texture;horizonSkirtMaterial.opacity=.5;horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;horizonSkirtMaterial.depthWrite=false;horizonSkirtMaterial.update();
+  horizonSkirtMaterial.diffuseMap=texture;horizonSkirtMaterial.emissiveMap=texture;horizonSkirtMaterial.opacityMap=texture;horizonSkirtMaterial.opacityMapChannel="a";horizonSkirtMaterial.opacity=.5;horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;horizonSkirtMaterial.depthWrite=false;horizonSkirtMaterial.update();
   tangentPatch.render.meshInstances=[new pc.MeshInstance(quad,tangentPatchMaterial,tangentPatch)];
   focusRingPatch.render.meshInstances=[new pc.MeshInstance(quad,focusRingMaterial,focusRingPatch)];
   horizonSkirt.render.meshInstances=[new pc.MeshInstance(quad,horizonSkirtMaterial,horizonSkirt)];
@@ -5043,7 +5064,7 @@ async function warmLocalRepresentationShaders(){
   quad.decRefCount();quad.destroy();texture.destroy();
   tangentPatchMaterial.diffuseMap=null;tangentPatchMaterial.emissiveMap=null;tangentPatchMaterial.opacityMap=null;tangentPatchMaterial.update();
   focusRingMaterial.diffuseMap=null;focusRingMaterial.emissiveMap=null;focusRingMaterial.opacityMap=null;focusRingMaterial.update();
-  horizonSkirtMaterial.diffuseMap=null;horizonSkirtMaterial.emissiveMap=null;horizonSkirtMaterial.update();
+  horizonSkirtMaterial.diffuseMap=null;horizonSkirtMaterial.emissiveMap=null;horizonSkirtMaterial.opacityMap=null;horizonSkirtMaterial.update();
 }
 function recordLocalFrame(dt){
   const ms=Math.max(0,Number(dt)||0)*1000;localFrameStats.lastFrameMs=ms;
