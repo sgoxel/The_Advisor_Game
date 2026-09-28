@@ -6518,13 +6518,20 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             if not hook or not hook.get("ok"):
                 raise RuntimeError(f"Unable to set campaign wear state {state_name}: {hook}")
 
-        WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+        wear_settled_js="""
             const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},cw=s.campaignWearProjection||{};
             return s.ready===true&&s.zoom?.scaleLabel==='1/10000'&&s.projection?.localStatic?.revealTier==='full'&&
                    Number(r.pendingPreparationCount||0)===0&&String(r.activeSignature||'')===String(r.requestedSignature||'')&&
                    cw.evidenceTargetState===arguments[0]&&cw.revisionSignature&&Number(cw.localQueryCount||0)>0;
-        """,state_name))
-        time.sleep(.12)
+        """
+        WebDriverWait(driver,180.0).until(lambda d:d.execute_script(wear_settled_js,state_name))
+        # Viewport changes can schedule a local terrain preparation on a later
+        # animation frame after the first zero-pending sample. Require the same
+        # fully settled state again after a short stability window so phone
+        # captures never race the resize-triggered preparation.
+        time.sleep(.35)
+        WebDriverWait(driver,180.0).until(lambda d:d.execute_script(wear_settled_js,state_name))
+        time.sleep(.08)
         proof=driver.execute_script("""
             const s=window.PlanetStage.snapshot(),cw=s.campaignWearProjection||{},r=s.projection?.resourceBudget||{},requested=arguments[1];
             const target=(cw.buildings||[]).find(x=>x.id===cw.evidenceTargetBuildingId)||null;
