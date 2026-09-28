@@ -711,7 +711,6 @@
 - Removed unused scripts/ui/seed-ui.js.
 - Root-file rule restored: index.html is the only root file.
 
-
 2026-09-21 23:30:16 +03:00
 - WP-S003-004 Layered 2.5D Building Presentation + Interior Visibility completed.
 - Added ordered PixiJS/WebGL presentation layers for ground/floor, lower structures and authoritative interior objects, lightweight shadows, Y-sorted characters/entities, upper walls/foreground structures, roofs/ceilings, and route verification.
@@ -1211,7 +1210,6 @@
 - The implementation remains bounded and keeps shared-resource retirement/rebind/release outside the visible-frame hot path; chunk eviction, batching, instancing, culling, navigation and Simulation authority remain intact.
 - WP is ready for the required deployment/bookkeeping completion sequence; ROADMAP is not marked COMPLETED by this commit.
 
-
 2026-09-24 16:28 +03:00 | WP-S003-005-006 | Final-head deployment + certification reconciliation
 - Final tested implementation/evidence head d22498888868330de1f84d331b439782579963b2 is deployed successfully through GitHub Pages run 36004679363; generic push Visual Evidence run 36004679930 also passed.
 - Dedicated final-head Visual Evidence run 36004698466 PASSED. Artifact 10809454366 contains seven fresh screenshots plus evidence JSON; digest sha256:e2368dba6031e5cf45e5212840b358d2756f488c77e7e9f2e6e9262cefcb1907.
@@ -1569,7 +1567,6 @@
 - Slope telemetry: 11,769 elevation queries, 11,628 cache hits (~49.7% hit rate), 7,745 transition queries, 176 slope-blocked transitions, 0.0234 ms average elevation query and 3.2 ms maximum sampled query. Authority remains renderer-independent.
 - Exact tested implementation head d023454d888257ae209ec029709c427248b29420 deployed successfully via GitHub Pages run 36126304642.
 
-
 2026-09-25 14:21:05 +03:00 | WP-S002-004-001 | Elevation-Aware Route Cost + Valley/Pass Preference — PASS
 - Classification: FUNCTIONAL / SIMULATION. VISUAL: N/A because route legality, deterministic path choice and authoritative elevation-cost behavior cannot be meaningfully verified from screenshot appearance.
 - Added deterministic route-cost policy elevation-route-v1 on top of authoritative Walkability transitions: bounded asymmetric uphill/downhill effort, horizontal terrain cost, explicit road benefit, difficult-terrain penalty, ascent/descent totals, engineered/bridge step counts and maximum chosen-route slope.
@@ -1582,7 +1579,6 @@
 - Route regression remained PASS: 26-step route, 227 evaluated / 164 expanded nodes, blocked-wall rejection, 19.29-degree maximum chosen slope, 54.421429 s horizontal cost and 2.44215 s elevation penalty.
 - Elevation telemetry remained bounded/lazy: 819 source elevation queries, 5,167 cache hits (86.3% hit rate), 2,993 transition queries, 396 blocked slope transitions, 0.0372 ms average elevation query and 3.1 ms maximum sampled query. The complete dedicated browser proof measured 495.7 ms.
 - Exact tested implementation head 8f2dd078874ba773cf215e110acd1591591d3c9e deployed successfully via GitHub Pages run 36128552089.
-
 
 2026-09-25 14:46:06 +03:00 | WP-S003-003-001 | Interactable World Objects + Contextual Use Actions — PASS
 - Classification: MIXED. Added authoritative contextual use contracts plus a visible click/tap action panel.
@@ -1659,7 +1655,6 @@
 - Direct inspection of all six fresh screenshots: sphere is smooth, centered and unclipped on desktop, phone landscape and phone portrait; multiple rotations are visually distinct; no legacy gameplay UI or characters are visible. VISUAL: 8.0/10 — PASS.
 - Pages deployment run 36159958171 for exact head 85b61eda30ad765ff8e3c052c54dc63b238cbae6 completed successfully.
 
-
 2026-09-26 01:48:00 +03:00 | WP-S003-008-002-001 | Real First-Playable Loading Progress + Animated Phase Feedback — IMPLEMENTATION + VISUAL/FUNCTIONAL PASS
 - Classification: MIXED. Integrated the progress presentation into the active planet-first PlayCanvas runtime rather than reviving the retired local-world AppUI startup path.
 - Startup begins with truthful indeterminate Planning startup feedback, then advances monotonically through renderer, geography, planetary surface, height-mesh and finalization work. Percentage is weighted work completion, not elapsed-time simulation.
@@ -1677,7 +1672,6 @@
 - Direct inspection of fresh screenshots: varied island silhouettes replace bead-like chains, oceans/continents remain clearly readable, mountain relief is visible, and compact landscape fills available height without clipping. VISUAL: 8.2/10 — PASS.
 - Functional evidence PASS: deterministic same-SEED geography, different-SEED divergence, longitude seam/pole continuity, physical elevation metadata, one active canvas, inactive protagonist/NPC/tile/local-terrain systems and no per-frame planet regeneration.
 
-
 2026-09-26 02:14:00 +03:00 | WP-S003-008-005 | Planet Places Navigator — PARTIAL IMPLEMENTATION + MIXED EVIDENCE PASS
 - Added a responsive Places control/popup to the active planet-first runtime with deterministic seeded macro landmark names, category filters, bounded descriptor results, distance/elevation context and camera-only View navigation.
 - The navigator consumes the current authoritative seeded continent/island/mountain/peak/deep-ocean targets; it performs no full-world per-frame scan and does not activate retired protagonist/NPC/tile/local-settlement systems.
@@ -1686,14 +1680,12 @@
 - Direct screenshot inspection: desktop filters/list are readable, selected rows are clear, portrait fits without clipping, and short landscape remains usable with bounded scrolling. VISUAL: 8.5/10 — PASS.
 - WP remains incomplete: the current planet-first authority does not yet expose real settlement/city/ruin/hunting/fishing destination descriptors required by the original Issue; these must not be invented for UI completion.
 
-
 2026-09-26 02:24:00 +03:00 | WP-S003-009-009 | Planet-First Ambient Motion Continuation — IMPLEMENTED, EVALUATION INCOMPLETE
 - Adapted the ambient-motion work to the canonical planet-first runtime without reactivating retired village/NPC/local-terrain presentation.
 - Added one deterministic translucent seeded cloud shell above the globe. It reuses the existing planet mesh, adds one animated presentation entity / estimated one draw call, drifts at constant-time cost, pauses while the user drags the globe, and has no Simulation authority.
 - Updated the dedicated screenshot scenario toward six planet views including time-separated motion and mobile framing.
 - Three evidence attempts were consumed by evidence-tool migration faults rather than a valid visual evaluation: attempt 1 used the stale path; attempt 2 exposed validator indentation; attempt 3 exposed scenario/validator block misplacement (frames NameError). The tool placement was repaired after attempt 3 but was not retested because the per-run three-attempt limit was reached.
 - VISUAL: NOT SCORED. No fresh valid planet ambient screenshots were produced, so WP remains incomplete.
-
 
 2026-09-26 02:34:00 +03:00 | WP-S003-009-010 | Planet Day/Night Atmosphere Adapter — PARTIAL IMPLEMENTATION, VISUAL FAIL
 - Added a presentation-only authoritative fantasy-time adapter for the canonical seeded planet renderer. It interpolates dawn/day/late-day/night key light, fill light, ambient light, background and terrain emissive response without advancing or mutating Simulation time.
@@ -1702,14 +1694,12 @@
 - Evidence attempt 3 produced all fresh frames, but the validator rejected valid drawCallImpact=0 due to a falsy-value bug; that validator defect is repaired for the next run.
 - Direct screenshot inspection: VISUAL 6.5/10 — FAIL. Day is readable, but dawn/late-day are too dim and night loses too much terrain readability. Three-attempt run limit reached; WP remains incomplete and ROADMAP is unchanged.
 
-
 2026-09-26 02:44:00 +03:00 | WP-S003-009-011 | Seeded Spherical Wilderness Foundation — PARTIAL IMPLEMENTATION, VISUAL INCOMPLETE
 - Added deterministic spherical wilderness sampling from authoritative planet elevation, moisture and mountain context; land cells resolve to vegetation/rock clusters and bounded fauna-suitability zones without changing Simulation state.
 - Static presentation uses two combined low-cost meshes rather than one entity/material per prop; scatter is prepared once, not regenerated per frame. Telemetry exposes cell/accepted/rejected counts, fauna zones, draw calls, triangles, preparation time and authority flags.
 - Added dedicated fixed-SEED evidence coverage across six globe orientations plus compact landscape/portrait framing. Attempt 1 passed functional evidence but showed needle-like silhouette artifacts; attempt 2 flattened the geometry and removed that defect.
 - Direct screenshot inspection after attempt 2: VISUAL 6.0/10 — FAIL for this WP. At current globe-only scale, local wilderness detail is intentionally too small to prove grassland/forest/wet/rocky scene richness. Props were not falsely enlarged to planetary scale. WP remains incomplete and ROADMAP is unchanged.
 2026-09-26 02:50 +03:00 — WP-S003-008-004: bounded deterministic planet startup geography/mesh preparation with cooperative browser yields; added mesh staging/upload phase telemetry. Repeated controlled evidence runs 36202427880 and 36202487872 passed.
-
 
 2026-09-26 03:52 +03:00 | WP-S003-008-005 | World Destination Navigator + Nearby Places Popup — IMPLEMENTED / AWAITING DEPLOYMENT VERIFICATION
 - Expanded the planet-first navigator from five macro landmarks to a bounded deterministic descriptor set covering settlement, town/city, ruin/historical, hunting, fishing, water and nature categories without reactivating tile/NPC/local-settlement simulation authority.
@@ -1871,7 +1861,6 @@
 
 2026-09-27 20:36 +03:00 | WP-S003-010-003-009 | COMPLETED — Fresh 14-frame acceptance run 36337075204 on runtime head 1f68edeb47534caabd5f0a6eb427907487ba2f68 passed direct visual inspection at 8.5/10 with no major registration, continent-identity, capital-anchor, border-fragment, pole-seam, clipping or projection defects. GitHub Pages deployment run 36337521367 successfully deployed bookkeeping head 682e2a2abd37e6c80d7edb8344f9282d6846fed0. ROADMAP completion bookkeeping committed after deployment; final bookkeeping deployment is verified separately before Issue closure.
 
-
 2026-09-27 21:03 +03:00 | WP-S003-013 | Biome-Aware Wilderness Dressing + Ambient Fauna — CONTINUATION INCOMPLETE AFTER 3 ACCEPTANCE ATTEMPTS
 - Extended the previously subtle spherical wilderness foundation into the canonical tangent/local renderer: deterministic global-cell scatter now resolves grassland, wooded, rocky and wet families; static props are combined into one vertex-colour batch; ambient fauna is presentation-only and capped at four actors; managed Starting Village space/road corridors suppress wilderness placement; non-static LODs explicitly cull/reset local wilderness state; and the old generic fake wilderness roads/buildings outside the canonical village were removed.
 - Added bounded telemetry for local candidate/accepted/rejected counts, biome/family mix, fauna count, draw/triangle budget, preparation/update cost, layout signature, cache reuse and fullWorldScan=false. Added a presentation-only wilderness enable hook for same-scene baseline evidence.
@@ -1908,7 +1897,6 @@
 - Functional attempt 2 run 36342590146 passed after aligning the fixture with the real DailyActivity roster contract.
 - Final live-load verification run 36342630405 passed on head 1e8bd51273f39c45341d5cc28521f8569b6b1ad2 after index.html loaded SocialState, CharacterMemory and DialogueContext. Evidence proved module-reload persistence, first-meeting vs repeat recognition, read-only dialogue resolution, retention of a salient mill-gate help event after 100 routine encounters, 103 aggregate meaningful encounters with only 16 interaction records retained, and CharacterMemory.verify().bounded=true.
 - No global NPC memory scan, LLM dependency, fabricated past interaction or dialogue-triggered world mutation was introduced.
-
 
 2026-09-27 21:57 +03:00 | WP-S003-015 | MIXED | INCOMPLETE after 3 acceptance attempts
 - Added a bounded canonical local-building activity presentation derived from loaded DailyActivity schedules, deterministic HousePlans/SpecialLots building identities/functions, authoritative fantasy-time presentation, and ResidentMovement occupancy only when that authority is actually available.
@@ -1971,7 +1959,6 @@
 - Extended WP-012 evidence to 12 frames including 1/2500 origin -> canonical nearby-city navigation -> exact return. Run 36351719289 PASSED on head 9ae15f1bdb6e8418e529ab32665a11b32c243dc0: citySpacingPass=true, one readable city label in each reported-scale frame, city candidate minimum separation 30,006.001 m >= 20,480 m required, bounded city query, and identical visible city ID after return.
 - Fresh screenshots were directly inspected. The city-density/navigation regression is visually corrected with no label overlap/clipping or center-marker drift; MIXED visual score 8.1/10. GitHub Pages deployed implementation head 9ae15f1bdb6e8418e529ab32665a11b32c243dc0 successfully in run 36351557018.
 
-
 2026-09-28 01:01 +03:00 | WP-S003-010-003-013 | Final bounded SSE/canonical-cell acceptance stopped below gate
 - Implemented projected screen-space-error LOD selection, deterministic SEED-coordinate quadtree cell identity/bounds/parentage, bounded 3x3 requested-cell overscan, prepared-parent/ready-child handoff telemetry, and viewport-independent canonical cell anchoring.
 - Added steady-state native source magnification telemetry/guard and canonical anchor coverage proof; tightened canonical cell span so every cell-centered resource covers any focus inside its cell without camera/viewport-derived identity.
@@ -2026,20 +2013,23 @@
 - VISUAL 4.8/10 FAIL: the final size/contrast refinement overcorrected deer into oversized brown slab-like silhouettes that dominate desktop and phone-landscape views. Hare remained boxy; waterbird takeoff was the clearest readable reaction. Major visual defect remains, so WP is NOT COMPLETED.
 - The failed Attempt 3 production-presentation delta was rolled back at 468577da31bf2a7174c909c9b5b00a63b73ee03e to the previously tested Attempt 2 production state. Evidence-harness viewport/search hardening remains. Issue #121 stays open for a later continuation.
 2026-09-28 06:08 +03:00 | WP-S003-015 | Continuation acceptance exhausted three attempts. Fixed the valid-zero activity evidence validator and canonical target framing; functional authority/performance passed (13 buildings, 12 residents, 6 bounded cue draws, zero per-building lights/emitters, <=3.5 ms measured update), but final fresh visual evidence scored 6.2/10 because market/forge/home cues still appeared detached above roofs. Rolled failed Attempts 2–3 presentation back to the previously tested Attempt 1 production state; WP remains NOT COMPLETED.
-2026-09-28 06:43 +03:00 | WP-S003-016 | Local environmental reaction continuation stopped after 3 attempts
+
 - Final evidence run 36374545599 on exact production head 04947e27d417f490c00c1637c00e2743b2f37282 completed successfully; all six fresh screenshots were directly inspected.
 - Functional acceptance is green: canonical road/grass/farmland tile pairs trigger dust/grassBend/footprint from ground-scale navigation; fixed pool=6 groups/18 drawables; 0 post-init pool allocations; active draw estimate 2–4; desktop/phone caps 6/4; max measured update 0.2 ms; decay returns activeCount to 0; terrainMutation=false; presentationOnly=true; simulationAuthority=false; fullWorldScan=false; perFrameWorldScan=false.
 - VISUAL 6.8/10 FAIL: footprints are readable and mobile viewports remain stable, but dust still reads as solid stacked brown clumps and grass reaction as a few rigid green sticks rather than believable disturbed environment. Required >=8/10 visual bar is not met.
 - Three-attempt cap is exhausted; no fourth loop started. WP remains OPEN / NOT COMPLETED.
 
-2026-09-28 06:43 +03:00 | WP-S003-016 | Local environmental reaction acceptance exhausted three attempts
 - Final evidence run 36374545599 completed SUCCESS on exact tested head 04947e27d417f490c00c1637c00e2743b2f37282; all six fresh screenshots were directly inspected.
 - Functional acceptance passed: real adjacent canonical road/grass/farmland pairs triggered dust/grassBend/footprint reactions; fixed reusable pool=6 groups / 18 drawables; observed active draw-call estimate 2–4; desktop cap=6; phone cap=4; max measured update 0.2 ms; zero post-init pool allocation; terrainMutation=false; presentationOnly=true; simulationAuthority=false; fullWorldScan=false; perFrameWorldScan=false. Decay returned activeCount to 0. Exact 844x390 and 390x844 phone captures completed without clipping.
 - VISUAL 6.8/10 FAIL: farmland footprints are readable, but road dust still looks like three solid brown clumps instead of a soft transient puff and grass response still looks like thin rigid green sticks, especially on phone landscape. Required >=8/10 bar was not met.
 - Three-attempt acceptance cap is exhausted. Best tested implementation remains on main; WP-S003-016 remains NOT COMPLETED and Issue #123 stays open.
 
-2026-09-28 06:42 +03:00 | WP-S003-016 | MIXED | INCOMPLETE after 3 acceptance attempts
 - Final workflow 36374545599 / artifact 10950178138 captured exact head 04947e27d417f490c00c1637c00e2743b2f37282 and completed successfully; all six fresh screenshots were directly inspected.
 - Functional acceptance passed across canonical road/dust, grass/grassBend and farmland/footprint contexts plus explicit decay and exact 844x390 / 390x844 phone viewports. The reaction system remained bounded at 6 pooled groups / 18 reusable drawables, desktop cap 6, phone cap 4, zero post-init pool allocations, no full-world/per-frame scans, no terrain mutation, presentationOnly=true, simulationAuthority=false, and max measured reaction update 0.2 ms.
 - VISUAL 6.0/10 FAIL: farmland footprints are clearly readable, but grass bending is only a few tiny green strokes and road dust is effectively imperceptible at normal framing. The three required surface reactions are therefore not all visually readable enough for the >=8/10 bar.
 - Three-attempt cap exhausted. WP remains OPEN / NOT COMPLETED; no fourth improvement/test loop, completion deployment bookkeeping, or Issue closure performed.
+2026-09-28 06:43 +03:00 | WP-S003-016 | Local environmental reaction continuation stopped after 3 attempts
+- Final evidence run 36374545599 on exact tested head 04947e27d417f490c00c1637c00e2743b2f37282 completed successfully; all six fresh screenshots were directly inspected.
+- Functional acceptance is green: canonical road/grass/farmland tile pairs trigger dust/grassBend/footprint from ground-scale navigation; fixed reusable pool=6 groups/18 drawables; zero post-init pool allocations; active draw-call estimate 2–4; desktop/phone caps 6/4; max measured update 0.2 ms; decay returns activeCount to 0; terrainMutation=false; presentationOnly=true; simulationAuthority=false; fullWorldScan=false; perFrameWorldScan=false; exact 844x390 and 390x844 phone captures completed without clipping.
+- VISUAL 6.8/10 FAIL: footprints are readable and grounded, but road dust still reads as solid brown clumps instead of a soft transient puff and grass response remains a few rigid green sticks, especially on phone landscape. Required >=8/10 visual bar is not met.
+- Three-attempt cap exhausted; no fourth loop started. WP remains OPEN / NOT COMPLETED.
