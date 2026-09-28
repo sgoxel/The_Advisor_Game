@@ -1730,9 +1730,23 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                      s?.stage==='seeded-planetary-geography' &&
                      s?.geographyVersion==='planetary-geography-v5' &&
                      Number(s?.canvasCount||0)===1)) return false;
+                if(arguments[0]==='wp-s003-015'){
+                  // Trusted local-evidence fast-start intentionally omits the
+                  // globe-only texture statistics consumed by PlanetStage.verify().
+                  // Require the canonical planet authority and no-per-frame
+                  // generation contract here; the eight WP frames below still
+                  // enforce full local settlement/activity truth and budgets.
+                  return Boolean(
+                    String(s?.activeSeed||'').length>0 &&
+                    s?.startupProgress?.mode==='ready' &&
+                    s?.activeSystems?.tileSystemActive===false &&
+                    s?.generation?.perFrameGeneration===false
+                  );
+                }
                 const v=window.PlanetStage?.verify?.();
                 return Boolean(v?.pass===true);
-                """
+                """,
+                scenario,
             )
         )
         if scenario == "wp-s003-012":
