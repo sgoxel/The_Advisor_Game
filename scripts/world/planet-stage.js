@@ -92,13 +92,13 @@ const ENVIRONMENT_REACTION_MAX_MOVE_METERS=7.5;
 const ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS=90;
 const ENVIRONMENT_REACTION_POOL_PER_KIND=2;
 let environmentalReactions={
-  enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,peakActiveCount:0,
+  enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,activeDrawCallEstimate:0,peakActiveCount:0,
   triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},
   lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,
   minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,
   triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,
   source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,
-  terrainMutation:false,presentationOnly:true,simulationAuthority:false,fullWorldScan:false,perFrameWorldScan:false
+  terrainMutation:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameWorldScan:false
 };
 let localBuildingActivityRoot=null;
 let localBuildingActivityContext=null;
@@ -2630,7 +2630,7 @@ function recordEnvironmentNavigationPassage(beforeLatitudeRadians,beforeLongitud
 function updateEnvironmentalReactions(){
   if(!environmentalReactionPool.length||!displayResource)return;
   const started=performance.now(),now=performance.now(),frame=localDisplayFrame(),dims=frame.dims;
-  let activeCount=0,visibleCount=0;
+  let activeCount=0,visibleCount=0,activeDrawCallEstimate=0;
   for(const slot of environmentalReactionPool){
     if(!slot.active)continue;
     const age=now-slot.startedAtMs;
@@ -2640,7 +2640,7 @@ function updateEnvironmentalReactions(){
     const east=Number(delta.eastMeters||0),north=Number(delta.northMeters||0);
     const inside=Math.abs(east)<=dims.patchWidth*.62&&Math.abs(north)<=dims.patchHeight*.62;
     slot.group.enabled=inside;if(!inside)continue;
-    visibleCount++;
+    visibleCount++;activeDrawCallEstimate+=slot.children.length;
     const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),t=clamp(age/slot.lifetimeMs,0,1),ground=localGroundHeightUnits(east,north,frame);
     let scale=1,liftMeters=.035;
     if(slot.kind==="dust"){scale=.72+t*.85;liftMeters=.08+t*.42;}
@@ -2651,7 +2651,7 @@ function updateEnvironmentalReactions(){
     slot.group.setLocalEulerAngles(0,slot.directionDegrees,0);
   }
   const ms=performance.now()-started;
-  environmentalReactions={...environmentalReactions,activeCount,visibleCount,peakActiveCount:Math.max(environmentalReactions.peakActiveCount,activeCount),lastUpdateMs:Number(ms.toFixed(4)),maxUpdateMs:Math.max(Number(environmentalReactions.maxUpdateMs||0),Number(ms.toFixed(4)))};
+  environmentalReactions={...environmentalReactions,activeCount,visibleCount,activeDrawCallEstimate,peakActiveCount:Math.max(environmentalReactions.peakActiveCount,activeCount),lastUpdateMs:Number(ms.toFixed(4)),maxUpdateMs:Math.max(Number(environmentalReactions.maxUpdateMs||0),Number(ms.toFixed(4)))};
 }
 
 function ensureLocalStaticMaterials(){
@@ -5018,7 +5018,7 @@ function destroy(){
   app?.destroy?.();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
   environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionPool=[];
-  environmentalReactions={enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,peakActiveCount:0,triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,terrainMutation:false,presentationOnly:true,simulationAuthority:false,fullWorldScan:false,perFrameWorldScan:false};
+  environmentalReactions={enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,activeDrawCallEstimate:0,peakActiveCount:0,triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,terrainMutation:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameWorldScan:false};
   clearLocalBuildingActivity();localBuildingActivityRoot=null;localBuildingActivityContext=null;
   buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
   localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;ready=false;
