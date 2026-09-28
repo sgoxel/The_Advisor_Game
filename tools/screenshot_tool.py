@@ -6705,12 +6705,18 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             return (bs.buildings||[]).find(x=>x.function===arguments[0])?.anchorTile||null;
         """,fn)
         if isinstance(anchor,dict):
-            mid_x=round((float(lot.get("cx") or 0)+float(anchor.get("x") or 0))/2.0)
-            mid_y=round((float(lot.get("cy") or 0)+float(anchor.get("y") or 0))/2.0)
+            # Bias framing toward the surrounding cue rather than the building
+            # center. At the fixed near-top-down camera, a 50/50 midpoint can
+            # leave south-side civic/workyard cues on the viewport edge even
+            # though the canonical cue is valid and nearby. 75% toward the cue
+            # keeps the associated building visible while making the evidence
+            # actually judge the surrounding silhouette.
+            focus_x=round(float(lot.get("cx") or 0)*.25+float(anchor.get("x") or 0)*.75)
+            focus_y=round(float(lot.get("cy") or 0)*.25+float(anchor.get("y") or 0)*.75)
             driver.execute_script("""
                 window.PlanetStage.setWorldTileFocus(String(arguments[0]),String(arguments[1]));
                 window.PlanetStage.setZoomScalar(1);
-            """,int(mid_x),int(mid_y))
+            """,int(focus_x),int(focus_y))
             WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
                 const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},bs=s.buildingSurroundings||{};
                 return s.projection?.localStatic?.revealTier==='full'&&Number(r.pendingPreparationCount||0)===0&&
