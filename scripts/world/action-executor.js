@@ -39,7 +39,7 @@ function objectFor(seed,activity){
   const id=String(activity?.interactionObjectId||"");
   return id?(InteriorObjects.build(seed).find(object=>object.id===id)||null):null;
 }
-function compatible(seed,position,activity){
+function compatible(seed,position,activity,actorKind=null,actorId=null){
   const action=activityAction(activity);
   const target=point(activity?.target);
   const actorPosition=point(position);
@@ -75,6 +75,26 @@ function compatible(seed,position,activity){
       interactionObjectId:null,interactionObjectType:"worksite",buildingId:lot?.id||null
     });
   }
+  if(activity?.targetSource==="work-choreography"){
+    const resident=actorKind==="resident"?(window.DailyActivity?.build?.(seed)||[]).find(item=>String(item.id)===String(actorId))||null:null;
+    const workPlan=resident?window.WorkCycles?.plan?.(seed,resident)||null:null;
+    const plannedStep=workPlan?.steps?.find(step=>
+      step.id===activity.workCycle?.stepId&&step.action===action&&samePoint(step.target,target)
+    )||null;
+    let road=false;
+    try{
+      const local=window.StartingVillage?.local?.(seed,target.x,target.y);
+      road=Boolean(local&&window.StartingVillage?.isRoadReserved?.(seed,local));
+    }catch(_){}
+    const pass=Boolean(
+      resident&&workPlan?.valid&&plannedStep&&nav?.walkable&&!nav?.buildingId&&!road&&
+      activity.supportedActions?.includes(action)
+    );
+    return Object.freeze({
+      ok:pass,reason:pass?"compatible":"incompatible-work-choreography",action,target,
+      interactionObjectId:null,interactionObjectType:"workplace-frontage",buildingId:String(activity.buildingId||"")||null
+    });
+  }
   return Object.freeze({ok:false,reason:"unsupported-target-source",action,target});
 }
 function snapshotState(state){
@@ -108,7 +128,7 @@ function advanceOn(map,request,seconds){
   if(current&&current.contractKey!==nextContract){
     map.delete(mapKey);current=null;changed=true;
   }
-  const check=compatible(String(request.seed),request.position,activity);
+  const check=compatible(String(request.seed),request.position,activity,kind,id);
   if(!check.ok){
     return Object.freeze({status:check.reason==="not-arrived"?"waiting-arrival":"rejected",reason:check.reason,holdsPosition:false,changed,state:null});
   }
