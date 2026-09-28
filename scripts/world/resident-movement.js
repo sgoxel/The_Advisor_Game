@@ -260,11 +260,15 @@ function advanceState(seed,state,activity,seconds){
 }
 function advance(seed,when,realSeconds,options=null){
   const includeSnapshot=options?.snapshot!==false;
-  if(!ensure(seed))return Object.freeze({changed:false,ticks:0});
-  if(proofContext?.active)return Object.freeze(includeSnapshot?{changed:false,ticks:0,proofFrozen:true,snapshot:snapshot()}:{changed:false,ticks:0,proofFrozen:true});
+  const requestedMaxTicks=Number(options?.maxTicks);
+  const maxTicks=Number.isFinite(requestedMaxTicks)
+    ?Math.max(1,Math.min(MAX_ADVANCE_STEPS,Math.floor(requestedMaxTicks)))
+    :MAX_ADVANCE_STEPS;
+  if(!ensure(seed))return Object.freeze({changed:false,ticks:0,pending:false});
+  if(proofContext?.active)return Object.freeze(includeSnapshot?{changed:false,ticks:0,pending:false,proofFrozen:true,snapshot:snapshot()}:{changed:false,ticks:0,pending:false,proofFrozen:true});
   accumulator+=Math.max(0,Math.min(2,Number(realSeconds)||0));
   let ticks=0,changed=false;
-  while(accumulator+1e-9>=FIXED_STEP_SECONDS&&ticks<MAX_ADVANCE_STEPS){
+  while(accumulator+1e-9>=FIXED_STEP_SECONDS&&ticks<maxTicks){
     const activities=new Map();
     const socialResidents=[];
     for(const state of states.values()){
@@ -303,7 +307,8 @@ function advance(seed,when,realSeconds,options=null){
     accumulator-=FIXED_STEP_SECONDS;
     ticks++;
   }
-  return Object.freeze(includeSnapshot?{changed,ticks,snapshot:snapshot()}:{changed,ticks});
+  const pending=accumulator+1e-9>=FIXED_STEP_SECONDS;
+  return Object.freeze(includeSnapshot?{changed,ticks,pending,snapshot:snapshot()}:{changed,ticks,pending});
 }
 function stateSnapshot(state){
   if(!state)return null;
