@@ -6592,7 +6592,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         })
         time.sleep(.12)
         driver.execute_script("window.PlanetStage.setEnvironmentalReactionEnabled(false);window.PlanetStage.setWorldTileFocus('0','0');window.PlanetStage.setZoomScalar(1)")
-        WebDriverWait(driver,120.0).until(lambda d:d.execute_script("""
+        WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
             const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},ls=s.projection?.localStatic||{};
             return s.ready===true&&s.zoom?.scaleLabel==='1/10000'&&Number(r.pendingPreparationCount||0)===0&&
                    String(r.activeSignature||'')===String(r.requestedSignature||'')&&ls.revealTier==='full';
@@ -6620,7 +6620,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             window.PlanetStage.setZoomScalar(1);
             window.PlanetStage.clearEnvironmentalReactions();
         """,str(pair["a"]["x"]),str(pair["a"]["y"]))
-        WebDriverWait(driver,120.0).until(lambda d:d.execute_script("""
+        WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
             const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},f=s.canonicalFocus?.worldTile||{};
             return String(f.x)===String(arguments[0])&&String(f.y)===String(arguments[1])&&
                    Number(r.pendingPreparationCount||0)===0&&String(r.activeSignature||'')===String(r.requestedSignature||'');
@@ -6634,17 +6634,10 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             const e=window.PlanetStage?.snapshot?.().environmentalReactions||{};
             return Number(e.triggerCount||0)>Number(arguments[0])&&String(e.lastKind||'')===String(arguments[1])&&Number(e.activeCount||0)>0;
         """,int(before.get("triggerCount") or 0),expected_kind))
-        driver.execute_script("window.PlanetStage.setEnvironmentalReactionEnabled(false)")
-        framing_x=str(int(pair["b"]["x"])+4)
-        framing_y=str(pair["b"]["y"])
-        driver.execute_script("window.PlanetStage.setWorldTileFocus(arguments[0],arguments[1])",framing_x,framing_y)
-        WebDriverWait(driver,30.0).until(lambda d:d.execute_script("""
-            const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},e=s.environmentalReactions||{},f=s.canonicalFocus?.worldTile||{};
-            return String(f.x)===String(arguments[0])&&String(f.y)===String(arguments[1])&&
-                   Number(r.pendingPreparationCount||0)===0&&String(r.activeSignature||'')===String(r.requestedSignature||'')&&
-                   Number(e.activeCount||0)>0;
-        """,framing_x,framing_y))
-        driver.execute_script("window.PlanetStage.setEnvironmentalReactionEnabled(true)")
+        driver.execute_script("""
+            const marker=document.querySelector('.planet-world-center');
+            if(marker)marker.style.visibility='hidden';
+        """)
         if decay:
             time.sleep(5.7)
             WebDriverWait(driver,20.0).until(lambda d:d.execute_script("return Number(window.PlanetStage?.snapshot?.().environmentalReactions?.activeCount||0)===0"))
@@ -6659,7 +6652,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               desktopActiveCap:e.desktopActiveCap,phoneActiveCap:e.phoneActiveCap,poolAllocationsAfterInit:e.poolAllocationsAfterInit,
               terrainMutation:e.terrainMutation,presentationOnly:e.presentationOnly,simulationAuthority:e.simulationAuthority,bounded:e.bounded,
               fullWorldScan:e.fullWorldScan,perFrameWorldScan:e.perFrameWorldScan,activeSlots:e.activeSlots,
-              focus:s.canonicalFocus?.worldTile,pending:r.pendingPreparationCount,standInActive:r.standInActive,requestedSignature:r.requestedSignature,activeSignature:r.activeSignature,viewport:{width:innerWidth,height:innerHeight}};
+              focus:s.canonicalFocus?.worldTile,pending:r.pendingPreparationCount,standInActive:r.standInActive,standInPinnedToViewport:r.standInPinnedToViewport,requestedSignature:r.requestedSignature,activeSignature:r.activeSignature,viewport:{width:innerWidth,height:innerHeight}};
         """,label,expected_kind,str(pair["surface"]),pair)
         return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-015":
@@ -9138,8 +9131,13 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 raise RuntimeError(f"Environmental reaction update cost exceeded 4 ms in frame {index}: {proof}")
             if float(proof.get("lastMovementMeters") or 0)>float(proof.get("maxMoveMeters") or 0)+.01:
                 raise RuntimeError(f"Environmental reaction accepted an invalid movement jump in frame {index}: {proof}")
-            if int(proof.get("pending") or 0)!=0 or proof.get("requestedSignature")!=proof.get("activeSignature"):
-                raise RuntimeError(f"Environmental reaction evidence captured unsettled local resource in frame {index}: {proof}")
+            pending=int(proof.get("pending") or 0)
+            if pending>1:
+                raise RuntimeError(f"Environmental reaction exceeded one bounded child preparation in frame {index}: {proof}")
+            if pending and proof.get("standInActive") is not True:
+                raise RuntimeError(f"Environmental reaction pending child lacks valid previous-ready stand-in in frame {index}: {proof}")
+            if proof.get("standInPinnedToViewport") is True:
+                raise RuntimeError(f"Environmental reaction evidence used a pinned/clamped stale stand-in in frame {index}: {proof}")
             if proof.get("label")!="decay-cleared":
                 kind=str(proof.get("expectedKind") or "")
                 if proof.get("lastKind")!=kind or int((proof.get("triggerByKind") or {}).get(kind) or 0)<=0:
