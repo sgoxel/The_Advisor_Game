@@ -2519,9 +2519,22 @@ function settlementRevealTierForScalar(value=zoomState.scalar){
 }
 function canonicalStartingVillageReveal(resource){
   if(!activeSeed||!resource||!window.StartingVillage||!window.HousePlans||!window.SpecialLots||!window.SettlementArchetypes||!window.PoliticalGeography)return null;
-  const focusTile=mapWorldTileAt(resource.lat0,resource.lon0);
+  // Settlement visibility is a property of the canonical player view, never of
+  // whichever SLOD cell happens to be active. Using the resource center here
+  // made the same 1/N view drop the village exactly when an east/west child
+  // became ready. A conservative viewport half-diagonal keeps the canonical
+  // village resident while any part of its established reveal radius can still
+  // be on-screen, independent of parent/child handoff timing.
+  const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const resourceTile=mapWorldTileAt(resource.lat0,resource.lon0);
   const distanceTiles=Math.hypot(Number(BigInt(focusTile.x)),Number(BigInt(focusTile.y)));
-  if(distanceTiles>512)return null;
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const viewportRadiusTiles=Math.hypot(
+    Math.max(0,Number(zoomState.visibleFootprintWidthMeters||0)),
+    Math.max(0,Number(zoomState.visibleFootprintHeightMeters||0))
+  )/(2*tileMeters);
+  const canonicalRevealRadiusTiles=512;
+  if(distanceTiles>viewportRadiusTiles+canonicalRevealRadiusTiles)return null;
   const key=activeSeed+"|starting-village";
   if(settlementRevealCache.key!==key){
     const country=window.PoliticalGeography.countryAt(activeSeed,"0","0");
@@ -2544,7 +2557,7 @@ function canonicalStartingVillageReveal(resource){
     }
   }
   const base=settlementRevealCache.value;if(!base)return null;
-  return Object.freeze({...base,focusTile,distanceTiles});
+  return Object.freeze({...base,focusTile,resourceTile,distanceTiles,viewportRadiusTiles,canonicalRevealRadiusTiles});
 }
 function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
