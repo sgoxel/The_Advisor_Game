@@ -2371,7 +2371,10 @@ function rebuildLocalFauna(plan,frame,reveal){
   const unit=frame.dims.metersPerUnit;
   for(const item of plan.fauna){
     if(localFaunaActors.length>=4||localWildernessManaged(item,reveal).reject)continue;
-    const y=localGroundHeightUnits(item.east,item.north,frame),size=(item.kind==="deer"?2.45:item.kind==="waterbird"?1.18:item.kind==="bird"?.98:1.38)*item.scale;
+    // Keep the same canonical actors/placements, but give close-ground fauna
+    // enough physical silhouette area to remain readable against wilderness
+    // props on desktop and modern-phone viewports.
+    const y=localGroundHeightUnits(item.east,item.north,frame),size=(item.kind==="deer"?3.15:item.kind==="waterbird"?1.52:item.kind==="bird"?1.22:1.72)*item.scale;
     const built=buildLocalFaunaMesh(item.kind,size,unit),actorEntity=new pc.Entity("AmbientFauna-"+item.kind+"-"+localFaunaActors.length);localFaunaRoot.addChild(actorEntity);
     actorEntity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});actorEntity.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.fauna,actorEntity)];
     const id=localFaunaKey(item),memory=localFaunaReactionMemory.get(id)||null;
@@ -2479,7 +2482,8 @@ function updateLocalFaunaMotion(step){
       (actor.state==="takeoff"?Math.sin(localFaunaClock*12+actor.phase)*.10:0);
     actor.entity.setLocalPosition(east/actor.unit,ground+actor.altitudeMeters/actor.unit+bob,-north/actor.unit);
     const heading=actor.state==="flee"||actor.state==="takeoff"?Math.atan2(actor.fleeEast,actor.fleeNorth)*180/Math.PI:(t*35)%360;
-    actor.entity.setLocalEulerAngles(0,heading,0);
+    const reactionLean=actor.state==="flee"?-7:(actor.state==="takeoff"?-12:0);
+    actor.entity.setLocalEulerAngles(reactionLean,heading,0);
     actor.lastRenderedEastMeters=east;actor.lastRenderedNorthMeters=north;actor.lastDistanceMeters=pdist;
   }
   wildlifeReaction={...wildlifeReaction,activeActorCount:localFaunaActors.length,visibleActorCount:visible,reactingActorCount:reacting,sleepingActorCount:sleeping,stateCounts:localFaunaReactionStateCounts(),updateCount:wildlifeReaction.updateCount+1};
