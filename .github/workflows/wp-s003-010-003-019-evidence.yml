@@ -40,7 +40,7 @@ jobs:
           sleep 1
 
       - name: Run layered streaming evidence
-        run: python tools/test_wp_s003_010_003_019.py "http://127.0.0.1:8000/" tools/wp_s003_010_003_019_artifact
+        run: python tools/test_wp_s003_010_003_019.py "http://127.0.0.1:8000/?evidence_layered_start=1" tools/wp_s003_010_003_019_artifact
 
       - name: Upload evidence artifact
         if: always()
