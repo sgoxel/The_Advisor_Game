@@ -3296,14 +3296,59 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
   };
   const decorate=(record,anchor)=>{
     const fn=String(record.function||"home"),b=anchor.basis,propsBefore=propCount;
-    if(fn==="home"){box(anchor,b,-1.0,0,1.8,.75,.55,C.wood);box(anchor,b,1.0,.15,1.7,1.0,.10,C.green);}
-    else if(fn==="lodging"){box(anchor,b,-1.2,0,2.2,.55,.45,C.woodLight);box(anchor,b,1.0,0,1.8,.65,.50,C.wood);box(anchor,b,0,1.0,3.6,.18,.72,C.wood);}
-    else if(fn==="market"){box(anchor,b,0,0,3.8,1.35,.55,C.wood);box(anchor,b,0,0,4.2,1.8,.16,C.fabric,1.75);box(anchor,b,-1.65,0, .18,.18,1.8,C.wood);box(anchor,b,1.65,0,.18,.18,1.8,C.wood);}
-    else if(fn==="craft"){box(anchor,b,0,0,2.1,.70,.55,C.metal);box(anchor,b,0,0,3.2,.32,.22,C.metal,.55);box(anchor,b,-1.7,.15,1.0,1.0,.55,C.stone);box(anchor,b,1.6,.15,1.5,.75,.55,C.wood);}
-    else if(fn==="storage"){box(anchor,b,-1.1,0,1.25,1.25,1.0,C.crate);box(anchor,b,.25,.15,1.25,1.25,.65,C.crate);box(anchor,b,1.55,0,1.25,1.25,1.25,C.crate);}
-    else if(fn==="farm"){box(anchor,b,-1.6,0,1.0,4.6,.10,C.soil);box(anchor,b,0,0,1.0,4.6,.10,C.green);box(anchor,b,1.6,0,1.0,4.6,.10,C.soil);box(anchor,b,0,1.6,2.0,1.2,.75,C.hay);}
-    else if(fn==="civic"){box(anchor,b,0,0,3.4,.28,1.45,C.civic);box(anchor,b,-1.45,0,.18,.18,1.45,C.wood);box(anchor,b,1.45,0,.18,.18,1.45,C.wood);box(anchor,b,0,1.35,3.2,.52,.42,C.woodLight);}
-    else {box(anchor,b,0,0,3.6,.42,.48,C.wood);box(anchor,b,-1.35,.15,.30,1.5,.80,C.woodLight);box(anchor,b,1.35,.15,.30,1.5,.80,C.woodLight);}
+    // Readability comes from a grounded composition with a function-specific
+    // footprint, not a detached icon. Every piece is still merged into the one
+    // shared surroundings mesh below.
+    if(fn==="home"){
+      box(anchor,b,0,0,4.6,2.8,.07,[.22,.34,.11]);
+      box(anchor,b,-1.25,.15,2.1,.90,.70,C.wood);
+      box(anchor,b,1.15,.05,1.6,1.15,.15,C.green);
+    }else if(fn==="lodging"){
+      box(anchor,b,0,0,6.2,3.8,.07,[.44,.33,.18]);
+      box(anchor,b,-1.65,.15,2.5,.65,.48,C.woodLight);
+      box(anchor,b,1.55,.15,2.5,.65,.48,C.woodLight);
+      box(anchor,b,0,1.30,4.8,.20,.78,C.wood);
+      box(anchor,b,-2.05,1.30,.20,.20,1.15,C.wood);
+      box(anchor,b,2.05,1.30,.20,.20,1.15,C.wood);
+    }else if(fn==="market"){
+      box(anchor,b,0,0,6.8,4.0,.07,[.47,.36,.18]);
+      box(anchor,b,0,.15,5.4,1.15,.78,C.woodLight);
+      box(anchor,b,0,.10,6.0,3.15,.22,[.78,.48,.13],2.25);
+      box(anchor,b,-2.45,.10,.20,.20,2.30,C.wood);
+      box(anchor,b,2.45,.10,.20,.20,2.30,C.wood);
+    }else if(fn==="craft"){
+      box(anchor,b,0,0,6.2,4.0,.07,[.27,.23,.18]);
+      box(anchor,b,0,.10,1.8,1.05,.72,C.metal);
+      box(anchor,b,0,.10,3.5,.48,.25,C.metal,.72);
+      box(anchor,b,-2.0,.15,1.35,1.25,.62,C.stone);
+      box(anchor,b,1.85,.15,1.65,.95,.62,C.wood);
+      box(anchor,b,2.0,1.25,1.05,1.05,.42,[.18,.17,.15]);
+    }else if(fn==="storage"){
+      box(anchor,b,0,0,6.4,3.8,.07,[.42,.35,.24]);
+      box(anchor,b,-1.75,.10,1.45,1.45,1.20,C.crate);
+      box(anchor,b,-.15,.10,1.45,1.45,.78,C.crate);
+      box(anchor,b,1.45,.10,1.45,1.45,1.48,C.crate);
+      box(anchor,b,1.2,1.25,3.1,1.55,.48,C.wood);
+    }else if(fn==="farm"){
+      box(anchor,b,0,0,7.2,5.4,.06,[.37,.27,.11]);
+      box(anchor,b,-2.0,0,1.15,5.0,.13,C.soil);
+      box(anchor,b,0,0,1.15,5.0,.13,C.green);
+      box(anchor,b,2.0,0,1.15,5.0,.13,C.soil);
+      box(anchor,b,0,1.75,2.5,1.55,1.00,C.hay);
+    }else if(fn==="civic"){
+      box(anchor,b,0,0,6.6,4.2,.07,[.50,.46,.35]);
+      box(anchor,b,0,.15,4.2,.32,1.65,C.civic);
+      box(anchor,b,-1.80,.15,.22,.22,1.65,C.wood);
+      box(anchor,b,1.80,.15,.22,.22,1.65,C.wood);
+      box(anchor,b,-1.65,1.35,2.7,.62,.45,C.woodLight);
+      box(anchor,b,1.65,1.35,2.7,.62,.45,C.woodLight);
+    }else{
+      box(anchor,b,0,0,6.6,4.2,.07,[.40,.31,.18]);
+      box(anchor,b,0,.15,4.6,.75,.82,C.woodLight);
+      box(anchor,b,-1.8,.15,.34,1.65,.92,C.wood);
+      box(anchor,b,1.8,.15,.34,1.65,.92,C.wood);
+      box(anchor,b,0,1.35,3.7,.70,.55,C.wood);
+    }
     return propCount-propsBefore;
   };
   for(const record of records){
