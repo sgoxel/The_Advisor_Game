@@ -132,15 +132,15 @@ def main():
     try:
         driver.get(evidence_url(TARGET))
         wait(driver, "return document.readyState==='complete'", 60)
-        wait(driver, "return Boolean(window.AppUI?.startNewCampaignForEvidence&&window.SeedSystem?.getCampaign)", 120)
+        wait(driver, "return Boolean(window.SeedSystem?.startNewCampaign&&window.SeedSystem?.getCampaign&&window.GameTime?.getNow)", 120)
         campaign = driver.execute_script("return window.SeedSystem.getCampaign()")
         if not campaign:
-            campaign = driver.execute_async_script("""
-                const done=arguments[arguments.length-1];
-                (async()=>{
-                  await window.AppUI.startNewCampaignForEvidence();
-                  done(window.SeedSystem.getCampaign()||null);
-                })().catch(error=>done({error:String(error?.stack||error)}));
+            campaign = driver.execute_script("""
+                const seed=window.SeedSystem.getSettings?.().seed||null;
+                const result=window.SeedSystem.startNewCampaign(seed);
+                return result?.ok
+                  ? (window.SeedSystem.getCampaign()||null)
+                  : {error:String(result?.message||'SeedSystem.startNewCampaign failed')};
             """)
             if not isinstance(campaign, dict) or campaign.get("error"):
                 raise AssertionError(f"Authoritative campaign startup failed: {campaign}")
@@ -208,10 +208,29 @@ def main():
         evidence["frames"].append({"name": capture(driver, "03-phone-rain"), "scene": "settlement-phone", "state": "rain", "weather": phone_rain})
 
         driver.set_window_size(1280, 800)
-        clear_snap = driver.execute_script("return window.RegionalWeather.clearEvidenceStamp()")
+        resume = driver.execute_script("""
+            const before=window.GameTime?.getNow?.()||null;
+            const snap=window.RegionalWeather.clearEvidenceStamp();
+            const after=window.GameTime?.getNow?.()||null;
+            const toMs=t=>t?Date.UTC(t.year,(t.month||1)-1,t.day||1,t.hour||0,t.minute||0,t.second||0):null;
+            const snapMs=toMs(snap?.fantasyTime),afterMs=toMs(after);
+            return {
+              before,
+              snap,
+              after,
+              deltaFantasyMs:(snapMs==null||afterMs==null)?null:Math.abs(afterMs-snapMs),
+              campaign:window.SeedSystem?.getCampaign?.()||null
+            };
+        """)
+        clear_snap = resume.get("snap") if isinstance(resume, dict) else None
         assert_runtime("authoritative-time-resume", clear_snap)
         if clear_snap.get("evidenceTimeOverride") is not False:
             raise AssertionError(f"Evidence override did not clear: {clear_snap}")
+        if not isinstance(resume.get("campaign"), dict) or not isinstance(resume.get("before"), dict) or not isinstance(resume.get("after"), dict):
+            raise AssertionError(f"Authoritative GameTime did not resume from a live campaign: {resume}")
+        resume_delta = resume.get("deltaFantasyMs")
+        if resume_delta is None or float(resume_delta) > 120000:
+            raise AssertionError(f"Weather did not resume current authoritative GameTime: {resume}")
 
         evidence["pass"] = True
         evidence["summary"] = {
@@ -226,6 +245,7 @@ def main():
             "rainShelterHook": evidence["frames"][1]["weather"].get("scheduleHook"),
             "differentRegionalSignatures": signatures.get("settlement-rain") != signatures.get("wilderness-rain"),
             "mobileParticleLimit": int(phone_rain.get("particleLimit") or 0),
+            "authoritativeResumeDeltaFantasyMs": float(resume_delta),
         }
         (OUT_DIR / "evidence.json").write_text(json.dumps(evidence, indent=2, sort_keys=True), encoding="utf-8")
         print(json.dumps(evidence["summary"], indent=2, sort_keys=True))
