@@ -154,7 +154,7 @@ let localNpcRoot=null;
 let localNpcMaterials=null;
 let localNpcContext=null;
 let localNpcEntities=new Map();
-let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles",presentationOnly:true,simulationAuthority:false};
+let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCycleResidentIds:Object.freeze([]),authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles",presentationOnly:true,simulationAuthority:false};
 const localBuildingInspectionKeys=new Set();
 const localNpcInspectionKeys=new Set();
 const localSignInspectionKeys=new Set();
@@ -3308,7 +3308,7 @@ function registerCanonicalBuildingInspection(record,entities){
 function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,unit,lift=0,preserveSelection=false){
   const started=performance.now(),selectedNpc=inspection.selectedType==="npc"?inspection.selectedId:null;
   clearInspectionKeySet(localNpcInspectionKeys,preserveSelection);localNpcRoot?.destroy?.();localNpcRoot=null;localNpcEntities.clear();
-  localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,activeWorkCycleToolCount:0};
+  localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,activeWorkCycleToolCount:0,activeWorkCycleResidentIds:Object.freeze([])};
   localNpcContext={reveal,tier,frame,presentationScale,unit,lift};
   if(!["refined","full"].includes(tier)||!window.DailyActivity?.build)return;
   ensureLocalNpcMaterials();localNpcRoot=new pc.Entity("CanonicalResidents");tangentPatch.addChild(localNpcRoot);
@@ -3349,6 +3349,7 @@ function updateCanonicalNpcMotion(){
   if(!localNpcRoot||!localNpcContext||!localNpcEntities.size)return;
   const started=performance.now(),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
   let activeTools=0,visibleCount=0;
+  const activeWorkCycleResidentIds=[];
   for(const record of localNpcEntities.values()){
     const state=residentPresentationState(record.resident),visible=Boolean(state&&!state.indoors);
     record.body.enabled=visible;record.head.enabled=visible;record.tool.enabled=false;
@@ -3371,11 +3372,13 @@ function updateCanonicalNpcMotion(){
       record.tool.setLocalScale(sx,sy,sz);
       record.tool.setLocalPosition(pos.x+record.bodyWidth*.58,ground+record.bodyHeight*(tray?0.72:0.62),pos.z);
       record.tool.setLocalEulerAngles(horizontal?58:0,0,horizontal?32:0);
-      record.tool.enabled=true;activeTools++;
+      record.tool.enabled=true;activeTools++;activeWorkCycleResidentIds.push(String(record.resident.id));
     }
   }
+  activeWorkCycleResidentIds.sort();
   const elapsed=performance.now()-started;
   localNpcPresentation={...localNpcPresentation,active:visibleCount>0,activeCount:visibleCount,activeWorkCycleToolCount:activeTools,
+    activeWorkCycleResidentIds:Object.freeze(activeWorkCycleResidentIds),
     drawCallEstimate:visibleCount*2+activeTools,
     motionUpdateCount:Number(localNpcPresentation.motionUpdateCount||0)+1,lastMotionUpdateMs:Number(elapsed.toFixed(4)),
     maxMotionUpdateMs:Math.max(Number(localNpcPresentation.maxMotionUpdateMs||0),Number(elapsed.toFixed(4)))};
