@@ -2548,12 +2548,12 @@ function createEnvironmentReactionGroup(kind,index){
   const group=new pc.Entity("EnvironmentReaction-"+kind+"-"+index),children=[];
   environmentalReactionRoot.addChild(group);
   if(kind==="dust"){
-    // Keep exactly three pooled drawables, but spread them into one low, soft
-    // cloud footprint instead of a vertical stack of solid-looking lobes.
+    // Three pooled translucent lobes form one readable puff. Their low profile,
+    // overlap and later per-frame drift avoid the old row of solid brown balls.
     const specs=[
-      [-.92,.18,-.48,1.85,.24,1.42],
-      [.02,.30,.02,2.20,.34,1.68],
-      [.96,.16,.52,1.62,.22,1.28]
+      [-.72,.22,-.28,1.28,.58,1.10],
+      [.00,.34,.02,1.62,.78,1.38],
+      [.72,.20,.30,1.18,.52,1.02]
     ];
     for(let i=0;i<specs.length;i++){
       const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"sphere",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5]);
@@ -2561,17 +2561,18 @@ function createEnvironmentReactionGroup(kind,index){
       children.push(e);
     }
   }else if(kind==="grassBend"){
-    // Four tapered blades span a small ~2 m disturbed swath and lean in a fan.
-    // The drawable count and pool topology stay identical to the accepted path.
+    // Each pooled drawable is a broad, flattened pressed-grass ribbon rather
+    // than a thin upright cone. Four overlapping ribbons make one disturbed
+    // patch that remains legible in the exact phone landscape viewport.
     const specs=[
-      [-.62,.42,-.28,-58,-18,.34,1.30,.20],
-      [-.20,.48,.18,-30,12,.38,1.46,.22],
-      [.22,.46,-.16,30,-10,.36,1.38,.21],
-      [.64,.38,.30,58,18,.32,1.20,.19]
+      [-.78,.075,-.34,-34,.52,.11,1.52],
+      [-.25,.085,.14,-12,.58,.12,1.72],
+      [.30,.080,-.12,15,.56,.11,1.66],
+      [.80,.070,.32,36,.48,.10,1.44]
     ];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"cone",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[5],q[6],q[7],0,q[4],q[3]);
-      e.render.castShadows=false;
+      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"box",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[4],q[5],q[6],6,q[3],i%2?7:-7);
+      e.render.castShadows=false;e.render.receiveShadows=true;
       children.push(e);
     }
   }else{
@@ -2587,13 +2588,13 @@ function createEnvironmentReactionGroup(kind,index){
 function ensureEnvironmentReactionPool(){
   if(environmentalReactionRoot||!pc||!tangentPatch)return Boolean(environmentalReactionRoot);
   environmentalReactionMaterials={
-    dust:environmentReactionMaterial("EnvironmentDust",.84,.72,.50,.22),
-    grass:environmentReactionMaterial("EnvironmentBentGrass",.34,.68,.16,.94),
+    dust:environmentReactionMaterial("EnvironmentDust",.88,.76,.56,.30),
+    grass:environmentReactionMaterial("EnvironmentBentGrass",.39,.64,.15,.90),
     footprint:environmentReactionMaterial("EnvironmentFootprint",.28,.15,.055,.90)
   };
   environmentalReactionMaterials.dust.useLighting=false;
-  environmentalReactionMaterials.dust.emissive.set(.84,.72,.50);
-  environmentalReactionMaterials.dust.emissiveIntensity=.55;
+  environmentalReactionMaterials.dust.emissive.set(.76,.62,.40);
+  environmentalReactionMaterials.dust.emissiveIntensity=.42;
   environmentalReactionMaterials.dust.update();
   environmentalReactionRoot=new pc.Entity("LocalEnvironmentalReactions");
   tangentPatch.addChild(environmentalReactionRoot);
@@ -2663,9 +2664,21 @@ function updateEnvironmentalReactions(){
     visibleCount++;activeDrawCallEstimate+=slot.children.length;
     const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),t=clamp(age/slot.lifetimeMs,0,1),ground=localGroundHeightUnits(east,north,frame);
     let scale=1,liftMeters=.035;
-    if(slot.kind==="dust"){scale=.82+t*.95;liftMeters=.08+t*.46;}
-    else if(slot.kind==="grassBend"){scale=1-t*.16;liftMeters=.045;}
-    else{scale=1-t*.06;liftMeters=.055;}
+    if(slot.kind==="dust"){
+      // Expand gently while the three existing pooled lobes rise and separate.
+      // No new entities/materials are allocated after pool initialization.
+      scale=.92+t*.42;liftMeters=.06+t*.16;
+      const spread=.34*t, rise=.42*t;
+      const bases=[[-.72,.22,-.28],[0,.34,.02],[.72,.20,.30]];
+      for(let i=0;i<slot.children.length;i++){
+        const b=bases[i],side=i-1;
+        slot.children[i].setLocalPosition(b[0]+side*spread,b[1]+rise*(i===1?1:.72),b[2]+(i===1?-.08:.16)*t);
+      }
+    }else if(slot.kind==="grassBend"){
+      // Keep the patch broad enough to read, then settle it back toward the
+      // surface instead of shrinking into thin marker-like sticks.
+      scale=1-t*.10;liftMeters=.035;
+    }else{scale=1-t*.06;liftMeters=.055;}
     slot.group.setLocalPosition(east/unit,ground+liftMeters/unit,-north/unit);
     slot.group.setLocalScale(scale/unit,scale/unit,scale/unit);
     slot.group.setLocalEulerAngles(0,slot.directionDegrees,0);
