@@ -5143,14 +5143,33 @@ function visualElevationMeters(sample){
   return Math.max(-520,(Number(sample.elevationMeters)||0)*OCEAN_VISUAL_DEPTH_FACTOR);
 }
 async function buildPlanetMesh(){
+  if(EVIDENCE_FAST_START){
+    // Trusted local-evidence bootstrap: the WP frames never inspect the globe,
+    // and all local terrain/settlement resources are built later from the same
+    // canonical SEED + coordinates. Avoid the custom height-mesh buffer/upload
+    // path entirely because Chrome/SwiftShader can stall there before local
+    // evidence starts. Production never enters this branch.
+    startupScheduler.evidenceFastStart=true;
+    startupScheduler.evidencePlanetPlaceholder=true;
+    startupScheduler.planetMeshLatitudeSegments=4;
+    startupScheduler.planetMeshLongitudeSegments=8;
+    const started=performance.now();
+    const mesh=pc.createSphere(device,{radius:DISPLAY_RADIUS_UNITS,latitudeBands:4,longitudeBands:8});
+    startupScheduler.phaseTimings.planetMeshPlaceholderMs=Number((performance.now()-started).toFixed(3));
+    meshVertexCount=45;
+    meshTriangleCount=64;
+    await yieldBrowser();
+    return mesh;
+  }
   const positions=[];
   const uvs=[];
   const indices=[];
   const normals=[];
-  const latitudeSegments=EVIDENCE_FAST_START?EVIDENCE_LATITUDE_SEGMENTS:LATITUDE_SEGMENTS;
-  const longitudeSegments=EVIDENCE_FAST_START?EVIDENCE_LONGITUDE_SEGMENTS:LONGITUDE_SEGMENTS;
+  const latitudeSegments=LATITUDE_SEGMENTS;
+  const longitudeSegments=LONGITUDE_SEGMENTS;
   const stride=longitudeSegments+1;
-  startupScheduler.evidenceFastStart=EVIDENCE_FAST_START;
+  startupScheduler.evidenceFastStart=false;
+  startupScheduler.evidencePlanetPlaceholder=false;
   startupScheduler.planetMeshLatitudeSegments=latitudeSegments;
   startupScheduler.planetMeshLongitudeSegments=longitudeSegments;
 
