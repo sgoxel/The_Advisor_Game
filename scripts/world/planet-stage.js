@@ -3187,13 +3187,47 @@ function updateWayfindingTextOverlay(force=false){
   const pixelW=Math.max(1,Math.round(width*dpr)),pixelH=Math.max(1,Math.round(height*dpr));
   if(layer.width!==pixelW||layer.height!==pixelH){layer.width=pixelW;layer.height=pixelH;}
   ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,layer.width,layer.height);ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.textAlign="center";ctx.textBaseline="middle";ctx.lineJoin="round";ctx.font=(width<600?"600 10px":"600 12px")+" system-ui, sans-serif";
+  if(inspection?.selectedType==="signpost"){
+    const elapsed=Number((performance.now()-started).toFixed(4));
+    wayfindingSignposts={...wayfindingSignposts,visibleTextCount:0,textUpdateCount:Number(wayfindingSignposts.textUpdateCount||0)+1,lastTextDrawMs:elapsed,maxTextDrawMs:Math.max(Number(wayfindingSignposts.maxTextDrawMs||0),elapsed)};
+    return;
+  }
+  const signCandidates=[];
+  for(const [signId,localPoint] of wayfindingSignAnchors){
+    const p=projectWayfindingPoint(localPoint);
+    if(!p||p.x<-100||p.x>width+100||p.y<-80||p.y>height+80)continue;
+    signCandidates.push({signId,p,d2:(p.x-width*.5)**2+(p.y-height*.5)**2});
+  }
+  signCandidates.sort((a,b)=>a.d2-b.d2||a.signId.localeCompare(b.signId));
+  const chosen=signCandidates[0]||null;
+  const panels=chosen?wayfindingPanelAnchors.filter(panel=>panel.signId===chosen.signId):[];
+  const narrow=width<600,rowH=narrow?30:32,gap=5,maxBoxW=Math.max(120,Math.min(narrow?184:230,width-18));
+  ctx.textAlign="center";ctx.textBaseline="middle";ctx.lineJoin="round";ctx.font=(narrow?"700 11px":"700 12px")+" system-ui, sans-serif";
   let visible=0;
-  for(const panel of wayfindingPanelAnchors){
-    const p=projectWayfindingPoint(panel.localPoint);if(!p||p.x<-80||p.x>width+80||p.y<-50||p.y>height+50)continue;
-    const label=panel.destinationName+"  "+panel.distanceLabel;
-    ctx.lineWidth=3.2;ctx.strokeStyle="rgba(44,27,15,.92)";ctx.strokeText(label,p.x,p.y,Math.max(74,width<600?116:150));
-    ctx.fillStyle="#f7e2ad";ctx.fillText(label,p.x,p.y,Math.max(74,width<600?116:150));visible++;
+  if(chosen&&panels.length){
+    const totalH=panels.length*rowH+Math.max(0,panels.length-1)*gap;
+    const startY=Math.max(10,Math.min(height-totalH-10,chosen.p.y-totalH*.5));
+    const preferRight=chosen.p.x<width*.55;
+    for(let index=0;index<panels.length;index++){
+      const panel=panels[index],panelPoint=projectWayfindingPoint(panel.localPoint);
+      if(!panelPoint)continue;
+      const label=panel.directionLabel+" · "+panel.destinationName+" · "+panel.distanceLabel;
+      const measured=Math.min(maxBoxW,Math.max(narrow?128:148,ctx.measureText(label).width+22));
+      let cx=preferRight?chosen.p.x+measured*.5+18:chosen.p.x-measured*.5-18;
+      cx=Math.max(measured*.5+8,Math.min(width-measured*.5-8,cx));
+      const cy=startY+index*(rowH+gap)+rowH*.5;
+      const left=cx-measured*.5,top=cy-rowH*.5;
+      ctx.beginPath();
+      if(typeof ctx.roundRect==="function")ctx.roundRect(left,top,measured,rowH,7);
+      else ctx.rect(left,top,measured,rowH);
+      ctx.fillStyle="rgba(55,35,18,.94)";ctx.fill();
+      ctx.lineWidth=1.5;ctx.strokeStyle="rgba(226,187,111,.96)";ctx.stroke();
+      const edgeX=preferRight?left:left+measured;
+      ctx.beginPath();ctx.moveTo(panelPoint.x,panelPoint.y);ctx.lineTo(edgeX,cy);
+      ctx.lineWidth=1.5;ctx.strokeStyle="rgba(226,187,111,.72)";ctx.stroke();
+      ctx.fillStyle="#fff0c4";ctx.fillText(label,cx,cy,measured-14);
+      visible++;
+    }
   }
   const elapsed=Number((performance.now()-started).toFixed(4));
   wayfindingSignposts={...wayfindingSignposts,visibleTextCount:visible,textUpdateCount:Number(wayfindingSignposts.textUpdateCount||0)+1,lastTextDrawMs:elapsed,maxTextDrawMs:Math.max(Number(wayfindingSignposts.maxTextDrawMs||0),elapsed)};
@@ -3221,17 +3255,17 @@ function buildCanonicalWayfindingSignposts(reveal,tier,frame,presentationScale,u
     face([rv(x0,y1,z1),rv(x1,y1,z1),rv(x1,y1,z0),rv(x0,y1,z0)],[0,1,0],color);
     face([rv(x0,y0,z0),rv(x1,y0,z0),rv(x1,y0,z1),rv(x0,y0,z1)],[0,-1,0],color);
   };
-  const postColor=[78,51,28,255],boardColors=[[126,82,42,255],[108,69,35,255],[143,94,48,255]];
+  const postColor=[74,45,24,255],baseColor=[82,71,56,255],boardColors=[[178,119,60,255],[151,94,45,255],[194,136,72,255]];
   for(const sign of model.signs||[]){
     const east=Number(sign.anchor.x)*tm,north=Number(sign.anchor.y)*tm,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame),ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift;
-    const postH=3.15*s;box(pos.x,ground+postH*.5,pos.z,.28*s,postH,.28*s,postColor,0);
+    const postH=3.35*s;box(pos.x,ground+.09*s,pos.z,.95*s,.18*s,.95*s,baseColor,0);box(pos.x,ground+postH*.5,pos.z,.42*s,postH,.42*s,postColor,0);
     const topPoint={x:pos.x,y:ground+2.65*s,z:pos.z};wayfindingSignAnchors.set(String(sign.id),topPoint);
     (sign.branches||[]).forEach((branch,index)=>{
       const dx=Number(branch.dx||0),dz=-Number(branch.dy||0),yaw=Math.atan2(dz,dx),centerX=pos.x+dx*.62*s,centerZ=pos.z+dz*.62*s,centerY=ground+(2.50-index*.56)*s;
-      box(centerX,centerY,centerZ,3.25*s,.42*s,.30*s,boardColors[index%boardColors.length],yaw);
+      box(centerX,centerY,centerZ,4.15*s,.58*s,.72*s,boardColors[index%boardColors.length],yaw);
       // Small pale end-cap makes branch direction physical without relying on a
       // screen-space arrow icon whose meaning would change under camera rotation.
-      box(centerX+dx*1.50*s,centerY,centerZ+dz*1.50*s,.22*s,.30*s,.34*s,[224,184,108,255],yaw);
+      box(centerX+dx*1.86*s,centerY,centerZ+dz*1.86*s,.30*s,.42*s,.76*s,[236,199,126,255],yaw);
       panelAnchors.push(Object.freeze({signId:String(sign.id),destinationId:String(branch.destinationId),destinationName:String(branch.destinationName),distanceLabel:String(branch.distanceLabel),directionLabel:String(branch.directionLabel),localPoint:Object.freeze({x:centerX,y:centerY,z:centerZ})}));
     });
     registerLocalInspection({
@@ -6171,7 +6205,7 @@ window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setScaleIndex,stepScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
   setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},
   workCycleEvidenceState,
-  focusWayfindingSignForEvidence:(id)=>{const sign=(wayfindingSignposts.signs||[]).find(item=>String(item.id)===String(id));if(sign){setWorldTileFocus(sign.junction.x,sign.junction.y);setZoomScalar(1);}return snapshot();},
+  focusWayfindingSignForEvidence:(id)=>{const sign=(wayfindingSignposts.signs||[]).find(item=>String(item.id)===String(id));if(sign){setWorldTileFocus(sign.anchor.x,sign.anchor.y);setZoomScalar(1);}return snapshot();},
   selectWayfindingSignForEvidence:(id)=>{const key=inspectionRegistryKey("signpost",String(id)),record=inspectionPickables.get(key);if(record){inspection.selectedId=String(id);inspection.selectedType="signpost";renderInspectionTooltip(record);}return snapshot();},
   destroy,
   constants:Object.freeze({
