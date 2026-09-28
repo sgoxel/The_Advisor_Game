@@ -2830,9 +2830,9 @@ function ensureLocalStaticMaterials(){
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.31,.14,.30),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
-    activityWarm:(()=>{const m=make("LocalActivityWarm",1,.48,.08);m.__activityEmissiveBoost=1.05;return m;})(),
-    activityOpen:(()=>{const m=make("LocalActivityOpen",.96,.64,.12);m.__activityEmissiveBoost=.52;return m;})(),
-    activityForge:(()=>{const m=make("LocalActivityForge",1,.16,.025);m.__activityEmissiveBoost=1.12;return m;})(),
+    activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activityForge:(()=>{const m=make("LocalActivityForge",1,.50,.22);m.__activityEmissiveBoost=.34;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activitySmoke:make("LocalActivitySmoke",.48,.49,.47,.58),
     activityProp:make("LocalActivityProp",.39,.24,.10),
     surroundings:(()=>{const m=make("LocalBuildingSurroundings",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -2866,6 +2866,60 @@ function sharedLocalPrimitive(type){
     mesh.setNormals([0,1,0, 0,1,0, 0,1,0, 0,1,0]);
     mesh.setUvs(0,[0,1, 1,1, 0,0, 1,0]);
     mesh.setIndices([0,1,2, 1,3,2]);mesh.update();
+  }else if(type==="activity-market-accessory"||type==="activity-forge-accessory"||type==="activity-warm-opening"){
+    // Activity state is rendered through one reusable architectural accessory
+    // mesh per cue type. Coordinates are normalized to the canonical building
+    // width/height/depth, so accessories share addCanonicalBuilding()'s exact
+    // local basis instead of inferring detached screen-facing marker positions.
+    mesh=new pc.Mesh(device);
+    const positions=[],normals=[],colors=[],indices=[];
+    const face=(verts,n,color)=>{
+      const base=positions.length/3,cc=color||[255,255,255,255];
+      for(const v of verts){positions.push(v[0],v[1],v[2]);normals.push(n[0],n[1],n[2]);colors.push(cc[0],cc[1],cc[2],cc[3]??255);}
+      indices.push(base,base+1,base+2,base,base+2,base+3);
+    };
+    const box=(cx,cy,cz,sx,sy,sz,color)=>{
+      const x0=cx-sx*.5,x1=cx+sx*.5,y0=cy-sy*.5,y1=cy+sy*.5,z0=cz-sz*.5,z1=cz+sz*.5;
+      face([[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]],[0,0,1],color);
+      face([[x1,y0,z0],[x0,y0,z0],[x0,y1,z0],[x1,y1,z0]],[0,0,-1],color);
+      face([[x1,y0,z1],[x1,y0,z0],[x1,y1,z0],[x1,y1,z1]],[1,0,0],color);
+      face([[x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y1,z0]],[-1,0,0],color);
+      face([[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z0]],[0,1,0],color);
+      face([[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]],[0,-1,0],color);
+    };
+    if(type==="activity-market-accessory"){
+      const cloth=[242,160,62,255],cloth2=[255,215,118,255],wood=[92,58,32,255];
+      // A narrow roof-edge awning plus an unmistakable hanging board. Both
+      // extend outside the roof footprint, but remain physically connected.
+      box(0,.55,-.60,.76,.075,.34,cloth);
+      box(-.25,.555,-.60,.18,.082,.35,cloth2);
+      box(.25,.555,-.60,.18,.082,.35,cloth2);
+      box(.47,.63,-.575,.045,.30,.045,wood);
+      box(.60,.67,-.575,.22,.18,.055,wood);
+      box(.57,.80,-.575,.30,.045,.045,wood);
+    }else if(type==="activity-forge-accessory"){
+      const soot=[72,66,61,255],iron=[90,83,76,255],ember=[255,116,28,255];
+      // High chimney/hood clears the roof silhouette; the small T-shaped anvil
+      // remains grounded just outside the front wall. The two silhouettes make
+      // a working forge legible without a broad colored apron.
+      box(.28,1.02,.16,.16,.72,.16,soot);
+      box(.28,1.38,.16,.25,.10,.25,soot);
+      box(-.20,.12,-.70,.10,.24,.10,iron);
+      box(-.20,.245,-.70,.34,.10,.16,iron);
+      box(-.33,.245,-.70,.12,.075,.11,iron);
+      box(.02,.08,-.69,.18,.07,.18,ember);
+    }else{
+      const warm=[255,232,146,255],hot=[255,248,205,255],frame=[106,70,39,255];
+      // Small paired gable/window openings plus one bracket lantern. There is no
+      // broad facade slab: only believable openings remain visible at night.
+      box(-.19,.63,-.515,.22,.22,.026,warm);
+      box(.19,.63,-.515,.22,.22,.026,hot);
+      box(-.19,.63,-.535,.025,.26,.035,frame);
+      box(.19,.63,-.535,.025,.26,.035,frame);
+      box(.42,.48,-.60,.055,.26,.055,frame);
+      box(.42,.36,-.62,.12,.12,.12,hot);
+    }
+    mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
   }else{
     mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):type==="cone"?pc.createCone(device,{baseRadius:.5,peakRadius:.08,height:1,capSegments:8}):pc.createBox(device);
   }
@@ -3188,21 +3242,21 @@ function activityBuildingGeometry(record,presentationScale,unit,frame,lift){
 }
 function addBuildingActivityCue(record,state,context,index){
   const g=activityBuildingGeometry(record,context.presentationScale,context.unit,context.frame,context.lift);if(!g||!state?.cue)return 0;
-  const s=g.presentationScale/g.unit,pos=canonicalSemanticPosition(g.east,g.north,g.presentationScale,g.unit,context.frame),front=canonicalSemanticPosition(g.east,g.north+g.d*.505,g.presentationScale,g.unit,context.frame),x=pos.x,z=pos.z,h=g.height*s,frontZ=front.z;
-  const name="BuildingActivity-"+state.cue+"-"+state.id+"-"+index;
+  const s=g.presentationScale/g.unit,pos=canonicalSemanticPosition(g.east,g.north,g.presentationScale,g.unit,context.frame),x=pos.x,z=pos.z,h=g.height*s;
+  const buildingW=Math.max(.08,g.w*s),buildingD=Math.max(.08,g.d*s),name="BuildingActivity-"+state.cue+"-"+state.id+"-"+index;
   if(state.cue==="warm-window"){
-    // One emissive facade panel per active building: larger than the former
-    // postage-stamp cue, but still a single shared-material draw with no light.
-    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityWarm,x,g.ground+h*.51,frontZ,Math.max(.06,2.8*s),Math.max(.06,1.55*s),Math.max(.025,.24*s));
+    const e=addLocalPrimitive(localBuildingActivityRoot,name,"activity-warm-opening",localStaticMaterials.activityWarm,x,g.ground,z,buildingW,h,buildingD);
+    e.render.castShadows=false;
   }else if(state.cue==="open-sign"){
-    // A readable projecting shop/market board, positioned outside the wall so
-    // it survives the fixed dimetric camera without becoming floating UI.
-    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityOpen,x+g.w*.34*s,g.ground+h*.70,frontZ-Math.max(.03,.20*s),Math.max(.07,2.25*s),Math.max(.06,1.25*s),Math.max(.03,.32*s));
+    const e=addLocalPrimitive(localBuildingActivityRoot,name,"activity-market-accessory",localStaticMaterials.activityOpen,x,g.ground,z,buildingW,h,buildingD);
+    e.render.castShadows=false;
   }else if(state.cue==="forge-glow"){
-    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityForge,x,g.ground+h*.43,frontZ-Math.max(.03,.12*s),Math.max(.07,2.75*s),Math.max(.06,1.55*s),Math.max(.03,.28*s));
+    const e=addLocalPrimitive(localBuildingActivityRoot,name,"activity-forge-accessory",localStaticMaterials.activityForge,x,g.ground,z,buildingW,h,buildingD);
+    e.render.castShadows=false;
   }else if(state.cue==="chimney-smoke"){
     addLocalPrimitive(localBuildingActivityRoot,name,"sphere",localStaticMaterials.activitySmoke,x+g.w*.20*s,g.ground+h+Math.max(.10,1.75*s),z,Math.max(.08,2.20*s),Math.max(.11,3.00*s),Math.max(.08,2.20*s));
   }else{
+    const front=canonicalSemanticPosition(g.east,g.north+g.d*.505,g.presentationScale,g.unit,context.frame),frontZ=front.z;
     addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityProp,x+g.w*.24*s,g.ground+Math.max(.04,.62*s),frontZ-Math.max(.03,.70*s),Math.max(.06,1.35*s),Math.max(.06,1.22*s),Math.max(.06,1.35*s));
   }
   return 1;
