@@ -2350,24 +2350,36 @@ function buildLocalFaunaMesh(kind,size,unit){
     pyramidY(s*.51,s*1.35,s*.12,s*.075,s*.050,s*.22,dark);
     ellipsoid(-s*.61,s*.75,0,s*.16,s*.09,s*.09,light,6,4);
   }else if(kind==="hare"){
-    ellipsoid(-s*.10,s*.46,0,s*.47,s*.31,s*.32,palette,9,5);
-    ellipsoid(s*.31,s*.64,0,s*.30,s*.25,s*.25,light,8,5);
-    ellipsoid(s*.39,s*1.03,-s*.105,s*.085,s*.34,s*.085,dark,6,5);
-    ellipsoid(s*.39,s*1.03,s*.105,s*.085,s*.34,s*.085,dark,6,5);
-    ellipsoid(-s*.38,s*.22,-s*.19,s*.23,s*.12,s*.13,dark,6,4);
-    ellipsoid(-s*.38,s*.22,s*.19,s*.23,s*.12,s*.13,dark,6,4);
-    ellipsoid(-s*.54,s*.50,0,s*.15,s*.15,s*.15,[.88,.82,.70],7,4);
+    // Keep the same restrained physical envelope, but put the defining features
+    // into the camera-visible X/Z footprint. Vertical ears collapsed into the
+    // near-top-down view and made the animal read as a small brown pebble.
+    ellipsoid(-s*.12,s*.43,0,s*.50,s*.27,s*.31,palette,9,5);
+    ellipsoid(s*.28,s*.58,0,s*.27,s*.22,s*.23,light,8,5);
+    // Two tapered ears project forward and slightly outward in plan view.
+    pyramidX(s*.31,s*.66,-s*.10,s*.055,s*.045,s*.44,dark);
+    pyramidX(s*.31,s*.66,s*.10,s*.055,s*.045,s*.44,dark);
+    // Broad rear feet and white tail keep the front/back axis readable during flee.
+    ellipsoid(-s*.39,s*.20,-s*.20,s*.28,s*.10,s*.12,dark,6,4);
+    ellipsoid(-s*.39,s*.20,s*.20,s*.28,s*.10,s*.12,dark,6,4);
+    ellipsoid(-s*.58,s*.45,0,s*.15,s*.14,s*.15,[.88,.82,.70],7,4);
   }else{
     const water=kind==="waterbird";
-    ellipsoid(-s*.04,s*.48,0,s*.42,s*.22,s*.28,palette,9,5);
-    ellipsoid(s*.39,s*(water?.67:.59),0,s*(water?.20:.18),s*(water?.20:.18),s*(water?.19:.18),light,8,4);
-    if(water)ellipsoid(s*.25,s*.61,0,s*.12,s*.30,s*.13,light,7,5);
-    pyramidX(s*.53,s*(water?.66:.58),0,s*.07,s*.095,s*.28,water?[.72,.48,.12]:[.66,.49,.20]);
-    // Overlapping tapered-looking wing lobes stay attached to the body instead
-    // of reading as detached grey spheres in the top-down view.
-    ellipsoid(-s*.10,s*.52,-s*.20,s*.34,s*.060,s*.28,dark,8,4);
-    ellipsoid(-s*.10,s*.52,s*.20,s*.34,s*.060,s*.28,dark,8,4);
-    pyramidX(-s*.31,s*.47,0,s*.075,s*.16,-s*.27,dark);
+    ellipsoid(-s*.06,s*.47,0,s*(water?.45:.42),s*(water?.20:.22),s*(water?.25:.28),palette,9,5);
+    if(water){
+      // Waterbirds need a horizontal neck/head axis: a mostly vertical neck is
+      // nearly invisible from the gameplay camera. These merged light forms stay
+      // within the prior body envelope but create a clear directional silhouette.
+      ellipsoid(s*.27,s*.56,0,s*.24,s*.075,s*.070,light,8,4);
+      ellipsoid(s*.49,s*.59,0,s*.18,s*.15,s*.15,light,8,4);
+      pyramidX(s*.60,s*.58,0,s*.055,s*.075,s*.25,[.72,.48,.12]);
+    }else{
+      ellipsoid(s*.39,s*.59,0,s*.18,s*.18,s*.18,light,8,4);
+      pyramidX(s*.53,s*.58,0,s*.07,s*.095,s*.28,[.66,.49,.20]);
+    }
+    // Dark, attached wings widen the plan-view body without increasing actor size.
+    ellipsoid(-s*.12,s*.51,-s*.20,s*.35,s*.055,s*.29,dark,8,4);
+    ellipsoid(-s*.12,s*.51,s*.20,s*.35,s*.055,s*.29,dark,8,4);
+    pyramidX(-s*.33,s*.46,0,s*.070,s*.15,-s*.28,dark);
     if(water){
       ellipsoid(-s*.12,s*.20,-s*.105,s*.045,s*.22,s*.045,[.43,.28,.12],6,4);
       ellipsoid(-s*.12,s*.20,s*.105,s*.045,s*.22,s*.045,[.43,.28,.12],6,4);
