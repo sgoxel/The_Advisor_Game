@@ -15,6 +15,13 @@ const TEXTURE_WIDTH=640;
 const TEXTURE_HEIGHT=320;
 const LATITUDE_SEGMENTS=96;
 const LONGITUDE_SEGMENTS=160;
+// Evidence-only startup optimization. This never changes SEED/world authority,
+// local settlement generation, coordinates, routes, or ground-scale geometry.
+// It only lowers the irrelevant pre-zoom globe tessellation when the trusted
+// local screenshot harness explicitly requests it.
+const EVIDENCE_FAST_START=typeof location!=="undefined"&&new URLSearchParams(location.search).get("evidence_fast_start")==="1";
+const EVIDENCE_LATITUDE_SEGMENTS=24;
+const EVIDENCE_LONGITUDE_SEGMENTS=40;
 const HEIGHT_EXAGGERATION=5.0;
 const OCEAN_VISUAL_DEPTH_FACTOR=0.0;
 const ZOOM_MIN=0;
@@ -5059,13 +5066,18 @@ async function buildPlanetMesh(){
   const uvs=[];
   const indices=[];
   const normals=[];
-  const stride=LONGITUDE_SEGMENTS+1;
+  const latitudeSegments=EVIDENCE_FAST_START?EVIDENCE_LATITUDE_SEGMENTS:LATITUDE_SEGMENTS;
+  const longitudeSegments=EVIDENCE_FAST_START?EVIDENCE_LONGITUDE_SEGMENTS:LONGITUDE_SEGMENTS;
+  const stride=longitudeSegments+1;
+  startupScheduler.evidenceFastStart=EVIDENCE_FAST_START;
+  startupScheduler.planetMeshLatitudeSegments=latitudeSegments;
+  startupScheduler.planetMeshLongitudeSegments=longitudeSegments;
 
-  await runSlicedRange(LATITUDE_SEGMENTS+1,latIndex=>{
-    const v=latIndex/LATITUDE_SEGMENTS;
+  await runSlicedRange(latitudeSegments+1,latIndex=>{
+    const v=latIndex/latitudeSegments;
     const lat=(0.5-v)*Math.PI;
-    for(let lonIndex=0;lonIndex<=LONGITUDE_SEGMENTS;lonIndex++){
-      const u=lonIndex/LONGITUDE_SEGMENTS;
+    for(let lonIndex=0;lonIndex<=longitudeSegments;lonIndex++){
+      const u=lonIndex/longitudeSegments;
       const lon=(u-0.5)*Math.PI*2;
       const direction=window.PlanetGeography.directionFromLatLon(lat,lon);
       const sample=geography.sampleDirection(direction);
@@ -5075,11 +5087,11 @@ async function buildPlanetMesh(){
       // Every longitude collapses to one geometric point at each pole. Give
       // those duplicate pole vertices one canonical U so the equirectangular
       // texture cannot create a radial seam/fan at the singularity.
-      uvs.push((latIndex===0||latIndex===LATITUDE_SEGMENTS)?.5:u,1-v);normals.push(0,0,0);
+      uvs.push((latIndex===0||latIndex===latitudeSegments)?.5:u,1-v);normals.push(0,0,0);
     }
   });
-  await runSlicedRange(LATITUDE_SEGMENTS,lat=>{
-    for(let lon=0;lon<LONGITUDE_SEGMENTS;lon++){
+  await runSlicedRange(latitudeSegments,lat=>{
+    for(let lon=0;lon<longitudeSegments;lon++){
       const a=lat*stride+lon;
       const b=a+1;
       const c=a+stride;
@@ -5106,23 +5118,23 @@ async function buildPlanetMesh(){
     const i=index*3,len=Math.hypot(normals[i],normals[i+1],normals[i+2])||1;
     normals[i]/=len;normals[i+1]/=len;normals[i+2]/=len;
   });
-  await runSlicedRange(LATITUDE_SEGMENTS+1,lat=>{
-    const a=lat*stride,b=a+LONGITUDE_SEGMENTS;
+  await runSlicedRange(latitudeSegments+1,lat=>{
+    const a=lat*stride,b=a+longitudeSegments;
     const nx=normals[a*3]+normals[b*3],ny=normals[a*3+1]+normals[b*3+1],nz=normals[a*3+2]+normals[b*3+2];
     const len=Math.hypot(nx,ny,nz)||1;
     normals[a*3]=normals[b*3]=nx/len;
     normals[a*3+1]=normals[b*3+1]=ny/len;
     normals[a*3+2]=normals[b*3+2]=nz/len;
   });
-  for(const row of [0,LATITUDE_SEGMENTS]){
+  for(const row of [0,latitudeSegments]){
     let nx=0,ny=0,nz=0;
-    for(let lon=0;lon<=LONGITUDE_SEGMENTS;lon++){
+    for(let lon=0;lon<=longitudeSegments;lon++){
       const index=row*stride+lon;
       nx+=normals[index*3];ny+=normals[index*3+1];nz+=normals[index*3+2];
     }
     const len=Math.hypot(nx,ny,nz)||1;
     nx/=len;ny/=len;nz/=len;
-    for(let lon=0;lon<=LONGITUDE_SEGMENTS;lon++){
+    for(let lon=0;lon<=longitudeSegments;lon++){
       const index=row*stride+lon;
       normals[index*3]=nx;normals[index*3+1]=ny;normals[index*3+2]=nz;
     }
