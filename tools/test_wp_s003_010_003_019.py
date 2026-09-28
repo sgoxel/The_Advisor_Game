@@ -291,7 +291,11 @@ def main():
         )
         if not result or result.get("campaign", {}).get("ok") is not True or result.get("planet") != second_seed:
             raise AssertionError(f"could not create second seed: {result}")
-        driver.refresh()
+        # The second seed is functional-only evidence. Keep the first seed on
+        # the real production globe for mandatory visual proof, then use the
+        # trusted local-only bootstrap for this second-seed determinism pass.
+        separator = "&" if "?" in TARGET else "?"
+        driver.get(f"{TARGET}{separator}evidence_fast_start=1")
         wait_ready(driver)
         set_viewport(driver, 1280, 800)
         if snap(driver).get("activeSeed") != second_seed:
