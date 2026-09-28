@@ -6510,12 +6510,15 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                         window.PlanetStage.setZoomScalar(1);
                     """,float(base["lat"]+dy),float(base["lon"]+dx))
                     try:
+                        # Wait only for the requested canonical LOD cell to settle.
+                        # Actor absence is then definitive for this offset; do not
+                        # burn the entire timeout waiting for an actor that this
+                        # SEED/cell simply does not contain.
                         WebDriverWait(driver,25.0).until(lambda d:d.execute_script("""
-                            const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},wr=s.wildlifeReaction||{};
+                            const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{};
                             return Number(r.pendingPreparationCount||0)===0&&
-                                   String(r.activeSignature||'')===String(r.requestedSignature||'')&&
-                                   Array.isArray(wr.actors)&&wr.actors.some(a=>a.kind===arguments[0]&&a.visible===true&&Number(a.distanceToPresenceMeters??1e9)<=14);
-                        """,kind))
+                                   String(r.activeSignature||'')===String(r.requestedSignature||'');
+                        """))
                         actor=driver.execute_script("""
                             const wr=window.PlanetStage.snapshot().wildlifeReaction||{},kind=arguments[0];
                             const actors=(wr.actors||[]).filter(a=>a.kind===kind&&a.visible===true&&Number(a.distanceToPresenceMeters??1e9)<=14);
