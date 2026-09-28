@@ -1,5 +1,5 @@
 name: WP-S004-007 Visual Evidence
-# WP-S004-007 final acceptance trigger
+# WP-S004-007 final acceptance trigger — direct projection
 
 on:
   workflow_dispatch:
