@@ -2862,8 +2862,8 @@ function ensureLocalStaticMaterials(){
   localStaticMaterials={
     road:make("LocalRoad",.22,.14,.075),square:make("LocalSquare",.42,.32,.19),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
-    roofWorn:make("LocalRoofWorn",.245,.145,.085),roofDamaged:make("LocalRoofDamaged",.105,.075,.060),
-    roofRepair:make("LocalRoofRepair",.50,.285,.105),roofOvergrown:make("LocalRoofOvergrown",.155,.245,.095),
+    roofWorn:make("LocalRoofWorn",.38,.27,.16),roofDamaged:make("LocalRoofDamaged",.105,.070,.052),
+    roofRepair:make("LocalRoofRepair",.48,.255,.095),roofOvergrown:make("LocalRoofOvergrown",.26,.22,.11),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.31,.14,.30),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3448,9 +3448,9 @@ function updateCanonicalNpcMotion(){
 function canonicalRoofMaterialForState(state,side,landmark){
   const visualState=String(state||"normal");
   if(visualState==="worn")return localStaticMaterials.roofWorn;
-  if(visualState==="damaged")return side==="left"?localStaticMaterials.roofDamaged:localStaticMaterials.roofWorn;
+  if(visualState==="damaged")return localStaticMaterials.roofDamaged;
   if(visualState==="repaired")return side==="left"?localStaticMaterials.roofRepair:(landmark?localStaticMaterials.landmark:localStaticMaterials.roof);
-  if(visualState==="overgrown")return side==="left"?localStaticMaterials.roofOvergrown:localStaticMaterials.roofWorn;
+  if(visualState==="overgrown")return localStaticMaterials.roofOvergrown;
   return landmark?localStaticMaterials.landmark:localStaticMaterials.roof;
 }
 function setCanonicalRoofMaterial(entity,material){
@@ -3468,22 +3468,23 @@ function applyCanonicalBuildingWearState(recordId,state){
   setCanonicalRoofMaterial(entry.left,canonicalRoofMaterialForState(visualState,"left",entry.landmark));
   setCanonicalRoofMaterial(entry.right,canonicalRoofMaterialForState(visualState,"right",entry.landmark));
   if(visualState==="damaged"){
-    // The state changes the real canonical roof silhouette: one roof plane has
-    // a missing end section and the surviving opposite plane is slightly
-    // shortened. Authoritative bounds/collision remain untouched.
-    const l=entry.base.left,r=entry.base.right;
-    entry.left.setLocalScale(l.scale[0],l.scale[1],l.scale[2]*.66);
-    entry.left.setLocalPosition(l.position[0],l.position[1]-.008,l.position[2]+l.scale[2]*.18);
-    entry.right.setLocalScale(r.scale[0],r.scale[1],r.scale[2]*.90);
-    entry.right.setLocalPosition(r.position[0],r.position[1],r.position[2]-r.scale[2]*.04);
+    // Remove only a bounded outer-eave strip from the real left roof plane.
+    // Keep its ridge edge fixed so the roof still reads as one building rather
+    // than a detached dark rectangle. Authoritative bounds/collision stay put.
+    const l=entry.base.left,missing=l.scale[0]*.20,rad=l.euler[2]*Math.PI/180;
+    entry.left.setLocalScale(l.scale[0]-missing,l.scale[1],l.scale[2]);
+    entry.left.setLocalPosition(
+      l.position[0]+Math.cos(rad)*missing*.5,
+      l.position[1]+Math.sin(rad)*missing*.5,
+      l.position[2]
+    );
   }else if(visualState==="repaired"){
     // Keep the silhouette canonical; the left roof plane itself becomes the
     // replacement-board section instead of receiving a floating decal.
     entry.left.setLocalPosition(entry.base.left.position[0],entry.base.left.position[1]+.006,entry.base.left.position[2]);
   }else if(visualState==="overgrown"){
-    // Slightly lower the mossed plane so attached eave growth reads as part of
-    // the roof/facade junction rather than a raised marker.
-    entry.left.setLocalPosition(entry.base.left.position[0],entry.base.left.position[1]-.004,entry.base.left.position[2]);
+    // Keep both canonical planes intact and let the shared olive-brown roof
+    // material + attached moss/vines carry the state without a half-roof block.
   }
   entry.visualState=visualState;
   return true;
@@ -3988,27 +3989,38 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const roofCenter=ground+physicalHeight*s+.025;
     const leftEast=east-w*.20,rightEast=east+w*.20;
     if(item.visualState==="worn"){
-      // The roof planes themselves carry the weathered material. These small,
-      // attached eave chips only break the edge rhythm; they are not a decal.
-      orientedBox(leftEast-w*.18,north+d*.34,roofCenter-.002,Math.max(.24,w*.045),.040,Math.max(.70,d*.14),C.weather,-24);
-      orientedBox(rightEast+w*.17,north-d*.30,roofCenter,Math.max(.22,w*.042),.038,Math.max(.62,d*.12),C.wearDark,24);
+      // Both real roof planes are visibly faded/desaturated. A handful of
+      // short raised shingle losses break the surface irregularly without
+      // becoming long overlay stripes or a second roof.
+      orientedBox(leftEast-w*.10,north-d*.24,roofCenter+.002,Math.max(.42,w*.075),.040,Math.max(.72,d*.14),C.wearDark,-24);
+      orientedBox(leftEast+w*.12,north+d*.18,roofCenter+.004,Math.max(.34,w*.060),.036,Math.max(.58,d*.11),C.weather,-24);
+      orientedBox(rightEast+w*.08,north-d*.08,roofCenter+.004,Math.max(.38,w*.065),.038,Math.max(.66,d*.13),C.wear,24);
+      orientedBox(rightEast-w*.12,north+d*.31,roofCenter+.003,Math.max(.30,w*.052),.034,Math.max(.52,d*.10),C.wearDark,24);
     }else if(item.visualState==="damaged"){
-      // Canonical roof geometry already removes a real roof-end section.
-      // Keep only a charred broken-edge remnant plus grounded debris.
-      orientedBox(leftEast-w*.21,north+d*.20,roofCenter-.012,Math.max(.28,w*.052),.085,Math.max(.90,d*.18),C.char,-24);
-      groundBox(east+w*.58,north+d*.34,.02,1.10,.34,.82,C.debris);
-      groundBox(east+w*.68,north-d*.18,.02,.78,.26,1.02,C.burn);
+      // The canonical left plane itself loses its outer eave strip. These
+      // short charred members sit on that broken edge; debris stays grounded.
+      orientedBox(leftEast-w*.12,north-d*.28,roofCenter-.006,Math.max(.28,w*.050),.090,Math.max(.76,d*.15),C.char,-24);
+      orientedBox(leftEast-w*.13,north+d*.05,roofCenter-.003,Math.max(.24,w*.044),.078,Math.max(.62,d*.12),C.burn,-24);
+      orientedBox(leftEast-w*.11,north+d*.31,roofCenter-.005,Math.max(.20,w*.038),.070,Math.max(.48,d*.09),C.ash,-24);
+      groundBox(east-w*.58,north+d*.38,.02,.82,.26,.64,C.debris);
+      groundBox(east-w*.66,north-d*.18,.02,.60,.22,.84,C.char);
     }else if(item.visualState==="repaired"){
-      // The left canonical roof plane is the replacement-board section.
-      // Two short edge caps make the join legible without covering the roof.
-      orientedBox(leftEast-w*.18,north-d*.34,roofCenter+.008,Math.max(.20,w*.040),.045,Math.max(.78,d*.15),C.newWoodLight,-24);
-      orientedBox(leftEast+w*.18,north+d*.31,roofCenter+.010,Math.max(.18,w*.036),.042,Math.max(.68,d*.13),C.repairDark,-24);
+      // The left canonical plane is the fresh replacement surface. Small
+      // staggered join battens/board ends stay fully inside that silhouette.
+      orientedBox(leftEast-w*.09,north-d*.27,roofCenter+.008,Math.max(.24,w*.043),.044,Math.max(.72,d*.14),C.newWoodLight,-24);
+      orientedBox(leftEast+w*.09,north-d*.02,roofCenter+.009,Math.max(.22,w*.040),.042,Math.max(.58,d*.11),C.repairDark,-24);
+      orientedBox(leftEast-w*.04,north+d*.25,roofCenter+.010,Math.max(.20,w*.036),.040,Math.max(.66,d*.13),C.newWoodLight,-24);
     }else if(item.visualState==="overgrown"){
-      // The mossed canonical roof plane supplies the broad state read. Narrow
-      // facade/eave vines connect it physically to the wall and ground.
-      orientedBox(east-w*.24,north+d*.50,ground+physicalHeight*s*.56,Math.max(.18,w*.035),Math.max(2.6,physicalHeight*.72),.18,C.green,0);
-      orientedBox(east+w*.12,north+d*.505,ground+physicalHeight*s*.48,Math.max(.15,w*.030),Math.max(2.1,physicalHeight*.58),.16,C.greenLight,0);
-      groundBox(east-w*.22,north+d*.56,.018,Math.max(.85,w*.16),.10,Math.max(.70,d*.14),C.moss);
+      // Both canonical roof planes keep an aged olive-brown base. Moss grows
+      // as several small attached islands near real eaves, with two narrow
+      // vines continuing down the facade and a minimal grounded termination.
+      orientedBox(leftEast-w*.10,north-d*.24,roofCenter+.006,Math.max(.50,w*.090),.036,Math.max(.64,d*.12),C.moss,-24);
+      orientedBox(leftEast+w*.12,north+d*.16,roofCenter+.007,Math.max(.40,w*.072),.034,Math.max(.52,d*.10),C.greenLight,-24);
+      orientedBox(rightEast+w*.08,north-d*.02,roofCenter+.007,Math.max(.44,w*.078),.034,Math.max(.58,d*.11),C.green,24);
+      orientedBox(rightEast-w*.11,north+d*.29,roofCenter+.006,Math.max(.34,w*.060),.032,Math.max(.46,d*.09),C.moss,24);
+      orientedBox(east-w*.24,north+d*.50,ground+physicalHeight*s*.54,Math.max(.16,w*.028),Math.max(2.25,physicalHeight*.62),.15,C.green,0);
+      orientedBox(east+w*.10,north+d*.505,ground+physicalHeight*s*.45,Math.max(.13,w*.024),Math.max(1.75,physicalHeight*.48),.14,C.greenLight,0);
+      groundBox(east-w*.22,north+d*.56,.018,Math.max(.62,w*.11),.08,Math.max(.54,d*.10),C.moss);
     }
   }
   if(positions.length){
