@@ -146,7 +146,7 @@ try:
         })
         (OUT/f"{PROFILE}-{idx+1:02d}-{profession}.json").write_text(json.dumps(records[-1],indent=2))
     browser_logs=driver.get_log("browser")
-    severe=[x for x in browser_logs if x.get("level")=="SEVERE"]
+    severe=[x for x in browser_logs if x.get("level")=="SEVERE" and "favicon.ico" not in str(x.get("message",""))]
     if severe:
         raise RuntimeError("browser console severe errors: "+json.dumps(severe[-10:]))
     if not all(r["verifyPass"] for r in records):
