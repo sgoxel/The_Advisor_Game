@@ -2857,7 +2857,7 @@ function ensureLocalStaticMaterials(){
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    activityForge:(()=>{const m=make("LocalActivityForge",1,1,1);m.__activityEmissiveBoost=.16;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activityForge:(()=>{const m=make("LocalActivityForge",1,.50,.22);m.__activityEmissiveBoost=.34;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activitySmoke:make("LocalActivitySmoke",.48,.49,.47,.58),
     activityProp:make("LocalActivityProp",.39,.24,.10),
     surroundings:(()=>{const m=make("LocalBuildingSurroundings",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -2925,19 +2925,19 @@ function sharedLocalPrimitive(type){
       box(.60,.67,-.575,.22,.18,.055,wood);
       box(.57,.80,-.575,.30,.045,.045,wood);
     }else if(type==="activity-forge-accessory"){
-      const soot=[36,34,32,255],iron=[154,148,137,255],ember=[224,62,16,255],hot=[255,174,62,255],stone=[158,145,124,255];
+      const soot=[43,39,35,255],iron=[135,126,112,255],ember=[224,62,16,255],hot=[255,174,62,255],stone=[128,111,91,255];
       // Put the stack on the outer, camera-visible eave instead of hiding it in
       // the roof footprint. A short hood physically bridges it back into the
       // workshop; the backed firebox and T-profile anvil sit just outside the
       // front edge. Everything remains one shared mesh/draw.
-      box(-.56,1.02,-.12,.22,.80,.22,stone);
-      box(-.56,1.435,-.12,.34,.10,.34,soot);
-      box(-.43,.79,-.12,.44,.13,.30,soot);
+      box(-.53,1.02,-.12,.18,.76,.18,stone);
+      box(-.53,1.415,-.12,.29,.09,.29,soot);
+      box(-.42,.78,-.12,.40,.12,.28,soot);
       box(-.36,.61,-.605,.38,.30,.12,soot);
       box(-.36,.60,-.674,.25,.16,.045,hot);
       box(-.36,.57,-.704,.15,.08,.026,ember);
       box(.06,.16,-.705,.11,.30,.11,iron);
-      box(.06,.315,-.705,.48,.12,.19,iron);
+      box(.06,.315,-.705,.42,.11,.18,iron);
       box(-.09,.315,-.705,.14,.08,.11,iron);
     }else{
       const warm=[255,196,68,255],hot=[255,236,166,255],frame=[64,43,28,255];
