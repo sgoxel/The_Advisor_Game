@@ -6406,7 +6406,7 @@ async function start(){
       let phaseStarted=performance.now();updateAnimatedZoom(dt);recordNavigationFramePhase("zoom",phaseStarted);
       if(activeSeed&&window.ResidentMovement){
         const when=window.GameTime?.getNow?.()||inspectionFantasyStamp();phaseStarted=performance.now();
-        window.ResidentMovement.advance(activeSeed,when,dt,{snapshot:false});recordNavigationFramePhase("residentAdvance",phaseStarted);
+        window.ResidentMovement.advance(activeSeed,when,dt,{snapshot:false,maxTicks:2});recordNavigationFramePhase("residentAdvance",phaseStarted);
       }else{navigationPerformance.framePhaseLastMs.residentAdvance=0;}
       phaseStarted=performance.now();updateCanonicalNpcMotion();recordNavigationFramePhase("npcMotion",phaseStarted);
       phaseStarted=performance.now();recordLocalFrame(dt);recordNavigationFramePhase("frameStats",phaseStarted);
