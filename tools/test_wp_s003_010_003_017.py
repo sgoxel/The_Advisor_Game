@@ -51,12 +51,15 @@ def set_viewport(driver, width, height):
     deadline = time.time() + 10
     while time.time() < deadline:
         metrics = driver.execute_script("""
-          const c=document.querySelector('#planetCanvas')?.getBoundingClientRect?.();
-          return {iw:innerWidth,ih:innerHeight,cw:Number(c?.width||0),ch:Number(c?.height||0)};
+          const node=document.querySelector('#planetCanvas');
+          const c=node?.getBoundingClientRect?.();
+          return {iw:innerWidth,ih:innerHeight,hasCanvas:Boolean(node),cw:Number(c?.width||0),ch:Number(c?.height||0)};
         """)
+        canvas_ok = (not metrics.get("hasCanvas")) or (
+            float(metrics.get("cw") or 0) > 0 and float(metrics.get("ch") or 0) > 0
+        )
         if (abs(float(metrics.get("iw") or 0)-width) <= 2 and
-            abs(float(metrics.get("ih") or 0)-height) <= 2 and
-            float(metrics.get("cw") or 0) > 0 and float(metrics.get("ch") or 0) > 0):
+            abs(float(metrics.get("ih") or 0)-height) <= 2 and canvas_ok):
             time.sleep(.8)
             return
         time.sleep(.15)
