@@ -1657,6 +1657,11 @@ def _queue_campaign_start_during_application_start(driver, timeout: float = 20.0
 
 def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static") -> str:
     queued_start_action = None
+    if scenario == "wp-s003-010-003-019":
+        # This WP visually verifies the broad 1/10 globe as well as local rings,
+        # so it must use the real globe path. Give software WebGL enough time for
+        # production globe mesh/texture startup instead of using fast-start.
+        timeout = max(timeout, 240.0)
     if scenario == "wp-s003-008-002":
         timeout = max(timeout, 180.0)
         queued_start_action = _queue_campaign_start_during_application_start(driver, min(timeout, 30.0))
@@ -8183,8 +8188,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             ("seed-a-close-1_2500",7,(1280,800),"steady"),
             ("pan-away",7,(1280,800),"pan-away"),
             ("pan-back",7,(1280,800),"pan-back"),
-            ("slow-parent-fallback",8,(1280,800),"slow-fallback"),
-            ("slow-child-settled",8,(1280,800),"slow-settled"),
+            ("slow-parent-fallback",7,(1280,800),"slow-fallback"),
+            ("slow-child-settled",7,(1280,800),"slow-settled"),
             ("phone-landscape-1_500",5,(844,390),"phone"),
             ("phone-portrait-1_2500",7,(390,844),"phone"),
             ("seed-b-close-1_2500",7,(1280,800),"seed-b"),
@@ -8226,7 +8231,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         if mode in ("seed-a","seed-b"):
             seed="WP_S003_010_003_019_A" if mode=="seed-a" else "WP_S003_010_003_019_B"
             base=driver.current_url.split("?",1)[0]
-            driver.get(base+"?seed="+seed+"&evidence_fast_start=1")
+            driver.get(base+"?seed="+seed)
             wait_stage(); focus_starting(); settle(scale_index)
         elif mode=="steady":
             settle(scale_index)
@@ -8246,7 +8251,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         elif mode=="slow-fallback":
             settle(6)
             driver.execute_cdp_cmd("Emulation.setCPUThrottlingRate",{"rate":6})
-            driver.execute_script("window.PlanetStage.setScaleIndex(8)")
+            driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",scale_index)
             WebDriverWait(driver,30.0).until(lambda d:d.execute_script("""
                 const r=window.PlanetStage.snapshot().projection?.resourceBudget||{};
                 return Number(r.pendingPreparationCount||0)>0 || r.standInActive===true;
@@ -16635,7 +16640,7 @@ def take_screenshots(
         # Request PlanetStage's presentation-only reduced startup globe here;
         # canonical local settlement/world authority, coordinates, camera truth
         # and every scenario acceptance gate remain unchanged.
-        if scenario in {"wp-s003-015", "wp-s003-020", "wp-s003-022", "wp-s003-010-003-019"} and browser_url.startswith(("http://127.0.0.1", "http://localhost")):
+        if scenario in {"wp-s003-015", "wp-s003-020", "wp-s003-022"} and browser_url.startswith(("http://127.0.0.1", "http://localhost")):
             browser_url += ("&" if "?" in browser_url else "?") + "evidence_fast_start=1"
         if scenario == "wp-s003-005-002":
             browser_url = browser_url.rstrip("/") + "/asset-standard-proof.html"
