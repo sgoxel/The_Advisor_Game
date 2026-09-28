@@ -15,6 +15,20 @@ from selenium.webdriver.support.ui import WebDriverWait
 TARGET = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000/?evidence_fast_start=1"
 OUT_DIR = Path(sys.argv[2] if len(sys.argv) > 2 else "tools/wp_s003_010_003_020_artifact")
 SEED = "AGENT6-NAV-PERF-A"
+BASELINE_DESKTOP = {"p95Ms": 929.7, "worstMs": 1304.6, "elapsedMs": 10463.0, "mapUpdateDelta": 72}
+BASELINE_MOBILE = {"p95Ms": 53.3, "worstMs": 713.5, "elapsedMs": 1978.8, "mapUpdateDelta": 43}
+EXPECTED_FINAL_SIGNATURE = {
+    "seed": SEED,
+    "geographyHash": "6fe0130c",
+    "worldTile": {"x": "-248761", "y": "28293"},
+    "latitudeDegrees": -8.928232,
+    "longitudeDegrees": 7.592527,
+    "scaleIndex": 0,
+    "scaleLabel": "1/10",
+    "semanticOrderingSignature": "5BD86CDF",
+    "borderTopologySignature": None,
+    "coordinateFabricRevision": "SCF-B83ABE19",
+}
 
 
 def driver_for(width=1280, height=800):
@@ -28,7 +42,17 @@ def driver_for(width=1280, height=800):
     options.add_argument(f"--window-size={width},{height}")
     options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
     d = webdriver.Chrome(options=options)
-    d.set_script_timeout(180)
+    # Startup/benchmark tasks can temporarily occupy software WebGL. Keep the
+    # Selenium transport timeout above the script timeout so the harness reports
+    # game assertions rather than a client-side 120 s socket timeout.
+    try:
+        d.command_executor.set_timeout(300)
+    except Exception:
+        try:
+            d.command_executor._client_config.timeout = 300
+        except Exception:
+            pass
+    d.set_script_timeout(240)
     d.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
         "width": width, "height": height, "deviceScaleFactor": 1, "mobile": False,
         "screenWidth": width, "screenHeight": height,
@@ -186,6 +210,10 @@ def rotation_benchmark(driver, steps=72):
     observed = collect_samples(driver)
     result["mapUpdatesAfter"] = int(after.get("mapPresentation", {}).get("updateCount") or 0)
     result["mapUpdateDelta"] = result["mapUpdatesAfter"] - int(result["mapUpdatesBefore"])
+    before_nav = before.get("navigationPerformance") or {}
+    after_nav = after.get("navigationPerformance") or {}
+    result["internalLongTask50Delta"] = int(after_nav.get("longTask50Count") or 0) - int(before_nav.get("longTask50Count") or 0)
+    result["internalLongTaskWorstMs"] = round(float(after_nav.get("longTaskWorstMs") or 0), 3)
     result["callTiming"] = summarize_times(result.pop("samples"))
     result["frameTiming"] = summarize_times(observed.get("frames") or [])
     result["longTasks"] = observed.get("longTasks") or []
@@ -210,11 +238,15 @@ def paced_rotation_benchmark(driver, steps=36, delay_seconds=0.022):
     after = snap(driver)
     observed = collect_samples(driver)
     longs = observed.get("longTasks") or []
+    before_nav = before.get("navigationPerformance") or {}
+    after_nav = after.get("navigationPerformance") or {}
     return {
         "steps": int(steps),
         "delaySeconds": delay_seconds,
         "callTiming": summarize_times(samples),
         "frameTiming": summarize_times(observed.get("frames") or []),
+        "internalLongTask50Delta": int(after_nav.get("longTask50Count") or 0) - int(before_nav.get("longTask50Count") or 0),
+        "internalLongTaskWorstMs": round(float(after_nav.get("longTaskWorstMs") or 0), 3),
         "longTask50Count": sum(1 for x in longs if float(x.get("duration") or 0) > 50),
         "longTaskWorstMs": round(max([float(x.get("duration") or 0) for x in longs] or [0]), 3),
         "longTasks": longs,
@@ -238,6 +270,34 @@ def animated_zoom_benchmark(driver, target_index):
         "longTask50Count": sum(1 for x in longs if float(x.get("duration") or 0) > 50),
         "longTaskWorstMs": round(max([float(x.get("duration") or 0) for x in longs] or [0]), 3),
     }
+
+
+def capture_navigation_sequence(driver):
+    set_viewport(driver, 1280, 800)
+    settle_scale(driver, 0)
+    start = snap(driver)
+    base_yaw = float(start["rotation"]["yawDegrees"])
+    base_pitch = float(start["rotation"]["pitchDegrees"])
+    frames = []
+    for idx, (dyaw, dpitch) in enumerate([(0, 0), (7, 2), (14, -2), (21, 3), (28, 0)]):
+        driver.execute_script("window.PlanetStage.setRotation(arguments[0],arguments[1]);", base_yaw + dyaw, base_pitch + dpitch)
+        time.sleep(.10)
+        frames.append({"phase": f"rotate-{idx}", "screenshot": capture(driver, f"sequence-rotate-{idx}")})
+
+    driver.execute_script("window.PlanetStage.setAnimatedScaleIndex(5,'wp020-sequence');")
+    for idx, pause in enumerate((.035, .055, .075)):
+        time.sleep(pause)
+        stage = snap(driver)
+        frames.append({
+            "phase": f"zoom-{idx}",
+            "scale": stage["zoom"]["displayScaleLabel"],
+            "scalar": stage["zoom"]["scalar"],
+            "screenshot": capture(driver, f"sequence-zoom-{idx}"),
+        })
+    WebDriverWait(driver, 90).until(lambda d: not bool(d.execute_script("return window.PlanetStage.snapshot().zoom.animating")))
+    frames.append({"phase": "zoom-settled", "screenshot": capture(driver, "sequence-zoom-settled")})
+    settle_scale(driver, 0)
+    return frames
 
 
 def deterministic_signature(stage):
@@ -284,6 +344,8 @@ def main():
 
         final = snap(d)
         final_signature = deterministic_signature(final)
+        if final_signature != EXPECTED_FINAL_SIGNATURE:
+            raise AssertionError(f"canonical benchmark signature changed vs pre-optimization baseline: {final_signature}")
 
         # Normal input cadence: separate browser tasks with a short inter-event delay.
         # This is the authoritative >50 ms long-task acceptance path; unlike the
@@ -292,6 +354,7 @@ def main():
         settle_scale(d, 0)
         paced_rotation = paced_rotation_benchmark(d, 36)
         paced_shot = capture(d, "desktop-paced-rotation")
+        sequence = capture_navigation_sequence(d)
 
         logs = d.get_log("browser")
         severe = [x for x in logs if x.get("level") == "SEVERE" and "favicon" not in str(x.get("message","")).lower()]
@@ -302,8 +365,10 @@ def main():
         optimized = nav.get("revision") == "world-map-navigation-budget-v1"
         evidence.update({
             "optimizedTelemetryPresent": optimized,
+            "baselineReference": {"desktop": BASELINE_DESKTOP, "mobile": BASELINE_MOBILE},
             "baselineSignature": baseline_signature,
             "finalSignature": final_signature,
+            "navigationSequence": sequence,
             "desktop": {
                 "rotation": rotation,
                 "forwardZoom": forward,
@@ -339,8 +404,18 @@ def main():
                 raise AssertionError(f"desktop rotation still rebuilds semantic map too often: {rotation['mapUpdateDelta']}")
             if mobile_rotation["mapUpdateDelta"] >= 24:
                 raise AssertionError(f"mobile rotation still rebuilds semantic map too often: {mobile_rotation['mapUpdateDelta']}")
-            if paced_rotation["longTask50Count"] != 0:
+            if rotation["callTiming"]["p95Ms"] >= BASELINE_DESKTOP["p95Ms"] * .25 or rotation["callTiming"]["worstMs"] >= 50:
+                raise AssertionError(f"desktop rotation timing did not materially improve: {rotation}")
+            if mobile_rotation["callTiming"]["p95Ms"] >= BASELINE_MOBILE["p95Ms"] * .5 or mobile_rotation["callTiming"]["worstMs"] >= 50:
+                raise AssertionError(f"mobile rotation timing did not materially improve: {mobile_rotation}")
+            if rotation["longTask50Count"] != 0 or rotation["internalLongTask50Delta"] != 0:
+                raise AssertionError(f"desktop rotation produced >50 ms navigation tasks: {rotation}")
+            if mobile_rotation["longTask50Count"] != 0 or mobile_rotation["internalLongTask50Delta"] != 0:
+                raise AssertionError(f"mobile rotation produced >50 ms navigation tasks: {mobile_rotation}")
+            if paced_rotation["longTask50Count"] != 0 or paced_rotation["internalLongTask50Delta"] != 0:
                 raise AssertionError(f"paced desktop navigation produced >50 ms long tasks: {paced_rotation}")
+            if forward["longTask50Count"] != 0 or reverse["longTask50Count"] != 0:
+                raise AssertionError(f"animated zoom produced >50 ms long tasks: forward={forward} reverse={reverse}")
             if paced_rotation["mapUpdateDelta"] >= 24:
                 raise AssertionError(f"paced desktop navigation still rebuilds semantic map too often: {paced_rotation['mapUpdateDelta']}")
     except Exception as exc:
