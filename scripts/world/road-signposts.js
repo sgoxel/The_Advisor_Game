@@ -123,27 +123,51 @@ function destinationRecords(seed){
   }
   return Object.freeze(out);
 }
-function routeBranch(seed,origin,destination){
-  const started=performance.now();
-  const route=window.RoutePlanner?.findRoute?.(seed,origin,destination.target,{maxDistanceTiles:MAX_ROUTE_TILES,maxNodes:MAX_ROUTE_NODES,detourAllowanceTiles:32})||null;
-  const queryMs=performance.now()-started;
-  if(!route?.found||!Array.isArray(route.path)||route.path.length<2)return {route:null,queryMs};
-  const a=numberPoint(route.path[0]),b=numberPoint(route.path[1]),dx=Math.sign(b.x-a.x),dy=Math.sign(b.y-a.y),dir=directionForDelta(dx,dy);
-  if(!dir||Math.abs(dx)+Math.abs(dy)!==1)return {route:null,queryMs};
-  const neighborRoad=roadAt(seed,a.x+dx,a.y+dy);
-  const meters=Math.max(0,(route.path.length-1)*tileMeters());
-  const distanceLabel=meters>=1000?(meters/1000).toFixed(meters>=10000?0:1)+" km":Math.round(meters)+" m";
-  return {
-    queryMs,
-    route:Object.freeze({
+function routeBranches(seed,origin,destinations){
+  const started=performance.now(),start=numberPoint(origin),startKey=start.x+","+start.y;
+  const targetByKey=new Map(),points=new Map([[startKey,start]]),previous=new Map([[startKey,null]]);
+  for(const destination of destinations||[]){
+    const target=numberPoint(destination.target),distance=Math.abs(target.x-start.x)+Math.abs(target.y-start.y);
+    if(distance>MAX_ROUTE_TILES)continue;
+    const key=target.x+","+target.y;
+    if(!targetByKey.has(key))targetByKey.set(key,[]);
+    targetByKey.get(key).push(destination);
+  }
+  const queue=[{x:start.x,y:start.y,steps:0}],found=new Set();
+  let head=0,expandedCount=0;
+  while(head<queue.length&&expandedCount<MAX_ROUTE_NODES&&found.size<targetByKey.size){
+    const current=queue[head++],currentKey=current.x+","+current.y;expandedCount++;
+    if(currentKey!==startKey&&targetByKey.has(currentKey))found.add(currentKey);
+    if(current.steps>=MAX_ROUTE_TILES)continue;
+    for(const dir of DIRS){
+      const x=current.x+dir.dx,y=current.y+dir.dy,key=x+","+y;
+      if(previous.has(key)||!roadAt(seed,x,y))continue;
+      previous.set(key,currentKey);points.set(key,{x,y});queue.push({x,y,steps:current.steps+1});
+    }
+  }
+  const routes=[];
+  for(const destination of destinations||[]){
+    const target=numberPoint(destination.target),targetKey=target.x+","+target.y;
+    if(targetKey===startKey||!previous.has(targetKey))continue;
+    const pathKeys=[];let cursor=targetKey;
+    while(cursor!=null){pathKeys.push(cursor);cursor=previous.get(cursor)??null;}
+    pathKeys.reverse();
+    if(pathKeys.length<2||pathKeys[0]!==startKey)continue;
+    const b=points.get(pathKeys[1]);if(!b)continue;
+    const dx=Math.sign(b.x-start.x),dy=Math.sign(b.y-start.y),dir=directionForDelta(dx,dy);
+    if(!dir||Math.abs(dx)+Math.abs(dy)!==1)continue;
+    const meters=Math.max(0,(pathKeys.length-1)*tileMeters());
+    const distanceLabel=meters>=1000?(meters/1000).toFixed(meters>=10000?0:1)+" km":Math.round(meters)+" m";
+    routes.push(Object.freeze({
       destinationId:destination.id,destinationName:destination.name,destinationType:destination.type,destinationCategory:destination.category,
       destinationAuthority:destination.authority,directionId:dir.id,directionLabel:dir.label,dx:dir.dx,dy:dir.dy,
-      routeSteps:route.stepCount,routeDistanceMeters:Number(meters.toFixed(1)),distanceLabel,
-      firstStep:Object.freeze({x:String(b.x),y:String(b.y)}),neighborRoad,
+      routeSteps:pathKeys.length-1,routeDistanceMeters:Number(meters.toFixed(1)),distanceLabel,
+      firstStep:Object.freeze({x:String(b.x),y:String(b.y)}),neighborRoad:true,
       edgeId:"SV-LOCAL|"+origin.x+","+origin.y+"|"+dir.id,
-      routeReason:String(route.reason||"ok"),reachable:true,source:"RoutePlanner.findRoute + StartingVillage road topology"
-    })
-  };
+      routeReason:"bounded-road-topology",reachable:true,source:"StartingVillage.isRoadReserved bounded local road graph"
+    }));
+  }
+  return {routes:Object.freeze(routes),queryMs:performance.now()-started,expandedCount};
 }
 function build(seedValue){
   const seed=String(seedValue==null?"":seedValue);
@@ -166,14 +190,13 @@ function build(seedValue){
       }
       candidates=DIRS.flatMap(d=>(groups.get(d.id)||[]).sort((a,b)=>a.distance-b.distance||a.destination.name.localeCompare(b.destination.name)).slice(0,2).map(x=>x.destination));
     }
-    for(const destination of candidates){
-      const result=routeBranch(seed,spec.junction,destination);routeQueryCount++;routeQueryMs+=result.queryMs;
-      const branch=result.route;if(!branch||branch.neighborRoad!==true)continue;
+    const routeResult=routeBranches(seed,spec.junction,candidates);routeQueryCount++;routeQueryMs+=routeResult.queryMs;
+    for(const branch of routeResult.routes){
+      if(!branch||branch.neighborRoad!==true)continue;
       const prior=byDirection.get(branch.directionId);
       if(!prior||branch.routeDistanceMeters<prior.routeDistanceMeters||(
         branch.routeDistanceMeters===prior.routeDistanceMeters&&branch.destinationName.localeCompare(prior.destinationName)<0
       ))byDirection.set(branch.directionId,branch);
-      if(spec.purpose!=="village-exit"&&byDirection.size>=MAX_DESTINATIONS_PER_SIGN)break;
     }
     let branches=Array.from(byDirection.values()).sort((a,b)=>a.routeDistanceMeters-b.routeDistanceMeters||a.directionId.localeCompare(b.directionId));
     branches=branches.slice(0,spec.purpose==="village-exit"?1:MAX_DESTINATIONS_PER_SIGN);
@@ -181,7 +204,7 @@ function build(seedValue){
     signs.push(Object.freeze({
       id:spec.id,purpose:spec.purpose,junction:spec.junction,anchor,roadDegree:degree,expectedDegree:spec.expectedDegree,
       branches:Object.freeze(branches),panelCount:branches.length,
-      authority:"StartingVillage.isRoadReserved + RoutePlanner.findRoute + canonical local destination labels",
+      authority:"StartingVillage.isRoadReserved bounded local road graph + canonical local destination labels",
       presentationOnly:true,simulationAuthority:false
     }));
     if(signs.length>=MAX_SIGNS)break;
