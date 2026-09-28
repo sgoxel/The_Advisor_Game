@@ -1739,7 +1739,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
                      s?.stage==='seeded-planetary-geography' &&
                      s?.geographyVersion==='planetary-geography-v5' &&
                      Number(s?.canvasCount||0)===1)) return false;
-                if(arguments[0]==='wp-s003-015'){
+                if(arguments[0]==='wp-s003-015'||arguments[0]==='wp-s003-022'){
                   // Trusted local-evidence fast-start intentionally omits the
                   // globe-only texture statistics consumed by PlanetStage.verify().
                   // Require the canonical planet authority and no-per-frame
@@ -16483,7 +16483,7 @@ def take_screenshots(
         # Request PlanetStage's presentation-only reduced startup globe here;
         # canonical local settlement/world authority, coordinates, camera truth
         # and every scenario acceptance gate remain unchanged.
-        if scenario in {"wp-s003-015", "wp-s003-020"} and browser_url.startswith(("http://127.0.0.1", "http://localhost")):
+        if scenario in {"wp-s003-015", "wp-s003-020", "wp-s003-022"} and browser_url.startswith(("http://127.0.0.1", "http://localhost")):
             browser_url += ("&" if "?" in browser_url else "?") + "evidence_fast_start=1"
         if scenario == "wp-s003-005-002":
             browser_url = browser_url.rstrip("/") + "/asset-standard-proof.html"
