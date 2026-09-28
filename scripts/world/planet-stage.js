@@ -84,6 +84,22 @@ function freshWildlifeReaction(){
 }
 let wildlifeReaction=freshWildlifeReaction();
 let localWildernessEnabled=true;
+let environmentalReactionRoot=null;
+let environmentalReactionMaterials=null;
+let environmentalReactionPool=[];
+const ENVIRONMENT_REACTION_MIN_MOVE_METERS=.65;
+const ENVIRONMENT_REACTION_MAX_MOVE_METERS=7.5;
+const ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS=90;
+const ENVIRONMENT_REACTION_POOL_PER_KIND=2;
+let environmentalReactions={
+  enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,peakActiveCount:0,
+  triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},
+  lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,
+  minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,
+  triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,
+  source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,
+  terrainMutation:false,presentationOnly:true,simulationAuthority:false,fullWorldScan:false,perFrameWorldScan:false
+};
 let localBuildingActivityRoot=null;
 let localBuildingActivityContext=null;
 let buildingActivity={
@@ -2509,6 +2525,135 @@ function renderLocalWilderness(resource,frame,reveal){
   wilderness={...wilderness,localActive:built.accepted>0,localBiome:dominant,localAcceptedStaticProps:built.accepted,localAmbientFaunaActiveCount:fauna,localShoreAccentCount:Number(built.shoreAccentCount||0),localRejectedManaged:built.rejectedManaged,localRejectedRoad:built.rejectedRoad,localFamilyCounts:{...built.familyCounts},localBiomeCounts:{...built.biomeCounts},localDrawCalls:drawCalls+fauna,localTriangles:built.triangles+faunaTriangles};
   return {accepted:built.accepted,triangles:built.triangles+faunaTriangles,drawCalls:drawCalls+fauna,fauna};
 }
+
+function environmentReactionPhoneProfile(){
+  const rect=canvas?.getBoundingClientRect?.();
+  return Math.min(Number(rect?.width||9999),Number(rect?.height||9999))<=480;
+}
+function environmentReactionSurfaceKind(surfaceType){
+  const type=String(surfaceType||"").toLowerCase();
+  if(["road","path","square","bridge","dirt"].includes(type))return "dust";
+  if(type==="grass")return "grassBend";
+  if(type==="farmland")return "footprint";
+  return null;
+}
+function environmentReactionMaterial(name,r,g,b,opacity=1){
+  const m=new pc.StandardMaterial();
+  m.name=name;m.diffuse.set(r,g,b);m.emissive.set(r*.12,g*.12,b*.12);m.emissiveIntensity=1;
+  m.roughness=.95;m.metalness=0;m.opacity=opacity;m.useLighting=true;m.cull=pc.CULLFACE_NONE;
+  if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}
+  m.update();return m;
+}
+function createEnvironmentReactionGroup(kind,index){
+  const group=new pc.Entity("EnvironmentReaction-"+kind+"-"+index),children=[];
+  environmentalReactionRoot.addChild(group);
+  if(kind==="dust"){
+    const specs=[[-.26,.16,-.06,.54,.30,.42],[.08,.22,.08,.64,.38,.52],[.34,.13,-.12,.44,.25,.38]];
+    for(let i=0;i<specs.length;i++){
+      const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"sphere",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5]);
+      children.push(e);
+    }
+  }else if(kind==="grassBend"){
+    const specs=[[-.32,.22,-.10,-58],[-.10,.25,.10,-48],[.14,.23,-.06,52],[.34,.20,.12,60]];
+    for(let i=0;i<specs.length;i++){
+      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"box",environmentalReactionMaterials.grass,q[0],q[1],q[2],.075,.48,.055,0,0,q[3]);
+      children.push(e);
+    }
+  }else{
+    const specs=[[-.16,.018,-.18,-18],[.16,.018,.20,18]];
+    for(let i=0;i<specs.length;i++){
+      const q=specs[i],e=addLocalPrimitive(group,"Footprint-"+index+"-"+i,"cylinder",environmentalReactionMaterials.footprint,q[0],q[1],q[2],.18,.025,.31,0,q[3],0);
+      children.push(e);
+    }
+  }
+  group.enabled=false;
+  return {kind,index,group,children,active:false,startedAtMs:0,lifetimeMs:0,latitudeRadians:0,longitudeRadians:0,directionDegrees:0};
+}
+function ensureEnvironmentReactionPool(){
+  if(environmentalReactionRoot||!pc||!tangentPatch)return Boolean(environmentalReactionRoot);
+  environmentalReactionMaterials={
+    dust:environmentReactionMaterial("EnvironmentDust",.58,.43,.25,.42),
+    grass:environmentReactionMaterial("EnvironmentBentGrass",.20,.50,.12,.92),
+    footprint:environmentReactionMaterial("EnvironmentFootprint",.22,.14,.075,.70)
+  };
+  environmentalReactionRoot=new pc.Entity("LocalEnvironmentalReactions");
+  tangentPatch.addChild(environmentalReactionRoot);
+  environmentalReactionPool=[];
+  for(const kind of ["dust","grassBend","footprint"]){
+    for(let i=0;i<ENVIRONMENT_REACTION_POOL_PER_KIND;i++)environmentalReactionPool.push(createEnvironmentReactionGroup(kind,i));
+  }
+  const drawableCount=environmentalReactionPool.reduce((sum,slot)=>sum+slot.children.length,0);
+  environmentalReactions={...environmentalReactions,poolInitialized:true,poolGroupCount:environmentalReactionPool.length,poolDrawableCount:drawableCount,poolAllocationsAfterInit:0};
+  return true;
+}
+function clearEnvironmentalReactions(){
+  for(const slot of environmentalReactionPool){slot.active=false;if(slot.group)slot.group.enabled=false;}
+  environmentalReactions={...environmentalReactions,activeCount:0,visibleCount:0};
+  return snapshot();
+}
+function triggerEnvironmentReaction(kind,surfaceType,latitudeRadians,longitudeRadians,movementMeters,directionDegrees){
+  if(!environmentalReactions.enabled||!ensureEnvironmentReactionPool())return false;
+  const cap=environmentReactionPhoneProfile()?environmentalReactions.phoneActiveCap:environmentalReactions.desktopActiveCap;
+  const active=environmentalReactionPool.filter(slot=>slot.active);
+  let slot=environmentalReactionPool.find(item=>item.kind===kind&&!item.active);
+  if(!slot){
+    const same=environmentalReactionPool.filter(item=>item.kind===kind).sort((a,b)=>a.startedAtMs-b.startedAtMs);
+    slot=same[0]||null;
+    if(slot)environmentalReactions={...environmentalReactions,reuseCount:environmentalReactions.reuseCount+1};
+  }
+  if(!slot)return false;
+  if(active.length>=cap&&!slot.active){
+    const oldest=active.sort((a,b)=>a.startedAtMs-b.startedAtMs)[0];
+    if(oldest){oldest.active=false;oldest.group.enabled=false;environmentalReactions={...environmentalReactions,reuseCount:environmentalReactions.reuseCount+1};}
+  }
+  const now=performance.now();
+  slot.active=true;slot.startedAtMs=now;slot.latitudeRadians=Number(latitudeRadians)||0;slot.longitudeRadians=Number(longitudeRadians)||0;
+  slot.directionDegrees=Number(directionDegrees)||0;slot.lifetimeMs=kind==="dust"?1450:kind==="grassBend"?2100:3600;slot.group.enabled=true;
+  const counts={...environmentalReactions.triggerByKind,[kind]:(environmentalReactions.triggerByKind[kind]||0)+1};
+  environmentalReactions={...environmentalReactions,triggerCount:environmentalReactions.triggerCount+1,triggerByKind:counts,lastKind:kind,lastSurfaceType:String(surfaceType||""),lastMovementMeters:Number(Number(movementMeters||0).toFixed(3)),lastTriggerAtMs:now};
+  return true;
+}
+function recordEnvironmentNavigationPassage(beforeLatitudeRadians,beforeLongitudeRadians,afterLatitudeRadians,afterLongitudeRadians){
+  if(!environmentalReactions.enabled||scaleIndexForScalar()<8||!displayResource||!tangentPatch?.enabled||!activeSeed)return false;
+  const delta=canonicalRegisteredDeltaMeters(beforeLatitudeRadians,beforeLongitudeRadians,afterLatitudeRadians,afterLongitudeRadians);
+  const east=Number(delta.eastMeters||0),north=Number(delta.northMeters||0),distance=Math.hypot(east,north);
+  if(distance<ENVIRONMENT_REACTION_MIN_MOVE_METERS||distance>ENVIRONMENT_REACTION_MAX_MOVE_METERS)return false;
+  const now=performance.now();
+  if(now-Number(environmentalReactions.lastTriggerAtMs||0)<ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS)return false;
+  const tile=mapWorldTileAt(afterLatitudeRadians,afterLongitudeRadians);
+  let surfaceType=null;
+  try{surfaceType=window.TerrainFoundation?.getType?.(activeSeed,tile.x,tile.y)||null;}catch(_){surfaceType=null;}
+  const kind=environmentReactionSurfaceKind(surfaceType);if(!kind)return false;
+  const directionDegrees=Math.atan2(east,north)*180/Math.PI;
+  return triggerEnvironmentReaction(kind,surfaceType,afterLatitudeRadians,afterLongitudeRadians,distance,directionDegrees);
+}
+function updateEnvironmentalReactions(){
+  if(!environmentalReactionPool.length||!displayResource)return;
+  const started=performance.now(),now=performance.now(),frame=localDisplayFrame(),dims=frame.dims;
+  let activeCount=0,visibleCount=0;
+  for(const slot of environmentalReactionPool){
+    if(!slot.active)continue;
+    const age=now-slot.startedAtMs;
+    if(age>=slot.lifetimeMs){slot.active=false;slot.group.enabled=false;environmentalReactions={...environmentalReactions,expiredCount:environmentalReactions.expiredCount+1};continue;}
+    activeCount++;
+    const delta=canonicalRegisteredDeltaMeters(frame.lat0,frame.lon0,slot.latitudeRadians,slot.longitudeRadians);
+    const east=Number(delta.eastMeters||0),north=Number(delta.northMeters||0);
+    const inside=Math.abs(east)<=dims.patchWidth*.62&&Math.abs(north)<=dims.patchHeight*.62;
+    slot.group.enabled=inside;if(!inside)continue;
+    visibleCount++;
+    const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),t=clamp(age/slot.lifetimeMs,0,1),ground=localGroundHeightUnits(east,north,frame);
+    let scale=1,liftMeters=.035;
+    if(slot.kind==="dust"){scale=.72+t*.85;liftMeters=.08+t*.42;}
+    else if(slot.kind==="grassBend"){scale=1-t*.18;liftMeters=.02;}
+    else{scale=1-t*.10;liftMeters=.015;}
+    slot.group.setLocalPosition(east/unit,ground+liftMeters/unit,-north/unit);
+    slot.group.setLocalScale(scale/unit,scale/unit,scale/unit);
+    slot.group.setLocalEulerAngles(0,slot.directionDegrees,0);
+  }
+  const ms=performance.now()-started;
+  environmentalReactions={...environmentalReactions,activeCount,visibleCount,peakActiveCount:Math.max(environmentalReactions.peakActiveCount,activeCount),lastUpdateMs:Number(ms.toFixed(4)),maxUpdateMs:Math.max(Number(environmentalReactions.maxUpdateMs||0),Number(ms.toFixed(4)))};
+}
+
 function ensureLocalStaticMaterials(){
   if(localStaticMaterials||!pc)return;
   const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
@@ -3719,7 +3864,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       semanticAnchorLocalZ=-Number(semanticDelta.northMeters||0)/dims.metersPerUnit;
     }
     const semanticAnchorCompensation=1-semanticHoldScale;
-    for(const rootNode of [localStaticRoot,localNpcRoot,localBuildingActivityRoot]){
+    for(const rootNode of [localStaticRoot,localNpcRoot,localBuildingActivityRoot,environmentalReactionRoot]){
       if(rootNode?.setLocalScale)rootNode.setLocalScale(semanticHoldScale,1,semanticHoldScale);
       if(rootNode?.setLocalPosition)rootNode.setLocalPosition(semanticAnchorLocalX*semanticAnchorCompensation,0,semanticAnchorLocalZ*semanticAnchorCompensation);
     }
@@ -3833,10 +3978,12 @@ function applyRotation(){
   rotationChangeCount++;  if(zoomState.scalar<=projectionState.transitionStart)updateMapPresentation();
 }
 function setRotation(yaw,pitch){
+  const beforeLatitudeRadians=zoomState.focusLatitudeRadians,beforeLongitudeRadians=zoomState.focusLongitudeRadians;
   yawDegrees=normalizeYaw(yaw);
   pitchDegrees=clamp(pitch,-82,82);
   applyRotation();
   if(zoomState.scalar>projectionState.transitionStart)applyCameraZoom();
+  recordEnvironmentNavigationPassage(beforeLatitudeRadians,beforeLongitudeRadians,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   return snapshot();
 }
 function rotateBy(deltaYaw,deltaPitch){
@@ -4374,6 +4521,7 @@ function updateAmbientMotion(dt){
   }
   const faunaStarted=performance.now();
   updateLocalFaunaMotion(step);
+  updateEnvironmentalReactions();
   const faunaMs=performance.now()-faunaStarted;
   wilderness={...wilderness,localFrameUpdateMs:Number(faunaMs.toFixed(4)),localMaxFrameUpdateMs:Math.max(Number(wilderness.localMaxFrameUpdateMs||0),Number(faunaMs.toFixed(4))),localAmbientFaunaActiveCount:localFaunaActors.length};
   ambientMotion.updateCount++;ambientMotion.lastUpdateMs=performance.now()-started;ambientMotion.maxUpdateMs=Math.max(ambientMotion.maxUpdateMs,ambientMotion.lastUpdateMs);
@@ -4821,6 +4969,7 @@ function snapshot(){
     wilderness:Object.freeze({...wilderness}),
     wildlifeReaction:Object.freeze({...wildlifeReaction,actors:Object.freeze(localFaunaActors.map(localFaunaActorSnapshot)),memoryEntryCount:localFaunaReactionMemory.size,
       speciesRules:Object.freeze(Object.fromEntries(Object.entries(LOCAL_FAUNA_SPECS).map(([kind,spec])=>[kind,Object.freeze({...spec})])))}),
+    environmentalReactions:Object.freeze({...environmentalReactions,activeSlots:Object.freeze(environmentalReactionPool.filter(slot=>slot.active).map(slot=>Object.freeze({kind:slot.kind,index:slot.index,ageMs:Number((performance.now()-slot.startedAtMs).toFixed(1)),lifetimeMs:slot.lifetimeMs,latitudeDegrees:Number((slot.latitudeRadians*180/Math.PI).toFixed(6)),longitudeDegrees:Number((slot.longitudeRadians*180/Math.PI).toFixed(6))})))}),
     inspection:Object.freeze({...inspection,activePickableCount:inspectionPickables.size,activeNpcCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="npc").length,activeBuildingCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="building").length,selectedAuthority:inspection.selectedId===null?null:(inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId))?.authority||null),boundedActiveRegistry:true,fullWorldScan:false,selectedStateRefreshIntervalMs:250}),
     npcPresentation:Object.freeze({...localNpcPresentation}),
     buildingActivity:Object.freeze({...buildingActivity,buildings:Object.freeze((buildingActivity.buildings||[]).slice())}),
@@ -4877,7 +5026,7 @@ function destroy(){
   geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localResidency.clear();localRecentEvictions.clear();localMotionPrefetchTargets.clear();localLastRequestRegistered=null;localMotionVector={east:0,north:0,magnitude:0};localStaticRefreshScheduled=false;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setScaleIndex,stepScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setScaleIndex,stepScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
   setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
