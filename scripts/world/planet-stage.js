@@ -3604,6 +3604,21 @@ function setCampaignWearEvidenceState(stateValue){
   const stateName=String(stateValue||"normal").toLowerCase(),allowed=new Set(["normal","worn","damaged","repaired","overgrown"]);
   if(!allowed.has(stateName))return Object.freeze({ok:false,reason:"unsupported-state",state:stateName});
   if(!activeSeed||!window.WorldState?.applyDelta||!window.WorldState?.structuralRef||!window.StartingVillage?.plan||!window.HousePlans?.build)return Object.freeze({ok:false,reason:"authority-unavailable"});
+  const delta=window.WorldState.deltaSnapshot?.(activeSeed)||null;
+  if(!delta?.bound){
+    let campaign=window.SeedSystem?.getCampaign?.()||null,reset=false;
+    if(!campaign||String(campaign.seed||"")!==String(activeSeed)){
+      let restored=null;try{restored=window.SeedSystem?.loadCampaign?.()||null;}catch(_){}
+      if(restored?.ok&&String(restored.campaign?.seed||"")===String(activeSeed))campaign=restored.campaign;
+    }
+    if(!campaign||String(campaign.seed||"")!==String(activeSeed)){
+      const started=window.SeedSystem?.startNewCampaign?.(activeSeed)||null;
+      if(!started?.ok||!started.campaign)return Object.freeze({ok:false,reason:"campaign-bind-unavailable"});
+      campaign=started.campaign;reset=true;
+    }
+    const bound=window.WorldState.bindCampaign?.(campaign,{reset})||null;
+    if(!bound?.ok)return Object.freeze({ok:false,reason:"campaign-bind-failed"});
+  }
   const village=window.StartingVillage.plan(activeSeed),houses=(window.HousePlans.build(activeSeed)||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))),record=houses[0]||null;
   if(!village||!record)return Object.freeze({ok:false,reason:"target-unavailable"});
   const settlement=window.WorldState.structuralRef(activeSeed,"settlement","WORLD","starting-village",{name:village.name,center:village.center});
@@ -5233,6 +5248,13 @@ async function buildScene(){  const started=performance.now();
   setStartupProgress("geography","Generating continents, oceans and islands…",52);
   if(!window.PlanetGeography)throw new Error("PlanetGeography is unavailable");
   activeSeed=window.PlanetGeography.resolveSeed();
+  if(window.WorldState?.bindCampaign&&window.SeedSystem?.loadCampaign){
+    let restored=null;
+    try{restored=window.SeedSystem.loadCampaign();}catch(_){}
+    if(restored?.ok&&String(restored.campaign?.seed||"")===String(activeSeed)){
+      window.WorldState.bindCampaign(restored.campaign,{reset:false});
+    }else window.WorldState.bindCampaign(null,{reset:false});
+  }
   geography=window.PlanetGeography.create(activeSeed);
   worldProjectionAnchorCache=null;
   politicalScaleEvidenceCache=null;
