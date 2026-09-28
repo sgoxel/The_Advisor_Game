@@ -2025,4 +2025,8 @@
 - Functional behavior passed: max 4 canonical SEED-derived local fauna, deer/hare flee, waterbird takeoff, presentationOnly=true, simulationAuthority=false, 10 Hz spatial-bucket reaction checks, exact 844x390 phone landscape + 390x844 phone portrait evidence, and max observed wildlife reaction update 3.3 ms.
 - VISUAL 5.5/10 FAIL: the final readability scaling makes deer render as oversized rectangular slab-like forms, especially on desktop and phone landscape; hare/waterbird remain too blocky and reaction posture is not naturally readable enough. The 3-attempt cap is reached, so no fourth loop was started.
 - WP-S003-014 remains IN PROGRESS / NOT COMPLETED and Issue #121 remains open.
-
+2026-09-28 05:44 +03:00 | WP-S003-014 | Reactive ambient wildlife continuation stopped after 3 attempts
+- Fresh final evidence run 36370402627 on exact head c296ee1f768c7f3a325dacee4665ced09975ca50 completed successfully and all eight required screenshots were directly inspected.
+- Functional acceptance remained green: canonical SEED-derived deer/hare/waterbird IDs stayed stable; flee/takeoff triggers worked; presentationOnly=true; simulationAuthority=false; fullWorldScan=false; maxActors=4; 100 ms reaction cadence; 24 m spatial buckets; triggerCount=11; max measured reaction update 3.3 ms; mobile landscape/portrait evidence completed at exact 844x390 and 390x844 inner viewports.
+- VISUAL 4.8/10 FAIL: the final size/contrast refinement overcorrected deer into oversized brown slab-like silhouettes that dominate desktop and phone-landscape views. Hare remained boxy; waterbird takeoff was the clearest readable reaction. Major visual defect remains, so WP is NOT COMPLETED.
+- The failed Attempt 3 production-presentation delta was rolled back at 468577da31bf2a7174c909c9b5b00a63b73ee03e to the previously tested Attempt 2 production state. Evidence-harness viewport/search hardening remains. Issue #121 stays open for a later continuation.
