@@ -6638,6 +6638,53 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         required={"grassland","rocky","wooded","wet"}
         if not required.issubset(set(targets or {})):
             raise RuntimeError(f"Unable to find bounded wilderness biome targets: {targets}")
+        # The generic wet biome may be an inland high-moisture patch. For the
+        # shoreline evidence requirement, deterministically refine a real
+        # canonical land/water boundary instead of pretending marsh = shore.
+        shoreline=driver.execute_script("""
+            const stage=window.PlanetStage,s=stage.snapshot(),geo=window.PlanetGeography?.create?.(s.activeSeed),radius=stage.constants.WORLD_RADIUS_METERS;
+            if(!geo)return null;
+            const clampLat=v=>Math.max(-Math.PI*.499,Math.min(Math.PI*.499,v));
+            const wrapLon=v=>{while(v>Math.PI)v-=Math.PI*2;while(v<-Math.PI)v+=Math.PI*2;return v;};
+            const at=(lat,lon)=>geo.sampleLatLon(clampLat(lat),wrapLon(lon));
+            const nearWater=(lat,lon,distanceMeters=40)=>{
+              const d=distanceMeters/radius,c=Math.max(.08,Math.cos(lat));
+              return !at(lat+d,lon).land||!at(lat-d,lon).land||!at(lat,lon+d/c).land||!at(lat,lon-d/c).land;
+            };
+            const refine=(a,b)=>{
+              let land={...a},water={...b},ga=at(a.lat,a.lon),gb=at(b.lat,b.lon);
+              if(ga.land===gb.land)return null;
+              if(!ga.land){land={...b};water={...a};const t=ga;ga=gb;gb=t;}
+              for(let i=0;i<26;i++){
+                let dl=water.lon-land.lon;while(dl>Math.PI)dl-=Math.PI*2;while(dl<-Math.PI)dl+=Math.PI*2;
+                const mid={lat:(land.lat+water.lat)/2,lon:wrapLon(land.lon+dl/2)},gm=at(mid.lat,mid.lon);
+                if(gm.land)land=mid;else water=mid;
+              }
+              let dl=land.lon-water.lon;while(dl>Math.PI)dl-=Math.PI*2;while(dl<-Math.PI)dl+=Math.PI*2;
+              const meanLat=(land.lat+water.lat)/2,east=dl*Math.cos(meanLat)*radius,north=(land.lat-water.lat)*radius,len=Math.hypot(east,north)||1;
+              const inset=10,lat=clampLat(land.lat+(north/len)*(inset/radius)),cos=Math.max(.08,Math.cos(lat));
+              const lon=wrapLon(land.lon+(east/len)*(inset/(radius*cos))),g=at(lat,lon);
+              if(!g.land||!nearWater(lat,lon,40))return null;
+              return {lat,lon,elevation:Number(g.elevationMeters||0),moisture:Number(g.moisture||0),surfaceClass:g.surfaceClass,mountainInfluence:Number(g.mountainInfluence||0),shoreline:true};
+            };
+            let best=null,bestScore=-Infinity;
+            const step=6*Math.PI/180;
+            for(let lat=-66*Math.PI/180;lat<=66*Math.PI/180;lat+=step){
+              for(let lon=-174*Math.PI/180;lon<174*Math.PI/180;lon+=step){
+                const a={lat,lon},ga=at(lat,lon);
+                for(const b of [{lat,lon:wrapLon(lon+step)},{lat:clampLat(lat+step),lon}]){
+                  const gb=at(b.lat,b.lon);if(Boolean(ga.land)===Boolean(gb.land))continue;
+                  const candidate=refine(a,b);if(!candidate)continue;
+                  const score=(candidate.surfaceClass==='coast'?3:0)+candidate.moisture*2-Math.max(0,candidate.elevation)/2500-candidate.mountainInfluence*2;
+                  if(score>bestScore){bestScore=score;best={...candidate,score};}
+                }
+              }
+            }
+            return best;
+        """)
+        if not shoreline:
+            raise RuntimeError("Unable to refine an actual canonical shoreline target for WP-S003-013")
+        targets["wet"]=shoreline
         plan=(
             ("village-edge","village","height:200",(1280,800),True),
             ("grassland-local","grassland","height:80",(1280,800),True),
