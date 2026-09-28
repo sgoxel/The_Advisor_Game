@@ -263,6 +263,13 @@ const SSE_COARSEN_PIXELS=1.5;
 // source. Refinement must select a finer canonical child instead of stretching
 // a coarse parent across a closer physical scale.
 const SSE_MAX_NATIVE_MAGNIFICATION=1.5;
+// A finer map-scale child should not become the steady-state source when it
+// must be shrunk so far that its bounded 1x focus patch no longer covers the
+// viewport and its 3x context transition dominates the image. Prefer the
+// adjacent canonical parent only when that parent remains within the existing
+// native magnification limit and a small relaxed screen-error ceiling.
+const SSE_MIN_STEADY_NATIVE_COMPENSATION=.72;
+const SSE_MAX_PARENT_CONTEXT_PIXELS=3.25;
 const SPATIAL_OVERSCAN_CELL_RADIUS=1;
 // The world-matched tangent continuation must cover large temporary focus
 // offsets and child preparation without exposing the clear-color rectangle.
@@ -2198,7 +2205,24 @@ function rawLodIndexForZoom(value){
   for(let index=0;index<LOCAL_DETAIL_LEVELS.length;index++){
     const errorOk=projectedPixelErrorForLevel(index,value)<=SSE_TARGET_PIXELS;
     const nativeScaleOk=nativeMagnificationForLevel(index,value)<=SSE_MAX_NATIVE_MAGNIFICATION;
-    if(errorOk&&nativeScaleOk)return index;
+    if(errorOk&&nativeScaleOk){
+      let selected=index;
+      // Presentation-only native-scale balance for broad/local map tiers.
+      // Canonical cell identity still comes exclusively from SEED coordinates;
+      // this only decides which already-defined SLOD level is the best visual
+      // representation for the current physical footprint.
+      while(selected>0){
+        const level=LOCAL_DETAIL_LEVELS[selected],parent=selected-1,parentLevel=LOCAL_DETAIL_LEVELS[parent];
+        const compensation=nativeMagnificationForLevel(selected,value);
+        if(level.staticWorld||parentLevel.staticWorld||Number(level.visibleHeightMeters||0)<10000||
+           compensation>=SSE_MIN_STEADY_NATIVE_COMPENSATION)break;
+        const parentMagnification=nativeMagnificationForLevel(parent,value);
+        const parentPixelError=projectedPixelErrorForLevel(parent,value);
+        if(parentMagnification>SSE_MAX_NATIVE_MAGNIFICATION||parentPixelError>SSE_MAX_PARENT_CONTEXT_PIXELS)break;
+        selected=parent;
+      }
+      return selected;
+    }
   }
   return LOCAL_DETAIL_LEVELS.length-1;
 }
