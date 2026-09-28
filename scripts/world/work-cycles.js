@@ -13,12 +13,14 @@ let telemetry={
 const DEFINITIONS=Object.freeze({
   farmer:Object.freeze([
     Object.freeze({id:"tools",label:"Collect farm tools",objectType:"storage",action:"retrieve",durationMinutes:8}),
+    Object.freeze({id:"yard",label:"Tend the farm yard",objectType:"exterior",action:"work",durationMinutes:12}),
     Object.freeze({id:"tend",label:"Tend and sort produce",objectType:"workbench",action:"work",durationMinutes:14}),
     Object.freeze({id:"store",label:"Store farm tools",objectType:"storage",action:"store",durationMinutes:8})
   ]),
   smith:Object.freeze([
     Object.freeze({id:"fuel",label:"Fetch fuel and stock",objectType:"storage",action:"retrieve",durationMinutes:8}),
     Object.freeze({id:"forge",label:"Forge at the workbench",objectType:"workbench",action:"craft",durationMinutes:14}),
+    Object.freeze({id:"cool",label:"Cool work at the workshop frontage",objectType:"exterior",action:"work",durationMinutes:10}),
     Object.freeze({id:"rack",label:"Rack finished work",objectType:"storage",action:"store",durationMinutes:8})
   ]),
   "tavern-keeper":Object.freeze([
@@ -29,6 +31,7 @@ const DEFINITIONS=Object.freeze({
   ]),
   shopkeeper:Object.freeze([
     Object.freeze({id:"stock",label:"Retrieve shop stock",objectType:"storage",action:"retrieve",durationMinutes:8}),
+    Object.freeze({id:"frontage",label:"Arrange the shop frontage",objectType:"exterior",action:"work",durationMinutes:10}),
     Object.freeze({id:"serve",label:"Serve the counter",objectType:"counter",action:"service",durationMinutes:14}),
     Object.freeze({id:"organize",label:"Organize shop storage",objectType:"storage",action:"store",durationMinutes:8})
   ]),
@@ -38,8 +41,9 @@ const DEFINITIONS=Object.freeze({
     Object.freeze({id:"stack",label:"Stack timber",objectType:"worksite",action:"work",durationMinutes:8})
   ]),
   guard:Object.freeze([
+    Object.freeze({id:"observe",label:"Observe the meeting-hall approach",objectType:"exterior",action:"work",durationMinutes:12}),
     Object.freeze({id:"brief",label:"Review the watch",objectType:"table",action:"work",durationMinutes:10}),
-    Object.freeze({id:"observe",label:"Observation pause",objectType:"chair",action:"sit",durationMinutes:7}),
+    Object.freeze({id:"pause",label:"Observation pause",objectType:"chair",action:"sit",durationMinutes:7}),
     Object.freeze({id:"report",label:"Record watch notes",objectType:"table",action:"work",durationMinutes:10})
   ])
 });
@@ -80,6 +84,35 @@ function residentObject(seed,resident,step){
     target:point(target),targetSource:"interior-interaction",buildingId:String(resident.workplaceId),
     interactionObjectId:String(object.id),interactionObjectType:String(object.type),
     intendedAction:step.action,action:step.action,supportedActions:Object.freeze([...(object.actions||[])])
+  });
+}
+function exteriorTarget(seed,resident,step){
+  const interior=window.BuildingInteriors?.get?.(seed,resident?.workplaceId)||null;
+  const entrance=interior?.entrance||null;
+  const origin=point(entrance?.outdoorAccess||entrance?.immediateOutside);
+  if(!origin)return null;
+  const protectedKeys=new Set([entrance?.door,entrance?.immediateOutside,entrance?.outdoorAccess].filter(Boolean).map(pointKey));
+  const candidates=[];
+  for(let radius=1;radius<=3;radius++)for(let oy=-radius;oy<=radius;oy++)for(let ox=-radius;ox<=radius;ox++){
+    if(Math.max(Math.abs(ox),Math.abs(oy))!==radius)continue;
+    const target=point({x:(BigInt(origin.x)+BigInt(ox)).toString(),y:(BigInt(origin.y)+BigInt(oy)).toString()});
+    if(protectedKeys.has(pointKey(target)))continue;
+    const nav=window.InteriorObjects?.classifyNavigation?InteriorObjects.classifyNavigation(seed,target.x,target.y):window.Walkability?.classify?.(seed,target.x,target.y);
+    if(!nav?.walkable||nav?.buildingId)continue;
+    let road=false;
+    try{const local=window.StartingVillage?.local?.(seed,target.x,target.y);road=Boolean(local&&window.StartingVillage?.isRoadReserved?.(seed,local));}catch(_){}
+    if(road)continue;
+    const score=Number(window.PRNG?.foundationUint32?.(seed,"work-cycle:frontage:"+resident.id+":"+target.x+":"+target.y)||0);
+    candidates.push({target,score});
+  }
+  candidates.sort((a,b)=>b.score-a.score||pointKey(a.target).localeCompare(pointKey(b.target)));
+  const target=candidates[0]?.target||null;
+  if(!target)return null;
+  return Object.freeze({
+    target,targetSource:"work-choreography",buildingId:String(resident.workplaceId),
+    interactionObjectId:null,interactionObjectType:"workplace-frontage",
+    intendedAction:step.action,action:step.action,supportedActions:Object.freeze([step.action]),
+    workplaceFrontage:true
   });
 }
 function outdoorCandidates(seed,resident){
@@ -128,7 +161,9 @@ function buildPlanFresh(seedValue,resident){
     const descriptor=definition[i];
     const target=descriptor.objectType==="worksite"
       ?outdoorTarget(seed,resident,descriptor,i,outdoor)
-      :residentObject(seed,resident,descriptor);
+      :descriptor.objectType==="exterior"
+        ?exteriorTarget(seed,resident,descriptor)
+        :residentObject(seed,resident,descriptor);
     if(!target)continue;
     steps.push(Object.freeze({
       id:descriptor.id,label:descriptor.label,durationMinutes:descriptor.durationMinutes,
@@ -231,7 +266,7 @@ function verify(seedValue){
       residentId:resident.id,profession,stepCount:first?.steps?.length||0,
       deterministic:Boolean(first&&second&&first.signature===second.signature),
       routesPass:Boolean(first?.routeChecks?.length&&first.routeChecks.every(x=>x.found)),
-      realTargets:Boolean(first?.steps?.every(step=>step.targetSource==="interior-interaction"||step.targetSource==="outdoor-worksite")),
+      realTargets:Boolean(first?.steps?.every(step=>["interior-interaction","outdoor-worksite","work-choreography"].includes(step.targetSource))),
       multiStepSamples:samples.length,planSignature:first?.signature||null
     }));
   }
