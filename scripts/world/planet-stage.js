@@ -3315,7 +3315,8 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),roster=window.DailyActivity.build(activeSeed)||[];
   let activeCount=0,entityCount=0;
   for(const resident of roster){
-    const state=residentPresentationState(resident);if(!state||state.indoors)continue;
+    const state=residentPresentationState(resident);if(!state)continue;
+    const initiallyVisible=!state.indoors;
     const east=state.x*tileMeters,north=state.y*tileMeters,ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.015;
     const bodyHeight=Math.max(.10,1.18*presentationScale/unit),bodyWidth=Math.max(.045,.48*presentationScale/unit),headSize=Math.max(.045,.44*presentationScale/unit);
     const pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame),x=pos.x,z=pos.z;
@@ -3325,6 +3326,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     const tool=addLocalPrimitive(localNpcRoot,"ResidentWorkTool-"+resident.id,"box",localNpcMaterials.tool,x,ground+bodyHeight*.62,z,bodyWidth*.26,bodyHeight*.72,bodyWidth*.26);
     tool.enabled=false;
     localNpcEntities.set(resident.id,{resident,body,head,tool,bodyHeight,bodyWidth,headSize,presentationScale,unit,frame,lift});
+    body.enabled=initiallyVisible;head.enabled=initiallyVisible;
     const entities=[body,head,tool];
     registerLocalInspection({
       id:resident.id,type:"npc",residentId:resident.id,pickPriority:3,
@@ -3334,7 +3336,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
       screenBounds:()=>inspectionEntityBounds(entities,5),
       screenDepth:()=>inspectionEntityDepth(entities)
     },localNpcInspectionKeys);
-    activeCount++;entityCount+=3;
+    if(initiallyVisible)activeCount++;entityCount+=3;
   }
   localNpcPresentation={...localNpcPresentation,active:activeCount>0,activeCount,entityCount,drawCallEstimate:entityCount,buildTimeMs:Number((performance.now()-started).toFixed(3)),time:inspectionFantasyStamp()};
   if(selectedNpc&&!inspectionPickables.has(inspectionRegistryKey("npc",selectedNpc)))dismissInspection();
@@ -3367,13 +3369,14 @@ function updateCanonicalNpcMotion(){
       const sy=horizontal?record.bodyHeight*.62:tray?record.bodyWidth*.20:record.bodyHeight*.92;
       const sz=tray?record.bodyWidth*.72:record.bodyWidth*.20;
       record.tool.setLocalScale(sx,sy,sz);
-      record.tool.setLocalPosition(pos.x+record.bodyWidth*.58,ground+record.bodyHeight*(tray?.72:.62),pos.z);
+      record.tool.setLocalPosition(pos.x+record.bodyWidth*.58,ground+record.bodyHeight*(tray?0.72:0.62),pos.z);
       record.tool.setLocalEulerAngles(horizontal?58:0,0,horizontal?32:0);
       record.tool.enabled=true;activeTools++;
     }
   }
   const elapsed=performance.now()-started;
   localNpcPresentation={...localNpcPresentation,active:visibleCount>0,activeCount:visibleCount,activeWorkCycleToolCount:activeTools,
+    drawCallEstimate:visibleCount*2+activeTools,
     motionUpdateCount:Number(localNpcPresentation.motionUpdateCount||0)+1,lastMotionUpdateMs:Number(elapsed.toFixed(4)),
     maxMotionUpdateMs:Math.max(Number(localNpcPresentation.maxMotionUpdateMs||0),Number(elapsed.toFixed(4)))};
 }
