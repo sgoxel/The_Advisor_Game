@@ -2291,3 +2291,10 @@
 - Workflow 36487809607 / artifact 10999909775 passed functionally on exact head aa2ce64334120e4c345524794fffa2b0b80a7b2e: two authoritative SEEDs, canonical 1x/3x/6x rings, <=8-resource / 48 MiB cache (captured max 7 entries / 12,253,392 bytes), pan-back cache+grace reuse, CPU-throttled parent fallback, missingCoverageCount=0, fullWorldScan=false and globalHighDetailMaterialized=false.
 - All 10 fresh WP screenshots plus the harness check were directly inspected. VISUAL 5.2/10 FAIL: the 1/500 desktop and phone-landscape views retain large angular/flat tonal fields, 1/2500 desktop/pan/second-SEED frames expose a dominant blurred rectangular focus footprint, and the throttled parent fallback is nearly featureless. The 1/10 globe and UI/responsive framing are readable.
 - Three-attempt cap reached. WP remains OPEN / IN PROGRESS / NOT COMPLETED; no deployment-completion bookkeeping or Issue closure was performed.
+
+
+2026-09-29 00:54 +03:00 | WP-S003-010-003-019 | MIXED | Restored best-tested presentation after capped final regression
+- After the three-attempt cap, no fourth implementation or visual-evidence loop was started. The final photometry-normalized state remained below acceptance, while the earlier Attempt-1 presentation had the best directly inspected score in this continuation (6.8/10, workflow 36485770975 / artifact 11000071792).
+- Stability guard commit 42db01a2cade4720083ff5f4998464e1e9a92724 restores only the tested WP-019 terrain presentation/handoff hunks from ff155ec65287f12c2513b4b2280558eda0d92d17. It deliberately preserves the newer WP-S003-010-003-020 navigation-budget/hot-path changes already present in planet-stage.js.
+- Code-level probes confirm the restored WP-019 hillshade/detail/emissive values match the tested Attempt-1 state and the WP-020 navigation-budget telemetry/scheduling remains present.
+- WP-S003-010-003-019 remains OPEN / IN PROGRESS / NOT COMPLETED. The existing Phase 4 suggest_log entry remains the next eligible visual direction; no suggestion was implemented in this capped run.
