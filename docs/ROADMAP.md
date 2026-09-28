@@ -115,7 +115,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-010-003-014` — Physical-Scale Semantic Layer Ladder + Stable Label/Border/Route Decluttering — COMPLETED
 - `WP-S003-010-003-015` — TOP PRIORITY BUG: SEED-Only Settlement Hierarchy + Realistic Physical Spacing — COMPLETED
 - `WP-S003-010-003-016` — Temporal-Coherent Detail Residency + Ready-Child Handoff + Navigation Prefetch — COMPLETED
-- `WP-S003-010-003-017` — TOP PRIORITY REGRESSION: Planet-Scale Semantic Cleanup + Explainable Marker Visibility — IN PROGRESS (Phase 2 acceptance achieved 2026-09-28; exact-head workflow 36470412008 PASS; 9 fresh screenshots directly inspected VISUAL 8.1/10 PASS; implementation/evidence head 6c78685c7255b9a10e047bc69fe0649e5cae422a deployed by Pages run 36470410958; completion bookkeeping pending)
+- `WP-S003-010-003-017` — TOP PRIORITY REGRESSION: Planet-Scale Semantic Cleanup + Explainable Marker Visibility — COMPLETED
 - `WP-S003-010-003-018` — Smooth Animated Zoom + Intermediate Physical Scale Ladder
 - `WP-S003-010-003-019` — Focus-Centric Layered World Streaming + Center-First Detail Refinement
 - `WP-S003-010-003-020` — World-Map Navigation Performance Budget + Main-Thread Stutter Elimination
