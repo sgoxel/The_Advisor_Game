@@ -3641,20 +3641,33 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
   }));
   const blockedByTree=(x,y)=>canonicalTreeCrowns.some(tree=>Math.hypot(Number(x)-tree.x,Number(y)-tree.y)<tree.radiusTiles);
   const sideBasis=side=>side==="N"?{ox:0,on:-1,tx:1,tn:0}:side==="S"?{ox:0,on:1,tx:-1,tn:0}:side==="W"?{ox:-1,on:0,tx:0,tn:-1}:{ox:1,on:0,tx:0,tn:1};
+  const cueFootprintClear=(record,basis,x,y,fn)=>{
+    const extent=fn==="lodging"?{u:2.05,v:1.42}:fn==="craft"?{u:1.90,v:1.28}:null;
+    if(!extent)return true;
+    const samples=[[0,0],[-extent.u,-extent.v],[extent.u,-extent.v],[-extent.u,extent.v],[extent.u,extent.v]];
+    for(const [u,v] of samples){
+      const sx=x+basis.tx*u+basis.ox*v,sy=y+basis.tn*u+basis.on*v;
+      if(blockedByOther(record,sx,sy))return false;
+      if(blockedByTree(sx,sy)){treeOcclusionRejects++;return false;}
+    }
+    return true;
+  };
   const anchorFor=record=>{
-    const b=record.bounds,access=record.entrance||record.access||null,opposite=access?.side==="S"?"N":access?.side==="N"?"S":access?.side==="E"?"W":access?.side==="W"?"E":"N";
+    const b=record.bounds,access=record.entrance||record.access||null,opposite=access?.side==="S"?"N":access?.side==="N"?"S":access?.side==="E"?"W":access?.side==="W"?"E":"N",fn=String(record.function||"home");
     // The dimetric gameplay camera reads S/E exterior space most clearly. Prefer
     // the other visible side from an S/E entrance, then fall back to the hidden
     // opposite side only when canonical road/building clearance requires it.
     const preferred=access?.side==="S"?"E":access?.side==="E"?"S":access?.side==="N"?"E":access?.side==="W"?"S":"S";
     const order=[preferred,opposite,...["S","E","N","W"].filter(x=>x!==preferred&&x!==opposite&&x!==access?.side),access?.side].filter(Boolean);
+    const outset=fn==="lodging"?2.35:fn==="craft"?1.85:1.55;
     for(const side of order){
       anchorSelectionAttempts++;
       const basis=sideBasis(side),cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
       const half=side==="N"||side==="S"?(Number(b.maxY)-Number(b.minY)+1)/2:(Number(b.maxX)-Number(b.minX)+1)/2;
-      const x=cx+basis.ox*(half+1.55),y=cy+basis.on*(half+1.55);
+      const x=cx+basis.ox*(half+outset),y=cy+basis.on*(half+outset);
       if(roadAt(x,y)||blockedByOther(record,x,y))continue;
       if(blockedByTree(x,y)){treeOcclusionRejects++;continue;}
+      if(!cueFootprintClear(record,basis,x,y,fn))continue;
       if(access&&Math.hypot(x-Number(access.x),y-Number(access.y))<2.2)continue;
       return {side,basis,east:x*tileMeters,north:y*tileMeters,tileX:x,tileY:y};
     }
@@ -3678,11 +3691,9 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,-3.15,.72,.28,4.10,.66,[.24,.13,.05],.12);
       box(anchor,b,.75,.72,.28,4.10,.66,[.24,.13,.05],.12);
       box(anchor,b,-1.20,1.88,4.18,.28,.66,[.24,.13,.05],.12);
-      // Hitching rail + water trough are visually distinct from farm furrows.
-      box(anchor,b,-1.18,-1.45,.28,.28,1.22,C.wood,.10);
-      box(anchor,b,.42,-1.45,.28,.28,1.22,C.wood,.10);
-      box(anchor,b,-.38,-1.45,2.10,.24,.24,C.wood,.96);
-      box(anchor,b,-1.34,.12,2.25,.88,.34,[.18,.32,.34],.16);
+      // A broad blue trough survives plan view better than three small hitching
+      // rail pieces and costs fewer primitives.
+      box(anchor,b,-1.34,.12,2.55,1.02,.36,[.16,.34,.38],.16);
       // Compact horse silhouette stays inside the paddock and reads in plan view.
       box(anchor,b,-1.15,.62,2.65,.92,.62,[.30,.15,.06],.22);
       box(anchor,b,.02,.73,.62,.64,.58,[.34,.18,.07],.40);
