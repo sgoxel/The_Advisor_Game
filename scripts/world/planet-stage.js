@@ -2121,7 +2121,7 @@ function prepareLocalWildernessPlan(job){
     const tx=String(Math.round(worldX/tileMeters)),ty=String(Math.round(worldY/tileMeters)),geo=worldLatLonForTile(tx,ty);
     const sample=geography?.sampleLatLon?.(geo.latitudeRadians,geo.longitudeRadians);
     if(!sample?.land){rejectedWater++;continue;}
-    const probe=Math.max(8,spacing*.8)/WORLD_RADIUS_METERS,probeLon=probe/Math.max(.08,Math.cos(geo.latitudeRadians));
+    const probeMeters=Math.max(24,Math.min(56,spacing*2.8)),probe=probeMeters/WORLD_RADIUS_METERS,probeLon=probe/Math.max(.08,Math.cos(geo.latitudeRadians));
     const waterNorthProbe=!geography?.sampleLatLon?.(clamp(geo.latitudeRadians+probe,-Math.PI*.499999,Math.PI*.499999),geo.longitudeRadians)?.land;
     const waterSouthProbe=!geography?.sampleLatLon?.(clamp(geo.latitudeRadians-probe,-Math.PI*.499999,Math.PI*.499999),geo.longitudeRadians)?.land;
     const waterEastProbe=!geography?.sampleLatLon?.(geo.latitudeRadians,wrapLongitudeRadians(geo.longitudeRadians+probeLon))?.land;
@@ -2135,7 +2135,8 @@ function prepareLocalWildernessPlan(job){
     const roll=(localWildernessHashInt(gx,gy,salt+71)>>>0)/4294967295,family=localWildernessFamily(biome,roll);
     const baseScale=.78+((localWildernessHashInt(gx,gy,salt+93)>>>0)/4294967295)*.62;
     const reliefScale=family==="outcrop"?1.10:(family==="rock"&&biome==="rocky"?1.06:(family==="sapling"&&biome==="wooded"?1.18:(family==="reed"&&biome==="wet"?1.14:1)));
-    const closeReadableScale=(Number(dims.visibleHeight||dims.visibleHeightMeters||500)<=90&&["grass","flower","bush","sapling","reed"].includes(family))?1.24:1;
+    const closeLod=Number(dims.visibleHeight||dims.visibleHeightMeters||500)<=90;
+    const closeReadableScale=closeLod?(biome==="wooded"&&["grass","flower","bush","sapling","log","stump"].includes(family)?1.34:(["grass","flower","bush","sapling","reed"].includes(family)?1.24:1)):1;
     const scale=baseScale*reliefScale*closeReadableScale;
     const rotation=((localWildernessHashInt(gx,gy,salt+109)>>>0)/4294967295)*Math.PI*2;
     const variant=(localWildernessHashInt(gx,gy,salt+131)>>>0)/4294967295;
