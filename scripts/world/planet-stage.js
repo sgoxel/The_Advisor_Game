@@ -2306,9 +2306,9 @@ function buildLocalFaunaMesh(kind,size,unit){
   const positions=[],normals=[],colors=[],indices=[],s=size/unit;
   // Species palettes need enough natural contrast to survive the ground camera
   // and dense biome dressing without becoming UI-like markers.
-  const palette=kind==="waterbird"?[.62,.65,.50]:kind==="bird"?[.31,.26,.16]:kind==="hare"?[.64,.43,.22]:[.53,.31,.14];
-  const dark=kind==="waterbird"?[.23,.29,.23]:kind==="bird"?[.17,.15,.11]:kind==="hare"?[.27,.17,.09]:[.31,.18,.09];
-  const light=kind==="waterbird"?[.94,.90,.69]:kind==="bird"?[.58,.47,.27]:kind==="hare"?[.88,.70,.43]:[.78,.60,.37];
+  const palette=kind==="waterbird"?[.53,.60,.40]:kind==="bird"?[.31,.26,.16]:kind==="hare"?[.69,.43,.18]:[.53,.31,.14];
+  const dark=kind==="waterbird"?[.16,.22,.16]:kind==="bird"?[.17,.15,.11]:kind==="hare"?[.22,.11,.05]:[.31,.18,.09];
+  const light=kind==="waterbird"?[.98,.95,.76]:kind==="bird"?[.58,.47,.27]:kind==="hare"?[.95,.77,.46]:[.78,.60,.37];
   const push=(x,y,z,color=palette)=>{positions.push(x,y,z);normals.push(0,1,0);colors.push(Math.round(color[0]*255),Math.round(color[1]*255),Math.round(color[2]*255),255);return positions.length/3-1;};
   const tri=(a,b,c)=>indices.push(a,b,c);
   // Reusable rounded low-poly primitive. The old implementation assembled
@@ -2357,13 +2357,18 @@ function buildLocalFaunaMesh(kind,size,unit){
     // near-top-down view and made the animal read as a small brown pebble.
     ellipsoid(-s*.12,s*.43,0,s*.50,s*.27,s*.31,palette,9,5);
     ellipsoid(s*.28,s*.58,0,s*.27,s*.22,s*.23,light,8,5);
-    // Two tapered ears project forward and slightly outward in plan view.
-    pyramidX(s*.31,s*.66,-s*.15,s*.065,s*.050,s*.48,dark);
-    pyramidX(s*.31,s*.66,s*.15,s*.065,s*.050,s*.48,dark);
+    // Two long plan-view ears carry bright outer mass plus a narrow dark inner
+    // stripe. The two-tone treatment remains part of the same merged mesh and
+    // reads as ears even before flee motion, without increasing the actor envelope.
+    pyramidX(s*.31,s*.66,-s*.15,s*.070,s*.055,s*.49,light);
+    pyramidX(s*.31,s*.66,s*.15,s*.070,s*.055,s*.49,light);
+    pyramidX(s*.36,s*.725,-s*.15,s*.018,s*.022,s*.36,dark);
+    pyramidX(s*.36,s*.725,s*.15,s*.018,s*.022,s*.36,dark);
+    ellipsoid(s*.50,s*.58,0,s*.075,s*.050,s*.060,dark,6,4);
     // Broad rear feet and white tail keep the front/back axis readable during flee.
     ellipsoid(-s*.39,s*.20,-s*.20,s*.28,s*.10,s*.12,dark,6,4);
     ellipsoid(-s*.39,s*.20,s*.20,s*.28,s*.10,s*.12,dark,6,4);
-    ellipsoid(-s*.58,s*.45,0,s*.15,s*.14,s*.15,[.88,.82,.70],7,4);
+    ellipsoid(-s*.58,s*.45,0,s*.15,s*.14,s*.15,[.95,.90,.78],7,4);
   }else{
     const water=kind==="waterbird";
     ellipsoid(-s*.06,s*.47,0,s*(water?.45:.42),s*(water?.20:.22),s*(water?.25:.28),palette,9,5);
@@ -2379,8 +2384,14 @@ function buildLocalFaunaMesh(kind,size,unit){
       pyramidX(s*.53,s*.58,0,s*.07,s*.095,s*.28,[.66,.49,.20]);
     }
     // Dark, attached wings widen the plan-view body without increasing actor size.
-    ellipsoid(-s*.12,s*.51,-s*.20,s*.35,s*.055,s*.29,dark,8,4);
-    ellipsoid(-s*.12,s*.51,s*.20,s*.35,s*.055,s*.29,dark,8,4);
+    // Move their visual centers slightly outward and add a slim light shoulder
+    // seam so the idle bird keeps two readable wing lobes against wet terrain.
+    ellipsoid(-s*.12,s*.51,-s*.23,s*.34,s*.055,s*.27,dark,8,4);
+    ellipsoid(-s*.12,s*.51,s*.23,s*.34,s*.055,s*.27,dark,8,4);
+    if(water){
+      ellipsoid(-s*.02,s*.565,-s*.17,s*.24,s*.030,s*.055,light,7,3);
+      ellipsoid(-s*.02,s*.565,s*.17,s*.24,s*.030,s*.055,light,7,3);
+    }
     pyramidX(-s*.33,s*.46,0,s*.070,s*.15,-s*.28,dark);
     if(water){
       ellipsoid(-s*.12,s*.20,-s*.105,s*.045,s*.22,s*.045,[.43,.28,.12],6,4);
