@@ -143,7 +143,6 @@ let localCampaignWearMesh=null;
 let localCampaignWearGeometry=null;
 let localCampaignWearContext=null;
 let localCampaignWearRelevantIds=new Set();
-let localCanonicalBuildingRoofs=new Map();
 let campaignWearProjection={
   active:false,buildingCount:0,changedBuildingCount:0,visualPrimitiveCount:0,drawCallEstimate:0,triangleCount:0,sharedMaterialCount:1,
   stateCounts:{normal:0,worn:0,damaged:0,repaired:0,overgrown:0},buildings:[],revisionSignature:null,maxRevision:0,
@@ -2862,8 +2861,6 @@ function ensureLocalStaticMaterials(){
   localStaticMaterials={
     road:make("LocalRoad",.22,.14,.075),square:make("LocalSquare",.42,.32,.19),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
-    roofWorn:make("LocalRoofWorn",.42,.36,.28),roofDamaged:make("LocalRoofDamaged",.11,.07,.05),
-    roofRepair:make("LocalRoofRepair",.65,.38,.15),roofOvergrown:make("LocalRoofOvergrown",.23,.30,.11),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.31,.14,.30),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3445,50 +3442,6 @@ function updateCanonicalNpcMotion(){
     motionUpdateCount:Number(localNpcPresentation.motionUpdateCount||0)+1,lastMotionUpdateMs:Number(elapsed.toFixed(4)),
     maxMotionUpdateMs:Math.max(Number(localNpcPresentation.maxMotionUpdateMs||0),Number(elapsed.toFixed(4)))};
 }
-function canonicalRoofMaterialForState(state,side,landmark){
-  const visualState=String(state||"normal");
-  if(visualState==="worn")return localStaticMaterials.roofWorn;
-  if(visualState==="damaged")return side==="left"?localStaticMaterials.roofDamaged:localStaticMaterials.roofWorn;
-  if(visualState==="repaired")return localStaticMaterials.roofRepair;
-  if(visualState==="overgrown")return localStaticMaterials.roofOvergrown;
-  return landmark?localStaticMaterials.landmark:localStaticMaterials.roof;
-}
-function setCanonicalRoofMaterial(entity,material){
-  const meshInstance=entity?.render?.meshInstances?.[0];if(meshInstance&&material)meshInstance.material=material;
-}
-function applyCanonicalBuildingWearState(recordId,state){
-  const entry=localCanonicalBuildingRoofs.get(String(recordId));if(!entry)return false;
-  const visualState=["normal","worn","damaged","repaired","overgrown"].includes(String(state))?String(state):"normal";
-  const reset=(entity,base)=>{
-    entity?.setLocalPosition?.(base.position[0],base.position[1],base.position[2]);
-    entity?.setLocalScale?.(base.scale[0],base.scale[1],base.scale[2]);
-    entity?.setLocalEulerAngles?.(base.euler[0],base.euler[1],base.euler[2]);
-  };
-  reset(entry.left,entry.base.left);reset(entry.right,entry.base.right);
-  setCanonicalRoofMaterial(entry.left,canonicalRoofMaterialForState(visualState,"left",entry.landmark));
-  setCanonicalRoofMaterial(entry.right,canonicalRoofMaterialForState(visualState,"right",entry.landmark));
-  if(visualState==="damaged"){
-    // Remove only a bounded outer-eave strip from the real left roof plane.
-    // Keep its ridge edge fixed so the roof still reads as one building rather
-    // than a detached dark rectangle. Authoritative bounds/collision stay put.
-    const l=entry.base.left,missing=l.scale[0]*.20,rad=l.euler[2]*Math.PI/180;
-    entry.left.setLocalScale(l.scale[0]-missing,l.scale[1],l.scale[2]);
-    entry.left.setLocalPosition(
-      l.position[0]+Math.cos(rad)*missing*.5,
-      l.position[1]+Math.sin(rad)*missing*.5,
-      l.position[2]
-    );
-  }else if(visualState==="repaired"){
-    // Keep the silhouette canonical; the left roof plane itself becomes the
-    // replacement-board section instead of receiving a floating decal.
-    entry.left.setLocalPosition(entry.base.left.position[0],entry.base.left.position[1]+.006,entry.base.left.position[2]);
-  }else if(visualState==="overgrown"){
-    // Keep both canonical planes intact and let the shared olive-brown roof
-    // material + attached moss/vines carry the state without a half-roof block.
-  }
-  entry.visualState=visualState;
-  return true;
-}
 function addCanonicalBuilding(record,index,presentationScale,unit,frame,detailed,landmark,lift=0){
   const b=record.bounds,tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),entities=[];
   const cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
@@ -3505,16 +3458,8 @@ function addCanonicalBuilding(record,index,presentationScale,unit,frame,detailed
   entities.push(addLocalStatic("CanonicalBody-"+record.id,"box",wall,pos.x,ground+h*.5,pos.z,w*presentationScale/unit,h,d*presentationScale/unit));
   const roofMat=landmark?localStaticMaterials.landmark:localStaticMaterials.roof;
   const roofY=ground+h+.025,roofL=canonicalSemanticPosition(east-w*.20,north,presentationScale,unit,frame),roofR=canonicalSemanticPosition(east+w*.20,north,presentationScale,unit,frame);
-  const left=addLocalStatic("CanonicalRoofL-"+record.id,"box",roofMat,roofL.x,roofY,roofL.z,w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit,0,0,-24);
-  const right=addLocalStatic("CanonicalRoofR-"+record.id,"box",roofMat,roofR.x,roofY,roofR.z,w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit,0,0,24);
-  entities.push(left,right);
-  localCanonicalBuildingRoofs.set(String(record.id),{
-    left,right,landmark:Boolean(landmark),visualState:"normal",
-    base:{
-      left:{position:[roofL.x,roofY,roofL.z],scale:[w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit],euler:[0,0,-24]},
-      right:{position:[roofR.x,roofY,roofR.z],scale:[w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit],euler:[0,0,24]}
-    }
-  });
+  entities.push(addLocalStatic("CanonicalRoofL-"+record.id,"box",roofMat,roofL.x,roofY,roofL.z,w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit,0,0,-24));
+  entities.push(addLocalStatic("CanonicalRoofR-"+record.id,"box",roofMat,roofR.x,roofY,roofR.z,w*.66*presentationScale/unit,.05,d*1.10*presentationScale/unit,0,0,24));
   registerCanonicalBuildingInspection(record,entities);
   return entities.length;
 }
@@ -3860,7 +3805,6 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
 function clearCanonicalCampaignWearProjection(){
   localCampaignWearMesh?.destroy?.();localCampaignWearMesh=null;
   localCampaignWearGeometry?.destroy?.();localCampaignWearGeometry=null;
-  for(const id of localCanonicalBuildingRoofs.keys())applyCanonicalBuildingWearState(id,"normal");
   localCampaignWearRelevantIds.clear();
   campaignWearProjection={...campaignWearProjection,active:false,buildingCount:0,changedBuildingCount:0,visualPrimitiveCount:0,drawCallEstimate:0,triangleCount:0,
     stateCounts:{normal:0,worn:0,damaged:0,repaired:0,overgrown:0},buildings:[],revisionSignature:null,maxRevision:0,deltaSequence:0,localQueryCount:0,buildMs:0,lastBuildReason:"cleared"};
@@ -3929,7 +3873,6 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
   }
   ensureLocalStaticMaterials();
   const state=campaignWearResolvedState(context.reveal),positions=[],normals=[],colors=[],indices=[];
-  for(const item of state.buildings)applyCanonicalBuildingWearState(item.id,item.visualState);
   let primitiveCount=0;
   const addVertex=(x,y,z,color,normal)=>{positions.push(x,y,z);normals.push(normal[0],normal[1],normal[2]);colors.push(color[0],color[1],color[2],color[3]??255);return positions.length/3-1;};
   const box=(east,north,yMeters,sxMeters,syMeters,szMeters,color)=>{
@@ -3989,31 +3932,39 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const roofCenter=ground+physicalHeight*s+.025;
     const leftEast=east-w*.20,rightEast=east+w*.20;
     if(item.visualState==="worn"){
-      // Wear is carried primarily by the two real roof planes: a desaturated,
-      // sun-bleached surface plus only two short missing-shingle runs.
-      orientedBox(leftEast-w*.10,north-d*.18,roofCenter+.003,Math.max(.30,w*.052),.036,Math.max(.60,d*.11),C.wearDark,-24);
-      orientedBox(rightEast+w*.08,north+d*.22,roofCenter+.003,Math.max(.28,w*.048),.034,Math.max(.54,d*.10),C.weather,24);
+      // Weathering follows both canonical roof planes instead of floating above them.
+      orientedBox(leftEast-w*.04,north+d*.08,roofCenter+.028,Math.max(.52,w*.11),.055,Math.max(3.6,d*.72),C.weather,-24);
+      orientedBox(rightEast+w*.03,north-d*.10,roofCenter+.030,Math.max(.46,w*.10),.052,Math.max(3.2,d*.66),C.wearDark,24);
+      orientedBox(leftEast+w*.10,north-d*.25,roofCenter+.042,Math.max(.34,w*.07),.045,Math.max(1.7,d*.34),C.wear,-24);
+      orientedBox(rightEast-w*.10,north+d*.30,roofCenter+.044,Math.max(.32,w*.065),.045,Math.max(1.5,d*.30),C.wear,24);
+      groundBox(east,north+d*.73,.018,Math.max(4.2,w*.88),.05,Math.max(1.3,d*.22),C.wear);
+      groundBox(east-w*.24,north+d*.60,.020,Math.max(.34,w*.07),.055,Math.max(2.5,d*.46),C.wearDark);
     }else if(item.visualState==="damaged"){
-      // One real roof plane is charred and loses an outer eave strip; the
-      // opposite plane stays faded rather than becoming a second black slab.
-      // Two short broken rafters define the exposed edge and debris is grounded.
-      orientedBox(leftEast-w*.12,north-d*.20,roofCenter-.004,Math.max(.22,w*.040),.080,Math.max(.70,d*.13),C.char,-24);
-      orientedBox(leftEast-w*.11,north+d*.20,roofCenter-.004,Math.max(.20,w*.036),.072,Math.max(.58,d*.11),C.burn,-24);
-      groundBox(east-w*.58,north+d*.34,.02,.72,.22,.58,C.debris);
-      groundBox(east-w*.64,north-d*.18,.02,.54,.20,.72,C.char);
+      // Irregular char/ash strips sit on the pitched roof; debris remains grounded.
+      orientedBox(leftEast-w*.02,north-d*.12,roofCenter+.040,Math.max(1.55,w*.28),.075,Math.max(3.3,d*.68),C.char,-24);
+      orientedBox(rightEast+w*.02,north+d*.15,roofCenter+.045,Math.max(1.10,w*.20),.065,Math.max(2.5,d*.50),C.burn,24);
+      orientedBox(leftEast+w*.18,north+d*.30,roofCenter+.060,Math.max(.62,w*.11),.050,Math.max(1.15,d*.22),C.ash,-24);
+      groundBox(east+w*.62,north+d*.26,.02,1.55,.62,1.15,C.debris);
+      groundBox(east+w*.72,north-d*.30,.02,1.10,.42,1.55,C.char);
+      groundBox(east+w*.50,north+d*.55,.02,1.65,.30,.56,C.burn);
     }else if(item.visualState==="repaired"){
-      // Both real roof planes are now fresh replacement timber so recovery is
-      // unmistakable from the fixed camera. Two darker join battens remain
-      // inside the same roof silhouette and read as construction seams.
-      orientedBox(leftEast-w*.05,north-d*.16,roofCenter+.008,Math.max(.18,w*.032),.040,Math.max(.82,d*.15),C.repairDark,-24);
-      orientedBox(rightEast+w*.05,north+d*.16,roofCenter+.008,Math.max(.18,w*.032),.040,Math.max(.82,d*.15),C.repairDark,24);
+      // Fresh planks inherit the roof pitch and overlap like an actual patch.
+      orientedBox(leftEast-w*.01,north,roofCenter+.045,Math.max(.48,w*.09),.060,Math.max(3.8,d*.78),C.newWood,-24);
+      orientedBox(leftEast+w*.16,north-d*.08,roofCenter+.060,Math.max(.44,w*.082),.055,Math.max(3.5,d*.72),C.newWoodLight,-24);
+      orientedBox(leftEast-w*.18,north+d*.10,roofCenter+.052,Math.max(.40,w*.075),.055,Math.max(3.2,d*.66),C.repairDark,-24);
+      orientedBox(rightEast-w*.05,north+d*.28,roofCenter+.050,Math.max(.38,w*.07),.050,Math.max(1.8,d*.36),C.newWoodLight,24);
+      groundBox(east+w*.62,north+.22*d,.02,.24,2.9,2.5,C.newWood);
+      groundBox(east+w*.62,north+.22*d,2.50,2.15,.24,.24,C.newWoodLight);
     }else if(item.visualState==="overgrown"){
-      // The two real roof planes become an aged olive surface. Growth reads
-      // through attached eave/facade vines rather than detached square patches.
-      orientedBox(east-w*.25,north+d*.50,ground+physicalHeight*s*.55,Math.max(.16,w*.028),Math.max(2.45,physicalHeight*.66),.14,C.green,0);
-      orientedBox(east+w*.10,north+d*.505,ground+physicalHeight*s*.46,Math.max(.13,w*.024),Math.max(1.90,physicalHeight*.52),.13,C.greenLight,0);
-      orientedBox(east-w*.03,north-d*.505,ground+physicalHeight*s*.43,Math.max(.12,w*.022),Math.max(1.65,physicalHeight*.46),.12,C.moss,0);
-      groundBox(east-w*.22,north+d*.56,.018,Math.max(.58,w*.10),.07,Math.max(.50,d*.09),C.moss);
+      // Ivy/moss is deliberately split across both roof planes so portrait framing
+      // cannot hide the whole cue behind one roof edge.
+      orientedBox(leftEast-w*.04,north+d*.12,roofCenter+.055,Math.max(.72,w*.14),.070,Math.max(3.4,d*.68),C.green,-24);
+      orientedBox(rightEast+w*.03,north-d*.08,roofCenter+.058,Math.max(.66,w*.13),.070,Math.max(3.0,d*.60),C.greenLight,24);
+      orientedBox(leftEast+w*.16,north-d*.30,roofCenter+.075,Math.max(.45,w*.085),.055,Math.max(1.55,d*.30),C.moss,-24);
+      orientedBox(rightEast-w*.18,north+d*.34,roofCenter+.078,Math.max(.43,w*.08),.055,Math.max(1.45,d*.28),C.moss,24);
+      groundBox(east-w*.56,north+d*.28,.02,2.25,.14,3.9,C.green);
+      groundBox(east+w*.58,north-d*.12,.02,2.55,.15,3.25,C.greenLight);
+      groundBox(east,north+d*.70,.02,Math.max(4.0,w*.80),.12,1.75,C.moss);
     }
   }
   if(positions.length){
@@ -4025,7 +3976,6 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
   const changed=state.buildings.filter(x=>x.visualState!=="normal"),elapsed=performance.now()-started,target=state.buildings.find(x=>x.evidenceTarget)||changed[0]||state.buildings[0]||null;
   campaignWearProjection={
     active:primitiveCount>0,buildingCount:state.buildings.length,changedBuildingCount:changed.length,visualPrimitiveCount:primitiveCount,
-    canonicalRoofStateAware:true,canonicalRoofVariantCount:changed.length,
     drawCallEstimate:primitiveCount>0?1:0,triangleCount:indices.length/3,sharedMaterialCount:1,stateCounts:state.stateCounts,buildings:state.buildings,
     revisionSignature:state.signature,maxRevision:state.maxRevision,deltaSequence:state.deltaSequence,localQueryCount:state.localQueryCount,localQueryLimit:16,
     evidenceTargetBuildingId:target?.id||null,evidenceTargetEntityId:target?.entityId||null,evidenceTargetState:target?.visualState||null,evidenceTargetRevision:Number(target?.revision||0),
@@ -4179,7 +4129,7 @@ function rebuildLocalStaticPresentation(resource){
   clearCanonicalBuildingSurroundings();
   clearCanonicalCampaignWearProjection();localCampaignWearContext=null;
   clearLocalFauna();
-  localStaticRoot?.destroy?.();localStaticRoot=null;localCanonicalBuildingRoofs.clear();
+  localStaticRoot?.destroy?.();localStaticRoot=null;
   const tier=settlementRevealTierForScalar();
   localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,presentationOnly:true,simulationAuthority:false};
   const reveal=canonicalStartingVillageReveal(resource);
@@ -6201,7 +6151,7 @@ function destroy(){
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
   generatedTexture?.destroy?.();generatedTexture=null;
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
-  clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection();localCampaignWearContext=null;clearCanonicalWayfindingSignposts();localCanonicalBuildingRoofs.clear();
+  clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection();localCampaignWearContext=null;clearCanonicalWayfindingSignposts();
   app?.destroy?.();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
   environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionTextures=null;environmentalReactionPool=[];
