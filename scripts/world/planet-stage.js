@@ -2518,9 +2518,9 @@ function ensureLocalStaticMaterials(){
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.31,.14,.30),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
-    activityWarm:(()=>{const m=make("LocalActivityWarm",1,.62,.16);m.__activityEmissiveBoost=1.80;return m;})(),
-    activityOpen:(()=>{const m=make("LocalActivityOpen",.98,.78,.18);m.__activityEmissiveBoost=.90;return m;})(),
-    activityForge:(()=>{const m=make("LocalActivityForge",1,.22,.03);m.__activityEmissiveBoost=1.90;return m;})(),
+    activityWarm:(()=>{const m=make("LocalActivityWarm",1,.46,.10,.62);m.__activityEmissiveBoost=.78;return m;})(),
+    activityOpen:(()=>{const m=make("LocalActivityOpen",.58,.34,.08);m.__activityEmissiveBoost=.16;return m;})(),
+    activityForge:(()=>{const m=make("LocalActivityForge",.96,.14,.025,.82);m.__activityEmissiveBoost=.88;return m;})(),
     activitySmoke:make("LocalActivitySmoke",.48,.49,.47,.58),
     activityProp:make("LocalActivityProp",.39,.24,.10),
     wilderness:wildernessMaterial,fauna:(()=>{const m=make("LocalFauna",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})()
@@ -2848,19 +2848,18 @@ function activityBuildingGeometry(record,presentationScale,unit,frame,lift){
 }
 function addBuildingActivityCue(record,state,context,index){
   const g=activityBuildingGeometry(record,context.presentationScale,context.unit,context.frame,context.lift);if(!g||!state?.cue)return 0;
-  const s=g.presentationScale/g.unit,pos=canonicalSemanticPosition(g.east,g.north,g.presentationScale,g.unit,context.frame),front=canonicalSemanticPosition(g.east,g.north+g.d*.505,g.presentationScale,g.unit,context.frame),outside=canonicalSemanticPosition(g.east,g.north+g.d*.82,g.presentationScale,g.unit,context.frame),x=pos.x,z=pos.z,h=g.height*s,frontZ=front.z,outsideZ=outside.z;
+  const s=g.presentationScale/g.unit,pos=canonicalSemanticPosition(g.east,g.north,g.presentationScale,g.unit,context.frame),front=canonicalSemanticPosition(g.east,g.north+g.d*.505,g.presentationScale,g.unit,context.frame),outside=canonicalSemanticPosition(g.east,g.north+g.d*.68,g.presentationScale,g.unit,context.frame),x=pos.x,z=pos.z,h=g.height*s,frontZ=front.z,outsideZ=outside.z;
   const name="BuildingActivity-"+state.cue+"-"+state.id+"-"+index;
   if(state.cue==="warm-window"){
-    // Steep gameplay camera hides facade windows behind roofs. Represent the
-    // same truthful warm-window/door state as a physical doorway light spill
-    // just outside the wall; it stays one primitive and uses no dynamic light.
-    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityWarm,x,g.ground+Math.max(.018,.035*s),outsideZ,Math.max(.08,4.0*s),Math.max(.018,.055*s),Math.max(.08,2.7*s));
+    // A compact translucent threshold spill touches the entrance instead of
+    // floating away from the building. It is still presentation-only geometry.
+    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityWarm,x,g.ground+Math.max(.016,.028*s),outsideZ,Math.max(.07,2.9*s),Math.max(.016,.045*s),Math.max(.07,1.75*s));
   }else if(state.cue==="open-sign"){
-    // Top-readable market threshold/awning board outside the entrance.
-    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityOpen,x,g.ground+Math.max(.025,.14*s),outsideZ,Math.max(.08,3.25*s),Math.max(.04,.20*s),Math.max(.08,1.9*s));
+    // Low ochre threshold/awning board: physical, top-readable and non-neon.
+    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityOpen,x,g.ground+Math.max(.024,.12*s),outsideZ,Math.max(.07,2.55*s),Math.max(.035,.17*s),Math.max(.07,1.35*s));
   }else if(state.cue==="forge-glow"){
-    // A compact glowing work-hearth/apron reads from above without a light.
-    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityForge,x,g.ground+Math.max(.025,.10*s),outsideZ,Math.max(.08,3.5*s),Math.max(.035,.16*s),Math.max(.08,2.25*s));
+    // Small forge work apron with restrained emissive warmth.
+    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityForge,x,g.ground+Math.max(.022,.085*s),outsideZ,Math.max(.07,2.85*s),Math.max(.03,.13*s),Math.max(.07,1.60*s));
   }else if(state.cue==="chimney-smoke"){
     addLocalPrimitive(localBuildingActivityRoot,name,"sphere",localStaticMaterials.activitySmoke,x+g.w*.20*s,g.ground+h+Math.max(.10,1.75*s),z,Math.max(.08,2.20*s),Math.max(.11,3.00*s),Math.max(.08,2.20*s));
   }else{
