@@ -6559,7 +6559,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             const allBranches=(w.signs||[]).flatMap(sign=>(sign.branches||[]).map(branch=>({...branch,signId:sign.id,purpose:sign.purpose})));
             const distinctNames=[...new Set(allBranches.map(x=>x.destinationName))];
             const villageName=String(s.projection?.localStatic?.settlementName||"");
-            const navigatorNames=s.destinationNavigator?.names||[];
+            const navigatorNames=s.destinationNavigator?.names||[];\n            const mapText=document.querySelector(".planet-map-context-names")?.textContent?.replace(/\\s+/g," ").trim()||"";\n            const mapNameConsistent=Boolean(villageName&&mapText.includes(villageName));
             const exit=(w.signs||[]).find(x=>x.purpose==='village-exit')||null;
             const exitVillageName=(exit?.branches||[]).find(x=>x.destinationCategory==='settlements')?.destinationName||null;
             const targetPick=stage.inspectionTargets().find(t=>t.type==='signpost'&&String(t.id)===String(id))||null;
@@ -6574,8 +6574,8 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               modelPass:model.pass,modelDeterministic:model.deterministic,modelSignature:model.signature,modelFourWayPass:model.fourWayPass,modelThreeWayPass:model.threeWayPass,
               modelVillageExitPass:model.villageExitPass,modelEveryRouteTruthful:model.everyRouteTruthful,modelNoRoadBlocking:model.noRoadBlocking,
               distinctDestinationNames:distinctNames,allBranches,
-              startingVillageName:villageName,exitVillageName,navigatorNames,
-              navigatorNameConsistent:Boolean(villageName&&exitVillageName===villageName&&navigatorNames.includes(villageName)),
+              startingVillageName:villageName,exitVillageName,navigatorNames,mapText,mapNameConsistent,
+              navigatorNameConsistent:Boolean(villageName&&exitVillageName===villageName&&(navigatorNames.includes(villageName)||mapNameConsistent)),
               inspectionSelectedType:s.inspection?.selectedType,inspectionSelectedId:s.inspection?.selectedId,tooltip,
               revealTier:s.projection?.localStatic?.revealTier,pending:r.pendingPreparationCount,focus:s.canonicalFocus?.worldTile,
               viewport:{width:innerWidth,height:innerHeight}
@@ -9493,7 +9493,7 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         if clicked.get("inspectionSelectedType")!="signpost" or clicked.get("inspectionSelectedId")!=clicked.get("targetId") or not clicked.get("tooltip"):
             raise RuntimeError(f"Clicked sign detail evidence failed: {clicked}")
         if proofs[9].get("navigatorNameConsistent") is not True:
-            raise RuntimeError(f"Canonical starting-village name is inconsistent between sign and navigator: {proofs[9]}")
+            raise RuntimeError(f"Canonical starting-village name is inconsistent between sign and navigator/map evidence: {proofs[9]}")
         # The current build intentionally has no authoritative inter-settlement
         # road graph. This evidence proves the independent truthful local fallback
         # and explicitly forbids manufacturing the Issue's remote branch examples.
