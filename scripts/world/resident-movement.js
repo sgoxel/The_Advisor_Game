@@ -258,9 +258,10 @@ function advanceState(seed,state,activity,seconds){
   }
   return changed;
 }
-function advance(seed,when,realSeconds){
+function advance(seed,when,realSeconds,options=null){
+  const includeSnapshot=options?.snapshot!==false;
   if(!ensure(seed))return Object.freeze({changed:false,ticks:0});
-  if(proofContext?.active)return Object.freeze({changed:false,ticks:0,proofFrozen:true});
+  if(proofContext?.active)return Object.freeze(includeSnapshot?{changed:false,ticks:0,proofFrozen:true,snapshot:snapshot()}:{changed:false,ticks:0,proofFrozen:true});
   accumulator+=Math.max(0,Math.min(2,Number(realSeconds)||0));
   let ticks=0,changed=false;
   while(accumulator+1e-9>=FIXED_STEP_SECONDS&&ticks<MAX_ADVANCE_STEPS){
@@ -302,7 +303,7 @@ function advance(seed,when,realSeconds){
     accumulator-=FIXED_STEP_SECONDS;
     ticks++;
   }
-  return Object.freeze({changed,ticks,snapshot:snapshot()});
+  return Object.freeze(includeSnapshot?{changed,ticks,snapshot:snapshot()}:{changed,ticks});
 }
 function stateSnapshot(state){
   if(!state)return null;
