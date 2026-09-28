@@ -20,8 +20,12 @@ const LONGITUDE_SEGMENTS=160;
 // It only lowers the irrelevant pre-zoom globe tessellation when the trusted
 // local screenshot harness explicitly requests it.
 const EVIDENCE_FAST_START=typeof location!=="undefined"&&new URLSearchParams(location.search).get("evidence_fast_start")==="1";
-const EVIDENCE_LATITUDE_SEGMENTS=24;
-const EVIDENCE_LONGITUDE_SEGMENTS=40;
+// WP-019 needs both a real far globe and the local streaming path. This mode
+// preserves the full SEED geography texture/feature scan, but reduces only the
+// evidence globe tessellation so SwiftShader does not dominate the test.
+const EVIDENCE_LAYERED_START=typeof location!=="undefined"&&new URLSearchParams(location.search).get("evidence_layered_start")==="1";
+const EVIDENCE_LATITUDE_SEGMENTS=32;
+const EVIDENCE_LONGITUDE_SEGMENTS=64;
 const HEIGHT_EXAGGERATION=5.0;
 const OCEAN_VISUAL_DEPTH_FACTOR=0.0;
 const ZOOM_MIN=0;
@@ -5893,8 +5897,8 @@ async function buildPlanetMesh(){
   const uvs=[];
   const indices=[];
   const normals=[];
-  const latitudeSegments=LATITUDE_SEGMENTS;
-  const longitudeSegments=LONGITUDE_SEGMENTS;
+  const latitudeSegments=EVIDENCE_LAYERED_START?EVIDENCE_LATITUDE_SEGMENTS:LATITUDE_SEGMENTS;
+  const longitudeSegments=EVIDENCE_LAYERED_START?EVIDENCE_LONGITUDE_SEGMENTS:LONGITUDE_SEGMENTS;
   const stride=longitudeSegments+1;
   startupScheduler.evidenceFastStart=false;
   startupScheduler.evidencePlanetPlaceholder=false;
@@ -6422,7 +6426,12 @@ async function buildScene(){  const started=performance.now();
     planet.render.meshInstances=[new pc.MeshInstance(mesh,surfaceMaterial,planet)];
     app.root.addChild(planet);
     buildAmbientMotion(mesh);
-    buildWildernessPresentation();
+    if(EVIDENCE_LAYERED_START){
+      // Global scatter is not part of this WP's far-globe criterion and is not
+      // visible at 1/10. Local wilderness still comes from the normal streamed
+      // resource path once the camera approaches the focus.
+      startupScheduler.evidenceGlobalWildernessSkipped=true;
+    }else buildWildernessPresentation();
   }
 
   keyLight=new pc.Entity("PlanetKeyLight");
