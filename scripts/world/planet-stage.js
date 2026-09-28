@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-semantic-markers-v1";
+const VERSION="planet-smooth-zoom-v1";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -31,6 +31,14 @@ const ZOOM_PINCH_SENSITIVITY=0.003;
 const ZOOM_DISTANCE_FACTOR=0.018;
 const SCALE_LADDER=Object.freeze(["1/10","1/20","1/50","1/100","1/250","1/500","1/1000","1/2500","1/5000","1/10000"]);
 const SCALE_DENOMINATORS=Object.freeze([10,20,50,100,250,500,1000,2500,5000,10000]);
+// Player-facing smooth zoom adds deterministic transition milestones without
+// redefining the canonical ten-step semantic scale ladder above.
+const ZOOM_DISPLAY_LADDER=Object.freeze(["1/10","1/15","1/20","1/30","1/50","1/75","1/100","1/150","1/250","1/375","1/500","1/750","1/1000","1/1500","1/2500","1/3750","1/5000","1/7500","1/10000"]);
+const ZOOM_DISPLAY_DENOMINATORS=Object.freeze([10,15,20,30,50,75,100,150,250,375,500,750,1000,1500,2500,3750,5000,7500,10000]);
+const ZOOM_ANIMATION_TIME_CONSTANT_SECONDS=.16;
+const ZOOM_ANIMATION_MAX_STEP_SECONDS=.05;
+const ZOOM_ANIMATION_SETTLE_EPSILON=.00006;
+const ZOOM_MAP_PRESENTATION_INTERVAL_MS=50;
 const SCALE_FOOTPRINT_PROGRESS_EXPONENT=1.6;
 const SEMANTIC_SCALE_HYSTERESIS_RATIO=1.06;
 const SEMANTIC_MARKER_POLICY_REVISION="semantic-marker-visibility-v1";
@@ -213,7 +221,9 @@ let atmospherePalette=null;
 let atmosphereTimeBinding={available:false,active:false,readOnly:true,directRealClockRead:false,campaignMutation:false,source:"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:0,lastAppliedAtMs:0,pollIntervalMs:1000,error:null};
 let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClusters:0,rockClusters:0,ambientFaunaZones:0,rejectedWater:0,drawCalls:0,triangles:0,preparationMs:0,cacheReuse:false,perFrameScatter:false,simulationAuthority:false,
   localEnabled:true,localActive:false,localSignature:null,localLevel:null,localBiome:null,localCandidateCount:0,localAcceptedStaticProps:0,localAmbientFaunaActiveCount:0,localShoreAccentCount:0,localRejectedWater:0,localRejectedManaged:0,localRejectedRoad:0,localFamilyCounts:{},localBiomeCounts:{},localDrawCalls:0,localTriangles:0,localPreparationMs:0,localPlanCached:false,localLayoutSignature:null,localFrameUpdateMs:0,localMaxFrameUpdateMs:0,localFullWorldScan:false,localDeterministicGlobalCells:true};
-let zoomState={scalar:0,band:"planet",focusLatitudeRadians:-pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0};
+let zoomState={scalar:0,targetScalar:0,band:"planet",focusLatitudeRadians:-pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0,
+  animating:false,zoomVelocity:0,animationStartScalar:0,animationStartAtMs:0,animationFrameCount:0,totalAnimationFrames:0,animationRetargetCount:0,animationSettledCount:0,lastAnimationDurationMs:0,lastAnimationInputSource:"none",lastAnimationMapUpdateAtMs:0,lastDisplayScaleIndex:0,
+  targetPrefetchRequests:0,targetPrefetchHits:0,targetPrefetchCompleted:0,targetPrefetchState:"idle",targetPrefetchSignature:null,targetPrefetchLevel:null,targetPrefetchStartedAtMs:0};
 const activePointers=new Map();
 let lastPinchDistance=null;
 let projectionState={mode:"globe",blend:0,transitionStart:.45,transitionEnd:.82,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
@@ -657,10 +667,9 @@ function semanticScaleIndexForScalar(value=zoomState.scalar){
 function currentSemanticLayerPolicy(portrait=false){return semanticLayerSpec(semanticScaleIndexForScalar(zoomState.scalar),portrait);}
 function mapContextKindsForBand(_band){return currentSemanticLayerPolicy(false).contextKinds.slice();}
 function mapPlaceKindsForBand(_band){return currentSemanticLayerPolicy(false).placeKinds.slice();}
-function scaleTargetFootprintHeightMeters(index){
-  const i=Math.max(0,Math.min(SCALE_LADDER.length-1,Math.round(Number(index)||0)));
+function scaleTargetFootprintHeightForDenominator(value){
   const first=Math.max(1,SCALE_DENOMINATORS[0]),last=Math.max(first+1,SCALE_DENOMINATORS[SCALE_DENOMINATORS.length-1]);
-  const denominator=Math.max(first,SCALE_DENOMINATORS[i]||first);
+  const denominator=clamp(Math.max(first,Number(value)||first),first,last);
   const progress=clamp(Math.log(denominator/first)/Math.log(last/first),0,1);
   // Reserve enough physical footprint for the penultimate scales to remain
   // distinct near-ground refinement tiers. A linear log-denominator curve
@@ -668,6 +677,29 @@ function scaleTargetFootprintHeightMeters(index){
   const physicalProgress=Math.pow(progress,SCALE_FOOTPRINT_PROGRESS_EXPONENT);
   const startHeight=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(0));
   return startHeight*Math.exp(Math.log(GROUND_FOOTPRINT_HEIGHT_METERS/startHeight)*physicalProgress);
+}
+function scaleTargetFootprintHeightMeters(index){
+  const i=Math.max(0,Math.min(SCALE_LADDER.length-1,Math.round(Number(index)||0)));
+  return scaleTargetFootprintHeightForDenominator(SCALE_DENOMINATORS[i]);
+}
+function displayScaleIndexForScalar(value=zoomState.scalar){
+  const height=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(clamp(value,0,1)));
+  let best=0,bestDistance=Infinity;
+  for(let i=0;i<ZOOM_DISPLAY_LADDER.length;i++){
+    const target=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,scaleTargetFootprintHeightForDenominator(ZOOM_DISPLAY_DENOMINATORS[i]));
+    const distance=Math.abs(Math.log(height/target));
+    if(distance<bestDistance){best=i;bestDistance=distance;}
+  }
+  return best;
+}
+function scalarForDisplayScaleIndex(index){
+  const i=Math.max(0,Math.min(ZOOM_DISPLAY_LADDER.length-1,Math.round(Number(index)||0)));
+  if(i===0)return 0;if(i===ZOOM_DISPLAY_LADDER.length-1)return 1;
+  return scalarForFootprintHeight(scaleTargetFootprintHeightForDenominator(ZOOM_DISPLAY_DENOMINATORS[i]));
+}
+function displayScaleStateForScalar(value=zoomState.scalar){
+  const index=displayScaleIndexForScalar(value),scalar=scalarForDisplayScaleIndex(index);
+  return Object.freeze({index,label:ZOOM_DISPLAY_LADDER[index],denominator:ZOOM_DISPLAY_DENOMINATORS[index],scalar:Number(scalar.toFixed(6)),targetFootprintHeightMeters:Number(presentationTargetHeightMeters(scalar).toFixed(3))});
 }
 function scaleIndexForScalar(value=zoomState.scalar){
   const height=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(clamp(value,0,1)));
@@ -690,6 +722,12 @@ function scaleStateForScalar(value=zoomState.scalar){
 }
 function setScaleIndex(index){return setZoomScalar(scalarForScaleIndex(index));}
 function stepScale(direction){const d=Math.sign(Number(direction)||0);return d===0?snapshot():setScaleIndex(scaleIndexForScalar()+d);}
+function setAnimatedScaleIndex(index,source="api"){return setZoomTargetScalar(scalarForDisplayScaleIndex(index),source);}
+function stepAnimatedScale(direction,source="step"){
+  const d=Math.sign(Number(direction)||0);if(d===0)return snapshot();
+  const base=displayScaleIndexForScalar(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar);
+  return setAnimatedScaleIndex(clamp(base+d,0,ZOOM_DISPLAY_LADDER.length-1),source);
+}
 function navigationSensitivity(){
   const rect=canvas?.getBoundingClientRect?.(),widthPx=Math.max(1,Number(rect?.width||1)),heightPx=Math.max(1,Number(rect?.height||1));
   const metersPerPixelX=Math.max(.000001,Number(zoomState.visibleFootprintWidthMeters||1))/widthPx;
@@ -1914,8 +1952,8 @@ function renderMapPresentation(){
   const requiredCitySeparation=Math.max(0,Number(window.WorldStandards?.MIN_CITY_CENTER_DISTANCE_METERS||0));
   const citySpacingPass=cityMinSeparationMeters==null||cityMinSeparationMeters+2>=requiredCitySeparation;
   const maxLandmarkCount=spec.budget;
-  const scaleState=scaleStateForScalar(),localLayers=semanticLocalLayerDiagnostics(semantic),ruler=scaleRulerForViewport(zoomState.visibleFootprintWidthMeters,rect?.width||1);
-  const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=scaleState.label;scale.querySelector(".planet-scale-meta span").textContent=semantic.displayBand;scale.querySelector(".planet-scale-line").style.width=ruler.pixelLength.toFixed(2)+"px";scale.querySelector("small").textContent=formatDistanceMeters(ruler.distanceMeters);
+  const scaleState=scaleStateForScalar(),displayScaleState=displayScaleStateForScalar(),targetDisplayScaleState=displayScaleStateForScalar(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar),localLayers=semanticLocalLayerDiagnostics(semantic),ruler=scaleRulerForViewport(zoomState.visibleFootprintWidthMeters,rect?.width||1);
+  const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=displayScaleState.label;scale.querySelector(".planet-scale-meta span").textContent=zoomState.animating?(displayScaleState.label+" → "+targetDisplayScaleState.label):semantic.displayBand;scale.querySelector(".planet-scale-line").style.width=ruler.pixelLength.toFixed(2)+"px";scale.querySelector("small").textContent=formatDistanceMeters(ruler.distanceMeters);
   mapPresentation={
     active:true,context,visibleContextKinds:contextKinds,visiblePlaceKinds:placeKinds,labelCount:legacyLabelCount,
     atlasVisibleLabelCount:visible.length,atlasCandidateCount:atlas.query.candidates.length,atlasQueryCellCount:atlas.query.queryCellCount,
@@ -1956,7 +1994,8 @@ function renderMapPresentation(){
     registrationMaxRoundTripErrorTiles:visible.reduce((max,item)=>Math.max(max,Number(item.roundTripErrorTiles||0)),0),
     projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),
     scaleDistanceMeters:ruler.distanceMeters,scaleLabel:formatDistanceMeters(ruler.distanceMeters),scaleStateIndex:scaleState.index,scaleStateLabel:scaleState.label,
-    scalePixelLength:ruler.pixelLength,metersPerScreenPixel:ruler.metersPerScreenPixel,rulerTruthErrorMeters:ruler.truthErrorMeters,internalZoomScalar:Number(zoomState.scalar.toFixed(6)),
+    displayScaleIndex:displayScaleState.index,displayScaleLabel:displayScaleState.label,targetDisplayScaleIndex:targetDisplayScaleState.index,targetDisplayScaleLabel:targetDisplayScaleState.label,
+    scalePixelLength:ruler.pixelLength,metersPerScreenPixel:ruler.metersPerScreenPixel,rulerTruthErrorMeters:ruler.truthErrorMeters,internalZoomScalar:Number(zoomState.scalar.toFixed(6)),targetZoomScalar:Number((zoomState.targetScalar??zoomState.scalar).toFixed(6)),zoomAnimating:Boolean(zoomState.animating),
     centerMarker,coordinateFabricRevision:coordinateFabricAuthority()?.revisionSignature||null,
     coordinateFabricStreamedCellIds:coordinateFabricAuthority()?.snapshot?.(mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians))?.streamedCellIds||[],
     updateCount:mapPresentation.updateCount+1,lastUpdateMs:Number((performance.now()-started).toFixed(3)),lastBorderBuildMs:mapBorderCache.builtAtMs,bounded:true,fullWorldScan:false
@@ -4841,6 +4880,7 @@ function pumpLocalPreparation(){
     localResources.maxFrameMsDuringPreparation=Number(localFrameStats.maxDuringPreparationMs.toFixed(3));
     localResources.preparedSignature=resource.signature;
     if(job.prewarm)localResources.prewarmCompleted++;
+    if(job.prewarm&&job.prewarmKind==="zoom-target"&&job.signature===zoomState.targetPrefetchSignature){zoomState.targetPrefetchCompleted++;zoomState.targetPrefetchState="ready";}
     job.slices++;job.maxSliceMs=Math.max(job.maxSliceMs,sliceMs);localResources.maxPreparationSliceMs=Math.max(localResources.maxPreparationSliceMs,Number(sliceMs.toFixed(3)));
     const queued=localQueuedRequest;localQueuedRequest=null;
     if(resource.signature===localResources.requestedSignature){activateLocalDetailResource(resource.signature,false);refreshZoomPresentation();}
@@ -4878,12 +4918,14 @@ function requestLocalDetailResource(index){
     const cached=localResourceCache.get(signature);
     if(priorResidency?.state==="grace"&&Number(priorResidency.graceUntilMs||0)>performance.now())localResources.graceReuseCount++;
     if(cached?.prefetchKind==="motion")localResources.prefetchHits++;
+    if(cached?.prefetchKind==="zoom-target"){localResources.prefetchHits++;zoomState.targetPrefetchHits++;zoomState.targetPrefetchState="hit";}
     localMotionPrefetchTargets.delete(signature);
     activateLocalDetailResource(signature,true);return;
   }
   if(localJob){
     if(localJob.signature===signature){
       if(localJob.prewarm&&localJob.prewarmKind==="motion"){localResources.prefetchMisses++;localMotionPrefetchTargets.delete(signature);}
+      if(localJob.prewarm&&localJob.prewarmKind==="zoom-target"){localResources.prefetchHits++;zoomState.targetPrefetchHits++;zoomState.targetPrefetchState="promoted";}
       localJob.prewarm=false;localResources.preparingPrewarm=false;return;
     }
     // Let a nearly finished same-focus job land (it is still a closer/nearer
@@ -5145,7 +5187,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
   if(blend<=0){localResources.activeResourceCount=0;localResources.pendingPreparationCount=0;localResources.standInActive=false;}
 }
-function applyCameraZoom(){
+function applyCameraZoom(updateMap=true){
   if(!cameraEntity||!zoomState.baseCameraDistance)return;
   const scalar=clamp(zoomState.scalar,ZOOM_MIN,ZOOM_MAX);
   zoomState.requestedBand=zoomBandFor(scalar);
@@ -5168,7 +5210,7 @@ function applyCameraZoom(){
   zoomState.visibleFootprintHeightMeters=Math.max(2,footprintHeight);
   zoomState.visibleFootprintWidthMeters=Math.max(2,footprintHeight*aspect);
   zoomState.band=visibleBandFor(zoomState.requestedBand,tangentOwnsView);
-  updateMapPresentation();
+  if(updateMap)updateMapPresentation();
 }
 // Semantic band shown to the player never claims a finer scale than the
 // representation currently on screen.
@@ -5184,13 +5226,73 @@ function localFocusOffsetMeters(resource){
   const delta=canonicalRegisteredDeltaMeters(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians,resource.lat0,resource.lon0);
   return {east:Number(delta.eastMeters||0),north:Number(delta.northMeters||0)};
 }
+function requestZoomTargetPrefetch(){
+  if(!ready||!activeSeed||!geography||!zoomState.animating)return;
+  const target=clamp(Number(zoomState.targetScalar)||0,ZOOM_MIN,ZOOM_MAX);
+  if(target<=projectionState.transitionStart){
+    zoomState.targetPrefetchState="globe-coverage";
+    zoomState.targetPrefetchSignature=null;zoomState.targetPrefetchLevel=null;
+    return;
+  }
+  const index=rawLodIndexForZoom(target),lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians;
+  const signature=localSignatureFor(index,lat,lon),level=LOCAL_DETAIL_LEVELS[index]?.id||null;
+  zoomState.targetPrefetchSignature=signature;zoomState.targetPrefetchLevel=level;
+  if(displayResource?.signature===signature||localResourceCache.has(signature)){
+    zoomState.targetPrefetchState="ready";zoomState.targetPrefetchHits++;localResources.prefetchHits++;return;
+  }
+  if(localJob){
+    zoomState.targetPrefetchState=localJob.signature===signature?"preparing":"deferred";
+    return;
+  }
+  zoomState.targetPrefetchRequests++;localResources.prefetchRequests++;
+  zoomState.targetPrefetchStartedAtMs=Number(performance.now().toFixed(3));
+  zoomState.targetPrefetchState="preparing";
+  startLocalJob(index,lat,lon,signature,true,"zoom-target");
+}
+function setZoomTargetScalar(value,source="input"){
+  const next=clamp(value,ZOOM_MIN,ZOOM_MAX);
+  if(Math.abs(next-(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar))<1e-7)return snapshot();
+  const now=performance.now();
+  if(zoomState.animating)zoomState.animationRetargetCount++;
+  lastZoomDirection=next>zoomState.scalar?1:-1;
+  zoomState.targetScalar=next;zoomState.animating=Math.abs(next-zoomState.scalar)>ZOOM_ANIMATION_SETTLE_EPSILON;
+  zoomState.animationStartScalar=zoomState.scalar;zoomState.animationStartAtMs=now;zoomState.animationFrameCount=0;
+  zoomState.lastAnimationInputSource=String(source||"input");zoomState.zoomChanges++;
+  zoomState.targetPrefetchState="idle";zoomState.targetPrefetchSignature=null;zoomState.targetPrefetchLevel=null;
+  if(zoomState.animating)requestZoomTargetPrefetch();
+  return snapshot();
+}
+function updateAnimatedZoom(dt){
+  if(!zoomState.animating)return false;
+  const seconds=Math.min(ZOOM_ANIMATION_MAX_STEP_SECONDS,Math.max(1/240,Number(dt)||1/60));
+  const previous=zoomState.scalar,target=clamp(zoomState.targetScalar,ZOOM_MIN,ZOOM_MAX),delta=target-previous;
+  const alpha=1-Math.exp(-seconds/ZOOM_ANIMATION_TIME_CONSTANT_SECONDS);
+  let next=previous+delta*alpha;
+  if(Math.abs(target-next)<=ZOOM_ANIMATION_SETTLE_EPSILON)next=target;
+  zoomState.scalar=next;zoomState.zoomVelocity=(next-previous)/seconds;zoomState.animationFrameCount++;zoomState.totalAnimationFrames++;
+  const displayIndex=displayScaleIndexForScalar(next),now=performance.now();
+  applyCameraZoom(false);
+  const milestoneChanged=displayIndex!==zoomState.lastDisplayScaleIndex;
+  if(milestoneChanged||now-Number(zoomState.lastAnimationMapUpdateAtMs||0)>=ZOOM_MAP_PRESENTATION_INTERVAL_MS){
+    zoomState.lastDisplayScaleIndex=displayIndex;zoomState.lastAnimationMapUpdateAtMs=now;updateMapPresentation();
+  }
+  if(zoomState.targetPrefetchState==="deferred"&&!localJob)requestZoomTargetPrefetch();
+  if(next===target){
+    zoomState.animating=false;zoomState.zoomVelocity=0;zoomState.animationSettledCount++;
+    zoomState.lastAnimationDurationMs=Number(Math.max(0,now-Number(zoomState.animationStartAtMs||now)).toFixed(3));
+    applyCameraZoom(true);
+  }
+  return true;
+}
 function setZoomScalar(value){
   const next=clamp(value,ZOOM_MIN,ZOOM_MAX);
-  if(Math.abs(next-zoomState.scalar)<1e-7)return snapshot();
+  if(Math.abs(next-zoomState.scalar)<1e-7&&Math.abs(next-(zoomState.targetScalar??next))<1e-7)return snapshot();
   lastZoomDirection=next>zoomState.scalar?1:-1;
-  zoomState.scalar=next;zoomState.zoomChanges++;applyCameraZoom();return snapshot();
+  zoomState.scalar=next;zoomState.targetScalar=next;zoomState.animating=false;zoomState.zoomVelocity=0;zoomState.animationFrameCount=0;
+  zoomState.lastDisplayScaleIndex=displayScaleIndexForScalar(next);zoomState.targetPrefetchState="idle";
+  zoomState.zoomChanges++;applyCameraZoom();return snapshot();
 }
-function zoomBy(delta){const d=Number(delta||0);return d===0?snapshot():stepScale(d>0?1:-1);}
+function zoomBy(delta){const d=Number(delta||0);return d===0?snapshot():stepAnimatedScale(d>0?1:-1,"zoomBy");}
 function applyRotation(){
   if(!planet)return;
   planet.setLocalEulerAngles(pitchDegrees,yawDegrees,0);
@@ -5579,10 +5681,11 @@ async function buildPlanetMesh(){
 }
 function resize(){
   if(!app||!device||!root)return;
-  // The scale ladder is discrete player-facing state. Reframing for a new
-  // viewport must not leave the scalar calibrated for the previous aspect ratio,
-  // or the same 1/N step will show a different physical footprint after resize.
-  const preservedScaleIndex=scaleIndexForScalar(zoomState.scalar);
+  // Preserve the current and target physical footprints across responsive
+  // reframing so an in-flight animated zoom does not jump to a different scale.
+  const hadCameraFrame=Number(zoomState.baseCameraDistance||0)>0;
+  const preservedCurrentHeight=hadCameraFrame?presentationTargetHeightMeters(zoomState.scalar):null;
+  const preservedTargetHeight=hadCameraFrame?presentationTargetHeightMeters(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar):null;
   const width=Math.max(1,Math.round(root.clientWidth||window.innerWidth||1));
   const height=Math.max(1,Math.round(root.clientHeight||window.innerHeight||1));
   const dpr=Math.min(1.5,Math.max(1,Number(window.devicePixelRatio||1)));
@@ -5600,7 +5703,9 @@ function resize(){
     const framingMargin=(height<=500&&aspect>1.7)?0.78:(aspect>1.7?1.015:1.055);
     const distance=(DISPLAY_RADIUS_UNITS*maxReliefFactor/Math.sin(limitingHalfFov))*framingMargin;
     zoomState.baseCameraDistance=distance;
-    zoomState.scalar=scalarForScaleIndex(preservedScaleIndex);
+    if(hadCameraFrame){zoomState.scalar=scalarForFootprintHeight(preservedCurrentHeight);zoomState.targetScalar=scalarForFootprintHeight(preservedTargetHeight);}
+    else{zoomState.scalar=0;zoomState.targetScalar=0;zoomState.animating=false;zoomState.zoomVelocity=0;}
+    zoomState.lastDisplayScaleIndex=displayScaleIndexForScalar(zoomState.scalar);
     applyCameraZoom();
   }
 }
@@ -5694,9 +5799,9 @@ function updateInspectionTooltip(){if(inspection.selectedId===null)return;const 
 function bindInput(){
   canvas.tabIndex=0;
   canvas.setAttribute("role","application");
-  canvas.setAttribute("aria-label","Rotatable seeded fantasy planet. Drag to rotate.");
+  canvas.setAttribute("aria-label","Rotatable seeded fantasy planet. Drag to rotate; wheel or pinch to smoothly zoom.");
   canvas.addEventListener("contextmenu",event=>event.preventDefault());
-  canvas.addEventListener("wheel",event=>{zoomState.wheelEvents++;if(event.deltaY!==0)stepScale(event.deltaY<0?1:-1);event.preventDefault();},{passive:false});
+  canvas.addEventListener("wheel",event=>{zoomState.wheelEvents++;if(event.deltaY!==0)stepAnimatedScale(event.deltaY<0?1:-1,"wheel");event.preventDefault();},{passive:false});
   canvas.addEventListener("pointerdown",event=>{
     if(event.pointerType==="mouse"&&event.button!==0)return;
     activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
@@ -5710,7 +5815,7 @@ function bindInput(){
   },{passive:false});
   canvas.addEventListener("pointermove",event=>{
     if(activePointers.has(event.pointerId))activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
-    if(activePointers.size>=2){const pts=Array.from(activePointers.values()).slice(0,2),distance=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);if(lastPinchDistance!==null&&Math.abs(distance-lastPinchDistance)>=8){zoomState.pinchEvents++;stepScale(distance>lastPinchDistance?1:-1);lastPinchDistance=distance;}event.preventDefault();return;}
+    if(activePointers.size>=2){const pts=Array.from(activePointers.values()).slice(0,2),distance=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);if(lastPinchDistance!==null&&Math.abs(distance-lastPinchDistance)>=4){const pinchDelta=(distance-lastPinchDistance)*ZOOM_PINCH_SENSITIVITY;zoomState.pinchEvents++;setZoomTargetScalar((Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar)+pinchDelta,"pinch");lastPinchDistance=distance;}event.preventDefault();return;}
     if(!dragging||event.pointerId!==pointerId)return;
     const dx=event.clientX-lastPointerX,dy=event.clientY-lastPointerY;
     inspection.dragDistance=Math.max(inspection.dragDistance,Math.hypot(event.clientX-inspection.pointerDownX,event.clientY-inspection.pointerDownY));
@@ -5730,8 +5835,8 @@ function bindInput(){
     else if(event.key==="ArrowRight")rotateByScreenFraction(.08,0);
     else if(event.key==="ArrowUp")rotateByScreenFraction(0,-.08);
     else if(event.key==="ArrowDown")rotateByScreenFraction(0,.08);
-    else if(event.key==="+"||event.key==="=")stepScale(1);
-    else if(event.key==="-"||event.key==="_")stepScale(-1);
+    else if(event.key==="+"||event.key==="=")stepAnimatedScale(1,"keyboard");
+    else if(event.key==="-"||event.key==="_")stepAnimatedScale(-1,"keyboard");
     else if(event.key==="Escape"){dismissInspection();}
     else handled=false;
     if(handled)event.preventDefault();
@@ -6081,7 +6186,7 @@ async function start(){
     await yieldPaint();
     bindInput();
     resize();
-    app.on?.("update",dt=>{frameCount++;if(activeSeed&&window.ResidentMovement){const when=window.GameTime?.getNow?.()||inspectionFantasyStamp();window.ResidentMovement.advance(activeSeed,when,dt);}updateCanonicalNpcMotion();recordLocalFrame(dt);updateAtmosphereTimeBinding();updateInspectionTooltip();updateWayfindingTextOverlay();updateAmbientMotion(dt);});
+    app.on?.("update",dt=>{frameCount++;updateAnimatedZoom(dt);if(activeSeed&&window.ResidentMovement){const when=window.GameTime?.getNow?.()||inspectionFantasyStamp();window.ResidentMovement.advance(activeSeed,when,dt);}updateCanonicalNpcMotion();recordLocalFrame(dt);updateAtmosphereTimeBinding();updateInspectionTooltip();updateWayfindingTextOverlay();updateAmbientMotion(dt);});
     await measuredPhase("appStartMs",async()=>app.start());
     if(EVIDENCE_FAST_START){
       // Trusted local screenshot runs do not need the synthetic hidden shader
@@ -6246,8 +6351,10 @@ function snapshot(){
       surfaceIdentity:canonicalSurfaceIdentity()
     }),
     zoom:Object.freeze({
-      scalar:Number(zoomState.scalar.toFixed(6)),band:zoomState.band,requestedBand:zoomState.requestedBand||zoomState.band,visibleBand:zoomState.band,
+      scalar:Number(zoomState.scalar.toFixed(6)),targetScalar:Number((zoomState.targetScalar??zoomState.scalar).toFixed(6)),band:zoomState.band,requestedBand:zoomState.requestedBand||zoomState.band,visibleBand:zoomState.band,
       scaleIndex:scaleStateForScalar().index,scaleLabel:scaleStateForScalar().label,scaleLadder:SCALE_LADDER.slice(),
+      displayScaleIndex:displayScaleStateForScalar().index,displayScaleLabel:displayScaleStateForScalar().label,displayScaleLadder:ZOOM_DISPLAY_LADDER.slice(),
+      targetDisplayScaleIndex:displayScaleStateForScalar(zoomState.targetScalar??zoomState.scalar).index,targetDisplayScaleLabel:displayScaleStateForScalar(zoomState.targetScalar??zoomState.scalar).label,
       requestedLevel:localResources.requestedLevel,visibleLevel:localResources.visibleLevel,
       focusLatitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),
       focusLongitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(6)),
@@ -6256,10 +6363,11 @@ function snapshot(){
       visibleFootprintWidthMeters:Number(zoomState.visibleFootprintWidthMeters.toFixed(3)),
       visibleFootprintHeightMeters:Number(zoomState.visibleFootprintHeightMeters.toFixed(3)),
       wheelEvents:zoomState.wheelEvents,pinchEvents:zoomState.pinchEvents,zoomChanges:zoomState.zoomChanges,
+      animation:Object.freeze({active:Boolean(zoomState.animating),velocityScalarPerSecond:Number(zoomState.zoomVelocity.toFixed(6)),timeConstantSeconds:ZOOM_ANIMATION_TIME_CONSTANT_SECONDS,settleEpsilon:ZOOM_ANIMATION_SETTLE_EPSILON,frameCount:zoomState.animationFrameCount,totalFrames:zoomState.totalAnimationFrames,retargetCount:zoomState.animationRetargetCount,settledCount:zoomState.animationSettledCount,lastDurationMs:zoomState.lastAnimationDurationMs,inputSource:zoomState.lastAnimationInputSource,currentDisplayScale:displayScaleStateForScalar().label,targetDisplayScale:displayScaleStateForScalar(zoomState.targetScalar??zoomState.scalar).label,prefetchState:zoomState.targetPrefetchState,prefetchLevel:zoomState.targetPrefetchLevel,prefetchSignature:zoomState.targetPrefetchSignature,prefetchRequests:zoomState.targetPrefetchRequests,prefetchHits:zoomState.targetPrefetchHits,prefetchCompleted:zoomState.targetPrefetchCompleted}),
       bands:ZOOM_BANDS.map(b=>b.id),detailLevels:LOCAL_DETAIL_LEVELS.map(level=>level.id),sameSphericalAuthority:true,
       dragSensitivity:navigationSensitivity(),
       pose:Object.freeze({sphere:entityTransformTelemetry(planet),camera:entityTransformTelemetry(cameraEntity),cameraLookVector:Object.freeze([0,0,-1]),cameraTarget:Object.freeze([0,0,0]),screenFocus:canonicalScreenFocusTelemetry(),cameraPoseInvariant:true,zoomTransform:"orthographic-magnification-only"}),
-      ladder:Object.freeze({labels:SCALE_LADDER.slice(),startScalar:LADDER_START_SCALAR,startHeightMeters:Number(ladderState().startHeight.toFixed(1)),groundHeightMeters:GROUND_FOOTPRINT_HEIGHT_METERS,levelMaxScalars:ladderState().levelMax.slice(),logUniformBelowStart:true})
+      ladder:Object.freeze({labels:SCALE_LADDER.slice(),displayLabels:ZOOM_DISPLAY_LADDER.slice(),displayDenominators:ZOOM_DISPLAY_DENOMINATORS.slice(),startScalar:LADDER_START_SCALAR,startHeightMeters:Number(ladderState().startHeight.toFixed(1)),groundHeightMeters:GROUND_FOOTPRINT_HEIGHT_METERS,levelMaxScalars:ladderState().levelMax.slice(),logUniformBelowStart:true})
     }),
     projection:Object.freeze({
       mode:projectionState.mode,
@@ -6393,7 +6501,7 @@ function destroy(){
   geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localResidency.clear();localRecentEvictions.clear();localMotionPrefetchTargets.clear();localLastRequestRegistered=null;localMotionVector={east:0,north:0,magnitude:0};localStaticRefreshScheduled=false;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setScaleIndex,stepScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setZoomTargetScalar,setScaleIndex,stepScale,setAnimatedScaleIndex,stepAnimatedScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
   setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},
   workCycleEvidenceState,
   focusWayfindingSignForEvidence:(id)=>{const sign=(wayfindingSignposts.signs||[]).find(item=>String(item.id)===String(id));if(sign){setWorldTileFocus(sign.anchor.x,sign.anchor.y);setZoomScalar(1);}return snapshot();},
