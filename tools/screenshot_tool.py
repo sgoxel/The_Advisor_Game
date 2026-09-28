@@ -6455,7 +6455,23 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             ("phone-waterbird-approach","waterbird","wet","mobile-react",(390,844)),
         )
         label,kind,biome,mode,viewport=plan[min(frame_index,len(plan)-1)]
-        driver.set_window_size(int(viewport[0]),int(viewport[1]));time.sleep(.15)
+        target_w,target_h=int(viewport[0]),int(viewport[1])
+        driver.set_window_size(target_w,target_h);time.sleep(.15)
+        # Selenium sizes the browser outer window, while the acceptance proof
+        # records the actual gameplay viewport (window.innerWidth/innerHeight).
+        # Compensate for runner chrome so the requested phone dimensions are
+        # truthful inner viewports rather than weakening the validator.
+        for _ in range(3):
+            inner=driver.execute_script("return {w:innerWidth,h:innerHeight}")
+            dw=target_w-int(inner.get("w") or 0);dh=target_h-int(inner.get("h") or 0)
+            if abs(dw)<=1 and abs(dh)<=1:
+                break
+            outer=driver.get_window_size()
+            driver.set_window_size(max(320,int(outer.get("width") or target_w)+dw),max(240,int(outer.get("height") or target_h)+dh))
+            time.sleep(.12)
+        inner=driver.execute_script("return {w:innerWidth,h:innerHeight}")
+        if abs(int(inner.get("w") or 0)-target_w)>1 or abs(int(inner.get("h") or 0)-target_h)>1:
+            raise RuntimeError(f"Unable to establish requested wildlife inner viewport {viewport}: {inner}")
 
         targets=driver.execute_script("""
             if(window.__WP_S003_014_TARGETS)return window.__WP_S003_014_TARGETS;
