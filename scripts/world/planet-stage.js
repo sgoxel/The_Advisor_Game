@@ -2600,9 +2600,9 @@ function createEnvironmentReactionGroup(kind,index){
   environmentalReactionRoot.addChild(group);
   if(kind==="dust"){
     const specs=[
-      [-.18,.15,-.07,2.00,1.30,1.78],
-      [.00,.23,.00,2.46,1.58,2.18],
-      [.19,.12,.08,1.82,1.18,1.64]
+      [-.48,.09,-.12,1.72,.88,1.52],
+      [.00,.14,.04,2.08,1.02,1.82],
+      [.46,.08,.14,1.58,.80,1.42]
     ];
     for(let i=0;i<specs.length;i++){
       const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"dust-puff",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5],0,i*17,0);
@@ -2694,8 +2694,10 @@ function recordEnvironmentNavigationPassage(beforeLatitudeRadians,beforeLongitud
   try{surfaceType=window.TerrainFoundation?.getType?.(activeSeed,tile.x,tile.y)||null;}catch(_){surfaceType=null;}
   const kind=environmentReactionSurfaceKind(surfaceType);if(!kind)return false;
   const directionDegrees=Math.atan2(east,north)*180/Math.PI;
-  const anchor=canonicalLatLonForLocalOffset(afterLatitudeRadians,afterLongitudeRadians,-east*.30,-north*.30);
-  return triggerEnvironmentReaction(kind,surfaceType,anchor.latitudeRadians,anchor.longitudeRadians,distance,directionDegrees);
+  // Use the exact canonical coordinate whose TerrainFoundation surface was
+  // classified above. Back-shifting presentation could cross a tile boundary
+  // and visually place a valid road reaction on adjacent grass.
+  return triggerEnvironmentReaction(kind,surfaceType,afterLatitudeRadians,afterLongitudeRadians,distance,directionDegrees);
 }
 function updateEnvironmentalReactions(){
   if(!environmentalReactionPool.length||!displayResource)return;
@@ -2714,12 +2716,14 @@ function updateEnvironmentalReactions(){
     const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),t=clamp(age/slot.lifetimeMs,0,1),ground=localGroundHeightUnits(east,north,frame);
     let scale=1,liftMeters=.035;
     if(slot.kind==="dust"){
-      scale=.92+t*.48;liftMeters=.045+t*.18;
-      const spread=.13*t,rise=.42*t;
-      const bases=[[-.16,.15,-.06],[0,.23,0],[.18,.12,.08]];
+      // Keep the three pooled soft-alpha puffs low and spread laterally so
+      // movement reads as a short road-surface disturbance, not one tall oval.
+      scale=.96+t*.26;liftMeters=.030+t*.080;
+      const spread=.18*t,rise=.16*t;
+      const bases=[[-.48,.09,-.12],[0,.14,.04],[.46,.08,.14]];
       for(let i=0;i<slot.children.length;i++){
         const b=bases[i],side=i-1;
-        slot.children[i].setLocalPosition(b[0]+side*spread,b[1]+rise*(i===1?1:.68),b[2]+side*.06*t);
+        slot.children[i].setLocalPosition(b[0]+side*spread,b[1]+rise*(i===1?1:.55),b[2]+side*.08*t);
       }
     }else if(slot.kind==="grassBend"){
       // Keep width stable and settle only slightly so phone-landscape remains
