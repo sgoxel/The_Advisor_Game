@@ -58,15 +58,27 @@ function gatewayVector(seed){
   const d=window.StartingVillage?.direction?.(seed)||{name:"East",dx:1,dy:0};
   return Object.freeze({id:String(d.name||"East").slice(0,1).toUpperCase(),name:String(d.name||"East"),dx:Number(d.dx||0),dy:Number(d.dy||0)});
 }
+function gatewayRoadPoint(seed,forward,g){
+  const candidates=[];
+  for(let lateral=-6;lateral<=6;lateral++){
+    const x=g.dx*forward-lateral*g.dy,y=g.dy*forward+lateral*g.dx;
+    if(!roadAt(seed,x,y))continue;
+    const degree=roadDegree(seed,freezePoint(x,y));
+    candidates.push({x,y,lateral,degree});
+  }
+  candidates.sort((a,b)=>Math.abs(a.lateral)-Math.abs(b.lateral)||b.degree-a.degree||a.lateral-b.lateral);
+  const chosen=candidates[0]||{x:g.dx*forward,y:g.dy*forward,lateral:0,degree:0};
+  return Object.freeze({x:chosen.x,y:chosen.y,lateral:chosen.lateral,degree:chosen.degree});
+}
 function junctionSpecs(seed){
   const ring=Number(window.StartingVillage?.RING_RADIUS_TILES||14),g=gatewayVector(seed);
   const right={dx:-g.dy,dy:g.dx};
   const tX=right.dx*(ring+1),tY=right.dy*(ring+1);
-  const exitForward=ring+6,exitX=g.dx*exitForward,exitY=g.dy*exitForward;
+  const exitForward=ring+6,exit=gatewayRoadPoint(seed,exitForward,g);
   return Object.freeze([
     Object.freeze({id:"SV-JUNCTION-CENTER",purpose:"four-way-crossroads",junction:freezePoint(0,0),expectedDegree:4}),
     Object.freeze({id:"SV-JUNCTION-T",purpose:"three-way-junction",junction:freezePoint(tX,tY),expectedDegree:3}),
-    Object.freeze({id:"SV-SIGN-EXIT",purpose:"village-exit",junction:freezePoint(exitX,exitY),expectedDegree:2})
+    Object.freeze({id:"SV-SIGN-EXIT",purpose:"village-exit",junction:freezePoint(exit.x,exit.y),expectedDegree:exit.degree,exitForward,exitLateral:exit.lateral})
   ]);
 }
 function destinationRecords(seed){
