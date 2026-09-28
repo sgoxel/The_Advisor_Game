@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-registration-v1";
+const VERSION="planet-semantic-markers-v1";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -33,6 +33,20 @@ const SCALE_LADDER=Object.freeze(["1/10","1/20","1/50","1/100","1/250","1/500","
 const SCALE_DENOMINATORS=Object.freeze([10,20,50,100,250,500,1000,2500,5000,10000]);
 const SCALE_FOOTPRINT_PROGRESS_EXPONENT=1.6;
 const SEMANTIC_SCALE_HYSTERESIS_RATIO=1.06;
+const SEMANTIC_MARKER_POLICY_REVISION="semantic-marker-visibility-v1";
+const SEMANTIC_MARKER_DEBUG_MODE=typeof location!=="undefined"&&new URLSearchParams(location.search).get("marker_debug")==="1";
+const SEMANTIC_MARKER_CLASSES=Object.freeze(["gameplay-center","capital","major-city","city","town","village","landmark-poi","route-road-node","debug-diagnostic"]);
+const SEMANTIC_MARKER_SPECS=Object.freeze({
+  "gameplay-center":Object.freeze({minScaleIndex:0,maxScaleIndex:9,debugOnly:false}),
+  "capital":Object.freeze({minScaleIndex:2,maxScaleIndex:4,debugOnly:false}),
+  "major-city":Object.freeze({minScaleIndex:3,maxScaleIndex:5,debugOnly:false}),
+  "city":Object.freeze({minScaleIndex:3,maxScaleIndex:5,debugOnly:false}),
+  "town":Object.freeze({minScaleIndex:5,maxScaleIndex:7,debugOnly:false}),
+  "village":Object.freeze({minScaleIndex:5,maxScaleIndex:9,debugOnly:false}),
+  "landmark-poi":Object.freeze({minScaleIndex:2,maxScaleIndex:9,debugOnly:false}),
+  "route-road-node":Object.freeze({minScaleIndex:7,maxScaleIndex:9,debugOnly:false}),
+  "debug-diagnostic":Object.freeze({minScaleIndex:0,maxScaleIndex:9,debugOnly:true})
+});
 let semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};
 // One continuous footprint ladder drives every representation:
 // - up to LADDER_START_SCALAR it is the true surface footprint of the globe
@@ -589,6 +603,36 @@ function semanticLayerSpec(index,portrait=false){
   return Object.freeze({...base,index:i,budget:portrait?base.portraitBudget:base.budget,
     unsupportedEntityClasses:Object.freeze(base.placeKinds.filter(kind=>kind==="town"&&!window.SettlementArchetypes?.settlementsForCountry)),
     classBudgets:Object.freeze({...base.classBudgets})});
+}
+function semanticMarkerClass(entity){
+  if(!entity)return null;
+  if(entity.markerClass&&SEMANTIC_MARKER_CLASSES.includes(entity.markerClass))return entity.markerClass;
+  if(entity.type==="capital")return "capital";
+  if(entity.type==="city")return entity.importanceClass==="major-city"?"major-city":"city";
+  if(entity.type==="town")return "town";
+  if(entity.type==="village")return "village";
+  if(entity.type==="landmark")return "landmark-poi";
+  if(entity.type==="route-node"||entity.type==="road-node")return "route-road-node";
+  return null;
+}
+function semanticMarkerPolicy(markerClass){
+  const policy=SEMANTIC_MARKER_SPECS[markerClass]||null;
+  if(!policy)return null;
+  return Object.freeze({
+    ...policy,
+    markerClass,
+    minimumDisplayScale:SCALE_LADDER[policy.minScaleIndex],
+    maximumDisplayScale:SCALE_LADDER[policy.maxScaleIndex]
+  });
+}
+function semanticMarkerClassBudget(spec,markerClass){
+  if(!spec||!markerClass)return 0;
+  if(markerClass==="capital")return Number(spec.classBudgets?.capital||0);
+  if(markerClass==="major-city"||markerClass==="city")return Number(spec.classBudgets?.city||0);
+  if(markerClass==="town")return Number(spec.classBudgets?.town||0);
+  if(markerClass==="village")return Number(spec.classBudgets?.village||0);
+  if(markerClass==="landmark-poi")return Number(spec.classBudgets?.landmark||0);
+  return 0;
 }
 function semanticScaleIndexForScalar(value=zoomState.scalar){
   const raw=scaleIndexForScalar(value),height=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(value));
@@ -1244,6 +1288,7 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
   const query=atlasQueryCandidates(spec),occupied=[],visible=[],visibleLandmarks=[];
   let hidden=0,behind=0,offscreen=0,occluded=0,overlap=0;
   const hiddenReasons={outsideFootprint:0,hiddenHemisphere:0,behindCamera:0,offscreen:0,identityMismatch:0,overlap:0,duplicateName:0,classBudget:0,globalBudget:0};
+  const visibilityReasonById=new Map();
   const eligibleCountsByClass={},renderedCountsByClass={};
   for(const entity of query.candidates)eligibleCountsByClass[entity.type]=(eligibleCountsByClass[entity.type]||0)+1;
   const rect=canvas.getBoundingClientRect();
@@ -1263,12 +1308,13 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
       else if(projected.reason==="behind-camera"){behind++;hiddenReasons.behindCamera++;}
       else if(projected.reason==="outside-footprint"){offscreen++;hiddenReasons.outsideFootprint++;}
       else {offscreen++;hiddenReasons.offscreen++;}
+      visibilityReasonById.set(entity.id,String(projected.reason||"offscreen"));
       continue;
     }
     const identity=atlasResolvedIdentity(entity);identityById.set(entity.id,identity);
-    if(!identity.identityMatch){hiddenReasons.identityMismatch++;continue;}
+    if(!identity.identityMatch){hiddenReasons.identityMismatch++;visibilityReasonById.set(entity.id,"identity-mismatch");continue;}
     const displayKey=entity.type+"|"+String(entity.name).trim().toLocaleLowerCase();
-    if(seenDisplayNames.has(displayKey)){hiddenReasons.duplicateName++;continue;}
+    if(seenDisplayNames.has(displayKey)){hiddenReasons.duplicateName++;visibilityReasonById.set(entity.id,"duplicate-name");continue;}
     seenDisplayNames.add(displayKey);validCandidates.push(entity);
   }
   if(atlasStickyBand!==spec.id){
@@ -1283,9 +1329,9 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
   const classCount=type=>[...atlasStickyEntities.values()].filter(item=>item.type===type).length;
   const canAdd=entity=>{
     if(atlasStickyEntities.has(entity.id))return true;
-    if(atlasStickyEntities.size>=spec.budget){hiddenReasons.globalBudget++;return false;}
+    if(atlasStickyEntities.size>=spec.budget){hiddenReasons.globalBudget++;visibilityReasonById.set(entity.id,"global-budget");return false;}
     const limit=Number(spec.classBudgets?.[entity.type]??spec.budget);
-    if(classCount(entity.type)>=limit){hiddenReasons.classBudget++;return false;}
+    if(classCount(entity.type)>=limit){hiddenReasons.classBudget++;visibilityReasonById.set(entity.id,"class-budget");return false;}
     atlasStickyEntities.set(entity.id,entity);return true;
   };
   // Landmarks are independently eligible at their scale tier. Reserve a small
@@ -1323,13 +1369,15 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
     const identity=identityById.get(entity.id)||atlasResolvedIdentity(entity);
     if(!identity.identityMatch)continue;
     const anchor=projected.projection,placed=atlasFindLabelPlacement(entity,anchor,portrait,rect,reserved,occupied);
-    if(!placed){overlap++;hiddenReasons.overlap++;continue;}
+    if(!placed){overlap++;hiddenReasons.overlap++;visibilityReasonById.set(entity.id,"overlap");continue;}
     atlasLabelPlacementCache.set(entity.id,{dx:placed.dx,dy:placed.dy});
     const p=placed.projection,box=placed.box;
     const tag=document.createElement("div");
     tag.className=entity.type==="landmark"?"planet-map-landmark":"planet-atlas-label";
     tag.dataset.kind=entity.type==="landmark"?(entity.landmarkType||"landmark"):entity.type;
     tag.dataset.focus=String(entity.currentFocus===true);
+    const semanticMarker=semanticMarkerClass(entity);
+    if(semanticMarker)tag.dataset.markerClass=semanticMarker;
     const rootRect=root.getBoundingClientRect(),canvasOffsetX=rect.left-rootRect.left,canvasOffsetY=rect.top-rootRect.top;
     tag.style.left=(canvasOffsetX+p.screenX).toFixed(2)+"px";tag.style.top=(canvasOffsetY+p.screenY).toFixed(2)+"px";
     tag.innerHTML="<small></small><strong></strong>";
@@ -1372,14 +1420,115 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
       roundTripErrorTiles:Number(roundTrip?.errorTiles??0),projection:p.mode
     });
     renderedCountsByClass[entity.type]=(renderedCountsByClass[entity.type]||0)+1;
+    visibilityReasonById.set(entity.id,"visible-labeled-callout");
     visible.push(record);if(entity.type==="landmark")visibleLandmarks.push(Object.freeze({id:entity.id,name:entity.name,type:entity.landmarkType||"landmark",latitudeDegrees:record.anchorLatitudeDegrees,longitudeDegrees:record.anchorLongitudeDegrees,screenX:record.screenX,screenY:record.screenY,anchorScreenX:record.anchorScreenX,anchorScreenY:record.anchorScreenY,leaderVisible:record.leaderVisible,leaderStartX:record.anchorScreenX,leaderStartY:record.anchorScreenY,leaderEndX:record.screenX,leaderEndY:record.screenY,displacementPixels:record.displacementPixels,canonicalSpatialCellId:record.canonicalSpatialCellId,projection:record.projection}));
   }
+  const markerTelemetry=semanticMarkerTelemetry(labelsLayer,spec,query,visible,projectedById,identityById,visibilityReasonById);
   const orderingSignature=atlasHashText(visible.map(item=>item.canonicalEntityId+"@"+item.screenX.toFixed(1)+","+item.screenY.toFixed(1)).join("|"));
-  return {query,visible,visibleLandmarks,hidden,behind,offscreen,occluded,overlap,
+  return {query,visible,visibleLandmarks,hidden,behind,offscreen,occluded,overlap,markerTelemetry,
     eligibleCountsByClass:Object.freeze({...eligibleCountsByClass}),renderedCountsByClass:Object.freeze({...renderedCountsByClass}),
     hiddenReasons:Object.freeze({...hiddenReasons}),displacedCount:visible.filter(item=>item.displacementPixels>1).length,
     leaderCount:visible.filter(item=>item.leaderVisible).length,orderingSignature,
     viewport:Object.freeze({width:rect.width,height:rect.height})};
+}
+function semanticMarkerTelemetry(labelsLayer,spec,query,visible,projectedById,identityById,visibilityReasonById){
+  const visibleById=new Map(visible.map(item=>[item.canonicalEntityId,item]));
+  const eligibleCounts={},renderedCounts={},culledCounts={},hiddenReasons={};
+  const decisions=[],rendered=[];
+  const addCount=(target,key)=>{target[key]=(target[key]||0)+1;};
+  const decide=(entity,markerClass,reason,projection,extra={})=>{
+    const policy=semanticMarkerPolicy(markerClass),visibleRecord=visibleById.get(entity?.id)||null;
+    const identity=identityById.get(entity?.id)||null;
+    const parentGeography=Object.freeze({
+      continentId:visibleRecord?.continentId||null,
+      countryId:entity?.countryId||visibleRecord?.politicalOwnerId||identity?.ids?.country||null,
+      regionId:entity?.regionId||identity?.ids?.region||null
+    });
+    const record=Object.freeze({
+      canonicalEntityId:String(entity?.id||extra.id||markerClass),
+      semanticClass:markerClass,
+      authoritativeName:String(entity?.name||extra.name||markerClass),
+      authority:String(entity?.authority||extra.authority||"PlanetStage.presentation"),
+      canonicalAnchorWorldTile:Object.freeze({x:String(entity?.anchorTile?.x??extra.anchorTile?.x??"0"),y:String(entity?.anchorTile?.y??extra.anchorTile?.y??"0")}),
+      anchorLatitudeDegrees:Number((entity?.latitudeDegrees??extra.latitudeDegrees??0).toFixed?.(6)??0),
+      anchorLongitudeDegrees:Number((entity?.longitudeDegrees??extra.longitudeDegrees??0).toFixed?.(6)??0),
+      parentGeography,
+      minimumDisplayScale:policy?.minimumDisplayScale||null,
+      maximumDisplayScale:policy?.maximumDisplayScale||null,
+      importance:Number(entity?.importance||0),
+      priority:Number(entity?.priority||0),
+      currentScale:SCALE_LADDER[spec.index],
+      visibilityReason:String(reason),
+      visible:reason==="visible-labeled-callout"||reason==="visible-debug-callout",
+      debugOnly:Boolean(policy?.debugOnly),
+      presentation:reason==="visible-debug-callout"?"labeled-debug-callout":"labeled-callout",
+      screenX:projection?.screenX==null?null:Number(projection.screenX.toFixed(2)),
+      screenY:projection?.screenY==null?null:Number(projection.screenY.toFixed(2)),
+      projection:projection?.mode||null
+    });
+    decisions.push(record);
+    addCount(eligibleCounts,markerClass);
+    if(record.visible){addCount(renderedCounts,markerClass);rendered.push(record);}
+    else{addCount(culledCounts,markerClass);addCount(hiddenReasons,record.visibilityReason);}
+    return record;
+  };
+  for(const entity of query.candidates){
+    const markerClass=semanticMarkerClass(entity);if(!markerClass)continue;
+    const policy=semanticMarkerPolicy(markerClass),projected=projectedById.get(entity.id)||atlasProjectCandidate(entity),projection=projected?.projection||null;
+    let reason=String(visibilityReasonById.get(entity.id)||projected?.reason||"not-rendered");
+    if(policy&&(spec.index<policy.minScaleIndex||spec.index>policy.maxScaleIndex))reason="scale-ineligible";
+    const budget=semanticMarkerClassBudget(spec,markerClass);
+    if(reason==="visible-labeled-callout"&&budget<=0)reason="class-budget";
+    decide(entity,markerClass,reason,projection);
+  }
+
+  const debugGeo=canonicalLatLonForLocalOffset(
+    zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians,
+    Math.max(40,zoomState.visibleFootprintWidthMeters*.18),
+    Math.max(30,zoomState.visibleFootprintHeightMeters*.12)
+  );
+  const debugTile=mapWorldTileAt(debugGeo.latitudeRadians,debugGeo.longitudeRadians),debugWorld=worldLatLonForTile(debugTile.x,debugTile.y);
+  const debugEntity=Object.freeze({
+    id:"DEBUG-CELL:"+debugTile.x+":"+debugTile.y,
+    type:"debug",markerClass:"debug-diagnostic",name:"DIAGNOSTIC CELL",authority:"PlanetStage.explicit-marker-debug-mode",
+    anchorTile:Object.freeze({x:String(debugTile.x),y:String(debugTile.y)}),
+    latitudeRadians:Number(debugWorld.latitudeRadians),longitudeRadians:Number(debugWorld.longitudeRadians),
+    latitudeDegrees:Number(debugWorld.latitudeDegrees),longitudeDegrees:Number(debugWorld.longitudeDegrees),
+    importance:0,priority:-100
+  });
+  const debugProjection=projectGeographicAnchor(debugEntity,{surfaceOffsetMeters:18});
+  let debugReason="debug-suppressed";
+  if(SEMANTIC_MARKER_DEBUG_MODE)debugReason=debugProjection?"visible-debug-callout":"debug-offscreen";
+  const debugDecision=decide(debugEntity,"debug-diagnostic",debugReason,debugProjection);
+  if(debugDecision.visible&&debugProjection){
+    const rootRect=root.getBoundingClientRect(),rect=canvas.getBoundingClientRect(),offsetX=rect.left-rootRect.left,offsetY=rect.top-rootRect.top;
+    const tag=document.createElement("div");tag.className="planet-debug-diagnostic-marker";tag.dataset.markerClass="debug-diagnostic";
+    tag.style.left=(offsetX+debugProjection.screenX).toFixed(2)+"px";tag.style.top=(offsetY+debugProjection.screenY).toFixed(2)+"px";
+    tag.innerHTML="<small>DEBUG MARKER</small><strong></strong>";
+    tag.querySelector("strong").textContent=debugTile.x+","+debugTile.y;
+    labelsLayer.appendChild(tag);
+  }
+  const known=new Set(SEMANTIC_MARKER_CLASSES);
+  const unknownProductionCount=SEMANTIC_MARKER_DEBUG_MODE?0:rendered.filter(item=>!known.has(item.semanticClass)||item.debugOnly).length;
+  const broadMinorRenderedCount=spec.index<=5?rendered.filter(item=>["town","village","route-road-node","debug-diagnostic"].includes(item.semanticClass)).length:0;
+  return Object.freeze({
+    policyRevision:SEMANTIC_MARKER_POLICY_REVISION,
+    debugMode:SEMANTIC_MARKER_DEBUG_MODE,
+    eligibleCountsByClass:Object.freeze({...eligibleCounts}),
+    renderedCountsByClass:Object.freeze({...renderedCounts}),
+    culledCountsByClass:Object.freeze({...culledCounts}),
+    hiddenReasonCounts:Object.freeze({...hiddenReasons}),
+    decisions:Object.freeze(decisions),
+    rendered:Object.freeze(rendered),
+    renderedCount:rendered.length,
+    culledCount:decisions.length-rendered.length,
+    debugSuppressedCount:Number(hiddenReasons["debug-suppressed"]||0),
+    unknownProductionCount,
+    broadMinorRenderedCount,
+    standaloneDecorativeGlyphCount:0,
+    bounded:true,
+    fullWorldScan:false
+  });
 }
 function geoPointFromViewportGrid(gx,gy,cols,rows,width,height){
   const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
@@ -1702,6 +1851,25 @@ function renderMapPresentation(){
 
   const labelsLayer=layer.querySelector(".planet-map-labels");labelsLayer.replaceChildren();
   const spec=semantic,atlas=renderAtlasLabels(labelsLayer,portrait,spec),visible=atlas.visible,visibleLandmarks=atlas.visibleLandmarks;
+  const markerBase=atlas.markerTelemetry||Object.freeze({eligibleCountsByClass:{},renderedCountsByClass:{},culledCountsByClass:{},hiddenReasonCounts:{},decisions:[],rendered:[],renderedCount:0,culledCount:0,debugSuppressedCount:0,unknownProductionCount:0,broadMinorRenderedCount:0,standaloneDecorativeGlyphCount:0,bounded:true,fullWorldScan:false});
+  const centerPolicy=semanticMarkerPolicy("gameplay-center");
+  const centerDecision=Object.freeze({
+    canonicalEntityId:"ACTIVE-GAMEPLAY-CENTER",semanticClass:"gameplay-center",authoritativeName:"Gameplay center",authority:"SeedCoordinateFabric + PlanetStage.canonicalFocus",
+    canonicalAnchorWorldTile:Object.freeze({x:String(centerMarker?.worldTile?.x??"0"),y:String(centerMarker?.worldTile?.y??"0")}),
+    anchorLatitudeDegrees:centerMarker?.latitudeDegrees??null,anchorLongitudeDegrees:centerMarker?.longitudeDegrees??null,
+    parentGeography:Object.freeze({continentId:null,countryId:null,regionId:null}),
+    minimumDisplayScale:centerPolicy.minimumDisplayScale,maximumDisplayScale:centerPolicy.maximumDisplayScale,
+    importance:1000,priority:1000,currentScale:SCALE_LADDER[spec.index],
+    visibilityReason:centerMarker?.visible===true?"visible-canonical-center":"projection-hidden",
+    visible:centerMarker?.visible===true,debugOnly:false,presentation:"canonical-center-crosshair",
+    screenX:centerMarker?.screenX??null,screenY:centerMarker?.screenY??null,projection:centerMarker?.projection??null
+  });
+  const markerEligibleCounts={...markerBase.eligibleCountsByClass,"gameplay-center":1};
+  const markerRenderedCounts={...markerBase.renderedCountsByClass,"gameplay-center":centerDecision.visible?1:0};
+  const markerCulledCounts={...markerBase.culledCountsByClass,"gameplay-center":centerDecision.visible?0:1};
+  const markerHiddenReasons={...markerBase.hiddenReasonCounts};
+  if(!centerDecision.visible)markerHiddenReasons["projection-hidden"]=(markerHiddenReasons["projection-hidden"]||0)+1;
+  const markerDecisions=Object.freeze([centerDecision,...markerBase.decisions]),visibleMarkers=Object.freeze([...(centerDecision.visible?[centerDecision]:[]),...markerBase.rendered]);
   const hierarchyVisible=visible.filter(item=>item.entityType!=="landmark"),legacyLabelCount=Math.min(6,hierarchyVisible.length);
   const visibleClasses=Array.from(new Set(visible.map(item=>item.displayClass)));
   const landmarkCandidates=atlas.query.candidates.filter(item=>item.type==="landmark");
@@ -1728,6 +1896,12 @@ function renderMapPresentation(){
     semanticEligibleLabelKinds:Object.freeze(semantic.kinds.slice()),semanticClassBudgets:Object.freeze({...semantic.classBudgets}),
     semanticEligibleCountsByClass:atlas.eligibleCountsByClass,semanticRenderedCountsByClass:atlas.renderedCountsByClass,
     semanticHiddenReasonCounts:atlas.hiddenReasons,semanticOrderingSignature:atlas.orderingSignature,semanticDisplacedLabelCount:atlas.displacedCount,semanticLeaderCount:atlas.leaderCount,
+    markerPolicyRevision:SEMANTIC_MARKER_POLICY_REVISION,markerDebugMode:SEMANTIC_MARKER_DEBUG_MODE,markerSemanticClasses:SEMANTIC_MARKER_CLASSES,
+    markerEligibleCountsByClass:Object.freeze(markerEligibleCounts),markerRenderedCountsByClass:Object.freeze(markerRenderedCounts),markerCulledCountsByClass:Object.freeze(markerCulledCounts),
+    markerHiddenReasonCounts:Object.freeze(markerHiddenReasons),markerDecisions,visibleMarkers,markerVisibleCount:visibleMarkers.length,
+    markerCulledCount:markerDecisions.length-visibleMarkers.length,markerDebugSuppressedCount:markerBase.debugSuppressedCount,
+    markerUnknownProductionCount:markerBase.unknownProductionCount,markerBroadScaleMinorRenderedCount:markerBase.broadMinorRenderedCount,
+    markerStandaloneDecorativeGlyphCount:markerBase.standaloneDecorativeGlyphCount,markerViewportBounded:true,markerFullWorldScan:false,
     semanticBorderClassesEligible:Object.freeze(semantic.borderClasses.slice()),semanticBorderClassesRendered:Object.freeze(projectedBorderSegmentCount>0&&semantic.borderClasses.includes("national")?["national"]:[]),
     semanticRouteClassesEligible:localLayers.eligibleRouteClasses,semanticRouteClassesRendered:localLayers.renderedRouteClasses,semanticRouteClassStatus:localLayers.routeStatus,
     semanticSettlementLayersEligible:localLayers.eligibleSettlementLayers,semanticSettlementLayersRendered:localLayers.renderedSettlementLayers,semanticSettlementLayerStatus:localLayers.settlementStatus,
@@ -6197,7 +6371,7 @@ window.PlanetStage=Object.freeze({
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
     WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
-    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,SCALE_DENOMINATORS,SCALE_FOOTPRINT_PROGRESS_EXPONENT,SEMANTIC_SCALE_HYSTERESIS_RATIO,SEMANTIC_LAYER_SPECS,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_GRACE_RESIDENCY_MS,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,LOCAL_SURROUND_SPAN_FACTOR,SSE_MAX_NATIVE_MAGNIFICATION
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,SCALE_DENOMINATORS,SCALE_FOOTPRINT_PROGRESS_EXPONENT,SEMANTIC_SCALE_HYSTERESIS_RATIO,SEMANTIC_LAYER_SPECS,SEMANTIC_MARKER_POLICY_REVISION,SEMANTIC_MARKER_CLASSES,SEMANTIC_MARKER_SPECS,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_GRACE_RESIDENCY_MS,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,LOCAL_SURROUND_SPAN_FACTOR,SSE_MAX_NATIVE_MAGNIFICATION
   })
 });
 const boot=()=>start().catch(()=>{});
