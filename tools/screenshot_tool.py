@@ -129,6 +129,7 @@ SCENARIOS = {
     "wp-s003-013",
     "wp-s003-014",
     "wp-s003-015",
+    "wp-s003-016",
     "wp-s003-010-001",
     "wp-s003-010-002",
     "wp-s003-010-003",
@@ -248,6 +249,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-013": 13,
     "wp-s003-014": 8,
     "wp-s003-015": 8,
+    "wp-s003-016": 6,
     "wp-s003-010-001": 7,
     "wp-s003-010-002": 8,
     "wp-s003-010-003": 9,
@@ -6572,6 +6574,80 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               focus:s.canonicalFocus?.worldTile,viewport:{width:innerWidth,height:innerHeight}};
         """,label,kind,str(actor["id"]),mode)
         return label+":"+json.dumps(proof,sort_keys=True)
+    if scenario == "wp-s003-016":
+        from selenium.webdriver.support.ui import WebDriverWait
+        configs=(
+            ("road-dust",(1280,800),"dust",("road","path","square","bridge","dirt"),False),
+            ("grass-bend",(1280,800),"grassBend",("grass",),False),
+            ("farmland-footprint",(1280,800),"footprint",("farmland",),False),
+            ("decay-cleared",(1280,800),"dust",("road","path","square","bridge","dirt"),True),
+            ("phone-grass-bend",(844,390),"grassBend",("grass",),False),
+            ("phone-farmland-footprint",(390,844),"footprint",("farmland",),False),
+        )
+        label,expected_kind,surface_types,decay=None,None,None,None
+        label,viewport,expected_kind,surface_types,decay=configs[min(frame_index,len(configs)-1)]
+        target_w,target_h=int(viewport[0]),int(viewport[1])
+        driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+            "width":target_w,"height":target_h,"deviceScaleFactor":1,"mobile":False
+        })
+        time.sleep(.12)
+        driver.execute_script("window.PlanetStage.setEnvironmentalReactionEnabled(false);window.PlanetStage.setWorldTileFocus('0','0');window.PlanetStage.setZoomScalar(1)")
+        WebDriverWait(driver,120.0).until(lambda d:d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},ls=s.projection?.localStatic||{};
+            return s.ready===true&&s.zoom?.scaleLabel==='1/10000'&&Number(r.pendingPreparationCount||0)===0&&
+                   String(r.activeSignature||'')===String(r.requestedSignature||'')&&ls.revealTier==='full';
+        """))
+        pair=driver.execute_script("""
+            const wanted=new Set(arguments[0]||[]),seed=window.PlanetStage.snapshot().activeSeed;
+            const typeAt=(x,y)=>String(window.TerrainFoundation?.getType?.(seed,String(x),String(y))||'');
+            for(let radius=2;radius<=36;radius++){
+              for(let y=-radius;y<=radius;y++)for(let x=-radius;x<=radius;x++){
+                if(Math.max(Math.abs(x),Math.abs(y))!==radius)continue;
+                const t=typeAt(x,y);if(!wanted.has(t))continue;
+                const candidates=[[x+1,y],[x-1,y],[x,y+1],[x,y-1]];
+                for(const [nx,ny] of candidates)if(typeAt(nx,ny)===t)return {a:{x:String(x),y:String(y)},b:{x:String(nx),y:String(ny)},surface:t};
+              }
+            }
+            return null;
+        """,list(surface_types))
+        if not pair:
+            raise RuntimeError(f"WP-S003-016 missing adjacent canonical surface pair for {label}: {surface_types}")
+        driver.execute_script("""
+            window.PlanetStage.setWorldTileFocus(arguments[0],arguments[1]);
+            window.PlanetStage.setZoomScalar(1);
+            window.PlanetStage.clearEnvironmentalReactions();
+        """,str(pair["a"]["x"]),str(pair["a"]["y"]))
+        WebDriverWait(driver,120.0).until(lambda d:d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},f=s.canonicalFocus?.worldTile||{};
+            return String(f.x)===String(arguments[0])&&String(f.y)===String(arguments[1])&&
+                   Number(r.pendingPreparationCount||0)===0&&String(r.activeSignature||'')===String(r.requestedSignature||'');
+        """,str(pair["a"]["x"]),str(pair["a"]["y"])))
+        driver.execute_script("window.PlanetStage.setEnvironmentalReactionEnabled(true)")
+        time.sleep(.14)
+        before=driver.execute_script("return window.PlanetStage.snapshot().environmentalReactions")
+        driver.execute_script("window.PlanetStage.setWorldTileFocus(arguments[0],arguments[1])",str(pair["b"]["x"]),str(pair["b"]["y"]))
+        time.sleep(.18)
+        WebDriverWait(driver,30.0).until(lambda d:d.execute_script("""
+            const e=window.PlanetStage?.snapshot?.().environmentalReactions||{};
+            return Number(e.triggerCount||0)>Number(arguments[0])&&String(e.lastKind||'')===String(arguments[1])&&Number(e.activeCount||0)>0;
+        """,int(before.get("triggerCount") or 0),expected_kind))
+        if decay:
+            time.sleep(4.2)
+            WebDriverWait(driver,20.0).until(lambda d:d.execute_script("return Number(window.PlanetStage?.snapshot?.().environmentalReactions?.activeCount||0)===0"))
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),e=s.environmentalReactions||{},r=s.projection?.resourceBudget||{};
+            return {label:arguments[0],expectedKind:arguments[1],targetSurface:arguments[2],pair:arguments[3],
+              enabled:e.enabled,poolInitialized:e.poolInitialized,poolGroupCount:e.poolGroupCount,poolDrawableCount:e.poolDrawableCount,
+              activeCount:e.activeCount,visibleCount:e.visibleCount,activeDrawCallEstimate:e.activeDrawCallEstimate,peakActiveCount:e.peakActiveCount,
+              triggerCount:e.triggerCount,expiredCount:e.expiredCount,reuseCount:e.reuseCount,triggerByKind:e.triggerByKind,
+              lastKind:e.lastKind,lastSurfaceType:e.lastSurfaceType,lastMovementMeters:e.lastMovementMeters,
+              lastUpdateMs:e.lastUpdateMs,maxUpdateMs:e.maxUpdateMs,minMoveMeters:e.minMoveMeters,maxMoveMeters:e.maxMoveMeters,
+              desktopActiveCap:e.desktopActiveCap,phoneActiveCap:e.phoneActiveCap,poolAllocationsAfterInit:e.poolAllocationsAfterInit,
+              terrainMutation:e.terrainMutation,presentationOnly:e.presentationOnly,simulationAuthority:e.simulationAuthority,bounded:e.bounded,
+              fullWorldScan:e.fullWorldScan,perFrameWorldScan:e.perFrameWorldScan,activeSlots:e.activeSlots,
+              focus:s.canonicalFocus?.worldTile,pending:r.pendingPreparationCount,viewport:{width:innerWidth,height:innerHeight}};
+        """,label,expected_kind,str(pair["surface"]),pair)
+        return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-015":
         from selenium.webdriver.support.ui import WebDriverWait
         configs=(
@@ -9021,6 +9097,53 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
         mobile_sizes={(int((p.get("viewport") or {}).get("width") or 0),int((p.get("viewport") or {}).get("height") or 0)) for p in mobile}
         if len(mobile)!=2 or (844,390) not in mobile_sizes or (390,844) not in mobile_sizes:
             raise RuntimeError(f"Mobile wildlife evidence missing required landscape/portrait views: {mobile}")
+        return
+    if scenario == "wp-s003-016":
+        if len(frames) < 6:
+            raise RuntimeError("wp-s003-016 requires six environmental-reaction evidence frames")
+        proofs=[]
+        seen=set()
+        for index,frame in enumerate(frames[:6],start=1):
+            action=str(frame.get("action") or "")
+            try:
+                proof=json.loads(action.split(":",1)[1])
+            except Exception as exc:
+                raise RuntimeError(f"WP-S003-016 frame {index} lacks environmental reaction proof: {action}") from exc
+            proofs.append(proof)
+            if proof.get("presentationOnly") is not True or proof.get("simulationAuthority") is not False or proof.get("terrainMutation") is not False:
+                raise RuntimeError(f"Environmental reaction authority failed in frame {index}: {proof}")
+            if proof.get("bounded") is not True or proof.get("fullWorldScan") is not False or proof.get("perFrameWorldScan") is not False:
+                raise RuntimeError(f"Environmental reaction bounded contract failed in frame {index}: {proof}")
+            if proof.get("poolInitialized") is not True or int(proof.get("poolGroupCount") or 0)!=6 or int(proof.get("poolDrawableCount") or 0)!=18:
+                raise RuntimeError(f"Environmental reaction pool contract failed in frame {index}: {proof}")
+            if int(proof.get("poolAllocationsAfterInit") or 0)!=0:
+                raise RuntimeError(f"Environmental reaction allocated after pool init in frame {index}: {proof}")
+            if int(proof.get("activeCount") or 0)>int(proof.get("desktopActiveCap") or 0) or int(proof.get("activeDrawCallEstimate") or 0)>18:
+                raise RuntimeError(f"Environmental reaction active/draw cap failed in frame {index}: {proof}")
+            if float(proof.get("maxUpdateMs") or 0)>4.0:
+                raise RuntimeError(f"Environmental reaction update cost exceeded 4 ms in frame {index}: {proof}")
+            if float(proof.get("lastMovementMeters") or 0)>float(proof.get("maxMoveMeters") or 0)+.01:
+                raise RuntimeError(f"Environmental reaction accepted an invalid movement jump in frame {index}: {proof}")
+            if int(proof.get("pending") or 0)!=0:
+                raise RuntimeError(f"Environmental reaction evidence captured unsettled local resource in frame {index}: {proof}")
+            if proof.get("label")!="decay-cleared":
+                kind=str(proof.get("expectedKind") or "")
+                if proof.get("lastKind")!=kind or int((proof.get("triggerByKind") or {}).get(kind) or 0)<=0:
+                    raise RuntimeError(f"Environmental reaction kind did not trigger in frame {index}: {proof}")
+                if int(proof.get("activeCount") or 0)<=0 or int(proof.get("visibleCount") or 0)<=0:
+                    raise RuntimeError(f"Environmental reaction was not visibly active in frame {index}: {proof}")
+                seen.add(kind)
+        if seen!={"dust","grassBend","footprint"}:
+            raise RuntimeError(f"Required three surface reaction kinds not proven: {sorted(seen)}")
+        decay=proofs[3]
+        if int(decay.get("activeCount") or 0)!=0 or int(decay.get("expiredCount") or 0)<=0:
+            raise RuntimeError(f"Environmental reaction decay did not clear pooled effects: {decay}")
+        mobile=[p for p in proofs if str(p.get("label") or "").startswith("phone-")]
+        mobile_sizes={(int((p.get("viewport") or {}).get("width") or 0),int((p.get("viewport") or {}).get("height") or 0)) for p in mobile}
+        if len(mobile)!=2 or (844,390) not in mobile_sizes or (390,844) not in mobile_sizes:
+            raise RuntimeError(f"Mobile environmental reaction evidence missing required viewports: {mobile}")
+        if int(proofs[-1].get("triggerCount") or 0)>8:
+            raise RuntimeError(f"Environmental reaction trigger count is spammy for bounded evidence path: {proofs[-1]}")
         return
     if scenario == "wp-s003-015":
         if len(frames) < 8:
@@ -15841,7 +15964,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-014", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-016", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-014", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
