@@ -792,7 +792,7 @@ function rotateByScreenPixels(dx,dy){
   const lat=Math.asin(clamp(sinLat0*cosAngular+cosLat0*sinAngular*Math.cos(bearing),-1,1));
   const lon=wrapLongitudeRadians(lon0+Math.atan2(Math.sin(bearing)*sinAngular*cosLat0,cosAngular-sinLat0*Math.sin(lat)));
   navigationPerformance.pointerMoveCount++;navigationPerformance.pointerMoveSnapshotAvoidedCount++;
-  return setViewTarget({latitudeRadians:lat,longitudeRadians:lon},{forceSemantic:false,snapshotResult:false});
+  return setViewTarget({latitudeRadians:lat,longitudeRadians:lon},{forceSemantic:false,snapshotResult:false,semanticUpdate:false});
 }
 function rotateByScreenFraction(xFraction,yFraction){const sensitivity=navigationSensitivity();return rotateByScreenPixels(Number(xFraction||0)*sensitivity.viewportWidthPixels,Number(yFraction||0)*sensitivity.viewportHeightPixels);}
 function niceScaleDistanceMeters(widthMeters){
@@ -5702,13 +5702,13 @@ function applyRotation(){
   updateZoomFocusFromRotation();
   rotationChangeCount++;
 }
-function setRotationInternal(yaw,pitch,{snapshotResult=true,semanticReason="rotation"}={}){
+function setRotationInternal(yaw,pitch,{snapshotResult=true,semanticReason="rotation",semanticUpdate=true}={}){
   const beforeLatitudeRadians=zoomState.focusLatitudeRadians,beforeLongitudeRadians=zoomState.focusLongitudeRadians;
   yawDegrees=normalizeYaw(yaw);
   pitchDegrees=clamp(pitch,-82,82);
   applyRotation();
   if(zoomState.scalar>projectionState.transitionStart)applyCameraZoom(false);
-  updateMapPresentation(semanticReason);
+  if(semanticUpdate)updateMapPresentation(semanticReason);
   recordEnvironmentNavigationPassage(beforeLatitudeRadians,beforeLongitudeRadians,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   return snapshotResult?snapshot():null;
 }
@@ -5731,11 +5731,11 @@ function rotationForLatLon(latitudeRadians,longitudeRadians){
     pitchDegrees:clamp(pitch*180/Math.PI,-82,82)
   });
 }
-function setViewTarget(target,{forceSemantic=true,snapshotResult=true}={}){
+function setViewTarget(target,{forceSemantic=true,snapshotResult=true,semanticUpdate=true}={}){
   if(!target)return snapshotResult?snapshot():null;
   const rotation=rotationForLatLon(Number(target.latitudeRadians)||0,Number(target.longitudeRadians)||0);
-  const result=setRotationInternal(rotation.yawDegrees,rotation.pitchDegrees,{snapshotResult:false,semanticReason:"rotation"});
-  if(forceSemantic)updateMapPresentation("view-target",true);
+  const result=setRotationInternal(rotation.yawDegrees,rotation.pitchDegrees,{snapshotResult:false,semanticReason:"rotation",semanticUpdate});
+  if(semanticUpdate&&forceSemantic)updateMapPresentation("view-target",true);
   return snapshotResult?snapshot():result;
 }
 function rgbaFromColor(color){
@@ -6363,8 +6363,8 @@ function applyAtmosphereMaterialPalette(p){
   if(cloudMaterial){cloudMaterial.emissive.set(...p.cloudTint);cloudMaterial.emissiveIntensity=p.cloudI;cloudMaterial.update();materialCount++;}
   return materialCount;
 }
-function applyAuthoritativeFantasyTime(stamp,source="authoritative-fantasy-time"){
-  const hour=fantasyHourFromStamp(stamp);if(hour===null||!keyLight||!fillLight||!surfaceMaterial||!cameraEntity)return snapshot();
+function applyAuthoritativeFantasyTime(stamp,source="authoritative-fantasy-time",{snapshotResult=true}={}){
+  const hour=fantasyHourFromStamp(stamp);if(hour===null||!keyLight||!fillLight||!surfaceMaterial||!cameraEntity)return snapshotResult?snapshot():null;
   const p=paletteForHour(hour);atmospherePalette=p;
   keyLight.light.color.set(...p.key);keyLight.light.intensity=p.keyI;fillLight.light.color.set(...p.fill);fillLight.light.intensity=p.fillI;
   app.scene.ambientLight.set(...p.ambient);cameraEntity.camera.clearColor.set(...p.sky);
@@ -6382,7 +6382,7 @@ function applyAuthoritativeFantasyTime(stamp,source="authoritative-fantasy-time"
     inspection.lastContentRefreshAtMs=Number.NEGATIVE_INFINITY;
     updateInspectionTooltip();
   }
-  return snapshot();
+  return snapshotResult?snapshot():null;
 }
 function atmosphereTimestampKey(value){
   if(!value)return null;
@@ -6398,7 +6398,7 @@ function initializeAtmosphereTimeBinding(){
     if(!campaign){atmosphereTimeBinding={...atmosphereTimeBinding,source:"no-existing-campaign"};return false;}
     const now=window.GameTime.getNow();if(!now){atmosphereTimeBinding={...atmosphereTimeBinding,source:"campaign-without-time"};return false;}
     const key=atmosphereTimestampKey(now);
-    applyAuthoritativeFantasyTime(now,"GameTime.getNow");
+    applyAuthoritativeFantasyTime(now,"GameTime.getNow",{snapshotResult:false});
     atmosphereTimeBinding={...atmosphereTimeBinding,active:true,source:"GameTime.getNow",campaignSeed:String(campaign.seed||""),lastTimestampKey:key,lastAppliedAtMs:performance.now(),error:null};
     return true;
   }catch(error){
@@ -6417,7 +6417,7 @@ function updateAtmosphereTimeBinding(){
     const now=window.GameTime?.getNow?.();if(!now)return;
     const key=atmosphereTimestampKey(now);
     if(key&&key!==atmosphereTimeBinding.lastTimestampKey){
-      applyAuthoritativeFantasyTime(now,"GameTime.getNow");
+      applyAuthoritativeFantasyTime(now,"GameTime.getNow",{snapshotResult:false});
       atmosphereTimeBinding={...atmosphereTimeBinding,active:true,source:"GameTime.getNow",campaignSeed:String(campaign.seed||""),lastTimestampKey:key,lastAppliedAtMs:nowMs,error:null};
     }else if(!atmosphereTimeBinding.active){
       atmosphereTimeBinding={...atmosphereTimeBinding,active:true,source:"GameTime.getNow",campaignSeed:String(campaign.seed||""),lastTimestampKey:key,error:null};
