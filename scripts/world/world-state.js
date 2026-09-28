@@ -107,6 +107,17 @@ function persist(){
     return true;
   }catch(_){return false}
 }
+function dispatchDeltaChange(seedValue,entryValue,removed=false){
+  if(typeof window==="undefined"||typeof window.dispatchEvent!=="function"||typeof CustomEvent!=="function")return;
+  const entry=entryValue?clone(entryValue):null;
+  try{
+    window.dispatchEvent(new CustomEvent("advisor:world-state-delta-change",{detail:Object.freeze({
+      seed:normalizeSeed(seedValue),entityId:String(entry?.entityId||""),entityKind:String(entry?.entityKind||""),
+      revision:Number(entry?.revision||0),sequence:Number(state?.sequence||entry?.sequence||0),removed:Boolean(removed),
+      reason:String(entry?.reason||"campaign-change")
+    })}));
+  }catch(_){}
+}
 function bindCampaign(campaignValue,optionsValue){
   const campaign=campaignValue||null;
   const options=optionsValue||{};
@@ -293,18 +304,21 @@ function applyDelta(seedValue,refValue,changesValue,reasonValue){
     reason:String(reasonValue||"campaign-change"),
     changes:deepMerge(previous?.changes||{},changes)
   };
-  const stored=persist();
+  const stored=persist(),entry=deepFreeze(clone(current.entries[refValue.id]));
+  dispatchDeltaChange(seed,entry,false);
   return Object.freeze({
-    ok:true,stored,entry:deepFreeze(clone(current.entries[refValue.id])),
+    ok:true,stored,entry,
     resolved:resolve(seed,refValue)
   });
 }
 function removeDelta(seedValue,entityIdValue){
   const current=activeState(seedValue),id=String(entityIdValue||"");
   if(!current||!current.entries[id])return false;
+  const previous=clone(current.entries[id]);
   delete current.entries[id];
   current.sequence+=1;
   persist();
+  dispatchDeltaChange(seedValue,previous,true);
   return true;
 }
 function evictFoundation(seedValue,refValue){
