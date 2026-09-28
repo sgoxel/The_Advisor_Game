@@ -8262,13 +8262,33 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
                 window.PlanetStage.setWorldTileFocus((BigInt(String(f.x))+BigInt(dx)).toString(),String(f.y));
             """)
             settle(6,240.0)
-            driver.execute_script("window.PlanetStage.setScaleIndex(arguments[0])",scale_index)
+            # Shift inside the prepared parent's bounded 6x coverage at the same
+            # moment as the zoom request. The child signature is therefore cold
+            # even if the parent's same-focus child prewarm completed while CI
+            # was throttled, while the previous ready parent remains a truthful
+            # world-matched fallback for the new focus until atomic swap.
+            driver.execute_script("""
+                const stage=window.PlanetStage,s=stage.snapshot(),c=s.projection?.spatialLod?.requestedCell||{},
+                      fabric=window.SeedCoordinateFabric.create(s.activeSeed,{
+                        radiusMeters:s.worldRadiusMeters,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)
+                      }),
+                      center=c.centerRegisteredMeters||{east:0,north:0},
+                      size=Math.max(64,Number(c.cellSizeMeters||64)),
+                      ll=fabric.latLonForRegisteredMeters(Number(center.east||0)+size*.72,Number(center.north||0));
+                stage.setViewTarget(ll);
+                stage.setScaleIndex(arguments[0]);
+            """,scale_index)
             WebDriverWait(driver,45.0).until(lambda d:d.execute_script("""
-                const r=window.PlanetStage.snapshot().projection?.resourceBudget||{};
-                return r.standInActive===true &&
-                       Boolean(r.activeSignature) &&
-                       String(r.activeSignature)!==String(r.requestedSignature);
+                const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{},
+                      h=s.projection?.spatialLod?.focusStreaming?.handoff||{};
+                return Boolean(r.activeSignature)&&Boolean(r.requestedSignature)&&
+                       String(r.activeSignature)!==String(r.requestedSignature)&&
+                       (Number(r.pendingPreparationCount||0)>0 || h.fallbackActive===true);
             """))
+            driver.execute_async_script("""
+                const done=arguments[arguments.length-1];
+                requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
+            """)
         elif mode=="slow-settled":
             driver.execute_cdp_cmd("Emulation.setCPUThrottlingRate",{"rate":1})
             settle(scale_index,240.0)
