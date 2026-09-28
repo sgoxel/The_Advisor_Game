@@ -132,6 +132,7 @@ SCENARIOS = {
     "wp-s003-016",
     "wp-s003-020",
     "wp-s003-021",
+    "wp-s003-022",
     "wp-s003-010-001",
     "wp-s003-010-002",
     "wp-s003-010-003",
@@ -254,6 +255,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-016": 6,
     "wp-s003-020": 8,
     "wp-s003-021": 8,
+    "wp-s003-022": 10,
     "wp-s003-010-001": 7,
     "wp-s003-010-002": 8,
     "wp-s003-010-003": 9,
@@ -1709,7 +1711,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-014","wp-s003-010-003-015","wp-s003-010-003-016","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011","wp-s003-013","wp-s003-014","wp-s003-015","wp-s003-020","wp-s003-021"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-014","wp-s003-010-003-015","wp-s003-010-003-016","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011","wp-s003-013","wp-s003-014","wp-s003-015","wp-s003-020","wp-s003-021","wp-s003-022"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -6455,6 +6457,101 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-022":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("four-way-crossroads","SV-JUNCTION-CENTER",(1280,800),"sign",False),
+            ("three-way-junction","SV-JUNCTION-T",(1280,800),"sign",False),
+            ("village-exit","SV-SIGN-EXIT",(1280,800),"sign",False),
+            ("named-branch-a",None,(1280,800),"branch-0",False),
+            ("named-branch-b",None,(1280,800),"branch-1",False),
+            ("route-distance",None,(1280,800),"branch-2",False),
+            ("phone-landscape","SV-JUNCTION-CENTER",(844,390),"sign",False),
+            ("phone-portrait","SV-JUNCTION-CENTER",(390,844),"sign",False),
+            ("clicked-detail","SV-JUNCTION-CENTER",(1280,800),"sign",True),
+            ("navigator-name","SV-SIGN-EXIT",(1280,800),"navigator",False),
+        )
+        label,target_id,viewport,mode,click_detail=plan[min(frame_index,len(plan)-1)]
+        target_w,target_h=int(viewport[0]),int(viewport[1])
+        driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+            "width":target_w,"height":target_h,"deviceScaleFactor":1,"mobile":False
+        })
+        driver.execute_script("""
+            window.PlanetStage.setWorldTileFocus("0","0");
+            window.PlanetStage.setZoomScalar(1);
+            window.PlanetStage.closePlaces?.();
+            window.PlanetStage.dismissInspection?.();
+        """)
+        WebDriverWait(driver,180.0).until(lambda d:d.execute_script("""
+            const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},w=s.wayfindingSignposts||{};
+            return s.ready===true&&s.zoom?.scaleLabel==='1/10000'&&s.projection?.localStatic?.revealTier==='full'&&
+                   Number(r.pendingPreparationCount||0)===0&&String(r.activeSignature||'')===String(r.requestedSignature||'')&&
+                   w.active===true&&Number(w.signCount||0)>=3&&Number(w.panelCount||0)>=3&&Number(s.inspection?.activeSignpostCount||0)>=3;
+        """))
+        if target_id is None:
+            target_id=driver.execute_script("""
+                const w=window.PlanetStage.snapshot().wayfindingSignposts||{},mode=arguments[0];
+                const flat=[];for(const sign of w.signs||[])for(const branch of sign.branches||[])flat.push({signId:sign.id,branch});
+                const seen=[],unique=[];for(const item of flat){const key=item.branch.destinationId;if(seen.includes(key))continue;seen.push(key);unique.push(item);}
+                const index=mode==='branch-1'?1:mode==='branch-2'?2:0;
+                return unique[index]?.signId||w.signs?.[0]?.id||null;
+            """,mode)
+        if not target_id:
+            raise RuntimeError("WP-S003-022 could not select a canonical local sign")
+        driver.execute_script("window.PlanetStage.focusWayfindingSignForEvidence(arguments[0])",target_id)
+        settled_js="""
+            const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},w=s.wayfindingSignposts||{},id=arguments[0];
+            return s.zoom?.scaleLabel==='1/10000'&&s.projection?.localStatic?.revealTier==='full'&&
+                   Number(r.pendingPreparationCount||0)===0&&String(r.activeSignature||'')===String(r.requestedSignature||'')&&
+                   w.active===true&&(w.signs||[]).some(x=>String(x.id)===String(id))&&Number(w.visibleTextCount||0)>0&&
+                   window.PlanetStage.inspectionTargets().some(t=>t.type==='signpost'&&String(t.id)===String(id));
+        """
+        WebDriverWait(driver,180.0).until(lambda d:d.execute_script(settled_js,target_id))
+        time.sleep(.30)
+        WebDriverWait(driver,180.0).until(lambda d:d.execute_script(settled_js,target_id))
+        if click_detail:
+            clicked=driver.execute_script("""
+                const stage=window.PlanetStage,id=arguments[0],target=stage.inspectionTargets().find(t=>t.type==='signpost'&&String(t.id)===String(id));
+                if(!target)return null;const b=target.bounds;return stage.pickInspection((b.left+b.right)/2,(b.top+b.bottom)/2);
+            """,target_id)
+            if not clicked:
+                raise RuntimeError(f"WP-S003-022 sign click failed for {target_id}")
+            WebDriverWait(driver,5.0).until(lambda d:d.execute_script("""
+                return window.PlanetStage.snapshot().inspection?.selectedType==='signpost'&&
+                       Boolean(document.querySelector('.world-inspection-tooltip')?.textContent?.trim());
+            """))
+        if mode=="navigator":
+            driver.execute_script("window.PlanetStage.openPlaces();window.PlanetStage.setPlacesCategory('settlements');")
+            time.sleep(.18)
+        proof=driver.execute_script("""
+            const stage=window.PlanetStage,s=stage.snapshot(),w=s.wayfindingSignposts||{},id=arguments[1],model=window.RoadSignposts?.proof?.(s.activeSeed)||{};
+            const target=(w.signs||[]).find(x=>String(x.id)===String(id))||null;
+            const allBranches=(w.signs||[]).flatMap(sign=>(sign.branches||[]).map(branch=>({...branch,signId:sign.id,purpose:sign.purpose})));
+            const distinctNames=[...new Set(allBranches.map(x=>x.destinationName))];
+            const villageName=String(s.projection?.localStatic?.settlementName||"");
+            const navigatorNames=s.destinationNavigator?.names||[];
+            const exit=(w.signs||[]).find(x=>x.purpose==='village-exit')||null;
+            const exitVillageName=(exit?.branches||[]).find(x=>x.destinationCategory==='settlements')?.destinationName||null;
+            const targetPick=stage.inspectionTargets().find(t=>t.type==='signpost'&&String(t.id)===String(id))||null;
+            const tooltip=document.querySelector('.world-inspection-tooltip')?.textContent?.replace(/\s+/g,' ').trim()||null;
+            return {
+              label:arguments[0],targetId:id,targetPurpose:target?.purpose||null,target,targetBounds:targetPick?.bounds||null,
+              signCount:w.signCount,panelCount:w.panelCount,triangleCount:w.triangleCount,geometryDrawCallEstimate:w.geometryDrawCallEstimate,
+              textCanvasCount:w.textCanvasCount,visibleTextCount:w.visibleTextCount,textUpdateCount:w.textUpdateCount,lastTextDrawMs:w.lastTextDrawMs,maxTextDrawMs:w.maxTextDrawMs,
+              routeQueryCount:w.routeQueryCount,routeQueryMs:w.routeQueryMs,buildMs:w.buildMs,authority:w.authority,fallbackScope:w.fallbackScope,
+              interSettlementRoadAuthorityAvailable:w.interSettlementRoadAuthorityAvailable,remoteConnectivityInvented:w.remoteConnectivityInvented,
+              presentationOnly:w.presentationOnly,simulationAuthority:w.simulationAuthority,bounded:w.bounded,fullWorldScan:w.fullWorldScan,perFrameRouteQuery:w.perFrameRouteQuery,
+              modelPass:model.pass,modelDeterministic:model.deterministic,modelSignature:model.signature,modelFourWayPass:model.fourWayPass,modelThreeWayPass:model.threeWayPass,
+              modelVillageExitPass:model.villageExitPass,modelEveryRouteTruthful:model.everyRouteTruthful,modelNoRoadBlocking:model.noRoadBlocking,
+              distinctDestinationNames:distinctNames,allBranches,
+              startingVillageName:villageName,exitVillageName,navigatorNames,
+              navigatorNameConsistent:Boolean(villageName&&exitVillageName===villageName&&navigatorNames.includes(villageName)),
+              inspectionSelectedType:s.inspection?.selectedType,inspectionSelectedId:s.inspection?.selectedId,tooltip,
+              revealTier:s.projection?.localStatic?.revealTier,pending:r.pendingPreparationCount,focus:s.canonicalFocus?.worldTile,
+              viewport:{width:innerWidth,height:innerHeight}
+            };
+        """,label,target_id)
+        return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-021":
         from selenium.webdriver.support.ui import WebDriverWait
         plan=(
@@ -9316,6 +9413,61 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-022":
+        if len(frames) < 10:
+            raise RuntimeError("wp-s003-022 requires ten local wayfinding evidence frames")
+        proofs=[]
+        expected_labels=["four-way-crossroads","three-way-junction","village-exit","named-branch-a","named-branch-b","route-distance","phone-landscape","phone-portrait","clicked-detail","navigator-name"]
+        for index,frame in enumerate(frames[:10],start=1):
+            action=str(frame.get("action") or "")
+            try:
+                proof=json.loads(action.split(":",1)[1])
+            except Exception as exc:
+                raise RuntimeError(f"WP-S003-022 frame {index} lacks wayfinding proof: {action}") from exc
+            proofs.append(proof)
+            if proof.get("label")!=expected_labels[index-1]:
+                raise RuntimeError(f"WP-S003-022 frame order mismatch {index}: {proof}")
+            if proof.get("modelPass") is not True or proof.get("modelDeterministic") is not True:
+                raise RuntimeError(f"Wayfinding deterministic topology proof failed in frame {index}: {proof}")
+            if proof.get("presentationOnly") is not True or proof.get("simulationAuthority") is not False:
+                raise RuntimeError(f"Wayfinding authority isolation failed in frame {index}: {proof}")
+            if proof.get("bounded") is not True or proof.get("fullWorldScan") is not False or proof.get("perFrameRouteQuery") is not False:
+                raise RuntimeError(f"Wayfinding bounded/no-per-frame-route contract failed in frame {index}: {proof}")
+            if proof.get("remoteConnectivityInvented") is not False or proof.get("interSettlementRoadAuthorityAvailable") is not False:
+                raise RuntimeError(f"Wayfinding fabricated unavailable remote connectivity in frame {index}: {proof}")
+            if int(proof.get("signCount") or 0)<3 or int(proof.get("panelCount") or 0)<3:
+                raise RuntimeError(f"Insufficient local wayfinding presentation in frame {index}: {proof}")
+            if int(proof.get("geometryDrawCallEstimate") or 0)!=1 or int(proof.get("textCanvasCount") or 0)!=1 or int(proof.get("triangleCount") or 0)>320:
+                raise RuntimeError(f"Wayfinding render budget failed in frame {index}: {proof}")
+            if int(proof.get("routeQueryCount") or 0)>32 or float(proof.get("buildMs") or 0)>80 or float(proof.get("maxTextDrawMs") or 0)>8:
+                raise RuntimeError(f"Wayfinding bounded performance gate failed in frame {index}: {proof}")
+            if int(proof.get("visibleTextCount") or 0)<1 or proof.get("revealTier")!="full" or int(proof.get("pending") or 0)!=0:
+                raise RuntimeError(f"Wayfinding scene not visually settled in frame {index}: {proof}")
+            if proof.get("modelEveryRouteTruthful") is not True or proof.get("modelNoRoadBlocking") is not True:
+                raise RuntimeError(f"Wayfinding reachability/clearance proof failed in frame {index}: {proof}")
+        if proofs[0].get("targetPurpose")!="four-way-crossroads" or proofs[0].get("modelFourWayPass") is not True:
+            raise RuntimeError(f"Four-way sign evidence failed: {proofs[0]}")
+        if proofs[1].get("targetPurpose")!="three-way-junction" or proofs[1].get("modelThreeWayPass") is not True:
+            raise RuntimeError(f"Three-way sign evidence failed: {proofs[1]}")
+        if proofs[2].get("targetPurpose")!="village-exit" or proofs[2].get("modelVillageExitPass") is not True:
+            raise RuntimeError(f"Village-exit sign evidence failed: {proofs[2]}")
+        names=proofs[0].get("distinctDestinationNames") or []
+        if len(names)<3:
+            raise RuntimeError(f"Wayfinding needs at least three distinct canonical local destination names: {names}")
+        branches=proofs[5].get("allBranches") or []
+        if not branches or not all(float(x.get("routeDistanceMeters") or -1)>=0 and x.get("reachable") is True and x.get("neighborRoad") is True for x in branches):
+            raise RuntimeError(f"Route distance/reachability evidence failed: {branches}")
+        if proofs[6].get("viewport")!={"width":844,"height":390} or proofs[7].get("viewport")!={"width":390,"height":844}:
+            raise RuntimeError(f"Wayfinding phone viewport evidence failed: {proofs[6].get('viewport')} / {proofs[7].get('viewport')}")
+        clicked=proofs[8]
+        if clicked.get("inspectionSelectedType")!="signpost" or clicked.get("inspectionSelectedId")!=clicked.get("targetId") or not clicked.get("tooltip"):
+            raise RuntimeError(f"Clicked sign detail evidence failed: {clicked}")
+        if proofs[9].get("navigatorNameConsistent") is not True:
+            raise RuntimeError(f"Canonical starting-village name is inconsistent between sign and navigator: {proofs[9]}")
+        # The current build intentionally has no authoritative inter-settlement
+        # road graph. This evidence proves the independent truthful local fallback
+        # and explicitly forbids manufacturing the Issue's remote branch examples.
+        return
     if scenario == "wp-s003-021":
         if len(frames) < 8:
             raise RuntimeError("wp-s003-021 requires eight persistent environmental-state evidence frames")
@@ -16320,7 +16472,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-020", "wp-s003-021", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-020", "wp-s003-021", "wp-s003-022", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
@@ -16328,7 +16480,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-016", "wp-s003-020", "wp-s003-021", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-014", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-016", "wp-s003-020", "wp-s003-021", "wp-s003-022", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-014", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(min(interval,0.04) if scenario == "wp-s003-014" else interval)
                 elif index:
