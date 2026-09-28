@@ -2549,21 +2549,21 @@ function createEnvironmentReactionGroup(kind,index){
   environmentalReactionRoot.addChild(group);
   if(kind==="dust"){
     const specs=[
-      [-.22,.10,-.10,1.10,.84,1.12,-12],
-      [.00,.15,.00,1.36,1.00,1.32,11],
-      [.23,.09,.11,.98,.76,1.02,31]
+      [-.18,.18,-.08,1.34,1.18,1.30],
+      [.00,.24,.00,1.92,1.60,1.78],
+      [.20,.14,.10,1.18,1.04,1.18]
     ];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"dust-puff",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5],0,q[6],0);
+      const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"dust-puff",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5],0,i*23,0);
       e.render.castShadows=false;e.render.receiveShadows=false;
       children.push(e);
     }
   }else if(kind==="grassBend"){
     const specs=[
-      [-.58,.04,-.30,-42,.92,.92,1.48],
-      [-.20,.05,.08,-15,1.00,1.00,1.62],
-      [.22,.05,-.08,17,.96,.96,1.58],
-      [.60,.04,.28,44,.86,.86,1.42]
+      [-.62,.030,-.22,-31,.92,.92,1.46],
+      [-.16,.038,.13,-4,1.00,1.00,1.62],
+      [.27,.032,-.10,22,.96,.96,1.52],
+      [.64,.026,.25,49,.84,.84,1.34]
     ];
     for(let i=0;i<specs.length;i++){
       const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"bent-grass-blade",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[4],q[5],q[6],0,q[3],0);
@@ -2583,13 +2583,13 @@ function createEnvironmentReactionGroup(kind,index){
 function ensureEnvironmentReactionPool(){
   if(environmentalReactionRoot||!pc||!tangentPatch)return Boolean(environmentalReactionRoot);
   environmentalReactionMaterials={
-    dust:environmentReactionMaterial("EnvironmentDust",.89,.77,.57,.27),
-    grass:environmentReactionMaterial("EnvironmentBentGrass",.38,.62,.14,.92),
+    dust:environmentReactionMaterial("EnvironmentDust",.86,.72,.50,.36),
+    grass:environmentReactionMaterial("EnvironmentBentGrass",.38,.58,.14,.91),
     footprint:environmentReactionMaterial("EnvironmentFootprint",.28,.15,.055,.90)
   };
   environmentalReactionMaterials.dust.useLighting=false;
-  environmentalReactionMaterials.dust.emissive.set(.74,.59,.37);
-  environmentalReactionMaterials.dust.emissiveIntensity=.34;
+  environmentalReactionMaterials.dust.emissive.set(.68,.54,.34);
+  environmentalReactionMaterials.dust.emissiveIntensity=.30;
   environmentalReactionMaterials.dust.update();
   environmentalReactionRoot=new pc.Entity("LocalEnvironmentalReactions");
   tangentPatch.addChild(environmentalReactionRoot);
@@ -2660,15 +2660,17 @@ function updateEnvironmentalReactions(){
     const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),t=clamp(age/slot.lifetimeMs,0,1),ground=localGroundHeightUnits(east,north,frame);
     let scale=1,liftMeters=.035;
     if(slot.kind==="dust"){
-      scale=.96+t*.48;liftMeters=.04+t*.13;
-      const spread=.10*t,rise=.22*t;
-      const bases=[[-.22,.10,-.10],[0,.15,0],[.23,.09,.11]];
+      // Keep all three wisps overlapping into one cloud while it expands and
+      // lifts. Peripheral wisps drift only slightly so they never read as balls.
+      scale=.96+t*.30;liftMeters=.05+t*.12;
+      const spread=.07*t,rise=.34*t;
+      const bases=[[-.18,.18,-.08],[0,.24,0],[.20,.14,.10]];
       for(let i=0;i<slot.children.length;i++){
         const b=bases[i],side=i-1;
-        slot.children[i].setLocalPosition(b[0]+side*spread,b[1]+rise*(i===1?1:.65),b[2]+side*.06*t);
+        slot.children[i].setLocalPosition(b[0]+side*spread,b[1]+rise*(i===1?1:.72),b[2]+side*.04*t);
       }
     }else if(slot.kind==="grassBend"){
-      scale=1-t*.08;liftMeters=.030;
+      scale=1-t*.07;liftMeters=.025;
     }else{scale=1-t*.06;liftMeters=.055;}
     slot.group.setLocalPosition(east/unit,ground+liftMeters/unit,-north/unit);
     slot.group.setLocalScale(scale/unit,scale/unit,scale/unit);
@@ -2699,41 +2701,42 @@ function sharedLocalPrimitive(type){
   if(localSharedPrimitives[type])return localSharedPrimitives[type];
   let mesh;
   if(type==="dust-puff"){
-    // Three shallow irregular horizontal lobes are packed into one shared mesh.
-    // They face the ground-view camera strongly while their layered alpha makes
-    // the center denser than the ragged outer edge, without textures or emitters.
+    // One irregular low-poly wisp volume. Three pooled instances overlap into
+    // a single readable cloud instead of appearing as separate balls/planes.
     mesh=new pc.Mesh(device);
-    const outline=[[-.54,-.10],[-.39,.39],[-.08,.53],[.34,.39],[.56,.05],[.38,-.39],[-.09,-.51],[-.47,-.30]];
-    const layers=[
-      {x:-.06,y:0,z:.01,s:1.00},
-      {x:.08,y:.10,z:.03,s:.76},
-      {x:-.03,y:.20,z:-.04,s:.54}
-    ];
-    const positions=[],normals=[],indices=[];
-    for(const layer of layers){
-      const base=positions.length/3;
-      positions.push(layer.x,layer.y,layer.z);normals.push(0,1,0);
-      for(const p of outline){
-        positions.push(layer.x+p[0]*layer.s,layer.y,layer.z+p[1]*layer.s);
-        normals.push(0,1,0);
-      }
-      for(let i=0;i<outline.length;i++)indices.push(base,base+1+i,base+1+((i+1)%outline.length));
+    const outline=[[-.56,-.30],[-.18,-.52],[.34,-.40],[.58,.02],[.30,.48],[-.24,.50],[-.58,.16]];
+    const positions=[],normals=[],indices=[],n=outline.length;
+    const addNormal=(x,y,z)=>{const l=Math.hypot(x,y,z)||1;normals.push(x/l,y/l,z/l);};
+    for(const p of outline){positions.push(p[0],-.12,p[1]);addNormal(p[0],.32,p[1]);}
+    for(const p of outline){positions.push(p[0]*.76,.24,p[1]*.76);addNormal(p[0],.58,p[1]);}
+    const apex=positions.length/3;positions.push(.05,.54,-.03);normals.push(0,1,0);
+    for(let i=0;i<n;i++){
+      const j=(i+1)%n;
+      indices.push(i,j,n+i, j,n+j,n+i);
+      indices.push(n+i,n+j,apex);
     }
     mesh.setPositions(positions);mesh.setNormals(normals);mesh.setIndices(indices);mesh.update();
   }else if(type==="bent-grass-blade"){
+    // Each drawable is a tiny three-strand pressed-grass clump. Four pooled
+    // clumps form an irregular disturbed patch while draw topology stays fixed.
     mesh=new pc.Mesh(device);
-    mesh.setPositions([
-      -.18,0,-.10,  .18,0,-.10,
-      -.16,.10,.24, .16,.10,.24,
-      -.10,.18,.62, .10,.18,.62,
-      -.018,.07,1.00, .018,.07,1.00
-    ]);
-    mesh.setNormals([
-      0,1,0, 0,1,0, 0,1,0, 0,1,0,
-      0,1,0, 0,1,0, 0,1,0, 0,1,0
-    ]);
-    mesh.setIndices([0,1,2, 1,3,2, 2,3,4, 3,5,4, 4,5,6, 5,7,6]);
-    mesh.update();
+    const positions=[],normals=[],indices=[];
+    const strands=[
+      {x:-.19,z:-.03,w:.065,len:.82,bx:-.15,bz:.08},
+      {x:.00,z:.04,w:.075,len:1.00,bx:.05,bz:-.06},
+      {x:.18,z:-.02,w:.058,len:.72,bx:.15,bz:.11}
+    ];
+    for(const s of strands){
+      const base=positions.length/3, mz=s.len*.46;
+      positions.push(
+        s.x-s.w,0,s.z, s.x+s.w,0,s.z,
+        s.x+s.bx-s.w*.70,.09,s.z+mz+s.bz, s.x+s.bx+s.w*.70,.09,s.z+mz+s.bz,
+        s.x+s.bx-s.w*.18,.035,s.z+s.len+s.bz*1.45, s.x+s.bx+s.w*.18,.035,s.z+s.len+s.bz*1.45
+      );
+      for(let i=0;i<6;i++)normals.push(0,1,0);
+      indices.push(base,base+1,base+2, base+1,base+3,base+2, base+2,base+3,base+4, base+3,base+5,base+4);
+    }
+    mesh.setPositions(positions);mesh.setNormals(normals);mesh.setIndices(indices);mesh.update();
   }else{
     mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):type==="cone"?pc.createCone(device,{baseRadius:.5,peakRadius:.08,height:1,capSegments:8}):pc.createBox(device);
   }
