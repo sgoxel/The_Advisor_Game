@@ -86,7 +86,6 @@ let wildlifeReaction=freshWildlifeReaction();
 let localWildernessEnabled=true;
 let environmentalReactionRoot=null;
 let environmentalReactionMaterials=null;
-let environmentalReactionTextures=null;
 let environmentalReactionPool=[];
 const ENVIRONMENT_REACTION_MIN_MOVE_METERS=.65;
 const ENVIRONMENT_REACTION_MAX_MOVE_METERS=7.5;
@@ -2545,68 +2544,34 @@ function environmentReactionMaterial(name,r,g,b,opacity=1){
   if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}
   m.update();return m;
 }
-function environmentReactionCanvasTexture(name,draw){
-  const size=96,canvas=document.createElement("canvas");canvas.width=size;canvas.height=size;
-  const ctx=canvas.getContext("2d",{alpha:true});if(!ctx)return null;
-  ctx.clearRect(0,0,size,size);draw(ctx,size);
-  const texture=new pc.Texture(device,{
-    name,width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true,
-    minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,
-    addressU:pc.ADDRESS_CLAMP_TO_EDGE,addressV:pc.ADDRESS_CLAMP_TO_EDGE
-  });
-  texture.setSource(canvas);return texture;
-}
-function ensureEnvironmentReactionTextures(){
-  if(environmentalReactionTextures)return environmentalReactionTextures;
-  const dust=environmentReactionCanvasTexture("EnvironmentDustSoftAlpha",(ctx,size)=>{
-    const cx=size*.5,cy=size*.5,g=ctx.createRadialGradient(cx,cy,size*.06,cx,cy,size*.47);
-    g.addColorStop(0,"rgba(255,255,255,.82)");g.addColorStop(.35,"rgba(255,255,255,.52)");
-    g.addColorStop(.72,"rgba(255,255,255,.18)");g.addColorStop(1,"rgba(255,255,255,0)");
-    ctx.fillStyle=g;ctx.fillRect(0,0,size,size);
-  });
-  const grass=environmentReactionCanvasTexture("EnvironmentBentGrassFan",(ctx,size)=>{
-    ctx.lineCap="round";ctx.lineJoin="round";
-    const blades=[
-      [.50,.76,.20,.42,.18,.16,7],[.48,.78,.32,.50,.30,.20,6],[.52,.78,.43,.48,.46,.14,8],
-      [.50,.76,.58,.46,.62,.18,7],[.52,.78,.68,.52,.74,.24,6],[.48,.78,.78,.48,.84,.18,7],
-      [.50,.78,.38,.60,.26,.42,5],[.50,.78,.62,.60,.74,.42,5]
-    ];
-    for(let i=0;i<blades.length;i++){
-      const b=blades[i],shade=i%3===0?"rgba(90,160,42,.96)":i%3===1?"rgba(72,142,34,.92)":"rgba(112,176,48,.94)";
-      ctx.strokeStyle=shade;ctx.lineWidth=b[6];ctx.beginPath();
-      ctx.moveTo(size*b[0],size*b[1]);ctx.quadraticCurveTo(size*b[2],size*b[3],size*b[4],size*b[5]);ctx.stroke();
-    }
-  });
-  environmentalReactionTextures={dust,grass};return environmentalReactionTextures;
-}
 function createEnvironmentReactionGroup(kind,index){
   const group=new pc.Entity("EnvironmentReaction-"+kind+"-"+index),children=[];
   environmentalReactionRoot.addChild(group);
   if(kind==="dust"){
-    // Three soft alpha planes remain pooled, but overlap as a diffuse ground-hugging
-    // cloud rather than exposing any solid primitive silhouette.
+    // Keep exactly three pooled drawables, but spread them into one low, soft
+    // cloud footprint instead of a vertical stack of solid-looking lobes.
     const specs=[
-      [-.72,.055,-.34,2.25,1,1.55,-14],
-      [.02,.085,.02,2.65,1,1.78,8],
-      [.76,.050,.36,2.05,1,1.42,22]
+      [-.92,.18,-.48,1.85,.24,1.42],
+      [.02,.30,.02,2.20,.34,1.68],
+      [.96,.16,.52,1.62,.22,1.28]
     ];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"plane",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5],0,q[6],0);
+      const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"sphere",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5]);
       e.render.castShadows=false;e.render.receiveShadows=false;
       children.push(e);
     }
   }else if(kind==="grassBend"){
-    // Four alpha-textured fan patches overlap into one bent-grass swath. Each
-    // texture itself contains several curved blades, keeping the same draw budget.
+    // Four tapered blades span a small ~2 m disturbed swath and lean in a fan.
+    // The drawable count and pool topology stay identical to the accepted path.
     const specs=[
-      [-.58,.040,-.30,1.20,1,1.00,-38],
-      [-.18,.045,.16,1.32,1,1.10,-12],
-      [.20,.045,-.14,1.28,1,1.08,14],
-      [.60,.040,.28,1.16,1,.96,40]
+      [-.62,.42,-.28,-58,-18,.34,1.30,.20],
+      [-.20,.48,.18,-30,12,.38,1.46,.22],
+      [.22,.46,-.16,30,-10,.36,1.38,.21],
+      [.64,.38,.30,58,18,.32,1.20,.19]
     ];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"plane",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[3],q[4],q[5],0,q[6],0);
-      e.render.castShadows=false;e.render.receiveShadows=false;
+      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"cone",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[5],q[6],q[7],0,q[4],q[3]);
+      e.render.castShadows=false;
       children.push(e);
     }
   }else{
@@ -2621,24 +2586,15 @@ function createEnvironmentReactionGroup(kind,index){
 }
 function ensureEnvironmentReactionPool(){
   if(environmentalReactionRoot||!pc||!tangentPatch)return Boolean(environmentalReactionRoot);
-  const reactionTextures=ensureEnvironmentReactionTextures();
   environmentalReactionMaterials={
-    dust:environmentReactionMaterial("EnvironmentDust",.82,.68,.46,.62),
-    grass:environmentReactionMaterial("EnvironmentBentGrass",1,1,1,.92),
+    dust:environmentReactionMaterial("EnvironmentDust",.84,.72,.50,.22),
+    grass:environmentReactionMaterial("EnvironmentBentGrass",.34,.68,.16,.94),
     footprint:environmentReactionMaterial("EnvironmentFootprint",.28,.15,.055,.90)
   };
   environmentalReactionMaterials.dust.useLighting=false;
-  environmentalReactionMaterials.dust.diffuseMap=reactionTextures?.dust||null;
-  environmentalReactionMaterials.dust.opacityMap=reactionTextures?.dust||null;
-  environmentalReactionMaterials.dust.opacityMapChannel="a";
-  environmentalReactionMaterials.dust.emissive.set(.42,.34,.22);
-  environmentalReactionMaterials.dust.emissiveIntensity=.22;
+  environmentalReactionMaterials.dust.emissive.set(.84,.72,.50);
+  environmentalReactionMaterials.dust.emissiveIntensity=.55;
   environmentalReactionMaterials.dust.update();
-  environmentalReactionMaterials.grass.useLighting=false;
-  environmentalReactionMaterials.grass.diffuseMap=reactionTextures?.grass||null;
-  environmentalReactionMaterials.grass.opacityMap=reactionTextures?.grass||null;
-  environmentalReactionMaterials.grass.opacityMapChannel="a";
-  environmentalReactionMaterials.grass.update();
   environmentalReactionRoot=new pc.Entity("LocalEnvironmentalReactions");
   tangentPatch.addChild(environmentalReactionRoot);
   environmentalReactionPool=[];
@@ -2707,8 +2663,8 @@ function updateEnvironmentalReactions(){
     visibleCount++;activeDrawCallEstimate+=slot.children.length;
     const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),t=clamp(age/slot.lifetimeMs,0,1),ground=localGroundHeightUnits(east,north,frame);
     let scale=1,liftMeters=.035;
-    if(slot.kind==="dust"){scale=.82+t*.88;liftMeters=.045+t*.18;}
-    else if(slot.kind==="grassBend"){scale=1-t*.12;liftMeters=.025;}
+    if(slot.kind==="dust"){scale=.82+t*.95;liftMeters=.08+t*.46;}
+    else if(slot.kind==="grassBend"){scale=1-t*.16;liftMeters=.045;}
     else{scale=1-t*.06;liftMeters=.055;}
     slot.group.setLocalPosition(east/unit,ground+liftMeters/unit,-north/unit);
     slot.group.setLocalScale(scale/unit,scale/unit,scale/unit);
@@ -2737,7 +2693,7 @@ function ensureLocalStaticMaterials(){
 }
 function sharedLocalPrimitive(type){
   if(localSharedPrimitives[type])return localSharedPrimitives[type];
-  const mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):type==="cone"?pc.createCone(device,{baseRadius:.5,peakRadius:.08,height:1,capSegments:8}):type==="plane"?pc.createPlane(device):pc.createBox(device);
+  const mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):type==="cone"?pc.createCone(device,{baseRadius:.5,peakRadius:.08,height:1,capSegments:8}):pc.createBox(device);
   mesh.incRefCount();// keep alive across static-world rebuilds
   return localSharedPrimitives[type]=mesh;
 }
@@ -5081,9 +5037,7 @@ function destroy(){
   clearLocalFauna();
   app?.destroy?.();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
-  environmentalReactionRoot=null;environmentalReactionMaterials=null;
-  if(environmentalReactionTextures){for(const texture of Object.values(environmentalReactionTextures))texture?.destroy?.();}
-  environmentalReactionTextures=null;environmentalReactionPool=[];
+  environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionPool=[];
   environmentalReactions={enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,activeDrawCallEstimate:0,peakActiveCount:0,triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,terrainMutation:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameWorldScan:false};
   clearLocalBuildingActivity();localBuildingActivityRoot=null;localBuildingActivityContext=null;
   buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
