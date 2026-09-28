@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-smooth-zoom-v1";
+const VERSION="planet-focus-streaming-v1";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -80,6 +80,8 @@ let fillLight=null;
 let surfaceMaterial=null;
 let tangentPatch=null;
 let tangentPatchMaterial=null;
+let focusRingPatch=null;
+let focusRingMaterial=null;
 let horizonSkirt=null;
 let horizonSkirtMaterial=null;
 let localStaticRoot=null;
@@ -230,6 +232,9 @@ let projectionState={mode:"globe",blend:0,transitionStart:.45,transitionEnd:.82,
 const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=8;
+const LOCAL_RESOURCE_CACHE_BUDGET_BYTES=48*1024*1024;
+const LOCAL_MEDIUM_RING_SPAN_FACTOR=3;
+const LOCAL_MEDIUM_RING_TEXTURE_SCALE=.75;
 const LOCAL_GRACE_RESIDENCY_MS=4500;
 const LOCAL_RESIDENCY_RECORD_LIMIT=64;
 const LOCAL_PREFETCH_RECORD_LIMIT=16;
@@ -360,6 +365,8 @@ function freshLocalResources(){
     longestHandoffLatencyMs:0,lastHandoffLatencyMs:0,lastHandoffRequestedAtMs:0,lastHandoffCompletedAtMs:0,
     revisitRegenerationSignature:null,revisitRegenerationPass:true,revisitCount:0,
     requestBudgetPerFrame:1,buildJobBudget:1,prefetchQueueLimit:1,graceResidencyMs:LOCAL_GRACE_RESIDENCY_MS,
+    cacheBudgetBytes:LOCAL_RESOURCE_CACHE_BUDGET_BYTES,cacheBudgetExceeded:false,centerFirst:true,streamingRevision:"focus-streaming-v1",
+    mediumRingSpanFactor:LOCAL_MEDIUM_RING_SPAN_FACTOR,mediumRingWidthMeters:0,mediumRingHeightMeters:0,mediumRingWorldMatched:false,
     surroundSpanFactor:LOCAL_SURROUND_SPAN_FACTOR,surroundWidthMeters:0,surroundHeightMeters:0,surroundWorldMatched:false};
 }
 let localResources=freshLocalResources();
@@ -4637,10 +4644,17 @@ function stitchSurroundCenterToDetail(detail,surround,spanFactor){
 function* localResourceSteps(job){
   const meshData=yield* tangentMeshSteps(job);
   const size=LOCAL_DETAIL_LEVELS[job.levelIndex].textureSize;
+  // Center-first streaming presentation: build the authoritative 1x focus
+  // patch first, then a cheaper 3x medium ring, then the 6x coarse fallback.
+  // All three sample the same SEED-registered coordinates; only presentation
+  // density differs.
   const detail=yield* surfaceTextureSteps(job,job.dims.patchWidth,job.dims.patchHeight,size,true);
+  const mediumSize=Math.max(96,Math.round(size*LOCAL_MEDIUM_RING_TEXTURE_SCALE));
+  const medium=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR,job.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR,mediumSize,true);
   const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,size,false);
-  stitchSurroundCenterToDetail(detail,surround,LOCAL_SURROUND_SPAN_FACTOR);
-  return {meshData,detail,surround};
+  stitchSurroundCenterToDetail(detail,medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
+  stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
+  return {meshData,detail,medium,surround};
 }
 function textureFromPixels(pixels){
   const canvas2d=document.createElement("canvas");canvas2d.width=pixels.size;canvas2d.height=pixels.size;
@@ -4660,18 +4674,19 @@ function skirtMeshForDims(dims,spanFactor=LOCAL_SURROUND_SPAN_FACTOR){
   return mesh;
 }
 function finalizeLocalResource(job,result){
-  const started=performance.now(),dims=job.dims,{meshData,detail,surround}=result;
+  const started=performance.now(),dims=job.dims,{meshData,detail,medium,surround}=result;
   const mesh=new pc.Mesh(device);mesh.setPositions(meshData.positions);mesh.setNormals(meshData.normals);mesh.setUvs(0,meshData.uvs);mesh.setIndices(meshData.indices);mesh.update();
   mesh.incRefCount();// owned by the LRU cache, not by whichever MeshInstance shows it
+  const mediumMesh=skirtMeshForDims(dims,LOCAL_MEDIUM_RING_SPAN_FACTOR);mediumMesh.incRefCount();
   const skirtMesh=skirtMeshForDims(dims,LOCAL_SURROUND_SPAN_FACTOR);skirtMesh.incRefCount();
-  const detailTexture=textureFromPixels(detail),surroundTexture=textureFromPixels(surround),textureSize=detail.size;
-  const detailMetersPerTexel=detail.metersPerTexel,surroundMetersPerTexel=surround.metersPerTexel;
+  const detailTexture=textureFromPixels(detail),mediumTexture=textureFromPixels(medium),surroundTexture=textureFromPixels(surround),textureSize=detail.size;
+  const detailMetersPerTexel=detail.metersPerTexel,mediumMetersPerTexel=medium.metersPerTexel,surroundMetersPerTexel=surround.metersPerTexel;
   const vertices=meshData.positions.length/3,triangles=meshData.indices.length/3;
-  const estimatedBytes=meshData.positions.byteLength+meshData.normals.byteLength+meshData.uvs.byteLength+meshData.indices.byteLength+textureSize*textureSize*4*2;
+  const estimatedBytes=meshData.positions.byteLength+meshData.normals.byteLength+meshData.uvs.byteLength+meshData.indices.byteLength+detail.size*detail.size*4+medium.size*medium.size*4+surround.size*surround.size*4;
   const wildernessPlan=prepareLocalWildernessPlan(job);
   const regenerationSignature=localResourceRegenerationSignature(job);
-  const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,skirtMesh,detailTexture,surroundTexture,wildernessPlan,estimatedBytes,
-    detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
+  const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,
+    detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
@@ -4690,11 +4705,14 @@ function finalizeLocalResource(job,result){
 }
 function destroyCachedLocalResource(resource){
   if(!resource||resource===displayResource)return;
-  for(const mesh of [resource.mesh,resource.skirtMesh]){if(!mesh)continue;mesh.decRefCount();if(mesh.refCount<1)mesh.destroy();localResources.destroyedMeshes++;}
-  resource.detailTexture?.destroy?.();resource.surroundTexture?.destroy?.();localResources.destroyedTextures+=2;
+  for(const mesh of [resource.mesh,resource.mediumMesh,resource.skirtMesh]){if(!mesh)continue;mesh.decRefCount();if(mesh.refCount<1)mesh.destroy();localResources.destroyedMeshes++;}
+  resource.detailTexture?.destroy?.();resource.mediumTexture?.destroy?.();resource.surroundTexture?.destroy?.();localResources.destroyedTextures+=3;
 }
 function trimLocalResourceCache(){
-  if(localResourceCache.size<=LOCAL_RESOURCE_CACHE_LIMIT)return;
+  const cacheBytes=()=>Array.from(localResourceCache.values()).reduce((sum,item)=>sum+Number(item?.estimatedBytes||0),0);
+  let bytes=cacheBytes();
+  localResources.cacheBudgetExceeded=bytes>LOCAL_RESOURCE_CACHE_BUDGET_BYTES;
+  if(localResourceCache.size<=LOCAL_RESOURCE_CACHE_LIMIT&&bytes<=LOCAL_RESOURCE_CACHE_BUDGET_BYTES)return;
   const now=performance.now(),candidates=[...localResourceCache.entries()].filter(([,resource])=>resource!==displayResource&&resource?.signature!==localResources.requestedSignature&&resource?.signature!==localResources.preparingSignature);
   candidates.sort((a,b)=>{
     const ae=localResidency.get(a[0])||{},be=localResidency.get(b[0])||{};
@@ -4703,13 +4721,15 @@ function trimLocalResourceCache(){
     return Number(ae.lastStateAtMs||0)-Number(be.lastStateAtMs||0);
   });
   for(const [key,resource] of candidates){
-    if(localResourceCache.size<=LOCAL_RESOURCE_CACHE_LIMIT)break;
+    if(localResourceCache.size<=LOCAL_RESOURCE_CACHE_LIMIT&&bytes<=LOCAL_RESOURCE_CACHE_BUDGET_BYTES)break;
     const entry=localResidency.get(key)||{};
     localResourceCache.delete(key);destroyCachedLocalResource(resource);
     localRecentEvictions.set(key,{regenerationSignature:resource.regenerationSignature||null,cellId:resource.spatialCell?.id||null,evictedAtMs:now});
     setLocalResidencyState(key,"evicted",{...entry,regenerationSignature:resource.regenerationSignature||entry.regenerationSignature||null,evictedAtMs:now});
-    localResources.evictions++;localResources.lastEvictionReason=entry.state==="grace"?"bounded-grace-pressure":"bounded-lru";
+    localResources.evictions++;localResources.lastEvictionReason=bytes>LOCAL_RESOURCE_CACHE_BUDGET_BYTES?"bounded-byte-pressure":(entry.state==="grace"?"bounded-grace-pressure":"bounded-lru");
+    bytes=Math.max(0,bytes-Number(resource?.estimatedBytes||0));
   }
+  localResources.cacheBudgetExceeded=bytes>LOCAL_RESOURCE_CACHE_BUDGET_BYTES;
   pruneLocalResidency();
 }
 function spatialDepthForLevel(index){
@@ -4977,6 +4997,11 @@ function activateLocalDetailResource(signature,fromCache){
   localDetail={...resource.detail,rebuildCount:(localDetail.rebuildCount||0)+1};
   tangentPatch.render.meshInstances=[new pc.MeshInstance(resource.mesh,tangentPatchMaterial,tangentPatch)];
   tangentPatchMaterial.diffuseMap=resource.detailTexture;tangentPatchMaterial.emissiveMap=resource.detailTexture;tangentPatchMaterial.opacityMap=resource.detailTexture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
+  if(focusRingPatch?.render&&focusRingMaterial){
+    focusRingPatch.render.meshInstances=[new pc.MeshInstance(resource.mediumMesh,focusRingMaterial,focusRingPatch)];
+    focusRingMaterial.diffuseMap=resource.mediumTexture;focusRingMaterial.emissiveMap=resource.mediumTexture;focusRingMaterial.opacityMap=resource.mediumTexture;focusRingMaterial.opacityMapChannel="a";focusRingMaterial.diffuse.set(1,1,1);focusRingMaterial.emissive.set(1,1,1);focusRingMaterial.emissiveIntensity=.88;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
+    localResources.mediumRingSpanFactor=LOCAL_MEDIUM_RING_SPAN_FACTOR;localResources.mediumRingWidthMeters=Number((resource.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR).toFixed(3));localResources.mediumRingHeightMeters=Number((resource.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR).toFixed(3));localResources.mediumRingWorldMatched=true;
+  }
   if(horizonSkirt?.render){
     horizonSkirt.render.meshInstances=[new pc.MeshInstance(resource.skirtMesh,horizonSkirtMaterial,horizonSkirt)];
     localResources.surroundSpanFactor=LOCAL_SURROUND_SPAN_FACTOR;localResources.surroundWidthMeters=Number((resource.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundHeightMeters=Number((resource.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundWorldMatched=true;
@@ -4996,25 +5021,28 @@ function activateLocalDetailResource(signature,fromCache){
 // planet-to-local handoff does not stall on shader compilation.
 async function warmLocalRepresentationShaders(){
   if(!app||!device||!pc)return;
-  ensureTangentPatch();ensureHorizonSkirt();ensureLocalStaticMaterials();
+  ensureTangentPatch();ensureFocusRingPatch();ensureHorizonSkirt();ensureLocalStaticMaterials();
   const texture=new pc.Texture(device,{width:4,height:4,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
   const pixels=texture.lock();pixels.fill(255);texture.unlock();
   texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;
   const quad=skirtMeshForDims({patchWidth:1,patchHeight:1,metersPerUnit:10},1);quad.incRefCount();
   tangentPatchMaterial.diffuseMap=texture;tangentPatchMaterial.emissiveMap=texture;tangentPatchMaterial.opacityMap=texture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.opacity=.5;tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
+  focusRingMaterial.diffuseMap=texture;focusRingMaterial.emissiveMap=texture;focusRingMaterial.opacityMap=texture;focusRingMaterial.opacityMapChannel="a";focusRingMaterial.opacity=.5;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
   horizonSkirtMaterial.diffuseMap=texture;horizonSkirtMaterial.emissiveMap=texture;horizonSkirtMaterial.opacity=.5;horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;horizonSkirtMaterial.depthWrite=false;horizonSkirtMaterial.update();
   tangentPatch.render.meshInstances=[new pc.MeshInstance(quad,tangentPatchMaterial,tangentPatch)];
+  focusRingPatch.render.meshInstances=[new pc.MeshInstance(quad,focusRingMaterial,focusRingPatch)];
   horizonSkirt.render.meshInstances=[new pc.MeshInstance(quad,horizonSkirtMaterial,horizonSkirt)];
   const holder=new pc.Entity("LocalShaderWarmup");app.root.addChild(holder);
   const previousRoot=localStaticRoot;localStaticRoot=holder;
   for(const [type,material] of [["box",localStaticMaterials.road],["box",localStaticMaterials.wall],["box",localStaticMaterials.roof],["cylinder",localStaticMaterials.trunk],["sphere",localStaticMaterials.leaf],["box",localStaticMaterials.water]])addLocalStatic("Warm-"+material.name,type,material,0,0,0,.01,.01,.01);
   localStaticRoot=previousRoot;
-  tangentPatch.enabled=true;horizonSkirt.enabled=true;
+  tangentPatch.enabled=true;focusRingPatch.enabled=true;horizonSkirt.enabled=true;
   await yieldPaint();await yieldPaint();
-  tangentPatch.enabled=false;horizonSkirt.enabled=false;
-  tangentPatch.render.meshInstances=[];horizonSkirt.render.meshInstances=[];holder.destroy();
+  tangentPatch.enabled=false;focusRingPatch.enabled=false;horizonSkirt.enabled=false;
+  tangentPatch.render.meshInstances=[];focusRingPatch.render.meshInstances=[];horizonSkirt.render.meshInstances=[];holder.destroy();
   quad.decRefCount();quad.destroy();texture.destroy();
   tangentPatchMaterial.diffuseMap=null;tangentPatchMaterial.emissiveMap=null;tangentPatchMaterial.opacityMap=null;tangentPatchMaterial.update();
+  focusRingMaterial.diffuseMap=null;focusRingMaterial.emissiveMap=null;focusRingMaterial.opacityMap=null;focusRingMaterial.update();
   horizonSkirtMaterial.diffuseMap=null;horizonSkirtMaterial.emissiveMap=null;horizonSkirtMaterial.update();
 }
 function recordLocalFrame(dt){
@@ -5032,6 +5060,14 @@ function ensureTangentPatch(){
   tangentPatch.render.meshInstances=[];
   tangentPatch.enabled=false;app.root.addChild(tangentPatch);
 }
+function ensureFocusRingPatch(){
+  if(focusRingPatch||!device)return;
+  focusRingMaterial=new pc.StandardMaterial();focusRingMaterial.name="SeededFocusMediumRing";
+  focusRingMaterial.diffuse.set(1,1,1);focusRingMaterial.emissive.set(1,1,1);focusRingMaterial.emissiveIntensity=.88;focusRingMaterial.__atmosphereBaseDiffuse=[1,1,1];
+  focusRingMaterial.useLighting=false;focusRingMaterial.cull=pc.CULLFACE_NONE;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
+  focusRingPatch=new pc.Entity("LocalFocusMediumRing");focusRingPatch.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
+  focusRingPatch.render.meshInstances=[];focusRingPatch.enabled=false;app.root.addChild(focusRingPatch);
+}
 function ensureHorizonSkirt(){
   if(horizonSkirt||!device)return;
   horizonSkirtMaterial=new pc.StandardMaterial();horizonSkirtMaterial.name="LocalHorizonSkirt";
@@ -5043,7 +5079,7 @@ function ensureHorizonSkirt(){
 // Zoom/rotation path: record the requested tier (may swap in a ready one).
 function updateLocalRequest(){
   if(!planet||projectionState.blend<=0)return;
-  ensureTangentPatch();ensureHorizonSkirt();
+  ensureTangentPatch();ensureFocusRingPatch();ensureHorizonSkirt();
   requestLocalDetailResource(requestedLodIndexForZoom());
 }
 // visibleHeightUnits: vertical extent, in scene units, that the camera sees at
@@ -5060,8 +5096,13 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.
     const fineVisible=tangentVisible&&zoomState.scalar>=projectionState.transitionStart;
     tangentPatch.enabled=fineVisible;
-    ensureHorizonSkirt();
+    ensureFocusRingPatch();ensureHorizonSkirt();
     const viewBlend=blend;
+    if(focusRingPatch){
+      focusRingPatch.enabled=tangentVisible;
+      const mediumReveal=projectionPresentationBlendForZoom();
+      focusRingMaterial.opacity=mediumReveal*.98;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
+    }
     if(horizonSkirt){
       horizonSkirt.enabled=tangentVisible;
       // Reveal the canonical tangent continuation quickly enough that the
@@ -5141,8 +5182,15 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     localResources.standInMagnification=Number(Math.max(1,dims.presentationCompensation).toFixed(4));
     localResources.visibleLevel=displayResource?.dims.levelId??null;
     localResources.requestedLevelIndex=requestedIndex;localResources.visibleLevelIndex=displayResource?visibleIndex:null;
+    if(focusRingPatch){
+      const mediumScale=patchScale;
+      focusRingPatch.setLocalEulerAngles(90,0,0);
+      focusRingPatch.setLocalScale(mediumScale,mediumScale,mediumScale);
+      focusRingPatch.setLocalPosition(offset.east/dims.metersPerUnit*mediumScale,offset.north/dims.metersPerUnit*mediumScale,DISPLAY_RADIUS_UNITS-.004);
+      projectionPresentation={...projectionPresentation,mediumScale};
+    }
     if(horizonSkirt){
-      // The 3x world-matched continuation shares the patch scale. During a
+      // The 6x world-matched continuation shares the patch scale. During a
       // large focus jump the bounded stand-in offset guarantees that this last
       // valid terrain representation still covers the viewport until swap.
       const surroundScale=patchScale;
@@ -5185,7 +5233,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
   };
   if(cloudLayer)cloudLayer.enabled=globeFade<.35;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
-  if(blend<=0){localResources.activeResourceCount=0;localResources.pendingPreparationCount=0;localResources.standInActive=false;}
+  if(blend<=0){localResources.activeResourceCount=0;localResources.pendingPreparationCount=0;localResources.standInActive=false;if(focusRingPatch)focusRingPatch.enabled=false;}
 }
 function applyCameraZoom(updateMap=true){
   if(!cameraEntity||!zoomState.baseCameraDistance)return;
@@ -6249,6 +6297,50 @@ function canonicalScreenFocusTelemetry(){
   const x=Number(screen?.x),y=Number(screen?.y),valid=Number.isFinite(x)&&Number.isFinite(y);
   return Object.freeze({valid,screenX:valid?Number(x.toFixed(3)):null,screenY:valid?Number(y.toFixed(3)):null,centerX:Number(centerX.toFixed(3)),centerY:Number(centerY.toFixed(3)),deltaPixels:valid?Number(Math.hypot(x-centerX,y-centerY).toFixed(3)):null,facingDot:facingDot===null?null:Number(facingDot.toFixed(6)),source:"canonical-sphere-transform"});
 }
+function focusStreamingDiagnostics(){
+  const requestedIndex=requestedLodIndexForZoom(zoomState.scalar),visibleIndex=displayResource?.levelIndex??null;
+  const stateCounts={requested:0,preparing:0,ready:0,active:0,grace:0,evicted:0},byLevel={};
+  for(const entry of localResidency.values()){
+    const state=String(entry?.state||"unknown"),level=String(entry?.level||"unknown");
+    if(stateCounts[state]!=null)stateCounts[state]++;
+    if(!byLevel[level])byLevel[level]={requested:0,preparing:0,ready:0,active:0,grace:0,evicted:0};
+    if(byLevel[level][state]!=null)byLevel[level][state]++;
+  }
+  const baseLayers=["terrain-elevation","coast-water"];
+  const mapLayers=[];
+  if(Number(mapPresentation?.projectedBorderSegmentCount||0)>0||Boolean(mapPresentation?.borderVisible))mapLayers.push("political-boundaries");
+  if(Number(mapPresentation?.atlasVisibleLabelCount||0)>0)mapLayers.push("major-labels");
+  const localLayers=[];
+  if(Number(localStatic?.occupiedAreaCount||0)>0)localLayers.push("settlement-footprint");
+  if(Number(localStatic?.roadCount||0)>0)localLayers.push("routes-roads");
+  if(Number(localStatic?.buildingCount||0)>0||Number(localStatic?.vegetationCount||0)>0)localLayers.push("local-biome-vegetation-buildings");
+  const requestedReady=Boolean(localResources.requestedSignature&&localResources.activeSignature===localResources.requestedSignature);
+  const focusState=!displayResource?"root-fallback":(localResources.standInActive?"parent-fallback":(requestedReady?"ready":"active"));
+  const detail=displayResource?.detail||localDetail||{};
+  const ring=(id,spanFactor,priority,metersPerTexel,layers,status)=>Object.freeze({
+    id,spanFactor,priority,distanceRank:priority,cellId:displayResource?.spatialCell?.id||null,
+    requestedLevel:LOCAL_DETAIL_LEVELS[requestedIndex]?.id||null,visibleLevel:visibleIndex===null?null:LOCAL_DETAIL_LEVELS[visibleIndex]?.id||null,
+    metersPerTexel:Number.isFinite(Number(metersPerTexel))?Number(Number(metersPerTexel).toFixed(3)):null,
+    layers:Object.freeze(layers.slice()),status,worldMatched:true
+  });
+  return Object.freeze({
+    revision:"focus-streaming-v1",centerFirst:true,canonicalAuthority:"Campaign-SEED + SeedCoordinateFabric + SLOD quadtree",
+    priorityOrder:Object.freeze(["focus-request","focus-medium-ring","motion-overscan","zoom-direction-neighbor","reverse-neighbor"]),
+    rings:Object.freeze([
+      ring("focus",1,0,detail.detailMetersPerTexel,[...baseLayers,...mapLayers,...localLayers],focusState),
+      ring("medium",LOCAL_MEDIUM_RING_SPAN_FACTOR,1,detail.mediumMetersPerTexel,[...baseLayers,...mapLayers],displayResource?"ready":"root-fallback"),
+      ring("outer",LOCAL_SURROUND_SPAN_FACTOR,2,detail.surroundMetersPerTexel,baseLayers,displayResource?"ready":"root-fallback"),
+      Object.freeze({id:"global-root",spanFactor:null,priority:3,distanceRank:3,cellId:null,requestedLevel:null,visibleLevel:"global-globe",metersPerTexel:null,layers:Object.freeze(baseLayers.concat(mapLayers)),status:planet?.enabled?"visible":"resident-fallback",worldMatched:true})
+    ]),
+    activeCellsByLod:Object.freeze(Object.fromEntries(Object.entries(byLevel).map(([k,v])=>[k,Object.freeze({...v})]))),
+    states:Object.freeze({...stateCounts}),
+    cache:Object.freeze({entries:localResourceCache.size,usedBytes:Number(localResources.estimatedCacheBytes||0),budgetBytes:LOCAL_RESOURCE_CACHE_BUDGET_BYTES,limit:LOCAL_RESOURCE_CACHE_LIMIT,budgetExceeded:Boolean(localResources.cacheBudgetExceeded),graceMs:LOCAL_GRACE_RESIDENCY_MS}),
+    handoff:Object.freeze({fallbackActive:Boolean(localResources.standInActive),lastLatencyMs:Number(localResources.lastHandoffLatencyMs||0),longestLatencyMs:Number(localResources.longestHandoffLatencyMs||0),missingCoverageCount:Number(localResources.missingCoverageCount||0),atomicSwap:true}),
+    budget:Object.freeze({requestsPerFrame:1,buildJobs:1,prefetchQueue:1,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,overscanRadiusCells:SPATIAL_OVERSCAN_CELL_RADIUS}),
+    motionPrefetch:Object.freeze({activeTargets:localMotionPrefetchTargets.size,eastMeters:Number(localMotionVector.east.toFixed(3)),northMeters:Number(localMotionVector.north.toFixed(3)),magnitudeMeters:Number(localMotionVector.magnitude.toFixed(3))}),
+    fullWorldScan:false,globalHighDetailMaterialized:false,viewportBounded:true,cameraAssignsIdentity:false,loadOrderAssignsIdentity:false
+  });
+}
 function spatialLodDiagnostics(){
   const requestedIndex=requestedLodIndexForZoom(zoomState.scalar);
   const requestedCell=canonicalSpatialCellFor(requestedIndex,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
@@ -6290,6 +6382,7 @@ function spatialLodDiagnostics(){
       offscreen:Number(mapPresentation.offscreenCulledCount||0),occluded:Number(mapPresentation.occludedCulledCount||0),overlap:Number(mapPresentation.overlapRejectedCount||0)
     }),
     rootCellMeters:SPATIAL_LOD_ROOT_CELL_METERS,maxDepth:SPATIAL_LOD_MAX_DEPTH,cellMaxLevelHeightRatio:SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,
+    focusStreaming:focusStreamingDiagnostics(),
     hysteresis:true,viewportBounded:true,fullWorldScan:false,cameraAssignsIdentity:false,viewportAssignsIdentity:false
   };
 }
@@ -6387,7 +6480,7 @@ function snapshot(){
       localDetail:Object.freeze({...localDetail,viewportBounded:true,fullWorldMaterialized:false}),
       spatialLod:Object.freeze(spatialLodDiagnostics()),
       localStatic:Object.freeze({...localStatic,focusLatitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),focusLongitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(6)),visibleFootprintWidthMeters:Number(zoomState.visibleFootprintWidthMeters.toFixed(3)),visibleFootprintHeightMeters:Number(zoomState.visibleFootprintHeightMeters.toFixed(3))}),
-      resourceBudget:Object.freeze({...localResources,cacheLimit:LOCAL_RESOURCE_CACHE_LIMIT,lodHysteresis:LOCAL_LOD_HYSTERESIS,offscreenFineDetailActive:false,viewportPriority:true}),
+      resourceBudget:Object.freeze({...localResources,cacheLimit:LOCAL_RESOURCE_CACHE_LIMIT,cacheBudgetBytes:LOCAL_RESOURCE_CACHE_BUDGET_BYTES,lodHysteresis:LOCAL_LOD_HYSTERESIS,offscreenFineDetailActive:false,viewportPriority:true,centerFirst:true}),
       presentation:Object.freeze({...projectionPresentation})
     }),
     activeSystems:Object.freeze({
