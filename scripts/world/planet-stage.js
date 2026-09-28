@@ -5906,6 +5906,31 @@ function inspectionTargets(){
     return Object.freeze({id:String(record.id),type:record.type,bounds:Object.freeze({...bounds}),authority:record.authority||null});
   }).filter(Boolean));
 }
+function workCycleEvidenceState(residentId){
+  const id=String(residentId||""),record=localNpcEntities.get(id)||null,rect=canvas?.getBoundingClientRect?.()||null;
+  if(!record||!rect||!cameraEntity?.camera)return Object.freeze({residentId:id,exists:Boolean(record),visible:false,toolEnabled:false,inViewport:false});
+  const entities=[record.body,record.head,record.tool].filter(Boolean);
+  const enabled=entities.filter(entity=>entity.enabled&&entity.parent);
+  const projected=enabled.map(entity=>{
+    const world=entity.getPosition?.();if(!world)return null;
+    const screen=cameraEntity.camera.worldToScreen(world,new pc.Vec3());
+    const sx=Number(screen?.x),sy=Number(screen?.y),sz=Number(screen?.z);
+    return Number.isFinite(sx)&&Number.isFinite(sy)?Object.freeze({x:sx,y:sy,z:Number.isFinite(sz)?sz:null}):null;
+  }).filter(Boolean);
+  const center=projected.length?Object.freeze({
+    x:projected.reduce((sum,p)=>sum+p.x,0)/projected.length,
+    y:projected.reduce((sum,p)=>sum+p.y,0)/projected.length
+  }):null;
+  const inViewport=Boolean(center&&center.x>=0&&center.x<=rect.width&&center.y>=0&&center.y<=rect.height);
+  const movement=window.ResidentMovement?.get?.(id)||null;
+  return Object.freeze({
+    residentId:id,exists:true,visible:enabled.length>0,toolEnabled:Boolean(record.tool?.enabled),
+    inViewport,screen:center?Object.freeze({x:Number(center.x.toFixed(3)),y:Number(center.y.toFixed(3)),width:Number(rect.width.toFixed(3)),height:Number(rect.height.toFixed(3))}):null,
+    movementStatus:movement?.status||null,workCycle:movement?.workCycle||null,
+    localTier:localStatic?.revealTier||null,localBuildingCount:Number(localStatic?.buildingCount||0),
+    presentationOnly:true,simulationAuthority:false
+  });
+}
 function verify(){
   const stage=snapshot();
   const check=geographyVerification||(window.PlanetGeography?.verifyDeterminism?.(activeSeed)||null);
@@ -5948,6 +5973,7 @@ function destroy(){
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setScaleIndex,stepScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
   setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},
+  workCycleEvidenceState,
   focusWayfindingSignForEvidence:(id)=>{const sign=(wayfindingSignposts.signs||[]).find(item=>String(item.id)===String(id));if(sign){setWorldTileFocus(sign.junction.x,sign.junction.y);setZoomScalar(1);}return snapshot();},
   selectWayfindingSignForEvidence:(id)=>{const key=inspectionRegistryKey("signpost",String(id)),record=inspectionPickables.get(key);if(record){inspection.selectedId=String(id);inspection.selectedType="signpost";renderInspectionTooltip(record);}return snapshot();},
   destroy,
