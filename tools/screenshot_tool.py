@@ -6456,18 +6456,18 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
         )
         label,kind,biome,mode,viewport=plan[min(frame_index,len(plan)-1)]
         target_w,target_h=int(viewport[0]),int(viewport[1])
-        # Size by the browser's own outer-vs-inner chrome delta. Using
-        # WebDriver get_window_size() here can lag one resize on headless Chrome
-        # and caused the old compensator to oscillate by exactly 143 px.
-        for _ in range(3):
-            metrics=driver.execute_script("return {iw:innerWidth,ih:innerHeight,ow:outerWidth,oh:outerHeight}")
-            chrome_w=max(0,int(metrics.get("ow") or 0)-int(metrics.get("iw") or 0))
-            chrome_h=max(0,int(metrics.get("oh") or 0)-int(metrics.get("ih") or 0))
-            driver.set_window_size(max(320,target_w+chrome_w),max(240,target_h+chrome_h))
-            time.sleep(.18)
-            inner=driver.execute_script("return {w:innerWidth,h:innerHeight}")
-            if abs(int(inner.get("w") or 0)-target_w)<=1 and abs(int(inner.get("h") or 0)-target_h)<=1:
-                break
+        # Set the CSS viewport directly through Chromium device metrics rather
+        # than compensating for headless window chrome. Selenium/Chromium can
+        # alternate set_window_size() between outer- and content-size semantics
+        # after repeated resizes, producing a 143 px oscillation. Device metrics
+        # gives deterministic innerWidth/innerHeight for visual evidence.
+        driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+            "width": target_w,
+            "height": target_h,
+            "deviceScaleFactor": 1,
+            "mobile": False,
+        })
+        time.sleep(.12)
         inner=driver.execute_script("return {w:innerWidth,h:innerHeight}")
         if abs(int(inner.get("w") or 0)-target_w)>1 or abs(int(inner.get("h") or 0)-target_h)>1:
             raise RuntimeError(f"Unable to establish requested wildlife inner viewport {viewport}: {inner}")
