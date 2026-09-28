@@ -6554,7 +6554,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
             driver.execute_script("window.PlanetStage.openPlaces();window.PlanetStage.setPlacesCategory('settlements');")
             time.sleep(.18)
         proof=driver.execute_script("""
-            const stage=window.PlanetStage,s=stage.snapshot(),w=s.wayfindingSignposts||{},id=arguments[1],model=window.RoadSignposts?.proof?.(s.activeSeed)||{};
+            const stage=window.PlanetStage,s=stage.snapshot(),r=s.projection?.resourceBudget||{},w=s.wayfindingSignposts||{},id=arguments[1],model=window.RoadSignposts?.proof?.(s.activeSeed)||{};
             const target=(w.signs||[]).find(x=>String(x.id)===String(id))||null;
             const allBranches=(w.signs||[]).flatMap(sign=>(sign.branches||[]).map(branch=>({...branch,signId:sign.id,purpose:sign.purpose})));
             const distinctNames=[...new Set(allBranches.map(x=>x.destinationName))];
