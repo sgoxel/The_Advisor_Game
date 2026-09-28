@@ -127,6 +127,7 @@ SCENARIOS = {
     "wp-s003-012",
     "wp-s003-009-011",
     "wp-s003-013",
+    "wp-s003-014",
     "wp-s003-015",
     "wp-s003-010-001",
     "wp-s003-010-002",
@@ -245,6 +246,7 @@ SCENARIO_MIN_SHOTS = {
     "wp-s003-012": 8,
     "wp-s003-009-011": 7,
     "wp-s003-013": 13,
+    "wp-s003-014": 8,
     "wp-s003-015": 8,
     "wp-s003-010-001": 7,
     "wp-s003-010-002": 8,
@@ -1701,7 +1703,7 @@ def prepare_current_build(driver, timeout: float = 10.0, scenario: str = "static
         # only; it does not relax playable/readiness assertions.
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 180.0)
-    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-014","wp-s003-010-003-015","wp-s003-010-003-016","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011","wp-s003-013","wp-s003-015"}:
+    if scenario in {"camera-zoom","camera-pan","camera-pan-zoom","playcanvas-root-cutover","wp-s003-010-001","wp-s003-010-002","wp-s003-010-003","wp-s003-010-003-001","wp-s003-010-003-002","wp-s003-010-003-003","wp-s003-010-003-004","wp-s003-010-003-005","wp-s003-010-003-005-001","wp-s003-010-003-005-002","wp-s003-010-003-006","wp-s003-010-003-007","wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010","wp-s003-010-003-014","wp-s003-010-003-015","wp-s003-010-003-016","wp-s003-010-004","wp-s003-010-005","wp-s003-006-014","wp-s003-008-004","wp-s003-008-005","wp-s003-009-009","wp-s003-009-010","wp-s003-012","wp-s003-009-011","wp-s003-013","wp-s003-014","wp-s003-015"}:
         from selenium.webdriver.support.ui import WebDriverWait
         driver.set_window_size(1280, 800)
         timeout = max(timeout, 60.0)
@@ -6440,6 +6442,118 @@ def _set_minimap_view(
 
 
 def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int, base_height: int) -> str:
+    if scenario == "wp-s003-014":
+        from selenium.webdriver.support.ui import WebDriverWait
+        plan=(
+            ("deer-idle","deer","grassland","idle",(1280,800)),
+            ("deer-approach","deer","grassland","react",(1280,800)),
+            ("hare-idle","hare","wooded","idle",(1280,800)),
+            ("hare-approach","hare","wooded","react",(1280,800)),
+            ("waterbird-idle","waterbird","wet","idle",(1280,800)),
+            ("waterbird-approach","waterbird","wet","react",(1280,800)),
+            ("phone-deer-approach","deer","grassland","mobile-react",(844,390)),
+            ("phone-waterbird-approach","waterbird","wet","mobile-react",(390,844)),
+        )
+        label,kind,biome,mode,viewport=plan[min(frame_index,len(plan)-1)]
+        driver.set_window_size(int(viewport[0]),int(viewport[1]));time.sleep(.15)
+
+        targets=driver.execute_script("""
+            if(window.__WP_S003_014_TARGETS)return window.__WP_S003_014_TARGETS;
+            const stage=window.PlanetStage,s=stage.snapshot(),geo=window.PlanetGeography?.create?.(s.activeSeed),radius=stage.constants.WORLD_RADIUS_METERS;
+            if(!geo)throw new Error('PlanetGeography unavailable');
+            const out={},scores={grassland:-Infinity,wooded:-Infinity,wet:-Infinity};
+            const nearWater=(lat,lon,distanceMeters=64)=>{
+              const d=distanceMeters/radius,c=Math.max(.08,Math.cos(lat));
+              return !geo.sampleLatLon(Math.max(-Math.PI*.499,Math.min(Math.PI*.499,lat+d)),lon).land||
+                     !geo.sampleLatLon(Math.max(-Math.PI*.499,Math.min(Math.PI*.499,lat-d)),lon).land||
+                     !geo.sampleLatLon(lat,lon+d/c).land||!geo.sampleLatLon(lat,lon-d/c).land;
+            };
+            for(let lat=-68;lat<=68;lat+=4)for(let lon=-176;lon<180;lon+=4){
+              const la=lat*Math.PI/180,lo=lon*Math.PI/180,g=geo.sampleLatLon(la,lo);if(!g.land)continue;
+              const moisture=Number(g.moisture||0),elevation=Number(g.elevationMeters||0),mountain=Number(g.mountainInfluence||0);
+              const coast64=nearWater(la,lo,64)||g.surfaceClass==='coast',inland750=!nearWater(la,lo,750);
+              const candidates=[];
+              if(coast64||moisture>.74)candidates.push(["wet",(coast64?4:0)+moisture*3-Math.max(0,elevation)/5000]);
+              if(inland750&&moisture>.52&&moisture<.67&&elevation<1550&&mountain<=.22)candidates.push(["wooded",moisture*5-Math.max(0,elevation)/5000]);
+              if(inland750&&moisture<.46&&elevation<1450&&mountain<=.20)candidates.push(["grassland",(1-moisture)*4-Math.max(0,elevation)/6000]);
+              for(const [key,score] of candidates)if(score>scores[key]){
+                scores[key]=score;out[key]={lat:la,lon:lo,elevation,moisture,surfaceClass:g.surfaceClass,mountainInfluence:mountain,score};
+              }
+            }
+            window.__WP_S003_014_TARGETS=out;return out;
+        """)
+        if biome not in (targets or {}):
+            raise RuntimeError(f"Unable to find canonical {biome} target for wildlife evidence: {targets}")
+
+        def find_actor():
+            base=targets[biome]
+            offsets=(0.0,.001,-.001,.002,-.002,.004,-.004)
+            for dy in offsets:
+                for dx in offsets:
+                    driver.execute_script("""
+                        window.PlanetStage.setViewTarget({latitudeRadians:arguments[0],longitudeRadians:arguments[1]});
+                        window.PlanetStage.setZoomScalar(1);
+                    """,float(base["lat"]+dy),float(base["lon"]+dx))
+                    try:
+                        WebDriverWait(driver,25.0).until(lambda d:d.execute_script("""
+                            const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{},wr=s.wildlifeReaction||{};
+                            return Number(r.pendingPreparationCount||0)===0&&
+                                   String(r.activeSignature||'')===String(r.requestedSignature||'')&&
+                                   Array.isArray(wr.actors)&&wr.actors.some(a=>a.kind===arguments[0]&&a.visible===true&&Number(a.distanceToPresenceMeters??1e9)<=14);
+                        """,kind))
+                        actor=driver.execute_script("""
+                            const wr=window.PlanetStage.snapshot().wildlifeReaction||{},kind=arguments[0];
+                            const actors=(wr.actors||[]).filter(a=>a.kind===kind&&a.visible===true&&Number(a.distanceToPresenceMeters??1e9)<=14);
+                            actors.sort((a,b)=>Number(a.distanceToPresenceMeters??1e9)-Number(b.distanceToPresenceMeters??1e9)||String(a.id).localeCompare(String(b.id)));
+                            return actors[0]||null;
+                        """,kind)
+                        if actor:
+                            driver.execute_script("window.__WP_S003_014_ACTIVE={kind:arguments[0],actor:arguments[1]}",kind,actor)
+                            return actor
+                    except Exception:
+                        pass
+            raise RuntimeError(f"No bounded {kind} fauna actor found near canonical {biome} target")
+
+        active=driver.execute_script("return window.__WP_S003_014_ACTIVE||null")
+        if mode in {"idle","mobile-react"} or not active or active.get("kind")!=kind:
+            actor=find_actor()
+        else:
+            actor=active.get("actor")
+        if not actor or not (actor.get("worldTile") or {}).get("x"):
+            raise RuntimeError(f"Missing canonical actor tile for {label}: {actor}")
+
+        if mode in {"react","mobile-react"}:
+            tile=actor["worldTile"]
+            before=int(driver.execute_script("return Number((window.PlanetStage.snapshot().wildlifeReaction?.triggerByKind||{})[arguments[0]]||0)",kind))
+            # Approach the exact canonical actor directly. Do not wait for a new
+            # terrain resource: the ready parent/stand-in remains on screen while
+            # the bounded focus request prepares, and the reaction is tied to the
+            # actor's stable world-tile identity.
+            driver.execute_script("""
+                const x=BigInt(arguments[0])+3n,y=BigInt(arguments[1]);
+                window.PlanetStage.setWorldTileFocus(String(x),String(y));window.PlanetStage.setZoomScalar(1);
+            """,str(tile["x"]),str(tile["y"]))
+            WebDriverWait(driver,12.0).until(lambda d:d.execute_script("""
+                const wr=window.PlanetStage?.snapshot?.()?.wildlifeReaction||{},kind=arguments[0],before=Number(arguments[1]),id=arguments[2];
+                return Number((wr.triggerByKind||{})[kind]||0)>before &&
+                       (wr.actors||[]).some(a=>a.id===id&&["flee","takeoff","return"].includes(a.state));
+            """,kind,before,str(actor["id"])))
+            time.sleep(.12)
+
+        proof=driver.execute_script("""
+            const s=window.PlanetStage.snapshot(),wr=s.wildlifeReaction||{},r=s.projection?.resourceBudget||{},kind=arguments[1],targetId=arguments[2];
+            const actor=(wr.actors||[]).find(a=>a.id===targetId)||(wr.actors||[]).find(a=>a.kind===kind)||null;
+            return {label:arguments[0],kind,mode:arguments[3],targetActorId:targetId,actor,
+              activeActorCount:wr.activeActorCount,visibleActorCount:wr.visibleActorCount,reactingActorCount:wr.reactingActorCount,
+              sleepingActorCount:wr.sleepingActorCount,spatialBucketCount:wr.spatialBucketCount,proximityChecks:wr.proximityChecks,
+              triggerCount:wr.triggerCount,triggerByKind:wr.triggerByKind,stateCounts:wr.stateCounts,presenceMoveMeters:wr.presenceMoveMeters,
+              updateCount:wr.updateCount,lastUpdateMs:wr.lastUpdateMs,maxUpdateMs:wr.maxUpdateMs,reactionTickMs:wr.reactionTickMs,
+              bucketMeters:wr.bucketMeters,maxActors:wr.maxActors,domesticAvailable:wr.domesticAvailable,domesticReason:wr.domesticReason,
+              presentationOnly:wr.presentationOnly,simulationAuthority:wr.simulationAuthority,bounded:wr.bounded,fullWorldScan:wr.fullWorldScan,
+              memoryEntryCount:wr.memoryEntryCount,pending:r.pendingPreparationCount,standInActive:r.standInActive,
+              focus:s.canonicalFocus?.worldTile,viewport:{width:innerWidth,height:innerHeight}};
+        """,label,kind,str(actor["id"]),mode)
+        return label+":"+json.dumps(proof,sort_keys=True)
     if scenario == "wp-s003-015":
         from selenium.webdriver.support.ui import WebDriverWait
         configs=(
@@ -8764,6 +8878,55 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
 
 
 def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
+    if scenario == "wp-s003-014":
+        if len(frames) < 8:
+            raise RuntimeError("wp-s003-014 requires eight wildlife approach/reaction evidence frames")
+        proofs=[]
+        reaction_kinds=set()
+        pair_ids={}
+        for index,frame in enumerate(frames[:8],start=1):
+            action=str(frame.get("action") or "")
+            try:
+                proof=json.loads(action.split(":",1)[1])
+            except Exception as exc:
+                raise RuntimeError(f"WP-S003-014 frame {index} lacks wildlife proof: {action}") from exc
+            proofs.append(proof)
+            if proof.get("presentationOnly") is not True or proof.get("simulationAuthority") is not False:
+                raise RuntimeError(f"Wildlife reaction authority failed in frame {index}: {proof}")
+            if proof.get("bounded") is not True or proof.get("fullWorldScan") is not False:
+                raise RuntimeError(f"Wildlife reaction bounded contract failed in frame {index}: {proof}")
+            if int(proof.get("activeActorCount") or 0)>4 or int(proof.get("maxActors") or 0)!=4:
+                raise RuntimeError(f"Wildlife actor cap failed in frame {index}: {proof}")
+            if int(proof.get("spatialBucketCount") or 0)>4:
+                raise RuntimeError(f"Wildlife spatial bucket bound failed in frame {index}: {proof}")
+            if float(proof.get("reactionTickMs") or 0)!=100 or float(proof.get("bucketMeters") or 0)!=24:
+                raise RuntimeError(f"Wildlife event cadence/bucket contract changed in frame {index}: {proof}")
+            if float(proof.get("maxUpdateMs") or 0)>4.0:
+                raise RuntimeError(f"Wildlife reaction update cost exceeded 4 ms in frame {index}: {proof}")
+            if proof.get("domesticAvailable") is not False or not str(proof.get("domesticReason") or ""):
+                raise RuntimeError(f"Domestic availability must be reported truthfully when absent: {proof}")
+            actor=proof.get("actor") or {}
+            if not actor.get("id") or actor.get("kind")!=proof.get("kind") or not (actor.get("worldTile") or {}).get("x"):
+                raise RuntimeError(f"Canonical wildlife identity missing in frame {index}: {proof}")
+            kind=str(proof.get("kind"))
+            pair_ids.setdefault(kind,actor.get("id"))
+            if pair_ids[kind]!=actor.get("id") and index<=6:
+                raise RuntimeError(f"Wildlife identity changed across approach pair for {kind}: {pair_ids[kind]} -> {actor.get('id')}")
+            if proof.get("mode") in {"react","mobile-react"}:
+                if int((proof.get("triggerByKind") or {}).get(kind) or 0)<=0:
+                    raise RuntimeError(f"Wildlife approach did not trigger {kind} in frame {index}: {proof}")
+                if actor.get("state") not in {"flee","takeoff","return"}:
+                    raise RuntimeError(f"Wildlife actor not visibly reacting after approach in frame {index}: {proof}")
+                reaction_kinds.add(kind)
+        if not {"deer","hare","waterbird"}.issubset(reaction_kinds):
+            raise RuntimeError(f"Required three wildlife reaction types not proven: {sorted(reaction_kinds)}")
+        if int(proofs[-1].get("triggerCount") or 0)>12:
+            raise RuntimeError(f"Wildlife reaction trigger count is spammy for bounded evidence path: {proofs[-1]}")
+        mobile=[p for p in proofs if "phone-" in str(p.get("label") or "")]
+        mobile_sizes={(int((p.get("viewport") or {}).get("width") or 0),int((p.get("viewport") or {}).get("height") or 0)) for p in mobile}
+        if len(mobile)!=2 or (844,390) not in mobile_sizes or (390,844) not in mobile_sizes:
+            raise RuntimeError(f"Mobile wildlife evidence missing required landscape/portrait views: {mobile}")
+        return
     if scenario == "wp-s003-015":
         if len(frames) < 8:
             raise RuntimeError("wp-s003-015 requires eight building-activity evidence frames")
@@ -15531,7 +15694,7 @@ def take_screenshots(
                 proof_action = _set_character_proof_state(driver, "open")
                 prep_action = prep_action + "+" + proof_action
 
-            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-013", "wp-s003-015", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+            if force_max_zoom and scenario not in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "playcanvas-foundation", "playcanvas-scene", "wp-s003-003", "wp-s003-004-002", "wp-s003-005-002", "wp-s003-005-006", "wp-s003-006-002", "wp-s003-006-001", "playcanvas-root-cutover", "wp-s003-006", "wp-s003-006-003", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-011", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-009-010", "wp-s003-009-011", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s004-005", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                 force_max_zoom_out(driver)
 
             frames: list[dict] = []
@@ -15539,7 +15702,7 @@ def take_screenshots(
                 if scenario == "wp-s003-008-002-001":
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
-                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-015", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-014", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
+                elif scenario in {"wp-s002-003-001", "wp-s002-004-001", "wp-s003-003-001", "building-presentation", "building-occlusion", "wp-s003-005", "wp-s003-005-006", "wp-s003-003", "wp-s003-006-001", "wp-s003-006-004", "wp-s003-006-005", "wp-s003-006-008", "wp-s003-006-011", "wp-s003-006-012", "wp-s003-006-013", "wp-s003-007-001", "wp-s003-008-002", "wp-s003-008-002-001", "wp-s003-008-003", "wp-s003-011", "wp-s003-012", "wp-s003-009-001", "wp-s003-009-002", "wp-s003-009-003", "wp-s003-009-004", "wp-s003-009-008", "wp-s003-009-009", "wp-s003-013", "wp-s003-014", "wp-s003-015", "wp-s003-010-003-004", "wp-s003-010-003-005", "wp-s003-010-003-005-001", "wp-s003-010-003-005-002", "wp-s003-010-003-008","wp-s003-010-003-009","wp-s003-010-003-010", "wp-s003-010-003-012", "wp-s003-010-003-013", "wp-s003-010-003-014", "wp-s003-010-003-015", "wp-s003-010-003-016", "wp-s003-010-004", "wp-s003-010-005", "wp-s004-001", "wp-s004-002", "wp-s004-003", "wp-s004-004", "wp-s004-004-001", "wp-s005-001", "wp-s005-002", "wp-s005-003","wp-s005-004","wp-s005-005","wp-s006-001","wp-s006-002","wp-s006-003","wp-s006-004","wp-s006-005","wp-s006-006","wp-s007-001","wp-s007-002","wp-s007-003"}:
                     action = _run_scenario_step(driver, scenario, index, width, height)
                     time.sleep(interval)
                 elif index:
