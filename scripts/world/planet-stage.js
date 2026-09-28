@@ -3876,12 +3876,16 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const ground=canonicalSemanticGroundHeightUnits(east,north,context.frame)+context.lift;
     orientedPatch(east,north,ground+yMeters*s,sxMeters,szMeters,color,0,shape);
   };
-  const foliageClump=(east,north,baseY,radiusMeters,heightMeters,colorA,colorB)=>{
-    const p=canonicalSemanticPosition(east,north,context.presentationScale,context.unit,context.frame),r=Math.max(.08,radiusMeters*s),h=Math.max(.10,heightMeters*s),base=positions.length/3;
-    const ring=[[-.62,-.36],[.18,-.72],[.68,-.08],[.38,.62],[-.44,.56]];
-    for(let i=0;i<ring.length;i++){const q=ring[i];addVertex(p.x+q[0]*r,baseY,p.z+q[1]*r,(i&1)?colorB:colorA,[0,.55,0]);}
-    const top=addVertex(p.x-r*.08,baseY+h,p.z+r*.06,colorB,[0,1,0]);
-    for(let i=0;i<ring.length;i++){const j=(i+1)%ring.length;indices.push(base+i,base+j,top);}
+  const leafFan=(east,north,centerY,radiusMeters,colorA,colorB,rollDeg=0,shape=0)=>{
+    const p=canonicalSemanticPosition(east,north,context.presentationScale,context.unit,context.frame),rad=rollDeg*Math.PI/180,cr=Math.cos(rad),sr=Math.sin(rad),r=Math.max(.10,radiusMeters*s);
+    const variants=[
+      [[-.78,-.22],[-.40,-.72],[.16,-.82],[.72,-.38],[.78,.24],[.26,.76],[-.52,.64]],
+      [[-.68,-.52],[-.12,-.82],[.55,-.68],[.82,-.06],[.48,.62],[-.06,.82],[-.72,.36]],
+      [[-.82,-.08],[-.50,-.70],[.10,-.76],[.70,-.48],[.82,.18],[.34,.78],[-.60,.56]]
+    ],pts=variants[Math.abs(shape)%variants.length],normal=[-sr,cr,0];
+    const center=addVertex(p.x,centerY,p.z,colorB,normal),base=positions.length/3;
+    for(let i=0;i<pts.length;i++){const q=pts[i],x=q[0]*r,z=q[1]*r;addVertex(p.x+x*cr,centerY+x*sr,p.z+z,(i&1)?colorA:colorB,normal);}
+    for(let i=0;i<pts.length;i++)indices.push(center,base+i,base+((i+1)%pts.length));
     primitiveCount++;
   };
   const C={
@@ -3898,33 +3902,35 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const roofCenter=ground+physicalHeight*s+.025;
     const leftEast=east-w*.20,rightEast=east+w*.20;
     if(item.visualState==="worn"){
-      // One connected weathered eave composition: broad discoloration plus adjacent scuff and ground-edge wear.
-      orientedPatch(leftEast-w*.05,north+d*.34,roofCenter+.039,Math.max(2.35,w*.42),Math.max(.92,d*.18),C.weather,-24,0);
-      orientedPatch(leftEast+w*.10,north+d*.20,roofCenter+.042,Math.max(1.55,w*.28),Math.max(1.18,d*.23),C.wear,-24,1);
-      orientedPatch(leftEast-w*.16,north+d*.28,roofCenter+.044,Math.max(.82,w*.15),Math.max(.78,d*.15),C.wearDark,-24,2);
-      groundPatch(east-w*.18,north+d*.67,.025,Math.max(3.15,w*.58),Math.max(1.15,d*.22),C.wear,1);
+      // Coherent clustered weathering: enough coverage to read from ground zoom without becoming a full roof mask.
+      orientedPatch(leftEast-w*.05,north+d*.06,roofCenter+.038,Math.max(2.15,w*.38),Math.max(3.05,d*.58),C.weather,-24,0);
+      orientedPatch(rightEast+w*.05,north-d*.14,roofCenter+.041,Math.max(1.65,w*.29),Math.max(2.45,d*.46),C.wearDark,24,1);
+      orientedPatch(leftEast+w*.14,north-d*.31,roofCenter+.046,Math.max(.82,w*.14),Math.max(1.28,d*.24),C.wear,-24,2);
+      groundPatch(east,north+d*.70,.024,Math.max(4.15,w*.78),Math.max(1.18,d*.21),C.wearDark,1);
     }else if(item.visualState==="damaged"){
-      // A single charred/broken eave zone connects roof damage to fallen debris below it.
-      orientedPatch(leftEast-w*.04,north+d*.33,roofCenter+.041,Math.max(2.55,w*.46),Math.max(1.18,d*.23),C.char,-24,1);
-      orientedPatch(leftEast+w*.10,north+d*.19,roofCenter+.045,Math.max(1.72,w*.31),Math.max(1.38,d*.27),C.burn,-24,2);
-      orientedPatch(leftEast-w*.16,north+d*.25,roofCenter+.048,Math.max(.86,w*.16),Math.max(.82,d*.16),C.ash,-24,0);
-      groundPatch(east-w*.19,north+d*.67,.025,Math.max(2.85,w*.52),Math.max(1.28,d*.25),C.debris,0);
-      groundPatch(east+w*.10,north+d*.75,.028,Math.max(1.36,w*.25),Math.max(.80,d*.16),C.char,2);
+      // A dark broken-roof cluster plus chunky fallen debris reads as structural damage, not linework.
+      orientedPatch(leftEast-w*.05,north-d*.07,roofCenter+.040,Math.max(2.45,w*.43),Math.max(3.05,d*.58),C.char,-24,1);
+      orientedPatch(rightEast+w*.09,north+d*.18,roofCenter+.044,Math.max(1.60,w*.28),Math.max(2.15,d*.40),C.burn,24,2);
+      orientedPatch(leftEast+w*.14,north+d*.31,roofCenter+.048,Math.max(.86,w*.15),Math.max(1.22,d*.23),C.ash,-24,0);
+      groundBox(east+w*.58,north+d*.42,.03,1.10,.48,1.35,C.debris);
+      groundBox(east+w*.72,north+d*.18,.03,.82,.38,1.05,C.char);
+      groundBox(east+w*.53,north-d*.18,.03,1.28,.32,.62,C.burn);
     }else if(item.visualState==="repaired"){
-      // A compact contiguous repair section: old scar under three overlapping fresh shingle patches and a small wood stack.
-      orientedPatch(leftEast-w*.04,north+d*.30,roofCenter+.040,Math.max(2.35,w*.42),Math.max(1.28,d*.25),C.repairDark,-24,2);
-      orientedPatch(leftEast-w*.12,north+d*.34,roofCenter+.047,Math.max(1.10,w*.20),Math.max(.95,d*.18),C.newWood,-24,0);
-      orientedPatch(leftEast+w*.04,north+d*.29,roofCenter+.050,Math.max(1.05,w*.19),Math.max(.90,d*.17),C.newWoodLight,-24,1);
-      orientedPatch(leftEast+w*.17,north+d*.22,roofCenter+.052,Math.max(.98,w*.18),Math.max(.86,d*.16),C.newWood,-24,2);
-      groundPatch(east-w*.04,north+d*.70,.026,Math.max(2.10,w*.38),Math.max(.92,d*.18),C.newWoodLight,1);
+      // One coherent warm repair field plus a small timber stack communicates recovery without roof-spanning bars.
+      orientedPatch(leftEast-w*.04,north+.02*d,roofCenter+.040,Math.max(2.15,w*.37),Math.max(3.00,d*.56),C.repairDark,-24,2);
+      orientedPatch(leftEast-w*.11,north-d*.15,roofCenter+.047,Math.max(1.38,w*.24),Math.max(1.85,d*.35),C.newWood,-24,0);
+      orientedPatch(leftEast+w*.10,north+d*.13,roofCenter+.050,Math.max(1.32,w*.23),Math.max(1.75,d*.33),C.newWoodLight,-24,1);
+      groundBox(east+w*.62,north+d*.40,.03,2.15,.26,.52,C.newWood);
+      groundBox(east+w*.62,north+d*.28,.31,1.75,.22,.44,C.newWoodLight);
     }else if(item.visualState==="overgrown"){
-      // One attached moss/vine mass hugs the same eave, then visibly continues onto the ground below.
-      orientedPatch(leftEast-w*.05,north+d*.35,roofCenter+.042,Math.max(2.65,w*.48),Math.max(.88,d*.17),C.green,-24,0);
-      orientedPatch(leftEast+w*.06,north+d*.22,roofCenter+.046,Math.max(1.95,w*.35),Math.max(1.20,d*.23),C.greenLight,-24,1);
-      orientedPatch(leftEast-w*.17,north+d*.25,roofCenter+.049,Math.max(.92,w*.17),Math.max(.82,d*.16),C.moss,-24,2);
-      groundPatch(east-w*.20,north+d*.66,.026,Math.max(3.10,w*.56),Math.max(1.55,d*.30),C.green,0);
-      groundPatch(east+w*.14,north+d*.75,.028,Math.max(1.90,w*.34),Math.max(1.05,d*.20),C.greenLight,2);
-      groundPatch(east-w*.46,north+d*.58,.029,Math.max(1.35,w*.25),Math.max(.92,d*.18),C.moss,1);
+      // Dark roof/eave moss under clustered leaf fans; grounded fans continue growth naturally into the yard.
+      orientedPatch(leftEast-w*.04,north+d*.09,roofCenter+.042,Math.max(1.75,w*.31),Math.max(2.45,d*.46),C.green,-24,0);
+      orientedPatch(rightEast+w*.07,north-d*.15,roofCenter+.045,Math.max(1.42,w*.25),Math.max(2.05,d*.38),C.moss,24,2);
+      leafFan(leftEast-w*.02,north-d*.03,roofCenter+.058,Math.max(.88,w*.14),C.green,C.greenLight,-24,0);
+      leafFan(rightEast+w*.04,north+d*.20,roofCenter+.060,Math.max(.78,w*.13),C.greenLight,C.moss,24,1);
+      leafFan(east-w*.55,north+d*.31,ground+.035*s,1.32,C.green,C.greenLight,0,2);
+      leafFan(east+w*.57,north-d*.08,ground+.035*s,1.18,C.greenLight,C.moss,0,0);
+      groundPatch(east,north+d*.68,.026,Math.max(4.0,w*.75),1.45,C.moss,1);
     }
   }
   if(positions.length){
