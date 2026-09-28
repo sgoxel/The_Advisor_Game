@@ -3180,6 +3180,19 @@ function updateWayfindingTextOverlay(force=false){
       const panelPoint=panels.length===1?(singlePanelPoint||chosen.p):chosen.p;
       const cx=Math.max(boardW*.5+edgePad,Math.min(width-boardW*.5-edgePad,panelPoint.x));
       const cy=startY+index*(rowH+gap)+rowH*.5,left=cx-boardW*.5,right=cx+boardW*.5,top=cy-rowH*.5,bottom=cy+rowH*.5;
+      // One-panel signs need an unmistakable physical support from the fixed
+      // near-top-down camera. Draw the visible face of the same timber post in
+      // this one shared canvas behind the plank; this is presentation-only and
+      // mirrors the underlying 3D post without adding DOM/world authority.
+      if(panels.length===1){
+        const stemW=narrow?5:6,stemBottom=Math.min(height-edgePad,cy+rowH*.5+(narrow?18:22));
+        ctx.fillStyle="rgba(69,40,20,.98)";
+        ctx.fillRect(cx-stemW*.5,cy+rowH*.14,stemW,Math.max(8,stemBottom-(cy+rowH*.14)));
+        ctx.beginPath();
+        ctx.moveTo(cx-(narrow?8:9),stemBottom);ctx.lineTo(cx+(narrow?8:9),stemBottom);
+        ctx.lineTo(cx+(narrow?6:7),Math.min(height-edgePad,stemBottom+4));ctx.lineTo(cx-(narrow?6:7),Math.min(height-edgePad,stemBottom+4));ctx.closePath();
+        ctx.fillStyle="rgba(91,73,50,.98)";ctx.fill();
+      }
       // Shared-canvas text is drawn as the visible face of the physical wood
       // boards, directly centered on the post rather than as floating UI.
       ctx.beginPath();
