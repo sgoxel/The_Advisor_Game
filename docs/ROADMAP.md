@@ -124,7 +124,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S003-015` — Contextual Building Activity Indicators — IN PROGRESS (continuation 3-attempt cap reached 2026-09-28; functional acceptance green, final visual 6.2/10; failed Attempts 2–3 presentation rolled back to tested Attempt 1 state; evidence validator fixed; NOT COMPLETED)
 - `WP-S003-016` — Local Environmental Reaction Effects — COMPLETED
 - `WP-S003-017` — Positional Ambient Soundscape + Activity Audio — COMPLETED
-- `WP-S003-018` — Regional Weather Presentation + Local Behavior Hooks — IN PROGRESS (3-attempt continuation cap reached 2026-09-28; runtime performance fixed: phone steady refresh 0.3 ms, fresh visual 8.2/10; authoritative campaign-time resume evidence harness still unresolved; NOT COMPLETED)
+- `WP-S003-018` — Regional Weather Presentation + Local Behavior Hooks — IN PROGRESS (continuation acceptance PASS 2026-09-28: run 36386546624 / artifact 10954717876; authoritative GameTime resume delta 0 ms; phone steady refresh 0.3 ms; fresh visual 8.2/10; final docs deployment/bookkeeping pending; NOT COMPLETED)
 - `WP-S003-019` — Seasonal World Presentation + Vegetation State — IN PROGRESS (3-attempt acceptance cap reached 2026-09-28; final visual 6.6/10, phone steady seasonal refresh 23.3 ms exceeds 15 ms budget; NOT COMPLETED)
 - `WP-S003-020` — Function-Readable Building Surroundings + Ownership Cues
 - `WP-S003-021` — Campaign-State Environmental Wear, Damage + Recovery Projection
