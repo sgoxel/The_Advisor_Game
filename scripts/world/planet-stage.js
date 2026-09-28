@@ -5598,6 +5598,29 @@ async function buildScene(){  const started=performance.now();
   atlasEntityCache.clear();atlasIdentityCache.clear();atlasStickyEntities.clear();atlasLabelPlacementCache.clear();
   geographySignature=geography.signature();
   geographyVerification=null;
+  if(EVIDENCE_FAST_START){
+    // The production globe texture normally populates geographyStats while it
+    // samples the canonical geography. Trusted local evidence skips that GPU-
+    // bound texture, so preserve the exact verification contract from the
+    // canonical PlanetGeography.signature() sample instead of bypassing verify().
+    // signature() samples 16 latitude rows x 36 longitude columns.
+    const totalSignatureSamples=16*36;
+    const landSamples=Number(geographySignature?.landCount||0);
+    geographyStats=Object.freeze({
+      textureWidth:0,textureHeight:0,totalTextureSamples:totalSignatureSamples,
+      minElevationMeters:Number(geographySignature?.minElevationMeters||0),
+      maxElevationMeters:Number(geographySignature?.maxElevationMeters||0),
+      landSamples,
+      oceanSamples:Math.max(0,totalSignatureSamples-landSamples),
+      islandSamples:Number(geographySignature?.islandCount||0),
+      mountainSamples:Number(geographySignature?.mountainCount||0),
+      peakSamples:Number(geographySignature?.maxElevationMeters||0)>=3400?1:0,
+      landFraction:Number((landSamples/totalSignatureSamples).toFixed(5)),
+      oceanFraction:Number(((totalSignatureSamples-landSamples)/totalSignatureSamples).toFixed(5)),
+      evidenceSource:"PlanetGeography.signature"
+    });
+    startupScheduler.evidenceGeographyStatsSource="PlanetGeography.signature";
+  }
   setStartupProgress("surface","Painting planetary surface and relief…",68);
 
   app.scene.ambientLight=new pc.Color(0.34,0.37,0.43);
