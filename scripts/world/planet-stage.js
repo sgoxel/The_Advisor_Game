@@ -2304,9 +2304,11 @@ function buildLocalWildernessMesh(plan,frame,reveal){
 }
 function buildLocalFaunaMesh(kind,size,unit){
   const positions=[],normals=[],colors=[],indices=[],s=size/unit;
-  const palette=kind==="waterbird"?[.76,.77,.65]:kind==="bird"?[.31,.26,.16]:kind==="hare"?[.57,.43,.27]:[.53,.31,.14];
-  const dark=kind==="waterbird"?[.36,.40,.34]:kind==="bird"?[.17,.15,.11]:kind==="hare"?[.35,.26,.18]:[.31,.18,.09];
-  const light=kind==="waterbird"?[.88,.87,.72]:kind==="bird"?[.58,.47,.27]:kind==="hare"?[.79,.68,.52]:[.78,.60,.37];
+  // Species palettes need enough natural contrast to survive the ground camera
+  // and dense biome dressing without becoming UI-like markers.
+  const palette=kind==="waterbird"?[.62,.65,.50]:kind==="bird"?[.31,.26,.16]:kind==="hare"?[.64,.43,.22]:[.53,.31,.14];
+  const dark=kind==="waterbird"?[.23,.29,.23]:kind==="bird"?[.17,.15,.11]:kind==="hare"?[.27,.17,.09]:[.31,.18,.09];
+  const light=kind==="waterbird"?[.94,.90,.69]:kind==="bird"?[.58,.47,.27]:kind==="hare"?[.88,.70,.43]:[.78,.60,.37];
   const push=(x,y,z,color=palette)=>{positions.push(x,y,z);normals.push(0,1,0);colors.push(Math.round(color[0]*255),Math.round(color[1]*255),Math.round(color[2]*255),255);return positions.length/3-1;};
   const tri=(a,b,c)=>indices.push(a,b,c);
   // Reusable rounded low-poly primitive. The old implementation assembled
@@ -2356,8 +2358,8 @@ function buildLocalFaunaMesh(kind,size,unit){
     ellipsoid(-s*.12,s*.43,0,s*.50,s*.27,s*.31,palette,9,5);
     ellipsoid(s*.28,s*.58,0,s*.27,s*.22,s*.23,light,8,5);
     // Two tapered ears project forward and slightly outward in plan view.
-    pyramidX(s*.31,s*.66,-s*.10,s*.055,s*.045,s*.44,dark);
-    pyramidX(s*.31,s*.66,s*.10,s*.055,s*.045,s*.44,dark);
+    pyramidX(s*.31,s*.66,-s*.15,s*.065,s*.050,s*.48,dark);
+    pyramidX(s*.31,s*.66,s*.15,s*.065,s*.050,s*.48,dark);
     // Broad rear feet and white tail keep the front/back axis readable during flee.
     ellipsoid(-s*.39,s*.20,-s*.20,s*.28,s*.10,s*.12,dark,6,4);
     ellipsoid(-s*.39,s*.20,s*.20,s*.28,s*.10,s*.12,dark,6,4);
@@ -2369,9 +2371,9 @@ function buildLocalFaunaMesh(kind,size,unit){
       // Waterbirds need a horizontal neck/head axis: a mostly vertical neck is
       // nearly invisible from the gameplay camera. These merged light forms stay
       // within the prior body envelope but create a clear directional silhouette.
-      ellipsoid(s*.27,s*.56,0,s*.24,s*.075,s*.070,light,8,4);
-      ellipsoid(s*.49,s*.59,0,s*.18,s*.15,s*.15,light,8,4);
-      pyramidX(s*.60,s*.58,0,s*.055,s*.075,s*.25,[.72,.48,.12]);
+      ellipsoid(s*.28,s*.56,0,s*.29,s*.080,s*.075,light,8,4);
+      ellipsoid(s*.53,s*.59,0,s*.16,s*.15,s*.15,light,8,4);
+      pyramidX(s*.64,s*.58,0,s*.055,s*.075,s*.28,[.78,.50,.10]);
     }else{
       ellipsoid(s*.39,s*.59,0,s*.18,s*.18,s*.18,light,8,4);
       pyramidX(s*.53,s*.58,0,s*.07,s*.095,s*.28,[.66,.49,.20]);
@@ -2448,7 +2450,10 @@ function rebuildLocalFauna(plan,frame,reveal){
     // from a grass candidate became tiny). Use restrained species metres plus a
     // deterministic mild variation from the existing canonical item variant.
     const y=localGroundHeightUnits(item.east,item.north,frame),variation=.92+clamp(Number(item.variant||0),0,1)*.16;
-    const size=(item.kind==="deer"?1.15:item.kind==="waterbird"?.80:item.kind==="bird"?.46:.68)*variation;
+    // Keep deer restrained; use plausible large-hare / goose-sized envelopes
+    // for the two species that were sub-pixel/near-sub-pixel in phone evidence.
+    // Identity and variation remain canonical and unchanged.
+    const size=(item.kind==="deer"?1.15:item.kind==="waterbird"?.92:item.kind==="bird"?.50:.78)*variation;
     const built=buildLocalFaunaMesh(item.kind,size,unit),actorEntity=new pc.Entity("AmbientFauna-"+item.kind+"-"+localFaunaActors.length);localFaunaRoot.addChild(actorEntity);
     actorEntity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});actorEntity.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.fauna,actorEntity)];
     const id=localFaunaKey(item),memory=localFaunaReactionMemory.get(id)||null;
