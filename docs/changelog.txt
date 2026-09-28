@@ -2020,3 +2020,9 @@
 - VISUAL 8.1/10 PASS: canonical wet evidence now shows a real shoreline with readable bank/wet dressing; rocky terrain no longer reads as a repetitive spike field; grassland/woodland remain populated without visible chunk-grid seams; phone landscape/portrait stay readable without clipping or broken geometry.
 - Functional/performance proof remained bounded and deterministic: deterministicGlobalCells=true, fullWorldScan=false, <=96 accepted desktop local props, <=4 fauna, <=5 local draw calls, <=1538 wilderness triangles, max observed local update 3.3 ms, exact repeat layout signature, and 1000 m/5000 m local detail fully culled.
 - Post-acceptance main was restored to the exact tested content (zero file diff versus the accepted head) at 0cf2bddb057018f48eb566389621eefe2f348027 and deployed successfully by GitHub Pages run 36368813893. No tracked temporary/test-file cleanup was required.
+2026-09-28 05:42 +03:00 | WP-S003-014 | Reactive ambient wildlife continuation stopped after final acceptance attempt
+- Final allowed evidence run 36370402627 on production head c296ee1f768c7f3a325dacee4665ced09975ca50 completed successfully and all 8 fresh screenshots were directly inspected.
+- Functional behavior passed: max 4 canonical SEED-derived local fauna, deer/hare flee, waterbird takeoff, presentationOnly=true, simulationAuthority=false, 10 Hz spatial-bucket reaction checks, exact 844x390 phone landscape + 390x844 phone portrait evidence, and max observed wildlife reaction update 3.3 ms.
+- VISUAL 5.5/10 FAIL: the final readability scaling makes deer render as oversized rectangular slab-like forms, especially on desktop and phone landscape; hare/waterbird remain too blocky and reaction posture is not naturally readable enough. The 3-attempt cap is reached, so no fourth loop was started.
+- WP-S003-014 remains IN PROGRESS / NOT COMPLETED and Issue #121 remains open.
+
