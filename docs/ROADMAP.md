@@ -139,7 +139,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S004-004-001` — NPC Building Approach, Occlusion + Separation — COMPLETED
 - `WP-S004-005` — Interior Action Execution + Character State Presentation — COMPLETED
 - `WP-S004-006` — Local NPC Social Encounters + Group Activity — COMPLETED
-- `WP-S004-007` — Profession-Specific Visible Work Cycles + Workplace Choreography — IN PROGRESS (functional acceptance green; fresh visual 3-attempt cap exhausted 2026-09-28; final evidence run 36416541701 produced no valid WP screenshots because local resource state never exposed settled NPC/workplace inspection targets; NOT COMPLETED)
+- `WP-S004-007` — Profession-Specific Visible Work Cycles + Workplace Choreography — IN PROGRESS (final functional workflow 36449559038 PASS on game head 530f962a868d57a95601447c735adc027fc67b96; fresh continuation 3-attempt cap exhausted 2026-09-28; final Attempt 3 produced and directly inspected 3 landscape + 3 portrait screenshots for smith/shopkeeper/guard, VISUAL 5.8/10 FAIL; professions remain too small/visually similar without the evidence card and crossroads labels dominate; outdoor woodcutter arrived at its authoritative stack step but was not visible/in-viewport, so required indoor+outdoor coverage is incomplete; orthographic inspection-bounds projection fix retained; NOT COMPLETED)
 - `WP-S004-008` — Contextual NPC Reactions + Local Social Boundaries
 - `WP-S004-009` — Time-of-Day Settlement Activity Rhythm
 - `WP-S004-010` — Density-Scaled Local Crowd Presentation
