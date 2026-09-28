@@ -245,12 +245,12 @@ const localMotionPrefetchTargets=new Map();
 let localLastRequestRegistered=null;
 let localMotionVector={east:0,north:0,magnitude:0};
 function freshLocalResources(){
-  return {activeSignature:null,requestedSignature:null,preparedSignature:null,preparingSignature:null,requestedLevel:null,visibleLevel:null,requestedCellId:null,activeCellId:null,preparingLevel:null,preparing:false,preparingPrewarm:false,preparationProgress:0,standInActive:false,standInMagnification:1,standInOffsetClamped:false,standInPinnedToViewport:false,standInRawOffsetMeters:{east:0,north:0},standInAppliedOffsetMeters:{east:0,north:0},
+  return {activeSignature:null,requestedSignature:null,preparedSignature:null,preparingSignature:null,requestedLevel:null,visibleLevel:null,requestedCellId:null,activeCellId:null,preparingLevel:null,preparing:false,preparingPrewarm:false,preparationProgress:0,standInActive:false,standInMagnification:1,standInSemanticScale:1,standInOffsetClamped:false,standInPinnedToViewport:false,standInRawOffsetMeters:{east:0,north:0},standInAppliedOffsetMeters:{east:0,north:0},
     cacheHits:0,cacheMisses:0,prewarmHits:0,prewarmCompleted:0,cancelledPreparations:0,deferredRequests:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,
     lastBuildMs:0,lastPreparationWallMs:0,lastPreparationBusyMs:0,lastPreparationSlices:0,maxPreparationSliceMs:0,lastSwapMs:0,maxSwapMs:0,swapCount:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,
     blockingZoomBuilds:0,maxFrameMsDuringPreparation:0,recentMaxFrameMs:0,lastFrameMs:0,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,cooperativePreparation:true,doubleBufferedSwap:true,
     residencyRevision:"temporal-residency-v1",requestedCellCount:0,preparingCellCount:0,readyCellCount:0,activeCellCount:0,graceResidentCellCount:0,evictedCellCount:0,
-    parentFallbackCount:0,missingCoverageCount:0,graceReuseCount:0,prefetchRequests:0,prefetchCompleted:0,prefetchHits:0,prefetchMisses:0,
+    parentFallbackCount:0,rootFallbackCount:0,missingCoverageCount:0,graceReuseCount:0,prefetchRequests:0,prefetchCompleted:0,prefetchHits:0,prefetchMisses:0,
     longestHandoffLatencyMs:0,lastHandoffLatencyMs:0,lastHandoffRequestedAtMs:0,lastHandoffCompletedAtMs:0,
     revisitRegenerationSignature:null,revisitRegenerationPass:true,revisitCount:0,
     requestBudgetPerFrame:1,buildJobBudget:1,prefetchQueueLimit:1,graceResidencyMs:LOCAL_GRACE_RESIDENCY_MS,
@@ -2774,12 +2774,15 @@ function rebuildLocalStaticPresentation(resource){
 }
 function scheduleLocalStaticPresentationRefresh(){
   if(localStaticRefreshScheduled||!displayResource)return;
+  // Semantic/static detail may not advance ahead of the supporting terrain cell.
+  // Preserve the current ready presentation during asynchronous refinement.
+  if(localResources.requestedSignature&&displayResource.signature!==localResources.requestedSignature)return;
   const desired=settlementRevealTierForScalar();
   if(localStatic.signature===displayResource.signature&&localStatic.revealTier===desired)return;
   localStaticRefreshScheduled=true;
   setTimeout(()=>{
     localStaticRefreshScheduled=false;
-    if(displayResource)rebuildLocalStaticPresentation(displayResource);
+    if(displayResource&&(!localResources.requestedSignature||displayResource.signature===localResources.requestedSignature))rebuildLocalStaticPresentation(displayResource);
   },0);
 }
 // ---- Cooperative LOD preparation -------------------------------------------
@@ -3030,7 +3033,7 @@ function finalizeLocalResource(job,result){
     localRecentEvictions.delete(job.signature);
   }
   setLocalResidencyState(job.signature,"ready",{cellId:job.spatialCell?.id||null,level:dims.levelId,regenerationSignature,prefetchKind:job.prewarm?job.prewarmKind:null,readyAtMs:performance.now()});
-  if(job.prewarm&&job.prewarmKind==="motion")localResources.prefetchCompleted++;
+  if(job.prewarm&&job.prewarmKind==="motion"){localResources.prefetchCompleted++;localMotionPrefetchTargets.delete(job.signature);}
   trimLocalResourceCache();
   localResources.cachedResourceCount=localResourceCache.size;
   localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);
@@ -3126,7 +3129,10 @@ function localResidencyDiagnostics(){
   const cells=[];
   for(const [signature,entry] of localResidency){
     let state=entry.state;
-    if(state==="grace"&&Number(entry.graceUntilMs||0)<=now&&!localResourceCache.has(signature))state="evicted";
+    if(state==="grace"&&Number(entry.graceUntilMs||0)<=now){
+      state=localResourceCache.has(signature)?"ready":"evicted";
+      entry.state=state;entry.lastStateAtMs=now;localResidency.set(signature,entry);
+    }
     if(counts[state]!=null)counts[state]++;
     if(cells.length<20)cells.push(Object.freeze({
       signature,state,cellId:entry.cellId||null,level:entry.level||null,
@@ -3138,7 +3144,7 @@ function localResidencyDiagnostics(){
   localResources.activeCellCount=counts.active;localResources.graceResidentCellCount=counts.grace;localResources.evictedCellCount=counts.evicted;
   return Object.freeze({
     revision:"temporal-residency-v1",counts:Object.freeze({...counts}),cells:Object.freeze(cells),
-    parentFallbackCount:Number(localResources.parentFallbackCount||0),missingCoverageCount:Number(localResources.missingCoverageCount||0),
+    parentFallbackCount:Number(localResources.parentFallbackCount||0),rootFallbackCount:Number(localResources.rootFallbackCount||0),missingCoverageCount:Number(localResources.missingCoverageCount||0),
     graceReuseCount:Number(localResources.graceReuseCount||0),prefetch:Object.freeze({
       requests:Number(localResources.prefetchRequests||0),completed:Number(localResources.prefetchCompleted||0),
       hits:Number(localResources.prefetchHits||0),misses:Number(localResources.prefetchMisses||0),
@@ -3202,7 +3208,9 @@ function pumpLocalPreparation(){
   }catch(error){
     // A failed preparation must never wedge the pipeline: drop it, keep the
     // last valid representation on screen and record the failure.
-    localJob=null;localQueuedRequest=null;localResources.preparing=false;localResources.preparingSignature=null;localResources.preparingLevel=null;
+    const failedSignature=localJob?.signature||null;
+    localJob=null;localQueuedRequest=null;if(failedSignature)localResidency.delete(failedSignature);localMotionPrefetchTargets.delete(failedSignature);
+    localResources.preparing=false;localResources.preparingSignature=null;localResources.preparingLevel=null;
     localResources.failedPreparations=(localResources.failedPreparations||0)+1;localResources.lastPreparationError=String(error?.message||error);
     localResources.pendingPreparationCount=0;
     console.error("Local LOD preparation failed.",error);
@@ -3243,29 +3251,38 @@ function pumpLocalPreparation(){
 function requestLocalDetailResource(index){
   const lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians,cell=canonicalSpatialCellFor(index,lat,lon),signature=localSignatureFor(index,lat,lon);
   updateLocalMotion(lat,lon);
-  const previousRequested=localResources.requestedSignature;
+  const previousRequested=localResources.requestedSignature,priorResidency=localResidency.get(signature)||null;
   localResources.requestedSignature=signature;localResources.requestedLevel=LOCAL_DETAIL_LEVELS[index].id;localResources.requestedCellId=cell.id;
   setLocalResidencyState(signature,"requested",{cellId:cell.id,level:LOCAL_DETAIL_LEVELS[index].id,requestedAtMs:performance.now()});
   if(previousRequested!==signature&&displayResource?.signature!==signature){
     localResources.lastHandoffRequestedAtMs=Number(performance.now().toFixed(3));
-    if(displayResource){localResources.parentFallbackCount++;}else if(ready&&projectionState.blend>0){localResources.missingCoverageCount++;}
+    // A prepared local representation is the immediate previous/parent fallback.
+    // Before the first local resource exists the canonical globe is still the
+    // ready root representation, so this is coverage, not a hole.
+    if(displayResource)localResources.parentFallbackCount++;
+    else if(ready&&projectionState.blend>0)localResources.rootFallbackCount++;
   }
   if(displayResource?.signature===signature){localResources.pendingPreparationCount=0;setLocalResidencyState(signature,"active",{cellId:cell.id,level:LOCAL_DETAIL_LEVELS[index].id});return;}
   localResources.pendingPreparationCount=1;
   if(localResourceCache.has(signature)){
-    const cached=localResourceCache.get(signature),entry=localResidency.get(signature)||{};
-    if(entry.state==="grace")localResources.graceReuseCount++;
-    if(localMotionPrefetchTargets.has(signature)){localResources.prefetchHits++;localMotionPrefetchTargets.delete(signature);}
+    const cached=localResourceCache.get(signature);
+    if(priorResidency?.state==="grace"&&Number(priorResidency.graceUntilMs||0)>performance.now())localResources.graceReuseCount++;
+    if(cached?.prefetchKind==="motion")localResources.prefetchHits++;
+    localMotionPrefetchTargets.delete(signature);
     activateLocalDetailResource(signature,true);return;
   }
-  if(localMotionPrefetchTargets.has(signature)){localResources.prefetchMisses++;localMotionPrefetchTargets.delete(signature);}
   if(localJob){
-    if(localJob.signature===signature){localJob.prewarm=false;localResources.preparingPrewarm=false;return;}
+    if(localJob.signature===signature){
+      if(localJob.prewarm&&localJob.prewarmKind==="motion"){localResources.prefetchMisses++;localMotionPrefetchTargets.delete(signature);}
+      localJob.prewarm=false;localResources.preparingPrewarm=false;return;
+    }
     // Let a nearly finished same-focus job land (it is still a closer/nearer
     // stand-in); otherwise cancel it and start on the latest request.
     const sameFocus=localJob.lat0===lat&&localJob.lon0===lon;
     if(sameFocus&&!localJob.prewarm&&localJob.steps/Math.max(1,localJob.totalSteps)>=.5){localQueuedRequest={index,lat,lon,signature};localResources.deferredRequests++;return;}
+    const cancelledSignature=localJob.signature;
     localResources.cancelledPreparations++;localJob=null;
+    localResidency.delete(cancelledSignature);localMotionPrefetchTargets.delete(cancelledSignature);
   }
   localQueuedRequest=null;
   startLocalJob(index,lat,lon,signature,false);
@@ -3436,6 +3453,15 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       // only until the authoritative requested-focus resource atomically swaps.
       offset=standInOffsetClamped?{east:0,north:0}:bounded;
     }
+    // Terrain must continue zooming while the child prepares, but semantic/static
+    // objects from the previous coarse tier must not balloon or clip. Hold their
+    // screen-scale until the refined resource atomically activates.
+    const semanticHoldScale=standInActive&&Number(dims.presentationCompensation||1)>1
+      ? 1/Number(dims.presentationCompensation||1):1;
+    for(const rootNode of [localStaticRoot,localNpcRoot,localBuildingActivityRoot]){
+      if(rootNode?.setLocalScale)rootNode.setLocalScale(semanticHoldScale,semanticHoldScale,semanticHoldScale);
+    }
+    localResources.standInSemanticScale=Number(semanticHoldScale.toFixed(6));
     tangentPatch.setLocalPosition(offset.east/dims.metersPerUnit*patchScale,offset.north/dims.metersPerUnit*patchScale,DISPLAY_RADIUS_UNITS+.002);
     const requestedIndex=requestedLodIndex,visibleIndex=displayResource?.levelIndex??requestedIndex;
     localResources.standInActive=standInActive;
