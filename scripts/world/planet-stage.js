@@ -2548,12 +2548,15 @@ function environmentReactionTexture(kind){
       [62,64,47,.86],[43,70,31,.56],[83,58,35,.62],[58,44,28,.46],[75,78,26,.42]
     ];
     for(const l of lobes){
-      const g=ctx.createRadialGradient(l[0],l[1],2,l[0],l[1],l[2]);
+      // Flatten each radial lobe into an irregular low ellipse so three pooled
+      // puffs combine as a short road-surface cloud instead of a round marker.
+      ctx.save();ctx.translate(l[0],l[1]);ctx.scale(1.08,.52);
+      const g=ctx.createRadialGradient(0,0,2,0,0,l[2]);
       g.addColorStop(0,`rgba(255,255,255,${l[3]})`);
       g.addColorStop(.34,`rgba(255,255,255,${l[3]*.82})`);
       g.addColorStop(.72,`rgba(255,255,255,${l[3]*.30})`);
       g.addColorStop(1,"rgba(255,255,255,0)");
-      ctx.fillStyle=g;ctx.fillRect(0,0,size,size);
+      ctx.fillStyle=g;ctx.fillRect(-l[2],-l[2],l[2]*2,l[2]*2);ctx.restore();
     }
   }else{
     const strands=[
@@ -2572,12 +2575,12 @@ function environmentReactionTexture(kind){
     ];
     ctx.lineCap="round";ctx.lineJoin="round";
     for(let i=0;i<strands.length;i++){
-      const s=strands[i],tone=i%4===0?"174,194,82":i%3===0?"110,143,53":"134,165,62";
+      const s=strands[i],tone=i%4===0?"142,157,74":i%3===0?"91,121,48":"112,139,56";
       ctx.strokeStyle=`rgba(${tone},${s[9]})`;ctx.lineWidth=s[8];
       ctx.beginPath();ctx.moveTo(s[0],s[1]);ctx.bezierCurveTo(s[2],s[3],s[4],s[5],s[6],s[7]);ctx.stroke();
     }
     for(const p of [[45,69,2.1],[70,61,1.7],[84,72,1.8],[56,77,1.5],[95,61,1.4]]){
-      ctx.fillStyle="rgba(185,171,92,.36)";ctx.beginPath();ctx.arc(p[0],p[1],p[2],0,Math.PI*2);ctx.fill();
+      ctx.fillStyle="rgba(145,136,76,.28)";ctx.beginPath();ctx.arc(p[0],p[1],p[2],0,Math.PI*2);ctx.fill();
     }
   }
   const texture=new pc.Texture(device,{
@@ -2610,10 +2613,10 @@ function createEnvironmentReactionGroup(kind,index){
     }
   }else if(kind==="grassBend"){
     const specs=[
-      [-.46,.020,-.22,-41,1.58,1.42,1.70],
-      [-.12,.024,.10,-11,1.76,1.58,1.82],
-      [.24,.021,-.05,21,1.62,1.46,1.72],
-      [.49,.018,.21,57,1.42,1.30,1.54]
+      [-.50,.020,-.24,-41,1.82,1.62,1.94],
+      [-.13,.024,.11,-11,2.02,1.80,2.08],
+      [.26,.021,-.06,21,1.86,1.66,1.96],
+      [.53,.018,.23,57,1.64,1.48,1.76]
     ];
     for(let i=0;i<specs.length;i++){
       const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"bent-grass-blade",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[4],q[5],q[6],0,q[3],0);
