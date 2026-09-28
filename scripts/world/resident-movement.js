@@ -81,7 +81,8 @@ function cloneActivity(activity){
     targetSource:activity.targetSource?String(activity.targetSource):null,
     interactionObjectId:activity.interactionObjectId?String(activity.interactionObjectId):null,
     interactionObjectType:activity.interactionObjectType?String(activity.interactionObjectType):null,
-    supportedActions:Object.freeze([...(activity.supportedActions||[])])
+    supportedActions:Object.freeze([...(activity.supportedActions||[])]),
+    workCycle:activity.workCycle?Object.freeze({...activity.workCycle}):null
   });
 }
 function residentState(resident,startValue){
@@ -317,6 +318,7 @@ function stateSnapshot(state){
     status:state.status,
     activityState:state.activity?.state||null,
     intendedAction:state.activity?.action||null,
+    workCycle:state.activity?.workCycle||null,
     actionExecution:window.ActionExecutor?.get?.("resident",state.residentId)||null,
     socialEncounter:window.SocialEncounters?.stateFor?.(state.residentId)||null,
     buildingId:nav?.buildingId||null,
@@ -349,6 +351,7 @@ function snapshot(){
     movementOnly:true,
     actionExecution:false,
     routePlanningPerFrame:false,
+    workCycles:window.WorkCycles?.snapshot?.(seedKey)||null,
     socialEncounters:window.SocialEncounters?.snapshot?.()||null,
     wallClearancePolicy:"prefer-one-tile",
     wallClearancePenaltySeconds:WALL_CLEARANCE_PENALTY_SECONDS,
