@@ -2548,21 +2548,21 @@ function createEnvironmentReactionGroup(kind,index){
   const group=new pc.Entity("EnvironmentReaction-"+kind+"-"+index),children=[];
   environmentalReactionRoot.addChild(group);
   if(kind==="dust"){
-    const specs=[[-.26,.16,-.06,.54,.30,.42],[.08,.22,.08,.64,.38,.52],[.34,.13,-.12,.44,.25,.38]];
+    const specs=[[-.34,.22,-.10,.72,.42,.58],[.06,.30,.08,.88,.52,.70],[.42,.18,-.16,.62,.36,.50]];
     for(let i=0;i<specs.length;i++){
       const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"sphere",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5]);
       children.push(e);
     }
   }else if(kind==="grassBend"){
-    const specs=[[-.32,.22,-.10,-58],[-.10,.25,.10,-48],[.14,.23,-.06,52],[.34,.20,.12,60]];
+    const specs=[[-.38,.30,-.12,-58],[-.12,.34,.12,-48],[.16,.32,-.08,52],[.40,.28,.14,60]];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"box",environmentalReactionMaterials.grass,q[0],q[1],q[2],.075,.48,.055,0,0,q[3]);
+      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"box",environmentalReactionMaterials.grass,q[0],q[1],q[2],.11,.68,.075,0,0,q[3]);
       children.push(e);
     }
   }else{
-    const specs=[[-.16,.018,-.18,-18],[.16,.018,.20,18]];
+    const specs=[[-.20,.022,-.24,-18],[.20,.022,.24,18]];
     for(let i=0;i<specs.length;i++){
-      const q=specs[i],e=addLocalPrimitive(group,"Footprint-"+index+"-"+i,"cylinder",environmentalReactionMaterials.footprint,q[0],q[1],q[2],.18,.025,.31,0,q[3],0);
+      const q=specs[i],e=addLocalPrimitive(group,"Footprint-"+index+"-"+i,"cylinder",environmentalReactionMaterials.footprint,q[0],q[1],q[2],.25,.028,.42,0,q[3],0);
       children.push(e);
     }
   }
@@ -2572,9 +2572,9 @@ function createEnvironmentReactionGroup(kind,index){
 function ensureEnvironmentReactionPool(){
   if(environmentalReactionRoot||!pc||!tangentPatch)return Boolean(environmentalReactionRoot);
   environmentalReactionMaterials={
-    dust:environmentReactionMaterial("EnvironmentDust",.58,.43,.25,.42),
-    grass:environmentReactionMaterial("EnvironmentBentGrass",.20,.50,.12,.92),
-    footprint:environmentReactionMaterial("EnvironmentFootprint",.22,.14,.075,.70)
+    dust:environmentReactionMaterial("EnvironmentDust",.70,.53,.31,.58),
+    grass:environmentReactionMaterial("EnvironmentBentGrass",.24,.62,.14,.96),
+    footprint:environmentReactionMaterial("EnvironmentFootprint",.16,.085,.035,.78)
   };
   environmentalReactionRoot=new pc.Entity("LocalEnvironmentalReactions");
   tangentPatch.addChild(environmentalReactionRoot);
@@ -2608,7 +2608,7 @@ function triggerEnvironmentReaction(kind,surfaceType,latitudeRadians,longitudeRa
   }
   const now=performance.now();
   slot.active=true;slot.startedAtMs=now;slot.latitudeRadians=Number(latitudeRadians)||0;slot.longitudeRadians=Number(longitudeRadians)||0;
-  slot.directionDegrees=Number(directionDegrees)||0;slot.lifetimeMs=kind==="dust"?1450:kind==="grassBend"?2100:3600;slot.group.enabled=true;
+  slot.directionDegrees=Number(directionDegrees)||0;slot.lifetimeMs=kind==="dust"?2800:kind==="grassBend"?3400:5200;slot.group.enabled=true;
   const counts={...environmentalReactions.triggerByKind,[kind]:(environmentalReactions.triggerByKind[kind]||0)+1};
   environmentalReactions={...environmentalReactions,triggerCount:environmentalReactions.triggerCount+1,triggerByKind:counts,lastKind:kind,lastSurfaceType:String(surfaceType||""),lastMovementMeters:Number(Number(movementMeters||0).toFixed(3)),lastTriggerAtMs:now};
   return true;
@@ -2643,7 +2643,7 @@ function updateEnvironmentalReactions(){
     visibleCount++;activeDrawCallEstimate+=slot.children.length;
     const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),t=clamp(age/slot.lifetimeMs,0,1),ground=localGroundHeightUnits(east,north,frame);
     let scale=1,liftMeters=.035;
-    if(slot.kind==="dust"){scale=.72+t*.85;liftMeters=.08+t*.42;}
+    if(slot.kind==="dust"){scale=.78+t*.72;liftMeters=.10+t*.48;}
     else if(slot.kind==="grassBend"){scale=1-t*.18;liftMeters=.02;}
     else{scale=1-t*.10;liftMeters=.015;}
     slot.group.setLocalPosition(east/unit,ground+liftMeters/unit,-north/unit);
@@ -3864,7 +3864,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       semanticAnchorLocalZ=-Number(semanticDelta.northMeters||0)/dims.metersPerUnit;
     }
     const semanticAnchorCompensation=1-semanticHoldScale;
-    for(const rootNode of [localStaticRoot,localNpcRoot,localBuildingActivityRoot,environmentalReactionRoot]){
+    for(const rootNode of [localStaticRoot,localNpcRoot,localBuildingActivityRoot]){
       if(rootNode?.setLocalScale)rootNode.setLocalScale(semanticHoldScale,1,semanticHoldScale);
       if(rootNode?.setLocalPosition)rootNode.setLocalPosition(semanticAnchorLocalX*semanticAnchorCompensation,0,semanticAnchorLocalZ*semanticAnchorCompensation);
     }
