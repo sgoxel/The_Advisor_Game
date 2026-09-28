@@ -3877,11 +3877,22 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const ground=canonicalSemanticGroundHeightUnits(east,north,context.frame)+context.lift;
     orientedBox(east,north,ground+yMeters*s+Math.max(.015,syMeters*s)*.5,sxMeters,syMeters,szMeters,color,0);
   };
+  const roofClump=(east,north,centerY,rollDeg,widthMeters,depthMeters,heightMeters,color)=>{
+    const p=canonicalSemanticPosition(east,north,context.presentationScale,context.unit,context.frame);
+    const rad=rollDeg*Math.PI/180,cr=Math.cos(rad),sr=Math.sin(rad),normal=[-sr,cr,0];
+    const hw=Math.max(.16,widthMeters)*s*.5,hd=Math.max(.16,depthMeters)*s*.5,h=Math.max(.10,heightMeters)*s;
+    const base=positions.length/3,corners=[[-hw,-hd],[hw,-hd],[hw,hd],[-hw,hd]];
+    for(const [x,z] of corners)addVertex(p.x+x*cr,centerY+x*sr,p.z+z,color,normal);
+    const apex=addVertex(p.x+normal[0]*h,centerY+normal[1]*h,p.z,color,normal);
+    indices.push(base,base+1,base+2,base,base+2,base+3);
+    for(let i=0;i<4;i++){const j=(i+1)%4;indices.push(base+i,base+j,apex);}
+    primitiveCount++;
+  };
   const C={
-    wear:[112,73,37,255],wearDark:[59,43,29,255],weather:[151,104,56,255],
-    char:[27,25,24,255],burn:[108,41,22,255],ash:[153,130,95,255],debris:[82,69,56,255],
-    newWood:[199,129,55,255],newWoodLight:[236,190,105,255],repairDark:[125,72,36,255],
-    green:[20,72,30,255],greenLight:[48,122,45,255],moss:[102,132,46,255]
+    wear:[105,69,38,255],wearDark:[57,42,30,255],weather:[145,99,55,255],
+    char:[24,22,20,255],burn:[105,42,22,255],ash:[139,119,88,255],debris:[77,64,51,255],
+    newWood:[201,126,49,255],newWoodLight:[235,181,87,255],repairDark:[119,68,34,255],
+    green:[18,68,27,255],greenLight:[43,111,39,255],moss:[91,126,40,255]
   };
   for(const item of state.buildings){
     const record=byId.get(item.id),b=record?.bounds;if(!record||!b||item.visualState==="normal")continue;
@@ -3890,31 +3901,35 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const physicalHeight=record.kind==="meeting-hall"?7.2:record.kind==="barn"?6.2:5.4;
     const roofCenter=ground+physicalHeight*s+.025,leftEast=east-w*.20,rightEast=east+w*.20;
     if(item.visualState==="worn"){
-      roofPatch(leftEast,north,roofCenter+.045,-24,[[-w*.27,-d*.30],[w*.13,-d*.34],[w*.28,-d*.05],[w*.17,d*.29],[-w*.11,d*.35],[-w*.29,d*.08]],C.weather);
-      roofPatch(rightEast,north+d*.05,roofCenter+.050,24,[[-w*.22,-d*.24],[w*.18,-d*.29],[w*.27,d*.02],[w*.08,d*.28],[-w*.24,d*.19]],C.wearDark);
-      groundPatch(east,north+d*.70,[[-w*.44,-d*.08],[w*.31,-d*.13],[w*.45,d*.04],[w*.18,d*.17],[-w*.35,d*.13]],C.wear);
-      groundPatch(east-w*.30,north+d*.55,[[-.65,-1.20],[.38,-1.02],[.56,.62],[-.22,1.30],[-.72,.45]],C.wearDark);
+      // Localized scuffs/weathering stay close to the roof/eave instead of masking the roof.
+      roofPatch(leftEast-w*.03,north-d*.12,roofCenter+.055,-24,[[-w*.13,-d*.12],[w*.12,-d*.15],[w*.16,d*.10],[-w*.09,d*.15]],C.weather);
+      roofPatch(rightEast+w*.04,north+d*.19,roofCenter+.058,24,[[-w*.10,-d*.10],[w*.11,-d*.12],[w*.14,d*.08],[-w*.08,d*.12]],C.wearDark);
+      groundPatch(east,north+d*.73,[[-w*.29,-d*.055],[w*.22,-d*.08],[w*.31,d*.035],[w*.10,d*.10],[-w*.25,d*.075]],C.wear);
+      groundPatch(east-w*.34,north+d*.59,[[-.48,-.72],[.31,-.58],[.44,.36],[-.20,.78],[-.52,.24]],C.wearDark);
     }else if(item.visualState==="damaged"){
-      roofPatch(leftEast,north-d*.05,roofCenter+.060,-24,[[-w*.30,-d*.31],[w*.09,-d*.35],[w*.28,-d*.10],[w*.20,d*.25],[-w*.03,d*.36],[-w*.28,d*.17]],C.char);
-      roofPatch(rightEast,north+d*.08,roofCenter+.065,24,[[-w*.24,-d*.23],[w*.16,-d*.28],[w*.29,.02],[w*.12,d*.29],[-w*.20,d*.21]],C.burn);
-      roofPatch(leftEast+w*.06,north+d*.20,roofCenter+.082,-24,[[-w*.12,-d*.10],[w*.13,-d*.13],[w*.16,d*.09],[-w*.09,d*.14]],C.ash);
-      groundBox(east+w*.62,north+d*.26,.02,1.55,.62,1.15,C.debris);
-      groundBox(east+w*.72,north-d*.30,.02,1.10,.42,1.55,C.char);
-      groundBox(east+w*.50,north+d*.55,.02,1.65,.30,.56,C.burn);
+      // A compact char scar plus broken roof members/debris reads as structural damage.
+      roofPatch(leftEast-w*.02,north-d*.08,roofCenter+.070,-24,[[-w*.17,-d*.18],[w*.12,-d*.20],[w*.18,d*.04],[w*.08,d*.18],[-w*.15,d*.14]],C.char);
+      roofPatch(rightEast+w*.05,north+d*.17,roofCenter+.072,24,[[-w*.11,-d*.11],[w*.12,-d*.13],[w*.15,d*.09],[-w*.08,d*.13]],C.burn);
+      orientedBox(leftEast+w*.13,north+d*.04,roofCenter+.105,Math.max(.32,w*.06),.18,Math.max(1.05,d*.20),C.debris,-24);
+      orientedBox(rightEast-w*.10,north-d*.22,roofCenter+.100,Math.max(.28,w*.055),.16,Math.max(.82,d*.16),C.ash,24);
+      groundBox(east+w*.63,north+d*.28,.02,1.35,.54,1.00,C.debris);
+      groundBox(east+w*.49,north+d*.55,.02,1.42,.26,.48,C.burn);
     }else if(item.visualState==="repaired"){
-      roofPatch(leftEast,north,roofCenter+.052,-24,[[-w*.27,-d*.26],[w*.22,-d*.29],[w*.28,d*.24],[-w*.19,d*.31]],C.repairDark);
-      orientedBox(leftEast-w*.04,north-d*.17,roofCenter+.075,Math.max(1.55,w*.28),.060,.42,C.newWood,-24);
-      orientedBox(leftEast+w*.02,north,roofCenter+.080,Math.max(1.70,w*.31),.060,.44,C.newWoodLight,-24);
-      orientedBox(leftEast-w*.08,north+d*.18,roofCenter+.074,Math.max(1.45,w*.26),.055,.40,C.newWood,-24);
-      roofPatch(rightEast,north+d*.22,roofCenter+.060,24,[[-w*.15,-d*.10],[w*.17,-d*.12],[w*.18,d*.12],[-w*.14,d*.15]],C.newWoodLight);
-      groundBox(east+w*.62,north+.22*d,.02,.24,2.9,2.5,C.newWood);
+      // Three short overlapping repair boards plus one small old-scar backing patch.
+      roofPatch(leftEast-w*.03,north,roofCenter+.058,-24,[[-w*.16,-d*.18],[w*.14,-d*.19],[w*.16,d*.16],[-w*.13,d*.18]],C.repairDark);
+      orientedBox(leftEast-w*.02,north-d*.13,roofCenter+.090,Math.max(1.48,w*.27),.070,.46,C.newWood,-24);
+      orientedBox(leftEast+w*.03,north+.01*d,roofCenter+.096,Math.max(1.62,w*.29),.070,.48,C.newWoodLight,-24);
+      orientedBox(leftEast-w*.07,north+d*.15,roofCenter+.088,Math.max(1.32,w*.24),.065,.43,C.newWood,-24);
+      groundBox(east+w*.62,north+.22*d,.02,.24,2.65,2.20,C.newWood);
     }else if(item.visualState==="overgrown"){
-      roofPatch(leftEast,north+d*.06,roofCenter+.068,-24,[[-w*.29,-d*.32],[w*.05,-d*.35],[w*.27,-d*.15],[w*.24,d*.18],[w*.02,d*.35],[-w*.27,d*.23]],C.green);
-      roofPatch(rightEast,north-d*.04,roofCenter+.070,24,[[-w*.25,-d*.28],[w*.15,-d*.31],[w*.29,-d*.02],[w*.18,d*.30],[-w*.10,d*.34],[-w*.28,d*.12]],C.greenLight);
-      roofPatch(leftEast+w*.08,north-d*.24,roofCenter+.090,-24,[[-w*.13,-d*.11],[w*.14,-d*.13],[w*.19,d*.08],[.02,d*.17],[-w*.15,d*.08]],C.moss);
-      groundPatch(east-w*.55,north+d*.28,[[-1.25,-1.85],[.72,-2.05],[1.20,-.62],[.86,1.62],[-.54,2.05],[-1.36,.62]],C.green);
-      groundPatch(east+w*.58,north-d*.10,[[-1.25,-1.45],[.78,-1.70],[1.38,-.28],[.82,1.55],[-.65,1.72],[-1.42,.35]],C.greenLight);
-      groundPatch(east,north+d*.72,[[-w*.38,-.72],[w*.29,-.88],[w*.44,-.12],[w*.24,.82],[-w*.30,.76],[-w*.45,.08]],C.moss);
+      // Raised foliage clumps carry the state; flat coverage is intentionally small.
+      roofPatch(leftEast-w*.02,north-d*.06,roofCenter+.065,-24,[[-w*.12,-d*.13],[w*.13,-d*.15],[w*.15,d*.10],[-w*.10,d*.14]],C.green);
+      roofPatch(rightEast+w*.03,north+d*.16,roofCenter+.067,24,[[-w*.10,-d*.10],[w*.11,-d*.12],[w*.14,d*.09],[-w*.08,d*.13]],C.moss);
+      roofClump(leftEast-w*.04,north-d*.02,roofCenter+.075,-24,1.35,1.10,.52,C.greenLight);
+      roofClump(rightEast+w*.05,north+d*.18,roofCenter+.078,24,1.15,.95,.46,C.green);
+      roofClump(leftEast+w*.14,north+d*.24,roofCenter+.082,-24,.90,.78,.40,C.moss);
+      groundPatch(east-w*.56,north+d*.30,[[-.92,-1.30],[.58,-1.44],[.94,-.38],[.63,1.16],[-.42,1.42],[-1.00,.42]],C.green);
+      groundPatch(east+w*.58,north-d*.10,[[-.88,-1.05],[.62,-1.20],[1.00,-.20],[.58,1.05],[-.48,1.22],[-1.02,.28]],C.greenLight);
     }
   }
   if(positions.length){
