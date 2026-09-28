@@ -3485,7 +3485,7 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
     ...(reveal.specialLots||[])
   ];
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
-  const positions=[],normals=[],colors=[],indices=[],summaries=[];let propCount=0,doorViolations=0,roadViolations=0;
+  const positions=[],normals=[],colors=[],indices=[],summaries=[];let propCount=0,doorViolations=0,roadViolations=0,treeOcclusionRejects=0,anchorSelectionAttempts=0;
   const C={
     wood:[.34,.18,.07],woodLight:[.52,.31,.13],fabric:[.69,.27,.10],metal:[.24,.26,.25],stone:[.38,.39,.36],
     hay:[.73,.56,.16],soil:[.34,.20,.08],green:[.20,.42,.12],civic:[.63,.49,.24],crate:[.45,.28,.12]
@@ -3507,6 +3507,16 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
   };
   const blockedByOther=(record,x,y)=>records.some(other=>String(other.id)!==String(record.id)&&other.bounds&&x>=Number(other.bounds.minX)-.75&&x<=Number(other.bounds.maxX)+.75&&y>=Number(other.bounds.minY)-.75&&y<=Number(other.bounds.maxY)+.75);
   const roadAt=(x,y)=>{const l=window.StartingVillage?.local?.(activeSeed,String(Math.round(x)),String(Math.round(y)));return Boolean(l&&window.StartingVillage?.isRoadReserved?.(activeSeed,l));};
+  // Match the deterministic canonical settlement tree ring below so a critical
+  // function cue does not get placed under a tree crown. This is a bounded
+  // local check (<=12 tree centers), not a world/viewport scan.
+  const canonicalTreeCount=tier==="refined"?10:tier==="full"?12:0;
+  const canonicalTreeCrowns=Object.freeze(Array.from({length:canonicalTreeCount},(_,i)=>{
+    const angle=i/Math.max(1,canonicalTreeCount)*Math.PI*2+localHash(i*17,canonicalTreeCount,91)*.22;
+    const radiusTiles=22+localHash(i*31,canonicalTreeCount,92)*4;
+    return Object.freeze({x:Math.cos(angle)*radiusTiles,y:Math.sin(angle)*radiusTiles,radiusTiles:2.35});
+  }));
+  const blockedByTree=(x,y)=>canonicalTreeCrowns.some(tree=>Math.hypot(Number(x)-tree.x,Number(y)-tree.y)<tree.radiusTiles);
   const sideBasis=side=>side==="N"?{ox:0,on:-1,tx:1,tn:0}:side==="S"?{ox:0,on:1,tx:-1,tn:0}:side==="W"?{ox:-1,on:0,tx:0,tn:-1}:{ox:1,on:0,tx:0,tn:1};
   const anchorFor=record=>{
     const b=record.bounds,access=record.entrance||record.access||null,opposite=access?.side==="S"?"N":access?.side==="N"?"S":access?.side==="E"?"W":access?.side==="W"?"E":"N";
@@ -3516,10 +3526,12 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
     const preferred=access?.side==="S"?"E":access?.side==="E"?"S":access?.side==="N"?"E":access?.side==="W"?"S":"S";
     const order=[preferred,opposite,...["S","E","N","W"].filter(x=>x!==preferred&&x!==opposite&&x!==access?.side),access?.side].filter(Boolean);
     for(const side of order){
+      anchorSelectionAttempts++;
       const basis=sideBasis(side),cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
       const half=side==="N"||side==="S"?(Number(b.maxY)-Number(b.minY)+1)/2:(Number(b.maxX)-Number(b.minX)+1)/2;
       const x=cx+basis.ox*(half+1.55),y=cy+basis.on*(half+1.55);
       if(roadAt(x,y)||blockedByOther(record,x,y))continue;
+      if(blockedByTree(x,y)){treeOcclusionRejects++;continue;}
       if(access&&Math.hypot(x-Number(access.x),y-Number(access.y))<2.2)continue;
       return {side,basis,east:x*tileMeters,north:y*tileMeters,tileX:x,tileY:y};
     }
@@ -3536,12 +3548,21 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,-1.25,.15,2.1,.90,.70,C.wood);
       box(anchor,b,1.15,.05,1.6,1.15,.15,C.green);
     }else if(fn==="lodging"){
-      box(anchor,b,0,0,6.2,3.8,.07,[.44,.33,.18]);
-      box(anchor,b,-1.65,.15,2.5,.65,.48,C.woodLight);
-      box(anchor,b,1.55,.15,2.5,.65,.48,C.woodLight);
-      box(anchor,b,0,1.30,4.8,.20,.78,C.wood);
-      box(anchor,b,-2.05,1.30,.20,.20,1.15,C.wood);
-      box(anchor,b,2.05,1.30,.20,.20,1.15,C.wood);
+      box(anchor,b,0,0,6.4,4.2,.07,[.44,.33,.18]);
+      // Stable gate + compact horse silhouette make lodging readable as an inn
+      // yard instead of a generic fence. The opposite side keeps two tables.
+      box(anchor,b,-2.30,.95,.24,.24,1.65,C.wood);
+      box(anchor,b,-.55,.95,.24,.24,1.65,C.wood);
+      box(anchor,b,-1.42,.95,3.70,.22,.24,C.wood,1.38);
+      box(anchor,b,-1.52,.10,1.75,.62,.72,[.33,.18,.08],.48);
+      box(anchor,b,-.82,.10,.38,.42,.62,[.36,.20,.09],.78);
+      box(anchor,b,-.58,.10,.48,.42,.38,[.36,.20,.09],1.05);
+      box(anchor,b,-2.02,.08,.16,.18,.82,[.25,.14,.07],.05);
+      box(anchor,b,-1.28,.08,.16,.18,.82,[.25,.14,.07],.05);
+      box(anchor,b,.85,.28,1.45,1.05,.16,C.woodLight,.70);
+      box(anchor,b,2.10,.28,1.45,1.05,.16,C.woodLight,.70);
+      box(anchor,b,1.47,1.45,.20,.20,1.75,C.wood);
+      box(anchor,b,1.47,1.45,1.05,.12,.62,[.71,.48,.20],1.42);
     }else if(fn==="market"){
       box(anchor,b,0,0,6.8,4.0,.07,[.47,.36,.18]);
       box(anchor,b,0,.15,5.4,1.15,.78,C.woodLight);
@@ -3554,12 +3575,20 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,-2.45,.10,.20,.20,2.30,C.wood);
       box(anchor,b,2.45,.10,.20,.20,2.30,C.wood);
     }else if(fn==="craft"){
-      box(anchor,b,0,0,6.2,4.0,.07,[.27,.23,.18]);
-      box(anchor,b,0,.10,1.8,1.05,.72,C.metal);
-      box(anchor,b,0,.10,3.5,.48,.25,C.metal,.72);
-      box(anchor,b,-2.0,.15,1.35,1.25,.62,C.stone);
-      box(anchor,b,1.85,.15,1.65,.95,.62,C.wood);
-      box(anchor,b,2.0,1.25,1.05,1.05,.42,[.18,.17,.15]);
+      box(anchor,b,0,0,6.4,4.2,.07,[.27,.23,.18]);
+      // Raised T-profile anvil on a stump.
+      box(anchor,b,.35,.15,.55,.72,.92,C.wood,.05);
+      box(anchor,b,.35,.15,2.15,.62,.30,[.18,.20,.20],.92);
+      box(anchor,b,-.42,.15,.72,.86,.34,[.22,.24,.24],1.08);
+      // Forge hood/chimney rises well above the yard silhouette.
+      box(anchor,b,-1.80,.55,1.55,1.18,.78,[.18,.17,.15],.42);
+      box(anchor,b,-1.80,.55,.72,.72,2.55,C.stone,1.10);
+      box(anchor,b,-1.80,.55,1.02,1.02,.24,[.12,.12,.11],3.56);
+      box(anchor,b,-1.80,.02,.78,.42,.20,[.82,.23,.06],.62);
+      // Fuel/ore pile stays grounded and irregular.
+      box(anchor,b,1.82,.42,1.55,1.02,.62,C.wood,.02);
+      box(anchor,b,2.16,.18,.72,.76,.48,[.24,.25,.23],.10);
+      box(anchor,b,1.42,.10,.62,.68,.38,[.18,.19,.18],.08);
     }else if(fn==="storage"){
       box(anchor,b,0,0,6.4,3.8,.07,[.42,.35,.24]);
       box(anchor,b,-1.75,.10,1.45,1.45,1.20,C.crate);
@@ -3575,19 +3604,29 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
       box(anchor,b,2.45,0,.82,5.15,.16,[.55,.38,.10]);
       box(anchor,b,0,1.85,2.6,1.65,1.05,C.hay);
     }else if(fn==="civic"){
-      box(anchor,b,0,0,6.6,4.2,.07,[.50,.46,.35]);
-      box(anchor,b,0,.15,4.2,.32,1.65,C.civic);
-      box(anchor,b,-1.80,.15,.22,.22,1.65,C.wood);
-      box(anchor,b,1.80,.15,.22,.22,1.65,C.wood);
-      box(anchor,b,-1.65,1.35,2.7,.62,.45,C.woodLight);
-      box(anchor,b,1.65,1.35,2.7,.62,.45,C.woodLight);
+      box(anchor,b,0,0,6.6,4.4,.07,[.50,.46,.35]);
+      // Tall notice board with two posts.
+      box(anchor,b,-1.15,.35,.25,.25,2.55,C.wood);
+      box(anchor,b,1.15,.35,.25,.25,2.55,C.wood);
+      box(anchor,b,0,.35,2.70,.22,1.35,C.civic,1.30);
+      box(anchor,b,0,.35,3.15,.18,.24,C.woodLight,2.62);
+      // Small bell/yoke creates a civic silhouette above the benches.
+      box(anchor,b,0,1.36,2.35,.20,.22,C.wood,1.62);
+      box(anchor,b,0,1.36,.52,.52,.66,[.74,.52,.14],1.82);
+      box(anchor,b,-1.75,1.42,2.35,.62,.42,C.woodLight,.18);
+      box(anchor,b,1.75,1.42,2.35,.62,.42,C.woodLight,.18);
     }else{
-      box(anchor,b,0,0,6.6,4.2,.07,[.40,.31,.18]);
-      box(anchor,b,0,.15,4.6,.75,.82,C.woodLight);
-      box(anchor,b,-1.8,.15,.34,1.65,.92,C.wood);
-      box(anchor,b,1.8,.15,.34,1.65,.92,C.wood);
-      box(anchor,b,0,1.25,4.3,.62,.52,C.wood);
-      box(anchor,b,0,1.25,.62,3.25,.52,C.woodLight);
+      box(anchor,b,0,0,6.6,4.4,.07,[.40,.31,.18]);
+      // Outdoor-work yard: a long log on two sawhorses plus a tall tool rack.
+      box(anchor,b,-.35,.12,4.55,.58,.55,C.woodLight,.88);
+      box(anchor,b,-1.55,.12,.38,1.45,.82,C.wood,.15);
+      box(anchor,b,.85,.12,.38,1.45,.82,C.wood,.15);
+      box(anchor,b,1.95,1.20,.28,.28,2.20,C.wood);
+      box(anchor,b,1.95,1.20,2.10,.22,.24,C.woodLight,1.78);
+      box(anchor,b,1.48,1.20,.16,.16,1.05,C.metal,.82);
+      box(anchor,b,2.02,1.20,.16,.16,1.28,C.metal,.72);
+      box(anchor,b,2.52,1.20,.16,.16,.92,C.metal,.90);
+      box(anchor,b,-2.25,1.10,1.20,1.05,.42,C.crate,.02);
     }
     return propCount-propsBefore;
   };
@@ -3596,7 +3635,9 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
     const anchor=anchorFor(record),count=decorate(record,anchor),access=record.entrance||record.access||null;
     if(access&&Math.hypot(anchor.tileX-Number(access.x),anchor.tileY-Number(access.y))<2.2)doorViolations++;
     if(roadAt(anchor.tileX,anchor.tileY))roadViolations++;
-    summaries.push(Object.freeze({id:String(record.id),label:String(record.label||record.kind||record.id),function:String(record.function||"home"),propCount:count,side:anchor.side,anchorTile:Object.freeze({x:Number(anchor.tileX.toFixed(2)),y:Number(anchor.tileY.toFixed(2))})}));
+    const fn=String(record.function||"home");
+    const semanticSilhouette={home:"yard/woodpile",lodging:"stable/horse/tables",market:"striped-canopy/stall",craft:"anvil/forge/chimney",storage:"crate/loading-stack",farm:"furrows/hay",civic:"notice-board/bell/benches","outdoor-work":"sawhorse/log/tool-rack"}[fn]||"workyard";
+    summaries.push(Object.freeze({id:String(record.id),label:String(record.label||record.kind||record.id),function:fn,semanticSilhouette,propCount:count,side:anchor.side,anchorTile:Object.freeze({x:Number(anchor.tileX.toFixed(2)),y:Number(anchor.tileY.toFixed(2))})}));
   }
   if(!positions.length)return 0;
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();localBuildingSurroundingsMesh=mesh;
@@ -3605,7 +3646,8 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
   buildingSurroundings={
     active:true,buildingCount:summaries.length,functionCount:functions.length,propCount,drawCallEstimate:1,triangleCount:indices.length/3,sharedMaterialCount:1,
     functions:Object.freeze(functions),buildings:Object.freeze(summaries),doorClearanceViolations:doorViolations,roadClearanceViolations:roadViolations,ownershipCueCount:0,
-    authoritativeFunctionSource:"HousePlans + SpecialLots.function",ownershipSource:"no-canonical-building-owner-name-exposed",
+    treeOcclusionRejectCount:treeOcclusionRejects,anchorSelectionAttempts,canonicalTreeOcclusionChecks:canonicalTreeCrowns.length,
+    criticalCueOcclusionAvoidance:true,authoritativeFunctionSource:"HousePlans + SpecialLots.function",ownershipSource:"no-canonical-building-owner-name-exposed",
     presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false,buildMs:Number((performance.now()-started).toFixed(4))
   };
   return 1;
