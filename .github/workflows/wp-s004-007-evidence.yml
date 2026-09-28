@@ -7,6 +7,13 @@ on:
     branches: [main]
     paths:
       - .github/workflows/wp-s004-007-evidence.yml
+      - tools/wp_s004_007_evidence.py
+      - tools/tests/wp-s004-007-work-cycles.test.js
+      - scripts/world/work-cycles.js
+      - scripts/world/resident-movement.js
+      - scripts/world/action-executor.js
+      - scripts/world/planet-stage.js
+      - index.html
 
 permissions:
   contents: read
