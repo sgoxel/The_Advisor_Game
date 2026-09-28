@@ -119,6 +119,17 @@ let buildingSurroundings={
   authoritativeFunctionSource:"HousePlans + SpecialLots.function",ownershipSource:"no-canonical-building-owner-name-exposed",
   presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false,buildMs:0
 };
+let localCampaignWearMesh=null;
+let localCampaignWearGeometry=null;
+let localCampaignWearContext=null;
+let localCampaignWearRelevantIds=new Set();
+let campaignWearProjection={
+  active:false,buildingCount:0,changedBuildingCount:0,visualPrimitiveCount:0,drawCallEstimate:0,triangleCount:0,sharedMaterialCount:1,
+  stateCounts:{normal:0,worn:0,damaged:0,repaired:0,overgrown:0},buildings:[],revisionSignature:null,maxRevision:0,
+  deltaSequence:0,localQueryCount:0,localQueryLimit:16,persistent:true,historyReplay:false,lazyLocal:true,
+  authoritativeSource:"WorldState.resolve local structural building refs",evidenceHookAvailable:true,lastBuildReason:"none",
+  presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameScan:false,buildMs:0
+};
 let localNpcRoot=null;
 let localNpcMaterials=null;
 let localNpcContext=null;
@@ -2836,6 +2847,7 @@ function ensureLocalStaticMaterials(){
     activitySmoke:make("LocalActivitySmoke",.48,.49,.47,.58),
     activityProp:make("LocalActivityProp",.39,.24,.10),
     surroundings:(()=>{const m=make("LocalBuildingSurroundings",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    campaignWear:(()=>{const m=make("LocalCampaignWear",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     wilderness:wildernessMaterial,fauna:(()=>{const m=make("LocalFauna",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})()
   };
 }
@@ -3442,6 +3454,180 @@ function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,
   return 1;
 }
 
+
+function clearCanonicalCampaignWearProjection(){
+  localCampaignWearMesh?.destroy?.();localCampaignWearMesh=null;
+  localCampaignWearGeometry?.destroy?.();localCampaignWearGeometry=null;
+  localCampaignWearRelevantIds.clear();
+  campaignWearProjection={...campaignWearProjection,active:false,buildingCount:0,changedBuildingCount:0,visualPrimitiveCount:0,drawCallEstimate:0,triangleCount:0,
+    stateCounts:{normal:0,worn:0,damaged:0,repaired:0,overgrown:0},buildings:[],revisionSignature:null,maxRevision:0,deltaSequence:0,localQueryCount:0,buildMs:0,lastBuildReason:"cleared"};
+}
+function campaignWearRefs(reveal){
+  if(!activeSeed||!reveal||!window.WorldState?.structuralRef)return {settlement:null,records:[]};
+  const village=reveal.village||window.StartingVillage?.plan?.(activeSeed)||null;
+  if(!village)return {settlement:null,records:[]};
+  const settlement=window.WorldState.structuralRef(activeSeed,"settlement","WORLD","starting-village",{name:village.name,center:village.center});
+  const records=[...(reveal.houses||[]),...(reveal.specialLots||[])].map(record=>({
+    record,
+    ref:window.WorldState.structuralRef(activeSeed,"building",settlement.id,String(record.id),{
+      planId:String(record.id),kind:String(record.kind||"building"),plotId:record.plotId==null?null:String(record.plotId)
+    })
+  }));
+  return {settlement,records};
+}
+function campaignWearVisualState(resolved){
+  const current=resolved?.current||{},campaign=current.campaignState||{},condition=String(
+    campaign.environmentalCondition??campaign.exteriorCondition??campaign.condition??current.environmentalCondition??"normal"
+  ).toLowerCase();
+  const damage=Number(campaign.damageLevel??campaign.damage??current.damageLevel??0)||0;
+  const wear=Number(campaign.wearLevel??campaign.wear??current.wearLevel??0)||0;
+  const repair=Number(campaign.repairLevel??campaign.recoveryLevel??campaign.repair??current.repairLevel??0)||0;
+  const abandoned=campaign.abandoned===true||current.abandoned===true||condition.includes("abandon")||condition.includes("overgrown");
+  if(abandoned||condition.includes("overgrown"))return "overgrown";
+  if(damage>=.25||condition.includes("damage")||condition.includes("burn")||condition.includes("ruin"))return "damaged";
+  if(repair>=.45||condition.includes("repair")||condition.includes("recover")||condition.includes("clean"))return "repaired";
+  if(wear>=.30||condition.includes("worn")||condition.includes("wear"))return "worn";
+  return "normal";
+}
+function campaignWearResolvedState(reveal){
+  const started=performance.now(),refs=campaignWearRefs(reveal),buildings=[],stateCounts={normal:0,worn:0,damaged:0,repaired:0,overgrown:0};
+  localCampaignWearRelevantIds.clear();
+  let localQueryCount=0,maxRevision=0,settlementRevision=0,deltaSequence=0;
+  if(refs.settlement){
+    localCampaignWearRelevantIds.add(String(refs.settlement.id));
+    const resolved=window.WorldState?.resolve?.(activeSeed,refs.settlement)||null;localQueryCount++;
+    settlementRevision=Number(resolved?.delta?.revision||0);maxRevision=Math.max(maxRevision,settlementRevision);
+  }
+  for(const pair of refs.records){
+    const resolved=window.WorldState?.resolve?.(activeSeed,pair.ref)||null;localQueryCount++;
+    localCampaignWearRelevantIds.add(String(pair.ref.id));
+    const visualState=campaignWearVisualState(resolved),revision=Number(resolved?.delta?.revision||0),campaign=resolved?.current?.campaignState||{};
+    maxRevision=Math.max(maxRevision,revision);stateCounts[visualState]=(stateCounts[visualState]||0)+1;
+    const b=pair.record.bounds||{},centerTile=Object.freeze({
+      x:String(Math.round((Number(b.minX||0)+Number(b.maxX||0))/2)),
+      y:String(Math.round((Number(b.minY||0)+Number(b.maxY||0))/2))
+    });
+    buildings.push(Object.freeze({
+      id:String(pair.record.id),entityId:String(pair.ref.id),kind:String(pair.record.kind||"building"),centerTile,
+      visualState,revision,evidenceTarget:String(campaign.evidenceWp||"")==="WP-S003-021",
+      condition:String(campaign.environmentalCondition||"normal"),wearLevel:Number(campaign.wearLevel||0),
+      damageLevel:Number(campaign.damageLevel||0),repairLevel:Number(campaign.repairLevel||0),abandoned:Boolean(campaign.abandoned)
+    }));
+  }
+  try{deltaSequence=Number(window.WorldState?.deltaSnapshot?.(activeSeed)?.sequence||0)}catch(_){deltaSequence=0}
+  const signature="CWP|"+revealHashText([activeSeed,settlementRevision,...buildings.map(x=>[x.entityId,x.revision,x.visualState].join(":"))].join("|"));
+  return {refs,buildings,stateCounts,signature,maxRevision,deltaSequence,localQueryCount,resolveMs:Number((performance.now()-started).toFixed(4))};
+}
+function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
+  const started=performance.now(),context=localCampaignWearContext;clearCanonicalCampaignWearProjection();
+  if(!context||!["refined","full"].includes(context.tier)||!pc||!device||!tangentPatch||!window.WorldState?.resolve){
+    campaignWearProjection={...campaignWearProjection,lastBuildReason:String(reason),buildMs:Number((performance.now()-started).toFixed(4))};
+    return 0;
+  }
+  ensureLocalStaticMaterials();
+  const state=campaignWearResolvedState(context.reveal),positions=[],normals=[],colors=[],indices=[];
+  let primitiveCount=0;
+  const addVertex=(x,y,z,color,normal)=>{positions.push(x,y,z);normals.push(normal[0],normal[1],normal[2]);colors.push(color[0],color[1],color[2],color[3]??255);return positions.length/3-1;};
+  const box=(east,north,yMeters,sxMeters,syMeters,szMeters,color)=>{
+    const p=canonicalSemanticPosition(east,north,context.presentationScale,context.unit,context.frame),s=context.presentationScale/context.unit;
+    const x0=p.x-sxMeters*s*.5,x1=p.x+sxMeters*s*.5,z0=p.z-szMeters*s*.5,z1=p.z+szMeters*s*.5;
+    const y0=canonicalSemanticGroundHeightUnits(east,north,context.frame)+context.lift+yMeters*s,y1=y0+Math.max(.015,syMeters*s);
+    const base=positions.length/3,cc=color;
+    const verts=[
+      [x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1],
+      [x1,y0,z0],[x0,y0,z0],[x0,y1,z0],[x1,y1,z0],
+      [x1,y0,z1],[x1,y0,z0],[x1,y1,z0],[x1,y1,z1],
+      [x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y1,z0],
+      [x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z0],
+      [x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]
+    ],faceNormals=[[0,0,1],[0,0,-1],[1,0,0],[-1,0,0],[0,1,0],[0,-1,0]];
+    for(let f=0;f<6;f++)for(let v=0;v<4;v++)addVertex(...verts[f*4+v],cc,faceNormals[f]);
+    for(let f=0;f<6;f++){const b=base+f*4;indices.push(b,b+1,b+2,b,b+2,b+3);}
+    primitiveCount++;
+  };
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const byId=new Map([...(context.reveal.houses||[]),...(context.reveal.specialLots||[])].map(x=>[String(x.id),x]));
+  const C={wear:[112,79,43,255],wearDark:[76,56,38,255],char:[54,48,43,255],burn:[105,52,31,255],debris:[103,91,75,255],
+    newWood:[207,152,77,255],newWoodLight:[235,190,108,255],green:[64,116,50,255],greenLight:[92,145,64,255]};
+  for(const item of state.buildings){
+    const record=byId.get(item.id),b=record?.bounds;if(!record||!b||item.visualState==="normal")continue;
+    const cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2,w=(Number(b.maxX)-Number(b.minX)+1)*tileMeters,d=(Number(b.maxY)-Number(b.minY)+1)*tileMeters;
+    const east=cx*tileMeters,north=cy*tileMeters,physicalHeight=record.kind==="meeting-hall"?7.2:record.kind==="barn"?6.2:5.4;
+    if(item.visualState==="worn"){
+      const front=north+d*.72;
+      box(east,front,.02,Math.max(3.8,w*.82),.05,Math.max(2.2,d*.34),C.wear);
+      for(const dx of [-1.2,0,1.2])box(east+dx,front+d*.22,.035,.34,.045,Math.max(3.8,d*.72),dx===0?C.wearDark:C.wear);
+    }else if(item.visualState==="damaged"){
+      const roofY=physicalHeight+.12;
+      box(east-w*.18,north,roofY,Math.max(1.5,w*.28),.08,Math.max(3.0,d*.72),C.char);
+      box(east+w*.12,north-d*.08,roofY+.025,Math.max(1.0,w*.18),.07,Math.max(2.2,d*.48),C.burn);
+      box(east+w*.62,north+d*.22,.04,1.35,.62,1.05,C.debris);
+      box(east+w*.72,north-d*.28,.04,1.05,.42,1.45,C.char);
+      box(east+w*.52,north+d*.52,.04,1.55,.30,.48,C.burn);
+    }else if(item.visualState==="repaired"){
+      const roofY=physicalHeight+.14;
+      for(const dx of [-.24,0,.24])box(east+w*dx,north,roofY,Math.max(.36,w*.09),.06,Math.max(3.1,d*.78),dx===0?C.newWoodLight:C.newWood);
+      box(east+w*.62,north+.22*d,.04,.22,2.8,2.4,C.newWood);
+      box(east+w*.62,north+.22*d,2.50,2.0,.22,.22,C.newWoodLight);
+    }else if(item.visualState==="overgrown"){
+      box(east-w*.58,north+d*.28,.03,2.1,.12,3.8,C.green);
+      box(east+w*.58,north-d*.12,.03,2.5,.14,3.1,C.greenLight);
+      box(east,north+d*.70,.03,Math.max(3.8,w*.76),.10,1.6,C.green);
+      const roofY=physicalHeight+.13;
+      box(east-w*.24,north+d*.28,roofY,.52,.08,Math.max(2.8,d*.58),C.green);
+      box(east+w*.22,north+d*.12,roofY+.02,.42,.07,Math.max(2.0,d*.42),C.greenLight);
+    }
+  }
+  if(positions.length){
+    const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
+    const entity=new pc.Entity("CanonicalCampaignWear");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
+    entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.campaignWear,entity)];tangentPatch.addChild(entity);
+    localCampaignWearMesh=entity;localCampaignWearGeometry=mesh;
+  }
+  const changed=state.buildings.filter(x=>x.visualState!=="normal"),elapsed=performance.now()-started,target=state.buildings.find(x=>x.evidenceTarget)||changed[0]||state.buildings[0]||null;
+  campaignWearProjection={
+    active:primitiveCount>0,buildingCount:state.buildings.length,changedBuildingCount:changed.length,visualPrimitiveCount:primitiveCount,
+    drawCallEstimate:primitiveCount>0?1:0,triangleCount:indices.length/3,sharedMaterialCount:1,stateCounts:state.stateCounts,buildings:state.buildings,
+    revisionSignature:state.signature,maxRevision:state.maxRevision,deltaSequence:state.deltaSequence,localQueryCount:state.localQueryCount,localQueryLimit:16,
+    evidenceTargetBuildingId:target?.id||null,evidenceTargetEntityId:target?.entityId||null,evidenceTargetState:target?.visualState||null,evidenceTargetRevision:Number(target?.revision||0),
+    persistent:true,historyReplay:false,lazyLocal:true,authoritativeSource:"WorldState.resolve local structural building refs",
+    evidenceHookAvailable:true,lastBuildReason:String(reason),presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameScan:false,
+    resolveMs:state.resolveMs,buildMs:Number(elapsed.toFixed(4))
+  };
+  if(localStatic){
+    localStatic={...localStatic,persistentRevisionSignature:state.signature,persistentPresentationSignature:String(localStatic.signature||"")+"|"+state.signature,
+      campaignWearDrawCallEstimate:campaignWearProjection.drawCallEstimate,campaignWearTriangleCount:campaignWearProjection.triangleCount};
+  }
+  return campaignWearProjection.drawCallEstimate;
+}
+function setCampaignWearEvidenceState(stateValue){
+  const stateName=String(stateValue||"normal").toLowerCase(),allowed=new Set(["normal","worn","damaged","repaired","overgrown"]);
+  if(!allowed.has(stateName))return Object.freeze({ok:false,reason:"unsupported-state",state:stateName});
+  if(!activeSeed||!window.WorldState?.applyDelta||!window.WorldState?.structuralRef||!window.StartingVillage?.plan||!window.HousePlans?.build)return Object.freeze({ok:false,reason:"authority-unavailable"});
+  const village=window.StartingVillage.plan(activeSeed),houses=(window.HousePlans.build(activeSeed)||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))),record=houses[0]||null;
+  if(!village||!record)return Object.freeze({ok:false,reason:"target-unavailable"});
+  const settlement=window.WorldState.structuralRef(activeSeed,"settlement","WORLD","starting-village",{name:village.name,center:village.center});
+  const ref=window.WorldState.structuralRef(activeSeed,"building",settlement.id,String(record.id),{planId:String(record.id),kind:String(record.kind||"building"),plotId:record.plotId==null?null:String(record.plotId)});
+  const patches={
+    normal:{environmentalCondition:"normal",wearLevel:0,damageLevel:0,repairLevel:0,abandoned:false},
+    worn:{environmentalCondition:"worn",wearLevel:.88,damageLevel:0,repairLevel:0,abandoned:false},
+    damaged:{environmentalCondition:"damaged",wearLevel:.58,damageLevel:.92,repairLevel:0,abandoned:false},
+    repaired:{environmentalCondition:"repaired",wearLevel:.05,damageLevel:0,repairLevel:.96,abandoned:false},
+    overgrown:{environmentalCondition:"overgrown",wearLevel:.72,damageLevel:.18,repairLevel:0,abandoned:true}
+  };
+  const result=window.WorldState.applyDelta(activeSeed,ref,{campaignState:{...patches[stateName],evidenceWp:"WP-S003-021"}},"WP-S003-021 controlled visual evidence");
+  if(localCampaignWearContext)rebuildCanonicalCampaignWearProjection("evidence-hook");
+  const b=record.bounds||{},targetTile=Object.freeze({x:String(Math.round((Number(b.minX||0)+Number(b.maxX||0))/2)),y:String(Math.round((Number(b.minY||0)+Number(b.maxY||0))/2))});
+  return Object.freeze({ok:Boolean(result?.ok),state:stateName,targetBuildingId:String(record.id),targetEntityId:String(ref.id),targetTile,revision:Number(result?.entry?.revision||0),stored:Boolean(result?.stored)});
+}
+function handleCampaignWearDeltaChange(event){
+  const detail=event?.detail||{};
+  if(!activeSeed||String(detail.seed||"")!==String(activeSeed)||!localCampaignWearContext)return;
+  if(!localCampaignWearRelevantIds.has(String(detail.entityId||"")))return;
+  rebuildCanonicalCampaignWearProjection("persistent-delta-event");
+}
+window.addEventListener("advisor:world-state-delta-change",handleCampaignWearDeltaChange);
+
 function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const started=performance.now(),dims=resource.dims,unit=dims.metersPerUnit,plan=reveal.settlement,village=reveal.village;
   const scale=revealPresentationScale(dims,tier,Number(village.approximateCoreDiameterMeters||104));
@@ -3490,6 +3676,8 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     landmarks=1;if(detailed)fullBuildings++;else coarseBuildings++;
   }
   const surroundingsDrawCalls=buildCanonicalBuildingSurroundings(reveal,tier,semanticFrame,scale,unit,lift);
+  localCampaignWearContext={reveal,tier,frame:semanticFrame,presentationScale:scale,unit,lift};
+  const campaignWearDrawCalls=rebuildCanonicalCampaignWearProjection("settlement-rebuild");
   const treeCount=tier==="coarse"?6:tier==="refined"?10:tier==="full"?12:0;
   for(let i=0;i<treeCount;i++){
     const angle=i/Math.max(1,treeCount)*Math.PI*2+localHash(i*17,treeCount,91)*.22;
@@ -3516,7 +3704,10 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     coarseBuildingCount:coarseBuildings,landmarkCount:landmarks,
     fullRoadCount:detailed?roadCount:0,fullBuildingCount:fullBuildings,
     roadCount,buildingCount:coarseBuildings+fullBuildings,vegetationCount:vegetation,wildernessCount:wild.accepted,ambientFaunaCount:wild.fauna,waterCount:0,
-    entityCount,triangleEstimate:triangles+wild.triangles+Number(buildingSurroundings.triangleCount||0),drawCallEstimate:entityCount+wild.fauna,
+    entityCount,triangleEstimate:triangles+wild.triangles+Number(buildingSurroundings.triangleCount||0)+Number(campaignWearProjection.triangleCount||0),
+    drawCallEstimate:entityCount+wild.fauna+Number(campaignWearDrawCalls||0),
+    persistentRevisionSignature:campaignWearProjection.revisionSignature,persistentPresentationSignature:String(resource.signature||"")+"|"+String(campaignWearProjection.revisionSignature||"CWP|0"),
+    campaignWearDrawCallEstimate:Number(campaignWearProjection.drawCallEstimate||0),campaignWearTriangleCount:Number(campaignWearProjection.triangleCount||0),
     buildTimeMs:Number((performance.now()-started).toFixed(3)),
     grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,
     authority:"SettlementArchetypes + StartingVillage + HousePlans + SpecialLots"
@@ -3530,6 +3721,7 @@ function rebuildLocalStaticPresentation(resource){
   clearLocalBuildingActivity();localBuildingActivityContext=null;
   buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
   clearCanonicalBuildingSurroundings();
+  clearCanonicalCampaignWearProjection();localCampaignWearContext=null;
   clearLocalFauna();
   localStaticRoot?.destroy?.();localStaticRoot=null;
   const tier=settlementRevealTierForScalar();
@@ -5369,6 +5561,7 @@ function snapshot(){
     npcPresentation:Object.freeze({...localNpcPresentation}),
     buildingActivity:Object.freeze({...buildingActivity,buildings:Object.freeze((buildingActivity.buildings||[]).slice())}),
     buildingSurroundings:Object.freeze({...buildingSurroundings,functions:Object.freeze((buildingSurroundings.functions||[]).slice()),buildings:Object.freeze((buildingSurroundings.buildings||[]).slice())}),
+    campaignWearProjection:Object.freeze({...campaignWearProjection,stateCounts:Object.freeze({...campaignWearProjection.stateCounts}),buildings:Object.freeze((campaignWearProjection.buildings||[]).slice())}),
     destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,queryCenter:Object.freeze({latitudeDegrees:Number((-pitchDegrees).toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
     mapPresentation:Object.freeze({...mapPresentation}),
     politicalScale:politicalScaleEvidence(),
@@ -5410,7 +5603,7 @@ function destroy(){
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
   generatedTexture?.destroy?.();generatedTexture=null;
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
-  clearLocalFauna();clearCanonicalBuildingSurroundings();
+  clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection();localCampaignWearContext=null;
   app?.destroy?.();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
   environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionTextures=null;environmentalReactionPool=[];
@@ -5424,7 +5617,7 @@ function destroy(){
   geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localResidency.clear();localRecentEvictions.clear();localMotionPrefetchTargets.clear();localLastRequestRegistered=null;localMotionVector={east:0,north:0,magnitude:0};localStaticRefreshScheduled=false;projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setScaleIndex,stepScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setScaleIndex,stepScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},openPlaces:()=>{destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
   setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
