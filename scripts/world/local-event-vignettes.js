@@ -98,10 +98,54 @@ function locationFor(spec,participants){
   const label=preferred.workplaceId?String(preferred.workplaceId).replace(/[-_:]+/g," "):"village activity point";
   return freeze({anchor,label,source,residentId:preferred.id});
 }
+function stagingPoint(seed,x,y,strict){
+  const classify=window.Walkability?.classify;if(typeof classify!=="function")return null;
+  let center=null;try{center=classify(seed,String(x),String(y));}catch(_){center=null}
+  if(!center?.walkable||center?.buildingId)return null;
+  if(strict){
+    // Keep event actors out of the immediate roof/footprint occlusion zone.
+    // This is event-time bounded validation, never a per-frame scan.
+    const clearance=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1],[2,0],[-2,0],[0,2],[0,-2]];
+    for(const [dx,dy] of clearance){
+      let nav=null;try{nav=classify(seed,String(x+BigInt(dx)),String(y+BigInt(dy)));}catch(_){nav=null}
+      if(nav?.buildingId)return null;
+    }
+  }
+  return freeze({x:String(x),y:String(y),level:Number(center.level||0)});
+}
+function stagingTargets(seed,day,spec,anchor,participants){
+  const count=Math.min(MAX_PARTICIPANTS,participants.length),ax=BigInt(anchor.x),ay=BigInt(anchor.y),candidates=[];
+  // Start two tiles away so participants form a readable gathering around an
+  // existing anchor instead of stacking directly against a workplace facade.
+  for(let radius=2;radius<=6;radius++){
+    const ring=[];
+    for(let oy=-radius;oy<=radius;oy++)for(let ox=-radius;ox<=radius;ox++){
+      if(Math.max(Math.abs(ox),Math.abs(oy))!==radius)continue;
+      ring.push({ox,oy,tie:score(seed,day,spec.id,"staging:"+radius+":"+ox+":"+oy)});
+    }
+    ring.sort((a,b)=>a.tie-b.tie||a.oy-b.oy||a.ox-b.ox);candidates.push(...ring);
+  }
+  const choose=(strict,already=[])=>{
+    const out=already.slice();
+    for(const candidate of candidates){
+      if(out.length>=count)break;
+      const x=ax+BigInt(candidate.ox),y=ay+BigInt(candidate.oy);
+      if(out.some(p=>p.x===String(x)&&p.y===String(y)))continue;
+      if(out.some(p=>Math.abs(Number(BigInt(p.x)-x))+Math.abs(Number(BigInt(p.y)-y))<2))continue;
+      const point=stagingPoint(seed,x,y,strict);if(point)out.push(point);
+    }
+    return out;
+  };
+  let points=choose(true);
+  if(points.length<count)points=choose(false,points);
+  while(points.length<count)points.push(freeze({x:String(anchor.x),y:String(anchor.y),level:Number(anchor.level||0)}));
+  return freeze(points.slice(0,count));
+}
 function descriptor(seed,day,spec){
   const residents=roster(seed),participants=pickParticipants(seed,day,spec,residents);
   if(participants.length<2)return null;
   const location=locationFor(spec,participants);if(!location)return null;
+  const staging=stagingTargets(seed,day,spec,location.anchor,participants);
   const jitter=(score(seed,day,spec.id,"slot")%21)-10;
   const startTimestamp=minuteTimestamp(day,spec.minute+jitter);
   const durationMinutes=spec.durationMinutes+(score(seed,day,spec.id,"duration")%16);
@@ -109,9 +153,10 @@ function descriptor(seed,day,spec){
   return freeze({
     id:eventId,type:spec.id,title:spec.title,icon:spec.icon,description:spec.description,
     startTimestamp,endTimestamp:addMinutes(startTimestamp,durationMinutes),durationMinutes,
-    location,participants:Object.freeze(participants.map(r=>freeze({
+    location,participants:Object.freeze(participants.map((r,index)=>freeze({
       id:String(r.id),name:String(r.displayName||r.name||r.id),profession:String(r.profession||"resident"),
-      existingTarget:targetOf(r)
+      existingTarget:targetOf(r),eventTarget:staging[index]||location.anchor,
+      eventTargetSource:staging[index]&&(staging[index].x!==location.anchor.x||staging[index].y!==location.anchor.y)?"bounded-walkable-staging":"event-anchor-fallback"
     }))),
     participantCount:participants.length,seedOnly:true,scheduleOverride:true,temporary:true
   });
@@ -184,10 +229,10 @@ function stateFor(residentId,seedValue){
   const mem=runtimeBySeed.get(seed),id=String(residentId||""),eventId=mem.residentIndex.get(id);if(!eventId)return null;
   const event=mem.active.get(eventId);if(!event)return null;
   const participant=event.participants.find(p=>p.id===id)||null;
-  const target=event.location.anchor;
+  const target=participant?.eventTarget||event.location.anchor;
   return freeze({
     eventId:event.id,type:event.type,title:event.title,scheduleOverride:true,
-    target,location:event.location,participant,
+    target,location:event.location,participant,stagingRevision:"bounded-walkable-staging-v1",
     activityOverride:freeze({
       state:"local-event",action:"gather",intendedAction:"gather",
       target,buildingId:null,targetSource:"local-event-vignette",
