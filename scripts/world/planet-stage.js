@@ -3663,7 +3663,7 @@ function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
   // Keep the authoritative settlement composition large enough to read as
   // actual world structure, not a locator glyph, then converge rapidly to 1:1.
-  const targetFraction=tier==="footprint"?.27:tier==="route"?.66:tier==="coarse"?.20:.20;
+  const targetFraction=tier==="footprint"?.27:tier==="route"?.78:tier==="coarse"?.20:.20;
   const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
   // Route overview stays presentation-only, but it should occupy enough screen
   // area for the actual road/access topology to read as a settlement rather
@@ -3770,13 +3770,15 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
     const b=record?.bounds;if(!b)continue;
     const minX=Number(b.minX)-.28,maxX=Number(b.maxX)+.28,minY=Number(b.minY)-.28,maxY=Number(b.maxY)+.28;
     if(![minX,maxX,minY,maxY].every(Number.isFinite)||maxX<=minX||maxY<=minY)continue;
-    const special=Boolean(record?.kind),fill=[142,101,58],
+    const special=Boolean(record?.kind),
+      fill=special?[142,101,58]:(tier==="route"?[92,86,58]:[142,101,58]),
       border=special?[224,174,92]:(tier==="route"?[116,105,70]:[164,140,82]);
     count++;
-    // Route-tier parcels are quiet cadastral context; roads/access links carry
-    // the stronger hierarchy. Keep ordinary lots as boundaries instead of
-    // filled cards so the real connected road/access morphology stays legible.
-    if(special)addQuad(minX,minY,maxX,maxY,fill,0);
+    // At route scale, every existing occupied plot contributes restrained
+    // authoritative land-use mass as well as its perimeter. Roads/access links
+    // remain darker and higher in the visual hierarchy; no new plot or road is
+    // created and all coordinates remain the StartingVillage/HousePlans truth.
+    if(special||tier==="route")addQuad(minX,minY,maxX,maxY,fill,0);
     const bw=tier==="route"
       ?Math.min(.14,Math.max(.075,Math.min(maxX-minX,maxY-minY)*.044))
       :Math.min(.23,Math.max(.12,Math.min(maxX-minX,maxY-minY)*.070));
@@ -3800,7 +3802,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   const entity=new pc.Entity("CanonicalOccupiedLotFills");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.lotOverview,entity)];
   localStaticRoot.addChild(entity);localSettlementLotGeometry=mesh;
-  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount,outlineSegmentCount,connectorSegmentCount,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-perimeter-access-v7"});
+  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount,outlineSegmentCount,connectorSegmentCount,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-perimeter-access-v8"});
 }
 function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tier){
   localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;
