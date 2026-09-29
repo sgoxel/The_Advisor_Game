@@ -190,8 +190,8 @@ function proofActivate(seedValue,typeValue,anchorValue,timestampValue){
   const seed=requiredSeed(seedValue),type=String(typeValue||""),anchor=point(anchorValue),stamp=normalizeTimestamp(timestampValue);
   if(!CATALOG.some(x=>x.id===type))throw new Error("Unknown encounter type: "+type);
   const event=descriptor(seed,anchor,stamp,type);proofBySeed.set(seed,freeze({event}));
-  const view=localPresentation(seed,anchor,stamp,{proof:true});
-  return freeze({pass:Boolean(view.active&&view.encounter?.type===type),event:view.encounter,snapshot:view});
+  const view=localPresentation(seed,event.anchor,stamp,{proof:true});
+  return freeze({pass:Boolean(view.active&&view.encounter?.type===type&&view.exactActorCount===event.actorCount),event:view.encounter,snapshot:view});
 }
 function clearProof(seedValue){
   const seed=requiredSeed(seedValue);proofBySeed.delete(seed);lastBySeed.delete(seed);renderCard(null);return true;
