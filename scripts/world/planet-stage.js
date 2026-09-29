@@ -3286,7 +3286,7 @@ function ensureLocalStaticMaterials(){
   localStaticMaterials={
     road:make("LocalRoad",.32,.20,.085),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
-    stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.08;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.06;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.39,.34,.18,.12),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3892,35 +3892,45 @@ function updateCanonicalNpcMotion(){
 }
 function canonicalRoofSegmentColor(state,plane,band,lane,landmark){
   const visualState=String(state||"normal");
-  const normal=landmark?[[220,151,55,255],[197,124,42,255],[231,171,72,255]]:[[104,48,31,255],[120,56,35,255],[90,38,28,255],[112,45,30,255]];
+  const normal=landmark?[[220,151,55,255],[211,139,49,255],[225,157,61,255]]:[[106,48,31,255],[111,51,32,255],[101,44,30,255],[108,47,31,255]];
   if(visualState==="worn"){
-    // High enough value separation to survive night palettes, but varied across
-    // the real roof surface rather than recoloring the whole plane uniformly.
-    const p=[[194,163,126,255],[145,126,105,255],[211,177,128,255],[121,108,96,255],[171,143,109,255],[157,132,104,255]];
-    return p[(plane*5+band*3+lane)%p.length];
+    // Most of the real roof remains one aged surface. Only a few bounded
+    // shingle groups bleach more strongly, preventing a checkerboard/color-code
+    // read while remaining legible under the authoritative night palette.
+    const aged=[[132,100,76,255],[121,92,72,255],[139,105,78,255],[116,89,71,255]];
+    const weathered=(plane===0&&((band===1&&lane===0)||(band===4&&lane===1)))||
+      (plane===1&&((band===2&&lane===0)||(band===5&&lane===1)));
+    if(weathered){
+      const p=[[190,160,126,255],[171,148,121,255],[205,172,131,255],[160,140,118,255]];
+      return p[(plane+band+lane)%p.length];
+    }
+    return aged[(plane+band+lane)%aged.length];
   }
   if(visualState==="damaged"){
-    if(plane===0&&(band<=2||lane===0)){
-      const p=[[43,34,30,255],[81,43,28,255],[119,65,37,255],[61,49,42,255],[96,54,34,255]];
-      return p[(band*2+lane)%p.length];
+    const charZone=plane===0&&((band<=2&&lane===0)||(band===1&&lane===1));
+    if(charZone){
+      const p=[[43,34,30,255],[82,44,29,255],[116,62,36,255],[61,48,41,255]];
+      return p[(band+lane)%p.length];
     }
-    const p=[[132,102,77,255],[101,83,70,255],[148,111,77,255],[119,91,70,255]];
-    return p[(plane+band+lane)%p.length];
+    const aged=[[113,77,54,255],[104,70,51,255],[121,82,56,255],[109,73,52,255]];
+    return aged[(plane+band+lane)%aged.length];
   }
   if(visualState==="repaired"){
-    if(plane===0&&band<=2){
-      const p=[[232,163,72,255],[252,204,112,255],[190,112,44,255],[224,151,62,255],[245,183,86,255]];
+    const repairedSection=plane===0&&band<=1&&lane<=1;
+    if(repairedSection){
+      const p=[[232,163,72,255],[248,197,103,255],[190,112,44,255],[222,148,61,255]];
       return p[(band*2+lane)%p.length];
     }
     return normal[(plane+band+lane)%normal.length];
   }
   if(visualState==="overgrown"){
-    if(lane===0&&(band===1||band===2||band===4||band===5)){
-      const p=[[48,111,48,255],[74,137,58,255],[131,154,72,255],[43,92,44,255],[96,139,59,255]];
+    const mossed=lane===0&&(band===1||band===2||band===4);
+    if(mossed){
+      const p=[[48,108,47,255],[74,132,57,255],[118,149,67,255],[43,91,43,255]];
       return p[(plane+band)%p.length];
     }
-    const p=[[118,99,63,255],[132,110,67,255],[101,85,58,255],[124,104,65,255],[109,92,60,255]];
-    return p[(plane+band+lane)%p.length];
+    const aged=[[112,82,55,255],[119,88,57,255],[105,78,54,255],[116,85,56,255]];
+    return aged[(plane+band+lane)%aged.length];
   }
   return normal[(plane+band+lane)%normal.length];
 }
@@ -3940,7 +3950,7 @@ function canonicalRoofMeshData(entry,state){
   const variedColor=(color,plane,band,lane,corner)=>{
     const salt=7103+plane*97+band*31+lane*13+corner*7;
     const n=localHash(entry.east+band*3.7+corner*.8,entry.north+lane*4.3+plane*.9,salt);
-    const amount=visualState==="normal"?.055:visualState==="worn"?.12:.085,factor=1+(n-.5)*2*amount;
+    const amount=visualState==="normal"?.028:visualState==="worn"?.065:.055,factor=1+(n-.5)*2*amount;
     return [Math.round(clamp(color[0]*factor,0,255)),Math.round(clamp(color[1]*factor,0,255)),Math.round(clamp(color[2]*factor,0,255)),color[3]??255];
   };
   const addQuad=(a,b,c,d,n,color,plane=0,band=0,lane=0)=>{
@@ -4483,10 +4493,12 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     const roofCenter=ground+physicalHeight*s+.025;
     const leftEast=east-w*.20,rightEast=east+w*.20;
     if(item.visualState==="worn"){
-      // The actual roof surface carries irregular weathering. Keep only two
-      // tiny edge losses so the state remains one batched accessory draw.
+      // The actual roof surface carries irregular weathering. Three tiny,
+      // separated missing-shingle/eave cues keep the legacy visible-projection
+      // evidence gate meaningful without reverting to broad overlay strips.
       orientedBox(leftEast-w*.13,north-d*.20,roofCenter-.004,Math.max(.22,w*.038),.035,Math.max(.50,d*.09),C.wearDark,-24);
       orientedBox(rightEast+w*.12,north+d*.24,roofCenter-.003,Math.max(.20,w*.034),.032,Math.max(.44,d*.08),C.weather,24);
+      orientedBox(leftEast+w*.10,north+d*.31,roofCenter-.002,Math.max(.17,w*.030),.030,Math.max(.36,d*.065),C.wear,-24);
     }else if(item.visualState==="damaged"){
       // A real roof segment is missing in the state-aware canonical mesh.
       // Exposed rafters and grounded debris make that silhouette change legible.
