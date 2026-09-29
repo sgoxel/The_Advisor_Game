@@ -418,6 +418,7 @@ def main():
         settle_scale(d, 0)
         install_observers(d)
         time.sleep(.25)
+        d.execute_script("window.ResidentMovement?.resetPerformanceTelemetry?.();")
 
         baseline_signature = deterministic_signature(snap(d))
         rotation = rotation_benchmark(d)
@@ -453,6 +454,7 @@ def main():
 
         nav = post_navigation.get("navigationPerformance") or {}
         budget = post_navigation.get("projection", {}).get("resourceBudget") or {}
+        resident_subphases = d.execute_script("return window.ResidentMovement?.performanceSnapshot?.() || window.ResidentMovement?.snapshot?.().performanceTelemetry || null;")
         optimized = nav.get("revision") == "world-map-navigation-budget-v1"
         evidence.update({
             "optimizedTelemetryPresent": optimized,
@@ -475,6 +477,7 @@ def main():
                 "screenshot": mobile_shot,
             },
             "navigationPerformance": nav,
+            "residentSubphasePerformance": resident_subphases,
             "worldMapWorkGate": {
                 "frameUpdateOver50Count": nav.get("frameUpdateOver50Count"),
                 "maxFrameUpdateMs": nav.get("maxFrameUpdateMs"),
