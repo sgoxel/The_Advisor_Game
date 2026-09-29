@@ -935,10 +935,11 @@ function gameplayCenterMarkerTelemetry(layer){
   }
   if(!projected){marker.hidden=true;return Object.freeze({visible:false,worldTile:center.worldTile,canonicalSpatialCellId:cell.id,projectionFallbackUsed:false});}
   marker.hidden=false;
+  const settlementOverview=settlementRevealTierForScalar(zoomState.scalar)==="route";marker.dataset.settlementOverview=String(settlementOverview);
   const rect=canvas.getBoundingClientRect(),rootRect=root.getBoundingClientRect(),offsetX=rect.left-rootRect.left,offsetY=rect.top-rootRect.top;
   marker.style.left=(offsetX+projected.screenX).toFixed(2)+"px";marker.style.top=(offsetY+projected.screenY).toFixed(2)+"px";
   const code=marker.querySelector("code"),shortCell=cell.cellX+","+cell.cellY;
-  if(code)code.textContent="CELL "+shortCell+" · "+center.latitudeDegrees.toFixed(3)+"°, "+center.longitudeDegrees.toFixed(3)+"°";
+  if(code)code.textContent=settlementOverview?"CELL "+shortCell:"CELL "+shortCell+" · "+center.latitudeDegrees.toFixed(3)+"°, "+center.longitudeDegrees.toFixed(3)+"°";
   marker.dataset.cellId=cell.id;marker.dataset.tile=center.worldTile.x+","+center.worldTile.y;
   return Object.freeze({
     visible:true,screenX:Number(projected.screenX.toFixed(2)),screenY:Number(projected.screenY.toFixed(2)),
@@ -3319,7 +3320,7 @@ function ensureLocalStaticMaterials(){
     road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.39,.30,.14,.58),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.028),lotOverview:make("LocalOccupiedLotOverview",.43,.36,.19,.40),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.028),lotOverview:make("LocalOccupiedLotOverview",1,1,1,.72),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3333,6 +3334,7 @@ function ensureLocalStaticMaterials(){
   };
   // Route and lot overview meshes are tangent-plane quads. Render both sides so
   // their visibility does not depend on the local tangent entity orientation.
+  localStaticMaterials.lotOverview.vertexColors=true;localStaticMaterials.lotOverview.diffuseVertexColor=true;
   for(const material of [localStaticMaterials.road,localStaticMaterials.roadOverview,localStaticMaterials.lotOverview]){material.cull=pc.CULLFACE_NONE;material.update();}
 }
 function sharedLocalPrimitive(type){
@@ -3591,14 +3593,14 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   if(!pc||!device)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
   const records=[...(window.StartingVillage?.buildPlots?.(activeSeed)||[]),...(reveal?.specialLots||[])];
   const tileMeters=Math.max(1,Number(reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
-  const positions=[],normals=[],uvs=[],indices=[];let count=0;
-  const addQuad=(x0,y0,x1,y1)=>{
+  const positions=[],normals=[],uvs=[],colors=[],indices=[];let count=0,outlineSegmentCount=0;
+  const addQuad=(x0,y0,x1,y1,color,extraLift=0)=>{
     if(!(x1>x0&&y1>y0))return false;
     const base=positions.length/3;
     for(const [cx,cy] of [[x0,y0],[x1,y0],[x1,y1],[x0,y1]]){
       const east=cx*tileMeters,north=cy*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
-      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.020;
-      positions.push(pos.x,ground,pos.z);normals.push(0,1,0);
+      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.020+extraLift;
+      positions.push(pos.x,ground,pos.z);normals.push(0,1,0);colors.push(color[0],color[1],color[2],255);
     }
     uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);return true;
   };
@@ -3606,14 +3608,24 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
     const b=record?.bounds;if(!b)continue;
     const minX=Number(b.minX)-.28,maxX=Number(b.maxX)+.28,minY=Number(b.minY)-.28,maxY=Number(b.maxY)+.28;
     if(![minX,maxX,minY,maxY].every(Number.isFinite)||maxX<=minX||maxY<=minY)continue;
-    if(addQuad(minX,minY,maxX,maxY))count++;
+    const special=Boolean(record?.kind),fill=special?[142,101,58]:[105,94,58],border=special?[236,181,91]:[194,164,92];
+    if(!addQuad(minX,minY,maxX,maxY,fill,0))continue;
+    count++;
+    // Perimeter strips use the exact authoritative lot bounds. They make the
+    // irregular occupied fabric readable at settlement-approach scale without
+    // inventing buildings, circular envelopes or camera-relative geometry.
+    const bw=Math.min(.22,Math.max(.12,Math.min(maxX-minX,maxY-minY)*.075));
+    if(addQuad(minX,minY,maxX,minY+bw,border,.006))outlineSegmentCount++;
+    if(addQuad(minX,maxY-bw,maxX,maxY,border,.006))outlineSegmentCount++;
+    if(addQuad(minX,minY+bw,minX+bw,maxY-bw,border,.006))outlineSegmentCount++;
+    if(addQuad(maxX-bw,minY+bw,maxX,maxY-bw,border,.006))outlineSegmentCount++;
   }
   if(!count)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
-  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
+  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
   const entity=new pc.Entity("CanonicalOccupiedLotFills");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.lotOverview,entity)];
   localStaticRoot.addChild(entity);localSettlementLotGeometry=mesh;
-  return Object.freeze({count,segmentCount:count,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-fills-v3"});
+  return Object.freeze({count,segmentCount:count+outlineSegmentCount,outlineSegmentCount,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-bounds-v4"});
 }
 function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tier){
   localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;
@@ -5284,15 +5296,8 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
     (mottle*.48-forestDelta*.082-copse*.024+dryField*.006+meadow*.016)*coverContrast
   ];
 }
-function sharedSurfaceAuthority(job){
-  if(job?.surfaceAuthority)return job.surfaceAuthority;
-  const lat0=job.lat0,lon0=job.lon0;
-  const spanEast=Math.max(1,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR),spanNorth=Math.max(1,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR);
-  // One canonical outer-footprint authority raster is reused by focus, medium,
-  // outer and parent-fallback presentation. The same registered world point is
-  // therefore reconstructed from the same four authority samples regardless
-  // of which visual ring currently covers it.
-  const size=160,cache=new Array(size*size);
+function makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,size){
+  const lat0=job.lat0,lon0=job.lon0,cache=new Array(size*size);
   const centerRegistered=job.biomeCoordinateProof?.registeredMeters||canonicalRegisteredMetersForLatLon(lat0,lon0);
   const centerRegisteredEast=Number(centerRegistered.east??centerRegistered.eastMeters??0),registeredPeriod=Math.PI*2*WORLD_RADIUS_METERS;
   const unwrapRegisteredEast=value=>{
@@ -5304,8 +5309,7 @@ function sharedSurfaceAuthority(job){
     if(cache[key])return cache[key];
     const au=ix/(size-1),av=iy/(size-1);
     const aeast=(au-.5)*spanEast,anorth=(.5-av)*spanNorth,geo=canonicalLatLonForLocalOffset(lat0,lon0,aeast,anorth);
-    const alat=geo.latitudeRadians,alon=geo.longitudeRadians;
-    const natural=geography.sampleLatLon(alat,alon),registered=canonicalRegisteredMetersForLatLon(alat,alon);
+    const natural=geography.sampleLatLon(geo.latitudeRadians,geo.longitudeRadians),registered=canonicalRegisteredMetersForLatLon(geo.latitudeRadians,geo.longitudeRadians);
     return cache[key]={natural,registeredEastMeters:unwrapRegisteredEast(registered.eastMeters),registeredNorthMeters:Number(registered.northMeters||0)};
   };
   const bilerp=(va,vb,vc,vd,tx,ty)=>lerp(lerp(Number(va)||0,Number(vb)||0,tx),lerp(Number(vc)||0,Number(vd)||0,tx),ty);
@@ -5325,8 +5329,34 @@ function sharedSurfaceAuthority(job){
       registeredNorthMeters:bilerp(aa.registeredNorthMeters,bb.registeredNorthMeters,cc.registeredNorthMeters,dd.registeredNorthMeters,tx,ty)
     };
   };
-  job.surfaceAuthority={size,spanEast,spanNorth,sample};
+  return Object.freeze({size,spanEast,spanNorth,sample});
+}
+function sharedSurfaceAuthority(job){
+  if(job?.surfaceAuthority)return job.surfaceAuthority;
+  const spanEast=Math.max(1,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR),spanNorth=Math.max(1,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR);
+  job.surfaceAuthority=makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,160);
   return job.surfaceAuthority;
+}
+function focusSurfaceAuthority(job){
+  if(job?.focusSurfaceAuthority)return job.focusSurfaceAuthority;
+  // The 160x 6x parent is correct for outer fallback, but its kilometre-scale
+  // cells are too coarse for a 1/500 focus view. Resolve a bounded canonical
+  // 1x child from the same PlanetGeography authority and edge-match it to parent.
+  const spanEast=Math.max(1,job.dims.patchWidth*1.08),spanNorth=Math.max(1,job.dims.patchHeight*1.08);
+  job.focusSurfaceAuthority=makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,96);
+  return job.focusSurfaceAuthority;
+}
+function blendSurfaceAuthoritySamples(coarse,fine,t){
+  const w=clamp(Number(t)||0,0,1),mix=(a,b)=>lerp(Number(a)||0,Number(b)||0,w);
+  return {
+    land:w>=.5?Boolean(fine?.land):Boolean(coarse?.land),
+    color:[0,1,2].map(i=>mix(coarse?.color?.[i],fine?.color?.[i])),
+    elevationMeters:mix(coarse?.elevationMeters,fine?.elevationMeters),
+    moisture:mix(coarse?.moisture,fine?.moisture),
+    mountainInfluence:mix(coarse?.mountainInfluence,fine?.mountainInfluence),
+    registeredEastMeters:mix(coarse?.registeredEastMeters,fine?.registeredEastMeters),
+    registeredNorthMeters:mix(coarse?.registeredNorthMeters,fine?.registeredNorthMeters)
+  };
 }
 function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRing=false){
   const lat0=job.lat0,lon0=job.lon0,data=new Uint8ClampedArray(size*size*4);
@@ -5375,8 +5405,13 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // Fine terrain/biome detail is sampled in the Campaign-SEED registered
   // coordinate frame. Patch recentering, viewport changes and LOD changes may
   // change presentation, but never the world-space inputs to the detail field.
-  const surfaceAuthority=sharedSurfaceAuthority(job);
-  const mixSample=(ux,vz)=>surfaceAuthority.sample((ux-.5)*spanEast,(.5-vz)*spanNorth);
+  const surfaceAuthority=sharedSurfaceAuthority(job),focusAuthority=contextRing?null:focusSurfaceAuthority(job);
+  const mixSample=(ux,vz)=>{
+    const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth,coarse=surfaceAuthority.sample(east,north);
+    if(!focusAuthority)return coarse;
+    const edge=Math.min(ux,1-ux,vz,1-vz),refine=smoothstep01(clamp((edge-.025)/.145,0,1));
+    return refine<=0?coarse:blendSurfaceAuthoritySamples(coarse,focusAuthority.sample(east,north),refine);
+  };
   for(let y=0;y<size;y++){
     for(let x=0;x<size;x++){
       const ux=(x+.5)/size,vz=(y+.5)/size;
@@ -5650,7 +5685,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-warped-cover-overview-v9",topographicSignalAuthority:"PlanetGeography elevation slope/curvature + moisture sampled from one per-SLOD outer-footprint authority raster reused by focus/medium/outer/fallback through SeedCoordinateFabric registered meters",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,
+      topographicSignalRevision:"canonical-center-authority-refinement-v10",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
