@@ -3980,6 +3980,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
         const chosen=candidates[0];
         if(chosen){routePathKeys.add(chosen.key);centerlineCellCount++;}
       }
+      const centerlineKeys=new Set(routePathKeys);
       for(const record of routePlan?.records||[]){
         const target=record?.entrance?.target;if(!target)continue;
         const tx=Number(target.x),ty=Number(target.y);if(!Number.isFinite(tx)||!Number.isFinite(ty))continue;
@@ -3988,15 +3989,40 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
           if(roadByKey.has(key)){accessTargetKeys.push(key);routePathKeys.add(key);break;}
         }
       }
-      const uniqueTargets=[...new Set(accessTargetKeys)].sort(),selectedClasses=[...routePathKeys].map(k=>classify(roadByKey.get(k))).filter(Boolean);
+      // Connect each real access target to the existing real gateway centerline
+      // only through road cells already returned by StartingVillage authority.
+      // The bounded search never invents connectivity and never runs per frame.
+      const uniqueTargets=[...new Set(accessTargetKeys)].sort();
+      const neighbors=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+      let connectedTargetCount=0,maxAcceptedPathCells=0,acceptedPathCellCount=0;
+      for(const targetKey of uniqueTargets){
+        if(centerlineKeys.has(targetKey)){connectedTargetCount++;continue;}
+        const [sx,sy]=targetKey.split(",").map(Number),queue=[{x:sx,y:sy,key:targetKey,path:[targetKey]}],seen=new Set([targetKey]);
+        let accepted=null;
+        while(queue.length){
+          const current=queue.shift();
+          if(current.path.length>18)continue;
+          if(current.key!==targetKey&&centerlineKeys.has(current.key)){accepted=current.path;break;}
+          for(const [dx,dy] of neighbors){
+            const x=current.x+dx,y=current.y+dy,key=x+","+y;
+            if(seen.has(key)||!roadByKey.has(key))continue;
+            seen.add(key);queue.push({x,y,key,path:[...current.path,key]});
+          }
+        }
+        if(!accepted)continue;
+        connectedTargetCount++;maxAcceptedPathCells=Math.max(maxAcceptedPathCells,accepted.length);
+        acceptedPathCellCount+=accepted.length;
+        for(const key of accepted)routePathKeys.add(key);
+      }
+      const selectedClasses=[...routePathKeys].map(k=>classify(roadByKey.get(k))).filter(Boolean);
       const ringCellCount=selectedClasses.filter(c=>c.ringCell).length;
       overviewStats=Object.freeze({
-        revision:"route-gateway-centerline-v13",accessTargetCount:uniqueTargets.length,connectedTargetCount:uniqueTargets.length,
-        localClusterTargetCount:0,selectedCellCount:selectedClasses.length,ringCellCount,
+        revision:"route-gateway-centerline-v14",accessTargetCount:uniqueTargets.length,connectedTargetCount,
+        localClusterTargetCount:acceptedPathCellCount,selectedCellCount:selectedClasses.length,ringCellCount,
         ringArcShare:Number((ringCellCount/Math.max(1,selectedClasses.length)).toFixed(4)),
         gatewayCellCount:selectedClasses.filter(c=>c.gatewayStem||c.outwardBranch).length,
         localPathCellCount:selectedClasses.filter(c=>c.localPath).length,centerlineCellCount,
-        maxPathCells:0,maxRingCellsOnAcceptedPath:0,maxAcceptedPathCells:0,maxAcceptedRingCells:0,maxAcceptedWeightedCost:0,
+        maxPathCells:18,maxRingCellsOnAcceptedPath:0,maxAcceptedPathCells,maxAcceptedRingCells:0,maxAcceptedWeightedCost:0,
         fullCanonicalRoadCount:roadCells.length
       });
     }
@@ -4007,19 +4033,19 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       }else if(!routePathKeys.has(x+","+y))continue;
       const half=tier==="footprint"
         ?(outwardBranch?.28:gatewayStem?.14:centerAvenue?.075:.11)
-        :(outwardBranch?.13:gatewayStem?.095:localPath?.060:ringCell?.050:centerAvenue?.070:.060);
+        :(outwardBranch?.145:gatewayStem?.110:localPath?.075:ringCell?.068:centerAvenue?.085:.072);
       const cell={x,y,half};selected.push(cell);selectedMap.set(x+","+y,cell);
     }
     renderedRoadCellCount=selected.length;
     for(const cell of selected){
-      const {x,y,half}=cell,nodeFloor=tier==="route"?.030:.040,nodeHalf=Math.max(nodeFloor,half*.62);
+      const {x,y,half}=cell,nodeFloor=tier==="route"?.040:.040,nodeHalf=Math.max(nodeFloor,half*.68);
       const neighborCount=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]
         .filter(([dx,dy])=>selectedMap.has((x+dx)+","+(y+dy))).length;
       if(neighborCount!==2)addQuad(x-nodeHalf,y-nodeHalf,x+nodeHalf,y+nodeHalf);
       for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
         const other=selectedMap.get((x+dx)+","+(y+dy));if(!other)continue;
         if(dx&&dy&&(selectedMap.has((x+dx)+","+y)||selectedMap.has(x+","+(y+dy))))continue;
-        const segmentFloor=tier==="route"?.038:.055;
+        const segmentFloor=tier==="route"?.052:.055;
         addSegment(x,y,other.x,other.y,Math.max(segmentFloor,Math.min(half,other.half)*(tier==="route"?2.35:2)));
       }
     }
@@ -4031,7 +4057,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
   const roadMaterial=(tier==="route"||tier==="footprint")?localStaticMaterials.roadOverview:localStaticMaterials.road;
   entity.render.meshInstances=[new pc.MeshInstance(mesh,roadMaterial,entity)];localStaticRoot.addChild(entity);localSettlementRoadGeometry=mesh;
   return Object.freeze({active:true,cellCount:(tier==="route"||tier==="footprint")?renderedRoadCellCount:roadCells.length,segmentCount,queryCount,triangleCount:indices.length/3,overviewStats,
-    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-gateway-centerline-v13":"StartingVillage.infrastructureAt-cell-mesh-v1"});
+    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-gateway-centerline-v14":"StartingVillage.infrastructureAt-cell-mesh-v1"});
 }
 function clearCanonicalWayfindingSignposts(){
   clearInspectionKeySet(localSignInspectionKeys,false);
@@ -6117,7 +6143,14 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Preserve enough canonical globe hue to keep the same macro terrain
       // recognizable through the projection handoff, then converge smoothly.
       const coarseIdentity=smoothstep01(clamp((metersPerTexel-4)/70,0,1));
-      const macroIdentityWeight=clamp(.040+coarseIdentity*.050+mountainIdentity*.012,.040,.110);
+      // The canonical globe source color can be nearly white on high peaks. At
+      // strategic tangent scale that imported broad chroma/luma created the
+      // remaining gray-white mountain smear even after curvature was clamped.
+      // Keep source-color identity, but cap its share as physical texels become
+      // coarse; elevation/moisture/mountain identity remains in localPalette.
+      const strategicSourceBand=smoothstep01(clamp((metersPerTexel-220)/900,0,1));
+      const strategicSourceCap=lerp(.110,.046,strategicSourceBand);
+      const macroIdentityWeight=clamp(.040+coarseIdentity*.050+mountainIdentity*.012,.040,strategicSourceCap);
       let base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
       pushRange("sourceLuma",luma3(sourceColor));pushRange("paletteLuma",luma3(localPalette));
       pushRange("elevation",elevationBase);pushRange("moisture",moistureBase);
@@ -6337,7 +6370,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // under broad low-frequency relief. Restore chroma while preserving the
       // computed luminance, so this changes only presentation and not authority.
       if(sample?.land&&metersPerTexel>18){
-        const chromaRestore=.28*smoothstep01(clamp((metersPerTexel-18)/82,0,1));
+        const chromaRestore=.42*smoothstep01(clamp((metersPerTexel-18)/82,0,1));
         const displayLuma=luma3(displayColor),paletteLuma=luma3(localPalette);
         const chromaTarget=localPalette.map(v=>clamp(v+(displayLuma-paletteLuma),0,1));
         displayColor=displayColor.map((v,i)=>lerp(v,chromaTarget[i],chromaRestore));
@@ -6500,7 +6533,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-access-morphology-map-detail-v24",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-access-morphology-map-detail-v25",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
