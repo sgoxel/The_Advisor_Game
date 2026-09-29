@@ -8,6 +8,9 @@ let lastNpcVisibilityState=Object.freeze({
   hiddenIndoorIds:Object.freeze([]),
   hiddenOccludedIds:Object.freeze([]),
   visibleResidentIds:Object.freeze([]),
+  visibleCrowdIds:Object.freeze([]),
+  hiddenCrowdIds:Object.freeze([]),
+  crowd:Object.freeze({active:false,activeCount:0,requestedCount:0,presentationOnly:true}),
   simulationAuthorityPreserved:true
 });
 const DEVELOPMENT_MODE_KEY="the-advisor-game:development-mode";
@@ -557,6 +560,16 @@ function characterTextureUrlForProfession(profession){
     default:return "assets/characters/npc_market_vendor_female_01.png";
   }
 }
+function crowdTextureUrlForVisualRole(role){
+  switch(String(role||"")){
+    case "traveler":return "assets/characters/npc_merchant_male_01.png";
+    case "laborer":return "assets/characters/npc_woodcutter_male_01.png";
+    case "guard":return "assets/characters/npc_guard_male_01.png";
+    case "farmer":return "assets/characters/npc_farmer_male_01.png";
+    case "craft":return "assets/characters/npc_blacksmith_male_01.png";
+    default:return "assets/characters/npc_market_vendor_female_01.png";
+  }
+}
 
 function relativeTileNumber(value,base,limit=16){
   try{
@@ -599,6 +612,9 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
   const maxY=BigInt(halfRows+CHARACTER_VISIBILITY_MARGIN_TILES);
   const hiddenIndoorIds=[];
   const hiddenOccludedIds=[];
+  const exactAvoidPoints=[];
+  const hiddenCrowdIds=[];
+  const visibleCrowdIds=[];
 
   if(protagonist){
     visibleCharacters.push(Object.freeze({
@@ -619,6 +635,7 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
     const movement=window.ResidentMovement?.get?.(resident.id)||null;
     const authoritative=movement?.position||activity?.target;
     if(!authoritative)continue;
+    exactAvoidPoints.push(Object.freeze({x:String(authoritative.x),y:String(authoritative.y)}));
     const presentation=window.ResidentMovement?.presentation?.(resident.id)||null;
     const presentationOffset=presentation?.offset||Object.freeze({x:0,y:0});
     const id=`resident:${resident.id}`;
@@ -656,10 +673,43 @@ function visibleCharacterSpecs(campaign,center,columns,rows,tileSize){
     }));
   }
 
+  const crowdMobile=Math.min(Number(window.innerWidth||1280),Number(window.innerHeight||720))<520;
+  const crowdState=campaign?.seed&&window.CrowdPresentation
+    ?CrowdPresentation.snapshot(campaign.seed,GameTime.getNow(),center,{
+      mobile:crowdMobile,
+      avoidPoints:exactAvoidPoints
+    })
+    :Object.freeze({active:false,activeCount:0,requestedCount:0,specs:Object.freeze([]),presentationOnly:true});
+  for(const crowd of crowdState.specs||[]){
+    const point=crowd?.point;if(!point)continue;
+    const presentationOffset=crowd.presentationOffset||Object.freeze({x:0,y:0});
+    if(npcOccludedByBuilding(campaign.seed,point,presentationOffset)){
+      hiddenCrowdIds.push(String(crowd.id));continue;
+    }
+    const offset=Camera.offsetFrom(point);
+    if(!offset){hiddenCrowdIds.push(String(crowd.id));continue;}
+    const dx=BigInt(offset.x),dy=BigInt(offset.y);
+    if(dx<-maxX||dx>maxX||dy<-maxY||dy>maxY){
+      hiddenCrowdIds.push(String(crowd.id));continue;
+    }
+    visibleCharacters.push(Object.freeze({
+      ...crowd,
+      textureUrl:crowdTextureUrlForVisualRole(crowd.visualRole),
+      point:Object.freeze({x:String(point.x),y:String(point.y)}),
+      presentationOffset,
+      frameIndex:0
+    }));
+    visibleCrowdIds.push(String(crowd.id));
+  }
+
   lastNpcVisibilityState=Object.freeze({
     hiddenIndoorIds:Object.freeze(hiddenIndoorIds.slice()),
     hiddenOccludedIds:Object.freeze(hiddenOccludedIds.slice()),
     visibleResidentIds:Object.freeze(visibleCharacters.filter(item=>item.role==="resident").map(item=>item.id)),
+    visibleCrowdIds:Object.freeze(visibleCrowdIds.slice()),
+    hiddenCrowdIds:Object.freeze(hiddenCrowdIds.slice()),
+    crowd:crowdState,
+    exactSimulatedResidentCount:roster.length,
     simulationAuthorityPreserved:true
   });
   return Object.freeze({
@@ -2998,6 +3048,7 @@ window.AppUI=Object.freeze({
   refreshResidentCharacters,
   residentMovementSnapshot:()=>window.ResidentMovement?.snapshot?.()||null,
   npcVisibilitySnapshot:()=>lastNpcVisibilityState,
+  crowdPresentationSnapshot:()=>window.CrowdPresentation?.last?.()||null,
   refreshResidentMovementProof:()=>renderResidentMovementProof(),
   residentMovementProofSnapshot:()=>window.ResidentMovement?.proofSnapshot?.()||lastResidentMovementProof,
   refreshResidentActionProof:()=>renderResidentActionProof(),
