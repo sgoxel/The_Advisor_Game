@@ -4797,10 +4797,15 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   const mottle=surfaceValueNoise(east,north,700,salt+31)*.035*wField+
     surfaceValueNoise(east,north,280,salt+37)*.026*wFine+
     surfaceValueNoise(east,north,120,salt+41)*.014*wCopse;
+  // Map-scale readability comes from one continuous registered-meter cover
+  // field, not from parcel meshes or camera-relative decoration. Stronger chroma
+  // separation reveals woodland/meadow/dry openings only when physically
+  // resolvable, so refinement adds information without changing world identity.
+  const coverContrast=lerp(1.20,1.78,smoothstep01(clamp((150-metersPerTexel)/145,0,1)));
   return [
-    mottle*.82-forestDelta*.045-copse*.018+dryField*.050+meadow*.014,
-    mottle-forestDelta*.036-copse*.014+dryField*.026+meadow*.042,
-    mottle*.60-forestDelta*.030-copse*.016+dryField*.004+meadow*.010
+    (mottle*.76-forestDelta*.105-copse*.026+dryField*.095+meadow*.010)*coverContrast,
+    (mottle*.94-forestDelta*.010-copse*.008+dryField*.038+meadow*.086)*coverContrast,
+    (mottle*.48-forestDelta*.082-copse*.024+dryField*.006+meadow*.016)*coverContrast
   ];
 }
 function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRing=false){
@@ -4878,22 +4883,21 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Keep their SEED-derived identity as an accent, while deriving most local
       // albedo from the same authoritative land/elevation state at every LOD.
       const elevationBase=Number(sample?.elevationMeters||0),moistureBase=clamp(Number(sample?.moisture||.5),0,1);
-      const alpineBase=smoothstep01((elevationBase-1700)/2600),dry=1-moistureBase;
-      const localPalette=sample?.land
-        ? [lerp(.20+.08*dry,.45,alpineBase),lerp(.34+.10*moistureBase,.48,alpineBase),lerp(.16+.06*moistureBase,.39,alpineBase)]
-        : [.055,.19,.34];
-      // Preserve macro hue only as a subtle identity accent. The dominant local
-      // map albedo is continuous authoritative elevation/moisture, preventing
-      // continent-scale palette cells from reading as giant polygon wedges.
-      // Preserve more of the canonical globe color at map-scale local LODs, then
-      // hand progressively to the local palette as texels approach gameplay scale.
-      // This keeps continent/mountain identity continuous through the projection
-      // handoff without inventing new geography or introducing LOD-specific tints.
       const mountainIdentity=clamp(Number(sample?.mountainInfluence||0),0,1);
-      // Keep the globe's macro hue as identity, not as a giant local-map color
-      // field. Map-scale readability comes from registered-meter relief/cover
-      // below, which stays continuous across focus/medium/outer layers.
-      const macroIdentityWeight=clamp(.09+mountainIdentity*.07,.09,.18);
+      const alpineBase=smoothstep01((elevationBase-1700)/2600),dry=1-moistureBase;
+      // Keep lowland, upland, and alpine presentation distinguishable using only
+      // canonical elevation/moisture/mountain inputs. These weights never create
+      // simulation identity; they expose existing SEED geography at map scale.
+      const uplandBase=smoothstep01((elevationBase-260)/1850),uplandWeight=clamp(Math.max(uplandBase,mountainIdentity*.72),0,1);
+      const lowlandPalette=[.16+.10*dry,.35+.14*moistureBase,.105+.065*moistureBase];
+      const uplandPalette=[.30+.085*dry,.335+.055*moistureBase,.215+.045*moistureBase];
+      const alpinePalette=[.455,.465,.415];
+      const foothillPalette=lowlandPalette.map((v,i)=>lerp(v,uplandPalette[i],uplandWeight));
+      const localPalette=sample?.land?foothillPalette.map((v,i)=>lerp(v,alpinePalette[i],alpineBase)):[.050,.18,.34];
+      // Preserve enough canonical globe hue to keep the same macro terrain
+      // recognizable through the projection handoff, then converge smoothly.
+      const coarseIdentity=smoothstep01(clamp((metersPerTexel-4)/70,0,1));
+      const macroIdentityWeight=clamp(.16+coarseIdentity*.34+mountainIdentity*.08,.16,.56);
       const base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
       const elevation=Number(sample?.elevationMeters||0);
       const relief=clamp(elevation/5200,0,1);
@@ -4934,7 +4938,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const h0=elevation+terrainDetailHeight(worldEast,worldNorth,photometricMetersPerTexel,detailSalt);
         const hx=Number(sx.elevationMeters||0)+terrainDetailHeight(sx.registeredEastMeters,sx.registeredNorthMeters,photometricMetersPerTexel,detailSalt);
         const hy=Number(sy.elevationMeters||0)+terrainDetailHeight(sy.registeredEastMeters,sy.registeredNorthMeters,photometricMetersPerTexel,detailSalt);
-        const exaggeration=2.2,gx=(hx-h0)/step*exaggeration,gy=(hy-h0)/step*exaggeration,nl=Math.hypot(gx,gy,1);
+        const exaggeration=lerp(2.6,5.0,smoothstep01(clamp((metersPerTexel-2)/70,0,1))),gx=(hx-h0)/step*exaggeration,gy=(hy-h0)/step*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
         const focusHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.30,.30,.68);
         shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.87:.79,contextRing?1.12:1.18);
