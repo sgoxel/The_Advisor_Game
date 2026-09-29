@@ -99,10 +99,14 @@ assert.strictEqual(stats.lazyChunkMaterialization,true,"micro-location lost lazy
 
 const chunkSource=fs.readFileSync("scripts/render/playcanvas/chunk-world-data.js","utf8");
 const meshSource=fs.readFileSync("scripts/render/playcanvas/terrain-chunk-mesh.js","utf8");
+const stageSource=fs.readFileSync("scripts/world/planet-stage.js","utf8");
 const html=fs.readFileSync("index.html","utf8");
 assert(/MicroLocations\?\.forChunk/.test(chunkSource),"chunk world data is not wired to MicroLocations");
+assert(/MicroLocations\?\.forChunk/.test(stageSource),"canonical PlanetStage is not wired to MicroLocations");
+assert(/microLocations:Object\.freeze/.test(stageSource),"PlanetStage snapshot does not expose micro-location telemetry");
 for(const semantic of ["campfire","tent","ruin-wall","shrine","grave","dock","fish-rack","unusual-tree","quarry","cave-mouth"]){
-  assert(meshSource.includes('semantic==="'+semantic+'"'),"renderer missing micro-location semantic "+semantic);
+  assert(meshSource.includes('semantic==="'+semantic+'"'),"chunk renderer missing micro-location semantic "+semantic);
+  assert(stageSource.includes('semantic==="'+semantic+'"'),"canonical PlanetStage missing micro-location semantic "+semantic);
 }
 assert(html.indexOf("scripts/world/world-destinations.js")<html.indexOf("scripts/world/micro-locations.js"),"MicroLocations must load after WorldDestinations");
 assert(html.indexOf("scripts/world/micro-locations.js")<html.indexOf("scripts/world/planet-stage.js"),"MicroLocations must load before PlanetStage world navigation");
