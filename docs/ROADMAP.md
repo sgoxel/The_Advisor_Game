@@ -184,7 +184,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S007-008` — Deterministic Lazy Catch-Up + Offline World Progression — COMPLETED
 - `WP-S007-009` — Versioned Save/Load, Deterministic Resume + World Compatibility
 - `WP-S007-009-001` — Persistent Generated-World Cache + Incremental Campaign Resume Store
-- `WP-S007-010` — World Simulation Budgets, Backpressure + Runtime Telemetry
+- `WP-S007-010` — World Simulation Budgets, Backpressure + Runtime Telemetry — ACCEPTED PENDING DEPLOYMENT (AGENT #6; implementation head 2183c06c72c02d6a34fdc25515fbc0464f7b0f82; dedicated workflow 36526072886 on evidence head 284a66f356cdf2844c2f2d6f93533f3bbf4d8601 SUCCESS; deterministic 160-event budget stress 10.0/10, constrained background max 8 events/slice vs current-authority max 32, identical authoritative order/outcome, bounded tier/exact-NPC/background work, persistence telemetry hooks, visible-frame correlation, telemetryAuthority=false, fullWorldScan=false, perFrameWorldScan=false; VISUAL: N/A; awaiting successful final deployment before COMPLETED)
 - `WP-S007-011` — Local Dynamic Event Vignettes + Reactive Scheduling
 - `WP-S007-012` — Persistent World Consequence Projection + Local Recovery
 - `WP-S007-013` — Rare Traveling Encounters + Surprise Event Stream
