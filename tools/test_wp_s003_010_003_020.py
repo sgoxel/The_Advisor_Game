@@ -379,6 +379,8 @@ def capture_navigation_sequence(driver):
             "phase":f"land-zoom-{idx}",
             "scale":stage["zoom"]["displayScaleLabel"],
             "scalar":stage["zoom"]["scalar"],
+            "presentation":stage.get("projection",{}).get("presentation"),
+            "resourceBudget":stage.get("projection",{}).get("resourceBudget"),
             "screenshot":capture(driver,f"visual-land-zoom-{idx}"),
         })
     WebDriverWait(driver, 90).until(lambda d: not bool(d.execute_script("return window.PlanetStage.snapshot().zoom.animating")))
