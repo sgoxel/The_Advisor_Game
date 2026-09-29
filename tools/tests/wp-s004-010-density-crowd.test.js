@@ -22,7 +22,7 @@ global.SettlementActivityRhythm={
 };
 global.Walkability={classify:()=>({walkable:true})};
 global.GeographyFoundation={getTerrainType:()=>"grass"};
-global.StartingVillage={local:()=>({}),isRoadReserved:()=>true};
+global.StartingVillage={plan:()=>({center:plans?.village?.center||{x:"0",y:"0"},name:"Proof Village"}),local:()=>({}),isRoadReserved:()=>true};
 
 const plans={
   village:Object.freeze({id:"V",name:"Proof Village",classId:"village",role:"local",center:Object.freeze({x:"0",y:"0"}),population:Object.freeze({planned:500})}),
@@ -78,6 +78,7 @@ const cityCore=CrowdPresentation.snapshotForPlan(seed,plans.city,day,{mobile:fal
 const cityFringeFocus={x:String(BigInt(plans.city.center.x)+18n),y:plans.city.center.y};
 const cityFringe=CrowdPresentation.snapshotForPlan(seed,plans.city,day,{mobile:false,avoidPoints:[],focus:cityFringeFocus});
 const resolvedCity=CrowdPresentation.snapshot(seed,day,plans.city.center,{mobile:false,avoidPoints:[]});
+const resolvedVillage=CrowdPresentation.snapshot(seed,day,plans.village.center,{mobile:false,avoidPoints:[]});
 
 assert(village.activeCount<town.activeCount&&town.activeCount<city.activeCount,"class density order must be visible");
 assert(cityNight.activeCount<city.activeCount,"night crowd must be lower than daytime");
@@ -85,6 +86,9 @@ assert.strictEqual(cityCore.districtBand,"core");
 assert.strictEqual(cityFringe.districtBand,"fringe");
 assert(cityFringe.activeCount<cityCore.activeCount,"fringe district must be less dense than city core");
 assert.strictEqual(resolvedCity.settlementClass,"city","bounded hot-path resolver must find city at its center");
+CrowdPresentation.reset();
+assert.strictEqual(resolvedVillage.settlementClass,"village","starting village must resolve as village at its canonical center");
+assert.strictEqual(resolvedVillage.districtBand,"core","starting village center must use core district density");
 assert(Number.isFinite(resolvedCity.resolveMs)&&Number.isFinite(resolvedCity.totalUpdateMs),"hot-path timing telemetry missing");
 assert(mobileCity.activeCount<=CrowdPresentation.MOBILE_ACTIVE_CROWD,"mobile cap exceeded");
 assert(city.activeCount<=CrowdPresentation.MAX_ACTIVE_CROWD,"desktop cap exceeded");
