@@ -3302,7 +3302,7 @@ function ensureLocalStaticMaterials(){
     road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.36,.27,.12,.88),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.10),lotOverview:make("LocalOccupiedLotOverview",.46,.36,.14,.34),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.10),lotOverview:make("LocalOccupiedLotOverview",.50,.39,.16,.52),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3490,12 +3490,12 @@ function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
   // Keep the authoritative settlement composition large enough to read as
   // actual world structure, not a locator glyph, then converge rapidly to 1:1.
-  const targetFraction=tier==="footprint"?.13:tier==="route"?.135:tier==="coarse"?.20:.20;
+  const targetFraction=tier==="footprint"?.13:tier==="route"?.16:tier==="coarse"?.20:.20;
   const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
   // Overview tiers are presentation aids, not locator glyphs. Keep the
   // authoritative village readable without inflating its ring/roads into a
   // screen-dominating target; closer tiers converge naturally toward 1:1.
-  const cap=tier==="footprint"?6:tier==="route"?6:tier==="coarse"?5:18;
+  const cap=tier==="footprint"?6:tier==="route"?7:tier==="coarse"?5:18;
   return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
 }
 function settlementPresentationLift(tier,value=zoomState.scalar){
@@ -3582,16 +3582,15 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
     }
     uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
   };
-  // Use one subdued filled patch per authoritative occupied lot. The previous
-  // four-edge outline treatment multiplied geometry and visually emphasized a
-  // ring/target silhouette at route scale. Filled canonical bounds read as an
-  // irregular settlement fabric while remaining presentation-only.
-  const inset=.08;
+  const edge=.17;
   for(const record of records){
     const b=record?.bounds;if(!b)continue;
-    const minX=Number(b.minX)-.5+inset,maxX=Number(b.maxX)+.5-inset,minY=Number(b.minY)-.5+inset,maxY=Number(b.maxY)+.5-inset;
+    const minX=Number(b.minX)-.5,maxX=Number(b.maxX)+.5,minY=Number(b.minY)-.5,maxY=Number(b.maxY)+.5;
     if(![minX,maxX,minY,maxY].every(Number.isFinite)||maxX<=minX||maxY<=minY)continue;
-    addQuad(minX,minY,maxX,maxY);
+    addQuad(minX,minY,maxX,Math.min(maxY,minY+edge));
+    addQuad(minX,Math.max(minY,maxY-edge),maxX,maxY);
+    addQuad(minX,minY+edge,Math.min(maxX,minX+edge),maxY-edge);
+    addQuad(Math.max(minX,maxX-edge),minY+edge,maxX,maxY-edge);
     count++;
   }
   if(!segmentCount)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
@@ -3599,7 +3598,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   const entity=new pc.Entity("CanonicalOccupiedLotOutlines");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.lotOverview,entity)];
   localStaticRoot.addChild(entity);localSettlementLotGeometry=mesh;
-  return Object.freeze({count,segmentCount,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-filled-fabric-v3"});
+  return Object.freeze({count,segmentCount,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-outlines-v2"});
 }
 function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tier){
   localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;localSettlementLotGeometry?.destroy?.();localSettlementLotGeometry=null;
@@ -3626,7 +3625,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
     uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
   };
   if(tier==="route"){
-    const half=.16;
+    const half=.22;
     for(const [x,y] of roadCells){
       addQuad(x-half,y-half,x+half,y+half);
       if(roadSet.has((x+1)+","+y))addQuad(x+half,y-half,x+1-half,y+half);
@@ -3963,8 +3962,6 @@ function ensureLocalCrowdMaterials(){
   material.__atmosphereBaseDiffuse=[1,1,1];
   material.vertexColors=true;
   material.diffuseVertexColor=true;
-  material.emissive.set(.14,.14,.12);
-  material.emissiveIntensity=.7;
   material.roughness=.92;
   material.metalness=0;
   if(pc.CULLFACE_NONE!==undefined)material.cull=pc.CULLFACE_NONE;
@@ -4016,12 +4013,11 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
   ensureLocalCrowdMaterials();
   const dims=frame.dims,unit=Math.max(1e-9,Number(dims.metersPerUnit)||1),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
   const halfW=Math.max(1,Number(dims.patchWidth||0)*.55),halfH=Math.max(1,Number(dims.patchHeight||0)*.55);
-  const resourceTile=mapWorldTileAt(resource.lat0,resource.lon0);
   const positions=[],normals=[],colors=[],indices=[],visibleSpecs=[];
   const roleColors=Object.freeze({
-    market:Object.freeze([196,132,72,255]),traveler:Object.freeze([109,145,194,255]),
-    laborer:Object.freeze([166,118,76,255]),guard:Object.freeze([92,126,184,255]),
-    farmer:Object.freeze([105,154,81,255]),craft:Object.freeze([183,105,81,255])
+    market:Object.freeze([122,84,51,255]),traveler:Object.freeze([77,97,122,255]),
+    laborer:Object.freeze([87,74,56,255]),guard:Object.freeze([56,79,110,255]),
+    farmer:Object.freeze([71,99,61,255]),craft:Object.freeze([110,71,59,255])
   });
   const quad=(x0,z0,x1,z1,ground,height,color,nx,nz)=>{
     const base=positions.length/3;
@@ -4029,34 +4025,17 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     for(let i=0;i<4;i++){normals.push(nx,0,nz);colors.push(...color);}
     indices.push(base,base+2,base+1,base+1,base+2,base+3);
   };
-  const diamond=(x,z,y,r,color)=>{
-    const base=positions.length/3;
-    positions.push(x-r,y,z,x,y,z-r,x+r,y,z,x,y,z+r);
-    for(let i=0;i<4;i++){normals.push(0,1,0);colors.push(...color);}
-    indices.push(base,base+1,base+2,base,base+2,base+3);
-  };
   for(const spec of crowd.specs){
-    let east=0,north=0,directLocal=true;
-    try{
-      const dx=Number(BigInt(String(spec.point.x))-BigInt(String(resourceTile.x)));
-      const dy=Number(BigInt(String(spec.point.y))-BigInt(String(resourceTile.y)));
-      if(!Number.isFinite(dx)||!Number.isFinite(dy)||Math.abs(dx)>128||Math.abs(dy)>128)throw new Error("crowd-local-wrap");
-      east=dx*tileMeters;north=dy*tileMeters;
-    }catch(_){
-      directLocal=false;
-      const ll=worldLatLonForTile(spec.point.x,spec.point.y);
-      const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,ll.latitudeRadians,ll.longitudeRadians);
-      east=Number(delta.eastMeters||0);north=Number(delta.northMeters||0);
-    }
-    east+=Number(spec.presentationOffset?.x||0)*tileMeters;
-    north+=Number(spec.presentationOffset?.y||0)*tileMeters;
+    const ll=worldLatLonForTile(spec.point.x,spec.point.y);
+    const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,ll.latitudeRadians,ll.longitudeRadians);
+    const east=Number(delta.eastMeters||0)+Number(spec.presentationOffset?.x||0)*tileMeters;
+    const north=Number(delta.northMeters||0)+Number(spec.presentationOffset?.y||0)*tileMeters;
     if(Math.abs(east)>halfW||Math.abs(north)>halfH)continue;
     const ground=localGroundHeightUnits(east,north,frame)+.018,posX=east/unit,posZ=-north/unit;
-    const height=Math.max(.09,1.56/unit),halfWidth=Math.max(.022,.28/unit),headRadius=Math.max(.018,.20/unit),color=roleColors[spec.visualRole]||roleColors.market;
+    const height=Math.max(.075,1.44/unit),halfWidth=Math.max(.018,.22/unit),color=roleColors[spec.visualRole]||roleColors.market;
     quad(posX-halfWidth,posZ,posX+halfWidth,posZ,ground,height,color,0,1);
     quad(posX,posZ-halfWidth,posX,posZ+halfWidth,ground,height,color,1,0);
-    diamond(posX,posZ,ground+height*.86,headRadius,color);
-    visibleSpecs.push(Object.freeze({...spec,directLocalProjection:directLocal}));
+    visibleSpecs.push(spec);
   }
   let mergedEntity=null;
   if(positions.length){
@@ -4084,8 +4063,7 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     resolveMs:Number(crowd.resolveMs||0),sourceUpdateMs:Number(crowd.updateMs||0),totalSourceUpdateMs:Number(crowd.totalUpdateMs||0),
     exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
     mobile,pooledStableIds:Boolean(crowd.pooledStableIds),localCulling:true,lowFrequencyMotion:Boolean(crowd.lowFrequencyMotion),
-    mergedBatch:true,sharedMaterialCount:mergedEntity?1:0,directLocalProjectionCount:visibleSpecs.filter(spec=>spec.directLocalProjection).length,
-    topFacingHeadMarkers:true,
+    mergedBatch:true,sharedMaterialCount:mergedEntity?1:0,
     presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,
     inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
   };
@@ -5046,7 +5024,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   // Overview settlement shape is now derived from occupied StartingVillage lots
   // plus their adjacent authoritative road cells. It is a thin boundary, never
   // a filled circular wash or camera-relative locator.
-  const envelope=tier==="footprint"?addCanonicalSettlementEnvelope(reveal,scale,unit,semanticFrame,lift,tier):Object.freeze({active:false,segmentCount:0,roadAuthorityQueryCount:0,mode:"none"});
+  const envelope=(tier==="footprint"||tier==="route")?addCanonicalSettlementEnvelope(reveal,scale,unit,semanticFrame,lift,tier):Object.freeze({active:false,segmentCount:0,roadAuthorityQueryCount:0,mode:"none"});
   // Flat occupied-lot patches expose the settlement's real irregular land-use
   // pattern at overview scales without leaking building geometry or inventing a
   // circular locator. They remain subordinate to roads through alpha + height.
@@ -5336,7 +5314,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       const uplandBase=smoothstep01((elevationBase-620)/2150),uplandWeight=clamp(Math.max(uplandBase,mountainIdentity*.58),0,1);
       const lowlandPalette=[.16+.10*dry,.35+.14*moistureBase,.105+.065*moistureBase];
       const uplandPalette=[.255+.080*dry,.365+.070*moistureBase,.190+.050*moistureBase];
-      const alpinePalette=[.34+.10*dry,.39+.08*moistureBase,.25+.07*moistureBase];
+      const alpinePalette=[.440,.455,.410];
       const foothillPalette=lowlandPalette.map((v,i)=>lerp(v,uplandPalette[i],uplandWeight));
       const localPalette=sample?.land?foothillPalette.map((v,i)=>lerp(v,alpinePalette[i],alpineBase)):[.050,.18,.34];
       // Preserve enough canonical globe hue to keep the same macro terrain
@@ -5415,18 +5393,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const slopeTone=-slopeSignal*(contextRing?lerp(.012,.026,contextRefineWeight):lerp(.020,.042,focusRefineWeight));
         const drainageTone=moistureCurve*(contextRing?lerp(.010,.018,contextRefineWeight):lerp(.016,.032,focusRefineWeight))-moistureGradient*(contextRing?.008:.012);
         const structureTone=broadRidgeTone+curvatureTone+slopeTone+drainageTone;
-        // Canonical slope aspect + moisture expose coherent landform hierarchy
-        // without introducing camera-relative or patch-relative noise. This
-        // breaks the broad gray wash at map scale while preserving the same
-        // PlanetGeography elevation/moisture truth at every LOD.
-        const aspectWarm=clamp((canonicalGx*.72-canonicalGy*.34)*3.2,-1,1);
-        const valleyMoist=clamp(moistureBase+Math.max(0,curvatureSignal)*.16,0,1);
-        const landformChroma=contextRing?lerp(.55,.78,contextRefineWeight):lerp(.72,1,focusRefineWeight);
-        cover=[
-          structureTone+aspectWarm*.026*landformChroma-valleyMoist*.010*landformChroma,
-          structureTone*.96+drainageTone*.12+valleyMoist*.032*landformChroma,
-          curvatureTone*.72+broadRidgeTone*.74+slopeTone*.62+drainageTone*.56-aspectWarm*.020*landformChroma
-        ];
+        cover=[structureTone,structureTone*.96+drainageTone*.12,curvatureTone*.72+broadRidgeTone*.74+slopeTone*.62+drainageTone*.56];
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
         const coverGain=contextRing?contextRefineWeight*.20:lerp(.24,.84,focusRefineWeight);
@@ -5577,7 +5544,7 @@ function finalizeLocalResource(job,result){
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
-      topographicSignalRevision:"canonical-multiscale-elevation-drainage-v6",topographicSignalAuthority:"PlanetGeography elevation slope/curvature at two physical baselines + moisture sampled through SeedCoordinateFabric registered meters",
+      topographicSignalRevision:"canonical-multiscale-elevation-drainage-v5",topographicSignalAuthority:"PlanetGeography elevation slope/curvature at two physical baselines + moisture sampled through SeedCoordinateFabric registered meters",
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
