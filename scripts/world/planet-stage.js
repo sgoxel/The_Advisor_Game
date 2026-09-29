@@ -950,7 +950,18 @@ function gameplayCenterMarkerTelemetry(layer){
   const rect=canvas.getBoundingClientRect(),rootRect=root.getBoundingClientRect(),offsetX=rect.left-rootRect.left,offsetY=rect.top-rootRect.top;
   marker.style.left=(offsetX+projected.screenX).toFixed(2)+"px";marker.style.top=(offsetY+projected.screenY).toFixed(2)+"px";
   const code=marker.querySelector("code"),shortCell=cell.cellX+","+cell.cellY;
-  if(code)code.textContent=settlementOverview?"CELL "+shortCell:"CELL "+shortCell+" · "+center.latitudeDegrees.toFixed(3)+"°, "+center.longitudeDegrees.toFixed(3)+"°";
+  if(code){
+    code.textContent=settlementOverview?"CELL "+shortCell:"CELL "+shortCell+" · "+center.latitudeDegrees.toFixed(3)+"°, "+center.longitudeDegrees.toFixed(3)+"°";
+    // Keep the exact center marker, but move its readout off the tiny canonical
+    // road/lot fabric at settlement-approach scale so the world structure can
+    // be inspected rather than covered by UI.
+    if(settlementOverview){
+      code.style.position="absolute";code.style.left="50%";code.style.top="-54px";
+      code.style.transform="translateX(-50%) scale(.82)";code.style.opacity=".72";
+    }else if(root?.dataset?.workFocus!=="true"){
+      code.style.position="";code.style.left="";code.style.top="";code.style.transform="";code.style.opacity="";
+    }
+  }
   marker.dataset.cellId=cell.id;marker.dataset.tile=center.worldTile.x+","+center.worldTile.y;
   return Object.freeze({
     visible:true,screenX:Number(projected.screenX.toFixed(2)),screenY:Number(projected.screenY.toFixed(2)),
@@ -3660,7 +3671,7 @@ function addCanonicalSettlementEnvelope(reveal,presentationScale,unit,frame,lift
   }
   return Object.freeze({active:true,segmentCount:points.length,roadAuthorityQueryCount:envelope.roadAuthorityQueryCount||0,mode:"authoritative-lot-road-envelope-v2"});
 }
-function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift){
+function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift,tier){
   localSettlementLotGeometry?.destroy?.();localSettlementLotGeometry=null;
   if(!pc||!device)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
   const records=[...(window.StartingVillage?.buildPlots?.(activeSeed)||[]),...(reveal?.specialLots||[])];
@@ -3691,19 +3702,17 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
     const b=record?.bounds;if(!b)continue;
     const minX=Number(b.minX)-.28,maxX=Number(b.maxX)+.28,minY=Number(b.minY)-.28,maxY=Number(b.maxY)+.28;
     if(![minX,maxX,minY,maxY].every(Number.isFinite)||maxX<=minX||maxY<=minY)continue;
-    const special=Boolean(record?.kind),fill=special?[142,101,58]:[76,72,48],border=special?[236,181,91]:[150,128,76];
-    if(!addQuad(minX,minY,maxX,maxY,fill,0))continue;
+    const special=Boolean(record?.kind),fill=[142,101,58],border=special?[236,181,91]:[176,150,86];
     count++;
-    // Perimeter strips use the exact authoritative lot bounds. They make the
-    // irregular occupied fabric readable at settlement-approach scale without
-    // inventing buildings, circular envelopes or camera-relative geometry.
-    if(special){
-      const bw=Math.min(.22,Math.max(.12,Math.min(maxX-minX,maxY-minY)*.075));
-      if(addQuad(minX,minY,maxX,minY+bw,border,.006))outlineSegmentCount++;
-      if(addQuad(minX,maxY-bw,maxX,maxY,border,.006))outlineSegmentCount++;
-      if(addQuad(minX,minY+bw,minX+bw,maxY-bw,border,.006))outlineSegmentCount++;
-      if(addQuad(maxX-bw,minY+bw,maxX,maxY-bw,border,.006))outlineSegmentCount++;
-    }
+    // Ordinary overview parcels are thin authoritative perimeters so they do
+    // not overpower the actual road network. Special lots retain a restrained
+    // fill because they are genuine canonical landmarks, not invented detail.
+    if(special)addQuad(minX,minY,maxX,maxY,fill,0);
+    const bw=Math.min(.25,Math.max(.14,Math.min(maxX-minX,maxY-minY)*.082));
+    if(addQuad(minX,minY,maxX,minY+bw,border,.006))outlineSegmentCount++;
+    if(addQuad(minX,maxY-bw,maxX,maxY,border,.006))outlineSegmentCount++;
+    if(addQuad(minX,minY+bw,minX+bw,maxY-bw,border,.006))outlineSegmentCount++;
+    if(addQuad(maxX-bw,minY+bw,maxX,maxY-bw,border,.006))outlineSegmentCount++;
   }
   // HousePlans exposes the canonical exterior entrance and its already-chosen
   // nearby road target. Keep those true access links in the same merged
@@ -3712,14 +3721,15 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   for(const house of reveal?.houses||[]){
     const entrance=house?.entrance,target=entrance?.target;
     if(!entrance||!target)continue;
-    if(addConnector(Number(entrance.x),Number(entrance.y),Number(target.x),Number(target.y),.20,[92,72,38]))connectorSegmentCount++;
+    const accessWidth=tier==="route"?.30:.24;
+    if(addConnector(Number(entrance.x),Number(entrance.y),Number(target.x),Number(target.y),accessWidth,[78,62,34]))connectorSegmentCount++;
   }
   if(!count)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
   const entity=new pc.Entity("CanonicalOccupiedLotFills");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.lotOverview,entity)];
   localStaticRoot.addChild(entity);localSettlementLotGeometry=mesh;
-  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount,outlineSegmentCount,connectorSegmentCount,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-access-v6"});
+  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount,outlineSegmentCount,connectorSegmentCount,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-perimeter-access-v7"});
 }
 function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tier){
   localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;
@@ -3761,7 +3771,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
         // closer tiers where it no longer reads as a locator glyph.
         if(!outwardBranch&&!gatewayStem&&!ringCell&&!localPath)continue;
       }
-      const half=tier==="footprint"?(outwardBranch?.30:.10):(outwardBranch?.34:.145);
+      const half=tier==="footprint"?(outwardBranch?.30:.10):(outwardBranch?.40:.20);
       addQuad(x-half,y-half,x+half,y+half);
       if(roadSet.has((x+1)+","+y))addQuad(x+half,y-half,x+1-half,y+half);
       if(roadSet.has(x+","+(y+1)))addQuad(x-half,y+half,x+half,y+1-half);
@@ -5184,7 +5194,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   // Flat occupied-lot patches expose the settlement's real irregular land-use
   // pattern at overview scales without leaking building geometry or inventing a
   // circular locator. They remain subordinate to roads through alpha + height.
-  const lotContext=(tier==="footprint"||tier==="route")?addCanonicalOccupiedLotContext(reveal,scale,unit,semanticFrame,lift):Object.freeze({count:0,mode:"none"});
+  const lotContext=(tier==="footprint"||tier==="route")?addCanonicalOccupiedLotContext(reveal,scale,unit,semanticFrame,lift,tier):Object.freeze({count:0,mode:"none"});
   const occupiedAreaCount=envelope.active||lotContext.count?1:0;
   let roadCount=0,coarseBuildings=0,fullBuildings=0,landmarks=0,vegetation=0,triangles=envelope.segmentCount*12+Number(lotContext.triangleCount||0);
   let roadGeometry=Object.freeze({active:false,cellCount:0,queryCount:0,triangleCount:0,mode:"none"});
@@ -5778,13 +5788,14 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         : lerp(sharedMetersPerTexel,Math.max(metersPerTexel,sharedMetersPerTexel*.14),focusRefineWeight*.94);
       const sharedMacro=worldSurfaceDetailValue(worldEast,worldNorth,sharedMetersPerTexel,phase)*contextDetailStrength;
       const nativeMacro=worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase);
-      const refinementGain=contextRing?contextRefineWeight*.22:lerp(.18,.90,focusRefineWeight);
-      const macroBase=sharedMacro+(nativeMacro-sharedMacro)*refinementGain;
-      // Increase only continuous registered-meter information. This restores
-      // readable map-scale terrain without resurrecting the broad source-color
-      // wedges that looked like LOD boundaries.
-      const detailContrast=contextRing?lerp(1.04,1.24,contextRefineWeight):lerp(1.10,1.68,focusRefineWeight);
-      const macro=macroBase*detailContrast;
+      // Keep the shared parent term at one constant gain over the whole child.
+      // Only the fine-minus-parent residual is feathered toward focus. A radial
+      // or edge-varying gain on the parent itself produced the pale 1/500 LOD
+      // boundary seen in fresh evidence.
+      const refinementGain=contextRing?contextRefineWeight*.22:focusRefineWeight*.86;
+      const sharedMacroContrast=contextRing?1.06:1.10;
+      const residualMacroContrast=contextRing?1.20:lerp(1.18,1.52,focusRefineWeight);
+      const macro=sharedMacro*sharedMacroContrast+(nativeMacro-sharedMacro)*refinementGain*residualMacroContrast;
       pushRange("baseLuma",luma3(base));pushRange("macro",macro);
       let shade=1,cover=[0,0,0];
       if(sample?.land){
@@ -5832,10 +5843,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         cover=[structureTone,structureTone*.95+drainageTone*.12,curvatureTone*.74+slopeTone*.64+drainageTone*.58];
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
-        const coverGain=contextRing?lerp(.12,.34,contextRefineWeight):lerp(.34,.94,focusRefineWeight);
+        const coverGain=contextRing?contextRefineWeight*.30:focusRefineWeight*.88;
         const mapCoverBoost=lerp(1.28,1,smoothstep01(clamp((28-metersPerTexel)/24,0,1)));
-        const coverContrast=(contextRing?lerp(1.04,1.22,contextRefineWeight):lerp(1.10,1.42,focusRefineWeight))*mapCoverBoost;
-        const landCover=sharedCover.map((v,i)=>(v+(nativeCover[i]-sharedCover[i])*coverGain)*coverContrast);
+        const sharedCoverContrast=(contextRing?1.06:1.10)*mapCoverBoost;
+        const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost;
+        const landCover=sharedCover.map((v,i)=>v*sharedCoverContrast+(nativeCover[i]-v)*coverGain*residualCoverContrast);
         cover=cover.map((v,i)=>v+landCover[i]);
       }
       const reliefTintWeight=sample?.land&&metersPerTexel>35?lerp(.06,1,smoothstep01(clamp((180-metersPerTexel)/145,0,1))):1;
@@ -6409,8 +6421,11 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     // Nothing local is shown until a prepared resource exists; the globe keeps
     // ownership meanwhile, so a preparing LOD can never produce a blank frame.
     const tangentVisible=handoff>.02&&Boolean(displayResource);
-    const preparingChild=Boolean(displayResource)&&Boolean(localResources.requestedSignature)&&localResources.requestedSignature!==displayResource.signature;
-    const preparedReveal=projectionPresentationBlendForZoom()*(preparingChild?.18:1);
+    // Google-Earth-style handoff: once a local parent is prepared, keep that
+    // valid textured parent fully visible while its finer child is preparing.
+    // The child still swaps atomically; loading never reveals the low-detail
+    // globe underneath an already-ready local representation.
+    const preparedReveal=projectionPresentationBlendForZoom();
     // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.
     const fineVisible=tangentVisible&&zoomState.scalar>=projectionState.transitionStart;
     tangentPatch.enabled=fineVisible;
@@ -6524,7 +6539,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
   // The overlap lets camera motion remain continuous while both surfaces are
   // still derived from the same canonical lat/lon focus.
   const handoff=projectionHandoffForZoom();
-  const tangentReveal=displayResource?projectionPresentationBlendForZoom()*(localResources.standInActive?.18:1):0;
+  const tangentReveal=displayResource?projectionPresentationBlendForZoom():0;
   const globeFade=tangentReveal;
   planet.enabled=globeFade<.9995;
   if(surfaceMaterial){
