@@ -86,6 +86,9 @@ def state(kind):
         event,events,cardVisible:Boolean(card&&!card.hidden),cardType:card?.dataset?.eventType||"",
         cardText:String(card?.innerText||""),focus:s.canonicalFocus?.worldTile||null,
         localStatic:ls,resourceBudget:rb,npcPresentation:np,signatureReady:Boolean(signatureReady),
+        activeLocalEventCueCount:Number(np.activeLocalEventCueCount||0),
+        activeLocalEventResidentIds:Array.isArray(np.activeLocalEventResidentIds)?np.activeLocalEventResidentIds:[],
+        localEventPresentationRevision:String(np.localEventPresentationRevision||""),
         participants,visibleParticipants
       };
     """,kind)
@@ -103,7 +106,9 @@ try:
             wait.until(lambda _d,k=kind: (
                 state(k)["cardVisible"] and state(k)["cardType"]==k and state(k)["scaleIndex"]==SCALE_INDEX and
                 state(k)["signatureReady"] and bool(state(k)["localStatic"].get("active")) and
-                int(state(k)["localStatic"].get("buildingCount",0))>0 and state(k)["visibleParticipants"]>=2
+                int(state(k)["localStatic"].get("buildingCount",0))>0 and state(k)["visibleParticipants"]>=2 and
+                state(k)["activeLocalEventCueCount"]>=state(k)["visibleParticipants"] and
+                state(k)["localEventPresentationRevision"]=="compact-participant-cues-v1"
             ))
         except TimeoutException:
             raise RuntimeError("event presentation timeout "+kind+": "+json.dumps(state(kind)))
@@ -114,8 +119,13 @@ try:
             raise RuntimeError("event active-count bound failed: "+json.dumps(st))
         if int(st["events"].get("participantCount",0))>4:
             raise RuntimeError("event participant bound failed: "+json.dumps(st))
+        participant_count=int((st["event"] or {}).get("participantCount") or len((st["event"] or {}).get("participants") or []))
         if st["visibleParticipants"]<2 or int(st["localStatic"].get("buildingCount",0))<=0:
             raise RuntimeError("event participants/local context not visibly materialized: "+json.dumps(st))
+        if st["activeLocalEventCueCount"]<st["visibleParticipants"] or st["activeLocalEventCueCount"]>max(1,participant_count)*3:
+            raise RuntimeError("event cue count outside compact bounded contract: "+json.dumps(st))
+        if len(st["activeLocalEventResidentIds"])<st["visibleParticipants"] or st["localEventPresentationRevision"]!="compact-participant-cues-v1":
+            raise RuntimeError("event cue resident/revision telemetry mismatch: "+json.dumps(st))
         if not st["events"].get("eventDriven") or st["events"].get("perFrameScan") or st["events"].get("fullSettlementPerFrameScan") or st["events"].get("fullWorldScan"):
             raise RuntimeError("event scheduling architecture regression: "+json.dumps(st))
         if kind.replace("-"," ").split()[0].upper() not in st["cardText"].upper():
