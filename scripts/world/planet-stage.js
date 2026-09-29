@@ -2462,15 +2462,18 @@ function surfaceValueNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt){
 function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel,phase){
   const salt=((phase*100000)|0)^0x5f356495;
   let detail=0;
-  if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.035;
-  if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.034;
-  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.038;
-  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.026;
-  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.022;
-  if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.016;
-  if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+89)*.018;
-  if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.022;
-  if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.014;
+  // Broad generic value-noise fields become visible as soft rectangular blobs
+  // at local map scale. Fade those macro octaves there and let the canonical
+  // PlanetGeography terrain-feature authority provide ridge/drainage structure.
+  const localWeight=smoothstep01(clamp((metersPerTexel-80)/900,0,1));
+  if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*lerp(.006,.035,localWeight);
+  if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*lerp(.010,.034,localWeight);
+  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.030;
+  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.022;
+  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.017;
+  if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.012;
+  if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.016;
+  if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.012;
   return detail;
 }
 function patchDimensionsForLevel(index){
@@ -5287,9 +5290,9 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const ridgeValley=clamp(Number(sample.terrainRidgeValley||0),-1,1);
         const drainage=clamp(Number(sample.terrainDrainage||0),0,1);
         const coverStructure=clamp(Number(sample.terrainCover||0),-1,1);
-        const ridgeTone=ridgeValley*(contextRing?.050:.074)*featureGain;
-        const channelTone=-drainage*(contextRing?.034:.048)*featureGain;
-        const coverTone=coverStructure*(contextRing?.018:.026)*featureGain;
+        const ridgeTone=ridgeValley*(contextRing?.080:.122)*featureGain;
+        const channelTone=-drainage*(contextRing?.058:.084)*featureGain;
+        const coverTone=coverStructure*(contextRing?.024:.036)*featureGain;
         cover[0]+=ridgeTone*.88+channelTone*.92+coverTone*.55;
         cover[1]+=ridgeTone*.74+channelTone*.58+coverTone;
         cover[2]+=ridgeTone*.58-channelTone*.22+coverTone*.42;
@@ -5439,7 +5442,7 @@ function finalizeLocalResource(job,result){
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
-      topographicSignalRevision:"canonical-multiscale-elevation-drainage-v5",topographicSignalAuthority:"PlanetGeography elevation slope/curvature at two physical baselines + moisture sampled through SeedCoordinateFabric registered meters",
+      topographicSignalRevision:"canonical-geography-terrain-features-v6",topographicSignalAuthority:"PlanetGeography elevation slope/curvature + registered-meter terrainFeatures sampled through SeedCoordinateFabric",terrainFeatureRevision:detailPixels.terrainFeatureRevision||mediumPixels.terrainFeatureRevision||surroundPixels.terrainFeatureRevision||null,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
