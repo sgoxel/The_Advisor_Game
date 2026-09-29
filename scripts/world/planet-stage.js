@@ -188,7 +188,7 @@ let localNpcRoot=null;
 let localNpcMaterials=null;
 let localNpcContext=null;
 let localNpcEntities=new Map();
-let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([]),localEventPresentationRevision:"compact-participant-cues-v1",rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles + LocalEventVignettes",rhythmSource:"SettlementActivityRhythm presentation-only",presentationOnly:true,simulationAuthority:false};
+let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([]),localEventPresentationRevision:"compact-participant-cues-v2",rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles + LocalEventVignettes",rhythmSource:"SettlementActivityRhythm presentation-only",presentationOnly:true,simulationAuthority:false};
 let localCrowdRoot=null;
 let localCrowdMesh=null;
 let localCrowdMaterials=null;
@@ -4570,7 +4570,7 @@ function updateCanonicalNpcMotion(){
     rhythmPriorityTotal+=rhythmPriority;rhythmPriorityCount++;
     const rhythmScale=working?1:(.95+rhythmPriority*.45);
     const phase=frameCount*.22+Number(String(record.resident.id).replace(/\D/g,"")||0);
-    const pulse=(working||eventActive)?Math.sin(phase)*.035:0,actionScale=eventActive?3.28:(working?3.05:rhythmScale);
+    const pulse=(working||eventActive)?Math.sin(phase)*.035:0,actionScale=eventActive?3.46:(working?3.05:rhythmScale);
     // Arrived workers keep the accepted WP-S004-007 silhouette scale. Other
     // outdoor residents get only a bounded presentation emphasis from fantasy-
     // time rhythm; positions, schedules, collision and routes stay authoritative.
@@ -4588,8 +4588,11 @@ function updateCanonicalNpcMotion(){
       const bw=record.bodyWidth*actionScale,bh=record.bodyHeight*actionScale,swing=Math.sin(phase);
       if(record.eventHalo){
         if(eventMaterial&&record.eventHalo.render?.meshInstances?.[0])record.eventHalo.render.meshInstances[0].material=eventMaterial;
-        record.eventHalo.setLocalScale(bw*1.42,Math.max(.010,bw*.055),bw*1.42);
-        record.eventHalo.setLocalPosition(pos.x,ground+.006,pos.z);
+        // Elongate the same pooled halo into a compact top-down shoulder/torso
+        // silhouette. It stays within the participant footprint but remains
+        // visible behind the head under the fixed near-top-down camera.
+        record.eventHalo.setLocalScale(bw*1.30,Math.max(.010,bw*.055),bw*1.82);
+        record.eventHalo.setLocalPosition(pos.x,ground+.006,pos.z+bw*.34);
         record.eventHalo.enabled=true;activeEventCues++;
       }
       const setEventProp=(entity,material,sx,sy,sz,dx,dy,dz,ry=0)=>{
@@ -4606,11 +4609,11 @@ function updateCanonicalNpcMotion(){
       }else if(eventType==="village-gathering"){
         setEventProp(record.workPropA,localNpcMaterials.timber,bw*1.18,bw*.13,bw*.34,0,bw*.11,bw*.90,10*swing);
       }else if(eventType==="minor-argument"){
-        setEventProp(record.workPropA,localNpcMaterials.ember,bw*.14,bw*.12,bw*1.18,bw*.48,bw*.12,bw*.32,42+10*swing);
-        setEventProp(record.workPropB,localNpcMaterials.metal,bw*.14,bw*.11,bw*1.02,-bw*.48,bw*.11,-bw*.24,-42-10*swing);
+        setEventProp(record.workPropA,localNpcMaterials.ember,bw*.20,bw*.13,bw*1.30,bw*.50,bw*.13,bw*.34,42+10*swing);
+        setEventProp(record.workPropB,localNpcMaterials.metal,bw*.20,bw*.12,bw*1.16,-bw*.50,bw*.12,-bw*.26,-42-10*swing);
       }else if(eventType==="predator-warning"){
-        setEventProp(record.workPropA,localNpcMaterials.stock,bw*.16,bw*.13,bw*1.34,bw*.62,bw*.12,0,8+5*swing);
-        setEventProp(record.workPropB,localNpcMaterials.ember,bw*.42,bw*.22,bw*.42,-bw*.62,bw*.16,bw*.18,45);
+        setEventProp(record.workPropA,localNpcMaterials.stock,bw*.22,bw*.14,bw*1.42,bw*.64,bw*.13,0,8+5*swing);
+        setEventProp(record.workPropB,localNpcMaterials.ember,bw*.50,bw*.24,bw*.50,-bw*.64,bw*.17,bw*.20,45);
       }
       activeLocalEventResidentIds.push(String(record.resident.id));
     }else if(working){
