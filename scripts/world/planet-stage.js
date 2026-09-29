@@ -81,10 +81,6 @@ let canvas=null;
 let planet=null;
 let mapScaleShell=null;
 let mapScaleShellMaterial=null;
-let mapFocusPreview=null;
-let mapFocusPreviewMaterial=null;
-let mapFocusPreviewTexture=null;
-let mapFocusPreviewState={ready:false,active:false,signature:null,buildMs:0,sampleCount:0,widthPixels:0,heightPixels:0,spanWidthMeters:0,spanHeightMeters:0,opacity:0,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false};
 let cameraEntity=null;
 let keyLight=null;
 let fillLight=null;
@@ -265,10 +261,6 @@ const activePointers=new Map();
 let lastPinchDistance=null;
 let projectionState={mode:"globe",blend:0,transitionStart:.45,transitionEnd:.82,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
-const MAP_FOCUS_PREVIEW_WIDTH=96;
-const MAP_FOCUS_PREVIEW_HEIGHT=64;
-const MAP_FOCUS_PREVIEW_HEIGHT_METERS=280000;
-const MAP_FOCUS_PREVIEW_WIDTH_METERS=MAP_FOCUS_PREVIEW_HEIGHT_METERS*1.6;
 const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=8;
 const LOCAL_RESOURCE_CACHE_BUDGET_BYTES=48*1024*1024;
@@ -6731,15 +6723,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
   // then yields once a local tangent resource is physically appropriate.
   const mapShellIn=smoothstep01(clamp((scalar-.57)/.09,0,1));
   const mapShellOut=displayResource?smoothstep01(clamp((scalar-.805)/.045,0,1)):0;
-  const previewIn=mapFocusPreviewState.ready?smoothstep01(clamp((scalar-.66)/.08,0,1)):0;
-  const previewOut=displayResource?projectionPresentationBlendForZoom(scalar):0;
-  const previewOpacity=mapFocusPreview?previewIn*(1-previewOut):0;
-  const mapShellOpacity=mapScaleShell?mapShellIn*(1-mapShellOut)*(1-previewOpacity*.92):0;
-  if(mapFocusPreview&&mapFocusPreviewMaterial){
-    mapFocusPreview.enabled=previewOpacity>.003;
-    mapFocusPreviewMaterial.opacity=previewOpacity;mapFocusPreviewMaterial.blendType=pc.BLEND_NORMAL;mapFocusPreviewMaterial.depthWrite=false;mapFocusPreviewMaterial.update();
-    mapFocusPreviewState={...mapFocusPreviewState,active:Boolean(mapFocusPreview.enabled),opacity:Number(previewOpacity.toFixed(6))};
-  }
+  const mapShellOpacity=mapScaleShell?mapShellIn*(1-mapShellOut):0;
   if(mapScaleShell&&mapScaleShellMaterial){
     mapScaleShell.enabled=mapShellOpacity>.003;
     mapScaleShellMaterial.opacity=mapShellOpacity;
@@ -6899,10 +6883,9 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     horizonOpacity:Number(tangentReveal.toFixed(6)),
     mapScaleShellOpacity:Number(mapShellOpacity.toFixed(6)),
     mapScaleShellActive:Boolean(mapScaleShell&&mapShellOpacity>.003),
-    mapFocusPreview:Object.freeze({...mapFocusPreviewState}),
     globeDepthWrite:Boolean(handoff<.02)
   };
-  if(cloudLayer)cloudLayer.enabled=globeFade<.35&&previewOpacity<.35;
+  if(cloudLayer)cloudLayer.enabled=globeFade<.35;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
   if(blend<=0){localResources.activeResourceCount=0;localResources.pendingPreparationCount=0;localResources.standInActive=false;if(focusRingPatch)focusRingPatch.enabled=false;}
 }
@@ -6979,7 +6962,6 @@ function setZoomTargetScalar(value,source="input"){
   zoomState.lastAnimationInputSource=String(source||"input");zoomState.zoomChanges++;
   zoomState.targetPrefetchState="idle";zoomState.targetPrefetchSignature=null;zoomState.targetPrefetchLevel=null;
   if(zoomState.animating)requestZoomTargetPrefetch();
-  if(zoomState.animating&&lastZoomDirection>0&&next>=.68)ensureMapFocusPreview();
   navigationPerformance.zoomCommandSnapshotAvoidedCount++;
   return null;
 }
@@ -7026,7 +7008,6 @@ function setRotationInternal(yaw,pitch,{snapshotResult=true,semanticReason="rota
   yawDegrees=normalizeYaw(yaw);
   pitchDegrees=clamp(pitch,-82,82);
   applyRotation();
-  disableMapFocusPreviewForMotion();
   if(zoomState.scalar>projectionState.transitionStart)applyCameraZoom(false);
   if(semanticUpdate)updateMapPresentation(semanticReason);
   recordEnvironmentNavigationPassage(beforeLatitudeRadians,beforeLongitudeRadians,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
@@ -7403,74 +7384,6 @@ function buildMapScaleShellMesh(){
   const mesh=new pc.Mesh(device);
   mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
   return mesh;
-}
-function buildMapFocusPreviewMesh(){
-  const halfX=(MAP_FOCUS_PREVIEW_WIDTH_METERS/WORLD_RADIUS_METERS*DISPLAY_RADIUS_UNITS)*.5;
-  const halfZ=(MAP_FOCUS_PREVIEW_HEIGHT_METERS/WORLD_RADIUS_METERS*DISPLAY_RADIUS_UNITS)*.5;
-  const mesh=new pc.Mesh(device);
-  mesh.setPositions([-halfX,0,-halfZ,halfX,0,-halfZ,-halfX,0,halfZ,halfX,0,halfZ]);
-  mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);
-  mesh.setUvs(0,[0,1,1,1,0,0,1,0]);
-  mesh.setIndices([0,2,1,1,2,3]);
-  mesh.update();
-  return mesh;
-}
-function mapFocusPreviewSignature(){
-  return [activeSeed,zoomState.focusLatitudeRadians.toFixed(7),zoomState.focusLongitudeRadians.toFixed(7),MAP_FOCUS_PREVIEW_WIDTH,MAP_FOCUS_PREVIEW_HEIGHT].join("|");
-}
-function ensureMapFocusPreview(){
-  if(!pc||!device||!geography||!activeSeed)return false;
-  const signature=mapFocusPreviewSignature();
-  if(mapFocusPreviewState.ready&&mapFocusPreviewState.signature===signature)return true;
-  const started=performance.now(),lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians;
-  const source=document.createElement("canvas");source.width=MAP_FOCUS_PREVIEW_WIDTH;source.height=MAP_FOCUS_PREVIEW_HEIGHT;
-  const ctx=source.getContext("2d",{alpha:false});if(!ctx)return false;
-  const image=ctx.createImageData(MAP_FOCUS_PREVIEW_WIDTH,MAP_FOCUS_PREVIEW_HEIGHT),data=image.data;
-  for(let y=0;y<MAP_FOCUS_PREVIEW_HEIGHT;y++)for(let x=0;x<MAP_FOCUS_PREVIEW_WIDTH;x++){
-    const u=(x+.5)/MAP_FOCUS_PREVIEW_WIDTH,v=(y+.5)/MAP_FOCUS_PREVIEW_HEIGHT;
-    const east=(u-.5)*MAP_FOCUS_PREVIEW_WIDTH_METERS,north=(.5-v)*MAP_FOCUS_PREVIEW_HEIGHT_METERS;
-    const geo=canonicalLatLonForLocalOffset(lat0,lon0,east,north),sample=geography.sampleLatLon(geo.latitudeRadians,geo.longitudeRadians);
-    const sourceColor=Array.isArray(sample?.color)?sample.color:(sample?.land?[.24,.42,.18]:[.05,.18,.36]);
-    let color=sourceColor.slice(0,3);
-    if(sample?.land){
-      const elevation=Number(sample?.elevationMeters||0),moisture=clamp(Number(sample?.moisture||.5),0,1),dry=1-moisture;
-      const upland=smoothstep01((elevation-550)/2200),alpine=smoothstep01((elevation-2400)/2600);
-      const low=[.17+.08*dry,.34+.13*moisture,.105+.05*moisture],high=[.27+.05*dry,.36+.05*moisture,.19+.03*moisture],snow=[.43,.45,.405];
-      const palette=low.map((q,i)=>lerp(lerp(q,high[i],upland),snow[i],alpine));
-      color=palette.map((q,i)=>lerp(q,Number(sourceColor[i]||0),.22));
-      if(elevation>3000){
-        const w=smoothstep01((elevation-3000)/2600);
-        color=color.map((q,i)=>clamp(lerp(q,q<=.54?q:.54+(q-.54)*.48,w)+[0,.006,.014][i]*w,0,.82));
-      }
-    }
-    const rgba=rgbaFromColor(color),di=(y*MAP_FOCUS_PREVIEW_WIDTH+x)*4;
-    data[di]=rgba[0];data[di+1]=rgba[1];data[di+2]=rgba[2];data[di+3]=255;
-  }
-  ctx.putImageData(image,0,0);
-  const texture=new pc.Texture(device,{width:MAP_FOCUS_PREVIEW_WIDTH,height:MAP_FOCUS_PREVIEW_HEIGHT,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
-  texture.name="CanonicalFocusPreview";texture.flipY=true;texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
-  texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.setSource(source);
-  if(!mapFocusPreviewMaterial){
-    mapFocusPreviewMaterial=new pc.StandardMaterial();mapFocusPreviewMaterial.name="CanonicalFocusPreviewMaterial";
-    mapFocusPreviewMaterial.diffuse.set(1,1,1);mapFocusPreviewMaterial.emissive.set(.04,.04,.04);mapFocusPreviewMaterial.emissiveIntensity=.22;
-    mapFocusPreviewMaterial.useLighting=false;mapFocusPreviewMaterial.cull=pc.CULLFACE_NONE;mapFocusPreviewMaterial.opacity=0;mapFocusPreviewMaterial.blendType=pc.BLEND_NORMAL;mapFocusPreviewMaterial.depthWrite=false;
-  }
-  const previous=mapFocusPreviewTexture;mapFocusPreviewTexture=texture;
-  mapFocusPreviewMaterial.diffuseMap=texture;mapFocusPreviewMaterial.emissiveMap=texture;mapFocusPreviewMaterial.update();previous?.destroy?.();
-  if(!mapFocusPreview){
-    mapFocusPreview=new pc.Entity("CanonicalFocusPreview");
-    mapFocusPreview.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
-    mapFocusPreview.render.meshInstances=[new pc.MeshInstance(buildMapFocusPreviewMesh(),mapFocusPreviewMaterial,mapFocusPreview)];
-    mapFocusPreview.setLocalEulerAngles(90,0,0);
-    mapFocusPreview.setLocalPosition(0,0,DISPLAY_RADIUS_UNITS*1.022);
-    mapFocusPreview.enabled=false;app.root.addChild(mapFocusPreview);
-  }
-  mapFocusPreviewState={ready:true,active:false,signature,buildMs:Number((performance.now()-started).toFixed(3)),sampleCount:MAP_FOCUS_PREVIEW_WIDTH*MAP_FOCUS_PREVIEW_HEIGHT,widthPixels:MAP_FOCUS_PREVIEW_WIDTH,heightPixels:MAP_FOCUS_PREVIEW_HEIGHT,spanWidthMeters:MAP_FOCUS_PREVIEW_WIDTH_METERS,spanHeightMeters:MAP_FOCUS_PREVIEW_HEIGHT_METERS,opacity:0,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false};
-  return true;
-}
-function disableMapFocusPreviewForMotion(){
-  if(mapFocusPreview)mapFocusPreview.enabled=false;
-  mapFocusPreviewState={...mapFocusPreviewState,active:false,opacity:0};
 }
 function resize(){
   if(!app||!device||!root)return;
@@ -8417,8 +8330,6 @@ function destroy(){
   resizeObserver?.disconnect?.();resizeObserver=null;
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
   generatedTexture?.destroy?.();generatedTexture=null;
-  mapFocusPreviewTexture?.destroy?.();mapFocusPreviewTexture=null;mapFocusPreview=null;mapFocusPreviewMaterial=null;
-  mapFocusPreviewState={ready:false,active:false,signature:null,buildMs:0,sampleCount:0,widthPixels:0,heightPixels:0,spanWidthMeters:0,spanHeightMeters:0,opacity:0,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false};
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
   clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection(false);localCampaignWearContext=null;clearCanonicalWayfindingSignposts();clearCanonicalRoofRegistry();
   app?.destroy?.();
