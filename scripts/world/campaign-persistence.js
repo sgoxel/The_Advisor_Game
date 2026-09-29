@@ -46,7 +46,9 @@ function deltaIndex(worldState){
   const groups={global:[],country:[],diplomacy:[],region:[],settlement:[],npc:[],event:[],other:[]};
   for(const item of Object.values(worldState?.entries||{})){
     const kind=String(item?.entityKind||"other");
-    const bucket=Object.prototype.hasOwnProperty.call(groups,kind)?kind:(["world","campaign"].includes(kind)?"global":"other");
+    const bucket=Object.prototype.hasOwnProperty.call(groups,kind)?kind:
+      (kind.startsWith("settlement")?"settlement":kind.startsWith("npc")?"npc":kind.startsWith("country")?"country":
+      kind.startsWith("region")?"region":kind.startsWith("diplomacy")?"diplomacy":(["world","campaign"].includes(kind)?"global":"other"));
     groups[bucket].push(String(item.entityId));
   }
   for(const key of Object.keys(groups))groups[key].sort();
