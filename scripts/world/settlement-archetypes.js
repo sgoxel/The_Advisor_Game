@@ -263,8 +263,15 @@ function hierarchyRawCandidate(seedValue,classId,cxValue,cyValue){
     clamp01(region?.identity?.transportAccessibility??0.45)*0.14+
     clamp01(region?.identity?.waterAccess??0.45)*0.10
   );
+  const legacyName=hierarchyName(seed,classId,cx,cy,region,name);
+  const naming=window.PlaceNaming?.descriptor
+    ?window.PlaceNaming.descriptor(seed,{id,type:classId,countryId:String(owner.id),regionId:String(region.id),x:String(x),y:String(y)})
+    :Object.freeze({name:legacyName,namingCultureKey:"legacy",nameGenerationVersion:0,authority:"legacy SettlementArchetypes naming"});
   const record=Object.freeze({
-    id,name:hierarchyName(seed,classId,cx,cy,region,name),classId,importanceClass,
+    id,name:naming.name,classId,importanceClass,
+    namingCultureKey:naming.namingCultureKey||null,
+    nameGenerationVersion:Number(naming.nameGenerationVersion||0),
+    namingAuthority:String(naming.authority||""),
     role:forcedStartingVillage?"starting-village":importanceClass==="major-city"?"major-city":"local",
     center:Object.freeze({x:String(x),y:String(y),terrain:String(terrain||"")}),
     countryId:String(owner.id),regionId:String(region.id),
@@ -306,10 +313,17 @@ function hierarchyCapitalForRecord(seed,record){
   try{
     const country=PoliticalGeography.countryById(seed,countryId)||null;
     if(country?.capital){
+      const capitalRegion=RegionProfile.descriptorAt?.(seed,country.capital.x,country.capital.y)||RegionProfile.at(seed,country.capital.x,country.capital.y)||null;
+      const capitalNaming=window.PlaceNaming?.descriptor
+        ?window.PlaceNaming.descriptor(seed,{id:String(country.capital.id),type:"capital",countryId:String(country.id),regionId:String(capitalRegion?.id||""),x:String(country.capital.x),y:String(country.capital.y)})
+        :Object.freeze({name:String(country.capital.name),namingCultureKey:"legacy",nameGenerationVersion:0,authority:"legacy PoliticalGeography capital naming"});
       result=Object.freeze({
-        id:String(country.capital.id),name:String(country.capital.name),classId:"national-capital",importanceClass:"national-capital",
+        id:String(country.capital.id),name:String(capitalNaming.name),classId:"national-capital",importanceClass:"national-capital",
+        namingCultureKey:capitalNaming.namingCultureKey||null,
+        nameGenerationVersion:Number(capitalNaming.nameGenerationVersion||0),
+        namingAuthority:String(capitalNaming.authority||""),
         role:"national-capital",center:Object.freeze({x:String(country.capital.x),y:String(country.capital.y),terrain:GeographyFoundation.getTerrainType(seed,country.capital.x,country.capital.y)}),
-        countryId:String(country.id),regionId:String((RegionProfile.descriptorAt?.(seed,country.capital.x,country.capital.y)||RegionProfile.at(seed,country.capital.x,country.capital.y))?.id||""),
+        countryId:String(country.id),regionId:String(capitalRegion?.id||""),
         generationCell:Object.freeze({id:"CAP|"+country.id,classId:"national-capital",cellX:null,cellY:null,cellSizeTiles:null}),
         coordinates:hierarchyCoordinateDiagnostics(seed,country.capital.x,country.capital.y),
         candidateRank:1,competitionScore:1,competitionKey:"capital:"+country.id,suitability:1,carryingCapacity:1,
