@@ -2725,3 +2725,7 @@
 - Functional evidence covers river-crossing, hunter-camp, fishing-spot, burial-site, unusual-grove and abandoned-cart-campsite plus stable unload/revisit. Query work remained 1 / max 4 cells per active chunk, presentation remained 19–29 primitives/draw-call estimate, measured local micro-location build stayed <=4.7 ms, and canonical constraints remain deterministic/SEED-only, lazy, `fullWorldScan=false`, `perFrameScan=false`, presentationOnly=true and simulationAuthority=false.
 - Directly inspected all 14 fresh exact-head screenshots. Focused center-cell readout is faint/offset instead of masking the composition; water crossings, burial grouping, grove, hunter camp and abandoned-cart camp remain distinct and unclipped across landscape/portrait. VISUAL 8.0/10 PASS.
 - Exact tested product deployed successfully via GitHub Pages run `36612769285`. WP remains IN PROGRESS only until this acceptance-documentation descendant is deployed, after which final ROADMAP completion bookkeeping will be deployed separately.
+
+2026-09-29 21:48 +03:00 | WP-S006-007-001 | COMPLETION BOOKKEEPING
+- Acceptance/docs descendant `18341ca041cd64362cd70b78ff1cb1e3584c92d2` deployed successfully via GitHub Pages run `36614595925` with build/deploy/report-build-status all SUCCESS.
+- ROADMAP now marks WP-S006-007-001 COMPLETED. This bookkeeping commit must itself deploy successfully before Issue #129 is closed.
