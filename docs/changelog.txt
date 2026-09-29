@@ -2488,3 +2488,10 @@
 - Final implementation/acceptance-docs descendant `68b7913807a73634a215ecb47132c44f1b5a9f58` deployed successfully through GitHub Pages run `36526546062`.
 - WP-S007-010 is ready for final ROADMAP completion bookkeeping; Issue #56 will close only after that final bookkeeping commit is also successfully deployed.
 
+2026-09-29 09:05 +03:00 | WP-S003-010-003-019 | CAPPED CONTINUATION — NOT COMPLETED
+- MIXED WP continued from the stable focus-streaming implementation. Attempt 1 restored the single-baseline canonical relief path and reduced broad macro-color influence, but workflow `36527335312` / artifact `11015471924` failed during the throttled-fallback screenshot; five fresh frames were directly inspected and still showed soft/blocky 1/500 terrain plus weak 1/2500 settlement context.
+- Attempt 2 exact head `2318668d76f2843b8f514a2366cacc2aa6ffde55` fixed canonical route/lot presentation lifetime + double-sided overview materials, reduced land-cover contrast, and stabilized the slow-CPU capture. Workflow `36528262024` / artifact `11015054763` completed FUNCTIONAL PASS; all 9 fresh frames were directly inspected at VISUAL 7.1/10 FAIL.
+- Final Attempt 3 exact head `81781a91625a2127b7f1978b8e8ee9d6feec796e` retained those fixes and added bounded nested-ring/overview refinements. Workflow `36528445123` / artifact `11015414199` completed FUNCTIONAL PASS: two SEEDs; canonical 1×/3×/6× hierarchy; <=8 entries / 48 MiB cache; pan-back reuse; parent fallback; atomic handoff; missingCoverageCount=0; fullWorldScan=false; globalHighDetailMaterialized=false.
+- All 9 final fresh screenshots were directly inspected. VISUAL 6.8/10 FAIL: far globe remained healthy with no blank coverage/clipping, but desktop/phone 1/500 retained a broad soft curved low-frequency transition, 1/2500 remained dominated by a small ring/cross route silhouette with weak lot morphology, throttled parent fallback remained nearly flat, and settled 1/5000 remained coarse/block-like.
+- Three-attempt cap exhausted. WP remains OPEN / IN PROGRESS / NOT COMPLETED; no fourth implementation/evidence loop was run.
+
