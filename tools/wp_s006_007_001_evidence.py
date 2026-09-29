@@ -34,11 +34,11 @@ wait=WebDriverWait(driver,300)
 def ready():
     try:
         return driver.execute_script("""
-          const s=window.PlanetStage?.snapshot?.(),r=window.GameRenderer?.snapshot?.();
+          const s=window.PlanetStage?.snapshot?.(),canvas=document.getElementById("planetCanvas");
           return Boolean(
             document.getElementById("planetStageRoot")?.dataset?.ready==="true" &&
             s?.ready && window.MicroLocations && window.WorldDestinations?.poiCell &&
-            r?.ready && r?.engine==="PlayCanvas"
+            canvas?.dataset?.renderer==="playcanvas"
           );
         """)
     except Exception:
@@ -79,19 +79,23 @@ def focus(loc):
 
 def state(loc):
     return driver.execute_script("""
-      const wanted=arguments[0],s=PlanetStage.snapshot(),r=GameRenderer.snapshot(),t=r.terrainChunks||{};
-      const samples=(t.dressingSamples||[]).filter(x=>x.microLocationId===wanted.id);
+      const wanted=arguments[0],s=PlanetStage.snapshot(),micro=s.microLocations||{},locations=Array.isArray(micro.locations)?micro.locations:[];
+      const match=locations.find(x=>String(x.id)===String(wanted.id))||null;
       return {
         ready:Boolean(s.ready),scaleIndex:Number(s.zoom?.scaleIndex),scaleLabel:s.zoom?.scaleLabel,
         focus:s.canonicalFocus?.worldTile||null,
         localStatic:s.projection?.localStatic||null,
         resourceBudget:s.projection?.resourceBudget||null,
-        matchingSamples:samples,
-        contextCounts:t.dressingContextCounts||{},semanticCounts:t.dressingSemanticCounts||{},
-        dressingDescriptorCount:Number(t.dressingDescriptorCount||0),
-        dressingPrimitiveInstanceCount:Number(t.dressingPrimitiveInstanceCount||0),
-        optimizedPresentationDrawCalls:Number(t.optimizedPresentationDrawCalls||0),
-        worldData:t.worldData||null,
+        micro:{
+          active:Boolean(micro.active),locationCount:Number(micro.locationCount||0),propCount:Number(micro.propCount||0),
+          primitiveCount:Number(micro.primitiveCount||0),drawCallEstimate:Number(micro.drawCallEstimate||0),
+          triangleEstimate:Number(micro.triangleEstimate||0),queryCellCount:Number(micro.queryCellCount||0),
+          maxQueryCells:Number(micro.maxQueryCells||0),buildMs:Number(micro.buildMs||0),
+          ids:Array.isArray(micro.ids)?micro.ids:[],types:Array.isArray(micro.types)?micro.types:[],
+          bounded:Boolean(micro.bounded),fullWorldScan:Boolean(micro.fullWorldScan),perFrameScan:Boolean(micro.perFrameScan),
+          lazy:Boolean(micro.lazy),presentationOnly:Boolean(micro.presentationOnly),simulationAuthority:Boolean(micro.simulationAuthority),
+          match
+        },
         microStats:MicroLocations.stats()
       };
     """,loc)
@@ -100,7 +104,13 @@ def visible(loc):
     st=state(loc)
     rb=st.get("resourceBudget") or {}
     sig_ok=(not rb.get("requestedSignature")) or rb.get("standInActive") or (rb.get("activeSignature") and rb.get("activeSignature")==rb.get("requestedSignature"))
-    return st["ready"] and st["scaleIndex"]==SCALE_INDEX and sig_ok and len(st["matchingSamples"])>0
+    m=st["micro"]
+    return (
+      st["ready"] and st["scaleIndex"]==SCALE_INDEX and sig_ok and
+      m["active"] and m["match"] is not None and m["primitiveCount"]>0 and
+      m["bounded"] and not m["fullWorldScan"] and not m["perFrameScan"] and
+      m["lazy"] and m["presentationOnly"] and not m["simulationAuthority"]
+    )
 
 def overlay(loc,st,revisit=False):
     driver.execute_script("""
@@ -115,8 +125,9 @@ def overlay(loc,st,revisit=False):
         '<div style="font-size:9px;letter-spacing:.11em;color:#e8ca80">WP-S006-007-001 · MICRO-LOCATION'+(revisit?' · REVISIT':'')+'</div>'+
         '<div style="font-size:15px;margin:2px 0 4px">'+String(p.type).replaceAll("-"," ").toUpperCase()+'</div>'+
         '<div>Source '+String(p.sourceType)+' · '+String(p.sourceDestinationId)+'</div>'+
-        '<div>Props '+Number(p.propCount)+' · live samples '+Number((s.matchingSamples||[]).length)+' · '+String(s.scaleLabel||"")+'</div>'+
-        '<div style="opacity:.64;margin-top:2px">SEED-only · lazy chunk materialization · bounded instanced props · no Simulation authority</div>';
+        '<div>Props '+Number(p.propCount)+' · live primitives '+Number(s.micro?.match?.primitiveCount||0)+' · '+String(s.scaleLabel||"")+'</div>'+
+        '<div>Bounded cells '+Number(s.micro?.queryCellCount||0)+' / '+Number(s.micro?.maxQueryCells||0)+' · build '+Number(s.micro?.buildMs||0).toFixed(2)+' ms</div>'+
+        '<div style="opacity:.64;margin-top:2px">SEED-only · lazy canonical PlanetStage projection · shared meshes/materials · no Simulation authority</div>';
       document.body.appendChild(card);
     """,loc,st,revisit)
 
@@ -126,7 +137,7 @@ try:
     try:
         wait.until(lambda _d: ready())
     except TimeoutException:
-        probe=driver.execute_script("""return {state:document.readyState,planetReady:window.PlanetStage?.snapshot?.()?.ready||false,stageReady:document.getElementById("planetStageRoot")?.dataset?.ready||null,micro:typeof window.MicroLocations,renderer:window.GameRenderer?.snapshot?.()||null,body:String(document.body?.innerText||"").slice(0,900)}""")
+        probe=driver.execute_script("""return {state:document.readyState,planetReady:window.PlanetStage?.snapshot?.()?.ready||false,stageReady:document.getElementById("planetStageRoot")?.dataset?.ready||null,micro:typeof window.MicroLocations,canvasRenderer:document.getElementById("planetCanvas")?.dataset?.renderer||null,startupError:window.PlanetStage?.snapshot?.()?.startupError||null,body:String(document.body?.innerText||"").slice(0,900)}""")
         raise RuntimeError("startup readiness timeout: "+json.dumps(probe))
     samples=find_samples()
     for idx,loc in enumerate(samples):
@@ -137,13 +148,22 @@ try:
             raise RuntimeError("micro-location render timeout "+loc["type"]+": "+json.dumps(state(loc)))
         time.sleep(.45)
         st=state(loc)
+        if st["micro"]["queryCellCount"]>st["micro"]["maxQueryCells"] or st["micro"]["maxQueryCells"]>4:
+            raise RuntimeError("micro-location query bound exceeded: "+json.dumps(st))
+        if st["micro"]["drawCallEstimate"]>96 or st["micro"]["buildMs"]>=50:
+            raise RuntimeError("micro-location presentation budget exceeded: "+json.dumps(st))
         overlay(loc,st,False)
         time.sleep(.18)
         path=OUT/f"{PROFILE}-{idx+1:02d}-{loc['type']}.png"
         driver.save_screenshot(str(path))
         records.append({"profile":PROFILE,"location":loc,"state":st,"file":str(path)})
     first=samples[0]
-    focus(samples[1]);time.sleep(.35)
+    focus(samples[1])
+    try:
+        wait.until(lambda _d: first["id"] not in (state(samples[1])["micro"]["ids"] or []))
+    except TimeoutException:
+        raise RuntimeError("micro-location did not unload after leaving local relevance: "+json.dumps(state(samples[1])))
+    time.sleep(.20)
     focus(first)
     try:
         wait.until(lambda _d: visible(first))
@@ -151,8 +171,10 @@ try:
         raise RuntimeError("revisit render timeout: "+json.dumps(state(first)))
     time.sleep(.35)
     revisit=state(first)
-    if not revisit["matchingSamples"]:
+    if revisit["micro"]["match"] is None:
         raise RuntimeError("revisit lost micro-location presentation")
+    if str(revisit["micro"]["match"].get("signature"))!=str(first["signature"]):
+        raise RuntimeError("revisit changed canonical micro-location signature: "+json.dumps(revisit))
     overlay(first,revisit,True)
     path=OUT/f"{PROFILE}-07-revisit-{first['type']}.png"
     driver.save_screenshot(str(path))
