@@ -15,6 +15,44 @@ let wallClearanceSeed="";
 let wallClearancePenaltyCells=new Set();
 let wallClearanceExemptCells=new Set();
 const proofCache=new Map();
+const PERFORMANCE_PHASES=Object.freeze(["activity","social","contextual","actionBefore","residentAdvance","actionAfter","routePlan","navigation"]);
+function freshPerformanceTelemetry(){
+  const phaseMaxMs={},phaseCalls={},phaseOver50Count={};
+  for(const phase of PERFORMANCE_PHASES){phaseMaxMs[phase]=0;phaseCalls[phase]=0;phaseOver50Count[phase]=0;}
+  return {
+    revision:"resident-subphase-v1",
+    phaseMaxMs,phaseCalls,phaseOver50Count,
+    maxPhase:null,maxMs:0,maxResidentId:null,maxReason:null,totalCalls:0
+  };
+}
+let performanceTelemetry=freshPerformanceTelemetry();
+function recordPerformance(phase,started,state=null,reason=null){
+  if(!Object.prototype.hasOwnProperty.call(performanceTelemetry.phaseMaxMs,phase))return 0;
+  const elapsed=Math.max(0,performance.now()-started),rounded=Number(elapsed.toFixed(3));
+  performanceTelemetry.phaseCalls[phase]++;
+  performanceTelemetry.totalCalls++;
+  if(rounded>performanceTelemetry.phaseMaxMs[phase])performanceTelemetry.phaseMaxMs[phase]=rounded;
+  if(rounded>50)performanceTelemetry.phaseOver50Count[phase]++;
+  if(rounded>performanceTelemetry.maxMs){
+    performanceTelemetry.maxMs=rounded;
+    performanceTelemetry.maxPhase=phase;
+    performanceTelemetry.maxResidentId=state?.residentId?String(state.residentId):null;
+    performanceTelemetry.maxReason=reason?String(reason):null;
+  }
+  return elapsed;
+}
+function performanceSnapshot(){
+  return Object.freeze({
+    revision:performanceTelemetry.revision,
+    phaseMaxMs:Object.freeze({...performanceTelemetry.phaseMaxMs}),
+    phaseCalls:Object.freeze({...performanceTelemetry.phaseCalls}),
+    phaseOver50Count:Object.freeze({...performanceTelemetry.phaseOver50Count}),
+    maxPhase:performanceTelemetry.maxPhase,maxMs:performanceTelemetry.maxMs,
+    maxResidentId:performanceTelemetry.maxResidentId,maxReason:performanceTelemetry.maxReason,
+    totalCalls:performanceTelemetry.totalCalls
+  });
+}
+function resetPerformanceTelemetry(){performanceTelemetry=freshPerformanceTelemetry();return performanceSnapshot();}
 
 function point(value){
   if(!value)return null;
@@ -67,9 +105,12 @@ function manhattan(a,b){
 }
 function navigation(seed,value){
   if(!value)return null;
-  return window.InteriorObjects?.classifyNavigation
+  const started=performance.now();
+  const result=window.InteriorObjects?.classifyNavigation
     ?InteriorObjects.classifyNavigation(seed,value.x,value.y)
     :Walkability.classify(seed,value.x,value.y);
+  recordPerformance("navigation",started,null,"classify");
+  return result;
 }
 function cloneActivity(activity){
   if(!activity?.target)return null;
@@ -131,6 +172,7 @@ function reset(seed){
   accumulator=0;
   pendingCooperativeTick=null;
   proofContext=null;
+  resetPerformanceTelemetry();
   wallClearanceSeed="";
   wallClearancePenaltyCells=new Set();
   wallClearanceExemptCells=new Set();
@@ -160,9 +202,11 @@ function plan(seed,state,activity,reason){
     state.lastReason=reason||"already-at-target";
     return true;
   }
+  const routeStarted=performance.now();
   const route=RoutePlanner.findRoute(seed,state.position,state.target,{
     stepPenaltySeconds:context=>wallClearancePenalty(seed,context)
   });
+  recordPerformance("routePlan",routeStarted,state,reason||"plan");
   state.routeRequests++;
   if(reason==="target-change"||reason==="initial-target")state.targetPlans++;
   if(reason==="invalid-next-segment")state.invalidSegmentReplans++;
@@ -271,7 +315,8 @@ function beginAdvanceTick(when){
 function advanceTickInitialization(tick,cooperative,started,budgetMs){
   while(tick.phase==="activities"){
     if(tick.initCursor>=tick.residents.length){tick.phase="social";break;}
-    const state=tick.residents[tick.initCursor++],activity=activeActivity(seedKey,state,tick.when);
+    const state=tick.residents[tick.initCursor++],activityStarted=performance.now(),activity=activeActivity(seedKey,state,tick.when);
+    recordPerformance("activity",activityStarted,state,"active");
     tick.activities.set(state.residentId,activity);
     const resident=residentById.get(state.residentId);
     tick.socialResidents.push(Object.freeze({
@@ -282,11 +327,14 @@ function advanceTickInitialization(tick,cooperative,started,budgetMs){
     if(cooperative&&performance.now()-started>=budgetMs)return false;
   }
   if(tick.phase==="social"){
+    const socialStarted=performance.now();
     window.SocialEncounters?.advance?.({seed:seedKey,when:tick.when,seconds:FIXED_STEP_SECONDS,residents:tick.socialResidents});
+    recordPerformance("social",socialStarted,null,"tick");
     tick.phase="contextual";
     if(cooperative&&performance.now()-started>=budgetMs)return false;
   }
   if(tick.phase==="contextual"){
+    const contextualStarted=performance.now();
     // Contextual protagonist reactions are event-driven: the reaction system
     // resolves only resident IDs named by queued local events. It never scans
     // the roster/world to discover candidates.
@@ -304,6 +352,7 @@ function advanceTickInitialization(tick,cooperative,started,budgetMs){
         });
       }
     });
+    recordPerformance("contextual",contextualStarted,null,"tick");
     tick.phase="residents";
     if(cooperative&&performance.now()-started>=budgetMs)return false;
   }
@@ -327,17 +376,23 @@ function advanceResidentForTick(tick,state){
     tick.changed=true;
     return;
   }
+  const beforeStarted=performance.now();
   const before=window.ActionExecutor?.advanceActor?.({
     seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
   },FIXED_STEP_SECONDS)||null;
+  recordPerformance("actionBefore",beforeStarted,state,"advance");
   if(before?.holdsPosition){
     tick.changed=Boolean(before.changed)||tick.changed;
     return;
   }
+  const residentStarted=performance.now();
   tick.changed=advanceState(seedKey,state,activity,FIXED_STEP_SECONDS)||tick.changed;
+  recordPerformance("residentAdvance",residentStarted,state,state.lastReason||"advance");
+  const afterStarted=performance.now();
   const after=window.ActionExecutor?.advanceActor?.({
     seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
   },0)||null;
+  recordPerformance("actionAfter",afterStarted,state,"advance");
   tick.changed=Boolean(after?.changed)||tick.changed;
 }
 function drainAdvanceTick(tick,cooperative){
@@ -431,6 +486,7 @@ function snapshot(){
     wallClearancePolicy:"prefer-one-tile",
     wallClearancePenaltySeconds:WALL_CLEARANCE_PENALTY_SECONDS,
     wallClearancePenaltyCellCount:wallClearancePenaltyCells.size,
+    performanceTelemetry:performanceSnapshot(),
     proofActive:Boolean(proofContext?.active),
     residents:Object.freeze([...states.values()].map(stateSnapshot))
   });
@@ -689,6 +745,7 @@ function endProof(){proofContext=null;return snapshot()}
 
 window.ResidentMovement=Object.freeze({
   FIXED_STEP_SECONDS,WALL_CLEARANCE_PENALTY_SECONDS,ensure,reset,advance,snapshot,get,position,presentation,verify,
+  performanceSnapshot,resetPerformanceTelemetry,
   beginProof,proofAdvanceToDoor,proofAdvanceToTarget,proofBeginOutbound,proofAdvanceSeconds,proofPlaceAt,proofPlaceResidentsAt,
   recordEvidence,proofSnapshot,endProof
 });
