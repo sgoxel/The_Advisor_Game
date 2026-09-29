@@ -3392,8 +3392,8 @@ function ensureLocalStaticMaterials(){
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     microStone:make("LocalMicroStone",.67,.64,.56),microWood:make("LocalMicroWood",.57,.34,.14),
     microDark:make("LocalMicroDark",.11,.075,.045),microCloth:make("LocalMicroCloth",.76,.56,.27),
-    microAccent:make("LocalMicroAccent",1.0,.45,.08),microSoil:make("LocalMicroSoil",.39,.22,.09),
-    microGround:make("LocalMicroGround",.31,.20,.08,.62),microMoss:make("LocalMicroMoss",.12,.28,.07,.54),
+    microAccent:make("LocalMicroAccent",1.0,.45,.08),microSoil:make("LocalMicroSoil",.43,.25,.10),
+    microGround:make("LocalMicroGround",.31,.20,.08,.26),microMoss:make("LocalMicroMoss",.12,.28,.07,.24),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityForge:(()=>{const m=make("LocalActivityForge",1,1,1);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -5391,24 +5391,34 @@ function prepareCanonicalMicroLocations(resource,tier){
   return Object.freeze({plan,bounds});
 }
 function renderMicroLocationGrounding(location,resource,frame){
-  const type=String(location?.compositionType||"");
-  if(["river-crossing","fishing-spot","waterfall-crossing"].includes(type))return Object.freeze({primitiveCount:0,triangleEstimate:0});
-  const target=worldLatLonForTile(location.anchor.x,location.anchor.y);
+  const type=String(location?.compositionType||""),target=worldLatLonForTile(location.anchor.x,location.anchor.y);
   const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,target.latitudeRadians,target.longitudeRadians);
   const east=Number(delta.eastMeters||0),north=Number(delta.northMeters||0),dims=resource.dims||{},unit=Math.max(1e-9,Number(dims.metersPerUnit||1));
   if(Math.abs(east)>Number(dims.patchWidth||0)*.68||Math.abs(north)>Number(dims.patchHeight||0)*.68)return Object.freeze({primitiveCount:0,triangleEstimate:0});
-  const ground=localGroundHeightUnits(east,north,frame)+.010,mat=type==="unusual-grove"?localStaticMaterials.microMoss:localStaticMaterials.microGround;
-  const spans=type==="burial-site"?[[0,0,8.4,5.6],[1.5,.7,4.6,3.4]]:
-    type==="unusual-grove"?[[0,0,9.2,7.2],[-2.1,1.4,4.8,3.8]]:
-    [[0,0,8.0,6.2],[1.8,-1.2,4.4,3.4]];
-  let count=0;
-  for(const [dx,dz,sx,sz] of spans){
-    const off=rotateMicroOffset(dx,dz,Number(location.rotation||0));
-    addLocalStatic("MicroGround-"+location.id+"-"+count,"sphere",mat,(east+off.x)/unit,ground,(-north+off.z)/unit,sx/unit,.12/unit,sz/unit);
-    count++;
+  const yaw=Number(location.rotation||0),ground=localGroundHeightUnits(east,north,frame)+.008;
+  let count=0,triangles=0;
+  const patch=(name,material,dx,dz,sx,sz,localYaw=yaw,yOffset=.006)=>{
+    const off=rotateMicroOffset(dx,dz,yaw);
+    addLocalStatic(name+"-"+location.id+"-"+count,"box",material,(east+off.x)/unit,ground+yOffset/unit,(-north+off.z)/unit,sx/unit,.045/unit,sz/unit,0,localYaw,0);
+    count++;triangles+=12;
+  };
+  if(["river-crossing","fishing-spot","waterfall-crossing"].includes(type)){
+    // WorldDestinations/WorldField is the canonical water-context authority for
+    // these POIs. The local globe renderer can visually understate narrow water
+    // corridors at 1/10000, so retain a bounded presentation ribbon beside the
+    // shoreline anchor instead of making the dock appear in open grass.
+    patch("MicroWater",localStaticMaterials.water,0,4.0,11.5,7.0,yaw,-.010);
+    patch("MicroWater",localStaticMaterials.water,3.2,5.1,5.4,5.0,yaw+8,-.009);
+  }else if(["hunter-camp","abandoned-cart-campsite","hidden-clearing"].includes(type)){
+    // Small overlapping worn patches read as a used clearing without becoming
+    // the large circular mound seen in the previous visual attempt.
+    patch("MicroWorn",localStaticMaterials.microGround,0,0,4.8,3.5,yaw+8);
+    patch("MicroWorn",localStaticMaterials.microGround,1.7,-.8,3.0,2.3,yaw-16);
+    patch("MicroWorn",localStaticMaterials.microGround,-1.5,1.0,2.6,2.0,yaw+24);
   }
-  return Object.freeze({primitiveCount:count,triangleEstimate:count*160});
+  return Object.freeze({primitiveCount:count,triangleEstimate:triangles});
 }
+
 function renderCanonicalMicroLocations(resource,frame,tier,prepared=null){
   resetMicroLocationPresentation();
   const prep=prepared||prepareCanonicalMicroLocations(resource,tier),plan=prep?.plan,bounds=prep?.bounds;
