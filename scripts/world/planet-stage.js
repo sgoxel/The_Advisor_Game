@@ -3465,7 +3465,7 @@ function ensureLocalStaticMaterials(){
     road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.31,.235,.105,.92),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.028),lotOverview:make("LocalOccupiedLotOverview",1,1,1,.34),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.028),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.58);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     microStone:make("LocalMicroStone",.67,.64,.56),microWood:make("LocalMicroWood",.57,.34,.14),
     microDark:make("LocalMicroDark",.11,.075,.045),microCloth:make("LocalMicroCloth",.76,.56,.27),
@@ -3772,10 +3772,9 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
       border=special?[224,174,92]:(tier==="route"?[116,105,70]:[164,140,82]);
     count++;
     // Route-tier parcels are quiet cadastral context; roads/access links carry
-    // the stronger hierarchy. A very restrained authoritative fill gives the
-    // six occupied plots enough visual mass to read as a village, not a glyph.
+    // the stronger hierarchy. Keep ordinary lots as boundaries instead of
+    // filled cards so the real connected road/access morphology stays legible.
     if(special)addQuad(minX,minY,maxX,maxY,fill,0);
-    else if(tier==="route")addQuad(minX,minY,maxX,maxY,[74,78,52],-.003);
     const bw=tier==="route"
       ?Math.min(.14,Math.max(.075,Math.min(maxX-minX,maxY-minY)*.044))
       :Math.min(.23,Math.max(.12,Math.min(maxX-minX,maxY-minY)*.070));
@@ -3791,7 +3790,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   for(const house of reveal?.houses||[]){
     const entrance=house?.entrance,target=entrance?.target;
     if(!entrance||!target)continue;
-    const accessWidth=tier==="route"?.38:.24;
+    const accessWidth=tier==="route"?.56:.24;
     if(addConnector(Number(entrance.x),Number(entrance.y),Number(target.x),Number(target.y),accessWidth,[72,61,38]))connectorSegmentCount++;
   }
   if(!count)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
@@ -3845,7 +3844,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       }
       const half=tier==="footprint"
         ?(outwardBranch?.30:.10)
-        :(outwardBranch?.42:(ringCell||centerAvenue||gatewayStem)?.24:.16);
+        :(outwardBranch?.36:ringCell?.10:(centerAvenue||gatewayStem)?.18:.13);
       addQuad(x-half,y-half,x+half,y+half);
       if(roadSet.has((x+1)+","+y))addQuad(x+half,y-half,x+1-half,y+half);
       if(roadSet.has(x+","+(y+1)))addQuad(x-half,y+half,x+half,y+1-half);
@@ -5909,13 +5908,13 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // only that low-frequency presentation component while retaining the
         // registered-meter cover/macro field and full near-ground relief.
         const nearReliefWeight=lerp(.30,1,smoothstep01(clamp((24-metersPerTexel)/16,0,1)));
-        const broadReliefWeight=lerp(.14,1,smoothstep01(clamp((58-metersPerTexel)/34,0,1)));
+        const broadReliefWeight=lerp(.36,1,smoothstep01(clamp((58-metersPerTexel)/34,0,1)));
         const rawHillshadeStrength=clamp((.05+focusRefineWeight*.26)*slopeLightingWeight*nearReliefWeight*broadReliefWeight,.010,.68);
         const hillshadeCap=metersPerTexel<=6?.70:metersPerTexel<=30?.26:metersPerTexel<=120?.055:.025;
         const focusHillshadeStrength=Math.min(rawHillshadeStrength,hillshadeCap);
         shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.94:.91,contextRing?1.06:1.09);
         const mapStructureBoost=lerp(1.06,1,smoothstep01(clamp((30-metersPerTexel)/28,0,1)));
-        const mapStructureScale=lerp(.18,1,smoothstep01(clamp((52-metersPerTexel)/30,0,1)))*broadReliefWeight;
+        const mapStructureScale=lerp(.52,1,smoothstep01(clamp((52-metersPerTexel)/30,0,1)))*broadReliefWeight;
         const curvatureTone=curvatureSignal*(contextRing?lerp(.030,.048,contextRefineWeight):lerp(.046,.080,focusRefineWeight))*mapStructureBoost*mapStructureScale*nearReliefWeight;
         const slopeTone=-slopeSignal*(contextRing?lerp(.006,.014,contextRefineWeight):lerp(.010,.024,focusRefineWeight))*slopeLightingWeight;
         const drainageTone=(moistureCurve*(contextRing?lerp(.010,.018,contextRefineWeight):lerp(.016,.032,focusRefineWeight))-moistureGradient*(contextRing?.008:.012))*mapStructureScale;
