@@ -7,6 +7,7 @@ const MOBILE_ACTIVE_CROWD=20;
 const LOCAL_QUERY_RADIUS_TILES=64;
 const MAX_CANDIDATE_CHECKS=192;
 const CLASS_CAP=Object.freeze({hamlet:4,village:8,town:16,city:26,"national-capital":32});
+const CLASS_POPULATION_RANGE=Object.freeze({hamlet:Object.freeze([35,140]),village:Object.freeze([120,620]),town:Object.freeze([550,3200]),city:Object.freeze([2800,18000]),"national-capital":Object.freeze([14000,65000])});
 const CLASS_RADIUS=Object.freeze({hamlet:8,village:13,town:20,city:28,"national-capital":34});
 const VISUAL_ROLES=Object.freeze(["market","traveler","laborer","guard","farmer","craft"]);
 let lastSnapshot=null;
@@ -62,7 +63,7 @@ function crowdActivity(when){
   return Object.freeze({band:String(profile.band||"daytime"),factor,modifiers:m});
 }
 function populationScale(plan,population){
-  const range=window.SettlementArchetypes?.CLASS_SCALE?.[plan.classId]?.population||[1,Math.max(2,population)];
+  const range=CLASS_POPULATION_RANGE[plan.classId]||[1,Math.max(2,population)];
   const lo=Math.max(1,Number(range[0]||1)),hi=Math.max(lo+1,Number(range[1]||lo+1));
   return clamp01((Math.log1p(Math.max(lo,population))-Math.log1p(lo))/(Math.log1p(hi)-Math.log1p(lo)));
 }
@@ -175,9 +176,13 @@ function representativePlans(seedValue){
       const p=item?.plan;if(p&&["village","town","city"].includes(p.classId)&&!out[p.classId])out[p.classId]=p;
     }
     if(!out.village||!out.town||!out.city){
-      const country=PoliticalGeography.countryAt(seed,"0","0");
-      for(const p of SettlementArchetypes.settlementsForCountry(seed,country,4)||[]){
-        if(["village","town","city"].includes(p.classId)&&!out[p.classId])out[p.classId]=p;
+      const span=40000n;
+      const query=SettlementArchetypes.canonicalSettlementsInBounds(seed,{
+        minX:(-span).toString(),maxX:span.toString(),minY:(-span).toString(),maxY:span.toString()
+      },["city","town","village"]);
+      for(const record of query?.settlements||[]){
+        if(!["village","town","city"].includes(record.classId)||out[record.classId])continue;
+        const p=planForRecord(seed,record);if(p)out[p.classId]=p;
       }
     }
   }catch(_){}
@@ -202,7 +207,7 @@ function verify(seedValue){
 function reset(){placementCache=new Map();lastSnapshot=null}
 
 window.CrowdPresentation=Object.freeze({
-  VERSION,MAX_ACTIVE_CROWD,MOBILE_ACTIVE_CROWD,MAX_CANDIDATE_CHECKS,CLASS_CAP,
+  VERSION,MAX_ACTIVE_CROWD,MOBILE_ACTIVE_CROWD,MAX_CANDIDATE_CHECKS,CLASS_CAP,CLASS_POPULATION_RANGE,
   resolvePlan,currentPopulation,snapshot,snapshotForPlan,representativePlans,verify,last:()=>lastSnapshot,reset
 });
 })();
