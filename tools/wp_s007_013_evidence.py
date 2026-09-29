@@ -136,6 +136,7 @@ try:
     driver.get(TARGET)
     try: wait.until(lambda _d: ready())
     except TimeoutException:
+        driver.save_screenshot(str(OUT/f"{PROFILE}-failure-startup.png"))
         raise RuntimeError("startup timeout: "+json.dumps(driver.execute_script("return {ready:window.PlanetStage?.snapshot?.()?.ready||false,error:window.PlanetStage?.snapshot?.()?.startupError||null,body:String(document.body?.innerText||'').slice(0,900)}")))
 
     for idx,kind in enumerate(TYPES):
@@ -144,7 +145,11 @@ try:
         except TimeoutException:
             refresh()
             try: wait.until(lambda _d,k=kind,e=expected: valid_state(k,e))
-            except TimeoutException: raise RuntimeError("travel encounter presentation gate failed "+kind+": "+json.dumps(state()))
+            except TimeoutException:
+                driver.save_screenshot(str(OUT/f"{PROFILE}-failure-{idx+1:02d}-{kind}.png"))
+                failure_state=state()
+                (OUT/f"{PROFILE}-failure-{idx+1:02d}-{kind}.json").write_text(json.dumps(failure_state,indent=2))
+                raise RuntimeError("travel encounter presentation gate failed "+kind+": "+json.dumps(failure_state))
         time.sleep(.35)
         st=state();travel=st["travel"];crowd=st["crowd"]
         if travel.get("fullWorldScan") or travel.get("perFrameScan") or not travel.get("eventDriven"): raise RuntimeError("encounter scheduling architecture regression: "+json.dumps(st))
