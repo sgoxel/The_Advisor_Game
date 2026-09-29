@@ -47,21 +47,11 @@ def activate(kind,index):
       let placement=null;
       if(event?.location?.anchor){
         ResidentMovement.beginProof(seed);
-        const anchor=event.location.anchor,ax=BigInt(anchor.x),ay=BigInt(anchor.y);
-        const offsets=[[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1],[2,0],[-2,0],[0,2],[0,-2],[2,1],[-2,1],[2,-1],[-2,-1],[1,2],[-1,2],[1,-2],[-1,-2],[3,0],[-3,0],[0,3],[0,-3]];
-        const positions=[];
-        for(const off of offsets){
-          const x=String(ax+BigInt(off[0])),y=String(ay+BigInt(off[1]));
-          let nav=null;try{nav=Walkability.classify(seed,x,y)}catch(_){nav=null}
-          if(nav?.walkable&&!nav?.buildingId)positions.push({x,y,level:0});
-          if(positions.length>=event.participants.length)break;
-        }
-        if(positions.length<event.participants.length)throw new Error("insufficient walkable local-event evidence positions");
-        placement=ResidentMovement.proofPlaceResidentsAt(
-          event.participants.map((p,i)=>({residentId:p.id,position:positions[i]})),
-          "local-event-"+type
-        );
-        if(!placement)throw new Error("unable to place local-event participants for visual proof");
+        const anchor=event.location.anchor;
+        const placements=event.participants.map(p=>({residentId:p.id,position:p.eventTarget||anchor}));
+        if(placements.some(p=>!p.position?.x||!p.position?.y))throw new Error("missing product local-event staging target");
+        placement=ResidentMovement.proofPlaceResidentsAt(placements,"local-event-"+type);
+        if(!placement)throw new Error("unable to place local-event participants at product staging targets");
         PlanetStage.setWorldTileFocus(anchor.x,anchor.y);
         PlanetStage.setScaleIndex(arguments[2]);
       }
@@ -120,6 +110,11 @@ try:
         if int(st["events"].get("participantCount",0))>4:
             raise RuntimeError("event participant bound failed: "+json.dumps(st))
         participant_count=int((st["event"] or {}).get("participantCount") or len((st["event"] or {}).get("participants") or []))
+        staged=(st["event"] or {}).get("participants") or []
+        if not staged or any(p.get("eventTargetSource")!="bounded-walkable-staging" for p in staged):
+            raise RuntimeError("production event staging fallback used in visual proof: "+json.dumps(st))
+        if len({str(p.get("eventTarget",{}).get("x"))+","+str(p.get("eventTarget",{}).get("y")) for p in staged})!=participant_count:
+            raise RuntimeError("production event staging targets are not distinct: "+json.dumps(st))
         if st["visibleParticipants"]<2 or int(st["localStatic"].get("buildingCount",0))<=0:
             raise RuntimeError("event participants/local context not visibly materialized: "+json.dumps(st))
         if st["activeLocalEventCueCount"]<st["visibleParticipants"] or st["activeLocalEventCueCount"]>max(1,participant_count)*3:
