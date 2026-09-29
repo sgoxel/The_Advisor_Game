@@ -43,6 +43,7 @@ jobs:
         run: |
           node --check scripts/world/world-road-graph.js
           node --check tools/tests/wp-s006-009-world-road-graph.test.js
+          python -m py_compile tools/wp_s006_009_visual.py
 
       - name: Deterministic hierarchical road graph acceptance
         run: node tools/tests/wp-s006-009-world-road-graph.test.js
