@@ -1555,6 +1555,16 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
     if(!placed){overlap++;hiddenReasons.overlap++;visibilityReasonById.set(entity.id,"overlap");continue;}
     atlasLabelPlacementCache.set(entity.id,{dx:placed.dx,dy:placed.dy});
     const p=placed.projection,box=placed.box;
+    // Once the authoritative starting-settlement road/lot fabric is visible,
+    // its own focus label is redundant and can obscure the very network the
+    // player is approaching. Preserve all other labels and the world-center
+    // marker; suppress only the current focused town/village at route scale.
+    const suppressFocusSettlementLabel=entity.currentFocus===true&&
+      (entity.type==="village"||entity.type==="town")&&spec.settlementRevealTier==="route";
+    if(suppressFocusSettlementLabel){
+      visibilityReasonById.set(entity.id,"focus-settlement-fabric-visible");
+      continue;
+    }
     const tag=document.createElement("div");
     tag.className=entity.type==="landmark"?"planet-map-landmark":"planet-atlas-label";
     tag.dataset.kind=entity.type==="landmark"?(entity.landmarkType||"landmark"):entity.type;
@@ -2289,8 +2299,15 @@ function projectionHandoffForZoom(value=zoomState.scalar){
   return smoothstep01((clamp(value,0,1)-projectionState.transitionStart)/span);
 }
 function projectionPresentationBlendForZoom(value=zoomState.scalar){
-  const handoff=projectionHandoffForZoom(value);
-  return smoothstep01(clamp((handoff-.18)/.16,0,1));
+  // Keep the richly colored globe as the last-valid parent through the broad
+  // 1/100–1/375 approach. The tangent resource is already being prepared in
+  // parallel; only its visual ownership is delayed until the physical zoom is
+  // close enough that its bounded registered-meter texture carries useful
+  // local information. This changes presentation timing only, never geography.
+  const scalar=clamp(value,0,1);
+  const start=Math.max(projectionState.transitionStart,.79);
+  const end=Math.max(start+.0001,projectionState.transitionEnd);
+  return smoothstep01((scalar-start)/(end-start));
 }
 function canonicalSurfaceIdentity(){
   if(!geography)return null;
@@ -3702,13 +3719,15 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
     const b=record?.bounds;if(!b)continue;
     const minX=Number(b.minX)-.28,maxX=Number(b.maxX)+.28,minY=Number(b.minY)-.28,maxY=Number(b.maxY)+.28;
     if(![minX,maxX,minY,maxY].every(Number.isFinite)||maxX<=minX||maxY<=minY)continue;
-    const special=Boolean(record?.kind),fill=[142,101,58],border=special?[236,181,91]:[176,150,86];
+    const special=Boolean(record?.kind),fill=[142,101,58],
+      border=special?[224,174,92]:(tier==="route"?[116,105,70]:[164,140,82]);
     count++;
-    // Ordinary overview parcels are thin authoritative perimeters so they do
-    // not overpower the actual road network. Special lots retain a restrained
-    // fill because they are genuine canonical landmarks, not invented detail.
+    // Route-tier parcels are quiet cadastral context; roads/access links carry
+    // the stronger hierarchy. Special lots remain restrained landmarks.
     if(special)addQuad(minX,minY,maxX,maxY,fill,0);
-    const bw=Math.min(.25,Math.max(.14,Math.min(maxX-minX,maxY-minY)*.082));
+    const bw=tier==="route"
+      ?Math.min(.16,Math.max(.085,Math.min(maxX-minX,maxY-minY)*.050))
+      :Math.min(.23,Math.max(.12,Math.min(maxX-minX,maxY-minY)*.070));
     if(addQuad(minX,minY,maxX,minY+bw,border,.006))outlineSegmentCount++;
     if(addQuad(minX,maxY-bw,maxX,maxY,border,.006))outlineSegmentCount++;
     if(addQuad(minX,minY+bw,minX+bw,maxY-bw,border,.006))outlineSegmentCount++;
@@ -3721,8 +3740,8 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   for(const house of reveal?.houses||[]){
     const entrance=house?.entrance,target=entrance?.target;
     if(!entrance||!target)continue;
-    const accessWidth=tier==="route"?.30:.24;
-    if(addConnector(Number(entrance.x),Number(entrance.y),Number(target.x),Number(target.y),accessWidth,[78,62,34]))connectorSegmentCount++;
+    const accessWidth=tier==="route"?.38:.24;
+    if(addConnector(Number(entrance.x),Number(entrance.y),Number(target.x),Number(target.y),accessWidth,[72,61,38]))connectorSegmentCount++;
   }
   if(!count)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
@@ -3762,16 +3781,20 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       const ringCell=Boolean(local&&Math.abs(Number(local.radius||0)-ringRadius)<=1.25);
       const outwardBranch=Boolean(local&&kind==="main-road"&&Number(local.forward||0)>ringRadius+1);
       const gatewayStem=Boolean(local&&kind==="main-road"&&Number(local.forward||0)>=0&&!ringCell&&Math.abs(Number(local.lateral||0))<=1.5);
+      const centerAvenue=Boolean(local&&kind==="main-road"&&Number(local.radius||0)<=ringRadius+1.5&&
+        (Math.abs(Number(local.x||0))<=1.5||Math.abs(Number(local.y||0))<=1.5));
       const localPath=kind==="local-path";
       if(tier==="footprint"){
         if(!outwardBranch&&!gatewayStem)continue;
       }else{
-        // 1/2500 is a progressive overview: expose real outward connectivity and
-        // irregular local paths now, defer the canonical ring/center avenue to
-        // closer tiers where it no longer reads as a locator glyph.
-        if(!outwardBranch&&!gatewayStem&&!ringCell&&!localPath)continue;
+        // Settlement approach shows the complete authoritative movement spine:
+        // ring, both center avenues, gateway/outward road and true local paths.
+        // No road is invented; every rendered cell comes from infrastructureAt.
+        if(!outwardBranch&&!gatewayStem&&!ringCell&&!centerAvenue&&!localPath)continue;
       }
-      const half=tier==="footprint"?(outwardBranch?.30:.10):(outwardBranch?.40:.20);
+      const half=tier==="footprint"
+        ?(outwardBranch?.30:.10)
+        :(outwardBranch?.42:(ringCell||centerAvenue||gatewayStem)?.24:.16);
       addQuad(x-half,y-half,x+half,y+half);
       if(roadSet.has((x+1)+","+y))addQuad(x+half,y-half,x+1-half,y+half);
       if(roadSet.has(x+","+(y+1)))addQuad(x-half,y+half,x+half,y+1-half);
@@ -5830,13 +5853,18 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // directional slope lighting out above ~30 m/texel and keep local
         // curvature/drainage contrast, which is stable in registered meters.
         const slopeLightingWeight=smoothstep01(clamp((34-metersPerTexel)/28,0,1));
-        const rawHillshadeStrength=clamp((.08+focusRefineWeight*.42)*slopeLightingWeight,.02,.72);
-        const hillshadeCap=metersPerTexel<=6?.70:metersPerTexel<=30?.42:metersPerTexel<=120?.14:.08;
+        // At the 1/500 map tier, broad slope/curvature lighting can still turn a
+        // truthful kilometre-scale landform into one conspicuous pale arc. Fade
+        // only that low-frequency presentation component while retaining the
+        // registered-meter cover/macro field and full near-ground relief.
+        const nearReliefWeight=lerp(.48,1,smoothstep01(clamp((20-metersPerTexel)/13,0,1)));
+        const rawHillshadeStrength=clamp((.06+focusRefineWeight*.30)*slopeLightingWeight*nearReliefWeight,.015,.68);
+        const hillshadeCap=metersPerTexel<=6?.70:metersPerTexel<=30?.30:metersPerTexel<=120?.11:.07;
         const focusHillshadeStrength=Math.min(rawHillshadeStrength,hillshadeCap);
-        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.92:.88,contextRing?1.08:1.12);
-        const mapStructureBoost=lerp(1.18,1,smoothstep01(clamp((30-metersPerTexel)/28,0,1)));
-        const mapStructureScale=lerp(.56,1,smoothstep01(clamp((46-metersPerTexel)/28,0,1)));
-        const curvatureTone=curvatureSignal*(contextRing?lerp(.040,.060,contextRefineWeight):lerp(.068,.120,focusRefineWeight))*mapStructureBoost*mapStructureScale;
+        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.93:.90,contextRing?1.07:1.10);
+        const mapStructureBoost=lerp(1.08,1,smoothstep01(clamp((30-metersPerTexel)/28,0,1)));
+        const mapStructureScale=lerp(.48,1,smoothstep01(clamp((46-metersPerTexel)/28,0,1)));
+        const curvatureTone=curvatureSignal*(contextRing?lerp(.030,.048,contextRefineWeight):lerp(.046,.080,focusRefineWeight))*mapStructureBoost*mapStructureScale*nearReliefWeight;
         const slopeTone=-slopeSignal*(contextRing?lerp(.006,.014,contextRefineWeight):lerp(.010,.024,focusRefineWeight))*slopeLightingWeight;
         const drainageTone=(moistureCurve*(contextRing?lerp(.010,.018,contextRefineWeight):lerp(.016,.032,focusRefineWeight))-moistureGradient*(contextRing?.008:.012))*mapStructureScale;
         const structureTone=curvatureTone+slopeTone+drainageTone;
