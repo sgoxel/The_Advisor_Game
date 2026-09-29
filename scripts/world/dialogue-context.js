@@ -233,9 +233,9 @@ function resolve(seedValue,configValue){
       uncertain:Boolean(knowledge?.uncertain)
     }),
     rumor:rumor?Object.freeze({
-      id:rumor.id,status:rumor.status,confidence:rumor.confidence,reliability:rumor.reliability,
-      freshness:rumor.freshness,location:rumor.location,subject:rumor.subject,
-      destinationLead:rumor.destinationLead?Object.freeze({id:rumor.destinationLead.id,name:rumor.destinationLead.name,type:rumor.destinationLead.type,category:rumor.destinationLead.category}):null,
+      id:rumor.id,text:rumor.text,status:rumor.status,confidence:rumor.confidence,reliability:rumor.reliability,
+      source:rumor.source,freshness:rumor.freshness,location:rumor.location,subject:rumor.subject,
+      destinationLead:rumor.destinationLead?Object.freeze({...rumor.destinationLead}):null,
       characterBounded:true,createsWorldTruth:false
     }):null,
     authority:"presentation-only + persisted CharacterMemory/LocalRumors knowledge",
@@ -377,11 +377,11 @@ function recordInteraction(seedValue,residentIdValue,configValue){
 function revealLead(seedValue,dialogueValue){
   const seed=normalizeSeed(seedValue),dialogue=dialogueValue&&typeof dialogueValue==="object"?dialogueValue:null;
   if(!dialogue?.rumor?.destinationLead||!scope().LocalRumors?.revealLead)return null;
-  const rumor=scope().LocalRumors.bestForTopic?.(seed,dialogue.speaker?.id,{
-    topic:dialogue.topic,destinations:scope().PlanetStage?.placeDescriptors?.()||[]
-  })||null;
-  if(!rumor||rumor.id!==dialogue.rumor.id)return null;
-  return scope().LocalRumors.revealLead(seed,dialogue.speaker.id,rumor);
+  const rumor={
+    ...dialogue.rumor,campaignSeed:seed,speakerId:String(dialogue.speaker?.id||""),
+    source:dialogue.rumor.source||Object.freeze({type:"unknown"})
+  };
+  return scope().LocalRumors.revealLead(seed,rumor.speakerId,rumor);
 }
 const api=Object.freeze({
   TONES,SOCIAL_KEYS,CASE_IDS,normalizeSocial,resolve,recordInteraction,revealLead,caseConfigs,proof,renderDebugPanel
