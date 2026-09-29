@@ -232,10 +232,16 @@ function activityForIdentity(seedValue,planValue,ordinalValue,timestampValue){
     (record.identity.identityKind==="known-resident"?knownResidentActivity(seed,record.identity,timestamp):genericActivity(seed,planValue,record.identity,timestamp));
   return deepFreeze({inactive:false,activity,record,exceptional:Boolean(override?.activity)});
 }
-function activityForResident(seedValue,residentIdValue,whenValue){
-  const seed=normalizeSeed(seedValue),residentId=String(residentIdValue||"");
+let residentPlanCache={seed:null,plan:null};
+function startingVillagePlanForResidentActivity(seed){
+  if(residentPlanCache.seed===seed)return residentPlanCache.plan;
   const country=PoliticalGeography.countryAt(seed,"0","0");
   const plan=(SettlementArchetypes.settlementsForCountry(seed,country,3)||[]).find(item=>item.role==="starting-village")||null;
+  residentPlanCache={seed,plan};return plan;
+}
+function activityForResident(seedValue,residentIdValue,whenValue){
+  const seed=normalizeSeed(seedValue),residentId=String(residentIdValue||"");
+  const plan=startingVillagePlanForResidentActivity(seed);
   if(!plan)return DailyActivity.resolveActionTarget(seed,residentId,whenValue);
   const ordinal=Math.max(0,Number(residentId.replace(/^R/,""))-1);
   if(!/^R\d+$/.test(residentId)||ordinal>=12)return DailyActivity.resolveActionTarget(seed,residentId,whenValue);
