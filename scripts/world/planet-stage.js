@@ -6906,7 +6906,14 @@ function updateProjectionPresentation(visibleHeightUnits=1){
   // from strategic map scale while the first tangent parent prepares.
   const mapShellIn=smoothstep01(clamp((scalar-.50)/.075,0,1));
   const mapShellOut=displayResource?projectionPresentationBlendForZoom(scalar):0;
+  // Partition strategic representation opacity instead of layering independent
+  // fades. The relief globe owns (1-shell)*(1-tangent), the smooth canonical
+  // shell owns shell*(1-tangent), and the prepared tangent parent owns tangent.
+  // The three weights therefore sum to exactly 1.0 and protruding exaggerated
+  // globe peaks cannot remain visible once the smooth shell has full ownership.
+  const reliefGlobeOpacity=(1-mapShellIn)*(1-mapShellOut);
   const mapShellOpacity=mapScaleShell?mapShellIn*(1-mapShellOut):0;
+  const strategicShellOwnership=mapScaleShell?mapShellIn:0;
   if(mapScaleShell&&mapScaleShellMaterial){
     mapScaleShell.enabled=mapShellOpacity>.003;
     mapScaleShellMaterial.opacity=mapShellOpacity;
@@ -7042,10 +7049,14 @@ function updateProjectionPresentation(visibleHeightUnits=1){
   // still derived from the same canonical lat/lon focus.
   const handoff=projectionHandoffForZoom();
   const tangentReveal=displayResource?projectionPresentationBlendForZoom():0;
-  const globeFade=tangentReveal;
-  planet.enabled=globeFade<.9995;
+  // mapShellOut and tangentReveal are the same prepared-parent handoff weight.
+  // Use the partition computed above so the old relief globe cannot reappear
+  // underneath the shell while tangent ownership increases.
+  const reliefOpacity=clamp(reliefGlobeOpacity,0,1);
+  const globeFade=1-reliefOpacity;
+  planet.enabled=reliefOpacity>.0005;
   if(surfaceMaterial){
-    surfaceMaterial.opacity=1-globeFade;
+    surfaceMaterial.opacity=reliefOpacity;
     surfaceMaterial.blendType=handoff>.001?pc.BLEND_NORMAL:pc.BLEND_NONE;
     // The tangent patch is geometrically inside the globe. Once the handoff
     // starts, a depth-writing sphere would mask the canonical tangent surface
@@ -7061,11 +7072,15 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     tangentPatchMaterial.update();
   }
   projectionPresentation={...projectionPresentation,
-    globeOpacity:Number((1-globeFade).toFixed(6)),
+    globeOpacity:Number(reliefOpacity.toFixed(6)),
+    reliefGlobeOpacity:Number(reliefOpacity.toFixed(6)),
     tangentOpacity:Number(tangentReveal.toFixed(6)),
     horizonOpacity:Number(tangentReveal.toFixed(6)),
     mapScaleShellOpacity:Number(mapShellOpacity.toFixed(6)),
     mapScaleShellActive:Boolean(mapScaleShell&&mapShellOpacity>.003),
+    strategicShellOwnership:Number(strategicShellOwnership.toFixed(6)),
+    representationOpacitySum:Number((reliefOpacity+mapShellOpacity+tangentReveal).toFixed(6)),
+    representationOwner:tangentReveal>=Math.max(reliefOpacity,mapShellOpacity)?"tangent-parent":mapShellOpacity>=reliefOpacity?"smooth-map-shell":"relief-globe",
     globeDepthWrite:Boolean(handoff<.02)
   };
   localResources.visibleParentOpacity=Number(mapShellOpacity.toFixed(6));
