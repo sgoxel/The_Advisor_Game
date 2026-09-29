@@ -5328,7 +5328,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // albedo from the same authoritative land/elevation state at every LOD.
       const elevationBase=Number(sample?.elevationMeters||0),moistureBase=clamp(Number(sample?.moisture||.5),0,1);
       const mountainIdentity=clamp(Number(sample?.mountainInfluence||0),0,1);
-      const alpineBase=smoothstep01((elevationBase-2450)/2100),dry=1-moistureBase;
+      const alpineBase=smoothstep01((elevationBase-1700)/2600),dry=1-moistureBase;
       // Keep lowland, upland, and alpine presentation distinguishable using only
       // canonical elevation/moisture/mountain inputs. These weights never create
       // simulation identity; they expose existing SEED geography at map scale.
@@ -5341,7 +5341,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Preserve enough canonical globe hue to keep the same macro terrain
       // recognizable through the projection handoff, then converge smoothly.
       const coarseIdentity=smoothstep01(clamp((metersPerTexel-4)/70,0,1));
-      const macroIdentityWeight=clamp(.10+coarseIdentity*.16+mountainIdentity*.05,.10,.32);
+      const macroIdentityWeight=clamp(.055+coarseIdentity*.095+mountainIdentity*.025,.055,.19);
       const base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
       const elevation=Number(sample?.elevationMeters||0);
       const relief=clamp(elevation/5200,0,1);
@@ -5381,40 +5381,28 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const sxP=mixSample(Math.min(1,ux+dux),vz),sxN=mixSample(Math.max(0,ux-dux),vz);
         const syP=mixSample(ux,Math.max(0,vz-dvz)),syN=mixSample(ux,Math.min(1,vz+dvz));
         const h0=elevation,hxP=Number(sxP.elevationMeters||0),hxN=Number(sxN.elevationMeters||0),hyP=Number(syP.elevationMeters||0),hyN=Number(syN.elevationMeters||0);
-        const fineGx=(hxP-hxN)/(2*step),fineGy=(hyP-hyN)/(2*step);
-        const fineCurvature=hxP+hxN+hyP+hyN-4*h0;
-        // A second, wider physical baseline exposes the canonical landform
-        // hierarchy (ridge/valley direction) that was lost when a single local
-        // derivative collapsed into broad gray fields at 1/100–1/500.
-        const broadStep=Math.max(step*3.5,Math.min(4200,Math.max(step*5.5,metersPerTexel*12)));
-        const bdx=broadStep/spanEast,bdz=broadStep/spanNorth;
-        const bxP=mixSample(Math.min(1,ux+bdx),vz),bxN=mixSample(Math.max(0,ux-bdx),vz);
-        const byP=mixSample(ux,Math.max(0,vz-bdz)),byN=mixSample(ux,Math.min(1,vz+bdz));
-        const bhxP=Number(bxP.elevationMeters||0),bhxN=Number(bxN.elevationMeters||0),bhyP=Number(byP.elevationMeters||0),bhyN=Number(byN.elevationMeters||0);
-        const broadGx=(bhxP-bhxN)/(2*broadStep),broadGy=(bhyP-bhyN)/(2*broadStep);
-        const broadCurvature=bhxP+bhxN+bhyP+bhyN-4*h0;
-        const fineMix=contextRing?lerp(.54,.68,contextRefineWeight):lerp(.62,.82,focusRefineWeight);
-        const canonicalGx=lerp(broadGx,fineGx,fineMix),canonicalGy=lerp(broadGy,fineGy,fineMix);
-        const fineCurvatureSignal=clamp(-fineCurvature/Math.max(1,step*.16),-1,1);
-        const broadCurvatureSignal=clamp(-broadCurvature/Math.max(1,broadStep*.13),-1,1);
-        const curvatureSignal=lerp(broadCurvatureSignal,fineCurvatureSignal,contextRing?.46:lerp(.48,.70,focusRefineWeight));
+        // Symmetric derivatives avoid directional smearing. The curvature term
+        // exposes broad ridges/valleys even when the local palette is nearly
+        // uniform, without inventing contour bands or patch-relative noise.
+        const canonicalGx=(hxP-hxN)/(2*step),canonicalGy=(hyP-hyN)/(2*step);
+        const curvatureMeters=(hxP+hxN+hyP+hyN-4*h0);
+        const curvatureSignal=clamp(-curvatureMeters/Math.max(1,step*.16),-1,1);
         const slopeMagnitude=Math.hypot(canonicalGx,canonicalGy);
-        const slopeSignal=smoothstep01(clamp((slopeMagnitude-.005)/.115,0,1));
+        const slopeSignal=smoothstep01(clamp((slopeMagnitude-.006)/.13,0,1));
         const mxP=Number(sxP.moisture??moistureBase),mxN=Number(sxN.moisture??moistureBase),myP=Number(syP.moisture??moistureBase),myN=Number(syN.moisture??moistureBase);
         const moistureCurve=clamp(-(mxP+mxN+myP+myN-4*moistureBase)/.055,-1,1);
         const moistureGradient=clamp(Math.hypot(mxP-mxN,myP-myN)/.16,0,1);
-        const topoRefine=contextRing?lerp(.80,1,contextRefineWeight):lerp(.90,1,focusRefineWeight);
-        const exaggeration=lerp(3.6,7.0,smoothstep01(clamp((metersPerTexel-2)/130,0,1)))*topoRefine;
+        const topoRefine=contextRing?lerp(.78,1,contextRefineWeight):lerp(.88,1,focusRefineWeight);
+        const exaggeration=lerp(3.4,6.8,smoothstep01(clamp((metersPerTexel-2)/110,0,1)))*topoRefine;
         const gx=canonicalGx*exaggeration,gy=canonicalGy*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
-        const focusHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.44,.42,.82);
-        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.82:.70,contextRing?1.17:1.26);
-        const broadRidgeTone=broadCurvatureSignal*(contextRing?lerp(.020,.034,contextRefineWeight):lerp(.032,.052,focusRefineWeight));
-        const curvatureTone=curvatureSignal*(contextRing?lerp(.034,.052,contextRefineWeight):lerp(.052,.096,focusRefineWeight));
-        const slopeTone=-slopeSignal*(contextRing?lerp(.012,.026,contextRefineWeight):lerp(.020,.042,focusRefineWeight));
+        const focusHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.46,.40,.82);
+        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.83:.72,contextRing?1.16:1.24);
+        const curvatureTone=curvatureSignal*(contextRing?lerp(.034,.052,contextRefineWeight):lerp(.052,.098,focusRefineWeight));
+        const slopeTone=-slopeSignal*(contextRing?lerp(.014,.028,contextRefineWeight):lerp(.022,.044,focusRefineWeight));
         const drainageTone=moistureCurve*(contextRing?lerp(.010,.018,contextRefineWeight):lerp(.016,.032,focusRefineWeight))-moistureGradient*(contextRing?.008:.012);
-        const structureTone=broadRidgeTone+curvatureTone+slopeTone+drainageTone;
-        cover=[structureTone,structureTone*.96+drainageTone*.12,curvatureTone*.72+broadRidgeTone*.74+slopeTone*.62+drainageTone*.56];
+        const structureTone=curvatureTone+slopeTone+drainageTone;
+        cover=[structureTone,structureTone*.95+drainageTone*.12,curvatureTone*.74+slopeTone*.64+drainageTone*.58];
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
         const coverGain=contextRing?contextRefineWeight*.20:lerp(.24,.84,focusRefineWeight);
@@ -5422,7 +5410,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const landCover=sharedCover.map((v,i)=>(v+(nativeCover[i]-sharedCover[i])*coverGain)*coverContrast);
         cover=cover.map((v,i)=>v+landCover[i]);
       }
-      const identityTint=sample?.land?[relief*.075,relief*.065,relief*.035]:[-.012,-.004,.028];
+      const identityTint=sample?.land?[relief*.040,relief*.036,relief*.020]:[-.010,-.003,.024];
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
       let displayColor=authoritative;
       if(useMicroDetail){
@@ -5565,7 +5553,7 @@ function finalizeLocalResource(job,result){
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
-      topographicSignalRevision:"canonical-multiscale-elevation-drainage-v5",topographicSignalAuthority:"PlanetGeography elevation slope/curvature at two physical baselines + moisture sampled through SeedCoordinateFabric registered meters",
+      topographicSignalRevision:"canonical-single-baseline-elevation-drainage-v6",topographicSignalAuthority:"PlanetGeography elevation slope/curvature + moisture sampled from the existing per-texture authority cache through SeedCoordinateFabric registered meters",
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
