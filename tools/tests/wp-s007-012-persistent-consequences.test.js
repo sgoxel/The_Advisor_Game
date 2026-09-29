@@ -125,11 +125,14 @@ assert(snap.maxResolveMs<50,"bounded local resolve exceeded 50 ms in determinist
 const source=fs.readFileSync("scripts/world/persistent-consequences.js","utf8");
 const html=fs.readFileSync("index.html","utf8");
 const css=fs.readFileSync("styles/main.css","utf8");
+const stageSource=fs.readFileSync("scripts/world/planet-stage.js","utf8");
 assert(source.includes("WorldState.applyDelta"),"PersistentConsequences must persist through authoritative WorldState deltas");
 assert(source.includes('window.addEventListener?.("advisor:world-state-delta-change"'),"projection does not react to lazy delta revisions");
 assert(html.includes("scripts/world/persistent-consequences.js"),"production HTML missing PersistentConsequences");
 assert(html.indexOf("scripts/world/persistent-consequences.js")<html.indexOf("scripts/world/planet-stage.js"),"consequence projection must load before PlanetStage");
 assert(css.includes(".persistent-world-consequence"),"persistent consequence panel styles missing");
+assert(stageSource.includes("rebuildPersistentConsequenceProjection")&&stageSource.includes("persistentConsequenceWorldCueCount"),"PlanetStage local consequence projection missing");
+assert(stageSource.includes('String(detail.entityKind||"")!=="consequence-registry"'),"PlanetStage consequence delta listener is not scoped to the registry kind");
 
 console.log(JSON.stringify({
   pass:true,wp:"WP-S007-012",classification:"MIXED",

@@ -184,6 +184,14 @@ let campaignWearProjection={
   authoritativeSource:"WorldState.resolve local structural building refs",evidenceHookAvailable:true,lastBuildReason:"none",
   presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameScan:false,buildMs:0
 };
+let localPersistentConsequenceRoot=null;
+let persistentConsequenceProjection={
+  active:false,recordCount:0,activeCount:0,projectedActiveCount:0,recoveredCount:0,
+  worldCueCount:0,buildingStateCueCount:0,primitiveCueCount:0,drawCallEstimate:0,triangleCount:0,
+  registryRevision:0,sourceDeltaRevision:0,records:Object.freeze([]),lastBuildReason:"none",buildMs:0,
+  authority:"PersistentConsequences + canonical HousePlans/StartingVillage coordinates",
+  presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameScan:false
+};
 let localNpcRoot=null;
 let localNpcMaterials=null;
 let localNpcContext=null;
@@ -3525,6 +3533,9 @@ function ensureLocalStaticMaterials(){
     activityProp:make("LocalActivityProp",.39,.24,.10),
     surroundings:(()=>{const m=make("LocalBuildingSurroundings",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     campaignWear:(()=>{const m=make("LocalCampaignWear",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    consequenceDamage:make("LocalConsequenceDamage",.62,.18,.08),
+    consequenceBlocked:make("LocalConsequenceBlocked",.82,.47,.11),
+    consequenceAbandoned:make("LocalConsequenceAbandoned",.24,.40,.14),
     wayfinding:(()=>{const m=make("LocalWayfindingSigns",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     wilderness:wildernessMaterial,fauna:(()=>{const m=make("LocalFauna",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})()
   };
@@ -5528,6 +5539,105 @@ function handleCampaignWearDeltaChange(event){
 }
 window.addEventListener("advisor:world-state-delta-change",handleCampaignWearDeltaChange);
 
+function resetPersistentConsequenceProjection(reason="cleared"){
+  localPersistentConsequenceRoot?.destroy?.();localPersistentConsequenceRoot=null;
+  persistentConsequenceProjection={
+    ...persistentConsequenceProjection,active:false,recordCount:0,activeCount:0,projectedActiveCount:0,recoveredCount:0,
+    worldCueCount:0,buildingStateCueCount:0,primitiveCueCount:0,drawCallEstimate:0,triangleCount:0,
+    registryRevision:0,sourceDeltaRevision:0,records:Object.freeze([]),lastBuildReason:String(reason),buildMs:0
+  };
+}
+function persistentConsequenceBuilding(reveal,id){
+  const key=String(id||"");
+  return [...(reveal?.houses||[]),...(reveal?.specialLots||[])].find(record=>String(record?.id||"")===key)||null;
+}
+function addPersistentConsequenceWorldCue(record,context,index){
+  const result={primitiveCount:0,buildingStateCueCount:0,triangleCount:0};
+  if(!record||record.status!=="active"||!localPersistentConsequenceRoot)return result;
+  const type=String(record.type||""),scale=Number(context.presentationScale||1),unit=Math.max(1e-9,Number(context.unit)||1),s=scale/unit;
+  if(type==="road-blockage"){
+    const a=record.target?.anchor;if(!a)return result;
+    const tm=Math.max(1,Number(context.reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
+    const east=Number(a.x)*tm,north=Number(a.y)*tm,pos=canonicalSemanticPosition(east,north,scale,unit,context.frame);
+    const ground=canonicalSemanticGroundHeightUnits(east,north,context.frame)+Number(context.lift||0)+.028;
+    const beamL=Math.max(.11,3.25*s),beamW=Math.max(.028,.34*s),beamH=Math.max(.026,.30*s),postH=Math.max(.05,.78*s),postOffset=Math.max(.06,1.28*s);
+    addLocalPrimitive(localPersistentConsequenceRoot,"ConsequenceBlockadeA-"+index,"box",localStaticMaterials.consequenceBlocked,pos.x,ground+beamH*.65,pos.z,beamL,beamH,beamW,0,45,0);
+    addLocalPrimitive(localPersistentConsequenceRoot,"ConsequenceBlockadeB-"+index,"box",localStaticMaterials.consequenceBlocked,pos.x,ground+beamH*.92,pos.z,beamL,beamH,beamW,0,-45,0);
+    addLocalPrimitive(localPersistentConsequenceRoot,"ConsequencePostA-"+index,"box",localStaticMaterials.activityProp,pos.x-postOffset,ground+postH*.5,pos.z,beamW*1.18,postH,beamW*1.18);
+    addLocalPrimitive(localPersistentConsequenceRoot,"ConsequencePostB-"+index,"box",localStaticMaterials.activityProp,pos.x+postOffset,ground+postH*.5,pos.z,beamW*1.18,postH,beamW*1.18);
+    result.primitiveCount=4;result.triangleCount=48;return result;
+  }
+  const building=persistentConsequenceBuilding(context.reveal,record.target?.entityId);if(!building)return result;
+  const state=type==="damaged-building"?"damaged":type==="abandoned-workplace"?"overgrown":null;
+  if(state&&applyCanonicalBuildingWearState(building.id,state))result.buildingStateCueCount=1;
+  const g=activityBuildingGeometry(building,scale,unit,context.frame,context.lift);if(!g)return result;
+  const pos=canonicalSemanticPosition(g.east,g.north,scale,unit,context.frame),front=canonicalSemanticPosition(g.east,g.north+g.d*.56,scale,unit,context.frame);
+  if(type==="damaged-building"){
+    const specs=[[-1.15,.18,.18,1.45,.32,.58,12],[.18,.12,-.05,1.10,.28,.50,-18],[1.18,.16,.15,1.32,.30,.54,27]];
+    for(let i=0;i<specs.length;i++){
+      const q=specs[i];
+      addLocalPrimitive(localPersistentConsequenceRoot,"ConsequenceDebris-"+index+"-"+i,"box",localStaticMaterials.consequenceDamage,pos.x+q[0]*s,g.ground+q[1]*s,front.z+q[2]*s,q[3]*s,q[4]*s,q[5]*s,0,q[6],0);
+    }
+    result.primitiveCount=3;result.triangleCount=36;
+  }else if(type==="abandoned-workplace"){
+    const spread=Math.max(.5,g.w*.22),specs=[[-spread,.12,.20,1.25,.18,1.10,9],[0,.10,-.18,1.55,.16,1.00,-11],[spread,.13,.12,1.18,.20,1.16,16]];
+    for(let i=0;i<specs.length;i++){
+      const q=specs[i];
+      addLocalPrimitive(localPersistentConsequenceRoot,"ConsequenceOvergrowth-"+index+"-"+i,"box",localStaticMaterials.consequenceAbandoned,pos.x+q[0]*s,g.ground+q[1]*s,front.z+q[2]*s,q[3]*s,q[4]*s,q[5]*s,0,q[6],0);
+    }
+    result.primitiveCount=3;result.triangleCount=36;
+  }
+  return result;
+}
+function rebuildPersistentConsequenceProjection(reason="settlement-rebuild"){
+  const started=performance.now(),context=localCampaignWearContext;
+  localPersistentConsequenceRoot?.destroy?.();localPersistentConsequenceRoot=null;
+  if(!context||!["refined","full"].includes(String(context.tier))||!localStaticRoot||!window.PersistentConsequences?.projection){
+    resetPersistentConsequenceProjection(reason);return 0;
+  }
+  let view=null;try{view=window.PersistentConsequences.projection(activeSeed)}catch(_){view=null;}
+  if(!view){resetPersistentConsequenceProjection(reason);return 0;}
+  const records=(view.records||[]).slice(0,8),active=records.filter(record=>record?.status==="active").slice(0,3);
+  localPersistentConsequenceRoot=new pc.Entity("PersistentConsequenceProjection");localStaticRoot.addChild(localPersistentConsequenceRoot);
+  let primitiveCueCount=0,buildingStateCueCount=0,triangleCount=0;
+  const projected=[];
+  for(let i=0;i<active.length;i++){
+    const record=active[i],cue=addPersistentConsequenceWorldCue(record,context,i);
+    primitiveCueCount+=cue.primitiveCount;buildingStateCueCount+=cue.buildingStateCueCount;triangleCount+=cue.triangleCount;
+    projected.push(Object.freeze({id:String(record.id),type:String(record.type),targetId:String(record.target?.entityId||""),primitiveCueCount:cue.primitiveCount,buildingStateCueCount:cue.buildingStateCueCount}));
+  }
+  if(!primitiveCueCount){localPersistentConsequenceRoot.destroy();localPersistentConsequenceRoot=null;}
+  persistentConsequenceProjection={
+    ...persistentConsequenceProjection,active:(primitiveCueCount+buildingStateCueCount)>0,
+    recordCount:Number(view.recordCount||records.length),activeCount:Number(view.activeCount||0),projectedActiveCount:active.length,recoveredCount:Number(view.recoveredCount||0),
+    worldCueCount:primitiveCueCount+buildingStateCueCount,buildingStateCueCount,primitiveCueCount,
+    drawCallEstimate:primitiveCueCount,triangleCount,registryRevision:Number(view.registryRevision||0),sourceDeltaRevision:Number(view.sourceDeltaRevision||0),
+    records:Object.freeze(projected),lastBuildReason:String(reason),buildMs:Number((performance.now()-started).toFixed(4)),
+    authority:"PersistentConsequences + canonical HousePlans/StartingVillage coordinates",
+    presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameScan:false
+  };
+  return persistentConsequenceProjection.drawCallEstimate;
+}
+function handlePersistentConsequenceDeltaChange(event){
+  const detail=event?.detail||{};
+  if(!activeSeed||String(detail.seed||"")!==String(activeSeed)||String(detail.entityKind||"")!=="consequence-registry"||!localCampaignWearContext||!localStaticRoot)return;
+  const oldDraw=Number(localStatic.persistentConsequenceDrawCallEstimate||0),oldTriangles=Number(localStatic.persistentConsequenceTriangleCount||0);
+  rebuildCanonicalCampaignWearProjection("persistent-consequence-base");
+  const drawCalls=rebuildPersistentConsequenceProjection("persistent-delta-event"),triangles=Number(persistentConsequenceProjection.triangleCount||0);
+  localStatic={
+    ...localStatic,entityCount:Number(localStaticRoot?.children?.length||localStatic.entityCount||0),
+    drawCallEstimate:Math.max(0,Number(localStatic.drawCallEstimate||0)-oldDraw+drawCalls),
+    triangleEstimate:Math.max(0,Number(localStatic.triangleEstimate||0)-oldTriangles+triangles),
+    campaignWearDrawCallEstimate:Number(campaignWearProjection.drawCallEstimate||0),campaignWearTriangleCount:Number(campaignWearProjection.triangleCount||0),
+    persistentRevisionSignature:campaignWearProjection.revisionSignature,persistentPresentationSignature:String(localStatic.signature||"")+"|"+String(campaignWearProjection.revisionSignature||"CWP|0"),
+    persistentConsequenceActiveCount:Number(persistentConsequenceProjection.activeCount||0),persistentConsequenceProjectedActiveCount:Number(persistentConsequenceProjection.projectedActiveCount||0),
+    persistentConsequenceWorldCueCount:Number(persistentConsequenceProjection.worldCueCount||0),persistentConsequenceDrawCallEstimate:Number(persistentConsequenceProjection.drawCallEstimate||0),
+    persistentConsequenceTriangleCount:Number(persistentConsequenceProjection.triangleCount||0),persistentConsequenceBuildMs:Number(persistentConsequenceProjection.buildMs||0),
+    persistentConsequenceRegistryRevision:Number(persistentConsequenceProjection.registryRevision||0)
+  };
+}
+window.addEventListener("advisor:world-state-delta-change",handlePersistentConsequenceDeltaChange);
+
 function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const started=performance.now(),dims=resource.dims,unit=dims.metersPerUnit,plan=reveal.settlement,village=reveal.village;
   const scale=revealPresentationScale(dims,tier,Number(village.approximateCoreDiameterMeters||104));
@@ -5585,6 +5695,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const surroundingsDrawCalls=buildCanonicalBuildingSurroundings(reveal,tier,semanticFrame,scale,unit,lift);
   localCampaignWearContext={reveal,tier,frame:semanticFrame,presentationScale:scale,unit,lift};
   const campaignWearDrawCalls=rebuildCanonicalCampaignWearProjection("settlement-rebuild");
+  const consequenceDrawCalls=rebuildPersistentConsequenceProjection("settlement-rebuild");
   const treeCount=tier==="route"?4:tier==="coarse"?6:tier==="refined"?10:tier==="full"?12:0;
   for(let i=0;i<treeCount;i++){
     const angle=i/Math.max(1,treeCount)*Math.PI*2+localHash(i*17,treeCount,91)*.22;
@@ -5612,14 +5723,18 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     coarseBuildingCount:coarseBuildings,landmarkCount:landmarks,
     fullRoadCount:detailed?roadCount:0,fullBuildingCount:fullBuildings,
     roadCount,buildingCount:coarseBuildings+fullBuildings,vegetationCount:vegetation,wildernessCount:wild.accepted,ambientFaunaCount:wild.fauna,waterCount:0,
-    entityCount,triangleEstimate:triangles+wild.triangles+Number(buildingSurroundings.triangleCount||0)+Number(campaignWearProjection.triangleCount||0)+Number(wayfindingSignposts.triangleCount||0),
-    drawCallEstimate:entityCount+wild.fauna+Number(campaignWearDrawCalls||0),
+    entityCount,triangleEstimate:triangles+wild.triangles+Number(buildingSurroundings.triangleCount||0)+Number(campaignWearProjection.triangleCount||0)+Number(persistentConsequenceProjection.triangleCount||0)+Number(wayfindingSignposts.triangleCount||0),
+    drawCallEstimate:entityCount+wild.fauna+Number(campaignWearDrawCalls||0)+Number(consequenceDrawCalls||0),
     footprintMode:envelope.mode,occupiedLotMode:lotContext.mode,occupiedLotCount:Number(lotContext.count||0),routeGeometryMode:roadGeometry.mode,
     routeOverviewStats:roadGeometry.overviewStats||null,routeOverviewPlanRevision:routePlan?.revision||null,routeOverviewRecordCount:Number(routePlan?.records?.length||0),
     roadAuthorityQueryCount:Number(envelope.roadAuthorityQueryCount||0)+Number(roadGeometry.queryCount||0),
     wayfindingSignCount:Number(wayfindingSignposts.signCount||0),wayfindingPanelCount:Number(wayfindingSignposts.panelCount||0),wayfindingDrawCallEstimate:Number(wayfindingDrawCalls||0),
     persistentRevisionSignature:campaignWearProjection.revisionSignature,persistentPresentationSignature:String(resource.signature||"")+"|"+String(campaignWearProjection.revisionSignature||"CWP|0"),
     campaignWearDrawCallEstimate:Number(campaignWearProjection.drawCallEstimate||0),campaignWearTriangleCount:Number(campaignWearProjection.triangleCount||0),
+    persistentConsequenceActiveCount:Number(persistentConsequenceProjection.activeCount||0),persistentConsequenceProjectedActiveCount:Number(persistentConsequenceProjection.projectedActiveCount||0),
+    persistentConsequenceWorldCueCount:Number(persistentConsequenceProjection.worldCueCount||0),persistentConsequenceDrawCallEstimate:Number(persistentConsequenceProjection.drawCallEstimate||0),
+    persistentConsequenceTriangleCount:Number(persistentConsequenceProjection.triangleCount||0),persistentConsequenceBuildMs:Number(persistentConsequenceProjection.buildMs||0),
+    persistentConsequenceRegistryRevision:Number(persistentConsequenceProjection.registryRevision||0),
     buildTimeMs:Number((performance.now()-started).toFixed(3)),
     grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,
     authority:"SettlementArchetypes + StartingVillage + HousePlans + SpecialLots"
@@ -5865,11 +5980,12 @@ function rebuildLocalStaticPresentation(resource){
   buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
   clearCanonicalBuildingSurroundings();
   clearCanonicalCampaignWearProjection(false);localCampaignWearContext=null;
+  resetPersistentConsequenceProjection("static-rebuild");
   clearLocalFauna();
   localStaticRoot?.destroy?.();localStaticRoot=null;localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;localSettlementLotGeometry?.destroy?.();localSettlementLotGeometry=null;clearCanonicalRoofRegistry();
   const tier=settlementRevealTierForScalar();
   resetMicroLocationPresentation();microLocationClearanceCenters=[];
-  localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,microLocationCount:0,microLocationPropCount:0,microLocationPrimitiveCount:0,microLocationDrawCallEstimate:0,microLocationTriangleEstimate:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,presentationOnly:true,simulationAuthority:false};
+  localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,microLocationCount:0,microLocationPropCount:0,microLocationPrimitiveCount:0,microLocationDrawCallEstimate:0,microLocationTriangleEstimate:0,persistentConsequenceActiveCount:0,persistentConsequenceProjectedActiveCount:0,persistentConsequenceWorldCueCount:0,persistentConsequenceDrawCallEstimate:0,persistentConsequenceTriangleCount:0,persistentConsequenceBuildMs:0,persistentConsequenceRegistryRevision:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,presentationOnly:true,simulationAuthority:false};
   const reveal=canonicalStartingVillageReveal(resource);
   if(reveal&&tier!=="none"){
     rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame);
@@ -8685,7 +8801,7 @@ function destroy(){
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
   clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection(false);localCampaignWearContext=null;clearCanonicalWayfindingSignposts();clearCanonicalRoofRegistry();
   app?.destroy?.();
-  app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
+  app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localPersistentConsequenceRoot=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
   environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionTextures=null;environmentalReactionPool=[];
   environmentalReactions={enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,activeDrawCallEstimate:0,peakActiveCount:0,triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,terrainMutation:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameWorldScan:false};
   clearLocalBuildingActivity();localBuildingActivityRoot=null;localBuildingActivityContext=null;

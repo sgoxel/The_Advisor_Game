@@ -35,7 +35,7 @@ def ready():
         return driver.execute_script("""
           const s=window.PlanetStage?.snapshot?.();
           return Boolean(document.getElementById("planetStageRoot")?.dataset?.ready==="true" &&
-            s?.ready && window.PersistentConsequences && window.WorldState && window.CampaignPersistence &&
+            s?.ready && window.PersistentConsequences && window.WorldState && window.WorldContext && window.CampaignPersistence &&
             window.CatchUpSimulation && window.EventScheduler && window.GameTime);
         """)
     except Exception:
@@ -151,7 +151,9 @@ try:
             wait.until(lambda _d: (
                 current_state()["panelVisible"] and current_state()["scaleIndex"]==SCALE_INDEX and
                 current_state()["signatureReady"] and bool(current_state()["localStatic"].get("active")) and
-                int(current_state()["localStatic"].get("buildingCount",0))>0
+                int(current_state()["localStatic"].get("buildingCount",0))>0 and
+                int(current_state()["localStatic"].get("persistentConsequenceProjectedActiveCount",0))==1 and
+                int(current_state()["localStatic"].get("persistentConsequenceWorldCueCount",0))>0
             ))
         except TimeoutException:
             raise RuntimeError("consequence presentation timeout "+kind+": "+json.dumps(current_state()))
@@ -162,6 +164,8 @@ try:
             raise RuntimeError("single active consequence contract failed: "+json.dumps(st))
         if cs.get("registryKind")!="consequence-registry" or cs["fullWorldScan"] or cs["fullSettlementPerFrameScan"] or cs["perFrameScan"] or not cs["lazyLocal"]:
             raise RuntimeError("bounded consequence architecture regression: "+json.dumps(st))
+        if int(st["localStatic"].get("persistentConsequenceProjectedActiveCount",0))!=1 or int(st["localStatic"].get("persistentConsequenceWorldCueCount",0))<1:
+            raise RuntimeError("local consequence world projection missing: "+json.dumps(st))
         if kind.split("-")[0].upper() not in st["panelText"].upper():
             raise RuntimeError("consequence panel text mismatch: "+json.dumps(st))
         if idx==0:
@@ -179,7 +183,8 @@ try:
     # Recovery presentation: return to the damaged building and advance authoritative fantasy time.
     activation=set_case("damaged-building")
     recovered=recover()
-    wait.until(lambda _d: current_state()["consequence"]["recoveredCount"]==1 and current_state()["panelVisible"])
+    wait.until(lambda _d: current_state()["consequence"]["recoveredCount"]==1 and current_state()["panelVisible"] and
+               int(current_state()["localStatic"].get("persistentConsequenceWorldCueCount",0))==0)
     time.sleep(.45)
     st=current_state()
     if recovered["activeCount"]!=0 or recovered["recoveredCount"]!=1 or "RECOVERED" not in st["panelText"].upper():
