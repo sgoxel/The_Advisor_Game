@@ -34,6 +34,11 @@ jobs:
           python-version: '3.11'
       - name: Install screenshot dependencies
         run: python -m pip install -r tools/requirements.txt
+      - name: Syntax check integration scripts
+        run: |
+          node --check scripts/world/crowd-presentation.js
+          node --check scripts/ui/app-ui.js
+          node --check scripts/render/playcanvas/app.js
       - name: Functional density crowd proof
         run: node tools/tests/wp-s004-010-density-crowd.test.js
       - name: Start local game
