@@ -2743,3 +2743,9 @@
 - Root cause: the prototype registry used WorldState.structuralRef with reserved kind "settlement". Production WorldState.materialize routes kind "settlement" through SettlementArchetypes.build and requires canonical generated-settlement keys, so this structural registry cannot materialize; WorldState.applyDelta therefore correctly rejects the write. The simplified deterministic mock did not model this reserved-kind branch.
 - Three-attempt cap is exhausted. No fresh screenshots were produced and VISUAL is therefore UNSCORED rather than fabricated.
 - Reconciliation removed the unaccepted PersistentConsequences service, production script load, panel CSS, dedicated deterministic test, Selenium evidence harness and dedicated workflow from main through commit 725c6d2854f4b8c197c08a624e87b26cf1e235c0. WP-S007-012 remains OPEN / IN PROGRESS / NOT COMPLETED.
+
+2026-09-29 22:10 +03:00 | WP-S006-007-001 | CORRECTED COMPLETION BOOKKEEPING
+- Corrected acceptance/docs commit `18a61eefa2a2b70ca8e55a3296c7e201ac824bbe` deployed successfully via GitHub Pages run `36616677421`.
+- Its automatically triggered regression confirmation workflow `36616679669` completed SUCCESS on both landscape and portrait, confirming the accepted Attempt-2 product remains functionally green after documentation/workflow cleanup.
+- ROADMAP now marks WP-S006-007-001 COMPLETED against accepted product `9ff7d8404adf50cc39dac9ae5d87d50549fcd2a3`, exact evidence `26dc8f0fe9de8465fc56e6ef7bd1050ac0dbce03` / workflow `36615130935`, artifacts `11054664493` + `11055540115`, FUNCTIONAL PASS and directly inspected VISUAL 8.1/10 PASS.
+- This bookkeeping commit must itself deploy successfully before Issue #129 is closed.
