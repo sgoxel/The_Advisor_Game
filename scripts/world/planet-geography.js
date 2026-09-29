@@ -12,6 +12,8 @@ const ISOLATED_ISLAND_COUNT=8;
 const MOUNTAIN_NODES_PER_CONTINENT=9;
 const DEFAULT_WORLD_RADIUS_METERS=637100;
 const DEFAULT_TILE_METERS=2;
+const TERRAIN_FEATURE_REVISION="seed-registered-terrain-features-v1";
+const TERRAIN_FEATURE_CACHE_LIMIT=8192;
 const INSTANCE_CACHE=new Map();
 const CONTINENT_STEMS=Object.freeze(["Alder","Amber","Ashen","Bright","Cedar","Dawn","Elder","Falcon","Golden","Green","Grey","High","Iron","Kings","Lake","North","Oak","Raven","Red","River","Silver","Stone","Sun","Thorn","West","White","Wolf"]);
 const CONTINENT_TAILS=Object.freeze(["reach","fall","wood","mere","gate","vale","march","crest","land","haven"]);
@@ -360,10 +362,64 @@ function create(seedValue){
     peak:hash32(seed+"|peak-noise"),
     ocean:hash32(seed+"|ocean"),
     moisture:hash32(seed+"|moisture"),
+    featureRidge:hash32(seed+"|terrain-feature-ridge"),
+    featureDrainage:hash32(seed+"|terrain-feature-drainage"),
+    featureCover:hash32(seed+"|terrain-feature-cover"),
     warpX:hash32(seed+"|warp-x"),
     warpY:hash32(seed+"|warp-y"),
     warpZ:hash32(seed+"|warp-z")
   });
+  // Canonical registered-meter terrain features are presentation authority,
+  // not simulation authority. They are generated only from Campaign SEED and
+  // the fixed PlanetGeography registration, so every renderer/LOD samples the
+  // same ridgeline/valley/drainage/cover identity. Cache only lattice nodes:
+  // this preserves exact continuous interpolation while bounding memory.
+  const terrainFeatureLatticeCache=new Map();
+  function terrainFeatureLattice(base,ix,iy){
+    const key=String(base)+"|"+String(ix)+"|"+String(iy);
+    if(terrainFeatureLatticeCache.has(key))return terrainFeatureLatticeCache.get(key);
+    const value=intHash(base,ix,iy,0)/4294967295*2-1;
+    terrainFeatureLatticeCache.set(key,value);
+    if(terrainFeatureLatticeCache.size>TERRAIN_FEATURE_CACHE_LIMIT){
+      const oldest=terrainFeatureLatticeCache.keys().next().value;
+      terrainFeatureLatticeCache.delete(oldest);
+    }
+    return value;
+  }
+  function terrainFeatureNoise(base,eastMeters,northMeters,wavelengthMeters){
+    const wavelength=Math.max(8,Number(wavelengthMeters)||8);
+    const x=Number(eastMeters||0)/wavelength,y=Number(northMeters||0)/wavelength;
+    const x0=Math.floor(x),y0=Math.floor(y),tx=smooth01(x-x0),ty=smooth01(y-y0);
+    const a=terrainFeatureLattice(base,x0,y0),b=terrainFeatureLattice(base,x0+1,y0);
+    const c=terrainFeatureLattice(base,x0,y0+1),d=terrainFeatureLattice(base,x0+1,y0+1);
+    return lerp(lerp(a,b,tx),lerp(c,d,tx),ty);
+  }
+  function terrainFeatureAtRegisteredMeters(eastMeters,northMeters,metersPerSample=100){
+    const east=Number(eastMeters||0),north=Number(northMeters||0),mps=Math.max(1,Number(metersPerSample)||1);
+    const admitted=wavelength=>smooth01(clamp((wavelength/mps-2)/5,0,1));
+    const ridgeBroad=terrainFeatureNoise(bases.featureRidge,east,north,18000)*admitted(18000);
+    const ridgeMid=((1-Math.abs(terrainFeatureNoise(bases.featureRidge,east,north,6500)))*2-1)*admitted(6500);
+    const ridgeFine=((1-Math.abs(terrainFeatureNoise(bases.featureRidge^0x51ed270b,east,north,2200)))*2-1)*admitted(2200);
+    const ridgeValley=clamp(ridgeBroad*.28+ridgeMid*.48+ridgeFine*.24,-1,1);
+    const drainageBroad=((1-Math.abs(terrainFeatureNoise(bases.featureDrainage,east,north,5200)))*2-1)*admitted(5200);
+    const drainageFine=((1-Math.abs(terrainFeatureNoise(bases.featureDrainage^0x68bc21eb,east,north,1600)))*2-1)*admitted(1600);
+    const drainage=clamp((drainageBroad*.68+drainageFine*.32-.34)*1.55,0,1);
+    const cover=clamp(
+      terrainFeatureNoise(bases.featureCover,east,north,6200)*.50*admitted(6200)+
+      terrainFeatureNoise(bases.featureCover^0x02e5be93,east,north,2100)*.32*admitted(2100)+
+      terrainFeatureNoise(bases.featureCover^0x7f4a7c15,east,north,720)*.18*admitted(720),
+      -1,1
+    );
+    return Object.freeze({
+      revision:TERRAIN_FEATURE_REVISION,
+      authority:"Campaign-SEED + PlanetGeography registered-meter lattice",
+      eastMeters:east,northMeters:north,metersPerSample:mps,
+      ridgeValley:Number(ridgeValley.toFixed(6)),
+      drainage:Number(drainage.toFixed(6)),
+      cover:Number(cover.toFixed(6)),
+      simulationAuthority:false
+    });
+  }
 
   function sampleDirection(directionValue){
     const d=normalize(directionValue.x,directionValue.y,directionValue.z);
@@ -519,12 +575,19 @@ function create(seedValue){
   const instance=Object.freeze({
     VERSION,seed,
     sampleDirection,sampleLatLon,signature,seamProof,continentById,
+    terrainFeatureAtRegisteredMeters,
     worldLatLonForTile,worldTileForLatLon,registrationRoundTrip,
     registration:Object.freeze({
       authority:"PlanetGeography.seed-fixed-spherical-frame",
       originDirection:registrationOrigin,eastDirection:registrationEast,northDirection:registrationNorth,
       defaultWorldRadiusMeters:DEFAULT_WORLD_RADIUS_METERS,defaultTileMeters:DEFAULT_TILE_METERS,
       componentRoots:continentComponentRoots
+    }),
+    terrainFeatures:Object.freeze({
+      revision:TERRAIN_FEATURE_REVISION,
+      authority:"Campaign-SEED + PlanetGeography registered-meter lattice",
+      cacheLimitEntries:TERRAIN_FEATURE_CACHE_LIMIT,
+      simulationAuthority:false
     }),
     layout:Object.freeze({
       continentCount:CONTINENT_COUNT,
