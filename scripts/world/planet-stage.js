@@ -2462,18 +2462,15 @@ function surfaceValueNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt){
 function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel,phase){
   const salt=((phase*100000)|0)^0x5f356495;
   let detail=0;
-  // Broad generic value-noise fields become visible as soft rectangular blobs
-  // at local map scale. Fade those macro octaves there and let the canonical
-  // PlanetGeography terrain-feature authority provide ridge/drainage structure.
-  const localWeight=smoothstep01(clamp((metersPerTexel-80)/900,0,1));
-  if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*lerp(.006,.035,localWeight);
-  if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*lerp(.010,.034,localWeight);
-  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.030;
-  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.022;
-  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.017;
-  if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.012;
-  if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.016;
-  if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.012;
+  if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.035;
+  if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.034;
+  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.038;
+  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.026;
+  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.022;
+  if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.016;
+  if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+89)*.018;
+  if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.022;
+  if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.014;
   return detail;
 }
 function patchDimensionsForLevel(index){
@@ -4900,7 +4897,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   // Flat occupied-lot patches expose the settlement's real irregular land-use
   // pattern at overview scales without leaking building geometry or inventing a
   // circular locator. They remain subordinate to roads through alpha + height.
-  const lotContext=(tier==="footprint"||tier==="route"||tier==="coarse")?addCanonicalOccupiedLotContext(reveal,scale,unit,semanticFrame,lift):Object.freeze({count:0,mode:"none"});
+  const lotContext=(tier==="footprint"||tier==="route")?addCanonicalOccupiedLotContext(reveal,scale,unit,semanticFrame,lift):Object.freeze({count:0,mode:"none"});
   const occupiedAreaCount=envelope.active||lotContext.count?1:0;
   let roadCount=0,coarseBuildings=0,fullBuildings=0,landmarks=0,vegetation=0,triangles=envelope.segmentCount*12+Number(lotContext.triangleCount||0);
   let roadGeometry=Object.freeze({active:false,cellCount:0,queryCount:0,triangleCount:0,mode:"none"});
@@ -4922,7 +4919,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   }
   const meeting=reveal.specialLots.find(item=>item.kind==="meeting-hall")||reveal.specialLots[0]||null;
   const ordinary=[...reveal.houses,...reveal.specialLots.filter(item=>!meeting||item.id!==meeting.id)];
-  const targetCount=tier==="coarse"?Math.min(ordinary.length,14):(tier==="refined"||tier==="full"?ordinary.length:0);
+  const targetCount=tier==="coarse"?Math.min(ordinary.length,10):(tier==="refined"||tier==="full"?ordinary.length:0);
   const detailed=tier==="refined"||tier==="full";
   for(let i=0;i<targetCount;i++){
     addCanonicalBuilding(ordinary[i],i,scale,unit,semanticFrame,detailed,false,lift);
@@ -5012,22 +5009,15 @@ function rebuildLocalStaticPresentation(resource){
 }
 function scheduleLocalStaticPresentationRefresh(){
   if(localStaticRefreshScheduled||!displayResource)return;
+  // Semantic/static detail may not advance ahead of the supporting terrain cell.
+  // Preserve the current ready presentation during asynchronous refinement.
+  if(localResources.requestedSignature&&displayResource.signature!==localResources.requestedSignature)return;
   const desired=settlementRevealTierForScalar();
-  // Map-scale settlement morphology is canonical semantic authority and may
-  // remain visible on a valid ready parent while a finer terrain child prepares.
-  // Detailed/refined props still wait for the exact requested terrain resource.
-  const parentSemanticAllowed=desired==="footprint"||desired==="route"||desired==="coarse";
-  if(localResources.requestedSignature&&displayResource.signature!==localResources.requestedSignature&&!parentSemanticAllowed)return;
   if(localStatic.signature===displayResource.signature&&localStatic.revealTier===desired)return;
   localStaticRefreshScheduled=true;
   setTimeout(()=>{
     localStaticRefreshScheduled=false;
-    if(!displayResource)return;
-    const currentDesired=settlementRevealTierForScalar();
-    const currentParentAllowed=currentDesired==="footprint"||currentDesired==="route"||currentDesired==="coarse";
-    if(!localResources.requestedSignature||displayResource.signature===localResources.requestedSignature||currentParentAllowed){
-      rebuildLocalStaticPresentation(displayResource);
-    }
+    if(displayResource&&(!localResources.requestedSignature||displayResource.signature===localResources.requestedSignature))rebuildLocalStaticPresentation(displayResource);
   },0);
 }
 // ---- Cooperative LOD preparation -------------------------------------------
@@ -5154,8 +5144,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
     const aeast=(au-.5)*spanEast,anorth=(.5-av)*spanNorth,geo=canonicalLatLonForLocalOffset(lat0,lon0,aeast,anorth);
     const alat=geo.latitudeRadians,alon=geo.longitudeRadians;
     const natural=geography.sampleLatLon(alat,alon),registered=canonicalRegisteredMetersForLatLon(alat,alon);
-    const registeredEastMeters=unwrapRegisteredEast(registered.eastMeters),registeredNorthMeters=Number(registered.northMeters||0);
-    return authorityCache[key]={natural,registeredEastMeters,registeredNorthMeters};
+    return authorityCache[key]={natural,registeredEastMeters:unwrapRegisteredEast(registered.eastMeters),registeredNorthMeters:Number(registered.northMeters||0)};
   };
   const mixSample=(ux,vz)=>{
     const gx=ux*(authoritySize-1),gy=vz*(authoritySize-1),x0=Math.floor(gx),y0=Math.floor(gy),x1=Math.min(authoritySize-1,x0+1),y1=Math.min(authoritySize-1,y0+1),tx=gx-x0,ty=gy-y0;
@@ -5172,35 +5161,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       registeredNorthMeters:bilerp(aa.registeredNorthMeters,bb.registeredNorthMeters,cc.registeredNorthMeters,dd.registeredNorthMeters)
     };
   };
-  // Reuse the already-cached canonical registered coordinates to build one
-  // tiny feature lattice. This avoids a second lat/lon/registration traversal.
-  // Rows yield cooperatively so even software WebGL never receives a large
-  // synchronous preparation block.
-  const featureSize=contextRing?20:32,featureCount=featureSize*featureSize;
-  const featureRidge=new Float32Array(featureCount),featureDrainage=new Float32Array(featureCount),featureCover=new Float32Array(featureCount);
-  const featureMetersPerSample=Math.max(metersPerTexel,Math.max(spanEast,spanNorth)/Math.max(1,featureSize-1));
-  let terrainFeatureRevision=null;
-  for(let fy=0;fy<featureSize;fy++){
-    const fv=fy/(featureSize-1);
-    for(let fx=0;fx<featureSize;fx++){
-      const fu=fx/(featureSize-1),sample=mixSample(fu,fv),index=fy*featureSize+fx;
-      const feature=geography.terrainFeatureAtRegisteredMeters?.(sample.registeredEastMeters,sample.registeredNorthMeters,featureMetersPerSample);
-      featureRidge[index]=Number(feature?.ridgeValley||0);
-      featureDrainage[index]=Number(feature?.drainage||0);
-      featureCover[index]=Number(feature?.cover||0);
-      terrainFeatureRevision=terrainFeatureRevision||feature?.revision||null;
-    }
-    yield 1;
-  }
   for(let y=0;y<size;y++){
     for(let x=0;x<size;x++){
       const ux=(x+.5)/size,vz=(y+.5)/size;
       const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
       const sample=mixSample(ux,vz);
-      const fgx=ux*(featureSize-1),fgy=vz*(featureSize-1),fx0=Math.floor(fgx),fy0=Math.floor(fgy),fx1=Math.min(featureSize-1,fx0+1),fy1=Math.min(featureSize-1,fy0+1),ftx=fgx-fx0,fty=fgy-fy0;
-      const fi00=fy0*featureSize+fx0,fi10=fy0*featureSize+fx1,fi01=fy1*featureSize+fx0,fi11=fy1*featureSize+fx1;
-      const featureBilerp=grid=>lerp(lerp(grid[fi00],grid[fi10],ftx),lerp(grid[fi01],grid[fi11],ftx),fty);
-      const terrainRidgeValley=featureBilerp(featureRidge),terrainDrainage=featureBilerp(featureDrainage),terrainCoverValue=featureBilerp(featureCover);
       const sourceColor=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
       // PlanetGeography carries intentionally broad macro color fields. At local
       // map scales those low-frequency fields can read as giant polygon wedges.
@@ -5234,11 +5199,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // progressively admit finer registered-meter frequencies toward focus.
       // Only frequency bandwidth changes; canonical geography/color authority
       // remains identical for focus, medium and outer representations.
-      const focusEdgeDistance=Math.min(ux,1-ux,vz,1-vz);
-      // Child-only bandwidth is exactly zero at the focus-patch boundary, then
-      // ramps inward. The parent and child therefore share identical photometry
-      // at the projected handoff edge instead of exposing an oblique tonal seam.
-      const focusRefineWeight=contextRing?0:smoothstep01(clamp((focusEdgeDistance-.035)/.19,0,1));
+      const focusRadius=Math.hypot((ux-.5)*2,(vz-.5)*2);
+      const focusRefineWeight=contextRing?0:smoothstep01(clamp((1.35-focusRadius)/1.10,0,1));
       const photometricMetersPerTexel=contextRing
         ? lerp(sharedMetersPerTexel,metersPerTexel,contextRefineWeight*.36)
         : lerp(sharedMetersPerTexel,Math.max(metersPerTexel,sharedMetersPerTexel*.14),focusRefineWeight*.94);
@@ -5304,20 +5266,6 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const coverContrast=contextRing?lerp(1.00,1.12,contextRefineWeight):lerp(1.05,1.34,focusRefineWeight);
         const landCover=sharedCover.map((v,i)=>(v+(nativeCover[i]-sharedCover[i])*coverGain)*coverContrast);
         cover=cover.map((v,i)=>v+landCover[i]);
-        // Sample one canonical registered-meter terrain-feature field from
-        // PlanetGeography across focus, medium, outer, and parent fallback.
-        // Physical bandwidth may differ by texel size; feature identity does not.
-        const featureBandwidth=smoothstep01(clamp((1400-metersPerTexel)/1320,0,1));
-        const featureGain=(contextRing?lerp(.66,.82,contextRefineWeight):lerp(.78,1,focusRefineWeight))*featureBandwidth;
-        const ridgeValley=clamp(Number(terrainRidgeValley||0),-1,1);
-        const drainage=clamp(Number(terrainDrainage||0),0,1);
-        const coverStructure=clamp(Number(terrainCoverValue||0),-1,1);
-        const ridgeTone=ridgeValley*(contextRing?.080:.122)*featureGain;
-        const channelTone=-drainage*(contextRing?.058:.084)*featureGain;
-        const coverTone=coverStructure*(contextRing?.024:.036)*featureGain;
-        cover[0]+=ridgeTone*.88+channelTone*.92+coverTone*.55;
-        cover[1]+=ridgeTone*.74+channelTone*.58+coverTone;
-        cover[2]+=ridgeTone*.58-channelTone*.22+coverTone*.42;
       }
       const identityTint=sample?.land?[relief*.075,relief*.065,relief*.035]:[-.012,-.004,.028];
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
@@ -5362,8 +5310,6 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
     data,size,metersPerTexel,
     coordinateAuthority:"Campaign-SEED + SeedCoordinateFabric.registeredMeters",
     coordinateRevision:coordinateFabricAuthority()?.revisionSignature||null,
-    terrainFeatureRevision:terrainFeatureRevision||geography?.terrainFeatures?.revision||null,
-    terrainFeatureAuthority:geography?.terrainFeatures?.authority||null,
     patchRelativeBiomeNoise:false
   };
 }
@@ -5464,7 +5410,7 @@ function finalizeLocalResource(job,result){
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
-      topographicSignalRevision:"canonical-geography-terrain-features-v6",topographicSignalAuthority:"PlanetGeography elevation slope/curvature + registered-meter terrainFeatures sampled through SeedCoordinateFabric",terrainFeatureRevision:detailPixels.terrainFeatureRevision||mediumPixels.terrainFeatureRevision||surroundPixels.terrainFeatureRevision||null,
+      topographicSignalRevision:"canonical-multiscale-elevation-drainage-v5",topographicSignalAuthority:"PlanetGeography elevation slope/curvature at two physical baselines + moisture sampled through SeedCoordinateFabric registered meters",
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
