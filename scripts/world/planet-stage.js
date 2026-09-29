@@ -3316,10 +3316,10 @@ function ensureLocalStaticMaterials(){
   const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.39,.30,.14,.58),square:make("LocalSquare",.48,.35,.18),
+    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.39,.30,.14,.72),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.028),lotOverview:make("LocalOccupiedLotOverview",.43,.36,.19,.40),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.028),lotOverview:make("LocalOccupiedLotOverview",.43,.36,.19,.62),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3604,7 +3604,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   };
   for(const record of records){
     const b=record?.bounds;if(!b)continue;
-    const minX=Number(b.minX)-.28,maxX=Number(b.maxX)+.28,minY=Number(b.minY)-.28,maxY=Number(b.maxY)+.28;
+    const minX=Number(b.minX)-.42,maxX=Number(b.maxX)+.42,minY=Number(b.minY)-.42,maxY=Number(b.maxY)+.42;
     if(![minX,maxX,minY,maxY].every(Number.isFinite)||maxX<=minX||maxY<=minY)continue;
     if(addQuad(minX,minY,maxX,maxY))count++;
   }
@@ -3655,7 +3655,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
         // closer tiers where it no longer reads as a locator glyph.
         if(!outwardBranch&&!localPath)continue;
       }
-      const half=tier==="footprint"?(outwardBranch?.30:.08):(outwardBranch?.34:.085);
+      const half=tier==="footprint"?(outwardBranch?.34:.13):(outwardBranch?.40:.16);
       addQuad(x-half,y-half,x+half,y+half);
       if(roadSet.has((x+1)+","+y))addQuad(x+half,y-half,x+1-half,y+half);
       if(roadSet.has(x+","+(y+1)))addQuad(x-half,y+half,x+half,y+1-half);
@@ -5388,13 +5388,13 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Preserve enough canonical globe hue to keep the same macro terrain
       // recognizable through the projection handoff, then converge smoothly.
       const coarseIdentity=smoothstep01(clamp((metersPerTexel-4)/70,0,1));
-      const macroIdentityWeight=clamp(.040+coarseIdentity*.050+mountainIdentity*.016,.040,.12);
+      const macroIdentityWeight=clamp(.025+coarseIdentity*.032+mountainIdentity*.012,.025,.085);
       let base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
       // Map-scale views should show terrain structure, not one kilometre-scale
       // brightness wedge. Compress only land luminance above ~35 m/texel while
       // preserving RGB differences; near-ground presentation is unchanged.
       if(sample?.land&&metersPerTexel>35){
-        const compression=smoothstep01(clamp((metersPerTexel-35)/120,0,1))*.72;
+        const compression=smoothstep01(clamp((metersPerTexel-35)/120,0,1))*.90;
         const luma=base[0]*.28+base[1]*.58+base[2]*.14;
         const targetLuma=.335+alpineBase*.055;
         const shift=(targetLuma-luma)*compression;
@@ -5423,7 +5423,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Increase only continuous registered-meter information. This restores
       // readable map-scale terrain without resurrecting the broad source-color
       // wedges that looked like LOD boundaries.
-      const detailContrast=contextRing?lerp(1.04,1.24,contextRefineWeight):lerp(1.10,1.68,focusRefineWeight);
+      const detailContrast=contextRing?lerp(1.06,1.28,contextRefineWeight):lerp(1.14,1.82,focusRefineWeight);
       const macro=macroBase*detailContrast;
       let shade=1,cover=[0,0,0];
       if(sample?.land){
@@ -5471,7 +5471,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
         const coverGain=contextRing?lerp(.12,.34,contextRefineWeight):lerp(.34,.94,focusRefineWeight);
-        const mapCoverBoost=lerp(1.18,1,smoothstep01(clamp((28-metersPerTexel)/24,0,1)));
+        const mapCoverBoost=lerp(1.30,1,smoothstep01(clamp((28-metersPerTexel)/24,0,1)));
         const coverContrast=(contextRing?lerp(1.04,1.22,contextRefineWeight):lerp(1.10,1.42,focusRefineWeight))*mapCoverBoost;
         const landCover=sharedCover.map((v,i)=>(v+(nativeCover[i]-sharedCover[i])*coverGain)*coverContrast);
         cover=cover.map((v,i)=>v+landCover[i]);
