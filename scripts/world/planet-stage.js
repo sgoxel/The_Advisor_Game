@@ -3476,9 +3476,12 @@ function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
   // Keep the authoritative settlement composition large enough to read as
   // actual world structure, not a locator glyph, then converge rapidly to 1:1.
-  const targetFraction=tier==="footprint"?.18:tier==="route"?.28:tier==="coarse"?.24:.22;
+  const targetFraction=tier==="footprint"?.13:tier==="route"?.17:tier==="coarse"?.20:.20;
   const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
-  const cap=tier==="footprint"?400:tier==="route"?280:tier==="coarse"?90:18;
+  // Overview tiers are presentation aids, not locator glyphs. Keep the
+  // authoritative village readable without inflating its ring/roads into a
+  // screen-dominating target; closer tiers converge naturally toward 1:1.
+  const cap=tier==="footprint"?6:tier==="route"?8:tier==="coarse"?5:18;
   return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
 }
 function settlementPresentationLift(tier,value=zoomState.scalar){
@@ -3542,12 +3545,12 @@ function addCanonicalSettlementEnvelope(reveal,presentationScale,unit,frame,lift
   const envelope=settlementEnvelopeHull(reveal),points=envelope.points||[];
   if(points.length<3)return Object.freeze({active:false,segmentCount:0,roadAuthorityQueryCount:envelope.roadAuthorityQueryCount||0,mode:"none"});
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
-  const widthMeters=tileMeters*(tier==="footprint"?.72:.46);
+  const widthMeters=tileMeters*(tier==="footprint"?.52:.30);
   for(let i=0;i<points.length;i++){
     const a=points[i],b=points[(i+1)%points.length];
     addCanonicalRoadSegment("CanonicalOccupiedEnvelope-"+i,a.x,a.y,b.x,b.y,widthMeters,presentationScale,unit,frame,lift+.008,localStaticMaterials.footprint);
   }
-  return Object.freeze({active:true,segmentCount:points.length,roadAuthorityQueryCount:envelope.roadAuthorityQueryCount||0,mode:"authoritative-lot-road-envelope-v1"});
+  return Object.freeze({active:true,segmentCount:points.length,roadAuthorityQueryCount:envelope.roadAuthorityQueryCount||0,mode:"authoritative-lot-road-envelope-v2"});
 }
 function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift){
   localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;
@@ -4777,8 +4780,13 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     roadGeometry=buildCanonicalRoadCellMesh(reveal,scale,unit,semanticFrame,lift);
     roadCount=roadGeometry.cellCount;
     const sq=(squareHalf*2+1)*reveal.tileMeters;
-    addLocalStatic("CanonicalPublicSquare","box",localStaticMaterials.square,centerPos.x,centerGround+.012,centerPos.z,sq*scale/unit,.032,sq*scale/unit);roadCount++;
-    triangles+=roadGeometry.triangleCount+12;
+    // The route-tier road mesh already exposes the authoritative square
+    // connections. Delay the filled square itself until buildings are visible
+    // so the 1/2500 handoff reads as a road network, not a target/cross glyph.
+    if(tier==="coarse"||tier==="refined"||tier==="full"){
+      addLocalStatic("CanonicalPublicSquare","box",localStaticMaterials.square,centerPos.x,centerGround+.012,centerPos.z,sq*scale/unit,.032,sq*scale/unit);roadCount++;triangles+=12;
+    }
+    triangles+=roadGeometry.triangleCount;
   }
   const meeting=reveal.specialLots.find(item=>item.kind==="meeting-hall")||reveal.specialLots[0]||null;
   const ordinary=[...reveal.houses,...reveal.specialLots.filter(item=>!meeting||item.id!==meeting.id)];
@@ -5040,10 +5048,10 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Keep lowland, upland, and alpine presentation distinguishable using only
       // canonical elevation/moisture/mountain inputs. These weights never create
       // simulation identity; they expose existing SEED geography at map scale.
-      const uplandBase=smoothstep01((elevationBase-260)/1850),uplandWeight=clamp(Math.max(uplandBase,mountainIdentity*.72),0,1);
+      const uplandBase=smoothstep01((elevationBase-620)/2150),uplandWeight=clamp(Math.max(uplandBase,mountainIdentity*.58),0,1);
       const lowlandPalette=[.16+.10*dry,.35+.14*moistureBase,.105+.065*moistureBase];
-      const uplandPalette=[.30+.085*dry,.335+.055*moistureBase,.215+.045*moistureBase];
-      const alpinePalette=[.455,.465,.415];
+      const uplandPalette=[.255+.080*dry,.365+.070*moistureBase,.190+.050*moistureBase];
+      const alpinePalette=[.440,.455,.410];
       const foothillPalette=lowlandPalette.map((v,i)=>lerp(v,uplandPalette[i],uplandWeight));
       const localPalette=sample?.land?foothillPalette.map((v,i)=>lerp(v,alpinePalette[i],alpineBase)):[.050,.18,.34];
       // Preserve enough canonical globe hue to keep the same macro terrain
@@ -5095,14 +5103,18 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const canonicalGx=(hxP-hxN)/(2*step),canonicalGy=(hyP-hyN)/(2*step);
         const curvatureMeters=(hxP+hxN+hyP+hyN-4*h0);
         const curvatureSignal=clamp(-curvatureMeters/Math.max(1,step*.16),-1,1);
+        const slopeMagnitude=Math.hypot(canonicalGx,canonicalGy);
+        const slopeSignal=smoothstep01(clamp((slopeMagnitude-.008)/.145,0,1));
         const topoRefine=contextRing?lerp(.72,1,contextRefineWeight):lerp(.82,1,focusRefineWeight);
         const exaggeration=lerp(3.1,6.2,smoothstep01(clamp((metersPerTexel-2)/110,0,1)))*topoRefine;
         const gx=canonicalGx*exaggeration,gy=canonicalGy*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
-        const focusHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.34,.34,.72);
-        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.86:.77,contextRing?1.13:1.20);
-        const topographicTone=curvatureSignal*(contextRing?lerp(.020,.034,contextRefineWeight):lerp(.030,.068,focusRefineWeight));
-        cover=[topographicTone,topographicTone*.96,topographicTone*.82];
+        const focusHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.38,.36,.78);
+        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.84:.73,contextRing?1.15:1.23);
+        const curvatureTone=curvatureSignal*(contextRing?lerp(.024,.042,contextRefineWeight):lerp(.038,.082,focusRefineWeight));
+        const slopeTone=-slopeSignal*(contextRing?lerp(.010,.024,contextRefineWeight):lerp(.018,.042,focusRefineWeight));
+        const structureTone=curvatureTone+slopeTone;
+        cover=[structureTone,structureTone*.94,curvatureTone*.76+slopeTone*.66];
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
         const coverGain=contextRing?contextRefineWeight*.20:lerp(.24,.84,focusRefineWeight);
@@ -5253,7 +5265,7 @@ function finalizeLocalResource(job,result){
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
-      topographicSignalRevision:"canonical-elevation-slope-curvature-v1",topographicSignalAuthority:"PlanetGeography elevation sampled through SeedCoordinateFabric registered meters",
+      topographicSignalRevision:"canonical-elevation-slope-curvature-v2",topographicSignalAuthority:"PlanetGeography elevation sampled through SeedCoordinateFabric registered meters",
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
