@@ -431,6 +431,11 @@ function advanceResidentForTick(tick,state,cooperative){
     work=tick.residentWork={residentId:state.residentId,phase:"checks"};
   }
   if(work.phase==="checks"){
+    const localEvent=window.LocalEventVignettes?.stateFor?.(state.residentId)||null;
+    if(localEvent?.holdsPosition){
+      window.ActionExecutor?.clear?.("resident",state.residentId);
+      state.presentationOffset=Object.freeze({x:0,y:0});tick.changed=true;tick.residentWork=null;return true;
+    }
     const contextual=window.ContextualReactions?.stateFor?.(state.residentId)||null;
     if(contextual?.holdsPosition){
       state.presentationOffset=Object.freeze({x:0,y:0});tick.changed=true;tick.residentWork=null;return true;
