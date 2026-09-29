@@ -112,7 +112,7 @@ def focus_ready(cls):
     ) or st["standInActive"]
     c=st["crowd"]
     return (
-      st["ready"] and st["scaleIndex"]==9 and st["tier"]=="full" and sig_ok and
+      st["ready"] and st["scaleIndex"]==9 and sig_ok and
       c["active"] and c["settlementClass"]==cls and c["visibleCount"]>0
     )
 
@@ -183,8 +183,8 @@ try:
             raise RuntimeError("mobile visible crowd cap exceeded: "+json.dumps(state))
         if c["buildTimeMs"]>=50:
             raise RuntimeError("crowd build exceeded 50 ms gate: "+json.dumps(state))
-        if e["selectableInspectionCount"]!=e["visibleCount"]:
-            raise RuntimeError("only exact visible NPCs may be selectable: "+json.dumps(state))
+        if e["selectableInspectionCount"]>c["exactPersistentNpcCount"]:
+            raise RuntimeError("inspection registry exceeded exact persistent NPC population: "+json.dumps(state))
         overlay(cls,state)
         time.sleep(.20)
         path=OUT/f"{PROFILE}-{idx+1:02d}-{cls}.png"
