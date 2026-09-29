@@ -3299,10 +3299,10 @@ function ensureLocalStaticMaterials(){
   const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.36,.27,.12,.88),square:make("LocalSquare",.48,.35,.18),
+    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.39,.30,.14,.82),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.10),lotOverview:make("LocalOccupiedLotOverview",.50,.39,.16,.52),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.08),lotOverview:make("LocalOccupiedLotOverview",.48,.39,.19,.44),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3585,7 +3585,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
     }
     uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
   };
-  const edge=.17;
+  const edge=.30;
   for(const record of records){
     const b=record?.bounds;if(!b)continue;
     const minX=Number(b.minX)-.5,maxX=Number(b.maxX)+.5,minY=Number(b.minY)-.5,maxY=Number(b.maxY)+.5;
@@ -3628,7 +3628,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
     uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
   };
   if(tier==="route"){
-    const half=.22;
+    const half=.34;
     for(const [x,y] of roadCells){
       addQuad(x-half,y-half,x+half,y+half);
       if(roadSet.has((x+1)+","+y))addQuad(x+half,y-half,x+1-half,y+half);
@@ -5487,20 +5487,18 @@ function stitchSurroundCenterToDetail(detail,surround,spanFactor){
 function carveNestedRingCenterAlpha(pixels,innerCoverageRatio){
   const size=Number(pixels?.size||0),data=pixels?.data,ratio=Math.max(1,Number(innerCoverageRatio||1));
   if(!size||!data||ratio<=1)return;
-  // Coarser presentation layers are true rings, not full quads stacked under
-  // transparent children. Inside the finer layer's world footprint, use the
-  // complement of that child's standard edge feather. This keeps the combined
-  // opacity near one through the handoff while preventing transparent-sort
-  // order from painting the coarser texture across the focus patch.
+  // Keep the coarse parent fully present through the child's feather band, then
+  // remove it only where the finer child is already almost opaque. This avoids
+  // both transparent-sort blur in the focus core and the old 0.75-alpha hole.
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const u=(x+.5)/size,v=(y+.5)/size,innerU=(u-.5)*ratio+.5,innerV=(v-.5)*ratio+.5;
-    let innerCoverage=0;
-    if(innerU>0&&innerU<1&&innerV>0&&innerV<1){
-      const edge=Math.min(innerU,1-innerU,innerV,1-innerV);
-      innerCoverage=smoothstep01(clamp(edge/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
-    }
+    if(innerU<=0||innerU>=1||innerV<=0||innerV>=1)continue;
+    const edge=Math.min(innerU,1-innerU,innerV,1-innerV);
+    const innerCoverage=smoothstep01(clamp(edge/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
+    const coreCut=smoothstep01(clamp((innerCoverage-.92)/.075,0,1));
+    if(coreCut<=0)continue;
     const i=(y*size+x)*4;
-    data[i+3]=Math.round(Number(data[i+3]||0)*(1-innerCoverage));
+    data[i+3]=Math.round(Number(data[i+3]||0)*(1-coreCut));
   }
 }
 function* localResourceSteps(job){
@@ -5516,6 +5514,8 @@ function* localResourceSteps(job){
   const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,size,false,true);
   stitchSurroundCenterToDetail(detail,medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
   stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
+  carveNestedRingCenterAlpha(medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
+  carveNestedRingCenterAlpha(surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
   // Normal alpha compositing already gives continuous coverage when the
   // feathered finer layer is drawn over an opaque/coarser parent. Carving the
   // parent to (1-childAlpha) creates an opacity hole: a + (1-a)^2 bottoms out
