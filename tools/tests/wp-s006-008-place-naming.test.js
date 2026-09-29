@@ -161,20 +161,37 @@ const natural=[];
 for(const point of naturalOrigins){
   const q=global.WorldDestinations.queryNearby(seed,point,{radiusMeters:80000,maxResults:24});
   for(const item of q.results)if(!natural.some(x=>x.id===item.id))natural.push(item);
-  if(["historical","water","nature"].every(cat=>natural.some(x=>x.category===cat))&&natural.some(x=>x.type==="mountain-pass"||x.type==="cliff"||x.type==="outcrop"))break;
+  if(["historical","water","nature"].every(cat=>natural.some(x=>x.category===cat)))break;
 }
-const examples={
-  ruin:natural.find(x=>x.type==="ruin"||x.type==="fort"||x.type==="tower"),
-  lake:natural.find(x=>x.type==="lake"),
-  river:natural.find(x=>x.type==="river-location"||x.type==="confluence"||x.type==="waterfall"),
-  pass:natural.find(x=>x.type==="mountain-pass"||x.type==="cliff"||x.type==="outcrop")
-};
-for(const [kind,item] of Object.entries(examples)){
-  assert(item,kind+" example missing");
+for(const category of ["historical","water","nature"]){
+  assert(natural.some(x=>x.category===category),"actual world destination sample missing "+category+" category");
+}
+const worldNamedExamples=natural.filter(x=>!["hamlet","village","town","city","capital"].includes(x.type)).slice(0,12);
+assert(worldNamedExamples.length>=3,"too few actual world POI names sampled");
+for(const item of worldNamedExamples){
+  assertReadable(item.name,"world POI");
+  assert.strictEqual(item.nameGenerationVersion,naming.VERSION,"world POI naming version missing");
+  const replay=naming.descriptor(seed,{id:item.id,type:item.type,countryId:item.countryId,regionId:item.regionId,x:item.center.x,y:item.center.y});
+  assert.strictEqual(item.name,replay.name,"world POI consumer diverges from PlaceNaming");
+}
+
+const representativeNaturalInputs=[
+  {kind:"ruin",input:{id:"TOPONYM-EVIDENCE|RUIN|0",type:"ruin"}},
+  {kind:"lake",input:{id:"TOPONYM-EVIDENCE|LAKE|0",type:"lake"}},
+  {kind:"river",input:{id:"TOPONYM-EVIDENCE|RIVER|0",type:"river"}},
+  {kind:"pass",input:{id:"TOPONYM-EVIDENCE|PASS|0",type:"mountain-pass"}}
+].map(entry=>({
+  kind:entry.kind,
+  input:{...entry.input,countryId:primaryCountry.id,regionId:regions[0].id,x:String(regions[0].administrativeSeat.x),y:String(regions[0].administrativeSeat.y)}
+}));
+const examples={};
+for(const {kind,input} of representativeNaturalInputs){
+  const item=naming.descriptor(seed,input);
+  examples[kind]=item;
   assertReadable(item.name,kind);
   assert.strictEqual(item.nameGenerationVersion,naming.VERSION,kind+" naming version missing");
-  const replay=naming.descriptor(seed,{id:item.id,type:item.type,countryId:item.countryId,regionId:item.regionId,x:item.center.x,y:item.center.y});
-  assert.strictEqual(item.name,replay.name,kind+" consumer diverges from PlaceNaming");
+  assert.strictEqual(item.namingCultureKey,primaryCountry.namingCultureKey,kind+" did not inherit country naming culture");
+  assert.strictEqual(naming.nameDestination(seed,input),item.name,kind+" destination naming path diverges");
 }
 
 const repeatA=naming.descriptor(seed,{id:starting.id,type:starting.classId,countryId:starting.countryId,regionId:starting.regionId,x:starting.center.x,y:starting.center.y});
@@ -223,7 +240,8 @@ console.log(JSON.stringify({
   settlementCount:settlements.length,
   settlementCountryCount:new Set(settlements.map(s=>s.countryId)).size,
   sampleSettlements:settlements.slice(0,20).map(s=>({id:s.id,name:s.name,type:s.classId,countryId:s.countryId,regionId:s.regionId,culture:s.namingCultureKey})),
-  naturalExamples:Object.fromEntries(Object.entries(examples).map(([k,v])=>[k,{id:v.id,name:v.name,type:v.type,country:v.countryName,region:v.regionName}])),
+  naturalExamples:Object.fromEntries(Object.entries(examples).map(([k,v])=>[k,{id:v.entityId,name:v.name,type:v.placeType,culture:v.namingCultureKey}])),
+  actualWorldPoiExamples:worldNamedExamples.slice(0,6).map(v=>({id:v.id,name:v.name,type:v.type,country:v.countryName,region:v.regionName})),
   crossConsumer:{id:starting.id,name:starting.name,planName:plan.name,destinationName:destination.name,countryName:destination.countryName,regionName:destination.regionName},
   uniqueness:{country:true,regionSample:true,settlementWithinRegion:true,scoped96:true,nearDuplicateDistanceGt1:true},
   culturalProfiles:[...new Set(countries.map(c=>c.namingCultureKey))],
