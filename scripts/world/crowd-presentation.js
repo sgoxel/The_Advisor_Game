@@ -122,6 +122,8 @@ function baseCandidates(seed,plan){
   const key=[seed,plan.id,plan.classId,plan.center.x,plan.center.y].join("|");
   const cached=placementCache.get(key);if(cached)return cached;
   const radius=CLASS_RADIUS[plan.classId]||14,out=[];let checks=0;
+  const classCap=Math.min(MAX_ACTIVE_CROWD,CLASS_CAP[plan.classId]||6);
+  const candidateTarget=Math.min(MAX_ACTIVE_CROWD*2,classCap+12);
   const centerX=BigInt(String(plan.center.x)),centerY=BigInt(String(plan.center.y));
   for(let i=0;i<MAX_CANDIDATE_CHECKS;i++){
     checks++;
@@ -148,15 +150,17 @@ function baseCandidates(seed,plan){
       try{
         const local=window.StartingVillage?.local?.(seed,point.x,point.y);
         roadPreferred=Boolean(local&&window.StartingVillage?.isRoadReserved?.(seed,local));
-        if(!roadPreferred&&out.length<48)usable=false;
       }catch(_){}
     }
     if(!usable)continue;
     if(out.some(other=>distanceTiles(other.point,point)<1.4))continue;
     out.push(Object.freeze({point,roadPreferred,rank:i}));
-    if(out.length>=MAX_ACTIVE_CROWD*2)break;
+    if(out.length>=candidateTarget)break;
   }
-  const result=Object.freeze({candidates:Object.freeze(out),candidateChecks:checks,bounded:true});
+  if(plan.role==="starting-village"){
+    out.sort((a,b)=>Number(Boolean(b.roadPreferred))-Number(Boolean(a.roadPreferred))||a.rank-b.rank);
+  }
+  const result=Object.freeze({candidates:Object.freeze(out),candidateChecks:checks,candidateTarget,bounded:true});
   placementCache.set(key,result);
   if(placementCache.size>8)placementCache.delete(placementCache.keys().next().value);
   return result;
