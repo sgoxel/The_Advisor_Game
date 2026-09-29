@@ -8,6 +8,8 @@ on:
       - .github/workflows/wp-s006-007-001-micro-locations.yml
       - scripts/world/world-destinations.js
       - scripts/world/micro-locations.js
+      - scripts/world/planet-stage.js
+      - styles/main.css
       - scripts/render/playcanvas/chunk-world-data.js
       - scripts/render/playcanvas/terrain-chunk-mesh.js
       - index.html
