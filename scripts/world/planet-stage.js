@@ -3483,10 +3483,11 @@ function ensureLocalStaticMaterials(){
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.11),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.58);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
+    microWater:make("LocalMicroWater",.07,.28,.42,.52),
     microStone:make("LocalMicroStone",.67,.64,.56),microWood:make("LocalMicroWood",.57,.34,.14),
     microDark:make("LocalMicroDark",.11,.075,.045),microCloth:make("LocalMicroCloth",.76,.56,.27),
-    microAccent:make("LocalMicroAccent",1.0,.45,.08),microSoil:make("LocalMicroSoil",.43,.25,.10),
-    microGround:make("LocalMicroGround",.31,.20,.08,.26),microMoss:make("LocalMicroMoss",.12,.28,.07,.24),
+    microAccent:make("LocalMicroAccent",1.0,.45,.08),microSoil:make("LocalMicroSoil",.43,.25,.10,.24),
+    microGround:make("LocalMicroGround",.31,.20,.08,.31),microMoss:make("LocalMicroMoss",.12,.28,.07,.24),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityForge:(()=>{const m=make("LocalActivityForge",1,1,1);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -5496,11 +5497,12 @@ function renderCanonicalMicroProp(prop,resource,frame,index){
   const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),ground=localGroundHeightUnits(east,north,frame)+.022;
   const yaw=Number(prop.rotation||0),semantic=String(prop.semantic||""),variant=Math.max(0,Math.min(2,Number(prop.variant||0)));
   let primitives=0,triangles=0;
+  const presentationScale=semantic==="unusual-tree"?1.06:semantic==="dock"?1.10:1.18;
   const add=(type,material,dx,dz,sx,sy,sz,yMeters=sy*.5,rx=0,ry=yaw,rz=0)=>{
     const off=rotateMicroOffset(dx,dz,yaw);
     addLocalStatic("Micro-"+String(prop.microLocationId||"loc")+"-"+index+"-"+primitives,type,material,
-      (east+off.x)/unit,ground+Number(yMeters||0)/unit,(-north+off.z)/unit,
-      Number(sx||1)/unit,Number(sy||1)/unit,Number(sz||1)/unit,rx,ry,rz);
+      (east+off.x)/unit,ground+Number(yMeters||0)*presentationScale/unit,(-north+off.z)/unit,
+      Number(sx||1)*presentationScale/unit,Number(sy||1)*presentationScale/unit,Number(sz||1)*presentationScale/unit,rx,ry,rz);
     primitives++;
     triangles+=type==="sphere"?160:type==="cylinder"||type==="cone"?64:12;
   };
@@ -5603,19 +5605,32 @@ function renderMicroLocationGrounding(location,resource,frame){
     addLocalStatic(name+"-"+location.id+"-"+count,"box",material,(east+off.x)/unit,ground+yOffset/unit,(-north+off.z)/unit,sx/unit,.045/unit,sz/unit,0,localYaw,0);
     count++;triangles+=12;
   };
+  const blob=(name,material,dx,dz,sx,sz,localYaw=yaw,yOffset=.004)=>{
+    const off=rotateMicroOffset(dx,dz,yaw);
+    addLocalStatic(name+"-"+location.id+"-"+count,"sphere",material,(east+off.x)/unit,ground+yOffset/unit,(-north+off.z)/unit,sx/unit,.055/unit,sz/unit,0,localYaw,0);
+    count++;triangles+=160;
+  };
   if(["river-crossing","fishing-spot","waterfall-crossing"].includes(type)){
-    // WorldDestinations/WorldField is the canonical water-context authority for
-    // these POIs. The local globe renderer can visually understate narrow water
-    // corridors at 1/10000, so retain a bounded presentation ribbon beside the
-    // shoreline anchor instead of making the dock appear in open grass.
-    patch("MicroWater",localStaticMaterials.water,0,4.0,11.5,7.0,yaw,-.010);
-    patch("MicroWater",localStaticMaterials.water,3.2,5.1,5.4,5.0,yaw+8,-.009);
+    // WorldDestinations/WorldField remains the water-context authority. Use a
+    // short chain of translucent, overlapping shoreline pools instead of broad
+    // rectangular slabs so the presentation reads as a narrow natural water
+    // corridor while retaining the exact canonical anchor.
+    blob("MicroWater",localStaticMaterials.microWater,-.8,2.0,4.5,4.9,yaw-10,-.010);
+    blob("MicroWater",localStaticMaterials.microWater,.1,4.3,5.0,5.5,yaw-2,-.011);
+    blob("MicroWater",localStaticMaterials.microWater,1.0,6.7,4.6,5.2,yaw+9,-.012);
+    blob("MicroWater",localStaticMaterials.microWater,1.7,8.7,3.8,4.4,yaw+15,-.013);
   }else if(["hunter-camp","abandoned-cart-campsite","hidden-clearing"].includes(type)){
-    // Small overlapping worn patches read as a used clearing without becoming
-    // the large circular mound seen in the previous visual attempt.
-    patch("MicroWorn",localStaticMaterials.microGround,0,0,4.8,3.5,yaw+8);
-    patch("MicroWorn",localStaticMaterials.microGround,1.7,-.8,3.0,2.3,yaw-16);
-    patch("MicroWorn",localStaticMaterials.microGround,-1.5,1.0,2.6,2.0,yaw+24);
+    // Organic overlapping wear shapes group the authoritative props into one
+    // readable used clearing without adding any world-state semantics.
+    blob("MicroWorn",localStaticMaterials.microGround,0,0,5.7,4.3,yaw+7,.003);
+    blob("MicroWorn",localStaticMaterials.microGround,1.8,-.8,3.5,2.8,yaw-13,.004);
+    blob("MicroWorn",localStaticMaterials.microGround,-1.7,1.0,3.1,2.5,yaw+21,.005);
+  }else if(type==="burial-site"){
+    blob("MicroBurialGround",localStaticMaterials.microSoil,0,.35,5.8,6.2,yaw+4,.003);
+    blob("MicroBurialMoss",localStaticMaterials.microMoss,-1.7,-.7,3.5,3.0,yaw-14,.004);
+  }else if(type==="unusual-grove"){
+    blob("MicroGroveFloor",localStaticMaterials.microMoss,0,0,7.6,6.4,yaw,.003);
+    blob("MicroGroveFloor",localStaticMaterials.microMoss,2.0,1.4,4.2,3.4,yaw+17,.004);
   }
   return Object.freeze({primitiveCount:count,triangleEstimate:triangles});
 }
