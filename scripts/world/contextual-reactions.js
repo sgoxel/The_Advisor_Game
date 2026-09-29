@@ -27,6 +27,46 @@ let advanceCount=0;
 let lastUpdateMs=0;
 let maxUpdateMs=0;
 let proofActive=false;
+let presentationSignature="";
+let presentationRenderCount=0;
+
+function renderPresentation(){
+  if(typeof document==="undefined")return;
+  const signature=[...active.values()].map(r=>r.id+":"+r.text).join("|");
+  if(signature===presentationSignature)return;
+  presentationSignature=signature;presentationRenderCount++;
+  let layer=document.getElementById("contextualReactionLayer");
+  if(!active.size){
+    layer?.remove?.();
+    return;
+  }
+  if(!layer){
+    layer=document.createElement("div");
+    layer.id="contextualReactionLayer";
+    layer.setAttribute("aria-live","polite");
+    Object.assign(layer.style,{
+      position:"absolute",right:"max(12px,env(safe-area-inset-right))",bottom:"max(74px,calc(env(safe-area-inset-bottom) + 74px))",
+      zIndex:"18",display:"grid",gap:"6px",maxWidth:"min(340px,calc(100vw - 24px))",pointerEvents:"none"
+    });
+    (document.getElementById("planetStageRoot")||document.body).appendChild(layer);
+  }
+  layer.replaceChildren();
+  for(const reaction of active.values()){
+    const card=document.createElement("div");
+    card.className="contextual-npc-reaction";
+    Object.assign(card.style,{
+      padding:"7px 10px",border:"1px solid rgba(230,205,144,.72)",borderRadius:"10px",
+      background:"rgba(9,15,20,.90)",boxShadow:"0 5px 18px rgba(0,0,0,.34)",
+      color:"#f6eed7",font:"600 12px/1.28 system-ui,sans-serif",letterSpacing:".01em",
+      backdropFilter:"blur(5px)"
+    });
+    const name=document.createElement("strong");
+    name.textContent=reaction.residentId+" · "+reaction.kind.replace(/-/g," ");
+    Object.assign(name.style,{display:"block",fontSize:"9px",textTransform:"uppercase",letterSpacing:".10em",color:"#e2c982",marginBottom:"2px"});
+    const text=document.createElement("span");text.textContent=reaction.text;
+    card.append(name,text);layer.appendChild(card);
+  }
+}
 
 function point(value){
   if(!value||value.x==null||value.y==null)return null;
@@ -81,6 +121,8 @@ function reset(seedValue){
   lastUpdateMs=0;
   maxUpdateMs=0;
   proofActive=false;
+  presentationSignature="";
+  if(typeof document!=="undefined")document.getElementById("contextualReactionLayer")?.remove?.();
   return snapshot();
 }
 function ensure(seedValue){
@@ -160,23 +202,23 @@ function evaluate(seed,event,resident,when){
     salience=valid?1:0;holdsPosition=valid;duration=1.2;
   }else if(kind==="close-follow"){
     valid=d<=CLOSE_DISTANCE_TILES&&event.proximitySeconds>=CLOSE_FOLLOW_SECONDS;
-    salience=valid?.82:0;
+    salience=valid?0.82:0;
   }else if(kind==="workplace-interrupt"){
     const activityBuilding=String(activity.buildingId||resident.workplaceId||"");
     valid=busy&&Boolean(activityBuilding)&&String(nav?.buildingId||"")===activityBuilding&&d<=CONTEXT_DISTANCE_TILES;
-    salience=valid?.9:0;
+    salience=valid?0.9:0;
   }else if(kind==="space-collision"){
-    valid=d===0;salience=valid?.96:0;holdsPosition=valid;duration=1.0;
+    valid=d===0;salience=valid?0.96:0;holdsPosition=valid;duration=1.0;
   }else if(kind==="disturbance"){
-    valid=event.disturbance&&d<=CONTEXT_DISTANCE_TILES;salience=valid?.75:0;
+    valid=event.disturbance&&d<=CONTEXT_DISTANCE_TILES;salience=valid?0.75:0;
   }else if(kind==="late-night-approach"){
     const hour=Number(timeParts(when).hour||0);
-    valid=(hour>=22||hour<5)&&d<=2;salience=valid?.72:0;
+    valid=(hour>=22||hour<5)&&d<=2;salience=valid?0.72:0;
   }else if(kind==="proximity"){
     // Ordinary passing is intentionally calm. Only a sustained immediate-space
     // presence graduates into a contextual reaction.
     valid=d<=CLOSE_DISTANCE_TILES&&event.proximitySeconds>=CLOSE_FOLLOW_SECONDS;
-    salience=valid?.72:0;
+    salience=valid?0.72:0;
   }
 
   if(!valid||salience<.7)return null;
@@ -212,6 +254,7 @@ function advanceActive(seconds){
     reaction.elapsed+=dt;
     if(reaction.elapsed+1e-9>=reaction.durationSeconds)active.delete(residentId);
   }
+  renderPresentation();
 }
 function processEvent(seed,event,residentLookup,when){
   processedEventCount++;
@@ -236,6 +279,7 @@ function processEvent(seed,event,residentLookup,when){
   };
   active.set(event.residentId,reaction);
   cooldownUntilMinute.set(event.residentId,minute+COOLDOWN_FANTASY_MINUTES);
+  renderPresentation();
   acceptedEventCount++;
   return reactionSnapshot(reaction);
 }
@@ -268,6 +312,7 @@ function snapshot(){
     queuedEventCount:queue.length,activeReactionCount:reactions.length,reactions,
     processedEventCount,acceptedEventCount,suppressedLowSalienceCount,suppressedCooldownCount,suppressedActiveCount,droppedEventCount,
     candidateCheckCount,maxCandidateChecksPerAdvance,advanceCount,lastUpdateMs,maxUpdateMs,
+    presentationCount:active.size,presentationRenderCount,
     decisionAuthority:"SEED + fantasy time slot + authoritative local event context",
     relationshipAuthority:"SocialState dialogue context when available",
     eventDriven:true,globalNpcScan:false,perFrameNpcScan:false,routeMutation:false,scheduleMutation:false,
