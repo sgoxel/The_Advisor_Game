@@ -1396,6 +1396,9 @@ body.planet-stage-active{
 #planetStageRoot[data-work-focus="true"] .planet-map-landmark[data-kind="village"],
 #planetStageRoot[data-work-focus="true"] .planet-atlas-label[data-kind="village"]{opacity:.10!important}
 #planetStageRoot[data-work-focus="true"] .planet-world-center{filter:none}
+#planetStageRoot[data-micro-location-focus="true"] .planet-world-center{filter:none;gap:0}
+#planetStageRoot[data-micro-location-focus="true"] .planet-world-center i{opacity:.22!important;transform:scale(.58)!important}
+#planetStageRoot[data-micro-location-focus="true"] .planet-world-center code{border-color:rgba(109,217,206,.20);background:rgba(4,15,22,.42)}
 .planet-map-landmark{position:absolute;transform:translate(-50%,-50%);z-index:2;display:grid;gap:2px;min-width:86px;max-width:180px;padding:5px 8px 6px;border:1px solid rgba(231,199,125,.66);border-radius:9px;background:linear-gradient(155deg,rgba(21,28,28,.94),rgba(10,20,27,.91));box-shadow:0 5px 16px rgba(0,0,0,.38);backdrop-filter:blur(7px);text-align:center;filter:drop-shadow(0 2px 2px rgba(0,0,0,.72))}
 .planet-map-landmark::after,.planet-map-landmark::before{content:none}
 .planet-map-landmark small{font:800 5.25px/1 Arial,sans-serif;letter-spacing:.14em;color:#d6b96f}
