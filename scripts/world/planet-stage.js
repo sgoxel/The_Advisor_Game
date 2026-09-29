@@ -6265,9 +6265,10 @@ function startLocalJob(index,lat,lon,signature,prewarm,prewarmKind="lod"){
   const dims=patchDimensionsForLevel(index),size=LOCAL_DETAIL_LEVELS[index].textureSize,spatialCell=canonicalSpatialCellFor(index,lat,lon);
   const anchorLat=spatialCell.centerLatitudeRadians,anchorLon=spatialCell.centerLongitudeRadians;
   const columns=Math.max(2,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters)+1),rows=Math.max(2,Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)+1);
+  const mediumSize=Math.max(96,Math.round(size*LOCAL_MEDIUM_RING_TEXTURE_SCALE));
   const biomeCoordinateProof=localBiomeCoordinateProof(anchorLat,anchorLon);
   const job={token:++localPreparationToken,signature,levelIndex:index,dims,lat0:anchorLat,lon0:anchorLon,requestedLat0:lat,requestedLon0:lon,spatialCell,prewarm,prewarmKind,groundDetailWeight:groundDetailWeightForLevel(index),centerElevation:Number(geography?.sampleLatLon?.(anchorLat,anchorLon)?.elevationMeters||0),biomeCoordinateProof,
-    totalSteps:rows+size*2,steps:0,busyMs:0,slices:0,maxSliceMs:0,startedAtMs:performance.now(),iterator:null};
+    totalSteps:rows+size+mediumSize+size,steps:0,busyMs:0,slices:0,maxSliceMs:0,startedAtMs:performance.now(),iterator:null};
   job.iterator=localResourceSteps(job);
   localJob=job;localResources.cacheMisses+=prewarm?0:1;
   setLocalResidencyState(signature,"preparing",{cellId:spatialCell.id,level:dims.levelId,prefetchKind:prewarm?prewarmKind:null,requestedAtMs:prewarm?null:performance.now()});
@@ -6356,6 +6357,15 @@ function requestLocalDetailResource(index){
     if(cached?.prefetchKind==="zoom-target"){localResources.prefetchHits++;zoomState.targetPrefetchHits++;zoomState.targetPrefetchState="hit";}
     localMotionPrefetchTargets.delete(signature);
     activateLocalDetailResource(signature,true);return;
+  }
+  // During an animated zoom, keep the single future target preparation alive.
+  // Intermediate scale requests are presentation milestones, not reasons to
+  // throw away already-computed rows. The canonical globe remains valid parent
+  // coverage until the target child is ready.
+  const targetSignature=zoomState.animating?zoomState.targetPrefetchSignature:null;
+  if(targetSignature&&signature!==targetSignature&&
+     ((localJob?.signature===targetSignature&&localJob.prewarmKind==="zoom-target")||localResourceCache.has(targetSignature))){
+    localResources.deferredRequests++;return;
   }
   if(localJob){
     if(localJob.signature===signature){
@@ -6744,9 +6754,27 @@ function updateAnimatedZoom(dt){
   const previous=zoomState.scalar,target=clamp(zoomState.targetScalar,ZOOM_MIN,ZOOM_MAX),delta=target-previous;
   const alpha=1-Math.exp(-seconds/ZOOM_ANIMATION_TIME_CONSTANT_SECONDS);
   let next=previous+delta*alpha;
+  const now=performance.now();
+  // Loading-aware zoom: on a forward planet→local transition, let the camera
+  // advance continuously with the one cooperative target build instead of
+  // outrunning it and magnifying the low-resolution globe into a gray field.
+  // This is timing/presentation only; the same target cell and SEED authority
+  // are used. A hard timeout prevents a slow or failed build from wedging zoom.
+  const targetSignature=zoomState.targetPrefetchSignature;
+  const targetReady=Boolean(targetSignature&&(localResourceCache.has(targetSignature)||displayResource?.signature===targetSignature));
+  const targetPreparing=Boolean(lastZoomDirection>0&&target>projectionState.transitionStart&&
+    targetSignature&&localJob?.signature===targetSignature&&localJob.prewarmKind==="zoom-target");
+  if(targetPreparing&&!targetReady){
+    const progress=smoothstep01(clamp(Number(localResources.preparationProgress||0),0,1));
+    const elapsed=Math.max(0,now-Number(zoomState.targetPrefetchStartedAtMs||now));
+    const timeoutRelease=smoothstep01(clamp((elapsed-6500)/1800,0,1));
+    const loadingProgress=Math.max(progress,timeoutRelease);
+    const loadingCeiling=projectionState.transitionStart+(target-projectionState.transitionStart)*loadingProgress;
+    next=Math.min(next,Math.max(previous,loadingCeiling));
+  }
   if(Math.abs(target-next)<=ZOOM_ANIMATION_SETTLE_EPSILON)next=target;
   zoomState.scalar=next;zoomState.zoomVelocity=(next-previous)/seconds;zoomState.animationFrameCount++;zoomState.totalAnimationFrames++;
-  const displayIndex=displayScaleIndexForScalar(next),now=performance.now();
+  const displayIndex=displayScaleIndexForScalar(next);
   applyCameraZoom(false);
   const milestoneChanged=displayIndex!==zoomState.lastDisplayScaleIndex;
   if(milestoneChanged||now-Number(zoomState.lastAnimationMapUpdateAtMs||0)>=ZOOM_MAP_PRESENTATION_INTERVAL_MS){
