@@ -4012,9 +4012,11 @@ function updateCanonicalNpcMotion(){
     const pos=canonicalSemanticPosition(east,north,record.presentationScale,record.unit,record.frame);
     const working=Boolean(state.movementState?.workCycle&&state.movementState?.status==="arrived");
     const phase=frameCount*.22+Number(String(record.resident.id).replace(/\D/g,"")||0);
-    const pulse=working?Math.sin(phase)*.035:0,actionScale=working?2.25:1;
+    const pulse=working?Math.sin(phase)*.035:0,actionScale=working?3.05:1;
     // Arrived workers receive a bounded presentation-only readability lift.
     // Position, collision, route and authoritative action targets stay unchanged.
+    // The active actor grows modestly; profession props do most of the screen-
+    // space work so the vignette reads without turning the resident into a marker.
     record.body.setLocalScale(record.bodyWidth*actionScale,record.bodyHeight*actionScale,record.bodyWidth*actionScale);
     record.head.setLocalScale(record.headSize*actionScale,record.headSize*actionScale,record.headSize*actionScale);
     record.body.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale*.5,pos.z);
@@ -4026,7 +4028,7 @@ function updateCanonicalNpcMotion(){
         if(Number.isFinite(screen?.x)&&Number.isFinite(screen?.y)&&Math.hypot(screen.x-cx,screen.y-cy)<=priorityRadius)centeredWorkAction=true;
       }
       const profession=String(record.resident.profession||""),stepId=String(state.movementState?.workCycle?.stepId||"");
-      const cueScale=1.45,bw=record.bodyWidth*actionScale*cueScale,bh=record.bodyHeight*actionScale*cueScale,swing=Math.sin(phase);
+      const cueScale=2.08,bw=record.bodyWidth*actionScale*cueScale,bh=record.bodyHeight*actionScale*cueScale,swing=Math.sin(phase);
       const setProp=(entity,material,sx,sy,sz,dx,dy,dz,rx=0,ry=0,rz=0)=>{
         if(!entity)return;
         if(material&&entity.render?.meshInstances?.[0])entity.render.meshInstances[0].material=material;
@@ -4036,41 +4038,47 @@ function updateCanonicalNpcMotion(){
       // work-step coordinate. Shared materials and at most three bounded props
       // keep the action legible without creating economy/resource authority.
       if(profession==="smith"){
-        // Hammer handle/head are laid out across the tangent plane so the
-        // silhouette remains obvious in the fixed top-down near-ground view.
+        // Strong top-down hammer + anvil/trough silhouette. These are real
+        // low-poly scene props, not screen-space icons, and remain anchored to
+        // the authoritative arrived work coordinate.
         if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.timber;
-        record.tool.setLocalScale(bw*.18,bw*.20,bw*2.45);
-        record.tool.setLocalPosition(pos.x+bw*.72,ground+bw*.34,pos.z+bw*.18);
-        record.tool.setLocalEulerAngles(0,24+34*swing,0);record.tool.enabled=true;activeTools++;
+        record.tool.setLocalScale(bw*.12,bw*.14,bw*2.65);
+        record.tool.setLocalPosition(pos.x+bw*.52,ground+bw*.24,pos.z+bw*.08);
+        record.tool.setLocalEulerAngles(0,32+40*swing,0);record.tool.enabled=true;activeTools++;
         if(stepId==="cool"){
-          setProp(record.workPropA,localNpcMaterials.metal,bw*2.70,bw*.34,bw*1.50,bw*1.78,bw*.22,bw*.10);
-          setProp(record.workPropB,localNpcMaterials.ember,bw*1.72,bw*.14,bw*.30,bw*1.78,bw*.50,bw*.10,0,8,0);
-          setProp(record.workPropC,localNpcMaterials.metal,bw*1.15,bw*.26,bw*.52,bw*.95,bw*.42,-bw*.78,0,24+34*swing,0);
+          setProp(record.workPropA,localNpcMaterials.metal,bw*2.85,bw*.22,bw*1.12,bw*1.72,bw*.16,bw*.12,0,-8,0);
+          setProp(record.workPropB,localNpcMaterials.ember,bw*1.78,bw*.12,bw*.26,bw*1.72,bw*.34,bw*.12,0,-8,0);
+          setProp(record.workPropC,localNpcMaterials.metal,bw*1.32,bw*.18,bw*.46,bw*1.06,bw*.28,-bw*.86,0,32+40*swing,0);
         }else{
-          setProp(record.workPropA,localNpcMaterials.metal,bw*1.90,bw*.52,bw*1.10,bw*1.62,bw*.30,0);
-          setProp(record.workPropB,localNpcMaterials.timber,bw*.82,bw*.58,bw*.82,bw*1.62,bw*.15,0);
-          setProp(record.workPropC,localNpcMaterials.metal,bw*1.15,bw*.26,bw*.52,bw*.95,bw*.42,-bw*.78,0,24+34*swing,0);
+          setProp(record.workPropA,localNpcMaterials.metal,bw*2.35,bw*.24,bw*.92,bw*1.58,bw*.18,0);
+          setProp(record.workPropB,localNpcMaterials.timber,bw*.72,bw*.52,bw*.72,bw*1.58,bw*.13,0);
+          setProp(record.workPropC,localNpcMaterials.metal,bw*1.32,bw*.18,bw*.46,bw*1.06,bw*.28,-bw*.86,0,32+40*swing,0);
         }
       }else if(profession==="shopkeeper"){
         if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.stock;
-        record.tool.setLocalScale(bw*1.70,bw*.16,bw*.92);
-        record.tool.setLocalPosition(pos.x+bw*.42,ground+bw*.78,pos.z);record.tool.setLocalEulerAngles(0,0,0);record.tool.enabled=true;activeTools++;
-        setProp(record.workPropA,localNpcMaterials.timber,bw*3.05,bw*.32,bw*1.52,bw*1.72,bw*.22,0);
-        setProp(record.workPropB,localNpcMaterials.stock,bw*.92,bw*.58,bw*.92,bw*1.22,bw*.64,-bw*.44,0,12,0);
-        setProp(record.workPropC,localNpcMaterials.ember,bw*.78,bw*.52,bw*.78,bw*2.14,bw*.60,bw*.36,0,-9,0);
+        record.tool.setLocalScale(bw*1.82,bw*.12,bw*.70);
+        record.tool.setLocalPosition(pos.x+bw*.28,ground+bw*.52,pos.z);record.tool.setLocalEulerAngles(0,0,0);record.tool.enabled=true;activeTools++;
+        // Long counter + separated stock stacks create a readable merchant
+        // footprint instead of three same-sized boxes around the actor.
+        setProp(record.workPropA,localNpcMaterials.timber,bw*3.35,bw*.24,bw*1.18,bw*1.66,bw*.16,0,0,0,0);
+        setProp(record.workPropB,localNpcMaterials.stock,bw*1.05,bw*.48,bw*1.05,bw*1.08,bw*.42,-bw*.96,0,10,0);
+        setProp(record.workPropC,localNpcMaterials.ember,bw*.92,bw*.44,bw*.92,bw*2.18,bw*.40,bw*.82,0,-10,0);
       }else if(profession==="guard"){
         if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.timber;
-        record.tool.setLocalScale(bw*.18,bw*.22,bw*4.25);
-        record.tool.setLocalPosition(pos.x+bw*1.02,ground+bw*.30,pos.z);record.tool.setLocalEulerAngles(0,8+3*swing,0);record.tool.enabled=true;activeTools++;
-        setProp(record.workPropA,localNpcMaterials.metal,bw*.72,bw*.26,bw*1.02,bw*1.02,bw*.34,-bw*2.38,0,8+3*swing,0);
-        setProp(record.workPropB,localNpcMaterials.metal,bw*1.72,bw*.30,bw*1.34,-bw*1.14,bw*.38,bw*.28,0,18,0);
+        // Spear remains a long unmistakable axis, while the shield is a broad
+        // offset plate. The point is a separate metal cap.
+        record.tool.setLocalScale(bw*.11,bw*.13,bw*4.65);
+        record.tool.setLocalPosition(pos.x+bw*.88,ground+bw*.20,pos.z);record.tool.setLocalEulerAngles(0,7+2*swing,0);record.tool.enabled=true;activeTools++;
+        setProp(record.workPropA,localNpcMaterials.metal,bw*.60,bw*.16,bw*.88,bw*.88,bw*.22,-bw*2.56,0,7+2*swing,0);
+        setProp(record.workPropB,localNpcMaterials.metal,bw*1.95,bw*.22,bw*1.52,-bw*1.24,bw*.24,bw*.38,0,18,0);
       }else if(profession==="woodcutter"){
         if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.timber;
-        record.tool.setLocalScale(bw*.18,bw*.20,bw*3.25);
-        record.tool.setLocalPosition(pos.x+bw*.82,ground+bw*.34,pos.z+bw*.06);record.tool.setLocalEulerAngles(0,-26+28*swing,0);record.tool.enabled=true;activeTools++;
-        setProp(record.workPropA,localNpcMaterials.timber,bw*3.05,bw*.48,bw*.88,bw*1.82,bw*.28,-bw*.46,0,18,0);
-        setProp(record.workPropB,localNpcMaterials.timber,bw*2.65,bw*.44,bw*.84,bw*1.62,bw*.72,bw*.58,0,-13,0);
-        setProp(record.workPropC,localNpcMaterials.metal,bw*1.12,bw*.24,bw*.62,bw*1.28,bw*.42,-bw*1.12,0,-26+28*swing,0);
+        // Axe + crossed log stack reads differently from guard/shop geometry.
+        record.tool.setLocalScale(bw*.11,bw*.13,bw*3.55);
+        record.tool.setLocalPosition(pos.x+bw*.62,ground+bw*.22,pos.z+bw*.02);record.tool.setLocalEulerAngles(0,-34+34*swing,0);record.tool.enabled=true;activeTools++;
+        setProp(record.workPropA,localNpcMaterials.timber,bw*3.25,bw*.34,bw*.72,bw*1.72,bw*.19,-bw*.52,0,22,0);
+        setProp(record.workPropB,localNpcMaterials.timber,bw*2.95,bw*.32,bw*.70,bw*1.58,bw*.54,bw*.64,0,-20,0);
+        setProp(record.workPropC,localNpcMaterials.metal,bw*1.34,bw*.18,bw*.58,bw*1.05,bw*.27,-bw*1.24,0,-34+34*swing,0);
       }else if(profession==="farmer"){
         if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.timber;
         record.tool.setLocalScale(bw*.18,bh*1.12,bw*.18);
@@ -4094,16 +4102,17 @@ function updateCanonicalNpcMotion(){
   // Keep the gameplay-center anchor exact, but move its concise readout away
   // from a centered authoritative work action and soften only the ring.
   const centerMarker=root?.querySelector?.(".planet-world-center"),centerCode=centerMarker?.querySelector?.("code"),centerGlyph=centerMarker?.querySelector?.("i");
+  if(root)root.dataset.workFocus=centeredWorkAction?"true":"false";
   if(centerMarker)centerMarker.dataset.workPriority=centeredWorkAction?"true":"false";
   if(centerCode){
     if(centeredWorkAction){
-      centerCode.style.position="absolute";centerCode.style.left="50%";centerCode.style.top="-48px";
-      centerCode.style.transform="translateX(-50%)";centerCode.style.opacity=".82";
+      centerCode.style.position="absolute";centerCode.style.left="50%";centerCode.style.top="-82px";
+      centerCode.style.transform="translateX(-50%) scale(.86)";centerCode.style.opacity=".12";
     }else{
       centerCode.style.position="";centerCode.style.left="";centerCode.style.top="";centerCode.style.transform="";centerCode.style.opacity="";
     }
   }
-  if(centerGlyph){centerGlyph.style.opacity=centeredWorkAction?".46":"";centerGlyph.style.transform=centeredWorkAction?"scale(.58)":"";}
+  if(centerGlyph){centerGlyph.style.opacity=centeredWorkAction?".16":"";centerGlyph.style.transform=centeredWorkAction?"scale(.38)":"";}
   const elapsed=performance.now()-started;
   localNpcPresentation={...localNpcPresentation,active:visibleCount>0,activeCount:visibleCount,activeWorkCycleToolCount:activeTools,activeWorkCyclePropCount:activeProps,
     activeWorkCycleResidentIds:Object.freeze(activeWorkCycleResidentIds),
