@@ -167,7 +167,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S006-005` — Settlement Archetypes + Country/Region/Terrain Inheritance — COMPLETED
 - `WP-S006-005-001` — Population-Scaled Settlement Footprints + Realistic Urban Morphology — COMPLETED
 - `WP-S006-006` — Settlement Building Catalog + Contextual Composition Rules — COMPLETED
-- `WP-S006-007` — Deterministic World Destinations + Points-of-Interest Foundation
+- `WP-S006-007` — Deterministic World Destinations + Points-of-Interest Foundation — IN PROGRESS (AGENT #6; three-attempt cap reached; functional semantics proven but bounded-query performance acceptance still failing; NOT COMPLETED)
 - `WP-S006-007-001` — Discoverable Micro-Locations + Wilderness POI Composition
 - `WP-S006-008` — Deterministic Place Naming + Toponym Hierarchy
 - `WP-S006-009` — Hierarchical Inter-Settlement Road Graph + Geography-Aware Main Routes
