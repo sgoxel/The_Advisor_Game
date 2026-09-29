@@ -56,10 +56,19 @@ function coordinatesFor(seed,x,y){
   try{const pg=window.PlanetGeography?.create?.(seed);if(pg){const geo=pg.worldLatLonForTile(tile.x,tile.y,TILE_METERS,window.PlanetGeography.DEFAULT_WORLD_RADIUS_METERS);latitudeRadians=Number(geo.latitudeRadians);longitudeRadians=Number(geo.longitudeRadians);latitudeDegrees=Number(geo.latitudeDegrees);longitudeDegrees=Number(geo.longitudeDegrees);}}catch(_){}
   return Object.freeze({tile,registeredMeters:Object.freeze({east:Number(BigInt(tile.x))*TILE_METERS,north:Number(BigInt(tile.y))*TILE_METERS}),latitudeRadians,longitudeRadians,latitudeDegrees,longitudeDegrees,authority:"PlanetGeography registered world coordinate"});
 }
-function namesFor(seed,type,x,y){
-  try{const external=window.PlaceNaming?.nameDestination?.(seed,{type,x:String(x),y:String(y)});if(external)return Object.freeze({name:String(external),authority:"PlaceNaming"});}catch(_){}
+function namesFor(seed,type,x,y,meta){
+  const input={...(meta||{}),type,id:String(meta?.id||[type,x,y].join("|")),x:String(x),y:String(y)};
+  try{
+    const canonical=window.PlaceNaming?.descriptor?.(seed,input);
+    if(canonical)return Object.freeze({
+      name:String(canonical.name),authority:String(canonical.authority||"PlaceNaming"),
+      namingCultureKey:canonical.namingCultureKey||null,
+      nameGenerationVersion:Number(canonical.nameGenerationVersion||0),
+      identityKey:canonical.identityKey||null
+    });
+  }catch(_){}
   const h=hash32(String(seed)+"|destination-name|"+type+"|"+String(x)+"|"+String(y)),stem=NAME_STEMS[h%NAME_STEMS.length],suffixes=TYPE_SUFFIX[type]||["Place"],suffix=suffixes[(h>>>8)%suffixes.length];
-  return Object.freeze({name:stem+" "+suffix,authority:"SEED fallback pending canonical toponymy"});
+  return Object.freeze({name:stem+" "+suffix,authority:"SEED fallback pending canonical toponymy",namingCultureKey:"legacy",nameGenerationVersion:0,identityKey:null});
 }
 function safeTerrain(seed,x,y){try{return String(window.GeographyFoundation?.getTerrainType?.(seed,String(x),String(y))||"water");}catch(_){return "water";}}
 function safeEnvironment(seed,x,y){try{return window.GeographyFoundation?.environment?.(seed,String(x),String(y))||Object.freeze({elevationMeters:0,moisturePercent:50,biome:"Unknown"});}catch(_){return Object.freeze({elevationMeters:0,moisturePercent:50,biome:"Unknown"});}}
@@ -151,10 +160,12 @@ function settlementRaw(record){
 function enrich(seed,raw){
   const x=raw.center.x,y=raw.center.y,coordinates=coordinatesFor(seed,x,y);
   let country=null,region=null;try{country=raw.countryId?window.PoliticalGeography?.countryById?.(seed,raw.countryId)||null:window.PoliticalGeography?.ownerAt?.(seed,x,y)||null;}catch(_){}try{region=window.RegionProfile?.descriptorAt?.(seed,x,y)||window.RegionProfile?.at?.(seed,x,y)||null;}catch(_){}
-  const type=raw.type,nameInfo=raw.canonicalName?Object.freeze({name:raw.canonicalName,authority:"SettlementArchetypes canonical name"}):namesFor(seed,type,x,y);
+  const type=raw.type,countryId=String(raw.countryId||country?.id||""),regionId=String(raw.regionId||region?.id||"");
+  const nameInfo=namesFor(seed,type,x,y,{id:String(raw.id),countryId,regionId});
+  const resolvedName=raw.canonicalName&&Number(nameInfo.nameGenerationVersion||0)===0?String(raw.canonicalName):String(nameInfo.name);
   const terrain=raw.evidence?.terrain||safeTerrain(seed,x,y),walkable=terrain!=="water",roadAccessClass=raw.type==="capital"||raw.type==="city"?"primary":raw.category==="cities"?"regional":raw.evidence?.roadNear?"local-road":raw.type==="bridge"?"crossing":"off-road";
   const defaultDiscoveryState=raw.importance>=3||["capital","city","town"].includes(type)?"known":"discoverable";
-  return Object.freeze({...raw,name:nameInfo.name,namingAuthority:nameInfo.authority,coordinates,countryId:String(raw.countryId||country?.id||""),countryName:String(country?.name||""),regionId:String(raw.regionId||region?.id||""),regionName:String(region?.name||""),discoverability:Object.freeze({defaultState:defaultDiscoveryState,requiresLocalMaterialization:false}),navigation:Object.freeze({suitable:walkable||raw.category==="water",walkableAnchor:walkable,roadAccessClass,roadGraphAuthority:window.WorldRoadGraph?"WorldRoadGraph":"local geography fallback",localChunkRequired:false}),strategicVisibilityTier:strategicTier(type,raw.importance),seedOnly:true,cameraIndependent:true,viewportIndependent:true,lodIndependent:true,streamingOrderIndependent:true,localMaterialized:false,authority:"Campaign SEED + fixed geography + canonical settlement hierarchy"});
+  return Object.freeze({...raw,name:resolvedName,namingAuthority:nameInfo.authority,namingCultureKey:nameInfo.namingCultureKey||null,nameGenerationVersion:Number(nameInfo.nameGenerationVersion||0),namingIdentityKey:nameInfo.identityKey||null,coordinates,countryId,countryName:String(country?.name||""),regionId,regionName:String(region?.name||""),discoverability:Object.freeze({defaultState:defaultDiscoveryState,requiresLocalMaterialization:false}),navigation:Object.freeze({suitable:walkable||raw.category==="water",walkableAnchor:walkable,roadAccessClass,roadGraphAuthority:window.WorldRoadGraph?"WorldRoadGraph":"local geography fallback",localChunkRequired:false}),strategicVisibilityTier:strategicTier(type,raw.importance),seedOnly:true,cameraIndependent:true,viewportIndependent:true,lodIndependent:true,streamingOrderIndependent:true,localMaterialized:false,authority:"Campaign SEED + fixed geography + canonical settlement hierarchy"});
 }
 function normalizeOrigin(seed,origin){
   if(origin&&origin.x!=null&&origin.y!=null)return Object.freeze({x:String(origin.x),y:String(origin.y)});
