@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Fresh continuation evidence targets the canonical PlanetStage PlayCanvas presentation.
 import json, os, time
 from pathlib import Path
 from selenium import webdriver
