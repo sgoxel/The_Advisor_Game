@@ -79,6 +79,8 @@ let device=null;
 let root=null;
 let canvas=null;
 let planet=null;
+let mapScaleShell=null;
+let mapScaleShellMaterial=null;
 let cameraEntity=null;
 let keyLight=null;
 let fillLight=null;
@@ -6070,7 +6072,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Texture generation is cooperative below a full row. This protects the
       // main-thread budget on slower/software renderers without changing any
       // pixel value, coordinate sample, or deterministic ordering.
-      if((x&63)===63&&x+1<size)yield .125;
+      if((x&31)===31&&x+1<size)yield .0625;
     }
     yield 1;
   }
@@ -6598,6 +6600,21 @@ function updateLocalRequest(){
 function updateProjectionPresentation(visibleHeightUnits=1){
   if(!planet)return;
   const blend=projectionState.blend;
+  const scalar=clamp(zoomState.scalar,0,1);
+  // The relief globe is a strong far-view representation but its exaggerated
+  // mountain mesh becomes visually misleading when magnified. A smooth shell
+  // with the identical canonical geography texture owns only that loading gap,
+  // then yields once a local tangent resource is physically appropriate.
+  const mapShellIn=smoothstep01(clamp((scalar-.57)/.09,0,1));
+  const mapShellOut=displayResource?smoothstep01(clamp((scalar-.805)/.045,0,1)):0;
+  const mapShellOpacity=mapScaleShell?mapShellIn*(1-mapShellOut):0;
+  if(mapScaleShell&&mapScaleShellMaterial){
+    mapScaleShell.enabled=mapShellOpacity>.003;
+    mapScaleShellMaterial.opacity=mapShellOpacity;
+    mapScaleShellMaterial.blendType=pc.BLEND_NORMAL;
+    mapScaleShellMaterial.depthWrite=false;
+    mapScaleShellMaterial.update();
+  }
   if(tangentPatch){
     const handoff=projectionHandoffForZoom();
     // Nothing local is shown until a prepared resource exists; the globe keeps
@@ -6610,7 +6627,11 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     const preparedReveal=projectionPresentationBlendForZoom();
     // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.
     const fineVisible=tangentVisible&&zoomState.scalar>=projectionState.transitionStart;
-    tangentPatch.enabled=fineVisible;
+    // The foreground tangent plane is closest to the camera, so keep it hidden
+    // until the smooth parent begins yielding. Medium/outer local coverage may
+    // continue preparing behind the shell without exposing unfinished map-scale
+    // photometry to the player.
+    tangentPatch.enabled=fineVisible&&(!mapScaleShell||mapShellOut>.02);
     ensureFocusRingPatch();ensureHorizonSkirt();
     const viewBlend=blend;
     if(focusRingPatch){
@@ -6744,6 +6765,8 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     globeOpacity:Number((1-globeFade).toFixed(6)),
     tangentOpacity:Number(tangentReveal.toFixed(6)),
     horizonOpacity:Number(tangentReveal.toFixed(6)),
+    mapScaleShellOpacity:Number(mapShellOpacity.toFixed(6)),
+    mapScaleShellActive:Boolean(mapScaleShell&&mapShellOpacity>.003),
     globeDepthWrite:Boolean(handoff<.02)
   };
   if(cloudLayer)cloudLayer.enabled=globeFade<.35;
@@ -6860,6 +6883,7 @@ function zoomBy(delta){const d=Number(delta||0);return d===0?null:stepAnimatedSc
 function applyRotation(){
   if(!planet)return;
   planet.setLocalEulerAngles(pitchDegrees,yawDegrees,0);
+  mapScaleShell?.setLocalEulerAngles?.(pitchDegrees,yawDegrees,0);
   updateZoomFocusFromRotation();
   rotationChangeCount++;
 }
@@ -7220,6 +7244,31 @@ async function buildPlanetMesh(){
   meshTriangleCount=indices.length/3;
   return mesh;
 }
+function buildMapScaleShellMesh(){
+  // Smooth canonical map parent used only during the deep globe→tangent handoff.
+  // It reuses the exact globe geography texture/UV registration but deliberately
+  // omits exaggerated relief, so loading never turns the approach into bright
+  // faceted mountain bands. This is presentation-only and adds no world truth.
+  const latitudeSegments=48,longitudeSegments=80,stride=longitudeSegments+1;
+  const positions=[],normals=[],uvs=[],indices=[],radius=DISPLAY_RADIUS_UNITS+.006;
+  for(let latIndex=0;latIndex<=latitudeSegments;latIndex++){
+    const v=latIndex/latitudeSegments,lat=(.5-v)*Math.PI;
+    for(let lonIndex=0;lonIndex<=longitudeSegments;lonIndex++){
+      const u=lonIndex/longitudeSegments,lon=(u-.5)*Math.PI*2;
+      const direction=window.PlanetGeography.directionFromLatLon(lat,lon);
+      positions.push(direction.x*radius,direction.y*radius,direction.z*radius);
+      normals.push(direction.x,direction.y,direction.z);
+      uvs.push((latIndex===0||latIndex===latitudeSegments)?.5:u,1-v);
+    }
+  }
+  for(let lat=0;lat<latitudeSegments;lat++)for(let lon=0;lon<longitudeSegments;lon++){
+    const a=lat*stride+lon,b=a+1,c=a+stride,d=c+1;
+    indices.push(a,c,b,b,c,d);
+  }
+  const mesh=new pc.Mesh(device);
+  mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
+  return mesh;
+}
 function resize(){
   if(!app||!device||!root)return;
   // Preserve the current and target physical footprints across responsive
@@ -7485,6 +7534,11 @@ function applyAtmosphereMaterialPalette(p){
     surfaceMaterial.emissive.set(p.emissive*p.worldTint[0],p.emissive*p.worldTint[1],p.emissive*p.worldTint[2]);
     surfaceMaterial.update();materialCount++;
   }
+  if(mapScaleShellMaterial){
+    mapScaleShellMaterial.diffuse.set(...p.worldTint);
+    mapScaleShellMaterial.emissive.set(p.emissive*p.worldTint[0],p.emissive*p.worldTint[1],p.emissive*p.worldTint[2]);
+    mapScaleShellMaterial.update();materialCount++;
+  }
   if(tangentPatchMaterial){
     tangentPatchMaterial.diffuse.set(...p.terrainTint);tangentPatchMaterial.emissive.set(...p.terrainTint);tangentPatchMaterial.emissiveIntensity=p.terrainI;tangentPatchMaterial.update();materialCount++;
   }
@@ -7659,6 +7713,25 @@ async function buildScene(){  const started=performance.now();
     const mesh=await buildPlanetMesh();
     planet.render.meshInstances=[new pc.MeshInstance(mesh,surfaceMaterial,planet)];
     app.root.addChild(planet);
+    // Keep one cheap smooth parent available for the map-scale handoff. It uses
+    // the same canonical equirectangular geography texture as the relief globe.
+    mapScaleShellMaterial=new pc.StandardMaterial();
+    mapScaleShellMaterial.name="CanonicalMapScaleShell";
+    mapScaleShellMaterial.diffuse.set(1,1,1);
+    mapScaleShellMaterial.diffuseMap=surfaceMaterial.diffuseMap;
+    mapScaleShellMaterial.emissive.set(.04,.04,.04);
+    mapScaleShellMaterial.emissiveMap=surfaceMaterial.diffuseMap;
+    mapScaleShellMaterial.emissiveIntensity=.22;
+    mapScaleShellMaterial.useLighting=false;
+    mapScaleShellMaterial.cull=pc.CULLFACE_NONE;
+    mapScaleShellMaterial.opacity=0;
+    mapScaleShellMaterial.blendType=pc.BLEND_NORMAL;
+    mapScaleShellMaterial.depthWrite=false;
+    mapScaleShellMaterial.update();
+    mapScaleShell=new pc.Entity("CanonicalMapScaleShell");
+    mapScaleShell.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
+    mapScaleShell.render.meshInstances=[new pc.MeshInstance(buildMapScaleShellMesh(),mapScaleShellMaterial,mapScaleShell)];
+    mapScaleShell.enabled=false;app.root.addChild(mapScaleShell);
     buildAmbientMotion(mesh);
     if(EVIDENCE_LAYERED_START){
       // Global scatter is not part of this WP's far-globe criterion and is not
