@@ -3790,7 +3790,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   for(const house of reveal?.houses||[]){
     const entrance=house?.entrance,target=entrance?.target;
     if(!entrance||!target)continue;
-    const accessWidth=tier==="route"?.56:.24;
+    const accessWidth=tier==="route"?.72:(tier==="footprint"?.34:.24);
     if(addConnector(Number(entrance.x),Number(entrance.y),Number(target.x),Number(target.y),accessWidth,[72,61,38]))connectorSegmentCount++;
   }
   if(!count)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
@@ -3847,11 +3847,14 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
         (Math.abs(Number(local.x||0))<=1.5||Math.abs(Number(local.y||0))<=1.5));
       const localPath=kind==="local-path";
       if(tier==="footprint"){
-        if(!outwardBranch&&!gatewayStem)continue;
+        // A retained parent must remain informative while the route-tier child
+        // prepares. Reuse only real StartingVillage center/local/gateway roads;
+        // no display-only connectors or invented settlement geometry.
+        if(!outwardBranch&&!gatewayStem&&!centerAvenue&&!localPath)continue;
       }else if(!outwardBranch&&!gatewayStem&&!ringCell&&!centerAvenue&&!localPath)continue;
       const half=tier==="footprint"
-        ?(outwardBranch?.30:.10)
-        :(outwardBranch?.36:ringCell?.10:(centerAvenue||gatewayStem)?.18:.13);
+        ?(outwardBranch?.28:(centerAvenue||gatewayStem)?.11:.10)
+        :(outwardBranch?.30:ringCell?.055:(centerAvenue||gatewayStem)?.11:.18);
       const cell={x,y,half};selected.push(cell);selectedMap.set(x+","+y,cell);
     }
     // Render each authoritative road cell as part of one continuous stroke.
@@ -5897,7 +5900,9 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // one-texel derivative can collapse broad canonical slopes into a flat wash;
         // widening only the presentation gradient reveals coherent ridges/valleys
         // while all heights still come from the same SEED-registered authority.
-        const step=Math.max(photometricMetersPerTexel*2.2,Math.min(900,metersPerTexel*4.25)),dux=step/spanEast,dvz=step/spanNorth;
+        const mapDerivativeBand=smoothstep01(clamp((metersPerTexel-30)/100,0,1))*(1-smoothstep01(clamp((metersPerTexel-520)/380,0,1)));
+        const derivativeScale=lerp(2.2,1.25,mapDerivativeBand),derivativeCap=lerp(900,420,mapDerivativeBand);
+        const step=Math.max(photometricMetersPerTexel*derivativeScale,Math.min(derivativeCap,metersPerTexel*lerp(4.25,2.25,mapDerivativeBand))),dux=step/spanEast,dvz=step/spanNorth;
         const sxP=mixSample(Math.min(1,ux+dux),vz),sxN=mixSample(Math.max(0,ux-dux),vz);
         const syP=mixSample(ux,Math.max(0,vz-dvz)),syN=mixSample(ux,Math.min(1,vz+dvz));
         const h0=elevation,hxP=Number(sxP.elevationMeters||0),hxN=Number(sxN.elevationMeters||0),hyP=Number(syP.elevationMeters||0),hyN=Number(syN.elevationMeters||0);
@@ -5932,10 +5937,17 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const focusHillshadeStrength=Math.min(rawHillshadeStrength,hillshadeCap);
         shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.94:.91,contextRing?1.06:1.09);
         const mapStructureBoost=lerp(1.06,1,smoothstep01(clamp((30-metersPerTexel)/28,0,1)));
-        const mapStructureScale=lerp(.52,1,smoothstep01(clamp((52-metersPerTexel)/30,0,1)))*broadReliefWeight;
-        const curvatureTone=curvatureSignal*(contextRing?lerp(.030,.048,contextRefineWeight):lerp(.046,.080,focusRefineWeight))*mapStructureBoost*mapStructureScale*nearReliefWeight;
+        // 1/500 needs readable ridges/valleys without restoring the broad
+        // low-frequency pale sweep. Boost only the high-pass curvature/drainage
+        // residual in the physically map-scale band; near-ground and very coarse
+        // parent photometry remain unchanged.
+        const mapHighPassBand=smoothstep01(clamp((metersPerTexel-32)/86,0,1))*(1-smoothstep01(clamp((metersPerTexel-420)/360,0,1)));
+        const baseStructureScale=lerp(.52,1,smoothstep01(clamp((52-metersPerTexel)/30,0,1)))*broadReliefWeight;
+        const mapStructureScale=clamp(baseStructureScale+mapHighPassBand*(contextRing?.24:.62),0,1.08);
+        const curvatureReliefWeight=lerp(nearReliefWeight,1,mapHighPassBand*.92);
+        const curvatureTone=curvatureSignal*(contextRing?lerp(.030,.048,contextRefineWeight):lerp(.046,.080,focusRefineWeight))*mapStructureBoost*mapStructureScale*curvatureReliefWeight;
         const slopeTone=-slopeSignal*(contextRing?lerp(.006,.014,contextRefineWeight):lerp(.010,.024,focusRefineWeight))*slopeLightingWeight;
-        const drainageTone=(moistureCurve*(contextRing?lerp(.010,.018,contextRefineWeight):lerp(.016,.032,focusRefineWeight))-moistureGradient*(contextRing?.008:.012))*mapStructureScale;
+        const drainageTone=(moistureCurve*(contextRing?lerp(.010,.018,contextRefineWeight):lerp(.016,.032,focusRefineWeight))-moistureGradient*(contextRing?.008:.012))*mapStructureScale*lerp(.9,1.22,mapHighPassBand);
         const structureTone=curvatureTone+slopeTone+drainageTone;
         cover=[structureTone,structureTone*.95+drainageTone*.12,curvatureTone*.74+slopeTone*.64+drainageTone*.58];
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
