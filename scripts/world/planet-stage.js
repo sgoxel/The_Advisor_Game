@@ -211,6 +211,7 @@ let microLocationPresentation={
   deterministic:true,seedOnly:true,lazy:true,bounded:true,fullWorldScan:false,perFrameScan:false,
   presentationOnly:true,simulationAuthority:false,collisionAuthority:false,navigationAuthority:false
 };
+let microLocationClearanceCenters=[];
 let resizeObserver=null;
 let yawDegrees=-18;
 let pitchDegrees=-10;
@@ -2698,6 +2699,11 @@ function prepareLocalWildernessPlan(job){
   return Object.freeze({signature,focusTile:focus,spacing,candidates,rejectedWater,items:Object.freeze(items),fauna:Object.freeze(fauna),familyCounts:Object.freeze({...familyCounts}),biomeCounts:Object.freeze({...biomeCounts}),preparationMs:Number((performance.now()-started).toFixed(3)),deterministicGlobalCells:true,fullWorldScan:false});
 }
 function localWildernessManaged(item,reveal){
+  for(const center of microLocationClearanceCenters){
+    if(Math.hypot(Number(item.east||0)-center.east,Number(item.north||0)-center.north)<center.radiusMeters){
+      return {reject:true,road:false,microLocation:true};
+    }
+  }
   if(!reveal)return {reject:false,road:false};
   const dist=Math.hypot(item.worldX,item.worldY),tileMeters=reveal.tileMeters,ring=Number(window.StartingVillage?.RING_RADIUS_TILES||14)*tileMeters;
   if(dist<Math.max(42,ring+12))return {reject:true,road:false};
@@ -3348,9 +3354,10 @@ function ensureLocalStaticMaterials(){
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.028),lotOverview:make("LocalOccupiedLotOverview",1,1,1,.58),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
-    microStone:make("LocalMicroStone",.46,.45,.40),microWood:make("LocalMicroWood",.48,.29,.13),
-    microDark:make("LocalMicroDark",.15,.12,.10),microCloth:make("LocalMicroCloth",.62,.48,.30),
-    microAccent:make("LocalMicroAccent",.88,.48,.12),microSoil:make("LocalMicroSoil",.32,.21,.11),
+    microStone:make("LocalMicroStone",.67,.64,.56),microWood:make("LocalMicroWood",.57,.34,.14),
+    microDark:make("LocalMicroDark",.11,.075,.045),microCloth:make("LocalMicroCloth",.76,.56,.27),
+    microAccent:make("LocalMicroAccent",1.0,.45,.08),microSoil:make("LocalMicroSoil",.39,.22,.09),
+    microGround:make("LocalMicroGround",.31,.20,.08,.62),microMoss:make("LocalMicroMoss",.12,.28,.07,.54),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityForge:(()=>{const m=make("LocalActivityForge",1,1,1);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -5247,80 +5254,133 @@ function renderCanonicalMicroProp(prop,resource,frame,index){
   const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,target.latitudeRadians,target.longitudeRadians);
   const east=Number(delta.eastMeters||0),north=Number(delta.northMeters||0),dims=resource.dims||{};
   if(Math.abs(east)>Number(dims.patchWidth||0)*.68||Math.abs(north)>Number(dims.patchHeight||0)*.68)return Object.freeze({primitiveCount:0,triangleEstimate:0});
-  const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),ground=localGroundHeightUnits(east,north,frame)+.018;
+  const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),ground=localGroundHeightUnits(east,north,frame)+.022;
   const yaw=Number(prop.rotation||0),semantic=String(prop.semantic||""),variant=Math.max(0,Math.min(2,Number(prop.variant||0)));
   let primitives=0,triangles=0;
-  const add=(type,material,dx,dz,sx,sy,sz,yMeters=sy*.5,localYaw=yaw)=>{
+  const add=(type,material,dx,dz,sx,sy,sz,yMeters=sy*.5,rx=0,ry=yaw,rz=0)=>{
     const off=rotateMicroOffset(dx,dz,yaw);
     addLocalStatic("Micro-"+String(prop.microLocationId||"loc")+"-"+index+"-"+primitives,type,material,
       (east+off.x)/unit,ground+Number(yMeters||0)/unit,(-north+off.z)/unit,
-      Number(sx||1)/unit,Number(sy||1)/unit,Number(sz||1)/unit,0,localYaw,0);
+      Number(sx||1)/unit,Number(sy||1)/unit,Number(sz||1)/unit,rx,ry,rz);
     primitives++;
     triangles+=type==="sphere"?160:type==="cylinder"||type==="cone"?64:12;
   };
-  const box=(mat,dx,dz,sx,sy,sz,y=sy*.5,localYaw=yaw)=>add("box",mat,dx,dz,sx,sy,sz,y,localYaw);
-  const sphere=(mat,dx,dz,sx,sy,sz,y=sy*.5)=>add("sphere",mat,dx,dz,sx,sy,sz,y,0);
+  const box=(mat,dx,dz,sx,sy,sz,y=sy*.5,localYaw=yaw)=>add("box",mat,dx,dz,sx,sy,sz,y,0,localYaw,0);
+  const sphere=(mat,dx,dz,sx,sy,sz,y=sy*.5)=>add("sphere",mat,dx,dz,sx,sy,sz,y,0,0,0);
+  const cone=(mat,dx,dz,sx,sy,sz,y=sy*.5,localYaw=yaw)=>add("cone",mat,dx,dz,sx,sy,sz,y,0,localYaw,0);
   const stone=localStaticMaterials.microStone,wood=localStaticMaterials.microWood,dark=localStaticMaterials.microDark,
     cloth=localStaticMaterials.microCloth,accent=localStaticMaterials.microAccent,soil=localStaticMaterials.microSoil,
     leaf=localStaticMaterials.leaf,trunk=localStaticMaterials.trunk;
   if(semantic==="campfire"){
-    for(let i=0;i<8;i++){const a=Math.PI*2*i/8;sphere(stone,Math.cos(a)*.48,Math.sin(a)*.48,.24,.18,.24,.11);}
-    box(wood,-.18,0,.88,.14,.14,.14,yaw+34);box(wood,.18,0,.88,.14,.14,.14,yaw-34);sphere(accent,0,0,.40,.52,.40,.36);
+    for(let i=0;i<8;i++){const a=Math.PI*2*i/8;sphere(stone,Math.cos(a)*.62,Math.sin(a)*.62,.30,.22,.30,.13);}
+    box(wood,-.23,0,1.08,.18,.18,.16,yaw+34);box(wood,.23,0,1.08,.18,.18,.16,yaw-34);
+    sphere(accent,0,0,.58,.72,.58,.48);sphere(localStaticMaterials.activityWarm,0,0,.28,.46,.28,.80);
   }else if(semantic==="tent"){
-    box(cloth,0,0,2.8,1.45,2.25,.76);box(wood,-1.15,0,.13,1.75,.13,.88);box(wood,1.15,0,.13,1.75,.13,.88);
+    cone(cloth,0,0,3.45,2.75,3.45,1.38);box(wood,0,0,.16,3.05,.16,1.53);
+    box(dark,0,1.08,.76,1.08,.12,.58,yaw);
   }else if(semantic==="ruin-wall"){
-    box(stone,-.48,0,1.45,1.85,.62,.93);box(stone,.47,.08,.82,1.10,.62,.55);sphere(stone,.92,.34,.48,.34,.46,.18);
+    box(stone,-.58,0,1.72,2.25,.72,1.13);box(stone,.55,.10,1.02,1.38,.72,.69);
+    sphere(stone,1.12,.34,.58,.42,.54,.22);sphere(stone,-1.08,.38,.44,.34,.42,.18);
   }else if(semantic==="shrine"){
-    box(stone,0,0,1.75,.28,1.28,.14);box(stone,0,0,.55,1.75,.55,1.00);box(stone,0,0,1.05,.22,.72,1.90);sphere(accent,0,0,.32,.26,.32,2.10);
+    box(stone,0,0,2.05,.34,1.52,.17);box(stone,0,0,.68,2.20,.68,1.22);
+    box(stone,0,0,1.28,.26,.82,2.34);sphere(accent,0,0,.40,.32,.40,2.62);
   }else if(semantic==="grave"){
-    box(stone,0,0,1.05,.18,.58,.10);box(stone,0,-.28,.68,1.15,.24,.62);
+    box(soil,0,.26,1.38,.11,2.30,.075);
+    box(stone,0,-.72,.82,1.34,.30,.73);box(stone,0,-.72,1.02,.20,.22,1.22);
   }else if(semantic==="marker-stone"){
-    box(stone,0,0,.62,1.25,.68,.64,yaw+variant*12);
+    box(stone,0,0,.78,1.52,.82,.78,yaw+variant*12);
   }else if(semantic==="dock"){
-    box(wood,0,0,2.75,.18,1.42,.12);box(dark,-1.08,-.52,.14,.86,.14,.42);box(dark,1.08,-.52,.14,.86,.14,.42);
+    box(wood,0,.24,1.92,.20,3.45,.14);
+    box(dark,-.74,-1.12,.16,1.02,.16,.50);box(dark,.74,-1.12,.16,1.02,.16,.50);
+    box(dark,-.74,1.52,.16,.82,.16,.40);box(dark,.74,1.52,.16,.82,.16,.40);
   }else if(semantic==="fish-rack"){
-    box(wood,-.78,0,.14,1.62,.14,.81);box(wood,.78,0,.14,1.62,.14,.81);box(wood,0,0,1.70,.14,.14,1.42);
-    box(cloth,-.34,0,.20,.58,.08,1.02);box(cloth,.34,0,.20,.58,.08,1.05);
+    box(wood,-.92,0,.16,1.88,.16,.94);box(wood,.92,0,.16,1.88,.16,.94);box(wood,0,0,2.02,.16,.16,1.62);
+    box(cloth,-.42,0,.24,.72,.10,1.12);box(cloth,.42,0,.24,.72,.10,1.15);
   }else if(semantic==="unusual-tree"){
-    box(trunk,0,0,.82,4.5,.82,2.25);sphere(leaf,0,0,4.2,2.55,3.7,5.0);sphere(leaf,-1.2,.28,2.0,1.6,1.9,4.6);sphere(leaf,1.15,-.25,2.1,1.7,2.0,4.75);
+    box(trunk,0,0,1.00,5.2,1.00,2.60);
+    sphere(leaf,0,0,4.75,3.05,4.15,5.75);sphere(leaf,-1.45,.30,2.35,1.88,2.20,5.20);sphere(leaf,1.38,-.28,2.42,1.95,2.26,5.35);
   }else if(semantic==="quarry"){
-    sphere(stone,-.72,-.32,1.25,.82,1.10,.42);sphere(stone,.62,-.18,1.05,.72,.95,.36);sphere(stone,.10,.72,.92,.62,.82,.31);box(wood,0,-1.00,1.55,.16,.16,.13);
+    sphere(stone,-.90,-.38,1.48,.98,1.28,.50);sphere(stone,.78,-.20,1.26,.86,1.12,.43);
+    sphere(stone,.12,.88,1.08,.72,.96,.36);box(wood,0,-1.24,1.82,.18,.18,.14);
   }else if(semantic==="cave-mouth"){
-    sphere(stone,-.86,0,1.28,1.58,1.05,.82);sphere(stone,.86,0,1.28,1.58,1.05,.82);sphere(stone,0,-.20,1.85,1.00,1.15,1.62);box(dark,0,.30,1.18,1.34,.24,.68);
+    sphere(stone,-1.02,0,1.50,1.84,1.22,.96);sphere(stone,1.02,0,1.50,1.84,1.22,.96);
+    sphere(stone,0,-.24,2.12,1.18,1.32,1.88);box(dark,0,.42,1.42,1.58,.30,.80);
   }else if(semantic==="cart"){
-    box(wood,0,0,2.15,.36,1.18,.43);box(wood,-1.02,0,.25,.92,.25,.40,yaw+18);sphere(dark,-.70,.62,.54,.72,.22,.40);sphere(dark,.70,.62,.54,.72,.22,.40);
+    box(wood,0,0,2.65,.44,1.48,.52);box(wood,0,-1.12,2.15,.18,.18,.35);
+    sphere(dark,-.92,.62,.68,.88,.28,.43);sphere(dark,.92,.62,.68,.88,.28,.43);
+    sphere(dark,-.92,-.42,.68,.88,.28,.43);sphere(dark,.92,-.42,.68,.88,.28,.43);
   }else if(semantic==="signpost"){
-    box(wood,0,0,.18,1.95,.18,.98);box(wood,.28,0,1.25,.38,.14,1.60);
+    box(wood,0,0,.22,2.25,.22,1.13);box(wood,.34,0,1.52,.46,.18,1.82);
   }else if(semantic==="crate"){
-    box(wood,0,0,1.02,.90,1.02,.45);
+    box(wood,0,0,1.24,1.08,1.24,.54);
   }else if(semantic==="barrel"){
-    box(wood,0,0,.84,1.08,.84,.54);box(dark,0,0,.90,.09,.90,.27);box(dark,0,0,.90,.09,.90,.80);
+    box(wood,0,0,1.02,1.28,1.02,.64);box(dark,0,0,1.10,.10,1.10,.32);box(dark,0,0,1.10,.10,1.10,.96);
   }else if(semantic==="sack"){
-    sphere(cloth,0,0,.86,1.02,.74,.52);
+    sphere(cloth,0,0,1.02,1.22,.88,.62);
   }else if(semantic==="woodpile"){
-    box(wood,-.42,-.24,.90,.18,.20,.12);box(wood,.40,-.22,.90,.18,.20,.12);box(wood,-.24,.26,.90,.18,.20,.31);box(wood,.42,.24,.90,.18,.20,.31);
+    box(wood,-.52,-.28,1.06,.22,.24,.14);box(wood,.50,-.26,1.06,.22,.24,.14);
+    box(wood,-.30,.30,1.06,.22,.24,.37);box(wood,.52,.28,1.06,.22,.24,.37);
   }else if(semantic==="bench"){
-    box(wood,0,0,1.72,.18,.52,.50);box(wood,-.62,0,.18,.72,.18,.35);box(wood,.62,0,.18,.72,.18,.35);box(wood,0,-.24,1.72,.62,.14,.82);
+    box(wood,0,0,2.00,.20,.62,.54);box(wood,-.74,0,.20,.82,.20,.40);box(wood,.74,0,.20,.82,.20,.40);
+    box(wood,0,-.30,2.00,.72,.16,.90);
   }else if(semantic==="bush"){
-    sphere(leaf,0,0,1.25+variant*.10,.82,.98,.44);sphere(leaf,.42,-.18,.72,.60,.72,.36);
+    sphere(leaf,0,0,1.42+variant*.12,.96,1.12,.50);sphere(leaf,.50,-.20,.82,.70,.82,.42);
   }else if(semantic==="flower"){
-    sphere(leaf,0,0,.54,.34,.54,.20);sphere(accent,-.22,.06,.20,.24,.20,.38);sphere(accent,.16,-.12,.22,.26,.22,.40);sphere(accent,.31,.14,.18,.22,.18,.37);
+    sphere(leaf,0,0,.62,.38,.62,.22);sphere(accent,-.26,.08,.24,.30,.24,.44);
+    sphere(accent,.18,-.14,.26,.32,.26,.47);sphere(accent,.36,.16,.22,.27,.22,.43);
   }else if(semantic==="work-prop"){
-    box(wood,0,0,1.35,.78,.84,.39);box(dark,.40,-.22,.38,.20,.38,.88,yaw+24);box(dark,-.38,.20,.32,.18,.32,.84,yaw-18);
+    box(wood,0,0,1.58,.92,1.02,.46);box(dark,.48,-.26,.44,.24,.44,1.02,yaw+24);box(dark,-.46,.24,.38,.22,.38,.98,yaw-18);
   }else{
-    box(soil,0,0,1.1,.12,1.1,.06);
+    box(soil,0,0,1.28,.14,1.28,.07);
   }
   return Object.freeze({primitiveCount:primitives,triangleEstimate:triangles});
 }
-function renderCanonicalMicroLocations(resource,frame,tier){
+function prepareCanonicalMicroLocations(resource,tier){
+  microLocationClearanceCenters=[];
+  if(!window.MicroLocations?.forChunk||!activeSeed||!resource?.dims?.staticWorld||!["refined","full"].includes(String(tier||""))){
+    return Object.freeze({plan:null,bounds:null});
+  }
+  const bounds=microLocationBounds(resource),plan=window.MicroLocations.forChunk(activeSeed,bounds);
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  for(const location of plan?.locations||[]){
+    const target=worldLatLonForTile(location.anchor.x,location.anchor.y);
+    const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,target.latitudeRadians,target.longitudeRadians);
+    microLocationClearanceCenters.push(Object.freeze({
+      east:Number(delta.eastMeters||0),north:Number(delta.northMeters||0),
+      radiusMeters:Math.min(11,Math.max(7,Number(location.footprintRadiusTiles||5)*tileMeters*.72))
+    }));
+  }
+  return Object.freeze({plan,bounds});
+}
+function renderMicroLocationGrounding(location,resource,frame){
+  const type=String(location?.compositionType||"");
+  if(["river-crossing","fishing-spot","waterfall-crossing"].includes(type))return Object.freeze({primitiveCount:0,triangleEstimate:0});
+  const target=worldLatLonForTile(location.anchor.x,location.anchor.y);
+  const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,target.latitudeRadians,target.longitudeRadians);
+  const east=Number(delta.eastMeters||0),north=Number(delta.northMeters||0),dims=resource.dims||{},unit=Math.max(1e-9,Number(dims.metersPerUnit||1));
+  if(Math.abs(east)>Number(dims.patchWidth||0)*.68||Math.abs(north)>Number(dims.patchHeight||0)*.68)return Object.freeze({primitiveCount:0,triangleEstimate:0});
+  const ground=localGroundHeightUnits(east,north,frame)+.010,mat=type==="unusual-grove"?localStaticMaterials.microMoss:localStaticMaterials.microGround;
+  const spans=type==="burial-site"?[[0,0,8.4,5.6],[1.5,.7,4.6,3.4]]:
+    type==="unusual-grove"?[[0,0,9.2,7.2],[-2.1,1.4,4.8,3.8]]:
+    [[0,0,8.0,6.2],[1.8,-1.2,4.4,3.4]];
+  let count=0;
+  for(const [dx,dz,sx,sz] of spans){
+    const off=rotateMicroOffset(dx,dz,Number(location.rotation||0));
+    addLocalStatic("MicroGround-"+location.id+"-"+count,"sphere",mat,(east+off.x)/unit,ground,(-north+off.z)/unit,sx/unit,.12/unit,sz/unit);
+    count++;
+  }
+  return Object.freeze({primitiveCount:count,triangleEstimate:count*160});
+}
+function renderCanonicalMicroLocations(resource,frame,tier,prepared=null){
   resetMicroLocationPresentation();
-  if(!window.MicroLocations?.forChunk||!activeSeed||!resource?.dims?.staticWorld||!["refined","full"].includes(String(tier||"")))return microLocationPresentation;
-  const started=performance.now(),bounds=microLocationBounds(resource),plan=window.MicroLocations.forChunk(activeSeed,bounds);
-  const locations=Array.isArray(plan?.locations)?plan.locations:[];
+  const prep=prepared||prepareCanonicalMicroLocations(resource,tier),plan=prep?.plan,bounds=prep?.bounds;
+  if(!plan||!bounds)return microLocationPresentation;
+  const started=performance.now(),locations=Array.isArray(plan?.locations)?plan.locations:[];
   let propCount=0,primitiveCount=0,triangleEstimate=0;
   const rendered=[];
   for(const location of locations){
-    let locationPrimitives=0,locationTriangles=0,locationProps=0;
+    const grounding=renderMicroLocationGrounding(location,resource,frame);
+    let locationPrimitives=grounding.primitiveCount,locationTriangles=grounding.triangleEstimate,locationProps=0;
     for(let i=0;i<(location.props||[]).length;i++){
       const result=renderCanonicalMicroProp(location.props[i],resource,frame,i);
       if(result.primitiveCount>0){locationProps++;locationPrimitives+=result.primitiveCount;locationTriangles+=result.triangleEstimate;}
@@ -5360,7 +5420,7 @@ function rebuildLocalStaticPresentation(resource){
   clearLocalFauna();
   localStaticRoot?.destroy?.();localStaticRoot=null;localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;localSettlementLotGeometry?.destroy?.();localSettlementLotGeometry=null;clearCanonicalRoofRegistry();
   const tier=settlementRevealTierForScalar();
-  resetMicroLocationPresentation();
+  resetMicroLocationPresentation();microLocationClearanceCenters=[];
   localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,microLocationCount:0,microLocationPropCount:0,microLocationPrimitiveCount:0,microLocationDrawCallEstimate:0,microLocationTriangleEstimate:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,presentationOnly:true,simulationAuthority:false};
   const reveal=canonicalStartingVillageReveal(resource);
   if(reveal&&tier!=="none"){
@@ -5375,8 +5435,9 @@ function rebuildLocalStaticPresentation(resource){
   ensureLocalStaticMaterials();localStaticRoot=new pc.Entity("LocalStaticWorld");tangentPatch.addChild(localStaticRoot);
   const unit=dims.metersPerUnit,center=geography.sampleLatLon(resource.lat0,resource.lon0);
   if(center?.land){
+    const preparedMicro=prepareCanonicalMicroLocations(resource,tier);
     const wild=renderLocalWilderness(resource,frame,null);
-    const micro=renderCanonicalMicroLocations(resource,frame,tier);
+    const micro=renderCanonicalMicroLocations(resource,frame,tier,preparedMicro);
     rebuildLocalCrowdPresentation(resource,frame,tier);
     localStatic.wildernessCount=wild.accepted;localStatic.ambientFaunaCount=wild.fauna;localStatic.vegetationCount=Object.entries(wilderness.localFamilyCounts||{}).filter(([k])=>["grass","flower","bush","sapling","reed"].includes(k)).reduce((sum,[,v])=>sum+Number(v||0),0);
     localStatic.microLocationCount=micro.locationCount;localStatic.microLocationPropCount=micro.propCount;localStatic.microLocationPrimitiveCount=micro.primitiveCount;
