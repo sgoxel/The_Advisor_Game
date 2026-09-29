@@ -341,7 +341,7 @@ function advanceResidentForTick(tick,state){
   tick.changed=Boolean(after?.changed)||tick.changed;
 }
 function drainAdvanceTick(tick,cooperative){
-  const started=performance.now(),budgetMs=cooperative?4:Infinity;
+  const started=performance.now(),budgetMs=cooperative?8:Infinity;
   if(!advanceTickInitialization(tick,cooperative,started,budgetMs))return false;
   while(tick.cursor<tick.residents.length){
     advanceResidentForTick(tick,tick.residents[tick.cursor]);
