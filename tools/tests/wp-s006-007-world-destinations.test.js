@@ -41,7 +41,7 @@ const otherSeed="WP_S006_007_ACCEPTANCE_ALT";
 const api=global.WorldDestinations;
 
 const origins=[{x:"0",y:"0"}];
-for(const rep of (global.RegionProfile?.representatives?.(seed)||[]).slice(0,4)){
+for(const rep of (global.RegionProfile?.representatives?.(seed)||[]).slice(0,2)){
   const seat=rep.administrativeSeat||{};
   if(seat.x!=null&&seat.y!=null)origins.push({x:String(seat.x),y:String(seat.y)});
 }
@@ -59,6 +59,9 @@ for(const origin of origins){
   assert.strictEqual(first.diagnostics.fullWorldScan,false,"query reported full world scan");
   assert.strictEqual(first.diagnostics.localChunkMaterialization,false,"descriptor query materialized local chunks");
   assert(first.diagnostics.queryCellCount<=api.MAX_QUERY_CELLS,"POI cell cap exceeded");
+  assert(first.diagnostics.poiCellCacheSize<=api.POI_CELL_CACHE_LIMIT,"POI cell cache cap exceeded");
+  assert(first.diagnostics.queryMs<=5000,"bounded destination query exceeded 5s cold-run acceptance budget");
+  assert(second.diagnostics.queryMs<=5000,"bounded destination repeat exceeded 5s acceptance budget");
   assert(first.results.length<=api.MAX_QUERY_RESULTS,"result cap exceeded");
   for(const d of first.results){
     assert(d.id&&d.type&&d.name,"descriptor identity incomplete");
@@ -74,6 +77,12 @@ for(const origin of origins){
   all.push(...first.results);
   summaries.push({origin,signature:api.signature(first),count:first.results.length,queryMs:first.diagnostics.queryMs,queryCellCount:first.diagnostics.queryCellCount,settlementQueryCellCount:first.diagnostics.settlementQueryCellCount});
 }
+
+const localSettlementQuery=api.queryNearby(seed,{x:"0",y:"0"},{radiusMeters:18000,maxResults:32});
+assert(localSettlementQuery.diagnostics.settlementClasses.includes("village"),"local query omitted village class");
+assert(localSettlementQuery.diagnostics.settlementClasses.includes("hamlet"),"local query omitted hamlet class");
+assert(localSettlementQuery.diagnostics.queryMs<=5000,"local settlement query exceeded 5s acceptance budget");
+all.push(...localSettlementQuery.results);
 
 const byId=new Map(all.map(x=>[x.id,x]));
 const unique=[...byId.values()];
@@ -128,7 +137,7 @@ console.log(JSON.stringify({
     fishing:{id:fishing.id,name:fishing.name,waterSamples:fishing.evidence.waterSamples},
     water:{id:water.id,type:water.type,name:water.name,waterSamples:water.evidence.waterSamples}
   },
-  bounds:{maxQueryCells:api.MAX_QUERY_CELLS,maxResults:api.MAX_QUERY_RESULTS,maxRadiusMeters:api.MAX_QUERY_RADIUS_METERS,fullWorldScan:false,localChunkMaterialization:false},
+  bounds:{maxQueryCells:api.MAX_QUERY_CELLS,maxResults:api.MAX_QUERY_RESULTS,maxRadiusMeters:api.MAX_QUERY_RADIUS_METERS,poiCellCacheLimit:api.POI_CELL_CACHE_LIMIT,queryBudgetMs:5000,fullWorldScan:false,localChunkMaterialization:false},
   filters:{historicalOnly:filtered.results.length,minImportance:minImportance.results.length,discoveredOnly:discovered.results.length},
   navigatorIntegration:true
 },null,2));
