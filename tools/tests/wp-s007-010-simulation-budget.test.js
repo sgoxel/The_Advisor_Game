@@ -85,6 +85,8 @@ const proof=WorldSimulationBudget.proof(seed+"-PROOF");
 const root=path.resolve(__dirname,"../..");
 const lazy=fs.readFileSync(path.join(root,"scripts/world/lazy-catchup.js"),"utf8");
 const tiers=fs.readFileSync(path.join(root,"scripts/world/simulation-tiers.js"),"utf8");
+const globalSim=fs.readFileSync(path.join(root,"scripts/world/global-country-simulation.js"),"utf8");
+const regionalSim=fs.readFileSync(path.join(root,"scripts/world/regional-settlement-simulation.js"),"utf8");
 const stage=fs.readFileSync(path.join(root,"scripts/world/planet-stage.js"),"utf8");
 
 const checks={
@@ -93,6 +95,7 @@ const checks={
   centralProof:proof.pass===true&&proof.finalOutcomeBudgetInvariant===true,
   tierBounds:budget.tiers.counts.exact<=1&&budget.tiers.counts.exactNpcHandles<=24&&budget.tiers.candidates<=12,
   tierTelemetry:budget.tiers.materializations===5&&budget.tiers.dematerializations===2&&budget.tiers.deferredPromotions===4,
+  aggregateRefreshTelemetry:globalSim.includes("recordRevisionRefresh")&&regionalSim.includes("recordRevisionRefresh"),
   persistenceTelemetry:budget.persistence.writeBehindDepth===7&&budget.persistence.dirtyRecords===9&&budget.persistence.cacheBytes===65536,
   boundedBackground:backgroundOrder.length===18&&budget.background.pending===0&&budget.background.queueLimit===128,
   incrementalCatchup:lazy.includes('WorldSimulationBudget?.limit?.("catchUpBatches"')&&lazy.includes("setTimeout(resolve,0)")&&lazy.includes("while(batches<maxBatches)"),
