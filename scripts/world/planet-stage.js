@@ -3824,8 +3824,20 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
     }
     uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
   };
+  const addSegment=(x0,y0,x1,y1,width)=>{
+    const dx=Number(x1)-Number(x0),dy=Number(y1)-Number(y0),len=Math.hypot(dx,dy);
+    if(!(len>0))return;
+    const hw=Math.max(.04,Number(width||.16)*.5),nx=-dy/len*hw,ny=dx/len*hw;
+    const base=positions.length/3;
+    for(const [cx,cy] of [[x0+nx,y0+ny],[x1+nx,y1+ny],[x1-nx,y1-ny],[x0-nx,y0-ny]]){
+      const east=cx*tileMeters,north=cy*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
+      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.030;
+      positions.push(pos.x,ground,pos.z);normals.push(0,1,0);
+    }
+    uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
+  };
   if(tier==="route"||tier==="footprint"){
-    const ringRadius=Math.max(1,Number(village.RING_RADIUS_TILES||14));
+    const ringRadius=Math.max(1,Number(village.RING_RADIUS_TILES||14)),selected=[],selectedMap=new Map();
     for(const [x,y,kind] of roadCells){
       const local=village.local(activeSeed,String(x),String(y));
       const ringCell=Boolean(local&&Math.abs(Number(local.radius||0)-ringRadius)<=1.25);
@@ -3836,18 +3848,24 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       const localPath=kind==="local-path";
       if(tier==="footprint"){
         if(!outwardBranch&&!gatewayStem)continue;
-      }else{
-        // Settlement approach shows the complete authoritative movement spine:
-        // ring, both center avenues, gateway/outward road and true local paths.
-        // No road is invented; every rendered cell comes from infrastructureAt.
-        if(!outwardBranch&&!gatewayStem&&!ringCell&&!centerAvenue&&!localPath)continue;
-      }
+      }else if(!outwardBranch&&!gatewayStem&&!ringCell&&!centerAvenue&&!localPath)continue;
       const half=tier==="footprint"
         ?(outwardBranch?.30:.10)
         :(outwardBranch?.36:ringCell?.10:(centerAvenue||gatewayStem)?.18:.13);
-      addQuad(x-half,y-half,x+half,y+half);
-      if(roadSet.has((x+1)+","+y))addQuad(x+half,y-half,x+1-half,y+half);
-      if(roadSet.has(x+","+(y+1)))addQuad(x-half,y+half,x+half,y+1-half);
+      const cell={x,y,half};selected.push(cell);selectedMap.set(x+","+y,cell);
+    }
+    // Render each authoritative road cell as part of one continuous stroke.
+    // Cardinal neighbours always connect. Diagonal neighbours connect only when
+    // there is no cardinal intermediary, preserving curved ring continuity
+    // without inventing shortcuts between distinct authoritative roads.
+    for(const cell of selected){
+      const {x,y,half}=cell,nodeHalf=Math.max(.055,half*.72);
+      addQuad(x-nodeHalf,y-nodeHalf,x+nodeHalf,y+nodeHalf);
+      for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
+        const other=selectedMap.get((x+dx)+","+(y+dy));if(!other)continue;
+        if(dx&&dy&&(selectedMap.has((x+dx)+","+y)||selectedMap.has(x+","+(y+dy))))continue;
+        addSegment(x,y,other.x,other.y,Math.max(.08,Math.min(half,other.half)*2));
+      }
     }
   }else{
     for(const [x,y] of roadCells)addQuad(x-.5,y-.5,x+.5,y+.5);
@@ -3856,7 +3874,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
   const entity=new pc.Entity("CanonicalAuthoritativeRoadCells");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   const roadMaterial=(tier==="route"||tier==="footprint")?localStaticMaterials.roadOverview:localStaticMaterials.road;
   entity.render.meshInstances=[new pc.MeshInstance(mesh,roadMaterial,entity)];localStaticRoot.addChild(entity);localSettlementRoadGeometry=mesh;
-  return Object.freeze({active:true,cellCount:tier==="footprint"?segmentCount:roadCells.length,segmentCount,queryCount,triangleCount:indices.length/3,mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-connected-network-v4":"StartingVillage.infrastructureAt-cell-mesh-v1"});
+  return Object.freeze({active:true,cellCount:tier==="footprint"?segmentCount:roadCells.length,segmentCount,queryCount,triangleCount:indices.length/3,mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-continuous-network-v5":"StartingVillage.infrastructureAt-cell-mesh-v1"});
 }
 function clearCanonicalWayfindingSignposts(){
   clearInspectionKeySet(localSignInspectionKeys,false);
@@ -5814,7 +5832,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // contour. Retain a bounded share of the same canonical elevation identity
       // while curvature/drainage/registered detail carry the readable structure.
       const absoluteElevationPaletteWeight=sample?.land
-        ?lerp(.07,1,smoothstep01(clamp((58-metersPerTexel)/36,0,1)))
+        ?lerp(.34,1,smoothstep01(clamp((58-metersPerTexel)/36,0,1)))
         :1;
       const paletteUplandWeight=uplandWeight*absoluteElevationPaletteWeight;
       const paletteAlpineWeight=alpineBase*absoluteElevationPaletteWeight;
@@ -5826,7 +5844,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Preserve enough canonical globe hue to keep the same macro terrain
       // recognizable through the projection handoff, then converge smoothly.
       const coarseIdentity=smoothstep01(clamp((metersPerTexel-4)/70,0,1));
-      const macroIdentityWeight=clamp(.026+coarseIdentity*.026+mountainIdentity*.008,.026,.068);
+      const macroIdentityWeight=clamp(.040+coarseIdentity*.050+mountainIdentity*.012,.040,.110);
       let base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
       pushRange("sourceLuma",luma3(sourceColor));pushRange("paletteLuma",luma3(localPalette));
       pushRange("elevation",elevationBase);pushRange("moisture",moistureBase);
@@ -5834,7 +5852,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // brightness wedge. Compress only land luminance above ~35 m/texel while
       // preserving RGB differences; near-ground presentation is unchanged.
       if(sample?.land&&metersPerTexel>35){
-        const compression=smoothstep01(clamp((metersPerTexel-35)/120,0,1))*.90;
+        const compression=smoothstep01(clamp((metersPerTexel-35)/120,0,1))*.58;
         const luma=base[0]*.28+base[1]*.58+base[2]*.14;
         const targetLuma=.325+paletteAlpineWeight*.012;
         const shift=(targetLuma-luma)*compression;
