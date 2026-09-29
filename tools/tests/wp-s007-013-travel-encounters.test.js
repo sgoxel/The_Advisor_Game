@@ -102,11 +102,19 @@ for(const type of visualTypes){
 TravelEncounters.clearProof(seed);
 
 const source=fs.readFileSync("scripts/world/travel-encounters.js","utf8");
+const stageSource=fs.readFileSync("scripts/world/planet-stage.js","utf8");
+const html=fs.readFileSync("index.html","utf8");
+const css=fs.readFileSync("styles/main.css","utf8");
 assert(source.includes("RegionProfile?.at"),"regional context missing");
 assert(source.includes("PoliticalGeography?.countryAt"),"political context missing");
 assert(source.includes("GeographyFoundation?.mainRoadInfo"),"road context missing");
 assert(source.includes("GeographyFoundation?.environment"),"biome context missing");
 assert(source.includes("seedAndFantasyTimeOnly:true"),"SEED + fantasy-time authority flag missing");
+assert(stageSource.includes("TravelEncounters?.localPresentation?.(activeSeed,focusTile,stamp"),"PlanetStage crowd batch is not wired to rare encounters");
+assert(stageSource.includes("travelEncounterCount:Number(encounter?.exactActorCount||0)"),"PlanetStage encounter telemetry missing");
+assert(stageSource.includes("travelEncounters:window.TravelEncounters?.snapshot?.(activeSeed)||null"),"PlanetStage snapshot missing travel encounter state");
+assert(html.indexOf("scripts/world/travel-encounters.js")<html.indexOf("scripts/world/planet-stage.js"),"travel encounter runtime must load before PlanetStage");
+assert(css.includes(".travel-encounter-card"),"travel encounter card styles missing");
 
 console.log(JSON.stringify({
   pass:true,wp:"WP-S007-013",classification:"MIXED",
