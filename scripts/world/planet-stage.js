@@ -5172,36 +5172,35 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       registeredNorthMeters:bilerp(aa.registeredNorthMeters,bb.registeredNorthMeters,cc.registeredNorthMeters,dd.registeredNorthMeters)
     };
   };
-  // Sample the geography-owned feature field once on a compact per-resource
-  // lattice, then bilerp it for pixels. This keeps identity canonical while
-  // bounding preparation cost independently of texture resolution.
-  const featureSize=contextRing?32:48,featureCache=new Array(featureSize*featureSize);
+  // Reuse the already-cached canonical registered coordinates to build one
+  // tiny feature lattice. This avoids a second lat/lon/registration traversal.
+  // Rows yield cooperatively so even software WebGL never receives a large
+  // synchronous preparation block.
+  const featureSize=contextRing?20:32,featureCount=featureSize*featureSize;
+  const featureRidge=new Float32Array(featureCount),featureDrainage=new Float32Array(featureCount),featureCover=new Float32Array(featureCount);
   const featureMetersPerSample=Math.max(metersPerTexel,Math.max(spanEast,spanNorth)/Math.max(1,featureSize-1));
-  const terrainFeatureAt=(fx,fy)=>{
-    const ix=Math.max(0,Math.min(featureSize-1,fx)),iy=Math.max(0,Math.min(featureSize-1,fy)),key=iy*featureSize+ix;
-    if(featureCache[key])return featureCache[key];
-    const fu=ix/(featureSize-1),fv=iy/(featureSize-1);
-    const feast=(fu-.5)*spanEast,fnorth=(.5-fv)*spanNorth,geo=canonicalLatLonForLocalOffset(lat0,lon0,feast,fnorth);
-    const registered=canonicalRegisteredMetersForLatLon(geo.latitudeRadians,geo.longitudeRadians);
-    const east=unwrapRegisteredEast(registered.eastMeters),north=Number(registered.northMeters||0);
-    return featureCache[key]=geography.terrainFeatureAtRegisteredMeters?.(east,north,featureMetersPerSample)||{ridgeValley:0,drainage:0,cover:0,revision:null};
-  };
-  const mixTerrainFeature=(ux,vz)=>{
-    const gx=ux*(featureSize-1),gy=vz*(featureSize-1),x0=Math.floor(gx),y0=Math.floor(gy),x1=Math.min(featureSize-1,x0+1),y1=Math.min(featureSize-1,y0+1),tx=gx-x0,ty=gy-y0;
-    const aa=terrainFeatureAt(x0,y0),bb=terrainFeatureAt(x1,y0),cc=terrainFeatureAt(x0,y1),dd=terrainFeatureAt(x1,y1);
-    const bilerp=(va,vb,vc,vd)=>lerp(lerp(Number(va)||0,Number(vb)||0,tx),lerp(Number(vc)||0,Number(vd)||0,tx),ty);
-    return {
-      ridgeValley:bilerp(aa.ridgeValley,bb.ridgeValley,cc.ridgeValley,dd.ridgeValley),
-      drainage:bilerp(aa.drainage,bb.drainage,cc.drainage,dd.drainage),
-      cover:bilerp(aa.cover,bb.cover,cc.cover,dd.cover),
-      revision:aa.revision||bb.revision||cc.revision||dd.revision||null
-    };
-  };
+  let terrainFeatureRevision=null;
+  for(let fy=0;fy<featureSize;fy++){
+    const fv=fy/(featureSize-1);
+    for(let fx=0;fx<featureSize;fx++){
+      const fu=fx/(featureSize-1),sample=mixSample(fu,fv),index=fy*featureSize+fx;
+      const feature=geography.terrainFeatureAtRegisteredMeters?.(sample.registeredEastMeters,sample.registeredNorthMeters,featureMetersPerSample);
+      featureRidge[index]=Number(feature?.ridgeValley||0);
+      featureDrainage[index]=Number(feature?.drainage||0);
+      featureCover[index]=Number(feature?.cover||0);
+      terrainFeatureRevision=terrainFeatureRevision||feature?.revision||null;
+    }
+    yield 1;
+  }
   for(let y=0;y<size;y++){
     for(let x=0;x<size;x++){
       const ux=(x+.5)/size,vz=(y+.5)/size;
       const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
-      const sample=mixSample(ux,vz),terrainFeature=mixTerrainFeature(ux,vz);
+      const sample=mixSample(ux,vz);
+      const fgx=ux*(featureSize-1),fgy=vz*(featureSize-1),fx0=Math.floor(fgx),fy0=Math.floor(fgy),fx1=Math.min(featureSize-1,fx0+1),fy1=Math.min(featureSize-1,fy0+1),ftx=fgx-fx0,fty=fgy-fy0;
+      const fi00=fy0*featureSize+fx0,fi10=fy0*featureSize+fx1,fi01=fy1*featureSize+fx0,fi11=fy1*featureSize+fx1;
+      const featureBilerp=grid=>lerp(lerp(grid[fi00],grid[fi10],ftx),lerp(grid[fi01],grid[fi11],ftx),fty);
+      const terrainRidgeValley=featureBilerp(featureRidge),terrainDrainage=featureBilerp(featureDrainage),terrainCoverValue=featureBilerp(featureCover);
       const sourceColor=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
       // PlanetGeography carries intentionally broad macro color fields. At local
       // map scales those low-frequency fields can read as giant polygon wedges.
@@ -5310,9 +5309,9 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // Physical bandwidth may differ by texel size; feature identity does not.
         const featureBandwidth=smoothstep01(clamp((1400-metersPerTexel)/1320,0,1));
         const featureGain=(contextRing?lerp(.66,.82,contextRefineWeight):lerp(.78,1,focusRefineWeight))*featureBandwidth;
-        const ridgeValley=clamp(Number(terrainFeature.ridgeValley||0),-1,1);
-        const drainage=clamp(Number(terrainFeature.drainage||0),0,1);
-        const coverStructure=clamp(Number(terrainFeature.cover||0),-1,1);
+        const ridgeValley=clamp(Number(terrainRidgeValley||0),-1,1);
+        const drainage=clamp(Number(terrainDrainage||0),0,1);
+        const coverStructure=clamp(Number(terrainCoverValue||0),-1,1);
         const ridgeTone=ridgeValley*(contextRing?.080:.122)*featureGain;
         const channelTone=-drainage*(contextRing?.058:.084)*featureGain;
         const coverTone=coverStructure*(contextRing?.024:.036)*featureGain;
@@ -5363,7 +5362,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
     data,size,metersPerTexel,
     coordinateAuthority:"Campaign-SEED + SeedCoordinateFabric.registeredMeters",
     coordinateRevision:coordinateFabricAuthority()?.revisionSignature||null,
-    terrainFeatureRevision:geography?.terrainFeatures?.revision||null,
+    terrainFeatureRevision:terrainFeatureRevision||geography?.terrainFeatures?.revision||null,
     terrainFeatureAuthority:geography?.terrainFeatures?.authority||null,
     patchRelativeBiomeNoise:false
   };
