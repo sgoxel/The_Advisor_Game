@@ -70,17 +70,37 @@ def restore_roundtrip():
     return driver.execute_script("""
       const s=PlanetStage.snapshot(),seed=s.activeSeed,campaign=SeedSystem.getCampaign();
       const before=PersistentConsequences.snapshot(seed),serialized=WorldState.serializeState(seed);
+      const save=CampaignPersistence.createSave({campaign,persist:false,capturedRealMs:0});
+      const validated=save?.ok?CampaignPersistence.validate(save.save):{ok:false,reason:save?.reason||"save-create-failed"};
       const reset=WorldState.bindCampaign(campaign,{reset:true});
       const restored=WorldState.restoreSerializedState(campaign,serialized);
       PersistentConsequences.renderPanel(seed);
       const after=PersistentConsequences.snapshot(seed);
       return {
-        reset,restored,
+        reset,restored,save:{ok:Boolean(save?.ok),validated:Boolean(validated?.ok),serializedBytes:Number(save?.save?.serializedBytes||0),deltaEntryCount:Object.keys(save?.save?.campaignStateDelta?.entries||{}).length},
         before:{recordCount:before.recordCount,activeCount:before.activeCount,signature:before.sourceCurrentSignature,deltaRevision:before.sourceDeltaRevision},
         after:{recordCount:after.recordCount,activeCount:after.activeCount,signature:after.sourceCurrentSignature,deltaRevision:after.sourceDeltaRevision},
         serializedEntryCount:Object.keys(serialized.entries||{}).length
       };
     """)
+
+def travel_roundtrip(anchor):
+    away=driver.execute_script("""
+      const a=arguments[0],scale=arguments[1];
+      const x=String(BigInt(a.x)+240n),y=String(BigInt(a.y)+180n);
+      PlanetStage.setWorldTileFocus(x,y);PlanetStage.setScaleIndex(scale);
+      return {x,y};
+    """,anchor,SCALE_INDEX)
+    time.sleep(.55)
+    driver.execute_script("""
+      const a=arguments[0],scale=arguments[1];
+      PlanetStage.setWorldTileFocus(a.x,a.y);PlanetStage.setScaleIndex(scale);
+    """,anchor,SCALE_INDEX)
+    try:
+        wait.until(lambda _d: current_state()["signatureReady"] and current_state()["consequence"]["activeCount"]==1)
+    except TimeoutException:
+        raise RuntimeError("consequence leave/re-enter roundtrip failed: "+json.dumps({"away":away,"state":current_state()}))
+    return {"away":away,"returned":current_state()["focus"],"activeAfterReturn":current_state()["consequence"]["activeCount"]}
 
 def recover():
     return driver.execute_script("""
@@ -120,8 +140,10 @@ try:
             raise RuntimeError("consequence panel text mismatch: "+json.dumps(st))
         if idx==0:
             persistence=restore_roundtrip()
-            if not persistence["restored"].get("ok") or persistence["before"]["signature"]!=persistence["after"]["signature"] or persistence["after"]["activeCount"]!=1:
+            if (not persistence["restored"].get("ok") or not persistence["save"].get("ok") or not persistence["save"].get("validated") or
+                persistence["before"]["signature"]!=persistence["after"]["signature"] or persistence["after"]["activeCount"]!=1):
                 raise RuntimeError("consequence persistence roundtrip failed: "+json.dumps(persistence))
+            persistence["travel"]=travel_roundtrip((st["consequence"]["records"][0]["target"]["anchor"]))
             st=current_state()
         path=OUT/f"{PROFILE}-{idx+1:02d}-{kind}.png"
         driver.save_screenshot(str(path))
