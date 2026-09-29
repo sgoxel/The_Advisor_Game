@@ -14,9 +14,6 @@ on:
       - tools/tests/wp-s006-007-001-micro-locations.test.js
       - tools/wp_s006_007_001_evidence.py
 
-concurrency:
-  group: wp-s006-007-001-micro-locations
-  cancel-in-progress: false
 
 permissions:
   contents: read
