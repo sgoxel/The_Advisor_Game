@@ -6,45 +6,83 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import TimeoutException
 
-TARGET=os.environ.get("TARGET","http://127.0.0.1:8000/")
+TARGET=os.environ.get("TARGET","http://127.0.0.1:8000/tools/wp_s004_010_local_evidence.html")
 PROFILE=os.environ.get("PROFILE","landscape")
 OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s004-010"))
 OUT.mkdir(parents=True,exist_ok=True)
 SIZE=(1280,720) if PROFILE=="landscape" else (390,844)
 CLASSES=("village","town","city")
-WHEN={"year":1201,"month":2,"day":1,"hour":12,"minute":15,"second":0}
+EVIDENCE_SEED="WP-S004-010-EVIDENCE"
 
 options=Options()
 options.add_argument("--headless=new")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--disable-gpu")
+options.add_argument("--enable-unsafe-swiftshader")
 options.add_argument(f"--window-size={SIZE[0]},{SIZE[1]}")
 options.set_capability("goog:loggingPrefs",{"browser":"ALL"})
 driver=webdriver.Chrome(options=options)
 driver.set_window_size(*SIZE)
-driver.set_script_timeout(150)
-wait=WebDriverWait(driver,150)
+driver.set_script_timeout(180)
+wait=WebDriverWait(driver,180)
 
 def ready():
     try:
         return driver.execute_script("""
-          return !!(window.PlanetStage&&PlanetStage.snapshot().ready&&
-            window.CrowdPresentation&&window.AppUI&&window.GameRenderer&&
-            window.SettlementArchetypes&&window.Camera&&window.ResidentMovement);
+          const startup=window.AppUI?.applicationStartupSnapshot?.();
+          const renderer=window.GameRenderer?.snapshot?.();
+          return !!(
+            window.AppUI&&window.CrowdPresentation&&window.SettlementArchetypes&&window.Camera&&
+            window.ResidentMovement&&window.SeedSystem&&window.GameTime&&
+            startup?.state==="ready"&&renderer?.ready
+          );
         """)
     except Exception:
         return False
 
+def startup_probe():
+    return driver.execute_script("""
+      return {
+        href:location.href,readyState:document.readyState,
+        appUI:typeof window.AppUI,renderer:typeof window.GameRenderer,
+        rendererReady:Boolean(window.GameRenderer?.snapshot?.().ready),
+        startup:window.AppUI?.applicationStartupSnapshot?.()||null,
+        crowd:typeof window.CrowdPresentation,settlement:typeof window.SettlementArchetypes,
+        camera:typeof window.Camera,residentMovement:typeof window.ResidentMovement,
+        bodyText:String(document.body?.innerText||"").slice(0,1200)
+      };
+    """)
+
+def start_campaign():
+    result=driver.execute_async_script("""
+      const seed=arguments[0],done=arguments[arguments.length-1];
+      (async()=>{
+        try{
+          await AppUI.startNewCampaignForEvidence(seed);
+          const campaign=SeedSystem.getCampaign(),renderer=GameRenderer.snapshot();
+          done({
+            ok:Boolean(campaign?.seed&&renderer?.ready&&renderer?.regionKey),
+            campaign,regionKey:renderer?.regionKey||null,
+            scene:AppUI.sceneLoadingSnapshot?.()||null,
+            startup:AppUI.applicationStartupSnapshot?.()||null
+          });
+        }catch(error){done({ok:false,error:String(error?.stack||error)})}
+      })();
+    """,EVIDENCE_SEED)
+    if not result or not result.get("ok"):
+        raise RuntimeError("campaign startup failed: "+json.dumps(result))
+    return result
+
 def initialize():
     return driver.execute_script("""
-      const s=PlanetStage.snapshot(),seed=s.activeSeed;
+      const campaign=SeedSystem.getCampaign(),seed=campaign?.seed||"";
       const verification=CrowdPresentation.verify(seed);
       const plans=CrowdPresentation.representativePlans(seed);
       return {
         seed,verification,
-        plans:Object.fromEntries(Object.entries(plans).map(([k,p])=>[k,p?{
-          id:p.id,name:p.name,classId:p.classId,center:p.center,population:p.population
+        plans:Object.fromEntries(["village","town","city"].map(k=>[k,plans[k]?{
+          id:plans[k].id,name:plans[k].name,classId:plans[k].classId,
+          center:plans[k].center,population:plans[k].population
         }:null]))
       };
     """)
@@ -54,18 +92,18 @@ def navigate(plan):
       const plan=arguments[0],done=arguments[arguments.length-1];
       (async()=>{
         try{
-          PlanetStage.applyAuthoritativeFantasyTime(arguments[1],"WP-S004-010 density evidence "+plan.classId);
-          PlanetStage.setWorldTileFocus(plan.center.x,plan.center.y);
-          PlanetStage.setScaleIndex(8);
           Camera.setZoom(1);
-          await AppUI.navigateCameraToForEvidence(plan.center.x,plan.center.y,false);
+          await AppUI.navigateCameraToForEvidence(String(plan.center.x),String(plan.center.y),true);
           await AppUI.refreshResidentCharacters();
-          done({ok:true,camera:Camera.getCenter(),stage:PlanetStage.snapshot().zoom});
-        }catch(error){
-          done({ok:false,error:String(error&&error.stack||error)});
-        }
+          const r=GameRenderer.snapshot();
+          done({
+            ok:Boolean(r?.ready&&r?.regionKey),
+            camera:Camera.getCenter(),zoom:Camera.getZoom(),
+            regionKey:r?.regionKey||null,runtime:AppUI.runtimeAreaLoadingSnapshot?.()||null
+          });
+        }catch(error){done({ok:false,error:String(error?.stack||error)})}
       })();
-    """,plan,WHEN)
+    """,plan)
 
 def state():
     return driver.execute_script("""
@@ -80,6 +118,7 @@ def state():
           activityFactor:Number(crowd.activityFactor||0),requestedCount:Number(crowd.requestedCount||0),
           activeCount:Number(crowd.activeCount||0),cap:Number(crowd.cap||0),
           candidateChecks:Number(crowd.candidateChecks||0),updateMs:Number(crowd.updateMs||0),
+          resolveMs:Number(crowd.resolveMs||0),totalUpdateMs:Number(crowd.totalUpdateMs||crowd.updateMs||0),
           presentationOnly:Boolean(crowd.presentationOnly),simulationAuthority:Boolean(crowd.simulationAuthority),
           persistentIdentity:Boolean(crowd.persistentIdentity),selectable:Boolean(crowd.selectable),
           collision:Boolean(crowd.collision),exactNpcReplacement:Boolean(crowd.exactNpcReplacement),
@@ -99,11 +138,11 @@ def state():
           crowdInstanceCount:crowdInstances.length,
           crowdNonInteractive:crowdInstances.every(x=>x.presentationOnly===true&&x.selectable===false&&x.persistentIdentity===false),
           crowdPixelHeights:crowdInstances.map(x=>Number(x.renderedPixelHeight||0)),
+          sharedTextureCount:Number(cp.sharedTextureCount||0),sharedMaterialCount:Number(cp.sharedMaterialCount||0),
           frameMs:Number(r.performance?.frameMs||0),drawCalls:Number(r.performance?.drawCalls||0)
         },
-        camera:Camera.getCenter(),
-        zoom:Number(Camera.getZoom()),
-        runtime:AppUI.runtimeAreaLoadingSnapshot()
+        inspection:r.inspection||null,camera:Camera.getCenter(),zoom:Number(Camera.getZoom()),
+        regionKey:r.regionKey||null,runtime:AppUI.runtimeAreaLoadingSnapshot?.()||null
       };
     """)
 
@@ -122,9 +161,9 @@ def add_overlay(cls,s):
       card.innerHTML=
         '<div style="font-size:9px;letter-spacing:.11em;color:#e8ca80">WP-S004-010 · DENSITY-SCALED LOCAL CROWD</div>'+
         '<div style="font-size:15px;margin:2px 0 4px">'+cls.toUpperCase()+' · '+String(c.settlementName||"")+'</div>'+
-        '<div>Population '+Number(c.population||0).toLocaleString()+' · '+String(c.rhythmBand||"")+' · density '+Math.round(Number(c.activityFactor||0)*100)+'%</div>'+
+        '<div>Population '+Number(c.population||0).toLocaleString()+' · '+String(c.rhythmBand||"")+' · activity '+Math.round(Number(c.activityFactor||0)*100)+'%</div>'+
         '<div style="margin-top:3px">Exact simulation '+Number(n.exactSimulatedResidentCount||0)+' · exact visible '+Number(n.visibleExactCount||0)+' · crowd visible '+Number(n.visibleCrowdCount||0)+' / '+Number(c.activeCount||0)+'</div>'+
-        '<div style="opacity:.72;margin-top:2px">crowd cap '+Number(c.cap||0)+' · renderer crowd '+Number(r.activeCrowdCount||0)+' · update '+Number(c.updateMs||0).toFixed(2)+' ms</div>'+
+        '<div style="opacity:.72;margin-top:2px">crowd cap '+Number(c.cap||0)+' · renderer crowd '+Number(r.activeCrowdCount||0)+' · update '+Number(c.totalUpdateMs||0).toFixed(2)+' ms</div>'+
         '<div style="opacity:.56;margin-top:2px">anonymous presentation only · non-selectable · no collision · no exact-NPC replacement</div>';
       document.body.appendChild(card);
     """,cls,s)
@@ -136,22 +175,10 @@ try:
     try:
         wait.until(lambda _d: ready())
     except TimeoutException:
-        probe=driver.execute_script("""
-          return {
-            href:location.href,readyState:document.readyState,
-            planetStage:typeof window.PlanetStage,
-            planetReady:window.PlanetStage?Boolean(PlanetStage.snapshot().ready):null,
-            crowd:typeof window.CrowdPresentation,
-            appUI:typeof window.AppUI,
-            renderer:typeof window.GameRenderer,
-            settlement:typeof window.SettlementArchetypes,
-            camera:typeof window.Camera,
-            residentMovement:typeof window.ResidentMovement,
-            bodyText:String(document.body?.innerText||"").slice(0,1200)
-          };
-        """)
-        logs=driver.get_log("browser")
-        raise RuntimeError("startup readiness timeout: "+json.dumps({"probe":probe,"browserLogs":logs[-20:]}))
+        raise RuntimeError("local evidence shell startup timeout: "+json.dumps({
+            "probe":startup_probe(),"browserLogs":driver.get_log("browser")[-30:]
+        }))
+    campaign=start_campaign()
     base=initialize()
     if not base["verification"].get("pass"):
         raise RuntimeError("CrowdPresentation.verify failed: "+json.dumps(base["verification"]))
@@ -164,9 +191,8 @@ try:
         nav=navigate(plan)
         if not nav.get("ok"):
             raise RuntimeError("navigation failed for "+cls+": "+json.dumps(nav))
-        time.sleep(.45)
-        s=state()
-        c=s["crowd"];n=s["npc"];r=s["renderer"]
+        time.sleep(.55)
+        s=state();c=s["crowd"];n=s["npc"];r=s["renderer"]
         if c.get("settlementClass")!=cls:
             raise RuntimeError("crowd resolved wrong settlement class: "+json.dumps({"expected":cls,"state":s}))
         if not c.get("active") or c.get("activeCount",0)<=0:
@@ -187,10 +213,12 @@ try:
             raise RuntimeError("candidate budget exceeded: "+json.dumps(s))
         if PROFILE=="portrait" and c.get("activeCount",9999)>20:
             raise RuntimeError("mobile crowd cap exceeded: "+json.dumps(s))
-        if c.get("updateMs",9999)>=50:
+        if c.get("totalUpdateMs",9999)>=50:
             raise RuntimeError("crowd update exceeded 50 ms gate: "+json.dumps(s))
+        if s.get("inspection",{}).get("activeNpcCount")!=r.get("activeExactResidentCount"):
+            raise RuntimeError("inspection registry included anonymous crowd: "+json.dumps(s))
         add_overlay(cls,s)
-        time.sleep(.2)
+        time.sleep(.25)
         path=OUT/f"{PROFILE}-{idx+1:02d}-{cls}.png"
         driver.save_screenshot(str(path))
         records.append({"profile":PROFILE,"class":cls,"plan":plan,"file":str(path),"state":s})
@@ -204,13 +232,11 @@ try:
 
     severe=[x for x in driver.get_log("browser") if x.get("level")=="SEVERE" and "favicon.ico" not in str(x.get("message",""))]
     if severe:
-        raise RuntimeError("browser console severe errors: "+json.dumps(severe[-10:]))
+        raise RuntimeError("browser console severe errors: "+json.dumps(severe[-15:]))
 
     result={
-      "pass":True,"profile":PROFILE,"viewport":SIZE,"seed":base["seed"],
-      "verification":base["verification"],
-      "counts":{"generated":generated,"visible":visible},
-      "records":records
+      "pass":True,"profile":PROFILE,"viewport":SIZE,"seed":base["seed"],"campaign":campaign,
+      "verification":base["verification"],"counts":{"generated":generated,"visible":visible},"records":records
     }
     (OUT/f"{PROFILE}-evidence.json").write_text(json.dumps(result,indent=2))
     print(json.dumps(result,indent=2))
