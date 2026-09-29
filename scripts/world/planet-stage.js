@@ -441,6 +441,40 @@ const atlasAuthorityQueue=[];
 const atlasAuthorityQueued=new Set();
 let atlasAuthorityWorkerScheduled=false;
 let atlasAuthorityRefreshScheduled=false;
+const atlasSettlementPrewarmQueue=[];
+const atlasSettlementPrewarmQueued=new Set();
+let atlasSettlementPrewarmWorkerScheduled=false;
+function atlasSettlementPrewarmKey(seed,classId,cx,cy){return [String(seed||""),String(classId||""),String(cx),String(cy)].join("|");}
+function atlasQueueSettlementPrewarm(classId,cx,cy){
+  const api=window.SettlementArchetypes;if(!activeSeed||!api?.stepCanonicalSettlementAtCellPrewarm)return;
+  const key=atlasSettlementPrewarmKey(activeSeed,classId,cx,cy);
+  if(atlasSettlementPrewarmQueued.has(key))return;
+  atlasSettlementPrewarmQueued.add(key);
+  atlasSettlementPrewarmQueue.push({key,seed:activeSeed,classId:String(classId),cx:String(cx),cy:String(cy)});
+  if(!atlasSettlementPrewarmWorkerScheduled){
+    atlasSettlementPrewarmWorkerScheduled=true;
+    const schedule=window.requestIdleCallback||((cb)=>setTimeout(()=>cb({timeRemaining:()=>4,didTimeout:false}),0));
+    schedule(atlasDrainSettlementPrewarmQueue,{timeout:120});
+  }
+}
+function atlasDrainSettlementPrewarmQueue(){
+  atlasSettlementPrewarmWorkerScheduled=false;
+  const job=atlasSettlementPrewarmQueue.shift();if(!job)return;
+  if(job.seed!==activeSeed){atlasSettlementPrewarmQueued.delete(job.key);}
+  else{
+    let result=null;
+    try{result=window.SettlementArchetypes?.stepCanonicalSettlementAtCellPrewarm?.(job.seed,job.classId,job.cx,job.cy)||null;}catch(_){result=null;}
+    if(result?.ready){
+      atlasSettlementPrewarmQueued.delete(job.key);
+      atlasScheduleAuthorityRefresh();
+    }else atlasSettlementPrewarmQueue.push(job);
+  }
+  if(atlasSettlementPrewarmQueue.length&&!atlasSettlementPrewarmWorkerScheduled){
+    atlasSettlementPrewarmWorkerScheduled=true;
+    const schedule=window.requestIdleCallback||((cb)=>setTimeout(()=>cb({timeRemaining:()=>4,didTimeout:false}),0));
+    schedule(atlasDrainSettlementPrewarmQueue,{timeout:120});
+  }
+}
 function atlasAuthorityKey(kind,tile){
   if(!tile)return null;
   const size=kind==="country"?Number(window.PoliticalGeography?.COUNTRY_CELL_SIZE||196608):8192;
@@ -1228,7 +1262,12 @@ function atlasSettlementHierarchyQuery(spec){
       const cx=floorDiv(BigInt(tile.x),size),cy=floorDiv(BigInt(tile.y),size),cellKey=cx+"|"+cy;
       if(cellSeen.has(cellKey))continue;cellSeen.add(cellKey);
       queryCellCount++;checked++;
-      let record=null;try{record=api.canonicalSettlementAtCell(activeSeed,classId,cx,cy)||null;}catch(_){record=null;}
+      let record=null;
+      try{
+        const status=api.canonicalSettlementAtCellCacheStatus?.(activeSeed,classId,cx,cy)||null;
+        if(status?.ready)record=status.record||null;
+        else atlasQueueSettlementPrewarm(classId,cx,cy);
+      }catch(_){record=null;}
       if(record){
         const rx=BigInt(String(record.center.x)),ry=BigInt(String(record.center.y));
         if(rx>=minX&&rx<=maxX&&ry>=minY&&ry<=maxY&&!seen.has(record.id)){
@@ -1305,7 +1344,18 @@ function atlasFocusEntityIds(spec){
   if(needed.has("region"))ids.region=regionEntity?.id||null;
   for(const kind of ["city","town","village"]){
     if(!needed.has(kind))continue;
-    let record=null;try{record=window.SettlementArchetypes?.canonicalSettlementAtPoint?.(activeSeed,kind,tile.x,tile.y)||null;}catch(_){record=null;}
+    let record=null;
+    try{
+      const api=window.SettlementArchetypes,classSpec=api?.HIERARCHY_CLASS_SPECS?.[kind];
+      if(classSpec){
+        const size=BigInt(Math.max(1,Math.round(Number(classSpec.cellTiles)||1)));
+        const floorDiv=(value,divisor)=>{let q=value/divisor,r=value%divisor;if(r!==0n&&value<0n)q-=1n;return q;};
+        const cx=floorDiv(BigInt(tile.x),size),cy=floorDiv(BigInt(tile.y),size);
+        const status=api.canonicalSettlementAtCellCacheStatus?.(activeSeed,kind,cx,cy)||null;
+        if(status?.ready)record=status.record||null;
+        else atlasQueueSettlementPrewarm(kind,cx,cy);
+      }
+    }catch(_){record=null;}
     ids[kind]=record?.id||null;
   }
   if(needed.has("district"))ids.district=atlasCellId("DIST",atlasCellForTile(tile,256));
@@ -2299,14 +2349,13 @@ function projectionHandoffForZoom(value=zoomState.scalar){
   return smoothstep01((clamp(value,0,1)-projectionState.transitionStart)/span);
 }
 function projectionPresentationBlendForZoom(value=zoomState.scalar){
-  // Keep the richly colored globe as the last-valid parent through the broad
-  // 1/100–1/375 approach. The tangent resource is already being prepared in
-  // parallel; only its visual ownership is delayed until the physical zoom is
-  // close enough that its bounded registered-meter texture carries useful
-  // local information. This changes presentation timing only, never geography.
+  // The local registered-meter photometry is now continuous at map scale, so
+  // hand visual ownership to the already-preparing tangent layer before the
+  // globe texture becomes visibly magnified. The overlap remains animated and
+  // changes presentation timing only; canonical focus/geography are untouched.
   const scalar=clamp(value,0,1);
-  const start=Math.max(projectionState.transitionStart,.79);
-  const end=Math.max(start+.0001,projectionState.transitionEnd);
+  const start=Math.max(projectionState.transitionStart,.67);
+  const end=Math.max(start+.0001,.745);
   return smoothstep01((scalar-start)/(end-start));
 }
 function canonicalSurfaceIdentity(){
@@ -3612,12 +3661,12 @@ function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
   // Keep the authoritative settlement composition large enough to read as
   // actual world structure, not a locator glyph, then converge rapidly to 1:1.
-  const targetFraction=tier==="footprint"?.27:tier==="route"?.40:tier==="coarse"?.20:.20;
+  const targetFraction=tier==="footprint"?.27:tier==="route"?.54:tier==="coarse"?.20:.20;
   const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
-  // Overview tiers are presentation aids, not locator glyphs. Keep the
-  // authoritative village readable without inflating its ring/roads into a
-  // screen-dominating target; closer tiers converge naturally toward 1:1.
-  const cap=tier==="footprint"?10:tier==="route"?14:tier==="coarse"?5:18;
+  // Route overview stays presentation-only, but it should occupy enough screen
+  // area for the actual road/access topology to read as a settlement rather
+  // than a tiny locator symbol. Geometry and coordinates remain authoritative.
+  const cap=tier==="footprint"?10:tier==="route"?18:tier==="coarse"?5:18;
   return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
 }
 function settlementPresentationLift(tier,value=zoomState.scalar){
