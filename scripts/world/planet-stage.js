@@ -3584,7 +3584,7 @@ function updateWayfindingTextOverlay(force=false){
     const projected=cameraEntity.camera.worldToScreen(world,new pc.Vec3());
     if(projected&&Number.isFinite(projected.x)&&Number.isFinite(projected.y))activeWorkCenters.push({x:projected.x,y:projected.y});
   }
-  const signCandidates=[],workDeclutterRadius=width<600?96:148;
+  const signCandidates=[],workDeclutterRadius=width<600?180:260;
   for(const [signId,localPoint] of wayfindingSignAnchors){
     const p=projectWayfindingPoint(localPoint);
     if(!p||p.x<-60||p.x>width+60||p.y<-60||p.y>height+60)continue;
@@ -3891,12 +3891,16 @@ function updateCanonicalNpcMotion(){
     const pos=canonicalSemanticPosition(east,north,record.presentationScale,record.unit,record.frame);
     const working=Boolean(state.movementState?.workCycle&&state.movementState?.status==="arrived");
     const phase=frameCount*.22+Number(String(record.resident.id).replace(/\D/g,"")||0);
-    const pulse=working?Math.sin(phase)*.035:0;
-    record.body.setLocalPosition(pos.x,ground+record.bodyHeight*.5,pos.z);
-    record.head.setLocalPosition(pos.x,ground+record.bodyHeight+record.headSize*(.48+pulse),pos.z);
+    const pulse=working?Math.sin(phase)*.035:0,actionScale=working?1.65:1;
+    // Arrived workers receive a bounded presentation-only readability lift.
+    // Position, collision, route and authoritative action targets stay unchanged.
+    record.body.setLocalScale(record.bodyWidth*actionScale,record.bodyHeight*actionScale,record.bodyWidth*actionScale);
+    record.head.setLocalScale(record.headSize*actionScale,record.headSize*actionScale,record.headSize*actionScale);
+    record.body.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale*.5,pos.z);
+    record.head.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale+record.headSize*actionScale*(.48+pulse),pos.z);
     if(working){
       const profession=String(record.resident.profession||""),stepId=String(state.movementState?.workCycle?.stepId||"");
-      const bw=record.bodyWidth,bh=record.bodyHeight,swing=Math.sin(phase);
+      const bw=record.bodyWidth*actionScale,bh=record.bodyHeight*actionScale,swing=Math.sin(phase);
       const setProp=(entity,material,sx,sy,sz,dx,dy,dz,rx=0,ry=0,rz=0)=>{
         if(!entity)return;
         if(material&&entity.render?.meshInstances?.[0])entity.render.meshInstances[0].material=material;
