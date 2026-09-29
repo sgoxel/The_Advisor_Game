@@ -78,21 +78,35 @@ function rawCountryName(seed,key){
   const form=pick(seed,"country-name:form:"+key,COUNTRY_FORMS);
   return Object.freeze({a,b,form,name:form+" of "+a+b});
 }
-function countryName(seed,cx,cy){
-  const key=cellKey(cx,cy),raw=rawCountryName(seed,key),colliders=[];
+function countryNaming(seed,cx,cy){
+  const key=cellKey(cx,cy),id=countryId(seed,cx,cy);
+  if(window.PlaceNaming?.descriptor){
+    const input={id,type:"country",x:cx.toString(),y:cy.toString()};
+    const raw=window.PlaceNaming.descriptor(seed,input,0),colliders=[];
+    for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+      const ox=cx+BigInt(dx),oy=cy+BigInt(dy),otherId=countryId(seed,ox,oy);
+      const other=window.PlaceNaming.descriptor(seed,{id:otherId,type:"country",x:ox.toString(),y:oy.toString()},0);
+      if(other.name===raw.name)colliders.push(otherId);
+    }
+    colliders.sort();
+    const rank=Math.max(0,colliders.indexOf(id));
+    return window.PlaceNaming.descriptor(seed,input,rank);
+  }
+  const raw=rawCountryName(seed,key),colliders=[];
   for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
     const otherKey=cellKey(cx+BigInt(dx),cy+BigInt(dy));
     if(rawCountryName(seed,otherKey).name===raw.name)colliders.push(otherKey);
   }
   colliders.sort();
   const rank=colliders.indexOf(key);
-  if(rank<=0)return raw.name;
-  const baseFormIndex=Math.max(0,COUNTRY_FORMS.indexOf(raw.form));
-  if(rank<COUNTRY_FORMS.length){
-    return COUNTRY_FORMS[(baseFormIndex+rank)%COUNTRY_FORMS.length]+" of "+raw.a+raw.b;
+  let name=raw.name;
+  if(rank>0){
+    const baseFormIndex=Math.max(0,COUNTRY_FORMS.indexOf(raw.form));
+    name=COUNTRY_FORMS[(baseFormIndex+rank)%COUNTRY_FORMS.length]+" of "+raw.a+raw.b+(rank>=COUNTRY_FORMS.length?" "+String(rank+1):"");
   }
-  return COUNTRY_FORMS[(baseFormIndex+rank)%COUNTRY_FORMS.length]+" of "+raw.a+raw.b+" "+String(rank+1);
+  return Object.freeze({entityId:id,name,canonicalName:name,shortForm:raw.a+raw.b,namingCultureKey:"legacy",nameGenerationVersion:0,attempt:Math.max(0,rank),authority:"legacy PoliticalGeography naming"});
 }
+function countryName(seed,cx,cy){return countryNaming(seed,cx,cy).name}
 function centerForCell(seed,cx,cy){
   const size=BigInt(COUNTRY_CELL_SIZE),half=BigInt(Math.floor(COUNTRY_CELL_SIZE/2));
   const key=cellKey(cx,cy);
@@ -104,10 +118,13 @@ function centerForCell(seed,cx,cy){
   });
 }
 function candidateForCell(seed,cx,cy){
-  const key=cellKey(cx,cy);
+  const key=cellKey(cx,cy),id=countryId(seed,cx,cy),naming=countryNaming(seed,cx,cy);
   return Object.freeze({
-    id:countryId(seed,cx,cy),
-    name:countryName(seed,cx,cy),
+    id,
+    name:naming.name,
+    namingCultureKey:naming.namingCultureKey||null,
+    nameGenerationVersion:Number(naming.nameGenerationVersion||0),
+    namingAuthority:String(naming.authority||""),
     cellX:cx.toString(),cellY:cy.toString(),
     key,
     politicalCenter:centerForCell(seed,cx,cy),
@@ -301,7 +318,11 @@ function countryFromCandidate(seed,candidate,scoreValue){
     mapAnchor:mapAnchor||candidate.politicalCenter,
     capital:Object.freeze({
       id:"CAP|"+candidate.id,
-      name:candidate.name+" Capital",
+      name:window.PlaceNaming?.nameSettlement
+        ?window.PlaceNaming.nameSettlement(seed,{id:"CAP|"+candidate.id,type:"capital",countryId:candidate.id,x:capital.x,y:capital.y})
+        :candidate.name+" Capital",
+      nameGenerationVersion:Number(window.PlaceNaming?.VERSION||0),
+      namingCultureKey:window.PlaceNaming?.cultureId?.(seed,candidate.id,"CAP|"+candidate.id)||null,
       x:capital.x,y:capital.y,
       terrain:capital.terrain,
       elevationMeters:capital.elevationMeters,
