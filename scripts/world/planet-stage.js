@@ -3285,10 +3285,10 @@ function ensureLocalStaticMaterials(){
   const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.39,.32,.19,.88),square:make("LocalSquare",.48,.35,.18),
+    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.32,.27,.16,.74),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.06;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.18),lotOverview:make("LocalOccupiedLotOverview",.50,.44,.28,.13),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.13),lotOverview:make("LocalOccupiedLotOverview",.44,.39,.22,.28),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3476,12 +3476,12 @@ function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
   // Keep the authoritative settlement composition large enough to read as
   // actual world structure, not a locator glyph, then converge rapidly to 1:1.
-  const targetFraction=tier==="footprint"?.16:tier==="route"?.23:tier==="coarse"?.20:.20;
+  const targetFraction=tier==="footprint"?.13:tier==="route"?.16:tier==="coarse"?.20:.20;
   const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
   // Overview tiers are presentation aids, not locator glyphs. Keep the
   // authoritative village readable without inflating its ring/roads into a
   // screen-dominating target; closer tiers converge naturally toward 1:1.
-  const cap=tier==="footprint"?7:tier==="route"?12:tier==="coarse"?5:18;
+  const cap=tier==="footprint"?6:tier==="route"?7:tier==="coarse"?5:18;
   return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
 }
 function settlementPresentationLift(tier,value=zoomState.scalar){
@@ -4983,7 +4983,7 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   // field, not from parcel meshes or camera-relative decoration. Stronger chroma
   // separation reveals woodland/meadow/dry openings only when physically
   // resolvable, so refinement adds information without changing world identity.
-  const coverContrast=lerp(1.20,1.78,smoothstep01(clamp((150-metersPerTexel)/145,0,1)));
+  const coverContrast=lerp(1.48,2.05,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
   return [
     (mottle*.76-forestDelta*.105-copse*.026+dryField*.095+meadow*.010)*coverContrast,
     (mottle*.94-forestDelta*.010-copse*.008+dryField*.038+meadow*.086)*coverContrast,
@@ -5079,7 +5079,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Preserve enough canonical globe hue to keep the same macro terrain
       // recognizable through the projection handoff, then converge smoothly.
       const coarseIdentity=smoothstep01(clamp((metersPerTexel-4)/70,0,1));
-      const macroIdentityWeight=clamp(.16+coarseIdentity*.34+mountainIdentity*.08,.16,.56);
+      const macroIdentityWeight=clamp(.10+coarseIdentity*.16+mountainIdentity*.05,.10,.32);
       const base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
       const elevation=Number(sample?.elevationMeters||0);
       const relief=clamp(elevation/5200,0,1);
@@ -5291,7 +5291,7 @@ function finalizeLocalResource(job,result){
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
-      topographicSignalRevision:"canonical-elevation-moisture-structure-v3",topographicSignalAuthority:"PlanetGeography elevation + moisture sampled through SeedCoordinateFabric registered meters",
+      topographicSignalRevision:"canonical-elevation-moisture-landcover-v4",topographicSignalAuthority:"PlanetGeography elevation + moisture sampled through SeedCoordinateFabric registered meters",
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
