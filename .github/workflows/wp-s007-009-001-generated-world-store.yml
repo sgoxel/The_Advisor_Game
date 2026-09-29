@@ -7,6 +7,8 @@ on:
       - .github/workflows/wp-s007-009-001-generated-world-store.yml
       - scripts/world/generated-world-store.js
       - scripts/world/place-naming.js
+      - scripts/world/country-profile.js
+      - scripts/world/region-profile.js
       - scripts/world/settlement-archetypes.js
       - scripts/world/world-road-graph.js
       - scripts/world/world-destinations.js
@@ -56,6 +58,8 @@ jobs:
         run: |
           node --check scripts/world/generated-world-store.js
           node --check scripts/world/place-naming.js
+          node --check scripts/world/country-profile.js
+          node --check scripts/world/region-profile.js
           node --check scripts/world/settlement-archetypes.js
           node --check scripts/world/world-road-graph.js
           node --check scripts/world/world-destinations.js
