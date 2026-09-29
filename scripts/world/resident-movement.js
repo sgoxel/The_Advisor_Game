@@ -403,7 +403,10 @@ function presentation(residentId){
 }
 
 function sampleTime(hour,minute=30){
-  const now=GameTime.getNow();
+  // Proof helpers must remain deterministic even when the standalone evidence
+  // page has no persisted campaign clock yet. Live simulation still uses
+  // GameTime directly; this fallback is confined to the proof-only path.
+  const now=GameTime.getNow()||Object.freeze({year:1201,month:2,day:1});
   return Object.freeze({year:now.year,month:now.month,day:now.day,hour:Number(hour),minute:Number(minute),second:0});
 }
 function proofResident(seed){
