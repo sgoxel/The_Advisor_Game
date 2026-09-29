@@ -405,7 +405,7 @@ function freshLocalResources(){
     cacheHits:0,cacheMisses:0,prewarmHits:0,prewarmCompleted:0,cancelledPreparations:0,deferredRequests:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,
     lastBuildMs:0,lastPreparationWallMs:0,lastPreparationBusyMs:0,lastPreparationSlices:0,maxPreparationSliceMs:0,lastSwapMs:0,maxSwapMs:0,swapCount:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,
     blockingZoomBuilds:0,maxFrameMsDuringPreparation:0,recentMaxFrameMs:0,lastFrameMs:0,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,cooperativePreparation:true,doubleBufferedSwap:true,
-    zoomReadinessHoldActive:false,zoomReadinessHoldFrames:0,zoomReadinessCapScalar:1,zoomReadinessRevision:"ready-parent-leash-v1",
+    zoomReadinessHoldActive:false,zoomReadinessHoldFrames:0,zoomReadinessCapScalar:1,zoomReadinessSourceVisibleHeightMeters:null,zoomReadinessCurrentMagnification:1,zoomReadinessMaxMagnification:1,zoomReadinessRevision:"ready-parent-leash-v2",
     residencyRevision:"temporal-residency-v1",requestedCellCount:0,preparingCellCount:0,readyCellCount:0,activeCellCount:0,graceResidentCellCount:0,evictedCellCount:0,
     parentFallbackCount:0,rootFallbackCount:0,missingCoverageCount:0,graceReuseCount:0,prefetchRequests:0,prefetchCompleted:0,prefetchHits:0,prefetchMisses:0,
     longestHandoffLatencyMs:0,lastHandoffLatencyMs:0,lastHandoffRequestedAtMs:0,lastHandoffCompletedAtMs:0,
@@ -7094,8 +7094,30 @@ function setZoomTargetScalar(value,source="input"){
 }
 function animatedZoomReadinessCapScalar(){
   if(lastZoomDirection<=0)return ZOOM_MAX;
-  if(!displayResource)return Math.max(projectionState.transitionStart,ZOOM_ROOT_READINESS_CAP_SCALAR);
-  const readableHeight=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,Number(displayResource.dims?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)/ZOOM_READY_PARENT_MAX_MAGNIFICATION);
+  if(!displayResource){
+    localResources.zoomReadinessSourceVisibleHeightMeters=null;
+    localResources.zoomReadinessCurrentMagnification=1;
+    return Math.max(projectionState.transitionStart,ZOOM_ROOT_READINESS_CAP_SCALAR);
+  }
+  // patchDimensionsForLevel() stores the native physical viewport as
+  // dims.visibleHeight (detail snapshots expose the same value as
+  // visibleHeightMeters). The v1 leash accidentally read dims.visibleHeightMeters,
+  // fell back to 36 m and therefore returned scalar 1.0 for every prepared
+  // parent. Use the actual resource dimension so a ready parent can never be
+  // stretched far beyond its physical information density while its child builds.
+  const nativeVisibleHeight=Math.max(
+    GROUND_FOOTPRINT_HEIGHT_METERS,
+    Number(displayResource.dims?.visibleHeight||displayResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)
+  );
+  const targetVisibleHeight=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(zoomState.scalar));
+  const currentMagnification=Math.max(1,nativeVisibleHeight/targetVisibleHeight);
+  localResources.zoomReadinessSourceVisibleHeightMeters=Number(nativeVisibleHeight.toFixed(3));
+  localResources.zoomReadinessCurrentMagnification=Number(currentMagnification.toFixed(4));
+  localResources.zoomReadinessMaxMagnification=Math.max(
+    Number(localResources.zoomReadinessMaxMagnification||1),
+    localResources.zoomReadinessCurrentMagnification
+  );
+  const readableHeight=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,nativeVisibleHeight/ZOOM_READY_PARENT_MAX_MAGNIFICATION);
   return clamp(scalarForFootprintHeight(readableHeight),zoomState.scalar,ZOOM_MAX);
 }
 function updateAnimatedZoom(dt){
@@ -7111,6 +7133,10 @@ function updateAnimatedZoom(dt){
   localResources.zoomReadinessHoldActive=readinessHold;
   localResources.zoomReadinessCapScalar=Number(readinessCap.toFixed(6));
   if(readinessHold)localResources.zoomReadinessHoldFrames++;
+  if(!displayResource&&target<=projectionState.transitionStart){
+    localResources.zoomReadinessSourceVisibleHeightMeters=null;
+    localResources.zoomReadinessCurrentMagnification=1;
+  }
   zoomState.scalar=next;zoomState.zoomVelocity=(next-previous)/seconds;zoomState.animationFrameCount++;zoomState.totalAnimationFrames++;
   const displayIndex=displayScaleIndexForScalar(next),now=performance.now();
   applyCameraZoom(false);
