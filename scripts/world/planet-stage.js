@@ -187,6 +187,18 @@ let localNpcMaterials=null;
 let localNpcContext=null;
 let localNpcEntities=new Map();
 let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles",rhythmSource:"SettlementActivityRhythm presentation-only",presentationOnly:true,simulationAuthority:false};
+let localCrowdRoot=null;
+let localCrowdMaterials=null;
+let localCrowdContext=null;
+let localCrowdEntities=[];
+let localCrowdPresentation={
+  active:false,generatedCount:0,visibleCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,
+  settlementId:null,settlementName:null,settlementClass:null,districtBand:"none",districtFactor:0,
+  population:0,populationSource:null,rhythmBand:"unknown",activityFactor:0,cap:0,candidateChecks:0,
+  exactPersistentNpcCount:0,visibleExactNpcCount:0,mobile:false,pooledStableIds:true,localCulling:true,lowFrequencyMotion:true,
+  presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,
+  inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
+};
 const localBuildingInspectionKeys=new Set();
 const localNpcInspectionKeys=new Set();
 const localSignInspectionKeys=new Set();
@@ -3940,6 +3952,92 @@ function ensureLocalNpcMaterials(){
       woodcutter:make("ResidentWoodcutter",.42,.30,.19),guard:make("ResidentGuard",.20,.34,.55)
     })
   };
+}
+function ensureLocalCrowdMaterials(){
+  if(localCrowdMaterials||!pc)return;
+  const make=(name,r,g,b)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.metalness=0;m.update();return m;};
+  localCrowdMaterials=Object.freeze({
+    market:make("CrowdMarket",.48,.33,.20),traveler:make("CrowdTraveler",.30,.38,.48),
+    laborer:make("CrowdLaborer",.34,.29,.22),guard:make("CrowdGuard",.22,.31,.43),
+    farmer:make("CrowdFarmer",.28,.39,.24),craft:make("CrowdCraft",.43,.28,.23)
+  });
+}
+function resetLocalCrowdTelemetry(){
+  localCrowdPresentation={
+    active:false,generatedCount:0,visibleCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,
+    settlementId:null,settlementName:null,settlementClass:null,districtBand:"none",districtFactor:0,
+    population:0,populationSource:null,rhythmBand:"unknown",activityFactor:0,cap:0,candidateChecks:0,
+    exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
+    mobile:false,pooledStableIds:true,localCulling:true,lowFrequencyMotion:true,
+    presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,
+    inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
+  };
+}
+function clearLocalCrowdPresentation(){
+  localCrowdRoot?.destroy?.();localCrowdRoot=null;localCrowdContext=null;localCrowdEntities=[];
+  resetLocalCrowdTelemetry();
+}
+function currentCrowdAvoidPoints(){
+  const points=[];
+  for(const record of localNpcEntities.values()){
+    const state=residentPresentationState(record.resident);if(!state)continue;
+    points.push(Object.freeze({x:String(Math.round(Number(state.x)||0)),y:String(Math.round(Number(state.y)||0))}));
+  }
+  return points;
+}
+function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
+  clearLocalCrowdPresentation();
+  if(!resource||!frame?.dims||!["refined","full"].includes(String(tier))||!window.CrowdPresentation||!tangentPatch)return;
+  const started=performance.now(),focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const rect=canvas?.getBoundingClientRect?.(),mobile=Math.min(Number(rect?.width||1280),Number(rect?.height||720))<=520;
+  const stamp=whenOverride||window.GameTime?.getNow?.()||inspectionFantasyStamp();
+  const crowd=CrowdPresentation.snapshot(activeSeed,stamp,focusTile,{mobile,avoidPoints:currentCrowdAvoidPoints()});
+  localCrowdContext={resource,frame,tier,stamp};
+  if(!crowd?.active||!crowd.specs?.length){
+    localCrowdPresentation={...localCrowdPresentation,
+      settlementId:crowd?.settlementId||null,settlementName:crowd?.settlementName||null,settlementClass:crowd?.settlementClass||null,
+      districtBand:crowd?.districtBand||"none",districtFactor:Number(crowd?.districtFactor||0),
+      population:Number(crowd?.population||0),populationSource:crowd?.populationSource||null,rhythmBand:crowd?.rhythmBand||"unknown",
+      activityFactor:Number(crowd?.activityFactor||0),cap:Number(crowd?.cap||0),candidateChecks:Number(crowd?.candidateChecks||0),mobile,
+      buildTimeMs:Number((performance.now()-started).toFixed(3))
+    };
+    return;
+  }
+  ensureLocalCrowdMaterials();
+  localCrowdRoot=new pc.Entity("AnonymousCrowdPresentation");tangentPatch.addChild(localCrowdRoot);
+  const dims=frame.dims,unit=Math.max(1e-9,Number(dims.metersPerUnit)||1),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const halfW=Math.max(1,Number(dims.patchWidth||0)*.55),halfH=Math.max(1,Number(dims.patchHeight||0)*.55);
+  for(const spec of crowd.specs){
+    const ll=worldLatLonForTile(spec.point.x,spec.point.y);
+    const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,ll.latitudeRadians,ll.longitudeRadians);
+    const east=Number(delta.eastMeters||0)+Number(spec.presentationOffset?.x||0)*tileMeters;
+    const north=Number(delta.northMeters||0)+Number(spec.presentationOffset?.y||0)*tileMeters;
+    if(Math.abs(east)>halfW||Math.abs(north)>halfH)continue;
+    const ground=localGroundHeightUnits(east,north,frame)+.018,posX=east/unit,posZ=-north/unit;
+    const height=Math.max(.075,1.44/unit),width=Math.max(.033,.40/unit);
+    const material=localCrowdMaterials[spec.visualRole]||localCrowdMaterials.market;
+    const entity=addLocalPrimitive(localCrowdRoot,"Crowd-"+spec.id,"sphere",material,posX,ground+height*.48,posZ,width,height,width);
+    entity.setLocalEulerAngles(0,Number(PRNG?.foundationUint32?.(activeSeed,"crowd:yaw:"+spec.id)||0)%360,0);
+    localCrowdEntities.push(Object.freeze({id:String(spec.id),entity,point:spec.point,visualRole:String(spec.visualRole||"market")}));
+  }
+  const elapsed=performance.now()-started;
+  localCrowdPresentation={
+    active:localCrowdEntities.length>0,generatedCount:Number(crowd.activeCount||0),visibleCount:localCrowdEntities.length,
+    entityCount:localCrowdEntities.length,drawCallEstimate:localCrowdEntities.length,buildTimeMs:Number(elapsed.toFixed(3)),
+    settlementId:crowd.settlementId||null,settlementName:crowd.settlementName||null,settlementClass:crowd.settlementClass||null,
+    districtBand:crowd.districtBand||"none",districtFactor:Number(crowd.districtFactor||0),
+    population:Number(crowd.population||0),populationSource:crowd.populationSource||null,rhythmBand:crowd.rhythmBand||"unknown",
+    activityFactor:Number(crowd.activityFactor||0),cap:Number(crowd.cap||0),candidateChecks:Number(crowd.candidateChecks||0),
+    resolveMs:Number(crowd.resolveMs||0),sourceUpdateMs:Number(crowd.updateMs||0),totalSourceUpdateMs:Number(crowd.totalUpdateMs||0),
+    exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
+    mobile,pooledStableIds:Boolean(crowd.pooledStableIds),localCulling:true,lowFrequencyMotion:Boolean(crowd.lowFrequencyMotion),
+    presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,
+    inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
+  };
+}
+function refreshLocalCrowdPresentation(whenOverride=null){
+  if(!localCrowdContext)return;
+  const c=localCrowdContext;rebuildLocalCrowdPresentation(c.resource,c.frame,c.tier,whenOverride);
 }
 function registerCanonicalBuildingInspection(record,entities){
   const typeLabel=readableTitle(record?.function||record?.kind||record?.type,"Building");
