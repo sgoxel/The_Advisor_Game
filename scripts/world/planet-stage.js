@@ -188,7 +188,7 @@ let localNpcRoot=null;
 let localNpcMaterials=null;
 let localNpcContext=null;
 let localNpcEntities=new Map();
-let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles",rhythmSource:"SettlementActivityRhythm presentation-only",presentationOnly:true,simulationAuthority:false};
+let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([]),localEventPresentationRevision:"compact-participant-cues-v1",rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles + LocalEventVignettes",rhythmSource:"SettlementActivityRhythm presentation-only",presentationOnly:true,simulationAuthority:false};
 let localCrowdRoot=null;
 let localCrowdMesh=null;
 let localCrowdMaterials=null;
@@ -4319,6 +4319,12 @@ function ensureLocalNpcMaterials(){
     body:make("LocalResidentBody",.19,.42,.72),head:make("LocalResidentHead",.86,.68,.50),tool:make("LocalResidentWorkTool",.30,.23,.15),
     timber:make("LocalResidentWorkTimber",.42,.26,.13),metal:make("LocalResidentWorkMetal",.24,.27,.30),
     ember:make("LocalResidentWorkEmber",.72,.22,.08),stock:make("LocalResidentWorkStock",.62,.48,.20),
+    localEvents:Object.freeze({
+      "market-day-setup":make("LocalEventMarket",.80,.47,.14),
+      "village-gathering":make("LocalEventGathering",.18,.58,.62),
+      "minor-argument":make("LocalEventArgument",.68,.20,.14),
+      "predator-warning":make("LocalEventWarning",.78,.61,.15)
+    }),
     professions:Object.freeze({
       farmer:make("ResidentFarmer",.26,.46,.24),smith:make("ResidentSmith",.48,.24,.19),
       "tavern-keeper":make("ResidentTavernKeeper",.55,.39,.20),shopkeeper:make("ResidentShopkeeper",.39,.30,.52),
@@ -4480,7 +4486,7 @@ function registerCanonicalBuildingInspection(record,entities){
 function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,unit,lift=0,preserveSelection=false){
   const started=performance.now(),selectedNpc=inspection.selectedType==="npc"?inspection.selectedId:null;
   clearInspectionKeySet(localNpcInspectionKeys,preserveSelection);localNpcRoot?.destroy?.();localNpcRoot=null;localNpcEntities.clear();
-  localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([])};
+  localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([])};
   localNpcContext={reveal,tier,frame,presentationScale,unit,lift};
   if(!["refined","full"].includes(tier)||!window.DailyActivity?.build)return;
   ensureLocalNpcMaterials();localNpcRoot=new pc.Entity("CanonicalResidents");tangentPatch.addChild(localNpcRoot);
@@ -4499,10 +4505,11 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     const workPropA=addLocalPrimitive(localNpcRoot,"ResidentWorkPropA-"+resident.id,"box",localNpcMaterials.timber,x,ground,z,bodyWidth,bodyWidth,bodyWidth);
     const workPropB=addLocalPrimitive(localNpcRoot,"ResidentWorkPropB-"+resident.id,"box",localNpcMaterials.metal,x,ground,z,bodyWidth,bodyWidth,bodyWidth);
     const workPropC=addLocalPrimitive(localNpcRoot,"ResidentWorkPropC-"+resident.id,"box",localNpcMaterials.stock,x,ground,z,bodyWidth,bodyWidth,bodyWidth);
-    tool.enabled=false;workPropA.enabled=false;workPropB.enabled=false;workPropC.enabled=false;
-    localNpcEntities.set(resident.id,{resident,body,head,tool,workPropA,workPropB,workPropC,bodyHeight,bodyWidth,headSize,presentationScale,unit,frame,lift});
+    const eventHalo=addLocalPrimitive(localNpcRoot,"ResidentEventHalo-"+resident.id,"cylinder",localNpcMaterials.localEvents["village-gathering"],x,ground,z,bodyWidth,bodyWidth*.08,bodyWidth);
+    tool.enabled=false;workPropA.enabled=false;workPropB.enabled=false;workPropC.enabled=false;eventHalo.enabled=false;
+    localNpcEntities.set(resident.id,{resident,body,head,tool,workPropA,workPropB,workPropC,eventHalo,bodyHeight,bodyWidth,headSize,presentationScale,unit,frame,lift});
     body.enabled=initiallyVisible;head.enabled=initiallyVisible;
-    const entities=[body,head,tool,workPropA,workPropB,workPropC];
+    const entities=[body,head,tool,workPropA,workPropB,workPropC,eventHalo];
     registerLocalInspection({
       id:resident.id,type:"npc",residentId:resident.id,pickPriority:3,
       authority:Object.freeze({residentId:resident.id,identitySource:"DailyActivity",professionSource:"ResidentAssignments",activitySource:"DailyActivity.resolveActionTarget"}),
@@ -4511,7 +4518,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
       screenBounds:()=>inspectionEntityBounds(entities,5),
       screenDepth:()=>inspectionEntityDepth(entities)
     },localNpcInspectionKeys);
-    if(initiallyVisible)activeCount++;entityCount+=6;
+    if(initiallyVisible)activeCount++;entityCount+=7;
   }
   localNpcPresentation={...localNpcPresentation,active:activeCount>0,activeCount,entityCount,drawCallEstimate:entityCount,buildTimeMs:Number((performance.now()-started).toFixed(3)),time:inspectionFantasyStamp()};
   if(selectedNpc&&!inspectionPickables.has(inspectionRegistryKey("npc",selectedNpc)))dismissInspection();
@@ -4524,24 +4531,26 @@ function updateCanonicalNpcMotion(){
   if(!localNpcRoot||!localNpcContext||!localNpcEntities.size)return;
   const started=performance.now(),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),rhythmStamp=inspectionFantasyStamp();
   const rhythm=window.SettlementActivityRhythm?.snapshot?.(activeSeed,rhythmStamp,[...localNpcEntities.values()].map(record=>record.resident))||null;
-  let activeTools=0,activeProps=0,visibleCount=0,centeredWorkAction=false,rhythmPriorityTotal=0,rhythmPriorityCount=0;
-  const activeWorkCycleResidentIds=[],viewportRect=canvas?.getBoundingClientRect?.()||null;
+  let activeTools=0,activeProps=0,activeEventCues=0,visibleCount=0,centeredWorkAction=false,rhythmPriorityTotal=0,rhythmPriorityCount=0;
+  const activeWorkCycleResidentIds=[],activeLocalEventResidentIds=[],viewportRect=canvas?.getBoundingClientRect?.()||null;
   for(const record of localNpcEntities.values()){
     const state=residentPresentationState(record.resident),visible=Boolean(state&&!state.indoors);
     record.body.enabled=visible;record.head.enabled=visible;record.tool.enabled=false;
-    for(const prop of [record.workPropA,record.workPropB,record.workPropC])if(prop)prop.enabled=false;
+    for(const prop of [record.workPropA,record.workPropB,record.workPropC,record.eventHalo])if(prop)prop.enabled=false;
     if(!visible)continue;
     visibleCount++;
     const east=state.x*tileMeters,north=state.y*tileMeters;
     const ground=canonicalSemanticGroundHeightUnits(east,north,record.frame)+record.lift+.015;
     const pos=canonicalSemanticPosition(east,north,record.presentationScale,record.unit,record.frame);
     const working=Boolean(state.movementState?.workCycle&&state.movementState?.status==="arrived");
+    const localEvent=window.LocalEventVignettes?.stateFor?.(record.resident.id,activeSeed)||null;
+    const eventActive=Boolean(localEvent?.activityOverride);
     const rhythmResident=window.SettlementActivityRhythm?.residentPresentation?.(activeSeed,record.resident,rhythmStamp,state.scheduled)||null;
     const rhythmPriority=Math.max(0,Math.min(1,Number(rhythmResident?.priority??.5)));
     rhythmPriorityTotal+=rhythmPriority;rhythmPriorityCount++;
     const rhythmScale=working?1:(.95+rhythmPriority*.45);
     const phase=frameCount*.22+Number(String(record.resident.id).replace(/\D/g,"")||0);
-    const pulse=working?Math.sin(phase)*.035:0,actionScale=working?3.05:rhythmScale;
+    const pulse=(working||eventActive)?Math.sin(phase)*.035:0,actionScale=eventActive?3.28:(working?3.05:rhythmScale);
     // Arrived workers keep the accepted WP-S004-007 silhouette scale. Other
     // outdoor residents get only a bounded presentation emphasis from fantasy-
     // time rhythm; positions, schedules, collision and routes stay authoritative.
@@ -4549,7 +4558,42 @@ function updateCanonicalNpcMotion(){
     record.head.setLocalScale(record.headSize*actionScale,record.headSize*actionScale,record.headSize*actionScale);
     record.body.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale*.5,pos.z);
     record.head.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale+record.headSize*actionScale*(.48+pulse),pos.z);
-    if(working){
+    if(eventActive){
+      if(viewportRect&&cameraEntity?.camera){
+        const screen=cameraEntity.camera.worldToScreen(record.body.getPosition(),new pc.Vec3());
+        const cx=viewportRect.width*.5,cy=viewportRect.height*.5,priorityRadius=Math.max(84,Math.min(180,Math.min(viewportRect.width,viewportRect.height)*.28));
+        if(Number.isFinite(screen?.x)&&Number.isFinite(screen?.y)&&Math.hypot(screen.x-cx,screen.y-cy)<=priorityRadius)centeredWorkAction=true;
+      }
+      const eventType=String(localEvent.type||""),eventMaterial=localNpcMaterials.localEvents?.[eventType]||localNpcMaterials.stock;
+      const bw=record.bodyWidth*actionScale,bh=record.bodyHeight*actionScale,swing=Math.sin(phase);
+      if(record.eventHalo){
+        if(eventMaterial&&record.eventHalo.render?.meshInstances?.[0])record.eventHalo.render.meshInstances[0].material=eventMaterial;
+        record.eventHalo.setLocalScale(bw*1.42,Math.max(.010,bw*.055),bw*1.42);
+        record.eventHalo.setLocalPosition(pos.x,ground+.006,pos.z);
+        record.eventHalo.enabled=true;activeEventCues++;
+      }
+      const setEventProp=(entity,material,sx,sy,sz,dx,dy,dz,ry=0)=>{
+        if(!entity)return;
+        if(material&&entity.render?.meshInstances?.[0])entity.render.meshInstances[0].material=material;
+        entity.setLocalScale(sx,sy,sz);entity.setLocalPosition(pos.x+dx,ground+dy,pos.z+dz);entity.setLocalEulerAngles(0,ry,0);entity.enabled=true;activeProps++;activeEventCues++;
+      };
+      // Compact event props stay inside roughly one resident-width of the
+      // authoritative walkable participant coordinate. They are presentation
+      // only and intentionally much smaller than the rejected slab-like cues.
+      if(eventType==="market-day-setup"){
+        setEventProp(record.workPropA,localNpcMaterials.stock,bw*.68,bw*.32,bw*.68,bw*.94,bw*.20,bw*.18,12);
+        setEventProp(record.workPropB,localNpcMaterials.timber,bw*.56,bw*.24,bw*.82,-bw*.82,bw*.16,-bw*.14,-10);
+      }else if(eventType==="village-gathering"){
+        setEventProp(record.workPropA,localNpcMaterials.timber,bw*1.18,bw*.13,bw*.34,0,bw*.11,bw*.90,10*swing);
+      }else if(eventType==="minor-argument"){
+        setEventProp(record.workPropA,localNpcMaterials.ember,bw*.14,bw*.12,bw*1.18,bw*.48,bw*.12,bw*.32,42+10*swing);
+        setEventProp(record.workPropB,localNpcMaterials.metal,bw*.14,bw*.11,bw*1.02,-bw*.48,bw*.11,-bw*.24,-42-10*swing);
+      }else if(eventType==="predator-warning"){
+        setEventProp(record.workPropA,localNpcMaterials.stock,bw*.16,bw*.13,bw*1.34,bw*.62,bw*.12,0,8+5*swing);
+        setEventProp(record.workPropB,localNpcMaterials.ember,bw*.42,bw*.22,bw*.42,-bw*.62,bw*.16,bw*.18,45);
+      }
+      activeLocalEventResidentIds.push(String(record.resident.id));
+    }else if(working){
       if(viewportRect&&cameraEntity?.camera){
         const screen=cameraEntity.camera.worldToScreen(record.body.getPosition(),new pc.Vec3());
         const cx=viewportRect.width*.5,cy=viewportRect.height*.5,priorityRadius=Math.max(72,Math.min(160,Math.min(viewportRect.width,viewportRect.height)*.24));
@@ -4620,7 +4664,7 @@ function updateCanonicalNpcMotion(){
       activeWorkCycleResidentIds.push(String(record.resident.id));
     }
   }
-  activeWorkCycleResidentIds.sort();
+  activeWorkCycleResidentIds.sort();activeLocalEventResidentIds.sort();
   // Keep the gameplay-center anchor exact, but move its concise readout away
   // from a centered authoritative work action and soften only the ring.
   const centerMarker=root?.querySelector?.(".planet-world-center"),centerCode=centerMarker?.querySelector?.("code"),centerGlyph=centerMarker?.querySelector?.("i");
@@ -4638,6 +4682,7 @@ function updateCanonicalNpcMotion(){
   const elapsed=performance.now()-started;
   localNpcPresentation={...localNpcPresentation,active:visibleCount>0,activeCount:visibleCount,activeWorkCycleToolCount:activeTools,activeWorkCyclePropCount:activeProps,
     activeWorkCycleResidentIds:Object.freeze(activeWorkCycleResidentIds),
+    activeLocalEventCueCount:activeEventCues,activeLocalEventResidentIds:Object.freeze(activeLocalEventResidentIds),
     rhythmBand:rhythm?.band||"unknown",rhythmModifiers:rhythm?.modifiers||null,rhythmCounts:rhythm?.counts||null,
     rhythmAveragePresentationPriority:rhythmPriorityCount?Number((rhythmPriorityTotal/rhythmPriorityCount).toFixed(4)):0,
     drawCallEstimate:visibleCount*2+activeTools+activeProps,
