@@ -5932,6 +5932,7 @@ async function warmLocalRepresentationShaders(){
 }
 function recordLocalFrame(dt){
   const ms=Math.max(0,Number(dt)||0)*1000;localFrameStats.lastFrameMs=ms;
+  window.WorldSimulationBudget?.recordVisibleFrame?.(ms,activeSeed);
   localFrameStats.recent.push(ms);if(localFrameStats.recent.length>120)localFrameStats.recent.shift();
   if(localJob)localFrameStats.maxDuringPreparationMs=Math.max(localFrameStats.maxDuringPreparationMs,ms);
   localResources.lastFrameMs=Number(ms.toFixed(3));localResources.recentMaxFrameMs=Number(Math.max(0,...localFrameStats.recent).toFixed(3));
