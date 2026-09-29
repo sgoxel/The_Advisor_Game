@@ -188,7 +188,7 @@ assert.strictEqual(WorldState.deltaSnapshot(seed).entryCount,0,"runtime reset di
   ].map(path=>html.indexOf(path));
   assert(dependencyOrder.every((value,index)=>value>=0&&(index===0||value>dependencyOrder[index-1])),"production persistence dependency load order invalid");
   assert(/CampaignPersistence\.restoreAndResume/.test(stageSource),"PlanetStage production bootstrap does not use versioned restore gate");
-  assert(/CampaignPersistence\.createSave/.test(stageSource),"PlanetStage does not checkpoint adopted existing campaigns");
+  assert(stageSource.includes("CampaignPersistence?.createSave")||stageSource.includes("CampaignPersistence.createSave"),"PlanetStage does not checkpoint adopted existing campaigns");
   assert(/Saved campaign is incompatible or corrupt/.test(stageSource),"production load failure is not user-visible/actionable");
 
   console.log(JSON.stringify({
