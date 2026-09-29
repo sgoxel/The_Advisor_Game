@@ -167,9 +167,9 @@ function processEvent(mem,record){
   else if(event.systemKind===END_KIND)deactivate(mem,event.payload?.eventId||event.entityId);
   return {kind:event.systemKind,eventId:event.entityId};
 }
-function advance(seedValue,nowValue){
-  const seed=requiredSeed(seedValue),now=normalizeTimestamp(nowValue),mem=state(seed);
-  activeSeed=seed;ensureScheduled(seed,now);
+function advance(seedValue,nowValue,optionsValue){
+  const seed=requiredSeed(seedValue),now=normalizeTimestamp(nowValue),mem=state(seed),options=optionsValue||{};
+  activeSeed=seed;if(options.ensureScheduled!==false)ensureScheduled(seed,now);
   if(mem.lastProcessedTimestamp===now){renderCard(seed);return snapshot(seed);}
   const result=window.EventScheduler?.processDue?.(seed,now,{
     maxEvents:PROCESS_LIMIT,priority:"nearby",systemKinds:[START_KIND,END_KIND],
