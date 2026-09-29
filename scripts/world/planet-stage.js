@@ -3742,7 +3742,9 @@ function addCanonicalSettlementEnvelope(reveal,presentationScale,unit,frame,lift
 function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift,tier){
   localSettlementLotGeometry?.destroy?.();localSettlementLotGeometry=null;
   if(!pc||!device)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
-  const records=[...(window.StartingVillage?.buildPlots?.(activeSeed)||[]),...(reveal?.specialLots||[])];
+  const ordinaryRecords=tier==="route"?(reveal?.houses||[]):(window.StartingVillage?.buildPlots?.(activeSeed)||[]);
+  const specialRecords=reveal?.specialLots||[],specialIds=new Set(specialRecords.map(item=>String(item?.id||"")));
+  const records=[...ordinaryRecords,...specialRecords];
   const tileMeters=Math.max(1,Number(reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
   const positions=[],normals=[],uvs=[],colors=[],indices=[];let count=0,outlineSegmentCount=0,connectorSegmentCount=0;
   const addPolygonQuad=(corners,color,extraLift=0)=>{
@@ -3770,20 +3772,23 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
     const b=record?.bounds;if(!b)continue;
     const minX=Number(b.minX)-.28,maxX=Number(b.maxX)+.28,minY=Number(b.minY)-.28,maxY=Number(b.maxY)+.28;
     if(![minX,maxX,minY,maxY].every(Number.isFinite)||maxX<=minX||maxY<=minY)continue;
-    const special=Boolean(record?.kind),fill=[142,101,58],
-      border=special?[224,174,92]:(tier==="route"?[116,105,70]:[164,140,82]);
+    const special=specialIds.has(String(record?.id||"")),fill=special?[176,124,62]:(tier==="route"?[123,94,58]:[142,101,58]),
+      border=special?[224,174,92]:[164,140,82];
     count++;
-    // Route-tier parcels are quiet cadastral context; roads/access links carry
-    // the stronger hierarchy. Keep ordinary lots as boundaries instead of
-    // filled cards so the real connected road/access morphology stays legible.
-    if(special)addQuad(minX,minY,maxX,maxY,fill,0);
-    const bw=tier==="route"
-      ?Math.min(.14,Math.max(.075,Math.min(maxX-minX,maxY-minY)*.044))
-      :Math.min(.23,Math.max(.12,Math.min(maxX-minX,maxY-minY)*.070));
-    if(addQuad(minX,minY,maxX,minY+bw,border,.006))outlineSegmentCount++;
-    if(addQuad(minX,maxY-bw,maxX,maxY,border,.006))outlineSegmentCount++;
-    if(addQuad(minX,minY+bw,minX+bw,maxY-bw,border,.006))outlineSegmentCount++;
-    if(addQuad(maxX-bw,minY+bw,maxX,maxY-bw,border,.006))outlineSegmentCount++;
+    // At route overview, use the actual authoritative HousePlans footprint as
+    // a compact filled silhouette. The larger build-plot parcel stays in the
+    // retained footprint parent only, so the child reads as inhabited fabric
+    // rather than floating cadastral rectangles.
+    if(tier==="route"){
+      if(addQuad(minX,minY,maxX,maxY,fill,0))outlineSegmentCount++;
+    }else{
+      if(special)addQuad(minX,minY,maxX,maxY,fill,0);
+      const bw=Math.min(.23,Math.max(.12,Math.min(maxX-minX,maxY-minY)*.070));
+      if(addQuad(minX,minY,maxX,minY+bw,border,.006))outlineSegmentCount++;
+      if(addQuad(minX,maxY-bw,maxX,maxY,border,.006))outlineSegmentCount++;
+      if(addQuad(minX,minY+bw,minX+bw,maxY-bw,border,.006))outlineSegmentCount++;
+      if(addQuad(maxX-bw,minY+bw,maxX,maxY-bw,border,.006))outlineSegmentCount++;
+    }
   }
   // HousePlans exposes the canonical exterior entrance and its already-chosen
   // nearby road target. Keep those true access links in the same merged
@@ -3792,7 +3797,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   for(const house of reveal?.houses||[]){
     const entrance=house?.entrance,target=entrance?.target;
     if(!entrance||!target)continue;
-    const accessWidth=tier==="route"?.88:(tier==="footprint"?.38:.24);
+    const accessWidth=tier==="route"?.46:(tier==="footprint"?.38:.24);
     if(addConnector(Number(entrance.x),Number(entrance.y),Number(target.x),Number(target.y),accessWidth,[72,61,38]))connectorSegmentCount++;
   }
   if(!count)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
@@ -3800,7 +3805,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   const entity=new pc.Entity("CanonicalOccupiedLotFills");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.lotOverview,entity)];
   localStaticRoot.addChild(entity);localSettlementLotGeometry=mesh;
-  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount,outlineSegmentCount,connectorSegmentCount,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-perimeter-access-v7"});
+  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount,outlineSegmentCount,connectorSegmentCount,triangleCount:indices.length/3,mode:tier==="route"?"authoritative-house-footprint-access-v9":"authoritative-occupied-lot-perimeter-access-v9"});
 }
 function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tier){
   localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;
@@ -3864,76 +3869,45 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
           if(roadByKey.has(key)){accessTargetKeys.push(key);break;}
         }
       }
-      // The overview has one real gateway/outward spine, but entrances are not
-      // forced to share that root. A weighted bounded path may join the spine
-      // only when it does not consume a long section of the authoritative ring.
-      // Otherwise a small local access cluster is shown around that entrance.
-      const spineKeys=[];
-      for(const cell0 of roadByKey.values()){
-        const c=classify(cell0);
-        if(c.outwardBranch||c.gatewayStem){routePathKeys.add(c.x+","+c.y);spineKeys.push(c.x+","+c.y);}
+      // Strategic route overview is a hierarchy, not a literal multi-cell road
+      // raster. Keep every canonical secondary path, then collapse the real
+      // gateway-facing main-road corridor to one existing authoritative cell
+      // per forward coordinate. The median lateral cell is deterministic and
+      // follows StartingVillage's SEED-shaped gateway curve without inventing
+      // geometry or exposing the ring as a locator.
+      const mainByForward=new Map();
+      for(const [x,y,kind] of roadCells){
+        const key=x+","+y,c=classify({x,y,kind});
+        if(c.localPath){routePathKeys.add(key);continue;}
+        if(kind!=="main-road"||c.ringCell)continue;
+        const local=village.local(activeSeed,String(x),String(y));if(!local)continue;
+        const forward=Number(local.forward||0),lateral=Number(local.lateral||0);
+        if(forward<4)continue;
+        if(!mainByForward.has(forward))mainByForward.set(forward,[]);
+        mainByForward.get(forward).push({key,x,y,lateral});
       }
-      const neighborSteps=[[1,0],[0,1],[-1,0],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-      const dist=new Map(),previous=new Map(),open=[];
-      for(const key of spineKeys.sort()){dist.set(key,0);previous.set(key,null);open.push(key);}
-      const stepCost=c=>c.ringCell?5.5:c.localPath?.62:c.centerAvenue?1.45:c.kind==="main-road"?.90:1.10;
-      let guard=0;
-      while(open.length&&guard++<roadCells.length*6){
-        open.sort((a,b)=>(dist.get(a)-dist.get(b))||a.localeCompare(b));
-        const key=open.shift(),cell=roadByKey.get(key);if(!cell)continue;
-        const baseCost=Number(dist.get(key)||0);
-        for(const [dx,dy] of neighborSteps){
-          const nk=(cell.x+dx)+","+(cell.y+dy),next0=roadByKey.get(nk);if(!next0)continue;
-          if(dx&&dy&&(roadByKey.has((cell.x+dx)+","+cell.y)||roadByKey.has(cell.x+","+(cell.y+dy))))continue;
-          const next=classify(next0),cost=baseCost+stepCost(next)*(dx&&dy?1.42:1);
-          if(cost>34)continue;
-          const prior=dist.get(nk);
-          if(prior===undefined||cost<prior-1e-6||(Math.abs(cost-prior)<1e-6&&String(key)<String(previous.get(nk)||"~"))){
-            dist.set(nk,cost);previous.set(nk,key);if(!open.includes(nk))open.push(nk);
-          }
-        }
+      let centerlineCellCount=0;
+      for(const forward of [...mainByForward.keys()].sort((a,b)=>a-b)){
+        const candidates=mainByForward.get(forward).sort((a,b)=>a.lateral-b.lateral||a.y-b.y||a.x-b.x);
+        const chosen=candidates[Math.floor((candidates.length-1)/2)];
+        if(chosen){routePathKeys.add(chosen.key);centerlineCellCount++;}
       }
-      let connectedTargetCount=0,localClusterTargetCount=0,maxPathCells=0,maxRingCellsOnAcceptedPath=0;
       const uniqueTargets=[...new Set(accessTargetKeys)].sort();
-      for(const targetKey of uniqueTargets){
-        const path=[];let key=targetKey,pathGuard=0;
-        while(key!=null&&previous.has(key)&&pathGuard++<=roadCells.length){
-          path.push(key);key=previous.get(key);
-        }
-        if(key!=null&&routePathKeys.has(key))path.push(key);
-        const ringCount=path.reduce((n,k)=>n+(classify(roadByKey.get(k)).ringCell?1:0),0);
-        const acceptable=path.length>0&&path.length<=18&&ringCount<=4&&Number(dist.get(targetKey)??Infinity)<=24;
-        if(acceptable){
-          connectedTargetCount++;maxPathCells=Math.max(maxPathCells,path.length);maxRingCellsOnAcceptedPath=Math.max(maxRingCellsOnAcceptedPath,ringCount);
-          for(const k of path)routePathKeys.add(k);
-        }else{
-          localClusterTargetCount++;
-          // Retain a bounded entrance neighborhood using only existing road
-          // cells. Ring cells may appear next to a real entrance, but expansion
-          // may not walk around the ring and recreate the target silhouette.
-          const queue=[{key:targetKey,depth:0}],seen=new Set([targetKey]);
-          while(queue.length){
-            const item=queue.shift(),cell0=roadByKey.get(item.key);if(!cell0)continue;
-            const c=classify(cell0);
-            if(!c.ringCell||item.depth<=2||c.localPath||c.gatewayStem||c.outwardBranch)routePathKeys.add(item.key);
-            if(item.depth>=5)continue;
-            for(const [dx,dy] of [[1,0],[0,1],[-1,0],[0,-1]]){
-              const nk=(c.x+dx)+","+(c.y+dy),next0=roadByKey.get(nk);if(!next0||seen.has(nk))continue;
-              const next=classify(next0);
-              if(c.ringCell&&next.ringCell&&item.depth>=2)continue;
-              seen.add(nk);queue.push({key:nk,depth:item.depth+1});
-            }
-          }
-        }
+      let connectedTargetCount=0;
+      for(const key of uniqueTargets){
+        const cell=roadByKey.get(key);if(!cell)continue;
+        if(routePathKeys.has(key)||[[1,0],[0,1],[-1,0],[0,-1]].some(([dx,dy])=>routePathKeys.has((cell.x+dx)+","+(cell.y+dy))))connectedTargetCount++;
       }
       const selectedClasses=[...routePathKeys].map(k=>classify(roadByKey.get(k))).filter(Boolean);
       const ringCellCount=selectedClasses.filter(c=>c.ringCell).length;
       overviewStats=Object.freeze({
-        revision:"route-priority-mask-v8",accessTargetCount:uniqueTargets.length,connectedTargetCount,localClusterTargetCount,
+        revision:"route-priority-centerline-v11",accessTargetCount:uniqueTargets.length,connectedTargetCount,
+        localClusterTargetCount:Math.max(0,uniqueTargets.length-connectedTargetCount),
         selectedCellCount:selectedClasses.length,ringCellCount,ringArcShare:Number((ringCellCount/Math.max(1,selectedClasses.length)).toFixed(4)),
         gatewayCellCount:selectedClasses.filter(c=>c.gatewayStem||c.outwardBranch).length,
-        localPathCellCount:selectedClasses.filter(c=>c.localPath).length,maxPathCells,maxRingCellsOnAcceptedPath,
-        maxAcceptedPathCells:18,maxAcceptedRingCells:4,maxAcceptedWeightedCost:24,fullCanonicalRoadCount:roadCells.length
+        localPathCellCount:selectedClasses.filter(c=>c.localPath).length,centerlineCellCount,
+        maxPathCells:0,maxRingCellsOnAcceptedPath:0,maxAcceptedPathCells:0,maxAcceptedRingCells:0,maxAcceptedWeightedCost:0,
+        fullCanonicalRoadCount:roadCells.length
       });
     }
     for(const [x,y,kind] of roadCells){
@@ -3943,7 +3917,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       }else if(!routePathKeys.has(x+","+y))continue;
       const half=tier==="footprint"
         ?(outwardBranch?.28:gatewayStem?.14:centerAvenue?.075:.11)
-        :(outwardBranch?.24:gatewayStem?.12:localPath?.13:ringCell?.050:centerAvenue?.060:.075);
+        :(outwardBranch?.17:gatewayStem?.11:localPath?.085:centerAvenue?.070:.070);
       const cell={x,y,half};selected.push(cell);selectedMap.set(x+","+y,cell);
     }
     renderedRoadCellCount=selected.length;
@@ -3955,7 +3929,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
         const other=selectedMap.get((x+dx)+","+(y+dy));if(!other)continue;
         if(dx&&dy&&(selectedMap.has((x+dx)+","+y)||selectedMap.has(x+","+(y+dy))))continue;
-        const segmentFloor=tier==="route"?.030:.055;
+        const segmentFloor=tier==="route"?.026:.055;
         addSegment(x,y,other.x,other.y,Math.max(segmentFloor,Math.min(half,other.half)*2));
       }
     }
@@ -3967,7 +3941,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
   const roadMaterial=(tier==="route"||tier==="footprint")?localStaticMaterials.roadOverview:localStaticMaterials.road;
   entity.render.meshInstances=[new pc.MeshInstance(mesh,roadMaterial,entity)];localStaticRoot.addChild(entity);localSettlementRoadGeometry=mesh;
   return Object.freeze({active:true,cellCount:(tier==="route"||tier==="footprint")?renderedRoadCellCount:roadCells.length,segmentCount,queryCount,triangleCount:indices.length/3,overviewStats,
-    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-priority-access-mask-v9":"StartingVillage.infrastructureAt-cell-mesh-v1"});
+    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-priority-centerline-v11":"StartingVillage.infrastructureAt-cell-mesh-v1"});
 }
 function clearCanonicalWayfindingSignposts(){
   clearInspectionKeySet(localSignInspectionKeys,false);
