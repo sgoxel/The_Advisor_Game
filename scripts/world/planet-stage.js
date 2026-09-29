@@ -6516,30 +6516,6 @@ async function makeGeographyTexture(){
   buildDestinationDescriptors();
   return texture;
 }
-function stablePlaceName(kind,target,index){
-  const stems=["Alder","Brim","Cinder","Dawn","Elder","Frost","Glen","Haven","Iron","Juniper","Kings","Lumen","Morrow","North","Oak","Raven","Silver","Thorn","Vale","Willow"];
-  const tails={continent:["reach","land","march"],island:["isle","haven","key"],mountain:["spire","peak","crown"],peak:["summit","crest","crown"],water:["deep","sea","blue"],village:["ford","stead","wick"],town:["bridge","market","cross"],city:["hold","gate","court"],ruin:["watch","keep","fall"],hunting:["wood","chase","wild"],fishing:["bay","shore","cove"]};
-  const lat=Math.round((Number(target?.latitudeDegrees)||0)*10),lon=Math.round((Number(target?.longitudeDegrees)||0)*10);
-  let h=2166136261>>>0;for(const ch of String(activeSeed)+"|"+kind+"|"+lat+"|"+lon+"|"+index){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
-  const stem=stems[h%stems.length],suffix=(tails[kind]||["reach"])[(h>>>8)%(tails[kind]||["reach"]).length];
-  return stem+" "+suffix.charAt(0).toUpperCase()+suffix.slice(1);
-}
-function descriptorAt(latitudeRadians,longitudeRadians){
-  const lat=clamp(latitudeRadians,-Math.PI/2+.01,Math.PI/2-.01),lon=((longitudeRadians+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
-  const sample=geography.sampleLatLon(lat,lon);
-  return Object.freeze({latitudeRadians:lat,longitudeRadians:lon,latitudeDegrees:Number((lat*180/Math.PI).toFixed(3)),longitudeDegrees:Number((lon*180/Math.PI).toFixed(3)),elevationMeters:Number(sample.elevationMeters)||0,surfaceClass:sample.surfaceClass,land:Boolean(sample.land)});
-}
-function boundedNearbySample(base,wantLand,label){
-  if(!base)return null;
-  const seed=String(activeSeed)+"|destination|"+label;let h=2166136261>>>0;for(const ch of seed){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
-  for(let ring=1;ring<=6;ring++)for(let step=0;step<12;step++){
-    const angle=((step+(h%12))/12)*Math.PI*2,span=.025*ring;
-    const target=descriptorAt(Number(base.latitudeRadians)+Math.sin(angle)*span,Number(base.longitudeRadians)+Math.cos(angle)*span/Math.max(.3,Math.cos(Number(base.latitudeRadians)||0)));
-    if(target.land===wantLand)return target;
-  }
-  const fallback=descriptorAt(Number(base.latitudeRadians)||0,Number(base.longitudeRadians)||0);
-  return fallback.land===wantLand?fallback:null;
-}
 function greatCircleDistanceKm(a,b){
   const lat1=Number(a?.latitudeRadians)||0,lat2=Number(b?.latitudeRadians)||0;
   const dLat=lat2-lat1,dLon=(Number(b?.longitudeRadians)||0)-(Number(a?.longitudeRadians)||0);
@@ -6548,37 +6524,25 @@ function greatCircleDistanceKm(a,b){
 }
 function currentViewTarget(){return {latitudeRadians:-pitchDegrees*Math.PI/180,longitudeRadians:-yawDegrees*Math.PI/180};}
 function buildDestinationDescriptors(){
-  const started=performance.now(),continent=featureTargets?.continent,island=featureTargets?.island||continent,mountain=featureTargets?.mountain||continent;
-  let startingVillageTarget=continent,startingVillageName=null;
+  const started=performance.now(),center=currentViewTarget();
+  let baseDescriptors=[];
   try{
-    const country=window.PoliticalGeography?.countryAt?.(activeSeed,"0","0");
-    const plan=(window.SettlementArchetypes?.settlementsForCountry?.(activeSeed,country,3)||[]).find(item=>item.role==="starting-village")||null;
-    if(plan){
-      const registered=worldLatLonForTile(plan.center.x,plan.center.y);
-      startingVillageTarget=descriptorAt(registered.latitudeRadians,registered.longitudeRadians);
-      startingVillageName=String(plan.name||"").trim()||null;
-    }
-  }catch(_){}
-  const source=[
-    ["village","settlements",startingVillageTarget,"Canonical starting village",3,startingVillageName],
-    ["town","cities",boundedNearbySample(continent,true,"town"),"Regional market town",3,null],
-    ["city","cities",boundedNearbySample(continent,true,"city"),"Major seeded regional center",4],
-    ["ruin","historical",boundedNearbySample(mountain,true,"ruin"),"Old hill ruin / historical site",2],
-    ["hunting","hunting",boundedNearbySample(continent,true,"hunt"),"Woodland and upland hunting grounds",1],
-    ["fishing","fishing",boundedNearbySample(island,false,"fish"),"Coastal fishing waters",1],
-    ["continent","landmark",continent,"Major continental landmass",5],
-    ["island","nature",island,"Seeded island landmark",3],
-    ["mountain","nature",mountain,"Mountain range high point",3],
-    ["peak","nature",featureTargets?.peak,"Highest surveyed elevation",4],
-    ["water","water",featureTargets?.deepOcean,"Deep ocean basin",2]
-  ];
-  const baseDescriptors=source.filter(row=>row[2]).map((row,index)=>{
-    const [kind,category,target,description,importance,nameHint]=row;
-    return Object.freeze({id:"planet-place-"+kind+"-"+index,name:nameHint||stablePlaceName(kind,target,index),type:kind,category,description,importance,
-      latitudeRadians:Number(target.latitudeRadians)||0,longitudeRadians:Number(target.longitudeRadians)||0,
-      latitudeDegrees:Number(target.latitudeDegrees)||0,longitudeDegrees:Number(target.longitudeDegrees)||0,
-      elevationMeters:Number(target.elevationMeters)||0});
-  });
+    const query=window.WorldDestinations?.queryNearby?.(activeSeed,center,{radiusMeters:80000,maxResults:16});
+    baseDescriptors=(query?.results||[]).map(item=>{
+      const coordinates=item.coordinates||{};
+      return Object.freeze({
+        ...item,
+        latitudeRadians:Number(coordinates.latitudeRadians)||0,
+        longitudeRadians:Number(coordinates.longitudeRadians)||0,
+        latitudeDegrees:Number(coordinates.latitudeDegrees)||0,
+        longitudeDegrees:Number(coordinates.longitudeDegrees)||0,
+        elevationMeters:Number(item.evidence?.elevationMeters)||0,
+        worldAuthority:true,
+        destinationAuthority:"WorldDestinations",
+        localMaterialized:false
+      });
+    });
+  }catch(_){baseDescriptors=[];}
   const rumorLeads=(window.LocalRumors?.navigatorLeads?.(activeSeed)||[]).slice(0,5),leadByDestinationId=new Map(rumorLeads.map(lead=>[String(lead.id),lead]));
   const merged=baseDescriptors.map(descriptor=>{
     const lead=leadByDestinationId.get(descriptor.id);if(!lead)return descriptor;
