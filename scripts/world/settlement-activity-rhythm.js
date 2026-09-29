@@ -94,6 +94,10 @@ function categoryFor(resident,activity){
   const workFunction=String(resident?.workFunction||resident?.workplaceFunction||"");
   const state=String(activity?.state||activity?.kind||"").toLowerCase();
   const action=String(activity?.intendedAction||activity?.action||"").toLowerCase();
+  // Individual DailyActivity remains authoritative. A guard who is scheduled
+  // asleep/home is not converted into patrol merely because the night profile
+  // has a strong guard modifier.
+  if(state==="sleep")return "home";
   if(profession==="guard")return "guard";
   if(state==="social"||state==="lunch"||action==="social"||action==="eat")return "tavern-social";
   if(state==="work"||["work","craft","service"].includes(action)){
