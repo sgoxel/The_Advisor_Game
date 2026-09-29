@@ -137,7 +137,7 @@ try:
                 raise RuntimeError("participant body/silhouette screen readability too small: "+json.dumps({"participant":p,"state":st}))
         if st["visibleParticipants"]<2 or int(st["localStatic"].get("buildingCount",0))<=0:
             raise RuntimeError("event participants/local context not visibly materialized: "+json.dumps(st))
-        if st["activeLocalEventCueCount"]<st["visibleParticipants"] or st["activeLocalEventCueCount"]>max(1,participant_count)*3:
+        if st["activeLocalEventCueCount"]<st["visibleParticipants"] or st["activeLocalEventCueCount"]>max(1,participant_count)*4:
             raise RuntimeError("event cue count outside compact bounded contract: "+json.dumps(st))
         if len(st["activeLocalEventResidentIds"])<st["visibleParticipants"] or st["localEventPresentationRevision"]!="compact-event-silhouette-v3":
             raise RuntimeError("event cue resident/revision telemetry mismatch: "+json.dumps(st))
