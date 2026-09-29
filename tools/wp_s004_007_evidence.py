@@ -57,7 +57,7 @@ def prepare_focus(profession):
       // after the worker already reached the requested choreography step.
       PlanetStage.applyAuthoritativeFantasyTime(sample.when,"WP-S004-007 evidence");
       PlanetStage.setWorldTileFocus(sample.target.x,sample.target.y);
-      PlanetStage.setScaleIndex(9);
+      PlanetStage.setScaleIndex(8);
       return {ok:true,seed,sample,verify:WorkCycles.verify(seed),work:WorkCycles.snapshot(seed)};
     """,profession)
 
@@ -80,7 +80,7 @@ def resource_ready():
     signature_ready=(not requested) or (bool(active) and str(active)==str(requested))
     return (
         state["ready"] and not state["standInActive"] and
-        state["pendingPreparationCount"]==0 and signature_ready and state["scaleIndex"]==9 and
+        state["pendingPreparationCount"]==0 and signature_ready and state["scaleIndex"]==8 and
         state["tier"] in ("refined","full") and state["localStaticActive"] and
         state["localBuildingCount"]>0
     )
@@ -129,7 +129,7 @@ def visual_ready(info):
     state=visual_state(info["sample"]["residentId"],info["sample"].get("buildingId"))
     exact=state.get("exact") or {}
     return (
-        state["settled"] and state["scaleIndex"]==9 and state["tier"] in ("refined","full") and
+        state["settled"] and state["scaleIndex"]==8 and state["tier"] in ("refined","full") and
         state["localStaticActive"] and state["localBuildingCount"]>0 and state["workplaceKnown"] and
         exact.get("visible") and bool(exact.get("screen")) and exact.get("inViewport") and state["exactToolActive"] and
         state.get("activeWorkCyclePropCount",0)>0 and exact.get("movementStatus")=="arrived" and
