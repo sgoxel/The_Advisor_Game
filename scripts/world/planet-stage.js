@@ -192,7 +192,7 @@ let localNpcRoot=null;
 let localNpcMaterials=null;
 let localNpcContext=null;
 let localNpcEntities=new Map();
-let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles",rhythmSource:"SettlementActivityRhythm presentation-only",presentationOnly:true,simulationAuthority:false};
+let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([]),rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles + LocalEventVignettes",rhythmSource:"SettlementActivityRhythm presentation-only",presentationOnly:true,simulationAuthority:false};
 let localCrowdRoot=null;
 let localCrowdMesh=null;
 let localCrowdMaterials=null;
@@ -4467,7 +4467,7 @@ function registerCanonicalBuildingInspection(record,entities){
 function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,unit,lift=0,preserveSelection=false){
   const started=performance.now(),selectedNpc=inspection.selectedType==="npc"?inspection.selectedId:null;
   clearInspectionKeySet(localNpcInspectionKeys,preserveSelection);localNpcRoot?.destroy?.();localNpcRoot=null;localNpcEntities.clear();
-  localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([])};
+  localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([])};
   localNpcContext={reveal,tier,frame,presentationScale,unit,lift};
   if(!["refined","full"].includes(tier)||!window.DailyActivity?.build)return;
   ensureLocalNpcMaterials();localNpcRoot=new pc.Entity("CanonicalResidents");tangentPatch.addChild(localNpcRoot);
@@ -4511,8 +4511,8 @@ function updateCanonicalNpcMotion(){
   if(!localNpcRoot||!localNpcContext||!localNpcEntities.size)return;
   const started=performance.now(),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),rhythmStamp=inspectionFantasyStamp();
   const rhythm=window.SettlementActivityRhythm?.snapshot?.(activeSeed,rhythmStamp,[...localNpcEntities.values()].map(record=>record.resident))||null;
-  let activeTools=0,activeProps=0,visibleCount=0,centeredWorkAction=false,rhythmPriorityTotal=0,rhythmPriorityCount=0;
-  const activeWorkCycleResidentIds=[],viewportRect=canvas?.getBoundingClientRect?.()||null;
+  let activeTools=0,activeProps=0,activeEventCues=0,visibleCount=0,centeredWorkAction=false,rhythmPriorityTotal=0,rhythmPriorityCount=0;
+  const activeWorkCycleResidentIds=[],activeLocalEventResidentIds=[],viewportRect=canvas?.getBoundingClientRect?.()||null;
   for(const record of localNpcEntities.values()){
     const state=residentPresentationState(record.resident),visible=Boolean(state&&!state.indoors);
     record.body.enabled=visible;record.head.enabled=visible;record.tool.enabled=false;
@@ -4523,12 +4523,14 @@ function updateCanonicalNpcMotion(){
     const ground=canonicalSemanticGroundHeightUnits(east,north,record.frame)+record.lift+.015;
     const pos=canonicalSemanticPosition(east,north,record.presentationScale,record.unit,record.frame);
     const working=Boolean(state.movementState?.workCycle&&state.movementState?.status==="arrived");
+    const localEvent=window.LocalEventVignettes?.stateFor?.(record.resident.id,activeSeed)||null;
+    const eventActive=Boolean(localEvent?.activityOverride);
     const rhythmResident=window.SettlementActivityRhythm?.residentPresentation?.(activeSeed,record.resident,rhythmStamp,state.scheduled)||null;
     const rhythmPriority=Math.max(0,Math.min(1,Number(rhythmResident?.priority??.5)));
     rhythmPriorityTotal+=rhythmPriority;rhythmPriorityCount++;
     const rhythmScale=working?1:(.95+rhythmPriority*.45);
     const phase=frameCount*.22+Number(String(record.resident.id).replace(/\D/g,"")||0);
-    const pulse=working?Math.sin(phase)*.035:0,actionScale=working?3.05:rhythmScale;
+    const pulse=(working||eventActive)?Math.sin(phase)*.035:0,actionScale=eventActive?3.55:(working?3.05:rhythmScale);
     // Arrived workers keep the accepted WP-S004-007 silhouette scale. Other
     // outdoor residents get only a bounded presentation emphasis from fantasy-
     // time rhythm; positions, schedules, collision and routes stay authoritative.
@@ -4536,7 +4538,49 @@ function updateCanonicalNpcMotion(){
     record.head.setLocalScale(record.headSize*actionScale,record.headSize*actionScale,record.headSize*actionScale);
     record.body.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale*.5,pos.z);
     record.head.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale+record.headSize*actionScale*(.48+pulse),pos.z);
-    if(working){
+    if(eventActive){
+      if(viewportRect&&cameraEntity?.camera){
+        const screen=cameraEntity.camera.worldToScreen(record.body.getPosition(),new pc.Vec3());
+        const cx=viewportRect.width*.5,cy=viewportRect.height*.5,priorityRadius=Math.max(72,Math.min(180,Math.min(viewportRect.width,viewportRect.height)*.28));
+        if(Number.isFinite(screen?.x)&&Number.isFinite(screen?.y)&&Math.hypot(screen.x-cx,screen.y-cy)<=priorityRadius)centeredWorkAction=true;
+      }
+      const eventType=String(localEvent.type||""),cueScale=2.15,bw=record.bodyWidth*actionScale*cueScale,bh=record.bodyHeight*actionScale*cueScale,swing=Math.sin(phase);
+      const setEventProp=(entity,material,sx,sy,sz,dx,dy,dz,rx=0,ry=0,rz=0)=>{
+        if(!entity)return;
+        if(material&&entity.render?.meshInstances?.[0])entity.render.meshInstances[0].material=material;
+        entity.setLocalScale(sx,sy,sz);entity.setLocalPosition(pos.x+dx,ground+dy,pos.z+dz);entity.setLocalEulerAngles(rx,ry,rz);entity.enabled=true;activeProps++;activeEventCues++;
+      };
+      // Event cues reuse the resident's existing pooled work entities and shared
+      // materials. They are presentation-only silhouettes around the exact
+      // authoritative participant coordinates; no event outcome or movement
+      // decision is derived from these shapes.
+      if(eventType==="market-day-setup"){
+        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.stock;
+        record.tool.setLocalScale(bw*2.85,bw*.16,bw*.72);
+        record.tool.setLocalPosition(pos.x,ground+bw*.32,pos.z+bw*1.36);record.tool.setLocalEulerAngles(0,0,0);record.tool.enabled=true;activeTools++;activeEventCues++;
+        setEventProp(record.workPropA,localNpcMaterials.timber,bw*1.18,bw*.58,bw*1.18,-bw*1.32,bw*.36,bw*.44,0,12,0);
+        setEventProp(record.workPropB,localNpcMaterials.stock,bw*1.18,bw*.58,bw*1.18,bw*1.32,bw*.36,bw*.44,0,-12,0);
+      }else if(eventType==="village-gathering"){
+        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.timber;
+        record.tool.setLocalScale(bw*3.05,bw*.18,bw*.66);
+        record.tool.setLocalPosition(pos.x,ground+bw*.24,pos.z+bw*1.15);record.tool.setLocalEulerAngles(0,8*swing,0);record.tool.enabled=true;activeTools++;activeEventCues++;
+        setEventProp(record.workPropA,localNpcMaterials.timber,bw*2.35,bw*.16,bw*.58,0,bw*.18,-bw*1.08,0,-8*swing,0);
+        setEventProp(record.workPropB,localNpcMaterials.stock,bw*.82,bw*.30,bw*.82,bw*1.65,bw*.24,0,0,45,0);
+      }else if(eventType==="minor-argument"){
+        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.ember;
+        record.tool.setLocalScale(bw*.24,bw*.20,bw*3.15);
+        record.tool.setLocalPosition(pos.x+bw*.62,ground+bw*.24,pos.z);record.tool.setLocalEulerAngles(0,45+12*swing,0);record.tool.enabled=true;activeTools++;activeEventCues++;
+        setEventProp(record.workPropA,localNpcMaterials.ember,bw*.24,bw*.18,bw*2.55,-bw*.62,bw*.22,0,0,-45-12*swing,0);
+        setEventProp(record.workPropB,localNpcMaterials.metal,bw*.72,bw*.24,bw*.72,0,bw*.22,bw*1.40,0,45,0);
+      }else if(eventType==="predator-warning"){
+        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.stock;
+        record.tool.setLocalScale(bw*.22,bh*1.18,bw*.22);
+        record.tool.setLocalPosition(pos.x+bw*.92,ground+bh*.58,pos.z);record.tool.setLocalEulerAngles(0,0,0);record.tool.enabled=true;activeTools++;activeEventCues++;
+        setEventProp(record.workPropA,localNpcMaterials.stock,bw*2.65,bw*.20,bw*.62,bw*.92,bh*1.02,0,0,0,0);
+        setEventProp(record.workPropB,localNpcMaterials.ember,bw*.72,bw*.30,bw*.72,bw*.92,bh*1.28,0,0,45,0);
+      }
+      activeLocalEventResidentIds.push(String(record.resident.id));
+    }else if(working){
       if(viewportRect&&cameraEntity?.camera){
         const screen=cameraEntity.camera.worldToScreen(record.body.getPosition(),new pc.Vec3());
         const cx=viewportRect.width*.5,cy=viewportRect.height*.5,priorityRadius=Math.max(72,Math.min(160,Math.min(viewportRect.width,viewportRect.height)*.24));
@@ -4607,7 +4651,7 @@ function updateCanonicalNpcMotion(){
       activeWorkCycleResidentIds.push(String(record.resident.id));
     }
   }
-  activeWorkCycleResidentIds.sort();
+  activeWorkCycleResidentIds.sort();activeLocalEventResidentIds.sort();
   // Keep the gameplay-center anchor exact, but move its concise readout away
   // from a centered authoritative work action and soften only the ring.
   const centerMarker=root?.querySelector?.(".planet-world-center"),centerCode=centerMarker?.querySelector?.("code"),centerGlyph=centerMarker?.querySelector?.("i");
@@ -4625,6 +4669,7 @@ function updateCanonicalNpcMotion(){
   const elapsed=performance.now()-started;
   localNpcPresentation={...localNpcPresentation,active:visibleCount>0,activeCount:visibleCount,activeWorkCycleToolCount:activeTools,activeWorkCyclePropCount:activeProps,
     activeWorkCycleResidentIds:Object.freeze(activeWorkCycleResidentIds),
+    activeLocalEventCueCount:activeEventCues,activeLocalEventResidentIds:Object.freeze(activeLocalEventResidentIds),
     rhythmBand:rhythm?.band||"unknown",rhythmModifiers:rhythm?.modifiers||null,rhythmCounts:rhythm?.counts||null,
     rhythmAveragePresentationPriority:rhythmPriorityCount?Number((rhythmPriorityTotal/rhythmPriorityCount).toFixed(4)):0,
     drawCallEstimate:visibleCount*2+activeTools+activeProps,
