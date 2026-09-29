@@ -50,6 +50,7 @@ const HIERARCHY_NAME_END=Object.freeze({
 });
 const hierarchyRawCache=new Map();
 const hierarchyAcceptedCache=new Map();
+const hierarchyAcceptedPrewarmCache=new Map();
 const hierarchyPlanetCache=new Map();
 const hierarchyCapitalCache=new Map();
 const hierarchyCountryCatalogCache=new Map();
@@ -358,6 +359,70 @@ function canonicalSettlementAtCell(seedValue,classIdValue,cxValue,cyValue){
   }
   hierarchyAcceptedCache.set(key,raw);return raw;
 }
+
+function canonicalSettlementAtCellCacheStatus(seedValue,classIdValue,cxValue,cyValue){
+  const seed=String(seedValue==null?"":seedValue),classId=String(classIdValue||"");
+  if(!HIERARCHY_CLASS_SPECS[classId])return Object.freeze({ready:true,record:null,key:null});
+  const cx=BigInt(String(cxValue)),cy=BigInt(String(cyValue)),key=seed+"|"+classId+"|"+cx+"|"+cy;
+  return Object.freeze({ready:hierarchyAcceptedCache.has(key),record:hierarchyAcceptedCache.get(key)||null,key});
+}
+function hierarchySettlementPrewarmTasks(record){
+  if(!record?.generationCell)return Object.freeze([]);
+  const tasks=[],seen=new Set(),push=(classId,cx,cy)=>{
+    const key=classId+"|"+cx+"|"+cy;if(seen.has(key))return;seen.add(key);
+    tasks.push(Object.freeze({classId,cx:BigInt(cx),cy:BigInt(cy)}));
+  };
+  const classId=String(record.classId),cx=BigInt(record.generationCell.cellX),cy=BigInt(record.generationCell.cellY);
+  for(let oy=-1n;oy<=1n;oy++)for(let ox=-1n;ox<=1n;ox++)if(ox!==0n||oy!==0n)push(classId,cx+ox,cy+oy);
+  const higher=classId==="town"?["city"]:classId==="village"?["city","town"]:classId==="hamlet"?["city","town","village"]:[];
+  for(const higherClass of higher){
+    const cell=hierarchyCellFor(higherClass,record.center.x,record.center.y);if(!cell)continue;
+    // NearbyRawWinners checks a 3x3 candidate neighborhood and each candidate's
+    // same-class winner check needs its own 1-cell ring. A 5x5 raw cache window
+    // therefore makes the later accepted-cell resolution purely cached.
+    for(let oy=-2n;oy<=2n;oy++)for(let ox=-2n;ox<=2n;ox++)push(higherClass,cell.x+ox,cell.y+oy);
+  }
+  return Object.freeze(tasks);
+}
+function stepCanonicalSettlementAtCellPrewarm(seedValue,classIdValue,cxValue,cyValue){
+  const seed=String(seedValue==null?"":seedValue),classId=String(classIdValue||"");
+  if(!HIERARCHY_CLASS_SPECS[classId])return Object.freeze({ready:true,record:null,remainingTasks:0,phase:"invalid"});
+  const cx=BigInt(String(cxValue)),cy=BigInt(String(cyValue)),key=seed+"|"+classId+"|"+cx+"|"+cy;
+  if(hierarchyAcceptedCache.has(key)){
+    hierarchyAcceptedPrewarmCache.delete(key);
+    return Object.freeze({ready:true,record:hierarchyAcceptedCache.get(key)||null,remainingTasks:0,phase:"ready"});
+  }
+  let state=hierarchyAcceptedPrewarmCache.get(key)||null;
+  if(!state){
+    state={seed,classId,cx,cy,phase:"target",record:null,tasks:Object.freeze([]),index:0};
+    hierarchyAcceptedPrewarmCache.set(key,state);
+  }
+  if(state.phase==="target"){
+    const raw=hierarchyRawCandidate(seed,classId,cx,cy);
+    state.record=raw;
+    if(!raw){
+      const record=canonicalSettlementAtCell(seed,classId,cx,cy);
+      hierarchyAcceptedPrewarmCache.delete(key);
+      return Object.freeze({ready:true,record,remainingTasks:0,phase:"ready-null"});
+    }
+    state.tasks=hierarchySettlementPrewarmTasks(raw);state.index=0;state.phase="dependencies";
+    return Object.freeze({ready:false,record:null,remainingTasks:state.tasks.length,phase:state.phase});
+  }
+  if(state.phase==="dependencies"&&state.index<state.tasks.length){
+    const task=state.tasks[state.index++];
+    hierarchyRawCandidate(seed,task.classId,task.cx,task.cy);
+    if(state.index>=state.tasks.length)state.phase="capital";
+    return Object.freeze({ready:false,record:null,remainingTasks:Math.max(0,state.tasks.length-state.index),phase:state.phase});
+  }
+  if(state.phase==="capital"){
+    hierarchyCapitalForRecord(seed,state.record);
+    state.phase="final";
+    return Object.freeze({ready:false,record:null,remainingTasks:0,phase:state.phase});
+  }
+  const record=canonicalSettlementAtCell(seed,classId,cx,cy);
+  hierarchyAcceptedPrewarmCache.delete(key);
+  return Object.freeze({ready:true,record,remainingTasks:0,phase:"ready"});
+}
 function canonicalSettlementAtPoint(seedValue,classIdValue,x,y){
   const classId=String(classIdValue||"");
   const cell=hierarchyCellFor(classId,x,y);
@@ -480,7 +545,7 @@ function canonicalHierarchySnapshot(seedValue,xValue,yValue,radiusMetersValue){
   });
 }
 function clearCanonicalHierarchyCache(){
-  hierarchyRawCache.clear();hierarchyAcceptedCache.clear();hierarchyCapitalCache.clear();hierarchyCountryCatalogCache.clear();catalogCache.clear();cache.clear();proofCache.clear();
+  hierarchyRawCache.clear();hierarchyAcceptedCache.clear();hierarchyAcceptedPrewarmCache.clear();hierarchyCapitalCache.clear();hierarchyCountryCatalogCache.clear();catalogCache.clear();cache.clear();proofCache.clear();
   return Object.freeze({raw:0,accepted:0,capital:0,countryCatalog:0,revision:"settlement-hierarchy-v"+HIERARCHY_VERSION});
 }
 function canonicalHierarchyProof(seedValue,xValue="0",yValue="0"){
@@ -1172,7 +1237,7 @@ function renderDebugPanel(seedValue,planIndexValue,rootNode){
 const api=Object.freeze({
   VERSION,SUPPORTED_CLASSES,CLASS_SCALE,build,settlementsForCountry,representatives,proof,renderDebugPanel,
   HIERARCHY_VERSION,HIERARCHY_CLASS_ORDER,HIERARCHY_CLASS_SPECS,
-  canonicalSettlementAtCell,canonicalSettlementAtPoint,canonicalSettlementsInBounds,createCanonicalSettlementsInBoundsQuery,stepCanonicalSettlementsInBoundsQuery,canonicalSettlementsForCountry,canonicalConsumerProof,
+  canonicalSettlementAtCell,canonicalSettlementAtCellCacheStatus,stepCanonicalSettlementAtCellPrewarm,canonicalSettlementAtPoint,canonicalSettlementsInBounds,createCanonicalSettlementsInBoundsQuery,stepCanonicalSettlementsInBoundsQuery,canonicalSettlementsForCountry,canonicalConsumerProof,
   canonicalHierarchySnapshot,canonicalHierarchyProof,clearCanonicalHierarchyCache
 });
 window.SettlementArchetypes=api;
