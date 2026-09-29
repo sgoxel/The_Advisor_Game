@@ -5612,13 +5612,19 @@ function activateLocalDetailResource(signature,fromCache){
     localResources.surroundSpanFactor=LOCAL_SURROUND_SPAN_FACTOR;localResources.surroundWidthMeters=Number((resource.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundHeightMeters=Number((resource.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundWorldMatched=true;
   }
   horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.opacityMap=resource.surroundTexture;horizonSkirtMaterial.opacityMapChannel="a";horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.78;horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;horizonSkirtMaterial.depthWrite=false;horizonSkirtMaterial.update();
-  rebuildLocalStaticPresentation(resource);
+  // Keep the atomic terrain swap bounded. Static settlement/wilderness
+  // presentation can involve entity destruction/rebuild and canonical local
+  // queries; doing that synchronously here caused >100 ms swap spikes after
+  // richer map-scale presentation was added. Retain the previous valid static
+  // layer for this handoff and rebuild it on the existing deferred refresh
+  // path once the new terrain resource is authoritative/active.
   if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);
   trimLocalResourceCache();
   localResources.activeSignature=signature;localResources.visibleLevel=resource.dims.levelId;localResources.activeCellId=resource.spatialCell?.id||null;localResources.activeResourceCount=1;localResources.cachedResourceCount=localResourceCache.size;
   localResources.pendingPreparationCount=localResources.requestedSignature===signature?0:1;
   localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);
   const swapMs=performance.now()-swapStarted;localResources.lastSwapMs=Number(swapMs.toFixed(3));localResources.maxSwapMs=Math.max(localResources.maxSwapMs,localResources.lastSwapMs);localResources.swapCount++;
+  scheduleLocalStaticPresentationRefresh();
   return true;
 }
 // Compile the tangent/surround/static-world shader variants during startup
