@@ -312,8 +312,8 @@ const LOCAL_SURROUND_SPAN_FACTOR=6;
 // ~2.5x of visible-footprint range, so presentation compensation never has to
 // shrink or magnify a tier far enough to read as a scale pop or blurry stretch.
 const LOCAL_DETAIL_LEVELS=Object.freeze([
-  Object.freeze({id:"regional-overview",band:"regional-overview",visibleHeightMeters:400000,sampleSpacingMeters:12000,textureSize:160,reliefClampMeters:7000,reliefGain:11,maxHeightUnits:.95,staticWorld:false}),
-  Object.freeze({id:"regional-detail",band:"regional-detail",visibleHeightMeters:140000,sampleSpacingMeters:4000,textureSize:192,reliefClampMeters:7000,reliefGain:10,maxHeightUnits:.80,staticWorld:false}),
+  Object.freeze({id:"regional-overview",band:"regional-overview",visibleHeightMeters:400000,sampleSpacingMeters:12000,textureSize:160,reliefClampMeters:7000,reliefGain:6,maxHeightUnits:.58,staticWorld:false}),
+  Object.freeze({id:"regional-detail",band:"regional-detail",visibleHeightMeters:140000,sampleSpacingMeters:4000,textureSize:192,reliefClampMeters:7000,reliefGain:5.5,maxHeightUnits:.56,staticWorld:false}),
   Object.freeze({id:"district",band:"district",visibleHeightMeters:50000,sampleSpacingMeters:1400,textureSize:256,reliefClampMeters:6000,reliefGain:9,maxHeightUnits:.65,staticWorld:false}),
   Object.freeze({id:"local-area-wide",band:"local-area",visibleHeightMeters:20000,sampleSpacingMeters:480,textureSize:320,reliefClampMeters:5000,reliefGain:8,maxHeightUnits:.60,staticWorld:false}),
   Object.freeze({id:"local-area",band:"local-area",visibleHeightMeters:10000,sampleSpacingMeters:220,textureSize:384,reliefClampMeters:4200,reliefGain:7,maxHeightUnits:.55,staticWorld:false}),
@@ -5429,13 +5429,13 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   }
   const meeting=reveal.specialLots.find(item=>item.kind==="meeting-hall")||reveal.specialLots[0]||null;
   const ordinary=[...reveal.houses,...reveal.specialLots.filter(item=>!meeting||item.id!==meeting.id)];
-  const targetCount=tier==="coarse"?Math.min(ordinary.length,10):(tier==="refined"||tier==="full"?ordinary.length:0);
+  const targetCount=tier==="route"?Math.min(ordinary.length,6):tier==="coarse"?Math.min(ordinary.length,10):(tier==="refined"||tier==="full"?ordinary.length:0);
   const detailed=tier==="refined"||tier==="full";
   for(let i=0;i<targetCount;i++){
     addCanonicalBuilding(ordinary[i],i,scale,unit,semanticFrame,detailed,false,lift);
     if(detailed)fullBuildings++;else coarseBuildings++;
   }
-  if((tier==="coarse"||tier==="refined"||tier==="full")&&meeting){
+  if((tier==="route"||tier==="coarse"||tier==="refined"||tier==="full")&&meeting){
     addCanonicalBuilding(meeting,targetCount,scale,unit,semanticFrame,detailed,true,lift);
     landmarks=1;if(detailed)fullBuildings++;else coarseBuildings++;
   }
@@ -5443,7 +5443,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const surroundingsDrawCalls=buildCanonicalBuildingSurroundings(reveal,tier,semanticFrame,scale,unit,lift);
   localCampaignWearContext={reveal,tier,frame:semanticFrame,presentationScale:scale,unit,lift};
   const campaignWearDrawCalls=rebuildCanonicalCampaignWearProjection("settlement-rebuild");
-  const treeCount=tier==="coarse"?6:tier==="refined"?10:tier==="full"?12:0;
+  const treeCount=tier==="route"?4:tier==="coarse"?6:tier==="refined"?10:tier==="full"?12:0;
   for(let i=0;i<treeCount;i++){
     const angle=i/Math.max(1,treeCount)*Math.PI*2+localHash(i*17,treeCount,91)*.22;
     const radiusTiles=22+localHash(i*31,treeCount,92)*4;
@@ -5821,11 +5821,22 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   const warpEast=surfaceValueNoise(east,north,6200,salt+101)*980;
   const warpNorth=surfaceValueNoise(east,north,5400,salt+107)*860;
   const we=east+warpEast,wn=north+warpNorth;
+  const wStrategic=detailOctaveWeight(48000,metersPerTexel),wStrategicMid=detailOctaveWeight(16000,metersPerTexel),
+    wStrategicFine=detailOctaveWeight(5200,metersPerTexel);
   const wBroad=detailOctaveWeight(3600,metersPerTexel),wMid=detailOctaveWeight(1500,metersPerTexel),
     wField=detailOctaveWeight(700,metersPerTexel),wFine=detailOctaveWeight(280,metersPerTexel),
     wCopse=detailOctaveWeight(120,metersPerTexel);
-  if(wBroad<=0)return [0,0,0];
+  if(wStrategic<=0&&wBroad<=0)return [0,0,0];
   const alpine=smoothstep01((elevation-2200)/900),lowland=1-alpine;
+  // Strategic map tiers need resolvable structure before farm/copse wavelengths
+  // become visible. The field is anchored only to Campaign-SEED registered
+  // meters and fades out before local terrain detail takes over.
+  const strategicWeight=smoothstep01(clamp((metersPerTexel-180)/900,0,1));
+  const strategic=(
+    surfaceValueNoise(we,wn,48000,salt+3)*.050*wStrategic+
+    surfaceValueNoise(we,wn,16000,salt+5)*.038*wStrategicMid+
+    surfaceValueNoise(we,wn,5200,salt+6)*.024*wStrategicFine
+  )*strategicWeight;
   const broad=surfaceValueNoise(we,wn,3600,salt+7)*.22*wBroad+
     surfaceValueNoise(we,wn,1500,salt+11)*.30*wMid+
     surfaceValueNoise(we,wn,700,salt+13)*.34*wField;
@@ -5844,9 +5855,9 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   // resolvable, so refinement adds information without changing world identity.
   const coverContrast=lerp(1.18,1.62,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
   return [
-    (mottle*.76-forestDelta*.105-copse*.026+dryField*.095+meadow*.010)*coverContrast,
-    (mottle*.94-forestDelta*.010-copse*.008+dryField*.038+meadow*.086)*coverContrast,
-    (mottle*.48-forestDelta*.082-copse*.024+dryField*.006+meadow*.016)*coverContrast
+    (mottle*.76-forestDelta*.105-copse*.026+dryField*.095+meadow*.010)*coverContrast+strategic*(.72+.20*alpine),
+    (mottle*.94-forestDelta*.010-copse*.008+dryField*.038+meadow*.086)*coverContrast+strategic*(1.00-.18*alpine),
+    (mottle*.48-forestDelta*.082-copse*.024+dryField*.006+meadow*.016)*coverContrast+strategic*(.50+.14*alpine)
   ];
 }
 function makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,size){
