@@ -48,12 +48,18 @@ function cellKey(rx,ry){return rx.toString()+":"+ry.toString()}
 function regionId(countryId,rx,ry){
   return "REG|"+countryId+"|"+rx.toString()+"|"+ry.toString();
 }
-function regionName(seed,countryId,rx,ry){
+function regionNaming(seed,countryId,rx,ry){
+  const id=regionId(countryId,rx,ry);
+  if(window.PlaceNaming?.descriptor){
+    return window.PlaceNaming.descriptor(seed,{id,type:"region",countryId,x:rx.toString(),y:ry.toString()});
+  }
   const key=countryId+"|"+cellKey(rx,ry);
   const a=NAME_A[PRNG.foundationUint32(seed,"region-profile:name-a:"+key)%NAME_A.length];
   const b=NAME_B[PRNG.foundationUint32(seed,"region-profile:name-b:"+key)%NAME_B.length];
-  return a+b+" Province";
+  const name=a+b+" Province";
+  return Object.freeze({entityId:id,name,canonicalName:name,shortForm:a+b,namingCultureKey:"legacy",nameGenerationVersion:0,authority:"legacy RegionProfile naming"});
 }
+function regionName(seed,countryId,rx,ry){return regionNaming(seed,countryId,rx,ry).name}
 function sampleCoordinates(rx,ry){
   const size=BigInt(REGION_CELL_SIZE);
   const baseX=rx*size,baseY=ry*size;
@@ -260,6 +266,9 @@ function buildForCell(seedValue,countryIdValue,rxValue,ryValue){
       identity.waterAccess,identity.transportAccessibility,prosperity.modifier,...Object.values(special).filter(v=>typeof v==="number")
     ].join("|")),
     name:regionName(seed,countryId,rx,ry),
+    namingCultureKey:regionNaming(seed,countryId,rx,ry).namingCultureKey||null,
+    nameGenerationVersion:Number(regionNaming(seed,countryId,rx,ry).nameGenerationVersion||0),
+    namingAuthority:String(regionNaming(seed,countryId,rx,ry).authority||""),
     parentCountryId:country.id,
     parentCountryName:country.name,
     countryProfileRevision:countryProfile.revision,
@@ -288,8 +297,12 @@ function descriptorAt(seedValue,xValue,yValue){
   const country=PoliticalGeography.countryAt(seed,xValue,yValue);
   if(!country)return null;
   const cell=cellFor(xValue,yValue),id=regionId(country.id,cell.x,cell.y);
+  const naming=regionNaming(seed,country.id,cell.x,cell.y);
   return Object.freeze({
-    id,name:regionName(seed,country.id,cell.x,cell.y),
+    id,name:naming.name,
+    namingCultureKey:naming.namingCultureKey||null,
+    nameGenerationVersion:Number(naming.nameGenerationVersion||0),
+    namingAuthority:String(naming.authority||""),
     parentCountryId:String(country.id),parentCountryName:String(country.name||""),
     cellX:cell.x.toString(),cellY:cell.y.toString(),
     lightweight:true,seedOnly:true,
