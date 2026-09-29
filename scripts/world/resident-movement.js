@@ -9,6 +9,7 @@ let seedKey="";
 let residentById=new Map();
 let states=new Map();
 let accumulator=0;
+let pendingCooperativeTick=null;
 let proofContext=null;
 let wallClearanceSeed="";
 let wallClearancePenaltyCells=new Set();
@@ -119,6 +120,7 @@ function ensure(seed){
   states=new Map();
   for(const resident of residentById.values())states.set(resident.id,residentState(resident,resident.homeTarget));
   accumulator=0;
+  pendingCooperativeTick=null;
   proofContext=null;
   return states.size===12;
 }
@@ -127,6 +129,7 @@ function reset(seed){
   residentById=new Map();
   states=new Map();
   accumulator=0;
+  pendingCooperativeTick=null;
   proofContext=null;
   wallClearanceSeed="";
   wallClearancePenaltyCells=new Set();
@@ -259,82 +262,102 @@ function advanceState(seed,state,activity,seconds){
   }
   return changed;
 }
+function beginAdvanceTick(when){
+  const activities=new Map(),socialResidents=[];
+  for(const state of states.values()){
+    const activity=activeActivity(seedKey,state,when);
+    activities.set(state.residentId,activity);
+    const resident=residentById.get(state.residentId);
+    socialResidents.push(Object.freeze({
+      id:state.residentId,name:resident?.displayName||resident?.name||state.residentId,profession:resident?.profession||"",
+      position:point(state.position),status:state.status,activity,
+      actionExecution:window.ActionExecutor?.get?.("resident",state.residentId)||null
+    }));
+  }
+  window.SocialEncounters?.advance?.({seed:seedKey,when,seconds:FIXED_STEP_SECONDS,residents:socialResidents});
+  // Contextual protagonist reactions are event-driven: the reaction system
+  // resolves only resident IDs named by queued local events. It never scans
+  // the roster/world to discover candidates.
+  window.ContextualReactions?.advance?.({
+    seed:seedKey,when,seconds:FIXED_STEP_SECONDS,
+    residentLookup:residentId=>{
+      const id=String(residentId||""),state=states.get(id);if(!state)return null;
+      const resident=residentById.get(id),activity=activities.get(id);
+      return Object.freeze({
+        id,position:point(state.position),status:state.status,
+        nextPosition:point(state.route?.path?.[state.routeIndex+1]||null),
+        workplaceId:resident?.workplaceId||null,activity,
+        workCycle:activity?.workCycle||null,
+        actionExecution:window.ActionExecutor?.get?.("resident",id)||null
+      });
+    }
+  });
+  return {when,activities,residents:[...states.values()],cursor:0,changed:false};
+}
+function advanceResidentForTick(tick,state){
+  const activity=tick.activities.get(state.residentId);
+  const contextual=window.ContextualReactions?.stateFor?.(state.residentId)||null;
+  if(contextual?.holdsPosition){
+    // A short contextual hesitation never discards the resident's route,
+    // target or schedule. When the bounded reaction expires the same route
+    // resumes from the same authoritative position.
+    state.presentationOffset=Object.freeze({x:0,y:0});
+    tick.changed=true;
+    return;
+  }
+  const social=window.SocialEncounters?.stateFor?.(state.residentId)||null;
+  if(social?.holdsPosition){
+    window.ActionExecutor?.clear?.("resident",state.residentId);
+    state.presentationOffset=Object.freeze({x:0,y:0});
+    tick.changed=true;
+    return;
+  }
+  const before=window.ActionExecutor?.advanceActor?.({
+    seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
+  },FIXED_STEP_SECONDS)||null;
+  if(before?.holdsPosition){
+    tick.changed=Boolean(before.changed)||tick.changed;
+    return;
+  }
+  tick.changed=advanceState(seedKey,state,activity,FIXED_STEP_SECONDS)||tick.changed;
+  const after=window.ActionExecutor?.advanceActor?.({
+    seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
+  },0)||null;
+  tick.changed=Boolean(after?.changed)||tick.changed;
+}
+function drainAdvanceTick(tick,cooperative){
+  const started=performance.now(),budgetMs=cooperative?12:Infinity;
+  while(tick.cursor<tick.residents.length){
+    advanceResidentForTick(tick,tick.residents[tick.cursor]);
+    tick.cursor++;
+    if(cooperative&&tick.cursor<tick.residents.length&&performance.now()-started>=budgetMs)break;
+  }
+  return tick.cursor>=tick.residents.length;
+}
 function advance(seed,when,realSeconds,options=null){
   const includeSnapshot=options?.snapshot!==false;
   const requestedMaxTicks=Number(options?.maxTicks);
   const maxTicks=Number.isFinite(requestedMaxTicks)
     ?Math.max(1,Math.min(MAX_ADVANCE_STEPS,Math.floor(requestedMaxTicks)))
     :MAX_ADVANCE_STEPS;
+  const cooperative=includeSnapshot===false&&maxTicks===1;
   if(!ensure(seed))return Object.freeze({changed:false,ticks:0,pending:false});
   if(proofContext?.active)return Object.freeze(includeSnapshot?{changed:false,ticks:0,pending:false,proofFrozen:true,snapshot:snapshot()}:{changed:false,ticks:0,pending:false,proofFrozen:true});
   accumulator+=Math.max(0,Math.min(2,Number(realSeconds)||0));
   let ticks=0,changed=false;
-  while(accumulator+1e-9>=FIXED_STEP_SECONDS&&ticks<maxTicks){
-    const activities=new Map();
-    const socialResidents=[];
-    for(const state of states.values()){
-      const activity=activeActivity(seedKey,state,when);
-      activities.set(state.residentId,activity);
-      const resident=residentById.get(state.residentId);
-      socialResidents.push(Object.freeze({
-        id:state.residentId,name:resident?.displayName||resident?.name||state.residentId,profession:resident?.profession||"",
-        position:point(state.position),status:state.status,activity,
-        actionExecution:window.ActionExecutor?.get?.("resident",state.residentId)||null
-      }));
+  while((pendingCooperativeTick||accumulator+1e-9>=FIXED_STEP_SECONDS)&&ticks<maxTicks){
+    const tick=pendingCooperativeTick||beginAdvanceTick(when);
+    const complete=drainAdvanceTick(tick,cooperative);
+    changed=tick.changed||changed;
+    if(!complete){
+      pendingCooperativeTick=tick;
+      break;
     }
-    window.SocialEncounters?.advance?.({seed:seedKey,when,seconds:FIXED_STEP_SECONDS,residents:socialResidents});
-    // Contextual protagonist reactions are event-driven: the reaction system
-    // resolves only resident IDs named by queued local events. It never scans
-    // the roster/world to discover candidates.
-    window.ContextualReactions?.advance?.({
-      seed:seedKey,when,seconds:FIXED_STEP_SECONDS,
-      residentLookup:residentId=>{
-        const id=String(residentId||""),state=states.get(id);if(!state)return null;
-        const resident=residentById.get(id),activity=activities.get(id);
-        return Object.freeze({
-          id,position:point(state.position),status:state.status,
-          nextPosition:point(state.route?.path?.[state.routeIndex+1]||null),
-          workplaceId:resident?.workplaceId||null,activity,
-          workCycle:activity?.workCycle||null,
-          actionExecution:window.ActionExecutor?.get?.("resident",id)||null
-        });
-      }
-    });
-    for(const state of states.values()){
-      const activity=activities.get(state.residentId);
-      const contextual=window.ContextualReactions?.stateFor?.(state.residentId)||null;
-      if(contextual?.holdsPosition){
-        // A short contextual hesitation never discards the resident's route,
-        // target or schedule. When the bounded reaction expires the same route
-        // resumes from the same authoritative position.
-        state.presentationOffset=Object.freeze({x:0,y:0});
-        changed=true;
-        continue;
-      }
-      const social=window.SocialEncounters?.stateFor?.(state.residentId)||null;
-      if(social?.holdsPosition){
-        window.ActionExecutor?.clear?.("resident",state.residentId);
-        state.presentationOffset=Object.freeze({x:0,y:0});
-        changed=true;
-        continue;
-      }
-      const before=window.ActionExecutor?.advanceActor?.({
-        seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
-      },FIXED_STEP_SECONDS)||null;
-      if(before?.holdsPosition){
-        changed=Boolean(before.changed)||changed;
-        continue;
-      }
-      changed=advanceState(seedKey,state,activity,FIXED_STEP_SECONDS)||changed;
-      const after=window.ActionExecutor?.advanceActor?.({
-        seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
-      },0)||null;
-      changed=Boolean(after?.changed)||changed;
-    }
-    accumulator-=FIXED_STEP_SECONDS;
+    pendingCooperativeTick=null;
+    accumulator=Math.max(0,accumulator-FIXED_STEP_SECONDS);
     ticks++;
   }
-  const pending=accumulator+1e-9>=FIXED_STEP_SECONDS;
+  const pending=Boolean(pendingCooperativeTick)||accumulator+1e-9>=FIXED_STEP_SECONDS;
   return Object.freeze(includeSnapshot?{changed,ticks,pending,snapshot:snapshot()}:{changed,ticks,pending});
 }
 function stateSnapshot(state){
