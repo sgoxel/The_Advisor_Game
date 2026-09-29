@@ -120,7 +120,8 @@ function exactHandles(seed,planValue,ctx,t){
 function runtime(seed){
   if(!runtimeBySeed.has(seed))runtimeBySeed.set(seed,{
     records:new Map(),history:[],lastCostMs:0,totalCostMs:0,updates:0,
-    transitionCount:0,lastFocus:null,lastSignals:null,lastTime:null,lastRenderToken:null
+    transitionCount:0,materializations:0,dematerializations:0,deferredPromotions:0,
+    lastFocus:null,lastSignals:null,lastTime:null,lastRenderToken:null
   });
   return runtimeBySeed.get(seed);
 }
@@ -173,7 +174,8 @@ function materializeRecord(seed,planValue,desired,t,previous){
 function apply(seedValue,optionsValue){
   const seed=String(seedValue??"");
   const suppliedPlans=Array.isArray(optionsValue?.candidatePlans)?optionsValue.candidatePlans:null;
-  const plans=(suppliedPlans||candidatePlans(seed)).slice(0,BUDGETS.candidateSettlements);
+  const candidateCap=window.WorldSimulationBudget?.limit?.("tierCandidates",BUDGETS.candidateSettlements,{seed,priority:"current"})||BUDGETS.candidateSettlements;
+  const plans=(suppliedPlans||candidatePlans(seed)).slice(0,Math.min(BUDGETS.candidateSettlements,candidateCap));
   const state=runtime(seed);
   const focus=point(optionsValue?.point)||point(Protagonist?.getPosition?.())||WorldCoordinates.origin();
   const signals=normalizeSignals(optionsValue||{});
@@ -187,15 +189,15 @@ function apply(seedValue,optionsValue){
     let tier=item.want.tier,reason=item.want.reason;
     if(tier==="exact"){
       if(exactLeft>0)exactLeft--;
-      else{tier="local";reason="exact-budget-backpressure";}
+      else{tier="local";reason="exact-budget-backpressure";state.deferredPromotions++;}
     }
     if(tier==="local"){
       if(localLeft>0)localLeft--;
-      else{tier="regional";reason="local-budget-backpressure";}
+      else{tier="regional";reason="local-budget-backpressure";state.deferredPromotions++;}
     }
     if(tier==="regional"){
       if(regionalLeft>0)regionalLeft--;
-      else{tier="global";reason="regional-budget-backpressure";}
+      else{tier="global";reason="regional-budget-backpressure";state.deferredPromotions++;}
     }
     const previous=state.records.get(item.plan.id)||null;
     const record=materializeRecord(seed,item.plan,Object.freeze({...item.want,tier,reason}),t,previous);
@@ -203,6 +205,8 @@ function apply(seedValue,optionsValue){
     next.set(record.id,record);
     if(previous?.tier!==record.tier){
       state.transitionCount++;
+      if(!previous||tierRank(record.tier)>tierRank(previous.tier))state.materializations++;
+      else if(previous&&tierRank(record.tier)<tierRank(previous.tier))state.dematerializations++;
       state.history.push(Object.freeze({
         sequence:state.transitionCount,id:record.id,name:record.name,
         from:previous?.tier||"untracked",to:record.tier,reason:record.reason,
@@ -215,7 +219,13 @@ function apply(seedValue,optionsValue){
   state.totalCostMs+=state.lastCostMs;state.updates++;
   state.lastFocus=focus;state.lastSignals=signals;state.lastTime=t;
   if(state.history.length>24)state.history.splice(0,state.history.length-24);
-  return snapshot(seed);
+  const snap=snapshot(seed);
+  window.WorldSimulationBudget?.recordTierSnapshot?.(seed,{
+    counts:snap.counts,candidateCount:snap.candidateCount,materializations:state.materializations,
+    dematerializations:state.dematerializations,deferredPromotions:state.deferredPromotions,
+    serializedBytes:JSON.stringify(snap.records).length,lastUpdateMs:state.lastCostMs
+  });
+  return snap;
 }
 function counts(records){
   const out={global:0,regional:0,local:0,exact:0};
@@ -242,6 +252,8 @@ function snapshot(seedValue){
       lastCostMs:state.lastCostMs,totalCostMs:Number(state.totalCostMs.toFixed(3)),
       averageCostMs:Number((state.updates?state.totalCostMs/state.updates:0).toFixed(3)),
       maxSynchronousCandidates:BUDGETS.candidateSettlements,
+      materializations:state.materializations,dematerializations:state.dematerializations,
+      deferredPromotions:state.deferredPromotions,
       renderActivationInputs:0
     }),
     bounded:Boolean(
