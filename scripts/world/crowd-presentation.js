@@ -37,6 +37,20 @@ function resolvePlan(seed,focus){
   if(lastResolvedPlan&&lastResolvedPlan.seed===seedKey&&distanceTiles(lastResolvedPlan.plan.center,point)<=LOCAL_QUERY_RADIUS_TILES){
     return lastResolvedPlan.plan;
   }
+  let startingPlan=null;
+  try{
+    const starting=window.StartingVillage?.plan?.(seedKey)||null;
+    if(starting?.center&&distanceTiles(starting.center,point)<=Math.min(16,LOCAL_QUERY_RADIUS_TILES)){
+      const country=window.PoliticalGeography?.countryAt?.(seedKey,String(starting.center.x),String(starting.center.y))||null;
+      startingPlan=SettlementArchetypes.build(seedKey,starting.center,{
+        countryId:country?.id||null,role:"starting-village",classHint:"village",nameHint:String(starting.name||"Starting Village")
+      })||null;
+    }
+  }catch(_){}
+  if(startingPlan){
+    lastResolvedPlan=Object.freeze({seed:seedKey,plan:startingPlan});
+    return startingPlan;
+  }
   const records=[];
   for(const classId of ["village","town","city","hamlet"]){
     try{
