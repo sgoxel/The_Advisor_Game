@@ -107,6 +107,24 @@ function persist(){
     return true;
   }catch(_){return false}
 }
+function serializeState(seedValue){
+  const current=activeState(seedValue);
+  return current?deepFreeze(clone(current)):null;
+}
+function validateSerializedState(campaignValue,serializedValue){
+  const campaign=campaignValue||null;
+  if(!campaign?.seed)return deepFreeze({ok:false,reason:"campaign-required"});
+  const next=normalizeLoaded(serializedValue,campaign);
+  return deepFreeze({ok:Boolean(next),reason:next?"ok":"incompatible-world-state",entryCount:next?Object.keys(next.entries).length:0});
+}
+function restoreSerializedState(campaignValue,serializedValue){
+  const campaign=campaignValue||null,checked=validateSerializedState(campaign,serializedValue);
+  if(!checked.ok)return checked;
+  state=normalizeLoaded(serializedValue,campaign);
+  foundationCache.clear();
+  const stored=persist();
+  return deepFreeze({ok:true,reason:"ok",stored,seed:state.seed,campaignKey:state.campaignKey,entryCount:Object.keys(state.entries).length,sequence:state.sequence});
+}
 function dispatchDeltaChange(seedValue,entryValue,removed=false){
   if(typeof window==="undefined"||typeof window.dispatchEvent!=="function"||typeof CustomEvent!=="function")return;
   const entry=entryValue?clone(entryValue):null;
@@ -539,7 +557,7 @@ function renderDebugPanel(seedValue,rootNode){
 
 const api=Object.freeze({
   FOUNDATION_SCHEMA_VERSION,DELTA_SCHEMA_VERSION,CURRENT_WORLD_SCHEMA_VERSION,WORLD_GENERATOR_VERSION,DELTA_DOMAINS,STORAGE_KEY,
-  bindCampaign,deltaSnapshot,terrainRef,countryRef,regionRef,settlementRef,diplomacyRef,structuralRef,
+  bindCampaign,serializeState,validateSerializedState,restoreSerializedState,deltaSnapshot,terrainRef,countryRef,regionRef,settlementRef,diplomacyRef,structuralRef,
   materialize,resolve,applyDelta,removeDelta,evictFoundation,clearFoundationCache,
   representatives,focusReference,previewMerge,applyEvidenceDelta,proof,renderDebugPanel
 });
