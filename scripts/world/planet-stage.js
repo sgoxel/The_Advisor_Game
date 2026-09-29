@@ -91,6 +91,7 @@ let horizonSkirt=null;
 let horizonSkirtMaterial=null;
 let localStaticRoot=null;
 let localStaticMaterials=null;
+let localSettlementRoadGeometry=null;
 let localWayfindingMesh=null;
 let localWayfindingEntity=null;
 let wayfindingTextCanvas=null;
@@ -188,7 +189,7 @@ let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstim
 const localBuildingInspectionKeys=new Set();
 const localNpcInspectionKeys=new Set();
 const localSignInspectionKeys=new Set();
-let localStatic={active:false,signature:null,level:"inactive",revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,authority:"spherical-seed-focus-presentation"};
+let localStatic={active:false,signature:null,level:"inactive",revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,authority:"spherical-seed-focus-presentation"};
 let resizeObserver=null;
 let yawDegrees=-18;
 let pitchDegrees=-10;
@@ -3287,7 +3288,7 @@ function ensureLocalStaticMaterials(){
     road:make("LocalRoad",.32,.20,.085),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.06;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.39,.34,.18,.12),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.24),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3481,7 +3482,8 @@ function revealPresentationScale(dims,tier,coreDiameterMeters){
   return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
 }
 function settlementPresentationLift(tier,value=zoomState.scalar){
-  if(tier==="footprint")return .46;
+  // The overview envelope is a terrain-adjacent boundary, not a raised locator.
+  if(tier==="footprint")return .08;
   if(tier==="route")return Number(clamp(.06+(.84-clamp(value,.70,.84))/.14*.18,.06,.24).toFixed(4));
   if(tier==="coarse")return .045;
   return .012;
@@ -3506,6 +3508,72 @@ function addCanonicalRoadSegment(name,x1,y1,x2,y2,widthMeters,presentationScale,
   const angle=Math.atan2(dx,dz)*180/Math.PI;
   const ground=canonicalSemanticGroundHeightUnits(centerEast,centerNorth,frame)+lift+.028,pos=canonicalSemanticPosition(centerEast,centerNorth,presentationScale,unit,frame);
   addLocalStatic(name,"box",material,pos.x,ground,pos.z,widthMeters*presentationScale/unit,.058,length/unit,0,angle,0);
+}
+function settlementEnvelopeHull(reveal){
+  const points=[],push=(x,y)=>{if(Number.isFinite(Number(x))&&Number.isFinite(Number(y)))points.push([Number(x),Number(y)]);};
+  const records=[...(window.StartingVillage?.buildPlots?.(activeSeed)||[]),...(reveal?.specialLots||[])];
+  let roadAuthorityQueryCount=0;
+  for(const record of records){
+    const b=record?.bounds;if(!b)continue;
+    push(Number(b.minX)-.5,Number(b.minY)-.5);push(Number(b.maxX)+.5,Number(b.minY)-.5);
+    push(Number(b.maxX)+.5,Number(b.maxY)+.5);push(Number(b.minX)-.5,Number(b.maxY)+.5);
+    // Only road cells adjacent to an occupied lot contribute to the overview
+    // envelope. This avoids the old circular settlement wash and keeps the
+    // boundary tied to actual occupied/connected world structure.
+    for(let y=Number(b.minY)-2;y<=Number(b.maxY)+2;y++)for(let x=Number(b.minX)-2;x<=Number(b.maxX)+2;x++){
+      const local=window.StartingVillage?.local?.(activeSeed,String(x),String(y));
+      const infra=local&&window.StartingVillage?.infrastructureAt?.(activeSeed,local);roadAuthorityQueryCount++;
+      if(!infra)continue;
+      push(x-.5,y-.5);push(x+.5,y-.5);push(x+.5,y+.5);push(x-.5,y+.5);
+    }
+  }
+  const squareHalf=Number(window.StartingVillage?.PUBLIC_HALF_SIZE||3)+.5;
+  push(-squareHalf,-squareHalf);push(squareHalf,-squareHalf);push(squareHalf,squareHalf);push(-squareHalf,squareHalf);
+  const unique=[...new Map(points.map(p=>[p[0].toFixed(3)+","+p[1].toFixed(3),p])).values()]
+    .sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  if(unique.length<3)return Object.freeze({points:Object.freeze(unique),roadAuthorityQueryCount});
+  const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+  const lower=[];for(const p of unique){while(lower.length>=2&&cross(lower[lower.length-2],lower[lower.length-1],p)<=0)lower.pop();lower.push(p);}
+  const upper=[];for(let i=unique.length-1;i>=0;i--){const p=unique[i];while(upper.length>=2&&cross(upper[upper.length-2],upper[upper.length-1],p)<=0)upper.pop();upper.push(p);}
+  const hull=lower.slice(0,-1).concat(upper.slice(0,-1));
+  return Object.freeze({points:Object.freeze(hull.map(p=>Object.freeze({x:p[0],y:p[1]}))),roadAuthorityQueryCount});
+}
+function addCanonicalSettlementEnvelope(reveal,presentationScale,unit,frame,lift,tier){
+  const envelope=settlementEnvelopeHull(reveal),points=envelope.points||[];
+  if(points.length<3)return Object.freeze({active:false,segmentCount:0,roadAuthorityQueryCount:envelope.roadAuthorityQueryCount||0,mode:"none"});
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const widthMeters=tileMeters*(tier==="footprint"?.72:.46);
+  for(let i=0;i<points.length;i++){
+    const a=points[i],b=points[(i+1)%points.length];
+    addCanonicalRoadSegment("CanonicalOccupiedEnvelope-"+i,a.x,a.y,b.x,b.y,widthMeters,presentationScale,unit,frame,lift+.008,localStaticMaterials.footprint);
+  }
+  return Object.freeze({active:true,segmentCount:points.length,roadAuthorityQueryCount:envelope.roadAuthorityQueryCount||0,mode:"authoritative-lot-road-envelope-v1"});
+}
+function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift){
+  localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;
+  const village=window.StartingVillage;
+  if(!village?.local||!village?.infrastructureAt||!pc||!device)return Object.freeze({active:false,cellCount:0,queryCount:0,triangleCount:0,mode:"none"});
+  const extent=Math.max(Number(village.CORE_RADIUS_TILES||26)+3,Number(village.GATEWAY_MAINLAND_EDGE_TILES||29)+4);
+  const tileMeters=Math.max(1,Number(reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
+  const positions=[],normals=[],uvs=[],indices=[];let cellCount=0,queryCount=0;
+  for(let y=-extent;y<=extent;y++)for(let x=-extent;x<=extent;x++){
+    const local=village.local(activeSeed,String(x),String(y)),infra=local&&village.infrastructureAt(activeSeed,local);queryCount++;
+    if(!infra||infra.type==="square")continue;
+    const base=positions.length/3;
+    const corners=[[x-.5,y-.5],[x+.5,y-.5],[x+.5,y+.5],[x-.5,y+.5]];
+    for(const [cx,cy] of corners){
+      const east=cx*tileMeters,north=cy*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
+      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.030;
+      positions.push(pos.x,ground,pos.z);normals.push(0,1,0);
+    }
+    uvs.push(0,0,1,0,1,1,0,1);
+    indices.push(base,base+1,base+2,base,base+2,base+3);cellCount++;
+  }
+  if(!cellCount)return Object.freeze({active:false,cellCount:0,queryCount,triangleCount:0,mode:"none"});
+  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
+  const entity=new pc.Entity("CanonicalAuthoritativeRoadCells");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
+  entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.road,entity)];localStaticRoot.addChild(entity);localSettlementRoadGeometry=mesh;
+  return Object.freeze({active:true,cellCount,queryCount,triangleCount:indices.length/3,mode:"StartingVillage.infrastructureAt-cell-mesh-v1"});
 }
 function clearCanonicalWayfindingSignposts(){
   clearInspectionKeySet(localSignInspectionKeys,false);
@@ -4692,44 +4760,25 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const villageOrigin=worldLatLonForTile(village.center.x,village.center.y),anchorDelta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,villageOrigin.latitudeRadians,villageOrigin.longitudeRadians);
   const semanticFrame={...frame,semanticAnchorEastMeters:Number(anchorDelta.eastMeters||0),semanticAnchorNorthMeters:Number(anchorDelta.northMeters||0)};
   ensureLocalStaticMaterials();localStaticRoot=new pc.Entity("CanonicalSettlementReveal");tangentPatch.addChild(localStaticRoot);
-  const coreRadiusMeters=Number(village.approximateCoreDiameterMeters||104)/2;
   const lift=settlementPresentationLift(tier);
   const centerGround=canonicalSemanticGroundHeightUnits(0,0,semanticFrame)+lift+.012,centerPos=canonicalSemanticPosition(0,0,scale,unit,semanticFrame);
-  let occupiedAreaCount=0;
-  // Semantic scale policy is literal here: 1/1000 reveals the footprint only;
-  // 1/2500 retains that footprint and adds the canonical road network. Do not
-  // leak buildings into those overview tiers just because their data is ready.
-  if(tier==="footprint"){
-    // The footprint-only tier may use the bounded occupied-area cue. Once the
-    // authoritative road network is visible, the road ring itself carries the
-    // settlement envelope; keeping the filled disk made 1/2500 read like a UI
-    // target rather than terrain.
-    addLocalStatic("CanonicalOccupiedArea","cylinder",localStaticMaterials.footprint,centerPos.x,centerGround,centerPos.z,coreRadiusMeters*2*scale/unit,.022,coreRadiusMeters*2*scale/unit);
-    occupiedAreaCount=1;
-  }
-  let roadCount=0,coarseBuildings=0,fullBuildings=0,landmarks=0,vegetation=0,triangles=occupiedAreaCount?80:0;
-  const roadWidth=Math.max(5,Number(window.WorldStandards?.TILE_METERS||2)*4);
-  // At overview tiers the canonical road centerlines are authoritative, but
-  // physical width must not turn the network into a solid cog at map scale.
-  const presentationRoadWidth=roadWidth*(tier==="route"?.30:tier==="coarse"?.60:tier==="refined"?.62:1);
+  // Overview settlement shape is now derived from occupied StartingVillage lots
+  // plus their adjacent authoritative road cells. It is a thin boundary, never
+  // a filled circular wash or camera-relative locator.
+  const envelope=(tier==="footprint"||tier==="route")?addCanonicalSettlementEnvelope(reveal,scale,unit,semanticFrame,lift,tier):Object.freeze({active:false,segmentCount:0,roadAuthorityQueryCount:0,mode:"none"});
+  const occupiedAreaCount=envelope.active?1:0;
+  let roadCount=0,coarseBuildings=0,fullBuildings=0,landmarks=0,vegetation=0,triangles=envelope.segmentCount*12;
+  let roadGeometry=Object.freeze({active:false,cellCount:0,queryCount:0,triangleCount:0,mode:"none"});
   const squareHalf=Number(window.StartingVillage.PUBLIC_HALF_SIZE||3);
-  const ring=Number(window.StartingVillage.RING_RADIUS_TILES||14);
-  const roadDetail=tier==="footprint"?0:tier==="route"?12:16;
   if(tier!=="none"&&tier!=="footprint"){
-    addCanonicalRoadSegment("CanonicalRoad-X",-ring,0,ring,0,presentationRoadWidth,scale,unit,semanticFrame,lift);roadCount++;
-    addCanonicalRoadSegment("CanonicalRoad-Y",0,-ring,0,ring,presentationRoadWidth,scale,unit,semanticFrame,lift);roadCount++;
-    const sq=(squareHalf*2+1)*reveal.tileMeters*(tier==="route"?.58:1);
+    // Materialize literal StartingVillage road/path cells into one bounded mesh.
+    // This retains the true ring width, secondary connectors and SEED-derived
+    // gateway curvature instead of approximating them as a perfect cross/ring.
+    roadGeometry=buildCanonicalRoadCellMesh(reveal,scale,unit,semanticFrame,lift);
+    roadCount=roadGeometry.cellCount;
+    const sq=(squareHalf*2+1)*reveal.tileMeters;
     addLocalStatic("CanonicalPublicSquare","box",localStaticMaterials.square,centerPos.x,centerGround+.012,centerPos.z,sq*scale/unit,.032,sq*scale/unit);roadCount++;
-  }
-  if(roadDetail){
-    let previous=null;
-    for(let i=0;i<=roadDetail;i++){
-      const a=i/roadDetail*Math.PI*2,x=Math.cos(a)*ring,y=Math.sin(a)*ring;
-      if(previous){addCanonicalRoadSegment("CanonicalRing-"+i,previous.x,previous.y,x,y,presentationRoadWidth,scale,unit,semanticFrame,lift);roadCount++;}
-      previous={x,y};
-    }
-    const dir=window.StartingVillage.direction(activeSeed),start=ring,end=Number(window.StartingVillage.GATEWAY_MAINLAND_EDGE_TILES||29);
-    addCanonicalRoadSegment("CanonicalGateway",dir.dx*start,dir.dy*start,dir.dx*end,dir.dy*end,presentationRoadWidth,scale,unit,semanticFrame,lift);roadCount++;
+    triangles+=roadGeometry.triangleCount+12;
   }
   const meeting=reveal.specialLots.find(item=>item.kind==="meeting-hall")||reveal.specialLots[0]||null;
   const ordinary=[...reveal.houses,...reveal.specialLots.filter(item=>!meeting||item.id!==meeting.id)];
@@ -4762,7 +4811,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   localBuildingActivityContext={reveal,tier,frame:semanticFrame,presentationScale:scale,unit,lift};
   rebuildCanonicalBuildingActivityPresentation("settlement-rebuild");
   const entityCount=localStaticRoot.children.length;
-  triangles+=roadCount*12+(coarseBuildings*12)+(fullBuildings*36);
+  triangles+=(coarseBuildings*12)+(fullBuildings*36);
   localStatic={
     ...localStatic,active:entityCount>0,signature:resource.signature,level:dims.levelId,revealTier:tier,
     settlementId:plan.id,settlementName:plan.name,settlementClass:plan.classId,settlementRole:plan.role,
@@ -4775,6 +4824,8 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     roadCount,buildingCount:coarseBuildings+fullBuildings,vegetationCount:vegetation,wildernessCount:wild.accepted,ambientFaunaCount:wild.fauna,waterCount:0,
     entityCount,triangleEstimate:triangles+wild.triangles+Number(buildingSurroundings.triangleCount||0)+Number(campaignWearProjection.triangleCount||0)+Number(wayfindingSignposts.triangleCount||0),
     drawCallEstimate:entityCount+wild.fauna+Number(campaignWearDrawCalls||0),
+    footprintMode:envelope.mode,routeGeometryMode:roadGeometry.mode,
+    roadAuthorityQueryCount:Number(envelope.roadAuthorityQueryCount||0)+Number(roadGeometry.queryCount||0),
     wayfindingSignCount:Number(wayfindingSignposts.signCount||0),wayfindingPanelCount:Number(wayfindingSignposts.panelCount||0),wayfindingDrawCallEstimate:Number(wayfindingDrawCalls||0),
     persistentRevisionSignature:campaignWearProjection.revisionSignature,persistentPresentationSignature:String(resource.signature||"")+"|"+String(campaignWearProjection.revisionSignature||"CWP|0"),
     campaignWearDrawCallEstimate:Number(campaignWearProjection.drawCallEstimate||0),campaignWearTriangleCount:Number(campaignWearProjection.triangleCount||0),
@@ -4793,9 +4844,9 @@ function rebuildLocalStaticPresentation(resource){
   clearCanonicalBuildingSurroundings();
   clearCanonicalCampaignWearProjection(false);localCampaignWearContext=null;
   clearLocalFauna();
-  localStaticRoot?.destroy?.();localStaticRoot=null;clearCanonicalRoofRegistry();
+  localStaticRoot?.destroy?.();localStaticRoot=null;localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;clearCanonicalRoofRegistry();
   const tier=settlementRevealTierForScalar();
-  localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,presentationOnly:true,simulationAuthority:false};
+  localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,presentationOnly:true,simulationAuthority:false};
   const reveal=canonicalStartingVillageReveal(resource);
   if(reveal&&tier!=="none"){
     rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame);
@@ -5034,20 +5085,30 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // one-texel derivative can collapse broad canonical slopes into a flat wash;
         // widening only the presentation gradient reveals coherent ridges/valleys
         // while all heights still come from the same SEED-registered authority.
-        const step=Math.max(photometricMetersPerTexel,Math.min(640,metersPerTexel*3.5)),dux=step/spanEast,dvz=step/spanNorth;
-        const sx=mixSample(Math.min(1,ux+dux),vz),sy=mixSample(ux,Math.max(0,vz-dvz));
-        const h0=elevation+terrainDetailHeight(worldEast,worldNorth,photometricMetersPerTexel,detailSalt);
-        const hx=Number(sx.elevationMeters||0)+terrainDetailHeight(sx.registeredEastMeters,sx.registeredNorthMeters,photometricMetersPerTexel,detailSalt);
-        const hy=Number(sy.elevationMeters||0)+terrainDetailHeight(sy.registeredEastMeters,sy.registeredNorthMeters,photometricMetersPerTexel,detailSalt);
-        const exaggeration=lerp(2.6,5.0,smoothstep01(clamp((metersPerTexel-2)/70,0,1))),gx=(hx-h0)/step*exaggeration,gy=(hy-h0)/step*exaggeration,nl=Math.hypot(gx,gy,1);
+        const step=Math.max(photometricMetersPerTexel*2.2,Math.min(900,metersPerTexel*4.25)),dux=step/spanEast,dvz=step/spanNorth;
+        const sxP=mixSample(Math.min(1,ux+dux),vz),sxN=mixSample(Math.max(0,ux-dux),vz);
+        const syP=mixSample(ux,Math.max(0,vz-dvz)),syN=mixSample(ux,Math.min(1,vz+dvz));
+        const h0=elevation,hxP=Number(sxP.elevationMeters||0),hxN=Number(sxN.elevationMeters||0),hyP=Number(syP.elevationMeters||0),hyN=Number(syN.elevationMeters||0);
+        // Symmetric derivatives avoid directional smearing. The curvature term
+        // exposes broad ridges/valleys even when the local palette is nearly
+        // uniform, without inventing contour bands or patch-relative noise.
+        const canonicalGx=(hxP-hxN)/(2*step),canonicalGy=(hyP-hyN)/(2*step);
+        const curvatureMeters=(hxP+hxN+hyP+hyN-4*h0);
+        const curvatureSignal=clamp(-curvatureMeters/Math.max(1,step*.16),-1,1);
+        const topoRefine=contextRing?lerp(.72,1,contextRefineWeight):lerp(.82,1,focusRefineWeight);
+        const exaggeration=lerp(3.1,6.2,smoothstep01(clamp((metersPerTexel-2)/110,0,1)))*topoRefine;
+        const gx=canonicalGx*exaggeration,gy=canonicalGy*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
-        const focusHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.30,.30,.68);
-        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.87:.79,contextRing?1.12:1.18);
+        const focusHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.34,.34,.72);
+        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.86:.77,contextRing?1.13:1.20);
+        const topographicTone=curvatureSignal*(contextRing?lerp(.020,.034,contextRefineWeight):lerp(.030,.068,focusRefineWeight));
+        cover=[topographicTone,topographicTone*.96,topographicTone*.82];
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
         const coverGain=contextRing?contextRefineWeight*.20:lerp(.24,.84,focusRefineWeight);
         const coverContrast=contextRing?lerp(1.00,1.12,contextRefineWeight):lerp(1.05,1.34,focusRefineWeight);
-        cover=sharedCover.map((v,i)=>(v+(nativeCover[i]-sharedCover[i])*coverGain)*coverContrast);
+        const landCover=sharedCover.map((v,i)=>(v+(nativeCover[i]-sharedCover[i])*coverGain)*coverContrast);
+        cover=cover.map((v,i)=>v+landCover[i]);
       }
       const identityTint=sample?.land?[relief*.075,relief*.065,relief*.035]:[-.012,-.004,.028];
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
@@ -5191,7 +5252,9 @@ function finalizeLocalResource(job,result){
   const regenerationSignature=localResourceRegenerationSignature(job);
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
-      coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,biomeCoordinateProof:job.biomeCoordinateProof,
+      coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
+      topographicSignalRevision:"canonical-elevation-slope-curvature-v1",topographicSignalAuthority:"PlanetGeography elevation sampled through SeedCoordinateFabric registered meters",
+      biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
   const evicted=localRecentEvictions.get(job.signature)||null;
