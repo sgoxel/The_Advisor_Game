@@ -54,6 +54,8 @@ const hierarchyAcceptedPrewarmCache=new Map();
 const hierarchyPlanetCache=new Map();
 const hierarchyCapitalCache=new Map();
 const hierarchyCountryCatalogCache=new Map();
+const hierarchyNamingScopeCache=new Map();
+const HIERARCHY_NAMING_SCOPE_CACHE_LIMIT=256;
 
 function hierarchyFloorDiv(value,divisor){
   const v=BigInt(String(value)),d=BigInt(String(divisor));
@@ -122,6 +124,58 @@ function hierarchyCoordinateDiagnostics(seed,xValue,yValue){
     authority:"SeedCoordinateFabric/PlanetGeography registration"
   });
 }
+function hierarchyNamingScope(seedValue,ownerValue,regionValue){
+  const seed=String(seedValue==null?"":seedValue),owner=ownerValue||null,region=regionValue||null;
+  if(!owner?.id||!region?.id||!window.PlaceNaming?.scoped)return null;
+  const cacheKey=seed+"|"+String(owner.id)+"|"+String(region.id)+"|v"+String(window.PlaceNaming.VERSION||0);
+  if(hierarchyNamingScopeCache.has(cacheKey))return hierarchyNamingScopeCache.get(cacheKey);
+  const regionSize=BigInt(Math.max(1,Number(window.RegionProfile?.REGION_CELL_SIZE||8192)));
+  const rx=BigInt(String(region.cellX)),ry=BigInt(String(region.cellY));
+  const minX=rx*regionSize,minY=ry*regionSize,maxX=minX+regionSize-1n,maxY=minY+regionSize-1n;
+  const inputs=[];
+  for(const classId of HIERARCHY_CLASS_ORDER){
+    const spec=HIERARCHY_CLASS_SPECS[classId],size=BigInt(spec.cellTiles);
+    const minCx=hierarchyFloorDiv(minX,size),maxCx=hierarchyFloorDiv(maxX,size);
+    const minCy=hierarchyFloorDiv(minY,size),maxCy=hierarchyFloorDiv(maxY,size);
+    for(let cy=minCy;cy<=maxCy;cy++)for(let cx=minCx;cx<=maxCx;cx++){
+      inputs.push({
+        id:"HSET|"+classId.toUpperCase()+"|"+hashText(seed+"|"+classId+"|"+cx+"|"+cy),
+        type:classId,countryId:String(owner.id),regionId:String(region.id),
+        x:cx.toString(),y:cy.toString()
+      });
+    }
+  }
+  try{
+    const country=PoliticalGeography.countryById(seed,String(owner.id))||null;
+    if(country?.capital){
+      const capitalRegion=RegionProfile.descriptorAt?.(seed,country.capital.x,country.capital.y)||null;
+      if(capitalRegion?.id===region.id){
+        inputs.push({
+          id:String(country.capital.id),type:"capital",countryId:String(owner.id),regionId:String(region.id),
+          x:String(country.capital.x),y:String(country.capital.y)
+        });
+      }
+    }
+  }catch(_){}
+  const descriptors=window.PlaceNaming.scoped(seed,inputs),byId=new Map(descriptors.map(item=>[String(item.entityId),item]));
+  const result=Object.freeze({byId,count:descriptors.length,regionId:String(region.id),countryId:String(owner.id)});
+  hierarchyNamingScopeCache.set(cacheKey,result);
+  while(hierarchyNamingScopeCache.size>HIERARCHY_NAMING_SCOPE_CACHE_LIMIT)hierarchyNamingScopeCache.delete(hierarchyNamingScopeCache.keys().next().value);
+  return result;
+}
+function hierarchyScopedNaming(seed,id,classId,owner,region,x,y){
+  const scope=hierarchyNamingScope(seed,owner,region);
+  const found=scope?.byId?.get(String(id))||null;
+  if(found)return found;
+  if(window.PlaceNaming?.descriptor){
+    return window.PlaceNaming.descriptor(seed,{
+      id:String(id),type:classId,countryId:String(owner?.id||""),regionId:String(region?.id||""),
+      x:String(x??""),y:String(y??"")
+    });
+  }
+  return null;
+}
+
 function hierarchyRoadNetworkRole(record){
   const importance=String(record?.importanceClass||record?.classId||"");
   if(importance==="national-capital")return "national-hub";
@@ -264,13 +318,13 @@ function hierarchyRawCandidate(seedValue,classId,cxValue,cyValue){
     clamp01(region?.identity?.waterAccess??0.45)*0.10
   );
   const legacyName=hierarchyName(seed,classId,cx,cy,region,name);
-  const naming=window.PlaceNaming?.descriptor
-    ?window.PlaceNaming.descriptor(seed,{id,type:classId,countryId:String(owner.id),regionId:String(region.id),x:String(x),y:String(y)})
-    :Object.freeze({name:legacyName,namingCultureKey:"legacy",nameGenerationVersion:0,authority:"legacy SettlementArchetypes naming"});
+  const naming=hierarchyScopedNaming(seed,id,classId,owner,region,x,y)
+    ||Object.freeze({name:legacyName,namingCultureKey:"legacy",nameGenerationVersion:0,attempt:0,authority:"legacy SettlementArchetypes naming"});
   const record=Object.freeze({
     id,name:naming.name,classId,importanceClass,
     namingCultureKey:naming.namingCultureKey||null,
     nameGenerationVersion:Number(naming.nameGenerationVersion||0),
+    namingAttempt:Number(naming.attempt||0),
     namingAuthority:String(naming.authority||""),
     role:forcedStartingVillage?"starting-village":importanceClass==="major-city"?"major-city":"local",
     center:Object.freeze({x:String(x),y:String(y),terrain:String(terrain||"")}),
@@ -314,13 +368,13 @@ function hierarchyCapitalForRecord(seed,record){
     const country=PoliticalGeography.countryById(seed,countryId)||null;
     if(country?.capital){
       const capitalRegion=RegionProfile.descriptorAt?.(seed,country.capital.x,country.capital.y)||RegionProfile.at(seed,country.capital.x,country.capital.y)||null;
-      const capitalNaming=window.PlaceNaming?.descriptor
-        ?window.PlaceNaming.descriptor(seed,{id:String(country.capital.id),type:"capital",countryId:String(country.id),regionId:String(capitalRegion?.id||""),x:String(country.capital.x),y:String(country.capital.y)})
-        :Object.freeze({name:String(country.capital.name),namingCultureKey:"legacy",nameGenerationVersion:0,authority:"legacy PoliticalGeography capital naming"});
+      const capitalNaming=hierarchyScopedNaming(seed,String(country.capital.id),"national-capital",country,capitalRegion,country.capital.x,country.capital.y)
+        ||Object.freeze({name:String(country.capital.name),namingCultureKey:"legacy",nameGenerationVersion:0,attempt:0,authority:"legacy PoliticalGeography capital naming"});
       result=Object.freeze({
         id:String(country.capital.id),name:String(capitalNaming.name),classId:"national-capital",importanceClass:"national-capital",
         namingCultureKey:capitalNaming.namingCultureKey||null,
         nameGenerationVersion:Number(capitalNaming.nameGenerationVersion||0),
+        namingAttempt:Number(capitalNaming.attempt||0),
         namingAuthority:String(capitalNaming.authority||""),
         role:"national-capital",center:Object.freeze({x:String(country.capital.x),y:String(country.capital.y),terrain:GeographyFoundation.getTerrainType(seed,country.capital.x,country.capital.y)}),
         countryId:String(country.id),regionId:String(capitalRegion?.id||""),
@@ -559,6 +613,7 @@ function canonicalHierarchySnapshot(seedValue,xValue,yValue,radiusMetersValue){
   });
 }
 function clearCanonicalHierarchyCache(){
+  hierarchyNamingScopeCache.clear();
   hierarchyRawCache.clear();hierarchyAcceptedCache.clear();hierarchyAcceptedPrewarmCache.clear();hierarchyCapitalCache.clear();hierarchyCountryCatalogCache.clear();catalogCache.clear();cache.clear();proofCache.clear();
   return Object.freeze({raw:0,accepted:0,capital:0,countryCatalog:0,revision:"settlement-hierarchy-v"+HIERARCHY_VERSION});
 }
