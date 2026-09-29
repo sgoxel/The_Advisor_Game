@@ -86,6 +86,7 @@ def state(kind):
         event,events,cardVisible:Boolean(card&&!card.hidden),cardType:card?.dataset?.eventType||"",
         cardText:String(card?.innerText||""),focus:s.canonicalFocus?.worldTile||null,
         localStatic:ls,resourceBudget:rb,npcPresentation:np,signatureReady:Boolean(signatureReady),
+        activeLocalEventCueCount:Number(np.activeLocalEventCueCount||0),activeLocalEventResidentIds:Array.isArray(np.activeLocalEventResidentIds)?np.activeLocalEventResidentIds:[],
         participants,visibleParticipants
       };
     """,kind)
@@ -103,7 +104,8 @@ try:
             wait.until(lambda _d,k=kind: (
                 state(k)["cardVisible"] and state(k)["cardType"]==k and state(k)["scaleIndex"]==SCALE_INDEX and
                 state(k)["signatureReady"] and bool(state(k)["localStatic"].get("active")) and
-                int(state(k)["localStatic"].get("buildingCount",0))>0 and state(k)["visibleParticipants"]>=2
+                int(state(k)["localStatic"].get("buildingCount",0))>0 and state(k)["visibleParticipants"]>=2 and
+                state(k)["activeLocalEventCueCount"]>=2
             ))
         except TimeoutException:
             raise RuntimeError("event presentation timeout "+kind+": "+json.dumps(state(kind)))
@@ -114,8 +116,8 @@ try:
             raise RuntimeError("event active-count bound failed: "+json.dumps(st))
         if int(st["events"].get("participantCount",0))>4:
             raise RuntimeError("event participant bound failed: "+json.dumps(st))
-        if st["visibleParticipants"]<2 or int(st["localStatic"].get("buildingCount",0))<=0:
-            raise RuntimeError("event participants/local context not visibly materialized: "+json.dumps(st))
+        if st["visibleParticipants"]<2 or int(st["localStatic"].get("buildingCount",0))<=0 or st["activeLocalEventCueCount"]<2:
+            raise RuntimeError("event participants/local cues/context not visibly materialized: "+json.dumps(st))
         if not st["events"].get("eventDriven") or st["events"].get("perFrameScan") or st["events"].get("fullSettlementPerFrameScan") or st["events"].get("fullWorldScan"):
             raise RuntimeError("event scheduling architecture regression: "+json.dumps(st))
         if kind.replace("-"," ").split()[0].upper() not in st["cardText"].upper():
