@@ -2475,15 +2475,18 @@ function surfaceValueNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt){
 function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel,phase){
   const salt=((phase*100000)|0)^0x5f356495;
   let detail=0;
-  if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.035;
-  if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.034;
-  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.038;
-  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.026;
-  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.022;
-  if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.016;
-  if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+89)*.018;
-  if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.022;
-  if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.014;
+  // Keep continental-scale variation as a quiet identity cue, then spend most
+  // visible contrast on frequencies the current physical texel can actually
+  // resolve. This prevents one macro slope from dominating the 1/500 frame.
+  if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.012;
+  if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.018;
+  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.052;
+  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.042;
+  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.030;
+  if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.022;
+  if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,260,salt+89)*.020;
+  if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.025;
+  if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.016;
   return detail;
 }
 function patchDimensionsForLevel(index){
@@ -3299,10 +3302,10 @@ function ensureLocalStaticMaterials(){
   const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.39,.30,.14,.82),square:make("LocalSquare",.48,.35,.18),
+    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.39,.30,.14,.72),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.08),lotOverview:make("LocalOccupiedLotOverview",.48,.39,.19,.44),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.05),lotOverview:make("LocalOccupiedLotOverview",.46,.38,.20,.22),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3574,34 +3577,29 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   if(!pc||!device)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
   const records=[...(window.StartingVillage?.buildPlots?.(activeSeed)||[]),...(reveal?.specialLots||[])];
   const tileMeters=Math.max(1,Number(reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
-  const positions=[],normals=[],uvs=[],indices=[];let count=0,segmentCount=0;
+  const positions=[],normals=[],uvs=[],indices=[];let count=0;
   const addQuad=(x0,y0,x1,y1)=>{
-    if(!(x1>x0&&y1>y0))return;
+    if(!(x1>x0&&y1>y0))return false;
     const base=positions.length/3;
     for(const [cx,cy] of [[x0,y0],[x1,y0],[x1,y1],[x0,y1]]){
       const east=cx*tileMeters,north=cy*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
-      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.022;
+      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.020;
       positions.push(pos.x,ground,pos.z);normals.push(0,1,0);
     }
-    uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
+    uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);return true;
   };
-  const edge=.30;
   for(const record of records){
     const b=record?.bounds;if(!b)continue;
-    const minX=Number(b.minX)-.5,maxX=Number(b.maxX)+.5,minY=Number(b.minY)-.5,maxY=Number(b.maxY)+.5;
+    const minX=Number(b.minX)-.28,maxX=Number(b.maxX)+.28,minY=Number(b.minY)-.28,maxY=Number(b.maxY)+.28;
     if(![minX,maxX,minY,maxY].every(Number.isFinite)||maxX<=minX||maxY<=minY)continue;
-    addQuad(minX,minY,maxX,Math.min(maxY,minY+edge));
-    addQuad(minX,Math.max(minY,maxY-edge),maxX,maxY);
-    addQuad(minX,minY+edge,Math.min(maxX,minX+edge),maxY-edge);
-    addQuad(Math.max(minX,maxX-edge),minY+edge,maxX,maxY-edge);
-    count++;
+    if(addQuad(minX,minY,maxX,maxY))count++;
   }
-  if(!segmentCount)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
+  if(!count)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
-  const entity=new pc.Entity("CanonicalOccupiedLotOutlines");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
+  const entity=new pc.Entity("CanonicalOccupiedLotFills");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.lotOverview,entity)];
   localStaticRoot.addChild(entity);localSettlementLotGeometry=mesh;
-  return Object.freeze({count,segmentCount,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-outlines-v2"});
+  return Object.freeze({count,segmentCount:count,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-fills-v3"});
 }
 function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tier){
   localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;
@@ -3628,7 +3626,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
     uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
   };
   if(tier==="route"){
-    const half=.34;
+    const half=.30;
     for(const [x,y] of roadCells){
       addQuad(x-half,y-half,x+half,y+half);
       if(roadSet.has((x+1)+","+y))addQuad(x+half,y-half,x+1-half,y+half);
@@ -5232,23 +5230,23 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
     wCopse=detailOctaveWeight(120,metersPerTexel);
   if(wBroad<=0)return [0,0,0];
   const alpine=smoothstep01((elevation-2200)/900),lowland=1-alpine;
-  const broad=surfaceValueNoise(east,north,3600,salt+7)*.48*wBroad+
-    surfaceValueNoise(east,north,1500,salt+11)*.32*wMid+
-    surfaceValueNoise(east,north,700,salt+13)*.20*wField;
-  const forestCover=clamp(.46+broad*.82,0,1)*lowland;
-  const forestDelta=(forestCover-.46*lowland)*wBroad;
-  const parcel=surfaceValueNoise(east,north,700,salt+19)*wField+
-    surfaceValueNoise(east,north,340,salt+23)*.45*wFine;
+  const broad=surfaceValueNoise(east,north,3600,salt+7)*.24*wBroad+
+    surfaceValueNoise(east,north,1500,salt+11)*.34*wMid+
+    surfaceValueNoise(east,north,700,salt+13)*.42*wField;
+  const forestCover=clamp(.44+broad*.68,0,1)*lowland;
+  const forestDelta=(forestCover-.44*lowland)*wBroad;
+  const parcel=surfaceValueNoise(east,north,700,salt+19)*.78*wField+
+    surfaceValueNoise(east,north,340,salt+23)*.60*wFine;
   const dryField=Math.max(0,parcel)*lowland,meadow=Math.max(0,-parcel)*lowland;
   const copse=surfaceValueNoise(east,north,120,salt+29)*wCopse*lowland;
-  const mottle=surfaceValueNoise(east,north,700,salt+31)*.035*wField+
-    surfaceValueNoise(east,north,280,salt+37)*.026*wFine+
-    surfaceValueNoise(east,north,120,salt+41)*.014*wCopse;
+  const mottle=surfaceValueNoise(east,north,700,salt+31)*.030*wField+
+    surfaceValueNoise(east,north,280,salt+37)*.032*wFine+
+    surfaceValueNoise(east,north,120,salt+41)*.018*wCopse;
   // Map-scale readability comes from one continuous registered-meter cover
   // field, not from parcel meshes or camera-relative decoration. Stronger chroma
   // separation reveals woodland/meadow/dry openings only when physically
   // resolvable, so refinement adds information without changing world identity.
-  const coverContrast=lerp(1.12,1.48,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
+  const coverContrast=lerp(1.18,1.62,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
   return [
     (mottle*.76-forestDelta*.105-copse*.026+dryField*.095+meadow*.010)*coverContrast,
     (mottle*.94-forestDelta*.010-copse*.008+dryField*.038+meadow*.086)*coverContrast,
@@ -5399,8 +5397,10 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const exaggeration=lerp(3.4,6.8,smoothstep01(clamp((metersPerTexel-2)/110,0,1)))*topoRefine;
         const gx=canonicalGx*exaggeration,gy=canonicalGy*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
-        const focusHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.46,.40,.82);
-        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.83:.72,contextRing?1.16:1.24);
+        const rawHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.46,.40,.82);
+        const hillshadeCap=metersPerTexel<=6?.78:metersPerTexel<=30?.60:metersPerTexel<=120?.48:.42;
+        const focusHillshadeStrength=Math.min(rawHillshadeStrength,hillshadeCap);
+        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.86:.78,contextRing?1.14:1.18);
         const curvatureTone=curvatureSignal*(contextRing?lerp(.034,.052,contextRefineWeight):lerp(.052,.098,focusRefineWeight));
         const slopeTone=-slopeSignal*(contextRing?lerp(.014,.028,contextRefineWeight):lerp(.022,.044,focusRefineWeight));
         const drainageTone=moistureCurve*(contextRing?lerp(.010,.018,contextRefineWeight):lerp(.016,.032,focusRefineWeight))-moistureGradient*(contextRing?.008:.012);
