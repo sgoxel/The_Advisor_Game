@@ -7,6 +7,8 @@ on:
       - .github/workflows/wp-s007-010-simulation-budget.yml
       - scripts/world/simulation-budget.js
       - scripts/core/event-scheduler.js
+      - scripts/world/global-country-simulation.js
+      - scripts/world/regional-settlement-simulation.js
       - scripts/world/lazy-catchup.js
       - scripts/world/simulation-tiers.js
       - scripts/world/planet-stage.js
