@@ -19,6 +19,7 @@ let boundCampaignId=null;
 let backendPromise=null;
 let backendOverride=null;
 let flushTimer=null;
+let flushPromise=null;
 const memory=new Map();
 const writeQueue=new Map();
 const runtime={
@@ -190,7 +191,7 @@ function scheduleFlush(reason){
   else flushTimer=setTimeout(run,120);
 }
 function flushSoon(reason){scheduleFlush(reason||"requested");return Object.freeze({queued:writeQueue.size,reason:String(reason||"requested")})}
-async function flush(optionsValue){
+async function performFlush(optionsValue){
   const options=optionsValue||{},maxRecords=Math.max(1,Math.min(MAX_WRITE_BATCH,Number(options.maxRecords)||MAX_WRITE_BATCH));
   if(!writeQueue.size)return Object.freeze({ok:true,written:0,remaining:0,commitSequence:runtime.lastCommitSequence});
   const batch=[...writeQueue.values()].slice(0,maxRecords),started=now();
@@ -217,6 +218,11 @@ async function flush(optionsValue){
     if(String(error?.name||"").includes("Quota")||String(error).includes("Quota"))runtime.backend=runtime.durable?"indexeddb-quota-error":runtime.backend;
     return Object.freeze({ok:false,written:0,remaining:writeQueue.size,reason:String(error?.message||error)});
   }
+}
+function flush(optionsValue){
+  if(flushPromise)return flushPromise;
+  flushPromise=performFlush(optionsValue).finally(()=>{flushPromise=null});
+  return flushPromise;
 }
 async function primeRecent(seedValue,optionsValue){
   const options=optionsValue||{},seed=String(seedValue==null?"":seedValue),campaign=options.campaign||ensureCampaign(seed);
