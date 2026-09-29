@@ -168,11 +168,7 @@ const base=(family,recordId,dependencySignature="v1",familyVersion=1)=>({
     "scripts/world/campaign-persistence.js","scripts/world/world-destinations.js","scripts/world/planet-stage.js"
   ].map(path=>html.indexOf(path));
   assert(order.every((value,index)=>value>=0&&(index===0||value>order[index-1])),"production generated-store load order is invalid");
-  const countrySource=fs.readFileSync("scripts/world/country-profile.js","utf8");
-  const regionSource=fs.readFileSync("scripts/world/region-profile.js","utf8");
   assert(namingSource.includes('family:"place-name"'),"PlaceNaming durable integration missing");
-  assert(countrySource.includes('family:"country-profile"'),"CountryProfile durable integration missing");
-  assert(regionSource.includes('family:"region-profile"'),"RegionProfile durable integration missing");
   assert(settlementSource.includes('family:"settlement-plan"'),"SettlementArchetypes durable integration missing");
   assert(roadSource.includes('family:"road-graph"')&&roadSource.includes('focusKey==="auto"'),"road graph durable partition is missing or camera-keyed");
   assert(destinationSource.includes('family:"poi-cell"'),"WorldDestinations durable POI integration missing");
@@ -192,7 +188,7 @@ const base=(family,recordId,dependencySignature="v1",familyVersion=1)=>({
     crashSafety:{failedCommit:true,recoveredRevision:recovered.value.revision},
     writeBehind:{batchLimit:GeneratedWorldStore.MAX_WRITE_BATCH,firstBatchWritten:bounded.written,remainingAfterFirstBatch:bounded.remaining},
     recovery:{derivedCacheRemoved:cleared.removed,authoritativeCampaignUntouched:true,quotaFallbackRegenerated:quotaRecovered.generated},
-    production:{indexedDbPrimary:true,partitionedLazy:true,placeNames:true,countryProfiles:true,regionProfiles:true,settlementPlans:true,countryRoadPartitions:true,poiPartitions:true,prePlayablePrime:true,explicitSaveFlush:true},
+    production:{indexedDbPrimary:true,partitionedLazy:true,placeNames:true,settlementPlans:true,countryRoadPartitions:true,poiPartitions:true,prePlayablePrime:true,explicitSaveFlush:true},
     rules:{seedFallback:true,cameraKeyed:false,gpuObjectsDurable:false,authoritativeRecordsEvictable:false,softBudgetBytes:GeneratedWorldStore.SOFT_BUDGET_BYTES,hardBudgetBytes:GeneratedWorldStore.HARD_BUDGET_BYTES}
   },null,2));
 })().catch(error=>{console.error(error);process.exitCode=1});
