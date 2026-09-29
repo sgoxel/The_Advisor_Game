@@ -12,9 +12,9 @@ OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s004-009"))
 OUT.mkdir(parents=True,exist_ok=True)
 SIZE=(1280,720) if PROFILE=="landscape" else (390,844)
 SAMPLES=[
-    ("dawn",{"year":1201,"month":2,"day":1,"hour":6,"minute":30,"second":0}),
-    ("midday",{"year":1201,"month":2,"day":1,"hour":12,"minute":30,"second":0}),
-    ("evening",{"year":1201,"month":2,"day":1,"hour":20,"minute":30,"second":0}),
+    ("dawn",{"year":1201,"month":2,"day":1,"hour":7,"minute":15,"second":0}),
+    ("midday",{"year":1201,"month":2,"day":1,"hour":10,"minute":30,"second":0}),
+    ("evening",{"year":1201,"month":2,"day":1,"hour":19,"minute":15,"second":0}),
     ("night",{"year":1201,"month":2,"day":1,"hour":23,"minute":30,"second":0}),
 ]
 EXPECTED={"dawn":"dawn","midday":"daytime","evening":"evening","night":"night"}
@@ -75,12 +75,11 @@ def apply_sample(name,when):
       PlanetStage.applyAuthoritativeFantasyTime(when,"WP-S004-009 evidence "+name);
       ResidentMovement.reset(seed);
       let last=null;
-      for(let i=0;i<150;i++){
-        ResidentMovement.advance(seed,when,2,{snapshot:false,maxTicks:240});
-        last=ResidentMovement.snapshot();
-        const moving=(last.residents||[]).filter(r=>r.status==="moving").length;
-        if(i>=30&&moving===0)break;
-      }
+      // Capture the authoritative active travel window instead of waiting until
+      // every resident has finished indoors. This exposes real route execution
+      // while leaving targets, schedules and movement authority unchanged.
+      for(let i=0;i<18;i++)ResidentMovement.advance(seed,when,2,{snapshot:false,maxTicks:240});
+      last=ResidentMovement.snapshot();
       return {name,when,last,rhythm:SettlementActivityRhythm.snapshot(seed,when)};
     """,name,when)
 
