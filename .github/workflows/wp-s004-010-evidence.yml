@@ -1,0 +1,56 @@
+name: WP-S004-010 Density Crowd Evidence
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/wp-s004-010-evidence.yml
+      - scripts/world/crowd-presentation.js
+      - scripts/ui/app-ui.js
+      - scripts/render/playcanvas/app.js
+      - index.html
+      - tools/tests/wp-s004-010-density-crowd.test.js
+      - tools/wp_s004_010_evidence.py
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [landscape, portrait]
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install screenshot dependencies
+        run: python -m pip install -r tools/requirements.txt
+      - name: Functional density crowd proof
+        run: node tools/tests/wp-s004-010-density-crowd.test.js
+      - name: Start local game
+        run: |
+          python -m http.server 8000 --bind 127.0.0.1 >/tmp/advisor-http.log 2>&1 &
+          echo $! >/tmp/advisor-http.pid
+          sleep 1
+      - name: Capture village town city density evidence
+        env:
+          TARGET: http://127.0.0.1:8000/
+          PROFILE: ${{ matrix.profile }}
+        run: python tools/wp_s004_010_evidence.py
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-s004-010-${{ matrix.profile }}-${{ github.run_id }}
+          path: tools/screenshots/wp-s004-010/
+          if-no-files-found: error
+          retention-days: 14
