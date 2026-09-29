@@ -10,13 +10,13 @@ function hash(seed,key){
 }
 function p(x,y){return Object.freeze({x:String(x),y:String(y),level:0})}
 global.PRNG={foundationUint32:hash};
-global.WorldCoordinates={position:(x,y)=>p(x,y)};
+global.WorldCoordinates={position:(x,y)=>p(x,y),add:(value,dx,dy)=>p(BigInt(value.x)+BigInt(dx),BigInt(value.y)+BigInt(dy))};
 global.GameTime={getNow:()=>({year:1201,month:2,day:1,hour:12,minute:0,second:0})};
-global.Walkability={classify:(_seed,x,y)=>{
-  const key=String(x)+","+String(y);
-  if(key==="1,0")return Object.freeze({walkable:true,category:"entrance",buildingId:"HOME1",doorwayKind:"exterior-door"});
-  if(key==="10,0")return Object.freeze({walkable:true,category:"interior",buildingId:"W1",doorwayKind:null});
-  return Object.freeze({walkable:true,category:"grass",buildingId:null,doorwayKind:null});
+global.Walkability={CATEGORY:{ENTRANCE:"entrance",INTERIOR:"interior"},classify:(_seed,x,y)=>{
+  const key=String(x)+","+String(y),base={walkable:true,secondsPerTile:.1,speedKmh:5};
+  if(key==="1,0")return Object.freeze({...base,category:"entrance",buildingId:"HOME1",doorwayKind:"exterior-door"});
+  if(key==="10,0")return Object.freeze({...base,category:"interior",buildingId:"W1",doorwayKind:null});
+  return Object.freeze({...base,category:"grass",buildingId:null,doorwayKind:null});
 }};
 global.InteriorObjects={classifyNavigation:global.Walkability.classify};
 const residents=[
@@ -25,6 +25,12 @@ const residents=[
   Object.freeze({id:"R03",displayName:"Celia Cinder",profession:"farmer",homePlanId:"HOME3",homeTarget:p(40,0),workplaceId:"W3",workplaceEnterable:true,workplaceTarget:p(50,0)}),
   Object.freeze({id:"R04",displayName:"Dren Dale",profession:"woodcutter",homePlanId:"HOME4",homeTarget:p(60,0),workplaceId:"YARD",workplaceEnterable:false,workplaceTarget:p(70,0)})
 ];
+for(let i=5;i<=12;i++){
+  residents.push(Object.freeze({
+    id:"R"+String(i).padStart(2,"0"),displayName:"Resident "+i,profession:"farmer",
+    homePlanId:"HOME"+i,homeTarget:p(100+i*3,0),workplaceId:"W"+i,workplaceEnterable:true,workplaceTarget:p(110+i*3,0)
+  }));
+}
 global.DailyActivity={
   build:()=>residents,
   resolveActionTarget:(_seed,resident,when)=>Object.freeze({
@@ -80,4 +86,45 @@ assert.strictEqual(telemetry.perFrameNpcScan,false);
 assert(telemetry.maxCandidateChecksPerAdvance<=ContextualReactions.MAX_EVENTS_PER_ADVANCE);
 assert(telemetry.maxUpdateMs<50,"reaction processing exceeded 50 ms in node fixture");
 
-console.log(JSON.stringify({pass:true,verification,telemetry},null,2));
+// Integration contract: a short contextual hold pauses movement presentation
+// without discarding or replanning the resident's existing authoritative route.
+global.RoutePlanner={findRoute:(_seed,a,b)=>{
+  const path=[p(a.x,a.y)];let x=BigInt(a.x),y=BigInt(a.y),tx=BigInt(b.x),ty=BigInt(b.y);
+  while(x!==tx){x+=x<tx?1n:-1n;path.push(p(x,y))}
+  while(y!==ty){y+=y<ty?1n:-1n;path.push(p(x,y))}
+  return Object.freeze({found:true,path:Object.freeze(path),stepCount:path.length-1,totalSeconds:(path.length-1)*.1});
+}};
+global.SocialEncounters={reset:()=>null,advance:()=>null,stateFor:()=>null,snapshot:()=>({activeEncounterCount:0})};
+global.ActionExecutor={
+  clearKind:()=>null,get:()=>null,
+  advanceActor:()=>Object.freeze({changed:false,holdsPosition:false})
+};
+require("../../scripts/world/resident-movement.js");
+ResidentMovement.reset(seed);
+const movementWhen={year:1201,month:2,day:1,hour:10,minute:30,second:0};
+ResidentMovement.advance(seed,movementWhen,.1);
+const beforeHold=ResidentMovement.get("R02");
+const holdEvent=ContextualReactions.observeProtagonist({
+  kind:"space-collision",residentId:"R02",protagonist:beforeHold.position,when:movementWhen,source:"simulation-protagonist"
+});
+assert.strictEqual(holdEvent.accepted,true);
+ResidentMovement.advance(seed,movementWhen,.1);
+const duringHold=ResidentMovement.get("R02");
+assert.deepStrictEqual(duringHold.position,beforeHold.position,"contextual hold failed to pause the resident");
+assert.strictEqual(duringHold.routeRequests,beforeHold.routeRequests,"contextual hold replanned the route");
+assert.strictEqual(duringHold.targetPlans,beforeHold.targetPlans,"contextual hold changed the authoritative target plan");
+assert(duringHold.contextualReaction?.holdsPosition,"resident snapshot did not expose the active contextual hold");
+for(let i=0;i<12;i++)ResidentMovement.advance(seed,movementWhen,.1);
+const afterHold=ResidentMovement.get("R02");
+assert.notDeepStrictEqual(afterHold.position,beforeHold.position,"resident did not resume its existing route after reaction expiry");
+assert.strictEqual(afterHold.routeRequests,beforeHold.routeRequests,"route was replanned after contextual reaction");
+assert.strictEqual(afterHold.targetPlans,beforeHold.targetPlans,"schedule target was replanned after contextual reaction");
+
+console.log(JSON.stringify({
+  pass:true,verification,telemetry,
+  integration:{
+    heldAt:beforeHold.position,resumedAt:afterHold.position,
+    routeRequestsBefore:beforeHold.routeRequests,routeRequestsAfter:afterHold.routeRequests,
+    targetPlansBefore:beforeHold.targetPlans,targetPlansAfter:afterHold.targetPlans
+  }
+},null,2));
