@@ -74,7 +74,9 @@ def state(kind):
       return {
         ready:Boolean(s.ready),scaleIndex:Number(s.zoom?.scaleIndex),scaleLabel:s.zoom?.scaleLabel,
         event,events,cardVisible:Boolean(card&&!card.hidden),cardType:card?.dataset?.eventType||"",
-        cardText:String(card?.innerText||""),focus:s.canonicalFocus?.worldTile||null,
+        cardText:String(card?.innerText||""),cardRect:card&&!card.hidden?(()=>{
+          const r=card.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};
+        })():null,focus:s.canonicalFocus?.worldTile||null,
         localStatic:ls,resourceBudget:rb,npcPresentation:np,signatureReady:Boolean(signatureReady),
         activeLocalEventCueCount:Number(np.activeLocalEventCueCount||0),
         activeLocalEventResidentIds:Array.isArray(np.activeLocalEventResidentIds)?np.activeLocalEventResidentIds:[],
@@ -130,11 +132,20 @@ try:
                 pairwise.append((dx*dx+dy*dy)**0.5)
         if pairwise and (min(pairwise)<3 or max(pairwise)>180):
             raise RuntimeError("participant screen-space grouping/separation outside compact contract: "+json.dumps({"distances":pairwise,"state":st}))
+        card=st.get("cardRect") or {}
         for p in visible:
             body=p["visual"].get("bodyScreenSizePx") or {}
             silhouette=p["visual"].get("eventSilhouetteScreenSizePx") or {}
             if max(float(body.get("width",0)),float(body.get("height",0)))<5 or max(float(silhouette.get("width",0)),float(silhouette.get("height",0)))<5:
                 raise RuntimeError("participant body/silhouette screen readability too small: "+json.dumps({"participant":p,"state":st}))
+            scr=p["visual"].get("screen") or {}
+            sw=float(silhouette.get("width",0));sh=float(silhouette.get("height",0))
+            if card and scr:
+                left=float(scr.get("x",0))-sw/2;right=float(scr.get("x",0))+sw/2
+                top=float(scr.get("y",0))-sh/2;bottom=float(scr.get("y",0))+sh/2
+                overlap=max(0,min(right,float(card.get("right",0)))-max(left,float(card.get("left",0))))*max(0,min(bottom,float(card.get("bottom",0)))-max(top,float(card.get("top",0))))
+                if overlap>1:
+                    raise RuntimeError("event card overlaps participant silhouette: "+json.dumps({"participant":p,"cardRect":card,"overlap":overlap,"state":st}))
         if st["visibleParticipants"]<2 or int(st["localStatic"].get("buildingCount",0))<=0:
             raise RuntimeError("event participants/local context not visibly materialized: "+json.dumps(st))
         if st["activeLocalEventCueCount"]<st["visibleParticipants"] or st["activeLocalEventCueCount"]>max(1,participant_count)*4:
