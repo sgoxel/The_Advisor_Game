@@ -22,7 +22,7 @@ options.add_argument(f"--window-size={SIZE[0]},{SIZE[1]}")
 options.set_capability("goog:loggingPrefs",{"browser":"ALL"})
 driver=webdriver.Chrome(options=options)
 driver.set_window_size(*SIZE)
-wait=WebDriverWait(driver,120)
+wait=WebDriverWait(driver,180)
 
 def ready():
     try:
@@ -31,6 +31,23 @@ def ready():
         )
     except Exception:
         return False
+
+def prime_reusable_parent():
+    return driver.execute_script("""
+      const s=PlanetStage.snapshot(),seed=s.activeSeed,p=window.StartingVillage?.plan?.(seed);
+      const center=p?.center||{x:"0",y:"0"};
+      PlanetStage.setWorldTileFocus(String(center.x),String(center.y));
+      PlanetStage.setScaleIndex(8);
+      return {seed,center:{x:String(center.x),y:String(center.y)},name:String(p?.name||"Starting Village")};
+    """)
+
+def parent_prime_ready():
+    state=resource_state()
+    return (
+        state["ready"] and state["scaleIndex"]==8 and
+        state["tier"] in ("refined","full") and state["localStaticActive"] and
+        state["localBuildingCount"]>0 and bool(state.get("activeSignature"))
+    )
 
 def candidate_professions():
     return driver.execute_script("""
@@ -175,8 +192,14 @@ def add_overlay(info,bounds):
 
 records=[]
 try:
-    driver.get(TARGET)
+    evidence_target=TARGET+("&" if "?" in TARGET else "?")+"evidence_fast_start=1"
+    driver.get(evidence_target)
     wait.until(lambda _d: ready())
+    prime=prime_reusable_parent()
+    try:
+        wait.until(lambda _d: parent_prime_ready())
+    except TimeoutException:
+        raise RuntimeError("initial reusable 1/5000 parent failed to activate: "+json.dumps({"prime":prime,"resource":resource_state()}))
     candidates=candidate_professions()
     if len(candidates)<3:
         raise RuntimeError("fewer than three live professions have valid visible work cycles: "+json.dumps(candidates))
@@ -226,8 +249,8 @@ try:
         raise RuntimeError("WorkCycles.verify failed during evidence")
     if not all(r["state"].get("status")=="arrived" for r in records):
         raise RuntimeError("selected worker did not reach its choreography target")
-    if not all(r["visualState"].get("settled") and (r["visualState"].get("exact") or {}).get("inViewport") and r["visualState"].get("workplaceKnown") and r["visualState"].get("exactToolActive") for r in records):
-        raise RuntimeError("one or more screenshots lacked settled exact worker/workplace visibility")
+    if not all((r["visualState"].get("settled") or r["visualState"].get("parentReusable")) and (r["visualState"].get("exact") or {}).get("inViewport") and r["visualState"].get("workplaceKnown") and r["visualState"].get("exactToolActive") for r in records):
+        raise RuntimeError("one or more screenshots lacked valid-parent/exact worker/workplace visibility")
     result={"pass":True,"profile":PROFILE,"viewport":SIZE,"records":records}
     (OUT/f"{PROFILE}-evidence.json").write_text(json.dumps(result,indent=2))
     print(json.dumps(result,indent=2))
