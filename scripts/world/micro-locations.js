@@ -65,25 +65,52 @@ function worldSurface(seed,x,y){
   try{return String(window.WorldField?.sample?.(String(seed),String(BigInt(String(x))*2n),String(BigInt(String(y))*2n))?.surfaceType||"");}
   catch(_){try{return String(window.GeographyFoundation?.getTerrainType?.(String(seed),String(x),String(y))||"");}catch(__){return "";}}
 }
+function waterFacingYaw(dx,dy){
+  if(dx===0n&&dy<0n)return 180;
+  if(dx>0n&&dy===0n)return 270;
+  if(dx===0n&&dy>0n)return 0;
+  return 90;
+}
 function shoreAnchor(seed,source){
   const center={x:BigInt(String(source.center.x)),y:BigInt(String(source.center.y))};
   const dirs=[
-    Object.freeze({dx:0n,dy:-1n,yaw:0}),Object.freeze({dx:1n,dy:0n,yaw:90}),
-    Object.freeze({dx:0n,dy:1n,yaw:180}),Object.freeze({dx:-1n,dy:0n,yaw:270})
+    Object.freeze({dx:0n,dy:-1n}),Object.freeze({dx:1n,dy:0n}),
+    Object.freeze({dx:0n,dy:1n}),Object.freeze({dx:-1n,dy:0n})
   ];
+  const centerWater=worldSurface(seed,String(center.x),String(center.y))==="water";
   let best=null;
   for(const dir of dirs){
-    let lastLand=center;
+    let low=0,lowTarget=centerWater,high=null;
     for(const step of WATER_SEARCH_STEPS){
       const distance=BigInt(step),x=center.x+dir.dx*distance,y=center.y+dir.dy*distance;
-      const surface=worldSurface(seed,String(x),String(y));
-      if(surface==="water"){
-        const candidate={x:lastLand.x,y:lastLand.y,yaw:dir.yaw,distance:step};
-        if(!best||candidate.distance<best.distance||(candidate.distance===best.distance&&candidate.yaw<best.yaw))best=candidate;
-        break;
-      }
-      lastLand={x,y};
+      const isWater=worldSurface(seed,String(x),String(y))==="water";
+      const target=centerWater?!isWater:isWater;
+      if(target){high=step;break;}
+      low=step;lowTarget=target;
     }
+    if(high===null)continue;
+    let lo=low,hi=high;
+    while(hi-lo>1){
+      const mid=Math.floor((lo+hi)/2),distance=BigInt(mid);
+      const isWater=worldSurface(seed,String(center.x+dir.dx*distance),String(center.y+dir.dy*distance))==="water";
+      const target=centerWater?!isWater:isWater;
+      if(target)hi=mid;else lo=mid;
+    }
+    let anchorDistance,waterDx,waterDy;
+    if(centerWater){
+      // Source is inside a river/lake corridor. The first dry tile is the
+      // shoreline anchor; water lies back toward the source center.
+      anchorDistance=hi;waterDx=-dir.dx;waterDy=-dir.dy;
+    }else{
+      // Source is dry but water-adjacent. Keep the anchor on the last dry tile
+      // so docks/crossing props never start several dozen metres inland.
+      anchorDistance=lo;waterDx=dir.dx;waterDy=dir.dy;
+    }
+    const distance=BigInt(anchorDistance),candidate={
+      x:center.x+dir.dx*distance,y:center.y+dir.dy*distance,
+      yaw:waterFacingYaw(waterDx,waterDy),distance:anchorDistance
+    };
+    if(!best||candidate.distance<best.distance||(candidate.distance===best.distance&&candidate.yaw<best.yaw))best=candidate;
   }
   if(best)return Object.freeze({x:String(best.x),y:String(best.y),yaw:best.yaw,shiftTiles:best.distance});
   return Object.freeze({x:String(center.x),y:String(center.y),yaw:(hash32(seed+"|shore-fallback|"+source.id)%4)*90,shiftTiles:0});
