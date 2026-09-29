@@ -68,6 +68,9 @@ function cultureFor(seed,countryId,entityId){
 function pick(seed,key,list){
   return list[hash32(safe(seed)+"|place-name|v"+VERSION+"|"+safe(key))%list.length];
 }
+function smoothWord(value){
+  return String(value).replace(/([aeiou])\1+/gi,"$1").replace(/([bcdfghjklmnpqrstvwxyz])\1+/gi,"$1");
+}
 function coreFor(seed,input,attempt){
   const id=safe(input.id)||[normalizeType(input.type),safe(input.countryId),safe(input.regionId),safe(input.x),safe(input.y)].join("|");
   const culture=cultureFor(seed,input.countryId,id);
@@ -75,28 +78,37 @@ function coreFor(seed,input,attempt){
   const lead=pick(seed,key+"|lead",culture.leads);
   const mid=pick(seed,key+"|mid",culture.mids);
   const tail=pick(seed,key+"|tail",culture.tails);
-  let core=lead+mid+tail;
-  core=core.replace(/([aeiou])\1+/gi,"$1").replace(/([bcdfghjklmnpqrstvwxyz])\1+/gi,"$1");
-  return Object.freeze({core,culture});
+  const lead2=pick(seed,key+"|lead2",culture.leads);
+  const mid2=pick(seed,key+"|mid2",culture.mids);
+  const tail2=pick(seed,key+"|tail2",culture.tails);
+  return Object.freeze({
+    core:smoothWord(lead+mid+tail),
+    qualifier:smoothWord(lead2+mid2+tail2),
+    culture
+  });
 }
 function displayName(seed,input,attempt){
-  const type=normalizeType(input.type),made=coreFor(seed,input,attempt),core=made.core;
+  const type=normalizeType(input.type),made=coreFor(seed,input,attempt),core=made.core,qualifier=made.qualifier;
+  const identityName=core+" "+qualifier;
   if(type==="country"){
-    return Object.freeze({name:pick(seed,safe(input.id)+"|country-form|"+attempt,COUNTRY_FORMS)+" of "+core,shortForm:core,culture:made.culture});
+    return Object.freeze({name:pick(seed,safe(input.id)+"|country-form|"+attempt,COUNTRY_FORMS)+" of "+identityName,shortForm:identityName,culture:made.culture});
   }
   if(type==="region"){
-    return Object.freeze({name:core+" "+pick(seed,safe(input.id)+"|region-form|"+attempt,REGION_SUFFIX),shortForm:core,culture:made.culture});
+    return Object.freeze({name:identityName+" "+pick(seed,safe(input.id)+"|region-form|"+attempt,REGION_SUFFIX),shortForm:identityName,culture:made.culture});
   }
   const labels=TYPE_LABELS[type];
   if(labels&&["lake","river","river-location","confluence","waterfall","mountain-pass","mountain","forest","ruin","fort","tower","bridge","cave","cliff","outcrop","hunting","fishing","grazing","gathering"].includes(type)){
     const label=pick(seed,safe(input.id)+"|type-label|"+type+"|"+attempt,labels);
-    return Object.freeze({name:(type==="lake"||type==="mountain"?"":core+" ")+label+(type==="lake"||type==="mountain"?" "+core:""),shortForm:core,culture:made.culture});
+    return Object.freeze({
+      name:(type==="lake"||type==="mountain"?"":identityName+" ")+label+(type==="lake"||type==="mountain"?" "+identityName:""),
+      shortForm:identityName,culture:made.culture
+    });
   }
   if(labels&&["capital","city","town","village","hamlet"].includes(type)){
     const decorate=hash32(safe(seed)+"|place-decorate|"+safe(input.id)+"|"+type)%5===0;
-    return Object.freeze({name:decorate?core+" "+pick(seed,safe(input.id)+"|settlement-label|"+type,labels):core,shortForm:core,culture:made.culture});
+    return Object.freeze({name:decorate?identityName+" "+pick(seed,safe(input.id)+"|settlement-label|"+type,labels):identityName,shortForm:identityName,culture:made.culture});
   }
-  return Object.freeze({name:core,shortForm:core,culture:made.culture});
+  return Object.freeze({name:identityName,shortForm:identityName,culture:made.culture});
 }
 function descriptor(seedValue,inputValue,attemptValue){
   const seed=safe(seedValue),input=inputValue||{},attempt=Math.max(0,Math.floor(Number(attemptValue)||0));
