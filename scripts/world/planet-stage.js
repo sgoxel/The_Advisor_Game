@@ -6064,8 +6064,16 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // or edge-varying gain on the parent itself produced the pale 1/500 LOD
       // boundary seen in fresh evidence.
       const refinementGain=contextRing?contextRefineWeight*.22:focusRefineWeight*.86;
-      const sharedMacroContrast=contextRing?1.06:1.10;
-      const residualMacroContrast=contextRing?1.20:lerp(1.18,1.52,focusRefineWeight);
+      // Regional parents are physically coarse but still need readable landform
+      // structure while finer children stream. Reuse the already-computed,
+      // registered-meter macro signal and increase only its presentation gain in
+      // the 0.4-5 km/texel strategic band. No extra geography/noise samples are
+      // introduced, so preparation cost and canonical world identity stay fixed.
+      const strategicMapBand=smoothstep01(clamp((metersPerTexel-320)/900,0,1))*
+        (1-smoothstep01(clamp((metersPerTexel-5000)/5200,0,1)));
+      const strategicMacroGain=1+strategicMapBand*(contextRing?.52:1.18);
+      const sharedMacroContrast=(contextRing?1.06:1.10)*strategicMacroGain;
+      const residualMacroContrast=(contextRing?1.20:lerp(1.18,1.52,focusRefineWeight))*strategicMacroGain;
       const macro=sharedMacro*sharedMacroContrast+(nativeMacro-sharedMacro)*refinementGain*residualMacroContrast;
       pushRange("baseLuma",luma3(base));pushRange("macro",macro);
       let shade=1,cover=[0,0,0];
@@ -6120,8 +6128,17 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // parent photometry remain unchanged.
         const mapHighPassBand=smoothstep01(clamp((metersPerTexel-32)/86,0,1))*(1-smoothstep01(clamp((metersPerTexel-420)/360,0,1)));
         const baseStructureScale=lerp(.52,1,smoothstep01(clamp((52-metersPerTexel)/30,0,1)))*broadReliefWeight;
-        const mapStructureScale=clamp(baseStructureScale+mapHighPassBand*(contextRing?.16:.34),0,1.02);
-        const curvatureReliefWeight=lerp(nearReliefWeight,1,mapHighPassBand*.92);
+        // Keep the existing near-map high-pass band, but carry a restrained
+        // version of the same canonical curvature/drainage form into the first
+        // regional parent. This prevents the ready parent from reading as a
+        // featureless color wash during animated zoom.
+        const mapStructureScale=clamp(
+          baseStructureScale+
+          mapHighPassBand*(contextRing?.16:.34)+
+          strategicMapBand*(contextRing?.20:.46),
+          0,1.08
+        );
+        const curvatureReliefWeight=lerp(nearReliefWeight,1,Math.max(mapHighPassBand*.92,strategicMapBand*.58));
         const curvatureTone=curvatureSignal*(contextRing?lerp(.030,.048,contextRefineWeight):lerp(.046,.080,focusRefineWeight))*mapStructureBoost*mapStructureScale*curvatureReliefWeight;
         const slopeTone=-slopeSignal*(contextRing?lerp(.006,.014,contextRefineWeight):lerp(.010,.024,focusRefineWeight))*slopeLightingWeight;
         const drainageTone=(moistureCurve*(contextRing?lerp(.010,.018,contextRefineWeight):lerp(.016,.032,focusRefineWeight))-moistureGradient*(contextRing?.008:.012))*mapStructureScale*lerp(.9,1.22,mapHighPassBand);
@@ -6129,7 +6146,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // actually bends or drains. A uniform continental slope therefore stays
         // quiet, while real ridges/valleys gain readable form at 1/500.
         const terrainShapeGate=clamp(Math.abs(curvatureSignal)*.78+moistureGradient*.42,0,1);
-        const directionalShapeTone=(lit-flatShade)*mapHighPassBand*terrainShapeGate*(contextRing?.052:.095);
+        const directionalBand=mapHighPassBand+strategicMapBand*(contextRing?.38:.62);
+        const directionalShapeTone=(lit-flatShade)*directionalBand*terrainShapeGate*(contextRing?.052:.095);
         const structureTone=curvatureTone+slopeTone+drainageTone+directionalShapeTone;
         cover=[
           structureTone-moistureGradient*mapHighPassBand*.006,
@@ -6144,10 +6162,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // camera-relative tint.
         const shapedCurvature=Math.sign(curvatureSignal)*Math.sqrt(Math.abs(curvatureSignal));
         const shapedMoistureCurve=Math.sign(moistureCurve)*Math.sqrt(Math.abs(moistureCurve));
-        const ridgeSignal=Math.max(0,shapedCurvature)*mapHighPassBand*mapStructureScale;
-        const valleySignal=Math.max(0,-shapedCurvature)*mapHighPassBand*mapStructureScale;
-        const wetValleySignal=Math.max(0,shapedMoistureCurve)*mapHighPassBand*mapStructureScale;
-        const drainageSignal=Math.sqrt(Math.max(0,moistureGradient))*mapHighPassBand*mapStructureScale;
+        const strategicFormBand=Math.max(mapHighPassBand,strategicMapBand*.58);
+        const ridgeSignal=Math.max(0,shapedCurvature)*strategicFormBand*mapStructureScale;
+        const valleySignal=Math.max(0,-shapedCurvature)*strategicFormBand*mapStructureScale;
+        const wetValleySignal=Math.max(0,shapedMoistureCurve)*strategicFormBand*mapStructureScale;
+        const drainageSignal=Math.sqrt(Math.max(0,moistureGradient))*strategicFormBand*mapStructureScale;
         const formStrength=contextRing?.58:1;
         const formTint=[
           (ridgeSignal*.086-valleySignal*.030-wetValleySignal*.012)*formStrength,
@@ -6368,7 +6387,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-access-morphology-map-detail-v22",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-access-morphology-map-detail-v23",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
