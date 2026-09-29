@@ -125,6 +125,7 @@ function candidateForCell(seed,cx,cy){
     namingCultureKey:naming.namingCultureKey||null,
     nameGenerationVersion:Number(naming.nameGenerationVersion||0),
     namingAuthority:String(naming.authority||""),
+    namingAttempt:Number(naming.attempt||0),
     cellX:cx.toString(),cellY:cy.toString(),
     key,
     politicalCenter:centerForCell(seed,cx,cy),
@@ -313,6 +314,10 @@ function countryFromCandidate(seed,candidate,scoreValue){
   return Object.freeze({
     id:candidate.id,
     name:candidate.name,
+    namingCultureKey:candidate.namingCultureKey||null,
+    nameGenerationVersion:Number(candidate.nameGenerationVersion||0),
+    namingAuthority:String(candidate.namingAuthority||""),
+    namingAttempt:Number(candidate.namingAttempt||0),
     cellX:candidate.cellX,cellY:candidate.cellY,
     politicalCenter:candidate.politicalCenter,
     mapAnchor:mapAnchor||candidate.politicalCenter,
