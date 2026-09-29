@@ -98,6 +98,7 @@ function context(seedValue,pointValue,timestampValue){
   });
 }
 function eligible(spec,ctx,w){
+  if(ctx.terrain==="water")return false;
   if(spec.road&&!ctx.onRoad)return false;
   if(spec.day&&!w.daylight)return false;
   if(spec.biomes&&spec.biomes.length&&!spec.biomes.includes(ctx.biome))return false;
@@ -140,14 +141,15 @@ function actorsFor(seed,spec,anchor,w,ctx){
   return freeze(actors);
 }
 function descriptor(seedValue,pointValue,timestampValue,forcedType){
-  const seed=requiredSeed(seedValue),p=point(pointValue),w=windowInfo(timestampValue),cell=macroCell(p),ctx=context(seed,p,w.key);
+  const seed=requiredSeed(seedValue),p=point(pointValue),w=windowInfo(timestampValue),cell=macroCell(p);
+  const anchor=anchorFor(seed,cell,w.cooldownBlock),ctx=context(seed,anchor,w.key);
   const chosenOffset=hash32(seed,"travel-encounter:cooldown-slot:"+ctx.regionId+":"+cell.x+":"+cell.y+":"+w.cooldownBlock)%COOLDOWN_WINDOWS;
   if(forcedType==null&&w.offset!==chosenOffset)return null;
   const rarity=hash32(seed,"travel-encounter:rarity:"+ctx.regionId+":"+cell.x+":"+cell.y+":"+w.cooldownBlock)%1000;
   if(forcedType==null&&rarity>=RARE_THRESHOLD_PER_1000)return null;
   const spec=forcedType?CATALOG.find(x=>x.id===String(forcedType)):chooseType(seed,ctx,w,cell);
   if(!spec)return null;
-  const anchor=anchorFor(seed,cell,w.cooldownBlock),actors=actorsFor(seed,spec,anchor,w,ctx);
+  const actors=actorsFor(seed,spec,anchor,w,ctx);
   return freeze({
     id:"TRE|"+String(hash32(seed,[ctx.regionId,cell.x,cell.y,w.cooldownBlock,spec.id].join("|")).toString(16).toUpperCase()),
     type:spec.id,title:spec.title,icon:spec.icon,summary:spec.summary,
@@ -188,9 +190,12 @@ function stream(seedValue,samplesValue){
 }
 function proofActivate(seedValue,typeValue,anchorValue,timestampValue){
   const seed=requiredSeed(seedValue),type=String(typeValue||""),anchor=point(anchorValue),stamp=normalizeTimestamp(timestampValue);
-  if(!CATALOG.some(x=>x.id===type))throw new Error("Unknown encounter type: "+type);
-  const event=descriptor(seed,anchor,stamp,type);proofBySeed.set(seed,freeze({event}));
-  const view=localPresentation(seed,event.anchor,stamp,{proof:true});
+  const spec=CATALOG.find(x=>x.id===type);if(!spec)throw new Error("Unknown encounter type: "+type);
+  const base=descriptor(seed,anchor,stamp,type),w=windowInfo(stamp),ctx=context(seed,anchor,stamp);
+  const actors=actorsFor(seed,spec,anchor,w,ctx);
+  const event=freeze({...clone(base),anchor,context:ctx,actors,actorCount:actors.length,proofControlledPlacement:true});
+  proofBySeed.set(seed,freeze({event}));
+  const view=localPresentation(seed,anchor,stamp,{proof:true});
   return freeze({pass:Boolean(view.active&&view.encounter?.type===type&&view.exactActorCount===event.actorCount),event:view.encounter,snapshot:view});
 }
 function clearProof(seedValue){
@@ -228,7 +233,8 @@ function renderCard(viewValue){
 }
 function autoTick(){
   try{
-    const stage=window.PlanetStage?.snapshot?.(),seed=stage?.activeSeed||window.SeedSystem?.getCampaign?.()?.seed,focus=stage?.canonicalFocus?.worldTile,stamp=window.GameTime?.getTimestampKey?.();
+    const stage=window.PlanetStage?.snapshot?.(),seed=stage?.activeSeed||window.SeedSystem?.getCampaign?.()?.seed,focus=stage?.canonicalFocus?.worldTile;
+    const stamp=window.GameTime?.getTimestampKey?.()||window.GameTime?.getNow?.()||null;
     if(seed&&focus&&stamp)localPresentation(seed,focus,stamp,{auto:true});else renderCard(null);
   }catch(_){}
 }
