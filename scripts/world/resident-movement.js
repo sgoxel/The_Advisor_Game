@@ -5,6 +5,7 @@ const LEVEL=0;
 const FIXED_STEP_SECONDS=0.1;
 const MAX_ADVANCE_STEPS=240;
 const WALL_CLEARANCE_PENALTY_SECONDS=20;
+const COOPERATIVE_ROUTE_POPS=24;
 let seedKey="";
 let residentById=new Map();
 let states=new Map();
@@ -136,6 +137,7 @@ function residentState(resident,startValue){
     activity:null,
     target:null,
     route:null,
+    pendingRoutePlan:null,
     routeIndex:0,
     segmentElapsed:0,
     status:"idle",
@@ -182,8 +184,19 @@ function reset(seed){
   return ensure(seed);
 }
 function routeTargetKey(activity){return activity?key(activity.target)+"|"+activity.state+"|"+activity.action:""}
+function applyRouteResult(state,route,reason){
+  state.routeRequests++;
+  if(reason==="target-change"||reason==="initial-target")state.targetPlans++;
+  if(reason==="invalid-next-segment")state.invalidSegmentReplans++;
+  state.route=route;
+  state.routeIndex=0;
+  state.status=route?.found?"moving":"stalled";
+  state.lastReason=route?.found?(reason||"planned"):(route?.reason||"unreachable");
+  return Boolean(route?.found);
+}
 function plan(seed,state,activity,reason){
   const nextActivity=cloneActivity(activity);
+  state.pendingRoutePlan=null;
   state.activity=nextActivity;
   state.target=nextActivity?.target||null;
   state.segmentElapsed=0;
@@ -207,14 +220,49 @@ function plan(seed,state,activity,reason){
     stepPenaltySeconds:context=>wallClearancePenalty(seed,context)
   });
   recordPerformance("routePlan",routeStarted,state,reason||"plan");
-  state.routeRequests++;
-  if(reason==="target-change"||reason==="initial-target")state.targetPlans++;
-  if(reason==="invalid-next-segment")state.invalidSegmentReplans++;
-  state.route=route;
-  state.routeIndex=0;
-  state.status=route?.found?"moving":"stalled";
-  state.lastReason=route?.found?(reason||"planned"):(route?.reason||"unreachable");
-  return Boolean(route?.found);
+  return applyRouteResult(state,route,reason);
+}
+function cooperativePlan(seed,state,activity,reason){
+  const nextActivity=cloneActivity(activity);
+  const target=nextActivity?.target||null;
+  const planKey=key(state.position)+"|"+routeTargetKey(nextActivity)+"|"+String(reason||"plan");
+  let pending=state.pendingRoutePlan;
+  if(!pending||pending.planKey!==planKey){
+    state.activity=nextActivity;
+    state.target=target;
+    state.segmentElapsed=0;
+    state.presentationOffset=Object.freeze({x:0,y:0});
+    state.pendingRoutePlan=null;
+    if(!state.target){
+      state.route=null;state.routeIndex=0;state.status="idle";state.lastReason="missing-target";
+      return Object.freeze({pending:false,found:false});
+    }
+    if(samePoint(state.position,state.target)){
+      state.route=Object.freeze({found:true,path:Object.freeze([state.position]),stepCount:0,totalSeconds:0});
+      state.routeIndex=0;state.status="arrived";state.lastReason=reason||"already-at-target";
+      return Object.freeze({pending:false,found:true});
+    }
+    if(!window.RoutePlanner?.beginRouteSearch||!window.RoutePlanner?.advanceRouteSearch){
+      return Object.freeze({pending:false,found:plan(seed,state,nextActivity,reason)});
+    }
+    const routeStarted=performance.now();
+    const search=RoutePlanner.beginRouteSearch(seed,state.position,state.target,{
+      stepPenaltySeconds:context=>wallClearancePenalty(seed,context)
+    });
+    recordPerformance("routePlan",routeStarted,state,(reason||"plan")+"-begin");
+    pending={planKey,reason:reason||"plan",search};
+    state.pendingRoutePlan=pending;
+    if(search.done){
+      state.pendingRoutePlan=null;
+      return Object.freeze({pending:false,found:applyRouteResult(state,search.result,reason)});
+    }
+  }
+  const routeStarted=performance.now();
+  const progress=RoutePlanner.advanceRouteSearch(pending.search,COOPERATIVE_ROUTE_POPS);
+  recordPerformance("routePlan",routeStarted,state,pending.reason+"-slice");
+  if(!progress.done)return Object.freeze({pending:true,found:false});
+  state.pendingRoutePlan=null;
+  return Object.freeze({pending:false,found:applyRouteResult(state,progress.result,pending.reason)});
 }
 function activeActivity(seed,state,when){
   const resident=residentById.get(state.residentId);
@@ -235,6 +283,15 @@ function ensureTarget(seed,state,activity){
   }
   if(!state.route&&next)return plan(seed,state,next,"initial-target");
   return Boolean(state.route?.found);
+}
+function ensureTargetCooperative(seed,state,activity){
+  if(state.pendingRoutePlan)return cooperativePlan(seed,state,state.activity,state.pendingRoutePlan.reason);
+  const next=cloneActivity(activity);
+  if(routeTargetKey(state.activity)!==routeTargetKey(next)){
+    return cooperativePlan(seed,state,next,state.activity?"target-change":"initial-target");
+  }
+  if(!state.route&&next)return cooperativePlan(seed,state,next,"initial-target");
+  return Object.freeze({pending:false,found:Boolean(state.route?.found)});
 }
 function completeStep(seed,state,next,segmentSeconds){
   if(manhattan(state.position,next)!==1){
@@ -270,8 +327,9 @@ function completeStep(seed,state,next,segmentSeconds){
   }
   return true;
 }
-function advanceState(seed,state,activity,seconds){
-  ensureTarget(seed,state,activity);
+function advanceState(seed,state,activity,seconds,cooperative=false){
+  const targetState=cooperative?ensureTargetCooperative(seed,state,activity):Object.freeze({pending:false,found:ensureTarget(seed,state,activity)});
+  if(targetState.pending)return Object.freeze({changed:false,pending:true});
   let remaining=Math.max(0,Number(seconds)||0);
   let changed=false;
   while(remaining>1e-9&&state.status==="moving"){
@@ -282,14 +340,22 @@ function advanceState(seed,state,activity,seconds){
         state.presentationOffset=Object.freeze({x:0,y:0});
         break;
       }
-      if(!plan(seed,state,state.activity,"invalid-next-segment"))break;
+      if(cooperative){
+        const replanned=cooperativePlan(seed,state,state.activity,"invalid-next-segment");
+        if(replanned.pending)return Object.freeze({changed,pending:true});
+        if(!replanned.found)break;
+      }else if(!plan(seed,state,state.activity,"invalid-next-segment"))break;
       next=state.route?.path?.[state.routeIndex+1]||null;
       if(!next)break;
     }
     const nav=navigation(seed,next);
     if(!nav?.walkable||manhattan(state.position,next)!==1||!Number.isFinite(nav.secondsPerTile)){
       state.blockedTraversals++;
-      if(!plan(seed,state,state.activity,"invalid-next-segment"))break;
+      if(cooperative){
+        const replanned=cooperativePlan(seed,state,state.activity,"invalid-next-segment");
+        if(replanned.pending)return Object.freeze({changed,pending:true});
+        if(!replanned.found)break;
+      }else if(!plan(seed,state,state.activity,"invalid-next-segment"))break;
       continue;
     }
     const segmentSeconds=Math.max(FIXED_STEP_SECONDS,Number(nav.secondsPerTile));
@@ -304,12 +370,12 @@ function advanceState(seed,state,activity,seconds){
     if(state.segmentElapsed+1e-9>=segmentSeconds)changed=completeStep(seed,state,next,segmentSeconds)||changed;
     else if(used>0)changed=true;
   }
-  return changed;
+  return Object.freeze({changed,pending:false});
 }
 function beginAdvanceTick(when){
   return {
     when,activities:new Map(),socialResidents:[],residents:[...states.values()],
-    initCursor:0,cursor:0,phase:"activities",changed:false
+    initCursor:0,cursor:0,phase:"activities",changed:false,residentWork:null
   };
 }
 function advanceTickInitialization(tick,cooperative,started,budgetMs){
@@ -358,48 +424,60 @@ function advanceTickInitialization(tick,cooperative,started,budgetMs){
   }
   return true;
 }
-function advanceResidentForTick(tick,state){
+function advanceResidentForTick(tick,state,cooperative){
   const activity=tick.activities.get(state.residentId);
-  const contextual=window.ContextualReactions?.stateFor?.(state.residentId)||null;
-  if(contextual?.holdsPosition){
-    // A short contextual hesitation never discards the resident's route,
-    // target or schedule. When the bounded reaction expires the same route
-    // resumes from the same authoritative position.
-    state.presentationOffset=Object.freeze({x:0,y:0});
-    tick.changed=true;
-    return;
+  let work=tick.residentWork;
+  if(!work||work.residentId!==state.residentId){
+    work=tick.residentWork={residentId:state.residentId,phase:"checks"};
   }
-  const social=window.SocialEncounters?.stateFor?.(state.residentId)||null;
-  if(social?.holdsPosition){
-    window.ActionExecutor?.clear?.("resident",state.residentId);
-    state.presentationOffset=Object.freeze({x:0,y:0});
-    tick.changed=true;
-    return;
+  if(work.phase==="checks"){
+    const contextual=window.ContextualReactions?.stateFor?.(state.residentId)||null;
+    if(contextual?.holdsPosition){
+      state.presentationOffset=Object.freeze({x:0,y:0});tick.changed=true;tick.residentWork=null;return true;
+    }
+    const social=window.SocialEncounters?.stateFor?.(state.residentId)||null;
+    if(social?.holdsPosition){
+      window.ActionExecutor?.clear?.("resident",state.residentId);
+      state.presentationOffset=Object.freeze({x:0,y:0});tick.changed=true;tick.residentWork=null;return true;
+    }
+    work.phase="before";
   }
-  const beforeStarted=performance.now();
-  const before=window.ActionExecutor?.advanceActor?.({
-    seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
-  },FIXED_STEP_SECONDS)||null;
-  recordPerformance("actionBefore",beforeStarted,state,"advance");
-  if(before?.holdsPosition){
-    tick.changed=Boolean(before.changed)||tick.changed;
-    return;
+  if(work.phase==="before"){
+    const beforeStarted=performance.now();
+    const before=window.ActionExecutor?.advanceActor?.({
+      seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
+    },FIXED_STEP_SECONDS)||null;
+    recordPerformance("actionBefore",beforeStarted,state,"advance");
+    if(before?.holdsPosition){
+      tick.changed=Boolean(before.changed)||tick.changed;tick.residentWork=null;return true;
+    }
+    work.phase="advance";
   }
-  const residentStarted=performance.now();
-  tick.changed=advanceState(seedKey,state,activity,FIXED_STEP_SECONDS)||tick.changed;
-  recordPerformance("residentAdvance",residentStarted,state,state.lastReason||"advance");
-  const afterStarted=performance.now();
-  const after=window.ActionExecutor?.advanceActor?.({
-    seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
-  },0)||null;
-  recordPerformance("actionAfter",afterStarted,state,"advance");
-  tick.changed=Boolean(after?.changed)||tick.changed;
+  if(work.phase==="advance"){
+    const residentStarted=performance.now();
+    const advanced=advanceState(seedKey,state,activity,FIXED_STEP_SECONDS,cooperative);
+    recordPerformance("residentAdvance",residentStarted,state,state.lastReason||"advance");
+    tick.changed=Boolean(advanced.changed)||tick.changed;
+    if(advanced.pending)return false;
+    work.phase="after";
+  }
+  if(work.phase==="after"){
+    const afterStarted=performance.now();
+    const after=window.ActionExecutor?.advanceActor?.({
+      seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
+    },0)||null;
+    recordPerformance("actionAfter",afterStarted,state,"advance");
+    tick.changed=Boolean(after?.changed)||tick.changed;
+    tick.residentWork=null;
+  }
+  return true;
 }
 function drainAdvanceTick(tick,cooperative){
   const started=performance.now(),budgetMs=cooperative?8:Infinity;
   if(!advanceTickInitialization(tick,cooperative,started,budgetMs))return false;
   while(tick.cursor<tick.residents.length){
-    advanceResidentForTick(tick,tick.residents[tick.cursor]);
+    const complete=advanceResidentForTick(tick,tick.residents[tick.cursor],cooperative);
+    if(!complete)return false;
     tick.cursor++;
     if(cooperative&&tick.cursor<tick.residents.length&&performance.now()-started>=budgetMs)return false;
   }
