@@ -3661,12 +3661,12 @@ function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
   // Keep the authoritative settlement composition large enough to read as
   // actual world structure, not a locator glyph, then converge rapidly to 1:1.
-  const targetFraction=tier==="footprint"?.27:tier==="route"?.66:tier==="coarse"?.20:.20;
+  const targetFraction=tier==="footprint"?.27:tier==="route"?.54:tier==="coarse"?.20:.20;
   const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
   // Route overview stays presentation-only, but it should occupy enough screen
   // area for the actual road/access topology to read as a settlement rather
   // than a tiny locator symbol. Geometry and coordinates remain authoritative.
-  const cap=tier==="footprint"?10:tier==="route"?22:tier==="coarse"?5:18;
+  const cap=tier==="footprint"?10:tier==="route"?18:tier==="coarse"?5:18;
   return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
 }
 function settlementPresentationLift(tier,value=zoomState.scalar){
@@ -3772,12 +3772,10 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
       border=special?[224,174,92]:(tier==="route"?[116,105,70]:[164,140,82]);
     count++;
     // Route-tier parcels are quiet cadastral context; roads/access links carry
-    // the stronger hierarchy. A very restrained authoritative fill gives the
-    // six occupied plots enough visual mass to read as a village, not a glyph.
+    // the stronger hierarchy. Special lots remain restrained landmarks.
     if(special)addQuad(minX,minY,maxX,maxY,fill,0);
-    else if(tier==="route")addQuad(minX,minY,maxX,maxY,[74,78,52],-.003);
     const bw=tier==="route"
-      ?Math.min(.14,Math.max(.075,Math.min(maxX-minX,maxY-minY)*.044))
+      ?Math.min(.16,Math.max(.085,Math.min(maxX-minX,maxY-minY)*.050))
       :Math.min(.23,Math.max(.12,Math.min(maxX-minX,maxY-minY)*.070));
     if(addQuad(minX,minY,maxX,minY+bw,border,.006))outlineSegmentCount++;
     if(addQuad(minX,maxY-bw,maxX,maxY,border,.006))outlineSegmentCount++;
@@ -5908,14 +5906,13 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // truthful kilometre-scale landform into one conspicuous pale arc. Fade
         // only that low-frequency presentation component while retaining the
         // registered-meter cover/macro field and full near-ground relief.
-        const nearReliefWeight=lerp(.30,1,smoothstep01(clamp((24-metersPerTexel)/16,0,1)));
-        const broadReliefWeight=lerp(.14,1,smoothstep01(clamp((58-metersPerTexel)/34,0,1)));
-        const rawHillshadeStrength=clamp((.05+focusRefineWeight*.26)*slopeLightingWeight*nearReliefWeight*broadReliefWeight,.010,.68);
-        const hillshadeCap=metersPerTexel<=6?.70:metersPerTexel<=30?.26:metersPerTexel<=120?.055:.025;
+        const nearReliefWeight=lerp(.48,1,smoothstep01(clamp((20-metersPerTexel)/13,0,1)));
+        const rawHillshadeStrength=clamp((.06+focusRefineWeight*.30)*slopeLightingWeight*nearReliefWeight,.015,.68);
+        const hillshadeCap=metersPerTexel<=6?.70:metersPerTexel<=30?.30:metersPerTexel<=120?.11:.07;
         const focusHillshadeStrength=Math.min(rawHillshadeStrength,hillshadeCap);
-        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.94:.91,contextRing?1.06:1.09);
-        const mapStructureBoost=lerp(1.06,1,smoothstep01(clamp((30-metersPerTexel)/28,0,1)));
-        const mapStructureScale=lerp(.18,1,smoothstep01(clamp((52-metersPerTexel)/30,0,1)))*broadReliefWeight;
+        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.93:.90,contextRing?1.07:1.10);
+        const mapStructureBoost=lerp(1.08,1,smoothstep01(clamp((30-metersPerTexel)/28,0,1)));
+        const mapStructureScale=lerp(.48,1,smoothstep01(clamp((46-metersPerTexel)/28,0,1)));
         const curvatureTone=curvatureSignal*(contextRing?lerp(.030,.048,contextRefineWeight):lerp(.046,.080,focusRefineWeight))*mapStructureBoost*mapStructureScale*nearReliefWeight;
         const slopeTone=-slopeSignal*(contextRing?lerp(.006,.014,contextRefineWeight):lerp(.010,.024,focusRefineWeight))*slopeLightingWeight;
         const drainageTone=(moistureCurve*(contextRing?lerp(.010,.018,contextRefineWeight):lerp(.016,.032,focusRefineWeight))-moistureGradient*(contextRing?.008:.012))*mapStructureScale;
@@ -5935,16 +5932,6 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       pushRange("coverLuma",luma3(cover));pushRange("shade",shade);
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
       let displayColor=authoritative;
-      // Coarse tangent tiles should retain the land hue already present in the
-      // canonical moisture/elevation palette rather than collapsing into gray
-      // under broad low-frequency relief. Restore chroma while preserving the
-      // computed luminance, so this changes only presentation and not authority.
-      if(sample?.land&&metersPerTexel>18){
-        const chromaRestore=.62*smoothstep01(clamp((metersPerTexel-18)/82,0,1));
-        const displayLuma=luma3(displayColor),paletteLuma=luma3(localPalette);
-        const chromaTarget=localPalette.map(v=>clamp(v+(displayLuma-paletteLuma),0,1));
-        displayColor=displayColor.map((v,i)=>lerp(v,chromaTarget[i],chromaRestore));
-      }
       if(useMicroDetail){
         const micro=localSurfaceSample(worldEast,worldNorth,sample).color;
         // As the physical texel size approaches gameplay scale, let canonical
@@ -5979,10 +5966,6 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
       const edgeCoverage=smoothstep01(clamp(edgeDistance/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
       data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*edgeCoverage):255;
-      // Texture generation is cooperative below a full row. This protects the
-      // main-thread budget on slower/software renderers without changing any
-      // pixel value, coordinate sample, or deterministic ordering.
-      if((x&63)===63&&x+1<size)yield .125;
     }
     yield 1;
   }
@@ -6265,10 +6248,9 @@ function startLocalJob(index,lat,lon,signature,prewarm,prewarmKind="lod"){
   const dims=patchDimensionsForLevel(index),size=LOCAL_DETAIL_LEVELS[index].textureSize,spatialCell=canonicalSpatialCellFor(index,lat,lon);
   const anchorLat=spatialCell.centerLatitudeRadians,anchorLon=spatialCell.centerLongitudeRadians;
   const columns=Math.max(2,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters)+1),rows=Math.max(2,Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)+1);
-  const mediumSize=Math.max(96,Math.round(size*LOCAL_MEDIUM_RING_TEXTURE_SCALE));
   const biomeCoordinateProof=localBiomeCoordinateProof(anchorLat,anchorLon);
   const job={token:++localPreparationToken,signature,levelIndex:index,dims,lat0:anchorLat,lon0:anchorLon,requestedLat0:lat,requestedLon0:lon,spatialCell,prewarm,prewarmKind,groundDetailWeight:groundDetailWeightForLevel(index),centerElevation:Number(geography?.sampleLatLon?.(anchorLat,anchorLon)?.elevationMeters||0),biomeCoordinateProof,
-    totalSteps:rows+size+mediumSize+size,steps:0,busyMs:0,slices:0,maxSliceMs:0,startedAtMs:performance.now(),iterator:null};
+    totalSteps:rows+size*2,steps:0,busyMs:0,slices:0,maxSliceMs:0,startedAtMs:performance.now(),iterator:null};
   job.iterator=localResourceSteps(job);
   localJob=job;localResources.cacheMisses+=prewarm?0:1;
   setLocalResidencyState(signature,"preparing",{cellId:spatialCell.id,level:dims.levelId,prefetchKind:prewarm?prewarmKind:null,requestedAtMs:prewarm?null:performance.now()});
@@ -6357,15 +6339,6 @@ function requestLocalDetailResource(index){
     if(cached?.prefetchKind==="zoom-target"){localResources.prefetchHits++;zoomState.targetPrefetchHits++;zoomState.targetPrefetchState="hit";}
     localMotionPrefetchTargets.delete(signature);
     activateLocalDetailResource(signature,true);return;
-  }
-  // During an animated zoom, keep the single future target preparation alive.
-  // Intermediate scale requests are presentation milestones, not reasons to
-  // throw away already-computed rows. The canonical globe remains valid parent
-  // coverage until the target child is ready.
-  const targetSignature=zoomState.animating?zoomState.targetPrefetchSignature:null;
-  if(targetSignature&&signature!==targetSignature&&
-     ((localJob?.signature===targetSignature&&localJob.prewarmKind==="zoom-target")||localResourceCache.has(targetSignature))){
-    localResources.deferredRequests++;return;
   }
   if(localJob){
     if(localJob.signature===signature){
@@ -6754,27 +6727,9 @@ function updateAnimatedZoom(dt){
   const previous=zoomState.scalar,target=clamp(zoomState.targetScalar,ZOOM_MIN,ZOOM_MAX),delta=target-previous;
   const alpha=1-Math.exp(-seconds/ZOOM_ANIMATION_TIME_CONSTANT_SECONDS);
   let next=previous+delta*alpha;
-  const now=performance.now();
-  // Loading-aware zoom: on a forward planet→local transition, let the camera
-  // advance continuously with the one cooperative target build instead of
-  // outrunning it and magnifying the low-resolution globe into a gray field.
-  // This is timing/presentation only; the same target cell and SEED authority
-  // are used. A hard timeout prevents a slow or failed build from wedging zoom.
-  const targetSignature=zoomState.targetPrefetchSignature;
-  const targetReady=Boolean(targetSignature&&(localResourceCache.has(targetSignature)||displayResource?.signature===targetSignature));
-  const targetPreparing=Boolean(lastZoomDirection>0&&target>projectionState.transitionStart&&
-    targetSignature&&localJob?.signature===targetSignature&&localJob.prewarmKind==="zoom-target");
-  if(targetPreparing&&!targetReady){
-    const progress=smoothstep01(clamp(Number(localResources.preparationProgress||0),0,1));
-    const elapsed=Math.max(0,now-Number(zoomState.targetPrefetchStartedAtMs||now));
-    const timeoutRelease=smoothstep01(clamp((elapsed-6500)/1800,0,1));
-    const loadingProgress=Math.max(progress,timeoutRelease);
-    const loadingCeiling=projectionState.transitionStart+(target-projectionState.transitionStart)*loadingProgress;
-    next=Math.min(next,Math.max(previous,loadingCeiling));
-  }
   if(Math.abs(target-next)<=ZOOM_ANIMATION_SETTLE_EPSILON)next=target;
   zoomState.scalar=next;zoomState.zoomVelocity=(next-previous)/seconds;zoomState.animationFrameCount++;zoomState.totalAnimationFrames++;
-  const displayIndex=displayScaleIndexForScalar(next);
+  const displayIndex=displayScaleIndexForScalar(next),now=performance.now();
   applyCameraZoom(false);
   const milestoneChanged=displayIndex!==zoomState.lastDisplayScaleIndex;
   if(milestoneChanged||now-Number(zoomState.lastAnimationMapUpdateAtMs||0)>=ZOOM_MAP_PRESENTATION_INTERVAL_MS){
