@@ -6150,7 +6150,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // introduced, so preparation cost and canonical world identity stay fixed.
       const strategicMapBand=smoothstep01(clamp((metersPerTexel-320)/900,0,1))*
         (1-smoothstep01(clamp((metersPerTexel-5000)/5200,0,1)));
-      const strategicMacroGain=1+strategicMapBand*(contextRing?.52:1.18);
+      const strategicMacroGain=1+strategicMapBand*(contextRing?.72:1.55);
       const sharedMacroContrast=(contextRing?1.06:1.10)*strategicMacroGain;
       const residualMacroContrast=(contextRing?1.20:lerp(1.18,1.52,focusRefineWeight))*strategicMacroGain;
       const macro=sharedMacro*sharedMacroContrast+(nativeMacro-sharedMacro)*refinementGain*residualMacroContrast;
@@ -6214,7 +6214,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const mapStructureScale=clamp(
           baseStructureScale+
           mapHighPassBand*(contextRing?.16:.34)+
-          strategicMapBand*(contextRing?.20:.46),
+          strategicMapBand*(contextRing?.28:.62),
           0,1.08
         );
         const curvatureReliefWeight=lerp(nearReliefWeight,1,Math.max(mapHighPassBand*.92,strategicMapBand*.58));
@@ -6246,7 +6246,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const valleySignal=Math.max(0,-shapedCurvature)*strategicFormBand*mapStructureScale;
         const wetValleySignal=Math.max(0,shapedMoistureCurve)*strategicFormBand*mapStructureScale;
         const drainageSignal=Math.sqrt(Math.max(0,moistureGradient))*strategicFormBand*mapStructureScale;
-        const formStrength=contextRing?.58:1;
+        const strategicFormGain=1+strategicMapBand*(contextRing?.16:.28);
+        const formStrength=(contextRing?.58:1)*strategicFormGain;
         const formTint=[
           (ridgeSignal*.086-valleySignal*.030-wetValleySignal*.012)*formStrength,
           (valleySignal*.074+wetValleySignal*.034+drainageSignal*.012-ridgeSignal*.014)*formStrength,
@@ -6288,8 +6289,9 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // readability. Its 3.6 km / 1.5 km / 700 m structure is physically
         // resolvable at 1/500 and avoids re-amplifying continental relief.
         const mapCoverBoost=lerp(1.28,1,smoothstep01(clamp((42-metersPerTexel)/38,0,1)));
-        const sharedCoverContrast=(contextRing?1.06:1.10)*mapCoverBoost;
-        const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost;
+        const strategicCoverBoost=1+strategicMapBand*(contextRing?.14:.32);
+        const sharedCoverContrast=(contextRing?1.06:1.10)*mapCoverBoost*strategicCoverBoost;
+        const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost*strategicCoverBoost;
         const landCover=sharedCover.map((v,i)=>v*sharedCoverContrast+(nativeCover[i]-v)*coverGain*residualCoverContrast);
         cover=cover.map((v,i)=>v+landCover[i]);
       }
@@ -6918,16 +6920,19 @@ function updateProjectionPresentation(visibleHeightUnits=1){
   // faceted. The shell uses the identical geography texture/UV registration and
   // adds no geography queries or identity; it only removes exaggerated relief
   // from strategic map scale while the first tangent parent prepares.
-  const mapShellIn=smoothstep01(clamp((scalar-.50)/.075,0,1));
+  // Complete relief→smooth-shell ownership before the 1/50 display milestone.
+  // The previous .50→.575 crossfade happened while the globe was already highly
+  // magnified, making partially transparent relief facets more obvious. Moving
+  // the same smooth transition earlier preserves animation while it is still
+  // visually coarse enough to hide the representation handoff.
+  const mapShellIn=smoothstep01(clamp((scalar-.40)/.08,0,1));
   const mapShellOut=displayResource?projectionPresentationBlendForZoom(scalar):0;
   // Partition strategic representation opacity instead of layering independent
-  // fades. The relief globe owns (1-shell)*(1-tangent), the smooth canonical
-  // shell owns shell*(1-tangent), and the prepared tangent parent owns tangent.
-  // The three weights therefore sum to exactly 1.0 and protruding exaggerated
-  // globe peaks cannot remain visible once the smooth shell has full ownership.
-  const reliefGlobeOpacity=(1-mapShellIn)*(1-mapShellOut);
-  const mapShellOpacity=mapScaleShell?mapShellIn*(1-mapShellOut):0;
+  // fades. If the optional smooth shell is absent (trusted fast-start evidence),
+  // its ownership is exactly zero so relief+tangent still sum to 1.0.
   const strategicShellOwnership=mapScaleShell?mapShellIn:0;
+  const reliefGlobeOpacity=(1-strategicShellOwnership)*(1-mapShellOut);
+  const mapShellOpacity=strategicShellOwnership*(1-mapShellOut);
   if(mapScaleShell&&mapScaleShellMaterial){
     mapScaleShell.enabled=mapShellOpacity>.003;
     mapScaleShellMaterial.opacity=mapShellOpacity;
