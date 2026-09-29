@@ -3593,16 +3593,27 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   if(!pc||!device)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
   const records=[...(window.StartingVillage?.buildPlots?.(activeSeed)||[]),...(reveal?.specialLots||[])];
   const tileMeters=Math.max(1,Number(reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
-  const positions=[],normals=[],uvs=[],colors=[],indices=[];let count=0,outlineSegmentCount=0;
-  const addQuad=(x0,y0,x1,y1,color,extraLift=0)=>{
-    if(!(x1>x0&&y1>y0))return false;
+  const positions=[],normals=[],uvs=[],colors=[],indices=[];let count=0,outlineSegmentCount=0,connectorSegmentCount=0;
+  const addPolygonQuad=(corners,color,extraLift=0)=>{
+    if(!Array.isArray(corners)||corners.length!==4)return false;
     const base=positions.length/3;
-    for(const [cx,cy] of [[x0,y0],[x1,y0],[x1,y1],[x0,y1]]){
-      const east=cx*tileMeters,north=cy*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
+    for(const [cx,cy] of corners){
+      if(!Number.isFinite(Number(cx))||!Number.isFinite(Number(cy)))return false;
+      const east=Number(cx)*tileMeters,north=Number(cy)*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
       const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.020+extraLift;
       positions.push(pos.x,ground,pos.z);normals.push(0,1,0);colors.push(color[0],color[1],color[2],255);
     }
     uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);return true;
+  };
+  const addQuad=(x0,y0,x1,y1,color,extraLift=0)=>{
+    if(!(x1>x0&&y1>y0))return false;
+    return addPolygonQuad([[x0,y0],[x1,y0],[x1,y1],[x0,y1]],color,extraLift);
+  };
+  const addConnector=(x1,y1,x2,y2,width,color)=>{
+    const dx=Number(x2)-Number(x1),dy=Number(y2)-Number(y1),len=Math.hypot(dx,dy);
+    if(!(len>0))return false;
+    const hw=Math.max(.055,Number(width||.12))*.5,nx=-dy/len*hw,ny=dx/len*hw;
+    return addPolygonQuad([[x1+nx,y1+ny],[x2+nx,y2+ny],[x2-nx,y2-ny],[x1-nx,y1-ny]],color,.010);
   };
   for(const record of records){
     const b=record?.bounds;if(!b)continue;
@@ -3620,12 +3631,21 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
     if(addQuad(minX,minY+bw,minX+bw,maxY-bw,border,.006))outlineSegmentCount++;
     if(addQuad(maxX-bw,minY+bw,maxX,maxY-bw,border,.006))outlineSegmentCount++;
   }
+  // HousePlans exposes the canonical exterior entrance and its already-chosen
+  // nearby road target. Keep those true access links in the same merged
+  // overview mesh so parent fallback and settlement approach read as connected
+  // village fabric without inventing roads or moving any authoritative cell.
+  for(const house of reveal?.houses||[]){
+    const entrance=house?.entrance,target=entrance?.target;
+    if(!entrance||!target)continue;
+    if(addConnector(Number(entrance.x),Number(entrance.y),Number(target.x),Number(target.y),.20,[92,72,38]))connectorSegmentCount++;
+  }
   if(!count)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
   const entity=new pc.Entity("CanonicalOccupiedLotFills");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.lotOverview,entity)];
   localStaticRoot.addChild(entity);localSettlementLotGeometry=mesh;
-  return Object.freeze({count,segmentCount:count+outlineSegmentCount,outlineSegmentCount,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-bounds-v4"});
+  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount,outlineSegmentCount,connectorSegmentCount,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-access-v5"});
 }
 function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tier){
   localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;
@@ -5424,7 +5444,9 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // albedo from the same authoritative land/elevation state at every LOD.
       const elevationBase=Number(sample?.elevationMeters||0),moistureBase=clamp(Number(sample?.moisture||.5),0,1);
       const mountainIdentity=clamp(Number(sample?.mountainInfluence||0),0,1);
-      const alpineBase=smoothstep01((elevationBase-1700)/2600),dry=1-moistureBase;
+      const alpineBase=smoothstep01((elevationBase-1700)/2600);
+      const broadPaletteWeight=sample?.land?lerp(.20,1,smoothstep01(clamp((58-metersPerTexel)/36,0,1))):1;
+      const paletteMoisture=lerp(.52,moistureBase,broadPaletteWeight),dry=1-paletteMoisture;
       // Keep lowland, upland, and alpine presentation distinguishable using only
       // canonical elevation/moisture/mountain inputs. These weights never create
       // simulation identity; they expose existing SEED geography at map scale.
@@ -5438,8 +5460,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         :1;
       const paletteUplandWeight=uplandWeight*absoluteElevationPaletteWeight;
       const paletteAlpineWeight=alpineBase*absoluteElevationPaletteWeight;
-      const lowlandPalette=[.16+.10*dry,.35+.14*moistureBase,.105+.065*moistureBase];
-      const uplandPalette=[.255+.080*dry,.365+.070*moistureBase,.190+.050*moistureBase];
+      const lowlandPalette=[.16+.10*dry,.35+.14*paletteMoisture,.105+.065*paletteMoisture];
+      const uplandPalette=[.255+.080*dry,.365+.070*paletteMoisture,.190+.050*paletteMoisture];
       const alpinePalette=[.440,.455,.410];
       const foothillPalette=lowlandPalette.map((v,i)=>lerp(v,uplandPalette[i],paletteUplandWeight));
       const localPalette=sample?.land?foothillPalette.map((v,i)=>lerp(v,alpinePalette[i],paletteAlpineWeight)):[.050,.18,.34];
@@ -5523,21 +5545,22 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const hillshadeCap=metersPerTexel<=6?.70:metersPerTexel<=30?.42:metersPerTexel<=120?.14:.08;
         const focusHillshadeStrength=Math.min(rawHillshadeStrength,hillshadeCap);
         shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.92:.88,contextRing?1.08:1.12);
-        const mapStructureBoost=lerp(1.32,1,smoothstep01(clamp((30-metersPerTexel)/28,0,1)));
-        const curvatureTone=curvatureSignal*(contextRing?lerp(.040,.060,contextRefineWeight):lerp(.068,.120,focusRefineWeight))*mapStructureBoost;
+        const mapStructureBoost=lerp(1.18,1,smoothstep01(clamp((30-metersPerTexel)/28,0,1)));
+        const mapStructureScale=lerp(.56,1,smoothstep01(clamp((46-metersPerTexel)/28,0,1)));
+        const curvatureTone=curvatureSignal*(contextRing?lerp(.040,.060,contextRefineWeight):lerp(.068,.120,focusRefineWeight))*mapStructureBoost*mapStructureScale;
         const slopeTone=-slopeSignal*(contextRing?lerp(.006,.014,contextRefineWeight):lerp(.010,.024,focusRefineWeight))*slopeLightingWeight;
-        const drainageTone=moistureCurve*(contextRing?lerp(.010,.018,contextRefineWeight):lerp(.016,.032,focusRefineWeight))-moistureGradient*(contextRing?.008:.012);
+        const drainageTone=(moistureCurve*(contextRing?lerp(.010,.018,contextRefineWeight):lerp(.016,.032,focusRefineWeight))-moistureGradient*(contextRing?.008:.012))*mapStructureScale;
         const structureTone=curvatureTone+slopeTone+drainageTone;
         cover=[structureTone,structureTone*.95+drainageTone*.12,curvatureTone*.74+slopeTone*.64+drainageTone*.58];
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
         const coverGain=contextRing?lerp(.12,.34,contextRefineWeight):lerp(.34,.94,focusRefineWeight);
-        const mapCoverBoost=lerp(1.18,1,smoothstep01(clamp((28-metersPerTexel)/24,0,1)));
+        const mapCoverBoost=lerp(1.28,1,smoothstep01(clamp((28-metersPerTexel)/24,0,1)));
         const coverContrast=(contextRing?lerp(1.04,1.22,contextRefineWeight):lerp(1.10,1.42,focusRefineWeight))*mapCoverBoost;
         const landCover=sharedCover.map((v,i)=>(v+(nativeCover[i]-sharedCover[i])*coverGain)*coverContrast);
         cover=cover.map((v,i)=>v+landCover[i]);
       }
-      const reliefTintWeight=sample?.land&&metersPerTexel>35?lerp(.16,1,smoothstep01(clamp((180-metersPerTexel)/145,0,1))):1;
+      const reliefTintWeight=sample?.land&&metersPerTexel>35?lerp(.06,1,smoothstep01(clamp((180-metersPerTexel)/145,0,1))):1;
       const identityTint=sample?.land?[relief*.040*reliefTintWeight,relief*.036*reliefTintWeight,relief*.020*reliefTintWeight]:[-.010,-.003,.024];
       pushRange("coverLuma",luma3(cover));pushRange("shade",shade);
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
@@ -5694,7 +5717,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-map-photometry-route-balance-v14",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-access-morphology-map-detail-v15",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
