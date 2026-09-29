@@ -7822,11 +7822,33 @@ async function buildScene(){  const started=performance.now();
   if(!window.PlanetGeography)throw new Error("PlanetGeography is unavailable");
   activeSeed=window.PlanetGeography.resolveSeed();
   if(window.WorldState?.bindCampaign&&window.SeedSystem?.loadCampaign){
-    let restored=null;
-    try{restored=window.SeedSystem.loadCampaign();}catch(_){}
-    if(restored?.ok&&String(restored.campaign?.seed||"")===String(activeSeed)){
-      window.WorldState.bindCampaign(restored.campaign,{reset:false});
-    }else window.WorldState.bindCampaign(null,{reset:false});
+    let versioned=null;
+    try{versioned=window.CampaignPersistence?.stored?.()||null;}catch(_){versioned=null;}
+    if(versioned?.ok&&String(versioned.save?.seed||"")===String(activeSeed)&&window.CampaignPersistence?.restoreAndResume){
+      setStartupProgress("geography","Restoring campaign state…",46);
+      const resumed=await window.CampaignPersistence.restoreAndResume(versioned.save,{
+        targetTimestamp:window.GameTime?.getTimestampKey?.()||versioned.save?.gameTime?.currentAuthoritativeFantasyTimestamp,
+        maxBatches:16,priority:"current"
+      });
+      if(!resumed?.ok||!resumed?.authoritativeReady){
+        throw new Error("Saved campaign could not reach an authoritative resume state. Start a new campaign or clear the saved campaign data.");
+      }
+    }else if(versioned&&!versioned.ok&&versioned.reason!=="save-required"){
+      throw new Error("Saved campaign is incompatible or corrupt ("+String(versioned.reason||"unknown")+"). Start a new campaign or clear the saved campaign data.");
+    }else{
+      let restored=null;
+      try{restored=window.SeedSystem.loadCampaign();}catch(_){}
+      if(restored?.ok&&String(restored.campaign?.seed||"")===String(activeSeed)){
+        window.WorldState.bindCampaign(restored.campaign,{reset:false});
+        if(window.CatchUpSimulation?.bindCampaign){
+          window.CatchUpSimulation.bindCampaign(restored.campaign,{reset:false});
+          const target=window.GameTime?.getTimestampKey?.();
+          const catchUp=target?await window.CatchUpSimulation.resumeTo(restored.campaign.seed,target,{maxBatches:16,priority:"current"}):null;
+          if(catchUp&&!catchUp.complete)throw new Error("Existing campaign catch-up did not reach an authoritative state.");
+          window.CampaignPersistence?.createSave?.({campaign:restored.campaign,persist:true});
+        }
+      }else window.WorldState.bindCampaign(null,{reset:false});
+    }
   }
   geography=window.PlanetGeography.create(activeSeed);
   worldProjectionAnchorCache=null;
@@ -8072,7 +8094,9 @@ async function start(){
     if(root){
       root.dataset.ready="false";
       root.dataset.error=startupError;
-      root.textContent="Planet renderer failed to start.";
+      root.textContent=/Saved campaign|campaign catch-up|authoritative resume/i.test(String(error?.message||error))
+        ?String(error?.message||error)
+        :"Planet renderer failed to start.";
     }
     console.error("Planet stage startup failed.",error);
     throw error;
