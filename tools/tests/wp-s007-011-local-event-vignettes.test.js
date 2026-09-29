@@ -25,6 +25,7 @@ const residents=[
   {id:"R06",name:"Fenn",displayName:"Fenn Pike",profession:"smith",workplaceId:"SMITHY",workplaceTarget:{x:"18",y:"11",level:0},homeTarget:{x:"12",y:"3",level:0}}
 ];
 global.DailyActivity={build:()=>residents};
+global.Walkability={classify:(_seed,x,y)=>({walkable:true,buildingId:null,level:0,x:String(x),y:String(y)})};
 global.SeedSystem={getCampaign:()=>null};
 global.GameTime={getTimestampKey:()=>null};
 global.WorldSimulationBudget={
@@ -46,8 +47,14 @@ assert.deepStrictEqual(plan,LocalEventVignettes.planDay(seed,day),"same seed/day
 assert.notDeepStrictEqual(plan,LocalEventVignettes.planDay(seed+"-ALT",day),"alternate seed did not change plan");
 for(const event of plan){
   assert(event.participantCount>=2&&event.participantCount<=4,"participant count outside bounded contract");
-  assert(event.participants.every(p=>p.id&&p.existingTarget),"event fabricated a participant/target");
+  assert(event.participants.every(p=>p.id&&p.existingTarget&&p.eventTarget),"event fabricated a participant/target");
   assert(event.location?.anchor&&event.location?.source,"event location is not grounded in an existing resident target");
+  assert.strictEqual(new Set(event.participants.map(p=>p.eventTarget.x+","+p.eventTarget.y)).size,event.participantCount,"event staging targets are not distinct");
+  assert(event.participants.every(p=>p.eventTargetSource==="bounded-walkable-staging"),"event did not use bounded walkable staging");
+  assert(event.participants.every(p=>{
+    const dx=Number(BigInt(p.eventTarget.x)-BigInt(event.location.anchor.x)),dy=Number(BigInt(p.eventTarget.y)-BigInt(event.location.anchor.y));
+    return Math.max(Math.abs(dx),Math.abs(dy))>=2&&Math.max(Math.abs(dx),Math.abs(dy))<=6;
+  }),"event staging escaped bounded immediate area");
   assert(event.endTimestamp>event.startTimestamp,"event duration invalid");
   assert.strictEqual(event.scheduleOverride,true);
 }
@@ -66,9 +73,10 @@ for(const type of LocalEventVignettes.CATALOG.map(x=>x.id)){
     const state=LocalEventVignettes.stateFor(participant.id,s);
     assert(state?.scheduleOverride&&state?.activityOverride,type+" participant did not receive temporary event activity");
     assert.strictEqual(state.activityOverride.action,"gather",type+" activity action changed");
-    assert.strictEqual(state.activityOverride.target.x,result.event.location.anchor.x,type+" activity target x drifted");
-    assert.strictEqual(state.activityOverride.target.y,result.event.location.anchor.y,type+" activity target y drifted");
+    assert.strictEqual(state.activityOverride.target.x,participant.eventTarget.x,type+" staged activity target x drifted");
+    assert.strictEqual(state.activityOverride.target.y,participant.eventTarget.y,type+" staged activity target y drifted");
     assert.strictEqual(state.activityOverride.targetSource,"local-event-vignette",type+" activity target source changed");
+    assert.strictEqual(state.stagingRevision,"bounded-walkable-staging-v1",type+" staging revision missing");
   }
   const ended=LocalEventVignettes.advance(s,"1201-02-01 12:46:00",{ensureScheduled:false});
   assert.strictEqual(ended.activeCount,0,type+" did not end cleanly");
