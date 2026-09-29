@@ -3302,10 +3302,10 @@ function ensureLocalStaticMaterials(){
   const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.39,.30,.14,.72),square:make("LocalSquare",.48,.35,.18),
+    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.39,.30,.14,.60),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.05),lotOverview:make("LocalOccupiedLotOverview",.46,.38,.20,.22),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.035),lotOverview:make("LocalOccupiedLotOverview",.43,.36,.19,.30),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3611,7 +3611,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
   for(let y=-extent;y<=extent;y++)for(let x=-extent;x<=extent;x++){
     const local=village.local(activeSeed,String(x),String(y)),infra=local&&village.infrastructureAt(activeSeed,local);queryCount++;
     if(!infra||infra.type==="square")continue;
-    roadCells.push([x,y]);roadSet.add(x+","+y);
+    roadCells.push([x,y,String(infra.kind||infra.type||"road")]);roadSet.add(x+","+y);
   }
   if(!roadCells.length)return Object.freeze({active:false,cellCount:0,queryCount,triangleCount:0,mode:"none"});
   const positions=[],normals=[],uvs=[],indices=[];let segmentCount=0;
@@ -3626,8 +3626,14 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
     uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
   };
   if(tier==="route"){
-    const half=.30;
-    for(const [x,y] of roadCells){
+    const ringRadius=Math.max(1,Number(village.RING_RADIUS_TILES||14));
+    for(const [x,y,kind] of roadCells){
+      const local=village.local(activeSeed,String(x),String(y));
+      const ringCell=Boolean(local&&Math.abs(Number(local.radius||0)-ringRadius)<=1.25);
+      const outwardBranch=Boolean(local&&kind==="main-road"&&Number(local.forward||0)>ringRadius+1);
+      // Keep the literal ring/center network visible but visually subordinate;
+      // real outward gateway branches carry the strongest overview weight.
+      const half=outwardBranch?.34:ringCell?.13:kind==="local-path"?.17:.20;
       addQuad(x-half,y-half,x+half,y+half);
       if(roadSet.has((x+1)+","+y))addQuad(x+half,y-half,x+1-half,y+half);
       if(roadSet.has(x+","+(y+1)))addQuad(x-half,y+half,x+half,y+1-half);
@@ -5253,6 +5259,50 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
     (mottle*.48-forestDelta*.082-copse*.024+dryField*.006+meadow*.016)*coverContrast
   ];
 }
+function sharedSurfaceAuthority(job){
+  if(job?.surfaceAuthority)return job.surfaceAuthority;
+  const lat0=job.lat0,lon0=job.lon0;
+  const spanEast=Math.max(1,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR),spanNorth=Math.max(1,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR);
+  // One canonical outer-footprint authority raster is reused by focus, medium,
+  // outer and parent-fallback presentation. The same registered world point is
+  // therefore reconstructed from the same four authority samples regardless
+  // of which visual ring currently covers it.
+  const size=160,cache=new Array(size*size);
+  const centerRegistered=job.biomeCoordinateProof?.registeredMeters||canonicalRegisteredMetersForLatLon(lat0,lon0);
+  const centerRegisteredEast=Number(centerRegistered.east??centerRegistered.eastMeters??0),registeredPeriod=Math.PI*2*WORLD_RADIUS_METERS;
+  const unwrapRegisteredEast=value=>{
+    const delta=Number(value||0)-centerRegisteredEast;
+    return centerRegisteredEast+(delta-Math.round(delta/registeredPeriod)*registeredPeriod);
+  };
+  const authorityAt=(ax,ay)=>{
+    const ix=Math.max(0,Math.min(size-1,ax)),iy=Math.max(0,Math.min(size-1,ay)),key=iy*size+ix;
+    if(cache[key])return cache[key];
+    const au=ix/(size-1),av=iy/(size-1);
+    const aeast=(au-.5)*spanEast,anorth=(.5-av)*spanNorth,geo=canonicalLatLonForLocalOffset(lat0,lon0,aeast,anorth);
+    const alat=geo.latitudeRadians,alon=geo.longitudeRadians;
+    const natural=geography.sampleLatLon(alat,alon),registered=canonicalRegisteredMetersForLatLon(alat,alon);
+    return cache[key]={natural,registeredEastMeters:unwrapRegisteredEast(registered.eastMeters),registeredNorthMeters:Number(registered.northMeters||0)};
+  };
+  const bilerp=(va,vb,vc,vd,tx,ty)=>lerp(lerp(Number(va)||0,Number(vb)||0,tx),lerp(Number(vc)||0,Number(vd)||0,tx),ty);
+  const sample=(east,north)=>{
+    const u=clamp(Number(east||0)/spanEast+.5,0,1),v=clamp(.5-Number(north||0)/spanNorth,0,1);
+    const gx=u*(size-1),gy=v*(size-1),x0=Math.floor(gx),y0=Math.floor(gy),x1=Math.min(size-1,x0+1),y1=Math.min(size-1,y0+1),tx=gx-x0,ty=gy-y0;
+    const aa=authorityAt(x0,y0),bb=authorityAt(x1,y0),cc=authorityAt(x0,y1),dd=authorityAt(x1,y1);
+    const a=aa.natural,b=bb.natural,c=cc.natural,d=dd.natural;
+    const color=[0,1,2].map(i=>bilerp(a.color?.[i],b.color?.[i],c.color?.[i],d.color?.[i],tx,ty));
+    const landWeight=bilerp(a.land?1:0,b.land?1:0,c.land?1:0,d.land?1:0,tx,ty);
+    return {
+      land:landWeight>=.5,color,
+      elevationMeters:bilerp(a.elevationMeters,b.elevationMeters,c.elevationMeters,d.elevationMeters,tx,ty),
+      moisture:bilerp(a.moisture,b.moisture,c.moisture,d.moisture,tx,ty),
+      mountainInfluence:bilerp(a.mountainInfluence,b.mountainInfluence,c.mountainInfluence,d.mountainInfluence,tx,ty),
+      registeredEastMeters:bilerp(aa.registeredEastMeters,bb.registeredEastMeters,cc.registeredEastMeters,dd.registeredEastMeters,tx,ty),
+      registeredNorthMeters:bilerp(aa.registeredNorthMeters,bb.registeredNorthMeters,cc.registeredNorthMeters,dd.registeredNorthMeters,tx,ty)
+    };
+  };
+  job.surfaceAuthority={size,spanEast,spanNorth,sample};
+  return job.surfaceAuthority;
+}
 function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRing=false){
   const lat0=job.lat0,lon0=job.lon0,data=new Uint8ClampedArray(size*size*4);
   const metersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
@@ -5286,37 +5336,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // Fine terrain/biome detail is sampled in the Campaign-SEED registered
   // coordinate frame. Patch recentering, viewport changes and LOD changes may
   // change presentation, but never the world-space inputs to the detail field.
-  const centerRegistered=job.biomeCoordinateProof?.registeredMeters||canonicalRegisteredMetersForLatLon(lat0,lon0);
-  const centerRegisteredEast=Number(centerRegistered.east??centerRegistered.eastMeters??0),registeredPeriod=Math.PI*2*WORLD_RADIUS_METERS;
-  const authoritySize=contextRing?96:128,authorityCache=new Array(authoritySize*authoritySize);
-  const unwrapRegisteredEast=value=>{
-    const delta=Number(value||0)-centerRegisteredEast;
-    return centerRegisteredEast+(delta-Math.round(delta/registeredPeriod)*registeredPeriod);
-  };
-  const authorityAt=(ax,ay)=>{
-    const ix=Math.max(0,Math.min(authoritySize-1,ax)),iy=Math.max(0,Math.min(authoritySize-1,ay)),key=iy*authoritySize+ix;
-    if(authorityCache[key])return authorityCache[key];
-    const au=ix/(authoritySize-1),av=iy/(authoritySize-1);
-    const aeast=(au-.5)*spanEast,anorth=(.5-av)*spanNorth,geo=canonicalLatLonForLocalOffset(lat0,lon0,aeast,anorth);
-    const alat=geo.latitudeRadians,alon=geo.longitudeRadians;
-    const natural=geography.sampleLatLon(alat,alon),registered=canonicalRegisteredMetersForLatLon(alat,alon);
-    return authorityCache[key]={natural,registeredEastMeters:unwrapRegisteredEast(registered.eastMeters),registeredNorthMeters:Number(registered.northMeters||0)};
-  };
-  const mixSample=(ux,vz)=>{
-    const gx=ux*(authoritySize-1),gy=vz*(authoritySize-1),x0=Math.floor(gx),y0=Math.floor(gy),x1=Math.min(authoritySize-1,x0+1),y1=Math.min(authoritySize-1,y0+1),tx=gx-x0,ty=gy-y0;
-    const aa=authorityAt(x0,y0),bb=authorityAt(x1,y0),cc=authorityAt(x0,y1),dd=authorityAt(x1,y1);
-    const a=aa.natural,b=bb.natural,c=cc.natural,d=dd.natural;
-    const bilerp=(va,vb,vc,vd)=>lerp(lerp(Number(va)||0,Number(vb)||0,tx),lerp(Number(vc)||0,Number(vd)||0,tx),ty);
-    const color=[0,1,2].map(i=>bilerp(a.color?.[i],b.color?.[i],c.color?.[i],d.color?.[i]));
-    const landWeight=bilerp(a.land?1:0,b.land?1:0,c.land?1:0,d.land?1:0);
-    return {
-      land:landWeight>=.5,color,elevationMeters:bilerp(a.elevationMeters,b.elevationMeters,c.elevationMeters,d.elevationMeters),
-      moisture:bilerp(a.moisture,b.moisture,c.moisture,d.moisture),
-      mountainInfluence:bilerp(a.mountainInfluence,b.mountainInfluence,c.mountainInfluence,d.mountainInfluence),
-      registeredEastMeters:bilerp(aa.registeredEastMeters,bb.registeredEastMeters,cc.registeredEastMeters,dd.registeredEastMeters),
-      registeredNorthMeters:bilerp(aa.registeredNorthMeters,bb.registeredNorthMeters,cc.registeredNorthMeters,dd.registeredNorthMeters)
-    };
-  };
+  const surfaceAuthority=sharedSurfaceAuthority(job);
+  const mixSample=(ux,vz)=>surfaceAuthority.sample((ux-.5)*spanEast,(.5-vz)*spanNorth);
   for(let y=0;y<size;y++){
     for(let x=0;x<size;x++){
       const ux=(x+.5)/size,vz=(y+.5)/size;
@@ -5556,7 +5577,7 @@ function finalizeLocalResource(job,result){
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
-      topographicSignalRevision:"canonical-single-baseline-elevation-drainage-v6",topographicSignalAuthority:"PlanetGeography elevation slope/curvature + moisture sampled from the existing per-texture authority cache through SeedCoordinateFabric registered meters",
+      topographicSignalRevision:"canonical-shared-authority-raster-v7",topographicSignalAuthority:"PlanetGeography elevation slope/curvature + moisture sampled from one per-SLOD outer-footprint authority raster reused by focus/medium/outer/fallback through SeedCoordinateFabric registered meters",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
