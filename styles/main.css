@@ -1533,3 +1533,70 @@ body.planet-stage-active{
   }
   .local-event-description{font-size:11px}
 }
+
+
+/* WP-S007-013 rare traveling encounter presentation */
+.travel-encounter-card{
+  position:fixed;
+  left:max(12px,env(safe-area-inset-left));
+  top:max(72px,calc(env(safe-area-inset-top) + 58px));
+  z-index:44;
+  width:min(340px,calc(100vw - 24px));
+  padding:12px 14px;
+  border:1px solid rgba(238,202,111,.58);
+  border-radius:14px;
+  background:linear-gradient(145deg,rgba(23,27,28,.94),rgba(10,15,17,.90));
+  color:#f8f1df;
+  box-shadow:0 10px 28px rgba(0,0,0,.38);
+  backdrop-filter:blur(8px);
+  pointer-events:none;
+  font:600 12px/1.35 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+.travel-encounter-card[hidden]{display:none!important}
+.travel-encounter-kicker{
+  color:#e4c56f;
+  font-size:9px;
+  letter-spacing:.18em;
+  margin-bottom:6px;
+}
+.travel-encounter-row{display:flex;gap:10px;align-items:flex-start}
+.travel-encounter-icon{
+  display:grid;
+  place-items:center;
+  flex:0 0 32px;
+  width:32px;height:32px;
+  border-radius:9px;
+  background:rgba(228,197,111,.13);
+  border:1px solid rgba(228,197,111,.48);
+  color:#f4d985;
+  font-size:17px;
+  line-height:1;
+}
+.travel-encounter-title{display:block;font-size:15px;line-height:1.18;color:#fff9e9}
+.travel-encounter-summary{margin:3px 0 0;color:rgba(248,241,223,.78);font-weight:500}
+.travel-encounter-meta{
+  margin-top:9px;
+  padding-top:8px;
+  border-top:1px solid rgba(255,255,255,.10);
+  color:#c7d4d0;
+  font-size:10px;
+}
+@media(max-width:520px){
+  .travel-encounter-card{
+    top:max(62px,calc(env(safe-area-inset-top) + 52px));
+    left:10px;
+    width:min(300px,calc(100vw - 20px));
+    padding:10px 12px;
+  }
+  .travel-encounter-summary{font-size:11px}
+}
+@media(max-height:430px) and (orientation:landscape){
+  .travel-encounter-card{
+    top:54px;
+    left:8px;
+    width:min(310px,38vw);
+    padding:9px 10px;
+  }
+  .travel-encounter-summary{display:none}
+  .travel-encounter-meta{margin-top:5px;padding-top:5px}
+}
