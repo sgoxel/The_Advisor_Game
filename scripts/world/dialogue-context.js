@@ -141,7 +141,7 @@ function topicRepeated(topic,recognition){
   const a=topicTokens(topic).filter(token=>token.length>2),b=topicTokens(recognition?.lastTopic||"").filter(token=>token.length>2);
   return a.some(token=>b.includes(token));
 }
-function responseText(tone,activity,topic,knowledge,recognition,priorReference){
+function responseText(tone,activity,topic,knowledge,recognition,priorReference,rumor){
   const prefix={
     friendly:"I'm glad you asked. ",
     neutral:"I'll answer as far as I can. ",
@@ -156,6 +156,9 @@ function responseText(tone,activity,topic,knowledge,recognition,priorReference){
     ?("I remember our earlier interaction: "+priorReference.summary+" ")
     :"";
   const repeated=topicRepeated(topic,recognition);
+  if(rumor){
+    return familiar+prefix+past+(repeated?"As we discussed before, ":"")+rumor.text;
+  }
   if(activity.kind==="sleeping"&&!knowledge)return familiar+prefix+past+"I cannot confirm anything about "+topic+" right now.";
   if(!knowledge)return familiar+prefix+past+"I do not have reliable knowledge to confirm anything about "+topic+".";
   if(knowledge.uncertain){
@@ -183,12 +186,17 @@ function resolve(seedValue,configValue){
   const priorReference=recognitionReferenceFor(seed,residentId,topic);
   const tone=recognitionTone(chooseTone(location,activity,social,urgency),social,recognition);
   const knowledge=knowledgeFor(seed,residentId,topic);
+  const rumor=config.allowRumors===false?null:(scope().LocalRumors?.bestForTopic?.(seed,residentId,{
+    topic,when,destinations:scope().PlanetStage?.placeDescriptors?.()||[],
+    localFacts:Array.isArray(config.localFacts)?config.localFacts:[],
+    localEvents:Array.isArray(config.localEvents)?config.localEvents:[]
+  })||null);
   const interactionKind=config.interactionKind==="advice-response"?"advice-response":"conversation";
-  const response=responseText(tone,activity,topic,knowledge,recognition,priorReference);
+  const response=responseText(tone,activity,topic,knowledge,recognition,priorReference,rumor);
   const identity=[
     seed,residentId,"protagonist",activity.timestamp,location.kind,activity.kind,
     SOCIAL_KEYS.map(key=>social[key].toFixed(3)).join(","),urgency.toFixed(3),topic,interactionKind,
-    knowledge?.id||"none",recognition.meaningfulEncounterCount,priorReference?.id||"none",tone,response
+    knowledge?.id||"none",rumor?.id||"none",recognition.meaningfulEncounterCount,priorReference?.id||"none",tone,response
   ].join("|");
   return Object.freeze({
     id:"DLG-"+hashText(identity),
@@ -224,7 +232,13 @@ function resolve(seedValue,configValue){
       reliability:knowledge?.reliability||null,
       uncertain:Boolean(knowledge?.uncertain)
     }),
-    authority:"presentation-only + persisted CharacterMemory recognition",
+    rumor:rumor?Object.freeze({
+      id:rumor.id,status:rumor.status,confidence:rumor.confidence,reliability:rumor.reliability,
+      freshness:rumor.freshness,location:rumor.location,subject:rumor.subject,
+      destinationLead:rumor.destinationLead?Object.freeze({id:rumor.destinationLead.id,name:rumor.destinationLead.name,type:rumor.destinationLead.type,category:rumor.destinationLead.category}):null,
+      characterBounded:true,createsWorldTruth:false
+    }):null,
+    authority:"presentation-only + persisted CharacterMemory/LocalRumors knowledge",
     worldMutation:false,
     memoryMutation:false
   });
@@ -360,8 +374,17 @@ function recordInteraction(seedValue,residentIdValue,configValue){
   if(!scope().CharacterMemory?.recordInteraction)throw new Error("CharacterMemory interaction API unavailable");
   return scope().CharacterMemory.recordInteraction(normalizeSeed(seedValue),String(residentIdValue||""),configValue||{});
 }
+function revealLead(seedValue,dialogueValue){
+  const seed=normalizeSeed(seedValue),dialogue=dialogueValue&&typeof dialogueValue==="object"?dialogueValue:null;
+  if(!dialogue?.rumor?.destinationLead||!scope().LocalRumors?.revealLead)return null;
+  const rumor=scope().LocalRumors.bestForTopic?.(seed,dialogue.speaker?.id,{
+    topic:dialogue.topic,destinations:scope().PlanetStage?.placeDescriptors?.()||[]
+  })||null;
+  if(!rumor||rumor.id!==dialogue.rumor.id)return null;
+  return scope().LocalRumors.revealLead(seed,dialogue.speaker.id,rumor);
+}
 const api=Object.freeze({
-  TONES,SOCIAL_KEYS,CASE_IDS,normalizeSocial,resolve,recordInteraction,caseConfigs,proof,renderDebugPanel
+  TONES,SOCIAL_KEYS,CASE_IDS,normalizeSocial,resolve,recordInteraction,revealLead,caseConfigs,proof,renderDebugPanel
 });
 scope().DialogueContext=api;
 })();
