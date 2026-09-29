@@ -374,37 +374,40 @@ function hierarchyBoundedCells(minX,maxX,minY,maxY,classId){
   cells.sort((p,q)=>p.distance-q.distance||p.y<q.y?-1:p.y>q.y?1:p.x<q.x?-1:p.x>q.x?1:0);
   return Object.freeze(cells.slice(0,HIERARCHY_QUERY_CELL_LIMIT).map(cell=>Object.freeze({x:cell.x,y:cell.y})));
 }
-function canonicalSettlementsInBounds(seedValue,boundsValue,classesValue){
+function createCanonicalSettlementsInBoundsQuery(seedValue,boundsValue,classesValue){
   const seed=String(seedValue==null?"":seedValue),bounds=boundsValue||{};
   let minX=BigInt(String(bounds.minX??"0")),maxX=BigInt(String(bounds.maxX??"0")),minY=BigInt(String(bounds.minY??"0")),maxY=BigInt(String(bounds.maxY??"0"));
   if(minX>maxX)[minX,maxX]=[maxX,minX];if(minY>maxY)[minY,maxY]=[maxY,minY];
   const requested=Array.isArray(classesValue)?classesValue.map(String):HIERARCHY_CLASS_ORDER.slice();
   const classes=[...new Set(requested.map(value=>value==="major-city"?"city":value).filter(value=>HIERARCHY_CLASS_SPECS[value]))];
-  const records=[],seen=new Set();let queryCellCount=0;
+  const work=[];let queryCellCount=0;
   for(const classId of classes){
     const cells=hierarchyBoundedCells(minX,maxX,minY,maxY,classId);queryCellCount+=cells.length;
-    for(const cell of cells){
-      const record=canonicalSettlementAtCell(seed,classId,cell.x,cell.y);if(!record||seen.has(record.id))continue;
-      const x=BigInt(record.center.x),y=BigInt(record.center.y);
-      if(x<minX||x>maxX||y<minY||y>maxY)continue;
-      seen.add(record.id);records.push(record);
-    }
+    for(const cell of cells)work.push(Object.freeze({classId,cell}));
   }
-  if(requested.includes("national-capital")||requested.includes("capital")){
-    const samples=[[minX,minY],[maxX,minY],[minX,maxY],[maxX,maxY],[(minX+maxX)/2n,(minY+maxY)/2n]],countries=new Map();
-    for(const [x,y] of samples)try{const country=PoliticalGeography.countryAt(seed,x.toString(),y.toString());if(country)countries.set(country.id,country);}catch(_){}
-    for(const country of countries.values()){
-      const cap=hierarchyCapitalForRecord(seed,{countryId:country.id});
-      if(!cap||seen.has(cap.id))continue;
-      const x=BigInt(cap.center.x),y=BigInt(cap.center.y);
-      if(x<minX||x>maxX||y<minY||y>maxY)continue;
-      seen.add(cap.id);records.push(cap);
-    }
+  return {
+    revision:"settlement-hierarchy-query-v1",seed,minX,maxX,minY,maxY,
+    requested:Object.freeze(requested.slice()),classes:Object.freeze(classes.slice()),
+    work:Object.freeze(work),queryCellCount,index:0,records:[],seen:new Set(),
+    done:false,result:null,processedCellCount:0
+  };
+}
+function canonicalSettlementsQueryAdd(state,record){
+  if(!record||state.seen.has(record.id))return false;
+  const x=BigInt(record.center.x),y=BigInt(record.center.y);
+  if(x<state.minX||x>state.maxX||y<state.minY||y>state.maxY)return false;
+  state.seen.add(record.id);state.records.push(record);return true;
+}
+function finalizeCanonicalSettlementsQuery(state){
+  if(state.requested.includes("national-capital")||state.requested.includes("capital")){
+    const samples=[[state.minX,state.minY],[state.maxX,state.minY],[state.minX,state.maxY],[state.maxX,state.maxY],[(state.minX+state.maxX)/2n,(state.minY+state.maxY)/2n]],countries=new Map();
+    for(const [x,y] of samples)try{const country=PoliticalGeography.countryAt(state.seed,x.toString(),y.toString());if(country)countries.set(country.id,country);}catch(_){}
+    for(const country of countries.values())canonicalSettlementsQueryAdd(state,hierarchyCapitalForRecord(state.seed,{countryId:country.id}));
   }
-  records.sort((a,b)=>hierarchyPriority(b)-hierarchyPriority(a)||a.id.localeCompare(b.id));
-  const enriched=records.map(record=>{
+  state.records.sort((a,b)=>hierarchyPriority(b)-hierarchyPriority(a)||a.id.localeCompare(b.id));
+  const enriched=state.records.map(record=>{
     let nearestSame=null,nearestHigher=null;
-    for(const other of records){
+    for(const other of state.records){
       if(other.id===record.id)continue;
       const d=hierarchyDistanceMeters(record.center,other.center);
       if(other.classId===record.classId&&(nearestSame==null||d<nearestSame))nearestSame=d;
@@ -417,15 +420,37 @@ function canonicalSettlementsInBounds(seedValue,boundsValue,classesValue){
   });
   const classCounts={};for(const item of enriched)classCounts[item.importanceClass]=(classCounts[item.importanceClass]||0)+1;
   const signature="HIDX-"+hashText(enriched.map(item=>[item.id,item.classId,item.importanceClass,item.center.x,item.center.y,item.countryId,item.regionId].join(":")).join("|"));
-  return Object.freeze({
+  state.result=Object.freeze({
     settlements:Object.freeze(enriched),
     diagnostics:Object.freeze({
       revision:"settlement-hierarchy-v"+HIERARCHY_VERSION,signature,classCounts:Object.freeze(classCounts),
-      queryCellCount,boundedQueryCellLimit:HIERARCHY_QUERY_CELL_LIMIT*classes.length,bounded:true,fullWorldScan:false,
+      queryCellCount:state.queryCellCount,boundedQueryCellLimit:HIERARCHY_QUERY_CELL_LIMIT*state.classes.length,bounded:true,fullWorldScan:false,
       seedOnly:true,cameraIndependent:true,viewportIndependent:true,lodIndependent:true,streamingOrderIndependent:true,
-      requestedClasses:Object.freeze(requested.slice()),resolvedClasses:Object.freeze(classes.slice())
+      requestedClasses:Object.freeze(state.requested.slice()),resolvedClasses:Object.freeze(state.classes.slice())
     })
   });
+  state.done=true;return state.result;
+}
+function stepCanonicalSettlementsInBoundsQuery(state,maxCellsValue=1){
+  if(!state||state.revision!=="settlement-hierarchy-query-v1")throw new Error("Invalid canonical settlement query state");
+  if(state.done)return Object.freeze({done:true,processedCells:0,remainingCells:0,result:state.result});
+  const maxCells=Math.max(1,Math.min(64,Math.floor(Number(maxCellsValue)||1)));
+  let processed=0;
+  while(state.index<state.work.length&&processed<maxCells){
+    const job=state.work[state.index++],record=canonicalSettlementAtCell(state.seed,job.classId,job.cell.x,job.cell.y);
+    canonicalSettlementsQueryAdd(state,record);processed++;state.processedCellCount++;
+  }
+  if(state.index>=state.work.length)finalizeCanonicalSettlementsQuery(state);
+  return Object.freeze({
+    done:Boolean(state.done),processedCells:processed,
+    remainingCells:Math.max(0,state.work.length-state.index),
+    result:state.result
+  });
+}
+function canonicalSettlementsInBounds(seedValue,boundsValue,classesValue){
+  const state=createCanonicalSettlementsInBoundsQuery(seedValue,boundsValue,classesValue);
+  while(!state.done)stepCanonicalSettlementsInBoundsQuery(state,64);
+  return state.result;
 }
 function canonicalHierarchySnapshot(seedValue,xValue,yValue,radiusMetersValue){
   const seed=String(seedValue==null?"":seedValue),x=BigInt(String(xValue??"0")),y=BigInt(String(yValue??"0"));
@@ -1147,7 +1172,7 @@ function renderDebugPanel(seedValue,planIndexValue,rootNode){
 const api=Object.freeze({
   VERSION,SUPPORTED_CLASSES,CLASS_SCALE,build,settlementsForCountry,representatives,proof,renderDebugPanel,
   HIERARCHY_VERSION,HIERARCHY_CLASS_ORDER,HIERARCHY_CLASS_SPECS,
-  canonicalSettlementAtCell,canonicalSettlementAtPoint,canonicalSettlementsInBounds,canonicalSettlementsForCountry,canonicalConsumerProof,
+  canonicalSettlementAtCell,canonicalSettlementAtPoint,canonicalSettlementsInBounds,createCanonicalSettlementsInBoundsQuery,stepCanonicalSettlementsInBoundsQuery,canonicalSettlementsForCountry,canonicalConsumerProof,
   canonicalHierarchySnapshot,canonicalHierarchyProof,clearCanonicalHierarchyCache
 });
 window.SettlementArchetypes=api;
