@@ -283,6 +283,19 @@ function buildForCell(seedValue,countryIdValue,rxValue,ryValue){
   cache.set(cacheKey,profile);
   return profile;
 }
+function descriptorAt(seedValue,xValue,yValue){
+  const seed=String(seedValue==null?"":seedValue);
+  const country=PoliticalGeography.countryAt(seed,xValue,yValue);
+  if(!country)return null;
+  const cell=cellFor(xValue,yValue),id=regionId(country.id,cell.x,cell.y);
+  return Object.freeze({
+    id,name:regionName(seed,country.id,cell.x,cell.y),
+    parentCountryId:String(country.id),parentCountryName:String(country.name||""),
+    cellX:cell.x.toString(),cellY:cell.y.toString(),
+    lightweight:true,seedOnly:true,
+    authority:"RegionProfile canonical region cell + PoliticalGeography ownership"
+  });
+}
 function at(seedValue,xValue,yValue){
   const seed=String(seedValue==null?"":seedValue);
   const country=PoliticalGeography.countryAt(seed,xValue,yValue);
@@ -521,7 +534,7 @@ function renderDebugPanel(seedValue,regionIndexValue,rootNode){
 }
 
 const api=Object.freeze({
-  VERSION,REGION_CELL_SIZE,SAMPLE_GRID,cellFor,at,buildForCell,regionsForCountry,representatives,proof,renderDebugPanel
+  VERSION,REGION_CELL_SIZE,SAMPLE_GRID,cellFor,descriptorAt,at,buildForCell,regionsForCountry,representatives,proof,renderDebugPanel
 });
 window.RegionProfile=api;
 window.RegionProfiles=api;
