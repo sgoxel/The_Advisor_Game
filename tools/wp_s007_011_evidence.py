@@ -12,7 +12,7 @@ OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s007-011"))
 OUT.mkdir(parents=True,exist_ok=True)
 SIZE=(1280,720) if PROFILE=="landscape" else (390,844)
 TYPES=["market-day-setup","village-gathering","minor-argument","predator-warning"]
-SCALE_INDEX=8
+SCALE_INDEX=9
 
 options=Options()
 options.add_argument("--headless=new")
@@ -43,12 +43,29 @@ def activate(kind,index):
       const type=arguments[0],idx=arguments[1],seed=PlanetStage.snapshot().activeSeed;
       const hh=12+idx,now="1201-02-01 "+String(hh).padStart(2,"0")+":00:00";
       const result=LocalEventVignettes.proofActivate(seed,type,now);
-      const e=result.event;
-      if(e?.location?.anchor){
-        PlanetStage.setWorldTileFocus(e.location.anchor.x,e.location.anchor.y);
+      const event=result.event;
+      let placement=null;
+      if(event?.location?.anchor){
+        ResidentMovement.beginProof(seed);
+        const anchor=event.location.anchor,ax=BigInt(anchor.x),ay=BigInt(anchor.y);
+        const offsets=[[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1],[2,0],[-2,0],[0,2],[0,-2],[2,1],[-2,1],[2,-1],[-2,-1],[1,2],[-1,2],[1,-2],[-1,-2],[3,0],[-3,0],[0,3],[0,-3]];
+        const positions=[];
+        for(const off of offsets){
+          const x=String(ax+BigInt(off[0])),y=String(ay+BigInt(off[1]));
+          let nav=null;try{nav=Walkability.classify(seed,x,y)}catch(_){nav=null}
+          if(nav?.walkable&&!nav?.buildingId)positions.push({x,y,level:0});
+          if(positions.length>=event.participants.length)break;
+        }
+        if(positions.length<event.participants.length)throw new Error("insufficient walkable local-event evidence positions");
+        placement=ResidentMovement.proofPlaceResidentsAt(
+          event.participants.map((p,i)=>({residentId:p.id,position:positions[i]})),
+          "local-event-"+type
+        );
+        if(!placement)throw new Error("unable to place local-event participants for visual proof");
+        PlanetStage.setWorldTileFocus(anchor.x,anchor.y);
         PlanetStage.setScaleIndex(arguments[2]);
       }
-      return {seed,now,result};
+      return {seed,now,result,placement};
     """,kind,index,SCALE_INDEX)
 
 def state(kind):
@@ -56,10 +73,20 @@ def state(kind):
       const kind=arguments[0],s=PlanetStage.snapshot(),events=s.localEvents||LocalEventVignettes.snapshot(s.activeSeed);
       const card=document.getElementById("localEventVignette");
       const event=(events.events||[])[0]||null;
+      const participants=(event?.participants||[]).map(p=>({
+        id:p.id,name:p.name,
+        movement:ResidentMovement.get?.(p.id)||null,
+        visual:PlanetStage.workCycleEvidenceState?.(p.id)||null
+      }));
+      const rb=s.projection?.resourceBudget||{},ls=s.projection?.localStatic||{},np=s.npcPresentation||{};
+      const signatureReady=(!rb.requestedSignature)||Boolean(rb.standInActive)||(rb.activeSignature&&rb.activeSignature===rb.requestedSignature);
+      const visibleParticipants=participants.filter(p=>p.visual?.visible&&p.visual?.inViewport).length;
       return {
         ready:Boolean(s.ready),scaleIndex:Number(s.zoom?.scaleIndex),scaleLabel:s.zoom?.scaleLabel,
         event,events,cardVisible:Boolean(card&&!card.hidden),cardType:card?.dataset?.eventType||"",
-        cardText:String(card?.innerText||""),focus:s.canonicalFocus?.worldTile||null
+        cardText:String(card?.innerText||""),focus:s.canonicalFocus?.worldTile||null,
+        localStatic:ls,resourceBudget:rb,npcPresentation:np,signatureReady:Boolean(signatureReady),
+        participants,visibleParticipants
       };
     """,kind)
 
@@ -73,16 +100,22 @@ try:
     for idx,kind in enumerate(TYPES):
         activation=activate(kind,idx)
         try:
-            wait.until(lambda _d,k=kind: state(k)["cardVisible"] and state(k)["cardType"]==k and state(k)["scaleIndex"]==SCALE_INDEX)
+            wait.until(lambda _d,k=kind: (
+                state(k)["cardVisible"] and state(k)["cardType"]==k and state(k)["scaleIndex"]==SCALE_INDEX and
+                state(k)["signatureReady"] and bool(state(k)["localStatic"].get("active")) and
+                int(state(k)["localStatic"].get("buildingCount",0))>0 and state(k)["visibleParticipants"]>=2
+            ))
         except TimeoutException:
             raise RuntimeError("event presentation timeout "+kind+": "+json.dumps(state(kind)))
-        time.sleep(.65)
+        time.sleep(.45)
         st=state(kind)
         ev=st["event"] or {}
         if int(st["events"].get("activeCount",0))!=1:
             raise RuntimeError("event active-count bound failed: "+json.dumps(st))
         if int(st["events"].get("participantCount",0))>4:
             raise RuntimeError("event participant bound failed: "+json.dumps(st))
+        if st["visibleParticipants"]<2 or int(st["localStatic"].get("buildingCount",0))<=0:
+            raise RuntimeError("event participants/local context not visibly materialized: "+json.dumps(st))
         if not st["events"].get("eventDriven") or st["events"].get("perFrameScan") or st["events"].get("fullSettlementPerFrameScan") or st["events"].get("fullWorldScan"):
             raise RuntimeError("event scheduling architecture regression: "+json.dumps(st))
         if kind.replace("-"," ").split()[0].upper() not in st["cardText"].upper():
