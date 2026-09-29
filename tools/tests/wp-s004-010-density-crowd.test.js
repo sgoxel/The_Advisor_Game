@@ -40,6 +40,11 @@ global.SettlementArchetypes={
   ]}),
   settlementsForCountry:()=>Object.values(plans),
   canonicalSettlementsInBounds:()=>({settlements:records}),
+  canonicalSettlementAtPoint:(_seed,classId,x,y)=>{
+    const r=records.find(item=>item.classId===classId);if(!r)return null;
+    const dx=Number(BigInt(String(r.center.x))-BigInt(String(x))),dy=Number(BigInt(String(r.center.y))-BigInt(String(y)));
+    return Math.hypot(dx,dy)<=64?r:null;
+  },
   build:(_seed,_center,options)=>plans[options.classHint]||null
 };
 let persistedCityPopulation=17250;
@@ -69,9 +74,18 @@ const town=CrowdPresentation.snapshotForPlan(seed,plans.town,day,{mobile:false,a
 const city=CrowdPresentation.snapshotForPlan(seed,plans.city,day,{mobile:false,avoidPoints:[]});
 const mobileCity=CrowdPresentation.snapshotForPlan(seed,plans.city,day,{mobile:true,avoidPoints:[]});
 const cityNight=CrowdPresentation.snapshotForPlan(seed,plans.city,night,{mobile:false,avoidPoints:[]});
+const cityCore=CrowdPresentation.snapshotForPlan(seed,plans.city,day,{mobile:false,avoidPoints:[],focus:plans.city.center});
+const cityFringeFocus={x:String(BigInt(plans.city.center.x)+18n),y:plans.city.center.y};
+const cityFringe=CrowdPresentation.snapshotForPlan(seed,plans.city,day,{mobile:false,avoidPoints:[],focus:cityFringeFocus});
+const resolvedCity=CrowdPresentation.snapshot(seed,day,plans.city.center,{mobile:false,avoidPoints:[]});
 
 assert(village.activeCount<town.activeCount&&town.activeCount<city.activeCount,"class density order must be visible");
 assert(cityNight.activeCount<city.activeCount,"night crowd must be lower than daytime");
+assert.strictEqual(cityCore.districtBand,"core");
+assert.strictEqual(cityFringe.districtBand,"fringe");
+assert(cityFringe.activeCount<cityCore.activeCount,"fringe district must be less dense than city core");
+assert.strictEqual(resolvedCity.settlementClass,"city","bounded hot-path resolver must find city at its center");
+assert(Number.isFinite(resolvedCity.resolveMs)&&Number.isFinite(resolvedCity.totalUpdateMs),"hot-path timing telemetry missing");
 assert(mobileCity.activeCount<=CrowdPresentation.MOBILE_ACTIVE_CROWD,"mobile cap exceeded");
 assert(city.activeCount<=CrowdPresentation.MAX_ACTIVE_CROWD,"desktop cap exceeded");
 assert.strictEqual(city.population,persistedCityPopulation,"persisted aggregate population not consumed");
@@ -92,7 +106,7 @@ assert(avoided.activeCount<=city.activeCount,"avoidance must not increase reques
 
 console.log(JSON.stringify({
   pass:true,
-  counts:{village:village.activeCount,town:town.activeCount,city:city.activeCount,cityNight:cityNight.activeCount,mobileCity:mobileCity.activeCount},
+  counts:{village:village.activeCount,town:town.activeCount,city:city.activeCount,cityNight:cityNight.activeCount,mobileCity:mobileCity.activeCount,cityFringe:cityFringe.activeCount},
   populationSource:city.populationSource,
   bounded:{desktop:CrowdPresentation.MAX_ACTIVE_CROWD,mobile:CrowdPresentation.MOBILE_ACTIVE_CROWD,candidateChecks:city.candidateChecks},
   authority:{presentationOnly:city.presentationOnly,simulationAuthority:city.simulationAuthority,selectable:city.selectable,persistentIdentity:city.persistentIdentity,exactNpcReplacement:city.exactNpcReplacement}
