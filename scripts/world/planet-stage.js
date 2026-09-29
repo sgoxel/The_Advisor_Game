@@ -2495,11 +2495,11 @@ function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel
   // resolve. This prevents one macro slope from dominating the 1/500 frame.
   if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.012;
   if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.018;
-  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.052;
-  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.042;
-  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.030;
-  if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.022;
-  if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,260,salt+89)*.020;
+  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.040;
+  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.034;
+  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.050;
+  if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.032;
+  if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,260,salt+89)*.034;
   if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.025;
   if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.016;
   return detail;
@@ -3512,12 +3512,12 @@ function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
   // Keep the authoritative settlement composition large enough to read as
   // actual world structure, not a locator glyph, then converge rapidly to 1:1.
-  const targetFraction=tier==="footprint"?.19:tier==="route"?.24:tier==="coarse"?.20:.20;
+  const targetFraction=tier==="footprint"?.19:tier==="route"?.34:tier==="coarse"?.20:.20;
   const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
   // Overview tiers are presentation aids, not locator glyphs. Keep the
   // authoritative village readable without inflating its ring/roads into a
   // screen-dominating target; closer tiers converge naturally toward 1:1.
-  const cap=tier==="footprint"?8:tier==="route"?9:tier==="coarse"?5:18;
+  const cap=tier==="footprint"?8:tier==="route"?12:tier==="coarse"?5:18;
   return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
 }
 function settlementPresentationLift(tier,value=zoomState.scalar){
@@ -5386,7 +5386,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // representation keeps terrain structure without becoming a differently
   // tinted LOD surface. The outer ring stays on the common coarse basis.
   const contextResolutionRatio=clamp(sharedMetersPerTexel/Math.max(1,metersPerTexel),1,2);
-  const contextRefineWeight=contextRing?smoothstep01(clamp((contextResolutionRatio-1)/.55,0,1)):0;
+  const contextRefineWeight=contextRing?smoothstep01(clamp((contextResolutionRatio-1)/.55,0,1))*.18:0;
   const useMicroDetail=metersPerTexel<=4&&!contextRing;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   // Surface relief is presented as continuous hillshade, not synthetic
@@ -5694,7 +5694,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-center-authority-map-transfer-v11",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-local-frequency-balance-v12",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
