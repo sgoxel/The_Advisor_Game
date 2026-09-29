@@ -91,6 +91,10 @@ assert(residentSource.includes("LocalEventVignettes?.stateFor?.(state.residentId
 assert(residentSource.includes("work.activity=localEvent.activityOverride"),"ResidentMovement does not apply temporary event activity override");
 assert(residentSource.includes('work.localEvent?"local-event"'),"ResidentMovement does not instrument event-directed movement");
 assert(stageSource.includes("localEvents:window.LocalEventVignettes?.snapshot?.(activeSeed)||null"),"PlanetStage snapshot missing local-event telemetry");
+assert(stageSource.includes('localEventPresentationRevision:"compact-participant-cues-v1"'),"compact local-event presentation revision missing");
+assert(stageSource.includes("activeLocalEventCueCount")&&stageSource.includes("activeLocalEventResidentIds"),"local-event cue telemetry missing");
+assert(stageSource.includes('eventType==="market-day-setup"')&&stageSource.includes('eventType==="village-gathering"')&&stageSource.includes('eventType==="minor-argument"')&&stageSource.includes('eventType==="predator-warning"'),"compact event-specific presentation catalog missing");
+assert(!stageSource.includes("cueScale=2.15"),"rejected oversized local-event cue scale returned");
 assert(html.indexOf("scripts/world/local-event-vignettes.js")<html.indexOf("scripts/world/planet-stage.js"),"local-event runtime must load before PlanetStage");
 assert(css.includes(".local-event-vignette"),"event presentation style missing");
 
