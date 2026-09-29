@@ -3916,37 +3916,41 @@ function updateCanonicalNpcMotion(){
       // work-step coordinate. Shared materials and at most three bounded props
       // keep the action legible without creating economy/resource authority.
       if(profession==="smith"){
-        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.metal;
-        record.tool.setLocalScale(bw*.20,bh*.86,bw*.20);
-        record.tool.setLocalPosition(pos.x+bw*.72,ground+bh*(.70+.06*swing),pos.z-bw*.12);
-        record.tool.setLocalEulerAngles(54+42*swing,0,28+20*swing);record.tool.enabled=true;activeTools++;
+        // Hammer handle/head are laid out across the tangent plane so the
+        // silhouette remains obvious in the fixed top-down near-ground view.
+        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.timber;
+        record.tool.setLocalScale(bw*.18,bw*.20,bw*2.45);
+        record.tool.setLocalPosition(pos.x+bw*.72,ground+bw*.34,pos.z+bw*.18);
+        record.tool.setLocalEulerAngles(0,24+34*swing,0);record.tool.enabled=true;activeTools++;
         if(stepId==="cool"){
-          setProp(record.workPropA,localNpcMaterials.metal,bw*2.35,bw*.48,bw*1.15,bw*1.55,bw*.28,bw*.12);
-          setProp(record.workPropB,localNpcMaterials.ember,bw*1.45,bw*.16,bw*.16,bw*1.55,bw*.62,bw*.12,0,0,-8);
+          setProp(record.workPropA,localNpcMaterials.metal,bw*2.70,bw*.34,bw*1.50,bw*1.78,bw*.22,bw*.10);
+          setProp(record.workPropB,localNpcMaterials.ember,bw*1.72,bw*.14,bw*.30,bw*1.78,bw*.50,bw*.10,0,8,0);
+          setProp(record.workPropC,localNpcMaterials.metal,bw*1.15,bw*.26,bw*.52,bw*.95,bw*.42,-bw*.78,0,24+34*swing,0);
         }else{
-          setProp(record.workPropA,localNpcMaterials.metal,bw*1.45,bw*.72,bw*.78,bw*1.45,bw*.42,0);
-          setProp(record.workPropB,localNpcMaterials.timber,bw*.72,bw*.82,bw*.72,bw*1.45,bw*.18,0);
+          setProp(record.workPropA,localNpcMaterials.metal,bw*1.90,bw*.52,bw*1.10,bw*1.62,bw*.30,0);
+          setProp(record.workPropB,localNpcMaterials.timber,bw*.82,bw*.58,bw*.82,bw*1.62,bw*.15,0);
+          setProp(record.workPropC,localNpcMaterials.metal,bw*1.15,bw*.26,bw*.52,bw*.95,bw*.42,-bw*.78,0,24+34*swing,0);
         }
       }else if(profession==="shopkeeper"){
         if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.stock;
-        record.tool.setLocalScale(bw*1.45,bw*.18,bw*.78);
-        record.tool.setLocalPosition(pos.x+bw*.38,ground+bh*(.73+.025*swing),pos.z);record.tool.setLocalEulerAngles(0,0,0);record.tool.enabled=true;activeTools++;
-        setProp(record.workPropA,localNpcMaterials.timber,bw*2.55,bw*.38,bw*1.15,bw*1.55,bw*.28,0);
-        setProp(record.workPropB,localNpcMaterials.stock,bw*.78,bw*.68,bw*.78,bw*1.15,bw*.78,-bw*.28);
-        setProp(record.workPropC,localNpcMaterials.ember,bw*.58,bw*.50,bw*.58,bw*1.85,bw*.69,bw*.25);
+        record.tool.setLocalScale(bw*1.70,bw*.16,bw*.92);
+        record.tool.setLocalPosition(pos.x+bw*.42,ground+bw*.78,pos.z);record.tool.setLocalEulerAngles(0,0,0);record.tool.enabled=true;activeTools++;
+        setProp(record.workPropA,localNpcMaterials.timber,bw*3.05,bw*.32,bw*1.52,bw*1.72,bw*.22,0);
+        setProp(record.workPropB,localNpcMaterials.stock,bw*.92,bw*.58,bw*.92,bw*1.22,bw*.64,-bw*.44,0,12,0);
+        setProp(record.workPropC,localNpcMaterials.ember,bw*.78,bw*.52,bw*.78,bw*2.14,bw*.60,bw*.36,0,-9,0);
       }else if(profession==="guard"){
         if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.timber;
-        record.tool.setLocalScale(bw*.18,bh*1.55,bw*.18);
-        record.tool.setLocalPosition(pos.x+bw*.78,ground+bh*.78,pos.z);record.tool.setLocalEulerAngles(0,0,2*swing);record.tool.enabled=true;activeTools++;
-        setProp(record.workPropA,localNpcMaterials.metal,bw*.42,bw*.42,bw*.42,bw*.78,bh*1.57,0,0,0,45);
-        setProp(record.workPropB,localNpcMaterials.metal,bw*.95,bh*.62,bw*.16,-bw*.64,bh*.65,0,0,0,-8);
+        record.tool.setLocalScale(bw*.18,bw*.22,bw*4.25);
+        record.tool.setLocalPosition(pos.x+bw*1.02,ground+bw*.30,pos.z);record.tool.setLocalEulerAngles(0,8+3*swing,0);record.tool.enabled=true;activeTools++;
+        setProp(record.workPropA,localNpcMaterials.metal,bw*.72,bw*.26,bw*1.02,bw*1.02,bw*.34,-bw*2.38,0,8+3*swing,0);
+        setProp(record.workPropB,localNpcMaterials.metal,bw*1.72,bw*.30,bw*1.34,-bw*1.14,bw*.38,bw*.28,0,18,0);
       }else if(profession==="woodcutter"){
-        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.metal;
-        record.tool.setLocalScale(bw*.22,bh*.98,bw*.22);
-        record.tool.setLocalPosition(pos.x+bw*.70,ground+bh*(.72+.08*swing),pos.z);record.tool.setLocalEulerAngles(58+48*swing,0,35+28*swing);record.tool.enabled=true;activeTools++;
-        setProp(record.workPropA,localNpcMaterials.timber,bw*2.65,bw*.58,bw*.76,bw*1.65,bw*.34,-bw*.26,0,18,0);
-        setProp(record.workPropB,localNpcMaterials.timber,bw*2.25,bw*.52,bw*.72,bw*1.48,bw*.82,bw*.38,0,-13,0);
-        if(stepId==="stack")setProp(record.workPropC,localNpcMaterials.timber,bw*1.65,bw*.46,bw*.65,bw*2.02,bw*1.20,-bw*.12,0,8,0);
+        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.timber;
+        record.tool.setLocalScale(bw*.18,bw*.20,bw*3.25);
+        record.tool.setLocalPosition(pos.x+bw*.82,ground+bw*.34,pos.z+bw*.06);record.tool.setLocalEulerAngles(0,-26+28*swing,0);record.tool.enabled=true;activeTools++;
+        setProp(record.workPropA,localNpcMaterials.timber,bw*3.05,bw*.48,bw*.88,bw*1.82,bw*.28,-bw*.46,0,18,0);
+        setProp(record.workPropB,localNpcMaterials.timber,bw*2.65,bw*.44,bw*.84,bw*1.62,bw*.72,bw*.58,0,-13,0);
+        setProp(record.workPropC,localNpcMaterials.metal,bw*1.12,bw*.24,bw*.62,bw*1.28,bw*.42,-bw*1.12,0,-26+28*swing,0);
       }else if(profession==="farmer"){
         if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.timber;
         record.tool.setLocalScale(bw*.18,bh*1.12,bw*.18);
@@ -3973,13 +3977,13 @@ function updateCanonicalNpcMotion(){
   if(centerMarker)centerMarker.dataset.workPriority=centeredWorkAction?"true":"false";
   if(centerCode){
     if(centeredWorkAction){
-      centerCode.style.position="absolute";centerCode.style.left="50%";centerCode.style.top="-36px";
-      centerCode.style.transform="translateX(-50%)";centerCode.style.opacity=".84";
+      centerCode.style.position="absolute";centerCode.style.left="50%";centerCode.style.top="-48px";
+      centerCode.style.transform="translateX(-50%)";centerCode.style.opacity=".82";
     }else{
       centerCode.style.position="";centerCode.style.left="";centerCode.style.top="";centerCode.style.transform="";centerCode.style.opacity="";
     }
   }
-  if(centerGlyph)centerGlyph.style.opacity=centeredWorkAction?".50":"";
+  if(centerGlyph){centerGlyph.style.opacity=centeredWorkAction?".46":"";centerGlyph.style.transform=centeredWorkAction?"scale(.58)":"";}
   const elapsed=performance.now()-started;
   localNpcPresentation={...localNpcPresentation,active:visibleCount>0,activeCount:visibleCount,activeWorkCycleToolCount:activeTools,activeWorkCyclePropCount:activeProps,
     activeWorkCycleResidentIds:Object.freeze(activeWorkCycleResidentIds),
