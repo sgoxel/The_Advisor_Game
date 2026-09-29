@@ -328,10 +328,14 @@ function tick(seedValue,nowValue,optionsValue){
   const ensured=options.ensure===false?null:ensureScheduled(seed,now);
   const batch=EventScheduler.processDue(seed,now,{
     maxEvents:options.maxEvents||EventScheduler.MAX_BATCH,
+    priority:options.priority||"background",
     systemKinds:[COUNTRY_SYSTEM,DIPLOMACY_SYSTEM],
     handle:(event,randomUint32)=>dispatch(seed,event,randomUint32)
   });
   state.ticks++;state.lastTickTimestamp=now;state.lastCostMs=Number((performance.now()-started).toFixed(3));state.totalCostMs+=state.lastCostMs;
+  window.WorldSimulationBudget?.recordRevisionRefresh?.(seed,{
+    country:batch.processed.filter(item=>item.event.systemKind===COUNTRY_SYSTEM&&item.outcome?.ok!==false).length
+  });
   return deepFreeze({ensured,batch,snapshot:snapshot(seed)});
 }
 function reset(seedValue,optionsValue){
