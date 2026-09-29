@@ -67,6 +67,7 @@ function seal(bodyValue){
 }
 function createSave(optionsValue){
   const options=optionsValue||{},campaign=options.campaign||window.SeedSystem?.getCampaign?.();
+  window.GeneratedWorldStore?.flushSoon?.("authoritative-save");
   if(!campaign?.seed)return deepFreeze({ok:false,reason:"campaign-required"});
   const seed=String(campaign.seed);
   if(!window.WorldState?.serializeState||!window.EventScheduler?.serialize||!window.CatchUpSimulation?.serializeState){
@@ -153,6 +154,7 @@ async function restoreAndResume(saveValue,optionsValue){
     const loaded=window.SeedSystem.loadCampaign();
     if(!loaded?.ok||String(loaded.campaign?.seed)!==String(save.seed)||campaignKey(loaded.campaign)!==String(save.campaignKey))throw new Error("campaign-header-restore-failed");
     const campaign=loaded.campaign;
+    if(window.GeneratedWorldStore?.bindCampaign)await window.GeneratedWorldStore.bindCampaign(campaign,{primeLimit:128,resumeReason:"campaign-restore"});
     setGate("restoring-deltas",false,"restoring",save.seed,null);
     const world=window.WorldState.restoreSerializedState(campaign,save.campaignStateDelta);
     if(!world?.ok)throw new Error("world-state-restore-failed:"+String(world?.reason||"unknown"));
