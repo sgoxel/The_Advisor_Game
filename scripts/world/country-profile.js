@@ -194,6 +194,13 @@ function build(seedValue,countryValue){
   if(!country)return null;
   const cacheKey=seed+"|"+country.id;
   if(profileCache.has(cacheKey))return profileCache.get(cacheKey);
+  const persistentOptions={
+    seed,family:"country-profile",recordId:String(country.id),familyVersion:VERSION,
+    dependencySignature:["country-profile",VERSION,"political",Number(window.PoliticalGeography?.VERSION||0),"geography",Number(window.GeographyFoundation?.VERSION||0)].join("|"),
+    regenCost:8,importance:5
+  };
+  const persisted=window.GeneratedWorldStore?.peek?.(persistentOptions)||null;
+  if(persisted){profileCache.set(cacheKey,persisted);return profileCache.get(cacheKey);}
 
   const context=foundationContext(seed,country);
   const governance=governanceFor(seed,country);
@@ -310,6 +317,7 @@ function build(seedValue,countryValue){
     })
   });
   profileCache.set(cacheKey,profile);
+  window.GeneratedWorldStore?.recordGenerated?.(persistentOptions,profile);
   return profile;
 }
 function sampleCountries(seed){
