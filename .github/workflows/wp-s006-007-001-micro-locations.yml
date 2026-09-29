@@ -2,6 +2,8 @@ name: WP-S006-007-001 Micro-Locations Evidence
 
 on:
   workflow_dispatch:
+  issue_comment:
+    types: [created]
   push:
     branches: [main]
     paths:
@@ -19,9 +21,14 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   evidence:
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (!github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/wp-s006-007-001-evidence'))
     strategy:
       fail-fast: false
       matrix:
@@ -65,3 +72,15 @@ jobs:
           path: tools/screenshots/wp-s006-007-001/
           if-no-files-found: error
           retention-days: 14
+      - name: Comment run link on Issue
+        if: github.event_name == 'issue_comment' && matrix.profile == 'landscape' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `WP-S006-007-001 evidence run: ${url}`
+            });
