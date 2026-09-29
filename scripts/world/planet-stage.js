@@ -3759,7 +3759,9 @@ function routeOverviewPriorityRecords(reveal){
 function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift,tier){
   localSettlementLotGeometry?.destroy?.();localSettlementLotGeometry=null;
   if(!pc||!device)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
-  const records=[...(window.StartingVillage?.buildPlots?.(activeSeed)||[]),...(reveal?.specialLots||[])];
+  const ordinaryRecords=tier==="route"?(reveal?.houses||[]):(window.StartingVillage?.buildPlots?.(activeSeed)||[]);
+  const specialRecords=reveal?.specialLots||[],specialIds=new Set(specialRecords.map(item=>String(item?.id||"")));
+  const records=[...ordinaryRecords,...specialRecords];
   const tileMeters=Math.max(1,Number(reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
   const positions=[],normals=[],uvs=[],colors=[],indices=[];let count=0,outlineSegmentCount=0,connectorSegmentCount=0;
   const addPolygonQuad=(corners,color,extraLift=0)=>{
@@ -3787,20 +3789,23 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
     const b=record?.bounds;if(!b)continue;
     const minX=Number(b.minX)-.28,maxX=Number(b.maxX)+.28,minY=Number(b.minY)-.28,maxY=Number(b.maxY)+.28;
     if(![minX,maxX,minY,maxY].every(Number.isFinite)||maxX<=minX||maxY<=minY)continue;
-    const special=Boolean(record?.kind),fill=[142,101,58],
-      border=special?[224,174,92]:(tier==="route"?[116,105,70]:[164,140,82]);
+    const special=specialIds.has(String(record?.id||"")),fill=special?[176,124,62]:(tier==="route"?[123,94,58]:[142,101,58]),
+      border=special?[224,174,92]:(tier==="route"?[139,114,74]:[164,140,82]);
     count++;
-    // Route-tier parcels are quiet cadastral context; roads/access links carry
-    // the stronger hierarchy. Keep ordinary lots as boundaries instead of
-    // filled cards so the real connected road/access morphology stays legible.
-    if(special)addQuad(minX,minY,maxX,maxY,fill,0);
-    const bw=tier==="route"
-      ?Math.min(.14,Math.max(.075,Math.min(maxX-minX,maxY-minY)*.044))
-      :Math.min(.23,Math.max(.12,Math.min(maxX-minX,maxY-minY)*.070));
-    if(addQuad(minX,minY,maxX,minY+bw,border,.006))outlineSegmentCount++;
-    if(addQuad(minX,maxY-bw,maxX,maxY,border,.006))outlineSegmentCount++;
-    if(addQuad(minX,minY+bw,minX+bw,maxY-bw,border,.006))outlineSegmentCount++;
-    if(addQuad(maxX-bw,minY+bw,maxX,maxY-bw,border,.006))outlineSegmentCount++;
+    // Route overview now shows the actual authoritative HousePlans footprints as
+    // compact filled silhouettes. The larger build-plot parcels remain only in
+    // the retained footprint parent. This removes oversized detached cadastral
+    // rectangles while keeping exact SEED-derived building bounds/entrances.
+    if(tier==="route"){
+      if(addQuad(minX,minY,maxX,maxY,fill,0))outlineSegmentCount++;
+    }else{
+      if(special)addQuad(minX,minY,maxX,maxY,fill,0);
+      const bw=Math.min(.23,Math.max(.12,Math.min(maxX-minX,maxY-minY)*.070));
+      if(addQuad(minX,minY,maxX,minY+bw,border,.006))outlineSegmentCount++;
+      if(addQuad(minX,maxY-bw,maxX,maxY,border,.006))outlineSegmentCount++;
+      if(addQuad(minX,minY+bw,minX+bw,maxY-bw,border,.006))outlineSegmentCount++;
+      if(addQuad(maxX-bw,minY+bw,maxX,maxY-bw,border,.006))outlineSegmentCount++;
+    }
   }
   // HousePlans exposes the canonical exterior entrance and its already-chosen
   // nearby road target. Keep those true access links in the same merged
@@ -3818,7 +3823,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   const entity=new pc.Entity("CanonicalOccupiedLotFills");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.lotOverview,entity)];
   localStaticRoot.addChild(entity);localSettlementLotGeometry=mesh;
-  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount,outlineSegmentCount,connectorSegmentCount,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-perimeter-access-v7"});
+  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount,outlineSegmentCount,connectorSegmentCount,triangleCount:indices.length/3,mode:tier==="route"?"authoritative-house-footprint-access-v8":"authoritative-occupied-lot-perimeter-access-v8"});
 }
 function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tier){
   localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;
@@ -5875,7 +5880,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   const componentRanges={
     sourceLuma:[Infinity,-Infinity],paletteLuma:[Infinity,-Infinity],baseLuma:[Infinity,-Infinity],
     macro:[Infinity,-Infinity],coverLuma:[Infinity,-Infinity],shade:[Infinity,-Infinity],finalLuma:[Infinity,-Infinity],
-    elevation:[Infinity,-Infinity],moisture:[Infinity,-Infinity],curvature:[Infinity,-Infinity],moistureGradient:[Infinity,-Infinity],ridgeValleyTint:[Infinity,-Infinity]
+    elevation:[Infinity,-Infinity],moisture:[Infinity,-Infinity],curvature:[Infinity,-Infinity],moistureGradient:[Infinity,-Infinity],ridgeValleyTint:[Infinity,-Infinity],registeredReliefShade:[Infinity,-Infinity]
   };
   const pushRange=(name,value)=>{
     const n=Number(value);if(!Number.isFinite(n))return;
@@ -6089,6 +6094,33 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         ];
         cover=cover.map((v,i)=>v+formTint[i]);
         pushRange("curvature",curvatureSignal);pushRange("moistureGradient",moistureGradient);pushRange("ridgeValleyTint",luma3(formTint));
+        // PlanetGeography can be intentionally smooth at settlement-map scale.
+        // Add a deterministic presentation-relief derivative from the existing
+        // Campaign-SEED registered terrain-detail field. Sampling that field at
+        // >=45 m/texel suppresses near-texel mottle and leaves coherent
+        // ridge/valley structure shared by focus, medium, outer and fallback.
+        const registeredReliefBand=smoothstep01(clamp((metersPerTexel-2)/20,0,1))*
+          (1-smoothstep01(clamp((metersPerTexel-420)/500,0,1)));
+        const reliefBandwidthMpt=Math.max(45,metersPerTexel),reliefStep=Math.max(90,Math.min(720,metersPerTexel*6));
+        const reliefCenter=terrainDetailHeight(worldEast,worldNorth,reliefBandwidthMpt,detailSalt+401);
+        const reliefXP=terrainDetailHeight(worldEast+reliefStep,worldNorth,reliefBandwidthMpt,detailSalt+401);
+        const reliefXN=terrainDetailHeight(worldEast-reliefStep,worldNorth,reliefBandwidthMpt,detailSalt+401);
+        const reliefYP=terrainDetailHeight(worldEast,worldNorth+reliefStep,reliefBandwidthMpt,detailSalt+401);
+        const reliefYN=terrainDetailHeight(worldEast,worldNorth-reliefStep,reliefBandwidthMpt,detailSalt+401);
+        const reliefGx=(reliefXP-reliefXN)/(2*reliefStep),reliefGy=(reliefYP-reliefYN)/(2*reliefStep);
+        const reliefCurvature=clamp(-(reliefXP+reliefXN+reliefYP+reliefYN-4*reliefCenter)/Math.max(1,reliefStep*.30),-1,1);
+        const reliefExaggeration=lerp(2.8,5.4,registeredReliefBand)*(contextRing?.72:1);
+        const rgx=reliefGx*reliefExaggeration,rgy=reliefGy*reliefExaggeration,rnl=Math.hypot(rgx,rgy,1);
+        const reliefLit=(-rgx*light[0]-rgy*light[1]+light[2])/rnl;
+        const reliefShadeTone=(reliefLit-flatShade)*registeredReliefBand*(contextRing?.085:.135);
+        const reliefConvex=Math.max(0,reliefCurvature)*registeredReliefBand,reliefConcave=Math.max(0,-reliefCurvature)*registeredReliefBand;
+        const reliefTint=[
+          reliefConvex*.032-reliefConcave*.012,
+          reliefConcave*.030-reliefConvex*.006,
+          reliefConcave*.012-reliefConvex*.014
+        ].map(v=>v*(contextRing?.70:1));
+        cover=cover.map((v,i)=>v+reliefShadeTone+reliefTint[i]);
+        pushRange("registeredReliefShade",reliefShadeTone);
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
         const coverGain=contextRing?contextRefineWeight*.38:focusRefineWeight*.98;
