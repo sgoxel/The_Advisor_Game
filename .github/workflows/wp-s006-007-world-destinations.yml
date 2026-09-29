@@ -1,22 +1,8 @@
 name: WP-S006-007 World Destinations Evidence
 
+# Incomplete WP: automatic triggers disabled after the 2026-09-29 three-attempt cap.
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/wp-s006-007-world-destinations.yml
-      - scripts/world/world-destinations.js
-      - scripts/world/planet-stage.js
-      - scripts/world/geography.js
-      - scripts/world/planet-geography.js
-      - scripts/world/political-geography.js
-      - scripts/world/region-profile.js
-      - scripts/world/settlement-archetypes.js
-      - tools/tests/wp-s006-007-world-destinations.test.js
-      - index.html
   workflow_dispatch:
-  issue_comment:
-    types: [created]
 
 permissions:
   contents: read
