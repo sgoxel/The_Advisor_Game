@@ -186,7 +186,7 @@ let localNpcRoot=null;
 let localNpcMaterials=null;
 let localNpcContext=null;
 let localNpcEntities=new Map();
-let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles",presentationOnly:true,simulationAuthority:false};
+let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles",rhythmSource:"SettlementActivityRhythm presentation-only",presentationOnly:true,simulationAuthority:false};
 const localBuildingInspectionKeys=new Set();
 const localNpcInspectionKeys=new Set();
 const localSignInspectionKeys=new Set();
@@ -3998,8 +3998,9 @@ function refreshCanonicalNpcPresentation(){
 }
 function updateCanonicalNpcMotion(){
   if(!localNpcRoot||!localNpcContext||!localNpcEntities.size)return;
-  const started=performance.now(),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
-  let activeTools=0,activeProps=0,visibleCount=0,centeredWorkAction=false;
+  const started=performance.now(),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),rhythmStamp=inspectionFantasyStamp();
+  const rhythm=window.SettlementActivityRhythm?.snapshot?.(activeSeed,rhythmStamp,[...localNpcEntities.values()].map(record=>record.resident))||null;
+  let activeTools=0,activeProps=0,visibleCount=0,centeredWorkAction=false,rhythmPriorityTotal=0,rhythmPriorityCount=0;
   const activeWorkCycleResidentIds=[],viewportRect=canvas?.getBoundingClientRect?.()||null;
   for(const record of localNpcEntities.values()){
     const state=residentPresentationState(record.resident),visible=Boolean(state&&!state.indoors);
@@ -4011,12 +4012,15 @@ function updateCanonicalNpcMotion(){
     const ground=canonicalSemanticGroundHeightUnits(east,north,record.frame)+record.lift+.015;
     const pos=canonicalSemanticPosition(east,north,record.presentationScale,record.unit,record.frame);
     const working=Boolean(state.movementState?.workCycle&&state.movementState?.status==="arrived");
+    const rhythmResident=window.SettlementActivityRhythm?.residentPresentation?.(activeSeed,record.resident,rhythmStamp,state.scheduled)||null;
+    const rhythmPriority=Math.max(0,Math.min(1,Number(rhythmResident?.priority??.5)));
+    rhythmPriorityTotal+=rhythmPriority;rhythmPriorityCount++;
+    const rhythmScale=working?1:(.92+rhythmPriority*.16);
     const phase=frameCount*.22+Number(String(record.resident.id).replace(/\D/g,"")||0);
-    const pulse=working?Math.sin(phase)*.035:0,actionScale=working?3.05:1;
-    // Arrived workers receive a bounded presentation-only readability lift.
-    // Position, collision, route and authoritative action targets stay unchanged.
-    // The active actor grows modestly; profession props do most of the screen-
-    // space work so the vignette reads without turning the resident into a marker.
+    const pulse=working?Math.sin(phase)*.035:0,actionScale=working?3.05:rhythmScale;
+    // Arrived workers keep the accepted WP-S004-007 silhouette scale. Other
+    // outdoor residents get only a bounded presentation emphasis from fantasy-
+    // time rhythm; positions, schedules, collision and routes stay authoritative.
     record.body.setLocalScale(record.bodyWidth*actionScale,record.bodyHeight*actionScale,record.bodyWidth*actionScale);
     record.head.setLocalScale(record.headSize*actionScale,record.headSize*actionScale,record.headSize*actionScale);
     record.body.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale*.5,pos.z);
@@ -4110,6 +4114,8 @@ function updateCanonicalNpcMotion(){
   const elapsed=performance.now()-started;
   localNpcPresentation={...localNpcPresentation,active:visibleCount>0,activeCount:visibleCount,activeWorkCycleToolCount:activeTools,activeWorkCyclePropCount:activeProps,
     activeWorkCycleResidentIds:Object.freeze(activeWorkCycleResidentIds),
+    rhythmBand:rhythm?.band||"unknown",rhythmModifiers:rhythm?.modifiers||null,rhythmCounts:rhythm?.counts||null,
+    rhythmAveragePresentationPriority:rhythmPriorityCount?Number((rhythmPriorityTotal/rhythmPriorityCount).toFixed(4)):0,
     drawCallEstimate:visibleCount*2+activeTools+activeProps,
     motionUpdateCount:Number(localNpcPresentation.motionUpdateCount||0)+1,lastMotionUpdateMs:Number(elapsed.toFixed(4)),
     maxMotionUpdateMs:Math.max(Number(localNpcPresentation.maxMotionUpdateMs||0),Number(elapsed.toFixed(4)))};
@@ -4313,6 +4319,7 @@ function buildingActivityTimeBand(hour){
 function canonicalBuildingActivityState(reveal){
   if(!reveal||!window.DailyActivity?.build||!window.DailyActivity?.resolveActionTarget)return null;
   const started=performance.now(),stamp=inspectionFantasyStamp(),hour=Number(stamp.hour)+Number(stamp.minute||0)/60;
+  const rhythm=window.SettlementActivityRhythm?.snapshot?.(activeSeed,stamp)||null;
   const byBuilding=new Map();
   const ensure=id=>{
     const key=String(id||"");if(!key)return null;
@@ -4340,6 +4347,14 @@ function canonicalBuildingActivityState(reveal){
     const id=String(record.id),fn=String(record.function||"home"),stats=byBuilding.get(id)||{scheduledResidentCount:0,occupiedResidentCount:0,workCount:0,homeCount:0,socialCount:0,states:new Set()};
     const workActive=stats.workCount>0,homeActive=fn==="home"&&stats.homeCount>0,socialActive=stats.socialCount>0;
     const active=stats.occupiedResidentCount>0||workActive||homeActive||socialActive;
+    const modifiers=rhythm?.modifiers||{},cueStrength=Math.max(.05,Math.min(1,
+      fn==="market"?Number(modifiers.marketPublicActivity??.5):
+      fn==="lodging"?Number(modifiers.tavernSocialActivity??.5):
+      fn==="civic"?Number(modifiers.guardPatrolPresence??.5):
+      ["craft","farm","outdoor-work"].includes(fn)?Number(modifiers.workSiteOccupancy??.5):
+      fn==="home"?1-Number(modifiers.outdoorResidentShare??.5):
+      Number(modifiers.ambientTrafficLikelihood??.5)
+    ));
     let cue=null;
     if(active&&night&&(fn==="home"||fn==="lodging"||fn==="civic"))cue="warm-window";
     else if(fn==="market"&&workActive)cue="open-sign";
@@ -4353,12 +4368,14 @@ function canonicalBuildingActivityState(reveal){
     return Object.freeze({
       id,label:String(record.label||record.name||id),kind:String(record.kind||"building"),function:fn,centerTile,
       active,workActive,homeActive,socialActive,scheduledResidentCount:stats.scheduledResidentCount,
-      occupiedResidentCount:stats.occupiedResidentCount,states:Object.freeze([...stats.states].sort()),cue
+      occupiedResidentCount:stats.occupiedResidentCount,states:Object.freeze([...stats.states].sort()),cue,
+      cueStrength:Number(cueStrength.toFixed(4))
     });
   });
-  const signature="BA|"+revealHashText([activeSeed,Math.floor(hour*4),...buildings.map(x=>[x.id,x.active?1:0,x.cue||"-",x.scheduledResidentCount,x.occupiedResidentCount].join(":"))].join("|"));
+  const signature="BA|"+revealHashText([activeSeed,Math.floor(hour*4),...buildings.map(x=>[x.id,x.active?1:0,x.cue||"-",Math.round(x.cueStrength*20),x.scheduledResidentCount,x.occupiedResidentCount].join(":"))].join("|"));
   return Object.freeze({
-    stamp:Object.freeze({...stamp}),hour:Number(hour.toFixed(3)),timeBand:buildingActivityTimeBand(hour),signature,
+    stamp:Object.freeze({...stamp}),hour:Number(hour.toFixed(3)),timeBand:rhythm?.band||buildingActivityTimeBand(hour),signature,
+    rhythm:rhythm?Object.freeze({band:rhythm.band,modifiers:rhythm.modifiers,counts:rhythm.counts,averagePresentationPriority:rhythm.averagePresentationPriority}):null,
     residentsEvaluated:residents.length,occupancySourceAvailable:Boolean(window.ResidentMovement?.get),
     buildings:Object.freeze(buildings),buildMs:Number((performance.now()-started).toFixed(4))
   });
@@ -4374,7 +4391,8 @@ function activityBuildingGeometry(record,presentationScale,unit,frame,lift){
 }
 function addBuildingActivityCue(record,state,context,index){
   const g=activityBuildingGeometry(record,context.presentationScale,context.unit,context.frame,context.lift);if(!g||!state?.cue)return 0;
-  const s=g.presentationScale/g.unit,pos=canonicalSemanticPosition(g.east,g.north,g.presentationScale,g.unit,context.frame),x=pos.x,z=pos.z,h=g.height*s;
+  const cueScale=.72+Math.max(.05,Math.min(1,Number(state.cueStrength||.5)))*.53;
+  const s=g.presentationScale/g.unit*cueScale,pos=canonicalSemanticPosition(g.east,g.north,g.presentationScale,g.unit,context.frame),x=pos.x,z=pos.z,h=g.height*s;
   const buildingW=Math.max(.08,g.w*s),buildingD=Math.max(.08,g.d*s),name="BuildingActivity-"+state.cue+"-"+state.id+"-"+index;
   if(state.cue==="warm-window"){
     const e=addLocalPrimitive(localBuildingActivityRoot,name,"activity-warm-opening",localStaticMaterials.activityWarm,x,g.ground,z,buildingW,h,buildingD);
@@ -4421,8 +4439,10 @@ function rebuildCanonicalBuildingActivityPresentation(reason="settlement-rebuild
     updateCount:Number(buildingActivity.updateCount||0)+1,lastUpdateMs:Number(elapsed.toFixed(4)),
     maxUpdateMs:Math.max(Number(buildingActivity.maxUpdateMs||0),Number(elapsed.toFixed(4))),
     lastSignature:state.signature,buildings:state.buildings,residentsEvaluated:state.residentsEvaluated,
+    rhythmBand:state.rhythm?.band||state.timeBand,rhythmModifiers:state.rhythm?.modifiers||null,rhythmCounts:state.rhythm?.counts||null,
+    rhythmAveragePresentationPriority:Number(state.rhythm?.averagePresentationPriority||0),
     occupancySourceAvailable:state.occupancySourceAvailable,activitySource:"DailyActivity.resolveActionTarget",
-    occupancySource:"ResidentMovement.get when available",updateReason:String(reason),
+    rhythmSource:"SettlementActivityRhythm presentation-only",occupancySource:"ResidentMovement.get when available",updateReason:String(reason),
     presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false
   };
 }
