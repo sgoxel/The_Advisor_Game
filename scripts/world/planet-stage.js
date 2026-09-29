@@ -339,11 +339,7 @@ const LOCAL_STANDIN_MAX_MAGNIFICATION=6;
 // small allowance beyond the steady-state 1.5x threshold lets the next child
 // become requested while animation buys its cooperative preparation time.
 const ZOOM_READY_PARENT_MAX_MAGNIFICATION=1.65;
-// Before any tangent parent is ready, keep the globe inside its readable
-// strategic-scale range. .63 is still beyond the local-request transition, so
-// the first canonical parent prepares while the camera animation visibly eases
-// instead of magnifying the coarse globe shell into the blurred 1/50 state.
-const ZOOM_ROOT_READINESS_CAP_SCALAR=.63;
+const ZOOM_ROOT_READINESS_CAP_SCALAR=.69;
 const LOCAL_TANGENT_OWNERSHIP_BLEND=.055;
 const LOCAL_STANDIN_MIN_COMPENSATION=1/3;
 const GLOBE_VERTICAL_FOV_DEGREES=34;
@@ -3503,7 +3499,7 @@ function ensureLocalStaticMaterials(){
     road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.235,.155,.055,1),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.11),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.74);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.11),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.82);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     microWater:make("LocalMicroWater",.07,.28,.42,.52),
     microStone:make("LocalMicroStone",.67,.64,.56),microWood:make("LocalMicroWood",.57,.34,.14),
@@ -3802,7 +3798,7 @@ function routeOverviewPlan(reveal){
     const aa=score(a),bb=score(b);
     return bb.forward-aa.forward||aa.lateral-bb.lateral||String(a?.id||"").localeCompare(String(b?.id||""));
   });
-  const cap=10,records=[];
+  const cap=8,records=[];
   for(const record of specials){if(records.length>=2||records.length>=cap)break;records.push(record);}
   for(const record of houses){if(records.length>=cap)break;if(!records.some(item=>String(item?.id||"")===String(record?.id||"")))records.push(record);}
   const frozen=Object.freeze(records.slice());
@@ -3986,7 +3982,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       const uniqueTargets=[...new Set(accessTargetKeys)].sort(),selectedClasses=[...routePathKeys].map(k=>classify(roadByKey.get(k))).filter(Boolean);
       const ringCellCount=selectedClasses.filter(c=>c.ringCell).length;
       overviewStats=Object.freeze({
-        revision:"route-gateway-centerline-v14",accessTargetCount:uniqueTargets.length,connectedTargetCount:uniqueTargets.length,
+        revision:"route-gateway-centerline-v13",accessTargetCount:uniqueTargets.length,connectedTargetCount:uniqueTargets.length,
         localClusterTargetCount:0,selectedCellCount:selectedClasses.length,ringCellCount,
         ringArcShare:Number((ringCellCount/Math.max(1,selectedClasses.length)).toFixed(4)),
         gatewayCellCount:selectedClasses.filter(c=>c.gatewayStem||c.outwardBranch).length,
@@ -3999,27 +3995,23 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       const c=classify({x,y,kind}),{ringCell,outwardBranch,gatewayStem,centerAvenue,localPath}=c;
       if(tier==="footprint"){
         if(!outwardBranch&&!gatewayStem&&!centerAvenue&&!localPath)continue;
-      }else if(!routePathKeys.has(x+","+y)&&!outwardBranch&&!gatewayStem&&!centerAvenue)continue;
-      // Settlement approach keeps the sparse target centerline but also shows
-      // the authoritative main-road spine cells already present in
-      // StartingVillage.infrastructureAt. This closes visual gaps without
-      // synthesizing or pathfinding any new road.
+      }else if(!routePathKeys.has(x+","+y))continue;
       const half=tier==="footprint"
         ?(outwardBranch?.28:gatewayStem?.14:centerAvenue?.075:.11)
-        :(outwardBranch?.16:gatewayStem?.12:localPath?.075:ringCell?.060:centerAvenue?.090:.075);
+        :(outwardBranch?.13:gatewayStem?.095:localPath?.060:ringCell?.050:centerAvenue?.070:.060);
       const cell={x,y,half};selected.push(cell);selectedMap.set(x+","+y,cell);
     }
     renderedRoadCellCount=selected.length;
     for(const cell of selected){
-      const {x,y,half}=cell,nodeFloor=tier==="route"?.040:.040,nodeHalf=Math.max(nodeFloor,half*.68);
+      const {x,y,half}=cell,nodeFloor=tier==="route"?.030:.040,nodeHalf=Math.max(nodeFloor,half*.62);
       const neighborCount=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]
         .filter(([dx,dy])=>selectedMap.has((x+dx)+","+(y+dy))).length;
       if(neighborCount!==2)addQuad(x-nodeHalf,y-nodeHalf,x+nodeHalf,y+nodeHalf);
       for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
         const other=selectedMap.get((x+dx)+","+(y+dy));if(!other)continue;
         if(dx&&dy&&(selectedMap.has((x+dx)+","+y)||selectedMap.has(x+","+(y+dy))))continue;
-        const segmentFloor=tier==="route"?.050:.055;
-        addSegment(x,y,other.x,other.y,Math.max(segmentFloor,Math.min(half,other.half)*(tier==="route"?2.55:2)));
+        const segmentFloor=tier==="route"?.038:.055;
+        addSegment(x,y,other.x,other.y,Math.max(segmentFloor,Math.min(half,other.half)*(tier==="route"?2.35:2)));
       }
     }
   }else{
@@ -4030,7 +4022,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
   const roadMaterial=(tier==="route"||tier==="footprint")?localStaticMaterials.roadOverview:localStaticMaterials.road;
   entity.render.meshInstances=[new pc.MeshInstance(mesh,roadMaterial,entity)];localStaticRoot.addChild(entity);localSettlementRoadGeometry=mesh;
   return Object.freeze({active:true,cellCount:(tier==="route"||tier==="footprint")?renderedRoadCellCount:roadCells.length,segmentCount,queryCount,triangleCount:indices.length/3,overviewStats,
-    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-gateway-centerline-v14":"StartingVillage.infrastructureAt-cell-mesh-v1"});
+    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-gateway-centerline-v13":"StartingVillage.infrastructureAt-cell-mesh-v1"});
 }
 function clearCanonicalWayfindingSignposts(){
   clearInspectionKeySet(localSignInspectionKeys,false);
@@ -6907,7 +6899,12 @@ function updateProjectionPresentation(visibleHeightUnits=1){
   // mountain mesh becomes visually misleading when magnified. A smooth shell
   // with the identical canonical geography texture owns only that loading gap,
   // then yields once a local tangent resource is physically appropriate.
-  const mapShellIn=smoothstep01(clamp((scalar-.57)/.09,0,1));
+  // Transition to the already-built smooth canonical shell before the relief
+  // globe is magnified enough for its coarse height mesh to become visibly
+  // faceted. The shell uses the identical geography texture/UV registration and
+  // adds no geography queries or identity; it only removes exaggerated relief
+  // from strategic map scale while the first tangent parent prepares.
+  const mapShellIn=smoothstep01(clamp((scalar-.50)/.075,0,1));
   const mapShellOut=displayResource?projectionPresentationBlendForZoom(scalar):0;
   const mapShellOpacity=mapScaleShell?mapShellIn*(1-mapShellOut):0;
   if(mapScaleShell&&mapScaleShellMaterial){
