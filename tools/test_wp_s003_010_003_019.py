@@ -211,7 +211,9 @@ def move_across_cell_and_back(driver, stage):
 
 def slow_fallback_proof(driver):
     settle_scale(driver, 6)
-    driver.execute_cdp_cmd("Emulation.setCPUThrottlingRate", {"rate": 6})
+    # Four-times CPU throttling still forces a parent-fallback window while
+    # keeping software WebGL responsive enough to capture that transient frame.
+    driver.execute_cdp_cmd("Emulation.setCPUThrottlingRate", {"rate": 4})
     try:
         driver.execute_script("window.PlanetStage.setScaleIndex(8);")
         wait(driver, """
