@@ -98,7 +98,7 @@ try:
                 state(k)["signatureReady"] and bool(state(k)["localStatic"].get("active")) and
                 int(state(k)["localStatic"].get("buildingCount",0))>0 and state(k)["visibleParticipants"]>=2 and
                 state(k)["activeLocalEventCueCount"]>=state(k)["visibleParticipants"] and
-                state(k)["localEventPresentationRevision"]=="compact-participant-cues-v1"
+                state(k)["localEventPresentationRevision"]=="compact-participant-cues-v2"
             ))
         except TimeoutException:
             raise RuntimeError("event presentation timeout "+kind+": "+json.dumps(state(kind)))
@@ -119,7 +119,7 @@ try:
             raise RuntimeError("event participants/local context not visibly materialized: "+json.dumps(st))
         if st["activeLocalEventCueCount"]<st["visibleParticipants"] or st["activeLocalEventCueCount"]>max(1,participant_count)*3:
             raise RuntimeError("event cue count outside compact bounded contract: "+json.dumps(st))
-        if len(st["activeLocalEventResidentIds"])<st["visibleParticipants"] or st["localEventPresentationRevision"]!="compact-participant-cues-v1":
+        if len(st["activeLocalEventResidentIds"])<st["visibleParticipants"] or st["localEventPresentationRevision"]!="compact-participant-cues-v2":
             raise RuntimeError("event cue resident/revision telemetry mismatch: "+json.dumps(st))
         if not st["events"].get("eventDriven") or st["events"].get("perFrameScan") or st["events"].get("fullSettlementPerFrameScan") or st["events"].get("fullWorldScan"):
             raise RuntimeError("event scheduling architecture regression: "+json.dumps(st))
