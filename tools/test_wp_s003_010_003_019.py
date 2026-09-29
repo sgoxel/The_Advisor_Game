@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import base64
 import json
 import math
 import sys
@@ -8,6 +9,7 @@ import time
 from pathlib import Path
 
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -87,8 +89,22 @@ def wait_ready(driver):
 def capture(driver, name):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     path = OUT_DIR / f"{name}.png"
-    if not driver.save_screenshot(str(path)):
+    try:
+        if driver.save_screenshot(str(path)):
+            return path.name
+    except TimeoutException:
+        pass
+    # Slow-CPU evidence can exceed ChromeDriver's fixed renderer screenshot
+    # timeout even while the frame is still renderable. CDP uses the same live
+    # production canvas but avoids treating that ChromeDriver timeout as proof
+    # that the world itself failed.
+    shot = driver.execute_cdp_cmd("Page.captureScreenshot", {
+        "format": "png", "fromSurface": True, "captureBeyondViewport": False
+    })
+    data = shot.get("data") if isinstance(shot, dict) else None
+    if not data:
         raise RuntimeError(f"screenshot failed: {path}")
+    path.write_bytes(base64.b64decode(data))
     return path.name
 
 
