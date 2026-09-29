@@ -12,7 +12,7 @@ const ISOLATED_ISLAND_COUNT=8;
 const MOUNTAIN_NODES_PER_CONTINENT=9;
 const DEFAULT_WORLD_RADIUS_METERS=637100;
 const DEFAULT_TILE_METERS=2;
-const TERRAIN_FEATURE_REVISION="seed-registered-terrain-features-v1";
+const TERRAIN_FEATURE_REVISION="seed-registered-terrain-features-v2";
 const INSTANCE_CACHE=new Map();
 const CONTINENT_STEMS=Object.freeze(["Alder","Amber","Ashen","Bright","Cedar","Dawn","Elder","Falcon","Golden","Green","Grey","High","Iron","Kings","Lake","North","Oak","Raven","Red","River","Silver","Stone","Sun","Thorn","West","White","Wolf"]);
 const CONTINENT_TAILS=Object.freeze(["reach","fall","wood","mere","gate","vale","march","crest","land","haven"]);
@@ -384,20 +384,15 @@ function create(seedValue){
   }
   function terrainFeatureAtRegisteredMeters(eastMeters,northMeters,metersPerSample=100){
     const east=Number(eastMeters||0),north=Number(northMeters||0),mps=Math.max(1,Number(metersPerSample)||1);
-    const admitted=wavelength=>smooth01(clamp((wavelength/mps-2)/5,0,1));
-    const ridgeBroad=terrainFeatureNoise(bases.featureRidge,east,north,18000)*admitted(18000);
-    const ridgeMid=((1-Math.abs(terrainFeatureNoise(bases.featureRidge,east,north,6500)))*2-1)*admitted(6500);
-    const ridgeFine=((1-Math.abs(terrainFeatureNoise(bases.featureRidge^0x51ed270b,east,north,2200)))*2-1)*admitted(2200);
-    const ridgeValley=clamp(ridgeBroad*.28+ridgeMid*.48+ridgeFine*.24,-1,1);
-    const drainageBroad=((1-Math.abs(terrainFeatureNoise(bases.featureDrainage,east,north,5200)))*2-1)*admitted(5200);
-    const drainageFine=((1-Math.abs(terrainFeatureNoise(bases.featureDrainage^0x68bc21eb,east,north,1600)))*2-1)*admitted(1600);
-    const drainage=clamp((drainageBroad*.68+drainageFine*.32-.34)*1.55,0,1);
-    const cover=clamp(
-      terrainFeatureNoise(bases.featureCover,east,north,6200)*.56*admitted(6200)+
-      terrainFeatureNoise(bases.featureCover^0x02e5be93,east,north,2100)*.30*admitted(2100)+
-      terrainFeatureNoise(bases.featureCover^0x7f4a7c15,east,north,720)*.14*admitted(720),
-      -1,1
-    );
+    const admitted=wavelength=>smooth01(clamp((wavelength/mps-2)/4,0,1));
+    // Three deterministic fields are enough to expose coherent local geography
+    // without adding a second expensive multi-octave terrain generator.
+    const ridgeBase=terrainFeatureNoise(bases.featureRidge,east,north,9000)*admitted(9000);
+    const ridgeValley=clamp(((1-Math.abs(ridgeBase))*2-1)*.82+
+      terrainFeatureNoise(bases.featureRidge^0x51ed270b,east,north,26000)*.18*admitted(26000),-1,1);
+    const drainageBase=(1-Math.abs(terrainFeatureNoise(bases.featureDrainage,east,north,4300)))*admitted(4300);
+    const drainage=clamp((drainageBase-.57)*2.55,0,1);
+    const cover=clamp(terrainFeatureNoise(bases.featureCover,east,north,2600)*admitted(2600),-1,1);
     return {
       revision:TERRAIN_FEATURE_REVISION,
       authority:"Campaign-SEED + PlanetGeography registered-meter lattice",
