@@ -4183,17 +4183,24 @@ function canonicalRoofMeshData(entry,state){
     else fascia(-.55,.55,41+plane);
   }
 
+  // A restrained ridge cap gives every detailed roof a readable gable axis at
+  // near-top-down scale without adding a draw call or changing building bounds.
+  const ridgeColor=entry.landmark?[142,82,31,255]:[72,31,25,255];
+  addPatch(-1,.91,.995,-.51,.51,ridgeColor,80,.010,0);
+  addPatch(1,.91,.995,-.51,.51,ridgeColor,81,.010,0);
+
   if(visualState==="worn"){
-    const light=[183,151,116,255],mid=[157,126,96,255],dark=[91,67,52,255];
+    const light=[176,145,112,255],mid=[151,119,91,255],dark=[93,66,50,255];
+    // Staggered low-profile shingle runs replace the prior square stamps.
     [
-      [-1,.06,.18,-.47,-.31,light,101,.012],
-      [-1,.24,.38,-.12,-.02,mid,102,.012],
-      [-1,.08,.22,.15,.27,light,103,.012],
-      [-1,.48,.60,.32,.44,dark,104,.010],
-      [ 1,.10,.24,-.27,-.16,light,105,.012],
-      [ 1,.34,.48,.02,.13,mid,106,.012],
-      [ 1,.14,.28,.31,.42,light,107,.012],
-      [ 1,.58,.70,-.49,-.39,dark,108,.010]
+      [-1,.05,.25,-.47,-.42,light,101,.013,.012],
+      [-1,.18,.40,-.23,-.17,mid,102,.012,-.010],
+      [-1,.06,.28,.05,.11,light,103,.013,.014],
+      [-1,.38,.61,.31,.36,dark,104,.010,-.012],
+      [ 1,.09,.31,-.34,-.28,light,105,.013,-.012],
+      [ 1,.27,.48,-.05,.00,mid,106,.012,.010],
+      [ 1,.12,.33,.23,.29,light,107,.013,-.014],
+      [ 1,.48,.69,.43,.48,dark,108,.010,.012]
     ].forEach(v=>addPatch(...v));
   }else if(visualState==="damaged"){
     const char=[45,35,30,255],burn=[111,56,34,255],ash=[143,117,88,255];
@@ -4202,24 +4209,25 @@ function canonicalRoofMeshData(entry,state){
     addPatch(-1,.10,.18,-.15,-.04,ash,123,.016,.012);
     addPatch(1,.08,.17,-.43,-.30,[101,68,50,255],124,.012,.015);
   }else if(visualState==="repaired"){
-    const fresh=[[231,164,76,255],[247,198,112,255],[199,124,52,255],[220,148,65,255]];
-    // Fresh replacement boards occupy the exact eave area that is absent in
-    // the damaged variant, aligned with the roof slope rather than as a decal.
-    const strips=[[-.53,-.43,.42],[-.42,-.32,.37],[-.31,-.21,.33],[-.20,-.10,.29]];
-    strips.forEach((r,i)=>addPatch(-1,.015,r[2],r[0],r[1],fresh[i],140+i,.025,(i%2?-.012:.012)));
-    addPatch(-1,.36,.43,-.51,-.34,[154,91,42,255],148,.029,.010);
+    const fresh=[[218,157,78,255],[235,185,104,255],[190,118,53,255],[211,143,66,255]];
+    // Fresh replacement boards sit slightly inboard of the damaged eave cut so
+    // they read as fitted roof work rather than bright planks floating outside.
+    const strips=[[-.50,-.43,.34],[-.40,-.33,.32],[-.30,-.23,.30],[-.20,-.13,.28]];
+    strips.forEach((r,i)=>addPatch(-1,.08,r[2],r[0],r[1],fresh[i],140+i,.022,(i%2?-.010:.010)));
+    addPatch(-1,.31,.39,-.50,-.36,[150,90,43,255],148,.024,.010);
   }else if(visualState==="overgrown"){
     const moss=[65,116,51,255],mossLight=[98,142,63,255],leaf=[45,91,43,255];
-    // Narrow eave-following moss/ivy runs keep growth attached to real roof
-    // geometry and avoid the former large green checkerboard blocks.
+    // Staggered roof-following growth clusters replace the prior straight green
+    // edge bars; facade vines below still connect the roof state to the ground.
     [
-      [-1,.018,.085,-.50,-.23,moss,161,.024,.012],
-      [-1,.025,.095,.03,.29,mossLight,162,.024,-.010],
-      [-1,.18,.28,-.39,-.27,leaf,163,.026,.018],
-      [-1,.32,.42,.19,.31,moss,164,.024,-.014],
-      [ 1,.020,.088,-.32,-.08,mossLight,165,.024,.010],
-      [ 1,.030,.102,.20,.45,moss,166,.024,-.012],
-      [ 1,.20,.30,-.03,.09,leaf,167,.026,.015]
+      [-1,.04,.20,-.49,-.43,moss,161,.024,.012],
+      [-1,.10,.28,-.31,-.24,mossLight,162,.024,-.010],
+      [-1,.05,.22,.05,.12,leaf,163,.026,.015],
+      [-1,.23,.39,.24,.31,moss,164,.024,-.014],
+      [ 1,.05,.22,-.37,-.31,mossLight,165,.024,-.012],
+      [ 1,.13,.31,-.12,-.05,moss,166,.024,.010],
+      [ 1,.06,.23,.19,.26,leaf,167,.026,-.014],
+      [ 1,.28,.43,.39,.45,mossLight,168,.024,.012]
     ].forEach(v=>addPatch(...v));
   }else{
     // A few nearly tonal narrow shingle runs keep normal roofs from reading as
