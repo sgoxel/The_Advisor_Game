@@ -5,13 +5,14 @@ const VERSION=1;
 const TILE_METERS=2;
 const POI_CELL_TILES=8192;
 const MAX_QUERY_RADIUS_METERS=80000;
-const MAX_QUERY_RESULTS=32;
+const MAX_QUERY_RESULTS=24;
 const MAX_QUERY_CELLS=169;
+const ACTIVE_POI_QUERY_CELLS=64;
 const SAMPLE_STEP_TILES=96;
 const FAR_SAMPLE_STEP_TILES=384;
 const POI_CELL_CACHE_LIMIT=512;
-const SETTLEMENT_CELL_LIMIT_PER_CLASS=25;
-const SETTLEMENT_RESULT_LIMIT_PER_CLASS=4;
+const SETTLEMENT_CELL_LIMIT_PER_CLASS=9;
+const SETTLEMENT_RESULT_LIMIT_PER_CLASS=3;
 const poiCellCache=new Map();
 const NAME_STEMS=Object.freeze(["Alder","Ash","Black","Bright","Cedar","Dawn","Elder","Falcon","Green","Grey","High","Iron","Kings","Lake","North","Oak","Raven","Red","River","Silver","Stone","Sun","Thorn","Vale","West","White","Wolf"]);
 const TYPE_SUFFIX=Object.freeze({
@@ -83,12 +84,14 @@ function contextAt(seed,xValue,yValue){
   const openNear=near.filter(p=>["grass","farmland","dirt","sand"].includes(p.terrain)).length;
   const cardinals=near.slice(1,5),waterArms=cardinals.filter(p=>p.terrain==="water").length,landNear=near.length-waterNear;
   const oppositeWater=(cardinals[0].terrain==="water"&&cardinals[1].terrain==="water")||(cardinals[2].terrain==="water"&&cardinals[3].terrain==="water");
-  let landform=null;try{landform=window.WorldField?.landform?.(seed,meterCoordinate(x),meterCoordinate(y),192)||null;}catch(_){}
+  let landform=null;
+  if(center.waterKind==="river"||center.elevationMeters>=320||center.terrain==="rock"){
+    try{landform=window.WorldField?.landform?.(seed,meterCoordinate(x),meterCoordinate(y),192)||null;}catch(_){}
+  }
   const relief=Number(landform?.localReliefMeters),slopeMeters=Number.isFinite(relief)?relief:Math.max(...elevations)-Math.min(...elevations);
-  let routeTerrain="";try{routeTerrain=safeTerrain(seed,x,y);}catch(_){}
   return Object.freeze({
     center,near:freezeArray(near),far:Object.freeze([]),waterNear,forestNear,rockNear,openNear,
-    roadNear:["road","bridge"].includes(routeTerrain),waterArms,landNear,oppositeWater,slopeMeters,
+    roadNear:false,waterArms,landNear,oppositeWater,slopeMeters,
     maxElevationMeters:Math.max(...elevations),minElevationMeters:Math.min(...elevations),
     slopeDegrees:Number(landform?.slopeDegrees||0),passSignal:Number(landform?.passSignal||0),
     cliffSignal:Number(landform?.cliffSignal||0),landformKind:String(landform?.kind||"")
@@ -104,7 +107,9 @@ function poiCandidatesForCell(seed,cxValue,cyValue){
   const size=BigInt(POI_CELL_TILES),baseX=cx*size,baseY=cy*size;
   const jx=BigInt(Math.round((unit(seed,"jx:"+cx+":"+cy)*.72+.14)*POI_CELL_TILES)),jy=BigInt(Math.round((unit(seed,"jy:"+cx+":"+cy)*.72+.14)*POI_CELL_TILES));
   const x=baseX+jx,y=baseY+jy,ctx=contextAt(seed,x,y),c=ctx.center,h=unit(seed,"history:"+cx+":"+cy),g=unit(seed,"activity:"+cx+":"+cy),out=[];
-  const ev={terrain:c.terrain,elevationMeters:c.elevationMeters,biome:c.biome,waterSamples:ctx.waterNear,forestSamples:ctx.forestNear,rockSamples:ctx.rockNear,openSamples:ctx.openNear,slopeMeters:Math.round(ctx.slopeMeters),roadNear:ctx.roadNear,waterArms:ctx.waterArms};
+  let roadNear=false;
+  if(h>.83||(ctx.waterNear>=2&&h>.58)){let routeTerrain="";try{routeTerrain=safeTerrain(seed,x,y);}catch(_){}roadNear=["road","bridge"].includes(routeTerrain);}
+  const ev={terrain:c.terrain,elevationMeters:c.elevationMeters,biome:c.biome,waterSamples:ctx.waterNear,forestSamples:ctx.forestNear,rockSamples:ctx.rockNear,openSamples:ctx.openNear,slopeMeters:Math.round(ctx.slopeMeters),roadNear,waterArms:ctx.waterArms};
   if(c.terrain==="water"){
     if(c.waterKind==="river"&&ctx.waterArms>=3&&ctx.landNear>=2)out.push(rawCandidate(seed,"confluence",x,y,.90,3,420,"A meeting of seeded river corridors with multiple approach arms.",["water","navigation","river"],ev));
     else if(c.waterKind==="river"&&(ctx.oppositeWater||ctx.waterArms>=2))out.push(rawCandidate(seed,"river-location",x,y,.78,2,500,"A notable reach on the continuous seeded river field.",["water","river"],ev));
@@ -117,14 +122,14 @@ function poiCandidatesForCell(seed,cxValue,cyValue){
     if(ctx.forestNear>=5)out.push(rawCandidate(seed,"forest",x,y,.68+ctx.forestNear/100,2,700,"A notable grove or forest pocket grounded in the local biome.",["woodland","gathering"],ev));
   }
   if(c.terrain!=="water"&&(ctx.waterNear>=2||ctx.waterArms>=1))out.push(rawCandidate(seed,"fishing",x,y,.65+ctx.waterNear/20,2,620,"A fishing area placed beside reachable seeded water.",["fishing","water-access"],ev));
-  if(c.terrain!=="water"&&(ctx.forestNear>=3||["Woodland","Highland"].includes(c.biome))&&!ctx.roadNear&&g>.18)out.push(rawCandidate(seed,"hunting",x,y,.61+ctx.forestNear/20,2,1100,"A hunting area derived from wilderness cover, relief and low route pressure.",["hunting","wilderness"],ev));
+  if(c.terrain!=="water"&&(ctx.forestNear>=3||["Woodland","Highland"].includes(c.biome))&&!roadNear&&g>.18)out.push(rawCandidate(seed,"hunting",x,y,.61+ctx.forestNear/20,2,1100,"A hunting area derived from wilderness cover, relief and low route pressure.",["hunting","wilderness"],ev));
   if(c.terrain!=="water"&&ctx.openNear>=6&&g>.36)out.push(rawCandidate(seed,"grazing",x,y,.60+ctx.openNear/30,1,900,"Open country suitable for grazing, derived from seeded ground cover.",["grazing","open-country"],ev));
   if(c.terrain!=="water"&&(ctx.forestNear>=3||ctx.rockNear>=2)&&g>.42)out.push(rawCandidate(seed,"gathering",x,y,.58+(ctx.forestNear+ctx.rockNear)/40,1,520,"A gathering area tied to local woodland or exposed material resources.",["gathering","resources"],ev));
-  if(c.terrain!=="water"&&c.elevationMeters<2600&&(ctx.roadNear||["rock","dirt","grass"].includes(c.terrain))&&h>.83){
-    const historicType=ctx.roadNear?(ctx.slopeMeters>450?"tower":"ruin"):(ctx.slopeMeters>650?"fort":"ruin");
-    out.push(rawCandidate(seed,historicType,x,y,.69+h/10,historicType==="fort"?3:2,historicType==="fort"?360:240,ctx.roadNear?"A historical site on a plausible seeded travel approach.":"A historical site on suitable dry terrain with deterministic regional context.",["historical",ctx.roadNear?"route-access":"terrain-access"],ev));
+  if(c.terrain!=="water"&&c.elevationMeters<2600&&(roadNear||["rock","dirt","grass"].includes(c.terrain))&&h>.83){
+    const historicType=roadNear?(ctx.slopeMeters>450?"tower":"ruin"):(ctx.slopeMeters>650?"fort":"ruin");
+    out.push(rawCandidate(seed,historicType,x,y,.69+h/10,historicType==="fort"?3:2,historicType==="fort"?360:240,roadNear?"A historical site on a plausible seeded travel approach.":"A historical site on suitable dry terrain with deterministic regional context.",["historical",roadNear?"route-access":"terrain-access"],ev));
   }
-  if((c.terrain==="bridge"||ctx.roadNear)&&ctx.waterNear>=2&&h>.58)out.push(rawCandidate(seed,"bridge",x,y,.76,2,180,"A strategically notable crossing where seeded route and water geography meet.",["crossing","route","water"],ev));
+  if((c.terrain==="bridge"||roadNear)&&ctx.waterNear>=2&&h>.58)out.push(rawCandidate(seed,"bridge",x,y,.76,2,180,"A strategically notable crossing where seeded route and water geography meet.",["crossing","route","water"],ev));
   out.sort((a,b)=>b.score-a.score||b.importance-a.importance||a.id.localeCompare(b.id));
   const result=Object.freeze(out.slice(0,4));
   poiCellCache.set(cacheKey,result);
@@ -136,8 +141,8 @@ function settlementRaw(record){
   return Object.freeze({id:String(record.id),type,category:categoryForType(type),center:Object.freeze({x:String(record.center.x),y:String(record.center.y)}),score:1+importance/10,importance,footprintRadiusMeters:settlementRadius(record),description:type==="capital"?"National political center from the canonical settlement hierarchy.":"Canonical "+type+" from the SEED settlement hierarchy.",activityTags:Object.freeze(["settlement",String(record.roadNetworkRole||"local-node")]),evidence:Object.freeze({terrain:String(record.center.terrain||""),settlementClass:String(record.classId||""),importanceClass:String(record.importanceClass||""),generationCellId:String(record.generationCell?.id||"")}),source:String(record.authority||"SettlementArchetypes"),worldAuthority:true,countryId:String(record.countryId||""),regionId:String(record.regionId||""),canonicalName:String(record.name||"")});
 }
 function enrich(seed,raw){
-  const x=raw.center.x,y=raw.center.y,coordinates=coordinatesFor(seed,x,y),context=window.GeographyFoundation?.hierarchy?.(seed,x,y)||{};
-  let country=null,region=null;try{country=window.PoliticalGeography?.ownerAt?.(seed,x,y)||null;}catch(_){}try{region=window.RegionProfile?.at?.(seed,x,y)||null;}catch(_){}
+  const x=raw.center.x,y=raw.center.y,coordinates=coordinatesFor(seed,x,y);
+  let country=null,region=null;try{country=raw.countryId?window.PoliticalGeography?.countryById?.(seed,raw.countryId)||null:window.PoliticalGeography?.ownerAt?.(seed,x,y)||null;}catch(_){}try{region=window.RegionProfile?.at?.(seed,x,y)||null;}catch(_){}
   const type=raw.type,nameInfo=raw.canonicalName?Object.freeze({name:raw.canonicalName,authority:"SettlementArchetypes canonical name"}):namesFor(seed,type,x,y);
   const terrain=raw.evidence?.terrain||safeTerrain(seed,x,y),walkable=terrain!=="water",roadAccessClass=raw.type==="capital"||raw.type==="city"?"primary":raw.category==="cities"?"regional":raw.evidence?.roadNear?"local-road":raw.type==="bridge"?"crossing":"off-road";
   const defaultDiscoveryState=raw.importance>=3||["capital","city","town"].includes(type)?"known":"discoverable";
@@ -205,18 +210,18 @@ function queryNearby(seedValue,originValue,optionsValue){
     if(a.cy!==b.cy)return a.cy<b.cy?-1:1;
     if(a.cx!==b.cx)return a.cx<b.cx?-1:1;
     return 0;
-  });const boundedCells=cells.slice(0,MAX_QUERY_CELLS);
+  });const boundedCells=cells.slice(0,Math.min(MAX_QUERY_CELLS,ACTIVE_POI_QUERY_CELLS));
   for(const cell of boundedCells)raw.push(...poiCandidatesForCell(seed,cell.cx,cell.cy));
   const settlementAnchors=raw.filter(item=>["hamlet","village","town","city","capital"].includes(item.type));
   const unique=new Map();for(const rawItem of raw){let item=rawItem;const distance=tileDistanceMeters(origin,item.center);if(distance>radiusMeters+item.footprintRadiusMeters)continue;if(item.importance<minImportance)continue;if(categories&&!categories.has(item.category))continue;if(types&&!types.has(item.type))continue;if(item.type==="hunting"){let nearest=Infinity;for(const settlement of settlementAnchors)nearest=Math.min(nearest,tileDistanceMeters(item.center,settlement.center));if(nearest<1800)continue;item=Object.freeze({...item,evidence:Object.freeze({...item.evidence,settlementPressureMeters:Number.isFinite(nearest)?Number(nearest.toFixed(1)):null})});}const prev=unique.get(item.id);if(!prev||distance<prev.distance)unique.set(item.id,{item,distance});}
   const ranked=[...unique.values()].sort((a,b)=>a.distance-b.distance||b.item.importance-a.item.importance||b.item.score-a.item.score||a.item.id.localeCompare(b.item.id));
   const results=[];for(const entry of ranked){const item=enrich(seed,entry.item);if(!discoveredPass(item,options))continue;const dir=bearing(origin,item.center);results.push(Object.freeze({...item,distanceMeters:Number(entry.distance.toFixed(2)),bearingDegrees:dir.degrees,directionLabel:dir.label}));if(results.length>=maxResults)break;}
   const ended=typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
-  return Object.freeze({seed,origin,radiusMeters,results:Object.freeze(results),diagnostics:Object.freeze({version:VERSION,queryMs:Number((ended-started).toFixed(3)),queryCellCount:boundedCells.length,maxQueryCells:MAX_QUERY_CELLS,settlementQueryCellCount:Number(settlementQuery.diagnostics?.queryCellCount||0),settlementClasses:Object.freeze(settlementClasses.slice()),poiCellCacheSize:poiCellCache.size,poiCellCacheLimit:POI_CELL_CACHE_LIMIT,candidateCount:raw.length,resultCount:results.length,bounded:true,fullWorldScan:false,localChunkMaterialization:false,descriptorOnly:true,seedOnly:true,cameraIndependent:true,viewportIndependent:true})});
+  return Object.freeze({seed,origin,radiusMeters,results:Object.freeze(results),diagnostics:Object.freeze({version:VERSION,queryMs:Number((ended-started).toFixed(3)),queryCellCount:boundedCells.length,maxQueryCells:MAX_QUERY_CELLS,activePoiQueryCellLimit:ACTIVE_POI_QUERY_CELLS,settlementQueryCellCount:Number(settlementQuery.diagnostics?.queryCellCount||0),settlementClasses:Object.freeze(settlementClasses.slice()),poiCellCacheSize:poiCellCache.size,poiCellCacheLimit:POI_CELL_CACHE_LIMIT,candidateCount:raw.length,resultCount:results.length,bounded:true,fullWorldScan:false,localChunkMaterialization:false,descriptorOnly:true,seedOnly:true,cameraIndependent:true,viewportIndependent:true})});
 }
 function descriptorById(seedValue,idValue,originValue,optionsValue){const id=String(idValue||"");if(!id)return null;const query=queryNearby(seedValue,originValue||{x:"0",y:"0"},{...(optionsValue||{}),radiusMeters:optionsValue?.radiusMeters||MAX_QUERY_RADIUS_METERS,maxResults:MAX_QUERY_RESULTS});return query.results.find(item=>item.id===id)||null;}
 function signature(query){return hash32((query?.results||[]).map(item=>[item.id,item.type,item.center.x,item.center.y,item.countryId,item.regionId,item.importance].join(":")).join("|")).toString(16).padStart(8,"0");}
 function verify(seedValue,originValue){const seed=String(seedValue==null?"":seedValue),origin=normalizeOrigin(seed,originValue||{x:"0",y:"0"}),a=queryNearby(seed,origin,{radiusMeters:80000,maxResults:32}),b=queryNearby(seed,origin,{radiusMeters:80000,maxResults:32}),sa=signature(a),sb=signature(b),settlement=a.results.some(x=>["hamlet","village","town","city","capital"].includes(x.type)),nonSettlement=a.results.some(x=>!["hamlet","village","town","city","capital"].includes(x.type));return Object.freeze({pass:sa===sb&&settlement&&nonSettlement&&a.diagnostics.bounded&&!a.diagnostics.fullWorldScan&&!a.diagnostics.localChunkMaterialization,seed,signatureA:sa,signatureB:sb,deterministic:sa===sb,settlement,nonSettlement,query:a});}
 
-window.WorldDestinations=Object.freeze({VERSION,TILE_METERS,POI_CELL_TILES,MAX_QUERY_RADIUS_METERS,MAX_QUERY_RESULTS,MAX_QUERY_CELLS,POI_CELL_CACHE_LIMIT,SETTLEMENT_CELL_LIMIT_PER_CLASS,SETTLEMENT_RESULT_LIMIT_PER_CLASS,queryNearby,descriptorById,verify,signature});
+window.WorldDestinations=Object.freeze({VERSION,TILE_METERS,POI_CELL_TILES,MAX_QUERY_RADIUS_METERS,MAX_QUERY_RESULTS,MAX_QUERY_CELLS,ACTIVE_POI_QUERY_CELLS,POI_CELL_CACHE_LIMIT,SETTLEMENT_CELL_LIMIT_PER_CLASS,SETTLEMENT_RESULT_LIMIT_PER_CLASS,queryNearby,descriptorById,verify,signature});
 })();
