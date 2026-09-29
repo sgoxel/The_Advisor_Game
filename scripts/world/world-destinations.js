@@ -59,7 +59,7 @@ function coordinatesFor(seed,x,y){
 function namesFor(seed,type,x,y,meta){
   const input={...(meta||{}),type,id:String(meta?.id||[type,x,y].join("|")),x:String(x),y:String(y)};
   try{
-    const canonical=window.PlaceNaming?.descriptor?.(seed,input);
+    const canonical=window.PlaceNaming?.descriptor?.(seed,input,Number(meta?.namingAttempt??meta?.attempt??0));
     if(canonical)return Object.freeze({
       name:String(canonical.name),authority:String(canonical.authority||"PlaceNaming"),
       namingCultureKey:canonical.namingCultureKey||null,
@@ -155,13 +155,13 @@ function poiCandidatesForCell(seed,cxValue,cyValue){
 }
 function settlementRaw(record){
   const type=settlementType(record),importance=settlementImportance(record);
-  return Object.freeze({id:String(record.id),type,category:categoryForType(type),center:Object.freeze({x:String(record.center.x),y:String(record.center.y)}),score:1+importance/10,importance,footprintRadiusMeters:settlementRadius(record),description:type==="capital"?"National political center from the canonical settlement hierarchy.":"Canonical "+type+" from the SEED settlement hierarchy.",activityTags:Object.freeze(["settlement",String(record.roadNetworkRole||"local-node")]),evidence:Object.freeze({terrain:String(record.center.terrain||""),settlementClass:String(record.classId||""),importanceClass:String(record.importanceClass||""),generationCellId:String(record.generationCell?.id||"")}),source:String(record.authority||"SettlementArchetypes"),worldAuthority:true,countryId:String(record.countryId||""),regionId:String(record.regionId||""),canonicalName:String(record.name||"")});
+  return Object.freeze({id:String(record.id),type,category:categoryForType(type),center:Object.freeze({x:String(record.center.x),y:String(record.center.y)}),score:1+importance/10,importance,footprintRadiusMeters:settlementRadius(record),description:type==="capital"?"National political center from the canonical settlement hierarchy.":"Canonical "+type+" from the SEED settlement hierarchy.",activityTags:Object.freeze(["settlement",String(record.roadNetworkRole||"local-node")]),evidence:Object.freeze({terrain:String(record.center.terrain||""),settlementClass:String(record.classId||""),importanceClass:String(record.importanceClass||""),generationCellId:String(record.generationCell?.id||"")}),source:String(record.authority||"SettlementArchetypes"),worldAuthority:true,countryId:String(record.countryId||""),regionId:String(record.regionId||""),canonicalName:String(record.name||""),canonicalNamingAttempt:Number(record.namingAttempt||0),canonicalNameGenerationVersion:Number(record.nameGenerationVersion||0),canonicalNamingCultureKey:record.namingCultureKey||null});
 }
 function enrich(seed,raw){
   const x=raw.center.x,y=raw.center.y,coordinates=coordinatesFor(seed,x,y);
   let country=null,region=null;try{country=raw.countryId?window.PoliticalGeography?.countryById?.(seed,raw.countryId)||null:window.PoliticalGeography?.ownerAt?.(seed,x,y)||null;}catch(_){}try{region=window.RegionProfile?.descriptorAt?.(seed,x,y)||window.RegionProfile?.at?.(seed,x,y)||null;}catch(_){}
   const type=raw.type,countryId=String(raw.countryId||country?.id||""),regionId=String(raw.regionId||region?.id||"");
-  const nameInfo=namesFor(seed,type,x,y,{id:String(raw.id),countryId,regionId});
+  const nameInfo=namesFor(seed,type,x,y,{id:String(raw.id),countryId,regionId,namingAttempt:Number(raw.canonicalNamingAttempt||0)});
   const resolvedName=raw.canonicalName&&Number(nameInfo.nameGenerationVersion||0)===0?String(raw.canonicalName):String(nameInfo.name);
   const terrain=raw.evidence?.terrain||safeTerrain(seed,x,y),walkable=terrain!=="water",roadAccessClass=raw.type==="capital"||raw.type==="city"?"primary":raw.category==="cities"?"regional":raw.evidence?.roadNear?"local-road":raw.type==="bridge"?"crossing":"off-road";
   const defaultDiscoveryState=raw.importance>=3||["capital","city","town"].includes(type)?"known":"discoverable";
