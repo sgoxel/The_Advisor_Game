@@ -105,7 +105,7 @@ for(const semantic of ["campfire","tent","ruin-wall","shrine","grave","dock","fi
   assert(meshSource.includes('semantic==="'+semantic+'"'),"renderer missing micro-location semantic "+semantic);
 }
 assert(html.indexOf("scripts/world/world-destinations.js")<html.indexOf("scripts/world/micro-locations.js"),"MicroLocations must load after WorldDestinations");
-assert(html.indexOf("scripts/world/micro-locations.js")<html.indexOf("scripts/render/renderer-bootstrap.js"),"MicroLocations must load before renderer bootstrap");
+assert(html.indexOf("scripts/world/micro-locations.js")<html.indexOf("scripts/world/planet-stage.js"),"MicroLocations must load before PlanetStage world navigation");
 
 console.log(JSON.stringify({
   pass:true,wp:"WP-S006-007-001",classification:"MIXED",

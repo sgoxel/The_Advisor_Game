@@ -58,7 +58,7 @@ jobs:
           PROFILE: ${{ matrix.profile }}
         run: python tools/wp_s006_007_001_evidence.py
       - name: Upload evidence
-        if: always()
+        if: always() && hashFiles('tools/screenshots/wp-s006-007-001/**') != ''
         uses: actions/upload-artifact@v4
         with:
           name: wp-s006-007-001-${{ matrix.profile }}-${{ github.run_id }}
