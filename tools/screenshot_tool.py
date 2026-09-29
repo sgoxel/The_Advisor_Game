@@ -10027,8 +10027,16 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                     raise RuntimeError(f"WP-019 center-first density order invalid frame {index}: {mpts}")
 
         close_static=proofs[2].get("localStatic") or {}
-        if int(close_static.get("roads") or 0)<1 or int(close_static.get("buildings") or 0)<1:
-            raise RuntimeError(f"WP-019 close focus lacks canonical roads/buildings: {proofs[2]}")
+        close_tier=str(close_static.get("tier") or "")
+        if int(close_static.get("roads") or 0)<1:
+            raise RuntimeError(f"WP-019 close focus lacks canonical roads: {proofs[2]}")
+        # Route-tier evidence is the bounded map-scale settlement overview: real
+        # StartingVillage roads plus occupied-area morphology. Building geometry
+        # is intentionally deferred until coarse/refined/full reveal tiers.
+        if close_tier=="route" and int(close_static.get("occupiedAreas") or 0)<1:
+            raise RuntimeError(f"WP-019 route-tier focus lacks occupied settlement context: {proofs[2]}")
+        if close_tier in {"coarse","refined","full"} and int(close_static.get("buildings") or 0)<1:
+            raise RuntimeError(f"WP-019 detailed focus lacks canonical buildings: {proofs[2]}")
         if int(proofs[4].get("cacheHits") or 0)<=int(proofs[3].get("cacheHits") or 0):
             raise RuntimeError(f"WP-019 pan-back did not reuse cached focus detail: away={proofs[3]} back={proofs[4]}")
         slow=(proofs[5].get("focusStreaming") or {}).get("handoff") or {}
