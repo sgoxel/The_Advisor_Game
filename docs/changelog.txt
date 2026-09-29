@@ -1,3 +1,11 @@
+2026-09-29 06:30 +03:00 | WP-S004-009 | MIXED PASS — acceptance pending deployment
+- Added SettlementActivityRhythm as a deterministic presentation-only fantasy-day profile layer with dawn, daytime, late-day, evening and night bands, 45-minute smooth transitions and per-resident SEED-derived timing variation.
+- DailyActivity schedules, route targets, resident materialization and world truth remain authoritative and unchanged. Telemetry reports fantasyTimeOnly=true, schedule/world/materialization mutation=false, globalScan=false and fullSettlementPerFrameScan=false.
+- Accepted exact-head workflow 36516836041 on aae20c8fc78ecba340696ed2d12388a1891ab423 completed SUCCESS; portrait artifact 11011033859 and landscape artifact 11010779695 cover the same village at dawn, midday, evening and night.
+- Fresh evidence showed exact visible residents 1 / 9 / 6 / 0 and building cues 7 / 12 / 7 / 7 across dawn / midday / evening / night. NPC presentation max was 1.1 ms and building-activity max was 1.9 ms.
+- All 8 fresh landscape/portrait screenshots were directly inspected. VISUAL 8.2/10 PASS: quiet dawn, visibly busy midday, warm social/home evening and quiet-but-inhabited night remain readable without major clipping, projection or mobile-layout defects.
+- Deployment verification and completion bookkeeping remain required before Issue closure.
+
 2026-09-28 04:05 +03:00 | WP-S003-019 | MIXED | INCOMPLETE after 3 acceptance attempts
 - Added standalone deterministic seasonal presentation from active SEED + RegionProfile climate + fantasy calendar, with spring/summer/autumn/winter foliage profiles, climate-aware flowers/dry grass/autumn leaves/frost/snow, bounded camera-local pooled accents, lazy relevant-only refresh, and a hard 24-entry seasonal profile cache.
 - Added dedicated fixed-location evidence across four representative seasonal dates plus warm/cold climate plausibility and phone/mobile budgets. No climate/resource mutation, Simulation authority, full-world scan or per-frame world scan was introduced.
