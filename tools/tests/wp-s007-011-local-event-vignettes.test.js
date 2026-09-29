@@ -66,7 +66,7 @@ for(const type of LocalEventVignettes.CATALOG.map(x=>x.id)){
     const state=LocalEventVignettes.stateFor(participant.id,s);
     assert(state?.holdsPosition&&state?.scheduleOverride,type+" participant did not receive temporary activity hold");
   }
-  const ended=LocalEventVignettes.advance(s,"1201-02-01 12:46:00");
+  const ended=LocalEventVignettes.advance(s,"1201-02-01 12:46:00",{ensureScheduled:false});
   assert.strictEqual(ended.activeCount,0,type+" did not end cleanly");
   proofRows.push({type,participants:result.event.participants.map(p=>p.id),location:result.event.location.label});
 }
