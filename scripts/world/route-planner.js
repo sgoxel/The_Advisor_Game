@@ -239,181 +239,118 @@ function routeCostMetrics(seed,path){
   });
 }
 
-function findRoute(seed,startValue,destinationValue,options){
-  const start=normalizePoint(startValue);
-  const destination=normalizePoint(destinationValue);
-  const opts=options||{};
+function immediateRouteResult(start,destination,maxNodes){
+  return frozenResult({
+    found:true,reason:"ok",start,destination,
+    path:Object.freeze([Object.freeze({x:start.x,y:start.y})]),
+    pathKeys:Object.freeze([key(start)]),stepCount:0,totalSeconds:0,
+    evaluatedCount:2,expandedCount:0,blockedRejectedCount:0,slopeBlockedRejectedCount:0,
+    slopePenaltySeconds:0,elevationPenaltySeconds:0,horizontalCostSeconds:0,
+    uphillPenaltySeconds:0,downhillPenaltySeconds:0,roadBenefitSeconds:0,difficultTerrainPenaltySeconds:0,
+    totalAscentMeters:0,totalDescentMeters:0,engineeredStepCount:0,bridgeStepCount:0,
+    externalPenaltySeconds:0,maxSlopeAngleDegrees:0,searchRadius:0,maxNodes
+  });
+}
+function beginRouteSearch(seed,startValue,destinationValue,options){
+  const start=normalizePoint(startValue),destination=normalizePoint(destinationValue),opts=options||{};
   const maxDistance=Math.max(1,Math.floor(Number(opts.maxDistanceTiles||DEFAULT_MAX_DISTANCE_TILES)));
   const maxNodes=Math.max(64,Math.floor(Number(opts.maxNodes||DEFAULT_MAX_NODES)));
   const detourAllowance=Math.max(0,Math.floor(Number(opts.detourAllowanceTiles??DEFAULT_DETOUR_ALLOWANCE_TILES)));
   const direct=manhattan(start,destination);
-
-  if(!Number.isFinite(direct)||direct>maxDistance){
-    return failure("outside-local-range",start,destination,{searchRadius:maxDistance,maxNodes});
-  }
-
-  const startState=movementState(seed,start.x,start.y);
-  if(!startState?.walkable)return failure("blocked-start",start,destination,{searchRadius:direct,maxNodes});
-  const destinationState=movementState(seed,destination.x,destination.y);
-  if(!destinationState?.walkable)return failure("blocked-destination",start,destination,{searchRadius:direct,maxNodes});
-
-  if(key(start)===key(destination)){
-    return frozenResult({
-      found:true,
-      reason:"ok",
-      start,destination,
-      path:Object.freeze([Object.freeze({x:start.x,y:start.y})]),
-      pathKeys:Object.freeze([key(start)]),
-      stepCount:0,
-      totalSeconds:0,
-      evaluatedCount:2,
-      expandedCount:0,
-      blockedRejectedCount:0,
-      slopeBlockedRejectedCount:0,
-      slopePenaltySeconds:0,
-      elevationPenaltySeconds:0,
-      horizontalCostSeconds:0,
-      uphillPenaltySeconds:0,
-      downhillPenaltySeconds:0,
-      roadBenefitSeconds:0,
-      difficultTerrainPenaltySeconds:0,
-      totalAscentMeters:0,
-      totalDescentMeters:0,
-      engineeredStepCount:0,
-      bridgeStepCount:0,
-      externalPenaltySeconds:0,
-      maxSlopeAngleDegrees:0,
-      searchRadius:0,
-      maxNodes
-    });
-  }
-
-  const searchRadius=Math.min(maxDistance,direct+detourAllowance);
-  const open=new MinHeap();
-  const cameFrom=new Map();
-  const points=new Map();
-  const gScore=new Map();
-  const stateCache=new Map();
-  let evaluatedCount=2;
-  let expandedCount=0;
-  let blockedRejectedCount=0;
-  let slopeBlockedRejectedCount=0;
-  let order=0;
-
-  const startKey=key(start);
-  points.set(startKey,start);
-  gScore.set(startKey,0);
-  stateCache.set(startKey,startState);
-  open.push({
-    point:start,
-    g:0,
-    h:heuristicSeconds(start,destination),
-    f:heuristicSeconds(start,destination),
-    order:order++
+  const search={
+    seed:String(seed),start,destination,opts,maxDistance,maxNodes,detourAllowance,direct,
+    searchRadius:Math.min(maxDistance,Number.isFinite(direct)?direct+detourAllowance:maxDistance),
+    destinationKey:key(destination),open:new MinHeap(),cameFrom:new Map(),points:new Map(),gScore:new Map(),stateCache:new Map(),
+    evaluatedCount:0,expandedCount:0,blockedRejectedCount:0,slopeBlockedRejectedCount:0,order:0,done:false,result:null
+  };
+  const finish=result=>{search.done=true;search.result=result;return search;};
+  if(!Number.isFinite(direct)||direct>maxDistance)return finish(failure("outside-local-range",start,destination,{searchRadius:maxDistance,maxNodes}));
+  const startState=movementState(seed,start.x,start.y);search.evaluatedCount++;
+  if(!startState?.walkable)return finish(failure("blocked-start",start,destination,{searchRadius:direct,maxNodes,evaluatedCount:search.evaluatedCount}));
+  const destinationState=movementState(seed,destination.x,destination.y);search.evaluatedCount++;
+  if(!destinationState?.walkable)return finish(failure("blocked-destination",start,destination,{searchRadius:direct,maxNodes,evaluatedCount:search.evaluatedCount}));
+  if(key(start)===search.destinationKey)return finish(immediateRouteResult(start,destination,maxNodes));
+  const startKey=key(start),h=heuristicSeconds(start,destination);
+  search.points.set(startKey,start);search.gScore.set(startKey,0);search.stateCache.set(startKey,startState);
+  search.open.push({point:start,g:0,h,f:h,order:search.order++});
+  return search;
+}
+function finishRouteSearchFound(search,current,currentKey){
+  const rebuilt=reconstruct(search.cameFrom,search.points,currentKey);
+  const costMetrics=routeCostMetrics(search.seed,rebuilt.path);
+  const externalPenaltySeconds=Math.max(0,Number(current.g)-Number(costMetrics.internalSeconds||0));
+  search.result=frozenResult({
+    found:true,reason:"ok",start:search.start,destination:search.destination,
+    path:rebuilt.path,pathKeys:rebuilt.pathKeys,stepCount:Math.max(0,rebuilt.path.length-1),totalSeconds:current.g,
+    evaluatedCount:search.evaluatedCount,expandedCount:search.expandedCount,
+    blockedRejectedCount:search.blockedRejectedCount,slopeBlockedRejectedCount:search.slopeBlockedRejectedCount,
+    slopePenaltySeconds:costMetrics.slopePenaltySeconds,elevationPenaltySeconds:costMetrics.elevationPenaltySeconds,
+    horizontalCostSeconds:costMetrics.horizontalCostSeconds,uphillPenaltySeconds:costMetrics.uphillPenaltySeconds,
+    downhillPenaltySeconds:costMetrics.downhillPenaltySeconds,roadBenefitSeconds:costMetrics.roadBenefitSeconds,
+    difficultTerrainPenaltySeconds:costMetrics.difficultTerrainPenaltySeconds,totalAscentMeters:costMetrics.totalAscentMeters,
+    totalDescentMeters:costMetrics.totalDescentMeters,engineeredStepCount:costMetrics.engineeredStepCount,
+    bridgeStepCount:costMetrics.bridgeStepCount,externalPenaltySeconds:Number(externalPenaltySeconds.toFixed(6)),
+    maxSlopeAngleDegrees:costMetrics.maxSlopeAngleDegrees,searchRadius:search.searchRadius,maxNodes:search.maxNodes
   });
-
-  while(open.length){
-    const current=open.pop();
+  search.done=true;
+}
+function finishRouteSearchFailure(search,reason){
+  search.result=failure(reason,search.start,search.destination,{
+    evaluatedCount:search.evaluatedCount,expandedCount:search.expandedCount,
+    blockedRejectedCount:search.blockedRejectedCount,slopeBlockedRejectedCount:search.slopeBlockedRejectedCount,
+    searchRadius:search.searchRadius,maxNodes:search.maxNodes
+  });
+  search.done=true;
+}
+function advanceRouteSearch(search,maxPops=32){
+  if(!search||search.done)return Object.freeze({done:true,result:search?.result||null,pops:0,expanded:0});
+  const popLimit=Number.isFinite(Number(maxPops))?Math.max(1,Math.floor(Number(maxPops))):Number.MAX_SAFE_INTEGER;
+  let pops=0,expandedThisStep=0;
+  while(search.open.length&&pops<popLimit&&!search.done){
+    const current=search.open.pop();pops++;
     if(!current)break;
-    const currentKey=key(current.point);
-    const bestKnown=gScore.get(currentKey);
+    const currentKey=key(current.point),bestKnown=search.gScore.get(currentKey);
     if(bestKnown==null||current.g>bestKnown+1e-9)continue;
-
-    if(currentKey===key(destination)){
-      const rebuilt=reconstruct(cameFrom,points,currentKey);
-      const costMetrics=routeCostMetrics(seed,rebuilt.path);
-      const externalPenaltySeconds=Math.max(0,Number(current.g)-Number(costMetrics.internalSeconds||0));
-      return frozenResult({
-        found:true,
-        reason:"ok",
-        start,destination,
-        path:rebuilt.path,
-        pathKeys:rebuilt.pathKeys,
-        stepCount:Math.max(0,rebuilt.path.length-1),
-        totalSeconds:current.g,
-        evaluatedCount,
-        expandedCount,
-        blockedRejectedCount,
-        slopeBlockedRejectedCount,
-        slopePenaltySeconds:costMetrics.slopePenaltySeconds,
-        elevationPenaltySeconds:costMetrics.elevationPenaltySeconds,
-        horizontalCostSeconds:costMetrics.horizontalCostSeconds,
-        uphillPenaltySeconds:costMetrics.uphillPenaltySeconds,
-        downhillPenaltySeconds:costMetrics.downhillPenaltySeconds,
-        roadBenefitSeconds:costMetrics.roadBenefitSeconds,
-        difficultTerrainPenaltySeconds:costMetrics.difficultTerrainPenaltySeconds,
-        totalAscentMeters:costMetrics.totalAscentMeters,
-        totalDescentMeters:costMetrics.totalDescentMeters,
-        engineeredStepCount:costMetrics.engineeredStepCount,
-        bridgeStepCount:costMetrics.bridgeStepCount,
-        externalPenaltySeconds:Number(externalPenaltySeconds.toFixed(6)),
-        maxSlopeAngleDegrees:costMetrics.maxSlopeAngleDegrees,
-        searchRadius,
-        maxNodes
-      });
-    }
-
-    expandedCount++;
-    if(expandedCount>maxNodes){
-      return failure("search-limit",start,destination,{
-        evaluatedCount,expandedCount,blockedRejectedCount,slopeBlockedRejectedCount,
-        searchRadius,maxNodes
-      });
-    }
-
+    if(currentKey===search.destinationKey){finishRouteSearchFound(search,current,currentKey);break;}
+    search.expandedCount++;expandedThisStep++;
+    if(search.expandedCount>search.maxNodes){finishRouteSearchFailure(search,"search-limit");break;}
     for(const direction of DIRECTIONS){
       const next=WorldCoordinates.add(current.point,direction.dx,direction.dy);
-      if(manhattan(start,next)>searchRadius)continue;
+      if(manhattan(search.start,next)>search.searchRadius)continue;
       const nextKey=key(next);
-      let state=stateCache.get(nextKey);
-      if(!state){
-        state=movementState(seed,next.x,next.y);
-        stateCache.set(nextKey,state);
-        evaluatedCount++;
-      }
-      if(!state?.walkable||!Number.isFinite(state.secondsPerTile)){
-        blockedRejectedCount++;
-        continue;
-      }
-      const currentState=stateCache.get(currentKey)||movementState(seed,current.point.x,current.point.y);
-      stateCache.set(currentKey,currentState);
-      const edgeCost=routeEdgeCost(seed,current.point,next,currentState,state);
+      let state=search.stateCache.get(nextKey);
+      if(!state){state=movementState(search.seed,next.x,next.y);search.stateCache.set(nextKey,state);search.evaluatedCount++;}
+      if(!state?.walkable||!Number.isFinite(state.secondsPerTile)){search.blockedRejectedCount++;continue;}
+      const currentState=search.stateCache.get(currentKey)||movementState(search.seed,current.point.x,current.point.y);
+      search.stateCache.set(currentKey,currentState);
+      const edgeCost=routeEdgeCost(search.seed,current.point,next,currentState,state);
       if(!edgeCost.allowed||!Number.isFinite(edgeCost.seconds)){
-        blockedRejectedCount++;
+        search.blockedRejectedCount++;
         if(edgeCost.reason==="cliff"||edgeCost.reason==="engineered-grade-limit"||
-          edgeCost.reason==="unsafe-very-steep-terrain"||edgeCost.reason==="diagonal-cliff-corner"){
-          slopeBlockedRejectedCount++;
-        }
+          edgeCost.reason==="unsafe-very-steep-terrain"||edgeCost.reason==="diagonal-cliff-corner")search.slopeBlockedRejectedCount++;
         continue;
       }
       let penaltySeconds=0;
-      if(typeof opts.stepPenaltySeconds==="function"){
-        const rawPenalty=Number(opts.stepPenaltySeconds(Object.freeze({
-          point:next,
-          state,
-          from:current.point,
-          start,
-          destination,
-          edgeCost
+      if(typeof search.opts.stepPenaltySeconds==="function"){
+        const rawPenalty=Number(search.opts.stepPenaltySeconds(Object.freeze({
+          point:next,state,from:current.point,start:search.start,destination:search.destination,edgeCost
         })));
         if(Number.isFinite(rawPenalty)&&rawPenalty>0)penaltySeconds=rawPenalty;
       }
-      const tentative=current.g+Number(edgeCost.seconds)+penaltySeconds;
-      const previous=gScore.get(nextKey);
+      const tentative=current.g+Number(edgeCost.seconds)+penaltySeconds,previous=search.gScore.get(nextKey);
       if(previous!=null&&tentative>=previous-1e-9)continue;
-
-      cameFrom.set(nextKey,currentKey);
-      points.set(nextKey,next);
-      gScore.set(nextKey,tentative);
-      const h=heuristicSeconds(next,destination);
-      open.push({point:next,g:tentative,h,f:tentative+h,order:order++});
+      search.cameFrom.set(nextKey,currentKey);search.points.set(nextKey,next);search.gScore.set(nextKey,tentative);
+      const h=heuristicSeconds(next,search.destination);
+      search.open.push({point:next,g:tentative,h,f:tentative+h,order:search.order++});
     }
   }
-
-  return failure("unreachable",start,destination,{
-    evaluatedCount,expandedCount,blockedRejectedCount,slopeBlockedRejectedCount,
-    searchRadius,maxNodes
-  });
+  if(!search.done&&!search.open.length)finishRouteSearchFailure(search,"unreachable");
+  return Object.freeze({done:search.done,result:search.result,pops,expanded:expandedThisStep});
+}
+function findRoute(seed,startValue,destinationValue,options){
+  const search=beginRouteSearch(seed,startValue,destinationValue,options);
+  while(!search.done)advanceRouteSearch(search,4096);
+  return search.result;
 }
 
 function interiorPoint(seed,lot){
@@ -548,6 +485,8 @@ window.RoutePlanner=Object.freeze({
   DEFAULT_MAX_NODES,
   ROUTE_ELEVATION_POLICY,
   routeEdgeCost,
+  beginRouteSearch,
+  advanceRouteSearch,
   findRoute,
   proof
 });
