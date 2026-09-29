@@ -339,7 +339,12 @@ const LOCAL_STANDIN_MAX_MAGNIFICATION=6;
 // small allowance beyond the steady-state 1.5x threshold lets the next child
 // become requested while animation buys its cooperative preparation time.
 const ZOOM_READY_PARENT_MAX_MAGNIFICATION=1.65;
-const ZOOM_ROOT_READINESS_CAP_SCALAR=.69;
+// Before the first registered tangent parent is ready, never magnify the global
+// geography shell beyond the point where it becomes a blurred strategic map.
+// Hold on the fully-smooth shell and let the existing single cooperative parent
+// prefetch finish; animation resumes normally as soon as real local coverage is
+// available. This is a readiness gate, not a routine disable or identity change.
+const ZOOM_ROOT_READINESS_CAP_SCALAR=.575;
 const LOCAL_TANGENT_OWNERSHIP_BLEND=.055;
 const LOCAL_STANDIN_MIN_COMPENSATION=1/3;
 const GLOBE_VERTICAL_FOV_DEGREES=34;
@@ -5508,13 +5513,18 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   }
   const meeting=reveal.specialLots.find(item=>item.kind==="meeting-hall")||reveal.specialLots[0]||null;
   const ordinary=[...reveal.houses,...reveal.specialLots.filter(item=>!meeting||item.id!==meeting.id)];
-  const targetCount=tier==="route"?Math.min(ordinary.length,6):tier==="coarse"?Math.min(ordinary.length,10):(tier==="refined"||tier==="full"?ordinary.length:0);
+  // Route overview already carries up to 12 real HousePlans/SpecialLots as one
+  // merged two-tone footprint/access mesh. Do not cover that clean map-scale
+  // silhouette with separate primitive building boxes; those blocks were the
+  // remaining diagrammatic look at 1/2500. Coarse+ tiers still materialize the
+  // normal canonical building presentation as before.
+  const targetCount=tier==="route"?0:tier==="coarse"?Math.min(ordinary.length,10):(tier==="refined"||tier==="full"?ordinary.length:0);
   const detailed=tier==="refined"||tier==="full";
   for(let i=0;i<targetCount;i++){
     addCanonicalBuilding(ordinary[i],i,scale,unit,semanticFrame,detailed,false,lift);
     if(detailed)fullBuildings++;else coarseBuildings++;
   }
-  if((tier==="route"||tier==="coarse"||tier==="refined"||tier==="full")&&meeting){
+  if((tier==="coarse"||tier==="refined"||tier==="full")&&meeting){
     addCanonicalBuilding(meeting,targetCount,scale,unit,semanticFrame,detailed,true,lift);
     landmarks=1;if(detailed)fullBuildings++;else coarseBuildings++;
   }
