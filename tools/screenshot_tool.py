@@ -6677,6 +6677,7 @@ def _run_scenario_step(driver, scenario: str, frame_index: int, base_width: int,
               targetEntityId:cw.evidenceTargetEntityId,targetVisualState:cw.evidenceTargetState,targetRevision:cw.evidenceTargetRevision,
               target,targetCenterTile:target?.centerTile||null,active:cw.active,buildingCount:cw.buildingCount,
               changedBuildingCount:cw.changedBuildingCount,visualPrimitiveCount:cw.visualPrimitiveCount,
+              canonicalRoofStateAware:cw.canonicalRoofStateAware,canonicalRoofVariantCount:cw.canonicalRoofVariantCount,
               drawCallEstimate:cw.drawCallEstimate,triangleCount:cw.triangleCount,sharedMaterialCount:cw.sharedMaterialCount,
               stateCounts:cw.stateCounts,revisionSignature:cw.revisionSignature,maxRevision:cw.maxRevision,deltaSequence:cw.deltaSequence,
               localQueryCount:cw.localQueryCount,localQueryLimit:cw.localQueryLimit,persistent:cw.persistent,historyReplay:cw.historyReplay,
@@ -9683,8 +9684,10 @@ def validate_scenario_frames(scenario: str, frames: list[dict]) -> None:
                 if proof.get("active") is not False or int(proof.get("visualPrimitiveCount") or 0)!=0 or int(proof.get("drawCallEstimate") or 0)!=0:
                     raise RuntimeError(f"Normal state should not invent environmental wear geometry: {proof}")
             else:
-                if proof.get("active") is not True or int(proof.get("changedBuildingCount") or 0)<1 or int(proof.get("visualPrimitiveCount") or 0)<4 or int(proof.get("drawCallEstimate") or 0)!=1:
-                    raise RuntimeError(f"Changed persistent state is not visibly projected in frame {index}: {proof}")
+                roof_state_visible=(proof.get("canonicalRoofStateAware") is True and int(proof.get("canonicalRoofVariantCount") or 0)>=1)
+                accessory_visible=(int(proof.get("visualPrimitiveCount") or 0)>=1 and int(proof.get("drawCallEstimate") or 0)==1)
+                if proof.get("active") is not True or int(proof.get("changedBuildingCount") or 0)<1 or not roof_state_visible or not accessory_visible:
+                    raise RuntimeError(f"Changed persistent state is not visibly projected through the canonical roof + bounded accessory channel in frame {index}: {proof}")
                 if int((proof.get("stateCounts") or {}).get(expected_states[index-1]) or 0)<1:
                     raise RuntimeError(f"Changed persistent state count missing in frame {index}: {proof}")
         reload=proofs[5]
