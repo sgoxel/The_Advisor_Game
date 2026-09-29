@@ -140,6 +140,9 @@ function descriptor(seedValue,inputValue,attemptValue){
   const regionId=safe(input.regionId)||(type==="region"?id:"");
   const key=[seed,VERSION,id,type,countryId,regionId,attempt].join("|");
   if(cache.has(key))return cache.get(key);
+  const durableOptions={seed,family:"place-name",recordId:key,familyVersion:VERSION,dependencySignature:"toponymy-v"+VERSION,regenCost:1,importance:4};
+  const persisted=window.GeneratedWorldStore?.peek?.(durableOptions)||null;
+  if(persisted){boundedSet(key,persisted);return cache.get(key);}
   const made=displayName(seed,{...input,id,type,countryId,regionId},attempt);
   const adjective=made.shortForm.endsWith("a")?made.shortForm+"n":made.shortForm+"ian";
   const result=Object.freeze({
@@ -163,6 +166,7 @@ function descriptor(seedValue,inputValue,attemptValue){
     frameIndependent:true
   });
   boundedSet(key,result);
+  window.GeneratedWorldStore?.recordGenerated?.(durableOptions,result);
   return result;
 }
 function nameCountry(seed,input,attempt){return descriptor(seed,{...(input||{}),type:"country"},attempt).name}
