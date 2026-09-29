@@ -209,7 +209,8 @@ let localStatic={active:false,signature:null,level:"inactive",revealTier:"none",
 let microLocationPresentation={
   active:false,locationCount:0,propCount:0,primitiveCount:0,drawCallEstimate:0,triangleEstimate:0,
   queryCellCount:0,maxQueryCells:0,buildMs:0,bounds:null,ids:Object.freeze([]),types:Object.freeze([]),
-  locations:Object.freeze([]),sourceAuthority:"MicroLocations + WorldDestinations.poiCell",
+  locations:Object.freeze([]),focusedLocationId:null,focusDistanceTiles:null,focusDeclutterActive:false,
+  sourceAuthority:"MicroLocations + WorldDestinations.poiCell",
   deterministic:true,seedOnly:true,lazy:true,bounded:true,fullWorldScan:false,perFrameScan:false,
   presentationOnly:true,simulationAuthority:false,collisionAuthority:false,navigationAuthority:false
 };
@@ -988,12 +989,15 @@ function gameplayCenterMarkerTelemetry(layer){
   const code=marker.querySelector("code"),shortCell=cell.cellX+","+cell.cellY;
   if(code){
     code.textContent=settlementOverview?"CELL "+shortCell:"CELL "+shortCell+" · "+center.latitudeDegrees.toFixed(3)+"°, "+center.longitudeDegrees.toFixed(3)+"°";
-    // Keep the exact center marker, but move its readout off the tiny canonical
-    // road/lot fabric at settlement-approach scale so the world structure can
-    // be inspected rather than covered by UI.
+    // Keep the exact center marker, but move its readout off canonical local
+    // structure when that structure itself is the focused visual subject.
+    const microLocationFocus=root?.dataset?.microLocationFocus==="true";
     if(settlementOverview){
       code.style.position="absolute";code.style.left="50%";code.style.top="-54px";
       code.style.transform="translateX(-50%) scale(.82)";code.style.opacity=".72";
+    }else if(microLocationFocus){
+      code.style.position="absolute";code.style.left="50%";code.style.top="-68px";
+      code.style.transform="translateX(-50%) scale(.68)";code.style.opacity=".10";
     }else if(root?.dataset?.workFocus!=="true"){
       code.style.position="";code.style.left="";code.style.top="";code.style.transform="";code.style.opacity="";
     }
@@ -5479,10 +5483,12 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
 }
 
 function resetMicroLocationPresentation(){
+  if(root)root.dataset.microLocationFocus="false";
   microLocationPresentation={
     active:false,locationCount:0,propCount:0,primitiveCount:0,drawCallEstimate:0,triangleEstimate:0,
     queryCellCount:0,maxQueryCells:Number(window.MicroLocations?.MAX_QUERY_CELLS_PER_CHUNK||0),buildMs:0,bounds:null,
     ids:Object.freeze([]),types:Object.freeze([]),locations:Object.freeze([]),
+    focusedLocationId:null,focusDistanceTiles:null,focusDeclutterActive:false,
     sourceAuthority:"MicroLocations + WorldDestinations.poiCell",
     deterministic:true,seedOnly:true,lazy:true,bounded:true,fullWorldScan:false,perFrameScan:false,
     presentationOnly:true,simulationAuthority:false,collisionAuthority:false,navigationAuthority:false
@@ -5513,7 +5519,10 @@ function renderCanonicalMicroProp(prop,resource,frame,index){
   const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),ground=localGroundHeightUnits(east,north,frame)+.022;
   const yaw=Number(prop.rotation||0),semantic=String(prop.semantic||""),variant=Math.max(0,Math.min(2,Number(prop.variant||0)));
   let primitives=0,triangles=0;
-  const presentationScale=semantic==="unusual-tree"?1.06:semantic==="dock"?1.10:1.18;
+  // Slightly strengthen the existing deterministic silhouettes at ground scale.
+  // This is presentation-only scaling of already-authoritative props: no new
+  // prop IDs, placement decisions, query radius, collision or simulation truth.
+  const presentationScale=semantic==="unusual-tree"?1.10:semantic==="dock"?1.16:(semantic==="tent"||semantic==="fish-rack"||semantic==="signpost")?1.30:1.24;
   const add=(type,material,dx,dz,sx,sy,sz,yMeters=sy*.5,rx=0,ry=yaw,rz=0)=>{
     const off=rotateMicroOffset(dx,dz,yaw);
     addLocalStatic("Micro-"+String(prop.microLocationId||"loc")+"-"+index+"-"+primitives,type,material,
@@ -5646,6 +5655,19 @@ function renderCanonicalMicroLocations(resource,frame,tier,prepared=null){
   const prep=prepared||prepareCanonicalMicroLocations(resource,tier),plan=prep?.plan,bounds=prep?.bounds;
   if(!plan||!bounds)return microLocationPresentation;
   const started=performance.now(),locations=Array.isArray(plan?.locations)?plan.locations:[];
+  const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  let focusMatch=null;
+  for(const location of locations){
+    try{
+      const dx=Number(BigInt(String(location.anchor.x))-BigInt(String(focusTile.x)));
+      const dy=Number(BigInt(String(location.anchor.y))-BigInt(String(focusTile.y)));
+      const distanceTiles=Math.hypot(dx,dy),focusRadius=Math.max(2,Number(location.footprintRadiusTiles||0)*.75);
+      if(distanceTiles<=focusRadius&&(!focusMatch||distanceTiles<focusMatch.distanceTiles)){
+        focusMatch={id:String(location.id),distanceTiles:Number(distanceTiles.toFixed(3))};
+      }
+    }catch(_){}
+  }
+  if(root)root.dataset.microLocationFocus=String(Boolean(focusMatch));
   let propCount=0,primitiveCount=0,triangleEstimate=0;
   const rendered=[];
   for(const location of locations){
@@ -5670,7 +5692,9 @@ function renderCanonicalMicroLocations(resource,frame,tier,prepared=null){
     maxQueryCells:Number(plan?.diagnostics?.maxQueryCells||window.MicroLocations?.MAX_QUERY_CELLS_PER_CHUNK||0),
     buildMs:Number((performance.now()-started).toFixed(3)),bounds,
     ids:Object.freeze(rendered.map(item=>item.id)),types:Object.freeze(rendered.map(item=>item.compositionType)),
-    locations:Object.freeze(rendered),sourceAuthority:"MicroLocations + WorldDestinations.poiCell",
+    locations:Object.freeze(rendered),focusedLocationId:focusMatch?.id||null,
+    focusDistanceTiles:focusMatch?.distanceTiles??null,focusDeclutterActive:Boolean(focusMatch),
+    sourceAuthority:"MicroLocations + WorldDestinations.poiCell",
     deterministic:true,seedOnly:true,lazy:true,bounded:true,fullWorldScan:false,perFrameScan:false,
     presentationOnly:true,simulationAuthority:false,collisionAuthority:false,navigationAuthority:false
   };
