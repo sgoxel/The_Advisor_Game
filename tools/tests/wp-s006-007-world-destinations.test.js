@@ -54,6 +54,7 @@ const all=[];
 for(const origin of origins){
   const first=api.queryNearby(seed,origin,{radiusMeters:80000,maxResults:32});
   const second=api.queryNearby(seed,origin,{radiusMeters:80000,maxResults:32});
+  console.log(JSON.stringify({timingProbe:{origin,firstMs:first.diagnostics.queryMs,secondMs:second.diagnostics.queryMs,poiCells:first.diagnostics.queryCellCount,settlementCells:first.diagnostics.settlementQueryCellCount}}));
   assert.strictEqual(api.signature(first),api.signature(second),"same-SEED nearby query changed");
   assert.deepStrictEqual(first.results.map(x=>x.id),second.results.map(x=>x.id),"same-SEED result ordering changed");
   assert(first.diagnostics.bounded,"query did not report bounded execution");
