@@ -7535,11 +7535,8 @@ function applyAtmosphereMaterialPalette(p){
     surfaceMaterial.update();materialCount++;
   }
   if(mapScaleShellMaterial){
-    // Match the ready local terrain's transient map palette so the smooth parent
-    // preserves land hue/detail instead of fading through a charcoal shell.
-    mapScaleShellMaterial.diffuse.set(...p.terrainTint);
-    mapScaleShellMaterial.emissive.set(...p.terrainTint);
-    mapScaleShellMaterial.emissiveIntensity=p.terrainI;
+    mapScaleShellMaterial.diffuse.set(...p.worldTint);
+    mapScaleShellMaterial.emissive.set(p.emissive*p.worldTint[0],p.emissive*p.worldTint[1],p.emissive*p.worldTint[2]);
     mapScaleShellMaterial.update();materialCount++;
   }
   if(tangentPatchMaterial){
@@ -7722,9 +7719,9 @@ async function buildScene(){  const started=performance.now();
     mapScaleShellMaterial.name="CanonicalMapScaleShell";
     mapScaleShellMaterial.diffuse.set(1,1,1);
     mapScaleShellMaterial.diffuseMap=surfaceMaterial.diffuseMap;
-    mapScaleShellMaterial.emissive.set(1,1,1);
+    mapScaleShellMaterial.emissive.set(.04,.04,.04);
     mapScaleShellMaterial.emissiveMap=surfaceMaterial.diffuseMap;
-    mapScaleShellMaterial.emissiveIntensity=.78;
+    mapScaleShellMaterial.emissiveIntensity=.22;
     mapScaleShellMaterial.useLighting=false;
     mapScaleShellMaterial.cull=pc.CULLFACE_NONE;
     mapScaleShellMaterial.opacity=0;
