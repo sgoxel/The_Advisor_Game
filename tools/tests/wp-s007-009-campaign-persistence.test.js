@@ -175,7 +175,21 @@ assert.strictEqual(WorldState.deltaSnapshot(seed).entryCount,0,"runtime reset di
   assert.strictEqual(CampaignPersistence.resumeStatus().ready,false,"failed load exposed authoritative-ready state");
 
   const stored=CampaignPersistence.stored();
-  assert(stored.ok&&stored.save.checksum===save.checksum,"stored versioned save did not round-trip");
+  assert(stored.ok,"stored versioned checkpoint did not validate");
+  assert.strictEqual(stored.save.catchUpState.lastAuthoritativeTimestamp,fixedTimestamp,"post-resume checkpoint did not retain authoritative timestamp");
+  assert(stored.save.checksum===mobileRestore.checkpointChecksum||stored.save.checksum===restored.checkpointChecksum,"stored checkpoint checksum not returned by resume");
+
+  const html=fs.readFileSync("index.html","utf8");
+  const stageSource=fs.readFileSync("scripts/world/planet-stage.js","utf8");
+  const dependencyOrder=[
+    "scripts/world/world-state.js","scripts/core/event-scheduler.js","scripts/world/global-country-simulation.js",
+    "scripts/world/regional-settlement-simulation.js","scripts/world/npc-lifecycle.js","scripts/world/lazy-catchup.js",
+    "scripts/world/campaign-persistence.js","scripts/world/planet-stage.js"
+  ].map(path=>html.indexOf(path));
+  assert(dependencyOrder.every((value,index)=>value>=0&&(index===0||value>dependencyOrder[index-1])),"production persistence dependency load order invalid");
+  assert(/CampaignPersistence\.restoreAndResume/.test(stageSource),"PlanetStage production bootstrap does not use versioned restore gate");
+  assert(/CampaignPersistence\.createSave/.test(stageSource),"PlanetStage does not checkpoint adopted existing campaigns");
+  assert(/Saved campaign is incompatible or corrupt/.test(stageSource),"production load failure is not user-visible/actionable");
 
   console.log(JSON.stringify({
     pass:true,
@@ -206,7 +220,9 @@ assert.strictEqual(WorldState.deltaSnapshot(seed).entryCount,0,"runtime reset di
       simulationMismatch:simCheck.reason,
       corruption:corruptResult.reason,
       partialStateInteractable:false,
-      migrationsImplemented:0
+      migrationsImplemented:0,
+      productionBootstrapIntegrated:true,
+      userVisibleFailure:true
     },
     bounds:{maxSaveBytes:CampaignPersistence.MAX_SAVE_BYTES,wholeWorldSerialized:false,renderStateSerialized:false,cameraStateSerialized:false}
   },null,2));
