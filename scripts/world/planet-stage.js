@@ -2374,8 +2374,12 @@ function projectionPresentationBlendForZoom(value=zoomState.scalar){
   // globe texture becomes visibly magnified. The overlap remains animated and
   // changes presentation timing only; canonical focus/geography are untouched.
   const scalar=clamp(value,0,1);
-  const start=Math.max(projectionState.transitionStart,.67);
-  const end=Math.max(start+.0001,.745);
+  // Prefer the already-prepared registered regional parent before the global
+  // 640x320 shell must be magnified into the 1/50-1/100 strategic range.
+  // This is only presentation ownership timing: the same canonical focus,
+  // geography and prepared resource remain authoritative.
+  const start=Math.max(projectionState.transitionStart,.60);
+  const end=Math.max(start+.0001,.715);
   return smoothstep01((scalar-start)/(end-start));
 }
 function canonicalSurfaceIdentity(){
@@ -3707,12 +3711,12 @@ function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
   // Keep the authoritative settlement composition large enough to read as
   // actual world structure, not a locator glyph, then converge rapidly to 1:1.
-  const targetFraction=tier==="footprint"?.38:tier==="route"?.66:tier==="coarse"?.20:.20;
+  const targetFraction=tier==="footprint"?.38:tier==="route"?.58:tier==="coarse"?.20:.20;
   const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
-  // Route overview stays presentation-only, but it should occupy enough screen
-  // area for the actual road/access topology to read as a settlement rather
-  // than a tiny locator symbol. Geometry and coordinates remain authoritative.
-  const cap=tier==="footprint"?14:tier==="route"?22:tier==="coarse"?5:18;
+  // Route overview stays presentation-only. Keep it large enough to read while
+  // avoiding oversized isolated blocks; a slightly denser set of real occupied
+  // footprints below now carries the settlement silhouette instead.
+  const cap=tier==="footprint"?14:tier==="route"?18:tier==="coarse"?5:18;
   return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
 }
 function settlementPresentationLift(tier,value=zoomState.scalar){
@@ -3798,7 +3802,7 @@ function routeOverviewPlan(reveal){
     const aa=score(a),bb=score(b);
     return bb.forward-aa.forward||aa.lateral-bb.lateral||String(a?.id||"").localeCompare(String(b?.id||""));
   });
-  const cap=8,records=[];
+  const cap=12,records=[];
   for(const record of specials){if(records.length>=2||records.length>=cap)break;records.push(record);}
   for(const record of houses){if(records.length>=cap)break;if(!records.some(item=>String(item?.id||"")===String(record?.id||"")))records.push(record);}
   const frozen=Object.freeze(records.slice());
@@ -6294,6 +6298,16 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       pushRange("coverLuma",luma3(cover));pushRange("shade",shade);
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
       let displayColor=authoritative;
+      // The first regional parent already contains canonical macro, curvature,
+      // drainage and land-cover structure, but their combined tone can collapse
+      // into a soft green wash at strategic scale. Increase only the contrast of
+      // those already-computed values around the canonical local palette. This
+      // adds no geography/noise query and leaves near-ground photometry alone.
+      if(sample?.land&&strategicMapBand>.001){
+        const regionalContrast=1+strategicMapBand*(contextRing?.14:.24);
+        const palettePivot=clamp(luma3(localPalette),.20,.58);
+        displayColor=displayColor.map(v=>clamp(palettePivot+(v-palettePivot)*regionalContrast,0,1));
+      }
       // Coarse tangent tiles should retain the land hue already present in the
       // canonical moisture/elevation palette rather than collapsing into gray
       // under broad low-frequency relief. Restore chroma while preserving the
