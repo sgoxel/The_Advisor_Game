@@ -215,7 +215,7 @@ function build(seedValue){
     panelCount:signs.reduce((n,s)=>n+s.panelCount,0),routeQueryCount,routeQueryMs:Number(routeQueryMs.toFixed(3)),
     maxRouteTiles:MAX_ROUTE_TILES,maxRouteNodes:MAX_ROUTE_NODES,buildMs:Number((performance.now()-started).toFixed(3)),
     signature,deterministic:true,bounded:true,fullWorldScan:false,perFrameRouteQuery:false,
-    remoteConnectivityInvented:false,interSettlementRoadAuthorityAvailable:false,
+    remoteConnectivityInvented:false,interSettlementRoadAuthorityAvailable:Boolean(window.WorldRoadGraph?.graphForCountry),
     fallbackScope:"authoritative local Starting Village roads and road-access SpecialLots only",
     presentationOnly:true,simulationAuthority:false
   });
