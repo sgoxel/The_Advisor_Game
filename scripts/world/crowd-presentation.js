@@ -12,6 +12,7 @@ const CLASS_RADIUS=Object.freeze({hamlet:5,village:6,town:7,city:8,"national-cap
 const VISUAL_ROLES=Object.freeze(["market","traveler","laborer","guard","farmer","craft"]);
 let lastSnapshot=null;
 let placementCache=new Map();
+let lastResolvedPlan=null;
 
 function clamp01(v){const n=Number(v);return Number.isFinite(n)?Math.max(0,Math.min(1,n)):0}
 function unit(seed,key){return Number(window.PRNG?.foundationUint32?.(String(seed),String(key))||0)/4294967295}
@@ -84,10 +85,20 @@ function populationScale(plan,population){
   const lo=Math.max(1,Number(range[0]||1)),hi=Math.max(lo+1,Number(range[1]||lo+1));
   return clamp01((Math.log1p(Math.max(lo,population))-Math.log1p(lo))/(Math.log1p(hi)-Math.log1p(lo)));
 }
-function desiredCount(plan,population,when,mobile){
+function districtDensity(plan,focus){
+  if(!focus||!plan?.center)return Object.freeze({band:"core",factor:1,distanceTiles:0});
+  const distance=distanceTiles(plan.center,focus);
+  const radius=Math.max(1,(CLASS_RADIUS[plan.classId]||8)*3);
+  const ratio=distance/radius;
+  if(ratio<=.25)return Object.freeze({band:"core",factor:1,distanceTiles:Number(distance.toFixed(2))});
+  if(ratio<=.60)return Object.freeze({band:"inner",factor:.82,distanceTiles:Number(distance.toFixed(2))});
+  if(ratio<=1)return Object.freeze({band:"fringe",factor:.58,distanceTiles:Number(distance.toFixed(2))});
+  return Object.freeze({band:"outer",factor:.38,distanceTiles:Number(distance.toFixed(2))});
+}
+function desiredCount(plan,population,when,mobile,districtFactor=1){
   const cap=Math.min(CLASS_CAP[plan.classId]||6,mobile?MOBILE_ACTIVE_CROWD:MAX_ACTIVE_CROWD);
   const activity=crowdActivity(when),scale=populationScale(plan,population);
-  const density=.56+.44*scale;
+  const density=(.56+.44*scale)*Math.max(.25,Math.min(1,Number(districtFactor)||1));
   return Object.freeze({
     count:Math.max(0,Math.min(cap,Math.round(cap*density*activity.factor))),
     cap,activity,populationScale:Number(scale.toFixed(4))
@@ -153,7 +164,8 @@ function snapshotForPlan(seedValue,planValue,whenValue,optionsValue){
     const empty=Object.freeze({version:VERSION,active:false,activeCount:0,requestedCount:0,specs:Object.freeze([]),presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,fullSettlementPerFrameScan:false});
     lastSnapshot=empty;return empty;
   }
-  const population=currentPopulation(seed,plan),density=desiredCount(plan,population.value,when,Boolean(options.mobile));
+  const district=options.district||districtDensity(plan,options.focus||plan.center);
+  const population=currentPopulation(seed,plan),density=desiredCount(plan,population.value,when,Boolean(options.mobile),district.factor);
   const placement=baseCandidates(seed,plan),avoid=Array.isArray(options.avoidPoints)?options.avoidPoints:[];
   const specs=[];
   for(const candidate of placement.candidates){
@@ -171,6 +183,7 @@ function snapshotForPlan(seedValue,planValue,whenValue,optionsValue){
   const result=Object.freeze({
     version:VERSION,active:true,seed,settlementId:String(plan.id),settlementName:String(plan.name||plan.id),
     settlementClass:String(plan.classId),population:population.value,populationSource:population.source,
+    districtBand:district.band,districtFactor:Number(district.factor.toFixed(3)),districtDistanceTiles:Number(district.distanceTiles||0),
     populationScale:density.populationScale,rhythmBand:density.activity.band,activityFactor:Number(density.activity.factor.toFixed(4)),
     requestedCount:density.count,activeCount:specs.length,cap:density.cap,poolCapacity:density.cap,
     candidateChecks:placement.candidateChecks,maxCandidateChecks:MAX_CANDIDATE_CHECKS,
@@ -187,7 +200,8 @@ function snapshot(seedValue,whenValue,focusValue,optionsValue){
   const resolveStarted=typeof performance!=="undefined"&&performance.now?performance.now():0;
   const plan=resolvePlan(seed,focusValue);
   const resolveMs=resolveStarted&&performance.now?performance.now()-resolveStarted:0;
-  const base=snapshotForPlan(seed,plan,whenValue,optionsValue);
+  const district=plan?districtDensity(plan,focusValue):Object.freeze({band:"none",factor:0,distanceTiles:0});
+  const base=snapshotForPlan(seed,plan,whenValue,{...(optionsValue||{}),focus:focusValue,district});
   const totalMs=started&&performance.now?performance.now()-started:Number(base.updateMs||0);
   const result=Object.freeze({...base,resolveMs:Number(resolveMs.toFixed(3)),totalUpdateMs:Number(totalMs.toFixed(3))});
   lastSnapshot=result;
@@ -233,6 +247,6 @@ function reset(){placementCache=new Map();lastSnapshot=null;lastResolvedPlan=nul
 
 window.CrowdPresentation=Object.freeze({
   VERSION,MAX_ACTIVE_CROWD,MOBILE_ACTIVE_CROWD,MAX_CANDIDATE_CHECKS,CLASS_CAP,CLASS_POPULATION_RANGE,
-  resolvePlan,currentPopulation,snapshot,snapshotForPlan,representativePlans,verify,last:()=>lastSnapshot,reset
+  resolvePlan,currentPopulation,districtDensity,snapshot,snapshotForPlan,representativePlans,verify,last:()=>lastSnapshot,reset
 });
 })();
