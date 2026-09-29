@@ -1,9 +1,9 @@
 (function(){
 "use strict";
 
-const VERSION="1.1.0";
+const VERSION="1.2.0";
 const SCHEMA="PersistentWorldConsequences";
-const SCHEMA_VERSION=1;
+const SCHEMA_VERSION=2;
 const REGISTRY_KIND="consequence-registry";
 const MAX_LOCAL_RECORDS=8;
 const MAX_VISIBLE_RECORDS=3;
@@ -74,7 +74,7 @@ function villageContext(seedValue){
   return freeze({seed,plan,ref});
 }
 function emptyRegistry(seed,ref){
-  return {schema:SCHEMA,schemaVersion:SCHEMA_VERSION,seed,settlementId:ref?.id||null,revision:0,records:{}};
+  return {schema:SCHEMA,schemaVersion:SCHEMA_VERSION,seed,settlementId:ref?.id||null,revision:0,records:[]};
 }
 function readRegistry(seedValue){
   const seed=requiredSeed(seedValue),ctx=villageContext(seed),t=telemetry(seed),started=nowMs();
@@ -83,18 +83,18 @@ function readRegistry(seedValue){
   const raw=resolved?.current?.consequenceProjection;
   const registry=(raw&&raw.schema===SCHEMA&&Number(raw.schemaVersion)===SCHEMA_VERSION&&raw.seed===seed)
     ? clone(raw):emptyRegistry(seed,ctx.ref);
-  if(!registry.records||typeof registry.records!=="object")registry.records={};
+  if(!Array.isArray(registry.records))registry.records=[];
   return {ctx,resolved,registry};
 }
 function orderedRecords(registry){
-  return Object.values(registry?.records||{}).filter(Boolean).sort((a,b)=>{
+  return (Array.isArray(registry?.records)?registry.records:[]).filter(Boolean).map(clone).sort((a,b)=>{
     const sa=a.status==="active"?0:1,sb=b.status==="active"?0:1;
     return sa-sb||String(b.startedTimestamp||"").localeCompare(String(a.startedTimestamp||""))||String(a.id).localeCompare(String(b.id));
   });
 }
 function boundedRegistry(registry){
   const rows=orderedRecords(registry).slice(0,MAX_LOCAL_RECORDS);
-  registry.records=Object.fromEntries(rows.map(r=>[r.id,clone(r)]));
+  registry.records=rows.map(clone);
   return registry;
 }
 function writeRegistry(seedValue,registryValue,reasonValue){
@@ -142,30 +142,30 @@ function descriptor(seedValue,typeValue,startedTimestampValue,optionsValue){
 }
 function activate(seedValue,typeValue,startedTimestampValue,optionsValue){
   const seed=requiredSeed(seedValue),read=readRegistry(seed),event=descriptor(seed,typeValue,startedTimestampValue,optionsValue);
-  const next=clone(read.registry);next.records[event.id]=clone(event);
+  const next=clone(read.registry);next.records=orderedRecords(read.registry).filter(record=>record.id!==event.id).concat([clone(event)]);
   return freeze({...writeRegistry(seed,next,"consequence:"+event.type+":activate"),record:event});
 }
 function recover(seedValue,idValue,recoveredTimestampValue,reasonValue){
-  const seed=requiredSeed(seedValue),id=String(idValue||""),when=normalizeTimestamp(recoveredTimestampValue),read=readRegistry(seed),current=read.registry.records[id];
+  const seed=requiredSeed(seedValue),id=String(idValue||""),when=normalizeTimestamp(recoveredTimestampValue),read=readRegistry(seed),rows=orderedRecords(read.registry),current=rows.find(record=>record.id===id)||null;
   if(!current)return freeze({ok:false,reason:"consequence-not-found",id});
   if(current.status==="recovered")return freeze({ok:true,reason:"already-recovered",record:freeze(clone(current))});
   const next=clone(read.registry),record=clone(current);
   record.status="recovered";record.state="recovered";record.recovery=clone(record.recovery||{});
   record.recovery.recoveredAtTimestamp=when;record.presentationRevision=Math.max(1,Number(record.presentationRevision)||1)+1;
-  next.records[id]=record;telemetry(seed).recoveries++;
+  next.records=rows.map(item=>clone(item.id===id?record:item));telemetry(seed).recoveries++;
   return freeze({...writeRegistry(seed,next,String(reasonValue||"consequence-recovered")),record:freeze(clone(record))});
 }
 function advance(seedValue,nowValue){
-  const seed=requiredSeed(seedValue),now=normalizeTimestamp(nowValue),read=readRegistry(seed),next=clone(read.registry);
+  const seed=requiredSeed(seedValue),now=normalizeTimestamp(nowValue),read=readRegistry(seed),next=clone(read.registry),rows=orderedRecords(read.registry),updates=new Map();
   let changed=0;
-  for(const record of orderedRecords(read.registry)){
+  for(const record of rows){
     if(changed>=MAX_RECOVERY_PER_ADVANCE)break;
     if(record.status!=="active"||record.recovery?.mode!=="time"||String(record.recovery?.readyAtTimestamp||"")>now)continue;
     const updated=clone(record);updated.status="recovered";updated.state="recovered";updated.recovery=clone(updated.recovery||{});
     updated.recovery.recoveredAtTimestamp=now;updated.presentationRevision=Math.max(1,Number(updated.presentationRevision)||1)+1;
-    next.records[updated.id]=updated;changed++;
+    updates.set(updated.id,updated);changed++;
   }
-  if(changed){telemetry(seed).recoveries+=changed;writeRegistry(seed,next,"consequence:auto-recovery");}
+  if(changed){next.records=rows.map(record=>clone(updates.get(record.id)||record));telemetry(seed).recoveries+=changed;writeRegistry(seed,next,"consequence:auto-recovery");}
   else renderPanel(seed);
   return snapshot(seed);
 }
@@ -240,7 +240,7 @@ function proofReset(seedValue){
 }
 function proofSetOnly(seedValue,typeValue,startedTimestampValue){
   const seed=requiredSeed(seedValue),event=descriptor(seed,typeValue,startedTimestampValue),read=readRegistry(seed);
-  const next=emptyRegistry(seed,read.ctx.ref);next.records[event.id]=clone(event);
+  const next=emptyRegistry(seed,read.ctx.ref);next.records=[clone(event)];
   const result=writeRegistry(seed,next,"WP-S007-012 proof "+event.type);
   return freeze({ok:result.ok,record:event,snapshot:snapshot(seed)});
 }

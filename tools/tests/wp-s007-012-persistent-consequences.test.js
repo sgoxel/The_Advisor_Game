@@ -65,6 +65,12 @@ const registryCtx=PersistentConsequences.villageContext(seed);
 assert.strictEqual(registryCtx.ref.kind,"consequence-registry","consequence registry reused a reserved generated kind");
 assert(WorldState.materialize(seed,registryCtx.ref),"consequence-registry structural ref did not materialize generically");
 PersistentConsequences.proofReset(seed);
+const singleDamage=PersistentConsequences.proofSetOnly(seed,"damaged-building",start);
+const singleRoad=PersistentConsequences.proofSetOnly(seed,"road-blockage",start);
+assert(singleDamage.ok&&singleRoad.ok,"single-record proof replacement failed");
+assert.strictEqual(singleRoad.snapshot.recordCount,1,"proofSetOnly retained stale consequence records under WorldState deep merge");
+assert.strictEqual(singleRoad.snapshot.records[0].type,"road-blockage","proofSetOnly did not replace the prior bounded registry array");
+PersistentConsequences.proofReset(seed);
 
 const deterministicA=PersistentConsequences.descriptor(seed,"damaged-building",start);
 const deterministicB=PersistentConsequences.descriptor(seed,"damaged-building",start);
@@ -128,7 +134,7 @@ assert(css.includes(".persistent-world-consequence"),"persistent consequence pan
 console.log(JSON.stringify({
   pass:true,wp:"WP-S007-012",classification:"MIXED",
   types:Object.keys(PersistentConsequences.TYPES),
-  persistence:{sparseSettlementDeltaEntries:Object.keys(persisted.entries).length,restoredSignature:beforeSignature},
+  persistence:{sparseRegistryDeltaEntries:Object.keys(persisted.entries).length,restoredSignature:beforeSignature},
   recovery:{activeAfterAdvance:advanced.activeCount,recoveredAfterAdvance:advanced.recoveredCount},
   bounds:{maxLocalRecords:PersistentConsequences.MAX_LOCAL_RECORDS,maxVisibleRecords:PersistentConsequences.MAX_VISIBLE_RECORDS,maxRecoveryPerAdvance:PersistentConsequences.MAX_RECOVERY_PER_ADVANCE},
   architecture:{registryKind:PersistentConsequences.REGISTRY_KIND,eventDriven:snap.eventDriven,perFrameScan:snap.perFrameScan,fullSettlementPerFrameScan:snap.fullSettlementPerFrameScan,fullWorldScan:snap.fullWorldScan,lazyLocal:snap.lazyLocal,historyReplay:snap.historyReplay}
