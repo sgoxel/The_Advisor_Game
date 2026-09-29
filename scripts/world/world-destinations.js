@@ -9,6 +9,8 @@ const MAX_QUERY_RESULTS=32;
 const MAX_QUERY_CELLS=169;
 const SAMPLE_STEP_TILES=96;
 const FAR_SAMPLE_STEP_TILES=384;
+const POI_CELL_CACHE_LIMIT=512;
+const poiCellCache=new Map();
 const NAME_STEMS=Object.freeze(["Alder","Ash","Black","Bright","Cedar","Dawn","Elder","Falcon","Green","Grey","High","Iron","Kings","Lake","North","Oak","Raven","Red","River","Silver","Stone","Sun","Thorn","Vale","West","White","Wolf"]);
 const TYPE_SUFFIX=Object.freeze({
   ruin:["Watch","Keep","Hall","Rest"],fort:["Fort","Watch","Hold"],tower:["Tower","Watch","Beacon"],bridge:["Bridge","Crossing","Ford"],
@@ -69,7 +71,9 @@ function rawCandidate(seed,type,x,y,score,importance,radius,description,tags,evi
   type,category:categoryForType(type),center:Object.freeze({x:String(x),y:String(y)}),score:Number(score.toFixed(6)),importance:clamp(importance,1,5),footprintRadiusMeters:Math.max(20,Math.round(radius)),description:String(description),activityTags:Object.freeze((tags||[]).map(String)),evidence:Object.freeze({...evidence}),source:"bounded destination cell",worldAuthority:true
 });}
 function poiCandidatesForCell(seed,cxValue,cyValue){
-  const cx=BigInt(String(cxValue)),cy=BigInt(String(cyValue)),size=BigInt(POI_CELL_TILES),baseX=cx*size,baseY=cy*size;
+  const cx=BigInt(String(cxValue)),cy=BigInt(String(cyValue)),cacheKey=String(seed)+"|"+cx+"|"+cy;
+  if(poiCellCache.has(cacheKey))return poiCellCache.get(cacheKey);
+  const size=BigInt(POI_CELL_TILES),baseX=cx*size,baseY=cy*size;
   const jx=BigInt(Math.round((unit(seed,"jx:"+cx+":"+cy)*.72+.14)*POI_CELL_TILES)),jy=BigInt(Math.round((unit(seed,"jy:"+cx+":"+cy)*.72+.14)*POI_CELL_TILES));
   const x=baseX+jx,y=baseY+jy,ctx=contextAt(seed,x,y),c=ctx.center,h=unit(seed,"history:"+cx+":"+cy),g=unit(seed,"activity:"+cx+":"+cy),out=[];
   const ev={terrain:c.terrain,elevationMeters:c.elevationMeters,biome:c.biome,waterSamples:ctx.waterNear,forestSamples:ctx.forestNear,rockSamples:ctx.rockNear,openSamples:ctx.openNear,slopeMeters:Math.round(ctx.slopeMeters),roadNear:ctx.roadNear,waterArms:ctx.waterArms};
@@ -95,7 +99,10 @@ function poiCandidatesForCell(seed,cxValue,cyValue){
   }
   if((c.terrain==="bridge"||ctx.roadNear)&&ctx.waterNear>=2&&h>.58)out.push(rawCandidate(seed,"bridge",x,y,.76,2,180,"A strategically notable crossing where seeded route and water geography meet.",["crossing","route","water"],ev));
   out.sort((a,b)=>b.score-a.score||b.importance-a.importance||a.id.localeCompare(b.id));
-  return Object.freeze(out.slice(0,4));
+  const result=Object.freeze(out.slice(0,4));
+  poiCellCache.set(cacheKey,result);
+  if(poiCellCache.size>POI_CELL_CACHE_LIMIT)poiCellCache.delete(poiCellCache.keys().next().value);
+  return result;
 }
 function settlementRaw(record){
   const type=settlementType(record),importance=settlementImportance(record);
@@ -119,11 +126,17 @@ function normalizeOrigin(seed,origin){
 }
 function normalizeCategories(value){if(value==null)return null;const list=Array.isArray(value)?value:[value];return new Set(list.map(String));}
 function discoveredPass(item,options){if(!options.discoveredOnly)return true;if(item.discoverability?.defaultState==="known")return true;const ids=options.discoveredIds instanceof Set?options.discoveredIds:new Set((options.discoveredIds||[]).map(String));return ids.has(String(item.id));}
+function settlementClassesForRadius(radiusMeters){
+  const classes=["national-capital","city","town"];
+  if(radiusMeters<=50000)classes.push("village");
+  if(radiusMeters<=20000)classes.push("hamlet");
+  return classes;
+}
 function queryNearby(seedValue,originValue,optionsValue){
   const started=typeof performance!=="undefined"&&performance.now?performance.now():Date.now(),seed=String(seedValue==null?"":seedValue),origin=normalizeOrigin(seed,originValue||{}),options=optionsValue||{};
   const radiusMeters=clamp(options.radiusMeters==null?40000:options.radiusMeters,250,MAX_QUERY_RADIUS_METERS),maxResults=Math.max(1,Math.min(MAX_QUERY_RESULTS,Math.floor(Number(options.maxResults)||16))),minImportance=clamp(options.minImportance||1,1,5),categories=normalizeCategories(options.categories||options.category),types=normalizeCategories(options.types||options.type);
   const radiusTiles=BigInt(Math.ceil(radiusMeters/TILE_METERS)),ox=BigInt(origin.x),oy=BigInt(origin.y),minX=ox-radiusTiles,maxX=ox+radiusTiles,minY=oy-radiusTiles,maxY=oy+radiusTiles;
-  let settlementQuery={settlements:[],diagnostics:{queryCellCount:0}};try{settlementQuery=window.SettlementArchetypes?.canonicalSettlementsInBounds?.(seed,{minX:String(minX),maxX:String(maxX),minY:String(minY),maxY:String(maxY)},["national-capital","city","town","village","hamlet"])||settlementQuery;}catch(_){}
+  let settlementQuery={settlements:[],diagnostics:{queryCellCount:0}},settlementClasses=settlementClassesForRadius(radiusMeters);try{settlementQuery=window.SettlementArchetypes?.canonicalSettlementsInBounds?.(seed,{minX:String(minX),maxX:String(maxX),minY:String(minY),maxY:String(maxY)},settlementClasses)||settlementQuery;}catch(_){}
   const raw=[];for(const record of settlementQuery.settlements||[])raw.push(settlementRaw(record));
   const minCx=floorDiv(minX,POI_CELL_TILES),maxCx=floorDiv(maxX,POI_CELL_TILES),minCy=floorDiv(minY,POI_CELL_TILES),maxCy=floorDiv(maxY,POI_CELL_TILES),cells=[];
   const ccx=floorDiv(ox,POI_CELL_TILES),ccy=floorDiv(oy,POI_CELL_TILES);
@@ -139,11 +152,11 @@ function queryNearby(seedValue,originValue,optionsValue){
   const ranked=[...unique.values()].sort((a,b)=>a.distance-b.distance||b.item.importance-a.item.importance||b.item.score-a.item.score||a.item.id.localeCompare(b.item.id));
   const results=[];for(const entry of ranked){const item=enrich(seed,entry.item);if(!discoveredPass(item,options))continue;const dir=bearing(origin,item.center);results.push(Object.freeze({...item,distanceMeters:Number(entry.distance.toFixed(2)),bearingDegrees:dir.degrees,directionLabel:dir.label}));if(results.length>=maxResults)break;}
   const ended=typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
-  return Object.freeze({seed,origin,radiusMeters,results:Object.freeze(results),diagnostics:Object.freeze({version:VERSION,queryMs:Number((ended-started).toFixed(3)),queryCellCount:boundedCells.length,maxQueryCells:MAX_QUERY_CELLS,settlementQueryCellCount:Number(settlementQuery.diagnostics?.queryCellCount||0),candidateCount:raw.length,resultCount:results.length,bounded:true,fullWorldScan:false,localChunkMaterialization:false,descriptorOnly:true,seedOnly:true,cameraIndependent:true,viewportIndependent:true})});
+  return Object.freeze({seed,origin,radiusMeters,results:Object.freeze(results),diagnostics:Object.freeze({version:VERSION,queryMs:Number((ended-started).toFixed(3)),queryCellCount:boundedCells.length,maxQueryCells:MAX_QUERY_CELLS,settlementQueryCellCount:Number(settlementQuery.diagnostics?.queryCellCount||0),settlementClasses:Object.freeze(settlementClasses.slice()),poiCellCacheSize:poiCellCache.size,poiCellCacheLimit:POI_CELL_CACHE_LIMIT,candidateCount:raw.length,resultCount:results.length,bounded:true,fullWorldScan:false,localChunkMaterialization:false,descriptorOnly:true,seedOnly:true,cameraIndependent:true,viewportIndependent:true})});
 }
 function descriptorById(seedValue,idValue,originValue,optionsValue){const id=String(idValue||"");if(!id)return null;const query=queryNearby(seedValue,originValue||{x:"0",y:"0"},{...(optionsValue||{}),radiusMeters:optionsValue?.radiusMeters||MAX_QUERY_RADIUS_METERS,maxResults:MAX_QUERY_RESULTS});return query.results.find(item=>item.id===id)||null;}
 function signature(query){return hash32((query?.results||[]).map(item=>[item.id,item.type,item.center.x,item.center.y,item.countryId,item.regionId,item.importance].join(":")).join("|")).toString(16).padStart(8,"0");}
 function verify(seedValue,originValue){const seed=String(seedValue==null?"":seedValue),origin=normalizeOrigin(seed,originValue||{x:"0",y:"0"}),a=queryNearby(seed,origin,{radiusMeters:80000,maxResults:32}),b=queryNearby(seed,origin,{radiusMeters:80000,maxResults:32}),sa=signature(a),sb=signature(b),settlement=a.results.some(x=>["hamlet","village","town","city","capital"].includes(x.type)),nonSettlement=a.results.some(x=>!["hamlet","village","town","city","capital"].includes(x.type));return Object.freeze({pass:sa===sb&&settlement&&nonSettlement&&a.diagnostics.bounded&&!a.diagnostics.fullWorldScan&&!a.diagnostics.localChunkMaterialization,seed,signatureA:sa,signatureB:sb,deterministic:sa===sb,settlement,nonSettlement,query:a});}
 
-window.WorldDestinations=Object.freeze({VERSION,TILE_METERS,POI_CELL_TILES,MAX_QUERY_RADIUS_METERS,MAX_QUERY_RESULTS,MAX_QUERY_CELLS,queryNearby,descriptorById,verify,signature});
+window.WorldDestinations=Object.freeze({VERSION,TILE_METERS,POI_CELL_TILES,MAX_QUERY_RADIUS_METERS,MAX_QUERY_RESULTS,MAX_QUERY_CELLS,POI_CELL_CACHE_LIMIT,queryNearby,descriptorById,verify,signature});
 })();
