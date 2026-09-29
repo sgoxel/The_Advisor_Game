@@ -6098,8 +6098,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // this turns coherent SEED structure into ridge/valley lighting rather
         // than another brightness blob. Two bounded samples per pixel are used,
         // with no geography query or simulation authority.
-        const registeredReliefBand=smoothstep01(clamp((metersPerTexel-20)/72,0,1))*
-          (1-smoothstep01(clamp((metersPerTexel-640)/520,0,1)));
+        const registeredReliefBand=smoothstep01(clamp((metersPerTexel-28)/110,0,1))*
+          (1-smoothstep01(clamp((metersPerTexel-500)/420,0,1)));
         let registeredReliefShade=0;
         if(registeredReliefBand>.001){
           const reliefMpt=Math.max(45,metersPerTexel),reliefStep=Math.max(150,Math.min(920,metersPerTexel*4.6));
@@ -6110,8 +6110,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
             reliefMpt,
             detailSalt+503
           );
-          const derivative=clamp((reliefLit-relief0)*3.25,-.18,.18);
-          registeredReliefShade=derivative*registeredReliefBand*(contextRing?.62:1);
+          const derivative=clamp((reliefLit-relief0)*.55,-.040,.040);
+          registeredReliefShade=clamp(derivative*registeredReliefBand*(contextRing?.45:1),-.036,.036);
           cover=[
             cover[0]+registeredReliefShade*.88,
             cover[1]+registeredReliefShade,
@@ -6125,7 +6125,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // Prefer the already SEED-registered land-cover field for strategic-map
         // readability. Its 3.6 km / 1.5 km / 700 m structure is physically
         // resolvable at 1/500 and avoids re-amplifying continental relief.
-        const mapCoverBoost=lerp(1.22,1,smoothstep01(clamp((42-metersPerTexel)/38,0,1)));
+        const mapCoverBoost=lerp(1.28,1,smoothstep01(clamp((42-metersPerTexel)/38,0,1)));
         const sharedCoverContrast=(contextRing?1.06:1.10)*mapCoverBoost;
         const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost;
         const landCover=sharedCover.map((v,i)=>v*sharedCoverContrast+(nativeCover[i]-v)*coverGain*residualCoverContrast);
@@ -6302,7 +6302,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-access-morphology-map-detail-v21",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-access-morphology-map-detail-v22",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
