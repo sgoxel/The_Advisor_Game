@@ -43,9 +43,11 @@ def ready():
 
 def bind_evidence_campaign():
     return driver.execute_script("""
+      const stageSeed=String(PlanetStage.snapshot().activeSeed||"");
+      if(!stageSeed)throw new Error("planet stage active SEED unavailable");
       let campaign=SeedSystem.getCampaign();
-      if(!campaign){
-        const started=SeedSystem.startNewCampaign();
+      if(!campaign||String(campaign.seed)!==stageSeed){
+        const started=SeedSystem.startNewCampaign(stageSeed);
         if(!started?.ok)throw new Error("unable to start evidence campaign: "+JSON.stringify(started));
         campaign=started.campaign;
       }
@@ -54,7 +56,7 @@ def bind_evidence_campaign():
       const now=GameTime.getTimestampKey();
       const catchup=CatchUpSimulation.bindCampaign(campaign,{reset:true,timestamp:now});
       if(!world?.ok||!catchup?.ok)throw new Error("unable to bind authoritative evidence state: "+JSON.stringify({world,catchup}));
-      return {seed:campaign.seed,now,world,catchup};
+      return {seed:campaign.seed,stageSeed,seedMatch:String(campaign.seed)===stageSeed,now,world,catchup};
     """)
 
 def set_case(kind):
