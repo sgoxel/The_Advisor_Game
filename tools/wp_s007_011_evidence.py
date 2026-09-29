@@ -98,7 +98,7 @@ try:
                 state(k)["signatureReady"] and bool(state(k)["localStatic"].get("active")) and
                 int(state(k)["localStatic"].get("buildingCount",0))>0 and state(k)["visibleParticipants"]>=2 and
                 state(k)["activeLocalEventCueCount"]>=state(k)["visibleParticipants"] and
-                state(k)["localEventPresentationRevision"]=="compact-participant-cues-v2"
+                state(k)["localEventPresentationRevision"]=="compact-event-silhouette-v3"
             ))
         except TimeoutException:
             raise RuntimeError("event presentation timeout "+kind+": "+json.dumps(state(kind)))
@@ -115,11 +115,31 @@ try:
             raise RuntimeError("production event staging fallback used in visual proof: "+json.dumps(st))
         if len({str(p.get("eventTarget",{}).get("x"))+","+str(p.get("eventTarget",{}).get("y")) for p in staged})!=participant_count:
             raise RuntimeError("production event staging targets are not distinct: "+json.dumps(st))
+        center=(st["event"] or {}).get("stagingCenter") or {}
+        if (st["event"] or {}).get("stagingMode")!="compact-walkable-cluster-v2" or not center:
+            raise RuntimeError("production event compact staging center missing: "+json.dumps(st))
+        cx,cy=int(center.get("x")),int(center.get("y"))
+        if any(max(abs(int(p["eventTarget"]["x"])-cx),abs(int(p["eventTarget"]["y"])-cy))>1 for p in staged):
+            raise RuntimeError("production participants escaped compact 1-tile cluster: "+json.dumps(st))
+        visible=[p for p in st["participants"] if p.get("visual",{}).get("visible") and p.get("visual",{}).get("inViewport")]
+        screens=[p["visual"].get("screen") for p in visible if p["visual"].get("screen")]
+        pairwise=[]
+        for i in range(len(screens)):
+            for j in range(i+1,len(screens)):
+                dx=screens[i]["x"]-screens[j]["x"];dy=screens[i]["y"]-screens[j]["y"]
+                pairwise.append((dx*dx+dy*dy)**0.5)
+        if pairwise and (min(pairwise)<3 or max(pairwise)>180):
+            raise RuntimeError("participant screen-space grouping/separation outside compact contract: "+json.dumps({"distances":pairwise,"state":st}))
+        for p in visible:
+            body=p["visual"].get("bodyScreenSizePx") or {}
+            silhouette=p["visual"].get("eventSilhouetteScreenSizePx") or {}
+            if max(float(body.get("width",0)),float(body.get("height",0)))<5 or max(float(silhouette.get("width",0)),float(silhouette.get("height",0)))<5:
+                raise RuntimeError("participant body/silhouette screen readability too small: "+json.dumps({"participant":p,"state":st}))
         if st["visibleParticipants"]<2 or int(st["localStatic"].get("buildingCount",0))<=0:
             raise RuntimeError("event participants/local context not visibly materialized: "+json.dumps(st))
         if st["activeLocalEventCueCount"]<st["visibleParticipants"] or st["activeLocalEventCueCount"]>max(1,participant_count)*3:
             raise RuntimeError("event cue count outside compact bounded contract: "+json.dumps(st))
-        if len(st["activeLocalEventResidentIds"])<st["visibleParticipants"] or st["localEventPresentationRevision"]!="compact-participant-cues-v2":
+        if len(st["activeLocalEventResidentIds"])<st["visibleParticipants"] or st["localEventPresentationRevision"]!="compact-event-silhouette-v3":
             raise RuntimeError("event cue resident/revision telemetry mismatch: "+json.dumps(st))
         if not st["events"].get("eventDriven") or st["events"].get("perFrameScan") or st["events"].get("fullSettlementPerFrameScan") or st["events"].get("fullWorldScan"):
             raise RuntimeError("event scheduling architecture regression: "+json.dumps(st))

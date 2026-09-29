@@ -51,10 +51,22 @@ for(const event of plan){
   assert(event.location?.anchor&&event.location?.source,"event location is not grounded in an existing resident target");
   assert.strictEqual(new Set(event.participants.map(p=>p.eventTarget.x+","+p.eventTarget.y)).size,event.participantCount,"event staging targets are not distinct");
   assert(event.participants.every(p=>p.eventTargetSource==="bounded-walkable-staging"),"event did not use bounded walkable staging");
+  assert.strictEqual(event.stagingMode,"compact-walkable-cluster-v2","event did not use compact cluster staging");
+  assert(event.stagingCenter&&event.stagingRadiusTiles===1,"event compact staging center missing");
   assert(event.participants.every(p=>{
     const dx=Number(BigInt(p.eventTarget.x)-BigInt(event.location.anchor.x)),dy=Number(BigInt(p.eventTarget.y)-BigInt(event.location.anchor.y));
     return Math.max(Math.abs(dx),Math.abs(dy))>=2&&Math.max(Math.abs(dx),Math.abs(dy))<=6;
   }),"event staging escaped bounded immediate area");
+  assert(event.participants.every(p=>{
+    const dx=Number(BigInt(p.eventTarget.x)-BigInt(event.stagingCenter.x)),dy=Number(BigInt(p.eventTarget.y)-BigInt(event.stagingCenter.y));
+    return Math.max(Math.abs(dx),Math.abs(dy))<=1;
+  }),"event participants escaped compact staging cluster");
+  const pairwise=[];
+  for(let i=0;i<event.participants.length;i++)for(let j=i+1;j<event.participants.length;j++){
+    const a=event.participants[i].eventTarget,b=event.participants[j].eventTarget;
+    pairwise.push(Math.max(Math.abs(Number(BigInt(a.x)-BigInt(b.x))),Math.abs(Number(BigInt(a.y)-BigInt(b.y)))));
+  }
+  assert(pairwise.every(d=>d>=1&&d<=2),"event participant spacing is not compact/distinct");
   assert(event.endTimestamp>event.startTimestamp,"event duration invalid");
   assert.strictEqual(event.scheduleOverride,true);
 }
@@ -76,7 +88,7 @@ for(const type of LocalEventVignettes.CATALOG.map(x=>x.id)){
     assert.strictEqual(state.activityOverride.target.x,participant.eventTarget.x,type+" staged activity target x drifted");
     assert.strictEqual(state.activityOverride.target.y,participant.eventTarget.y,type+" staged activity target y drifted");
     assert.strictEqual(state.activityOverride.targetSource,"local-event-vignette",type+" activity target source changed");
-    assert.strictEqual(state.stagingRevision,"bounded-walkable-staging-v1",type+" staging revision missing");
+    assert.strictEqual(state.stagingRevision,"compact-walkable-cluster-v2",type+" staging revision missing");
   }
   const ended=LocalEventVignettes.advance(s,"1201-02-01 12:46:00",{ensureScheduled:false});
   assert.strictEqual(ended.activeCount,0,type+" did not end cleanly");
@@ -99,9 +111,10 @@ assert(residentSource.includes("LocalEventVignettes?.stateFor?.(state.residentId
 assert(residentSource.includes("work.activity=localEvent.activityOverride"),"ResidentMovement does not apply temporary event activity override");
 assert(residentSource.includes('work.localEvent?"local-event"'),"ResidentMovement does not instrument event-directed movement");
 assert(stageSource.includes("localEvents:window.LocalEventVignettes?.snapshot?.(activeSeed)||null"),"PlanetStage snapshot missing local-event telemetry");
-assert(stageSource.includes('localEventPresentationRevision:"compact-participant-cues-v2"'),"compact local-event presentation revision missing");
+assert(stageSource.includes('localEventPresentationRevision:"compact-event-silhouette-v3"'),"compact local-event presentation revision missing");
 assert(stageSource.includes("activeLocalEventCueCount")&&stageSource.includes("activeLocalEventResidentIds"),"local-event cue telemetry missing");
 assert(stageSource.includes('eventType==="market-day-setup"')&&stageSource.includes('eventType==="village-gathering"')&&stageSource.includes('eventType==="minor-argument"')&&stageSource.includes('eventType==="predator-warning"'),"compact event-specific presentation catalog missing");
+assert(stageSource.includes("eventSilhouetteScreenSizePx")&&stageSource.includes("bodyScreenSizePx"),"event body/silhouette evidence metrics missing");
 assert(!stageSource.includes("cueScale=2.15"),"rejected oversized local-event cue scale returned");
 assert(html.indexOf("scripts/world/local-event-vignettes.js")<html.indexOf("scripts/world/planet-stage.js"),"local-event runtime must load before PlanetStage");
 assert(css.includes(".local-event-vignette"),"event presentation style missing");

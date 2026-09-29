@@ -188,7 +188,7 @@ let localNpcRoot=null;
 let localNpcMaterials=null;
 let localNpcContext=null;
 let localNpcEntities=new Map();
-let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([]),localEventPresentationRevision:"compact-participant-cues-v2",rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles + LocalEventVignettes",rhythmSource:"SettlementActivityRhythm presentation-only",presentationOnly:true,simulationAuthority:false};
+let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([]),localEventPresentationRevision:"compact-event-silhouette-v3",rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles + LocalEventVignettes",rhythmSource:"SettlementActivityRhythm presentation-only",presentationOnly:true,simulationAuthority:false};
 let localCrowdRoot=null;
 let localCrowdMesh=null;
 let localCrowdMaterials=null;
@@ -4600,7 +4600,7 @@ function updateCanonicalNpcMotion(){
     rhythmPriorityTotal+=rhythmPriority;rhythmPriorityCount++;
     const rhythmScale=working?1:(.95+rhythmPriority*.45);
     const phase=frameCount*.22+Number(String(record.resident.id).replace(/\D/g,"")||0);
-    const pulse=(working||eventActive)?Math.sin(phase)*.035:0,actionScale=eventActive?3.46:(working?3.05:rhythmScale);
+    const pulse=(working||eventActive)?Math.sin(phase)*.035:0,actionScale=eventActive?3.62:(working?3.05:rhythmScale);
     // Arrived workers keep the accepted WP-S004-007 silhouette scale. Other
     // outdoor residents get only a bounded presentation emphasis from fantasy-
     // time rhythm; positions, schedules, collision and routes stay authoritative.
@@ -4621,9 +4621,15 @@ function updateCanonicalNpcMotion(){
         // Elongate the same pooled halo into a compact top-down shoulder/torso
         // silhouette. It stays within the participant footprint but remains
         // visible behind the head under the fixed near-top-down camera.
-        record.eventHalo.setLocalScale(bw*1.30,Math.max(.010,bw*.055),bw*1.82);
-        record.eventHalo.setLocalPosition(pos.x,ground+.006,pos.z+bw*.34);
+        record.eventHalo.setLocalScale(bw*.92,Math.max(.010,bw*.055),bw*1.58);
+        record.eventHalo.setLocalPosition(pos.x,ground+.006,pos.z+bw*.28);
         record.eventHalo.enabled=true;activeEventCues++;
+      }
+      if(record.tool){
+        if(eventMaterial&&record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=eventMaterial;
+        record.tool.setLocalScale(bw*1.58,Math.max(.012,bw*.07),bw*.38);
+        record.tool.setLocalPosition(pos.x,ground+.013,pos.z-bw*.12);
+        record.tool.setLocalEulerAngles(0,0,0);record.tool.enabled=true;activeEventCues++;
       }
       const setEventProp=(entity,material,sx,sy,sz,dx,dy,dz,ry=0)=>{
         if(!entity)return;
@@ -8607,6 +8613,9 @@ function workCycleEvidenceState(residentId){
   if(!record||!rect||!cameraEntity?.camera)return Object.freeze({residentId:id,exists:Boolean(record),visible:false,toolEnabled:false,inViewport:false});
   const entities=[record.body,record.head,record.tool].filter(Boolean);
   const enabled=entities.filter(entity=>entity.enabled&&entity.parent);
+  const bodyBounds=inspectionEntityBounds([record.body,record.head].filter(entity=>entity?.enabled&&entity.parent),0);
+  const eventSilhouetteBounds=inspectionEntityBounds([record.eventHalo,record.tool].filter(entity=>entity?.enabled&&entity.parent),0);
+  const sizeOf=bounds=>bounds?Object.freeze({width:Number(Math.max(0,bounds.right-bounds.left).toFixed(3)),height:Number(Math.max(0,bounds.bottom-bounds.top).toFixed(3))}):null;
   const projected=enabled.map(entity=>{
     const world=entity.getPosition?.();if(!world)return null;
     const screen=cameraEntity.camera.worldToScreen(world,new pc.Vec3());
@@ -8622,6 +8631,7 @@ function workCycleEvidenceState(residentId){
   return Object.freeze({
     residentId:id,exists:true,visible:enabled.length>0,toolEnabled:Boolean(record.tool?.enabled),
     inViewport,screen:center?Object.freeze({x:Number(center.x.toFixed(3)),y:Number(center.y.toFixed(3)),width:Number(rect.width.toFixed(3)),height:Number(rect.height.toFixed(3))}):null,
+    bodyScreenSizePx:sizeOf(bodyBounds),eventSilhouetteScreenSizePx:sizeOf(eventSilhouetteBounds),
     movementStatus:movement?.status||null,workCycle:movement?.workCycle||null,
     localTier:localStatic?.revealTier||null,localBuildingCount:Number(localStatic?.buildingCount||0),
     presentationOnly:true,simulationAuthority:false

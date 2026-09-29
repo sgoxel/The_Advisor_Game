@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="1.0.0";
+const VERSION="1.1.0";
 const START_KIND="local-vignette-start";
 const END_KIND="local-vignette-end";
 const MAX_ACTIVE_EVENTS=2;
@@ -114,32 +114,48 @@ function stagingPoint(seed,x,y,strict){
   return freeze({x:String(x),y:String(y),level:Number(center.level||0)});
 }
 function stagingTargets(seed,day,spec,anchor,participants){
-  const count=Math.min(MAX_PARTICIPANTS,participants.length),ax=BigInt(anchor.x),ay=BigInt(anchor.y),candidates=[];
-  // Start two tiles away so participants form a readable gathering around an
-  // existing anchor instead of stacking directly against a workplace facade.
-  for(let radius=2;radius<=6;radius++){
+  const count=Math.min(MAX_PARTICIPANTS,participants.length),ax=BigInt(anchor.x),ay=BigInt(anchor.y),centerCandidates=[];
+  for(let radius=3;radius<=5;radius++){
     const ring=[];
     for(let oy=-radius;oy<=radius;oy++)for(let ox=-radius;ox<=radius;ox++){
       if(Math.max(Math.abs(ox),Math.abs(oy))!==radius)continue;
-      ring.push({ox,oy,tie:score(seed,day,spec.id,"staging:"+radius+":"+ox+":"+oy)});
+      ring.push({ox,oy,tie:score(seed,day,spec.id,"cluster-center:"+radius+":"+ox+":"+oy)});
     }
-    ring.sort((a,b)=>a.tie-b.tie||a.oy-b.oy||a.ox-b.ox);candidates.push(...ring);
+    ring.sort((u,v)=>u.tie-v.tie||u.oy-v.oy||u.ox-v.ox);centerCandidates.push(...ring);
   }
-  const choose=(strict,already=[])=>{
-    const out=already.slice();
-    for(const candidate of candidates){
+  const tryCenter=(candidate,strict)=>{
+    const cx=ax+BigInt(candidate.ox),cy=ay+BigInt(candidate.oy),center=stagingPoint(seed,cx,cy,strict);
+    if(!center)return null;
+    const offsets=[];
+    for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++)offsets.push({ox,oy,tie:score(seed,day,spec.id,"cluster-slot:"+center.x+":"+center.y+":"+ox+":"+oy)});
+    offsets.sort((u,v)=>{
+      const uc=u.ox===0&&u.oy===0?0:1,vc=v.ox===0&&v.oy===0?0:1;
+      return uc-vc||u.tie-v.tie||u.oy-v.oy||u.ox-v.ox;
+    });
+    const out=[];
+    for(const slot of offsets){
       if(out.length>=count)break;
-      const x=ax+BigInt(candidate.ox),y=ay+BigInt(candidate.oy);
-      if(out.some(p=>p.x===String(x)&&p.y===String(y)))continue;
-      if(out.some(p=>Math.abs(Number(BigInt(p.x)-x))+Math.abs(Number(BigInt(p.y)-y))<2))continue;
-      const point=stagingPoint(seed,x,y,strict);if(point)out.push(point);
+      const x=cx+BigInt(slot.ox),y=cy+BigInt(slot.oy),fromAnchor=Math.max(Math.abs(Number(x-ax)),Math.abs(Number(y-ay)));
+      if(fromAnchor<2||fromAnchor>6)continue;
+      const point=stagingPoint(seed,x,y,strict);if(!point||out.some(p=>p.x===point.x&&p.y===point.y))continue;
+      out.push(point);
     }
-    return out;
+    return out.length>=count?{center,targets:out.slice(0,count)}:null;
   };
-  let points=choose(true);
-  if(points.length<count)points=choose(false,points);
-  while(points.length<count)points.push(freeze({x:String(anchor.x),y:String(anchor.y),level:Number(anchor.level||0)}));
-  return freeze(points.slice(0,count));
+  let cluster=null;
+  for(const strict of [true,false]){
+    for(const candidate of centerCandidates){cluster=tryCenter(candidate,strict);if(cluster)break;}
+    if(cluster)break;
+  }
+  if(cluster)return freeze({center:cluster.center,targets:freeze(cluster.targets),clusterRadiusTiles:1,source:"compact-walkable-cluster-v2"});
+  const fallback=[];
+  for(const candidate of centerCandidates){
+    if(fallback.length>=count)break;
+    const point=stagingPoint(seed,ax+BigInt(candidate.ox),ay+BigInt(candidate.oy),false);
+    if(point&&!fallback.some(p=>p.x===point.x&&p.y===point.y))fallback.push(point);
+  }
+  while(fallback.length<count)fallback.push(freeze({x:String(anchor.x),y:String(anchor.y),level:Number(anchor.level||0)}));
+  return freeze({center:fallback[0]||anchor,targets:freeze(fallback.slice(0,count)),clusterRadiusTiles:null,source:"bounded-walkable-staging-fallback"});
 }
 function descriptor(seed,day,spec){
   const residents=roster(seed),participants=pickParticipants(seed,day,spec,residents);
@@ -153,10 +169,11 @@ function descriptor(seed,day,spec){
   return freeze({
     id:eventId,type:spec.id,title:spec.title,icon:spec.icon,description:spec.description,
     startTimestamp,endTimestamp:addMinutes(startTimestamp,durationMinutes),durationMinutes,
-    location,participants:Object.freeze(participants.map((r,index)=>freeze({
+    location,stagingCenter:staging.center,stagingRadiusTiles:staging.clusterRadiusTiles,stagingMode:staging.source,
+    participants:Object.freeze(participants.map((r,index)=>freeze({
       id:String(r.id),name:String(r.displayName||r.name||r.id),profession:String(r.profession||"resident"),
-      existingTarget:targetOf(r),eventTarget:staging[index]||location.anchor,
-      eventTargetSource:staging[index]&&(staging[index].x!==location.anchor.x||staging[index].y!==location.anchor.y)?"bounded-walkable-staging":"event-anchor-fallback"
+      existingTarget:targetOf(r),eventTarget:staging.targets[index]||location.anchor,
+      eventTargetSource:staging.targets[index]&&(staging.targets[index].x!==location.anchor.x||staging.targets[index].y!==location.anchor.y)?"bounded-walkable-staging":"event-anchor-fallback"
     }))),
     participantCount:participants.length,seedOnly:true,scheduleOverride:true,temporary:true
   });
@@ -232,7 +249,7 @@ function stateFor(residentId,seedValue){
   const target=participant?.eventTarget||event.location.anchor;
   return freeze({
     eventId:event.id,type:event.type,title:event.title,scheduleOverride:true,
-    target,location:event.location,participant,stagingRevision:"bounded-walkable-staging-v1",
+    target,location:event.location,participant,stagingRevision:"compact-walkable-cluster-v2",
     activityOverride:freeze({
       state:"local-event",action:"gather",intendedAction:"gather",
       target,buildingId:null,targetSource:"local-event-vignette",
