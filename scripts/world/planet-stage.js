@@ -4586,7 +4586,11 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   // Semantic scale policy is literal here: 1/1000 reveals the footprint only;
   // 1/2500 retains that footprint and adds the canonical road network. Do not
   // leak buildings into those overview tiers just because their data is ready.
-  if(tier==="footprint"||tier==="route"){
+  if(tier==="footprint"){
+    // The footprint-only tier may use the bounded occupied-area cue. Once the
+    // authoritative road network is visible, the road ring itself carries the
+    // settlement envelope; keeping the filled disk made 1/2500 read like a UI
+    // target rather than terrain.
     addLocalStatic("CanonicalOccupiedArea","cylinder",localStaticMaterials.footprint,centerPos.x,centerGround,centerPos.z,coreRadiusMeters*2*scale/unit,.022,coreRadiusMeters*2*scale/unit);
     occupiedAreaCount=1;
   }
@@ -4869,7 +4873,14 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Preserve macro hue only as a subtle identity accent. The dominant local
       // map albedo is continuous authoritative elevation/moisture, preventing
       // continent-scale palette cells from reading as giant polygon wedges.
-      const base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,.10),0,1));
+      // Preserve more of the canonical globe color at map-scale local LODs, then
+      // hand progressively to the local palette as texels approach gameplay scale.
+      // This keeps continent/mountain identity continuous through the projection
+      // handoff without inventing new geography or introducing LOD-specific tints.
+      const mountainIdentity=clamp(Number(sample?.mountainInfluence||0),0,1);
+      const coarseIdentity=smoothstep01(clamp((metersPerTexel-8)/92,0,1));
+      const macroIdentityWeight=clamp(.10+coarseIdentity*.30+mountainIdentity*.08,.10,.46);
+      const base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
       const elevation=Number(sample?.elevationMeters||0);
       const relief=clamp(elevation/5200,0,1);
       // Detail frequencies are anchored to canonical SEED-registered meters.
@@ -4895,7 +4906,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // Shared context remains restrained while focus progressively samples
         // a finer, still world-registered relief gradient. This restores
         // readable 1/500 landform structure without a rectangular LOD edge.
-        const step=photometricMetersPerTexel,dux=step/spanEast,dvz=step/spanNorth;
+        // Sample relief over a physically resolvable baseline. At map scale a
+        // one-texel derivative can collapse broad canonical slopes into a flat wash;
+        // widening only the presentation gradient reveals coherent ridges/valleys
+        // while all heights still come from the same SEED-registered authority.
+        const step=Math.max(photometricMetersPerTexel,Math.min(640,metersPerTexel*3.5)),dux=step/spanEast,dvz=step/spanNorth;
         const sx=mixSample(Math.min(1,ux+dux),vz),sy=mixSample(ux,Math.max(0,vz-dvz));
         const h0=elevation+terrainDetailHeight(worldEast,worldNorth,photometricMetersPerTexel,detailSalt);
         const hx=Number(sx.elevationMeters||0)+terrainDetailHeight(sx.registeredEastMeters,sx.registeredNorthMeters,photometricMetersPerTexel,detailSalt);
