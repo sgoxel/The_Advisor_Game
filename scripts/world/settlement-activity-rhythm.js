@@ -97,9 +97,10 @@ function categoryFor(resident,activity){
   // Individual DailyActivity remains authoritative. A guard who is scheduled
   // asleep/home is not converted into patrol merely because the night profile
   // has a strong guard modifier.
-  if(state==="sleep")return "home";
+  if(state==="sleep"||state==="prepare"||state==="breakfast")return "home";
   if(profession==="guard")return "guard";
-  if(state==="social"||state==="lunch"||action==="social"||action==="eat")return "tavern-social";
+  const publicContext=String(activity?.location||"").toLowerCase()==="public";
+  if(state==="social"||state==="lunch"||action==="social"||(action==="eat"&&publicContext))return "tavern-social";
   if(state==="work"||["work","craft","service"].includes(action)){
     if(workFunction==="market"||profession==="shopkeeper")return "market";
     if(workFunction==="lodging"||profession==="tavern-keeper")return "tavern-social";
