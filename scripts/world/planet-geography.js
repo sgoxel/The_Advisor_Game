@@ -12,7 +12,6 @@ const ISOLATED_ISLAND_COUNT=8;
 const MOUNTAIN_NODES_PER_CONTINENT=9;
 const DEFAULT_WORLD_RADIUS_METERS=637100;
 const DEFAULT_TILE_METERS=2;
-const TERRAIN_FEATURE_REVISION="seed-registered-terrain-features-v2";
 const INSTANCE_CACHE=new Map();
 const CONTINENT_STEMS=Object.freeze(["Alder","Amber","Ashen","Bright","Cedar","Dawn","Elder","Falcon","Golden","Green","Grey","High","Iron","Kings","Lake","North","Oak","Raven","Red","River","Silver","Stone","Sun","Thorn","West","White","Wolf"]);
 const CONTINENT_TAILS=Object.freeze(["reach","fall","wood","mere","gate","vale","march","crest","land","haven"]);
@@ -361,44 +360,10 @@ function create(seedValue){
     peak:hash32(seed+"|peak-noise"),
     ocean:hash32(seed+"|ocean"),
     moisture:hash32(seed+"|moisture"),
-    featureRidge:hash32(seed+"|terrain-feature-ridge"),
-    featureDrainage:hash32(seed+"|terrain-feature-drainage"),
-    featureCover:hash32(seed+"|terrain-feature-cover"),
     warpX:hash32(seed+"|warp-x"),
     warpY:hash32(seed+"|warp-y"),
     warpZ:hash32(seed+"|warp-z")
   });
-  // Canonical registered-meter terrain features are presentation authority,
-  // not simulation authority. Consumers sample this continuous field into their
-  // bounded spatial-resource cache; the authority itself stays allocation-light.
-  function terrainFeatureNoise(base,eastMeters,northMeters,wavelengthMeters){
-    const wavelength=Math.max(8,Number(wavelengthMeters)||8);
-    const x=Number(eastMeters||0)/wavelength,y=Number(northMeters||0)/wavelength;
-    const x0=Math.floor(x),y0=Math.floor(y),tx=smooth01(x-x0),ty=smooth01(y-y0);
-    const lattice=(ix,iy)=>intHash(base,ix,iy,0)/4294967295*2-1;
-    return lerp(
-      lerp(lattice(x0,y0),lattice(x0+1,y0),tx),
-      lerp(lattice(x0,y0+1),lattice(x0+1,y0+1),tx),
-      ty
-    );
-  }
-  function terrainFeatureAtRegisteredMeters(eastMeters,northMeters,metersPerSample=100){
-    const east=Number(eastMeters||0),north=Number(northMeters||0),mps=Math.max(1,Number(metersPerSample)||1);
-    const admitted=wavelength=>smooth01(clamp((wavelength/mps-2)/4,0,1));
-    // Three deterministic fields are enough to expose coherent local geography
-    // without adding a second expensive multi-octave terrain generator.
-    const ridgeBase=terrainFeatureNoise(bases.featureRidge,east,north,9000)*admitted(9000);
-    const ridgeValley=clamp(((1-Math.abs(ridgeBase))*2-1)*.82+
-      terrainFeatureNoise(bases.featureRidge^0x51ed270b,east,north,26000)*.18*admitted(26000),-1,1);
-    const drainageBase=(1-Math.abs(terrainFeatureNoise(bases.featureDrainage,east,north,4300)))*admitted(4300);
-    const drainage=clamp((drainageBase-.57)*2.55,0,1);
-    const cover=clamp(terrainFeatureNoise(bases.featureCover,east,north,2600)*admitted(2600),-1,1);
-    return {
-      revision:TERRAIN_FEATURE_REVISION,
-      authority:"Campaign-SEED + PlanetGeography registered-meter lattice",
-      ridgeValley,drainage,cover,simulationAuthority:false
-    };
-  }
 
   function sampleDirection(directionValue){
     const d=normalize(directionValue.x,directionValue.y,directionValue.z);
@@ -554,19 +519,12 @@ function create(seedValue){
   const instance=Object.freeze({
     VERSION,seed,
     sampleDirection,sampleLatLon,signature,seamProof,continentById,
-    terrainFeatureAtRegisteredMeters,
     worldLatLonForTile,worldTileForLatLon,registrationRoundTrip,
     registration:Object.freeze({
       authority:"PlanetGeography.seed-fixed-spherical-frame",
       originDirection:registrationOrigin,eastDirection:registrationEast,northDirection:registrationNorth,
       defaultWorldRadiusMeters:DEFAULT_WORLD_RADIUS_METERS,defaultTileMeters:DEFAULT_TILE_METERS,
       componentRoots:continentComponentRoots
-    }),
-    terrainFeatures:Object.freeze({
-      revision:TERRAIN_FEATURE_REVISION,
-      authority:"Campaign-SEED + PlanetGeography registered-meter lattice",
-      cachePolicy:"consumer spatial-resource cache",
-      simulationAuthority:false
     }),
     layout:Object.freeze({
       continentCount:CONTINENT_COUNT,
