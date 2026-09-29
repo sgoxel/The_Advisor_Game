@@ -353,10 +353,15 @@ function tick(seedValue,nowValue,optionsValue){
   const started=performance.now(),ensured=options.ensure===false?null:ensureScheduled(seed,now);
   const batch=EventScheduler.processDue(seed,now,{
     maxEvents:options.maxEvents||EventScheduler.MAX_BATCH,
+    priority:options.priority||"background",
     systemKinds:[REGION_SYSTEM,SETTLEMENT_SYSTEM],
     handle:(event,randomUint32)=>dispatch(seed,event,randomUint32)
   });
   state.ticks++;state.lastTickTimestamp=now;state.lastCostMs=Number((performance.now()-started).toFixed(3));state.totalCostMs+=state.lastCostMs;
+  window.WorldSimulationBudget?.recordRevisionRefresh?.(seed,{
+    region:batch.processed.filter(item=>item.event.systemKind===REGION_SYSTEM&&item.outcome?.ok!==false).length,
+    settlement:batch.processed.filter(item=>item.event.systemKind===SETTLEMENT_SYSTEM&&item.outcome?.ok!==false).length
+  });
   return deepFreeze({ensured,batch,snapshot:snapshot(seed)});
 }
 function storedAggregate(seed,plan){
