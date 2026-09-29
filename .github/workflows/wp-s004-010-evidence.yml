@@ -12,6 +12,7 @@ on:
       - index.html
       - tools/tests/wp-s004-010-density-crowd.test.js
       - tools/wp_s004_010_evidence.py
+      - tools/wp_s004_010_local_evidence.html
 
 permissions:
   contents: read
@@ -48,7 +49,7 @@ jobs:
           sleep 1
       - name: Capture village town city density evidence
         env:
-          TARGET: http://127.0.0.1:8000/
+          TARGET: http://127.0.0.1:8000/tools/wp_s004_010_local_evidence.html
           PROFILE: ${{ matrix.profile }}
         run: python tools/wp_s004_010_evidence.py
       - name: Upload evidence
