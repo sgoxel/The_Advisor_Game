@@ -425,28 +425,33 @@ function advanceTickInitialization(tick,cooperative,started,budgetMs){
   return true;
 }
 function advanceResidentForTick(tick,state,cooperative){
-  const activity=tick.activities.get(state.residentId);
+  const scheduledActivity=tick.activities.get(state.residentId);
   let work=tick.residentWork;
   if(!work||work.residentId!==state.residentId){
-    work=tick.residentWork={residentId:state.residentId,phase:"checks"};
+    work=tick.residentWork={residentId:state.residentId,phase:"checks",activity:null,localEvent:false};
   }
   if(work.phase==="checks"){
     const localEvent=window.LocalEventVignettes?.stateFor?.(state.residentId)||null;
-    if(localEvent?.holdsPosition){
+    if(localEvent?.activityOverride){
       window.ActionExecutor?.clear?.("resident",state.residentId);
-      state.presentationOffset=Object.freeze({x:0,y:0});tick.changed=true;tick.residentWork=null;return true;
+      work.activity=localEvent.activityOverride;
+      work.localEvent=true;
+      work.phase="advance";
+    }else{
+      work.activity=scheduledActivity;
+      const contextual=window.ContextualReactions?.stateFor?.(state.residentId)||null;
+      if(contextual?.holdsPosition){
+        state.presentationOffset=Object.freeze({x:0,y:0});tick.changed=true;tick.residentWork=null;return true;
+      }
+      const social=window.SocialEncounters?.stateFor?.(state.residentId)||null;
+      if(social?.holdsPosition){
+        window.ActionExecutor?.clear?.("resident",state.residentId);
+        state.presentationOffset=Object.freeze({x:0,y:0});tick.changed=true;tick.residentWork=null;return true;
+      }
+      work.phase="before";
     }
-    const contextual=window.ContextualReactions?.stateFor?.(state.residentId)||null;
-    if(contextual?.holdsPosition){
-      state.presentationOffset=Object.freeze({x:0,y:0});tick.changed=true;tick.residentWork=null;return true;
-    }
-    const social=window.SocialEncounters?.stateFor?.(state.residentId)||null;
-    if(social?.holdsPosition){
-      window.ActionExecutor?.clear?.("resident",state.residentId);
-      state.presentationOffset=Object.freeze({x:0,y:0});tick.changed=true;tick.residentWork=null;return true;
-    }
-    work.phase="before";
   }
+  const activity=work.activity||scheduledActivity;
   if(work.phase==="before"){
     const beforeStarted=performance.now();
     const before=window.ActionExecutor?.advanceActor?.({
@@ -461,12 +466,17 @@ function advanceResidentForTick(tick,state,cooperative){
   if(work.phase==="advance"){
     const residentStarted=performance.now();
     const advanced=advanceState(seedKey,state,activity,FIXED_STEP_SECONDS,cooperative);
-    recordPerformance("residentAdvance",residentStarted,state,state.lastReason||"advance");
+    recordPerformance("residentAdvance",residentStarted,state,work.localEvent?"local-event":(state.lastReason||"advance"));
     tick.changed=Boolean(advanced.changed)||tick.changed;
     if(advanced.pending)return false;
     work.phase="after";
   }
   if(work.phase==="after"){
+    if(work.localEvent){
+      if(state.status==="arrived")state.presentationOffset=Object.freeze({x:0,y:0});
+      tick.residentWork=null;
+      return true;
+    }
     const afterStarted=performance.now();
     const after=window.ActionExecutor?.advanceActor?.({
       seed:seedKey,actorKind:"resident",actorId:state.residentId,position:state.position,activity
