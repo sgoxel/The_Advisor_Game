@@ -4,6 +4,7 @@ from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException
 
 TARGET=os.environ.get("TARGET","http://127.0.0.1:8000/")
 PROFILE=os.environ.get("PROFILE","landscape")
@@ -132,7 +133,25 @@ records=[]
 try:
     url=TARGET+("&" if "?" in TARGET else "?")+"evidence_fast_start=1"
     driver.get(url)
-    wait.until(lambda _d: ready())
+    try:
+        wait.until(lambda _d: ready())
+    except TimeoutException:
+        probe=driver.execute_script("""
+          return {
+            href:location.href,readyState:document.readyState,
+            planetStage:typeof window.PlanetStage,
+            planetReady:window.PlanetStage?Boolean(PlanetStage.snapshot().ready):null,
+            crowd:typeof window.CrowdPresentation,
+            appUI:typeof window.AppUI,
+            renderer:typeof window.GameRenderer,
+            settlement:typeof window.SettlementArchetypes,
+            camera:typeof window.Camera,
+            residentMovement:typeof window.ResidentMovement,
+            bodyText:String(document.body?.innerText||"").slice(0,1200)
+          };
+        """)
+        logs=driver.get_log("browser")
+        raise RuntimeError("startup readiness timeout: "+json.dumps({"probe":probe,"browserLogs":logs[-20:]}))
     base=initialize()
     if not base["verification"].get("pass"):
         raise RuntimeError("CrowdPresentation.verify failed: "+json.dumps(base["verification"]))
