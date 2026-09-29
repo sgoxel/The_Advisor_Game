@@ -992,6 +992,7 @@ function gameplayCenterMarkerTelemetry(layer){
     // Keep the exact center marker, but move its readout off canonical local
     // structure when that structure itself is the focused visual subject.
     const microLocationFocus=root?.dataset?.microLocationFocus==="true";
+    code.style.display=microLocationFocus?"none":"";
     if(settlementOverview){
       code.style.position="absolute";code.style.left="50%";code.style.top="-54px";
       code.style.transform="translateX(-50%) scale(.82)";code.style.opacity=".72";
@@ -5544,7 +5545,11 @@ function renderCanonicalMicroProp(prop,resource,frame,index){
   }else if(semantic==="tent"){
     add("micro-tent",cloth,0,0,3.55,2.70,3.55,1.36,0,yaw+45,0);
     box(wood,0,0,.14,2.92,.14,1.46);
-    box(dark,0,1.36,.92,1.16,.12,.60,yaw);
+    box(dark,0,1.36,1.18,1.22,.14,.61,yaw);
+    // Presentation-only guy poles and entrance apron make the same canonical
+    // tent legible from the default high camera without inventing a new prop.
+    box(wood,-1.55,.88,.12,.82,.12,.41,yaw+10);box(wood,1.55,.88,.12,.82,.12,.41,yaw-10);
+    box(cloth,0,1.88,1.72,.10,1.02,.055,yaw);
   }else if(semantic==="ruin-wall"){
     box(stone,-.58,0,1.72,2.25,.72,1.13);box(stone,.55,.10,1.02,1.38,.72,.69);
     sphere(stone,1.12,.34,.58,.42,.54,.22);sphere(stone,-1.08,.38,.44,.34,.42,.18);
@@ -5552,17 +5557,21 @@ function renderCanonicalMicroProp(prop,resource,frame,index){
     box(stone,0,0,2.05,.34,1.52,.17);box(stone,0,0,.68,2.20,.68,1.22);
     box(stone,0,0,1.28,.26,.82,2.34);sphere(accent,0,0,.40,.32,.40,2.62);
   }else if(semantic==="grave"){
-    box(soil,0,.26,1.38,.11,2.30,.075);
+    box(soil,0,.26,1.46,.13,2.46,.085);
     box(stone,0,-.72,.82,1.34,.30,.73);box(stone,0,-.72,1.02,.20,.22,1.22);
+    box(stone,-.63,.28,.13,.18,1.92,.10,yaw);box(stone,.63,.28,.13,.18,1.92,.10,yaw);
+    sphere(accent,.38,.68,.20,.18,.20,.13);
   }else if(semantic==="marker-stone"){
     box(stone,0,0,.78,1.52,.82,.78,yaw+variant*12);
   }else if(semantic==="dock"){
     box(wood,0,.24,1.92,.20,3.45,.14);
     box(dark,-.74,-1.12,.16,1.02,.16,.50);box(dark,.74,-1.12,.16,1.02,.16,.50);
     box(dark,-.74,1.52,.16,.82,.16,.40);box(dark,.74,1.52,.16,.82,.16,.40);
+    box(dark,-.79,.25,.10,.20,3.18,.25,yaw);box(dark,.79,.25,.10,.20,3.18,.25,yaw);
   }else if(semantic==="fish-rack"){
     box(wood,-.92,0,.16,1.88,.16,.94);box(wood,.92,0,.16,1.88,.16,.94);box(wood,0,0,2.02,.16,.16,1.62);
-    box(cloth,-.42,0,.24,.72,.10,1.12);box(cloth,.42,0,.24,.72,.10,1.15);
+    box(cloth,-.58,0,.22,.78,.10,1.12);box(cloth,-.18,0,.22,.86,.10,1.16);
+    box(accent,.24,0,.22,.72,.10,1.14);box(cloth,.62,0,.22,.82,.10,1.13);
   }else if(semantic==="unusual-tree"){
     box(trunk,0,0,1.00,5.2,1.00,2.60);
     sphere(leaf,0,0,4.75,3.05,4.15,5.75);sphere(leaf,-1.45,.30,2.35,1.88,2.20,5.20);sphere(leaf,1.38,-.28,2.42,1.95,2.26,5.35);
@@ -5576,6 +5585,8 @@ function renderCanonicalMicroProp(prop,resource,frame,index){
     box(wood,0,0,2.65,.44,1.48,.52);box(wood,0,-1.12,2.15,.18,.18,.35);
     sphere(dark,-.92,.62,.68,.88,.28,.43);sphere(dark,.92,.62,.68,.88,.28,.43);
     sphere(dark,-.92,-.42,.68,.88,.28,.43);sphere(dark,.92,-.42,.68,.88,.28,.43);
+    box(dark,-1.18,.10,.12,.78,1.62,.45,yaw);box(dark,1.18,.10,.12,.78,1.62,.45,yaw);
+    box(cloth,0,.12,2.20,.14,1.10,1.10,yaw);
   }else if(semantic==="signpost"){
     box(wood,0,0,.22,2.25,.22,1.13);box(wood,.34,0,1.52,.46,.18,1.82);
   }else if(semantic==="crate"){
