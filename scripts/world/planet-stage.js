@@ -2145,7 +2145,21 @@ function warmResidentMovementScheduler(){
   if(!activeSeed||!window.ResidentMovement)return;
   window.ResidentMovement.ensure?.(activeSeed);
   const started=performance.now(),step=Math.max(.001,Number(window.ResidentMovement.FIXED_STEP_SECONDS||.1));
-  window.ResidentMovement.advance(activeSeed,window.GameTime?.getNow?.()||inspectionFantasyStamp(),step,{snapshot:false,maxTicks:1});
+  const when=window.GameTime?.getNow?.()||inspectionFantasyStamp();
+  // Prime the bounded twelve-resident work-cycle/route caches while the startup
+  // screen still owns the main thread. This is deterministic SEED + fantasy-time
+  // preparation, not simulation authority: the same plans would otherwise be
+  // built lazily inside the first interactive scheduler slices.
+  if(window.WorkCycles?.plan&&window.DailyActivity?.build){
+    const residents=window.DailyActivity.build(activeSeed)||[];
+    for(let i=0;i<residents.length&&i<12;i++)window.WorkCycles.plan(activeSeed,residents[i]);
+  }
+  // Complete the already-existing one fixed simulation tick before app.start().
+  // Runtime navigation remains cooperative; only its deterministic cold caches
+  // and initial tick are removed from the interactive path.
+  let result=window.ResidentMovement.advance(activeSeed,when,step,{snapshot:false,maxTicks:240});
+  let guard=0;
+  while(result?.pending&&guard++<24)result=window.ResidentMovement.advance(activeSeed,when,0,{snapshot:false,maxTicks:240});
   navigationPerformance.residentSchedulerWarmupMs=Number((performance.now()-started).toFixed(3));
 }
 function startResidentMovementScheduler(){
