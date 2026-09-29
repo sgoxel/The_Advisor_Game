@@ -360,8 +360,11 @@ function proofDefinitions(seed){
 }
 function executeProof(seed){
   const definitions=proofDefinitions(seed),results=[];
-  reset(seed);proofActive=true;
+  // Each behavioral case is an independent authoritative situation. Resetting
+  // between cases prevents a later/earlier proof timestamp from being mistaken
+  // for repeated behavior; cooldown itself is tested separately below.
   for(const def of definitions){
+    reset(seed);proofActive=true;
     const before=snapshot();
     notify({...def.event,when:def.when});
     advance({seed,when:def.when,seconds:.1,residentLookup:id=>String(id)===def.residentId?def.resident:null});
@@ -371,7 +374,6 @@ function executeProof(seed){
       reaction,reactionCreated:Boolean(reaction),acceptedDelta:snapshot().acceptedEventCount-before.acceptedEventCount,
       lowSalienceDelta:snapshot().suppressedLowSalienceCount-before.suppressedLowSalienceCount
     }));
-    advance({seed,when:def.when,seconds:4,residentLookup:()=>def.resident});
   }
   const close=definitions.find(row=>row.id==="close-follow");
   let cooldownSuppressed=false;
