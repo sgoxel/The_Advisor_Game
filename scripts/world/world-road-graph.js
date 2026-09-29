@@ -243,7 +243,7 @@ function edgeKey(aId,bId){return [String(aId),String(bId)].sort().join("|")}
 function graphForCountry(seedValue,countryValue,optionsValue){
   const seed=String(seedValue==null?"":seedValue),country=normalizeCountry(seed,countryValue),options=optionsValue||{};
   if(!country)return null;
-  const radius=Math.max(1,Math.min(4,Number(options.radius??4))),cacheKey=[VERSION,seed,country.id,radius].join("|");
+  const radius=Math.max(1,Math.min(4,Number(options.radius??4))),focusKey=options.focus&&options.focus.x!=null&&options.focus.y!=null?String(options.focus.x)+","+String(options.focus.y):"auto",cacheKey=[VERSION,seed,country.id,radius,focusKey].join("|");
   if(graphCache.has(cacheKey))return graphCache.get(cacheKey);
   const started=now();
   const catalog=boundedSettlementCatalog(seed,country,radius,options.focus);
