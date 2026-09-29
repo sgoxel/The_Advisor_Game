@@ -37,22 +37,40 @@ def ready():
 
 def initialize():
     return driver.execute_script("""
-      const s=PlanetStage.snapshot(),seed=s.activeSeed;
-      const reps={...CrowdPresentation.representativePlans(seed)};
-      const country=PoliticalGeography.countryAt(seed,"0","0");
-      const start=(SettlementArchetypes.settlementsForCountry(seed,country,4)||[])
-        .find(p=>p.role==="starting-village"&&p.classId==="village")||null;
-      if(start)reps.village=start;
-      const plans={};
-      for(const cls of ["village","town","city"]){
-        const p=reps[cls];plans[cls]=p?{
-          id:String(p.id),name:String(p.name||p.id),classId:String(p.classId),
-          role:String(p.role||""),center:{x:String(p.center.x),y:String(p.center.y)},
-          population:p.population||null
-        }:null;
-      }
-      return {seed,plans,verify:CrowdPresentation.verify(seed)};
+      const seed=PlanetStage.snapshot().activeSeed,start=StartingVillage.plan(seed);
+      const resolved=CrowdPresentation.resolvePlan(seed,start.center);
+      const village=resolved&&resolved.classId==="village"?resolved:null;
+      return {
+        seed,
+        village:village?{id:String(village.id),name:String(village.name||village.id),classId:"village",
+          role:String(village.role||"starting-village"),center:{x:String(village.center.x),y:String(village.center.y)},
+          population:village.population||null}:null
+      };
     """)
+
+def discover_plan(cls):
+    return driver.execute_script("""
+      const cls=arguments[0],seed=PlanetStage.snapshot().activeSeed,records=[];
+      for(let cy=-3;cy<=3;cy++)for(let cx=-3;cx<=3;cx++){
+        let record=null;
+        try{record=SettlementArchetypes.canonicalSettlementAtCell(seed,cls,String(cx),String(cy))}catch(_){record=null}
+        if(record)records.push(record);
+      }
+      records.sort((a,b)=>{
+        const da=Math.hypot(Number(BigInt(a.center.x)),Number(BigInt(a.center.y)));
+        const db=Math.hypot(Number(BigInt(b.center.x)),Number(BigInt(b.center.y)));
+        return da-db||String(a.id).localeCompare(String(b.id));
+      });
+      for(const record of records.slice(0,12)){
+        const plan=CrowdPresentation.resolvePlan(seed,record.center);
+        if(plan&&String(plan.classId)===cls)return {
+          id:String(plan.id),name:String(plan.name||plan.id),classId:String(plan.classId),
+          role:String(plan.role||""),center:{x:String(plan.center.x),y:String(plan.center.y)},
+          population:plan.population||null
+        };
+      }
+      return null;
+    """,cls)
 
 def set_focus(plan):
     return driver.execute_script("""
@@ -153,14 +171,13 @@ try:
         raise RuntimeError("startup readiness timeout: "+json.dumps({"probe":probe,"browser":driver.get_log("browser")[-20:]}))
 
     base=initialize()
-    if not base["verify"].get("pass"):
-        raise RuntimeError("CrowdPresentation.verify failed: "+json.dumps(base["verify"]))
+    plans={"village":base.get("village"),"town":discover_plan("town"),"city":discover_plan("city")}
     for cls in CLASSES:
-        if not base["plans"].get(cls):
-            raise RuntimeError("missing representative "+cls+": "+json.dumps(base["plans"]))
+        if not plans.get(cls):
+            raise RuntimeError("missing bounded canonical "+cls+": "+json.dumps(plans))
 
     for idx,cls in enumerate(CLASSES):
-        plan=base["plans"][cls]
+        plan=plans[cls]
         set_focus(plan)
         try:
             wait.until(lambda _d, wanted=cls: focus_ready(wanted))
@@ -203,7 +220,7 @@ try:
         raise RuntimeError("browser console severe errors: "+json.dumps(severe[-10:]))
 
     result={"pass":True,"profile":PROFILE,"viewport":SIZE,"seed":base["seed"],
-            "verification":base["verify"],"counts":{"generated":generated,"visible":visible},"records":records}
+            "verification":{"functionalProof":"node tools/tests/wp-s004-010-density-crowd.test.js","browserWorldDiscovery":"bounded canonical settlement cells"},"counts":{"generated":generated,"visible":visible},"records":records}
     (OUT/f"{PROFILE}-evidence.json").write_text(json.dumps(result,indent=2))
     print(json.dumps(result,indent=2))
 finally:
