@@ -3317,7 +3317,7 @@ function ensureLocalStaticMaterials(){
   const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.39,.30,.14,.58),square:make("LocalSquare",.48,.35,.18),
+    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.31,.235,.105,.78),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.028),lotOverview:make("LocalOccupiedLotOverview",1,1,1,.72),
@@ -5429,11 +5429,20 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // canonical elevation/moisture/mountain inputs. These weights never create
       // simulation identity; they expose existing SEED geography at map scale.
       const uplandBase=smoothstep01((elevationBase-620)/2150),uplandWeight=clamp(Math.max(uplandBase,mountainIdentity*.58),0,1);
+      // At map scale, absolute kilometre-scale elevation bands should remain
+      // recognizable context rather than dominate local albedo as a giant pale
+      // contour. Retain a bounded share of the same canonical elevation identity
+      // while curvature/drainage/registered detail carry the readable structure.
+      const absoluteElevationPaletteWeight=sample?.land
+        ?lerp(.22,1,smoothstep01(clamp((58-metersPerTexel)/36,0,1)))
+        :1;
+      const paletteUplandWeight=uplandWeight*absoluteElevationPaletteWeight;
+      const paletteAlpineWeight=alpineBase*absoluteElevationPaletteWeight;
       const lowlandPalette=[.16+.10*dry,.35+.14*moistureBase,.105+.065*moistureBase];
       const uplandPalette=[.255+.080*dry,.365+.070*moistureBase,.190+.050*moistureBase];
       const alpinePalette=[.440,.455,.410];
-      const foothillPalette=lowlandPalette.map((v,i)=>lerp(v,uplandPalette[i],uplandWeight));
-      const localPalette=sample?.land?foothillPalette.map((v,i)=>lerp(v,alpinePalette[i],alpineBase)):[.050,.18,.34];
+      const foothillPalette=lowlandPalette.map((v,i)=>lerp(v,uplandPalette[i],paletteUplandWeight));
+      const localPalette=sample?.land?foothillPalette.map((v,i)=>lerp(v,alpinePalette[i],paletteAlpineWeight)):[.050,.18,.34];
       // Preserve enough canonical globe hue to keep the same macro terrain
       // recognizable through the projection handoff, then converge smoothly.
       const coarseIdentity=smoothstep01(clamp((metersPerTexel-4)/70,0,1));
@@ -5447,7 +5456,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       if(sample?.land&&metersPerTexel>35){
         const compression=smoothstep01(clamp((metersPerTexel-35)/120,0,1))*.72;
         const luma=base[0]*.28+base[1]*.58+base[2]*.14;
-        const targetLuma=.335+alpineBase*.055;
+        const targetLuma=.335+paletteAlpineWeight*.022;
         const shift=(targetLuma-luma)*compression;
         base=base.map(v=>clamp(v+shift,0,1));
       }
@@ -5685,7 +5694,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-center-authority-refinement-v10",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-center-authority-map-transfer-v11",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
