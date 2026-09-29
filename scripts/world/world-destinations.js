@@ -7,14 +7,16 @@ const POI_CELL_TILES=8192;
 const MAX_QUERY_RADIUS_METERS=80000;
 const MAX_QUERY_RESULTS=24;
 const MAX_QUERY_CELLS=169;
-const ACTIVE_POI_QUERY_CELLS=36;
+const ACTIVE_POI_QUERY_CELLS=24;
 const SAMPLE_STEP_TILES=96;
 const FAR_SAMPLE_STEP_TILES=384;
 const POI_CELL_CACHE_LIMIT=512;
 const CONTEXT_CACHE_LIMIT=1024;
 const contextCache=new Map();
-const SETTLEMENT_CELL_LIMIT_PER_CLASS=9;
-const SETTLEMENT_RESULT_LIMIT_PER_CLASS=3;
+const SETTLEMENT_CELL_LIMIT_PER_CLASS=4;
+const SETTLEMENT_RESULT_LIMIT_PER_CLASS=2;
+const SETTLEMENT_QUERY_CACHE_LIMIT=128;
+const settlementQueryCache=new Map();
 const poiCellCache=new Map();
 const NAME_STEMS=Object.freeze(["Alder","Ash","Black","Bright","Cedar","Dawn","Elder","Falcon","Green","Grey","High","Iron","Kings","Lake","North","Oak","Raven","Red","River","Silver","Stone","Sun","Thorn","Vale","West","White","Wolf"]);
 const TYPE_SUFFIX=Object.freeze({
@@ -179,7 +181,9 @@ function orderedCellsForClass(origin,classId,radiusMeters){
   return Object.freeze(cells.slice(0,SETTLEMENT_CELL_LIMIT_PER_CLASS));
 }
 function boundedSettlementQuery(seed,origin,radiusMeters){
-  const classes=settlementClassesForRadius(radiusMeters),records=[],seen=new Set();let queryCellCount=0;
+  const classes=settlementClassesForRadius(radiusMeters),cacheKey=[seed,origin.x,origin.y,Math.round(radiusMeters),classes.join(",")].join("|");
+  if(settlementQueryCache.has(cacheKey))return settlementQueryCache.get(cacheKey);
+  const records=[],seen=new Set();let queryCellCount=0;
   const radiusTiles=BigInt(Math.ceil(radiusMeters/TILE_METERS)),ox=BigInt(origin.x),oy=BigInt(origin.y),minX=ox-radiusTiles,maxX=ox+radiusTiles,minY=oy-radiusTiles,maxY=oy+radiusTiles;
   if(classes.includes("national-capital")){
     try{
@@ -199,7 +203,9 @@ function boundedSettlementQuery(seed,origin,radiusMeters){
     }
   }
   records.sort((a,b)=>tileDistanceMeters(origin,a.center)-tileDistanceMeters(origin,b.center)||String(a.id).localeCompare(String(b.id)));
-  return Object.freeze({settlements:Object.freeze(records),diagnostics:Object.freeze({queryCellCount,bounded:true,classes:Object.freeze(classes.slice()),cellLimitPerClass:SETTLEMENT_CELL_LIMIT_PER_CLASS,resultLimitPerClass:SETTLEMENT_RESULT_LIMIT_PER_CLASS})});
+  const result=Object.freeze({settlements:Object.freeze(records),diagnostics:Object.freeze({queryCellCount,bounded:true,classes:Object.freeze(classes.slice()),cellLimitPerClass:SETTLEMENT_CELL_LIMIT_PER_CLASS,resultLimitPerClass:SETTLEMENT_RESULT_LIMIT_PER_CLASS,cacheHit:false})});
+  settlementQueryCache.set(cacheKey,result);if(settlementQueryCache.size>SETTLEMENT_QUERY_CACHE_LIMIT)settlementQueryCache.delete(settlementQueryCache.keys().next().value);
+  return result;
 }
 function queryNearby(seedValue,originValue,optionsValue){
   const started=typeof performance!=="undefined"&&performance.now?performance.now():Date.now(),seed=String(seedValue==null?"":seedValue),origin=normalizeOrigin(seed,originValue||{}),options=optionsValue||{};
@@ -228,5 +234,5 @@ function descriptorById(seedValue,idValue,originValue,optionsValue){const id=Str
 function signature(query){return hash32((query?.results||[]).map(item=>[item.id,item.type,item.center.x,item.center.y,item.countryId,item.regionId,item.importance].join(":")).join("|")).toString(16).padStart(8,"0");}
 function verify(seedValue,originValue){const seed=String(seedValue==null?"":seedValue),origin=normalizeOrigin(seed,originValue||{x:"0",y:"0"}),a=queryNearby(seed,origin,{radiusMeters:80000,maxResults:32}),b=queryNearby(seed,origin,{radiusMeters:80000,maxResults:32}),sa=signature(a),sb=signature(b),settlement=a.results.some(x=>["hamlet","village","town","city","capital"].includes(x.type)),nonSettlement=a.results.some(x=>!["hamlet","village","town","city","capital"].includes(x.type));return Object.freeze({pass:sa===sb&&settlement&&nonSettlement&&a.diagnostics.bounded&&!a.diagnostics.fullWorldScan&&!a.diagnostics.localChunkMaterialization,seed,signatureA:sa,signatureB:sb,deterministic:sa===sb,settlement,nonSettlement,query:a});}
 
-window.WorldDestinations=Object.freeze({VERSION,TILE_METERS,POI_CELL_TILES,MAX_QUERY_RADIUS_METERS,MAX_QUERY_RESULTS,MAX_QUERY_CELLS,ACTIVE_POI_QUERY_CELLS,POI_CELL_CACHE_LIMIT,CONTEXT_CACHE_LIMIT,SETTLEMENT_CELL_LIMIT_PER_CLASS,SETTLEMENT_RESULT_LIMIT_PER_CLASS,queryNearby,descriptorById,verify,signature});
+window.WorldDestinations=Object.freeze({VERSION,TILE_METERS,POI_CELL_TILES,MAX_QUERY_RADIUS_METERS,MAX_QUERY_RESULTS,MAX_QUERY_CELLS,ACTIVE_POI_QUERY_CELLS,POI_CELL_CACHE_LIMIT,CONTEXT_CACHE_LIMIT,SETTLEMENT_CELL_LIMIT_PER_CLASS,SETTLEMENT_RESULT_LIMIT_PER_CLASS,SETTLEMENT_QUERY_CACHE_LIMIT,queryNearby,descriptorById,verify,signature});
 })();
