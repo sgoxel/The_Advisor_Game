@@ -1,16 +1,18 @@
 (function(){
 "use strict";
 
-const VERSION=1;
+const VERSION=2;
 const TILE_METERS=2;
 const POI_CELL_TILES=8192;
 const MAX_QUERY_RADIUS_METERS=80000;
 const MAX_QUERY_RESULTS=24;
 const MAX_QUERY_CELLS=169;
-const ACTIVE_POI_QUERY_CELLS=64;
+const ACTIVE_POI_QUERY_CELLS=36;
 const SAMPLE_STEP_TILES=96;
 const FAR_SAMPLE_STEP_TILES=384;
 const POI_CELL_CACHE_LIMIT=512;
+const CONTEXT_CACHE_LIMIT=1024;
+const contextCache=new Map();
 const SETTLEMENT_CELL_LIMIT_PER_CLASS=9;
 const SETTLEMENT_RESULT_LIMIT_PER_CLASS=3;
 const poiCellCache=new Map();
@@ -75,8 +77,9 @@ function samplePoint(seed,x,y){
   return Object.freeze({x:String(x),y:String(y),terrain,elevationMeters:Number(env.elevationMeters)||0,moisturePercent:Number(env.moisturePercent)||0,biome:String(env.biome||""),waterKind:null});
 }
 function contextAt(seed,xValue,yValue){
-  const x=BigInt(String(xValue)),y=BigInt(String(yValue)),step=BigInt(SAMPLE_STEP_TILES);
-  const nearOffsets=[[0n,0n],[step,0n],[-step,0n],[0n,step],[0n,-step],[step,step],[-step,step],[step,-step],[-step,-step]];
+  const x=BigInt(String(xValue)),y=BigInt(String(yValue)),cacheKey=String(seed)+"|"+x+"|"+y;
+  if(contextCache.has(cacheKey))return contextCache.get(cacheKey);
+  const step=BigInt(SAMPLE_STEP_TILES),nearOffsets=[[0n,0n],[step,0n],[-step,0n],[0n,step],[0n,-step]];
   const near=nearOffsets.map(([dx,dy])=>samplePoint(seed,x+dx,y+dy)),center=near[0],elevations=near.map(p=>p.elevationMeters);
   const waterNear=near.filter(p=>p.terrain==="water").length;
   const forestNear=near.filter(p=>p.terrain==="forest"||/forest|woodland/i.test(p.biome)).length;
@@ -84,18 +87,20 @@ function contextAt(seed,xValue,yValue){
   const openNear=near.filter(p=>["grass","farmland","dirt","sand"].includes(p.terrain)).length;
   const cardinals=near.slice(1,5),waterArms=cardinals.filter(p=>p.terrain==="water").length,landNear=near.length-waterNear;
   const oppositeWater=(cardinals[0].terrain==="water"&&cardinals[1].terrain==="water")||(cardinals[2].terrain==="water"&&cardinals[3].terrain==="water");
-  let landform=null;
-  if(center.waterKind==="river"||center.elevationMeters>=320||center.terrain==="rock"){
-    try{landform=window.WorldField?.landform?.(seed,meterCoordinate(x),meterCoordinate(y),192)||null;}catch(_){}
-  }
-  const relief=Number(landform?.localReliefMeters),slopeMeters=Number.isFinite(relief)?relief:Math.max(...elevations)-Math.min(...elevations);
-  return Object.freeze({
+  const east=cardinals[0].elevationMeters,west=cardinals[1].elevationMeters,south=cardinals[2].elevationMeters,north=cardinals[3].elevationMeters,c=center.elevationMeters;
+  const sampleMeters=Math.max(1,SAMPLE_STEP_TILES*TILE_METERS),gradientX=(east-west)/(2*sampleMeters),gradientY=(south-north)/(2*sampleMeters);
+  const slopeDegrees=Math.atan(Math.hypot(gradientX,gradientY))*180/Math.PI,slopeMeters=Math.max(...elevations)-Math.min(...elevations);
+  const xSaddle=Math.min(Math.min(east,west)-c,c-Math.max(north,south)),ySaddle=Math.min(Math.min(north,south)-c,c-Math.max(east,west));
+  const saddleStrength=Math.max(0,xSaddle,ySaddle),passSignal=clamp((saddleStrength-2)/24,0,1)*clamp((slopeMeters-34)/150,0,1),cliffSignal=clamp((slopeDegrees-31)/25,0,1)*clamp((slopeMeters-72)/220,0,1);
+  const result=Object.freeze({
     center,near:freezeArray(near),far:Object.freeze([]),waterNear,forestNear,rockNear,openNear,
     roadNear:false,waterArms,landNear,oppositeWater,slopeMeters,
     maxElevationMeters:Math.max(...elevations),minElevationMeters:Math.min(...elevations),
-    slopeDegrees:Number(landform?.slopeDegrees||0),passSignal:Number(landform?.passSignal||0),
-    cliffSignal:Number(landform?.cliffSignal||0),landformKind:String(landform?.kind||"")
+    slopeDegrees:Number(slopeDegrees.toFixed(3)),passSignal:Number(passSignal.toFixed(4)),
+    cliffSignal:Number(cliffSignal.toFixed(4)),landformKind:passSignal>=.12?"pass":cliffSignal>=.22?"cliff":slopeDegrees>=8?"slope":"plain"
   });
+  contextCache.set(cacheKey,result);if(contextCache.size>CONTEXT_CACHE_LIMIT)contextCache.delete(contextCache.keys().next().value);
+  return result;
 }
 function rawCandidate(seed,type,x,y,score,importance,radius,description,tags,evidence){return Object.freeze({
   id:"WDEST|"+String(type).toUpperCase()+"|"+hash32(String(seed)+"|"+type+"|"+String(x)+"|"+String(y)).toString(16).padStart(8,"0"),
@@ -119,11 +124,11 @@ function poiCandidatesForCell(seed,cxValue,cyValue){
     else if((c.terrain==="rock"||ctx.rockNear>=3)&&ctx.slopeMeters>=80)out.push(rawCandidate(seed,"outcrop",x,y,.72,2,230,"An exposed rocky outcrop supported by seeded terrain and relief.",["rock","gathering"],ev));
     if(ctx.passSignal>=.12&&c.elevationMeters>=320)out.push(rawCandidate(seed,"mountain-pass",x,y,.74,3,460,"A traversable seeded highland saddle identified by the landform field.",["travel","highland"],ev));
     if((c.terrain==="rock"||ctx.rockNear>=2)&&ctx.slopeMeters>=180&&unit(seed,"cave:"+cx+":"+cy)>.72)out.push(rawCandidate(seed,"cave",x,y,.70,2,140,"A cave site where rocky relief supports a plausible opening.",["rock","shelter"],ev));
-    if(ctx.forestNear>=5)out.push(rawCandidate(seed,"forest",x,y,.68+ctx.forestNear/100,2,700,"A notable grove or forest pocket grounded in the local biome.",["woodland","gathering"],ev));
+    if(ctx.forestNear>=4)out.push(rawCandidate(seed,"forest",x,y,.68+ctx.forestNear/100,2,700,"A notable grove or forest pocket grounded in the local biome.",["woodland","gathering"],ev));
   }
   if(c.terrain!=="water"&&(ctx.waterNear>=2||ctx.waterArms>=1))out.push(rawCandidate(seed,"fishing",x,y,.65+ctx.waterNear/20,2,620,"A fishing area placed beside reachable seeded water.",["fishing","water-access"],ev));
   if(c.terrain!=="water"&&(ctx.forestNear>=3||["Woodland","Highland"].includes(c.biome))&&!roadNear&&g>.18)out.push(rawCandidate(seed,"hunting",x,y,.61+ctx.forestNear/20,2,1100,"A hunting area derived from wilderness cover, relief and low route pressure.",["hunting","wilderness"],ev));
-  if(c.terrain!=="water"&&ctx.openNear>=6&&g>.36)out.push(rawCandidate(seed,"grazing",x,y,.60+ctx.openNear/30,1,900,"Open country suitable for grazing, derived from seeded ground cover.",["grazing","open-country"],ev));
+  if(c.terrain!=="water"&&ctx.openNear>=4&&g>.36)out.push(rawCandidate(seed,"grazing",x,y,.60+ctx.openNear/30,1,900,"Open country suitable for grazing, derived from seeded ground cover.",["grazing","open-country"],ev));
   if(c.terrain!=="water"&&(ctx.forestNear>=3||ctx.rockNear>=2)&&g>.42)out.push(rawCandidate(seed,"gathering",x,y,.58+(ctx.forestNear+ctx.rockNear)/40,1,520,"A gathering area tied to local woodland or exposed material resources.",["gathering","resources"],ev));
   if(c.terrain!=="water"&&c.elevationMeters<2600&&(roadNear||["rock","dirt","grass"].includes(c.terrain))&&h>.83){
     const historicType=roadNear?(ctx.slopeMeters>450?"tower":"ruin"):(ctx.slopeMeters>650?"fort":"ruin");
@@ -223,5 +228,5 @@ function descriptorById(seedValue,idValue,originValue,optionsValue){const id=Str
 function signature(query){return hash32((query?.results||[]).map(item=>[item.id,item.type,item.center.x,item.center.y,item.countryId,item.regionId,item.importance].join(":")).join("|")).toString(16).padStart(8,"0");}
 function verify(seedValue,originValue){const seed=String(seedValue==null?"":seedValue),origin=normalizeOrigin(seed,originValue||{x:"0",y:"0"}),a=queryNearby(seed,origin,{radiusMeters:80000,maxResults:32}),b=queryNearby(seed,origin,{radiusMeters:80000,maxResults:32}),sa=signature(a),sb=signature(b),settlement=a.results.some(x=>["hamlet","village","town","city","capital"].includes(x.type)),nonSettlement=a.results.some(x=>!["hamlet","village","town","city","capital"].includes(x.type));return Object.freeze({pass:sa===sb&&settlement&&nonSettlement&&a.diagnostics.bounded&&!a.diagnostics.fullWorldScan&&!a.diagnostics.localChunkMaterialization,seed,signatureA:sa,signatureB:sb,deterministic:sa===sb,settlement,nonSettlement,query:a});}
 
-window.WorldDestinations=Object.freeze({VERSION,TILE_METERS,POI_CELL_TILES,MAX_QUERY_RADIUS_METERS,MAX_QUERY_RESULTS,MAX_QUERY_CELLS,ACTIVE_POI_QUERY_CELLS,POI_CELL_CACHE_LIMIT,SETTLEMENT_CELL_LIMIT_PER_CLASS,SETTLEMENT_RESULT_LIMIT_PER_CLASS,queryNearby,descriptorById,verify,signature});
+window.WorldDestinations=Object.freeze({VERSION,TILE_METERS,POI_CELL_TILES,MAX_QUERY_RADIUS_METERS,MAX_QUERY_RESULTS,MAX_QUERY_CELLS,ACTIVE_POI_QUERY_CELLS,POI_CELL_CACHE_LIMIT,CONTEXT_CACHE_LIMIT,SETTLEMENT_CELL_LIMIT_PER_CLASS,SETTLEMENT_RESULT_LIMIT_PER_CLASS,queryNearby,descriptorById,verify,signature});
 })();
