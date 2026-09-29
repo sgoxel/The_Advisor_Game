@@ -203,7 +203,14 @@ let localCrowdPresentation={
 const localBuildingInspectionKeys=new Set();
 const localNpcInspectionKeys=new Set();
 const localSignInspectionKeys=new Set();
-let localStatic={active:false,signature:null,level:"inactive",revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,authority:"spherical-seed-focus-presentation"};
+let localStatic={active:false,signature:null,level:"inactive",revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,microLocationCount:0,microLocationPropCount:0,microLocationPrimitiveCount:0,microLocationDrawCallEstimate:0,microLocationTriangleEstimate:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,authority:"spherical-seed-focus-presentation"};
+let microLocationPresentation={
+  active:false,locationCount:0,propCount:0,primitiveCount:0,drawCallEstimate:0,triangleEstimate:0,
+  queryCellCount:0,maxQueryCells:0,buildMs:0,bounds:null,ids:Object.freeze([]),types:Object.freeze([]),
+  locations:Object.freeze([]),sourceAuthority:"MicroLocations + WorldDestinations.poiCell",
+  deterministic:true,seedOnly:true,lazy:true,bounded:true,fullWorldScan:false,perFrameScan:false,
+  presentationOnly:true,simulationAuthority:false,collisionAuthority:false,navigationAuthority:false
+};
 let resizeObserver=null;
 let yawDegrees=-18;
 let pitchDegrees=-10;
@@ -3322,6 +3329,9 @@ function ensureLocalStaticMaterials(){
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.028),lotOverview:make("LocalOccupiedLotOverview",1,1,1,.58),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
+    microStone:make("LocalMicroStone",.46,.45,.40),microWood:make("LocalMicroWood",.48,.29,.13),
+    microDark:make("LocalMicroDark",.15,.12,.10),microCloth:make("LocalMicroCloth",.62,.48,.30),
+    microAccent:make("LocalMicroAccent",.88,.48,.12),microSoil:make("LocalMicroSoil",.32,.21,.11),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityForge:(()=>{const m=make("LocalActivityForge",1,1,1);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -5185,6 +5195,139 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     authority:"SettlementArchetypes + StartingVillage + HousePlans + SpecialLots"
   };
 }
+
+function resetMicroLocationPresentation(){
+  microLocationPresentation={
+    active:false,locationCount:0,propCount:0,primitiveCount:0,drawCallEstimate:0,triangleEstimate:0,
+    queryCellCount:0,maxQueryCells:Number(window.MicroLocations?.MAX_QUERY_CELLS_PER_CHUNK||0),buildMs:0,bounds:null,
+    ids:Object.freeze([]),types:Object.freeze([]),locations:Object.freeze([]),
+    sourceAuthority:"MicroLocations + WorldDestinations.poiCell",
+    deterministic:true,seedOnly:true,lazy:true,bounded:true,fullWorldScan:false,perFrameScan:false,
+    presentationOnly:true,simulationAuthority:false,collisionAuthority:false,navigationAuthority:false
+  };
+  return microLocationPresentation;
+}
+function microLocationBounds(resource){
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const center=mapWorldTileAt(resource.lat0,resource.lon0),dims=resource.dims||{};
+  const halfX=Math.max(12,Math.ceil(Math.max(24,Number(dims.patchWidth||64))/(tileMeters*2)));
+  const halfY=Math.max(12,Math.ceil(Math.max(24,Number(dims.patchHeight||64))/(tileMeters*2)));
+  const x=BigInt(String(center.x)),y=BigInt(String(center.y));
+  return Object.freeze({
+    minX:String(x-BigInt(halfX)),maxX:String(x+BigInt(halfX)),
+    minY:String(y-BigInt(halfY)),maxY:String(y+BigInt(halfY)),
+    center:Object.freeze({x:String(center.x),y:String(center.y)}),halfX,halfY
+  });
+}
+function rotateMicroOffset(dx,dz,yawDegrees){
+  const a=Number(yawDegrees||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
+  return Object.freeze({x:Number(dx||0)*c-Number(dz||0)*s,z:Number(dx||0)*s+Number(dz||0)*c});
+}
+function renderCanonicalMicroProp(prop,resource,frame,index){
+  const target=worldLatLonForTile(prop.x,prop.y);
+  const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,target.latitudeRadians,target.longitudeRadians);
+  const east=Number(delta.eastMeters||0),north=Number(delta.northMeters||0),dims=resource.dims||{};
+  if(Math.abs(east)>Number(dims.patchWidth||0)*.68||Math.abs(north)>Number(dims.patchHeight||0)*.68)return Object.freeze({primitiveCount:0,triangleEstimate:0});
+  const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),ground=localGroundHeightUnits(east,north,frame)+.018;
+  const yaw=Number(prop.rotation||0),semantic=String(prop.semantic||""),variant=Math.max(0,Math.min(2,Number(prop.variant||0)));
+  let primitives=0,triangles=0;
+  const add=(type,material,dx,dz,sx,sy,sz,yMeters=sy*.5,localYaw=yaw)=>{
+    const off=rotateMicroOffset(dx,dz,yaw);
+    addLocalStatic("Micro-"+String(prop.microLocationId||"loc")+"-"+index+"-"+primitives,type,material,
+      (east+off.x)/unit,ground+Number(yMeters||0)/unit,(-north+off.z)/unit,
+      Number(sx||1)/unit,Number(sy||1)/unit,Number(sz||1)/unit,0,localYaw,0);
+    primitives++;
+    triangles+=type==="sphere"?160:type==="cylinder"||type==="cone"?64:12;
+  };
+  const box=(mat,dx,dz,sx,sy,sz,y=sy*.5,localYaw=yaw)=>add("box",mat,dx,dz,sx,sy,sz,y,localYaw);
+  const sphere=(mat,dx,dz,sx,sy,sz,y=sy*.5)=>add("sphere",mat,dx,dz,sx,sy,sz,y,0);
+  const stone=localStaticMaterials.microStone,wood=localStaticMaterials.microWood,dark=localStaticMaterials.microDark,
+    cloth=localStaticMaterials.microCloth,accent=localStaticMaterials.microAccent,soil=localStaticMaterials.microSoil,
+    leaf=localStaticMaterials.leaf,trunk=localStaticMaterials.trunk;
+  if(semantic==="campfire"){
+    for(let i=0;i<8;i++){const a=Math.PI*2*i/8;sphere(stone,Math.cos(a)*.48,Math.sin(a)*.48,.24,.18,.24,.11);}
+    box(wood,-.18,0,.88,.14,.14,.14,yaw+34);box(wood,.18,0,.88,.14,.14,.14,yaw-34);sphere(accent,0,0,.40,.52,.40,.36);
+  }else if(semantic==="tent"){
+    box(cloth,0,0,2.8,1.45,2.25,.76);box(wood,-1.15,0,.13,1.75,.13,.88);box(wood,1.15,0,.13,1.75,.13,.88);
+  }else if(semantic==="ruin-wall"){
+    box(stone,-.48,0,1.45,1.85,.62,.93);box(stone,.47,.08,.82,1.10,.62,.55);sphere(stone,.92,.34,.48,.34,.46,.18);
+  }else if(semantic==="shrine"){
+    box(stone,0,0,1.75,.28,1.28,.14);box(stone,0,0,.55,1.75,.55,1.00);box(stone,0,0,1.05,.22,.72,1.90);sphere(accent,0,0,.32,.26,.32,2.10);
+  }else if(semantic==="grave"){
+    box(stone,0,0,1.05,.18,.58,.10);box(stone,0,-.28,.68,1.15,.24,.62);
+  }else if(semantic==="marker-stone"){
+    box(stone,0,0,.62,1.25,.68,.64,yaw+variant*12);
+  }else if(semantic==="dock"){
+    box(wood,0,0,2.75,.18,1.42,.12);box(dark,-1.08,-.52,.14,.86,.14,.42);box(dark,1.08,-.52,.14,.86,.14,.42);
+  }else if(semantic==="fish-rack"){
+    box(wood,-.78,0,.14,1.62,.14,.81);box(wood,.78,0,.14,1.62,.14,.81);box(wood,0,0,1.70,.14,.14,1.42);
+    box(cloth,-.34,0,.20,.58,.08,1.02);box(cloth,.34,0,.20,.58,.08,1.05);
+  }else if(semantic==="unusual-tree"){
+    box(trunk,0,0,.82,4.5,.82,2.25);sphere(leaf,0,0,4.2,2.55,3.7,5.0);sphere(leaf,-1.2,.28,2.0,1.6,1.9,4.6);sphere(leaf,1.15,-.25,2.1,1.7,2.0,4.75);
+  }else if(semantic==="quarry"){
+    sphere(stone,-.72,-.32,1.25,.82,1.10,.42);sphere(stone,.62,-.18,1.05,.72,.95,.36);sphere(stone,.10,.72,.92,.62,.82,.31);box(wood,0,-1.00,1.55,.16,.16,.13);
+  }else if(semantic==="cave-mouth"){
+    sphere(stone,-.86,0,1.28,1.58,1.05,.82);sphere(stone,.86,0,1.28,1.58,1.05,.82);sphere(stone,0,-.20,1.85,1.00,1.15,1.62);box(dark,0,.30,1.18,1.34,.24,.68);
+  }else if(semantic==="cart"){
+    box(wood,0,0,2.15,.36,1.18,.43);box(wood,-1.02,0,.25,.92,.25,.40,yaw+18);sphere(dark,-.70,.62,.54,.72,.22,.40);sphere(dark,.70,.62,.54,.72,.22,.40);
+  }else if(semantic==="signpost"){
+    box(wood,0,0,.18,1.95,.18,.98);box(wood,.28,0,1.25,.38,.14,1.60);
+  }else if(semantic==="crate"){
+    box(wood,0,0,1.02,.90,1.02,.45);
+  }else if(semantic==="barrel"){
+    box(wood,0,0,.84,1.08,.84,.54);box(dark,0,0,.90,.09,.90,.27);box(dark,0,0,.90,.09,.90,.80);
+  }else if(semantic==="sack"){
+    sphere(cloth,0,0,.86,1.02,.74,.52);
+  }else if(semantic==="woodpile"){
+    box(wood,-.42,-.24,.90,.18,.20,.12);box(wood,.40,-.22,.90,.18,.20,.12);box(wood,-.24,.26,.90,.18,.20,.31);box(wood,.42,.24,.90,.18,.20,.31);
+  }else if(semantic==="bench"){
+    box(wood,0,0,1.72,.18,.52,.50);box(wood,-.62,0,.18,.72,.18,.35);box(wood,.62,0,.18,.72,.18,.35);box(wood,0,-.24,1.72,.62,.14,.82);
+  }else if(semantic==="bush"){
+    sphere(leaf,0,0,1.25+variant*.10,.82,.98,.44);sphere(leaf,.42,-.18,.72,.60,.72,.36);
+  }else if(semantic==="flower"){
+    sphere(leaf,0,0,.54,.34,.54,.20);sphere(accent,-.22,.06,.20,.24,.20,.38);sphere(accent,.16,-.12,.22,.26,.22,.40);sphere(accent,.31,.14,.18,.22,.18,.37);
+  }else if(semantic==="work-prop"){
+    box(wood,0,0,1.35,.78,.84,.39);box(dark,.40,-.22,.38,.20,.38,.88,yaw+24);box(dark,-.38,.20,.32,.18,.32,.84,yaw-18);
+  }else{
+    box(soil,0,0,1.1,.12,1.1,.06);
+  }
+  return Object.freeze({primitiveCount:primitives,triangleEstimate:triangles});
+}
+function renderCanonicalMicroLocations(resource,frame,tier){
+  resetMicroLocationPresentation();
+  if(!window.MicroLocations?.forChunk||!activeSeed||!resource?.dims?.staticWorld||!["refined","full"].includes(String(tier||"")))return microLocationPresentation;
+  const started=performance.now(),bounds=microLocationBounds(resource),plan=window.MicroLocations.forChunk(activeSeed,bounds);
+  const locations=Array.isArray(plan?.locations)?plan.locations:[];
+  let propCount=0,primitiveCount=0,triangleEstimate=0;
+  const rendered=[];
+  for(const location of locations){
+    let locationPrimitives=0,locationTriangles=0,locationProps=0;
+    for(let i=0;i<(location.props||[]).length;i++){
+      const result=renderCanonicalMicroProp(location.props[i],resource,frame,i);
+      if(result.primitiveCount>0){locationProps++;locationPrimitives+=result.primitiveCount;locationTriangles+=result.triangleEstimate;}
+    }
+    if(locationPrimitives>0){
+      propCount+=locationProps;primitiveCount+=locationPrimitives;triangleEstimate+=locationTriangles;
+      rendered.push(Object.freeze({
+        id:String(location.id),compositionType:String(location.compositionType),sourceDestinationId:String(location.sourceDestinationId),
+        signature:String(location.signature),anchor:Object.freeze({x:String(location.anchor.x),y:String(location.anchor.y)}),
+        propCount:locationProps,primitiveCount:locationPrimitives,triangleEstimate:locationTriangles
+      }));
+    }
+  }
+  microLocationPresentation={
+    active:primitiveCount>0,locationCount:rendered.length,propCount,primitiveCount,
+    drawCallEstimate:primitiveCount,triangleEstimate,queryCellCount:Number(plan?.diagnostics?.queryCellCount||0),
+    maxQueryCells:Number(plan?.diagnostics?.maxQueryCells||window.MicroLocations?.MAX_QUERY_CELLS_PER_CHUNK||0),
+    buildMs:Number((performance.now()-started).toFixed(3)),bounds,
+    ids:Object.freeze(rendered.map(item=>item.id)),types:Object.freeze(rendered.map(item=>item.compositionType)),
+    locations:Object.freeze(rendered),sourceAuthority:"MicroLocations + WorldDestinations.poiCell",
+    deterministic:true,seedOnly:true,lazy:true,bounded:true,fullWorldScan:false,perFrameScan:false,
+    presentationOnly:true,simulationAuthority:false,collisionAuthority:false,navigationAuthority:false
+  };
+  return microLocationPresentation;
+}
+
 function rebuildLocalStaticPresentation(resource){
   if(!tangentPatch||!device||!geography||!resource)return;
   const started=performance.now(),dims=resource.dims,frame={lat0:resource.lat0,lon0:resource.lon0,dims,groundDetailWeight:resource.groundDetailWeight,centerElevation:resource.centerElevation},eligible=dims.staticWorld;
@@ -5198,7 +5341,8 @@ function rebuildLocalStaticPresentation(resource){
   clearLocalFauna();
   localStaticRoot?.destroy?.();localStaticRoot=null;localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;localSettlementLotGeometry?.destroy?.();localSettlementLotGeometry=null;clearCanonicalRoofRegistry();
   const tier=settlementRevealTierForScalar();
-  localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,presentationOnly:true,simulationAuthority:false};
+  resetMicroLocationPresentation();
+  localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,microLocationCount:0,microLocationPropCount:0,microLocationPrimitiveCount:0,microLocationDrawCallEstimate:0,microLocationTriangleEstimate:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,presentationOnly:true,simulationAuthority:false};
   const reveal=canonicalStartingVillageReveal(resource);
   if(reveal&&tier!=="none"){
     rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame);
@@ -5213,9 +5357,12 @@ function rebuildLocalStaticPresentation(resource){
   const unit=dims.metersPerUnit,center=geography.sampleLatLon(resource.lat0,resource.lon0);
   if(center?.land){
     const wild=renderLocalWilderness(resource,frame,null);
+    const micro=renderCanonicalMicroLocations(resource,frame,tier);
     rebuildLocalCrowdPresentation(resource,frame,tier);
     localStatic.wildernessCount=wild.accepted;localStatic.ambientFaunaCount=wild.fauna;localStatic.vegetationCount=Object.entries(wilderness.localFamilyCounts||{}).filter(([k])=>["grass","flower","bush","sapling","reed"].includes(k)).reduce((sum,[,v])=>sum+Number(v||0),0);
-    localStatic.triangleEstimate+=wild.triangles;localStatic.drawCallEstimate+=wild.drawCalls;
+    localStatic.microLocationCount=micro.locationCount;localStatic.microLocationPropCount=micro.propCount;localStatic.microLocationPrimitiveCount=micro.primitiveCount;
+    localStatic.microLocationDrawCallEstimate=micro.drawCallEstimate;localStatic.microLocationTriangleEstimate=micro.triangleEstimate;
+    localStatic.triangleEstimate+=wild.triangles+micro.triangleEstimate;localStatic.drawCallEstimate+=wild.drawCalls+micro.drawCallEstimate;
   }else{
     rebuildLocalFauna(null,frame,null);wilderness={...wilderness,localActive:false,localAmbientFaunaActiveCount:0};
     const y=localGroundHeightUnits(0,0,frame)+.02;addLocalStatic("SeedWaterSurface","box",localStaticMaterials.water,0,y,0,dims.patchWidth*.88/unit,.035,dims.patchHeight*.88/unit);
@@ -7552,6 +7699,7 @@ function snapshot(){
     atmosphere:Object.freeze({...atmosphere}),
     atmosphereTimeBinding:Object.freeze({...atmosphereTimeBinding}),
     wilderness:Object.freeze({...wilderness}),
+    microLocations:Object.freeze({...microLocationPresentation,ids:Object.freeze((microLocationPresentation.ids||[]).slice()),types:Object.freeze((microLocationPresentation.types||[]).slice()),locations:Object.freeze((microLocationPresentation.locations||[]).slice())}),
     wildlifeReaction:Object.freeze({...wildlifeReaction,actors:Object.freeze(localFaunaActors.map(localFaunaActorSnapshot)),memoryEntryCount:localFaunaReactionMemory.size,
       speciesRules:Object.freeze(Object.fromEntries(Object.entries(LOCAL_FAUNA_SPECS).map(([kind,spec])=>[kind,Object.freeze({...spec})])))}),
     environmentalReactions:Object.freeze({...environmentalReactions,activeSlots:Object.freeze(environmentalReactionPool.filter(slot=>slot.active).map(slot=>Object.freeze({kind:slot.kind,index:slot.index,ageMs:Number((performance.now()-slot.startedAtMs).toFixed(1)),lifetimeMs:slot.lifetimeMs,latitudeDegrees:Number((slot.latitudeRadians*180/Math.PI).toFixed(6)),longitudeDegrees:Number((slot.longitudeRadians*180/Math.PI).toFixed(6))})))}),
