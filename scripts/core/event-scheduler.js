@@ -85,10 +85,12 @@ function binaryInsert(queue,event){
 function schedule(seedValue,eventValue){
   const state=stateFor(seedValue),event=normalizeEvent(eventValue);
   if(state.queue.some(item=>item.id===event.id&&item.address===event.address)){
+    window.WorldSimulationBudget?.recordQueue?.(state.seed,"events",state.queue.length);
     return deepFreeze({ok:true,duplicate:true,event,pending:state.queue.length});
   }
   binaryInsert(state.queue,event);
   state.scheduled++;state.peakQueue=Math.max(state.peakQueue,state.queue.length);
+  window.WorldSimulationBudget?.recordQueue?.(state.seed,"events",state.queue.length);
   return deepFreeze({ok:true,duplicate:false,event,pending:state.queue.length});
 }
 function scheduleMany(seedValue,eventsValue){
@@ -105,7 +107,10 @@ function boundedLimit(value){
 }
 function processDue(seedValue,nowValue,optionsValue){
   const seed=normalizeSeed(seedValue),now=normalizeTimestamp(nowValue),options=optionsValue||{};
-  const state=stateFor(seed),limit=boundedLimit(options.maxEvents),processed=[];
+  const state=stateFor(seed),requestedLimit=boundedLimit(options.maxEvents);
+  const limit=window.WorldSimulationBudget?.limit?.("events",requestedLimit,{seed,priority:options.priority||"background"})||requestedLimit;
+  const budgetSlice=window.WorldSimulationBudget?.beginSlice?.("events",{seed,priority:options.priority||"background",pending:state.queue.length})||null;
+  const processed=[];
   const systems=Array.isArray(options.systemKinds)&&options.systemKinds.length
     ?new Set(options.systemKinds.map(required).map(String))
     :null;
@@ -133,10 +138,16 @@ function processDue(seedValue,nowValue,optionsValue){
   }
   const relevant=systems?state.queue.filter(item=>systems.has(item.systemKind)):state.queue;
   state.batches++;state.lastBatchSize=processed.length;state.maxObservedBatch=Math.max(state.maxObservedBatch,processed.length);
+  const hasMoreDue=Boolean(relevant.length&&relevant[0].fantasyTimestamp<=now);
+  window.WorldSimulationBudget?.recordQueue?.(seed,"events",state.queue.length);
+  if(budgetSlice)window.WorldSimulationBudget?.endSlice?.(budgetSlice,{
+    processed:processed.length,pending:state.queue.length,deferred:hasMoreDue?Math.max(1,relevant.length):0
+  });
   return deepFreeze({
     now,limit,processed:Object.freeze(processed),processedCount:processed.length,
     pending:state.queue.length,pendingMatching:relevant.length,nextDue:relevant[0]?.fantasyTimestamp||null,
-    hasMoreDue:Boolean(relevant.length&&relevant[0].fantasyTimestamp<=now),bounded:processed.length<=MAX_BATCH,
+    hasMoreDue,bounded:processed.length<=MAX_BATCH,
+    worldBudgetLimited:limit<requestedLimit,
     systemKinds:systems?Object.freeze([...systems].sort()):null
   });
 }
