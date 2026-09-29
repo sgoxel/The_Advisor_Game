@@ -3838,16 +3838,51 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
   };
   if(tier==="route"||tier==="footprint"){
     const ringRadius=Math.max(1,Number(village.RING_RADIUS_TILES||14)),selected=[],selectedMap=new Map();
-    // Route overview shows only road fragments that are materially relevant to
-    // occupied entrances plus the real local/gateway/outward network. The full
-    // ring and center avenues remain canonical and return at closer tiers; hiding
-    // unrelated overview segments is semantic decluttering, not new road truth.
-    const occupiedAccessRoadKeys=new Set();
+    const roadByKey=new Map(roadCells.map(([x,y,kind])=>[x+","+y,{x,y,kind}]));
+    // Route overview is a minimal connected tree over existing road cells:
+    // start from one deterministic real outward/gateway cell, traverse only
+    // authoritative StartingVillage road adjacency, then retain the paths to
+    // real HousePlans entrance targets. No display-only road is generated.
+    const routePathKeys=new Set(),accessTargetKeys=[];
     if(tier==="route"){
       for(const record of [...(reveal?.houses||[]),...(reveal?.specialLots||[])]){
         const target=record?.entrance?.target;if(!target)continue;
         const tx=Number(target.x),ty=Number(target.y);if(!Number.isFinite(tx)||!Number.isFinite(ty))continue;
-        for(const [dx,dy] of [[0,0],[-1,0],[1,0],[0,-1],[0,1]])occupiedAccessRoadKeys.add((tx+dx)+","+(ty+dy));
+        for(const [dx,dy] of [[0,0],[-1,0],[1,0],[0,-1],[0,1]]){
+          const key=(tx+dx)+","+(ty+dy);
+          if(roadByKey.has(key)){accessTargetKeys.push(key);break;}
+        }
+      }
+      const roots=[];
+      for(const [x,y,kind] of roadCells){
+        if(kind!=="main-road")continue;
+        const local=village.local(activeSeed,String(x),String(y));if(!local)continue;
+        const forward=Number(local.forward||0),lateral=Math.abs(Number(local.lateral||0));
+        if(forward>ringRadius+1)roots.push({key:x+","+y,x,y,forward,lateral});
+      }
+      roots.sort((a,b)=>a.forward-b.forward||a.lateral-b.lateral||a.y-b.y||a.x-b.x);
+      const root=roots[0]?.key||roadCells[0]?.[0]+","+roadCells[0]?.[1];
+      if(root&&roadByKey.has(root)){
+        const previous=new Map([[root,null]]),queue=[root];
+        const neighborSteps=[[1,0],[0,1],[-1,0],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+        for(let qi=0;qi<queue.length;qi++){
+          const key=queue[qi],cell=roadByKey.get(key);if(!cell)continue;
+          for(const [dx,dy] of neighborSteps){
+            const nk=(cell.x+dx)+","+(cell.y+dy);if(previous.has(nk)||!roadByKey.has(nk))continue;
+            // Diagonal adjacency is used only where no cardinal road cell can
+            // mediate the turn, matching the established continuous-road rule.
+            if(dx&&dy&&(roadByKey.has((cell.x+dx)+","+cell.y)||roadByKey.has(cell.x+","+(cell.y+dy))))continue;
+            previous.set(nk,key);queue.push(nk);
+          }
+        }
+        routePathKeys.add(root);
+        for(const targetKey of [...new Set(accessTargetKeys)].sort()){
+          if(!previous.has(targetKey))continue;
+          let key=targetKey,guard=0;
+          while(key!=null&&guard++<=roadCells.length){
+            routePathKeys.add(key);key=previous.get(key)??null;
+          }
+        }
       }
     }
     for(const [x,y,kind] of roadCells){
@@ -3857,31 +3892,28 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       const gatewayStem=Boolean(local&&kind==="main-road"&&Number(local.forward||0)>=0&&!ringCell&&Math.abs(Number(local.lateral||0))<=1.5);
       const centerAvenue=Boolean(local&&kind==="main-road"&&Number(local.radius||0)<=ringRadius+1.5&&
         (Math.abs(Number(local.x||0))<=1.5||Math.abs(Number(local.y||0))<=1.5));
-      const localPath=kind==="local-path",occupiedAccess=occupiedAccessRoadKeys.has(x+","+y);
+      const localPath=kind==="local-path",routePath=routePathKeys.has(x+","+y);
       if(tier==="footprint"){
         // A retained parent must remain informative while the route-tier child
-        // prepares. Reuse only real StartingVillage center/local/gateway roads;
-        // no display-only connectors or invented settlement geometry.
+        // prepares. Reuse only real StartingVillage center/local/gateway roads.
         if(!outwardBranch&&!gatewayStem&&!centerAvenue&&!localPath)continue;
-      }else if(!outwardBranch&&!gatewayStem&&!localPath&&!occupiedAccess)continue;
+      }else if(!routePath)continue;
       const half=tier==="footprint"
         ?(outwardBranch?.28:gatewayStem?.14:centerAvenue?.075:.11)
-        :(outwardBranch?.26:gatewayStem?.13:localPath?.14:.052);
+        :(outwardBranch?.24:gatewayStem?.12:localPath?.13:ringCell?.055:centerAvenue?.065:.075);
       const cell={x,y,half};selected.push(cell);selectedMap.set(x+","+y,cell);
     }
-    // Render each authoritative road cell as part of one continuous stroke.
-    // Cardinal neighbours always connect. Diagonal neighbours connect only when
-    // there is no cardinal intermediary, preserving curved ring continuity
-    // without inventing shortcuts between distinct authoritative roads.
+    // Render the selected authoritative tree as continuous centerlines. Node
+    // quads appear only at actual endpoints/junctions, avoiding a beaded glyph.
     for(const cell of selected){
-      const {x,y,half}=cell,nodeFloor=tier==="route"?.022:.040,nodeHalf=Math.max(nodeFloor,half*.58);
+      const {x,y,half}=cell,nodeFloor=tier==="route"?.020:.040,nodeHalf=Math.max(nodeFloor,half*.54);
       const neighborCount=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]
         .filter(([dx,dy])=>selectedMap.has((x+dx)+","+(y+dy))).length;
       if(neighborCount!==2)addQuad(x-nodeHalf,y-nodeHalf,x+nodeHalf,y+nodeHalf);
       for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
         const other=selectedMap.get((x+dx)+","+(y+dy));if(!other)continue;
         if(dx&&dy&&(selectedMap.has((x+dx)+","+y)||selectedMap.has(x+","+(y+dy))))continue;
-        const segmentFloor=tier==="route"?.035:.055;
+        const segmentFloor=tier==="route"?.032:.055;
         addSegment(x,y,other.x,other.y,Math.max(segmentFloor,Math.min(half,other.half)*2));
       }
     }
@@ -3892,7 +3924,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
   const entity=new pc.Entity("CanonicalAuthoritativeRoadCells");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   const roadMaterial=(tier==="route"||tier==="footprint")?localStaticMaterials.roadOverview:localStaticMaterials.road;
   entity.render.meshInstances=[new pc.MeshInstance(mesh,roadMaterial,entity)];localStaticRoot.addChild(entity);localSettlementRoadGeometry=mesh;
-  return Object.freeze({active:true,cellCount:tier==="footprint"?segmentCount:roadCells.length,segmentCount,queryCount,triangleCount:indices.length/3,mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-occupied-access-network-v6":"StartingVillage.infrastructureAt-cell-mesh-v1"});
+  return Object.freeze({active:true,cellCount:tier==="footprint"?segmentCount:roadCells.length,segmentCount,queryCount,triangleCount:indices.length/3,mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-connected-access-tree-v7":"StartingVillage.infrastructureAt-cell-mesh-v1"});
 }
 function clearCanonicalWayfindingSignposts(){
   clearInspectionKeySet(localSignInspectionKeys,false);
@@ -6157,7 +6189,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-access-morphology-map-detail-v17",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-access-morphology-map-detail-v18",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
