@@ -12,8 +12,10 @@ OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s004-008"))
 OUT.mkdir(parents=True,exist_ok=True)
 SIZE=(1280,720) if PROFILE=="landscape" else (390,844)
 # Landscape sees a materially wider physical footprint at the same canonical scale.
-# Use the next finer scale there so the same local NPC presentation tier is requested.
-SCALE_INDEX=7 if PROFILE=="landscape" else 8
+# Use the closer canonical ground scale (1/10000) there so the resident/building
+# presentation is actually materialized inside the wider viewport. Portrait
+# already passes at 1/5000 and remains unchanged.
+SCALE_INDEX=9 if PROFILE=="landscape" else 8
 CASES=["doorway-block","close-follow"]
 
 options=Options()
