@@ -2637,9 +2637,9 @@ function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel
   // resolve. This prevents one macro slope from dominating the 1/500 frame.
   if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.012;
   if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.018;
-  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.040;
-  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.034;
-  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.050;
+  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.054;
+  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.044;
+  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.024;
   if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.032;
   if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,260,salt+89)*.034;
   if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.025;
@@ -3815,7 +3815,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
     roadCells.push([x,y,String(infra.kind||infra.type||"road")]);roadSet.add(x+","+y);
   }
   if(!roadCells.length)return Object.freeze({active:false,cellCount:0,queryCount,triangleCount:0,mode:"none",overviewStats:null});
-  const positions=[],normals=[],uvs=[],indices=[];let segmentCount=0;
+  const positions=[],normals=[],uvs=[],indices=[];let segmentCount=0,renderedRoadCellCount=0;
   let overviewStats=null;
   const addQuad=(x0,y0,x1,y1)=>{
     if(!(x1>x0&&y1>y0))return;
@@ -3915,12 +3915,12 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
           while(queue.length){
             const item=queue.shift(),cell0=roadByKey.get(item.key);if(!cell0)continue;
             const c=classify(cell0);
-            if(!c.ringCell||item.depth<=1||c.localPath)routePathKeys.add(item.key);
-            if(item.depth>=3)continue;
+            if(!c.ringCell||item.depth<=2||c.localPath||c.gatewayStem||c.outwardBranch)routePathKeys.add(item.key);
+            if(item.depth>=5)continue;
             for(const [dx,dy] of [[1,0],[0,1],[-1,0],[0,-1]]){
               const nk=(c.x+dx)+","+(c.y+dy),next0=roadByKey.get(nk);if(!next0||seen.has(nk))continue;
               const next=classify(next0);
-              if(c.ringCell&&next.ringCell&&item.depth>=1)continue;
+              if(c.ringCell&&next.ringCell&&item.depth>=2)continue;
               seen.add(nk);queue.push({key:nk,depth:item.depth+1});
             }
           }
@@ -3946,6 +3946,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
         :(outwardBranch?.24:gatewayStem?.12:localPath?.13:ringCell?.050:centerAvenue?.060:.075);
       const cell={x,y,half};selected.push(cell);selectedMap.set(x+","+y,cell);
     }
+    renderedRoadCellCount=selected.length;
     for(const cell of selected){
       const {x,y,half}=cell,nodeFloor=tier==="route"?.020:.040,nodeHalf=Math.max(nodeFloor,half*.54);
       const neighborCount=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]
@@ -3965,8 +3966,8 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
   const entity=new pc.Entity("CanonicalAuthoritativeRoadCells");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   const roadMaterial=(tier==="route"||tier==="footprint")?localStaticMaterials.roadOverview:localStaticMaterials.road;
   entity.render.meshInstances=[new pc.MeshInstance(mesh,roadMaterial,entity)];localStaticRoot.addChild(entity);localSettlementRoadGeometry=mesh;
-  return Object.freeze({active:true,cellCount:tier==="footprint"?segmentCount:roadCells.length,segmentCount,queryCount,triangleCount:indices.length/3,overviewStats,
-    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-priority-access-mask-v8":"StartingVillage.infrastructureAt-cell-mesh-v1"});
+  return Object.freeze({active:true,cellCount:(tier==="route"||tier==="footprint")?renderedRoadCellCount:roadCells.length,segmentCount,queryCount,triangleCount:indices.length/3,overviewStats,
+    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-priority-access-mask-v9":"StartingVillage.infrastructureAt-cell-mesh-v1"});
 }
 function clearCanonicalWayfindingSignposts(){
   clearInspectionKeySet(localSignInspectionKeys,false);
@@ -5373,7 +5374,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   // Overview settlement shape is now derived from occupied StartingVillage lots
   // plus their adjacent authoritative road cells. It is a thin boundary, never
   // a filled circular wash or camera-relative locator.
-  const envelope=(tier==="footprint"||tier==="route")?addCanonicalSettlementEnvelope(reveal,scale,unit,semanticFrame,lift,tier):Object.freeze({active:false,segmentCount:0,roadAuthorityQueryCount:0,mode:"none"});
+  const envelope=tier==="footprint"?addCanonicalSettlementEnvelope(reveal,scale,unit,semanticFrame,lift,tier):Object.freeze({active:false,segmentCount:0,roadAuthorityQueryCount:0,mode:"none"});
   // Flat occupied-lot patches expose the settlement's real irregular land-use
   // pattern at overview scales without leaking building geometry or inventing a
   // circular locator. They remain subordinate to roads through alpha + height.
@@ -6055,15 +6056,17 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // only from the same registered elevation/moisture samples above, so it
         // adds coherent ridge/valley readability without generic noise or a
         // camera-relative tint.
-        const ridgeSignal=Math.max(0,curvatureSignal)*mapHighPassBand*mapStructureScale;
-        const valleySignal=Math.max(0,-curvatureSignal)*mapHighPassBand*mapStructureScale;
-        const wetValleySignal=Math.max(0,moistureCurve)*mapHighPassBand*mapStructureScale;
-        const drainageSignal=moistureGradient*mapHighPassBand*mapStructureScale;
-        const formStrength=contextRing?.72:1;
+        const shapedCurvature=Math.sign(curvatureSignal)*Math.sqrt(Math.abs(curvatureSignal));
+        const shapedMoistureCurve=Math.sign(moistureCurve)*Math.sqrt(Math.abs(moistureCurve));
+        const ridgeSignal=Math.max(0,shapedCurvature)*mapHighPassBand*mapStructureScale;
+        const valleySignal=Math.max(0,-shapedCurvature)*mapHighPassBand*mapStructureScale;
+        const wetValleySignal=Math.max(0,shapedMoistureCurve)*mapHighPassBand*mapStructureScale;
+        const drainageSignal=Math.sqrt(Math.max(0,moistureGradient))*mapHighPassBand*mapStructureScale;
+        const formStrength=contextRing?.58:1;
         const formTint=[
-          (ridgeSignal*.052-valleySignal*.020-wetValleySignal*.008)*formStrength,
-          (valleySignal*.044+wetValleySignal*.026+drainageSignal*.010-ridgeSignal*.010)*formStrength,
-          (valleySignal*.016+wetValleySignal*.014+drainageSignal*.010-ridgeSignal*.020)*formStrength
+          (ridgeSignal*.086-valleySignal*.030-wetValleySignal*.012)*formStrength,
+          (valleySignal*.074+wetValleySignal*.034+drainageSignal*.012-ridgeSignal*.014)*formStrength,
+          (valleySignal*.026+wetValleySignal*.020+drainageSignal*.012-ridgeSignal*.034)*formStrength
         ];
         cover=cover.map((v,i)=>v+formTint[i]);
         pushRange("curvature",curvatureSignal);pushRange("moistureGradient",moistureGradient);pushRange("ridgeValleyTint",luma3(formTint));
@@ -6073,7 +6076,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // Prefer the already SEED-registered land-cover field for strategic-map
         // readability. Its 3.6 km / 1.5 km / 700 m structure is physically
         // resolvable at 1/500 and avoids re-amplifying continental relief.
-        const mapCoverBoost=lerp(1.62,1,smoothstep01(clamp((42-metersPerTexel)/38,0,1)));
+        const mapCoverBoost=lerp(1.34,1,smoothstep01(clamp((42-metersPerTexel)/38,0,1)));
         const sharedCoverContrast=(contextRing?1.06:1.10)*mapCoverBoost;
         const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost;
         const landCover=sharedCover.map((v,i)=>v*sharedCoverContrast+(nativeCover[i]-v)*coverGain*residualCoverContrast);
@@ -6250,7 +6253,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-access-morphology-map-detail-v19",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-access-morphology-map-detail-v20",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
