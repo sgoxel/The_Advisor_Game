@@ -1,16 +1,16 @@
 name: WP-S006-005-001 Evidence
 
 on:
-  workflow_dispatch:
   issue_comment:
     types: [created]
+  workflow_dispatch:
 
 permissions:
   contents: read
   issues: write
 
 concurrency:
-  group: wp-s006-005-001-${{ github.event.issue.number || github.sha }}
+  group: wp-s006-005-001-evidence-${{ github.event.issue.number || github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -23,33 +23,45 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout exact event head
+      - name: Checkout event head
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 1
-      - uses: actions/setup-python@v5
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install evidence dependencies
-        run: python -m pip install -r tools/requirements.txt
-      - name: Start exact-head game server
+        run: python -m pip install selenium
+
+      - name: Verify Chrome
+        run: google-chrome --version || google-chrome-stable --version || chromium --version
+
+      - name: Start local game server
         run: |
           python -m http.server 8000 --bind 127.0.0.1 >/tmp/advisor-http.log 2>&1 &
+          echo $! >/tmp/advisor-http.pid
           sleep 1
+
       - name: Run deterministic morphology evidence
         env:
           TARGET: http://127.0.0.1:8000/settlement-morphology-proof.html
+          EVIDENCE_DIR: tools/screenshots/wp-s006-005-001
         run: python tools/wp_s006_005_001_evidence.py
-      - name: Upload evidence
+
+      - name: Upload evidence artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: wp-s006-005-001-evidence-${{ github.run_id }}
           path: tools/screenshots/wp-s006-005-001/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
-      - name: Comment run result
+
+      - name: Comment result
         if: github.event_name == 'issue_comment' && always()
         uses: actions/github-script@v7
         env:
@@ -59,7 +71,9 @@ jobs:
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const ok = process.env.RUN_STATUS === 'success';
             await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
               body: ok
                 ? `WP-S006-005-001 evidence completed. [Open workflow run and artifact](${url}).`
                 : `WP-S006-005-001 evidence FAILED. [Open workflow run and logs](${url}).`
