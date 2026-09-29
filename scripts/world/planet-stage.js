@@ -5331,6 +5331,20 @@ function sharedSurfaceAuthority(job){
 function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRing=false){
   const lat0=job.lat0,lon0=job.lon0,data=new Uint8ClampedArray(size*size*4);
   const metersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
+  // Bounded presentation-only contributor telemetry. These ranges reuse values
+  // already computed for this texture build; they add no geography queries or
+  // world scans and never participate in terrain authority.
+  const componentRanges={
+    sourceLuma:[Infinity,-Infinity],paletteLuma:[Infinity,-Infinity],baseLuma:[Infinity,-Infinity],
+    macro:[Infinity,-Infinity],coverLuma:[Infinity,-Infinity],shade:[Infinity,-Infinity],finalLuma:[Infinity,-Infinity],
+    elevation:[Infinity,-Infinity],moisture:[Infinity,-Infinity]
+  };
+  const pushRange=(name,value)=>{
+    const n=Number(value);if(!Number.isFinite(n))return;
+    const r=componentRanges[name];if(!r)return;
+    if(n<r[0])r[0]=n;if(n>r[1])r[1]=n;
+  };
+  const luma3=v=>Number(v?.[0]||0)*.28+Number(v?.[1]||0)*.58+Number(v?.[2]||0)*.14;
   // One shared coarse photometric basis is sampled by every concentric ring.
   // Resolution still falls with distance, while only the focus layer adds a
   // restrained fine-frequency delta. This prevents LOD identity from appearing
@@ -5390,6 +5404,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       const coarseIdentity=smoothstep01(clamp((metersPerTexel-4)/70,0,1));
       const macroIdentityWeight=clamp(.040+coarseIdentity*.050+mountainIdentity*.016,.040,.12);
       let base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
+      pushRange("sourceLuma",luma3(sourceColor));pushRange("paletteLuma",luma3(localPalette));
+      pushRange("elevation",elevationBase);pushRange("moisture",moistureBase);
       // Map-scale views should show terrain structure, not one kilometre-scale
       // brightness wedge. Compress only land luminance above ~35 m/texel while
       // preserving RGB differences; near-ground presentation is unchanged.
@@ -5425,6 +5441,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // wedges that looked like LOD boundaries.
       const detailContrast=contextRing?lerp(1.04,1.24,contextRefineWeight):lerp(1.10,1.68,focusRefineWeight);
       const macro=macroBase*detailContrast;
+      pushRange("baseLuma",luma3(base));pushRange("macro",macro);
       let shade=1,cover=[0,0,0];
       if(sample?.land){
         // Shared context remains restrained while focus progressively samples
@@ -5478,6 +5495,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       }
       const reliefTintWeight=sample?.land&&metersPerTexel>35?lerp(.35,1,smoothstep01(clamp((180-metersPerTexel)/145,0,1))):1;
       const identityTint=sample?.land?[relief*.040*reliefTintWeight,relief*.036*reliefTintWeight,relief*.020*reliefTintWeight]:[-.010,-.003,.024];
+      pushRange("coverLuma",luma3(cover));pushRange("shade",shade);
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
       let displayColor=authoritative;
       if(useMicroDetail){
@@ -5507,6 +5525,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
           surfaceValueNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.018;
         displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.82:i===1?.94:1),0,.86));
       }
+      pushRange("finalLuma",luma3(displayColor));
       const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
       // Shared photometry makes the rectangular resource edge visually neutral;
       // use only a broad edge feather for the subtle fine-frequency delta.
@@ -5516,8 +5535,16 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
     }
     yield 1;
   }
+  const roundedRanges=Object.fromEntries(Object.entries(componentRanges).map(([name,range])=>[
+    name,Object.freeze({
+      min:Number((Number.isFinite(range[0])?range[0]:0).toFixed(5)),
+      max:Number((Number.isFinite(range[1])?range[1]:0).toFixed(5)),
+      span:Number(((Number.isFinite(range[1])?range[1]:0)-(Number.isFinite(range[0])?range[0]:0)).toFixed(5))
+    })
+  ]));
   return {
     data,size,metersPerTexel,
+    componentRanges:Object.freeze(roundedRanges),
     coordinateAuthority:"Campaign-SEED + SeedCoordinateFabric.registeredMeters",
     coordinateRevision:coordinateFabricAuthority()?.revisionSignature||null,
     patchRelativeBiomeNoise:false
@@ -5620,6 +5647,9 @@ function finalizeLocalResource(job,result){
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
+      surfaceComponentRanges:Object.freeze({
+        focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
+      }),
       topographicSignalRevision:"canonical-warped-cover-overview-v9",topographicSignalAuthority:"PlanetGeography elevation slope/curvature + moisture sampled from one per-SLOD outer-footprint authority raster reused by focus/medium/outer/fallback through SeedCoordinateFabric registered meters",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
