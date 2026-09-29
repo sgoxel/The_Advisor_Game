@@ -188,6 +188,7 @@ const synthetic=Array.from({length:96},(_,i)=>({id:"SYNTH|"+i,type:"village",cou
 const scopedA=naming.scoped(seed,synthetic),scopedB=naming.scoped(seed,[...synthetic].reverse());
 assert.strictEqual(new Set(scopedA.map(x=>x.name)).size,synthetic.length,"scoped collision resolver produced duplicates");
 assert.deepStrictEqual(scopedA.map(x=>[x.entityId,x.name]).sort(),scopedB.map(x=>[x.entityId,x.name]).sort(),"scoped naming depends on input/load order");
+for(const item of scopedA)assertReadable(item.name,"scoped synthetic");
 
 const saved={entityId:starting.id,name:"Legacy Campaign Name",nameGenerationVersion:0,namingCultureKey:"legacy-save"};
 const preserved=naming.preserve(saved,repeatA);
@@ -196,7 +197,10 @@ assert.strictEqual(preserved.nameGenerationVersion,0,"save preservation changed 
 
 naming.clearCache();
 const t0=performance.now();
-for(let i=0;i<3000;i++)naming.descriptor(seed,{id:"PERF|"+i,type:i%2?"village":"river",countryId:primaryCountry.id,regionId:regions[0].id,x:String(i),y:String(-i)});
+for(let i=0;i<3000;i++){
+  const d=naming.descriptor(seed,{id:"PERF|"+i,type:i%2?"village":"river",countryId:primaryCountry.id,regionId:regions[0].id,x:String(i),y:String(-i)});
+  assertReadable(d.name,"performance descriptor");
+}
 const coldMs=performance.now()-t0;
 const stats=naming.stats();
 assert(stats.cacheSize<=naming.CACHE_LIMIT,"name cache exceeded explicit bound");
