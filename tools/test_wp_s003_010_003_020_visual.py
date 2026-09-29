@@ -81,7 +81,7 @@ def main():
         for i,pause in enumerate((.045,.075,.12)):
             time.sleep(pause)
             s=snap(d)
-            evidence["frames"].append({"phase":f"zoom-transition-{i}","displayScale":s["zoom"]["displayScaleLabel"],"scalar":s["zoom"]["scalar"],"screenshot":capture(d,f"production-zoom-transition-{i}")})
+            evidence["frames"].append({"phase":f"zoom-transition-{i}","displayScale":s["zoom"]["displayScaleLabel"],"scalar":s["zoom"]["scalar"],"projectionMode":s.get("projection",{}).get("mode"),"presentation":s.get("projection",{}).get("presentation"),"resourceBudget":s.get("projection",{}).get("resourceBudget"),"localDetail":s.get("projection",{}).get("localDetail"),"screenshot":capture(d,f"production-zoom-transition-{i}")})
         wait(d,"return window.PlanetStage.snapshot().zoom.animation.active===false",120)
         mid=settle_scale(d,5)
         evidence["frames"].append({"phase":"mid-1_500","scale":mid["zoom"]["scaleLabel"],"screenshot":capture(d,"production-mid-1_500")})
