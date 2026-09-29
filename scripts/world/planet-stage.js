@@ -4114,10 +4114,10 @@ function updateCanonicalNpcMotion(){
 function canonicalRoofSegmentColor(state,plane,band,lane,landmark){
   const visualState=String(state||"normal");
   const normal=landmark?[219,149,54,255]:[108,49,31,255];
-  if(visualState==="worn")return landmark?[183,137,82,255]:[128,94,69,255];
-  if(visualState==="damaged")return landmark?[151,91,43,255]:[108,72,52,255];
+  if(visualState==="worn")return landmark?[178,132,79,255]:[124,91,68,255];
+  if(visualState==="damaged")return landmark?[151,91,43,255]:[105,70,51,255];
   if(visualState==="repaired")return normal;
-  if(visualState==="overgrown")return landmark?[171,124,70,255]:[114,83,55,255];
+  if(visualState==="overgrown")return landmark?[168,122,69,255]:[112,82,55,255];
   return normal;
 }
 function canonicalRoofMeshData(entry,state){
@@ -4133,7 +4133,7 @@ function canonicalRoofMeshData(entry,state){
   };
   const variedColor=(color,salt,corner)=>{
     const n=localHash(entry.east+salt*1.73+corner*.47,entry.north+salt*.91-corner*.31,7301+salt*17+corner*11);
-    const amount=visualState==="normal"?.018:.035,factor=1+(n-.5)*2*amount;
+    const amount=visualState==="normal"?.016:.028,factor=1+(n-.5)*2*amount;
     return [Math.round(clamp(color[0]*factor,0,255)),Math.round(clamp(color[1]*factor,0,255)),Math.round(clamp(color[2]*factor,0,255)),color[3]??255];
   };
   const addQuad=(a,b,c,d,n,color,salt=0)=>{
@@ -4144,97 +4144,74 @@ function canonicalRoofMeshData(entry,state){
     }
     indices.push(base,base+1,base+2,base,base+2,base+3);
   };
-  const addPatch=(side,t0,t1,n0,n1,color,salt,lift=.018,skew=0)=>{
-    const n=normalFor(side);
-    addQuad(
-      point(side,t0,n0,lift),
-      point(side,t1,n0+skew,lift),
-      point(side,t1,n1-skew,lift),
-      point(side,t0,n1,lift),
-      n,color,salt
-    );
+  const addRibbon=(side,nodes,color,salt,lift=.014)=>{
+    const nrm=normalFor(side);
+    for(let i=0;i<nodes.length-1;i++){
+      const a=nodes[i],b=nodes[i+1];
+      addQuad(
+        point(side,a[1],a[0],lift),point(side,a[2],a[0],lift),
+        point(side,b[2],b[0],lift),point(side,b[1],b[0],lift),
+        nrm,color,salt+i
+      );
+    }
   };
   const baseColor=canonicalRoofSegmentColor(visualState,0,0,0,entry.landmark);
   const addPlane=(side,plane)=>{
     const n=normalFor(side);
     if(visualState==="damaged"&&plane===0){
-      // Remove a stepped outer-eave section from the actual canonical roof.
-      // The two different depths avoid a rectangular cutout silhouette.
-      addQuad(point(side,.42,-.55),point(side,1,-.55),point(side,1,-.36),point(side,.42,-.36),n,baseColor,20);
-      addQuad(point(side,.28,-.36),point(side,1,-.36),point(side,1,-.18),point(side,.28,-.18),n,baseColor,21);
-      addQuad(point(side,0,-.18),point(side,1,-.18),point(side,1,.55),point(side,0,.55),n,baseColor,22);
+      // A stepped bite is removed from the real eave. The unequal depths make
+      // the damage part of the silhouette rather than a painted rectangle.
+      addQuad(point(side,.45,-.55),point(side,1,-.55),point(side,1,-.37),point(side,.45,-.37),n,baseColor,20);
+      addQuad(point(side,.30,-.37),point(side,1,-.37),point(side,1,-.20),point(side,.30,-.20),n,baseColor,21);
+      addQuad(point(side,.14,-.20),point(side,1,-.20),point(side,1,-.08),point(side,.14,-.08),n,baseColor,22);
+      addQuad(point(side,0,-.08),point(side,1,-.08),point(side,1,.55),point(side,0,.55),n,baseColor,23);
     }else{
       addQuad(point(side,0,-.55),point(side,1,-.55),point(side,1,.55),point(side,0,.55),n,baseColor,plane);
     }
   };
   addPlane(-1,0);addPlane(1,1);
 
-  // Fascia is part of the canonical roof mesh. Damage removes the same eave
-  // span as the roof hole; every other state keeps one continuous edge.
   for(let plane=0;plane<2;plane++){
-    const side=plane===0?-1:1,drop=Math.max(.025,.16*entry.presentationScale/entry.unit);
-    const edgeColor=visualState==="overgrown"?[54,91,42,255]:visualState==="worn"?[96,76,60,255]:visualState==="damaged"?[59,40,31,255]:
-      visualState==="repaired"&&plane===0?[170,94,38,255]:entry.landmark?[151,87,31,255]:[68,30,23,255];
+    const side=plane===0?-1:1,drop=Math.max(.025,.15*entry.presentationScale/entry.unit);
+    const edgeColor=visualState==="overgrown"?[55,90,43,255]:visualState==="worn"?[94,75,60,255]:visualState==="damaged"?[58,40,31,255]:
+      visualState==="repaired"&&plane===0?[164,90,38,255]:entry.landmark?[151,87,31,255]:[68,30,23,255];
     const fascia=(n0,n1,salt)=>{
       const a=point(side,0,n0),b=point(side,0,n1);
       addQuad(a,b,[b[0],b[1]-drop,b[2]],[a[0],a[1]-drop,a[2]],[side,0,0],edgeColor,salt);
     };
-    if(visualState==="damaged"&&plane===0)fascia(-.18,.55,40);
+    if(visualState==="damaged"&&plane===0)fascia(-.08,.55,40);
     else fascia(-.55,.55,41+plane);
   }
 
-  // A restrained ridge cap gives every detailed roof a readable gable axis at
-  // near-top-down scale without adding a draw call or changing building bounds.
-  const ridgeColor=entry.landmark?[142,82,31,255]:[72,31,25,255];
-  addPatch(-1,.91,.995,-.51,.51,ridgeColor,80,.010,0);
-  addPatch(1,.91,.995,-.51,.51,ridgeColor,81,.010,0);
-
   if(visualState==="worn"){
-    const light=[176,145,112,255],mid=[151,119,91,255],dark=[93,66,50,255];
-    // Staggered low-profile shingle runs replace the prior square stamps.
-    [
-      [-1,.05,.25,-.47,-.42,light,101,.013,.012],
-      [-1,.18,.40,-.23,-.17,mid,102,.012,-.010],
-      [-1,.06,.28,.05,.11,light,103,.013,.014],
-      [-1,.38,.61,.31,.36,dark,104,.010,-.012],
-      [ 1,.09,.31,-.34,-.28,light,105,.013,-.012],
-      [ 1,.27,.48,-.05,.00,mid,106,.012,.010],
-      [ 1,.12,.33,.23,.29,light,107,.013,-.014],
-      [ 1,.48,.69,.43,.48,dark,108,.010,.012]
-    ].forEach(v=>addPatch(...v));
+    // Long, slightly wandering roof-following streaks read as worn shingles
+    // rather than isolated square swatches.
+    addRibbon(-1,[[-.50,.075,.125],[-.28,.065,.135],[-.05,.082,.145],[.18,.070,.128],[.43,.092,.150]],[179,148,114,255],100,.010);
+    addRibbon(-1,[[-.38,.38,.425],[-.18,.35,.405],[.02,.37,.420],[.21,.34,.392]],[92,69,54,255],110,.009);
+    addRibbon(1,[[-.30,.16,.205],[-.08,.14,.198],[.16,.17,.218],[.40,.15,.202]],[158,127,97,255],118,.010);
   }else if(visualState==="damaged"){
-    const char=[45,35,30,255],burn=[111,56,34,255],ash=[143,117,88,255];
-    addPatch(-1,.40,.48,-.54,-.37,char,121,.022,.025);
-    addPatch(-1,.27,.35,-.35,-.19,burn,122,.021,-.018);
-    addPatch(-1,.10,.18,-.15,-.04,ash,123,.016,.012);
-    addPatch(1,.08,.17,-.43,-.30,[101,68,50,255],124,.012,.015);
+    // Char follows the irregular broken edge and a secondary soot streak crosses
+    // the intact slope; both are part of the state-aware roof mesh.
+    addRibbon(-1,[[-.53,.43,.49],[-.37,.29,.36],[-.20,.15,.22],[-.08,.08,.14]],[45,35,30,255],130,.018);
+    addRibbon(-1,[[-.42,.56,.61],[-.22,.51,.57],[-.02,.48,.54]],[112,58,35,255],138,.014);
+    addRibbon(1,[[-.46,.10,.145],[-.28,.12,.160],[-.08,.11,.155]],[112,76,55,255],142,.010);
   }else if(visualState==="repaired"){
-    const fresh=[[218,157,78,255],[235,185,104,255],[190,118,53,255],[211,143,66,255]];
-    // Fresh replacement boards sit slightly inboard of the damaged eave cut so
-    // they read as fitted roof work rather than bright planks floating outside.
-    const strips=[[-.50,-.43,.34],[-.40,-.33,.32],[-.30,-.23,.30],[-.20,-.13,.28]];
-    strips.forEach((r,i)=>addPatch(-1,.08,r[2],r[0],r[1],fresh[i],140+i,.022,(i%2?-.010:.010)));
-    addPatch(-1,.31,.39,-.50,-.36,[150,90,43,255],148,.024,.010);
+    // A single irregular fresh-timber replacement occupies the same eave area
+    // lost by damage. Subtle seams vary along its inner edge without protruding.
+    addRibbon(-1,[[-.53,.012,.43],[-.39,.012,.39],[-.24,.012,.34],[-.10,.012,.29]],[220,151,68,255],150,.012);
+    addRibbon(-1,[[-.49,.14,.165],[-.36,.13,.158],[-.23,.15,.178],[-.12,.14,.168]],[247,198,111,255],158,.015);
+    addRibbon(-1,[[-.45,.29,.315],[-.33,.28,.307],[-.20,.30,.327],[-.11,.29,.318]],[157,92,42,255],164,.014);
   }else if(visualState==="overgrown"){
-    const moss=[65,116,51,255],mossLight=[98,142,63,255],leaf=[45,91,43,255];
-    // Staggered roof-following growth clusters replace the prior straight green
-    // edge bars; facade vines below still connect the roof state to the ground.
-    [
-      [-1,.04,.20,-.49,-.43,moss,161,.024,.012],
-      [-1,.10,.28,-.31,-.24,mossLight,162,.024,-.010],
-      [-1,.05,.22,.05,.12,leaf,163,.026,.015],
-      [-1,.23,.39,.24,.31,moss,164,.024,-.014],
-      [ 1,.05,.22,-.37,-.31,mossLight,165,.024,-.012],
-      [ 1,.13,.31,-.12,-.05,moss,166,.024,.010],
-      [ 1,.06,.23,.19,.26,leaf,167,.026,-.014],
-      [ 1,.28,.43,.39,.45,mossLight,168,.024,.012]
-    ].forEach(v=>addPatch(...v));
+    // Continuous irregular moss hugs the eaves; smaller ivy runs climb the roof
+    // slope. This replaces the former isolated green rectangles.
+    addRibbon(-1,[[-.52,.008,.095],[-.35,.010,.125],[-.16,.006,.082],[.04,.012,.135],[.24,.008,.105],[.48,.010,.145]],[65,112,50,255],170,.015);
+    addRibbon(1,[[-.48,.010,.080],[-.24,.008,.120],[.02,.012,.090],[.27,.007,.132],[.49,.011,.100]],[91,135,60,255],180,.015);
+    addRibbon(-1,[[-.34,.22,.275],[-.18,.20,.265],[-.02,.23,.287],[.12,.21,.272]],[45,88,43,255],190,.016);
+    addRibbon(1,[[.05,.27,.320],[.18,.25,.310],[.33,.28,.337]],[53,97,45,255],196,.016);
   }else{
-    // A few nearly tonal narrow shingle runs keep normal roofs from reading as
-    // one flat polygon without exposing a grid.
     const tone=entry.landmark?[204,132,47,255]:[101,43,29,255];
-    addPatch(-1,.31,.34,-.46,.46,tone,181,.006,0);
-    addPatch(1,.55,.58,-.44,.44,tone,182,.006,0);
+    addRibbon(-1,[[-.46,.31,.33],[-.12,.30,.325],[.18,.31,.33],[.44,.305,.326]],tone,200,.004);
+    addRibbon(1,[[-.42,.55,.57],[-.08,.545,.568],[.24,.55,.57],[.43,.548,.569]],tone,205,.004);
   }
   return {positions,normals,colors,indices,visualState};
 }
@@ -4772,9 +4749,9 @@ function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
     }else if(item.visualState==="overgrown"){
       // Green vertex-color bands are part of the real roof eave. Narrow facade
       // vines connect those bands to the ground without detached foliage blobs.
-      orientedBox(east-w*.25,north+d*.505,ground+physicalHeight*s*.53,Math.max(.14,w*.024),Math.max(2.25,physicalHeight*.60),.13,C.green,0);
-      orientedBox(east+w*.10,north+d*.508,ground+physicalHeight*s*.44,Math.max(.12,w*.021),Math.max(1.72,physicalHeight*.46),.12,C.greenLight,0);
-      groundBox(east-w*.20,north+d*.57,.018,Math.max(.55,w*.095),.07,Math.max(.46,d*.085),C.moss);
+      orientedBox(east-w*.25,north+d*.505,ground+physicalHeight*s*.47,Math.max(.09,w*.015),Math.max(1.85,physicalHeight*.48),.08,C.green,7);
+      orientedBox(east+w*.10,north+d*.508,ground+physicalHeight*s*.38,Math.max(.08,w*.013),Math.max(1.35,physicalHeight*.36),.07,C.greenLight,-6);
+      groundBox(east-w*.20,north+d*.57,.018,Math.max(.44,w*.072),.055,Math.max(.34,d*.060),C.moss);
     }
   }
   if(positions.length){
