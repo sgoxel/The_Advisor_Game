@@ -11,6 +11,9 @@ PROFILE=os.environ.get("PROFILE","landscape")
 OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s004-008"))
 OUT.mkdir(parents=True,exist_ok=True)
 SIZE=(1280,720) if PROFILE=="landscape" else (390,844)
+# Landscape sees a materially wider physical footprint at the same canonical scale.
+# Use the next finer scale there so the same local NPC presentation tier is requested.
+SCALE_INDEX=7 if PROFILE=="landscape" else 8
 CASES=["doorway-block","close-follow"]
 
 options=Options()
@@ -52,9 +55,9 @@ def prepare(case_id):
       if(!placed)return {ok:false,caseId,seed,reason:"proof-placement-failed",proof};
       PlanetStage.applyAuthoritativeFantasyTime(proof.when,"WP-S004-008 evidence");
       PlanetStage.setWorldTileFocus(proof.residentPosition.x,proof.residentPosition.y);
-      PlanetStage.setScaleIndex(8);
+      PlanetStage.setScaleIndex(arguments[1]);
       return {ok:true,caseId,seed,proof,placed};
-    """,case_id)
+    """,case_id,SCALE_INDEX)
 
 def resource_state(info):
     return driver.execute_script("""
@@ -76,7 +79,7 @@ def resource_state(info):
 def visual_ready(info):
     state=resource_state(info)
     return (
-        state["ready"] and state["scaleIndex"]==8 and state["tier"] in ("refined","full") and
+        state["ready"] and state["scaleIndex"]==SCALE_INDEX and state["tier"] in ("refined","full") and
         state["localStaticActive"] and state["residentInView"] and state["bubbleVisible"] and
         bool(state["reaction"])
     )
