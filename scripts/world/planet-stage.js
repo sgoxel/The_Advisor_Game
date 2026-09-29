@@ -5043,6 +5043,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   }
   const wild=renderLocalWilderness(resource,frame,reveal);
   rebuildCanonicalNpcPresentation(reveal,tier,semanticFrame,scale,unit,lift,false);
+  rebuildLocalCrowdPresentation(resource,semanticFrame,tier);
   localBuildingActivityContext={reveal,tier,frame:semanticFrame,presentationScale:scale,unit,lift};
   rebuildCanonicalBuildingActivityPresentation("settlement-rebuild");
   const entityCount=localStaticRoot.children.length;
@@ -5074,6 +5075,7 @@ function rebuildLocalStaticPresentation(resource){
   const started=performance.now(),dims=resource.dims,frame={lat0:resource.lat0,lon0:resource.lon0,dims,groundDetailWeight:resource.groundDetailWeight,centerElevation:resource.centerElevation},eligible=dims.staticWorld;
   clearInspectionKeySet(localBuildingInspectionKeys,false);clearInspectionKeySet(localNpcInspectionKeys,false);clearCanonicalWayfindingSignposts();
   localNpcRoot?.destroy?.();localNpcRoot=null;localNpcContext=null;localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0};
+  clearLocalCrowdPresentation();
   clearLocalBuildingActivity();localBuildingActivityContext=null;
   buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
   clearCanonicalBuildingSurroundings();
@@ -5096,6 +5098,7 @@ function rebuildLocalStaticPresentation(resource){
   const unit=dims.metersPerUnit,center=geography.sampleLatLon(resource.lat0,resource.lon0);
   if(center?.land){
     const wild=renderLocalWilderness(resource,frame,null);
+    rebuildLocalCrowdPresentation(resource,frame,tier);
     localStatic.wildernessCount=wild.accepted;localStatic.ambientFaunaCount=wild.fauna;localStatic.vegetationCount=Object.entries(wilderness.localFamilyCounts||{}).filter(([k])=>["grass","flower","bush","sapling","reed"].includes(k)).reduce((sum,[,v])=>sum+Number(v||0),0);
     localStatic.triangleEstimate+=wild.triangles;localStatic.drawCallEstimate+=wild.drawCalls;
   }else{
@@ -6833,6 +6836,7 @@ function applyAtmosphereMaterialPalette(p){
   }
   materialCount+=gradeAtmosphereMaterialRegistry(localStaticMaterials,p.localTint,p.localE);
   materialCount+=gradeAtmosphereMaterialRegistry(localNpcMaterials,p.localTint,p.localE*1.35);
+  materialCount+=gradeAtmosphereMaterialRegistry(localCrowdMaterials,p.localTint,p.localE*.9);
   const cloudMaterial=cloudLayer?.render?.meshInstances?.[0]?.material;
   if(cloudMaterial){cloudMaterial.emissive.set(...p.cloudTint);cloudMaterial.emissiveIntensity=p.cloudI;cloudMaterial.update();materialCount++;}
   return materialCount;
@@ -6851,6 +6855,7 @@ function applyAuthoritativeFantasyTime(stamp,source="authoritative-fantasy-time"
     groundPaletteIntegrated:true,postProcess:false,weatherSimulation:false
   };
   refreshCanonicalNpcPresentation();
+  refreshLocalCrowdPresentation(stamp);
   refreshCanonicalBuildingActivityPresentation();
   if(inspection.selectedId!==null){
     inspection.lastContentRefreshAtMs=Number.NEGATIVE_INFINITY;
@@ -7348,6 +7353,7 @@ function snapshot(){
     activeSystems:Object.freeze({
       protagonistEnabled:false,
       npcEnabled:Boolean(localNpcPresentation.activeCount>0),
+      crowdEnabled:Boolean(localCrowdPresentation.visibleCount>0),
       tileSystemActive:false,
       localTerrainActive:Boolean(tangentPatch?.enabled),
       settlementGenerationActive:false,
@@ -7372,6 +7378,12 @@ function snapshot(){
     inspection:Object.freeze({...inspection,activePickableCount:inspectionPickables.size,activeNpcCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="npc").length,activeBuildingCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="building").length,activeSignpostCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="signpost").length,selectedAuthority:inspection.selectedId===null?null:(inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId))?.authority||null),boundedActiveRegistry:true,fullWorldScan:false,selectedStateRefreshIntervalMs:250}),
     wayfindingSignposts:Object.freeze({...wayfindingSignposts,signs:Object.freeze((wayfindingSignposts.signs||[]).slice())}),
     npcPresentation:Object.freeze({...localNpcPresentation}),
+    crowdPresentation:Object.freeze({...localCrowdPresentation,
+      exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),
+      visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
+      inspectionRegistered:false,selectable:false,persistentIdentity:false,collision:false,
+      actors:Object.freeze(localCrowdEntities.map(item=>Object.freeze({id:item.id,point:item.point,visualRole:item.visualRole,visible:Boolean(item.entity?.enabled)})))
+    }),
     buildingActivity:Object.freeze({...buildingActivity,buildings:Object.freeze((buildingActivity.buildings||[]).slice())}),
     buildingSurroundings:Object.freeze({...buildingSurroundings,functions:Object.freeze((buildingSurroundings.functions||[]).slice()),buildings:Object.freeze((buildingSurroundings.buildings||[]).slice())}),
     campaignWearProjection:Object.freeze({...campaignWearProjection,stateCounts:Object.freeze({...campaignWearProjection.stateCounts}),buildings:Object.freeze((campaignWearProjection.buildings||[]).slice())}),
@@ -7451,7 +7463,8 @@ function destroy(){
   environmentalReactions={enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,activeDrawCallEstimate:0,peakActiveCount:0,triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,terrainMutation:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameWorldScan:false};
   clearLocalBuildingActivity();localBuildingActivityRoot=null;localBuildingActivityContext=null;
   buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
-  localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;localNpcEntities.clear();ready=false;
+  localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;localNpcEntities.clear();
+  localCrowdRoot=null;localCrowdMaterials=null;localCrowdContext=null;localCrowdEntities=[];resetLocalCrowdTelemetry();ready=false;
   inspectionPickables.clear();localBuildingInspectionKeys.clear();localNpcInspectionKeys.clear();localSignInspectionKeys.clear();
   wayfindingTextCanvas?.remove?.();wayfindingTextCanvas=null;wayfindingTextContext=null;wayfindingPanelAnchors=[];wayfindingSignAnchors.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
