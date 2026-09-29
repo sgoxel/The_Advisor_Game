@@ -1897,6 +1897,55 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       for(const [dx,dz] of [[-0.42,-0.38],[0.0,-0.38],[0.42,-0.38],[-0.28,0.24],[0.28,0.24]]){
         addSphere(groups.foliage,dx,dz,0.34,0.30+variant*0.03,0.34,0.22);
       }
+    }else if(semantic==="campfire"){
+      for(let i=0;i<8;i++){const a=(Math.PI*2*i)/8;addSphere(groups.stone,Math.cos(a)*0.48,Math.sin(a)*0.48,0.22,0.16,0.22,0.13);}
+      addBox(groups.woodBoxes,-0.18,0,0.82,0.14,0.14,0.16,yaw+32);
+      addBox(groups.woodBoxes,0.18,0,0.82,0.14,0.14,0.16,yaw-32);
+      addSphere(groups.accent,0,0,0.34,0.46,0.34,0.34);
+    }else if(semantic==="tent"){
+      addBox(groups.clothBoxes,0,0,1.58,0.82,1.36,0.43,yaw);
+      addBox(groups.woodBoxes,-0.70,0,0.10,1.08,0.10,0.54,yaw);
+      addBox(groups.woodBoxes,0.70,0,0.10,1.08,0.10,0.54,yaw);
+      addBox(groups.darkBoxes,0,0.69,1.10,0.12,0.08,0.72,yaw);
+    }else if(semantic==="ruin-wall"){
+      addBox(groups.stoneBoxes,-0.55,0,0.82,1.25,0.62,0.63,yaw);
+      addBox(groups.stoneBoxes,0.18,0,0.62,0.82,0.62,0.41,yaw);
+      addSphere(groups.stone,0.65,0.18,0.34,0.26,0.34,0.18);
+    }else if(semantic==="shrine"){
+      addBox(groups.stoneBoxes,0,0,1.18,0.32,0.86,0.16,yaw);
+      addBox(groups.stoneBoxes,0,0,0.42,1.38,0.42,0.88,yaw);
+      addBox(groups.stoneBoxes,0,0,0.82,0.18,0.62,1.56,yaw);
+      addSphere(groups.accent,0,0,0.28,0.22,0.28,1.72);
+    }else if(semantic==="grave"){
+      addBox(groups.stoneBoxes,0,0,0.60,0.18,0.38,0.10,yaw);
+      addBox(groups.stoneBoxes,0,-0.22,0.48,0.88,0.20,0.54,yaw);
+    }else if(semantic==="marker-stone"){
+      addBox(groups.stoneBoxes,0,0,0.42,0.92,0.48,0.46,yaw+variant*12);
+    }else if(semantic==="dock"){
+      addBox(groups.woodBoxes,0,0,1.48,0.16,1.02,0.14,yaw);
+      addBox(groups.darkBoxes,-0.62,-0.36,0.12,0.72,0.12,0.36,yaw);
+      addBox(groups.darkBoxes,0.62,-0.36,0.12,0.72,0.12,0.36,yaw);
+    }else if(semantic==="fish-rack"){
+      addBox(groups.woodBoxes,-0.56,0,0.12,1.22,0.12,0.61,yaw);
+      addBox(groups.woodBoxes,0.56,0,0.12,1.22,0.12,0.61,yaw);
+      addBox(groups.woodBoxes,0,0,1.22,0.12,0.12,1.12,yaw);
+      addBox(groups.clothBoxes,-0.24,0,0.18,0.42,0.08,0.78,yaw);
+      addBox(groups.clothBoxes,0.24,0,0.18,0.42,0.08,0.80,yaw);
+    }else if(semantic==="unusual-tree"){
+      addBox(groups.woodBoxes,0,0,0.64,2.60,0.64,1.30,yaw);
+      addSphere(groups.foliage,0,0,2.50,1.62,2.24,2.78);
+      addSphere(groups.foliage,-0.78,0.22,1.42,1.02,1.32,2.52);
+      addSphere(groups.foliage,0.76,-0.16,1.48,1.08,1.38,2.62);
+    }else if(semantic==="quarry"){
+      addSphere(groups.stone,-0.52,-0.26,0.92,0.62,0.82,0.34);
+      addSphere(groups.stone,0.44,-0.12,0.78,0.54,0.70,0.30);
+      addSphere(groups.stone,0.08,0.54,0.68,0.48,0.62,0.26);
+      addBox(groups.woodBoxes,0,-0.72,1.12,0.14,0.14,0.16,yaw);
+    }else if(semantic==="cave-mouth"){
+      addSphere(groups.stone,-0.60,0,0.92,1.06,0.78,0.56);
+      addSphere(groups.stone,0.60,0,0.92,1.06,0.78,0.56);
+      addSphere(groups.stone,0,-0.12,1.28,0.72,0.82,1.10);
+      addBox(groups.darkBoxes,0,0.18,0.86,0.96,0.20,0.48,yaw);
     }else if(semantic==="bench"){
       addBox(groups.woodBoxes,0,0,1.24,0.16,0.42,0.48,yaw);
       addBox(groups.woodBoxes,-0.46,0,0.16,0.62,0.16,0.31,yaw);
@@ -1917,6 +1966,9 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       routeSafe:descriptor.routeSafe!==false,
       roadAdjacent:Boolean(descriptor.roadAdjacent),
       rotation:yaw,variant,
+      microLocationId:descriptor.microLocationId?String(descriptor.microLocationId):null,
+      microLocationType:descriptor.microLocationType?String(descriptor.microLocationType):null,
+      destinationId:descriptor.destinationId?String(descriptor.destinationId):null,
       primitiveCount
     }));
     return primitiveCount;
@@ -3118,7 +3170,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const ambientBuildings=collectAmbientBuildingInstances(spec.worldData,buildings,roofProfiles);
 
     const treeVariants=[[],[]],rocks=[],treeVariationSamples=[],dressingSamples=[];
-    const dressingGroups={woodBoxes:[],darkBoxes:[],foliage:[],accent:[],stone:[],soil:[],cloth:[],darkSpheres:[]};
+    const dressingGroups={woodBoxes:[],darkBoxes:[],stoneBoxes:[],clothBoxes:[],foliage:[],accent:[],stone:[],soil:[],cloth:[],darkSpheres:[]};
     for(let i=0;i<props.length;i++)sourcePresentationPrimitiveCount+=collectPropInstances(spec.worldData,props[i],treeVariants,rocks,treeVariationSamples,dressingGroups,dressingSamples);
     const contactShadowInstances=[];
     for(const variants of treeVariants){
@@ -3138,7 +3190,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         scale:[0.74,1,0.50],euler:[0,0,0],contactKind:"rock"
       });
     }
-    const majorContactSemantics=new Set(["well","cart","bench","work-prop","woodpile","crate","barrel"]);
+    const majorContactSemantics=new Set(["well","cart","bench","work-prop","woodpile","crate","barrel","ruin-wall","shrine","grave","tent","campfire","dock","fish-rack","unusual-tree","quarry","cave-mouth","marker-stone"]);
     for(const descriptor of props){
       if(String(descriptor?.type||"")!=="dressing"||!majorContactSemantics.has(String(descriptor?.semantic||"")))continue;
       const p=localTileCenter(spec.worldData,descriptor.x,descriptor.y);
@@ -3161,6 +3213,8 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const dressingInstancedGroups=[
       createInstancedGroup(entity,"ChunkDressing_Wood",primitiveMesh("box"),presentationMaterial("dressing-wood",0.54,0.34,0.16,0.08),dressingGroups.woodBoxes),
       createInstancedGroup(entity,"ChunkDressing_DarkWood",primitiveMesh("box"),presentationMaterial("dressing-dark",0.24,0.15,0.09,0.05),dressingGroups.darkBoxes),
+      createInstancedGroup(entity,"ChunkDressing_StoneBlocks",primitiveMesh("box"),presentationMaterial("dressing-stone",0.48,0.48,0.43,0.04),dressingGroups.stoneBoxes),
+      createInstancedGroup(entity,"ChunkDressing_ClothBlocks",primitiveMesh("box"),presentationMaterial("dressing-cloth",0.67,0.54,0.33,0.03),dressingGroups.clothBoxes),
       createInstancedGroup(entity,"ChunkDressing_Foliage",primitiveMesh("sphere"),presentationMaterial("dressing-foliage",0.29,0.52,0.23,0.04),dressingGroups.foliage),
       createInstancedGroup(entity,"ChunkDressing_Accent",primitiveMesh("sphere"),presentationMaterial("dressing-accent",0.86,0.56,0.20,0.03),dressingGroups.accent),
       createInstancedGroup(entity,"ChunkDressing_Stone",primitiveMesh("sphere"),presentationMaterial("dressing-stone",0.48,0.48,0.43,0.04),dressingGroups.stone),

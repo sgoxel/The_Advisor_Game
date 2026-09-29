@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="1.9.0";
+const VERSION="1.10.0";
 const STANDARD_TERRAIN=new Set([
   "road","bridge","square","path","grass","dirt","farmland","plot",
   "forest","mud","rock","sand","floor","door","wall","water","building"
@@ -672,7 +672,11 @@ function generate(spec){
   const routeNetworkPlan=routeConnectorPlan(seed);
   const connectorDescriptors=routeNetworkPlan.cells.filter(item=>ownsCoordinate(item.x,item.y,spec.x,spec.y,size));
   const dressing=semanticDressing(seed).filter(item=>ownsCoordinate(item.x,item.y,spec.x,spec.y,size));
+  const microPlan=window.MicroLocations?.forChunk?.(seed,bounds)||Object.freeze({locations:Object.freeze([]),diagnostics:Object.freeze({queryCellCount:0,bounded:true,fullWorldScan:false})});
+  const microLocations=Array.isArray(microPlan?.locations)?microPlan.locations:[];
+  const microProps=microLocations.flatMap(location=>location.props||[]).filter(item=>ownsCoordinate(item.x,item.y,spec.x,spec.y,size));
   for(const item of dressing)staticObjects.push(item);
+  for(const item of microProps)staticObjects.push(item);
   const ownedBuildings=buildings.filter(building=>{
     const anchor=building.entrance||{x:building.bounds.minX,y:building.bounds.minY};
     return ownsCoordinate(anchor.x,anchor.y,spec.x,spec.y,size);
@@ -731,7 +735,10 @@ function generate(spec){
         id:item.id,type:item.type,x:item.x,y:item.y,sourceTerrain:item.sourceTerrain||null,
         semantic:item.semantic||null,context:item.context||null,buildingId:item.buildingId||null,
         roadAdjacent:Boolean(item.roadAdjacent),routeSafe:item.routeSafe!==false,
-        rotation:Number(item.rotation||0),variant:Number(item.variant||0)
+        rotation:Number(item.rotation||0),variant:Number(item.variant||0),
+        microLocationId:item.microLocationId?String(item.microLocationId):null,
+        microLocationType:item.microLocationType?String(item.microLocationType):null,
+        destinationId:item.destinationId?String(item.destinationId):null
       }))),
       connectorDescriptors:Object.freeze(connectorDescriptors),
       routeNetwork:Object.freeze({
@@ -745,12 +752,22 @@ function generate(spec){
         simulationAuthorityPreserved:true
       }),
       dressing:Object.freeze({
-        count:dressing.length,
-        routeSafeCount:dressing.filter(item=>item.routeSafe!==false).length,
-        contexts:Object.freeze(dressing.reduce((acc,item)=>{acc[item.context]=(acc[item.context]||0)+1;return acc;},{})),
-        semantics:Object.freeze(dressing.reduce((acc,item)=>{acc[item.semantic]=(acc[item.semantic]||0)+1;return acc;},{})),
+        count:dressing.length+microProps.length,
+        routeSafeCount:[...dressing,...microProps].filter(item=>item.routeSafe!==false).length,
+        contexts:Object.freeze([...dressing,...microProps].reduce((acc,item)=>{acc[item.context]=(acc[item.context]||0)+1;return acc;},{})),
+        semantics:Object.freeze([...dressing,...microProps].reduce((acc,item)=>{acc[item.semantic]=(acc[item.semantic]||0)+1;return acc;},{})),
         deterministic:true,
         rendererOnly:true
+      }),
+      microLocations:Object.freeze({
+        count:microLocations.length,propCount:microProps.length,
+        ids:Object.freeze(microLocations.map(item=>String(item.id)).sort()),
+        types:Object.freeze(microLocations.map(item=>String(item.compositionType)).sort()),
+        sourceDestinationIds:Object.freeze(microLocations.map(item=>String(item.sourceDestinationId)).sort()),
+        queryCellCount:Number(microPlan?.diagnostics?.queryCellCount||0),
+        maxQueryCells:Number(microPlan?.diagnostics?.maxQueryCells||0),
+        deterministic:true,lazy:true,bounded:true,fullWorldScan:false,perFrameScan:false,
+        rendererOnly:true,simulationAuthority:false
       }),
       interiorObjectDescriptors:Object.freeze(interiorObjects),
       hardCodedSampleGeometry:false

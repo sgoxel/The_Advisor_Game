@@ -8,6 +8,7 @@ const MAX_QUERY_RADIUS_METERS=80000;
 const MAX_QUERY_RESULTS=24;
 const MAX_QUERY_CELLS=169;
 const ACTIVE_POI_QUERY_CELLS=24;
+const LOCAL_POI_CELL_QUERY_LIMIT=9;
 const SAMPLE_STEP_TILES=96;
 const FAR_SAMPLE_STEP_TILES=384;
 const POI_CELL_CACHE_LIMIT=512;
@@ -233,9 +234,21 @@ function queryNearby(seedValue,originValue,optionsValue){
   const ended=phaseNow();
   return Object.freeze({seed,origin,radiusMeters,results:Object.freeze(results),diagnostics:Object.freeze({version:VERSION,queryMs:Number((ended-started).toFixed(3)),phaseMs:Object.freeze({settlements:Number((settlementEnded-settlementStarted).toFixed(3)),poi:Number((poiEnded-poiStarted).toFixed(3)),filterRank:Number((filterEnded-filterStarted).toFixed(3)),enrich:Number((ended-enrichStarted).toFixed(3))}),queryCellCount:boundedCells.length,maxQueryCells:MAX_QUERY_CELLS,activePoiQueryCellLimit:ACTIVE_POI_QUERY_CELLS,settlementQueryCellCount:Number(settlementQuery.diagnostics?.queryCellCount||0),settlementClasses:Object.freeze(settlementClasses.slice()),poiCellCacheSize:poiCellCache.size,poiCellCacheLimit:POI_CELL_CACHE_LIMIT,candidateCount:raw.length,resultCount:results.length,bounded:true,fullWorldScan:false,localChunkMaterialization:false,descriptorOnly:true,seedOnly:true,cameraIndependent:true,viewportIndependent:true})});
 }
+function poiCell(seedValue,cxValue,cyValue){
+  const seed=String(seedValue==null?"":seedValue),cx=String(cxValue),cy=String(cyValue);
+  const results=poiCandidatesForCell(seed,cx,cy);
+  return Object.freeze({
+    seed,cx,cy,results,
+    diagnostics:Object.freeze({
+      version:VERSION,queryCellCount:1,maxQueryCells:LOCAL_POI_CELL_QUERY_LIMIT,
+      resultCount:results.length,bounded:true,fullWorldScan:false,localChunkMaterialization:false,
+      descriptorOnly:true,seedOnly:true,cameraIndependent:true,viewportIndependent:true
+    })
+  });
+}
 function descriptorById(seedValue,idValue,originValue,optionsValue){const id=String(idValue||"");if(!id)return null;const query=queryNearby(seedValue,originValue||{x:"0",y:"0"},{...(optionsValue||{}),radiusMeters:optionsValue?.radiusMeters||MAX_QUERY_RADIUS_METERS,maxResults:MAX_QUERY_RESULTS});return query.results.find(item=>item.id===id)||null;}
 function signature(query){return hash32((query?.results||[]).map(item=>[item.id,item.type,item.center.x,item.center.y,item.countryId,item.regionId,item.importance].join(":")).join("|")).toString(16).padStart(8,"0");}
 function verify(seedValue,originValue){const seed=String(seedValue==null?"":seedValue),origin=normalizeOrigin(seed,originValue||{x:"0",y:"0"}),a=queryNearby(seed,origin,{radiusMeters:80000,maxResults:32}),b=queryNearby(seed,origin,{radiusMeters:80000,maxResults:32}),sa=signature(a),sb=signature(b),settlement=a.results.some(x=>["hamlet","village","town","city","capital"].includes(x.type)),nonSettlement=a.results.some(x=>!["hamlet","village","town","city","capital"].includes(x.type));return Object.freeze({pass:sa===sb&&settlement&&nonSettlement&&a.diagnostics.bounded&&!a.diagnostics.fullWorldScan&&!a.diagnostics.localChunkMaterialization,seed,signatureA:sa,signatureB:sb,deterministic:sa===sb,settlement,nonSettlement,query:a});}
 
-window.WorldDestinations=Object.freeze({VERSION,TILE_METERS,POI_CELL_TILES,MAX_QUERY_RADIUS_METERS,MAX_QUERY_RESULTS,MAX_QUERY_CELLS,ACTIVE_POI_QUERY_CELLS,POI_CELL_CACHE_LIMIT,CONTEXT_CACHE_LIMIT,SETTLEMENT_CELL_LIMIT_PER_CLASS,SETTLEMENT_RESULT_LIMIT_PER_CLASS,SETTLEMENT_QUERY_CACHE_LIMIT,queryNearby,descriptorById,verify,signature});
+window.WorldDestinations=Object.freeze({VERSION,TILE_METERS,POI_CELL_TILES,MAX_QUERY_RADIUS_METERS,MAX_QUERY_RESULTS,MAX_QUERY_CELLS,ACTIVE_POI_QUERY_CELLS,LOCAL_POI_CELL_QUERY_LIMIT,POI_CELL_CACHE_LIMIT,CONTEXT_CACHE_LIMIT,SETTLEMENT_CELL_LIMIT_PER_CLASS,SETTLEMENT_RESULT_LIMIT_PER_CLASS,SETTLEMENT_QUERY_CACHE_LIMIT,queryNearby,poiCell,descriptorById,verify,signature});
 })();
