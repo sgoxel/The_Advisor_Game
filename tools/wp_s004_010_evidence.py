@@ -162,8 +162,6 @@ try:
             raise RuntimeError("renderer crowd became interactive/persistent: "+json.dumps(s))
         if not c.get("presentationOnly") or c.get("simulationAuthority") or c.get("persistentIdentity") or c.get("selectable") or c.get("collision") or c.get("exactNpcReplacement"):
             raise RuntimeError("crowd authority isolation failed: "+json.dumps(s))
-        if c.get("fullSettlementPerFrameScan") or c.get("globalScan") or c.get("candidateChecks",9999)>CrowdPresentation_MAX if False else False:
-            pass
         if c.get("candidateChecks",9999)>192:
             raise RuntimeError("candidate budget exceeded: "+json.dumps(s))
         if c.get("updateMs",9999)>=50:
