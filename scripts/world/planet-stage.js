@@ -4897,7 +4897,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   // Flat occupied-lot patches expose the settlement's real irregular land-use
   // pattern at overview scales without leaking building geometry or inventing a
   // circular locator. They remain subordinate to roads through alpha + height.
-  const lotContext=(tier==="footprint"||tier==="route")?addCanonicalOccupiedLotContext(reveal,scale,unit,semanticFrame,lift):Object.freeze({count:0,mode:"none"});
+  const lotContext=(tier==="footprint"||tier==="route"||tier==="coarse")?addCanonicalOccupiedLotContext(reveal,scale,unit,semanticFrame,lift):Object.freeze({count:0,mode:"none"});
   const occupiedAreaCount=envelope.active||lotContext.count?1:0;
   let roadCount=0,coarseBuildings=0,fullBuildings=0,landmarks=0,vegetation=0,triangles=envelope.segmentCount*12+Number(lotContext.triangleCount||0);
   let roadGeometry=Object.freeze({active:false,cellCount:0,queryCount:0,triangleCount:0,mode:"none"});
@@ -4919,7 +4919,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   }
   const meeting=reveal.specialLots.find(item=>item.kind==="meeting-hall")||reveal.specialLots[0]||null;
   const ordinary=[...reveal.houses,...reveal.specialLots.filter(item=>!meeting||item.id!==meeting.id)];
-  const targetCount=tier==="coarse"?Math.min(ordinary.length,10):(tier==="refined"||tier==="full"?ordinary.length:0);
+  const targetCount=tier==="coarse"?Math.min(ordinary.length,14):(tier==="refined"||tier==="full"?ordinary.length:0);
   const detailed=tier==="refined"||tier==="full";
   for(let i=0;i<targetCount;i++){
     addCanonicalBuilding(ordinary[i],i,scale,unit,semanticFrame,detailed,false,lift);
@@ -5009,15 +5009,22 @@ function rebuildLocalStaticPresentation(resource){
 }
 function scheduleLocalStaticPresentationRefresh(){
   if(localStaticRefreshScheduled||!displayResource)return;
-  // Semantic/static detail may not advance ahead of the supporting terrain cell.
-  // Preserve the current ready presentation during asynchronous refinement.
-  if(localResources.requestedSignature&&displayResource.signature!==localResources.requestedSignature)return;
   const desired=settlementRevealTierForScalar();
+  // Map-scale settlement morphology is canonical semantic authority and may
+  // remain visible on a valid ready parent while a finer terrain child prepares.
+  // Detailed/refined props still wait for the exact requested terrain resource.
+  const parentSemanticAllowed=desired==="footprint"||desired==="route"||desired==="coarse";
+  if(localResources.requestedSignature&&displayResource.signature!==localResources.requestedSignature&&!parentSemanticAllowed)return;
   if(localStatic.signature===displayResource.signature&&localStatic.revealTier===desired)return;
   localStaticRefreshScheduled=true;
   setTimeout(()=>{
     localStaticRefreshScheduled=false;
-    if(displayResource&&(!localResources.requestedSignature||displayResource.signature===localResources.requestedSignature))rebuildLocalStaticPresentation(displayResource);
+    if(!displayResource)return;
+    const currentDesired=settlementRevealTierForScalar();
+    const currentParentAllowed=currentDesired==="footprint"||currentDesired==="route"||currentDesired==="coarse";
+    if(!localResources.requestedSignature||displayResource.signature===localResources.requestedSignature||currentParentAllowed){
+      rebuildLocalStaticPresentation(displayResource);
+    }
   },0);
 }
 // ---- Cooperative LOD preparation -------------------------------------------
@@ -5144,7 +5151,9 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
     const aeast=(au-.5)*spanEast,anorth=(.5-av)*spanNorth,geo=canonicalLatLonForLocalOffset(lat0,lon0,aeast,anorth);
     const alat=geo.latitudeRadians,alon=geo.longitudeRadians;
     const natural=geography.sampleLatLon(alat,alon),registered=canonicalRegisteredMetersForLatLon(alat,alon);
-    return authorityCache[key]={natural,registeredEastMeters:unwrapRegisteredEast(registered.eastMeters),registeredNorthMeters:Number(registered.northMeters||0)};
+    const registeredEastMeters=unwrapRegisteredEast(registered.eastMeters),registeredNorthMeters=Number(registered.northMeters||0);
+    const terrainFeature=geography.terrainFeatureAtRegisteredMeters?.(registeredEastMeters,registeredNorthMeters,metersPerTexel)||null;
+    return authorityCache[key]={natural,registeredEastMeters,registeredNorthMeters,terrainFeature};
   };
   const mixSample=(ux,vz)=>{
     const gx=ux*(authoritySize-1),gy=vz*(authoritySize-1),x0=Math.floor(gx),y0=Math.floor(gy),x1=Math.min(authoritySize-1,x0+1),y1=Math.min(authoritySize-1,y0+1),tx=gx-x0,ty=gy-y0;
@@ -5157,6 +5166,10 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       land:landWeight>=.5,color,elevationMeters:bilerp(a.elevationMeters,b.elevationMeters,c.elevationMeters,d.elevationMeters),
       moisture:bilerp(a.moisture,b.moisture,c.moisture,d.moisture),
       mountainInfluence:bilerp(a.mountainInfluence,b.mountainInfluence,c.mountainInfluence,d.mountainInfluence),
+      terrainRidgeValley:bilerp(aa.terrainFeature?.ridgeValley,bb.terrainFeature?.ridgeValley,cc.terrainFeature?.ridgeValley,dd.terrainFeature?.ridgeValley),
+      terrainDrainage:bilerp(aa.terrainFeature?.drainage,bb.terrainFeature?.drainage,cc.terrainFeature?.drainage,dd.terrainFeature?.drainage),
+      terrainCover:bilerp(aa.terrainFeature?.cover,bb.terrainFeature?.cover,cc.terrainFeature?.cover,dd.terrainFeature?.cover),
+      terrainFeatureRevision:aa.terrainFeature?.revision||bb.terrainFeature?.revision||cc.terrainFeature?.revision||dd.terrainFeature?.revision||null,
       registeredEastMeters:bilerp(aa.registeredEastMeters,bb.registeredEastMeters,cc.registeredEastMeters,dd.registeredEastMeters),
       registeredNorthMeters:bilerp(aa.registeredNorthMeters,bb.registeredNorthMeters,cc.registeredNorthMeters,dd.registeredNorthMeters)
     };
@@ -5266,6 +5279,20 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const coverContrast=contextRing?lerp(1.00,1.12,contextRefineWeight):lerp(1.05,1.34,focusRefineWeight);
         const landCover=sharedCover.map((v,i)=>(v+(nativeCover[i]-sharedCover[i])*coverGain)*coverContrast);
         cover=cover.map((v,i)=>v+landCover[i]);
+        // Sample one canonical registered-meter terrain-feature field from
+        // PlanetGeography across focus, medium, outer, and parent fallback.
+        // Physical bandwidth may differ by texel size; feature identity does not.
+        const featureBandwidth=smoothstep01(clamp((1400-metersPerTexel)/1320,0,1));
+        const featureGain=(contextRing?lerp(.66,.82,contextRefineWeight):lerp(.78,1,focusRefineWeight))*featureBandwidth;
+        const ridgeValley=clamp(Number(sample.terrainRidgeValley||0),-1,1);
+        const drainage=clamp(Number(sample.terrainDrainage||0),0,1);
+        const coverStructure=clamp(Number(sample.terrainCover||0),-1,1);
+        const ridgeTone=ridgeValley*(contextRing?.050:.074)*featureGain;
+        const channelTone=-drainage*(contextRing?.034:.048)*featureGain;
+        const coverTone=coverStructure*(contextRing?.018:.026)*featureGain;
+        cover[0]+=ridgeTone*.88+channelTone*.92+coverTone*.55;
+        cover[1]+=ridgeTone*.74+channelTone*.58+coverTone;
+        cover[2]+=ridgeTone*.58-channelTone*.22+coverTone*.42;
       }
       const identityTint=sample?.land?[relief*.075,relief*.065,relief*.035]:[-.012,-.004,.028];
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
@@ -5310,6 +5337,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
     data,size,metersPerTexel,
     coordinateAuthority:"Campaign-SEED + SeedCoordinateFabric.registeredMeters",
     coordinateRevision:coordinateFabricAuthority()?.revisionSignature||null,
+    terrainFeatureRevision:geography?.terrainFeatures?.revision||null,
+    terrainFeatureAuthority:geography?.terrainFeatures?.authority||null,
     patchRelativeBiomeNoise:false
   };
 }
