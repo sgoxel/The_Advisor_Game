@@ -31,17 +31,34 @@ function planForRecord(seed,record){
   }catch(_){return null}
 }
 function resolvePlan(seed,focus){
-  if(!focus||!window.SettlementArchetypes?.canonicalSettlementsInBounds)return null;
-  const x=BigInt(String(focus.x)),y=BigInt(String(focus.y)),r=BigInt(LOCAL_QUERY_RADIUS_TILES);
-  let query=null;
-  try{
-    query=SettlementArchetypes.canonicalSettlementsInBounds(seed,{
-      minX:(x-r).toString(),maxX:(x+r).toString(),minY:(y-r).toString(),maxY:(y+r).toString()
-    },["national-capital","city","town","village","hamlet"]);
-  }catch(_){query=null}
-  const records=(query?.settlements||[]).slice().sort((a,b)=>distanceTiles(a.center,focus)-distanceTiles(b.center,focus)||String(a.id).localeCompare(String(b.id)));
-  const record=records.find(item=>distanceTiles(item.center,focus)<=LOCAL_QUERY_RADIUS_TILES)||null;
-  return planForRecord(seed,record);
+  if(!focus||!window.SettlementArchetypes?.canonicalSettlementAtPoint)return null;
+  const seedKey=String(seed),point=Object.freeze({x:String(focus.x),y:String(focus.y)});
+  if(lastResolvedPlan&&lastResolvedPlan.seed===seedKey&&distanceTiles(lastResolvedPlan.plan.center,point)<=LOCAL_QUERY_RADIUS_TILES){
+    return lastResolvedPlan.plan;
+  }
+  const records=[];
+  for(const classId of ["village","town","city","hamlet"]){
+    try{
+      const record=SettlementArchetypes.canonicalSettlementAtPoint(seedKey,classId,point.x,point.y);
+      if(record&&distanceTiles(record.center,point)<=LOCAL_QUERY_RADIUS_TILES)records.push(record);
+    }catch(_){}
+  }
+  let plan=null;
+  records.sort((a,b)=>distanceTiles(a.center,point)-distanceTiles(b.center,point)||String(a.id).localeCompare(String(b.id)));
+  if(records[0])plan=planForRecord(seedKey,records[0]);
+  if(!plan){
+    try{
+      const country=window.PoliticalGeography?.countryAt?.(seedKey,point.x,point.y)||null;
+      const capital=country?.capital?Object.freeze({x:String(country.capital.x),y:String(country.capital.y)}):null;
+      if(country&&capital&&distanceTiles(capital,point)<=LOCAL_QUERY_RADIUS_TILES){
+        plan=SettlementArchetypes.build(seedKey,capital,{
+          countryId:String(country.id),role:"national-capital",classHint:"national-capital",nameHint:String(country.capital.name||"Capital")
+        })||null;
+      }
+    }catch(_){}
+  }
+  lastResolvedPlan=plan?Object.freeze({seed:seedKey,plan}):null;
+  return plan;
 }
 function currentPopulation(seed,plan){
   let value=Math.max(0,Math.round(Number(plan?.population?.planned||0)));
@@ -165,8 +182,16 @@ function snapshotForPlan(seedValue,planValue,whenValue,optionsValue){
   lastSnapshot=result;return result;
 }
 function snapshot(seedValue,whenValue,focusValue,optionsValue){
-  const seed=String(seedValue==null?"":seedValue),plan=resolvePlan(seed,focusValue);
-  return snapshotForPlan(seed,plan,whenValue,optionsValue);
+  const started=typeof performance!=="undefined"&&performance.now?performance.now():0;
+  const seed=String(seedValue==null?"":seedValue);
+  const resolveStarted=typeof performance!=="undefined"&&performance.now?performance.now():0;
+  const plan=resolvePlan(seed,focusValue);
+  const resolveMs=resolveStarted&&performance.now?performance.now()-resolveStarted:0;
+  const base=snapshotForPlan(seed,plan,whenValue,optionsValue);
+  const totalMs=started&&performance.now?performance.now()-started:Number(base.updateMs||0);
+  const result=Object.freeze({...base,resolveMs:Number(resolveMs.toFixed(3)),totalUpdateMs:Number(totalMs.toFixed(3))});
+  lastSnapshot=result;
+  return result;
 }
 function representativePlans(seedValue){
   const seed=String(seedValue==null?"":seedValue),out={};
@@ -204,7 +229,7 @@ function verify(seedValue){
   const authority=[...Object.values(day),...Object.values(nightRows)].every(row=>row.presentationOnly&&!row.simulationAuthority&&!row.persistentIdentity&&!row.selectable&&!row.collision&&!row.exactNpcReplacement&&row.fullSettlementPerFrameScan===false&&row.activeCount<=row.cap&&row.candidateChecks<=MAX_CANDIDATE_CHECKS);
   return Object.freeze({pass:Boolean(deterministic&&densityOrder&&timeOrder&&authority),deterministic,densityOrder,timeOrder,authority,day:Object.freeze(day),night:Object.freeze(nightRows),maxActiveCrowd:MAX_ACTIVE_CROWD,mobileActiveCrowd:MOBILE_ACTIVE_CROWD});
 }
-function reset(){placementCache=new Map();lastSnapshot=null}
+function reset(){placementCache=new Map();lastSnapshot=null;lastResolvedPlan=null}
 
 window.CrowdPresentation=Object.freeze({
   VERSION,MAX_ACTIVE_CROWD,MOBILE_ACTIVE_CROWD,MAX_CANDIDATE_CHECKS,CLASS_CAP,CLASS_POPULATION_RANGE,
