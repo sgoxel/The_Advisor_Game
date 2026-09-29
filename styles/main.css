@@ -1471,3 +1471,62 @@ body.planet-stage-active{
 .world-inspection-tooltip[data-placement="below"]:after,.world-inspection-tooltip.below-anchor:after{top:-7px;bottom:auto;border-right:0;border-bottom:0;border-left:1px solid rgba(164,221,211,.5);border-top:1px solid rgba(164,221,211,.5)}
 .world-inspection-tooltip strong{font-size:13px;line-height:1.25}.world-inspection-tooltip span{font-size:10px;line-height:1.3;color:#a8c8cc}
 @media(max-width:520px){.world-inspection-tooltip{min-width:132px;padding:9px 10px}.world-inspection-tooltip strong{font-size:12px}}
+
+
+/* WP-S007-011 local dynamic event vignette */
+.local-event-vignette{
+  position:fixed;
+  right:max(12px,env(safe-area-inset-right));
+  top:max(72px,calc(env(safe-area-inset-top) + 58px));
+  z-index:44;
+  width:min(340px,calc(100vw - 24px));
+  padding:12px 14px;
+  border:1px solid rgba(230,205,139,.56);
+  border-radius:14px;
+  background:linear-gradient(145deg,rgba(20,25,31,.92),rgba(8,13,18,.88));
+  color:#f5efdf;
+  box-shadow:0 10px 28px rgba(0,0,0,.38);
+  backdrop-filter:blur(8px);
+  pointer-events:none;
+  font:600 12px/1.35 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+.local-event-vignette[hidden]{display:none!important}
+.local-event-kicker{
+  color:#d9bd73;
+  font-size:9px;
+  letter-spacing:.16em;
+  margin-bottom:6px;
+}
+.local-event-row{display:flex;gap:10px;align-items:flex-start}
+.local-event-icon{
+  display:grid;
+  place-items:center;
+  flex:0 0 30px;
+  width:30px;height:30px;
+  border-radius:50%;
+  background:rgba(217,189,115,.14);
+  border:1px solid rgba(217,189,115,.44);
+  color:#f0d48a;
+  font-size:16px;
+  line-height:1;
+}
+.local-event-title{display:block;font-size:15px;line-height:1.18;color:#fff8e9}
+.local-event-description{margin:3px 0 0;color:rgba(245,239,223,.76);font-weight:500}
+.local-event-meta{
+  margin-top:9px;
+  padding-top:8px;
+  border-top:1px solid rgba(255,255,255,.10);
+  color:#cbd5d9;
+  font-size:10px;
+}
+.local-event-participants{margin-top:3px;color:#e8ca80;font-size:10px;font-weight:700}
+@media (max-width:520px){
+  .local-event-vignette{
+    top:auto;
+    bottom:max(72px,calc(env(safe-area-inset-bottom) + 64px));
+    right:10px;
+    width:min(300px,calc(100vw - 20px));
+    padding:10px 12px;
+  }
+  .local-event-description{font-size:11px}
+}
