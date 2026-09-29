@@ -5155,8 +5155,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
     const alat=geo.latitudeRadians,alon=geo.longitudeRadians;
     const natural=geography.sampleLatLon(alat,alon),registered=canonicalRegisteredMetersForLatLon(alat,alon);
     const registeredEastMeters=unwrapRegisteredEast(registered.eastMeters),registeredNorthMeters=Number(registered.northMeters||0);
-    const terrainFeature=geography.terrainFeatureAtRegisteredMeters?.(registeredEastMeters,registeredNorthMeters,metersPerTexel)||null;
-    return authorityCache[key]={natural,registeredEastMeters,registeredNorthMeters,terrainFeature};
+    return authorityCache[key]={natural,registeredEastMeters,registeredNorthMeters};
   };
   const mixSample=(ux,vz)=>{
     const gx=ux*(authoritySize-1),gy=vz*(authoritySize-1),x0=Math.floor(gx),y0=Math.floor(gy),x1=Math.min(authoritySize-1,x0+1),y1=Math.min(authoritySize-1,y0+1),tx=gx-x0,ty=gy-y0;
@@ -5169,19 +5168,40 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       land:landWeight>=.5,color,elevationMeters:bilerp(a.elevationMeters,b.elevationMeters,c.elevationMeters,d.elevationMeters),
       moisture:bilerp(a.moisture,b.moisture,c.moisture,d.moisture),
       mountainInfluence:bilerp(a.mountainInfluence,b.mountainInfluence,c.mountainInfluence,d.mountainInfluence),
-      terrainRidgeValley:bilerp(aa.terrainFeature?.ridgeValley,bb.terrainFeature?.ridgeValley,cc.terrainFeature?.ridgeValley,dd.terrainFeature?.ridgeValley),
-      terrainDrainage:bilerp(aa.terrainFeature?.drainage,bb.terrainFeature?.drainage,cc.terrainFeature?.drainage,dd.terrainFeature?.drainage),
-      terrainCover:bilerp(aa.terrainFeature?.cover,bb.terrainFeature?.cover,cc.terrainFeature?.cover,dd.terrainFeature?.cover),
-      terrainFeatureRevision:aa.terrainFeature?.revision||bb.terrainFeature?.revision||cc.terrainFeature?.revision||dd.terrainFeature?.revision||null,
       registeredEastMeters:bilerp(aa.registeredEastMeters,bb.registeredEastMeters,cc.registeredEastMeters,dd.registeredEastMeters),
       registeredNorthMeters:bilerp(aa.registeredNorthMeters,bb.registeredNorthMeters,cc.registeredNorthMeters,dd.registeredNorthMeters)
+    };
+  };
+  // Sample the geography-owned feature field once on a compact per-resource
+  // lattice, then bilerp it for pixels. This keeps identity canonical while
+  // bounding preparation cost independently of texture resolution.
+  const featureSize=contextRing?32:48,featureCache=new Array(featureSize*featureSize);
+  const featureMetersPerSample=Math.max(metersPerTexel,Math.max(spanEast,spanNorth)/Math.max(1,featureSize-1));
+  const terrainFeatureAt=(fx,fy)=>{
+    const ix=Math.max(0,Math.min(featureSize-1,fx)),iy=Math.max(0,Math.min(featureSize-1,fy)),key=iy*featureSize+ix;
+    if(featureCache[key])return featureCache[key];
+    const fu=ix/(featureSize-1),fv=iy/(featureSize-1);
+    const feast=(fu-.5)*spanEast,fnorth=(.5-fv)*spanNorth,geo=canonicalLatLonForLocalOffset(lat0,lon0,feast,fnorth);
+    const registered=canonicalRegisteredMetersForLatLon(geo.latitudeRadians,geo.longitudeRadians);
+    const east=unwrapRegisteredEast(registered.eastMeters),north=Number(registered.northMeters||0);
+    return featureCache[key]=geography.terrainFeatureAtRegisteredMeters?.(east,north,featureMetersPerSample)||{ridgeValley:0,drainage:0,cover:0,revision:null};
+  };
+  const mixTerrainFeature=(ux,vz)=>{
+    const gx=ux*(featureSize-1),gy=vz*(featureSize-1),x0=Math.floor(gx),y0=Math.floor(gy),x1=Math.min(featureSize-1,x0+1),y1=Math.min(featureSize-1,y0+1),tx=gx-x0,ty=gy-y0;
+    const aa=terrainFeatureAt(x0,y0),bb=terrainFeatureAt(x1,y0),cc=terrainFeatureAt(x0,y1),dd=terrainFeatureAt(x1,y1);
+    const bilerp=(va,vb,vc,vd)=>lerp(lerp(Number(va)||0,Number(vb)||0,tx),lerp(Number(vc)||0,Number(vd)||0,tx),ty);
+    return {
+      ridgeValley:bilerp(aa.ridgeValley,bb.ridgeValley,cc.ridgeValley,dd.ridgeValley),
+      drainage:bilerp(aa.drainage,bb.drainage,cc.drainage,dd.drainage),
+      cover:bilerp(aa.cover,bb.cover,cc.cover,dd.cover),
+      revision:aa.revision||bb.revision||cc.revision||dd.revision||null
     };
   };
   for(let y=0;y<size;y++){
     for(let x=0;x<size;x++){
       const ux=(x+.5)/size,vz=(y+.5)/size;
       const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
-      const sample=mixSample(ux,vz);
+      const sample=mixSample(ux,vz),terrainFeature=mixTerrainFeature(ux,vz);
       const sourceColor=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
       // PlanetGeography carries intentionally broad macro color fields. At local
       // map scales those low-frequency fields can read as giant polygon wedges.
@@ -5215,8 +5235,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // progressively admit finer registered-meter frequencies toward focus.
       // Only frequency bandwidth changes; canonical geography/color authority
       // remains identical for focus, medium and outer representations.
-      const focusRadius=Math.hypot((ux-.5)*2,(vz-.5)*2);
-      const focusRefineWeight=contextRing?0:smoothstep01(clamp((1.35-focusRadius)/1.10,0,1));
+      const focusEdgeDistance=Math.min(ux,1-ux,vz,1-vz);
+      // Child-only bandwidth is exactly zero at the focus-patch boundary, then
+      // ramps inward. The parent and child therefore share identical photometry
+      // at the projected handoff edge instead of exposing an oblique tonal seam.
+      const focusRefineWeight=contextRing?0:smoothstep01(clamp((focusEdgeDistance-.035)/.19,0,1));
       const photometricMetersPerTexel=contextRing
         ? lerp(sharedMetersPerTexel,metersPerTexel,contextRefineWeight*.36)
         : lerp(sharedMetersPerTexel,Math.max(metersPerTexel,sharedMetersPerTexel*.14),focusRefineWeight*.94);
@@ -5287,9 +5310,9 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // Physical bandwidth may differ by texel size; feature identity does not.
         const featureBandwidth=smoothstep01(clamp((1400-metersPerTexel)/1320,0,1));
         const featureGain=(contextRing?lerp(.66,.82,contextRefineWeight):lerp(.78,1,focusRefineWeight))*featureBandwidth;
-        const ridgeValley=clamp(Number(sample.terrainRidgeValley||0),-1,1);
-        const drainage=clamp(Number(sample.terrainDrainage||0),0,1);
-        const coverStructure=clamp(Number(sample.terrainCover||0),-1,1);
+        const ridgeValley=clamp(Number(terrainFeature.ridgeValley||0),-1,1);
+        const drainage=clamp(Number(terrainFeature.drainage||0),0,1);
+        const coverStructure=clamp(Number(terrainFeature.cover||0),-1,1);
         const ridgeTone=ridgeValley*(contextRing?.080:.122)*featureGain;
         const channelTone=-drainage*(contextRing?.058:.084)*featureGain;
         const coverTone=coverStructure*(contextRing?.024:.036)*featureGain;
