@@ -3632,10 +3632,16 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       const ringCell=Boolean(local&&Math.abs(Number(local.radius||0)-ringRadius)<=1.25);
       const outwardBranch=Boolean(local&&kind==="main-road"&&Number(local.forward||0)>ringRadius+1);
       const gatewayStem=Boolean(local&&kind==="main-road"&&Number(local.forward||0)>=0&&!ringCell&&Math.abs(Number(local.lateral||0))<=1.5);
-      if(tier==="footprint"&&!outwardBranch&&!gatewayStem)continue;
-      // At overview scale the canonical ring remains present but nearly hairline;
-      // outward gateway truth and irregular occupied lots carry the silhouette.
-      const half=tier==="footprint"?(outwardBranch?.30:.08):(outwardBranch?.34:ringCell?.055:kind==="local-path"?.095:.10);
+      const localPath=kind==="local-path";
+      if(tier==="footprint"){
+        if(!outwardBranch&&!gatewayStem)continue;
+      }else{
+        // 1/2500 is a progressive overview: expose real outward connectivity and
+        // irregular local paths now, defer the canonical ring/center avenue to
+        // closer tiers where it no longer reads as a locator glyph.
+        if(!outwardBranch&&!localPath)continue;
+      }
+      const half=tier==="footprint"?(outwardBranch?.30:.08):(outwardBranch?.34:.085);
       addQuad(x-half,y-half,x+half,y+half);
       if(roadSet.has((x+1)+","+y))addQuad(x+half,y-half,x+1-half,y+half);
       if(roadSet.has(x+","+(y+1)))addQuad(x-half,y+half,x+half,y+1-half);
@@ -5230,26 +5236,29 @@ function terrainDetailHeight(east,north,metersPerTexel,salt){
   return h;
 }
 function landCoverTint(east,north,metersPerTexel,salt,elevation){
-  // Presentation-only cover is a continuous fractal field, never a thresholded
-  // collection of rounded parcels. Every frequency is anchored to registered
-  // world meters and fades in only when resolved by the current physical texel.
+  // Presentation-only cover is continuous and registered in world meters. A
+  // low-frequency deterministic domain warp prevents the value-noise lattice
+  // from reading as square mosaic fields without introducing camera/LOD identity.
+  const warpEast=surfaceValueNoise(east,north,6200,salt+101)*980;
+  const warpNorth=surfaceValueNoise(east,north,5400,salt+107)*860;
+  const we=east+warpEast,wn=north+warpNorth;
   const wBroad=detailOctaveWeight(3600,metersPerTexel),wMid=detailOctaveWeight(1500,metersPerTexel),
     wField=detailOctaveWeight(700,metersPerTexel),wFine=detailOctaveWeight(280,metersPerTexel),
     wCopse=detailOctaveWeight(120,metersPerTexel);
   if(wBroad<=0)return [0,0,0];
   const alpine=smoothstep01((elevation-2200)/900),lowland=1-alpine;
-  const broad=surfaceValueNoise(east,north,3600,salt+7)*.24*wBroad+
-    surfaceValueNoise(east,north,1500,salt+11)*.34*wMid+
-    surfaceValueNoise(east,north,700,salt+13)*.42*wField;
-  const forestCover=clamp(.44+broad*.68,0,1)*lowland;
+  const broad=surfaceValueNoise(we,wn,3600,salt+7)*.22*wBroad+
+    surfaceValueNoise(we,wn,1500,salt+11)*.30*wMid+
+    surfaceValueNoise(we,wn,700,salt+13)*.34*wField;
+  const forestCover=clamp(.44+broad*.62,0,1)*lowland;
   const forestDelta=(forestCover-.44*lowland)*wBroad;
-  const parcel=surfaceValueNoise(east,north,700,salt+19)*.78*wField+
-    surfaceValueNoise(east,north,340,salt+23)*.60*wFine;
+  const parcel=surfaceValueNoise(we,wn,700,salt+19)*.66*wField+
+    surfaceValueNoise(we,wn,340,salt+23)*.48*wFine;
   const dryField=Math.max(0,parcel)*lowland,meadow=Math.max(0,-parcel)*lowland;
-  const copse=surfaceValueNoise(east,north,120,salt+29)*wCopse*lowland;
-  const mottle=surfaceValueNoise(east,north,700,salt+31)*.030*wField+
-    surfaceValueNoise(east,north,280,salt+37)*.032*wFine+
-    surfaceValueNoise(east,north,120,salt+41)*.018*wCopse;
+  const copse=surfaceValueNoise(we,wn,120,salt+29)*wCopse*lowland;
+  const mottle=surfaceValueNoise(we,wn,700,salt+31)*.026*wField+
+    surfaceValueNoise(we,wn,280,salt+37)*.028*wFine+
+    surfaceValueNoise(we,wn,120,salt+41)*.016*wCopse;
   // Map-scale readability comes from one continuous registered-meter cover
   // field, not from parcel meshes or camera-relative decoration. Stronger chroma
   // separation reveals woodland/meadow/dry openings only when physically
@@ -5365,8 +5374,18 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Preserve enough canonical globe hue to keep the same macro terrain
       // recognizable through the projection handoff, then converge smoothly.
       const coarseIdentity=smoothstep01(clamp((metersPerTexel-4)/70,0,1));
-      const macroIdentityWeight=clamp(.055+coarseIdentity*.095+mountainIdentity*.025,.055,.19);
-      const base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
+      const macroIdentityWeight=clamp(.040+coarseIdentity*.050+mountainIdentity*.016,.040,.12);
+      let base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
+      // Map-scale views should show terrain structure, not one kilometre-scale
+      // brightness wedge. Compress only land luminance above ~35 m/texel while
+      // preserving RGB differences; near-ground presentation is unchanged.
+      if(sample?.land&&metersPerTexel>35){
+        const compression=smoothstep01(clamp((metersPerTexel-35)/120,0,1))*.72;
+        const luma=base[0]*.28+base[1]*.58+base[2]*.14;
+        const targetLuma=.335+alpineBase*.055;
+        const shift=(targetLuma-luma)*compression;
+        base=base.map(v=>clamp(v+shift,0,1));
+      }
       const elevation=Number(sample?.elevationMeters||0);
       const relief=clamp(elevation/5200,0,1);
       // Detail frequencies are anchored to canonical SEED-registered meters.
@@ -5438,12 +5457,13 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
         const coverGain=contextRing?lerp(.12,.34,contextRefineWeight):lerp(.34,.94,focusRefineWeight);
-        const mapCoverBoost=lerp(1.42,1,smoothstep01(clamp((28-metersPerTexel)/24,0,1)));
-        const coverContrast=(contextRing?lerp(1.08,1.30,contextRefineWeight):lerp(1.18,1.56,focusRefineWeight))*mapCoverBoost;
+        const mapCoverBoost=lerp(1.18,1,smoothstep01(clamp((28-metersPerTexel)/24,0,1)));
+        const coverContrast=(contextRing?lerp(1.04,1.22,contextRefineWeight):lerp(1.10,1.42,focusRefineWeight))*mapCoverBoost;
         const landCover=sharedCover.map((v,i)=>(v+(nativeCover[i]-sharedCover[i])*coverGain)*coverContrast);
         cover=cover.map((v,i)=>v+landCover[i]);
       }
-      const identityTint=sample?.land?[relief*.040,relief*.036,relief*.020]:[-.010,-.003,.024];
+      const reliefTintWeight=sample?.land&&metersPerTexel>35?lerp(.35,1,smoothstep01(clamp((180-metersPerTexel)/145,0,1))):1;
+      const identityTint=sample?.land?[relief*.040*reliefTintWeight,relief*.036*reliefTintWeight,relief*.020*reliefTintWeight]:[-.010,-.003,.024];
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
       let displayColor=authoritative;
       if(useMicroDetail){
@@ -5586,7 +5606,7 @@ function finalizeLocalResource(job,result){
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
-      topographicSignalRevision:"canonical-shared-authority-raster-v8",topographicSignalAuthority:"PlanetGeography elevation slope/curvature + moisture sampled from one per-SLOD outer-footprint authority raster reused by focus/medium/outer/fallback through SeedCoordinateFabric registered meters",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,
+      topographicSignalRevision:"canonical-warped-cover-overview-v9",topographicSignalAuthority:"PlanetGeography elevation slope/curvature + moisture sampled from one per-SLOD outer-footprint authority raster reused by focus/medium/outer/fallback through SeedCoordinateFabric registered meters",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
