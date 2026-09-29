@@ -78,11 +78,20 @@ def resource_ready():
     requested=state.get("requestedSignature")
     active=state.get("activeSignature")
     signature_ready=(not requested) or (bool(active) and str(active)==str(requested))
-    return (
-        state["ready"] and not state["standInActive"] and
-        state["pendingPreparationCount"]==0 and signature_ready and state["scaleIndex"]==8 and
-        state["tier"] in ("refined","full") and state["localStaticActive"] and
+    exact_ready=(
+        not state["standInActive"] and state["pendingPreparationCount"]==0 and signature_ready
+    )
+    # A valid already-active 1/5000 parent is acceptable while the exact child
+    # finishes prewarming. The later visual gate still requires the authoritative
+    # selected resident/tool/workplace to be visible at the requested focus.
+    parent_reusable=bool(
+        state["standInActive"] and active and state["localStaticActive"] and
         state["localBuildingCount"]>0
+    )
+    return (
+        state["ready"] and state["scaleIndex"]==8 and
+        state["tier"] in ("refined","full") and state["localStaticActive"] and
+        state["localBuildingCount"]>0 and (exact_ready or parent_reusable)
     )
 
 def activate(info):
@@ -112,6 +121,7 @@ def visual_state(resident_id,building_id):
       return {
         settled:Boolean(!rb.standInActive&&Number(rb.pendingPreparationCount||0)===0&&
           (!rb.requestedSignature||(rb.activeSignature&&String(rb.activeSignature)===String(rb.requestedSignature)))),
+        parentReusable:Boolean(rb.standInActive&&rb.activeSignature&&ls.active&&Number(ls.buildingCount||0)>0),
         requestedSignature:rb.requestedSignature,activeSignature:rb.activeSignature,localStaticSignature:ls.signature,
         preparing:Boolean(rb.preparing),pendingPreparationCount:Number(rb.pendingPreparationCount||0),
         standInActive:Boolean(rb.standInActive),scaleIndex:s.zoom.scaleIndex,scaleLabel:s.zoom.scaleLabel,
@@ -129,7 +139,7 @@ def visual_ready(info):
     state=visual_state(info["sample"]["residentId"],info["sample"].get("buildingId"))
     exact=state.get("exact") or {}
     return (
-        state["settled"] and state["scaleIndex"]==8 and state["tier"] in ("refined","full") and
+        (state["settled"] or state.get("parentReusable")) and state["scaleIndex"]==8 and state["tier"] in ("refined","full") and
         state["localStaticActive"] and state["localBuildingCount"]>0 and state["workplaceKnown"] and
         exact.get("visible") and bool(exact.get("screen")) and exact.get("inViewport") and state["exactToolActive"] and
         state.get("activeWorkCyclePropCount",0)>0 and exact.get("movementStatus")=="arrived" and
@@ -146,16 +156,16 @@ def add_overlay(info,bounds):
       const cy=((Number(bounds.top)||0)+(Number(bounds.bottom)||0))/2;
       const horizontal=cx>w*.5?"left":"right",vertical=cy>h*.5?"top":"bottom";
       Object.assign(card.style,{
-        position:"fixed",zIndex:"99999",width:"min(286px,calc(100vw - 20px))",
+        position:"fixed",zIndex:"99999",width:"min(248px,calc(100vw - 20px))",
         padding:"8px 10px",borderRadius:"9px",background:"rgba(7,12,18,.86)",color:"#f4f0df",
         border:"1px solid rgba(232,202,128,.68)",boxShadow:"0 6px 18px rgba(0,0,0,.32)",
-        font:"600 11px/1.32 system-ui,sans-serif",pointerEvents:"none"
+        font:"600 10px/1.28 system-ui,sans-serif",pointerEvents:"none"
       });
       card.style[horizontal]="10px";card.style[vertical]="10px";
       const s=info.sample,st=info.state;
       card.innerHTML=
         '<div style="font-size:9px;letter-spacing:.11em;color:#e8ca80">WP-S004-007 · LIVE WORK CYCLE</div>'+
-        '<div style="font-size:15px;margin:2px 0 4px">'+String(s.profession).replace(/-/g," ")+' · '+s.label+'</div>'+
+        '<div style="font-size:13px;margin:2px 0 3px">'+String(s.profession).replace(/-/g," ")+' · '+s.label+'</div>'+
         '<div>'+s.action.toUpperCase()+' · '+s.targetSource.replace(/-/g," ")+' · '+(st?.status||"unknown")+'</div>'+
         '<div style="opacity:.76;margin-top:3px">Step '+(Number(s.stepIndex)+1)+'/'+(st?.workCycle?.stepCount||"?")+
         ' · route '+(st?.routeRequests??"?")+' · ≤12 exact workers</div>'+
