@@ -156,7 +156,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S005-004` — Advice Acceptance, Rejection + Influence Resolution — COMPLETED
 - `WP-S005-005` — Relationship, Reputation + Duty State Foundation — COMPLETED
 - `WP-S005-006` — NPC Recognition + Personal Interaction Memory — COMPLETED
-- `WP-S005-007` — Local Rumors, Knowledge Exchange + Discoverable Leads
+- `WP-S005-007` — Local Rumors, Knowledge Exchange + Discoverable Leads — IN PROGRESS (AGENT #6; accepted functional implementation/evidence head c28d8cdb3f0f7665fdcec95416823e1c89b3bd11 / workflow 36525973107 SUCCESS: deterministic resident-bounded confirmed/uncertain/hearsay knowledge, freshness/stale context, resident-scoped local-event filtering, read-only CharacterMemory queries, stable persistent navigator lead reveal, <=6 results, <=16 destinations, <=24 local indexed records, <=5 leads, <=64 resident-memory candidates, localIndexedQueriesOnly=true, globalScan=false, worldMutation=false, simulationAuthority=false; VISUAL N/A because acceptance is authority/persistence/query behavior rather than a new rendering surface; ACCEPTED PENDING DEPLOYMENT)
 
 # Stage 6 — Political Geography + Settlement Diversity Foundation
 
