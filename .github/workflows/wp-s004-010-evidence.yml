@@ -7,8 +7,7 @@ on:
     paths:
       - .github/workflows/wp-s004-010-evidence.yml
       - scripts/world/crowd-presentation.js
-      - scripts/ui/app-ui.js
-      - scripts/render/playcanvas/app.js
+      - scripts/world/planet-stage.js
       - index.html
       - tools/tests/wp-s004-010-density-crowd.test.js
       - tools/wp_s004_010_evidence.py
@@ -38,8 +37,7 @@ jobs:
       - name: Syntax check integration scripts
         run: |
           node --check scripts/world/crowd-presentation.js
-          node --check scripts/ui/app-ui.js
-          node --check scripts/render/playcanvas/app.js
+          node --check scripts/world/planet-stage.js
       - name: Functional density crowd proof
         run: node tools/tests/wp-s004-010-density-crowd.test.js
       - name: Start local game
