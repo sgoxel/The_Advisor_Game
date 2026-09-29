@@ -186,8 +186,7 @@ let localNpcRoot=null;
 let localNpcMaterials=null;
 let localNpcContext=null;
 let localNpcEntities=new Map();
-let localCrowdEntities=new Map();
-let localNpcPresentation={active:false,activeCount:0,exactActiveCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,crowdActiveCount:0,crowdRequestedCount:0,crowdEntityCount:0,crowdDrawCallEstimate:0,crowdCap:0,crowdSettlementId:null,crowdSettlementName:null,crowdSettlementClass:null,crowdPopulation:0,crowdPopulationSource:null,crowdActivityFactor:0,crowdBuildMs:0,crowdCandidateChecks:0,crowdSelectable:false,crowdPersistentIdentity:false,crowdCollision:false,crowdExactNpcReplacement:false,crowdFullSettlementPerFrameScan:false,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles",rhythmSource:"SettlementActivityRhythm presentation-only",crowdSource:"CrowdPresentation presentation-only",presentationOnly:true,simulationAuthority:false};
+let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles",rhythmSource:"SettlementActivityRhythm presentation-only",presentationOnly:true,simulationAuthority:false};
 let localCrowdRoot=null;
 let localCrowdMaterials=null;
 let localCrowdContext=null;
@@ -4040,61 +4039,6 @@ function refreshLocalCrowdPresentation(whenOverride=null){
   if(!localCrowdContext)return;
   const c=localCrowdContext;rebuildLocalCrowdPresentation(c.resource,c.frame,c.tier,whenOverride);
 }
-function crowdMaterialForRole(role){
-  const p=localNpcMaterials?.professions||{};
-  if(role==="guard")return p.guard||localNpcMaterials.body;
-  if(role==="farmer")return p.farmer||localNpcMaterials.body;
-  if(role==="craft")return p.smith||localNpcMaterials.body;
-  if(role==="laborer")return p.woodcutter||localNpcMaterials.body;
-  if(role==="traveler")return p["tavern-keeper"]||localNpcMaterials.body;
-  return p.shopkeeper||localNpcMaterials.body;
-}
-function crowdRelativeTiles(value,origin){
-  try{return Number(BigInt(String(value))-BigInt(String(origin)))}catch(_){return 0}
-}
-function rebuildAnonymousCrowdPresentation(plan,focusTile,tier,frame,presentationScale,unit,lift=0,avoidPoints=[]){
-  localCrowdEntities.clear();
-  const empty={activeCount:0,requestedCount:0,entityCount:0,drawCallEstimate:0,cap:0,settlementId:null,settlementName:null,settlementClass:null,population:0,populationSource:null,activityFactor:0,buildMs:0,candidateChecks:0};
-  if(!plan||!["refined","full"].includes(String(tier))||!window.CrowdPresentation?.snapshotForPlan)return Object.freeze(empty);
-  ensureLocalNpcMaterials();
-  if(!localNpcRoot){localNpcRoot=new pc.Entity("CanonicalResidentsAndCrowd");tangentPatch.addChild(localNpcRoot);}
-  const mobile=Math.min(Number(root?.clientWidth||window.innerWidth||1280),Number(root?.clientHeight||window.innerHeight||720))<520;
-  const crowd=window.CrowdPresentation.snapshotForPlan(activeSeed,plan,inspectionFantasyStamp(),{mobile,avoidPoints});
-  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),scale=Math.max(.65,Number(presentationScale||1)),u=Math.max(1e-9,Number(unit)||1);
-  let entityCount=0;
-  for(const spec of crowd?.specs||[]){
-    const dx=crowdRelativeTiles(spec.point?.x,plan.center.x)+Number(spec.presentationOffset?.x||0);
-    const dy=crowdRelativeTiles(spec.point?.y,plan.center.y)+Number(spec.presentationOffset?.y||0);
-    const east=dx*tileMeters,north=dy*tileMeters,pos=canonicalSemanticPosition(east,north,scale,u,frame);
-    const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.018;
-    const height=Math.max(.055,.92*scale/u),radius=Math.max(.028,.28*scale/u);
-    const body=addLocalPrimitive(localNpcRoot,"AnonymousCrowd-"+String(spec.id),"cone",crowdMaterialForRole(spec.visualRole),pos.x,ground+height*.5,pos.z,radius,height,radius,0,spec.flipX?18:-18,0);
-    body._advisorCrowdPresentationOnly=true;
-    localCrowdEntities.set(String(spec.id),{body,spec});
-    entityCount++;
-  }
-  return Object.freeze({
-    activeCount:Number(crowd?.activeCount||0),requestedCount:Number(crowd?.requestedCount||0),entityCount,drawCallEstimate:entityCount,
-    cap:Number(crowd?.cap||0),settlementId:crowd?.settlementId||plan.id,settlementName:crowd?.settlementName||plan.name,
-    settlementClass:crowd?.settlementClass||plan.classId,population:Number(crowd?.population||0),populationSource:crowd?.populationSource||null,
-    activityFactor:Number(crowd?.activityFactor||0),buildMs:Number(crowd?.updateMs||0),candidateChecks:Number(crowd?.candidateChecks||0),
-    presentationOnly:true,selectable:false,persistentIdentity:false,collision:false,exactNpcReplacement:false,fullSettlementPerFrameScan:false
-  });
-}
-function focusedCrowdPlan(resource){
-  if(!activeSeed||!resource||!window.CrowdPresentation?.resolvePlan)return null;
-  const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
-  const plan=window.CrowdPresentation.resolvePlan(activeSeed,focusTile);
-  return plan?Object.freeze({plan,focusTile}):null;
-}
-function rebuildFocusedAnonymousCrowd(resource,tier,frame){
-  const resolved=focusedCrowdPlan(resource);if(!resolved)return null;
-  const {plan,focusTile}=resolved,origin=worldLatLonForTile(plan.center.x,plan.center.y);
-  const anchorDelta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,origin.latitudeRadians,origin.longitudeRadians);
-  const semanticFrame={...frame,semanticAnchorEastMeters:Number(anchorDelta.eastMeters||0),semanticAnchorNorthMeters:Number(anchorDelta.northMeters||0)};
-  const unit=Math.max(1e-9,Number(resource.dims?.metersPerUnit||1));
-  return rebuildAnonymousCrowdPresentation(plan,focusTile,tier,semanticFrame,1,unit,.012,[]);
-}
 function registerCanonicalBuildingInspection(record,entities){
   const typeLabel=readableTitle(record?.function||record?.kind||record?.type,"Building");
   const explicitName=String(record?.label||record?.name||"").trim();
@@ -4109,8 +4053,8 @@ function registerCanonicalBuildingInspection(record,entities){
 }
 function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,unit,lift=0,preserveSelection=false){
   const started=performance.now(),selectedNpc=inspection.selectedType==="npc"?inspection.selectedId:null;
-  clearInspectionKeySet(localNpcInspectionKeys,preserveSelection);localNpcRoot?.destroy?.();localNpcRoot=null;localNpcEntities.clear();localCrowdEntities.clear();
-  localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,exactActiveCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),crowdActiveCount:0,crowdRequestedCount:0,crowdEntityCount:0,crowdDrawCallEstimate:0,crowdCap:0,crowdSettlementId:null,crowdSettlementName:null,crowdSettlementClass:null,crowdPopulation:0,crowdPopulationSource:null,crowdActivityFactor:0,crowdBuildMs:0,crowdCandidateChecks:0};
+  clearInspectionKeySet(localNpcInspectionKeys,preserveSelection);localNpcRoot?.destroy?.();localNpcRoot=null;localNpcEntities.clear();
+  localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([])};
   localNpcContext={reveal,tier,frame,presentationScale,unit,lift};
   if(!["refined","full"].includes(tier)||!window.DailyActivity?.build)return;
   ensureLocalNpcMaterials();localNpcRoot=new pc.Entity("CanonicalResidents");tangentPatch.addChild(localNpcRoot);
@@ -4143,15 +4087,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     },localNpcInspectionKeys);
     if(initiallyVisible)activeCount++;entityCount+=6;
   }
-  const avoidPoints=[];
-  for(const record of localNpcEntities.values()){
-    const state=residentPresentationState(record.resident);if(state)avoidPoints.push(Object.freeze({x:String(Math.round(state.x)),y:String(Math.round(state.y))}));
-  }
-  const crowdStats=rebuildAnonymousCrowdPresentation(reveal?.settlement||null,reveal?.village?.center||null,tier,frame,presentationScale,unit,lift,avoidPoints);
-  localNpcPresentation={...localNpcPresentation,active:activeCount>0||crowdStats.activeCount>0,activeCount,exactActiveCount:activeCount,entityCount,drawCallEstimate:entityCount+crowdStats.drawCallEstimate,buildTimeMs:Number((performance.now()-started).toFixed(3)),time:inspectionFantasyStamp(),
-    crowdActiveCount:crowdStats.activeCount,crowdRequestedCount:crowdStats.requestedCount,crowdEntityCount:crowdStats.entityCount,crowdDrawCallEstimate:crowdStats.drawCallEstimate,crowdCap:crowdStats.cap,
-    crowdSettlementId:crowdStats.settlementId,crowdSettlementName:crowdStats.settlementName,crowdSettlementClass:crowdStats.settlementClass,crowdPopulation:crowdStats.population,crowdPopulationSource:crowdStats.populationSource,
-    crowdActivityFactor:crowdStats.activityFactor,crowdBuildMs:crowdStats.buildMs,crowdCandidateChecks:crowdStats.candidateChecks,crowdSelectable:false,crowdPersistentIdentity:false,crowdCollision:false,crowdExactNpcReplacement:false,crowdFullSettlementPerFrameScan:false};
+  localNpcPresentation={...localNpcPresentation,active:activeCount>0,activeCount,entityCount,drawCallEstimate:entityCount,buildTimeMs:Number((performance.now()-started).toFixed(3)),time:inspectionFantasyStamp()};
   if(selectedNpc&&!inspectionPickables.has(inspectionRegistryKey("npc",selectedNpc)))dismissInspection();
 }
 function refreshCanonicalNpcPresentation(){
@@ -4278,7 +4214,7 @@ function updateCanonicalNpcMotion(){
     activeWorkCycleResidentIds:Object.freeze(activeWorkCycleResidentIds),
     rhythmBand:rhythm?.band||"unknown",rhythmModifiers:rhythm?.modifiers||null,rhythmCounts:rhythm?.counts||null,
     rhythmAveragePresentationPriority:rhythmPriorityCount?Number((rhythmPriorityTotal/rhythmPriorityCount).toFixed(4)):0,
-    drawCallEstimate:visibleCount*2+activeTools+activeProps+Number(localNpcPresentation.crowdDrawCallEstimate||0),
+    drawCallEstimate:visibleCount*2+activeTools+activeProps,
     motionUpdateCount:Number(localNpcPresentation.motionUpdateCount||0)+1,lastMotionUpdateMs:Number(elapsed.toFixed(4)),
     maxMotionUpdateMs:Math.max(Number(localNpcPresentation.maxMotionUpdateMs||0),Number(elapsed.toFixed(4)))};
 }
@@ -5138,7 +5074,7 @@ function rebuildLocalStaticPresentation(resource){
   if(!tangentPatch||!device||!geography||!resource)return;
   const started=performance.now(),dims=resource.dims,frame={lat0:resource.lat0,lon0:resource.lon0,dims,groundDetailWeight:resource.groundDetailWeight,centerElevation:resource.centerElevation},eligible=dims.staticWorld;
   clearInspectionKeySet(localBuildingInspectionKeys,false);clearInspectionKeySet(localNpcInspectionKeys,false);clearCanonicalWayfindingSignposts();
-  localNpcRoot?.destroy?.();localNpcRoot=null;localNpcContext=null;localNpcEntities.clear();localCrowdEntities.clear();localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,exactActiveCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,crowdActiveCount:0,crowdRequestedCount:0,crowdEntityCount:0,crowdDrawCallEstimate:0,crowdCap:0,crowdSettlementId:null,crowdSettlementName:null,crowdSettlementClass:null,crowdPopulation:0,crowdPopulationSource:null,crowdActivityFactor:0,crowdBuildMs:0,crowdCandidateChecks:0};
+  localNpcRoot?.destroy?.();localNpcRoot=null;localNpcContext=null;localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0};
   clearLocalCrowdPresentation();
   clearLocalBuildingActivity();localBuildingActivityContext=null;
   buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
@@ -5170,14 +5106,7 @@ function rebuildLocalStaticPresentation(resource){
     const y=localGroundHeightUnits(0,0,frame)+.02;addLocalStatic("SeedWaterSurface","box",localStaticMaterials.water,0,y,0,dims.patchWidth*.88/unit,.035,dims.patchHeight*.88/unit);
     localStatic.waterCount=1;localStatic.triangleEstimate+=12;localStatic.drawCallEstimate+=1;
   }
-  const crowdStats=rebuildFocusedAnonymousCrowd(resource,tier,frame);
-  if(crowdStats){
-    localNpcPresentation={...localNpcPresentation,active:crowdStats.activeCount>0,activeCount:0,exactActiveCount:0,entityCount:0,drawCallEstimate:crowdStats.drawCallEstimate,buildTimeMs:Number(crowdStats.buildMs||0),time:inspectionFantasyStamp(),
-      crowdActiveCount:crowdStats.activeCount,crowdRequestedCount:crowdStats.requestedCount,crowdEntityCount:crowdStats.entityCount,crowdDrawCallEstimate:crowdStats.drawCallEstimate,crowdCap:crowdStats.cap,
-      crowdSettlementId:crowdStats.settlementId,crowdSettlementName:crowdStats.settlementName,crowdSettlementClass:crowdStats.settlementClass,crowdPopulation:crowdStats.population,crowdPopulationSource:crowdStats.populationSource,
-      crowdActivityFactor:crowdStats.activityFactor,crowdBuildMs:crowdStats.buildMs,crowdCandidateChecks:crowdStats.candidateChecks,crowdSelectable:false,crowdPersistentIdentity:false,crowdCollision:false,crowdExactNpcReplacement:false,crowdFullSettlementPerFrameScan:false};
-  }
-  localStatic.entityCount=localStaticRoot.children.length;localStatic.active=localStatic.entityCount>0||localFaunaActors.length>0||Number(localNpcPresentation.crowdActiveCount||0)>0;localStatic.buildTimeMs=Number((performance.now()-started).toFixed(3));
+  localStatic.entityCount=localStaticRoot.children.length;localStatic.active=localStatic.entityCount>0||localFaunaActors.length>0;localStatic.buildTimeMs=Number((performance.now()-started).toFixed(3));
 }
 function scheduleLocalStaticPresentationRefresh(){
   if(localStaticRefreshScheduled||!displayResource)return;
