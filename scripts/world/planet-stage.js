@@ -3486,8 +3486,8 @@ function ensureLocalStaticMaterials(){
     microWater:make("LocalMicroWater",.07,.28,.42,.52),
     microStone:make("LocalMicroStone",.67,.64,.56),microWood:make("LocalMicroWood",.57,.34,.14),
     microDark:make("LocalMicroDark",.11,.075,.045),microCloth:make("LocalMicroCloth",.76,.56,.27),
-    microAccent:make("LocalMicroAccent",1.0,.45,.08),microSoil:make("LocalMicroSoil",.43,.25,.10,.24),
-    microGround:make("LocalMicroGround",.31,.20,.08,.31),microMoss:make("LocalMicroMoss",.12,.28,.07,.24),
+    microAccent:make("LocalMicroAccent",1.0,.45,.08),microSoil:make("LocalMicroSoil",.43,.25,.10,.18),
+    microGround:make("LocalMicroGround",.31,.20,.08,.22),microMoss:make("LocalMicroMoss",.12,.28,.07,.18),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityForge:(()=>{const m=make("LocalActivityForge",1,1,1);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3501,12 +3501,23 @@ function ensureLocalStaticMaterials(){
   // Route and lot overview meshes are tangent-plane quads. Render both sides so
   // their visibility does not depend on the local tangent entity orientation.
   localStaticMaterials.lotOverview.vertexColors=true;localStaticMaterials.lotOverview.diffuseVertexColor=true;
-  for(const material of [localStaticMaterials.road,localStaticMaterials.roadOverview,localStaticMaterials.lotOverview]){material.cull=pc.CULLFACE_NONE;material.update();}
+  for(const material of [localStaticMaterials.road,localStaticMaterials.roadOverview,localStaticMaterials.lotOverview,localStaticMaterials.microWater,localStaticMaterials.microGround,localStaticMaterials.microMoss,localStaticMaterials.microSoil]){material.cull=pc.CULLFACE_NONE;material.update();}
 }
 function sharedLocalPrimitive(type){
   if(localSharedPrimitives[type])return localSharedPrimitives[type];
   let mesh;
-  if(type==="dust-puff"){
+  if(type==="micro-ground-patch"||type==="micro-water-ribbon"){
+    mesh=new pc.Mesh(device);
+    const ring=type==="micro-water-ribbon"
+      ?[[-.30,-.52],[.16,-.52],[.29,-.34],[.20,-.12],[.34,.08],[.28,.28],[.17,.52],[-.24,.52],[-.19,.31],[-.31,.13],[-.22,-.10],[-.36,-.31]]
+      :[[-.52,-.12],[-.40,-.40],[-.08,-.53],[.26,-.48],[.49,-.26],[.53,.05],[.39,.35],[.10,.52],[-.24,.48],[-.49,.25]];
+    const positions=[0,0,0],normals=[0,1,0],indices=[];
+    for(const p of ring){positions.push(p[0],0,p[1]);normals.push(0,1,0);}
+    for(let i=0;i<ring.length;i++)indices.push(0,i+1,((i+1)%ring.length)+1);
+    mesh.setPositions(positions);mesh.setNormals(normals);mesh.setIndices(indices);mesh.update();
+  }else if(type==="micro-tent"){
+    mesh=pc.createCone(device,{baseRadius:.5,peakRadius:.045,height:1,capSegments:4});
+  }else if(type==="dust-puff"){
     // Three softly textured quads inside one shared mesh give broad coverage
     // from the fixed oblique gameplay camera without a faceted solid silhouette.
     mesh=new pc.Mesh(device);
@@ -5504,7 +5515,7 @@ function renderCanonicalMicroProp(prop,resource,frame,index){
       (east+off.x)/unit,ground+Number(yMeters||0)*presentationScale/unit,(-north+off.z)/unit,
       Number(sx||1)*presentationScale/unit,Number(sy||1)*presentationScale/unit,Number(sz||1)*presentationScale/unit,rx,ry,rz);
     primitives++;
-    triangles+=type==="sphere"?160:type==="cylinder"||type==="cone"?64:12;
+    triangles+=type==="sphere"?160:type==="cylinder"||type==="cone"?64:type==="micro-tent"?16:12;
   };
   const box=(mat,dx,dz,sx,sy,sz,y=sy*.5,localYaw=yaw)=>add("box",mat,dx,dz,sx,sy,sz,y,0,localYaw,0);
   const sphere=(mat,dx,dz,sx,sy,sz,y=sy*.5)=>add("sphere",mat,dx,dz,sx,sy,sz,y,0,0,0);
@@ -5517,8 +5528,9 @@ function renderCanonicalMicroProp(prop,resource,frame,index){
     box(wood,-.23,0,1.08,.18,.18,.16,yaw+34);box(wood,.23,0,1.08,.18,.18,.16,yaw-34);
     sphere(accent,0,0,.58,.72,.58,.48);sphere(localStaticMaterials.activityWarm,0,0,.28,.46,.28,.80);
   }else if(semantic==="tent"){
-    cone(cloth,0,0,3.45,2.75,3.45,1.38);box(wood,0,0,.16,3.05,.16,1.53);
-    box(dark,0,1.08,.76,1.08,.12,.58,yaw);
+    add("micro-tent",cloth,0,0,3.55,2.70,3.55,1.36,0,yaw+45,0);
+    box(wood,0,0,.14,2.92,.14,1.46);
+    box(dark,0,1.36,.92,1.16,.12,.60,yaw);
   }else if(semantic==="ruin-wall"){
     box(stone,-.58,0,1.72,2.25,.72,1.13);box(stone,.55,.10,1.02,1.38,.72,.69);
     sphere(stone,1.12,.34,.58,.42,.54,.22);sphere(stone,-1.08,.38,.44,.34,.42,.18);
@@ -5600,37 +5612,26 @@ function renderMicroLocationGrounding(location,resource,frame){
   if(Math.abs(east)>Number(dims.patchWidth||0)*.68||Math.abs(north)>Number(dims.patchHeight||0)*.68)return Object.freeze({primitiveCount:0,triangleEstimate:0});
   const yaw=Number(location.rotation||0),ground=localGroundHeightUnits(east,north,frame)+.008;
   let count=0,triangles=0;
-  const patch=(name,material,dx,dz,sx,sz,localYaw=yaw,yOffset=.006)=>{
+  const surface=(name,shape,material,dx,dz,sx,sz,localYaw=yaw,yOffset=.004)=>{
     const off=rotateMicroOffset(dx,dz,yaw);
-    addLocalStatic(name+"-"+location.id+"-"+count,"box",material,(east+off.x)/unit,ground+yOffset/unit,(-north+off.z)/unit,sx/unit,.045/unit,sz/unit,0,localYaw,0);
-    count++;triangles+=12;
-  };
-  const blob=(name,material,dx,dz,sx,sz,localYaw=yaw,yOffset=.004)=>{
-    const off=rotateMicroOffset(dx,dz,yaw);
-    addLocalStatic(name+"-"+location.id+"-"+count,"sphere",material,(east+off.x)/unit,ground+yOffset/unit,(-north+off.z)/unit,sx/unit,.055/unit,sz/unit,0,localYaw,0);
-    count++;triangles+=160;
+    addLocalStatic(name+"-"+location.id+"-"+count,shape,material,(east+off.x)/unit,ground+yOffset/unit,(-north+off.z)/unit,sx/unit,1,sz/unit,0,localYaw,0);
+    count++;triangles+=shape==="micro-water-ribbon"?12:10;
   };
   if(["river-crossing","fishing-spot","waterfall-crossing"].includes(type)){
-    // WorldDestinations/WorldField remains the water-context authority. Use a
-    // short chain of translucent, overlapping shoreline pools instead of broad
-    // rectangular slabs so the presentation reads as a narrow natural water
-    // corridor while retaining the exact canonical anchor.
-    blob("MicroWater",localStaticMaterials.microWater,-.8,2.0,4.5,4.9,yaw-10,-.010);
-    blob("MicroWater",localStaticMaterials.microWater,.1,4.3,5.0,5.5,yaw-2,-.011);
-    blob("MicroWater",localStaticMaterials.microWater,1.0,6.7,4.6,5.2,yaw+9,-.012);
-    blob("MicroWater",localStaticMaterials.microWater,1.7,8.7,3.8,4.4,yaw+15,-.013);
+    // WorldDestinations/WorldField remains the water-context authority. Two
+    // reusable irregular ribbon meshes form one shallow, bending corridor
+    // beside the exact canonical shoreline anchor without inventing water truth.
+    surface("MicroWater","micro-water-ribbon",localStaticMaterials.microWater,0,4.2,7.1,12.4,yaw-3,-.010);
+    surface("MicroWater","micro-water-ribbon",localStaticMaterials.microWater,1.45,9.0,5.2,7.4,yaw+13,-.011);
   }else if(["hunter-camp","abandoned-cart-campsite","hidden-clearing"].includes(type)){
-    // Organic overlapping wear shapes group the authoritative props into one
-    // readable used clearing without adding any world-state semantics.
-    blob("MicroWorn",localStaticMaterials.microGround,0,0,5.7,4.3,yaw+7,.003);
-    blob("MicroWorn",localStaticMaterials.microGround,1.8,-.8,3.5,2.8,yaw-13,.004);
-    blob("MicroWorn",localStaticMaterials.microGround,-1.7,1.0,3.1,2.5,yaw+21,.005);
+    surface("MicroWorn","micro-ground-patch",localStaticMaterials.microGround,0,0,6.4,4.9,yaw+5,.003);
+    surface("MicroWorn","micro-ground-patch",localStaticMaterials.microGround,1.55,-.72,3.5,2.7,yaw-15,.004);
   }else if(type==="burial-site"){
-    blob("MicroBurialGround",localStaticMaterials.microSoil,0,.35,5.8,6.2,yaw+4,.003);
-    blob("MicroBurialMoss",localStaticMaterials.microMoss,-1.7,-.7,3.5,3.0,yaw-14,.004);
+    surface("MicroBurialGround","micro-ground-patch",localStaticMaterials.microSoil,0,.30,6.0,6.6,yaw+3,.003);
+    surface("MicroBurialMoss","micro-ground-patch",localStaticMaterials.microMoss,-1.45,-.65,3.4,3.0,yaw-16,.004);
   }else if(type==="unusual-grove"){
-    blob("MicroGroveFloor",localStaticMaterials.microMoss,0,0,7.6,6.4,yaw,.003);
-    blob("MicroGroveFloor",localStaticMaterials.microMoss,2.0,1.4,4.2,3.4,yaw+17,.004);
+    surface("MicroGroveFloor","micro-ground-patch",localStaticMaterials.microMoss,0,0,7.8,6.6,yaw,.003);
+    surface("MicroGroveFloor","micro-ground-patch",localStaticMaterials.microMoss,1.85,1.25,4.0,3.2,yaw+19,.004);
   }
   return Object.freeze({primitiveCount:count,triangleEstimate:triangles});
 }
