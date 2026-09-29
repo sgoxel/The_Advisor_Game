@@ -263,36 +263,51 @@ function advanceState(seed,state,activity,seconds){
   return changed;
 }
 function beginAdvanceTick(when){
-  const activities=new Map(),socialResidents=[];
-  for(const state of states.values()){
-    const activity=activeActivity(seedKey,state,when);
-    activities.set(state.residentId,activity);
+  return {
+    when,activities:new Map(),socialResidents:[],residents:[...states.values()],
+    initCursor:0,cursor:0,phase:"activities",changed:false
+  };
+}
+function advanceTickInitialization(tick,cooperative,started,budgetMs){
+  while(tick.phase==="activities"){
+    if(tick.initCursor>=tick.residents.length){tick.phase="social";break;}
+    const state=tick.residents[tick.initCursor++],activity=activeActivity(seedKey,state,tick.when);
+    tick.activities.set(state.residentId,activity);
     const resident=residentById.get(state.residentId);
-    socialResidents.push(Object.freeze({
+    tick.socialResidents.push(Object.freeze({
       id:state.residentId,name:resident?.displayName||resident?.name||state.residentId,profession:resident?.profession||"",
       position:point(state.position),status:state.status,activity,
       actionExecution:window.ActionExecutor?.get?.("resident",state.residentId)||null
     }));
+    if(cooperative&&performance.now()-started>=budgetMs)return false;
   }
-  window.SocialEncounters?.advance?.({seed:seedKey,when,seconds:FIXED_STEP_SECONDS,residents:socialResidents});
-  // Contextual protagonist reactions are event-driven: the reaction system
-  // resolves only resident IDs named by queued local events. It never scans
-  // the roster/world to discover candidates.
-  window.ContextualReactions?.advance?.({
-    seed:seedKey,when,seconds:FIXED_STEP_SECONDS,
-    residentLookup:residentId=>{
-      const id=String(residentId||""),state=states.get(id);if(!state)return null;
-      const resident=residentById.get(id),activity=activities.get(id);
-      return Object.freeze({
-        id,position:point(state.position),status:state.status,
-        nextPosition:point(state.route?.path?.[state.routeIndex+1]||null),
-        workplaceId:resident?.workplaceId||null,activity,
-        workCycle:activity?.workCycle||null,
-        actionExecution:window.ActionExecutor?.get?.("resident",id)||null
-      });
-    }
-  });
-  return {when,activities,residents:[...states.values()],cursor:0,changed:false};
+  if(tick.phase==="social"){
+    window.SocialEncounters?.advance?.({seed:seedKey,when:tick.when,seconds:FIXED_STEP_SECONDS,residents:tick.socialResidents});
+    tick.phase="contextual";
+    if(cooperative&&performance.now()-started>=budgetMs)return false;
+  }
+  if(tick.phase==="contextual"){
+    // Contextual protagonist reactions are event-driven: the reaction system
+    // resolves only resident IDs named by queued local events. It never scans
+    // the roster/world to discover candidates.
+    window.ContextualReactions?.advance?.({
+      seed:seedKey,when:tick.when,seconds:FIXED_STEP_SECONDS,
+      residentLookup:residentId=>{
+        const id=String(residentId||""),state=states.get(id);if(!state)return null;
+        const resident=residentById.get(id),activity=tick.activities.get(id);
+        return Object.freeze({
+          id,position:point(state.position),status:state.status,
+          nextPosition:point(state.route?.path?.[state.routeIndex+1]||null),
+          workplaceId:resident?.workplaceId||null,activity,
+          workCycle:activity?.workCycle||null,
+          actionExecution:window.ActionExecutor?.get?.("resident",id)||null
+        });
+      }
+    });
+    tick.phase="residents";
+    if(cooperative&&performance.now()-started>=budgetMs)return false;
+  }
+  return true;
 }
 function advanceResidentForTick(tick,state){
   const activity=tick.activities.get(state.residentId);
@@ -326,13 +341,15 @@ function advanceResidentForTick(tick,state){
   tick.changed=Boolean(after?.changed)||tick.changed;
 }
 function drainAdvanceTick(tick,cooperative){
-  const started=performance.now(),budgetMs=cooperative?12:Infinity;
+  const started=performance.now(),budgetMs=cooperative?8:Infinity;
+  if(!advanceTickInitialization(tick,cooperative,started,budgetMs))return false;
   while(tick.cursor<tick.residents.length){
     advanceResidentForTick(tick,tick.residents[tick.cursor]);
     tick.cursor++;
-    if(cooperative&&tick.cursor<tick.residents.length&&performance.now()-started>=budgetMs)break;
+    if(cooperative&&tick.cursor<tick.residents.length&&performance.now()-started>=budgetMs)return false;
   }
-  return tick.cursor>=tick.residents.length;
+  tick.phase="done";
+  return true;
 }
 function advance(seed,when,realSeconds,options=null){
   const includeSnapshot=options?.snapshot!==false;
