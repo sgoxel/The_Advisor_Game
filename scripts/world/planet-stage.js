@@ -3879,7 +3879,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       for(const [x,y,kind] of roadCells){
         const key=x+","+y,c=classify({x,y,kind});
         if(c.localPath){routePathKeys.add(key);continue;}
-        if(kind!=="main-road"||c.ringCell)continue;
+        if(kind!=="main-road")continue;
         const local=village.local(activeSeed,String(x),String(y));if(!local)continue;
         const forward=Number(local.forward||0),lateral=Number(local.lateral||0);
         if(forward<4)continue;
@@ -3901,7 +3901,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       const selectedClasses=[...routePathKeys].map(k=>classify(roadByKey.get(k))).filter(Boolean);
       const ringCellCount=selectedClasses.filter(c=>c.ringCell).length;
       overviewStats=Object.freeze({
-        revision:"route-priority-centerline-v11",accessTargetCount:uniqueTargets.length,connectedTargetCount,
+        revision:"route-priority-centerline-v12",accessTargetCount:uniqueTargets.length,connectedTargetCount,
         localClusterTargetCount:Math.max(0,uniqueTargets.length-connectedTargetCount),
         selectedCellCount:selectedClasses.length,ringCellCount,ringArcShare:Number((ringCellCount/Math.max(1,selectedClasses.length)).toFixed(4)),
         gatewayCellCount:selectedClasses.filter(c=>c.gatewayStem||c.outwardBranch).length,
@@ -3941,7 +3941,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
   const roadMaterial=(tier==="route"||tier==="footprint")?localStaticMaterials.roadOverview:localStaticMaterials.road;
   entity.render.meshInstances=[new pc.MeshInstance(mesh,roadMaterial,entity)];localStaticRoot.addChild(entity);localSettlementRoadGeometry=mesh;
   return Object.freeze({active:true,cellCount:(tier==="route"||tier==="footprint")?renderedRoadCellCount:roadCells.length,segmentCount,queryCount,triangleCount:indices.length/3,overviewStats,
-    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-priority-centerline-v11":"StartingVillage.infrastructureAt-cell-mesh-v1"});
+    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-priority-centerline-v12":"StartingVillage.infrastructureAt-cell-mesh-v1"});
 }
 function clearCanonicalWayfindingSignposts(){
   clearInspectionKeySet(localSignInspectionKeys,false);
