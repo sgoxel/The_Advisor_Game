@@ -7839,6 +7839,7 @@ async function buildScene(){  const started=performance.now();
       let restored=null;
       try{restored=window.SeedSystem.loadCampaign();}catch(_){}
       if(restored?.ok&&String(restored.campaign?.seed||"")===String(activeSeed)){
+        if(window.GeneratedWorldStore?.bindCampaign)await window.GeneratedWorldStore.bindCampaign(restored.campaign,{primeLimit:128,resumeReason:"existing-campaign"});
         window.WorldState.bindCampaign(restored.campaign,{reset:false});
         if(window.CatchUpSimulation?.bindCampaign){
           window.CatchUpSimulation.bindCampaign(restored.campaign,{reset:false});
@@ -8074,6 +8075,7 @@ async function start(){
     }else window.addEventListener("resize",resize);
 
     ready=true;
+    window.GeneratedWorldStore?.markFirstPlayable?.();
     beginNavigationPerformanceTelemetry();
     startResidentMovementScheduler();
     setStartupProgress("ready","First playable planet ready",100,"ready");
@@ -8352,7 +8354,8 @@ function snapshot(){
     startupError,
     startupProgress:Object.freeze({...startupProgress,loadingProofActive:Boolean(loadingProof)}),
     loadingPresentation:Object.freeze({...((loadingProof||startupProgress)),loadingProofActive:Boolean(loadingProof)}),
-    startupScheduler:Object.freeze({...startupScheduler,progressMonotonic:true,sharedCooperativeScheduler:true,criticalPathOnly:true})
+    startupScheduler:Object.freeze({...startupScheduler,progressMonotonic:true,sharedCooperativeScheduler:true,criticalPathOnly:true}),
+    generatedWorldStore:window.GeneratedWorldStore?.telemetry?.()||null
   });
 }
 function inspectionTargets(){
