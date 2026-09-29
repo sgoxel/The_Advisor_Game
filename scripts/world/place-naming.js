@@ -65,8 +65,16 @@ function cultureFor(seed,countryId,entityId){
   const id=cultureId(seed,countryId,entityId);
   return CULTURES.find(item=>item.id===id)||CULTURES[0];
 }
+function mix32(value){
+  let h=Number(value)>>>0;
+  h^=h>>>16;h=Math.imul(h,0x7feb352d);
+  h^=h>>>15;h=Math.imul(h,0x846ca68b);
+  h^=h>>>16;
+  return h>>>0;
+}
 function pick(seed,key,list){
-  return list[hash32(safe(seed)+"|place-name|v"+VERSION+"|"+safe(key))%list.length];
+  const h=hash32(safe(seed)+"|place-name|v"+VERSION+"|"+safe(key));
+  return list[mix32(h)%list.length];
 }
 function smoothWord(value){
   return String(value).replace(/([aeiou])\1+/gi,"$1").replace(/([bcdfghjklmnpqrstvwxyz])\1+/gi,"$1");
@@ -152,7 +160,7 @@ function scoped(seedValue,inputsValue){
   const used=new Set(),out=[];
   for(const item of inputs){
     let d=null;
-    for(let attempt=0;attempt<64;attempt++){
+    for(let attempt=0;attempt<256;attempt++){
       const candidate=descriptor(seed,item,attempt);
       const normalized=candidate.name.toLocaleLowerCase("en-US");
       if(!used.has(normalized)){d=candidate;used.add(normalized);break;}
