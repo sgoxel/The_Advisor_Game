@@ -4355,11 +4355,14 @@ function currentCrowdAvoidPoints(){
 }
 function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
   clearLocalCrowdPresentation();
-  if(!resource||!frame?.dims||!["refined","full"].includes(String(tier))||!window.CrowdPresentation||!tangentPatch)return;
+  if(!resource||!frame?.dims||!window.CrowdPresentation||!tangentPatch)return;
   const started=performance.now(),focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   const rect=canvas?.getBoundingClientRect?.(),mobile=Math.min(Number(rect?.width||1280),Number(rect?.height||720))<=520;
   const stamp=whenOverride||window.GameTime?.getNow?.()||inspectionFantasyStamp();
-  const crowd=CrowdPresentation.snapshot(activeSeed,stamp,focusTile,{mobile,avoidPoints:currentCrowdAvoidPoints()});
+  const settlementCrowdActive=["refined","full"].includes(String(tier));
+  const crowd=settlementCrowdActive
+    ? CrowdPresentation.snapshot(activeSeed,stamp,focusTile,{mobile,avoidPoints:currentCrowdAvoidPoints()})
+    : Object.freeze({active:false,activeCount:0,specs:Object.freeze([]),pooledStableIds:true,lowFrequencyMotion:true});
   const encounter=window.TravelEncounters?.localPresentation?.(activeSeed,focusTile,stamp,{mobile})||null;
   const encounterSpecs=Array.isArray(encounter?.exactActors)?encounter.exactActors:[];
   const presentationSpecs=[...(crowd?.specs||[]),...encounterSpecs];
@@ -5756,7 +5759,6 @@ function rebuildLocalStaticPresentation(resource){
     const preparedMicro=prepareCanonicalMicroLocations(resource,tier);
     const wild=renderLocalWilderness(resource,frame,null);
     const micro=renderCanonicalMicroLocations(resource,frame,tier,preparedMicro);
-    rebuildLocalCrowdPresentation(resource,frame,tier);
     localStatic.wildernessCount=wild.accepted;localStatic.ambientFaunaCount=wild.fauna;localStatic.vegetationCount=Object.entries(wilderness.localFamilyCounts||{}).filter(([k])=>["grass","flower","bush","sapling","reed"].includes(k)).reduce((sum,[,v])=>sum+Number(v||0),0);
     localStatic.microLocationCount=micro.locationCount;localStatic.microLocationPropCount=micro.propCount;localStatic.microLocationPrimitiveCount=micro.primitiveCount;
     localStatic.microLocationDrawCallEstimate=micro.drawCallEstimate;localStatic.microLocationTriangleEstimate=micro.triangleEstimate;
@@ -5766,6 +5768,10 @@ function rebuildLocalStaticPresentation(resource){
     const y=localGroundHeightUnits(0,0,frame)+.02;addLocalStatic("SeedWaterSurface","box",localStaticMaterials.water,0,y,0,dims.patchWidth*.88/unit,.035,dims.patchHeight*.88/unit);
     localStatic.waterCount=1;localStatic.triangleEstimate+=12;localStatic.drawCallEstimate+=1;
   }
+  // Rare traveling encounters are local relevance presentation and may occur
+  // outside settlements. Reuse the one merged crowd batch on both land and
+  // water/local-wilderness ground resources; routine crowd remains settlement-tier gated.
+  rebuildLocalCrowdPresentation(resource,frame,tier);
   localStatic.entityCount=localStaticRoot.children.length;localStatic.active=localStatic.entityCount>0||localFaunaActors.length>0;localStatic.buildTimeMs=Number((performance.now()-started).toFixed(3));
 }
 function scheduleLocalStaticPresentationRefresh(){
