@@ -4424,18 +4424,28 @@ function currentCrowdAvoidPoints(){
 }
 function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
   clearLocalCrowdPresentation();
-  if(!resource||!frame?.dims||!["refined","full"].includes(String(tier))||!window.CrowdPresentation||!tangentPatch)return;
+  if(!resource||!frame?.dims||(!window.CrowdPresentation&&!window.TravelEncounters)||!tangentPatch)return;
   const started=performance.now(),focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   const rect=canvas?.getBoundingClientRect?.(),mobile=Math.min(Number(rect?.width||1280),Number(rect?.height||720))<=520;
-  const stamp=whenOverride||window.GameTime?.getNow?.()||inspectionFantasyStamp();
-  const crowd=CrowdPresentation.snapshot(activeSeed,stamp,focusTile,{mobile,avoidPoints:currentCrowdAvoidPoints()});
+  const stamp=whenOverride||window.GameTime?.getTimestampKey?.()||window.GameTime?.getNow?.()||inspectionFantasyStamp();
+  const settlementCrowdActive=["refined","full"].includes(String(tier));
+  const crowd=settlementCrowdActive&&window.CrowdPresentation?CrowdPresentation.snapshot(activeSeed,stamp,focusTile,{mobile,avoidPoints:currentCrowdAvoidPoints()}):null;
+  const encounter=window.TravelEncounters?.localPresentation?.(activeSeed,focusTile,stamp,{mobile})||null;
+  const routineSpecs=crowd?.active&&Array.isArray(crowd.specs)?crowd.specs:[];
+  const encounterSpecs=encounter?.active&&Array.isArray(encounter.exactActors)?encounter.exactActors:[];
+  const specs=[...routineSpecs,...encounterSpecs];
   localCrowdContext={resource,frame,tier,stamp};
-  if(!crowd?.active||!crowd.specs?.length){
+  if(!specs.length){
     localCrowdPresentation={...localCrowdPresentation,
       settlementId:crowd?.settlementId||null,settlementName:crowd?.settlementName||null,settlementClass:crowd?.settlementClass||null,
       districtBand:crowd?.districtBand||"none",districtFactor:Number(crowd?.districtFactor||0),
       population:Number(crowd?.population||0),populationSource:crowd?.populationSource||null,rhythmBand:crowd?.rhythmBand||"unknown",
       activityFactor:Number(crowd?.activityFactor||0),cap:Number(crowd?.cap||0),candidateChecks:Number(crowd?.candidateChecks||0),mobile,
+      travelEncounterCount:Number(encounter?.exactActorCount||0),visibleTravelEncounterCount:0,
+      travelEncounterId:encounter?.encounter?.id||null,travelEncounterType:encounter?.encounter?.type||null,
+      travelEncounterBuildMs:Number(encounter?.updateMs||0),travelEncounterBodyMinPx:null,travelEncounterBodyMaxPx:null,
+      travelEncounterVisualAnchorSource:encounter?.encounter?.visualAnchor?.source||null,
+      travelerSilhouetteRevision:"travel-encounter-silhouette-v2",
       buildTimeMs:Number((performance.now()-started).toFixed(3))
     };
     return;
@@ -4446,9 +4456,16 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
   const resourceTile=mapWorldTileAt(resource.lat0,resource.lon0);
   const positions=[],normals=[],colors=[],indices=[],visibleSpecs=[];
   const roleColors=Object.freeze({
-    market:Object.freeze([196,132,72,255]),traveler:Object.freeze([109,145,194,255]),
-    laborer:Object.freeze([166,118,76,255]),guard:Object.freeze([92,126,184,255]),
-    farmer:Object.freeze([105,154,81,255]),craft:Object.freeze([183,105,81,255])
+    market:Object.freeze([196,132,72,255]),traveler:Object.freeze([96,142,196,255]),
+    laborer:Object.freeze([166,118,76,255]),guard:Object.freeze([78,116,181,255]),
+    farmer:Object.freeze([105,154,81,255]),craft:Object.freeze([183,105,81,255]),
+    merchant:Object.freeze([211,151,70,255]),caravan:Object.freeze([168,112,69,255]),bard:Object.freeze([145,91,183,255]),
+    pilgrim:Object.freeze([137,123,91,255]),messenger:Object.freeze([66,145,190,255]),hunter:Object.freeze([73,127,76,255])
+  });
+  const propColors=Object.freeze({
+    pack:Object.freeze([105,69,42,255]),satchel:Object.freeze([125,78,45,255]),bundle:Object.freeze([148,102,58,255]),
+    lute:Object.freeze([167,112,59,255]),staff:Object.freeze([111,83,52,255]),spear:Object.freeze([159,161,154,255]),
+    bow:Object.freeze([126,84,48,255]),"field-pack":Object.freeze([89,93,65,255])
   });
   const quad=(x0,z0,x1,z1,ground,height,color,nx,nz)=>{
     const base=positions.length/3;
@@ -4462,7 +4479,30 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     for(let i=0;i<4;i++){normals.push(0,1,0);colors.push(...color);}
     indices.push(base,base+1,base+2,base,base+2,base+3);
   };
-  for(const spec of crowd.specs){
+  const topRect=(x,z,y,halfX,halfZ,color)=>{
+    const base=positions.length/3;
+    positions.push(x-halfX,y,z-halfZ,x+halfX,y,z-halfZ,x+halfX,y,z+halfZ,x-halfX,y,z+halfZ);
+    for(let i=0;i<4;i++){normals.push(0,1,0);colors.push(...color);}
+    indices.push(base,base+1,base+2,base,base+2,base+3);
+  };
+  const screenFootprint=(x,z,y,halfX,halfZ)=>{
+    if(!cameraEntity?.camera||!canvas?.getBoundingClientRect)return null;
+    const transform=tangentPatch.getWorldTransform?.();if(!transform)return null;
+    const project=(px,pz)=>{
+      const world=transform.transformPoint(new pc.Vec3(px,y,pz),new pc.Vec3()),screen=cameraEntity.camera.worldToScreen(world,new pc.Vec3());
+      return Number.isFinite(Number(screen?.x))&&Number.isFinite(Number(screen?.y))?{x:Number(screen.x),y:Number(screen.y)}:null;
+    };
+    const pts=[project(x-halfX,z-halfZ),project(x+halfX,z-halfZ),project(x+halfX,z+halfZ),project(x-halfX,z+halfZ)].filter(Boolean);
+    if(pts.length!==4)return null;
+    const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y),bounds={left:Math.min(...xs),right:Math.max(...xs),top:Math.min(...ys),bottom:Math.max(...ys)};
+    const view=canvas.getBoundingClientRect(),centerX=(bounds.left+bounds.right)/2,centerY=(bounds.top+bounds.bottom)/2;
+    return Object.freeze({
+      screen:Object.freeze({x:Number(centerX.toFixed(3)),y:Number(centerY.toFixed(3)),width:Number(view.width.toFixed(3)),height:Number(view.height.toFixed(3))}),
+      bodyScreenSizePx:Object.freeze({width:Number((bounds.right-bounds.left).toFixed(3)),height:Number((bounds.bottom-bounds.top).toFixed(3))}),
+      inViewport:Boolean(centerX>=0&&centerX<=view.width&&centerY>=0&&centerY<=view.height)
+    });
+  };
+  for(const spec of specs){
     let east=0,north=0,directLocal=true;
     try{
       const dx=Number(BigInt(String(spec.point.x))-BigInt(String(resourceTile.x)));
@@ -4471,50 +4511,56 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
       east=dx*tileMeters;north=dy*tileMeters;
     }catch(_){
       directLocal=false;
-      const ll=worldLatLonForTile(spec.point.x,spec.point.y);
-      const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,ll.latitudeRadians,ll.longitudeRadians);
+      const ll=worldLatLonForTile(spec.point.x,spec.point.y),delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,ll.latitudeRadians,ll.longitudeRadians);
       east=Number(delta.eastMeters||0);north=Number(delta.northMeters||0);
     }
-    east+=Number(spec.presentationOffset?.x||0)*tileMeters;
-    north+=Number(spec.presentationOffset?.y||0)*tileMeters;
+    east+=Number(spec.presentationOffset?.x||0)*tileMeters;north+=Number(spec.presentationOffset?.y||0)*tileMeters;
     if(Math.abs(east)>halfW||Math.abs(north)>halfH)continue;
-    const ground=localGroundHeightUnits(east,north,frame)+.018,posX=east/unit,posZ=-north/unit;
-    const height=Math.max(.09,1.56/unit),halfWidth=Math.max(.022,.28/unit),headRadius=Math.max(.018,.20/unit),color=roleColors[spec.visualRole]||roleColors.market;
+    const ground=localGroundHeightUnits(east,north,frame)+.018,posX=east/unit,posZ=-north/unit,isEncounter=Boolean(spec.travelEncounter);
+    const height=Math.max(isEncounter ? .16 : .09,(isEncounter?1.76:1.56)/unit);
+    const halfWidth=Math.max(isEncounter ? .045 : .022,(isEncounter ? .38 : .28)/unit),headRadius=Math.max(isEncounter ? .03 : .018,(isEncounter ? .25 : .20)/unit);
+    const color=roleColors[spec.visualRole]||roleColors.traveler;
     quad(posX-halfWidth,posZ,posX+halfWidth,posZ,ground,height,color,0,1);
     quad(posX,posZ-halfWidth,posX,posZ+halfWidth,ground,height,color,1,0);
-    diamond(posX,posZ,ground+height*.86,headRadius,color);
-    visibleSpecs.push(Object.freeze({...spec,directLocalProjection:directLocal}));
+    let screenEvidence=null;
+    if(isEncounter){
+      const topHalfX=Math.max(.06,.56/unit),topHalfZ=Math.max(.075,.78/unit),topY=ground+height*.55;
+      topRect(posX,posZ,topY,topHalfX,topHalfZ,color);
+      diamond(posX,posZ-topHalfZ*.42,ground+height*.91,headRadius,color);
+      const propColor=propColors[spec.propKind]||propColors.pack,side=Number(spec.presentationOffset?.x||0)>=0?1:-1;
+      if(spec.propKind==="staff"||spec.propKind==="spear"||spec.propKind==="bow")topRect(posX+side*topHalfX*.92,posZ,topY+.004,Math.max(.014,.07/unit),Math.max(.08,.75/unit),propColor);
+      else topRect(posX+side*topHalfX*.88,posZ+topHalfZ*.22,topY+.004,Math.max(.025,.20/unit),Math.max(.03,.28/unit),propColor);
+      screenEvidence=screenFootprint(posX,posZ,topY,topHalfX,topHalfZ);
+    }else diamond(posX,posZ,ground+height*.86,headRadius,color);
+    visibleSpecs.push(Object.freeze({...spec,directLocalProjection:directLocal,screen:screenEvidence?.screen||null,bodyScreenSizePx:screenEvidence?.bodyScreenSizePx||null,inViewport:Boolean(screenEvidence?.inViewport)}));
   }
   let mergedEntity=null;
   if(positions.length){
-    localCrowdMesh=new pc.Mesh(device);
-    localCrowdMesh.setPositions(positions);
-    localCrowdMesh.setNormals(normals);
-    localCrowdMesh.setColors32(colors);
-    localCrowdMesh.setIndices(indices);
-    localCrowdMesh.update();
-    localCrowdRoot=new pc.Entity("AnonymousCrowdPresentation");
-    localCrowdRoot.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
-    localCrowdRoot.render.meshInstances=[new pc.MeshInstance(localCrowdMesh,localCrowdMaterials.merged,localCrowdRoot)];
-    tangentPatch.addChild(localCrowdRoot);
-    mergedEntity=localCrowdRoot;
+    localCrowdMesh=new pc.Mesh(device);localCrowdMesh.setPositions(positions);localCrowdMesh.setNormals(normals);localCrowdMesh.setColors32(colors);localCrowdMesh.setIndices(indices);localCrowdMesh.update();
+    localCrowdRoot=new pc.Entity("AnonymousCrowdPresentation");localCrowdRoot.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
+    localCrowdRoot.render.meshInstances=[new pc.MeshInstance(localCrowdMesh,localCrowdMaterials.merged,localCrowdRoot)];tangentPatch.addChild(localCrowdRoot);mergedEntity=localCrowdRoot;
   }
-  localCrowdEntities=visibleSpecs.map(spec=>Object.freeze({id:String(spec.id),entity:mergedEntity,point:spec.point,visualRole:String(spec.visualRole||"market")}));
+  localCrowdEntities=visibleSpecs.map(spec=>Object.freeze({
+    id:String(spec.id),entity:mergedEntity,point:spec.point,visualRole:String(spec.visualRole||"market"),travelEncounter:Boolean(spec.travelEncounter),
+    encounterType:spec.encounterType||null,propKind:spec.propKind||null,screen:spec.screen||null,bodyScreenSizePx:spec.bodyScreenSizePx||null,inViewport:Boolean(spec.inViewport)
+  }));
+  const travelRows=localCrowdEntities.filter(item=>item.travelEncounter),travelSizes=travelRows.map(item=>Math.max(Number(item.bodyScreenSizePx?.width||0),Number(item.bodyScreenSizePx?.height||0))).filter(Number.isFinite);
   const elapsed=performance.now()-started;
   localCrowdPresentation={
-    active:localCrowdEntities.length>0,generatedCount:Number(crowd.activeCount||0),visibleCount:localCrowdEntities.length,
+    active:localCrowdEntities.length>0,generatedCount:Number(crowd?.activeCount||0)+Number(encounter?.exactActorCount||0),visibleCount:localCrowdEntities.length,
     entityCount:mergedEntity?1:0,drawCallEstimate:mergedEntity?1:0,buildTimeMs:Number(elapsed.toFixed(3)),
-    settlementId:crowd.settlementId||null,settlementName:crowd.settlementName||null,settlementClass:crowd.settlementClass||null,
-    districtBand:crowd.districtBand||"none",districtFactor:Number(crowd.districtFactor||0),
-    population:Number(crowd.population||0),populationSource:crowd.populationSource||null,rhythmBand:crowd.rhythmBand||"unknown",
-    activityFactor:Number(crowd.activityFactor||0),cap:Number(crowd.cap||0),candidateChecks:Number(crowd.candidateChecks||0),
-    resolveMs:Number(crowd.resolveMs||0),sourceUpdateMs:Number(crowd.updateMs||0),totalSourceUpdateMs:Number(crowd.totalUpdateMs||0),
+    settlementId:crowd?.settlementId||null,settlementName:crowd?.settlementName||null,settlementClass:crowd?.settlementClass||null,
+    districtBand:crowd?.districtBand||"none",districtFactor:Number(crowd?.districtFactor||0),population:Number(crowd?.population||0),populationSource:crowd?.populationSource||null,
+    rhythmBand:crowd?.rhythmBand||"unknown",activityFactor:Number(crowd?.activityFactor||0),cap:Number(crowd?.cap||0),candidateChecks:Number(crowd?.candidateChecks||0),
+    resolveMs:Number(crowd?.resolveMs||0),sourceUpdateMs:Number(crowd?.updateMs||0),totalSourceUpdateMs:Number(crowd?.totalUpdateMs||0),
     exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
-    mobile,pooledStableIds:Boolean(crowd.pooledStableIds),localCulling:true,lowFrequencyMotion:Boolean(crowd.lowFrequencyMotion),
-    mergedBatch:true,sharedMaterialCount:mergedEntity?1:0,directLocalProjectionCount:visibleSpecs.filter(spec=>spec.directLocalProjection).length,
-    topFacingHeadMarkers:true,
-    presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,
-    inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
+    travelEncounterCount:Number(encounter?.exactActorCount||0),visibleTravelEncounterCount:travelRows.length,travelEncounterId:encounter?.encounter?.id||null,
+    travelEncounterType:encounter?.encounter?.type||null,travelEncounterBuildMs:Number(encounter?.updateMs||0),
+    travelEncounterBodyMinPx:travelSizes.length?Number(Math.min(...travelSizes).toFixed(3)):null,travelEncounterBodyMaxPx:travelSizes.length?Number(Math.max(...travelSizes).toFixed(3)):null,
+    travelEncounterVisualAnchorSource:encounter?.encounter?.visualAnchor?.source||null,travelerSilhouetteRevision:"travel-encounter-silhouette-v2",
+    mobile,pooledStableIds:Boolean(crowd?.pooledStableIds!==false),localCulling:true,lowFrequencyMotion:Boolean(crowd?.lowFrequencyMotion!==false),mergedBatch:true,sharedMaterialCount:mergedEntity?1:0,
+    directLocalProjectionCount:visibleSpecs.filter(spec=>spec.directLocalProjection).length,topFacingHeadMarkers:true,topFacingTravelerBodies:true,
+    presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
   };
 }
 function refreshLocalCrowdPresentation(whenOverride=null){
@@ -8574,7 +8620,7 @@ function snapshot(){
     atmosphereTimeBinding:Object.freeze({...atmosphereTimeBinding}),
     wilderness:Object.freeze({...wilderness}),
     microLocations:Object.freeze({...microLocationPresentation,ids:Object.freeze((microLocationPresentation.ids||[]).slice()),types:Object.freeze((microLocationPresentation.types||[]).slice()),locations:Object.freeze((microLocationPresentation.locations||[]).slice())}),
-    localEvents:window.LocalEventVignettes?.snapshot?.(activeSeed)||null,
+    localEvents:window.LocalEventVignettes?.snapshot?.(activeSeed)||null,\n    travelEncounters:window.TravelEncounters?.snapshot?.(activeSeed)||null,
     wildlifeReaction:Object.freeze({...wildlifeReaction,actors:Object.freeze(localFaunaActors.map(localFaunaActorSnapshot)),memoryEntryCount:localFaunaReactionMemory.size,
       speciesRules:Object.freeze(Object.fromEntries(Object.entries(LOCAL_FAUNA_SPECS).map(([kind,spec])=>[kind,Object.freeze({...spec})])))}),
     environmentalReactions:Object.freeze({...environmentalReactions,activeSlots:Object.freeze(environmentalReactionPool.filter(slot=>slot.active).map(slot=>Object.freeze({kind:slot.kind,index:slot.index,ageMs:Number((performance.now()-slot.startedAtMs).toFixed(1)),lifetimeMs:slot.lifetimeMs,latitudeDegrees:Number((slot.latitudeRadians*180/Math.PI).toFixed(6)),longitudeDegrees:Number((slot.longitudeRadians*180/Math.PI).toFixed(6))})))}),
@@ -8585,7 +8631,7 @@ function snapshot(){
       exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),
       visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
       inspectionRegistered:false,selectable:false,persistentIdentity:false,collision:false,
-      actors:Object.freeze(localCrowdEntities.map(item=>Object.freeze({id:item.id,point:item.point,visualRole:item.visualRole,visible:Boolean(item.entity?.enabled)})))
+      actors:Object.freeze(localCrowdEntities.map(item=>Object.freeze({id:item.id,point:item.point,visualRole:item.visualRole,visible:Boolean(item.entity?.enabled),travelEncounter:Boolean(item.travelEncounter),encounterType:item.encounterType||null,propKind:item.propKind||null,inViewport:Boolean(item.inViewport),screen:item.screen||null,bodyScreenSizePx:item.bodyScreenSizePx||null})))
     }),
     buildingActivity:Object.freeze({...buildingActivity,buildings:Object.freeze((buildingActivity.buildings||[]).slice())}),
     buildingSurroundings:Object.freeze({...buildingSurroundings,functions:Object.freeze((buildingSurroundings.functions||[]).slice()),buildings:Object.freeze((buildingSurroundings.buildings||[]).slice())}),
