@@ -3962,6 +3962,8 @@ function ensureLocalCrowdMaterials(){
   material.__atmosphereBaseDiffuse=[1,1,1];
   material.vertexColors=true;
   material.diffuseVertexColor=true;
+  material.emissive.set(.14,.14,.12);
+  material.emissiveIntensity=.7;
   material.roughness=.92;
   material.metalness=0;
   if(pc.CULLFACE_NONE!==undefined)material.cull=pc.CULLFACE_NONE;
@@ -4013,11 +4015,12 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
   ensureLocalCrowdMaterials();
   const dims=frame.dims,unit=Math.max(1e-9,Number(dims.metersPerUnit)||1),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
   const halfW=Math.max(1,Number(dims.patchWidth||0)*.55),halfH=Math.max(1,Number(dims.patchHeight||0)*.55);
+  const resourceTile=mapWorldTileAt(resource.lat0,resource.lon0);
   const positions=[],normals=[],colors=[],indices=[],visibleSpecs=[];
   const roleColors=Object.freeze({
-    market:Object.freeze([122,84,51,255]),traveler:Object.freeze([77,97,122,255]),
-    laborer:Object.freeze([87,74,56,255]),guard:Object.freeze([56,79,110,255]),
-    farmer:Object.freeze([71,99,61,255]),craft:Object.freeze([110,71,59,255])
+    market:Object.freeze([196,132,72,255]),traveler:Object.freeze([109,145,194,255]),
+    laborer:Object.freeze([166,118,76,255]),guard:Object.freeze([92,126,184,255]),
+    farmer:Object.freeze([105,154,81,255]),craft:Object.freeze([183,105,81,255])
   });
   const quad=(x0,z0,x1,z1,ground,height,color,nx,nz)=>{
     const base=positions.length/3;
@@ -4025,17 +4028,34 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     for(let i=0;i<4;i++){normals.push(nx,0,nz);colors.push(...color);}
     indices.push(base,base+2,base+1,base+1,base+2,base+3);
   };
+  const diamond=(x,z,y,r,color)=>{
+    const base=positions.length/3;
+    positions.push(x-r,y,z,x,y,z-r,x+r,y,z,x,y,z+r);
+    for(let i=0;i<4;i++){normals.push(0,1,0);colors.push(...color);}
+    indices.push(base,base+1,base+2,base,base+2,base+3);
+  };
   for(const spec of crowd.specs){
-    const ll=worldLatLonForTile(spec.point.x,spec.point.y);
-    const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,ll.latitudeRadians,ll.longitudeRadians);
-    const east=Number(delta.eastMeters||0)+Number(spec.presentationOffset?.x||0)*tileMeters;
-    const north=Number(delta.northMeters||0)+Number(spec.presentationOffset?.y||0)*tileMeters;
+    let east=0,north=0,directLocal=true;
+    try{
+      const dx=Number(BigInt(String(spec.point.x))-BigInt(String(resourceTile.x)));
+      const dy=Number(BigInt(String(spec.point.y))-BigInt(String(resourceTile.y)));
+      if(!Number.isFinite(dx)||!Number.isFinite(dy)||Math.abs(dx)>128||Math.abs(dy)>128)throw new Error("crowd-local-wrap");
+      east=dx*tileMeters;north=dy*tileMeters;
+    }catch(_){
+      directLocal=false;
+      const ll=worldLatLonForTile(spec.point.x,spec.point.y);
+      const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,ll.latitudeRadians,ll.longitudeRadians);
+      east=Number(delta.eastMeters||0);north=Number(delta.northMeters||0);
+    }
+    east+=Number(spec.presentationOffset?.x||0)*tileMeters;
+    north+=Number(spec.presentationOffset?.y||0)*tileMeters;
     if(Math.abs(east)>halfW||Math.abs(north)>halfH)continue;
     const ground=localGroundHeightUnits(east,north,frame)+.018,posX=east/unit,posZ=-north/unit;
-    const height=Math.max(.075,1.44/unit),halfWidth=Math.max(.018,.22/unit),color=roleColors[spec.visualRole]||roleColors.market;
+    const height=Math.max(.09,1.56/unit),halfWidth=Math.max(.022,.28/unit),headRadius=Math.max(.018,.20/unit),color=roleColors[spec.visualRole]||roleColors.market;
     quad(posX-halfWidth,posZ,posX+halfWidth,posZ,ground,height,color,0,1);
     quad(posX,posZ-halfWidth,posX,posZ+halfWidth,ground,height,color,1,0);
-    visibleSpecs.push(spec);
+    diamond(posX,posZ,ground+height*.86,headRadius,color);
+    visibleSpecs.push(Object.freeze({...spec,directLocalProjection:directLocal}));
   }
   let mergedEntity=null;
   if(positions.length){
@@ -4063,7 +4083,8 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     resolveMs:Number(crowd.resolveMs||0),sourceUpdateMs:Number(crowd.updateMs||0),totalSourceUpdateMs:Number(crowd.totalUpdateMs||0),
     exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
     mobile,pooledStableIds:Boolean(crowd.pooledStableIds),localCulling:true,lowFrequencyMotion:Boolean(crowd.lowFrequencyMotion),
-    mergedBatch:true,sharedMaterialCount:mergedEntity?1:0,
+    mergedBatch:true,sharedMaterialCount:mergedEntity?1:0,directLocalProjectionCount:visibleSpecs.filter(spec=>spec.directLocalProjection).length,
+    topFacingHeadMarkers:true,
     presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,
     inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
   };
