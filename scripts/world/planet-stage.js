@@ -4128,12 +4128,14 @@ function canonicalRoofMeshData(entry,state){
   const normalFor=side=>{const slope=roofRiseMeters/runMeters,l=Math.hypot(slope,1);return [side*slope/l,1/l,0];};
   const point=(side,t,northFactor,liftMeters=0)=>{
     const east=entry.east+side*runMeters*(1-t),north=entry.north+northFactor*entry.d,p=canonicalSemanticPosition(east,north,entry.presentationScale,entry.unit,entry.frame);
-    const n=normalFor(side),lift=liftMeters*entry.presentationScale/entry.unit;
-    return [p.x+n[0]*lift,outerY+roofRise*t+n[1]*lift,p.z];
+    const lift=liftMeters*entry.presentationScale/entry.unit;
+    // Detail remains inside the canonical footprint. A tiny vertical lift
+    // avoids z-fighting without pushing repair/moss beyond the eave silhouette.
+    return [p.x,outerY+roofRise*t+lift,p.z];
   };
   const variedColor=(color,salt,corner)=>{
     const n=localHash(entry.east+salt*1.73+corner*.47,entry.north+salt*.91-corner*.31,7301+salt*17+corner*11);
-    const amount=visualState==="normal"?.016:.028,factor=1+(n-.5)*2*amount;
+    const amount=visualState==="normal"?.018:.030,factor=1+(n-.5)*2*amount;
     return [Math.round(clamp(color[0]*factor,0,255)),Math.round(clamp(color[1]*factor,0,255)),Math.round(clamp(color[2]*factor,0,255)),color[3]??255];
   };
   const addQuad=(a,b,c,d,n,color,salt=0)=>{
@@ -4144,27 +4146,50 @@ function canonicalRoofMeshData(entry,state){
     }
     indices.push(base,base+1,base+2,base,base+2,base+3);
   };
-  const addRibbon=(side,nodes,color,salt,lift=.014)=>{
-    const nrm=normalFor(side);
-    for(let i=0;i<nodes.length-1;i++){
-      const a=nodes[i],b=nodes[i+1];
-      addQuad(
-        point(side,a[1],a[0],lift),point(side,a[2],a[0],lift),
-        point(side,b[2],b[0],lift),point(side,b[1],b[0],lift),
-        nrm,color,salt+i
-      );
+  const addTri=(a,b,c,n,color,salt=0)=>{
+    const base=positions.length/3,verts=[a,b,c];
+    for(let corner=0;corner<3;corner++){
+      const q=verts[corner],cc=variedColor(color,salt,corner);
+      positions.push(q[0],q[1],q[2]);normals.push(n[0],n[1],n[2]);colors.push(cc[0],cc[1],cc[2],cc[3]);
     }
+    indices.push(base,base+1,base+2);
   };
+  const addPatch=(side,t0,t1,n0,n1,color,salt,lift=.010,skew=0)=>{
+    const n=normalFor(side);
+    addQuad(
+      point(side,t0,n0,lift),
+      point(side,t1,n0+skew,lift),
+      point(side,t1,n1-skew,lift),
+      point(side,t0,n1,lift),
+      n,color,salt
+    );
+  };
+  const addLeafCluster=(side,t,northFactor,color,salt,scaleT=.065,scaleN=.038)=>{
+    const n=normalFor(side),lift=.014;
+    addTri(
+      point(side,t-scaleT*.45,northFactor,lift),
+      point(side,t+scaleT*.72,northFactor-scaleN,lift),
+      point(side,t+scaleT*.32,northFactor+scaleN*.78,lift),
+      n,color,salt
+    );
+    addTri(
+      point(side,t-scaleT*.18,northFactor+scaleN*.15,lift+.002),
+      point(side,t+scaleT*.48,northFactor+scaleN*1.05,lift+.002),
+      point(side,t+scaleT*.88,northFactor+scaleN*.08,lift+.002),
+      n,color,salt+1
+    );
+  };
+
   const baseColor=canonicalRoofSegmentColor(visualState,0,0,0,entry.landmark);
   const addPlane=(side,plane)=>{
     const n=normalFor(side);
     if(visualState==="damaged"&&plane===0){
-      // A stepped bite is removed from the real eave. The unequal depths make
-      // the damage part of the silhouette rather than a painted rectangle.
-      addQuad(point(side,.45,-.55),point(side,1,-.55),point(side,1,-.37),point(side,.45,-.37),n,baseColor,20);
-      addQuad(point(side,.30,-.37),point(side,1,-.37),point(side,1,-.20),point(side,.30,-.20),n,baseColor,21);
-      addQuad(point(side,.14,-.20),point(side,1,-.20),point(side,1,-.08),point(side,.14,-.08),n,baseColor,22);
-      addQuad(point(side,0,-.08),point(side,1,-.08),point(side,1,.55),point(side,0,.55),n,baseColor,23);
+      // Stepped, unequal eave losses make a broken silhouette while retaining
+      // the same authoritative roof footprint and ridge.
+      addQuad(point(side,.44,-.55),point(side,1,-.55),point(side,1,-.41),point(side,.44,-.41),n,baseColor,20);
+      addQuad(point(side,.35,-.41),point(side,1,-.41),point(side,1,-.30),point(side,.35,-.30),n,baseColor,21);
+      addQuad(point(side,.25,-.30),point(side,1,-.30),point(side,1,-.18),point(side,.25,-.18),n,baseColor,22);
+      addQuad(point(side,0,-.18),point(side,1,-.18),point(side,1,.55),point(side,0,.55),n,baseColor,23);
     }else{
       addQuad(point(side,0,-.55),point(side,1,-.55),point(side,1,.55),point(side,0,.55),n,baseColor,plane);
     }
@@ -4172,46 +4197,60 @@ function canonicalRoofMeshData(entry,state){
   addPlane(-1,0);addPlane(1,1);
 
   for(let plane=0;plane<2;plane++){
-    const side=plane===0?-1:1,drop=Math.max(.025,.15*entry.presentationScale/entry.unit);
-    const edgeColor=visualState==="overgrown"?[55,90,43,255]:visualState==="worn"?[94,75,60,255]:visualState==="damaged"?[58,40,31,255]:
-      visualState==="repaired"&&plane===0?[164,90,38,255]:entry.landmark?[151,87,31,255]:[68,30,23,255];
+    const side=plane===0?-1:1,drop=Math.max(.025,.16*entry.presentationScale/entry.unit);
+    const edgeColor=visualState==="overgrown"?[54,91,42,255]:visualState==="worn"?[96,76,60,255]:visualState==="damaged"?[59,40,31,255]:
+      visualState==="repaired"&&plane===0?[170,94,38,255]:entry.landmark?[151,87,31,255]:[68,30,23,255];
     const fascia=(n0,n1,salt)=>{
       const a=point(side,0,n0),b=point(side,0,n1);
       addQuad(a,b,[b[0],b[1]-drop,b[2]],[a[0],a[1]-drop,a[2]],[side,0,0],edgeColor,salt);
     };
-    if(visualState==="damaged"&&plane===0)fascia(-.08,.55,40);
+    if(visualState==="damaged"&&plane===0)fascia(-.18,.55,40);
     else fascia(-.55,.55,41+plane);
   }
 
   if(visualState==="worn"){
-    // Long, slightly wandering roof-following streaks read as worn shingles
-    // rather than isolated square swatches.
-    addRibbon(-1,[[-.50,.075,.125],[-.28,.065,.135],[-.05,.082,.145],[.18,.070,.128],[.43,.092,.150]],[179,148,114,255],100,.010);
-    addRibbon(-1,[[-.38,.38,.425],[-.18,.35,.405],[.02,.37,.420],[.21,.34,.392]],[92,69,54,255],110,.009);
-    addRibbon(1,[[-.30,.16,.205],[-.08,.14,.198],[.16,.17,.218],[.40,.15,.202]],[158,127,97,255],118,.010);
+    const light=[177,145,111,255],mid=[151,120,91,255],dark=[88,65,50,255];
+    // Narrow, staggered shingle runs replace the former square patches.
+    [
+      [-1,.05,.28,-.49,-.435,light,101,.008,.010],
+      [-1,.18,.43,-.18,-.125,mid,102,.008,-.012],
+      [-1,.06,.30,.155,.215,light,103,.008,.014],
+      [-1,.47,.72,.345,.397,dark,104,.007,-.010],
+      [ 1,.08,.31,-.31,-.255,light,105,.008,-.012],
+      [ 1,.29,.53,-.035,.020,mid,106,.008,.011],
+      [ 1,.10,.34,.275,.332,light,107,.008,-.013],
+      [ 1,.53,.77,-.485,-.435,dark,108,.007,.010]
+    ].forEach(v=>addPatch(...v));
   }else if(visualState==="damaged"){
-    // Char follows the irregular broken edge and a secondary soot streak crosses
-    // the intact slope; both are part of the state-aware roof mesh.
-    addRibbon(-1,[[-.53,.43,.49],[-.37,.29,.36],[-.20,.15,.22],[-.08,.08,.14]],[45,35,30,255],130,.018);
-    addRibbon(-1,[[-.42,.56,.61],[-.22,.51,.57],[-.02,.48,.54]],[112,58,35,255],138,.014);
-    addRibbon(1,[[-.46,.10,.145],[-.28,.12,.160],[-.08,.11,.155]],[112,76,55,255],142,.010);
+    const char=[45,35,30,255],burn=[111,56,34,255],ash=[143,117,88,255];
+    addPatch(-1,.42,.50,-.535,-.425,char,121,.010,.020);
+    addPatch(-1,.34,.41,-.395,-.305,burn,122,.010,-.016);
+    addPatch(-1,.23,.31,-.285,-.195,ash,123,.009,.012);
+    addLeafCluster(-1,.18,-.13,[84,54,40,255],125,.045,.025);
+    addPatch(1,.08,.19,-.44,-.385,[101,68,50,255],126,.007,.010);
   }else if(visualState==="repaired"){
-    // A single irregular fresh-timber replacement occupies the same eave area
-    // lost by damage. Subtle seams vary along its inner edge without protruding.
-    addRibbon(-1,[[-.53,.012,.43],[-.39,.012,.39],[-.24,.012,.34],[-.10,.012,.29]],[220,151,68,255],150,.012);
-    addRibbon(-1,[[-.49,.14,.165],[-.36,.13,.158],[-.23,.15,.178],[-.12,.14,.168]],[247,198,111,255],158,.015);
-    addRibbon(-1,[[-.45,.29,.315],[-.33,.28,.307],[-.20,.30,.327],[-.11,.29,.318]],[157,92,42,255],164,.014);
+    const fresh=[[224,156,72,255],[239,187,101,255],[198,124,55,255],[215,145,66,255]];
+    // Four slim replacement boards sit fully inside the missing-damage zone.
+    const strips=[[-.515,-.445,.34],[-.425,-.355,.30],[-.335,-.265,.37],[-.245,-.175,.28]];
+    strips.forEach((r,i)=>addPatch(-1,.035,r[2],r[0],r[1],fresh[i],140+i,.009,(i%2?-.009:.009)));
+    addPatch(-1,.285,.335,-.515,-.175,[147,87,42,255],148,.010,.004);
   }else if(visualState==="overgrown"){
-    // Continuous irregular moss hugs the eaves; smaller ivy runs climb the roof
-    // slope. This replaces the former isolated green rectangles.
-    addRibbon(-1,[[-.52,.008,.095],[-.35,.010,.125],[-.16,.006,.082],[.04,.012,.135],[.24,.008,.105],[.48,.010,.145]],[65,112,50,255],170,.015);
-    addRibbon(1,[[-.48,.010,.080],[-.24,.008,.120],[.02,.012,.090],[.27,.007,.132],[.49,.011,.100]],[91,135,60,255],180,.015);
-    addRibbon(-1,[[-.34,.22,.275],[-.18,.20,.265],[-.02,.23,.287],[.12,.21,.272]],[45,88,43,255],190,.016);
-    addRibbon(1,[[.05,.27,.320],[.18,.25,.310],[.33,.28,.337]],[53,97,45,255],196,.016);
+    const moss=[62,112,50,255],mossLight=[94,139,62,255],leaf=[43,88,42,255];
+    // Moss follows short shingle runs while paired triangles form irregular
+    // leaf clusters; nothing recolors a broad rectangular roof region.
+    addPatch(-1,.04,.27,-.475,-.425,moss,161,.009,.012);
+    addPatch(-1,.13,.34,.075,.125,mossLight,162,.009,-.012);
+    addPatch(1,.05,.28,-.255,-.205,mossLight,163,.009,.010);
+    addPatch(1,.20,.40,.315,.360,moss,164,.009,-.010);
+    addLeafCluster(-1,.24,-.31,leaf,170,.060,.032);
+    addLeafCluster(-1,.42,.23,moss,172,.055,.030);
+    addLeafCluster(1,.30,-.055,leaf,174,.060,.032);
+    addLeafCluster(1,.53,.18,mossLight,176,.052,.030);
+    addLeafCluster(-1,.12,.39,mossLight,178,.050,.026);
   }else{
     const tone=entry.landmark?[204,132,47,255]:[101,43,29,255];
-    addRibbon(-1,[[-.46,.31,.33],[-.12,.30,.325],[.18,.31,.33],[.44,.305,.326]],tone,200,.004);
-    addRibbon(1,[[-.42,.55,.57],[-.08,.545,.568],[.24,.55,.57],[.43,.548,.569]],tone,205,.004);
+    addPatch(-1,.31,.34,-.46,.46,tone,181,.004,0);
+    addPatch(1,.55,.58,-.44,.44,tone,182,.004,0);
   }
   return {positions,normals,colors,indices,visualState};
 }
