@@ -12,6 +12,10 @@ on:
       - tools/tests/wp-s004-010-density-crowd.test.js
       - tools/wp_s004_010_evidence.py
 
+concurrency:
+  group: wp-s004-010-density-evidence
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
