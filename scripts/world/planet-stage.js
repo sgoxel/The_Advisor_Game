@@ -199,6 +199,7 @@ let localCrowdPresentation={
   settlementId:null,settlementName:null,settlementClass:null,districtBand:"none",districtFactor:0,
   population:0,populationSource:null,rhythmBand:"unknown",activityFactor:0,cap:0,candidateChecks:0,
   exactPersistentNpcCount:0,visibleExactNpcCount:0,mobile:false,pooledStableIds:true,localCulling:true,lowFrequencyMotion:true,
+  travelEncounterCount:0,travelEncounterId:null,travelEncounterType:null,
   presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,
   inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
 };
@@ -4333,6 +4334,7 @@ function resetLocalCrowdTelemetry(){
     population:0,populationSource:null,rhythmBand:"unknown",activityFactor:0,cap:0,candidateChecks:0,
     exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
     mobile:false,pooledStableIds:true,localCulling:true,lowFrequencyMotion:true,
+    travelEncounterCount:0,travelEncounterId:null,travelEncounterType:null,
     presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,
     inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
   };
@@ -4357,13 +4359,17 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
   const rect=canvas?.getBoundingClientRect?.(),mobile=Math.min(Number(rect?.width||1280),Number(rect?.height||720))<=520;
   const stamp=whenOverride||window.GameTime?.getNow?.()||inspectionFantasyStamp();
   const crowd=CrowdPresentation.snapshot(activeSeed,stamp,focusTile,{mobile,avoidPoints:currentCrowdAvoidPoints()});
+  const encounter=window.TravelEncounters?.localPresentation?.(activeSeed,focusTile,stamp,{mobile})||null;
+  const encounterSpecs=Array.isArray(encounter?.exactActors)?encounter.exactActors:[];
+  const presentationSpecs=[...(crowd?.specs||[]),...encounterSpecs];
   localCrowdContext={resource,frame,tier,stamp};
-  if(!crowd?.active||!crowd.specs?.length){
+  if(!presentationSpecs.length){
     localCrowdPresentation={...localCrowdPresentation,
       settlementId:crowd?.settlementId||null,settlementName:crowd?.settlementName||null,settlementClass:crowd?.settlementClass||null,
       districtBand:crowd?.districtBand||"none",districtFactor:Number(crowd?.districtFactor||0),
       population:Number(crowd?.population||0),populationSource:crowd?.populationSource||null,rhythmBand:crowd?.rhythmBand||"unknown",
       activityFactor:Number(crowd?.activityFactor||0),cap:Number(crowd?.cap||0),candidateChecks:Number(crowd?.candidateChecks||0),mobile,
+      travelEncounterCount:Number(encounter?.exactActorCount||0),travelEncounterId:encounter?.encounter?.id||null,travelEncounterType:encounter?.encounter?.type||null,
       buildTimeMs:Number((performance.now()-started).toFixed(3))
     };
     return;
@@ -4390,7 +4396,7 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     for(let i=0;i<4;i++){normals.push(0,1,0);colors.push(...color);}
     indices.push(base,base+1,base+2,base,base+2,base+3);
   };
-  for(const spec of crowd.specs){
+  for(const spec of presentationSpecs){
     let east=0,north=0,directLocal=true;
     try{
       const dx=Number(BigInt(String(spec.point.x))-BigInt(String(resourceTile.x)));
@@ -4407,10 +4413,15 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     north+=Number(spec.presentationOffset?.y||0)*tileMeters;
     if(Math.abs(east)>halfW||Math.abs(north)>halfH)continue;
     const ground=localGroundHeightUnits(east,north,frame)+.018,posX=east/unit,posZ=-north/unit;
-    const height=Math.max(.09,1.56/unit),halfWidth=Math.max(.022,.28/unit),headRadius=Math.max(.018,.20/unit),color=roleColors[spec.visualRole]||roleColors.market;
+    const encounterScale=spec.travelEncounter?1.55:1;
+    const height=Math.max(.09,1.56*encounterScale/unit),halfWidth=Math.max(.022,.28*encounterScale/unit),headRadius=Math.max(.018,.20*encounterScale/unit),color=roleColors[spec.visualRole]||roleColors.market;
     quad(posX-halfWidth,posZ,posX+halfWidth,posZ,ground,height,color,0,1);
     quad(posX,posZ-halfWidth,posX,posZ+halfWidth,ground,height,color,1,0);
     diamond(posX,posZ,ground+height*.86,headRadius,color);
+    if(spec.travelEncounter){
+      const markerRadius=Math.max(.026,.42/unit),markerY=ground+height+Math.max(.03,.32/unit);
+      diamond(posX,posZ,markerY,markerRadius,[238,205,116,255]);
+    }
     visibleSpecs.push(Object.freeze({...spec,directLocalProjection:directLocal}));
   }
   let mergedEntity=null;
@@ -4427,10 +4438,10 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     tangentPatch.addChild(localCrowdRoot);
     mergedEntity=localCrowdRoot;
   }
-  localCrowdEntities=visibleSpecs.map(spec=>Object.freeze({id:String(spec.id),entity:mergedEntity,point:spec.point,visualRole:String(spec.visualRole||"market")}));
+  localCrowdEntities=visibleSpecs.map(spec=>Object.freeze({id:String(spec.id),entity:mergedEntity,point:spec.point,visualRole:String(spec.visualRole||"market"),travelEncounter:Boolean(spec.travelEncounter),encounterType:spec.encounterType||null}));
   const elapsed=performance.now()-started;
   localCrowdPresentation={
-    active:localCrowdEntities.length>0,generatedCount:Number(crowd.activeCount||0),visibleCount:localCrowdEntities.length,
+    active:localCrowdEntities.length>0,generatedCount:Number(crowd.activeCount||0)+Number(encounter?.exactActorCount||0),visibleCount:localCrowdEntities.length,
     entityCount:mergedEntity?1:0,drawCallEstimate:mergedEntity?1:0,buildTimeMs:Number(elapsed.toFixed(3)),
     settlementId:crowd.settlementId||null,settlementName:crowd.settlementName||null,settlementClass:crowd.settlementClass||null,
     districtBand:crowd.districtBand||"none",districtFactor:Number(crowd.districtFactor||0),
@@ -4438,7 +4449,8 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     activityFactor:Number(crowd.activityFactor||0),cap:Number(crowd.cap||0),candidateChecks:Number(crowd.candidateChecks||0),
     resolveMs:Number(crowd.resolveMs||0),sourceUpdateMs:Number(crowd.updateMs||0),totalSourceUpdateMs:Number(crowd.totalUpdateMs||0),
     exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
-    mobile,pooledStableIds:Boolean(crowd.pooledStableIds),localCulling:true,lowFrequencyMotion:Boolean(crowd.lowFrequencyMotion),
+    travelEncounterCount:Number(encounter?.exactActorCount||0),travelEncounterId:encounter?.encounter?.id||null,travelEncounterType:encounter?.encounter?.type||null,
+    mobile,pooledStableIds:Boolean(crowd.pooledStableIds!==false),localCulling:true,lowFrequencyMotion:Boolean(crowd.lowFrequencyMotion!==false),
     mergedBatch:true,sharedMaterialCount:mergedEntity?1:0,directLocalProjectionCount:visibleSpecs.filter(spec=>spec.directLocalProjection).length,
     topFacingHeadMarkers:true,
     presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,
@@ -8281,6 +8293,7 @@ function snapshot(){
     wilderness:Object.freeze({...wilderness}),
     microLocations:Object.freeze({...microLocationPresentation,ids:Object.freeze((microLocationPresentation.ids||[]).slice()),types:Object.freeze((microLocationPresentation.types||[]).slice()),locations:Object.freeze((microLocationPresentation.locations||[]).slice())}),
     localEvents:window.LocalEventVignettes?.snapshot?.(activeSeed)||null,
+    travelEncounters:window.TravelEncounters?.snapshot?.(activeSeed)||null,
     wildlifeReaction:Object.freeze({...wildlifeReaction,actors:Object.freeze(localFaunaActors.map(localFaunaActorSnapshot)),memoryEntryCount:localFaunaReactionMemory.size,
       speciesRules:Object.freeze(Object.fromEntries(Object.entries(LOCAL_FAUNA_SPECS).map(([kind,spec])=>[kind,Object.freeze({...spec})])))}),
     environmentalReactions:Object.freeze({...environmentalReactions,activeSlots:Object.freeze(environmentalReactionPool.filter(slot=>slot.active).map(slot=>Object.freeze({kind:slot.kind,index:slot.index,ageMs:Number((performance.now()-slot.startedAtMs).toFixed(1)),lifetimeMs:slot.lifetimeMs,latitudeDegrees:Number((slot.latitudeRadians*180/Math.PI).toFixed(6)),longitudeDegrees:Number((slot.longitudeRadians*180/Math.PI).toFixed(6))})))}),
@@ -8291,7 +8304,7 @@ function snapshot(){
       exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),
       visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
       inspectionRegistered:false,selectable:false,persistentIdentity:false,collision:false,
-      actors:Object.freeze(localCrowdEntities.map(item=>Object.freeze({id:item.id,point:item.point,visualRole:item.visualRole,visible:Boolean(item.entity?.enabled)})))
+      actors:Object.freeze(localCrowdEntities.map(item=>Object.freeze({id:item.id,point:item.point,visualRole:item.visualRole,travelEncounter:Boolean(item.travelEncounter),encounterType:item.encounterType||null,visible:Boolean(item.entity?.enabled)})))
     }),
     buildingActivity:Object.freeze({...buildingActivity,buildings:Object.freeze((buildingActivity.buildings||[]).slice())}),
     buildingSurroundings:Object.freeze({...buildingSurroundings,functions:Object.freeze((buildingSurroundings.functions||[]).slice()),buildings:Object.freeze((buildingSurroundings.buildings||[]).slice())}),
