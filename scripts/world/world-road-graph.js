@@ -9,6 +9,8 @@ const MAX_REDUNDANCY_EDGES=10;
 const MAX_ROUTE_EXPANSIONS=96;
 const GRAPH_CACHE_LIMIT=16;
 const CORRIDOR_SAMPLES=11;
+const CATALOG_CELL_LIMIT_PER_CLASS=4;
+const CATALOG_RESULT_LIMIT_PER_CLASS=2;
 const LATERAL_OFFSETS=Object.freeze([-1,-0.6,-0.3,0,0.3,0.6,1]);
 const graphCache=new Map();
 
@@ -120,6 +122,77 @@ function normalizeCountry(seed,input){
   if(input&&typeof input==="object"&&input.x!=null&&input.y!=null)return window.PoliticalGeography?.countryAt?.(seed,String(input.x),String(input.y))||null;
   return window.PoliticalGeography?.countryAt?.(seed,"0","0")||null;
 }
+function floorDiv(value,divisor){
+  const v=BigInt(String(value)),d=BigInt(String(divisor));let q=v/d,r=v%d;
+  if(r!==0n&&v<0n)q-=1n;return q;
+}
+function orderedSettlementCells(point,classId,radiusMeters){
+  const spec=window.SettlementArchetypes?.HIERARCHY_CLASS_SPECS?.[classId];
+  if(!spec)return Object.freeze([]);
+  const size=BigInt(spec.cellTiles),cx=floorDiv(point.x,size),cy=floorDiv(point.y,size);
+  const radiusTiles=Math.max(1,Math.ceil(radiusMeters/TILE_METERS));
+  const maxRing=Math.max(1,Math.min(4,Math.ceil(radiusTiles/Number(size)))),cells=[];
+  for(let oy=-maxRing;oy<=maxRing;oy++)for(let ox=-maxRing;ox<=maxRing;ox++){
+    cells.push({cx:cx+BigInt(ox),cy:cy+BigInt(oy),d2:ox*ox+oy*oy});
+  }
+  cells.sort((a,b)=>a.d2-b.d2||(a.cy<b.cy?-1:a.cy>b.cy?1:a.cx<b.cx?-1:a.cx>b.cx?1:0));
+  return Object.freeze(cells.slice(0,CATALOG_CELL_LIMIT_PER_CLASS));
+}
+function capitalRecord(seed,country){
+  const cap=country?.capital;if(!cap?.id||cap.x==null||cap.y==null)return null;
+  let region=null;try{region=window.RegionProfile?.descriptorAt?.(seed,String(cap.x),String(cap.y))||window.RegionProfile?.at?.(seed,String(cap.x),String(cap.y))||null}catch(_){}
+  return Object.freeze({
+    id:String(cap.id),name:String(cap.name||country.name||"Capital"),classId:"national-capital",importanceClass:"national-capital",
+    role:"national-capital",roadNetworkRole:"national-hub",countryId:String(country.id),regionId:String(region?.id||""),
+    center:Object.freeze({x:String(cap.x),y:String(cap.y)}),authority:"PoliticalGeography.capital"
+  });
+}
+function boundedSettlementCatalog(seed,country,radius,focusValue){
+  const started=now(),records=[],seen=new Set();let queryCellCount=0;
+  const add=record=>{
+    if(!record||seen.has(String(record.id))||String(record.countryId||"")!==String(country.id))return false;
+    seen.add(String(record.id));records.push(record);return true;
+  };
+  add(capitalRecord(seed,country));
+  let originCountry=null;try{originCountry=window.PoliticalGeography?.countryAt?.(seed,"0","0")||null}catch(_){}
+  const originOwned=String(originCountry?.id||"")===String(country.id);
+  const focus=focusValue&&focusValue.x!=null&&focusValue.y!=null
+    ?Object.freeze({x:String(focusValue.x),y:String(focusValue.y)})
+    :originOwned?Object.freeze({x:"0",y:"0"})
+    :Object.freeze({x:String(country.capital?.x??country.mapAnchor?.x??"0"),y:String(country.capital?.y??country.mapAnchor?.y??"0")});
+  if(originOwned){
+    try{add(window.SettlementArchetypes?.canonicalSettlementAtPoint?.(seed,"village","0","0")||null)}catch(_){}
+  }
+  const radiusMeters=[0,18000,26000,36000,48000][radius]||36000;
+  const centers=[focus];
+  const cap=country.capital?Object.freeze({x:String(country.capital.x),y:String(country.capital.y)}):null;
+  if(cap&&distanceMeters(focus,cap)>12000)centers.push(cap);
+  const classes=["city","town","village","hamlet"];
+  for(let centerIndex=0;centerIndex<centers.length;centerIndex++){
+    const center=centers[centerIndex],activeClasses=centerIndex===0?classes:["city","town"];
+    for(const classId of activeClasses){
+      let accepted=0;
+      for(const cell of orderedSettlementCells(center,classId,radiusMeters)){
+        queryCellCount++;
+        let record=null;
+        try{record=window.SettlementArchetypes?.canonicalSettlementAtCell?.(seed,classId,cell.cx,cell.cy)||null}catch(_){record=null}
+        if(!record||String(record.countryId||"")!==String(country.id))continue;
+        if(distanceMeters(center,record.center)>radiusMeters)continue;
+        if(add(record))accepted++;
+        if(accepted>=CATALOG_RESULT_LIMIT_PER_CLASS)break;
+      }
+    }
+  }
+  records.sort((a,b)=>priority(b)-priority(a)||distanceMeters(focus,a.center)-distanceMeters(focus,b.center)||String(a.id).localeCompare(String(b.id)));
+  return Object.freeze({
+    records:Object.freeze(records.slice(0,MAX_NODES)),focus,
+    diagnostics:Object.freeze({
+      queryCellCount,centerCount:centers.length,recordCount:Math.min(records.length,MAX_NODES),
+      cellLimitPerClass:CATALOG_CELL_LIMIT_PER_CLASS,resultLimitPerClass:CATALOG_RESULT_LIMIT_PER_CLASS,
+      planningMs:Number((now()-started).toFixed(3)),bounded:true,fullWorldScan:false
+    })
+  });
+}
 function localApproach(seed,node){
   if(node?.role!=="starting-village")return Object.freeze({kind:"settlement-center",anchor:Object.freeze({x:String(node.center.x),y:String(node.center.y)}),authority:"SettlementArchetypes.center"});
   try{
@@ -173,7 +246,8 @@ function graphForCountry(seedValue,countryValue,optionsValue){
   const radius=Math.max(1,Math.min(4,Number(options.radius??4))),cacheKey=[VERSION,seed,country.id,radius].join("|");
   if(graphCache.has(cacheKey))return graphCache.get(cacheKey);
   const started=now();
-  const records=(window.SettlementArchetypes?.canonicalSettlementsForCountry?.(seed,country,radius)||[]).slice(0,MAX_NODES);
+  const catalog=boundedSettlementCatalog(seed,country,radius,options.focus);
+  const records=catalog.records;
   const nodes=records.map(record=>nodeDescriptor(seed,record)).sort((a,b)=>b.priority-a.priority||a.id.localeCompare(b.id));
   if(!nodes.length)return Object.freeze({version:VERSION,seed,countryId:String(country.id),nodes:Object.freeze([]),edges:Object.freeze([]),junctions:Object.freeze([]),signature:"EMPTY",diagnostics:Object.freeze({bounded:true,fullWorldScan:false,nodeCount:0,edgeCount:0,connectedComponents:0})});
   const edges=[],connected=[nodes[0]],seenEdges=new Set(),candidateComparisons=[];
@@ -233,6 +307,9 @@ function graphForCountry(seedValue,countryValue,optionsValue){
       waterCrossingCount:edges.reduce((sum,edge)=>sum+edge.crossingCount,0),
       totalCorridorSamples:edges.reduce((sum,edge)=>sum+edge.geometry.samples.length,0),
       maxNodes:MAX_NODES,maxEdges:MAX_EDGES,maxRedundancyEdges:MAX_REDUNDANCY_EDGES,
+      catalogQueryCellCount:catalog.diagnostics.queryCellCount,catalogCenterCount:catalog.diagnostics.centerCount,
+      catalogRecordCount:catalog.diagnostics.recordCount,catalogPlanningMs:catalog.diagnostics.planningMs,
+      catalogCellLimitPerClass:CATALOG_CELL_LIMIT_PER_CLASS,catalogResultLimitPerClass:CATALOG_RESULT_LIMIT_PER_CLASS,
       planningMs:Number((now()-started).toFixed(3)),bounded:true,fullWorldScan:false,
       localChunkMaterialization:false,detailedSegmentsMaterialized:0,perFramePlanning:false,
       cameraIndependent:true,viewportIndependent:true,seedOnly:true
@@ -289,7 +366,7 @@ function proof(seedValue,countryValue){
 function clear(){graphCache.clear()}
 
 window.WorldRoadGraph=Object.freeze({
-  VERSION,MAX_NODES,MAX_EDGES,MAX_REDUNDANCY_EDGES,MAX_ROUTE_EXPANSIONS,GRAPH_CACHE_LIMIT,
+  VERSION,MAX_NODES,MAX_EDGES,MAX_REDUNDANCY_EDGES,MAX_ROUTE_EXPANSIONS,GRAPH_CACHE_LIMIT,CATALOG_CELL_LIMIT_PER_CLASS,CATALOG_RESULT_LIMIT_PER_CLASS,
   graphForCountry,route,nearestNode,proof,clear
 });
 })();
