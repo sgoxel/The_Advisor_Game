@@ -76,14 +76,16 @@ def validate(ev):
         if r['districtCount']>9: raise AssertionError(f'unbounded districts {r["classId"]}')
 
 all_runs=[]
-for profile,w,h in PROFILES:
-    driver=webdriver.Chrome(options=opts())
-    try:
+driver=webdriver.Chrome(options=opts())
+try:
+    driver.set_window_size(PROFILES[0][1],PROFILES[0][2])
+    driver.get(BASE_URL)
+    WebDriverWait(driver,120, poll_frequency=0.25).until(
+        lambda d: d.execute_script("return document.documentElement.dataset.ready==='true'||document.documentElement.dataset.ready==='failed'")
+    )
+    for profile,w,h in PROFILES:
         driver.set_window_size(w,h)
-        driver.get(BASE_URL)
-        WebDriverWait(driver,90, poll_frequency=0.25).until(
-            lambda d: d.execute_script("return document.documentElement.dataset.ready==='true'||document.documentElement.dataset.ready==='failed'")
-        )
+        time.sleep(0.3)
         proof=driver.execute_script('return window.__morphologyEvidence') or {}
         ev=normalized(proof)
         logs=[x for x in driver.get_log('browser') if x.get('level') in ('SEVERE','ERROR') and not ('favicon.ico' in str(x.get('message','')) and '404' in str(x.get('message','')))]
@@ -93,11 +95,12 @@ for profile,w,h in PROFILES:
         driver.execute_script("document.querySelector('.common-scale')?.scrollIntoView({block:'start'})")
         time.sleep(0.2)
         driver.save_screenshot(str(OUT/f'{profile}-common-scale.png'))
+        driver.execute_script("window.scrollTo(0,0)")
         if logs: raise AssertionError(f'browser errors in {profile}: {logs[:3]}')
         validate(ev)
         all_runs.append(ev)
-    finally:
-        driver.quit()
+finally:
+    driver.quit()
 
 def sig(ev):
     return json.dumps({k:v for k,v in ev.items() if k not in ('profile','browserErrors')},sort_keys=True,separators=(',',':'))
