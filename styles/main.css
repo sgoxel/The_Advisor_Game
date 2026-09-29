@@ -1391,6 +1391,7 @@ body.planet-stage-active{
 .planet-world-center i::before,.planet-world-center i::after{content:"";position:absolute;left:50%;top:50%;background:rgba(173,255,242,.98);transform:translate(-50%,-50%)}
 .planet-world-center i::before{width:21px;height:1px}.planet-world-center i::after{width:1px;height:21px}
 .planet-world-center code{padding:4px 6px;border:1px solid rgba(109,217,206,.44);border-radius:7px;background:rgba(4,15,22,.82);color:#d9fff8;font:700 8px/1.1 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap;letter-spacing:.01em}
+.planet-world-center[data-settlement-overview="true"]{gap:0}.planet-world-center[data-settlement-overview="true"] code{position:absolute;right:18px;top:16px}
 #planetStageRoot[data-work-focus="true"] .planet-map-label[data-kind="village"],
 #planetStageRoot[data-work-focus="true"] .planet-map-landmark[data-kind="village"],
 #planetStageRoot[data-work-focus="true"] .planet-atlas-label[data-kind="village"]{opacity:.10!important}
