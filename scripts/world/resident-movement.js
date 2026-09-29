@@ -133,6 +133,7 @@ function reset(seed){
   wallClearanceExemptCells=new Set();
   window.ActionExecutor?.clearKind?.("resident");
   window.SocialEncounters?.reset?.(seed);
+  window.ContextualReactions?.reset?.(seed);
   return ensure(seed);
 }
 function routeTargetKey(activity){return activity?key(activity.target)+"|"+activity.state+"|"+activity.action:""}
@@ -282,8 +283,34 @@ function advance(seed,when,realSeconds,options=null){
       }));
     }
     window.SocialEncounters?.advance?.({seed:seedKey,when,seconds:FIXED_STEP_SECONDS,residents:socialResidents});
+    // Contextual protagonist reactions are event-driven: the reaction system
+    // resolves only resident IDs named by queued local events. It never scans
+    // the roster/world to discover candidates.
+    window.ContextualReactions?.advance?.({
+      seed:seedKey,when,seconds:FIXED_STEP_SECONDS,
+      residentLookup:residentId=>{
+        const id=String(residentId||""),state=states.get(id);if(!state)return null;
+        const resident=residentById.get(id),activity=activities.get(id);
+        return Object.freeze({
+          id,position:point(state.position),status:state.status,
+          nextPosition:point(state.route?.path?.[state.routeIndex+1]||null),
+          workplaceId:resident?.workplaceId||null,activity,
+          workCycle:activity?.workCycle||null,
+          actionExecution:window.ActionExecutor?.get?.("resident",id)||null
+        });
+      }
+    });
     for(const state of states.values()){
       const activity=activities.get(state.residentId);
+      const contextual=window.ContextualReactions?.stateFor?.(state.residentId)||null;
+      if(contextual?.holdsPosition){
+        // A short contextual hesitation never discards the resident's route,
+        // target or schedule. When the bounded reaction expires the same route
+        // resumes from the same authoritative position.
+        state.presentationOffset=Object.freeze({x:0,y:0});
+        changed=true;
+        continue;
+      }
       const social=window.SocialEncounters?.stateFor?.(state.residentId)||null;
       if(social?.holdsPosition){
         window.ActionExecutor?.clear?.("resident",state.residentId);
@@ -327,6 +354,7 @@ function stateSnapshot(state){
     workCycle:state.activity?.workCycle||null,
     actionExecution:window.ActionExecutor?.get?.("resident",state.residentId)||null,
     socialEncounter:window.SocialEncounters?.stateFor?.(state.residentId)||null,
+    contextualReaction:window.ContextualReactions?.stateFor?.(state.residentId)||null,
     buildingId:nav?.buildingId||null,
     occupiesBuilding:Boolean(nav?.buildingId),
     navigationCategory:nav?.category||null,
@@ -359,6 +387,7 @@ function snapshot(){
     routePlanningPerFrame:false,
     workCycles:window.WorkCycles?.snapshot?.(seedKey)||null,
     socialEncounters:window.SocialEncounters?.snapshot?.()||null,
+    contextualReactions:window.ContextualReactions?.snapshot?.()||null,
     wallClearancePolicy:"prefer-one-tile",
     wallClearancePenaltySeconds:WALL_CLEARANCE_PENALTY_SECONDS,
     wallClearancePenaltyCellCount:wallClearancePenaltyCells.size,
