@@ -184,9 +184,15 @@ function stateFor(residentId,seedValue){
   const mem=runtimeBySeed.get(seed),id=String(residentId||""),eventId=mem.residentIndex.get(id);if(!eventId)return null;
   const event=mem.active.get(eventId);if(!event)return null;
   const participant=event.participants.find(p=>p.id===id)||null;
+  const target=event.location.anchor;
   return freeze({
-    eventId:event.id,type:event.type,title:event.title,holdsPosition:true,scheduleOverride:true,
-    target:participant?.existingTarget||event.location.anchor,location:event.location,participant
+    eventId:event.id,type:event.type,title:event.title,scheduleOverride:true,
+    target,location:event.location,participant,
+    activityOverride:freeze({
+      state:"local-event",action:"gather",intendedAction:"gather",
+      target,buildingId:null,targetSource:"local-event-vignette",
+      eventId:event.id,eventType:event.type
+    })
   });
 }
 function activeEvents(seedValue){
