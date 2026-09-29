@@ -92,6 +92,9 @@ for(const type of visualTypes){
   const proof=TravelEncounters.proofActivate(seed,type,proofAnchor,proofTime);
   assert.strictEqual(proof.pass,true,type+" proof activation failed");
   assert.strictEqual(proof.snapshot.active,true);
+  assert.strictEqual(proof.event.anchor.x,proofAnchor.x,type+" proof anchor x drifted");
+  assert.strictEqual(proof.event.anchor.y,proofAnchor.y,type+" proof anchor y drifted");
+  assert.strictEqual(proof.event.proofControlledPlacement,true,type+" proof placement flag missing");
   assert(proof.snapshot.exactActorCount>=1&&proof.snapshot.exactActorCount<=4);
   assert(proof.snapshot.exactActors.every(a=>a.travelEncounter&&a.presentationOnly&&!a.simulationAuthority));
   const far=TravelEncounters.localPresentation(seed,{x:"500",y:"500"},proofTime);
@@ -110,7 +113,10 @@ assert(source.includes("PoliticalGeography?.countryAt"),"political context missi
 assert(source.includes("GeographyFoundation?.mainRoadInfo"),"road context missing");
 assert(source.includes("GeographyFoundation?.environment"),"biome context missing");
 assert(source.includes("seedAndFantasyTimeOnly:true"),"SEED + fantasy-time authority flag missing");
+assert(source.includes("getTimestampKey?.()||window.GameTime?.getNow?.()"),"auto refresh lacks fantasy-time fallback");
 assert(stageSource.includes("TravelEncounters?.localPresentation?.(activeSeed,focusTile,stamp"),"PlanetStage crowd batch is not wired to rare encounters");
+assert(stageSource.includes('const settlementCrowdActive=["refined","full"].includes(String(tier))'),"routine settlement crowd gate missing");
+assert(stageSource.includes("rebuildLocalCrowdPresentation(resource,frame,tier);"),"ground/wilderness encounter batch refresh missing");
 assert(stageSource.includes("travelEncounterCount:Number(encounter?.exactActorCount||0)"),"PlanetStage encounter telemetry missing");
 assert(stageSource.includes("travelEncounters:window.TravelEncounters?.snapshot?.(activeSeed)||null"),"PlanetStage snapshot missing travel encounter state");
 assert(html.indexOf("scripts/world/travel-encounters.js")<html.indexOf("scripts/world/planet-stage.js"),"travel encounter runtime must load before PlanetStage");
