@@ -199,7 +199,9 @@ function advanceTo(seedValue,targetValue,optionsValue){
   if(timestampMs(target)<timestampMs(state.lastAuthoritativeTimestamp)){
     return deepFreeze({ok:false,reason:"backward-catch-up-rejected",snapshot:snapshot(seed)});
   }
-  const maxBatches=Math.max(1,Math.min(256,Math.floor(Number(options.maxBatches)||MAX_BATCHES_PER_SLICE)));
+  const requestedMaxBatches=Math.max(1,Math.min(256,Math.floor(Number(options.maxBatches)||MAX_BATCHES_PER_SLICE)));
+  const maxBatches=window.WorldSimulationBudget?.limit?.("catchUpBatches",requestedMaxBatches,{seed,priority:options.priority||"background"})||requestedMaxBatches;
+  const budgetSlice=window.WorldSimulationBudget?.beginSlice?.("catch-up",{seed,priority:options.priority||"background",pending:EventScheduler.snapshot(seed).pending})||null;
   const started=performance.now(),spanHours=Math.max(0,(timestampMs(target)-timestampMs(state.lastAuthoritativeTimestamp))/3600000);
   state.targetTimestamp=target;state.inProgress=true;state.ready=false;state.lastSpanHours=spanHours;state.maxSpanHours=Math.max(state.maxSpanHours,spanHours);
   ensureAggregateQueue(seed,state.cursorTimestamp||state.lastAuthoritativeTimestamp);
@@ -227,10 +229,16 @@ function advanceTo(seedValue,targetValue,optionsValue){
   const cost=performance.now()-started;
   state.lastCostMs=Number(cost.toFixed(3));state.totalCostMs+=state.lastCostMs;
   state.totalBatches+=batches;state.totalEvents+=events;
+  const schedulerPending=EventScheduler.snapshot(seed).pending;
+  window.WorldSimulationBudget?.recordQueue?.(seed,"catchUp",schedulerPending);
+  if(budgetSlice)window.WorldSimulationBudget?.endSlice?.(budgetSlice,{
+    processed:batches,pending:schedulerPending,deferred:more?Math.max(1,schedulerPending):0,durationMs:cost
+  });
   persist(seed);
   return deepFreeze({
     ok:true,complete:!more,authoritativeReady:!more,target,batches,events,spanHours,
-    cursorTimestamp:state.cursorTimestamp,nextDue:nextDueTimestamp(seed,target),snapshot:snapshot(seed)
+    cursorTimestamp:state.cursorTimestamp,nextDue:nextDueTimestamp(seed,target),snapshot:snapshot(seed),
+    worldBudgetLimited:maxBatches<requestedMaxBatches
   });
 }
 async function resumeTo(seedValue,targetValue,optionsValue){
@@ -238,7 +246,7 @@ async function resumeTo(seedValue,targetValue,optionsValue){
   const maxSlices=Math.max(1,Math.min(MAX_RESUME_SLICES,Math.floor(Number(options.maxSlices)||MAX_RESUME_SLICES)));
   let slices=0,result=null;
   do{
-    result=advanceTo(seed,target,{maxBatches:options.maxBatches||MAX_BATCHES_PER_SLICE});
+    result=advanceTo(seed,target,{maxBatches:options.maxBatches||MAX_BATCHES_PER_SLICE,priority:options.priority||"background"});
     slices++;
     if(result.complete)break;
     await new Promise(resolve=>setTimeout(resolve,0));
