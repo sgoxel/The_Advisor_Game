@@ -955,6 +955,14 @@ function build(seedValue,centerValue,optionsValue){
   const key=[country.id,region.id,center.x,center.y,role,options.classHint||""].join("|");
   const cacheKey=seed+"|"+key+"|"+String(canonicalRecord?.id||"legacy");
   if(cache.has(cacheKey))return cache.get(cacheKey);
+  const persistentOptions={
+    seed,family:"settlement-plan",recordId:String(canonicalRecord?.id||cacheKey)+"|"+role,
+    familyVersion:VERSION,
+    dependencySignature:["settlement",VERSION,"hierarchy",HIERARCHY_VERSION,"country",countryProfile.revision,"region",region.revision,"naming",Number(window.PlaceNaming?.VERSION||0)].join("|"),
+    regenCost:8,importance:5
+  };
+  const persisted=window.GeneratedWorldStore?.peek?.(persistentOptions)||null;
+  if(persisted){cache.set(cacheKey,persisted);return cache.get(cacheKey);}
   const classId=classFor(seed,key,countryProfile,region,local,border,options);
   const subtypes=subtypeWeights(countryProfile,region,local,border,classId);
   const footprintRadius={hamlet:40,village:72,town:112,city:160,"national-capital":240}[classId]||96;
@@ -1036,6 +1044,7 @@ function build(seedValue,centerValue,optionsValue){
     })
   });
   cache.set(cacheKey,plan);
+  window.GeneratedWorldStore?.recordGenerated?.(persistentOptions,plan);
   return plan;
 }
 function settlementsForCountry(seedValue,countryValue,radiusValue){
