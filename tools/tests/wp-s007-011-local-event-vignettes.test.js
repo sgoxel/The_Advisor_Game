@@ -64,7 +64,11 @@ for(const type of LocalEventVignettes.CATALOG.map(x=>x.id)){
   assert(result.event.participants.length>=2&&result.event.participants.length<=4);
   for(const participant of result.event.participants){
     const state=LocalEventVignettes.stateFor(participant.id,s);
-    assert(state?.holdsPosition&&state?.scheduleOverride,type+" participant did not receive temporary activity hold");
+    assert(state?.scheduleOverride&&state?.activityOverride,type+" participant did not receive temporary event activity");
+    assert.strictEqual(state.activityOverride.action,"gather",type+" activity action changed");
+    assert.strictEqual(state.activityOverride.target.x,result.event.location.anchor.x,type+" activity target x drifted");
+    assert.strictEqual(state.activityOverride.target.y,result.event.location.anchor.y,type+" activity target y drifted");
+    assert.strictEqual(state.activityOverride.targetSource,"local-event-vignette",type+" activity target source changed");
   }
   const ended=LocalEventVignettes.advance(s,"1201-02-01 12:46:00",{ensureScheduled:false});
   assert.strictEqual(ended.activeCount,0,type+" did not end cleanly");
@@ -83,7 +87,9 @@ const residentSource=fs.readFileSync("scripts/world/resident-movement.js","utf8"
 const stageSource=fs.readFileSync("scripts/world/planet-stage.js","utf8");
 const html=fs.readFileSync("index.html","utf8");
 const css=fs.readFileSync("styles/main.css","utf8");
-assert(residentSource.includes("LocalEventVignettes?.stateFor?.(state.residentId)"),"ResidentMovement is not wired to event activity holds");
+assert(residentSource.includes("LocalEventVignettes?.stateFor?.(state.residentId)"),"ResidentMovement is not wired to local events");
+assert(residentSource.includes("work.activity=localEvent.activityOverride"),"ResidentMovement does not apply temporary event activity override");
+assert(residentSource.includes('work.localEvent?"local-event"'),"ResidentMovement does not instrument event-directed movement");
 assert(stageSource.includes("localEvents:window.LocalEventVignettes?.snapshot?.(activeSeed)||null"),"PlanetStage snapshot missing local-event telemetry");
 assert(html.indexOf("scripts/world/local-event-vignettes.js")<html.indexOf("scripts/world/planet-stage.js"),"local-event runtime must load before PlanetStage");
 assert(css.includes(".local-event-vignette"),"event presentation style missing");
