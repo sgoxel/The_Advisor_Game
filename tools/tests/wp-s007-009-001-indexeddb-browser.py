@@ -39,7 +39,8 @@ try:
           const r=await G.resolve(base(family,id),async()=>{generators++;return {family,id,signature:"BROWSER-"+family+"-"+id}});
           rows.push({family,id,generated:r.generated,source:r.source,value:r.value});
         }
-        const flush=await G.flush({maxRecords:32});
+        let flush=await G.flush({maxRecords:32});
+        while(G.telemetry().dirtyQueueDepth)flush=await G.flush({maxRecords:32});
         localStorage.setItem("wp-s007-009-001-authoritative",JSON.stringify({seed:c.seed,settlementRevision:11,npcRevision:6}));
         done({bound,rows,generators,flush,telemetry:G.telemetry()});
       })().catch(e=>done({error:String(e&&e.stack||e)}));
@@ -47,8 +48,9 @@ try:
     assert first["bound"]["backend"]=="indexeddb", first
     assert first["bound"]["durable"] is True, first
     assert first["generators"]==4 and all(x["generated"] for x in first["rows"]), first
-    assert first["flush"]["written"]==4, first
+    assert first["flush"]["ok"] is True, first
     assert first["telemetry"]["persistentCacheRecords"]==4, first
+    assert first["telemetry"]["writeRecords"]==4, first
     assert first["telemetry"]["dirtyQueueDepth"]==0, first
     first_values={x["family"]:x["value"] for x in first["rows"]}
     d.quit()
