@@ -17,18 +17,29 @@ options=Options()
 options.add_argument("--headless=new")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--disable-gpu")
+options.add_argument("--enable-webgl")
+options.add_argument("--ignore-gpu-blocklist")
+options.add_argument("--use-angle=swiftshader")
 options.add_argument(f"--window-size={SIZE[0]},{SIZE[1]}")
 options.set_capability("goog:loggingPrefs",{"browser":"ALL"})
 driver=webdriver.Chrome(options=options)
+try:
+    driver.command_executor.set_timeout(600)
+except Exception:
+    pass
+driver.set_script_timeout(300)
 driver.set_window_size(*SIZE)
-wait=WebDriverWait(driver,180)
+wait=WebDriverWait(driver,300)
 
 def ready():
     try:
         return driver.execute_script("""
-          const s=window.PlanetStage?.snapshot?.();
-          return Boolean(s?.ready&&window.MicroLocations&&window.WorldDestinations?.poiCell&&window.GameRenderer?.snapshot);
+          const s=window.PlanetStage?.snapshot?.(),r=window.GameRenderer?.snapshot?.();
+          return Boolean(
+            document.getElementById("planetStageRoot")?.dataset?.ready==="true" &&
+            s?.ready && window.MicroLocations && window.WorldDestinations?.poiCell &&
+            r?.ready && r?.engine==="PlayCanvas"
+          );
         """)
     except Exception:
         return False
@@ -111,11 +122,11 @@ def overlay(loc,st,revisit=False):
 
 records=[]
 try:
-    driver.get(TARGET+("&" if "?" in TARGET else "?")+"evidence_fast_start=1")
+    driver.get(TARGET)
     try:
         wait.until(lambda _d: ready())
     except TimeoutException:
-        probe=driver.execute_script("""return {state:document.readyState,planet:window.PlanetStage?.snapshot?.(),micro:typeof MicroLocations,renderer:typeof GameRenderer,body:String(document.body?.innerText||"").slice(0,900)}""")
+        probe=driver.execute_script("""return {state:document.readyState,planetReady:window.PlanetStage?.snapshot?.()?.ready||false,stageReady:document.getElementById("planetStageRoot")?.dataset?.ready||null,micro:typeof window.MicroLocations,renderer:window.GameRenderer?.snapshot?.()||null,body:String(document.body?.innerText||"").slice(0,900)}""")
         raise RuntimeError("startup readiness timeout: "+json.dumps(probe))
     samples=find_samples()
     for idx,loc in enumerate(samples):
