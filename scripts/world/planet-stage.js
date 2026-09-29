@@ -3320,7 +3320,7 @@ function ensureLocalStaticMaterials(){
     road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.31,.235,.105,.78),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.028),lotOverview:make("LocalOccupiedLotOverview",1,1,1,.72),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.028),lotOverview:make("LocalOccupiedLotOverview",1,1,1,.58),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -3667,7 +3667,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
         // closer tiers where it no longer reads as a locator glyph.
         if(!outwardBranch&&!localPath)continue;
       }
-      const half=tier==="footprint"?(outwardBranch?.30:.08):(outwardBranch?.34:.085);
+      const half=tier==="footprint"?(outwardBranch?.30:.10):(outwardBranch?.34:.145);
       addQuad(x-half,y-half,x+half,y+half);
       if(roadSet.has((x+1)+","+y))addQuad(x+half,y-half,x+1-half,y+half);
       if(roadSet.has(x+","+(y+1)))addQuad(x-half,y+half,x+half,y+1-half);
@@ -5434,7 +5434,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // contour. Retain a bounded share of the same canonical elevation identity
       // while curvature/drainage/registered detail carry the readable structure.
       const absoluteElevationPaletteWeight=sample?.land
-        ?lerp(.22,1,smoothstep01(clamp((58-metersPerTexel)/36,0,1)))
+        ?lerp(.07,1,smoothstep01(clamp((58-metersPerTexel)/36,0,1)))
         :1;
       const paletteUplandWeight=uplandWeight*absoluteElevationPaletteWeight;
       const paletteAlpineWeight=alpineBase*absoluteElevationPaletteWeight;
@@ -5446,7 +5446,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Preserve enough canonical globe hue to keep the same macro terrain
       // recognizable through the projection handoff, then converge smoothly.
       const coarseIdentity=smoothstep01(clamp((metersPerTexel-4)/70,0,1));
-      const macroIdentityWeight=clamp(.040+coarseIdentity*.050+mountainIdentity*.016,.040,.12);
+      const macroIdentityWeight=clamp(.026+coarseIdentity*.026+mountainIdentity*.008,.026,.068);
       let base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
       pushRange("sourceLuma",luma3(sourceColor));pushRange("paletteLuma",luma3(localPalette));
       pushRange("elevation",elevationBase);pushRange("moisture",moistureBase);
@@ -5454,9 +5454,9 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // brightness wedge. Compress only land luminance above ~35 m/texel while
       // preserving RGB differences; near-ground presentation is unchanged.
       if(sample?.land&&metersPerTexel>35){
-        const compression=smoothstep01(clamp((metersPerTexel-35)/120,0,1))*.72;
+        const compression=smoothstep01(clamp((metersPerTexel-35)/120,0,1))*.90;
         const luma=base[0]*.28+base[1]*.58+base[2]*.14;
-        const targetLuma=.335+paletteAlpineWeight*.022;
+        const targetLuma=.325+paletteAlpineWeight*.012;
         const shift=(targetLuma-luma)*compression;
         base=base.map(v=>clamp(v+shift,0,1));
       }
@@ -5694,7 +5694,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-focus-morphology-balance-v13",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-map-photometry-route-balance-v14",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
