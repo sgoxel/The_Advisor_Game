@@ -403,6 +403,7 @@ function freshLocalResources(){
     residencyRevision:"temporal-residency-v1",requestedCellCount:0,preparingCellCount:0,readyCellCount:0,activeCellCount:0,graceResidentCellCount:0,evictedCellCount:0,
     parentFallbackCount:0,rootFallbackCount:0,missingCoverageCount:0,graceReuseCount:0,prefetchRequests:0,prefetchCompleted:0,prefetchHits:0,prefetchMisses:0,
     longestHandoffLatencyMs:0,lastHandoffLatencyMs:0,lastHandoffRequestedAtMs:0,lastHandoffCompletedAtMs:0,
+    handoffRequestScalar:null,firstReadyScalar:null,firstReadyLevel:null,firstReadyLatencyMs:0,visibleParentOpacity:1,visibleChildOpacity:0,visibleResourceSignature:null,visibleMetersPerTexel:null,
     revisitRegenerationSignature:null,revisitRegenerationPass:true,revisitCount:0,
     requestBudgetPerFrame:1,buildJobBudget:1,prefetchQueueLimit:1,graceResidencyMs:LOCAL_GRACE_RESIDENCY_MS,
     cacheBudgetBytes:LOCAL_RESOURCE_CACHE_BUDGET_BYTES,cacheBudgetExceeded:false,centerFirst:true,streamingRevision:"focus-streaming-v1",
@@ -6571,7 +6572,10 @@ function pumpLocalPreparation(){
     if(job.prewarm&&job.prewarmKind==="zoom-target"&&job.signature===zoomState.targetPrefetchSignature){zoomState.targetPrefetchCompleted++;zoomState.targetPrefetchState="ready";}
     job.slices++;job.maxSliceMs=Math.max(job.maxSliceMs,sliceMs);localResources.maxPreparationSliceMs=Math.max(localResources.maxPreparationSliceMs,Number(sliceMs.toFixed(3)));
     const queued=localQueuedRequest;localQueuedRequest=null;
-    if(resource.signature===localResources.requestedSignature){activateLocalDetailResource(resource.signature,false);refreshZoomPresentation();}
+    const sameFocusRequest=Math.abs(Number(job.requestedLat0)-Number(zoomState.focusLatitudeRadians))<1e-10&&Math.abs(Number(job.requestedLon0)-Number(zoomState.focusLongitudeRadians))<1e-10;
+    const requestedIndexNow=requestedLodIndexForZoom(zoomState.scalar);
+    const progressiveParent=sameFocusRequest&&job.levelIndex<requestedIndexNow&&(!displayResource||job.levelIndex>displayResource.levelIndex);
+    if(resource.signature===localResources.requestedSignature||progressiveParent){activateLocalDetailResource(resource.signature,false);refreshZoomPresentation();}
     if(queued&&queued.signature===localResources.requestedSignature&&displayResource?.signature!==queued.signature){
       if(localResourceCache.has(queued.signature)){activateLocalDetailResource(queued.signature,true);refreshZoomPresentation();}
       else startLocalJob(queued.index,queued.lat,queued.lon,queued.signature,false);
@@ -6594,6 +6598,7 @@ function requestLocalDetailResource(index){
   setLocalResidencyState(signature,"requested",{cellId:cell.id,level:LOCAL_DETAIL_LEVELS[index].id,requestedAtMs:performance.now()});
   if(previousRequested!==signature&&displayResource?.signature!==signature){
     localResources.lastHandoffRequestedAtMs=Number(performance.now().toFixed(3));
+    localResources.handoffRequestScalar=Number(zoomState.scalar.toFixed(6));
     // A prepared local representation is the immediate previous/parent fallback.
     // Before the first local resource exists the canonical globe is still the
     // ready root representation, so this is coverage, not a hole.
@@ -6616,10 +6621,12 @@ function requestLocalDetailResource(index){
       if(localJob.prewarm&&localJob.prewarmKind==="zoom-target"){localResources.prefetchHits++;zoomState.targetPrefetchHits++;zoomState.targetPrefetchState="promoted";}
       localJob.prewarm=false;localResources.preparingPrewarm=false;return;
     }
-    // Let a nearly finished same-focus job land (it is still a closer/nearer
-    // stand-in); otherwise cancel it and start on the latest request.
-    const sameFocus=localJob.lat0===lat&&localJob.lon0===lon;
-    if(sameFocus&&!localJob.prewarm&&localJob.steps/Math.max(1,localJob.totalSteps)>=.5){localQueuedRequest={index,lat,lon,signature};localResources.deferredRequests++;return;}
+    // Keep a same-focus coarser build alive while zooming inward. It is a valid
+    // canonical parent and can become immediate coverage while the finer child
+    // is queued. Compare the requested focus, not the SLOD cell-center anchor.
+    const sameFocus=Math.abs(Number(localJob.requestedLat0)-Number(lat))<1e-10&&Math.abs(Number(localJob.requestedLon0)-Number(lon))<1e-10;
+    const progressiveParent=sameFocus&&localJob.levelIndex<index;
+    if(progressiveParent||(sameFocus&&!localJob.prewarm&&localJob.steps/Math.max(1,localJob.totalSteps)>=.5)){localQueuedRequest={index,lat,lon,signature};localResources.deferredRequests++;return;}
     const cancelledSignature=localJob.signature;
     localResources.cancelledPreparations++;localJob=null;
     localResidency.delete(cancelledSignature);localMotionPrefetchTargets.delete(cancelledSignature);
@@ -6657,6 +6664,11 @@ function activateLocalDetailResource(signature,fromCache){
   }
   displayResource=resource;
   setLocalResidencyState(signature,"active",{cellId:resource.spatialCell?.id||null,level:resource.dims?.levelId||null,regenerationSignature:resource.regenerationSignature||null,activatedAtMs:performance.now()});
+  if(zoomState.animating&&localResources.firstReadyScalar===null){
+    localResources.firstReadyScalar=Number(zoomState.scalar.toFixed(6));
+    localResources.firstReadyLevel=resource.dims?.levelId||null;
+    localResources.firstReadyLatencyMs=Number(Math.max(0,performance.now()-Number(zoomState.animationStartAtMs||performance.now())).toFixed(3));
+  }
   if(localResources.requestedSignature===signature&&localResources.lastHandoffRequestedAtMs){
     const latency=Math.max(0,performance.now()-Number(localResources.lastHandoffRequestedAtMs||0));
     localResources.lastHandoffLatencyMs=Number(latency.toFixed(3));localResources.longestHandoffLatencyMs=Math.max(Number(localResources.longestHandoffLatencyMs||0),localResources.lastHandoffLatencyMs);
@@ -6769,7 +6781,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
   // with the identical canonical geography texture owns only that loading gap,
   // then yields once a local tangent resource is physically appropriate.
   const mapShellIn=smoothstep01(clamp((scalar-.57)/.09,0,1));
-  const mapShellOut=displayResource?smoothstep01(clamp((scalar-.805)/.045,0,1)):0;
+  const mapShellOut=displayResource?projectionPresentationBlendForZoom(scalar):0;
   const mapShellOpacity=mapScaleShell?mapShellIn*(1-mapShellOut):0;
   if(mapScaleShell&&mapScaleShellMaterial){
     mapScaleShell.enabled=mapShellOpacity>.003;
@@ -6932,6 +6944,10 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     mapScaleShellActive:Boolean(mapScaleShell&&mapShellOpacity>.003),
     globeDepthWrite:Boolean(handoff<.02)
   };
+  localResources.visibleParentOpacity=Number(mapShellOpacity.toFixed(6));
+  localResources.visibleChildOpacity=Number(tangentReveal.toFixed(6));
+  localResources.visibleResourceSignature=displayResource?.signature||null;
+  localResources.visibleMetersPerTexel=displayResource?Number(displayResource.detail?.detailMetersPerTexel||0):null;
   if(cloudLayer)cloudLayer.enabled=globeFade<.35;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
   if(blend<=0){localResources.activeResourceCount=0;localResources.pendingPreparationCount=0;localResources.standInActive=false;if(focusRingPatch)focusRingPatch.enabled=false;}
@@ -6983,7 +6999,11 @@ function requestZoomTargetPrefetch(){
     zoomState.targetPrefetchSignature=null;zoomState.targetPrefetchLevel=null;
     return;
   }
-  const index=rawLodIndexForZoom(target),lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians;
+  const finalIndex=rawLodIndexForZoom(target),lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians;
+  // Stage animated zoom prewarm through the next canonical parent instead of
+  // jumping straight to the final deep tier. This avoids spending the single
+  // build slot on a resource that intermediate zoom requests immediately cancel.
+  const index=displayResource?Math.min(finalIndex,displayResource.levelIndex+1):Math.min(finalIndex,0);
   const signature=localSignatureFor(index,lat,lon),level=LOCAL_DETAIL_LEVELS[index]?.id||null;
   zoomState.targetPrefetchSignature=signature;zoomState.targetPrefetchLevel=level;
   if(displayResource?.signature===signature||localResourceCache.has(signature)){
@@ -7008,6 +7028,7 @@ function setZoomTargetScalar(value,source="input"){
   zoomState.animationStartScalar=zoomState.scalar;zoomState.animationStartAtMs=now;zoomState.animationFrameCount=0;
   zoomState.lastAnimationInputSource=String(source||"input");zoomState.zoomChanges++;
   zoomState.targetPrefetchState="idle";zoomState.targetPrefetchSignature=null;zoomState.targetPrefetchLevel=null;
+  localResources.firstReadyScalar=null;localResources.firstReadyLevel=null;localResources.firstReadyLatencyMs=0;
   if(zoomState.animating)requestZoomTargetPrefetch();
   navigationPerformance.zoomCommandSnapshotAvoidedCount++;
   return null;
