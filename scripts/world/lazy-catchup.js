@@ -113,6 +113,36 @@ function persist(seedValue){
     return true;
   }catch(_){return false}
 }
+function serializeState(seedValue){
+  const current=stateFor(seedValue),out=clone(current);
+  out.schedulerState=EventScheduler.serialize(current.seed);
+  return deepFreeze(out);
+}
+function validateSerializedState(campaignValue,serializedValue,schedulerValue){
+  const campaign=campaignValue||null;
+  if(!campaign?.seed)return deepFreeze({ok:false,reason:"campaign-required"});
+  const raw=clone(serializedValue||{});
+  if(schedulerValue)raw.schedulerState=clone(schedulerValue);
+  const next=normalizeLoaded(raw,campaign);
+  if(!next)return deepFreeze({ok:false,reason:"incompatible-catch-up-state"});
+  const scheduler=raw.schedulerState||next.schedulerState;
+  if(!scheduler||scheduler.schema!==EventScheduler.SCHEMA||scheduler.schemaVersion!==EventScheduler.SCHEMA_VERSION||scheduler.seed!==String(campaign.seed)){
+    return deepFreeze({ok:false,reason:"incompatible-scheduler-state"});
+  }
+  return deepFreeze({ok:true,reason:"ok",seed:String(campaign.seed),lastAuthoritativeTimestamp:next.lastAuthoritativeTimestamp});
+}
+function restoreSerializedState(campaignValue,serializedValue,optionsValue){
+  const campaign=campaignValue||null,options=optionsValue||{},schedulerState=options.schedulerState||serializedValue?.schedulerState||null;
+  const checked=validateSerializedState(campaign,serializedValue,schedulerState);
+  if(!checked.ok)return checked;
+  const raw=clone(serializedValue);raw.schedulerState=clone(schedulerState);
+  const next=normalizeLoaded(raw,campaign),seed=normalizeSeed(campaign.seed);
+  const schedulerRestore=EventScheduler.restore(seed,schedulerState);
+  if(!schedulerRestore?.ok){EventScheduler.reset(seed);return deepFreeze({ok:false,reason:"scheduler-restore-failed"});}
+  boundCampaign=campaign;runtimeBySeed.set(seed,next);
+  const stored=persist(seed);
+  return deepFreeze({ok:true,reason:"ok",stored,restoredScheduler:true,snapshot:snapshot(seed)});
+}
 function ensureAggregateQueue(seed,timestamp){
   GlobalCountrySimulation.ensureScheduled(seed,timestamp);
   RegionalSettlementSimulation.ensureScheduled(seed,timestamp);
@@ -456,6 +486,6 @@ function renderDebugPanel(seedValue,rootNode){
 
 window.CatchUpSimulation=Object.freeze({
   VERSION,SCHEMA,SCHEMA_VERSION,STORAGE_KEY,IMPORTANT_SYSTEM,MAX_BATCHES_PER_SLICE,
-  bindCampaign,advanceTo,resumeTo,authoritativeReady,scheduleImportant,persist,snapshot,proof,evidenceStep,renderDebugPanel
+  bindCampaign,serializeState,validateSerializedState,restoreSerializedState,advanceTo,resumeTo,authoritativeReady,scheduleImportant,persist,snapshot,proof,evidenceStep,renderDebugPanel
 });
 })();
