@@ -86,7 +86,7 @@ for profile,w,h in PROFILES:
         )
         proof=driver.execute_script('return window.__morphologyEvidence') or {}
         ev=normalized(proof)
-        logs=[x for x in driver.get_log('browser') if x.get('level') in ('SEVERE','ERROR')]
+        logs=[x for x in driver.get_log('browser') if x.get('level') in ('SEVERE','ERROR') and not ('favicon.ico' in str(x.get('message','')) and '404' in str(x.get('message','')))]
         ev['profile']=profile; ev['browserErrors']=logs
         (OUT/f'evidence-{profile}.json').write_text(json.dumps(ev,indent=2),encoding='utf-8')
         capture_full(driver,OUT/f'{profile}-full.png')
