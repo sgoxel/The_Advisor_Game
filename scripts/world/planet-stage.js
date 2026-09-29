@@ -4438,7 +4438,7 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
   if(!resource||!frame?.dims||!tangentPatch)return;
   const started=performance.now(),focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   const rect=canvas?.getBoundingClientRect?.(),mobile=Math.min(Number(rect?.width||1280),Number(rect?.height||720))<=520;
-  const stamp=whenOverride||window.GameTime?.getNow?.()||inspectionFantasyStamp();
+  const stamp=whenOverride||window.GameTime?.getTimestampKey?.()||window.GameTime?.getNow?.()||inspectionFantasyStamp();
   const encounter=window.TravelEncounters?.localPresentation?.(activeSeed,focusTile,stamp,{mobile})||null;
   const settlementCrowdActive=["refined","full"].includes(String(tier))&&Boolean(window.CrowdPresentation);
   const crowd=settlementCrowdActive?CrowdPresentation.snapshot(activeSeed,stamp,focusTile,{mobile,avoidPoints:currentCrowdAvoidPoints()}):null;
@@ -4452,8 +4452,8 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
       districtBand:crowd?.districtBand||"none",districtFactor:Number(crowd?.districtFactor||0),population:Number(crowd?.population||0),
       populationSource:crowd?.populationSource||null,rhythmBand:crowd?.rhythmBand||"unknown",activityFactor:Number(crowd?.activityFactor||0),
       cap:Number(crowd?.cap||0),candidateChecks:Number(crowd?.candidateChecks||0),mobile,
-      travelEncounterCount:Number(encounter?.exactActorCount||0),travelEncounterVisibleCount:0,travelEncounterDrawCallEstimate:0,
-      travelEncounterPresentationRevision:encounter?.encounter?.visualPresentationRevision||null,travelEncounterActorEvidence:Object.freeze([]),
+      travelEncounterCount:Number(encounter?.exactActorCount||0),travelEncounterVisibleCount:0,visibleTravelEncounterCount:0,travelEncounterDrawCallEstimate:0,
+      travelEncounterPresentationRevision:encounter?.encounter?.visualPresentationRevision||null,travelerSilhouetteRevision:"travel-encounter-silhouette-v2",travelEncounterBodyMinPx:null,travelEncounterBodyMaxPx:null,travelEncounterVisualAnchorSource:encounter?.encounter?.visualAnchor?.source||null,travelEncounterActorEvidence:Object.freeze([]),
       buildTimeMs:Number((performance.now()-started).toFixed(3))
     };
     return;
@@ -4520,7 +4520,7 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
       else if(kind==="lute")topRect(posX+bodyHX*1.0,posZ+bodyHZ*.12,ground+.062,Math.max(.025,.22/unit),Math.max(.035,.40/unit),accent);
       else topRect(posX+bodyHX*.98,posZ+bodyHZ*.2,ground+.062,Math.max(.025,.24/unit),Math.max(.03,.30/unit),propColor);
       const screen=projectLocal(posX,ground+.055,posZ),bodyScreenSizePx=projectedRect(posX,posZ,ground+.055,bodyHX,bodyHZ);
-      encounterEvidence.push(Object.freeze({id:String(spec.id),encounterType:String(spec.encounterType||""),visualRole:String(spec.visualRole||"traveler"),propKind:kind,point:spec.point,screen,bodyScreenSizePx,directLocalProjection:directLocal,presentationRevision:"travel-encounter-silhouette-v2"}));
+      encounterEvidence.push(Object.freeze({id:String(spec.id),encounterType:String(spec.encounterType||""),visualRole:String(spec.visualRole||"traveler"),propKind:kind,point:spec.point,screen,bodyScreenSizePx,inViewport:Boolean(screen&&rect&&screen.x>=0&&screen.x<=rect.width&&screen.y>=0&&screen.y<=rect.height),directLocalProjection:directLocal,presentationRevision:"travel-encounter-silhouette-v2"}));
       visibleSpecs.push(Object.freeze({...spec,directLocalProjection:directLocal,screen,bodyScreenSizePx}));
     }else{
       const height=Math.max(.09,1.56/unit),halfWidth=Math.max(.022,.28/unit),headRadius=Math.max(.018,.20/unit);
@@ -4534,15 +4534,15 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     localCrowdRoot=new pc.Entity("AnonymousCrowdPresentation");localCrowdRoot.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
     localCrowdRoot.render.meshInstances=[new pc.MeshInstance(localCrowdMesh,localCrowdMaterials.merged,localCrowdRoot)];tangentPatch.addChild(localCrowdRoot);mergedEntity=localCrowdRoot;
   }
-  localCrowdEntities=visibleSpecs.map(spec=>Object.freeze({id:String(spec.id),entity:mergedEntity,point:spec.point,visualRole:String(spec.visualRole||"market"),travelEncounter:Boolean(spec.travelEncounter),encounterType:spec.encounterType||null,propKind:spec.propKind||null,screen:spec.screen||null,bodyScreenSizePx:spec.bodyScreenSizePx||null}));
-  const elapsed=performance.now()-started,visibleEncounterCount=visibleSpecs.filter(spec=>spec.travelEncounter).length;
+  localCrowdEntities=visibleSpecs.map(spec=>Object.freeze({id:String(spec.id),entity:mergedEntity,point:spec.point,visualRole:String(spec.visualRole||"market"),travelEncounter:Boolean(spec.travelEncounter),encounterType:spec.encounterType||null,propKind:spec.propKind||null,screen:spec.screen||null,bodyScreenSizePx:spec.bodyScreenSizePx||null,inViewport:Boolean(spec.screen&&rect&&spec.screen.x>=0&&spec.screen.x<=rect.width&&spec.screen.y>=0&&spec.screen.y<=rect.height)}));
+  const elapsed=performance.now()-started,visibleEncounterCount=visibleSpecs.filter(spec=>spec.travelEncounter).length,travelSizes=encounterEvidence.map(item=>Math.max(Number(item.bodyScreenSizePx?.width||0),Number(item.bodyScreenSizePx?.height||0))).filter(n=>Number.isFinite(n)&&n>0);
   localCrowdPresentation={
     active:localCrowdEntities.length>0,generatedCount:Number(crowd?.activeCount||0)+Number(encounter?.exactActorCount||0),visibleCount:localCrowdEntities.length,entityCount:mergedEntity?1:0,drawCallEstimate:mergedEntity?1:0,buildTimeMs:Number(elapsed.toFixed(3)),
     settlementId:crowd?.settlementId||null,settlementName:crowd?.settlementName||null,settlementClass:crowd?.settlementClass||null,districtBand:crowd?.districtBand||"none",districtFactor:Number(crowd?.districtFactor||0),
     population:Number(crowd?.population||0),populationSource:crowd?.populationSource||null,rhythmBand:crowd?.rhythmBand||"unknown",activityFactor:Number(crowd?.activityFactor||0),cap:Number(crowd?.cap||0),candidateChecks:Number(crowd?.candidateChecks||0),
     resolveMs:Number(crowd?.resolveMs||0),sourceUpdateMs:Number(crowd?.updateMs||0),totalSourceUpdateMs:Number(crowd?.totalUpdateMs||0),exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
     mobile,pooledStableIds:Boolean(crowd?.pooledStableIds!==false),localCulling:true,lowFrequencyMotion:Boolean(crowd?.lowFrequencyMotion!==false),mergedBatch:true,sharedMaterialCount:mergedEntity?1:0,directLocalProjectionCount:visibleSpecs.filter(spec=>spec.directLocalProjection).length,topFacingHeadMarkers:true,
-    travelEncounterCount:Number(encounter?.exactActorCount||0),travelEncounterVisibleCount:visibleEncounterCount,travelEncounterDrawCallEstimate:visibleEncounterCount&&mergedEntity?1:0,travelEncounterPresentationRevision:encounter?.encounter?.visualPresentationRevision||null,travelEncounterActorEvidence:Object.freeze(encounterEvidence.slice()),travelEncounterSummaryOnly:Boolean(encounter?.summaryOnly),
+    travelEncounterCount:Number(encounter?.exactActorCount||0),travelEncounterVisibleCount:visibleEncounterCount,visibleTravelEncounterCount:visibleEncounterCount,travelEncounterDrawCallEstimate:visibleEncounterCount&&mergedEntity?1:0,travelEncounterPresentationRevision:encounter?.encounter?.visualPresentationRevision||null,travelerSilhouetteRevision:"travel-encounter-silhouette-v2",travelEncounterBodyMinPx:travelSizes.length?Number(Math.min(...travelSizes).toFixed(3)):null,travelEncounterBodyMaxPx:travelSizes.length?Number(Math.max(...travelSizes).toFixed(3)):null,travelEncounterVisualAnchorSource:encounter?.encounter?.visualAnchor?.source||null,travelEncounterActorEvidence:Object.freeze(encounterEvidence.slice()),travelEncounterSummaryOnly:Boolean(encounter?.summaryOnly),topFacingTravelerBodies:true,
     presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
   };
 }
