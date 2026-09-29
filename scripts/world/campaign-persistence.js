@@ -162,7 +162,8 @@ async function restoreAndResume(saveValue,optionsValue){
     setGate("catch-up",false,"catch-up-in-progress",save.seed,target);
     const resumed=await window.CatchUpSimulation.resumeTo(save.seed,target,{maxBatches:options.maxBatches||16,maxSlices:options.maxSlices||1024,priority:options.priority||"current"});
     if(!resumed?.complete||!window.CatchUpSimulation.authoritativeReady(save.seed))throw new Error("authoritative-catch-up-incomplete");
-    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(save));}catch(_){}
+    const checkpoint=createSave({campaign,persist:true,capturedRealMs:Number(options.capturedRealMs??Date.now())});
+    if(!checkpoint?.ok)throw new Error("post-resume-checkpoint-failed:"+String(checkpoint?.reason||"unknown"));
     setGate("ready",true,"authoritative-ready",save.seed,target);
     const delta=window.WorldState.deltaSnapshot(save.seed),scheduler=window.EventScheduler.snapshot(save.seed),catchSnap=window.CatchUpSimulation.snapshot(save.seed);
     return deepFreeze({
@@ -172,7 +173,8 @@ async function restoreAndResume(saveValue,optionsValue){
         delta:hashText(stableStringify(delta.entries)),scheduler:hashText(stableStringify(scheduler.queue)),
         catchUp:hashText(stableStringify({lastAuthoritativeTimestamp:catchSnap.lastAuthoritativeTimestamp,cursorTimestamp:catchSnap.cursorTimestamp,importantLedger:catchSnap.importantLedger}))
       },
-      deltaEntryCount:delta.entryCount,schedulerPending:scheduler.pending,gate
+      deltaEntryCount:delta.entryCount,schedulerPending:scheduler.pending,
+      checkpointChecksum:checkpoint.save.checksum,checkpointBytes:checkpoint.save.serializedBytes,gate
     });
   }catch(error){
     restoreStorage(backup);
