@@ -3314,6 +3314,9 @@ function ensureLocalStaticMaterials(){
     wayfinding:(()=>{const m=make("LocalWayfindingSigns",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     wilderness:wildernessMaterial,fauna:(()=>{const m=make("LocalFauna",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})()
   };
+  // Route and lot overview meshes are tangent-plane quads. Render both sides so
+  // their visibility does not depend on the local tangent entity orientation.
+  for(const material of [localStaticMaterials.road,localStaticMaterials.roadOverview,localStaticMaterials.lotOverview]){material.cull=pc.CULLFACE_NONE;material.update();}
 }
 function sharedLocalPrimitive(type){
   if(localSharedPrimitives[type])return localSharedPrimitives[type];
@@ -3601,7 +3604,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   return Object.freeze({count,segmentCount,triangleCount:indices.length/3,mode:"authoritative-occupied-lot-outlines-v2"});
 }
 function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tier){
-  localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;localSettlementLotGeometry?.destroy?.();localSettlementLotGeometry=null;
+  localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;
   const village=window.StartingVillage;
   if(!village?.local||!village?.infrastructureAt||!pc||!device)return Object.freeze({active:false,cellCount:0,queryCount:0,triangleCount:0,mode:"none"});
   const extent=Math.max(Number(village.CORE_RADIUS_TILES||26)+3,Number(village.GATEWAY_MAINLAND_EDGE_TILES||29)+4);
@@ -5245,7 +5248,7 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   // field, not from parcel meshes or camera-relative decoration. Stronger chroma
   // separation reveals woodland/meadow/dry openings only when physically
   // resolvable, so refinement adds information without changing world identity.
-  const coverContrast=lerp(1.48,2.05,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
+  const coverContrast=lerp(1.12,1.48,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
   return [
     (mottle*.76-forestDelta*.105-copse*.026+dryField*.095+meadow*.010)*coverContrast,
     (mottle*.94-forestDelta*.010-copse*.008+dryField*.038+meadow*.086)*coverContrast,
