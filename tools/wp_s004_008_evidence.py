@@ -27,7 +27,7 @@ options.add_argument(f"--window-size={SIZE[0]},{SIZE[1]}")
 options.set_capability("goog:loggingPrefs",{"browser":"ALL"})
 driver=webdriver.Chrome(options=options)
 driver.set_window_size(*SIZE)
-wait=WebDriverWait(driver,120)
+wait=WebDriverWait(driver,180)
 
 def ready():
     try:
@@ -41,6 +41,22 @@ def verify():
     return driver.execute_script("""
       const seed=PlanetStage.snapshot().activeSeed;
       return {seed,verification:ContextualReactions.verify(seed)};
+    """)
+
+def prime_reusable_parent():
+    return driver.execute_script("""
+      const s=PlanetStage.snapshot(),seed=s.activeSeed,p=window.StartingVillage?.plan?.(seed);
+      const center=p?.center||{x:"0",y:"0"};
+      PlanetStage.setWorldTileFocus(String(center.x),String(center.y));
+      PlanetStage.setScaleIndex(8);
+      return {seed,center:{x:String(center.x),y:String(center.y)},name:String(p?.name||"Starting Village")};
+    """)
+
+def parent_prime_ready():
+    return driver.execute_script("""
+      const s=PlanetStage.snapshot(),rb=s.projection.resourceBudget||{},ls=s.projection.localStatic||{};
+      return Boolean(s.ready&&Number(s.zoom.scaleIndex)===8&&["refined","full"].includes(String(ls.revealTier||""))&&
+        ls.active&&Number(ls.buildingCount||0)>0&&rb.activeSignature);
     """)
 
 def prepare(case_id):
@@ -109,8 +125,14 @@ def add_overlay(info,state,verification):
 
 records=[]
 try:
-    driver.get(TARGET)
+    evidence_target=TARGET+("&" if "?" in TARGET else "?")+"evidence_fast_start=1"
+    driver.get(evidence_target)
     wait.until(lambda _d: ready())
+    prime=prime_reusable_parent()
+    try:
+        wait.until(lambda _d: parent_prime_ready())
+    except TimeoutException:
+        raise RuntimeError("initial reusable local parent failed to activate: "+json.dumps(prime))
     checked=verify()
     if not checked["verification"].get("pass"):
         raise RuntimeError("ContextualReactions.verify failed: "+json.dumps(checked["verification"]))
