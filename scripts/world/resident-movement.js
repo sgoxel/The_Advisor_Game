@@ -475,11 +475,25 @@ function advanceResidentForTick(tick,state,cooperative){
 function drainAdvanceTick(tick,cooperative){
   const started=performance.now(),budgetMs=cooperative?8:Infinity;
   if(!advanceTickInitialization(tick,cooperative,started,budgetMs))return false;
-  while(tick.cursor<tick.residents.length){
-    const complete=advanceResidentForTick(tick,tick.residents[tick.cursor],cooperative);
+  // Runtime simulation is cooperatively drained one resident at a time. The
+  // previous time-budget loop could pack several already-small resident jobs
+  // into one outer scheduler call, increasing allocation/GC pressure and making
+  // the wall-clock slice vulnerable to runner pauses even though every measured
+  // resident subphase stayed below 6 ms. Fixed one-resident drains preserve the
+  // exact resident order, SEED/fantasy-time inputs and outcomes while bounding
+  // the controllable work performed by each scheduler callback.
+  if(cooperative&&tick.cursor<tick.residents.length){
+    const complete=advanceResidentForTick(tick,tick.residents[tick.cursor],true);
     if(!complete)return false;
     tick.cursor++;
-    if(cooperative&&tick.cursor<tick.residents.length&&performance.now()-started>=budgetMs)return false;
+    if(tick.cursor<tick.residents.length)return false;
+    tick.phase="done";
+    return true;
+  }
+  while(tick.cursor<tick.residents.length){
+    const complete=advanceResidentForTick(tick,tick.residents[tick.cursor],false);
+    if(!complete)return false;
+    tick.cursor++;
   }
   tick.phase="done";
   return true;
