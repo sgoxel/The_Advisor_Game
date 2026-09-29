@@ -121,6 +121,13 @@ function rawCandidate(seed,type,x,y,score,importance,radius,description,tags,evi
 function poiCandidatesForCell(seed,cxValue,cyValue){
   const cx=BigInt(String(cxValue)),cy=BigInt(String(cyValue)),cacheKey=String(seed)+"|"+cx+"|"+cy;
   if(poiCellCache.has(cacheKey))return poiCellCache.get(cacheKey);
+  const persistentOptions={
+    seed:String(seed),family:"poi-cell",recordId:String(cx)+","+String(cy),familyVersion:VERSION,
+    dependencySignature:["destinations",VERSION,"geography",Number(window.GeographyFoundation?.VERSION||0),"naming",Number(window.PlaceNaming?.VERSION||0)].join("|"),
+    regenCost:4,importance:4
+  };
+  const persisted=window.GeneratedWorldStore?.peek?.(persistentOptions)||null;
+  if(persisted){poiCellCache.set(cacheKey,persisted);return poiCellCache.get(cacheKey);}
   const size=BigInt(POI_CELL_TILES),baseX=cx*size,baseY=cy*size;
   const jx=BigInt(Math.round((unit(seed,"jx:"+cx+":"+cy)*.72+.14)*POI_CELL_TILES)),jy=BigInt(Math.round((unit(seed,"jy:"+cx+":"+cy)*.72+.14)*POI_CELL_TILES));
   const x=baseX+jx,y=baseY+jy,ctx=contextAt(seed,x,y),c=ctx.center,h=unit(seed,"history:"+cx+":"+cy),g=unit(seed,"activity:"+cx+":"+cy),out=[];
@@ -151,6 +158,7 @@ function poiCandidatesForCell(seed,cxValue,cyValue){
   const result=Object.freeze(out.slice(0,4));
   poiCellCache.set(cacheKey,result);
   if(poiCellCache.size>POI_CELL_CACHE_LIMIT)poiCellCache.delete(poiCellCache.keys().next().value);
+  window.GeneratedWorldStore?.recordGenerated?.(persistentOptions,result);
   return result;
 }
 function settlementRaw(record){
