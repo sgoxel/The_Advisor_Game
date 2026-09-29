@@ -16,6 +16,9 @@ on:
       - scripts/world/planet-stage.js
       - index.html
       - tools/tests/wp-s007-009-001-generated-world-store.test.js
+      - generated-world-store-proof.html
+      - tools/wp_s007_009_001_browser.py
+      - tools/requirements.txt
       - tools/tests/wp-s007-009-001-browser-harness.html
       - tools/tests/wp-s007-009-001-indexeddb-browser.py
   workflow_dispatch:
@@ -66,6 +69,7 @@ jobs:
           node --check scripts/world/campaign-persistence.js
           node --check scripts/world/planet-stage.js
           node --check tools/tests/wp-s007-009-001-generated-world-store.test.js
+          python -m py_compile tools/wp_s007_009_001_browser.py
           python -m py_compile tools/tests/wp-s007-009-001-indexeddb-browser.py
 
       - name: Durable cache incremental resume acceptance
