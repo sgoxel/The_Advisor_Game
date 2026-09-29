@@ -1448,13 +1448,13 @@ function atlasResolvedIdentity(entity){
   const result=Object.freeze({ids:Object.freeze(ids),resolvedName:resolvedName||null,resolvedId:resolvedId||null,identityMatch:String(resolvedId||"")===String(entity.id)&&String(resolvedName||"")===String(entity.name)});
   atlasIdentityCache.set(cacheKey,result);return result;
 }
-function atlasProjectCandidate(entity){
+function atlasProjectCandidate(entity,viewportRect=null){
   const scene=geographicScenePoint(entity.latitudeRadians,entity.longitudeRadians,entity.type==="landmark"?8:5);if(!scene)return {reason:"outside-footprint"};
   if(scene.mode==="globe"&&planet){
     const center=planet.getPosition(),normal=scene.world.clone().sub(center),toCamera=cameraEntity.getPosition().clone().sub(scene.world);
     if(normal.dot(toCamera)<=0)return {reason:"hidden-hemisphere"};
   }
-  const screen=cameraEntity.camera.worldToScreen(scene.world),viewDepth=cameraViewDepth(scene.world),rect=canvas.getBoundingClientRect();
+  const screen=cameraEntity.camera.worldToScreen(scene.world),viewDepth=cameraViewDepth(scene.world),rect=viewportRect||canvas.getBoundingClientRect();
   if(!Number.isFinite(screen.x)||!Number.isFinite(screen.y)||!Number.isFinite(screen.z))return {reason:"invalid-projection"};
   if(!Number.isFinite(viewDepth)||viewDepth>=0)return {reason:"behind-camera"};
   const x=screen.x/Math.max(1,rect.width)*100,y=screen.y/Math.max(1,rect.height)*100;
@@ -1530,7 +1530,9 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
   const projectedById=new Map(),identityById=new Map(),validCandidates=[],seenDisplayNames=new Set();
   const projectionFor=entity=>{
     if(projectedById.has(entity.id))return projectedById.get(entity.id);
-    const projected=atlasProjectCandidate(entity);projectedById.set(entity.id,projected);return projected;
+    // One viewport measurement per semantic frame avoids repeated forced layout
+    // while projecting the bounded label candidate set.
+    const projected=atlasProjectCandidate(entity,rect);projectedById.set(entity.id,projected);return projected;
   };
   // A candidate may consume semantic density only after it is actually eligible
   // for this frame. Projection/occlusion and canonical identity come before the
@@ -1561,13 +1563,15 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
   // current projected/validated candidates so identical visible state cannot
   // inherit a different label set from prior pan or viewport history.
   atlasStickyEntities.clear();
-  const classCount=type=>[...atlasStickyEntities.values()].filter(item=>item.type===type).length;
+  const selectedClassCounts=Object.create(null);
   const canAdd=entity=>{
     if(atlasStickyEntities.has(entity.id))return true;
     if(atlasStickyEntities.size>=spec.budget){hiddenReasons.globalBudget++;visibilityReasonById.set(entity.id,"global-budget");return false;}
     const limit=Number(spec.classBudgets?.[entity.type]??spec.budget);
-    if(classCount(entity.type)>=limit){hiddenReasons.classBudget++;visibilityReasonById.set(entity.id,"class-budget");return false;}
-    atlasStickyEntities.set(entity.id,entity);return true;
+    if(Number(selectedClassCounts[entity.type]||0)>=limit){hiddenReasons.classBudget++;visibilityReasonById.set(entity.id,"class-budget");return false;}
+    atlasStickyEntities.set(entity.id,entity);
+    selectedClassCounts[entity.type]=Number(selectedClassCounts[entity.type]||0)+1;
+    return true;
   };
   // Landmarks are independently eligible at their scale tier. Reserve a small
   // bounded quota so hierarchy labels cannot consume the entire sticky budget.
@@ -1585,6 +1589,7 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
         .sort((a,b)=>Number(a.importance||0)-Number(b.importance||0)||b.id.localeCompare(a.id))[0];
       if(!removable)break;
       atlasStickyEntities.delete(removable.id);atlasLabelPlacementCache.delete(removable.id);
+      selectedClassCounts[removable.type]=Math.max(0,Number(selectedClassCounts[removable.type]||0)-1);
     }
     canAdd(entity);
   }
