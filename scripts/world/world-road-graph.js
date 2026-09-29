@@ -245,6 +245,13 @@ function graphForCountry(seedValue,countryValue,optionsValue){
   if(!country)return null;
   const radius=Math.max(1,Math.min(4,Number(options.radius??4))),focusKey=options.focus&&options.focus.x!=null&&options.focus.y!=null?String(options.focus.x)+","+String(options.focus.y):"auto",cacheKey=[VERSION,seed,country.id,radius,focusKey].join("|");
   if(graphCache.has(cacheKey))return graphCache.get(cacheKey);
+  const persistentOptions={
+    seed,family:"road-graph",recordId:String(country.id)+"|r"+radius+"|f"+focusKey,familyVersion:VERSION,
+    dependencySignature:["road",VERSION,"settlement",Number(window.SettlementArchetypes?.VERSION||0),"hierarchy",Number(window.SettlementArchetypes?.HIERARCHY_VERSION||0),"planet",Number(window.PlanetGeography?.VERSION||0)].join("|"),
+    regenCost:24,importance:5
+  };
+  const persisted=window.GeneratedWorldStore?.peek?.(persistentOptions)||null;
+  if(persisted){graphCache.set(cacheKey,persisted);return graphCache.get(cacheKey);}
   const started=now();
   const catalog=boundedSettlementCatalog(seed,country,radius,options.focus);
   const records=catalog.records;
@@ -316,6 +323,7 @@ function graphForCountry(seedValue,countryValue,optionsValue){
     })
   });
   graphCache.set(cacheKey,result);while(graphCache.size>GRAPH_CACHE_LIMIT)graphCache.delete(graphCache.keys().next().value);
+  window.GeneratedWorldStore?.recordGenerated?.(persistentOptions,result);
   return result;
 }
 function route(seedValue,countryValue,fromIdValue,toIdValue,optionsValue){
