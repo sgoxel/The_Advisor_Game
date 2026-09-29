@@ -334,6 +334,12 @@ const LOCAL_DETAIL_LEVELS=Object.freeze([
 ]);
 const LOCAL_PREP_SLICE_BUDGET_MS=6;
 const LOCAL_STANDIN_MAX_MAGNIFICATION=6;
+// Animated inward zoom may use a prepared parent as a short-lived stand-in,
+// but it must not race far past that parent's readable physical scale. The
+// small allowance beyond the steady-state 1.5x threshold lets the next child
+// become requested while animation buys its cooperative preparation time.
+const ZOOM_READY_PARENT_MAX_MAGNIFICATION=1.65;
+const ZOOM_ROOT_READINESS_CAP_SCALAR=.69;
 const LOCAL_TANGENT_OWNERSHIP_BLEND=.055;
 const LOCAL_STANDIN_MIN_COMPENSATION=1/3;
 const GLOBE_VERTICAL_FOV_DEGREES=34;
@@ -399,6 +405,7 @@ function freshLocalResources(){
     cacheHits:0,cacheMisses:0,prewarmHits:0,prewarmCompleted:0,cancelledPreparations:0,deferredRequests:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,
     lastBuildMs:0,lastPreparationWallMs:0,lastPreparationBusyMs:0,lastPreparationSlices:0,maxPreparationSliceMs:0,lastSwapMs:0,maxSwapMs:0,swapCount:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,
     blockingZoomBuilds:0,maxFrameMsDuringPreparation:0,recentMaxFrameMs:0,lastFrameMs:0,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,cooperativePreparation:true,doubleBufferedSwap:true,
+    zoomReadinessHoldActive:false,zoomReadinessHoldFrames:0,zoomReadinessCapScalar:1,zoomReadinessRevision:"ready-parent-leash-v1",
     residencyRevision:"temporal-residency-v1",requestedCellCount:0,preparingCellCount:0,readyCellCount:0,activeCellCount:0,graceResidentCellCount:0,evictedCellCount:0,
     parentFallbackCount:0,rootFallbackCount:0,missingCoverageCount:0,graceReuseCount:0,prefetchRequests:0,prefetchCompleted:0,prefetchHits:0,prefetchMisses:0,
     longestHandoffLatencyMs:0,lastHandoffLatencyMs:0,lastHandoffRequestedAtMs:0,lastHandoffCompletedAtMs:0,
@@ -707,7 +714,7 @@ const SEMANTIC_LAYER_SPECS=Object.freeze([
   Object.freeze({id:"semantic-1-250",scaleLabel:"1/250",displayBand:"regional detail",contextKinds:["country","region","city"],placeKinds:["region","capital","major-city","city","landmark"],kinds:["region","capital","city","landmark"],focusKind:"region",budget:11,portraitBudget:7,classBudgets:{region:4,capital:2,city:4,landmark:2},landmarkKinds:["peak","mountain","ruin","water"],borderClasses:["national","regional"],routeClasses:["primary"],settlementLayers:[],settlementRevealTier:"none",queryMode:"local"}),
   Object.freeze({id:"semantic-1-500",scaleLabel:"1/500",displayBand:"local network",contextKinds:["region","city"],placeKinds:["region","major-city","city","major-landmark"],kinds:["region","city","landmark"],focusKind:"city",budget:7,portraitBudget:5,classBudgets:{region:2,city:3,landmark:2},landmarkKinds:["peak","mountain","island"],borderClasses:["national","regional"],routeClasses:["primary","secondary"],settlementLayers:[],settlementRevealTier:"none",queryMode:"local"}),
   Object.freeze({id:"semantic-1-1000",scaleLabel:"1/1000",displayBand:"settlement area",contextKinds:["city","village","district"],placeKinds:["city","town","village","district","landmark"],kinds:["city","town","village","district","landmark"],focusKind:"village",budget:9,portraitBudget:6,classBudgets:{city:2,town:3,village:4,district:3,landmark:2},landmarkKinds:["city","town","village","ruin"],borderClasses:["regional"],routeClasses:["primary","secondary"],settlementLayers:["settlement-footprint"],settlementRevealTier:"footprint",queryMode:"local"}),
-  Object.freeze({id:"semantic-1-2500",scaleLabel:"1/2500",displayBand:"settlement approach",contextKinds:["village","district"],placeKinds:["town","village","district","landmark"],kinds:["town","village","district","landmark"],focusKind:"village",budget:8,portraitBudget:6,classBudgets:{town:2,village:3,district:3,landmark:2},landmarkKinds:["town","village","ruin"],borderClasses:[],routeClasses:["primary","secondary","local"],settlementLayers:["settlement-footprint","roads"],settlementRevealTier:"route",queryMode:"local"}),
+  Object.freeze({id:"semantic-1-2500",scaleLabel:"1/2500",displayBand:"settlement approach",contextKinds:["village","district"],placeKinds:["town","village","district","landmark"],kinds:["town","village","district","landmark"],focusKind:"village",budget:6,portraitBudget:5,classBudgets:{town:1,village:3,district:1,landmark:1},landmarkKinds:["town","village","ruin"],borderClasses:[],routeClasses:["primary","secondary","local"],settlementLayers:["settlement-footprint","roads"],settlementRevealTier:"route",queryMode:"local"}),
   Object.freeze({id:"semantic-1-5000",scaleLabel:"1/5000",displayBand:"near ground",contextKinds:["village","district"],placeKinds:["village","district","landmark"],kinds:["village","district","landmark"],focusKind:"village",budget:7,portraitBudget:5,classBudgets:{village:2,district:3,landmark:2},landmarkKinds:["village","ruin"],borderClasses:[],routeClasses:["primary","secondary","local"],settlementLayers:["settlement-footprint","roads","buildings"],settlementRevealTier:"refined",queryMode:"local"}),
   Object.freeze({id:"semantic-1-10000",scaleLabel:"1/10000",displayBand:"ground",contextKinds:["village","district"],placeKinds:["village","district","landmark"],kinds:["village","district","landmark"],focusKind:"village",budget:5,portraitBudget:4,classBudgets:{village:1,district:2,landmark:1},landmarkKinds:["village","ruin"],borderClasses:[],routeClasses:["local"],settlementLayers:["settlement-footprint","roads","buildings"],settlementRevealTier:"full",queryMode:"local"})
 ]);
@@ -3489,10 +3496,10 @@ function ensureLocalStaticMaterials(){
   const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.31,.235,.105,.92),square:make("LocalSquare",.48,.35,.18),
+    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.235,.155,.055,1),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.11),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.58);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.11),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.74);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     microWater:make("LocalMicroWater",.07,.28,.42,.52),
     microStone:make("LocalMicroStone",.67,.64,.56),microWood:make("LocalMicroWood",.57,.34,.14),
@@ -3834,14 +3841,22 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
     const b=record?.bounds;if(!b)continue;
     const minX=Number(b.minX)-.28,maxX=Number(b.maxX)+.28,minY=Number(b.minY)-.28,maxY=Number(b.maxY)+.28;
     if(![minX,maxX,minY,maxY].every(Number.isFinite)||maxX<=minX||maxY<=minY)continue;
-    const special=specialIds.has(String(record?.id||"")),fill=special?[184,132,67]:(tier==="route"?[121,91,53]:[142,101,58]),
-      border=special?[224,174,92]:[164,140,82];
+    const special=specialIds.has(String(record?.id||"")),fill=special?[206,151,74]:(tier==="route"?[153,111,59]:[142,101,58]),
+      border=special?[238,190,102]:[190,153,88];
     count++;
     // Route overview exposes a small explicit subset of the real HousePlans /
     // SpecialLots footprints as quiet occupied fabric. Parent build-plot parcels
     // stay coarse-only; no camera-relative or synthetic settlement shape exists.
     if(tier==="route"){
       if(addQuad(minX,minY,maxX,maxY,fill,0))outlineSegmentCount++;
+      // The route tier already uses real HousePlans/SpecialLots footprints.
+      // Add only their own thin perimeter so the occupied fabric is readable
+      // against map-scale terrain without inventing building geometry.
+      const bw=Math.min(.20,Math.max(.10,Math.min(maxX-minX,maxY-minY)*.060));
+      if(addQuad(minX,minY,maxX,minY+bw,border,.008))outlineSegmentCount++;
+      if(addQuad(minX,maxY-bw,maxX,maxY,border,.008))outlineSegmentCount++;
+      if(addQuad(minX,minY+bw,minX+bw,maxY-bw,border,.008))outlineSegmentCount++;
+      if(addQuad(maxX-bw,minY+bw,maxX,maxY-bw,border,.008))outlineSegmentCount++;
     }else{
       if(special)addQuad(minX,minY,maxX,maxY,fill,0);
       const bw=Math.min(.23,Math.max(.12,Math.min(maxX-minX,maxY-minY)*.070));
@@ -3859,8 +3874,8 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   for(const house of connectorRecords){
     const entrance=house?.entrance,target=entrance?.target;
     if(!entrance||!target)continue;
-    const accessWidth=tier==="route"?.42:(tier==="footprint"?.38:.24);
-    if(addConnector(Number(entrance.x),Number(entrance.y),Number(target.x),Number(target.y),accessWidth,[72,61,38]))connectorSegmentCount++;
+    const accessWidth=tier==="route"?.55:(tier==="footprint"?.38:.24);
+    if(addConnector(Number(entrance.x),Number(entrance.y),Number(target.x),Number(target.y),accessWidth,[55,43,24]))connectorSegmentCount++;
   }
   if(!count)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
@@ -3976,15 +3991,15 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
     }
     renderedRoadCellCount=selected.length;
     for(const cell of selected){
-      const {x,y,half}=cell,nodeFloor=tier==="route"?.020:.040,nodeHalf=Math.max(nodeFloor,half*.54);
+      const {x,y,half}=cell,nodeFloor=tier==="route"?.030:.040,nodeHalf=Math.max(nodeFloor,half*.62);
       const neighborCount=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]
         .filter(([dx,dy])=>selectedMap.has((x+dx)+","+(y+dy))).length;
       if(neighborCount!==2)addQuad(x-nodeHalf,y-nodeHalf,x+nodeHalf,y+nodeHalf);
       for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
         const other=selectedMap.get((x+dx)+","+(y+dy));if(!other)continue;
         if(dx&&dy&&(selectedMap.has((x+dx)+","+y)||selectedMap.has(x+","+(y+dy))))continue;
-        const segmentFloor=tier==="route"?.024:.055;
-        addSegment(x,y,other.x,other.y,Math.max(segmentFloor,Math.min(half,other.half)*2));
+        const segmentFloor=tier==="route"?.038:.055;
+        addSegment(x,y,other.x,other.y,Math.max(segmentFloor,Math.min(half,other.half)*(tier==="route"?2.35:2)));
       }
     }
   }else{
@@ -7077,13 +7092,25 @@ function setZoomTargetScalar(value,source="input"){
   navigationPerformance.zoomCommandSnapshotAvoidedCount++;
   return null;
 }
+function animatedZoomReadinessCapScalar(){
+  if(lastZoomDirection<=0)return ZOOM_MAX;
+  if(!displayResource)return Math.max(projectionState.transitionStart,ZOOM_ROOT_READINESS_CAP_SCALAR);
+  const readableHeight=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,Number(displayResource.dims?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)/ZOOM_READY_PARENT_MAX_MAGNIFICATION);
+  return clamp(scalarForFootprintHeight(readableHeight),zoomState.scalar,ZOOM_MAX);
+}
 function updateAnimatedZoom(dt){
   if(!zoomState.animating)return false;
   const seconds=Math.min(ZOOM_ANIMATION_MAX_STEP_SECONDS,Math.max(1/240,Number(dt)||1/60));
   const previous=zoomState.scalar,target=clamp(zoomState.targetScalar,ZOOM_MIN,ZOOM_MAX),delta=target-previous;
   const alpha=1-Math.exp(-seconds/ZOOM_ANIMATION_TIME_CONSTANT_SECONDS);
   let next=previous+delta*alpha;
+  const readinessCap=target>previous?animatedZoomReadinessCapScalar():ZOOM_MAX;
+  const readinessHold=target>previous&&next>readinessCap+1e-7;
+  if(readinessHold)next=Math.max(previous,readinessCap);
   if(Math.abs(target-next)<=ZOOM_ANIMATION_SETTLE_EPSILON)next=target;
+  localResources.zoomReadinessHoldActive=readinessHold;
+  localResources.zoomReadinessCapScalar=Number(readinessCap.toFixed(6));
+  if(readinessHold)localResources.zoomReadinessHoldFrames++;
   zoomState.scalar=next;zoomState.zoomVelocity=(next-previous)/seconds;zoomState.animationFrameCount++;zoomState.totalAnimationFrames++;
   const displayIndex=displayScaleIndexForScalar(next),now=performance.now();
   applyCameraZoom(false);
