@@ -288,6 +288,10 @@ function advance(request){
   const seed=String(request?.seed||seedKey||"");
   if(!ensure(seed))return snapshot();
   const when=request?.when||window.GameTime?.getNow?.()||timeParts(null);
+  // Evidence mode freezes an already-resolved reaction so the normal resident
+  // scheduler cannot consume a short remark before the screenshot is captured.
+  // Production never sets proofActive, so live timing is unchanged.
+  if(proofActive&&request?.allowProofAdvance!==true)return snapshot();
   advanceActive(request?.seconds);
   let checksBefore=candidateCheckCount,processed=0;
   while(queue.length&&processed<MAX_EVENTS_PER_ADVANCE){
@@ -367,7 +371,7 @@ function executeProof(seed){
     reset(seed);proofActive=true;
     const before=snapshot();
     notify({...def.event,when:def.when});
-    advance({seed,when:def.when,seconds:.1,residentLookup:id=>String(id)===def.residentId?def.resident:null});
+    advance({seed,when:def.when,seconds:.1,allowProofAdvance:true,residentLookup:id=>String(id)===def.residentId?def.resident:null});
     const reaction=stateFor(def.residentId);
     results.push(Object.freeze({
       id:def.id,residentId:def.residentId,residentPosition:def.residentPosition,protagonist:def.event.protagonist,
@@ -380,11 +384,11 @@ function executeProof(seed){
   if(close){
     reset(seed);proofActive=true;
     notify({...close.event,when:close.when});
-    advance({seed,when:close.when,seconds:.1,residentLookup:id=>String(id)===close.residentId?close.resident:null});
-    advance({seed,when:close.when,seconds:4,residentLookup:()=>close.resident});
+    advance({seed,when:close.when,seconds:.1,allowProofAdvance:true,residentLookup:id=>String(id)===close.residentId?close.resident:null});
+    advance({seed,when:close.when,seconds:4,allowProofAdvance:true,residentLookup:()=>close.resident});
     const before=snapshot().suppressedCooldownCount;
     notify({...close.event,when:close.when});
-    advance({seed,when:close.when,seconds:.1,residentLookup:id=>String(id)===close.residentId?close.resident:null});
+    advance({seed,when:close.when,seconds:.1,allowProofAdvance:true,residentLookup:id=>String(id)===close.residentId?close.resident:null});
     cooldownSuppressed=snapshot().suppressedCooldownCount>before&&!stateFor(close.residentId);
   }
   const byId=Object.fromEntries(results.map(r=>[r.id,r]));
@@ -421,7 +425,7 @@ function beginProof(seedValue,caseId){
   if(!def)return null;
   reset(seed);proofActive=true;
   notify({...def.event,when:def.when});
-  advance({seed,when:def.when,seconds:.1,residentLookup:id=>String(id)===def.residentId?def.resident:null});
+  advance({seed,when:def.when,seconds:.1,allowProofAdvance:true,residentLookup:id=>String(id)===def.residentId?def.resident:null});
   return Object.freeze({
     caseId:def.id,residentId:def.residentId,residentPosition:def.residentPosition,protagonist:def.event.protagonist,
     when:def.when,reaction:stateFor(def.residentId),snapshot:snapshot()
