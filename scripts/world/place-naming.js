@@ -77,7 +77,21 @@ function pick(seed,key,list){
   return list[mix32(h)%list.length];
 }
 function smoothWord(value){
-  return String(value).replace(/([aeiou])\1+/gi,"$1").replace(/([bcdfghjklmnpqrstvwxyz])\1+/gi,"$1");
+  const source=String(value).replace(/([aeiou])\1+/gi,"$1").replace(/([bcdfghjklmnpqrstvwxyz])\1+/gi,"$1");
+  const consonant=/[bcdfghjklmnpqrstvwxyz]/i,vowels="aeiou";
+  let out="",run=0;
+  for(const ch of source){
+    if(consonant.test(ch)){
+      if(run>=4){
+        const bridge=vowels[mix32(hash32(source+"|bridge|"+out.length))%vowels.length];
+        out+=bridge;run=0;
+      }
+      out+=ch;run++;
+    }else{
+      out+=ch;run=0;
+    }
+  }
+  return out;
 }
 function coreFor(seed,input,attempt){
   const id=safe(input.id)||[normalizeType(input.type),safe(input.countryId),safe(input.regionId),safe(input.x),safe(input.y)].join("|");
