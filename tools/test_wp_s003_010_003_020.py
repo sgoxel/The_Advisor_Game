@@ -375,13 +375,16 @@ def capture_navigation_sequence(driver):
     for idx, pause in enumerate((.045,.065,.090)):
         time.sleep(pause)
         stage=snap(driver)
+        shot=capture(driver,f"visual-land-zoom-{idx}")
+        displayed=snap(driver)
         frames.append({
             "phase":f"land-zoom-{idx}",
-            "scale":stage["zoom"]["displayScaleLabel"],
-            "scalar":stage["zoom"]["scalar"],
-            "presentation":stage.get("projection",{}).get("presentation"),
-            "resourceBudget":stage.get("projection",{}).get("resourceBudget"),
-            "screenshot":capture(driver,f"visual-land-zoom-{idx}"),
+            "scale":displayed["zoom"]["displayScaleLabel"],
+            "scalar":displayed["zoom"]["scalar"],
+            "preCaptureScalar":stage["zoom"]["scalar"],
+            "presentation":displayed.get("projection",{}).get("presentation"),
+            "resourceBudget":displayed.get("projection",{}).get("resourceBudget"),
+            "screenshot":shot,
         })
     WebDriverWait(driver, 90).until(lambda d: not bool(d.execute_script("return window.PlanetStage.snapshot().zoom.animating")))
     frames.append({"phase":"land-zoom-settled","screenshot":capture(driver,"visual-land-zoom-settled")})
