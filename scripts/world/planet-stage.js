@@ -3790,7 +3790,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   for(const house of reveal?.houses||[]){
     const entrance=house?.entrance,target=entrance?.target;
     if(!entrance||!target)continue;
-    const accessWidth=tier==="route"?.72:(tier==="footprint"?.34:.24);
+    const accessWidth=tier==="route"?.88:(tier==="footprint"?.38:.24);
     if(addConnector(Number(entrance.x),Number(entrance.y),Number(target.x),Number(target.y),accessWidth,[72,61,38]))connectorSegmentCount++;
   }
   if(!count)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
@@ -3853,8 +3853,8 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
         if(!outwardBranch&&!gatewayStem&&!centerAvenue&&!localPath)continue;
       }else if(!outwardBranch&&!gatewayStem&&!ringCell&&!centerAvenue&&!localPath)continue;
       const half=tier==="footprint"
-        ?(outwardBranch?.28:(centerAvenue||gatewayStem)?.11:.10)
-        :(outwardBranch?.30:ringCell?.055:(centerAvenue||gatewayStem)?.11:.18);
+        ?(outwardBranch?.28:gatewayStem?.14:centerAvenue?.075:.11)
+        :(outwardBranch?.28:ringCell?.035:gatewayStem?.14:centerAvenue?.065:.20);
       const cell={x,y,half};selected.push(cell);selectedMap.set(x+","+y,cell);
     }
     // Render each authoritative road cell as part of one continuous stroke.
@@ -3862,12 +3862,13 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
     // there is no cardinal intermediary, preserving curved ring continuity
     // without inventing shortcuts between distinct authoritative roads.
     for(const cell of selected){
-      const {x,y,half}=cell,nodeHalf=Math.max(.055,half*.72);
+      const {x,y,half}=cell,nodeFloor=tier==="route"?.024:.040,nodeHalf=Math.max(nodeFloor,half*.72);
       addQuad(x-nodeHalf,y-nodeHalf,x+nodeHalf,y+nodeHalf);
       for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
         const other=selectedMap.get((x+dx)+","+(y+dy));if(!other)continue;
         if(dx&&dy&&(selectedMap.has((x+dx)+","+y)||selectedMap.has(x+","+(y+dy))))continue;
-        addSegment(x,y,other.x,other.y,Math.max(.08,Math.min(half,other.half)*2));
+        const segmentFloor=tier==="route"?.035:.055;
+        addSegment(x,y,other.x,other.y,Math.max(segmentFloor,Math.min(half,other.half)*2));
       }
     }
   }else{
@@ -5948,8 +5949,17 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const curvatureTone=curvatureSignal*(contextRing?lerp(.030,.048,contextRefineWeight):lerp(.046,.080,focusRefineWeight))*mapStructureBoost*mapStructureScale*curvatureReliefWeight;
         const slopeTone=-slopeSignal*(contextRing?lerp(.006,.014,contextRefineWeight):lerp(.010,.024,focusRefineWeight))*slopeLightingWeight;
         const drainageTone=(moistureCurve*(contextRing?lerp(.010,.018,contextRefineWeight):lerp(.016,.032,focusRefineWeight))-moistureGradient*(contextRing?.008:.012))*mapStructureScale*lerp(.9,1.22,mapHighPassBand);
-        const structureTone=curvatureTone+slopeTone+drainageTone;
-        cover=[structureTone,structureTone*.95+drainageTone*.12,curvatureTone*.74+slopeTone*.64+drainageTone*.58];
+        // Directional shading is admitted only where the local high-pass shape
+        // actually bends or drains. A uniform continental slope therefore stays
+        // quiet, while real ridges/valleys gain readable form at 1/500.
+        const terrainShapeGate=clamp(Math.abs(curvatureSignal)*.78+moistureGradient*.42,0,1);
+        const directionalShapeTone=(lit-flatShade)*mapHighPassBand*terrainShapeGate*(contextRing?.052:.095);
+        const structureTone=curvatureTone+slopeTone+drainageTone+directionalShapeTone;
+        cover=[
+          structureTone-moistureGradient*mapHighPassBand*.006,
+          structureTone*.95+drainageTone*.16+moistureCurve*mapHighPassBand*.005,
+          curvatureTone*.74+slopeTone*.64+drainageTone*.64+directionalShapeTone*.72
+        ];
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
         const coverGain=contextRing?contextRefineWeight*.30:focusRefineWeight*.88;
