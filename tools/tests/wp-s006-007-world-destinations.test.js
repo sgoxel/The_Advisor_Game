@@ -32,6 +32,7 @@ function load(path){vm.runInThisContext(fs.readFileSync(path,"utf8"),{filename:p
   "scripts/world/country-profile.js",
   "scripts/world/region-profile.js",
   "scripts/world/settlement-archetypes.js",
+  "scripts/world/world-field.js",
   "scripts/world/world-destinations.js"
 ].forEach(load);
 
@@ -96,7 +97,8 @@ assert(unique.some(x=>x.category==="water"),"no natural water destination found 
 const fishing=unique.find(x=>x.type==="fishing");
 assert(fishing.evidence.waterSamples>=2||fishing.evidence.waterArms>=1,"fishing destination lacks water evidence");
 const hunting=unique.find(x=>x.type==="hunting");
-assert(hunting.evidence.forestSamples>=3||["Woodland","Highland"].includes(hunting.evidence.biome),"hunting destination lacks wilderness evidence");
+assert(hunting.evidence.forestSamples>=3||/forest|woodland/i.test(String(hunting.evidence.biome||"")),"hunting destination lacks wilderness evidence");
+assert(hunting.evidence.settlementPressureMeters==null||hunting.evidence.settlementPressureMeters>=1800,"hunting destination violates settlement-pressure clearance");
 const historical=unique.find(x=>x.category==="historical");
 assert.notStrictEqual(historical.evidence.terrain,"water","historical destination placed on water");
 const water=unique.find(x=>x.category==="water");
@@ -137,7 +139,7 @@ console.log(JSON.stringify({
     fishing:{id:fishing.id,name:fishing.name,waterSamples:fishing.evidence.waterSamples},
     water:{id:water.id,type:water.type,name:water.name,waterSamples:water.evidence.waterSamples}
   },
-  bounds:{maxQueryCells:api.MAX_QUERY_CELLS,maxResults:api.MAX_QUERY_RESULTS,maxRadiusMeters:api.MAX_QUERY_RADIUS_METERS,poiCellCacheLimit:api.POI_CELL_CACHE_LIMIT,queryBudgetMs:5000,fullWorldScan:false,localChunkMaterialization:false},
+  bounds:{maxQueryCells:api.MAX_QUERY_CELLS,maxResults:api.MAX_QUERY_RESULTS,maxRadiusMeters:api.MAX_QUERY_RADIUS_METERS,poiCellCacheLimit:api.POI_CELL_CACHE_LIMIT,settlementCellLimitPerClass:api.SETTLEMENT_CELL_LIMIT_PER_CLASS,settlementResultLimitPerClass:api.SETTLEMENT_RESULT_LIMIT_PER_CLASS,queryBudgetMs:5000,fullWorldScan:false,localChunkMaterialization:false,worldFieldAuthority:true},
   filters:{historicalOnly:filtered.results.length,minImportance:minImportance.results.length,discoveredOnly:discovered.results.length},
   navigatorIntegration:true
 },null,2));
