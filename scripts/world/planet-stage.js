@@ -2384,7 +2384,10 @@ function projectionPresentationBlendForZoom(value=zoomState.scalar){
   // This is only presentation ownership timing: the same canonical focus,
   // geography and prepared resource remain authoritative.
   const start=Math.max(projectionState.transitionStart,.60);
-  const end=Math.max(start+.0001,.715);
+  // Once a registered parent exists, finish the smooth-shell crossfade before
+  // the 1/50 milestone. The transition remains continuous, but the high-contrast
+  // global mountain chroma no longer ghosts over an already-readable tangent map.
+  const end=Math.max(start+.0001,.695);
   return smoothstep01((scalar-start)/(end-start));
 }
 function canonicalSurfaceIdentity(){
@@ -2663,7 +2666,7 @@ function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel
   // visible contrast on frequencies the current physical texel can actually
   // resolve. This prevents one macro slope from dominating the 1/500 frame.
   if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.012;
-  if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.018;
+  if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.026;
   if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.036;
   if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.026;
   if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.014;
@@ -5952,9 +5955,9 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   // already-sampled registered fields toward the physically readable 16 km and
   // 5.2 km terms; this changes only presentation weights, not sampling/authority.
   const strategic=(
-    surfaceValueNoise(we,wn,48000,salt+3)*.018*wStrategic+
-    surfaceValueNoise(we,wn,16000,salt+5)*.055*wStrategicMid+
-    surfaceValueNoise(we,wn,5200,salt+6)*.034*wStrategicFine
+    surfaceValueNoise(we,wn,48000,salt+3)*.010*wStrategic+
+    surfaceValueNoise(we,wn,16000,salt+5)*.048*wStrategicMid+
+    surfaceValueNoise(we,wn,5200,salt+6)*.052*wStrategicFine
   )*strategicWeight;
   const broad=surfaceValueNoise(we,wn,3600,salt+7)*.22*wBroad+
     surfaceValueNoise(we,wn,1500,salt+11)*.30*wMid+
@@ -6533,7 +6536,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-access-morphology-map-detail-v25",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-access-morphology-map-detail-v26",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
