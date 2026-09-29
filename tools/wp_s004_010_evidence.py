@@ -162,8 +162,12 @@ try:
             raise RuntimeError("renderer crowd became interactive/persistent: "+json.dumps(s))
         if not c.get("presentationOnly") or c.get("simulationAuthority") or c.get("persistentIdentity") or c.get("selectable") or c.get("collision") or c.get("exactNpcReplacement"):
             raise RuntimeError("crowd authority isolation failed: "+json.dumps(s))
+        if c.get("fullSettlementPerFrameScan") or c.get("globalScan"):
+            raise RuntimeError("crowd scan budget isolation failed: "+json.dumps(s))
         if c.get("candidateChecks",9999)>192:
             raise RuntimeError("candidate budget exceeded: "+json.dumps(s))
+        if PROFILE=="portrait" and c.get("activeCount",9999)>20:
+            raise RuntimeError("mobile crowd cap exceeded: "+json.dumps(s))
         if c.get("updateMs",9999)>=50:
             raise RuntimeError("crowd update exceeded 50 ms gate: "+json.dumps(s))
         add_overlay(cls,s)
