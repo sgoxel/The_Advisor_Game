@@ -3584,13 +3584,14 @@ function updateWayfindingTextOverlay(force=false){
     const projected=cameraEntity.camera.worldToScreen(world,new pc.Vec3());
     if(projected&&Number.isFinite(projected.x)&&Number.isFinite(projected.y))activeWorkCenters.push({x:projected.x,y:projected.y});
   }
-  const signCandidates=[],workDeclutterRadius=width<600?180:260;
+  const signCandidates=[],workDeclutterRadius=width<600?180:260,centerWorkRadius=Math.max(76,Math.min(170,Math.min(width,height)*.25));
+  const centeredWork=activeWorkCenters.some(worker=>Math.hypot(worker.x-width*.5,worker.y-height*.5)<=centerWorkRadius);
   for(const [signId,localPoint] of wayfindingSignAnchors){
     const p=projectWayfindingPoint(localPoint);
     if(!p||p.x<-60||p.x>width+60||p.y<-60||p.y>height+60)continue;
-    // Preserve the physical route sign, but suppress its shared-canvas text
-    // when that text would cover an active authoritative work action.
-    if(activeWorkCenters.some(worker=>(worker.x-p.x)**2+(worker.y-p.y)**2<workDeclutterRadius*workDeclutterRadius))continue;
+    // Centered authoritative work outranks route lettering at close scale.
+    // Physical signs and route truth stay present/clickable; only text yields.
+    if(centeredWork||activeWorkCenters.some(worker=>(worker.x-p.x)**2+(worker.y-p.y)**2<workDeclutterRadius*workDeclutterRadius))continue;
     signCandidates.push({signId,p,d2:(p.x-width*.5)**2+(p.y-height*.5)**2});
   }
   signCandidates.sort((a,b)=>a.d2-b.d2||a.signId.localeCompare(b.signId));
@@ -3878,8 +3879,8 @@ function refreshCanonicalNpcPresentation(){
 function updateCanonicalNpcMotion(){
   if(!localNpcRoot||!localNpcContext||!localNpcEntities.size)return;
   const started=performance.now(),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
-  let activeTools=0,activeProps=0,visibleCount=0;
-  const activeWorkCycleResidentIds=[];
+  let activeTools=0,activeProps=0,visibleCount=0,centeredWorkAction=false;
+  const activeWorkCycleResidentIds=[],viewportRect=canvas?.getBoundingClientRect?.()||null;
   for(const record of localNpcEntities.values()){
     const state=residentPresentationState(record.resident),visible=Boolean(state&&!state.indoors);
     record.body.enabled=visible;record.head.enabled=visible;record.tool.enabled=false;
@@ -3891,7 +3892,7 @@ function updateCanonicalNpcMotion(){
     const pos=canonicalSemanticPosition(east,north,record.presentationScale,record.unit,record.frame);
     const working=Boolean(state.movementState?.workCycle&&state.movementState?.status==="arrived");
     const phase=frameCount*.22+Number(String(record.resident.id).replace(/\D/g,"")||0);
-    const pulse=working?Math.sin(phase)*.035:0,actionScale=working?1.65:1;
+    const pulse=working?Math.sin(phase)*.035:0,actionScale=working?2.25:1;
     // Arrived workers receive a bounded presentation-only readability lift.
     // Position, collision, route and authoritative action targets stay unchanged.
     record.body.setLocalScale(record.bodyWidth*actionScale,record.bodyHeight*actionScale,record.bodyWidth*actionScale);
@@ -3899,8 +3900,13 @@ function updateCanonicalNpcMotion(){
     record.body.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale*.5,pos.z);
     record.head.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale+record.headSize*actionScale*(.48+pulse),pos.z);
     if(working){
+      if(viewportRect&&cameraEntity?.camera){
+        const screen=cameraEntity.camera.worldToScreen(record.body.getPosition(),new pc.Vec3());
+        const cx=viewportRect.width*.5,cy=viewportRect.height*.5,priorityRadius=Math.max(72,Math.min(160,Math.min(viewportRect.width,viewportRect.height)*.24));
+        if(Number.isFinite(screen?.x)&&Number.isFinite(screen?.y)&&Math.hypot(screen.x-cx,screen.y-cy)<=priorityRadius)centeredWorkAction=true;
+      }
       const profession=String(record.resident.profession||""),stepId=String(state.movementState?.workCycle?.stepId||"");
-      const bw=record.bodyWidth*actionScale,bh=record.bodyHeight*actionScale,swing=Math.sin(phase);
+      const cueScale=1.45,bw=record.bodyWidth*actionScale*cueScale,bh=record.bodyHeight*actionScale*cueScale,swing=Math.sin(phase);
       const setProp=(entity,material,sx,sy,sz,dx,dy,dz,rx=0,ry=0,rz=0)=>{
         if(!entity)return;
         if(material&&entity.render?.meshInstances?.[0])entity.render.meshInstances[0].material=material;
@@ -3961,6 +3967,19 @@ function updateCanonicalNpcMotion(){
     }
   }
   activeWorkCycleResidentIds.sort();
+  // Keep the gameplay-center anchor exact, but move its concise readout away
+  // from a centered authoritative work action and soften only the ring.
+  const centerMarker=root?.querySelector?.(".planet-world-center"),centerCode=centerMarker?.querySelector?.("code"),centerGlyph=centerMarker?.querySelector?.("i");
+  if(centerMarker)centerMarker.dataset.workPriority=centeredWorkAction?"true":"false";
+  if(centerCode){
+    if(centeredWorkAction){
+      centerCode.style.position="absolute";centerCode.style.left="50%";centerCode.style.top="-36px";
+      centerCode.style.transform="translateX(-50%)";centerCode.style.opacity=".84";
+    }else{
+      centerCode.style.position="";centerCode.style.left="";centerCode.style.top="";centerCode.style.transform="";centerCode.style.opacity="";
+    }
+  }
+  if(centerGlyph)centerGlyph.style.opacity=centeredWorkAction?".50":"";
   const elapsed=performance.now()-started;
   localNpcPresentation={...localNpcPresentation,active:visibleCount>0,activeCount:visibleCount,activeWorkCycleToolCount:activeTools,activeWorkCyclePropCount:activeProps,
     activeWorkCycleResidentIds:Object.freeze(activeWorkCycleResidentIds),
