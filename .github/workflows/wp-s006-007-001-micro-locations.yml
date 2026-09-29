@@ -8,6 +8,7 @@ on:
       - .github/workflows/wp-s006-007-001-micro-locations.yml
       - scripts/world/world-destinations.js
       - scripts/world/micro-locations.js
+      - scripts/world/planet-stage.js
       - scripts/render/playcanvas/chunk-world-data.js
       - scripts/render/playcanvas/terrain-chunk-mesh.js
       - index.html
@@ -43,6 +44,7 @@ jobs:
         run: |
           node --check scripts/world/world-destinations.js
           node --check scripts/world/micro-locations.js
+          node --check scripts/world/planet-stage.js
           node --check scripts/render/playcanvas/chunk-world-data.js
           node --check scripts/render/playcanvas/terrain-chunk-mesh.js
       - name: Functional micro-location proof
