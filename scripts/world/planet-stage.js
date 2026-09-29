@@ -5921,10 +5921,14 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   // become visible. The field is anchored only to Campaign-SEED registered
   // meters and fades out before local terrain detail takes over.
   const strategicWeight=smoothstep01(clamp((metersPerTexel-180)/900,0,1));
+  // At first-parent map scale the old strategic mix over-weighted the 48 km
+  // term, producing one broad blurred mountain band. Rebalance the exact same
+  // already-sampled registered fields toward the physically readable 16 km and
+  // 5.2 km terms; this changes only presentation weights, not sampling/authority.
   const strategic=(
-    surfaceValueNoise(we,wn,48000,salt+3)*.050*wStrategic+
-    surfaceValueNoise(we,wn,16000,salt+5)*.038*wStrategicMid+
-    surfaceValueNoise(we,wn,5200,salt+6)*.024*wStrategicFine
+    surfaceValueNoise(we,wn,48000,salt+3)*.018*wStrategic+
+    surfaceValueNoise(we,wn,16000,salt+5)*.055*wStrategicMid+
+    surfaceValueNoise(we,wn,5200,salt+6)*.034*wStrategicFine
   )*strategicWeight;
   const broad=surfaceValueNoise(we,wn,3600,salt+7)*.22*wBroad+
     surfaceValueNoise(we,wn,1500,salt+11)*.30*wMid+
@@ -6031,7 +6035,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // world scans and never participate in terrain authority.
   const componentRanges={
     sourceLuma:[Infinity,-Infinity],paletteLuma:[Infinity,-Infinity],baseLuma:[Infinity,-Infinity],
-    macro:[Infinity,-Infinity],coverLuma:[Infinity,-Infinity],shade:[Infinity,-Infinity],finalLuma:[Infinity,-Infinity],
+    macro:[Infinity,-Infinity],coverLuma:[Infinity,-Infinity],landCoverLuma:[Infinity,-Infinity],structureTone:[Infinity,-Infinity],shade:[Infinity,-Infinity],finalLuma:[Infinity,-Infinity],
     elevation:[Infinity,-Infinity],moisture:[Infinity,-Infinity],curvature:[Infinity,-Infinity],moistureGradient:[Infinity,-Infinity],ridgeValleyTint:[Infinity,-Infinity],registeredReliefShade:[Infinity,-Infinity]
   };
   const pushRange=(name,value)=>{
@@ -6160,7 +6164,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // introduced, so preparation cost and canonical world identity stay fixed.
       const strategicMapBand=smoothstep01(clamp((metersPerTexel-320)/900,0,1))*
         (1-smoothstep01(clamp((metersPerTexel-5000)/5200,0,1)));
-      const strategicMacroGain=1+strategicMapBand*(contextRing?.72:1.55);
+      const strategicMacroGain=1+strategicMapBand*(contextRing?.58:1.30);
       const sharedMacroContrast=(contextRing?1.06:1.10)*strategicMacroGain;
       const residualMacroContrast=(contextRing?1.20:lerp(1.18,1.52,focusRefineWeight))*strategicMacroGain;
       const macro=sharedMacro*sharedMacroContrast+(nativeMacro-sharedMacro)*refinementGain*residualMacroContrast;
@@ -6224,7 +6228,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const mapStructureScale=clamp(
           baseStructureScale+
           mapHighPassBand*(contextRing?.16:.34)+
-          strategicMapBand*(contextRing?.28:.62),
+          strategicMapBand*(contextRing?.22:.42),
           0,1.08
         );
         const curvatureReliefWeight=lerp(nearReliefWeight,1,Math.max(mapHighPassBand*.92,strategicMapBand*.58));
@@ -6237,7 +6241,14 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const terrainShapeGate=clamp(Math.abs(curvatureSignal)*.78+moistureGradient*.42,0,1);
         const directionalBand=mapHighPassBand+strategicMapBand*(contextRing?.38:.62);
         const directionalShapeTone=(lit-flatShade)*directionalBand*terrainShapeGate*(contextRing?.052:.095);
-        const structureTone=curvatureTone+slopeTone+drainageTone+directionalShapeTone;
+        // Coarse authority rasters can legitimately contain strong kilometre-scale
+        // curvature, but letting that term reach full local-map contrast makes one
+        // soft ridge dominate the first parent. Clamp only the combined strategic
+        // presentation residual; the signed canonical inputs remain unchanged.
+        const rawStructureTone=curvatureTone+slopeTone+drainageTone+directionalShapeTone;
+        const strategicStructureLimit=lerp(.090,.044,strategicMapBand);
+        const structureTone=clamp(rawStructureTone,-strategicStructureLimit,strategicStructureLimit);
+        pushRange("structureTone",structureTone);
         cover=[
           structureTone-moistureGradient*mapHighPassBand*.006,
           structureTone*.95+drainageTone*.16+moistureCurve*mapHighPassBand*.005,
@@ -6256,7 +6267,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const valleySignal=Math.max(0,-shapedCurvature)*strategicFormBand*mapStructureScale;
         const wetValleySignal=Math.max(0,shapedMoistureCurve)*strategicFormBand*mapStructureScale;
         const drainageSignal=Math.sqrt(Math.max(0,moistureGradient))*strategicFormBand*mapStructureScale;
-        const strategicFormGain=1+strategicMapBand*(contextRing?.16:.28);
+        const strategicFormGain=1+strategicMapBand*(contextRing?.08:.12);
         const formStrength=(contextRing?.58:1)*strategicFormGain;
         const formTint=[
           (ridgeSignal*.086-valleySignal*.030-wetValleySignal*.012)*formStrength,
@@ -6299,10 +6310,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // readability. Its 3.6 km / 1.5 km / 700 m structure is physically
         // resolvable at 1/500 and avoids re-amplifying continental relief.
         const mapCoverBoost=lerp(1.28,1,smoothstep01(clamp((42-metersPerTexel)/38,0,1)));
-        const strategicCoverBoost=1+strategicMapBand*(contextRing?.14:.32);
+        const strategicCoverBoost=1+strategicMapBand*(contextRing?.08:.18);
         const sharedCoverContrast=(contextRing?1.06:1.10)*mapCoverBoost*strategicCoverBoost;
         const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost*strategicCoverBoost;
         const landCover=sharedCover.map((v,i)=>v*sharedCoverContrast+(nativeCover[i]-v)*coverGain*residualCoverContrast);
+        pushRange("landCoverLuma",luma3(landCover));
         cover=cover.map((v,i)=>v+landCover[i]);
       }
       const reliefTintWeight=sample?.land&&metersPerTexel>35?lerp(.06,1,smoothstep01(clamp((180-metersPerTexel)/145,0,1))):1;
@@ -6316,7 +6328,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // those already-computed values around the canonical local palette. This
       // adds no geography/noise query and leaves near-ground photometry alone.
       if(sample?.land&&strategicMapBand>.001){
-        const regionalContrast=1+strategicMapBand*(contextRing?.14:.24);
+        const regionalContrast=1+strategicMapBand*(contextRing?.08:.12);
         const palettePivot=clamp(luma3(localPalette),.20,.58);
         displayColor=displayColor.map(v=>clamp(palettePivot+(v-palettePivot)*regionalContrast,0,1));
       }
@@ -6488,7 +6500,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-access-morphology-map-detail-v23",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-access-morphology-map-detail-v24",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
