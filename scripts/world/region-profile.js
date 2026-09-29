@@ -251,6 +251,13 @@ function buildForCell(seedValue,countryIdValue,rxValue,ryValue){
   if(!country)return null;
   const countryProfile=CountryProfile.build(seed,countryId);
   if(!countryProfile)return null;
+  const persistentOptions={
+    seed,family:"region-profile",recordId:id,familyVersion:VERSION,
+    dependencySignature:["region-profile",VERSION,"country",countryProfile.revision,"political",Number(window.PoliticalGeography?.VERSION||0),"geography",Number(window.GeographyFoundation?.VERSION||0),"naming",Number(window.PlaceNaming?.VERSION||0)].join("|"),
+    regenCost:10,importance:5
+  };
+  const persisted=window.GeneratedWorldStore?.peek?.(persistentOptions)||null;
+  if(persisted){cache.set(cacheKey,persisted);return cache.get(cacheKey);}
   const samples=acceptedSamples(seed,countryId,rx,ry);
   if(!samples.length)return null;
   const seat=seatFor(seed,countryId,rx,ry,samples);
@@ -290,6 +297,7 @@ function buildForCell(seedValue,countryIdValue,rxValue,ryValue){
     })
   });
   cache.set(cacheKey,profile);
+  window.GeneratedWorldStore?.recordGenerated?.(persistentOptions,profile);
   return profile;
 }
 function descriptorAt(seedValue,xValue,yValue){
