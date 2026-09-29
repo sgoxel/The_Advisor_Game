@@ -2652,3 +2652,11 @@
 2026-09-29 18:35 +03:00 | WP-S003-010-003-019 | POST-CAP CONCURRENT EDIT RECONCILIATION — NOT COMPLETED
 - After the three-attempt cap and bookkeeping, concurrent commit `4aaf932c694b1fb147ebf105b6082b2c1de18ebe` changed the same WP019 route selection by admitting canonical ring cells into the centerline pass. That descendant had no acceptance slot in this capped run and was not treated as valid evidence.
 - Restored `scripts/world/planet-stage.js` to tested Attempt-2 blob `60ebe95b775130dcdd78ced391f2149887a24934` in reconciliation commit `037ceec0db0ff85d97d45a2be13f69c3a2e53e05`. No fourth implementation/evidence loop was run. Issue #174 remains OPEN / IN PROGRESS / NOT COMPLETED.
+
+
+2026-09-29 18:59 +03:00 | WP-S006-007-001 | CANONICAL MICRO-LOCATION ACCEPTANCE — PASS, AWAITING COMPLETION BOOKKEEPING
+- Retained deterministic MicroLocations authority and integrated visitable wilderness POI compositions into the canonical PlayCanvas PlanetStage local-static projection. Accepted implementation commit: `6edc3694eafb65566eefc53b6b4efb4c14ecd2ba`; exact evidence head: `13a64d1a7b45cab6b45f15772c5f91a302d097a6`.
+- Dedicated workflow `36593924733` SUCCESS on landscape + portrait. Fresh artifacts: landscape `11044943432`, portrait `11045216513`. Six distinct deterministic types were captured (river-crossing, hunter-camp, fishing-spot, burial-site, unusual-grove, abandoned-cart-campsite) plus unload/revisit proof.
+- Functional proof remains green: same-SEED identity/signature stability, alternate-SEED divergence, geography-backed source validity, <=4 queried POI cells/chunk, <=2 locations/chunk, <=14 props/location, fullWorldScan=false, perFrameScan=false, lazy=true, presentationOnly=true, simulationAuthority=false. Fresh PlanetStage presentation build cost measured 0.8–4.8 ms across captured cases.
+- All 14 fresh production screenshots were retrieved and directly inspected. VISUAL 8.0/10 PASS: compositions are distinct and grounded, shoreline/camp/burial/grove treatment is coherent, portrait and landscape remain readable, no clipping/projection break is visible, and the revisit reproduces the same place.
+- Exact evidence head deployed successfully via GitHub Pages run `36593924305`. WP remains IN PROGRESS only until this acceptance documentation deploys and the final ROADMAP completion bookkeeping commit is separately deployed.
