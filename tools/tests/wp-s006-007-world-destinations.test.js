@@ -16,7 +16,7 @@ global.performance=performance;
 global.localStorage=new MemoryStorage();
 global.document={getElementById:()=>null,querySelector:()=>null,querySelectorAll:()=>[],body:null};
 global.location={search:"",hash:"",pathname:"/"};
-global.navigator={userAgent:"node"};
+Object.defineProperty(globalThis,"navigator",{value:{userAgent:"node"},configurable:true});
 function load(path){vm.runInThisContext(fs.readFileSync(path,"utf8"),{filename:path})}
 
 [
