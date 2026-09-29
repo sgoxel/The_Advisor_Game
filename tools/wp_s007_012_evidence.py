@@ -35,10 +35,27 @@ def ready():
         return driver.execute_script("""
           const s=window.PlanetStage?.snapshot?.();
           return Boolean(document.getElementById("planetStageRoot")?.dataset?.ready==="true" &&
-            s?.ready && window.PersistentConsequences && window.WorldState && window.CampaignPersistence);
+            s?.ready && window.PersistentConsequences && window.WorldState && window.CampaignPersistence &&
+            window.CatchUpSimulation && window.EventScheduler && window.GameTime);
         """)
     except Exception:
         return False
+
+def bind_evidence_campaign():
+    return driver.execute_script("""
+      let campaign=SeedSystem.getCampaign();
+      if(!campaign){
+        const started=SeedSystem.startNewCampaign();
+        if(!started?.ok)throw new Error("unable to start evidence campaign: "+JSON.stringify(started));
+        campaign=started.campaign;
+      }
+      const world=WorldState.bindCampaign(campaign,{reset:true});
+      EventScheduler.reset(campaign.seed);
+      const now=GameTime.getTimestampKey();
+      const catchup=CatchUpSimulation.bindCampaign(campaign,{reset:true,timestamp:now});
+      if(!world?.ok||!catchup?.ok)throw new Error("unable to bind authoritative evidence state: "+JSON.stringify({world,catchup}));
+      return {seed:campaign.seed,now,world,catchup};
+    """)
 
 def set_case(kind):
     return driver.execute_script("""
@@ -117,6 +134,7 @@ try:
         wait.until(lambda _d: ready())
     except TimeoutException:
         raise RuntimeError("startup timeout: "+json.dumps(driver.execute_script("return {ready:window.PlanetStage?.snapshot?.()?.ready||false,error:window.PlanetStage?.snapshot?.()?.startupError||null,body:String(document.body?.innerText||'').slice(0,900)}")))
+    campaign_binding=bind_evidence_campaign()
 
     persistence=None
     for idx,kind in enumerate(TYPES):
@@ -166,7 +184,7 @@ try:
         raise RuntimeError("browser console severe errors: "+json.dumps(severe[-10:]))
     result={
         "pass":True,"wp":"WP-S007-012","classification":"MIXED","profile":PROFILE,"viewport":SIZE,
-        "types":TYPES,"persistence":persistence,"recoveredAt":RECOVERED_AT,"records":records
+        "types":TYPES,"campaignBinding":campaign_binding,"persistence":persistence,"recoveredAt":RECOVERED_AT,"records":records
     }
     (OUT/f"{PROFILE}-evidence.json").write_text(json.dumps(result,indent=2))
     print(json.dumps(result,indent=2))
