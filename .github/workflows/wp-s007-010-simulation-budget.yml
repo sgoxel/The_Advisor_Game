@@ -1,0 +1,61 @@
+name: WP-S007-010 Simulation Budget Evidence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/wp-s007-010-simulation-budget.yml
+      - scripts/world/simulation-budget.js
+      - scripts/core/event-scheduler.js
+      - scripts/world/lazy-catchup.js
+      - scripts/world/simulation-tiers.js
+      - scripts/world/planet-stage.js
+      - index.html
+      - tools/tests/wp-s007-010-simulation-budget.test.js
+  workflow_dispatch:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  evidence:
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (!github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/wp-s007-010-evidence'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Syntax
+        run: |
+          node --check scripts/world/simulation-budget.js
+          node --check scripts/core/event-scheduler.js
+          node --check scripts/world/lazy-catchup.js
+          node --check scripts/world/simulation-tiers.js
+          node --check scripts/world/planet-stage.js
+          node --check tools/tests/wp-s007-010-simulation-budget.test.js
+
+      - name: Deterministic budget stress
+        run: node tools/tests/wp-s007-010-simulation-budget.test.js
+
+      - name: Comment run link on Issue
+        if: github.event_name == 'issue_comment' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const ok = '${{ job.status }}' === 'success';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: ok
+                ? `WP-S007-010 evidence completed. [Open workflow run](${url}).`
+                : `WP-S007-010 evidence FAILED. [Open workflow run and logs](${url}).`
+            });
