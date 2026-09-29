@@ -2637,15 +2637,29 @@ function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel
   // resolve. This prevents one macro slope from dominating the 1/500 frame.
   if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.012;
   if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.018;
-  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.054;
-  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.044;
-  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.024;
+  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.036;
+  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.026;
+  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.014;
   if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.032;
   if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,260,salt+89)*.034;
   if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.025;
   if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.016;
   return detail;
 }
+function registeredMapReliefValue(worldEastMeters,worldNorthMeters,metersPerTexel,salt){
+  // Presentation-only relief: use only wavelengths that remain physically
+  // resolvable at this texel size. Inputs are Campaign-SEED registered metres,
+  // so focus movement/LOD/cache order cannot change the field.
+  const m=Math.max(1,Number(metersPerTexel)||1);
+  let value=0,weight=0;
+  for(const [wavelength,gain] of [[5200,.32],[2600,.62],[1200,.54],[560,.30]]){
+    if(wavelength/m<2.25)continue;
+    value+=surfaceValueNoise(worldEastMeters,worldNorthMeters,wavelength,salt+Math.round(wavelength))*gain;
+    weight+=gain;
+  }
+  return weight?value/weight:0;
+}
+
 function patchDimensionsForLevel(index){
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
   const levelIndex=clamp(Math.round(index),0,LOCAL_DETAIL_LEVELS.length-1),level=LOCAL_DETAIL_LEVELS[levelIndex];
@@ -5849,7 +5863,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   const componentRanges={
     sourceLuma:[Infinity,-Infinity],paletteLuma:[Infinity,-Infinity],baseLuma:[Infinity,-Infinity],
     macro:[Infinity,-Infinity],coverLuma:[Infinity,-Infinity],shade:[Infinity,-Infinity],finalLuma:[Infinity,-Infinity],
-    elevation:[Infinity,-Infinity],moisture:[Infinity,-Infinity],curvature:[Infinity,-Infinity],moistureGradient:[Infinity,-Infinity],ridgeValleyTint:[Infinity,-Infinity]
+    elevation:[Infinity,-Infinity],moisture:[Infinity,-Infinity],curvature:[Infinity,-Infinity],moistureGradient:[Infinity,-Infinity],ridgeValleyTint:[Infinity,-Infinity],registeredReliefShade:[Infinity,-Infinity]
   };
   const pushRange=(name,value)=>{
     const n=Number(value);if(!Number.isFinite(n))return;
@@ -6062,13 +6076,40 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         ];
         cover=cover.map((v,i)=>v+formTint[i]);
         pushRange("curvature",curvatureSignal);pushRange("moistureGradient",moistureGradient);pushRange("ridgeValleyTint",luma3(formTint));
+        // The map-scale albedo field can remain soft even when canonical
+        // PlanetGeography elevation is locally smooth. Read a directional
+        // derivative from the existing registered-meter terrain-detail field:
+        // this turns coherent SEED structure into ridge/valley lighting rather
+        // than another brightness blob. Two bounded samples per pixel are used,
+        // with no geography query or simulation authority.
+        const registeredReliefBand=smoothstep01(clamp((metersPerTexel-20)/72,0,1))*
+          (1-smoothstep01(clamp((metersPerTexel-640)/520,0,1)));
+        let registeredReliefShade=0;
+        if(registeredReliefBand>.001){
+          const reliefMpt=Math.max(45,metersPerTexel),reliefStep=Math.max(150,Math.min(920,metersPerTexel*4.6));
+          const relief0=registeredMapReliefValue(worldEast,worldNorth,reliefMpt,detailSalt+503);
+          const reliefLit=registeredMapReliefValue(
+            worldEast-light[0]*reliefStep,
+            worldNorth-light[1]*reliefStep,
+            reliefMpt,
+            detailSalt+503
+          );
+          const derivative=clamp((reliefLit-relief0)*3.25,-.18,.18);
+          registeredReliefShade=derivative*registeredReliefBand*(contextRing?.62:1);
+          cover=[
+            cover[0]+registeredReliefShade*.88,
+            cover[1]+registeredReliefShade,
+            cover[2]+registeredReliefShade*.78
+          ];
+        }
+        pushRange("registeredReliefShade",registeredReliefShade);
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
         const coverGain=contextRing?contextRefineWeight*.38:focusRefineWeight*.98;
         // Prefer the already SEED-registered land-cover field for strategic-map
         // readability. Its 3.6 km / 1.5 km / 700 m structure is physically
         // resolvable at 1/500 and avoids re-amplifying continental relief.
-        const mapCoverBoost=lerp(1.34,1,smoothstep01(clamp((42-metersPerTexel)/38,0,1)));
+        const mapCoverBoost=lerp(1.22,1,smoothstep01(clamp((42-metersPerTexel)/38,0,1)));
         const sharedCoverContrast=(contextRing?1.06:1.10)*mapCoverBoost;
         const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost;
         const landCover=sharedCover.map((v,i)=>v*sharedCoverContrast+(nativeCover[i]-v)*coverGain*residualCoverContrast);
@@ -6245,7 +6286,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-access-morphology-map-detail-v20",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter detail remains shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-access-morphology-map-detail-v21",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
