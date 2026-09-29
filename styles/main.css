@@ -1528,7 +1528,7 @@ body.planet-stage-active{
     top:auto;
     bottom:max(72px,calc(env(safe-area-inset-bottom) + 64px));
     right:10px;
-    width:min(300px,calc(100vw - 20px));
+    width:min(270px,calc(100vw - 96px));
     padding:10px 12px;
   }
   .local-event-description{font-size:11px}
