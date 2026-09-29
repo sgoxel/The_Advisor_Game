@@ -339,7 +339,11 @@ const LOCAL_STANDIN_MAX_MAGNIFICATION=6;
 // small allowance beyond the steady-state 1.5x threshold lets the next child
 // become requested while animation buys its cooperative preparation time.
 const ZOOM_READY_PARENT_MAX_MAGNIFICATION=1.65;
-const ZOOM_ROOT_READINESS_CAP_SCALAR=.69;
+// Before any tangent parent is ready, keep the globe inside its readable
+// strategic-scale range. .63 is still beyond the local-request transition, so
+// the first canonical parent prepares while the camera animation visibly eases
+// instead of magnifying the coarse globe shell into the blurred 1/50 state.
+const ZOOM_ROOT_READINESS_CAP_SCALAR=.63;
 const LOCAL_TANGENT_OWNERSHIP_BLEND=.055;
 const LOCAL_STANDIN_MIN_COMPENSATION=1/3;
 const GLOBE_VERTICAL_FOV_DEGREES=34;
@@ -3798,7 +3802,7 @@ function routeOverviewPlan(reveal){
     const aa=score(a),bb=score(b);
     return bb.forward-aa.forward||aa.lateral-bb.lateral||String(a?.id||"").localeCompare(String(b?.id||""));
   });
-  const cap=8,records=[];
+  const cap=10,records=[];
   for(const record of specials){if(records.length>=2||records.length>=cap)break;records.push(record);}
   for(const record of houses){if(records.length>=cap)break;if(!records.some(item=>String(item?.id||"")===String(record?.id||"")))records.push(record);}
   const frozen=Object.freeze(records.slice());
@@ -3841,18 +3845,30 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
     const b=record?.bounds;if(!b)continue;
     const minX=Number(b.minX)-.28,maxX=Number(b.maxX)+.28,minY=Number(b.minY)-.28,maxY=Number(b.maxY)+.28;
     if(![minX,maxX,minY,maxY].every(Number.isFinite)||maxX<=minX||maxY<=minY)continue;
-    const special=specialIds.has(String(record?.id||"")),fill=special?[206,151,74]:(tier==="route"?[153,111,59]:[142,101,58]),
+    const special=specialIds.has(String(record?.id||"")),
+      fill=special?[206,151,74]:(tier==="route"?[153,111,59]:[142,101,58]),
       border=special?[238,190,102]:[190,153,88];
     count++;
-    // Route overview exposes a small explicit subset of the real HousePlans /
-    // SpecialLots footprints as quiet occupied fabric. Parent build-plot parcels
-    // stay coarse-only; no camera-relative or synthetic settlement shape exists.
+    // Route overview exposes only a bounded priority subset of real
+    // HousePlans/SpecialLots footprints. At this map scale a single flat quad
+    // read like an abstract block, so split the *same authoritative footprint*
+    // into two restrained roof tones and a thin center ridge. No new building
+    // position/shape/authority is invented and everything stays in one mesh.
     if(tier==="route"){
-      if(addQuad(minX,minY,maxX,maxY,fill,0))outlineSegmentCount++;
-      // The route tier already uses real HousePlans/SpecialLots footprints.
-      // Add only their own thin perimeter so the occupied fabric is readable
-      // against map-scale terrain without inventing building geometry.
-      const bw=Math.min(.20,Math.max(.10,Math.min(maxX-minX,maxY-minY)*.060));
+      const width=maxX-minX,height=maxY-minY;
+      const dark=special?[181,111,43]:[127,88,49],light=special?[224,164,73]:[181,135,77];
+      if(width>=height){
+        const mid=(minY+maxY)*.5,ridgeHalf=Math.min(.10,Math.max(.055,height*.035));
+        if(addQuad(minX,minY,maxX,mid,dark,0))outlineSegmentCount++;
+        if(addQuad(minX,mid,maxX,maxY,light,.003))outlineSegmentCount++;
+        if(addQuad(minX,mid-ridgeHalf,maxX,mid+ridgeHalf,border,.012))outlineSegmentCount++;
+      }else{
+        const mid=(minX+maxX)*.5,ridgeHalf=Math.min(.10,Math.max(.055,width*.035));
+        if(addQuad(minX,minY,mid,maxY,dark,0))outlineSegmentCount++;
+        if(addQuad(mid,minY,maxX,maxY,light,.003))outlineSegmentCount++;
+        if(addQuad(mid-ridgeHalf,minY,mid+ridgeHalf,maxY,border,.012))outlineSegmentCount++;
+      }
+      const bw=Math.min(.20,Math.max(.10,Math.min(width,height)*.060));
       if(addQuad(minX,minY,maxX,minY+bw,border,.008))outlineSegmentCount++;
       if(addQuad(minX,maxY-bw,maxX,maxY,border,.008))outlineSegmentCount++;
       if(addQuad(minX,minY+bw,minX+bw,maxY-bw,border,.008))outlineSegmentCount++;
@@ -3882,7 +3898,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   const entity=new pc.Entity("CanonicalOccupiedLotFills");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.lotOverview,entity)];
   localStaticRoot.addChild(entity);localSettlementLotGeometry=mesh;
-  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount,outlineSegmentCount,connectorSegmentCount,triangleCount:indices.length/3,mode:tier==="route"?"authoritative-priority-house-footprint-access-v10":"authoritative-occupied-lot-perimeter-access-v10"});
+  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount,outlineSegmentCount,connectorSegmentCount,triangleCount:indices.length/3,mode:tier==="route"?"authoritative-priority-house-footprint-access-v11":"authoritative-occupied-lot-perimeter-access-v10"});
 }
 function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tier,routePlan=null){
   localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;
@@ -3970,7 +3986,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       const uniqueTargets=[...new Set(accessTargetKeys)].sort(),selectedClasses=[...routePathKeys].map(k=>classify(roadByKey.get(k))).filter(Boolean);
       const ringCellCount=selectedClasses.filter(c=>c.ringCell).length;
       overviewStats=Object.freeze({
-        revision:"route-gateway-centerline-v13",accessTargetCount:uniqueTargets.length,connectedTargetCount:uniqueTargets.length,
+        revision:"route-gateway-centerline-v14",accessTargetCount:uniqueTargets.length,connectedTargetCount:uniqueTargets.length,
         localClusterTargetCount:0,selectedCellCount:selectedClasses.length,ringCellCount,
         ringArcShare:Number((ringCellCount/Math.max(1,selectedClasses.length)).toFixed(4)),
         gatewayCellCount:selectedClasses.filter(c=>c.gatewayStem||c.outwardBranch).length,
@@ -3983,23 +3999,27 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       const c=classify({x,y,kind}),{ringCell,outwardBranch,gatewayStem,centerAvenue,localPath}=c;
       if(tier==="footprint"){
         if(!outwardBranch&&!gatewayStem&&!centerAvenue&&!localPath)continue;
-      }else if(!routePathKeys.has(x+","+y))continue;
+      }else if(!routePathKeys.has(x+","+y)&&!outwardBranch&&!gatewayStem&&!centerAvenue)continue;
+      // Settlement approach keeps the sparse target centerline but also shows
+      // the authoritative main-road spine cells already present in
+      // StartingVillage.infrastructureAt. This closes visual gaps without
+      // synthesizing or pathfinding any new road.
       const half=tier==="footprint"
         ?(outwardBranch?.28:gatewayStem?.14:centerAvenue?.075:.11)
-        :(outwardBranch?.13:gatewayStem?.095:localPath?.060:ringCell?.050:centerAvenue?.070:.060);
+        :(outwardBranch?.16:gatewayStem?.12:localPath?.075:ringCell?.060:centerAvenue?.090:.075);
       const cell={x,y,half};selected.push(cell);selectedMap.set(x+","+y,cell);
     }
     renderedRoadCellCount=selected.length;
     for(const cell of selected){
-      const {x,y,half}=cell,nodeFloor=tier==="route"?.030:.040,nodeHalf=Math.max(nodeFloor,half*.62);
+      const {x,y,half}=cell,nodeFloor=tier==="route"?.040:.040,nodeHalf=Math.max(nodeFloor,half*.68);
       const neighborCount=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]
         .filter(([dx,dy])=>selectedMap.has((x+dx)+","+(y+dy))).length;
       if(neighborCount!==2)addQuad(x-nodeHalf,y-nodeHalf,x+nodeHalf,y+nodeHalf);
       for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
         const other=selectedMap.get((x+dx)+","+(y+dy));if(!other)continue;
         if(dx&&dy&&(selectedMap.has((x+dx)+","+y)||selectedMap.has(x+","+(y+dy))))continue;
-        const segmentFloor=tier==="route"?.038:.055;
-        addSegment(x,y,other.x,other.y,Math.max(segmentFloor,Math.min(half,other.half)*(tier==="route"?2.35:2)));
+        const segmentFloor=tier==="route"?.050:.055;
+        addSegment(x,y,other.x,other.y,Math.max(segmentFloor,Math.min(half,other.half)*(tier==="route"?2.55:2)));
       }
     }
   }else{
@@ -4010,7 +4030,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
   const roadMaterial=(tier==="route"||tier==="footprint")?localStaticMaterials.roadOverview:localStaticMaterials.road;
   entity.render.meshInstances=[new pc.MeshInstance(mesh,roadMaterial,entity)];localStaticRoot.addChild(entity);localSettlementRoadGeometry=mesh;
   return Object.freeze({active:true,cellCount:(tier==="route"||tier==="footprint")?renderedRoadCellCount:roadCells.length,segmentCount,queryCount,triangleCount:indices.length/3,overviewStats,
-    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-gateway-centerline-v13":"StartingVillage.infrastructureAt-cell-mesh-v1"});
+    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-gateway-centerline-v14":"StartingVillage.infrastructureAt-cell-mesh-v1"});
 }
 function clearCanonicalWayfindingSignposts(){
   clearInspectionKeySet(localSignInspectionKeys,false);
