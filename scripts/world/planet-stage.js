@@ -5902,19 +5902,31 @@ function makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,size){
   };
   return Object.freeze({size,spanEast,spanNorth,sample});
 }
+function broadAuthorityRasterSizes(levelIndex){
+  // Broad map parents must become usable before animated zoom outruns them.
+  // Reduce only coarse-parent sampling density; finer local tiers keep the
+  // existing 160x/96x authority rasters unchanged.
+  const index=Math.max(0,Number(levelIndex)||0);
+  if(index===0)return Object.freeze({shared:80,focus:64});
+  if(index===1)return Object.freeze({shared:96,focus:72});
+  if(index===2)return Object.freeze({shared:128,focus:80});
+  return Object.freeze({shared:160,focus:96});
+}
 function sharedSurfaceAuthority(job){
   if(job?.surfaceAuthority)return job.surfaceAuthority;
   const spanEast=Math.max(1,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR),spanNorth=Math.max(1,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR);
-  job.surfaceAuthority=makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,160);
+  const raster=broadAuthorityRasterSizes(job.levelIndex);
+  job.surfaceAuthority=makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,raster.shared);
   return job.surfaceAuthority;
 }
 function focusSurfaceAuthority(job){
   if(job?.focusSurfaceAuthority)return job.focusSurfaceAuthority;
-  // The 160x 6x parent is correct for outer fallback, but its kilometre-scale
-  // cells are too coarse for a 1/500 focus view. Resolve a bounded canonical
-  // 1x child from the same PlanetGeography authority and edge-match it to parent.
+  // The bounded 1x child remains canonical and edge-matched to its parent.
+  // Broad tiers use a smaller raster only to reduce preparation latency; local
+  // terrain tiers retain the previous 96x focus authority unchanged.
   const spanEast=Math.max(1,job.dims.patchWidth*1.08),spanNorth=Math.max(1,job.dims.patchHeight*1.08);
-  job.focusSurfaceAuthority=makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,96);
+  const raster=broadAuthorityRasterSizes(job.levelIndex);
+  job.focusSurfaceAuthority=makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,raster.focus);
   return job.focusSurfaceAuthority;
 }
 function blendSurfaceAuthoritySamples(coarse,fine,t){
@@ -6311,9 +6323,11 @@ function* localResourceSteps(job){
   // All three sample the same SEED-registered coordinates; only presentation
   // density differs.
   const detail=yield* surfaceTextureSteps(job,job.dims.patchWidth,job.dims.patchHeight,size,true,false);
-  const mediumSize=Math.max(96,Math.round(size*LOCAL_MEDIUM_RING_TEXTURE_SCALE));
+  const broadParent=job.levelIndex<=1;
+  const mediumSize=broadParent?Math.max(80,Math.round(size*.50)):Math.max(96,Math.round(size*LOCAL_MEDIUM_RING_TEXTURE_SCALE));
+  const surroundSize=broadParent?Math.max(96,Math.round(size*.58)):size;
   const medium=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR,job.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR,mediumSize,true,true);
-  const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,size,false,true);
+  const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,surroundSize,false,true);
   stitchSurroundCenterToDetail(detail,medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
   stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
   carveNestedRingCenterAlpha(medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
@@ -6361,7 +6375,7 @@ function finalizeLocalResource(job,result){
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
-      topographicSignalRevision:"canonical-access-morphology-map-detail-v22",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from a stable 160x outer parent plus bounded 96x canonical 1x child blended to the parent at focus edges; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-access-morphology-map-detail-v22",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
@@ -6586,7 +6600,7 @@ function pumpLocalPreparation(){
       if(localResourceCache.has(queued.signature)){activateLocalDetailResource(queued.signature,true);refreshZoomPresentation();}
       else startLocalJob(queued.index,queued.lat,queued.lon,queued.signature,false);
     }
-    if(!localJob)scheduleLocalPrewarm();
+    if(!localJob){scheduleFocusedMapPrewarm();scheduleLocalPrewarm();}
     return;
   }
   job.busyMs+=sliceMs;job.slices++;job.maxSliceMs=Math.max(job.maxSliceMs,sliceMs);
@@ -6639,6 +6653,18 @@ function requestLocalDetailResource(index){
   }
   localQueuedRequest=null;
   startLocalJob(index,lat,lon,signature,false);
+}
+function scheduleFocusedMapPrewarm(){
+  // Explicit globe focus changes get a bounded two-tier head start. This is
+  // presentation scheduling only: each resource still comes from the same
+  // Campaign-SEED/SLOD authority and occupies the normal cache budget.
+  if(!ready||!activeSeed||!geography||localJob||displayResource||zoomState.scalar>projectionState.transitionStart)return;
+  const lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians;
+  for(const index of [0,1]){
+    const signature=localSignatureFor(index,lat,lon);
+    if(localResourceCache.has(signature))continue;
+    startLocalJob(index,lat,lon,signature,true,"globe-focus");return;
+  }
 }
 function scheduleLocalPrewarm(){
   if(localJob||!displayResource||projectionState.blend<=0)return;
@@ -7111,6 +7137,7 @@ function setViewTarget(target,{forceSemantic=true,snapshotResult=true,semanticUp
   const rotation=rotationForLatLon(Number(target.latitudeRadians)||0,Number(target.longitudeRadians)||0);
   const result=setRotationInternal(rotation.yawDegrees,rotation.pitchDegrees,{snapshotResult:false,semanticReason:"rotation",semanticUpdate});
   if(semanticUpdate&&forceSemantic)updateMapPresentation("view-target",true);
+  scheduleFocusedMapPrewarm();
   return snapshotResult?snapshot():result;
 }
 function rgbaFromColor(color){
