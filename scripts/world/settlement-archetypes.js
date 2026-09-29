@@ -69,6 +69,32 @@ function hierarchyDistanceMeters(a,b){
   const dy=Number(BigInt(String(a.y))-BigInt(String(b.y)))*HIERARCHY_TILE_METERS;
   return Math.hypot(dx,dy);
 }
+function hierarchyCandidateEnvelope(classId,cxValue,cyValue){
+  const spec=HIERARCHY_CLASS_SPECS[classId];if(!spec)return null;
+  const cx=BigInt(String(cxValue)),cy=BigInt(String(cyValue)),size=BigInt(spec.cellTiles);
+  let anchorX,anchorY,spread;
+  if(classId==="village"){
+    anchorX=cx*size;anchorY=cy*size;spread=BigInt(Math.max(0,Math.ceil(spec.jitterTiles)));
+  }else{
+    const half=BigInt(Math.floor(spec.cellTiles/2));
+    anchorX=cx*size+half;anchorY=cy*size+half;
+    if(classId==="city"){
+      const citySearch=Math.max(0,Number(WorldStandards.CITY_LAND_SEARCH_STEP_TILES||0))*Math.max(0,Number(WorldStandards.CITY_LAND_SEARCH_RINGS||0));
+      spread=BigInt(Math.ceil(spec.jitterTiles+citySearch));
+    }else{
+      const step=Math.max(48,Math.floor(spec.cellTiles/10));
+      spread=BigInt(Math.ceil(spec.jitterTiles+step*2));
+    }
+  }
+  return Object.freeze({minX:anchorX-spread,maxX:anchorX+spread,minY:anchorY-spread,maxY:anchorY+spread});
+}
+function hierarchyEnvelopeDistanceMeters(classId,cx,cy,point){
+  const box=hierarchyCandidateEnvelope(classId,cx,cy);if(!box)return 0;
+  const px=BigInt(String(point.x)),py=BigInt(String(point.y));
+  const dx=px<box.minX?box.minX-px:px>box.maxX?px-box.maxX:0n;
+  const dy=py<box.minY?box.minY-py:py>box.maxY?py-box.maxY:0n;
+  return Math.hypot(Number(dx)*HIERARCHY_TILE_METERS,Number(dy)*HIERARCHY_TILE_METERS);
+}
 function hierarchyCoordinateDiagnostics(seed,xValue,yValue){
   const x=String(xValue),y=String(yValue);
   const registeredMeters=Object.freeze({
@@ -259,7 +285,9 @@ function hierarchySameClassWinner(seed,record){
   const spec=HIERARCHY_CLASS_SPECS[record.classId],cx=BigInt(record.generationCell.cellX),cy=BigInt(record.generationCell.cellY);
   for(let oy=-1n;oy<=1n;oy++)for(let ox=-1n;ox<=1n;ox++){
     if(ox===0n&&oy===0n)continue;
-    const other=hierarchyRawCandidate(seed,record.classId,cx+ox,cy+oy);
+    const ncx=cx+ox,ncy=cy+oy;
+    if(hierarchyEnvelopeDistanceMeters(record.classId,ncx,ncy,record.center)+0.01>=spec.minSameClassMeters)continue;
+    const other=hierarchyRawCandidate(seed,record.classId,ncx,ncy);
     if(!other)continue;
     const distance=hierarchyDistanceMeters(record.center,other.center);
     if(distance+0.01>=spec.minSameClassMeters)continue;
@@ -280,7 +308,7 @@ function hierarchyCapitalForRecord(seed,record){
       result=Object.freeze({
         id:String(country.capital.id),name:String(country.capital.name),classId:"national-capital",importanceClass:"national-capital",
         role:"national-capital",center:Object.freeze({x:String(country.capital.x),y:String(country.capital.y),terrain:GeographyFoundation.getTerrainType(seed,country.capital.x,country.capital.y)}),
-        countryId:String(country.id),regionId:String(RegionProfile.at(seed,country.capital.x,country.capital.y)?.id||""),
+        countryId:String(country.id),regionId:String((RegionProfile.descriptorAt?.(seed,country.capital.x,country.capital.y)||RegionProfile.at(seed,country.capital.x,country.capital.y))?.id||""),
         generationCell:Object.freeze({id:"CAP|"+country.id,classId:"national-capital",cellX:null,cellY:null,cellSizeTiles:null}),
         coordinates:hierarchyCoordinateDiagnostics(seed,country.capital.x,country.capital.y),
         candidateRank:1,competitionScore:1,competitionKey:"capital:"+country.id,suitability:1,carryingCapacity:1,
@@ -294,11 +322,13 @@ function hierarchyCapitalForRecord(seed,record){
   hierarchyCapitalCache.set(cacheKey,result);
   return result;
 }
-function hierarchyNearbyRawWinners(seed,classId,point){
+function hierarchyNearbyRawWinners(seed,classId,point,maxDistanceMeters=Infinity){
   const cell=hierarchyCellFor(classId,point.x,point.y);if(!cell)return [];
   const out=[];
   for(let oy=-1n;oy<=1n;oy++)for(let ox=-1n;ox<=1n;ox++){
-    const raw=hierarchyRawCandidate(seed,classId,cell.x+ox,cell.y+oy);
+    const cx=cell.x+ox,cy=cell.y+oy;
+    if(Number.isFinite(maxDistanceMeters)&&hierarchyEnvelopeDistanceMeters(classId,cx,cy,point)>maxDistanceMeters+0.01)continue;
+    const raw=hierarchyRawCandidate(seed,classId,cx,cy);
     if(raw&&hierarchySameClassWinner(seed,raw))out.push(raw);
   }
   return out;
@@ -311,10 +341,10 @@ function hierarchyHigherClearancePass(seed,record){
   }
   const blockers=[];
   if(capital)blockers.push(capital);
-  for(const classId of record.classId==="town"?["city"]:record.classId==="village"?["city","town"]:["city","town","village"]){
-    blockers.push(...hierarchyNearbyRawWinners(seed,classId,record.center));
-  }
   const clearance=HIERARCHY_CLASS_SPECS[record.classId].higherClearanceMeters;
+  for(const classId of record.classId==="town"?["city"]:record.classId==="village"?["city","town"]:["city","town","village"]){
+    blockers.push(...hierarchyNearbyRawWinners(seed,classId,record.center,clearance));
+  }
   return !blockers.some(other=>other.id!==record.id&&hierarchyDistanceMeters(record.center,other.center)+0.01<clearance);
 }
 function canonicalSettlementAtCell(seedValue,classIdValue,cxValue,cyValue){
