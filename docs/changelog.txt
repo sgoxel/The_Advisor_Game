@@ -2583,3 +2583,11 @@
 - Final visual changes restore canonical land chroma at coarse tangent scales, attenuate broad map-relief bands, yield texture generation every 64 pixels, enlarge the authoritative route-tier village, expose the full StartingVillage movement spine, add restrained occupied-lot mass, and suppress the redundant route-focus settlement label. All authority remains Campaign-SEED + canonical coordinates/fantasy time.
 - All 10 final production screenshots were retrieved and directly inspected. VISUAL 7.8/10 FAIL: planet/rotation and settled 1/500 desktop/phone are coherent, the old 1/500 curved luminance seam is no longer a major defect, and 1/2500 is clearer/larger; however animated 1/75 and 1/375 frames still show broad gray/white low-frequency terrain bands. Required >=8/10 is not met.
 - Three-attempt cap exhausted. Issue #175 remains open; ROADMAP remains IN PROGRESS / NOT COMPLETED.
+
+
+2026-09-29 15:31 +03:00 | WP-S003-010-003-020 | POST-CAP RECONCILIATION — NOT COMPLETED
+- Overlapping experimental head `9f938ea949599793c3ebef4fa66350a61cd984cc` preserved one zoom-target cooperative prefetch and paced forward zoom against its preparation progress.
+- Exact-head workflow `36567844068` / artifact `11032338903` FUNCTIONAL FAIL: benchmark geography hash `6fe0130c` and coordinate fabric `SCF-B83ABE19` remained fixed, but semantic ordering changed from accepted `5BD86CDF` to `3D39BE78`, proving visible semantic output was still timing/cache-state sensitive under the experiment.
+- Production visual sequence still completed with `fullWorldScan=false`. All 10 fresh frames were retrieved and directly inspected at VISUAL 7.4/10 FAIL: globe/rotation stayed coherent and settled 1/500 stayed green, but 1/100–1/375 still exposed broad gray low-information terrain and 1/2500 remained visibly diagrammatic.
+- No fourth improvement/evidence loop was run. The failed experiment was rolled back. Current `scripts/world/planet-stage.js` is byte-identical to verified capped product head `1d50a866bc0fb32d30499b8f297edc0bfa4f1882`, whose exact workflow `36566266758` was FUNCTIONAL PASS / VISUAL 7.8/10 FAIL.
+- Issue #175 remains open and ROADMAP remains IN PROGRESS / NOT COMPLETED.
