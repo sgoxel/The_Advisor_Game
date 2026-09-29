@@ -147,7 +147,7 @@ function settlementRaw(record){
 }
 function enrich(seed,raw){
   const x=raw.center.x,y=raw.center.y,coordinates=coordinatesFor(seed,x,y);
-  let country=null,region=null;try{country=raw.countryId?window.PoliticalGeography?.countryById?.(seed,raw.countryId)||null:window.PoliticalGeography?.ownerAt?.(seed,x,y)||null;}catch(_){}try{region=window.RegionProfile?.at?.(seed,x,y)||null;}catch(_){}
+  let country=null,region=null;try{country=raw.countryId?window.PoliticalGeography?.countryById?.(seed,raw.countryId)||null:window.PoliticalGeography?.ownerAt?.(seed,x,y)||null;}catch(_){}try{region=window.RegionProfile?.descriptorAt?.(seed,x,y)||window.RegionProfile?.at?.(seed,x,y)||null;}catch(_){}
   const type=raw.type,nameInfo=raw.canonicalName?Object.freeze({name:raw.canonicalName,authority:"SettlementArchetypes canonical name"}):namesFor(seed,type,x,y);
   const terrain=raw.evidence?.terrain||safeTerrain(seed,x,y),walkable=terrain!=="water",roadAccessClass=raw.type==="capital"||raw.type==="city"?"primary":raw.category==="cities"?"regional":raw.evidence?.roadNear?"local-road":raw.type==="bridge"?"crossing":"off-road";
   const defaultDiscoveryState=raw.importance>=3||["capital","city","town"].includes(type)?"known":"discoverable";
