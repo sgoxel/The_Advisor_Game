@@ -4610,14 +4610,14 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const roadWidth=Math.max(5,Number(window.WorldStandards?.TILE_METERS||2)*4);
   // At overview tiers the canonical road centerlines are authoritative, but
   // physical width must not turn the network into a solid cog at map scale.
-  const presentationRoadWidth=roadWidth*(tier==="route"?.42:tier==="coarse"?.60:tier==="refined"?.62:1);
+  const presentationRoadWidth=roadWidth*(tier==="route"?.30:tier==="coarse"?.60:tier==="refined"?.62:1);
   const squareHalf=Number(window.StartingVillage.PUBLIC_HALF_SIZE||3);
   const ring=Number(window.StartingVillage.RING_RADIUS_TILES||14);
   const roadDetail=tier==="footprint"?0:tier==="route"?12:16;
   if(tier!=="none"&&tier!=="footprint"){
     addCanonicalRoadSegment("CanonicalRoad-X",-ring,0,ring,0,presentationRoadWidth,scale,unit,semanticFrame,lift);roadCount++;
     addCanonicalRoadSegment("CanonicalRoad-Y",0,-ring,0,ring,presentationRoadWidth,scale,unit,semanticFrame,lift);roadCount++;
-    const sq=(squareHalf*2+1)*reveal.tileMeters;
+    const sq=(squareHalf*2+1)*reveal.tileMeters*(tier==="route"?.58:1);
     addLocalStatic("CanonicalPublicSquare","box",localStaticMaterials.square,centerPos.x,centerGround+.012,centerPos.z,sq*scale/unit,.032,sq*scale/unit);roadCount++;
   }
   if(roadDetail){
@@ -4890,8 +4890,10 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // This keeps continent/mountain identity continuous through the projection
       // handoff without inventing new geography or introducing LOD-specific tints.
       const mountainIdentity=clamp(Number(sample?.mountainInfluence||0),0,1);
-      const coarseIdentity=smoothstep01(clamp((metersPerTexel-8)/92,0,1));
-      const macroIdentityWeight=clamp(.10+coarseIdentity*.30+mountainIdentity*.08,.10,.46);
+      // Keep the globe's macro hue as identity, not as a giant local-map color
+      // field. Map-scale readability comes from registered-meter relief/cover
+      // below, which stays continuous across focus/medium/outer layers.
+      const macroIdentityWeight=clamp(.09+mountainIdentity*.07,.09,.18);
       const base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
       const elevation=Number(sample?.elevationMeters||0);
       const relief=clamp(elevation/5200,0,1);
@@ -4912,7 +4914,12 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       const sharedMacro=worldSurfaceDetailValue(worldEast,worldNorth,sharedMetersPerTexel,phase)*contextDetailStrength;
       const nativeMacro=worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase);
       const refinementGain=contextRing?contextRefineWeight*.22:lerp(.18,.90,focusRefineWeight);
-      const macro=sharedMacro+(nativeMacro-sharedMacro)*refinementGain;
+      const macroBase=sharedMacro+(nativeMacro-sharedMacro)*refinementGain;
+      // Increase only continuous registered-meter information. This restores
+      // readable map-scale terrain without resurrecting the broad source-color
+      // wedges that looked like LOD boundaries.
+      const detailContrast=contextRing?lerp(1.04,1.24,contextRefineWeight):lerp(1.10,1.68,focusRefineWeight);
+      const macro=macroBase*detailContrast;
       let shade=1,cover=[0,0,0];
       if(sample?.land){
         // Shared context remains restrained while focus progressively samples
@@ -4929,12 +4936,13 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const hy=Number(sy.elevationMeters||0)+terrainDetailHeight(sy.registeredEastMeters,sy.registeredNorthMeters,photometricMetersPerTexel,detailSalt);
         const exaggeration=2.2,gx=(hx-h0)/step*exaggeration,gy=(hy-h0)/step*exaggeration,nl=Math.hypot(gx,gy,1);
         const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
-        const focusHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.18,.24,.60);
-        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.90:.84,contextRing?1.08:1.12);
+        const focusHillshadeStrength=clamp(contextHillshadeStrength+focusRefineWeight*.30,.30,.68);
+        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.87:.79,contextRing?1.12:1.18);
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
         const coverGain=contextRing?contextRefineWeight*.20:lerp(.24,.84,focusRefineWeight);
-        cover=sharedCover.map((v,i)=>v+(nativeCover[i]-sharedCover[i])*coverGain);
+        const coverContrast=contextRing?lerp(1.00,1.12,contextRefineWeight):lerp(1.05,1.34,focusRefineWeight);
+        cover=sharedCover.map((v,i)=>(v+(nativeCover[i]-sharedCover[i])*coverGain)*coverContrast);
       }
       const identityTint=sample?.land?[relief*.075,relief*.065,relief*.035]:[-.012,-.004,.028];
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
