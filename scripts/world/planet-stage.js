@@ -4015,7 +4015,7 @@ function updateCanonicalNpcMotion(){
     const rhythmResident=window.SettlementActivityRhythm?.residentPresentation?.(activeSeed,record.resident,rhythmStamp,state.scheduled)||null;
     const rhythmPriority=Math.max(0,Math.min(1,Number(rhythmResident?.priority??.5)));
     rhythmPriorityTotal+=rhythmPriority;rhythmPriorityCount++;
-    const rhythmScale=working?1:(.92+rhythmPriority*.16);
+    const rhythmScale=working?1:(.95+rhythmPriority*.45);
     const phase=frameCount*.22+Number(String(record.resident.id).replace(/\D/g,"")||0);
     const pulse=working?Math.sin(phase)*.035:0,actionScale=working?3.05:rhythmScale;
     // Arrived workers keep the accepted WP-S004-007 silhouette scale. Other
@@ -4391,7 +4391,7 @@ function activityBuildingGeometry(record,presentationScale,unit,frame,lift){
 }
 function addBuildingActivityCue(record,state,context,index){
   const g=activityBuildingGeometry(record,context.presentationScale,context.unit,context.frame,context.lift);if(!g||!state?.cue)return 0;
-  const cueScale=.72+Math.max(.05,Math.min(1,Number(state.cueStrength||.5)))*.53;
+  const cueScale=.80+Math.max(.05,Math.min(1,Number(state.cueStrength||.5)))*.90;
   const s=g.presentationScale/g.unit*cueScale,pos=canonicalSemanticPosition(g.east,g.north,g.presentationScale,g.unit,context.frame),x=pos.x,z=pos.z,h=g.height*s;
   const buildingW=Math.max(.08,g.w*s),buildingD=Math.max(.08,g.d*s),name="BuildingActivity-"+state.cue+"-"+state.id+"-"+index;
   if(state.cue==="warm-window"){
