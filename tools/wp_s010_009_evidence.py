@@ -44,11 +44,11 @@ def state(mode,profile):
       const rect=n=>{if(!n)return null;const r=n.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
       const ov=(a,b)=>!a||!b?0:Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left))*Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
       const visible=n=>Boolean(n&&getComputedStyle(n).display!=='none'&&getComputedStyle(n).visibility!=='hidden');
-      const panel=document.getElementById('advisorChatPanel'),strip=document.querySelector('.advisor-activity-strip'),close=document.querySelector('.advisor-chat-close'),composer=document.querySelector('.advisor-chat-compose'),transcript=document.querySelector('.advisor-chat-transcript'),map=document.querySelector('.planet-map-context'),places=document.querySelector('.planet-places-button'),scale=document.querySelector('.planet-scale-ruler');
-      const p=rect(panel),a=rect(strip),c=rect(close),compose=visible(composer)?rect(composer):null,trans=visible(transcript)?rect(transcript):null;
+      const panel=document.getElementById('advisorChatPanel'),strip=document.querySelector('.advisor-activity-strip'),close=document.querySelector('.advisor-chat-close'),composer=document.querySelector('.advisor-chat-compose'),textarea=composer?.querySelector('textarea'),send=composer?.querySelector('button'),transcript=document.querySelector('.advisor-chat-transcript'),map=document.querySelector('.planet-map-context'),places=document.querySelector('.planet-places-button'),scale=document.querySelector('.planet-scale-ruler');
+      const p=rect(panel),a=rect(strip),c=rect(close),compose=visible(composer)?rect(composer):null,ta=visible(textarea)?rect(textarea):null,sb=visible(send)?rect(send):null,trans=visible(transcript)?rect(transcript):null;
       const inside=x=>Boolean(x&&x.left>=-.5&&x.top>=-.5&&x.right<=innerWidth+.5&&x.bottom<=innerHeight+.5);
       const snap=window.ProtagonistActivityUI?.snapshot?.()||{};
-      return {mode,profile,viewport:{width:innerWidth,height:innerHeight},panel:p,activity:a,composer:compose,transcript:trans,panelInside:inside(p),activityInside:inside(a),composerInside:compose?inside(compose):true,documentWidth:document.documentElement.scrollWidth,
+      return {mode,profile,viewport:{width:innerWidth,height:innerHeight},panel:p,activity:a,composer:compose,textarea:ta,sendButton:sb,transcript:trans,panelInside:inside(p),activityInside:inside(a),composerInside:compose?inside(compose):true,composerUsable:Boolean(compose&&ta&&sb&&compose.height>=44&&ta.height>=32&&sb.height>=32&&inside(ta)&&inside(sb)),documentWidth:document.documentElement.scrollWidth,
         overlap:{map:ov(p,rect(map)),places:ov(p,rect(places)),scale:ov(p,rect(scale)),close:ov(a,c)},
         phase:strip?.dataset?.activityPhase||null,kind:strip?.dataset?.activityKind||null,
         eyebrow:strip?.querySelector('.advisor-activity-main small')?.textContent?.trim()||'',title:strip?.querySelector('.advisor-activity-main strong')?.textContent?.trim()||'',
@@ -61,6 +61,7 @@ def state(mode,profile):
 
 def assert_state(s):
     if not s["panelInside"] or not s["activityInside"] or not s["composerInside"]:raise RuntimeError("activity/chat escaped viewport "+json.dumps(s))
+    if s["profile"]=="phone-landscape" and not s.get("composerUsable"):raise RuntimeError("phone-landscape message composer is not usable "+json.dumps(s))
     if s["documentWidth"]>s["viewport"]["width"]+1:raise RuntimeError("horizontal overflow "+json.dumps(s))
     if s["overlap"]["map"]>1 or s["overlap"]["places"]>1 or s["overlap"]["scale"]>1:raise RuntimeError("Advisor panel overlaps required map chrome "+json.dumps(s))
     if s["overlap"]["close"]>1:raise RuntimeError("activity strip overlaps close control "+json.dumps(s))
