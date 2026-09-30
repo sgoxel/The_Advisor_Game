@@ -22,14 +22,14 @@ function C(v){if(v==null||typeof v!=="object")return v;if(Array.isArray(v))retur
 function F(v){if(v==null||typeof v!=="object"||Object.isFrozen(v))return v;Object.values(v).forEach(F);return Object.freeze(v)}
 function S(v){if(v==null||typeof v!=="object")return JSON.stringify(v);if(Array.isArray(v))return "["+v.map(S).join(",")+"]";return "{"+Object.keys(v).sort().map(k=>JSON.stringify(k)+":"+S(v[k])).join(",")+"}"}
 function H(v){let h=2166136261>>>0;for(const ch of String(v??"")){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0}return(h>>>0).toString(16).toUpperCase().padStart(8,"0")}
-function txt(v,n=160){return String(v??"").trim().replace(/\\s+/g," ").slice(0,n)}
+function txt(v,n=160){let x=String(v??"").trim().replaceAll(String.fromCharCode(9)," ").replaceAll(String.fromCharCode(10)," ").replaceAll(String.fromCharCode(13)," ");while(x.includes("  "))x=x.replaceAll("  "," ");return x.slice(0,n)}
 function id(v,n=160){return txt(v,n).replace(/[^A-Za-z0-9:_|.@/-]/g,"-")}
 function clamp(v,a=0,b=1){const n=Number(v);return Number.isFinite(n)?Math.max(a,Math.min(b,n)):a}
 function round(v,d=4){const f=10**d;return Math.round(Number(v)*f)/f}
 function seed(v){const s=txt(v);if(!s)throw new Error("Campaign SEED is required.");return s}
-function ts(v){const x=txt(v,32);if(!/^\\d{4,}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$/.test(x))throw new Error("Fantasy timestamp must be YYYY-MM-DD HH:MM:SS.");return x}
+function ts(v){const x=txt(v,32);if(!/^[0-9]{4,}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$/.test(x))throw new Error("Fantasy timestamp must be YYYY-MM-DD HH:MM:SS.");return x}
 function leap(y){return y%4===0&&(y%100!==0||y%400===0)}
-function seconds(v){const m=ts(v).match(/^(\\d+)-(\\d{2})-(\\d{2}) (\\d{2}):(\\d{2}):(\\d{2})$/),y=Number(m[1]),mo=Number(m[2]),d=Number(m[3]),hh=Number(m[4]),mm=Number(m[5]),ss=Number(m[6]);if(mo<1||mo>12||d<1||d>31||hh>23||mm>59||ss>59)throw new Error("Fantasy timestamp fields are invalid.");const prior=y-1,monthDays=[31,28+(leap(y)?1:0),31,30,31,30,31,31,30,31,30,31];let days=365*prior+Math.floor(prior/4)-Math.floor(prior/100)+Math.floor(prior/400);for(let i=0;i<mo-1;i++)days+=monthDays[i];days+=d-1;return days*86400+hh*3600+mm*60+ss}
+function seconds(v){const m=ts(v).match(/^([0-9]+)-([0-9]{2})-([0-9]{2}) ([0-9]{2}):([0-9]{2}):([0-9]{2})$/),y=Number(m[1]),mo=Number(m[2]),d=Number(m[3]),hh=Number(m[4]),mm=Number(m[5]),ss=Number(m[6]);if(mo<1||mo>12||d<1||d>31||hh>23||mm>59||ss>59)throw new Error("Fantasy timestamp fields are invalid.");const prior=y-1,monthDays=[31,28+(leap(y)?1:0),31,30,31,30,31,31,30,31,30,31];let days=365*prior+Math.floor(prior/4)-Math.floor(prior/100)+Math.floor(prior/400);for(let i=0;i<mo-1;i++)days+=monthDays[i];days+=d-1;return days*86400+hh*3600+mm*60+ss}
 function foundationUnit(s,key){return parseInt(H(s+"|"+key),16)/4294967296}
 function validPlan(p){return!!(p&&id(p.id)===p.id&&p.classId&&Number.isFinite(Number(p.population?.planned))&&Number.isFinite(Number(p.prosperity?.value))&&p.inputs?.local?.resources)}
 function providerRef(seedValue,planId,functionId){return F({kind:"settlement-function",id:"SFP-"+H(seedValue+"|"+planId+"|"+functionId)})}
