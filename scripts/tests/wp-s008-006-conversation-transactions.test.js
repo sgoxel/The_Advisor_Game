@@ -31,7 +31,7 @@ assert(Ledger,'ConversationTransactions should attach to window');
 function baseRecord(i,overrides={}){
   return {
     fantasyTimestamp:`1201-03-${String(2+Math.floor(i/24)).padStart(2,'0')} ${String(i%24).padStart(2,'0')}:00:00`,
-    message:{messageId:`M-${i}`,role:'player',text:`Message ${i}`},
+    message:{messageId:`M-${i}`,referenceId:`REF-${i}`,role:'player',text:`Message ${i}`},
     routing:{mode:'local',recognizedIntentIds:[`intent.${i%3}`]},
     ...overrides
   };
@@ -40,6 +40,7 @@ function baseRecord(i,overrides={}){
 assert.equal(Ledger.clear(activeSeed).ok,true);
 const local=Ledger.append(activeSeed,baseRecord(0,{links:{characterMemoryIds:['MEM-1'],advisorChannelIds:['ADV-1']}}));
 assert.equal(local.ok,true);
+assert.equal(local.record.message.referenceId,'REF-0','message reference metadata must persist');
 const rejected=Ledger.append(activeSeed,baseRecord(1,{proposalId:'P-1',decisionId:'D-REJECT',outcome:{completed:true}}));
 assert.equal(rejected.record.outcome.state,'unexecuted','claimed completion without Simulation evidence must be suppressed');
 assert.equal(rejected.record.outcome.claimedCompletionSuppressed,true);
@@ -108,11 +109,22 @@ assert.equal(Ledger.append(activeSeed,baseRecord(90)).ok,false);
 assert.equal(Ledger.append(activeSeed,baseRecord(90)).reason,'ledger-incompatible');
 
 stores.set(activeSeed,{seed:activeSeed,sequence:0,entries:{}});
+const malformedSeed='WP006-MALFORMED';
+WorldState.bindCampaign({seed:malformedSeed});
+Ledger.append(malformedSeed,baseRecord(0));
+const malformedRef=WorldState.structuralRef(malformedSeed,Ledger.REGISTRY_KIND,'WORLD',Ledger.REGISTRY_KEY,{role:'advisor-conversation-history',authority:'ConversationTransactions registry foundation'});
+ensure(malformedSeed).entries[malformedRef.id].changes.conversationTransactions.records[0].outcome={state:'completed',simulationResultId:null,authoritativeResultId:null,authoritativeExecution:true,claimedCompletionSuppressed:false};
+assert.equal(Ledger.snapshot(malformedSeed).compatible,false,'malformed completed record must fail safely');
+assert.equal(Ledger.append(malformedSeed,baseRecord(1)).reason,'ledger-incompatible');
+WorldState.bindCampaign({seed:'WP006-SEED-A'});
+stores.set(activeSeed,{seed:activeSeed,sequence:0,entries:{}});
 const evalRejected=Ledger.fromEvaluation(activeSeed,{messageId:'EV-1',role:'player',text:'Try it.'},{mode:'local',recognizedIntentIds:['intent.interaction']},{when:'1201-04-01 10:00:00',decisionId:'PCD-1',executionId:'PCE-1',proposal:{proposalId:'PCP-1'},execution:{attempted:false,state:'not-run',actionExecuted:false}});
-const evalDone=Ledger.fromEvaluation(activeSeed,{messageId:'EV-2',role:'player',text:'Use it.'},{mode:'local',recognizedIntentIds:['intent.interaction']},{when:'1201-04-01 10:01:00',decisionId:'PCD-2',executionId:'PCE-2',proposal:{proposalId:'PCP-2'},execution:{attempted:true,state:'active',actionExecuted:true,authoritativeResult:{ok:true,id:'ACT-2'}}});
+const evalActive=Ledger.fromEvaluation(activeSeed,{messageId:'EV-2',role:'player',text:'Use it.'},{mode:'local',recognizedIntentIds:['intent.interaction']},{when:'1201-04-01 10:01:00',decisionId:'PCD-2',executionId:'PCE-2',proposal:{proposalId:'PCP-2'},execution:{attempted:true,state:'active',actionExecuted:true,authoritativeResult:{ok:true,id:'ACT-2',status:'active'}}});
+const evalDone=Ledger.fromEvaluation(activeSeed,{messageId:'EV-3',role:'player',text:'Finish it.'},{mode:'local',recognizedIntentIds:['intent.interaction']},{when:'1201-04-01 10:02:00',decisionId:'PCD-3',executionId:'PCE-3',proposal:{proposalId:'PCP-3'},execution:{attempted:true,state:'complete',actionExecuted:true,authoritativeResult:{ok:true,id:'ACT-3',status:'complete'}}});
 assert.equal(evalRejected.record.outcome.state,'unexecuted');
+assert.equal(evalActive.record.outcome.state,'unexecuted','active Simulation state must not be labeled completed');
 assert.equal(evalDone.record.outcome.state,'completed');
-assert.equal(evalDone.record.outcome.simulationResultId,'PCE-2');
+assert.equal(evalDone.record.outcome.simulationResultId,'PCE-3');
 
 const finalSnap=Ledger.snapshot(activeSeed);
 assert.equal(finalSnap.persistenceAuthority,'WorldState CampaignStateDelta');

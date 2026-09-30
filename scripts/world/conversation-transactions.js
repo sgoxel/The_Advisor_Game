@@ -88,6 +88,7 @@ function normalizeMessage(input){
   const src=input&&typeof input==="object"?input:{};
   return freeze({
     messageId:cleanId(src.messageId||src.id||"message"),
+    referenceId:cleanId(src.referenceId||src.replyToId||"",160)||null,
     role:["player","advisor","system"].includes(src.role)?src.role:"player",
     text:cleanText(src.text||src.dialogue||"",MAX_DIALOGUE_CHARS),
     historicalDialogue:true,authoritativeFact:false
@@ -107,7 +108,12 @@ function simulationOutcome(input){
   const execution=src.execution&&typeof src.execution==="object"?src.execution:src;
   const executionId=cleanId(src.executionId||execution.executionId||src.simulationResultId||execution.simulationResultId||"",160)||null;
   const authoritativeResultId=cleanId(src.authoritativeResultId||execution.authoritativeResultId||execution.authoritativeResult?.id||"",160)||null;
-  const succeeded=Boolean(executionId&&execution.actionExecuted===true&&(execution.ok===true||execution.authoritativeResult?.ok===true||["completed","accepted","active","success"].includes(String(execution.state||execution.status||"").toLowerCase())));
+  const status=String(execution.state||execution.status||execution.authoritativeResult?.status||"").toLowerCase();
+  const succeeded=Boolean(
+    executionId&&execution.actionExecuted===true&&
+    ["complete","completed","success","succeeded"].includes(status)&&
+    (execution.ok===true||execution.authoritativeResult?.ok===true)
+  );
   return freeze({
     state:succeeded?"completed":"unexecuted",
     simulationResultId:succeeded?executionId:null,
@@ -128,7 +134,7 @@ function normalizeLinks(input){
 }
 function canonicalIdBasis(seed,record){
   return {
-    seed,fantasyTimestamp:record.fantasyTimestamp,messageId:record.message.messageId,role:record.message.role,
+    seed,fantasyTimestamp:record.fantasyTimestamp,messageId:record.message.messageId,referenceId:record.message.referenceId,role:record.message.role,
     routingMode:record.routing.mode,intents:record.routing.recognizedIntentIds,
     proposalIds:record.links.proposalIds,decisionIds:record.links.decisionIds,
     advisorChannelIds:record.links.advisorChannelIds,characterMemoryIds:record.links.characterMemoryIds,

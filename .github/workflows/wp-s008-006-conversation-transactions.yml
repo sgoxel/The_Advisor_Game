@@ -6,6 +6,7 @@ on:
     paths:
       - "scripts/world/conversation-transactions.js"
       - "scripts/tests/wp-s008-006-conversation-transactions.test.js"
+      - "tools/tests/wp-s007-009-campaign-persistence.test.js"
       - ".github/workflows/wp-s008-006-conversation-transactions.yml"
       - "scripts/world/world-state.js"
       - "scripts/world/campaign-persistence.js"
@@ -22,18 +23,25 @@ permissions:
 jobs:
   conversation-persistence:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@v4
       - name: Use Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
+      - name: Syntax
+        run: |
+          node --check scripts/world/conversation-transactions.js
+          node --check scripts/tests/wp-s008-006-conversation-transactions.test.js
+          node --check tools/tests/wp-s007-009-campaign-persistence.test.js
       - name: Run prerequisite Stage 8 authority regression
         run: node scripts/tests/wp-s008-005-protagonist-command-evaluator.test.js
       - name: Run WP-S008-006 bounded persistence evidence
         run: node scripts/tests/wp-s008-006-conversation-transactions.test.js
+      - name: Run actual campaign persistence regression
+        run: node tools/tests/wp-s007-009-campaign-persistence.test.js
       - name: Verify current WP state deployed to GitHub Pages
         if: github.event_name == 'push'
         shell: bash

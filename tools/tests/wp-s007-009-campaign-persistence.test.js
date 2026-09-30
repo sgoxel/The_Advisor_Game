@@ -44,6 +44,7 @@ global.RegionalSettlementSimulation={
 global.NPCLifecycle={};
 
 load("scripts/world/lazy-catchup.js");
+load("scripts/world/conversation-transactions.js");
 load("scripts/world/campaign-persistence.js");
 
 assert(global.CampaignPersistence,"CampaignPersistence API missing");
@@ -93,6 +94,13 @@ const futureEvent=EventScheduler.schedule(seed,{
 }).event;
 assert(futureEvent&&futureEvent.id,"future scheduler event missing");
 CatchUpSimulation.persist(seed);
+const conversationRecord=ConversationTransactions.append(seed,{
+  fantasyTimestamp:fixedTimestamp,
+  message:{messageId:"PERSIST-MSG-1",referenceId:"PERSIST-REF-1",role:"player",text:"Remember this bounded conversation."},
+  routing:{mode:"direct",recognizedIntentIds:["advisor.info.request"]},
+  links:{characterMemoryIds:["MEM-PERSIST-1"]}
+});
+assert(conversationRecord.ok,conversationRecord.reason);
 
 const created=CampaignPersistence.createSave({capturedRealMs:123456789,persist:true});
 assert(created.ok,created.reason);
@@ -110,6 +118,9 @@ assert(save.gameTime.creationFantasyTimestamp&&save.gameTime.currentAuthoritativ
 assert(save.gameTime.offlineProgressionPolicy&&save.gameTime.offlineProgressionPolicy.fantasyHoursPerRealHour===24,"offline progression metadata missing");
 assert(save.schedulerState.pendingEvents.some(e=>e.id===futureEvent.id),"scheduled event metadata missing");
 assert(save.catchUpState.lastAuthoritativeTimestamp===fixedTimestamp,"catch-up checkpoint missing");
+const conversationEntry=Object.values(save.campaignStateDelta.entries).find(item=>item.entityKind===ConversationTransactions.REGISTRY_KIND);
+assert(conversationEntry,"conversation transaction registry missing from sparse campaign save");
+assert(conversationEntry.changes?.conversationTransactions?.records?.some(row=>row.id===conversationRecord.record.id),"conversation transaction missing from campaign delta");
 assert(save.deltaIndex.settlement.includes(settlementRef.id),"settlement delta index missing");
 assert(save.deltaIndex.npc.includes(npcRef.id),"NPC delta index missing");
 assert.strictEqual(save.sparse,true);
@@ -120,7 +131,7 @@ assert(save.serializedBytes<CampaignPersistence.MAX_SAVE_BYTES,"save exceeded sp
 
 const worldStateSerialized=save.campaignStateDelta;
 assert(!JSON.stringify(worldStateSerialized).includes(distantBefore.foundationSignature),"distant immutable foundation leaked into sparse save");
-assert(Object.keys(worldStateSerialized.entries).length===2,"unexpected sparse delta count");
+assert(Object.keys(worldStateSerialized.entries).length===3,"unexpected sparse delta count including bounded conversation registry");
 
 const settlementBefore=WorldState.resolve(seed,settlementRef);
 const npcBefore=WorldState.resolve(seed,npcRef);
@@ -128,6 +139,7 @@ const schedulerBefore=EventScheduler.serialize(seed);
 
 resetRuntime(campaign,fixedTimestamp);
 assert.strictEqual(WorldState.deltaSnapshot(seed).entryCount,0,"runtime reset did not clear deltas");
+assert.strictEqual(ConversationTransactions.snapshot(seed).recordCount,0,"runtime reset did not clear conversation delta");
 
 (async()=>{
   const restored=await CampaignPersistence.restoreAndResume(save,{targetTimestamp:fixedTimestamp,maxBatches:4,maxSlices:8});
@@ -141,7 +153,9 @@ assert.strictEqual(WorldState.deltaSnapshot(seed).entryCount,0,"runtime reset di
   assert.strictEqual(npcAfter.entityRef.id,npcRef.id,"NPC stable ID changed");
   const schedulerAfter=EventScheduler.serialize(seed);
   assert.deepStrictEqual(schedulerAfter.pendingEvents.map(e=>e.id),schedulerBefore.pendingEvents.map(e=>e.id),"scheduler pending events changed after reload");
-  assert.strictEqual(WorldState.deltaSnapshot(seed).entryCount,2,"saved sparse deltas not fully restored");
+  assert.strictEqual(WorldState.deltaSnapshot(seed).entryCount,3,"saved sparse deltas not fully restored");
+  assert.strictEqual(ConversationTransactions.get(seed,conversationRecord.record.id)?.id,conversationRecord.record.id,"conversation transaction did not survive campaign restore");
+  assert.strictEqual(ConversationTransactions.get(seed,conversationRecord.record.id)?.message.referenceId,"PERSIST-REF-1","conversation reference metadata changed after reload");
 
   const distantAfter=WorldState.resolve(seed,distantRef);
   assert.strictEqual(distantAfter.foundationSignature,distantBefore.foundationSignature,"untouched distant area failed deterministic SEED regeneration");
