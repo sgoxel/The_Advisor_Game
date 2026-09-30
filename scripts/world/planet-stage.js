@@ -3744,12 +3744,13 @@ function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
   // Keep the authoritative settlement composition large enough to read as
   // actual world structure, not a locator glyph, then converge rapidly to 1:1.
-  const targetFraction=tier==="footprint"?.38:tier==="route"?.58:tier==="coarse"?.20:.20;
+  const targetFraction=tier==="footprint"?.38:tier==="route"?.68:tier==="coarse"?.20:.20;
   const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
-  // Route overview stays presentation-only. Keep it large enough to read while
-  // avoiding oversized isolated blocks; a slightly denser set of real occupied
-  // footprints below now carries the settlement silhouette instead.
-  const cap=tier==="footprint"?14:tier==="route"?18:tier==="coarse"?5:18;
+  // Route overview stays presentation-only. The final Phase 16 evidence showed
+  // the real connected village was still undersized at 1/2500, so give the same
+  // authoritative footprints/access geometry more screen area without moving,
+  // synthesizing, or reconnecting any world record.
+  const cap=tier==="footprint"?14:tier==="route"?20:tier==="coarse"?5:18;
   return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
 }
 function settlementPresentationLift(tier,value=zoomState.scalar){
@@ -3835,8 +3836,8 @@ function routeOverviewPlan(reveal){
     const aa=score(a),bb=score(b);
     return bb.forward-aa.forward||aa.lateral-bb.lateral||String(a?.id||"").localeCompare(String(b?.id||""));
   });
-  const cap=12,records=[];
-  for(const record of specials){if(records.length>=2||records.length>=cap)break;records.push(record);}
+  const cap=14,records=[];
+  for(const record of specials){if(records.length>=3||records.length>=cap)break;records.push(record);}
   for(const record of houses){if(records.length>=cap)break;if(!records.some(item=>String(item?.id||"")===String(record?.id||"")))records.push(record);}
   const frozen=Object.freeze(records.slice());
   return Object.freeze({
@@ -6409,10 +6410,17 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // introduced, so preparation cost and canonical world identity stay fixed.
       const strategicMapBand=smoothstep01(clamp((metersPerTexel-320)/900,0,1))*
         (1-smoothstep01(clamp((metersPerTexel-5000)/5200,0,1)));
+      // Final Phase 16 evidence showed the remaining 1/75 ridge is not geometry:
+      // it is the already-computed regional macro/cover field being magnified
+      // before district refinement. Quiet only that coarse residual while the
+      // canonical base palette remains fully visible.
+      const coarseRegionalResidualBand=smoothstep01(clamp((metersPerTexel-700)/700,0,1))*
+        (1-smoothstep01(clamp((metersPerTexel-5000)/5200,0,1)));
+      const coarseRegionalResidualGain=1-coarseRegionalResidualBand*.62;
       const strategicMacroGain=1+strategicMapBand*(contextRing?.22:.48);
       const sharedMacroContrast=(contextRing?1.06:1.10)*strategicMacroGain;
       const residualMacroContrast=(contextRing?1.20:lerp(1.18,1.52,focusRefineWeight))*strategicMacroGain;
-      const macro=sharedMacro*sharedMacroContrast+(nativeMacro-sharedMacro)*refinementGain*residualMacroContrast;
+      const macro=(sharedMacro*sharedMacroContrast+(nativeMacro-sharedMacro)*refinementGain*residualMacroContrast)*coarseRegionalResidualGain;
       pushRange("baseLuma",luma3(base));pushRange("macro",macro);
       let shade=1,cover=[0,0,0],structureContribution=[0,0,0],landCoverContribution=[0,0,0];
       if(sample?.land){
@@ -6568,7 +6576,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const strategicCoverBoost=1+strategicMapBand*(contextRing?.03:.06);
         const sharedCoverContrast=(contextRing?1.06:1.10)*mapCoverBoost*strategicCoverBoost;
         const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost*strategicCoverBoost;
-        const landCover=sharedCover.map((v,i)=>v*sharedCoverContrast+(nativeCover[i]-v)*coverGain*residualCoverContrast);
+        const coarseRegionalCoverGain=1-coarseRegionalResidualBand*.48;
+        const landCover=sharedCover.map((v,i)=>(v*sharedCoverContrast+(nativeCover[i]-v)*coverGain*residualCoverContrast)*coarseRegionalCoverGain);
         landCoverContribution=landCover.slice();
         pushRange("landCoverLuma",luma3(landCover));
         cover=cover.map((v,i)=>v+landCover[i]);
@@ -6815,7 +6824,7 @@ function finalizeLocalResource(job,result){
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
-      topographicSignalRevision:"canonical-access-morphology-map-detail-v29",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-access-morphology-map-detail-v30",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
