@@ -133,7 +133,7 @@ def assert_frame(s):
     if s["overlap"]["map"]>1 or s["overlap"]["places"]>1 or s["overlap"]["scale"]>1:raise RuntimeError("Advisor result overlaps required map chrome "+json.dumps(s))
     if s["activityPhase"]!="completed":raise RuntimeError("activity is not authoritative completed "+json.dumps(s))
     if not s["activitySnapshot"].get("completionBacked"):raise RuntimeError("completed activity lacks terminal Simulation backing "+json.dumps(s))
-    if s["conversationStatus"]!="Completed":raise RuntimeError("conversation history does not visibly reflect authoritative completion "+json.dumps(s))
+    if str(s["conversationStatus"]).strip().upper()!="COMPLETED":raise RuntimeError("conversation history does not visibly reflect authoritative completion "+json.dumps(s))
     if "Simulation" not in s["activityText"] or "Result" not in s["activityText"]:raise RuntimeError("visible result lacks Simulation/result evidence "+json.dumps(s))
     authority=s["activitySnapshot"].get("authority",{})
     for key in ["directExecution","directWorldMutation","wholeWorldScan","wholeHistoryScan","perFrameRender"]:
