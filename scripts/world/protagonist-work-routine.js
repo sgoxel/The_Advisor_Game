@@ -23,11 +23,11 @@ function clone(value){if(value==null||typeof value!=="object")return value;if(Ar
 function canonical(value){if(Array.isArray(value))return value.map(canonical);if(value&&typeof value==="object"){const out={};for(const key of Object.keys(value).sort())if(value[key]!==undefined)out[key]=canonical(value[key]);return out;}return value;}
 function stable(value){return JSON.stringify(canonical(value));}
 function hashText(value){let h=2166136261>>>0;for(const ch of String(value==null?"":value)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}h^=h>>>16;h=Math.imul(h,2246822507);h^=h>>>13;return(h>>>0).toString(16).toUpperCase().padStart(8,"0");}
-function clean(value,max=160){return String(value==null?"":value).trim().replace(/s+/g," ").slice(0,max);}
+function clean(value,max=160){return String(value==null?"":value).trim().replace(/\s+/g," ").slice(0,max);}
 function cleanId(value,max=160){return clean(value,max).replace(/[^A-Za-z0-9:_|.@/-]/g,"-");}
 function plain(value){return Boolean(value)&&typeof value==="object"&&!Array.isArray(value);}
-function validWhen(value){return /^d{4,}-d{2}-d{2} d{2}:d{2}:d{2}$/.test(String(value||""));}
-function minuteOfDay(value){const m=String(value||"").match(/^d{4,}-d{2}-d{2} (d{2}):(d{2}):d{2}$/);if(!m)return null;const h=Number(m[1]),mi=Number(m[2]);return h>=0&&h<24&&mi>=0&&mi<60?h*60+mi:null;}
+function validWhen(value){return /^\d{4,}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(String(value||""));}
+function minuteOfDay(value){const m=String(value||"").match(/^\d{4,}-\d{2}-\d{2} (\d{2}):(\d{2}):\d{2}$/);if(!m)return null;const h=Number(m[1]),mi=Number(m[2]);return h>=0&&h<24&&mi>=0&&mi<60?h*60+mi:null;}
 function clampMilli(value){const n=Number(value);return Number.isFinite(n)?Math.max(0,Math.min(100000,Math.round(n))):0;}
 function uniqueIds(value,limit=MAX_GOAL_LINKS){const out=[];for(const raw of Array.isArray(value)?value:[]){const id=cleanId(raw);if(id&&!out.includes(id))out.push(id);if(out.length>=limit)break;}return freeze(out);}
 function normalizeProposal(value){if(!plain(value))return null;const commandId=cleanId(value.commandId);if(!commandId)return null;const parameters=plain(value.validatedParameters)?clone(value.validatedParameters):plain(value.parameters)?clone(value.parameters):{};return freeze({proposalId:cleanId(value.proposalId)||null,commandId,parameters,source:cleanId(value.source||"protagonist-work-routine",80)||"protagonist-work-routine"});}
