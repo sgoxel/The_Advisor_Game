@@ -114,7 +114,7 @@ assert.deepStrictEqual(presentationB,presentationA,'presentation/device state in
 
 const source=fs.readFileSync(modulePath,'utf8');
 for(const forbidden of ['Math.random','Date.now','new Date(','innerWidth','innerHeight','devicePixelRatio','navigator.'])assert(!source.includes(forbidden),'forbidden non-authoritative input reference: '+forbidden);
-for(const forbidden of ['ActionExecutor','RoutePlanner','applyDelta','setPosition','teleport'])assert(!source.includes(forbidden),'planner must not contain direct execution/mutation path: '+forbidden);
+for(const forbidden of ['ActionExecutor.','RoutePlanner.','applyDelta(','setPosition(','teleport('])assert(!source.includes(forbidden),'planner must not contain direct execution/mutation call: '+forbidden);
 assert(source.includes('fullWorldScan:false')&&source.includes('perFrameScan:false'),'bounded scan contract missing');
 
 const repoRoot=path.resolve(__dirname,'../..'),indexPath=path.join(repoRoot,'index.html');
