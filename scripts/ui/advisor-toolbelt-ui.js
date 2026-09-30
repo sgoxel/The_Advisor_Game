@@ -41,7 +41,7 @@ function skillView(seed,skill){
   return freeze({id:skill,label:TOOL_META[skill].label,level,totalXp:Math.max(0,Math.floor(Number(row?.totalXp)||0)),progress:row?.atMaxLevel?1:(next>0?Math.max(0,Math.min(1,current/next)):0),available:Boolean(root[TOOL_META[skill].global])});
 }
 function likelyConfidence(row){
-  for(const key of ["confidence","confidenceScore","evidenceQuality","readinessScore","conditionScore","quality"]){
+  for(const key of ["confidence","confidenceScore","evidenceQuality","evidenceQualityScore","readinessScore","conditionScore","quality"]){
     const value=row?.[key];
     if(typeof value==="number"&&Number.isFinite(value)){
       if(value>1&&value<=100)return Math.max(0,Math.min(1,value/100));
@@ -60,7 +60,7 @@ function compactDetails(row){
     ["When",row?.fantasyTimestamp||row?.when||row?.timestamp]
   ];
   for(const [label,value] of candidates){const text=cleanText(value,120);if(text&&!details.some(x=>x.value===text))details.push({label,value:text})}
-  const blockers=Array.isArray(row?.blockers)?row.blockers.length:0,unknowns=Array.isArray(row?.unknowns)?row.unknowns.length:0,conflicts=Array.isArray(row?.conflicts)?row.conflicts.length:0;
+  const blockers=Array.isArray(row?.blockers)?row.blockers.length:0,unknowns=Array.isArray(row?.unknowns)?row.unknowns.length:0,conflicts=Array.isArray(row?.conflicts)?row.conflicts.length:0;\n  if(Array.isArray(row?.evidenceRefIds)&&row.evidenceRefIds.length)details.push({label:"Evidence",value:String(row.evidenceRefIds.length)+" refs"});
   if(blockers)details.push({label:"Blockers",value:String(blockers)});
   if(unknowns)details.push({label:"Unknowns",value:String(unknowns)});
   if(conflicts)details.push({label:"Conflicts",value:String(conflicts)});
