@@ -227,7 +227,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 
 # Stage 11 — Advisor Progression, Investigation + Influence Tools
 
-- `WP-S011-001` — Persistent Advisor Skill Profile + Progression Ledger
+- `WP-S011-001` — Persistent Advisor Skill Profile + Progression Ledger — COMPLETED
 - `WP-S011-002` — Insight Investigation Action + Evidence Quality
 - `WP-S011-003` — Rhetoric Persuasion Tool + Bounded Influence Modifier
 - `WP-S011-004` — Diplomacy Leverage Tool + Relationship-Aware Outcomes
