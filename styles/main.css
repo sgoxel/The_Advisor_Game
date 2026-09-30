@@ -2057,3 +2057,14 @@ body.planet-stage-active{
     max-height:236px;
   }
 }
+
+
+/* WP-S009-010 tablet authority fit: reserve final bounded status height */
+@media(min-width:521px) and (max-width:900px) and (min-height:431px){
+  .advisor-chat-panel:has(.advisor-status-readout[open]){
+    grid-template-rows:auto 310px minmax(72px,1fr) auto auto;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-readout[open] .advisor-status-body{
+    max-height:268px;
+  }
+}
