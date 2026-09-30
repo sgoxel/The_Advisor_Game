@@ -1,4 +1,5 @@
 name: WP-S011-010 End-to-End Advisor Acceptance
+# exact-head verification trigger
 
 on:
   push:
