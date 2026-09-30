@@ -191,7 +191,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 
 # Stage 8 — Hybrid Advisor Conversation + Character Decision Interface
 
-- `WP-S008-001` — Deterministic Input Normalization + Sentence Library Matching — IN PROGRESS
+- `WP-S008-001` — Deterministic Input Normalization + Sentence Library Matching — COMPLETED
 - `WP-S008-002` — Context-Bounded Command Set Interface + Authoritative Target Filtering
 - `WP-S008-003` — Deterministic Local Conversation Router + Offline Fallback
 - `WP-S008-004` — External LLM Adapter + Structured Proposal Validation
