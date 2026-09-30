@@ -2153,3 +2153,30 @@ body.planet-stage-active{
   .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-activity-strip{display:none}
 }
 
+
+
+/* WP-S010-009 attempt-2 short-landscape control fit */
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-chat-panel:has(.advisor-activity-strip){
+    grid-template-rows:auto auto 0 minmax(44px,auto);
+  }
+  .advisor-chat-panel:has(.advisor-activity-strip) .advisor-chat-transcript{
+    display:none;
+  }
+  .advisor-chat-panel:has(.advisor-activity-strip) .advisor-chat-compose{
+    gap:2px;
+    padding:4px 6px 5px;
+  }
+  .advisor-chat-panel:has(.advisor-activity-strip) .advisor-chat-compose>label,
+  .advisor-chat-panel:has(.advisor-activity-strip) .advisor-chat-compose>small{
+    display:none;
+  }
+  .advisor-chat-panel:has(.advisor-activity-strip) .advisor-chat-compose textarea{
+    min-height:32px;
+    max-height:32px;
+    resize:none;
+  }
+  .advisor-chat-panel:has(.advisor-activity-strip) .advisor-chat-compose button{
+    min-height:32px;
+  }
+}
