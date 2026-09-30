@@ -19,6 +19,7 @@ const MODES=Object.freeze([
   "llm-eligible",
   "deterministic-offline-fallback"
 ]);
+const FACT_STOPWORDS=new Set(["the","a","an","about","of","to","in","on","at","for","is","are","was","were","with","and","or","what","where","tell","me","do","you","know"]);
 
 function deepFreeze(value){
   if(!value||typeof value!=="object"||Object.isFrozen(value))return value;
@@ -205,7 +206,7 @@ function factRows(context,sources){
   })).filter(row=>row.summary&&row.grounded);
 }
 function bestFact(topic,rows){
-  const wanted=tokens(topic);
+  const wanted=tokens(topic).filter(token=>!FACT_STOPWORDS.has(token));
   if(!wanted.length)return null;
   const ranked=rows.map(row=>{
     const hay=lower([row.subject,row.summary].filter(Boolean).join(" "));
