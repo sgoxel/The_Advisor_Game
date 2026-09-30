@@ -1538,7 +1538,7 @@ body.planet-stage-active{
     width:min(300px,calc(100vw - 20px));
     padding:10px 12px;
   }
-  .local-event-vignette[data-placement="top-right"]{left:auto;right:10px;top:max(72px,calc(env(safe-area-inset-top) + 58px));bottom:auto}
+  .local-event-vignette[data-placement="top-right"]{left:auto;right:10px;top:max(104px,calc(env(safe-area-inset-top) + 96px));bottom:auto}
   .local-event-vignette[data-placement="bottom-right"]{left:auto;right:10px;top:auto;bottom:max(72px,calc(env(safe-area-inset-bottom) + 64px))}
   .local-event-vignette[data-placement="bottom-left"]{left:10px;right:auto;top:auto;bottom:max(72px,calc(env(safe-area-inset-bottom) + 64px))}
   .local-event-description{font-size:11px}
