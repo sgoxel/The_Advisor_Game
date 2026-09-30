@@ -4181,7 +4181,10 @@ function updateWayfindingTextOverlay(force=false){
   const pixelW=Math.max(1,Math.round(width*dpr)),pixelH=Math.max(1,Math.round(height*dpr));
   if(layer.width!==pixelW||layer.height!==pixelH){layer.width=pixelW;layer.height=pixelH;}
   ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,layer.width,layer.height);ctx.setTransform(dpr,0,0,dpr,0,0);
-  if(inspection?.selectedType==="signpost"){
+  if(inspection?.selectedType==="signpost"||root?.dataset?.travelEncounterFocus==="true"){
+    // During a focused rare encounter, the physical sign mesh and canonical
+    // route truth stay present/clickable while only the screen-space lettering
+    // yields. This prevents route boards from covering actors or fixed map UI.
     const elapsed=Number((performance.now()-started).toFixed(4));
     wayfindingSignposts={...wayfindingSignposts,visibleTextCount:0,textUpdateCount:Number(wayfindingSignposts.textUpdateCount||0)+1,lastTextDrawMs:elapsed,maxTextDrawMs:Math.max(Number(wayfindingSignposts.maxTextDrawMs||0),elapsed)};
     return;
