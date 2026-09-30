@@ -274,6 +274,7 @@ function advanceTo(seedValue,targetValue,optionsValue){
 async function resumeTo(seedValue,targetValue,optionsValue){
   const seed=normalizeSeed(seedValue),target=normalizeTimestamp(targetValue),options=optionsValue||{};
   const maxSlices=Math.max(1,Math.min(MAX_RESUME_SLICES,Math.floor(Number(options.maxSlices)||MAX_RESUME_SLICES)));
+  const protagonistStart=stateFor(seed).lastAuthoritativeTimestamp;
   let slices=0,result=null;
   do{
     result=advanceTo(seed,target,{maxBatches:options.maxBatches||MAX_BATCHES_PER_SLICE,priority:options.priority||"background"});
@@ -281,7 +282,19 @@ async function resumeTo(seedValue,targetValue,optionsValue){
     if(result.complete)break;
     await new Promise(resolve=>setTimeout(resolve,0));
   }while(slices<maxSlices);
-  return deepFreeze({...result,slices,complete:Boolean(result?.complete),authoritativeReady:Boolean(result?.complete)});
+  let protagonistCatchUp=null;
+  if(result?.complete&&window.ProtagonistOfflineCatchUp?.resumeAuthoritativeInterval){
+    protagonistCatchUp=await window.ProtagonistOfflineCatchUp.resumeAuthoritativeInterval(seed,{
+      authority:window.ProtagonistOfflineCatchUp.RESUME_AUTHORITY||"fantasy-game-time-resume",
+      authoritative:true,
+      startFantasyTimestamp:protagonistStart,
+      targetFantasyTimestamp:target,
+      maxSlices:Math.min(maxSlices,window.ProtagonistOfflineCatchUp.MAX_RESUME_SLICES||maxSlices),
+      maxSegments:window.ProtagonistOfflineCatchUp.MAX_SEGMENTS_PER_SLICE||8
+    });
+  }
+  const protagonistReady=!protagonistCatchUp||Boolean(protagonistCatchUp.complete);
+  return deepFreeze({...result,slices,complete:Boolean(result?.complete&&protagonistReady),authoritativeReady:Boolean(result?.complete&&protagonistReady),protagonistCatchUp});
 }
 function authoritativeReady(seedValue){
   try{const state=stateFor(seedValue);return Boolean(state.ready&&!state.inProgress)}catch(_){return false}
