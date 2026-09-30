@@ -153,29 +153,41 @@ def assert_state(st):
 
 records=[]
 try:
+    # Build the expensive PlayCanvas world once. Evidence state changes are
+    # presentation-only and event-driven, so the same exact-head world can be
+    # resized and re-rendered without reloading or changing world authority.
+    first_profile="phone-portrait"
+    first_mode="ordinary"
+    driver.set_window_size(*VIEWPORTS[first_profile])
+    driver.get(target_url(first_mode))
+    try:
+        wait.until(lambda _d: ready(first_mode))
+    except TimeoutException:
+        failure=OUT/f"{first_profile}-{first_mode}-startup-failure.png"
+        driver.save_screenshot(str(failure))
+        details=driver.execute_script("""
+          return {
+            body:String(document.body?.innerText||"").slice(0,1400),
+            stage:window.PlanetStage?.snapshot?.()||null,
+            ui:window.AdvisorConversationUI?.snapshot?.()||null
+          };
+        """)
+        raise RuntimeError("startup/evidence timeout: "+json.dumps(details))
+
     for profile,size in VIEWPORTS.items():
         driver.set_window_size(*size)
+        time.sleep(.45)
         for mode in MODE_MATRIX[profile]:
-            driver.get(target_url(mode))
-            try:
-                wait.until(lambda _d,m=mode: ready(m))
-            except TimeoutException:
-                failure=OUT/f"{profile}-{mode}-startup-failure.png"
-                driver.save_screenshot(str(failure))
-                details=driver.execute_script("""
-                  return {
-                    body:String(document.body?.innerText||"").slice(0,1400),
-                    stage:window.PlanetStage?.snapshot?.()||null,
-                    ui:window.AdvisorConversationUI?.snapshot?.()||null
-                  };
-                """)
-                raise RuntimeError("startup/evidence timeout: "+json.dumps(details))
+            driver.execute_script("window.AdvisorConversationUI.setEvidenceMode(arguments[0]);",mode)
+            WebDriverWait(driver,30).until(lambda _d,m=mode: ready(m))
             driver.execute_script("const t=document.querySelector('.advisor-chat-transcript');if(t)t.scrollTop=0;")
-            time.sleep(.35)
+            time.sleep(.25)
             st=geometry_state(mode,profile)
-            assert_state(st)
             path=OUT/f"{profile}-{mode}.png"
+            # Always retain the actual visual before any geometry assertion so
+            # a failed attempt is inspectable rather than telemetry-only.
             driver.save_screenshot(str(path))
+            assert_state(st)
             records.append({"profile":profile,"mode":mode,"file":str(path),"state":st})
 
     severe=[
