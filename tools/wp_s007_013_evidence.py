@@ -107,7 +107,7 @@ def valid_state(kind,expected):
       st["travel"].get("active") and int(st["travel"].get("exactActorCount",0))==expected and
       int(st["crowd"].get("travelEncounterCount",0))==expected and int(st["crowd"].get("visibleTravelEncounterCount",0))>=expected and
       st["visibleEncounterActors"]>=expected and sizes and min(sizes)>=MIN_BODY_PX and
-      st["crowd"].get("travelerSilhouetteRevision")=="travel-encounter-silhouette-v2" and
+      st["crowd"].get("travelerSilhouetteRevision")=="travel-encounter-silhouette-v3" and
       int(st["crowd"].get("drawCallEstimate",0))<=1 and
       int(ls.get("waterCount",0) or 0)==0 and context_score>=2 and
       st["travel"].get("encounter",{}).get("context",{}).get("visualSurfaceValid") is True and
