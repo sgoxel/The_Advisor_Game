@@ -2917,11 +2917,11 @@
 
 2026-09-30 11:05 +03:00 | WP-S008-003 | FUNCTIONAL ACCEPTED — DETERMINISTIC LOCAL CONVERSATION ROUTER + OFFLINE FALLBACK
 - Continued only WP-S008-003 under AGENT #6. Added production `LocalConversationRouter` v1 and loaded it from `index.html`.
-- Exact accepted implementation/evidence head `c9158c1ca27051b9b3c971e9b46953b491b7e11d`; dedicated exact-head workflow `36687108759` SUCCESS and verified both deterministic evidence and the production router/index markers on public GitHub Pages.
+- Exact accepted implementation/evidence head `980ce15c89ac52c0af846ca2c1b3a3875852c575`; dedicated exact-head workflow `36687482635` SUCCESS and verified both deterministic evidence and the production router/index markers on public GitHub Pages.
 - Common supported inputs route deterministically without an LLM: greetings, travel suggestions, interaction requests, warnings and reminders use local templates; grounded status/schedule/inventory and information/location questions only answer when bounded authoritative/context records exist.
 - Ambiguous input such as `find Rowan` remains `clarification-needed` with multiple candidate intents instead of guessing. Unfamiliar language is marked `llm-eligible` while still returning a deterministic offline reply; with external AI disabled it uses `deterministic-offline-fallback` directly.
 - The router accepts supplied normalized candidates for independent use, uses SentenceLibrary only when available, and falls back to its own bounded recognizer otherwise. Character identity remains the same protagonist across all routing modes and presentation/device fields do not affect deterministic replay.
-- The first test attempt exposed an unsafe generic-token grounding edge case: an absent-fact question could match an unrelated memory via stopwords. The accepted fix filters generic fact tokens, so missing facts fail closed instead of being spuriously grounded.
+- The first test attempt exposed an unsafe generic-token grounding edge case: an absent-fact question could match an unrelated memory via stopwords. The accepted descendant filters generic fact tokens, then tightens grounding to exact token membership with subject-token priority, so missing facts fail closed instead of being spuriously grounded or substring-matched.
 - Evidence bounds memory reads to <=16 rows and advice rows to <=8, records `fullWorldScan=false` and `wholeHistoryScan=false`, and proves `worldMutation=false`, `actionExecuted=false`, `memoryMutation=false`, with a Simulation trap untouched.
 - VISUAL: N/A — this WP is routing/fallback logic and adds no rendered surface. ROADMAP remains IN PROGRESS until this acceptance documentation state is itself verified on GitHub Pages.
 
