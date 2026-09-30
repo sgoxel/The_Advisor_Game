@@ -152,6 +152,8 @@ try:
                 raise RuntimeError("travel encounter presentation gate failed "+kind+": "+json.dumps(failure_state))
         time.sleep(.35)
         st=state();travel=st["travel"];crowd=st["crowd"]
+        path=OUT/f"{PROFILE}-{idx+1:02d}-{kind}.png"
+        driver.save_screenshot(str(path))
         if travel.get("fullWorldScan") or travel.get("perFrameScan") or not travel.get("eventDriven"): raise RuntimeError("encounter scheduling architecture regression: "+json.dumps(st))
         if not travel.get("exactOnlyNearRelevance") or not travel.get("seedAndFantasyTimeOnly"): raise RuntimeError("encounter authority/relevance contract failed: "+json.dumps(st))
         if float(crowd.get("buildTimeMs",0) or 0)>50.0: raise RuntimeError("merged traveler batch build exceeded 50 ms: "+json.dumps(st))
@@ -159,7 +161,7 @@ try:
             roundtrip=leave_and_return(activation["result"]["event"])
             if roundtrip["returned"]["id"]!=activation["result"]["event"]["id"]: raise RuntimeError("encounter identity changed after leave/return: "+json.dumps(roundtrip))
             wait.until(lambda _d,k=kind,e=expected: valid_state(k,e));st=state()
-        path=OUT/f"{PROFILE}-{idx+1:02d}-{kind}.png";driver.save_screenshot(str(path))
+        driver.save_screenshot(str(path))
         records.append({"profile":PROFILE,"type":kind,"file":str(path),"activation":activation,"state":st})
 
     unique={(a["x"],a["y"]) for a in anchors}
