@@ -156,7 +156,11 @@ try:
         driver.save_screenshot(str(path))
         if travel.get("fullWorldScan") or travel.get("perFrameScan") or not travel.get("eventDriven"): raise RuntimeError("encounter scheduling architecture regression: "+json.dumps(st))
         if not travel.get("exactOnlyNearRelevance") or not travel.get("seedAndFantasyTimeOnly"): raise RuntimeError("encounter authority/relevance contract failed: "+json.dumps(st))
-        if float(crowd.get("buildTimeMs",0) or 0)>50.0: raise RuntimeError("merged traveler batch build exceeded 50 ms: "+json.dumps(st))
+        merged_ms=float(crowd.get("mergedPresentationBuildMs",0) or 0)
+        if merged_ms>16.7:
+            driver.save_screenshot(str(OUT/f"{PROFILE}-failure-{idx+1:02d}-{kind}-performance.png"))
+            (OUT/f"{PROFILE}-failure-{idx+1:02d}-{kind}-performance.json").write_text(json.dumps(st,indent=2))
+            raise RuntimeError("merged traveler presentation exceeded 16.7 ms incremental budget: "+json.dumps(st))
         if idx==0:
             roundtrip=leave_and_return(activation["result"]["event"])
             if roundtrip["returned"]["id"]!=activation["result"]["event"]["id"]: raise RuntimeError("encounter identity changed after leave/return: "+json.dumps(roundtrip))
@@ -168,7 +172,7 @@ try:
     if len(unique)<3: raise RuntimeError("evidence did not cover at least three distinct canonical encounter anchors: "+json.dumps(anchors))
     severe=[x for x in driver.get_log("browser") if x.get("level")=="SEVERE" and "favicon.ico" not in str(x.get("message",""))]
     if severe: raise RuntimeError("browser console severe errors: "+json.dumps(severe[-10:]))
-    result={"pass":True,"wp":"WP-S007-013","classification":"MIXED","profile":PROFILE,"viewport":SIZE,"types":TYPES,"minBodyPx":MIN_BODY_PX,"distinctAnchorCount":len(unique),"roundtrip":roundtrip,"records":records}
+    result={"pass":True,"wp":"WP-S007-013","classification":"MIXED","profile":PROFILE,"viewport":SIZE,"types":TYPES,"minBodyPx":MIN_BODY_PX,"mergedPresentationBudgetMs":16.7,"distinctAnchorCount":len(unique),"roundtrip":roundtrip,"records":records}
     (OUT/f"{PROFILE}-evidence.json").write_text(json.dumps(result,indent=2));print(json.dumps(result,indent=2))
 finally:
     driver.quit()
