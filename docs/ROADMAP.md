@@ -225,4 +225,17 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S010-009` — Visible Protagonist Activity + Advisor Intent/Outcome Presentation (AGENT #6; MIXED accepted/deployed 2026-09-30. Exact accepted product/evidence head `a49f26a5e8f147a1dcf072fb03b478e2e6baf494`; dedicated workflow `36755683378` SUCCESS; fresh 11-frame artifact `11116388797`; activity/UI authority plus Stage 10 regressions PASS; all 11 fresh screenshots directly inspected at VISUAL 8.4/10 PASS; short-landscape activity/status/composer containment PASS; exact-head public Pages product verification PASS. Acceptance bookkeeping commit `cfea67220a13fd449d1fcc5d343a71b0e12bc145` deployed successfully via Pages run `36756459779`. Read-only/event-driven presentation preserves Campaign-SEED outcome isolation, authoritative journey target fallback and terminal-Simulation completion gating.) — COMPLETED
 - `WP-S010-010` — End-to-End Advice → Decision → World Action Acceptance (AGENT #6; MIXED accepted/deployed 2026-09-30. Exact accepted product/evidence head `4a20fef148728ba518a4ca593510f37dac039abe`; deployment-verifier/acceptance-docs head `9a3687889df1b75917f3b2fe103d78e1c62122f9`; exact-head workflow `36764890104` SUCCESS; fresh artifact `11120502121`; functional acceptance, Stage 8/10 regressions, deterministic replay, persistence reload, rejected/deferred/invalid zero-action cases and terminal Simulation-backed interaction all PASS. Production evidence binds the campaign through WorldState and traces Advisor intent → bounded CommandSet proposal → protagonist accepted decision → Simulation validation → ProtagonistActionRuntime → ProtagonistInteractionPipeline/ObjectInteractions/ActionExecutor → terminal result → persistent ConversationTransactions/history + memory linkage. Bounds remain event-driven/local with no full-world scan, direct world/position mutation or teleportation. Fresh phone/desktop frames were directly inspected: authoritative completed outcome is readable and contained with zero overlap against required map/Places/scale chrome; only a minor transient desktop Local Event card sits partly behind the Advisor panel. VISUAL 8.1/10 — PASS. GitHub Pages byte-for-byte verification of the WP test, evidence harness, ROADMAP, changelog and suggestion log PASS.) — COMPLETED
 
+# Stage 11 — Advisor Progression, Investigation + Influence Tools
+
+- `WP-S011-001` — Persistent Advisor Skill Profile + Progression Ledger
+- `WP-S011-002` — Insight Investigation Action + Evidence Quality
+- `WP-S011-003` — Rhetoric Persuasion Tool + Bounded Influence Modifier
+- `WP-S011-004` — Diplomacy Leverage Tool + Relationship-Aware Outcomes
+- `WP-S011-005` — Stewardship Situation Analysis + Settlement/Resource Report
+- `WP-S011-006` — Command Readiness + Risk Analysis Tool
+- `WP-S011-007` — Intrigue Lead Analysis + Source Confidence
+- `WP-S011-008` — Accessible Advisor Tool Auto-Resolution + Mini-Game Authority Boundary
+- `WP-S011-009` — Advisor Progression + Toolbelt Outcome UI
+- `WP-S011-010` — End-to-End Investigate → Advise → World Outcome Acceptance
+
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
