@@ -9049,6 +9049,7 @@ function workCycleEvidenceState(residentId){
   const bodyBounds=inspectionEntityBounds([record.body,record.head].filter(entity=>entity?.enabled&&entity.parent),0);
   const eventSilhouetteBounds=inspectionEntityBounds([record.eventHalo,record.tool].filter(entity=>entity?.enabled&&entity.parent),0);
   const sizeOf=bounds=>bounds?Object.freeze({width:Number(Math.max(0,bounds.right-bounds.left).toFixed(3)),height:Number(Math.max(0,bounds.bottom-bounds.top).toFixed(3))}):null;
+  const rectOf=bounds=>bounds?Object.freeze({left:Number(bounds.left.toFixed(3)),right:Number(bounds.right.toFixed(3)),top:Number(bounds.top.toFixed(3)),bottom:Number(bounds.bottom.toFixed(3))}):null;
   const projected=enabled.map(entity=>{
     const world=entity.getPosition?.();if(!world)return null;
     const screen=cameraEntity.camera.worldToScreen(world,new pc.Vec3());
@@ -9064,6 +9065,7 @@ function workCycleEvidenceState(residentId){
   return Object.freeze({
     residentId:id,exists:true,visible:enabled.length>0,toolEnabled:Boolean(record.tool?.enabled),
     inViewport,screen:center?Object.freeze({x:Number(center.x.toFixed(3)),y:Number(center.y.toFixed(3)),width:Number(rect.width.toFixed(3)),height:Number(rect.height.toFixed(3))}):null,
+    bodyBoundsPx:rectOf(bodyBounds),eventSilhouetteBoundsPx:rectOf(eventSilhouetteBounds),
     bodyScreenSizePx:sizeOf(bodyBounds),eventSilhouetteScreenSizePx:sizeOf(eventSilhouetteBounds),
     movementStatus:movement?.status||null,workCycle:movement?.workCycle||null,
     localTier:localStatic?.revealTier||null,localBuildingCount:Number(localStatic?.buildingCount||0),
