@@ -241,7 +241,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 # Stage 12 — Local Economy, Employment + Material Progression Foundation
 
 - `WP-S012-001` — Authoritative Currency, Wealth + Transaction Ledger — COMPLETED
-- `WP-S012-002` — SEED-Grounded Local Goods, Prices + Availability (AGENT #6; FUNCTIONAL accepted 2026-10-01 after Attempt 2. Exact accepted product head `7ecdce1e4cd92db5ba895ffee6df33a8b9c5497f`; dedicated workflow `36792879453` SUCCESS and product Pages deployment `36792878397` SUCCESS. `local-market-v1` derives <=8 stable settlement-function providers and <=16 read-only offers from Campaign SEED + canonical SettlementBuildingCatalog composition, then optionally refines price/availability from the existing RegionalSettlementSimulation aggregate stored in WorldState. Evidence covers food/basic-good/service offers, exact same-state replay, alternate-SEED variation, zero-stock unavailable state, stale/future aggregate -> explicit unknown state, foundation fallback, stable `OFFER-...`/`SFP-...` IDs, and bounded query filtering. `fullWorldScan=false`, `wholeSettlementScan=false`, `perFrameScan=false`, currency/inventory/market/building/resource mutation=false and sellerNpcFabrication=false. VISUAL: N/A — read-only market query adds no rendered surface. ROADMAP remains IN PROGRESS pending acceptance-docs deployment and separate completion bookkeeping.)
+- `WP-S012-002` — SEED-Grounded Local Goods, Prices + Availability
 - `WP-S012-003` — Employment Contract, Wage + Work Compensation
 - `WP-S012-004` — Buy, Sell + Service Transaction Validation
 - `WP-S012-005` — Household Housing, Rent + Shelter Obligations
