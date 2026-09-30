@@ -1902,3 +1902,78 @@ body.planet-stage-active{
   .advisor-status-readout[open] .advisor-status-line span{font-size:5px}
   .advisor-status-readout[open] .advisor-status-note{display:none}
 }
+
+
+/* WP-S009-010 attempt-4 portrait readability + full-category fit */
+@media(max-width:520px) and (min-height:431px){
+  .advisor-chat-panel:has(.advisor-status-readout[open]){
+    max-height:min(80vh,620px);
+    grid-template-rows:auto 306px minmax(64px,1fr) auto auto;
+  }
+  .advisor-status-readout[open] .advisor-status-body{
+    max-height:268px;
+    padding:6px 8px 7px;
+    gap:6px;
+    overflow:hidden;
+  }
+  .advisor-status-readout[open] .advisor-status-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:6px;
+  }
+  .advisor-status-readout[open] .advisor-status-identity{
+    min-height:34px;
+    padding:5px 7px;
+    gap:6px;
+  }
+  .advisor-status-readout[open] .advisor-status-identity h3{
+    display:block;
+    font-size:10px;
+  }
+  .advisor-status-readout[open] .advisor-status-identity p{
+    margin:1px 0 0;
+    font-size:7px;
+  }
+  .advisor-status-readout[open] .advisor-status-traits{
+    max-width:150px;
+    gap:3px;
+  }
+  .advisor-status-readout[open] .advisor-status-trait{
+    padding:2px 4px;
+    font-size:6px;
+  }
+  .advisor-status-readout[open] .advisor-status-card{
+    padding:6px 7px;
+  }
+  .advisor-status-readout[open] .advisor-status-card-head{
+    gap:5px;
+    margin-bottom:4px;
+  }
+  .advisor-status-readout[open] .advisor-status-card-head strong{font-size:7px}
+  .advisor-status-readout[open] .advisor-status-card-head span{font-size:6px}
+  .advisor-status-readout[open] .advisor-status-meter{
+    grid-template-columns:42px minmax(0,1fr) 18px;
+    gap:3px;
+  }
+  .advisor-status-readout[open] .advisor-status-meter label,
+  .advisor-status-readout[open] .advisor-status-meter b{font-size:6.5px}
+  .advisor-status-readout[open] .advisor-status-line{gap:4px;padding:2px 0}
+  .advisor-status-readout[open] .advisor-status-line strong{font-size:7px}
+  .advisor-status-readout[open] .advisor-status-line span{font-size:6px}
+  .advisor-status-readout[open] .advisor-status-note{
+    display:block;
+    font-size:6.5px;
+    line-height:1.25;
+  }
+  .advisor-status-readout[open] .advisor-status-empty{
+    padding:5px 6px;
+    font-size:7px;
+    line-height:1.2;
+  }
+  .advisor-status-readout[open][data-status-mode="unavailable"] .advisor-status-card{
+    padding-top:5px;
+    padding-bottom:5px;
+  }
+  .advisor-status-readout[open][data-status-mode="unavailable"] .advisor-status-card-head{
+    margin-bottom:3px;
+  }
+}
