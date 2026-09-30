@@ -1601,7 +1601,7 @@ body.planet-stage-active{
   max-height:min(74vh,690px);
   overflow:hidden;
   display:grid;
-  grid-template-rows:auto minmax(140px,1fr) auto auto;
+  grid-template-rows:auto auto minmax(120px,1fr) auto auto;
   border:1px solid rgba(146,205,196,.42);
   border-radius:22px;
   background:
@@ -1710,7 +1710,7 @@ body.planet-stage-active{
 }
 @media(max-width:520px){
   .advisor-chat-launcher{bottom:max(8px,env(safe-area-inset-bottom));min-height:40px;padding:0 12px}
-  .advisor-chat-panel{right:8px;bottom:max(112px,calc(env(safe-area-inset-bottom) + 104px));width:calc(100vw - 16px);max-height:min(64vh,540px);border-radius:17px;grid-template-rows:auto minmax(110px,1fr) auto auto}
+  .advisor-chat-panel{right:8px;bottom:max(112px,calc(env(safe-area-inset-bottom) + 104px));width:calc(100vw - 16px);max-height:min(64vh,540px);border-radius:17px;grid-template-rows:auto auto minmax(100px,1fr) auto auto}
   .advisor-chat-head{padding:12px 12px 9px}.advisor-chat-head strong{font-size:18px}.advisor-chat-close{width:34px;height:34px;flex-basis:34px}
   .advisor-chat-transcript{gap:7px;padding:8px}.advisor-chat-exchange{padding:7px}.advisor-chat-bubble{padding:6px 8px}.advisor-chat-bubble p{font-size:10.5px}
   .advisor-chat-bubble.player{margin-left:22px}.advisor-chat-bubble.protagonist{margin-right:18px}
@@ -1723,7 +1723,7 @@ body.planet-stage-active{
     top:50px;right:8px;bottom:8px;
     width:min(430px,50vw);max-height:none;
     border-radius:15px;
-    grid-template-rows:auto minmax(44px,1fr) auto;
+    grid-template-rows:auto auto minmax(42px,1fr) auto;
   }
   .advisor-chat-head{padding:8px 9px 6px}.advisor-chat-head>div>small{font-size:6px}.advisor-chat-head strong{font-size:15px}.advisor-chat-head span{font-size:7px}.advisor-chat-close{width:29px;height:29px;flex-basis:29px;border-radius:8px;font-size:18px}
   .advisor-chat-transcript{gap:5px;padding:6px}.advisor-chat-exchange{gap:4px;padding:5px 6px;border-radius:10px}.advisor-chat-meta time{font-size:6px}.advisor-chat-status{min-height:17px;font-size:6px}
@@ -1731,4 +1731,59 @@ body.planet-stage-active{
   .advisor-chat-trace{padding-top:3px}.advisor-chat-trace summary{font-size:6px}.advisor-chat-trace>div{margin-top:3px;padding:4px 5px;font-size:6px}
   .advisor-chat-compose{gap:4px;padding:5px 7px 6px}.advisor-chat-compose>label,.advisor-chat-compose>small{font-size:6px}.advisor-chat-compose textarea{min-height:35px;max-height:45px;padding:5px 6px;font-size:8px}.advisor-chat-compose button{min-width:52px;font-size:8px}
   .advisor-counsel{display:none}
+}
+
+
+/* WP-S009-010 — Protagonist status readout */
+.advisor-status-readout{
+  border-bottom:1px solid rgba(151,204,198,.12);
+  background:linear-gradient(180deg,rgba(12,31,36,.42),rgba(4,13,18,.24));
+  min-width:0;
+}
+.advisor-status-readout>summary{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  min-height:42px;padding:0 13px;cursor:pointer;list-style:none;color:#dceae8;
+}
+.advisor-status-readout>summary::-webkit-details-marker{display:none}
+.advisor-status-summary-copy{min-width:0;display:grid;gap:1px}
+.advisor-status-summary-copy small{font-size:7px;font-weight:900;letter-spacing:.16em;color:#77c3b0}
+.advisor-status-summary-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#eff8f5}
+.advisor-status-summary-meta{display:flex;gap:5px;align-items:center;flex:0 0 auto}
+.advisor-status-chip{display:inline-flex;align-items:center;min-height:20px;padding:0 7px;border-radius:999px;border:1px solid rgba(119,195,175,.34);background:rgba(64,131,111,.13);color:#bde9dc;font-size:6.5px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.advisor-status-chip.advisory{border-color:rgba(211,175,91,.34);background:rgba(151,111,35,.12);color:#ecd79d}
+.advisor-status-chip.unavailable{border-color:rgba(143,158,165,.28);background:rgba(80,90,98,.12);color:#aab9bd}
+.advisor-status-body{display:grid;gap:7px;padding:8px 10px 10px;max-height:min(310px,42vh);overflow:auto;overscroll-behavior:contain}
+.advisor-status-identity{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px;align-items:start;padding:8px 9px;border:1px solid rgba(140,191,184,.14);border-radius:11px;background:rgba(255,255,255,.018)}
+.advisor-status-identity h3{margin:0;font-size:13px;color:#f0f8f5}.advisor-status-identity p{margin:2px 0 0;color:#86a4a6;font-size:8px}
+.advisor-status-traits{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;max-width:160px}
+.advisor-status-trait{padding:3px 5px;border-radius:7px;background:rgba(95,145,140,.11);color:#a8c6c3;font-size:6.5px;font-weight:800}
+.advisor-status-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.advisor-status-card{min-width:0;padding:8px 9px;border:1px solid rgba(140,191,184,.12);border-radius:11px;background:rgba(255,255,255,.018)}
+.advisor-status-card[data-kind="advisory"]{border-color:rgba(207,169,87,.2);background:rgba(131,96,31,.055)}
+.advisor-status-card[data-kind="unavailable"]{border-style:dashed;opacity:.82}
+.advisor-status-card-head{display:flex;align-items:center;justify-content:space-between;gap:7px;margin-bottom:6px}
+.advisor-status-card-head strong{font-size:8px;letter-spacing:.09em;text-transform:uppercase;color:#9bb8b6}
+.advisor-status-card-head span{font-size:6.5px;color:#728f91}
+.advisor-status-meters{display:grid;gap:5px}.advisor-status-meter{display:grid;grid-template-columns:52px minmax(0,1fr) 24px;gap:6px;align-items:center}
+.advisor-status-meter label{font-size:7px;color:#8da9a8}.advisor-status-meter b{text-align:right;font-size:7px;color:#d6e7e2}
+.advisor-status-meter-track{height:5px;border-radius:999px;background:rgba(112,137,140,.18);overflow:hidden}
+.advisor-status-meter-fill{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,rgba(87,188,155,.88),rgba(112,212,179,.9))}
+.advisor-status-meter[data-alert="true"] .advisor-status-meter-fill{background:linear-gradient(90deg,rgba(201,146,68,.9),rgba(226,179,88,.92))}
+.advisor-status-meter[data-danger="true"] .advisor-status-meter-fill{background:linear-gradient(90deg,rgba(190,92,84,.92),rgba(225,122,107,.92))}
+.advisor-status-lines{display:grid;gap:4px}.advisor-status-line{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:baseline;padding:4px 0;border-top:1px solid rgba(148,184,182,.07)}
+.advisor-status-line:first-child{border-top:0;padding-top:0}.advisor-status-line strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px;color:#dceae6}.advisor-status-line span{font-size:7px;color:#789596;white-space:nowrap}
+.advisor-status-note{margin:0;color:#7f999a;font-size:7px;line-height:1.35}.advisor-status-note.advisory{color:#bda66f}
+.advisor-status-empty{padding:9px;border:1px dashed rgba(142,165,168,.2);border-radius:9px;color:#84989b;font-size:8px;line-height:1.35}
+.advisor-status-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:2px;color:#617d80;font-size:6.5px}
+@media(max-width:520px){
+  .advisor-status-readout>summary{min-height:38px;padding:0 10px}.advisor-status-body{max-height:240px;padding:7px 8px 8px}
+  .advisor-status-grid{grid-template-columns:1fr 1fr;gap:6px}.advisor-status-card{padding:7px}
+  .advisor-status-traits{max-width:130px}.advisor-status-meter{grid-template-columns:45px minmax(0,1fr) 22px;gap:4px}
+}
+@media(max-width:360px){.advisor-status-grid{grid-template-columns:1fr}.advisor-status-traits{display:none}}
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-status-readout>summary{min-height:29px;padding:0 8px}.advisor-status-summary-copy small{font-size:5.5px}.advisor-status-summary-copy strong{font-size:9px}.advisor-status-chip{min-height:16px;padding:0 5px;font-size:5px}
+  .advisor-status-body{grid-template-columns:1.05fr 1fr;gap:5px;max-height:135px;padding:5px 6px 6px}.advisor-status-identity{grid-column:1/-1;padding:5px 6px}.advisor-status-identity h3{font-size:9px}.advisor-status-identity p,.advisor-status-trait{font-size:5.5px}.advisor-status-trait{padding:2px 4px}
+  .advisor-status-grid{display:contents}.advisor-status-card{padding:5px 6px;border-radius:8px}.advisor-status-card-head{margin-bottom:4px}.advisor-status-card-head strong,.advisor-status-line strong{font-size:6px}.advisor-status-card-head span,.advisor-status-line span,.advisor-status-note{font-size:5.5px}
+  .advisor-status-meter{grid-template-columns:38px minmax(0,1fr) 18px;gap:3px}.advisor-status-meter label,.advisor-status-meter b{font-size:5.5px}.advisor-status-meter-track{height:4px}.advisor-status-foot{display:none}
 }
