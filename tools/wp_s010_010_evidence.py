@@ -48,6 +48,8 @@ def execute_chain():
         if(!set?.ok||!campaign)throw new Error('Evidence campaign initialization failed');
       }
       const seed=campaign.seed;
+      const worldBinding=window.WorldState?.bindCampaign?.(campaign,{reset:true});
+      if(!worldBinding?.ok||!worldBinding?.bound)throw new Error('Evidence campaign failed to bind production WorldState '+JSON.stringify(worldBinding));
       const when=window.GameTime?.getTimestampKey?.();
       if(!seed||!when)throw new Error('Campaign SEED/Fantasy Game Time unavailable after campaign initialization');
       const object=window.InteriorObjects.build(seed).find(o=>Array.isArray(o.actions)&&o.actions.length&&o.interactionPositions?.length);
