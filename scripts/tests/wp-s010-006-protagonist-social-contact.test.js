@@ -175,13 +175,19 @@ assert.equal(evaluated.execution.state,'proposal-ready');
 assert.equal(evaluated.execution.reason,'person-interaction-requires-later-concrete-target');
 assert.equal(evaluated.execution.actionExecuted,false);
 
-// Runtime handoff remains scheduling-only here; Simulation/dialogue systems retain outcome authority.
-let scheduledConfig=null;
-const scheduled=Social.schedule(live,snapshot,{value:.95,urgency:.8,socialAcceptability:.9},{runtime:{schedule(config){scheduledConfig=config;return {ok:true,reason:'scheduled'};}},actorPosition:pos});
+// Person-only contact stops at the existing dialogue/interaction boundary; it must not enter a non-terminal action-runtime loop.
+let runtimeCalls=0;
+const blockedRuntime=Social.runtimeInput(live,snapshot,{value:.95,urgency:.8,socialAcceptability:.9},{actorPosition:pos});
+assert.equal(blockedRuntime.ok,false);
+assert.equal(blockedRuntime.reason,'person-contact-requires-dialogue-interaction-boundary');
+assert.equal(blockedRuntime.evaluatorHandoff.config.proposal.parameters.personId,'R-LIVE');
+const scheduled=Social.schedule(live,snapshot,{value:.95,urgency:.8,socialAcceptability:.9},{runtime:{schedule(){runtimeCalls++;return {ok:true};}},actorPosition:pos});
 assert.equal(scheduled.ok,true);
-assert.equal(scheduled.boundary,'ProtagonistActionRuntime -> ProtagonistCommandEvaluator -> dialogue/interaction boundary');
-assert.equal(scheduledConfig.proposal.commandId,'advisor.propose_interaction');
-assert.equal(scheduledConfig.proposal.parameters.personId,'R-LIVE');
+assert.equal(scheduled.reason,'dialogue-interaction-boundary-ready');
+assert.equal(scheduled.boundary,'ProtagonistCommandEvaluator -> dialogue/interaction boundary');
+assert.equal(scheduled.handoff.config.proposal.commandId,'advisor.propose_interaction');
+assert.equal(scheduled.handoff.config.proposal.parameters.personId,'R-LIVE');
+assert.equal(runtimeCalls,0);
 assert.equal(scheduled.directActionExecution,false);
 assert.equal(scheduled.directRelationshipMutation,false);
 assert.equal(scheduled.directMemoryMutation,false);
