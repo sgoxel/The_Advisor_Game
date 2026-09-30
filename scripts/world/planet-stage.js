@@ -6409,7 +6409,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // introduced, so preparation cost and canonical world identity stay fixed.
       const strategicMapBand=smoothstep01(clamp((metersPerTexel-320)/900,0,1))*
         (1-smoothstep01(clamp((metersPerTexel-5000)/5200,0,1)));
-      const strategicMacroGain=1+strategicMapBand*(contextRing?.58:1.30);
+      const strategicMacroGain=1+strategicMapBand*(contextRing?.22:.48);
       const sharedMacroContrast=(contextRing?1.06:1.10)*strategicMacroGain;
       const residualMacroContrast=(contextRing?1.20:lerp(1.18,1.52,focusRefineWeight))*strategicMacroGain;
       const macro=sharedMacro*sharedMacroContrast+(nativeMacro-sharedMacro)*refinementGain*residualMacroContrast;
@@ -6548,15 +6548,14 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
           ];
         }
         pushRange("registeredReliefShade",registeredReliefShade);
-        // Phase 15 contributor isolation showed that the broad gray ridge and
-        // repeated strategic-map striping are carried by this combined structure
-        // term, not by macro or registered land-cover. Strongly quiet the coarse
-        // regional parent and smoothly retain more form through district scale;
-        // attenuation reaches zero before the 150 m/texel local-area tier.
+        // Phase 16 flat-height A/B proved the residual defect is in albedo
+        // composition, not tangent geometry. Keep repeated curvature/drainage
+        // morphology strongly suppressed through regional/district/map bandwidth
+        // and fade that suppression out only as genuinely local detail resolves.
         const strategicStructureAttenuationBand=
-          smoothstep01(clamp((metersPerTexel-180)/650,0,1))*
+          smoothstep01(clamp((metersPerTexel-30)/150,0,1))*
           (1-smoothstep01(clamp((metersPerTexel-5200)/4800,0,1)));
-        const strategicStructureGain=1-strategicStructureAttenuationBand*.78;
+        const strategicStructureGain=1-strategicStructureAttenuationBand*.86;
         if(strategicStructureAttenuationBand>.001)cover=cover.map(v=>v*strategicStructureGain);
         structureContribution=cover.slice();
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
@@ -6565,8 +6564,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // Prefer the already SEED-registered land-cover field for strategic-map
         // readability. Its 3.6 km / 1.5 km / 700 m structure is physically
         // resolvable at 1/500 and avoids re-amplifying continental relief.
-        const mapCoverBoost=lerp(1.28,1,smoothstep01(clamp((42-metersPerTexel)/38,0,1)));
-        const strategicCoverBoost=1+strategicMapBand*(contextRing?.08:.18);
+        const mapCoverBoost=1+smoothstep01(clamp((220-metersPerTexel)/180,0,1))*.20;
+        const strategicCoverBoost=1+strategicMapBand*(contextRing?.03:.06);
         const sharedCoverContrast=(contextRing?1.06:1.10)*mapCoverBoost*strategicCoverBoost;
         const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost*strategicCoverBoost;
         const landCover=sharedCover.map((v,i)=>v*sharedCoverContrast+(nativeCover[i]-v)*coverGain*residualCoverContrast);
@@ -6585,7 +6584,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // those already-computed values around the canonical local palette. This
       // adds no geography/noise query and leaves near-ground photometry alone.
       if(sample?.land&&strategicMapBand>.001){
-        const regionalContrast=1+strategicMapBand*(contextRing?.08:.12);
+        const regionalContrast=1+strategicMapBand*(contextRing?.03:.05);
         const palettePivot=clamp(luma3(localPalette),.20,.58);
         displayColor=displayColor.map(v=>clamp(palettePivot+(v-palettePivot)*regionalContrast,0,1));
       }
@@ -6816,7 +6815,7 @@ function finalizeLocalResource(job,result){
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
-      topographicSignalRevision:"canonical-access-morphology-map-detail-v28",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-access-morphology-map-detail-v29",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
