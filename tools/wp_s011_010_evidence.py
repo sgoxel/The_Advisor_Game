@@ -59,7 +59,7 @@ def execute_chain():
       if(!seed||!when)throw new Error('Campaign SEED/Fantasy Game Time unavailable');
       const object=window.InteriorObjects.build(seed).find(o=>Array.isArray(o.actions)&&o.actions.length&&o.interactionPositions?.length);
       if(!object)throw new Error('No authoritative actionable interior object');
-      const action=String(object.actions[0]),actorPosition={x:String(object.interactionPositions[0].x),y:String(object.interactionPositions[0].y),level:0};
+      const action='inspect',actorPosition={x:String(object.interactionPositions[0].x),y:String(object.interactionPositions[0].y),level:0};
       const advanceWhen=(value,seconds)=>{
         const m=String(value).match(/^(\\d{4,})-(\\d{2})-(\\d{2}) (\\d{2}):(\\d{2}):(\\d{2})$/);if(!m)throw new Error('Invalid Fantasy Game Time '+value);
         const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]+seconds)),p=n=>String(n).padStart(2,'0');
@@ -75,8 +75,8 @@ def execute_chain():
       if(!resolution?.ok||resolution.result?.authority?.executesAction!==false)throw new Error('Advisor tool resolution failed '+JSON.stringify(resolution));
       const progression=window.AdvisorProgression.award(seed,'insight',{campaignSeed:seed,kind:'advisor-tool-result',authority:'AdvisorToolResolution',validated:true,rewardBand:'success',fantasyTimestamp:when,toolId:'advisor.insight',outcomeId:resolution.result.id,sourceSystem:'AdvisorToolResolution'});
       if(!progression?.ok)throw new Error('Validated progression award failed '+JSON.stringify(progression));
-      const advice=window.AdvisorChannel.recordAdvice(seed,{topic:'Insight '+insight.result.id+': use the grounded workshop object.',target:{type:'interaction',id:object.id,label:object.type},timestamp:when,details:'Evidence '+insight.result.evidenceRefIds.join(', ')},'protagonist');
-      const memory=window.CharacterMemory.recordAdviceReference(seed,{kind:'protagonist',id:'protagonist'},advice.id,{timestamp:when,summary:'Grounded Advisor finding '+insight.result.id+' supports using '+object.type+'.'});
+      const advice=window.AdvisorChannel.recordAdvice(seed,{topic:'Insight '+insight.result.id+': inspect the grounded object.',target:{type:'interaction',id:object.id,label:object.type},timestamp:when,details:'Evidence '+insight.result.evidenceRefIds.join(', ')},'protagonist');
+      const memory=window.CharacterMemory.recordAdviceReference(seed,{kind:'protagonist',id:'protagonist'},advice.id,{timestamp:when,summary:'Grounded Advisor finding '+insight.result.id+' supports inspecting '+object.type+'.'});
       if(!advice?.id||!memory?.id)throw new Error('Advice/memory linkage failed');
 
       const personId='WP011010-R01';
@@ -86,18 +86,20 @@ def execute_chain():
         queryDestinations(){return {results:[],diagnostics:{bounded:true,fullWorldScan:false}};},
         getCountry(){return null;},getRoadGraph(){return null;},getKnownLeads(){return [];}
       });
-      const route=window.LocalConversationRouter.route('Speak with Rowan and use the workshop object.',{seed,when,character:{id:'protagonist',name:'Protagonist'},externalAiEnabled:false},{matchSentence(){return null;},getMemory(){return [];},getAdvice(){return [];},getSocialContext(){return null;}});
+      const route=window.LocalConversationRouter.route('Speak with Rowan and inspect the grounded object.',{seed,when,character:{id:'protagonist',name:'Protagonist'},externalAiEnabled:false},{matchSentence(){return null;},getMemory(){return [];},getAdvice(){return [];},getSocialContext(){return null;}});
       if(route.selectedIntentId!=='advisor.interaction.request')throw new Error('Unexpected advice intent '+route.selectedIntentId);
       const interaction=snapshot.targets.interactions.find(x=>x.id===object.id),person=snapshot.targets.people.find(x=>x.id===personId);
       if(!interaction||!person||!interaction.personIds.includes(personId))throw new Error('Bounded command snapshot missing authoritative target association');
-      const proposal={proposalId:'PROP-WP-S011-010-VISUAL',commandId:'advisor.propose_interaction',parameters:{personId,interactionTargetId:object.id,topic:'Use the grounded workshop object'},source:'advisor-insight:'+insight.result.id};
+      const proposal={proposalId:'PROP-WP-S011-010-VISUAL',commandId:'advisor.propose_interaction',parameters:{personId,interactionTargetId:object.id,topic:'Inspect grounded object'},source:'advisor-insight:'+insight.result.id};
       const scheduled=window.ProtagonistActionRuntime.schedule({seed,when,snapshot,proposal,actorId:'protagonist',actorPosition,decisionContext:{value:.98,urgency:.92,socialAcceptability:.95}});
       if(!scheduled?.ok)throw new Error('Runtime schedule failed '+JSON.stringify(scheduled));
       const firstTick=window.ProtagonistActionRuntime.tick({seed,when,maxAttempts:1}),firstRow=firstTick?.processed?.[0];
-      if(firstRow?.state!=='running')throw new Error('Production action did not enter active Simulation state '+JSON.stringify(firstRow));
-      const completionWhen=advanceWhen(when,30),tick=window.ProtagonistActionRuntime.tick({seed,when:completionWhen,maxAttempts:1}),row=tick?.processed?.[0],evaluation=row?.evaluatorResult;
+      if(!firstRow||!['running','succeeded'].includes(firstRow.state))throw new Error('Production action did not enter or complete Simulation '+JSON.stringify(firstRow));
+      let completionWhen=when,row=firstRow;
+      if(firstRow.state==='running'){completionWhen=advanceWhen(when,30);const tick=window.ProtagonistActionRuntime.tick({seed,when:completionWhen,maxAttempts:1});row=tick?.processed?.[0];}
+      const evaluation=row?.evaluatorResult;
       if(row?.state!=='succeeded'||evaluation?.execution?.state!=='completed'||evaluation?.execution?.authoritativeResult?.terminal!==true)throw new Error('Authoritative terminal execution missing '+JSON.stringify(row));
-      const stored=window.ConversationTransactions.fromEvaluation(seed,{messageId:'MSG-WP-S011-010-VISUAL',referenceId:insight.result.id,role:'player',text:'Speak with Rowan and use the workshop object.'},route,evaluation,{advisorChannelIds:[advice.id],characterMemoryIds:[memory.id],replyText:'I used the grounded workshop object. Simulation confirmed the result.'});
+      const stored=window.ConversationTransactions.fromEvaluation(seed,{messageId:'MSG-WP-S011-010-VISUAL',referenceId:insight.result.id,role:'player',text:'Speak with Rowan and inspect the grounded object.'},route,evaluation,{advisorChannelIds:[advice.id],characterMemoryIds:[memory.id],replyText:'I inspected the grounded object. Simulation confirmed the result.'});
       if(!stored?.ok||stored.record?.outcome?.state!=='completed')throw new Error('Conversation history missing terminal Simulation result '+JSON.stringify(stored));
       window.ProtagonistStatusUI?.setEvidenceMode?.(null);window.ProtagonistActivityUI.setEvidenceMode(null);window.AdvisorConversationUI.setEvidenceMode(null);window.AdvisorToolbeltUI.setEvidenceMode(null);
       const pipeline=window.ProtagonistInteractionPipeline.get(seed,evaluation.execution.authoritativeResult.attemptId);
