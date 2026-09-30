@@ -1854,3 +1854,51 @@ body.planet-stage-active{
   .advisor-status-readout[open] .advisor-status-line span{font-size:4px}
   .advisor-status-readout[open] .advisor-status-note{display:none}
 }
+
+/* WP-S009-010 attempt-3 compact all-category fit */
+.advisor-status-readout[open] .advisor-status-grid{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+@media(max-width:520px){
+  .advisor-status-readout[open] .advisor-status-identity{
+    min-height:24px;
+    padding:3px 5px;
+    align-items:center;
+  }
+  .advisor-status-readout[open] .advisor-status-identity h3{display:none}
+  .advisor-status-readout[open] .advisor-status-identity p{
+    margin:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    font-size:5.5px;
+  }
+  .advisor-status-readout[open] .advisor-status-traits{
+    gap:2px;
+    max-width:142px;
+  }
+  .advisor-status-readout[open] .advisor-status-trait{
+    padding:1px 3px;
+    font-size:5px;
+  }
+  .advisor-status-readout[open] .advisor-status-card{
+    padding:4px 5px;
+  }
+  .advisor-status-readout[open] .advisor-status-card-head{
+    gap:3px;
+    margin-bottom:3px;
+  }
+  .advisor-status-readout[open] .advisor-status-card-head strong{font-size:6px}
+  .advisor-status-readout[open] .advisor-status-card-head span{font-size:5px}
+  .advisor-status-readout[open] .advisor-status-meter{
+    grid-template-columns:29px minmax(0,1fr) 13px;
+    gap:2px;
+  }
+  .advisor-status-readout[open] .advisor-status-meter label,
+  .advisor-status-readout[open] .advisor-status-meter b{font-size:5.5px}
+  .advisor-status-readout[open] .advisor-status-meter-track{height:4px}
+  .advisor-status-readout[open] .advisor-status-line{gap:3px;padding:1px 0}
+  .advisor-status-readout[open] .advisor-status-line strong{font-size:5.8px}
+  .advisor-status-readout[open] .advisor-status-line span{font-size:5px}
+  .advisor-status-readout[open] .advisor-status-note{display:none}
+}
