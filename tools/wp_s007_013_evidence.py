@@ -29,6 +29,7 @@ driver=webdriver.Chrome(options=options)
 driver.set_script_timeout(180)
 driver.set_window_size(*SIZE)
 wait=WebDriverWait(driver,240)
+presentation_wait=WebDriverWait(driver,60)
 
 def ready():
     try:
@@ -159,10 +160,10 @@ try:
 
     for idx,kind in enumerate(TYPES):
         activation=activate(kind,idx);expected=int(activation["result"]["event"]["actorCount"]);anchors.append(activation["result"]["event"]["anchor"])
-        try: wait.until(lambda _d,k=kind,e=expected: valid_state(k,e))
+        try: presentation_wait.until(lambda _d,k=kind,e=expected: valid_state(k,e))
         except TimeoutException:
             refresh()
-            try: wait.until(lambda _d,k=kind,e=expected: valid_state(k,e))
+            try: presentation_wait.until(lambda _d,k=kind,e=expected: valid_state(k,e))
             except TimeoutException:
                 driver.save_screenshot(str(OUT/f"{PROFILE}-failure-{idx+1:02d}-{kind}.png"))
                 failure_state=state()
@@ -182,7 +183,7 @@ try:
         if idx==0:
             roundtrip=leave_and_return(activation["result"]["event"])
             if roundtrip["returned"]["id"]!=activation["result"]["event"]["id"]: raise RuntimeError("encounter identity changed after leave/return: "+json.dumps(roundtrip))
-            wait.until(lambda _d,k=kind,e=expected: valid_state(k,e));st=state()
+            presentation_wait.until(lambda _d,k=kind,e=expected: valid_state(k,e));st=state()
         driver.save_screenshot(str(path))
         records.append({"profile":PROFILE,"type":kind,"file":str(path),"activation":activation,"state":st})
 
