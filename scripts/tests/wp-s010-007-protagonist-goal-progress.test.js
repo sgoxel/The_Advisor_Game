@@ -47,6 +47,7 @@ const gAbandoned=makeGoal('Old plan',6);
 const outcomes=new Map([
   ['action:PAX-PART',{attemptId:'PAX-PART',state:'running',terminal:false,reason:'simulation-handoff-active'}],
   ['action:PAX-BLOCK',{attemptId:'PAX-BLOCK',state:'blocked',terminal:true,reason:'route-blocked'}],
+  ['action:PAX-RECOVER',{attemptId:'PAX-RECOVER',state:'running',terminal:false,reason:'route-resumed'}],
   ['interaction:IAX-FAIL',{attemptId:'IAX-FAIL',resultId:'IRX-FAIL',status:'failed',reason:'interaction-failed',simulation:{authoritativeTerminalSuccess:false}}],
   ['action:PAX-DEFER',{attemptId:'PAX-DEFER',state:'deferred',terminal:false,reason:'protagonist-deferred'}],
   ['action:PAX-DONE',{attemptId:'PAX-DONE',state:'succeeded',terminal:true,reason:'simulation-terminal-success',evaluatorResult:{finalValidation:{ok:true},execution:{actionExecuted:true,state:'succeeded',authoritativeResult:{id:'SIM-WORK-77',terminal:true}}}}],
@@ -63,6 +64,10 @@ const replan=svc.record(seed,{goalId:gBlocked,sourceKind:'action',sourceId:'PAX-
 assert(replan.ok);assert.equal(replan.observation.status,'replan-needed');
 const context=svc.replanContext(seed,gBlocked);
 assert(context.ok&&context.replanNeeded);assert.equal(context.status,'replan-needed');assert(context.reasons.length>=1);assert.equal(context.plannerAuthority,false);
+const recovered=svc.record(seed,{goalId:gBlocked,sourceKind:'action',sourceId:'PAX-RECOVER',when:'1201-03-02 10:12:30'});
+assert(recovered.ok);assert.equal(recovered.observation.status,'progress');
+const recoveredContext=svc.replanContext(seed,gBlocked);
+assert(recoveredContext.ok&&!recoveredContext.replanNeeded);assert.equal(recoveredContext.status,'continue');assert.equal(recoveredContext.latestStatus,'progress');
 
 const failed=svc.record(seed,{goalId:gFailed,sourceKind:'interaction',sourceId:'IAX-FAIL',when:'1201-03-02 10:13:00'});
 assert(failed.ok);assert.equal(failed.observation.status,'failed');assert.equal(Goals.get(seed,gFailed).status,'active');
@@ -99,4 +104,4 @@ assert(html.includes(script),'canonical root must load goal progress');
 assert(html.indexOf(script)>html.indexOf('scripts/world/protagonist-journey.js?v=protagonist-journey-v1'));
 assert(html.indexOf(script)>html.indexOf('scripts/world/protagonist-interaction-pipeline.js?v=protagonist-interaction-pipeline-v1'));
 
-console.log(JSON.stringify({wp:'WP-S010-007',status:'PASS',visual:'N/A',evidence:{partial:partial.observation.status,blocked:blocked.observation.status,replan:context.status,failed:failed.observation.status,deferred:deferred.observation.status,completed:completedGoal.status,forgedRejected:!forged.ok,abandoned:abandoned.observation.status,duplicateIdempotent:duplicate.duplicate,saveReload:afterReload.length===1,bounds:snap.bounds,fullWorldScan:snap.fullWorldScan,wholeHistoryScan:snap.wholeHistoryScan,directActionExecution:snap.directActionExecution,directWorldMutation:snap.directWorldMutation}}));
+console.log(JSON.stringify({wp:'WP-S010-007',status:'PASS',visual:'N/A',evidence:{partial:partial.observation.status,blocked:blocked.observation.status,replan:context.status,replanClearsAfterProgress:!recoveredContext.replanNeeded,failed:failed.observation.status,deferred:deferred.observation.status,completed:completedGoal.status,forgedRejected:!forged.ok,abandoned:abandoned.observation.status,duplicateIdempotent:duplicate.duplicate,saveReload:afterReload.length===1,bounds:snap.bounds,fullWorldScan:snap.fullWorldScan,wholeHistoryScan:snap.wholeHistoryScan,directActionExecution:snap.directActionExecution,directWorldMutation:snap.directWorldMutation}}));
