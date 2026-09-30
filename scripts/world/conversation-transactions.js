@@ -12,6 +12,8 @@ const MAX_DIALOGUE_CHARS=480;
 const MAX_LINKS_PER_KIND=8;
 const MAX_QUERY_RESULTS=24;
 const OUTCOME_STATES=Object.freeze(["unexecuted","completed"]);
+const DECISION_STATES=Object.freeze(["considering","accepted","modified","deferred","rejected","invalid"]);
+const MAX_REPLY_CHARS=480;
 
 function root(){return typeof window!=="undefined"?window:globalThis}
 function clone(value){
@@ -67,6 +69,11 @@ function recordShapeValid(record,id){
   if(!record.links||typeof record.links!=="object"||!record.outcome||typeof record.outcome!=="object")return false;
   if(!OUTCOME_STATES.includes(record.outcome.state))return false;
   if(record.outcome.state==="completed"&&(!record.outcome.simulationResultId||record.outcome.authoritativeExecution!==true))return false;
+  if(record.presentation!=null){
+    if(typeof record.presentation!=="object"||typeof record.presentation.replyText!=="string")return false;
+    if(record.presentation.decisionState!=null&&!DECISION_STATES.includes(record.presentation.decisionState))return false;
+    if(record.presentation.providerPayloadPersisted!==false)return false;
+  }
   return true;
 }
 function ledgerCompatible(raw,seed,ref){
@@ -96,11 +103,28 @@ function normalizeMessage(input){
 }
 function normalizeRouting(input){
   const src=input&&typeof input==="object"?input:{};
+  const inferredIntents=[src.selectedIntentId,...(Array.isArray(src.intentCandidates)?src.intentCandidates.map(item=>item?.intentId):[])].filter(Boolean);
   return freeze({
     mode:cleanId(src.mode||src.routingMode||"unknown",80)||"unknown",
-    recognizedIntentIds:freeze(uniqueIds(src.recognizedIntentIds||src.intentIds||[])),
+    recognizedIntentIds:freeze(uniqueIds(src.recognizedIntentIds||src.intentIds||inferredIntents)),
     localReplyId:cleanId(src.localReplyId||"",160)||null,
     externalProviderUsed:Boolean(src.externalProviderUsed===true)
+  });
+}
+function normalizePresentation(input){
+  const src=input&&typeof input==="object"?input:{};
+  const character=src.character&&typeof src.character==="object"?src.character:{};
+  const decision=cleanId(src.decisionState||src.decision||"",40).toLowerCase();
+  const responseSource=src.responseSource||src.sourceMetadata?.responseSource||src.mode||src.routingMode||"";
+  return freeze({
+    replyText:cleanText(src.replyText||src.reply||"",MAX_REPLY_CHARS),
+    replyCharacterId:cleanId(src.replyCharacterId||character.id||"protagonist",120)||"protagonist",
+    replyCharacterName:cleanText(src.replyCharacterName||character.name||"Protagonist",120)||"Protagonist",
+    decisionState:DECISION_STATES.includes(decision)?decision:null,
+    validationState:cleanId(src.validationState||src.validation?.status||"",80)||null,
+    responseSource:cleanId(responseSource,120)||null,
+    traceAvailable:Boolean(src.traceAvailable!==false&&(decision||responseSource)),
+    providerPayloadPersisted:false
   });
 }
 function simulationOutcome(input){
@@ -138,6 +162,8 @@ function canonicalIdBasis(seed,record){
     routingMode:record.routing.mode,intents:record.routing.recognizedIntentIds,
     proposalIds:record.links.proposalIds,decisionIds:record.links.decisionIds,
     advisorChannelIds:record.links.advisorChannelIds,characterMemoryIds:record.links.characterMemoryIds,
+    replyText:record.presentation?.replyText||"",decisionState:record.presentation?.decisionState||null,
+    responseSource:record.presentation?.responseSource||null,
     outcomeState:record.outcome.state,simulationResultId:record.outcome.simulationResultId
   };
 }
@@ -148,8 +174,10 @@ function normalizeRecord(seedValue,inputValue){
   const routing=normalizeRouting(input.routing||input);
   const links=normalizeLinks(input.links||input);
   const outcome=simulationOutcome(input.simulationResult||input.execution||input.outcome||{});
+  const presentationSource=input.presentation&&typeof input.presentation==="object"?{...input,...input.presentation}:input;
+  const presentation=normalizePresentation(presentationSource);
   const mergedLinks=freeze({...clone(links),simulationResultIds:freeze(uniqueIds([...(links.simulationResultIds||[]),outcome.simulationResultId].filter(Boolean)))});
-  const draft={schema:"ConversationTransaction",schemaVersion:SCHEMA_VERSION,fantasyTimestamp,message,routing,links:mergedLinks,outcome,
+  const draft={schema:"ConversationTransaction",schemaVersion:SCHEMA_VERSION,fantasyTimestamp,message,routing,links:mergedLinks,outcome,presentation,
     authority:freeze({chronology:"Fantasy Game Time",worldTruthCopied:false,dialogueIsProof:false,fullWorldScan:false,wholeCampaignScan:false,providerStatePersisted:false,renderStatePersisted:false,cameraStatePersisted:false})};
   const id="CTX-"+hashText(stableStringify(canonicalIdBasis(seed,draft)));
   return freeze({id,...draft});
@@ -216,12 +244,39 @@ function clear(seedValue){
 }
 function fromEvaluation(seedValue,messageValue,routingValue,evaluationValue,extraValue){
   const evaluation=evaluationValue&&typeof evaluationValue==="object"?evaluationValue:{},extra=extraValue&&typeof extraValue==="object"?extraValue:{};
+  const validation=evaluation.finalValidation||evaluation.originalValidation||null;
   return append(seedValue,{
     fantasyTimestamp:evaluation.when||extra.fantasyTimestamp||currentTimestamp(),message:messageValue,routing:routingValue,
     proposalId:evaluation.proposal?.proposalId||evaluation.finalProposal?.proposalId||null,
     decisionId:evaluation.decisionId||null,
     advisorChannelIds:extra.advisorChannelIds||[],characterMemoryIds:extra.characterMemoryIds||[],
+    presentation:{
+      replyText:extra.replyText||routingValue?.reply||"",
+      character:routingValue?.character||extra.character||null,
+      decisionState:evaluation.decision||null,
+      validationState:validation?(validation.ok===true?"validated":validation.status||validation.reason||"invalid"):null,
+      responseSource:routingValue?.sourceMetadata?.responseSource||routingValue?.mode||null,
+      traceAvailable:true
+    },
     simulationResult:{executionId:evaluation.executionId,...clone(evaluation.execution||{})}
+  });
+}
+function appendExchange(seedValue,messageValue,routingValue,extraValue){
+  const routing=routingValue&&typeof routingValue==="object"?routingValue:{},extra=extraValue&&typeof extraValue==="object"?extraValue:{};
+  return append(seedValue,{
+    fantasyTimestamp:extra.fantasyTimestamp||extra.when||currentTimestamp(),
+    message:messageValue,
+    routing,
+    advisorChannelIds:extra.advisorChannelIds||[],
+    characterMemoryIds:extra.characterMemoryIds||[],
+    presentation:{
+      replyText:routing.reply||extra.replyText||"",
+      character:routing.character||extra.character||null,
+      decisionState:extra.decisionState||null,
+      validationState:extra.validationState||null,
+      responseSource:routing.sourceMetadata?.responseSource||routing.mode||null,
+      traceAvailable:true
+    }
   });
 }
 function proof(seedValue){
@@ -235,8 +290,8 @@ function proof(seedValue){
 }
 
 const api=freeze({
-  VERSION,SCHEMA,SCHEMA_VERSION,REGISTRY_KIND,REGISTRY_KEY,MAX_RECORDS,MAX_LEDGER_BYTES,MAX_DIALOGUE_CHARS,MAX_LINKS_PER_KIND,MAX_QUERY_RESULTS,
-  normalizeRecord,append,fromEvaluation,get,list,snapshot,clear,proof
+  VERSION,SCHEMA,SCHEMA_VERSION,REGISTRY_KIND,REGISTRY_KEY,MAX_RECORDS,MAX_LEDGER_BYTES,MAX_DIALOGUE_CHARS,MAX_LINKS_PER_KIND,MAX_QUERY_RESULTS,MAX_REPLY_CHARS,DECISION_STATES,
+  normalizeRecord,append,appendExchange,fromEvaluation,get,list,snapshot,clear,proof
 });
 root().ConversationTransactions=api;
 root().ConversationTransactionLedger=api;
