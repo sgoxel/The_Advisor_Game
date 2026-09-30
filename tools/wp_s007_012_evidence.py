@@ -23,6 +23,9 @@ options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--enable-webgl")
 options.add_argument("--ignore-gpu-blocklist")
 options.add_argument("--use-angle=swiftshader")
+options.add_argument("--disable-background-timer-throttling")
+options.add_argument("--disable-backgrounding-occluded-windows")
+options.add_argument("--disable-renderer-backgrounding")
 options.add_argument(f"--window-size={SIZE[0]},{SIZE[1]}")
 options.set_capability("goog:loggingPrefs",{"browser":"ALL"})
 driver=webdriver.Chrome(options=options)
@@ -33,9 +36,13 @@ wait=WebDriverWait(driver,240)
 def ready():
     try:
         return driver.execute_script("""
-          const s=window.PlanetStage?.snapshot?.();
-          return Boolean(document.getElementById("planetStageRoot")?.dataset?.ready==="true" &&
-            s?.ready && window.PersistentConsequences && window.WorldState && window.WorldContext && window.CampaignPersistence &&
+          const s=window.PlanetStage?.snapshot?.(),root=document.getElementById("planetStageRoot");
+          // PlanetStage marks its authoritative first-playable snapshot ready before a final
+          // paint-only rAF and DOM data-ready decoration. Headless Chromium may throttle that
+          // paint indefinitely, so evidence must gate on the actual playable stage state plus
+          // the real canvas/dependencies, not on the later decoration flag.
+          return Boolean(s?.ready && root && document.getElementById("planetCanvas") &&
+            window.PersistentConsequences && window.WorldState && window.WorldContext && window.CampaignPersistence &&
             window.CatchUpSimulation && window.EventScheduler && window.GameTime);
         """)
     except Exception:
@@ -141,7 +148,7 @@ try:
     try:
         wait.until(lambda _d: ready())
     except TimeoutException:
-        raise RuntimeError("startup timeout: "+json.dumps(driver.execute_script("return {ready:window.PlanetStage?.snapshot?.()?.ready||false,error:window.PlanetStage?.snapshot?.()?.startupError||null,body:String(document.body?.innerText||'').slice(0,900)}")))
+        raise RuntimeError("startup timeout: "+json.dumps(driver.execute_script("return {ready:window.PlanetStage?.snapshot?.()?.ready||false,domReady:document.getElementById(\'planetStageRoot\')?.dataset?.ready||null,canvas:Boolean(document.getElementById(\'planetCanvas\')),deps:{pc:Boolean(window.PersistentConsequences),ws:Boolean(window.WorldState),wc:Boolean(window.WorldContext),save:Boolean(window.CampaignPersistence),catchup:Boolean(window.CatchUpSimulation),scheduler:Boolean(window.EventScheduler),time:Boolean(window.GameTime)},error:window.PlanetStage?.snapshot?.()?.startupError||null,body:String(document.body?.innerText||\'\').slice(0,900)}")))
     campaign_binding=bind_evidence_campaign()
 
     persistence=None
