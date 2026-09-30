@@ -100,6 +100,7 @@ let tangentPatchMaterial=null;
 let wp020EvidenceFlatMesh=null;
 let wp020EvidenceFlatMeshSignature=null;
 let wp020EvidencePresentationMode="normal";
+let wp020EvidenceVisibilityRestore=null;
 let focusRingPatch=null;
 let focusRingMaterial=null;
 let horizonSkirt=null;
@@ -6289,11 +6290,18 @@ function blendSurfaceAuthoritySamples(coarse,fine,t){
     registeredNorthMeters:mix(coarse?.registeredNorthMeters,fine?.registeredNorthMeters)
   };
 }
-function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRing=false){
+function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRing=false,evidenceLayerRole="focus"){
   const lat0=job.lat0,lon0=job.lon0,data=new Uint8ClampedArray(size*size*4);
   const metersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
-  const captureContributorPixels=Boolean(EVIDENCE_SURFACE_CONTRIBUTORS&&job.levelIndex<=2&&!contextRing);
+  const captureContributorPixels=Boolean(EVIDENCE_SURFACE_CONTRIBUTORS&&job.levelIndex<=2);
   const contributorLayers=captureContributorPixels?Object.fromEntries(["base","macro","structure","landCover","final"].map(name=>[name,new Uint8ClampedArray(size*size*4)])):null;
+  const evidenceProbeTargets=captureContributorPixels?[
+    ["west",-.28,0],["west-inner",-.14,0],["center",0,0],["east-inner",.14,0],["east",.28,0],["north",0,.18],["south",0,-.18]
+  ].map(([id,fx,fy])=>{
+    const east=Number(fx)*job.dims.patchWidth,north=Number(fy)*job.dims.patchHeight;
+    return {id,east,north,x:Math.max(0,Math.min(size-1,Math.floor((east/spanEast+.5)*size))),y:Math.max(0,Math.min(size-1,Math.floor((.5-north/spanNorth)*size)))};
+  }):null;
+  const evidenceProbes=[];
   const writeContributorRgb=(name,offset,rgb)=>{
     const target=contributorLayers?.[name];if(!target)return;
     target[offset]=Math.round(clamp(Number(rgb?.[0])||0,0,1)*255);
@@ -6721,6 +6729,22 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.82:i===1?.94:1),0,.86));
       }
       pushRange("finalLuma",luma3(displayColor));
+      if(evidenceProbeTargets){
+        for(const target of evidenceProbeTargets){
+          if(target.x!==x||target.y!==y)continue;
+          const probeEdge=Math.min(ux,1-ux,vz,1-vz);
+          const probeAlpha=featherEdges?smoothstep01(clamp(probeEdge/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1)):1;
+          evidenceProbes.push(Object.freeze({
+            id:target.id,layerRole:String(evidenceLayerRole),pixel:Object.freeze({x,y}),uv:Object.freeze({u:Number(ux.toFixed(6)),v:Number(vz.toFixed(6))}),
+            offsetMeters:Object.freeze({east:Number(east.toFixed(3)),north:Number(north.toFixed(3))}),
+            registeredMeters:Object.freeze({east:Number(Number(parentSample?.registeredEastMeters||0).toFixed(3)),north:Number(Number(parentSample?.registeredNorthMeters||0).toFixed(3))}),
+            sourceColor:Object.freeze(sourceColor.map(v=>Number(Number(v||0).toFixed(6)))),localPalette:Object.freeze(localPalette.map(v=>Number(Number(v||0).toFixed(6)))),
+            base:Object.freeze(base.map(v=>Number(Number(v||0).toFixed(6)))),final:Object.freeze(displayColor.map(v=>Number(Number(v||0).toFixed(6)))),
+            elevationMeters:Number(elevationBase.toFixed(3)),moisture:Number(moistureBase.toFixed(6)),alpha:Number(probeAlpha.toFixed(6)),
+            metersPerTexel:Number(metersPerTexel.toFixed(3))
+          }));
+        }
+      }
       if(contributorLayers){
         writeContributorRgb("base",pixelOffset,base);
         writeContributionRgb("macro",pixelOffset,[macro,macro,macro],3.2);
@@ -6751,7 +6775,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   return {
     data,size,metersPerTexel,
     componentRanges:Object.freeze(roundedRanges),
-    contributorPixels:captureContributorPixels?{revision:"wp020-surface-contributors-v1",size,layers:contributorLayers}:null,
+    contributorPixels:captureContributorPixels?{revision:"wp020-surface-contributors-v2",layerRole:String(evidenceLayerRole),size,spanEast:Number(spanEast),spanNorth:Number(spanNorth),metersPerTexel:Number(metersPerTexel.toFixed(3)),layers:contributorLayers,probes:Object.freeze(evidenceProbes.slice())}:null,
     coordinateAuthority:"Campaign-SEED + SeedCoordinateFabric.registeredMeters",
     coordinateRevision:coordinateFabricAuthority()?.revisionSignature||null,
     patchRelativeBiomeNoise:false
@@ -6808,14 +6832,14 @@ function* localResourceSteps(job){
   // All three sample the same SEED-registered coordinates; only presentation
   // density differs.
   job.currentPreparationPhase="texture-focus";
-  const detail=yield* surfaceTextureSteps(job,job.dims.patchWidth,job.dims.patchHeight,size,true,false);
+  const detail=yield* surfaceTextureSteps(job,job.dims.patchWidth,job.dims.patchHeight,size,true,false,"focus");
   const broadParent=job.levelIndex<=1;
   const mediumSize=broadParent?Math.max(80,Math.round(size*.50)):Math.max(96,Math.round(size*LOCAL_MEDIUM_RING_TEXTURE_SCALE));
   const surroundSize=broadParent?Math.max(96,Math.round(size*.58)):size;
   job.currentPreparationPhase="texture-medium";
-  const medium=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR,job.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR,mediumSize,true,true);
+  const medium=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR,job.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR,mediumSize,true,true,"medium");
   job.currentPreparationPhase="texture-surround";
-  const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,surroundSize,false,true);
+  const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,surroundSize,false,true,"outer");
   job.currentPreparationPhase="ring-compose";
   yield {forceSlice:true};
   // Phase 19: at strategic tiers the focus child is already an edge-feathered
@@ -6857,20 +6881,24 @@ function textureFromPixels(pixels){
   return texture;
 }
 function surfaceContributorEvidence(){
-  const record=displayResource?.surfaceContributorPixels||null;
-  if(!EVIDENCE_SURFACE_CONTRIBUTORS||!record?.layers)return Object.freeze({available:false,enabled:Boolean(EVIDENCE_SURFACE_CONTRIBUTORS),reason:"no-broad-focus-contributor-capture"});
-  const images={};
-  for(const [name,pixels] of Object.entries(record.layers)){
-    const c=document.createElement("canvas");c.width=record.size;c.height=record.size;
-    c.getContext("2d",{alpha:false}).putImageData(new ImageData(pixels,record.size,record.size),0,0);
-    images[name]=c.toDataURL("image/png");
+  const records=displayResource?.surfaceContributorPixels||null;
+  if(!EVIDENCE_SURFACE_CONTRIBUTORS||!records?.focus?.layers)return Object.freeze({available:false,enabled:Boolean(EVIDENCE_SURFACE_CONTRIBUTORS),reason:"no-layer-contributor-capture"});
+  const roles={};
+  for(const [role,record] of Object.entries(records)){
+    if(!record?.layers)continue;
+    const images={};
+    for(const [name,pixels] of Object.entries(record.layers)){
+      const c=document.createElement("canvas");c.width=record.size;c.height=record.size;
+      c.getContext("2d",{alpha:false}).putImageData(new ImageData(pixels,record.size,record.size),0,0);
+      images[name]=c.toDataURL("image/png");
+    }
+    roles[role]=Object.freeze({layerRole:record.layerRole,size:record.size,spanEast:record.spanEast,spanNorth:record.spanNorth,metersPerTexel:record.metersPerTexel,images:Object.freeze(images),probes:Object.freeze((record.probes||[]).slice())});
   }
   return Object.freeze({
-    available:true,enabled:true,revision:record.revision,resourceSignature:displayResource?.signature||null,
-    level:displayResource?.dims?.levelId||null,size:record.size,
-    metersPerTexel:Number(displayResource?.detail?.detailMetersPerTexel||0),
-    componentRanges:displayResource?.detail?.surfaceComponentRanges?.focus||null,
-    images:Object.freeze(images),worldResampleCount:0,geographyQueryCount:0
+    available:true,enabled:true,revision:records.focus.revision,resourceSignature:displayResource?.signature||null,
+    level:displayResource?.dims?.levelId||null,
+    componentRanges:displayResource?.detail?.surfaceComponentRanges||null,
+    roles:Object.freeze(roles),worldResampleCount:0,geographyQueryCount:0
   });
 }
 function clearWp020EvidenceFlatMesh(){
@@ -6907,11 +6935,28 @@ function wp020PresentationEvidenceState(){
     })
   });
 }
+function applyWp020EvidenceLayerVisibility(){
+  if(!EVIDENCE_WP020_PRESENTATION_ISOLATION)return;
+  const layerMode=["focus-only","medium-only","outer-only"].includes(wp020EvidencePresentationMode)?wp020EvidencePresentationMode:null;
+  if(!layerMode)return;
+  if(!wp020EvidenceVisibilityRestore)wp020EvidenceVisibilityRestore={focus:Boolean(tangentPatch?.enabled),medium:Boolean(focusRingPatch?.enabled),outer:Boolean(horizonSkirt?.enabled)};
+  if(tangentPatch)tangentPatch.enabled=layerMode==="focus-only";
+  if(focusRingPatch)focusRingPatch.enabled=layerMode==="medium-only";
+  if(horizonSkirt)horizonSkirt.enabled=layerMode==="outer-only";
+}
+function restoreWp020EvidenceLayerVisibility(){
+  if(!wp020EvidenceVisibilityRestore)return;
+  if(tangentPatch)tangentPatch.enabled=Boolean(wp020EvidenceVisibilityRestore.focus);
+  if(focusRingPatch)focusRingPatch.enabled=Boolean(wp020EvidenceVisibilityRestore.medium);
+  if(horizonSkirt)horizonSkirt.enabled=Boolean(wp020EvidenceVisibilityRestore.outer);
+  wp020EvidenceVisibilityRestore=null;
+}
 function setWp020PresentationEvidenceMode(mode="normal"){
   const requested=String(mode||"normal");
   if(!EVIDENCE_WP020_PRESENTATION_ISOLATION)return Object.freeze({available:false,enabled:false,mode:"normal",reason:"evidence-flag-required"});
   if(!displayResource||!tangentPatch?.render||!tangentPatchMaterial||!pc||!device)return Object.freeze({available:false,enabled:true,mode:wp020EvidencePresentationMode,reason:"display-resource-unavailable"});
-  if(requested!=="normal"&&requested!=="flat-height")return Object.freeze({available:false,enabled:true,mode:wp020EvidencePresentationMode,reason:"unsupported-mode"});
+  if(!["normal","flat-height","focus-only","medium-only","outer-only"].includes(requested))return Object.freeze({available:false,enabled:true,mode:wp020EvidencePresentationMode,reason:"unsupported-mode"});
+  restoreWp020EvidenceLayerVisibility();
   if(requested==="flat-height"){
     if(!wp020EvidenceFlatMesh||wp020EvidenceFlatMeshSignature!==displayResource.signature){
       clearWp020EvidenceFlatMesh();
@@ -6925,12 +6970,25 @@ function setWp020PresentationEvidenceMode(mode="normal"){
     wp020EvidencePresentationMode="normal";
     clearWp020EvidenceFlatMesh();
   }
+  if(["focus-only","medium-only","outer-only"].includes(requested)){
+    wp020EvidencePresentationMode=requested;
+    tangentPatch.render.meshInstances=[new pc.MeshInstance(displayResource.mesh,tangentPatchMaterial,tangentPatch)];
+    clearWp020EvidenceFlatMesh();
+    applyWp020EvidenceLayerVisibility();
+  }
+  const layerState=()=>{
+    const state=(entity,material,role)=>{
+      const pos=entity?.getLocalPosition?.();
+      return Object.freeze({role,enabled:Boolean(entity?.enabled),opacity:Number(Number(material?.opacity||0).toFixed(6)),z:Number(Number(pos?.z||0).toFixed(6)),diffuse:material?.diffuse?Object.freeze([material.diffuse.r,material.diffuse.g,material.diffuse.b].map(v=>Number(Number(v).toFixed(6)))):null,emissive:material?.emissive?Object.freeze([material.emissive.r,material.emissive.g,material.emissive.b].map(v=>Number(Number(v).toFixed(6)))):null,emissiveIntensity:Number(Number(material?.emissiveIntensity||0).toFixed(6))});
+    };
+    return Object.freeze({focus:state(tangentPatch,tangentPatchMaterial,"focus"),medium:state(focusRingPatch,focusRingMaterial,"medium"),outer:state(horizonSkirt,horizonSkirtMaterial,"outer")});
+  };
   return Object.freeze({
     available:true,enabled:true,mode:wp020EvidencePresentationMode,
     resourceSignature:displayResource.signature,level:displayResource?.dims?.levelId||null,
     textureIdentityUnchanged:true,materialIdentityUnchanged:true,
     geometryMode:wp020EvidencePresentationMode==="flat-height"?"flat-focus-quad":"canonical-heightfield",
-    state:wp020PresentationEvidenceState(),
+    state:wp020PresentationEvidenceState(),layers:layerState(),
     worldResampleCount:0,geographyQueryCount:0
   });
 }
@@ -6953,8 +7011,8 @@ function finalizeLocalResource(job,result){
   phaseMs.textureUpload=performance.now()-phaseStarted;phaseStarted=performance.now();
   const detailMetersPerTexel=detail.metersPerTexel,mediumMetersPerTexel=medium.metersPerTexel,surroundMetersPerTexel=surround.metersPerTexel;
   const vertices=meshData.positions.length/3,triangles=meshData.indices.length/3;
-  const surfaceContributorPixels=detail.contributorPixels||null;
-  const contributorBytes=surfaceContributorPixels?Object.values(surfaceContributorPixels.layers||{}).reduce((sum,pixels)=>sum+Number(pixels?.byteLength||0),0):0;
+  const surfaceContributorPixels=(detail.contributorPixels||medium.contributorPixels||surround.contributorPixels)?Object.freeze({focus:detail.contributorPixels||null,medium:medium.contributorPixels||null,outer:surround.contributorPixels||null}):null;
+  const contributorBytes=surfaceContributorPixels?Object.values(surfaceContributorPixels).reduce((sum,record)=>sum+Object.values(record?.layers||{}).reduce((inner,pixels)=>inner+Number(pixels?.byteLength||0),0),0):0;
   const estimatedBytes=meshData.positions.byteLength+meshData.normals.byteLength+meshData.uvs.byteLength+meshData.indices.byteLength+detail.size*detail.size*4+medium.size*medium.size*4+surround.size*surround.size*4+contributorBytes;
   phaseMs.wildernessPlan=0;
   const regenerationSignature=localResourceRegenerationSignature(job);
@@ -7621,6 +7679,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
   if(cloudLayer)cloudLayer.enabled=globeFade<.35;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
   if(blend<=0){localResources.activeResourceCount=0;localResources.pendingPreparationCount=0;localResources.standInActive=false;if(focusRingPatch)focusRingPatch.enabled=false;}
+  applyWp020EvidenceLayerVisibility();
 }
 function applyCameraZoom(updateMap=true){
   if(!cameraEntity||!zoomState.baseCameraDistance)return;
@@ -9143,7 +9202,7 @@ function destroy(){
   resizeObserver?.disconnect?.();resizeObserver=null;
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
   generatedTexture?.destroy?.();generatedTexture=null;
-  clearWp020EvidenceFlatMesh();wp020EvidencePresentationMode="normal";
+  restoreWp020EvidenceLayerVisibility();clearWp020EvidenceFlatMesh();wp020EvidencePresentationMode="normal";
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
   clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection(false);localCampaignWearContext=null;clearCanonicalWayfindingSignposts();clearCanonicalRoofRegistry();
   app?.destroy?.();
