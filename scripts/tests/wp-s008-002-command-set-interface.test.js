@@ -194,6 +194,20 @@ CommandSet.buildSnapshot(base,sources);
 delete globalThis.Simulation;
 assert.strictEqual(simulationTouched,false);
 
+const unsafeSourceSnapshot=CommandSet.buildSnapshot(base,Object.freeze({
+  ...sources,
+  queryDestinations(context){
+    return Object.freeze({
+      results:Object.freeze(placeRows.A),
+      diagnostics:Object.freeze({bounded:false,fullWorldScan:true})
+    });
+  }
+}));
+assert.strictEqual(unsafeSourceSnapshot.diagnostics.bounded,false,"unsafe source must not be mislabeled bounded");
+assert.strictEqual(unsafeSourceSnapshot.diagnostics.fullWorldScan,true,"full-world source diagnostic must propagate");
+assert.strictEqual(unsafeSourceSnapshot.diagnostics.destinationSourceBounded,false);
+assert.strictEqual(unsafeSourceSnapshot.diagnostics.destinationSourceFullWorldScan,true);
+
 for(const schema of CommandSet.getCommandSchemas()){
   assert.strictEqual(schema.executionAuthority,false);
   assert.strictEqual(schema.simulationMutation,false);
