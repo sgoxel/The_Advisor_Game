@@ -2003,3 +2003,46 @@ body.planet-stage-active{
     max-height:272px;
   }
 }
+
+
+/* WP-S009-010 landscape status dashboard: preserve chrome and readable bounded cards */
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-chat-shell:has(.advisor-status-readout[open]) .advisor-chat-launcher[aria-expanded="true"]{
+    display:none;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]){
+    grid-template-rows:auto minmax(0,1fr) 0 0;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-chat-transcript,
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-chat-compose{
+    display:none;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-readout[open]{
+    min-height:0;
+    height:100%;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-readout[open] .advisor-status-body{
+    height:auto;
+    max-height:none;
+    padding:4px 5px 5px;
+    gap:4px;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-identity{
+    min-height:21px;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-card{
+    padding:4px 5px;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-card-head strong{
+    font-size:5.8px;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-card-head span,
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-meter label,
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-meter b,
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-line span{
+    font-size:4.8px;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-line strong{
+    font-size:5.5px;
+  }
+}
