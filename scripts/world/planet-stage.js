@@ -1012,8 +1012,8 @@ function gameplayCenterMarkerTelemetry(layer){
     code.textContent=settlementOverview?"CELL "+shortCell:"CELL "+shortCell+" · "+center.latitudeDegrees.toFixed(3)+"°, "+center.longitudeDegrees.toFixed(3)+"°";
     // Keep the exact center marker, but move its readout off canonical local
     // structure when that structure itself is the focused visual subject.
-    const microLocationFocus=root?.dataset?.microLocationFocus==="true";
-    code.style.display=microLocationFocus?"none":"";
+    const microLocationFocus=root?.dataset?.microLocationFocus==="true",travelEncounterFocus=root?.dataset?.travelEncounterFocus==="true";
+    code.style.display=(microLocationFocus||travelEncounterFocus)?"none":"";
     if(settlementOverview){
       code.style.position="absolute";code.style.left="50%";code.style.top="-54px";
       code.style.transform="translateX(-50%) scale(.82)";code.style.opacity=".72";
@@ -1032,7 +1032,8 @@ function gameplayCenterMarkerTelemetry(layer){
     projection:projected.mode,projectionFallbackUsed,
     latitudeDegrees:Number(center.latitudeDegrees.toFixed(6)),longitudeDegrees:Number(center.longitudeDegrees.toFixed(6)),
     worldTile:center.worldTile,registeredMeters:center.registeredMeters,canonicalSpatialCellId:cell.id,streamSignature:cell.signature,
-    coordinateFabricRevision:fabric.revisionSignature,roundTripErrorMeters:center.roundTripErrorMeters,worldAnchored:true,fixedHudDot:false
+    coordinateFabricRevision:fabric.revisionSignature,roundTripErrorMeters:center.roundTripErrorMeters,worldAnchored:true,fixedHudDot:false,
+    travelEncounterDecluttered:Boolean(root?.dataset?.travelEncounterFocus==="true")
   });
 }
 function coordinateFabricDiagnostics(){
@@ -4423,6 +4424,7 @@ function resetLocalCrowdTelemetry(){
 function clearLocalCrowdPresentation(){
   localCrowdMesh?.destroy?.();localCrowdMesh=null;
   localCrowdRoot?.destroy?.();localCrowdRoot=null;localCrowdContext=null;localCrowdEntities=[];
+  if(root?.dataset)root.dataset.travelEncounterFocus="false";
   resetLocalCrowdTelemetry();
 }
 function currentCrowdAvoidPoints(){
@@ -4442,6 +4444,7 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
   const settlementCrowdActive=["refined","full"].includes(String(tier));
   const crowd=settlementCrowdActive&&window.CrowdPresentation?CrowdPresentation.snapshot(activeSeed,stamp,focusTile,{mobile,avoidPoints:currentCrowdAvoidPoints()}):null;
   const encounter=window.TravelEncounters?.localPresentation?.(activeSeed,focusTile,stamp,{mobile})||null;
+  if(root?.dataset)root.dataset.travelEncounterFocus=String(Boolean(encounter?.active));
   const routineSpecs=crowd?.active&&Array.isArray(crowd.specs)?crowd.specs:[];
   const encounterSpecs=encounter?.active&&Array.isArray(encounter.exactActors)?encounter.exactActors:[];
   const specs=[...routineSpecs,...encounterSpecs];
@@ -4456,7 +4459,7 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
       travelEncounterId:encounter?.encounter?.id||null,travelEncounterType:encounter?.encounter?.type||null,
       travelEncounterBuildMs:Number(encounter?.updateMs||0),travelEncounterBodyMinPx:null,travelEncounterBodyMaxPx:null,
       travelEncounterVisualAnchorSource:encounter?.encounter?.visualAnchor?.source||null,
-      travelerSilhouetteRevision:"travel-encounter-silhouette-v2",
+      travelerSilhouetteRevision:"travel-encounter-silhouette-v3",
       buildTimeMs:Number((performance.now()-started).toFixed(3))
     };
     return;
@@ -4478,6 +4481,7 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     lute:Object.freeze([167,112,59,255]),staff:Object.freeze([111,83,52,255]),spear:Object.freeze([159,161,154,255]),
     bow:Object.freeze([126,84,48,255]),"field-pack":Object.freeze([89,93,65,255])
   });
+  const travelerOutline=Object.freeze([24,29,27,255]),travelerSkin=Object.freeze([229,184,140,255]),travelerHighlight=Object.freeze([246,220,149,255]);
   const quad=(x0,z0,x1,z1,ground,height,color,nx,nz)=>{
     const base=positions.length/3;
     positions.push(x0,ground,z0,x1,ground,z1,x0,ground+height,z0,x1,ground+height,z1);
@@ -4536,12 +4540,19 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     let screenEvidence=null;
     if(isEncounter){
       const topHalfX=Math.max(.06,.56/unit),topHalfZ=Math.max(.075,.78/unit),topY=ground+height*.55;
-      topRect(posX,posZ,topY,topHalfX,topHalfZ,color);
-      diamond(posX,posZ-topHalfZ*.42,ground+height*.91,headRadius,color);
+      // Ground-camera readability: keep one merged draw call, but layer a dark
+      // top-facing outline, role-colored torso, warm sash, and skin-toned head.
+      // This is presentation-only geometry at the canonical encounter anchor.
+      topRect(posX,posZ,topY,topHalfX*1.10,topHalfZ*1.10,travelerOutline);
+      topRect(posX,posZ,topY+.006,topHalfX*.88,topHalfZ*.90,color);
+      topRect(posX,posZ-topHalfZ*.03,topY+.010,topHalfX*.26,topHalfZ*.56,travelerHighlight);
+      const headZ=posZ-topHalfZ*.58,outerHead=Math.max(headRadius*1.28,.036);
+      diamond(posX,headZ,ground+height*.915,outerHead,travelerOutline);
+      diamond(posX,headZ,ground+height*.922,Math.max(headRadius*.78,.026),travelerSkin);
       const propColor=propColors[spec.propKind]||propColors.pack,side=Number(spec.presentationOffset?.x||0)>=0?1:-1;
-      if(spec.propKind==="staff"||spec.propKind==="spear"||spec.propKind==="bow")topRect(posX+side*topHalfX*.92,posZ,topY+.004,Math.max(.014,.07/unit),Math.max(.08,.75/unit),propColor);
-      else topRect(posX+side*topHalfX*.88,posZ+topHalfZ*.22,topY+.004,Math.max(.025,.20/unit),Math.max(.03,.28/unit),propColor);
-      screenEvidence=screenFootprint(posX,posZ,topY,topHalfX,topHalfZ);
+      if(spec.propKind==="staff"||spec.propKind==="spear"||spec.propKind==="bow")topRect(posX+side*topHalfX*.98,posZ,topY+.014,Math.max(.014,.07/unit),Math.max(.08,.75/unit),propColor);
+      else topRect(posX+side*topHalfX*.94,posZ+topHalfZ*.22,topY+.014,Math.max(.025,.20/unit),Math.max(.03,.28/unit),propColor);
+      screenEvidence=screenFootprint(posX,posZ,topY,topHalfX*1.10,topHalfZ*1.10);
     }else diamond(posX,posZ,ground+height*.86,headRadius,color);
     visibleSpecs.push(Object.freeze({...spec,directLocalProjection:directLocal,screen:screenEvidence?.screen||null,bodyScreenSizePx:screenEvidence?.bodyScreenSizePx||null,inViewport:Boolean(screenEvidence?.inViewport)}));
   }
@@ -4575,7 +4586,7 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     travelEncounterCount:Number(encounter?.exactActorCount||0),visibleTravelEncounterCount:travelRows.length,travelEncounterId:encounter?.encounter?.id||null,
     travelEncounterType:encounter?.encounter?.type||null,travelEncounterBuildMs:Number(encounter?.updateMs||0),
     travelEncounterBodyMinPx:travelSizes.length?Number(Math.min(...travelSizes).toFixed(3)):null,travelEncounterBodyMaxPx:travelSizes.length?Number(Math.max(...travelSizes).toFixed(3)):null,
-    travelEncounterVisualAnchorSource:encounter?.encounter?.visualAnchor?.source||null,travelerSilhouetteRevision:"travel-encounter-silhouette-v2",
+    travelEncounterVisualAnchorSource:encounter?.encounter?.visualAnchor?.source||null,travelerSilhouetteRevision:"travel-encounter-silhouette-v3",
     mobile,pooledStableIds:Boolean(crowd?.pooledStableIds!==false),localCulling:true,lowFrequencyMotion:Boolean(crowd?.lowFrequencyMotion!==false),mergedBatch:true,sharedMaterialCount:mergedEntity?1:0,
     directLocalProjectionCount:visibleSpecs.filter(spec=>spec.directLocalProjection).length,topFacingHeadMarkers:true,topFacingTravelerBodies:true,
     presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
