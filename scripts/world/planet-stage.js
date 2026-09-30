@@ -4557,9 +4557,16 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
   }));
   const travelRows=localCrowdEntities.filter(item=>item.travelEncounter),travelSizes=travelRows.map(item=>Math.max(Number(item.bodyScreenSizePx?.width||0),Number(item.bodyScreenSizePx?.height||0))).filter(Number.isFinite);
   const elapsed=performance.now()-started;
+  // CrowdPresentation source resolution predates rare encounters and can be much
+  // more expensive than the merged mesh itself on SwiftShader/mobile runners.
+  // Keep total build telemetry, but expose the incremental presentation phase
+  // separately so WP-S007-013 can enforce its own rendering cost without
+  // disguising unrelated anonymous-crowd source work.
+  const sourceCostMs=Math.max(0,Number(crowd?.totalUpdateMs||0))+Math.max(0,Number(encounter?.updateMs||0));
+  const mergedPresentationBuildMs=Math.max(0,elapsed-sourceCostMs);
   localCrowdPresentation={
     active:localCrowdEntities.length>0,generatedCount:Number(crowd?.activeCount||0)+Number(encounter?.exactActorCount||0),visibleCount:localCrowdEntities.length,
-    entityCount:mergedEntity?1:0,drawCallEstimate:mergedEntity?1:0,buildTimeMs:Number(elapsed.toFixed(3)),
+    entityCount:mergedEntity?1:0,drawCallEstimate:mergedEntity?1:0,buildTimeMs:Number(elapsed.toFixed(3)),mergedPresentationBuildMs:Number(mergedPresentationBuildMs.toFixed(3)),
     settlementId:crowd?.settlementId||null,settlementName:crowd?.settlementName||null,settlementClass:crowd?.settlementClass||null,
     districtBand:crowd?.districtBand||"none",districtFactor:Number(crowd?.districtFactor||0),population:Number(crowd?.population||0),populationSource:crowd?.populationSource||null,
     rhythmBand:crowd?.rhythmBand||"unknown",activityFactor:Number(crowd?.activityFactor||0),cap:Number(crowd?.cap||0),candidateChecks:Number(crowd?.candidateChecks||0),
