@@ -236,7 +236,7 @@ function snapshot(seedValue){
 function card(){
   if(typeof document==="undefined")return null;
   let node=document.getElementById("travelEncounterCard");if(node)return node;
-  const root=document.getElementById("planetStageRoot")||document.body;if(!root)return null;
+  const root=document.body||document.getElementById("planetStageRoot");if(!root)return null;
   node=document.createElement("aside");node.id="travelEncounterCard";node.className="travel-encounter-card";node.hidden=true;node.setAttribute("aria-live","polite");node.dataset.safeSlot="bottom-center";
   node.innerHTML='<div class="travel-encounter-kicker">RARE ENCOUNTER</div><div class="travel-encounter-row"><span class="travel-encounter-icon"></span><div><strong class="travel-encounter-title"></strong><p class="travel-encounter-summary"></p></div></div><div class="travel-encounter-meta"></div>';
   root.appendChild(node);return node;
