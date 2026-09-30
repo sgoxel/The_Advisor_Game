@@ -173,7 +173,8 @@ def recover():
 
 records=[]
 try:
-    driver.get(TARGET)
+    evidence_target=TARGET+("&" if "?" in TARGET else "?")+"evidence_fast_start=1"
+    driver.get(evidence_target)
     try:
         wait.until(lambda _d: ready())
     except TimeoutException:
@@ -195,14 +196,15 @@ try:
     persistence=None
     for idx,kind in enumerate(TYPES):
         activation=set_case(kind)
+        def presentation_ready(_d):
+            state=current_state()
+            local=state["localStatic"]
+            return (state["panelVisible"] and state["scaleIndex"]==SCALE_INDEX and state["scaleLabel"]==EXPECTED_SCALE_LABEL and
+                    state["signatureReady"] and bool(local.get("active")) and int(local.get("buildingCount",0))>0 and
+                    int(local.get("persistentConsequenceProjectedActiveCount",0))==1 and
+                    int(local.get("persistentConsequenceWorldCueCount",0))>0)
         try:
-            wait.until(lambda _d: (
-                current_state()["panelVisible"] and current_state()["scaleIndex"]==SCALE_INDEX and current_state()["scaleLabel"]==EXPECTED_SCALE_LABEL and
-                current_state()["signatureReady"] and bool(current_state()["localStatic"].get("active")) and
-                int(current_state()["localStatic"].get("buildingCount",0))>0 and
-                int(current_state()["localStatic"].get("persistentConsequenceProjectedActiveCount",0))==1 and
-                int(current_state()["localStatic"].get("persistentConsequenceWorldCueCount",0))>0
-            ))
+            wait.until(presentation_ready)
         except TimeoutException:
             raise RuntimeError("consequence presentation timeout "+kind+": "+json.dumps(current_state()))
         time.sleep(.45)
