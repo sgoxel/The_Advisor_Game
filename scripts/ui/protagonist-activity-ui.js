@@ -73,7 +73,9 @@ function runtimeModel(ctx){
   const activeJourney=journey?.active||null;
   if(activeJourney&&String(activeJourney.status||"")==="travelling"){
     const total=Number(activeJourney.route?.totalMeters),done=Number(activeJourney.progressMeters),progress=Number.isFinite(total)&&total>0&&Number.isFinite(done)?done*100/total:null;
-    const destination=activeJourney.destinationLabel||activeJourney.route?.destinationLabel||activeJourney.route?.destination?.label||null;
+    const destinationPoint=activeJourney.route?.destination||null;
+    const destination=activeJourney.destinationLabel||activeJourney.route?.destinationLabel||destinationPoint?.label||
+      (destinationPoint?.x!=null&&destinationPoint?.y!=null?("World cell "+String(destinationPoint.x)+", "+String(destinationPoint.y)):null);
     return baseModel({mode:"runtime",when,phase:"active",kind:"travel",eyebrow:"MOVING",title:destination?("Traveling to "+cleanText(destination,100)):"Traveling on a validated route",target:destination?cleanText(destination,100):null,detail:"Physical journey in progress",progress,referenceId:activeJourney.journeyId,authorityLabel:"Journey progress"});
   }
 
