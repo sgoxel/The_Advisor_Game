@@ -293,7 +293,7 @@ function render(reason="explicit"){
   state.renderCount++;state.lastSeed=ctx.seed;state.lastRecordCount=records.length;state.lastRenderReason=reason;
 
   const launcher=state.rootNode.querySelector(".advisor-chat-launcher");
-  launcher?.addEventListener("click",()=>{state.open=!state.open;render("toggle")});
+  launcher?.addEventListener("click",()=>{const next=!state.open;if(next&&root.AdvisorToolbeltUI?.setOpen)root.AdvisorToolbeltUI.setOpen(false);state.open=next;render("toggle")});
   state.rootNode.querySelector(".advisor-chat-close")?.addEventListener("click",()=>{state.open=false;render("close")});
   const form=state.rootNode.querySelector(".advisor-chat-compose");
   form?.addEventListener("submit",event=>{
@@ -311,7 +311,7 @@ function render(reason="explicit"){
   });
   return state.rootNode;
 }
-function setEvidenceMode(modeValue){
+function setOpen(value){state.open=Boolean(value);return render(state.open?"external-open":"external-close")}\nfunction setEvidenceMode(modeValue){
   const mode=EVIDENCE_MODES.includes(String(modeValue||""))?String(modeValue):null;
   state.evidenceMode=mode;state.open=Boolean(mode)||state.open;
   return render("evidence-mode");
@@ -369,6 +369,6 @@ function proof(){
 
 return freeze({
   VERSION,MAX_TRANSCRIPT_RECORDS,MAX_COUNSEL_ROWS,MAX_MESSAGE_CHARS,EVIDENCE_MODES,
-  completedBacked,statusFor,viewRecord,evidenceRecords,recordMessage,deliverCounsel,mount,autoMount,render,setEvidenceMode,snapshot,proof
+  completedBacked,statusFor,viewRecord,evidenceRecords,recordMessage,deliverCounsel,mount,autoMount,render,setOpen,setEvidenceMode,snapshot,proof
 });
 });
