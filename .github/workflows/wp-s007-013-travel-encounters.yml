@@ -1,5 +1,5 @@
 name: WP-S007-013 Travel Encounters Evidence
-# Evidence trigger revision: 2026-09-30 AGENT 6 card-race retest
+# Evidence trigger revision: 2026-09-30 AGENT 6 final wayfinding-declutter retest
 
 on:
   workflow_dispatch:
