@@ -6540,6 +6540,14 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
           ];
         }
         pushRange("registeredReliefShade",registeredReliefShade);
+        // Phase 15 contributor isolation showed that the broad gray ridge at
+        // first-parent map scale is carried by this combined structure term,
+        // not by macro or registered land-cover. Attenuate it only above the
+        // district bandwidth; the 1/150 district tier (~469 m/texel) and all
+        // finer local terrain keep their existing structure unchanged.
+        const coarseRegionalStructureBand=strategicMapBand*smoothstep01(clamp((metersPerTexel-700)/650,0,1));
+        const coarseRegionalStructureGain=1-coarseRegionalStructureBand*.50;
+        if(coarseRegionalStructureBand>.001)cover=cover.map(v=>v*coarseRegionalStructureGain);
         structureContribution=cover.slice();
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
@@ -6767,7 +6775,7 @@ function finalizeLocalResource(job,result){
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
-      topographicSignalRevision:"canonical-access-morphology-map-detail-v26",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-access-morphology-map-detail-v27",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
