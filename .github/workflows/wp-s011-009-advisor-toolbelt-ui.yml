@@ -4,16 +4,6 @@ on:
   push:
     branches: [main]
     paths:
-      - "index.html"
-      - "styles/main.css"
-      - "scripts/world/advisor-progression.js"
-      - "scripts/world/advisor-tool-resolution.js"
-      - "scripts/world/advisor-insight.js"
-      - "scripts/world/advisor-rhetoric.js"
-      - "scripts/world/advisor-diplomacy.js"
-      - "scripts/world/advisor-stewardship.js"
-      - "scripts/world/advisor-command.js"
-      - "scripts/world/advisor-intrigue.js"
       - "scripts/ui/advisor-conversation-ui.js"
       - "scripts/ui/advisor-toolbelt-ui.js"
       - "scripts/tests/wp-s011-009-advisor-toolbelt-ui.test.js"
