@@ -1977,3 +1977,18 @@ body.planet-stage-active{
     margin-bottom:3px;
   }
 }
+
+
+/* WP-S009-010 attempt-5 portrait dashboard mode without chrome overlap */
+@media(max-width:520px) and (min-height:431px){
+  .advisor-chat-panel:has(.advisor-status-readout[open]){
+    max-height:min(70vh,590px);
+    grid-template-rows:auto 290px 0 auto auto;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-chat-transcript{
+    display:none;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-readout[open] .advisor-status-body{
+    max-height:252px;
+  }
+}
