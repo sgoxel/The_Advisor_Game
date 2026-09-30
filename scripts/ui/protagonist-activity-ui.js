@@ -91,7 +91,8 @@ function runtimeModel(ctx){
   }
 
   const recentInteraction=latest(interaction?.results,"updatedFantasyTimestamp");
-  const recentAction=latest(action?.results,"lastEvaluatedWhen");
+  const actionResults=(Array.isArray(action?.results)?action.results.slice(0,MAX_RUNTIME_ROWS):[]).filter(row=>!seed||!row?.seed||row.seed===seed);
+  const recentAction=latest(actionResults,"lastEvaluatedWhen");
   if(recentInteraction&&(!recentAction||String(recentInteraction.updatedFantasyTimestamp||"")>=String(recentAction.lastEvaluatedWhen||""))){
     if(strictInteractionCompletion(recentInteraction))return baseModel({mode:"runtime",when,phase:"completed",kind:recentInteraction.action==="work"?"work":"interaction",eyebrow:"RECENT OUTCOME",title:title(recentInteraction.action||"Interaction")+" completed",target:title(recentInteraction.targetId||"Target"),detail:"Terminal Simulation result confirmed",referenceId:recentInteraction.attemptId,resultId:recentInteraction.resultId,authorityLabel:"Simulation confirmed",completionBacked:true});
     return baseModel({mode:"runtime",when,phase:"blocked",kind:"interaction",eyebrow:"RECENT OUTCOME",title:"Interaction did not complete",target:title(recentInteraction.targetId||"Target"),detail:"No authoritative completion recorded",reason:reasonLabel(recentInteraction.reason)||title(recentInteraction.status||"Stopped"),referenceId:recentInteraction.attemptId,resultId:recentInteraction.resultId,authorityLabel:"Simulation result"});
