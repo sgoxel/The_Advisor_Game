@@ -12,8 +12,8 @@ OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s007-012"))
 OUT.mkdir(parents=True,exist_ok=True)
 SIZE=(1280,720) if PROFILE=="landscape" else (390,844)
 TYPES=["damaged-building","road-blockage","abandoned-workplace"]
-SCALE_INDEX=16
-EXPECTED_SCALE_LABEL="1/5000"
+SCALE_INDEX=9
+EXPECTED_SCALE_LABEL="1/10000"
 START="9999-03-02 09:00:00"
 RECOVERED_AT="9999-03-02 16:00:00"
 
