@@ -6311,6 +6311,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // as a differently tinted/contrasted patch.
   const focusTextureSize=Math.max(1,Number(LOCAL_DETAIL_LEVELS[job.levelIndex]?.textureSize||size));
   const sharedMetersPerTexel=Math.max(job.dims.patchWidth,job.dims.patchHeight)*LOCAL_SURROUND_SPAN_FACTOR/focusTextureSize;
+  // Phase 18 final acceptance: strategic concentric representations must apply
+  // the same low-frequency transfer to their common parent sample. Native texel
+  // size is reserved for the registered high-pass residual only.
+  const sharedPhotometryLock=job.levelIndex<=2;
+  const baseTransferMetersPerTexel=sharedPhotometryLock?sharedMetersPerTexel:metersPerTexel;
   // Medium-context sampling is physically denser than the outer 6x fallback.
   // Admit only a bounded share of that resolvable bandwidth so the parent
   // representation keeps terrain structure without becoming a differently
@@ -6355,7 +6360,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       const elevationBase=Number(parentSample?.elevationMeters||0),moistureBase=clamp(Number(parentSample?.moisture||.5),0,1);
       const mountainIdentity=clamp(Number(parentSample?.mountainInfluence||0),0,1);
       const alpineBase=smoothstep01((elevationBase-1700)/2600);
-      const broadPaletteWeight=parentSample?.land?lerp(.20,1,smoothstep01(clamp((58-metersPerTexel)/36,0,1))):1;
+      const broadPaletteWeight=parentSample?.land?lerp(.20,1,smoothstep01(clamp((58-baseTransferMetersPerTexel)/36,0,1))):1;
       const paletteMoisture=lerp(.52,moistureBase,broadPaletteWeight),dry=1-paletteMoisture;
       // Keep lowland, upland, and alpine presentation distinguishable using only
       // canonical elevation/moisture/mountain inputs. These weights never create
@@ -6366,10 +6371,10 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // contour. Retain a bounded share of the same canonical elevation identity
       // while curvature/drainage/registered detail carry the readable structure.
       const strategicBaseFlattenBand=parentSample?.land
-        ?smoothstep01(clamp((metersPerTexel-700)/650,0,1))*(1-smoothstep01(clamp((metersPerTexel-4800)/4000,0,1)))
+        ?smoothstep01(clamp((baseTransferMetersPerTexel-700)/650,0,1))*(1-smoothstep01(clamp((baseTransferMetersPerTexel-34000)/18000,0,1)))
         :0;
       const absoluteElevationPaletteWeight=parentSample?.land
-        ?lerp(lerp(.34,1,smoothstep01(clamp((58-metersPerTexel)/36,0,1))),.12,strategicBaseFlattenBand)
+        ?lerp(lerp(.34,1,smoothstep01(clamp((58-baseTransferMetersPerTexel)/36,0,1))),.12,strategicBaseFlattenBand)
         :1;
       const paletteUplandWeight=uplandWeight*absoluteElevationPaletteWeight;
       const paletteAlpineWeight=alpineBase*absoluteElevationPaletteWeight;
@@ -6380,13 +6385,13 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       const localPalette=parentSample?.land?foothillPalette.map((v,i)=>lerp(v,alpinePalette[i],paletteAlpineWeight)):[.050,.18,.34];
       // Preserve enough canonical globe hue to keep the same macro terrain
       // recognizable through the projection handoff, then converge smoothly.
-      const coarseIdentity=smoothstep01(clamp((metersPerTexel-4)/70,0,1));
+      const coarseIdentity=smoothstep01(clamp((baseTransferMetersPerTexel-4)/70,0,1));
       // The canonical globe source color can be nearly white on high peaks. At
       // strategic tangent scale that imported broad chroma/luma created the
       // remaining gray-white mountain smear even after curvature was clamped.
       // Keep source-color identity, but cap its share as physical texels become
       // coarse; elevation/moisture/mountain identity remains in localPalette.
-      const strategicSourceBand=smoothstep01(clamp((metersPerTexel-220)/900,0,1));
+      const strategicSourceBand=smoothstep01(clamp((baseTransferMetersPerTexel-220)/900,0,1));
       const strategicSourceCap=lerp(.110,.046,strategicSourceBand);
       const macroIdentityWeight=clamp(.040+coarseIdentity*.050+mountainIdentity*.012,.040,strategicSourceCap);
       let base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
@@ -6395,8 +6400,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Map-scale views should show terrain structure, not one kilometre-scale
       // brightness wedge. Compress only land luminance above ~35 m/texel while
       // preserving RGB differences; near-ground presentation is unchanged.
-      if(parentSample?.land&&metersPerTexel>35){
-        const compression=smoothstep01(clamp((metersPerTexel-35)/120,0,1))*.58;
+      if(parentSample?.land&&baseTransferMetersPerTexel>35){
+        const compression=smoothstep01(clamp((baseTransferMetersPerTexel-35)/120,0,1))*.58;
         const luma=base[0]*.28+base[1]*.58+base[2]*.14;
         const targetLuma=.325+paletteAlpineWeight*.012;
         const shift=(targetLuma-luma)*compression;
@@ -6427,7 +6432,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Only the fine-minus-parent residual is feathered toward focus. A radial
       // or edge-varying gain on the parent itself produced the pale 1/500 LOD
       // boundary seen in fresh evidence.
-      const refinementGain=contextRing?contextRefineWeight*.22:focusRefineWeight*.86;
+      const strategicFocusResidualScale=contextRing?1:lerp(.16,1,smoothstep01(clamp((1200-metersPerTexel)/900,0,1)));
+      const refinementGain=contextRing?contextRefineWeight*.22:focusRefineWeight*.86*strategicFocusResidualScale;
       // Regional parents are physically coarse but still need readable landform
       // structure while finer children stream. Reuse the already-computed,
       // registered-meter macro signal and increase only its presentation gain in
@@ -6441,16 +6447,21 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // canonical base palette remains fully visible.
       const coarseRegionalResidualBand=smoothstep01(clamp((metersPerTexel-700)/700,0,1))*
         (1-smoothstep01(clamp((metersPerTexel-5000)/5200,0,1)));
+      const sharedCoarseRegionalResidualBand=smoothstep01(clamp((sharedMetersPerTexel-700)/700,0,1))*
+        (1-smoothstep01(clamp((sharedMetersPerTexel-34000)/18000,0,1)));
       // The exact-screen contributor capture isolates the remaining broad
       // regional band to coarse base/parent photometry. Suppress only the shared
       // low-frequency parent term while retaining the already-generated
       // fine-minus-parent registered residual as the physically resolvable
       // high-pass signal. This adds no samples and changes no world authority.
-      const coarseRegionalSharedGain=1-coarseRegionalResidualBand*.82;
-      const coarseRegionalFineGain=1+coarseRegionalResidualBand*.18;
-      const strategicMacroGain=1+strategicMapBand*(contextRing?.22:.48);
-      const sharedMacroContrast=(contextRing?1.06:1.10)*strategicMacroGain;
-      const residualMacroContrast=(contextRing?1.20:lerp(1.18,1.52,focusRefineWeight))*strategicMacroGain;
+      const coarseRegionalSharedGain=1-sharedCoarseRegionalResidualBand*.82;
+      const coarseRegionalFineGain=1+coarseRegionalResidualBand*.08;
+      const sharedStrategicMapBand=smoothstep01(clamp((sharedMetersPerTexel-320)/900,0,1))*
+        (1-smoothstep01(clamp((sharedMetersPerTexel-34000)/18000,0,1)));
+      const sharedStrategicMacroGain=1+sharedStrategicMapBand*.26;
+      const residualStrategicMacroGain=1+strategicMapBand*(contextRing?.22:.48);
+      const sharedMacroContrast=(sharedPhotometryLock?1.08:(contextRing?1.06:1.10))*sharedStrategicMacroGain;
+      const residualMacroContrast=(contextRing?1.20:lerp(1.18,1.52,focusRefineWeight))*residualStrategicMacroGain;
       const macro=sharedMacro*sharedMacroContrast*coarseRegionalSharedGain+
         (nativeMacro-sharedMacro)*refinementGain*residualMacroContrast*coarseRegionalFineGain;
       pushRange("baseLuma",luma3(base));pushRange("macro",macro);
@@ -6600,21 +6611,25 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         structureContribution=cover.slice();
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevationBase).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevationBase);
-        const coverGain=contextRing?contextRefineWeight*.38:focusRefineWeight*.98;
+        const coverGain=contextRing?contextRefineWeight*.38:focusRefineWeight*.98*strategicFocusResidualScale;
         // Prefer the already SEED-registered land-cover field for strategic-map
         // readability. Its 3.6 km / 1.5 km / 700 m structure is physically
         // resolvable at 1/500 and avoids re-amplifying continental relief.
         const mapCoverBoost=1+smoothstep01(clamp((220-metersPerTexel)/180,0,1))*.20;
+        const sharedMapCoverBoost=1+smoothstep01(clamp((220-sharedMetersPerTexel)/180,0,1))*.20;
         const strategicCoverBoost=1+strategicMapBand*(contextRing?.03:.06);
-        const sharedCoverContrast=(contextRing?1.06:1.10)*mapCoverBoost*strategicCoverBoost;
+        const sharedStrategicCoverBoost=1+sharedStrategicMapBand*.045;
+        const sharedCoverContrast=(sharedPhotometryLock?1.08:(contextRing?1.06:1.10))*sharedMapCoverBoost*sharedStrategicCoverBoost;
         const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost*strategicCoverBoost;
-        const coarseRegionalCoverGain=1-coarseRegionalResidualBand*.48;
-        const landCover=sharedCover.map((v,i)=>(v*sharedCoverContrast+(nativeCover[i]-v)*coverGain*residualCoverContrast)*coarseRegionalCoverGain);
+        const sharedCoarseRegionalCoverGain=1-sharedCoarseRegionalResidualBand*.48;
+        const residualCoarseRegionalCoverGain=1-coarseRegionalResidualBand*.16;
+        const landCover=sharedCover.map((v,i)=>v*sharedCoverContrast*sharedCoarseRegionalCoverGain+
+          (nativeCover[i]-v)*coverGain*residualCoverContrast*residualCoarseRegionalCoverGain);
         landCoverContribution=landCover.slice();
         pushRange("landCoverLuma",luma3(landCover));
         cover=cover.map((v,i)=>v+landCover[i]);
       }
-      const reliefTintWeight=parentSample?.land&&metersPerTexel>35?lerp(.06,1,smoothstep01(clamp((180-metersPerTexel)/145,0,1))):1;
+      const reliefTintWeight=parentSample?.land&&baseTransferMetersPerTexel>35?lerp(.06,1,smoothstep01(clamp((180-baseTransferMetersPerTexel)/145,0,1))):1;
       const identityTint=parentSample?.land?[relief*.040*reliefTintWeight,relief*.036*reliefTintWeight,relief*.020*reliefTintWeight]:[-.010,-.003,.024];
       pushRange("coverLuma",luma3(cover));pushRange("shade",shade);
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
@@ -6624,8 +6639,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // into a soft green wash at strategic scale. Increase only the contrast of
       // those already-computed values around the canonical local palette. This
       // adds no geography/noise query and leaves near-ground photometry alone.
-      if(parentSample?.land&&strategicMapBand>.001){
-        const regionalContrast=1+strategicMapBand*(contextRing?.03:.05);
+      if(parentSample?.land&&(sharedPhotometryLock?sharedStrategicMapBand:strategicMapBand)>.001){
+        const regionalContrast=1+(sharedPhotometryLock?sharedStrategicMapBand:strategicMapBand)*(sharedPhotometryLock?.04:(contextRing?.03:.05));
         const palettePivot=clamp(luma3(localPalette),.20,.58);
         displayColor=displayColor.map(v=>clamp(palettePivot+(v-palettePivot)*regionalContrast,0,1));
       }
@@ -6645,8 +6660,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // canonical moisture/elevation palette rather than collapsing into gray
       // under broad low-frequency relief. Restore chroma while preserving the
       // computed luminance, so this changes only presentation and not authority.
-      if(parentSample?.land&&metersPerTexel>18){
-        const chromaRestore=.42*smoothstep01(clamp((metersPerTexel-18)/82,0,1));
+      if(parentSample?.land&&baseTransferMetersPerTexel>18){
+        const chromaRestore=.42*smoothstep01(clamp((baseTransferMetersPerTexel-18)/82,0,1));
         const displayLuma=luma3(displayColor),paletteLuma=luma3(localPalette);
         const chromaTarget=localPalette.map(v=>clamp(v+(displayLuma-paletteLuma),0,1));
         displayColor=displayColor.map((v,i)=>lerp(v,chromaTarget[i],chromaRestore));
@@ -6775,10 +6790,12 @@ function* localResourceSteps(job){
   job.currentPreparationPhase="texture-surround";
   const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,surroundSize,false,true);
   job.currentPreparationPhase="ring-compose";
+  yield {forceSlice:true};
   stitchSurroundCenterToDetail(detail,medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
   stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
   carveNestedRingCenterAlpha(medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
   carveNestedRingCenterAlpha(surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
+  yield {forceSlice:true};
   job.currentPreparationPhase="wilderness-plan";
   const wildernessPlan=yield* prepareLocalWildernessPlanSteps(job);
   // Normal alpha compositing already gives continuous coverage when the
@@ -6910,7 +6927,7 @@ function finalizeLocalResource(job,result){
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
       meshHeightRange:meshData.meshHeightRange||null,
-      topographicSignalRevision:"canonical-base-highpass-map-detail-v31",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-shared-transfer-highpass-map-detail-v32",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
@@ -7113,7 +7130,11 @@ function pumpLocalPreparation(){
   const job=localJob;if(!job||!device)return;
   const sliceStart=performance.now();let step=null;
   try{
-    while(!(step=job.iterator.next()).done){job.steps++;if(performance.now()-sliceStart>=LOCAL_PREP_SLICE_BUDGET_MS)break;}
+    while(!(step=job.iterator.next()).done){
+      job.steps++;
+      if(step?.value&&typeof step.value==="object"&&step.value.forceSlice)break;
+      if(performance.now()-sliceStart>=LOCAL_PREP_SLICE_BUDGET_MS)break;
+    }
   }catch(error){
     // A failed preparation must never wedge the pipeline: drop it, keep the
     // last valid representation on screen and record the failure.
