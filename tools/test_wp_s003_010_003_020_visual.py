@@ -80,6 +80,24 @@ def screenshot_delta(a_name,b_name):
     }
 
 def capture_flat_height_isolation(d,phase):
+    # Freeze the currently displayed physical scalar before the A/B. The
+    # diagnostic scale is reached through animated zoom, and displayScaleIndex
+    # can become correct slightly before the animation settles. Without this,
+    # the normal and flat screenshots can differ simply because the camera kept
+    # moving between captures.
+    frozen=d.execute_script("""
+      const s=window.PlanetStage?.snapshot?.();
+      if(!s) return null;
+      window.PlanetStage.setZoomScalar(Number(s.zoom.scalar));
+      return window.PlanetStage.snapshot();
+    """)
+    if not frozen:
+        raise AssertionError(f"unable to freeze A/B scalar at {phase}")
+    WebDriverWait(d,60).until(lambda x: (
+        not bool((x.execute_script("return window.PlanetStage.snapshot()") or {}).get("zoom",{}).get("animating"))
+        and int(((x.execute_script("return window.PlanetStage.snapshot()") or {}).get("projection",{}).get("resourceBudget",{}).get("pendingPreparationCount") or 0))==0
+    ))
+    time.sleep(.12)
     normal=d.execute_script("return window.PlanetStage?.setWp020PresentationEvidenceMode?.('normal')||null")
     if not normal or normal.get("available") is not True or normal.get("mode")!="normal":
         raise AssertionError(f"normal evidence unavailable at {phase}: {normal}")
