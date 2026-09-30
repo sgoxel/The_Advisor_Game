@@ -2274,3 +2274,15 @@ body.planet-stage-active{
     font-size:16px;
   }
 }
+
+
+/* WP-S010-009 final short-landscape fit: eliminate unused header height */
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-chat-panel:has(.advisor-activity-strip):not(:has(.advisor-status-readout[open])) .advisor-chat-head{
+    box-sizing:border-box;
+    height:55px;
+    min-height:55px;
+    max-height:55px;
+    overflow:hidden;
+  }
+}
