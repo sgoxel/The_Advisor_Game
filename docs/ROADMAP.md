@@ -222,7 +222,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S010-006` — Autonomous Social Contact + Relationship-Conscious Initiative — COMPLETED
 - `WP-S010-007` — Goal Commitment Progress + Failure/Replan Consequences — COMPLETED
 - `WP-S010-008` — Offline Protagonist Catch-Up + Resume Continuity — COMPLETED
-- `WP-S010-009` — Visible Protagonist Activity + Advisor Intent/Outcome Presentation — IN PROGRESS (visual acceptance pending; VISUAL 7/10 on exact head `b231450c4633d77636956cab889b55bd912ddd69`; functional PASS; 844×390 message composer still clips below panel; 3-attempt cap reached)
+- `WP-S010-009` — Visible Protagonist Activity + Advisor Intent/Outcome Presentation — IN PROGRESS (MIXED accepted pending completion bookkeeping; final current-main product/evidence head `a49f26a5e8f147a1dcf072fb03b478e2e6baf494`; dedicated workflow `36755683378` SUCCESS; fresh 11-frame artifact `11116388797`; functional authority + Stage 10 regressions PASS; direct inspection VISUAL 8.4/10 PASS; exact-head public Pages product verification PASS; completion bookkeeping commit still required)
 - `WP-S010-010` — End-to-End Advice → Decision → World Action Acceptance
 
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
