@@ -192,7 +192,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 # Stage 8 — Hybrid Advisor Conversation + Character Decision Interface
 
 - `WP-S008-001` — Deterministic Input Normalization + Sentence Library Matching — COMPLETED
-- `WP-S008-002` — Context-Bounded Command Set Interface + Authoritative Target Filtering
+- `WP-S008-002` — Context-Bounded Command Set Interface + Authoritative Target Filtering — IN PROGRESS (AGENT #6; FUNCTIONAL accepted implementation/evidence head `d265d1573427a36a9d2ea619a0b5b5312e695842`; exact-head workflow `36685889246` SUCCESS with public Pages verification. `advisor-command-set-v1` exposes 5 stable read-only query/advice/travel/interaction schemas; bounded context A=`CMDCTX-8B9F0779`, context B=`CMDCTX-D5BA1776`; current people/place/route/interaction IDs filter deterministically with stale/unknown IDs rejected; arbitrary JavaScript/raw mutation/file/network/direct world mutation/execution authority all false; bounded source diagnostics propagate; `fullWorldScan=false`, render/camera/device/performance authority false; VISUAL: N/A because this WP adds no rendered surface. Completion waits for acceptance-doc deployment verification.)
 - `WP-S008-003` — Deterministic Local Conversation Router + Offline Fallback
 - `WP-S008-004` — External LLM Adapter + Structured Proposal Validation
 - `WP-S008-005` — Protagonist Command Proposal Evaluation + Simulation Execution Boundary
