@@ -430,7 +430,7 @@ let localMotionVector={east:0,north:0,magnitude:0};
 function freshLocalResources(){
   return {activeSignature:null,requestedSignature:null,preparedSignature:null,preparingSignature:null,requestedLevel:null,visibleLevel:null,requestedCellId:null,activeCellId:null,preparingLevel:null,preparing:false,preparingPrewarm:false,preparationProgress:0,standInActive:false,standInMagnification:1,standInSemanticScale:1,standInOffsetClamped:false,standInPinnedToViewport:false,standInRawOffsetMeters:{east:0,north:0},standInAppliedOffsetMeters:{east:0,north:0},
     cacheHits:0,cacheMisses:0,prewarmHits:0,prewarmCompleted:0,cancelledPreparations:0,deferredRequests:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,
-    lastBuildMs:0,lastPreparationWallMs:0,lastPreparationBusyMs:0,lastPreparationSlices:0,maxPreparationSliceMs:0,lastSwapMs:0,maxSwapMs:0,swapCount:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,
+    lastBuildMs:0,lastPreparationWallMs:0,lastPreparationBusyMs:0,lastPreparationSlices:0,maxPreparationSliceMs:0,lastPreparationPhase:null,preparationPhaseMaxMs:{},preparationPhaseBusyMs:{},lastFinalizeMs:0,maxFinalizeMs:0,lastFinalizationPhaseMs:{},finalizationPhaseMaxMs:{},lastSwapMs:0,maxSwapMs:0,swapCount:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,
     blockingZoomBuilds:0,maxFrameMsDuringPreparation:0,recentMaxFrameMs:0,lastFrameMs:0,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,cooperativePreparation:true,doubleBufferedSwap:true,
     zoomReadinessHoldActive:false,zoomReadinessHoldFrames:0,zoomReadinessCapScalar:1,zoomReadinessSourceVisibleHeightMeters:null,zoomReadinessCurrentMagnification:1,zoomReadinessMaxMagnification:1,zoomReadinessRevision:"ready-parent-leash-v2",
     residencyRevision:"temporal-residency-v1",requestedCellCount:0,preparingCellCount:0,readyCellCount:0,activeCellCount:0,graceResidentCellCount:0,evictedCellCount:0,
@@ -6755,18 +6755,23 @@ function carveNestedRingCenterAlpha(pixels,innerCoverageRatio){
   }
 }
 function* localResourceSteps(job){
+  job.currentPreparationPhase="mesh-heightfield";
   const meshData=yield* tangentMeshSteps(job);
   const size=LOCAL_DETAIL_LEVELS[job.levelIndex].textureSize;
   // Center-first streaming presentation: build the authoritative 1x focus
   // patch first, then a cheaper 3x medium ring, then the 6x coarse fallback.
   // All three sample the same SEED-registered coordinates; only presentation
   // density differs.
+  job.currentPreparationPhase="texture-focus";
   const detail=yield* surfaceTextureSteps(job,job.dims.patchWidth,job.dims.patchHeight,size,true,false);
   const broadParent=job.levelIndex<=1;
   const mediumSize=broadParent?Math.max(80,Math.round(size*.50)):Math.max(96,Math.round(size*LOCAL_MEDIUM_RING_TEXTURE_SCALE));
   const surroundSize=broadParent?Math.max(96,Math.round(size*.58)):size;
+  job.currentPreparationPhase="texture-medium";
   const medium=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR,job.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR,mediumSize,true,true);
+  job.currentPreparationPhase="texture-surround";
   const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,surroundSize,false,true);
+  job.currentPreparationPhase="ring-compose";
   stitchSurroundCenterToDetail(detail,medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
   stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
   carveNestedRingCenterAlpha(medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
@@ -6875,18 +6880,23 @@ function skirtMeshForDims(dims,spanFactor=LOCAL_SURROUND_SPAN_FACTOR){
   return mesh;
 }
 function finalizeLocalResource(job,result){
-  const started=performance.now(),dims=job.dims,{meshData,detail,medium,surround}=result;
+  const started=performance.now(),dims=job.dims,{meshData,detail,medium,surround}=result,phaseMs={};
+  let phaseStarted=performance.now();
   const mesh=new pc.Mesh(device);mesh.setPositions(meshData.positions);mesh.setNormals(meshData.normals);mesh.setUvs(0,meshData.uvs);mesh.setIndices(meshData.indices);mesh.update();
   mesh.incRefCount();// owned by the LRU cache, not by whichever MeshInstance shows it
+  phaseMs.meshUpload=performance.now()-phaseStarted;phaseStarted=performance.now();
   const mediumMesh=skirtMeshForDims(dims,LOCAL_MEDIUM_RING_SPAN_FACTOR);mediumMesh.incRefCount();
   const skirtMesh=skirtMeshForDims(dims,LOCAL_SURROUND_SPAN_FACTOR);skirtMesh.incRefCount();
+  phaseMs.ringMeshUpload=performance.now()-phaseStarted;phaseStarted=performance.now();
   const detailTexture=textureFromPixels(detail),mediumTexture=textureFromPixels(medium),surroundTexture=textureFromPixels(surround),textureSize=detail.size;
+  phaseMs.textureUpload=performance.now()-phaseStarted;phaseStarted=performance.now();
   const detailMetersPerTexel=detail.metersPerTexel,mediumMetersPerTexel=medium.metersPerTexel,surroundMetersPerTexel=surround.metersPerTexel;
   const vertices=meshData.positions.length/3,triangles=meshData.indices.length/3;
   const surfaceContributorPixels=detail.contributorPixels||null;
   const contributorBytes=surfaceContributorPixels?Object.values(surfaceContributorPixels.layers||{}).reduce((sum,pixels)=>sum+Number(pixels?.byteLength||0),0):0;
   const estimatedBytes=meshData.positions.byteLength+meshData.normals.byteLength+meshData.uvs.byteLength+meshData.indices.byteLength+detail.size*detail.size*4+medium.size*medium.size*4+surround.size*surround.size*4+contributorBytes;
   const wildernessPlan=prepareLocalWildernessPlan(job);
+  phaseMs.wildernessPlan=performance.now()-phaseStarted;phaseStarted=performance.now();
   const regenerationSignature=localResourceRegenerationSignature(job);
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,surfaceContributorPixels,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
@@ -6911,6 +6921,14 @@ function finalizeLocalResource(job,result){
   trimLocalResourceCache();
   localResources.cachedResourceCount=localResourceCache.size;
   localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);
+  phaseMs.cacheBookkeeping=performance.now()-phaseStarted;
+  const finalizeMs=performance.now()-started;
+  localResources.lastFinalizeMs=Number(finalizeMs.toFixed(3));
+  localResources.maxFinalizeMs=Math.max(Number(localResources.maxFinalizeMs||0),localResources.lastFinalizeMs);
+  localResources.lastFinalizationPhaseMs=Object.fromEntries(Object.entries(phaseMs).map(([name,ms])=>[name,Number(ms.toFixed(3))]));
+  for(const [name,ms] of Object.entries(phaseMs)){
+    localResources.finalizationPhaseMaxMs[name]=Math.max(Number(localResources.finalizationPhaseMaxMs[name]||0),Number(ms.toFixed(3)));
+  }
   return resource;
 }
 function destroyCachedLocalResource(resource){
@@ -7062,13 +7080,21 @@ function startLocalJob(index,lat,lon,signature,prewarm,prewarmKind="lod"){
   const columns=Math.max(2,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters)+1),rows=Math.max(2,Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)+1);
   const biomeCoordinateProof=localBiomeCoordinateProof(anchorLat,anchorLon);
   const job={token:++localPreparationToken,signature,levelIndex:index,dims,lat0:anchorLat,lon0:anchorLon,requestedLat0:lat,requestedLon0:lon,spatialCell,prewarm,prewarmKind,groundDetailWeight:groundDetailWeightForLevel(index),centerElevation:Number(geography?.sampleLatLon?.(anchorLat,anchorLon)?.elevationMeters||0),biomeCoordinateProof,
-    totalSteps:rows+size*2,steps:0,busyMs:0,slices:0,maxSliceMs:0,startedAtMs:performance.now(),iterator:null};
+    totalSteps:rows+size*2,steps:0,busyMs:0,slices:0,maxSliceMs:0,currentPreparationPhase:"queued",phaseSliceMaxMs:{},phaseBusyMs:{},startedAtMs:performance.now(),iterator:null};
   job.iterator=localResourceSteps(job);
   localJob=job;localResources.cacheMisses+=prewarm?0:1;
   setLocalResidencyState(signature,"preparing",{cellId:spatialCell.id,level:dims.levelId,prefetchKind:prewarm?prewarmKind:null,requestedAtMs:prewarm?null:performance.now()});
   localResources.preparing=true;localResources.preparingPrewarm=prewarm;localResources.preparingSignature=signature;localResources.preparingLevel=dims.levelId;localResources.preparationProgress=0;
   localResources.lastPreparationQueuedAtMs=Number(job.startedAtMs.toFixed(3));localFrameStats.maxDuringPreparationMs=0;
   scheduleLocalPump();
+}
+function recordLocalPreparationPhase(job,ms){
+  const phase=String(job?.currentPreparationPhase||"unknown"),rounded=Number(Math.max(0,Number(ms)||0).toFixed(3));
+  job.phaseSliceMaxMs[phase]=Math.max(Number(job.phaseSliceMaxMs[phase]||0),rounded);
+  job.phaseBusyMs[phase]=Number((Number(job.phaseBusyMs[phase]||0)+rounded).toFixed(3));
+  localResources.lastPreparationPhase=phase;
+  localResources.preparationPhaseMaxMs[phase]=Math.max(Number(localResources.preparationPhaseMaxMs[phase]||0),rounded);
+  localResources.preparationPhaseBusyMs[phase]=Number((Number(localResources.preparationPhaseBusyMs[phase]||0)+rounded).toFixed(3));
 }
 let localPumpScheduled=false;
 function scheduleLocalPump(){
@@ -7096,6 +7122,7 @@ function pumpLocalPreparation(){
     return;
   }
   let sliceMs=performance.now()-sliceStart;
+  recordLocalPreparationPhase(job,sliceMs);
   if(step.done){
     const resource=finalizeLocalResource(job,step.value);
     sliceMs=performance.now()-sliceStart;
