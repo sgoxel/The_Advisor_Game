@@ -2287,3 +2287,12 @@ body.planet-stage-active{
     overflow:hidden;
   }
 }
+
+
+/* WP-S010-009 current-run attempt-1: prevent auto-row stretch from pushing composer below panel */
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-chat-panel:has(.advisor-activity-strip):not(:has(.advisor-status-readout[open])){
+    grid-template-rows:max-content max-content 0 max-content 0;
+    align-content:start;
+  }
+}
