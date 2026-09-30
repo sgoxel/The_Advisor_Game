@@ -70,8 +70,14 @@ def state():
       const s=PlanetStage.snapshot(),te=s.travelEncounters||TravelEncounters.snapshot(s.activeSeed),cp=s.crowdPresentation||{};
       const card=document.getElementById("travelEncounterCard"),cardRect=card&&!card.hidden?card.getBoundingClientRect():null;
       const cardCenter=cardRect?{x:(cardRect.left+cardRect.right)/2,y:(cardRect.top+cardRect.bottom)/2}:null;
-      const cardTopElement=cardCenter?document.elementFromPoint(cardCenter.x,cardCenter.y):null;
-      const cardTopmost=Boolean(card&&cardTopElement&&(cardTopElement===card||card.contains(cardTopElement)));
+      let cardTopElement=null,cardTopmost=false;
+      if(card&&cardCenter){
+        const previousPointerEvents=card.style.pointerEvents;
+        card.style.pointerEvents="auto";
+        cardTopElement=document.elementFromPoint(cardCenter.x,cardCenter.y);
+        cardTopmost=Boolean(cardTopElement&&(cardTopElement===card||card.contains(cardTopElement)));
+        card.style.pointerEvents=previousPointerEvents;
+      }
       const panel=document.querySelector(".planet-places-panel:not([hidden])"),panelRect=panel?panel.getBoundingClientRect():null;
       const center=document.querySelector(".planet-world-center:not([hidden])"),centerGlyph=center?.querySelector("i"),centerCode=center?.querySelector("code");
       const centerGlyphRect=centerGlyph?.getBoundingClientRect?.()||null,centerCodeStyle=centerCode?getComputedStyle(centerCode):null;
