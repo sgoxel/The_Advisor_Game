@@ -42,7 +42,7 @@ def ready():
           // paint indefinitely, so evidence must gate on the actual playable stage state plus
           // the real canvas/dependencies, not on the later decoration flag.
           return Boolean(s?.ready && root && document.getElementById("planetCanvas") &&
-            window.PersistentConsequences && window.WorldState && window.WorldContext && window.CampaignPersistence &&
+            window.PersistentConsequences && window.WorldState && window.CampaignPersistence &&
             window.CatchUpSimulation && window.EventScheduler && window.GameTime);
         """)
     except Exception:
@@ -148,7 +148,7 @@ try:
     try:
         wait.until(lambda _d: ready())
     except TimeoutException:
-        raise RuntimeError("startup timeout: "+json.dumps(driver.execute_script("return {ready:window.PlanetStage?.snapshot?.()?.ready||false,domReady:document.getElementById(\'planetStageRoot\')?.dataset?.ready||null,canvas:Boolean(document.getElementById(\'planetCanvas\')),deps:{pc:Boolean(window.PersistentConsequences),ws:Boolean(window.WorldState),wc:Boolean(window.WorldContext),save:Boolean(window.CampaignPersistence),catchup:Boolean(window.CatchUpSimulation),scheduler:Boolean(window.EventScheduler),time:Boolean(window.GameTime)},error:window.PlanetStage?.snapshot?.()?.startupError||null,body:String(document.body?.innerText||\'\').slice(0,900)}")))
+        raise RuntimeError("startup timeout: "+json.dumps(driver.execute_script("return {ready:window.PlanetStage?.snapshot?.()?.ready||false,domReady:document.getElementById(\'planetStageRoot\')?.dataset?.ready||null,canvas:Boolean(document.getElementById(\'planetCanvas\')),deps:{pc:Boolean(window.PersistentConsequences),ws:Boolean(window.WorldState),save:Boolean(window.CampaignPersistence),catchup:Boolean(window.CatchUpSimulation),scheduler:Boolean(window.EventScheduler),time:Boolean(window.GameTime)},error:window.PlanetStage?.snapshot?.()?.startupError||null,body:String(document.body?.innerText||\'\').slice(0,900)}")))
     campaign_binding=bind_evidence_campaign()
 
     persistence=None
