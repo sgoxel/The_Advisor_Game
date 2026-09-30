@@ -32,9 +32,9 @@ driver=webdriver.Chrome(options=opt);wait=WebDriverWait(driver,240)
 def ready(mode):
     try:
         return driver.execute_script("""
-          const m=arguments[0],stage=document.getElementById('planetStageRoot'),panel=document.getElementById('advisorChatPanel'),strip=document.querySelector('.advisor-activity-strip');
-          const as=window.ProtagonistActivityUI?.snapshot?.(),cs=window.AdvisorConversationUI?.snapshot?.();
-          return Boolean(stage?.dataset?.ready==='true'&&window.PlanetStage?.snapshot?.()?.ready&&panel&&!panel.hidden&&strip&&as?.evidenceMode===m&&cs?.evidenceMode==='ordinary');
+          const m=arguments[0],stage=document.getElementById('planetStageRoot'),panel=document.getElementById('advisorChatPanel'),strip=document.querySelector('.advisor-activity-strip'),status=document.querySelector('.advisor-status-readout');
+          const as=window.ProtagonistActivityUI?.snapshot?.(),ss=window.ProtagonistStatusUI?.snapshot?.(),cs=window.AdvisorConversationUI?.snapshot?.();
+          return Boolean(stage?.dataset?.ready==='true'&&window.PlanetStage?.snapshot?.()?.ready&&panel&&!panel.hidden&&strip&&as?.evidenceMode===m&&ss?.evidenceMode==null&&status&&!status.open&&cs?.evidenceMode==='ordinary');
         """,mode)
     except Exception:return False
 
@@ -82,13 +82,17 @@ def assert_state(s):
 records=[]
 try:
     driver.set_window_size(*VIEWPORTS["phone-portrait"]);driver.get(url("traveling"))
+    try:wait.until(lambda d:window_ready(d))
+    except TimeoutException:
+        driver.save_screenshot(str(OUT/"startup-failure.png"));raise
+    driver.execute_script("window.ProtagonistStatusUI.setEvidenceMode(null);window.AdvisorConversationUI.setEvidenceMode('ordinary');")
     try:wait.until(lambda d:ready("traveling"))
     except TimeoutException:
         driver.save_screenshot(str(OUT/"startup-failure.png"));raise
     for profile,size in VIEWPORTS.items():
         driver.set_window_size(*size);time.sleep(.35)
         for mode in MATRIX[profile]:
-            driver.execute_script("window.ProtagonistActivityUI.setEvidenceMode(arguments[0]);window.AdvisorConversationUI.setEvidenceMode('ordinary');",mode)
+            driver.execute_script("window.ProtagonistStatusUI.setEvidenceMode(null);window.ProtagonistActivityUI.setEvidenceMode(arguments[0]);window.AdvisorConversationUI.setEvidenceMode('ordinary');",mode)
             WebDriverWait(driver,30).until(lambda d,m=mode:ready(m));time.sleep(.18)
             s=state(mode,profile);path=OUT/f"{profile}-{mode}.png";driver.save_screenshot(str(path));assert_state(s);records.append({"profile":profile,"mode":mode,"file":str(path),"state":s})
     severe=[e for e in driver.get_log("browser") if e.get("level")=="SEVERE" and "favicon.ico" not in str(e.get("message",""))]
