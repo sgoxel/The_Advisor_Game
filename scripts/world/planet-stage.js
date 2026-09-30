@@ -3839,7 +3839,7 @@ function routeOverviewPlan(reveal){
     const aa=score(a),bb=score(b);
     return bb.forward-aa.forward||aa.lateral-bb.lateral||String(a?.id||"").localeCompare(String(b?.id||""));
   });
-  const cap=14,records=[];
+  const cap=18,records=[];
   for(const record of specials){if(records.length>=3||records.length>=cap)break;records.push(record);}
   for(const record of houses){if(records.length>=cap)break;if(!records.some(item=>String(item?.id||"")===String(record?.id||"")))records.push(record);}
   const frozen=Object.freeze(records.slice());
@@ -3856,7 +3856,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   const records=tier==="route"?(routePlan?.records||[]):[...(window.StartingVillage?.buildPlots?.(activeSeed)||[]),...(reveal?.specialLots||[])];
   const specialIds=new Set((reveal?.specialLots||[]).map(item=>String(item?.id||"")));
   const tileMeters=Math.max(1,Number(reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
-  const positions=[],normals=[],uvs=[],colors=[],indices=[];let count=0,outlineSegmentCount=0,connectorSegmentCount=0;
+  const positions=[],normals=[],uvs=[],colors=[],indices=[];let count=0,outlineSegmentCount=0,connectorSegmentCount=0,publicSquareContextCount=0;
   const addPolygonQuad=(corners,color,extraLift=0)=>{
     if(!Array.isArray(corners)||corners.length!==4)return false;
     const base=positions.length/3;
@@ -3919,6 +3919,14 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
       if(addQuad(maxX-bw,minY+bw,maxX,maxY-bw,border,.006))outlineSegmentCount++;
     }
   }
+  // Route-tier composition also includes the canonical StartingVillage public
+  // square. This is existing world authority at its exact tile coordinates and
+  // gives the real occupied footprints a readable civic center without adding
+  // any synthetic lot, building, or road.
+  if(tier==="route"){
+    const squareHalf=Math.max(1,Number(window.StartingVillage?.PUBLIC_HALF_SIZE||3));
+    if(addQuad(-squareHalf,-squareHalf,squareHalf,squareHalf,[146,136,108],.002))publicSquareContextCount=1;
+  }
   // HousePlans exposes the canonical exterior entrance and its already-chosen
   // nearby road target. Keep those true access links in the same merged
   // overview mesh so parent fallback and settlement approach read as connected
@@ -3935,7 +3943,7 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   const entity=new pc.Entity("CanonicalOccupiedLotFills");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
   entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.lotOverview,entity)];
   localStaticRoot.addChild(entity);localSettlementLotGeometry=mesh;
-  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount,outlineSegmentCount,connectorSegmentCount,triangleCount:indices.length/3,mode:tier==="route"?"authoritative-priority-house-footprint-access-v11":"authoritative-occupied-lot-perimeter-access-v10"});
+  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount+publicSquareContextCount,outlineSegmentCount,connectorSegmentCount,publicSquareContextCount,triangleCount:indices.length/3,mode:tier==="route"?"authoritative-priority-house-footprint-access-v12":"authoritative-occupied-lot-perimeter-access-v10"});
 }
 function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tier,routePlan=null){
   localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;
@@ -6354,8 +6362,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // recognizable context rather than dominate local albedo as a giant pale
       // contour. Retain a bounded share of the same canonical elevation identity
       // while curvature/drainage/registered detail carry the readable structure.
+      const strategicBaseFlattenBand=sample?.land
+        ?smoothstep01(clamp((metersPerTexel-700)/650,0,1))*(1-smoothstep01(clamp((metersPerTexel-4800)/4000,0,1)))
+        :0;
       const absoluteElevationPaletteWeight=sample?.land
-        ?lerp(.34,1,smoothstep01(clamp((58-metersPerTexel)/36,0,1)))
+        ?lerp(lerp(.34,1,smoothstep01(clamp((58-metersPerTexel)/36,0,1))),.12,strategicBaseFlattenBand)
         :1;
       const paletteUplandWeight=uplandWeight*absoluteElevationPaletteWeight;
       const paletteAlpineWeight=alpineBase*absoluteElevationPaletteWeight;
@@ -6427,11 +6438,18 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // canonical base palette remains fully visible.
       const coarseRegionalResidualBand=smoothstep01(clamp((metersPerTexel-700)/700,0,1))*
         (1-smoothstep01(clamp((metersPerTexel-5000)/5200,0,1)));
-      const coarseRegionalResidualGain=1-coarseRegionalResidualBand*.62;
+      // The exact-screen contributor capture isolates the remaining broad
+      // regional band to coarse base/parent photometry. Suppress only the shared
+      // low-frequency parent term while retaining the already-generated
+      // fine-minus-parent registered residual as the physically resolvable
+      // high-pass signal. This adds no samples and changes no world authority.
+      const coarseRegionalSharedGain=1-coarseRegionalResidualBand*.82;
+      const coarseRegionalFineGain=1+coarseRegionalResidualBand*.18;
       const strategicMacroGain=1+strategicMapBand*(contextRing?.22:.48);
       const sharedMacroContrast=(contextRing?1.06:1.10)*strategicMacroGain;
       const residualMacroContrast=(contextRing?1.20:lerp(1.18,1.52,focusRefineWeight))*strategicMacroGain;
-      const macro=(sharedMacro*sharedMacroContrast+(nativeMacro-sharedMacro)*refinementGain*residualMacroContrast)*coarseRegionalResidualGain;
+      const macro=sharedMacro*sharedMacroContrast*coarseRegionalSharedGain+
+        (nativeMacro-sharedMacro)*refinementGain*residualMacroContrast*coarseRegionalFineGain;
       pushRange("baseLuma",luma3(base));pushRange("macro",macro);
       let shade=1,cover=[0,0,0],structureContribution=[0,0,0],landCoverContribution=[0,0,0];
       if(sample?.land){
@@ -6607,6 +6625,18 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const regionalContrast=1+strategicMapBand*(contextRing?.03:.05);
         const palettePivot=clamp(luma3(localPalette),.20,.58);
         displayColor=displayColor.map(v=>clamp(palettePivot+(v-palettePivot)*regionalContrast,0,1));
+      }
+      // At the 1/500-style local-map band, boost only contrast already present
+      // in the registered macro/curvature/cover composite. This is a display
+      // transfer, not new noise or geography sampling, and fades out before
+      // ground-scale rendering.
+      if(sample?.land){
+        const localMapReadabilityBand=smoothstep01(clamp((metersPerTexel-18)/34,0,1))*
+          (1-smoothstep01(clamp((metersPerTexel-230)/170,0,1)));
+        if(localMapReadabilityBand>.001){
+          const pivot=clamp(luma3(localPalette),.20,.58),gain=1+localMapReadabilityBand*.14;
+          displayColor=displayColor.map(v=>clamp(pivot+(v-pivot)*gain,0,1));
+        }
       }
       // Coarse tangent tiles should retain the land hue already present in the
       // canonical moisture/elevation palette rather than collapsing into gray
@@ -6866,7 +6896,7 @@ function finalizeLocalResource(job,result){
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
       meshHeightRange:meshData.meshHeightRange||null,
-      topographicSignalRevision:"canonical-access-morphology-map-detail-v30",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-base-highpass-map-detail-v31",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
