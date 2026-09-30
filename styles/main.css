@@ -2228,3 +2228,16 @@ body.planet-stage-active{
     height:36px;
   }
 }
+
+
+/* WP-S010-009 final collapsed-status track budget */
+@media(min-height:431px){
+  .advisor-chat-panel:has(.advisor-activity-strip):not(:has(.advisor-status-readout[open])){
+    grid-template-rows:auto minmax(42px,auto) minmax(72px,1fr) auto auto;
+  }
+}
+@media(max-width:520px) and (min-height:431px){
+  .advisor-chat-panel:has(.advisor-activity-strip):not(:has(.advisor-status-readout[open])){
+    grid-template-rows:auto minmax(38px,auto) minmax(72px,1fr) auto auto;
+  }
+}
