@@ -51,17 +51,21 @@ def capture_contributors(d,phase):
         raise AssertionError(f"contributor capture unavailable at {phase}: {payload}")
     if int(payload.get("worldResampleCount",-1))!=0 or int(payload.get("geographyQueryCount",-1))!=0:
         raise AssertionError(f"contributor capture performed forbidden resampling at {phase}: {payload}")
-    images={}
-    for name,data_url in (payload.get("images") or {}).items():
-        images[name]=save_data_url(data_url,f"contributors-{phase}-{name}")
+    roles={}
     required={"base","macro","structure","landCover","final"}
-    if set(images)!=required:
-        raise AssertionError(f"contributor layer mismatch at {phase}: {sorted(images)}")
+    for role,record in (payload.get("roles") or {}).items():
+        images={}
+        for name,data_url in (record.get("images") or {}).items():
+            images[name]=save_data_url(data_url,f"contributors-{phase}-{role}-{name}")
+        if set(images)!=required:
+            raise AssertionError(f"contributor layer mismatch at {phase}/{role}: {sorted(images)}")
+        roles[role]={**record,"images":images}
+    if set(roles)!={"focus","medium","outer"}:
+        raise AssertionError(f"contributor role mismatch at {phase}: {sorted(roles)}")
     return {
       "phase":phase,"revision":payload.get("revision"),"resourceSignature":payload.get("resourceSignature"),
-      "level":payload.get("level"),"size":payload.get("size"),"metersPerTexel":payload.get("metersPerTexel"),
-      "componentRanges":payload.get("componentRanges"),"worldResampleCount":payload.get("worldResampleCount"),
-      "geographyQueryCount":payload.get("geographyQueryCount"),"images":images
+      "level":payload.get("level"),"componentRanges":payload.get("componentRanges"),"roles":roles,
+      "worldResampleCount":payload.get("worldResampleCount"),"geographyQueryCount":payload.get("geographyQueryCount")
     }
 
 def screenshot_delta(a_name,b_name):
@@ -146,6 +150,42 @@ def capture_flat_height_isolation(d,phase):
       "pixelDelta":screenshot_delta(normal_shot,flat_shot)
     }
 
+def screenshot_samples(path_name,points=None):
+    points=points or {"center":(.50,.50),"ridge_west":(.34,.50),"ridge_east":(.66,.50),"north":(.50,.36),"south":(.50,.64)}
+    img=Image.open(OUT_DIR/path_name).convert("RGB")
+    samples={}
+    for name,(fx,fy) in points.items():
+        x=max(0,min(img.width-1,round(fx*(img.width-1))))
+        y=max(0,min(img.height-1,round(fy*(img.height-1))))
+        samples[name]=list(img.getpixel((x,y)))
+    return samples
+
+def capture_transition_layer_isolation(d,scalar=.690488):
+    d.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);",float(scalar))
+    wait(d,"const s=window.PlanetStage.snapshot();return Math.abs(Number(s.zoom.scalar)-arguments[0])<1e-6 && Number(s.projection?.resourceBudget?.pendingPreparationCount||0)===0",240,float(scalar))
+    time.sleep(.8)
+    baseline=snap(d)
+    sig=baseline.get("projection",{}).get("resourceBudget",{}).get("visibleResourceSignature")
+    frames={}
+    states={}
+    for mode in ("normal","focus-only","medium-only","outer-only"):
+        state=d.execute_script("return window.PlanetStage.setWp020PresentationEvidenceMode(arguments[0]);",mode)
+        if not state or state.get("available") is not True or state.get("mode")!=mode:
+            raise AssertionError(f"layer isolation unavailable for {mode}: {state}")
+        time.sleep(.25)
+        current=snap(d)
+        current_sig=current.get("projection",{}).get("resourceBudget",{}).get("visibleResourceSignature")
+        if current_sig!=sig or abs(float(current["zoom"]["scalar"])-float(scalar))>1e-6:
+            raise AssertionError(f"layer isolation changed resource/scalar: {mode} {current_sig} {current['zoom']['scalar']}")
+        shot=capture(d,f"transition-layer-{mode}")
+        frames[mode]={"screenshot":shot,"framebufferRgb":screenshot_samples(shot)}
+        states[mode]=state
+    d.execute_script("window.PlanetStage.setWp020PresentationEvidenceMode('normal');")
+    contributor=capture_contributors(d,"transition-pinned")
+    return {"mode":"pinned-transition-layer-isolation-v1","scalar":float(scalar),"resourceSignature":sig,
+            "displayScale":baseline.get("zoom",{}).get("displayScaleLabel"),"states":states,
+            "frames":frames,"contributors":contributor}
+
 def focus_village(d):
     t=d.execute_script("""
       const s=window.PlanetStage.snapshot(),p=window.StartingVillage?.plan?.(s.activeSeed);
@@ -182,7 +222,7 @@ def settle_display_scale(d,index,timeout=300):
 
 def main():
     OUT_DIR.mkdir(parents=True,exist_ok=True)
-    evidence={"wp":"WP-S003-010-003-020","target":TARGET,"diagnosticTarget":DIAGNOSTIC_TARGET,"visualMode":"production-no-fast-start","pass":False,"frames":[],"contributorDiagnostics":[],"presentationIsolation":[]}
+    evidence={"wp":"WP-S003-010-003-020","target":TARGET,"diagnosticTarget":DIAGNOSTIC_TARGET,"visualMode":"production-no-fast-start","pass":False,"frames":[],"contributorDiagnostics":[],"presentationIsolation":[],"transitionLayerIsolation":None}
     d=driver_for()
     try:
         d.get(DIAGNOSTIC_TARGET)
@@ -206,6 +246,8 @@ def main():
         evidence["frames"].append({"phase":"diagnostic-1_150","displayScale":diag150["zoom"]["displayScaleLabel"],"scalar":diag150["zoom"]["scalar"],"localDetail":diag150.get("projection",{}).get("localDetail"),"resourceBudget":diag150.get("projection",{}).get("resourceBudget"),"screenshot":capture(d,"production-diagnostic-1_150")})
         evidence["contributorDiagnostics"].append(capture_contributors(d,"1_150"))
         evidence["presentationIsolation"].append(capture_flat_height_isolation(d,"1_150"))
+        focus_village(d)
+        evidence["transitionLayerIsolation"]=capture_transition_layer_isolation(d,.690488)
         focus_village(d)
         settle_scale(d,0)
         d.execute_script("window.PlanetStage.setAnimatedScaleIndex(10,'wp020-production-visual');")
