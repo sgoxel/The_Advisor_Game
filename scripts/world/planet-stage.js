@@ -4414,7 +4414,7 @@ function resetLocalCrowdTelemetry(){
     active:false,generatedCount:0,visibleCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,
     settlementId:null,settlementName:null,settlementClass:null,districtBand:"none",districtFactor:0,
     population:0,populationSource:null,rhythmBand:"unknown",activityFactor:0,cap:0,candidateChecks:0,
-    exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
+    exactPersistentNpcCount:Number(localNpcEntities.size||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
     mobile:false,pooledStableIds:true,localCulling:true,lowFrequencyMotion:true,
     presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,
     inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
@@ -4564,7 +4564,7 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     districtBand:crowd?.districtBand||"none",districtFactor:Number(crowd?.districtFactor||0),population:Number(crowd?.population||0),populationSource:crowd?.populationSource||null,
     rhythmBand:crowd?.rhythmBand||"unknown",activityFactor:Number(crowd?.activityFactor||0),cap:Number(crowd?.cap||0),candidateChecks:Number(crowd?.candidateChecks||0),
     resolveMs:Number(crowd?.resolveMs||0),sourceUpdateMs:Number(crowd?.updateMs||0),totalSourceUpdateMs:Number(crowd?.totalUpdateMs||0),
-    exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
+    exactPersistentNpcCount:Number(localNpcEntities.size||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
     travelEncounterCount:Number(encounter?.exactActorCount||0),visibleTravelEncounterCount:travelRows.length,travelEncounterId:encounter?.encounter?.id||null,
     travelEncounterType:encounter?.encounter?.type||null,travelEncounterBuildMs:Number(encounter?.updateMs||0),
     travelEncounterBodyMinPx:travelSizes.length?Number(Math.min(...travelSizes).toFixed(3)):null,travelEncounterBodyMaxPx:travelSizes.length?Number(Math.max(...travelSizes).toFixed(3)):null,
@@ -8745,7 +8745,7 @@ function snapshot(){
     wayfindingSignposts:Object.freeze({...wayfindingSignposts,signs:Object.freeze((wayfindingSignposts.signs||[]).slice())}),
     npcPresentation:Object.freeze({...localNpcPresentation}),
     crowdPresentation:Object.freeze({...localCrowdPresentation,
-      exactPersistentNpcCount:Number(window.DailyActivity?.build?.(activeSeed)?.length||0),
+      exactPersistentNpcCount:Number(localNpcEntities.size||0),
       visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
       inspectionRegistered:false,selectable:false,persistentIdentity:false,collision:false,
       actors:Object.freeze(localCrowdEntities.map(item=>Object.freeze({id:item.id,point:item.point,visualRole:item.visualRole,visible:Boolean(item.entity?.enabled),travelEncounter:Boolean(item.travelEncounter),encounterType:item.encounterType||null,propKind:item.propKind||null,inViewport:Boolean(item.inViewport),screen:item.screen||null,bodyScreenSizePx:item.bodyScreenSizePx||null})))
