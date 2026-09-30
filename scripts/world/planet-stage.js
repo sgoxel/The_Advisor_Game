@@ -24,6 +24,11 @@ const EVIDENCE_FAST_START=typeof location!=="undefined"&&new URLSearchParams(loc
 // preserves the full SEED geography texture/feature scan, but reduces only the
 // evidence globe tessellation so SwiftShader does not dominate the test.
 const EVIDENCE_LAYERED_START=typeof location!=="undefined"&&new URLSearchParams(location.search).get("evidence_layered_start")==="1";
+// WP-020 contributor isolation is evidence-only. It retains bounded per-pixel
+// presentation values already computed for the first two regional focus textures;
+// it never adds geography queries, changes rendered pixels, or runs in production
+// unless the trusted evidence URL explicitly opts in.
+const EVIDENCE_SURFACE_CONTRIBUTORS=typeof location!=="undefined"&&new URLSearchParams(location.search).get("wp020_surface_contributors")==="1";
 const EVIDENCE_LATITUDE_SEGMENTS=32;
 const EVIDENCE_LONGITUDE_SEGMENTS=64;
 const HEIGHT_EXAGGERATION=5.0;
@@ -6245,6 +6250,16 @@ function blendSurfaceAuthoritySamples(coarse,fine,t){
 function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRing=false){
   const lat0=job.lat0,lon0=job.lon0,data=new Uint8ClampedArray(size*size*4);
   const metersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
+  const captureContributorPixels=Boolean(EVIDENCE_SURFACE_CONTRIBUTORS&&job.levelIndex<=1&&!contextRing);
+  const contributorLayers=captureContributorPixels?Object.fromEntries(["base","macro","structure","landCover","final"].map(name=>[name,new Uint8ClampedArray(size*size*4)])):null;
+  const writeContributorRgb=(name,offset,rgb)=>{
+    const target=contributorLayers?.[name];if(!target)return;
+    target[offset]=Math.round(clamp(Number(rgb?.[0])||0,0,1)*255);
+    target[offset+1]=Math.round(clamp(Number(rgb?.[1])||0,0,1)*255);
+    target[offset+2]=Math.round(clamp(Number(rgb?.[2])||0,0,1)*255);
+    target[offset+3]=255;
+  };
+  const writeContributionRgb=(name,offset,rgb,gain)=>writeContributorRgb(name,offset,[0,1,2].map(i=>.5+(Number(rgb?.[i])||0)*gain));
   // Bounded presentation-only contributor telemetry. These ranges reuse values
   // already computed for this texture build; they add no geography queries or
   // world scans and never participate in terrain authority.
@@ -6298,7 +6313,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   };
   for(let y=0;y<size;y++){
     for(let x=0;x<size;x++){
-      const ux=(x+.5)/size,vz=(y+.5)/size;
+      const ux=(x+.5)/size,vz=(y+.5)/size,pixelOffset=(y*size+x)*4;
       const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
       const sample=mixSample(ux,vz);
       const sourceColor=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
@@ -6391,7 +6406,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       const residualMacroContrast=(contextRing?1.20:lerp(1.18,1.52,focusRefineWeight))*strategicMacroGain;
       const macro=sharedMacro*sharedMacroContrast+(nativeMacro-sharedMacro)*refinementGain*residualMacroContrast;
       pushRange("baseLuma",luma3(base));pushRange("macro",macro);
-      let shade=1,cover=[0,0,0];
+      let shade=1,cover=[0,0,0],structureContribution=[0,0,0],landCoverContribution=[0,0,0];
       if(sample?.land){
         // Shared context remains restrained while focus progressively samples
         // a finer, still world-registered relief gradient. This restores
@@ -6525,6 +6540,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
           ];
         }
         pushRange("registeredReliefShade",registeredReliefShade);
+        structureContribution=cover.slice();
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
         const coverGain=contextRing?contextRefineWeight*.38:focusRefineWeight*.98;
@@ -6536,6 +6552,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const sharedCoverContrast=(contextRing?1.06:1.10)*mapCoverBoost*strategicCoverBoost;
         const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost*strategicCoverBoost;
         const landCover=sharedCover.map((v,i)=>v*sharedCoverContrast+(nativeCover[i]-v)*coverGain*residualCoverContrast);
+        landCoverContribution=landCover.slice();
         pushRange("landCoverLuma",luma3(landCover));
         cover=cover.map((v,i)=>v+landCover[i]);
       }
@@ -6592,7 +6609,14 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.82:i===1?.94:1),0,.86));
       }
       pushRange("finalLuma",luma3(displayColor));
-      const rgba=rgbaFromColor(displayColor),i=(y*size+x)*4;
+      if(contributorLayers){
+        writeContributorRgb("base",pixelOffset,base);
+        writeContributionRgb("macro",pixelOffset,[macro,macro,macro],3.2);
+        writeContributionRgb("structure",pixelOffset,structureContribution,5.0);
+        writeContributionRgb("landCover",pixelOffset,landCoverContribution,5.0);
+        writeContributorRgb("final",pixelOffset,displayColor);
+      }
+      const rgba=rgbaFromColor(displayColor),i=pixelOffset;
       // Shared photometry makes the rectangular resource edge visually neutral;
       // use only a broad edge feather for the subtle fine-frequency delta.
       const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
@@ -6615,6 +6639,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   return {
     data,size,metersPerTexel,
     componentRanges:Object.freeze(roundedRanges),
+    contributorPixels:captureContributorPixels?{revision:"wp020-surface-contributors-v1",size,layers:contributorLayers}:null,
     coordinateAuthority:"Campaign-SEED + SeedCoordinateFabric.registeredMeters",
     coordinateRevision:coordinateFabricAuthority()?.revisionSignature||null,
     patchRelativeBiomeNoise:false
@@ -6698,6 +6723,23 @@ function textureFromPixels(pixels){
   texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.anisotropy=localTextureAnisotropy();texture.setSource(canvas2d);
   return texture;
 }
+function surfaceContributorEvidence(){
+  const record=displayResource?.surfaceContributorPixels||null;
+  if(!EVIDENCE_SURFACE_CONTRIBUTORS||!record?.layers)return Object.freeze({available:false,enabled:Boolean(EVIDENCE_SURFACE_CONTRIBUTORS),reason:"no-broad-focus-contributor-capture"});
+  const images={};
+  for(const [name,pixels] of Object.entries(record.layers)){
+    const c=document.createElement("canvas");c.width=record.size;c.height=record.size;
+    c.getContext("2d",{alpha:false}).putImageData(new ImageData(pixels,record.size,record.size),0,0);
+    images[name]=c.toDataURL("image/png");
+  }
+  return Object.freeze({
+    available:true,enabled:true,revision:record.revision,resourceSignature:displayResource?.signature||null,
+    level:displayResource?.dims?.levelId||null,size:record.size,
+    metersPerTexel:Number(displayResource?.detail?.detailMetersPerTexel||0),
+    componentRanges:displayResource?.detail?.surfaceComponentRanges?.focus||null,
+    images:Object.freeze(images),worldResampleCount:0,geographyQueryCount:0
+  });
+}
 function skirtMeshForDims(dims,spanFactor=LOCAL_SURROUND_SPAN_FACTOR){
   const halfX=dims.patchWidth*spanFactor*.5/dims.metersPerUnit,halfZ=dims.patchHeight*spanFactor*.5/dims.metersPerUnit,mesh=new pc.Mesh(device);
   mesh.setPositions([-halfX,0,-halfZ,halfX,0,-halfZ,-halfX,0,halfZ,halfX,0,halfZ]);
@@ -6713,15 +6755,18 @@ function finalizeLocalResource(job,result){
   const detailTexture=textureFromPixels(detail),mediumTexture=textureFromPixels(medium),surroundTexture=textureFromPixels(surround),textureSize=detail.size;
   const detailMetersPerTexel=detail.metersPerTexel,mediumMetersPerTexel=medium.metersPerTexel,surroundMetersPerTexel=surround.metersPerTexel;
   const vertices=meshData.positions.length/3,triangles=meshData.indices.length/3;
-  const estimatedBytes=meshData.positions.byteLength+meshData.normals.byteLength+meshData.uvs.byteLength+meshData.indices.byteLength+detail.size*detail.size*4+medium.size*medium.size*4+surround.size*surround.size*4;
+  const surfaceContributorPixels=detail.contributorPixels||null;
+  const contributorBytes=surfaceContributorPixels?Object.values(surfaceContributorPixels.layers||{}).reduce((sum,pixels)=>sum+Number(pixels?.byteLength||0),0):0;
+  const estimatedBytes=meshData.positions.byteLength+meshData.normals.byteLength+meshData.uvs.byteLength+meshData.indices.byteLength+detail.size*detail.size*4+medium.size*medium.size*4+surround.size*surround.size*4+contributorBytes;
   const wildernessPlan=prepareLocalWildernessPlan(job);
   const regenerationSignature=localResourceRegenerationSignature(job);
-  const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,
+  const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,surfaceContributorPixels,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
+      surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
       topographicSignalRevision:"canonical-access-morphology-map-detail-v26",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
@@ -8863,7 +8908,7 @@ function destroy(){
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setZoomTargetScalar,setScaleIndex,stepScale,setAnimatedScaleIndex,stepAnimatedScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},placeDescriptors:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();return Object.freeze(destinationNavigator.descriptors.map(item=>Object.freeze({...item})))},refreshPlaces:()=>{buildDestinationDescriptors();renderDestinationNavigator();return snapshot();},openPlaces:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
   setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},
-  workCycleEvidenceState,
+  workCycleEvidenceState,surfaceContributorEvidence,
   focusWayfindingSignForEvidence:(id)=>{const sign=(wayfindingSignposts.signs||[]).find(item=>String(item.id)===String(id));if(sign){setWorldTileFocus(sign.anchor.x,sign.anchor.y);setZoomScalar(1);}return snapshot();},
   selectWayfindingSignForEvidence:(id)=>{const key=inspectionRegistryKey("signpost",String(id)),record=inspectionPickables.get(key);if(record){inspection.selectedId=String(id);inspection.selectedType="signpost";renderInspectionTooltip(record);}return snapshot();},
   destroy,
