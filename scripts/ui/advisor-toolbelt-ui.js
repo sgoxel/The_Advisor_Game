@@ -177,6 +177,7 @@ function render(reason="explicit"){
   state.rootNode.dataset.renderMode="event-driven";
   state.rootNode.dataset.evidenceMode=state.evidenceMode||"none";
   state.rootNode.dataset.open=String(state.open);
+  root.document.body?.classList.toggle("advisor-toolbelt-open",state.open);
   state.renderCount++;state.lastReason=reason;state.lastSeed=model.ctx.seed;
   state.rootNode.querySelector(".advisor-toolbelt-launcher")?.addEventListener("click",()=>setOpen(!state.open));
   state.rootNode.querySelector(".advisor-toolbelt-close")?.addEventListener("click",()=>setOpen(false));
