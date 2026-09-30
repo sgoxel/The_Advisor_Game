@@ -6603,10 +6603,19 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // composition, not tangent geometry. Keep repeated curvature/drainage
         // morphology strongly suppressed through regional/district/map bandwidth
         // and fade that suppression out only as genuinely local detail resolves.
+        const strategicStructureMetersPerTexel=sharedPhotometryLock?baseTransferMetersPerTexel:metersPerTexel;
+        const strategicStructureUpperStart=sharedPhotometryLock?34000:5200;
+        const strategicStructureUpperSpan=sharedPhotometryLock?18000:4800;
         const strategicStructureAttenuationBand=
-          smoothstep01(clamp((metersPerTexel-30)/150,0,1))*
-          (1-smoothstep01(clamp((metersPerTexel-5200)/4800,0,1)));
-        const strategicStructureGain=1-strategicStructureAttenuationBand*.86;
+          smoothstep01(clamp((strategicStructureMetersPerTexel-30)/150,0,1))*
+          (1-smoothstep01(clamp((strategicStructureMetersPerTexel-strategicStructureUpperStart)/strategicStructureUpperSpan,0,1)));
+        // Phase 19: strategic context rings must suppress the same coarse
+        // structure family as the focus child. At the local-map tier, however,
+        // recover only physically resolvable registered-meter structure so
+        // 1/500 does not collapse into a featureless green wash.
+        const localMapStructureRecovery=sharedPhotometryLock?0:smoothstep01(clamp((260-metersPerTexel)/150,0,1));
+        const strategicStructureSuppression=lerp(.86,.42,localMapStructureRecovery);
+        const strategicStructureGain=1-strategicStructureAttenuationBand*strategicStructureSuppression;
         if(strategicStructureAttenuationBand>.001)cover=cover.map(v=>v*strategicStructureGain);
         structureContribution=cover.slice();
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevationBase).map(v=>v*contextDetailStrength);
@@ -6937,7 +6946,7 @@ function finalizeLocalResource(job,result){
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
       meshHeightRange:meshData.meshHeightRange||null,
-      topographicSignalRevision:"canonical-continuous-parent-highpass-map-detail-v33",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-continuous-parent-map-recovery-v34",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
