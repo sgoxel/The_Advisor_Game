@@ -2,6 +2,7 @@
 from __future__ import annotations
 import base64, json, sys, time
 from pathlib import Path
+from PIL import Image, ImageChops, ImageStat
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
@@ -63,26 +64,68 @@ def capture_contributors(d,phase):
       "geographyQueryCount":payload.get("geographyQueryCount"),"images":images
     }
 
+def screenshot_delta(a_name,b_name):
+    a=Image.open(OUT_DIR/a_name).convert("RGB")
+    b=Image.open(OUT_DIR/b_name).convert("RGB")
+    if a.size!=b.size: raise AssertionError(f"screenshot size mismatch: {a.size} != {b.size}")
+    w,h=a.size
+    box=(int(w*.12),int(h*.10),int(w*.88),int(h*.90))
+    diff=ImageChops.difference(a.crop(box),b.crop(box))
+    stat=ImageStat.Stat(diff)
+    mean_rgb=[float(v) for v in stat.mean]
+    extrema=[int(pair[1]) for pair in stat.extrema]
+    return {
+      "crop":[int(v) for v in box],"meanAbsRgb":round(sum(mean_rgb)/3,4),
+      "meanAbsByChannel":[round(v,4) for v in mean_rgb],"maxAbsByChannel":extrema
+    }
+
 def capture_flat_height_isolation(d,phase):
-    payload=d.execute_script("return window.PlanetStage?.setWp020PresentationEvidenceMode?.('flat-height')||null")
-    if not payload or payload.get("available") is not True or payload.get("mode")!="flat-height":
-        raise AssertionError(f"flat-height evidence unavailable at {phase}: {payload}")
-    if int(payload.get("worldResampleCount",-1))!=0 or int(payload.get("geographyQueryCount",-1))!=0:
-        raise AssertionError(f"flat-height evidence performed forbidden resampling at {phase}: {payload}")
-    time.sleep(.15)
-    frame=snap(d)
-    shot=capture(d,f"presentation-isolation-{phase}-flat-height")
+    normal=d.execute_script("return window.PlanetStage?.setWp020PresentationEvidenceMode?.('normal')||null")
+    if not normal or normal.get("available") is not True or normal.get("mode")!="normal":
+        raise AssertionError(f"normal evidence unavailable at {phase}: {normal}")
+    time.sleep(.12)
+    normal_frame=snap(d)
+    normal_shot=capture(d,f"presentation-isolation-{phase}-normal")
+
+    flat=d.execute_script("return window.PlanetStage?.setWp020PresentationEvidenceMode?.('flat-height')||null")
+    if not flat or flat.get("available") is not True or flat.get("mode")!="flat-height":
+        raise AssertionError(f"flat-height evidence unavailable at {phase}: {flat}")
+    if int(flat.get("worldResampleCount",-1))!=0 or int(flat.get("geographyQueryCount",-1))!=0:
+        raise AssertionError(f"flat-height evidence performed forbidden resampling at {phase}: {flat}")
+    time.sleep(.12)
+    flat_frame=snap(d)
+    flat_shot=capture(d,f"presentation-isolation-{phase}-flat-height")
+
     restored=d.execute_script("return window.PlanetStage?.setWp020PresentationEvidenceMode?.('normal')||null")
     if not restored or restored.get("available") is not True or restored.get("mode")!="normal":
         raise AssertionError(f"failed to restore canonical heightfield at {phase}: {restored}")
     time.sleep(.08)
+
+    ns=normal.get("state") or {}; fs=flat.get("state") or {}
+    if normal.get("resourceSignature")!=flat.get("resourceSignature") or normal.get("level")!=flat.get("level"):
+        raise AssertionError(f"A/B resource identity changed at {phase}: normal={normal} flat={flat}")
+    exact_numeric=("scalar","focusLatitudeRadians","focusLongitudeRadians","yawDegrees","pitchDegrees",
+                   "presentationCompensation","patchScale","shownHeightMeters","tangentOpacity",
+                   "mapScaleShellOpacity","reliefGlobeOpacity","cameraOrthoHeight","detailMetersPerTexel")
+    for key in exact_numeric:
+        av=float(ns.get(key) or 0); bv=float(fs.get(key) or 0)
+        if abs(av-bv)>1e-6:
+            raise AssertionError(f"A/B screen state changed at {phase} field={key}: {av} != {bv}")
+    if ns.get("viewport")!=fs.get("viewport") or ns.get("representationOwner")!=fs.get("representationOwner"):
+        raise AssertionError(f"A/B viewport/owner changed at {phase}: normal={ns} flat={fs}")
+    if ns.get("material")!=fs.get("material") or ns.get("texture")!=fs.get("texture"):
+        raise AssertionError(f"A/B material/texture state changed at {phase}: normal={ns} flat={fs}")
+
     return {
-      "phase":phase,"mode":"flat-height","resourceSignature":payload.get("resourceSignature"),
-      "level":payload.get("level"),"textureIdentityUnchanged":payload.get("textureIdentityUnchanged"),
-      "materialIdentityUnchanged":payload.get("materialIdentityUnchanged"),"geometryMode":payload.get("geometryMode"),
-      "worldResampleCount":payload.get("worldResampleCount"),"geographyQueryCount":payload.get("geographyQueryCount"),
-      "displayScale":frame.get("zoom",{}).get("displayScaleLabel"),"scalar":frame.get("zoom",{}).get("scalar"),
-      "screenshot":shot
+      "phase":phase,"mode":"exact-screen-height-ab","resourceSignature":flat.get("resourceSignature"),
+      "level":flat.get("level"),"textureIdentityUnchanged":flat.get("textureIdentityUnchanged"),
+      "materialIdentityUnchanged":flat.get("materialIdentityUnchanged"),
+      "worldResampleCount":flat.get("worldResampleCount"),"geographyQueryCount":flat.get("geographyQueryCount"),
+      "normalState":ns,"flatState":fs,
+      "normalDisplayScale":normal_frame.get("zoom",{}).get("displayScaleLabel"),
+      "flatDisplayScale":flat_frame.get("zoom",{}).get("displayScaleLabel"),
+      "normalScreenshot":normal_shot,"flatScreenshot":flat_shot,
+      "pixelDelta":screenshot_delta(normal_shot,flat_shot)
     }
 
 def focus_village(d):
