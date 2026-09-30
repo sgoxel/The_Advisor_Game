@@ -189,4 +189,14 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S007-012` — Persistent World Consequence Projection + Local Recovery — COMPLETED (AGENT #6; Phase 3 accepted 2026-09-30. Exact accepted game/evidence head `c8d9f153560fd2c6607faa2343ab56a6715c34cc`, workflow `36675317946` SUCCESS, landscape artifact `11079508019`, portrait artifact `11079344404`; evidence-harness descendant `10712eacffbe112e4a8eb61be1e47db7c06f7a7c` also PASSed workflow `36675818806`. Production save/validate/restore/resume preserves exactly one sparse non-reserved `consequence-registry` CampaignStateDelta entry and stable `A3849BED` signature across reload and leave/return. Damaged-building, road-blockage and abandoned-workplace each project one bounded local active consequence at canonical ground `1/10000`; recovery clears active world cues. Bounds remain <=8 local records, <=3 visible, <=4 recoveries/advance; event-driven/lazy-local; `perFrameScan=false`, `fullSettlementPerFrameScan=false`, `fullWorldScan=false`; projection is not Simulation authority. All 8 fresh exact-head landscape/portrait screenshots directly inspected: VISUAL 8.1/10 PASS with readable unclipped status cards, distinct damage/barrier/overgrowth cues, and clean recovered state. Accepted product deployed via Pages run `36675317609`; evidence descendant deployed via `36675817922`; acceptance docs commit `a07dd8ed9f35e27db121c17319c7059de894e565` deployed via Pages run `36676244363`. Completion bookkeeping is committed only after those deployment gates passed.)
 - `WP-S007-013` — Rare Traveling Encounters + Surprise Event Stream — COMPLETED
 
+# Stage 8 — Hybrid Advisor Conversation + Character Decision Interface
+
+- `WP-S008-001` — Deterministic Input Normalization + Sentence Library Matching
+- `WP-S008-002` — Context-Bounded Command Set Interface + Authoritative Target Filtering
+- `WP-S008-003` — Deterministic Local Conversation Router + Offline Fallback
+- `WP-S008-004` — External LLM Adapter + Structured Proposal Validation
+- `WP-S008-005` — Protagonist Command Proposal Evaluation + Simulation Execution Boundary
+- `WP-S008-006` — Persistent Conversation Transactions + Memory/Outcome Linking
+- `WP-S008-007` — Advisor Chat Interaction Surface + Routing/Decision Trace
+
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
