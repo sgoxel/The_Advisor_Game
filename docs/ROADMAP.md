@@ -229,7 +229,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 
 - `WP-S011-001` — Persistent Advisor Skill Profile + Progression Ledger — COMPLETED
 - `WP-S011-002` — Insight Investigation Action + Evidence Quality — COMPLETED
-- `WP-S011-003` — Rhetoric Persuasion Tool + Bounded Influence Modifier
+- `WP-S011-003` — Rhetoric Persuasion Tool + Bounded Influence Modifier — COMPLETED
 - `WP-S011-004` — Diplomacy Leverage Tool + Relationship-Aware Outcomes
 - `WP-S011-005` — Stewardship Situation Analysis + Settlement/Resource Report
 - `WP-S011-006` — Command Readiness + Risk Analysis Tool
