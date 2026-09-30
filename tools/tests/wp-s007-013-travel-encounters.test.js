@@ -122,7 +122,7 @@ assert(stageSource.includes("travelEncounterDecluttered"),"center-marker declutt
 assert(mainCss.includes('data-travel-encounter-focus="true"')&&mainCss.includes("translateY(-46px)")&&mainCss.includes("code{display:none!important}"),"center HUD traveler declutter CSS missing");
 assert(html.includes("travel-encounters.js?v=travel-encounters-v3"),"travel encounter runtime cache revision missing");
 assert(html.indexOf("scripts/world/travel-encounters.js")<html.indexOf("scripts/world/planet-stage.js"),"travel runtime must load before PlanetStage");
-assert(css.includes(".travel-encounter-card")&&css.includes("z-index:90")&&source.includes("document.body||document.getElementById"),"dedicated travel card overlay layer missing or malformed");
+assert(css.includes(".travel-encounter-card")&&css.includes("z-index:90")&&css.includes('.wayfinding-sign-text-layer{display:none!important}')&&source.includes("document.body||document.getElementById"),"dedicated travel card overlay or wayfinding declutter layer missing or malformed");
 
 console.log(JSON.stringify({
   pass:true,wp:"WP-S007-013",classification:"MIXED",
