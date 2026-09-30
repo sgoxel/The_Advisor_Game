@@ -311,7 +311,8 @@ function render(reason="explicit"){
   });
   return state.rootNode;
 }
-function setOpen(value){state.open=Boolean(value);return render(state.open?"external-open":"external-close")}\nfunction setEvidenceMode(modeValue){
+function setOpen(value){state.open=Boolean(value);return render(state.open?"external-open":"external-close")}
+function setEvidenceMode(modeValue){
   const mode=EVIDENCE_MODES.includes(String(modeValue||""))?String(modeValue):null;
   state.evidenceMode=mode;state.open=Boolean(mode)||state.open;
   return render("evidence-mode");
