@@ -96,10 +96,14 @@ def set_case(kind):
       const result=PersistentConsequences.proofSetOnly(seed,type,stamp);
       if(!result?.ok)throw new Error("consequence proof activation failed: "+JSON.stringify(result));
       const record=result.record,anchor=record.target.anchor;
-      PlanetStage.setWorldTileFocus(anchor.x,anchor.y);
+      // Keep the authoritative consequence target visible while moving the fixed
+      // center-cell HUD/readout away from it. This is camera framing only; the
+      // consequence anchor and all world-state coordinates remain unchanged.
+      const viewFocus={x:String(BigInt(anchor.x)-4n),y:String(BigInt(anchor.y)+2n)};
+      PlanetStage.setWorldTileFocus(viewFocus.x,viewFocus.y);
       PlanetStage.setScaleIndex(arguments[2]);
       PersistentConsequences.renderPanel(seed);
-      return {seed,result};
+      return {seed,result,viewFocus};
     """,kind,START,SCALE_INDEX)
 
 def current_state():
@@ -150,7 +154,8 @@ def travel_roundtrip(anchor):
     time.sleep(.55)
     driver.execute_script("""
       const a=arguments[0],scale=arguments[1];
-      PlanetStage.setWorldTileFocus(a.x,a.y);PlanetStage.setScaleIndex(scale);
+      const viewFocus={x:String(BigInt(a.x)-4n),y:String(BigInt(a.y)+2n)};
+      PlanetStage.setWorldTileFocus(viewFocus.x,viewFocus.y);PlanetStage.setScaleIndex(scale);
     """,anchor,SCALE_INDEX)
     try:
         wait.until(lambda _d: current_state()["signatureReady"] and current_state()["consequence"]["activeCount"]==1)
