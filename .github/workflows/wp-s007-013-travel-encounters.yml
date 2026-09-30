@@ -20,7 +20,10 @@ permissions:
   issues: write
 
 concurrency:
-  group: wp-s007-013-evidence
+  # Only push runs share a cancellation lane. Each issue-comment run gets its
+  # own lane so an unrelated comment that is later skipped cannot cancel an
+  # already-running exact-head browser capture before the job-level filter.
+  group: ${{ github.event_name == 'push' && 'wp-s007-013-evidence-push' || format('wp-s007-013-evidence-comment-{0}', github.run_id) }}
   cancel-in-progress: true
 
 jobs:
