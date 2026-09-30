@@ -209,10 +209,13 @@ function bestFact(topic,rows){
   const wanted=tokens(topic).filter(token=>!FACT_STOPWORDS.has(token));
   if(!wanted.length)return null;
   const ranked=rows.map(row=>{
-    const hay=lower([row.subject,row.summary].filter(Boolean).join(" "));
-    const score=wanted.reduce((n,token)=>n+(hay.includes(token)?1:0),0);
-    return {row,score};
+    const known=new Set(tokens([row.subject,row.summary].filter(Boolean).join(" ")).filter(token=>!FACT_STOPWORDS.has(token)));
+    const score=wanted.reduce((n,token)=>n+(known.has(token)?1:0),0);
+    const subjectTokens=new Set(tokens(row.subject||"").filter(token=>!FACT_STOPWORDS.has(token)));
+    const subjectScore=wanted.reduce((n,token)=>n+(subjectTokens.has(token)?1:0),0);
+    return {row,score,subjectScore};
   }).filter(item=>item.score>0).sort((a,b)=>
+    b.subjectScore-a.subjectScore||
     b.score-a.score||
     Number(a.row.uncertain)-Number(b.row.uncertain)||
     a.row.id.localeCompare(b.row.id)
