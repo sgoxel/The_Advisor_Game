@@ -101,6 +101,9 @@ let wp020EvidenceFlatMesh=null;
 let wp020EvidenceFlatMeshSignature=null;
 let wp020EvidencePresentationMode="normal";
 let wp020EvidenceVisibilityRestore=null;
+let wp020EvidenceTransitionFreeze=false;
+let wp020EvidenceTransitionArm=null;
+let wp020EvidenceTransitionFreezeState=null;
 let focusRingPatch=null;
 let focusRingMaterial=null;
 let horizonSkirt=null;
@@ -6951,6 +6954,30 @@ function restoreWp020EvidenceLayerVisibility(){
   if(horizonSkirt)horizonSkirt.enabled=Boolean(wp020EvidenceVisibilityRestore.outer);
   wp020EvidenceVisibilityRestore=null;
 }
+function armWp020TransitionEvidenceFreeze(options={}){
+  if(!EVIDENCE_WP020_PRESENTATION_ISOLATION)return Object.freeze({available:false,enabled:false,armed:false,frozen:false,reason:"evidence-flag-required"});
+  const minScalar=clamp(Number(options?.minScalar??.67),ZOOM_MIN,ZOOM_MAX),level=String(options?.level||"regional-detail");
+  wp020EvidenceTransitionFreeze=false;
+  wp020EvidenceTransitionFreezeState=null;
+  wp020EvidenceTransitionArm=Object.freeze({minScalar,level});
+  return Object.freeze({available:true,enabled:true,armed:true,frozen:false,minScalar,level});
+}
+function wp020TransitionEvidenceFreezeState(){
+  return Object.freeze({
+    available:Boolean(EVIDENCE_WP020_PRESENTATION_ISOLATION),
+    armed:Boolean(wp020EvidenceTransitionArm),
+    frozen:Boolean(wp020EvidenceTransitionFreeze),
+    arm:wp020EvidenceTransitionArm,
+    state:wp020EvidenceTransitionFreezeState
+  });
+}
+function releaseWp020TransitionEvidenceFreeze(){
+  wp020EvidenceTransitionFreeze=false;
+  wp020EvidenceTransitionArm=null;
+  const previous=wp020EvidenceTransitionFreezeState;
+  wp020EvidenceTransitionFreezeState=null;
+  return Object.freeze({available:Boolean(EVIDENCE_WP020_PRESENTATION_ISOLATION),released:true,previous});
+}
 function setWp020PresentationEvidenceMode(mode="normal"){
   const requested=String(mode||"normal");
   if(!EVIDENCE_WP020_PRESENTATION_ISOLATION)return Object.freeze({available:false,enabled:false,mode:"normal",reason:"evidence-flag-required"});
@@ -7355,6 +7382,7 @@ function scheduleLocalPrewarm(){
 }
 // Double-buffered swap: only a fully prepared resource becomes visible.
 function activateLocalDetailResource(signature,fromCache){
+  if(wp020EvidenceTransitionFreeze&&displayResource&&String(signature)!==String(displayResource.signature))return false;
   if(!tangentPatch?.render||!device||!tangentPatchMaterial||!horizonSkirtMaterial)return false;
   const resource=localResourceCache.get(signature);if(!resource)return false;
   const swapStarted=performance.now();
@@ -7791,6 +7819,7 @@ function animatedZoomReadinessCapScalar(){
   return clamp(scalarForFootprintHeight(readableHeight),zoomState.scalar,ZOOM_MAX);
 }
 function updateAnimatedZoom(dt){
+  if(wp020EvidenceTransitionFreeze)return false;
   if(!zoomState.animating)return false;
   const seconds=Math.min(ZOOM_ANIMATION_MAX_STEP_SECONDS,Math.max(1/240,Number(dt)||1/60));
   const previous=zoomState.scalar,target=clamp(zoomState.targetScalar,ZOOM_MIN,ZOOM_MAX),delta=target-previous;
@@ -7810,6 +7839,21 @@ function updateAnimatedZoom(dt){
   zoomState.scalar=next;zoomState.zoomVelocity=(next-previous)/seconds;zoomState.animationFrameCount++;zoomState.totalAnimationFrames++;
   const displayIndex=displayScaleIndexForScalar(next),now=performance.now();
   applyCameraZoom(false);
+  if(EVIDENCE_WP020_PRESENTATION_ISOLATION&&wp020EvidenceTransitionArm&&!wp020EvidenceTransitionFreeze){
+    const arm=wp020EvidenceTransitionArm,level=String(displayResource?.dims?.levelId||"");
+    if(next>=Number(arm.minScalar||0)&&level===String(arm.level||"regional-detail")){
+      wp020EvidenceTransitionFreeze=true;
+      wp020EvidenceTransitionFreezeState=Object.freeze({
+        scalar:Number(next.toFixed(6)),
+        level,
+        resourceSignature:displayResource?.signature||null,
+        requestedSignature:localResources.requestedSignature||null,
+        requestedLevel:localResources.requestedLevel||null,
+        pendingPreparationCount:Number(localResources.pendingPreparationCount||0),
+        frozenAtMs:Number(performance.now().toFixed(3))
+      });
+    }
+  }
   const milestoneChanged=displayIndex!==zoomState.lastDisplayScaleIndex;
   if(milestoneChanged||now-Number(zoomState.lastAnimationMapUpdateAtMs||0)>=ZOOM_MAP_PRESENTATION_INTERVAL_MS){
     zoomState.lastDisplayScaleIndex=displayIndex;zoomState.lastAnimationMapUpdateAtMs=now;updateMapPresentation("zoom-animation");
@@ -9202,7 +9246,7 @@ function destroy(){
   resizeObserver?.disconnect?.();resizeObserver=null;
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
   generatedTexture?.destroy?.();generatedTexture=null;
-  restoreWp020EvidenceLayerVisibility();clearWp020EvidenceFlatMesh();wp020EvidencePresentationMode="normal";
+  releaseWp020TransitionEvidenceFreeze();restoreWp020EvidenceLayerVisibility();clearWp020EvidenceFlatMesh();wp020EvidencePresentationMode="normal";
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
   clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection(false);localCampaignWearContext=null;clearCanonicalWayfindingSignposts();clearCanonicalRoofRegistry();
   app?.destroy?.();
@@ -9222,7 +9266,7 @@ function destroy(){
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setZoomTargetScalar,setScaleIndex,stepScale,setAnimatedScaleIndex,stepAnimatedScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},placeDescriptors:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();return Object.freeze(destinationNavigator.descriptors.map(item=>Object.freeze({...item})))},refreshPlaces:()=>{buildDestinationDescriptors();renderDestinationNavigator();return snapshot();},openPlaces:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
   setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},
-  workCycleEvidenceState,surfaceContributorEvidence,setWp020PresentationEvidenceMode,
+  workCycleEvidenceState,surfaceContributorEvidence,setWp020PresentationEvidenceMode,armWp020TransitionEvidenceFreeze,wp020TransitionEvidenceFreezeState,releaseWp020TransitionEvidenceFreeze,
   focusWayfindingSignForEvidence:(id)=>{const sign=(wayfindingSignposts.signs||[]).find(item=>String(item.id)===String(id));if(sign){setWorldTileFocus(sign.anchor.x,sign.anchor.y);setZoomScalar(1);}return snapshot();},
   selectWayfindingSignForEvidence:(id)=>{const key=inspectionRegistryKey("signpost",String(id)),record=inspectionPickables.get(key);if(record){inspection.selectedId=String(id);inspection.selectedType="signpost";renderInspectionTooltip(record);}return snapshot();},
   destroy,
