@@ -2,7 +2,7 @@ name: WP-S010-003 Protagonist Interaction Pipeline
 
 on:
   push:
-    branches: [main, "agent6/wp-s010-003"]
+    branches: [main]
     paths:
       - "scripts/world/protagonist-interaction-pipeline.js"
       - "scripts/tests/wp-s010-003-protagonist-interaction-pipeline.test.js"
