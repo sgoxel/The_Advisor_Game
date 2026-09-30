@@ -3883,7 +3883,8 @@ function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift
   };
   for(const record of records){
     const b=record?.bounds;if(!b)continue;
-    const minX=Number(b.minX)-.28,maxX=Number(b.maxX)+.28,minY=Number(b.minY)-.28,maxY=Number(b.maxY)+.28;
+    const footprintPad=tier==="route"?.42:.28;
+    const minX=Number(b.minX)-footprintPad,maxX=Number(b.maxX)+footprintPad,minY=Number(b.minY)-footprintPad,maxY=Number(b.maxY)+footprintPad;
     if(![minX,maxX,minY,maxY].every(Number.isFinite)||maxX<=minX||maxY<=minY)continue;
     const special=specialIds.has(String(record?.id||"")),
       fill=special?[206,151,74]:(tier==="route"?[153,111,59]:[142,101,58]),
@@ -5732,7 +5733,9 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   // Overview settlement shape is now derived from occupied StartingVillage lots
   // plus their adjacent authoritative road cells. It is a thin boundary, never
   // a filled circular wash or camera-relative locator.
-  const envelope=Object.freeze({active:false,segmentCount:0,roadAuthorityQueryCount:0,mode:"none"});
+  const envelope=tier==="route"
+    ?addCanonicalSettlementEnvelope(reveal,scale,unit,semanticFrame,lift,tier)
+    :Object.freeze({active:false,segmentCount:0,roadAuthorityQueryCount:0,mode:"none"});
   // Flat occupied-lot patches expose the settlement's real irregular land-use
   // pattern at overview scales without leaking building geometry or inventing a
   // circular locator. They remain subordinate to roads through alpha + height.
@@ -5778,7 +5781,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   localCampaignWearContext={reveal,tier,frame:semanticFrame,presentationScale:scale,unit,lift};
   const campaignWearDrawCalls=rebuildCanonicalCampaignWearProjection("settlement-rebuild");
   const consequenceDrawCalls=rebuildPersistentConsequenceProjection("settlement-rebuild");
-  const treeCount=tier==="route"?4:tier==="coarse"?6:tier==="refined"?10:tier==="full"?12:0;
+  const treeCount=tier==="route"?7:tier==="coarse"?6:tier==="refined"?10:tier==="full"?12:0;
   for(let i=0;i<treeCount;i++){
     const angle=i/Math.max(1,treeCount)*Math.PI*2+localHash(i*17,treeCount,91)*.22;
     const radiusTiles=22+localHash(i*31,treeCount,92)*4;
@@ -6625,6 +6628,13 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const strategicStructureSuppression=lerp(.86,.42,localMapStructureRecovery);
         const strategicStructureGain=1-strategicStructureAttenuationBand*strategicStructureSuppression;
         if(strategicStructureAttenuationBand>.001)cover=cover.map(v=>v*strategicStructureGain);
+        // Phase 19 final: the fresh transition evidence isolates the remaining
+        // gray ridge to strategic medium/outer context, while the focus child is
+        // already clean. Strategic context therefore keeps the exact shared
+        // parent/base and registered cover, but drops native coarse directional
+        // structure/lighting that becomes an unreadable ridge when magnified.
+        // Local-map tiers keep the recovered registered-meter structure.
+        if(sharedPhotometryLock&&contextRing){cover=[0,0,0];shade=1;}
         structureContribution=cover.slice();
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevationBase).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevationBase);
