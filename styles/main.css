@@ -2068,3 +2068,18 @@ body.planet-stage-active{
     max-height:268px;
   }
 }
+
+
+/* WP-S009-010 desktop status dashboard: reserve full authority readout */
+@media(min-width:901px) and (min-height:431px){
+  .advisor-chat-panel:has(.advisor-status-readout[open]){
+    grid-template-rows:auto 310px 0 auto 0;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-chat-transcript,
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-counsel{
+    display:none;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-readout[open] .advisor-status-body{
+    max-height:268px;
+  }
+}
