@@ -128,6 +128,8 @@ const css=fs.readFileSync("styles/main.css","utf8");
 const stageSource=fs.readFileSync("scripts/world/planet-stage.js","utf8");
 assert(source.includes("WorldState.applyDelta"),"PersistentConsequences must persist through authoritative WorldState deltas");
 assert(source.includes('window.addEventListener?.("advisor:world-state-delta-change"'),"projection does not react to lazy delta revisions");
+assert(html.includes("scripts/world/world-context.js"),"production HTML missing WorldContext required by catch-up simulations");
+assert(html.indexOf("scripts/world/world-context.js")<html.indexOf("scripts/world/global-country-simulation.js"),"WorldContext must load before catch-up aggregate simulations");
 assert(html.includes("scripts/world/persistent-consequences.js"),"production HTML missing PersistentConsequences");
 assert(html.indexOf("scripts/world/persistent-consequences.js")<html.indexOf("scripts/world/planet-stage.js"),"consequence projection must load before PlanetStage");
 assert(css.includes(".persistent-world-consequence"),"persistent consequence panel styles missing");
