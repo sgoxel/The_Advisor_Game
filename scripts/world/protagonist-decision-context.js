@@ -23,10 +23,10 @@ function validWhen(value){return /^\d{4,}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(S
 function reasonPush(list,code){const clean=cleanId(code,96);if(clean&&!list.includes(clean)&&list.length<MAX_REASONS)list.push(clean)}
 function missingPush(list,key){if(!list.includes(key)&&list.length<MAX_MISSING_SOURCES)list.push(key)}
 function factorRecord(available,value,reason){return freeze({available:Boolean(available),value:value==null?null:Number(value.toFixed(4)),reason:reason||null})}
-function roleScopes(snapshot){const values=snapshot?.scopes||snapshot?.currentRole?.scopes||[];return Array.isArray(values)?values.map(x=>cleanId(x,120)).filter(Boolean).slice(0,MAX_SCOPES):[]}
+function roleScopes(snapshot){const values=snapshot?.scopes||snapshot?.currentRole?.scopes||[];return Array.isArray(values)?values.slice(0,MAX_SCOPES).map(x=>cleanId(x,120)).filter(Boolean):[]}
 function activeGoals(snapshot){
   const rows=Array.isArray(snapshot?.records)?snapshot.records:Array.isArray(snapshot?.goals)?snapshot.goals:[];
-  return rows.filter(row=>row&&String(row.status||"active")==="active").slice(0,MAX_GOALS);
+  return rows.slice(0,MAX_GOALS).filter(row=>row&&String(row.status||"active")==="active");
 }
 function pressureValue(snapshot,key){
   const milli=snapshot?.pressureMilli?.[key];if(Number.isFinite(Number(milli)))return score01(milli,100000);
@@ -78,7 +78,7 @@ function build(configValue){
     value+=topPriority*0.14;urgency+=topPriority*0.10;
     factors.goals=factorRecord(true,topPriority,"active-goals-"+goals.length);
     reasonPush(reasons,topPriority>=0.75?"high-priority-commitment":"active-commitment");
-    const conflicts=Array.isArray(config.conflictingGoalIds)?new Set(config.conflictingGoalIds.map(x=>cleanId(x,160)).filter(Boolean)):null;
+    const conflicts=Array.isArray(config.conflictingGoalIds)?new Set(config.conflictingGoalIds.slice(0,MAX_GOALS).map(x=>cleanId(x,160)).filter(Boolean)):null;
     if(conflicts&&goals.some(row=>conflicts.has(cleanId(row.id,160)))){dutyConflict=true;reasonPush(reasons,"goal-conflict")}
   }else if(snapshots.goals&&Array.isArray(snapshots.goals.records)){factors.goals=factorRecord(true,0,"no-active-goals")}
   else{missingPush(missing,"goals");factors.goals=factorRecord(false,null,"unavailable")}
