@@ -2824,7 +2824,7 @@ function localWildernessSpacing(dims){
   // entire viewport can be scanned and still remain cheap.
   return h<=45?6:h<=90?11:h<=240?32:75;
 }
-function prepareLocalWildernessPlan(job){
+function* prepareLocalWildernessPlanSteps(job){
   const started=performance.now(),dims=job?.dims;
   if(!dims?.staticWorld)return null;
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
@@ -2838,8 +2838,9 @@ function prepareLocalWildernessPlan(job){
   // Scan the complete bounded patch. The previous ordered early stop filled the
   // budget from one side of the grid, producing the visible horizontal prop
   // band. Global-cell hashes now choose a uniformly distributed bounded subset.
-  for(let gy=minY;gy<=maxY;gy++)for(let gx=minX;gx<=maxX;gx++){
-    candidates++;const h=localWildernessHashInt(gx,gy,salt),u=(h>>>0)/4294967295;
+  for(let gy=minY;gy<=maxY;gy++){
+    for(let gx=minX;gx<=maxX;gx++){
+      candidates++;if((candidates&7)===0)yield .125;const h=localWildernessHashInt(gx,gy,salt),u=(h>>>0)/4294967295;
     const jx=((localWildernessHashInt(gx,gy,salt+17)>>>0)/4294967295-.5)*spacing*.72;
     const jy=((localWildernessHashInt(gx,gy,salt+31)>>>0)/4294967295-.5)*spacing*.72;
     const worldX=(gx+.5)*spacing+jx,worldY=(gy+.5)*spacing+jy,east=worldX-centerX,north=worldY-centerY;
@@ -2870,6 +2871,8 @@ function prepareLocalWildernessPlan(job){
     const priority=localWildernessHashInt(gx,gy,salt+191)>>>0;
     const faunaRoll=(localWildernessHashInt(gx,gy,salt+157)>>>0)/4294967295;
     raw.push(Object.freeze({east,north,worldX,worldY,worldTile:Object.freeze({x:tx,y:ty}),family,biome,scale,rotation,variant,priority,faunaRoll,elevationMeters:Number(sample.elevationMeters||0),moisture:Number(sample.moisture||0),mountainInfluence:Number(sample.mountainInfluence||0),nearWater,shoreAccent:nearWater&&shoreRoll<.48,waterEast,waterNorth}));
+    }
+    yield 1;
   }
   raw.sort((a,b)=>a.priority-b.priority||a.worldY-b.worldY||a.worldX-b.worldX);
   const items=raw.slice(0,maxStatic).sort((a,b)=>a.worldY-b.worldY||a.worldX-b.worldX);
@@ -6343,16 +6346,16 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
     for(let x=0;x<size;x++){
       const ux=(x+.5)/size,vz=(y+.5)/size,pixelOffset=(y*size+x)*4;
       const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
-      const sample=mixSample(ux,vz);
-      const sourceColor=Array.isArray(sample?.color)?sample.color:(sample?.land?[.28,.46,.20]:[.06,.22,.42]);
+      const sample=mixSample(ux,vz),parentSample=surfaceAuthority.sample(east,north);
+      const sourceColor=Array.isArray(parentSample?.color)?parentSample.color:(parentSample?.land?[.28,.46,.20]:[.06,.22,.42]);
       // PlanetGeography carries intentionally broad macro color fields. At local
       // map scales those low-frequency fields can read as giant polygon wedges.
       // Keep their SEED-derived identity as an accent, while deriving most local
       // albedo from the same authoritative land/elevation state at every LOD.
-      const elevationBase=Number(sample?.elevationMeters||0),moistureBase=clamp(Number(sample?.moisture||.5),0,1);
-      const mountainIdentity=clamp(Number(sample?.mountainInfluence||0),0,1);
+      const elevationBase=Number(parentSample?.elevationMeters||0),moistureBase=clamp(Number(parentSample?.moisture||.5),0,1);
+      const mountainIdentity=clamp(Number(parentSample?.mountainInfluence||0),0,1);
       const alpineBase=smoothstep01((elevationBase-1700)/2600);
-      const broadPaletteWeight=sample?.land?lerp(.20,1,smoothstep01(clamp((58-metersPerTexel)/36,0,1))):1;
+      const broadPaletteWeight=parentSample?.land?lerp(.20,1,smoothstep01(clamp((58-metersPerTexel)/36,0,1))):1;
       const paletteMoisture=lerp(.52,moistureBase,broadPaletteWeight),dry=1-paletteMoisture;
       // Keep lowland, upland, and alpine presentation distinguishable using only
       // canonical elevation/moisture/mountain inputs. These weights never create
@@ -6362,10 +6365,10 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // recognizable context rather than dominate local albedo as a giant pale
       // contour. Retain a bounded share of the same canonical elevation identity
       // while curvature/drainage/registered detail carry the readable structure.
-      const strategicBaseFlattenBand=sample?.land
+      const strategicBaseFlattenBand=parentSample?.land
         ?smoothstep01(clamp((metersPerTexel-700)/650,0,1))*(1-smoothstep01(clamp((metersPerTexel-4800)/4000,0,1)))
         :0;
-      const absoluteElevationPaletteWeight=sample?.land
+      const absoluteElevationPaletteWeight=parentSample?.land
         ?lerp(lerp(.34,1,smoothstep01(clamp((58-metersPerTexel)/36,0,1))),.12,strategicBaseFlattenBand)
         :1;
       const paletteUplandWeight=uplandWeight*absoluteElevationPaletteWeight;
@@ -6374,7 +6377,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       const uplandPalette=[.255+.080*dry,.365+.070*paletteMoisture,.190+.050*paletteMoisture];
       const alpinePalette=[.440,.455,.410];
       const foothillPalette=lowlandPalette.map((v,i)=>lerp(v,uplandPalette[i],paletteUplandWeight));
-      const localPalette=sample?.land?foothillPalette.map((v,i)=>lerp(v,alpinePalette[i],paletteAlpineWeight)):[.050,.18,.34];
+      const localPalette=parentSample?.land?foothillPalette.map((v,i)=>lerp(v,alpinePalette[i],paletteAlpineWeight)):[.050,.18,.34];
       // Preserve enough canonical globe hue to keep the same macro terrain
       // recognizable through the projection handoff, then converge smoothly.
       const coarseIdentity=smoothstep01(clamp((metersPerTexel-4)/70,0,1));
@@ -6392,7 +6395,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Map-scale views should show terrain structure, not one kilometre-scale
       // brightness wedge. Compress only land luminance above ~35 m/texel while
       // preserving RGB differences; near-ground presentation is unchanged.
-      if(sample?.land&&metersPerTexel>35){
+      if(parentSample?.land&&metersPerTexel>35){
         const compression=smoothstep01(clamp((metersPerTexel-35)/120,0,1))*.58;
         const luma=base[0]*.28+base[1]*.58+base[2]*.14;
         const targetLuma=.325+paletteAlpineWeight*.012;
@@ -6400,11 +6403,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         base=base.map(v=>clamp(v+shift,0,1));
       }
       const elevation=Number(sample?.elevationMeters||0);
-      const relief=clamp(elevation/5200,0,1);
+      const relief=clamp(elevationBase/5200,0,1);
       // Detail frequencies are anchored to canonical SEED-registered meters.
       // Rebuilding the same coordinates from a different patch/LOD therefore
       // reveals the same field instead of rolling a new patch-relative pattern.
-      const worldEast=sample.registeredEastMeters,worldNorth=sample.registeredNorthMeters;
+      const worldEast=parentSample.registeredEastMeters,worldNorth=parentSample.registeredNorthMeters;
       // Center-first refinement must add *information*, not a differently tinted
       // tile. Keep the outer edge on the exact shared photometric basis and
       // progressively admit finer registered-meter frequencies toward focus.
@@ -6452,7 +6455,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         (nativeMacro-sharedMacro)*refinementGain*residualMacroContrast*coarseRegionalFineGain;
       pushRange("baseLuma",luma3(base));pushRange("macro",macro);
       let shade=1,cover=[0,0,0],structureContribution=[0,0,0],landCoverContribution=[0,0,0];
-      if(sample?.land){
+      if(parentSample?.land){
         // Shared context remains restrained while focus progressively samples
         // a finer, still world-registered relief gradient. This restores
         // readable 1/500 landform structure without a rectangular LOD edge.
@@ -6576,8 +6579,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
             reliefMpt,
             detailSalt+503
           );
-          const derivative=clamp((reliefLit-relief0)*.55,-.040,.040);
-          registeredReliefShade=clamp(derivative*registeredReliefBand*(contextRing?.45:1),-.036,.036);
+          const derivative=clamp((reliefLit-relief0)*.78,-.052,.052);
+          registeredReliefShade=clamp(derivative*registeredReliefBand*(contextRing?.45:1),-.048,.048);
           cover=[
             cover[0]+registeredReliefShade*.88,
             cover[1]+registeredReliefShade,
@@ -6595,8 +6598,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const strategicStructureGain=1-strategicStructureAttenuationBand*.86;
         if(strategicStructureAttenuationBand>.001)cover=cover.map(v=>v*strategicStructureGain);
         structureContribution=cover.slice();
-        const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevation).map(v=>v*contextDetailStrength);
-        const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevation);
+        const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevationBase).map(v=>v*contextDetailStrength);
+        const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevationBase);
         const coverGain=contextRing?contextRefineWeight*.38:focusRefineWeight*.98;
         // Prefer the already SEED-registered land-cover field for strategic-map
         // readability. Its 3.6 km / 1.5 km / 700 m structure is physically
@@ -6611,8 +6614,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         pushRange("landCoverLuma",luma3(landCover));
         cover=cover.map((v,i)=>v+landCover[i]);
       }
-      const reliefTintWeight=sample?.land&&metersPerTexel>35?lerp(.06,1,smoothstep01(clamp((180-metersPerTexel)/145,0,1))):1;
-      const identityTint=sample?.land?[relief*.040*reliefTintWeight,relief*.036*reliefTintWeight,relief*.020*reliefTintWeight]:[-.010,-.003,.024];
+      const reliefTintWeight=parentSample?.land&&metersPerTexel>35?lerp(.06,1,smoothstep01(clamp((180-metersPerTexel)/145,0,1))):1;
+      const identityTint=parentSample?.land?[relief*.040*reliefTintWeight,relief*.036*reliefTintWeight,relief*.020*reliefTintWeight]:[-.010,-.003,.024];
       pushRange("coverLuma",luma3(cover));pushRange("shade",shade);
       const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
       let displayColor=authoritative;
@@ -6621,7 +6624,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // into a soft green wash at strategic scale. Increase only the contrast of
       // those already-computed values around the canonical local palette. This
       // adds no geography/noise query and leaves near-ground photometry alone.
-      if(sample?.land&&strategicMapBand>.001){
+      if(parentSample?.land&&strategicMapBand>.001){
         const regionalContrast=1+strategicMapBand*(contextRing?.03:.05);
         const palettePivot=clamp(luma3(localPalette),.20,.58);
         displayColor=displayColor.map(v=>clamp(palettePivot+(v-palettePivot)*regionalContrast,0,1));
@@ -6630,11 +6633,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // in the registered macro/curvature/cover composite. This is a display
       // transfer, not new noise or geography sampling, and fades out before
       // ground-scale rendering.
-      if(sample?.land){
+      if(parentSample?.land){
         const localMapReadabilityBand=smoothstep01(clamp((metersPerTexel-18)/34,0,1))*
           (1-smoothstep01(clamp((metersPerTexel-230)/170,0,1)));
         if(localMapReadabilityBand>.001){
-          const pivot=clamp(luma3(localPalette),.20,.58),gain=1+localMapReadabilityBand*.14;
+          const pivot=clamp(luma3(localPalette),.20,.58),gain=1+localMapReadabilityBand*.18;
           displayColor=displayColor.map(v=>clamp(pivot+(v-pivot)*gain,0,1));
         }
       }
@@ -6642,7 +6645,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // canonical moisture/elevation palette rather than collapsing into gray
       // under broad low-frequency relief. Restore chroma while preserving the
       // computed luminance, so this changes only presentation and not authority.
-      if(sample?.land&&metersPerTexel>18){
+      if(parentSample?.land&&metersPerTexel>18){
         const chromaRestore=.42*smoothstep01(clamp((metersPerTexel-18)/82,0,1));
         const displayLuma=luma3(displayColor),paletteLuma=luma3(localPalette);
         const chromaTarget=localPalette.map(v=>clamp(v+(displayLuma-paletteLuma),0,1));
@@ -6659,7 +6662,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // High peaks are legitimately snow-covered, but the canonical near-white
       // macro palette plus hillshade used to saturate into featureless white.
       // Compress only alpine highlights, preserving SEED-derived hue/detail.
-      if(sample?.land&&elevation>3400){
+      if(parentSample?.land&&elevation>3400){
         const snowWeight=smoothstep01((elevation-3400)/2600),cool=[0,.008,.018];
         displayColor=displayColor.map((v,i)=>{
           const compressed=v<=.52?v:.52+(v-.52)*.56;
@@ -6669,7 +6672,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Fine canonical albedo roughness keeps close alpine terrain readable
       // without inventing patch-local noise. Frequencies remain registered-meter
       // anchored, so the same coordinate has the same mottling in every rebuild.
-      if(sample?.land&&metersPerTexel<=8){
+      if(parentSample?.land&&metersPerTexel<=8){
         const coarseScale=Math.max(2,metersPerTexel*6),fineScale=Math.max(.75,metersPerTexel*2);
         const rough=surfaceValueNoise(worldEast,worldNorth,coarseScale,detailSalt+211)*.040+
           surfaceValueNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.018;
@@ -6776,13 +6779,15 @@ function* localResourceSteps(job){
   stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
   carveNestedRingCenterAlpha(medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
   carveNestedRingCenterAlpha(surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
+  job.currentPreparationPhase="wilderness-plan";
+  const wildernessPlan=yield* prepareLocalWildernessPlanSteps(job);
   // Normal alpha compositing already gives continuous coverage when the
   // feathered finer layer is drawn over an opaque/coarser parent. Carving the
   // parent to (1-childAlpha) creates an opacity hole: a + (1-a)^2 bottoms out
   // at 0.75, exposing the lower representation as a dark rectangular halo.
   // Keep medium fully present beneath detail, and surround fully present beneath
   // medium; z ordering and the shared world-stitched colors perform the handoff.
-  return {meshData,detail,medium,surround};
+  return {meshData,detail,medium,surround,wildernessPlan};
 }
 function textureFromPixels(pixels){
   const canvas2d=document.createElement("canvas");canvas2d.width=pixels.size;canvas2d.height=pixels.size;
@@ -6880,7 +6885,7 @@ function skirtMeshForDims(dims,spanFactor=LOCAL_SURROUND_SPAN_FACTOR){
   return mesh;
 }
 function finalizeLocalResource(job,result){
-  const started=performance.now(),dims=job.dims,{meshData,detail,medium,surround}=result,phaseMs={};
+  const started=performance.now(),dims=job.dims,{meshData,detail,medium,surround,wildernessPlan}=result,phaseMs={};
   let phaseStarted=performance.now();
   const mesh=new pc.Mesh(device);mesh.setPositions(meshData.positions);mesh.setNormals(meshData.normals);mesh.setUvs(0,meshData.uvs);mesh.setIndices(meshData.indices);mesh.update();
   mesh.incRefCount();// owned by the LRU cache, not by whichever MeshInstance shows it
@@ -6895,8 +6900,7 @@ function finalizeLocalResource(job,result){
   const surfaceContributorPixels=detail.contributorPixels||null;
   const contributorBytes=surfaceContributorPixels?Object.values(surfaceContributorPixels.layers||{}).reduce((sum,pixels)=>sum+Number(pixels?.byteLength||0),0):0;
   const estimatedBytes=meshData.positions.byteLength+meshData.normals.byteLength+meshData.uvs.byteLength+meshData.indices.byteLength+detail.size*detail.size*4+medium.size*medium.size*4+surround.size*surround.size*4+contributorBytes;
-  const wildernessPlan=prepareLocalWildernessPlan(job);
-  phaseMs.wildernessPlan=performance.now()-phaseStarted;phaseStarted=performance.now();
+  phaseMs.wildernessPlan=0;
   const regenerationSignature=localResourceRegenerationSignature(job);
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,surfaceContributorPixels,
     detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
