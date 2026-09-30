@@ -323,7 +323,7 @@ function attempt(seed,request){
   const activity=actionActivity(descriptor,action,actionState.target);
   const result=ActionExecutor.advanceActor({
     seed:String(seed),actorKind,actorId,position:actorPosition,activity
-  },0);
+  },Math.max(0,Math.min(3600,Number(request?.seconds)||0)));
   const ok=result?.status==="active"||result?.status==="complete";
   if(!ok)telemetry.rejectedAttempts++;
   return Object.freeze({
