@@ -128,6 +128,18 @@ chrono.start(chronoSeed,{when:ts(10),origin,destination:roadDest});
 assert.equal(chrono.advance(chronoSeed,{when:ts(9)}).reason,'cannot-rewind-journey-chronology');
 assert.equal(chrono.pause(chronoSeed,{when:ts(9)}).reason,'cannot-rewind-journey-chronology');
 
+// Default production adapter consumes RoutePlanner legality and routeEdgeCost instead of trusting caller distance/time.
+global.WorldStandards={TILE_METERS:2,WALK_SPEED_KMH:{road:3.6,grass:3.0}};
+global.Walkability={CATEGORY:{ROUTE:'route',DIFFICULT:'difficult',INTERIOR:'interior'},classify(){return {terrainType:'road',category:'route'};}};
+let defaultRouteCalls=0,defaultEdgeCalls=0;
+global.RoutePlanner={
+  findRoute(seedValue,from,to){defaultRouteCalls++;return {found:true,reason:'ok',path:[clone(from),{x:'1',y:'0',level:0},clone(to)],stepCount:2,totalSeconds:4};},
+  routeEdgeCost(){defaultEdgeCalls++;return {seconds:2};}
+};
+const defaultWorld=makeWorld(),defaultSvc=Journey.createService({worldState:defaultWorld}),defaultSeed=seed+'-DEFAULT';
+const defaultStart=defaultSvc.start(defaultSeed,{when:ts(0),origin,destination:{x:'2',y:'0',level:0}});
+assert(defaultStart.ok);assert.equal(defaultRouteCalls,1);assert.equal(defaultEdgeCalls,2);assert.equal(defaultStart.journey.route.totalMeters,4);assert.equal(defaultStart.journey.route.totalSeconds,4);assert.equal(defaultStart.journey.route.segments[0].surface,'road');
+
 for(const snapshot of [reloaded.snapshot(seed),road.snapshot(seed+'-ROAD'),grass.snapshot(seed+'-GRASS'),stateSvc.snapshot(stateSeed),cancelSvc.snapshot(cancelSeed)]){
   assert(snapshot.serializedBytes<=Journey.MAX_LEDGER_BYTES);assert(snapshot.historyCount<=Journey.MAX_HISTORY);
   assert.equal(snapshot.persistenceAuthority,'WorldState CampaignStateDelta');assert.equal(snapshot.chronologyAuthority,'Fantasy Game Time');assert.equal(snapshot.routeAuthority,'RoutePlanner validated route');
@@ -142,6 +154,7 @@ console.log(JSON.stringify({
   roadProgressAfter50s:road50.journey.progressMeters,grassProgressAfter50s:grass50.journey.progressMeters,
   partialTravel:true,exactEndpointArrival:true,interruptionResume:true,staleRouteZeroMutation:true,
   saveReloadContinuity:true,campaignIsolation:true,
+  defaultRoutePlannerIntegration:{routeCalls:defaultRouteCalls,edgeCalls:defaultEdgeCalls,totalMeters:defaultStart.journey.route.totalMeters,totalSeconds:defaultStart.journey.route.totalSeconds},
   bounds:{maxHistory:Journey.MAX_HISTORY,maxSegments:Journey.MAX_SEGMENTS,maxRouteSteps:Journey.MAX_ROUTE_STEPS,maxLedgerBytes:Journey.MAX_LEDGER_BYTES,maxAdvanceSeconds:Journey.MAX_ADVANCE_SECONDS},
   fullWorldScan:false,perFramePathPlanning:false,directPositionMutation:false,teleportation:false
 },null,2));
