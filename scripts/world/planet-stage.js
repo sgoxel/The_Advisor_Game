@@ -6097,6 +6097,7 @@ function* tangentMeshSteps(job){
   const columns=Math.max(2,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters)+1);
   const rows=Math.max(2,Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)+1);
   const positions=new Float32Array(columns*rows*3),normals=new Float32Array(columns*rows*3),uvs=new Float32Array(columns*rows*2);
+  let minHeightUnits=Infinity,maxHeightUnits=-Infinity;
   const frame={lat0,lon0,dims,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation};
   for(let z=0;z<rows;z++){
     const vz=z/(rows-1),northMeters=(vz-.5)*dims.patchHeight;
@@ -6105,14 +6106,21 @@ function* tangentMeshSteps(job){
       // Macro height identity is clamped to the tier's relief window, micro
       // relief is layered in near the ground, and the outer 12% feathers down
       // to the coarse surround so the LOD edge never reads as a slab.
-      positions[v*3]=eastMeters/dims.metersPerUnit;positions[v*3+1]=localGroundHeightUnits(eastMeters,northMeters,frame);positions[v*3+2]=-northMeters/dims.metersPerUnit;
+      const heightUnits=localGroundHeightUnits(eastMeters,northMeters,frame);
+      positions[v*3]=eastMeters/dims.metersPerUnit;positions[v*3+1]=heightUnits;positions[v*3+2]=-northMeters/dims.metersPerUnit;
+      minHeightUnits=Math.min(minHeightUnits,heightUnits);maxHeightUnits=Math.max(maxHeightUnits,heightUnits);
       normals[v*3+1]=1;uvs[v*2]=ux;uvs[v*2+1]=vz;
     }
     yield 1;
   }
   const indices=new Uint32Array((columns-1)*(rows-1)*6);let k=0;
   for(let z=0;z<rows-1;z++)for(let x=0;x<columns-1;x++){const a=z*columns+x,b=a+1,c=a+columns,d=c+1;indices[k++]=a;indices[k++]=c;indices[k++]=b;indices[k++]=b;indices[k++]=c;indices[k++]=d;}
-  return {positions,normals,uvs,indices,columns,rows};
+  const minUnits=Number.isFinite(minHeightUnits)?minHeightUnits:0,maxUnits=Number.isFinite(maxHeightUnits)?maxHeightUnits:0,spanUnits=Math.max(0,maxUnits-minUnits);
+  return {positions,normals,uvs,indices,columns,rows,meshHeightRange:Object.freeze({
+    minUnits:Number(minUnits.toFixed(6)),maxUnits:Number(maxUnits.toFixed(6)),spanUnits:Number(spanUnits.toFixed(6)),
+    minMeters:Number((minUnits*dims.metersPerUnit).toFixed(3)),maxMeters:Number((maxUnits*dims.metersPerUnit).toFixed(3)),
+    spanMeters:Number((spanUnits*dims.metersPerUnit).toFixed(3)),metersPerUnit:Number(dims.metersPerUnit.toFixed(6))
+  })};
 }
 // Presentation-only relief and land cover, anchored to continuous world meters.
 // Each octave fades in once it spans >2 texels, so every LOD shows structure at
@@ -6771,6 +6779,35 @@ function clearWp020EvidenceFlatMesh(){
   try{wp020EvidenceFlatMesh.destroy?.();}catch(_){}
   wp020EvidenceFlatMesh=null;wp020EvidenceFlatMeshSignature=null;
 }
+function wp020PresentationEvidenceState(){
+  const dims=displayResource?.dims||null,detail=displayResource?.detail||null;
+  const color3=color=>color?Object.freeze([Number(color.r.toFixed(6)),Number(color.g.toFixed(6)),Number(color.b.toFixed(6))]):null;
+  const rect=canvas?.getBoundingClientRect?.()||{width:0,height:0};
+  const compensation=Number(projectionPresentation?.presentationCompensation??(dims?localPresentationCompensation(zoomState.scalar,displayResource.levelIndex):1));
+  return Object.freeze({
+    scalar:Number(zoomState.scalar.toFixed(9)),targetScalar:Number(zoomState.targetScalar.toFixed(9)),
+    focusLatitudeRadians:Number(zoomState.focusLatitudeRadians.toFixed(9)),focusLongitudeRadians:Number(zoomState.focusLongitudeRadians.toFixed(9)),
+    yawDegrees:Number(yawDegrees.toFixed(6)),pitchDegrees:Number(pitchDegrees.toFixed(6)),
+    viewport:Object.freeze({width:Number(rect.width.toFixed(3)),height:Number(rect.height.toFixed(3))}),
+    resourceSignature:displayResource?.signature||null,level:dims?.levelId||null,
+    presentationCompensation:Number(compensation.toFixed(6)),
+    patchScale:Number(Number(projectionPresentation?.patchScale||0).toFixed(9)),
+    shownHeightMeters:Number(Number(projectionPresentation?.shownHeightMeters||0).toFixed(3)),
+    tangentOpacity:Number(Number(projectionPresentation?.tangentOpacity||0).toFixed(6)),
+    mapScaleShellOpacity:Number(Number(projectionPresentation?.mapScaleShellOpacity||0).toFixed(6)),
+    reliefGlobeOpacity:Number(Number(projectionPresentation?.reliefGlobeOpacity||0).toFixed(6)),
+    representationOwner:projectionPresentation?.representationOwner||null,
+    cameraOrthoHeight:Number(Number(cameraEntity?.camera?.orthoHeight||0).toFixed(9)),
+    meshHeightRange:detail?.meshHeightRange||null,
+    detailMetersPerTexel:Number(Number(detail?.detailMetersPerTexel||0).toFixed(3)),
+    texture:Object.freeze({minFilter:detail?.minFilter||null,magFilter:detail?.magFilter||null,anisotropy:Number(detail?.anisotropy||0)}),
+    material:Object.freeze({
+      diffuse:color3(tangentPatchMaterial?.diffuse),emissive:color3(tangentPatchMaterial?.emissive),
+      emissiveIntensity:Number(Number(tangentPatchMaterial?.emissiveIntensity||0).toFixed(6)),
+      opacity:Number(Number(tangentPatchMaterial?.opacity||0).toFixed(6)),opacityMapChannel:tangentPatchMaterial?.opacityMapChannel||null
+    })
+  });
+}
 function setWp020PresentationEvidenceMode(mode="normal"){
   const requested=String(mode||"normal");
   if(!EVIDENCE_WP020_PRESENTATION_ISOLATION)return Object.freeze({available:false,enabled:false,mode:"normal",reason:"evidence-flag-required"});
@@ -6794,6 +6831,7 @@ function setWp020PresentationEvidenceMode(mode="normal"){
     resourceSignature:displayResource.signature,level:displayResource?.dims?.levelId||null,
     textureIdentityUnchanged:true,materialIdentityUnchanged:true,
     geometryMode:wp020EvidencePresentationMode==="flat-height"?"flat-focus-quad":"canonical-heightfield",
+    state:wp020PresentationEvidenceState(),
     worldResampleCount:0,geographyQueryCount:0
   });
 }
@@ -6824,6 +6862,7 @@ function finalizeLocalResource(job,result){
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
+      meshHeightRange:meshData.meshHeightRange||null,
       topographicSignalRevision:"canonical-access-morphology-map-detail-v30",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
