@@ -168,7 +168,7 @@ function simulationValidation(seed,snapshot,proposal,position){
   }
   return Object.freeze({checked:true,ok:false,reason:"unsupported-command",source:"Simulation",delegate:null,executionReady:false});
 }
-function executeAccepted(seed,snapshot,proposal,validation,position,actorId){
+function executeAccepted(seed,snapshot,proposal,validation,position,actorId,executionContext){
   if(!validation.ok)return Object.freeze({attempted:false,state:"blocked",reason:validation.reason,delegate:validation.delegate||null,actionExecuted:false,positionMutation:false,directWorldMutation:false});
   if(proposal.commandId==="advisor.propose_travel"){
     return deepFreeze({
@@ -179,6 +179,28 @@ function executeAccepted(seed,snapshot,proposal,validation,position,actorId){
   if(proposal.commandId==="advisor.propose_interaction"){
     const targetId=proposal.validatedParameters.interactionTargetId;
     if(!targetId)return Object.freeze({attempted:false,state:"proposal-ready",reason:"person-interaction-requires-later-concrete-target",delegate:null,actionExecuted:false,positionMutation:false,directWorldMutation:false});
+    const pipeline=root?.ProtagonistInteractionPipeline;
+    if(pipeline?.execute){
+      const target=targetLookup(snapshot,"interaction",targetId);
+      const targetKind=(String(target?.objectType||"").toLowerCase()==="door"||String(targetId).endsWith(":door"))?"building":"object";
+      const pipelineResult=pipeline.execute(seed,{
+        when:executionContext?.when,actorId,actorPosition:position,targetKind,targetId,action:validation.action,
+        externalKey:executionContext?.runtimeAttemptId||executionContext?.executionId||proposal.proposalId||null,
+        references:{proposalId:proposal.proposalId,decisionId:executionContext?.decisionId||null,runtimeAttemptId:executionContext?.runtimeAttemptId||null}
+      });
+      const interaction=pipelineResult?.interaction||null,status=String(interaction?.status||"failed"),terminal=status==="terminal-success";
+      const started=status==="active"||status==="pending"||terminal;
+      return deepFreeze({
+        attempted:true,state:terminal?"completed":status,reason:String(interaction?.reason||pipelineResult?.reason||"interaction-pipeline-result"),
+        delegate:"ProtagonistInteractionPipeline -> ObjectInteractions/ActionExecutor",
+        actionExecuted:started,positionMutation:false,directWorldMutation:false,
+        authoritativeResult:interaction?{
+          id:String(interaction.resultId||interaction.attemptId||""),ok:Boolean(pipelineResult?.ok),status,reason:String(interaction.reason||""),
+          objectId:String(interaction.targetId||targetId),action:String(interaction.action||validation.action||""),terminal,
+          attemptId:String(interaction.attemptId||""),resultId:interaction.resultId?String(interaction.resultId):null
+        }:null
+      });
+    }
     const interactions=root?.ObjectInteractions;
     if(!interactions?.attempt)return Object.freeze({attempted:false,state:"blocked",reason:"object-interactions-unavailable",delegate:"ObjectInteractions",actionExecuted:false,positionMutation:false,directWorldMutation:false});
     const result=interactions.attempt(seed,{actorKind:"protagonist",actorId,actorPosition:position,objectId:targetId,action:validation.action}),ok=Boolean(result?.ok);
@@ -213,7 +235,7 @@ function evaluate(configValue){
   const ids=buildIds(seed,when,proposal,decision,factors,finalProposal);
   const executable=(decision==="accepted"||decision==="modified")&&finalValidation.ok;
   const execution=executable&&config.execute!==false
-    ?executeAccepted(seed,snapshot,finalProposal,finalValidation,position,normalizeText(config.actorId||"protagonist",120)||"protagonist")
+    ?executeAccepted(seed,snapshot,finalProposal,finalValidation,position,normalizeText(config.actorId||"protagonist",120)||"protagonist",{when,runtimeAttemptId:normalizeText(config.runtimeAttemptId||"",160)||null,decisionId:ids.decisionId,executionId:ids.executionId})
     :Object.freeze({attempted:false,state:executable?"validated":"not-run",reason:executable?"execution-disabled":decision,delegate:finalValidation.delegate||null,actionExecuted:false,positionMutation:false,directWorldMutation:false});
   return deepFreeze({
     evaluatorVersion:EVALUATOR_VERSION,decisionVersion:DECISION_VERSION,executionVersion:EXECUTION_VERSION,
