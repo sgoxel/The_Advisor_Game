@@ -2904,3 +2904,13 @@
 - A trap-backed test proved the module never reads Simulation. It contains no movement, resource, authority, world-state, clock, camera, device, or external-provider mutation path; it only returns deterministic interpretation metadata.
 - VISUAL: N/A — this WP introduces no new rendered surface; screenshots cannot meaningfully verify language normalization/matching correctness. ROADMAP remains IN PROGRESS until this acceptance documentation state is itself verified on GitHub Pages.
 
+
+
+2026-09-30 10:50 +03:00 | WP-S008-002 | FUNCTIONAL ACCEPTED — CONTEXT-BOUNDED COMMAND SET + AUTHORITATIVE TARGET FILTERING
+- Continued only WP-S008-002 under AGENT #6. Added production `CommandSetInterface` with versioned `advisor-command-set-v1` / `advisor-command-context-v1`, loaded by `index.html`.
+- Exact accepted implementation/evidence head `d265d1573427a36a9d2ea619a0b5b5312e695842`; dedicated exact-head workflow `36685889246` SUCCESS and verified the production module plus loader markers on public GitHub Pages.
+- The interface exposes 5 stable non-executing schemas: information query, schedule query, advice proposal, travel proposal and local interaction proposal. Every schema declares actor/target kinds, parameters, preconditions, fail-closed validation contract, structured result shape, `executionAuthority=false` and `simulationMutation=false`.
+- Deterministic evidence produced context snapshot `CMDCTX-8B9F0779` with people `R01,R02`, places `P1,P2`, route `E12`, interactions `OBJ-A,OBJ-T`; moving authoritative context produced `CMDCTX-D5BA1776` with people `R01,R04`, places `P2,P3`, route `E23`, interactions `OBJ-B,OBJ-S2`. The shared authoritative place `P2` retained the same identity and command schemas were byte-stable across presentation/device differences.
+- Validation accepted representative information/schedule/advice/travel/interaction proposals while stale person/place IDs, unknown commands, unexpected parameters and mismatched interaction targets failed closed. A Simulation trap remained untouched.
+- Bounded diagnostics show 4 resident rows, 4 activity rows, 3 destination rows, 3 road nodes and 2 road edges consumed in the evidence context; `bounded=true`, `fullWorldScan=false`, `renderStateAuthority=false`, `cameraAuthority=false`, `deviceAuthority=false`, `performanceAuthority=false`, `worldMutation=false`, and `executionAuthority=false`. An adversarial full-world source is explicitly surfaced as unsafe rather than mislabeled bounded.
+- VISUAL: N/A — this WP is a functional command-schema/context-filtering authority boundary with no new rendered surface. ROADMAP remains IN PROGRESS until this acceptance documentation state is verified on GitHub Pages.
