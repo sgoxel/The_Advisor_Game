@@ -161,30 +161,56 @@ def screenshot_samples(path_name,points=None):
     return samples
 
 def capture_transition_layer_isolation(d,scalar=.690488):
-    d.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);",float(scalar))
-    wait(d,"const s=window.PlanetStage.snapshot();return Math.abs(Number(s.zoom.scalar)-arguments[0])<1e-6 && Number(s.projection?.resourceBudget?.pendingPreparationCount||0)===0",240,float(scalar))
-    time.sleep(.8)
+    # Phase 20 must inspect the actual retained regional parent visible in the
+    # failing animated handoff. Arming the evidence-only freeze lets the normal
+    # zoom path reach that exact resource, then holds animation and blocks only
+    # resource activation while A/B layer screenshots are captured. Preparation
+    # may finish into cache; no generation inputs or canonical world state change.
+    focus_village(d)
+    settle_scale(d,0)
+    arm=d.execute_script(
+        "return window.PlanetStage.armWp020TransitionEvidenceFreeze({minScalar:arguments[0],level:'regional-detail'});",
+        float(scalar)
+    )
+    if not arm or arm.get("available") is not True or arm.get("armed") is not True:
+        raise AssertionError(f"unable to arm retained-parent isolation: {arm}")
+    d.execute_script("window.PlanetStage.setAnimatedScaleIndex(10,'wp020-transition-parent-isolation');")
+    wait(d,"return window.PlanetStage.wp020TransitionEvidenceFreezeState().frozen===true",180)
+    time.sleep(.08)
+    freeze=d.execute_script("return window.PlanetStage.wp020TransitionEvidenceFreezeState();")
     baseline=snap(d)
     sig=baseline.get("projection",{}).get("resourceBudget",{}).get("visibleResourceSignature")
+    level=baseline.get("projection",{}).get("localDetail",{}).get("level")
+    frozen_scalar=float(baseline.get("zoom",{}).get("scalar") or 0)
+    if level!="regional-detail" or not sig or "regional-detail" not in sig:
+        raise AssertionError(f"retained-parent freeze missed regional-detail: level={level} sig={sig} freeze={freeze}")
     frames={}
     states={}
-    for mode in ("normal","focus-only","medium-only","outer-only"):
-        state=d.execute_script("return window.PlanetStage.setWp020PresentationEvidenceMode(arguments[0]);",mode)
-        if not state or state.get("available") is not True or state.get("mode")!=mode:
-            raise AssertionError(f"layer isolation unavailable for {mode}: {state}")
-        time.sleep(.25)
-        current=snap(d)
-        current_sig=current.get("projection",{}).get("resourceBudget",{}).get("visibleResourceSignature")
-        if current_sig!=sig or abs(float(current["zoom"]["scalar"])-float(scalar))>1e-6:
-            raise AssertionError(f"layer isolation changed resource/scalar: {mode} {current_sig} {current['zoom']['scalar']}")
-        shot=capture(d,f"transition-layer-{mode}")
-        frames[mode]={"screenshot":shot,"framebufferRgb":screenshot_samples(shot)}
-        states[mode]=state
-    d.execute_script("window.PlanetStage.setWp020PresentationEvidenceMode('normal');")
-    contributor=capture_contributors(d,"transition-pinned")
-    return {"mode":"pinned-transition-layer-isolation-v1","scalar":float(scalar),"resourceSignature":sig,
-            "displayScale":baseline.get("zoom",{}).get("displayScaleLabel"),"states":states,
-            "frames":frames,"contributors":contributor}
+    contributor=None
+    try:
+        contributor=capture_contributors(d,"transition-retained-parent")
+        for mode in ("normal","focus-only","medium-only","outer-only"):
+            state=d.execute_script("return window.PlanetStage.setWp020PresentationEvidenceMode(arguments[0]);",mode)
+            if not state or state.get("available") is not True or state.get("mode")!=mode:
+                raise AssertionError(f"layer isolation unavailable for {mode}: {state}")
+            time.sleep(.08)
+            current=snap(d)
+            current_sig=current.get("projection",{}).get("resourceBudget",{}).get("visibleResourceSignature")
+            current_level=current.get("projection",{}).get("localDetail",{}).get("level")
+            current_scalar=float(current.get("zoom",{}).get("scalar") or 0)
+            frozen=d.execute_script("return window.PlanetStage.wp020TransitionEvidenceFreezeState().frozen===true")
+            if not frozen or current_sig!=sig or current_level!="regional-detail" or abs(current_scalar-frozen_scalar)>1e-6:
+                raise AssertionError(f"retained-parent isolation drifted: {mode} level={current_level} sig={current_sig} scalar={current_scalar}")
+            shot=capture(d,f"transition-retained-parent-{mode}")
+            frames[mode]={"screenshot":shot,"framebufferRgb":screenshot_samples(shot)}
+            states[mode]=state
+    finally:
+        try:d.execute_script("window.PlanetStage.setWp020PresentationEvidenceMode('normal');")
+        finally:d.execute_script("window.PlanetStage.releaseWp020TransitionEvidenceFreeze();")
+    return {"mode":"retained-regional-parent-layer-isolation-v2","requestedMinScalar":float(scalar),
+            "scalar":frozen_scalar,"resourceSignature":sig,"level":level,
+            "displayScale":baseline.get("zoom",{}).get("displayScaleLabel"),"freeze":freeze,
+            "states":states,"frames":frames,"contributors":contributor}
 
 def focus_village(d):
     t=d.execute_script("""
