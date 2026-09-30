@@ -111,7 +111,7 @@ assert(source.includes("seedAndFantasyTimeOnly:true"),"SEED + fantasy-time autho
 assert(source.includes("getTimestampKey?.()||window.GameTime?.getNow?.()"),"auto refresh lacks fantasy-time fallback");
 assert(stageSource.includes('const settlementCrowdActive=["refined","full"].includes(String(tier))'),"routine settlement crowd gate missing");
 assert(stageSource.includes("TravelEncounters?.localPresentation?.(activeSeed,focusTile,stamp"),"PlanetStage is not wired to rare encounters");
-assert(stageSource.includes('travelerSilhouetteRevision:"travel-encounter-silhouette-v2"'),"traveler silhouette revision missing");
+assert(stageSource.includes('travelerSilhouetteRevision:"travel-encounter-silhouette-v3"'),"traveler silhouette revision missing");
 assert(stageSource.includes("topFacingTravelerBodies:true"),"top-facing traveler body geometry missing");
 assert(stageSource.includes("travelEncounterBodyMinPx"),"traveler screen-size telemetry missing");
 assert(stageSource.includes("mergedPresentationBuildMs"),"merged traveler presentation timing telemetry missing");
