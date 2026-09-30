@@ -185,7 +185,7 @@ function descriptor(seedValue,pointValue,timestampValue,forcedType=null){
     macroCell:cell,windowIndex:w.index,cooldownBlock:w.cooldownBlock,windowHours:WINDOW_HOURS,cooldownHours:WINDOW_HOURS*COOLDOWN_WINDOWS,
     startedWindow:w.key.slice(0,13)+":00:00",actorCount:actors.length,actors,context:ctx,rare:true,authoritativeOutcome:false,politicalOutcome:false,
     identityAuthority:"Campaign SEED + Fantasy Game Time + deterministic local context",distantMode:"summary-only",exactMaterializationRadiusTiles:LOCAL_RADIUS_TILES,
-    pooledPresentation:true,visualPresentationRevision:"travel-encounter-silhouette-v2",fullWorldScan:false,perFrameScan:false
+    pooledPresentation:true,visualPresentationRevision:"travel-encounter-silhouette-v3",fullWorldScan:false,perFrameScan:false
   });
 }
 function probe(seedValue,pointValue,timestampValue){return descriptor(seedValue,pointValue,timestampValue,null)}
@@ -218,7 +218,7 @@ function proofActivate(seedValue,typeValue,anchorValue,timestampValue){
     anchor,rawAnchor:baseAnchor,visualAnchor:visual,macroCell:cell,windowIndex:w.index,cooldownBlock:w.cooldownBlock,windowHours:WINDOW_HOURS,cooldownHours:WINDOW_HOURS*COOLDOWN_WINDOWS,
     startedWindow:w.key.slice(0,13)+":00:00",actorCount:actors.length,actors,context:ctx,rare:true,authoritativeOutcome:false,politicalOutcome:false,
     identityAuthority:"Campaign SEED + Fantasy Game Time + deterministic local context",distantMode:"summary-only",exactMaterializationRadiusTiles:LOCAL_RADIUS_TILES,
-    pooledPresentation:true,visualPresentationRevision:"travel-encounter-silhouette-v2",proofControlledPlacement:true,fullWorldScan:false,perFrameScan:false
+    pooledPresentation:true,visualPresentationRevision:"travel-encounter-silhouette-v3",proofControlledPlacement:true,fullWorldScan:false,perFrameScan:false
   });
   proofBySeed.set(seed,freeze({event}));
   const view=localPresentation(seed,anchor,stamp,{proof:true});
