@@ -177,6 +177,14 @@ try:
     if not wc_diag.get("present"):
         logs=[x for x in driver.get_log("browser") if "world-context" in str(x.get("message","")).lower() or x.get("level")=="SEVERE"]
         raise RuntimeError("WorldContext loader failure: "+json.dumps({"diagnostic":wc_diag,"browser":logs[-20:]}))
+    if not driver.execute_script("return Boolean(window.WorldContext)"):
+        diagnostics=driver.execute_script("""
+          const resources=performance.getEntriesByType("resource").filter(e=>String(e.name||"").includes("world-context.js")).map(e=>({name:e.name,initiatorType:e.initiatorType,duration:e.duration,transferSize:e.transferSize,encodedBodySize:e.encodedBodySize,decodedBodySize:e.decodedBodySize}));
+          const tag=[...document.scripts].find(s=>String(s.src||"").includes("world-context.js"));
+          return {resources,tag:tag?{src:tag.src,type:tag.type||"",async:Boolean(tag.async),defer:Boolean(tag.defer)}:null,readyState:document.readyState};
+        """)
+        diagnostics["browserLogs"]=[x for x in driver.get_log("browser") if "world-context" in str(x.get("message","")).lower() or x.get("level")=="SEVERE"][-30:]
+        raise RuntimeError("WorldContext export missing after PlanetStage ready: "+json.dumps(diagnostics))
     campaign_binding=bind_evidence_campaign()
 
     persistence=None
