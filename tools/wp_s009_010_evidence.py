@@ -36,7 +36,8 @@ def state(mode,profile):
       const p=rect(panel),r=rect(readout),inside=x=>Boolean(x&&x.left>=-.5&&x.top>=-.5&&x.right<=innerWidth+.5&&x.bottom<=innerHeight+.5);
       return {mode,profile,viewport:{width:innerWidth,height:innerHeight},panel:p,readout:r,panelInside:inside(p),readoutInside:inside(r),documentWidth:document.documentElement.scrollWidth,
         overlap:{map:ov(p,rect(map)),places:ov(p,rect(places)),scale:ov(p,rect(scale)),launcher:ov(r,rect(launcher))},
-        cards:[...document.querySelectorAll('.advisor-status-card')].map(n=>({title:n.querySelector('strong')?.textContent?.trim(),text:n.textContent.trim().slice(0,260)})),
+        cards:[...document.querySelectorAll('.advisor-status-card')].map(n=>({title:n.querySelector('strong')?.textContent?.trim(),text:n.textContent.trim().slice(0,260),rect:rect(n)})),
+        cardsVisible:[...document.querySelectorAll('.advisor-status-card')].every(n=>{const x=rect(n);return x&&r&&x.left>=r.left-.5&&x.right<=r.right+.5&&x.top>=r.top-.5&&x.bottom<=r.bottom+.5}),
         chips:[...document.querySelectorAll('.advisor-status-chip')].map(n=>n.textContent.trim()),
         status:window.ProtagonistStatusUI?.snapshot?.()||null,chat:window.AdvisorConversationUI?.snapshot?.()||null};
     """,mode,profile)
@@ -46,6 +47,7 @@ def assert_state(s):
     if s["documentWidth"]>s["viewport"]["width"]+1:raise RuntimeError("horizontal overflow "+json.dumps(s))
     if s["overlap"]["map"]>1 or s["overlap"]["places"]>1 or s["overlap"]["scale"]>1:raise RuntimeError("Advisor panel overlaps map chrome "+json.dumps(s))
     if s["overlap"]["launcher"]>1:raise RuntimeError("status readout overlaps Advisor launcher "+json.dumps(s))
+    if not s.get("cardsVisible"):raise RuntimeError("one or more status cards are clipped outside the readout viewport "+json.dumps(s))
     a=s["status"].get("authority",{})
     if a.get("directWorldMutation") is not False or a.get("directExecution") is not False or a.get("wholeWorldScan") is not False or a.get("perFrameRender") is not False:raise RuntimeError("authority/event-driven contract failed "+json.dumps(s))
     titles={c.get("title") for c in s["cards"]}

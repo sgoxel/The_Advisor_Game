@@ -1787,3 +1787,70 @@ body.planet-stage-active{
   .advisor-status-grid{display:contents}.advisor-status-card{padding:5px 6px;border-radius:8px}.advisor-status-card-head{margin-bottom:4px}.advisor-status-card-head strong,.advisor-status-line strong{font-size:6px}.advisor-status-card-head span,.advisor-status-line span,.advisor-status-note{font-size:5.5px}
   .advisor-status-meter{grid-template-columns:38px minmax(0,1fr) 18px;gap:3px}.advisor-status-meter label,.advisor-status-meter b{font-size:5.5px}.advisor-status-meter-track{height:4px}.advisor-status-foot{display:none}
 }
+
+
+/* WP-S009-010 attempt-2 visibility hardening: expanded readout owns a bounded visible track */
+.advisor-chat-panel:has(.advisor-status-readout[open]){
+  grid-template-rows:auto minmax(205px,auto) minmax(72px,1fr) auto auto;
+  max-height:min(82vh,720px);
+}
+.advisor-status-readout[open]{min-height:0;overflow:hidden}
+.advisor-status-readout[open] .advisor-status-body{
+  max-height:190px;
+  overflow:hidden;
+}
+.advisor-status-readout[open] .advisor-status-grid{align-items:stretch}
+.advisor-status-readout[open] .advisor-status-card{padding:6px 7px}
+.advisor-status-readout[open] .advisor-status-card-head{margin-bottom:4px}
+.advisor-status-readout[open] .advisor-status-lines{gap:2px}
+.advisor-status-readout[open] .advisor-status-line{padding:2px 0}
+.advisor-status-readout[open] .advisor-status-meters{gap:3px}
+.advisor-status-readout[open] .advisor-status-meter{grid-template-columns:48px minmax(0,1fr) 22px;gap:4px}
+.advisor-status-readout[open] .advisor-status-identity{padding:6px 7px}
+@media(max-width:520px){
+  .advisor-chat-panel:has(.advisor-status-readout[open]){
+    max-height:min(70vh,590px);
+    grid-template-rows:auto 210px minmax(74px,1fr) auto auto;
+  }
+  .advisor-status-readout[open] .advisor-status-body{max-height:172px}
+  .advisor-status-readout[open] .advisor-status-card{padding:5px 6px}
+  .advisor-status-readout[open] .advisor-status-line{padding:1px 0}
+  .advisor-status-readout[open] .advisor-status-meter{grid-template-columns:42px minmax(0,1fr) 18px;gap:3px}
+}
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-chat-panel:has(.advisor-status-readout[open]){
+    grid-template-rows:auto 118px minmax(36px,1fr) auto;
+    max-height:none;
+  }
+  .advisor-status-readout[open] .advisor-status-body{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:3px;
+    height:89px;
+    max-height:89px;
+    padding:3px 5px 4px;
+    overflow:hidden;
+  }
+  .advisor-status-readout[open] .advisor-status-identity{
+    grid-column:1/-1;
+    min-height:20px;
+    padding:3px 5px;
+    align-items:center;
+  }
+  .advisor-status-readout[open] .advisor-status-identity h3{font-size:7px}
+  .advisor-status-readout[open] .advisor-status-identity p{display:none}
+  .advisor-status-readout[open] .advisor-status-traits{gap:2px;max-width:180px}
+  .advisor-status-readout[open] .advisor-status-trait{padding:1px 3px;font-size:4.5px}
+  .advisor-status-readout[open] .advisor-status-card{padding:3px 4px;border-radius:6px;min-height:0}
+  .advisor-status-readout[open] .advisor-status-card-head{margin-bottom:2px}
+  .advisor-status-readout[open] .advisor-status-card-head strong{font-size:5px}
+  .advisor-status-readout[open] .advisor-status-card-head span{font-size:4px}
+  .advisor-status-readout[open] .advisor-status-meter{grid-template-columns:26px minmax(0,1fr) 12px;gap:2px}
+  .advisor-status-readout[open] .advisor-status-meter label,.advisor-status-readout[open] .advisor-status-meter b{font-size:4px}
+  .advisor-status-readout[open] .advisor-status-meter-track{height:3px}
+  .advisor-status-readout[open] .advisor-status-meters .advisor-status-meter:nth-child(n+3){display:none}
+  .advisor-status-readout[open] .advisor-status-lines .advisor-status-line:nth-child(n+3){display:none}
+  .advisor-status-readout[open] .advisor-status-line{padding:0}
+  .advisor-status-readout[open] .advisor-status-line strong{font-size:4.8px}
+  .advisor-status-readout[open] .advisor-status-line span{font-size:4px}
+  .advisor-status-readout[open] .advisor-status-note{display:none}
+}
