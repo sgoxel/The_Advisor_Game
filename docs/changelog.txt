@@ -1,3 +1,11 @@
+2026-09-30 17:59 +03:00 | WP-S010-003 | FUNCTIONAL ACCEPTED — deployment/completion pending
+- Accepted exact product/evidence head `c381dffa4ad56fd0de373b36cae33b91a4fc86ec`; dedicated workflow `36732965933` SUCCESS with persistent interaction evidence, Stage 10 authority regressions, and public GitHub Pages product verification.
+- `ProtagonistInteractionPipeline` v1 persists stable interaction attempts/results through existing `WorldState CampaignStateDelta`, with object use progressing `active -> terminal-success`, canonical building-door interaction, explicit Simulation-facing person-adapter pending/failure coverage, unavailable/rejected distinction, forged-completion suppression, duplicate idempotence, deterministic replay, save/reload continuity, and reference-only linkage to conversation/proposal/decision/runtime IDs.
+- End-to-end runtime/evaluator evidence preserves stable `PAX-99FC42D6` and progresses `running -> succeeded` through `ProtagonistInteractionPipeline -> ObjectInteractions/ActionExecutor`; only authoritative terminal Simulation evidence can become completed interaction history.
+- Bounds/authority: <=8 active attempts, <=24 retained terminal results, <=64 KiB ledger, <=30 fantasy seconds per advance slice; `fullWorldScan=false`, `wholeHistoryScan=false`, `perFrameScan=false`, `directWorldMutation=false`, `worldTruthCopied=false`.
+- VISUAL: N/A — this WP adds persistent interaction attempt/result authority and no rendered surface.
+- Completion remains gated on accepted-docs deployment and final ROADMAP bookkeeping deployment.
+
 2026-09-29 06:30 +03:00 | WP-S004-009 | MIXED PASS — acceptance pending deployment
 - Added SettlementActivityRhythm as a deterministic presentation-only fantasy-day profile layer with dawn, daytime, late-day, evening and night bands, 45-minute smooth transitions and per-resident SEED-derived timing variation.
 - DailyActivity schedules, route targets, resident materialization and world truth remain authoritative and unchanged. Telemetry reports fantasyTimeOnly=true, schedule/world/materialization mutation=false, globalScan=false and fullSettlementPerFrameScan=false.
