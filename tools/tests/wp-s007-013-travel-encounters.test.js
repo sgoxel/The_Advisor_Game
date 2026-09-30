@@ -116,7 +116,7 @@ assert(stageSource.includes("topFacingTravelerBodies:true"),"top-facing traveler
 assert(stageSource.includes("travelEncounterBodyMinPx"),"traveler screen-size telemetry missing");\nassert(stageSource.includes("mergedPresentationBuildMs"),"merged traveler presentation timing telemetry missing");
 assert(stageSource.includes("travelEncounters:window.TravelEncounters?.snapshot?.(activeSeed)||null"),"PlanetStage snapshot missing travel encounter state");
 assert(html.indexOf("scripts/world/travel-encounters.js")<html.indexOf("scripts/world/planet-stage.js"),"travel runtime must load before PlanetStage");
-assert(css.includes(".travel-encounter-card")&&css.includes("bottom-center")===false,"dedicated travel card stylesheet missing or malformed");
+assert(css.includes(".travel-encounter-card")&&css.includes("z-index:90")&&source.includes("document.body||document.getElementById"),"dedicated travel card overlay layer missing or malformed");
 
 console.log(JSON.stringify({
   pass:true,wp:"WP-S007-013",classification:"MIXED",
