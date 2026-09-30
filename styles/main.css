@@ -2296,3 +2296,17 @@ body.planet-stage-active{
     align-content:start;
   }
 }
+
+
+/* WP-S010-009 short-landscape activity composer anchor */
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-chat-panel:has(.advisor-activity-strip) .advisor-chat-compose{
+    position:absolute;
+    z-index:2;
+    left:0;
+    right:0;
+    bottom:0;
+    box-sizing:border-box;
+    width:100%;
+  }
+}
