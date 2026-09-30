@@ -7,7 +7,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 
 TARGET=sys.argv[1] if len(sys.argv)>1 else "http://127.0.0.1:8000/?seed=AGENT6-NAV-PERF-A"
-DIAGNOSTIC_TARGET=TARGET+("&" if "?" in TARGET else "?")+"wp020_surface_contributors=1"
+DIAGNOSTIC_TARGET=TARGET+("&" if "?" in TARGET else "?")+"wp020_surface_contributors=1&wp020_presentation_isolation=1"
 OUT_DIR=Path(sys.argv[2] if len(sys.argv)>2 else "tools/wp_s003_010_003_020_artifact/production_visual")
 
 def driver_for():
@@ -63,6 +63,28 @@ def capture_contributors(d,phase):
       "geographyQueryCount":payload.get("geographyQueryCount"),"images":images
     }
 
+def capture_flat_height_isolation(d,phase):
+    payload=d.execute_script("return window.PlanetStage?.setWp020PresentationEvidenceMode?.('flat-height')||null")
+    if not payload or payload.get("available") is not True or payload.get("mode")!="flat-height":
+        raise AssertionError(f"flat-height evidence unavailable at {phase}: {payload}")
+    if int(payload.get("worldResampleCount",-1))!=0 or int(payload.get("geographyQueryCount",-1))!=0:
+        raise AssertionError(f"flat-height evidence performed forbidden resampling at {phase}: {payload}")
+    time.sleep(.15)
+    frame=snap(d)
+    shot=capture(d,f"presentation-isolation-{phase}-flat-height")
+    restored=d.execute_script("return window.PlanetStage?.setWp020PresentationEvidenceMode?.('normal')||null")
+    if not restored or restored.get("available") is not True or restored.get("mode")!="normal":
+        raise AssertionError(f"failed to restore canonical heightfield at {phase}: {restored}")
+    time.sleep(.08)
+    return {
+      "phase":phase,"mode":"flat-height","resourceSignature":payload.get("resourceSignature"),
+      "level":payload.get("level"),"textureIdentityUnchanged":payload.get("textureIdentityUnchanged"),
+      "materialIdentityUnchanged":payload.get("materialIdentityUnchanged"),"geometryMode":payload.get("geometryMode"),
+      "worldResampleCount":payload.get("worldResampleCount"),"geographyQueryCount":payload.get("geographyQueryCount"),
+      "displayScale":frame.get("zoom",{}).get("displayScaleLabel"),"scalar":frame.get("zoom",{}).get("scalar"),
+      "screenshot":shot
+    }
+
 def focus_village(d):
     t=d.execute_script("""
       const s=window.PlanetStage.snapshot(),p=window.StartingVillage?.plan?.(s.activeSeed);
@@ -99,7 +121,7 @@ def settle_display_scale(d,index,timeout=300):
 
 def main():
     OUT_DIR.mkdir(parents=True,exist_ok=True)
-    evidence={"wp":"WP-S003-010-003-020","target":TARGET,"diagnosticTarget":DIAGNOSTIC_TARGET,"visualMode":"production-no-fast-start","pass":False,"frames":[],"contributorDiagnostics":[]}
+    evidence={"wp":"WP-S003-010-003-020","target":TARGET,"diagnosticTarget":DIAGNOSTIC_TARGET,"visualMode":"production-no-fast-start","pass":False,"frames":[],"contributorDiagnostics":[],"presentationIsolation":[]}
     d=driver_for()
     try:
         d.get(DIAGNOSTIC_TARGET)
@@ -118,9 +140,11 @@ def main():
         diag75=settle_display_scale(d,5)
         evidence["frames"].append({"phase":"diagnostic-1_75","displayScale":diag75["zoom"]["displayScaleLabel"],"scalar":diag75["zoom"]["scalar"],"localDetail":diag75.get("projection",{}).get("localDetail"),"resourceBudget":diag75.get("projection",{}).get("resourceBudget"),"screenshot":capture(d,"production-diagnostic-1_75")})
         evidence["contributorDiagnostics"].append(capture_contributors(d,"1_75"))
+        evidence["presentationIsolation"].append(capture_flat_height_isolation(d,"1_75"))
         diag150=settle_display_scale(d,7)
         evidence["frames"].append({"phase":"diagnostic-1_150","displayScale":diag150["zoom"]["displayScaleLabel"],"scalar":diag150["zoom"]["scalar"],"localDetail":diag150.get("projection",{}).get("localDetail"),"resourceBudget":diag150.get("projection",{}).get("resourceBudget"),"screenshot":capture(d,"production-diagnostic-1_150")})
         evidence["contributorDiagnostics"].append(capture_contributors(d,"1_150"))
+        evidence["presentationIsolation"].append(capture_flat_height_isolation(d,"1_150"))
         focus_village(d)
         settle_scale(d,0)
         d.execute_script("window.PlanetStage.setAnimatedScaleIndex(10,'wp020-production-visual');")
@@ -153,6 +177,6 @@ def main():
     finally:
         (OUT_DIR/"evidence.json").write_text(json.dumps(evidence,indent=2,sort_keys=True),encoding="utf-8")
         d.quit()
-    print(json.dumps({"seed":evidence.get("seed"),"frames":len(evidence["frames"]),"contributors":len(evidence.get("contributorDiagnostics") or []),"fullWorldScan":evidence.get("fullWorldScan")},indent=2))
+    print(json.dumps({"seed":evidence.get("seed"),"frames":len(evidence["frames"]),"contributors":len(evidence.get("contributorDiagnostics") or []),"presentationIsolation":len(evidence.get("presentationIsolation") or []),"fullWorldScan":evidence.get("fullWorldScan")},indent=2))
 
 if __name__=="__main__": main()
