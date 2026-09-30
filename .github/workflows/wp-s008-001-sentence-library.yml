@@ -1,0 +1,27 @@
+name: WP-S008-001 Sentence Library
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/world/sentence-library.js"
+      - "scripts/tests/wp-s008-001-sentence-library.test.js"
+      - ".github/workflows/wp-s008-001-sentence-library.yml"
+      - "index.html"
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-sentence-library:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run WP-S008-001 deterministic evidence
+        run: node scripts/tests/wp-s008-001-sentence-library.test.js
