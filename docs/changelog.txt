@@ -2937,3 +2937,15 @@
 - Bounds are <=512 input characters, <=16 grounded facts, <=32 KiB request, <=16 KiB provider response, <=4000 text characters, <=4 proposals and <=4 KiB/proposal. Replay is deterministic and presentation/device context does not change the validated result.
 - A Simulation trap remained untouched: `simulationTouched=false`, `worldMutation=false`, `executionAttempted=false`, `persisted=false`, and `providerSecretsRead=false`.
 - VISUAL: N/A — this WP is a provider/validation authority boundary with no new rendered surface. ROADMAP remains IN PROGRESS until this acceptance-documentation state is verified on GitHub Pages.
+
+2026-09-30 11:42 +03:00 | WP-S008-005 | FUNCTIONAL ACCEPTED — PROTAGONIST COMMAND PROPOSAL EVALUATION + SIMULATION EXECUTION BOUNDARY
+- Continued only WP-S008-005 under AGENT #6. Added production `ProtagonistCommandEvaluator` v1 and loaded it after the existing bounded CommandSet/external-adapter layers.
+- Exact accepted implementation/evidence head `f186bcee5394a34553277f1e90faa58279fae7dd`; exact-head workflow `36691003866` SUCCESS. Its product-state check verified the evaluator module and loader on public GitHub Pages after Pages deployment `36691003144` succeeded.
+- The evaluator accepts direct structured proposals independently of Sentence Library or LLM routing, requires Campaign SEED plus Fantasy Game Time, validates proposals through `CommandSetInterface`, and assigns stable `PCX/PCD/PCE` transaction, decision, and execution IDs.
+- Protagonist evaluation exposes accepted, modified, deferred, rejected, and invalid states. The same SEED + Fantasy Game Time + proposal + supplied character/social/context factors replays deterministically; changing Fantasy Game Time changes the deterministic decision identity.
+- Accepted travel validates the authoritative destination and delegates route legality to existing `RoutePlanner`; it returns a route-ready handoff without teleporting or directly changing protagonist position.
+- Accepted concrete interaction validates the current bounded person/object association and live interaction range, then delegates through existing `ObjectInteractions -> ActionExecutor`. The evidence action reached the existing protagonist action contract with status `active`; no parallel action authority was introduced.
+- Invalid authoritative target `P999` failed closed as `target-unavailable` before RoutePlanner/ObjectInteractions were called. Rejected and deferred proposals performed no world-action handoff. A duty-conflict case selected only an independently validated lawful modified destination.
+- Evidence records `directControl=false`, `directPositionMutation=false`, `teleportation=false`, `fullWorldScan=false`, `parallelWorldAuthority=false`, and `seedAndFantasyTimeAuthority=true`.
+- VISUAL: N/A — this WP adds an autonomy/Simulation execution boundary with no rendered surface. ROADMAP remains IN PROGRESS until this acceptance-documentation state is itself verified on GitHub Pages.
+
