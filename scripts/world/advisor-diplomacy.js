@@ -13,7 +13,7 @@ const MAX_REPUTATIONS=6;
 const MAX_OBLIGATIONS=8;
 const MAX_SCOPES=16;
 const MAX_FACTOR_REFS=16;
-const MAX_RISKS=6;
+const MAX_RISKS=6;\nconst MAX_OPTIONS=6;\nconst MAX_CONSTRAINTS=8;
 const MAX_MODIFIER=0.07;
 const MAX_SKILL_BONUS=0.015;
 const COUNTERPART_KINDS=Object.freeze(["resident","official","country","faction"]);
@@ -161,6 +161,26 @@ function factorRefs(relationship,reputations,obligations,authority,request,count
   refs.push("COUNTERPART:"+counterpart.refId);
   return freeze([...new Set(refs.filter(Boolean))].slice(0,MAX_FACTOR_REFS));
 }
+function leverageOptions(counterpart,relationship,reputations,authority,request,factors){
+  const options=[];
+  const add=(id,strength,refs)=>{if(options.length<MAX_OPTIONS)options.push(freeze({id,strength:round4(clamp01(strength,.5)),sourceRefs:freeze([...new Set((refs||[]).filter(Boolean))].slice(0,MAX_FACTOR_REFS))}))};
+  if(counterpart.kind==="country"){
+    if(factors.cooperationScore>=.58)add("mutual-cooperation",factors.cooperationScore,[relationship.refId]);
+    if(factors.leverageScore>=.55)add("directional-leverage",factors.leverageScore,[relationship.refId]);
+  }else{
+    if(factors.relationshipScore>=.58)add("relationship-goodwill",factors.relationshipScore,[relationship.refId]);
+    if(factors.reputationScore>=.58&&reputations.length)add("reputation-appeal",factors.reputationScore,reputations.map(x=>x.refId));
+    if(factors.obligationNet>0&&factors.obligationRefs?.length)add("counterpart-obligation",factors.obligationScore,factors.obligationRefs);
+  }
+  if(request.requiredAuthorityScope&&authority?.scopes.includes(request.requiredAuthorityScope))add("legitimate-authority-request",factors.authorityScore,["AUTHSCOPE:"+request.requiredAuthorityScope]);
+  return freeze(options);
+}
+function constraintsFor(request,counterpart){
+  const rows=["advisor-only","protagonist-choice-required","simulation-validation-required","no-fabricated-leverage"];
+  if(request.requiredAuthorityScope)rows.push("authority-scope:"+request.requiredAuthorityScope);
+  if(HIGH_AUTHORITY_KINDS.includes(counterpart.kind))rows.push("higher-authority-context");
+  return freeze(rows.slice(0,MAX_CONSTRAINTS));
+}
 function assess(seedValue,inputValue){
   const seed=requiredSeed(seedValue),input=plain(inputValue)?inputValue:{};
   let when,counterpart,request,decisionContext,relationship,reputations,obligations,authority;
@@ -179,11 +199,11 @@ function assess(seedValue,inputValue){
   const skillContribution=round4(((skill.level-1)/19)*MAX_SKILL_BONUS*favorableStrength);
   const modifier=round4(Math.max(-MAX_MODIFIER,Math.min(MAX_MODIFIER,baseModifier+skillContribution)));
   const adjusted=freeze({value:round4(clamp01(decisionContext.value+modifier*.5,decisionContext.value)),urgency:decisionContext.urgency,socialAcceptability:round4(clamp01(decisionContext.socialAcceptability+modifier,decisionContext.socialAcceptability)),dutyConflict:decisionContext.dutyConflict});
-  const refs=factorRefs(relationship,reputations,obligations,authority,request,counterpart),risks=risksFor(factors,request,factors.obligationRefs||[]);
+  const refs=factorRefs(relationship,reputations,obligations,authority,request,counterpart),risks=risksFor(factors,request,factors.obligationRefs||[]),options=leverageOptions(counterpart,relationship,reputations,authority,request,factors),constraints=constraintsFor(request,counterpart);
   const basis={seed,when,counterpart,request,decisionContext,relationship,reputations,obligations,authority,skillLevel:skill.level};
   const attemptId="DPA-"+hashText(stable(basis)),resultId="DPR-"+hashText("result|"+stable({...basis,modifier,adjusted,factorRefs:refs}));
   return freeze({ok:true,reason:"assessed",assessment:freeze({
-    version:VERSION,seed,fantasyTimestamp:when,attemptId,resultId,counterpart,request,factors,risks,factorRefs:refs,
+    version:VERSION,seed,fantasyTimestamp:when,attemptId,resultId,counterpart,request,factors,options,constraints,risks,factorRefs:refs,
     skill:freeze({level:skill.level,totalXp:skill.totalXp,contribution:skillContribution,maxBonus:MAX_SKILL_BONUS}),
     baseModifier,modifier,modifierCap:MAX_MODIFIER,decisionContext:adjusted,originalDecisionContext:decisionContext,
     advisoryOnly:true,forcedDecision:false,guaranteedOutcome:false,requiresEvaluator:true,evaluatorBoundary:"ProtagonistCommandEvaluator",
@@ -218,14 +238,14 @@ function snapshot(seedValue){const seed=requiredSeed(seedValue),read=readLedger(
   version:VERSION,schema:SCHEMA,schemaVersion:SCHEMA_VERSION,seed,advisorProfileId:read.ctx.advisorProfileId,registryId:read.ctx.ref?.id||null,compatible:true,reason:read.reason,
   ledgerRevision:Number(read.ledger.revision||0),deltaRevision:Number(read.resolved?.delta?.revision||0),lastFantasyTimestamp:read.ledger.lastFantasyTimestamp,
   outcomeCount:read.ledger.outcomes.length,serializedBytes:utf8Bytes(stable(read.ledger)),outcomes:freeze(read.ledger.outcomes.map(x=>freeze(clone(x)))),
-  maxOutcomes:MAX_OUTCOMES,maxLedgerBytes:MAX_LEDGER_BYTES,maxQueryResults:MAX_QUERY_RESULTS,maxReputations:MAX_REPUTATIONS,maxObligations:MAX_OBLIGATIONS,maxScopes:MAX_SCOPES,maxFactorRefs:MAX_FACTOR_REFS,maxModifier:MAX_MODIFIER,maxSkillBonus:MAX_SKILL_BONUS,
+  maxOutcomes:MAX_OUTCOMES,maxLedgerBytes:MAX_LEDGER_BYTES,maxQueryResults:MAX_QUERY_RESULTS,maxReputations:MAX_REPUTATIONS,maxObligations:MAX_OBLIGATIONS,maxScopes:MAX_SCOPES,maxFactorRefs:MAX_FACTOR_REFS,maxOptions:MAX_OPTIONS,maxConstraints:MAX_CONSTRAINTS,maxModifier:MAX_MODIFIER,maxSkillBonus:MAX_SKILL_BONUS,
   bounded:true,persistenceAuthority:"WorldState CampaignStateDelta",chronologyAuthority:"Fantasy Game Time",relationshipAuthority:"SocialState references only",
   politicalRelationshipAuthority:"CountryRelations references only",legitimateAuthority:"ProtagonistAuthority scopes only",decisionAuthority:"ProtagonistCommandEvaluator",
   fullWorldScan:false,wholeRelationshipScan:false,wholeHistoryScan:false,perFrameScan:false,directWorldMutation:false,relationshipMutation:false,
   politicalMutation:false,territorialMutation:false,lawMutation:false,ownershipMutation:false,authorityMutation:false,resourceMutation:false,
   forcedDecision:false,guaranteedOutcome:false,simulationValidationBypass:false,providerWordingAuthority:false,presentationStateAuthority:false
 })}
-const api=Object.freeze({VERSION,SCHEMA,SCHEMA_VERSION,MAX_OUTCOMES,MAX_LEDGER_BYTES,MAX_QUERY_RESULTS,MAX_REPUTATIONS,MAX_OBLIGATIONS,MAX_SCOPES,MAX_FACTOR_REFS,MAX_RISKS,MAX_MODIFIER,MAX_SKILL_BONUS,COUNTERPART_KINDS,assess,recordOutcome,listOutcomes,snapshot});
+const api=Object.freeze({VERSION,SCHEMA,SCHEMA_VERSION,MAX_OUTCOMES,MAX_LEDGER_BYTES,MAX_QUERY_RESULTS,MAX_REPUTATIONS,MAX_OBLIGATIONS,MAX_SCOPES,MAX_FACTOR_REFS,MAX_RISKS,MAX_OPTIONS,MAX_CONSTRAINTS,MAX_MODIFIER,MAX_SKILL_BONUS,COUNTERPART_KINDS,assess,recordOutcome,listOutcomes,snapshot});
 root().AdvisorDiplomacy=api;
 if(typeof module!=="undefined"&&module.exports)module.exports=api;
 })();
