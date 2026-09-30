@@ -43,6 +43,7 @@ jobs:
       - name: Syntax
         run: |
           node --check scripts/world/persistent-consequences.js
+          node --check scripts/world/world-context.js
           node --check tools/tests/wp-s007-012-persistent-consequences.test.js
       - name: Deterministic persistence and recovery proof
         run: node tools/tests/wp-s007-012-persistent-consequences.test.js
