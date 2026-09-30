@@ -1745,6 +1745,7 @@ body.planet-stage-active{
   min-height:42px;padding:0 13px;cursor:pointer;list-style:none;color:#dceae8;
 }
 .advisor-status-readout>summary::-webkit-details-marker{display:none}
+.advisor-status-readout:not([open])>.advisor-status-body{display:none}
 .advisor-status-summary-copy{min-width:0;display:grid;gap:1px}
 .advisor-status-summary-copy small{font-size:7px;font-weight:900;letter-spacing:.16em;color:#77c3b0}
 .advisor-status-summary-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#eff8f5}
