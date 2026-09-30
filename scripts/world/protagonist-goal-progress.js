@@ -155,9 +155,9 @@ function createService(optionsValue){
     const goalId=cleanId(goalIdValue),goal=goals?.get?.(seedValue,goalId,identityValue)||null;if(!goal)return freeze({ok:false,reason:"goal-not-found",replanNeeded:false});
     const rows=list(seedValue,goalId,{limit:Math.min(MAX_REPLAN_REASONS,Number(optionsValue?.limit)||MAX_REPLAN_REASONS)},identityValue);
     if(["completed","abandoned"].includes(goal.status))return freeze({ok:true,goalId,replanNeeded:false,goalStatus:goal.status,reasons:freeze([]),advisoryOnly:true,directActionExecution:false});
-    const relevant=rows.filter(x=>["blocked","failed","deferred","replan-needed"].includes(x.status));
+    const latest=rows[0]||null,replanStates=["blocked","failed","deferred","replan-needed"],relevant=latest&&replanStates.includes(latest.status)?rows.filter(x=>replanStates.includes(x.status)&&x.fantasyTimestamp===latest.fantasyTimestamp):[];
     const reasons=relevant.slice(0,MAX_REPLAN_REASONS).map(x=>freeze({observationId:x.observationId,status:x.status,reason:x.reason,sourceKind:x.sourceKind,sourceId:x.sourceId,fantasyTimestamp:x.fantasyTimestamp}));
-    return freeze({ok:true,goalId,goalStatus:goal.status,replanNeeded:reasons.length>0,status:reasons.length?"replan-needed":"continue",reasons:freeze(reasons),advisoryOnly:true,plannerAuthority:false,directActionExecution:false,directWorldMutation:false});
+    return freeze({ok:true,goalId,goalStatus:goal.status,replanNeeded:reasons.length>0,status:reasons.length?"replan-needed":"continue",latestStatus:latest?.status||null,reasons:freeze(reasons),advisoryOnly:true,plannerAuthority:false,directActionExecution:false,directWorldMutation:false});
   }
   function snapshot(seedValue,identityValue){
     const seed=requiredSeed(seedValue),read=readLedger(seed,identityValue);if(!read.compatible)return freeze({version:VERSION,seed,compatible:false,reason:read.reason,recordCount:0,records:freeze([]),bounded:true});
