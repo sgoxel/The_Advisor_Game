@@ -29,27 +29,45 @@ jobs:
           node-version: "20"
       - name: Run WP-S008-001 deterministic evidence
         run: node scripts/tests/wp-s008-001-sentence-library.test.js
-      - name: Verify exact Sentence Library deployed to GitHub Pages
+      - name: Verify current WP-S008-001 state deployed to GitHub Pages
         if: github.event_name == 'push'
         shell: bash
         run: |
           set -euo pipefail
           BASE="https://sgoxel.github.io/The_Advisor_Game"
+          if grep -q 'WP-S008-001.*COMPLETED' docs/ROADMAP.md; then
+            MODE=completed
+          else
+            MODE=accepted
+          fi
           for attempt in $(seq 1 24); do
             bust="${GITHUB_SHA}-${attempt}"
             curl -fsSL "${BASE}/scripts/world/sentence-library.js?rev=${bust}" -o /tmp/live-sentence-library.js || true
             curl -fsSL "${BASE}/index.html?rev=${bust}" -o /tmp/live-index.html || true
-            module_ok=0
+            curl -fsSL "${BASE}/docs/ROADMAP.md?rev=${bust}" -o /tmp/live-roadmap.md || true
+            curl -fsSL "${BASE}/docs/changelog.txt?rev=${bust}" -o /tmp/live-changelog.txt || true
+            curl -fsSL "${BASE}/docs/suggest_log.txt?rev=${bust}" -o /tmp/live-suggest.txt || true
+            product_ok=0
             index_ok=0
-            grep -q 'LIBRARY_VERSION="advisor-sentence-library-v1"' /tmp/live-sentence-library.js 2>/dev/null && module_ok=1 || true
+            state_ok=0
+            grep -q 'LIBRARY_VERSION="advisor-sentence-library-v1"' /tmp/live-sentence-library.js 2>/dev/null && product_ok=1 || true
             grep -q 'scripts/world/sentence-library.js?v=sentence-library-v1' /tmp/live-index.html 2>/dev/null && index_ok=1 || true
-            if [ "${module_ok}" -eq 1 ] && [ "${index_ok}" -eq 1 ]; then
-              echo "GitHub Pages exposes the WP-S008-001 production module on attempt ${attempt}."
+            if [ "${MODE}" = completed ]; then
+              grep -q 'WP-S008-001.*COMPLETED' /tmp/live-roadmap.md 2>/dev/null && state_ok=1 || true
+            else
+              if grep -q 'WP-S008-001.*IN PROGRESS' /tmp/live-roadmap.md 2>/dev/null && \
+                 grep -q 'FUNCTIONAL PHASE 1 ACCEPTED — DETERMINISTIC INPUT NORMALIZATION + SENTENCE LIBRARY' /tmp/live-changelog.txt 2>/dev/null && \
+                 grep -q 'WP-S008-001 | Phase 2 | Future improvement after accepted implementation' /tmp/live-suggest.txt 2>/dev/null; then
+                state_ok=1
+              fi
+            fi
+            if [ "${product_ok}" -eq 1 ] && [ "${index_ok}" -eq 1 ] && [ "${state_ok}" -eq 1 ]; then
+              echo "GitHub Pages verified for WP-S008-001 ${MODE} state on attempt ${attempt}."
               exit 0
             fi
             sleep 10
           done
-          echo "GitHub Pages did not expose the WP-S008-001 production markers in time." >&2
+          echo "GitHub Pages did not expose the expected WP-S008-001 ${MODE} markers in time." >&2
           exit 1
       - name: Comment exact run on Issue 178
         if: always()
@@ -64,7 +82,7 @@ jobs:
               `Commit: \`${sha}\``,
               `Run: ${url}`,
               status === 'success'
-                ? 'Deterministic Sentence Library evidence passed and the exact production module/index markers were verified on GitHub Pages.'
+                ? 'Deterministic Sentence Library evidence passed and the exact production plus current WP documentation state were verified on GitHub Pages.'
                 : 'Workflow or GitHub Pages deployment verification failed; WP remains incomplete.'
             ].join('\n');
             await github.rest.issues.createComment({
