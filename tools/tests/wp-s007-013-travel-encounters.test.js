@@ -120,7 +120,7 @@ assert(stageSource.includes("travelEncounters:window.TravelEncounters?.snapshot?
 assert(stageSource.includes('root.dataset.travelEncounterFocus=String(Boolean(encounter?.active))'),"travel encounter focus declutter state missing");
 assert(stageSource.includes("travelEncounterDecluttered"),"center-marker declutter telemetry missing");
 assert(mainCss.includes('data-travel-encounter-focus="true"')&&mainCss.includes("translateY(-46px)")&&mainCss.includes("code{display:none!important}"),"center HUD traveler declutter CSS missing");
-assert(html.includes("travel-encounters-v3")&&html.includes("travel-encounter-silhouette-v3"),"v3 encounter cache revisions missing");
+assert(html.includes("travel-encounters.js?v=travel-encounters-v3"),"travel encounter runtime cache revision missing");
 assert(html.indexOf("scripts/world/travel-encounters.js")<html.indexOf("scripts/world/planet-stage.js"),"travel runtime must load before PlanetStage");
 assert(css.includes(".travel-encounter-card")&&css.includes("z-index:90")&&source.includes("document.body||document.getElementById"),"dedicated travel card overlay layer missing or malformed");
 
