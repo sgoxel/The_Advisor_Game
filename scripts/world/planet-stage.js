@@ -3536,10 +3536,10 @@ function ensureLocalStaticMaterials(){
   const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.235,.155,.055,1),square:make("LocalSquare",.48,.35,.18),
+    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.285,.19,.075,1),square:make("LocalSquare",.48,.35,.18),
     wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.11),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.82);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.11),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.90);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
     microWater:make("LocalMicroWater",.07,.28,.42,.52),
     microStone:make("LocalMicroStone",.67,.64,.56),microWood:make("LocalMicroWood",.57,.34,.14),
@@ -4060,7 +4060,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       const selectedClasses=[...routePathKeys].map(k=>classify(roadByKey.get(k))).filter(Boolean);
       const ringCellCount=selectedClasses.filter(c=>c.ringCell).length;
       overviewStats=Object.freeze({
-        revision:"route-gateway-centerline-v14",accessTargetCount:uniqueTargets.length,connectedTargetCount,
+        revision:"route-gateway-centerline-v15",accessTargetCount:uniqueTargets.length,connectedTargetCount,
         localClusterTargetCount:acceptedPathCellCount,selectedCellCount:selectedClasses.length,ringCellCount,
         ringArcShare:Number((ringCellCount/Math.max(1,selectedClasses.length)).toFixed(4)),
         gatewayCellCount:selectedClasses.filter(c=>c.gatewayStem||c.outwardBranch).length,
@@ -4081,15 +4081,15 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
     }
     renderedRoadCellCount=selected.length;
     for(const cell of selected){
-      const {x,y,half}=cell,nodeFloor=tier==="route"?.040:.040,nodeHalf=Math.max(nodeFloor,half*.68);
+      const {x,y,half}=cell,nodeFloor=tier==="route"?.055:.040,nodeHalf=Math.max(nodeFloor,half*.72);
       const neighborCount=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]
         .filter(([dx,dy])=>selectedMap.has((x+dx)+","+(y+dy))).length;
       if(neighborCount!==2)addQuad(x-nodeHalf,y-nodeHalf,x+nodeHalf,y+nodeHalf);
       for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
         const other=selectedMap.get((x+dx)+","+(y+dy));if(!other)continue;
         if(dx&&dy&&(selectedMap.has((x+dx)+","+y)||selectedMap.has(x+","+(y+dy))))continue;
-        const segmentFloor=tier==="route"?.052:.055;
-        addSegment(x,y,other.x,other.y,Math.max(segmentFloor,Math.min(half,other.half)*(tier==="route"?2.35:2)));
+        const segmentFloor=tier==="route"?.064:.055;
+        addSegment(x,y,other.x,other.y,Math.max(segmentFloor,Math.min(half,other.half)*(tier==="route"?2.55:2)));
       }
     }
   }else{
@@ -4100,7 +4100,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
   const roadMaterial=(tier==="route"||tier==="footprint")?localStaticMaterials.roadOverview:localStaticMaterials.road;
   entity.render.meshInstances=[new pc.MeshInstance(mesh,roadMaterial,entity)];localStaticRoot.addChild(entity);localSettlementRoadGeometry=mesh;
   return Object.freeze({active:true,cellCount:(tier==="route"||tier==="footprint")?renderedRoadCellCount:roadCells.length,segmentCount,queryCount,triangleCount:indices.length/3,overviewStats,
-    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-gateway-centerline-v14":"StartingVillage.infrastructureAt-cell-mesh-v1"});
+    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-gateway-centerline-v15":"StartingVillage.infrastructureAt-cell-mesh-v1"});
 }
 function clearCanonicalWayfindingSignposts(){
   clearInspectionKeySet(localSignInspectionKeys,false);
@@ -8415,8 +8415,14 @@ function applyAtmosphereMaterialPalette(p){
   if(tangentPatchMaterial){
     tangentPatchMaterial.diffuse.set(...p.terrainTint);tangentPatchMaterial.emissive.set(...p.terrainTint);tangentPatchMaterial.emissiveIntensity=p.terrainI;tangentPatchMaterial.update();materialCount++;
   }
+  // The focus, medium and outer registered terrain layers are one visual
+  // surface. Apply the same fantasy-time photometry to every layer so a valid
+  // medium parent cannot become a neutral gray/white band during handoff.
+  if(focusRingMaterial){
+    focusRingMaterial.diffuse.set(...p.terrainTint);focusRingMaterial.emissive.set(...p.terrainTint);focusRingMaterial.emissiveIntensity=p.terrainI;focusRingMaterial.update();materialCount++;
+  }
   if(horizonSkirtMaterial){
-    horizonSkirtMaterial.diffuse.set(...p.terrainTint);horizonSkirtMaterial.emissive.set(...p.terrainTint);horizonSkirtMaterial.emissiveIntensity=p.terrainI*.96;horizonSkirtMaterial.update();materialCount++;
+    horizonSkirtMaterial.diffuse.set(...p.terrainTint);horizonSkirtMaterial.emissive.set(...p.terrainTint);horizonSkirtMaterial.emissiveIntensity=p.terrainI;horizonSkirtMaterial.update();materialCount++;
   }
   materialCount+=gradeAtmosphereMaterialRegistry(localStaticMaterials,p.localTint,p.localE);
   materialCount+=gradeAtmosphereMaterialRegistry(localNpcMaterials,p.localTint,p.localE*1.35);
