@@ -255,8 +255,11 @@ function renderCard(viewValue){
 function autoTick(){
   try{
     const stage=window.PlanetStage?.snapshot?.(),seed=stage?.activeSeed||window.SeedSystem?.getCampaign?.()?.seed,focus=stage?.canonicalFocus?.worldTile,stamp=window.GameTime?.getTimestampKey?.()||window.GameTime?.getNow?.()||null;
-    if(seed&&focus&&stamp)localPresentation(seed,focus,stamp,{auto:true});
-    else if(seed&&proofBySeed.has(String(seed)))renderCard(lastBySeed.get(String(seed))||null);
+    // Controlled evidence activation must remain presentation-stable while its
+    // deterministic proof record exists. Normal production encounters still
+    // follow authoritative fantasy time through the path below.
+    if(seed&&proofBySeed.has(String(seed)))renderCard(lastBySeed.get(String(seed))||null);
+    else if(seed&&focus&&stamp)localPresentation(seed,focus,stamp,{auto:true});
     else renderCard(null);
   }catch(_){}
 }
