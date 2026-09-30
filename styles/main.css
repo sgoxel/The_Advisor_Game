@@ -2180,3 +2180,17 @@ body.planet-stage-active{
     min-height:32px;
   }
 }
+
+/* WP-S010-009 attempt-2: short-landscape activity mode keeps the message composer usable */
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-chat-panel:has(.advisor-activity-strip):not(:has(.advisor-status-readout[open])){
+    grid-template-rows:auto auto 0 auto 0;
+  }
+  .advisor-chat-panel:has(.advisor-activity-strip):not(:has(.advisor-status-readout[open])) .advisor-chat-transcript,
+  .advisor-chat-panel:has(.advisor-activity-strip):not(:has(.advisor-status-readout[open])) .advisor-counsel{display:none}
+  .advisor-chat-panel:has(.advisor-activity-strip):not(:has(.advisor-status-readout[open])) .advisor-chat-compose{padding:5px 7px 6px}
+  .advisor-chat-panel:has(.advisor-activity-strip):not(:has(.advisor-status-readout[open])) .advisor-chat-compose textarea{min-height:38px}
+  .advisor-chat-panel:has(.advisor-activity-strip):not(:has(.advisor-status-readout[open])) .advisor-activity-strip{padding:4px 7px;row-gap:1px}
+  .advisor-chat-panel:has(.advisor-activity-strip):not(:has(.advisor-status-readout[open])) .advisor-activity-signal{min-height:22px}
+}
+
