@@ -43,6 +43,11 @@ let live=UI.runtimeModel(ctx);
 assert.equal(live.phase,'active');assert.equal(live.kind,'travel');assert.equal(live.progress,40);assert.equal(live.referenceId,'JRN-LIVE');
 
 reset();
+global.ProtagonistJourney={snapshot(){return {active:{journeyId:'JRN-COORD',status:'travelling',progressMeters:10,route:{totalMeters:50,destination:{x:'120',y:'-45',level:0}}}};}};
+live=UI.runtimeModel(ctx);
+assert.equal(live.target,'World cell 120, -45');assert(live.title.includes('World cell 120, -45'));
+
+reset();
 global.ProtagonistInteractionPipeline={snapshot(){return {active:[{attemptId:'IAX-LIVE',status:'active',action:'work',targetId:'FORGE-ANVIL',reason:'simulation-active',updatedFantasyTimestamp:'1201-09-30 20:19:00'}],results:[]};}};
 live=UI.runtimeModel(ctx);
 assert.equal(live.phase,'active');assert.equal(live.kind,'work');assert.equal(live.referenceId,'IAX-LIVE');
