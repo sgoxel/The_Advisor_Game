@@ -113,7 +113,8 @@ assert(stageSource.includes('const settlementCrowdActive=["refined","full"].incl
 assert(stageSource.includes("TravelEncounters?.localPresentation?.(activeSeed,focusTile,stamp"),"PlanetStage is not wired to rare encounters");
 assert(stageSource.includes('travelerSilhouetteRevision:"travel-encounter-silhouette-v2"'),"traveler silhouette revision missing");
 assert(stageSource.includes("topFacingTravelerBodies:true"),"top-facing traveler body geometry missing");
-assert(stageSource.includes("travelEncounterBodyMinPx"),"traveler screen-size telemetry missing");\nassert(stageSource.includes("mergedPresentationBuildMs"),"merged traveler presentation timing telemetry missing");
+assert(stageSource.includes("travelEncounterBodyMinPx"),"traveler screen-size telemetry missing");
+assert(stageSource.includes("mergedPresentationBuildMs"),"merged traveler presentation timing telemetry missing");
 assert(stageSource.includes("travelEncounters:window.TravelEncounters?.snapshot?.(activeSeed)||null"),"PlanetStage snapshot missing travel encounter state");
 assert(html.indexOf("scripts/world/travel-encounters.js")<html.indexOf("scripts/world/planet-stage.js"),"travel runtime must load before PlanetStage");
 assert(css.includes(".travel-encounter-card")&&css.includes("z-index:90")&&source.includes("document.body||document.getElementById"),"dedicated travel card overlay layer missing or malformed");
