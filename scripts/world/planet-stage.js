@@ -262,6 +262,7 @@ let buildTimeMs=0;
 let meshVertexCount=0;
 let meshTriangleCount=0;
 let generatedTexture=null;
+let mapScaleShellTexture=null;
 let startupProgress={mode:"indeterminate",measuredPercent:null,displayedPercent:null,phaseId:"planning",phaseLabel:"Planning startup…",completedWeightedWork:0,totalWeightedWork:100,firstPaintAtMs:Date.now(),determinateAtMs:null,measured100AtMs:null,gameplayReadyAtMs:null,optionalPostReadyWorkCount:0};
 let loadingProof=null;
 const STARTUP_SLICE_BUDGET_MS=6;
@@ -7934,6 +7935,16 @@ async function makeGeographyTexture(){
   const ctx=source.getContext("2d",{alpha:false});
   const image=ctx.createImageData(TEXTURE_WIDTH,TEXTURE_HEIGHT);
   const data=image.data;
+  // The temporary strategic map shell needs the same canonical geography
+  // identity without magnifying the globe atlas's near-white alpine chroma.
+  // Build a second presentation texture in this exact existing SEED sample pass:
+  // no extra geography queries, coordinates, jobs, or world authority.
+  const strategicSource=document.createElement("canvas");
+  strategicSource.width=TEXTURE_WIDTH;
+  strategicSource.height=TEXTURE_HEIGHT;
+  const strategicCtx=strategicSource.getContext("2d",{alpha:false});
+  const strategicImage=strategicCtx.createImageData(TEXTURE_WIDTH,TEXTURE_HEIGHT);
+  const strategicData=strategicImage.data;
 
   let minElevation=Infinity,maxElevation=-Infinity;
   let landSamples=0,oceanSamples=0,islandSamples=0,mountainSamples=0,peakSamples=0;
@@ -7958,6 +7969,25 @@ async function makeGeographyTexture(){
     const rgba=rgbaFromColor(renderColor);
     const dataIndex=index*4;
     data[dataIndex]=rgba[0];data[dataIndex+1]=rgba[1];data[dataIndex+2]=rgba[2];data[dataIndex+3]=255;
+    // Presentation-only land palette for the smooth strategic fallback.
+    // Water remains byte-identical to the canonical globe atlas. Land keeps
+    // SEED elevation/moisture/mountain identity, but high peaks cannot become
+    // a broad gray/white smear when the 640x320 shell is temporarily magnified.
+    let strategicColor=renderColor;
+    if(sample.land){
+      const moisture=clamp(Number(sample.moisture??.5),0,1),dry=1-moisture;
+      const elevation=Number(sample.elevationMeters||0),mountain=clamp(Number(sample.mountainInfluence||0),0,1);
+      const upland=clamp(Math.max(smoothstep01((elevation-620)/2400),mountain*.48),0,1)*.55;
+      const alpine=smoothstep01((elevation-2200)/3200)*.22;
+      const lowlandPalette=[.155+.085*dry,.335+.115*moisture,.100+.055*moisture];
+      const uplandPalette=[.230+.060*dry,.320+.065*moisture,.160+.045*moisture];
+      const alpinePalette=[.330,.350,.300];
+      const foothill=lowlandPalette.map((value,channel)=>lerp(value,uplandPalette[channel],upland));
+      const strategicPalette=foothill.map((value,channel)=>lerp(value,alpinePalette[channel],alpine));
+      strategicColor=strategicPalette.map((value,channel)=>clamp(lerp(value,Number(renderColor[channel])||0,.08),0,1));
+    }
+    const strategicRgba=rgbaFromColor(strategicColor);
+    strategicData[dataIndex]=strategicRgba[0];strategicData[dataIndex+1]=strategicRgba[1];strategicData[dataIndex+2]=strategicRgba[2];strategicData[dataIndex+3]=255;
     minElevation=Math.min(minElevation,sample.elevationMeters);
     maxElevation=Math.max(maxElevation,sample.elevationMeters);
     if(sample.land)landSamples++;else oceanSamples++;
@@ -7976,6 +8006,7 @@ async function makeGeographyTexture(){
     }
   });
   ctx.putImageData(image,0,0);
+  strategicCtx.putImageData(strategicImage,0,0);
 
   const texture=new pc.Texture(device,{
     width:TEXTURE_WIDTH,
@@ -7991,7 +8022,22 @@ async function makeGeographyTexture(){
   texture.magFilter=pc.FILTER_LINEAR;
   texture.setSource(source);
 
+  const strategicTexture=new pc.Texture(device,{
+    width:TEXTURE_WIDTH,
+    height:TEXTURE_HEIGHT,
+    format:pc.PIXELFORMAT_R8_G8_B8_A8,
+    mipmaps:true
+  });
+  strategicTexture.name="SeededStrategicMapShell";
+  strategicTexture.flipY=true;
+  strategicTexture.addressU=pc.ADDRESS_REPEAT;
+  strategicTexture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
+  strategicTexture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;
+  strategicTexture.magFilter=pc.FILTER_LINEAR;
+  strategicTexture.setSource(strategicSource);
+
   generatedTexture=texture;
+  mapScaleShellTexture=strategicTexture;
   geographyStats=Object.freeze({
     textureWidth:TEXTURE_WIDTH,
     textureHeight:TEXTURE_HEIGHT,
@@ -8766,9 +8812,9 @@ async function buildScene(){  const started=performance.now();
     mapScaleShellMaterial=new pc.StandardMaterial();
     mapScaleShellMaterial.name="CanonicalMapScaleShell";
     mapScaleShellMaterial.diffuse.set(1,1,1);
-    mapScaleShellMaterial.diffuseMap=surfaceMaterial.diffuseMap;
+    mapScaleShellMaterial.diffuseMap=mapScaleShellTexture||surfaceMaterial.diffuseMap;
     mapScaleShellMaterial.emissive.set(.04,.04,.04);
-    mapScaleShellMaterial.emissiveMap=surfaceMaterial.diffuseMap;
+    mapScaleShellMaterial.emissiveMap=mapScaleShellTexture||surfaceMaterial.diffuseMap;
     mapScaleShellMaterial.emissiveIntensity=.22;
     mapScaleShellMaterial.useLighting=false;
     mapScaleShellMaterial.cull=pc.CULLFACE_NONE;
@@ -9246,6 +9292,7 @@ function destroy(){
   resizeObserver?.disconnect?.();resizeObserver=null;
   if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
   generatedTexture?.destroy?.();generatedTexture=null;
+  mapScaleShellTexture?.destroy?.();mapScaleShellTexture=null;
   releaseWp020TransitionEvidenceFreeze();restoreWp020EvidenceLayerVisibility();clearWp020EvidenceFlatMesh();wp020EvidencePresentationMode="normal";
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
   clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection(false);localCampaignWearContext=null;clearCanonicalWayfindingSignposts();clearCanonicalRoofRegistry();
