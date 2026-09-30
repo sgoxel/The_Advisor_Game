@@ -83,10 +83,10 @@ function commandSnapshot(){
 }
 function investigate(seedValue=seed,time=when){
   return Insight.analyze(seedValue,{
-    subject:{id:"OBJ-ACCEPT",type:"object"},fantasyTimestamp:time,
+    subject:{id:"BLDG-A",type:"place"},fantasyTimestamp:time,
     evidence:[
-      {refId:"SIM:OBJ-ACCEPT",subjectId:"OBJ-ACCEPT",sourceType:"simulation",reliability:"verified",claimKey:"workbench-actionable",stance:"support",fantasyTimestamp:time},
-      {refId:"OBS:OBJ-ACCEPT",subjectId:"OBJ-ACCEPT",sourceType:"direct-observation",reliability:"verified",claimKey:"workbench-actionable",stance:"support",fantasyTimestamp:time}
+      {refId:"SIM:OBJ-ACCEPT",subjectId:"BLDG-A",sourceType:"simulation",reliability:"verified",claimKey:"workbench-actionable",stance:"support",fantasyTimestamp:time},
+      {refId:"OBS:OBJ-ACCEPT",subjectId:"BLDG-A",sourceType:"direct-observation",reliability:"verified",claimKey:"workbench-actionable",stance:"support",fantasyTimestamp:time}
     ]
   });
 }
@@ -143,7 +143,7 @@ const second=runSuccess();
 assert.deepStrictEqual({insightId:second.insight.result.id,resolutionId:second.resolution.result.id,progressionEventId:second.progression.event.id,adviceId:second.advice.id,memoryId:second.memory.id,runtimeAttemptId:second.row.attemptId,decisionId:second.evaluation.decisionId,executionId:second.evaluation.executionId,interactionAttemptId:second.interaction.attemptId,conversationId:second.stored.record.id},stable);
 
 const weakSeed="WP-S011-010-WEAK",beforeWeakAttempts=sim.attemptCalls;
-const weak=Insight.analyze(weakSeed,{subject:{id:"OBJ-ACCEPT",type:"object"},fantasyTimestamp:"1201-10-01 10:01:00",evidence:[{refId:"RUMOR:OBJ-ACCEPT",subjectId:"OBJ-ACCEPT",sourceType:"rumor",reliability:"uncertain",claimKey:"workbench-actionable",stance:"support",fantasyTimestamp:"1201-10-01 10:01:00"}]});
+const weak=Insight.analyze(weakSeed,{subject:{id:"BLDG-A",type:"place"},fantasyTimestamp:"1201-10-01 10:01:00",evidence:[{refId:"RUMOR:OBJ-ACCEPT",subjectId:"BLDG-A",sourceType:"rumor",reliability:"uncertain",claimKey:"workbench-actionable",stance:"support",fantasyTimestamp:"1201-10-01 10:01:00"}]});
 assert(weak.ok);assert.equal(weak.result.status,"uncertain");assert.equal(weak.result.worldTruth,false);assert.equal(sim.attemptCalls,beforeWeakAttempts,"uncertain evidence must not execute an action");
 
 const snapshot=commandSnapshot(),route=adviceRoute(),validProposal=proposalFromAdvice(route,snapshot,first.insight.result.id);

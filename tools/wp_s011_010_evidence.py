@@ -66,9 +66,9 @@ def execute_chain():
         return String(d.getUTCFullYear()).padStart(4,'0')+'-'+p(d.getUTCMonth()+1)+'-'+p(d.getUTCDate())+' '+p(d.getUTCHours())+':'+p(d.getUTCMinutes())+':'+p(d.getUTCSeconds());
       };
       window.ProtagonistActionRuntime.reset();window.ProtagonistInteractionPipeline.clear(seed);window.ConversationTransactions.clear(seed);window.CharacterMemory.clear(seed);
-      const insight=window.AdvisorInsight.analyze(seed,{subject:{id:object.id,type:'object'},fantasyTimestamp:when,evidence:[
-        {refId:'SIM:'+object.id,subjectId:object.id,sourceType:'simulation',reliability:'verified',claimKey:'actionable-object',stance:'support',fantasyTimestamp:when},
-        {refId:'OBS:'+object.id,subjectId:object.id,sourceType:'direct-observation',reliability:'verified',claimKey:'actionable-object',stance:'support',fantasyTimestamp:when}
+      const insightSubjectId=String(object.buildingId||object.id);\n      const insight=window.AdvisorInsight.analyze(seed,{subject:{id:insightSubjectId,type:'place'},fantasyTimestamp:when,evidence:[
+        {refId:'SIM:'+object.id,subjectId:insightSubjectId,sourceType:'simulation',reliability:'verified',claimKey:'actionable-object',stance:'support',fantasyTimestamp:when},
+        {refId:'OBS:'+object.id,subjectId:insightSubjectId,sourceType:'direct-observation',reliability:'verified',claimKey:'actionable-object',stance:'support',fantasyTimestamp:when}
       ]});
       if(!insight?.ok||insight.result?.status!=='supported')throw new Error('Grounded Insight failed '+JSON.stringify(insight));
       const resolution=window.AdvisorToolResolutionBoundary.autoResolve(seed,{requestId:'REQ-WP-S011-010-VISUAL',toolId:'advisor.insight',fantasyTimestamp:when,context:{refId:insight.result.id,sourceSystem:'AdvisorInsight',validated:true},accessibility:{inputModality:'keyboard'}});
