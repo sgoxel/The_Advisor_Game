@@ -1710,7 +1710,7 @@ body.planet-stage-active{
 }
 @media(max-width:520px){
   .advisor-chat-launcher{bottom:max(8px,env(safe-area-inset-bottom));min-height:40px;padding:0 12px}
-  .advisor-chat-panel{right:8px;bottom:max(8px,env(safe-area-inset-bottom));width:calc(100vw - 16px);max-height:min(64vh,540px);border-radius:17px;grid-template-rows:auto minmax(110px,1fr) auto auto}
+  .advisor-chat-panel{right:8px;bottom:max(112px,calc(env(safe-area-inset-bottom) + 104px));width:calc(100vw - 16px);max-height:min(64vh,540px);border-radius:17px;grid-template-rows:auto minmax(110px,1fr) auto auto}
   .advisor-chat-head{padding:12px 12px 9px}.advisor-chat-head strong{font-size:18px}.advisor-chat-close{width:34px;height:34px;flex-basis:34px}
   .advisor-chat-transcript{gap:7px;padding:8px}.advisor-chat-exchange{padding:7px}.advisor-chat-bubble{padding:6px 8px}.advisor-chat-bubble p{font-size:10.5px}
   .advisor-chat-bubble.player{margin-left:22px}.advisor-chat-bubble.protagonist{margin-right:18px}
