@@ -119,6 +119,9 @@ function buildRequest(configValue){
   if(!snapshot||typeof snapshot!=="object"||!snapshot.snapshotId||!Array.isArray(snapshot.commands)){
     return finish(resultBase("rejected","invalid-command-snapshot",null),{fallbackRequired:true});
   }
+  if(snapshot.diagnostics?.bounded===false||snapshot.diagnostics?.fullWorldScan===true){
+    return finish(resultBase("rejected","unbounded-command-snapshot",String(snapshot.snapshotId)),{fallbackRequired:true});
+  }
   if(!commandSet||typeof commandSet.validateProposal!=="function"){
     return finish(resultBase("unavailable","command-validator-unavailable",null),{fallbackRequired:true});
   }

@@ -104,6 +104,29 @@ Object.defineProperty(globalThis,"Simulation",{
   assert.strictEqual(extraParameter.status,"proposal-rejected");
   assert.strictEqual(extraParameter.proposalRejections[0].reason,"unexpected-parameter");
 
+  const unsafeSnapshot=Object.freeze({
+    ...snapshot,
+    diagnostics:Object.freeze({...snapshot.diagnostics,bounded:false,fullWorldScan:true})
+  });
+  let unsafeCalls=0;
+  const unsafe=await Adapter.invoke({
+    ...base,
+    snapshot:unsafeSnapshot,
+    provider:Object.freeze({isAvailable:true,async generate(){unsafeCalls++;return {text:"must not run"};}})
+  });
+  assert.strictEqual(unsafe.status,"rejected");
+  assert.strictEqual(unsafe.reason,"unbounded-command-snapshot");
+  assert.strictEqual(unsafeCalls,0);
+  assert.strictEqual(unsafe.fallbackRequired,true);
+
+  const falseSuccessText=await Adapter.invoke({...base,provider:Adapter.createFakeProvider({
+    text:"I have already teleported and completed the task.",proposals:[]
+  })});
+  assert.strictEqual(falseSuccessText.status,"ok");
+  assert.strictEqual(falseSuccessText.untrustedText,true);
+  assert.strictEqual(falseSuccessText.executionAttempted,false);
+  assert.strictEqual(falseSuccessText.worldMutation,false);
+
   const malformed=await Adapter.invoke({...base,provider:Object.freeze({
     isAvailable:true,async generate(){return "{not-json";}
   })});
@@ -174,7 +197,7 @@ Object.defineProperty(globalThis,"Simulation",{
   assert.strictEqual(simulationTouched,false);
   delete globalThis.Simulation;
 
-  for(const result of [textOnly,valid,unknown,invalidTarget,extraProposalField,extraParameter,malformed,extraRoot,oversized,disabled,unavailable,providerError]){
+  for(const result of [textOnly,valid,unknown,invalidTarget,extraProposalField,extraParameter,unsafe,falseSuccessText,malformed,extraRoot,oversized,disabled,unavailable,providerError]){
     assert.strictEqual(result.worldMutation,false);
     assert.strictEqual(result.executionAttempted,false);
     assert.strictEqual(result.simulationAuthority,false);
@@ -196,6 +219,8 @@ Object.defineProperty(globalThis,"Simulation",{
       invalidTarget:invalidTarget.proposalRejections[0].reason,
       unexpectedProposalField:extraProposalField.proposalRejections[0].reason,
       unexpectedParameter:extraParameter.proposalRejections[0].reason,
+      unboundedSnapshot:unsafe.reason,
+      falseSuccessTextUntrusted:falseSuccessText.untrustedText,
       malformed:malformed.reason,
       providerDisabled:disabled.reason,
       providerUnavailable:unavailable.reason,
