@@ -1,3 +1,4 @@
+// WP-S007-013 deployment verification trigger: accepted Phase 2.
 "use strict";
 const assert=require("assert");
 const fs=require("fs");
