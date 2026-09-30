@@ -222,7 +222,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S010-006` — Autonomous Social Contact + Relationship-Conscious Initiative — COMPLETED
 - `WP-S010-007` — Goal Commitment Progress + Failure/Replan Consequences — COMPLETED
 - `WP-S010-008` — Offline Protagonist Catch-Up + Resume Continuity — COMPLETED
-- `WP-S010-009` — Visible Protagonist Activity + Advisor Intent/Outcome Presentation
+- `WP-S010-009` — Visible Protagonist Activity + Advisor Intent/Outcome Presentation — IN PROGRESS (visual acceptance pending; 3-attempt cap reached)
 - `WP-S010-010` — End-to-End Advice → Decision → World Action Acceptance
 
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
