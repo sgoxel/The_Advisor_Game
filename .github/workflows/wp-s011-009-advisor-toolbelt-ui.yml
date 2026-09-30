@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
     paths:
+      - "index.html"
+      - "styles/main.css"
+      - "docs/ROADMAP.md"
+      - "docs/changelog.txt"
+      - "docs/suggest_log.txt"
       - "scripts/ui/advisor-conversation-ui.js"
       - "scripts/ui/advisor-toolbelt-ui.js"
       - "scripts/tests/wp-s011-009-advisor-toolbelt-ui.test.js"

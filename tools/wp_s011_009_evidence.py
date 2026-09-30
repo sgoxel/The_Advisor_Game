@@ -84,7 +84,9 @@ def geometry_state(mode,profile):
       const map=document.querySelector(".planet-map-context");
       const places=document.querySelector(".planet-places-button");
       const scale=document.querySelector(".planet-scale-ruler");
-      const p=rect(panel),l=rect(launcher);
+      const p=rect(panel),l=rect(launcher),resultRect=rect(document.querySelector(".advisor-tool-result"));
+      const skillRects=[...document.querySelectorAll(".advisor-tool-skill")].map(rect).filter(Boolean);
+      const contained=(outer,inner)=>Boolean(outer&&inner&&inner.left>=outer.left-.5&&inner.top>=outer.top-.5&&inner.right<=outer.right+.5&&inner.bottom<=outer.bottom+.5);
       const selected=document.querySelector('.advisor-tool-skill[data-selected="true"] b')?.textContent?.trim()||"";
       const status=document.querySelector(".advisor-tool-result-head strong")?.textContent?.trim()||"";
       const authority=document.querySelector(".advisor-tool-authority")?.textContent?.trim()||"";
@@ -93,7 +95,9 @@ def geometry_state(mode,profile):
       const proof=window.AdvisorToolbeltUI?.proof?.()||null;
       return {
         mode,profile,viewport:{width:innerWidth,height:innerHeight},
-        panel:p,launcher:l,panelInside:inside(p),launcherInside:inside(l),
+        panel:p,launcher:l,resultRect,skillRects,panelInside:inside(p),launcherInside:inside(l),
+        skillsWithinPanel:skillRects.length===6&&skillRects.every(r=>contained(p,r)),
+        resultWithinPanel:contained(p,resultRect),resultVisibleHeight:resultRect?Math.max(0,Math.min(p.bottom,resultRect.bottom)-Math.max(p.top,resultRect.top)):0,
         selected,status,authority,fixture,
         overlap:{
           map:overlap(p,rect(map)),
@@ -116,6 +120,10 @@ def assert_state(st):
             raise RuntimeError("Toolbelt overlaps required chrome ("+key+"): "+json.dumps(st))
     if st["documentWidth"]>st["viewport"]["width"]+1:
         raise RuntimeError("horizontal document overflow: "+json.dumps(st))
+    if not st.get("skillsWithinPanel"):
+        raise RuntimeError("all six skill cards are not visibly contained by the panel: "+json.dumps(st))
+    if not st.get("resultWithinPanel") or float(st.get("resultVisibleHeight") or 0)<28:
+        raise RuntimeError("current result is clipped or not visibly contained by the panel: "+json.dumps(st))
     expected=EXPECTED[st["mode"]]
     if st["selected"]!=expected[0] or st["status"]!=expected[1]:
         raise RuntimeError("expected evidence content missing: "+json.dumps(st))

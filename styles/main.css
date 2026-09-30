@@ -2416,3 +2416,28 @@ body.planet-stage-active{
   .advisor-tool-result>footer{display:none}
   .advisor-toolbelt-foot{padding:4px 7px;font-size:6px}
 }
+
+
+/* WP-S011-009 visual attempt 2 — short-landscape full-content hardening */
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-toolbelt-panel{
+    top:64px;right:8px;bottom:48px;
+    width:min(520px,calc(100vw - 16px));max-height:none;
+    grid-template-rows:30px 15px 29px minmax(0,1fr);
+  }
+  .advisor-toolbelt-head{box-sizing:border-box;height:30px;min-height:30px;padding:3px 7px}
+  .advisor-toolbelt-head>div{gap:0}.advisor-toolbelt-head small{font-size:5px}.advisor-toolbelt-head strong{font-size:13px;line-height:1}.advisor-toolbelt-head span{display:none}
+  .advisor-toolbelt-close{width:23px;height:23px;flex-basis:23px;border-radius:7px;font-size:16px}
+  .advisor-tool-fixture{box-sizing:border-box;height:13px;margin:2px 7px 0;padding:2px 5px;border-radius:6px;font-size:5px;line-height:1}
+  .advisor-tool-skills{grid-template-columns:repeat(6,minmax(0,1fr));gap:3px;padding:3px 7px 2px}
+  .advisor-tool-skill{gap:2px;padding:3px 4px;border-radius:7px}
+  .advisor-tool-skill>span{gap:3px}.advisor-tool-skill b{font-size:5.7px}.advisor-tool-skill em{font-size:5px}.advisor-tool-skill>i{height:3px}.advisor-tool-skill small{display:none}
+  .advisor-tool-main{overflow:hidden;padding:0 7px 4px}
+  .advisor-tool-title{align-items:center;padding:1px 1px 3px}.advisor-tool-title small{display:none}.advisor-tool-title strong{font-size:10px;line-height:1}.advisor-tool-title>span{max-width:180px;font-size:4.6px;line-height:1.1}
+  .advisor-tool-result{gap:3px;padding:4px 6px;border-radius:8px}
+  .advisor-tool-result-head{align-items:center}.advisor-tool-result-head small{display:none}.advisor-tool-result-head strong{font-size:8px;line-height:1.05}
+  .advisor-tool-authority{padding:2px 4px;font-size:4.5px}
+  .advisor-tool-confidence{gap:2px}.advisor-tool-confidence>span{font-size:4.8px}.advisor-tool-confidence>i{height:3px}
+  .advisor-tool-caution{max-height:16px;overflow:hidden;margin:0;padding:2px 4px;font-size:4.6px;line-height:1.15}
+  .advisor-tool-details,.advisor-tool-result>footer,.advisor-tool-recent,.advisor-toolbelt-foot{display:none}
+}
