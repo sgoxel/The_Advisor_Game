@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="1.1.0";
+const VERSION="1.2.0";
 const START_KIND="local-vignette-start";
 const END_KIND="local-vignette-end";
 const MAX_ACTIVE_EVENTS=2;
@@ -48,7 +48,8 @@ function state(seedValue){
   if(!runtimeBySeed.has(seed))runtimeBySeed.set(seed,{
     seed,plannedDays:[],active:new Map(),residentIndex:new Map(),
     started:0,ended:0,processedBatches:0,maxBatch:0,lastProcessedTimestamp:null,
-    renderCount:0,lastRenderMs:0,maxRenderMs:0,lastEventId:null
+    renderCount:0,lastRenderMs:0,maxRenderMs:0,lastEventId:null,
+    cardPlacementCount:0,lastCardPlacementMs:0,maxCardPlacementMs:0,lastCardPlacement:"top-right",lastCardParticipantBoundCount:0,lastCardOverlapArea:0
   });
   return runtimeBySeed.get(seed);
 }
@@ -271,6 +272,53 @@ function card(){
   node.innerHTML='<div class="local-event-kicker">LOCAL EVENT</div><div class="local-event-row"><span class="local-event-icon"></span><div><strong class="local-event-title"></strong><p class="local-event-description"></p></div></div><div class="local-event-meta"></div><div class="local-event-participants"></div>';
   root.appendChild(node);return node;
 }
+const CARD_PLACEMENTS=Object.freeze(["top-right","bottom-right","bottom-left"]);
+function rectOverlapArea(a,b){
+  if(!a||!b)return 0;
+  const w=Math.max(0,Math.min(Number(a.right),Number(b.right))-Math.max(Number(a.left),Number(b.left)));
+  const h=Math.max(0,Math.min(Number(a.bottom),Number(b.bottom))-Math.max(Number(a.top),Number(b.top)));
+  return w*h;
+}
+function participantScreenBounds(event){
+  const out=[];
+  for(const participant of (event?.participants||[]).slice(0,MAX_PARTICIPANTS)){
+    const visual=window.PlanetStage?.workCycleEvidenceState?.(participant.id)||null;
+    if(!visual?.visible||!visual?.inViewport)continue;
+    let b=visual.eventSilhouetteBoundsPx||visual.bodyBoundsPx||null;
+    if(!b&&visual.screen){
+      const size=visual.eventSilhouetteScreenSizePx||visual.bodyScreenSizePx||null;
+      if(size){
+        const hw=Math.max(0,Number(size.width||0))/2,hh=Math.max(0,Number(size.height||0))/2;
+        b={left:Number(visual.screen.x)-hw,right:Number(visual.screen.x)+hw,top:Number(visual.screen.y)-hh,bottom:Number(visual.screen.y)+hh};
+      }
+    }
+    if(!b||![b.left,b.right,b.top,b.bottom].every(Number.isFinite))continue;
+    const pad=6;out.push(Object.freeze({residentId:String(participant.id),left:b.left-pad,right:b.right+pad,top:b.top-pad,bottom:b.bottom+pad}));
+  }
+  return Object.freeze(out);
+}
+function placeCard(node,event,seed){
+  if(!node||node.hidden||!event)return;
+  const started=typeof performance!=="undefined"&&performance.now?performance.now():Date.now(),bounds=participantScreenBounds(event);
+  let best=CARD_PLACEMENTS[0],bestOverlap=Infinity;
+  for(const placement of CARD_PLACEMENTS){
+    node.dataset.placement=placement;
+    const r=node.getBoundingClientRect?.();if(!r)continue;
+    const cardRect={left:r.left,right:r.right,top:r.top,bottom:r.bottom};
+    const overlap=bounds.reduce((sum,b)=>sum+rectOverlapArea(cardRect,b),0);
+    if(overlap<bestOverlap){bestOverlap=overlap;best=placement;}
+    if(overlap<=.5)break;
+  }
+  node.dataset.placement=best;
+  node.dataset.placementRevision="participant-aware-safe-slots-v1";
+  node.dataset.participantBoundCount=String(bounds.length);
+  node.dataset.participantOverlapArea=String(Number((Number.isFinite(bestOverlap)?bestOverlap:0).toFixed(3)));
+  if(seed&&runtimeBySeed.has(seed)){
+    const mem=runtimeBySeed.get(seed),elapsed=(typeof performance!=="undefined"&&performance.now?performance.now():Date.now())-started;
+    mem.cardPlacementCount++;mem.lastCardPlacementMs=elapsed;mem.maxCardPlacementMs=Math.max(mem.maxCardPlacementMs,elapsed);
+    mem.lastCardPlacement=best;mem.lastCardParticipantBoundCount=bounds.length;mem.lastCardOverlapArea=Number((Number.isFinite(bestOverlap)?bestOverlap:0).toFixed(3));
+  }
+}
 function renderCard(seedValue){
   if(typeof document==="undefined")return null;
   const started=typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
@@ -283,6 +331,13 @@ function renderCard(seedValue){
     if(q(".local-event-description"))q(".local-event-description").textContent=event.description;
     if(q(".local-event-meta"))q(".local-event-meta").textContent=event.location.label+" · until "+event.endTimestamp.slice(11,16);
     if(q(".local-event-participants"))q(".local-event-participants").textContent=event.participants.map(p=>p.name).join(" · ");
+    placeCard(node,event,seed);
+    if(typeof window!=="undefined"&&window.requestAnimationFrame)window.requestAnimationFrame(()=>{
+      if(!node.hidden&&node.dataset.eventType===event.type)placeCard(node,event,seed);
+    });
+  }else{
+    node.dataset.placement="top-right";node.dataset.placementRevision="participant-aware-safe-slots-v1";
+    node.dataset.participantBoundCount="0";node.dataset.participantOverlapArea="0";
   }
   if(seed&&runtimeBySeed.has(seed)){
     const mem=runtimeBySeed.get(seed),elapsed=(typeof performance!=="undefined"&&performance.now?performance.now():Date.now())-started;
@@ -302,6 +357,9 @@ function snapshot(seedValue){
     plannedDays:Object.freeze(mem.plannedDays.slice()),started:mem.started,ended:mem.ended,processedBatches:mem.processedBatches,maxBatch:mem.maxBatch,
     lastProcessedTimestamp:mem.lastProcessedTimestamp,lastEventId:mem.lastEventId,
     renderCount:mem.renderCount,lastRenderMs:Number(mem.lastRenderMs.toFixed(3)),maxRenderMs:Number(mem.maxRenderMs.toFixed(3)),
+    cardPlacementCount:mem.cardPlacementCount,lastCardPlacementMs:Number(mem.lastCardPlacementMs.toFixed(3)),maxCardPlacementMs:Number(mem.maxCardPlacementMs.toFixed(3)),
+    lastCardPlacement:mem.lastCardPlacement,lastCardParticipantBoundCount:mem.lastCardParticipantBoundCount,lastCardOverlapArea:mem.lastCardOverlapArea,
+    cardPlacementRevision:"participant-aware-safe-slots-v1",cardPlacementSlots:CARD_PLACEMENTS,
     eventDriven:true,perFrameScan:false,fullSettlementPerFrameScan:false,fullWorldScan:false,distantSummaryOnly:true,
     simulationAuthority:true,presentationAuthority:false,participantSource:"DailyActivity bounded resident roster",
     events:Object.freeze(events.map(e=>freeze(clone(e))))
