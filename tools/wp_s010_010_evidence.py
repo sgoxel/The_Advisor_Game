@@ -39,9 +39,17 @@ def load_object_interactions():
 
 def execute_chain():
     return driver.execute_script("""
-      const seed=window.SeedSystem?.getCampaign?.()?.seed||window.SeedSystem?.getSettings?.()?.seed;
+      let campaign=window.SeedSystem?.getCampaign?.()||null;
+      if(!campaign){
+        const requestedSeed='AGENT6-WP-S010-010-VISUAL';
+        const set=window.SeedSystem?.setSettingsSeed?.(requestedSeed);
+        const started=window.SeedSystem?.startNewCampaign?.(requestedSeed);
+        campaign=started?.campaign||window.SeedSystem?.getCampaign?.()||null;
+        if(!set?.ok||!campaign)throw new Error('Evidence campaign initialization failed');
+      }
+      const seed=campaign.seed;
       const when=window.GameTime?.getTimestampKey?.();
-      if(!seed||!when)throw new Error('Campaign SEED/Fantasy Game Time unavailable');
+      if(!seed||!when)throw new Error('Campaign SEED/Fantasy Game Time unavailable after campaign initialization');
       const object=window.InteriorObjects.build(seed).find(o=>Array.isArray(o.actions)&&o.actions.includes('inspect')&&o.interactionPositions?.length);
       if(!object)throw new Error('No authoritative inspectable interior object');
       const actorPosition={x:String(object.interactionPositions[0].x),y:String(object.interactionPositions[0].y),level:0};
@@ -138,5 +146,9 @@ try:
     result={"pass":True,"wp":"WP-S010-010","classification":"MIXED","chain":chain,"frames":frames}
     (OUT/"evidence.json").write_text(json.dumps(result,indent=2),encoding="utf-8")
     print(json.dumps({"pass":True,"screenshots":len(frames),"chain":{k:chain[k] for k in ["intent","proposalId","runtimeAttemptId","decision","decisionId","executionId","interactionAttemptId","interactionResultId","interactionStatus","terminalSimulation","conversationId","historyOutcome"]}},indent=2))
+except Exception:
+    try: driver.save_screenshot(str(OUT/"failure.png"))
+    except Exception: pass
+    raise
 finally:
     driver.quit()
