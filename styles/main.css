@@ -2148,3 +2148,8 @@ body.planet-stage-active{
   .advisor-activity-authority{display:none}
 }
 
+/* WP-S010-009 attempt-2: preserve the accepted short-landscape status dashboard height */
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-activity-strip{display:none}
+}
+
