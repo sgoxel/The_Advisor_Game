@@ -82,7 +82,7 @@ function createRuntime(optionsValue){
       pending.splice(i,1);row.state="running";row.reason="execution-started";row.attemptCount++;row.lastEvaluatedWhen=when;
       if(!evaluator?.evaluate){row.state="blocked";row.terminal=true;row.reason="protagonist-evaluator-unavailable";telemetryState.blocked++;telemetryState.terminal++;addResult(row);processed.push(snapshotRecord(row));continue;}
       telemetryState.evaluatorCalls++;
-      const record=evaluator.evaluate({seed,when,snapshot:row.snapshot,proposal:row.proposal,decisionContext:row.decisionContext||undefined,actorPosition:row.actorPosition||undefined,actorId:row.actorId,modifiedProposal:row.modifiedProposal||undefined,execute:true});
+      const record=evaluator.evaluate({seed,when,snapshot:row.snapshot,proposal:row.proposal,decisionContext:row.decisionContext||undefined,actorPosition:row.actorPosition||undefined,actorId:row.actorId,modifiedProposal:row.modifiedProposal||undefined,runtimeAttemptId:row.attemptId,execute:true});
       row.evaluatorTransactionId=cleanId(record?.transactionId)||null;row.evaluatorDecisionId=cleanId(record?.decisionId)||null;row.evaluatorExecutionId=cleanId(record?.executionId)||null;
       const mapped=mapResult(record);row.state=mapped.state;row.terminal=mapped.terminal;row.reason=mapped.reason;row.evaluatorResult=record?clone(record):null;
       telemetryState.processed++;telemetryState[row.state]=(telemetryState[row.state]||0)+1;
