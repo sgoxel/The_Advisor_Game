@@ -81,15 +81,19 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://sgoxel.github.io/The_Advisor_Game"
-          MODE="in-progress"; grep -q 'WP-S010-010.*COMPLETED' docs/ROADMAP.md && MODE="completed" || true
           for attempt in $(seq 1 72); do
             curl -fsSL --max-time 20 "$BASE/scripts/tests/wp-s010-010-end-to-end-acceptance.test.js?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-test.js || true
             curl -fsSL --max-time 20 "$BASE/tools/wp_s010_010_evidence.py?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-evidence.py || true
             curl -fsSL --max-time 20 "$BASE/docs/ROADMAP.md?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-roadmap.md || true
-            product=0; state=0
-            grep -q 'WP-S010-010' /tmp/live-test.js 2>/dev/null && grep -q 'authoritative phone + desktop' .github/workflows/wp-s010-010-end-to-end-acceptance.yml 2>/dev/null && grep -q 'WP-S010-010' /tmp/live-evidence.py 2>/dev/null && product=1 || true
-            if [ "$MODE" = completed ]; then grep -q 'WP-S010-010.*COMPLETED' /tmp/live-roadmap.md 2>/dev/null && state=1 || true; else grep -q 'WP-S010-010.*IN PROGRESS' /tmp/live-roadmap.md 2>/dev/null && state=1 || true; fi
-            [ "$product" -eq 1 ] && [ "$state" -eq 1 ] && exit 0
+            curl -fsSL --max-time 20 "$BASE/docs/changelog.txt?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-changelog.txt || true
+            curl -fsSL --max-time 20 "$BASE/docs/suggest_log.txt?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-suggest.txt || true
+            if cmp -s scripts/tests/wp-s010-010-end-to-end-acceptance.test.js /tmp/live-test.js \
+              && cmp -s tools/wp_s010_010_evidence.py /tmp/live-evidence.py \
+              && cmp -s docs/ROADMAP.md /tmp/live-roadmap.md \
+              && cmp -s docs/changelog.txt /tmp/live-changelog.txt \
+              && cmp -s docs/suggest_log.txt /tmp/live-suggest.txt; then
+              exit 0
+            fi
             sleep 5
           done
           exit 1
