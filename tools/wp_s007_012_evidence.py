@@ -49,6 +49,29 @@ def ready():
     except Exception:
         return False
 
+
+def world_context_diagnostic():
+    return driver.execute_async_script("""
+      const done=arguments[arguments.length-1];
+      (async()=>{
+        const node=[...document.scripts].find(s=>String(s.src||"").includes("/scripts/world/world-context.js"));
+        const src=node?.src||new URL("scripts/world/world-context.js",location.href).href;
+        const perf=performance.getEntriesByType("resource").find(e=>String(e.name||"").includes("/scripts/world/world-context.js"));
+        let fetched=null;
+        try{
+          const response=await fetch(src+(src.includes("?")?"&":"?")+"evidenceProbe="+Date.now(),{cache:"no-store"});
+          const body=await response.text();
+          fetched={ok:response.ok,status:response.status,length:body.length,tail:body.slice(-180)};
+        }catch(error){fetched={ok:false,error:String(error)}}
+        done({
+          present:Boolean(window.WorldContext),resolverPresent:Boolean(window.WorldContextResolver),
+          scriptSrc:src,scriptNode:Boolean(node),
+          perf:perf?{duration:Number(perf.duration||0),transferSize:Number(perf.transferSize||0),decodedBodySize:Number(perf.decodedBodySize||0),initiatorType:perf.initiatorType}:null,
+          fetched
+        });
+      })().catch(error=>done({present:Boolean(window.WorldContext),error:String(error)}));
+    """)
+
 def bind_evidence_campaign():
     return driver.execute_script("""
       const stageSeed=String(PlanetStage.snapshot().activeSeed||"");
@@ -150,6 +173,10 @@ try:
         wait.until(lambda _d: ready())
     except TimeoutException:
         raise RuntimeError("startup timeout: "+json.dumps(driver.execute_script("return {ready:window.PlanetStage?.snapshot?.()?.ready||false,domReady:document.getElementById(\'planetStageRoot\')?.dataset?.ready||null,canvas:Boolean(document.getElementById(\'planetCanvas\')),deps:{pc:Boolean(window.PersistentConsequences),ws:Boolean(window.WorldState),save:Boolean(window.CampaignPersistence),catchup:Boolean(window.CatchUpSimulation),scheduler:Boolean(window.EventScheduler),time:Boolean(window.GameTime)},error:window.PlanetStage?.snapshot?.()?.startupError||null,body:String(document.body?.innerText||\'\').slice(0,900)}")))
+    wc_diag=world_context_diagnostic()
+    if not wc_diag.get("present"):
+        logs=[x for x in driver.get_log("browser") if "world-context" in str(x.get("message","")).lower() or x.get("level")=="SEVERE"]
+        raise RuntimeError("WorldContext loader failure: "+json.dumps({"diagnostic":wc_diag,"browser":logs[-20:]}))
     campaign_binding=bind_evidence_campaign()
 
     persistence=None
