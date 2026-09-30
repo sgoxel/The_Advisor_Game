@@ -44,6 +44,7 @@ jobs:
       - name: Campaign persistence regression
         run: node tools/tests/wp-s007-009-campaign-persistence.test.js
       - name: Verify exact product is live on GitHub Pages
+        if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail
