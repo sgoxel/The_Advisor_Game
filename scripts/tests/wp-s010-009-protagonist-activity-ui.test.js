@@ -58,9 +58,12 @@ live=UI.runtimeModel(ctx);
 assert.equal(live.phase,'planned');assert.equal(live.kind,'self-care');assert.equal(live.target,'Bread Ration');assert.equal(live.completionBacked,false);
 
 reset();
-global.ProtagonistActionRuntime={snapshot(){return {pending:[],results:[{seed:'SEED-A',attemptId:'PAX-DONE',state:'succeeded',terminal:true,lastEvaluatedWhen:'1201-09-30 20:19:00',proposal:{source:'protagonist-work-routine',parameters:{targetLabel:'Forge anvil'}},evaluatorResult:{execution:{actionExecuted:true,state:'succeeded',authoritativeResult:{id:'SIM-42',terminal:true}}}}]};}};
+global.ProtagonistActionRuntime={snapshot(){return {pending:[],results:[
+  {seed:'OTHER-SEED',attemptId:'PAX-OTHER',state:'succeeded',terminal:true,lastEvaluatedWhen:'1201-09-30 20:19:59',proposal:{source:'protagonist-work-routine',parameters:{targetLabel:'Wrong campaign'}},evaluatorResult:{execution:{actionExecuted:true,state:'succeeded',authoritativeResult:{id:'SIM-OTHER',terminal:true}}}},
+  {seed:'SEED-A',attemptId:'PAX-DONE',state:'succeeded',terminal:true,lastEvaluatedWhen:'1201-09-30 20:19:00',proposal:{source:'protagonist-work-routine',parameters:{targetLabel:'Forge anvil'}},evaluatorResult:{execution:{actionExecuted:true,state:'succeeded',authoritativeResult:{id:'SIM-42',terminal:true}}}}
+]};}};
 live=UI.runtimeModel(ctx);
-assert.equal(live.phase,'completed');assert.equal(live.completionBacked,true);assert.equal(live.resultId,'SIM-42');
+assert.equal(live.phase,'completed');assert.equal(live.completionBacked,true);assert.equal(live.resultId,'SIM-42');assert.equal(live.target,'Forge Anvil');
 
 reset();
 global.ProtagonistActionRuntime={snapshot(){return {pending:[],results:[{seed:'SEED-A',attemptId:'PAX-FORGED',state:'succeeded',terminal:true,lastEvaluatedWhen:'1201-09-30 20:19:00',proposal:{source:'protagonist-work-routine'},evaluatorResult:{execution:{actionExecuted:false,state:'succeeded',authoritativeResult:{id:'FAKE',terminal:true}}}}]};}};
