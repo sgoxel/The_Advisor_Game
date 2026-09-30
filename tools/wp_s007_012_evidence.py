@@ -12,7 +12,8 @@ OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s007-012"))
 OUT.mkdir(parents=True,exist_ok=True)
 SIZE=(1280,720) if PROFILE=="landscape" else (390,844)
 TYPES=["damaged-building","road-blockage","abandoned-workplace"]
-SCALE_INDEX=9
+SCALE_INDEX=16
+EXPECTED_SCALE_LABEL="1/5000"
 START="9999-03-02 09:00:00"
 RECOVERED_AT="9999-03-02 16:00:00"
 
@@ -156,7 +157,7 @@ try:
         activation=set_case(kind)
         try:
             wait.until(lambda _d: (
-                current_state()["panelVisible"] and current_state()["scaleIndex"]==SCALE_INDEX and
+                current_state()["panelVisible"] and current_state()["scaleIndex"]==SCALE_INDEX and current_state()["scaleLabel"]==EXPECTED_SCALE_LABEL and
                 current_state()["signatureReady"] and bool(current_state()["localStatic"].get("active")) and
                 int(current_state()["localStatic"].get("buildingCount",0))>0 and
                 int(current_state()["localStatic"].get("persistentConsequenceProjectedActiveCount",0))==1 and
@@ -204,7 +205,7 @@ try:
     if severe:
         raise RuntimeError("browser console severe errors: "+json.dumps(severe[-10:]))
     result={
-        "pass":True,"wp":"WP-S007-012","classification":"MIXED","profile":PROFILE,"viewport":SIZE,
+        "pass":True,"wp":"WP-S007-012","classification":"MIXED","profile":PROFILE,"viewport":SIZE,"targetScaleIndex":SCALE_INDEX,"targetScaleLabel":EXPECTED_SCALE_LABEL,
         "types":TYPES,"campaignBinding":campaign_binding,"persistence":persistence,"recoveredAt":RECOVERED_AT,"records":records
     }
     (OUT/f"{PROFILE}-evidence.json").write_text(json.dumps(result,indent=2))
