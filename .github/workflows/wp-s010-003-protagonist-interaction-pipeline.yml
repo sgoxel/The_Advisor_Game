@@ -1,3 +1,4 @@
+# Clean-main acceptance rerun after duplicate cleanup
 name: WP-S010-003 Protagonist Interaction Pipeline
 
 on:
