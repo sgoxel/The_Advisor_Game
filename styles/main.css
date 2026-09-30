@@ -2083,3 +2083,15 @@ body.planet-stage-active{
     max-height:268px;
   }
 }
+
+
+/* WP-S009-010 portrait status dashboard cleanup: remove clipped chat rows */
+@media(max-width:520px) and (min-height:431px){
+  .advisor-chat-panel:has(.advisor-status-readout[open]){
+    grid-template-rows:auto 310px 0 0 0;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-chat-compose,
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-counsel{
+    display:none;
+  }
+}
