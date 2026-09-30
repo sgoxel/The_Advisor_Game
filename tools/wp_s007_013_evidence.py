@@ -69,6 +69,9 @@ def state():
     return driver.execute_script("""
       const s=PlanetStage.snapshot(),te=s.travelEncounters||TravelEncounters.snapshot(s.activeSeed),cp=s.crowdPresentation||{};
       const card=document.getElementById("travelEncounterCard"),cardRect=card&&!card.hidden?card.getBoundingClientRect():null;
+      const cardCenter=cardRect?{x:(cardRect.left+cardRect.right)/2,y:(cardRect.top+cardRect.bottom)/2}:null;
+      const cardTopElement=cardCenter?document.elementFromPoint(cardCenter.x,cardCenter.y):null;
+      const cardTopmost=Boolean(card&&cardTopElement&&(cardTopElement===card||card.contains(cardTopElement)));
       const panel=document.querySelector(".planet-places-panel:not([hidden])"),panelRect=panel?panel.getBoundingClientRect():null;
       const rb=s.projection?.resourceBudget||{},ls=s.projection?.localStatic||{},actors=(cp.actors||[]).filter(a=>a.travelEncounter);
       const signatureReady=(!rb.requestedSignature)||Boolean(rb.standInActive)||(rb.activeSignature&&rb.activeSignature===rb.requestedSignature);
@@ -84,7 +87,7 @@ def state():
         ready:Boolean(s.ready),seed:s.activeSeed,scaleIndex:Number(s.zoom?.scaleIndex),scaleLabel:s.zoom?.scaleLabel,
         focus:s.canonicalFocus?.worldTile||null,resourceBudget:rb,localStatic:ls,signatureReady:Boolean(signatureReady),
         travel:te,crowd:cp,actors:actorRows,visibleEncounterActors:actorRows.filter(a=>a.visible&&a.inViewport).length,
-        cardVisible:Boolean(card&&!card.hidden&&getComputedStyle(card).display!=="none"),cardType:card?.dataset?.encounterType||"",
+        cardVisible:Boolean(card&&!card.hidden&&getComputedStyle(card).display!=="none"),cardTopmost,cardType:card?.dataset?.encounterType||"",
         cardSafeSlot:card?.dataset?.safeSlot||"",cardText:String(card?.innerText||""),cardRect:cardBox,
         cardPanelOverlapPx2:overlaps(cardBox,panelBox),viewport:{width:innerWidth,height:innerHeight}
       };
@@ -99,7 +102,7 @@ def valid_state(kind,expected):
     card_inside=bool(card and card["left"]>=0 and card["top"]>=0 and card["right"]<=st["viewport"]["width"] and card["bottom"]<=st["viewport"]["height"])
     no_actor_card_overlap=all(float(a.get("cardOverlapPx2",0) or 0)<=max(20.0,float((a.get("bodyScreenSizePx") or {}).get("width",0))*float((a.get("bodyScreenSizePx") or {}).get("height",0))*.15) for a in st["actors"])
     return bool(
-      st["cardVisible"] and st["cardType"]==kind and st["cardSafeSlot"]=="bottom-center" and card_inside and
+      st["cardVisible"] and st["cardTopmost"] and st["cardType"]==kind and st["cardSafeSlot"]=="bottom-center" and card_inside and
       st["cardPanelOverlapPx2"]==0 and no_actor_card_overlap and st["scaleIndex"]==SCALE_INDEX and st["signatureReady"] and
       st["travel"].get("active") and int(st["travel"].get("exactActorCount",0))==expected and
       int(st["crowd"].get("travelEncounterCount",0))==expected and int(st["crowd"].get("visibleTravelEncounterCount",0))>=expected and
