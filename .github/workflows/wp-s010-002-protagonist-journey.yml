@@ -1,0 +1,81 @@
+name: WP-S010-002 Protagonist Journey
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/world/protagonist-journey.js"
+      - "scripts/tests/wp-s010-002-protagonist-journey.test.js"
+      - ".github/workflows/wp-s010-002-protagonist-journey.yml"
+      - "scripts/world/protagonist-action-runtime.js"
+      - "scripts/world/protagonist-command-evaluator.js"
+      - "scripts/world/route-planner.js"
+      - "scripts/data/world-standards.js"
+      - "scripts/world/world-state.js"
+      - "index.html"
+      - "docs/ROADMAP.md"
+      - "docs/changelog.txt"
+      - "docs/suggest_log.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Persistent physical journey evidence
+        run: node scripts/tests/wp-s010-002-protagonist-journey.test.js
+      - name: Stage 10 runtime and evaluator regressions
+        run: |
+          node scripts/tests/wp-s010-001-protagonist-action-runtime.test.js
+          node scripts/tests/wp-s008-005-protagonist-command-evaluator.test.js
+      - name: Verify exact product is live on GitHub Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://sgoxel.github.io/The_Advisor_Game"
+          MODE="accepted"
+          if grep -q 'WP-S010-002.*COMPLETED' docs/ROADMAP.md; then MODE="completed"; fi
+          for attempt in $(seq 1 72); do
+            curl -fsSL --max-time 20 "$BASE/scripts/world/protagonist-journey.js?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-journey.js || true
+            curl -fsSL --max-time 20 "$BASE/index.html?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-index.html || true
+            curl -fsSL --max-time 20 "$BASE/docs/ROADMAP.md?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-roadmap.md || true
+            product_ok=0
+            state_ok=0
+            grep -q 'VERSION="protagonist-journey-v1"' /tmp/live-journey.js 2>/dev/null && grep -q 'scripts/world/protagonist-journey.js?v=protagonist-journey-v1' /tmp/live-index.html 2>/dev/null && product_ok=1 || true
+            if [ "$MODE" = "completed" ]; then
+              grep -q 'WP-S010-002.*COMPLETED' /tmp/live-roadmap.md 2>/dev/null && state_ok=1 || true
+            else
+              state_ok=1
+            fi
+            if [ "$product_ok" -eq 1 ] && [ "$state_ok" -eq 1 ]; then
+              echo "GitHub Pages exposes WP-S010-002 mode=$MODE for commit $GITHUB_SHA"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "GitHub Pages did not expose expected WP-S010-002 $MODE markers in time." >&2
+          exit 1
+      - name: Comment exact run on Issue 205
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status='${{ job.status }}';
+            const body=[
+              'AGENT #6 WP-S010-002 exact-head workflow: **'+status.toUpperCase()+'**',
+              'Commit: '+context.sha,
+              'Run: https://github.com/'+context.repo.owner+'/'+context.repo.repo+'/actions/runs/'+context.runId,
+              status==='success'
+                ? 'Persistent journey evidence, Stage 10 runtime/evaluator regressions, and public Pages product verification passed.'
+                : 'Journey evidence, regression, or public Pages verification failed; WP remains incomplete.'
+            ].join('\n');
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:205,body});
