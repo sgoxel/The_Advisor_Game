@@ -2925,3 +2925,15 @@
 - Evidence bounds memory reads to <=16 rows and advice rows to <=8, records `fullWorldScan=false` and `wholeHistoryScan=false`, and proves `worldMutation=false`, `actionExecuted=false`, `memoryMutation=false`, with a Simulation trap untouched.
 - VISUAL: N/A — this WP is routing/fallback logic and adds no rendered surface. ROADMAP remains IN PROGRESS until this acceptance documentation state is itself verified on GitHub Pages.
 
+
+
+2026-09-30 11:21 +03:00 | WP-S008-004 | FUNCTIONAL ACCEPTED — EXTERNAL LLM ADAPTER + STRUCTURED PROPOSAL VALIDATION
+- Continued only WP-S008-004 under AGENT #6. Added production `ExternalLlmAdapter` v1 after the deterministic local router and loaded it through `index.html`.
+- Exact accepted implementation/evidence head `46126e55f1b186366bafaa62c1f73e5cedc943d5`; exact-head workflow `36688871054` SUCCESS. The workflow’s live check verified the adapter module and loader on public GitHub Pages (product state verified on attempt 11).
+- The provider request contains only the bounded protagonist/context facts, allowed command schemas, current authoritative targets and explicit no-execution rules. Snapshots reporting `bounded=false` or `fullWorldScan=true` are rejected before a provider is called.
+- Deterministic fake-provider evidence passed text-only output and one valid `advisor.propose_travel` proposal for authoritative target `P1`. Provider text is always marked untrusted and cannot establish action success.
+- Fail-closed evidence returned: unknown command `unknown-command`; stale/unknown target `target-unavailable`; unexpected proposal root field `unexpected-proposal-field`; unexpected command parameter `unexpected-parameter`; unbounded snapshot `unbounded-command-snapshot`; malformed JSON `malformed-json`.
+- Provider-disabled, provider-unavailable and provider-call-failed paths all remain recoverable and require local fallback. The test provider carrying a sentinel API key proved the request/result did not expose that secret; provider errors are normalized instead of logging raw error text.
+- Bounds are <=512 input characters, <=16 grounded facts, <=32 KiB request, <=16 KiB provider response, <=4000 text characters, <=4 proposals and <=4 KiB/proposal. Replay is deterministic and presentation/device context does not change the validated result.
+- A Simulation trap remained untouched: `simulationTouched=false`, `worldMutation=false`, `executionAttempted=false`, `persisted=false`, and `providerSecretsRead=false`.
+- VISUAL: N/A — this WP is a provider/validation authority boundary with no new rendered surface. ROADMAP remains IN PROGRESS until this acceptance-documentation state is verified on GitHub Pages.
