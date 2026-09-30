@@ -23,10 +23,10 @@ function clone(value){if(value==null||typeof value!=="object")return value;if(Ar
 function canonical(value){if(Array.isArray(value))return value.map(canonical);if(value&&typeof value==="object"){const out={};for(const key of Object.keys(value).sort())if(value[key]!==undefined)out[key]=canonical(value[key]);return out;}return value;}
 function stable(value){return JSON.stringify(canonical(value));}
 function hashText(value){let h=2166136261>>>0;for(const ch of String(value==null?"":value)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}h^=h>>>16;h=Math.imul(h,2246822507);h^=h>>>13;return(h>>>0).toString(16).toUpperCase().padStart(8,"0");}
-function clean(value,max=160){return String(value==null?"":value).trim().replace(/s+/g," ").slice(0,max);}
+function clean(value,max=160){return String(value==null?"":value).trim().replace(/\s+/g," ").slice(0,max);}
 function cleanId(value,max=160){return clean(value,max).replace(/[^A-Za-z0-9:_|.@/-]/g,"-");}
 function plain(value){return Boolean(value)&&typeof value==="object"&&!Array.isArray(value);}
-function validWhen(value){return /^d{4,}-d{2}-d{2} d{2}:d{2}:d{2}$/.test(String(value||""));}
+function validWhen(value){return /^\d{4,}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(String(value||""));}
 function clamp01(value,fallback=0){const n=Number(value);return Number.isFinite(n)?Math.max(0,Math.min(1,n)):fallback;}
 function clampPriority(value,fallback=50){const n=Number(value);return Number.isFinite(n)?Math.max(0,Math.min(100,Math.round(n))):fallback;}
 function normalizeIntent(value){const text=cleanId(value,40).toLowerCase();return SUPPORTED_INTENTS.includes(text)?text:null;}
