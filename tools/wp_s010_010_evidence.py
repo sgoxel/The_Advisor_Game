@@ -50,17 +50,25 @@ def execute_chain():
       const seed=campaign.seed;
       const when=window.GameTime?.getTimestampKey?.();
       if(!seed||!when)throw new Error('Campaign SEED/Fantasy Game Time unavailable after campaign initialization');
-      const object=window.InteriorObjects.build(seed).find(o=>Array.isArray(o.actions)&&o.actions.includes('inspect')&&o.interactionPositions?.length);
-      if(!object)throw new Error('No authoritative inspectable interior object');
+      const object=window.InteriorObjects.build(seed).find(o=>Array.isArray(o.actions)&&o.actions.length&&o.interactionPositions?.length);
+      if(!object)throw new Error('No authoritative actionable interior object');
+      const action=String(object.actions[0]);
       const actorPosition={x:String(object.interactionPositions[0].x),y:String(object.interactionPositions[0].y),level:0};
+      const advanceWhen=(value,seconds)=>{
+        const m=String(value).match(/^(\\d{4,})-(\\d{2})-(\\d{2}) (\\d{2}):(\\d{2}):(\\d{2})$/);
+        if(!m)throw new Error('Invalid Fantasy Game Time '+value);
+        const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]+seconds));
+        const p=n=>String(n).padStart(2,'0');
+        return String(d.getUTCFullYear()).padStart(4,'0')+'-'+p(d.getUTCMonth()+1)+'-'+p(d.getUTCDate())+' '+p(d.getUTCHours())+':'+p(d.getUTCMinutes())+':'+p(d.getUTCSeconds());
+      };
       const personId='WP010010-R01';
       const snapshot=window.CommandSetInterface.buildSnapshot({seed,when,origin:actorPosition},{
         getResidentRoster(){return [{id:personId,name:'Rowan'}];},
-        getDailyActivities(){return [{residentId:personId,target:actorPosition,state:'working',action:'inspect',intendedAction:'inspect',label:'Inspecting '+object.type,buildingId:object.buildingId,interactionObjectId:object.id,interactionObjectType:object.type,targetSource:'interior-interaction'}];},
+        getDailyActivities(){return [{residentId:personId,target:actorPosition,state:'working',action,intendedAction:action,label:'Using '+object.type,buildingId:object.buildingId,interactionObjectId:object.id,interactionObjectType:object.type,targetSource:'interior-interaction'}];},
         queryDestinations(){return {results:[],diagnostics:{bounded:true,fullWorldScan:false}};},
         getCountry(){return null;},getRoadGraph(){return null;},getKnownLeads(){return [];}
       });
-      const route=window.LocalConversationRouter.route('Speak with Rowan and inspect the workshop object.',{seed,when,character:{id:'protagonist',name:'Protagonist'},externalAiEnabled:false},{
+      const route=window.LocalConversationRouter.route('Speak with Rowan and use the workshop object.',{seed,when,character:{id:'protagonist',name:'Protagonist'},externalAiEnabled:false},{
         matchSentence(){return null;},getMemory(){return [];},getAdvice(){return [];},getSocialContext(){return null;}
       });
       if(route.selectedIntentId!=='advisor.interaction.request')throw new Error('Unexpected advice intent '+route.selectedIntentId);
@@ -70,13 +78,17 @@ def execute_chain():
       window.ProtagonistActionRuntime.reset();
       window.ProtagonistInteractionPipeline.clear(seed);
       window.ConversationTransactions.clear(seed);
-      const proposal={proposalId:'PROP-WP-S010-010-VISUAL',commandId:'advisor.propose_interaction',parameters:{personId,interactionTargetId:object.id,topic:'Inspect the workshop object'},source:'wp-s010-010-browser-acceptance'};
+      const proposal={proposalId:'PROP-WP-S010-010-VISUAL',commandId:'advisor.propose_interaction',parameters:{personId,interactionTargetId:object.id,topic:'Use the workshop object'},source:'wp-s010-010-browser-acceptance'};
       const scheduled=window.ProtagonistActionRuntime.schedule({seed,when,snapshot,proposal,actorId:'protagonist',actorPosition,decisionContext:{value:.98,urgency:.92,socialAcceptability:.95}});
       if(!scheduled?.ok)throw new Error('Runtime schedule failed '+JSON.stringify(scheduled));
-      const tick=window.ProtagonistActionRuntime.tick({seed,when,maxAttempts:1});
+      const firstTick=window.ProtagonistActionRuntime.tick({seed,when,maxAttempts:1});
+      const firstRow=firstTick?.processed?.[0];
+      if(firstRow?.state!=='running')throw new Error('Production action did not enter active Simulation state '+JSON.stringify(firstRow));
+      const completionWhen=advanceWhen(when,30);
+      const tick=window.ProtagonistActionRuntime.tick({seed,when:completionWhen,maxAttempts:1});
       const row=tick?.processed?.[0],evaluation=row?.evaluatorResult;
       if(row?.state!=='succeeded'||evaluation?.execution?.state!=='completed'||evaluation?.execution?.authoritativeResult?.terminal!==true)throw new Error('Authoritative terminal execution missing '+JSON.stringify(row));
-      const stored=window.ConversationTransactions.fromEvaluation(seed,{messageId:'MSG-WP-S010-010-VISUAL',referenceId:'ADVICE-WP-S010-010-VISUAL',role:'player',text:'Speak with Rowan and inspect the workshop object.'},route,evaluation,{characterMemoryIds:['MEM-WP-S010-010-VISUAL'],replyText:'I inspected the workshop object. Simulation confirmed the result.'});
+      const stored=window.ConversationTransactions.fromEvaluation(seed,{messageId:'MSG-WP-S010-010-VISUAL',referenceId:'ADVICE-WP-S010-010-VISUAL',role:'player',text:'Speak with Rowan and use the workshop object.'},route,evaluation,{characterMemoryIds:['MEM-WP-S010-010-VISUAL'],replyText:'I used the workshop object. Simulation confirmed the result.'});
       if(!stored?.ok||stored.record?.outcome?.state!=='completed')throw new Error('Conversation history did not retain terminal Simulation result '+JSON.stringify(stored));
       window.ProtagonistStatusUI?.setEvidenceMode?.(null);
       window.ProtagonistActivityUI.setEvidenceMode(null);
@@ -85,8 +97,8 @@ def execute_chain():
       window.AdvisorConversationUI.render('wp-s010-010-authoritative-success');
       const pipeline=window.ProtagonistInteractionPipeline.get(seed,evaluation.execution.authoritativeResult.attemptId);
       return {
-        seed,when,objectId:object.id,objectType:object.type,buildingId:object.buildingId,actorPosition,
-        intent:route.selectedIntentId,proposalId:evaluation.proposal.proposalId,runtimeAttemptId:row.attemptId,
+        seed,when,completionWhen,objectId:object.id,objectType:object.type,buildingId:object.buildingId,action,actorPosition,
+        intent:route.selectedIntentId,proposalId:evaluation.proposal.proposalId,runtimeAttemptId:row.attemptId,firstTickState:firstRow.state,
         decision:evaluation.decision,decisionId:evaluation.decisionId,executionId:evaluation.executionId,
         interactionAttemptId:pipeline?.attemptId||null,interactionResultId:pipeline?.resultId||null,
         interactionStatus:pipeline?.status||null,terminalSimulation:Boolean(pipeline?.simulation?.authoritativeTerminalSuccess),
