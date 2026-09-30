@@ -2,7 +2,7 @@ name: WP-S010-008 Offline Catch-Up
 
 on:
   push:
-    branches: [main]
+    branches: [main, agent6-wp-s010-008]
     paths:
       - "scripts/world/protagonist-offline-catchup.js"
       - "scripts/tests/wp-s010-008-protagonist-offline-catchup.test.js"
