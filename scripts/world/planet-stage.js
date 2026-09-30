@@ -2406,11 +2406,13 @@ function projectionPresentationBlendForZoom(value=zoomState.scalar){
   // 640x320 shell must be magnified into the 1/50-1/100 strategic range.
   // This is only presentation ownership timing: the same canonical focus,
   // geography and prepared resource remain authoritative.
-  const start=Math.max(projectionState.transitionStart,.60);
+  const start=Math.max(projectionState.transitionStart,.535);
   // Once a registered parent exists, finish the smooth-shell crossfade before
-  // the 1/50 milestone. The transition remains continuous, but the high-contrast
-  // global mountain chroma no longer ghosts over an already-readable tangent map.
-  const end=Math.max(start+.0001,.695);
+  // the first 1/75 strategic-map capture. Exact-screen evidence showed that a
+  // ~50/50 shell/tangent blend at this scale reintroduced blurred global relief
+  // over the already-readable registered tangent parent. Keep the handoff smooth,
+  // but complete it while the shell is still coarse enough to hide the change.
+  const end=Math.max(start+.0001,.595);
   return smoothstep01((scalar-start)/(end-start));
 }
 function canonicalSurfaceIdentity(){
