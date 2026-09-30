@@ -33,9 +33,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Social contact selection evidence
+      - name: Social-contact selection and handoff evidence
         run: node scripts/tests/wp-s010-006-protagonist-social-contact.test.js
-      - name: Social, memory, command and Stage 10 regressions
+      - name: Social, command and Stage 10 regressions
         run: |
           node tools/tests/wp-s005-006-recognition.test.js
           node scripts/tests/wp-s008-002-command-set-interface.test.js
@@ -82,7 +82,7 @@ jobs:
               'Commit: '+context.sha,
               'Run: https://github.com/'+context.repo.owner+'/'+context.repo.repo+'/actions/runs/'+context.runId,
               status==='success'
-                ? 'Friendly/duty/conflict/unresolved-memory/unavailable/tie-break evidence, bounded SocialState/CharacterMemory reads, command/evaluator handoff, Stage 5/8/10 regressions, and public Pages product verification passed. VISUAL: N/A — functional-only social selection/runtime handoff.'
-                : 'Social-contact evidence, regression, handoff, or public Pages verification failed; WP remains incomplete.'
+                ? 'Bounded social initiative evidence, relationship/memory read-only guards, command/evaluator handoff, regressions, and public Pages product verification passed. VISUAL: N/A — functional-only social selection/handoff.'
+                : 'Social-contact evidence, authority guard, regression, handoff, or public Pages verification failed; WP remains incomplete.'
             ].join('\n');
             await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:209,body});
