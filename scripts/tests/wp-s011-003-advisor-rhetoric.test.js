@@ -88,14 +88,14 @@ assert.equal(rejected.decision,'rejected');
 assert(Rhetoric.recordOutcome(seed,unfavorable.assessment,rejected).ok);
 
 const neutralContext={
-  decisionContext:{value:.55,urgency:.55,socialAcceptability:.55,dutyConflict:false},
+  decisionContext:{value:.50,urgency:.50,socialAcceptability:.50,dutyConflict:false},
   personality:{traits:{resolve:50,empathy:50,curiosity:50,caution:50,ambition:50,sociability:50}},
   relationships:{trust:50,suspicion:50},goals:{records:[]},knowledge:[]
 };
 const neutral=Rhetoric.assess(seed,{fantasyTimestamp:'1201-05-04 10:02:00',argument:{messageId:'MSG-3',argumentId:'ARG-3',appealStyle:'neutral',goalIds:[],knowledgeRefIds:[]},context:neutralContext});
 assert(neutral.ok);assert.equal(neutral.assessment.modifier,0);
 const deferred=Evaluator.evaluate({seed,when:'1201-05-04 10:02:00',snapshot:{...snapshot,context:{seed,when:'1201-05-04 10:02:00'}},execute:false,proposal:{proposalId:'PROP-NEUTRAL',commandId:'advisor.propose_advice',parameters:{topic:'Neutral proposal'}},decisionContext:neutral.assessment.decisionContext});
-assert(['deferred','accepted'].includes(deferred.decision),'deterministic evaluator bias may place exact neutral edge near threshold');
+assert.equal(deferred.decision,'deferred','neutral rhetoric fixture should preserve evaluator deferral');
 assert(Rhetoric.recordOutcome(seed,neutral.assessment,deferred).ok);
 
 rhetoricLevel=1;
