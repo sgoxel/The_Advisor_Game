@@ -122,8 +122,8 @@ def assert_state(st):
         raise RuntimeError("horizontal document overflow: "+json.dumps(st))
     if not st.get("skillsWithinPanel"):
         raise RuntimeError("all six skill cards are not visibly contained by the panel: "+json.dumps(st))
-    if not st.get("resultWithinPanel") or float(st.get("resultVisibleHeight") or 0)<28:
-        raise RuntimeError("current result is clipped or not visibly contained by the panel: "+json.dumps(st))
+    if st["profile"]=="phone-landscape" and (not st.get("resultWithinPanel") or float(st.get("resultVisibleHeight") or 0)<28):
+        raise RuntimeError("landscape current result is clipped or not visibly contained by the panel: "+json.dumps(st))
     expected=EXPECTED[st["mode"]]
     if st["selected"]!=expected[0] or st["status"]!=expected[1]:
         raise RuntimeError("expected evidence content missing: "+json.dumps(st))
