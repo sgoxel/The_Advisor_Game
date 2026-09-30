@@ -48,7 +48,7 @@ def capture_contributors(d,phase):
     payload=d.execute_script("return window.PlanetStage?.surfaceContributorEvidence?.()||null")
     if not payload or payload.get("available") is not True:
         raise AssertionError(f"contributor capture unavailable at {phase}: {payload}")
-    if int(payload.get("worldResampleCount") or -1)!=0 or int(payload.get("geographyQueryCount") or -1)!=0:
+    if int(payload.get("worldResampleCount",-1))!=0 or int(payload.get("geographyQueryCount",-1))!=0:
         raise AssertionError(f"contributor capture performed forbidden resampling at {phase}: {payload}")
     images={}
     for name,data_url in (payload.get("images") or {}).items():
