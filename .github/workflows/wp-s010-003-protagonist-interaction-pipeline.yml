@@ -2,7 +2,7 @@ name: WP-S010-003 Protagonist Interaction Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [main, "agent6/wp-s010-003"]
     paths:
       - "scripts/world/protagonist-interaction-pipeline.js"
       - "scripts/tests/wp-s010-003-protagonist-interaction-pipeline.test.js"
@@ -39,6 +39,7 @@ jobs:
           node scripts/tests/wp-s010-002-protagonist-journey.test.js
           node scripts/tests/wp-s008-005-protagonist-command-evaluator.test.js
       - name: Verify exact product is live on GitHub Pages
+        if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail
