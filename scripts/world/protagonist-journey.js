@@ -33,7 +33,8 @@ function timestamp(value){const out=clean(value,32);if(!validWhen(out))throw new
 function timestampParts(value){const m=String(value||"").match(/^(\d{4,})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);if(!m)return null;const p={y:+m[1],mo:+m[2],d:+m[3],h:+m[4],mi:+m[5],s:+m[6]};if(p.mo<1||p.mo>12||p.d<1||p.d>31||p.h>23||p.mi>59||p.s>59)return null;return p;}
 function daysFromCivil(y,m,d){y-=m<=2?1:0;const era=Math.floor(y/400),yoe=y-era*400,mp=m+(m>2?-3:9),doy=Math.floor((153*mp+2)/5)+d-1,doe=yoe*365+Math.floor(yoe/4)-Math.floor(yoe/100)+doy;return era*146097+doe;}
 function secondIndex(value){const p=timestampParts(value);return p?daysFromCivil(p.y,p.mo,p.d)*86400+p.h*3600+p.mi*60+p.s:null;}
-function currentTimestamp(){return root?.GameTime?.getTimestampKey?.()||null;}\nfunction shiftTimestamp(value,seconds){
+function currentTimestamp(){return root?.GameTime?.getTimestampKey?.()||null;}
+function shiftTimestamp(value,seconds){
   const p=timestampParts(value);if(!p)return value;
   const d=new Date(Date.UTC(p.y,p.mo-1,p.d,p.h,p.mi,p.s)+Math.max(0,Number(seconds)||0)*1000);
   const pad=n=>String(n).padStart(2,"0");
