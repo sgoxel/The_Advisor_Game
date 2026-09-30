@@ -107,12 +107,18 @@ function markup(modelValue){
   const m=modelValue||state.lastModel||evidenceModel("healthy"),identity=m.identity.value,needs=m.needs.value,goals=m.goals.value,inventory=m.inventory.value,health=m.health.value,authority=m.authority.value,guidance=m.guidance.value;
   const open=m.mode!=="runtime"?" open":"";
   const subtitle=authority?authority.role:(m.authority.available?"Role available":"Role unavailable");
+  const dominantNeed=Array.isArray(needs)&&needs.length?needs.slice().sort((a,b)=>b.value-a.value||String(a.key).localeCompare(String(b.key)))[0]:null;
+  let signalLabel="Grounded",signalKind="";
+  if(m.unavailable.length){signalLabel=m.unavailable.length+" unavailable";signalKind="unavailable"}
+  else if(health?.injuries?.length||Number(health?.fatigue)>=80){signalLabel=(health?.injuries?.length?"Injury · ":"")+"Fatigue "+pct(health?.fatigue);signalKind="alert"}
+  else if(dominantNeed&&dominantNeed.value>=60){signalLabel=dominantNeed.label+" "+pct(dominantNeed.value);signalKind="alert"}
+  else if(authority&&Number(authority.rankTier)>=2){signalLabel="Rank "+authority.rankTier;signalKind=""}
   const traitHtml=identity?.traits?.length?'<div class="advisor-status-traits">'+identity.traits.slice(0,MAX_TRAITS).map(t=>'<span class="advisor-status-trait">'+esc(t.label)+' '+esc(t.value)+'</span>').join("")+'</div>':"";
   const healthRows=health?[{label:"Condition",detail:health.condition+"%"},{label:"Fatigue",detail:health.fatigue+"%"},...(health.injuries||[]).map(x=>({label:x,detail:"constraint"}))]:null;
   const authorityRows=authority?[{label:authority.role,detail:"rank "+authority.rankTier},...(authority.scopes||[]).slice(0,MAX_SCOPES).map(x=>({label:title(x),detail:"scope"}))]:null;
   const guidanceRows=guidance?.map(x=>({label:x.label,detail:(x.stance||"advice")+" · P"+x.priority}));
   return '<details class="advisor-status-readout" data-status-mode="'+esc(m.mode)+'"'+open+'>'+
-    '<summary><span class="advisor-status-summary-copy"><small>PROTAGONIST READOUT</small><strong>'+esc(identity?.name||"Current state")+' · '+esc(subtitle)+'</strong></span><span class="advisor-status-summary-meta">'+chip("Current","")+chip(m.unavailable.length?m.unavailable.length+" unavailable":"grounded",m.unavailable.length?"unavailable":"")+'</span></summary>'+
+    '<summary><span class="advisor-status-summary-copy"><small>PROTAGONIST READOUT</small><strong>'+esc(identity?.name||"Current state")+' · '+esc(subtitle)+'</strong></span><span class="advisor-status-summary-meta">'+chip("Current","")+chip(signalLabel,signalKind)+'</span></summary>'+
     '<div class="advisor-status-body">'+
       '<section class="advisor-status-identity"><div><h3>'+esc(identity?.name||"Identity unavailable")+'</h3><p>'+esc(identity?.subtitle||"No identity snapshot supplied")+'</p></div>'+traitHtml+'</section>'+
       '<div class="advisor-status-grid">'+
