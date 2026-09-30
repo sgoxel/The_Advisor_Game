@@ -104,7 +104,7 @@ for(let i=0;i<visualTypes.length;i++){
 }
 TravelEncounters.clearProof(seed);
 
-const source=fs.readFileSync("scripts/world/travel-encounters.js","utf8"),stageSource=fs.readFileSync("scripts/world/planet-stage.js","utf8"),html=fs.readFileSync("index.html","utf8"),css=fs.readFileSync("styles/travel-encounters.css","utf8");
+const source=fs.readFileSync("scripts/world/travel-encounters.js","utf8"),stageSource=fs.readFileSync("scripts/world/planet-stage.js","utf8"),html=fs.readFileSync("index.html","utf8"),css=fs.readFileSync("styles/travel-encounters.css","utf8"),mainCss=fs.readFileSync("styles/main.css","utf8");
 assert(source.includes("PlanetGeography?.create?.(seed)"),"canonical PlanetGeography visual surface validation missing");
 assert(source.includes("MAX_VISUAL_ANCHOR_CHECKS=81"),"bounded visual-anchor cap missing");
 assert(source.includes("seedAndFantasyTimeOnly:true"),"SEED + fantasy-time authority flag missing");
@@ -116,6 +116,10 @@ assert(stageSource.includes("topFacingTravelerBodies:true"),"top-facing traveler
 assert(stageSource.includes("travelEncounterBodyMinPx"),"traveler screen-size telemetry missing");
 assert(stageSource.includes("mergedPresentationBuildMs"),"merged traveler presentation timing telemetry missing");
 assert(stageSource.includes("travelEncounters:window.TravelEncounters?.snapshot?.(activeSeed)||null"),"PlanetStage snapshot missing travel encounter state");
+assert(stageSource.includes('root.dataset.travelEncounterFocus=String(Boolean(encounter?.active))'),"travel encounter focus declutter state missing");
+assert(stageSource.includes("travelEncounterDecluttered"),"center-marker declutter telemetry missing");
+assert(mainCss.includes('data-travel-encounter-focus="true"')&&mainCss.includes("translateY(-46px)")&&mainCss.includes("code{display:none!important}"),"center HUD traveler declutter CSS missing");
+assert(html.includes("travel-encounters-v3")&&html.includes("travel-encounter-silhouette-v3"),"v3 encounter cache revisions missing");
 assert(html.indexOf("scripts/world/travel-encounters.js")<html.indexOf("scripts/world/planet-stage.js"),"travel runtime must load before PlanetStage");
 assert(css.includes(".travel-encounter-card")&&css.includes("z-index:90")&&source.includes("document.body||document.getElementById"),"dedicated travel card overlay layer missing or malformed");
 
