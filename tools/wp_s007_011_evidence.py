@@ -153,6 +153,8 @@ try:
                     raise RuntimeError("event card overlaps participant silhouette: "+json.dumps({"participant":p,"cardRect":card,"overlap":overlap,"state":st}))
         if st.get("cardPlacementRevision")!="participant-aware-safe-slots-v1" or st.get("cardPlacement") not in ["top-right","bottom-right","bottom-left"]:
             raise RuntimeError("event card placement contract missing: "+json.dumps(st))
+        if PROFILE=="portrait" and st.get("cardPlacement")=="top-right" and float((st.get("cardRect") or {}).get("top",0))<100:
+            raise RuntimeError("portrait top-right event card intrudes into persistent top chrome: "+json.dumps(st))
         if float(st.get("cardParticipantOverlapArea",0))>0.5 or overlap_total>0.5:
             raise RuntimeError("event card overlap telemetry failed: "+json.dumps({"measured":overlap_total,"state":st}))
         if st["visibleParticipants"]<2 or int(st["localStatic"].get("buildingCount",0))<=0:
