@@ -6250,7 +6250,7 @@ function blendSurfaceAuthoritySamples(coarse,fine,t){
 function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRing=false){
   const lat0=job.lat0,lon0=job.lon0,data=new Uint8ClampedArray(size*size*4);
   const metersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
-  const captureContributorPixels=Boolean(EVIDENCE_SURFACE_CONTRIBUTORS&&job.levelIndex<=1&&!contextRing);
+  const captureContributorPixels=Boolean(EVIDENCE_SURFACE_CONTRIBUTORS&&job.levelIndex<=2&&!contextRing);
   const contributorLayers=captureContributorPixels?Object.fromEntries(["base","macro","structure","landCover","final"].map(name=>[name,new Uint8ClampedArray(size*size*4)])):null;
   const writeContributorRgb=(name,offset,rgb)=>{
     const target=contributorLayers?.[name];if(!target)return;
