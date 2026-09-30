@@ -48,13 +48,15 @@ jobs:
             curl -fsSL --max-time 20 "$BASE/scripts/world/protagonist-journey.js?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-journey.js || true
             curl -fsSL --max-time 20 "$BASE/index.html?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-index.html || true
             curl -fsSL --max-time 20 "$BASE/docs/ROADMAP.md?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-roadmap.md || true
+            curl -fsSL --max-time 20 "$BASE/docs/changelog.txt?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-changelog.txt || true
+            curl -fsSL --max-time 20 "$BASE/docs/suggest_log.txt?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-suggest.txt || true
             product_ok=0
             state_ok=0
             grep -q 'VERSION="protagonist-journey-v1"' /tmp/live-journey.js 2>/dev/null && grep -q 'scripts/world/protagonist-journey.js?v=protagonist-journey-v1' /tmp/live-index.html 2>/dev/null && product_ok=1 || true
             if [ "$MODE" = "completed" ]; then
               grep -q 'WP-S010-002.*COMPLETED' /tmp/live-roadmap.md 2>/dev/null && state_ok=1 || true
             else
-              state_ok=1
+              grep -q 'WP-S010-002.*FUNCTIONAL ACCEPTED' /tmp/live-changelog.txt 2>/dev/null && grep -q 'WP-S010-002.*Future improvement after accepted implementation' /tmp/live-suggest.txt 2>/dev/null && state_ok=1 || true
             fi
             if [ "$product_ok" -eq 1 ] && [ "$state_ok" -eq 1 ]; then
               echo "GitHub Pages exposes WP-S010-002 mode=$MODE for commit $GITHUB_SHA"
