@@ -79,6 +79,11 @@ def assert_state(s):
         if a.get(key) is not False:raise RuntimeError("read-only/event-driven contract failed "+key+" "+json.dumps(s))
     if a.get("completionRequiresTerminalSimulation") is not True:raise RuntimeError("completion gate missing "+json.dumps(s))
 
+def window_ready(driver):
+    try:
+        return driver.execute_script("return Boolean(window.ProtagonistStatusUI&&window.AdvisorConversationUI&&window.ProtagonistActivityUI&&document.getElementById('advisorChatPanel'));")
+    except Exception:return False
+
 records=[]
 try:
     driver.set_window_size(*VIEWPORTS["phone-portrait"]);driver.get(url("traveling"))
