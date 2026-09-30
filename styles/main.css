@@ -2095,3 +2095,56 @@ body.planet-stage-active{
     display:none;
   }
 }
+
+/* WP-S010-009 — Visible protagonist activity + intent/outcome presentation */
+.advisor-chat-head:has(.advisor-activity-strip){flex-wrap:wrap}
+.advisor-activity-strip{
+  order:3;flex:1 0 100%;min-width:0;display:grid;grid-template-columns:8px minmax(0,1fr) auto;
+  column-gap:8px;row-gap:4px;align-items:center;padding:8px 9px;border:1px solid rgba(137,196,184,.18);
+  border-radius:11px;background:linear-gradient(135deg,rgba(10,29,34,.82),rgba(9,19,29,.74));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035)
+}
+.advisor-activity-signal{width:8px;height:100%;min-height:31px;border-radius:999px;background:#7f9ca4;box-shadow:0 0 0 2px rgba(127,156,164,.09)}
+.advisor-activity-main{min-width:0;display:grid;gap:1px}
+.advisor-activity-main small{color:#8db9b0;font-size:7px;font-weight:900;letter-spacing:.15em}
+.advisor-activity-main strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f2faf7;font-size:12px;line-height:1.15}
+.advisor-activity-main>span:not(.advisor-activity-progress){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#a9bbb9;font-size:8px}
+.advisor-activity-meta{display:grid;justify-items:end;gap:3px;min-width:76px}
+.advisor-activity-phase,.advisor-activity-authority{max-width:112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:999px;padding:3px 6px;font-size:6px;font-weight:800;letter-spacing:.04em}
+.advisor-activity-phase{border:1px solid rgba(135,199,187,.24);background:rgba(48,91,87,.27);color:#c8ece4}
+.advisor-activity-authority{color:#87aaa4}
+.advisor-activity-context{grid-column:2/-1;min-width:0;display:flex;gap:7px;align-items:center;overflow:hidden;color:#8fa7a4;font-size:6.5px}
+.advisor-activity-context>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.advisor-activity-context b{color:#c8dad6;font-weight:800}
+.advisor-activity-progress{position:relative;width:min(170px,100%);height:3px;margin-top:3px;overflow:hidden;border-radius:999px;background:rgba(134,177,170,.16)}
+.advisor-activity-progress i{display:block;height:100%;border-radius:inherit;background:rgba(111,206,180,.78)}
+.advisor-activity-strip[data-activity-phase="planned"] .advisor-activity-signal{background:#d9ad63;box-shadow:0 0 0 2px rgba(217,173,99,.10)}
+.advisor-activity-strip[data-activity-phase="planned"] .advisor-activity-phase{color:#f1d7a4;border-color:rgba(217,173,99,.28);background:rgba(111,76,28,.28)}
+.advisor-activity-strip[data-activity-phase="active"] .advisor-activity-signal{background:#62c7aa;box-shadow:0 0 10px rgba(98,199,170,.24)}
+.advisor-activity-strip[data-activity-phase="active"] .advisor-activity-phase{color:#c9f7e8;border-color:rgba(98,199,170,.34);background:rgba(24,92,74,.34)}
+.advisor-activity-strip[data-activity-phase="deferred"] .advisor-activity-signal,
+.advisor-activity-strip[data-activity-phase="blocked"] .advisor-activity-signal{background:#d77e72;box-shadow:0 0 0 2px rgba(215,126,114,.10)}
+.advisor-activity-strip[data-activity-phase="deferred"] .advisor-activity-phase,
+.advisor-activity-strip[data-activity-phase="blocked"] .advisor-activity-phase{color:#ffd1cb;border-color:rgba(215,126,114,.32);background:rgba(112,44,39,.31)}
+.advisor-activity-strip[data-activity-phase="completed"] .advisor-activity-signal{background:#79b8e6;box-shadow:0 0 10px rgba(121,184,230,.22)}
+.advisor-activity-strip[data-activity-phase="completed"] .advisor-activity-phase{color:#d9efff;border-color:rgba(121,184,230,.32);background:rgba(39,78,112,.31)}
+.advisor-activity-strip[data-activity-phase="completed"] .advisor-activity-main small{color:#96c9ec}
+.advisor-activity-reason{color:#d9a49b!important}
+.advisor-activity-result{color:#9fc8e5!important}
+@media(max-width:520px){
+  .advisor-activity-strip{grid-template-columns:7px minmax(0,1fr) auto;padding:7px 8px;column-gap:7px}
+  .advisor-activity-main strong{font-size:10px}
+  .advisor-activity-main>span:not(.advisor-activity-progress){font-size:7px}
+  .advisor-activity-meta{min-width:64px}
+  .advisor-activity-phase,.advisor-activity-authority{max-width:86px;padding:2px 5px;font-size:5.5px}
+  .advisor-activity-context{gap:5px;font-size:5.8px}
+}
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-activity-strip{padding:5px 7px;row-gap:2px}
+  .advisor-activity-signal{min-height:25px}
+  .advisor-activity-main strong{font-size:9px}
+  .advisor-activity-main small,.advisor-activity-main>span:not(.advisor-activity-progress){font-size:5.5px}
+  .advisor-activity-context{font-size:5px}
+  .advisor-activity-authority{display:none}
+}
+
