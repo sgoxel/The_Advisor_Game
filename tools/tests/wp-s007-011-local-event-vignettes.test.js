@@ -118,6 +118,8 @@ assert(stageSource.includes("eventSilhouetteScreenSizePx")&&stageSource.includes
 assert(!stageSource.includes("cueScale=2.15"),"rejected oversized local-event cue scale returned");
 assert(html.indexOf("scripts/world/local-event-vignettes.js")<html.indexOf("scripts/world/planet-stage.js"),"local-event runtime must load before PlanetStage");
 assert(css.includes(".local-event-vignette"),"event presentation style missing");
+assert(fs.readFileSync("scripts/world/local-event-vignettes.js","utf8").includes("participant-aware-safe-slots-v1"),"participant-aware event-card placement missing");
+assert(css.includes('data-placement="top-right"')&&css.includes('data-placement="bottom-right"')&&css.includes('data-placement="bottom-left"'),"bounded event-card safe slots missing");
 
 console.log(JSON.stringify({
   pass:true,wp:"WP-S007-011",classification:"MIXED",
