@@ -54,13 +54,15 @@ function compactDetails(row){
   const details=[];
   const candidates=[
     ["Status",row?.status||row?.readinessStatus||row?.condition||row?.decision||row?.resolutionMode],
-    ["Subject",row?.subject?.label||row?.subjectLabel||row?.target?.label||row?.targetLabel],
+    ["Subject",row?.subject?.label||row?.subjectLabel||row?.target?.label||row?.targetLabel||row?.subjectId],
+    ["Quality",row?.qualityBand],
     ["Outcome",row?.outcome?.state||row?.outcomeState||row?.result?.status],
     ["Source",row?.sourceRef||row?.sourceId||row?.primarySourceId],
     ["When",row?.fantasyTimestamp||row?.when||row?.timestamp]
   ];
   for(const [label,value] of candidates){const text=cleanText(value,120);if(text&&!details.some(x=>x.value===text))details.push({label,value:text})}
-  const blockers=Array.isArray(row?.blockers)?row.blockers.length:0,unknowns=Array.isArray(row?.unknowns)?row.unknowns.length:0,conflicts=Array.isArray(row?.conflicts)?row.conflicts.length:0;\n  if(Array.isArray(row?.evidenceRefIds)&&row.evidenceRefIds.length)details.push({label:"Evidence",value:String(row.evidenceRefIds.length)+" refs"});
+  if(Array.isArray(row?.evidenceRefIds)&&row.evidenceRefIds.length)details.push({label:"Evidence",value:String(row.evidenceRefIds.length)+" refs"});
+  const blockers=Array.isArray(row?.blockers)?row.blockers.length:0,unknowns=Array.isArray(row?.unknowns)?row.unknowns.length:0,conflicts=Array.isArray(row?.conflicts)?row.conflicts.length:0;
   if(blockers)details.push({label:"Blockers",value:String(blockers)});
   if(unknowns)details.push({label:"Unknowns",value:String(unknowns)});
   if(conflicts)details.push({label:"Conflicts",value:String(conflicts)});
@@ -86,13 +88,16 @@ function readToolRows(seed,skill){
 function recentResolutions(seed){
   try{
     const rows=root.AdvisorToolResolutionBoundary?.listResolutions?.(seed,{limit:MAX_RECENT_RESULTS})||[];
-    return freeze((Array.isArray(rows)?rows:[]).slice(0,MAX_RECENT_RESULTS).map((row,index)=>freeze({
-      id:cleanText(row?.id||row?.resolutionId||("ATR-"+index),120),
-      tool:cleanText(row?.tool||row?.skill||"advisor",40),
-      mode:cleanText(row?.mode||row?.resolutionMode||"resolved",40),
-      when:cleanText(row?.fantasyTimestamp||row?.when||"",40),
-      authority:"Advisory"
-    })));
+    return freeze((Array.isArray(rows)?rows:[]).slice(0,MAX_RECENT_RESULTS).map((row,index)=>{
+      const rawTool=cleanText(row?.tool||row?.skill||row?.toolId||"advisor",60);
+      return freeze({
+        id:cleanText(row?.id||row?.resolutionId||("ATR-"+index),120),
+        tool:rawTool.startsWith("advisor.")?rawTool.slice(8):rawTool,
+        mode:cleanText(row?.mode||row?.resolutionMode||"resolved",40),
+        when:cleanText(row?.fantasyTimestamp||row?.when||"",40),
+        authority:"Advisory"
+      });
+    }));
   }catch(_){return freeze([])}
 }
 function productionModel(){
