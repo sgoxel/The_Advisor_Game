@@ -73,6 +73,8 @@ def state():
       const cardTopElement=cardCenter?document.elementFromPoint(cardCenter.x,cardCenter.y):null;
       const cardTopmost=Boolean(card&&cardTopElement&&(cardTopElement===card||card.contains(cardTopElement)));
       const panel=document.querySelector(".planet-places-panel:not([hidden])"),panelRect=panel?panel.getBoundingClientRect():null;
+      const center=document.querySelector(".planet-world-center:not([hidden])"),centerGlyph=center?.querySelector("i"),centerCode=center?.querySelector("code");
+      const centerGlyphRect=centerGlyph?.getBoundingClientRect?.()||null,centerCodeStyle=centerCode?getComputedStyle(centerCode):null;
       const rb=s.projection?.resourceBudget||{},ls=s.projection?.localStatic||{},actors=(cp.actors||[]).filter(a=>a.travelEncounter);
       const signatureReady=(!rb.requestedSignature)||Boolean(rb.standInActive)||(rb.activeSignature&&rb.activeSignature===rb.requestedSignature);
       const cardBox=cardRect?{left:cardRect.left,top:cardRect.top,right:cardRect.right,bottom:cardRect.bottom,width:cardRect.width,height:cardRect.height}:null;
@@ -81,7 +83,8 @@ def state():
       const actorRows=actors.map(a=>{
         const size=a.bodyScreenSizePx||{},scr=a.screen||{},w=Number(size.width||0),h=Number(size.height||0);
         const box=scr&&Number.isFinite(Number(scr.x))?{left:Number(scr.x)-w/2,right:Number(scr.x)+w/2,top:Number(scr.y)-h/2,bottom:Number(scr.y)+h/2}:null;
-        return {...a,cardOverlapPx2:overlaps(cardBox,box)};
+        const glyphBox=centerGlyphRect?{left:centerGlyphRect.left,right:centerGlyphRect.right,top:centerGlyphRect.top,bottom:centerGlyphRect.bottom}:null;
+        return {...a,cardOverlapPx2:overlaps(cardBox,box),centerGlyphOverlapPx2:overlaps(glyphBox,box)};
       });
       return {
         ready:Boolean(s.ready),seed:s.activeSeed,scaleIndex:Number(s.zoom?.scaleIndex),scaleLabel:s.zoom?.scaleLabel,
@@ -89,7 +92,11 @@ def state():
         travel:te,crowd:cp,actors:actorRows,visibleEncounterActors:actorRows.filter(a=>a.visible&&a.inViewport).length,
         cardVisible:Boolean(card&&!card.hidden&&getComputedStyle(card).display!=="none"),cardTopmost,cardType:card?.dataset?.encounterType||"",
         cardSafeSlot:card?.dataset?.safeSlot||"",cardText:String(card?.innerText||""),cardRect:cardBox,
-        cardPanelOverlapPx2:overlaps(cardBox,panelBox),viewport:{width:innerWidth,height:innerHeight}
+        cardPanelOverlapPx2:overlaps(cardBox,panelBox),
+        travelEncounterFocus:document.getElementById("planetStageRoot")?.dataset?.travelEncounterFocus||"",
+        centerGlyphRect:centerGlyphRect?{left:centerGlyphRect.left,right:centerGlyphRect.right,top:centerGlyphRect.top,bottom:centerGlyphRect.bottom,width:centerGlyphRect.width,height:centerGlyphRect.height}:null,
+        centerCodeVisible:Boolean(centerCode&&centerCodeStyle&&centerCodeStyle.display!=="none"&&centerCodeStyle.visibility!=="hidden"&&Number(centerCodeStyle.opacity||1)>.01),
+        viewport:{width:innerWidth,height:innerHeight}
       };
     """)
 
@@ -101,9 +108,11 @@ def valid_state(kind,expected):
     card=st.get("cardRect") or {}
     card_inside=bool(card and card["left"]>=0 and card["top"]>=0 and card["right"]<=st["viewport"]["width"] and card["bottom"]<=st["viewport"]["height"])
     no_actor_card_overlap=all(float(a.get("cardOverlapPx2",0) or 0)<=max(20.0,float((a.get("bodyScreenSizePx") or {}).get("width",0))*float((a.get("bodyScreenSizePx") or {}).get("height",0))*.15) for a in st["actors"])
+    no_center_glyph_overlap=all(float(a.get("centerGlyphOverlapPx2",0) or 0)<=1.0 for a in st["actors"])
     return bool(
       st["cardVisible"] and st["cardTopmost"] and st["cardType"]==kind and st["cardSafeSlot"]=="bottom-center" and card_inside and
-      st["cardPanelOverlapPx2"]==0 and no_actor_card_overlap and st["scaleIndex"]==SCALE_INDEX and st["signatureReady"] and
+      st["cardPanelOverlapPx2"]==0 and no_actor_card_overlap and st["travelEncounterFocus"]=="true" and
+      not st["centerCodeVisible"] and no_center_glyph_overlap and st["scaleIndex"]==SCALE_INDEX and st["signatureReady"] and
       st["travel"].get("active") and int(st["travel"].get("exactActorCount",0))==expected and
       int(st["crowd"].get("travelEncounterCount",0))==expected and int(st["crowd"].get("visibleTravelEncounterCount",0))>=expected and
       st["visibleEncounterActors"]>=expected and sizes and min(sizes)>=MIN_BODY_PX and
