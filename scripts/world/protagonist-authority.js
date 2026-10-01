@@ -15,7 +15,6 @@ const BASE_ROLE_ID="local-resident";
 const ROLE_DEFS=Object.freeze({
   "local-resident":Object.freeze({roleId:"local-resident",title:"Local Resident",rankTier:0,rankLabel:"ordinary",scopes:Object.freeze(["self"])}),
   "guild-member":Object.freeze({roleId:"guild-member",title:"Guild Member",rankTier:1,rankLabel:"recognized-local-role",scopes:Object.freeze(["self","guild:participate"])}),
-  "knight":Object.freeze({roleId:"knight",title:"Knight",rankTier:1,rankLabel:"recognized-martial-role",scopes:Object.freeze(["self","martial:personal-defense","local:protection-service"])}),
   "knight":Object.freeze({roleId:"knight",title:"Knight",rankTier:2,rankLabel:"local-protection-role",scopes:Object.freeze(["self","local:protection","local:escort","local:patrol"])}),
   "village-steward":Object.freeze({roleId:"village-steward",title:"Village Steward",rankTier:2,rankLabel:"local-authority",scopes:Object.freeze(["self","settlement:administration","settlement:request-assistance"])}),
   "regional-magistrate":Object.freeze({roleId:"regional-magistrate",title:"Regional Magistrate",rankTier:3,rankLabel:"regional-authority",scopes:Object.freeze(["self","settlement:administration","region:adjudication","region:request-assistance"])}),
