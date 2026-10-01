@@ -8,7 +8,8 @@ if(root)root.LocalConflictPresentation=api;
 
 const VERSION="local-conflict-presentation-v1";
 const EVIDENCE_MODES=Object.freeze(["active","retreat","terminal","recovered","cleared"]);
-const SOURCE_READ_LIMIT=5;\nconst TERMINAL_CUE_SECONDS=300;
+const SOURCE_READ_LIMIT=5;
+const TERMINAL_CUE_SECONDS=300;
 const ANCHOR_SYNC_MS=80;
 const UNTRUSTED_KINDS=Object.freeze(["ui","advisor","llm","provider","render","camera","viewport","device"]);
 const state={
@@ -70,7 +71,8 @@ function runtimeModel(optionsValue={}){
   const stage=safeRead("stage",()=>root.PlanetStage?.snapshot?.(),null);
   const threats=safeRead("threats",()=>root.LocalSecurityIncidents?.list?.(seed,{status:"active",limit:1})||[],[]);
   const results=safeRead("combat",()=>root.PersonalCombatExchange?.list?.(seed,{limit:1},"protagonist")||[],[]);
-  const health=safeRead("health",()=>root.ProtagonistHealth?.snapshot?.(seed,"protagonist")||null,null);\n  const now=safeRead("time",()=>root.GameTime?.getTimestampKey?.()||null,null);
+  const health=safeRead("health",()=>root.ProtagonistHealth?.snapshot?.(seed,"protagonist")||null,null);
+  const now=safeRead("time",()=>root.GameTime?.getTimestampKey?.()||null,null);
   const worldAnchor=freeze({kind:"canonical-focus",worldTile:stage?.canonicalFocus?.worldTile||null,latitudeDegrees:stage?.canonicalFocus?.latitudeDegrees??null,longitudeDegrees:stage?.canonicalFocus?.longitudeDegrees??null});
   const latest=Array.isArray(results)?results[0]:null,threat=Array.isArray(threats)?threats[0]:null;
   const latestSeconds=fantasySecondIndex(latest?.fantasyTimestamp),nowSeconds=fantasySecondIndex(now),threatSeconds=fantasySecondIndex(threat?.updatedTimestamp||threat?.createdTimestamp);
@@ -82,7 +84,6 @@ function runtimeModel(optionsValue={}){
     if(terminalFresh&&disengaged)return presentationModel({phase:"retreat",title:resolutionLabel(resolution),detail:"Simulation recorded disengagement. This cue does not claim victory or move any actor.",status:"terminal disengagement",badges:["DISENGAGED","TERMINAL"],terminal:true,sourceRef:freeze({kind:"combat-result",id:id(latest.id)}),locationRef:latest.locationRef||null,worldAnchor,fantasyTimestamp:latest.fantasyTimestamp});
     if(terminalFresh)return presentationModel({phase:"terminal",title:resolutionLabel(resolution),detail:"A terminal Simulation combat result is available for this local conflict.",status:"terminal · Simulation",badges:["TERMINAL",resolutionLabel(resolution).toUpperCase()],terminal:true,sourceRef:freeze({kind:"combat-result",id:id(latest.id)}),locationRef:latest.locationRef||null,worldAnchor,fantasyTimestamp:latest.fantasyTimestamp});
   }
-  const threat=Array.isArray(threats)?threats[0]:null;
   if(threat)return presentationModel({phase:"active",title:clean(threat.summary||title(threat.category||"local threat"),100),detail:"Known local security incident. Resolution remains pending.",status:clean((threat.epistemicStatus||"known")+" · "+(threat.severity||"severity unknown"),70),badges:[String(threat.epistemicStatus||"KNOWN").toUpperCase(),String(threat.severity||"ACTIVE").toUpperCase()],sourceRef:threat.sourceRef||freeze({kind:"security-incident",id:id(threat.id)}),locationRef:threat.locationRef||null,worldAnchor,fantasyTimestamp:threat.updatedTimestamp||threat.createdTimestamp});
   return presentationModel({phase:"cleared",worldAnchor,detail:"No bounded active conflict evidence is available."});
 }
