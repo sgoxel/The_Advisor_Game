@@ -12,7 +12,7 @@ const ROLE_CATALOG=Object.freeze({
   "guild-member":Object.freeze({
     targetRoleId:"guild-member",title:"Guild Member",fromRoleIds:Object.freeze(["local-resident"]),
     employmentProfessions:Object.freeze(["smith","tavern-keeper","shopkeeper"]),
-    appointmentAction:"accept-appointment",institutionKind:"building",
+    appointmentAction:"accept-appointment",institutionKind:"workplace",
     appointingAuthorityRule:"authoritative employment employer at same qualifying workplace",
     requiredPaidWorkCount:1,
     socialThresholds:Object.freeze({minTrust:0.45,minRespect:0.45,maxSuspicion:0.50})
