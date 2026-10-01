@@ -9440,6 +9440,7 @@ window.PlanetStage=Object.freeze({
   workCycleEvidenceState,surfaceContributorEvidence,setWp020PresentationEvidenceMode,armWp020TransitionEvidenceFreeze,wp020TransitionEvidenceFreezeState,releaseWp020TransitionEvidenceFreeze,
   focusWayfindingSignForEvidence:(id)=>{const sign=(wayfindingSignposts.signs||[]).find(item=>String(item.id)===String(id));if(sign){setWorldTileFocus(sign.anchor.x,sign.anchor.y);setZoomScalar(1);}return snapshot();},
   selectWayfindingSignForEvidence:(id)=>{const key=inspectionRegistryKey("signpost",String(id)),record=inspectionPickables.get(key);if(record){inspection.selectedId=String(id);inspection.selectedType="signpost";renderInspectionTooltip(record);}return snapshot();},
+  selectBuildingForEvidence:(id)=>{const key=inspectionRegistryKey("building",String(id)),record=inspectionPickables.get(key);if(record){inspection.selectedId=String(id);inspection.selectedType="building";renderInspectionTooltip(record);}return snapshot();},
   destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
