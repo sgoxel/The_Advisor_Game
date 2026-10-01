@@ -1,4 +1,4 @@
-# WP-S013-005 exact-head gate v1
+# WP-S013-005 exact-head gate v2 — explicit product verification trigger
 name: WP-S013-005 Legitimate Appointment Resolution
 on:
   push:
