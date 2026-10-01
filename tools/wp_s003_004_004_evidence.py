@@ -60,6 +60,7 @@ def compact_state():
         billboardLayerActive:Boolean(np.billboardLayerActive),detailedBillboardCount:Number(np.detailedBillboardCount||0),residentBillboardCount:Number(np.residentBillboardCount||0),
         protagonistBillboardVisible:Boolean(np.protagonistBillboardVisible),groundRepresentationReady:Boolean(np.groundRepresentationReady),
         billboardTextureUrls:Array.isArray(np.billboardTextureUrls)?np.billboardTextureUrls:[],cameraPresentation:np.cameraPresentation||null,presentationScaleMultiplier:Number(np.presentationScaleMultiplier||1),activeResidentCount:Number(np.activeCount||0),
+        tangentPresentationPitchDegrees:Number(np.tangentPresentationPitchDegrees||0),
         cameraPoseInvariant:s.zoom?.pose?.cameraPoseInvariant!==false,cameraPitchDegrees:Number(pp.cameraPitchDegrees||0),zoomTransform:s.zoom?.pose?.zoomTransform||pp.zoomTransform||null,
         residentTargetCount:targets.length,residentTargets:targets.slice(0,8).map(t=>({id:String(t.id),bounds:t.bounds||null})),
         navigation:{longTask50Count:Number(s.navigationPerformance?.longTask50Count||0),longTaskWorstMs:Number(s.navigationPerformance?.longTaskWorstMs||0),framePhaseMaxMs:s.navigationPerformance?.framePhaseMaxMs||{}},
@@ -91,7 +92,7 @@ def add_overlay(label,state):
         '<div>'+String(s.scaleLabel||'')+' · visible LOD '+String(s.visibleLevel||'')+' · '+String(s.revealTier||'')+'</div>'+
         '<div>Detailed billboards '+s.detailedBillboardCount+' · visible residents '+s.activeResidentCount+' · 2× art '+s.presentationScaleMultiplier.toFixed(1)+'</div>'+
         '<div style="opacity:.70;margin-top:2px">'+(textures||'no detailed character textures')+'</div>'+
-        '<div style="opacity:.58">camera '+String(s.cameraPresentation||'')+' · pure zoom pose invariant '+String(s.cameraPoseInvariant)+'</div>';
+        '<div style="opacity:.58">camera '+String(s.cameraPresentation||'')+' · tangent '+String(s.tangentPresentationPitchDegrees||0)+'° · pure zoom pose invariant '+String(s.cameraPoseInvariant)+'</div>';
       document.body.appendChild(card);
     """,label,state)
 
@@ -115,6 +116,8 @@ def validate(label,index,state):
             raise RuntimeError(label+" did not use required character PNG assets: "+json.dumps(urls))
     if not state["cameraPoseInvariant"] or abs(float(state["cameraPitchDegrees"]))>0.001:
         raise RuntimeError(label+" violated README pure-zoom camera invariant: "+json.dumps(state))
+    if state["cameraPresentation"]!="orthographic-3q" or not 45<=float(state["tangentPresentationPitchDegrees"])<=75:
+        raise RuntimeError(label+" missing fixed orthographic 3/4 tangent presentation: "+json.dumps(state))
 
 records=[]
 try:
