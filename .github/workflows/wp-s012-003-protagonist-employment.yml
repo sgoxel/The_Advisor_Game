@@ -1,4 +1,5 @@
 name: WP-S012-003 Protagonist Employment
+# exact-head trigger after workflow registration
 
 on:
   push:
