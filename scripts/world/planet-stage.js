@@ -4857,16 +4857,26 @@ function createGroundCharacterBillboard(parent,name,url,x,ground,z,presentationS
   const material=groundCharacterMaterial(url);if(!material||!parent)return null;
   const texture=material.diffuseMap,tw=Math.max(1,Number(texture?.width||1)),th=Math.max(1,Number(texture?.height||1));
   const h=Math.max(.10,Number(heightMeters||1.75)*GROUND_CHARACTER_PRESENTATION_SCALE*Number(presentationScale||1)/Math.max(1e-9,Number(unit)||1));
-  const w=h*Math.max(.28,Math.min(1.2,tw/th));
-  const entity=addLocalPrimitive(parent,name,"character-billboard",material,x,ground+.035,z-h*.47,w,1,h);
-  entity.setLocalEulerAngles(90,0,0);
+  const w=h*Math.max(.28,Math.min(1.2,tw/th)),feetOffset=h*.47;
+  // The shared plane starts on XZ. Counter-rotate the fixed tangent pitch so
+  // the final world plane is camera-facing, then lift its center from the
+  // canonical ground point instead of shifting it backwards through terrain.
+  const entity=addLocalPrimitive(parent,name,"character-billboard",material,x,ground+.035+feetOffset,z,w,1,h);
+  entity.setLocalEulerAngles(90-LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,0,0);
   if(entity?.render){entity.render.castShadows=false;entity.render.receiveShadows=false;}
-  entity._advisorBillboard={url,width:w,height:h,feetOffset:h*.47};
+  entity._advisorBillboard={url,width:w,height:h,feetOffset};
   return entity;
 }
+function authoritativeProtagonistGroundPoint(){
+  const apiPoint=window.Protagonist?.getPosition?.()||null;
+  if(apiPoint)return {x:Number(apiPoint.x),y:Number(apiPoint.y),source:"Protagonist.getPosition"};
+  const stored=window.SeedSystem?.getCampaign?.()?.protagonist||null;
+  if(stored&&stored.x!==undefined&&stored.y!==undefined)return {x:Number(stored.x),y:Number(stored.y),source:"SeedSystem.campaign.protagonist"};
+  return null;
+}
 function protagonistGroundPoint(){
-  const authoritative=window.Protagonist?.getPosition?.()||null;
-  if(authoritative)return {x:Number(authoritative.x),y:Number(authoritative.y),source:"Protagonist.getPosition"};
+  const authoritative=authoritativeProtagonistGroundPoint();
+  if(authoritative)return authoritative;
   const village=window.StartingVillage?.plan?.(activeSeed)||null;
   const base=village?.center?{x:Number(village.center.x),y:Number(village.center.y),source:"StartingVillage.plan.center"}:null;
   if(!base)return null;
@@ -5541,7 +5551,7 @@ function applyCanonicalGroundBuildingCutaway(tier){
   }
   groundBuildingCutaway={...groundBuildingCutaway,active:false,buildingId:null,buildingLabel:null,protagonistTile:null,hiddenRoofCount:0,loweredShellCount:0,interiorFloorCount:0};
   if(String(tier||"")!=="full"||String(displayResource?.dims?.levelId||"")!=="ground")return groundBuildingCutaway;
-  const protagonist=window.Protagonist?.getPosition?.()||null;if(!protagonist)return groundBuildingCutaway;
+  const protagonist=authoritativeProtagonistGroundPoint();if(!protagonist)return groundBuildingCutaway;
   const entry=Array.from(localCanonicalBuildingRoofs.values()).find(item=>canonicalPointInsideBounds(protagonist,item?.record?.bounds))||null;
   if(!entry)return groundBuildingCutaway;
   if(entry.entity)entry.entity.enabled=false;

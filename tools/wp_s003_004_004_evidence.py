@@ -65,7 +65,7 @@ def compact_state():
         protagonistBillboardVisible:Boolean(np.protagonistBillboardVisible),groundRepresentationReady:Boolean(np.groundRepresentationReady),
         billboardTextureUrls:Array.isArray(np.billboardTextureUrls)?np.billboardTextureUrls:[],cameraPresentation:np.cameraPresentation||null,presentationScaleMultiplier:Number(np.presentationScaleMultiplier||1),activeResidentCount:Number(np.activeCount||0),
         tangentPresentationPitchDegrees:Number(np.tangentPresentationPitchDegrees||0),
-        protagonistPosition:window.Protagonist?.getPosition?.()||null,
+        protagonistPosition:window.Protagonist?.getPosition?.()||window.SeedSystem?.getCampaign?.()?.protagonist||null,
         groundBuildingCutaway:s.groundBuildingCutaway||null,
         cameraPoseInvariant:s.zoom?.pose?.cameraPoseInvariant!==false,cameraPitchDegrees:Number(pp.cameraPitchDegrees||0),zoomTransform:s.zoom?.pose?.zoomTransform||pp.zoomTransform||null,
         residentTargetCount:targets.length,residentTargets:targets.slice(0,8).map(t=>({id:String(t.id),bounds:t.bounds||null})),
@@ -112,7 +112,7 @@ def set_protagonist_position(point):
       if(!campaign||!p)return {ok:false,reason:'campaign-or-point-missing'};
       campaign.protagonist=window.WorldCoordinates.position(String(p.x),String(p.y));
       window.PlanetStage.setWorldTileFocus(String(p.x),String(p.y));
-      return {ok:true,position:window.Protagonist.getPosition()};
+      return {ok:true,position:{x:String(campaign.protagonist.x),y:String(campaign.protagonist.y)}};
     """,point)
     if not result or not result.get("ok"):
         raise RuntimeError("could not set evidence campaign protagonist position: "+json.dumps(result))
