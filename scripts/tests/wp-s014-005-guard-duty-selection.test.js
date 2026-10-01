@@ -125,5 +125,5 @@ assert(html.includes('scripts/world/protagonist-guard-duty-selection.js?v=protag
 
 const tele=Duty.telemetry();
 assert.equal(tele.fullWorldScan,false);assert.equal(tele.wholeSettlementScan,false);assert.equal(tele.wholeHistoryScan,false);assert.equal(tele.perFrameScan,false);
-assert(tele.rosterReads<=9&&tele.rosterReads>0);
+assert(tele.evaluations>0&&tele.evaluations<=16);\nassert.equal(tele.rosterReads,tele.evaluations);\nfor(const key of ['authorityReads','statusReads','serviceReads','employmentReads','healthReads','needsReads','goalReads'])assert.equal(tele[key],tele.evaluations,key+' must remain one bounded read per evaluation');
 console.log(JSON.stringify({pass:true,wp:'WP-S014-005',classification:'FUNCTIONAL',visual:'N/A',patrol:patrol.selectedDuty,escort:escort.selectedDuty,statusObligationRequired:missingStatusDuty.selectedDuty,noSelfScope:noSelfScope.selectedDuty,unsupportedProposal:unsupportedProposal.status,mismatchedProposal:mismatchedProposal.status,routeBlocked:blockedRoute.selectedDuty,offHours:offHours.selectedDuty,injured:injured.selectedDuty,urgentNeed:hungry.selectedDuty,forgedAuthority:noDuty.selectedDuty,runtimeBoundary:scheduled.boundary,npcDailyActivityUnchanged:true,telemetry:tele},null,2));
