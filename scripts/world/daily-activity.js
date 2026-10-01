@@ -474,6 +474,19 @@ async function buildCooperative(seedValue,options={}){
       if(typeof options.yield==="function")await options.yield();
       else await new Promise(resolve=>setTimeout(resolve,0));
     };
+    // The first resident used to pay the complete interior/building cache cost
+    // inside its "home" unit. Prime those exact deterministic caches through
+    // their cooperative builders first, forwarding every bounded subunit to the
+    // existing startup telemetry instead of hiding preparation inside R01.
+    if(typeof window.InteriorObjects?.buildCooperative==="function"){
+      await window.InteriorObjects.buildCooperative(seed,{
+        yield:pause,
+        onUnit:(elapsed,index,phase)=>{
+          try{options.onUnit?.(elapsed,index,"prep-"+String(phase||"interior-object"));}catch(_){}
+        }
+      });
+      await pause();
+    }
     for(let index=0;index<12;index++){
       let started=now();
       const identity=identityForIndex(seed,index);
