@@ -43,18 +43,8 @@ jobs:
         with: {python-version: "3.11"}
       - run: python -m pip install -r tools/requirements.txt
       - name: Capture fresh conflict/outcome/recovery evidence
-        shell: pwsh
         env: {TARGET: "http://127.0.0.1:8000/", OUT: "tools/screenshots/wp-s014-010"}
-        run: |
-          $log = Join-Path $env:RUNNER_TEMP "wp-s014-010-http.log"
-          $server = Start-Process -FilePath "python" -ArgumentList @("-m","http.server","8000","--bind","127.0.0.1") -RedirectStandardOutput $log -RedirectStandardError "$log.err" -WindowStyle Hidden -PassThru
-          try {
-            Start-Sleep -Seconds 2
-            python tools/wp_s014_010_evidence.py
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          } finally {
-            if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force }
-          }
+        run: python tools/wp_s014_010_evidence.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
