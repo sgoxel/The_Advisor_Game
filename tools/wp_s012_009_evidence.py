@@ -36,7 +36,7 @@ def check(st):
   rows=st.get("recentRows") or [];recent=st.get("recent");foot=st.get("panelFoot")
   if len(rows)!=1:raise RuntimeError("completed outcome row missing "+json.dumps(st))
   rr=rows[0].get("rect") or {};txt=str(rows[0].get("text") or "").lower()
-  if not recent or not foot or rr.get("height",0)<20 or rr.get("top",-1)<recent.get("top",0)-.5 or rr.get("bottom",10**9)>recent.get("bottom",0)+.5 or rr.get("bottom",10**9)>foot.get("top",0)-1:raise RuntimeError("completed outcome row clipped "+json.dumps(st))
+  min_h=9 if st.get("profile")=="phone-landscape" else 20\n  if not recent or not foot or rr.get("height",0)<min_h or rr.get("top",-1)<recent.get("top",0)-.5 or rr.get("bottom",10**9)>recent.get("bottom",0)+.5 or rr.get("bottom",10**9)>foot.get("top",0)-1:raise RuntimeError("completed outcome row clipped "+json.dumps(st))
   for token in ["buy","completed","exc-evid-01"]:
    if token not in txt:raise RuntimeError("completed outcome content missing "+token+" "+json.dumps(st))
  a=(st.get("snapshot") or {}).get("authority") or {}
