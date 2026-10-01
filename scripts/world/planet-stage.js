@@ -294,7 +294,7 @@ const STARTUP_SLICE_BUDGET_MS=6;
 const STARTUP_WATCHDOG_TICK_MS=1000;
 const STARTUP_WATCHDOG_SLOW_MS=8000;
 const STARTUP_WATCHDOG_STALL_MS=30000;
-let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{},watchdogChecks:0,watchdogSlowCount:0,watchdogStallCount:0,watchdogMaxNoProgressMs:0,surfaceProgressUpdates:0,surfaceSamplingWallMs:0,surfaceCanvasCommitMs:0,surfaceTextureUploadMs:0,surfaceProgressIntervalSamples:0,residentWarmupDeferred:true,residentWarmupStartedAtMs:null,residentWarmupCompletedAtMs:null,residentWarmupPlanCount:0,residentWarmupPlanCompleted:0,residentWarmupAdvanceCalls:0,residentWarmupYieldCount:0,residentWarmupMaxUnitMs:0,residentWarmupMaxUnitLabel:null,residentWarmupRosterUnitCount:0,residentWarmupRosterMaxUnitMs:0,residentWarmupRouteSliceCount:0,residentWarmupMaxRouteSliceMs:0,residentWarmupError:null,controlledWorkStartedAtMs:null,controlledWorkEndedAtMs:null,simulationAuthorityPreserved:true};
+let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{},watchdogChecks:0,watchdogSlowCount:0,watchdogStallCount:0,watchdogMaxNoProgressMs:0,surfaceProgressUpdates:0,surfaceSamplingWallMs:0,surfaceCanvasCommitMs:0,surfaceTextureUploadMs:0,surfaceProgressIntervalSamples:0,geographySignatureSliceCount:0,geographySignatureMaxSliceMs:0,residentWarmupDeferred:true,residentWarmupStartedAtMs:null,residentWarmupCompletedAtMs:null,residentWarmupPlanCount:0,residentWarmupPlanCompleted:0,residentWarmupAdvanceCalls:0,residentWarmupYieldCount:0,residentWarmupMaxUnitMs:0,residentWarmupMaxUnitLabel:null,residentWarmupRosterUnitCount:0,residentWarmupRosterMaxUnitMs:0,residentWarmupRouteSliceCount:0,residentWarmupMaxRouteSliceMs:0,residentWarmupError:null,controlledWorkStartedAtMs:null,controlledWorkEndedAtMs:null,simulationAuthorityPreserved:true};
 let longTaskObserver=null;
 let heartbeatTimer=null;
 let startupWatchdogTimer=null;
@@ -9331,7 +9331,19 @@ async function buildScene(){  const started=performance.now();
   mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],builtAtMs:0};
   mapBorderEndpointSnapCache.clear();
   atlasEntityCache.clear();atlasIdentityCache.clear();atlasStickyEntities.clear();atlasLabelPlacementCache.clear();
-  geographySignature=geography.signature();
+  if(typeof geography.signatureCooperative==="function"){
+    geographySignature=await geography.signatureCooperative({
+      budgetMs:STARTUP_SLICE_BUDGET_MS,
+      yield:yieldBrowser,
+      onSlice:elapsed=>{
+        startupScheduler.geographySignatureSliceCount++;
+        startupScheduler.geographySignatureMaxSliceMs=Math.max(
+          Number(startupScheduler.geographySignatureMaxSliceMs||0),
+          Number((Number(elapsed)||0).toFixed(3))
+        );
+      }
+    });
+  }else geographySignature=geography.signature();
   geographyVerification=null;
   if(EVIDENCE_FAST_START){
     // The production globe texture normally populates geographyStats while it
