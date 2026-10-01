@@ -1,0 +1,382 @@
+name: Visual Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: URL to capture
+        required: true
+        default: https://sgoxel.github.io/The_Advisor_Game/
+        type: string
+      profile:
+        description: Viewport profile
+        required: true
+        default: landscape
+        type: choice
+        options:
+          - landscape
+          - portrait
+      scenario:
+        description: Evidence scenario
+        required: true
+        default: static
+        type: choice
+        options:
+          - static
+          - panel-cycle
+          - responsive-cycle
+          - camera-pan
+          - camera-zoom
+          - camera-pan-zoom
+          - motion-sequence
+          - time-of-day
+          - village-reference
+          - region-transition
+          - save-load
+          - npc-conversation-state
+          - npc-edge-crossing
+          - terrain-natural
+          - main-road
+          - starting-village
+          - building-presentation
+          - building-occlusion
+          - wp-s001-001
+          - wp-s001-004
+          - wp-s003-005
+          - playcanvas-foundation
+          - playcanvas-scene
+          - wp-s003-003
+          - wp-s003-004-002
+          - wp-s003-004-003
+          - wp-s003-004-004
+          - wp-s003-004-005
+          - wp-s003-005-002
+          - wp-s003-005-003
+          - wp-s003-005-004
+          - wp-s003-005-006
+          - wp-s003-006-002
+          - wp-s003-006-001
+          - wp-s003-006
+          - wp-s003-006-003
+          - wp-s003-006-004
+          - wp-s003-006-005
+          - wp-s003-006-006
+          - wp-s003-006-007
+          - wp-s003-006-009
+          - wp-s003-006-011
+          - wp-s003-006-012
+          - wp-s003-006-013
+          - wp-s003-006-014
+          - wp-s003-007-001
+          - wp-s003-008-001
+          - wp-s003-008-002
+          - wp-s003-008-002-001
+          - wp-s003-008-003
+          - wp-s003-008-004
+          - wp-s003-008-005
+          - wp-s003-008-006
+          - wp-s003-011
+          - wp-s003-009-001
+          - wp-s003-009-002
+          - wp-s003-009-003
+          - wp-s003-009-004
+          - wp-s003-009-004-001
+          - wp-s003-009-004-002
+          - wp-s003-009-005
+          - wp-s003-009-006
+          - wp-s003-009-007
+          - wp-s003-009-008
+          - wp-s003-009-009
+          - wp-s003-009-010
+          - wp-s003-012
+          - wp-s003-009-011
+          - wp-s003-013
+          - wp-s003-014
+          - wp-s003-015
+          - wp-s003-016
+          - wp-s003-020
+          - wp-s003-021
+          - wp-s003-022
+          - wp-s003-010-001
+          - wp-s003-010-002
+          - wp-s003-010-003
+          - wp-s003-010-003-001
+          - wp-s003-010-003-003
+          - wp-s003-010-003-004
+          - wp-s003-010-003-012
+          - wp-s003-010-003-013
+          - wp-s003-010-003-014
+          - wp-s003-010-003-015
+          - wp-s003-010-003-016
+          - wp-s003-010-003-019
+          - wp-s003-010-003-005-002
+          - wp-s004-001
+          - wp-s004-002
+          - wp-s004-003
+          - wp-s004-004
+          - wp-s004-004-001
+          - wp-s004-005
+          - wp-s005-001
+          - wp-s005-002
+          - wp-s005-003
+          - wp-s005-004
+          - wp-s005-005
+          - wp-s006-001
+          - wp-s006-002
+          - wp-s006-003
+          - wp-s006-004
+          - wp-s006-005
+          - wp-s006-006
+          - wp-s007-001
+          - wp-s007-002
+          - wp-s007-003
+          - wp-s007-004
+          - wp-s007-005
+          - wp-s007-006
+          - wp-s007-007
+          - wp-s007-008
+          - playcanvas-root-cutover
+      shots:
+        description: Requested screenshot count; scenario minimums still apply
+        required: true
+        default: '1'
+        type: string
+      publish_to_main:
+        description: Commit tools/screenshots output to main
+        required: true
+        default: false
+        type: boolean
+  issue_comment:
+    types: [created]
+  push:
+    branches: [main]
+    paths:
+      - tools/screenshot_tool.py
+      - tools/requirements.txt
+      - .github/workflows/visual-evidence.yml
+      - index.html
+      - scripts/world/planet-stage.js
+      - scripts/world/planet-geography.js
+      - scripts/world/coordinate-fabric.js
+      - scripts/world/geography.js
+      - scripts/world/political-geography.js
+      - scripts/world/country-profile.js
+      - scripts/world/region-profile.js
+      - scripts/world/country-relations.js
+      - scripts/world/settlement-archetypes.js
+      - scripts/world/settlement-building-catalog.js
+      - scripts/world/world-state.js
+      - scripts/world/world-context.js
+      - scripts/world/simulation-tiers.js
+      - scripts/core/prng.js
+      - scripts/core/event-scheduler.js
+      - scripts/world/global-country-simulation.js
+      - scripts/world/regional-settlement-simulation.js
+      - scripts/world/npc-lifecycle.js
+      - scripts/world/lazy-catchup.js
+      - scripts/world/starting-village.js
+      - scripts/world/house-plans.js
+      - scripts/world/special-lots.js
+      - scripts/world/daily-activity.js
+      - scripts/world/resident-movement.js
+      - scripts/world/action-executor.js
+      - scripts/world/advisor-channel.js
+      - scripts/world/character-memory.js
+      - scripts/world/social-state.js
+      - scripts/world/dialogue-context.js
+      - scripts/world/advice-resolution.js
+      - styles/main.css
+      - scripts/world/terrain.js
+      - scripts/world/walkability.js
+      - scripts/world/route-planner.js
+      - scripts/world/building-interiors.js
+      - scripts/world/interior-objects.js
+      - scripts/data/world-standards.js
+      - scripts/data/terrain-palette.js
+      - scripts/data/tile-textures.js
+      - scripts/ui/app-ui.js
+      - scripts/ui/responsive-control-deck.js
+      - scripts/render/texture-assets.js
+      - scripts/render/game-renderer.js
+      - scripts/render/renderer-contract.js
+      - scripts/render/renderer-bootstrap.js
+      - scripts/render/runtime-render-quality.js
+      - scripts/render/playcanvas/**
+      - asset-standard-proof.html
+      - assets/models/wp-s003-005-002/**
+      - assets/environment/**
+      - scripts/main.js
+      - assets/tiles/vector/**
+      - styles/main.css
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  # Keep repeated evidence for the same Issue/scenario serialized, but never let
+  # another WP replace a pending run. Push self-tests are isolated by commit.
+  group: visual-evidence-${{ github.repository }}-${{ github.event_name }}-${{ github.event.issue.number || inputs.scenario || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'issue_comment' &&
+       !github.event.issue.pull_request &&
+       (github.event.comment.user.login == github.repository_owner ||
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR') &&
+       startsWith(github.event.comment.body, '/visual-evidence'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout event commit
+        uses: actions/checkout@v4
+        with:
+          # Issue-comment evidence must be reproducible even while other agents
+          # are pushing unrelated WPs to main. github.sha is the default-branch
+          # head captured when this event was created.
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install screenshot dependencies
+        run: python -m pip install -r tools/requirements.txt
+
+      - name: Verify browser
+        run: |
+          google-chrome --version || google-chrome-stable --version || chromium --version
+
+      - name: Configure Git identity
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Start local game server for repository evidence
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          python -m http.server 8000 --bind 127.0.0.1 >/tmp/advisor-http.log 2>&1 &
+          echo $! >/tmp/advisor-http.pid
+          sleep 1
+
+      - name: Resolve capture inputs
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TARGET: ${{ inputs.target }}
+          INPUT_PROFILE: ${{ inputs.profile }}
+          INPUT_SCENARIO: ${{ inputs.scenario }}
+          INPUT_SHOTS: ${{ inputs.shots }}
+          INPUT_PUBLISH: ${{ inputs.publish_to_main }}
+          COMMENT_BODY: ${{ github.event.comment.body || '' }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+        run: |
+          target='https://sgoxel.github.io/The_Advisor_Game/'
+          profile='landscape'
+          scenario='static'
+          shots='1'
+          publish='false'
+          issue=''
+
+          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
+            target="${INPUT_TARGET:-$target}"
+            profile="${INPUT_PROFILE:-$profile}"
+            scenario="${INPUT_SCENARIO:-$scenario}"
+            shots="${INPUT_SHOTS:-$shots}"
+            publish="${INPUT_PUBLISH:-false}"
+          elif [ "$EVENT_NAME" = 'push' ]; then
+            target='http://127.0.0.1:8000/'
+            scenario='wp-s003-010-003-005-002'
+          elif [ "$EVENT_NAME" = 'issue_comment' ]; then
+            requested="$(printf '%s' "$COMMENT_BODY" | awk '{print $2}')"
+            requested_profile="$(printf '%s' "$COMMENT_BODY" | awk '{print $3}')"
+            [ -n "$requested" ] && scenario="$requested"
+            [ -n "$requested_profile" ] && profile="$requested_profile"
+            if [ "$scenario" = 'playcanvas-root-cutover' ]; then
+              target='https://sgoxel.github.io/The_Advisor_Game/'
+            else
+              target='http://127.0.0.1:8000/'
+            fi
+            issue="$ISSUE_NUMBER"
+          fi
+
+          case "$scenario" in
+            static|panel-cycle|camera-pan|camera-zoom|camera-pan-zoom|responsive-cycle|motion-sequence|time-of-day|village-reference|region-transition|save-load|npc-conversation-state|npc-edge-crossing|terrain-natural|main-road|starting-village|building-presentation|building-occlusion|wp-s001-001|wp-s001-004|wp-s002-003-001|wp-s002-004-001|wp-s003-003-001|wp-s003-005|playcanvas-foundation|playcanvas-scene|wp-s003-003|wp-s003-004-002|wp-s003-004-003|wp-s003-004-004|wp-s003-004-005|wp-s003-005-002|wp-s003-005-003|wp-s003-005-004|wp-s003-005-006|wp-s003-006-002|wp-s003-006-001|wp-s003-006|wp-s003-006-003|wp-s003-006-004|wp-s003-006-005|wp-s003-006-006|wp-s003-006-007|wp-s003-006-008|wp-s003-006-009|wp-s003-006-011|wp-s003-006-012|wp-s003-006-013|wp-s003-006-014|wp-s003-007-001|wp-s003-008-001|wp-s003-008-002|wp-s003-008-002-001|wp-s003-008-003|wp-s003-008-004|wp-s003-008-005|wp-s003-008-006|wp-s003-011|wp-s003-009-001|wp-s003-009-002|wp-s003-009-003|wp-s003-009-004|wp-s003-009-004-001|wp-s003-009-004-002|wp-s003-009-005|wp-s003-009-006|wp-s003-009-007|wp-s003-009-008|wp-s003-009-009|wp-s003-009-010|wp-s003-012|wp-s003-009-011|wp-s003-013|wp-s003-014|wp-s003-015|wp-s003-016|wp-s003-020|wp-s003-021|wp-s003-022|wp-s003-010-001|wp-s003-010-002|wp-s003-010-003|wp-s003-010-003-001|wp-s003-010-003-002|wp-s003-010-003-003|wp-s003-010-003-004|wp-s003-010-003-005|wp-s003-010-003-005-001|wp-s003-010-003-005-002|wp-s003-010-003-006|wp-s003-010-003-007|wp-s003-010-003-008|wp-s003-010-003-009|wp-s003-010-003-010|wp-s003-010-003-012|wp-s003-010-003-013|wp-s003-010-003-014|wp-s003-010-003-015|wp-s003-010-003-016|wp-s003-010-003-019|wp-s003-010-004|wp-s003-010-005|wp-s004-001|wp-s004-002|wp-s004-003|wp-s004-004|wp-s004-004-001|wp-s004-005|wp-s005-001|wp-s005-002|wp-s005-003|wp-s005-004|wp-s005-005|wp-s006-001|wp-s006-002|wp-s006-003|wp-s006-004|wp-s006-005|wp-s006-006|wp-s007-001|wp-s007-002|wp-s007-003|wp-s007-004|wp-s007-005|wp-s007-006|wp-s007-007|wp-s007-008|playcanvas-root-cutover) ;;
+            *) echo "Unsupported scenario: $scenario" >&2; exit 2 ;;
+          esac
+          case "$profile" in landscape|portrait) ;; *) echo "Unsupported profile: $profile" >&2; exit 2 ;; esac
+          case "$shots" in ''|*[!0-9]*) echo "shots must be an integer" >&2; exit 2 ;; esac
+
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "profile=$profile" >> "$GITHUB_OUTPUT"
+          echo "scenario=$scenario" >> "$GITHUB_OUTPUT"
+          echo "shots=$shots" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "issue=$issue" >> "$GITHUB_OUTPUT"
+
+      - name: Capture screenshots
+        shell: bash
+        env:
+          TARGET: ${{ steps.resolve.outputs.target }}
+          PROFILE: ${{ steps.resolve.outputs.profile }}
+          SCENARIO: ${{ steps.resolve.outputs.scenario }}
+          SHOTS: ${{ steps.resolve.outputs.shots }}
+          PUBLISH: ${{ steps.resolve.outputs.publish }}
+          ISSUE: ${{ steps.resolve.outputs.issue }}
+        run: |
+          args=(
+            "$TARGET"
+            "visual-${SCENARIO}"
+            --profile "$PROFILE"
+            --scenario "$SCENARIO"
+            --shots "$SHOTS"
+            --timestamp-names
+            --wait-min 1
+            --wait-max 1
+            --evidence-json "evidence-${SCENARIO}-${GITHUB_RUN_ID}.json"
+          )
+          if [ -n "$ISSUE" ]; then args+=(--issue "$ISSUE"); fi
+          if [ "$PUBLISH" != 'true' ]; then args+=(--no-publish); fi
+          if [ "$SCENARIO" = 'wp-s003-004-004' ]; then
+            TARGET="$TARGET" OUT="tools/screenshots/wp-s003-004-004" python tools/wp_s003_004_004_evidence.py
+          else
+            python tools/screenshot_tool.py "${args[@]}"
+          fi
+
+      - name: Upload visual evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-evidence-${{ steps.resolve.outputs.scenario }}-${{ github.run_id }}
+          path: tools/screenshots/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Comment run link on Issue
+        if: github.event_name == 'issue_comment' && always()
+        uses: actions/github-script@v7
+        env:
+          SCENARIO: ${{ steps.resolve.outputs.scenario }}
+          RUN_STATUS: ${{ job.status }}
+        with:
+          script: |
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const ok = process.env.RUN_STATUS === 'success';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: ok
+                ? `Visual evidence completed for **${process.env.SCENARIO}**. [Open workflow run and artifact](${url}).`
+                : `Visual evidence **FAILED** for **${process.env.SCENARIO || 'unresolved'}**. [Open workflow run and logs](${url}).`
+            });

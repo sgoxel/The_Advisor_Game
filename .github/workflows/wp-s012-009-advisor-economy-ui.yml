@@ -1,0 +1,121 @@
+name: WP-S012-009 Advisor Economy Readout
+on:
+  push:
+    branches: [main]
+    paths:
+      - "index.html"
+      - "styles/main.css"
+      - "scripts/ui/advisor-economy-ui.js"
+      - "scripts/ui/advisor-toolbelt-ui.js"
+      - "scripts/ui/advisor-conversation-ui.js"
+      - "scripts/world/protagonist-wealth.js"
+      - "scripts/world/protagonist-employment.js"
+      - "scripts/world/protagonist-housing.js"
+      - "scripts/world/local-market.js"
+      - "scripts/world/economic-transaction.js"
+      - "scripts/tests/wp-s012-009-advisor-economy-ui.test.js"
+      - "tools/wp_s012_009_evidence.py"
+      - "docs/ROADMAP.md"
+      - "docs/changelog.txt"
+      - "docs/suggest_log.txt"
+      - ".github/workflows/wp-s012-009-advisor-economy-ui.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: wp-s012-009-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ github.sha }}"}
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - name: Syntax
+        run: |
+          node --check scripts/ui/advisor-economy-ui.js
+          node --check scripts/tests/wp-s012-009-advisor-economy-ui.test.js
+          python -m py_compile tools/wp_s012_009_evidence.py
+      - name: Economy and UI authority regressions
+        run: |
+          node scripts/tests/wp-s012-001-protagonist-wealth.test.js
+          node scripts/tests/wp-s012-002-local-market.test.js
+          node scripts/tests/wp-s012-003-protagonist-employment.test.js
+          node scripts/tests/wp-s012-004-economic-transaction.test.js
+          node scripts/tests/wp-s012-005-protagonist-housing.test.js
+          node scripts/tests/wp-s012-008-local-market-consequences.test.js
+          node scripts/tests/wp-s011-009-advisor-toolbelt-ui.test.js
+          node scripts/tests/wp-s008-007-advisor-chat-ui.test.js
+          node scripts/tests/wp-s012-009-advisor-economy-ui.test.js
+  visual:
+    needs: functional
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ github.sha }}"}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: python -m pip install -r tools/requirements.txt
+      - run: |
+          python -m http.server 8000 --bind 127.0.0.1 >/tmp/wp-s012-009-http.log 2>&1 &
+          sleep 1
+      - name: Capture fresh responsive economy evidence
+        env:
+          TARGET: http://127.0.0.1:8000/
+          OUT: tools/screenshots/wp-s012-009
+        run: python tools/wp_s012_009_evidence.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wp-s012-009-advisor-economy-${{ github.sha }}
+          path: tools/screenshots/wp-s012-009/
+          if-no-files-found: error
+          retention-days: 14
+  deploy_verify:
+    needs: [functional,visual]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ github.sha }}"}
+      - name: Verify exact product is live on GitHub Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://sgoxel.github.io/The_Advisor_Game"
+          MODE="accepted"
+          if grep -q 'WP-S012-009.*COMPLETED' docs/ROADMAP.md; then MODE="completed"; fi
+          for attempt in $(seq 1 72); do
+            curl -fsSL --max-time 20 "$BASE/scripts/ui/advisor-economy-ui.js?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-ui.js || true
+            curl -fsSL --max-time 20 "$BASE/index.html?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-index.html || true
+            curl -fsSL --max-time 20 "$BASE/styles/main.css?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-main.css || true
+            curl -fsSL --max-time 20 "$BASE/docs/ROADMAP.md?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-roadmap.md || true
+            product_ok=0;state_ok=0
+            grep -q 'VERSION="advisor-economy-ui-v1"' /tmp/live-ui.js 2>/dev/null &&
+              grep -q 'scripts/ui/advisor-economy-ui.js?v=advisor-economy-ui-v1' /tmp/live-index.html 2>/dev/null &&
+              grep -q 'WP-S012-009 — Advisor economy, work + purchase readout' /tmp/live-main.css 2>/dev/null && product_ok=1 || true
+            if [ "$MODE" = "completed" ]; then grep -q 'WP-S012-009.*COMPLETED' /tmp/live-roadmap.md 2>/dev/null && state_ok=1 || true; else state_ok=1; fi
+            if [ "$product_ok" -eq 1 ] && [ "$state_ok" -eq 1 ]; then echo "GitHub Pages exposes WP-S012-009 mode=$MODE for $GITHUB_SHA";exit 0; fi
+            sleep 5
+          done
+          exit 1
+  report:
+    if: always()
+    needs: [functional,visual,deploy_verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const ok=${{ needs.functional.result == 'success' && needs.visual.result == 'success' && needs.deploy_verify.result == 'success' }};
+            const body=['AGENT #6 WP-S012-009 exact-head workflow: **'+(ok?'SUCCESS':'FAILURE')+'**','Commit: '+context.sha,'Run: https://github.com/'+context.repo.owner+'/'+context.repo.repo+'/actions/runs/'+context.runId,ok?'Functional authority regressions, fresh responsive screenshots, and GitHub Pages verification passed. Visual inspection is still required before acceptance.':'One or more functional, visual-capture, or Pages verification gates failed; WP remains incomplete.'].join('\n');
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:251,body});
+
+# WP-S012-009 exact-head verification trigger
+
+# WP-S012-009 visual attempt 3 exact-head trigger
