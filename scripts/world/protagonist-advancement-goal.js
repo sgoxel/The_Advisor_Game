@@ -9,20 +9,14 @@ if(root)root.ProtagonistAdvancementGoal=api;
 const VERSION="protagonist-advancement-goal-v1";
 const MAX_OPPORTUNITIES=12;
 const MAX_GOALS=8;
+const MAX_OBLIGATIONS=8;
+const MAX_SCOPES=16;
 const MAX_REASONS=12;
-const MAX_RELATIONSHIPS=8;
+const MAX_PROPOSAL_PARAMETERS=16;
 const MAX_RESULT_BYTES=49152;
 const DECISIONS=Object.freeze(["pursue","defer","reject","maintain-current-role"]);
-const KIND_WEIGHTS=Object.freeze({
-  "promotion":Object.freeze({base:62,ambition:16,resolve:10,curiosity:3,caution:-10,trust:10,respect:10,loyalty:4,suspicion:-10,fear:-8,resentment:-6,goal:12,authority:10,standing:12,economy:6,health:-16,needs:-14,obligations:-10,employment:-4}),
-  "appointment":Object.freeze({base:64,ambition:14,resolve:12,curiosity:4,caution:-10,trust:12,respect:12,loyalty:4,suspicion:-10,fear:-8,resentment:-6,goal:12,authority:14,standing:10,economy:5,health:-14,needs:-12,obligations:-10,employment:-4}),
-  "patronage":Object.freeze({base:58,ambition:10,resolve:6,curiosity:4,caution:-6,trust:16,respect:14,loyalty:10,suspicion:-10,fear:-6,resentment:-6,goal:14,authority:4,standing:6,economy:4,health:-8,needs:-8,obligations:-6,employment:-2}),
-  "training":Object.freeze({base:52,ambition:8,resolve:8,curiosity:14,caution:-8,trust:8,respect:8,loyalty:2,suspicion:-6,fear:-4,resentment:-4,goal:12,authority:4,standing:4,economy:3,health:-4,needs:-6,obligations:-4,employment:-2}),
-  "service":Object.freeze({base:48,ambition:6,resolve:8,curiosity:2,caution:-4,trust:8,respect:8,loyalty:14,suspicion:-6,fear:-4,resentment:-6,goal:10,authority:8,standing:6,economy:3,health:-6,needs:-8,obligations:-12,employment:-6}),
-  "career":Object.freeze({base:56,ambition:12,resolve:8,curiosity:8,caution:-8,trust:8,respect:8,loyalty:4,suspicion:-8,fear:-6,resentment:-4,goal:14,authority:8,standing:8,economy:10,health:-8,needs:-10,obligations:-8,employment:-8}),
-  "other":Object.freeze({base:46,ambition:6,resolve:6,curiosity:4,caution:-6,trust:6,respect:6,loyalty:4,suspicion:-6,fear:-4,resentment:-4,goal:8,authority:4,standing:4,economy:2,health:-6,needs:-6,obligations:-6,employment:-2})
-});
-const telemetryState={evaluations:0,liveBuilds:0,pursues:0,defers:0,rejects:0,maintains:0,invalid:0,socialReads:0,opportunityReads:0};
+const ALLOWED_KINDS=Object.freeze(["promotion","appointment","patronage","training","service","career","other"]);
+const telemetryState={evaluations:0,liveBuilds:0,socialReads:0,profileReads:0,needsReads:0,healthReads:0,goalReads:0,authorityReads:0,employmentReads:0,wealthReads:0,runtimeSchedules:0,invalid:0,pursues:0,defers:0,rejects:0,maintains:0};
 
 function freeze(value){if(value==null||typeof value!=="object"||Object.isFrozen(value))return value;for(const item of Object.values(value))freeze(item);return Object.freeze(value)}
 function clone(value){if(value==null||typeof value!=="object")return value;if(Array.isArray(value))return value.map(clone);const out={};for(const [key,item] of Object.entries(value))out[key]=clone(item);return out}
@@ -31,414 +25,334 @@ function hashText(value){let h=2166136261>>>0;for(const ch of String(value==null
 function clean(value,max=160){return String(value==null?"":value).trim().replace(/\s+/g," ").slice(0,max)}
 function cleanId(value,max=160){return clean(value,max).replace(/[^A-Za-z0-9:_|.@/\-]/g,"-")}
 function plain(value){return Boolean(value)&&typeof value==="object"&&!Array.isArray(value)}
+function finite(value){const n=Number(value);return Number.isFinite(n)?n:null}
+function clamp01(value,fallback=0){const n=finite(value);if(n==null)return fallback;if(n>=0&&n<=1)return n;if(n>=0&&n<=100)return n/100;if(n>=0&&n<=100000)return n/100000;return Math.max(0,Math.min(1,n))}
+function clamp100(value,fallback=50){const n=finite(value);return n==null?fallback:Math.max(0,Math.min(100,n))}
 function validWhen(value){return /^\d{4,}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(String(value||""))}
 function parts(value){const m=String(value||"").match(/^(\d{4,})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);if(!m)return null;const p={y:+m[1],mo:+m[2],d:+m[3],h:+m[4],mi:+m[5],s:+m[6]};if(p.mo<1||p.mo>12||p.d<1||p.d>31||p.h>23||p.mi>59||p.s>59)return null;return p}
 function daysFromCivil(y,m,d){y-=m<=2?1:0;const era=Math.floor(y/400),yoe=y-era*400,mp=m+(m>2?-3:9),doy=Math.floor((153*mp+2)/5)+d-1,doe=yoe*365+Math.floor(yoe/4)-Math.floor(yoe/100)+doy;return era*146097+doe}
 function secondIndex(value){const p=parts(value);return p?daysFromCivil(p.y,p.mo,p.d)*86400+p.h*3600+p.mi*60+p.s:null}
-function clamp01(value,fallback=0){const n=Number(value);return Number.isFinite(n)?Math.max(0,Math.min(1,n)):fallback}
-function clamp100(value,fallback=50){const n=Number(value);return Number.isFinite(n)?Math.max(0,Math.min(100,Math.round(n))):fallback}
-function score01(value,max=100){const n=Number(value);if(!Number.isFinite(n))return null;if(n>=0&&n<=1)return n;return Math.max(0,Math.min(1,n/max))}
-function average(values){const list=(Array.isArray(values)?values:[]).filter(v=>Number.isFinite(Number(v)));if(!list.length)return null;return list.reduce((sum,v)=>sum+Number(v),0)/list.length}
-function root(){return typeof window!=="undefined"?window:globalThis}
-function requiredSeed(value){const seed=clean(value,160);if(!seed)throw new Error("Campaign SEED is required.");return seed}
-function identityKey(value){return cleanId(value||"protagonist",96)||"protagonist"}
-function protagonistId(seed,key){try{return root().ProtagonistProfile?.derive?.(seed,key)?.protagonistId||("PROTAGONIST-"+hashText(seed+"|"+key+"|identity-v1"))}catch(_){return"PROTAGONIST-"+hashText(seed+"|"+key+"|identity-v1")}}
-function currentTimestamp(){return root().GameTime?.getTimestampKey?.()||null}
-function safeList(fn){try{return Array.isArray(fn?.())?fn():null}catch(_){return null}}
-function safeCall(fn,...args){try{return fn?.(...args)||null}catch(_){return null}}
+function uniqueIds(values,max=MAX_REASONS){const out=[];for(const raw of Array.isArray(values)?values:[]){const id=cleanId(raw,160);if(id&&!out.includes(id)){out.push(id);if(out.length>=max)break}}return freeze(out)}
+function invalid(seed,when,reason,extra){
+  telemetryState.invalid++;
+  return freeze({version:VERSION,ok:false,seed:seed||null,when:when||null,status:"invalid",disposition:"invalid",reason,decisionId:null,selectedOpportunity:null,selectedProposal:null,evaluated:freeze([]),bounded:true,requiresRuntime:false,...(extra||{}),authority:authorityMarkers()});
+}
+function authorityMarkers(){return freeze({determinism:"Campaign SEED + Fantasy Game Time + bounded Stage 1-12 authority context + supplied grounded opportunities",proposalOnly:true,selectionEventDriven:true,directActionExecution:false,directWorldMutation:false,directRankMutation:false,directSkillMutation:false,directRelationshipMutation:false,directWealthMutation:false,directEmploymentMutation:false,appointmentAuthority:false,opportunityCreation:false,simulationValidationBypass:false,fullWorldScan:false,fullSettlementScan:false,wholeHistoryScan:false,perFrameScan:false,providerAuthority:false,presentationAuthority:false})}
+
 function normalizeTraits(value){
-  const raw=plain(value)&&plain(value.traits)?value.traits:plain(value)&&plain(value.personality?.traits)?value.personality.traits:plain(value)?value:{};
-  const trait=v=>score01(raw[v],100);
-  return freeze({
-    resolve:trait("resolve")??0.5,
-    empathy:trait("empathy")??0.5,
-    curiosity:trait("curiosity")??0.5,
-    caution:trait("caution")??0.5,
-    ambition:trait("ambition")??0.5,
-    sociability:trait("sociability")??0.5
-  });
+  const raw=plain(value?.traits)?value.traits:plain(value?.personality?.traits)?value.personality.traits:plain(value)?value:{};
+  return freeze({resolve:clamp01(raw.resolve,.5),curiosity:clamp01(raw.curiosity,.5),caution:clamp01(raw.caution,.5),ambition:clamp01(raw.ambition,.5),empathy:clamp01(raw.empathy,.5),sociability:clamp01(raw.sociability,.5)});
 }
-function normalizeProfile(value){
-  if(!plain(value))return freeze({traits:freeze({resolve:0.5,empathy:0.5,curiosity:0.5,caution:0.5,ambition:0.5,sociability:0.5}),fixedBaseline:false});
-  return freeze({traits:normalizeTraits(value),fixedBaseline:value.fixedBaseline===true});
-}
-function normalizeNeedPressure(value){
-  const raw=plain(value)&&plain(value.pressureMilli)?value.pressureMilli:plain(value)&&plain(value.pressures)?value.pressures:plain(value)?value:{};
-  const read=key=>score01(raw[key],100000)??score01(raw[key],100);
-  return freeze({hunger:read("hunger")??0,fatigue:read("fatigue")??0,safety:read("safety")??0,social:read("social")??0});
+function normalizeNeeds(value){
+  const raw=plain(value?.pressureMilli)?value.pressureMilli:plain(value?.pressures)?value.pressures:plain(value)?value:{};
+  return freeze({hunger:clamp01(raw.hunger,0),fatigue:clamp01(raw.fatigue,0),safety:clamp01(raw.safety,0),social:clamp01(raw.social,0)});
 }
 function normalizeHealth(value){
-  if(!plain(value))return freeze({condition:0.5,fatigue:0.25});
-  const condition=score01(value.conditionMilli!=null?value.conditionMilli:value.condition,100000)??score01(value.conditionScore,10)??0.5;
-  const fatigue=score01(value.fatigueMilli!=null?value.fatigueMilli:value.fatigue,100000)??0.25;
-  return freeze({condition,fatigue});
+  const raw=plain(value)?value:{};
+  const condition=raw.conditionMilli!=null?clamp01(raw.conditionMilli,.75):raw.condition!=null?clamp01(raw.condition,.75):raw.conditionScore!=null?Math.max(0,Math.min(1,Number(raw.conditionScore)/10)):.75;
+  const fatigue=raw.fatigueMilli!=null?clamp01(raw.fatigueMilli,.2):clamp01(raw.fatigue,.2);
+  return freeze({condition,fatigue,mobilityBlocked:Boolean(raw.mobilityBlocked||raw.incapacitated)});
 }
 function normalizeGoals(value){
-  const rows=Array.isArray(value?.records)?value.records:Array.isArray(value?.goals)?value.goals:Array.isArray(value)?value:[],out=[];
-  for(const row of rows.slice(0,MAX_GOALS)){
-    const id=cleanId(row?.id||row?.goalId||"",160);if(!id)continue;
-    const priority=clamp100(row?.priority,50);
-    out.push(freeze({id,priority,topic:clean(row?.topic||row?.title||row?.goal||"",120),status:cleanId(row?.status||"active",40).toLowerCase()}));
+  const rows=Array.isArray(value?.records)?value.records:Array.isArray(value?.goals)?value.goals:Array.isArray(value)?value:[];
+  const out=[];
+  for(const row of rows){
+    const id=cleanId(row?.id||row?.goalId,160);if(!id)continue;
+    const status=cleanId(row?.status||"active",40).toLowerCase();
+    if(status!=="active")continue;
+    out.push(freeze({id,priority:clamp100(row?.priority,50),topic:clean(row?.topic||row?.title||row?.goal,120)}));
   }
-  return freeze(out.filter(row=>row.status==="active"));
+  return freeze(out);
 }
 function normalizeAuthority(value){
-  if(!plain(value))return freeze({available:false,roleId:null,rankTier:null,rankLabel:null,scopes:freeze([])});
+  if(!plain(value))return freeze({available:false,roleId:null,rankTier:0,scopes:freeze([])});
   const current=plain(value.currentRole)?value.currentRole:value;
-  const scopes=Array.isArray(current.scopes)?current.scopes.slice(0,16).map(x=>cleanId(x,120)).filter(Boolean):[];
-  const rankTier=current.rankTier!=null?Number(current.rankTier):value.rankTier!=null?Number(value.rankTier):null;
-  return freeze({available:true,roleId:cleanId(current.roleId||value.roleId||"",80)||null,rankTier:Number.isFinite(rankTier)?rankTier:null,rankLabel:cleanId(current.rankLabel||value.rankLabel||"",80)||null,scopes:freeze(scopes)});
-}
-function normalizeStanding(value){
-  if(!plain(value))return freeze({available:false,score:null,rankTier:null,domains:freeze({})});
-  const domains=plain(value.domains)?value.domains:plain(value.foundation)?value.foundation:{},scores=[];
-  for(const v of Object.values(domains))if(Number.isFinite(Number(v?.score)))scores.push(Number(v.score));else if(Number.isFinite(Number(v)))scores.push(Number(v));
-  const score=scores.length?average(scores):null;
-  const rankTier=Number.isFinite(Number(value.rankTier))?Number(value.rankTier):null;
-  return freeze({available:true,score:score==null?null:Number(score.toFixed(4)),rankTier,domains:freeze(clone(domains))});
+  const scopes=uniqueIds(Array.isArray(current.scopes)?current.scopes:Array.isArray(value.scopes)?value.scopes:[],MAX_SCOPES);
+  const rank=finite(current.rankTier!=null?current.rankTier:value.rankTier);
+  return freeze({available:true,roleId:cleanId(current.roleId||value.roleId,80)||null,rankTier:rank==null?0:rank,scopes});
 }
 function normalizeEmployment(value){
   if(!plain(value))return freeze({available:false,status:"none",contract:null});
-  const contract=plain(value.contract)?value.contract:null;
-  return freeze({available:true,status:cleanId(value.status||"none",24).toLowerCase()||"none",contract:contract?freeze(clone(contract)):null});
+  const contract=plain(value.contract)?clone(value.contract):null;
+  return freeze({available:true,status:cleanId(value.status||contract?.status||"none",32).toLowerCase()||"none",contract:contract?freeze(contract):null});
 }
 function normalizeWealth(value){
   if(!plain(value))return freeze({available:false,balanceCopper:null,reserveCopper:null});
-  const balance=Number.isFinite(Number(value.balanceCopper))?Math.max(0,Math.floor(Number(value.balanceCopper))):Number.isFinite(Number(value.balance))?Math.max(0,Math.floor(Number(value.balance))):null;
-  const reserve=Number.isFinite(Number(value.reserveCopper))?Math.max(0,Math.floor(Number(value.reserveCopper))):null;
-  return freeze({available:true,balanceCopper:balance,reserveCopper:reserve});
+  const balance=finite(value.balanceCopper!=null?value.balanceCopper:value.balance);
+  const reserve=finite(value.reserveCopper);
+  return freeze({available:true,balanceCopper:balance==null?null:Math.max(0,Math.floor(balance)),reserveCopper:reserve==null?null:Math.max(0,Math.floor(reserve))});
 }
 function normalizeObligations(value){
-  const rows=Array.isArray(value?.obligations)?value.obligations:Array.isArray(value)?value:[],out=[];
-  for(const row of rows.slice(0,8)){
-    const kind=cleanId(row?.kind||row?.type||"",80).toLowerCase();if(!kind)continue;
-    const state=cleanId(row?.state||"standing",32).toLowerCase()||"standing";
-    out.push(freeze({kind,state,priority:cleanId(row?.priority||"",24).toLowerCase()||null,dueAt:clean(row?.dueAt||row?.nextDueAt||"",32)||null,obligationId:cleanId(row?.obligationId||row?.id||"",160)||null}));
+  const rows=Array.isArray(value?.obligations)?value.obligations:Array.isArray(value)?value:[];
+  const out=[];
+  for(const row of rows){
+    const id=cleanId(row?.obligationId||row?.id,160);if(!id)continue;
+    out.push(freeze({id,state:cleanId(row?.state||"active",40).toLowerCase()||"active",priority:clamp100(row?.priority,50),kind:cleanId(row?.kind||row?.type||"commitment",80).toLowerCase()}));
   }
-  const dueCount=out.filter(row=>["due","overdue","payment-pending"].includes(row.state)).length;
-  return freeze({available:true,rows:freeze(out),dueCount});
+  return freeze(out);
 }
 function normalizeRelationship(value){
-  const raw=plain(value?.values)?value.values:plain(value)&&plain(value.relationship)?value.relationship.values:plain(value)?value:{};
-  return freeze({
-    trust:clamp01(raw.trust,0.5),
-    respect:clamp01(raw.respect,0.5),
-    suspicion:clamp01(raw.suspicion,0.25),
-    fear:clamp01(raw.fear,0.1),
-    loyalty:clamp01(raw.loyalty,0.35),
-    resentment:clamp01(raw.resentment,0.1)
-  });
+  const raw=plain(value?.values)?value.values:plain(value?.relationship?.values)?value.relationship.values:plain(value?.relationship)?value.relationship:plain(value)?value:{};
+  return freeze({trust:clamp01(raw.trust,.5),respect:clamp01(raw.respect,.5),suspicion:clamp01(raw.suspicion,.2),fear:clamp01(raw.fear,.1),loyalty:clamp01(raw.loyalty,.35),resentment:clamp01(raw.resentment,.1)});
 }
-function normalizePrerequisites(value){
-  const raw=plain(value)?value:{},blockers=Array.isArray(raw.blockers)?raw.blockers:[],list=[];
-  for(const blocker of blockers.slice(0,MAX_REASONS)){const id=cleanId(blocker,96);if(id&&!list.includes(id))list.push(id)}
-  return freeze({satisfied:raw.satisfied!==false,blockers:freeze(list),notes:clean(raw.notes||"",160)||null});
+function normalizeSourceRef(raw){
+  const ref=plain(raw?.sourceRef)?raw.sourceRef:plain(raw?.sourceNpcRef)?raw.sourceNpcRef:plain(raw?.groundingRef)?raw.groundingRef:null;
+  const id=cleanId(ref?.id||ref?.refId||raw?.sourceNpcId||raw?.sponsorId||raw?.counterpartId,160);
+  if(!id)return null;
+  return freeze({kind:cleanId(ref?.kind||"resident",60).toLowerCase()||"resident",id});
+}
+function normalizeProposal(value){
+  if(!plain(value))return {ok:false,reason:"proposal-required",proposal:null};
+  const commandId=cleanId(value.commandId,160);if(!commandId)return {ok:false,reason:"proposal-command-required",proposal:null};
+  const rawParams=plain(value.validatedParameters)?value.validatedParameters:plain(value.parameters)?value.parameters:{};
+  const keys=Object.keys(rawParams);
+  if(keys.length>MAX_PROPOSAL_PARAMETERS)return {ok:false,reason:"proposal-parameter-limit-exceeded",proposal:null};
+  const params={};
+  for(const key of keys.sort()){
+    const cleanKey=cleanId(key,80);if(!cleanKey)continue;
+    const item=rawParams[key];
+    if(item==null||typeof item==="string"||typeof item==="number"||typeof item==="boolean")params[cleanKey]=typeof item==="string"?clean(item,160):item;
+    else return {ok:false,reason:"proposal-parameter-invalid",proposal:null};
+  }
+  const proposal=freeze({proposalId:cleanId(value.proposalId,160)||null,commandId,parameters:freeze(params),source:cleanId(value.source||"protagonist-advancement-goal",100)||"protagonist-advancement-goal"});
+  return {ok:true,reason:"ok",proposal};
 }
 function normalizeOpportunity(value,index){
-  const raw=plain(value)?value:{},id=cleanId(raw.opportunityId||raw.id||raw.candidateId||("ADV-"+index),160),kindRaw=cleanId(raw.kind||raw.type||raw.intent||"",48).toLowerCase();
-  const kind=KIND_WEIGHTS[kindRaw]?kindRaw:(raw.targetRoleId||raw.targetRankTier!=null?"promotion":raw.targetProfessionId?"career":raw.sourceNpcId||raw.sourceNpcRef?"patronage":"other");
-  const sourceNpcRef=plain(raw.sourceNpcRef)?freeze({kind:cleanId(raw.sourceNpcRef.kind||"resident",40).toLowerCase()||"resident",id:cleanId(raw.sourceNpcRef.id||raw.sourceNpcRef.refId||"",160)||null}):null;
-  const sourceNpcId=cleanId(raw.sourceNpcId||raw.sponsorId||raw.counterpartId||sourceNpcRef?.id||"",160)||null;
-  const proposal=raw.proposal&&plain(raw.proposal)?freeze(clone(raw.proposal)):null;
-  const relationship=normalizeRelationship(raw.social||raw.relationship||raw.relationships||raw.relationshipSummary||raw.socialContext||raw);
-  const prerequisites=normalizePrerequisites(raw.prerequisites||raw.requirements);
-  const goalLinks=[];for(const g of Array.isArray(raw.goalLinks)?raw.goalLinks:Array.isArray(raw.goals)?raw.goals:[]){const goalId=cleanId(g,160);if(goalId&&!goalLinks.includes(goalId)&&goalLinks.length<MAX_GOALS)goalLinks.push(goalId)}
-  const requiredScopes=[];for(const s of Array.isArray(raw.requiredAuthorityScopes)?raw.requiredAuthorityScopes:Array.isArray(raw.requiredScopes)?raw.requiredScopes:[]){const scope=cleanId(s,120);if(scope&&!requiredScopes.includes(scope)&&requiredScopes.length<MAX_RELATIONSHIPS)requiredScopes.push(scope)}
-  const requiredObligations=[];for(const o of Array.isArray(raw.requiredObligationIds)?raw.requiredObligationIds:Array.isArray(raw.obligationIds)?raw.obligationIds:[]){const obligation=cleanId(o,160);if(obligation&&!requiredObligations.includes(obligation)&&requiredObligations.length<MAX_RELATIONSHIPS)requiredObligations.push(obligation)}
-  const opensAt=clean(raw.opensAt||raw.availableFrom||raw.validFrom||"",32)||null,closesAt=clean(raw.expiresAt||raw.closesAt||raw.validUntil||"",32)||null;
-  const targetRankTier=Number.isFinite(Number(raw.targetRankTier))?Number(raw.targetRankTier):null;
-  const costCopper=Number.isFinite(Number(raw.costCopper))?Math.max(0,Math.floor(Number(raw.costCopper))):null;
-  const obligationCostCopper=Number.isFinite(Number(raw.obligationCostCopper))?Math.max(0,Math.floor(Number(raw.obligationCostCopper))):null;
-  const importance=clamp100(raw.priority!=null?raw.priority:raw.importance,50);
-  const label=clean(raw.label||raw.name||raw.title||kind,120);
-  const targetRoleId=cleanId(raw.targetRoleId||raw.roleId||raw.promotionRoleId||"",80)||null;
-  const targetProfessionId=cleanId(raw.targetProfessionId||raw.professionId||"",80)||null;
+  if(!plain(value))return freeze({ok:false,index,opportunityId:"INVALID-"+index,reason:"opportunity-not-object"});
+  const opportunityId=cleanId(value.opportunityId||value.id||value.candidateId,160);
+  if(!opportunityId)return freeze({ok:false,index,opportunityId:"INVALID-"+index,reason:"opportunity-id-required"});
+  const kindRaw=cleanId(value.kind||value.type||value.intent||"other",60).toLowerCase();
+  const kind=ALLOWED_KINDS.includes(kindRaw)?kindRaw:"other";
+  const goalLinks=uniqueIds(Array.isArray(value.goalLinks)?value.goalLinks:Array.isArray(value.goals)?value.goals:[],MAX_GOALS+1);
+  const requiredScopes=uniqueIds(Array.isArray(value.requiredAuthorityScopes)?value.requiredAuthorityScopes:Array.isArray(value.requiredScopes)?value.requiredScopes:[],MAX_SCOPES+1);
+  const conflicts=uniqueIds(Array.isArray(value.conflictsWithCommitmentIds)?value.conflictsWithCommitmentIds:Array.isArray(value.conflictingCommitmentIds)?value.conflictingCommitmentIds:[],MAX_OBLIGATIONS+1);
+  const prereqRaw=plain(value.prerequisites)?value.prerequisites:plain(value.requirements)?value.requirements:{};
+  const prereqBlockers=uniqueIds(Array.isArray(prereqRaw.blockers)?prereqRaw.blockers:[],MAX_REASONS+1);
+  const proposalCheck=normalizeProposal(value.proposal);
+  const sourceRef=normalizeSourceRef(value);
+  let invalidReason=null;
+  if(goalLinks.length>MAX_GOALS)invalidReason="goal-link-limit-exceeded";
+  else if(requiredScopes.length>MAX_SCOPES)invalidReason="required-scope-limit-exceeded";
+  else if(conflicts.length>MAX_OBLIGATIONS)invalidReason="commitment-link-limit-exceeded";
+  else if(prereqBlockers.length>MAX_REASONS)invalidReason="prerequisite-blocker-limit-exceeded";
   return freeze({
-    opportunityId:id,kind,label,available:raw.available!==false,grounded:raw.grounded!==false,priority:importance,
-    sourceNpcRef,sourceNpcId,targetRoleId,targetProfessionId,targetRankTier,requiredAuthorityScopes:freeze(requiredScopes),
-    requiredObligationIds:freeze(requiredObligations),goalLinks:freeze(goalLinks),relationship,prerequisites,
-    opensAt,closesAt,costCopper,obligationCostCopper,
-    proposal:proposal||null,proposalRequired:raw.proposalRequired!==false,reason:clean(raw.reason||"",160)||null
+    ok:!invalidReason,index,opportunityId,invalidReason,
+    opportunity:freeze({
+      opportunityId,kind,label:clean(value.label||value.name||value.title||kind,120),priority:clamp100(value.priority!=null?value.priority:value.importance,50),
+      grounded:value.grounded===true,available:value.available!==false,sourceRef,
+      prerequisites:freeze({satisfied:prereqRaw.satisfied!==false&&prereqBlockers.length===0,blockers:prereqBlockers}),
+      goalLinks,requiredScopes,conflictsWithCommitmentIds:conflicts,requiresClearSchedule:Boolean(value.requiresClearSchedule),
+      opensAt:clean(value.opensAt||value.availableFrom||value.validFrom,32)||null,closesAt:clean(value.closesAt||value.expiresAt||value.validUntil,32)||null,
+      targetRoleId:cleanId(value.targetRoleId||value.roleId,80)||null,targetRankTier:finite(value.targetRankTier),
+      targetProfessionId:cleanId(value.targetProfessionId||value.professionId,80)||null,
+      costCopper:finite(value.costCopper)==null?0:Math.max(0,Math.floor(Number(value.costCopper))),
+      relationship:normalizeRelationship(value.relationship||value.social||value.socialContext),
+      proposal:proposalCheck.proposal,proposalError:proposalCheck.ok?null:proposalCheck.reason
+    })
   });
 }
-function buildProposal(seed,when,opportunity){
-  if(opportunity.proposal)return opportunity.proposal;
-  const sourceId=opportunity.sourceNpcRef?.id||opportunity.sourceNpcId||opportunity.targetProfessionId||opportunity.targetRoleId||null;
-  const topic=clean(opportunity.label||opportunity.kind||opportunity.targetRoleId||opportunity.targetProfessionId||"advancement",160);
-  const personId=sourceId&&sourceId!==opportunity.targetProfessionId&&sourceId!==opportunity.targetRoleId?sourceId:null;
-  const proposal=personId?{
-    commandId:"advisor.propose_interaction",
-    parameters:{personId,topic},
-    source:"protagonist-advancement-goal"
-  }:{
-    commandId:"advisor.propose_advice",
-    parameters:{topic},
-    source:"protagonist-advancement-goal"
-  };
-  return freeze({proposalId:"ADVPROP-"+hashText(stable({seed,when,opportunityId:opportunity.opportunityId,proposal})),commandId:proposal.commandId,parameters:freeze(clone(proposal.parameters)),source:proposal.source});
+function needPressure(needs){
+  const values=[needs.hunger,needs.fatigue,needs.safety,needs.social],max=Math.max(...values),avg=values.reduce((a,b)=>a+b,0)/values.length;
+  return freeze({max,average:avg,urgent:max>=.75||avg>=.68});
 }
-function goalAlignment(opportunity,goals){
-  if(!opportunity.goalLinks.length||!goals.length)return {support:0,matched:[]};
-  const matched=[];let support=0;
-  for(const goal of goals){if(opportunity.goalLinks.includes(goal.id)){matched.push(goal.id);support+=goal.priority}}
-  return {support,matched};
+function healthPressure(health){return freeze({urgent:Boolean(health.mobilityBlocked||health.condition<.45||health.fatigue>=.80),condition:health.condition,fatigue:health.fatigue})}
+function goalSupport(opportunity,goals){
+  const matches=goals.filter(g=>opportunity.goalLinks.includes(g.id));
+  const best=matches.reduce((m,g)=>Math.max(m,g.priority),0);
+  return freeze({matchedGoalIds:freeze(matches.map(g=>g.id)),score:best/100});
 }
-function relationshipSignal(relationship){
-  const trust=clamp01(relationship?.trust,0.5),respect=clamp01(relationship?.respect,0.5),suspicion=clamp01(relationship?.suspicion,0.25),fear=clamp01(relationship?.fear,0.1),loyalty=clamp01(relationship?.loyalty,0.35),resentment=clamp01(relationship?.resentment,0.1);
-  const confidence=(trust+respect+loyalty)/3;
-  const caution=(suspicion+fear+resentment)/3;
-  return freeze({trust,respect,suspicion,fear,loyalty,resentment,confidence, caution,score:(confidence-caution)*100});
+function socialSignal(rel){
+  const positive=(rel.trust+rel.respect+rel.loyalty)/3,negative=(rel.suspicion+rel.fear+rel.resentment)/3;
+  return Math.max(-1,Math.min(1,positive-negative));
 }
-function pressureScore(needs){
-  const hunger=clamp01(needs?.hunger,0),fatigue=clamp01(needs?.fatigue,0),safety=clamp01(needs?.safety,0),social=clamp01(needs?.social,0);
-  return freeze({hunger,fatigue,safety,social,pressure:(hunger*.38+fatigue*.28+safety*.18+social*.16)*100});
+function activeCommitments(obligations,goals,employment){
+  const ids=[],dueIds=[];
+  for(const row of obligations){
+    if(["ended","completed","cancelled","inactive"].includes(row.state))continue;
+    ids.push(row.id);
+    if(["due","overdue","payment-pending","urgent"].includes(row.state)||row.priority>=80)dueIds.push(row.id);
+  }
+  for(const goal of goals)if(goal.priority>=85){const id="GOAL:"+goal.id;ids.push(id);dueIds.push(id)}
+  if(employment.status==="active"&&employment.contract?.id)ids.push("EMPLOYMENT:"+cleanId(employment.contract.id,120));
+  return freeze({ids:freeze([...new Set(ids)].slice(0,MAX_OBLIGATIONS+MAX_GOALS+1)),dueIds:freeze([...new Set(dueIds)].slice(0,MAX_OBLIGATIONS+MAX_GOALS)),pressure:Math.min(1,dueIds.length*.22+Math.max(0,ids.length-dueIds.length)*.05)});
 }
-function healthScore(health){
-  const condition=clamp01(health?.condition,0.5),fatigue=clamp01(health?.fatigue,0.25);
-  return freeze({condition,fatigue,capacity:Math.max(0,Math.min(100,condition*100-fatigue*30))});
-}
-function rankFit(opportunity,authority,standing){
-  const currentRank=Number.isFinite(Number(authority?.rankTier))?Number(authority.rankTier):Number.isFinite(Number(standing?.rankTier))?Number(standing.rankTier):0;
-  const targetRank=Number.isFinite(Number(opportunity.targetRankTier))?Number(opportunity.targetRankTier):currentRank;
-  const gap=targetRank-currentRank;
-  return freeze({currentRank,targetRank,gap,fit:gap<=0?8:gap===1?14:gap===2?8:gap===3?2:-12});
-}
-function obligationPressure(obligations){
-  const dueCount=Number(obligations?.dueCount||0),rows=Array.isArray(obligations?.rows)?obligations.rows:[],activePenalty=rows.some(row=>row.state==="payment-pending")?8:0;
-  return freeze({dueCount,pressure:Math.min(100,dueCount*18+activePenalty)});
-}
-function economicFit(opportunity,wealth,employment,obligations,healthPressure){
-  const balance=Number.isFinite(Number(wealth?.balanceCopper))?Number(wealth.balanceCopper):null;
-  const reserve=Number.isFinite(Number(wealth?.reserveCopper))?Number(wealth.reserveCopper):0;
-  const cost=Number.isFinite(Number(opportunity.costCopper))?Number(opportunity.costCopper):0;
-  const obligationCost=Number.isFinite(Number(opportunity.obligationCostCopper))?Number(opportunity.obligationCostCopper):0;
-  const available=balance==null?true:balance>=cost+obligationCost;
-  const stress=(!available?24:0)+(balance!=null&&reserve&&balance<reserve?10:0)+(employment?.status==="active"&&obligations.dueCount>0?8:0)+(healthPressure>65?10:0);
-  return freeze({balance,available,cost,obligationCost,stress});
-}
-function maintainCandidate(context){
-  const {traits,needs,health,obligations,authority}=context;
-  const rankTier=Number.isFinite(Number(authority?.rankTier))?Number(authority.rankTier):0;
-  const pressure=pressureScore(needs).pressure;
-  const healthCap=healthScore(health).capacity;
-  const obligation=obligationPressure(obligations).pressure;
-  const ambition=traits.ambition*100,caution=traits.caution*100,resolve=traits.resolve*100;
-  const stability=52+(caution*.18)+(healthCap*.12)+(obligation*.14)+(pressure*.10)-(ambition*.12)-(resolve*.04)-(rankTier*2);
-  return freeze({
-    opportunityId:"maintain-current-role",
-    kind:"maintain-current-role",
-    label:"Maintain current role",
-    available:true,
-    grounded:true,
-    priority:50,
-    score:Number(Math.max(0,Math.min(100,stability)).toFixed(4)),
-    blockers:freeze([]),
-    hardBlockers:freeze([]),
-    softBlockers:freeze([]),
-    reason:pressure>=60||obligation>=30||healthCap<55?"stability-preserved":"current-role-maintained",
-    proposal:null,
-    selected:false,
-    maintain:true
-  });
-}
-function classifyBlockers(opportunity,context,fit,pressure,healthCap,economic){
-  const hard=[];const soft=[];
-  if(!opportunity.available)hard.push("opportunity-unavailable");
+function blockersFor(opportunity,context){
+  const hard=[],soft=[];
   if(!opportunity.grounded)hard.push("opportunity-not-grounded");
-  if(!opportunity.prerequisites.satisfied)for(const blocker of opportunity.prerequisites.blockers.length?opportunity.prerequisites.blockers:["prerequisite-unsatisfied"]){hard.push(blocker);}
-  if(opportunity.opensAt&&validWhen(opportunity.opensAt)&&secondIndex(opportunity.opensAt)>secondIndex(context.when))soft.push("not-yet-open");
-  if(opportunity.closesAt&&validWhen(opportunity.closesAt)&&secondIndex(opportunity.closesAt)<secondIndex(context.when))hard.push("opportunity-expired");
-  if(opportunity.requiredAuthorityScopes.some(scope=>!context.authority.scopes.includes(scope)))hard.push("authority-scope-missing");
-  if(opportunity.requiredObligationIds.length&&(!context.obligations.rows.length||!opportunity.requiredObligationIds.every(id=>context.obligations.rows.some(row=>row.obligationId===id))))soft.push("obligation-mismatch");
-  if(fit.gap>2)hard.push("rank-gap-too-large");
-  if(pressure.pressure>=70)soft.push("need-pressure-high");
-  if(healthCap<45)soft.push("health-too-low");
-  if(!economic.available)soft.push("insufficient-funds");
+  if(!opportunity.sourceRef)hard.push("grounding-source-required");
+  if(!opportunity.available)hard.push("opportunity-unavailable");
+  if(opportunity.proposalError)hard.push(opportunity.proposalError);
+  if(!opportunity.prerequisites.satisfied)hard.push(...(opportunity.prerequisites.blockers.length?opportunity.prerequisites.blockers:["prerequisite-unsatisfied"]));
+  if(opportunity.opensAt&&(!validWhen(opportunity.opensAt)||secondIndex(opportunity.opensAt)>secondIndex(context.when)))soft.push("opportunity-not-yet-open");
+  if(opportunity.closesAt&&(!validWhen(opportunity.closesAt)||secondIndex(opportunity.closesAt)<secondIndex(context.when)))hard.push("opportunity-expired");
+  if(opportunity.requiredScopes.some(scope=>!context.authority.scopes.includes(scope)))hard.push("authority-scope-missing");
+  if(opportunity.targetRankTier!=null&&opportunity.targetRankTier-context.authority.rankTier>2)hard.push("rank-gap-too-large");
+  const conflict=opportunity.conflictsWithCommitmentIds.some(id=>context.commitments.ids.includes(id));
+  if(conflict||(opportunity.requiresClearSchedule&&context.commitments.dueIds.length))soft.push("commitment-conflict");
+  if(context.needPressure.urgent)soft.push("urgent-self-care");
+  if(context.healthPressure.urgent)soft.push("urgent-health");
+  if(opportunity.costCopper>0&&context.wealth.balanceCopper!=null&&context.wealth.balanceCopper<opportunity.costCopper)soft.push("insufficient-funds");
   return freeze({hard:freeze([...new Set(hard)].slice(0,MAX_REASONS)),soft:freeze([...new Set(soft)].slice(0,MAX_REASONS))});
 }
-function scoreOpportunity(opportunity,context){
-  const kindWeights=KIND_WEIGHTS[opportunity.kind]||KIND_WEIGHTS.other;
-  const trait=context.traits,pressure=context.pressures,health=context.health,economic=context.economic,obligations=context.obligationPressure,fit=context.rankFit,relationship=relationshipSignal(opportunity.relationship),alignment=goalAlignment(opportunity,context.goals);
-  let score=kindWeights.base;
-  score+=trait.ambition*kindWeights.ambition;
-  score+=trait.resolve*kindWeights.resolve;
-  score+=trait.curiosity*kindWeights.curiosity;
-  score+=trait.caution*kindWeights.caution;
-  score+=relationship.trust*kindWeights.trust;
-  score+=relationship.respect*kindWeights.respect;
-  score+=relationship.loyalty*kindWeights.loyalty;
-  score+=relationship.suspicion*kindWeights.suspicion;
-  score+=relationship.fear*kindWeights.fear;
-  score+=relationship.resentment*kindWeights.resentment;
-  score+=alignment.support*0.12*kindWeights.goal;
-  score+=fit.fit*kindWeights.standing;
-  score+=fit.gap<=0?kindWeights.authority:kindWeights.authority*0.55;
-  score+=economic.available?kindWeights.economy:kindWeights.economy-18;
-  score+=health.capacity*kindWeights.health/100;
-  score+=pressure.pressure*kindWeights.needs/100;
-  score+=obligations.pressure*kindWeights.obligations/100;
-  score+=context.employment.status==="active"?kindWeights.employment:0;
-  score+=opportunity.priority*0.18;
-  score+=opportunity.goalLinks.length?Math.min(12,alignment.support*0.06):0;
-  if(opportunity.targetRoleId&&context.authority.roleId&&opportunity.targetRoleId===context.authority.roleId)score-=18;
-  if(opportunity.targetProfessionId&&context.employment.contract?.professionId&&opportunity.targetProfessionId===context.employment.contract.professionId)score-=8;
-  if(opportunity.costCopper!=null&&economic.balance!=null&&economic.balance<opportunity.costCopper)score-=24;
-  if(opportunity.obligationCostCopper!=null&&economic.balance!=null&&economic.balance<opportunity.obligationCostCopper)score-=16;
-  if(opportunity.kind==="appointment"&&fit.gap<=0)score-=22;
-  if(opportunity.kind==="promotion"&&fit.gap<=0)score-=14;
-  if(opportunity.kind==="career"&&trait.curiosity>0.65)score+=4;
+function opportunityScore(opportunity,context){
+  const goal=goalSupport(opportunity,context.goals),social=socialSignal(opportunity.relationship),traits=context.traits;
+  let score=8+opportunity.priority*.55+traits.ambition*18+traits.resolve*10+traits.curiosity*5-traits.caution*6+goal.score*14+social*8;
+  if(opportunity.targetRankTier!=null){
+    const gap=opportunity.targetRankTier-context.authority.rankTier;
+    score+=gap===1?6:gap===2?1:gap<=0?-8:0;
+  }
+  if(opportunity.targetProfessionId&&context.employment.contract?.professionId===opportunity.targetProfessionId)score-=6;
+  if(opportunity.costCopper>0&&context.wealth.balanceCopper!=null&&context.wealth.balanceCopper<opportunity.costCopper)score-=12;
+  score-=context.commitments.pressure*10;
   const tie=parseInt(hashText(stable({seed:context.seed,when:context.when,opportunityId:opportunity.opportunityId,kind:opportunity.kind})),16)>>>0;
-  return freeze({score:Number(Math.max(0,Math.min(100,score)).toFixed(4)),tie,relationship,alignment,fit,economic,hard:freeze([]),soft:freeze([])});
+  return freeze({score:Number(Math.max(0,Math.min(100,score)).toFixed(4)),tie,goalSupport:goal,socialSignal:Number(social.toFixed(4))});
 }
-function normalizeContext(configValue){
-  const config=plain(configValue)?configValue:{},seed=clean(config.seed,160),when=clean(config.when,32),identity=identityKey(config.identityKey||config.identity||"protagonist"),profile=normalizeProfile(config.profile),needs=normalizeNeedPressure(config.needs),health=normalizeHealth(config.health),goals=normalizeGoals(config.goals),authority=normalizeAuthority(config.authority),standing=normalizeStanding(config.standing),employment=normalizeEmployment(config.employment),wealth=normalizeWealth(config.wealth),obligations=normalizeObligations(config.obligations||config.statusObligations),opportunitiesRaw=Array.isArray(config.opportunities)?config.opportunities:Array.isArray(config.candidates)?config.candidates:[],opportunities=[];
-  for(let i=0;i<opportunitiesRaw.length&&i<MAX_OPPORTUNITIES;i++)opportunities.push(normalizeOpportunity(opportunitiesRaw[i],i));
-  return freeze({seed,when,identity,profile,traits:profile.traits,needs,health,goals,authority,standing,employment,wealth,obligations,opportunities:freeze(opportunities),relationships:plain(config.relationships)?freeze(clone(config.relationships)):null});
+function maintainScore(context){
+  const healthStress=context.healthPressure.urgent?1:Math.max(0,(.65-context.health.condition));
+  const score=52+context.traits.caution*20-context.traits.ambition*20+context.needPressure.max*18+healthStress*15+context.commitments.pressure*18;
+  return Number(Math.max(0,Math.min(100,score)).toFixed(4));
+}
+function evaluatorDecisionContext(row,context){
+  return freeze({value:Number(Math.max(.05,Math.min(1,row.score/100)).toFixed(4)),urgency:Number(Math.max(.2,Math.min(1,.45+row.score/200)).toFixed(4)),socialAcceptability:Number(Math.max(.05,Math.min(1,.55+row.socialSignal*.3)).toFixed(4)),dutyConflict:false});
+}
+function compactSelected(row){
+  if(!row)return null;
+  return freeze({opportunityId:row.opportunity.opportunityId,kind:row.opportunity.kind,label:row.opportunity.label,score:row.score,reason:row.reason,hardBlockers:row.hardBlockers,softBlockers:row.softBlockers,sourceRef:row.opportunity.sourceRef,targetRoleId:row.opportunity.targetRoleId,targetRankTier:row.opportunity.targetRankTier,targetProfessionId:row.opportunity.targetProfessionId});
+}
+function finalizeResult(base){
+  const result={...base,bounds:freeze({maxOpportunities:MAX_OPPORTUNITIES,maxGoals:MAX_GOALS,maxObligations:MAX_OBLIGATIONS,maxScopes:MAX_SCOPES,maxReasons:MAX_REASONS,maxProposalParameters:MAX_PROPOSAL_PARAMETERS,maxResultBytes:MAX_RESULT_BYTES}),authority:authorityMarkers(),bounded:true};
+  result.serializedBytes=stable(result).length;
+  if(result.serializedBytes>MAX_RESULT_BYTES)return invalid(result.seed,result.when,"result-byte-budget-exceeded",{maxResultBytes:MAX_RESULT_BYTES});
+  return freeze(result);
 }
 function evaluate(configValue){
   telemetryState.evaluations++;
-  const context=normalizeContext(configValue);
-  if(!context.seed)return freeze({version:VERSION,ok:false,reason:"campaign-seed-required",status:"invalid",decisionId:null,selectedOpportunity:null,selectedProposal:null,evaluated:freeze([]),bounded:true,requiresRuntime:false});
-  if(!validWhen(context.when))return freeze({version:VERSION,ok:false,reason:"fantasy-time-required",status:"invalid",decisionId:null,selectedOpportunity:null,selectedProposal:null,evaluated:freeze([]),bounded:true,requiresRuntime:false});
-  if(context.opportunities.length>MAX_OPPORTUNITIES)return freeze({version:VERSION,ok:false,reason:"opportunity-limit-exceeded",status:"invalid",decisionId:null,selectedOpportunity:null,selectedProposal:null,evaluated:freeze([]),bounded:true,requiresRuntime:false,maxOpportunities:MAX_OPPORTUNITIES});
-  const pressures=pressureScore(context.needs),health=healthScore(context.health),obligationPressureRow=obligationPressure(context.obligations),maintain=maintainCandidate({seed:context.seed,when:context.when,traits:context.traits,needs:context.needs,health:context.health,obligations:context.obligations,authority:context.authority});
-  const evaluated=[],valid=[];
-  for(const opportunity of context.opportunities){
-    const scoring=scoreOpportunity(opportunity,{...context,pressures,health,obligationPressure:obligationPressureRow,rankFit:rankFit(opportunity,context.authority,context.standing),economic:economicFit(opportunity,context.wealth,context.employment,context.obligations,health.capacity)});
-    const blockers=classifyBlockers(opportunity,{...context,when:context.when},scoring.fit,pressures,health.capacity,scoring.economic);
-    const hard=blockers.hard.slice(0,MAX_REASONS),soft=blockers.soft.slice(0,MAX_REASONS);
-    let decision="reject",reason="opportunity-blocked";
-    if(hard.length===0&&soft.length===0&&scoring.score>=70){decision="pursue";reason="opportunity-strong";}
-    else if(hard.length===0&&(soft.length>0||scoring.score>=45)){decision="defer";reason=soft.length?"opportunity-not-now":"opportunity-possible";}
-    else if(hard.length===0&&scoring.score<45){decision="reject";reason="opportunity-weak";}
-    else if(hard.length>0){decision="reject";reason=hard[0];}
-    const row=freeze({
-      opportunityId:opportunity.opportunityId,kind:opportunity.kind,label:opportunity.label,score:scoring.score,decision,reason,
-      hardBlockers:freeze(hard),softBlockers:freeze(soft),goalSupport:scoring.alignment.support,matchedGoalIds:freeze(scoring.alignment.matched),
-      rankFit:scoring.fit,relationship:scoring.relationship,economic:scoring.economic,proposalId:opportunity.proposal?.proposalId||null
-    });
-    evaluated.push(row);
-    if(decision!=="reject")valid.push({opportunity,scoring,decision,reason,hard,soft,row});
-  }
-  const bestValidScore=Math.max(0,...valid.map(item=>Number.isFinite(item.row.score)?item.row.score:0));
-  const rankedRejected=[...evaluated].sort((a,b)=>(Number.isFinite(b.score)?b.score:-1)-(Number.isFinite(a.score)?a.score:-1)||a.opportunityId.localeCompare(b.opportunityId));
-  if(!valid.length&&rankedRejected.length){
-    const topRejected=rankedRejected[0];
-    const selectedOpportunity=freeze({
-      opportunityId:topRejected.opportunityId,kind:topRejected.kind,label:topRejected.label,score:Number.isFinite(topRejected.score)?topRejected.score:null,
-      reason:topRejected.reason,hardBlockers:topRejected.hardBlockers,softBlockers:topRejected.softBlockers,targetRoleId:null,targetProfessionId:null,targetRankTier:null
-    });
-    telemetryState.rejects++;
-    return freeze({
-      version:VERSION,ok:true,seed:context.seed,when:context.when,status:"reject",disposition:"reject",reason:topRejected.reason,
-      decisionId:"ADVDEC-"+hashText(stable({seed:context.seed,when:context.when,status:"reject",opportunityId:topRejected.opportunityId,reason:topRejected.reason})),
-      selectedOpportunity,selectedProposal:null,selectedOpportunityId:selectedOpportunity.opportunityId,selectedProposalId:null,
-      selectedCandidate:freeze({opportunityId:selectedOpportunity.opportunityId,kind:selectedOpportunity.kind,score:selectedOpportunity.score}),
-      evaluated:freeze([...evaluated,{opportunityId:maintain.opportunityId,kind:maintain.kind,label:maintain.label,score:maintain.score,decision:"maintain-current-role",reason:maintain.reason,hardBlockers:freeze([]),softBlockers:freeze([]),goalSupport:0,matchedGoalIds:freeze([]),rankFit:freeze({currentRank:Number.isFinite(Number(context.authority.rankTier))?Number(context.authority.rankTier):0,targetRank:Number.isFinite(Number(context.authority.rankTier))?Number(context.authority.rankTier):0,gap:0,fit:10}),relationship:freeze({trust:0.5,respect:0.5,suspicion:0.25,fear:0.1,loyalty:0.35,resentment:0.1,confidence:0.45,caution:0.15,score:30}),economic:freeze({balance:context.wealth.balanceCopper,available:true,cost:0,obligationCost:0,stress:0}),proposalId:null}]),
-      decisionContext:freeze({traits:context.traits,needs:context.needs,health:context.health,goals:context.goals,authority:context.authority,standing:context.standing,employment:context.employment,wealth:context.wealth,obligations:context.obligations,pressure:pressures,healthCapacity:health.capacity,obligationPressure:obligationPressureRow.pressure,opportunityCount:context.opportunities.length,maintainScore:maintain.score}),
-      maintain,
-      bounds:freeze({maxOpportunities:MAX_OPPORTUNITIES,maxGoals:MAX_GOALS,maxReasons:MAX_REASONS,maxRelationships:MAX_RELATIONSHIPS,maxResultBytes:MAX_RESULT_BYTES}),
-      authority:freeze({determinism:"Campaign SEED + Fantasy Game Time + bounded supplied/live authority context",directActionExecution:false,worldMutation:false,simulationValidationBypass:false,fullWorldScan:false,perFrameScan:false,providerAuthority:false}),
-      handoff:freeze({boundary:"ProtagonistActionRuntime -> ProtagonistCommandEvaluator -> Simulation",proposalOnly:false,requiresRuntimeValidation:false,directActionExecution:false}),
-      bounded:true
-    });
-  }
-  const maintainWinner=maintain.score>=bestValidScore;
-  let selectedOpportunity=null,selectedProposal=null,status="maintain-current-role",reason=maintain.reason,decisionId="ADVDEC-"+hashText(stable({seed:context.seed,when:context.when,status:"maintain-current-role",maintain:maintain.score}));
-  if(!maintainWinner){
-    valid.sort((a,b)=>b.row.score-a.row.score||a.scoring.tie-b.scoring.tie||a.opportunity.opportunityId.localeCompare(b.opportunity.opportunityId));
-    const top=valid[0]||null;
-    if(top){
-      selectedOpportunity=freeze({opportunityId:top.opportunity.opportunityId,kind:top.opportunity.kind,label:top.opportunity.label,score:top.row.score,reason:top.reason,hardBlockers:top.hard,softBlockers:top.soft,targetRoleId:top.opportunity.targetRoleId||null,targetProfessionId:top.opportunity.targetProfessionId||null,targetRankTier:top.opportunity.targetRankTier});
-      if(top.decision==="pursue"){
-        status="pursue";reason=top.reason;selectedProposal=buildProposal(context.seed,context.when,top.opportunity);telemetryState.pursues++;
-      }else if(top.decision==="defer"){
-        status="defer";reason=top.reason;telemetryState.defers++;
-      }else{
-        status="reject";reason=top.reason;telemetryState.rejects++;
-      }
-      decisionId="ADVDEC-"+hashText(stable({seed:context.seed,when:context.when,status,opportunityId:top.opportunity.opportunityId,reason}));
-    }else{
-      telemetryState.maintains++;
-      const result=freeze({
-        version:VERSION,ok:true,seed:context.seed,when:context.when,status:"maintain-current-role",disposition:"maintain-current-role",
-        reason:maintain.reason,decisionId,selectedOpportunity:null,selectedProposal:null,selectedOpportunityId:null,selectedProposalId:null,
-        selectedCandidate:null,evaluated:freeze([...evaluated,{opportunityId:maintain.opportunityId,kind:maintain.kind,label:maintain.label,score:maintain.score,decision:"maintain-current-role",reason:maintain.reason,hardBlockers:freeze([]),softBlockers:freeze([]),goalSupport:0,matchedGoalIds:freeze([]),rankFit:freeze({currentRank:Number.isFinite(Number(context.authority.rankTier))?Number(context.authority.rankTier):0,targetRank:Number.isFinite(Number(context.authority.rankTier))?Number(context.authority.rankTier):0,gap:0,fit:10}),relationship:freeze({trust:0.5,respect:0.5,suspicion:0.25,fear:0.1,loyalty:0.35,resentment:0.1,confidence:0.45,caution:0.15,score:30}),economic:freeze({balance:context.wealth.balanceCopper,available:true,cost:0,obligationCost:0,stress:0}),proposalId:null}]),maintain:maintain,
-        decisionContext:freeze({
-          traits:context.traits,needs:context.needs,health:context.health,goals:context.goals,authority:context.authority,standing:context.standing,employment:context.employment,wealth:context.wealth,obligations:context.obligations,
-          pressure:pressures,healthCapacity:health.capacity,obligationPressure:obligationPressureRow.pressure,opportunityCount:context.opportunities.length,maintainScore:maintain.score
-        }),
-        bounds:freeze({maxOpportunities:MAX_OPPORTUNITIES,maxGoals:MAX_GOALS,maxReasons:MAX_REASONS,maxRelationships:MAX_RELATIONSHIPS,maxResultBytes:MAX_RESULT_BYTES}),
-        authority:freeze({determinism:"Campaign SEED + Fantasy Game Time + bounded supplied/live authority context",directActionExecution:false,worldMutation:false,simulationValidationBypass:false,fullWorldScan:false,perFrameScan:false,providerAuthority:false})
-      });
-      return result;
+  const config=plain(configValue)?configValue:{},seed=clean(config.seed,160),when=clean(config.when,32);
+  if(!seed)return invalid(seed,when,"campaign-seed-required");
+  if(!validWhen(when))return invalid(seed,when,"fantasy-time-required");
+  const rawOpportunities=Array.isArray(config.opportunities)?config.opportunities:Array.isArray(config.candidates)?config.candidates:[];
+  const rawGoals=Array.isArray(config.goals?.records)?config.goals.records:Array.isArray(config.goals?.goals)?config.goals.goals:Array.isArray(config.goals)?config.goals:[];
+  const rawObligations=Array.isArray(config.obligations?.obligations)?config.obligations.obligations:Array.isArray(config.obligations)?config.obligations:[];
+  const rawScopes=Array.isArray(config.authority?.currentRole?.scopes)?config.authority.currentRole.scopes:Array.isArray(config.authority?.scopes)?config.authority.scopes:[];
+  if(rawOpportunities.length>MAX_OPPORTUNITIES)return invalid(seed,when,"opportunity-limit-exceeded",{maxOpportunities:MAX_OPPORTUNITIES});
+  if(rawGoals.length>MAX_GOALS)return invalid(seed,when,"goal-read-limit-exceeded",{maxGoals:MAX_GOALS});
+  if(rawObligations.length>MAX_OBLIGATIONS)return invalid(seed,when,"obligation-limit-exceeded",{maxObligations:MAX_OBLIGATIONS});
+  if(rawScopes.length>MAX_SCOPES)return invalid(seed,when,"authority-scope-limit-exceeded",{maxScopes:MAX_SCOPES});
+
+  const context={
+    seed,when,traits:normalizeTraits(config.profile),needs:normalizeNeeds(config.needs),health:normalizeHealth(config.health),
+    goals:normalizeGoals(config.goals),authority:normalizeAuthority(config.authority),employment:normalizeEmployment(config.employment),
+    wealth:normalizeWealth(config.wealth),obligations:normalizeObligations(config.obligations)
+  };
+  context.needPressure=needPressure(context.needs);
+  context.healthPressure=healthPressure(context.health);
+  context.commitments=activeCommitments(context.obligations,context.goals,context.employment);
+
+  const normalized=rawOpportunities.map((row,index)=>normalizeOpportunity(row,index));
+  const idCounts=new Map();
+  for(const row of normalized)if(row.opportunityId&&!row.opportunityId.startsWith("INVALID-"))idCounts.set(row.opportunityId,(idCounts.get(row.opportunityId)||0)+1);
+  const evaluated=[];
+  for(const normalizedRow of normalized.sort((a,b)=>a.opportunityId.localeCompare(b.opportunityId)||a.index-b.index)){
+    if(!normalizedRow.ok){
+      evaluated.push(freeze({opportunityId:normalizedRow.opportunityId,kind:"invalid",score:0,decision:"reject",reason:normalizedRow.invalidReason||normalizedRow.reason,hardBlockers:freeze([normalizedRow.invalidReason||normalizedRow.reason]),softBlockers:freeze([]),proposalId:null,socialSignal:0,matchedGoalIds:freeze([])}));
+      continue;
     }
-  }else{
-    telemetryState.maintains++;
+    const opportunity=normalizedRow.opportunity;
+    if((idCounts.get(opportunity.opportunityId)||0)>1){
+      evaluated.push(freeze({opportunityId:opportunity.opportunityId,kind:opportunity.kind,score:0,decision:"reject",reason:"opportunity-id-duplicate",hardBlockers:freeze(["opportunity-id-duplicate"]),softBlockers:freeze([]),proposalId:opportunity.proposal?.proposalId||null,socialSignal:0,matchedGoalIds:freeze([]),opportunity}));
+      continue;
+    }
+    const metric=opportunityScore(opportunity,context),blockers=blockersFor(opportunity,context);
+    let decision="reject",reason=blockers.hard[0]||"opportunity-weak";
+    if(!blockers.hard.length&&blockers.soft.length){decision="defer";reason=blockers.soft[0]}
+    else if(!blockers.hard.length&&metric.score>=65){decision="pursue";reason="opportunity-strong"}
+    else if(!blockers.hard.length&&metric.score>=45){decision="defer";reason="opportunity-possible"}
+    evaluated.push(freeze({opportunityId:opportunity.opportunityId,kind:opportunity.kind,label:opportunity.label,score:metric.score,tie:metric.tie,decision,reason,hardBlockers:blockers.hard,softBlockers:blockers.soft,proposalId:opportunity.proposal?.proposalId||null,socialSignal:metric.socialSignal,matchedGoalIds:metric.goalSupport.matchedGoalIds,opportunity}));
   }
-  const decisionContext=freeze({
-    traits:context.traits,needs:context.needs,health:context.health,goals:context.goals,authority:context.authority,standing:context.standing,employment:context.employment,wealth:context.wealth,obligations:context.obligations,
-    pressure:pressures,healthCapacity:health.capacity,obligationPressure:obligationPressureRow.pressure,opportunityCount:context.opportunities.length,maintainScore:maintain.score
+
+  const pursues=evaluated.filter(row=>row.decision==="pursue").sort((a,b)=>b.score-a.score||a.tie-b.tie||a.opportunityId.localeCompare(b.opportunityId));
+  const defers=evaluated.filter(row=>row.decision==="defer").sort((a,b)=>b.score-a.score||a.tie-b.tie||a.opportunityId.localeCompare(b.opportunityId));
+  const rejects=evaluated.filter(row=>row.decision==="reject").sort((a,b)=>b.score-a.score||a.opportunityId.localeCompare(b.opportunityId));
+  const maintain=maintainScore(context);
+  let status="maintain-current-role",selected=null,reason="current-role-maintained";
+  if(pursues.length&&pursues[0].score>maintain){status="pursue";selected=pursues[0];reason=selected.reason}
+  else if(pursues.length){status="maintain-current-role";reason="stability-preferred"}
+  else if(defers.length){status="defer";selected=defers[0];reason=selected.reason}
+  else if(rejects.length){status="reject";selected=rejects[0];reason=selected.reason}
+
+  const selectedProposal=status==="pursue"?selected?.opportunity?.proposal||null:null;
+  const selectedOpportunity=compactSelected(selected);
+  const decisionBasis={seed,when,status,reason,selectedOpportunityId:selectedOpportunity?.opportunityId||null,maintainScore:maintain,evaluated:evaluated.map(row=>({id:row.opportunityId,decision:row.decision,reason:row.reason,score:row.score}))};
+  const decisionId="ADVDEC-"+hashText(stable(decisionBasis));
+  const selectedContext=selected?evaluatorDecisionContext(selected,context):null;
+  if(status==="pursue")telemetryState.pursues++;else if(status==="defer")telemetryState.defers++;else if(status==="reject")telemetryState.rejects++;else telemetryState.maintains++;
+
+  return finalizeResult({
+    version:VERSION,ok:true,seed,when,status,disposition:status,reason,decisionId,
+    selectedOpportunity,selectedOpportunityId:selectedOpportunity?.opportunityId||null,selectedProposal,selectedProposalId:selectedProposal?.proposalId||null,
+    evaluated:freeze(evaluated.map(row=>freeze({opportunityId:row.opportunityId,kind:row.kind,label:row.label||null,score:row.score,decision:row.decision,reason:row.reason,hardBlockers:row.hardBlockers,softBlockers:row.softBlockers,proposalId:row.proposalId,socialSignal:row.socialSignal,matchedGoalIds:row.matchedGoalIds}))),
+    evaluatorDecisionContext:selectedContext,
+    maintain:freeze({score:maintain,reason:status==="maintain-current-role"?reason:"not-selected"}),
+    contextSummary:freeze({needPressure:context.needPressure,healthPressure:context.healthPressure,commitmentPressure:context.commitments.pressure,activeCommitmentCount:context.commitments.ids.length,currentRoleId:context.authority.roleId,currentRankTier:context.authority.rankTier,employmentStatus:context.employment.status,goalCount:context.goals.length,opportunityCount:rawOpportunities.length}),
+    handoff:freeze({boundary:"ProtagonistActionRuntime -> ProtagonistCommandEvaluator -> Simulation",proposalOnly:true,requiresRuntimeValidation:status==="pursue",terminalSimulationRequired:status==="pursue",directEvaluatorHandoff:false,directActionExecution:false})
   });
-  const result=freeze({
-    version:VERSION,ok:true,seed:context.seed,when:context.when,status,disposition:status,reason,decisionId,
-    selectedOpportunity,selectedProposal,selectedOpportunityId:selectedOpportunity?.opportunityId||null,selectedProposalId:selectedProposal?.proposalId||null,
-    selectedCandidate:selectedOpportunity?freeze({opportunityId:selectedOpportunity.opportunityId,kind:selectedOpportunity.kind,score:selectedOpportunity.score}):null,
-    evaluated:freeze([...evaluated,{opportunityId:maintain.opportunityId,kind:maintain.kind,label:maintain.label,score:maintain.score,decision:"maintain-current-role",reason:maintain.reason,hardBlockers:freeze([]),softBlockers:freeze([]),goalSupport:0,matchedGoalIds:freeze([]),rankFit:freeze({currentRank:Number.isFinite(Number(context.authority.rankTier))?Number(context.authority.rankTier):0,targetRank:Number.isFinite(Number(context.authority.rankTier))?Number(context.authority.rankTier):0,gap:0,fit:10}),relationship:freeze({trust:0.5,respect:0.5,suspicion:0.25,fear:0.1,loyalty:0.35,resentment:0.1,confidence:0.45,caution:0.15,score:30}),economic:freeze({balance:context.wealth.balanceCopper,available:true,cost:0,obligationCost:0,stress:0}),proposalId:null}]),
-    decisionContext,
-    maintain,
-    bounds:freeze({maxOpportunities:MAX_OPPORTUNITIES,maxGoals:MAX_GOALS,maxReasons:MAX_REASONS,maxRelationships:MAX_RELATIONSHIPS,maxResultBytes:MAX_RESULT_BYTES}),
-    authority:freeze({determinism:"Campaign SEED + Fantasy Game Time + bounded supplied/live authority context",directActionExecution:false,worldMutation:false,simulationValidationBypass:false,fullWorldScan:false,perFrameScan:false,providerAuthority:false}),
-    handoff:freeze({boundary:"ProtagonistActionRuntime -> ProtagonistCommandEvaluator -> Simulation",proposalOnly:Boolean(selectedProposal),requiresRuntimeValidation:Boolean(selectedProposal),directActionExecution:false}),
-    bounded:true
-  });
-  telemetryState[status==="pursue"?"pursues":status==="defer"?"defers":status==="reject"?"rejects":"maintains"]++;
-  return result;
 }
-function gatherLiveOpportunities(seed,when,identity,options){
-  if(Array.isArray(options?.opportunities)||Array.isArray(options?.candidates))return Array.isArray(options.opportunities)?options.opportunities.slice(0,MAX_OPPORTUNITIES):options.candidates.slice(0,MAX_OPPORTUNITIES);
-  const collected=[];
-  try{const list=root().ProtagonistPatronageOpportunities?.list?.(seed,when,{limit:MAX_OPPORTUNITIES},identity);if(Array.isArray(list))collected.push(...list)}catch(_){}
-  try{const list=root().ProtagonistProfessionOpportunities?.list?.(seed,when,{openOnly:true,limit:MAX_OPPORTUNITIES},identity);if(Array.isArray(list))collected.push(...list)}catch(_){}
-  return collected.slice(0,MAX_OPPORTUNITIES);
+function socialFor(seed,sourceId){
+  if(!sourceId||!root?.SocialState?.dialogueContext)return null;
+  try{telemetryState.socialReads++;return root.SocialState.dialogueContext(seed,sourceId)||null}catch(_){return null}
 }
 function fromLive(seedValue,whenValue,optionsValue){
   telemetryState.liveBuilds++;
-  const options=plain(optionsValue)?optionsValue:{},seed=clean(seedValue,160),when=clean(whenValue,32),identity=identityKey(options.identityKey||options.identity||"protagonist");
-  let profile=null,needs=null,health=null,goals=null,authority=null,standing=null,employment=null,wealth=null,obligations=null,relationships=plain(options.relationships)?options.relationships:null;
-  try{profile=options.profile||root().ProtagonistProfile?.summary?.(seed,identity)||root().ProtagonistProfile?.derive?.(seed,identity)||null}catch(_){}
-  try{needs=options.needs||root().ProtagonistNeeds?.snapshot?.(seed,identity)||null}catch(_){}
-  try{health=options.health||root().ProtagonistHealth?.snapshot?.(seed,identity)||null}catch(_){}
-  try{goals=options.goals||root().ProtagonistGoals?.snapshot?.(seed,identity)||root().ProtagonistGoals?.list?.(seed,{limit:MAX_GOALS},identity)||null}catch(_){}
-  try{authority=options.authority||root().ProtagonistAuthority?.snapshot?.(seed,identity)||null}catch(_){}
-  try{standing=options.standing||root().ProtagonistStanding?.snapshot?.(seed,identity)||null}catch(_){}
-  try{employment=options.employment||root().ProtagonistEmployment?.current?.(seed,when,identity)||null}catch(_){}
-  try{wealth=options.wealth||root().ProtagonistWealth?.snapshot?.(seed,identity)||null}catch(_){}
-  try{obligations=options.obligations||root().ProtagonistStatusObligations?.resolve?.(seed,when,identity)||null}catch(_){}
-  const opportunities=gatherLiveOpportunities(seed,when,identity,options).map((opportunity,index)=>{
-    const raw=clone(opportunity);
-    if(!relationships&&raw?.sourceNpcId&&root().SocialState?.dialogueContext){const social=safeCall(root().SocialState.dialogueContext,seed,raw.sourceNpcId);if(social)raw.social=social;}
-    return normalizeOpportunity(raw,index);
+  const options=plain(optionsValue)?optionsValue:{},seed=clean(seedValue,160),when=clean(whenValue,32),identity=cleanId(options.identityKey||options.identity||"protagonist",96)||"protagonist";
+  const opportunities=Array.isArray(options.opportunities)?options.opportunities:Array.isArray(options.candidates)?options.candidates:[];
+  if(opportunities.length>MAX_OPPORTUNITIES)return invalid(seed,when,"opportunity-limit-exceeded",{maxOpportunities:MAX_OPPORTUNITIES});
+  let profile=options.profile||null,needs=options.needs||null,health=options.health||null,goals=options.goals||null,authority=options.authority||null,employment=options.employment||null,wealth=options.wealth||null;
+  try{if(!profile){telemetryState.profileReads++;profile=root?.ProtagonistProfile?.summary?.(seed,identity)||root?.ProtagonistProfile?.derive?.(seed,identity)||null}}catch(_){}
+  try{if(!needs){telemetryState.needsReads++;needs=root?.ProtagonistNeeds?.snapshot?.(seed,identity)||null}}catch(_){}
+  try{if(!health){telemetryState.healthReads++;health=root?.ProtagonistHealth?.decisionContext?.(seed,identity)||root?.ProtagonistHealth?.snapshot?.(seed,identity)||null}}catch(_){}
+  try{if(!goals){telemetryState.goalReads++;goals=root?.ProtagonistGoals?.list?.(seed,{limit:MAX_GOALS},identity)||[]}}catch(_){}
+  try{if(!authority){telemetryState.authorityReads++;authority=root?.ProtagonistAuthority?.decisionContext?.(seed,identity)||root?.ProtagonistAuthority?.snapshot?.(seed,identity)||null}}catch(_){}
+  try{if(!employment){telemetryState.employmentReads++;employment=root?.ProtagonistEmployment?.current?.(seed,when,identity)||null}}catch(_){}
+  try{if(!wealth){telemetryState.wealthReads++;wealth=root?.ProtagonistWealth?.snapshot?.(seed,identity)||null}}catch(_){}
+  const enriched=opportunities.map(raw=>{
+    const copy=clone(raw);
+    if(!copy.relationship){
+      const source=normalizeSourceRef(copy);
+      const social=source?.kind==="resident"?socialFor(seed,source.id):null;
+      if(social)copy.relationship=social;
+    }
+    return copy;
   });
-  return evaluate({seed,when,identityKey:identity,profile,needs,health,goals,authority,standing,employment,wealth,obligations,relationships,opportunities});
-}
-function evaluatorInput(resultValue,snapshotValue,decisionContextValue,optionsValue){
-  const result=plain(resultValue)?resultValue:{},options=plain(optionsValue)?optionsValue:{};
-  if(result.ok!==true||result.status!=="pursue"||!result.selectedProposal)return freeze({ok:false,reason:"selected-advancement-proposal-required",config:null});
-  return freeze({ok:true,reason:"advancement-proposal-ready",boundary:"ProtagonistActionRuntime -> ProtagonistCommandEvaluator -> Simulation",executionDisabled:true,config:freeze({seed:clean(result.seed,160),when:clean(result.when,32),snapshot:snapshotValue||null,proposal:result.selectedProposal,decisionContext:decisionContextValue||result.decisionContext,actorId:cleanId(options.actorId||"protagonist",120)||"protagonist",execute:false,advancementDecisionId:result.decisionId})});
+  return evaluate({seed,when,profile,needs,health,goals,authority,employment,wealth,obligations:options.obligations||[],opportunities:enriched});
 }
 function runtimeInput(resultValue,snapshotValue,decisionContextValue,optionsValue){
-  const handoff=evaluatorInput(resultValue,snapshotValue,decisionContextValue,optionsValue);
+  const result=plain(resultValue)?resultValue:{},options=plain(optionsValue)?optionsValue:{};
+  if(result.ok!==true||result.status!=="pursue"||!plain(result.selectedProposal))return freeze({ok:false,reason:"selected-advancement-proposal-required",config:null});
+  const actorId=cleanId(options.actorId||"protagonist",120)||"protagonist";
+  return freeze({ok:true,reason:"advancement-runtime-handoff-ready",boundary:"ProtagonistActionRuntime -> ProtagonistCommandEvaluator -> Simulation",directEvaluatorHandoff:false,executionDeferredToRuntime:true,config:freeze({
+    seed:clean(result.seed,160),when:clean(result.when,32),dueWhen:clean(result.when,32),actorId,
+    planId:"ADVPLAN-"+cleanId(result.decisionId,160),selectionId:cleanId(result.decisionId,160),
+    proposal:result.selectedProposal,snapshot:snapshotValue||null,
+    decisionContext:plain(decisionContextValue)?decisionContextValue:result.evaluatorDecisionContext,
+    actorPosition:options.actorPosition?clone(options.actorPosition):null
+  })});
+}
+function schedule(resultValue,snapshotValue,decisionContextValue,optionsValue){
+  const options=plain(optionsValue)?optionsValue:{},handoff=runtimeInput(resultValue,snapshotValue,decisionContextValue,options);
   if(!handoff.ok)return handoff;
-  return freeze({ok:true,reason:"advancement-runtime-handoff-ready",boundary:"ProtagonistActionRuntime -> ProtagonistCommandEvaluator -> Simulation",executionDisabled:true,directActionExecution:false,directRankMutation:false,directRelationshipMutation:false,directWorldMutation:false,evaluatorHandoff:handoff});
+  const runtime=options.runtime||root?.ProtagonistActionRuntime;
+  if(!runtime?.schedule)return freeze({ok:false,reason:"protagonist-action-runtime-unavailable",boundary:handoff.boundary,directEvaluatorHandoff:false});
+  telemetryState.runtimeSchedules++;
+  const scheduled=runtime.schedule(handoff.config);
+  return freeze({ok:Boolean(scheduled?.ok),reason:scheduled?.reason||scheduled?.attempt?.reason||"runtime-schedule-result",boundary:handoff.boundary,directEvaluatorHandoff:false,directActionExecution:false,runtimeResult:scheduled||null});
 }
 function snapshot(seedValue,whenValue,optionsValue){return fromLive(seedValue,whenValue,optionsValue)}
-function telemetry(){return freeze({...telemetryState,bounded:true,fullWorldScan:false,perFrameScan:false,authority:false})}
+function telemetry(){return freeze({...telemetryState,bounded:true,selectionEventDriven:true,fullWorldScan:false,fullSettlementScan:false,wholeHistoryScan:false,perFrameScan:false,directActionExecution:false,directWorldMutation:false,directRankMutation:false,directSkillMutation:false,directRelationshipMutation:false,directWealthMutation:false,appointmentAuthority:false,opportunityCreation:false,simulationValidationBypass:false,authority:false})}
 
-root().ProtagonistAdvancementGoal=Object.freeze({
-  VERSION,MAX_OPPORTUNITIES,MAX_GOALS,MAX_REASONS,MAX_RELATIONSHIPS,MAX_RESULT_BYTES,DECISIONS,KIND_WEIGHTS,
-  evaluate,fromLive,evaluatorInput,runtimeInput,snapshot,telemetry
+root.ProtagonistAdvancementGoal=Object.freeze({
+  VERSION,MAX_OPPORTUNITIES,MAX_GOALS,MAX_OBLIGATIONS,MAX_SCOPES,MAX_REASONS,MAX_PROPOSAL_PARAMETERS,MAX_RESULT_BYTES,DECISIONS,ALLOWED_KINDS,
+  evaluate,fromLive,runtimeInput,schedule,snapshot,telemetry
 });
-if(typeof module!=="undefined"&&module.exports)module.exports=root().ProtagonistAdvancementGoal;
-return root().ProtagonistAdvancementGoal;
+if(typeof module!=="undefined"&&module.exports)module.exports=root.ProtagonistAdvancementGoal;
+return root.ProtagonistAdvancementGoal;
 });
