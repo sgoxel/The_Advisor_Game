@@ -99,9 +99,20 @@ function ensureLayer(){
   layer=document.createElement("section");layer.id="localConflictPresentation";layer.className="local-conflict-presentation";layer.setAttribute("aria-label","Local conflict presentation");layer.dataset.safeSlot="world-anchor";(document.body||document.documentElement).appendChild(layer);state.mounted=true;return layer;
 }
 function anchorSnapshot(){
-  let stage=null;state.anchorStageReads++;try{stage=root.PlanetStage?.snapshot?.()||null}catch(_){}const focus=stage?.canonicalFocus?.screenSpaceFocus,canvas=typeof document!=="undefined"?document.getElementById("planetCanvas"):null,rect=canvas?.getBoundingClientRect?.();
-  const x=Number(focus?.screenX),y=Number(focus?.screenY);if(!rect||focus?.valid!==true||!Number.isFinite(x)||!Number.isFinite(y))return null;
-  return freeze({x:Number((rect.left+x).toFixed(3)),y:Number((rect.top+y).toFixed(3)),screenX:Number(x.toFixed(3)),screenY:Number(y.toFixed(3)),canvasLeft:Number(rect.left.toFixed(3)),canvasTop:Number(rect.top.toFixed(3)),canvasWidth:Number(rect.width.toFixed(3)),canvasHeight:Number(rect.height.toFixed(3)),worldTile:stage?.canonicalFocus?.worldTile||null,latitudeDegrees:stage?.canonicalFocus?.latitudeDegrees??null,longitudeDegrees:stage?.canonicalFocus?.longitudeDegrees??null,source:"PlanetStage.canonicalFocus.screenSpaceFocus"});
+  let stage=null;state.anchorStageReads++;try{stage=root.PlanetStage?.snapshot?.()||null}catch(_){}
+  const canvas=typeof document!=="undefined"?document.getElementById("planetCanvas"):null,rect=canvas?.getBoundingClientRect?.(),locationId=id(state.lastModel?.locationRef?.id,180);
+  if(locationId&&root.PlanetStage?.inspectionTargets){
+    try{
+      const target=(root.PlanetStage.inspectionTargets()||[]).find(row=>id(row?.id,180)===locationId&&row?.bounds);
+      const b=target?.bounds;
+      if(b&&[b.left,b.right,b.top,b.bottom].every(Number.isFinite)){
+        const x=(Number(b.left)+Number(b.right))/2,y=(Number(b.top)+Number(b.bottom))/2;
+        return freeze({x:Number(x.toFixed(3)),y:Number(y.toFixed(3)),screenX:rect?Number((x-rect.left).toFixed(3)):null,screenY:rect?Number((y-rect.top).toFixed(3)):null,canvasLeft:rect?Number(rect.left.toFixed(3)):null,canvasTop:rect?Number(rect.top.toFixed(3)):null,canvasWidth:rect?Number(rect.width.toFixed(3)):null,canvasHeight:rect?Number(rect.height.toFixed(3)):null,worldTile:stage?.canonicalFocus?.worldTile||null,latitudeDegrees:stage?.canonicalFocus?.latitudeDegrees??null,longitudeDegrees:stage?.canonicalFocus?.longitudeDegrees??null,targetId:locationId,targetType:target.type||null,source:"PlanetStage.inspectionTargets"});
+      }
+    }catch(_){}
+  }
+  const focus=stage?.canonicalFocus?.screenSpaceFocus,x=Number(focus?.screenX),y=Number(focus?.screenY);if(!rect||focus?.valid!==true||!Number.isFinite(x)||!Number.isFinite(y))return null;
+  return freeze({x:Number((rect.left+x).toFixed(3)),y:Number((rect.top+y).toFixed(3)),screenX:Number(x.toFixed(3)),screenY:Number(y.toFixed(3)),canvasLeft:Number(rect.left.toFixed(3)),canvasTop:Number(rect.top.toFixed(3)),canvasWidth:Number(rect.width.toFixed(3)),canvasHeight:Number(rect.height.toFixed(3)),worldTile:stage?.canonicalFocus?.worldTile||null,latitudeDegrees:stage?.canonicalFocus?.latitudeDegrees??null,longitudeDegrees:stage?.canonicalFocus?.longitudeDegrees??null,targetId:locationId||null,targetType:null,source:"PlanetStage.canonicalFocus.screenSpaceFocus"});
 }
 function syncAnchor(){
   const layer=getLayer(),model=state.lastModel;if(!layer||!model?.visible)return null;
