@@ -118,15 +118,21 @@ def set_protagonist_position(point):
         raise RuntimeError("could not set evidence campaign protagonist position: "+json.dumps(result))
     return result
 
-def set_scale(index):
+def set_scale(index,require_level_settle=True):
     js("window.PlanetStage.setScaleIndex(arguments[0]);",int(index))
     wait.until(lambda _d:int(compact_state()["scaleIndex"])==int(index))
     if index==9:
         wait.until(lambda _d: compact_state()["visibleLevel"]=="ground" and compact_state()["pending"]==0 and compact_state()["tangentPatchActive"])
         wait.until(lambda _d: compact_state()["groundRepresentationReady"] and compact_state()["protagonistBillboardVisible"] and compact_state()["residentBillboardCount"]>=1 and compact_state()["detailedBillboardCount"]>=2)
     else:
-        wait.until(lambda _d: compact_state()["pending"]==0 and compact_state()["visibleLevel"]!="ground")
+        # Scale 8 is also used as a presentation reset before the building/phone
+        # proof frames. A ready ground terrain resource may remain temporarily as
+        # valid fallback coverage while the coarser child prepares; the WP rule
+        # here is that detailed character art must turn off immediately. Captured
+        # near-ground evidence still requests a fully settled non-ground resource.
         wait.until(lambda _d: compact_state()["detailedBillboardCount"]==0 and not compact_state()["billboardLayerActive"] and not compact_state()["protagonistBillboardVisible"])
+        if require_level_settle:
+            wait.until(lambda _d: compact_state()["pending"]==0 and compact_state()["visibleLevel"]!="ground")
     time.sleep(.45)
     return compact_state()
 
