@@ -63,12 +63,13 @@ function localAccessContext(seedValue,identityValue,whenValue,targetValue){
   const target=targetValue&&typeof targetValue==="object"?targetValue:{},auth=roleSnapshot(seed,identity,when),req=requirement(target);
   const label=T(target.label||req.label||target.kind||"local access",120),scopes=new Set((auth.scopes||[]).map(x=>I(x,120)).filter(Boolean));
   const currentRank=Number.isFinite(Number(auth.rankTier))?Number(auth.rankTier):null,requiredRank=req.requiredRoleId?roleRank(req.requiredRoleId):null;
-  const scopeOK=auth.exists&&(req.requiredScope==="self"||scopes.has(req.requiredScope));
-  const roleOK=auth.exists&&(!req.requiredRoleId||(requiredRank!==null&&currentRank!==null&&currentRank>=requiredRank));
+  const ordinaryOpen=req.source==="ordinary-local-access"&&req.requiredScope==="self"&&!req.requiredRoleId;
+  const scopeOK=ordinaryOpen||Boolean(auth.exists&&(req.requiredScope==="self"||scopes.has(req.requiredScope)));
+  const roleOK=!req.requiredRoleId||Boolean(auth.exists&&requiredRank!==null&&currentRank!==null&&currentRank>=requiredRank);
   const permitted=Boolean(scopeOK&&roleOK);
   const conditional=Boolean(auth.exists&&!permitted&&target.allowConditional===true&&target.contextVerified===true);
-  const unknown=!auth.exists;
-  const reason=unknown?"authority-unavailable":permitted?"status-authority-scope-present":conditional?"status-authority-context-conditional":!scopeOK?"missing-authority-scope":"insufficient-legitimate-role";
+  const unknown=!auth.exists&&!ordinaryOpen;
+  const reason=ordinaryOpen?"ordinary-local-access":unknown?"authority-unavailable":permitted?"status-authority-scope-present":conditional?"status-authority-context-conditional":!scopeOK?"missing-authority-scope":"insufficient-legitimate-role";
   const status=permitted?"permitted":conditional?"conditional":"restricted";
   const presentation=unknown
     ?"Legitimate status is unavailable; privileged access is not assumed."
