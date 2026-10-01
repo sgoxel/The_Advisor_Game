@@ -2631,3 +2631,22 @@ body.advisor-economy-open .advisor-chat-launcher,body.advisor-economy-open .advi
   .advisor-econ-empty{padding:2px 4px;line-height:1.1}
   .advisor-econ-foot{padding:1px 7px;font-size:4.7px;white-space:nowrap}
 }
+
+
+/* WP-S012-009 continuation visual attempt 1 — phone portrait outcome visibility */
+@media(max-width:520px) and (orientation:portrait){
+  .advisor-economy-panel{
+    bottom:max(72px,calc(env(safe-area-inset-bottom) + 64px));
+    max-height:min(79vh,620px);
+  }
+  .advisor-econ-head{padding:8px 10px 6px}
+  .advisor-econ-head strong{font-size:17px}
+  .advisor-econ-summary{padding:6px 8px}
+  .advisor-econ-summary article{padding:6px}
+  .advisor-econ-offers{max-height:122px}
+  .advisor-econ-selected{gap:6px;padding:8px}
+  .advisor-econ-selected footer{display:none}
+  .advisor-econ-detail{grid-template-rows:auto minmax(62px,1fr);gap:6px}
+  .advisor-econ-recent{min-height:62px;max-height:132px}
+  .advisor-econ-outcomes article{padding:5px 7px}
+}
