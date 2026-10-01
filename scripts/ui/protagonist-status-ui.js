@@ -7,6 +7,7 @@ if(root)root.ProtagonistStatusUI=api;
 "use strict";
 
 const VERSION="protagonist-status-ui-v1";
+const ADVANCEMENT_READOUT_VERSION="wp-s013-009-v1";
 const EVIDENCE_MODES=Object.freeze(["healthy","pressure","injured","authority","unavailable"]);
 const MAX_GOALS=3,MAX_ITEMS=4,MAX_GUIDANCE=3,MAX_SCOPES=4,MAX_TRAITS=4,MAX_COMMITMENTS=4,MAX_OUTCOMES=4,MAX_BLOCKERS=4;
 const state={evidenceMode:null,modelBuilds:0,runtimeBuilds:0,evidenceBuilds:0,lastModel:null};
@@ -195,5 +196,5 @@ try{
   const requested=p?.get?.("advisorStatusEvidence");if(EVIDENCE_MODES.includes(requested))state.evidenceMode=requested;
 }catch(_){}
 
-return freeze({VERSION,EVIDENCE_MODES,MAX_GOALS,MAX_ITEMS,MAX_GUIDANCE,MAX_SCOPES,MAX_COMMITMENTS,MAX_OUTCOMES,MAX_BLOCKERS,evidenceModel,runtimeModel,currentModel,setEvidenceMode,markup,snapshot});
+return freeze({VERSION,ADVANCEMENT_READOUT_VERSION,EVIDENCE_MODES,MAX_GOALS,MAX_ITEMS,MAX_GUIDANCE,MAX_SCOPES,MAX_COMMITMENTS,MAX_OUTCOMES,MAX_BLOCKERS,evidenceModel,runtimeModel,currentModel,setEvidenceMode,markup,snapshot});
 });
