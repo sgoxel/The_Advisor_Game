@@ -10,7 +10,7 @@ from screenshot_tool import set_exact_viewport
 TARGET=os.environ.get("TARGET","http://127.0.0.1:8000/")
 OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s003-004-004"))
 OUT.mkdir(parents=True,exist_ok=True)
-SEED=os.environ.get("WP_S003_004_004_SEED","GROUND-BILLBOARD-EVIDENCE-004004")
+SEED=os.environ.get("WP_S003_004_004_SEED","GROUND-BILLBOARD-EVIDENCE-004004")\nEVIDENCE_TIME="1100-01-01 11:30:00"
 VIEWS=[
     ("desktop-near-ground",1280,800,8),
     ("desktop-ground",1280,800,9),
@@ -59,9 +59,9 @@ def compact_state():
         revealTier:ls.revealTier||null,localStaticActive:Boolean(ls.active),buildingCount:Number(ls.buildingCount||0),
         billboardLayerActive:Boolean(np.billboardLayerActive),detailedBillboardCount:Number(np.detailedBillboardCount||0),residentBillboardCount:Number(np.residentBillboardCount||0),
         protagonistBillboardVisible:Boolean(np.protagonistBillboardVisible),groundRepresentationReady:Boolean(np.groundRepresentationReady),
-        billboardTextureUrls:Array.isArray(np.billboardTextureUrls)?np.billboardTextureUrls:[],cameraPresentation:np.cameraPresentation||null,
+        billboardTextureUrls:Array.isArray(np.billboardTextureUrls)?np.billboardTextureUrls:[],cameraPresentation:np.cameraPresentation||null,presentationScaleMultiplier:Number(np.presentationScaleMultiplier||1),activeResidentCount:Number(np.activeCount||0),
         cameraPoseInvariant:s.zoom?.pose?.cameraPoseInvariant!==false,cameraPitchDegrees:Number(pp.cameraPitchDegrees||0),zoomTransform:s.zoom?.pose?.zoomTransform||pp.zoomTransform||null,
-        residentTargets:targets.slice(0,8).map(t=>({id:String(t.id),bounds:t.bounds||null})),
+        residentTargetCount:targets.length,residentTargets:targets.slice(0,8).map(t=>({id:String(t.id),bounds:t.bounds||null})),
         navigation:{longTask50Count:Number(s.navigationPerformance?.longTask50Count||0),longTaskWorstMs:Number(s.navigationPerformance?.longTaskWorstMs||0),framePhaseMaxMs:s.navigationPerformance?.framePhaseMaxMs||{}},
         npcPresentation:np
       };
@@ -89,7 +89,7 @@ def add_overlay(label,state):
       card.innerHTML='<div style="font-size:9px;letter-spacing:.1em;color:#e3bf73">WP-S003-004-004 · GROUND CHARACTER ART</div>'+
         '<div style="font-size:13px;margin:2px 0">'+label.replaceAll('-',' ')+'</div>'+
         '<div>'+String(s.scaleLabel||'')+' · visible LOD '+String(s.visibleLevel||'')+' · '+String(s.revealTier||'')+'</div>'+
-        '<div>Detailed billboards '+s.detailedBillboardCount+' · protagonist '+(s.protagonistBillboardVisible?'YES':'NO')+' · residents '+s.residentBillboardCount+'</div>'+
+        '<div>Detailed billboards '+s.detailedBillboardCount+' · visible residents '+s.activeResidentCount+' · 2× art '+s.presentationScaleMultiplier.toFixed(1)+'</div>'+
         '<div style="opacity:.70;margin-top:2px">'+(textures||'no detailed character textures')+'</div>'+
         '<div style="opacity:.58">camera '+String(s.cameraPresentation||'')+' · pure zoom pose invariant '+String(s.cameraPoseInvariant)+'</div>';
       document.body.appendChild(card);
@@ -106,6 +106,10 @@ def validate(label,index,state):
             raise RuntimeError(label+" did not reach ready ground representation: "+json.dumps(state))
         if state["detailedBillboardCount"]<2 or state["residentBillboardCount"]<1 or not state["protagonistBillboardVisible"]:
             raise RuntimeError(label+" missing protagonist/resident detailed billboards: "+json.dumps(state))
+        if state["activeResidentCount"]<2 or state["residentTargetCount"]<2:
+            raise RuntimeError(label+" lacks multiple visible authoritative residents: "+json.dumps(state))
+        if state["presentationScaleMultiplier"]<1.99:
+            raise RuntimeError(label+" ground character presentation is below intended 2x scale: "+json.dumps(state))
         urls=state["billboardTextureUrls"]
         if "assets/characters/protagonist_male.png" not in urls or not any("npc_" in str(u) for u in urls):
             raise RuntimeError(label+" did not use required character PNG assets: "+json.dumps(urls))
@@ -119,7 +123,7 @@ try:
     wait.until(lambda _d: ready())
     reset_seed_and_focus()
     driver.refresh();wait.until(lambda _d: ready())
-    prime=js("""const s=PlanetStage.snapshot(),p=StartingVillage.plan(s.activeSeed),c=p?.center||{x:'0',y:'0'};PlanetStage.setWorldTileFocus(String(c.x),String(c.y));return {activeSeed:s.activeSeed,center:{x:String(c.x),y:String(c.y)},village:p?.name||'Starting Village'};""")
+    prime=js("""const s=PlanetStage.snapshot(),p=StartingVillage.plan(s.activeSeed),c=p?.center||{x:'0',y:'0'};PlanetStage.applyAuthoritativeFantasyTime(arguments[0],'WP-S003-004-004 daytime visual evidence',{snapshotResult:false});PlanetStage.setWorldTileFocus(String(c.x),String(c.y));return {activeSeed:s.activeSeed,center:{x:String(c.x),y:String(c.y)},village:p?.name||'Starting Village',when:arguments[0]};""",EVIDENCE_TIME)
     for label,width,height,index in VIEWS:
         set_exact_viewport(driver,width,height)
         time.sleep(.18)
