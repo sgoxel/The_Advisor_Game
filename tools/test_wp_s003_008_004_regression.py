@@ -111,6 +111,19 @@ try:
         raise AssertionError("resident warmup did not yield between deterministic units: " + repr(background_scheduler))
     if float(background_scheduler.get("residentWarmupMaxUnitMs") or 0) >= 50:
         raise AssertionError("post-ready resident warmup unit exceeded 50 ms: " + repr(background_scheduler))
+    if int(background_scheduler.get("residentWarmupRouteSliceCount") or 0) < 1:
+        raise AssertionError("work-cycle route warmup did not use cooperative route slices: " + repr(background_scheduler))
+    if float(background_scheduler.get("residentWarmupMaxRouteSliceMs") or 0) >= 50:
+        raise AssertionError("cooperative work-cycle route slice exceeded 50 ms: " + repr(background_scheduler))
+    work_cycles = js("return window.WorkCycles?.snapshot?.(window.PlanetStage.snapshot().activeSeed) || null;")
+    if not work_cycles:
+        raise AssertionError("WorkCycles telemetry unavailable after background preparation")
+    if int(work_cycles.get("cooperativePlanPrepareCount") or 0) < 1:
+        raise AssertionError("WorkCycles cooperative plan preparation did not run: " + repr(work_cycles))
+    if int(work_cycles.get("cooperativeRouteYieldCount") or 0) < 1:
+        raise AssertionError("WorkCycles route preparation did not yield: " + repr(work_cycles))
+    if float(work_cycles.get("cooperativeMaxRouteSliceMs") or 0) >= 50:
+        raise AssertionError("WorkCycles route slice crossed 50 ms: " + repr(work_cycles))
     if int(background_scheduler.get("backgroundPreparationCompleteAtMs") or 0) < warmup_completed:
         raise AssertionError("background completion timestamp is inconsistent: " + repr(background_scheduler))
     if int(background_scheduler.get("optionalPostReadyWorkCount") or 0) != 0 or int(background_progress.get("optionalPostReadyWorkCount") or 0) != 0:
@@ -217,6 +230,7 @@ try:
             "startupProgress": progress,
             "startupSchedulerAtReady": scheduler,
             "backgroundScheduler": background_scheduler,
+            "workCycles": work_cycles,
         },
         "watchdogDecisions": decisions,
         "slowPresentation": slow_ui,
