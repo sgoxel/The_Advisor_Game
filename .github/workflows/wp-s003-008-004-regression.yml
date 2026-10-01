@@ -6,11 +6,9 @@ on:
     paths:
       - .github/workflows/wp-s003-008-004-regression.yml
       - tools/test_wp_s003_008_004_regression.py
-      - scripts/ui/app-ui.js
-      - scripts/render/playcanvas/chunk-preload.js
-      - scripts/render/playcanvas/app.js
-      - scripts/render/playcanvas/chunk-world-data.js
+      - scripts/world/planet-stage.js
       - index.html
+      - styles/main.css
   workflow_dispatch:
   issue_comment:
     types: [created]
@@ -28,8 +26,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: Checkout exact event commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -38,13 +39,15 @@ jobs:
         run: python -m pip install -r tools/requirements.txt
       - name: Verify browser
         run: google-chrome --version || google-chrome-stable --version || chromium --version
+      - name: Syntax-check active startup implementation
+        run: node --check scripts/world/planet-stage.js
       - name: Start local game
         run: |
           python -m http.server 8000 --bind 127.0.0.1 >/tmp/advisor-http.log 2>&1 &
           echo $! >/tmp/advisor-http.pid
           sleep 1
-      - name: Run startup regression evidence
-        run: python tools/test_wp_s003_008_004_regression.py "http://127.0.0.1:8000/?evidence_fast_start=1" tools/wp_s003_008_004_regression_artifact
+      - name: Run production-path startup regression evidence
+        run: python tools/test_wp_s003_008_004_regression.py "http://127.0.0.1:8000/" tools/wp_s003_008_004_regression_artifact
       - name: Upload evidence artifact
         if: always()
         uses: actions/upload-artifact@v4

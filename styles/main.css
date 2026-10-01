@@ -1367,6 +1367,9 @@ body.planet-stage-active{
 .planet-stage-loading-progress{width:100%;height:10px;overflow:hidden;border-radius:999px;border:1px solid rgba(173,210,230,.22);background:rgba(2,7,13,.66)}
 .planet-stage-loading-bar{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#7ccbb4,#69b8df,#ad8ce0,#e69b72);transition:width .18s ease-out}
 .planet-stage-loading-percent{color:#e1edf5;font:700 12px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.04em}
+.planet-stage-loading-retry{appearance:none;border:1px solid rgba(162,205,228,.42);border-radius:999px;background:rgba(20,38,54,.88);color:#e6f2f7;padding:8px 15px;font:700 12px/1 Arial,Helvetica,sans-serif;letter-spacing:.02em;cursor:pointer}
+.planet-stage-loading-retry:hover,.planet-stage-loading-retry:focus-visible{border-color:rgba(168,226,208,.8);outline:none;box-shadow:0 0 0 3px rgba(116,190,199,.16)}
+.planet-stage-loading-retry[hidden]{display:none}
 .planet-stage-loading[data-mode="indeterminate"] .planet-stage-loading-bar{width:38%!important;animation:planet-loading-scan 1.15s ease-in-out infinite}
 .planet-stage-loading[data-mode="ready"] .planet-stage-loading-card{border-color:rgba(130,216,176,.38);box-shadow:0 24px 80px rgba(0,0,0,.34),0 0 34px rgba(94,190,151,.12)}
 .planet-stage-loading[data-mode="failed"] .planet-stage-loading-card{border-color:rgba(225,119,104,.48)}

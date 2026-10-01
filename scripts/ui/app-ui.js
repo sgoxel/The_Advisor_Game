@@ -73,23 +73,7 @@ const SCENE_LOADING_PHASES=Object.freeze({
   ready:Object.freeze({title:"Scene ready",message:"Entering the world…"}),
   error:Object.freeze({title:"Startup interrupted",message:"The scene could not finish preparing."})
 });
-const STARTUP_WATCHDOG=Object.freeze({tickMs:1000,slowAfterMs:8000,stallAfterMs:30000});
 let sceneLoadingHideTimer=null;
-let sceneLoadingWatchdogTimer=null;
-function newStartupPreparationTelemetry(){
-  return {
-    terrainWallMs:0,terrainProgressEvents:0,terrainRequiredChunks:0,terrainCompletedChunks:0,
-    terrainMaxSliceMs:0,terrainDataMaxSliceMs:0,terrainMeshMaxWorkMs:0,
-    textureRegionWallMs:0,characterPreparationWallMs:0,rendererPreparationRuns:0,
-    simulationAuthorityPreserved:true
-  };
-}
-function newStartupWatchdogState(now=Date.now()){
-  return {
-    status:"healthy",startedAtMs:now,lastProgressAtMs:now,lastProgressLabel:"startup-begin",
-    signal:null,checks:0,slowSinceMs:null,stalledAtMs:null
-  };
-}
 const sceneLoadingState={
   cycleId:0,
   origin:null,
@@ -105,9 +89,7 @@ const sceneLoadingState={
   phaseEvents:[],
   cycles:[],
   proofOverride:null,
-  progress:null,
-  watchdog:newStartupWatchdogState(),
-  preparation:newStartupPreparationTelemetry()
+  progress:null
 };
 const applicationStartupGate={
   state:"idle",
@@ -182,107 +164,6 @@ function loadingReducedMotion(){
   try{return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches)}
   catch(_){return false}
 }
-function formatLoadingSeconds(ms){
-  const seconds=Math.max(0,Number(ms)||0)/1000;
-  return seconds<10?seconds.toFixed(1)+"s":Math.round(seconds)+"s";
-}
-function startupProgressSignal(){
-  const snapshot=window.GameRenderer?.snapshot?.()||{};
-  const preload=snapshot.terrainPreload||{};
-  const destination=preload.destinationProgress||{};
-  const world=snapshot.worldAssetPreparation||{};
-  const characters=snapshot.characterAssetPreparation||{};
-  return JSON.stringify({
-    phase:sceneLoadingState.phase,
-    rendererReady:Boolean(snapshot.ready),
-    regionKey:String(snapshot.regionKey||""),
-    terrainCompositions:Number(preload.compositions||0),
-    active:Number(preload.Active||0),
-    prepared:Number(preload.Prepared||0),
-    cached:Number(preload.Cached||0),
-    destinationCompleted:Number(destination.completed||preload.destinationCompletedCount||0),
-    destinationPartialCells:Number(destination.partialCellsCompleted||0),
-    worldReady:Boolean(world.ready),
-    worldRegions:Number(world.regionCount||0),
-    worldKeys:Number(world.keyCount||0),
-    characterPrepared:Number(characters.preparedCharacterCount||characters.preparedCount||0),
-    weightedWork:Number(sceneLoadingState.progress?.completedWeightedWork||0)
-  });
-}
-function startupWatchdogDecision(noProgressMs){
-  const age=Math.max(0,Number(noProgressMs)||0);
-  const status=age>=STARTUP_WATCHDOG.stallAfterMs?"stalled":age>=STARTUP_WATCHDOG.slowAfterMs?"slow":"healthy";
-  return Object.freeze({
-    status,noProgressMs:age,
-    slowAfterMs:STARTUP_WATCHDOG.slowAfterMs,
-    stallAfterMs:STARTUP_WATCHDOG.stallAfterMs,
-    simulationAuthorityPreserved:true
-  });
-}
-function noteSceneLoadingProgress(label="progress",now=Date.now()){
-  if(sceneLoadingState.state!=="loading")return sceneLoadingState.watchdog;
-  if(!sceneLoadingState.watchdog)sceneLoadingState.watchdog=newStartupWatchdogState(now);
-  const watchdog=sceneLoadingState.watchdog;
-  watchdog.lastProgressAtMs=now;
-  watchdog.lastProgressLabel=String(label||"progress");
-  watchdog.status="healthy";
-  watchdog.slowSinceMs=null;
-  watchdog.signal=startupProgressSignal();
-  return watchdog;
-}
-function startupWatchdogSnapshot(now=Date.now()){
-  const watchdog=sceneLoadingState.watchdog||newStartupWatchdogState(now);
-  const elapsedMs=sceneLoadingState.startedAtMs===null?0:Math.max(0,now-Number(sceneLoadingState.startedAtMs||now));
-  const noProgressMs=Math.max(0,now-Number(watchdog.lastProgressAtMs||now));
-  return Object.freeze({
-    status:watchdog.status,elapsedMs,noProgressMs,
-    lastProgressAtMs:watchdog.lastProgressAtMs,lastProgressLabel:watchdog.lastProgressLabel,
-    checks:Number(watchdog.checks||0),slowSinceMs:watchdog.slowSinceMs,stalledAtMs:watchdog.stalledAtMs,
-    tickMs:STARTUP_WATCHDOG.tickMs,slowAfterMs:STARTUP_WATCHDOG.slowAfterMs,stallAfterMs:STARTUP_WATCHDOG.stallAfterMs,
-    simulationAuthorityPreserved:true
-  });
-}
-function stopSceneLoadingWatchdog(){
-  if(sceneLoadingWatchdogTimer){clearInterval(sceneLoadingWatchdogTimer);sceneLoadingWatchdogTimer=null}
-}
-function tickSceneLoadingWatchdog(now=Date.now()){
-  if(sceneLoadingState.state!=="loading")return startupWatchdogSnapshot(now);
-  const watchdog=sceneLoadingState.watchdog||newStartupWatchdogState(now);
-  sceneLoadingState.watchdog=watchdog;
-  watchdog.checks=Number(watchdog.checks||0)+1;
-  syncStartupProgressTelemetry();
-  const signal=startupProgressSignal();
-  if(watchdog.signal===null||signal!==watchdog.signal){
-    watchdog.signal=signal;
-    watchdog.lastProgressAtMs=now;
-    watchdog.lastProgressLabel="measurable-render-progress";
-    watchdog.status="healthy";
-    watchdog.slowSinceMs=null;
-  }
-  const decision=startupWatchdogDecision(now-Number(watchdog.lastProgressAtMs||now));
-  if(decision.status==="slow"&&watchdog.status!=="slow"){
-    watchdog.status="slow";
-    watchdog.slowSinceMs=now;
-  }
-  if(decision.status==="stalled"){
-    watchdog.status="stalled";
-    watchdog.stalledAtMs=now;
-    const phase=(SCENE_LOADING_PHASES[sceneLoadingState.phase]||SCENE_LOADING_PHASES.boot).message;
-    const error=new Error("No measurable startup progress for "+formatLoadingSeconds(decision.noProgressMs)+" while "+phase.toLowerCase()+" Retry safely.");
-    failSceneLoading(error);
-    if(applicationStartupGate.state==="pending")failApplicationStartupGate(error);
-    return startupWatchdogSnapshot(now);
-  }
-  applySceneLoadingPresentation();
-  return startupWatchdogSnapshot(now);
-}
-function startSceneLoadingWatchdog(){
-  stopSceneLoadingWatchdog();
-  const now=Date.now();
-  sceneLoadingState.watchdog=newStartupWatchdogState(now);
-  sceneLoadingState.watchdog.signal=startupProgressSignal();
-  sceneLoadingWatchdogTimer=setInterval(()=>tickSceneLoadingWatchdog(Date.now()),STARTUP_WATCHDOG.tickMs);
-}
 function sceneLoadingReadiness(renderSucceeded=sceneLoadingState.renderSucceeded){
   const snapshot=window.GameRenderer?.snapshot?.()||{};
   const campaign=window.SeedSystem?.getCampaign?.()||null;
@@ -320,9 +201,7 @@ function currentSceneLoadingCycle(){
     error:sceneLoadingState.error,
     renderSucceeded:Boolean(sceneLoadingState.renderSucceeded),
     readiness:sceneLoadingState.readiness,
-    phaseEvents:Object.freeze(sceneLoadingState.phaseEvents.map(item=>Object.freeze({...item}))),
-    watchdog:startupWatchdogSnapshot(),
-    preparation:Object.freeze({...sceneLoadingState.preparation})
+    phaseEvents:Object.freeze(sceneLoadingState.phaseEvents.map(item=>Object.freeze({...item})))
   });
 }
 function archiveSceneLoadingCycle(){
@@ -360,8 +239,8 @@ function syncStartupProgressTelemetry(){
   const p=sceneLoadingState.progress;if(!p)return;
   const snapshot=window.GameRenderer?.snapshot?.()||{};
   const preload=snapshot.terrainPreload||{};
-  const required=Number(preload.destinationRequiredCount??preload.requiredChunkCount??preload.activeTargetCount??preload.Active??0);
-  const completed=Number(preload.destinationCompletedCount??preload.completedRequiredChunkCount??preload.readyChunkCount??preload.Active??required);
+  const required=Number(preload.requiredChunkCount??preload.activeChunkCount??0);
+  const completed=Number(preload.completedRequiredChunkCount??preload.readyChunkCount??required);
   if(Number.isFinite(required)&&required>=0)p.requiredChunkCount=required;
   if(Number.isFinite(completed)&&completed>=0)p.completedRequiredChunkCount=Math.min(p.requiredChunkCount||completed,completed);
   const optional=Number(preload.optionalPostReadyWorkCount??preload.pendingPreloadCount??0);
@@ -376,9 +255,7 @@ function startupProgressSnapshot(){
     totalWeightedFirstPlayableWork:p.totalWeightedWork,completedWeightedFirstPlayableWork:p.completedWeightedWork,
     requiredChunkCount:p.requiredChunkCount,completedRequiredChunkCount:p.completedRequiredChunkCount,
     optionalPostReadyWorkCount:p.optionalPostReadyWorkCount,firstPaintAtMs:sceneLoadingState.startedAtMs,
-    determinateAtMs:p.determinateAtMs,measured100AtMs:p.measured100AtMs,gameplayReadyAtMs:p.gameplayReadyAtMs,
-    watchdog:startupWatchdogSnapshot(),
-    preparation:Object.freeze({...sceneLoadingState.preparation})
+    determinateAtMs:p.determinateAtMs,measured100AtMs:p.measured100AtMs,gameplayReadyAtMs:p.gameplayReadyAtMs
   });
 }
 function applySceneLoadingPresentation(){
@@ -396,15 +273,11 @@ function applySceneLoadingPresentation(){
   e.sceneLoadingOverlay.classList.toggle("is-ready",effectiveState==="ready");
   e.sceneLoadingOverlay.classList.toggle("scene-loading-proof-reduced",Boolean(proof?.reducedMotion));
   e.sceneLoadingTitle.textContent=String(proof?.title||info.title);
-  const watchdogSnapshot=!proof&&effectiveState==="loading"?startupWatchdogSnapshot():null;
-  const slowSuffix=watchdogSnapshot?.status==="slow"
-    ?" Still working — no new measurable progress for "+formatLoadingSeconds(watchdogSnapshot.noProgressMs)+"."
-    :"";
   e.sceneLoadingPhase.textContent=String(
     proof?.message||
     (effectiveState==="error"&&sceneLoadingState.error
       ?"The scene could not finish preparing. "+sceneLoadingState.error
-      :info.message+slowSuffix)
+      :info.message)
   );
   const startupProgress=sceneLoadingState.progress;
   const proofProgress=Boolean((proof?.runtimeArea||proof?.startupProgress)&&Number.isFinite(proof?.progress));
@@ -416,18 +289,10 @@ function applySceneLoadingPresentation(){
     const value=proofProgress?Math.max(0,Math.min(100,Number(proof.progress)||0)):Math.max(0,Math.min(100,Number(startupProgress?.displayedPercent)||0));
     e.sceneLoadingProgressBar.style.width=value.toFixed(1)+"%";
     e.sceneLoadingProgressBar.parentElement?.setAttribute("aria-valuenow",String(Math.round(value)));
-    if(e.sceneLoadingProgressText){
-      const chunkText=!proof&&Number(startupProgress?.requiredChunkCount||0)>0
-        ?" · "+Number(startupProgress.completedRequiredChunkCount||0)+"/"+Number(startupProgress.requiredChunkCount||0)+" chunks"
-        :"";
-      const timingText=!proof&&watchdogSnapshot
-        ?" · "+formatLoadingSeconds(watchdogSnapshot.elapsedMs)+" elapsed · progress "+
-          (watchdogSnapshot.noProgressMs<1500?"just now":formatLoadingSeconds(watchdogSnapshot.noProgressMs)+" ago")
-        :"";
-      const baseText=proofProgress?(proof.progressText||Math.round(value)+"%"):
-        (startupProgress?.mode==="indeterminate"?"Planning startup…":Math.round(value)+"%");
-      e.sceneLoadingProgressText.textContent=String(baseText+chunkText+timingText);
-    }
+    if(e.sceneLoadingProgressText)e.sceneLoadingProgressText.textContent=String(
+      proofProgress?(proof.progressText||Math.round(value)+"%"):
+      (startupProgress?.mode==="indeterminate"?"Planning startup…":Math.round(value)+"%")
+    );
   }
   e.sceneLoadingRetry.hidden=effectiveState!=="error";
 }
@@ -458,9 +323,7 @@ function beginSceneLoading(origin,phase="renderer"){
   sceneLoadingState.phaseEvents=[];
   sceneLoadingState.proofOverride=null;
   sceneLoadingState.progress=newStartupProgress();
-  sceneLoadingState.preparation=newStartupPreparationTelemetry();
   recordSceneLoadingEvent(sceneLoadingState.phase,"loading");
-  startSceneLoadingWatchdog();
   applySceneLoadingPresentation();
   return sceneLoadingSnapshot();
 }
@@ -470,13 +333,11 @@ function setSceneLoadingPhase(phase){
   if(sceneLoadingState.phase===next)return sceneLoadingSnapshot();
   completeStartupProgressPhase(sceneLoadingState.phase);
   sceneLoadingState.phase=next;
-  noteSceneLoadingProgress("phase:"+next);
   recordSceneLoadingEvent(next,"loading");
   applySceneLoadingPresentation();
   return sceneLoadingSnapshot();
 }
 function finishSceneLoading(reason,renderSucceeded){
-  if(sceneLoadingState.state!=="loading")return false;
   sceneLoadingState.renderSucceeded=Boolean(renderSucceeded);
   const readiness=sceneLoadingReadiness(sceneLoadingState.renderSucceeded);
   const campaignActive=readiness.campaignActive;
@@ -490,7 +351,6 @@ function finishSceneLoading(reason,renderSucceeded){
   sceneLoadingState.readyAtMs=Date.now();
   sceneLoadingState.readiness=readiness;
   sceneLoadingState.error=null;
-  stopSceneLoadingWatchdog();
   recordSceneLoadingEvent("ready","ready");
   applySceneLoadingPresentation();
   const hide=()=>{
@@ -506,7 +366,6 @@ function finishSceneLoading(reason,renderSucceeded){
 }
 function failSceneLoading(error){
   if(sceneLoadingHideTimer){clearTimeout(sceneLoadingHideTimer);sceneLoadingHideTimer=null}
-  stopSceneLoadingWatchdog();
   if(sceneLoadingState.progress)sceneLoadingState.progress.mode="failed";
   sceneLoadingState.state="error";
   sceneLoadingState.phase="error";
@@ -537,29 +396,6 @@ function clearSceneLoadingProof(){
   sceneLoadingState.proofOverride=null;
   applySceneLoadingPresentation();
   return sceneLoadingSnapshot();
-}
-function setStartupWatchdogProofForEvidence(status="healthy",options={}){
-  const key=["healthy","slow","stalled"].includes(String(status))?String(status):"healthy";
-  const elapsedMs=Math.max(0,Number(options.elapsedMs??(key==="healthy"?5000:key==="slow"?12000:34000))||0);
-  const noProgressMs=Math.max(0,Number(options.noProgressMs??(key==="healthy"?800:key==="slow"?9000:31000))||0);
-  const progress=Math.max(0,Math.min(99,Number(options.progress??68)||0));
-  const progressAge=noProgressMs<1500?"progress just now":"last progress "+formatLoadingSeconds(noProgressMs)+" ago";
-  if(key==="stalled"){
-    return setSceneLoadingProof("error",{
-      title:"Startup needs attention",
-      message:"No measurable progress for "+formatLoadingSeconds(noProgressMs)+". Retry safely; world state is unchanged.",
-      startupProgress:true,progress,
-      progressText:Math.round(progress)+"% · "+formatLoadingSeconds(elapsedMs)+" elapsed · "+progressAge
-    });
-  }
-  return setSceneLoadingProof("assets",{
-    title:key==="slow"?"Still shaping the world":"Shaping the world",
-    message:key==="slow"
-      ?"Still working — this device is taking longer, but measurable work may continue."
-      :"Preparing deterministic terrain and nearby presentation.",
-    startupProgress:true,progress,
-    progressText:Math.round(progress)+"% · "+formatLoadingSeconds(elapsedMs)+" elapsed · "+progressAge
-  });
 }
 function sceneLoadingSnapshot(){
   const overlay=e.sceneLoadingOverlay||document.getElementById("sceneLoadingOverlay");
@@ -1643,32 +1479,6 @@ async function renderTerrain(){
        about to become visible, including revisits whose terrain data is already
        cached. This keeps world assets/materials pinned and ready before render. */
     if(startupLoading)setSceneLoadingPhase("assets");
-    let startupDestinationPrepared=false;
-    if(startupLoading&&typeof GameRenderer.prepareTerrainDestination==="function"){
-      const terrainStarted=performance.now();
-      sceneLoadingState.preparation.rendererPreparationRuns++;
-      const destination=await GameRenderer.prepareTerrainDestination({
-        seed:campaign.seed,center,
-        width:base.width,height:base.height,columns:base.columns,rows:base.rows,tileSize:base.tileSize,
-        regionKey:base.regionKey
-      },{
-        forceGate:true,graceMs:0,
-        onProgress:progress=>{
-          sceneLoadingState.preparation.terrainProgressEvents++;
-          sceneLoadingState.preparation.terrainRequiredChunks=Number(progress?.required||0);
-          sceneLoadingState.preparation.terrainCompletedChunks=Number(progress?.completed||0);
-          noteSceneLoadingProgress("terrain:"+Number(progress?.completed||0)+"/"+Number(progress?.required||0));
-          applySceneLoadingPresentation();
-        }
-      });
-      sceneLoadingState.preparation.terrainWallMs=Number((performance.now()-terrainStarted).toFixed(3));
-      const preloadMetrics=GameRenderer.snapshot?.().terrainPreload||{};
-      sceneLoadingState.preparation.terrainMaxSliceMs=Number(preloadMetrics.destinationMaxSliceMs||0);
-      sceneLoadingState.preparation.terrainDataMaxSliceMs=Number(preloadMetrics.destinationDataMaxMs||0);
-      sceneLoadingState.preparation.terrainMeshMaxWorkMs=Number(preloadMetrics.maxWorkMs||0);
-      if(destination?.ready!==true)throw new Error("Startup terrain preparation did not reach incremental readiness.");
-      startupDestinationPrepared=true;
-    }
     const rendererPrepared=await Promise.resolve(GameRenderer.prepareTerrain?.({
       seed:campaign.seed,
       center,
@@ -1680,7 +1490,6 @@ async function renderTerrain(){
       regionKey:base.regionKey
     }));
     if(rendererPrepared&&rendererPrepared.prepared===false)return false;
-    if(startupDestinationPrepared)GameRenderer.finishTerrainDestination?.();
     cachedTerrain=GameRenderer.getPreparedTerrainView?.({
       seed:campaign.seed,
       center,
@@ -1730,12 +1539,7 @@ async function renderTerrain(){
     e.terrainGrid.hidden=true;
   }
   if(startupLoading)setSceneLoadingPhase("assets");
-  const textureStarted=startupLoading?performance.now():0;
   const prepared=await TextureAssets.prepareRegion(regionKey,requiredKeys);
-  if(startupLoading){
-    sceneLoadingState.preparation.textureRegionWallMs=Number((performance.now()-textureStarted).toFixed(3));
-    noteSceneLoadingProgress("texture-region-ready");
-  }
   if(currentSerial!==terrainRenderSerial||!prepared.ready||prepared.stale||!TextureAssets.isRegionPrepared(regionKey,requiredKeys)){
     return false;
   }
@@ -1744,13 +1548,8 @@ async function renderTerrain(){
   const interiorObjects=window.InteriorObjects?.build?InteriorObjects.build(campaign.seed):[];
   const characterBundle=visibleCharacterSpecs(campaign,center,columns,rows,tileSize);
   renderVisibleActionRibbon(characterBundle.visibleCharacters);
-  const characterStarted=startupLoading?performance.now():0;
   const characterPreparation=GameRenderer.prepareCharacters?.(characterBundle.visibleCharacters,characterBundle.simulatedCharacterCount)||Promise.resolve(null);
   await characterPreparation;
-  if(startupLoading){
-    sceneLoadingState.preparation.characterPreparationWallMs=Number((performance.now()-characterStarted).toFixed(3));
-    noteSceneLoadingProgress("character-presentation-ready");
-  }
   if(currentSerial!==terrainRenderSerial)return false;
   const rendererSnapshot=GameRenderer.render({
     width,height,columns,rows,tileSize,
@@ -3202,8 +3001,6 @@ window.AppUI=Object.freeze({
   applicationStartupSnapshot,
   setSceneLoadingProof,
   clearSceneLoadingProof,
-  setStartupWatchdogProofForEvidence,
-  evaluateStartupWatchdogForEvidence:(noProgressMs)=>startupWatchdogDecision(noProgressMs),
   startNewCampaignForEvidence:(seed)=>startNewCampaign(String(seed||"")),
   refreshTerrain:async()=>{const result=await renderTerrain();updateCameraPresentation();return result;},
   refreshBuildingPresentation:()=>renderBuildingPresentationProof(GameRenderer.snapshot()),

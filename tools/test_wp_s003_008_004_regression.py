@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WP-S003-008-004 current-startup regression evidence."""
+"""WP-S003-008-004 planet-first startup responsiveness regression evidence."""
 import json
 import sys
 import time
@@ -10,7 +10,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
-URL = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000/?evidence_fast_start=1"
+URL = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000/"
 OUT = Path(sys.argv[2] if len(sys.argv) > 2 else "tools/wp_s003_008_004_regression_artifact")
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -18,8 +18,8 @@ options = Options()
 options.add_argument("--headless=new")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-options.add_argument("--disable-gpu")
-options.add_argument("--window-size=430,900")
+options.add_argument("--enable-unsafe-swiftshader")
+options.add_argument("--window-size=412,915")
 options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
 driver = webdriver.Chrome(options=options)
 driver.set_page_load_timeout(120)
@@ -28,185 +28,177 @@ driver.set_script_timeout(300)
 evidence = {
     "wp": "WP-S003-008-004",
     "classification": "FUNCTIONAL / PERFORMANCE",
-    "visual": "N/A — startup responsiveness and no-progress recovery are functional timing/state requirements.",
+    "visual": "N/A — startup responsiveness, bounded cooperative work, and no-progress recovery are timing/state requirements.",
+    "viewport": {"width": 412, "height": 915, "profile": "Android-equivalent portrait"},
 }
 
 def js(script, *args):
     return driver.execute_script(script, *args)
 
-def startup_diagnostic():
-    try:
-        return js("""
-          return {
-            readyState: document.readyState,
-            hasAppUI: !!window.AppUI,
-            hasGameRenderer: !!window.GameRenderer,
-            gate: window.AppUI?.applicationStartupSnapshot?.() || null,
-            scene: window.AppUI?.sceneLoadingSnapshot?.() || null,
-            renderer: window.GameRenderer?.snapshot?.() || null,
-            campaign: window.SeedSystem?.getCampaign?.() || null
-          };
-        """)
-    except Exception as exc:
-        return {"diagnosticError": repr(exc)}
+def wait_planet_api(timeout=30):
+    WebDriverWait(driver, timeout).until(lambda d: d.execute_script("return !!window.PlanetStage;"))
 
-def wait_app_ready(timeout=60):
-    try:
-        WebDriverWait(driver, timeout).until(
-            lambda d: d.execute_script(
-                "return !!window.AppUI && !!window.GameRenderer && "
-                "window.AppUI.applicationStartupSnapshot().state === 'ready';"
-            )
+def observe_until_ready(timeout=210):
+    deadline = time.monotonic() + timeout
+    observations = []
+    last_key = None
+    while time.monotonic() < deadline:
+        snapshot = js("return window.PlanetStage.snapshot();")
+        progress = snapshot.get("startupProgress") or {}
+        key = (
+            progress.get("phaseId"),
+            round(float(progress.get("measuredPercent") or 0), 3),
+            int(progress.get("surfaceSamplesCompleted") or 0),
+            progress.get("watchdogStatus"),
         )
-    except Exception:
-        evidence["startupDiagnostic"] = startup_diagnostic()
-        evidence["browserLogsAtStartupFailure"] = driver.get_log("browser")[-80:]
-        print(json.dumps({
-            "checkpoint": "application-startup-timeout",
-            "diagnostic": evidence["startupDiagnostic"],
-            "browserLogs": evidence["browserLogsAtStartupFailure"],
-        }, indent=2), flush=True)
-        raise
+        if key != last_key:
+            observations.append({
+                "wallSeconds": round(time.monotonic(), 3),
+                "phaseId": key[0],
+                "percent": key[1],
+                "surfaceSamplesCompleted": key[2],
+                "surfaceSamplesTotal": int(progress.get("surfaceSamplesTotal") or 0),
+                "watchdogStatus": key[3],
+            })
+            last_key = key
+        if snapshot.get("ready") is True and progress.get("mode") == "ready":
+            return snapshot, observations
+        if progress.get("mode") == "failed":
+            raise AssertionError("startup entered failed state: " + json.dumps(progress, sort_keys=True))
+        time.sleep(0.2)
+    raise AssertionError("planet-first startup did not reach ready within evidence timeout")
 
-def wait_loader_settled():
-    WebDriverWait(driver, 240).until(
-        lambda d: d.execute_script(
-            "return ['hidden','ready'].includes(window.AppUI.sceneLoadingSnapshot().current.state);"
-        )
-    )
+def severe_logs():
+    return [
+        row for row in driver.get_log("browser")
+        if row.get("level") == "SEVERE" and "favicon" not in str(row.get("message", "")).lower()
+    ]
 
 try:
-    print(json.dumps({"checkpoint": "navigate", "url": URL}), flush=True)
     driver.get(URL)
-    wait_app_ready()
-    print(json.dumps({"checkpoint": "application-ready", "diagnostic": startup_diagnostic()}), flush=True)
+    wait_planet_api()
+    first, observations = observe_until_ready()
+    progress = first.get("startupProgress") or {}
+    scheduler = first.get("startupScheduler") or {}
 
-    driver.execute_async_script("""
-      const done=arguments[arguments.length-1];
-      Promise.resolve(window.AppUI.startNewCampaignForEvidence('AGENT6-WP-S003-008-004-REGRESSION'))
-        .then(()=>done({ok:true}))
-        .catch(error=>done({ok:false,error:String(error)}));
-    """)
-    wait_loader_settled()
-
-    initial = js("""
-      return {
-        ui: window.AppUI.sceneLoadingSnapshot(),
-        renderer: window.GameRenderer.snapshot(),
-        campaign: window.SeedSystem.getCampaign()
-      };
-    """)
-    current = initial["ui"]["current"]
-    preload = initial["renderer"].get("terrainPreload") or {}
-    prep = current.get("preparation") or {}
+    surface_obs = [o for o in observations if o.get("phaseId") == "surface"]
+    distinct_surface = sorted({float(o.get("percent") or 0) for o in surface_obs})
+    if len(distinct_surface) < 3 or (max(distinct_surface) - min(distinct_surface)) < 5:
+        raise AssertionError("surface loading did not expose truthful incremental progress: " + repr(surface_obs))
+    if int(scheduler.get("surfaceProgressUpdates") or 0) < 3:
+        raise AssertionError("surface progress telemetry did not update incrementally: " + repr(scheduler))
+    if int(progress.get("surfaceSamplesTotal") or 0) <= 0:
+        raise AssertionError("surface sample total is missing: " + repr(progress))
+    if int(progress.get("surfaceSamplesCompleted") or 0) != int(progress.get("surfaceSamplesTotal") or 0):
+        raise AssertionError("surface samples did not complete: " + repr(progress))
+    if int(scheduler.get("yieldCount") or 0) < 1 or int(scheduler.get("paintHeartbeatCount") or 0) < 1 or int(scheduler.get("heartbeatCount") or 0) < 1:
+        raise AssertionError("browser heartbeat/yield evidence is missing: " + repr(scheduler))
+    if float(scheduler.get("maxSliceMs") or 0) >= 50:
+        raise AssertionError("controlled cooperative slice exceeded 50 ms: " + repr(scheduler.get("maxSliceMs")))
+    if int(scheduler.get("controlledLongTaskOver200") or 0) != 0:
+        raise AssertionError("severe >200 ms controlled startup task observed: " + repr(scheduler))
+    if float(scheduler.get("controlledLongestLongTaskMs") or 0) >= 200:
+        raise AssertionError("controlled startup long task reached 200 ms: " + repr(scheduler))
+    if int(scheduler.get("watchdogStallCount") or 0) != 0:
+        raise AssertionError("healthy startup tripped no-progress watchdog: " + repr(scheduler))
+    if float(scheduler.get("watchdogMaxNoProgressMs") or 0) >= 30000:
+        raise AssertionError("healthy startup reached watchdog stall threshold: " + repr(scheduler))
+    if scheduler.get("simulationAuthorityPreserved") is not True:
+        raise AssertionError("startup watchdog/scheduler authority isolation missing: " + repr(scheduler))
+    for metric in ("surfaceSamplingWallMs", "surfaceCanvasCommitMs", "surfaceTextureUploadMs"):
+        if float(scheduler.get(metric) or 0) <= 0:
+            raise AssertionError(f"{metric} telemetry missing: {scheduler}")
 
     decisions = {
-        "healthy": js("return window.AppUI.evaluateStartupWatchdogForEvidence(0);"),
-        "slow": js("return window.AppUI.evaluateStartupWatchdogForEvidence(9000);"),
-        "stalled": js("return window.AppUI.evaluateStartupWatchdogForEvidence(31000);"),
+        "healthy": js("return window.PlanetStage.evaluateStartupWatchdogForEvidence(0);"),
+        "slow": js("return window.PlanetStage.evaluateStartupWatchdogForEvidence(9000);"),
+        "stalled": js("return window.PlanetStage.evaluateStartupWatchdogForEvidence(31000);"),
     }
     expected = {"healthy": "healthy", "slow": "slow", "stalled": "stalled"}
     for name, status in expected.items():
         if decisions[name].get("status") != status:
             raise AssertionError(f"watchdog threshold mismatch for {name}: {decisions[name]}")
+        if decisions[name].get("simulationAuthorityPreserved") is not True:
+            raise AssertionError(f"watchdog authority isolation missing for {name}: {decisions[name]}")
 
-    watchdog = current.get("watchdog") or {}
-    if watchdog.get("simulationAuthorityPreserved") is not True:
-        raise AssertionError(f"watchdog authority isolation missing: {watchdog}")
-    if not watchdog.get("lastProgressAtMs"):
-        raise AssertionError(f"last-progress telemetry missing: {watchdog}")
-    if float(prep.get("terrainWallMs") or 0) <= 0:
-        raise AssertionError(f"startup terrain wall telemetry missing: {prep}")
-    if int(prep.get("terrainProgressEvents") or 0) < 1:
-        raise AssertionError(f"startup terrain progress events missing: {prep}")
-    if int(prep.get("terrainRequiredChunks") or 0) < 1:
-        raise AssertionError(f"required first-playable chunk count missing: {prep}")
-    if int(prep.get("terrainCompletedChunks") or 0) < int(prep.get("terrainRequiredChunks") or 0):
-        raise AssertionError(f"startup terrain did not complete required chunks: {prep}")
-
-    controlled_metrics = {
-        "destinationMaxSliceMs": float(preload.get("destinationMaxSliceMs") or 0),
-        "destinationDataMaxMs": float(preload.get("destinationDataMaxMs") or 0),
-        "maxWorkMs": float(preload.get("maxWorkMs") or 0),
-    }
-    for name, value in controlled_metrics.items():
-        if value >= 50:
-            raise AssertionError(f"{name} exceeded 50 ms: {value}")
-    if int(preload.get("destinationLongTask50") or 0) != 0:
-        raise AssertionError(f"controlled destination slices crossed 50 ms: {preload}")
-    if int(preload.get("destinationPaintHeartbeats") or 0) < 1:
-        raise AssertionError(f"startup preparation did not yield through paint boundaries: {preload}")
-    if float(preload.get("destinationWallMs") or 0) <= 0:
-        raise AssertionError(f"destination wall timing missing: {preload}")
-
-    js("return window.AppUI.setStartupWatchdogProofForEvidence('slow',{elapsedMs:12000,noProgressMs:9000,progress:68});")
-    slow_overlay = js("return window.AppUI.sceneLoadingSnapshot().overlay;")
-    if "Still working" not in str(slow_overlay.get("message") or ""):
-        raise AssertionError(f"slow state is not communicated: {slow_overlay}")
-    if "elapsed" not in str(slow_overlay.get("progressText") or ""):
-        raise AssertionError(f"slow state lacks elapsed telemetry: {slow_overlay}")
-
-    js("return window.AppUI.setStartupWatchdogProofForEvidence('stalled',{elapsedMs:34000,noProgressMs:31000,progress:68});")
-    stalled_overlay = js("return window.AppUI.sceneLoadingSnapshot().overlay;")
-    if stalled_overlay.get("retryVisible") is not True:
-        raise AssertionError(f"verified no-progress state lacks retry: {stalled_overlay}")
-    if "No measurable progress" not in str(stalled_overlay.get("message") or ""):
-        raise AssertionError(f"verified no-progress state lacks diagnostic: {stalled_overlay}")
-
-    before_seed = str(initial["campaign"]["seed"])
-    before_active = int(preload.get("Active") or 0)
-    driver.find_element(By.ID, "sceneLoadingRetry").click()
-    wait_app_ready()
-    wait_loader_settled()
-
-    after = js("""
+    js("return window.PlanetStage.setStartupWatchdogProofForEvidence('slow',{elapsedMs:12000,lastProgressAgeMs:9000,percent:68,surfaceRatio:.4});")
+    slow_ui = js("""
+      const root=document.querySelector('#planetStageRoot'),overlay=root.querySelector('.planet-stage-loading');
       return {
-        ui: window.AppUI.sceneLoadingSnapshot(),
-        renderer: window.GameRenderer.snapshot(),
-        campaign: window.SeedSystem.getCampaign()
+        phase:overlay.querySelector('.planet-stage-loading-phase')?.textContent||'',
+        percent:overlay.querySelector('.planet-stage-loading-percent')?.textContent||'',
+        retryHidden:overlay.querySelector('.planet-stage-loading-retry')?.hidden,
+        mode:overlay.dataset.mode,proof:overlay.dataset.proof
       };
     """)
-    after_preload = after["renderer"].get("terrainPreload") or {}
-    after_seed = str(after["campaign"]["seed"])
-    if after_seed != before_seed:
-        raise AssertionError(f"reload retry changed Campaign SEED: {before_seed} -> {after_seed}")
-    if after_preload.get("simulationAuthorityPreserved") is not True:
-        raise AssertionError(f"reload retry lost Simulation isolation: {after_preload}")
-    active_target = int(after_preload.get("activeTargetCount") or after_preload.get("Active") or 0)
-    if int(after_preload.get("Active") or 0) > active_target:
-        raise AssertionError(f"reload retry duplicated active terrain resources: {after_preload}")
+    if "Still working" not in slow_ui.get("phase", "") or "elapsed" not in slow_ui.get("percent", ""):
+        raise AssertionError("slow-start presentation lacks useful live diagnostics: " + repr(slow_ui))
+    if slow_ui.get("retryHidden") is not True:
+        raise AssertionError("retry should stay hidden while measurable work can continue: " + repr(slow_ui))
 
-    severe = [
-        row for row in driver.get_log("browser")
-        if row.get("level") == "SEVERE" and "favicon" not in str(row.get("message", "")).lower()
-    ]
+    js("return window.PlanetStage.setStartupWatchdogProofForEvidence('stalled',{elapsedMs:34000,lastProgressAgeMs:31000,percent:68});")
+    stalled_ui = js("""
+      const root=document.querySelector('#planetStageRoot'),overlay=root.querySelector('.planet-stage-loading');
+      return {
+        phase:overlay.querySelector('.planet-stage-loading-phase')?.textContent||'',
+        percent:overlay.querySelector('.planet-stage-loading-percent')?.textContent||'',
+        retryHidden:overlay.querySelector('.planet-stage-loading-retry')?.hidden,
+        mode:overlay.dataset.mode,proof:overlay.dataset.proof
+      };
+    """)
+    if stalled_ui.get("retryHidden") is not False or stalled_ui.get("mode") != "failed":
+        raise AssertionError("verified no-progress state lacks retry recovery: " + repr(stalled_ui))
+    if "No measurable progress" not in stalled_ui.get("phase", ""):
+        raise AssertionError("verified no-progress state lacks clear diagnostic: " + repr(stalled_ui))
+
+    before_seed = str(first.get("activeSeed"))
+    before_hash = str(first.get("geographyHash"))
+    driver.find_element(By.CLASS_NAME, "planet-stage-loading-retry").click()
+    wait_planet_api()
+    second, retry_observations = observe_until_ready()
+    if str(second.get("activeSeed")) != before_seed:
+        raise AssertionError("Retry reload changed active SEED")
+    if str(second.get("geographyHash")) != before_hash:
+        raise AssertionError("Retry reload changed deterministic geography identity")
+    retry_scheduler = second.get("startupScheduler") or {}
+    if int(retry_scheduler.get("watchdogStallCount") or 0) != 0:
+        raise AssertionError("healthy retry tripped watchdog: " + repr(retry_scheduler))
+    if retry_scheduler.get("simulationAuthorityPreserved") is not True:
+        raise AssertionError("retry path lost Simulation authority isolation")
+
+    severe = severe_logs()
     if severe:
-        raise AssertionError(f"severe browser errors: {severe[-10:]}")
+        raise AssertionError("severe browser errors: " + repr(severe[-10:]))
 
     evidence.update({
         "pass": True,
-        "watchdogDecisions": decisions,
-        "startupWatchdog": watchdog,
-        "startupPreparation": prep,
-        "controlledPreparation": {
-            **controlled_metrics,
-            "destinationWallMs": preload.get("destinationWallMs"),
-            "destinationPaintHeartbeats": preload.get("destinationPaintHeartbeats"),
-            "destinationLongTask50": preload.get("destinationLongTask50"),
+        "firstStartup": {
+            "seed": before_seed,
+            "geographyHash": before_hash,
+            "observations": observations,
+            "surfaceObservationCount": len(surface_obs),
+            "distinctSurfacePercentCount": len(distinct_surface),
+            "startupProgress": progress,
+            "startupScheduler": scheduler,
         },
-        "slowOverlay": slow_overlay,
-        "stalledOverlay": stalled_overlay,
+        "watchdogDecisions": decisions,
+        "slowPresentation": slow_ui,
+        "stalledPresentation": stalled_ui,
         "retry": {
-            "seedStable": after_seed == before_seed,
-            "activeBefore": before_active,
-            "activeAfter": after_preload.get("Active"),
-            "activeTargetAfter": active_target,
-            "simulationAuthorityPreserved": after_preload.get("simulationAuthorityPreserved"),
+            "seedStable": str(second.get("activeSeed")) == before_seed,
+            "geographyHashStable": str(second.get("geographyHash")) == before_hash,
+            "observationCount": len(retry_observations),
+            "startupScheduler": retry_scheduler,
         },
     })
 except Exception as exc:
     evidence["pass"] = False
     evidence["error"] = repr(exc)
+    try:
+        evidence["failureSnapshot"] = js("return window.PlanetStage?.snapshot?.() || null;")
+        evidence["browserLogs"] = driver.get_log("browser")[-80:]
+    except Exception as diagnostic_exc:
+        evidence["diagnosticError"] = repr(diagnostic_exc)
     raise
 finally:
     (OUT / "evidence.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")

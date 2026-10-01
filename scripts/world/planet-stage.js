@@ -263,12 +263,18 @@ let meshVertexCount=0;
 let meshTriangleCount=0;
 let generatedTexture=null;
 let mapScaleShellTexture=null;
-let startupProgress={mode:"indeterminate",measuredPercent:null,displayedPercent:null,phaseId:"planning",phaseLabel:"Planning startup…",completedWeightedWork:0,totalWeightedWork:100,firstPaintAtMs:Date.now(),determinateAtMs:null,measured100AtMs:null,gameplayReadyAtMs:null,optionalPostReadyWorkCount:0};
+const startupEpochMs=Date.now();
+let startupProgress={mode:"indeterminate",measuredPercent:null,displayedPercent:null,phaseId:"planning",phaseLabel:"Planning startup…",completedWeightedWork:0,totalWeightedWork:100,firstPaintAtMs:startupEpochMs,startedAtMs:startupEpochMs,lastProgressAtMs:startupEpochMs,lastProgressLabel:"planning",watchdogStatus:"healthy",watchdogSlowSinceMs:null,watchdogStalledAtMs:null,surfaceSamplesCompleted:0,surfaceSamplesTotal:0,determinateAtMs:null,measured100AtMs:null,gameplayReadyAtMs:null,optionalPostReadyWorkCount:0};
 let loadingProof=null;
 const STARTUP_SLICE_BUDGET_MS=6;
-let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{}};
+const STARTUP_WATCHDOG_TICK_MS=1000;
+const STARTUP_WATCHDOG_SLOW_MS=8000;
+const STARTUP_WATCHDOG_STALL_MS=30000;
+let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{},watchdogChecks:0,watchdogSlowCount:0,watchdogStallCount:0,watchdogMaxNoProgressMs:0,surfaceProgressUpdates:0,surfaceSamplingWallMs:0,surfaceCanvasCommitMs:0,surfaceTextureUploadMs:0,surfaceProgressIntervalSamples:0,simulationAuthorityPreserved:true};
 let longTaskObserver=null;
 let heartbeatTimer=null;
+let startupWatchdogTimer=null;
+let startupAbortError=null;
 let controlledWorkActive=false;
 let lastHeartbeatAt=0;
 let destinationNavigator={open:false,category:"all",descriptors:[],selectedId:null,queryCount:0,lastQueryMs:0,navigationCount:0,lastTarget:null};
@@ -2516,33 +2522,109 @@ function updateProjectionState(){
 }
 
 function clamp(value,min,max){return Math.min(max,Math.max(min,Number(value)||0));}
+function loadingSeconds(ms){
+  const seconds=Math.max(0,Number(ms)||0)/1000;
+  return seconds<10?seconds.toFixed(1)+"s":Math.round(seconds)+"s";
+}
+function startupWatchdogDecision(noProgressMs){
+  const age=Math.max(0,Number(noProgressMs)||0);
+  const status=age>=STARTUP_WATCHDOG_STALL_MS?"stalled":age>=STARTUP_WATCHDOG_SLOW_MS?"slow":"healthy";
+  return Object.freeze({status,noProgressMs:age,slowAfterMs:STARTUP_WATCHDOG_SLOW_MS,stallAfterMs:STARTUP_WATCHDOG_STALL_MS,simulationAuthorityPreserved:true});
+}
+function stopStartupWatchdog(){
+  if(startupWatchdogTimer){clearInterval(startupWatchdogTimer);startupWatchdogTimer=null;}
+}
+function tickStartupWatchdog(now=Date.now()){
+  if(ready||startupProgress.mode==="ready"||startupProgress.mode==="failed"){stopStartupWatchdog();return startupWatchdogDecision(0);}
+  startupScheduler.watchdogChecks++;
+  const last=Number(startupProgress.lastProgressAtMs||startupProgress.startedAtMs||now);
+  const decision=startupWatchdogDecision(now-last);
+  startupScheduler.watchdogMaxNoProgressMs=Math.max(startupScheduler.watchdogMaxNoProgressMs,decision.noProgressMs);
+  if(decision.status==="healthy"){
+    if(startupProgress.watchdogStatus!=="healthy")startupProgress={...startupProgress,watchdogStatus:"healthy",watchdogSlowSinceMs:null};
+  }else if(decision.status==="slow"){
+    if(startupProgress.watchdogStatus!=="slow"){
+      startupScheduler.watchdogSlowCount++;
+      startupProgress={...startupProgress,watchdogStatus:"slow",watchdogSlowSinceMs:now};
+    }
+  }else if(!startupAbortError){
+    startupScheduler.watchdogStallCount++;
+    const message="No measurable startup progress for "+loadingSeconds(decision.noProgressMs)+". Retry safely; world state is unchanged.";
+    startupAbortError=new Error(message);
+    startupError=message;
+    startupProgress={...startupProgress,mode:"failed",phaseId:"error",phaseLabel:message,title:"Startup needs attention",watchdogStatus:"stalled",watchdogStalledAtMs:now};
+    stopStartupWatchdog();
+  }
+  presentStartupProgress();
+  return decision;
+}
+function startStartupWatchdog(){
+  stopStartupWatchdog();
+  startupWatchdogTimer=setInterval(()=>tickStartupWatchdog(Date.now()),STARTUP_WATCHDOG_TICK_MS);
+}
 function loadingNodes(){
   const overlay=root?.querySelector?.(".planet-stage-loading");
-  return {overlay,title:overlay?.querySelector?.(".planet-stage-loading-title"),phase:overlay?.querySelector?.(".planet-stage-loading-phase"),bar:overlay?.querySelector?.(".planet-stage-loading-bar"),percent:overlay?.querySelector?.(".planet-stage-loading-percent"),track:overlay?.querySelector?.(".planet-stage-loading-progress")};
+  return {overlay,title:overlay?.querySelector?.(".planet-stage-loading-title"),phase:overlay?.querySelector?.(".planet-stage-loading-phase"),bar:overlay?.querySelector?.(".planet-stage-loading-bar"),percent:overlay?.querySelector?.(".planet-stage-loading-percent"),track:overlay?.querySelector?.(".planet-stage-loading-progress"),retry:overlay?.querySelector?.(".planet-stage-loading-retry")};
 }
 function presentStartupProgress(){
   const n=loadingNodes();if(!n.overlay)return;
   const p=loadingProof||startupProgress;
   n.overlay.hidden=!loadingProof&&p.mode==="ready";n.overlay.dataset.mode=String(p.mode||"determinate");n.overlay.dataset.phase=String(p.phaseId||"planning");n.overlay.dataset.proof=loadingProof?"true":"false";
+  const now=Date.now();
+  const elapsedMs=Math.max(0,Number(p.elapsedMs??(now-Number(p.startedAtMs||startupProgress.startedAtMs||now)))||0);
+  const progressAgeMs=Math.max(0,Number(p.lastProgressAgeMs??(now-Number(p.lastProgressAtMs||startupProgress.lastProgressAtMs||now)))||0);
+  const watchdogStatus=String(p.watchdogStatus||"healthy");
   if(n.title)n.title.textContent=String(p.title||((p.mode==="ready")?"World ready":(p.mode==="failed")?"Startup interrupted":"Waking the world"));
-  if(n.phase)n.phase.textContent=String(p.phaseLabel||"Preparing world…");
+  let phaseText=String(p.phaseLabel||"Preparing world…");
+  if(watchdogStatus==="slow"&&!/Still working/i.test(phaseText))phaseText+=" Still working — no new measurable progress for "+loadingSeconds(progressAgeMs)+".";
+  if(n.phase)n.phase.textContent=phaseText;
   const value=clamp(p.displayedPercent??p.measuredPercent??0,0,100);
   if(n.bar)n.bar.style.width=value.toFixed(1)+"%";
   if(n.track)n.track.setAttribute("aria-valuenow",String(Math.round(value)));
-  if(n.percent)n.percent.textContent=p.mode==="indeterminate"?"Planning startup…":Math.round(value)+"%";
+  if(n.percent){
+    if(p.mode==="indeterminate")n.percent.textContent="Planning startup…";
+    else{
+      const surfaceTotal=Number(p.surfaceSamplesTotal??startupProgress.surfaceSamplesTotal??0);
+      const surfaceDone=Number(p.surfaceSamplesCompleted??startupProgress.surfaceSamplesCompleted??0);
+      const sampleText=String(p.phaseId)==="surface"&&surfaceTotal>0?" · surface "+Math.round(100*surfaceDone/surfaceTotal)+"%":"";
+      const ageText=progressAgeMs<1500?"progress just now":"progress "+loadingSeconds(progressAgeMs)+" ago";
+      n.percent.textContent=Math.round(value)+"%"+sampleText+" · "+loadingSeconds(elapsedMs)+" elapsed · "+ageText;
+    }
+  }
+  if(n.retry){
+    n.retry.hidden=String(p.mode)!=="failed";
+    if(n.retry.dataset.bound!=="true"){
+      n.retry.dataset.bound="true";
+      n.retry.addEventListener("click",()=>window.location.reload());
+    }
+  }
 }
 function setStartupProgress(phaseId,phaseLabel,percent,mode="determinate"){
-  const value=clamp(percent,0,100);
-  if(startupProgress.mode==="indeterminate"&&mode!=="indeterminate")startupProgress.determinateAtMs=Date.now();
+  if(startupAbortError&&mode!=="failed")throw startupAbortError;
+  const value=clamp(percent,0,100),now=Date.now();
+  if(startupProgress.mode==="indeterminate"&&mode!=="indeterminate")startupProgress.determinateAtMs=now;
   const previous=Number(startupProgress.measuredPercent??0);
   const measured=Math.max(previous,value);
-  startupProgress={...startupProgress,mode,phaseId:String(phaseId),phaseLabel:String(phaseLabel),measuredPercent:measured,displayedPercent:measured,completedWeightedWork:measured};
-  if(measured===100&&!startupProgress.measured100AtMs)startupProgress.measured100AtMs=Date.now();
+  const nextPhase=String(phaseId),phaseChanged=nextPhase!==String(startupProgress.phaseId||"");
+  const advanced=measured>previous+1e-9;
+  startupProgress={...startupProgress,mode,phaseId:nextPhase,phaseLabel:String(phaseLabel),measuredPercent:measured,displayedPercent:measured,completedWeightedWork:measured,
+    ...(phaseChanged||advanced?{lastProgressAtMs:now,lastProgressLabel:nextPhase+":"+String(phaseLabel),watchdogStatus:"healthy",watchdogSlowSinceMs:null}:{})};
+  if(measured===100&&!startupProgress.measured100AtMs)startupProgress.measured100AtMs=now;
   presentStartupProgress();
 }
-function setLoadingProof(mode,phaseId,phaseLabel,percent){
-  loadingProof={mode:String(mode||"determinate"),phaseId:String(phaseId||"proof"),phaseLabel:String(phaseLabel||"Preparing world…"),measuredPercent:Number(percent),displayedPercent:Number(percent)};
+function setLoadingProof(mode,phaseId,phaseLabel,percent,options={}){
+  loadingProof={mode:String(mode||"determinate"),phaseId:String(phaseId||"proof"),phaseLabel:String(phaseLabel||"Preparing world…"),measuredPercent:Number(percent),displayedPercent:Number(percent),
+    title:options.title||null,watchdogStatus:String(options.watchdogStatus||"healthy"),elapsedMs:Math.max(0,Number(options.elapsedMs)||0),lastProgressAgeMs:Math.max(0,Number(options.lastProgressAgeMs)||0),
+    surfaceSamplesCompleted:Math.max(0,Number(options.surfaceSamplesCompleted)||0),surfaceSamplesTotal:Math.max(0,Number(options.surfaceSamplesTotal)||0)};
   presentStartupProgress();return snapshot();
+}
+function setStartupWatchdogProofForEvidence(status="healthy",options={}){
+  const key=["healthy","slow","stalled"].includes(String(status))?String(status):"healthy";
+  const elapsedMs=Math.max(0,Number(options.elapsedMs??(key==="healthy"?5000:key==="slow"?12000:34000))||0);
+  const lastProgressAgeMs=Math.max(0,Number(options.lastProgressAgeMs??(key==="healthy"?800:key==="slow"?9000:31000))||0);
+  const percent=clamp(options.percent??68,0,99);
+  if(key==="stalled")return setLoadingProof("failed","error","No measurable progress for "+loadingSeconds(lastProgressAgeMs)+". Retry safely; world state is unchanged.",percent,{title:"Startup needs attention",watchdogStatus:key,elapsedMs,lastProgressAgeMs});
+  return setLoadingProof("determinate","surface",key==="slow"?"Painting planetary surface and relief… Still working while this device finishes the current slice.":"Painting planetary surface and relief…",percent,{watchdogStatus:key,elapsedMs,lastProgressAgeMs,surfaceSamplesCompleted:Math.round((options.surfaceRatio??.4)*204800),surfaceSamplesTotal:204800});
 }
 function clearLoadingProof(){loadingProof=null;presentStartupProgress();return snapshot();}
 function yieldPaint(){startupScheduler.paintHeartbeatCount++;return new Promise(resolve=>requestAnimationFrame(()=>resolve()));}
@@ -2551,21 +2633,25 @@ function yieldBrowser(){
   return new Promise(resolve=>setTimeout(resolve,0));
 }
 async function runSlicedRange(total,step){
+  if(startupAbortError)throw startupAbortError;
   startupScheduler.firstPlayableWorkUnits+=total;
   let sliceStarted=performance.now();
-  for(let i=0;i<total;i++){    step(i);
+  for(let i=0;i<total;i++){
+    step(i);
     startupScheduler.completedFirstPlayableWorkUnits++;
     const elapsed=performance.now()-sliceStarted;
     if(elapsed>=STARTUP_SLICE_BUDGET_MS&&i+1<total){
       startupScheduler.sliceCount++;
       startupScheduler.maxSliceMs=Math.max(startupScheduler.maxSliceMs,elapsed);
       await yieldBrowser();
+      if(startupAbortError)throw startupAbortError;
       sliceStarted=performance.now();
     }
   }
   const elapsed=performance.now()-sliceStarted;
   startupScheduler.sliceCount++;
   startupScheduler.maxSliceMs=Math.max(startupScheduler.maxSliceMs,elapsed);
+  if(startupAbortError)throw startupAbortError;
 }
 function beginResponsivenessTelemetry(){
   lastHeartbeatAt=performance.now();
@@ -2598,13 +2684,16 @@ function beginResponsivenessTelemetry(){
 }
 async function measuredPhase(id,work){
   await yieldBrowser();
+  if(startupAbortError)throw startupAbortError;
   const started=performance.now();
   const result=await work();
   startupScheduler.phaseTimings[id]=Number((performance.now()-started).toFixed(3));
   await yieldBrowser();
+  if(startupAbortError)throw startupAbortError;
   return result;
 }
 function endResponsivenessTelemetry(){
+  stopStartupWatchdog();
   if(heartbeatTimer){clearInterval(heartbeatTimer);heartbeatTimer=null;}
   longTaskObserver?.disconnect?.();longTaskObserver=null;
 }
@@ -8054,8 +8143,13 @@ async function makeGeographyTexture(){
   let landSamples=0,oceanSamples=0,islandSamples=0,mountainSamples=0,peakSamples=0;
   let highest=null,deepest=null,bestIsland=null,bestMountain=null,bestContinent=null,bestContinuity=null,bestContinuityScore=-Infinity;
   const polarReferenceByRow=new Map(),polarBlendStart=80*Math.PI/180,polarBlendSpan=10*Math.PI/180;
+  const totalSurfaceSamples=TEXTURE_WIDTH*TEXTURE_HEIGHT;
+  const surfaceProgressInterval=Math.max(TEXTURE_WIDTH,TEXTURE_WIDTH*8);
+  const surfaceStarted=performance.now();
+  startupScheduler.surfaceProgressIntervalSamples=surfaceProgressInterval;
+  startupProgress={...startupProgress,surfaceSamplesCompleted:0,surfaceSamplesTotal:totalSurfaceSamples};
 
-  await runSlicedRange(TEXTURE_WIDTH*TEXTURE_HEIGHT,index=>{
+  await runSlicedRange(totalSurfaceSamples,index=>{
     const py=Math.floor(index/TEXTURE_WIDTH),px=index-py*TEXTURE_WIDTH;
     const v=(py+0.5)/TEXTURE_HEIGHT;
     const lat=(0.5-v)*Math.PI;
@@ -8108,10 +8202,30 @@ async function makeGeographyTexture(){
       const continuityScore=sample.continentInfluence*3+sample.moisture*.35-Math.abs(sample.elevationMeters-650)/7000-sample.islandInfluence*.45;
       if(continuityScore>bestContinuityScore){bestContinuityScore=continuityScore;bestContinuity=descriptor;}
     }
+    const completed=index+1;
+    if(completed===totalSurfaceSamples||completed%surfaceProgressInterval===0){
+      const ratio=completed/totalSurfaceSamples;
+      startupScheduler.surfaceProgressUpdates++;
+      startupProgress={...startupProgress,surfaceSamplesCompleted:completed,surfaceSamplesTotal:totalSurfaceSamples};
+      setStartupProgress("surface","Painting planetary surface and relief… "+Math.round(ratio*100)+"% sampled",68+ratio*14);
+    }
   });
-  ctx.putImageData(image,0,0);
-  strategicCtx.putImageData(strategicImage,0,0);
+  startupScheduler.surfaceSamplingWallMs=Number((performance.now()-surfaceStarted).toFixed(3));
 
+  let surfaceCommitStarted=performance.now();
+  ctx.putImageData(image,0,0);
+  startupScheduler.surfaceCanvasCommitMs=Number((startupScheduler.surfaceCanvasCommitMs+performance.now()-surfaceCommitStarted).toFixed(3));
+  setStartupProgress("surface","Committing planetary surface atlas…",82.4);
+  await yieldBrowser();
+  if(startupAbortError)throw startupAbortError;
+  surfaceCommitStarted=performance.now();
+  strategicCtx.putImageData(strategicImage,0,0);
+  startupScheduler.surfaceCanvasCommitMs=Number((startupScheduler.surfaceCanvasCommitMs+performance.now()-surfaceCommitStarted).toFixed(3));
+  setStartupProgress("surface","Committing strategic map atlas…",82.8);
+  await yieldBrowser();
+  if(startupAbortError)throw startupAbortError;
+
+  let surfaceUploadStarted=performance.now();
   const texture=new pc.Texture(device,{
     width:TEXTURE_WIDTH,
     height:TEXTURE_HEIGHT,
@@ -8125,7 +8239,12 @@ async function makeGeographyTexture(){
   texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;
   texture.magFilter=pc.FILTER_LINEAR;
   texture.setSource(source);
+  startupScheduler.surfaceTextureUploadMs=Number((startupScheduler.surfaceTextureUploadMs+performance.now()-surfaceUploadStarted).toFixed(3));
+  setStartupProgress("surface","Uploading planetary surface texture…",83.2);
+  await yieldBrowser();
+  if(startupAbortError)throw startupAbortError;
 
+  surfaceUploadStarted=performance.now();
   const strategicTexture=new pc.Texture(device,{
     width:TEXTURE_WIDTH,
     height:TEXTURE_HEIGHT,
@@ -8139,6 +8258,10 @@ async function makeGeographyTexture(){
   strategicTexture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;
   strategicTexture.magFilter=pc.FILTER_LINEAR;
   strategicTexture.setSource(strategicSource);
+  startupScheduler.surfaceTextureUploadMs=Number((startupScheduler.surfaceTextureUploadMs+performance.now()-surfaceUploadStarted).toFixed(3));
+  setStartupProgress("surface","Planetary surface ready…",83.8);
+  await yieldBrowser();
+  if(startupAbortError)throw startupAbortError;
 
   generatedTexture=texture;
   mapScaleShellTexture=strategicTexture;
@@ -8996,6 +9119,9 @@ async function start(){
     root=document.getElementById("planetStageRoot");
     if(!root)throw new Error("Planet stage root is missing");
     beginResponsivenessTelemetry();
+    startupAbortError=null;
+    startupProgress={...startupProgress,startedAtMs:Date.now(),lastProgressAtMs:Date.now(),lastProgressLabel:"startup-begin",watchdogStatus:"healthy",watchdogSlowSinceMs:null,watchdogStalledAtMs:null};
+    startStartupWatchdog();
     presentStartupProgress();
     await yieldPaint();
     setStartupProgress("engine","Loading renderer…",15);
@@ -9089,14 +9215,16 @@ async function start(){
     controlledWorkActive=false;
     endResponsivenessTelemetry();
     startupError=String(error?.stack||error);
-    startupProgress={...startupProgress,mode:"failed",phaseId:"error",phaseLabel:"The planet could not finish preparing."};
+    const failureMessage=startupProgress.watchdogStatus==="stalled"
+      ?String(startupProgress.phaseLabel||error?.message||"Startup stopped after no measurable progress.")
+      :(/Saved campaign|campaign catch-up|authoritative resume/i.test(String(error?.message||error))
+        ?String(error?.message||error)
+        :"The planet could not finish preparing. Retry startup.");
+    startupProgress={...startupProgress,mode:"failed",phaseId:"error",phaseLabel:failureMessage,title:"Startup interrupted"};
     presentStartupProgress();
     if(root){
       root.dataset.ready="false";
       root.dataset.error=startupError;
-      root.textContent=/Saved campaign|campaign catch-up|authoritative resume/i.test(String(error?.message||error))
-        ?String(error?.message||error)
-        :"Planet renderer failed to start.";
     }
     console.error("Planet stage startup failed.",error);
     throw error;
@@ -9441,7 +9569,7 @@ function destroy(){
   geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localResidency.clear();localRecentEvictions.clear();localMotionPrefetchTargets.clear();localLastRequestRegistered=null;localMotionVector={east:0,north:0,magnitude:0};localStaticRefreshScheduled=false;mapPresentationSchedule={raf:0,timer:0,lastRenderedAtMs:0,pendingReason:null};liveMapAnchors=[];navigationPerformance=freshNavigationPerformance();projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
-  VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setZoomTargetScalar,setScaleIndex,stepScale,setAnimatedScaleIndex,stepAnimatedScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},placeDescriptors:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();return Object.freeze(destinationNavigator.descriptors.map(item=>Object.freeze({...item})))},refreshPlaces:()=>{buildDestinationDescriptors();renderDestinationNavigator();return snapshot();},openPlaces:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
+  VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setZoomTargetScalar,setScaleIndex,stepScale,setAnimatedScaleIndex,stepAnimatedScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,setStartupWatchdogProofForEvidence,evaluateStartupWatchdogForEvidence:(noProgressMs)=>startupWatchdogDecision(noProgressMs),applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},placeDescriptors:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();return Object.freeze(destinationNavigator.descriptors.map(item=>Object.freeze({...item})))},refreshPlaces:()=>{buildDestinationDescriptors();renderDestinationNavigator();return snapshot();},openPlaces:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
   setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},
   workCycleEvidenceState,surfaceContributorEvidence,setWp020PresentationEvidenceMode,armWp020TransitionEvidenceFreeze,wp020TransitionEvidenceFreezeState,releaseWp020TransitionEvidenceFreeze,
   focusWayfindingSignForEvidence:(id)=>{const sign=(wayfindingSignposts.signs||[]).find(item=>String(item.id)===String(id));if(sign){setWorldTileFocus(sign.anchor.x,sign.anchor.y);setZoomScalar(1);}return snapshot();},
