@@ -6,6 +6,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import TimeoutException
+from screenshot_tool import set_exact_viewport
 
 TARGET=os.environ.get("TARGET","http://127.0.0.1:8000/")
 OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s014-009"));OUT.mkdir(parents=True,exist_ok=True)
@@ -70,16 +71,16 @@ def assert_state(s):
 
 records=[]
 try:
-    driver.set_window_size(*VIEWPORTS["phone-portrait"]);driver.get(url("ordinary"))
+    set_exact_viewport(driver,*VIEWPORTS["phone-portrait"]);driver.get(url("ordinary"))
     try:wait.until(lambda d:ready("ordinary"))
     except TimeoutException:
         driver.save_screenshot(str(OUT/"startup-failure.png"));raise
     for profile,size in VIEWPORTS.items():
-        driver.set_window_size(*size);time.sleep(.35)
+        set_exact_viewport(driver,*size);time.sleep(.35)
         for mode in MATRIX[profile]:
             driver.execute_script("window.AdvisorSecurityReadoutUI.setEvidenceMode(arguments[0]);window.AdvisorConversationUI.render('wp-s014-009-'+arguments[0]);",mode)
             WebDriverWait(driver,30).until(lambda d,m=mode:ready(m));time.sleep(.2)
-            s=state(mode,profile);path=OUT/f"{profile}-{mode}.png";driver.save_screenshot(str(path));assert_state(s);records.append({"profile":profile,"mode":mode,"file":str(path),"state":s})
+            s=state(mode,profile)\n            if s["viewport"]!={"width":size[0],"height":size[1]}:raise RuntimeError("viewport calibration drift "+json.dumps(s))\n            path=OUT/f"{profile}-{mode}.png";driver.save_screenshot(str(path));assert_state(s);records.append({"profile":profile,"mode":mode,"file":str(path),"state":s})
     severe=[e for e in driver.get_log("browser") if e.get("level")=="SEVERE" and "favicon.ico" not in str(e.get("message",""))]
     if severe:raise RuntimeError("browser severe errors "+json.dumps(severe[-10:]))
     result={"pass":True,"wp":"WP-S014-009","classification":"MIXED","screenshots":len(records),"records":records}
