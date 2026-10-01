@@ -1,3 +1,11 @@
+2026-10-01T08:56:54Z | AGENT #6 | WP-S003-010-003-021 | MIXED ACCEPTED — deployment/completion pending
+- Accepted exact implementation/evidence head `2fcb49ed059d4fe33f8a55ed2a9eb8eccfad11bb`; dedicated workflow `36838797445` SUCCESS; artifact `11151190584`.
+- Fixed active globe-rotation label/callout freezing with a bounded live reprojection path for already-rendered canonical labels/leaders while semantic discovery/layout remains event-driven and pointer-settle refreshed.
+- Drag-time local streaming requests are deferred and refreshed once on settle; evidence recorded 36 pointer moves, 36 streaming deferrals, 2 settle refreshes, live reprojection max 0.2 ms, max semantic update 29.9 ms, max frame update 3.8 ms, ResidentMovement scheduler max 7.0 ms, missingCoverageCount=0 and fullWorldScan=false.
+- Removed the reported non-functional orange/yellow/pink regional-map shards by suppressing marker-like seasonal flower/leaf/frost/snow screen-space accents whenever local decorative presentation is ineligible; seasonal climate/tint treatment remains active. Regional accentCount=0, mapScaleAccentSuppressed=true, markerStandaloneDecorativeGlyphCount=0 and markerUnknownProductionCount=0.
+- Directly inspected all 6 fresh exact-head phone screenshots (390x844 + 844x390, before/mid-drag/after). VISUAL 8.4/10 PASS: colored shards are gone, labels visibly track map motion, political border/center marker stay coherent, and no major clipping/overlap defects remain.
+- Deployment and final completion bookkeeping remain required before Issue #274 closure.
+
 2026-10-01T07:40Z | AGENT #1 | WP-S013-008 | Added the bounded protagonist advancement-goal selector, live opportunity hydration, proposal handoff helpers, and focused tests; fixed maintain/reject selection stability for weak and hard-blocked advancement opportunities.
 
 2026-09-30 17:59 +03:00 | WP-S010-003 | FUNCTIONAL ACCEPTED — deployment/completion pending

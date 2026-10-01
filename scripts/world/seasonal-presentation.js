@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="seasonal-presentation-v1";
+const VERSION="seasonal-presentation-v2";
 const UPDATE_INTERVAL_MS=1500;
 const PROFILE_CACHE_LIMIT=24;
 const EVIDENCE_QUERY_KEY="seasonEvidence";
@@ -48,6 +48,7 @@ function bindContextObserver(root){
       if(target===root){
         if(record.attributeName==="data-ready")cachedRootReady=root.dataset.ready==="true";
         else if(record.attributeName==="data-seed")cachedSeed=String(root.dataset.seed||"");
+        else if(record.attributeName==="data-local-decorative-eligible"&&lastSnapshot?.active)refresh();
       }
       if(record.attributeName==="data-tile"&&target?.classList?.contains("planet-world-center")){centerMarker=target;cacheMarkerTile(target)}
       if(record.type==="childList"){
@@ -59,7 +60,7 @@ function bindContextObserver(root){
       }
     }
   });
-  contextObserver.observe(root,{attributes:true,attributeFilter:["data-ready","data-seed","data-tile"],childList:true,subtree:true});
+  contextObserver.observe(root,{attributes:true,attributeFilter:["data-ready","data-seed","data-tile","data-local-decorative-eligible"],childList:true,subtree:true});
 }
 function stageRoot(){
   if(rootNode)return rootNode;
@@ -222,7 +223,7 @@ function scheduleDraw(profile,seed,plan){
 }
 function refresh(){
   const started=performance.now(),contextStarted=performance.now(),context=rootContext(),contextMs=performance.now()-contextStarted,profileStarted=performance.now(),profile=buildProfile(context),profileMs=performance.now()-profileStarted,root=context?.root||stageRoot();
-  const active=Boolean(context&&profile&&root?.dataset?.ready==="true"),cls=deviceClass(),limit=accentLimit(cls),planStarted=performance.now(),plan=profile?accentPlan(profile,context?.seed||"",limit):Object.freeze({entries:Object.freeze([]),counts:Object.freeze({count:0,flower:0,leaf:0,frost:0,snow:0})}),planMs=performance.now()-planStarted,counts=plan.counts;
+  const active=Boolean(context&&profile&&root?.dataset?.ready==="true"),mapScaleAccentEligible=String(root?.dataset?.localDecorativeEligible||"true")!=="false",cls=deviceClass(),limit=accentLimit(cls),planStarted=performance.now(),plan=profile?accentPlan(profile,context?.seed||"",mapScaleAccentEligible?limit:0):Object.freeze({entries:Object.freeze([]),counts:Object.freeze({count:0,flower:0,leaf:0,frost:0,snow:0})}),planMs=performance.now()-planStarted,counts=plan.counts;
   if(active){ensureOverlay();applyGroundTreatment(profile,context.seed);scheduleDraw(profile,context.seed,plan)}
   else{if(ctx&&overlay)ctx.clearRect(0,0,overlay.width,overlay.height);if(groundWash)groundWash.style.background="none"}
   updateCount++;lastUpdateMs=performance.now()-started;maxUpdateMs=Math.max(maxUpdateMs,lastUpdateMs);
@@ -232,6 +233,7 @@ function refresh(){
     profile,season:profile?.season||"pending",seasonSignature:profile?.signature||null,
     region:context?Object.freeze({id:context.region.id,name:context.region.name,revision:context.region.revision,climate:context.region.identity?.climate||"unknown"}):null,
     deviceClass:cls,accentLimit:limit,accentCount:counts.count,flowerAccentCount:counts.flower,leafAccentCount:counts.leaf,frostAccentCount:counts.frost,snowAccentCount:counts.snow,
+    mapScaleAccentEligible,mapScaleAccentSuppressed:Boolean(active&&!mapScaleAccentEligible),
     overlayZIndex:2,cameraLocalPresentation:true,pooledAccents:true,groundTreatmentActive:Boolean(active&&groundWash),groundPatchCount:active?3:0,materialParameterCount:3,instanceVariationCount:counts.count,
     updateIntervalMs:UPDATE_INTERVAL_MS,profileCacheEntries:profileCache.size,profileCacheLimit:PROFILE_CACHE_LIMIT,spatialCacheHits:spatialHits,profileCacheHits:profileHits,
     updatePhasesMs:Object.freeze({context:round(contextMs),profile:round(profileMs),plan:round(planMs)}),

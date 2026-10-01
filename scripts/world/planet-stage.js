@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-focus-streaming-v1";
+const VERSION="planet-focus-streaming-v2";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
 
@@ -446,33 +446,41 @@ function freshLocalResources(){
     requestBudgetPerFrame:1,buildJobBudget:1,prefetchQueueLimit:1,graceResidencyMs:LOCAL_GRACE_RESIDENCY_MS,
     cacheBudgetBytes:LOCAL_RESOURCE_CACHE_BUDGET_BYTES,cacheBudgetExceeded:false,centerFirst:true,streamingRevision:"focus-streaming-v1",
     mediumRingSpanFactor:LOCAL_MEDIUM_RING_SPAN_FACTOR,mediumRingWidthMeters:0,mediumRingHeightMeters:0,mediumRingWorldMatched:false,
-    surroundSpanFactor:LOCAL_SURROUND_SPAN_FACTOR,surroundWidthMeters:0,surroundHeightMeters:0,surroundWorldMatched:false};
+    surroundSpanFactor:LOCAL_SURROUND_SPAN_FACTOR,surroundWidthMeters:0,surroundHeightMeters:0,surroundWorldMatched:false,
+    interactionStreamingDeferred:false,interactionSliceBudgetMs:2.5,activeSliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,
+    mapScalePresentationEligible:false,mapScaleSuppressionActive:false,mapScaleSuppressedRootCount:0,mapScaleSuppressionRevision:"map-scale-local-visibility-v1"};
 }
 let localResources=freshLocalResources();
 let localPreparationToken=0;
 let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,atlasVisibleLabelCount:0,atlasCandidateCount:0,atlasQueryCellCount:0,hiddenHemisphereCulledCount:0,behindCameraCulledCount:0,offscreenCulledCount:0,occludedCulledCount:0,overlapRejectedCount:0,visibleLabelClasses:[],visibleLabels:[],maxLabelBudget:0,maxLabelDisplacementPixels:0,labelQueryBuildMs:0,labelLayoutMs:0,borderProjectionMs:0,cityCandidateCount:0,cityVisibleCount:0,cityMinSeparationMeters:null,citySpacingPass:true,cityQueryCellCount:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,borderTopologySignature:null,borderGraphRevision:null,borderGraphNodeCount:0,borderGraphEdgeCount:0,borderGraphOwnerPairs:[],borderEndpointClassifications:null,borderFocusOwnerId:null,waterClippedBorderCount:0,borderDiagnostics:[],registrationMaxRoundTripErrorTiles:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",scaleStateIndex:0,scaleStateLabel:SCALE_LADDER[0],scalePixelLength:0,metersPerScreenPixel:0,rulerTruthErrorMeters:0,internalZoomScalar:0,updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
 let mapPresentationSchedule={raf:0,timer:0,lastRenderedAtMs:0,pendingReason:null};
+let liveMapAnchors=[];
 let navigationLongTaskObserver=null;
 let residentMovementTimer=0,residentMovementDrainTimer=0,residentMovementLastSchedulerAtMs=0;
-let navigationPerformance={
-  revision:"world-map-navigation-budget-v1",
-  semanticUpdateRequestCount:0,semanticUpdateRenderCount:0,semanticUpdateCoalescedCount:0,semanticUpdateForcedCount:0,
-  semanticUpdatePending:false,semanticUpdateMinIntervalMs:NAV_SEMANTIC_MIN_INTERVAL_MS,lastSemanticUpdateMs:0,maxSemanticUpdateMs:0,totalSemanticUpdateMs:0,
-  semanticPhaseLastMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
-  semanticPhaseMaxMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
-  semanticPhaseOver50Count:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
-  rotationRequestCount:0,zoomRequestCount:0,authorityRefreshRequestCount:0,pointerSettleFlushCount:0,
-  pointerMoveCount:0,pointerMoveSnapshotCount:0,pointerMoveSnapshotAvoidedCount:0,
-  programmaticRotationSnapshotAvoidedCount:0,zoomCommandSnapshotAvoidedCount:0,
-  frameUpdateCount:0,lastFrameUpdateMs:0,maxFrameUpdateMs:0,lastRenderCpuMs:0,maxRenderCpuMs:0,
-  frameUpdateOver50Count:0,renderCpuOver50Count:0,
-  framePhaseLastMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},
-  framePhaseMaxMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},
-  residentAdvanceSnapshotSuppressed:true,residentSchedulerMode:"fixed-step-cooperative",
-  residentSchedulerCalls:0,residentSchedulerLastMs:0,residentSchedulerMaxMs:0,residentSchedulerOver50Count:0,residentSchedulerPendingDrains:0,residentSchedulerWarmupMs:0,
-  longTask50Count:0,longTaskWorstMs:0,
-  eventDrivenSemanticUpdates:true,cameraMotionImmediate:true,perFrameFullPlanetIteration:false,bounded:true,fullWorldScan:false
-};
+function freshNavigationPerformance(){
+  return {
+    revision:"world-map-navigation-budget-v2",
+    semanticUpdateRequestCount:0,semanticUpdateRenderCount:0,semanticUpdateCoalescedCount:0,semanticUpdateForcedCount:0,
+    semanticUpdatePending:false,semanticUpdateMinIntervalMs:NAV_SEMANTIC_MIN_INTERVAL_MS,lastSemanticUpdateMs:0,maxSemanticUpdateMs:0,totalSemanticUpdateMs:0,
+    semanticPhaseLastMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
+    semanticPhaseMaxMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
+    semanticPhaseOver50Count:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
+    rotationRequestCount:0,zoomRequestCount:0,authorityRefreshRequestCount:0,pointerSettleFlushCount:0,
+    pointerMoveCount:0,pointerMoveSnapshotCount:0,pointerMoveSnapshotAvoidedCount:0,
+    programmaticRotationSnapshotAvoidedCount:0,zoomCommandSnapshotAvoidedCount:0,
+    liveProjectionCount:0,liveProjectionLabelUpdateCount:0,liveProjectionHiddenCount:0,liveProjectionLastMs:0,liveProjectionMaxMs:0,liveProjectionOver8MsCount:0,liveProjectionMaxLabels:0,
+    semanticUpdateDragDeferredCount:0,streamingRequestDeferredCount:0,pointerSettleStreamingRefreshCount:0,interactionStreamingDeferred:false,
+    frameUpdateCount:0,lastFrameUpdateMs:0,maxFrameUpdateMs:0,lastRenderCpuMs:0,maxRenderCpuMs:0,
+    frameUpdateOver50Count:0,renderCpuOver50Count:0,
+    framePhaseLastMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},
+    framePhaseMaxMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},
+    residentAdvanceSnapshotSuppressed:true,residentSchedulerMode:"fixed-step-cooperative",
+    residentSchedulerCalls:0,residentSchedulerLastMs:0,residentSchedulerMaxMs:0,residentSchedulerOver50Count:0,residentSchedulerPendingDrains:0,residentSchedulerWarmupMs:0,
+    longTask50Count:0,longTaskWorstMs:0,
+    eventDrivenSemanticUpdates:true,cameraMotionImmediate:true,liveSemanticProjection:true,dragStreamingDeferred:true,perFrameFullPlanetIteration:false,bounded:true,fullWorldScan:false
+  };
+}
+let navigationPerformance=freshNavigationPerformance();
 let atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};
 let atlasStickyBand=null;
 const atlasStickyEntities=new Map();
@@ -988,6 +996,42 @@ function projectGeographicAnchor(anchor,options={}){
   };
 }
 function projectMapLabel(descriptor){return projectGeographicAnchor(descriptor,{surfaceOffsetMeters:8});}
+function updateLiveMapAnchors(reason="rotation"){
+  if(!root||!canvas||!cameraEntity?.camera||!liveMapAnchors.length)return 0;
+  const started=performance.now(),rect=canvas.getBoundingClientRect(),rootRect=root.getBoundingClientRect();
+  const offsetX=rect.left-rootRect.left,offsetY=rect.top-rootRect.top;
+  let updated=0,hidden=0;
+  for(const item of liveMapAnchors){
+    const tag=item?.tag;if(!tag?.isConnected)continue;
+    const projected=atlasProjectCandidate(item.entity,rect).projection||null;
+    if(!projected){
+      tag.hidden=true;if(item.leader)item.leader.hidden=true;hidden++;continue;
+    }
+    tag.hidden=false;
+    tag.style.left=(offsetX+projected.screenX+item.dx).toFixed(2)+"px";
+    tag.style.top=(offsetY+projected.screenY+item.dy).toFixed(2)+"px";
+    if(item.leader){
+      item.leader.hidden=false;
+      item.leader.style.left=(offsetX+projected.screenX).toFixed(2)+"px";
+      item.leader.style.top=(offsetY+projected.screenY).toFixed(2)+"px";
+    }
+    updated++;
+  }
+  const elapsed=performance.now()-started;
+  navigationPerformance.liveProjectionCount++;
+  navigationPerformance.liveProjectionLabelUpdateCount+=updated;
+  navigationPerformance.liveProjectionHiddenCount+=hidden;
+  navigationPerformance.liveProjectionLastMs=Number(elapsed.toFixed(3));
+  navigationPerformance.liveProjectionMaxMs=Math.max(Number(navigationPerformance.liveProjectionMaxMs||0),navigationPerformance.liveProjectionLastMs);
+  navigationPerformance.liveProjectionMaxLabels=Math.max(Number(navigationPerformance.liveProjectionMaxLabels||0),liveMapAnchors.length);
+  if(elapsed>8)navigationPerformance.liveProjectionOver8MsCount++;
+  mapPresentation.liveProjectionActive=true;
+  mapPresentation.liveProjectionReason=String(reason||"rotation");
+  mapPresentation.liveProjectedLabelCount=updated;
+  mapPresentation.liveProjectionHiddenCount=hidden;
+  mapPresentation.liveProjectionLastMs=navigationPerformance.liveProjectionLastMs;
+  return updated;
+}
 function gameplayCenterMarkerTelemetry(layer){
   const fabric=coordinateFabricAuthority(),marker=layer?.querySelector?.(".planet-world-center");
   if(!fabric||!marker)return null;
@@ -1566,6 +1610,7 @@ function atlasFindLabelPlacement(entity,p,portrait,rect,reserved,occupied){
   return null;
 }
 function renderAtlasLabels(labelsLayer,portrait,spec){
+  liveMapAnchors=[];
   const query=atlasQueryCandidates(spec),occupied=[],visible=[],visibleLandmarks=[];
   let hidden=0,behind=0,offscreen=0,occluded=0,overlap=0;
   const hiddenReasons={outsideFootprint:0,hiddenHemisphere:0,behindCamera:0,offscreen:0,identityMismatch:0,overlap:0,duplicateName:0,classBudget:0,globalBudget:0};
@@ -1672,6 +1717,9 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
     tag.className=entity.type==="landmark"?"planet-map-landmark":"planet-atlas-label";
     tag.dataset.kind=entity.type==="landmark"?(entity.landmarkType||"landmark"):entity.type;
     tag.dataset.focus=String(entity.currentFocus===true);
+    tag.dataset.canonicalId=String(entity.id);
+    tag.dataset.anchorLatitudeRadians=String(Number(entity.latitudeRadians||0));
+    tag.dataset.anchorLongitudeRadians=String(Number(entity.longitudeRadians||0));
     const semanticMarker=semanticMarkerClass(entity);
     if(semanticMarker)tag.dataset.markerClass=semanticMarker;
     const rootRect=root.getBoundingClientRect(),canvasOffsetX=rect.left-rootRect.left,canvasOffsetY=rect.top-rootRect.top;
@@ -1680,14 +1728,16 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
     tag.querySelector("small").textContent=(entity.type==="landmark"?String(entity.landmarkType||"landmark"):entity.type).toUpperCase();
     tag.querySelector("strong").textContent=entity.name;
     const displacement=Math.hypot(placed.dx,placed.dy),leaderVisible=entity.type==="landmark"||displacement>=18;
+    let liveLeader=null;
     if(leaderVisible){
-      const leader=document.createElement("i");leader.className="planet-atlas-leader";leader.dataset.landmark=String(entity.type==="landmark");
+      const leader=document.createElement("i");leader.className="planet-atlas-leader";leader.dataset.landmark=String(entity.type==="landmark");leader.dataset.canonicalId=String(entity.id);
       leader.style.left=(canvasOffsetX+anchor.screenX).toFixed(2)+"px";leader.style.top=(canvasOffsetY+anchor.screenY).toFixed(2)+"px";
       leader.style.width=displacement.toFixed(1)+"px";
       leader.style.transform="rotate("+Math.atan2(placed.dy,placed.dx).toFixed(5)+"rad)";
-      labelsLayer.appendChild(leader);
+      labelsLayer.appendChild(leader);liveLeader=leader;
     }
     labelsLayer.appendChild(tag);occupied.push(box);
+    liveMapAnchors.push({entity,tag,leader:liveLeader,dx:Number(placed.dx||0),dy:Number(placed.dy||0)});
     const renderedRect=tag.getBoundingClientRect();
     const renderedCenterX=renderedRect.left+renderedRect.width*.5-rect.left;
     const renderedCenterY=renderedRect.top+renderedRect.height*.5-rect.top;
@@ -2273,6 +2323,12 @@ function updateMapPresentation(reason="direct",force=false){
   else if(String(reason).startsWith("zoom"))navigationPerformance.zoomRequestCount++;
   else if(reason==="authority-refresh")navigationPerformance.authorityRefreshRequestCount++;
   else if(reason==="pointer-settle")navigationPerformance.pointerSettleFlushCount++;
+  if(dragging&&!force&&reason!=="pointer-settle"){
+    navigationPerformance.semanticUpdateDragDeferredCount++;
+    mapPresentationSchedule.pendingReason=reason;
+    navigationPerformance.semanticUpdatePending=true;
+    return;
+  }
   if(force){
     navigationPerformance.semanticUpdateForcedCount++;
     cancelMapPresentationSchedule();
@@ -3708,6 +3764,35 @@ function revealHashText(value){
 }
 function settlementRevealTierForScalar(value=zoomState.scalar){
   return semanticLayerSpec(semanticScaleIndexForScalar(value),false).settlementRevealTier;
+}
+function localWorldPresentationEligibility(value=zoomState.scalar){
+  const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX),revealTier=settlementRevealTierForScalar(scalar);
+  const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
+  return Object.freeze({visible:revealTier!=="none"||Boolean(level?.staticWorld),revealTier,rawLevelIndex:rawIndex,rawLevelId:level?.id||null,rawStaticWorld:Boolean(level?.staticWorld)});
+}
+function applyLocalWorldPresentationVisibility(){
+  const gate=localWorldPresentationEligibility(),nodes=[localStaticRoot,localNpcRoot,localCrowdRoot,localBuildingActivityRoot,localCampaignWearMesh,localFaunaRoot,environmentalReactionRoot,localWayfindingEntity].filter(Boolean);
+  if(root?.dataset){
+    const eligible=String(Boolean(gate.visible));
+    if(root.dataset.localDecorativeEligible!==eligible)root.dataset.localDecorativeEligible=eligible;
+  }
+  let suppressed=0;
+  for(const node of nodes){
+    if(!gate.visible){
+      if(node.enabled!==false){
+        node.__mapScalePresentationSuppressed=true;
+        node.enabled=false;
+      }
+      if(node.__mapScalePresentationSuppressed===true)suppressed++;
+    }else if(node.__mapScalePresentationSuppressed===true){
+      node.enabled=true;
+      node.__mapScalePresentationSuppressed=false;
+    }
+  }
+  localResources.mapScalePresentationEligible=Boolean(gate.visible);
+  localResources.mapScaleSuppressionActive=!gate.visible&&suppressed>0;
+  localResources.mapScaleSuppressedRootCount=!gate.visible?suppressed:0;
+  return gate;
 }
 function canonicalStartingVillageReveal(resource){
   if(!activeSeed||!resource||!window.StartingVillage||!window.HousePlans||!window.SpecialLots||!window.SettlementArchetypes||!window.PoliticalGeography)return null;
@@ -6078,7 +6163,14 @@ function rebuildLocalStaticPresentation(resource){
   localStaticRoot?.destroy?.();localStaticRoot=null;localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;localSettlementLotGeometry?.destroy?.();localSettlementLotGeometry=null;clearCanonicalRoofRegistry();
   const tier=settlementRevealTierForScalar();
   resetMicroLocationPresentation();microLocationClearanceCenters=[];
-  localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,microLocationCount:0,microLocationPropCount:0,microLocationPrimitiveCount:0,microLocationDrawCallEstimate:0,microLocationTriangleEstimate:0,persistentConsequenceActiveCount:0,persistentConsequenceProjectedActiveCount:0,persistentConsequenceWorldCueCount:0,persistentConsequenceDrawCallEstimate:0,persistentConsequenceTriangleCount:0,persistentConsequenceBuildMs:0,persistentConsequenceRegistryRevision:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,presentationOnly:true,simulationAuthority:false};
+  localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,microLocationCount:0,microLocationPropCount:0,microLocationPrimitiveCount:0,microLocationDrawCallEstimate:0,microLocationTriangleEstimate:0,persistentConsequenceActiveCount:0,persistentConsequenceProjectedActiveCount:0,persistentConsequenceWorldCueCount:0,persistentConsequenceDrawCallEstimate:0,persistentConsequenceTriangleCount:0,persistentConsequenceBuildMs:0,persistentConsequenceRegistryRevision:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,mapScaleSuppressedDecorative:false,presentationOnly:true,simulationAuthority:false};
+  const scaleGate=localWorldPresentationEligibility();
+  if(!scaleGate.visible){
+    localStatic.mapScaleSuppressedDecorative=true;
+    localStatic.buildTimeMs=Number((performance.now()-started).toFixed(3));
+    applyLocalWorldPresentationVisibility();
+    return;
+  }
   const reveal=canonicalStartingVillageReveal(resource);
   if(reveal&&tier!=="none"){
     rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame);
@@ -7256,12 +7348,13 @@ function scheduleLocalPump(){
 function pumpLocalPreparation(){
   localPumpScheduled=false;
   const job=localJob;if(!job||!device)return;
-  const sliceStart=performance.now();let step=null;
+  const sliceStart=performance.now(),sliceBudget=dragging?Math.min(2.5,LOCAL_PREP_SLICE_BUDGET_MS):LOCAL_PREP_SLICE_BUDGET_MS;let step=null;
+  localResources.activeSliceBudgetMs=Number(sliceBudget.toFixed(3));
   try{
     while(!(step=job.iterator.next()).done){
       job.steps++;
       if(step?.value&&typeof step.value==="object"&&step.value.forceSlice)break;
-      if(performance.now()-sliceStart>=LOCAL_PREP_SLICE_BUDGET_MS)break;
+      if(performance.now()-sliceStart>=sliceBudget)break;
     }
   }catch(error){
     // A failed preparation must never wedge the pipeline: drop it, keep the
@@ -7356,6 +7449,7 @@ function requestLocalDetailResource(index){
   startLocalJob(index,lat,lon,signature,false);
 }
 function scheduleFocusedMapPrewarm(){
+  if(dragging)return;
   // Explicit globe focus changes get a bounded two-tier head start. This is
   // presentation scheduling only: each resource still comes from the same
   // Campaign-SEED/SLOD authority and occupies the normal cache budget.
@@ -7368,7 +7462,7 @@ function scheduleFocusedMapPrewarm(){
   }
 }
 function scheduleLocalPrewarm(){
-  if(localJob||!displayResource||projectionState.blend<=0)return;
+  if(dragging||localJob||!displayResource||projectionState.blend<=0)return;
   if(localResources.requestedSignature!==displayResource.signature)return;
   const lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians,index=displayResource.levelIndex;
   const motion=motionPrefetchCandidate(index);
@@ -7593,7 +7687,8 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     // margin. The requested focus remains authoritative and the new resource is
     // still swapped atomically as soon as preparation completes.
     const rawOffset=displayResource?localFocusOffsetMeters(displayResource):{east:0,north:0};
-    const standInActive=Boolean(displayResource)&&localResources.requestedSignature!==displayResource.signature;
+    const interactionStandInActive=dragging&&Boolean(displayResource);
+    const standInActive=Boolean(displayResource)&&(localResources.requestedSignature!==displayResource.signature||interactionStandInActive);
     let offset={east:rawOffset.east,north:rawOffset.north},standInOffsetClamped=false;
     if(standInActive&&displayResource){
       const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
@@ -7711,15 +7806,20 @@ function updateProjectionPresentation(visibleHeightUnits=1){
   if(cloudLayer)cloudLayer.enabled=globeFade<.35;
   localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
   if(blend<=0){localResources.activeResourceCount=0;localResources.pendingPreparationCount=0;localResources.standInActive=false;if(focusRingPatch)focusRingPatch.enabled=false;}
+  applyLocalWorldPresentationVisibility();
   applyWp020EvidenceLayerVisibility();
 }
-function applyCameraZoom(updateMap=true){
+function applyCameraZoom(updateMap=true,options={}){
   if(!cameraEntity||!zoomState.baseCameraDistance)return;
   const scalar=clamp(zoomState.scalar,ZOOM_MIN,ZOOM_MAX);
   zoomState.requestedBand=zoomBandFor(scalar);
   updateProjectionState();
-  updateLocalRequest();
-  scheduleLocalStaticPresentationRefresh();
+  const deferStreaming=Boolean(options?.deferStreaming);
+  navigationPerformance.interactionStreamingDeferred=deferStreaming;
+  localResources.interactionStreamingDeferred=deferStreaming;
+  if(deferStreaming)navigationPerformance.streamingRequestDeferredCount++;
+  else updateLocalRequest();
+  if(!deferStreaming)scheduleLocalStaticPresentationRefresh();
   const targetHeightMeters=Math.max(2,presentationTargetHeightMeters(scalar));
   const visibleHeightUnits=Math.max(1e-6,targetHeightMeters/WORLD_RADIUS_METERS*DISPLAY_RADIUS_UNITS);
   const orthoHeight=Math.max(1e-6,visibleHeightUnits*.5);
@@ -7891,7 +7991,8 @@ function setRotationInternal(yaw,pitch,{snapshotResult=true,semanticReason="rota
   yawDegrees=normalizeYaw(yaw);
   pitchDegrees=clamp(pitch,-82,82);
   applyRotation();
-  if(zoomState.scalar>projectionState.transitionStart)applyCameraZoom(false);
+  if(zoomState.scalar>projectionState.transitionStart)applyCameraZoom(false,{deferStreaming:dragging});
+  updateLiveMapAnchors(semanticReason);
   if(semanticUpdate)updateMapPresentation(semanticReason);
   recordEnvironmentNavigationPassage(beforeLatitudeRadians,beforeLongitudeRadians,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   return snapshotResult?snapshot():null;
@@ -8443,6 +8544,7 @@ function bindInput(){
     if(activePointers.size===2){const pts=Array.from(activePointers.values());lastPinchDistance=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);dragging=false;pointerId=null;event.preventDefault();return;}
     if(dragging||pointerId!==null){activePointers.delete(event.pointerId);return;}
     dragging=true;pointerId=event.pointerId;
+    cancelMapPresentationSchedule();
     lastPointerX=event.clientX;lastPointerY=event.clientY;inspection.pointerDownX=event.clientX;inspection.pointerDownY=event.clientY;inspection.dragDistance=0;
     canvas.setPointerCapture?.(event.pointerId);
     canvas.focus({preventScroll:true});
@@ -8460,7 +8562,11 @@ function bindInput(){
   const endPointer=event=>{
     activePointers.delete(event.pointerId);if(activePointers.size<2)lastPinchDistance=null;
     if(event.pointerId!==pointerId)return;
-    dragging=false;canvas.releasePointerCapture?.(event.pointerId);pointerId=null;updateMapPresentation("pointer-settle",true);if(event.type==="pointerup"&&inspection.dragDistance<=6)pickInspection(event.clientX,event.clientY);
+    dragging=false;canvas.releasePointerCapture?.(event.pointerId);pointerId=null;
+    navigationPerformance.interactionStreamingDeferred=false;localResources.interactionStreamingDeferred=false;
+    if(zoomState.scalar>projectionState.transitionStart){navigationPerformance.pointerSettleStreamingRefreshCount++;applyCameraZoom(false);}
+    updateLiveMapAnchors("pointer-settle");updateMapPresentation("pointer-settle",true);
+    if(event.type==="pointerup"&&inspection.dragDistance<=6)pickInspection(event.clientX,event.clientY);
   };
   canvas.addEventListener("pointerup",endPointer);
   canvas.addEventListener("pointercancel",endPointer);
@@ -9311,7 +9417,7 @@ function destroy(){
   wayfindingTextCanvas?.remove?.();wayfindingTextCanvas=null;wayfindingTextContext=null;wayfindingPanelAnchors=[];wayfindingSignAnchors.clear();
   inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
   atmospherePalette=null;atmosphereTimeBinding={available:false,active:false,readOnly:true,directRealClockRead:false,campaignMutation:false,source:"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:0,lastAppliedAtMs:0,pollIntervalMs:1000,error:null};
-  geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localResidency.clear();localRecentEvictions.clear();localMotionPrefetchTargets.clear();localLastRequestRegistered=null;localMotionVector={east:0,north:0,magnitude:0};localStaticRefreshScheduled=false;mapPresentationSchedule={raf:0,timer:0,lastRenderedAtMs:0,pendingReason:null};navigationPerformance={revision:"world-map-navigation-budget-v1",semanticUpdateRequestCount:0,semanticUpdateRenderCount:0,semanticUpdateCoalescedCount:0,semanticUpdateForcedCount:0,semanticUpdatePending:false,semanticUpdateMinIntervalMs:NAV_SEMANTIC_MIN_INTERVAL_MS,lastSemanticUpdateMs:0,maxSemanticUpdateMs:0,totalSemanticUpdateMs:0,semanticPhaseLastMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},semanticPhaseMaxMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},semanticPhaseOver50Count:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},rotationRequestCount:0,zoomRequestCount:0,authorityRefreshRequestCount:0,pointerSettleFlushCount:0,pointerMoveCount:0,pointerMoveSnapshotCount:0,pointerMoveSnapshotAvoidedCount:0,programmaticRotationSnapshotAvoidedCount:0,zoomCommandSnapshotAvoidedCount:0,frameUpdateCount:0,lastFrameUpdateMs:0,maxFrameUpdateMs:0,lastRenderCpuMs:0,maxRenderCpuMs:0,frameUpdateOver50Count:0,renderCpuOver50Count:0,framePhaseLastMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},framePhaseMaxMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},residentAdvanceSnapshotSuppressed:true,residentSchedulerMode:"fixed-step-cooperative",residentSchedulerCalls:0,residentSchedulerLastMs:0,residentSchedulerMaxMs:0,residentSchedulerOver50Count:0,residentSchedulerPendingDrains:0,residentSchedulerWarmupMs:0,longTask50Count:0,longTaskWorstMs:0,eventDrivenSemanticUpdates:true,cameraMotionImmediate:true,perFrameFullPlanetIteration:false,bounded:true,fullWorldScan:false};projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
+  geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localResidency.clear();localRecentEvictions.clear();localMotionPrefetchTargets.clear();localLastRequestRegistered=null;localMotionVector={east:0,north:0,magnitude:0};localStaticRefreshScheduled=false;mapPresentationSchedule={raf:0,timer:0,lastRenderedAtMs:0,pendingReason:null};liveMapAnchors=[];navigationPerformance=freshNavigationPerformance();projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
 }
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setZoomTargetScalar,setScaleIndex,stepScale,setAnimatedScaleIndex,stepAnimatedScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},placeDescriptors:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();return Object.freeze(destinationNavigator.descriptors.map(item=>Object.freeze({...item})))},refreshPlaces:()=>{buildDestinationDescriptors();renderDestinationNavigator();return snapshot();},openPlaces:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
