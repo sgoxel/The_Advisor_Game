@@ -3,6 +3,7 @@
 
 const LEVEL=0;
 const cache=new Map();
+const cooperativeBuilds=new Map();
 const proofCache=new Map();
 const TYPE_RULES=Object.freeze({
   bed:Object.freeze({blocking:true,actions:Object.freeze(["sleep","rest"])}),
@@ -113,6 +114,79 @@ function buildFresh(seed){
   return Object.freeze(objects);
 }
 function build(seed){const key=String(seed);if(!cache.has(key))cache.set(key,buildFresh(key));return cache.get(key)}
+async function buildCooperative(seedValue,options={}){
+  const key=String(seedValue==null?"":seedValue);
+  if(!key)return Object.freeze([]);
+  if(cache.has(key))return cache.get(key);
+  if(cooperativeBuilds.has(key))return cooperativeBuilds.get(key);
+  const pending=(async()=>{
+    const now=()=>typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
+    const pause=async()=>{
+      if(typeof options.yield==="function")await options.yield();
+      else await new Promise(resolve=>setTimeout(resolve,0));
+    };
+    const record=(started,index,phase)=>{
+      try{options.onUnit?.(now()-started,index,phase);}catch(_){}
+    };
+    let buildings;
+    if(typeof BuildingInteriors?.buildCooperative==="function"){
+      buildings=await BuildingInteriors.buildCooperative(key,{
+        yield:pause,
+        onUnit:(elapsed,index,phase)=>{
+          try{options.onUnit?.(elapsed,index,"building-"+String(phase||"unit"));}catch(_){}
+        }
+      });
+    }else{
+      const started=now();
+      buildings=BuildingInteriors.build(key);
+      record(started,-1,"building-interiors");
+      await pause();
+    }
+    const occupied=new Set(),reserved=new Set(),objects=[];
+    for(let buildingIndex=0;buildingIndex<buildings.length;buildingIndex++){
+      const building=buildings[buildingIndex];
+      const protectedCells=new Set(
+        [building.entrance?.door,building.entrance?.immediateInside,building.interiorTarget]
+          .filter(Boolean).map(pointKey)
+      );
+      const buildingInteractions=[];
+      const types=typesFor(building);
+      for(let typeIndex=0;typeIndex<types.length;typeIndex++){
+        const started=now(),type=types[typeIndex],rule=TYPE_RULES[type];
+        if(rule){
+          for(const candidate of orderedFloors(key,building,type,typeIndex)){
+            const candidatePoint=point(candidate.x,candidate.y);
+            if(protectedCells.has(pointKey(candidatePoint))||occupied.has(pointKey(candidatePoint))||reserved.has(pointKey(candidatePoint)))continue;
+            const interaction=interactionFor(building,candidatePoint,occupied,reserved);
+            if(!interaction)continue;
+            const interactionPoint=point(interaction.x,interaction.y);
+            const prospectiveBlocked=new Set(occupied);
+            if(rule.blocking)prospectiveBlocked.add(pointKey(candidatePoint));
+            if(!interactionsReachable(building,prospectiveBlocked,[...buildingInteractions,interactionPoint]))continue;
+            const id=building.id+":"+type+":"+String(typeIndex+1).padStart(2,"0");
+            objects.push(Object.freeze({
+              id,type,buildingId:building.id,buildingLabel:building.label,
+              room:candidate.room||null,coordinate:candidatePoint,level:LEVEL,
+              blocking:rule.blocking,actions:rule.actions,
+              interactionPositions:Object.freeze([interactionPoint])
+            }));
+            if(rule.blocking)occupied.add(pointKey(candidatePoint));
+            reserved.add(pointKey(interactionPoint));
+            buildingInteractions.push(interactionPoint);
+            break;
+          }
+        }
+        record(started,buildingIndex,"object-"+String(building.id)+"-"+String(type||typeIndex));
+        await pause();
+      }
+    }
+    const frozen=Object.freeze(objects);
+    cache.set(key,frozen);
+    return frozen;
+  })();
+  cooperativeBuilds.set(key,pending);
+  try{return await pending;}finally{cooperativeBuilds.delete(key);}
+}
 function blockingAt(seed,x,y){const k=String(x)+","+String(y)+",0";return build(seed).find(o=>o.blocking&&pointKey(o.coordinate)===k)||null}
 function classifyNavigation(seed,x,y){
   const base=Walkability.classify(seed,x,y);
@@ -160,5 +234,5 @@ function proof(seed){
   proofCache.set(key,result);
   return result;
 }
-window.InteriorObjects=Object.freeze({LEVEL,TYPE_RULES,build,blockingAt,classifyNavigation,proof});
+window.InteriorObjects=Object.freeze({LEVEL,TYPE_RULES,build,buildCooperative,blockingAt,classifyNavigation,proof});
 })();
