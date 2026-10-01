@@ -20,7 +20,7 @@ CASES=[
 ]
 
 def url():
-    p=urlsplit(TARGET);q=dict(parse_qsl(p.query,keep_blank_values=True));q.update({"evidence_fast_start":"1"})
+    p=urlsplit(TARGET);q=dict(parse_qsl(p.query,keep_blank_values=True));q.update({"evidence_fast_start":"1","advisorEvidence":"ordinary"})
     return urlunsplit((p.scheme,p.netloc,p.path,urlencode(q),p.fragment))
 
 opt=Options()
