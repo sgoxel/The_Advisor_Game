@@ -4054,24 +4054,31 @@ function applyLocalWorldPresentationVisibility(){
   localResources.mapScaleSuppressedRootCount=!gate.visible?suppressed:0;
   return gate;
 }
+function canonicalStartingVillageVisibleBounds(reveal){
+  const records=[...(reveal?.houses||[]),...(reveal?.specialLots||[])];
+  const centerX=Number(reveal?.village?.center?.x ?? 0),centerY=Number(reveal?.village?.center?.y ?? 0);
+  let minX=centerX,maxX=centerX,minY=centerY,maxY=centerY;
+  const includeBounds=(bounds)=>{
+    if(!bounds)return;
+    const minXValue=Number(bounds.minX),maxXValue=Number(bounds.maxX),minYValue=Number(bounds.minY),maxYValue=Number(bounds.maxY);
+    if(!Number.isFinite(minXValue)||!Number.isFinite(maxXValue)||!Number.isFinite(minYValue)||!Number.isFinite(maxYValue))return;
+    minX=Math.min(minX,minXValue);maxX=Math.max(maxX,maxXValue);minY=Math.min(minY,minYValue);maxY=Math.max(maxY,maxYValue);
+  };
+  for(const record of records)includeBounds(record?.bounds);
+  const squareHalf=Number(window.StartingVillage?.PUBLIC_HALF_SIZE||3);
+  minX=Math.min(minX,-squareHalf-4);maxX=Math.max(maxX,squareHalf+4);minY=Math.min(minY,-squareHalf-4);maxY=Math.max(maxY,squareHalf+4);
+  const halfTileSpan=Math.max(18,Math.max(maxX-minX,maxY-minY)*.5+18);
+  return Object.freeze({minX,maxX,minY,maxY,halfTileSpan});
+}
 function canonicalStartingVillageReveal(resource){
   if(!activeSeed||!resource||!window.StartingVillage||!window.HousePlans||!window.SpecialLots||!window.SettlementArchetypes||!window.PoliticalGeography)return null;
-  // Settlement visibility is a property of the canonical player view, never of
-  // whichever SLOD cell happens to be active. Using the resource center here
-  // made the same 1/N view drop the village exactly when an east/west child
-  // became ready. A conservative viewport half-diagonal keeps the canonical
-  // village resident while any part of its established reveal radius can still
-  // be on-screen, independent of parent/child handoff timing.
   const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   const resourceTile=mapWorldTileAt(resource.lat0,resource.lon0);
-  const distanceTiles=Math.hypot(Number(BigInt(focusTile.x))-Number(BigInt(resourceTile.x)),Number(BigInt(focusTile.y))-Number(BigInt(resourceTile.y)));
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
   const viewportRadiusTiles=Math.hypot(
     Math.max(0,Number(zoomState.visibleFootprintWidthMeters||0)),
     Math.max(0,Number(zoomState.visibleFootprintHeightMeters||0))
   )/(2*tileMeters);
-  const canonicalRevealRadiusTiles=512;
-  if(distanceTiles>viewportRadiusTiles+canonicalRevealRadiusTiles)return null;
   const key=activeSeed+"|starting-village";
   if(settlementRevealCache.key!==key){
     const country=window.PoliticalGeography.countryAt(activeSeed,"0","0");
@@ -4094,7 +4101,15 @@ function canonicalStartingVillageReveal(resource){
     }
   }
   const base=settlementRevealCache.value;if(!base)return null;
-  return Object.freeze({...base,focusTile,resourceTile,distanceTiles,viewportRadiusTiles,canonicalRevealRadiusTiles});
+  const bounds=canonicalStartingVillageVisibleBounds(base);
+  const focusX=Number(focusTile.x),focusY=Number(focusTile.y),
+    left=bounds.minX-viewportRadiusTiles-bounds.halfTileSpan,
+    right=bounds.maxX+viewportRadiusTiles+bounds.halfTileSpan,
+    top=bounds.minY-viewportRadiusTiles-bounds.halfTileSpan,
+    bottom=bounds.maxY+viewportRadiusTiles+bounds.halfTileSpan;
+  if(focusX<left||focusX>right||focusY<top||focusY>bottom)return null;
+  const distanceTiles=Math.hypot(Number(BigInt(focusTile.x))-Number(BigInt(resourceTile.x)),Number(BigInt(focusTile.y))-Number(BigInt(resourceTile.y)));
+  return Object.freeze({...base,focusTile,resourceTile,distanceTiles,viewportRadiusTiles,canonicalRevealRadiusTiles:Math.max(48,bounds.halfTileSpan)});
 }
 function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
