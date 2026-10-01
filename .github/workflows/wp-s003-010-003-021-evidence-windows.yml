@@ -1,7 +1,7 @@
 name: WP-S003-010-003-021 Interaction Coherence Evidence Windows
 on:
   push:
-    branches: [agent6/wp-s003-010-003-021]
+    branches: [agent6/wp-s003-010-003-021-acceptance-8ef3259]
     paths:
       - .github/workflows/wp-s003-010-003-021-evidence-windows.yml
       - tools/test_wp_s003_010_003_021.py
