@@ -1107,8 +1107,10 @@ function gameplayCenterMarkerTelemetry(layer){
     code.textContent=settlementOverview?"CELL "+shortCell:"CELL "+shortCell+" · "+center.latitudeDegrees.toFixed(3)+"°, "+center.longitudeDegrees.toFixed(3)+"°";
     // Keep the exact center marker, but move its readout off canonical local
     // structure when that structure itself is the focused visual subject.
-    const microLocationFocus=root?.dataset?.microLocationFocus==="true",travelEncounterFocus=root?.dataset?.travelEncounterFocus==="true";
-    code.style.display=(microLocationFocus||travelEncounterFocus)?"none":"";
+    const microLocationFocus=root?.dataset?.microLocationFocus==="true",travelEncounterFocus=root?.dataset?.travelEncounterFocus==="true",groundCharacterFocus=groundCharacterLayerEligible();
+    // The canonical center glyph remains world-anchored and visible at final
+    // ground, but its map-coordinate readout yields to the RPG character scene.
+    code.style.display=(microLocationFocus||travelEncounterFocus||groundCharacterFocus)?"none":"";
     if(settlementOverview){
       code.style.position="absolute";code.style.left="50%";code.style.top="-54px";
       code.style.transform="translateX(-50%) scale(.82)";code.style.opacity=".72";
@@ -1740,7 +1742,8 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
     // player is approaching. Preserve all other labels and the world-center
     // marker; suppress only the current focused town/village at route scale.
     const suppressFocusSettlementLabel=entity.currentFocus===true&&
-      (entity.type==="village"||entity.type==="town")&&spec.settlementRevealTier==="route";
+      (entity.type==="village"||entity.type==="town")&&
+      (spec.settlementRevealTier==="route"||groundCharacterLayerEligible());
     if(suppressFocusSettlementLabel){
       visibilityReasonById.set(entity.id,"focus-settlement-fabric-visible");
       continue;
@@ -5183,6 +5186,11 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
   }
   const detailedBillboardCount=residentBillboardCount+(protagonistBillboardVisible?1:0);
   localNpcPresentation={...localNpcPresentation,active:activeCount>0||protagonistBillboardVisible,activeCount,entityCount,drawCallEstimate:entityCount,buildTimeMs:Number((performance.now()-started).toFixed(3)),time:inspectionFantasyStamp(),billboardLayerActive:groundArt&&detailedBillboardCount>0,detailedBillboardCount,residentBillboardCount,protagonistBillboardVisible,billboardTextureUrls:Object.freeze(Array.from(billboardUrls).sort()),groundRepresentationReady:groundArt,cameraPresentation:"orthographic-3q",tangentPresentationPitchDegrees:LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES};
+  // Responsive/focus handoffs may briefly render route-board text while ground
+  // art is disabled at the reset scale. Once the authoritative ground layer is
+  // rebuilt, immediately reconcile the shared text canvas so stale lettering
+  // cannot survive into the final RPG frame.
+  updateWayfindingTextOverlay(true);
   if(selectedNpc&&!inspectionPickables.has(inspectionRegistryKey("npc",selectedNpc)))dismissInspection();
 }
 function refreshCanonicalNpcPresentation(){
