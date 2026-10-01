@@ -4730,7 +4730,7 @@ function groundCharacterTextureUrl(profession){
   return GROUND_CHARACTER_PROFESSION_TEXTURES[String(profession||"")]||GROUND_CHARACTER_FALLBACK_TEXTURE;
 }
 function groundCharacterLayerEligible(){
-  return Boolean(displayResource&&String(displayResource.dims?.levelId||"")==="ground"&&String(localStatic?.revealTier||"")==="full"&&tangentPatch?.enabled);
+  return Boolean(displayResource&&String(displayResource.dims?.levelId||"")==="ground"&&String(localNpcContext?.tier||"")==="full"&&tangentPatch?.enabled);
 }
 function scheduleGroundCharacterRefresh(){
   if(groundCharacterRefreshScheduled||groundCharacterPendingLoads>0||!groundCharacterLayerEligible()||!localNpcContext)return;
