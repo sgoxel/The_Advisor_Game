@@ -59,8 +59,8 @@ def execute_chain():
       };
       const objects=window.InteriorObjects.build(seed),residents=window.DailyActivity.build(seed);
       const resident=residents.find(r=>{
-        const obj=objects.find(o=>o.id===r.workplaceObjectId);
-        return r.workplaceEnterable&&obj?.actions?.includes('work')&&Array.isArray(r.schedule)&&r.schedule.some(b=>b.state==='work'&&b.intendedAction==='work');
+        const obj=objects.find(o=>o.id===r.workplaceObjectId),interaction=obj?window.ObjectInteractions.get(seed,obj.id):null;
+        return r.workplaceEnterable&&interaction?.actions?.includes('work')&&Array.isArray(r.schedule)&&r.schedule.some(b=>b.state==='work'&&b.intendedAction==='work');
       });
       if(!resident)throw new Error('No grounded indoor resident work context');
       const object=objects.find(o=>o.id===resident.workplaceObjectId),workBlocks=resident.schedule.filter(b=>b.state==='work'&&b.intendedAction==='work').slice(0,4);
