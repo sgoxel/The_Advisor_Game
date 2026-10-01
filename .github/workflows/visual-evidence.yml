@@ -280,6 +280,7 @@ jobs:
           INPUT_PUBLISH: ${{ inputs.publish_to_main }}
           COMMENT_BODY: ${{ github.event.comment.body || '' }}
           ISSUE_NUMBER: ${{ github.event.issue.number || '' }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
         run: |
           target='https://sgoxel.github.io/The_Advisor_Game/'
           profile='landscape'
@@ -296,7 +297,11 @@ jobs:
             publish="${INPUT_PUBLISH:-false}"
           elif [ "$EVENT_NAME" = 'push' ]; then
             target='http://127.0.0.1:8000/'
-            scenario='wp-s003-010-003-005-002'
+            if printf '%s' "$HEAD_COMMIT_MESSAGE" | grep -q '^WP-S003-004-004'; then
+              scenario='wp-s003-004-004'
+            else
+              scenario='wp-s003-010-003-005-002'
+            fi
           elif [ "$EVENT_NAME" = 'issue_comment' ]; then
             requested="$(printf '%s' "$COMMENT_BODY" | awk '{print $2}')"
             requested_profile="$(printf '%s' "$COMMENT_BODY" | awk '{print $3}')"
