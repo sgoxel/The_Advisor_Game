@@ -3520,6 +3520,10 @@ function tickLocalFaunaReactionTriggers(){
     lastUpdateMs:Number((performance.now()-started).toFixed(4)),maxUpdateMs:Math.max(Number(wildlifeReaction.maxUpdateMs||0),Number((performance.now()-started).toFixed(4)))};
 }
 function updateLocalFaunaMotion(step){
+  if(!localWorldPresentationEligibility().visible){
+    wildlifeReaction={...wildlifeReaction,visibleActorCount:0,reactingActorCount:0};
+    return;
+  }
   if(!localFaunaActors.length){
     wildlifeReaction={...wildlifeReaction,activeActorCount:0,visibleActorCount:0,reactingActorCount:0,sleepingActorCount:0,stateCounts:{idle:0,flee:0,takeoff:0,return:0,sleep:0}};
     return;
@@ -3760,7 +3764,7 @@ function recordEnvironmentNavigationPassage(beforeLatitudeRadians,beforeLongitud
   return triggerEnvironmentReaction(kind,surfaceType,afterLatitudeRadians,afterLongitudeRadians,distance,directionDegrees);
 }
 function updateEnvironmentalReactions(){
-  if(!environmentalReactionPool.length||!displayResource)return;
+  if(!localWorldPresentationEligibility().visible||!environmentalReactionPool.length||!displayResource)return;
   const started=performance.now(),now=performance.now(),frame=localDisplayFrame(),dims=frame.dims;
   let activeCount=0,visibleCount=0,activeDrawCallEstimate=0;
   for(const slot of environmentalReactionPool){
@@ -4484,6 +4488,11 @@ function wayfindingSignScreenDepth(signId){
   if(!world||!camera)return Infinity;return (world.x-camera.x)**2+(world.y-camera.y)**2+(world.z-camera.z)**2;
 }
 function updateWayfindingTextOverlay(force=false){
+  if(!localWorldPresentationEligibility().visible){
+    if(wayfindingTextContext&&wayfindingTextCanvas){wayfindingTextContext.setTransform(1,0,0,1,0,0);wayfindingTextContext.clearRect(0,0,wayfindingTextCanvas.width,wayfindingTextCanvas.height);}
+    if(Number(wayfindingSignposts.visibleTextCount||0)!==0)wayfindingSignposts={...wayfindingSignposts,visibleTextCount:0};
+    return;
+  }
   if(!wayfindingSignposts.active||!wayfindingPanelAnchors.length||!root||!canvas||!cameraEntity?.camera){
     if(wayfindingTextContext&&wayfindingTextCanvas){wayfindingTextContext.setTransform(1,0,0,1,0,0);wayfindingTextContext.clearRect(0,0,wayfindingTextCanvas.width,wayfindingTextCanvas.height);}
     return;
@@ -4756,7 +4765,8 @@ function groundCharacterTextureUrl(profession){
   return GROUND_CHARACTER_PROFESSION_TEXTURES[String(profession||"")]||GROUND_CHARACTER_FALLBACK_TEXTURE;
 }
 function groundCharacterLayerEligible(){
-  return Boolean(displayResource&&String(displayResource.dims?.levelId||"")==="ground"&&String(localNpcContext?.tier||"")==="full"&&tangentPatch?.enabled);
+  const rawIndex=rawLodIndexForZoom(zoomState.scalar),rawLevel=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
+  return Boolean(localWorldPresentationEligibility().visible&&String(rawLevel?.id||"")==="ground"&&displayResource&&String(displayResource.dims?.levelId||"")==="ground"&&String(localNpcContext?.tier||"")==="full"&&tangentPatch?.enabled);
 }
 function scheduleGroundCharacterRefresh(){
   if(groundCharacterRefreshScheduled||groundCharacterPendingLoads>0||!groundCharacterLayerEligible()||!localNpcContext)return;
@@ -5020,7 +5030,7 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
   };
 }
 function refreshLocalCrowdPresentation(whenOverride=null){
-  if(!localCrowdContext)return;
+  if(!localCrowdContext||!localWorldPresentationEligibility().visible)return;
   const c=localCrowdContext;rebuildLocalCrowdPresentation(c.resource,c.frame,c.tier,whenOverride);
 }
 function registerCanonicalBuildingInspection(record,entities){
@@ -5089,11 +5099,11 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
   if(selectedNpc&&!inspectionPickables.has(inspectionRegistryKey("npc",selectedNpc)))dismissInspection();
 }
 function refreshCanonicalNpcPresentation(){
-  if(!localNpcContext)return;
+  if(!localNpcContext||!localWorldPresentationEligibility().visible)return;
   const c=localNpcContext;rebuildCanonicalNpcPresentation(c.reveal,c.tier,c.frame,c.presentationScale,c.unit,c.lift,true);
 }
 function updateCanonicalNpcMotion(){
-  if(!localNpcRoot||!localNpcContext||!localNpcEntities.size)return;
+  if(!localWorldPresentationEligibility().visible||!localNpcRoot||!localNpcContext||!localNpcEntities.size)return;
   const started=performance.now(),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),rhythmStamp=inspectionFantasyStamp();
   const rhythm=window.SettlementActivityRhythm?.snapshot?.(activeSeed,rhythmStamp,[...localNpcEntities.values()].map(record=>record.resident))||null;
   let activeTools=0,activeProps=0,activeEventCues=0,visibleCount=0,centeredWorkAction=false,rhythmPriorityTotal=0,rhythmPriorityCount=0;
@@ -5700,7 +5710,7 @@ function rebuildCanonicalBuildingActivityPresentation(reason="settlement-rebuild
   };
 }
 function refreshCanonicalBuildingActivityPresentation(){
-  if(localBuildingActivityContext)rebuildCanonicalBuildingActivityPresentation("authoritative-time-change");
+  if(localBuildingActivityContext&&localWorldPresentationEligibility().visible)rebuildCanonicalBuildingActivityPresentation("authoritative-time-change");
 }
 
 
