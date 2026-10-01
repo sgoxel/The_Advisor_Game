@@ -189,10 +189,18 @@ function actionContext(descriptor,actorPosition,action){
     target
   });
 }
+function rankStatus(seed,descriptor,when){
+  if(!window?.ProtagonistRankAccess||!descriptor)return null;
+  try{
+    const target={id:descriptor.id,kind:descriptor.type,buildingId:descriptor.buildingId,label:descriptor.label,requiredScope:(descriptor.type==="door"?"self":"self")};
+    return window.ProtagonistRankAccess.localAccessContext(seed,"protagonist",when||window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00",target);
+  }catch(_){return null}
+}
 function context(seed,descriptorOrId,actorPosition){
   const descriptor=typeof descriptorOrId==="string"?get(seed,descriptorOrId):descriptorOrId;
   if(!descriptor)return null;
   const actor=point(actorPosition);
+  const access=rankStatus(seed,descriptor,window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00");
   return Object.freeze({
     id:descriptor.id,
     type:descriptor.type,
@@ -203,6 +211,7 @@ function context(seed,descriptorOrId,actorPosition){
     source:descriptor.source,
     distanceTiles:nearestDistance(descriptor,actor),
     actions:Object.freeze(descriptor.actions.map(action=>actionContext(descriptor,actor,action))),
+    access:access?Object.freeze({status:access.status,permitted:access.permitted,conditional:access.conditional,reason:access.reason,label:access.label}):null,
     createsResources:false,
     authoritative:true
   });
@@ -285,9 +294,14 @@ function attempt(seed,request){
     telemetry.rejectedAttempts++;
     return Object.freeze({ok:false,status:"rejected",reason:"unknown-object",authoritative:true});
   }
+  const access=rankStatus(seed,descriptor,window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00");
   if(!descriptor.actions.includes(action)){
     telemetry.rejectedAttempts++;
-    return Object.freeze({ok:false,status:"rejected",reason:"unsupported-action",objectId:descriptor.id,action,authoritative:true});
+    return Object.freeze({ok:false,status:"rejected",reason:"unsupported-action",objectId:descriptor.id,action,authoritative:true,access:access?{status:access.status,permitted:access.permitted,conditional:access.conditional,reason:access.reason}:null});
+  }
+  if(access&&access.status==="restricted"){
+    telemetry.rejectedAttempts++;
+    return Object.freeze({ok:false,status:"rejected",reason:"status-restricted",objectId:descriptor.id,action,authoritative:true,access:{status:access.status,permitted:access.permitted,conditional:access.conditional,reason:access.reason}});
   }
   const actionState=actionContext(descriptor,actorPosition,action);
   if(!actionState.enabled){

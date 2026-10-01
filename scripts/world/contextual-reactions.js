@@ -165,6 +165,10 @@ function choice(seed,when,residentId,kind,length){
 }
 function reactionTemplate(seed,when,residentId,kind,social){
   const warm=Number(social?.trust||0)>=.62&&Number(social?.suspicion||0)<=.38;
+  const rankAware=window?.ProtagonistRankAccess?.npcReaction?.(seed,residentId,"protagonist",when,{kind,label:"local context"})||null;
+  if(rankAware&&rankAware.recognized){
+    return rankAware.message;
+  }
   const templates={
     "doorway-block":warm
       ?["Mind the doorway, please.","Could I get through there?"]
