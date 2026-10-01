@@ -504,10 +504,12 @@ function freshNavigationPerformance(){
     semanticUpdateDragDeferredCount:0,streamingRequestDeferredCount:0,pointerSettleStreamingRefreshCount:0,interactionStreamingDeferred:false,
     frameUpdateCount:0,lastFrameUpdateMs:0,maxFrameUpdateMs:0,lastRenderCpuMs:0,maxRenderCpuMs:0,
     frameUpdateOver50Count:0,renderCpuOver50Count:0,
+    pointerDragFrameMaxMs:0,pointerDragFrameOver50Count:0,pointerDragRenderCpuMaxMs:0,pointerDragRenderCpuOver50Count:0,
     framePhaseLastMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},
     framePhaseMaxMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},
     residentAdvanceSnapshotSuppressed:true,residentSchedulerMode:"fixed-step-cooperative",
     residentSchedulerCalls:0,residentSchedulerLastMs:0,residentSchedulerMaxMs:0,residentSchedulerOver50Count:0,residentSchedulerPendingDrains:0,residentSchedulerWarmupMs:0,
+    pointerDragResidentSchedulerMaxMs:0,pointerDragResidentSchedulerOver50Count:0,
     longTask50Count:0,longTaskWorstMs:0,
     eventDrivenSemanticUpdates:true,cameraMotionImmediate:true,liveSemanticProjection:true,dragStreamingDeferred:true,perFrameFullPlanetIteration:false,bounded:true,fullWorldScan:false
   };
@@ -2406,6 +2408,10 @@ function recordResidentSchedulerSlice(started){
   navigationPerformance.residentSchedulerLastMs=Number(elapsed.toFixed(3));
   navigationPerformance.residentSchedulerMaxMs=Math.max(navigationPerformance.residentSchedulerMaxMs,navigationPerformance.residentSchedulerLastMs);
   if(elapsed>50)navigationPerformance.residentSchedulerOver50Count++;
+  if(dragging){
+    navigationPerformance.pointerDragResidentSchedulerMaxMs=Math.max(Number(navigationPerformance.pointerDragResidentSchedulerMaxMs||0),navigationPerformance.residentSchedulerLastMs);
+    if(elapsed>=50)navigationPerformance.pointerDragResidentSchedulerOver50Count++;
+  }
   return elapsed;
 }
 function scheduleResidentMovementDrain(){
@@ -9516,6 +9522,10 @@ async function start(){
       const elapsed=performance.now()-frameStarted;navigationPerformance.frameUpdateCount++;
       navigationPerformance.lastFrameUpdateMs=Number(elapsed.toFixed(3));navigationPerformance.maxFrameUpdateMs=Math.max(navigationPerformance.maxFrameUpdateMs,navigationPerformance.lastFrameUpdateMs);
       if(elapsed>50)navigationPerformance.frameUpdateOver50Count++;
+      if(dragging){
+        navigationPerformance.pointerDragFrameMaxMs=Math.max(Number(navigationPerformance.pointerDragFrameMaxMs||0),navigationPerformance.lastFrameUpdateMs);
+        if(elapsed>=50)navigationPerformance.pointerDragFrameOver50Count++;
+      }
     });
     let navigationRenderStarted=0;
     app.on?.("prerender",()=>{navigationRenderStarted=performance.now();});
@@ -9524,6 +9534,10 @@ async function start(){
       const elapsed=Math.max(0,performance.now()-navigationRenderStarted);navigationPerformance.lastRenderCpuMs=Number(elapsed.toFixed(3));
       navigationPerformance.maxRenderCpuMs=Math.max(navigationPerformance.maxRenderCpuMs,navigationPerformance.lastRenderCpuMs);
       if(elapsed>50)navigationPerformance.renderCpuOver50Count++;
+      if(dragging){
+        navigationPerformance.pointerDragRenderCpuMaxMs=Math.max(Number(navigationPerformance.pointerDragRenderCpuMaxMs||0),navigationPerformance.lastRenderCpuMs);
+        if(elapsed>=50)navigationPerformance.pointerDragRenderCpuOver50Count++;
+      }
     });
     await measuredPhase("appStartMs",async()=>app.start());
     setStartupProgress("finalizing","Preparing local transition shaders…",98);
