@@ -286,7 +286,7 @@ const STARTUP_SLICE_BUDGET_MS=6;
 const STARTUP_WATCHDOG_TICK_MS=1000;
 const STARTUP_WATCHDOG_SLOW_MS=8000;
 const STARTUP_WATCHDOG_STALL_MS=30000;
-let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{},watchdogChecks:0,watchdogSlowCount:0,watchdogStallCount:0,watchdogMaxNoProgressMs:0,surfaceProgressUpdates:0,surfaceSamplingWallMs:0,surfaceCanvasCommitMs:0,surfaceTextureUploadMs:0,surfaceProgressIntervalSamples:0,residentWarmupDeferred:true,residentWarmupStartedAtMs:null,residentWarmupCompletedAtMs:null,residentWarmupPlanCount:0,residentWarmupPlanCompleted:0,residentWarmupAdvanceCalls:0,residentWarmupYieldCount:0,residentWarmupMaxUnitMs:0,residentWarmupMaxUnitLabel:null,residentWarmupRouteSliceCount:0,residentWarmupMaxRouteSliceMs:0,residentWarmupError:null,simulationAuthorityPreserved:true};
+let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{},watchdogChecks:0,watchdogSlowCount:0,watchdogStallCount:0,watchdogMaxNoProgressMs:0,surfaceProgressUpdates:0,surfaceSamplingWallMs:0,surfaceCanvasCommitMs:0,surfaceTextureUploadMs:0,surfaceProgressIntervalSamples:0,residentWarmupDeferred:true,residentWarmupStartedAtMs:null,residentWarmupCompletedAtMs:null,residentWarmupPlanCount:0,residentWarmupPlanCompleted:0,residentWarmupAdvanceCalls:0,residentWarmupYieldCount:0,residentWarmupMaxUnitMs:0,residentWarmupMaxUnitLabel:null,residentWarmupRosterUnitCount:0,residentWarmupRosterMaxUnitMs:0,residentWarmupRouteSliceCount:0,residentWarmupMaxRouteSliceMs:0,residentWarmupError:null,controlledWorkStartedAtMs:null,controlledWorkEndedAtMs:null,simulationAuthorityPreserved:true};
 let longTaskObserver=null;
 let heartbeatTimer=null;
 let startupWatchdogTimer=null;
@@ -2433,8 +2433,17 @@ async function warmResidentMovementScheduler(){
   // Build the bounded resident roster first so the same deterministic objects
   // are reused by cooperative work-cycle preparation and ResidentMovement.ensure.
   let unitStarted=performance.now();
-  const residents=(window.DailyActivity?.build?.(activeSeed)||[]).slice(0,12);
-  recordResidentWarmupUnit(unitStarted,"resident-roster");
+  const residents=(typeof window.DailyActivity?.buildCooperative==="function"
+    ?await window.DailyActivity.buildCooperative(activeSeed,{
+      yield:yieldResidentWarmup,
+      onUnit:(elapsed,index)=>{
+        startupScheduler.residentWarmupRosterUnitCount++;
+        startupScheduler.residentWarmupRosterMaxUnitMs=Math.max(Number(startupScheduler.residentWarmupRosterMaxUnitMs||0),Number((Number(elapsed)||0).toFixed(3)));
+        recordResidentWarmupElapsed(elapsed,"resident-roster-"+String(index));
+      }
+    })
+    :(window.DailyActivity?.build?.(activeSeed)||[])
+  ).slice(0,12);
   startupScheduler.residentWarmupPlanCount=residents.length;
   await yieldResidentWarmup();
 
@@ -2446,7 +2455,8 @@ async function warmResidentMovementScheduler(){
     for(let i=0;i<residents.length;i++){
       if(typeof window.WorkCycles.preparePlan==="function"){
         await window.WorkCycles.preparePlan(activeSeed,residents[i],{
-          maxRoutePops:6,
+          maxRoutePops:128,
+          maxRouteMs:7.5,
           yield:yieldResidentWarmup,
           onSlice:(elapsed,label)=>{
             startupScheduler.residentWarmupRouteSliceCount++;
@@ -2765,7 +2775,11 @@ function beginResponsivenessTelemetry(){
           if(d>50)startupScheduler.longTaskOver50++;
           if(d>100)startupScheduler.longTaskOver100++;
           if(d>200)startupScheduler.longTaskOver200++;
-          if(controlledWorkActive){
+          const entryStart=Number(entry.startTime)||0,entryEnd=entryStart+d;
+          const controlledStart=Number(startupScheduler.controlledWorkStartedAtMs||0);
+          const controlledEnd=Number(startupScheduler.controlledWorkEndedAtMs||0);
+          const belongsToControlledWindow=controlledStart>0&&entryEnd>=controlledStart&&entryStart<=(controlledEnd>0?controlledEnd:performance.now());
+          if(belongsToControlledWindow){
             startupScheduler.controlledLongestLongTaskMs=Math.max(startupScheduler.controlledLongestLongTaskMs,d);
             if(d>50)startupScheduler.controlledLongTaskOver50++;
             if(d>100)startupScheduler.controlledLongTaskOver100++;
@@ -9349,7 +9363,10 @@ async function start(){
 
     app=new pc.AppBase(canvas);
     await measuredPhase("appInitMs",async()=>app.init(options));
-    controlledWorkActive=true;    await measuredPhase("buildSceneMs",()=>buildScene());
+    controlledWorkActive=true;
+    startupScheduler.controlledWorkStartedAtMs=performance.now();
+    await measuredPhase("buildSceneMs",()=>buildScene());
+    startupScheduler.controlledWorkEndedAtMs=performance.now();
     controlledWorkActive=false;
     setStartupProgress("finalizing","Starting first playable renderer…",96);
     await yieldPaint();

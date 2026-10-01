@@ -24,6 +24,7 @@ const PROFESSIONS=Object.freeze([
   Object.freeze({profession:"guard",workFunction:"civic",workObjectTypes:Object.freeze(["table","chair"]),idealStart:9,afterWork:18})
 ]);
 const cache=new Map();
+const cooperativeBuilds=new Map();
 
 function pad2(value){return String(value).padStart(2,"0")}
 function identityName(seed,index){
@@ -454,6 +455,30 @@ function build(seedValue){
   cache.set(seed,frozen);
   return frozen;
 }
+async function buildCooperative(seedValue,options={}){
+  const seed=String(seedValue==null?"":seedValue);
+  if(!seed)return Object.freeze([]);
+  if(cache.has(seed))return cache.get(seed);
+  if(cooperativeBuilds.has(seed))return cooperativeBuilds.get(seed);
+  const pending=(async()=>{
+    const roster=[];
+    for(let index=0;index<12;index++){
+      const started=typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
+      roster.push(buildResident(seed,index));
+      const ended=typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
+      try{options.onUnit?.(ended-started,index);}catch(_){}
+      if(index<11){
+        if(typeof options.yield==="function")await options.yield();
+        else await new Promise(resolve=>setTimeout(resolve,0));
+      }
+    }
+    const frozen=Object.freeze(roster.map(r=>Object.freeze(r)));
+    cache.set(seed,frozen);
+    return frozen;
+  })();
+  cooperativeBuilds.set(seed,pending);
+  try{return await pending;}finally{cooperativeBuilds.delete(seed);}
+}
 
 function residentIdentityView(seedValue,when){
   const seed=String(seedValue==null?"":seedValue);
@@ -778,6 +803,7 @@ function proof(seedValue,when){return residentScheduleProof(seedValue,when)}
 
 const api=Object.freeze({
   build,
+  buildCooperative,
   residents:build,
   resolveActionTarget,
   resolve:resolveActionTarget,

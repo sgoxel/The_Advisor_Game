@@ -111,6 +111,10 @@ try:
         raise AssertionError("resident warmup did not yield between deterministic units: " + repr(background_scheduler))
     if float(background_scheduler.get("residentWarmupMaxUnitMs") or 0) >= 50:
         raise AssertionError("post-ready resident warmup unit exceeded 50 ms: " + repr(background_scheduler))
+    if int(background_scheduler.get("residentWarmupRosterUnitCount") or 0) < 12:
+        raise AssertionError("resident roster was not cooperatively prepared: " + repr(background_scheduler))
+    if float(background_scheduler.get("residentWarmupRosterMaxUnitMs") or 0) >= 50:
+        raise AssertionError("resident roster unit exceeded 50 ms: " + repr(background_scheduler))
     if int(background_scheduler.get("residentWarmupRouteSliceCount") or 0) < 1:
         raise AssertionError("work-cycle route warmup did not use cooperative route slices: " + repr(background_scheduler))
     if float(background_scheduler.get("residentWarmupMaxRouteSliceMs") or 0) >= 50:

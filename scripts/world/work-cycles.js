@@ -183,13 +183,14 @@ async function routePassCooperative(seed,a,b,options={}){
   const planner=window.RoutePlanner;
   if(!planner?.beginRouteSearch||!planner?.advanceRouteSearch)return routePass(seed,a,b);
   telemetry.routeQueryCount++;telemetry.cooperativeRouteSearchCount++;
-  const maxPops=Math.max(1,Math.floor(Number(options.maxRoutePops||6)));
+  const maxPops=Math.max(1,Math.floor(Number(options.maxRoutePops||128)));
+  const maxMs=Math.max(.5,Math.min(8,Number(options.maxRouteMs||7.5)));
   let started=nowMs(),search=planner.beginRouteSearch(seed,a,b),elapsed=nowMs()-started;
   telemetry.cooperativeRouteSliceCount++;telemetry.cooperativeMaxRouteSliceMs=Math.max(telemetry.cooperativeMaxRouteSliceMs,elapsed);
   options.onSlice?.(elapsed,"route-begin");
   while(!search.done){
     started=nowMs();
-    const advanced=planner.advanceRouteSearch(search,maxPops);
+    const advanced=planner.advanceRouteSearch(search,maxPops,maxMs);
     elapsed=nowMs()-started;
     telemetry.cooperativeRouteSliceCount++;telemetry.cooperativeMaxRouteSliceMs=Math.max(telemetry.cooperativeMaxRouteSliceMs,elapsed);
     options.onSlice?.(elapsed,"route-advance");

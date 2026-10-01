@@ -302,11 +302,17 @@ function finishRouteSearchFailure(search,reason){
   });
   search.done=true;
 }
-function advanceRouteSearch(search,maxPops=32){
+function advanceRouteSearch(search,maxPops=32,maxMs=Infinity){
   if(!search||search.done)return Object.freeze({done:true,result:search?.result||null,pops:0,expanded:0});
   const popLimit=Number.isFinite(Number(maxPops))?Math.max(1,Math.floor(Number(maxPops))):Number.MAX_SAFE_INTEGER;
+  const timeBudget=Number.isFinite(Number(maxMs))?Math.max(.5,Number(maxMs)):Infinity;
+  const sliceStarted=typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
   let pops=0,expandedThisStep=0;
   while(search.open.length&&pops<popLimit&&!search.done){
+    if(pops>0){
+      const now=typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
+      if(now-sliceStarted>=timeBudget)break;
+    }
     const current=search.open.pop();pops++;
     if(!current)break;
     const currentKey=key(current.point),bestKnown=search.gScore.get(currentKey);
