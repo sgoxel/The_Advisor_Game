@@ -2837,6 +2837,27 @@ async function measuredPhase(id,work){
   if(startupAbortError)throw startupAbortError;
   return result;
 }
+async function measuredControlledPhase(id,work){
+  // Drain deferred renderer/device work from the previous phase before opening
+  // the controlled build window. Keep the trailing browser yield inside the
+  // window so any deferred work actually triggered by buildScene remains
+  // attributed to controlled startup rather than being hidden.
+  await yieldBrowser();
+  if(startupAbortError)throw startupAbortError;
+  controlledWorkActive=true;
+  startupScheduler.controlledWorkStartedAtMs=performance.now();
+  const started=performance.now();
+  try{
+    const result=await work();
+    startupScheduler.phaseTimings[id]=Number((performance.now()-started).toFixed(3));
+    await yieldBrowser();
+    if(startupAbortError)throw startupAbortError;
+    return result;
+  }finally{
+    startupScheduler.controlledWorkEndedAtMs=performance.now();
+    controlledWorkActive=false;
+  }
+}
 function endResponsivenessTelemetry(){
   stopStartupWatchdog();
   if(heartbeatTimer){clearInterval(heartbeatTimer);heartbeatTimer=null;}
@@ -9575,11 +9596,7 @@ async function start(){
 
     app=new pc.AppBase(canvas);
     await measuredPhase("appInitMs",async()=>app.init(options));
-    controlledWorkActive=true;
-    startupScheduler.controlledWorkStartedAtMs=performance.now();
-    await measuredPhase("buildSceneMs",()=>buildScene());
-    startupScheduler.controlledWorkEndedAtMs=performance.now();
-    controlledWorkActive=false;
+    await measuredControlledPhase("buildSceneMs",()=>buildScene());
     setStartupProgress("finalizing","Starting first playable renderer…",96);
     await yieldPaint();
     bindInput();
