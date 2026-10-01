@@ -19,7 +19,7 @@ opt=Options()
 for arg in ["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader","--disable-search-engine-choice-screen"]:
     opt.add_argument(arg)
 opt.set_capability("goog:loggingPrefs",{"browser":"ALL"})
-driver=webdriver.Chrome(options=opt);wait=WebDriverWait(driver,240)
+driver=webdriver.Chrome(options=opt);driver.set_script_timeout(240);wait=WebDriverWait(driver,240)
 
 def page_ready():
     try:
