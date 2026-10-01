@@ -8457,7 +8457,20 @@ function unregisterInspectionPickable(id,type=null){
   if(inspection.selectedId===idText&&(!type||inspection.selectedType===type))dismissInspection();
   let removed=false;for(const key of keys)removed=inspectionPickables.delete(key)||removed;return removed;
 }
-function readableInspectionLines(record){
+function inspectionRankAccess(record){
+  if(record?.type!=="building"||!activeSeed||!window.ProtagonistRankAccess?.localAccessContext)return null;
+  const kind=String(record.authority?.kind||"").trim();
+  const requiredScope=(kind==="storehouse"||kind==="meeting-hall")?"settlement:administration":null;
+  if(!requiredScope)return null;
+  const action=kind==="meeting-hall"?"work":"enter";
+  try{
+    return window.ProtagonistRankAccess.localAccessContext(
+      activeSeed,"protagonist",window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00",
+      {id:String(record.id),kind:"building",buildingId:String(record.id),buildingKind:kind,label:String(record.name||record.buildingType||"Building"),action,requiredScope}
+    );
+  }catch(_){return null}
+}
+function readableInspectionLines(record,accessValue=null){
   const readable=(value,fallback)=>{const text=String(value??"").trim();return text||fallback;};
   if(record.type==="npc"){
     let live=null;try{live=typeof record.inspect==="function"?record.inspect():null;}catch{live=null;}
@@ -8467,7 +8480,12 @@ function readableInspectionLines(record){
     return [readable(record.name,"Road signpost"),...(record.branches||[]).slice(0,3).map(branch=>readable(branch.destinationName,"Destination")+" — "+readable(branch.distanceLabel,"route")+" "+readable(branch.directionLabel,""))];
   }
   const functionLabel=String(record.functionLabel??"").trim(),buildingType=String(record.buildingType??"").trim(),typeLabel=functionLabel||buildingType||"Building",name=String(record.name??"").trim();
-  return name&&name!==typeLabel?[name,typeLabel]:[typeLabel];
+  const lines=name&&name!==typeLabel?[name,typeLabel]:[typeLabel],access=accessValue||inspectionRankAccess(record);
+  if(access){
+    const role=String(access.role?.title||"").trim(),requirement=String(access.requiredScope||access.requiredRoleId||"").trim(),status=String(access.status||"unknown").toUpperCase();
+    lines.push("Access · "+status+(access.status==="permitted"&&role?" · "+role:access.status!=="permitted"&&requirement?" · needs "+requirement:"")+" · Simulation validates");
+  }
+  return lines;
 }
 function renderInspectionTooltip(record,knownBounds=null){
   let tip=root?.querySelector?.(".world-inspection-tooltip");if(!tip){tip=document.createElement("aside");tip.className="world-inspection-tooltip";tip.setAttribute("role","status");root.appendChild(tip);}
@@ -8475,7 +8493,10 @@ function renderInspectionTooltip(record,knownBounds=null){
   if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite)||bounds.left>bounds.right||bounds.top>bounds.bottom){dismissInspection();return false;}
   const now=performance.now(),recordKey=inspectionRegistryKey(record.type,record.id),selectionChanged=tip.dataset.recordKey!==recordKey;
   if(selectionChanged||tip.dataset.contentKey===undefined||now-inspection.lastContentRefreshAtMs>=250){
-    const lines=readableInspectionLines(record),contentKey=lines.join("\u001f");
+    const access=inspectionRankAccess(record);
+    tip.dataset.rankAccess=access?.status||"ordinary";
+    tip.dataset.rankReason=access?.reason||"";
+    const lines=readableInspectionLines(record,access),contentKey=lines.join("\u001f");
     if(tip.dataset.contentKey!==contentKey){
       tip.replaceChildren();lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=line;tip.appendChild(el);});
       tip.dataset.contentKey=contentKey;inspection.contentRefreshes++;
@@ -9425,6 +9446,7 @@ window.PlanetStage=Object.freeze({
   workCycleEvidenceState,surfaceContributorEvidence,setWp020PresentationEvidenceMode,armWp020TransitionEvidenceFreeze,wp020TransitionEvidenceFreezeState,releaseWp020TransitionEvidenceFreeze,
   focusWayfindingSignForEvidence:(id)=>{const sign=(wayfindingSignposts.signs||[]).find(item=>String(item.id)===String(id));if(sign){setWorldTileFocus(sign.anchor.x,sign.anchor.y);setZoomScalar(1);}return snapshot();},
   selectWayfindingSignForEvidence:(id)=>{const key=inspectionRegistryKey("signpost",String(id)),record=inspectionPickables.get(key);if(record){inspection.selectedId=String(id);inspection.selectedType="signpost";renderInspectionTooltip(record);}return snapshot();},
+  selectBuildingForEvidence:(id)=>{const key=inspectionRegistryKey("building",String(id)),record=inspectionPickables.get(key);if(record){inspection.selectedId=String(id);inspection.selectedType="building";renderInspectionTooltip(record);}return snapshot();},
   destroy,
   constants:Object.freeze({
     EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,

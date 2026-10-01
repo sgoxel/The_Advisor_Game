@@ -54,6 +54,7 @@ function renderPresentation(){
   for(const reaction of active.values()){
     const card=document.createElement("div");
     card.className="contextual-npc-reaction";
+    card.dataset.rankRecognized=reaction.rankRecognized?"true":"false";
     Object.assign(card.style,{
       padding:"7px 10px",border:"1px solid rgba(230,205,144,.72)",borderRadius:"10px",
       background:"rgba(9,15,20,.90)",boxShadow:"0 5px 18px rgba(0,0,0,.34)",
@@ -227,12 +228,15 @@ function evaluate(seed,event,resident,when){
 
   if(!valid||salience<.7)return null;
   const social=relationshipValues(seed,event.residentId);
+  const reactionKind=kind==="proximity"?"close-follow":kind;
+  const rankAware=window?.ProtagonistRankAccess?.npcReaction?.(seed,event.residentId,"protagonist",when,{kind:reactionKind,label:"local context"})||null;
   return Object.freeze({
-    kind:kind==="proximity"?"close-follow":kind,
+    kind:reactionKind,
     salience:Number(salience.toFixed(3)),
     holdsPosition,
     durationSeconds:duration,
-    text:reactionTemplate(seed,when,event.residentId,kind==="proximity"?"close-follow":kind,social),
+    text:rankAware?.recognized?rankAware.message:reactionTemplate(seed,when,event.residentId,reactionKind,social),
+    rankRecognized:Boolean(rankAware?.recognized),
     socialSource:social?"SocialState.dialogueContext":"deterministic-neutral-baseline",
     distanceTiles:d,
     protagonistNavigation:Object.freeze({
@@ -244,6 +248,7 @@ function reactionSnapshot(reaction){
   if(!reaction)return null;
   return Object.freeze({
     id:reaction.id,residentId:reaction.residentId,kind:reaction.kind,text:reaction.text,
+    rankRecognized:Boolean(reaction.rankRecognized),
     salience:reaction.salience,holdsPosition:Boolean(reaction.holdsPosition),
     elapsedSeconds:Number(reaction.elapsed.toFixed(3)),durationSeconds:reaction.durationSeconds,
     remainingSeconds:Number(Math.max(0,reaction.durationSeconds-reaction.elapsed).toFixed(3)),
@@ -277,6 +282,7 @@ function processEvent(seed,event,residentLookup,when){
   const reaction={
     id:"CTX-R"+String(acceptedEventCount+1).padStart(5,"0")+"-"+String(window.PRNG?.foundationUint32?.(seed,"contextual-reaction-id:"+slotKey(event.when||when)+":"+event.residentId+":"+evaluated.kind)||0).toString(16).toUpperCase(),
     residentId:event.residentId,kind:evaluated.kind,text:evaluated.text,salience:evaluated.salience,
+    rankRecognized:Boolean(evaluated.rankRecognized),
     holdsPosition:evaluated.holdsPosition,durationSeconds:evaluated.durationSeconds,elapsed:0,
     source:event.source,socialSource:evaluated.socialSource,distanceTiles:evaluated.distanceTiles,
     protagonistNavigation:evaluated.protagonistNavigation

@@ -2729,3 +2729,16 @@ body:has(.advisor-rank-readout[open]) .advisor-economy-launcher{
 .advisor-chat-panel:has(.advisor-rank-readout[open]) .advisor-activity-strip{
   display:none!important;
 }
+
+
+/* WP-S013-010 — rank-aware local access presentation */
+.object-interaction-panel[data-access="permitted"]{border-color:rgba(119,205,161,.78);box-shadow:0 12px 34px rgba(0,0,0,.34),0 0 0 1px rgba(72,142,109,.12) inset}
+.object-interaction-panel[data-access="restricted"]{border-color:rgba(218,169,83,.82);background:linear-gradient(180deg,rgba(38,34,25,.97),rgba(24,23,20,.95))}
+.object-interaction-panel[data-access="conditional"]{border-color:rgba(119,171,207,.76)}
+.object-interaction-actions button[data-access-status="restricted"]{border-color:rgba(213,163,79,.42);color:#d7c28f}
+.object-interaction-actions button[data-access-status="conditional"]{border-color:rgba(113,170,207,.55)}
+.contextual-npc-reaction[data-rank-recognized="true"]{border-color:rgba(123,203,181,.82)!important}
+.world-inspection-tooltip[data-rank-access="permitted"]{border-color:rgba(119,205,161,.78);box-shadow:0 12px 36px rgba(0,0,0,.42),0 0 0 1px rgba(72,142,109,.12) inset}
+.world-inspection-tooltip[data-rank-access="restricted"]{border-color:rgba(218,169,83,.82);background:linear-gradient(145deg,rgba(38,34,25,.97),rgba(24,23,20,.95))}
+.world-inspection-tooltip[data-rank-access="restricted"] span:last-child{color:#e2c482}
+.world-inspection-tooltip[data-rank-access="permitted"] span:last-child{color:#a8d8bd}

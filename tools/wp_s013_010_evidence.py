@@ -9,113 +9,177 @@ from selenium.common.exceptions import TimeoutException
 
 TARGET=os.environ.get("TARGET","http://127.0.0.1:8000/")
 OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s013-010"));OUT.mkdir(parents=True,exist_ok=True)
-VIEWPORTS={"phone":(390,844),"desktop":(1280,720)}
+VIEWPORTS={"phone":(390,844),"phone-landscape":(844,390),"desktop":(1280,720)}
+CASES=[
+    ("phone","ordinary-access"),
+    ("phone","authority-access"),
+    ("phone-landscape","known-reaction"),
+    ("desktop","authority-access"),
+    ("desktop","known-reaction"),
+    ("desktop","unknown-reaction"),
+]
 
-def target_url():
-    p=urlsplit(TARGET);q=dict(parse_qsl(p.query,keep_blank_values=True));q["evidence_fast_start"]="1"
+def url():
+    p=urlsplit(TARGET);q=dict(parse_qsl(p.query,keep_blank_values=True));q.update({"evidence_fast_start":"1"})
     return urlunsplit((p.scheme,p.netloc,p.path,urlencode(q),p.fragment))
 
 opt=Options()
 for arg in ["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader","--disable-search-engine-choice-screen"]:opt.add_argument(arg)
 opt.set_capability("goog:loggingPrefs",{"browser":"ALL"})
-driver=webdriver.Chrome(options=opt);driver.set_script_timeout(180);wait=WebDriverWait(driver,60)
+driver=webdriver.Chrome(options=opt);driver.set_script_timeout(180);wait=WebDriverWait(driver,300)
 
 def ready():
     try:
         return driver.execute_script("""
-          return Boolean(
-            window.AppUI&&window.ObjectInteractions&&window.ProtagonistRankAccess&&window.ContextualReactions&&
-            window.SpecialLots&&window.SeedSystem&&window.GameTime&&
-            document.getElementById('objectInteractionPanel')
-          );
+          const s=window.PlanetStage?.snapshot?.();
+          return Boolean(s?.ready&&s?.activeSeed&&window.StartingVillage&&window.DailyActivity&&window.ContextualReactions&&window.ProtagonistRankAccess&&window.CharacterMemory&&window.SocialState);
         """)
     except Exception:return False
 
-def initialize_campaign():
+def patch_context(case):
     return driver.execute_script("""
-      try{
-        const seed='AGENT6-WP-S013-010-A';
-        const set=window.SeedSystem?.setSettingsSeed?.(seed);
-        const started=window.SeedSystem?.startNewCampaign?.(seed);
-        const campaign=started?.campaign||window.SeedSystem?.getCampaign?.()||null;
-        if(!set?.ok||!campaign)return{ok:false,error:'synchronous campaign initialization failed',seed};
-        return{ok:true,seed:String(campaign.seed)};
-      }catch(e){return{ok:false,error:String(e)}}
+      const mode=arguments[0];
+      if(!window.__wp010OriginalAuthority)window.__wp010OriginalAuthority=window.ProtagonistAuthority;
+      if(!window.__wp010OriginalMemory)window.__wp010OriginalMemory=window.CharacterMemory;
+      if(!window.__wp010OriginalSocial)window.__wp010OriginalSocial=window.SocialState;
+      const steward=mode!=='ordinary-access',known=mode==='known-reaction';
+      window.ProtagonistAuthority=Object.freeze({
+        ...window.__wp010OriginalAuthority,
+        snapshot(){
+          return steward
+            ?{exists:true,currentRole:{roleId:'village-steward',title:'Village Steward',rankTier:2,rankLabel:'local-authority',scopes:['self','settlement:administration','settlement:request-assistance']}}
+            :{exists:true,currentRole:{roleId:'local-resident',title:'Local Resident',rankTier:0,rankLabel:'ordinary',scopes:['self']}};
+        }
+      });
+      window.CharacterMemory=Object.freeze({
+        ...window.__wp010OriginalMemory,
+        recognition(_seed,residentId){
+          return known
+            ?{metBefore:true,meaningfulEncounterCount:3,familiarity:'known',residentId}
+            :{metBefore:false,meaningfulEncounterCount:0,familiarity:'stranger',residentId};
+        }
+      });
+      window.SocialState=Object.freeze({
+        ...window.__wp010OriginalSocial,
+        dialogueContext(_seed,residentId){
+          return {
+            values:{trust:.72,respect:.68,suspicion:.12,fear:.08,loyalty:.4,resentment:.05},
+            reputations:known?[{scope:'settlement',id:'starting-village',score:.6,eventIds:['SOC-EVIDENCE-RANK']}]:[]
+          };
+        }
+      });
+      window.ContextualReactions.endProof?.();
+      window.PlanetStage.dismissInspection?.();
+      return {ok:true,mode,seed:window.PlanetStage.snapshot().activeSeed};
+    """,case)
+
+def prime_access():
+    return driver.execute_script("""
+      const s=window.PlanetStage.snapshot(),seed=s.activeSeed,p=window.StartingVillage?.plan?.(seed);
+      if(!seed||!p?.center)return {ok:false,reason:'starting-village-unavailable',seed,plan:p||null};
+      window.PlanetStage.setWorldTileFocus(String(p.center.x),String(p.center.y));
+      window.PlanetStage.setScaleIndex(8);
+      return {ok:true,seed,center:{x:String(p.center.x),y:String(p.center.y)},name:String(p.name||'Starting Village')};
     """)
 
-def set_scenario(mode):
+def access_ready():
+    try:
+        return driver.execute_script("""
+          const s=window.PlanetStage.snapshot(),ls=s.projection?.localStatic||{},targets=window.PlanetStage.inspectionTargets?.()||[];
+          return Boolean(s.ready&&['refined','full'].includes(String(ls.revealTier||''))&&ls.active&&targets.some(t=>t.type==='building'&&t.authority?.kind==='storehouse'));
+        """)
+    except Exception:return False
+
+def select_access():
     return driver.execute_script("""
-      const mode=arguments[0],campaign=window.SeedSystem?.getCampaign?.(),seed=campaign?.seed;
-      if(!seed)throw new Error('Campaign unavailable');
-      if(!window.__wp13010Originals)window.__wp13010Originals={authority:window.ProtagonistAuthority,memory:window.CharacterMemory,social:window.SocialState};
-      const higher=mode!=='ordinary',known=mode==='known';
-      const base=window.__wp13010Originals;
-      window.ProtagonistAuthority={...base.authority,snapshot(){return{exists:true,currentRole:higher?{roleId:'village-steward',title:'Village Steward',rankTier:2,rankLabel:'local-authority',scopes:['self','settlement:administration','settlement:request-assistance']}:{roleId:'local-resident',title:'Local Resident',rankTier:0,rankLabel:'ordinary',scopes:['self']}}}};
-      window.CharacterMemory={...base.memory,recognition(){return known?{metBefore:true,meaningfulEncounterCount:3,familiarity:'known'}:{metBefore:false,meaningfulEncounterCount:0,familiarity:'stranger'}}};
-      window.SocialState={...base.social,dialogueContext(){return{values:{trust:.72,respect:.68,suspicion:.12,fear:.08,loyalty:.4,resentment:.05},reputations:known?[{scope:'settlement',id:'starting-village',score:.6,eventIds:['SOC-EVIDENCE-RANK']}]:[]}}};
-      window.ContextualReactions.endProof?.();
-      window.AppUI.closeObjectInteractionForEvidence?.();
-      if(mode==='ordinary'||mode==='authority'){
-        const shown=window.AppUI.showObjectInteractionForEvidence('table',0,'Village Meeting Hall');
-        if(!shown)throw new Error('Village Meeting Hall table unavailable');
-        const work=shown.context.actions.find(x=>x.id==='work');
-        return{mode,seed,kind:'access',context:shown.context,work,panel:window.AppUI.objectInteractionPanelSnapshot(),telemetry:window.ProtagonistRankAccess.telemetry()};
-      }
+      const targets=window.PlanetStage.inspectionTargets?.()||[],target=targets.find(t=>t.type==='building'&&t.authority?.kind==='storehouse')||null;
+      if(!target)return {ok:false,reason:'storehouse-inspection-unavailable'};
+      window.PlanetStage.selectBuildingForEvidence?.(target.id);
+      const tip=document.querySelector('.world-inspection-tooltip');
+      return {ok:Boolean(tip),target,access:tip?.dataset?.rankAccess||null,text:tip?.innerText||''};
+    """)
+
+def setup(case):
+    base=patch_context(case)
+    if not base.get("ok"):return base
+    if case.endswith("access"):
+        primed=prime_access()
+        if not primed.get("ok"):return primed
+        try:WebDriverWait(driver,120).until(lambda d:access_ready())
+        except TimeoutException:return {"ok":False,"reason":"local-storehouse-not-materialized","prime":primed}
+        selected=select_access()
+        return {"ok":bool(selected.get("ok")),"mode":case,"selected":selected}
+    return driver.execute_script("""
+      const mode=arguments[0],seed=window.PlanetStage.snapshot().activeSeed;
       const proof=window.ContextualReactions.beginProof(seed,'close-follow');
-      if(!proof?.reaction)throw new Error('Contextual reaction proof unavailable');
-      return{mode,seed,kind:'reaction',proof,rank:window.ProtagonistRankAccess.npcReaction(seed,proof.residentId,'protagonist',proof.when,{label:'the local exchange'}),telemetry:window.ProtagonistRankAccess.telemetry()};
-    """,mode)
+      return {ok:Boolean(proof?.reaction),mode,proof};
+    """,case)
 
-def frame_state(mode,scenario):
+def state(case,profile):
     return driver.execute_script("""
-      const mode=arguments[0],scenario=arguments[1],rect=n=>{if(!n)return null;const r=n.getBoundingClientRect();if(!r.width&&!r.height)return null;return{left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
-      const inside=r=>Boolean(r&&r.left>=-.5&&r.top>=-.5&&r.right<=innerWidth+.5&&r.bottom<=innerHeight+.5);
-      const panel=document.getElementById('objectInteractionPanel'),reaction=document.querySelector('.contextual-npc-reaction'),work=[...(document.querySelectorAll('#objectInteractionActions button')||[])].find(b=>b.dataset.action==='work');
-      const p=rect(panel),r=rect(reaction),message=document.getElementById('objectInteractionMessage')?.innerText||'',meta=document.getElementById('objectInteractionMeta')?.innerText||'';
-      return{mode,scenario,viewport:{width:innerWidth,height:innerHeight},documentWidth:document.documentElement.scrollWidth,panel:p,reaction:r,panelInside:p?inside(p):true,reactionInside:r?inside(r):true,meta,message,workText:work?.innerText||'',workDisabled:Boolean(work?.disabled),reactionText:reaction?.innerText||'',rankTelemetry:window.ProtagonistRankAccess.telemetry(),objectTelemetry:window.ObjectInteractions.snapshot(window.SeedSystem.getCampaign().seed)};
-    """,mode,scenario)
+      const mode=arguments[0],profile=arguments[1];
+      const rect=n=>{if(!n)return null;const r=n.getBoundingClientRect();if(r.width===0&&r.height===0)return null;return{left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
+      const inside=r=>Boolean(!r||(r.left>=-.5&&r.top>=-.5&&r.right<=innerWidth+.5&&r.bottom<=innerHeight+.5));
+      const ov=(a,b)=>!a||!b?0:Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left))*Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
+      const tip=document.querySelector('.world-inspection-tooltip'),reaction=document.querySelector('.contextual-npc-reaction');
+      const t=rect(tip),r=rect(reaction);
+      const chrome={map:rect(document.querySelector('.planet-map-context')),places:rect(document.querySelector('.planet-places-button')),scale:rect(document.querySelector('.planet-scale-ruler')),advisor:rect(document.querySelector('.advisor-chat-launcher')),toolbelt:rect(document.querySelector('.advisor-toolbelt-launcher')),economy:rect(document.querySelector('.advisor-economy-launcher'))};
+      const s=window.PlanetStage?.snapshot?.()||null,rank=window.ProtagonistRankAccess?.snapshot?.(s?.activeSeed,'protagonist')||null,ctx=window.ContextualReactions?.snapshot?.()||null;
+      return {
+        mode,profile,viewport:{width:innerWidth,height:innerHeight},documentWidth:document.documentElement.scrollWidth,
+        tooltip:t,reaction:r,tooltipInside:inside(t),reactionInside:inside(r),
+        tooltipText:tip?tip.innerText.replace(/\s+/g,' ').trim():'',
+        tooltipAccess:tip?.dataset?.rankAccess||null,tooltipReason:tip?.dataset?.rankReason||null,
+        reactionText:reaction?reaction.innerText.replace(/\s+/g,' ').trim():'',
+        reactionRecognized:reaction?.dataset?.rankRecognized||null,
+        overlap:Object.fromEntries(Object.entries(chrome).flatMap(([k,v])=>[['tooltip-'+k,ov(t,v)],['reaction-'+k,ov(r,v)]])),
+        planet:s,rankSnapshot:rank,reactionSnapshot:ctx
+      };
+    """,case,profile)
 
-def assert_frame(s):
+def assert_state(s):
     if s["documentWidth"]>s["viewport"]["width"]+1:raise RuntimeError("horizontal overflow "+json.dumps(s))
-    if not s["panelInside"] or not s["reactionInside"]:raise RuntimeError("rank cue escaped viewport "+json.dumps(s))
-    if s["mode"]=="ordinary":
-        if "STATUS RESTRICTED" not in s["meta"] or "RESTRICTED" not in s["workText"] or not s["workDisabled"]:raise RuntimeError("ordinary restricted cue missing "+json.dumps(s))
-        if "status never bypasses Simulation" not in s["message"]:raise RuntimeError("ordinary Simulation wording missing "+json.dumps(s))
-    elif s["mode"]=="authority":
-        if "STATUS PERMITTED" not in s["meta"] or "PERMITTED" not in s["workText"] or s["workDisabled"]:raise RuntimeError("authority permitted cue missing "+json.dumps(s))
-        if "Village Steward" not in s["message"] or "Simulation still validates" not in s["message"]:raise RuntimeError("authority Simulation wording missing "+json.dumps(s))
-    elif s["mode"]=="known":
-        if "Village Steward" not in s["reactionText"] or "recognize your standing" not in s["reactionText"]:raise RuntimeError("grounded rank acknowledgement missing "+json.dumps(s))
-    elif s["mode"]=="unknown":
-        if "Village Steward" in s["reactionText"] or "recognize your standing" in s["reactionText"]:raise RuntimeError("ungrounded resident magically recognized rank "+json.dumps(s))
-    t=s["rankTelemetry"]
-    for k in ["fullWorldScan","wholeSettlementScan","wholeHistoryScan","perFrameScan","relationshipMutation","worldMutation"]:
-        if t.get(k) is not False:raise RuntimeError("rank telemetry authority regression "+k+" "+json.dumps(s))
-    if s["objectTelemetry"].get("perFrameScan") is not False or s["objectTelemetry"].get("boundedLocalQuery") is not True:raise RuntimeError("object query bounds regression "+json.dumps(s))
+    if not s["tooltipInside"] or not s["reactionInside"]:raise RuntimeError("rank presentation escaped viewport "+json.dumps(s))
+    for k,v in s["overlap"].items():
+        if v>1 and (("tooltip-" in k and s["tooltip"] is not None) or ("reaction-" in k and s["reaction"] is not None)):
+            raise RuntimeError("rank presentation overlaps required world chrome "+k+" "+json.dumps(s))
+    rank=s.get("rankSnapshot") or {}
+    for key in ["fullWorldScan","wholeSettlementScan","wholeHistoryScan","perFrameScan"]:
+        if rank.get(key) is not False:raise RuntimeError("rank scan regression "+key+" "+json.dumps(s))
+    if rank.get("readOnly") is not True or rank.get("eventDriven") is not True:raise RuntimeError("rank authority regression "+json.dumps(s))
+    mode=s["mode"]
+    if mode=="ordinary-access":
+        if s.get("tooltipAccess")!="restricted":raise RuntimeError("ordinary storehouse not restricted "+json.dumps(s))
+        if "ACCESS · RESTRICTED" not in s["tooltipText"].upper() or "SETTLEMENT:ADMINISTRATION" not in s["tooltipText"].upper():raise RuntimeError("restricted access cue missing "+json.dumps(s))
+    elif mode=="authority-access":
+        if s.get("tooltipAccess")!="permitted":raise RuntimeError("steward storehouse not permitted "+json.dumps(s))
+        if "ACCESS · PERMITTED" not in s["tooltipText"].upper() or "VILLAGE STEWARD" not in s["tooltipText"].upper() or "SIMULATION VALIDATES" not in s["tooltipText"].upper():raise RuntimeError("permitted access cue wrong "+json.dumps(s))
+    elif mode=="known-reaction":
+        if s.get("reactionRecognized")!="true" or "VILLAGE STEWARD" not in s["reactionText"].upper():raise RuntimeError("known NPC did not acknowledge title "+json.dumps(s))
+    elif mode=="unknown-reaction":
+        if s.get("reactionRecognized")!="false" or "VILLAGE STEWARD" in s["reactionText"].upper():raise RuntimeError("unknown NPC gained omniscient title knowledge "+json.dumps(s))
 
-frames=[]
+records=[]
 try:
-    driver.set_window_size(*VIEWPORTS["phone"]);driver.get(target_url())
-    startup=driver.execute_script("""return {readyState:document.readyState,app:!!window.AppUI,seed:!!window.SeedSystem,world:!!window.WorldState,objects:!!window.ObjectInteractions,rank:!!window.ProtagonistRankAccess,reactions:!!window.ContextualReactions,daily:!!window.DailyActivity,interiors:!!window.BuildingInteriors,interiorObjects:!!window.InteriorObjects};""")
-    print(json.dumps({"startup":startup}))
+    driver.set_window_size(*VIEWPORTS["phone"]);driver.get(url())
     try:wait.until(lambda d:ready())
     except TimeoutException:
-        driver.save_screenshot(str(OUT/"startup-failure.png"));raise
-    init=initialize_campaign()
-    if not init.get("ok"):raise RuntimeError("campaign init failed "+json.dumps(init))
-    time.sleep(.35)
-    matrix=[("phone","ordinary"),("phone","known"),("phone","unknown"),("desktop","authority"),("desktop","known"),("desktop","unknown")]
-    for profile,mode in matrix:
-        driver.set_window_size(*VIEWPORTS[profile]);time.sleep(.35)
-        scenario=set_scenario(mode);time.sleep(.2)
-        s=frame_state(mode,scenario);path=OUT/f"{profile}-{mode}.png";driver.save_screenshot(str(path));assert_frame(s);frames.append({"profile":profile,"mode":mode,"file":str(path),"state":s})
+        diag=driver.execute_script("""return {readyState:document.readyState,planet:window.PlanetStage?.snapshot?.()||null,rank:Boolean(window.ProtagonistRankAccess),reactions:Boolean(window.ContextualReactions),memory:Boolean(window.CharacterMemory),social:Boolean(window.SocialState)}""")
+        print(json.dumps({"startup":diag},default=str));driver.save_screenshot(str(OUT/"startup-failure.png"));raise
+    for profile,case in CASES:
+        driver.set_window_size(*VIEWPORTS[profile]);time.sleep(.3)
+        result=setup(case)
+        if not result.get("ok"):
+            driver.save_screenshot(str(OUT/f"{profile}-{case}-setup-failure.png"))
+            raise RuntimeError("evidence setup failed "+json.dumps(result))
+        time.sleep(.25)
+        s=state(case,profile);assert_state(s)
+        path=OUT/f"{profile}-{case}.png";driver.save_screenshot(str(path))
+        records.append({"profile":profile,"case":case,"file":str(path),"state":s})
     severe=[e for e in driver.get_log("browser") if e.get("level")=="SEVERE" and "favicon.ico" not in str(e.get("message",""))]
     if severe:raise RuntimeError("browser severe errors "+json.dumps(severe[-10:]))
-    result={"pass":True,"wp":"WP-S013-010","classification":"MIXED","seed":init["seed"],"frames":frames}
+    result={"pass":True,"wp":"WP-S013-010","classification":"MIXED","screenshots":len(records),"records":records}
     (OUT/"evidence.json").write_text(json.dumps(result,indent=2),encoding="utf-8")
-    print(json.dumps({"pass":True,"wp":"WP-S013-010","screenshots":len(frames),"matrix":matrix,"seed":init["seed"]},indent=2))
-except Exception:
-    try:driver.save_screenshot(str(OUT/"failure.png"))
-    except Exception:pass
-    raise
-finally:driver.quit()
+    print(json.dumps({"pass":True,"wp":"WP-S013-010","screenshots":len(records),"cases":[c for _,c in CASES]},indent=2))
+finally:
+    driver.quit()

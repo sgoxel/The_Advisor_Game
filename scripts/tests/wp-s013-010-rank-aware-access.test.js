@@ -77,6 +77,14 @@ assert(objectSource.includes('building?.kind==="meeting-hall"&&descriptor.type==
 assert(objectSource.includes('actorKind==="protagonist"?rankStatus'),'resident routines must be isolated from protagonist status');
 assert(objectSource.includes('access.status==="conditional"'),'conditional access must have an explicit fail-closed branch');
 assert(objectSource.includes('reason:"status-conditional"'),'conditional access must never execute as ready');
+const planetSource=fs.readFileSync(path.resolve(__dirname,'../world/planet-stage.js'),'utf8');
+assert(planetSource.includes('function inspectionRankAccess(record)'),'PlanetStage must project rank access into live building inspection');
+assert(planetSource.includes('selectBuildingForEvidence:'),'bounded live building evidence selector missing');
+assert(planetSource.includes('tip.dataset.rankAccess'),'live inspection must expose access state');
+const reactionSource=fs.readFileSync(path.resolve(__dirname,'../world/contextual-reactions.js'),'utf8');
+assert(reactionSource.includes('card.dataset.rankRecognized'),'NPC reaction card must expose grounded recognition state');
+const cssSource=fs.readFileSync(path.resolve(__dirname,'../../styles/main.css'),'utf8');
+assert(cssSource.includes('WP-S013-010 — rank-aware local access presentation'),'rank access visual treatment missing');
 const uiSource=fs.readFileSync(path.resolve(__dirname,'../ui/app-ui.js'),'utf8');
 for(const phrase of ['STATUS "+String(accessStatus).toUpperCase()','status never bypasses Simulation','Simulation still validates the action and outcome','data'])void phrase;
 assert(uiSource.includes('STATUS "+String(accessStatus).toUpperCase()'));assert(uiSource.includes('status never bypasses Simulation'));assert(uiSource.includes('Simulation still validates the action and outcome'));

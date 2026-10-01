@@ -7,6 +7,8 @@ on:
       - "scripts/world/protagonist-rank-access.js"
       - "scripts/world/object-interactions.js"
       - "scripts/world/contextual-reactions.js"
+      - "scripts/world/planet-stage.js"
+      - "styles/main.css"
       - "scripts/ui/app-ui.js"
       - "scripts/tests/wp-s013-010-rank-aware-access.test.js"
       - "tools/wp_s013_010_evidence.py"
@@ -38,6 +40,7 @@ jobs:
           node --check scripts/world/protagonist-rank-access.js
           node --check scripts/world/object-interactions.js
           node --check scripts/world/contextual-reactions.js
+          node --check scripts/world/planet-stage.js
           node --check scripts/ui/app-ui.js
           node --check scripts/tests/wp-s013-010-rank-aware-access.test.js
           python -m py_compile tools/wp_s013_010_evidence.py
