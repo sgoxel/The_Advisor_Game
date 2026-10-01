@@ -10,7 +10,7 @@ const SAFE_ACTIONS=Object.freeze({
   bed:Object.freeze(["inspect","rest","sleep"]),
   chair:Object.freeze(["inspect","sit"]),
   table:Object.freeze(["inspect","eat","social","work"]),
-  counter:Object.freeze(["inspect","service","social"]),
+  counter:Object.freeze(["inspect","service","social","work"]),
   workbench:Object.freeze(["inspect","work"]),
   hearth:Object.freeze(["inspect","warm"]),
   storage:Object.freeze(["inspect"]),
