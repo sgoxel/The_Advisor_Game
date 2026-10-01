@@ -2684,3 +2684,54 @@ body.advisor-economy-open .advisor-chat-launcher,body.advisor-economy-open .advi
   .advisor-rank-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}.advisor-rank-card{padding:4px;border-radius:6px}.advisor-rank-card header{margin-bottom:2px}.advisor-rank-card header strong{font-size:4.5px}.advisor-rank-card header span{font-size:4px}.advisor-rank-card h4{font-size:5.5px;margin-bottom:1px}.advisor-rank-card>p{max-height:13px;overflow:hidden;margin-bottom:2px;font-size:4px;line-height:1.1}.advisor-rank-row{gap:2px;padding-top:1px}.advisor-rank-row strong{font-size:4.3px}.advisor-rank-row small{font-size:3.8px}.advisor-rank-row code{display:none}.advisor-rank-rows .advisor-rank-row:nth-child(n+3){display:none}.advisor-rank-empty{padding:3px;font-size:4px}.advisor-rank-unavailable{padding:3px 4px;font-size:4px}.advisor-rank-body>footer{font-size:3.8px}
 }
 
+
+
+/* WP-S013-009 visual attempt 2 — contain rank readout and preserve Advisor messaging */
+.advisor-chat-panel:has(.advisor-rank-readout[open]){
+  grid-template-rows:auto minmax(0,1fr) 0 auto 0;
+  align-content:stretch;
+}
+.advisor-chat-panel:has(.advisor-rank-readout[open]) .advisor-chat-transcript,
+.advisor-chat-panel:has(.advisor-rank-readout[open]) .advisor-counsel{
+  display:none;
+}
+.advisor-readout-stack:has(.advisor-rank-readout[open]){
+  min-height:0;
+  height:100%;
+  overflow:hidden;
+  display:grid;
+  grid-template-rows:minmax(0,1fr);
+}
+.advisor-readout-stack:has(.advisor-rank-readout[open]) .advisor-status-readout{
+  display:none;
+}
+.advisor-readout-stack:has(.advisor-rank-readout[open]) .advisor-rank-readout[open]{
+  min-height:0;
+  height:100%;
+  overflow:hidden;
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr);
+}
+.advisor-readout-stack:has(.advisor-rank-readout[open]) .advisor-rank-body{
+  box-sizing:border-box;
+  min-height:0;
+  height:auto;
+  max-height:none;
+  overflow:auto;
+}
+@media(max-width:520px){
+  .advisor-chat-panel:has(.advisor-rank-readout[open]){
+    bottom:8px;
+    max-height:min(82vh,660px);
+  }
+}
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-chat-panel:has(.advisor-rank-readout[open]){
+    grid-template-rows:55px minmax(0,1fr) 0 48px 0;
+  }
+  .advisor-readout-stack:has(.advisor-rank-readout[open]) .advisor-rank-body{
+    height:auto;
+    max-height:none;
+    overflow:hidden;
+  }
+}
