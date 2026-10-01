@@ -1,0 +1,107 @@
+name: WP-S013-009 Advisor Rank Patronage Advancement Readout
+on:
+  push:
+    branches: [main, "agent6/wp-s013-009"]
+    paths:
+      - "scripts/ui/protagonist-status-ui.js"
+      - "scripts/tests/wp-s013-009-advisor-rank-readout.test.js"
+      - "styles/main.css"
+      - "tools/wp_s013_009_evidence.py"
+      - ".github/workflows/wp-s013-009-advisor-rank-readout.yml"
+      - "docs/ROADMAP.md"
+      - "docs/changelog.txt"
+      - "docs/suggest_log.txt"
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: wp-s013-009-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ github.sha }}"}
+      - uses: actions/setup-node@v4
+        with: {node-version: 20}
+      - name: Syntax and read-only authority tests
+        run: |
+          node --check scripts/ui/protagonist-status-ui.js
+          node --check scripts/tests/wp-s013-009-advisor-rank-readout.test.js
+          node scripts/tests/wp-s013-009-advisor-rank-readout.test.js
+          node scripts/tests/wp-s009-010-protagonist-status-ui.test.js
+          node scripts/tests/wp-s008-007-advisor-chat-ui.test.js
+
+  visual:
+    needs: functional
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ github.sha }}"}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: python -m pip install -r tools/requirements.txt
+      - run: python -m http.server 8000 --bind 127.0.0.1 >/tmp/wp-s013-009-http.log 2>&1 &
+      - name: Capture exact-head responsive readout evidence
+        env:
+          TARGET: "http://127.0.0.1:8000/"
+          OUT: "tools/screenshots/wp-s013-009"
+        run: python tools/wp_s013_009_evidence.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wp-s013-009-readout-${{ github.sha }}
+          path: tools/screenshots/wp-s013-009/
+          if-no-files-found: error
+          retention-days: 14
+
+  pages:
+    if: github.ref == 'refs/heads/main'
+    needs: [functional, visual]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ github.sha }}"}
+      - name: Verify exact product is live on GitHub Pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://sgoxel.github.io/The_Advisor_Game"
+          for attempt in $(seq 1 72); do
+            curl -fsSL --max-time 20 "$BASE/scripts/ui/protagonist-status-ui.js?sha=${GITHUB_SHA}&try=$attempt" -o /tmp/live.js || true
+            curl -fsSL --max-time 20 "$BASE/styles/main.css?sha=${GITHUB_SHA}&try=$attempt" -o /tmp/live.css || true
+            if grep -q 'ADVANCEMENT_READOUT_VERSION="wp-s013-009-v1"' /tmp/live.js 2>/dev/null && grep -q 'WP-S013-009 — Advisor rank / patronage / advancement readout' /tmp/live.css 2>/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+  report:
+    if: always()
+    needs: [functional, visual, pages]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment exact run on Issue 272
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const functional='${{ needs.functional.result }}';
+            const visual='${{ needs.visual.result }}';
+            const pages='${{ needs.pages.result }}';
+            const body=[
+              'AGENT #6 WP-S013-009 exact-head workflow',
+              'Commit: '+context.sha,
+              'Run: https://github.com/'+context.repo.owner+'/'+context.repo.repo+'/actions/runs/'+context.runId,
+              'Functional: **'+functional+'**',
+              'Visual capture: **'+visual+'**',
+              'Pages verification: **'+pages+'**',
+              'Fresh responsive artifact is attached to this workflow run when visual capture succeeds.'
+            ].join('\n');
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:272,body});
