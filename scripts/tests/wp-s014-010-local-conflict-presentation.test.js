@@ -5,6 +5,8 @@ global.PlanetStage={snapshot(){return {ready:true,activeSeed:'WP-S014-010-SEED',
 global.LocalSecurityIncidents={list(){return [{id:'SEC-1',status:'active',epistemicStatus:'confirmed',severity:'serious',summary:'Bandits threaten the mill road.',sourceRef:{kind:'simulation-event',id:'SIM-SEC-1'},locationRef:{kind:'workplace',id:'mill-crossing'},updatedTimestamp:'1201-10-01 18:42:00'}]}};
 global.PersonalCombatExchange={list(){return []}};
 global.ProtagonistHealth={snapshot(){return {compatible:true,injuries:[]}}};
+let now='1201-10-01 18:48:00';
+global.GameTime={getTimestampKey(){return now}};
 const UI=require('../ui/local-conflict-presentation.js');
 
 assert.equal(UI.VERSION,'local-conflict-presentation-v1');
