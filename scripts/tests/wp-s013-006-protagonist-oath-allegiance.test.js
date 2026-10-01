@@ -63,6 +63,7 @@ put('IAX-END-1',{action:'end-oath',time:'1126-10-01 09:20:00'});
 const ended=Oath.end(seed,made.oath.id,'released',{authority:'simulation',authoritative:true,operationId:'OATH-END-001',fantasyTimestamp:'1126-10-01 09:21:00',interactionAttemptId:'IAX-END-1'},identity);
 assert(ended.ok&&ended.oath.state==='ended'&&ended.historyRetained);
 const endDup=Oath.end(seed,made.oath.id,'released',{authority:'simulation',authoritative:true,operationId:'OATH-END-001',fantasyTimestamp:'1126-10-01 09:21:00',interactionAttemptId:'IAX-END-1'},identity);assert(endDup.ok&&endDup.duplicate);
+const endConflict=Oath.end(seed,made.oath.id,'released',{authority:'simulation',authoritative:true,operationId:'OATH-END-001',fantasyTimestamp:'1126-10-01 09:22:00',interactionAttemptId:'IAX-END-1'},identity);assert(!endConflict.ok&&endConflict.reason==='duplicate-oath-end-conflict');
 put('IAX-OATH-2',{time:'1126-10-01 09:30:00'});
 const made2=Oath.create(seed,{...request,interactionAttemptId:'IAX-OATH-2'},{authority:'simulation',authoritative:true,operationId:'OATH-OP-002',fantasyTimestamp:'1126-10-01 09:31:00'},identity);assert(made2.ok);
 put('IAX-BREAK-2',{action:'break-oath',status:'failed',time:'1126-10-01 09:40:00',auth:false});
