@@ -247,7 +247,7 @@ let localCrowdPresentation={
 const localBuildingInspectionKeys=new Set();
 const localNpcInspectionKeys=new Set();
 const localSignInspectionKeys=new Set();
-let localStatic={active:false,signature:null,level:"inactive",revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,microLocationCount:0,microLocationPropCount:0,microLocationPrimitiveCount:0,microLocationDrawCallEstimate:0,microLocationTriangleEstimate:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,authority:"spherical-seed-focus-presentation"};
+let localStatic={active:false,signature:null,level:"inactive",revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,dressingCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,microLocationCount:0,microLocationPropCount:0,microLocationPrimitiveCount:0,microLocationDrawCallEstimate:0,microLocationTriangleEstimate:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,authority:"spherical-seed-focus-presentation"};
 let microLocationPresentation={
   active:false,locationCount:0,propCount:0,primitiveCount:0,drawCallEstimate:0,triangleEstimate:0,
   queryCellCount:0,maxQueryCells:0,buildMs:0,bounds:null,ids:Object.freeze([]),types:Object.freeze([]),
@@ -5441,6 +5441,72 @@ function addCanonicalBuilding(record,index,presentationScale,unit,frame,detailed
   return entities.length;
 }
 
+function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
+  if(!reveal||!['refined','full'].includes(String(tier)))return {count:0,triangles:0};
+  const records=[...(Array.isArray(reveal.houses)?reveal.houses:[]),...(Array.isArray(reveal.specialLots)?reveal.specialLots:[])];
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  let count=0,triangles=0;
+  const addBox=(record,label,material,offsetEast,offsetNorth,halfW,halfH,halfD,rotationY=0)=>{
+    const bounds=record?.bounds||{};
+    const centerEast=((Number(bounds.minX)+Number(bounds.maxX))/2)*tileMeters;
+    const centerNorth=((Number(bounds.minY)+Number(bounds.maxY))/2)*tileMeters;
+    const east=centerEast+offsetEast;
+    const north=centerNorth+offsetNorth;
+    const pos=canonicalSemanticPosition(east,north,scale,unit,frame);
+    const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+halfH*scale/unit;
+    addLocalStatic("CanonicalDressing-"+record.id+"-"+label,"box",material,pos.x,ground,pos.z,halfW*2*scale/unit,halfH*2*scale/unit,halfD*2*scale/unit,0,rotationY,0);
+    count++;triangles+=12;
+  };
+  const addBall=(record,label,material,offsetEast,offsetNorth,radiusX,radiusY,radiusZ)=>{
+    const bounds=record?.bounds||{};
+    const centerEast=((Number(bounds.minX)+Number(bounds.maxX))/2)*tileMeters;
+    const centerNorth=((Number(bounds.minY)+Number(bounds.maxY))/2)*tileMeters;
+    const east=centerEast+offsetEast;
+    const north=centerNorth+offsetNorth;
+    const pos=canonicalSemanticPosition(east,north,scale,unit,frame);
+    const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift;
+    addLocalStatic("CanonicalDressing-"+record.id+"-"+label,"sphere",material,pos.x,ground+radiusY*scale/unit,pos.z,radiusX*scale/unit,radiusY*scale/unit,radiusZ*scale/unit);
+    count++;triangles+=24;
+  };
+  for(let i=0;i<records.length;i++){
+    const record=records[i];
+    if(!record?.bounds)continue;
+    const bounds=record.bounds;
+    const cx=(Number(bounds.minX)+Number(bounds.maxX))/2;
+    const cy=(Number(bounds.minY)+Number(bounds.maxY))/2;
+    const east=cx*tileMeters,north=cy*tileMeters;
+    const kind=String(record.kind||"").toLowerCase();
+    const isResidential=/house|home|residential/.test(kind) || (/^h[0-9]/.test(String(record.id||""))&&record.kind!=="meeting-hall");
+    const isWorkshop=/workshop|smith|forge|tavern|shop|market|storage|barn/.test(kind);
+    const isCivic=/meeting|hall|well|civic|public/.test(kind);
+    if(isResidential){
+      addBox(record,"garden-base",localStaticMaterials.microGround,-1.1*tileMeters,1.1*tileMeters,.72,.04,.82);
+      addBall(record,"garden-bush-a",localStaticMaterials.leaf,-0.8*tileMeters,1.3*tileMeters,.22,.22,.22);
+      addBall(record,"garden-bush-b",localStaticMaterials.leaf,-1.8*tileMeters,0.5*tileMeters,.26,.18,.26);
+      addBall(record,"garden-bush-c",localStaticMaterials.leaf,-0.3*tileMeters,1.6*tileMeters,.20,.20,.20);
+      addBox(record,"yard-wood",localStaticMaterials.microWood,0.8*tileMeters,-1.1*tileMeters,.28,.22,.38);
+      addBox(record,"yard-crate",localStaticMaterials.microWood,1.35*tileMeters,0.55*tileMeters,.22,.22,.22,10);
+    }else if(isWorkshop){
+      addBox(record,"work-woodpile",localStaticMaterials.microWood,-1.15*tileMeters,-1.1*tileMeters,.48,.16,.44);
+      addBox(record,"work-crate-a",localStaticMaterials.microWood,1.15*tileMeters,-0.8*tileMeters,.24,.26,.24,12);
+      addBox(record,"work-crate-b",localStaticMaterials.microWood,1.55*tileMeters,0.9*tileMeters,.24,.26,.24,-16);
+      addBox(record,"work-barrel",localStaticMaterials.microDark,0.90*tileMeters,1.20*tileMeters,.19,.42,.19,0);
+    }else if(isCivic){
+      addBall(record,"well-ring-a",localStaticMaterials.microStone,0.0,1.4*tileMeters,.26,.18,.26);
+      addBall(record,"well-ring-b",localStaticMaterials.microStone,-0.32*tileMeters,1.25*tileMeters,.20,.16,.20);
+      addBall(record,"well-ring-c",localStaticMaterials.microStone,0.32*tileMeters,1.25*tileMeters,.20,.16,.20);
+      addBox(record,"well-post",localStaticMaterials.microWood,1.1*tileMeters,0.2*tileMeters,.12,.74,.12,0);
+      addBox(record,"well-sign",localStaticMaterials.microCloth,1.55*tileMeters,0.1*tileMeters,.36,.22,.10,12);
+    }else{
+      addBox(record,"yard-fence",localStaticMaterials.microWood,-0.9*tileMeters,1.0*tileMeters,.07,.26,.65,18);
+      addBall(record,"yard-bush",localStaticMaterials.leaf,1.1*tileMeters,1.0*tileMeters,.24,.20,.24);
+      addBall(record,"yard-flower",localStaticMaterials.microAccent,1.5*tileMeters,-0.4*tileMeters,.12,.14,.12);
+    }
+    if(count>64)break;
+  }
+  return {count,triangles};
+}
+
 function clearLocalBuildingActivity(){
   localBuildingActivityRoot?.destroy?.();localBuildingActivityRoot=null;
 }
@@ -6174,6 +6240,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   }
   const wayfindingDrawCalls=buildCanonicalWayfindingSignposts(reveal,tier,semanticFrame,scale,unit,lift);
   const surroundingsDrawCalls=buildCanonicalBuildingSurroundings(reveal,tier,semanticFrame,scale,unit,lift);
+  const dressingStats=(tier==="coarse"||tier==="refined"||tier==="full")?addCanonicalSettlementDressing(reveal,tier,semanticFrame,scale,unit,lift):{count:0,triangles:0};
   localCampaignWearContext={reveal,tier,frame:semanticFrame,presentationScale:scale,unit,lift};
   const campaignWearDrawCalls=rebuildCanonicalCampaignWearProjection("settlement-rebuild");
   const consequenceDrawCalls=rebuildPersistentConsequenceProjection("settlement-rebuild");
@@ -6193,7 +6260,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   localBuildingActivityContext={reveal,tier,frame:semanticFrame,presentationScale:scale,unit,lift};
   rebuildCanonicalBuildingActivityPresentation("settlement-rebuild");
   const entityCount=localStaticRoot.children.length;
-  triangles+=(coarseBuildings*12)+(fullBuildings*36);
+  triangles+=(coarseBuildings*12)+(fullBuildings*36)+Number(dressingStats.triangles||0);
   localStatic={
     ...localStatic,active:entityCount>0,signature:resource.signature,level:dims.levelId,revealTier:tier,
     settlementId:plan.id,settlementName:plan.name,settlementClass:plan.classId,settlementRole:plan.role,
@@ -6203,7 +6270,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     coarseRoadCount:(tier==="footprint"||tier==="route"||tier==="coarse")?roadCount:0,
     coarseBuildingCount:coarseBuildings,landmarkCount:landmarks,
     fullRoadCount:detailed?roadCount:0,fullBuildingCount:fullBuildings,
-    roadCount,buildingCount:coarseBuildings+fullBuildings,vegetationCount:vegetation,wildernessCount:wild.accepted,ambientFaunaCount:wild.fauna,waterCount:0,
+    roadCount,buildingCount:coarseBuildings+fullBuildings,vegetationCount:vegetation,dressingCount:Number(dressingStats.count||0),wildernessCount:wild.accepted,ambientFaunaCount:wild.fauna,waterCount:0,
     entityCount,triangleEstimate:triangles+wild.triangles+Number(buildingSurroundings.triangleCount||0)+Number(campaignWearProjection.triangleCount||0)+Number(persistentConsequenceProjection.triangleCount||0)+Number(wayfindingSignposts.triangleCount||0),
     drawCallEstimate:entityCount+wild.fauna+Number(campaignWearDrawCalls||0)+Number(consequenceDrawCalls||0),
     footprintMode:envelope.mode,occupiedLotMode:lotContext.mode,occupiedLotCount:Number(lotContext.count||0),routeGeometryMode:roadGeometry.mode,
