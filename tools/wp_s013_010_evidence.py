@@ -18,7 +18,7 @@ def target_url():
 opt=Options()
 for arg in ["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader","--disable-search-engine-choice-screen"]:opt.add_argument(arg)
 opt.set_capability("goog:loggingPrefs",{"browser":"ALL"})
-driver=webdriver.Chrome(options=opt);driver.set_script_timeout(180);wait=WebDriverWait(driver,240)
+driver=webdriver.Chrome(options=opt);driver.set_script_timeout(180);wait=WebDriverWait(driver,60)
 
 def ready():
     try:
@@ -33,9 +33,8 @@ def ready():
 
 def initialize_campaign():
     return driver.execute_script("""
-      const candidates=['AGENT6-WP-S013-010-A','AGENT6-WP-S013-010-B','AGENT6-WP-S013-010-C','AGENT6-WP-S013-010-D'];
       try{
-        const seed=candidates.find(s=>(window.SpecialLots?.build?.(s)||[]).some(x=>x.kind==='meeting-hall'))||candidates[0];
+        const seed='AGENT6-WP-S013-010-A';
         const set=window.SeedSystem?.setSettingsSeed?.(seed);
         const started=window.SeedSystem?.startNewCampaign?.(seed);
         const campaign=started?.campaign||window.SeedSystem?.getCampaign?.()||null;
@@ -97,6 +96,8 @@ def assert_frame(s):
 frames=[]
 try:
     driver.set_window_size(*VIEWPORTS["phone"]);driver.get(target_url())
+    startup=driver.execute_script("""return {readyState:document.readyState,app:!!window.AppUI,seed:!!window.SeedSystem,world:!!window.WorldState,objects:!!window.ObjectInteractions,rank:!!window.ProtagonistRankAccess,reactions:!!window.ContextualReactions,daily:!!window.DailyActivity,interiors:!!window.BuildingInteriors,interiorObjects:!!window.InteriorObjects};""")
+    print(json.dumps({"startup":startup}))
     try:wait.until(lambda d:ready())
     except TimeoutException:
         driver.save_screenshot(str(OUT/"startup-failure.png"));raise
