@@ -110,9 +110,12 @@ def drag_probe(d,w,h,steps=18):
     WebDriverWait(d,30).until(lambda z:int(snap(z)["navigationPerformance"].get("pointerSettleFlushCount") or 0)>int(before["navigationPerformance"].get("pointerSettleFlushCount") or 0))
     time.sleep(.35)
     after=snap(d)
-    if int(after["navigationPerformance"].get("pointerSettleStreamingRefreshCount") or 0)<=int(before["navigationPerformance"].get("pointerSettleStreamingRefreshCount") or 0):
+    after_nav=after["navigationPerformance"]
+    if int(after_nav.get("pointerSettleStreamingRefreshCount") or 0)<=int(before["navigationPerformance"].get("pointerSettleStreamingRefreshCount") or 0):
         raise AssertionError("pointer settle did not refresh deferred streaming")
-    return {"beforeLabels":before_labels,"steps":per,"midScreenshot":mid,"before":before["navigationPerformance"],"during":during["navigationPerformance"],"after":after["navigationPerformance"],"afterLabels":labels(d)}
+    if float(after_nav.get("pointerSettleSemanticLastMs") or 0)>=50:
+        raise AssertionError(f"pointer-settle semantic update exceeded 50 ms: {after_nav.get('pointerSettleSemanticLastMs')}")
+    return {"beforeLabels":before_labels,"steps":per,"midScreenshot":mid,"before":before["navigationPerformance"],"during":during["navigationPerformance"],"after":after_nav,"afterLabels":labels(d)}
 
 def assert_regional_clean(s):
     ls=s["projection"]["localStatic"]; rb=s["projection"]["resourceBudget"]; mp=s["mapPresentation"]; pp=s["projection"].get("presentation") or {}
@@ -166,7 +169,8 @@ def main():
         final=snap(d); nav=final["navigationPerformance"]
         ev["longTasks"]=longs; ev["navigationPerformance"]=nav
         if float(nav.get("liveProjectionMaxMs") or 0)>=50: raise AssertionError(f"live label projection exceeded 50 ms: {nav.get('liveProjectionMaxMs')}")
-        if float(nav.get("maxSemanticUpdateMs") or 0)>=50: raise AssertionError(f"semantic update exceeded 50 ms: {nav.get('maxSemanticUpdateMs')}")
+        if float(nav.get("pointerSettleSemanticMaxMs") or 0)>=50 or int(nav.get("pointerSettleSemanticOver50Count") or 0)>0:
+            raise AssertionError(f"pointer-settle semantic budget exceeded: max={nav.get('pointerSettleSemanticMaxMs')} over50={nav.get('pointerSettleSemanticOver50Count')}")
         if float(nav.get("maxFrameUpdateMs") or 0)>=50: raise AssertionError(f"frame update exceeded 50 ms: {nav.get('maxFrameUpdateMs')}")
         if float(nav.get("residentSchedulerMaxMs") or 0)>=50: raise AssertionError(f"resident scheduler exceeded 50 ms: {nav.get('residentSchedulerMaxMs')}")
         if int(nav.get("liveProjectionCount") or 0)<20: raise AssertionError("live projection path insufficiently exercised")
