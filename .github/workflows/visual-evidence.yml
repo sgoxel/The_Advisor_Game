@@ -152,6 +152,7 @@ on:
     branches: [main]
     paths:
       - tools/screenshot_tool.py
+      - tools/wp_s003_004_004_evidence.py
       - tools/requirements.txt
       - .github/workflows/visual-evidence.yml
       - index.html
