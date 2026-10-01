@@ -4546,6 +4546,15 @@ function updateWayfindingTextOverlay(force=false){
     if(wayfindingTextContext&&wayfindingTextCanvas){wayfindingTextContext.setTransform(1,0,0,1,0,0);wayfindingTextContext.clearRect(0,0,wayfindingTextCanvas.width,wayfindingTextCanvas.height);}
     return;
   }
+  // Final ground play is an RPG scene, not a route-reading map. Keep the
+  // physical signposts in-world/clickable, but suppress their shared-canvas
+  // lettering while detailed ground character art owns the view so characters,
+  // building depth and interaction space remain readable.
+  if(groundCharacterLayerEligible()){
+    if(wayfindingTextContext&&wayfindingTextCanvas){wayfindingTextContext.setTransform(1,0,0,1,0,0);wayfindingTextContext.clearRect(0,0,wayfindingTextCanvas.width,wayfindingTextCanvas.height);}
+    if(Number(wayfindingSignposts.visibleTextCount||0)!==0)wayfindingSignposts={...wayfindingSignposts,visibleTextCount:0};
+    return;
+  }
   const now=performance.now();if(!force&&now-wayfindingLastTextDrawAt<50)return;wayfindingLastTextDrawAt=now;
   const started=performance.now(),layer=ensureWayfindingTextCanvas(),ctx=wayfindingTextContext;if(!layer||!ctx)return;
   const rect=canvas.getBoundingClientRect(),width=Math.max(1,Math.round(rect.width)),height=Math.max(1,Math.round(rect.height)),dpr=Math.min(2,Math.max(1,Number(window.devicePixelRatio||1)));

@@ -199,10 +199,10 @@ try:
         target_point=overview_point if mode=="overview" else proof[mode]
         if mode!="overview":
             set_protagonist_position(target_point)
-            set_scale(8)
+            set_scale(8,require_level_settle=False)
         elif label.startswith("phone-"):
             set_protagonist_position(overview_point)
-            set_scale(8)
+            set_scale(8,require_level_settle=False)
         time.sleep(.18)
         state=set_scale(index)
         validate(label,index,state,mode,proof)
