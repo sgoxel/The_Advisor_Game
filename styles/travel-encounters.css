@@ -1,0 +1,25 @@
+/* WP-S007-013 — rare traveling encounter safe-slot card */
+.travel-encounter-card{
+  position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:90;
+  width:min(420px,calc(100vw - 176px));padding:12px 14px;border:1px solid rgba(226,186,104,.62);border-radius:15px;
+  background:linear-gradient(145deg,rgba(25,24,24,.95),rgba(10,15,20,.94));color:#f8f0de;
+  box-shadow:0 12px 34px rgba(0,0,0,.44);backdrop-filter:blur(9px);pointer-events:none;
+  font:600 12px/1.35 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif
+}
+.travel-encounter-card[hidden]{display:none!important}
+.travel-encounter-kicker{margin-bottom:6px;color:#e1b768;font-size:9px;letter-spacing:.18em}
+.travel-encounter-row{display:flex;align-items:flex-start;gap:10px}
+.travel-encounter-icon{display:grid;place-items:center;flex:0 0 32px;width:32px;height:32px;border:1px solid rgba(225,183,104,.46);border-radius:10px;background:rgba(225,183,104,.12);color:#f2cf88;font-size:17px;line-height:1}
+.travel-encounter-title{display:block;color:#fff7e8;font-size:15px;line-height:1.18}
+.travel-encounter-summary{margin:3px 0 0;color:rgba(244,235,217,.78);font-size:11px;font-weight:500}
+.travel-encounter-meta{margin-top:8px;padding-top:7px;border-top:1px solid rgba(255,255,255,.1);color:#c8d4d6;font-size:9.5px}
+@media(max-width:620px){
+  .travel-encounter-card{bottom:max(164px,calc(env(safe-area-inset-bottom) + 154px));width:min(350px,calc(100vw - 20px));padding:10px 12px}
+  .travel-encounter-summary{font-size:10.5px}.travel-encounter-meta{font-size:9px}
+}
+@media(max-height:430px) and (orientation:landscape){
+  .travel-encounter-card{bottom:10px;width:min(440px,52vw);padding:9px 11px}
+  .travel-encounter-summary{display:none}.travel-encounter-meta{margin-top:5px;padding-top:5px}
+}
+/* Focused rare encounters keep physical road signs but suppress their screen-space text layer. */
+#planetStageRoot[data-travel-encounter-focus="true"] .wayfinding-sign-text-layer{display:none!important}

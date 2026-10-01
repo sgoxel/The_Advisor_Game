@@ -1,0 +1,60 @@
+name: WP-S004-007 Visual Evidence
+# WP-S004-007 final acceptance trigger — direct projection
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/wp-s004-007-evidence.yml
+      - tools/wp_s004_007_evidence.py
+      - tools/tests/wp-s004-007-work-cycles.test.js
+      - scripts/world/work-cycles.js
+      - scripts/world/resident-movement.js
+      - scripts/world/action-executor.js
+      - scripts/world/planet-stage.js
+      - index.html
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [landscape, portrait]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install screenshot dependencies
+        run: python -m pip install -r tools/requirements.txt
+      - name: Verify browser
+        run: google-chrome --version || google-chrome-stable --version || chromium --version
+      - name: Functional preflight
+        run: node tools/tests/wp-s004-007-work-cycles.test.js
+      - name: Start local game
+        run: |
+          python -m http.server 8000 --bind 127.0.0.1 >/tmp/advisor-http.log 2>&1 &
+          echo $! >/tmp/advisor-http.pid
+          sleep 1
+      - name: Capture live work-cycle evidence
+        env:
+          TARGET: http://127.0.0.1:8000/
+          PROFILE: ${{ matrix.profile }}
+        run: python tools/wp_s004_007_evidence.py
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-s004-007-${{ matrix.profile }}-${{ github.run_id }}
+          path: tools/screenshots/wp-s004-007/
+          if-no-files-found: error
+          retention-days: 14

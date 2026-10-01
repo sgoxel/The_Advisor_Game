@@ -249,6 +249,6 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S012-007` — Autonomous Economic Need + Spending Priority Selection — COMPLETED
 - `WP-S012-008` — Local Market Stock Revision + Economic Consequence Persistence — COMPLETED
 - `WP-S012-009` — Advisor Economy, Work + Purchase Readout — COMPLETED
-- `WP-S012-010` — End-to-End Work → Pay → Purchase → Persistent Outcome Acceptance — COMPLETED
+- `WP-S012-010` — End-to-End Work → Pay → Purchase → Persistent Outcome Acceptance — IN PROGRESS (AGENT #6; MIXED accepted at `cc105108bdcbb48c141de13ef257b81cd35904d4`, workflow `36811895565`, fresh phone+desktop VISUAL 8.4/10 PASS; acceptance-docs deployment pending)
 
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**

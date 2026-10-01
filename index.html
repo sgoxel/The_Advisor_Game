@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#070b12">
+<title>The Advisor Game — Seeded Fantasy Planet</title>
+<link rel="stylesheet" href="styles/main.css?v=advisor-economy-v1">
+<link rel="stylesheet" href="styles/travel-encounters.css?v=travel-encounters-v3">
+</head>
+<body class="planet-stage-active">
+<main
+  id="planetStageRoot"
+  class="planet-stage-root"
+  aria-label="Fantasy world planet foundation"
+  data-ready="false"
+>
+  <div class="planet-stage-loading" aria-live="polite" data-mode="indeterminate">
+    <div class="planet-stage-loading-card">
+      <div class="planet-stage-loading-orbit" aria-hidden="true"><span></span><i></i></div>
+      <strong class="planet-stage-loading-title">Waking the world</strong>
+      <span class="planet-stage-loading-phase">Planning startup…</span>
+      <div class="planet-stage-loading-progress" role="progressbar" aria-label="First playable progress" aria-valuemin="0" aria-valuemax="100">
+        <span class="planet-stage-loading-bar"></span>
+      </div>
+      <code class="planet-stage-loading-percent">Planning startup…</code>
+    </div>
+  </div>
+</main>
+<script src="scripts/data/config.js?v=atmosphere-time-v1"></script>
+<script src="scripts/data/world-standards.js?v=city-spacing-v1"></script>
+<script src="scripts/core/prng.js?v=map-info-v1"></script>
+<script src="scripts/world/coordinates.js?v=map-info-v1"></script>
+<script src="scripts/core/seed.js?v=atmosphere-time-v1"></script>
+<script src="scripts/core/game-time.js?v=atmosphere-time-v1"></script>
+<script src="scripts/world/generated-world-store.js?v=generated-world-store-v1"></script>
+<script src="scripts/world/place-naming.js?v=toponymy-v1"></script>
+<script src="scripts/world/geography.js?v=city-spacing-v1"></script>
+<script src="scripts/world/political-geography.js?v=map-info-v1"></script>
+<script src="scripts/world/country-profile.js?v=settlement-reveal-v1"></script>
+<script src="scripts/world/region-profile.js?v=settlement-reveal-v1"></script>
+<script src="scripts/world/country-relations.js?v=settlement-reveal-v1"></script>
+<script src="scripts/world/starting-village.js?v=settlement-reveal-v1"></script>
+<script src="scripts/world/house-plans.js?v=settlement-reveal-v1"></script>
+<script src="scripts/world/special-lots.js?v=settlement-reveal-v1"></script>
+<script src="scripts/world/settlement-archetypes.js?v=settlement-reveal-v1"></script>
+<script src="scripts/world/world-road-graph.js?v=world-road-graph-v1"></script>
+<script src="scripts/world/settlement-building-catalog.js?v=settlement-morphology-v1"></script>
+<script src="scripts/world/settlement-morphology.js?v=settlement-morphology-v1"></script>
+<script src="scripts/data/terrain-palette.js?v=inspection-v1"></script>
+<script src="scripts/data/tile-textures.js?v=inspection-v1"></script>
+<script src="scripts/world/terrain.js?v=inspection-v1"></script>
+<script src="scripts/world/building-interiors.js?v=inspection-v1"></script>
+<script src="scripts/world/walkability.js?v=inspection-v1"></script>
+<script src="scripts/world/route-planner.js?v=inspection-v1"></script>
+<script src="scripts/world/road-signposts.js?v=road-signposts-v1"></script>
+<script src="scripts/world/interior-objects.js?v=inspection-v1"></script>
+<script src="scripts/world/daily-activity.js?v=inspection-v1"></script>
+<script src="scripts/world/settlement-activity-rhythm.js?v=settlement-rhythm-v1"></script>
+<script src="scripts/world/world-state.js?v=campaign-wear-v1"></script>
+<script src="scripts/world/world-context.js?v=world-context-v1"></script>
+<script src="scripts/core/event-scheduler.js?v=campaign-persistence-v1"></script>
+<script src="scripts/world/global-country-simulation.js?v=campaign-persistence-v1"></script>
+<script src="scripts/world/regional-settlement-simulation.js?v=campaign-persistence-v1"></script>
+<script src="scripts/world/local-market.js?v=local-market-v1"></script>
+<script src="scripts/world/npc-lifecycle.js?v=campaign-persistence-v1"></script>
+<script src="scripts/world/lazy-catchup.js?v=campaign-persistence-v1"></script>
+<script src="scripts/world/campaign-persistence.js?v=campaign-persistence-v1"></script>
+<script src="scripts/world/persistent-consequences.js?v=persistent-consequences-v3"></script>
+<script src="scripts/world/crowd-presentation.js?v=density-crowd-v1"></script>
+<script src="scripts/world/social-state.js?v=npc-recognition-v1"></script>
+<script src="scripts/world/social-encounters.js?v=local-social-encounters-v1"></script>
+<script src="scripts/world/contextual-reactions.js?v=contextual-npc-reactions-v1"></script>
+<script src="scripts/world/action-executor.js?v=work-cycles-v1"></script>
+<script src="scripts/world/work-cycles.js?v=work-cycles-v1"></script>
+<script src="scripts/world/resident-movement.js?v=work-cycles-v3"></script>
+<script src="scripts/world/character-memory.js?v=npc-recognition-v2"></script>
+<script src="scripts/world/local-rumors.js?v=local-rumors-v1"></script>
+<script src="scripts/world/dialogue-context.js?v=local-rumors-v1"></script>
+<script src="scripts/world/protagonist-profile.js?v=protagonist-profile-v1"></script>
+<script src="scripts/world/protagonist-goals.js?v=protagonist-goals-v1"></script>
+<script src="scripts/world/protagonist-needs.js?v=protagonist-needs-v1"></script>
+<script src="scripts/world/protagonist-inventory.js?v=protagonist-inventory-v1"></script>
+<script src="scripts/world/protagonist-wealth.js?v=protagonist-wealth-v1"></script>
+<script src="scripts/world/protagonist-health.js?v=protagonist-health-v1"></script>
+<script src="scripts/world/protagonist-authority.js?v=protagonist-authority-v1"></script>
+<script src="scripts/world/protagonist-decision-context.js?v=protagonist-decision-context-v1"></script>
+<script src="scripts/world/protagonist-planner.js?v=protagonist-autonomous-planner-v1"></script>
+<script src="scripts/world/protagonist-guidance.js?v=protagonist-guidance-v1"></script>
+<script src="scripts/world/advisor-progression.js?v=advisor-progression-v1"></script>
+<script src="scripts/world/advisor-insight.js?v=advisor-insight-v1"></script>
+<script src="scripts/world/advisor-rhetoric.js?v=advisor-rhetoric-v1"></script>
+<script src="scripts/world/advisor-diplomacy.js?v=advisor-diplomacy-v1"></script>
+<script src="scripts/world/advisor-stewardship.js?v=advisor-stewardship-v1"></script>
+<script src="scripts/world/advisor-command.js?v=advisor-command-v1"></script>
+<script src="scripts/world/advisor-intrigue.js?v=advisor-intrigue-v1"></script>
+<script src="scripts/world/advisor-tool-resolution.js?v=advisor-tool-resolution-v1"></script>
+<script src="scripts/world/advisor-channel.js?v=advisor-chat-v1"></script>
+<script src="scripts/world/sentence-library.js?v=sentence-library-v1"></script>
+<script src="scripts/world/command-set-interface.js?v=command-set-v1"></script>
+<script src="scripts/world/local-conversation-router.js?v=local-router-v1"></script>
+<script src="scripts/world/external-llm-adapter.js?v=llm-adapter-v1"></script>
+<script src="scripts/world/protagonist-command-evaluator.js?v=protagonist-command-evaluator-v1"></script>
+<script src="scripts/world/protagonist-interaction-pipeline.js?v=protagonist-interaction-pipeline-v1"></script>
+<script src="scripts/world/protagonist-action-runtime.js?v=protagonist-action-runtime-v1"></script>
+<script src="scripts/world/protagonist-journey.js?v=protagonist-journey-v1"></script>
+<script src="scripts/world/protagonist-self-care.js?v=protagonist-self-care-v1"></script>
+<script src="scripts/world/protagonist-work-routine.js?v=protagonist-work-routine-v1"></script>
+<script src="scripts/world/protagonist-employment.js?v=protagonist-employment-v1"></script>\n<script src="scripts/world/protagonist-profession-opportunities.js?v=protagonist-profession-opportunities-v1"></script>
+<script src="scripts/world/economic-transaction.js?v=economic-transaction-v1"></script>\n<script src="scripts/world/local-market-consequences.js?v=local-market-consequences-v1"></script>
+<script src="scripts/world/protagonist-housing.js?v=protagonist-housing-v1"></script>\n<script src="scripts/world/protagonist-economic-priority.js?v=protagonist-economic-priority-v1"></script>
+<script src="scripts/world/protagonist-social-contact.js?v=protagonist-social-contact-v1"></script>\n<script src="scripts/world/protagonist-goal-progress.js?v=protagonist-goal-progress-v1"></script>
+<script src="scripts/world/protagonist-offline-catchup.js?v=protagonist-offline-catchup-v1"></script>
+<script src="scripts/world/conversation-transactions.js?v=conversation-transactions-v2"></script>
+<script src="scripts/ui/protagonist-status-ui.js?v=protagonist-status-ui-v1"></script>
+<script src="scripts/ui/protagonist-activity-ui.js?v=protagonist-activity-ui-v1"></script>
+<script src="scripts/ui/advisor-economy-ui.js?v=advisor-economy-ui-v1"></script>
+<script src="scripts/ui/advisor-toolbelt-ui.js?v=advisor-toolbelt-ui-v1"></script>
+<script src="scripts/ui/advisor-conversation-ui.js?v=advisor-chat-v1"></script>
+<script src="scripts/world/planet-geography.js?v=planetary-geography-v5"></script>
+<script src="scripts/world/coordinate-fabric.js?v=seed-coordinate-fabric-v1"></script>
+<script src="scripts/world/world-field.js?v=world-destinations-v2"></script>
+<script src="scripts/world/world-destinations.js?v=world-destinations-v3"></script>
+<script src="scripts/world/micro-locations.js?v=micro-locations-v1"></script>
+<script src="scripts/world/simulation-budget.js?v=world-sim-budget-v1"></script>
+<script src="scripts/world/local-event-vignettes.js?v=local-event-vignettes-v2"></script>
+<script src="scripts/world/travel-encounters.js?v=travel-encounters-v3"></script>
+<script src="scripts/world/planet-stage.js?v=wp020-strategic-handoff-v31"></script>
+<script src="scripts/world/ambient-audio.js?v=ambient-audio-v1"></script>
+<script src="scripts/world/regional-weather.js?v=regional-weather-v1"></script>
+<script src="scripts/world/seasonal-presentation.js?v=seasonal-presentation-v1"></script>
+</body>
+</html>
