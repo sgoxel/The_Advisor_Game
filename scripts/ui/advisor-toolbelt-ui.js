@@ -192,6 +192,7 @@ function render(reason="explicit"){
 function setOpen(value){
   const next=Boolean(value);
   if(next&&root.AdvisorConversationUI?.setOpen)root.AdvisorConversationUI.setOpen(false);
+  if(next&&root.AdvisorEconomyUI?.setOpen)root.AdvisorEconomyUI.setOpen(false);
   state.open=next;
   return render(next?"open":"close");
 }

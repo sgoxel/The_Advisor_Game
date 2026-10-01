@@ -311,7 +311,7 @@ function render(reason="explicit"){
   });
   return state.rootNode;
 }
-function setOpen(value){state.open=Boolean(value);return render(state.open?"external-open":"external-close")}
+function setOpen(value){const next=Boolean(value);if(next&&root.AdvisorEconomyUI?.setOpen)root.AdvisorEconomyUI.setOpen(false);state.open=next;return render(state.open?"external-open":"external-close")}
 function setEvidenceMode(modeValue){
   const mode=EVIDENCE_MODES.includes(String(modeValue||""))?String(modeValue):null;
   state.evidenceMode=mode;state.open=Boolean(mode)||state.open;
