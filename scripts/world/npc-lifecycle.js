@@ -235,27 +235,36 @@ function activityForIdentity(seedValue,planValue,ordinalValue,timestampValue){
 let residentPlanCache={seed:null,plan:null};
 function startingVillagePlanForResidentActivity(seed){
   if(residentPlanCache.seed===seed)return residentPlanCache.plan;
-  // Resident movement only needs the canonical starting-village plan. Building
-  // the whole country settlement catalogue here made the first post-ready NPC
-  // activity lookup perform unrelated city/town/hamlet generation on the main
-  // thread. Resolve the same canonical origin-village record directly instead.
+  // Resident lifecycle overrides only require the canonical starting-village
+  // identity, center and parent ID. Rebuilding the full settlement archetype
+  // here pulled unrelated country/region planning into one resident activity
+  // lookup. Keep the same canonical settlement ID without materializing that
+  // presentation/planning payload.
   let plan=null;
   try{
     const record=SettlementArchetypes.canonicalSettlementAtPoint(seed,"village","0","0");
     if(record?.role==="starting-village"){
-      plan=SettlementArchetypes.build(seed,record.center,{
-        countryId:record.countryId,
-        role:record.role,
-        classHint:record.classId,
-        nameHint:record.name,
-        canonicalRecord:record
-      })||null;
+      plan=deepFreeze({
+        id:String(record.id),role:String(record.role),classId:String(record.classId||"village"),
+        name:String(record.name||"Starting Village"),countryId:String(record.countryId||""),
+        regionId:String(record.regionId||""),center:Object.freeze({x:String(record.center.x),y:String(record.center.y)})
+      });
     }
   }catch(_){plan=null;}
   residentPlanCache={seed,plan};return plan;
 }
+function npcLifecycleDeltaPresent(seed){
+  try{
+    const delta=window.WorldState?.deltaSnapshot?.(seed)||null;
+    return Boolean(delta?.entries?.some?.(entry=>String(entry?.entityKind||"")==="npc"));
+  }catch(_){return true;}
+}
 function activityForResident(seedValue,residentIdValue,whenValue){
   const seed=normalizeSeed(seedValue),residentId=String(residentIdValue||"");
+  // With no NPC delta, lifecycle state is exactly the immutable default
+  // (alive, uninjured, unmigrated, free). DailyActivity is therefore the same
+  // authoritative schedule result without materializing settlement identity.
+  if(!npcLifecycleDeltaPresent(seed))return DailyActivity.resolveActionTarget(seed,residentId,whenValue);
   const plan=startingVillagePlanForResidentActivity(seed);
   if(!plan)return DailyActivity.resolveActionTarget(seed,residentId,whenValue);
   const ordinal=Math.max(0,Number(residentId.replace(/^R/,""))-1);
