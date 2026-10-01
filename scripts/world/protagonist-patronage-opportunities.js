@@ -74,7 +74,26 @@ function buildOpportunity(seedValue,whenValue,row,intent,identityValue){
  const cy=cycle(whenValue),pre=prerequisite(seedValue,whenValue,row,intent,identityValue),payload={version:VERSION,seed:seedValue,cycle:cy.key,intent,residentId:row.residentId,professionId:row.professionId,workplaceId:row.workplaceId},opportunityId="PAT-"+H(S(payload)),liveSignature="PATSIG-"+H("A|"+S(payload)+"|"+S(pre))+H("B|"+S(payload)+"|"+S(pre));
  return F({opportunityId,intent,intentLabel:intentLabel(intent),sourceNpcRef:ref("resident",row.residentId),sourceNpcLabel:row.displayName,sourceRole:F({professionId:row.professionId,workFunction:row.workFunction}),locationRef:ref("workplace",row.workplaceId),locationLabel:row.workplaceLabel,opensAt:cy.start,expiresAt:cy.end,cycleKey:cy.key,prerequisites:pre,liveSignature,available:pre.satisfied===true,offerMeaning:intent==="mentorship-training"?"grounded invitation to discuss training support":intent==="service-sponsorship"?"grounded invitation to discuss service sponsorship":"grounded invitation to discuss an advancement recommendation",rankGuaranteed:false,appointmentGuaranteed:false,skillGrant:false,wealthGrant:false,authorityGrant:false,relationshipGrant:false,readOnly:true});
 }
+function decisionIndex(seedValue,identityValue){
+ const r=read(seedValue,identityValue),map=new Map();
+ if(!r.ok)return map;
+ for(const row of r.ledger.decisions)map.set(row.opportunityId,row);
+ return map;
+}
+function decorateDecision(opportunity,decision){
+ if(!decision)return F({...C(opportunity),state:"open",closed:false,available:opportunity.prerequisites.satisfied===true});
+ const closed=decision.decision==="accepted"||decision.decision==="rejected";
+ return F({...C(opportunity),state:closed?decision.status:"deferred",closed,available:opportunity.prerequisites.satisfied===true&&!closed,lastDecision:F(C(decision))});
+}
 function list(seedValue,whenValue,optionsValue={},identityValue){
+ let s,when;try{s=seed(seedValue);when=ts(whenValue)}catch(_){return F([])}
+ const rows=residentRows(s),decisionByOpportunity=decisionIndex(s,identityValue),byIntent={};for(const i of INTENTS)byIntent[i]=[];
+ for(const row of rows){for(const intent of INTENTS){const base=buildOpportunity(s,when,row,intent,identityValue),o=decorateDecision(base,decisionByOpportunity.get(base.opportunityId)||null);if(o.available)byIntent[intent].push(o)}}
+ const selected=[];
+ for(const intent of INTENTS){byIntent[intent].sort((a,b)=>{const av=parseInt(H(s+"|"+a.cycleKey+"|"+intent+"|"+a.sourceNpcRef.id),16),bv=parseInt(H(s+"|"+b.cycleKey+"|"+intent+"|"+b.sourceNpcRef.id),16);return av-bv||a.opportunityId.localeCompare(b.opportunityId)});selected.push(...byIntent[intent].slice(0,MAX_PER_INTENT))}
+ const intent=I(optionsValue?.intent,64),npc=I(optionsValue?.sourceNpcId,160),limit=Math.max(0,Math.min(MAX_QUERY_RESULTS,Math.floor(Number(optionsValue?.limit)||MAX_RESULTS)));
+ return F(selected.filter(x=>(!intent||x.intent===intent)&&(!npc||x.sourceNpcRef.id===npc)).sort((a,b)=>a.intent.localeCompare(b.intent)||a.opportunityId.localeCompare(b.opportunityId)).slice(0,limit));
+},identityValue){
  let s,when;try{s=seed(seedValue);when=ts(whenValue)}catch(_){return F([])}
  const rows=residentRows(s),byIntent={};for(const i of INTENTS)byIntent[i]=[];
  for(const row of rows){for(const intent of INTENTS){const o=buildOpportunity(s,when,row,intent,identityValue);if(o.available)byIntent[intent].push(o)}}
@@ -87,7 +106,8 @@ function inspectCandidate(seedValue,whenValue,residentIdValue,intentValue,identi
  let s,when;try{s=seed(seedValue);when=ts(whenValue)}catch(e){return F({ok:false,reason:String(e.message||e)})}
  const residentId=I(residentIdValue),intent=I(intentValue,64);if(!INTENTS.includes(intent))return F({ok:false,reason:"intent-invalid"});
  const row=residentRows(s).find(x=>x.residentId===residentId);if(!row)return F({ok:false,reason:"source-resident-unavailable"});
- const opportunity=buildOpportunity(s,when,row,intent,identityValue);return F({ok:true,reason:opportunity.available?"available":"blocked",opportunity});
+ const base=buildOpportunity(s,when,row,intent,identityValue),opportunity=decorateDecision(base,decisionIndex(s,identityValue).get(base.opportunityId)||null);
+ return F({ok:true,reason:opportunity.closed?"closed":opportunity.available?"available":"blocked",opportunity});
 }
 function get(seedValue,whenValue,opportunityIdValue,identityValue){const id=I(opportunityIdValue);return list(seedValue,whenValue,{limit:MAX_QUERY_RESULTS},identityValue).find(x=>x.opportunityId===id)||null}
 function empty(c){return{schema:SCHEMA,schemaVersion:SCHEMA_VERSION,version:VERSION,seed:c.seed,protagonistId:c.protagonistId,identityKey:c.identityKey,registryId:c.ref?.id||null,revision:0,decisions:[]}}
@@ -118,9 +138,16 @@ function proposal(o){return F({proposalOnly:true,opportunityId:o.opportunityId,a
 function evaluate(seedValue,opportunityIdValue,decisionValue,optionsValue,identityValue){
  let s;try{s=seed(seedValue)}catch(e){return F({ok:false,reason:String(e.message||e)})}
  const a=protagonistAuth(optionsValue);if(!a.ok)return F(a);const decision=I(decisionValue,32).toLowerCase();if(!DECISIONS.includes(decision))return F({ok:false,reason:"decision-invalid"});
- const opportunity=get(s,a.fantasyTimestamp,opportunityIdValue,identityValue);if(!opportunity)return F({ok:false,reason:"opportunity-unavailable-or-stale"});
- const r=read(s,identityValue);if(!r.ok)return F({ok:false,reason:r.reason});const sig=decisionSignature(r.c,a,opportunity,decision),found=r.ledger.decisions.find(x=>x.decisionId===a.decisionId);
- if(found){if(found.signature!==sig)return F({ok:false,reason:"duplicate-decision-conflict"});return F({ok:true,reason:"duplicate-decision",duplicate:true,decisionRecord:F(C(found)),interactionProposal:found.decision==="accepted"?proposal(opportunity):null})}
+ const r=read(s,identityValue);if(!r.ok)return F({ok:false,reason:r.reason});
+ const requestedOpportunityId=I(opportunityIdValue),found=r.ledger.decisions.find(x=>x.decisionId===a.decisionId);
+ if(found){
+  if(found.opportunityId!==requestedOpportunityId||found.decision!==decision)return F({ok:false,reason:"duplicate-decision-conflict"});
+  return F({ok:true,reason:"duplicate-decision",duplicate:true,decisionRecord:F(C(found)),interactionProposal:null,directRankMutation:false,directSkillMutation:false,directWealthMutation:false,directAuthorityMutation:false,directRelationshipMutation:false});
+ }
+ const prior=[...r.ledger.decisions].reverse().find(x=>x.opportunityId===requestedOpportunityId&&(x.decision==="accepted"||x.decision==="rejected"));
+ if(prior)return F({ok:false,reason:"opportunity-closed",closedBy:F(C(prior))});
+ const opportunity=get(s,a.fantasyTimestamp,requestedOpportunityId,identityValue);if(!opportunity)return F({ok:false,reason:"opportunity-unavailable-or-stale"});
+ const sig=decisionSignature(r.c,a,opportunity,decision);
  const record=F({id:"PDEC-"+H(sig),decisionId:a.decisionId,opportunityId:opportunity.opportunityId,opportunityLiveSignature:opportunity.liveSignature,intent:opportunity.intent,sourceNpcRef:opportunity.sourceNpcRef,locationRef:opportunity.locationRef,decision,status:decision==="accepted"?"accepted-awaiting-simulation":decision,decidedAt:a.fantasyTimestamp,signature:sig});
  const l=C(r.ledger);l.decisions=[...l.decisions,C(record)].slice(-MAX_DECISIONS);const w=write(s,identityValue,l,"protagonist-patronage-opportunity-evaluate:"+record.id);
  return F({...w,duplicate:false,decisionRecord:w.ok?record:null,interactionProposal:w.ok&&decision==="accepted"?proposal(opportunity):null,directRankMutation:false,directSkillMutation:false,directWealthMutation:false,directAuthorityMutation:false,directRelationshipMutation:false});
