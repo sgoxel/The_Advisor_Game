@@ -8711,18 +8711,21 @@ function renderDestinationNavigator(){
 function wildernessHash(label){
   let h=2166136261>>>0;for(const ch of String(activeSeed)+"|wilderness|"+label){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}return h>>>0;
 }
-function buildWildernessDescriptors(){
+async function buildWildernessDescriptors(){
   const started=performance.now(),vegetation=[],rocks=[],fauna=[];let cells=0,rejectedWater=0;
-  for(let lat=-72;lat<=72;lat+=8)for(let lon=-176;lon<180;lon+=8){
+  const latitudeCount=19,longitudeCount=45,total=latitudeCount*longitudeCount;
+  await runSlicedRange(total,index=>{
+    const lat=-72+Math.floor(index/longitudeCount)*8,lon=-176+(index%longitudeCount)*8;
     cells++;const jLat=((wildernessHash("lat:"+lat+":"+lon)%1000)/999-.5)*3.2,jLon=((wildernessHash("lon:"+lat+":"+lon)%1000)/999-.5)*3.2;
     const sample=geography.sampleLatLon((lat+jLat)*Math.PI/180,(lon+jLon)*Math.PI/180);
-    if(!sample.land){rejectedWater++;continue;}
+    if(!sample.land){rejectedWater++;return;}
     const descriptor={latitudeRadians:sample.latitudeRadians,longitudeRadians:sample.longitudeRadians,elevationMeters:sample.elevationMeters,surfaceClass:sample.surfaceClass,moisture:sample.moisture};
     const roll=wildernessHash("kind:"+lat+":"+lon)%100;
-    if(sample.elevationMeters>1450||sample.mountainInfluence>.22){if(roll<72)rocks.push(descriptor);}    else if(sample.moisture>.40){if(roll<78)vegetation.push(descriptor);}
+    if(sample.elevationMeters>1450||sample.mountainInfluence>.22){if(roll<72)rocks.push(descriptor);}
+    else if(sample.moisture>.40){if(roll<78)vegetation.push(descriptor);}
     else if(roll<48)rocks.push(descriptor);else if(roll<82)vegetation.push(descriptor);
     if(sample.moisture>.46&&sample.elevationMeters<1200&&(wildernessHash("fauna:"+lat+":"+lon)%100)<12)fauna.push(descriptor);
-  }
+  });
   wilderness={generated:true,cellCount:cells,acceptedStaticProps:vegetation.length+rocks.length,vegetationClusters:vegetation.length,rockClusters:rocks.length,ambientFaunaZones:fauna.length,rejectedWater,drawCalls:0,triangles:0,preparationMs:Number((performance.now()-started).toFixed(3)),cacheReuse:false,perFrameScatter:false,simulationAuthority:false};
   return {vegetation,rocks,fauna};
 }
@@ -8742,10 +8745,16 @@ function buildWildernessMesh(items,size){
   if(!positions.length)return null;
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setIndices(indices);mesh.update();wilderness.triangles+=indices.length/3;return mesh;
 }
-function buildWildernessPresentation(){
-  const groups=buildWildernessDescriptors();
+async function buildWildernessPresentation(){
+  const groups=await buildWildernessDescriptors();
   const specs=[[groups.vegetation,.028,[.18,.38,.13],"WildernessVegetation"],[groups.rocks,.024,[.38,.33,.25],"WildernessRock"]];
-  for(const [items,size,color,name] of specs){const mesh=buildWildernessMesh(items,size);if(!mesh)continue;const material=new pc.StandardMaterial();material.name=name+"Material";material.diffuse.set(...color);material.roughness=.92;material.update();const entity=new pc.Entity(name);entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});entity.render.meshInstances=[new pc.MeshInstance(mesh,material,entity)];planet.addChild(entity);wilderness.drawCalls++;}
+  for(const [items,size,color,name] of specs){
+    const mesh=buildWildernessMesh(items,size);if(!mesh)continue;
+    const material=new pc.StandardMaterial();material.name=name+"Material";material.diffuse.set(...color);material.roughness=.92;material.update();
+    const entity=new pc.Entity(name);entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
+    entity.render.meshInstances=[new pc.MeshInstance(mesh,material,entity)];planet.addChild(entity);wilderness.drawCalls++;
+    await yieldBrowser();
+  }
 }
 function visualElevationMeters(sample){
   if(sample.land)return Math.max(40,Number(sample.elevationMeters)||0);
@@ -9082,11 +9091,12 @@ function bindInput(){
 function seededUnit(label){
   let h=2166136261>>>0;for(const ch of String(activeSeed)+"|"+label){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}return (h>>>0)/4294967295;
 }
-function makeCloudTexture(){
+async function makeCloudTexture(){
   const source=document.createElement("canvas");source.width=256;source.height=128;
   const ctx=source.getContext("2d");const image=ctx.createImageData(source.width,source.height),data=image.data;
   const phaseA=seededUnit("cloud-a")*Math.PI*2,phaseB=seededUnit("cloud-b")*Math.PI*2,phaseC=seededUnit("cloud-c")*Math.PI*2;
-  for(let y=0;y<source.height;y++)for(let x=0;x<source.width;x++){
+  await runSlicedRange(source.width*source.height,index=>{
+    const y=Math.floor(index/source.width),x=index-y*source.width;
     const u=x/source.width,v=y/source.height,lat=(v-.5)*Math.PI;
     const field=Math.sin(u*Math.PI*10+phaseA)*.34+Math.sin(u*Math.PI*22+v*Math.PI*5+phaseB)*.22+Math.cos(u*Math.PI*7-v*Math.PI*13+phaseC)*.18+Math.cos(lat*3)*.20;
     // Longitude is singular at a sphere pole and every longitude wedge shares
@@ -9095,15 +9105,18 @@ function makeCloudTexture(){
     // polar cap, then ease clouds back in before normal latitudes.
     const poleDistance=Math.min(v,1-v);
     const polarT=clamp((poleDistance-.05)/.05,0,1),polarFade=polarT*polarT*(3-2*polarT);
-    const alpha=Math.round(clamp((field-.12)*260,0,112)*polarFade);const i=(y*source.width+x)*4;
+    const alpha=Math.round(clamp((field-.12)*260,0,112)*polarFade),i=index*4;
     data[i]=232;data[i+1]=241;data[i+2]=246;data[i+3]=alpha;
-  }
+  });
   ctx.putImageData(image,0,0);
+  await yieldBrowser();
   const texture=new pc.Texture(device,{width:source.width,height:source.height,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
-  texture.name="SeededPlanetClouds";texture.addressU=pc.ADDRESS_REPEAT;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.setSource(source);return texture;
+  texture.name="SeededPlanetClouds";texture.addressU=pc.ADDRESS_REPEAT;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.setSource(source);
+  await yieldBrowser();
+  return texture;
 }
-function buildAmbientMotion(surfaceMesh){
-  const material=new pc.StandardMaterial();const texture=makeCloudTexture();
+async function buildAmbientMotion(surfaceMesh){
+  const material=new pc.StandardMaterial();const texture=await makeCloudTexture();
   material.name="SeededCloudLayer";material.diffuse.set(1,1,1);material.emissive.set(.72,.78,.84);material.__atmosphereBaseDiffuse=[1,1,1];material.emissiveMap=texture;material.emissiveIntensity=.9;material.opacityMap=texture;material.opacityMapChannel="a";material.opacity=.58;material.blendType=pc.BLEND_NORMAL;material.depthWrite=false;material.cull=pc.CULLFACE_BACK;material.useLighting=false;material.update();
   cloudLayer=new pc.Entity("AmbientCloudLayer");cloudLayer.setLocalScale(1.018,1.018,1.018);cloudLayer.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});cloudLayer.render.meshInstances=[new pc.MeshInstance(surfaceMesh,material,cloudLayer)];planet.addChild(cloudLayer);
   ambientMotion={...ambientMotion,cloudLayerCount:1,animatedEntityCount:1,drawCallEstimate:1};
@@ -9443,13 +9456,13 @@ async function buildScene(){  const started=performance.now();
     mapScaleShell.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
     mapScaleShell.render.meshInstances=[new pc.MeshInstance(buildMapScaleShellMesh(),mapScaleShellMaterial,mapScaleShell)];
     mapScaleShell.enabled=false;app.root.addChild(mapScaleShell);
-    buildAmbientMotion(mesh);
+    await buildAmbientMotion(mesh);
     if(EVIDENCE_LAYERED_START){
       // Global scatter is not part of this WP's far-globe criterion and is not
       // visible at 1/10. Local wilderness still comes from the normal streamed
       // resource path once the camera approaches the focus.
       startupScheduler.evidenceGlobalWildernessSkipped=true;
-    }else buildWildernessPresentation();
+    }else await buildWildernessPresentation();
   }
 
   keyLight=new pc.Entity("PlanetKeyLight");
