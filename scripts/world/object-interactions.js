@@ -86,13 +86,14 @@ function nearestInteractionPoint(descriptor,actorPosition){
 function descriptorActions(type){
   return SAFE_ACTIONS[type]||Object.freeze(["inspect"]);
 }
-function objectDescriptor(object){
+function objectDescriptor(object,building){
   return Object.freeze({
     id:String(object.id),
     type:String(object.type),
     label:TYPE_LABELS[object.type]||String(object.type),
     buildingId:String(object.buildingId||""),
     buildingLabel:String(object.buildingLabel||""),
+    buildingKind:String(building?.kind||""),
     coordinate:point(object.coordinate),
     interactionPositions:Object.freeze((object.interactionPositions||[]).map(point).filter(Boolean)),
     actions:Object.freeze([...descriptorActions(object.type)]),
@@ -112,6 +113,7 @@ function doorDescriptor(building){
     label:(building.label?String(building.label)+" ":"")+"Door",
     buildingId:String(building.id),
     buildingLabel:String(building.label||""),
+    buildingKind:String(building.kind||""),
     coordinate:door,
     interactionPositions:Object.freeze(positions),
     actions:Object.freeze([...SAFE_ACTIONS.door]),
@@ -122,9 +124,10 @@ function doorDescriptor(building){
 }
 function compile(seed){
   const key=String(seed);
+  const buildings=BuildingInteriors.build(key),buildingById=new Map(buildings.map(building=>[String(building.id),building]));
   const descriptors=[
-    ...InteriorObjects.build(key).map(objectDescriptor),
-    ...BuildingInteriors.build(key).map(doorDescriptor).filter(Boolean)
+    ...InteriorObjects.build(key).map(object=>objectDescriptor(object,buildingById.get(String(object.buildingId)))),
+    ...buildings.map(doorDescriptor).filter(Boolean)
   ].sort((a,b)=>String(a.id).localeCompare(String(b.id)));
   const byId=new Map(descriptors.map(item=>[item.id,item]));
   const spatial=new Map();
@@ -189,29 +192,37 @@ function actionContext(descriptor,actorPosition,action){
     target
   });
 }
-function rankStatus(seed,descriptor,when){
+function rankStatus(seed,descriptor,when,action){
   if(!window?.ProtagonistRankAccess||!descriptor)return null;
   try{
-    const target={id:descriptor.id,kind:descriptor.type,buildingId:descriptor.buildingId,label:descriptor.label,requiredScope:(descriptor.type==="door"?"self":"self")};
+    const target={id:descriptor.id,kind:descriptor.type,objectType:descriptor.type,buildingId:descriptor.buildingId,buildingKind:descriptor.buildingKind,label:descriptor.label,action:String(action||"inspect")};
     return window.ProtagonistRankAccess.localAccessContext(seed,"protagonist",when||window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00",target);
   }catch(_){return null}
+}
+function accessView(access){
+  return access?Object.freeze({status:access.status,permitted:access.permitted===true,conditional:access.conditional===true,unknown:access.unknown===true,reason:access.reason,presentation:access.presentation,requiredScope:access.requiredScope||null,requiredRoleId:access.requiredRoleId||null,requirementSource:access.requirementSource||null}):null;
 }
 function context(seed,descriptorOrId,actorPosition){
   const descriptor=typeof descriptorOrId==="string"?get(seed,descriptorOrId):descriptorOrId;
   if(!descriptor)return null;
-  const actor=point(actorPosition);
-  const access=rankStatus(seed,descriptor,window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00");
+  const actor=point(actorPosition),when=window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00";
+  const actionRows=descriptor.actions.map(action=>{
+    const base=actionContext(descriptor,actor,action),access=rankStatus(seed,descriptor,when,action),restricted=access?.status==="restricted";
+    return Object.freeze({...base,enabled:Boolean(base.enabled&&!restricted),reason:restricted?"status-restricted":base.reason,access:accessView(access)});
+  });
+  const summaryAccess=rankStatus(seed,descriptor,when,descriptor.type==="door"?"enter":descriptor.actions.find(action=>action!=="inspect")||"inspect");
   return Object.freeze({
     id:descriptor.id,
     type:descriptor.type,
     label:descriptor.label,
     buildingId:descriptor.buildingId,
     buildingLabel:descriptor.buildingLabel,
+    buildingKind:descriptor.buildingKind,
     coordinate:descriptor.coordinate,
     source:descriptor.source,
     distanceTiles:nearestDistance(descriptor,actor),
-    actions:Object.freeze(descriptor.actions.map(action=>actionContext(descriptor,actor,action))),
-    access:access?Object.freeze({status:access.status,permitted:access.permitted,conditional:access.conditional,reason:access.reason,label:access.label}):null,
+    actions:Object.freeze(actionRows),
+    access:accessView(summaryAccess),
     createsResources:false,
     authoritative:true
   });
@@ -294,7 +305,7 @@ function attempt(seed,request){
     telemetry.rejectedAttempts++;
     return Object.freeze({ok:false,status:"rejected",reason:"unknown-object",authoritative:true});
   }
-  const access=rankStatus(seed,descriptor,window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00");
+  const access=actorKind==="protagonist"?rankStatus(seed,descriptor,window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00",action):null;
   if(!descriptor.actions.includes(action)){
     telemetry.rejectedAttempts++;
     return Object.freeze({ok:false,status:"rejected",reason:"unsupported-action",objectId:descriptor.id,action,authoritative:true,access:access?{status:access.status,permitted:access.permitted,conditional:access.conditional,reason:access.reason}:null});
