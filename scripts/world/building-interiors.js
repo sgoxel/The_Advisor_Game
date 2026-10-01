@@ -4,6 +4,7 @@
 const LEVEL=0;
 const TILE_AREA_M2=WorldStandards.TILE_METERS*WorldStandards.TILE_METERS;
 const modelCache=new Map();
+const cooperativeBuilds=new Map();
 const proofCache=new Map();
 
 function point(x,y){
@@ -161,6 +162,42 @@ function build(seed){
   if(!modelCache.has(key))modelCache.set(key,buildFresh(key));
   return modelCache.get(key);
 }
+async function buildCooperative(seedValue,options={}){
+  const key=String(seedValue==null?"":seedValue);
+  if(!key)return Object.freeze([]);
+  if(modelCache.has(key))return modelCache.get(key);
+  if(cooperativeBuilds.has(key))return cooperativeBuilds.get(key);
+  const pending=(async()=>{
+    const now=()=>typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
+    const pause=async()=>{
+      if(typeof options.yield==="function")await options.yield();
+      else await new Promise(resolve=>setTimeout(resolve,0));
+    };
+    const record=(started,index,phase)=>{
+      try{options.onUnit?.(now()-started,index,phase);}catch(_){}
+    };
+    let started=now();
+    const houses=houseSources(key);
+    record(started,-1,"house-sources");
+    await pause();
+    started=now();
+    const specials=specialSources(key);
+    record(started,-1,"special-sources");
+    await pause();
+    const sources=[...houses,...specials],built=[];
+    for(let index=0;index<sources.length;index++){
+      started=now();
+      built.push(describe(key,sources[index]));
+      record(started,index,"describe-"+String(sources[index]?.id||index));
+      if(index<sources.length-1)await pause();
+    }
+    const frozen=Object.freeze(built);
+    modelCache.set(key,frozen);
+    return frozen;
+  })();
+  cooperativeBuilds.set(key,pending);
+  try{return await pending;}finally{cooperativeBuilds.delete(key);}
+}
 
 function get(seed,id){
   return build(seed).find(item=>item.id===id)||null;
@@ -300,6 +337,6 @@ function proof(seed){
 
 window.BuildingInteriors=Object.freeze({
   LEVEL,TILE_AREA_M2,
-  build,get,proof
+  build,buildCooperative,get,proof
 });
 })();
