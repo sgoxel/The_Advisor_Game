@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import json, math, sys, time
+import json, math, platform, sys, time
 from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -12,7 +12,9 @@ SEED="AGENT6-NAV-PERF-A"
 
 def driver_for(w=390,h=844):
     o=Options()
-    for a in ("--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader"): o.add_argument(a)
+    args=["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--disable-background-timer-throttling","--disable-renderer-backgrounding"]
+    if platform.system()!="Darwin": args.append("--use-angle=swiftshader")
+    for a in args: o.add_argument(a)
     o.add_argument(f"--window-size={w},{h}")
     o.set_capability("goog:loggingPrefs",{"browser":"ALL"})
     d=webdriver.Chrome(options=o); d.set_script_timeout(240)
@@ -29,7 +31,12 @@ def snap(d): return d.execute_script("return window.PlanetStage?.snapshot?.()||n
 
 def wait_ready(d):
     WebDriverWait(d,180).until(lambda x:x.execute_script("return document.readyState==='complete'"))
-    WebDriverWait(d,300).until(lambda x:x.execute_script("return document.getElementById('planetStageRoot')?.dataset?.ready==='true'"))
+    try:
+        WebDriverWait(d,300).until(lambda x:x.execute_script("return document.getElementById('planetStageRoot')?.dataset?.ready==='true'"))
+    except Exception as e:
+        diag=d.execute_script("""const r=document.getElementById('planetStageRoot'),l=r?.querySelector?.('.planet-stage-loading');return {ready:r?.dataset?.ready||null,error:r?.dataset?.error||null,loading:l?.innerText||null,planetStage:Boolean(window.PlanetStage),snapshot:window.PlanetStage?.snapshot?.()||null};""")
+        logs=[x for x in d.get_log("browser") if x.get("level") in ("SEVERE","WARNING")][-12:]
+        raise AssertionError(f"startup readiness timeout: diag={diag} browser={logs}") from e
 
 def set_seed(d):
     r=d.execute_script("const s=String(arguments[0]);const c=window.SeedSystem.startNewCampaign(s);const p=window.PlanetGeography.persistSeed(s);return {c,p};",SEED)
