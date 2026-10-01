@@ -493,6 +493,7 @@ function freshNavigationPerformance(){
     revision:"world-map-navigation-budget-v2",
     semanticUpdateRequestCount:0,semanticUpdateRenderCount:0,semanticUpdateCoalescedCount:0,semanticUpdateForcedCount:0,
     semanticUpdatePending:false,semanticUpdateMinIntervalMs:NAV_SEMANTIC_MIN_INTERVAL_MS,lastSemanticUpdateMs:0,maxSemanticUpdateMs:0,totalSemanticUpdateMs:0,
+    pointerSettleSemanticLastMs:0,pointerSettleSemanticMaxMs:0,pointerSettleSemanticOver50Count:0,
     semanticPhaseLastMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
     semanticPhaseMaxMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
     semanticPhaseOver50Count:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
@@ -503,10 +504,12 @@ function freshNavigationPerformance(){
     semanticUpdateDragDeferredCount:0,streamingRequestDeferredCount:0,pointerSettleStreamingRefreshCount:0,interactionStreamingDeferred:false,
     frameUpdateCount:0,lastFrameUpdateMs:0,maxFrameUpdateMs:0,lastRenderCpuMs:0,maxRenderCpuMs:0,
     frameUpdateOver50Count:0,renderCpuOver50Count:0,
+    pointerDragFrameMaxMs:0,pointerDragFrameOver50Count:0,pointerDragRenderCpuMaxMs:0,pointerDragRenderCpuOver50Count:0,
     framePhaseLastMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},
     framePhaseMaxMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},
     residentAdvanceSnapshotSuppressed:true,residentSchedulerMode:"fixed-step-cooperative",
     residentSchedulerCalls:0,residentSchedulerLastMs:0,residentSchedulerMaxMs:0,residentSchedulerOver50Count:0,residentSchedulerPendingDrains:0,residentSchedulerWarmupMs:0,
+    pointerDragResidentSchedulerMaxMs:0,pointerDragResidentSchedulerOver50Count:0,
     longTask50Count:0,longTaskWorstMs:0,
     eventDrivenSemanticUpdates:true,cameraMotionImmediate:true,liveSemanticProjection:true,dragStreamingDeferred:true,perFrameFullPlanetIteration:false,bounded:true,fullWorldScan:false
   };
@@ -2167,7 +2170,7 @@ function renderMapPresentation(){
 
   const borderBuildStarted=performance.now(),border=buildMapBorderSegments();
   recordSemanticPhase("borderBuild",borderBuildStarted);
-  const borderProjectionStarted=performance.now(),svg=layer.querySelector(".planet-map-borders");svg.replaceChildren();
+  const borderProjectionStarted=performance.now(),svg=layer.querySelector(".planet-map-borders"),borderFragment=document.createDocumentFragment();
   let projectedBorderSegmentCount=0,rejectedInteriorBorderStubCount=0;
   const borderOffsetMeters=Math.max(2,Math.min(24,zoomState.visibleFootprintWidthMeters*.000015));
   const rawBorderLines=stitchMapBorderSegments(border.segments);
@@ -2190,7 +2193,7 @@ function renderMapPresentation(){
       line.setAttribute("points",run.map(p=>(p.x*10).toFixed(1)+","+(p.y*10).toFixed(1)).join(" "));
       line.setAttribute("class","planet-political-border");
       line.dataset.ownerA=chain.ownerA;line.dataset.ownerB=chain.ownerB;
-      svg.appendChild(line);projectedBorderSegmentCount++;run=[];
+      borderFragment.appendChild(line);projectedBorderSegmentCount++;run=[];
     };
     const isLandPoint=point=>{
       try{return Boolean(geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)?.land);}catch(_){return false;}
@@ -2236,6 +2239,9 @@ function renderMapPresentation(){
     }
     flush();
   }
+  // Commit the completed canonical border batch once. Keeping SVG creation
+  // detached avoids repeated live-DOM style/layout work inside the settle task.
+  svg.replaceChildren(borderFragment);
   svg.hidden=projectedBorderSegmentCount===0;
   const borderProjectionMs=performance.now()-borderProjectionStarted;
   recordSemanticPhase("borderProjection",borderProjectionStarted);
@@ -2345,6 +2351,11 @@ function performMapPresentationUpdate(reason="scheduled"){
   navigationPerformance.lastSemanticUpdateMs=Number(elapsed.toFixed(3));
   navigationPerformance.maxSemanticUpdateMs=Math.max(navigationPerformance.maxSemanticUpdateMs,navigationPerformance.lastSemanticUpdateMs);
   navigationPerformance.totalSemanticUpdateMs+=navigationPerformance.lastSemanticUpdateMs;
+  if(reason==="pointer-settle"){
+    navigationPerformance.pointerSettleSemanticLastMs=navigationPerformance.lastSemanticUpdateMs;
+    navigationPerformance.pointerSettleSemanticMaxMs=Math.max(Number(navigationPerformance.pointerSettleSemanticMaxMs||0),navigationPerformance.lastSemanticUpdateMs);
+    if(navigationPerformance.lastSemanticUpdateMs>=50)navigationPerformance.pointerSettleSemanticOver50Count++;
+  }
   navigationPerformance.semanticUpdatePending=false;
 }
 function updateMapPresentation(reason="direct",force=false){
@@ -2397,6 +2408,10 @@ function recordResidentSchedulerSlice(started){
   navigationPerformance.residentSchedulerLastMs=Number(elapsed.toFixed(3));
   navigationPerformance.residentSchedulerMaxMs=Math.max(navigationPerformance.residentSchedulerMaxMs,navigationPerformance.residentSchedulerLastMs);
   if(elapsed>50)navigationPerformance.residentSchedulerOver50Count++;
+  if(dragging){
+    navigationPerformance.pointerDragResidentSchedulerMaxMs=Math.max(Number(navigationPerformance.pointerDragResidentSchedulerMaxMs||0),navigationPerformance.residentSchedulerLastMs);
+    if(elapsed>=50)navigationPerformance.pointerDragResidentSchedulerOver50Count++;
+  }
   return elapsed;
 }
 function scheduleResidentMovementDrain(){
@@ -3978,21 +3993,20 @@ function staticSettlementRevealTierForIndex(index){
 function settlementRevealTierForScalar(value=zoomState.scalar){
   const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX);
   const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
-  const activeStaticIndex=displayResource?.levelIndex??rawIndex;
-  const activeStaticLevel=LOCAL_DETAIL_LEVELS[activeStaticIndex]||LOCAL_DETAIL_LEVELS[0];
-  const activeStaticWorld=Boolean(activeStaticLevel?.staticWorld)||Boolean(displayResource?.dims?.staticWorld);
-  if(level?.staticWorld||activeStaticWorld){
-    const staticTier=staticSettlementRevealTierForIndex(Math.max(rawIndex,activeStaticIndex));
+  // Reveal tier follows the requested physical scale. A previously-ready static
+  // resource may stay resident only as terrain stand-in coverage while a coarser
+  // parent prepares; it must never promote settlement props back into map scale.
+  if(level?.staticWorld){
+    const staticTier=staticSettlementRevealTierForIndex(rawIndex);
     if(staticTier!=="none")return staticTier;
   }
   return semanticLayerSpec(semanticScaleIndexForScalar(scalar),false).settlementRevealTier;
 }
 function localWorldPresentationEligibility(value=zoomState.scalar){
   const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX),revealTier=settlementRevealTierForScalar(scalar);
-  const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
-  const activeStaticWorld=Boolean(displayResource?.dims?.staticWorld)||Boolean((displayResource?.levelIndex!==undefined)&&((LOCAL_DETAIL_LEVELS[displayResource.levelIndex]||{}).staticWorld));
-  const staticWorldVisible=Boolean(level?.staticWorld)||activeStaticWorld;
-  return Object.freeze({visible:revealTier!=="none"||staticWorldVisible,revealTier,rawLevelIndex:rawIndex,rawLevelId:level?.id||null,rawStaticWorld:Boolean(level?.staticWorld)||activeStaticWorld});
+  const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0],requestedStaticWorld=Boolean(level?.staticWorld);
+  const staleDisplayStaticWorld=Boolean(displayResource?.dims?.staticWorld)&&!requestedStaticWorld;
+  return Object.freeze({visible:revealTier!=="none"||requestedStaticWorld,revealTier,rawLevelIndex:rawIndex,rawLevelId:level?.id||null,rawStaticWorld:requestedStaticWorld,staleDisplayStaticWorldIgnored:staleDisplayStaticWorld});
 }
 function applyLocalWorldPresentationVisibility(){
   const gate=localWorldPresentationEligibility(),nodes=[localStaticRoot,localNpcRoot,localCrowdRoot,localBuildingActivityRoot,localCampaignWearMesh,localFaunaRoot,environmentalReactionRoot,localWayfindingEntity].filter(Boolean);
@@ -8089,13 +8103,17 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       horizonSkirtMaterial.depthWrite=false;
       horizonSkirtMaterial.update();
     }
-    // Keep one fixed orthographic 3/4 tangent presentation at every local LOD.
-    // Zoom still changes only magnification/detail; the presentation pitch never varies with scalar.
-    tangentPatch.setLocalEulerAngles(LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,0,0);
     const dims=localPatchDimensions(),level=LOCAL_DETAIL_LEVELS[dims.levelIndex];
+    // Only the final ground play area uses the stylized orthographic 3/4 view.
+    // Strategic/regional/local-map tiers remain map-facing so terrain and DOM
+    // geographic anchors share the same projection while dragging or streaming.
+    const requestedLevel=LOCAL_DETAIL_LEVELS[rawLodIndexForZoom(zoomState.scalar)]||LOCAL_DETAIL_LEVELS[0];
+    const groundPresentationReady=String(requestedLevel?.id||"")==="ground"&&String(displayResource?.dims?.levelId||"")==="ground";
+    const tangentPitchDegrees=groundPresentationReady?LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES:90;
+    tangentPatch.setLocalEulerAngles(tangentPitchDegrees,0,0);
     const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
     const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
-    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters()};
+    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters(),tangentPitchDegrees,groundPresentationReady};
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     // A prepared stand-in normally remains exactly world-anchored while a new
     // focus resource is built. At ground scale a small pointer drag can request
@@ -8161,7 +8179,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     localResources.requestedLevelIndex=requestedIndex;localResources.visibleLevelIndex=displayResource?visibleIndex:null;
     if(focusRingPatch){
       const mediumScale=patchScale;
-      focusRingPatch.setLocalEulerAngles(LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,0,0);
+      focusRingPatch.setLocalEulerAngles(tangentPitchDegrees,0,0);
       focusRingPatch.setLocalScale(mediumScale,mediumScale,mediumScale);
       focusRingPatch.setLocalPosition(offset.east/dims.metersPerUnit*mediumScale,offset.north/dims.metersPerUnit*mediumScale,DISPLAY_RADIUS_UNITS-.004);
       projectionPresentation={...projectionPresentation,mediumScale};
@@ -8171,7 +8189,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       // large focus jump the bounded stand-in offset guarantees that this last
       // valid terrain representation still covers the viewport until swap.
       const surroundScale=patchScale;
-      horizonSkirt.setLocalEulerAngles(LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,0,0);
+      horizonSkirt.setLocalEulerAngles(tangentPitchDegrees,0,0);
       horizonSkirt.setLocalScale(surroundScale,surroundScale,surroundScale);
       horizonSkirt.setLocalPosition(offset.east/dims.metersPerUnit*surroundScale,offset.north/dims.metersPerUnit*surroundScale,DISPLAY_RADIUS_UNITS-.010);
       projectionPresentation={...projectionPresentation,surroundScale};
@@ -9504,6 +9522,10 @@ async function start(){
       const elapsed=performance.now()-frameStarted;navigationPerformance.frameUpdateCount++;
       navigationPerformance.lastFrameUpdateMs=Number(elapsed.toFixed(3));navigationPerformance.maxFrameUpdateMs=Math.max(navigationPerformance.maxFrameUpdateMs,navigationPerformance.lastFrameUpdateMs);
       if(elapsed>50)navigationPerformance.frameUpdateOver50Count++;
+      if(dragging){
+        navigationPerformance.pointerDragFrameMaxMs=Math.max(Number(navigationPerformance.pointerDragFrameMaxMs||0),navigationPerformance.lastFrameUpdateMs);
+        if(elapsed>=50)navigationPerformance.pointerDragFrameOver50Count++;
+      }
     });
     let navigationRenderStarted=0;
     app.on?.("prerender",()=>{navigationRenderStarted=performance.now();});
@@ -9512,6 +9534,10 @@ async function start(){
       const elapsed=Math.max(0,performance.now()-navigationRenderStarted);navigationPerformance.lastRenderCpuMs=Number(elapsed.toFixed(3));
       navigationPerformance.maxRenderCpuMs=Math.max(navigationPerformance.maxRenderCpuMs,navigationPerformance.lastRenderCpuMs);
       if(elapsed>50)navigationPerformance.renderCpuOver50Count++;
+      if(dragging){
+        navigationPerformance.pointerDragRenderCpuMaxMs=Math.max(Number(navigationPerformance.pointerDragRenderCpuMaxMs||0),navigationPerformance.lastRenderCpuMs);
+        if(elapsed>=50)navigationPerformance.pointerDragRenderCpuOver50Count++;
+      }
     });
     await measuredPhase("appStartMs",async()=>app.start());
     setStartupProgress("finalizing","Preparing local transition shaders…",98);
