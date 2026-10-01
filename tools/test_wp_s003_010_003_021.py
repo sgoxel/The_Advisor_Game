@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import json, math, sys, time
+import json, math, platform, sys, time
 from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -12,7 +12,9 @@ SEED="AGENT6-NAV-PERF-A"
 
 def driver_for(w=390,h=844):
     o=Options()
-    for a in ("--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader"): o.add_argument(a)
+    args=["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--disable-background-timer-throttling","--disable-renderer-backgrounding"]
+    if platform.system()!="Darwin": args.append("--use-angle=swiftshader")
+    for a in args: o.add_argument(a)
     o.add_argument(f"--window-size={w},{h}")
     o.set_capability("goog:loggingPrefs",{"browser":"ALL"})
     d=webdriver.Chrome(options=o); d.set_script_timeout(240)
@@ -29,7 +31,12 @@ def snap(d): return d.execute_script("return window.PlanetStage?.snapshot?.()||n
 
 def wait_ready(d):
     WebDriverWait(d,180).until(lambda x:x.execute_script("return document.readyState==='complete'"))
-    WebDriverWait(d,300).until(lambda x:x.execute_script("return document.getElementById('planetStageRoot')?.dataset?.ready==='true'"))
+    try:
+        WebDriverWait(d,300).until(lambda x:x.execute_script("return document.getElementById('planetStageRoot')?.dataset?.ready==='true'"))
+    except Exception as e:
+        diag=d.execute_script("""const r=document.getElementById('planetStageRoot'),l=r?.querySelector?.('.planet-stage-loading');return {ready:r?.dataset?.ready||null,error:r?.dataset?.error||null,loading:l?.innerText||null,planetStage:Boolean(window.PlanetStage),snapshot:window.PlanetStage?.snapshot?.()||null};""")
+        logs=[x for x in d.get_log("browser") if x.get("level") in ("SEVERE","WARNING")][-12:]
+        raise AssertionError(f"startup readiness timeout: diag={diag} browser={logs}") from e
 
 def set_seed(d):
     r=d.execute_script("const s=String(arguments[0]);const c=window.SeedSystem.startNewCampaign(s);const p=window.PlanetGeography.persistSeed(s);return {c,p};",SEED)
@@ -103,17 +110,38 @@ def drag_probe(d,w,h,steps=18):
     WebDriverWait(d,30).until(lambda z:int(snap(z)["navigationPerformance"].get("pointerSettleFlushCount") or 0)>int(before["navigationPerformance"].get("pointerSettleFlushCount") or 0))
     time.sleep(.35)
     after=snap(d)
-    if int(after["navigationPerformance"].get("pointerSettleStreamingRefreshCount") or 0)<=int(before["navigationPerformance"].get("pointerSettleStreamingRefreshCount") or 0):
+    after_nav=after["navigationPerformance"]
+    if int(after_nav.get("pointerSettleStreamingRefreshCount") or 0)<=int(before["navigationPerformance"].get("pointerSettleStreamingRefreshCount") or 0):
         raise AssertionError("pointer settle did not refresh deferred streaming")
-    return {"beforeLabels":before_labels,"steps":per,"midScreenshot":mid,"before":before["navigationPerformance"],"during":during["navigationPerformance"],"after":after["navigationPerformance"],"afterLabels":labels(d)}
+    if float(after_nav.get("pointerSettleSemanticLastMs") or 0)>=50:
+        raise AssertionError(f"pointer-settle semantic update exceeded 50 ms: {after_nav.get('pointerSettleSemanticLastMs')}")
+    return {"beforeLabels":before_labels,"steps":per,"midScreenshot":mid,"before":before["navigationPerformance"],"during":during["navigationPerformance"],"after":after_nav,"afterLabels":labels(d)}
 
 def assert_regional_clean(s):
-    ls=s["projection"]["localStatic"]; rb=s["projection"]["resourceBudget"]; mp=s["mapPresentation"]
+    ls=s["projection"]["localStatic"]; rb=s["projection"]["resourceBudget"]; mp=s["mapPresentation"]; pp=s["projection"].get("presentation") or {}
     if str(ls.get("revealTier"))!="none": raise AssertionError(f"regional reveal tier not none: {ls.get('revealTier')}")
     if ls.get("mapScaleSuppressedDecorative") is not True: raise AssertionError(f"map-scale decorative suppression missing: {ls}")
     if rb.get("mapScalePresentationEligible") is not False: raise AssertionError(f"map-scale local presentation unexpectedly eligible: {rb}")
+    if abs(float(pp.get("tangentPitchDegrees") or 90)-90)>0.01: raise AssertionError(f"regional tangent is not map-facing: {pp}")
+    if pp.get("groundPresentationReady") is True: raise AssertionError(f"ground 3/4 presentation leaked into regional scale: {pp}")
     if int(ls.get("buildingCount") or 0) or int(ls.get("vegetationCount") or 0) or int(ls.get("microLocationPrimitiveCount") or 0): raise AssertionError(f"local decorative geometry leaked into regional scale: {ls}")
     if int(mp.get("markerStandaloneDecorativeGlyphCount") or 0)!=0 or int(mp.get("markerUnknownProductionCount") or 0)!=0: raise AssertionError("standalone/unknown marker glyph leaked")
+
+def zoomout_stale_resource_probe(d):
+    before=snap(d)
+    result=d.execute_script("""
+      window.PlanetStage.setScaleIndex(4);
+      const s=window.PlanetStage.snapshot();
+      const root=document.getElementById('planetStageRoot');
+      return {snapshot:s,localDecorativeEligible:root?.dataset?.localDecorativeEligible||null};
+    """)
+    s=result["snapshot"]; rb=s["projection"]["resourceBudget"]; pp=s["projection"].get("presentation") or {}
+    if int(s["zoom"]["scaleIndex"])!=4: raise AssertionError(f"zoom-out request did not reach regional scale immediately: {s['zoom']}")
+    if result.get("localDecorativeEligible")!="false": raise AssertionError(f"stale local decorative root remained eligible during zoom-out: {result}")
+    if rb.get("mapScalePresentationEligible") is not False: raise AssertionError(f"stale static resource kept regional local presentation eligible: {rb}")
+    if abs(float(pp.get("tangentPitchDegrees") or 90)-90)>0.01: raise AssertionError(f"stale static resource kept RPG tangent pitch during zoom-out: {pp}")
+    if pp.get("groundPresentationReady") is True: raise AssertionError(f"stale ground resource retained ground presentation during zoom-out: {pp}")
+    return {"beforeVisibleLevel":before["zoom"].get("visibleLevel"),"afterVisibleLevel":s["zoom"].get("visibleLevel"),"requestedLevel":s["zoom"].get("requestedLevel"),"pendingPreparationCount":rb.get("pendingPreparationCount"),"mapScalePresentationEligible":rb.get("mapScalePresentationEligible"),"tangentPitchDegrees":pp.get("tangentPitchDegrees"),"groundPresentationReady":pp.get("groundPresentationReady"),"localDecorativeEligible":result.get("localDecorativeEligible")}
 
 def main():
     OUT.mkdir(parents=True,exist_ok=True)
@@ -126,6 +154,7 @@ def main():
             if view_index==0:
                 close=settle_index(d,7)
                 ev["views"].append({"viewport":[w,h],"phase":"close-materialized","scale":close["zoom"]["scaleLabel"],"localStatic":close["projection"]["localStatic"]})
+                ev["zoomoutStaleResourceProbe"]=zoomout_stale_resource_probe(d)
             regional,target=regional_mid(d); assert_regional_clean(regional)
             seasonal=d.execute_script("return window.SeasonalPresentation?.snapshot?.()||null")
             if not seasonal: raise AssertionError("seasonal presentation telemetry unavailable")
@@ -140,6 +169,13 @@ def main():
         final=snap(d); nav=final["navigationPerformance"]
         ev["longTasks"]=longs; ev["navigationPerformance"]=nav
         if float(nav.get("liveProjectionMaxMs") or 0)>=50: raise AssertionError(f"live label projection exceeded 50 ms: {nav.get('liveProjectionMaxMs')}")
+        if float(nav.get("pointerSettleSemanticMaxMs") or 0)>=50 or int(nav.get("pointerSettleSemanticOver50Count") or 0)>0:
+            raise AssertionError(f"pointer-settle semantic budget exceeded: max={nav.get('pointerSettleSemanticMaxMs')} over50={nav.get('pointerSettleSemanticOver50Count')}")
+        for key in ("pointerDragFrameMaxMs","pointerDragRenderCpuMaxMs","pointerDragResidentSchedulerMaxMs"):
+            if key not in nav: raise AssertionError(f"missing interaction telemetry: {key}")
+            if float(nav.get(key) or 0)>=50: raise AssertionError(f"regional pointer-drag budget exceeded: {key}={nav.get(key)}")
+        for key in ("pointerDragFrameOver50Count","pointerDragRenderCpuOver50Count","pointerDragResidentSchedulerOver50Count"):
+            if int(nav.get(key) or 0)>0: raise AssertionError(f"regional pointer-drag >50 ms task recorded: {key}={nav.get(key)}")
         if int(nav.get("liveProjectionCount") or 0)<20: raise AssertionError("live projection path insufficiently exercised")
         if int(final["projection"]["resourceBudget"].get("missingCoverageCount") or 0)!=0: raise AssertionError(f"terrain coverage gap reported: {final['projection']['resourceBudget']}")
         severe=[x for x in d.get_log("browser") if x.get("level")=="SEVERE" and "favicon" not in str(x.get("message","")).lower()]
