@@ -4,6 +4,10 @@ on:
     branches: [agent6/wp-s003-010-003-021]
     paths:
       - .github/workflows/wp-s003-010-003-021-exact-macos.yml
+      - tools/test_wp_s003_010_003_021.py
+      - scripts/world/planet-stage.js
+      - scripts/world/seasonal-presentation.js
+      - index.html
   workflow_dispatch:
 permissions:
   contents: read
