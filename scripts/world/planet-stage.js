@@ -270,7 +270,7 @@ const STARTUP_SLICE_BUDGET_MS=6;
 const STARTUP_WATCHDOG_TICK_MS=1000;
 const STARTUP_WATCHDOG_SLOW_MS=8000;
 const STARTUP_WATCHDOG_STALL_MS=30000;
-let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{},watchdogChecks:0,watchdogSlowCount:0,watchdogStallCount:0,watchdogMaxNoProgressMs:0,surfaceProgressUpdates:0,surfaceSamplingWallMs:0,surfaceCanvasCommitMs:0,surfaceTextureUploadMs:0,surfaceProgressIntervalSamples:0,residentWarmupDeferred:true,residentWarmupStartedAtMs:null,residentWarmupCompletedAtMs:null,residentWarmupPlanCount:0,residentWarmupPlanCompleted:0,residentWarmupAdvanceCalls:0,residentWarmupYieldCount:0,residentWarmupMaxUnitMs:0,residentWarmupError:null,simulationAuthorityPreserved:true};
+let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{},watchdogChecks:0,watchdogSlowCount:0,watchdogStallCount:0,watchdogMaxNoProgressMs:0,surfaceProgressUpdates:0,surfaceSamplingWallMs:0,surfaceCanvasCommitMs:0,surfaceTextureUploadMs:0,surfaceProgressIntervalSamples:0,residentWarmupDeferred:true,residentWarmupStartedAtMs:null,residentWarmupCompletedAtMs:null,residentWarmupPlanCount:0,residentWarmupPlanCompleted:0,residentWarmupAdvanceCalls:0,residentWarmupYieldCount:0,residentWarmupMaxUnitMs:0,residentWarmupMaxUnitLabel:null,residentWarmupRouteSliceCount:0,residentWarmupMaxRouteSliceMs:0,residentWarmupError:null,simulationAuthorityPreserved:true};
 let longTaskObserver=null;
 let heartbeatTimer=null;
 let startupWatchdogTimer=null;
@@ -2392,10 +2392,16 @@ function runResidentMovementScheduledSlice(realSeconds){
   recordResidentSchedulerSlice(started);
   if(result?.pending){navigationPerformance.residentSchedulerPendingDrains++;scheduleResidentMovementDrain();}
 }
-function recordResidentWarmupUnit(started){
-  const elapsed=Math.max(0,performance.now()-started);
-  startupScheduler.residentWarmupMaxUnitMs=Math.max(Number(startupScheduler.residentWarmupMaxUnitMs||0),Number(elapsed.toFixed(3)));
-  return elapsed;
+function recordResidentWarmupElapsed(elapsed,label){
+  const measured=Number(Math.max(0,Number(elapsed)||0).toFixed(3));
+  if(measured>Number(startupScheduler.residentWarmupMaxUnitMs||0)){
+    startupScheduler.residentWarmupMaxUnitMs=measured;
+    startupScheduler.residentWarmupMaxUnitLabel=String(label||"resident-warmup");
+  }
+  return measured;
+}
+function recordResidentWarmupUnit(started,label){
+  return recordResidentWarmupElapsed(performance.now()-started,label);
 }
 function yieldResidentWarmup(){
   startupScheduler.residentWarmupYieldCount++;
@@ -2408,37 +2414,57 @@ async function warmResidentMovementScheduler(){
   const started=performance.now(),step=Math.max(.001,Number(window.ResidentMovement.FIXED_STEP_SECONDS||.1));
   const when=window.GameTime?.getNow?.()||inspectionFantasyStamp();
 
+  // Build the bounded resident roster first so the same deterministic objects
+  // are reused by cooperative work-cycle preparation and ResidentMovement.ensure.
   let unitStarted=performance.now();
-  window.ResidentMovement.ensure?.(activeSeed);
-  recordResidentWarmupUnit(unitStarted);
+  const residents=(window.DailyActivity?.build?.(activeSeed)||[]).slice(0,12);
+  recordResidentWarmupUnit(unitStarted,"resident-roster");
+  startupScheduler.residentWarmupPlanCount=residents.length;
   await yieldResidentWarmup();
 
-  // No resident is visible in the initial planet view, so cache priming is
-  // post-ready background preparation rather than a first-playable dependency.
-  // Keep the deterministic routine, but yield after every resident.
-  if(window.WorkCycles?.plan&&window.DailyActivity?.build){
-    const residents=(window.DailyActivity.build(activeSeed)||[]).slice(0,12);
-    startupScheduler.residentWarmupPlanCount=residents.length;
+  // Work-cycle route checks were the remaining multi-second hotspot. Prime the
+  // exact existing PLAN_CACHE through RoutePlanner's incremental search API;
+  // the final synchronous plan() call then reads only deterministic cached
+  // route booleans and produces byte-for-byte equivalent plan structure.
+  if(window.WorkCycles?.plan){
     for(let i=0;i<residents.length;i++){
-      unitStarted=performance.now();
-      window.WorkCycles.plan(activeSeed,residents[i]);
-      recordResidentWarmupUnit(unitStarted);
+      if(typeof window.WorkCycles.preparePlan==="function"){
+        await window.WorkCycles.preparePlan(activeSeed,residents[i],{
+          maxRoutePops:6,
+          yield:yieldResidentWarmup,
+          onSlice:(elapsed,label)=>{
+            startupScheduler.residentWarmupRouteSliceCount++;
+            startupScheduler.residentWarmupMaxRouteSliceMs=Math.max(Number(startupScheduler.residentWarmupMaxRouteSliceMs||0),Number((Number(elapsed)||0).toFixed(3)));
+            recordResidentWarmupElapsed(elapsed,"work-cycle-"+String(label||"route-slice"));
+          }
+        });
+      }else{
+        unitStarted=performance.now();
+        window.WorkCycles.plan(activeSeed,residents[i]);
+        recordResidentWarmupUnit(unitStarted,"work-cycle-plan-"+String(residents[i]?.id||i));
+      }
       startupScheduler.residentWarmupPlanCompleted=i+1;
       await yieldResidentWarmup();
     }
   }
 
-  // Preserve the same one fixed initialization tick, but drain it through the
-  // resident system's cooperative one-unit path.
+  // Interior/object caches are now hot. Initialize movement after route-heavy
+  // preparation, then preserve the same one fixed simulation tick using the
+  // existing maxTicks=1 cooperative resident path.
+  unitStarted=performance.now();
+  window.ResidentMovement.ensure?.(activeSeed);
+  recordResidentWarmupUnit(unitStarted,"resident-ensure");
+  await yieldResidentWarmup();
+
   unitStarted=performance.now();
   let result=window.ResidentMovement.advance(activeSeed,when,step,{snapshot:false,maxTicks:1});
-  recordResidentWarmupUnit(unitStarted);
+  recordResidentWarmupUnit(unitStarted,"resident-advance-0");
   startupScheduler.residentWarmupAdvanceCalls++;
   while(result?.pending){
     await yieldResidentWarmup();
     unitStarted=performance.now();
     result=window.ResidentMovement.advance(activeSeed,when,0,{snapshot:false,maxTicks:1});
-    recordResidentWarmupUnit(unitStarted);
+    recordResidentWarmupUnit(unitStarted,"resident-advance-"+startupScheduler.residentWarmupAdvanceCalls);
     startupScheduler.residentWarmupAdvanceCalls++;
   }
   navigationPerformance.residentSchedulerWarmupMs=Number((performance.now()-started).toFixed(3));
