@@ -117,3 +117,5 @@ jobs:
             await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:251,body});
 
 # WP-S012-009 exact-head verification trigger
+
+# WP-S012-009 visual attempt 3 exact-head trigger
