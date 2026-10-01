@@ -54,13 +54,13 @@ def compact_state():
       return {
         ready:Boolean(s.ready),activeSeed:s.activeSeed,scaleIndex:Number(s.zoom?.scaleIndex),scaleLabel:s.zoom?.displayScaleLabel||s.zoom?.scaleLabel||null,
         requestedBand:s.zoom?.requestedBand||null,visibleBand:s.zoom?.band||null,
-        requestedLevel:rb.requestedLevel||rb.requestedLevelId||null,visibleLevel:rb.visibleLevel||ls.level||null,
-        pending:Number(rb.pendingPreparationCount||0),standIn:Boolean(rb.standInActive),
+        requestedLevel:s.zoom?.requestedLevel||rb.requestedLevel||rb.requestedLevelId||null,visibleLevel:s.zoom?.visibleLevel||rb.visibleLevel||ls.level||null,
+        pending:Number(rb.pendingPreparationCount||0),standIn:Boolean(rb.standInActive),tangentPatchActive:Boolean(s.projection?.tangentPatchActive),
         revealTier:ls.revealTier||null,localStaticActive:Boolean(ls.active),buildingCount:Number(ls.buildingCount||0),
         billboardLayerActive:Boolean(np.billboardLayerActive),detailedBillboardCount:Number(np.detailedBillboardCount||0),residentBillboardCount:Number(np.residentBillboardCount||0),
         protagonistBillboardVisible:Boolean(np.protagonistBillboardVisible),groundRepresentationReady:Boolean(np.groundRepresentationReady),
         billboardTextureUrls:Array.isArray(np.billboardTextureUrls)?np.billboardTextureUrls:[],cameraPresentation:np.cameraPresentation||null,
-        cameraPoseInvariant:pp.cameraPoseInvariant!==false,cameraPitchDegrees:Number(pp.cameraPitchDegrees||0),zoomTransform:pp.zoomTransform||null,
+        cameraPoseInvariant:s.zoom?.pose?.cameraPoseInvariant!==false,cameraPitchDegrees:Number(pp.cameraPitchDegrees||0),zoomTransform:s.zoom?.pose?.zoomTransform||pp.zoomTransform||null,
         residentTargets:targets.slice(0,8).map(t=>({id:String(t.id),bounds:t.bounds||null})),
         navigation:{longTask50Count:Number(s.navigationPerformance?.longTask50Count||0),longTaskWorstMs:Number(s.navigationPerformance?.longTaskWorstMs||0),framePhaseMaxMs:s.navigationPerformance?.framePhaseMaxMs||{}},
         npcPresentation:np
@@ -71,10 +71,11 @@ def set_scale(index):
     js("window.PlanetStage.setScaleIndex(arguments[0]);",int(index))
     wait.until(lambda _d:int(compact_state()["scaleIndex"])==int(index))
     if index==9:
-        wait.until(lambda _d: compact_state()["visibleLevel"]=="ground" and compact_state()["revealTier"]=="full" and compact_state()["pending"]==0)
+        wait.until(lambda _d: compact_state()["visibleLevel"]=="ground" and compact_state()["pending"]==0 and compact_state()["tangentPatchActive"])
         wait.until(lambda _d: compact_state()["groundRepresentationReady"] and compact_state()["protagonistBillboardVisible"] and compact_state()["residentBillboardCount"]>=1 and compact_state()["detailedBillboardCount"]>=2)
     else:
-        wait.until(lambda _d: compact_state()["pending"]==0 and compact_state()["revealTier"] in ("refined","full"))
+        wait.until(lambda _d: compact_state()["pending"]==0 and compact_state()["visibleLevel"]!="ground")
+        wait.until(lambda _d: compact_state()["detailedBillboardCount"]==0 and not compact_state()["billboardLayerActive"] and not compact_state()["protagonistBillboardVisible"])
     time.sleep(.45)
     return compact_state()
 
@@ -98,7 +99,7 @@ def validate(label,index,state):
     if not state["ready"]:
         raise RuntimeError(label+" stage not ready")
     if index==8:
-        if state["detailedBillboardCount"]!=0 or state["billboardLayerActive"] or state["protagonistBillboardVisible"]:
+        if state["visibleLevel"]=="ground" or state["detailedBillboardCount"]!=0 or state["billboardLayerActive"] or state["protagonistBillboardVisible"]:
             raise RuntimeError(label+" leaked detailed character art outside final ground: "+json.dumps(state))
     if index==9:
         if state["visibleLevel"]!="ground" or state["revealTier"]!="full" or not state["groundRepresentationReady"]:
