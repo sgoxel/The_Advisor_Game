@@ -246,7 +246,7 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S012-004` — Buy, Sell + Service Transaction Validation — COMPLETED
 - `WP-S012-005` — Household Housing, Rent + Shelter Obligations — COMPLETED
 - `WP-S012-006` — Profession Change, Apprenticeship + Work Opportunity Pipeline — COMPLETED
-- `WP-S012-007` — Autonomous Economic Need + Spending Priority Selection
+- `WP-S012-007` — Autonomous Economic Need + Spending Priority Selection — COMPLETED
 - `WP-S012-008` — Local Market Stock Revision + Economic Consequence Persistence
 - `WP-S012-009` — Advisor Economy, Work + Purchase Readout
 - `WP-S012-010` — End-to-End Work → Pay → Purchase → Persistent Outcome Acceptance
