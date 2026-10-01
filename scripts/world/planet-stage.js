@@ -230,6 +230,7 @@ const GROUND_CHARACTER_PROFESSION_TEXTURES=Object.freeze({
 });
 const GROUND_CHARACTER_FALLBACK_TEXTURE="assets/characters/npc_market_vendor_female_01.png";
 const GROUND_CHARACTER_PRESENTATION_SCALE=2.0;
+const LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES=62;
 const groundCharacterMaterials=new Map();
 const groundCharacterTextures=new Map();
 const groundCharacterLoads=new Map();
@@ -404,7 +405,6 @@ const ZOOM_ROOT_READINESS_CAP_SCALAR=.575;
 const LOCAL_TANGENT_OWNERSHIP_BLEND=.055;
 const LOCAL_STANDIN_MIN_COMPENSATION=1/3;
 const GLOBE_VERTICAL_FOV_DEGREES=34;
-const LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES=62;
 let ladderCache={key:null,startHeight:0,levelMax:[]};
 function globeCameraDistanceForScalar(value){
   const safeSurfaceDistance=DISPLAY_RADIUS_UNITS*1.42;
