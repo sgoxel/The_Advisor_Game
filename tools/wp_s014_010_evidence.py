@@ -54,10 +54,24 @@ def move_probe():
     before=driver.execute_script("const s=window.PlanetStage.snapshot();return {lat:s.canonicalFocus.latitudeDegrees,lon:s.canonicalFocus.longitudeDegrees,tile:s.canonicalFocus.worldTile}")
     driver.execute_script("window.PlanetStage.rotateByScreenPixels(36,-18);window.LocalConflictPresentation.syncAnchor();")
     time.sleep(.18)
-    after=driver.execute_script("window.LocalConflictPresentation.syncAnchor();const s=window.PlanetStage.snapshot(),a=window.LocalConflictPresentation.snapshot().anchor,c=document.getElementById('planetCanvas').getBoundingClientRect(),f=s.canonicalFocus.screenSpaceFocus;return{lat:s.canonicalFocus.latitudeDegrees,lon:s.canonicalFocus.longitudeDegrees,tile:s.canonicalFocus.worldTile,delta:Math.hypot(a.x-(c.left+f.screenX),a.y-(c.top+f.screenY))}")
+    after=driver.execute_script("window.LocalConflictPresentation.syncAnchor();const s=window.PlanetStage.snapshot(),a=window.LocalConflictPresentation.snapshot().anchor,c=document.getElementById('planetCanvas').getBoundingClientRect(),f=s.canonicalFocus.screenSpaceFocus;return{lat:s.canonicalFocus.latitudeDegrees,lon:s.canonicalFocus.longitudeDegrees,tile:s.canonicalFocus.worldTile,delta:Math.hypot(a.x-(c.left+f.screenX),a.y-(c.top+f.screenY)),source:a.source}")
     if abs(float(after["lat"])-float(before["lat"]))<1e-7 and abs(float(after["lon"])-float(before["lon"]))<1e-7:raise RuntimeError("camera/navigation probe did not move canonical focus")
     if float(after["delta"])>2.5:raise RuntimeError("conflict anchor failed to track navigation")
     return {"before":before,"after":after}
+
+def grounded_anchor_probe():
+    result=driver.execute_script("""
+      const targets=(window.PlanetStage.inspectionTargets?.()||[]).filter(x=>x.type==='building'&&x.bounds);
+      const target=targets[0];if(!target)return {ok:false,reason:'no-visible-building-target'};
+      const out=window.LocalConflictPresentation.present({validated:true,phase:'active',summary:'Grounded conflict-location anchor evidence.',sourceRef:{kind:'simulation-event',id:'EVIDENCE-GROUNDED-ANCHOR'},locationRef:{kind:'building',id:target.id}});
+      window.LocalConflictPresentation.syncAnchor();
+      const a=window.LocalConflictPresentation.snapshot().anchor,b=target.bounds,expected={x:(b.left+b.right)/2,y:(b.top+b.bottom)/2};
+      return {ok:Boolean(out?.ok),targetId:target.id,targetType:target.type,source:a?.source||null,expected,actual:a?{x:a.x,y:a.y}:null,delta:a?Math.hypot(a.x-expected.x,a.y-expected.y):null};
+    """)
+    if not result.get("ok"):raise RuntimeError("grounded anchor probe unavailable "+json.dumps(result))
+    if result.get("source")!="PlanetStage.inspectionTargets":raise RuntimeError("grounded location did not use active world projection "+json.dumps(result))
+    if float(result.get("delta") or 999)>2.5:raise RuntimeError("grounded location anchor mismatch "+json.dumps(result))
+    return result
 
 records=[]
 try:
@@ -66,6 +80,7 @@ try:
     wait.until(lambda d:d.execute_script("const s=window.PlanetStage.snapshot();return s.zoom?.scaleIndex===9&&s.projection?.tangentPatchActive===true"))
     time.sleep(.5)
     probe=move_probe()
+    grounded=grounded_anchor_probe()
     for profile,(w,h) in VIEWPORTS.items():
         set_exact_viewport(driver,w,h);time.sleep(.25)
         for mode in MATRIX[profile]:
@@ -80,8 +95,8 @@ try:
     if resumed!={"markerCount":1,"cardCount":1,"visible":True}:raise RuntimeError("state transition duplicated or lost presentation nodes "+json.dumps(resumed))
     logs=[x for x in driver.get_log("browser") if x.get("level") in ("SEVERE","ERROR")]
     if logs:raise RuntimeError("browser console errors "+json.dumps(logs))
-    result={"pass":True,"wp":"WP-S014-010","classification":"MIXED","records":records,"movementProbe":probe,"cleared":cleared,"resumed":resumed}
+    result={"pass":True,"wp":"WP-S014-010","classification":"MIXED","records":records,"movementProbe":probe,"groundedAnchorProbe":grounded,"cleared":cleared,"resumed":resumed}
     (OUT/"evidence.json").write_text(json.dumps(result,indent=2),encoding="utf-8")
-    print(json.dumps({"pass":True,"wp":"WP-S014-010","screenshots":len(records),"movementAnchorDelta":probe["after"]["delta"]},indent=2))
+    print(json.dumps({"pass":True,"wp":"WP-S014-010","screenshots":len(records),"movementAnchorDelta":probe["after"]["delta"],"groundedAnchorDelta":grounded["delta"]},indent=2))
 finally:
     driver.quit()
