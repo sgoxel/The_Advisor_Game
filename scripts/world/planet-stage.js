@@ -493,6 +493,7 @@ function freshNavigationPerformance(){
     revision:"world-map-navigation-budget-v2",
     semanticUpdateRequestCount:0,semanticUpdateRenderCount:0,semanticUpdateCoalescedCount:0,semanticUpdateForcedCount:0,
     semanticUpdatePending:false,semanticUpdateMinIntervalMs:NAV_SEMANTIC_MIN_INTERVAL_MS,lastSemanticUpdateMs:0,maxSemanticUpdateMs:0,totalSemanticUpdateMs:0,
+    pointerSettleSemanticLastMs:0,pointerSettleSemanticMaxMs:0,pointerSettleSemanticOver50Count:0,
     semanticPhaseLastMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
     semanticPhaseMaxMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
     semanticPhaseOver50Count:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
@@ -2348,6 +2349,11 @@ function performMapPresentationUpdate(reason="scheduled"){
   navigationPerformance.lastSemanticUpdateMs=Number(elapsed.toFixed(3));
   navigationPerformance.maxSemanticUpdateMs=Math.max(navigationPerformance.maxSemanticUpdateMs,navigationPerformance.lastSemanticUpdateMs);
   navigationPerformance.totalSemanticUpdateMs+=navigationPerformance.lastSemanticUpdateMs;
+  if(reason==="pointer-settle"){
+    navigationPerformance.pointerSettleSemanticLastMs=navigationPerformance.lastSemanticUpdateMs;
+    navigationPerformance.pointerSettleSemanticMaxMs=Math.max(Number(navigationPerformance.pointerSettleSemanticMaxMs||0),navigationPerformance.lastSemanticUpdateMs);
+    if(navigationPerformance.lastSemanticUpdateMs>=50)navigationPerformance.pointerSettleSemanticOver50Count++;
+  }
   navigationPerformance.semanticUpdatePending=false;
 }
 function updateMapPresentation(reason="direct",force=false){
