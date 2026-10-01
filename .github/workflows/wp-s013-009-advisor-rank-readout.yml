@@ -1,7 +1,7 @@
 name: WP-S013-009 Advisor Rank Readout Evidence
 on:
   push:
-    branches: [main]
+    branches: [main, "agent6/wp-s013-009-authority-fix"]
     paths:
       - "index.html"
       - "styles/main.css"
