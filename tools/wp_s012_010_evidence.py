@@ -80,7 +80,11 @@ def execute_chain():
       if(!derived?.ok)throw new Error('Employment derive failed '+JSON.stringify(derived));
       const activated=window.ProtagonistEmployment.activate(seed,derived.contract,{authority:'simulation',authoritative:true,campaignSeed:seed,operationId:'WP-S012-010-CONTRACT',fantasyTimestamp:day+' 00:00:01'});
       if(!activated?.ok)throw new Error('Employment activate failed '+JSON.stringify(activated));
-      const actorPosition={x:String(resident.workplaceTarget.x),y:String(resident.workplaceTarget.y),level:0};
+      const interactionDescriptor=window.ObjectInteractions.get(seed,object.id),workPoint=interactionDescriptor?.interactionPositions?.[0]||object.interactionPositions?.[0]||resident.workplaceTarget;
+      if(!interactionDescriptor||!workPoint)throw new Error('Authoritative ObjectInteractions work point unavailable');
+      const actorPosition={x:String(workPoint.x),y:String(workPoint.y),level:Number(workPoint.level||0)};
+      const actionContext=window.ObjectInteractions.context(seed,object.id,actorPosition),workAction=actionContext?.actions?.find(x=>x.id==='work');
+      if(!workAction?.enabled||workAction.distanceTiles!==0)throw new Error('Authoritative work interaction is not range-ready '+JSON.stringify({actorPosition,actionContext}));
       const activity=window.DailyActivity.resolveActionTarget(seed,resident,workWhen);
       if(activity?.action!=='work'||activity?.interactionObjectId!==object.id)throw new Error('Grounded DailyActivity work target mismatch '+JSON.stringify(activity));
       const commandSnapshot=window.CommandSetInterface.buildSnapshot({seed,when:workWhen,origin:actorPosition},{
