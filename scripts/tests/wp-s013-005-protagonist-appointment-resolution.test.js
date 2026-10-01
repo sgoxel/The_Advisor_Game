@@ -36,7 +36,7 @@ global.ProtagonistAuthority={
 let paymentRows=[{id:'TXN-WAGE-1',direction:'credit',reasonCode:'employment-wage',sourceRef:{kind:'employment-contract',id:'EMP-SMITH'},fantasyTimestamp:'1126-10-01 08:00:00'}];
 let employmentAvailable=true;
 global.ProtagonistEmployment={
-  current(){return employmentAvailable?{ok:true,status:'active',contract:{id:'EMP-SMITH',professionId:'smith',employerRef:{kind:'resident',id:'R01'},workplaceRef:{kind:'building',id:'BLD-SMITHY'},validFrom:'1126-09-01 00:00:00',validUntil:'1126-12-01 00:00:00'}}:null;},
+  current(){return employmentAvailable?{ok:true,status:'active',contract:{id:'EMP-SMITH',professionId:'smith',employerRef:{kind:'resident',id:'R01'},workplaceRef:{kind:'workplace',id:'BLD-SMITHY'},validFrom:'1126-09-01 00:00:00',validUntil:'1126-12-01 00:00:00'}}:null;},
   recentPayments(){return employmentAvailable?C(paymentRows):null;}
 };
 const terminal=new Map();
@@ -57,11 +57,11 @@ paymentRows=[];const missingWork=Appointment.eligibility(seed,'guild-member',whe
 employmentAvailable=false;const unknown=Appointment.eligibility(seed,'guild-member',when,identity);assert.equal(unknown.status,'unknown');assert.equal(transitionCalls,0);employmentAvailable=true;
 assert.equal(Appointment.eligibility(seed,'realm-councillor',when,identity).reason,'target-role-unsupported');
 put('IAX-APPT-1',{time:'1126-10-01 09:01:00'});
-const baseReq={appointingActorId:'R01',institutionRef:{kind:'building',id:'BLD-SMITHY'},interactionAttemptId:'IAX-APPT-1'};
+const baseReq={appointingActorId:'R01',institutionRef:{kind:'workplace',id:'BLD-SMITHY'},interactionAttemptId:'IAX-APPT-1'};
 const baseOpt={authority:'simulation',authoritative:true,operationId:'APPOINT-001',fantasyTimestamp:when};
 assert.equal(Appointment.appointment(seed,'guild-member',baseReq,{...baseOpt,authority:'ui'},identity).reason,'simulation-authority-required');
 assert.equal(Appointment.appointment(seed,'guild-member',{...baseReq,appointingActorId:'R02'},baseOpt,identity).reason,'appointing-actor-not-authoritative-employer');
-assert.equal(Appointment.appointment(seed,'guild-member',{...baseReq,institutionRef:{kind:'building',id:'BLD-SHOP'}},baseOpt,identity).reason,'appointing-institution-not-authoritative-workplace');
+assert.equal(Appointment.appointment(seed,'guild-member',{...baseReq,institutionRef:{kind:'workplace',id:'BLD-SHOP'}},baseOpt,identity).reason,'appointing-institution-not-authoritative-workplace');
 put('IAX-WRONG',{targetId:'R01',action:'talk',time:'1126-10-01 09:01:00'});
 assert.equal(Appointment.appointment(seed,'guild-member',{...baseReq,interactionAttemptId:'IAX-WRONG'},{...baseOpt,operationId:'APPOINT-WRONG'},identity).reason,'appointment-evidence-mismatch');
 put('IAX-STALE',{time:'1126-10-01 08:00:00'});
