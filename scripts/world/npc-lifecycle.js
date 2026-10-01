@@ -235,8 +235,23 @@ function activityForIdentity(seedValue,planValue,ordinalValue,timestampValue){
 let residentPlanCache={seed:null,plan:null};
 function startingVillagePlanForResidentActivity(seed){
   if(residentPlanCache.seed===seed)return residentPlanCache.plan;
-  const country=PoliticalGeography.countryAt(seed,"0","0");
-  const plan=(SettlementArchetypes.settlementsForCountry(seed,country,3)||[]).find(item=>item.role==="starting-village")||null;
+  // Resident movement only needs the canonical starting-village plan. Building
+  // the whole country settlement catalogue here made the first post-ready NPC
+  // activity lookup perform unrelated city/town/hamlet generation on the main
+  // thread. Resolve the same canonical origin-village record directly instead.
+  let plan=null;
+  try{
+    const record=SettlementArchetypes.canonicalSettlementAtPoint(seed,"village","0","0");
+    if(record?.role==="starting-village"){
+      plan=SettlementArchetypes.build(seed,record.center,{
+        countryId:record.countryId,
+        role:record.role,
+        classHint:record.classId,
+        nameHint:record.name,
+        canonicalRecord:record
+      })||null;
+    }
+  }catch(_){plan=null;}
   residentPlanCache={seed,plan};return plan;
 }
 function activityForResident(seedValue,residentIdValue,whenValue){
