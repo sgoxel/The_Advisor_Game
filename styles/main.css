@@ -2729,3 +2729,59 @@ body:has(.advisor-rank-readout[open]) .advisor-economy-launcher{
 .advisor-chat-panel:has(.advisor-rank-readout[open]) .advisor-activity-strip{
   display:none!important;
 }
+
+
+/* WP-S013-009 current-run attempt 2 — readable short-landscape focused detail */
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-chat-panel:has(.advisor-rank-readout[open]){
+    grid-template-rows:34px minmax(0,1fr) 0 0 0;
+  }
+  .advisor-chat-panel:has(.advisor-rank-readout[open]) .advisor-chat-head{
+    box-sizing:border-box;
+    height:34px;
+    min-height:34px;
+    max-height:34px;
+    padding:4px 7px;
+  }
+  .advisor-chat-panel:has(.advisor-rank-readout[open]) .advisor-chat-close{
+    width:24px;
+    height:24px;
+    min-height:24px;
+    flex-basis:24px;
+    font-size:16px;
+  }
+  .advisor-rank-readout>summary{
+    min-height:26px;
+    height:26px;
+  }
+  .advisor-rank-readout>summary small{font-size:5px}
+  .advisor-rank-readout>summary strong{font-size:8px}
+  .advisor-rank-summary-meta b,.advisor-rank-summary-meta i{font-size:4.5px}
+  .advisor-rank-body{
+    height:calc(100% - 26px);
+    gap:4px;
+    padding:3px 6px 4px;
+  }
+  .advisor-rank-hero{
+    grid-template-columns:minmax(0,.72fr) minmax(0,1.28fr);
+    padding:4px 5px;
+  }
+  .advisor-rank-hero small{font-size:4.5px}
+  .advisor-rank-hero strong{font-size:8px}
+  .advisor-rank-hero span,.advisor-rank-scopes code{font-size:4.5px}
+  .advisor-rank-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:4px;
+  }
+  .advisor-rank-card{
+    padding:4px 5px;
+  }
+  .advisor-rank-card header strong{font-size:5.4px}
+  .advisor-rank-card header span{font-size:4.6px}
+  .advisor-rank-card h4{font-size:6.4px}
+  .advisor-rank-card>p{font-size:4.8px;line-height:1.15}
+  .advisor-rank-row strong{font-size:5.1px}
+  .advisor-rank-row small{font-size:4.5px}
+  .advisor-rank-empty,.advisor-rank-unavailable{font-size:4.6px}
+  .advisor-rank-body>footer{font-size:4.2px}
+}
