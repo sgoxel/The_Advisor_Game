@@ -14,6 +14,7 @@ const telemetryState={localAccessQueries:0,npcReactionQueries:0,authorityReads:0
 const ROLE_RANKS=Object.freeze({
   "local-resident":0,
   "guild-member":1,
+  "knight":2,
   "village-steward":2,
   "regional-magistrate":3,
   "realm-councillor":4

@@ -17,6 +17,20 @@ const ROLE_CATALOG=Object.freeze({
     appointingAuthorityRule:"authoritative employment employer at same qualifying workplace",
     requiredPaidWorkCount:1,
     socialThresholds:Object.freeze({minTrust:0.45,minRespect:0.45,maxSuspicion:0.50})
+  }),
+  "knight":Object.freeze({
+    targetRoleId:"knight",title:"Knight",fromRoleIds:Object.freeze(["guild-member","local-resident"]),
+    employmentProfessions:Object.freeze(["guard"]),
+    appointmentAction:"accept-appointment",institutionKind:"workplace",
+    appointingAuthorityRule:"authoritative sworn patron or guard employer at the same qualifying workplace",
+    requiredPaidWorkCount:0,
+    requiredSkillId:"martial",
+    requiredSkillLevel:4,
+    requiredStandingDomain:"service",
+    requiredStandingThreshold:6,
+    requiredOath:true,
+    requiredServiceRoleType:"squire",
+    socialThresholds:Object.freeze({minTrust:0.55,minRespect:0.55,maxSuspicion:0.45})
   })
 });
 function F(v){if(v==null||typeof v!=="object"||Object.isFrozen(v))return v;for(const x of Object.values(v))F(x);return Object.freeze(v)}
@@ -49,9 +63,47 @@ function authority(seedValue,identityValue){try{return root?.ProtagonistAuthorit
 function employment(seedValue,whenValue,identityValue){try{return root?.ProtagonistEmployment?.current?.(seedValue,whenValue,identityValue)||null}catch(_){return null}}
 function payments(seedValue,identityValue){try{return root?.ProtagonistEmployment?.recentPayments?.(seedValue,{limit:MAX_PAYMENT_READS},identityValue)||null}catch(_){return null}}
 function socialContext(seedValue,residentId){try{return root?.SocialState?.dialogueContext?.(seedValue,residentId)||null}catch(_){return null}}
+function knightServiceContext(seedValue,identityValue){
+  const service=root?.ProtagonistServiceContracts;
+  const oath=root?.ProtagonistOathAllegiance;
+  const activeService=typeof service?.dutyContext==="function"?service.dutyContext(seedValue,{limit:8},identityValue):null;
+  const serviceList=typeof service?.list==="function"?service.list(seedValue,{limit:8},identityValue):null;
+  const serviceRows=Array.isArray(serviceList)?serviceList:[];
+  const serviceRecord=Array.isArray(serviceRows)&&serviceRows.length?serviceRows.find(x=>x?.state==="active"||x?.status==="active"||x?.roleType==="squire")||serviceRows[0]:null;
+  const oathCtx=typeof oath?.currentContext==="function"?oath.currentContext(seedValue,identityValue):null;
+  const oathList=typeof oath?.list==="function"?oath.list(seedValue,{limit:12},identityValue):null;
+  const oathRows=Array.isArray(oathList)?oathList:[];
+  const activeOath=Array.isArray(oathCtx?.oaths)?oathCtx.oaths.find(x=>x?.state==="active"):null || oathRows.find(x=>x?.state==="active")||null;
+  const contractRef=serviceRecord&&P(serviceRecord)?(serviceRecord.patronRef||serviceRecord.employerRef||serviceRecord.organizationRef||null):null;
+  const employerRef=refIn(contractRef)||null;
+  const workplaceRef=refIn(serviceRecord?.organizationRef||serviceRecord?.workplaceRef||serviceRecord?.institutionRef||null)||null;
+  return {service:activeService||serviceRecord||null,serviceList:serviceRows,oath:oathCtx||activeOath||null,oathRows:oathRows,employerRef,workplaceRef};
+}
+function knightEligibility(seedValue,whenValue,identityValue){
+  let s,when;try{s=seed(seedValue);when=ts(whenValue)}catch(e){return F({status:"unknown",eligible:false,reason:String(e.message||e),blockers:F(["invalid-input"]),sources:F([]),readOnly:true})}
+  const auth=authority(s,identityValue);if(!auth)return F({status:"unknown",eligible:false,reason:"authority-source-unavailable",targetRoleId:"knight",blockers:F(["authority-source-unavailable"]),sources:F([]),readOnly:true,bounded:true});
+  if(auth.exists!==true||!auth.currentRole?.roleId)return F({status:"unknown",eligible:false,reason:"authority-state-uninitialized",targetRoleId:"knight",blockers:F(["authority-state-uninitialized"]),sources:F([]),readOnly:true,bounded:true});
+  const blockers=[],sources=[ref("protagonist-role",auth.currentRole.roleId)],currentRoleId=I(auth.currentRole.roleId,80);if(!["guild-member","local-resident"].includes(currentRoleId))blockers.push("current-role-not-eligible");
+  const martial=root?.ProtagonistSkills?.getSkill?.(s,"martial",identityValue)||null;const martialLevel=Number(martial?.level||0);if(!Number.isFinite(martialLevel)||martialLevel<4)blockers.push("martial-skill-insufficient");else sources.push(ref("skill","martial"));
+  const standing=typeof root?.ProtagonistStanding?.summary=="function"?root.ProtagonistStanding.summary(s,{kind:"local",id:"local"},identityValue):null;const standingService=Number(standing?.domains?.service?.score ?? standing?.domains?.service ?? NaN);if(!Number.isFinite(standingService)||standingService<6)blockers.push("service-standing-insufficient");else sources.push(ref("standing-scope","local"));
+  const oathState=knightServiceContext(s,identityValue);const oathRows=Array.isArray(oathState.oathRows)?oathState.oathRows:[];let oathActive=null;if(Array.isArray(oathState.oath?.oaths)){oathActive=oathState.oath.oaths.find(x=>x?.state==="active")||null;}else if(oathState.oath&&typeof oathState.oath==="object"&&(oathState.oath.state==="active"||oathState.oath.active===true)){oathActive=oathState.oath;}else{oathActive=oathRows.find(x=>x?.state==="active")||null;}if(!oathActive)blockers.push("active-oath-required");else sources.push(ref("oath",I(oathActive.id||oathActive.oathId||"oath",160)));
+  const serviceRows=Array.isArray(oathState.serviceList)?oathState.serviceList:[];const serviceRow=serviceRows.find(x=>x?.roleType==="squire"||x?.state==="active"||x?.status==="active")||serviceRows[0]||null;const serviceRole=I(serviceRow?.roleType||serviceRow?.roleId||"",80);if(!serviceRole||serviceRole.toLowerCase()!=="squire")blockers.push("squire-service-required");else sources.push(ref("service-role","squire"));
+  const employerRef=oathState.employerRef||refIn(serviceRow?.patronRef||serviceRow?.employerRef||serviceRow?.sourceRef||null)||null;const workplaceRef=oathState.workplaceRef||refIn(serviceRow?.organizationRef||serviceRow?.workplaceRef||serviceRow?.institutionRef||null)||null;
+  const residentRoster=residentRows(s),employer=employerRef?residentRoster.find(r=>r.residentId===employerRef.id):null;if(!employer)blockers.push("grounded-patron-required");else sources.push(ref("resident",employer.residentId),ref("building",employer.workplaceId));
+  if(!workplaceRef||workplaceRef.kind!=="workplace")blockers.push("grounded-workplace-required");
+  if(!root?.SocialState?.dialogueContext)return F({status:"unknown",eligible:false,reason:"social-state-unavailable",targetRoleId:"knight",currentRoleId,blockers:F([...blockers,"social-state-unavailable"]),sources:F(sources.filter(Boolean)),readOnly:true,bounded:true});
+  const social=employer?socialContext(s,employer.residentId):null,sv=social?.values||null;if(!sv)return F({status:"unknown",eligible:false,reason:"social-context-unavailable",targetRoleId:"knight",currentRoleId,blockers:F([...blockers,"social-context-unavailable"]),sources:F(sources.filter(Boolean)),readOnly:true,bounded:true});
+  const trust=Number(sv.trust),respect=Number(sv.respect),suspicion=Number(sv.suspicion);if(!Number.isFinite(trust)||!Number.isFinite(respect)||!Number.isFinite(suspicion))return F({status:"unknown",eligible:false,reason:"social-context-invalid",targetRoleId:"knight",currentRoleId,blockers:F([...blockers,"social-context-invalid"]),sources:F(sources.filter(Boolean)),readOnly:true,bounded:true});
+  if(trust<0.55)blockers.push("appointing-actor-trust-below-threshold");if(respect<0.55)blockers.push("appointing-actor-respect-below-threshold");if(suspicion>0.45)blockers.push("appointing-actor-suspicion-too-high");
+  const status=blockers.length?"ineligible":"eligible";
+  const payload={version:VERSION,seed:s,targetRoleId:"knight",currentRoleId,martialLevel,standingService,serviceRole,employerRef,workplaceRef,social:{trust,respect,suspicion},oathActive:!!oathActive};
+  const result={status,eligible:status==="eligible",reason:status==="eligible"?"eligible":"blocked",targetRoleId:"knight",currentRoleId,protagonistId:actor(s,I(identityValue||"protagonist",96)||"protagonist"),blockers:F(blockers),sources:F(sources.filter(Boolean).slice(0,12)),employment:F({contractId:I(serviceRow?.id||serviceRow?.contractId||serviceRow?.employmentContractId||"squire-service",160),status:serviceRow?.state||serviceRow?.status||"active",professionId:I(employer?.professionId||"guard",80),employerRef:employerRef||ref("resident",employer?.residentId||""),workplaceRef:workplaceRef||ref("workplace",employer?.workplaceId||""),paymentIds:F(Array.isArray(serviceRow?.paymentIds)?serviceRow.paymentIds.map(x=>I(x,160)):[])}),social:F({source:"SocialState.dialogueContext",residentId:employer?.residentId||null,trust,respect,suspicion,thresholds:F({minTrust:0.55,minRespect:0.55,maxSuspicion:0.45})}),eligibilitySignature:"ELG-"+H(S(payload)),readOnly:true,bounded:true,maxResidentReads:MAX_RESIDENT_READS,maxPaymentReads:MAX_PAYMENT_READS,autoAppointment:false,directAuthorityMutation:false};
+  return F(result);
+}
 function eligibility(seedValue,targetRoleValue,whenValue,identityValue){
  let s,when;try{s=seed(seedValue);when=ts(whenValue)}catch(e){return F({status:"unknown",eligible:false,reason:String(e.message||e),blockers:F(["invalid-input"]),sources:F([]),readOnly:true})}
  const def=roleDef(targetRoleValue);if(!def)return F({status:"ineligible",eligible:false,reason:"target-role-unsupported",targetRoleId:I(targetRoleValue,80),blockers:F(["target-role-unsupported"]),sources:F([]),readOnly:true,bounded:true});
+ if(def.targetRoleId==="knight")return knightEligibility(seedValue,whenValue,identityValue);
  const auth=authority(s,identityValue);if(!auth)return F({status:"unknown",eligible:false,reason:"authority-source-unavailable",targetRoleId:def.targetRoleId,blockers:F(["authority-source-unavailable"]),sources:F([]),readOnly:true,bounded:true});
  if(auth.exists!==true||!auth.currentRole?.roleId)return F({status:"unknown",eligible:false,reason:"authority-state-uninitialized",targetRoleId:def.targetRoleId,blockers:F(["authority-state-uninitialized"]),sources:F([]),readOnly:true,bounded:true});
  const blockers=[],sources=[ref("protagonist-role",auth.currentRole.roleId)],currentRoleId=I(auth.currentRole.roleId,80);if(!def.fromRoleIds.includes(currentRoleId))blockers.push("current-role-not-eligible");
