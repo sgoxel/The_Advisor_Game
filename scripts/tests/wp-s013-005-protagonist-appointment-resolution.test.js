@@ -16,6 +16,8 @@ const roster=Object.freeze([
   Object.freeze({id:'R03',displayName:'Alda Reed',profession:'guard',workplaceId:'BLD-GUARD',workplaceLabel:'Village Guard Post'})
 ]);
 global.DailyActivity={build(){return roster}};
+let socialValues={trust:.62,respect:.64,suspicion:.18};
+global.SocialState={dialogueContext(_seed,id){assert.equal(id,'R01');return {source:'persistent-social-ledger',values:C(socialValues)}}};
 const seed='WP-S013-005-SEED',identity='protagonist';
 let currentRole='local-resident',transitionCalls=0;
 const history=[];
@@ -49,7 +51,8 @@ const when='1126-10-01 09:02:00';
 assert.equal(Appointment.VERSION,'protagonist-appointment-resolution-v1');
 assert.equal(Appointment.catalog().length,1);assert.equal(Appointment.catalog()[0].targetRoleId,'guild-member');
 const eligible=Appointment.eligibility(seed,'guild-member',when,identity);
-assert.equal(eligible.status,'eligible');assert(eligible.eligible);assert.deepEqual(eligible.blockers,[]);assert.equal(eligible.currentRoleId,'local-resident');assert.equal(eligible.employment.contractId,'EMP-SMITH');assert.deepEqual(eligible.employment.paymentIds,['TXN-WAGE-1']);assert.equal(transitionCalls,0,'eligibility must never mutate authority');assert.equal(currentRole,'local-resident');
+assert.equal(eligible.status,'eligible');assert(eligible.eligible);assert.deepEqual(eligible.blockers,[]);assert.equal(eligible.currentRoleId,'local-resident');assert.equal(eligible.employment.contractId,'EMP-SMITH');assert.deepEqual(eligible.employment.paymentIds,['TXN-WAGE-1']);assert.equal(transitionCalls,0,'eligibility must never mutate authority');assert.equal(currentRole,'local-resident');assert.equal(eligible.social.source,'SocialState.dialogueContext');assert.equal(eligible.social.residentId,'R01');
+socialValues={trust:.2,respect:.64,suspicion:.18};const lowTrust=Appointment.eligibility(seed,'guild-member',when,identity);assert.equal(lowTrust.status,'ineligible');assert(lowTrust.blockers.includes('appointing-actor-trust-below-threshold'));assert.equal(transitionCalls,0);socialValues={trust:.62,respect:.64,suspicion:.18};
 paymentRows=[];const missingWork=Appointment.eligibility(seed,'guild-member',when,identity);assert.equal(missingWork.status,'ineligible');assert(missingWork.blockers.includes('completed-paid-work-required'));assert.equal(transitionCalls,0);paymentRows=[{id:'TXN-WAGE-1',reasonCode:'employment-wage',sourceRef:{kind:'employment-contract',id:'EMP-SMITH'},fantasyTimestamp:'1126-10-01 08:00:00'}];
 employmentAvailable=false;const unknown=Appointment.eligibility(seed,'guild-member',when,identity);assert.equal(unknown.status,'unknown');assert.equal(transitionCalls,0);employmentAvailable=true;
 assert.equal(Appointment.eligibility(seed,'realm-councillor',when,identity).reason,'target-role-unsupported');
