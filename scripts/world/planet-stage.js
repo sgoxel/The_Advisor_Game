@@ -230,6 +230,7 @@ const GROUND_CHARACTER_PROFESSION_TEXTURES=Object.freeze({
 });
 const GROUND_CHARACTER_FALLBACK_TEXTURE="assets/characters/npc_market_vendor_female_01.png";
 const GROUND_CHARACTER_PRESENTATION_SCALE=2.0;
+const LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES=62;
 const groundCharacterMaterials=new Map();
 const groundCharacterTextures=new Map();
 const groundCharacterLoads=new Map();
@@ -404,7 +405,6 @@ const ZOOM_ROOT_READINESS_CAP_SCALAR=.575;
 const LOCAL_TANGENT_OWNERSHIP_BLEND=.055;
 const LOCAL_STANDIN_MIN_COMPENSATION=1/3;
 const GLOBE_VERTICAL_FOV_DEGREES=34;
-const LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES=62;
 let ladderCache={key:null,startHeight:0,levelMax:[]};
 function globeCameraDistanceForScalar(value){
   const safeSurfaceDistance=DISPLAY_RADIUS_UNITS*1.42;
@@ -3978,21 +3978,20 @@ function staticSettlementRevealTierForIndex(index){
 function settlementRevealTierForScalar(value=zoomState.scalar){
   const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX);
   const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
-  const activeStaticIndex=displayResource?.levelIndex??rawIndex;
-  const activeStaticLevel=LOCAL_DETAIL_LEVELS[activeStaticIndex]||LOCAL_DETAIL_LEVELS[0];
-  const activeStaticWorld=Boolean(activeStaticLevel?.staticWorld)||Boolean(displayResource?.dims?.staticWorld);
-  if(level?.staticWorld||activeStaticWorld){
-    const staticTier=staticSettlementRevealTierForIndex(Math.max(rawIndex,activeStaticIndex));
+  // Reveal tier follows the requested physical scale. A previously-ready static
+  // resource may stay resident only as terrain stand-in coverage while a coarser
+  // parent prepares; it must never promote settlement props back into map scale.
+  if(level?.staticWorld){
+    const staticTier=staticSettlementRevealTierForIndex(rawIndex);
     if(staticTier!=="none")return staticTier;
   }
   return semanticLayerSpec(semanticScaleIndexForScalar(scalar),false).settlementRevealTier;
 }
 function localWorldPresentationEligibility(value=zoomState.scalar){
   const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX),revealTier=settlementRevealTierForScalar(scalar);
-  const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
-  const activeStaticWorld=Boolean(displayResource?.dims?.staticWorld)||Boolean((displayResource?.levelIndex!==undefined)&&((LOCAL_DETAIL_LEVELS[displayResource.levelIndex]||{}).staticWorld));
-  const staticWorldVisible=Boolean(level?.staticWorld)||activeStaticWorld;
-  return Object.freeze({visible:revealTier!=="none"||staticWorldVisible,revealTier,rawLevelIndex:rawIndex,rawLevelId:level?.id||null,rawStaticWorld:Boolean(level?.staticWorld)||activeStaticWorld});
+  const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0],requestedStaticWorld=Boolean(level?.staticWorld);
+  const staleDisplayStaticWorld=Boolean(displayResource?.dims?.staticWorld)&&!requestedStaticWorld;
+  return Object.freeze({visible:revealTier!=="none"||requestedStaticWorld,revealTier,rawLevelIndex:rawIndex,rawLevelId:level?.id||null,rawStaticWorld:requestedStaticWorld,staleDisplayStaticWorldIgnored:staleDisplayStaticWorld});
 }
 function applyLocalWorldPresentationVisibility(){
   const gate=localWorldPresentationEligibility(),nodes=[localStaticRoot,localNpcRoot,localCrowdRoot,localBuildingActivityRoot,localCampaignWearMesh,localFaunaRoot,environmentalReactionRoot,localWayfindingEntity].filter(Boolean);
@@ -8089,13 +8088,17 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       horizonSkirtMaterial.depthWrite=false;
       horizonSkirtMaterial.update();
     }
-    // Keep one fixed orthographic 3/4 tangent presentation at every local LOD.
-    // Zoom still changes only magnification/detail; the presentation pitch never varies with scalar.
-    tangentPatch.setLocalEulerAngles(LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,0,0);
     const dims=localPatchDimensions(),level=LOCAL_DETAIL_LEVELS[dims.levelIndex];
+    // Only the final ground play area uses the stylized orthographic 3/4 view.
+    // Strategic/regional/local-map tiers remain map-facing so terrain and DOM
+    // geographic anchors share the same projection while dragging or streaming.
+    const requestedLevel=LOCAL_DETAIL_LEVELS[rawLodIndexForZoom(scalar)]||LOCAL_DETAIL_LEVELS[0];
+    const groundPresentationReady=String(requestedLevel?.id||"")==="ground"&&String(displayResource?.dims?.levelId||"")==="ground";
+    const tangentPitchDegrees=groundPresentationReady?LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES:90;
+    tangentPatch.setLocalEulerAngles(tangentPitchDegrees,0,0);
     const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
     const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
-    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters()};
+    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters(),tangentPitchDegrees,groundPresentationReady};
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     // A prepared stand-in normally remains exactly world-anchored while a new
     // focus resource is built. At ground scale a small pointer drag can request
@@ -8161,7 +8164,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     localResources.requestedLevelIndex=requestedIndex;localResources.visibleLevelIndex=displayResource?visibleIndex:null;
     if(focusRingPatch){
       const mediumScale=patchScale;
-      focusRingPatch.setLocalEulerAngles(LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,0,0);
+      focusRingPatch.setLocalEulerAngles(tangentPitchDegrees,0,0);
       focusRingPatch.setLocalScale(mediumScale,mediumScale,mediumScale);
       focusRingPatch.setLocalPosition(offset.east/dims.metersPerUnit*mediumScale,offset.north/dims.metersPerUnit*mediumScale,DISPLAY_RADIUS_UNITS-.004);
       projectionPresentation={...projectionPresentation,mediumScale};
@@ -8171,7 +8174,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       // large focus jump the bounded stand-in offset guarantees that this last
       // valid terrain representation still covers the viewport until swap.
       const surroundScale=patchScale;
-      horizonSkirt.setLocalEulerAngles(LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,0,0);
+      horizonSkirt.setLocalEulerAngles(tangentPitchDegrees,0,0);
       horizonSkirt.setLocalScale(surroundScale,surroundScale,surroundScale);
       horizonSkirt.setLocalPosition(offset.east/dims.metersPerUnit*surroundScale,offset.north/dims.metersPerUnit*surroundScale,DISPLAY_RADIUS_UNITS-.010);
       projectionPresentation={...projectionPresentation,surroundScale};

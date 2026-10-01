@@ -1,0 +1,36 @@
+name: WP-S003-010-003-021 Interaction Coherence Evidence Windows
+on:
+  push:
+    branches: [agent6/wp-s003-010-003-021-acceptance-8ef3259]
+    paths:
+      - .github/workflows/wp-s003-010-003-021-evidence-windows.yml
+      - tools/test_wp_s003_010_003_021.py
+      - scripts/world/planet-stage.js
+      - scripts/world/seasonal-presentation.js
+      - index.html
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  evidence:
+    runs-on: windows-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: python -m pip install -r tools/requirements.txt
+      - name: Start local game
+        shell: pwsh
+        run: |
+          Start-Process python -ArgumentList "-m","http.server","8000","--bind","127.0.0.1" -WindowStyle Hidden
+          Start-Sleep -Seconds 2
+      - name: Run interaction coherence evidence
+        run: python tools/test_wp_s003_010_003_021.py "http://127.0.0.1:8000/?evidence_fast_start=1" tools/wp_s003_010_003_021_artifact
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-s003-010-003-021-windows-evidence-${{ github.run_id }}
+          path: tools/wp_s003_010_003_021_artifact/
+          retention-days: 14
