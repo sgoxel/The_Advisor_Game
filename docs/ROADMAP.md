@@ -118,7 +118,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-010-003-023` — Progressive Terrain Surface Refinement + Cross-LOD Material Continuity
 - `WP-S003-010-003-024` — Ground Semantic Readiness + Truthful Scale Transition and Center-Marker UX
 - `WP-S003-010-003-025` — Fixed-Focus Planet-to-Ground Visual + Performance Regression Harness
-- `WP-S003-010-003-026` — README Current-Build + Canonical/Intermediate Scale Contract Reconciliation
+- `WP-S003-010-003-026` — Immutable README Scale Contract + Runtime/Roadmap Compliance
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area — COMPLETED
 - `WP-S003-010-004-001` — Starting-Village Close-Zoom Visual Cohesion + Entertaining Gameplay-Area Context
 - `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance — COMPLETED
