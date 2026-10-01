@@ -82,6 +82,8 @@ assert(css.includes('.advisor-chat-panel:has(.advisor-security-readout[open]) .a
 assert(css.includes('.advisor-chat-panel:has(.advisor-security-readout[open]) .advisor-security-readout{box-sizing:border-box;min-height:0;height:auto;overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr)}'),'open security readout must stretch with the Advisor content track');
 assert(css.includes('.advisor-chat-panel:has(.advisor-security-readout[open]) .advisor-security-body{box-sizing:border-box;min-height:0;height:auto;max-height:none;overflow:auto;overscroll-behavior:contain}'),'security body must scroll inside the stretched readout instead of spilling outside');
 assert(css.includes('.advisor-security-body{gap:4px;height:auto;max-height:none;overflow:auto;padding:3px 6px 5px}'),'landscape security body must use its grid track rather than a second percentage height');
+assert(css.includes('.advisor-security-card header strong{font-size:7px}.advisor-security-card header span{font-size:6px}'),'landscape security card headings must remain readable');
+assert(css.includes('.advisor-security-row strong{font-size:7px}.advisor-security-row small{font-size:6px}'),'landscape security rows must remain readable');
 assert(css.includes('.advisor-chat-panel:has(.advisor-security-readout[open]) .advisor-activity-strip{display:none!important}'),'security readout must reserve the header track for security content on constrained viewports');
 
 for(const forbidden of ['Date.now','Math.random','applyInjury(','recordSimulation(','resolveExchange(','setPosition(','teleport(','ActionExecutor.'])assert(!source.includes(forbidden),'forbidden execution/mutation path '+forbidden);
