@@ -1031,6 +1031,7 @@ function createManager({
       streamingState,destinationRequests,destinationCompletions,destinationCacheHits,destinationPromotions,
       staleDestinationCancelled,destinationDeduplicated,destinationRequiredCount,destinationCompletedCount,
       destinationRequiredIds,destinationTarget,destinationStartedAtMs,destinationGateShownAtMs,destinationReadyAtMs,
+      destinationWallMs:Number((destinationStartedAtMs===null?0:((destinationReadyAtMs??performance.now())-destinationStartedAtMs)).toFixed(3)),
       destinationProgress:destinationLastProgress,destinationSliceCount,
       destinationDeferredPreparedCount,
       destinationLastSliceMs:Number(destinationLastSliceMs.toFixed(3)),
