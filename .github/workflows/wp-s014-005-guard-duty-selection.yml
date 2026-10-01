@@ -33,7 +33,9 @@ jobs:
           node scripts/tests/wp-s014-005-guard-duty-selection.test.js
       - name: Existing authority regressions
         run: |
+          node scripts/tests/wp-s008-005-protagonist-command-evaluator.test.js
           node scripts/tests/wp-s009-005-protagonist-health.test.js
+          node scripts/tests/wp-s010-001-protagonist-action-runtime.test.js
           node scripts/tests/wp-s012-003-protagonist-employment.test.js
           node scripts/tests/wp-s013-004-protagonist-service-contracts.test.js
           node scripts/tests/wp-s013-007-protagonist-status-obligations.test.js
