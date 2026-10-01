@@ -294,7 +294,7 @@ const STARTUP_SLICE_BUDGET_MS=6;
 const STARTUP_WATCHDOG_TICK_MS=1000;
 const STARTUP_WATCHDOG_SLOW_MS=8000;
 const STARTUP_WATCHDOG_STALL_MS=30000;
-let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{},watchdogChecks:0,watchdogSlowCount:0,watchdogStallCount:0,watchdogMaxNoProgressMs:0,surfaceProgressUpdates:0,surfaceSamplingWallMs:0,surfaceCanvasCommitMs:0,surfaceTextureUploadMs:0,surfaceProgressIntervalSamples:0,geographySignatureSliceCount:0,geographySignatureMaxSliceMs:0,residentWarmupDeferred:true,residentWarmupStartedAtMs:null,residentWarmupCompletedAtMs:null,residentWarmupPlanCount:0,residentWarmupPlanCompleted:0,residentWarmupAdvanceCalls:0,residentWarmupYieldCount:0,residentWarmupMaxUnitMs:0,residentWarmupMaxUnitLabel:null,residentWarmupRosterUnitCount:0,residentWarmupRosterMaxUnitMs:0,residentWarmupRouteSliceCount:0,residentWarmupMaxRouteSliceMs:0,residentWarmupError:null,controlledWorkStartedAtMs:null,controlledWorkEndedAtMs:null,simulationAuthorityPreserved:true};
+let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{},watchdogChecks:0,watchdogSlowCount:0,watchdogStallCount:0,watchdogMaxNoProgressMs:0,surfaceProgressUpdates:0,surfaceSamplingWallMs:0,surfaceCanvasCommitMs:0,surfaceTextureUploadMs:0,surfaceProgressIntervalSamples:0,geographySignatureSliceCount:0,geographySignatureMaxSliceMs:0,residentWarmupDeferred:true,residentWarmupStartedAtMs:null,residentWarmupCompletedAtMs:null,residentWarmupPlanCount:0,residentWarmupPlanCompleted:0,residentWarmupAdvanceCalls:0,residentWarmupYieldCount:0,residentWarmupMaxUnitMs:0,residentWarmupMaxUnitLabel:null,residentWarmupRosterUnitCount:0,residentWarmupRosterMaxUnitMs:0,residentWarmupRouteSliceCount:0,residentWarmupMaxRouteSliceMs:0,residentWarmupError:null,postReadyPresentationDeferred:false,postReadyPresentationStartedAtMs:null,postReadyPresentationCompletedAtMs:null,postReadyCloudWallMs:0,postReadyWildernessWallMs:0,postReadyPresentationError:null,controlledWorkStartedAtMs:null,controlledWorkEndedAtMs:null,simulationAuthorityPreserved:true};
 let longTaskObserver=null;
 let heartbeatTimer=null;
 let startupWatchdogTimer=null;
@@ -488,6 +488,7 @@ let liveMapAnchors=[];
 let navigationLongTaskObserver=null;
 let residentMovementTimer=0,residentMovementDrainTimer=0,residentMovementLastSchedulerAtMs=0;
 let residentWarmupPromise=null;
+let postReadyGlobalPresentationSurfaceMesh=null;
 function freshNavigationPerformance(){
   return {
     revision:"world-map-navigation-budget-v2",
@@ -2431,6 +2432,32 @@ function yieldResidentWarmup(){
   startupScheduler.residentWarmupYieldCount++;
   return new Promise(resolve=>setTimeout(resolve,0));
 }
+async function warmPostReadyGlobalPresentation(){
+  const surfaceMesh=postReadyGlobalPresentationSurfaceMesh;
+  if(!surfaceMesh||EVIDENCE_FAST_START){
+    startupScheduler.postReadyPresentationCompletedAtMs=Date.now();
+    return;
+  }
+  startupScheduler.postReadyPresentationStartedAtMs=Date.now();
+  startupScheduler.postReadyPresentationError=null;
+  try{
+    await yieldResidentWarmup();
+    let started=performance.now();
+    await buildAmbientMotion(surfaceMesh);
+    startupScheduler.postReadyCloudWallMs=Number((performance.now()-started).toFixed(3));
+    await yieldResidentWarmup();
+    if(!EVIDENCE_LAYERED_START){
+      started=performance.now();
+      await buildWildernessPresentation();
+      startupScheduler.postReadyWildernessWallMs=Number((performance.now()-started).toFixed(3));
+      await yieldResidentWarmup();
+    }
+    startupScheduler.postReadyPresentationCompletedAtMs=Date.now();
+  }catch(error){
+    startupScheduler.postReadyPresentationError=String(error?.stack||error);
+    throw error;
+  }
+}
 async function warmResidentMovementScheduler(){
   if(!activeSeed||!window.ResidentMovement)return;
   startupScheduler.residentWarmupStartedAtMs=Date.now();
@@ -2444,10 +2471,10 @@ async function warmResidentMovementScheduler(){
   const residents=(typeof window.DailyActivity?.buildCooperative==="function"
     ?await window.DailyActivity.buildCooperative(activeSeed,{
       yield:yieldResidentWarmup,
-      onUnit:(elapsed,index)=>{
+      onUnit:(elapsed,index,phase)=>{
         startupScheduler.residentWarmupRosterUnitCount++;
         startupScheduler.residentWarmupRosterMaxUnitMs=Math.max(Number(startupScheduler.residentWarmupRosterMaxUnitMs||0),Number((Number(elapsed)||0).toFixed(3)));
-        recordResidentWarmupElapsed(elapsed,"resident-roster-"+String(index));
+        recordResidentWarmupElapsed(elapsed,"resident-roster-"+String(index)+"-"+String(phase||"unit"));
       }
     })
     :(window.DailyActivity?.build?.(activeSeed)||[])
@@ -2512,6 +2539,7 @@ function scheduleResidentMovementWarmup(){
     await yieldResidentWarmup();
     try{
       await warmResidentMovementScheduler();
+      await warmPostReadyGlobalPresentation();
     }catch(error){
       startupScheduler.residentWarmupError=String(error?.stack||error);
       console.error("Resident movement post-ready preparation failed.",error);
@@ -9456,13 +9484,15 @@ async function buildScene(){  const started=performance.now();
     mapScaleShell.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
     mapScaleShell.render.meshInstances=[new pc.MeshInstance(buildMapScaleShellMesh(),mapScaleShellMaterial,mapScaleShell)];
     mapScaleShell.enabled=false;app.root.addChild(mapScaleShell);
-    await buildAmbientMotion(mesh);
+    // Clouds and broad wilderness dressing are not required for the first safe
+    // playable planet view. Keep the exact same deterministic routines, but
+    // defer them to the cooperative post-ready phase so ambient presentation
+    // cannot monopolize the critical startup window.
+    postReadyGlobalPresentationSurfaceMesh=mesh;
+    startupScheduler.postReadyPresentationDeferred=true;
     if(EVIDENCE_LAYERED_START){
-      // Global scatter is not part of this WP's far-globe criterion and is not
-      // visible at 1/10. Local wilderness still comes from the normal streamed
-      // resource path once the camera approaches the focus.
       startupScheduler.evidenceGlobalWildernessSkipped=true;
-    }else await buildWildernessPresentation();
+    }
   }
 
   keyLight=new pc.Entity("PlanetKeyLight");
