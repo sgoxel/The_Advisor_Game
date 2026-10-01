@@ -127,3 +127,5 @@ jobs:
             const ok=${{ needs.functional.result == 'success' && needs.visual.result == 'success' && needs.deploy_verify.result == 'success' }};
             const body=['AGENT #6 WP-S012-010 exact-head workflow: **'+(ok?'SUCCESS':'FAILURE')+'**','Commit: '+context.sha,'Run: https://github.com/'+context.repo.owner+'/'+context.repo.repo+'/actions/runs/'+context.runId,ok?'Stage 12 authority regressions, real production work→pay→purchase persistence capture, and GitHub Pages verification passed. Direct screenshot inspection is still required before acceptance.':'One or more functional, production-evidence, or Pages verification gates failed; WP remains incomplete.'].join('\n');
             await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:252,body});
+
+# Attempt 3 authoritative counter-work integration
