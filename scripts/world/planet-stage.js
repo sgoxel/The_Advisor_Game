@@ -4853,18 +4853,30 @@ function requestGroundCharacterMaterial(url){
 function groundCharacterMaterial(url){
   return groundCharacterMaterials.get(String(url||""))||requestGroundCharacterMaterial(url);
 }
+function groundCharacterBillboardPose(height,feetOffset=null){
+  const h=Math.max(.10,Number(height||1)),feet=Math.max(.01,Number(feetOffset??h*.47));
+  const pitchRadians=LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES*Math.PI/180;
+  return Object.freeze({
+    pitchDegrees:90-LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,
+    feetOffset:feet,
+    centerLift:feet*Math.cos(pitchRadians),
+    centerBack:feet*Math.sin(pitchRadians)
+  });
+}
 function createGroundCharacterBillboard(parent,name,url,x,ground,z,presentationScale,unit,heightMeters){
   const material=groundCharacterMaterial(url);if(!material||!parent)return null;
   const texture=material.diffuseMap,tw=Math.max(1,Number(texture?.width||1)),th=Math.max(1,Number(texture?.height||1));
   const h=Math.max(.10,Number(heightMeters||1.75)*GROUND_CHARACTER_PRESENTATION_SCALE*Number(presentationScale||1)/Math.max(1e-9,Number(unit)||1));
-  const w=h*Math.max(.28,Math.min(1.2,tw/th)),feetOffset=h*.47;
-  // The shared plane starts on XZ. Counter-rotate the fixed tangent pitch so
-  // the final world plane is camera-facing, then lift its center from the
-  // canonical ground point instead of shifting it backwards through terrain.
-  const entity=addLocalPrimitive(parent,name,"character-billboard",material,x,ground+.035+feetOffset,z,w,1,h);
-  entity.setLocalEulerAngles(90-LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,0,0);
+  const w=h*Math.max(.28,Math.min(1.2,tw/th)),pose=groundCharacterBillboardPose(h);
+  // The shared plane starts on XZ under the fixed-pitch tangent parent.
+  // Counter-rotate that parent so the final world card faces the orthographic
+  // camera. Offset the card center along the inverse parent pitch so the lower
+  // visible edge lands exactly on the canonical terrain point instead of
+  // intersecting the terrain and being clipped by depth testing.
+  const entity=addLocalPrimitive(parent,name,"character-billboard",material,x,ground+.035+pose.centerLift,z-pose.centerBack,w,1,h);
+  entity.setLocalEulerAngles(pose.pitchDegrees,0,0);
   if(entity?.render){entity.render.castShadows=false;entity.render.receiveShadows=false;}
-  entity._advisorBillboard={url,width:w,height:h,feetOffset};
+  entity._advisorBillboard={url,width:w,height:h,feetOffset:pose.feetOffset};
   return entity;
 }
 function authoritativeProtagonistGroundPoint(){
@@ -5203,7 +5215,10 @@ function updateCanonicalNpcMotion(){
     if(record.billboard){
       const base=record.billboard._advisorBillboard||{},emphasis=eventActive?1.08:working?1.045:1;
       const h=Math.max(.1,Number(base.height||1)*emphasis),w=Math.max(.1,Number(base.width||1)*emphasis),feet=Math.max(.01,Number(base.feetOffset||h*.47)*emphasis);
-      record.billboard.setLocalScale(w,1,h);record.billboard.setLocalPosition(pos.x,ground+.035,pos.z-feet);record.billboard.setLocalEulerAngles(90,0,0);
+      const pose=groundCharacterBillboardPose(h,feet);
+      record.billboard.setLocalScale(w,1,h);
+      record.billboard.setLocalPosition(pos.x,ground+.035+pose.centerLift,pos.z-pose.centerBack);
+      record.billboard.setLocalEulerAngles(pose.pitchDegrees,0,0);
     }
     if(eventActive){
       if(viewportRect&&cameraEntity?.camera){
