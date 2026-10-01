@@ -4054,31 +4054,24 @@ function applyLocalWorldPresentationVisibility(){
   localResources.mapScaleSuppressedRootCount=!gate.visible?suppressed:0;
   return gate;
 }
-function canonicalStartingVillageVisibleBounds(reveal){
-  const records=[...(reveal?.houses||[]),...(reveal?.specialLots||[])];
-  const centerX=Number(reveal?.village?.center?.x ?? 0),centerY=Number(reveal?.village?.center?.y ?? 0);
-  let minX=centerX,maxX=centerX,minY=centerY,maxY=centerY;
-  const includeBounds=(bounds)=>{
-    if(!bounds)return;
-    const minXValue=Number(bounds.minX),maxXValue=Number(bounds.maxX),minYValue=Number(bounds.minY),maxYValue=Number(bounds.maxY);
-    if(!Number.isFinite(minXValue)||!Number.isFinite(maxXValue)||!Number.isFinite(minYValue)||!Number.isFinite(maxYValue))return;
-    minX=Math.min(minX,minXValue);maxX=Math.max(maxX,maxXValue);minY=Math.min(minY,minYValue);maxY=Math.max(maxY,maxYValue);
-  };
-  for(const record of records)includeBounds(record?.bounds);
-  const squareHalf=Number(window.StartingVillage?.PUBLIC_HALF_SIZE||3);
-  minX=Math.min(minX,-squareHalf-4);maxX=Math.max(maxX,squareHalf+4);minY=Math.min(minY,-squareHalf-4);maxY=Math.max(maxY,squareHalf+4);
-  const halfTileSpan=Math.max(18,Math.max(maxX-minX,maxY-minY)*.5+18);
-  return Object.freeze({minX,maxX,minY,maxY,halfTileSpan});
-}
 function canonicalStartingVillageReveal(resource){
   if(!activeSeed||!resource||!window.StartingVillage||!window.HousePlans||!window.SpecialLots||!window.SettlementArchetypes||!window.PoliticalGeography)return null;
+  // Settlement visibility is a property of the canonical player view, never of
+  // whichever SLOD cell happens to be active. Using the resource center here
+  // made the same 1/N view drop the village exactly when an east/west child
+  // became ready. A conservative viewport half-diagonal keeps the canonical
+  // village resident while any part of its established reveal radius can still
+  // be on-screen, independent of parent/child handoff timing.
   const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   const resourceTile=mapWorldTileAt(resource.lat0,resource.lon0);
+  const distanceTiles=Math.hypot(Number(BigInt(focusTile.x))-Number(BigInt(resourceTile.x)),Number(BigInt(focusTile.y))-Number(BigInt(resourceTile.y)));
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
   const viewportRadiusTiles=Math.hypot(
     Math.max(0,Number(zoomState.visibleFootprintWidthMeters||0)),
     Math.max(0,Number(zoomState.visibleFootprintHeightMeters||0))
   )/(2*tileMeters);
+  const canonicalRevealRadiusTiles=512;
+  if(distanceTiles>viewportRadiusTiles+canonicalRevealRadiusTiles)return null;
   const key=activeSeed+"|starting-village";
   if(settlementRevealCache.key!==key){
     const country=window.PoliticalGeography.countryAt(activeSeed,"0","0");
@@ -4101,15 +4094,7 @@ function canonicalStartingVillageReveal(resource){
     }
   }
   const base=settlementRevealCache.value;if(!base)return null;
-  const bounds=canonicalStartingVillageVisibleBounds(base);
-  const focusX=Number(focusTile.x),focusY=Number(focusTile.y),
-    left=bounds.minX-viewportRadiusTiles-bounds.halfTileSpan,
-    right=bounds.maxX+viewportRadiusTiles+bounds.halfTileSpan,
-    top=bounds.minY-viewportRadiusTiles-bounds.halfTileSpan,
-    bottom=bounds.maxY+viewportRadiusTiles+bounds.halfTileSpan;
-  if(focusX<left||focusX>right||focusY<top||focusY>bottom)return null;
-  const distanceTiles=Math.hypot(Number(BigInt(focusTile.x))-Number(BigInt(resourceTile.x)),Number(BigInt(focusTile.y))-Number(BigInt(resourceTile.y)));
-  return Object.freeze({...base,focusTile,resourceTile,distanceTiles,viewportRadiusTiles,canonicalRevealRadiusTiles:Math.max(48,bounds.halfTileSpan)});
+  return Object.freeze({...base,focusTile,resourceTile,distanceTiles,viewportRadiusTiles,canonicalRevealRadiusTiles});
 }
 function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
@@ -8917,17 +8902,14 @@ async function buildPlanetMesh(){
   meshTriangleCount=indices.length/3;
   return mesh;
 }
-async function buildMapScaleShellMesh(){
+function buildMapScaleShellMesh(){
   // Smooth canonical map parent used only during the deep globe→tangent handoff.
   // It reuses the exact globe geography texture/UV registration but deliberately
   // omits exaggerated relief, so loading never turns the approach into bright
   // faceted mountain bands. This is presentation-only and adds no world truth.
-  // Build its CPU arrays cooperatively just like the main globe mesh so this
-  // fallback cannot create an unlabelled long task inside first-playable work.
   const latitudeSegments=48,longitudeSegments=80,stride=longitudeSegments+1;
   const positions=[],normals=[],uvs=[],indices=[],radius=DISPLAY_RADIUS_UNITS+.006;
-  const cpuStarted=performance.now();
-  await runSlicedRange(latitudeSegments+1,latIndex=>{
+  for(let latIndex=0;latIndex<=latitudeSegments;latIndex++){
     const v=latIndex/latitudeSegments,lat=(.5-v)*Math.PI;
     for(let lonIndex=0;lonIndex<=longitudeSegments;lonIndex++){
       const u=lonIndex/longitudeSegments,lon=(u-.5)*Math.PI*2;
@@ -8936,23 +8918,13 @@ async function buildMapScaleShellMesh(){
       normals.push(direction.x,direction.y,direction.z);
       uvs.push((latIndex===0||latIndex===latitudeSegments)?.5:u,1-v);
     }
-  });
-  await runSlicedRange(latitudeSegments,lat=>{
-    for(let lon=0;lon<longitudeSegments;lon++){
-      const a=lat*stride+lon,b=a+1,c=a+stride,d=c+1;
-      indices.push(a,c,b,b,c,d);
-    }
-  });
-  startupScheduler.phaseTimings.mapScaleShellCpuMs=Number((performance.now()-cpuStarted).toFixed(3));
+  }
+  for(let lat=0;lat<latitudeSegments;lat++)for(let lon=0;lon<longitudeSegments;lon++){
+    const a=lat*stride+lon,b=a+1,c=a+stride,d=c+1;
+    indices.push(a,c,b,b,c,d);
+  }
   const mesh=new pc.Mesh(device);
-  let phaseStarted=performance.now();
-  mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);
-  startupScheduler.phaseTimings.mapScaleShellBufferStageMs=Number((performance.now()-phaseStarted).toFixed(3));
-  await yieldBrowser();
-  phaseStarted=performance.now();
-  mesh.update();
-  startupScheduler.phaseTimings.mapScaleShellUploadMs=Number((performance.now()-phaseStarted).toFixed(3));
-  await yieldBrowser();
+  mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
   return mesh;
 }
 function resize(){
@@ -9510,8 +9482,7 @@ async function buildScene(){  const started=performance.now();
     mapScaleShellMaterial.update();
     mapScaleShell=new pc.Entity("CanonicalMapScaleShell");
     mapScaleShell.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
-    const mapScaleShellMesh=await buildMapScaleShellMesh();
-    mapScaleShell.render.meshInstances=[new pc.MeshInstance(mapScaleShellMesh,mapScaleShellMaterial,mapScaleShell)];
+    mapScaleShell.render.meshInstances=[new pc.MeshInstance(buildMapScaleShellMesh(),mapScaleShellMaterial,mapScaleShell)];
     mapScaleShell.enabled=false;app.root.addChild(mapScaleShell);
     // Clouds and broad wilderness dressing are not required for the first safe
     // playable planet view. Keep the exact same deterministic routines, but
