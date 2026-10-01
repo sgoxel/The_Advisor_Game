@@ -112,3 +112,4 @@ jobs:
                 : 'Economic-priority evidence, regression, or GitHub Pages verification failed; WP remains incomplete.'
             ].join('\n');
             await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:249,body});
+# exact-head trigger
