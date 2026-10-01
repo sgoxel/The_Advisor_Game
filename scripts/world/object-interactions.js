@@ -86,13 +86,14 @@ function nearestInteractionPoint(descriptor,actorPosition){
 function descriptorActions(type){
   return SAFE_ACTIONS[type]||Object.freeze(["inspect"]);
 }
-function objectDescriptor(object){
+function objectDescriptor(object,building){
   return Object.freeze({
     id:String(object.id),
     type:String(object.type),
     label:TYPE_LABELS[object.type]||String(object.type),
     buildingId:String(object.buildingId||""),
     buildingLabel:String(object.buildingLabel||""),
+    buildingKind:String(building?.kind||""),
     coordinate:point(object.coordinate),
     interactionPositions:Object.freeze((object.interactionPositions||[]).map(point).filter(Boolean)),
     actions:Object.freeze([...descriptorActions(object.type)]),
@@ -112,6 +113,7 @@ function doorDescriptor(building){
     label:(building.label?String(building.label)+" ":"")+"Door",
     buildingId:String(building.id),
     buildingLabel:String(building.label||""),
+    buildingKind:String(building.kind||""),
     coordinate:door,
     interactionPositions:Object.freeze(positions),
     actions:Object.freeze([...SAFE_ACTIONS.door]),
@@ -122,9 +124,10 @@ function doorDescriptor(building){
 }
 function compile(seed){
   const key=String(seed);
+  const buildings=BuildingInteriors.build(key),buildingById=new Map(buildings.map(building=>[String(building.id),building]));
   const descriptors=[
-    ...InteriorObjects.build(key).map(objectDescriptor),
-    ...BuildingInteriors.build(key).map(doorDescriptor).filter(Boolean)
+    ...InteriorObjects.build(key).map(object=>objectDescriptor(object,buildingById.get(String(object.buildingId)))),
+    ...buildings.map(doorDescriptor).filter(Boolean)
   ].sort((a,b)=>String(a.id).localeCompare(String(b.id)));
   const byId=new Map(descriptors.map(item=>[item.id,item]));
   const spatial=new Map();
@@ -191,18 +194,10 @@ function actionContext(seed,descriptor,actorPosition,action,accessValue){
     access:access?Object.freeze({status:access.status,permitted:access.permitted,conditional:access.conditional,reason:access.reason,requiredScope:access.requiredScope,requiredRoleId:access.requiredRoleId,roleTitle:access.role?.title||null,rankTier:access.role?.rankTier??null,presentation:access.presentation}):null
   });
 }
-function statusRequirement(seed,descriptor,action){
-  const building=descriptor?.buildingId?BuildingInteriors.get(seed,descriptor.buildingId):null;
-  if(building?.kind==="meeting-hall"&&descriptor.type==="table"&&action==="work"){
-    return Object.freeze({requiredScope:"settlement:administration",requiredRoleId:null,label:"Administrative work"});
-  }
-  return Object.freeze({requiredScope:"self",requiredRoleId:null,label:descriptor?.label||"local interaction"});
-}
 function rankStatus(seed,descriptor,when,action){
   if(!window?.ProtagonistRankAccess||!descriptor)return null;
   try{
-    const requirement=statusRequirement(seed,descriptor,action);
-    const target={id:descriptor.id,kind:descriptor.type,buildingId:descriptor.buildingId,label:requirement.label,requiredScope:requirement.requiredScope,requiredRoleId:requirement.requiredRoleId};
+    const target={id:descriptor.id,kind:descriptor.type,objectType:descriptor.type,buildingId:descriptor.buildingId,buildingKind:descriptor.buildingKind,label:descriptor.label,action:String(action||"inspect")};
     return window.ProtagonistRankAccess.localAccessContext(seed,"protagonist",when||window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00",target);
   }catch(_){return null}
 }
@@ -221,6 +216,7 @@ function context(seed,descriptorOrId,actorPosition){
     label:descriptor.label,
     buildingId:descriptor.buildingId,
     buildingLabel:descriptor.buildingLabel,
+    buildingKind:descriptor.buildingKind,
     coordinate:descriptor.coordinate,
     source:descriptor.source,
     distanceTiles:nearestDistance(descriptor,actor),
