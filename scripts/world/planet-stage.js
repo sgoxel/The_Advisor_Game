@@ -8457,6 +8457,16 @@ function unregisterInspectionPickable(id,type=null){
   if(inspection.selectedId===idText&&(!type||inspection.selectedType===type))dismissInspection();
   let removed=false;for(const key of keys)removed=inspectionPickables.delete(key)||removed;return removed;
 }
+function inspectionRankAccess(record){
+  if(record?.type!=="building"||!activeSeed||!window.ProtagonistRankAccess?.localAccessContext)return null;
+  const kind=String(record.authority?.kind||"").trim(),action=kind==="meeting-hall"?"work":"enter";
+  try{
+    return window.ProtagonistRankAccess.localAccessContext(
+      activeSeed,"protagonist",window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00",
+      {id:String(record.id),kind:"building",buildingId:String(record.id),buildingKind:kind,label:String(record.name||record.buildingType||"Building"),action}
+    );
+  }catch(_){return null}
+}
 function readableInspectionLines(record){
   const readable=(value,fallback)=>{const text=String(value??"").trim();return text||fallback;};
   if(record.type==="npc"){
@@ -8466,8 +8476,12 @@ function readableInspectionLines(record){
   if(record.type==="signpost"){
     return [readable(record.name,"Road signpost"),...(record.branches||[]).slice(0,3).map(branch=>readable(branch.destinationName,"Destination")+" — "+readable(branch.distanceLabel,"route")+" "+readable(branch.directionLabel,""))];
   }
-  const functionLabel=String(record.functionLabel??"").trim(),buildingType=String(record.buildingType??"").trim(),typeLabel=functionLabel||buildingType||"Building",name=String(record.name??"").trim();
-  return name&&name!==typeLabel?[name,typeLabel]:[typeLabel];
+  const functionLabel=String(record.functionLabel??"").trim(),buildingType=String(record.buildingType??"").trim(),typeLabel=functionLabel||buildingType||"Building",name=String(record.name??"").trim(),lines=name&&name!==typeLabel?[name,typeLabel]:[typeLabel],access=inspectionRankAccess(record);
+  if(access){
+    const role=String(access.role?.title||"").trim(),requirement=String(access.requiredScope||access.requiredRoleId||"").trim();
+    lines.push("Access · "+String(access.status||"unknown").toUpperCase()+(access.status==="permitted"&&role?" · "+role:access.status==="restricted"&&requirement?" · needs "+requirement:""));
+  }
+  return lines;
 }
 function renderInspectionTooltip(record,knownBounds=null){
   let tip=root?.querySelector?.(".world-inspection-tooltip");if(!tip){tip=document.createElement("aside");tip.className="world-inspection-tooltip";tip.setAttribute("role","status");root.appendChild(tip);}
@@ -8475,6 +8489,7 @@ function renderInspectionTooltip(record,knownBounds=null){
   if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite)||bounds.left>bounds.right||bounds.top>bounds.bottom){dismissInspection();return false;}
   const now=performance.now(),recordKey=inspectionRegistryKey(record.type,record.id),selectionChanged=tip.dataset.recordKey!==recordKey;
   if(selectionChanged||tip.dataset.contentKey===undefined||now-inspection.lastContentRefreshAtMs>=250){
+    const access=inspectionRankAccess(record);tip.dataset.rankAccess=access?.status||"ordinary";tip.dataset.rankReason=access?.reason||"";
     const lines=readableInspectionLines(record),contentKey=lines.join("\u001f");
     if(tip.dataset.contentKey!==contentKey){
       tip.replaceChildren();lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=line;tip.appendChild(el);});
