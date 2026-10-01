@@ -5,6 +5,7 @@ from urllib.parse import urlsplit,urlunsplit,parse_qsl,urlencode
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException
 from screenshot_tool import set_exact_viewport
 
 TARGET=os.environ.get("TARGET","http://127.0.0.1:8000/")
@@ -17,13 +18,18 @@ def evidence_url():
     return urlunsplit((p.scheme,p.netloc,p.path,urlencode(q),p.fragment))
 
 opt=Options()
-for arg in ["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader","--disable-search-engine-choice-screen"]:opt.add_argument(arg)
+for arg in ["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader","--disable-search-engine-choice-screen","--disable-background-timer-throttling","--disable-backgrounding-occluded-windows","--disable-renderer-backgrounding","--window-size=1280,720"]:opt.add_argument(arg)
 opt.set_capability("goog:loggingPrefs",{"browser":"ALL"})
 driver=webdriver.Chrome(options=opt);driver.set_script_timeout(180);wait=WebDriverWait(driver,240)
 
 def ready():
     try:
-        return driver.execute_script("return Boolean(document.getElementById('planetStageRoot')?.dataset?.ready==='true'&&window.PlanetStage?.snapshot?.()?.ready&&window.LocalConflictPresentation?.snapshot?.()?.mounted)")
+        return driver.execute_script("""
+          const stage=window.PlanetStage?.snapshot?.(),root=document.getElementById('planetStageRoot');
+          // PlanetStage's playable snapshot is authoritative. Headless Chrome can defer the
+          // later DOM data-ready paint decoration indefinitely, so do not gate evidence on it.
+          return Boolean(stage?.ready&&root&&document.getElementById('planetCanvas')&&window.LocalConflictPresentation?.snapshot?.()?.mounted);
+        """)
     except Exception:return False
 
 def visual_state(mode,profile):
@@ -75,7 +81,15 @@ def grounded_anchor_probe():
 
 records=[]
 try:
-    driver.get(evidence_url());wait.until(lambda d:ready())
+    driver.get(evidence_url())
+    try:
+        wait.until(lambda d:ready())
+    except TimeoutException:
+        diag=driver.execute_script("""return {documentReady:document.readyState,domReady:document.getElementById('planetStageRoot')?.dataset?.ready||null,stage:window.PlanetStage?.snapshot?.()||null,conflict:window.LocalConflictPresentation?.snapshot?.()||null,canvas:Boolean(document.getElementById('planetCanvas')),body:String(document.body?.innerText||'').slice(0,1200)}""")
+        diag["browserLogs"]=driver.get_log("browser")[-30:]
+        (OUT/"startup-timeout.json").write_text(json.dumps(diag,indent=2),encoding="utf-8")
+        driver.save_screenshot(str(OUT/"startup-timeout.png"))
+        raise RuntimeError("playable-stage startup timeout: "+json.dumps(diag))
     driver.execute_script("window.PlanetStage.setScaleIndex(9)")
     wait.until(lambda d:d.execute_script("const s=window.PlanetStage.snapshot();return s.zoom?.scaleIndex===9&&s.projection?.tangentPatchActive===true"))
     wait.until(lambda d:d.execute_script("return (window.PlanetStage.inspectionTargets?.()||[]).some(x=>x.type==='building'&&x.bounds)"))
