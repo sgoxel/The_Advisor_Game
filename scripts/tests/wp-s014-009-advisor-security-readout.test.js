@@ -78,9 +78,10 @@ for(const key of ['perFrameRead','fullWorldScan','wholeSettlementScan','wholeHis
 assert.equal(auth.presentationOnly,true);
 assert.deepStrictEqual(reads,{health:2,inventory:2,skill:2,authority:2});
 
-assert(css.includes('.advisor-chat-panel:has(.advisor-security-readout[open]) .advisor-readout-stack{min-height:0;overflow:hidden}'),'open security readout stack must contain its content');
-assert(css.includes('.advisor-chat-panel:has(.advisor-security-readout[open]) .advisor-security-readout{box-sizing:border-box;min-height:0;height:100%;overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr)}'),'open security readout must own the Advisor content track');
-assert(css.includes('.advisor-chat-panel:has(.advisor-security-readout[open]) .advisor-security-body{min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain}'),'security body must scroll inside the readout instead of spilling outside');
+assert(css.includes('.advisor-chat-panel:has(.advisor-security-readout[open]) .advisor-readout-stack{min-height:0;overflow:hidden;align-content:stretch;grid-template-rows:minmax(0,1fr)}'),'open security readout stack must stretch its sole active content row');
+assert(css.includes('.advisor-chat-panel:has(.advisor-security-readout[open]) .advisor-security-readout{box-sizing:border-box;min-height:0;height:auto;overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr)}'),'open security readout must stretch with the Advisor content track');
+assert(css.includes('.advisor-chat-panel:has(.advisor-security-readout[open]) .advisor-security-body{box-sizing:border-box;min-height:0;height:auto;max-height:none;overflow:auto;overscroll-behavior:contain}'),'security body must scroll inside the stretched readout instead of spilling outside');
+assert(css.includes('.advisor-security-body{gap:4px;height:auto;max-height:none;overflow:auto;padding:3px 6px 5px}'),'landscape security body must use its grid track rather than a second percentage height');
 assert(css.includes('.advisor-chat-panel:has(.advisor-security-readout[open]) .advisor-activity-strip{display:none!important}'),'security readout must reserve the header track for security content on constrained viewports');
 
 for(const forbidden of ['Date.now','Math.random','applyInjury(','recordSimulation(','resolveExchange(','setPosition(','teleport(','ActionExecutor.'])assert(!source.includes(forbidden),'forbidden execution/mutation path '+forbidden);
