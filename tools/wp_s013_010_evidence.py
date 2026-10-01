@@ -55,8 +55,13 @@ def patch_context(case):
         ...window.__wp010OriginalMemory,
         recognition(_seed,residentId){
           return known
-            ?{metBefore:true,meaningfulEncounterCount:3,familiarity:'known',residentId}
-            :{metBefore:false,meaningfulEncounterCount:0,familiarity:'stranger',residentId};
+            ?{metBefore:true,meaningfulEncounterCount:3,familiarity:'known',residentId,scannedEntryCount:3}
+            :{metBefore:false,meaningfulEncounterCount:0,familiarity:'stranger',residentId,scannedEntryCount:1};
+        },
+        recognitionReference(_seed,residentId){
+          return known
+            ?{id:'MEM-WP010-'+residentId,topic:'Village Steward office',summary:'Observed the protagonist serving as Village Steward.'}
+            :null;
         }
       });
       window.SocialState=Object.freeze({
