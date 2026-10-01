@@ -12,7 +12,7 @@ SEED="AGENT6-NAV-PERF-A"
 
 def driver_for(w=390,h=844):
     o=Options()
-    for a in ("--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader"): o.add_argument(a)
+    for a in ("--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader","--enable-unsafe-swiftshader","--disable-search-engine-choice-screen"): o.add_argument(a)
     o.add_argument(f"--window-size={w},{h}")
     o.set_capability("goog:loggingPrefs",{"browser":"ALL"})
     d=webdriver.Chrome(options=o); d.set_script_timeout(240)
@@ -146,7 +146,12 @@ def main():
         if severe: raise AssertionError(f"severe browser errors: {severe[-8:]}")
         ev["pass"]=True
     except Exception as e:
-        ev["error"]=repr(e); raise
+        ev["error"]=repr(e)
+        try: ev["browserLog"]=d.get_log("browser")[-40:]
+        except Exception: ev["browserLog"]=[]
+        try: ev["failureScreenshot"]=shot(d,"failure")
+        except Exception: pass
+        raise
     finally:
         (OUT/"evidence.json").write_text(json.dumps(ev,indent=2,sort_keys=True),encoding="utf-8")
         d.quit()
