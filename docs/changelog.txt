@@ -1,3 +1,5 @@
+2026-10-01T12:35:18Z | AGENT #1 | WP-S014-003 | Added a bounded proposal-only conflict-response selector for avoid/fight/defend/protect/yield/retreat that consumes grounded threat and readiness context, rejects ungrounded or invented targets, keeps all evaluation read-only, and hands off only through the existing ProtagonistCommandEvaluator/ProtagonistActionRuntime boundary without any direct combat or world mutation.
+
 2026-10-01T15:52:00Z | AGENT #1 | WP-S013-010 | Added a bounded rank-aware local access layer and NPC recognition path that restricts ordinary residents, permits legitimate steward-level access, keeps access checks read-only, and delegates actual world-action authority to ObjectInteractions/Simulation without any direct relationship or world mutation.
 
 2026-10-01T15:20:00Z | AGENT #1 | WP-S013-009 | Fixed the runtime protagonist status readout to keep role, duties, opportunities, and advancement grounded in authoritative runtime data while preserving read-only event-driven presentation and no direct action/world mutation.
