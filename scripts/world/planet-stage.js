@@ -2167,7 +2167,7 @@ function renderMapPresentation(){
 
   const borderBuildStarted=performance.now(),border=buildMapBorderSegments();
   recordSemanticPhase("borderBuild",borderBuildStarted);
-  const borderProjectionStarted=performance.now(),svg=layer.querySelector(".planet-map-borders");svg.replaceChildren();
+  const borderProjectionStarted=performance.now(),svg=layer.querySelector(".planet-map-borders"),borderFragment=document.createDocumentFragment();
   let projectedBorderSegmentCount=0,rejectedInteriorBorderStubCount=0;
   const borderOffsetMeters=Math.max(2,Math.min(24,zoomState.visibleFootprintWidthMeters*.000015));
   const rawBorderLines=stitchMapBorderSegments(border.segments);
@@ -2190,7 +2190,7 @@ function renderMapPresentation(){
       line.setAttribute("points",run.map(p=>(p.x*10).toFixed(1)+","+(p.y*10).toFixed(1)).join(" "));
       line.setAttribute("class","planet-political-border");
       line.dataset.ownerA=chain.ownerA;line.dataset.ownerB=chain.ownerB;
-      svg.appendChild(line);projectedBorderSegmentCount++;run=[];
+      borderFragment.appendChild(line);projectedBorderSegmentCount++;run=[];
     };
     const isLandPoint=point=>{
       try{return Boolean(geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)?.land);}catch(_){return false;}
@@ -2236,6 +2236,9 @@ function renderMapPresentation(){
     }
     flush();
   }
+  // Commit the completed canonical border batch once. Keeping SVG creation
+  // detached avoids repeated live-DOM style/layout work inside the settle task.
+  svg.replaceChildren(borderFragment);
   svg.hidden=projectedBorderSegmentCount===0;
   const borderProjectionMs=performance.now()-borderProjectionStarted;
   recordSemanticPhase("borderProjection",borderProjectionStarted);
