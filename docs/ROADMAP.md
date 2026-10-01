@@ -128,33 +128,33 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-021` — Campaign-State Environmental Wear, Damage + Recovery Projection — COMPLETED
 - `WP-S003-022` — Crossroads Direction Signposts + Named Route Wayfinding — COMPLETED
 
-# Stage 4 — World Geography, Settlements/Cities, Roads + Focused Environment Foundation
+# Stage 4 — Starting Village Population + Visible Activity Foundation
 
-- `WP-S004-001` — Deterministic Country Territories + Political Centers — COMPLETED
-- `WP-S004-002` — Region/Province Profiles + Terrain/Resource Identity — COMPLETED
-- `WP-S004-003` — Settlement Archetypes + Country/Region/Terrain Inheritance — COMPLETED
-- `WP-S004-003-001` — Population-Scaled Settlement Footprints + Realistic Urban Morphology — COMPLETED
-- `WP-S004-004` — Settlement Building Catalog + Contextual Composition Rules — COMPLETED
-- `WP-S004-005` — Hierarchical Inter-Settlement Road Graph + Geography-Aware Main Routes — COMPLETED
-- `WP-S004-006` — Deterministic World Destinations + Points-of-Interest Foundation — COMPLETED
-- `WP-S004-006-001` — Discoverable Micro-Locations + Wilderness POI Composition — COMPLETED
-- `WP-S004-007` — Deterministic Place Naming + Toponym Hierarchy — COMPLETED
-- `WP-S004-008` — Country Profile: Wealth, Governance + Strategic Orientation — COMPLETED
-- `WP-S004-009` — Country Relations + Diplomacy Baseline — COMPLETED
+- `WP-S004-001` — Deterministic Starting Village Resident Roster — COMPLETED
+- `WP-S004-002` — Homes, Professions + Indoor Workplace Assignment — COMPLETED
+- `WP-S004-003` — Deterministic Daily Activity + Action Targets — COMPLETED
+- `WP-S004-004` — Autonomous Indoor/Outdoor Route Execution + Visible Movement — COMPLETED
+- `WP-S004-004-001` — NPC Building Approach, Occlusion + Separation — COMPLETED
+- `WP-S004-005` — Interior Action Execution + Character State Presentation — COMPLETED
+- `WP-S004-006` — Profession-Specific Visible Work Cycles + Workplace Choreography — COMPLETED
+- `WP-S004-007` — Time-of-Day Settlement Activity Rhythm — COMPLETED
+- `WP-S004-008` — Density-Scaled Local Crowd Presentation — COMPLETED
+- `WP-S004-009` — Local NPC Social Encounters + Group Activity — COMPLETED
+- `WP-S004-010` — Contextual NPC Reactions + Local Social Boundaries — COMPLETED
 
-# Stage 5 — Starting Village Population + Visible Activity Foundation
+# Stage 5 — World Geography, Settlements/Cities, Roads + Focused Environment Foundation
 
-- `WP-S005-001` — Deterministic Starting Village Resident Roster — COMPLETED
-- `WP-S005-002` — Homes, Professions + Indoor Workplace Assignment — COMPLETED
-- `WP-S005-003` — Deterministic Daily Activity + Action Targets — COMPLETED
-- `WP-S005-004` — Autonomous Indoor/Outdoor Route Execution + Visible Movement — COMPLETED
-- `WP-S005-004-001` — NPC Building Approach, Occlusion + Separation — COMPLETED
-- `WP-S005-005` — Interior Action Execution + Character State Presentation — COMPLETED
-- `WP-S005-006` — Profession-Specific Visible Work Cycles + Workplace Choreography — COMPLETED
-- `WP-S005-007` — Time-of-Day Settlement Activity Rhythm — COMPLETED
-- `WP-S005-008` — Density-Scaled Local Crowd Presentation — COMPLETED
-- `WP-S005-009` — Local NPC Social Encounters + Group Activity — COMPLETED
-- `WP-S005-010` — Contextual NPC Reactions + Local Social Boundaries — COMPLETED
+- `WP-S005-001` — Deterministic Country Territories + Political Centers — COMPLETED
+- `WP-S005-002` — Region/Province Profiles + Terrain/Resource Identity — COMPLETED
+- `WP-S005-003` — Settlement Archetypes + Country/Region/Terrain Inheritance — COMPLETED
+- `WP-S005-003-001` — Population-Scaled Settlement Footprints + Realistic Urban Morphology — COMPLETED
+- `WP-S005-004` — Settlement Building Catalog + Contextual Composition Rules — COMPLETED
+- `WP-S005-005` — Hierarchical Inter-Settlement Road Graph + Geography-Aware Main Routes — COMPLETED
+- `WP-S005-006` — Deterministic World Destinations + Points-of-Interest Foundation — COMPLETED
+- `WP-S005-006-001` — Discoverable Micro-Locations + Wilderness POI Composition — COMPLETED
+- `WP-S005-007` — Deterministic Place Naming + Toponym Hierarchy — COMPLETED
+- `WP-S005-008` — Country Profile: Wealth, Governance + Strategic Orientation — COMPLETED
+- `WP-S005-009` — Country Relations + Diplomacy Baseline — COMPLETED
 
 # Stage 6 — Advisor Interaction + Social Foundation
 
