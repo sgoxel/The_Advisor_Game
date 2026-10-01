@@ -13,18 +13,15 @@ on:
       - "docs/ROADMAP.md"
       - "docs/changelog.txt"
       - "docs/suggest_log.txt"
-  issue_comment:
-    types: [created]
   workflow_dispatch:
 permissions:
   contents: read
   issues: write
 concurrency:
-  group: wp-s014-010-${{ github.sha }}
-  cancel-in-progress: false
+  group: wp-s014-010-main
+  cancel-in-progress: true
 jobs:
   functional:
-    if: github.event_name != 'issue_comment' || (github.event.issue.number == 286 && contains(github.event.comment.body, '/wp-s014-010-evidence'))
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
