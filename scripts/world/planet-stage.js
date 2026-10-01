@@ -4033,12 +4033,14 @@ function staticSettlementRevealTierForIndex(index){
 }
 function settlementRevealTierForScalar(value=zoomState.scalar){
   const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX);
+  const requestedLevel=String(localResources.requestedLevel||LOCAL_DETAIL_LEVELS[requestedLodIndexForZoom(scalar)]?.id||"");
   const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
   // Semantic/local-world eligibility follows the requested physical scale, not
   // a retained terrain resource. A ready close-detail parent may remain visible
   // temporarily to guarantee terrain coverage, but it must never keep village
   // props, residents or decorative layers alive after zoom has returned to a
   // regional/strategic scale.
+  if(requestedLevel==="ground"||level?.id==="ground")return "full";
   if(level?.staticWorld){
     const staticTier=staticSettlementRevealTierForIndex(rawIndex);
     if(staticTier!=="none")return staticTier;
@@ -4047,12 +4049,13 @@ function settlementRevealTierForScalar(value=zoomState.scalar){
 }
 function localWorldPresentationEligibility(value=zoomState.scalar){
   const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX),revealTier=settlementRevealTierForScalar(scalar);
+  const requestedLevel=String(localResources.requestedLevel||LOCAL_DETAIL_LEVELS[requestedLodIndexForZoom(scalar)]?.id||"");
   const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
   // Retained parent resources are terrain-coverage fallbacks only. Presentation
   // eligibility is determined by the requested scale so stale local roots and
   // seasonal accents cannot survive at regional/strategic map scales.
-  const staticWorldVisible=Boolean(level?.staticWorld);
-  return Object.freeze({visible:revealTier!=="none"||staticWorldVisible,revealTier,rawLevelIndex:rawIndex,rawLevelId:level?.id||null,rawStaticWorld:staticWorldVisible});
+  const staticWorldVisible=Boolean(level?.staticWorld)||requestedLevel==="ground";
+  return Object.freeze({visible:revealTier!=="none"||staticWorldVisible,revealTier,rawLevelIndex:rawIndex,rawLevelId:requestedLevel==="ground"?"ground":level?.id||null,rawStaticWorld:staticWorldVisible});
 }
 function applyLocalWorldPresentationVisibility(){
   const gate=localWorldPresentationEligibility(),nodes=[localStaticRoot,localNpcRoot,localCrowdRoot,localBuildingActivityRoot,localCampaignWearMesh,localFaunaRoot,environmentalReactionRoot,localWayfindingEntity].filter(Boolean);
@@ -4826,8 +4829,10 @@ function groundCharacterTextureUrl(profession){
   return GROUND_CHARACTER_PROFESSION_TEXTURES[String(profession||"")]||GROUND_CHARACTER_FALLBACK_TEXTURE;
 }
 function groundCharacterLayerEligible(){
+  const requestedLevel=String(localResources.requestedLevel||LOCAL_DETAIL_LEVELS[requestedLodIndexForZoom(zoomState.scalar)]?.id||"");
   const rawIndex=rawLodIndexForZoom(zoomState.scalar),rawLevel=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
-  return Boolean(localWorldPresentationEligibility().visible&&String(rawLevel?.id||"")==="ground"&&displayResource&&String(displayResource.dims?.levelId||"")==="ground"&&String(localNpcContext?.tier||"")==="full"&&tangentPatch?.enabled);
+  const levelId=String(displayResource?.dims?.levelId||requestedLevel||rawLevel?.id||"");
+  return Boolean(localWorldPresentationEligibility().visible&&String(rawLevel?.id||requestedLevel||"")==="ground"&&levelId==="ground"&&String(localNpcContext?.tier||"")==="full"&&tangentPatch?.enabled);
 }
 function scheduleGroundCharacterRefresh(){
   if(groundCharacterRefreshScheduled||groundCharacterPendingLoads>0||!groundCharacterLayerEligible()||!localNpcContext)return;
