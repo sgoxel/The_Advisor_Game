@@ -1899,6 +1899,7 @@ function renderObjectInteractionPanel(context,actorPosition,{proof=false,message
   objectInteractionProofMode=Boolean(proof);
   e.objectInteractionPanel.hidden=false;
   e.objectInteractionPanel.dataset.proof=proof?"true":"false";
+  e.objectInteractionPanel.dataset.access=context.access?.status||"ordinary";
   e.objectInteractionTitle.textContent=context.label||context.type||"World Object";
   const distance=Number(context.distanceTiles);
   const distanceText=Number.isFinite(distance)?distance+" tile"+(distance===1?"":"s")+" away":"distance unavailable";
@@ -1913,13 +1914,17 @@ function renderObjectInteractionPanel(context,actorPosition,{proof=false,message
   for(const action of context.actions){
     const button=document.createElement("button");
     button.type="button";
-    button.textContent=action.label;
+    const actionAccess=action.access?.status||"ordinary";
+    button.textContent=actionAccess==="restricted"?action.label+" · Restricted":actionAccess==="conditional"?action.label+" · Conditional":action.label;
     button.disabled=!action.enabled;
     button.dataset.ready=action.enabled?"true":"false";
     button.dataset.action=action.id;
-    button.title=action.enabled
-      ?action.label
-      :"Move closer: "+String(action.distanceTiles)+" tile(s), allowed "+String(action.rangeTiles);
+    button.dataset.access=actionAccess;
+    button.title=action.reason==="status-restricted"
+      ?("Requires legitimate scope: "+String(action.access?.requiredScope||"unknown"))
+      :action.enabled
+        ?action.label
+        :"Move closer: "+String(action.distanceTiles)+" tile(s), allowed "+String(action.rangeTiles);
     button.onclick=()=>{
       const activeActor=objectInteractionActorPosition(actorPosition);
       const result=ObjectInteractions.attempt(campaign.seed,{
@@ -1943,10 +1948,11 @@ function renderObjectInteractionPanel(context,actorPosition,{proof=false,message
   }
   return context;
 }
-function showObjectInteractionForEvidence(type="table",index=0){
+function showObjectInteractionForEvidence(type="table",index=0,options={}){
   const campaign=SeedSystem.getCampaign();
   if(!campaign?.seed||!window.ObjectInteractions)return null;
-  const matches=ObjectInteractions.list(campaign.seed).filter(item=>item.type===String(type));
+  const requestedKind=String(options?.buildingKind||"");
+  const matches=ObjectInteractions.list(campaign.seed).filter(item=>item.type===String(type)&&(!requestedKind||item.buildingKind===requestedKind));
   const descriptor=matches[Math.max(0,Math.min(matches.length-1,Number(index)||0))]||ObjectInteractions.list(campaign.seed)[0]||null;
   if(!descriptor)return null;
   const actorPosition=descriptor.interactionPositions?.[0]||descriptor.coordinate;
@@ -1966,7 +1972,11 @@ function objectInteractionPanelSnapshot(){
     proofMode:objectInteractionProofMode,
     selectedId:lastObjectInteractionContext?.id||null,
     selectedType:lastObjectInteractionContext?.type||null,
+    selectedBuildingKind:lastObjectInteractionContext?.buildingKind||null,
+    accessStatus:lastObjectInteractionContext?.access?.status||null,
+    accessReason:lastObjectInteractionContext?.access?.reason||null,
     enabledActions:Object.freeze(lastObjectInteractionContext?.actions?.filter(action=>action.enabled).map(action=>action.id)||[]),
+    restrictedActions:Object.freeze(lastObjectInteractionContext?.actions?.filter(action=>action.reason==="status-restricted").map(action=>action.id)||[]),
     buttonCount:e.objectInteractionActions?.children?.length||0,
     minTouchTargetPx:44
   });
