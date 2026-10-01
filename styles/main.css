@@ -2652,3 +2652,60 @@ body.advisor-economy-open .advisor-chat-launcher,body.advisor-economy-open .advi
   .advisor-econ-recent{min-height:62px;max-height:132px}
   .advisor-econ-outcomes article{padding:5px 7px}
 }
+
+
+/* WP-S013-009 — Advisor rank / patronage / advancement readout */
+.advisor-status-card[data-status-section="commitments"],
+.advisor-status-card[data-status-section="advancement"]{
+  border-color:rgba(123,203,181,.2);
+  background:linear-gradient(155deg,rgba(32,76,72,.11),rgba(255,255,255,.018));
+}
+.advisor-status-card[data-status-section="advancement"] .advisor-status-line:first-child strong{
+  color:#cde9dd;
+}
+.advisor-status-readout[open] .advisor-status-body{
+  overflow:auto!important;
+  overscroll-behavior:contain;
+}
+@media(max-width:520px) and (min-height:431px){
+  .advisor-chat-panel:has(.advisor-status-readout[open]){
+    max-height:min(72vh,610px);
+    grid-template-rows:auto minmax(0,1fr) 0 0 0;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-readout[open]{
+    min-height:0;
+    overflow:hidden;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-readout[open] .advisor-status-body{
+    box-sizing:border-box;
+    height:100%;
+    max-height:none!important;
+    overflow:auto!important;
+  }
+  .advisor-status-readout[open] .advisor-status-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-chat-panel:has(.advisor-status-readout[open]){
+    grid-template-rows:auto minmax(0,1fr) 0 0;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-readout[open]{
+    min-height:0;
+    overflow:hidden;
+  }
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-readout[open] .advisor-status-body{
+    box-sizing:border-box;
+    height:100%;
+    max-height:none!important;
+    overflow:auto!important;
+  }
+  .advisor-status-readout[open] .advisor-status-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media(min-width:521px) and (min-height:431px){
+  .advisor-chat-panel:has(.advisor-status-readout[open]) .advisor-status-readout[open] .advisor-status-body{
+    overflow:auto!important;
+  }
+}
