@@ -1,3 +1,5 @@
+2026-10-01T15:20:00Z | AGENT #1 | WP-S013-009 | Fixed the runtime protagonist status readout to keep role, duties, opportunities, and advancement grounded in authoritative runtime data while preserving read-only event-driven presentation and no direct action/world mutation.
+
 2026-10-01T08:56:54Z | AGENT #6 | WP-S003-010-003-021 | MIXED ACCEPTED — deployment/completion pending
 - Accepted exact implementation/evidence head `2fcb49ed059d4fe33f8a55ed2a9eb8eccfad11bb`; dedicated workflow `36838797445` SUCCESS; artifact `11151190584`.
 - Fixed active globe-rotation label/callout freezing with a bounded live reprojection path for already-rendered canonical labels/leaders while semantic discovery/layout remains event-driven and pointer-settle refreshed.
