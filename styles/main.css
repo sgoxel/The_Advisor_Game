@@ -2473,3 +2473,45 @@ body.advisor-economy-open .advisor-chat-launcher,body.advisor-economy-open .advi
 .advisor-econ-foot{display:flex;justify-content:space-between;gap:12px;padding:8px 11px 9px;border-top:1px solid rgba(221,197,139,.10);color:#789092;font-size:6px}.advisor-econ-foot strong{text-align:right;color:#aebfbb}
 @media(max-width:520px){.advisor-economy-launcher{right:8px;bottom:max(104px,calc(env(safe-area-inset-bottom) + 96px))}.advisor-economy-panel{right:8px;bottom:max(154px,calc(env(safe-area-inset-bottom) + 146px));width:calc(100vw - 16px);max-height:min(66vh,560px);border-radius:17px}.advisor-econ-head{padding:10px 11px 8px}.advisor-econ-head strong{font-size:18px}.advisor-econ-summary{padding:7px 8px}.advisor-econ-summary article{padding:7px}.advisor-econ-summary strong{font-size:10px}.advisor-econ-body{grid-template-columns:1fr;padding:0 8px 8px}.advisor-econ-offers{max-height:142px}.advisor-econ-selected dl{grid-template-columns:repeat(2,1fr)}.advisor-econ-recent{max-height:100px}}
 @media(max-height:430px) and (orientation:landscape){.advisor-economy-launcher{right:286px;bottom:8px;min-height:34px}.advisor-economy-panel{top:58px;right:8px;bottom:45px;width:min(650px,calc(100vw - 16px));max-height:none;grid-template-rows:31px 14px 42px minmax(0,1fr) 24px;border-radius:14px}.advisor-econ-head{height:31px;padding:3px 7px}.advisor-econ-head small{font-size:5px}.advisor-econ-head strong{font-size:12px}.advisor-econ-head span{display:none}.advisor-econ-close{width:23px;height:23px;flex-basis:23px;border-radius:7px;font-size:16px}.advisor-econ-fixture{height:12px;margin:2px 7px 0;padding:2px 5px;font-size:5px;line-height:1}.advisor-econ-summary{gap:4px;padding:3px 7px}.advisor-econ-summary article{gap:1px;padding:4px 5px;border-radius:7px}.advisor-econ-summary small{font-size:4.5px}.advisor-econ-summary strong{font-size:7px}.advisor-econ-summary span{font-size:5px}.advisor-econ-body{grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:5px;padding:0 7px 4px}.advisor-econ-section-title small{font-size:4.5px}.advisor-econ-section-title strong{font-size:7px}.advisor-econ-section-title>span{font-size:5px}.advisor-econ-offers{gap:3px}.advisor-econ-offer{gap:1px 5px;padding:3px 5px;border-radius:6px}.advisor-econ-offer strong{font-size:6px}.advisor-econ-offer small,.advisor-econ-offer i{font-size:4.5px}.advisor-econ-offer em{font-size:6px}.advisor-econ-detail{gap:4px}.advisor-econ-selected{gap:4px;padding:5px 6px;border-radius:7px}.advisor-econ-selected header strong{font-size:8px}.advisor-econ-selected header b{padding:2px 4px;font-size:4.5px}.advisor-econ-selected small{font-size:4.5px}.advisor-econ-selected dl{grid-template-columns:repeat(4,minmax(0,1fr));gap:3px}.advisor-econ-selected dl>div{padding:3px 4px;border-radius:5px}.advisor-econ-selected dt{font-size:4.3px}.advisor-econ-selected dd{font-size:5.5px}.advisor-econ-selected footer{display:none}.advisor-econ-selected>p{font-size:5px}.advisor-econ-recent{gap:3px}.advisor-econ-outcomes{gap:2px}.advisor-econ-outcomes article{padding:3px 4px;border-radius:5px}.advisor-econ-outcomes strong{font-size:5.5px}.advisor-econ-outcomes small,.advisor-econ-outcomes b,.advisor-econ-outcomes code{font-size:4.5px}.advisor-econ-empty{padding:4px;font-size:5px}.advisor-econ-foot{padding:3px 7px;font-size:4.5px}}
+
+
+/* WP-S012-009 visual attempt 2 — preserve chrome + keep economy trace readable */
+@media(max-width:520px){
+  .advisor-economy-panel{
+    bottom:max(94px,calc(env(safe-area-inset-bottom) + 86px));
+    max-height:min(75vh,620px);
+  }
+  .advisor-econ-recent{max-height:132px}
+}
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-economy-panel{
+    top:64px;right:8px;bottom:8px;
+    width:min(632px,calc(100vw - 212px));
+    max-height:none;
+    grid-template-rows:29px 14px 42px minmax(0,1fr) 18px;
+  }
+  .advisor-econ-head{height:29px;padding:3px 7px}
+  .advisor-econ-head strong{font-size:13px}
+  .advisor-econ-head small{font-size:5.5px}
+  .advisor-econ-fixture{height:12px;font-size:5.5px}
+  .advisor-econ-summary article{padding:4px 6px}
+  .advisor-econ-summary small{font-size:5px}
+  .advisor-econ-summary strong{font-size:8px}
+  .advisor-econ-summary span{font-size:5.5px}
+  .advisor-econ-section-title small{font-size:5px}
+  .advisor-econ-section-title strong{font-size:8px}
+  .advisor-econ-section-title>span{font-size:5.5px}
+  .advisor-econ-offer{padding:4px 5px}
+  .advisor-econ-offer strong{font-size:7px}
+  .advisor-econ-offer em{font-size:7px}
+  .advisor-econ-offer small,.advisor-econ-offer i{font-size:5px}
+  .advisor-econ-selected{padding:5px 6px}
+  .advisor-econ-selected header strong{font-size:9px}
+  .advisor-econ-selected header b{font-size:5px}
+  .advisor-econ-selected small{font-size:5px}
+  .advisor-econ-selected dt{font-size:4.8px}
+  .advisor-econ-selected dd{font-size:6px}
+  .advisor-econ-outcomes strong{font-size:6px}
+  .advisor-econ-outcomes small,.advisor-econ-outcomes b,.advisor-econ-outcomes code{font-size:5px}
+  .advisor-econ-foot{padding:3px 7px;font-size:5px}
+}
