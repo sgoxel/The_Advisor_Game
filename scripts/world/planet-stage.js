@@ -3978,11 +3978,13 @@ function staticSettlementRevealTierForIndex(index){
 function settlementRevealTierForScalar(value=zoomState.scalar){
   const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX);
   const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
-  const activeStaticIndex=displayResource?.levelIndex??rawIndex;
-  const activeStaticLevel=LOCAL_DETAIL_LEVELS[activeStaticIndex]||LOCAL_DETAIL_LEVELS[0];
-  const activeStaticWorld=Boolean(activeStaticLevel?.staticWorld)||Boolean(displayResource?.dims?.staticWorld);
-  if(level?.staticWorld||activeStaticWorld){
-    const staticTier=staticSettlementRevealTierForIndex(Math.max(rawIndex,activeStaticIndex));
+  // Semantic/local-world eligibility follows the requested physical scale, not
+  // a retained terrain resource. A ready close-detail parent may remain visible
+  // temporarily to guarantee terrain coverage, but it must never keep village
+  // props, residents or decorative layers alive after zoom has returned to a
+  // regional/strategic scale.
+  if(level?.staticWorld){
+    const staticTier=staticSettlementRevealTierForIndex(rawIndex);
     if(staticTier!=="none")return staticTier;
   }
   return semanticLayerSpec(semanticScaleIndexForScalar(scalar),false).settlementRevealTier;
@@ -3990,9 +3992,11 @@ function settlementRevealTierForScalar(value=zoomState.scalar){
 function localWorldPresentationEligibility(value=zoomState.scalar){
   const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX),revealTier=settlementRevealTierForScalar(scalar);
   const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
-  const activeStaticWorld=Boolean(displayResource?.dims?.staticWorld)||Boolean((displayResource?.levelIndex!==undefined)&&((LOCAL_DETAIL_LEVELS[displayResource.levelIndex]||{}).staticWorld));
-  const staticWorldVisible=Boolean(level?.staticWorld)||activeStaticWorld;
-  return Object.freeze({visible:revealTier!=="none"||staticWorldVisible,revealTier,rawLevelIndex:rawIndex,rawLevelId:level?.id||null,rawStaticWorld:Boolean(level?.staticWorld)||activeStaticWorld});
+  // Retained parent resources are terrain-coverage fallbacks only. Presentation
+  // eligibility is determined by the requested scale so stale local roots and
+  // seasonal accents cannot survive at regional/strategic map scales.
+  const staticWorldVisible=Boolean(level?.staticWorld);
+  return Object.freeze({visible:revealTier!=="none"||staticWorldVisible,revealTier,rawLevelIndex:rawIndex,rawLevelId:level?.id||null,rawStaticWorld:staticWorldVisible});
 }
 function applyLocalWorldPresentationVisibility(){
   const gate=localWorldPresentationEligibility(),nodes=[localStaticRoot,localNpcRoot,localCrowdRoot,localBuildingActivityRoot,localCampaignWearMesh,localFaunaRoot,environmentalReactionRoot,localWayfindingEntity].filter(Boolean);
