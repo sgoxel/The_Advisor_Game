@@ -230,7 +230,7 @@ const groundCharacterLoads=new Map();
 const groundCharacterFailures=new Set();
 let groundCharacterPendingLoads=0;
 let groundCharacterRefreshScheduled=false;
-let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([]),localEventPresentationRevision:"ground-billboard-v1",rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles + LocalEventVignettes",rhythmSource:"SettlementActivityRhythm presentation-only",billboardLayerActive:false,detailedBillboardCount:0,residentBillboardCount:0,protagonistBillboardVisible:false,billboardTextureUrls:Object.freeze([]),billboardOnlyAtGround:true,groundRepresentationReady:false,cameraPresentation:"orthographic-top-down",presentationScaleMultiplier:GROUND_CHARACTER_PRESENTATION_SCALE,presentationOnly:true,simulationAuthority:false};
+let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([]),localEventPresentationRevision:"ground-billboard-v1",rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles + LocalEventVignettes",rhythmSource:"SettlementActivityRhythm presentation-only",billboardLayerActive:false,detailedBillboardCount:0,residentBillboardCount:0,protagonistBillboardVisible:false,billboardTextureUrls:Object.freeze([]),billboardOnlyAtGround:true,groundRepresentationReady:false,cameraPresentation:"orthographic-3q",tangentPresentationPitchDegrees:LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,presentationScaleMultiplier:GROUND_CHARACTER_PRESENTATION_SCALE,presentationOnly:true,simulationAuthority:false};
 let localCrowdRoot=null;
 let localCrowdMesh=null;
 let localCrowdMaterials=null;
@@ -398,6 +398,7 @@ const ZOOM_ROOT_READINESS_CAP_SCALAR=.575;
 const LOCAL_TANGENT_OWNERSHIP_BLEND=.055;
 const LOCAL_STANDIN_MIN_COMPENSATION=1/3;
 const GLOBE_VERTICAL_FOV_DEGREES=34;
+const LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES=62;
 let ladderCache={key:null,startHeight:0,levelMax:[]};
 function globeCameraDistanceForScalar(value){
   const safeSurfaceDistance=DISPLAY_RADIUS_UNITS*1.42;
@@ -4789,6 +4790,7 @@ function createGroundCharacterBillboard(parent,name,url,x,ground,z,presentationS
   const h=Math.max(.10,Number(heightMeters||1.75)*GROUND_CHARACTER_PRESENTATION_SCALE*Number(presentationScale||1)/Math.max(1e-9,Number(unit)||1));
   const w=h*Math.max(.28,Math.min(1.2,tw/th));
   const entity=addLocalPrimitive(parent,name,"character-billboard",material,x,ground+.035,z-h*.47,w,1,h);
+  entity.setLocalEulerAngles(90,0,0);
   if(entity?.render){entity.render.castShadows=false;entity.render.receiveShadows=false;}
   entity._advisorBillboard={url,width:w,height:h,feetOffset:h*.47};
   return entity;
@@ -5073,7 +5075,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     if(initiallyVisible)activeCount++;entityCount+=7+(billboard?1:0);
   }
   const detailedBillboardCount=residentBillboardCount+(protagonistBillboardVisible?1:0);
-  localNpcPresentation={...localNpcPresentation,active:activeCount>0||protagonistBillboardVisible,activeCount,entityCount,drawCallEstimate:entityCount,buildTimeMs:Number((performance.now()-started).toFixed(3)),time:inspectionFantasyStamp(),billboardLayerActive:groundArt&&detailedBillboardCount>0,detailedBillboardCount,residentBillboardCount,protagonistBillboardVisible,billboardTextureUrls:Object.freeze(Array.from(billboardUrls).sort()),groundRepresentationReady:groundArt,cameraPresentation:"orthographic-top-down"};
+  localNpcPresentation={...localNpcPresentation,active:activeCount>0||protagonistBillboardVisible,activeCount,entityCount,drawCallEstimate:entityCount,buildTimeMs:Number((performance.now()-started).toFixed(3)),time:inspectionFantasyStamp(),billboardLayerActive:groundArt&&detailedBillboardCount>0,detailedBillboardCount,residentBillboardCount,protagonistBillboardVisible,billboardTextureUrls:Object.freeze(Array.from(billboardUrls).sort()),groundRepresentationReady:groundArt,cameraPresentation:"orthographic-3q",tangentPresentationPitchDegrees:LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES};
   if(selectedNpc&&!inspectionPickables.has(inspectionRegistryKey("npc",selectedNpc)))dismissInspection();
 }
 function refreshCanonicalNpcPresentation(){
@@ -5114,7 +5116,7 @@ function updateCanonicalNpcMotion(){
     if(record.billboard){
       const base=record.billboard._advisorBillboard||{},emphasis=eventActive?1.08:working?1.045:1;
       const h=Math.max(.1,Number(base.height||1)*emphasis),w=Math.max(.1,Number(base.width||1)*emphasis),feet=Math.max(.01,Number(base.feetOffset||h*.47)*emphasis);
-      record.billboard.setLocalScale(w,1,h);record.billboard.setLocalPosition(pos.x,ground+.035,pos.z-feet);record.billboard.setLocalEulerAngles(0,0,0);
+      record.billboard.setLocalScale(w,1,h);record.billboard.setLocalPosition(pos.x,ground+.035,pos.z-feet);record.billboard.setLocalEulerAngles(90,0,0);
     }
     if(eventActive){
       if(viewportRect&&cameraEntity?.camera){
@@ -8041,8 +8043,9 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       horizonSkirtMaterial.depthWrite=false;
       horizonSkirtMaterial.update();
     }
-    // LOD refinement occupies the same camera-facing tangent plane; zoom never changes viewing angle.
-    tangentPatch.setLocalEulerAngles(90,0,0);
+    // Keep one fixed orthographic 3/4 tangent presentation at every local LOD.
+    // Zoom still changes only magnification/detail; the presentation pitch never varies with scalar.
+    tangentPatch.setLocalEulerAngles(LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,0,0);
     const dims=localPatchDimensions(),level=LOCAL_DETAIL_LEVELS[dims.levelIndex];
     const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
     const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
@@ -8112,7 +8115,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     localResources.requestedLevelIndex=requestedIndex;localResources.visibleLevelIndex=displayResource?visibleIndex:null;
     if(focusRingPatch){
       const mediumScale=patchScale;
-      focusRingPatch.setLocalEulerAngles(90,0,0);
+      focusRingPatch.setLocalEulerAngles(LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,0,0);
       focusRingPatch.setLocalScale(mediumScale,mediumScale,mediumScale);
       focusRingPatch.setLocalPosition(offset.east/dims.metersPerUnit*mediumScale,offset.north/dims.metersPerUnit*mediumScale,DISPLAY_RADIUS_UNITS-.004);
       projectionPresentation={...projectionPresentation,mediumScale};
@@ -8122,7 +8125,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
       // large focus jump the bounded stand-in offset guarantees that this last
       // valid terrain representation still covers the viewport until swap.
       const surroundScale=patchScale;
-      horizonSkirt.setLocalEulerAngles(90,0,0);
+      horizonSkirt.setLocalEulerAngles(LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,0,0);
       horizonSkirt.setLocalScale(surroundScale,surroundScale,surroundScale);
       horizonSkirt.setLocalPosition(offset.east/dims.metersPerUnit*surroundScale,offset.north/dims.metersPerUnit*surroundScale,DISPLAY_RADIUS_UNITS-.010);
       projectionPresentation={...projectionPresentation,surroundScale};
