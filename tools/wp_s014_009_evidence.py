@@ -80,7 +80,13 @@ try:
         for mode in MATRIX[profile]:
             driver.execute_script("window.AdvisorSecurityReadoutUI.setEvidenceMode(arguments[0]);window.AdvisorConversationUI.render('wp-s014-009-'+arguments[0]);",mode)
             WebDriverWait(driver,30).until(lambda d,m=mode:ready(m));time.sleep(.2)
-            s=state(mode,profile)\n            if s["viewport"]!={"width":size[0],"height":size[1]}:raise RuntimeError("viewport calibration drift "+json.dumps(s))\n            path=OUT/f"{profile}-{mode}.png";driver.save_screenshot(str(path));assert_state(s);records.append({"profile":profile,"mode":mode,"file":str(path),"state":s})
+            s=state(mode,profile)
+            if s["viewport"]!={"width":size[0],"height":size[1]}:
+                raise RuntimeError("viewport calibration drift "+json.dumps(s))
+            path=OUT/f"{profile}-{mode}.png"
+            driver.save_screenshot(str(path))
+            assert_state(s)
+            records.append({"profile":profile,"mode":mode,"file":str(path),"state":s})
     severe=[e for e in driver.get_log("browser") if e.get("level")=="SEVERE" and "favicon.ico" not in str(e.get("message",""))]
     if severe:raise RuntimeError("browser severe errors "+json.dumps(severe[-10:]))
     result={"pass":True,"wp":"WP-S014-009","classification":"MIXED","screenshots":len(records),"records":records}
