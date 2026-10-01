@@ -347,7 +347,11 @@ jobs:
           )
           if [ -n "$ISSUE" ]; then args+=(--issue "$ISSUE"); fi
           if [ "$PUBLISH" != 'true' ]; then args+=(--no-publish); fi
-          python tools/screenshot_tool.py "${args[@]}"
+          if [ "$SCENARIO" = 'wp-s003-004-004' ]; then
+            TARGET="$TARGET" OUT="tools/screenshots/wp-s003-004-004" python tools/wp_s003_004_004_evidence.py
+          else
+            python tools/screenshot_tool.py "${args[@]}"
+          fi
 
       - name: Upload visual evidence artifact
         if: always()
