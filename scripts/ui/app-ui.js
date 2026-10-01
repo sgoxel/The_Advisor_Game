@@ -1955,6 +1955,7 @@ function renderObjectInteractionPanel(context,actorPosition,{proof=false,message
   return context;
 }
 function showObjectInteractionForEvidence(type="table",index=0,buildingLabel=""){
+  if(!e.objectInteractionPanel)cache();
   const campaign=SeedSystem.getCampaign();
   if(!campaign?.seed||!window.ObjectInteractions)return null;
   const requestedLabel=String(buildingLabel||"");
