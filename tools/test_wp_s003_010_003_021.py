@@ -166,6 +166,9 @@ def main():
         final=snap(d); nav=final["navigationPerformance"]
         ev["longTasks"]=longs; ev["navigationPerformance"]=nav
         if float(nav.get("liveProjectionMaxMs") or 0)>=50: raise AssertionError(f"live label projection exceeded 50 ms: {nav.get('liveProjectionMaxMs')}")
+        if float(nav.get("maxSemanticUpdateMs") or 0)>=50: raise AssertionError(f"semantic update exceeded 50 ms: {nav.get('maxSemanticUpdateMs')}")
+        if float(nav.get("maxFrameUpdateMs") or 0)>=50: raise AssertionError(f"frame update exceeded 50 ms: {nav.get('maxFrameUpdateMs')}")
+        if float(nav.get("residentSchedulerMaxMs") or 0)>=50: raise AssertionError(f"resident scheduler exceeded 50 ms: {nav.get('residentSchedulerMaxMs')}")
         if int(nav.get("liveProjectionCount") or 0)<20: raise AssertionError("live projection path insufficiently exercised")
         if int(final["projection"]["resourceBudget"].get("missingCoverageCount") or 0)!=0: raise AssertionError(f"terrain coverage gap reported: {final['projection']['resourceBudget']}")
         severe=[x for x in d.get_log("browser") if x.get("level")=="SEVERE" and "favicon" not in str(x.get("message","")).lower()]
