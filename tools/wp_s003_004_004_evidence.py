@@ -10,12 +10,16 @@ from screenshot_tool import set_exact_viewport
 TARGET=os.environ.get("TARGET","http://127.0.0.1:8000/")
 OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s003-004-004"))
 OUT.mkdir(parents=True,exist_ok=True)
-SEED=os.environ.get("WP_S003_004_004_SEED","GROUND-BILLBOARD-EVIDENCE-004004")\nEVIDENCE_TIME="1100-01-01 11:30:00"
+SEED=os.environ.get("WP_S003_004_004_SEED","GROUND-BILLBOARD-EVIDENCE-004004")
+EVIDENCE_TIME="1100-01-01 11:30:00"
 VIEWS=[
-    ("desktop-near-ground",1280,800,8),
-    ("desktop-ground",1280,800,9),
-    ("phone-landscape-ground",844,390,9),
-    ("phone-portrait-ground",390,844,9),
+    ("desktop-near-ground",1280,800,8,"overview"),
+    ("desktop-ground",1280,800,9,"overview"),
+    ("desktop-building-front",1280,800,9,"front"),
+    ("desktop-building-behind",1280,800,9,"behind"),
+    ("desktop-interior-cutaway",1280,800,9,"inside"),
+    ("phone-landscape-ground",844,390,9,"overview"),
+    ("phone-portrait-ground",390,844,9,"overview"),
 ]
 
 options=Options()
@@ -61,12 +65,58 @@ def compact_state():
         protagonistBillboardVisible:Boolean(np.protagonistBillboardVisible),groundRepresentationReady:Boolean(np.groundRepresentationReady),
         billboardTextureUrls:Array.isArray(np.billboardTextureUrls)?np.billboardTextureUrls:[],cameraPresentation:np.cameraPresentation||null,presentationScaleMultiplier:Number(np.presentationScaleMultiplier||1),activeResidentCount:Number(np.activeCount||0),
         tangentPresentationPitchDegrees:Number(np.tangentPresentationPitchDegrees||0),
+        protagonistPosition:window.Protagonist?.getPosition?.()||null,
+        groundBuildingCutaway:s.groundBuildingCutaway||null,
         cameraPoseInvariant:s.zoom?.pose?.cameraPoseInvariant!==false,cameraPitchDegrees:Number(pp.cameraPitchDegrees||0),zoomTransform:s.zoom?.pose?.zoomTransform||pp.zoomTransform||null,
         residentTargetCount:targets.length,residentTargets:targets.slice(0,8).map(t=>({id:String(t.id),bounds:t.bounds||null})),
         navigation:{longTask50Count:Number(s.navigationPerformance?.longTask50Count||0),longTaskWorstMs:Number(s.navigationPerformance?.longTaskWorstMs||0),framePhaseMaxMs:s.navigationPerformance?.framePhaseMaxMs||{}},
         npcPresentation:np
       };
     """)
+
+def proof_building_points():
+    result=js("""
+      const seed=window.PlanetStage?.snapshot?.()?.activeSeed;
+      const interiors=seed&&window.BuildingInteriors?.build?.(seed)||[];
+      const walk=(x,y)=>{try{const c=window.Walkability?.classify?.(seed,String(x),String(y));return Boolean(c?.walkable&&!c?.buildingId)}catch(_){return false}};
+      for(const interior of interiors){
+        const b=interior?.bounds,inside=interior?.interiorTarget;
+        if(!b||!inside)continue;
+        const cx=Math.floor((Number(b.minX)+Number(b.maxX))/2),cy=Math.floor((Number(b.minY)+Number(b.maxY))/2);
+        const candidates=[
+          {x:cx,y:Number(b.minY)-2,side:'south'},
+          {x:cx,y:Number(b.maxY)+2,side:'north'},
+          {x:Number(b.minX)-2,y:cy,side:'west'},
+          {x:Number(b.maxX)+2,y:cy,side:'east'}
+        ].filter(p=>walk(p.x,p.y));
+        if(candidates.length<2)continue;
+        candidates.sort((a,b)=>a.y-b.y||a.x-b.x);
+        const behind=candidates[0],front=candidates[candidates.length-1];
+        return {
+          ok:true,buildingId:String(interior.id),label:String(interior.label||interior.id),
+          bounds:b,
+          inside:{x:String(inside.x),y:String(inside.y)},
+          front:{x:String(front.x),y:String(front.y),side:front.side},
+          behind:{x:String(behind.x),y:String(behind.y),side:behind.side}
+        };
+      }
+      return {ok:false,reason:'no-enterable-building-with-two-outdoor-proof-points'};
+    """)
+    if not result or not result.get("ok"):
+        raise RuntimeError("could not derive building depth/cutaway proof points: "+json.dumps(result))
+    return result
+
+def set_protagonist_position(point):
+    result=js("""
+      const p=arguments[0],campaign=window.SeedSystem?.getCampaign?.();
+      if(!campaign||!p)return {ok:false,reason:'campaign-or-point-missing'};
+      campaign.protagonist=window.WorldCoordinates.position(String(p.x),String(p.y));
+      window.PlanetStage.setWorldTileFocus(String(p.x),String(p.y));
+      return {ok:true,position:window.Protagonist.getPosition()};
+    """,point)
+    if not result or not result.get("ok"):
+        raise RuntimeError("could not set evidence campaign protagonist position: "+json.dumps(result))
+    return result
 
 def set_scale(index):
     js("window.PlanetStage.setScaleIndex(arguments[0]);",int(index))
@@ -92,11 +142,12 @@ def add_overlay(label,state):
         '<div>'+String(s.scaleLabel||'')+' · visible LOD '+String(s.visibleLevel||'')+' · '+String(s.revealTier||'')+'</div>'+
         '<div>Detailed billboards '+s.detailedBillboardCount+' · visible residents '+s.activeResidentCount+' · 2× art '+s.presentationScaleMultiplier.toFixed(1)+'</div>'+
         '<div style="opacity:.70;margin-top:2px">'+(textures||'no detailed character textures')+'</div>'+
+        '<div>cutaway '+(s.groundBuildingCutaway?.active?'ON '+String(s.groundBuildingCutaway.buildingId||''):'OFF')+' · protagonist '+String(s.protagonistPosition?.x||'?')+','+String(s.protagonistPosition?.y||'?')+'</div>'+
         '<div style="opacity:.58">camera '+String(s.cameraPresentation||'')+' · tangent '+String(s.tangentPresentationPitchDegrees||0)+'° · pure zoom pose invariant '+String(s.cameraPoseInvariant)+'</div>';
       document.body.appendChild(card);
     """,label,state)
 
-def validate(label,index,state):
+def validate(label,index,state,mode="overview",proof=None):
     if not state["ready"]:
         raise RuntimeError(label+" stage not ready")
     if index==8:
@@ -118,6 +169,14 @@ def validate(label,index,state):
         raise RuntimeError(label+" violated README pure-zoom camera invariant: "+json.dumps(state))
     if state["cameraPresentation"]!="orthographic-3q" or not 45<=float(state["tangentPresentationPitchDegrees"])<=75:
         raise RuntimeError(label+" missing fixed orthographic 3/4 tangent presentation: "+json.dumps(state))
+    cut=state.get("groundBuildingCutaway") or {}
+    if mode=="inside":
+        if not cut.get("active") or str(cut.get("buildingId"))!=str((proof or {}).get("buildingId")):
+            raise RuntimeError(label+" did not activate the authoritative occupied-building cutaway: "+json.dumps(cut))
+        if int(cut.get("hiddenRoofCount") or 0)!=1 or int(cut.get("loweredShellCount") or 0)!=1 or int(cut.get("interiorFloorCount") or 0)!=1:
+            raise RuntimeError(label+" cutaway did not expose roof/shell/floor contract: "+json.dumps(cut))
+    elif mode in ("front","behind","overview") and cut.get("active"):
+        raise RuntimeError(label+" unexpectedly activated building cutaway outside the interior: "+json.dumps(cut))
 
 records=[]
 try:
@@ -127,20 +186,30 @@ try:
     reset_seed_and_focus()
     driver.refresh();wait.until(lambda _d: ready())
     prime=js("""const s=PlanetStage.snapshot(),p=StartingVillage.plan(s.activeSeed),c=p?.center||{x:'0',y:'0'};PlanetStage.applyAuthoritativeFantasyTime(arguments[0],'WP-S003-004-004 daytime visual evidence',{snapshotResult:false});PlanetStage.setWorldTileFocus(String(c.x),String(c.y));return {activeSeed:s.activeSeed,center:{x:String(c.x),y:String(c.y)},village:p?.name||'Starting Village',when:arguments[0]};""",EVIDENCE_TIME)
-    for label,width,height,index in VIEWS:
+    proof=proof_building_points()
+    overview_point={"x":str(prime["center"]["x"]),"y":str(prime["center"]["y"])}
+    for label,width,height,index,mode in VIEWS:
         set_exact_viewport(driver,width,height)
+        target_point=overview_point if mode=="overview" else proof[mode]
+        if mode!="overview":
+            set_protagonist_position(target_point)
+            set_scale(8)
+        elif label.startswith("phone-"):
+            set_protagonist_position(overview_point)
+            set_scale(8)
         time.sleep(.18)
         state=set_scale(index)
-        validate(label,index,state)
+        validate(label,index,state,mode,proof)
         add_overlay(label,state)
-        time.sleep(.12)
+        time.sleep(.16)
         path=OUT/f"{label}.png"
-        driver.save_screenshot(str(path))
-        records.append({"label":label,"viewport":[width,height],"scaleIndex":index,"file":str(path),"state":state})
+        if not driver.save_screenshot(str(path)):
+            raise RuntimeError("screenshot capture failed: "+str(path))
+        records.append({"label":label,"viewport":[width,height],"scaleIndex":index,"mode":mode,"file":str(path),"state":state,"proof":proof if mode!="overview" else None})
     severe=[x for x in driver.get_log("browser") if x.get("level")=="SEVERE" and "favicon.ico" not in str(x.get("message",""))]
     if severe:
         raise RuntimeError("browser console severe errors: "+json.dumps(severe[-12:]))
-    result={"pass":True,"wp":"WP-S003-004-004","classification":"MIXED","seed":prime.get("activeSeed"),"center":prime.get("center"),"village":prime.get("village"),"records":records}
+    result={"pass":True,"wp":"WP-S003-004-004","classification":"MIXED","seed":prime.get("activeSeed"),"center":prime.get("center"),"village":prime.get("village"),"buildingProof":proof,"records":records}
     (OUT/"evidence.json").write_text(json.dumps(result,indent=2))
     print(json.dumps(result,indent=2))
 finally:
