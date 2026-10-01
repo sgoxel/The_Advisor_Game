@@ -235,14 +235,12 @@ function activityForIdentity(seedValue,planValue,ordinalValue,timestampValue){
 let residentPlanCache={seed:null,plan:null};
 function startingVillagePlanForResidentActivity(seed){
   if(residentPlanCache.seed===seed)return residentPlanCache.plan;
-  // Resident lifecycle overrides only require the canonical starting-village
-  // identity, center and parent ID. Rebuilding the full settlement archetype
-  // here pulled unrelated country/region planning into one resident activity
-  // lookup. Keep the same canonical settlement ID without materializing that
-  // presentation/planning payload.
+  // Lifecycle overrides only need the canonical starting-village identity.
+  // Do not materialize strategic country/region settlement hierarchy from the
+  // resident movement hot path.
   let plan=null;
   try{
-    const record=SettlementArchetypes.canonicalSettlementAtPoint(seed,"village","0","0");
+    const record=SettlementArchetypes.canonicalStartingVillageIdentity?.(seed)||null;
     if(record?.role==="starting-village"){
       plan=deepFreeze({
         id:String(record.id),role:String(record.role),classId:String(record.classId||"village"),
@@ -255,6 +253,9 @@ function startingVillagePlanForResidentActivity(seed){
 }
 function npcLifecycleDeltaPresent(seed){
   try{
+    if(typeof window.WorldState?.hasDeltaKind==="function")return WorldState.hasDeltaKind(seed,"npc");
+    // Compatibility fallback for standalone harnesses that provide an older
+    // WorldState mock. Production uses the bounded kind query above.
     const delta=window.WorldState?.deltaSnapshot?.(seed)||null;
     return Boolean(delta?.entries?.some?.(entry=>String(entry?.entityKind||"")==="npc"));
   }catch(_){return true;}
