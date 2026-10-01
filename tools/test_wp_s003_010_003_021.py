@@ -73,7 +73,7 @@ def ground_to_regional_transition_probe(d,w,h):
     ground_pitch=62.0
     # Fixed local presentation pitch is a pure-zoom invariant. Verify via the
     # tangent entity transform rather than changing angle by scale.
-    actual_ground_pitch=float(d.execute_script("""const e=window.PlanetStage?.snapshot?.(); const n=window.pc?.app?.root?.findByName?.('LocalTangentPatch'); return n?.getLocalEulerAngles?.().x ?? null;""") or 0)
+    actual_ground_pitch=float(ground["projection"]["presentation"].get("tangentPitchDegrees") or 0)
     if abs(actual_ground_pitch-ground_pitch)>0.1:
         raise AssertionError(f"ground tangent pitch changed: {actual_ground_pitch}")
     d.execute_script("window.PlanetStage.setScaleIndex(4);")
@@ -83,7 +83,7 @@ def ground_to_regional_transition_probe(d,w,h):
         raise AssertionError(f"stale static-world presentation leaked during zoom-out: {rb}")
     if rb.get("mapScaleSuppressionActive") is not True or int(rb.get("mapScaleSuppressedRootCount") or 0)<1:
         raise AssertionError(f"map-scale roots were not suppressed immediately: {rb}")
-    transient_pitch=float(d.execute_script("""const n=window.pc?.app?.root?.findByName?.('LocalTangentPatch'); return n?.getLocalEulerAngles?.().x ?? null;""") or 0)
+    transient_pitch=float(transient["projection"]["presentation"].get("tangentPitchDegrees") or 0)
     if abs(transient_pitch-ground_pitch)>0.1:
         raise AssertionError(f"pure-zoom tangent pitch changed during coarsening: {transient_pitch}")
     transition_shot=shot(d,f"{w}x{h}-regional-transition")
