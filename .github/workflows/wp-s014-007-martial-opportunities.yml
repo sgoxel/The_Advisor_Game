@@ -15,7 +15,7 @@ permissions:
   contents: read
   issues: write
 concurrency:
-  group: wp-s014-007-\${{ github.sha }}
+  group: wp-s014-007-${{ github.sha }}
   cancel-in-progress: false
 jobs:
   functional:
@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-        with: {ref: "\${{ github.sha }}"}
+        with: {ref: "${{ github.sha }}"}
       - uses: actions/setup-node@v4
         with: {node-version: 20}
       - name: Syntax + deterministic martial opportunity evidence
@@ -46,9 +46,9 @@ jobs:
           BASE="https://sgoxel.github.io/The_Advisor_Game"
           MODE="accepted"; grep -q 'WP-S014-007.*COMPLETED' docs/ROADMAP.md && MODE="completed" || true
           for attempt in $(seq 1 72); do
-            curl -fsSL --max-time 20 "$BASE/scripts/world/protagonist-martial-opportunities.js?sha=\${GITHUB_SHA}&try=\${attempt}" -o /tmp/live-martial-opps.js || true
-            curl -fsSL --max-time 20 "$BASE/index.html?sha=\${GITHUB_SHA}&try=\${attempt}" -o /tmp/live-index.html || true
-            curl -fsSL --max-time 20 "$BASE/docs/ROADMAP.md?sha=\${GITHUB_SHA}&try=\${attempt}" -o /tmp/live-roadmap.md || true
+            curl -fsSL --max-time 20 "$BASE/scripts/world/protagonist-martial-opportunities.js?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-martial-opps.js || true
+            curl -fsSL --max-time 20 "$BASE/index.html?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-index.html || true
+            curl -fsSL --max-time 20 "$BASE/docs/ROADMAP.md?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-roadmap.md || true
             product=0; state=0
             grep -q 'VERSION="protagonist-martial-opportunities-v1"' /tmp/live-martial-opps.js 2>/dev/null && grep -q 'protagonist-martial-opportunities.js?v=protagonist-martial-opportunities-v1' /tmp/live-index.html 2>/dev/null && product=1 || true
             if [ "$MODE" = completed ]; then grep -q 'WP-S014-007.*COMPLETED' /tmp/live-roadmap.md 2>/dev/null && state=1 || true; else state=1; fi
@@ -61,5 +61,5 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const body='AGENT #6 WP-S014-007 exact-head workflow: **\${{ job.status }}**\nCommit: '+context.sha+'\nRun: https://github.com/'+context.repo.owner+'/'+context.repo.repo+'/actions/runs/'+context.runId+'\nDeterministic martial opportunity/practice evidence, Stage 10/12/13 regressions, and public Pages verification were attempted. VISUAL: N/A.';
+            const body='AGENT #6 WP-S014-007 exact-head workflow: **${{ job.status }}**\nCommit: '+context.sha+'\nRun: https://github.com/'+context.repo.owner+'/'+context.repo.repo+'/actions/runs/'+context.runId+'\nDeterministic martial opportunity/practice evidence, Stage 10/12/13 regressions, and public Pages verification were attempted. VISUAL: N/A.';
             await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:283,body});
