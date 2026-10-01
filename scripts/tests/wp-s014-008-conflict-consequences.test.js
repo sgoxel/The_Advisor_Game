@@ -48,21 +48,21 @@ function evidence(id,overrides={}){return{
  ...overrides
 }}
 put('IAX-PROTECT',{time:t1});
-const protected=evidence('SIM-PROTECT-1',{
+const protectedEvidence=evidence('SIM-PROTECT-1',{
  injury:{kind:'bruise',bodyRegion:'torso',severityMilli:12000,recoveryDurationSeconds:7200},
  service:{contractId,dutyId:'training-service',resultState:'completed',interactionAttemptId:'IAX-PROTECT'},
  standingRecognition:true
 });
 const baseline=WorldState.serializeState(seed);
-const a=Bridge.consume(seed,protected,sim('CC-PRIMARY'),identity);assert(a.ok,JSON.stringify(a));assert(a.injuryApplied&&a.serviceApplied&&a.standingApplied);assert.equal(a.healthAuthority,'ProtagonistHealth');assert.equal(a.serviceAuthority,'ProtagonistServiceContracts');assert.equal(a.standingAuthority,'ProtagonistStanding');
+const a=Bridge.consume(seed,protectedEvidence,sim('CC-PRIMARY'),identity);assert(a.ok,JSON.stringify(a));assert(a.injuryApplied&&a.serviceApplied&&a.standingApplied);assert.equal(a.healthAuthority,'ProtagonistHealth');assert.equal(a.serviceAuthority,'ProtagonistServiceContracts');assert.equal(a.standingAuthority,'ProtagonistStanding');
 const firstAudit=C(a.audit),firstHealth=C(Health.snapshot(seed,identity)),firstStanding=C(Standing.snapshot(seed,identity)),firstService=C(Service.snapshot(seed,identity));
 assert.equal(firstHealth.injuries.length,1);assert.equal(firstService.resultCount,1);assert.equal(firstService.results[0].resultState,'completed');assert.equal(Standing.summary(seed,{kind:'local',id:'GUARD-POST'},identity).domains.service.scopedDelta,3);
 assert(firstAudit.refs.health?.id&&firstAudit.refs.service?.id&&firstAudit.refs.standing?.id);assert(!JSON.stringify(firstAudit).includes('severityMilli'),'audit must keep refs, not copied injury truth');
-stores.set(seed,C(baseline));const replay=Bridge.consume(seed,protected,sim('CC-PRIMARY'),identity);assert(replay.ok);assert.deepStrictEqual(C(replay.audit),firstAudit,'same SEED + Fantasy Game Time + evidence must replay identically');assert.deepStrictEqual(C(Health.snapshot(seed,identity).injuries),firstHealth.injuries);assert.deepStrictEqual(C(Standing.snapshot(seed,identity).records),firstStanding.records);assert.deepStrictEqual(C(Service.snapshot(seed,identity).results),firstService.results);
+stores.set(seed,C(baseline));const replay=Bridge.consume(seed,protectedEvidence,sim('CC-PRIMARY'),identity);assert(replay.ok);assert.deepStrictEqual(C(replay.audit),firstAudit,'same SEED + Fantasy Game Time + evidence must replay identically');assert.deepStrictEqual(C(Health.snapshot(seed,identity).injuries),firstHealth.injuries);assert.deepStrictEqual(C(Standing.snapshot(seed,identity).records),firstStanding.records);assert.deepStrictEqual(C(Service.snapshot(seed,identity).results),firstService.results);
 
-const duplicate=Bridge.consume(seed,protected,sim('CC-PRIMARY'),identity);assert(duplicate.ok&&duplicate.duplicate&&duplicate.reason==='duplicate');
-const duplicateSource=Bridge.consume(seed,protected,sim('CC-PRIMARY-ALT'),identity);assert(duplicateSource.ok&&duplicateSource.duplicate&&duplicateSource.reason==='duplicate-source');
-const conflict=Bridge.consume(seed,{...protected,injury:{...protected.injury,severityMilli:13000}},sim('CC-CONFLICT'),identity);assert(!conflict.ok&&conflict.reason==='duplicate-source-conflict');
+const duplicate=Bridge.consume(seed,protectedEvidence,sim('CC-PRIMARY'),identity);assert(duplicate.ok&&duplicate.duplicate&&duplicate.reason==='duplicate');
+const duplicateSource=Bridge.consume(seed,protectedEvidence,sim('CC-PRIMARY-ALT'),identity);assert(duplicateSource.ok&&duplicateSource.duplicate&&duplicateSource.reason==='duplicate-source');
+const conflict=Bridge.consume(seed,{...protectedEvidence,injury:{...protectedEvidence.injury,severityMilli:13000}},sim('CC-CONFLICT'),identity);assert(!conflict.ok&&conflict.reason==='duplicate-source-conflict');
 assert.equal(Health.snapshot(seed,identity).injuries.length,1);assert.equal(Service.snapshot(seed,identity).resultCount,1);
 
 const standingBefore=Standing.snapshot(seed,identity).recordCount;
