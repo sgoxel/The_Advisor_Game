@@ -8,6 +8,13 @@ on:
       - "scripts/world/protagonist-wealth.js"
       - "scripts/world/protagonist-employment.js"
       - "scripts/world/protagonist-inventory.js"
+      - "scripts/world/command-set-interface.js"
+      - "scripts/world/protagonist-command-evaluator.js"
+      - "scripts/world/protagonist-action-runtime.js"
+      - "scripts/world/action-executor.js"
+      - "scripts/world/object-interactions.js"
+      - "scripts/world/daily-activity.js"
+      - "scripts/world/interior-objects.js"
       - "scripts/world/protagonist-interaction-pipeline.js"
       - "scripts/world/economic-transaction.js"
       - "scripts/world/local-market.js"
@@ -42,8 +49,11 @@ jobs:
           python -m py_compile tools/wp_s012_010_evidence.py
       - name: Stage 12 chain and authority regressions
         run: |
+          node scripts/tests/wp-s008-002-command-set-interface.test.js
           node scripts/tests/wp-s008-005-protagonist-command-evaluator.test.js
+          node scripts/tests/wp-s010-001-protagonist-action-runtime.test.js
           node scripts/tests/wp-s010-003-protagonist-interaction-pipeline.test.js
+          node scripts/tests/wp-s010-005-protagonist-work-routine.test.js
           node scripts/tests/wp-s012-001-protagonist-wealth.test.js
           node scripts/tests/wp-s012-002-local-market.test.js
           node scripts/tests/wp-s012-003-protagonist-employment.test.js

@@ -25,7 +25,7 @@ def page_ready():
     try:
         return driver.execute_script("""
           const stage=document.getElementById('planetStageRoot');
-          return Boolean(stage?.dataset?.ready==='true'&&window.PlanetStage?.snapshot?.()?.ready&&window.WorldState&&window.DailyActivity&&window.InteriorObjects&&window.ProtagonistInteractionPipeline&&window.ProtagonistEmployment&&window.ProtagonistWealth&&window.ProtagonistInventory&&window.LocalMarket&&window.LocalMarketConsequences&&window.EconomicTransaction&&window.AdvisorEconomyUI);
+          return Boolean(stage?.dataset?.ready==='true'&&window.PlanetStage?.snapshot?.()?.ready&&window.WorldState&&window.DailyActivity&&window.InteriorObjects&&window.CommandSetInterface&&window.ProtagonistCommandEvaluator&&window.ProtagonistActionRuntime&&window.ProtagonistInteractionPipeline&&window.ProtagonistEmployment&&window.ProtagonistWealth&&window.ProtagonistInventory&&window.LocalMarket&&window.LocalMarketConsequences&&window.EconomicTransaction&&window.AdvisorEconomyUI);
         """)
     except Exception:return False
 
@@ -81,11 +81,27 @@ def execute_chain():
       const activated=window.ProtagonistEmployment.activate(seed,derived.contract,{authority:'simulation',authoritative:true,campaignSeed:seed,operationId:'WP-S012-010-CONTRACT',fantasyTimestamp:day+' 00:00:01'});
       if(!activated?.ok)throw new Error('Employment activate failed '+JSON.stringify(activated));
       const actorPosition={x:String(resident.workplaceTarget.x),y:String(resident.workplaceTarget.y),level:0};
-      const workInput={actorId:'protagonist',targetKind:'object',targetId:object.id,action:'work',actorPosition,externalKey:'WP-S012-010-WORK',fantasyTimestamp:workWhen,references:{proposalId:'WP-S012-010-AUTONOMOUS-WORK'}};
-      const started=window.ProtagonistInteractionPipeline.execute(seed,workInput);
-      if(!started?.ok||started.interaction?.status!=='active')throw new Error('Work did not enter active Simulation state '+JSON.stringify(started));
-      const finished=window.ProtagonistInteractionPipeline.execute(seed,{...workInput,fantasyTimestamp:doneWhen});
-      if(!finished?.ok||finished.interaction?.status!=='terminal-success'||finished.interaction?.simulation?.authoritativeTerminalSuccess!==true)throw new Error('Terminal Simulation work evidence missing '+JSON.stringify(finished));
+      const activity=window.DailyActivity.resolveActionTarget(seed,resident,workWhen);
+      if(activity?.action!=='work'||activity?.interactionObjectId!==object.id)throw new Error('Grounded DailyActivity work target mismatch '+JSON.stringify(activity));
+      const commandSnapshot=window.CommandSetInterface.buildSnapshot({seed,when:workWhen,origin:actorPosition},{
+        getResidentRoster(){return[resident];},
+        getDailyActivities(){return[activity];},
+        queryDestinations(){return{results:[],diagnostics:{bounded:true,fullWorldScan:false}};},
+        getCountry(){return null;},getRoadGraph(){return null;},getKnownLeads(){return[];}
+      });
+      const person=commandSnapshot.targets.people.find(x=>x.id===resident.id),workTarget=commandSnapshot.targets.interactions.find(x=>x.id===object.id);
+      if(!person||!workTarget||workTarget.action!=='work'||!workTarget.personIds.includes(resident.id))throw new Error('Bounded command snapshot lost grounded work context');
+      window.ProtagonistActionRuntime.reset();
+      const proposal={proposalId:'PROP-WP-S012-010-WORK',commandId:'advisor.propose_interaction',parameters:{personId:resident.id,interactionTargetId:object.id,topic:'Complete paid '+resident.profession+' work'},source:'wp-s012-010-production'};
+      const scheduled=window.ProtagonistActionRuntime.schedule({seed,when:workWhen,snapshot:commandSnapshot,proposal,actorId:'protagonist',actorPosition,decisionContext:{value:.99,urgency:.95,socialAcceptability:.98}});
+      if(!scheduled?.ok)throw new Error('ProtagonistActionRuntime schedule failed '+JSON.stringify(scheduled));
+      const firstTick=window.ProtagonistActionRuntime.tick({seed,when:workWhen,maxAttempts:1}),firstRow=firstTick.processed[0];
+      let runtimeRow=firstRow;
+      if(firstRow?.state==='running')runtimeRow=window.ProtagonistActionRuntime.tick({seed,when:doneWhen,maxAttempts:1}).processed[0];
+      const evaluatorResult=runtimeRow?.evaluatorResult,authoritativeAttemptId=evaluatorResult?.execution?.authoritativeResult?.attemptId;
+      const pipeline=authoritativeAttemptId?window.ProtagonistInteractionPipeline.get(seed,authoritativeAttemptId):null;
+      if(!['accepted','modified'].includes(String(evaluatorResult?.decision||''))||runtimeRow?.state!=='succeeded'||pipeline?.status!=='terminal-success'||pipeline?.action!=='work'||pipeline?.simulation?.authoritativeTerminalSuccess!==true)throw new Error('Protagonist decision → terminal Simulation work failed '+JSON.stringify({runtimeRow,pipeline}));
+      const finished={interaction:pipeline};
       const balanceBeforeWork=window.ProtagonistWealth.snapshot(seed).balance;
       const wage=window.ProtagonistEmployment.settle(seed,{contractId:derived.contract.id,employerRef:contractContext.employerRef,workplaceRef:contractContext.workplaceRef,workResultId:finished.interaction.resultId},{authority:'simulation',authoritative:true,campaignSeed:seed,operationId:'WP-S012-010-WAGE',fantasyTimestamp:payWhen});
       if(!wage?.ok||wage.duplicate)throw new Error('Wage settlement failed '+JSON.stringify(wage));
@@ -133,14 +149,14 @@ def execute_chain():
       if(model.fixture!==false||model.work?.lastPay?.id!==wage.transactionId||!model.outcomes.some(x=>x.id===purchase.transactionId&&x.state==='completed'))throw new Error('Production economy readout does not reflect real chain '+JSON.stringify(model));
       const chain={
         seed,initialWhen,day,residentId:resident.id,profession:resident.profession,workplaceId:resident.workplaceId,workObjectId:object.id,
-        workWhen,workAttemptId:finished.interaction.attemptId,workResultId:finished.interaction.resultId,terminalSimulation:true,
+        workWhen,protagonistRuntimeAttemptId:runtimeRow.attemptId,protagonistDecision:evaluatorResult.decision,protagonistDecisionId:evaluatorResult.decisionId||null,protagonistExecutionId:evaluatorResult.executionId||null,workAttemptId:finished.interaction.attemptId,workResultId:finished.interaction.resultId,terminalSimulation:true,
         contractId:derived.contract.id,paymentId:wage.paymentId,wageTransactionId:wage.transactionId,wageAmount:wage.amount,
         balanceBeforeWork,balanceAfterPay,balanceAfterPurchase,
         settlementId:plan.id,offerId:offer.offerId,itemId:offer.itemRef.id,priceCopper:q.totalPriceCopper,stockBefore,stockAfter:beforeRestore.stock,
         purchaseQuoteId:q.quoteId,purchaseTransactionId:purchase.transactionId,purchaseWealthTransactionId:purchase.wealthTransactionId,inventoryOperationId:purchase.inventoryOperationId,marketConsequenceId:purchase.marketConsequence?.consequenceId||null,
         inventoryBefore,inventoryAfter:beforeRestore.itemQty,saveReload:true,leaveReturn:true,duplicateProtected:true,
         persistence:{...beforeRestore,restoredEventCount:window.LocalMarketConsequences.snapshot(seed,plan.id).eventCount},
-        authority:{productionFixture:false,terminalWorkRequired:true}
+        authority:{productionFixture:false,protagonistDecisionRequired:true,actionRuntimeRequired:true,terminalWorkRequired:true,simulationValidationBypass:false}
       };
       window.__wpS012010Chain=chain;
       return chain;
@@ -183,7 +199,7 @@ try:
     if not load_object_interactions():raise RuntimeError("Production ObjectInteractions failed to load")
     chain=execute_chain()
     required=["workResultId","wageTransactionId","purchaseTransactionId","purchaseWealthTransactionId","inventoryOperationId","offerId"]
-    if any(not chain.get(k) for k in required) or not chain.get("terminalSimulation") or not chain.get("saveReload") or not chain.get("leaveReturn") or not chain.get("duplicateProtected"):raise RuntimeError("acceptance chain incomplete "+json.dumps(chain))
+    if any(not chain.get(k) for k in required) or chain.get("protagonistDecision") not in ["accepted","modified"] or not chain.get("protagonistRuntimeAttemptId") or not chain.get("terminalSimulation") or not chain.get("saveReload") or not chain.get("leaveReturn") or not chain.get("duplicateProtected"):raise RuntimeError("acceptance chain incomplete "+json.dumps(chain))
     if chain["balanceAfterPay"]!=chain["balanceBeforeWork"]+chain["wageAmount"] or chain["balanceAfterPurchase"]!=chain["balanceAfterPay"]-chain["priceCopper"]:raise RuntimeError("balance chain invalid "+json.dumps(chain))
     if chain["inventoryAfter"]!=chain["inventoryBefore"]+1 or chain["stockAfter"]!=chain["stockBefore"]-1:raise RuntimeError("inventory/market chain invalid "+json.dumps(chain))
     for profile,size in VIEWPORTS.items():
