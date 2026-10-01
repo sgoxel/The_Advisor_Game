@@ -63,6 +63,40 @@ def shot(d,name):
     if not d.save_screenshot(str(p)): raise RuntimeError("screenshot failed")
     return p.name
 
+def ground_to_regional_transition_probe(d,w,h):
+    d.execute_script("window.PlanetStage.setZoomScalar(1);")
+    WebDriverWait(d,300).until(lambda x:
+        str(snap(x)["projection"]["resourceBudget"].get("visibleLevel") or "")=="ground"
+        and int(snap(x)["projection"]["resourceBudget"].get("pendingPreparationCount") or 0)==0)
+    time.sleep(.2)
+    ground=snap(d)
+    ground_pitch=62.0
+    # Fixed local presentation pitch is a pure-zoom invariant. Verify via the
+    # tangent entity transform rather than changing angle by scale.
+    actual_ground_pitch=float(d.execute_script("""const e=window.PlanetStage?.snapshot?.(); const n=window.pc?.app?.root?.findByName?.('LocalTangentPatch'); return n?.getLocalEulerAngles?.().x ?? null;""") or 0)
+    if abs(actual_ground_pitch-ground_pitch)>0.1:
+        raise AssertionError(f"ground tangent pitch changed: {actual_ground_pitch}")
+    d.execute_script("window.PlanetStage.setScaleIndex(4);")
+    time.sleep(.04)
+    transient=snap(d); rb=transient["projection"]["resourceBudget"]
+    if rb.get("mapScalePresentationEligible") is not False:
+        raise AssertionError(f"stale static-world presentation leaked during zoom-out: {rb}")
+    if rb.get("mapScaleSuppressionActive") is not True or int(rb.get("mapScaleSuppressedRootCount") or 0)<1:
+        raise AssertionError(f"map-scale roots were not suppressed immediately: {rb}")
+    transient_pitch=float(d.execute_script("""const n=window.pc?.app?.root?.findByName?.('LocalTangentPatch'); return n?.getLocalEulerAngles?.().x ?? null;""") or 0)
+    if abs(transient_pitch-ground_pitch)>0.1:
+        raise AssertionError(f"pure-zoom tangent pitch changed during coarsening: {transient_pitch}")
+    transition_shot=shot(d,f"{w}x{h}-regional-transition")
+    return {"groundVisibleLevel":ground["projection"]["resourceBudget"].get("visibleLevel"),
+            "groundPitchDegrees":actual_ground_pitch,
+            "transitionVisibleLevel":rb.get("visibleLevel"),"transitionRequestedLevel":rb.get("requestedLevel"),
+            "mapScalePresentationEligible":rb.get("mapScalePresentationEligible"),
+            "mapScaleSuppressionActive":rb.get("mapScaleSuppressionActive"),
+            "mapScaleSuppressedRootCount":rb.get("mapScaleSuppressedRootCount"),
+            "staleDisplayStaticWorldIgnored":rb.get("staleDisplayStaticWorldIgnored"),
+            "transitionPitchDegrees":transient_pitch,"screenshot":transition_shot}
+
+
 def labels(d):
     return d.execute_script("""return [...document.querySelectorAll('.planet-map-labels .planet-atlas-label[data-canonical-id],.planet-map-labels .planet-map-landmark[data-canonical-id]')].filter(e=>!e.hidden).map(e=>({id:e.dataset.canonicalId,text:e.textContent.trim(),left:parseFloat(e.style.left)||0,top:parseFloat(e.style.top)||0,kind:e.dataset.kind||''}));""")
 
@@ -126,6 +160,8 @@ def main():
             if view_index==0:
                 close=settle_index(d,7)
                 ev["views"].append({"viewport":[w,h],"phase":"close-materialized","scale":close["zoom"]["scaleLabel"],"localStatic":close["projection"]["localStatic"]})
+                transition=ground_to_regional_transition_probe(d,w,h)
+                ev["views"].append({"viewport":[w,h],"phase":"ground-to-regional-transition","transition":transition})
             regional,target=regional_mid(d); assert_regional_clean(regional)
             seasonal=d.execute_script("return window.SeasonalPresentation?.snapshot?.()||null")
             if not seasonal: raise AssertionError("seasonal presentation telemetry unavailable")
@@ -140,6 +176,9 @@ def main():
         final=snap(d); nav=final["navigationPerformance"]
         ev["longTasks"]=longs; ev["navigationPerformance"]=nav
         if float(nav.get("liveProjectionMaxMs") or 0)>=50: raise AssertionError(f"live label projection exceeded 50 ms: {nav.get('liveProjectionMaxMs')}")
+        if float(nav.get("maxSemanticUpdateMs") or 0)>=50: raise AssertionError(f"semantic update exceeded 50 ms: {nav.get('maxSemanticUpdateMs')}")
+        if float(nav.get("maxFrameUpdateMs") or 0)>=50: raise AssertionError(f"frame update exceeded 50 ms: {nav.get('maxFrameUpdateMs')}")
+        if float(nav.get("residentSchedulerMaxMs") or 0)>=50: raise AssertionError(f"resident scheduler exceeded 50 ms: {nav.get('residentSchedulerMaxMs')}")
         if int(nav.get("liveProjectionCount") or 0)<20: raise AssertionError("live projection path insufficiently exercised")
         if int(final["projection"]["resourceBudget"].get("missingCoverageCount") or 0)!=0: raise AssertionError(f"terrain coverage gap reported: {final['projection']['resourceBudget']}")
         severe=[x for x in d.get_log("browser") if x.get("level")=="SEVERE" and "favicon" not in str(x.get("message","")).lower()]
