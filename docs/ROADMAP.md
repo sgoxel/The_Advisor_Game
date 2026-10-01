@@ -251,4 +251,17 @@ Work Package codes use zero-padded three-digit numeric segments:
 - `WP-S012-009` — Advisor Economy, Work + Purchase Readout — COMPLETED
 - `WP-S012-010` — End-to-End Work → Pay → Purchase → Persistent Outcome Acceptance — COMPLETED
 
+# Stage 13 — Legitimate Advancement, Patronage + Social Rank Foundation
+
+- `WP-S013-001` — Protagonist Skills, Practice + Qualification State
+- `WP-S013-002` — Social Standing, Service Merit + Recognition Ledger
+- `WP-S013-003` — Patronage, Mentorship + Sponsorship Opportunity Pipeline
+- `WP-S013-004` — Squire/Retainer Service + Duty Contract Validation
+- `WP-S013-005` — Legitimate Rank/Role Eligibility + Appointment Resolution
+- `WP-S013-006` — Oath, Allegiance + Authority Scope Transition
+- `WP-S013-007` — Status-Bound Duties, Privileges + Obligation State
+- `WP-S013-008` — Autonomous Advancement Goal + Opportunity Selection
+- `WP-S013-009` — Advisor Rank, Patronage + Advancement Readout
+- `WP-S013-010` — Rank-Aware Local Access, NPC Reactions + Social Consequences
+
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
