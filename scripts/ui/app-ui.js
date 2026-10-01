@@ -1903,23 +1903,34 @@ function renderObjectInteractionPanel(context,actorPosition,{proof=false,message
   const distance=Number(context.distanceTiles);
   const distanceText=Number.isFinite(distance)?distance+" tile"+(distance===1?"":"s")+" away":"distance unavailable";
   const place=context.buildingLabel?context.buildingLabel+" · ":"";
-  e.objectInteractionMeta.textContent=place+String(context.type||"object")+" · "+distanceText;
+  const privileged=context.actions.find(action=>action.access?.requiredScope&&action.access.requiredScope!=="self")||null;
+  const accessStatus=privileged?.access?.status||null;
+  e.objectInteractionMeta.textContent=place+String(context.type||"object")+" · "+distanceText+(accessStatus?" · STATUS "+String(accessStatus).toUpperCase():"");
   e.objectInteractionMessage.textContent=message||(
-    context.actions.some(action=>action.enabled)
-      ?"Choose a context action. Actions that require exact positioning stay disabled until the actor reaches the interaction point."
-      :"This object is outside the protagonist's current interaction range."
+    privileged?.access?.status==="restricted"
+      ?privileged.label+" is restricted because the required authority scope is not held. Ordinary actions remain available; status never bypasses Simulation."
+      :privileged?.access?.status==="permitted"
+        ?privileged.label+" is permitted by "+String(privileged.access.roleTitle||"the current legitimate role")+". Simulation still validates the action and outcome."
+        :privileged?.access?.status==="conditional"
+          ?privileged.label+" is conditional and needs additional grounded local context before it can proceed."
+          :context.actions.some(action=>action.enabled)
+            ?"Choose a context action. Actions that require exact positioning stay disabled until the actor reaches the interaction point."
+            :"This object is outside the protagonist's current interaction range."
   );
   e.objectInteractionActions.replaceChildren();
   for(const action of context.actions){
-    const button=document.createElement("button");
+    const button=document.createElement("button"),statusTag=action.access?.requiredScope&&action.access.requiredScope!=="self"?" · "+String(action.access.status||"").toUpperCase():"";
     button.type="button";
-    button.textContent=action.label;
+    button.textContent=action.label+statusTag;
     button.disabled=!action.enabled;
     button.dataset.ready=action.enabled?"true":"false";
     button.dataset.action=action.id;
-    button.title=action.enabled
-      ?action.label
-      :"Move closer: "+String(action.distanceTiles)+" tile(s), allowed "+String(action.rangeTiles);
+    button.dataset.accessStatus=action.access?.status||"";
+    button.title=action.reason==="status-restricted"
+      ?action.label+" requires "+String(action.access?.requiredScope||"additional authority")
+      :action.enabled
+        ?action.label
+        :"Move closer: "+String(action.distanceTiles)+" tile(s), allowed "+String(action.rangeTiles);
     button.onclick=()=>{
       const activeActor=objectInteractionActorPosition(actorPosition);
       const result=ObjectInteractions.attempt(campaign.seed,{
@@ -1943,11 +1954,12 @@ function renderObjectInteractionPanel(context,actorPosition,{proof=false,message
   }
   return context;
 }
-function showObjectInteractionForEvidence(type="table",index=0){
+function showObjectInteractionForEvidence(type="table",index=0,buildingLabel=""){
   const campaign=SeedSystem.getCampaign();
   if(!campaign?.seed||!window.ObjectInteractions)return null;
-  const matches=ObjectInteractions.list(campaign.seed).filter(item=>item.type===String(type));
-  const descriptor=matches[Math.max(0,Math.min(matches.length-1,Number(index)||0))]||ObjectInteractions.list(campaign.seed)[0]||null;
+  const requestedLabel=String(buildingLabel||"");
+  const matches=ObjectInteractions.list(campaign.seed).filter(item=>item.type===String(type)&&(!requestedLabel||item.buildingLabel===requestedLabel));
+  const descriptor=matches[Math.max(0,Math.min(matches.length-1,Number(index)||0))]||(requestedLabel?null:ObjectInteractions.list(campaign.seed)[0]||null);
   if(!descriptor)return null;
   const actorPosition=descriptor.interactionPositions?.[0]||descriptor.coordinate;
   const context=ObjectInteractions.context(campaign.seed,descriptor.id,actorPosition);

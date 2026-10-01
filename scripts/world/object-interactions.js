@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="world-object-interactions-v1";
+const VERSION="world-object-interactions-v2";
 const DEFAULT_QUERY_RADIUS_TILES=3;
 const DEFAULT_PICK_RADIUS_TILES=1.25;
 const MAX_RESULTS=12;
@@ -175,32 +175,46 @@ function visitLocal(seed,centerValue,radiusValue){
   telemetry.lastCandidateCount=candidates;
   return Object.freeze({items:Object.freeze([...seen.values()]),visitedCells,candidates});
 }
-function actionContext(descriptor,actorPosition,action){
+function actionContext(seed,descriptor,actorPosition,action,accessValue){
   const actor=point(actorPosition),target=nearestInteractionPoint(descriptor,actor);
-  const distance=target&&actor?manhattan(actor,target):Infinity;
-  const range=actionRange(action);
+  const distance=target&&actor?manhattan(actor,target):Infinity,range=actionRange(action),rangeReady=Number.isFinite(distance)&&distance<=range;
+  const access=accessValue===undefined?rankStatus(seed,descriptor,window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00",action):accessValue;
+  const statusReady=!access||access.status!=="restricted";
   return Object.freeze({
     id:action,
     label:ACTION_LABELS[action]||action,
     rangeTiles:range,
     distanceTiles:distance,
-    enabled:Number.isFinite(distance)&&distance<=range,
-    reason:Number.isFinite(distance)&&distance<=range?"ready":"out-of-range",
-    target
+    enabled:rangeReady&&statusReady,
+    reason:!rangeReady?"out-of-range":statusReady?"ready":"status-restricted",
+    target,
+    access:access?Object.freeze({status:access.status,permitted:access.permitted,conditional:access.conditional,reason:access.reason,requiredScope:access.requiredScope,requiredRoleId:access.requiredRoleId,roleTitle:access.role?.title||null,rankTier:access.role?.rankTier??null,presentation:access.presentation}):null
   });
 }
-function rankStatus(seed,descriptor,when){
+function statusRequirement(seed,descriptor,action){
+  const building=descriptor?.buildingId?BuildingInteriors.get(seed,descriptor.buildingId):null;
+  if(building?.kind==="meeting-hall"&&descriptor.type==="table"&&action==="work"){
+    return Object.freeze({requiredScope:"settlement:administration",requiredRoleId:null,label:"Administrative work"});
+  }
+  return Object.freeze({requiredScope:"self",requiredRoleId:null,label:descriptor?.label||"local interaction"});
+}
+function rankStatus(seed,descriptor,when,action){
   if(!window?.ProtagonistRankAccess||!descriptor)return null;
   try{
-    const target={id:descriptor.id,kind:descriptor.type,buildingId:descriptor.buildingId,label:descriptor.label,requiredScope:(descriptor.type==="door"?"self":"self")};
+    const requirement=statusRequirement(seed,descriptor,action);
+    const target={id:descriptor.id,kind:descriptor.type,buildingId:descriptor.buildingId,label:requirement.label,requiredScope:requirement.requiredScope,requiredRoleId:requirement.requiredRoleId};
     return window.ProtagonistRankAccess.localAccessContext(seed,"protagonist",when||window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00",target);
   }catch(_){return null}
 }
 function context(seed,descriptorOrId,actorPosition){
   const descriptor=typeof descriptorOrId==="string"?get(seed,descriptorOrId):descriptorOrId;
   if(!descriptor)return null;
-  const actor=point(actorPosition);
-  const access=rankStatus(seed,descriptor,window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00");
+  const actor=point(actorPosition),when=window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00";
+  const actions=descriptor.actions.map(action=>{
+    const access=rankStatus(seed,descriptor,when,action);
+    return actionContext(seed,descriptor,actor,action,access);
+  });
+  const privileged=actions.find(action=>action.access?.requiredScope&&action.access.requiredScope!=="self")||null;
   return Object.freeze({
     id:descriptor.id,
     type:descriptor.type,
@@ -210,8 +224,8 @@ function context(seed,descriptorOrId,actorPosition){
     coordinate:descriptor.coordinate,
     source:descriptor.source,
     distanceTiles:nearestDistance(descriptor,actor),
-    actions:Object.freeze(descriptor.actions.map(action=>actionContext(descriptor,actor,action))),
-    access:access?Object.freeze({status:access.status,permitted:access.permitted,conditional:access.conditional,reason:access.reason,label:access.label}):null,
+    actions:Object.freeze(actions),
+    access:privileged?.access||null,
     createsResources:false,
     authoritative:true
   });
@@ -294,7 +308,7 @@ function attempt(seed,request){
     telemetry.rejectedAttempts++;
     return Object.freeze({ok:false,status:"rejected",reason:"unknown-object",authoritative:true});
   }
-  const access=rankStatus(seed,descriptor,window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00");
+  const access=actorKind==="protagonist"?rankStatus(seed,descriptor,window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00",action):null;
   if(!descriptor.actions.includes(action)){
     telemetry.rejectedAttempts++;
     return Object.freeze({ok:false,status:"rejected",reason:"unsupported-action",objectId:descriptor.id,action,authoritative:true,access:access?{status:access.status,permitted:access.permitted,conditional:access.conditional,reason:access.reason}:null});
@@ -303,7 +317,7 @@ function attempt(seed,request){
     telemetry.rejectedAttempts++;
     return Object.freeze({ok:false,status:"rejected",reason:"status-restricted",objectId:descriptor.id,action,authoritative:true,access:{status:access.status,permitted:access.permitted,conditional:access.conditional,reason:access.reason}});
   }
-  const actionState=actionContext(descriptor,actorPosition,action);
+  const actionState=actionContext(seed,descriptor,actorPosition,action,access);
   if(!actionState.enabled){
     telemetry.rejectedAttempts++;
     return Object.freeze({
