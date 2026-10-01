@@ -78,9 +78,11 @@ try:
     driver.get(evidence_url());wait.until(lambda d:ready())
     driver.execute_script("window.PlanetStage.setScaleIndex(9)")
     wait.until(lambda d:d.execute_script("const s=window.PlanetStage.snapshot();return s.zoom?.scaleIndex===9&&s.projection?.tangentPatchActive===true"))
-    time.sleep(.5)
-    probe=move_probe()
+    wait.until(lambda d:d.execute_script("return (window.PlanetStage.inspectionTargets?.()||[]).some(x=>x.type==='building'&&x.bounds)"))
+    time.sleep(.35)
     grounded=grounded_anchor_probe()
+    driver.execute_script("window.LocalConflictPresentation.setEvidenceMode('active')")
+    probe=move_probe()
     for profile,(w,h) in VIEWPORTS.items():
         set_exact_viewport(driver,w,h);time.sleep(.25)
         for mode in MATRIX[profile]:
