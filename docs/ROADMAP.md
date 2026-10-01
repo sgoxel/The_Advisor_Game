@@ -72,11 +72,10 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-008-002` — Colorful Animated Scene Loading Status + Ready Transition — COMPLETED
 - `WP-S003-008-002-001` — Real First-Playable Loading Progress + Animated Phase Feedback — COMPLETED
 - `WP-S003-008-003` — Functional Projection-Aware Mini Map — COMPLETED
-- `WP-S003-008-004` — Responsive Startup Work Slicing + Main-Thread Stall Prevention — COMPLETED
-- `WP-S003-008-004-001` — Android Startup + Local-LOD Stall Watchdog, Recovery and Mobile Preparation Budget
+- `WP-S003-008-004` — Responsive Startup Work Slicing + Main-Thread Stall Prevention
 - `WP-S003-008-005` — World Destination Navigator + Nearby Places Popup — COMPLETED
-- `WP-S003-009` — Loading-Screen-Inspired Living World Visual Direction Foundation — COMPLETED
-- `WP-S003-009-001` — Starting Village Environmental Dressing + Semantic Prop Placement — COMPLETED
+- `WP-S003-009` — Loading-Screen-Inspired Living World Visual Direction Foundation
+- `WP-S003-009-001` — Starting Village Environmental Dressing + Semantic Prop Placement
 - `WP-S003-009-002` — Road Network Hierarchy + Raised Surface + Door Connector Paths — COMPLETED
 - `WP-S003-009-003` — Terrain/Object Contact Shadows + Grounding — COMPLETED
 - `WP-S003-009-004` — Deterministic Material Variation + Effective Ultra Texture Quality — COMPLETED
@@ -97,41 +96,34 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-010-003-004` — Terrain-Anchored Landmarks + World-Projected Political Borders — COMPLETED
 - `WP-S003-010-003-005` — Seamless Viewport-Filling Multi-LOD Terrain Continuity — COMPLETED
 - `WP-S003-010-003-005-001` — Zero-Movement Geographic Identity + Focus Lock Across LODs — COMPLETED
-- `WP-S003-010-003-005-002` — True Cross-LOD Surface Refinement + Texel/Geometry Density Continuity — COMPLETED
-- `WP-S003-010-003-006` — Streaming-Safe Scale Ladder + Ready-LOD Semantic Handoffs — COMPLETED
-- `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground — COMPLETED
-- `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling — COMPLETED
+- `WP-S003-010-003-005-002` — True Cross-LOD Surface Refinement + Texel/Geometry Density Continuity
+- `WP-S003-010-003-006` — Streaming-Safe Scale Ladder + Ready-LOD Semantic Handoffs
+- `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground
+- `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling
 - `WP-S003-010-003-009` — Canonical Planet/World Coordinate Registration + Political Atlas Integrity — COMPLETED
 - `WP-S003-010-003-010` — TOP PRIORITY BUG: SEED-Only Canonical Political Boundaries + SEED-Only Important-Place Placement — COMPLETED
-- `WP-S003-010-003-011` — TOP PRIORITY BUG: Pure Zoom + Canonical 1/N Scale Ladder + Scale-Aware Navigation — COMPLETED
+- `WP-S003-010-003-011` — TOP PRIORITY BUG: Pure Zoom + Canonical 1/N Scale Ladder + Scale-Aware Navigation
 - `WP-S003-010-003-012` — TOP PRIORITY BUG: SEED Coordinate Fabric + Gameplay-Center Marker + Landmark Callouts — COMPLETED
 - `WP-S003-010-003-013` — Screen-Space-Error Hierarchical Spatial LOD + Canonical Cell Refinement — COMPLETED
-- `WP-S003-010-003-014` — Physical-Scale Semantic Layer Ladder + Stable Label/Border/Route Decluttering — COMPLETED
+- `WP-S003-010-003-014` — Physical-Scale Semantic Layer Ladder + Stable Label/Border/Route Decluttering
 - `WP-S003-010-003-015` — TOP PRIORITY BUG: SEED-Only Settlement Hierarchy + Realistic Physical Spacing — COMPLETED
-- `WP-S003-010-003-016` — Temporal-Coherent Detail Residency + Ready-Child Handoff + Navigation Prefetch — COMPLETED
-- `WP-S003-010-003-017` — TOP PRIORITY REGRESSION: Planet-Scale Semantic Cleanup + Explainable Marker Visibility — COMPLETED
-- `WP-S003-010-003-018` — Smooth Animated Zoom + Intermediate Physical Scale Ladder — COMPLETED
+- `WP-S003-010-003-016` — Temporal-Coherent Detail Residency + Ready-Child Handoff + Navigation Prefetch
+- `WP-S003-010-003-017` — TOP PRIORITY REGRESSION: Planet-Scale Semantic Cleanup + Explainable Marker Visibility
+- `WP-S003-010-003-018` — Smooth Animated Zoom + Intermediate Physical Scale Ladder
 - `WP-S003-010-003-019` — Focus-Centric Layered World Streaming + Center-First Detail Refinement — COMPLETED
-- `WP-S003-010-003-020` — World-Map Navigation Performance Budget + Main-Thread Stutter Elimination — COMPLETED
-- `WP-S003-010-003-021` — World-Map Interaction Coherence + Streaming Stutter Cleanup — COMPLETED
-- `WP-S003-010-003-022` — TOP PRIORITY REGRESSION: Atomic Terrain + Static-World LOD Handoff
-- `WP-S003-010-003-023` — Progressive Terrain Surface Refinement + Cross-LOD Material Continuity
-- `WP-S003-010-003-024` — Ground Semantic Readiness + Truthful Scale Transition and Center-Marker UX
-- `WP-S003-010-003-025` — Fixed-Focus Planet-to-Ground Visual + Performance Regression Harness
-- `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area — COMPLETED
-- `WP-S003-010-004-001` — Starting-Village Close-Zoom Visual Cohesion + Entertaining Gameplay-Area Context
-- `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance — COMPLETED
+- `WP-S003-010-003-020` — World-Map Navigation Performance Budget + Main-Thread Stutter Elimination
+- `WP-S003-010-003-021` — World-Map Interaction Coherence + Streaming Stutter Cleanup
+- `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area
+- `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips — COMPLETED
 - `WP-S003-012` — Day/Night Atmospheric Color + Lighting Palette — COMPLETED
-- `WP-S003-013` — Biome-Aware Wilderness Dressing + Ambient Fauna — COMPLETED
-- `WP-S003-013-001` — Performance-Batched Wilderness Prop Readability + Ground Dressing Cleanup
+- `WP-S003-013` — Biome-Aware Wilderness Dressing + Ambient Fauna
 - `WP-S003-014` — Reactive Ambient Wildlife Behavior — COMPLETED
 - `WP-S003-015` — Contextual Building Activity Indicators — COMPLETED
 - `WP-S003-016` — Local Environmental Reaction Effects — COMPLETED
 - `WP-S003-017` — Positional Ambient Soundscape + Activity Audio — COMPLETED
 - `WP-S003-018` — Regional Weather Presentation + Local Behavior Hooks — COMPLETED
-- `WP-S003-019` — Seasonal World Presentation + Vegetation State — COMPLETED
-- `WP-S003-019-001` — TOP PRIORITY REGRESSION: World-Anchored Seasonal Detail + Physical-Scale Decorative Gating
+- `WP-S003-019` — Seasonal World Presentation + Vegetation State
 - `WP-S003-020` — Function-Readable Building Surroundings + Ownership Cues — COMPLETED
 - `WP-S003-021` — Campaign-State Environmental Wear, Damage + Recovery Projection — COMPLETED
 - `WP-S003-022` — Crossroads Direction Signposts + Named Route Wayfinding — COMPLETED
