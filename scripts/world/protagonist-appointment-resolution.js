@@ -1,3 +1,4 @@
+// Bounded legitimate appointment resolver; ProtagonistAuthority remains the sole rank/role state authority.
 (function(root,factory){
 "use strict";
 const api=factory(root||globalThis);
