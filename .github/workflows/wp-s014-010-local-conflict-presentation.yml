@@ -43,8 +43,29 @@ jobs:
         with: {python-version: "3.11"}
       - run: python -m pip install -r tools/requirements.txt
       - name: Capture fresh conflict/outcome/recovery evidence
+        shell: pwsh
         env: {TARGET: "http://127.0.0.1:8000/", OUT: "tools/screenshots/wp-s014-010"}
-        run: python tools/wp_s014_010_evidence.py
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP "wp-s014-010-http.log"
+          $server = Start-Process -FilePath "python" -ArgumentList @("-m","http.server","8000","--bind","127.0.0.1") -RedirectStandardOutput $log -RedirectStandardError "$log.err" -PassThru -WindowStyle Hidden
+          try {
+            $ready = $false
+            for ($i=0; $i -lt 30; $i++) {
+              try {
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/" -UseBasicParsing -TimeoutSec 2
+                if ($response.StatusCode -eq 200) { $ready = $true; break }
+              } catch {}
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not $ready) {
+              if (Test-Path "$log.err") { Get-Content "$log.err" }
+              throw "Local evidence server did not become reachable."
+            }
+            python tools/wp_s014_010_evidence.py
+            if ($LASTEXITCODE -ne 0) { throw "WP-S014-010 evidence harness failed with exit code $LASTEXITCODE." }
+          } finally {
+            if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue }
+          }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
