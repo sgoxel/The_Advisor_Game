@@ -70,6 +70,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Verify exact product is live on GitHub Pages
+        if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail
