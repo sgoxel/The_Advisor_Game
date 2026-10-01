@@ -171,8 +171,11 @@ def main():
         if float(nav.get("liveProjectionMaxMs") or 0)>=50: raise AssertionError(f"live label projection exceeded 50 ms: {nav.get('liveProjectionMaxMs')}")
         if float(nav.get("pointerSettleSemanticMaxMs") or 0)>=50 or int(nav.get("pointerSettleSemanticOver50Count") or 0)>0:
             raise AssertionError(f"pointer-settle semantic budget exceeded: max={nav.get('pointerSettleSemanticMaxMs')} over50={nav.get('pointerSettleSemanticOver50Count')}")
-        if float(nav.get("maxFrameUpdateMs") or 0)>=50: raise AssertionError(f"frame update exceeded 50 ms: {nav.get('maxFrameUpdateMs')}")
-        if float(nav.get("residentSchedulerMaxMs") or 0)>=50: raise AssertionError(f"resident scheduler exceeded 50 ms: {nav.get('residentSchedulerMaxMs')}")
+        for key in ("pointerDragFrameMaxMs","pointerDragRenderCpuMaxMs","pointerDragResidentSchedulerMaxMs"):
+            if key not in nav: raise AssertionError(f"missing interaction telemetry: {key}")
+            if float(nav.get(key) or 0)>=50: raise AssertionError(f"regional pointer-drag budget exceeded: {key}={nav.get(key)}")
+        for key in ("pointerDragFrameOver50Count","pointerDragRenderCpuOver50Count","pointerDragResidentSchedulerOver50Count"):
+            if int(nav.get(key) or 0)>0: raise AssertionError(f"regional pointer-drag >50 ms task recorded: {key}={nav.get(key)}")
         if int(nav.get("liveProjectionCount") or 0)<20: raise AssertionError("live projection path insufficiently exercised")
         if int(final["projection"]["resourceBudget"].get("missingCoverageCount") or 0)!=0: raise AssertionError(f"terrain coverage gap reported: {final['projection']['resourceBudget']}")
         severe=[x for x in d.get_log("browser") if x.get("level")=="SEVERE" and "favicon" not in str(x.get("message","")).lower()]
