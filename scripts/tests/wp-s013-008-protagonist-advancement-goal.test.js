@@ -1,156 +1,133 @@
-const assert=require("assert");
-const path=require("path");
-const fs=require("fs");
-
-function H(v){let h=2166136261>>>0;for(const ch of String(v??"")){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0}h^=h>>>16;h=Math.imul(h,2246822507);h^=h>>>13;return(h>>>0).toString(16).toUpperCase().padStart(8,"0")}
-function C(v){return v==null||typeof v!=="object"?v:JSON.parse(JSON.stringify(v))}
-
+"use strict";
+const assert=require("assert"),fs=require("fs"),path=require("path");
 global.window=global;
-global.TextEncoder=global.TextEncoder||require("util").TextEncoder;
 
-let socialReads=0;
-global.ProtagonistProfile={summary(seed){return {protagonistId:"PROTAGONIST-"+H(seed+"|protagonist|identity-v1"),traits:{resolve:82,empathy:64,curiosity:74,caution:28,ambition:86,sociability:58},fixedBaseline:true}},derive(seed){return {protagonistId:"PROTAGONIST-"+H(seed+"|protagonist|identity-v1"),personality:{traits:{resolve:82,empathy:64,curiosity:74,caution:28,ambition:86,sociability:58}}}}};
-global.ProtagonistNeeds={snapshot(){return {pressureMilli:{hunger:12000,fatigue:14000,safety:8000,social:9000}}}};
-global.ProtagonistHealth={snapshot(){return {conditionMilli:88000,fatigueMilli:12000}}};
-global.ProtagonistGoals={snapshot(){return {records:[{id:"GOAL-1",priority:90,topic:"seek advancement",status:"active"},{id:"GOAL-2",priority:25,topic:"save money",status:"active"}]}}};
-global.ProtagonistAuthority={snapshot(){return {exists:true,currentRole:{roleId:"local-resident",rankTier:0,rankLabel:"ordinary",scopes:["self"]}}}};
-global.ProtagonistStanding={snapshot(){return {available:true,rankTier:0,domains:{service:{score:45},professional:{score:50}}}}};
-global.ProtagonistEmployment={current(){return {ok:true,status:"active",contract:{id:"EMP-1",professionId:"smith",employerRef:{kind:"resident",id:"r-guard"},workplaceRef:{kind:"workplace",id:"W1"}}}}};
-global.ProtagonistWealth={snapshot(){return {available:true,balanceCopper:42,reserveCopper:10}}};
-global.ProtagonistStatusObligations={resolve(){return {ok:true,obligations:[{kind:"employment-duty",state:"standing",obligationId:"OB-1"},{kind:"housing-obligation",state:"due",obligationId:"OB-2"}],restrictedActions:[{kind:"settlement-administration"}]}}};
-global.SocialState={dialogueContext(_seed,id){socialReads++;return {source:"persistent-social-ledger",values:{trust:id==="r-mentor"?0.86:0.22,respect:id==="r-mentor"?0.84:0.18,suspicion:id==="r-mentor"?0.12:0.76,fear:0.08,loyalty:id==="r-mentor"?0.66:0.2,resentment:0.1}}}};
-global.ProtagonistPatronageOpportunities={list(){return[{opportunityId:"PAT-LIVE",kind:"patronage",label:"Mentor-backed advancement",sourceNpcId:"r-mentor",goalLinks:["GOAL-1"],priority:88,grounded:true,available:true,targetRankTier:1,targetRoleId:"guild-member",proposal:null}]}}
-global.ProtagonistProfessionOpportunities={list(){return[]}};
-
-const modulePath=path.resolve(__dirname,"../world/protagonist-advancement-goal.js");
+const root=path.resolve(__dirname,"../..");
+const modulePath=path.join(root,"scripts/world/protagonist-advancement-goal.js");
 delete require.cache[require.resolve(modulePath)];
 const Advancement=require(modulePath);
 global.ProtagonistAdvancementGoal=Advancement;
 
-const seed="WP-S013-008-SEED";
-const when="1202-03-01 09:30:00";
+const seed="WP-S013-008-SEED",when="1201-10-01 11:00:00";
+const profile={traits:{resolve:80,curiosity:70,caution:20,ambition:90,empathy:60,sociability:65}};
+const needs={pressures:{hunger:10,fatigue:10,safety:5,social:10}};
+const health={condition:0.95,fatigue:0.12,mobilityBlocked:false};
+const goals={records:[{id:"G-ADV",status:"active",priority:90,title:"Earn a legitimate guild role"}]};
+const authority={roleId:"local-resident",rankTier:0,scopes:["self"]};
+const employment={status:"active",contract:{id:"EMP-SMITH",professionId:"smith"}};
+const wealth={balanceCopper:240,reserveCopper:40};
+const relationship={trust:.82,respect:.84,suspicion:.08,fear:.05,loyalty:.55,resentment:.04};
+const primary={
+  opportunityId:"ADV-GUILD",kind:"appointment",label:"Ask the master smith about guild appointment",priority:90,grounded:true,available:true,
+  sourceRef:{kind:"resident",id:"R1"},targetRoleId:"guild-member",targetRankTier:1,goalLinks:["G-ADV"],
+  prerequisites:{satisfied:true,blockers:[]},relationship,
+  proposal:{proposalId:"PROP-ADV-GUILD",commandId:"advisor.propose_interaction",parameters:{personId:"R1",interactionTargetId:"OBJ1",topic:"guild appointment"},source:"advancement-evidence"}
+};
+const secondary={
+  opportunityId:"ADV-TRAIN",kind:"training",label:"Ask for advanced forge training",priority:66,grounded:true,available:true,
+  sourceRef:{kind:"resident",id:"R2"},prerequisites:{satisfied:true},relationship:{trust:.6,respect:.6},
+  proposal:{proposalId:"PROP-ADV-TRAIN",commandId:"advisor.propose_interaction",parameters:{personId:"R2",interactionTargetId:"OBJ2",topic:"advanced training"},source:"advancement-evidence"}
+};
 
-const pursue=Advancement.evaluate({
-  seed,when,identityKey:"protagonist",
-  opportunities:[
-    {opportunityId:"ADV-PURSUE",kind:"patronage",label:"Mentor-backed advancement",sourceNpcId:"r-mentor",goalLinks:["GOAL-1"],priority:92,grounded:true,available:true,targetRankTier:1,targetRoleId:"guild-member"},
-    {opportunityId:"ADV-REJECT",kind:"promotion",label:"Unverified office",sourceNpcId:"r-critic",goalLinks:["GOAL-1"],priority:95,grounded:true,available:true,requiredAuthorityScopes:["settlement:administration"],targetRankTier:2,targetRoleId:"village-steward",prerequisites:{satisfied:false,blockers:["unverified-office"]}}
-  ],
-  profile:ProtagonistProfile.summary(seed),
-  needs:ProtagonistNeeds.snapshot(seed),
-  health:ProtagonistHealth.snapshot(seed),
-  goals:ProtagonistGoals.snapshot(seed),
-  authority:ProtagonistAuthority.snapshot(seed),
-  standing:ProtagonistStanding.snapshot(seed),
-  employment:ProtagonistEmployment.current(seed,when),
-  wealth:ProtagonistWealth.snapshot(seed),
-  obligations:ProtagonistStatusObligations.resolve(seed,when)
+const base={seed,when,profile,needs,health,goals,authority,employment,wealth,obligations:[],opportunities:[secondary,primary]};
+const pursued=Advancement.evaluate(base);
+assert(pursued.ok);assert.equal(pursued.status,"pursue");assert.equal(pursued.selectedOpportunityId,"ADV-GUILD");
+assert.equal(pursued.selectedProposal.commandId,"advisor.propose_interaction");assert.equal(pursued.handoff.boundary,"ProtagonistActionRuntime -> ProtagonistCommandEvaluator -> Simulation");
+assert.equal(pursued.handoff.terminalSimulationRequired,true);assert.equal(pursued.authority.opportunityCreation,false);assert.equal(pursued.authority.appointmentAuthority,false);
+
+const replay=Advancement.evaluate({...base,opportunities:[primary,secondary]});
+assert.equal(replay.decisionId,pursued.decisionId);assert.equal(replay.selectedOpportunityId,pursued.selectedOpportunityId);assert.deepStrictEqual(replay.evaluated,pursued.evaluated);
+
+const urgent=Advancement.evaluate({...base,needs:{pressures:{hunger:95,fatigue:20,safety:10,social:10}}});
+assert.equal(urgent.status,"defer");assert(urgent.selectedOpportunity.softBlockers.includes("urgent-self-care"));assert.equal(urgent.selectedProposal,null);
+
+const conflictOpp={...primary,conflictsWithCommitmentIds:["OBL-FAMILY"]};
+const conflict=Advancement.evaluate({...base,goals:{records:[]},obligations:[{id:"OBL-FAMILY",state:"due",priority:95,kind:"family"}],opportunities:[conflictOpp]});
+assert.equal(conflict.status,"defer");assert(conflict.selectedOpportunity.softBlockers.includes("commitment-conflict"));
+
+const missingPrereq=Advancement.evaluate({...base,opportunities:[{...primary,prerequisites:{satisfied:false,blockers:["qualification-missing"]}}]});
+assert.equal(missingPrereq.status,"reject");assert.equal(missingPrereq.reason,"qualification-missing");assert.equal(missingPrereq.selectedProposal,null);
+assert.equal(Advancement.runtimeInput(missingPrereq,{snapshotId:"NONE"}).ok,false);
+
+const ungrounded=Advancement.evaluate({...base,opportunities:[{...primary,grounded:false}]});
+assert.equal(ungrounded.status,"reject");assert.equal(ungrounded.reason,"opportunity-not-grounded");
+const missingProposal=Advancement.evaluate({...base,opportunities:[{...primary,proposal:null}]});
+assert.equal(missingProposal.status,"reject");assert.equal(missingProposal.reason,"proposal-required");
+
+const stable=Advancement.evaluate({
+  seed,when,profile:{traits:{resolve:50,curiosity:50,caution:100,ambition:10}},needs,health,goals:{records:[]},authority,employment:{status:"none"},wealth,obligations:[],
+  opportunities:[{...primary,priority:90,goalLinks:[],relationship:{trust:.5,respect:.5,suspicion:.2,fear:.1,loyalty:.35,resentment:.1}}]
 });
-assert.equal(pursue.ok,true);
-assert.equal(pursue.status,"pursue");
-assert.equal(pursue.selectedOpportunityId,"ADV-PURSUE");
-assert.equal(pursue.selectedProposal.commandId,"advisor.propose_interaction");
-assert.equal(pursue.selectedProposal.parameters.personId,"r-mentor");
-assert.equal(Advancement.runtimeInput(pursue,null,null,{actorId:"protagonist"}).ok,true);
-assert.equal(Advancement.evaluatorInput(pursue,null,null,{actorId:"protagonist"}).ok,true);
-const again=Advancement.evaluate({
-  seed,when,identityKey:"protagonist",
-  opportunities:[
-    {opportunityId:"ADV-PURSUE",kind:"patronage",label:"Mentor-backed advancement",sourceNpcId:"r-mentor",goalLinks:["GOAL-1"],priority:92,grounded:true,available:true,targetRankTier:1,targetRoleId:"guild-member"},
-    {opportunityId:"ADV-REJECT",kind:"promotion",label:"Unverified office",sourceNpcId:"r-critic",goalLinks:["GOAL-1"],priority:95,grounded:true,available:true,requiredAuthorityScopes:["settlement:administration"],targetRankTier:2,targetRoleId:"village-steward",prerequisites:{satisfied:false,blockers:["unverified-office"]}}
-  ],
-  profile:ProtagonistProfile.summary(seed),
-  needs:ProtagonistNeeds.snapshot(seed),
-  health:ProtagonistHealth.snapshot(seed),
-  goals:ProtagonistGoals.snapshot(seed),
-  authority:ProtagonistAuthority.snapshot(seed),
-  standing:ProtagonistStanding.snapshot(seed),
-  employment:ProtagonistEmployment.current(seed,when),
-  wealth:ProtagonistWealth.snapshot(seed),
-  obligations:ProtagonistStatusObligations.resolve(seed,when)
-});
-assert.deepEqual(again.status,pursue.status);
-assert.deepEqual(again.selectedOpportunityId,pursue.selectedOpportunityId);
+assert.equal(stable.status,"maintain-current-role");assert.equal(stable.reason,"stability-preferred");assert.equal(stable.selectedProposal,null);
 
-const maintain=Advancement.evaluate({
-  seed:"WP-S013-008-MAINTAIN",when,
-  opportunities:[
-    {opportunityId:"ADV-CAREER",kind:"training",label:"Costly distant move",sourceNpcId:"r-mentor",goalLinks:[],priority:8,grounded:true,available:true,costCopper:999,targetRankTier:1,targetRoleId:"guild-member"}
-  ],
-  profile:{traits:{resolve:12,empathy:58,curiosity:22,caution:84,ambition:18,sociability:32}},
-  needs:{hunger:0.93,fatigue:0.88,safety:0.56,social:0.64},
-  health:{condition:0.31,fatigue:0.72},
-  goals:{records:[{id:"GOAL-1",priority:15,status:"active"}]},
-  authority:{currentRole:{roleId:"local-resident",rankTier:0,scopes:["self"]}},
-  standing:{rankTier:0,domains:{service:{score:18}}},
-  employment:{status:"active",contract:{id:"EMP-1",professionId:"smith"}},
-  wealth:{balanceCopper:4,reserveCopper:0},
-  obligations:{obligations:[{kind:"employment-duty",state:"due",obligationId:"OB-1"},{kind:"housing-obligation",state:"overdue",obligationId:"OB-2"}]}
-});
-assert.equal(maintain.status,"maintain-current-role");
-assert.equal(maintain.selectedProposal,null);
+const tooMany=Array.from({length:Advancement.MAX_OPPORTUNITIES+1},(_,i)=>({...primary,opportunityId:"ADV-"+i,proposal:{...primary.proposal,proposalId:"P-"+i}}));
+assert.equal(Advancement.evaluate({...base,opportunities:tooMany}).reason,"opportunity-limit-exceeded");
+const tooManyGoals=Array.from({length:Advancement.MAX_GOALS+1},(_,i)=>({id:"G"+i,status:"active",priority:10}));
+assert.equal(Advancement.evaluate({...base,goals:{records:tooManyGoals}}).reason,"goal-read-limit-exceeded");
+const duplicate=Advancement.evaluate({...base,opportunities:[primary,{...primary,label:"Conflicting duplicate"}]});
+assert.equal(duplicate.status,"reject");assert(duplicate.evaluated.every(x=>x.reason==="opportunity-id-duplicate"));
 
-const reject=Advancement.evaluate({
-  seed:"WP-S013-008-REJECT",when,
-  opportunities:[
-    {opportunityId:"ADV-HARD",kind:"promotion",label:"Court office without access",sourceNpcId:"r-critic",goalLinks:["GOAL-1"],priority:98,grounded:true,available:true,requiredAuthorityScopes:["settlement:administration"],targetRankTier:2,targetRoleId:"village-steward",proposal:null}
-  ],
-  profile:{traits:{resolve:86,empathy:52,curiosity:76,caution:18,ambition:92,sociability:66}},
-  needs:{hunger:0.08,fatigue:0.14,safety:0.09,social:0.10},
-  health:{condition:0.91,fatigue:0.08},
-  goals:{records:[{id:"GOAL-1",priority:95,status:"active"}]},
-  authority:{currentRole:{roleId:"local-resident",rankTier:0,scopes:["self"]}},
-  standing:{rankTier:0,domains:{professional:{score:32}}},
-  employment:{status:"none",contract:null},
-  wealth:{balanceCopper:80,reserveCopper:10},
-  obligations:{obligations:[]}
-});
-assert.equal(reject.status,"reject");
-assert.equal(reject.selectedOpportunityId,"ADV-HARD");
-assert(reject.evaluated.find(row=>row.opportunityId==="ADV-HARD").hardBlockers.includes("authority-scope-missing"));
+let profileReads=0,needsReads=0,healthReads=0,goalReads=0,authorityReads=0,employmentReads=0,wealthReads=0,socialReads=0;
+global.ProtagonistProfile={summary(){profileReads++;return profile}};
+global.ProtagonistNeeds={snapshot(){needsReads++;return needs}};
+global.ProtagonistHealth={decisionContext(){healthReads++;return health}};
+global.ProtagonistGoals={list(s,o){goalReads++;assert.equal(o.limit,Advancement.MAX_GOALS);return goals.records}};
+global.ProtagonistAuthority={decisionContext(){authorityReads++;return authority}};
+global.ProtagonistEmployment={current(){employmentReads++;return employment}};
+global.ProtagonistWealth={snapshot(){wealthReads++;return wealth}};
+global.SocialState={dialogueContext(s,id){socialReads++;assert.equal(id,"R1");return relationship},adviceAcceptability(){return .9}};
+global.ProtagonistStanding={snapshot(){throw new Error("Stage 13 standing must not be read")}};
+global.ProtagonistStatusObligations={resolve(){throw new Error("Stage 13 status obligations must not be read")}};
+global.ProtagonistPatronageOpportunities={list(){throw new Error("Stage 13 patronage opportunities must not be read")}};
+global.ProtagonistProfessionOpportunities={list(){throw new Error("Stage 13 profession opportunities must not be read")}};
+const live=Advancement.fromLive(seed,when,{obligations:[],opportunities:[{...primary,relationship:null}]});
+assert(live.ok&&live.status==="pursue");assert.deepStrictEqual([profileReads,needsReads,healthReads,goalReads,authorityReads,employmentReads,wealthReads,socialReads],[1,1,1,1,1,1,1,1]);
 
-const defer=Advancement.evaluate({
-  seed:"WP-S013-008-DEFER",when,
-  opportunities:[
-    {opportunityId:"ADV-FUTURE",kind:"training",label:"Future sponsor session",sourceNpcId:"r-mentor",goalLinks:["GOAL-1"],priority:88,grounded:true,available:true,opensAt:"1202-03-02 09:30:00",targetRankTier:1,targetRoleId:"guild-member",proposal:null}
-  ],
-  profile:{traits:{resolve:70,empathy:55,curiosity:78,caution:32,ambition:88,sociability:62}},
-  needs:{hunger:0.05,fatigue:0.08,safety:0.05,social:0.07},
-  health:{condition:0.88,fatigue:0.12},
-  goals:{records:[{id:"GOAL-1",priority:88,status:"active"}]},
-  authority:{currentRole:{roleId:"local-resident",rankTier:0,scopes:["self"]}},
-  standing:{rankTier:0,domains:{professional:{score:68}}},
-  employment:{status:"active",contract:{id:"EMP-1",professionId:"smith"}},
-  wealth:{balanceCopper:48,reserveCopper:10},
-  obligations:{obligations:[{kind:"employment-duty",state:"standing",obligationId:"OB-1"}]}
-});
-assert.equal(defer.status,"defer");
-assert.equal(defer.selectedOpportunityId,"ADV-FUTURE");
-assert(defer.evaluated.find(row=>row.opportunityId==="ADV-FUTURE").softBlockers.includes("not-yet-open"));
+let fakeSchedules=0,captured=null;
+const fakeRuntime={schedule(config){fakeSchedules++;captured=config;return{ok:true,reason:"scheduled",attempt:{attemptId:"PAX-ADV",reason:"scheduled"}}}};
+const scheduledOnly=Advancement.schedule(pursued,{snapshotId:"SNAP-ADV"},null,{runtime:fakeRuntime,actorPosition:{x:"0",y:"0",level:0}});
+assert(scheduledOnly.ok);assert.equal(fakeSchedules,1);assert.equal(captured.proposal.proposalId,"PROP-ADV-GUILD");assert.equal(scheduledOnly.boundary,"ProtagonistActionRuntime -> ProtagonistCommandEvaluator -> Simulation");
 
-const live=Advancement.fromLive(seed,when,{identityKey:"protagonist"});
-assert.equal(live.status,"pursue");
-assert.equal(live.selectedOpportunityId,"PAT-LIVE");
-assert.equal(socialReads>0,true);
-assert.equal(Advancement.telemetry().liveBuilds>0,true);
-assert.equal(Advancement.telemetry().fullWorldScan,false);
-assert.equal(Advancement.telemetry().perFrameScan,false);
-assert.equal(Advancement.telemetry().authority,false);
+global.CommandSetInterface=Object.freeze({validateProposal(snapshot,p){
+  const target=(snapshot?.targets?.interactions||[]).find(x=>x.id===p.parameters.interactionTargetId);
+  const person=(snapshot?.targets?.people||[]).find(x=>x.id===p.parameters.personId);
+  if(!target||!person)return Object.freeze({ok:false,reason:"target-unavailable"});
+  return Object.freeze({ok:true,status:"validated",reason:"proposal-valid",commandId:p.commandId,snapshotId:snapshot.snapshotId,proposalId:p.proposalId,source:p.source,validatedParameters:Object.freeze({...p.parameters})});
+}});
+global.ObjectInteractions=Object.freeze({context(s,targetId){
+  if(targetId!=="OBJ1")return null;
+  return Object.freeze({actions:Object.freeze([{id:"work",enabled:true,reason:"ready",target:Object.freeze({x:"0",y:"0",level:0})}])});
+}});
+let simulationCalls=0;
+global.ProtagonistInteractionPipeline=Object.freeze({execute(s,input){
+  simulationCalls++;
+  return Object.freeze({ok:true,reason:"simulation-terminal-success",interaction:Object.freeze({attemptId:"IAX-ADV",resultId:"IRX-ADV",targetId:input.targetId,action:input.action,status:"terminal-success",reason:"simulation-terminal-success",simulation:Object.freeze({authoritativeTerminalSuccess:true})})});
+}});
+const evaluatorPath=path.join(root,"scripts/world/protagonist-command-evaluator.js");
+delete require.cache[require.resolve(evaluatorPath)];const Evaluator=require(evaluatorPath);global.ProtagonistCommandEvaluator=Evaluator;
+const runtimePath=path.join(root,"scripts/world/protagonist-action-runtime.js");
+delete require.cache[require.resolve(runtimePath)];const Runtime=require(runtimePath);global.ProtagonistActionRuntime=Runtime;
+const rt=Runtime.createRuntime({evaluator:Evaluator});
+const commandSnapshot={snapshotId:"SNAP-ADV",context:{seed,when,origin:{x:"0",y:"0",level:0}},targets:{people:[{id:"R1"}],places:[],routes:[],interactions:[{id:"OBJ1",personIds:["R1"],objectType:"workbench",action:"work",position:{x:"0",y:"0",level:0}}]}};
+const scheduled=Advancement.schedule(pursued,commandSnapshot,null,{runtime:rt,actorPosition:{x:"0",y:"0",level:0}});
+assert(scheduled.ok);const tick=rt.tick({seed,when});assert.equal(tick.processedCount,1);assert.equal(tick.processed[0].state,"succeeded");assert.equal(simulationCalls,1);
+assert.equal(tick.processed[0].evaluatorResult.finalValidation.ok,true);assert.equal(tick.processed[0].evaluatorResult.execution.actionExecuted,true);
 
-const indexPath=path.resolve(__dirname,"../../index.html");
-const html=fs.readFileSync(indexPath,"utf8");
-const script='scripts/world/protagonist-advancement-goal.js?v=protagonist-advancement-goal-v1';
-assert(html.includes(script),'canonical root must load the advancement selector');
-assert(html.indexOf(script)>html.indexOf('scripts/world/protagonist-economic-priority.js?v=protagonist-economic-priority-v1'));
+const telemetry=Advancement.telemetry();
+for(const key of ["fullWorldScan","fullSettlementScan","wholeHistoryScan","perFrameScan","directActionExecution","directWorldMutation","directRankMutation","directSkillMutation","directRelationshipMutation","directWealthMutation","appointmentAuthority","opportunityCreation","simulationValidationBypass"])assert.equal(telemetry[key],false,key);
+assert.equal(telemetry.selectionEventDriven,true);assert(pursued.serializedBytes<=Advancement.MAX_RESULT_BYTES);
+
+const source=fs.readFileSync(modulePath,"utf8");
+for(const forbidden of ["Math.random(","Date.now(","new Date(","innerWidth","innerHeight","devicePixelRatio","navigator.","ProtagonistStanding","ProtagonistStatusObligations","ProtagonistPatronageOpportunities","ProtagonistProfessionOpportunities","ProtagonistAuthority?.transition","applyDelta(","ActionExecutor."])assert(!source.includes(forbidden),"forbidden authority/input reference: "+forbidden);
+assert(source.includes('boundary:"ProtagonistActionRuntime -> ProtagonistCommandEvaluator -> Simulation"'));
+assert(!source.includes("function evaluatorInput("),"selector must not expose a direct evaluator handoff");
+
+const html=fs.readFileSync(path.join(root,"index.html"),"utf8"),script="scripts/world/protagonist-advancement-goal.js?v=protagonist-advancement-goal-v1";
+assert(html.includes(script));assert(html.indexOf(script)>html.indexOf("scripts/world/protagonist-action-runtime.js?v=protagonist-action-runtime-v1"));assert(html.indexOf(script)>html.indexOf("scripts/world/protagonist-employment.js?v=protagonist-employment-v1"));
 
 console.log(JSON.stringify({
-  pass:true,
-  version:Advancement.VERSION,
-  pursue:{status:pursue.status,selectedOpportunityId:pursue.selectedOpportunityId},
-  maintain:maintain.status,
-  reject:reject.status,
-  defer:defer.status,
-  telemetry:Advancement.telemetry(),
-  liveStatus:live.status,
-  guards:{fullWorldScan:false,perFrameScan:false,directActionExecution:false,simulationValidationBypass:false}
+  wp:"WP-S013-008",classification:"FUNCTIONAL",visual:"N/A — bounded autonomous advancement selection and runtime handoff introduce no rendered surface",pass:true,version:Advancement.VERSION,
+  cases:{pursue:pursued.reason,urgentNeed:urgent.reason,commitmentConflict:conflict.reason,missingPrerequisite:missingPrereq.reason,ungrounded:ungrounded.reason,missingProposal:missingProposal.reason,maintain:stable.reason},
+  deterministicReplay:true,inputOrderIndependent:true,stage1To12LiveReadsOnly:true,liveReads:{profileReads,needsReads,healthReads,goalReads,authorityReads,employmentReads,wealthReads,socialReads},
+  runtimeBoundary:scheduled.boundary,terminalSimulationState:tick.processed[0].state,simulationCalls,bounds:pursued.bounds,guards:telemetry
 },null,2));
