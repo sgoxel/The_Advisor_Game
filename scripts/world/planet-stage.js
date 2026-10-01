@@ -3904,13 +3904,31 @@ function revealHashText(value){
   for(const ch of String(value)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
   return (h>>>0).toString(16).toUpperCase().padStart(8,"0");
 }
+function staticSettlementRevealTierForIndex(index){
+  if(index>=11)return "full";
+  if(index>=10)return "refined";
+  if(index>=9)return "route";
+  if(index>=8)return "footprint";
+  return "none";
+}
 function settlementRevealTierForScalar(value=zoomState.scalar){
-  return semanticLayerSpec(semanticScaleIndexForScalar(value),false).settlementRevealTier;
+  const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX);
+  const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
+  const activeStaticIndex=displayResource?.levelIndex??rawIndex;
+  const activeStaticLevel=LOCAL_DETAIL_LEVELS[activeStaticIndex]||LOCAL_DETAIL_LEVELS[0];
+  const activeStaticWorld=Boolean(activeStaticLevel?.staticWorld)||Boolean(displayResource?.dims?.staticWorld);
+  if(level?.staticWorld||activeStaticWorld){
+    const staticTier=staticSettlementRevealTierForIndex(Math.max(rawIndex,activeStaticIndex));
+    if(staticTier!=="none")return staticTier;
+  }
+  return semanticLayerSpec(semanticScaleIndexForScalar(scalar),false).settlementRevealTier;
 }
 function localWorldPresentationEligibility(value=zoomState.scalar){
   const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX),revealTier=settlementRevealTierForScalar(scalar);
   const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
-  return Object.freeze({visible:revealTier!=="none"||Boolean(level?.staticWorld),revealTier,rawLevelIndex:rawIndex,rawLevelId:level?.id||null,rawStaticWorld:Boolean(level?.staticWorld)});
+  const activeStaticWorld=Boolean(displayResource?.dims?.staticWorld)||Boolean((displayResource?.levelIndex!==undefined)&&((LOCAL_DETAIL_LEVELS[displayResource.levelIndex]||{}).staticWorld));
+  const staticWorldVisible=Boolean(level?.staticWorld)||activeStaticWorld;
+  return Object.freeze({visible:revealTier!=="none"||staticWorldVisible,revealTier,rawLevelIndex:rawIndex,rawLevelId:level?.id||null,rawStaticWorld:Boolean(level?.staticWorld)||activeStaticWorld});
 }
 function applyLocalWorldPresentationVisibility(){
   const gate=localWorldPresentationEligibility(),nodes=[localStaticRoot,localNpcRoot,localCrowdRoot,localBuildingActivityRoot,localCampaignWearMesh,localFaunaRoot,environmentalReactionRoot,localWayfindingEntity].filter(Boolean);
@@ -3946,7 +3964,7 @@ function canonicalStartingVillageReveal(resource){
   // be on-screen, independent of parent/child handoff timing.
   const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
   const resourceTile=mapWorldTileAt(resource.lat0,resource.lon0);
-  const distanceTiles=Math.hypot(Number(BigInt(focusTile.x)),Number(BigInt(focusTile.y)));
+  const distanceTiles=Math.hypot(Number(BigInt(focusTile.x))-Number(BigInt(resourceTile.x)),Number(BigInt(focusTile.y))-Number(BigInt(resourceTile.y)));
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
   const viewportRadiusTiles=Math.hypot(
     Math.max(0,Number(zoomState.visibleFootprintWidthMeters||0)),
