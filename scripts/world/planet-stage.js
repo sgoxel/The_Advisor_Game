@@ -182,6 +182,12 @@ let buildingActivity={
   activitySource:"DailyActivity.resolveActionTarget",occupancySource:"ResidentMovement.get when available",
   presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false
 };
+let groundBuildingCutaway={
+  active:false,buildingId:null,buildingLabel:null,protagonistTile:null,
+  hiddenRoofCount:0,loweredShellCount:0,interiorFloorCount:0,
+  source:"Protagonist.getPosition + canonical building bounds",
+  presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementScan:false,perFrameScan:false
+};
 let localBuildingSurroundingsMesh=null;
 let buildingSurroundings={
   active:false,buildingCount:0,functionCount:0,propCount:0,drawCallEstimate:0,triangleCount:0,sharedMaterialCount:1,
@@ -5432,15 +5438,54 @@ function addCanonicalBuilding(record,index,presentationScale,unit,frame,detailed
     return entities.length;
   }
   const physicalHeight=record.kind==="meeting-hall"?7.2:record.kind==="barn"?6.2:5.4;
-  const h=Math.max(.08,physicalHeight*presentationScale/unit);
-  entities.push(addLocalStatic("CanonicalBody-"+record.id,"box",wall,pos.x,ground+h*.5,pos.z,w*presentationScale/unit,h,d*presentationScale/unit));
+  const h=Math.max(.08,physicalHeight*presentationScale/unit),bodyW=w*presentationScale/unit,bodyD=d*presentationScale/unit;
+  const bodyEntity=addLocalStatic("CanonicalBody-"+record.id,"box",wall,pos.x,ground+h*.5,pos.z,bodyW,h,bodyD);
+  entities.push(bodyEntity);
+  const interiorFloor=addLocalStatic("CanonicalInteriorFloor-"+record.id,"box",localStaticMaterials.square,pos.x,ground+.012,pos.z,bodyW*.88,.024,bodyD*.88);
+  interiorFloor.enabled=false;entities.push(interiorFloor);
   const roofEntity=new pc.Entity("CanonicalRoof-"+record.id);roofEntity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});
-  const entry={id:String(record.id),record,east,north,w,d,ground,h,presentationScale,unit,frame,landmark:Boolean(landmark),entity:roofEntity,mesh:null,visualState:"normal",triangleCount:0};
+  const entry={id:String(record.id),record,east,north,w,d,ground,h,bodyW,bodyD,presentationScale,unit,frame,landmark:Boolean(landmark),entity:roofEntity,bodyEntity,interiorFloor,mesh:null,visualState:"normal",triangleCount:0};
   const built=buildCanonicalRoofMesh(entry,"normal");entry.mesh=built.mesh;entry.triangleCount=built.data.indices.length/3;
   roofEntity.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.stateRoof,roofEntity)];localStaticRoot.addChild(roofEntity);entities.push(roofEntity);
   localCanonicalBuildingRoofs.set(entry.id,entry);
   registerCanonicalBuildingInspection(record,entities);
   return entities.length;
+}
+function canonicalPointInsideBounds(point,bounds){
+  if(!point||!bounds)return false;
+  try{
+    const x=BigInt(String(point.x)),y=BigInt(String(point.y));
+    return x>=BigInt(String(bounds.minX))&&x<=BigInt(String(bounds.maxX))&&y>=BigInt(String(bounds.minY))&&y<=BigInt(String(bounds.maxY));
+  }catch(_){return false;}
+}
+function applyCanonicalGroundBuildingCutaway(tier){
+  for(const entry of localCanonicalBuildingRoofs.values()){
+    if(entry?.entity)entry.entity.enabled=true;
+    if(entry?.interiorFloor)entry.interiorFloor.enabled=false;
+    if(entry?.bodyEntity){
+      entry.bodyEntity.enabled=true;
+      entry.bodyEntity.setLocalScale(entry.bodyW,entry.h,entry.bodyD);
+      entry.bodyEntity.setLocalPosition(entry.bodyEntity.getLocalPosition().x,entry.ground+entry.h*.5,entry.bodyEntity.getLocalPosition().z);
+    }
+  }
+  groundBuildingCutaway={...groundBuildingCutaway,active:false,buildingId:null,buildingLabel:null,protagonistTile:null,hiddenRoofCount:0,loweredShellCount:0,interiorFloorCount:0};
+  if(String(tier||"")!=="full"||String(displayResource?.dims?.levelId||"")!=="ground")return groundBuildingCutaway;
+  const protagonist=window.Protagonist?.getPosition?.()||null;if(!protagonist)return groundBuildingCutaway;
+  const entry=Array.from(localCanonicalBuildingRoofs.values()).find(item=>canonicalPointInsideBounds(protagonist,item?.record?.bounds))||null;
+  if(!entry)return groundBuildingCutaway;
+  if(entry.entity)entry.entity.enabled=false;
+  if(entry.interiorFloor)entry.interiorFloor.enabled=true;
+  if(entry.bodyEntity){
+    const low=Math.max(.028,entry.h*.18),p=entry.bodyEntity.getLocalPosition();
+    entry.bodyEntity.setLocalScale(entry.bodyW,low,entry.bodyD);
+    entry.bodyEntity.setLocalPosition(p.x,entry.ground+low*.5,p.z);
+  }
+  groundBuildingCutaway={
+    ...groundBuildingCutaway,active:true,buildingId:entry.id,buildingLabel:String(entry.record?.label||entry.record?.name||entry.id),
+    protagonistTile:Object.freeze({x:String(protagonist.x),y:String(protagonist.y)}),
+    hiddenRoofCount:entry.entity?1:0,loweredShellCount:entry.bodyEntity?1:0,interiorFloorCount:entry.interiorFloor?1:0
+  };
+  return groundBuildingCutaway;
 }
 
 function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
@@ -6240,6 +6285,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     addCanonicalBuilding(meeting,targetCount,scale,unit,semanticFrame,detailed,true,lift);
     landmarks=1;if(detailed)fullBuildings++;else coarseBuildings++;
   }
+  applyCanonicalGroundBuildingCutaway(tier);
   const wayfindingDrawCalls=buildCanonicalWayfindingSignposts(reveal,tier,semanticFrame,scale,unit,lift);
   const surroundingsDrawCalls=buildCanonicalBuildingSurroundings(reveal,tier,semanticFrame,scale,unit,lift);
   const dressingStats=(tier==="coarse"||tier==="refined"||tier==="full")?addCanonicalSettlementDressing(reveal,tier,semanticFrame,scale,unit,lift):{count:0,triangles:0};
@@ -9763,6 +9809,7 @@ function snapshot(){
       actors:Object.freeze(localCrowdEntities.map(item=>Object.freeze({id:item.id,point:item.point,visualRole:item.visualRole,visible:Boolean(item.entity?.enabled),travelEncounter:Boolean(item.travelEncounter),encounterType:item.encounterType||null,propKind:item.propKind||null,inViewport:Boolean(item.inViewport),screen:item.screen||null,bodyScreenSizePx:item.bodyScreenSizePx||null})))
     }),
     buildingActivity:Object.freeze({...buildingActivity,buildings:Object.freeze((buildingActivity.buildings||[]).slice())}),
+    groundBuildingCutaway:Object.freeze({...groundBuildingCutaway}),
     buildingSurroundings:Object.freeze({...buildingSurroundings,functions:Object.freeze((buildingSurroundings.functions||[]).slice()),buildings:Object.freeze((buildingSurroundings.buildings||[]).slice())}),
     campaignWearProjection:Object.freeze({...campaignWearProjection,stateCounts:Object.freeze({...campaignWearProjection.stateCounts}),buildings:Object.freeze((campaignWearProjection.buildings||[]).slice())}),
     destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),names:Object.freeze(destinationNavigator.descriptors.map(d=>d.name)),leadCount:destinationNavigator.descriptors.filter(d=>d.rumorLead).length,leadIds:Object.freeze(destinationNavigator.descriptors.filter(d=>d.rumorLead).map(d=>d.leadId||d.id)),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,queryCenter:Object.freeze({latitudeDegrees:Number((-pitchDegrees).toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
@@ -9850,6 +9897,7 @@ function destroy(){
   environmentalReactions={enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,activeDrawCallEstimate:0,peakActiveCount:0,triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,terrainMutation:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameWorldScan:false};
   clearLocalBuildingActivity();localBuildingActivityRoot=null;localBuildingActivityContext=null;
   buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
+  groundBuildingCutaway={...groundBuildingCutaway,active:false,buildingId:null,buildingLabel:null,protagonistTile:null,hiddenRoofCount:0,loweredShellCount:0,interiorFloorCount:0};
   localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;localNpcEntities.clear();
   for(const texture of groundCharacterTextures.values())try{texture?.destroy?.();}catch(_){}
   groundCharacterMaterials.clear();groundCharacterTextures.clear();groundCharacterLoads.clear();groundCharacterFailures.clear();groundCharacterPendingLoads=0;groundCharacterRefreshScheduled=false;
