@@ -2550,3 +2550,52 @@ body.advisor-economy-open .advisor-chat-launcher,body.advisor-economy-open .advi
   .advisor-econ-empty{font-size:5.7px}
   .advisor-econ-foot{padding:3px 7px;font-size:5.2px}
 }
+
+
+/* WP-S012-009 visual attempt 3 — landscape readability + compact scale clearance */
+@media(max-height:430px) and (orientation:landscape){
+  body.advisor-economy-open .planet-scale-ruler{
+    box-sizing:border-box;
+    width:116px;
+    gap:3px;
+    padding:5px 7px 6px;
+  }
+  body.advisor-economy-open .planet-scale-meta{gap:5px}
+  body.advisor-economy-open .planet-scale-meta strong{font-size:10px}
+  body.advisor-economy-open .planet-scale-meta span{font-size:6px}
+  body.advisor-economy-open .planet-scale-ruler small{font-size:7px}
+  .advisor-economy-panel{
+    left:132px;right:8px;top:64px;bottom:8px;
+    width:auto;min-width:0;
+    grid-template-rows:32px 14px 44px minmax(0,1fr) 20px;
+  }
+  .advisor-econ-head{height:32px}
+  .advisor-econ-head small{font-size:6.2px}
+  .advisor-econ-head strong{font-size:14px}
+  .advisor-econ-fixture{font-size:6px}
+  .advisor-econ-summary{gap:5px}
+  .advisor-econ-summary article{padding:5px 7px}
+  .advisor-econ-summary small{font-size:5.8px}
+  .advisor-econ-summary strong{font-size:9.5px}
+  .advisor-econ-summary span{font-size:6.2px}
+  .advisor-econ-body{grid-template-columns:minmax(0,.88fr) minmax(0,1.12fr);gap:7px}
+  .advisor-econ-section-title small{font-size:5.8px}
+  .advisor-econ-section-title strong{font-size:8.8px}
+  .advisor-econ-section-title>span{font-size:6px}
+  .advisor-econ-offers{gap:4px}
+  .advisor-econ-offer{padding:4px 6px}
+  .advisor-econ-offer strong{font-size:7.8px}
+  .advisor-econ-offer small,.advisor-econ-offer i{font-size:5.8px}
+  .advisor-econ-offer em{font-size:7.8px}
+  .advisor-econ-selected{gap:5px;padding:6px 7px}
+  .advisor-econ-selected header strong{font-size:10px}
+  .advisor-econ-selected header b{font-size:5.8px}
+  .advisor-econ-selected small{font-size:5.8px}
+  .advisor-econ-selected dt{font-size:5.5px}
+  .advisor-econ-selected dd{font-size:7px}
+  .advisor-econ-selected>p{font-size:5.8px}
+  .advisor-econ-outcomes strong{font-size:7px}
+  .advisor-econ-outcomes small,.advisor-econ-outcomes b,.advisor-econ-outcomes code{font-size:5.6px}
+  .advisor-econ-empty{font-size:6px}
+  .advisor-econ-foot{padding:4px 7px;font-size:5.6px}
+}
