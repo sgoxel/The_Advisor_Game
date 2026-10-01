@@ -54,6 +54,7 @@ function renderPresentation(){
   for(const reaction of active.values()){
     const card=document.createElement("div");
     card.className="contextual-npc-reaction";
+    card.dataset.rankRecognized=reaction.rankRecognized?"true":"false";
     Object.assign(card.style,{
       padding:"7px 10px",border:"1px solid rgba(230,205,144,.72)",borderRadius:"10px",
       background:"rgba(9,15,20,.90)",boxShadow:"0 5px 18px rgba(0,0,0,.34)",
@@ -166,8 +167,8 @@ function choice(seed,when,residentId,kind,length){
 function reactionTemplate(seed,when,residentId,kind,social){
   const warm=Number(social?.trust||0)>=.62&&Number(social?.suspicion||0)<=.38;
   const rankAware=window?.ProtagonistRankAccess?.npcReaction?.(seed,residentId,"protagonist",when,{kind,label:"local context"})||null;
-  if(rankAware&&rankAware.recognized){
-    return rankAware.message;
+  if(rankAware?.recognized){
+    return Object.freeze({text:rankAware.message,rankRecognized:true,rankKnowledgeRef:rankAware.knowledge?.referenceId||null});
   }
   const templates={
     "doorway-block":warm
@@ -186,7 +187,7 @@ function reactionTemplate(seed,when,residentId,kind,social){
       :["Evening. What do you need?","It's late. Keep some distance."]
   };
   const rows=templates[kind]||["Hmm.","I noticed that."];
-  return rows[choice(seed,when,residentId,kind,rows.length)];
+  return Object.freeze({text:rows[choice(seed,when,residentId,kind,rows.length)],rankRecognized:false,rankKnowledgeRef:null});
 }
 function evaluate(seed,event,resident,when){
   if(!resident?.position)return null;
@@ -226,13 +227,15 @@ function evaluate(seed,event,resident,when){
   }
 
   if(!valid||salience<.7)return null;
-  const social=relationshipValues(seed,event.residentId);
+  const social=relationshipValues(seed,event.residentId),template=reactionTemplate(seed,when,event.residentId,kind==="proximity"?"close-follow":kind,social);
   return Object.freeze({
     kind:kind==="proximity"?"close-follow":kind,
     salience:Number(salience.toFixed(3)),
     holdsPosition,
     durationSeconds:duration,
-    text:reactionTemplate(seed,when,event.residentId,kind==="proximity"?"close-follow":kind,social),
+    text:template.text,
+    rankRecognized:template.rankRecognized,
+    rankKnowledgeRef:template.rankKnowledgeRef,
     socialSource:social?"SocialState.dialogueContext":"deterministic-neutral-baseline",
     distanceTiles:d,
     protagonistNavigation:Object.freeze({
@@ -244,6 +247,7 @@ function reactionSnapshot(reaction){
   if(!reaction)return null;
   return Object.freeze({
     id:reaction.id,residentId:reaction.residentId,kind:reaction.kind,text:reaction.text,
+    rankRecognized:Boolean(reaction.rankRecognized),rankKnowledgeRef:reaction.rankKnowledgeRef||null,
     salience:reaction.salience,holdsPosition:Boolean(reaction.holdsPosition),
     elapsedSeconds:Number(reaction.elapsed.toFixed(3)),durationSeconds:reaction.durationSeconds,
     remainingSeconds:Number(Math.max(0,reaction.durationSeconds-reaction.elapsed).toFixed(3)),
@@ -277,6 +281,7 @@ function processEvent(seed,event,residentLookup,when){
   const reaction={
     id:"CTX-R"+String(acceptedEventCount+1).padStart(5,"0")+"-"+String(window.PRNG?.foundationUint32?.(seed,"contextual-reaction-id:"+slotKey(event.when||when)+":"+event.residentId+":"+evaluated.kind)||0).toString(16).toUpperCase(),
     residentId:event.residentId,kind:evaluated.kind,text:evaluated.text,salience:evaluated.salience,
+    rankRecognized:Boolean(evaluated.rankRecognized),rankKnowledgeRef:evaluated.rankKnowledgeRef||null,
     holdsPosition:evaluated.holdsPosition,durationSeconds:evaluated.durationSeconds,elapsed:0,
     source:event.source,socialSource:evaluated.socialSource,distanceTiles:evaluated.distanceTiles,
     protagonistNavigation:evaluated.protagonistNavigation
