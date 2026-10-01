@@ -73,6 +73,11 @@ assert.equal(accepted.ok,true);assert.equal(accepted.decisionRecord.status,'acce
 assert.equal(accepted.interactionProposal.proposalOnly,true);assert.equal(accepted.interactionProposal.targetId,'r-guard');
 assert.equal(accepted.interactionProposal.requiresTerminalSimulation,true);assert.equal(accepted.interactionProposal.directActionExecution,false);
 assert.equal(JSON.stringify(global.ProtagonistAuthority.snapshot()),beforeAuthority,'opportunity acceptance must not mutate rank/authority');
+const closedAccepted=Patronage.inspectCandidate(seed,when,'r-guard','advancement-sponsorship');
+assert.equal(closedAccepted.reason,'closed');assert.equal(closedAccepted.opportunity.closed,true);assert.equal(closedAccepted.opportunity.state,'accepted-awaiting-simulation');
+assert.equal(Patronage.get(seed,when,guard.opportunityId),null,'accepted opportunity must not remain open');
+const secondAccept=Patronage.evaluate(seed,guard.opportunityId,'accepted',{authority:'protagonist',protagonistOwned:true,decisionId:'D-SECOND-ACCEPT',fantasyTimestamp:when});
+assert.equal(secondAccept.ok,false);assert.equal(secondAccept.reason,'opportunity-closed');
 const dup=Patronage.evaluate(seed,guard.opportunityId,'accepted',{authority:'protagonist',protagonistOwned:true,decisionId:'D-ACCEPT',fantasyTimestamp:when});
 assert.equal(dup.ok,true);assert.equal(dup.duplicate,true);
 const conflict=Patronage.evaluate(seed,guard.opportunityId,'rejected',{authority:'protagonist',protagonistOwned:true,decisionId:'D-ACCEPT',fantasyTimestamp:when});
@@ -81,11 +86,15 @@ assert.equal(conflict.ok,false);assert.equal(conflict.reason,'duplicate-decision
 const mentor=first.find(x=>x.intent==='mentorship-training'&&x.opportunityId!==guard.opportunityId);
 const rejected=Patronage.evaluate(seed,mentor.opportunityId,'rejected',{authority:'protagonist',protagonistOwned:true,decisionId:'D-REJECT',fantasyTimestamp:when});
 assert.equal(rejected.ok,true);assert.equal(rejected.interactionProposal,null);
+const closedRejected=Patronage.inspectCandidate(seed,when,mentor.sourceNpcRef.id,mentor.intent);
+assert.equal(closedRejected.reason,'closed');assert.equal(closedRejected.opportunity.closed,true);assert.equal(closedRejected.opportunity.state,'rejected');
 const service=first.find(x=>x.intent==='service-sponsorship');
 const deferred=Patronage.evaluate(seed,service.opportunityId,'deferred',{authority:'protagonist',protagonistOwned:true,decisionId:'D-DEFER',fantasyTimestamp:when});
 assert.equal(deferred.ok,true);assert.equal(deferred.interactionProposal,null);
+const deferredState=Patronage.inspectCandidate(seed,when,service.sourceNpcRef.id,service.intent);
+assert.equal(deferredState.reason,'available');assert.equal(deferredState.opportunity.state,'deferred');assert.equal(deferredState.opportunity.closed,false);
 
-const stale=Patronage.evaluate(seed,guard.opportunityId,'accepted',{authority:'protagonist',protagonistOwned:true,decisionId:'D-STALE',fantasyTimestamp:'1201-05-20 09:00:00'});
+const stale=Patronage.evaluate(seed,service.opportunityId,'accepted',{authority:'protagonist',protagonistOwned:true,decisionId:'D-STALE',fantasyTimestamp:'1201-05-20 09:00:00'});
 assert.equal(stale.ok,false);assert.equal(stale.reason,'opportunity-unavailable-or-stale');
 
 const sourceOpp=Patronage.list(seed,when,{limit:12}).find(x=>x.sourceNpcRef.id==='r-shop');
@@ -100,6 +109,8 @@ assert.equal(Patronage.snapshot(seed).decisionCount,0);
 WorldState.restoreSerializedState({seed},saved);
 assert.deepStrictEqual(Patronage.snapshot(seed),pre);
 assert.deepStrictEqual(Patronage.decisions(seed,{limit:12}),preDecisions);
+const reloadedClosed=Patronage.inspectCandidate(seed,when,'r-guard','advancement-sponsorship');
+assert.equal(reloadedClosed.reason,'closed');assert.equal(reloadedClosed.opportunity.state,'accepted-awaiting-simulation');
 
 const snap=Patronage.snapshot(seed);
 assert.equal(snap.bounded,true);assert.equal(snap.fullWorldScan,false);assert.equal(snap.fullSettlementScan,false);assert.equal(snap.wholeHistoryScan,false);assert.equal(snap.perFrameGeneration,false);
@@ -112,7 +123,7 @@ const proof={
  version:Patronage.VERSION,intents:[...Patronage.INTENTS],opportunityCount:first.length,decisionCount:snap.decisionCount,
  knownQualified:true,lowTrustBlocked:true,invalidRoleBlocked:true,unknownBlocked:true,stableReplay:true,alternateSeedDifferent:true,
  expiryFailClosed:true,sourceInvalidFailClosed:true,protagonistOwnedEvaluation:true,simulationProposalOnly:true,
- duplicateIdempotent:true,conflictFailClosed:true,saveReload:true,bounded:true,fullWorldScan:false,wholeHistoryScan:false,perFrameGeneration:false,
+ duplicateIdempotent:true,conflictFailClosed:true,stableOpenClosedState:true,saveReload:true,bounded:true,fullWorldScan:false,wholeHistoryScan:false,perFrameGeneration:false,
  rankMutation:false,skillMutation:false,wealthMutation:false,authorityMutation:false,relationshipMutation:false
 };
 console.log('WP-S013-003 patronage opportunity evidence PASS');
