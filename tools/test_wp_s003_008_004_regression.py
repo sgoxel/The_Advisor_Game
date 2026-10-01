@@ -34,13 +34,39 @@ evidence = {
 def js(script, *args):
     return driver.execute_script(script, *args)
 
-def wait_app_ready():
-    WebDriverWait(driver, 180).until(
-        lambda d: d.execute_script(
-            "return !!window.AppUI && !!window.GameRenderer && "
-            "window.AppUI.applicationStartupSnapshot().state === 'ready';"
+def startup_diagnostic():
+    try:
+        return js("""
+          return {
+            readyState: document.readyState,
+            hasAppUI: !!window.AppUI,
+            hasGameRenderer: !!window.GameRenderer,
+            gate: window.AppUI?.applicationStartupSnapshot?.() || null,
+            scene: window.AppUI?.sceneLoadingSnapshot?.() || null,
+            renderer: window.GameRenderer?.snapshot?.() || null,
+            campaign: window.SeedSystem?.getCampaign?.() || null
+          };
+        """)
+    except Exception as exc:
+        return {"diagnosticError": repr(exc)}
+
+def wait_app_ready(timeout=60):
+    try:
+        WebDriverWait(driver, timeout).until(
+            lambda d: d.execute_script(
+                "return !!window.AppUI && !!window.GameRenderer && "
+                "window.AppUI.applicationStartupSnapshot().state === 'ready';"
+            )
         )
-    )
+    except Exception:
+        evidence["startupDiagnostic"] = startup_diagnostic()
+        evidence["browserLogsAtStartupFailure"] = driver.get_log("browser")[-80:]
+        print(json.dumps({
+            "checkpoint": "application-startup-timeout",
+            "diagnostic": evidence["startupDiagnostic"],
+            "browserLogs": evidence["browserLogsAtStartupFailure"],
+        }, indent=2), flush=True)
+        raise
 
 def wait_loader_settled():
     WebDriverWait(driver, 240).until(
@@ -50,8 +76,10 @@ def wait_loader_settled():
     )
 
 try:
+    print(json.dumps({"checkpoint": "navigate", "url": URL}), flush=True)
     driver.get(URL)
     wait_app_ready()
+    print(json.dumps({"checkpoint": "application-ready", "diagnostic": startup_diagnostic()}), flush=True)
 
     driver.execute_async_script("""
       const done=arguments[arguments.length-1];
