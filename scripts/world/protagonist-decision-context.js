@@ -125,6 +125,18 @@ function build(configValue){
     else if(requiredScope){reasonPush(reasons,"authority-scope-present")}
   }else{missingPush(missing,"authority");factors.authority=factorRecord(false,null,"unavailable");if(requiredScope){value-=0.25;urgency-=0.10;reasonPush(reasons,"authority-scope-unavailable")}}
 
+  const housing=snapshots.housing;
+  if(plain(housing)&&housing.available!==false){
+    const status=cleanId(housing.obligationStatus||"shelter-secure",64);
+    let pressure=score01(housing.pressureMilli,100000);
+    if(pressure==null)pressure=status==="overdue"?1:status==="due"?0.75:status==="upcoming"?0.25:0;
+    factors.housing=factorRecord(true,pressure,"authoritative-housing-obligation");
+    if(status==="overdue"){urgency+=pressure*0.16;value-=pressure*0.04;reasonPush(reasons,"housing-obligation-overdue")}
+    else if(status==="due"){urgency+=pressure*0.12;value-=pressure*0.02;reasonPush(reasons,"housing-obligation-due")}
+    else if(status==="upcoming"){urgency+=pressure*0.04;reasonPush(reasons,"housing-obligation-upcoming")}
+    else if(status==="shelter-secure"){reasonPush(reasons,"shelter-secure")}
+  }
+
   value=Math.max(0,Math.min(1,value));urgency=Math.max(0,Math.min(1,urgency));socialAcceptability=Math.max(0,Math.min(1,socialAcceptability));
   const decisionContext=freeze({value:Number(value.toFixed(4)),urgency:Number(urgency.toFixed(4)),socialAcceptability:Number(socialAcceptability.toFixed(4)),dutyConflict});
   const signature={seed,when,decisionContext,factors,reasons,missing,requiredAuthorityScope:requiredScope||null,conflictingGoalIds:Array.isArray(config.conflictingGoalIds)?config.conflictingGoalIds.slice(0,MAX_GOALS).map(x=>cleanId(x,160)):[]};
@@ -133,7 +145,7 @@ function build(configValue){
     factors:freeze(factors),reasons:freeze(reasons.slice(0,MAX_REASONS)),missingSources:freeze(missing.slice(0,MAX_MISSING_SOURCES)),
     evaluatorBoundary:"ProtagonistCommandEvaluator",evaluatorCompatible:true,readOnly:true,bounded:true,
     bounds:freeze({maxReasons:MAX_REASONS,maxGoals:MAX_GOALS,maxScopes:MAX_SCOPES,maxMissingSources:MAX_MISSING_SOURCES}),
-    authority:freeze({determinism:"Campaign SEED + Fantasy Game Time + supplied authoritative/validated snapshots",directActionExecution:false,worldMutation:false,positionMutation:false,teleportation:false,simulationValidationBypass:false,inventoryAuthority:false,rankAuthority:false,healthAuthority:false,goalAuthority:false,relationshipAuthority:false,fullWorldScan:false,perFrameScan:false,providerAuthority:false,presentationAuthority:false})
+    authority:freeze({determinism:"Campaign SEED + Fantasy Game Time + supplied authoritative/validated snapshots",directActionExecution:false,worldMutation:false,positionMutation:false,teleportation:false,simulationValidationBypass:false,inventoryAuthority:false,rankAuthority:false,healthAuthority:false,goalAuthority:false,relationshipAuthority:false,housingAuthority:false,fullWorldScan:false,perFrameScan:false,providerAuthority:false,presentationAuthority:false})
   });
 }
 function fromLive(seedValue,whenValue,optionsValue){
@@ -146,7 +158,8 @@ function fromLive(seedValue,whenValue,optionsValue){
     relationships:plain(options.relationships)?clone(options.relationships):null,
     inventory:scope.ProtagonistInventory?.snapshot?.(seed,identity)||null,
     health:scope.ProtagonistHealth?.decisionContext?.(seed,identity)||null,
-    authority:scope.ProtagonistAuthority?.decisionContext?.(seed,identity)||null
+    authority:scope.ProtagonistAuthority?.decisionContext?.(seed,identity)||null,
+    housing:scope.ProtagonistHousing?.decisionContext?.(seed,when,identity)||null
   };
   return build({seed,when,snapshots,conflictingGoalIds:options.conflictingGoalIds,requiredAuthorityScope:options.requiredAuthorityScope});
 }
