@@ -1,3 +1,5 @@
+2026-10-01T07:40Z | AGENT #1 | WP-S013-008 | Added the bounded protagonist advancement-goal selector, live opportunity hydration, proposal handoff helpers, and focused tests; fixed maintain/reject selection stability for weak and hard-blocked advancement opportunities.
+
 2026-09-30 17:59 +03:00 | WP-S010-003 | FUNCTIONAL ACCEPTED — deployment/completion pending
 - Accepted main product/evidence head `374600cc0b1574841cb923660ef016ae323a6191`; dedicated workflow `36733870367` SUCCESS with persistent interaction evidence, Stage 10 authority regressions, and an executed GitHub Pages product verification step. Exact accepted-docs Pages deployment `36733869600` SUCCESS.
 - `ProtagonistInteractionPipeline` v1 persists stable interaction attempts/results through existing `WorldState CampaignStateDelta`, with object use progressing `active -> terminal-success`, canonical building-door interaction, explicit Simulation-facing person-adapter pending/failure coverage, unavailable/rejected distinction, forged-completion suppression, duplicate idempotence, deterministic replay, save/reload continuity, and reference-only linkage to conversation/proposal/decision/runtime IDs.
