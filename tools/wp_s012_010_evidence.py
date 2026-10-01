@@ -39,8 +39,14 @@ def load_object_interactions():
 
 def execute_chain():
     return driver.execute_script("""
-      const campaign=window.SeedSystem?.getCampaign?.();
-      if(!campaign?.seed)throw new Error('Production campaign unavailable');
+      let campaign=window.SeedSystem?.getCampaign?.()||null;
+      if(!campaign){
+        const requestedSeed='AGENT6-WP-S012-010-VISUAL';
+        const set=window.SeedSystem?.setSettingsSeed?.(requestedSeed);
+        const started=window.SeedSystem?.startNewCampaign?.(requestedSeed);
+        campaign=started?.campaign||window.SeedSystem?.getCampaign?.()||null;
+        if(!set?.ok||!campaign?.seed)throw new Error('Evidence campaign initialization failed');
+      }
       const seed=campaign.seed,initialWhen=window.GameTime?.getTimestampKey?.();
       if(!initialWhen)throw new Error('Fantasy Game Time unavailable');
       const bound=window.WorldState.bindCampaign(campaign,{reset:true});
