@@ -18,12 +18,14 @@ global.DailyActivity={build(){return roster}};
 const seed='WP-S013-006-SEED',identity='protagonist';
 let authorityRole='guild-member',authorityScopes=['self','guild:participate'];
 const authorityHistory=[{id:'AUTH-001',transitionId:'APTR-GUILD-001',fromRoleId:'local-resident',toRoleId:'guild-member',fantasyTimestamp:'1126-10-01 08:30:00',sourceRef:{kind:'workplace',id:'BLD-SMITHY'}}];
-let authorityReads=0;
+let authorityReads=0,authorityTransitionCalls=0;
 global.ProtagonistAuthority={
- snapshot(){authorityReads++;return {exists:true,currentRole:{roleId:authorityRole,scopes:C(authorityScopes)},history:C(authorityHistory)};}
+ snapshot(){authorityReads++;return {exists:true,currentRole:{roleId:authorityRole,scopes:C(authorityScopes)},history:C(authorityHistory)};},
+ transition(){authorityTransitionCalls++;throw new Error('oath/allegiance ledger must never mutate ProtagonistAuthority');}
 };
+let employmentActive=true;
 global.ProtagonistEmployment={
- current(){return {ok:true,status:'active',contract:{id:'EMP-SMITH',professionId:'smith',employerRef:{kind:'resident',id:'R01'},workplaceRef:{kind:'workplace',id:'BLD-SMITHY'}}};}
+ current(){return employmentActive?{ok:true,status:'active',contract:{id:'EMP-SMITH',professionId:'smith',employerRef:{kind:'resident',id:'R01'},workplaceRef:{kind:'workplace',id:'BLD-SMITHY'}}}:null;}
 };
 const interactions=new Map();
 function put(id,{targetId='R01',action='swear-oath',status='terminal-success',time='1126-10-01 09:00:00',auth=true}={}){
@@ -49,16 +51,19 @@ const oldHistory=C(authorityHistory);authorityHistory.length=0;
 assert.equal(Oath.create(seed,request,options,identity).reason,'authority-transition-proof-required');
 authorityHistory.push(...oldHistory);
 assert.equal(Oath.create(seed,{...request,obligationRefs:[{kind:'invented-duty',id:'DO-WHATEVER'}]},options,identity).reason,'unsupported-obligation-reference');
+assert.equal(Oath.create(seed,{...request,obligationRefs:new Array(5).fill({kind:'employment-contract',id:'EMP-SMITH'})},{...options,operationId:'OATH-BAD-CAP'},identity).reason,'reference-cap-exceeded');
 put('IAX-STALE',{time:'1126-10-01 08:00:00'});
 assert.equal(Oath.create(seed,{...request,interactionAttemptId:'IAX-STALE'},{...options,operationId:'OATH-STALE'},identity).reason,'oath-evidence-stale');
 const made=Oath.create(seed,request,options,identity);
-assert(made.ok,JSON.stringify(made));assert.equal(made.oath.state,'active');assert.deepEqual(made.oath.authorityScopes,['guild:participate']);assert.deepEqual(made.oath.authorityTransitionIds,['APTR-GUILD-001']);assert.deepEqual(made.oath.obligationRefs,[{kind:'employment-contract',id:'EMP-SMITH'}]);assert.equal(made.oath.relationshipMutation,false);assert.equal(made.oath.authorityMutation,false);
-const dup=Oath.create(seed,request,options,identity);assert(dup.ok&&dup.duplicate&&dup.reason==='duplicate-oath');
+assert(made.ok,JSON.stringify(made));assert.equal(made.oath.state,'active');assert.deepEqual(made.oath.authorityScopes,['guild:participate']);assert.deepEqual(made.oath.authorityTransitionIds,['APTR-GUILD-001']);assert.deepEqual(made.oath.obligationRefs,[{kind:'employment-contract',id:'EMP-SMITH'}]);assert.equal(made.oath.relationshipMutation,false);assert.equal(made.oath.authorityMutation,false);assert.equal(made.authorityTransitionRequested,false);assert.equal(authorityTransitionCalls,0);
+authorityRole='local-resident';authorityScopes=['self'];authorityHistory.length=0;employmentActive=false;
+const dup=Oath.create(seed,request,options,identity);assert(dup.ok&&dup.duplicate&&dup.reason==='duplicate-oath','exact replay must remain idempotent after live prerequisites change');
 put('IAX-OATH-ALT',{time:'1126-10-01 09:01:00'});
 const conflict=Oath.create(seed,{...request,interactionAttemptId:'IAX-OATH-ALT'},options,identity);assert(!conflict.ok&&conflict.reason==='duplicate-oath-conflict');
+authorityRole='guild-member';authorityScopes=['self','guild:participate'];authorityHistory.push(...oldHistory);employmentActive=true;
 let context=Oath.currentContext(seed,identity);assert(context.available);assert.deepEqual(context.authorityScopes,['guild:participate']);assert.deepEqual(context.obligationRefs,[{kind:'employment-contract',id:'EMP-SMITH'}]);assert.equal(context.oaths[0].authorityStillBacked,true);assert.equal(context.relationshipSource,'SocialState only');
 authorityRole='local-resident';authorityScopes=['self'];context=Oath.currentContext(seed,identity);assert.deepEqual(context.authorityScopes,[]);assert.equal(context.oaths[0].authorityStillBacked,false,'oath must not preserve authority after ProtagonistAuthority no longer backs it');authorityRole='guild-member';authorityScopes=['self','guild:participate'];
-const beforeReload=Oath.snapshot(seed,identity);store=C(store);const afterReload=Oath.snapshot(seed,identity);assert.deepEqual(afterReload.oaths,beforeReload.oaths);assert.equal(afterReload.fullWorldScan,false);assert.equal(afterReload.fullSettlementScan,false);assert.equal(afterReload.wholeHistoryScan,false);assert.equal(afterReload.perFrameScan,false);assert.equal(afterReload.directAuthorityMutation,false);assert.equal(afterReload.directRelationshipMutation,false);assert(afterReload.serializedBytes<=afterReload.bounds.maxLedgerBytes);
+const beforeReload=Oath.snapshot(seed,identity);store=C(store);const afterReload=Oath.snapshot(seed,identity);assert.deepEqual(afterReload.oaths,beforeReload.oaths);assert.equal(afterReload.fullWorldScan,false);assert.equal(afterReload.fullSettlementScan,false);assert.equal(afterReload.wholeHistoryScan,false);assert.equal(afterReload.perFrameScan,false);assert.equal(afterReload.directAuthorityMutation,false);assert.equal(afterReload.directRelationshipMutation,false);assert.equal(afterReload.authorityTransitionRequested,false);assert.equal(afterReload.scopeAuthority,'ProtagonistAuthority existing transition proof only');assert(afterReload.serializedBytes<=afterReload.bounds.maxLedgerBytes);
 put('IAX-END-1',{action:'end-oath',time:'1126-10-01 09:20:00'});
 const ended=Oath.end(seed,made.oath.id,'released',{authority:'simulation',authoritative:true,operationId:'OATH-END-001',fantasyTimestamp:'1126-10-01 09:21:00',interactionAttemptId:'IAX-END-1'},identity);
 assert(ended.ok&&ended.oath.state==='ended'&&ended.historyRetained);
@@ -69,7 +74,7 @@ const made2=Oath.create(seed,{...request,interactionAttemptId:'IAX-OATH-2'},{aut
 put('IAX-BREAK-2',{action:'break-oath',status:'failed',time:'1126-10-01 09:40:00',auth:false});
 const breached=Oath.end(seed,made2.oath.id,'breached',{authority:'simulation',authoritative:true,operationId:'OATH-END-002',fantasyTimestamp:'1126-10-01 09:41:00',interactionAttemptId:'IAX-BREAK-2'},identity);
 assert(breached.ok&&breached.oath.state==='breached');assert.equal(Oath.snapshot(seed,identity).oathCount,2);assert.equal(Oath.snapshot(seed,identity).activeCount,0);
-assert.equal(Oath.snapshot('OTHER-SEED',identity).oathCount,0,'campaigns must remain isolated');assert(authorityReads>0);
+assert.equal(Oath.snapshot('OTHER-SEED',identity).oathCount,0,'campaigns must remain isolated');assert(authorityReads>0);assert.equal(authorityTransitionCalls,0);
 const indexPath=path.resolve(__dirname,'../../index.html');
 if(fs.existsSync(indexPath)){
  const html=fs.readFileSync(indexPath,'utf8'),script='scripts/world/protagonist-oath-allegiance.js?v=protagonist-oath-allegiance-v1';
