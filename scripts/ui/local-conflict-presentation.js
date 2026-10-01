@@ -8,13 +8,13 @@ if(root)root.LocalConflictPresentation=api;
 
 const VERSION="local-conflict-presentation-v1";
 const EVIDENCE_MODES=Object.freeze(["active","retreat","terminal","recovered","cleared"]);
-const SOURCE_READ_LIMIT=4;
+const SOURCE_READ_LIMIT=5;\nconst TERMINAL_CUE_SECONDS=300;
 const ANCHOR_SYNC_MS=80;
 const UNTRUSTED_KINDS=Object.freeze(["ui","advisor","llm","provider","render","camera","viewport","device"]);
 const state={
   evidenceMode:null,explicitEvidence:null,lastModel:null,mounted:false,
   modelBuilds:0,renders:0,anchorSyncs:0,anchorStageReads:0,sourceReadTotal:0,
-  sourceReads:{stage:0,threats:0,combat:0,health:0},timer:null,lastAnchor:null
+  sourceReads:{stage:0,threats:0,combat:0,health:0,time:0},timer:null,lastAnchor:null
 };
 
 function freeze(value){if(value==null||typeof value!=="object"||Object.isFrozen(value))return value;for(const x of Object.values(value))freeze(x);return Object.freeze(value)}
@@ -28,6 +28,7 @@ function bump(key){if(Object.prototype.hasOwnProperty.call(state.sourceReads,key
 function safeRead(key,fn,fallback=null){bump(key);try{const out=fn();return out==null?fallback:out}catch(_){return fallback}}
 function trustedRef(value){if(!value||typeof value!=="object")return null;const kind=id(value.kind||value.type||"",80).toLowerCase(),refId=id(value.id||value.entityId||value.refId||"",180);return kind&&refId&&!UNTRUSTED_KINDS.includes(kind)?freeze({kind,id:refId}):null}
 function resolutionLabel(value){const v=id(value,60).toLowerCase();return ({"protagonist-advantage":"Advantage secured","opponent-advantage":"Driven back","stalemate":"Stalemate","protagonist-disengaged":"Disengaged","opposition-disengaged":"Opposition withdrew"})[v]||title(v||"Recorded outcome")}
+function fantasySecondIndex(value){const m=String(value||"").match(/^(\\d{4,})-(\\d{2})-(\\d{2}) (\\d{2}):(\\d{2}):(\\d{2})$/);if(!m)return null;let y=+m[1],mo=+m[2],d=+m[3],h=+m[4],mi=+m[5],s=+m[6];if(mo<1||mo>12||d<1||d>31||h>23||mi>59||s>59)return null;y-=mo<=2?1:0;const era=Math.floor(y/400),yoe=y-era*400,mp=mo+(mo>2?-3:9),doy=Math.floor((153*mp+2)/5)+d-1,doe=yoe*365+Math.floor(yoe/4)-Math.floor(yoe/100)+doy;return (era*146097+doe)*86400+h*3600+mi*60+s}
 function presentationModel(input){
   const x=input&&typeof input==="object"?input:{},phase=EVIDENCE_MODES.includes(x.phase)?x.phase:"cleared",visible=phase!=="cleared";
   const out={
@@ -64,19 +65,22 @@ function healthContainsCombatInjury(health,result){
   return rows.some(row=>id(row?.sourceRef?.id,180)===resultId||id(row?.source?.id,180)===resultId);
 }
 function runtimeModel(optionsValue={}){
-  state.modelBuilds++;state.sourceReadTotal=0;state.sourceReads={stage:0,threats:0,combat:0,health:0};
+  state.modelBuilds++;state.sourceReadTotal=0;state.sourceReads={stage:0,threats:0,combat:0,health:0,time:0};
   const seed=clean(optionsValue.seed||currentSeed(),160);if(!seed)return presentationModel({phase:"cleared",detail:"Campaign unavailable."});
   const stage=safeRead("stage",()=>root.PlanetStage?.snapshot?.(),null);
   const threats=safeRead("threats",()=>root.LocalSecurityIncidents?.list?.(seed,{status:"active",limit:1})||[],[]);
   const results=safeRead("combat",()=>root.PersonalCombatExchange?.list?.(seed,{limit:1},"protagonist")||[],[]);
-  const health=safeRead("health",()=>root.ProtagonistHealth?.snapshot?.(seed,"protagonist")||null,null);
+  const health=safeRead("health",()=>root.ProtagonistHealth?.snapshot?.(seed,"protagonist")||null,null);\n  const now=safeRead("time",()=>root.GameTime?.getTimestampKey?.()||null,null);
   const worldAnchor=freeze({kind:"canonical-focus",worldTile:stage?.canonicalFocus?.worldTile||null,latitudeDegrees:stage?.canonicalFocus?.latitudeDegrees??null,longitudeDegrees:stage?.canonicalFocus?.longitudeDegrees??null});
-  const latest=Array.isArray(results)?results[0]:null;
-  if(latest){
+  const latest=Array.isArray(results)?results[0]:null,threat=Array.isArray(threats)?threats[0]:null;
+  const latestSeconds=fantasySecondIndex(latest?.fantasyTimestamp),nowSeconds=fantasySecondIndex(now),threatSeconds=fantasySecondIndex(threat?.updatedTimestamp||threat?.createdTimestamp);
+  const terminalFresh=Boolean(latest&&(latestSeconds===null||nowSeconds===null||(nowSeconds>=latestSeconds&&nowSeconds-latestSeconds<=TERMINAL_CUE_SECONDS)));
+  const newerThreat=Boolean(threat&&(!latest||latestSeconds===null||threatSeconds===null||threatSeconds>latestSeconds));
+  if(latest&&!newerThreat){
     const resolution=id(latest.resolution,60).toLowerCase(),disengaged=resolution.includes("disengaged"),recovering=Boolean(latest.protagonistInjuryEvidence&&healthContainsCombatInjury(health,latest));
     if(recovering)return presentationModel({phase:"recovered",title:"Recovering after conflict",detail:"The terminal combat result is recorded; current health still carries its injury evidence.",status:"recovery · "+resolutionLabel(resolution),badges:["RECOVERY","TERMINAL"],terminal:true,recovery:true,sourceRef:freeze({kind:"combat-result",id:id(latest.id)}),locationRef:latest.locationRef||null,worldAnchor,fantasyTimestamp:latest.fantasyTimestamp});
-    if(disengaged)return presentationModel({phase:"retreat",title:resolutionLabel(resolution),detail:"Simulation recorded disengagement. This cue does not claim victory or move any actor.",status:"terminal disengagement",badges:["DISENGAGED","TERMINAL"],terminal:true,sourceRef:freeze({kind:"combat-result",id:id(latest.id)}),locationRef:latest.locationRef||null,worldAnchor,fantasyTimestamp:latest.fantasyTimestamp});
-    return presentationModel({phase:"terminal",title:resolutionLabel(resolution),detail:"A terminal Simulation combat result is available for this local conflict.",status:"terminal · Simulation",badges:["TERMINAL",resolutionLabel(resolution).toUpperCase()],terminal:true,sourceRef:freeze({kind:"combat-result",id:id(latest.id)}),locationRef:latest.locationRef||null,worldAnchor,fantasyTimestamp:latest.fantasyTimestamp});
+    if(terminalFresh&&disengaged)return presentationModel({phase:"retreat",title:resolutionLabel(resolution),detail:"Simulation recorded disengagement. This cue does not claim victory or move any actor.",status:"terminal disengagement",badges:["DISENGAGED","TERMINAL"],terminal:true,sourceRef:freeze({kind:"combat-result",id:id(latest.id)}),locationRef:latest.locationRef||null,worldAnchor,fantasyTimestamp:latest.fantasyTimestamp});
+    if(terminalFresh)return presentationModel({phase:"terminal",title:resolutionLabel(resolution),detail:"A terminal Simulation combat result is available for this local conflict.",status:"terminal · Simulation",badges:["TERMINAL",resolutionLabel(resolution).toUpperCase()],terminal:true,sourceRef:freeze({kind:"combat-result",id:id(latest.id)}),locationRef:latest.locationRef||null,worldAnchor,fantasyTimestamp:latest.fantasyTimestamp});
   }
   const threat=Array.isArray(threats)?threats[0]:null;
   if(threat)return presentationModel({phase:"active",title:clean(threat.summary||title(threat.category||"local threat"),100),detail:"Known local security incident. Resolution remains pending.",status:clean((threat.epistemicStatus||"known")+" · "+(threat.severity||"severity unknown"),70),badges:[String(threat.epistemicStatus||"KNOWN").toUpperCase(),String(threat.severity||"ACTIVE").toUpperCase()],sourceRef:threat.sourceRef||freeze({kind:"security-incident",id:id(threat.id)}),locationRef:threat.locationRef||null,worldAnchor,fantasyTimestamp:threat.updatedTimestamp||threat.createdTimestamp});
@@ -120,7 +124,7 @@ function clear(reason="cleared"){state.explicitEvidence=presentationModel({phase
 function setEvidenceMode(modeValue){const mode=EVIDENCE_MODES.includes(modeValue)?modeValue:"active";state.evidenceMode=mode;state.explicitEvidence=null;render(evidenceModel(mode),"evidence");return snapshot()}
 function startAnchorSync(){if(typeof root.setInterval!=="function"||state.timer)return;state.timer=root.setInterval(()=>{if(state.lastModel?.visible)syncAnchor()},ANCHOR_SYNC_MS)}
 function stopAnchorSync(){if(state.timer&&typeof root.clearInterval==="function")root.clearInterval(state.timer);state.timer=null}
-function snapshot(){return freeze({version:VERSION,evidenceMode:state.evidenceMode,model:state.lastModel,anchor:state.lastAnchor,mounted:state.mounted,visible:Boolean(state.lastModel?.visible),phase:state.lastModel?.phase||"cleared",modelBuilds:state.modelBuilds,renders:state.renders,anchorSyncs:state.anchorSyncs,anchorStageReads:state.anchorStageReads,sourceReadTotal:state.sourceReadTotal,sourceReads:freeze(clone(state.sourceReads)),limits:freeze({sourceReadLimit:SOURCE_READ_LIMIT,anchorSyncMs:ANCHOR_SYNC_MS,maxVisibleRecords:1,maxBadges:3}),authority:freeze({readOnly:true,presentationOnly:true,eventDriven:true,sourcePolling:false,anchorPresentationTickOnly:true,fullWorldScan:false,wholeSettlementScan:false,wholeHistoryScan:false,perFrameSourceScan:false,directWorldMutation:false,directActionExecution:false,combatResolution:false,healthMutation:false,standingMutation:false,relationshipMutation:false,rankMutation:false,movementMutation:false,simulationAuthority:false})})}
+function snapshot(){return freeze({version:VERSION,evidenceMode:state.evidenceMode,model:state.lastModel,anchor:state.lastAnchor,mounted:state.mounted,visible:Boolean(state.lastModel?.visible),phase:state.lastModel?.phase||"cleared",modelBuilds:state.modelBuilds,renders:state.renders,anchorSyncs:state.anchorSyncs,anchorStageReads:state.anchorStageReads,sourceReadTotal:state.sourceReadTotal,sourceReads:freeze(clone(state.sourceReads)),limits:freeze({sourceReadLimit:SOURCE_READ_LIMIT,anchorSyncMs:ANCHOR_SYNC_MS,terminalCueSeconds:TERMINAL_CUE_SECONDS,maxVisibleRecords:1,maxBadges:3}),authority:freeze({readOnly:true,presentationOnly:true,eventDriven:true,sourcePolling:false,anchorPresentationTickOnly:true,fullWorldScan:false,wholeSettlementScan:false,wholeHistoryScan:false,perFrameSourceScan:false,directWorldMutation:false,directActionExecution:false,combatResolution:false,healthMutation:false,standingMutation:false,relationshipMutation:false,rankMutation:false,movementMutation:false,simulationAuthority:false})})}
 function init(){
   if(typeof document==="undefined")return false;ensureLayer();
   let requested=null;try{requested=new URLSearchParams(root.location?.search||"").get("conflictPresentationEvidence")}catch(_){}
@@ -132,5 +136,5 @@ function init(){
   return true;
 }
 if(typeof document!=="undefined"){if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init()}
-return freeze({VERSION,EVIDENCE_MODES,SOURCE_READ_LIMIT,ANCHOR_SYNC_MS,evidenceModel,normalizeExplicit,runtimeModel,presentationModel,present,clear,setEvidenceMode,refresh,render,syncAnchor,snapshot,init,stopAnchorSync});
+return freeze({VERSION,EVIDENCE_MODES,SOURCE_READ_LIMIT,TERMINAL_CUE_SECONDS,ANCHOR_SYNC_MS,evidenceModel,normalizeExplicit,runtimeModel,presentationModel,present,clear,setEvidenceMode,refresh,render,syncAnchor,snapshot,init,stopAnchorSync});
 });
