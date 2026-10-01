@@ -2684,3 +2684,36 @@ body.advisor-economy-open .advisor-chat-launcher,body.advisor-economy-open .advi
   .advisor-rank-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}.advisor-rank-card{padding:4px;border-radius:6px}.advisor-rank-card header{margin-bottom:2px}.advisor-rank-card header strong{font-size:4.5px}.advisor-rank-card header span{font-size:4px}.advisor-rank-card h4{font-size:5.5px;margin-bottom:1px}.advisor-rank-card>p{max-height:13px;overflow:hidden;margin-bottom:2px;font-size:4px;line-height:1.1}.advisor-rank-row{gap:2px;padding-top:1px}.advisor-rank-row strong{font-size:4.3px}.advisor-rank-row small{font-size:3.8px}.advisor-rank-row code{display:none}.advisor-rank-rows .advisor-rank-row:nth-child(n+3){display:none}.advisor-rank-empty{padding:3px;font-size:4px}.advisor-rank-unavailable{padding:3px 4px;font-size:4px}.advisor-rank-body>footer{font-size:3.8px}
 }
 
+/* WP-S013-009 visual attempt 2 — expanded rank readout owns the Advisor content track */
+.advisor-chat-panel:has(.advisor-rank-readout[open]){
+  grid-template-rows:auto minmax(0,1fr) 0 0 0;
+}
+.advisor-chat-panel:has(.advisor-rank-readout[open]) .advisor-readout-stack{
+  min-height:0;
+  overflow:auto;
+  overscroll-behavior:contain;
+}
+.advisor-chat-panel:has(.advisor-rank-readout[open]) .advisor-rank-readout{
+  min-height:0;
+  overflow:visible;
+}
+.advisor-chat-panel:has(.advisor-rank-readout[open]) .advisor-rank-body{
+  max-height:none;
+  overflow:visible;
+}
+.advisor-chat-panel:has(.advisor-rank-readout[open]) .advisor-chat-transcript,
+.advisor-chat-panel:has(.advisor-rank-readout[open]) .advisor-chat-compose,
+.advisor-chat-panel:has(.advisor-rank-readout[open]) .advisor-counsel{
+  display:none!important;
+}
+body:has(.advisor-rank-readout[open]) .advisor-chat-launcher,
+body:has(.advisor-rank-readout[open]) .advisor-toolbelt-launcher,
+body:has(.advisor-rank-readout[open]) .advisor-economy-launcher{
+  display:none!important;
+}
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-chat-panel:has(.advisor-rank-readout[open]){
+    grid-template-rows:55px minmax(0,1fr) 0 0 0;
+  }
+}
+
