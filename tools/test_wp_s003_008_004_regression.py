@@ -68,6 +68,18 @@ def observe_until_ready(timeout=210):
         time.sleep(0.2)
     raise AssertionError("planet-first startup did not reach ready within evidence timeout")
 
+def wait_background_complete(timeout=210):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        snapshot = js("return window.PlanetStage.snapshot();")
+        scheduler = snapshot.get("startupScheduler") or {}
+        if scheduler.get("residentWarmupError"):
+            raise AssertionError("post-ready resident warmup failed: " + str(scheduler.get("residentWarmupError")))
+        if scheduler.get("residentWarmupCompletedAtMs") and int(scheduler.get("optionalPostReadyWorkCount") or 0) == 0:
+            return snapshot
+        time.sleep(0.2)
+    raise AssertionError("post-ready resident warmup did not complete within evidence timeout")
+
 def severe_logs():
     return [
         row for row in driver.get_log("browser")
@@ -80,6 +92,29 @@ try:
     first, observations = observe_until_ready()
     progress = first.get("startupProgress") or {}
     scheduler = first.get("startupScheduler") or {}
+    first_playable_at = int(progress.get("gameplayReadyAtMs") or 0)
+    if first_playable_at <= 0:
+        raise AssertionError("first-playable timestamp is missing: " + repr(progress))
+
+    background = wait_background_complete()
+    background_scheduler = background.get("startupScheduler") or {}
+    background_progress = background.get("startupProgress") or {}
+    warmup_started = int(background_scheduler.get("residentWarmupStartedAtMs") or 0)
+    warmup_completed = int(background_scheduler.get("residentWarmupCompletedAtMs") or 0)
+    if warmup_started < first_playable_at or warmup_completed < first_playable_at:
+        raise AssertionError("resident warmup was not deferred until after first playable: " + repr(background_scheduler))
+    if int(background_scheduler.get("residentWarmupPlanCompleted") or 0) != int(background_scheduler.get("residentWarmupPlanCount") or 0):
+        raise AssertionError("resident plan warmup did not finish: " + repr(background_scheduler))
+    if int(background_scheduler.get("residentWarmupAdvanceCalls") or 0) < 1:
+        raise AssertionError("resident initialization tick did not run: " + repr(background_scheduler))
+    if int(background_scheduler.get("residentWarmupYieldCount") or 0) < max(2, int(background_scheduler.get("residentWarmupPlanCount") or 0)):
+        raise AssertionError("resident warmup did not yield between deterministic units: " + repr(background_scheduler))
+    if float(background_scheduler.get("residentWarmupMaxUnitMs") or 0) >= 50:
+        raise AssertionError("post-ready resident warmup unit exceeded 50 ms: " + repr(background_scheduler))
+    if int(background_scheduler.get("backgroundPreparationCompleteAtMs") or 0) < warmup_completed:
+        raise AssertionError("background completion timestamp is inconsistent: " + repr(background_scheduler))
+    if int(background_scheduler.get("optionalPostReadyWorkCount") or 0) != 0 or int(background_progress.get("optionalPostReadyWorkCount") or 0) != 0:
+        raise AssertionError("completed background work is still reported pending")
 
     surface_obs = [o for o in observations if o.get("phaseId") == "surface"]
     distinct_surface = sorted({float(o.get("percent") or 0) for o in surface_obs})
@@ -156,11 +191,12 @@ try:
     driver.find_element(By.CLASS_NAME, "planet-stage-loading-retry").click()
     wait_planet_api()
     second, retry_observations = observe_until_ready()
+    second_background = wait_background_complete()
     if str(second.get("activeSeed")) != before_seed:
         raise AssertionError("Retry reload changed active SEED")
     if str(second.get("geographyHash")) != before_hash:
         raise AssertionError("Retry reload changed deterministic geography identity")
-    retry_scheduler = second.get("startupScheduler") or {}
+    retry_scheduler = second_background.get("startupScheduler") or {}
     if int(retry_scheduler.get("watchdogStallCount") or 0) != 0:
         raise AssertionError("healthy retry tripped watchdog: " + repr(retry_scheduler))
     if retry_scheduler.get("simulationAuthorityPreserved") is not True:
@@ -179,7 +215,8 @@ try:
             "surfaceObservationCount": len(surface_obs),
             "distinctSurfacePercentCount": len(distinct_surface),
             "startupProgress": progress,
-            "startupScheduler": scheduler,
+            "startupSchedulerAtReady": scheduler,
+            "backgroundScheduler": background_scheduler,
         },
         "watchdogDecisions": decisions,
         "slowPresentation": slow_ui,

@@ -270,7 +270,7 @@ const STARTUP_SLICE_BUDGET_MS=6;
 const STARTUP_WATCHDOG_TICK_MS=1000;
 const STARTUP_WATCHDOG_SLOW_MS=8000;
 const STARTUP_WATCHDOG_STALL_MS=30000;
-let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{},watchdogChecks:0,watchdogSlowCount:0,watchdogStallCount:0,watchdogMaxNoProgressMs:0,surfaceProgressUpdates:0,surfaceSamplingWallMs:0,surfaceCanvasCommitMs:0,surfaceTextureUploadMs:0,surfaceProgressIntervalSamples:0,simulationAuthorityPreserved:true};
+let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{},watchdogChecks:0,watchdogSlowCount:0,watchdogStallCount:0,watchdogMaxNoProgressMs:0,surfaceProgressUpdates:0,surfaceSamplingWallMs:0,surfaceCanvasCommitMs:0,surfaceTextureUploadMs:0,surfaceProgressIntervalSamples:0,residentWarmupDeferred:true,residentWarmupStartedAtMs:null,residentWarmupCompletedAtMs:null,residentWarmupPlanCount:0,residentWarmupPlanCompleted:0,residentWarmupAdvanceCalls:0,residentWarmupYieldCount:0,residentWarmupMaxUnitMs:0,residentWarmupError:null,simulationAuthorityPreserved:true};
 let longTaskObserver=null;
 let heartbeatTimer=null;
 let startupWatchdogTimer=null;
@@ -463,6 +463,7 @@ let mapPresentationSchedule={raf:0,timer:0,lastRenderedAtMs:0,pendingReason:null
 let liveMapAnchors=[];
 let navigationLongTaskObserver=null;
 let residentMovementTimer=0,residentMovementDrainTimer=0,residentMovementLastSchedulerAtMs=0;
+let residentWarmupPromise=null;
 function freshNavigationPerformance(){
   return {
     revision:"world-map-navigation-budget-v2",
@@ -2391,26 +2392,78 @@ function runResidentMovementScheduledSlice(realSeconds){
   recordResidentSchedulerSlice(started);
   if(result?.pending){navigationPerformance.residentSchedulerPendingDrains++;scheduleResidentMovementDrain();}
 }
-function warmResidentMovementScheduler(){
+function recordResidentWarmupUnit(started){
+  const elapsed=Math.max(0,performance.now()-started);
+  startupScheduler.residentWarmupMaxUnitMs=Math.max(Number(startupScheduler.residentWarmupMaxUnitMs||0),Number(elapsed.toFixed(3)));
+  return elapsed;
+}
+function yieldResidentWarmup(){
+  startupScheduler.residentWarmupYieldCount++;
+  return new Promise(resolve=>setTimeout(resolve,0));
+}
+async function warmResidentMovementScheduler(){
   if(!activeSeed||!window.ResidentMovement)return;
-  window.ResidentMovement.ensure?.(activeSeed);
+  startupScheduler.residentWarmupStartedAtMs=Date.now();
+  startupScheduler.residentWarmupError=null;
   const started=performance.now(),step=Math.max(.001,Number(window.ResidentMovement.FIXED_STEP_SECONDS||.1));
   const when=window.GameTime?.getNow?.()||inspectionFantasyStamp();
-  // Prime the bounded twelve-resident work-cycle/route caches while the startup
-  // screen still owns the main thread. This is deterministic SEED + fantasy-time
-  // preparation, not simulation authority: the same plans would otherwise be
-  // built lazily inside the first interactive scheduler slices.
+
+  let unitStarted=performance.now();
+  window.ResidentMovement.ensure?.(activeSeed);
+  recordResidentWarmupUnit(unitStarted);
+  await yieldResidentWarmup();
+
+  // No resident is visible in the initial planet view, so cache priming is
+  // post-ready background preparation rather than a first-playable dependency.
+  // Keep the deterministic routine, but yield after every resident.
   if(window.WorkCycles?.plan&&window.DailyActivity?.build){
-    const residents=window.DailyActivity.build(activeSeed)||[];
-    for(let i=0;i<residents.length&&i<12;i++)window.WorkCycles.plan(activeSeed,residents[i]);
+    const residents=(window.DailyActivity.build(activeSeed)||[]).slice(0,12);
+    startupScheduler.residentWarmupPlanCount=residents.length;
+    for(let i=0;i<residents.length;i++){
+      unitStarted=performance.now();
+      window.WorkCycles.plan(activeSeed,residents[i]);
+      recordResidentWarmupUnit(unitStarted);
+      startupScheduler.residentWarmupPlanCompleted=i+1;
+      await yieldResidentWarmup();
+    }
   }
-  // Complete the already-existing one fixed simulation tick before app.start().
-  // Runtime navigation remains cooperative; only its deterministic cold caches
-  // and initial tick are removed from the interactive path.
-  let result=window.ResidentMovement.advance(activeSeed,when,step,{snapshot:false,maxTicks:240});
-  let guard=0;
-  while(result?.pending&&guard++<24)result=window.ResidentMovement.advance(activeSeed,when,0,{snapshot:false,maxTicks:240});
+
+  // Preserve the same one fixed initialization tick, but drain it through the
+  // resident system's cooperative one-unit path.
+  unitStarted=performance.now();
+  let result=window.ResidentMovement.advance(activeSeed,when,step,{snapshot:false,maxTicks:1});
+  recordResidentWarmupUnit(unitStarted);
+  startupScheduler.residentWarmupAdvanceCalls++;
+  while(result?.pending){
+    await yieldResidentWarmup();
+    unitStarted=performance.now();
+    result=window.ResidentMovement.advance(activeSeed,when,0,{snapshot:false,maxTicks:1});
+    recordResidentWarmupUnit(unitStarted);
+    startupScheduler.residentWarmupAdvanceCalls++;
+  }
   navigationPerformance.residentSchedulerWarmupMs=Number((performance.now()-started).toFixed(3));
+  startupScheduler.residentWarmupCompletedAtMs=Date.now();
+}
+function scheduleResidentMovementWarmup(){
+  if(residentWarmupPromise)return residentWarmupPromise;
+  startupScheduler.optionalPostReadyWorkCount=1;
+  startupProgress={...startupProgress,optionalPostReadyWorkCount:1};
+  residentWarmupPromise=(async()=>{
+    await yieldResidentWarmup();
+    try{
+      await warmResidentMovementScheduler();
+    }catch(error){
+      startupScheduler.residentWarmupError=String(error?.stack||error);
+      console.error("Resident movement post-ready preparation failed.",error);
+    }finally{
+      startupScheduler.optionalPostReadyWorkCount=0;
+      startupProgress={...startupProgress,optionalPostReadyWorkCount:0};
+      startupScheduler.backgroundPreparationCompleteAtMs=Date.now();
+      startResidentMovementScheduler();
+      endResponsivenessTelemetry();
+    }
+  })();
+  return residentWarmupPromise;
 }
 function startResidentMovementScheduler(){
   if(residentMovementTimer)clearInterval(residentMovementTimer);
@@ -9153,8 +9206,8 @@ async function start(){
     app=new pc.AppBase(canvas);
     await measuredPhase("appInitMs",async()=>app.init(options));
     controlledWorkActive=true;    await measuredPhase("buildSceneMs",()=>buildScene());
-    warmResidentMovementScheduler();
     controlledWorkActive=false;
+    setStartupProgress("finalizing","Starting first playable renderer…",96);
     await yieldPaint();
     bindInput();
     resize();
@@ -9181,6 +9234,7 @@ async function start(){
       if(elapsed>50)navigationPerformance.renderCpuOver50Count++;
     });
     await measuredPhase("appStartMs",async()=>app.start());
+    setStartupProgress("finalizing","Preparing local transition shaders…",98);
     if(EVIDENCE_FAST_START){
       // Trusted local screenshot runs do not need the synthetic hidden shader
       // warmup scene. On software WebGL that pre-playable compile can stall
@@ -9191,6 +9245,7 @@ async function start(){
     }else{
       await measuredPhase("localShaderWarmupMs",()=>warmLocalRepresentationShaders());
     }
+    setStartupProgress("finalizing","Finalizing first playable controls…",99);
     initializeAtmosphereTimeBinding();
 
     if("ResizeObserver" in window){
@@ -9201,15 +9256,16 @@ async function start(){
     ready=true;
     window.GeneratedWorldStore?.markFirstPlayable?.();
     beginNavigationPerformanceTelemetry();
-    startResidentMovementScheduler();
+    startupScheduler.optionalPostReadyWorkCount=1;
+    startupProgress={...startupProgress,optionalPostReadyWorkCount:1};
     setStartupProgress("ready","First playable planet ready",100,"ready");
     startupProgress.gameplayReadyAtMs=Date.now();
-    startupScheduler.backgroundPreparationCompleteAtMs=startupProgress.gameplayReadyAtMs;
-    startupScheduler.optionalPostReadyWorkCount=0;    endResponsivenessTelemetry();
+    startupScheduler.backgroundPreparationCompleteAtMs=null;
     await yieldPaint();
     root.dataset.ready="true";
     root.dataset.seed=activeSeed;
     renderDestinationNavigator();
+    scheduleResidentMovementWarmup();
     return snapshot();
   }catch(error){
     controlledWorkActive=false;
