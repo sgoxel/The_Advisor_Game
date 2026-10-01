@@ -8902,14 +8902,17 @@ async function buildPlanetMesh(){
   meshTriangleCount=indices.length/3;
   return mesh;
 }
-function buildMapScaleShellMesh(){
+async function buildMapScaleShellMesh(){
   // Smooth canonical map parent used only during the deep globe→tangent handoff.
   // It reuses the exact globe geography texture/UV registration but deliberately
   // omits exaggerated relief, so loading never turns the approach into bright
   // faceted mountain bands. This is presentation-only and adds no world truth.
+  // Build its CPU arrays cooperatively just like the main globe mesh so this
+  // fallback cannot create an unlabelled long task inside first-playable work.
   const latitudeSegments=48,longitudeSegments=80,stride=longitudeSegments+1;
   const positions=[],normals=[],uvs=[],indices=[],radius=DISPLAY_RADIUS_UNITS+.006;
-  for(let latIndex=0;latIndex<=latitudeSegments;latIndex++){
+  const cpuStarted=performance.now();
+  await runSlicedRange(latitudeSegments+1,latIndex=>{
     const v=latIndex/latitudeSegments,lat=(.5-v)*Math.PI;
     for(let lonIndex=0;lonIndex<=longitudeSegments;lonIndex++){
       const u=lonIndex/longitudeSegments,lon=(u-.5)*Math.PI*2;
@@ -8918,13 +8921,23 @@ function buildMapScaleShellMesh(){
       normals.push(direction.x,direction.y,direction.z);
       uvs.push((latIndex===0||latIndex===latitudeSegments)?.5:u,1-v);
     }
-  }
-  for(let lat=0;lat<latitudeSegments;lat++)for(let lon=0;lon<longitudeSegments;lon++){
-    const a=lat*stride+lon,b=a+1,c=a+stride,d=c+1;
-    indices.push(a,c,b,b,c,d);
-  }
+  });
+  await runSlicedRange(latitudeSegments,lat=>{
+    for(let lon=0;lon<longitudeSegments;lon++){
+      const a=lat*stride+lon,b=a+1,c=a+stride,d=c+1;
+      indices.push(a,c,b,b,c,d);
+    }
+  });
+  startupScheduler.phaseTimings.mapScaleShellCpuMs=Number((performance.now()-cpuStarted).toFixed(3));
   const mesh=new pc.Mesh(device);
-  mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
+  let phaseStarted=performance.now();
+  mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);
+  startupScheduler.phaseTimings.mapScaleShellBufferStageMs=Number((performance.now()-phaseStarted).toFixed(3));
+  await yieldBrowser();
+  phaseStarted=performance.now();
+  mesh.update();
+  startupScheduler.phaseTimings.mapScaleShellUploadMs=Number((performance.now()-phaseStarted).toFixed(3));
+  await yieldBrowser();
   return mesh;
 }
 function resize(){
@@ -9482,7 +9495,7 @@ async function buildScene(){  const started=performance.now();
     mapScaleShellMaterial.update();
     mapScaleShell=new pc.Entity("CanonicalMapScaleShell");
     mapScaleShell.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
-    mapScaleShell.render.meshInstances=[new pc.MeshInstance(buildMapScaleShellMesh(),mapScaleShellMaterial,mapScaleShell)];
+    const mapScaleShellMesh=await buildMapScaleShellMesh();\n    mapScaleShell.render.meshInstances=[new pc.MeshInstance(mapScaleShellMesh,mapScaleShellMaterial,mapScaleShell)];
     mapScaleShell.enabled=false;app.root.addChild(mapScaleShell);
     // Clouds and broad wilderness dressing are not required for the first safe
     // playable planet view. Keep the exact same deterministic routines, but
