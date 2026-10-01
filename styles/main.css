@@ -2515,3 +2515,38 @@ body.advisor-economy-open .advisor-chat-launcher,body.advisor-economy-open .advi
   .advisor-econ-outcomes small,.advisor-econ-outcomes b,.advisor-econ-outcomes code{font-size:5px}
   .advisor-econ-foot{padding:3px 7px;font-size:5px}
 }
+
+
+/* WP-S012-009 visual attempt 2 — landscape chrome clearance + readable compact typography */
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-economy-panel{
+    top:64px;right:8px;bottom:8px;
+    width:min(600px,calc(100vw - 236px));
+    min-width:430px;
+    grid-template-rows:31px 14px 42px minmax(0,1fr) 19px;
+  }
+  .advisor-econ-head small{font-size:6px}
+  .advisor-econ-head strong{font-size:13px}
+  .advisor-econ-fixture{font-size:5.7px}
+  .advisor-econ-summary small{font-size:5.4px}
+  .advisor-econ-summary strong{font-size:8px}
+  .advisor-econ-summary span{font-size:5.7px}
+  .advisor-econ-body{gap:6px}
+  .advisor-econ-section-title small{font-size:5.4px}
+  .advisor-econ-section-title strong{font-size:7.8px}
+  .advisor-econ-section-title>span{font-size:5.7px}
+  .advisor-econ-offer{padding:4px 5px}
+  .advisor-econ-offer strong{font-size:6.8px}
+  .advisor-econ-offer small,.advisor-econ-offer i{font-size:5.2px}
+  .advisor-econ-offer em{font-size:6.8px}
+  .advisor-econ-selected{padding:5px 6px}
+  .advisor-econ-selected header strong{font-size:8.8px}
+  .advisor-econ-selected header b{font-size:5.2px}
+  .advisor-econ-selected small{font-size:5.2px}
+  .advisor-econ-selected dt{font-size:5px}
+  .advisor-econ-selected dd{font-size:6.2px}
+  .advisor-econ-outcomes strong{font-size:6.2px}
+  .advisor-econ-outcomes small,.advisor-econ-outcomes b,.advisor-econ-outcomes code{font-size:5px}
+  .advisor-econ-empty{font-size:5.7px}
+  .advisor-econ-foot{padding:3px 7px;font-size:5.2px}
+}
