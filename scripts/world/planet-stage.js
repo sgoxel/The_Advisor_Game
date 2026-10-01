@@ -223,13 +223,14 @@ const GROUND_CHARACTER_PROFESSION_TEXTURES=Object.freeze({
   guard:"assets/characters/npc_guard_male_01.png"
 });
 const GROUND_CHARACTER_FALLBACK_TEXTURE="assets/characters/npc_market_vendor_female_01.png";
+const GROUND_CHARACTER_PRESENTATION_SCALE=2.0;
 const groundCharacterMaterials=new Map();
 const groundCharacterTextures=new Map();
 const groundCharacterLoads=new Map();
 const groundCharacterFailures=new Set();
 let groundCharacterPendingLoads=0;
 let groundCharacterRefreshScheduled=false;
-let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([]),localEventPresentationRevision:"ground-billboard-v1",rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles + LocalEventVignettes",rhythmSource:"SettlementActivityRhythm presentation-only",billboardLayerActive:false,detailedBillboardCount:0,residentBillboardCount:0,protagonistBillboardVisible:false,billboardTextureUrls:Object.freeze([]),billboardOnlyAtGround:true,groundRepresentationReady:false,cameraPresentation:"orthographic-top-down",presentationOnly:true,simulationAuthority:false};
+let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([]),localEventPresentationRevision:"ground-billboard-v1",rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles + LocalEventVignettes",rhythmSource:"SettlementActivityRhythm presentation-only",billboardLayerActive:false,detailedBillboardCount:0,residentBillboardCount:0,protagonistBillboardVisible:false,billboardTextureUrls:Object.freeze([]),billboardOnlyAtGround:true,groundRepresentationReady:false,cameraPresentation:"orthographic-top-down",presentationScaleMultiplier:GROUND_CHARACTER_PRESENTATION_SCALE,presentationOnly:true,simulationAuthority:false};
 let localCrowdRoot=null;
 let localCrowdMesh=null;
 let localCrowdMaterials=null;
@@ -4785,7 +4786,7 @@ function groundCharacterMaterial(url){
 function createGroundCharacterBillboard(parent,name,url,x,ground,z,presentationScale,unit,heightMeters){
   const material=groundCharacterMaterial(url);if(!material||!parent)return null;
   const texture=material.diffuseMap,tw=Math.max(1,Number(texture?.width||1)),th=Math.max(1,Number(texture?.height||1));
-  const h=Math.max(.10,Number(heightMeters||1.75)*Number(presentationScale||1)/Math.max(1e-9,Number(unit)||1));
+  const h=Math.max(.10,Number(heightMeters||1.75)*GROUND_CHARACTER_PRESENTATION_SCALE*Number(presentationScale||1)/Math.max(1e-9,Number(unit)||1));
   const w=h*Math.max(.28,Math.min(1.2,tw/th));
   const entity=addLocalPrimitive(parent,name,"character-billboard",material,x,ground+.035,z-h*.47,w,1,h);
   if(entity?.render){entity.render.castShadows=false;entity.render.receiveShadows=false;}
@@ -4793,6 +4794,8 @@ function createGroundCharacterBillboard(parent,name,url,x,ground,z,presentationS
   return entity;
 }
 function protagonistGroundPoint(){
+  const authoritative=window.Protagonist?.getPosition?.()||null;
+  if(authoritative)return {x:Number(authoritative.x),y:Number(authoritative.y),source:"Protagonist.getPosition"};
   const village=window.StartingVillage?.plan?.(activeSeed)||null;
   const base=village?.center?{x:Number(village.center.x),y:Number(village.center.y),source:"StartingVillage.plan.center"}:null;
   if(!base)return null;
