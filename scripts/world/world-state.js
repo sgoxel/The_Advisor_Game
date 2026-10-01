@@ -12,6 +12,7 @@ const DELTA_DOMAINS=Object.freeze([
 ]);
 const STORAGE_KEY=GameConfig.campaignStorageKey+".world-state-delta.v1";
 const foundationCache=new Map();
+const deltaKindPresenceCache=new Map();
 let state=null;
 
 function clone(value){
@@ -122,6 +123,7 @@ function restoreSerializedState(campaignValue,serializedValue){
   if(!checked.ok)return checked;
   state=normalizeLoaded(serializedValue,campaign);
   foundationCache.clear();
+  deltaKindPresenceCache.clear();
   const stored=persist();
   return deepFreeze({ok:true,reason:"ok",stored,seed:state.seed,campaignKey:state.campaignKey,entryCount:Object.keys(state.entries).length,sequence:state.sequence});
 }
@@ -150,6 +152,7 @@ function bindCampaign(campaignValue,optionsValue){
   }
   state=next||freshState(campaign);
   foundationCache.clear();
+  deltaKindPresenceCache.clear();
   const stored=persist();
   return Object.freeze({
     ok:true,bound:true,restored:Boolean(next),reset:Boolean(options.reset),
@@ -159,6 +162,21 @@ function bindCampaign(campaignValue,optionsValue){
 function activeState(seedValue){
   const seed=normalizeSeed(seedValue);
   return state&&state.seed===seed?state:null;
+}
+function hasDeltaKind(seedValue,kindValue){
+  const current=activeState(seedValue),kind=String(kindValue||"");
+  if(!current||!kind)return false;
+  const cacheKey=current.seed+"|"+String(current.sequence)+"|"+kind;
+  if(deltaKindPresenceCache.has(cacheKey))return deltaKindPresenceCache.get(cacheKey);
+  let present=false;
+  for(const id in current.entries){
+    if(String(current.entries[id]?.entityKind||"")===kind){present=true;break;}
+  }
+  // Presence queries are used in hot simulation paths. Keep only the current
+  // sequence so campaign mutations never leave an unbounded history of keys.
+  deltaKindPresenceCache.clear();
+  deltaKindPresenceCache.set(cacheKey,present);
+  return present;
 }
 function deltaSnapshot(seedValue){
   const current=activeState(seedValue);
@@ -322,6 +340,7 @@ function applyDelta(seedValue,refValue,changesValue,reasonValue){
     reason:String(reasonValue||"campaign-change"),
     changes:deepMerge(previous?.changes||{},changes)
   };
+  deltaKindPresenceCache.clear();
   const stored=persist(),entry=deepFreeze(clone(current.entries[refValue.id]));
   dispatchDeltaChange(seed,entry,false);
   return Object.freeze({
@@ -335,6 +354,7 @@ function removeDelta(seedValue,entityIdValue){
   const previous=clone(current.entries[id]);
   delete current.entries[id];
   current.sequence+=1;
+  deltaKindPresenceCache.clear();
   persist();
   dispatchDeltaChange(seedValue,previous,true);
   return true;
@@ -557,7 +577,7 @@ function renderDebugPanel(seedValue,rootNode){
 
 const api=Object.freeze({
   FOUNDATION_SCHEMA_VERSION,DELTA_SCHEMA_VERSION,CURRENT_WORLD_SCHEMA_VERSION,WORLD_GENERATOR_VERSION,DELTA_DOMAINS,STORAGE_KEY,
-  bindCampaign,serializeState,validateSerializedState,restoreSerializedState,deltaSnapshot,terrainRef,countryRef,regionRef,settlementRef,diplomacyRef,structuralRef,
+  bindCampaign,serializeState,validateSerializedState,restoreSerializedState,hasDeltaKind,deltaSnapshot,terrainRef,countryRef,regionRef,settlementRef,diplomacyRef,structuralRef,
   materialize,resolve,applyDelta,removeDelta,evictFoundation,clearFoundationCache,
   representatives,focusReference,previewMerge,applyEvidenceDelta,proof,renderDebugPanel
 });
