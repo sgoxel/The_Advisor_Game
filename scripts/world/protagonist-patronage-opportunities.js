@@ -93,14 +93,6 @@ function list(seedValue,whenValue,optionsValue={},identityValue){
  for(const intent of INTENTS){byIntent[intent].sort((a,b)=>{const av=parseInt(H(s+"|"+a.cycleKey+"|"+intent+"|"+a.sourceNpcRef.id),16),bv=parseInt(H(s+"|"+b.cycleKey+"|"+intent+"|"+b.sourceNpcRef.id),16);return av-bv||a.opportunityId.localeCompare(b.opportunityId)});selected.push(...byIntent[intent].slice(0,MAX_PER_INTENT))}
  const intent=I(optionsValue?.intent,64),npc=I(optionsValue?.sourceNpcId,160),limit=Math.max(0,Math.min(MAX_QUERY_RESULTS,Math.floor(Number(optionsValue?.limit)||MAX_RESULTS)));
  return F(selected.filter(x=>(!intent||x.intent===intent)&&(!npc||x.sourceNpcRef.id===npc)).sort((a,b)=>a.intent.localeCompare(b.intent)||a.opportunityId.localeCompare(b.opportunityId)).slice(0,limit));
-},identityValue){
- let s,when;try{s=seed(seedValue);when=ts(whenValue)}catch(_){return F([])}
- const rows=residentRows(s),byIntent={};for(const i of INTENTS)byIntent[i]=[];
- for(const row of rows){for(const intent of INTENTS){const o=buildOpportunity(s,when,row,intent,identityValue);if(o.available)byIntent[intent].push(o)}}
- const selected=[];
- for(const intent of INTENTS){byIntent[intent].sort((a,b)=>{const av=parseInt(H(s+"|"+a.cycleKey+"|"+intent+"|"+a.sourceNpcRef.id),16),bv=parseInt(H(s+"|"+b.cycleKey+"|"+intent+"|"+b.sourceNpcRef.id),16);return av-bv||a.opportunityId.localeCompare(b.opportunityId)});selected.push(...byIntent[intent].slice(0,MAX_PER_INTENT))}
- const intent=I(optionsValue?.intent,64),npc=I(optionsValue?.sourceNpcId,160),limit=Math.max(0,Math.min(MAX_QUERY_RESULTS,Math.floor(Number(optionsValue?.limit)||MAX_RESULTS)));
- return F(selected.filter(x=>(!intent||x.intent===intent)&&(!npc||x.sourceNpcRef.id===npc)).sort((a,b)=>a.intent.localeCompare(b.intent)||a.opportunityId.localeCompare(b.opportunityId)).slice(0,limit));
 }
 function inspectCandidate(seedValue,whenValue,residentIdValue,intentValue,identityValue){
  let s,when;try{s=seed(seedValue);when=ts(whenValue)}catch(e){return F({ok:false,reason:String(e.message||e)})}
