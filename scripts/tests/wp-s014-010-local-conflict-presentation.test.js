@@ -22,7 +22,7 @@ const active=UI.runtimeModel({seed:'WP-S014-010-SEED'});
 assert.equal(active.phase,'active');
 assert.equal(active.sourceRef.id,'SIM-SEC-1');
 let tele=UI.snapshot();
-assert.equal(tele.sourceReadTotal,4);
+assert.equal(tele.sourceReadTotal,5);
 assert.equal(tele.authority.perFrameSourceScan,false);
 assert.equal(tele.authority.fullWorldScan,false);
 assert.equal(tele.authority.directActionExecution,false);
@@ -55,5 +55,16 @@ global.ProtagonistHealth.snapshot=()=>({compatible:true,injuries:[]});
 let retreat=UI.runtimeModel({seed:'WP-S014-010-SEED'});
 assert.equal(retreat.phase,'retreat');
 assert.equal(retreat.terminal,true);
+
+now='1201-10-01 19:00:00';
+let stale=UI.runtimeModel({seed:'WP-S014-010-SEED'});
+assert.equal(stale.phase,'cleared','old terminal outcomes must expire after the bounded presentation window');
+
+now='1201-10-01 18:50:00';
+global.PersonalCombatExchange.list=()=>[{id:'CBT-OLD',resolution:'stalemate',fantasyTimestamp:'1201-10-01 18:45:00',terminal:true,locationRef:{kind:'workplace',id:'mill-crossing'},protagonistInjuryEvidence:null}];
+global.LocalSecurityIncidents.list=()=>[{id:'SEC-NEW',status:'active',epistemicStatus:'confirmed',severity:'serious',summary:'A newer threat is active.',sourceRef:{kind:'simulation-event',id:'SIM-SEC-NEW'},locationRef:{kind:'workplace',id:'gate'},updatedTimestamp:'1201-10-01 18:49:00'}];
+let newer=UI.runtimeModel({seed:'WP-S014-010-SEED'});
+assert.equal(newer.phase,'active','newer active threat evidence must supersede an older terminal cue');
+assert.equal(newer.sourceRef.id,'SIM-SEC-NEW');
 
 console.log(JSON.stringify({pass:true,wp:'WP-S014-010',classification:'MIXED',version:UI.VERSION,states:UI.EVIDENCE_MODES,sourceReadLimit:UI.SOURCE_READ_LIMIT,authority:UI.snapshot().authority},null,2));
