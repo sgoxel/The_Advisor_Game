@@ -9,7 +9,9 @@ const MAX_OUTDOOR_CANDIDATES=96;
 const MAX_FRONTAGE_ROUTE_CANDIDATES=6;
 let telemetry={
   resolveCount:0,planBuildCount:0,routeQueryCount:0,routeFailureCount:0,fallbackCount:0,
-  transitionSamples:0,totalResolveMs:0,maxResolveMs:0,totalPlanBuildMs:0,maxPlanBuildMs:0
+  transitionSamples:0,totalResolveMs:0,maxResolveMs:0,totalPlanBuildMs:0,maxPlanBuildMs:0,
+  cooperativePlanPrepareCount:0,cooperativeRouteSearchCount:0,cooperativeRouteSliceCount:0,
+  cooperativeRouteYieldCount:0,cooperativeMaxRouteSliceMs:0
 };
 
 const DEFINITIONS=Object.freeze({
@@ -88,11 +90,11 @@ function residentObject(seed,resident,step){
     intendedAction:step.action,action:step.action,supportedActions:Object.freeze([...(object.actions||[])])
   });
 }
-function exteriorTarget(seed,resident,step){
+function exteriorRouteCandidates(seed,resident){
   const interior=window.BuildingInteriors?.get?.(seed,resident?.workplaceId)||null;
   const entrance=interior?.entrance||null;
   const origin=point(entrance?.outdoorAccess||entrance?.immediateOutside);
-  if(!origin)return null;
+  if(!origin)return Object.freeze({origin:null,candidates:Object.freeze([])});
   const protectedKeys=new Set([entrance?.door,entrance?.immediateOutside,entrance?.outdoorAccess].filter(Boolean).map(pointKey));
   const candidates=[];
   for(let radius=1;radius<=3;radius++)for(let oy=-radius;oy<=radius;oy++)for(let ox=-radius;ox<=radius;ox++){
@@ -108,7 +110,12 @@ function exteriorTarget(seed,resident,step){
     candidates.push({target,score,radius});
   }
   candidates.sort((a,b)=>a.radius-b.radius||b.score-a.score||pointKey(a.target).localeCompare(pointKey(b.target)));
-  const selected=candidates.slice(0,MAX_FRONTAGE_ROUTE_CANDIDATES).find(candidate=>routePass(seed,origin,candidate.target))||null;
+  return Object.freeze({origin,candidates:Object.freeze(candidates.slice(0,MAX_FRONTAGE_ROUTE_CANDIDATES))});
+}
+function exteriorTarget(seed,resident,step){
+  const prepared=exteriorRouteCandidates(seed,resident),origin=prepared.origin;
+  if(!origin)return null;
+  const selected=prepared.candidates.find(candidate=>routePass(seed,origin,candidate.target))||null;
   const target=selected?.target||null;
   if(!target)return null;
   return Object.freeze({
@@ -147,23 +154,54 @@ function outdoorTarget(seed,resident,step,index,candidates){
     intendedAction:"work",action:"work",supportedActions:Object.freeze(["work"])
   });
 }
+function routePassCacheKey(seed,a,b){
+  if(!a||!b)return null;
+  const aKey=pointKey(a),bKey=pointKey(b);
+  if(aKey===bKey)return "";
+  const pair=aKey<bKey?aKey+"|"+bKey:bKey+"|"+aKey;
+  return String(seed)+"|"+pair;
+}
+function storeRoutePass(cacheKey,pass){
+  if(cacheKey)ROUTE_PASS_CACHE.set(cacheKey,Boolean(pass));
+  if(!pass)telemetry.routeFailureCount++;
+  return Boolean(pass);
+}
 function routePass(seed,a,b){
   if(!a||!b||!window.RoutePlanner?.findRoute)return false;
-  const aKey=pointKey(a),bKey=pointKey(b);
-  if(aKey===bKey)return true;
-  const pair=aKey<bKey?aKey+"|"+bKey:bKey+"|"+aKey;
-  const cacheKey=String(seed)+"|"+pair;
+  const cacheKey=routePassCacheKey(seed,a,b);
+  if(cacheKey==="")return true;
   if(ROUTE_PASS_CACHE.has(cacheKey))return ROUTE_PASS_CACHE.get(cacheKey);
   telemetry.routeQueryCount++;
   const route=RoutePlanner.findRoute(seed,a,b);
-  const pass=Boolean(route?.found);
-  ROUTE_PASS_CACHE.set(cacheKey,pass);
-  if(!pass)telemetry.routeFailureCount++;
-  return pass;
+  return storeRoutePass(cacheKey,Boolean(route?.found));
 }
-function buildPlanFresh(seedValue,resident){
-  const started=nowMs(),seed=String(seedValue||""),definition=DEFINITIONS[String(resident?.profession||"")]||null;
-  if(!seed||!resident||!definition)return null;
+async function routePassCooperative(seed,a,b,options={}){
+  if(!a||!b)return false;
+  const cacheKey=routePassCacheKey(seed,a,b);
+  if(cacheKey==="")return true;
+  if(ROUTE_PASS_CACHE.has(cacheKey))return ROUTE_PASS_CACHE.get(cacheKey);
+  const planner=window.RoutePlanner;
+  if(!planner?.beginRouteSearch||!planner?.advanceRouteSearch)return routePass(seed,a,b);
+  telemetry.routeQueryCount++;telemetry.cooperativeRouteSearchCount++;
+  const maxPops=Math.max(1,Math.floor(Number(options.maxRoutePops||6)));
+  let started=nowMs(),search=planner.beginRouteSearch(seed,a,b),elapsed=nowMs()-started;
+  telemetry.cooperativeRouteSliceCount++;telemetry.cooperativeMaxRouteSliceMs=Math.max(telemetry.cooperativeMaxRouteSliceMs,elapsed);
+  options.onSlice?.(elapsed,"route-begin");
+  while(!search.done){
+    started=nowMs();
+    const advanced=planner.advanceRouteSearch(search,maxPops);
+    elapsed=nowMs()-started;
+    telemetry.cooperativeRouteSliceCount++;telemetry.cooperativeMaxRouteSliceMs=Math.max(telemetry.cooperativeMaxRouteSliceMs,elapsed);
+    options.onSlice?.(elapsed,"route-advance");
+    if(!advanced.done){
+      telemetry.cooperativeRouteYieldCount++;
+      if(typeof options.yield==="function")await options.yield();
+      else await new Promise(resolve=>setTimeout(resolve,0));
+    }
+  }
+  return storeRoutePass(cacheKey,Boolean(search.result?.found));
+}
+function buildPlanSteps(seed,resident,definition){
   const outdoor=String(resident.profession)==="woodcutter"?outdoorCandidates(seed,resident):[];
   const steps=[];
   for(let i=0;i<definition.length&&i<MAX_STEPS;i++){
@@ -182,21 +220,52 @@ function buildPlanFresh(seedValue,resident){
       supportedActions:target.supportedActions
     }));
   }
-  const checkRoutes=list=>{
-    const checks=[];
-    for(let i=0;i<list.length;i++){
-      const next=list[(i+1)%list.length];
-      checks.push(Object.freeze({from:list[i].id,to:next.id,found:routePass(seed,list[i].target,next.target)}));
+  return steps;
+}
+function checkPlanRoutes(seed,list){
+  const checks=[];
+  for(let i=0;i<list.length;i++){
+    const next=list[(i+1)%list.length];
+    checks.push(Object.freeze({from:list[i].id,to:next.id,found:routePass(seed,list[i].target,next.target)}));
+  }
+  return checks;
+}
+async function primePlanRouteList(seed,list,options){
+  for(let i=0;i<list.length;i++){
+    const next=list[(i+1)%list.length];
+    await routePassCooperative(seed,list[i].target,next.target,options);
+  }
+}
+async function preparePlan(seedValue,resident,options={}){
+  const seed=String(seedValue||""),key=seed+"|"+String(resident?.id||""),definition=DEFINITIONS[String(resident?.profession||"")]||null;
+  if(!seed||!resident||!definition)return null;
+  if(PLAN_CACHE.has(key))return PLAN_CACHE.get(key);
+  telemetry.cooperativePlanPrepareCount++;
+  for(const descriptor of definition){
+    if(descriptor.objectType!=="exterior")continue;
+    const prepared=exteriorRouteCandidates(seed,resident);
+    if(!prepared.origin)continue;
+    for(const candidate of prepared.candidates){
+      if(await routePassCooperative(seed,prepared.origin,candidate.target,options))break;
     }
-    return checks;
-  };
-  let finalSteps=steps.slice(),routeChecks=checkRoutes(finalSteps),frontageFallback=false;
+  }
+  const steps=buildPlanSteps(seed,resident,definition);
+  await primePlanRouteList(seed,steps,options);
+  const fallbackSteps=steps.filter(step=>step.targetSource!=="work-choreography");
+  if(fallbackSteps.length!==steps.length)await primePlanRouteList(seed,fallbackSteps,options);
+  return plan(seed,resident);
+}
+function buildPlanFresh(seedValue,resident){
+  const started=nowMs(),seed=String(seedValue||""),definition=DEFINITIONS[String(resident?.profession||"")]||null;
+  if(!seed||!resident||!definition)return null;
+  const steps=buildPlanSteps(seed,resident,definition);
+  let finalSteps=steps.slice(),routeChecks=checkPlanRoutes(seed,finalSteps),frontageFallback=false;
   // Frontage choreography is optional presentation. If a generated lot makes
   // that exterior point unreachable, preserve the authoritative interior
   // interaction cycle rather than invalidating or fabricating a route.
   if(routeChecks.some(x=>!x.found)&&finalSteps.some(step=>step.targetSource==="work-choreography")){
     finalSteps=finalSteps.filter(step=>step.targetSource!=="work-choreography");
-    routeChecks=checkRoutes(finalSteps);frontageFallback=true;
+    routeChecks=checkPlanRoutes(seed,finalSteps);frontageFallback=true;
   }
   const totalMinutes=finalSteps.reduce((sum,step)=>sum+Math.max(1,Number(step.durationMinutes)||1),0);
   const signature=finalSteps.map(step=>[step.id,step.action,pointKey(step.target),step.interactionObjectId||"-"].join(":")).join("|");
@@ -313,6 +382,9 @@ function snapshot(seedValue){
     transitionSamples:telemetry.transitionSamples,
     averageResolveMs:Number((telemetry.totalResolveMs/resolves).toFixed(4)),maxResolveMs:Number(telemetry.maxResolveMs.toFixed(4)),
     averagePlanBuildMs:Number((telemetry.totalPlanBuildMs/plans).toFixed(4)),maxPlanBuildMs:Number(telemetry.maxPlanBuildMs.toFixed(4)),
+    cooperativePlanPrepareCount:telemetry.cooperativePlanPrepareCount,cooperativeRouteSearchCount:telemetry.cooperativeRouteSearchCount,
+    cooperativeRouteSliceCount:telemetry.cooperativeRouteSliceCount,cooperativeRouteYieldCount:telemetry.cooperativeRouteYieldCount,
+    cooperativeMaxRouteSliceMs:Number(telemetry.cooperativeMaxRouteSliceMs.toFixed(4)),
     exactWorkerCap:12,fullSettlementPerFrameScan:false,routePlanningPerFrame:false,economyAuthority:false,resourceMutation:false
   });
 }
@@ -323,7 +395,7 @@ function clear(seedValue=null){
     for(const key of [...PLAN_CACHE.keys()])if(key.startsWith(prefix))PLAN_CACHE.delete(key);
     for(const key of [...ROUTE_PASS_CACHE.keys()])if(key.startsWith(prefix))ROUTE_PASS_CACHE.delete(key);
   }
-  telemetry={resolveCount:0,planBuildCount:0,routeQueryCount:0,routeFailureCount:0,fallbackCount:0,transitionSamples:0,totalResolveMs:0,maxResolveMs:0,totalPlanBuildMs:0,maxPlanBuildMs:0};
+  telemetry={resolveCount:0,planBuildCount:0,routeQueryCount:0,routeFailureCount:0,fallbackCount:0,transitionSamples:0,totalResolveMs:0,maxResolveMs:0,totalPlanBuildMs:0,maxPlanBuildMs:0,cooperativePlanPrepareCount:0,cooperativeRouteSearchCount:0,cooperativeRouteSliceCount:0,cooperativeRouteYieldCount:0,cooperativeMaxRouteSliceMs:0};
 }
-window.WorkCycles=Object.freeze({VERSION,DEFINITIONS,MAX_STEPS,plan,resolve,evidenceSamples,verify,snapshot,clear});
+window.WorkCycles=Object.freeze({VERSION,DEFINITIONS,MAX_STEPS,plan,preparePlan,resolve,evidenceSamples,verify,snapshot,clear});
 })();
