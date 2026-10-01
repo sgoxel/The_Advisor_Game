@@ -7,6 +7,7 @@ on:
       - "scripts/world/protagonist-authority.js"
       - "scripts/world/protagonist-appointment-resolution.js"
       - "scripts/world/protagonist-rank-access.js"
+      - "scripts/tests/wp-s013-005-protagonist-appointment-resolution.test.js"
       - "scripts/tests/wp-s014-006-knight-appointment.test.js"
       - ".github/workflows/wp-s014-006-knight-appointment.yml"
       - "docs/ROADMAP.md"
