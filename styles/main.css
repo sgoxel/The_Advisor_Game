@@ -2717,3 +2717,15 @@ body:has(.advisor-rank-readout[open]) .advisor-economy-launcher{
   }
 }
 
+
+
+/* WP-S013-009 visual attempt 3 — expanded rank view owns the readout stack */
+.advisor-readout-stack:has(.advisor-rank-readout[open]) .advisor-status-readout{
+  display:none!important;
+}
+
+
+/* WP-S013-009 current-run attempt 1 — reserve full bounded rank-detail height */
+.advisor-chat-panel:has(.advisor-rank-readout[open]) .advisor-activity-strip{
+  display:none!important;
+}

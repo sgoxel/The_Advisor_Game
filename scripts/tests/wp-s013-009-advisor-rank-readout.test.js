@@ -28,6 +28,26 @@ const proof=UI.proof();assert.equal(proof.pass,true);
 const snap=UI.snapshot();assert.equal(snap.authority.eventDriven,true);assert.equal(snap.authority.boundedReads,true);for(const key of ['perFrameRead','fullWorldScan','wholeHistoryScan','directWorldMutation','directActionExecution','rankMutation','relationshipMutation','economyMutation','appointmentExecution','serviceAcceptance','oathCreation','patronageDecision','progressionMutation','protagonistDecisionBypass','simulationValidationBypass'])assert.equal(snap.authority[key],false,key);
 assert(snap.sourceReadTotal<=UI.MAX_SOURCE_READS,'bounded source read budget');
 
+// Missing authoritative sources remain unknown; presentation never synthesizes an ordinary role.
+global.ProtagonistAuthority={snapshot(){return{exists:false,reason:'empty'}}};
+global.ProtagonistStatusObligations={decisionContext(){return{ok:false,reason:'protagonist-authority-unavailable'}}};
+global.ProtagonistPatronageOpportunities={list(){return null},decisions(){return null}};
+global.ProtagonistServiceContracts={dutyContext(){return null},results(){return null}};
+global.ProtagonistOathAllegiance={currentContext(){return null}};
+global.ProtagonistAppointmentResolution={catalog(){return null},list(){return null}};
+const missing=UI.runtimeModel({seed:'SEED-RANK',when:'1201-10-01 10:00:00'});
+assert.equal(missing.role,null);
+assert.equal(missing.eligibility.status,'unknown');
+assert(missing.eligibility.unknowns.includes('appointment-catalog-unavailable'));
+assert(missing.sources.some(x=>x.name==='ProtagonistAuthority'&&x.available===false));
+assert(missing.sources.some(x=>x.name==='Status obligations'&&x.available===false));
+const missingHtml=UI.markup(missing);
+assert(missingHtml.includes('Status unavailable'));
+assert(missingHtml.includes('Unknown role'));
+assert(!missingHtml.includes('Local Resident'));
+const missingSnap=UI.snapshot();
+assert(missingSnap.sourceReadTotal<=UI.MAX_SOURCE_READS,'bounded source read budget after refresh');
+
 const source=fs.readFileSync(modulePath,'utf8');
 for(const forbidden of ['requestAnimationFrame','setInterval(','Math.random','Date.now','innerWidth','innerHeight','devicePixelRatio'])assert(!source.includes(forbidden),'forbidden frame/device authority: '+forbidden);
 for(const forbidden of ['ProtagonistAppointmentResolution?.appointment','ProtagonistPatronageOpportunities?.evaluate','ProtagonistServiceContracts?.activate','ProtagonistOathAllegiance?.create','ProtagonistAdvancementGoal?.schedule','ActionExecutor.execute','ProtagonistCommandEvaluator.evaluate'])assert(!source.includes(forbidden),'mutation/action path present: '+forbidden);
