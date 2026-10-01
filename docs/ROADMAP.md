@@ -276,7 +276,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S014-006` — Squire-to-Knight Qualification + Legitimate Martial Appointment — COMPLETED
 - `WP-S014-007` — Tournament, Sparring + Martial Training Opportunity Pipeline — COMPLETED
 - `WP-S014-008` — Conflict Injury, Standing + Service Consequence Integration — COMPLETED
-- `WP-S014-009` — Advisor Threat, Martial Readiness + Security Readout
+- `WP-S014-009` — Advisor Threat, Martial Readiness + Security Readout — COMPLETED
 - `WP-S014-010` — Visible Local Conflict, Outcome + Recovery Presentation
 
 **TO BE CONTINUED AFTER CURRENT ROADMAP STAGES ARE IMPLEMENTED AND REVIEWED**
