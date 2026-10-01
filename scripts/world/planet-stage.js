@@ -1,0 +1,9332 @@
+(function(){
+"use strict";
+
+const VERSION="planet-focus-streaming-v1";
+const ENGINE_VERSION="2.22.3";
+const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
+
+const EARTH_REFERENCE_RADIUS_METERS=6_371_000;
+const WORLD_SCALE_FRACTION=0.10;
+const WORLD_RADIUS_METERS=Math.round(EARTH_REFERENCE_RADIUS_METERS*WORLD_SCALE_FRACTION);
+const WORLD_DIAMETER_METERS=WORLD_RADIUS_METERS*2;
+const WORLD_CIRCUMFERENCE_METERS=2*Math.PI*WORLD_RADIUS_METERS;
+const DISPLAY_RADIUS_UNITS=3.25;
+const TEXTURE_WIDTH=640;
+const TEXTURE_HEIGHT=320;
+const LATITUDE_SEGMENTS=96;
+const LONGITUDE_SEGMENTS=160;
+// Evidence-only startup optimization. This never changes SEED/world authority,
+// local settlement generation, coordinates, routes, or ground-scale geometry.
+// It only lowers the irrelevant pre-zoom globe tessellation when the trusted
+// local screenshot harness explicitly requests it.
+const EVIDENCE_FAST_START=typeof location!=="undefined"&&new URLSearchParams(location.search).get("evidence_fast_start")==="1";
+// WP-019 needs both a real far globe and the local streaming path. This mode
+// preserves the full SEED geography texture/feature scan, but reduces only the
+// evidence globe tessellation so SwiftShader does not dominate the test.
+const EVIDENCE_LAYERED_START=typeof location!=="undefined"&&new URLSearchParams(location.search).get("evidence_layered_start")==="1";
+// WP-020 contributor isolation is evidence-only. It retains bounded per-pixel
+// presentation values already computed for the first two regional focus textures;
+// it never adds geography queries, changes rendered pixels, or runs in production
+// unless the trusted evidence URL explicitly opts in.
+const EVIDENCE_SURFACE_CONTRIBUTORS=typeof location!=="undefined"&&new URLSearchParams(location.search).get("wp020_surface_contributors")==="1";
+// WP-020 Phase 16 can temporarily replace only the visible focus heightfield
+// with a flat quad while retaining the exact same prepared texture/material.
+// This trusted evidence mode performs no new world/geography sampling and is
+// unreachable in normal production URLs.
+const EVIDENCE_WP020_PRESENTATION_ISOLATION=typeof location!=="undefined"&&new URLSearchParams(location.search).get("wp020_presentation_isolation")==="1";
+const EVIDENCE_LATITUDE_SEGMENTS=32;
+const EVIDENCE_LONGITUDE_SEGMENTS=64;
+const HEIGHT_EXAGGERATION=5.0;
+const OCEAN_VISUAL_DEPTH_FACTOR=0.0;
+const ZOOM_MIN=0;
+const ZOOM_MAX=1;
+const ZOOM_WHEEL_SENSITIVITY=0.00045;
+const ZOOM_PINCH_SENSITIVITY=0.003;
+const ZOOM_DISTANCE_FACTOR=0.018;
+const SCALE_LADDER=Object.freeze(["1/10","1/20","1/50","1/100","1/250","1/500","1/1000","1/2500","1/5000","1/10000"]);
+const SCALE_DENOMINATORS=Object.freeze([10,20,50,100,250,500,1000,2500,5000,10000]);
+// Player-facing smooth zoom adds deterministic transition milestones without
+// redefining the canonical ten-step semantic scale ladder above.
+const ZOOM_DISPLAY_LADDER=Object.freeze(["1/10","1/15","1/20","1/30","1/50","1/75","1/100","1/150","1/250","1/375","1/500","1/750","1/1000","1/1500","1/2500","1/3750","1/5000","1/7500","1/10000"]);
+const ZOOM_DISPLAY_DENOMINATORS=Object.freeze([10,15,20,30,50,75,100,150,250,375,500,750,1000,1500,2500,3750,5000,7500,10000]);
+const ZOOM_ANIMATION_TIME_CONSTANT_SECONDS=.16;
+const ZOOM_ANIMATION_MAX_STEP_SECONDS=.05;
+const ZOOM_ANIMATION_SETTLE_EPSILON=.00006;
+const ZOOM_MAP_PRESENTATION_INTERVAL_MS=50;
+const NAV_SEMANTIC_MIN_INTERVAL_MS=80;
+const SCALE_FOOTPRINT_PROGRESS_EXPONENT=1.6;
+const SEMANTIC_SCALE_HYSTERESIS_RATIO=1.06;
+const SEMANTIC_MARKER_POLICY_REVISION="semantic-marker-visibility-v1";
+const SEMANTIC_MARKER_DEBUG_MODE=typeof location!=="undefined"&&new URLSearchParams(location.search).get("marker_debug")==="1";
+const SEMANTIC_MARKER_CLASSES=Object.freeze(["gameplay-center","capital","major-city","city","town","village","landmark-poi","route-road-node","debug-diagnostic"]);
+const SEMANTIC_MARKER_SPECS=Object.freeze({
+  "gameplay-center":Object.freeze({minScaleIndex:0,maxScaleIndex:9,debugOnly:false}),
+  "capital":Object.freeze({minScaleIndex:2,maxScaleIndex:4,debugOnly:false}),
+  "major-city":Object.freeze({minScaleIndex:3,maxScaleIndex:5,debugOnly:false}),
+  "city":Object.freeze({minScaleIndex:3,maxScaleIndex:5,debugOnly:false}),
+  "town":Object.freeze({minScaleIndex:6,maxScaleIndex:7,debugOnly:false}),
+  "village":Object.freeze({minScaleIndex:6,maxScaleIndex:9,debugOnly:false}),
+  "landmark-poi":Object.freeze({minScaleIndex:2,maxScaleIndex:9,debugOnly:false}),
+  "route-road-node":Object.freeze({minScaleIndex:7,maxScaleIndex:9,debugOnly:false}),
+  "debug-diagnostic":Object.freeze({minScaleIndex:0,maxScaleIndex:9,debugOnly:true})
+});
+let semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};
+// One continuous footprint ladder drives every representation:
+// - up to LADDER_START_SCALAR it is the true surface footprint of the globe
+//   camera (it depends on viewport framing, so it is computed, not tabled);
+// - above it the footprint shrinks log-uniformly to the 36 m ground view, so
+//   each wheel/pinch step changes apparent scale by the same factor.
+// Local LOD tiers are native where the ladder equals their height, and the
+// semantic band past SEMANTIC_LOCAL_BAND_START is the band of that tier.
+const LADDER_START_SCALAR=.70;
+const GROUND_FOOTPRINT_HEIGHT_METERS=36;
+const SEMANTIC_LOCAL_BAND_START=.58;
+const ZOOM_BANDS=Object.freeze([{id:"planet",max:.18},{id:"continent",max:.38},{id:"country-region",max:SEMANTIC_LOCAL_BAND_START},{id:"regional-overview",max:null},{id:"regional-detail",max:null},{id:"district",max:null},{id:"local-area",max:null},{id:"settlement",max:null},{id:"near-ground",max:null},{id:"ground",max:1}]);
+
+let pc=null;
+let app=null;
+let device=null;
+let root=null;
+let canvas=null;
+let planet=null;
+let mapScaleShell=null;
+let mapScaleShellMaterial=null;
+let cameraEntity=null;
+let keyLight=null;
+let fillLight=null;
+let surfaceMaterial=null;
+let tangentPatch=null;
+let tangentPatchMaterial=null;
+let wp020EvidenceFlatMesh=null;
+let wp020EvidenceFlatMeshSignature=null;
+let wp020EvidencePresentationMode="normal";
+let wp020EvidenceVisibilityRestore=null;
+let wp020EvidenceTransitionFreeze=false;
+let wp020EvidenceTransitionArm=null;
+let wp020EvidenceTransitionFreezeState=null;
+let focusRingPatch=null;
+let focusRingMaterial=null;
+let horizonSkirt=null;
+let horizonSkirtMaterial=null;
+let localStaticRoot=null;
+let localStaticMaterials=null;
+let localSettlementRoadGeometry=null;
+let localSettlementLotGeometry=null;
+let localWayfindingMesh=null;
+let localWayfindingEntity=null;
+let wayfindingTextCanvas=null;
+let wayfindingTextContext=null;
+let wayfindingLastTextDrawAt=0;
+let wayfindingPanelAnchors=[];
+const wayfindingSignAnchors=new Map();
+let wayfindingSignposts={
+  active:false,version:null,signCount:0,panelCount:0,triangleCount:0,geometryDrawCallEstimate:0,textCanvasCount:0,
+  visibleTextCount:0,textUpdateCount:0,lastTextDrawMs:0,maxTextDrawMs:0,routeQueryCount:0,routeQueryMs:0,buildMs:0,
+  signs:[],signature:null,authority:"unavailable",fallbackScope:null,interSettlementRoadAuthorityAvailable:false,
+  remoteConnectivityInvented:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameRouteQuery:false
+};
+let localFaunaRoot=null;
+let localFaunaActors=[];
+let localFaunaClock=0;
+const LOCAL_FAUNA_REACTION_TICK_SECONDS=.10;
+const LOCAL_FAUNA_BUCKET_METERS=24;
+const LOCAL_FAUNA_MEMORY_TTL_MS=8000;
+const LOCAL_FAUNA_MEMORY_LIMIT=16;
+const LOCAL_FAUNA_SPECS=Object.freeze({
+  deer:Object.freeze({triggerMeters:28,speedMetersPerSecond:8.5,reactionSeconds:2.6,returnSpeedMetersPerSecond:3.2,maxAltitudeMeters:0}),
+  hare:Object.freeze({triggerMeters:18,speedMetersPerSecond:6.6,reactionSeconds:1.8,returnSpeedMetersPerSecond:2.8,maxAltitudeMeters:0}),
+  bird:Object.freeze({triggerMeters:20,speedMetersPerSecond:7.2,reactionSeconds:2.2,returnSpeedMetersPerSecond:3.0,maxAltitudeMeters:12}),
+  waterbird:Object.freeze({triggerMeters:17,speedMetersPerSecond:5.8,reactionSeconds:2.0,returnSpeedMetersPerSecond:2.4,maxAltitudeMeters:7})
+});
+let localFaunaReactionAccumulator=0;
+const localFaunaReactionMemory=new Map();
+function freshWildlifeReaction(){
+  return {
+    enabled:true,activeActorCount:0,visibleActorCount:0,reactingActorCount:0,sleepingActorCount:0,
+    spatialBucketCount:0,proximityChecks:0,triggerCount:0,triggerByKind:{deer:0,hare:0,bird:0,waterbird:0},
+    stateCounts:{idle:0,flee:0,takeoff:0,return:0,sleep:0},presenceMoveMeters:0,
+    lastPresenceEastMeters:null,lastPresenceNorthMeters:null,lastTriggerActorId:null,lastTriggerKind:null,
+    updateCount:0,lastUpdateMs:0,maxUpdateMs:0,reactionTickMs:LOCAL_FAUNA_REACTION_TICK_SECONDS*1000,
+    bucketMeters:LOCAL_FAUNA_BUCKET_METERS,maxActors:4,domesticAvailable:false,
+    domesticReason:"no-canonical-domestic-ambient-actor-exposed",
+    presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false
+  };
+}
+let wildlifeReaction=freshWildlifeReaction();
+let localWildernessEnabled=true;
+let environmentalReactionRoot=null;
+let environmentalReactionMaterials=null;
+let environmentalReactionTextures=null;
+let environmentalReactionPool=[];
+const ENVIRONMENT_REACTION_MIN_MOVE_METERS=.65;
+const ENVIRONMENT_REACTION_MAX_MOVE_METERS=7.5;
+const ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS=90;
+const ENVIRONMENT_REACTION_POOL_PER_KIND=2;
+let environmentalReactions={
+  enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,activeDrawCallEstimate:0,peakActiveCount:0,
+  triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},
+  lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,
+  minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,
+  triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,
+  source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,
+  terrainMutation:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameWorldScan:false
+};
+let localBuildingActivityRoot=null;
+let localBuildingActivityContext=null;
+let buildingActivity={
+  active:false,authoritativeHour:null,timeBand:"unknown",buildingCount:0,activeBuildingCount:0,
+  occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,
+  smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,
+  drawCallEstimate:0,dynamicLightCount:0,particleEmitterCount:0,sharedMaterialCount:0,
+  updateCount:0,lastUpdateMs:0,maxUpdateMs:0,lastSignature:null,buildings:[],
+  activitySource:"DailyActivity.resolveActionTarget",occupancySource:"ResidentMovement.get when available",
+  presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false
+};
+let localBuildingSurroundingsMesh=null;
+let buildingSurroundings={
+  active:false,buildingCount:0,functionCount:0,propCount:0,drawCallEstimate:0,triangleCount:0,sharedMaterialCount:1,
+  functions:[],buildings:[],doorClearanceViolations:0,roadClearanceViolations:0,ownershipCueCount:0,
+  authoritativeFunctionSource:"HousePlans + SpecialLots.function",ownershipSource:"no-canonical-building-owner-name-exposed",
+  presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false,buildMs:0
+};
+let localCampaignWearMesh=null;
+let localCampaignWearGeometry=null;
+let localCampaignWearContext=null;
+let localCampaignWearRelevantIds=new Set();
+let localCanonicalBuildingRoofs=new Map();
+let campaignWearProjection={
+  active:false,buildingCount:0,changedBuildingCount:0,visualPrimitiveCount:0,drawCallEstimate:0,triangleCount:0,sharedMaterialCount:1,
+  stateCounts:{normal:0,worn:0,damaged:0,repaired:0,overgrown:0},buildings:[],revisionSignature:null,maxRevision:0,
+  deltaSequence:0,localQueryCount:0,localQueryLimit:16,persistent:true,historyReplay:false,lazyLocal:true,
+  authoritativeSource:"WorldState.resolve local structural building refs",evidenceHookAvailable:true,lastBuildReason:"none",
+  presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameScan:false,buildMs:0
+};
+let localPersistentConsequenceRoot=null;
+let persistentConsequenceProjection={
+  active:false,recordCount:0,activeCount:0,projectedActiveCount:0,recoveredCount:0,
+  worldCueCount:0,buildingStateCueCount:0,primitiveCueCount:0,drawCallEstimate:0,triangleCount:0,
+  registryRevision:0,sourceDeltaRevision:0,records:Object.freeze([]),lastBuildReason:"none",buildMs:0,
+  authority:"PersistentConsequences + canonical HousePlans/StartingVillage coordinates",
+  presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameScan:false
+};
+let localNpcRoot=null;
+let localNpcMaterials=null;
+let localNpcContext=null;
+let localNpcEntities=new Map();
+let localNpcPresentation={active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,motionUpdateCount:0,lastMotionUpdateMs:0,maxMotionUpdateMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([]),localEventPresentationRevision:"compact-event-silhouette-v3",rhythmBand:"unknown",rhythmModifiers:null,rhythmCounts:null,rhythmAveragePresentationPriority:0,authoritativeIdentitySource:"DailyActivity",authoritativeActivitySource:"DailyActivity + WorkCycles + LocalEventVignettes",rhythmSource:"SettlementActivityRhythm presentation-only",presentationOnly:true,simulationAuthority:false};
+let localCrowdRoot=null;
+let localCrowdMesh=null;
+let localCrowdMaterials=null;
+let localCrowdContext=null;
+let localCrowdEntities=[];
+let localCrowdPresentation={
+  active:false,generatedCount:0,visibleCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,
+  settlementId:null,settlementName:null,settlementClass:null,districtBand:"none",districtFactor:0,
+  population:0,populationSource:null,rhythmBand:"unknown",activityFactor:0,cap:0,candidateChecks:0,
+  exactPersistentNpcCount:0,visibleExactNpcCount:0,mobile:false,pooledStableIds:true,localCulling:true,lowFrequencyMotion:true,
+  presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,
+  inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
+};
+const localBuildingInspectionKeys=new Set();
+const localNpcInspectionKeys=new Set();
+const localSignInspectionKeys=new Set();
+let localStatic={active:false,signature:null,level:"inactive",revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,microLocationCount:0,microLocationPropCount:0,microLocationPrimitiveCount:0,microLocationDrawCallEstimate:0,microLocationTriangleEstimate:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,authority:"spherical-seed-focus-presentation"};
+let microLocationPresentation={
+  active:false,locationCount:0,propCount:0,primitiveCount:0,drawCallEstimate:0,triangleEstimate:0,
+  queryCellCount:0,maxQueryCells:0,buildMs:0,bounds:null,ids:Object.freeze([]),types:Object.freeze([]),
+  locations:Object.freeze([]),focusedLocationId:null,focusDistanceTiles:null,focusDeclutterActive:false,
+  sourceAuthority:"MicroLocations + WorldDestinations.poiCell",
+  deterministic:true,seedOnly:true,lazy:true,bounded:true,fullWorldScan:false,perFrameScan:false,
+  presentationOnly:true,simulationAuthority:false,collisionAuthority:false,navigationAuthority:false
+};
+let microLocationClearanceCenters=[];
+let resizeObserver=null;
+let yawDegrees=-18;
+let pitchDegrees=-10;
+let dragging=false;
+let pointerId=null;
+let lastPointerX=0;
+let lastPointerY=0;
+let pointerDragCount=0;
+let rotationChangeCount=0;
+let ready=false;
+let startupError=null;
+let frameCount=0;
+let activeSeed=null;
+let geography=null;
+let geographySignature=null;
+let geographyVerification=null;
+let geographyStats=null;
+let featureTargets=null;
+let buildTimeMs=0;
+let meshVertexCount=0;
+let meshTriangleCount=0;
+let generatedTexture=null;
+let mapScaleShellTexture=null;
+let startupProgress={mode:"indeterminate",measuredPercent:null,displayedPercent:null,phaseId:"planning",phaseLabel:"Planning startup…",completedWeightedWork:0,totalWeightedWork:100,firstPaintAtMs:Date.now(),determinateAtMs:null,measured100AtMs:null,gameplayReadyAtMs:null,optionalPostReadyWorkCount:0};
+let loadingProof=null;
+const STARTUP_SLICE_BUDGET_MS=6;
+let startupScheduler={sliceBudgetMs:STARTUP_SLICE_BUDGET_MS,sliceCount:0,yieldCount:0,maxSliceMs:0,longTaskOver50:0,longTaskOver100:0,longTaskOver200:0,longestLongTaskMs:0,controlledLongTaskOver50:0,controlledLongTaskOver100:0,controlledLongTaskOver200:0,controlledLongestLongTaskMs:0,maxEventLoopLagMs:0,heartbeatCount:0,paintHeartbeatCount:0,firstPlayableWorkUnits:0,completedFirstPlayableWorkUnits:0,optionalPostReadyWorkCount:0,backgroundPreparationCompleteAtMs:null,phaseTimings:{}};
+let longTaskObserver=null;
+let heartbeatTimer=null;
+let controlledWorkActive=false;
+let lastHeartbeatAt=0;
+let destinationNavigator={open:false,category:"all",descriptors:[],selectedId:null,queryCount:0,lastQueryMs:0,navigationCount:0,lastTarget:null};
+const inspectionPickables=new Map();
+let inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
+let cloudLayer=null;
+let ambientMotion={enabled:true,cloudLayerCount:0,animatedEntityCount:0,drawCallEstimate:0,updateCount:0,lastUpdateMs:0,maxUpdateMs:0,cloudYawDegrees:0};
+let atmosphere={active:false,authoritativeHour:null,phase:"unbound",source:"none",dynamicLightCount:2,materialCount:1,drawCallImpact:0,simulationAuthority:false};
+let atmospherePalette=null;
+let atmosphereTimeBinding={available:false,active:false,readOnly:true,directRealClockRead:false,campaignMutation:false,source:"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:0,lastAppliedAtMs:0,pollIntervalMs:1000,error:null};
+let atmospherePresentationRefresh={scheduled:false,stamp:null,step:0,sequence:0};
+let wilderness={generated:false,cellCount:0,acceptedStaticProps:0,vegetationClusters:0,rockClusters:0,ambientFaunaZones:0,rejectedWater:0,drawCalls:0,triangles:0,preparationMs:0,cacheReuse:false,perFrameScatter:false,simulationAuthority:false,
+  localEnabled:true,localActive:false,localSignature:null,localLevel:null,localBiome:null,localCandidateCount:0,localAcceptedStaticProps:0,localAmbientFaunaActiveCount:0,localShoreAccentCount:0,localRejectedWater:0,localRejectedManaged:0,localRejectedRoad:0,localFamilyCounts:{},localBiomeCounts:{},localDrawCalls:0,localTriangles:0,localPreparationMs:0,localPlanCached:false,localLayoutSignature:null,localFrameUpdateMs:0,localMaxFrameUpdateMs:0,localFullWorldScan:false,localDeterministicGlobalCells:true};
+let zoomState={scalar:0,targetScalar:0,band:"planet",focusLatitudeRadians:-pitchDegrees*Math.PI/180,focusLongitudeRadians:-yawDegrees*Math.PI/180,baseCameraDistance:0,cameraDistance:0,visibleFootprintWidthMeters:WORLD_DIAMETER_METERS,visibleFootprintHeightMeters:WORLD_DIAMETER_METERS,wheelEvents:0,pinchEvents:0,zoomChanges:0,
+  animating:false,zoomVelocity:0,animationStartScalar:0,animationStartAtMs:0,animationFrameCount:0,totalAnimationFrames:0,animationRetargetCount:0,animationSettledCount:0,lastAnimationDurationMs:0,lastAnimationInputSource:"none",lastAnimationMapUpdateAtMs:0,lastDisplayScaleIndex:0,
+  targetPrefetchRequests:0,targetPrefetchHits:0,targetPrefetchCompleted:0,targetPrefetchState:"idle",targetPrefetchSignature:null,targetPrefetchLevel:null,targetPrefetchStartedAtMs:0};
+const activePointers=new Map();
+let lastPinchDistance=null;
+let projectionState={mode:"globe",blend:0,transitionStart:.45,transitionEnd:.82,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
+const LOCAL_SAMPLE_SPACING_METERS=2;
+const LOCAL_PATCH_MARGIN=1.50;
+const LOCAL_RESOURCE_CACHE_LIMIT=8;
+const LOCAL_RESOURCE_CACHE_BUDGET_BYTES=48*1024*1024;
+const LOCAL_MEDIUM_RING_SPAN_FACTOR=3;
+const LOCAL_MEDIUM_RING_TEXTURE_SCALE=.75;
+const LOCAL_GRACE_RESIDENCY_MS=4500;
+const LOCAL_RESIDENCY_RECORD_LIMIT=64;
+const LOCAL_PREFETCH_RECORD_LIMIT=16;
+// Keep adjacent-tier stabilization narrow enough that the same physical footprint
+// resolves to the same canonical LOD after forward or reverse zoom settles.
+const LOCAL_LOD_HYSTERESIS=0.003;
+// Hierarchical local detail selection is driven by projected screen-space
+// error, not by zoom-band identity.  The quadtree root is larger than the
+// complete 10%-Earth circumference, so every streamed local cell has stable
+// SEED-coordinate ancestry independent of camera/viewport/load order.
+const SPATIAL_LOD_ROOT_CELL_METERS=4_194_304;
+const SPATIAL_LOD_MAX_DEPTH=20;
+// A canonical cell-centered resource must cover every possible focus position
+// inside that cell even at the narrowest supported portrait aspect. Keep cell
+// span well inside the physical patch's spare margin; identity therefore stays
+// viewport-independent while the disposable presentation patch may resize.
+const SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO=.22;
+// Keep local refinement near a two-pixel projected source/geometric error,
+ // comparable to a normal screen-space terrain LOD budget.  These are tighter
+ // than the original 8/9/6.5px values; hierarchy identity remains coordinate-only.
+const SSE_TARGET_PIXELS=2;
+const SSE_REFINE_PIXELS=2.5;
+const SSE_COARSEN_PIXELS=1.5;
+// A representation may shrink to cover a wider view, but once it would need
+// to be magnified beyond this ratio it is no longer an acceptable steady-state
+// source. Refinement must select a finer canonical child instead of stretching
+// a coarse parent across a closer physical scale.
+const SSE_MAX_NATIVE_MAGNIFICATION=1.5;
+// A finer map-scale child should not become the steady-state source when it
+// must be shrunk so far that its bounded 1x focus patch no longer covers the
+// viewport and its 3x context transition dominates the image. Prefer the
+// adjacent canonical parent only when that parent remains within the existing
+// native magnification limit and a small relaxed screen-error ceiling.
+const SSE_MIN_STEADY_NATIVE_COMPENSATION=.72;
+const SSE_MAX_PARENT_CONTEXT_PIXELS=3.25;
+const SPATIAL_OVERSCAN_CELL_RADIUS=1;
+// The world-matched tangent continuation must cover large temporary focus
+// offsets and child preparation without exposing the clear-color rectangle.
+// Keep it bounded to one shared quad/texture while sampling a wider canonical
+// SEED footprint; this adds no draw calls or alternate geography authority.
+const LOCAL_SURROUND_SPAN_FACTOR=6;
+// Every physical LOD is native at its band's upper scalar and covers at most
+// ~2.5x of visible-footprint range, so presentation compensation never has to
+// shrink or magnify a tier far enough to read as a scale pop or blurry stretch.
+const LOCAL_DETAIL_LEVELS=Object.freeze([
+  Object.freeze({id:"regional-overview",band:"regional-overview",visibleHeightMeters:400000,sampleSpacingMeters:12000,textureSize:160,reliefClampMeters:7000,reliefGain:6,maxHeightUnits:.58,staticWorld:false}),
+  Object.freeze({id:"regional-detail",band:"regional-detail",visibleHeightMeters:140000,sampleSpacingMeters:4000,textureSize:192,reliefClampMeters:7000,reliefGain:5.5,maxHeightUnits:.56,staticWorld:false}),
+  Object.freeze({id:"district",band:"district",visibleHeightMeters:50000,sampleSpacingMeters:1400,textureSize:256,reliefClampMeters:6000,reliefGain:9,maxHeightUnits:.65,staticWorld:false}),
+  Object.freeze({id:"local-area-wide",band:"local-area",visibleHeightMeters:20000,sampleSpacingMeters:480,textureSize:320,reliefClampMeters:5000,reliefGain:8,maxHeightUnits:.60,staticWorld:false}),
+  Object.freeze({id:"local-area",band:"local-area",visibleHeightMeters:10000,sampleSpacingMeters:220,textureSize:384,reliefClampMeters:4200,reliefGain:7,maxHeightUnits:.55,staticWorld:false}),
+  // These physical terrain tiers do not contain settlement geometry yet, so keep
+  // the player-facing semantic band at LOCAL AREA until a static-world resource
+  // is actually visible. This prevents the UI/ruler from claiming SETTLEMENT
+  // while the frame still contains terrain only.
+  Object.freeze({id:"settlement-wide",band:"local-area",visibleHeightMeters:5000,sampleSpacingMeters:110,textureSize:448,reliefClampMeters:3000,reliefGain:5.5,maxHeightUnits:.50,staticWorld:false}),
+  Object.freeze({id:"settlement",band:"local-area",visibleHeightMeters:2000,sampleSpacingMeters:44,textureSize:448,reliefClampMeters:1600,reliefGain:4,maxHeightUnits:.42,staticWorld:false}),
+  Object.freeze({id:"settlement-core",band:"local-area",visibleHeightMeters:1000,sampleSpacingMeters:22,textureSize:448,reliefClampMeters:900,reliefGain:3,maxHeightUnits:.38,staticWorld:false}),
+  // The first two static-world tiers visibly contain the road/building layout,
+  // so they own SETTLEMENT semantics. NEAR GROUND begins only once the closer
+  // resource is ready, preserving truthfulness through asynchronous handoffs.
+  Object.freeze({id:"near-ground-wide",band:"settlement",visibleHeightMeters:500,sampleSpacingMeters:11,textureSize:352,reliefClampMeters:400,reliefGain:2.2,maxHeightUnits:.33,staticWorld:true}),
+  Object.freeze({id:"near-ground",band:"settlement",visibleHeightMeters:200,sampleSpacingMeters:5,textureSize:384,reliefClampMeters:180,reliefGain:1.5,maxHeightUnits:.28,staticWorld:true}),
+  Object.freeze({id:"near-ground-close",band:"near-ground",visibleHeightMeters:80,sampleSpacingMeters:3,textureSize:384,reliefClampMeters:60,reliefGain:.9,maxHeightUnits:.22,staticWorld:true}),
+  Object.freeze({id:"ground",band:"ground",visibleHeightMeters:36,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,textureSize:384,reliefClampMeters:10,reliefGain:.35,maxHeightUnits:.18,staticWorld:true})
+]);
+const LOCAL_PREP_SLICE_BUDGET_MS=6;
+const LOCAL_STANDIN_MAX_MAGNIFICATION=6;
+// Animated inward zoom may use a prepared parent as a short-lived stand-in,
+// but it must not race far past that parent's readable physical scale. The
+// small allowance beyond the steady-state 1.5x threshold lets the next child
+// become requested while animation buys its cooperative preparation time.
+const ZOOM_READY_PARENT_MAX_MAGNIFICATION=1.65;
+// Before the first registered tangent parent is ready, never magnify the global
+// geography shell beyond the point where it becomes a blurred strategic map.
+// Hold on the fully-smooth shell and let the existing single cooperative parent
+// prefetch finish; animation resumes normally as soon as real local coverage is
+// available. This is a readiness gate, not a routine disable or identity change.
+const ZOOM_ROOT_READINESS_CAP_SCALAR=.575;
+const LOCAL_TANGENT_OWNERSHIP_BLEND=.055;
+const LOCAL_STANDIN_MIN_COMPENSATION=1/3;
+const GLOBE_VERTICAL_FOV_DEGREES=34;
+let ladderCache={key:null,startHeight:0,levelMax:[]};
+function globeCameraDistanceForScalar(value){
+  const safeSurfaceDistance=DISPLAY_RADIUS_UNITS*1.42;
+  const travel=Math.max(0,(zoomState.baseCameraDistance||safeSurfaceDistance*2.5)-safeSurfaceDistance);
+  return safeSurfaceDistance+travel*Math.pow(1-clamp(value,0,1),2.15);
+}
+function globeSurfaceFootprintHeightMeters(value){
+  const surfaceDistance=Math.max(.05,globeCameraDistanceForScalar(value)-DISPLAY_RADIUS_UNITS);
+  return 2*surfaceDistance*Math.tan(GLOBE_VERTICAL_FOV_DEGREES*Math.PI/360)*(WORLD_RADIUS_METERS/DISPLAY_RADIUS_UNITS);
+}
+const LADDER_RATE_RAMP=.08;
+function ladderState(){
+  const key=Number(zoomState.baseCameraDistance||0).toFixed(5);
+  if(ladderCache.key===key)return ladderCache;
+  // Continue from the globe camera's footprint AND its zoom rate at the ladder
+  // start, ramp the log-rate over LADDER_RATE_RAMP, then hold it constant so
+  // the ground view lands exactly on GROUND_FOOTPRINT_HEIGHT_METERS at 1.0.
+  const startHeight=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS*10,globeSurfaceFootprintHeightMeters(LADDER_START_SCALAR));
+  const e=.001,startRate=Math.max(0,(Math.log(globeSurfaceFootprintHeightMeters(LADDER_START_SCALAR-e))-Math.log(startHeight))/e);
+  const span=1-LADDER_START_SCALAR,total=Math.log(startHeight/GROUND_FOOTPRINT_HEIGHT_METERS),ramp=Math.min(LADDER_RATE_RAMP,span*.5);
+  const cruiseRate=(total-startRate*ramp*.5)/(span-ramp*.5);
+  ladderCache={key,startHeight,startRate,cruiseRate,ramp,levelMax:[],orientationStart:0};
+  ladderCache.levelMax=LOCAL_DETAIL_LEVELS.map((level,index)=>index===LOCAL_DETAIL_LEVELS.length-1?1:Number(scalarForFootprintHeight(level.visibleHeightMeters).toFixed(6)));
+  ladderCache.orientationStart=Number(scalarForFootprintHeight(5000).toFixed(4));
+  return ladderCache;
+}
+function presentationTargetHeightMeters(value=zoomState.scalar){
+  const scalar=clamp(value,0,1);
+  if(scalar<=LADDER_START_SCALAR)return globeSurfaceFootprintHeightMeters(scalar);
+  const L=ladderState(),t=scalar-LADDER_START_SCALAR;
+  // integral of rate(t): ramp is a smoothstep blend from startRate to cruiseRate.
+  let drop;
+  if(t<=L.ramp){const u=t/L.ramp,smoothIntegral=u*u*u-u*u*u*u/2;drop=L.startRate*t+(L.cruiseRate-L.startRate)*L.ramp*smoothIntegral;}
+  else drop=L.startRate*L.ramp+(L.cruiseRate-L.startRate)*L.ramp*.5+L.cruiseRate*(t-L.ramp);
+  return Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,L.startHeight*Math.exp(-drop));
+}
+function scalarForFootprintHeight(heightMeters){
+  const h=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,Number(heightMeters)||0);
+  let lo=0,hi=1;
+  for(let i=0;i<48;i++){const mid=(lo+hi)/2;if(presentationTargetHeightMeters(mid)>h)lo=mid;else hi=mid;}
+  return (lo+hi)/2;
+}
+function levelMaxScalar(index){return ladderState().levelMax[index]??1;}
+let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,geometrySampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,textureSize:0,sourceTextureWidth:0,sourceTextureHeight:0,detailMetersPerTexel:0,surroundMetersPerTexel:0,anisotropy:1,minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:0,surroundDetailBandCount:0,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
+let requestedLodIndex=0;
+let displayResource=null;
+let localJob=null;
+let localQueuedRequest=null;
+let lastZoomDirection=1;
+let localFrameStats={lastFrameMs:0,recent:[],maxDuringPreparationMs:0};
+const localSharedPrimitives={};
+const localResourceCache=new Map();
+const localResidency=new Map();
+const localRecentEvictions=new Map();
+const localMotionPrefetchTargets=new Map();
+let localLastRequestRegistered=null;
+let localMotionVector={east:0,north:0,magnitude:0};
+function freshLocalResources(){
+  return {activeSignature:null,requestedSignature:null,preparedSignature:null,preparingSignature:null,requestedLevel:null,visibleLevel:null,requestedCellId:null,activeCellId:null,preparingLevel:null,preparing:false,preparingPrewarm:false,preparationProgress:0,standInActive:false,standInMagnification:1,standInSemanticScale:1,standInOffsetClamped:false,standInPinnedToViewport:false,standInRawOffsetMeters:{east:0,north:0},standInAppliedOffsetMeters:{east:0,north:0},
+    cacheHits:0,cacheMisses:0,prewarmHits:0,prewarmCompleted:0,cancelledPreparations:0,deferredRequests:0,evictions:0,destroyedMeshes:0,destroyedTextures:0,activeResourceCount:0,cachedResourceCount:0,estimatedCacheBytes:0,culledOuterRepresentations:0,pendingPreparationCount:0,
+    lastBuildMs:0,lastPreparationWallMs:0,lastPreparationBusyMs:0,lastPreparationSlices:0,maxPreparationSliceMs:0,lastPreparationPhase:null,preparationPhaseMaxMs:{},preparationPhaseBusyMs:{},lastFinalizeMs:0,maxFinalizeMs:0,lastFinalizationPhaseMs:{},finalizationPhaseMaxMs:{},lastSwapMs:0,maxSwapMs:0,swapCount:0,lastPreparationQueuedAtMs:0,lastPreparationCompletedAtMs:0,lastEvictionReason:null,
+    blockingZoomBuilds:0,maxFrameMsDuringPreparation:0,recentMaxFrameMs:0,lastFrameMs:0,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,cooperativePreparation:true,doubleBufferedSwap:true,
+    zoomReadinessHoldActive:false,zoomReadinessHoldFrames:0,zoomReadinessCapScalar:1,zoomReadinessSourceVisibleHeightMeters:null,zoomReadinessCurrentMagnification:1,zoomReadinessMaxMagnification:1,zoomReadinessRevision:"ready-parent-leash-v2",
+    residencyRevision:"temporal-residency-v1",requestedCellCount:0,preparingCellCount:0,readyCellCount:0,activeCellCount:0,graceResidentCellCount:0,evictedCellCount:0,
+    parentFallbackCount:0,rootFallbackCount:0,missingCoverageCount:0,graceReuseCount:0,prefetchRequests:0,prefetchCompleted:0,prefetchHits:0,prefetchMisses:0,
+    longestHandoffLatencyMs:0,lastHandoffLatencyMs:0,lastHandoffRequestedAtMs:0,lastHandoffCompletedAtMs:0,
+    handoffRequestScalar:null,firstReadyScalar:null,firstReadyLevel:null,firstReadyLatencyMs:0,visibleParentOpacity:1,visibleChildOpacity:0,visibleResourceSignature:null,visibleMetersPerTexel:null,
+    revisitRegenerationSignature:null,revisitRegenerationPass:true,revisitCount:0,
+    requestBudgetPerFrame:1,buildJobBudget:1,prefetchQueueLimit:1,graceResidencyMs:LOCAL_GRACE_RESIDENCY_MS,
+    cacheBudgetBytes:LOCAL_RESOURCE_CACHE_BUDGET_BYTES,cacheBudgetExceeded:false,centerFirst:true,streamingRevision:"focus-streaming-v1",
+    mediumRingSpanFactor:LOCAL_MEDIUM_RING_SPAN_FACTOR,mediumRingWidthMeters:0,mediumRingHeightMeters:0,mediumRingWorldMatched:false,
+    surroundSpanFactor:LOCAL_SURROUND_SPAN_FACTOR,surroundWidthMeters:0,surroundHeightMeters:0,surroundWorldMatched:false};
+}
+let localResources=freshLocalResources();
+let localPreparationToken=0;
+let mapPresentation={active:false,context:null,visibleContextKinds:[],visiblePlaceKinds:[],labelCount:0,atlasVisibleLabelCount:0,atlasCandidateCount:0,atlasQueryCellCount:0,hiddenHemisphereCulledCount:0,behindCameraCulledCount:0,offscreenCulledCount:0,occludedCulledCount:0,overlapRejectedCount:0,visibleLabelClasses:[],visibleLabels:[],maxLabelBudget:0,maxLabelDisplacementPixels:0,labelQueryBuildMs:0,labelLayoutMs:0,borderProjectionMs:0,cityCandidateCount:0,cityVisibleCount:0,cityMinSeparationMeters:null,citySpacingPass:true,cityQueryCellCount:0,landmarkCandidateCount:0,landmarkVisibleCount:0,landmarkKinds:[],visibleLandmarks:[],maxLandmarkCount:0,borderVisible:false,borderSampleCount:0,borderLandSampleCount:0,borderWaterSampleCount:0,borderOwnerQueryCount:0,borderSegmentCount:0,borderWorldVertexCount:0,projectedBorderSegmentCount:0,politicalOwnerCount:0,borderTopologySignature:null,borderGraphRevision:null,borderGraphNodeCount:0,borderGraphEdgeCount:0,borderGraphOwnerPairs:[],borderEndpointClassifications:null,borderFocusOwnerId:null,waterClippedBorderCount:0,borderDiagnostics:[],registrationMaxRoundTripErrorTiles:0,projectionMode:"globe",scaleDistanceMeters:0,scaleLabel:"",scaleStateIndex:0,scaleStateLabel:SCALE_LADDER[0],scalePixelLength:0,metersPerScreenPixel:0,rulerTruthErrorMeters:0,internalZoomScalar:0,updateCount:0,lastUpdateMs:0,lastBorderBuildMs:0,bounded:true,fullWorldScan:false};
+let mapPresentationSchedule={raf:0,timer:0,lastRenderedAtMs:0,pendingReason:null};
+let navigationLongTaskObserver=null;
+let residentMovementTimer=0,residentMovementDrainTimer=0,residentMovementLastSchedulerAtMs=0;
+let navigationPerformance={
+  revision:"world-map-navigation-budget-v1",
+  semanticUpdateRequestCount:0,semanticUpdateRenderCount:0,semanticUpdateCoalescedCount:0,semanticUpdateForcedCount:0,
+  semanticUpdatePending:false,semanticUpdateMinIntervalMs:NAV_SEMANTIC_MIN_INTERVAL_MS,lastSemanticUpdateMs:0,maxSemanticUpdateMs:0,totalSemanticUpdateMs:0,
+  semanticPhaseLastMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
+  semanticPhaseMaxMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
+  semanticPhaseOver50Count:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},
+  rotationRequestCount:0,zoomRequestCount:0,authorityRefreshRequestCount:0,pointerSettleFlushCount:0,
+  pointerMoveCount:0,pointerMoveSnapshotCount:0,pointerMoveSnapshotAvoidedCount:0,
+  programmaticRotationSnapshotAvoidedCount:0,zoomCommandSnapshotAvoidedCount:0,
+  frameUpdateCount:0,lastFrameUpdateMs:0,maxFrameUpdateMs:0,lastRenderCpuMs:0,maxRenderCpuMs:0,
+  frameUpdateOver50Count:0,renderCpuOver50Count:0,
+  framePhaseLastMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},
+  framePhaseMaxMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},
+  residentAdvanceSnapshotSuppressed:true,residentSchedulerMode:"fixed-step-cooperative",
+  residentSchedulerCalls:0,residentSchedulerLastMs:0,residentSchedulerMaxMs:0,residentSchedulerOver50Count:0,residentSchedulerPendingDrains:0,residentSchedulerWarmupMs:0,
+  longTask50Count:0,longTaskWorstMs:0,
+  eventDrivenSemanticUpdates:true,cameraMotionImmediate:true,perFrameFullPlanetIteration:false,bounded:true,fullWorldScan:false
+};
+let atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};
+let atlasStickyBand=null;
+const atlasStickyEntities=new Map();
+const atlasLabelPlacementCache=new Map();
+const atlasEntityCache=new Map();
+const atlasIdentityCache=new Map();
+const atlasAuthorityIndex=new Map();
+const atlasAuthorityQueue=[];
+const atlasAuthorityQueued=new Set();
+let atlasAuthorityWorkerScheduled=false;
+let atlasAuthorityRefreshScheduled=false;
+const atlasSettlementPrewarmQueue=[];
+const atlasSettlementPrewarmQueued=new Set();
+let atlasSettlementPrewarmWorkerScheduled=false;
+function atlasSettlementPrewarmKey(seed,classId,cx,cy){return [String(seed||""),String(classId||""),String(cx),String(cy)].join("|");}
+function atlasQueueSettlementPrewarm(classId,cx,cy){
+  const api=window.SettlementArchetypes;if(!activeSeed||!api?.stepCanonicalSettlementAtCellPrewarm)return;
+  const key=atlasSettlementPrewarmKey(activeSeed,classId,cx,cy);
+  if(atlasSettlementPrewarmQueued.has(key))return;
+  atlasSettlementPrewarmQueued.add(key);
+  atlasSettlementPrewarmQueue.push({key,seed:activeSeed,classId:String(classId),cx:String(cx),cy:String(cy)});
+  if(!atlasSettlementPrewarmWorkerScheduled){
+    atlasSettlementPrewarmWorkerScheduled=true;
+    const schedule=window.requestIdleCallback||((cb)=>setTimeout(()=>cb({timeRemaining:()=>4,didTimeout:false}),0));
+    schedule(atlasDrainSettlementPrewarmQueue,{timeout:120});
+  }
+}
+function atlasDrainSettlementPrewarmQueue(){
+  atlasSettlementPrewarmWorkerScheduled=false;
+  const job=atlasSettlementPrewarmQueue.shift();if(!job)return;
+  if(job.seed!==activeSeed){atlasSettlementPrewarmQueued.delete(job.key);}
+  else{
+    let result=null;
+    try{result=window.SettlementArchetypes?.stepCanonicalSettlementAtCellPrewarm?.(job.seed,job.classId,job.cx,job.cy)||null;}catch(_){result=null;}
+    if(result?.ready){
+      atlasSettlementPrewarmQueued.delete(job.key);
+      atlasScheduleAuthorityRefresh();
+    }else atlasSettlementPrewarmQueue.push(job);
+  }
+  if(atlasSettlementPrewarmQueue.length&&!atlasSettlementPrewarmWorkerScheduled){
+    atlasSettlementPrewarmWorkerScheduled=true;
+    const schedule=window.requestIdleCallback||((cb)=>setTimeout(()=>cb({timeRemaining:()=>4,didTimeout:false}),0));
+    schedule(atlasDrainSettlementPrewarmQueue,{timeout:120});
+  }
+}
+function atlasAuthorityKey(kind,tile){
+  if(!tile)return null;
+  const size=kind==="country"?Number(window.PoliticalGeography?.COUNTRY_CELL_SIZE||196608):8192;
+  const cell=atlasCellForTile(tile,size);
+  return activeSeed+"|"+kind+"|"+cell.x+"|"+cell.y;
+}
+function atlasQueueAuthority(kind,tile){
+  if(kind!=="country"&&kind!=="region"||!tile)return;
+  const key=atlasAuthorityKey(kind,tile);if(!key||atlasAuthorityIndex.has(key)||atlasAuthorityQueued.has(key))return;
+  atlasAuthorityQueued.add(key);atlasAuthorityQueue.push({key,kind,tile:{x:String(tile.x),y:String(tile.y)}});
+  if(!atlasAuthorityWorkerScheduled){
+    atlasAuthorityWorkerScheduled=true;
+    const schedule=window.requestIdleCallback||((cb)=>setTimeout(()=>cb({timeRemaining:()=>4,didTimeout:false}),0));
+    schedule(atlasDrainAuthorityQueue,{timeout:120});
+  }
+}
+function atlasScheduleAuthorityRefresh(){
+  atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};
+  mapContextCache={key:null,value:null};
+  if(atlasAuthorityRefreshScheduled)return;
+  atlasAuthorityRefreshScheduled=true;
+  requestAnimationFrame(()=>{
+    atlasAuthorityRefreshScheduled=false;
+    if(ready&&root&&canvas&&activeSeed)updateMapPresentation("authority-refresh");
+  });
+}
+function atlasDrainAuthorityQueue(deadline){
+  atlasAuthorityWorkerScheduled=false;
+  const started=performance.now();
+  let changed=false;
+  while(atlasAuthorityQueue.length&&((deadline?.timeRemaining?.()||0)>1||performance.now()-started<3)){
+    const job=atlasAuthorityQueue.shift();atlasAuthorityQueued.delete(job.key);
+    let value=null;
+    try{
+      if(job.kind==="country"){
+        const c=window.PoliticalGeography?.countryAt?.(activeSeed,job.tile.x,job.tile.y)||null;
+        if(c){
+          const anchor={x:String(c.mapAnchor?.x??c.politicalCenter?.x??job.tile.x),y:String(c.mapAnchor?.y??c.politicalCenter?.y??job.tile.y)};
+          const surface=atlasPlanetSurfaceForTile(anchor.x,anchor.y);
+          let owner=null;try{owner=window.PoliticalGeography?.ownerAt?.(activeSeed,anchor.x,anchor.y)||null;}catch(_){owner=null;}
+          if(surface.sample?.land&&owner?.id===c.id)value=atlasEntityBase(c.id,"country",c.name,anchor,"PoliticalGeography.countryAt:canonical-owned-land",{countryId:c.id,capital:c.capital||null});
+        }
+      }else{
+        const r=window.RegionProfile?.at?.(activeSeed,job.tile.x,job.tile.y)||null;
+        if(r){
+          const requested={x:String(r.administrativeSeat?.x??job.tile.x),y:String(r.administrativeSeat?.y??job.tile.y)};
+          const regionSize=Number(window.RegionProfile?.REGION_CELL_SIZE||8192);
+          const anchor=atlasStableLandAnchor(requested,Math.max(128,Math.floor(regionSize*.28)),(x,y)=>{
+            const rr=window.RegionProfile?.at?.(activeSeed,x,y)||null;
+            return rr?.id===r.id;
+          });
+          if(anchor)value=atlasEntityBase(r.id,"region",r.name,anchor,"RegionProfile.at:canonical-owned-land",{countryId:r.parentCountryId});
+        }
+      }
+    }catch(_){}
+    atlasAuthorityIndex.set(job.key,value);changed=true;
+  }
+  if(changed)atlasScheduleAuthorityRefresh();
+  if(atlasAuthorityQueue.length&&!atlasAuthorityWorkerScheduled){
+    atlasAuthorityWorkerScheduled=true;
+    const schedule=window.requestIdleCallback||((cb)=>setTimeout(()=>cb({timeRemaining:()=>4,didTimeout:false}),0));
+    schedule(atlasDrainAuthorityQueue,{timeout:120});
+  }
+}
+let mapContextCache={key:null,value:null};
+let mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],graphRevision:null,graphNodeCount:0,graphEdgeCount:0,graphOwnerPairs:[],endpointClassifications:null,focusOwnerId:null,builtAtMs:0};
+const mapBorderEndpointSnapCache=new Map();
+let projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};
+let worldProjectionAnchorCache=null;
+let settlementRevealCache={key:null,value:null};
+let localStaticRefreshScheduled=false;
+let politicalScaleEvidenceCache=null;
+let coordinateFabric=null;
+function coordinateFabricAuthority(){
+  if(!activeSeed||!window.SeedCoordinateFabric)return null;
+  if(!coordinateFabric||coordinateFabric.seed!==activeSeed){
+    coordinateFabric=window.SeedCoordinateFabric.create(activeSeed,{radiusMeters:WORLD_RADIUS_METERS,tileMeters:Number(window.WorldStandards?.TILE_METERS||2)});
+  }
+  return coordinateFabric;
+}
+
+function wrapLongitudeRadians(value){
+  let lon=Number(value)||0;lon=((lon+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;return lon;
+}
+function planetWorldAnchor(){
+  if(worldProjectionAnchorCache)return worldProjectionAnchorCache;
+  const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||window.PlanetGeography?.DEFAULT_TILE_METERS||2));
+  const geo=geography?.worldLatLonForTile?.("0","0",tileMeters,WORLD_RADIUS_METERS)||
+    window.PlanetGeography?.worldLatLonForTile?.(activeSeed,"0","0",tileMeters,WORLD_RADIUS_METERS)||null;
+  let sample=null;try{sample=geo?geography?.sampleLatLon?.(geo.latitudeRadians,geo.longitudeRadians):null;}catch(_){sample=null;}
+  worldProjectionAnchorCache=Object.freeze({
+    latitudeRadians:Number(geo?.latitudeRadians||0),longitudeRadians:Number(geo?.longitudeRadians||0),
+    latitudeDegrees:Number(geo?.latitudeDegrees||0),longitudeDegrees:Number(geo?.longitudeDegrees||0),
+    land:Boolean(sample?.land),surfaceClass:String(sample?.surfaceClass||"unknown"),
+    elevationMeters:Number(sample?.elevationMeters||0),
+    continentId:sample?.continentId||null,continentName:sample?.continentName||null,
+    authority:"PlanetGeography seed-fixed spherical registration",
+    worldTileOrigin:Object.freeze({x:"0",y:"0"})
+  });
+  return worldProjectionAnchorCache;
+}
+function mapWorldTileAt(latitudeRadians,longitudeRadians){
+  const fabric=coordinateFabricAuthority();
+  if(fabric)return fabric.worldTileForLatLon(latitudeRadians,longitudeRadians);
+  const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||window.PlanetGeography?.DEFAULT_TILE_METERS||2));
+  const tile=geography?.worldTileForLatLon?.(latitudeRadians,longitudeRadians,tileMeters,WORLD_RADIUS_METERS)||
+    window.PlanetGeography?.worldTileForLatLon?.(activeSeed,latitudeRadians,longitudeRadians,tileMeters,WORLD_RADIUS_METERS);
+  return Object.freeze({x:String(tile?.x??"0"),y:String(tile?.y??"0")});
+}
+function worldLatLonForTile(xValue,yValue){
+  const fabric=coordinateFabricAuthority(),geo=fabric?.worldLatLonForTile?.(xValue,yValue);
+  if(geo)return geo;
+  const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||window.PlanetGeography?.DEFAULT_TILE_METERS||2));
+  const legacy=geography?.worldLatLonForTile?.(xValue,yValue,tileMeters,WORLD_RADIUS_METERS)||
+    window.PlanetGeography?.worldLatLonForTile?.(activeSeed,xValue,yValue,tileMeters,WORLD_RADIUS_METERS);
+  if(legacy)return Object.freeze({
+    latitudeRadians:Number(legacy.latitudeRadians)||0,longitudeRadians:Number(legacy.longitudeRadians)||0,
+    latitudeDegrees:Number(legacy.latitudeDegrees)||0,longitudeDegrees:Number(legacy.longitudeDegrees)||0,
+    worldTile:Object.freeze({x:String(legacy.worldTile?.x??xValue??"0"),y:String(legacy.worldTile?.y??yValue??"0")})
+  });
+  return Object.freeze({latitudeRadians:0,longitudeRadians:0,latitudeDegrees:0,longitudeDegrees:0,worldTile:Object.freeze({x:String(xValue??"0"),y:String(yValue??"0")})});
+}
+function canonicalRegisteredMetersForLatLon(latitudeRadians,longitudeRadians){
+  const fabric=coordinateFabricAuthority(),registered=fabric?.registeredMetersForLatLon?.(latitudeRadians,longitudeRadians);
+  if(registered)return registered;
+  const tile=mapWorldTileAt(latitudeRadians,longitudeRadians);
+  const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||window.PlanetGeography?.DEFAULT_TILE_METERS||2));
+  return Object.freeze({
+    eastMeters:Number(BigInt(tile.x))*tileMeters,
+    northMeters:Number(BigInt(tile.y))*tileMeters,
+    authority:"canonical-world-tile-fallback"
+  });
+}
+function canonicalRegisteredDeltaMeters(originLatitudeRadians,originLongitudeRadians,targetLatitudeRadians,targetLongitudeRadians){
+  const fabric=coordinateFabricAuthority(),delta=fabric?.registeredDeltaMeters?.(originLatitudeRadians,originLongitudeRadians,targetLatitudeRadians,targetLongitudeRadians);
+  if(delta)return delta;
+  const origin=canonicalRegisteredMetersForLatLon(originLatitudeRadians,originLongitudeRadians),target=canonicalRegisteredMetersForLatLon(targetLatitudeRadians,targetLongitudeRadians);
+  const period=Math.PI*2*WORLD_RADIUS_METERS,half=period*.5;let east=Number(target.eastMeters||0)-Number(origin.eastMeters||0);
+  if(east>half)east-=period;else if(east<-half)east+=period;
+  return Object.freeze({eastMeters:east,northMeters:Number(target.northMeters||0)-Number(origin.northMeters||0),authority:"canonical-registered-meter-fallback"});
+}
+function canonicalLatLonForLocalOffset(originLatitudeRadians,originLongitudeRadians,eastMeters,northMeters){
+  const fabric=coordinateFabricAuthority(),origin=canonicalRegisteredMetersForLatLon(originLatitudeRadians,originLongitudeRadians);
+  const inverse=fabric?.latLonForRegisteredMeters?.(Number(origin.eastMeters||0)+Number(eastMeters||0),Number(origin.northMeters||0)+Number(northMeters||0));
+  if(inverse)return inverse;
+  const lat=clamp(Number(originLatitudeRadians||0)+Number(northMeters||0)/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999),cosLat=Math.max(.08,Math.cos(originLatitudeRadians));
+  const lon=wrapLongitudeRadians(Number(originLongitudeRadians||0)+Number(eastMeters||0)/(WORLD_RADIUS_METERS*cosLat));
+  return Object.freeze({latitudeRadians:lat,longitudeRadians:lon,authority:"legacy-local-offset-fallback"});
+}
+function setWorldTileFocus(xValue,yValue){
+  return setViewTarget(worldLatLonForTile(xValue,yValue));
+}
+function mapGeneratedName(kind,latitudeRadians,longitudeRadians){
+  const stems=["Alder","Amber","Ashen","Bright","Cedar","Dawn","Elder","Falcon","Golden","Green","Grey","High","Iron","Lake","North","Oak","Raven","Red","River","Silver","Stone","Sun","Thorn","West","White","Wolf"];
+  const tails={continent:["Reach","Land","March"],ocean:["Ocean","Sea","Deep"],country:["Realm","Kingdom","March"],region:["Vale","Reach","Province"],city:["Hold","Gate","Court"],district:["Ward","Shire","Zone"],village:["Ford","Stead","Wick"]};
+  const lat=Math.round((Number(latitudeRadians)||0)*180/Math.PI*8),lon=Math.round((Number(longitudeRadians)||0)*180/Math.PI*8);
+  let h=2166136261>>>0;for(const ch of String(activeSeed)+"|map:"+kind+"|"+lat+"|"+lon){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
+  return stems[h%stems.length]+" "+(tails[kind]||["Reach"])[(h>>>8)%(tails[kind]||["Reach"]).length];
+}
+function politicalScaleEvidence(){
+  if(politicalScaleEvidenceCache)return politicalScaleEvidenceCache;
+  const countryCellSize=Number(window.PoliticalGeography?.COUNTRY_CELL_SIZE||0);
+  const regionCellSize=Number(window.RegionProfile?.REGION_CELL_SIZE||8192);
+  const ratio=countryCellSize>0&&regionCellSize>0?countryCellSize/regionCellSize:0;
+  const owners=new Set();let sampleCount=0;
+  if(window.PoliticalGeography?.ownerAt&&activeSeed){
+    for(let y=-131072;y<=131072;y+=65536){
+      for(let x=-196608;x<=196608;x+=65536){
+        try{const owner=window.PoliticalGeography.ownerAt(activeSeed,String(x),String(y));if(owner?.id)owners.add(owner.id);}catch(_){}
+        sampleCount++;
+      }
+    }
+  }
+  politicalScaleEvidenceCache=Object.freeze({
+    countryCellSize,regionCellSize,
+    countryRegionLinearRatio:Number(ratio.toFixed(3)),
+    nominalRegionCellsPerCountry:Number((ratio*ratio).toFixed(1)),
+    boundedSampleCount:sampleCount,
+    boundedDistinctCountryOwners:owners.size,
+    sampleSpanTiles:Object.freeze({width:393216,height:262144}),
+    fullWorldScan:false
+  });
+  return politicalScaleEvidenceCache;
+}
+function mapContextForFocus(){
+  if(!activeSeed)return null;
+  const lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians,policy=currentSemanticLayerPolicy(false),kinds=policy.contextKinds;
+  const key=[activeSeed,policy.id,lat.toFixed(4),lon.toFixed(4)].join("|");
+  if(mapContextCache.key===key&&mapContextCache.value)return mapContextCache.value;
+  const tile=mapWorldTileAt(lat,lon),needed=new Set(kinds),name=(kind,fallback)=>{
+    try{
+      if(kind==="continent"){
+        const surface=atlasPlanetSurfaceForTile(tile.x,tile.y);
+        return surface.sample?.land?(surface.sample?.continentName||fallback):null;
+      }
+      if(kind==="country"){
+        const key=atlasAuthorityKey("country",tile);
+        if(!atlasAuthorityIndex.has(key))atlasQueueAuthority("country",tile);
+        return atlasAuthorityIndex.get(key)?.name||null;
+      }
+      if(kind==="region"){
+        const key=atlasAuthorityKey("region",tile);
+        if(!atlasAuthorityIndex.has(key))atlasQueueAuthority("region",tile);
+        return atlasAuthorityIndex.get(key)?.name||null;
+      }
+      return window.GeographyFoundation?.hierarchyName?.(activeSeed,kind,tile.x,tile.y)||fallback;
+    }catch(_){return fallback;}
+  };
+  const displayName=(kind,fallback)=>{const resolved=name(kind,fallback);return resolved==null?null:String(resolved);};
+  const context=Object.freeze({
+    continent:needed.has("continent")?displayName("continent",mapGeneratedName("continent",lat,lon)):null,
+    country:needed.has("country")?displayName("country",null):null,
+    region:needed.has("region")?displayName("region",null):null,
+    city:needed.has("city")?displayName("city",mapGeneratedName("city",lat,lon)):null,
+    district:needed.has("district")?displayName("district",mapGeneratedName("district",lat,lon)):null,
+    village:needed.has("village")?displayName("village",mapGeneratedName("village",lat,lon)):null,
+    tileX:tile.x,tileY:tile.y
+  });
+  mapContextCache={key,value:context};return context;
+}
+const SEMANTIC_LAYER_SPECS=Object.freeze([
+  Object.freeze({id:"semantic-1-10",scaleLabel:"1/10",displayBand:"planet",contextKinds:["continent"],placeKinds:["continent","major-island"],kinds:["continent","ocean"],focusKind:"continent",budget:7,portraitBudget:4,classBudgets:{continent:3,ocean:3},landmarkKinds:["peak","mountain"],borderClasses:[],routeClasses:[],settlementLayers:[],settlementRevealTier:"none",queryMode:"globe",latSpan:68,lonSpan:118}),
+  Object.freeze({id:"semantic-1-20",scaleLabel:"1/20",displayBand:"continent",contextKinds:["continent","country"],placeKinds:["continent","country","major-island"],kinds:["continent","ocean","country"],focusKind:"continent",budget:9,portraitBudget:5,classBudgets:{continent:2,ocean:2,country:5},landmarkKinds:["peak","mountain","island"],borderClasses:[],routeClasses:[],settlementLayers:[],settlementRevealTier:"none",queryMode:"globe",latSpan:48,lonSpan:78}),
+  Object.freeze({id:"semantic-1-50",scaleLabel:"1/50",displayBand:"country / region",contextKinds:["continent","country"],placeKinds:["country","capital","region","major-landmark"],kinds:["country","region","capital","landmark"],focusKind:"country",budget:10,portraitBudget:6,classBudgets:{country:4,region:3,capital:2,landmark:2},landmarkKinds:["peak","mountain","island"],borderClasses:["national"],routeClasses:[],settlementLayers:[],settlementRevealTier:"none",queryMode:"globe",latSpan:28,lonSpan:44}),
+  Object.freeze({id:"semantic-1-100",scaleLabel:"1/100",displayBand:"regional overview",contextKinds:["country","region"],placeKinds:["country","region","capital","major-city","landmark"],kinds:["country","region","capital","city","landmark"],focusKind:"region",budget:11,portraitBudget:7,classBudgets:{country:3,region:4,capital:2,city:3,landmark:2},landmarkKinds:["peak","mountain","island","ruin","water"],borderClasses:["national"],routeClasses:["primary"],settlementLayers:[],settlementRevealTier:"none",queryMode:"local"}),
+  Object.freeze({id:"semantic-1-250",scaleLabel:"1/250",displayBand:"regional detail",contextKinds:["country","region","city"],placeKinds:["region","capital","major-city","city","landmark"],kinds:["region","capital","city","landmark"],focusKind:"region",budget:11,portraitBudget:7,classBudgets:{region:4,capital:2,city:4,landmark:2},landmarkKinds:["peak","mountain","ruin","water"],borderClasses:["national","regional"],routeClasses:["primary"],settlementLayers:[],settlementRevealTier:"none",queryMode:"local"}),
+  Object.freeze({id:"semantic-1-500",scaleLabel:"1/500",displayBand:"local network",contextKinds:["region","city"],placeKinds:["region","major-city","city","major-landmark"],kinds:["region","city","landmark"],focusKind:"city",budget:7,portraitBudget:5,classBudgets:{region:2,city:3,landmark:2},landmarkKinds:["peak","mountain","island"],borderClasses:["national","regional"],routeClasses:["primary","secondary"],settlementLayers:[],settlementRevealTier:"none",queryMode:"local"}),
+  Object.freeze({id:"semantic-1-1000",scaleLabel:"1/1000",displayBand:"settlement area",contextKinds:["city","village","district"],placeKinds:["city","town","village","district","landmark"],kinds:["city","town","village","district","landmark"],focusKind:"village",budget:9,portraitBudget:6,classBudgets:{city:2,town:3,village:4,district:3,landmark:2},landmarkKinds:["city","town","village","ruin"],borderClasses:["regional"],routeClasses:["primary","secondary"],settlementLayers:["settlement-footprint"],settlementRevealTier:"footprint",queryMode:"local"}),
+  Object.freeze({id:"semantic-1-2500",scaleLabel:"1/2500",displayBand:"settlement approach",contextKinds:["village","district"],placeKinds:["town","village","district","landmark"],kinds:["town","village","district","landmark"],focusKind:"village",budget:6,portraitBudget:5,classBudgets:{town:1,village:3,district:1,landmark:1},landmarkKinds:["town","village","ruin"],borderClasses:[],routeClasses:["primary","secondary","local"],settlementLayers:["settlement-footprint","roads"],settlementRevealTier:"route",queryMode:"local"}),
+  Object.freeze({id:"semantic-1-5000",scaleLabel:"1/5000",displayBand:"near ground",contextKinds:["village","district"],placeKinds:["village","district","landmark"],kinds:["village","district","landmark"],focusKind:"village",budget:7,portraitBudget:5,classBudgets:{village:2,district:3,landmark:2},landmarkKinds:["village","ruin"],borderClasses:[],routeClasses:["primary","secondary","local"],settlementLayers:["settlement-footprint","roads","buildings"],settlementRevealTier:"refined",queryMode:"local"}),
+  Object.freeze({id:"semantic-1-10000",scaleLabel:"1/10000",displayBand:"ground",contextKinds:["village","district"],placeKinds:["village","district","landmark"],kinds:["village","district","landmark"],focusKind:"village",budget:5,portraitBudget:4,classBudgets:{village:1,district:2,landmark:1},landmarkKinds:["village","ruin"],borderClasses:[],routeClasses:["local"],settlementLayers:["settlement-footprint","roads","buildings"],settlementRevealTier:"full",queryMode:"local"})
+]);
+function semanticLayerSpec(index,portrait=false){
+  const i=Math.max(0,Math.min(SEMANTIC_LAYER_SPECS.length-1,Math.round(Number(index)||0))),base=SEMANTIC_LAYER_SPECS[i];
+  return Object.freeze({...base,index:i,budget:portrait?base.portraitBudget:base.budget,
+    unsupportedEntityClasses:Object.freeze(base.placeKinds.filter(kind=>kind==="town"&&!window.SettlementArchetypes?.settlementsForCountry)),
+    classBudgets:Object.freeze({...base.classBudgets})});
+}
+function semanticMarkerClass(entity){
+  if(!entity)return null;
+  if(entity.markerClass&&SEMANTIC_MARKER_CLASSES.includes(entity.markerClass))return entity.markerClass;
+  if(entity.type==="capital")return "capital";
+  if(entity.type==="city")return entity.importanceClass==="major-city"?"major-city":"city";
+  if(entity.type==="town")return "town";
+  if(entity.type==="village")return "village";
+  if(entity.type==="landmark")return "landmark-poi";
+  if(entity.type==="route-node"||entity.type==="road-node")return "route-road-node";
+  return null;
+}
+function semanticMarkerPolicy(markerClass){
+  const policy=SEMANTIC_MARKER_SPECS[markerClass]||null;
+  if(!policy)return null;
+  return Object.freeze({
+    ...policy,
+    markerClass,
+    minimumDisplayScale:SCALE_LADDER[policy.minScaleIndex],
+    maximumDisplayScale:SCALE_LADDER[policy.maxScaleIndex]
+  });
+}
+function semanticMarkerClassBudget(spec,markerClass){
+  if(!spec||!markerClass)return 0;
+  if(markerClass==="capital")return Number(spec.classBudgets?.capital||0);
+  if(markerClass==="major-city"||markerClass==="city")return Number(spec.classBudgets?.city||0);
+  if(markerClass==="town")return Number(spec.classBudgets?.town||0);
+  if(markerClass==="village")return Number(spec.classBudgets?.village||0);
+  if(markerClass==="landmark-poi")return Number(spec.classBudgets?.landmark||0);
+  return 0;
+}
+function semanticScaleIndexForScalar(value=zoomState.scalar){
+  const raw=scaleIndexForScalar(value),height=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(value));
+  if(!semanticScaleState.initialized){
+    semanticScaleState={index:raw,initialized:true,changes:0,holds:0,lastRawIndex:raw};return raw;
+  }
+  let index=semanticScaleState.index;
+  while(raw>index&&index<SEMANTIC_LAYER_SPECS.length-1){
+    const threshold=Math.sqrt(scaleTargetFootprintHeightMeters(index)*scaleTargetFootprintHeightMeters(index+1));
+    if(height>threshold/SEMANTIC_SCALE_HYSTERESIS_RATIO)break;
+    index++;
+  }
+  while(raw<index&&index>0){
+    const threshold=Math.sqrt(scaleTargetFootprintHeightMeters(index-1)*scaleTargetFootprintHeightMeters(index));
+    if(height<threshold*SEMANTIC_SCALE_HYSTERESIS_RATIO)break;
+    index--;
+  }
+  const changed=index!==semanticScaleState.index;
+  semanticScaleState={index,initialized:true,changes:semanticScaleState.changes+(changed?1:0),holds:semanticScaleState.holds+(!changed&&raw!==index?1:0),lastRawIndex:raw};
+  return index;
+}
+function currentSemanticLayerPolicy(portrait=false){return semanticLayerSpec(semanticScaleIndexForScalar(zoomState.scalar),portrait);}
+function mapContextKindsForBand(_band){return currentSemanticLayerPolicy(false).contextKinds.slice();}
+function mapPlaceKindsForBand(_band){return currentSemanticLayerPolicy(false).placeKinds.slice();}
+function scaleTargetFootprintHeightForDenominator(value){
+  const first=Math.max(1,SCALE_DENOMINATORS[0]),last=Math.max(first+1,SCALE_DENOMINATORS[SCALE_DENOMINATORS.length-1]);
+  const denominator=clamp(Math.max(first,Number(value)||first),first,last);
+  const progress=clamp(Math.log(denominator/first)/Math.log(last/first),0,1);
+  // Reserve enough physical footprint for the penultimate scales to remain
+  // distinct near-ground refinement tiers. A linear log-denominator curve
+  // collapsed 1/5000 into the same 36 m ground LOD as 1/10000.
+  const physicalProgress=Math.pow(progress,SCALE_FOOTPRINT_PROGRESS_EXPONENT);
+  const startHeight=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(0));
+  return startHeight*Math.exp(Math.log(GROUND_FOOTPRINT_HEIGHT_METERS/startHeight)*physicalProgress);
+}
+function scaleTargetFootprintHeightMeters(index){
+  const i=Math.max(0,Math.min(SCALE_LADDER.length-1,Math.round(Number(index)||0)));
+  return scaleTargetFootprintHeightForDenominator(SCALE_DENOMINATORS[i]);
+}
+function displayScaleIndexForScalar(value=zoomState.scalar){
+  const height=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(clamp(value,0,1)));
+  let best=0,bestDistance=Infinity;
+  for(let i=0;i<ZOOM_DISPLAY_LADDER.length;i++){
+    const target=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,scaleTargetFootprintHeightForDenominator(ZOOM_DISPLAY_DENOMINATORS[i]));
+    const distance=Math.abs(Math.log(height/target));
+    if(distance<bestDistance){best=i;bestDistance=distance;}
+  }
+  return best;
+}
+function scalarForDisplayScaleIndex(index){
+  const i=Math.max(0,Math.min(ZOOM_DISPLAY_LADDER.length-1,Math.round(Number(index)||0)));
+  if(i===0)return 0;if(i===ZOOM_DISPLAY_LADDER.length-1)return 1;
+  return scalarForFootprintHeight(scaleTargetFootprintHeightForDenominator(ZOOM_DISPLAY_DENOMINATORS[i]));
+}
+function displayScaleStateForScalar(value=zoomState.scalar){
+  const index=displayScaleIndexForScalar(value),scalar=scalarForDisplayScaleIndex(index);
+  return Object.freeze({index,label:ZOOM_DISPLAY_LADDER[index],denominator:ZOOM_DISPLAY_DENOMINATORS[index],scalar:Number(scalar.toFixed(6)),targetFootprintHeightMeters:Number(presentationTargetHeightMeters(scalar).toFixed(3))});
+}
+function scaleIndexForScalar(value=zoomState.scalar){
+  const height=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(clamp(value,0,1)));
+  let best=0,bestDistance=Infinity;
+  for(let i=0;i<SCALE_LADDER.length;i++){
+    const target=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,scaleTargetFootprintHeightMeters(i));
+    const distance=Math.abs(Math.log(height/target));
+    if(distance<bestDistance){best=i;bestDistance=distance;}
+  }
+  return best;
+}
+function scalarForScaleIndex(index){
+  const i=Math.max(0,Math.min(SCALE_LADDER.length-1,Math.round(Number(index)||0)));
+  if(i===0)return 0;if(i===SCALE_LADDER.length-1)return 1;
+  return scalarForFootprintHeight(scaleTargetFootprintHeightMeters(i));
+}
+function scaleStateForScalar(value=zoomState.scalar){
+  const index=scaleIndexForScalar(value),scalar=scalarForScaleIndex(index);
+  return Object.freeze({index,label:SCALE_LADDER[index],scalar:Number(scalar.toFixed(6)),targetFootprintHeightMeters:Number(presentationTargetHeightMeters(scalar).toFixed(3))});
+}
+function setScaleIndex(index){return setZoomScalar(scalarForScaleIndex(index));}
+function stepScale(direction){const d=Math.sign(Number(direction)||0);return d===0?null:setScaleIndex(scaleIndexForScalar()+d);}
+function setAnimatedScaleIndex(index,source="api"){return setZoomTargetScalar(scalarForDisplayScaleIndex(index),source);}
+function stepAnimatedScale(direction,source="step"){
+  const d=Math.sign(Number(direction)||0);if(d===0)return null;
+  const base=displayScaleIndexForScalar(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar);
+  return setAnimatedScaleIndex(clamp(base+d,0,ZOOM_DISPLAY_LADDER.length-1),source);
+}
+function navigationSensitivity(){
+  const rect=canvas?.getBoundingClientRect?.(),widthPx=Math.max(1,Number(rect?.width||1)),heightPx=Math.max(1,Number(rect?.height||1));
+  const metersPerPixelX=Math.max(.000001,Number(zoomState.visibleFootprintWidthMeters||1))/widthPx;
+  const metersPerPixelY=Math.max(.000001,Number(zoomState.visibleFootprintHeightMeters||1))/heightPx;
+  const cosLat=Math.max(.08,Math.cos(zoomState.focusLatitudeRadians));
+  const yawDegreesPerPixel=metersPerPixelX/(WORLD_RADIUS_METERS*cosLat)*180/Math.PI;
+  const pitchDegreesPerPixel=metersPerPixelY/WORLD_RADIUS_METERS*180/Math.PI;
+  return Object.freeze({viewportWidthPixels:widthPx,viewportHeightPixels:heightPx,metersPerPixelX:Number(metersPerPixelX.toFixed(6)),metersPerPixelY:Number(metersPerPixelY.toFixed(6)),yawDegreesPerPixel:Number(yawDegreesPerPixel.toFixed(9)),pitchDegreesPerPixel:Number(pitchDegreesPerPixel.toFixed(9)),samplePixels:100,sampleHorizontalMeters:Number((metersPerPixelX*100).toFixed(3)),sampleVerticalMeters:Number((metersPerPixelY*100).toFixed(3))});
+}
+function rotateByScreenPixels(dx,dy){
+  const sensitivity=navigationSensitivity();
+  // Screen-space navigation is defined in physical surface distance, not raw
+  // Euler degrees. Convert the requested pointer displacement to a great-circle
+  // destination so equal pixel drags track the current visible footprint at
+  // every scale, then solve the exact sphere rotation for that canonical focus.
+  const eastMeters=-Number(dx||0)*sensitivity.metersPerPixelX;
+  const northMeters=Number(dy||0)*sensitivity.metersPerPixelY;
+  const distanceMeters=Math.hypot(eastMeters,northMeters);
+  if(distanceMeters<1e-9)return null;
+  const angular=distanceMeters/WORLD_RADIUS_METERS,bearing=Math.atan2(eastMeters,northMeters);
+  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians;
+  const sinLat0=Math.sin(lat0),cosLat0=Math.cos(lat0),sinAngular=Math.sin(angular),cosAngular=Math.cos(angular);
+  const lat=Math.asin(clamp(sinLat0*cosAngular+cosLat0*sinAngular*Math.cos(bearing),-1,1));
+  const lon=wrapLongitudeRadians(lon0+Math.atan2(Math.sin(bearing)*sinAngular*cosLat0,cosAngular-sinLat0*Math.sin(lat)));
+  navigationPerformance.pointerMoveCount++;navigationPerformance.pointerMoveSnapshotAvoidedCount++;
+  return setViewTarget({latitudeRadians:lat,longitudeRadians:lon},{forceSemantic:false,snapshotResult:false,semanticUpdate:false});
+}
+function rotateByScreenFraction(xFraction,yFraction){const sensitivity=navigationSensitivity();return rotateByScreenPixels(Number(xFraction||0)*sensitivity.viewportWidthPixels,Number(yFraction||0)*sensitivity.viewportHeightPixels);}
+function niceScaleDistanceMeters(widthMeters){
+  const target=Math.max(1,Number(widthMeters)||1)*.22;
+  const power=Math.pow(10,Math.floor(Math.log10(target)));
+  const normalized=target/power;
+  const nice=normalized>=5?5:normalized>=2?2:1;
+  return nice*power;
+}
+function scaleRulerForViewport(widthMeters,pixelWidth){
+  const width=Math.max(.000001,Number(widthMeters)||1),pixels=Math.max(1,Number(pixelWidth)||1);
+  const distanceMeters=niceScaleDistanceMeters(width),metersPerScreenPixel=width/pixels,pixelLength=distanceMeters/metersPerScreenPixel;
+  return Object.freeze({distanceMeters,pixelLength:Number(pixelLength.toFixed(4)),metersPerScreenPixel:Number(metersPerScreenPixel.toFixed(6)),truthErrorMeters:Number(Math.abs(distanceMeters-pixelLength*metersPerScreenPixel).toFixed(6))});
+}
+function formatDistanceMeters(meters){
+  const m=Math.max(1,Number(meters)||1);
+  if(m>=1000){const km=m/1000;return (km>=100?Math.round(km):km>=10?km.toFixed(0):km.toFixed(1))+" km";}
+  return Math.round(m)+" m";
+}
+function ensureMapPresentationDom(){
+  if(!root)return null;
+  let layer=root.querySelector(".planet-map-layer");
+  if(layer)return layer;
+  layer=document.createElement("div");layer.className="planet-map-layer";layer.setAttribute("aria-live","polite");
+  const borders=document.createElementNS("http://www.w3.org/2000/svg","svg");borders.setAttribute("class","planet-map-borders");borders.setAttribute("viewBox","0 0 1000 1000");borders.setAttribute("preserveAspectRatio","none");borders.setAttribute("aria-hidden","true");
+  const labels=document.createElement("div");labels.className="planet-map-labels";labels.setAttribute("aria-hidden","true");
+  const center=document.createElement("div");center.className="planet-world-center";center.setAttribute("aria-label","Canonical gameplay-area center");center.innerHTML='<i aria-hidden="true"></i><code></code>';
+  const info=document.createElement("section");info.className="planet-map-context";info.setAttribute("aria-label","Geographic context");
+  const scale=document.createElement("div");scale.className="planet-scale-ruler";scale.innerHTML='<div class="planet-scale-meta"><strong></strong><span></span></div><div class="planet-scale-line"><i></i></div><small></small>';
+  layer.append(borders,labels,center,info,scale);root.appendChild(layer);return layer;
+}
+function geographicScenePoint(latitudeRadians,longitudeRadians,surfaceOffsetMeters=0){
+  if(!pc||!cameraEntity?.camera||!window.PlanetGeography?.directionFromLatLon)return null;
+  const lat=clamp(latitudeRadians,-Math.PI*.499999,Math.PI*.499999),lon=wrapLongitudeRadians(longitudeRadians);
+  // Project overlays against the representation that is actually visible.
+  // Raw projectionState.blend begins before the tangent surface is presented;
+  // using it clipped borders/labels to the hidden tangent patch at 0.12x while
+  // the player was still seeing the globe. Switch only when tangent is the
+  // dominant rendered representation.
+  const tangentActive=Boolean(tangentPatch?.enabled&&displayResource&&Number(projectionPresentation?.representationBlend||0)>=.5);
+  if(tangentActive){
+    const frame=localDisplayFrame(),dims=frame.dims,lat0=frame.lat0,lon0=frame.lon0,delta=canonicalRegisteredDeltaMeters(lat0,lon0,lat,lon);
+    const north=Number(delta.northMeters||0),east=Number(delta.eastMeters||0);
+    const insideDetail=Math.abs(east)<=dims.patchWidth*.52&&Math.abs(north)<=dims.patchHeight*.52;
+    // The visible local map is the detailed 1x patch plus a canonical 3x
+    // surround. Projecting overlays only against the 1x patch made valid
+    // country boundaries stop at an invisible interior rectangle while the
+    // player still saw world-matched surround terrain beyond it.
+    const insideSurround=Boolean(horizonSkirt?.enabled)&&Math.abs(east)<=dims.patchWidth*1.5&&Math.abs(north)<=dims.patchHeight*1.5;
+    if(!insideDetail&&!insideSurround)return null;
+    const holder=insideDetail?tangentPatch:horizonSkirt;
+    const groundY=insideDetail?localGroundHeightUnits(east,north,frame):0;
+    const local=new pc.Vec3(east/dims.metersPerUnit,groundY+Number(surfaceOffsetMeters||0)/dims.metersPerUnit,-north/dims.metersPerUnit);
+    const world=holder.getWorldTransform().transformPoint(local,new pc.Vec3());
+    return {world,mode:insideDetail?"tangent":"tangent-surround",latitudeRadians:lat,longitudeRadians:lon,eastMeters:east,northMeters:north};
+  }
+  const direction=window.PlanetGeography.directionFromLatLon(lat,lon);if(!direction)return null;
+  let sample=null;try{sample=geography?.sampleLatLon?.(lat,lon)||null;}catch(_){sample=null;}
+  const visualMeters=visualElevationMeters(sample||{land:true,elevationMeters:0});
+  const radius=DISPLAY_RADIUS_UNITS*(1+(visualMeters/WORLD_RADIUS_METERS)*HEIGHT_EXAGGERATION)+(DISPLAY_RADIUS_UNITS/WORLD_RADIUS_METERS)*Number(surfaceOffsetMeters||0);
+  const local=new pc.Vec3(direction.x*radius,direction.y*radius,direction.z*radius);
+  const world=planet?.getWorldTransform?.().transformPoint(local,new pc.Vec3())||local;
+  return {world,mode:"globe",latitudeRadians:lat,longitudeRadians:lon,eastMeters:null,northMeters:null};
+}
+function cameraViewDepth(world){
+  if(!world||!cameraEntity?.camera?.viewMatrix||!pc)return null;
+  try{
+    const viewPoint=cameraEntity.camera.viewMatrix.transformPoint(world,new pc.Vec3());
+    return Number(viewPoint?.z);
+  }catch(_){return null;}
+}
+function projectGeographicAnchor(anchor,options={}){
+  if(!canvas||!cameraEntity?.camera||!anchor)return null;
+  const scene=geographicScenePoint(anchor.latitudeRadians,anchor.longitudeRadians,options.surfaceOffsetMeters||0);if(!scene)return null;
+  if(scene.mode==="globe"&&planet){
+    const center=planet.getPosition(),normal=scene.world.clone().sub(center),toCamera=cameraEntity.getPosition().clone().sub(scene.world);
+    if(normal.dot(toCamera)<=0)return null;
+  }
+  const screen=cameraEntity.camera.worldToScreen(scene.world),viewDepth=cameraViewDepth(scene.world),rect=canvas.getBoundingClientRect();
+  // PlayCanvas worldToScreen().z is unnormalized clip-space depth and can be
+  // negative for visible points, especially with our orthographic camera.
+  // The documented behind-camera test is view-space Z: visible points are < 0.
+  if(!Number.isFinite(screen.x)||!Number.isFinite(screen.y)||!Number.isFinite(screen.z)||!Number.isFinite(viewDepth)||viewDepth>=0)return null;
+  const xPct=screen.x/Math.max(1,rect.width)*100,yPct=screen.y/Math.max(1,rect.height)*100;
+  if(options.allowOffscreen!==true&&(xPct<0||xPct>100||yPct<0||yPct>100))return null;
+  return {
+    x:xPct,y:yPct,screenX:screen.x,screenY:screen.y,depth:screen.z,viewDepth,mode:scene.mode,
+    latitudeRadians:scene.latitudeRadians,longitudeRadians:scene.longitudeRadians,
+    worldX:Number(scene.world.x.toFixed(6)),worldY:Number(scene.world.y.toFixed(6)),worldZ:Number(scene.world.z.toFixed(6))
+  };
+}
+function projectMapLabel(descriptor){return projectGeographicAnchor(descriptor,{surfaceOffsetMeters:8});}
+function gameplayCenterMarkerTelemetry(layer){
+  const fabric=coordinateFabricAuthority(),marker=layer?.querySelector?.(".planet-world-center");
+  if(!fabric||!marker)return null;
+  const center=fabric.describeLatLon(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians,256);
+  const cell=fabric.materializeCell(center.worldTile,256);
+  let projected=projectGeographicAnchor(center,{surfaceOffsetMeters:14}),projectionFallbackUsed=false;
+  // Responsive canvas/camera resize can briefly invalidate the generic geographic
+  // projection even though the canonical focus itself remains camera-facing.
+  // The focus transform is authoritative for this one special marker, so use its
+  // world projection as a bounded fallback rather than hiding or HUD-pinning it.
+  if(!projected){
+    const focus=canonicalScreenFocusTelemetry();
+    const rect=canvas?.getBoundingClientRect?.();
+    if(focus?.valid&&Number(focus.facingDot||0)>0&&rect?.width>0&&rect?.height>0){
+      const centerX=rect.width*.5,centerY=rect.height*.5;
+      const projectedInside=Number(focus.screenX)>=0&&Number(focus.screenX)<=rect.width&&Number(focus.screenY)>=0&&Number(focus.screenY)<=rect.height;
+      const projectedNearCurrentCenter=Math.hypot(Number(focus.screenX)-centerX,Number(focus.screenY)-centerY)<=Math.max(3,Math.min(rect.width,rect.height)*.025);
+      // During a responsive canvas handoff worldToScreen can briefly expose the
+      // previous viewport's coordinates (for example 640,400 after switching to
+      // 844x390). The canonical gameplay focus is defined by the camera-center
+      // invariant, so reject stale coordinates and place this one world-anchored
+      // focus marker at the current canvas center until the projection matrix
+      // catches up. No entity/world coordinate or camera state is changed.
+      const screenX=projectedInside&&projectedNearCurrentCenter?Number(focus.screenX):centerX;
+      const screenY=projectedInside&&projectedNearCurrentCenter?Number(focus.screenY):centerY;
+      projected={
+        x:screenX/rect.width*100,y:screenY/rect.height*100,
+        screenX,screenY,depth:null,viewDepth:null,
+        mode:projectedInside&&projectedNearCurrentCenter?"canonical-focus-transform":"canonical-focus-center-invariant"
+      };
+      projectionFallbackUsed=true;
+    }
+  }
+  if(!projected){marker.hidden=true;return Object.freeze({visible:false,worldTile:center.worldTile,canonicalSpatialCellId:cell.id,projectionFallbackUsed:false});}
+  marker.hidden=false;
+  const settlementOverview=settlementRevealTierForScalar(zoomState.scalar)==="route";marker.dataset.settlementOverview=String(settlementOverview);
+  const rect=canvas.getBoundingClientRect(),rootRect=root.getBoundingClientRect(),offsetX=rect.left-rootRect.left,offsetY=rect.top-rootRect.top;
+  marker.style.left=(offsetX+projected.screenX).toFixed(2)+"px";marker.style.top=(offsetY+projected.screenY).toFixed(2)+"px";
+  const code=marker.querySelector("code"),shortCell=cell.cellX+","+cell.cellY;
+  if(code){
+    code.textContent=settlementOverview?"CELL "+shortCell:"CELL "+shortCell+" · "+center.latitudeDegrees.toFixed(3)+"°, "+center.longitudeDegrees.toFixed(3)+"°";
+    // Keep the exact center marker, but move its readout off canonical local
+    // structure when that structure itself is the focused visual subject.
+    const microLocationFocus=root?.dataset?.microLocationFocus==="true",travelEncounterFocus=root?.dataset?.travelEncounterFocus==="true";
+    code.style.display=(microLocationFocus||travelEncounterFocus)?"none":"";
+    if(settlementOverview){
+      code.style.position="absolute";code.style.left="50%";code.style.top="-54px";
+      code.style.transform="translateX(-50%) scale(.82)";code.style.opacity=".72";
+    }else if(microLocationFocus){
+      code.style.position="absolute";code.style.left="50%";code.style.top="-68px";
+      code.style.transform="translateX(-50%) scale(.68)";code.style.opacity=".10";
+    }else if(root?.dataset?.workFocus!=="true"){
+      code.style.position="";code.style.left="";code.style.top="";code.style.transform="";code.style.opacity="";
+    }
+  }
+  marker.dataset.cellId=cell.id;marker.dataset.tile=center.worldTile.x+","+center.worldTile.y;
+  return Object.freeze({
+    visible:true,screenX:Number(projected.screenX.toFixed(2)),screenY:Number(projected.screenY.toFixed(2)),
+    clipDepth:Number.isFinite(projected.depth)?Number(projected.depth.toFixed(6)):null,
+    viewDepth:Number.isFinite(projected.viewDepth)?Number(projected.viewDepth.toFixed(6)):null,
+    projection:projected.mode,projectionFallbackUsed,
+    latitudeDegrees:Number(center.latitudeDegrees.toFixed(6)),longitudeDegrees:Number(center.longitudeDegrees.toFixed(6)),
+    worldTile:center.worldTile,registeredMeters:center.registeredMeters,canonicalSpatialCellId:cell.id,streamSignature:cell.signature,
+    coordinateFabricRevision:fabric.revisionSignature,roundTripErrorMeters:center.roundTripErrorMeters,worldAnchored:true,fixedHudDot:false,
+    travelEncounterDecluttered:Boolean(root?.dataset?.travelEncounterFocus==="true")
+  });
+}
+function coordinateFabricDiagnostics(){
+  const fabric=coordinateFabricAuthority();if(!fabric)return null;
+  const center=fabric.describeLatLon(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians,256),systems=[];
+  const add=(kind,id,tile,authority)=>{
+    if(!tile||tile.x===undefined||tile.y===undefined)return;
+    try{
+      const d=fabric.describeTile(tile.x,tile.y,256);
+      systems.push(Object.freeze({kind,id:String(id||kind),authority:String(authority||""),worldTile:d.worldTile,canonicalSpatialCellId:d.spatialCell.id,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees,roundTripErrorMeters:d.roundTripErrorMeters}));
+    }catch(_){}
+  };
+  add("gameplay-center","ACTIVE-CENTER",center.worldTile,"PlanetStage.canonicalFocus");
+  add("terrain","FOCUS-TERRAIN",center.worldTile,"PlanetGeography.sampleLatLon");
+  try{
+    const country=window.PoliticalGeography?.countryAt?.(activeSeed,center.worldTile.x,center.worldTile.y);
+    const anchor=country?.mapAnchor||country?.politicalCenter||country?.capital;
+    if(anchor)add("country",country.id,anchor,"PoliticalGeography.countryAt");
+    if(country?.capital)add("capital",country.capital.id,country.capital,"PoliticalGeography.capital");
+  }catch(_){}
+  try{
+    const region=window.RegionProfile?.at?.(activeSeed,center.worldTile.x,center.worldTile.y);
+    if(region?.administrativeSeat)add("region",region.id,region.administrativeSeat,"RegionProfile.at");
+  }catch(_){}
+  try{
+    const village=window.GeographyFoundation?.nearestVillage?.(activeSeed,center.worldTile.x,center.worldTile.y,false);
+    if(village)add("village",village.name||"village",{x:village.x,y:village.y},"GeographyFoundation.nearestVillage");
+  }catch(_){}
+  try{
+    const landmark=(destinationNavigator.descriptors||[]).slice().sort((a,b)=>Number(b.importance||0)-Number(a.importance||0)||String(a.id).localeCompare(String(b.id)))[0];
+    if(landmark)add("landmark",landmark.id,mapWorldTileAt(landmark.latitudeRadians,landmark.longitudeRadians),"DestinationNavigatorDescriptor");
+  }catch(_){}
+  try{
+    const house=window.HousePlans?.build?.(activeSeed)?.[0];
+    if(house?.bounds){
+      const x=String(Math.round((Number(house.bounds.minX)+Number(house.bounds.maxX))/2)),y=String(Math.round((Number(house.bounds.minY)+Number(house.bounds.maxY))/2));
+      add("building",house.id||"house",Object.freeze({x,y}),"HousePlans.build");
+    }
+  }catch(_){}
+  try{
+    let road=null;
+    for(let y=-20;y<=20&&!road;y++)for(let x=-20;x<=20&&!road;x++){
+      const local=window.StartingVillage?.local?.(activeSeed,String(x),String(y)),infra=local&&window.StartingVillage?.infrastructureAt?.(activeSeed,local);
+      if(infra?.type==="road"||infra?.type==="path")road={x:String(x),y:String(y),kind:infra.kind||infra.type};
+    }
+    if(road)add("road",road.kind,road,"StartingVillage.infrastructureAt");
+  }catch(_){}
+  try{
+    const edge=mapBorderCache?.diagnostics?.[0]?.aTile;
+    if(edge)add("political-border",mapBorderCache.diagnostics[0].canonicalEdgeId||"border-edge",edge,"PoliticalGeography.canonicalBoundaryGraph");
+  }catch(_){}
+  const snapshot=fabric.snapshot(center.worldTile);
+  return Object.freeze({
+    ...snapshot,
+    center,
+    consumers:Object.freeze(systems),
+    consumerKinds:Object.freeze(systems.map(item=>item.kind)),
+    maxRoundTripErrorMeters:Number(systems.reduce((m,item)=>Math.max(m,Number(item.roundTripErrorMeters||0)),center.roundTripErrorMeters||0).toFixed(6)),
+    sameSeedSpatialAuthority:systems.every(item=>String(item.canonicalSpatialCellId||"").includes(fabric.revisionSignature)),
+    fullWorldScan:false
+  });
+}
+function mapLandmarkKindsForBand(_band){return currentSemanticLayerPolicy(false).landmarkKinds.slice();}
+
+function atlasHashText(value){
+  let h=2166136261>>>0;for(const ch of String(value)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}return (h>>>0).toString(16).toUpperCase().padStart(8,"0");
+}
+function atlasFloorDiv(value,size){
+  const v=BigInt(String(value)),s=BigInt(size);let q=v/s,r=v%s;if(r!==0n&&v<0n)q-=1n;return q;
+}
+function atlasCellForTile(tile,size){
+  return Object.freeze({x:atlasFloorDiv(tile.x,size),y:atlasFloorDiv(tile.y,size)});
+}
+function atlasCityCellSize(){return Math.max(1024,Math.round(Number(window.WorldStandards?.CITY_CELL_SIZE_TILES||16384)))}
+function atlasCityQuery(){
+  const size=atlasCityCellSize(),focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const focusCell=atlasCellForTile(focusTile,size),tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||2));
+  const cosLat=Math.max(.08,Math.cos(zoomState.focusLatitudeRadians));
+  const halfXTiles=Math.ceil((Math.max(1,zoomState.visibleFootprintWidthMeters)*.56)/(2*tileMeters*cosLat));
+  const halfYTiles=Math.ceil((Math.max(1,zoomState.visibleFootprintHeightMeters)*.56)/(2*tileMeters));
+  let minX=atlasFloorDiv((BigInt(focusTile.x)-BigInt(halfXTiles)).toString(),size)-1n;
+  let maxX=atlasFloorDiv((BigInt(focusTile.x)+BigInt(halfXTiles)).toString(),size)+1n;
+  let minY=atlasFloorDiv((BigInt(focusTile.y)-BigInt(halfYTiles)).toString(),size)-1n;
+  let maxY=atlasFloorDiv((BigInt(focusTile.y)+BigInt(halfYTiles)).toString(),size)+1n;
+  const radius=5n;
+  if(maxX-minX+1n>11n){minX=focusCell.x-radius;maxX=focusCell.x+radius;}
+  if(maxY-minY+1n>11n){minY=focusCell.y-radius;maxY=focusCell.y+radius;}
+  const half=BigInt(Math.floor(size/2)),tiles=[];
+  for(let cy=minY;cy<=maxY;cy++)for(let cx=minX;cx<=maxX;cx++){
+    tiles.push(Object.freeze({x:(cx*BigInt(size)+half).toString(),y:(cy*BigInt(size)+half).toString(),cellX:cx.toString(),cellY:cy.toString()}));
+  }
+  tiles.sort((a,b)=>{
+    const adx=Number(BigInt(a.cellX)-focusCell.x),ady=Number(BigInt(a.cellY)-focusCell.y),bdx=Number(BigInt(b.cellX)-focusCell.x),bdy=Number(BigInt(b.cellY)-focusCell.y);
+    return adx*adx+ady*ady-(bdx*bdx+bdy*bdy)||a.cellY.localeCompare(b.cellY)||a.cellX.localeCompare(b.cellX);
+  });
+  return Object.freeze({
+    key:[size,minX,maxX,minY,maxY].join(":"),
+    size,tiles:Object.freeze(tiles.slice(0,121)),
+    requestedCellCount:Number((maxX-minX+1n)*(maxY-minY+1n)),
+    bounded:true
+  });
+}
+function atlasCellId(prefix,cell){return prefix+"|"+cell.x.toString()+"|"+cell.y.toString()+"|"+atlasHashText(activeSeed+"|"+prefix+"|"+cell.x+"|"+cell.y).slice(0,8);}
+function atlasPlanetSurfaceForTile(x,y){
+  const geo=worldLatLonForTile(x,y);let sample=null;try{sample=geography?.sampleLatLon?.(geo.latitudeRadians,geo.longitudeRadians)||null;}catch(_){}
+  return {geo,sample};
+}
+function atlasRepresentativeTile(baseX,baseY,step,wantLand,validator){
+  const bx=BigInt(String(baseX)),by=BigInt(String(baseY)),s=BigInt(Math.max(1,Math.round(step||1)));
+  const offsets=[[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1],[2,0],[-2,0],[0,2],[0,-2]];
+  for(const [ox,oy] of offsets){
+    const x=(bx+BigInt(ox)*s).toString(),y=(by+BigInt(oy)*s).toString();
+    let valid=true;try{valid=validator?validator(x,y):true;}catch(_){valid=false;}if(!valid)continue;
+    const {sample}=atlasPlanetSurfaceForTile(x,y);if(!sample||Boolean(sample.land)!==Boolean(wantLand))continue;
+    return Object.freeze({x,y});
+  }
+  return null;
+}
+function atlasStableLandAnchor(base,step,validator){
+  if(!base)return null;
+  const bx=BigInt(String(base.x)),by=BigInt(String(base.y)),stride=BigInt(Math.max(1,Math.round(step||1)));
+  const offsets=[[0,0]];
+  for(let ring=1;ring<=6;ring++)for(let spoke=0;spoke<16;spoke++){
+    const angle=Math.PI*2*spoke/16;
+    offsets.push([Math.round(Math.cos(angle)*ring),Math.round(Math.sin(angle)*ring)]);
+  }
+  const seen=new Set();
+  for(const [ox,oy] of offsets){
+    const x=(bx+BigInt(ox)*stride).toString(),y=(by+BigInt(oy)*stride).toString(),key=x+"|"+y;
+    if(seen.has(key))continue;seen.add(key);
+    let valid=true;try{valid=validator?validator(x,y):true;}catch(_){valid=false;}if(!valid)continue;
+    const surface=atlasPlanetSurfaceForTile(x,y);if(surface.sample?.land)return Object.freeze({x,y});
+  }
+  return null;
+}
+function atlasEntityBase(id,type,name,anchorTile,authority,extra={}){
+  if(!id||!name||!anchorTile)return null;const geo=worldLatLonForTile(anchorTile.x,anchorTile.y);
+  return Object.freeze({id:String(id),type:String(type),name:String(name),authority:String(authority),anchorTile:Object.freeze({x:String(anchorTile.x),y:String(anchorTile.y)}),
+    latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,latitudeDegrees:geo.latitudeDegrees,longitudeDegrees:geo.longitudeDegrees,...extra});
+}
+function atlasCanonicalEntityForKind(kind,tile){
+  if(!activeSeed||!tile)return null;
+  if(kind==="continent"){
+    const surface=atlasPlanetSurfaceForTile(tile.x,tile.y),continentId=surface.sample?.continentId||null;
+    if(!surface.sample?.land||!continentId)return null;
+    const cacheKey=activeSeed+"|"+continentId;
+    if(atlasEntityCache.has(cacheKey))return atlasEntityCache.get(cacheKey);
+    const descriptor=geography?.continentById?.(continentId)||null;
+    if(!descriptor){atlasEntityCache.set(cacheKey,null);return null;}
+    const anchor=mapWorldTileAt(descriptor.latitudeRadians,descriptor.longitudeRadians);
+    const entity=atlasEntityBase(continentId,"continent",descriptor.name,anchor,"PlanetGeography.continentById",{continentId});
+    atlasEntityCache.set(cacheKey,entity);return entity;
+  }
+  if(kind==="ocean"){
+    const size=196608,cell=atlasCellForTile(tile,size),id=atlasCellId("OCEAN",cell),cacheKey=activeSeed+"|"+id;
+    if(atlasEntityCache.has(cacheKey))return atlasEntityCache.get(cacheKey);
+    const half=BigInt(Math.floor(size/2)),base={x:(cell.x*BigInt(size)+half).toString(),y:(cell.y*BigInt(size)+half).toString()};
+    const anchor=atlasRepresentativeTile(base.x,base.y,Math.floor(size*.20),false,null);if(!anchor){atlasEntityCache.set(cacheKey,null);return null;}
+    const geo=worldLatLonForTile(anchor.x,anchor.y),name=mapGeneratedName("ocean",geo.latitudeRadians,geo.longitudeRadians);
+    const entity=atlasEntityBase(id,"ocean",name,anchor,"PlanetGeography+deterministic-water-cell");atlasEntityCache.set(cacheKey,entity);return entity;
+  }
+  if(kind==="country"||kind==="capital"){
+    const key=atlasAuthorityKey("country",tile);
+    if(!atlasAuthorityIndex.has(key)){atlasQueueAuthority("country",tile);return null;}
+    const countryEntity=atlasAuthorityIndex.get(key);if(!countryEntity)return null;
+    if(kind==="country")return countryEntity;
+    const capital=countryEntity.capital;if(!capital)return null;
+    const capKey=activeSeed+"|"+String(capital.id);
+    if(atlasEntityCache.has(capKey))return atlasEntityCache.get(capKey);
+    const surface=atlasPlanetSurfaceForTile(capital.x,capital.y);
+    let owner=null;try{owner=window.PoliticalGeography?.ownerAt?.(activeSeed,capital.x,capital.y)||null;}catch(_){owner=null;}
+    if(!surface.sample?.land||owner?.id!==countryEntity.id){atlasEntityCache.set(capKey,null);return null;}
+    const entity=atlasEntityBase(capital.id,"capital",capital.name,{x:capital.x,y:capital.y},"PoliticalGeography.capital:canonical-owned-land",{countryId:countryEntity.id,parentCountryMatch:true});
+    atlasEntityCache.set(capKey,entity);return entity;
+  }
+  if(kind==="region"){
+    const key=atlasAuthorityKey("region",tile);
+    if(!atlasAuthorityIndex.has(key)){atlasQueueAuthority("region",tile);return null;}
+    return atlasAuthorityIndex.get(key);
+  }
+  if(kind==="city"||kind==="district"){
+    const size=kind==="city"?atlasCityCellSize():256,cell=atlasCellForTile(tile,size),id=atlasCellId(kind==="city"?"CITY":"DIST",cell),cacheKey=activeSeed+"|"+id;
+    if(atlasEntityCache.has(cacheKey))return atlasEntityCache.get(cacheKey);
+    if(kind==="city"){
+      const city=window.GeographyFoundation?.cityAtCell?.(activeSeed,cell.x,cell.y)||null;
+      if(!city){atlasEntityCache.set(cacheKey,null);return null;}
+      const anchor={x:String(city.x),y:String(city.y)},surface=atlasPlanetSurfaceForTile(anchor.x,anchor.y);
+      if(!surface.sample?.land){atlasEntityCache.set(cacheKey,null);return null;}
+      const entity=atlasEntityBase(id,"city",city.name,anchor,"GeographyFoundation.cityAtCell:seed-land",{cityCellX:String(cell.x),cityCellY:String(cell.y),landValidated:Boolean(city.landValidated)});
+      atlasEntityCache.set(cacheKey,entity);return entity;
+    }
+    const half=BigInt(Math.floor(size/2)),base={x:(cell.x*BigInt(size)+half).toString(),y:(cell.y*BigInt(size)+half).toString()};
+    const anchor=atlasRepresentativeTile(base.x,base.y,Math.max(16,Math.floor(size*.2)),true,(x,y)=>{const cc=atlasCellForTile({x,y},size);return cc.x===cell.x&&cc.y===cell.y;});
+    if(!anchor){atlasEntityCache.set(cacheKey,null);return null;}const name=window.GeographyFoundation?.hierarchyName?.(activeSeed,kind,anchor.x,anchor.y);if(!name){atlasEntityCache.set(cacheKey,null);return null;}
+    const entity=atlasEntityBase(id,kind,name,anchor,"GeographyFoundation.hierarchy");atlasEntityCache.set(cacheKey,entity);return entity;
+  }
+  if(kind==="village"){
+    const v=window.GeographyFoundation?.nearestVillage?.(activeSeed,tile.x,tile.y,false);if(!v)return null;
+    const cell=Object.freeze({x:BigInt(v.cellX),y:BigInt(v.cellY)}),id=atlasCellId("VIL",cell),cacheKey=activeSeed+"|"+id;
+    if(atlasEntityCache.has(cacheKey))return atlasEntityCache.get(cacheKey);
+    const surface=atlasPlanetSurfaceForTile(v.x,v.y);if(!surface.sample?.land){atlasEntityCache.set(cacheKey,null);return null;}
+    const entity=atlasEntityBase(id,"village",v.name,{x:v.x,y:v.y},"GeographyFoundation.villageCenter");atlasEntityCache.set(cacheKey,entity);return entity;
+  }
+  return null;
+}
+function atlasTownEntitiesForFocus(){
+  if(!activeSeed||!window.SettlementArchetypes?.settlementsForCountry||!window.PoliticalGeography?.countryAt)return Object.freeze([]);
+  const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  let country=null,plans=[];try{country=window.PoliticalGeography.countryAt(activeSeed,focusTile.x,focusTile.y);plans=country?window.SettlementArchetypes.settlementsForCountry(activeSeed,country,3)||[]:[];}catch(_){plans=[];}
+  const out=[];
+  for(const plan of plans){
+    if(plan?.classId!=="town"||!plan?.center)continue;
+    const anchor={x:String(plan.center.x),y:String(plan.center.y)},surface=atlasPlanetSurfaceForTile(anchor.x,anchor.y);
+    if(!surface.sample?.land)continue;
+    const cacheKey=activeSeed+"|TOWN|"+String(plan.id);
+    let entity=atlasEntityCache.get(cacheKey)||null;
+    if(!entity){
+      entity=atlasEntityBase(plan.id,"town",plan.name,anchor,"SettlementArchetypes.settlementsForCountry:seed-plan",
+        {countryId:plan.countryId||country?.id||null,regionId:plan.regionId||null,settlementClass:plan.classId,settlementRole:plan.role||null});
+      if(entity)atlasEntityCache.set(cacheKey,entity);
+    }
+    if(entity)out.push(entity);
+  }
+  return Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)).slice(0,24));
+}
+function atlasSettlementHierarchyQuery(spec){
+  const classes=spec.kinds.filter(kind=>kind==="city"||kind==="town"||kind==="village");
+  const api=window.SettlementArchetypes;
+  if(!classes.length||!activeSeed||!api?.canonicalSettlementAtCell||!api?.HIERARCHY_CLASS_SPECS)return null;
+  const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||2)),cosLat=Math.max(.08,Math.cos(zoomState.focusLatitudeRadians));
+  const halfXTiles=Math.ceil((Math.max(1,zoomState.visibleFootprintWidthMeters)*.62)/(2*tileMeters*cosLat));
+  const halfYTiles=Math.ceil((Math.max(1,zoomState.visibleFootprintHeightMeters)*.62)/(2*tileMeters));
+  const minX=BigInt(focusTile.x)-BigInt(halfXTiles),maxX=BigInt(focusTile.x)+BigInt(halfXTiles);
+  const minY=BigInt(focusTile.y)-BigInt(halfYTiles),maxY=BigInt(focusTile.y)+BigInt(halfYTiles);
+  const floorDiv=(value,divisor)=>{let q=value/divisor,r=value%divisor;if(r!==0n&&value<0n)q-=1n;return q;};
+  const sampleTiles=[focusTile,...atlasQuerySamples(spec).map(point=>mapWorldTileAt(point.latitudeRadians,point.longitudeRadians))];
+  const uniqueSampleTiles=[],sampleSeen=new Set();
+  for(const tile of sampleTiles){
+    const key=String(tile.x)+"|"+String(tile.y);if(sampleSeen.has(key))continue;
+    sampleSeen.add(key);uniqueSampleTiles.push(Object.freeze({x:String(tile.x),y:String(tile.y)}));
+  }
+  uniqueSampleTiles.sort((a,b)=>{
+    const adx=Number(BigInt(a.x)-BigInt(focusTile.x)),ady=Number(BigInt(a.y)-BigInt(focusTile.y));
+    const bdx=Number(BigInt(b.x)-BigInt(focusTile.x)),bdy=Number(BigInt(b.y)-BigInt(focusTile.y));
+    return adx*adx+ady*ady-(bdx*bdx+bdy*bdy)||a.y.localeCompare(b.y)||a.x.localeCompare(b.x);
+  });
+  const entities=[],seen=new Set(),classCounts={};let queryCellCount=0;
+  for(const classId of classes){
+    const classSpec=api.HIERARCHY_CLASS_SPECS[classId];if(!classSpec)continue;
+    const size=BigInt(Math.max(1,Math.round(Number(classSpec.cellTiles)||1)));
+    const classBudget=Math.max(1,Math.min(4,Number(spec.classBudgets?.[classId]||1)));
+    const cellSeen=new Set();let checked=0;
+    for(const tile of uniqueSampleTiles){
+      const cx=floorDiv(BigInt(tile.x),size),cy=floorDiv(BigInt(tile.y),size),cellKey=cx+"|"+cy;
+      if(cellSeen.has(cellKey))continue;cellSeen.add(cellKey);
+      queryCellCount++;checked++;
+      let record=null;
+      try{
+        const status=api.canonicalSettlementAtCellCacheStatus?.(activeSeed,classId,cx,cy)||null;
+        if(status?.ready)record=status.record||null;
+        else atlasQueueSettlementPrewarm(classId,cx,cy);
+      }catch(_){record=null;}
+      if(record){
+        const rx=BigInt(String(record.center.x)),ry=BigInt(String(record.center.y));
+        if(rx>=minX&&rx<=maxX&&ry>=minY&&ry<=maxY&&!seen.has(record.id)){
+          const type=record.classId==="city"?"city":record.classId==="town"?"town":record.classId==="village"?"village":null;
+          if(type){
+            const anchor={x:String(record.center.x),y:String(record.center.y)},surface=atlasPlanetSurfaceForTile(anchor.x,anchor.y);
+            if(surface.sample?.land){
+              const entity=atlasEntityBase(record.id,type,record.name,anchor,"SettlementArchetypes.canonicalSettlementAtCell:seed-hierarchy-bounded",{
+                countryId:record.countryId||null,regionId:record.regionId||null,settlementClass:record.classId,
+                importanceClass:record.importanceClass||record.classId,settlementRole:record.role||null,
+                generationCellId:record.generationCell?.id||null,generationCellX:record.generationCell?.cellX??null,generationCellY:record.generationCell?.cellY??null,
+                hierarchyRevision:"settlement-hierarchy-v"+String(api.HIERARCHY_VERSION||1)+"-atlas-bounded-v1",hierarchySignature:record.cacheRegenerationSignature||null,
+                carryingCapacity:Number(record.carryingCapacity||0),candidateRank:Number(record.candidateRank||0),
+                nearestSameClassMeters:record.nearestSameClassMeters??null,nearestHigherClassMeters:record.nearestHigherClassMeters??null,
+                importance:record.importanceClass==="major-city"?6:record.classId==="city"?4:record.classId==="town"?2:0
+              });
+              if(entity){seen.add(record.id);entities.push(entity);classCounts[record.importanceClass||record.classId]=(classCounts[record.importanceClass||record.classId]||0)+1;}
+            }
+          }
+        }
+      }
+      if(checked>=classBudget)break;
+    }
+  }
+  entities.sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+  const signature="ATLAS-HIDX-"+atlasHashText(entities.map(item=>[item.id,item.type,item.anchorTile.x,item.anchorTile.y].join(":")).join("|"));
+  const diagnostics=Object.freeze({
+    revision:"settlement-hierarchy-v"+String(api.HIERARCHY_VERSION||1)+"-atlas-bounded-v1",signature,
+    classCounts:Object.freeze({...classCounts}),queryCellCount,
+    boundedQueryCellLimit:classes.reduce((sum,classId)=>sum+Math.max(1,Math.min(4,Number(spec.classBudgets?.[classId]||1))),0),
+    bounded:true,fullWorldScan:false,seedOnly:true,cameraIndependent:false,viewportIndependent:false,lodIndependent:false,streamingOrderIndependent:true,
+    requestedClasses:Object.freeze(classes.slice()),resolvedClasses:Object.freeze(classes.slice())
+  });
+  return Object.freeze({
+    key:[activeSeed,spec.id,minX,maxX,minY,maxY,classes.join(","),signature].join(":"),
+    entities:Object.freeze(entities),diagnostics
+  });
+}
+function atlasBandSpec(_band,portrait){return currentSemanticLayerPolicy(portrait);}
+function atlasQuerySamples(spec){
+  const globe=spec.queryMode==="globe";
+  const out=[];
+  if(globe){
+    const rows=3,cols=5,latSpan=Number(spec.latSpan||28)*Math.PI/180,lonSpan=Number(spec.lonSpan||44)*Math.PI/180;
+    for(let r=0;r<rows;r++)for(let col=0;col<cols;col++){
+      const fy=rows===1?0:(r/(rows-1)-.5)*2,fx=cols===1?0:(col/(cols-1)-.5)*2;
+      out.push(Object.freeze({latitudeRadians:clamp(zoomState.focusLatitudeRadians-fy*latSpan,-Math.PI*.499999,Math.PI*.499999),longitudeRadians:wrapLongitudeRadians(zoomState.focusLongitudeRadians+fx*lonSpan)}));
+    }
+  }else{
+    const rows=3,cols=3,width=Math.max(1,zoomState.visibleFootprintWidthMeters*.88),height=Math.max(1,zoomState.visibleFootprintHeightMeters*.88);
+    for(let r=0;r<rows;r++)for(let col=0;col<cols;col++)out.push(geoPointFromViewportGrid(col,r,cols,rows,width,height));
+  }
+  return out;
+}
+function atlasFocusEntityIds(spec){
+  const tile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians),ids={},needed=new Set(spec.kinds);
+  let countryEntity=null,regionEntity=null;
+  if(needed.has("country")||needed.has("capital")){
+    const key=atlasAuthorityKey("country",tile);
+    if(!atlasAuthorityIndex.has(key))atlasQueueAuthority("country",tile);
+    countryEntity=atlasAuthorityIndex.get(key)||null;
+  }
+  if(needed.has("region")){
+    const key=atlasAuthorityKey("region",tile);
+    if(!atlasAuthorityIndex.has(key))atlasQueueAuthority("region",tile);
+    regionEntity=atlasAuthorityIndex.get(key)||null;
+  }
+  if(needed.has("continent")){
+    const surface=atlasPlanetSurfaceForTile(tile.x,tile.y);
+    ids.continent=surface.sample?.land?(surface.sample?.continentId||null):null;
+  }
+  if(needed.has("country"))ids.country=countryEntity?.id||null;
+  if(needed.has("capital"))ids.capital=countryEntity?.capital?.id||null;
+  if(needed.has("region"))ids.region=regionEntity?.id||null;
+  for(const kind of ["city","town","village"]){
+    if(!needed.has(kind))continue;
+    let record=null;
+    try{
+      const api=window.SettlementArchetypes,classSpec=api?.HIERARCHY_CLASS_SPECS?.[kind];
+      if(classSpec){
+        const size=BigInt(Math.max(1,Math.round(Number(classSpec.cellTiles)||1)));
+        const floorDiv=(value,divisor)=>{let q=value/divisor,r=value%divisor;if(r!==0n&&value<0n)q-=1n;return q;};
+        const cx=floorDiv(BigInt(tile.x),size),cy=floorDiv(BigInt(tile.y),size);
+        const status=api.canonicalSettlementAtCellCacheStatus?.(activeSeed,kind,cx,cy)||null;
+        if(status?.ready)record=status.record||null;
+        else atlasQueueSettlementPrewarm(kind,cx,cy);
+      }
+    }catch(_){record=null;}
+    ids[kind]=record?.id||null;
+  }
+  if(needed.has("district"))ids.district=atlasCellId("DIST",atlasCellForTile(tile,256));
+  return {tile,ids,primaryId:ids[spec.focusKind]||null};
+}
+function atlasQueryCandidates(spec){
+  const precision=spec.queryMode==="globe"?(spec.index<=1?1:2):4;
+  const settlementHierarchy=(spec.kinds.includes("city")||spec.kinds.includes("town")||spec.kinds.includes("village"))?atlasSettlementHierarchyQuery(spec):null;
+  const key=[activeSeed,spec.id,zoomState.focusLatitudeRadians.toFixed(precision),zoomState.focusLongitudeRadians.toFixed(precision),
+    Math.round(Math.log10(Math.max(1,zoomState.visibleFootprintWidthMeters))*20),spec.kinds.join(","),settlementHierarchy?.key||"no-settlement-hierarchy"].join("|");
+  if(atlasLabelCache.key===key)return atlasLabelCache;
+  const started=performance.now(),samples=atlasQuerySamples(spec),unique=new Map(),focus=atlasFocusEntityIds(spec);
+  if(settlementHierarchy){
+    for(const entity of settlementHierarchy.entities||[])if(entity&&!unique.has(entity.id))unique.set(entity.id,entity);
+  }
+  for(const [sampleIndex,point] of samples.entries()){
+    let surface=null;try{surface=geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)||null;}catch(_){surface=null;}if(!surface)continue;
+    const tile=mapWorldTileAt(point.latitudeRadians,point.longitudeRadians);
+    for(const kind of spec.kinds){
+      if(kind==="landmark"||(settlementHierarchy&&["city","town","village"].includes(kind)))continue;
+      if(samples.length>9&&["country","region","capital"].includes(kind)&&sampleIndex%3!==1)continue;
+      if(kind==="ocean"){if(surface.land)continue;}else if(!surface.land)continue;
+      let entity=null;try{entity=atlasCanonicalEntityForKind(kind,tile);}catch(_){entity=null;}if(!entity)continue;
+      if(!unique.has(entity.id))unique.set(entity.id,entity);
+    }
+  }
+  if(spec.kinds.includes("landmark")){
+    for(const d of destinationNavigator.descriptors){
+      if(!["peak","mountain","island","ruin","water"].includes(d.type)||!spec.landmarkKinds.includes(d.type))continue;
+      if(spec.index<=5&&Number(d.importance||0)<3)continue;
+      const tile=mapWorldTileAt(d.latitudeRadians,d.longitudeRadians);
+      const entity=atlasEntityBase(d.id,"landmark",d.name,tile,"DestinationNavigatorDescriptor",{landmarkType:d.type,importance:Number(d.importance||0),latitudeRadians:Number(d.latitudeRadians)||0,longitudeRadians:Number(d.longitudeRadians)||0,latitudeDegrees:Number(d.latitudeDegrees)||0,longitudeDegrees:Number(d.longitudeDegrees)||0});
+      if(entity&&!unique.has(entity.id))unique.set(entity.id,entity);
+    }
+  }
+  if(spec.index===2){
+    const countryCount=[...unique.values()].filter(entity=>entity.type==="country").length;
+    if(countryCount<2){for(const [id,entity] of [...unique.entries()])if(entity.type==="region")unique.delete(id);}
+  }
+  const typePriority={continent:100,ocean:96,country:90,landmark:84,region:82,capital:78,city:72,town:70,village:68,district:60};
+  const candidates=[...unique.values()].map(entity=>Object.freeze({...entity,currentFocus:entity.id===focus.primaryId,priority:(entity.id===focus.primaryId?1000:0)+(typePriority[entity.type]||0)+Number(entity.importance||0)}))
+    .sort((a,b)=>b.priority-a.priority||a.id.localeCompare(b.id));
+  atlasLabelCache={key,candidates,queryCellCount:samples.length+Number(settlementHierarchy?.diagnostics?.queryCellCount||0),
+    cityQuery:null,settlementHierarchy,buildMs:Number((performance.now()-started).toFixed(3)),focus};
+  return atlasLabelCache;
+}
+function atlasResolvedIdentity(entity){
+  const cacheKey=activeSeed+"|"+entity.id+"|"+entity.anchorTile.x+"|"+entity.anchorTile.y;
+  if(atlasIdentityCache.has(cacheKey))return atlasIdentityCache.get(cacheKey);
+  const tile=entity.anchorTile,ids={continent:null,country:null,region:null,city:null,town:null,district:null,village:null};
+  let resolvedName=null,resolvedId=null;
+  try{
+    if(entity.type==="continent"){
+      const surface=atlasPlanetSurfaceForTile(tile.x,tile.y);
+      ids.continent=surface.sample?.land?(surface.sample?.continentId||null):null;resolvedId=ids.continent;
+      resolvedName=surface.sample?.continentName||null;
+    }else if(entity.type==="ocean"){
+      const s=atlasPlanetSurfaceForTile(tile.x,tile.y);resolvedName=s.sample?.land?null:entity.name;resolvedId=s.sample?.land?null:entity.id;
+    }else if(entity.type==="country"){
+      const country=atlasAuthorityIndex.get(atlasAuthorityKey("country",tile))||null;ids.country=country?.id||null;resolvedId=country?.id||null;resolvedName=country?.name||null;
+    }else if(entity.type==="capital"){
+      const country=atlasAuthorityIndex.get(atlasAuthorityKey("country",tile))||null;ids.country=country?.id||null;resolvedId=country?.capital?.id||null;resolvedName=country?.capital?.name||null;
+    }else if(entity.type==="region"){
+      const region=atlasAuthorityIndex.get(atlasAuthorityKey("region",tile))||null;ids.region=region?.id||null;ids.country=region?.countryId||null;resolvedId=region?.id||null;resolvedName=region?.name||null;
+    }else if(["city","town","village"].includes(entity.type)&&entity.generationCellX!=null&&entity.generationCellY!=null){
+      const record=window.SettlementArchetypes?.canonicalSettlementAtCell?.(
+        activeSeed,entity.settlementClass||entity.type,entity.generationCellX,entity.generationCellY
+      )||null;
+      ids[entity.type]=record?.id||null;ids.country=record?.countryId||entity.countryId||null;ids.region=record?.regionId||entity.regionId||null;
+      resolvedId=record?.id||null;resolvedName=record?.name||null;
+    }else if(entity.type==="city"){
+      const cell=atlasCellForTile(tile,atlasCityCellSize()),city=window.GeographyFoundation?.cityAtCell?.(activeSeed,cell.x,cell.y)||null;
+      ids.city=city?atlasCellId("CITY",cell):null;resolvedId=ids.city;resolvedName=city?.name||null;
+    }else if(entity.type==="town"){
+      const country=entity.countryId?window.PoliticalGeography?.countryById?.(activeSeed,entity.countryId):window.PoliticalGeography?.countryAt?.(activeSeed,tile.x,tile.y);
+      const plan=(country&&window.SettlementArchetypes?.settlementsForCountry?.(activeSeed,country,3)||[]).find(item=>item?.id===entity.id&&item?.classId==="town")||null;
+      ids.town=plan?.id||null;ids.country=plan?.countryId||entity.countryId||null;ids.region=plan?.regionId||entity.regionId||null;
+      resolvedId=plan?.id||null;resolvedName=plan?.name||null;
+    }else if(entity.type==="district"){
+      const cell=atlasCellForTile(tile,256);ids.district=atlasCellId("DIST",cell);resolvedId=ids.district;resolvedName=window.GeographyFoundation?.hierarchyName?.(activeSeed,"district",tile.x,tile.y)||null;
+    }else if(entity.type==="village"){
+      const village=window.GeographyFoundation?.nearestVillage?.(activeSeed,tile.x,tile.y,false)||null;
+      if(village){ids.village=atlasCellId("VIL",Object.freeze({x:BigInt(village.cellX),y:BigInt(village.cellY)}));resolvedId=ids.village;resolvedName=village.name;}
+    }else if(entity.type==="landmark"){
+      resolvedName=entity.name;resolvedId=entity.id;
+    }
+  }catch(_){}
+  const result=Object.freeze({ids:Object.freeze(ids),resolvedName:resolvedName||null,resolvedId:resolvedId||null,identityMatch:String(resolvedId||"")===String(entity.id)&&String(resolvedName||"")===String(entity.name)});
+  atlasIdentityCache.set(cacheKey,result);return result;
+}
+function atlasProjectCandidate(entity,viewportRect=null){
+  const scene=geographicScenePoint(entity.latitudeRadians,entity.longitudeRadians,entity.type==="landmark"?8:5);if(!scene)return {reason:"outside-footprint"};
+  if(scene.mode==="globe"&&planet){
+    const center=planet.getPosition(),normal=scene.world.clone().sub(center),toCamera=cameraEntity.getPosition().clone().sub(scene.world);
+    if(normal.dot(toCamera)<=0)return {reason:"hidden-hemisphere"};
+  }
+  const screen=cameraEntity.camera.worldToScreen(scene.world),viewDepth=cameraViewDepth(scene.world),rect=viewportRect||canvas.getBoundingClientRect();
+  if(!Number.isFinite(screen.x)||!Number.isFinite(screen.y)||!Number.isFinite(screen.z))return {reason:"invalid-projection"};
+  if(!Number.isFinite(viewDepth)||viewDepth>=0)return {reason:"behind-camera"};
+  const x=screen.x/Math.max(1,rect.width)*100,y=screen.y/Math.max(1,rect.height)*100;
+  if(x<2||x>98||y<3||y>97)return {reason:"offscreen"};
+  return {projection:{x,y,screenX:screen.x,screenY:screen.y,depth:screen.z,viewDepth,mode:scene.mode}};
+}
+function atlasLabelBox(entity,p,portrait){
+  const nameLen=Math.max(5,String(entity.name).length),scale=portrait?.82:1;
+  const perChar={continent:15.5,ocean:11.5,country:11.0,region:8.2,capital:7.8,city:7.4,town:7.2,village:7.0,district:6.6,landmark:7.4}[entity.type]||7.4;
+  const minWidth={continent:180,ocean:140,country:150,region:115,capital:110,city:104,town:102,village:100,district:96,landmark:86}[entity.type]||100;
+  const maxWidth={continent:360,ocean:260,country:300,region:230,capital:220,city:200,town:196,village:190,district:180,landmark:180}[entity.type]||200;
+  const width=Math.min(maxWidth,Math.max(minWidth,30+nameLen*perChar))*scale,height=(entity.type==="continent"||entity.type==="ocean"?48:40)*scale;
+  return {left:p.screenX-width/2,right:p.screenX+width/2,top:p.screenY-height/2,bottom:p.screenY+height/2};
+}
+function atlasBoxesOverlap(a,b,gap){return !(a.right+gap<b.left||b.right+gap<a.left||a.bottom+gap<b.top||b.bottom+gap<a.top);}
+function atlasPlacementFits(box,rect,reserved,occupied,margin,gap){
+  if(box.left<margin||box.right>rect.width-margin||box.top<margin||box.bottom>rect.height-margin)return false;
+  if(reserved.some(other=>atlasBoxesOverlap(box,other,gap)))return false;
+  if(occupied.some(other=>atlasBoxesOverlap(box,other,gap)))return false;
+  return true;
+}
+function atlasFindLabelPlacement(entity,p,portrait,rect,reserved,occupied){
+  const base=atlasLabelBox(entity,p,portrait),width=Math.max(1,base.right-base.left),height=Math.max(1,base.bottom-base.top);
+  const margin=portrait?6:8,gap=portrait?5:7,seen=new Set(),candidates=[],maxDisplacement=entity.type==="landmark"?(portrait?82:112):(portrait?58:82);
+  const remember=(dx,dy)=>{
+    if(Math.hypot(dx,dy)>maxDisplacement+.01)return;
+    const key=Math.round(dx)+"|"+Math.round(dy);
+    if(seen.has(key))return;seen.add(key);candidates.push({dx,dy});
+  };
+  // Placement choice must be a pure function of the current canonical anchor,
+  // viewport and deterministic candidate ordering. Historical offsets are kept
+  // only as telemetry; consulting them here made identical visible states choose
+  // different layouts after an intervening pan/portrait frame.
+  if(entity.type==="landmark"){
+    remember(0,-26);remember(26,0);remember(-26,0);remember(0,26);
+  }else remember(0,0);
+  const stepX=Math.max(22,Math.min(42,width*.18)),stepY=Math.max(20,Math.min(34,height*.70));
+  for(let ring=1;ring<=2;ring++){
+    const dx=stepX*ring,dy=stepY*ring;
+    remember(0,-dy);remember(0,dy);remember(-dx,0);remember(dx,0);
+    remember(-dx,-dy);remember(dx,-dy);remember(-dx,dy);remember(dx,dy);
+  }
+  const tryCandidate=({dx,dy})=>{
+    const minX=margin+width/2,maxX=Math.max(minX,rect.width-margin-width/2);
+    const minY=margin+height/2,maxY=Math.max(minY,rect.height-margin-height/2);
+    const screenX=clamp(p.screenX+dx,minX,maxX),screenY=clamp(p.screenY+dy,minY,maxY);
+    const actualDx=screenX-p.screenX,actualDy=screenY-p.screenY,displacement=Math.hypot(actualDx,actualDy);
+    if(displacement>maxDisplacement+.01)return null;
+    if(p.mode==="globe"&&entity.type!=="landmark"){
+      const cx=rect.width*.5,cy=rect.height*.5;
+      const anchorRadius=Math.hypot(p.screenX-cx,p.screenY-cy),placedRadius=Math.hypot(screenX-cx,screenY-cy);
+      if(placedRadius>anchorRadius+4)return null;
+    }
+    const placed={...p,screenX,screenY,x:screenX/Math.max(1,rect.width)*100,y:screenY/Math.max(1,rect.height)*100};
+    const box=atlasLabelBox(entity,placed,portrait);
+    if(!atlasPlacementFits(box,rect,reserved,occupied,margin,gap))return null;
+    return {projection:placed,box,dx:actualDx,dy:actualDy,displacement,maxDisplacement};
+  };
+  for(const candidate of candidates){
+    const placed=tryCandidate(candidate);
+    if(placed)return placed;
+  }
+  return null;
+}
+function renderAtlasLabels(labelsLayer,portrait,spec){
+  const query=atlasQueryCandidates(spec),occupied=[],visible=[],visibleLandmarks=[];
+  let hidden=0,behind=0,offscreen=0,occluded=0,overlap=0;
+  const hiddenReasons={outsideFootprint:0,hiddenHemisphere:0,behindCamera:0,offscreen:0,identityMismatch:0,overlap:0,duplicateName:0,classBudget:0,globalBudget:0};
+  const visibilityReasonById=new Map();
+  const eligibleCountsByClass={},renderedCountsByClass={};
+  for(const entity of query.candidates)eligibleCountsByClass[entity.type]=(eligibleCountsByClass[entity.type]||0)+1;
+  const rect=canvas.getBoundingClientRect();
+  const projectedById=new Map(),identityById=new Map(),validCandidates=[],seenDisplayNames=new Set();
+  const projectionFor=entity=>{
+    if(projectedById.has(entity.id))return projectedById.get(entity.id);
+    // One viewport measurement per semantic frame avoids repeated forced layout
+    // while projecting the bounded label candidate set.
+    const projected=atlasProjectCandidate(entity,rect);projectedById.set(entity.id,projected);return projected;
+  };
+  // A candidate may consume semantic density only after it is actually eligible
+  // for this frame. Projection/occlusion and canonical identity come before the
+  // bounded class/global budgets; otherwise offscreen high-priority entities can
+  // starve visible lower-priority entities and create an empty map.
+  for(const entity of query.candidates){
+    const projected=projectionFor(entity);
+    if(!projected.projection){
+      if(projected.reason==="hidden-hemisphere"){hidden++;occluded++;hiddenReasons.hiddenHemisphere++;}
+      else if(projected.reason==="behind-camera"){behind++;hiddenReasons.behindCamera++;}
+      else if(projected.reason==="outside-footprint"){offscreen++;hiddenReasons.outsideFootprint++;}
+      else {offscreen++;hiddenReasons.offscreen++;}
+      visibilityReasonById.set(entity.id,String(projected.reason||"offscreen"));
+      continue;
+    }
+    const identity=atlasResolvedIdentity(entity);identityById.set(entity.id,identity);
+    if(!identity.identityMatch){hiddenReasons.identityMismatch++;visibilityReasonById.set(entity.id,"identity-mismatch");continue;}
+    const displayKey=entity.type+"|"+String(entity.name).trim().toLocaleLowerCase();
+    if(seenDisplayNames.has(displayKey)){hiddenReasons.duplicateName++;visibilityReasonById.set(entity.id,"duplicate-name");continue;}
+    seenDisplayNames.add(displayKey);validCandidates.push(entity);
+  }
+  if(atlasStickyBand!==spec.id){
+    atlasStickyBand=spec.id;
+    atlasLabelPlacementCache.clear();
+  }
+  // Semantic hysteresis stabilizes the eligible class set across scale
+  // thresholds. Density membership inside that set is recomputed from the
+  // current projected/validated candidates so identical visible state cannot
+  // inherit a different label set from prior pan or viewport history.
+  atlasStickyEntities.clear();
+  const selectedClassCounts=Object.create(null);
+  const canAdd=entity=>{
+    if(atlasStickyEntities.has(entity.id))return true;
+    if(atlasStickyEntities.size>=spec.budget){hiddenReasons.globalBudget++;visibilityReasonById.set(entity.id,"global-budget");return false;}
+    const limit=Number(spec.classBudgets?.[entity.type]??spec.budget);
+    if(Number(selectedClassCounts[entity.type]||0)>=limit){hiddenReasons.classBudget++;visibilityReasonById.set(entity.id,"class-budget");return false;}
+    atlasStickyEntities.set(entity.id,entity);
+    selectedClassCounts[entity.type]=Number(selectedClassCounts[entity.type]||0)+1;
+    return true;
+  };
+  // Landmarks are independently eligible at their scale tier. Reserve a small
+  // bounded quota so hierarchy labels cannot consume the entire sticky budget.
+  const landmarkReserve=spec.kinds.includes("landmark")?Math.min(spec.budget,portrait?2:3,Number(spec.classBudgets?.landmark??3)):0;
+  const viewportCenter=Object.freeze({x:rect.width*.5,y:rect.height*.5});
+  const preferredLandmarks=validCandidates.filter(entity=>entity.type==="landmark")
+    .map(entity=>{const projected=projectionFor(entity).projection;return {entity,projected,distance:Math.hypot(projected.screenX-viewportCenter.x,projected.screenY-viewportCenter.y)};})
+    .sort((a,b)=>a.distance-b.distance||Number(b.entity.importance||0)-Number(a.entity.importance||0)||a.entity.id.localeCompare(b.entity.id))
+    .slice(0,landmarkReserve)
+    .map(item=>item.entity);
+  for(const entity of preferredLandmarks){
+    if(atlasStickyEntities.has(entity.id)){atlasStickyEntities.set(entity.id,entity);continue;}
+    while(atlasStickyEntities.size>=spec.budget){
+      const removable=[...atlasStickyEntities.values()].filter(item=>item.type!=="landmark")
+        .sort((a,b)=>Number(a.importance||0)-Number(b.importance||0)||b.id.localeCompare(a.id))[0];
+      if(!removable)break;
+      atlasStickyEntities.delete(removable.id);atlasLabelPlacementCache.delete(removable.id);
+      selectedClassCounts[removable.type]=Math.max(0,Number(selectedClassCounts[removable.type]||0)-1);
+    }
+    canAdd(entity);
+  }
+  for(const entity of validCandidates)canAdd(entity);
+  const typePriority={continent:100,ocean:96,country:90,landmark:84,region:82,capital:78,city:72,town:70,village:68,district:60};
+  const rankedCandidates=[...atlasStickyEntities.values()].map(entity=>({
+    ...entity,
+    currentFocus:entity.id===query.focus?.primaryId,
+    priority:(entity.id===query.focus?.primaryId?1000:0)+(typePriority[entity.type]||0)+Number(entity.importance||0)
+  })).sort((a,b)=>b.priority-a.priority||a.id.localeCompare(b.id));
+  const candidates=rankedCandidates;
+  const reservedSelectors=[".planet-map-context",".planet-places-button",".planet-scale-ruler",".planet-world-center"];
+  const reserved=reservedSelectors.map(selector=>root?.querySelector?.(selector)?.getBoundingClientRect?.()).filter(Boolean).map(r=>({left:r.left-rect.left,right:r.right-rect.left,top:r.top-rect.top,bottom:r.bottom-rect.top}));
+  for(const entity of candidates){
+    const projected=projectionFor(entity);
+    if(!projected.projection)continue;
+    const identity=identityById.get(entity.id)||atlasResolvedIdentity(entity);
+    if(!identity.identityMatch)continue;
+    const anchor=projected.projection,placed=atlasFindLabelPlacement(entity,anchor,portrait,rect,reserved,occupied);
+    if(!placed){overlap++;hiddenReasons.overlap++;visibilityReasonById.set(entity.id,"overlap");continue;}
+    atlasLabelPlacementCache.set(entity.id,{dx:placed.dx,dy:placed.dy});
+    const p=placed.projection,box=placed.box;
+    // Once the authoritative starting-settlement road/lot fabric is visible,
+    // its own focus label is redundant and can obscure the very network the
+    // player is approaching. Preserve all other labels and the world-center
+    // marker; suppress only the current focused town/village at route scale.
+    const suppressFocusSettlementLabel=entity.currentFocus===true&&
+      (entity.type==="village"||entity.type==="town")&&spec.settlementRevealTier==="route";
+    if(suppressFocusSettlementLabel){
+      visibilityReasonById.set(entity.id,"focus-settlement-fabric-visible");
+      continue;
+    }
+    const tag=document.createElement("div");
+    tag.className=entity.type==="landmark"?"planet-map-landmark":"planet-atlas-label";
+    tag.dataset.kind=entity.type==="landmark"?(entity.landmarkType||"landmark"):entity.type;
+    tag.dataset.focus=String(entity.currentFocus===true);
+    const semanticMarker=semanticMarkerClass(entity);
+    if(semanticMarker)tag.dataset.markerClass=semanticMarker;
+    const rootRect=root.getBoundingClientRect(),canvasOffsetX=rect.left-rootRect.left,canvasOffsetY=rect.top-rootRect.top;
+    tag.style.left=(canvasOffsetX+p.screenX).toFixed(2)+"px";tag.style.top=(canvasOffsetY+p.screenY).toFixed(2)+"px";
+    tag.innerHTML="<small></small><strong></strong>";
+    tag.querySelector("small").textContent=(entity.type==="landmark"?String(entity.landmarkType||"landmark"):entity.type).toUpperCase();
+    tag.querySelector("strong").textContent=entity.name;
+    const displacement=Math.hypot(placed.dx,placed.dy),leaderVisible=entity.type==="landmark"||displacement>=18;
+    if(leaderVisible){
+      const leader=document.createElement("i");leader.className="planet-atlas-leader";leader.dataset.landmark=String(entity.type==="landmark");
+      leader.style.left=(canvasOffsetX+anchor.screenX).toFixed(2)+"px";leader.style.top=(canvasOffsetY+anchor.screenY).toFixed(2)+"px";
+      leader.style.width=displacement.toFixed(1)+"px";
+      leader.style.transform="rotate("+Math.atan2(placed.dy,placed.dx).toFixed(5)+"rad)";
+      labelsLayer.appendChild(leader);
+    }
+    labelsLayer.appendChild(tag);occupied.push(box);
+    const renderedRect=tag.getBoundingClientRect();
+    const renderedCenterX=renderedRect.left+renderedRect.width*.5-rect.left;
+    const renderedCenterY=renderedRect.top+renderedRect.height*.5-rect.top;
+    const renderedClipped=renderedRect.left<rect.left-0.5||renderedRect.right>rect.right+0.5||renderedRect.top<rect.top-0.5||renderedRect.bottom>rect.bottom+0.5;
+    const anchorSurface=atlasPlanetSurfaceForTile(entity.anchorTile.x,entity.anchorTile.y);
+    const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||2));
+    const roundTrip=geography?.registrationRoundTrip?.(entity.anchorTile.x,entity.anchorTile.y,tileMeters,WORLD_RADIUS_METERS)||null;
+    let politicalOwner=null;
+    if(["country","region","capital","town"].includes(entity.type))try{politicalOwner=window.PoliticalGeography?.ownerAt?.(activeSeed,entity.anchorTile.x,entity.anchorTile.y)||null;}catch(_){politicalOwner=null;}
+    const record=Object.freeze({
+      canonicalEntityId:entity.id,entityType:entity.type,displayClass:entity.type==="landmark"?(entity.landmarkType||"landmark"):entity.type,
+      authoritativeName:entity.name,authority:entity.authority,currentFocus:Boolean(entity.currentFocus),
+      anchorLatitudeDegrees:Number(entity.latitudeDegrees.toFixed(5)),anchorLongitudeDegrees:Number(entity.longitudeDegrees.toFixed(5)),
+      anchorWorldTile:entity.anchorTile,resolvedHierarchyIds:identity.ids,identityMatch:identity.identityMatch,
+      anchorScreenX:Number(anchor.screenX.toFixed(2)),anchorScreenY:Number(anchor.screenY.toFixed(2)),
+      screenX:Number(p.screenX.toFixed(2)),screenY:Number(p.screenY.toFixed(2)),
+      placementDx:Number(placed.dx.toFixed(2)),placementDy:Number(placed.dy.toFixed(2)),
+      displacementPixels:Number(displacement.toFixed(2)),leaderVisible,
+      renderedScreenX:Number(renderedCenterX.toFixed(2)),renderedScreenY:Number(renderedCenterY.toFixed(2)),
+      renderedPlacementErrorPixels:Number(Math.hypot(renderedCenterX-p.screenX,renderedCenterY-p.screenY).toFixed(2)),
+      renderedClipped,
+      planetLand:Boolean(anchorSurface.sample?.land),planetSurfaceClass:String(anchorSurface.sample?.surfaceClass||"unknown"),
+      continentId:anchorSurface.sample?.continentId||null,continentName:anchorSurface.sample?.continentName||null,
+      politicalOwnerId:politicalOwner?.id||null,parentCountryMatch:entity.type==="capital"?Boolean(politicalOwner?.id&&politicalOwner.id===entity.countryId):null,
+      canonicalSpatialCellId:coordinateFabricAuthority()?.cellForTile?.(entity.anchorTile.x,entity.anchorTile.y)?.id||null,
+      roundTripErrorTiles:Number(roundTrip?.errorTiles??0),projection:p.mode
+    });
+    renderedCountsByClass[entity.type]=(renderedCountsByClass[entity.type]||0)+1;
+    visibilityReasonById.set(entity.id,"visible-labeled-callout");
+    visible.push(record);if(entity.type==="landmark")visibleLandmarks.push(Object.freeze({id:entity.id,name:entity.name,type:entity.landmarkType||"landmark",latitudeDegrees:record.anchorLatitudeDegrees,longitudeDegrees:record.anchorLongitudeDegrees,screenX:record.screenX,screenY:record.screenY,anchorScreenX:record.anchorScreenX,anchorScreenY:record.anchorScreenY,leaderVisible:record.leaderVisible,leaderStartX:record.anchorScreenX,leaderStartY:record.anchorScreenY,leaderEndX:record.screenX,leaderEndY:record.screenY,displacementPixels:record.displacementPixels,canonicalSpatialCellId:record.canonicalSpatialCellId,projection:record.projection}));
+  }
+  const markerTelemetry=semanticMarkerTelemetry(labelsLayer,spec,query,visible,projectedById,identityById,visibilityReasonById);
+  const orderingSignature=atlasHashText(visible.map(item=>item.canonicalEntityId+"@"+item.screenX.toFixed(1)+","+item.screenY.toFixed(1)).join("|"));
+  return {query,visible,visibleLandmarks,hidden,behind,offscreen,occluded,overlap,markerTelemetry,
+    eligibleCountsByClass:Object.freeze({...eligibleCountsByClass}),renderedCountsByClass:Object.freeze({...renderedCountsByClass}),
+    hiddenReasons:Object.freeze({...hiddenReasons}),displacedCount:visible.filter(item=>item.displacementPixels>1).length,
+    leaderCount:visible.filter(item=>item.leaderVisible).length,orderingSignature,
+    viewport:Object.freeze({width:rect.width,height:rect.height})};
+}
+function semanticMarkerTelemetry(labelsLayer,spec,query,visible,projectedById,identityById,visibilityReasonById){
+  const visibleById=new Map(visible.map(item=>[item.canonicalEntityId,item]));
+  const eligibleCounts={},renderedCounts={},culledCounts={},hiddenReasons={};
+  const decisions=[],rendered=[];
+  const addCount=(target,key)=>{target[key]=(target[key]||0)+1;};
+  const decide=(entity,markerClass,reason,projection,extra={})=>{
+    const policy=semanticMarkerPolicy(markerClass),visibleRecord=visibleById.get(entity?.id)||null;
+    const identity=identityById.get(entity?.id)||null;
+    const parentGeography=Object.freeze({
+      continentId:visibleRecord?.continentId||null,
+      countryId:entity?.countryId||visibleRecord?.politicalOwnerId||identity?.ids?.country||null,
+      regionId:entity?.regionId||identity?.ids?.region||null
+    });
+    const record=Object.freeze({
+      canonicalEntityId:String(entity?.id||extra.id||markerClass),
+      semanticClass:markerClass,
+      authoritativeName:String(entity?.name||extra.name||markerClass),
+      authority:String(entity?.authority||extra.authority||"PlanetStage.presentation"),
+      canonicalAnchorWorldTile:Object.freeze({x:String(entity?.anchorTile?.x??extra.anchorTile?.x??"0"),y:String(entity?.anchorTile?.y??extra.anchorTile?.y??"0")}),
+      anchorLatitudeDegrees:Number((entity?.latitudeDegrees??extra.latitudeDegrees??0).toFixed?.(6)??0),
+      anchorLongitudeDegrees:Number((entity?.longitudeDegrees??extra.longitudeDegrees??0).toFixed?.(6)??0),
+      parentGeography,
+      minimumDisplayScale:policy?.minimumDisplayScale||null,
+      maximumDisplayScale:policy?.maximumDisplayScale||null,
+      importance:Number(entity?.importance||0),
+      priority:Number(entity?.priority||0),
+      currentScale:SCALE_LADDER[spec.index],
+      visibilityReason:String(reason),
+      visible:reason==="visible-labeled-callout"||reason==="visible-debug-callout",
+      debugOnly:Boolean(policy?.debugOnly),
+      presentation:reason==="visible-debug-callout"?"labeled-debug-callout":"labeled-callout",
+      screenX:projection?.screenX==null?null:Number(projection.screenX.toFixed(2)),
+      screenY:projection?.screenY==null?null:Number(projection.screenY.toFixed(2)),
+      projection:projection?.mode||null
+    });
+    decisions.push(record);
+    addCount(eligibleCounts,markerClass);
+    if(record.visible){addCount(renderedCounts,markerClass);rendered.push(record);}
+    else{addCount(culledCounts,markerClass);addCount(hiddenReasons,record.visibilityReason);}
+    return record;
+  };
+  for(const entity of query.candidates){
+    const markerClass=semanticMarkerClass(entity);if(!markerClass)continue;
+    const policy=semanticMarkerPolicy(markerClass),projected=projectedById.get(entity.id)||atlasProjectCandidate(entity),projection=projected?.projection||null;
+    let reason=String(visibilityReasonById.get(entity.id)||projected?.reason||"not-rendered");
+    if(policy&&(spec.index<policy.minScaleIndex||spec.index>policy.maxScaleIndex))reason="scale-ineligible";
+    const budget=semanticMarkerClassBudget(spec,markerClass);
+    if(reason==="visible-labeled-callout"&&budget<=0)reason="class-budget";
+    decide(entity,markerClass,reason,projection);
+  }
+
+  const debugGeo=canonicalLatLonForLocalOffset(
+    zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians,
+    Math.max(40,zoomState.visibleFootprintWidthMeters*.18),
+    Math.max(30,zoomState.visibleFootprintHeightMeters*.12)
+  );
+  const debugTile=mapWorldTileAt(debugGeo.latitudeRadians,debugGeo.longitudeRadians),debugWorld=worldLatLonForTile(debugTile.x,debugTile.y);
+  const debugEntity=Object.freeze({
+    id:"DEBUG-CELL:"+debugTile.x+":"+debugTile.y,
+    type:"debug",markerClass:"debug-diagnostic",name:"DIAGNOSTIC CELL",authority:"PlanetStage.explicit-marker-debug-mode",
+    anchorTile:Object.freeze({x:String(debugTile.x),y:String(debugTile.y)}),
+    latitudeRadians:Number(debugWorld.latitudeRadians),longitudeRadians:Number(debugWorld.longitudeRadians),
+    latitudeDegrees:Number(debugWorld.latitudeDegrees),longitudeDegrees:Number(debugWorld.longitudeDegrees),
+    importance:0,priority:-100
+  });
+  const debugProjection=projectGeographicAnchor(debugEntity,{surfaceOffsetMeters:18});
+  let debugReason="debug-suppressed";
+  if(SEMANTIC_MARKER_DEBUG_MODE)debugReason=debugProjection?"visible-debug-callout":"debug-offscreen";
+  const debugDecision=decide(debugEntity,"debug-diagnostic",debugReason,debugProjection);
+  if(debugDecision.visible&&debugProjection){
+    const rootRect=root.getBoundingClientRect(),rect=canvas.getBoundingClientRect(),offsetX=rect.left-rootRect.left,offsetY=rect.top-rootRect.top;
+    const tag=document.createElement("div");tag.className="planet-debug-diagnostic-marker";tag.dataset.markerClass="debug-diagnostic";
+    tag.style.left=(offsetX+debugProjection.screenX).toFixed(2)+"px";tag.style.top=(offsetY+debugProjection.screenY).toFixed(2)+"px";
+    tag.innerHTML="<small>DEBUG MARKER</small><strong></strong>";
+    tag.querySelector("strong").textContent=debugTile.x+","+debugTile.y;
+    labelsLayer.appendChild(tag);
+  }
+  const known=new Set(SEMANTIC_MARKER_CLASSES);
+  const unknownProductionCount=SEMANTIC_MARKER_DEBUG_MODE?0:rendered.filter(item=>!known.has(item.semanticClass)||item.debugOnly).length;
+  const broadMinorRenderedCount=spec.index<=5?rendered.filter(item=>["town","village","route-road-node","debug-diagnostic"].includes(item.semanticClass)).length:0;
+  return Object.freeze({
+    policyRevision:SEMANTIC_MARKER_POLICY_REVISION,
+    debugMode:SEMANTIC_MARKER_DEBUG_MODE,
+    eligibleCountsByClass:Object.freeze({...eligibleCounts}),
+    renderedCountsByClass:Object.freeze({...renderedCounts}),
+    culledCountsByClass:Object.freeze({...culledCounts}),
+    hiddenReasonCounts:Object.freeze({...hiddenReasons}),
+    decisions:Object.freeze(decisions),
+    rendered:Object.freeze(rendered),
+    renderedCount:rendered.length,
+    culledCount:decisions.length-rendered.length,
+    debugSuppressedCount:Number(hiddenReasons["debug-suppressed"]||0),
+    unknownProductionCount,
+    broadMinorRenderedCount,
+    standaloneDecorativeGlyphCount:0,
+    bounded:true,
+    fullWorldScan:false
+  });
+}
+function geoPointFromViewportGrid(gx,gy,cols,rows,width,height){
+  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
+  const east=(gx/(cols-1)-.5)*width,north=(.5-gy/(rows-1))*height;
+  return Object.freeze({
+    latitudeRadians:clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999),
+    longitudeRadians:wrapLongitudeRadians(lon0+east/(WORLD_RADIUS_METERS*cosLat))
+  });
+}
+function interpolateGeoPoint(a,b,t){
+  const dLon=wrapLongitudeRadians(b.longitudeRadians-a.longitudeRadians);
+  return {latitudeRadians:a.latitudeRadians+(b.latitudeRadians-a.latitudeRadians)*t,longitudeRadians:wrapLongitudeRadians(a.longitudeRadians+dLon*t)};
+}
+function borderSignature(segments){
+  let h=2166136261>>>0;
+  const rows=segments.map(seg=>{
+    const pair=[seg.ownerA,seg.ownerB].sort().join("~");
+    const a=seg.aTile,b=seg.bTile;
+    return pair+"|"+a.x+","+a.y+"|"+b.x+","+b.y;
+  }).sort();
+  for(const row of rows)for(const ch of row){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
+  return (h>>>0).toString(16).toUpperCase().padStart(8,"0");
+}
+function snapBorderEndpointToNearbyCoast(point){
+  if(!point||!geography)return point;
+  const tile=point.tile||mapWorldTileAt(point.latitudeRadians,point.longitudeRadians);
+  const key=[activeSeed,tile.x,tile.y].join("|");
+  if(mapBorderEndpointSnapCache.has(key))return mapBorderEndpointSnapCache.get(key);
+  let origin=null;try{origin=geography.sampleLatLon(point.latitudeRadians,point.longitudeRadians);}catch(_){origin=null;}
+  if(!origin?.land){mapBorderEndpointSnapCache.set(key,point);return point;}
+  const lat0=point.latitudeRadians,lon0=point.longitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
+  let water=null;
+  outer:for(const radius of [6000,12000,18000,24000,30000,36000]){
+    for(let d=0;d<16;d++){
+      const angle=d/16*Math.PI*2,east=Math.cos(angle)*radius,north=Math.sin(angle)*radius;
+      const candidate={latitudeRadians:clamp(lat0+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999),longitudeRadians:wrapLongitudeRadians(lon0+east/(WORLD_RADIUS_METERS*cosLat))};
+      let sample=null;try{sample=geography.sampleLatLon(candidate.latitudeRadians,candidate.longitudeRadians);}catch(_){sample=null;}
+      if(!sample?.land){water=candidate;break outer;}
+    }
+  }
+  if(!water){mapBorderEndpointSnapCache.set(key,point);return point;}
+  let land={latitudeRadians:point.latitudeRadians,longitudeRadians:point.longitudeRadians},sea=water;
+  for(let i=0;i<18;i++){
+    const mid=interpolateGeoPoint(land,sea,.5);
+    let sample=null;try{sample=geography.sampleLatLon(mid.latitudeRadians,mid.longitudeRadians);}catch(_){sample=null;}
+    if(sample?.land)land=mid;else sea=mid;
+  }
+  const snappedTile=mapWorldTileAt(land.latitudeRadians,land.longitudeRadians);
+  const snapped=Object.freeze({latitudeRadians:land.latitudeRadians,longitudeRadians:land.longitudeRadians,tile:Object.freeze({x:String(snappedTile.x),y:String(snappedTile.y)})});
+  mapBorderEndpointSnapCache.set(key,snapped);return snapped;
+}
+function stitchMapBorderSegments(segments){
+  const groups=new Map();
+  for(const seg of segments){
+    const pair=String(seg.stitchKey||[seg.ownerA,seg.ownerB].sort().join("~"));
+    if(!groups.has(pair))groups.set(pair,[]);
+    groups.get(pair).push(seg);
+  }
+  const lines=[];
+  for(const [pair,group] of groups.entries()){
+    const nodes=new Map(),edges=group.map((seg,index)=>({
+      index,seg,aKey:seg.aTile.x+","+seg.aTile.y,bKey:seg.bTile.x+","+seg.bTile.y
+    }));
+    const add=(key,index)=>{if(!nodes.has(key))nodes.set(key,[]);nodes.get(key).push(index);};
+    for(const edge of edges){add(edge.aKey,edge.index);add(edge.bKey,edge.index);}
+    const unused=new Set(edges.map(edge=>edge.index));
+    const pointFor=(edge,key)=>key===edge.aKey?edge.seg.a:edge.seg.b;
+    const otherKey=(edge,key)=>key===edge.aKey?edge.bKey:edge.aKey;
+    const candidateStarts=()=>[...nodes.entries()]
+      .filter(([,indices])=>indices.some(i=>unused.has(i)))
+      .sort((a,b)=>{
+        const au=a[1].filter(i=>unused.has(i)).length,bu=b[1].filter(i=>unused.has(i)).length;
+        return (au===1?0:1)-(bu===1?0:1)||a[0].localeCompare(b[0]);
+      });
+    while(unused.size){
+      const starts=candidateStarts();if(!starts.length)break;
+      let currentKey=starts[0][0],guard=0;const points=[];
+      while(guard++<group.length+4){
+        const options=(nodes.get(currentKey)||[]).filter(i=>unused.has(i)).sort((a,b)=>a-b);
+        if(!options.length)break;
+        const edge=edges[options[0]];
+        if(!points.length)points.push(pointFor(edge,currentKey));
+        unused.delete(edge.index);
+        currentKey=otherKey(edge,currentKey);
+        points.push(pointFor(edge,currentKey));
+      }
+      if(points.length>=2){
+        const first=group[0]||{};
+        const firstPoint=points[0],lastPoint=points[points.length-1];
+        const closed=String(firstPoint?.tile?.x)===String(lastPoint?.tile?.x)&&String(firstPoint?.tile?.y)===String(lastPoint?.tile?.y);
+        if(!closed){
+          points[0]=snapBorderEndpointToNearbyCoast(firstPoint);
+          points[points.length-1]=snapBorderEndpointToNearbyCoast(lastPoint);
+        }
+        lines.push(Object.freeze({ownerA:first.ownerA||null,ownerB:first.ownerB||null,points:Object.freeze(points)}));
+      }
+    }
+  }
+  return Object.freeze(lines);
+}
+function buildMapBorderSegments(){
+  const policy=currentSemanticLayerPolicy(false),visible=policy.borderClasses.includes("national");
+  const empty={segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],graphRevision:null,graphNodeCount:0,graphEdgeCount:0,graphOwnerPairs:[],endpointClassifications:null,focusOwnerId:null,built:false};
+  if(!visible||!window.PoliticalGeography?.canonicalBoundaryGraph||!window.PoliticalGeography?.ownerAt)return empty;
+  const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  let focusOwnerId=null;
+  try{
+    const focusSurface=geography?.sampleLatLon?.(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians)||null;
+    if(focusSurface?.land)focusOwnerId=String(window.PoliticalGeography.ownerAt(activeSeed,focusTile.x,focusTile.y)?.id||"")||null;
+  }catch(_){focusOwnerId=null;}
+  if(!focusOwnerId)return empty;
+  const started=performance.now();
+  let graph=null;try{graph=window.PoliticalGeography.canonicalBoundaryGraph(activeSeed,focusOwnerId);}catch(_){graph=null;}
+  if(!graph)return empty;
+  const key=[activeSeed,focusOwnerId,graph.revision,graph.signature].join("|");
+  if(mapBorderCache.key===key)return {
+    segments:mapBorderCache.segments,sampleCount:mapBorderCache.sampleCount,landSampleCount:mapBorderCache.landSampleCount,waterSampleCount:mapBorderCache.waterSampleCount,
+    ownerQueryCount:mapBorderCache.ownerQueryCount,ownerCount:mapBorderCache.ownerCount,worldVertexCount:mapBorderCache.worldVertexCount,
+    topologySignature:mapBorderCache.topologySignature,waterClippedCount:mapBorderCache.waterClippedCount,diagnostics:mapBorderCache.diagnostics,
+    graphRevision:mapBorderCache.graphRevision,graphNodeCount:mapBorderCache.graphNodeCount,graphEdgeCount:mapBorderCache.graphEdgeCount,
+    graphOwnerPairs:mapBorderCache.graphOwnerPairs,endpointClassifications:mapBorderCache.endpointClassifications,focusOwnerId,built:false
+  };
+  const pointFor=point=>{
+    const tile=Object.freeze({x:String(point.x),y:String(point.y)}),geo=worldLatLonForTile(tile.x,tile.y);
+    return Object.freeze({
+      latitudeRadians:geo.latitudeRadians,longitudeRadians:geo.longitudeRadians,tile,
+      endpointClassification:String(point.classification||"continuation")
+    });
+  };
+  const segments=graph.edges.map(edge=>{
+    const a=pointFor(edge.a),b=pointFor(edge.b);
+    return Object.freeze({
+      a,b,aTile:a.tile,bTile:b.tile,ownerA:edge.ownerA,ownerB:edge.ownerB,
+      stitchKey:"focus:"+focusOwnerId,canonicalEdgeId:edge.id,
+      endpointAClass:a.endpointClassification,endpointBClass:b.endpointClassification
+    });
+  });
+  const diagnostics=graph.edges.slice(0,32).map(edge=>Object.freeze({
+    canonicalEdgeId:edge.id,ownerPair:Object.freeze([edge.ownerA,edge.ownerB]),
+    aTile:Object.freeze({x:edge.a.x,y:edge.a.y}),bTile:Object.freeze({x:edge.b.x,y:edge.b.y}),
+    endpointAClass:edge.a.classification,endpointBClass:edge.b.classification,aLand:true,bLand:true
+  }));
+  mapBorderCache={
+    key,segments,sampleCount:graph.sampleCount,landSampleCount:graph.landSampleCount,waterSampleCount:graph.waterSampleCount,
+    ownerQueryCount:graph.ownerQueryCount,ownerCount:graph.ownerCount,worldVertexCount:segments.length*2,
+    topologySignature:graph.signature,waterClippedCount:graph.waterClippedCount,diagnostics,
+    graphRevision:graph.revision,graphNodeCount:graph.nodeCount,graphEdgeCount:graph.edgeCount,
+    graphOwnerPairs:graph.ownerPairs,endpointClassifications:graph.endpointClassifications,
+    focusOwnerId,builtAtMs:Number((performance.now()-started).toFixed(3))
+  };
+  return {
+    segments,sampleCount:graph.sampleCount,landSampleCount:graph.landSampleCount,waterSampleCount:graph.waterSampleCount,
+    ownerQueryCount:graph.ownerQueryCount,ownerCount:graph.ownerCount,worldVertexCount:segments.length*2,
+    topologySignature:graph.signature,waterClippedCount:graph.waterClippedCount,diagnostics,
+    graphRevision:graph.revision,graphNodeCount:graph.nodeCount,graphEdgeCount:graph.edgeCount,
+    graphOwnerPairs:graph.ownerPairs,endpointClassifications:graph.endpointClassifications,focusOwnerId,built:true
+  };
+}
+function borderPathLandSafe(a,b){
+  for(const t of [0,.2,.4,.6,.8,1]){
+    const point=interpolateGeoPoint(a,b,t);
+    let sample=null;try{sample=geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)||null;}catch(_){sample=null;}
+    if(!sample?.land)return false;
+  }
+  return true;
+}
+function borderEndpointNearCoast(point){
+  if(!point||!geography)return false;
+  const lat=Number(point.latitudeRadians)||0,lon=Number(point.longitudeRadians)||0,cosLat=Math.max(.08,Math.cos(lat));
+  // Roughly one contour sample spacing. A real land-border endpoint may stop at
+  // a coast/lake shore, but an isolated endpoint surrounded by land is a
+  // presentation/topology defect and must not be rendered as a dangling stub.
+  const radiusMeters=5000;
+  const offsets=[[radiusMeters,0],[-radiusMeters,0],[0,radiusMeters],[0,-radiusMeters],
+    [radiusMeters*.707,radiusMeters*.707],[-radiusMeters*.707,radiusMeters*.707],
+    [radiusMeters*.707,-radiusMeters*.707],[-radiusMeters*.707,-radiusMeters*.707]];
+  for(const [east,north] of offsets){
+    const sampleLat=clamp(lat+north/WORLD_RADIUS_METERS,-Math.PI*.499999,Math.PI*.499999);
+    const sampleLon=wrapLongitudeRadians(lon+east/(WORLD_RADIUS_METERS*cosLat));
+    let sample=null;try{sample=geography.sampleLatLon(sampleLat,sampleLon);}catch(_){sample=null;}
+    if(sample&&!sample.land)return true;
+  }
+  return false;
+}
+function borderEndpointNearGlobeHorizon(point){
+  if(point?.mode!=="globe"||!planet||!cameraEntity)return false;
+  const center=planet.getPosition(),cameraPos=cameraEntity.getPosition();
+  const nx=Number(point.worldX)-center.x,ny=Number(point.worldY)-center.y,nz=Number(point.worldZ)-center.z;
+  const tx=cameraPos.x-Number(point.worldX),ty=cameraPos.y-Number(point.worldY),tz=cameraPos.z-Number(point.worldZ);
+  const denom=Math.max(1e-6,Math.hypot(nx,ny,nz)*Math.hypot(tx,ty,tz));
+  return (nx*tx+ny*ty+nz*tz)/denom<.12;
+}
+function borderEndpointJustified(point){
+  if(!point)return false;
+  if(point.x<=2.5||point.x>=97.5||point.y<=2.5||point.y>=97.5)return true;
+  return borderEndpointNearGlobeHorizon(point)||borderEndpointNearCoast(point);
+}
+function borderRunClosed(run){
+  if(!Array.isArray(run)||run.length<3)return false;
+  const a=run[0],b=run[run.length-1],latDelta=(Number(a.latitudeRadians)-Number(b.latitudeRadians))*WORLD_RADIUS_METERS;
+  const meanLat=(Number(a.latitudeRadians)+Number(b.latitudeRadians))*.5;
+  const lonDelta=wrapLongitudeRadians(Number(a.longitudeRadians)-Number(b.longitudeRadians))*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(meanLat));
+  return Math.hypot(latDelta,lonDelta)<4000;
+}
+function borderChainClosed(chain){
+  const points=chain?.points||[];if(points.length<3)return false;
+  const a=points[0],b=points[points.length-1];
+  if(String(a?.tile?.x)===String(b?.tile?.x)&&String(a?.tile?.y)===String(b?.tile?.y))return true;
+  const latDelta=(Number(a.latitudeRadians)-Number(b.latitudeRadians))*WORLD_RADIUS_METERS;
+  const meanLat=(Number(a.latitudeRadians)+Number(b.latitudeRadians))*.5;
+  const lonDelta=wrapLongitudeRadians(Number(a.longitudeRadians)-Number(b.longitudeRadians))*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(meanLat));
+  return Math.hypot(latDelta,lonDelta)<4000;
+}
+function borderChainLengthMeters(chain){
+  const points=chain?.points||[];let total=0;
+  for(let i=1;i<points.length;i++){
+    const a=points[i-1],b=points[i],latDelta=(Number(b.latitudeRadians)-Number(a.latitudeRadians))*WORLD_RADIUS_METERS;
+    const meanLat=(Number(a.latitudeRadians)+Number(b.latitudeRadians))*.5;
+    const lonDelta=wrapLongitudeRadians(Number(b.longitudeRadians)-Number(a.longitudeRadians))*WORLD_RADIUS_METERS*Math.max(.08,Math.cos(meanLat));
+    total+=Math.hypot(latDelta,lonDelta);
+  }
+  return total;
+}
+function semanticLocalLayerDiagnostics(policy){
+  const eligibleRoutes=policy.routeClasses.slice(),renderedRoutes=[];
+  const tier=String(localStatic?.revealTier||"none"),roadCount=Number(localStatic?.roadCount||0),buildingCount=Number(localStatic?.buildingCount||0);
+  const routeTier=new Set(tier==="route"?["primary"]:tier==="coarse"?["primary","secondary"]:["refined","full"].includes(tier)?["primary","secondary","local"]:[]);
+  for(const kind of eligibleRoutes)if(roadCount>0&&routeTier.has(kind))renderedRoutes.push(kind);
+  const renderedSettlement=[];
+  if(policy.settlementLayers.includes("settlement-footprint")&&Number(localStatic?.occupiedAreaCount||0)>0)renderedSettlement.push("settlement-footprint");
+  if(policy.settlementLayers.includes("roads")&&roadCount>0)renderedSettlement.push("roads");
+  if(policy.settlementLayers.includes("buildings")&&buildingCount>0)renderedSettlement.push("buildings");
+  const routeStatus={};for(const kind of eligibleRoutes)routeStatus[kind]=renderedRoutes.includes(kind)?"rendered":(roadCount>0?"presentation-tier-hidden":"authoritative-local-network-not-materialized");
+  const settlementStatus={};for(const kind of policy.settlementLayers)settlementStatus[kind]=renderedSettlement.includes(kind)?"rendered":"not-materialized-at-current-focus";
+  return Object.freeze({eligibleRouteClasses:Object.freeze(eligibleRoutes),renderedRouteClasses:Object.freeze(renderedRoutes),routeStatus:Object.freeze(routeStatus),
+    eligibleSettlementLayers:Object.freeze(policy.settlementLayers.slice()),renderedSettlementLayers:Object.freeze(renderedSettlement),settlementStatus:Object.freeze(settlementStatus),
+    roadCount,buildingCount,revealTier:tier});
+}
+function recordSemanticPhase(name,started){
+  const elapsed=Math.max(0,performance.now()-started),rounded=Number(elapsed.toFixed(3));
+  if(navigationPerformance.semanticPhaseLastMs?.[name]===undefined)return elapsed;
+  navigationPerformance.semanticPhaseLastMs[name]=rounded;
+  navigationPerformance.semanticPhaseMaxMs[name]=Math.max(Number(navigationPerformance.semanticPhaseMaxMs[name]||0),rounded);
+  if(elapsed>50)navigationPerformance.semanticPhaseOver50Count[name]=Number(navigationPerformance.semanticPhaseOver50Count[name]||0)+1;
+  return elapsed;
+}
+function renderMapPresentation(){
+  const layer=ensureMapPresentationDom();if(!layer)return;
+  const rect=canvas?.getBoundingClientRect?.(),portrait=(rect?.height||1)>(rect?.width||1),semantic=currentSemanticLayerPolicy(portrait);
+  const started=performance.now(),contextStarted=performance.now(),context=mapContextForFocus(),contextKinds=semantic.contextKinds,placeKinds=semantic.placeKinds;
+  recordSemanticPhase("contextQuery",contextStarted);
+  const contextDomStarted=performance.now(),centerMarker=gameplayCenterMarkerTelemetry(layer);
+  const info=layer.querySelector(".planet-map-context");info.replaceChildren();
+  const heading=document.createElement("div");heading.className="planet-map-context-head";heading.innerHTML="<small>WORLD MAP</small><strong></strong>";heading.querySelector("strong").textContent=semantic.displayBand;info.appendChild(heading);
+  const names=document.createElement("div");names.className="planet-map-context-names";
+  const labels={continent:"CONTINENT",country:"COUNTRY",region:"REGION",city:"CITY",district:"ZONE",village:"VILLAGE"};
+  for(const kind of contextKinds){const row=document.createElement("div");row.innerHTML="<span></span><strong></strong>";row.querySelector("span").textContent=labels[kind]||kind.toUpperCase();row.querySelector("strong").textContent=String(context?.[kind]||"—");names.appendChild(row);}info.appendChild(names);
+  recordSemanticPhase("contextDomCommit",contextDomStarted);
+
+  const borderBuildStarted=performance.now(),border=buildMapBorderSegments();
+  recordSemanticPhase("borderBuild",borderBuildStarted);
+  const borderProjectionStarted=performance.now(),svg=layer.querySelector(".planet-map-borders");svg.replaceChildren();
+  let projectedBorderSegmentCount=0,rejectedInteriorBorderStubCount=0;
+  const borderOffsetMeters=Math.max(2,Math.min(24,zoomState.visibleFootprintWidthMeters*.000015));
+  const rawBorderLines=stitchMapBorderSegments(border.segments);
+  // Canonical political topology is no longer presentation-filtered. Every
+  // canonical component is projected; viewport/horizon clipping happens later.
+  const borderLines=rawBorderLines;
+  const suppressedMinorBorderPolylineCount=0;
+  for(const chain of borderLines){
+    let run=[];
+    const flush=()=>{
+      if(run.length<2){run=[];return;}
+      const xs=run.map(p=>p.x),ys=run.map(p=>p.y);
+      if(Math.max(...xs)<-3||Math.min(...xs)>103||Math.max(...ys)<-3||Math.min(...ys)>103){run=[];return;}
+      // Do not declutter, dominance-filter, or reject canonical political
+      // components by screen length/endpoints. Those viewport-relative
+      // heuristics caused borders to disappear/reappear while the sphere moved.
+      // Canonical graph construction has already pruned invalid interior stubs;
+      // this layer only performs deterministic world-land clipping + projection.
+      const line=document.createElementNS("http://www.w3.org/2000/svg","polyline");
+      line.setAttribute("points",run.map(p=>(p.x*10).toFixed(1)+","+(p.y*10).toFixed(1)).join(" "));
+      line.setAttribute("class","planet-political-border");
+      line.dataset.ownerA=chain.ownerA;line.dataset.ownerB=chain.ownerB;
+      svg.appendChild(line);projectedBorderSegmentCount++;run=[];
+    };
+    const isLandPoint=point=>{
+      try{return Boolean(geography?.sampleLatLon?.(point.latitudeRadians,point.longitudeRadians)?.land);}catch(_){return false;}
+    };
+    const coastBoundary=(landPoint,waterPoint)=>{
+      let land=landPoint,water=waterPoint;
+      for(let refine=0;refine<14;refine++){
+        const mid=interpolateGeoPoint(land,water,.5);
+        if(isLandPoint(mid))land=mid;else water=mid;
+      }
+      return land;
+    };
+    for(let i=0;i<chain.points.length;i++){
+      const point=chain.points[i];
+      if(i===0){
+        if(isLandPoint(point)){
+          const projected=projectGeographicAnchor(point,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
+          if(projected)run.push(projected);
+        }
+        continue;
+      }
+      const previous=chain.points[i-1];
+      let samplePoint=previous,sampleLand=isLandPoint(previous);
+      for(let step=1;step<=8;step++){
+        const densePoint=interpolateGeoPoint(previous,point,step/8),denseLand=isLandPoint(densePoint);
+        if(sampleLand&&!denseLand){
+          const coast=coastBoundary(samplePoint,densePoint);
+          const projected=projectGeographicAnchor(coast,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
+          if(projected)run.push(projected);
+          flush();
+        }else if(!sampleLand&&denseLand){
+          const coast=coastBoundary(densePoint,samplePoint);
+          const coastProjected=projectGeographicAnchor(coast,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
+          if(coastProjected)run.push(coastProjected);
+          const projected=projectGeographicAnchor(densePoint,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
+          if(projected)run.push(projected);else flush();
+        }else if(denseLand){
+          const projected=projectGeographicAnchor(densePoint,{surfaceOffsetMeters:borderOffsetMeters,allowOffscreen:true});
+          if(projected)run.push(projected);else flush();
+        }
+        samplePoint=densePoint;sampleLand=denseLand;
+      }
+    }
+    flush();
+  }
+  svg.hidden=projectedBorderSegmentCount===0;
+  const borderProjectionMs=performance.now()-borderProjectionStarted;
+  recordSemanticPhase("borderProjection",borderProjectionStarted);
+
+  const labelsLayer=layer.querySelector(".planet-map-labels");labelsLayer.replaceChildren();
+  const labelLayoutStarted=performance.now();
+  const spec=semantic,atlas=renderAtlasLabels(labelsLayer,portrait,spec),visible=atlas.visible,visibleLandmarks=atlas.visibleLandmarks;
+  const labelLayoutMs=performance.now()-labelLayoutStarted;
+  recordSemanticPhase("labelQueryLayout",labelLayoutStarted);
+  const markerCommitStarted=performance.now();
+  const markerBase=atlas.markerTelemetry||Object.freeze({eligibleCountsByClass:{},renderedCountsByClass:{},culledCountsByClass:{},hiddenReasonCounts:{},decisions:[],rendered:[],renderedCount:0,culledCount:0,debugSuppressedCount:0,unknownProductionCount:0,broadMinorRenderedCount:0,standaloneDecorativeGlyphCount:0,bounded:true,fullWorldScan:false});
+  const centerPolicy=semanticMarkerPolicy("gameplay-center");
+  const centerDecision=Object.freeze({
+    canonicalEntityId:"ACTIVE-GAMEPLAY-CENTER",semanticClass:"gameplay-center",authoritativeName:"Gameplay center",authority:"SeedCoordinateFabric + PlanetStage.canonicalFocus",
+    canonicalAnchorWorldTile:Object.freeze({x:String(centerMarker?.worldTile?.x??"0"),y:String(centerMarker?.worldTile?.y??"0")}),
+    anchorLatitudeDegrees:centerMarker?.latitudeDegrees??null,anchorLongitudeDegrees:centerMarker?.longitudeDegrees??null,
+    parentGeography:Object.freeze({continentId:null,countryId:null,regionId:null}),
+    minimumDisplayScale:centerPolicy.minimumDisplayScale,maximumDisplayScale:centerPolicy.maximumDisplayScale,
+    importance:1000,priority:1000,currentScale:SCALE_LADDER[spec.index],
+    visibilityReason:centerMarker?.visible===true?"visible-canonical-center":"projection-hidden",
+    visible:centerMarker?.visible===true,debugOnly:false,presentation:"canonical-center-crosshair",
+    screenX:centerMarker?.screenX??null,screenY:centerMarker?.screenY??null,projection:centerMarker?.projection??null
+  });
+  const markerEligibleCounts={...markerBase.eligibleCountsByClass,"gameplay-center":1};
+  const markerRenderedCounts={...markerBase.renderedCountsByClass,"gameplay-center":centerDecision.visible?1:0};
+  const markerCulledCounts={...markerBase.culledCountsByClass,"gameplay-center":centerDecision.visible?0:1};
+  const markerHiddenReasons={...markerBase.hiddenReasonCounts};
+  if(!centerDecision.visible)markerHiddenReasons["projection-hidden"]=(markerHiddenReasons["projection-hidden"]||0)+1;
+  const markerDecisions=Object.freeze([centerDecision,...markerBase.decisions]),visibleMarkers=Object.freeze([...(centerDecision.visible?[centerDecision]:[]),...markerBase.rendered]);
+  const hierarchyVisible=visible.filter(item=>item.entityType!=="landmark"),legacyLabelCount=Math.min(6,hierarchyVisible.length);
+  const visibleClasses=Array.from(new Set(visible.map(item=>item.displayClass)));
+  const landmarkCandidates=atlas.query.candidates.filter(item=>item.type==="landmark");
+  const cityCandidates=atlas.query.candidates.filter(item=>item.type==="city"),cityVisible=visible.filter(item=>item.entityType==="city");
+  let cityMinSeparationMeters=null;
+  for(let i=0;i<cityCandidates.length;i++)for(let j=i+1;j<cityCandidates.length;j++){
+    const delta=canonicalRegisteredDeltaMeters(cityCandidates[i].latitudeRadians,cityCandidates[i].longitudeRadians,cityCandidates[j].latitudeRadians,cityCandidates[j].longitudeRadians);
+    const distance=Math.hypot(Number(delta.eastMeters||0),Number(delta.northMeters||0));
+    cityMinSeparationMeters=cityMinSeparationMeters==null?distance:Math.min(cityMinSeparationMeters,distance);
+  }
+  const requiredCitySeparation=Math.max(0,Number(window.WorldStandards?.MIN_CITY_CENTER_DISTANCE_METERS||0));
+  const citySpacingPass=cityMinSeparationMeters==null||cityMinSeparationMeters+2>=requiredCitySeparation;
+  const maxLandmarkCount=spec.budget;
+  const scaleState=scaleStateForScalar(),displayScaleState=displayScaleStateForScalar(),targetDisplayScaleState=displayScaleStateForScalar(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar),localLayers=semanticLocalLayerDiagnostics(semantic),ruler=scaleRulerForViewport(zoomState.visibleFootprintWidthMeters,rect?.width||1);
+  const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=displayScaleState.label;scale.querySelector(".planet-scale-meta span").textContent=zoomState.animating?(displayScaleState.label+" → "+targetDisplayScaleState.label):semantic.displayBand;scale.querySelector(".planet-scale-line").style.width=ruler.pixelLength.toFixed(2)+"px";scale.querySelector("small").textContent=formatDistanceMeters(ruler.distanceMeters);
+  mapPresentation={
+    active:true,context,visibleContextKinds:contextKinds,visiblePlaceKinds:placeKinds,labelCount:legacyLabelCount,
+    atlasVisibleLabelCount:visible.length,atlasCandidateCount:atlas.query.candidates.length,atlasQueryCellCount:atlas.query.queryCellCount,
+    hiddenHemisphereCulledCount:atlas.hidden,behindCameraCulledCount:atlas.behind,offscreenCulledCount:atlas.offscreen,
+    occludedCulledCount:atlas.occluded,overlapRejectedCount:atlas.overlap,visibleLabelClasses:visibleClasses,visibleLabels:visible,
+    maxLabelBudget:spec.budget,labelQueryBuildMs:atlas.query.buildMs,labelLayoutMs:Number(labelLayoutMs.toFixed(3)),borderProjectionMs:Number(borderProjectionMs.toFixed(3)),
+    semanticPolicyId:semantic.id,semanticScaleIndex:semantic.index,semanticScaleLabel:semantic.scaleLabel,semanticDisplayBand:semantic.displayBand,
+    semanticRequestedScaleIndex:scaleState.index,semanticHysteresisRatio:SEMANTIC_SCALE_HYSTERESIS_RATIO,semanticHysteresisChanges:semanticScaleState.changes,semanticHysteresisHolds:semanticScaleState.holds,
+    semanticEligibleLabelKinds:Object.freeze(semantic.kinds.slice()),semanticClassBudgets:Object.freeze({...semantic.classBudgets}),
+    semanticEligibleCountsByClass:atlas.eligibleCountsByClass,semanticRenderedCountsByClass:atlas.renderedCountsByClass,
+    semanticHiddenReasonCounts:atlas.hiddenReasons,semanticOrderingSignature:atlas.orderingSignature,semanticDisplacedLabelCount:atlas.displacedCount,semanticLeaderCount:atlas.leaderCount,
+    markerPolicyRevision:SEMANTIC_MARKER_POLICY_REVISION,markerDebugMode:SEMANTIC_MARKER_DEBUG_MODE,markerSemanticClasses:SEMANTIC_MARKER_CLASSES,
+    markerEligibleCountsByClass:Object.freeze(markerEligibleCounts),markerRenderedCountsByClass:Object.freeze(markerRenderedCounts),markerCulledCountsByClass:Object.freeze(markerCulledCounts),
+    markerHiddenReasonCounts:Object.freeze(markerHiddenReasons),markerDecisions,visibleMarkers,markerVisibleCount:visibleMarkers.length,
+    markerCulledCount:markerDecisions.length-visibleMarkers.length,markerDebugSuppressedCount:markerBase.debugSuppressedCount,
+    markerUnknownProductionCount:markerBase.unknownProductionCount,markerBroadScaleMinorRenderedCount:markerBase.broadMinorRenderedCount,
+    markerStandaloneDecorativeGlyphCount:markerBase.standaloneDecorativeGlyphCount,markerViewportBounded:true,markerFullWorldScan:false,
+    semanticBorderClassesEligible:Object.freeze(semantic.borderClasses.slice()),semanticBorderClassesRendered:Object.freeze(projectedBorderSegmentCount>0&&semantic.borderClasses.includes("national")?["national"]:[]),
+    semanticRouteClassesEligible:localLayers.eligibleRouteClasses,semanticRouteClassesRendered:localLayers.renderedRouteClasses,semanticRouteClassStatus:localLayers.routeStatus,
+    semanticSettlementLayersEligible:localLayers.eligibleSettlementLayers,semanticSettlementLayersRendered:localLayers.renderedSettlementLayers,semanticSettlementLayerStatus:localLayers.settlementStatus,
+    semanticUnsupportedEntityClasses:semantic.unsupportedEntityClasses,semanticPolicySignature:atlasHashText([semantic.id,semantic.kinds.join(","),semantic.borderClasses.join(","),semantic.routeClasses.join(","),semantic.settlementLayers.join(",")].join("|")),
+    cityCandidateCount:cityCandidates.length,cityVisibleCount:cityVisible.length,
+    cityMinSeparationMeters:cityMinSeparationMeters==null?null:Number(cityMinSeparationMeters.toFixed(3)),citySpacingPass,
+    cityQueryCellCount:Number(atlas.query.settlementHierarchy?.diagnostics?.queryCellCount||atlas.query.cityQuery?.tiles?.length||0),cityRequiredMinSeparationMeters:requiredCitySeparation,
+    cityVisibleIds:cityVisible.map(item=>item.canonicalEntityId),
+    settlementHierarchyRevision:atlas.query.settlementHierarchy?.diagnostics?.revision||null,
+    settlementHierarchySignature:atlas.query.settlementHierarchy?.diagnostics?.signature||null,
+    settlementHierarchyClassCounts:atlas.query.settlementHierarchy?.diagnostics?.classCounts||{},
+    settlementHierarchyQueryCellCount:Number(atlas.query.settlementHierarchy?.diagnostics?.queryCellCount||0),
+    settlementHierarchyBounded:atlas.query.settlementHierarchy?atlas.query.settlementHierarchy.diagnostics?.bounded===true:null,
+    settlementHierarchyFullWorldScan:atlas.query.settlementHierarchy?atlas.query.settlementHierarchy.diagnostics?.fullWorldScan===true:null,
+    landmarkCandidateCount:landmarkCandidates.length,landmarkVisibleCount:visibleLandmarks.length,landmarkKinds:Array.from(new Set(visibleLandmarks.map(item=>item.type))),visibleLandmarks,maxLandmarkCount,
+    borderVisible:projectedBorderSegmentCount>0,borderSampleCount:border.sampleCount,borderLandSampleCount:border.landSampleCount,borderWaterSampleCount:border.waterSampleCount,borderOwnerQueryCount:border.ownerQueryCount,borderSegmentCount:border.segments.length,borderWorldVertexCount:border.worldVertexCount,projectedBorderSegmentCount,politicalOwnerCount:border.ownerCount,
+    borderTopologySignature:border.topologySignature,borderGraphRevision:border.graphRevision,borderGraphNodeCount:border.graphNodeCount,borderGraphEdgeCount:border.graphEdgeCount,
+    borderGraphOwnerPairs:border.graphOwnerPairs,borderEndpointClassifications:border.endpointClassifications,borderFocusOwnerId:border.focusOwnerId,
+    waterClippedBorderCount:border.waterClippedCount,borderDiagnostics:border.diagnostics,borderPolylineCount:borderLines.length,rawBorderPolylineCount:rawBorderLines.length,suppressedMinorBorderPolylineCount,rejectedInteriorBorderStubCount,
+    maxLabelDisplacementPixels:visible.reduce((max,item)=>Math.max(max,Number(item.displacementPixels||0)),0),
+    registrationMaxRoundTripErrorTiles:visible.reduce((max,item)=>Math.max(max,Number(item.roundTripErrorTiles||0)),0),
+    projectionMode:projectionState.mode,projectionBlend:Number(projectionState.blend.toFixed(6)),
+    scaleDistanceMeters:ruler.distanceMeters,scaleLabel:formatDistanceMeters(ruler.distanceMeters),scaleStateIndex:scaleState.index,scaleStateLabel:scaleState.label,
+    displayScaleIndex:displayScaleState.index,displayScaleLabel:displayScaleState.label,targetDisplayScaleIndex:targetDisplayScaleState.index,targetDisplayScaleLabel:targetDisplayScaleState.label,
+    scalePixelLength:ruler.pixelLength,metersPerScreenPixel:ruler.metersPerScreenPixel,rulerTruthErrorMeters:ruler.truthErrorMeters,internalZoomScalar:Number(zoomState.scalar.toFixed(6)),targetZoomScalar:Number((zoomState.targetScalar??zoomState.scalar).toFixed(6)),zoomAnimating:Boolean(zoomState.animating),
+    centerMarker,coordinateFabricRevision:coordinateFabricAuthority()?.revisionSignature||null,
+    coordinateFabricStreamedCellIds:coordinateFabricAuthority()?.snapshot?.(mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians))?.streamedCellIds||[],
+    updateCount:mapPresentation.updateCount+1,lastUpdateMs:Number((performance.now()-started).toFixed(3)),lastBorderBuildMs:mapBorderCache.builtAtMs,bounded:true,fullWorldScan:false
+  };
+  recordSemanticPhase("markerScaleCommit",markerCommitStarted);
+}
+function cancelMapPresentationSchedule(){
+  if(mapPresentationSchedule.raf){cancelAnimationFrame(mapPresentationSchedule.raf);mapPresentationSchedule.raf=0;}
+  if(mapPresentationSchedule.timer){clearTimeout(mapPresentationSchedule.timer);mapPresentationSchedule.timer=0;}
+  mapPresentationSchedule.pendingReason=null;
+  navigationPerformance.semanticUpdatePending=false;
+}
+function performMapPresentationUpdate(reason="scheduled"){
+  if(!root||!canvas||!activeSeed)return;
+  mapPresentationSchedule.raf=0;mapPresentationSchedule.timer=0;mapPresentationSchedule.pendingReason=null;
+  const started=performance.now();
+  renderMapPresentation();
+  const elapsed=performance.now()-started;
+  mapPresentationSchedule.lastRenderedAtMs=performance.now();
+  navigationPerformance.semanticUpdateRenderCount++;
+  navigationPerformance.lastSemanticUpdateMs=Number(elapsed.toFixed(3));
+  navigationPerformance.maxSemanticUpdateMs=Math.max(navigationPerformance.maxSemanticUpdateMs,navigationPerformance.lastSemanticUpdateMs);
+  navigationPerformance.totalSemanticUpdateMs+=navigationPerformance.lastSemanticUpdateMs;
+  navigationPerformance.semanticUpdatePending=false;
+}
+function updateMapPresentation(reason="direct",force=false){
+  if(!root||!canvas||!activeSeed)return;
+  navigationPerformance.semanticUpdateRequestCount++;
+  if(reason==="rotation")navigationPerformance.rotationRequestCount++;
+  else if(String(reason).startsWith("zoom"))navigationPerformance.zoomRequestCount++;
+  else if(reason==="authority-refresh")navigationPerformance.authorityRefreshRequestCount++;
+  else if(reason==="pointer-settle")navigationPerformance.pointerSettleFlushCount++;
+  if(force){
+    navigationPerformance.semanticUpdateForcedCount++;
+    cancelMapPresentationSchedule();
+    performMapPresentationUpdate(reason);
+    return;
+  }
+  if(mapPresentationSchedule.raf||mapPresentationSchedule.timer){
+    navigationPerformance.semanticUpdateCoalescedCount++;
+    mapPresentationSchedule.pendingReason=reason;
+    navigationPerformance.semanticUpdatePending=true;
+    return;
+  }
+  const now=performance.now(),remaining=Math.max(0,NAV_SEMANTIC_MIN_INTERVAL_MS-(now-mapPresentationSchedule.lastRenderedAtMs));
+  mapPresentationSchedule.pendingReason=reason;
+  navigationPerformance.semanticUpdatePending=true;
+  const queueFrame=()=>{
+    mapPresentationSchedule.timer=0;
+    if(mapPresentationSchedule.raf)return;
+    mapPresentationSchedule.raf=requestAnimationFrame(()=>performMapPresentationUpdate(mapPresentationSchedule.pendingReason||reason));
+  };
+  if(remaining>0)mapPresentationSchedule.timer=setTimeout(queueFrame,remaining);
+  else queueFrame();
+}
+function recordNavigationFramePhase(name,started){
+  const elapsed=Math.max(0,performance.now()-started);
+  if(navigationPerformance.framePhaseLastMs?.[name]!==undefined){
+    navigationPerformance.framePhaseLastMs[name]=Number(elapsed.toFixed(3));
+    navigationPerformance.framePhaseMaxMs[name]=Math.max(Number(navigationPerformance.framePhaseMaxMs[name]||0),Number(elapsed.toFixed(3)));
+  }
+  return elapsed;
+}
+function recordResidentSchedulerSlice(started){
+  const elapsed=Math.max(0,performance.now()-started);
+  navigationPerformance.residentSchedulerCalls++;
+  navigationPerformance.residentSchedulerLastMs=Number(elapsed.toFixed(3));
+  navigationPerformance.residentSchedulerMaxMs=Math.max(navigationPerformance.residentSchedulerMaxMs,navigationPerformance.residentSchedulerLastMs);
+  if(elapsed>50)navigationPerformance.residentSchedulerOver50Count++;
+  return elapsed;
+}
+function scheduleResidentMovementDrain(){
+  if(residentMovementDrainTimer||!ready||!activeSeed||!window.ResidentMovement)return;
+  residentMovementDrainTimer=setTimeout(()=>{
+    residentMovementDrainTimer=0;
+    const started=performance.now();
+    const result=window.ResidentMovement.advance(activeSeed,window.GameTime?.getNow?.()||inspectionFantasyStamp(),0,{snapshot:false,maxTicks:1});
+    recordResidentSchedulerSlice(started);
+    if(result?.pending){navigationPerformance.residentSchedulerPendingDrains++;scheduleResidentMovementDrain();}
+  },0);
+}
+function runResidentMovementScheduledSlice(realSeconds){
+  if(!ready||!activeSeed||!window.ResidentMovement)return;
+  const started=performance.now();
+  const result=window.ResidentMovement.advance(activeSeed,window.GameTime?.getNow?.()||inspectionFantasyStamp(),realSeconds,{snapshot:false,maxTicks:1});
+  recordResidentSchedulerSlice(started);
+  if(result?.pending){navigationPerformance.residentSchedulerPendingDrains++;scheduleResidentMovementDrain();}
+}
+function warmResidentMovementScheduler(){
+  if(!activeSeed||!window.ResidentMovement)return;
+  window.ResidentMovement.ensure?.(activeSeed);
+  const started=performance.now(),step=Math.max(.001,Number(window.ResidentMovement.FIXED_STEP_SECONDS||.1));
+  const when=window.GameTime?.getNow?.()||inspectionFantasyStamp();
+  // Prime the bounded twelve-resident work-cycle/route caches while the startup
+  // screen still owns the main thread. This is deterministic SEED + fantasy-time
+  // preparation, not simulation authority: the same plans would otherwise be
+  // built lazily inside the first interactive scheduler slices.
+  if(window.WorkCycles?.plan&&window.DailyActivity?.build){
+    const residents=window.DailyActivity.build(activeSeed)||[];
+    for(let i=0;i<residents.length&&i<12;i++)window.WorkCycles.plan(activeSeed,residents[i]);
+  }
+  // Complete the already-existing one fixed simulation tick before app.start().
+  // Runtime navigation remains cooperative; only its deterministic cold caches
+  // and initial tick are removed from the interactive path.
+  let result=window.ResidentMovement.advance(activeSeed,when,step,{snapshot:false,maxTicks:240});
+  let guard=0;
+  while(result?.pending&&guard++<24)result=window.ResidentMovement.advance(activeSeed,when,0,{snapshot:false,maxTicks:240});
+  navigationPerformance.residentSchedulerWarmupMs=Number((performance.now()-started).toFixed(3));
+}
+function startResidentMovementScheduler(){
+  if(residentMovementTimer)clearInterval(residentMovementTimer);
+  if(residentMovementDrainTimer){clearTimeout(residentMovementDrainTimer);residentMovementDrainTimer=0;}
+  residentMovementLastSchedulerAtMs=performance.now();
+  residentMovementTimer=setInterval(()=>{
+    const now=performance.now(),dt=Math.max(0,Math.min(.5,(now-residentMovementLastSchedulerAtMs)/1000));
+    residentMovementLastSchedulerAtMs=now;
+    runResidentMovementScheduledSlice(dt);
+  },100);
+}
+function stopResidentMovementScheduler(){
+  if(residentMovementTimer)clearInterval(residentMovementTimer);
+  if(residentMovementDrainTimer)clearTimeout(residentMovementDrainTimer);
+  residentMovementTimer=0;residentMovementDrainTimer=0;residentMovementLastSchedulerAtMs=0;
+}
+function beginNavigationPerformanceTelemetry(){
+  navigationLongTaskObserver?.disconnect?.();navigationLongTaskObserver=null;
+  if(!("PerformanceObserver" in window))return;
+  try{
+    navigationLongTaskObserver=new PerformanceObserver(list=>{
+      if(!ready)return;
+      for(const entry of list.getEntries()){
+        const d=Number(entry.duration)||0;
+        if(d>50)navigationPerformance.longTask50Count++;
+        navigationPerformance.longTaskWorstMs=Math.max(navigationPerformance.longTaskWorstMs,d);
+      }
+    });
+    navigationLongTaskObserver.observe({entryTypes:["longtask"]});
+  }catch(_){navigationLongTaskObserver=null;}
+}
+
+function tangentFrame(latitudeRadians,longitudeRadians){
+  const fabric=coordinateFabricAuthority(),described=fabric?.describeLatLon?.(latitudeRadians,longitudeRadians);
+  if(described?.tangentBasis){
+    const basis=described.tangentBasis,planet=described.planetMeters;
+    return Object.freeze({
+      originMeters:Object.freeze([Number(planet.x.toFixed(3)),Number(planet.y.toFixed(3)),Number(planet.z.toFixed(3))]),
+      east:Object.freeze([basis.east.x,basis.east.y,basis.east.z].map(v=>Number(v.toFixed(6)))),
+      north:Object.freeze([basis.north.x,basis.north.y,basis.north.z].map(v=>Number(v.toFixed(6)))),
+      up:Object.freeze([basis.up.x,basis.up.y,basis.up.z].map(v=>Number(v.toFixed(6))))
+    });
+  }
+  const lat=Number(latitudeRadians)||0,lon=Number(longitudeRadians)||0,cLat=Math.cos(lat),sLat=Math.sin(lat),cLon=Math.cos(lon),sLon=Math.sin(lon);
+  const up=[cLat*sLon,sLat,cLat*cLon],east=[cLon,0,-sLon],north=[-sLat*sLon,cLat,-sLat*cLon];
+  return Object.freeze({originMeters:Object.freeze(up.map(v=>Number((v*WORLD_RADIUS_METERS).toFixed(3)))),east:Object.freeze(east.map(v=>Number(v.toFixed(6)))),north:Object.freeze(north.map(v=>Number(v.toFixed(6)))),up:Object.freeze(up.map(v=>Number(v.toFixed(6))))});
+}
+function smoothstep01(value){const t=clamp(value,0,1);return t*t*(3-2*t);}
+function projectionHandoffForZoom(value=zoomState.scalar){
+  const span=Math.max(.0001,projectionState.transitionEnd-projectionState.transitionStart);
+  return smoothstep01((clamp(value,0,1)-projectionState.transitionStart)/span);
+}
+function projectionPresentationBlendForZoom(value=zoomState.scalar){
+  // The local registered-meter photometry is now continuous at map scale, so
+  // hand visual ownership to the already-preparing tangent layer before the
+  // globe texture becomes visibly magnified. The overlap remains animated and
+  // changes presentation timing only; canonical focus/geography are untouched.
+  const scalar=clamp(value,0,1);
+  // Prefer the already-prepared registered regional parent before the global
+  // 640x320 shell must be magnified into the 1/50-1/100 strategic range.
+  // This is only presentation ownership timing: the same canonical focus,
+  // geography and prepared resource remain authoritative.
+  const start=Math.max(projectionState.transitionStart,.535);
+  // Once a registered parent exists, finish the smooth-shell crossfade before
+  // the first 1/75 strategic-map capture. Exact-screen evidence showed that a
+  // ~50/50 shell/tangent blend at this scale reintroduced blurred global relief
+  // over the already-readable registered tangent parent. Keep the handoff smooth,
+  // but complete it while the shell is still coarse enough to hide the change.
+  const end=Math.max(start+.0001,.595);
+  return smoothstep01((scalar-start)/(end-start));
+}
+function canonicalSurfaceIdentity(){
+  if(!geography)return null;
+  const lat0=zoomState.focusLatitudeRadians,lon0=zoomState.focusLongitudeRadians,cosLat=Math.max(.08,Math.cos(lat0));
+  const sampleOffset=(eastMeters,northMeters)=>{
+    const geo=canonicalLatLonForLocalOffset(lat0,lon0,eastMeters,northMeters),sample=geography.sampleLatLon(geo.latitudeRadians,geo.longitudeRadians);
+    return Object.freeze({land:Boolean(sample?.land),surfaceClass:String(sample?.surfaceClass||""),elevationMeters:Number((Number(sample?.elevationMeters||0)).toFixed(2))});
+  };
+  const ring20km=Object.freeze({north:sampleOffset(0,20000),east:sampleOffset(20000,0),south:sampleOffset(0,-20000),west:sampleOffset(-20000,0)});
+  const ring100km=Object.freeze({north:sampleOffset(0,100000),east:sampleOffset(100000,0),south:sampleOffset(0,-100000),west:sampleOffset(-100000,0)});
+  const center=sampleOffset(0,0);
+  const samples=[center,...Object.values(ring20km),...Object.values(ring100km)];
+  const landCount=samples.filter(s=>s.land).length;
+  const elevations=samples.map(s=>s.elevationMeters);
+  return Object.freeze({
+    center,ring20km,ring100km,
+    macroDescriptor:Object.freeze({
+      landSampleCount:landCount,
+      waterSampleCount:samples.length-landCount,
+      elevationRangeMeters:Number((Math.max(...elevations)-Math.min(...elevations)).toFixed(2)),
+      identitySource:"canonical-geography-samples",
+      localLodPreservesMacroIdentity:true
+    })
+  });
+}
+function updateProjectionState(){
+  const raw=(zoomState.scalar-projectionState.transitionStart)/(projectionState.transitionEnd-projectionState.transitionStart);
+  const blend=smoothstep01(raw);
+  const frame=tangentFrame(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  projectionState={
+    ...projectionState,
+    mode:blend<=0?"globe":blend>=1?"local-tangent":"tangent-transition",
+    blend,
+    tangentOrigin:frame.originMeters,
+    basis:Object.freeze({east:frame.east,north:frame.north,up:frame.up}),
+    cameraTarget:Object.freeze([0,0,0]),
+    continuityErrorMeters:0
+  };
+}
+
+function clamp(value,min,max){return Math.min(max,Math.max(min,Number(value)||0));}
+function loadingNodes(){
+  const overlay=root?.querySelector?.(".planet-stage-loading");
+  return {overlay,title:overlay?.querySelector?.(".planet-stage-loading-title"),phase:overlay?.querySelector?.(".planet-stage-loading-phase"),bar:overlay?.querySelector?.(".planet-stage-loading-bar"),percent:overlay?.querySelector?.(".planet-stage-loading-percent"),track:overlay?.querySelector?.(".planet-stage-loading-progress")};
+}
+function presentStartupProgress(){
+  const n=loadingNodes();if(!n.overlay)return;
+  const p=loadingProof||startupProgress;
+  n.overlay.hidden=!loadingProof&&p.mode==="ready";n.overlay.dataset.mode=String(p.mode||"determinate");n.overlay.dataset.phase=String(p.phaseId||"planning");n.overlay.dataset.proof=loadingProof?"true":"false";
+  if(n.title)n.title.textContent=String(p.title||((p.mode==="ready")?"World ready":(p.mode==="failed")?"Startup interrupted":"Waking the world"));
+  if(n.phase)n.phase.textContent=String(p.phaseLabel||"Preparing world…");
+  const value=clamp(p.displayedPercent??p.measuredPercent??0,0,100);
+  if(n.bar)n.bar.style.width=value.toFixed(1)+"%";
+  if(n.track)n.track.setAttribute("aria-valuenow",String(Math.round(value)));
+  if(n.percent)n.percent.textContent=p.mode==="indeterminate"?"Planning startup…":Math.round(value)+"%";
+}
+function setStartupProgress(phaseId,phaseLabel,percent,mode="determinate"){
+  const value=clamp(percent,0,100);
+  if(startupProgress.mode==="indeterminate"&&mode!=="indeterminate")startupProgress.determinateAtMs=Date.now();
+  const previous=Number(startupProgress.measuredPercent??0);
+  const measured=Math.max(previous,value);
+  startupProgress={...startupProgress,mode,phaseId:String(phaseId),phaseLabel:String(phaseLabel),measuredPercent:measured,displayedPercent:measured,completedWeightedWork:measured};
+  if(measured===100&&!startupProgress.measured100AtMs)startupProgress.measured100AtMs=Date.now();
+  presentStartupProgress();
+}
+function setLoadingProof(mode,phaseId,phaseLabel,percent){
+  loadingProof={mode:String(mode||"determinate"),phaseId:String(phaseId||"proof"),phaseLabel:String(phaseLabel||"Preparing world…"),measuredPercent:Number(percent),displayedPercent:Number(percent)};
+  presentStartupProgress();return snapshot();
+}
+function clearLoadingProof(){loadingProof=null;presentStartupProgress();return snapshot();}
+function yieldPaint(){startupScheduler.paintHeartbeatCount++;return new Promise(resolve=>requestAnimationFrame(()=>resolve()));}
+function yieldBrowser(){
+  startupScheduler.yieldCount++;
+  return new Promise(resolve=>setTimeout(resolve,0));
+}
+async function runSlicedRange(total,step){
+  startupScheduler.firstPlayableWorkUnits+=total;
+  let sliceStarted=performance.now();
+  for(let i=0;i<total;i++){    step(i);
+    startupScheduler.completedFirstPlayableWorkUnits++;
+    const elapsed=performance.now()-sliceStarted;
+    if(elapsed>=STARTUP_SLICE_BUDGET_MS&&i+1<total){
+      startupScheduler.sliceCount++;
+      startupScheduler.maxSliceMs=Math.max(startupScheduler.maxSliceMs,elapsed);
+      await yieldBrowser();
+      sliceStarted=performance.now();
+    }
+  }
+  const elapsed=performance.now()-sliceStarted;
+  startupScheduler.sliceCount++;
+  startupScheduler.maxSliceMs=Math.max(startupScheduler.maxSliceMs,elapsed);
+}
+function beginResponsivenessTelemetry(){
+  lastHeartbeatAt=performance.now();
+  heartbeatTimer=setInterval(()=>{
+    const now=performance.now();
+    startupScheduler.maxEventLoopLagMs=Math.max(startupScheduler.maxEventLoopLagMs,Math.max(0,now-lastHeartbeatAt-16));
+    startupScheduler.heartbeatCount++;
+    lastHeartbeatAt=now;
+  },16);
+  if("PerformanceObserver" in window){
+    try{
+      longTaskObserver=new PerformanceObserver(list=>{
+        for(const entry of list.getEntries()){
+          const d=Number(entry.duration)||0;
+          startupScheduler.longestLongTaskMs=Math.max(startupScheduler.longestLongTaskMs,d);
+          if(d>50)startupScheduler.longTaskOver50++;
+          if(d>100)startupScheduler.longTaskOver100++;
+          if(d>200)startupScheduler.longTaskOver200++;
+          if(controlledWorkActive){
+            startupScheduler.controlledLongestLongTaskMs=Math.max(startupScheduler.controlledLongestLongTaskMs,d);
+            if(d>50)startupScheduler.controlledLongTaskOver50++;
+            if(d>100)startupScheduler.controlledLongTaskOver100++;
+            if(d>200)startupScheduler.controlledLongTaskOver200++;
+          }
+        }
+      });
+      longTaskObserver.observe({entryTypes:["longtask"]});
+    }catch(_){}
+  }
+}
+async function measuredPhase(id,work){
+  await yieldBrowser();
+  const started=performance.now();
+  const result=await work();
+  startupScheduler.phaseTimings[id]=Number((performance.now()-started).toFixed(3));
+  await yieldBrowser();
+  return result;
+}
+function endResponsivenessTelemetry(){
+  if(heartbeatTimer){clearInterval(heartbeatTimer);heartbeatTimer=null;}
+  longTaskObserver?.disconnect?.();longTaskObserver=null;
+}
+function normalizeYaw(value){
+  let n=Number(value)||0;
+  n%=360;
+  if(n<0)n+=360;
+  return n;
+}
+function viewportPixelHeight(){
+  const rect=canvas?.getBoundingClientRect?.();
+  return Math.max(1,Number(rect?.height||canvas?.height||720));
+}
+function worldSpaceErrorForLevel(index){
+  const level=LOCAL_DETAIL_LEVELS[clamp(Math.round(index),0,LOCAL_DETAIL_LEVELS.length-1)];
+  const geometricError=Math.max(.05,Number(level.sampleSpacingMeters||1)*.125);
+  // One source texel is the minimum honest texture error. The previous 0.5x
+  // factor understated source resolution and kept visibly blocky parents alive.
+  const sourceError=Math.max(.05,Number(level.visibleHeightMeters||1)/Math.max(1,Number(level.textureSize||1)));
+  return Math.max(geometricError,sourceError);
+}
+function metersPerScreenPixelForZoom(value=zoomState.scalar){
+  return Math.max(.001,presentationTargetHeightMeters(value)/viewportPixelHeight());
+}
+function projectedPixelErrorForLevel(index,value=zoomState.scalar){
+  return worldSpaceErrorForLevel(index)/metersPerScreenPixelForZoom(value);
+}
+function nativeMagnificationForLevel(index,value=zoomState.scalar){
+  const level=LOCAL_DETAIL_LEVELS[clamp(Math.round(index),0,LOCAL_DETAIL_LEVELS.length-1)];
+  return Number(level.visibleHeightMeters||1)/Math.max(1,presentationTargetHeightMeters(value));
+}
+function rawLodIndexForZoom(value){
+  for(let index=0;index<LOCAL_DETAIL_LEVELS.length;index++){
+    const errorOk=projectedPixelErrorForLevel(index,value)<=SSE_TARGET_PIXELS;
+    const nativeScaleOk=nativeMagnificationForLevel(index,value)<=SSE_MAX_NATIVE_MAGNIFICATION;
+    if(errorOk&&nativeScaleOk){
+      let selected=index;
+      // Presentation-only native-scale balance for broad/local map tiers.
+      // Canonical cell identity still comes exclusively from SEED coordinates;
+      // this only decides which already-defined SLOD level is the best visual
+      // representation for the current physical footprint.
+      while(selected>0){
+        const level=LOCAL_DETAIL_LEVELS[selected],parent=selected-1,parentLevel=LOCAL_DETAIL_LEVELS[parent];
+        const compensation=nativeMagnificationForLevel(selected,value);
+        if(level.staticWorld||parentLevel.staticWorld||Number(level.visibleHeightMeters||0)<10000||
+           compensation>=SSE_MIN_STEADY_NATIVE_COMPENSATION)break;
+        const parentMagnification=nativeMagnificationForLevel(parent,value);
+        const parentPixelError=projectedPixelErrorForLevel(parent,value);
+        if(parentMagnification>SSE_MAX_NATIVE_MAGNIFICATION||parentPixelError>SSE_MAX_PARENT_CONTEXT_PIXELS)break;
+        selected=parent;
+      }
+      return selected;
+    }
+  }
+  return LOCAL_DETAIL_LEVELS.length-1;
+}
+function zoomBandFor(value){
+  if(value<=SEMANTIC_LOCAL_BAND_START)return (ZOOM_BANDS.find(b=>b.max!==null&&value<=b.max)||ZOOM_BANDS[2]).id;
+  return LOCAL_DETAIL_LEVELS[rawLodIndexForZoom(value)].band;
+}
+function updateZoomFocusFromRotation(){
+  // PlayCanvas interprets local Euler angles in XYZ order. For Z=0, the local
+  // direction that the rotated sphere places on world +Z is R^T*[0,0,1]:
+  // [-sin(yaw), sin(pitch)*cos(yaw), cos(pitch)*cos(yaw)].
+  // Convert that exact direction back to the canonical spherical latitude/lon
+  // instead of assuming latitude===pitch and longitude===-yaw.
+  const pitch=pitchDegrees*Math.PI/180,yaw=yawDegrees*Math.PI/180;
+  const x=-Math.sin(yaw),y=Math.sin(pitch)*Math.cos(yaw),z=Math.cos(pitch)*Math.cos(yaw);
+  zoomState.focusLatitudeRadians=Math.asin(clamp(y,-1,1));
+  zoomState.focusLongitudeRadians=wrapLongitudeRadians(Math.atan2(x,z));
+}
+function lodHysteresisAt(index){
+  const max=levelMaxScalar(index),previousMax=index>0?levelMaxScalar(index-1):projectionState.transitionStart;
+  return Math.min(LOCAL_LOD_HYSTERESIS,Math.max(.0005,(max-previousMax)*.2));
+}
+// Requested LOD follows the zoom scalar (with per-boundary hysteresis). It never
+// builds anything by itself; the visible LOD only changes when a prepared
+// resource is swapped in.
+function requestedLodIndexForZoom(value=zoomState.scalar){
+  const levels=LOCAL_DETAIL_LEVELS;
+  if(value>=ZOOM_MAX-1e-7)return requestedLodIndex=levels.length-1;
+  const rawIndex=rawLodIndexForZoom(value);
+  if(!displayResource)return requestedLodIndex=rawIndex;
+  // Hysteresis may stabilize only one adjacent LOD boundary. If zoom jumps
+  // across multiple physical tiers (for example ground -> local-area), keeping
+  // the old fine requested tier would make the ready ground resource stand in
+  // at the wrong physical scale until a much coarser threshold is crossed.
+  // Multi-tier moves must immediately request the raw target tier.
+  if(Math.abs(rawIndex-requestedLodIndex)>1)return requestedLodIndex=rawIndex;
+  if(rawIndex>requestedLodIndex){
+    // Native-scale safety outranks hysteresis: a coarse tier may be a temporary
+    // stand-in while its child prepares, but it may never remain the requested
+    // steady-state source once it exceeds the 1.5x native magnification bound.
+    if(nativeMagnificationForLevel(requestedLodIndex,value)>SSE_MAX_NATIVE_MAGNIFICATION){
+      return requestedLodIndex=rawIndex;
+    }
+    // Otherwise refine only after the current tier clearly exceeds the pixel
+    // error guard, preventing boundary flutter without violating native scale.
+    if(projectedPixelErrorForLevel(requestedLodIndex,value)<SSE_REFINE_PIXELS)return requestedLodIndex;
+  }else if(rawIndex<requestedLodIndex){
+    // Coarsen only once the candidate parent is comfortably below the target.
+    if(projectedPixelErrorForLevel(rawIndex,value)>SSE_COARSEN_PIXELS)return requestedLodIndex;
+  }
+  return requestedLodIndex=rawIndex;
+}
+function localDetailLevelForZoom(value=zoomState.scalar){return LOCAL_DETAIL_LEVELS[requestedLodIndexForZoom(value)];}
+function localPresentationCompensation(value=zoomState.scalar,index=displayResource?.levelIndex??requestedLodIndex){
+  const level=LOCAL_DETAIL_LEVELS[index]||LOCAL_DETAIL_LEVELS[0];
+  const targetHeight=presentationTargetHeightMeters(value);
+  // Values above 1 only occur while a coarser ready LOD stands in for a finer
+  // one that is still preparing: it is magnified to the exact target footprint
+  // instead of freezing the apparent zoom or popping to an unready tier.
+  return clamp(level.visibleHeightMeters/Math.max(1,targetHeight),LOCAL_STANDIN_MIN_COMPENSATION,LOCAL_STANDIN_MAX_MAGNIFICATION);
+}
+function localTextureSizeForLevel(levelId){
+  return Number(LOCAL_DETAIL_LEVELS.find(level=>level.id===levelId)?.textureSize||256);
+}
+function localTextureAnisotropy(){
+  return Math.max(1,Math.min(4,Number(device?.maxAnisotropy||1)));
+}
+function surfaceDetailBandCount(metersPerTexel){
+  const m=Math.max(0,Number(metersPerTexel)||0);
+  return (m<=24000?1:0)+(m<=6000?1:0)+(m<=1200?1:0)+(m<=100?1:0)+(m<=30?1:0)+(m<=4?1:0);
+}
+function seededHash32(label){
+  let h=2166136261>>>0;
+  for(const ch of String(activeSeed||"")+"|"+String(label||"")){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
+  h^=h>>>13;h=Math.imul(h,0x5bd1e995)>>>0;h^=h>>>15;
+  return h>>>0;
+}
+function surfaceHash2(ix,iy,salt){
+  let h=(Math.imul(ix|0,374761393)^Math.imul(iy|0,668265263)^(salt|0))|0;
+  h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;
+  return (h>>>0)/4294967295;
+}
+function surfaceValueNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt){
+  const x=worldEastMeters/scaleMeters,y=worldNorthMeters/scaleMeters,x0=Math.floor(x),y0=Math.floor(y),tx=smoothstep01(x-x0),ty=smoothstep01(y-y0);
+  const a=surfaceHash2(x0,y0,salt),b=surfaceHash2(x0+1,y0,salt),c=surfaceHash2(x0,y0+1,salt),d=surfaceHash2(x0+1,y0+1,salt);
+  return lerp(lerp(a,b,tx),lerp(c,d,tx),ty)-.5;
+}
+function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel,phase){
+  const salt=((phase*100000)|0)^0x5f356495;
+  let detail=0;
+  // Keep continental-scale variation as a quiet identity cue, then spend most
+  // visible contrast on frequencies the current physical texel can actually
+  // resolve. This prevents one macro slope from dominating the 1/500 frame.
+  if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.012;
+  if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.026;
+  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.036;
+  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.026;
+  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.014;
+  if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.032;
+  if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,260,salt+89)*.034;
+  if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.025;
+  if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.016;
+  return detail;
+}
+function registeredMapReliefValue(worldEastMeters,worldNorthMeters,metersPerTexel,salt){
+  // Presentation-only relief: use only wavelengths that remain physically
+  // resolvable at this texel size. Inputs are Campaign-SEED registered metres,
+  // so focus movement/LOD/cache order cannot change the field.
+  const m=Math.max(1,Number(metersPerTexel)||1);
+  let value=0,weight=0;
+  for(const [wavelength,gain] of [[5200,.32],[2600,.62],[1200,.54],[560,.30]]){
+    if(wavelength/m<2.25)continue;
+    value+=surfaceValueNoise(worldEastMeters,worldNorthMeters,wavelength,salt+Math.round(wavelength))*gain;
+    weight+=gain;
+  }
+  return weight?value/weight:0;
+}
+
+function patchDimensionsForLevel(index){
+  const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
+  const levelIndex=clamp(Math.round(index),0,LOCAL_DETAIL_LEVELS.length-1),level=LOCAL_DETAIL_LEVELS[levelIndex];
+  const portraitFactor=aspect>=1?1:(82/54);
+  const visibleHeight=level.visibleHeightMeters*portraitFactor;
+  const visibleWidth=visibleHeight*aspect;
+  const patchWidth=visibleWidth*LOCAL_PATCH_MARGIN,patchHeight=visibleHeight*LOCAL_PATCH_MARGIN;
+  // Normalize every physical LOD footprint into a bounded presentation mesh.
+  const metersPerUnit=Math.max(1,Math.max(patchWidth,patchHeight)/8);
+  return {levelIndex,levelId:level.id,band:level.band,visibleWidth,visibleHeight,patchWidth,patchHeight,sampleSpacingMeters:level.sampleSpacingMeters,reliefClampMeters:level.reliefClampMeters,reliefGain:level.reliefGain,maxHeightUnits:level.maxHeightUnits,metersPerUnit,staticWorld:Boolean(level.staticWorld)};
+}
+// Dimensions of the representation that is actually on screen (the displayed,
+// fully prepared resource), with the compensation that maps it to the target
+// footprint. Falls back to the requested tier before any resource is ready.
+function localPatchDimensions(){
+  const dims=displayResource?{...displayResource.dims}:patchDimensionsForLevel(requestedLodIndexForZoom());
+  dims.presentationCompensation=localPresentationCompensation(zoomState.scalar,dims.levelIndex);
+  return dims;
+}
+function localDisplayFrame(){
+  if(displayResource)return {lat0:displayResource.lat0,lon0:displayResource.lon0,dims:displayResource.dims,groundDetailWeight:displayResource.groundDetailWeight};
+  const dims=patchDimensionsForLevel(requestedLodIndexForZoom());
+  return {lat0:zoomState.focusLatitudeRadians,lon0:zoomState.focusLongitudeRadians,dims,groundDetailWeight:groundDetailWeightForLevel(dims.levelIndex)};
+}
+function groundDetailWeightForLevel(index){
+  const h=LOCAL_DETAIL_LEVELS[index]?.visibleHeightMeters??GROUND_FOOTPRINT_HEIGHT_METERS;
+  return smoothstep01(Math.log(15000/h)/Math.log(15000/GROUND_FOOTPRINT_HEIGHT_METERS));
+}
+function localHash(eastMeters,northMeters,salt=0){
+  const x=Math.floor(eastMeters*.5),z=Math.floor(northMeters*.5),seedSalt=(seededHash32("local-hash")^(salt|0))|0;
+  let h=(Math.imul(x,374761393)^Math.imul(z,668265263)^Math.imul(seedSalt,2246822519))>>>0;
+  h=Math.imul(h^(h>>>13),1274126177)>>>0;return ((h^(h>>>16))>>>0)/4294967295;
+}
+function localSurfaceSample(registeredEastMeters,registeredNorthMeters,base){
+  const salt=((seededUnit("local-ground")*1e9)|0)^0x51f15e;
+  const broad=surfaceValueNoise(registeredEastMeters,registeredNorthMeters,34,salt+11)*1.15;
+  const medium=surfaceValueNoise(registeredEastMeters,registeredNorthMeters,12,salt+29)*.72;
+  const fine=surfaceValueNoise(registeredEastMeters,registeredNorthMeters,4.2,salt+47)*.38;
+  const field=(broad+medium+fine)/2.25;
+  const land=!!base?.land;
+  const microElevation=land?field*5.2:field*.45;
+  const baseColor=Array.isArray(base?.color)?base.color:[.18,.32,.22];
+  const light=field*.16;
+  const high=Number(base?.elevationMeters||0)>2600;
+  const color=land
+    ? (high
+      ? [clamp(.34+light,0,1),clamp(.38+light,0,1),clamp(.30+light*.7,0,1)]
+      : [clamp(baseColor[0]*.52+.14+light,0,1),clamp(baseColor[1]*.52+.24+light,0,1),clamp(baseColor[2]*.44+.09+light*.65,0,1)])
+    : [clamp(baseColor[0]*.45+.04+light*.15,0,1),clamp(baseColor[1]*.55+.12+light*.2,0,1),clamp(baseColor[2]*.7+.28+light*.28,0,1)];
+  return {microElevation,color};
+}
+function localBiomeCoordinateProof(latitudeRadians,longitudeRadians){
+  const tile=mapWorldTileAt(latitudeRadians,longitudeRadians),registered=canonicalRegisteredMetersForLatLon(latitudeRadians,longitudeRadians);
+  const sample=geography?.sampleLatLon?.(latitudeRadians,longitudeRadians)||null;
+  const local=localSurfaceSample(registered.eastMeters,registered.northMeters,sample);
+  const signature="BIO-"+seededHash32([
+    tile.x,tile.y,
+    Number(registered.eastMeters||0).toFixed(3),Number(registered.northMeters||0).toFixed(3),
+    sample?.surfaceClass||"",Number(sample?.elevationMeters||0).toFixed(3),Number(sample?.moisture||0).toFixed(6),Number(sample?.mountainInfluence||0).toFixed(6),
+    Number(local.microElevation||0).toFixed(6),(local.color||[]).map(v=>Number(v||0).toFixed(6)).join(",")
+  ].join("|")).toString(16).toUpperCase().padStart(8,"0");
+  return Object.freeze({
+    signature,worldTile:Object.freeze({x:String(tile.x),y:String(tile.y)}),
+    registeredMeters:Object.freeze({east:Number(Number(registered.eastMeters||0).toFixed(3)),north:Number(Number(registered.northMeters||0).toFixed(3))}),
+    surfaceClass:sample?.surfaceClass||null,land:Boolean(sample?.land),elevationMeters:Number(sample?.elevationMeters||0),
+    moisture:Number(sample?.moisture||0),mountainInfluence:Number(sample?.mountainInfluence||0),
+    microElevationMeters:Number(Number(local.microElevation||0).toFixed(6)),
+    coordinateRevision:coordinateFabricAuthority()?.revisionSignature||null,
+    authority:"Campaign-SEED + SeedCoordinateFabric registered coordinates + PlanetGeography"
+  });
+}
+function localGroundHeightUnits(eastMeters,northMeters,frame=localDisplayFrame()){
+  const dims=frame.dims,lat0=frame.lat0,lon0=frame.lon0,geo=canonicalLatLonForLocalOffset(lat0,lon0,eastMeters,northMeters);
+  const lat=geo.latitudeRadians,lon=geo.longitudeRadians;
+  const sample=geography?.sampleLatLon?.(lat,lon),centerElevation=frame.centerElevation??Number(geography?.sampleLatLon?.(lat0,lon0)?.elevationMeters||0);
+  const registered=canonicalRegisteredMetersForLatLon(lat,lon),local=localSurfaceSample(registered.eastMeters,registered.northMeters,sample),elevation=Number(sample?.elevationMeters||0);
+  const macroDelta=clamp(elevation-centerElevation,-dims.reliefClampMeters,dims.reliefClampMeters);
+  const raw=(macroDelta*dims.reliefGain+local.microElevation*.8*frame.groundDetailWeight)/dims.metersPerUnit;
+  const ux=eastMeters/dims.patchWidth+.5,vz=northMeters/dims.patchHeight+.5,edge=Math.min(ux,1-ux,vz,1-vz);
+  return clamp(raw,-dims.maxHeightUnits,dims.maxHeightUnits)*smoothstep01(clamp(edge/.12,0,1));
+}
+function localWildernessHashInt(x,y,salt=0){
+  const seedSalt=(seededHash32("local-wilderness")^(salt|0))|0;
+  let h=(Math.imul(x|0,374761393)^Math.imul(y|0,668265263)^Math.imul(seedSalt,2246822519))>>>0;
+  h=Math.imul(h^(h>>>13),1274126177)>>>0;return (h^(h>>>16))>>>0;
+}
+function localWildernessBiome(sample,nearWater=false){
+  if(!sample?.land)return "water";
+  if(nearWater||sample.surfaceClass==="coast"||Number(sample.moisture||0)>.68)return "wet";
+  if(Number(sample.elevationMeters||0)>1550||Number(sample.mountainInfluence||0)>.22)return "rocky";
+  if(Number(sample.moisture||0)>.49)return "wooded";
+  return "grassland";
+}
+function localWildernessFamily(biome,roll){
+  const r=clamp(Number(roll)||0,0,.999999);
+  // Keep one deterministic global-cell scatter, but give each biome a
+  // stronger silhouette vocabulary so terrain identity reads at gameplay zoom.
+  if(biome==="rocky")return r<.30?"rock":r<.40?"outcrop":r<.58?"grass":r<.73?"bush":r<.82?"stump":r<.91?"flower":"sapling";
+  if(biome==="wet")return r<.38?"reed":r<.52?"bush":r<.68?"driftwood":r<.76?"rock":r<.90?"grass":"flower";
+  if(biome==="wooded")return r<.28?"bush":r<.49?"sapling":r<.64?"log":r<.73?"stump":r<.83?"rock":r<.92?"grass":"flower";
+  return r<.24?"grass":r<.45?"flower":r<.62?"bush":r<.75?"rock":r<.86?"log":r<.93?"stump":"sapling";
+}
+function localWildernessSpacing(dims){
+  const h=Number(dims?.visibleHeight||dims?.visibleHeightMeters||500);
+  // Keep candidate counts bounded without introducing an ordered early-stop
+  // band. Each physical LOD gets globally anchored cells large enough that the
+  // entire viewport can be scanned and still remain cheap.
+  return h<=45?6:h<=90?11:h<=240?32:75;
+}
+function* prepareLocalWildernessPlanSteps(job){
+  const started=performance.now(),dims=job?.dims;
+  if(!dims?.staticWorld)return null;
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const focus=mapWorldTileAt(job.lat0,job.lon0),centerX=Number(BigInt(focus.x))*tileMeters,centerY=Number(BigInt(focus.y))*tileMeters;
+  const spacing=localWildernessSpacing(dims),halfX=dims.patchWidth*.52,halfY=dims.patchHeight*.52;
+  const minX=Math.floor((centerX-halfX)/spacing),maxX=Math.ceil((centerX+halfX)/spacing);
+  const minY=Math.floor((centerY-halfY)/spacing),maxY=Math.ceil((centerY+halfY)/spacing);
+  const raw=[],fauna=[],familyCounts={},biomeCounts={};let candidates=0,rejectedWater=0;
+  const salt=((seededUnit("local-wilderness-cells")*0x7fffffff)|0)^0x63d83595;
+  const maxStatic=dims.visibleHeight<=90?96:dims.visibleHeight<=240?112:128;
+  // Scan the complete bounded patch. The previous ordered early stop filled the
+  // budget from one side of the grid, producing the visible horizontal prop
+  // band. Global-cell hashes now choose a uniformly distributed bounded subset.
+  for(let gy=minY;gy<=maxY;gy++){
+    for(let gx=minX;gx<=maxX;gx++){
+      candidates++;if((candidates&7)===0)yield .125;const h=localWildernessHashInt(gx,gy,salt),u=(h>>>0)/4294967295;
+    const jx=((localWildernessHashInt(gx,gy,salt+17)>>>0)/4294967295-.5)*spacing*.72;
+    const jy=((localWildernessHashInt(gx,gy,salt+31)>>>0)/4294967295-.5)*spacing*.72;
+    const worldX=(gx+.5)*spacing+jx,worldY=(gy+.5)*spacing+jy,east=worldX-centerX,north=worldY-centerY;
+    if(Math.abs(east)>halfX*.965||Math.abs(north)>halfY*.965)continue;
+    const tx=String(Math.round(worldX/tileMeters)),ty=String(Math.round(worldY/tileMeters)),geo=worldLatLonForTile(tx,ty);
+    const sample=geography?.sampleLatLon?.(geo.latitudeRadians,geo.longitudeRadians);
+    if(!sample?.land){rejectedWater++;continue;}
+    const probeMeters=Math.max(24,Math.min(56,spacing*2.8)),probe=probeMeters/WORLD_RADIUS_METERS,probeLon=probe/Math.max(.08,Math.cos(geo.latitudeRadians));
+    const waterNorthProbe=!geography?.sampleLatLon?.(clamp(geo.latitudeRadians+probe,-Math.PI*.499999,Math.PI*.499999),geo.longitudeRadians)?.land;
+    const waterSouthProbe=!geography?.sampleLatLon?.(clamp(geo.latitudeRadians-probe,-Math.PI*.499999,Math.PI*.499999),geo.longitudeRadians)?.land;
+    const waterEastProbe=!geography?.sampleLatLon?.(geo.latitudeRadians,wrapLongitudeRadians(geo.longitudeRadians+probeLon))?.land;
+    const waterWestProbe=!geography?.sampleLatLon?.(geo.latitudeRadians,wrapLongitudeRadians(geo.longitudeRadians-probeLon))?.land;
+    const nearWater=waterNorthProbe||waterSouthProbe||waterEastProbe||waterWestProbe;
+    let waterEast=(waterEastProbe?1:0)-(waterWestProbe?1:0),waterNorth=(waterNorthProbe?1:0)-(waterSouthProbe?1:0);
+    const waterVectorLength=Math.hypot(waterEast,waterNorth);
+    if(waterVectorLength>0){waterEast/=waterVectorLength;waterNorth/=waterVectorLength;}
+    const biome=localWildernessBiome(sample,nearWater),density=biome==="wooded"?.76:biome==="wet"?.72:biome==="rocky"?.62:.68;
+    if(u>density)continue;
+    const roll=(localWildernessHashInt(gx,gy,salt+71)>>>0)/4294967295,family=localWildernessFamily(biome,roll);
+    const baseScale=.78+((localWildernessHashInt(gx,gy,salt+93)>>>0)/4294967295)*.62;
+    const reliefScale=family==="outcrop"?1.10:(family==="rock"&&biome==="rocky"?1.06:(family==="sapling"&&biome==="wooded"?1.18:(family==="reed"&&biome==="wet"?1.14:1)));
+    const closeLod=Number(dims.visibleHeight||dims.visibleHeightMeters||500)<=90;
+    const closeReadableScale=closeLod?(biome==="wooded"&&["grass","flower","bush","sapling","log","stump"].includes(family)?1.34:(["grass","flower","bush","sapling","reed"].includes(family)?1.24:1)):1;
+    const scale=baseScale*reliefScale*closeReadableScale;
+    const rotation=((localWildernessHashInt(gx,gy,salt+109)>>>0)/4294967295)*Math.PI*2;
+    const variant=(localWildernessHashInt(gx,gy,salt+131)>>>0)/4294967295;
+    const shoreRoll=(localWildernessHashInt(gx,gy,salt+149)>>>0)/4294967295;
+    const priority=localWildernessHashInt(gx,gy,salt+191)>>>0;
+    const faunaRoll=(localWildernessHashInt(gx,gy,salt+157)>>>0)/4294967295;
+    raw.push(Object.freeze({east,north,worldX,worldY,worldTile:Object.freeze({x:tx,y:ty}),family,biome,scale,rotation,variant,priority,faunaRoll,elevationMeters:Number(sample.elevationMeters||0),moisture:Number(sample.moisture||0),mountainInfluence:Number(sample.mountainInfluence||0),nearWater,shoreAccent:nearWater&&shoreRoll<.48,waterEast,waterNorth}));
+    }
+    yield 1;
+  }
+  raw.sort((a,b)=>a.priority-b.priority||a.worldY-b.worldY||a.worldX-b.worldX);
+  const items=raw.slice(0,maxStatic).sort((a,b)=>a.worldY-b.worldY||a.worldX-b.worldX);
+  for(const item of items){
+    familyCounts[item.family]=(familyCounts[item.family]||0)+1;biomeCounts[item.biome]=(biomeCounts[item.biome]||0)+1;
+    if(fauna.length<4&&item.faunaRoll<(item.biome==="wooded"?.085:item.biome==="grassland"?.075:item.biome==="wet"?.06:.025)){
+      fauna.push(Object.freeze({...item,kind:item.biome==="wet"?"waterbird":item.biome==="wooded"?"hare":item.biome==="grassland"?"deer":"bird"}));
+    }
+  }
+  const signature="WLD|"+revealHashText([activeSeed,focus.x,focus.y,dims.levelId,spacing,...items.map(x=>x.worldTile.x+","+x.worldTile.y+":"+x.family)].join("|"));
+  return Object.freeze({signature,focusTile:focus,spacing,candidates,rejectedWater,items:Object.freeze(items),fauna:Object.freeze(fauna),familyCounts:Object.freeze({...familyCounts}),biomeCounts:Object.freeze({...biomeCounts}),preparationMs:Number((performance.now()-started).toFixed(3)),deterministicGlobalCells:true,fullWorldScan:false});
+}
+function localWildernessManaged(item,reveal){
+  for(const center of microLocationClearanceCenters){
+    if(Math.hypot(Number(item.east||0)-center.east,Number(item.north||0)-center.north)<center.radiusMeters){
+      return {reject:true,road:false,microLocation:true};
+    }
+  }
+  if(!reveal)return {reject:false,road:false};
+  const dist=Math.hypot(item.worldX,item.worldY),tileMeters=reveal.tileMeters,ring=Number(window.StartingVillage?.RING_RADIUS_TILES||14)*tileMeters;
+  if(dist<Math.max(42,ring+12))return {reject:true,road:false};
+  const roadHalf=5.5,axisProtected=(Math.abs(item.worldX)<roadHalf&&Math.abs(item.worldY)<ring+10)||(Math.abs(item.worldY)<roadHalf&&Math.abs(item.worldX)<ring+10);
+  const ringProtected=Math.abs(dist-ring)<6.5;
+  const dir=window.StartingVillage?.direction?.(activeSeed)||{dx:1,dy:0},along=item.worldX*dir.dx+item.worldY*dir.dy,cross=Math.abs(item.worldX*dir.dy-item.worldY*dir.dx);
+  const gatewayProtected=along>ring-5&&along<Number(window.StartingVillage?.GATEWAY_MAINLAND_EDGE_TILES||29)*tileMeters+12&&cross<7;
+  if(axisProtected||ringProtected||gatewayProtected)return {reject:true,road:true};
+  const transition=smoothstep01((dist-Math.max(42,ring+12))/90);
+  const keep=((localWildernessHashInt(Math.round(item.worldX),Math.round(item.worldY),211)>>>0)/4294967295)<(.18+.82*transition);
+  return {reject:!keep,road:false};
+}
+function wildernessColor(family,biome){
+  const colors={
+    grass:[.27,.50,.12,255],flower:[.88,.38,.10,255],bush:[.10,.31,.07,255],rock:[.34,.33,.30,255],outcrop:[.31,.30,.28,255],
+    log:[.26,.13,.05,255],driftwood:[.36,.25,.13,255],stump:[.24,.12,.04,255],sapling:[.13,.39,.08,255],reed:[.30,.44,.11,255]
+  };
+  const base=colors[family]||[.25,.45,.15,255];
+  if(biome==="wet"&&family!=="flower")return [base[0]*.88,Math.min(1,base[1]*1.06),base[2]*.90,255];
+  return base;
+}
+function buildLocalWildernessMesh(plan,frame,reveal){
+  if(!plan?.items?.length||!localWildernessEnabled)return {mesh:null,accepted:0,rejectedManaged:0,rejectedRoad:0,shoreAccentCount:0,triangles:0,familyCounts:{},biomeCounts:{}};
+  const unit=frame.dims.metersPerUnit,positions=[],normals=[],colors=[],indices=[],familyCounts={},biomeCounts={};let accepted=0,rejectedManaged=0,rejectedRoad=0,shoreAccentCount=0;
+  const push=(x,y,z,color)=>{positions.push(x,y,z);normals.push(0,1,0);colors.push(Math.round(color[0]*255),Math.round(color[1]*255),Math.round(color[2]*255),255);return positions.length/3-1;};
+  const tri=(a,b,c)=>indices.push(a,b,c);
+  const quad=(a,b,c,d)=>{tri(a,b,c);tri(a,c,d);};
+  for(const item of plan.items){
+    const managed=localWildernessManaged(item,reveal);if(managed.reject){rejectedManaged++;if(managed.road)rejectedRoad++;continue;}
+    const x=item.east/unit,z=-item.north/unit,y=localGroundHeightUnits(item.east,item.north,frame)+.012,baseColor=wildernessColor(item.family,item.biome);
+    const variant=clamp(Number(item.variant??.5),0,1),tone=.90+variant*.18,color=[clamp(baseColor[0]*tone,0,1),clamp(baseColor[1]*tone,0,1),clamp(baseColor[2]*tone,0,1),255];
+    const m=(item.family==="outcrop"?1.48:item.family==="rock"?.76:item.family==="log"||item.family==="driftwood"?1.20:item.family==="sapling"?1.08:item.family==="bush"?.92:item.family==="stump"?.72:.62)*item.scale/unit;
+    const h=(item.family==="outcrop"?.88:item.family==="sapling"?4.2:item.family==="reed"?1.75:item.family==="bush"?1.18:item.family==="stump"?.74:item.family==="rock"?.43:item.family==="log"||item.family==="driftwood"?.55:item.family==="flower"?.78:.92)*item.scale/unit;
+    const ca=Math.cos(item.rotation),sa=Math.sin(item.rotation);
+    if(item.biome==="wet"&&item.shoreAccent&&Math.hypot(Number(item.waterEast||0),Number(item.waterNorth||0))>.1){
+      const bx=Number(item.waterEast||0),bz=-Number(item.waterNorth||0),tx=-bz,tz=bx;
+      const cx=x+bx*m*.78,cz=z+bz*m*.78,halfLength=m*(2.20+variant*.65),halfDepth=m*.52,py=y+.001;
+      const bank=[.08,.25,.18],inner=[.10,.31,.22];
+      const a=push(cx-tx*halfLength-bx*halfDepth,py,cz-tz*halfLength-bz*halfDepth,bank);
+      const b=push(cx+tx*halfLength-bx*halfDepth,py,cz+tz*halfLength-bz*halfDepth,bank);
+      const cc=push(cx+tx*halfLength+bx*halfDepth,py,cz+tz*halfLength+bz*halfDepth,bank);
+      const d=push(cx-tx*halfLength+bx*halfDepth,py,cz-tz*halfLength+bz*halfDepth,bank);quad(a,b,cc,d);
+      const innerLength=halfLength*.78,innerDepth=halfDepth*.42,icx=cx+bx*halfDepth*.45,icz=cz+bz*halfDepth*.45;
+      const ia=push(icx-tx*innerLength-bx*innerDepth,py+.001,icz-tz*innerLength-bz*innerDepth,inner);
+      const ib=push(icx+tx*innerLength-bx*innerDepth,py+.001,icz+tz*innerLength-bz*innerDepth,inner);
+      const ic=push(icx+tx*innerLength+bx*innerDepth,py+.001,icz+tz*innerLength+bz*innerDepth,inner);
+      const id=push(icx-tx*innerLength+bx*innerDepth,py+.001,icz-tz*innerLength+bz*innerDepth,inner);quad(ia,ib,ic,id);
+      shoreAccentCount++;
+    }
+    if(!["grass","flower"].includes(item.family)){
+      const patch=item.biome==="wet"?[.07,.20,.17]:item.biome==="rocky"?[.17,.16,.14]:item.biome==="wooded"?[.10,.20,.06]:[.23,.29,.08];
+      const pr=m*(item.family==="outcrop"?1.24:1.48),py=y+.002;
+      const pa=push(x-pr,py,z,patch),pb=push(x,py,z-pr*.72,patch),pcv=push(x+pr,py,z,patch),pd=push(x,py,z+pr*.72,patch);quad(pa,pb,pcv,pd);
+    }
+    if(item.family==="rock"||item.family==="outcrop"){
+      const ridge=item.family==="outcrop",apexEast=(variant-.5)*m*.58,apexNorth=(.5-variant)*m*.38;
+      const a=push(x-m*(1.02+variant*.22),y,z-m*(.58+(1-variant)*.18),color),b=push(x+m*(.86+(1-variant)*.28),y,z-m*(.54+variant*.16),color);
+      const c=push(x+m*(.64+variant*.18),y,z+m*(.76+(1-variant)*.24),color),d=push(x-m*(.62+(1-variant)*.22),y,z+m*(.70+variant*.20),color);
+      const e=push(x+apexEast,y+h*(.72+variant*.38),z+apexNorth,color);
+      tri(a,b,e);tri(b,c,e);tri(c,d,e);tri(d,a,e);quad(a,d,c,b);
+      if(ridge){
+        // A low secondary lobe follows the deterministic rotation so outcrops
+        // read as varied ridge clusters rather than repeated twin pyramids.
+        const shade=[color[0]*.86,color[1]*.86,color[2]*.86,255],rm=m*(.46+(1-variant)*.14),rh=h*(.48+variant*.18);
+        const ox=ca*m*(.62+variant*.28),oz=sa*m*(.62+variant*.28);
+        const aa=push(x+ox-rm,y+.01,z+oz-rm*.50,shade),bb=push(x+ox+rm,y+.01,z+oz-rm*.44,shade);
+        const cc=push(x+ox+rm*.60,y+.01,z+oz+rm*.62,shade),dd=push(x+ox-rm*.58,y+.01,z+oz+rm*.58,shade),ee=push(x+ox*.82,y+rh,z+oz*.82,shade);
+        tri(aa,bb,ee);tri(bb,cc,ee);tri(cc,dd,ee);tri(dd,aa,ee);quad(aa,dd,cc,bb);
+      }
+    }else if(item.family==="log"||item.family==="driftwood"){
+      const dx=ca*m,dz=sa*m,px=-sa*h*.42,pz=ca*h*.42,top=y+h*.58;
+      const a=push(x-dx+px,y,z-dz+pz,color),b=push(x+dx+px,y,z+dz+pz,color),cc=push(x+dx-px,y,z+dz-pz,color),d=push(x-dx-px,y,z-dz-pz,color);
+      const e=push(x-dx+px,top,z-dz+pz,color),ff=push(x+dx+px,top,z+dz+pz,color),g=push(x+dx-px,top,z+dz-pz,color),hh=push(x-dx-px,top,z-dz-pz,color);
+      quad(a,b,ff,e);quad(b,cc,g,ff);quad(cc,d,hh,g);quad(d,a,e,hh);quad(e,ff,g,hh);
+    }else if(item.family==="stump"){
+      const a=push(x-m,y,z-m,color),b=push(x+m,y,z-m,color),cc=push(x+m,y,z+m,color),d=push(x-m,y,z+m,color);
+      const e=push(x-m*.7,y+h,z-m*.7,color),ff=push(x+m*.7,y+h,z-m*.7,color),g=push(x+m*.7,y+h,z+m*.7,color),hh=push(x-m*.7,y+h,z+m*.7,color);
+      quad(a,b,ff,e);quad(b,cc,g,ff);quad(cc,d,hh,g);quad(d,a,e,hh);quad(e,ff,g,hh);
+    }else if(item.family==="bush"){
+      const top=push(x-m*.18,y+h,z+m*.06,color),bottom=push(x,y+h*.08,z,color),ring=[
+        push(x-m,y+h*.48,z,color),push(x,y+h*.48,z-m,color),push(x+m,y+h*.48,z,color),push(x,y+h*.48,z+m,color)
+      ];
+      for(let k=0;k<4;k++){const n=(k+1)%4;tri(top,ring[k],ring[n]);tri(bottom,ring[n],ring[k]);}
+      const side=[color[0]*.88,color[1]*.94,color[2]*.86,255],sm=m*.58,sx=x+m*.46,sz=z-m*.18,st=push(sx,y+h*.78,sz,side),sb=push(sx,y+h*.12,sz,side);
+      const sr=[push(sx-sm,y+h*.38,sz,side),push(sx,y+h*.38,sz-sm,side),push(sx+sm,y+h*.38,sz,side),push(sx,y+h*.38,sz+sm,side)];
+      for(let k=0;k<4;k++){const n=(k+1)%4;tri(st,sr[k],sr[n]);tri(sb,sr[n],sr[k]);}
+    }else if(item.family==="sapling"){
+      const trunk=[.31,.18,.07],tw=m*.16,th=h*.58;
+      const a=push(x-tw,y,z,trunk),b=push(x+tw,y,z,trunk),cc=push(x+tw,y+th,z,trunk),d=push(x-tw,y+th,z,trunk);quad(a,b,cc,d);
+      const e=push(x,y,z-tw,trunk),ff=push(x,y,z+tw,trunk),g=push(x,y+th,z+tw,trunk),hh=push(x,y+th,z-tw,trunk);quad(e,ff,g,hh);
+      const cy=y+h*.72,top=push(x,y+h*1.08,z,color),bottom=push(x,cy-h*.22,z,color),ring=[
+        push(x-m,cy,z,color),push(x,cy,z-m,color),push(x+m,cy,z,color),push(x,cy,z+m,color)
+      ];
+      for(let k=0;k<4;k++){const n=(k+1)%4;tri(top,ring[k],ring[n]);tri(bottom,ring[n],ring[k]);}
+    }else{
+      const stem=item.family==="flower"?[.25,.55,.12]:color,w=m*.28,blades=item.family==="flower"?3:5;
+      for(let k=0;k<blades;k++){
+        const a=item.rotation+k*Math.PI/blades,dx=Math.cos(a)*w,dz=Math.sin(a)*w,lean=(k-(blades-1)/2)*w*.38;
+        const p=push(x-dz,y,z+dx,stem),q=push(x+dz,y,z-dx,stem),r=push(x+lean,y+h*(.78+k*.055),z-lean*.35,stem);tri(p,q,r);
+      }
+      if(item.family==="flower"){
+        const bloom=[.98,.68,.12],center=push(x,y+h,z,bloom),petal=m*.46;
+        const p0=push(x-petal,y+h,z,bloom),p1=push(x,y+h+.03,z-petal,bloom),p2=push(x+petal,y+h,z,bloom),p3=push(x,y+h+.03,z+petal,bloom);
+        tri(center,p0,p1);tri(center,p1,p2);tri(center,p2,p3);tri(center,p3,p0);
+      }
+    }
+    accepted++;familyCounts[item.family]=(familyCounts[item.family]||0)+1;biomeCounts[item.biome]=(biomeCounts[item.biome]||0)+1;
+  }
+  if(!indices.length)return {mesh:null,accepted,rejectedManaged,rejectedRoad,shoreAccentCount,triangles:0,familyCounts,biomeCounts};
+  // The old wilderness mesh forced every vertex normal straight upward, so
+  // rocks, bushes and fauna-adjacent props rendered like flat map symbols.
+  // Accumulate real triangle normals while keeping all geometry in one batch.
+  normals.fill(0);
+  for(let i=0;i<indices.length;i+=3){
+    const ia=indices[i]*3,ib=indices[i+1]*3,ic=indices[i+2]*3;
+    const abx=positions[ib]-positions[ia],aby=positions[ib+1]-positions[ia+1],abz=positions[ib+2]-positions[ia+2];
+    const acx=positions[ic]-positions[ia],acy=positions[ic+1]-positions[ia+1],acz=positions[ic+2]-positions[ia+2];
+    const nx=aby*acz-abz*acy,ny=abz*acx-abx*acz,nz=abx*acy-aby*acx;
+    for(const at of [ia,ib,ic]){normals[at]+=nx;normals[at+1]+=ny;normals[at+2]+=nz;}
+  }
+  for(let i=0;i<normals.length;i+=3){
+    normals[i+1]+=.28;
+    const len=Math.hypot(normals[i],normals[i+1],normals[i+2])||1;
+    normals[i]/=len;normals[i+1]/=len;normals[i+2]/=len;
+  }
+  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
+  return {mesh,accepted,rejectedManaged,rejectedRoad,shoreAccentCount,triangles:indices.length/3,familyCounts,biomeCounts};
+}
+function buildLocalFaunaMesh(kind,size,unit){
+  const positions=[],normals=[],colors=[],indices=[],s=size/unit;
+  // Species palettes need enough natural contrast to survive the ground camera
+  // and dense biome dressing without becoming UI-like markers.
+  const palette=kind==="waterbird"?[.53,.60,.40]:kind==="bird"?[.31,.26,.16]:kind==="hare"?[.69,.43,.18]:[.53,.31,.14];
+  const dark=kind==="waterbird"?[.16,.22,.16]:kind==="bird"?[.17,.15,.11]:kind==="hare"?[.22,.11,.05]:[.31,.18,.09];
+  const light=kind==="waterbird"?[.98,.95,.76]:kind==="bird"?[.58,.47,.27]:kind==="hare"?[.95,.77,.46]:[.78,.60,.37];
+  const push=(x,y,z,color=palette)=>{positions.push(x,y,z);normals.push(0,1,0);colors.push(Math.round(color[0]*255),Math.round(color[1]*255),Math.round(color[2]*255),255);return positions.length/3-1;};
+  const tri=(a,b,c)=>indices.push(a,b,c);
+  // Reusable rounded low-poly primitive. The old implementation assembled
+  // wildlife from rectangular boxes, so even correct behavior read as props.
+  // Five latitude bands and eight radial segments keep each animal cheap while
+  // giving it a tapered, light-reactive silhouette from the gameplay camera.
+  const ellipsoid=(cx,cy,cz,rx,ry,rz,color=palette,segments=8,rings=5)=>{
+    const base=positions.length/3;
+    for(let ring=0;ring<=rings;ring++){
+      const phi=-Math.PI*.5+(ring/rings)*Math.PI,cp=Math.cos(phi),sp=Math.sin(phi);
+      for(let segment=0;segment<segments;segment++){
+        const theta=(segment/segments)*Math.PI*2;
+        push(cx+Math.cos(theta)*cp*rx,cy+sp*ry,cz+Math.sin(theta)*cp*rz,color);
+      }
+    }
+    for(let ring=0;ring<rings;ring++)for(let segment=0;segment<segments;segment++){
+      const next=(segment+1)%segments;
+      const a=base+ring*segments+segment,b=base+ring*segments+next;
+      const d=base+(ring+1)*segments+segment,c=base+(ring+1)*segments+next;
+      // Reverse the parametric winding so the outside faces remain front-facing.
+      tri(a,c,b);tri(a,d,c);
+    }
+  };
+  const pyramidY=(cx,baseY,cz,rx,rz,height,color=palette)=>{
+    const a=push(cx-rx,baseY,cz-rz,color),b=push(cx+rx,baseY,cz-rz,color),c=push(cx+rx,baseY,cz+rz,color),d=push(cx-rx,baseY,cz+rz,color),tip=push(cx,baseY+height,cz,color);
+    tri(a,c,b);tri(a,d,c);tri(a,b,tip);tri(b,c,tip);tri(c,d,tip);tri(d,a,tip);
+  };
+  const pyramidX=(baseX,cy,cz,ry,rz,length,color=palette)=>{
+    const a=push(baseX,cy-ry,cz-rz,color),b=push(baseX,cy+ry,cz-rz,color),c=push(baseX,cy+ry,cz+rz,color),d=push(baseX,cy-ry,cz+rz,color),tip=push(baseX+length,cy,cz,color);
+    tri(a,b,c);tri(a,c,d);tri(a,tip,b);tri(b,tip,c);tri(c,tip,d);tri(d,tip,a);
+  };
+  if(kind==="deer"){
+    // Compact torso + distinct neck/head/muzzle keeps the top-down silhouette
+    // cervid-shaped instead of reading as a long capsule.
+    ellipsoid(-s*.10,s*.70,0,s*.55,s*.30,s*.28,palette,10,5);
+    ellipsoid(s*.32,s*.95,0,s*.19,s*.38,s*.18,dark,8,5);
+    ellipsoid(s*.55,s*1.20,0,s*.27,s*.21,s*.21,palette,8,5);
+    ellipsoid(s*.77,s*1.16,0,s*.19,s*.12,s*.13,dark,8,4);
+    for(const x of [-s*.36,s*.28])for(const z of [-s*.17,s*.17])ellipsoid(x,s*.29,z,s*.060,s*.28,s*.055,dark,6,4);
+    pyramidY(s*.51,s*1.35,-s*.12,s*.075,s*.050,s*.22,dark);
+    pyramidY(s*.51,s*1.35,s*.12,s*.075,s*.050,s*.22,dark);
+    ellipsoid(-s*.61,s*.75,0,s*.16,s*.09,s*.09,light,6,4);
+  }else if(kind==="hare"){
+    // Keep the same restrained physical envelope, but put the defining features
+    // into the camera-visible X/Z footprint. Vertical ears collapsed into the
+    // near-top-down view and made the animal read as a small brown pebble.
+    ellipsoid(-s*.12,s*.43,0,s*.50,s*.27,s*.31,palette,9,5);
+    ellipsoid(s*.28,s*.58,0,s*.27,s*.22,s*.23,light,8,5);
+    // Two long plan-view ears carry bright outer mass plus a narrow dark inner
+    // stripe. The two-tone treatment remains part of the same merged mesh and
+    // reads as ears even before flee motion, without increasing the actor envelope.
+    pyramidX(s*.31,s*.66,-s*.15,s*.070,s*.055,s*.49,light);
+    pyramidX(s*.31,s*.66,s*.15,s*.070,s*.055,s*.49,light);
+    pyramidX(s*.36,s*.725,-s*.15,s*.018,s*.022,s*.36,dark);
+    pyramidX(s*.36,s*.725,s*.15,s*.018,s*.022,s*.36,dark);
+    ellipsoid(s*.50,s*.58,0,s*.075,s*.050,s*.060,dark,6,4);
+    // Broad rear feet and white tail keep the front/back axis readable during flee.
+    ellipsoid(-s*.39,s*.20,-s*.20,s*.28,s*.10,s*.12,dark,6,4);
+    ellipsoid(-s*.39,s*.20,s*.20,s*.28,s*.10,s*.12,dark,6,4);
+    ellipsoid(-s*.58,s*.45,0,s*.15,s*.14,s*.15,[.95,.90,.78],7,4);
+  }else{
+    const water=kind==="waterbird";
+    ellipsoid(-s*.06,s*.47,0,s*(water?.45:.42),s*(water?.20:.22),s*(water?.25:.28),palette,9,5);
+    if(water){
+      // Waterbirds need a horizontal neck/head axis: a mostly vertical neck is
+      // nearly invisible from the gameplay camera. These merged light forms stay
+      // within the prior body envelope but create a clear directional silhouette.
+      ellipsoid(s*.28,s*.56,0,s*.29,s*.080,s*.075,light,8,4);
+      ellipsoid(s*.53,s*.59,0,s*.16,s*.15,s*.15,light,8,4);
+      pyramidX(s*.64,s*.58,0,s*.055,s*.075,s*.28,[.78,.50,.10]);
+    }else{
+      ellipsoid(s*.39,s*.59,0,s*.18,s*.18,s*.18,light,8,4);
+      pyramidX(s*.53,s*.58,0,s*.07,s*.095,s*.28,[.66,.49,.20]);
+    }
+    // Dark, attached wings widen the plan-view body without increasing actor size.
+    // Move their visual centers slightly outward and add a slim light shoulder
+    // seam so the idle bird keeps two readable wing lobes against wet terrain.
+    ellipsoid(-s*.12,s*.51,-s*.23,s*.34,s*.055,s*.27,dark,8,4);
+    ellipsoid(-s*.12,s*.51,s*.23,s*.34,s*.055,s*.27,dark,8,4);
+    if(water){
+      ellipsoid(-s*.02,s*.565,-s*.17,s*.24,s*.030,s*.055,light,7,3);
+      ellipsoid(-s*.02,s*.565,s*.17,s*.24,s*.030,s*.055,light,7,3);
+    }
+    pyramidX(-s*.33,s*.46,0,s*.070,s*.15,-s*.28,dark);
+    if(water){
+      ellipsoid(-s*.12,s*.20,-s*.105,s*.045,s*.22,s*.045,[.43,.28,.12],6,4);
+      ellipsoid(-s*.12,s*.20,s*.105,s*.045,s*.22,s*.045,[.43,.28,.12],6,4);
+    }
+  }
+  normals.fill(0);
+  for(let i=0;i<indices.length;i+=3){
+    const ia=indices[i]*3,ib=indices[i+1]*3,ic=indices[i+2]*3;
+    const abx=positions[ib]-positions[ia],aby=positions[ib+1]-positions[ia+1],abz=positions[ib+2]-positions[ia+2];
+    const acx=positions[ic]-positions[ia],acy=positions[ic+1]-positions[ia+1],acz=positions[ic+2]-positions[ia+2];
+    const nx=aby*acz-abz*acy,ny=abz*acx-abx*acz,nz=abx*acy-aby*acx;
+    for(const at of [ia,ib,ic]){normals[at]+=nx;normals[at+1]+=ny;normals[at+2]+=nz;}
+  }
+  for(let i=0;i<normals.length;i+=3){const len=Math.hypot(normals[i],normals[i+1],normals[i+2])||1;normals[i]/=len;normals[i+1]/=len;normals[i+2]/=len;}
+  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
+  return {mesh,triangles:indices.length/3};
+}
+function clearLocalFauna(){
+  rememberLocalFaunaActors();
+  for(const actor of localFaunaActors)actor.mesh?.destroy?.();
+  localFaunaActors=[];localFaunaRoot?.destroy?.();localFaunaRoot=null;
+  wildlifeReaction={...wildlifeReaction,activeActorCount:0,visibleActorCount:0,reactingActorCount:0,sleepingActorCount:0,spatialBucketCount:0,stateCounts:{idle:0,flee:0,takeoff:0,return:0,sleep:0}};
+}
+function localFaunaKey(item){
+  return String(activeSeed||"seed")+"|"+String(item?.kind||"fauna")+"|"+String(item?.worldTile?.x??"?")+"|"+String(item?.worldTile?.y??"?");
+}
+function localFaunaWrappedEastDelta(fromEast,toEast){
+  const period=Math.PI*2*WORLD_RADIUS_METERS,half=period*.5;
+  let d=Number(toEast||0)-Number(fromEast||0);
+  if(d>half)d-=period;else if(d<-half)d+=period;
+  return d;
+}
+function localFaunaPresenceMeters(){
+  const p=canonicalRegisteredMetersForLatLon(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  return {east:Number(p?.eastMeters||0),north:Number(p?.northMeters||0)};
+}
+function pruneLocalFaunaReactionMemory(now=performance.now()){
+  for(const [key,value] of localFaunaReactionMemory)if(Number(value?.expiresAt||0)<=now)localFaunaReactionMemory.delete(key);
+  while(localFaunaReactionMemory.size>LOCAL_FAUNA_MEMORY_LIMIT)localFaunaReactionMemory.delete(localFaunaReactionMemory.keys().next().value);
+}
+function rememberLocalFaunaActor(actor,now=performance.now()){
+  if(!actor?.id)return;
+  localFaunaReactionMemory.delete(actor.id);
+  localFaunaReactionMemory.set(actor.id,{
+    currentWorldX:Number(actor.currentWorldX||actor.homeWorldX||0),currentWorldY:Number(actor.currentWorldY||actor.homeWorldY||0),
+    altitudeMeters:Number(actor.altitudeMeters||0),state:String(actor.state||"idle"),
+    reactionRemaining:Number(actor.reactionRemaining||0),cooldownUntil:Number(actor.cooldownUntil||0),
+    fleeEast:Number(actor.fleeEast||0),fleeNorth:Number(actor.fleeNorth||0),expiresAt:now+LOCAL_FAUNA_MEMORY_TTL_MS
+  });
+  pruneLocalFaunaReactionMemory(now);
+}
+function rememberLocalFaunaActors(){
+  const now=performance.now();for(const actor of localFaunaActors)rememberLocalFaunaActor(actor,now);
+}
+function rebuildLocalFauna(plan,frame,reveal){
+  clearLocalFauna();
+  if(!localWildernessEnabled||!plan?.fauna?.length||!tangentPatch)return 0;
+  pruneLocalFaunaReactionMemory();
+  localFaunaRoot=new pc.Entity("LocalAmbientFauna");tangentPatch.addChild(localFaunaRoot);
+  const unit=frame.dims.metersPerUnit;
+  for(const item of plan.fauna){
+    if(localFaunaActors.length>=4||localWildernessManaged(item,reveal).reject)continue;
+    // Fauna identity/position comes from the canonical wilderness item, but its
+    // physical body size must not inherit that item's unrelated prop-family
+    // scale (a deer spawned from a large prop candidate became huge while a hare
+    // from a grass candidate became tiny). Use restrained species metres plus a
+    // deterministic mild variation from the existing canonical item variant.
+    const y=localGroundHeightUnits(item.east,item.north,frame),variation=.92+clamp(Number(item.variant||0),0,1)*.16;
+    // Keep deer restrained; use plausible large-hare / goose-sized envelopes
+    // for the two species that were sub-pixel/near-sub-pixel in phone evidence.
+    // Identity and variation remain canonical and unchanged.
+    const size=(item.kind==="deer"?1.15:item.kind==="waterbird"?.92:item.kind==="bird"?.50:.78)*variation;
+    const built=buildLocalFaunaMesh(item.kind,size,unit),actorEntity=new pc.Entity("AmbientFauna-"+item.kind+"-"+localFaunaActors.length);localFaunaRoot.addChild(actorEntity);
+    actorEntity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});actorEntity.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.fauna,actorEntity)];
+    const id=localFaunaKey(item),memory=localFaunaReactionMemory.get(id)||null;
+    const resourceCenterX=Number(item.worldX||0)-Number(item.east||0),resourceCenterY=Number(item.worldY||0)-Number(item.north||0);
+    const currentWorldX=memory?Number(memory.currentWorldX):Number(item.worldX||0),currentWorldY=memory?Number(memory.currentWorldY):Number(item.worldY||0);
+    const east=localFaunaWrappedEastDelta(resourceCenterX,currentWorldX),north=currentWorldY-resourceCenterY;
+    actorEntity.setLocalPosition(east/unit,y+Number(memory?.altitudeMeters||0)/unit,-north/unit);
+    localFaunaActors.push({
+      id,entity:actorEntity,mesh:built.mesh,triangles:built.triangles,kind:item.kind,phase:item.rotation,frame,unit,
+      worldTile:Object.freeze({x:String(item.worldTile.x),y:String(item.worldTile.y)}),
+      homeWorldX:Number(item.worldX||0),homeWorldY:Number(item.worldY||0),resourceCenterX,resourceCenterY,
+      currentWorldX,currentWorldY,altitudeMeters:Number(memory?.altitudeMeters||0),
+      state:String(memory?.state||"idle"),reactionRemaining:Number(memory?.reactionRemaining||0),cooldownUntil:Number(memory?.cooldownUntil||0),
+      fleeEast:Number(memory?.fleeEast||0),fleeNorth:Number(memory?.fleeNorth||0),
+      idleRadiusMeters:item.kind==="bird"?.72:item.kind==="waterbird"?.55:item.kind==="hare"?.42:.48,
+      lastDistanceMeters:null,lastRenderedEastMeters:east,lastRenderedNorthMeters:north,sleeping:false
+    });
+  }
+  wildlifeReaction={...wildlifeReaction,activeActorCount:localFaunaActors.length};
+  return localFaunaActors.length;
+}
+function localFaunaReactionStateCounts(){
+  const counts={idle:0,flee:0,takeoff:0,return:0,sleep:0};
+  for(const actor of localFaunaActors){
+    if(actor.sleeping)counts.sleep++;
+    else if(Object.hasOwn(counts,actor.state))counts[actor.state]++;
+    else counts.idle++;
+  }
+  return counts;
+}
+function tickLocalFaunaReactionTriggers(){
+  if(!wildlifeReaction.enabled||!localFaunaActors.length)return;
+  const started=performance.now(),presence=localFaunaPresenceMeters(),lastEast=wildlifeReaction.lastPresenceEastMeters,lastNorth=wildlifeReaction.lastPresenceNorthMeters;
+  const moved=lastEast===null||lastNorth===null?0:Math.hypot(localFaunaWrappedEastDelta(lastEast,presence.east),presence.north-lastNorth);
+  const buckets=new Map(),bucketMeters=LOCAL_FAUNA_BUCKET_METERS;
+  for(const actor of localFaunaActors){
+    const dx=localFaunaWrappedEastDelta(presence.east,actor.currentWorldX),dy=actor.currentWorldY-presence.north;
+    const key=Math.floor(dx/bucketMeters)+","+Math.floor(dy/bucketMeters);
+    if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(actor);
+  }
+  const maxTrigger=Math.max(...Object.values(LOCAL_FAUNA_SPECS).map(x=>x.triggerMeters)),ring=Math.ceil(maxTrigger/bucketMeters),nearby=new Set();
+  for(let by=-ring;by<=ring;by++)for(let bx=-ring;bx<=ring;bx++){
+    const list=buckets.get(bx+","+by);if(list)for(const actor of list)nearby.add(actor);
+  }
+  let checks=0,triggers=0,lastActor=null,lastKind=null;
+  const triggerByKind={...wildlifeReaction.triggerByKind};
+  const now=performance.now();
+  if(moved>=.6){
+    for(const actor of nearby){
+      if(actor.sleeping||actor.state!=="idle"||now<Number(actor.cooldownUntil||0))continue;
+      const spec=LOCAL_FAUNA_SPECS[actor.kind]||LOCAL_FAUNA_SPECS.deer;
+      const dx=localFaunaWrappedEastDelta(presence.east,actor.currentWorldX),dy=actor.currentWorldY-presence.north,distance=Math.hypot(dx,dy);checks++;
+      actor.lastDistanceMeters=distance;
+      if(distance>spec.triggerMeters)continue;
+      const fallback=Number(actor.phase||0),len=Math.max(.001,distance);
+      actor.fleeEast=distance<.15?Math.cos(fallback):dx/len;
+      actor.fleeNorth=distance<.15?Math.sin(fallback):dy/len;
+      actor.state=spec.maxAltitudeMeters>0?"takeoff":"flee";
+      actor.reactionRemaining=spec.reactionSeconds;
+      actor.cooldownUntil=now+(spec.reactionSeconds+1.25)*1000;
+      triggers++;lastActor=actor.id;lastKind=actor.kind;
+      triggerByKind[actor.kind]=Number(triggerByKind[actor.kind]||0)+1;
+      rememberLocalFaunaActor(actor,now);
+    }
+  }
+  wildlifeReaction={...wildlifeReaction,lastPresenceEastMeters:presence.east,lastPresenceNorthMeters:presence.north,presenceMoveMeters:Number(moved.toFixed(3)),
+    spatialBucketCount:buckets.size,proximityChecks:wildlifeReaction.proximityChecks+checks,triggerCount:wildlifeReaction.triggerCount+triggers,
+    triggerByKind,lastTriggerActorId:lastActor||wildlifeReaction.lastTriggerActorId,lastTriggerKind:lastKind||wildlifeReaction.lastTriggerKind,
+    lastUpdateMs:Number((performance.now()-started).toFixed(4)),maxUpdateMs:Math.max(Number(wildlifeReaction.maxUpdateMs||0),Number((performance.now()-started).toFixed(4)))};
+}
+function updateLocalFaunaMotion(step){
+  if(!localFaunaActors.length){
+    wildlifeReaction={...wildlifeReaction,activeActorCount:0,visibleActorCount:0,reactingActorCount:0,sleepingActorCount:0,stateCounts:{idle:0,flee:0,takeoff:0,return:0,sleep:0}};
+    return;
+  }
+  const presence=localFaunaPresenceMeters(),visibleHeight=Math.max(36,Number(zoomState.visibleFootprintHeightMeters||80)),sleepRadius=Math.max(60,Math.min(220,visibleHeight*1.15));
+  let visible=0,reacting=0,sleeping=0;
+  for(const actor of localFaunaActors){
+    const spec=LOCAL_FAUNA_SPECS[actor.kind]||LOCAL_FAUNA_SPECS.deer;
+    const pdx=localFaunaWrappedEastDelta(presence.east,actor.currentWorldX),pdy=actor.currentWorldY-presence.north,pdist=Math.hypot(pdx,pdy);
+    const shouldSleep=pdist>sleepRadius*(actor.state==="idle"?1:1.35);
+    actor.sleeping=shouldSleep;actor.entity.enabled=!shouldSleep;
+    if(shouldSleep){sleeping++;continue;}visible++;
+    if(actor.state==="flee"||actor.state==="takeoff"){
+      actor.currentWorldX+=actor.fleeEast*spec.speedMetersPerSecond*step;
+      actor.currentWorldY+=actor.fleeNorth*spec.speedMetersPerSecond*step;
+      actor.reactionRemaining=Math.max(0,Number(actor.reactionRemaining||0)-step);
+      if(spec.maxAltitudeMeters>0)actor.altitudeMeters=Math.min(spec.maxAltitudeMeters,actor.altitudeMeters+spec.maxAltitudeMeters*.95*step);
+      reacting++;
+      if(actor.reactionRemaining<=0)actor.state="return";
+    }else if(actor.state==="return"){
+      const dx=localFaunaWrappedEastDelta(actor.currentWorldX,actor.homeWorldX),dy=actor.homeWorldY-actor.currentWorldY,dist=Math.hypot(dx,dy);
+      if(dist>.05){
+        const travel=Math.min(dist,spec.returnSpeedMetersPerSecond*step);actor.currentWorldX+=dx/dist*travel;actor.currentWorldY+=dy/dist*travel;
+      }
+      if(spec.maxAltitudeMeters>0)actor.altitudeMeters=Math.max(0,actor.altitudeMeters-spec.maxAltitudeMeters*.72*step);
+      if(dist<=.35&&actor.altitudeMeters<=.08){actor.currentWorldX=actor.homeWorldX;actor.currentWorldY=actor.homeWorldY;actor.altitudeMeters=0;actor.state="idle";}
+    }
+    const t=localFaunaClock*.65+actor.phase;
+    const idle=actor.state==="idle";
+    const idleEast=idle?Math.sin(t)*actor.idleRadiusMeters:0,idleNorth=idle?Math.cos(t*.73)*actor.idleRadiusMeters*.65:0;
+    const renderWorldX=actor.currentWorldX+idleEast,renderWorldY=actor.currentWorldY+idleNorth;
+    const east=localFaunaWrappedEastDelta(actor.resourceCenterX,renderWorldX),north=renderWorldY-actor.resourceCenterY;
+    const ground=localGroundHeightUnits(east,north,actor.frame),bob=idle?Math.abs(Math.sin(t*1.8))*actor.idleRadiusMeters*.10/actor.unit:
+      (actor.state==="takeoff"?Math.sin(localFaunaClock*12+actor.phase)*.10:0);
+    actor.entity.setLocalPosition(east/actor.unit,ground+actor.altitudeMeters/actor.unit+bob,-north/actor.unit);
+    const heading=actor.state==="flee"||actor.state==="takeoff"?Math.atan2(actor.fleeEast,actor.fleeNorth)*180/Math.PI:(t*35)%360;
+    const reactionLean=actor.state==="flee"?-7:(actor.state==="takeoff"?-12:0);
+    actor.entity.setLocalEulerAngles(reactionLean,heading,0);
+    actor.lastRenderedEastMeters=east;actor.lastRenderedNorthMeters=north;actor.lastDistanceMeters=pdist;
+  }
+  wildlifeReaction={...wildlifeReaction,activeActorCount:localFaunaActors.length,visibleActorCount:visible,reactingActorCount:reacting,sleepingActorCount:sleeping,stateCounts:localFaunaReactionStateCounts(),updateCount:wildlifeReaction.updateCount+1};
+}
+function localFaunaActorSnapshot(actor){
+  return Object.freeze({id:actor.id,kind:actor.kind,state:actor.sleeping?"sleep":actor.state,worldTile:actor.worldTile,
+    homeWorldMeters:Object.freeze({east:Number(actor.homeWorldX.toFixed(3)),north:Number(actor.homeWorldY.toFixed(3))}),
+    currentWorldMeters:Object.freeze({east:Number(actor.currentWorldX.toFixed(3)),north:Number(actor.currentWorldY.toFixed(3))}),
+    altitudeMeters:Number(actor.altitudeMeters.toFixed(3)),distanceToPresenceMeters:actor.lastDistanceMeters===null?null:Number(actor.lastDistanceMeters.toFixed(3)),
+    visible:Boolean(actor.entity?.enabled),reactionRemaining:Number(Number(actor.reactionRemaining||0).toFixed(3))});
+}
+function renderLocalWilderness(resource,frame,reveal){
+  const plan=resource?.wildernessPlan;
+  wilderness={...wilderness,localEnabled:localWildernessEnabled,localActive:false,localSignature:plan?.signature||null,localLevel:resource?.dims?.levelId||null,localBiome:null,localCandidateCount:Number(plan?.candidates||0),localAcceptedStaticProps:0,localAmbientFaunaActiveCount:0,localShoreAccentCount:0,localRejectedWater:Number(plan?.rejectedWater||0),localRejectedManaged:0,localRejectedRoad:0,localFamilyCounts:{},localBiomeCounts:{},localDrawCalls:0,localTriangles:0,localPreparationMs:Number(plan?.preparationMs||0),localPlanCached:Boolean(plan),localLayoutSignature:plan?.signature||null,localFullWorldScan:false,localDeterministicGlobalCells:true};
+  if(!plan||!localWildernessEnabled){rebuildLocalFauna(null,frame,reveal);return {accepted:0,triangles:0,drawCalls:0,fauna:0};}
+  ensureLocalStaticMaterials();
+  const built=buildLocalWildernessMesh(plan,frame,reveal);let drawCalls=0;
+  if(built.mesh){
+    const entity=new pc.Entity("LocalWildernessBatch");entity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});
+    entity.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.wilderness,entity)];localStaticRoot.addChild(entity);drawCalls=1;
+  }
+  const fauna=rebuildLocalFauna(plan,frame,reveal),faunaTriangles=localFaunaActors.reduce((sum,item)=>sum+Number(item.triangles||0),0),dominant=Object.entries(built.biomeCounts).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))[0]?.[0]||null;
+  wilderness={...wilderness,localActive:built.accepted>0,localBiome:dominant,localAcceptedStaticProps:built.accepted,localAmbientFaunaActiveCount:fauna,localShoreAccentCount:Number(built.shoreAccentCount||0),localRejectedManaged:built.rejectedManaged,localRejectedRoad:built.rejectedRoad,localFamilyCounts:{...built.familyCounts},localBiomeCounts:{...built.biomeCounts},localDrawCalls:drawCalls+fauna,localTriangles:built.triangles+faunaTriangles};
+  return {accepted:built.accepted,triangles:built.triangles+faunaTriangles,drawCalls:drawCalls+fauna,fauna};
+}
+
+function environmentReactionPhoneProfile(){
+  const rect=canvas?.getBoundingClientRect?.();
+  return Math.min(Number(rect?.width||9999),Number(rect?.height||9999))<=480;
+}
+function environmentReactionSurfaceKind(surfaceType){
+  const type=String(surfaceType||"").toLowerCase();
+  if(["road","path","square","bridge","dirt"].includes(type))return "dust";
+  if(type==="grass")return "grassBend";
+  if(type==="farmland")return "footprint";
+  return null;
+}
+function environmentReactionTexture(kind){
+  const size=128,canvas=document.createElement("canvas");canvas.width=size;canvas.height=size;
+  const ctx=canvas.getContext("2d",{alpha:true});
+  if(!ctx)throw new Error("Environmental reaction texture context unavailable");
+  ctx.clearRect(0,0,size,size);
+  if(kind==="dust"){
+    const lobes=[
+      [62,64,47,.86],[43,70,31,.56],[83,58,35,.62],[58,44,28,.46],[75,78,26,.42]
+    ];
+    for(const l of lobes){
+      // Flatten each radial lobe into an irregular low ellipse so three pooled
+      // puffs combine as a short road-surface cloud instead of a round marker.
+      ctx.save();ctx.translate(l[0],l[1]);ctx.scale(1.08,.52);
+      const g=ctx.createRadialGradient(0,0,2,0,0,l[2]);
+      g.addColorStop(0,`rgba(255,255,255,${l[3]})`);
+      g.addColorStop(.34,`rgba(255,255,255,${l[3]*.82})`);
+      g.addColorStop(.72,`rgba(255,255,255,${l[3]*.30})`);
+      g.addColorStop(1,"rgba(255,255,255,0)");
+      ctx.fillStyle=g;ctx.fillRect(-l[2],-l[2],l[2]*2,l[2]*2);ctx.restore();
+    }
+  }else{
+    const strands=[
+      [24,81,43,67,64,56,86,55,5.2,.78],
+      [18,72,37,63,58,60,78,64,3.6,.66],
+      [34,91,48,75,67,66,95,62,4.2,.76],
+      [49,94,58,78,74,67,101,69,3.4,.64],
+      [29,64,45,57,62,53,89,48,3.0,.57],
+      [55,88,66,76,80,72,109,78,4.4,.71],
+      [63,95,72,83,83,80,111,91,2.8,.56],
+      [38,78,50,68,66,63,94,58,2.6,.54],
+      [46,70,57,62,72,59,105,55,2.2,.50],
+      [28,86,39,73,51,68,69,70,2.4,.52],
+      [57,76,69,66,79,62,98,60,2.5,.52],
+      [39,96,48,83,57,76,75,75,2.2,.48]
+    ];
+    ctx.lineCap="round";ctx.lineJoin="round";
+    for(let i=0;i<strands.length;i++){
+      const s=strands[i],tone=i%4===0?"142,157,74":i%3===0?"91,121,48":"112,139,56";
+      ctx.strokeStyle=`rgba(${tone},${s[9]})`;ctx.lineWidth=s[8];
+      ctx.beginPath();ctx.moveTo(s[0],s[1]);ctx.bezierCurveTo(s[2],s[3],s[4],s[5],s[6],s[7]);ctx.stroke();
+    }
+    for(const p of [[45,69,2.1],[70,61,1.7],[84,72,1.8],[56,77,1.5],[95,61,1.4]]){
+      ctx.fillStyle="rgba(145,136,76,.28)";ctx.beginPath();ctx.arc(p[0],p[1],p[2],0,Math.PI*2);ctx.fill();
+    }
+  }
+  const texture=new pc.Texture(device,{
+    name:"environment-reaction-"+kind,width:size,height:size,
+    format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true,
+    minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,
+    addressU:pc.ADDRESS_CLAMP_TO_EDGE,addressV:pc.ADDRESS_CLAMP_TO_EDGE
+  });
+  texture.setSource(canvas);return texture;
+}
+function environmentReactionMaterial(name,r,g,b,opacity=1){
+  const m=new pc.StandardMaterial();
+  m.name=name;m.diffuse.set(r,g,b);m.emissive.set(r*.12,g*.12,b*.12);m.emissiveIntensity=1;
+  m.roughness=.95;m.metalness=0;m.opacity=opacity;m.useLighting=true;m.cull=pc.CULLFACE_NONE;
+  if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}
+  m.update();return m;
+}
+function createEnvironmentReactionGroup(kind,index){
+  const group=new pc.Entity("EnvironmentReaction-"+kind+"-"+index),children=[];
+  environmentalReactionRoot.addChild(group);
+  if(kind==="dust"){
+    const specs=[
+      [-.48,.09,-.12,1.72,.88,1.52],
+      [.00,.14,.04,2.08,1.02,1.82],
+      [.46,.08,.14,1.58,.80,1.42]
+    ];
+    for(let i=0;i<specs.length;i++){
+      const q=specs[i],e=addLocalPrimitive(group,"DustPuff-"+index+"-"+i,"dust-puff",environmentalReactionMaterials.dust,q[0],q[1],q[2],q[3],q[4],q[5],0,i*17,0);
+      e.render.castShadows=false;e.render.receiveShadows=false;children.push(e);
+    }
+  }else if(kind==="grassBend"){
+    const specs=[
+      [-.58,.020,-.28,-41,2.10,1.86,2.22],
+      [-.15,.024,.13,-11,2.30,2.04,2.36],
+      [.30,.021,-.07,21,2.14,1.90,2.24],
+      [.61,.018,.27,57,1.90,1.70,2.02]
+    ];
+    for(let i=0;i<specs.length;i++){
+      const q=specs[i],e=addLocalPrimitive(group,"BentGrass-"+index+"-"+i,"bent-grass-blade",environmentalReactionMaterials.grass,q[0],q[1],q[2],q[4],q[5],q[6],0,q[3],0);
+      e.render.castShadows=false;e.render.receiveShadows=false;children.push(e);
+    }
+  }else{
+    const specs=[[-.24,.038,-.30,-18],[.24,.038,.30,18]];
+    for(let i=0;i<specs.length;i++){
+      const q=specs[i],e=addLocalPrimitive(group,"Footprint-"+index+"-"+i,"cylinder",environmentalReactionMaterials.footprint,q[0],q[1],q[2],.34,.05,.56,0,q[3],0);
+      children.push(e);
+    }
+  }
+  group.enabled=false;
+  return {kind,index,group,children,active:false,startedAtMs:0,lifetimeMs:0,latitudeRadians:0,longitudeRadians:0,directionDegrees:0};
+}
+function ensureEnvironmentReactionPool(){
+  if(environmentalReactionRoot||!pc||!tangentPatch)return Boolean(environmentalReactionRoot);
+  environmentalReactionTextures={
+    dust:environmentReactionTexture("dust"),
+    grass:environmentReactionTexture("grass")
+  };
+  environmentalReactionMaterials={
+    dust:environmentReactionMaterial("EnvironmentDust",.88,.73,.50,.90),
+    grass:environmentReactionMaterial("EnvironmentBentGrass",1,1,1,.94),
+    footprint:environmentReactionMaterial("EnvironmentFootprint",.28,.15,.055,.90)
+  };
+  const dust=environmentalReactionMaterials.dust,grass=environmentalReactionMaterials.grass;
+  dust.diffuseMap=environmentalReactionTextures.dust;dust.emissiveMap=environmentalReactionTextures.dust;dust.opacityMap=environmentalReactionTextures.dust;dust.opacityMapChannel="a";
+  dust.useLighting=false;dust.diffuse.set(.96,.82,.62);dust.emissive.set(.60,.45,.28);dust.emissiveIntensity=.24;dust.blendType=pc.BLEND_NORMAL;dust.depthWrite=false;dust.alphaTest=.015;dust.update();
+  grass.diffuseMap=environmentalReactionTextures.grass;grass.opacityMap=environmentalReactionTextures.grass;grass.opacityMapChannel="a";
+  grass.diffuse.set(1,1,1);grass.emissive.set(.03,.045,.015);grass.emissiveIntensity=.18;grass.useLighting=true;grass.blendType=pc.BLEND_NORMAL;grass.depthWrite=false;grass.alphaTest=.03;grass.update();
+  environmentalReactionRoot=new pc.Entity("LocalEnvironmentalReactions");
+  tangentPatch.addChild(environmentalReactionRoot);
+  environmentalReactionPool=[];
+  for(const kind of ["dust","grassBend","footprint"]){
+    for(let i=0;i<ENVIRONMENT_REACTION_POOL_PER_KIND;i++)environmentalReactionPool.push(createEnvironmentReactionGroup(kind,i));
+  }
+  const drawableCount=environmentalReactionPool.reduce((sum,slot)=>sum+slot.children.length,0);
+  environmentalReactions={...environmentalReactions,poolInitialized:true,poolGroupCount:environmentalReactionPool.length,poolDrawableCount:drawableCount,poolAllocationsAfterInit:0};
+  return true;
+}
+function clearEnvironmentalReactions(){
+  for(const slot of environmentalReactionPool){slot.active=false;if(slot.group)slot.group.enabled=false;}
+  environmentalReactions={...environmentalReactions,activeCount:0,visibleCount:0};
+  return snapshot();
+}
+function triggerEnvironmentReaction(kind,surfaceType,latitudeRadians,longitudeRadians,movementMeters,directionDegrees){
+  if(!environmentalReactions.enabled||!ensureEnvironmentReactionPool())return false;
+  const cap=environmentReactionPhoneProfile()?environmentalReactions.phoneActiveCap:environmentalReactions.desktopActiveCap;
+  const active=environmentalReactionPool.filter(slot=>slot.active);
+  let slot=environmentalReactionPool.find(item=>item.kind===kind&&!item.active);
+  if(!slot){
+    const same=environmentalReactionPool.filter(item=>item.kind===kind).sort((a,b)=>a.startedAtMs-b.startedAtMs);
+    slot=same[0]||null;
+    if(slot)environmentalReactions={...environmentalReactions,reuseCount:environmentalReactions.reuseCount+1};
+  }
+  if(!slot)return false;
+  if(active.length>=cap&&!slot.active){
+    const oldest=active.sort((a,b)=>a.startedAtMs-b.startedAtMs)[0];
+    if(oldest){oldest.active=false;oldest.group.enabled=false;environmentalReactions={...environmentalReactions,reuseCount:environmentalReactions.reuseCount+1};}
+  }
+  const now=performance.now();
+  slot.active=true;slot.startedAtMs=now;slot.latitudeRadians=Number(latitudeRadians)||0;slot.longitudeRadians=Number(longitudeRadians)||0;
+  slot.directionDegrees=Number(directionDegrees)||0;slot.lifetimeMs=kind==="dust"?3600:kind==="grassBend"?4200:5600;slot.group.enabled=true;
+  const counts={...environmentalReactions.triggerByKind,[kind]:(environmentalReactions.triggerByKind[kind]||0)+1};
+  environmentalReactions={...environmentalReactions,triggerCount:environmentalReactions.triggerCount+1,triggerByKind:counts,lastKind:kind,lastSurfaceType:String(surfaceType||""),lastMovementMeters:Number(Number(movementMeters||0).toFixed(3)),lastTriggerAtMs:now};
+  return true;
+}
+function recordEnvironmentNavigationPassage(beforeLatitudeRadians,beforeLongitudeRadians,afterLatitudeRadians,afterLongitudeRadians){
+  if(!environmentalReactions.enabled||scaleIndexForScalar()<8||!displayResource||!tangentPatch?.enabled||!activeSeed)return false;
+  const delta=canonicalRegisteredDeltaMeters(beforeLatitudeRadians,beforeLongitudeRadians,afterLatitudeRadians,afterLongitudeRadians);
+  const east=Number(delta.eastMeters||0),north=Number(delta.northMeters||0),distance=Math.hypot(east,north);
+  if(distance<ENVIRONMENT_REACTION_MIN_MOVE_METERS||distance>ENVIRONMENT_REACTION_MAX_MOVE_METERS)return false;
+  const now=performance.now();
+  if(now-Number(environmentalReactions.lastTriggerAtMs||0)<ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS)return false;
+  const tile=mapWorldTileAt(afterLatitudeRadians,afterLongitudeRadians);
+  let surfaceType=null;
+  try{surfaceType=window.TerrainFoundation?.getType?.(activeSeed,tile.x,tile.y)||null;}catch(_){surfaceType=null;}
+  const kind=environmentReactionSurfaceKind(surfaceType);if(!kind)return false;
+  const directionDegrees=Math.atan2(east,north)*180/Math.PI;
+  // Use the exact canonical coordinate whose TerrainFoundation surface was
+  // classified above. Back-shifting presentation could cross a tile boundary
+  // and visually place a valid road reaction on adjacent grass.
+  return triggerEnvironmentReaction(kind,surfaceType,afterLatitudeRadians,afterLongitudeRadians,distance,directionDegrees);
+}
+function updateEnvironmentalReactions(){
+  if(!environmentalReactionPool.length||!displayResource)return;
+  const started=performance.now(),now=performance.now(),frame=localDisplayFrame(),dims=frame.dims;
+  let activeCount=0,visibleCount=0,activeDrawCallEstimate=0;
+  for(const slot of environmentalReactionPool){
+    if(!slot.active)continue;
+    const age=now-slot.startedAtMs;
+    if(age>=slot.lifetimeMs){slot.active=false;slot.group.enabled=false;environmentalReactions={...environmentalReactions,expiredCount:environmentalReactions.expiredCount+1};continue;}
+    activeCount++;
+    const delta=canonicalRegisteredDeltaMeters(frame.lat0,frame.lon0,slot.latitudeRadians,slot.longitudeRadians);
+    const east=Number(delta.eastMeters||0),north=Number(delta.northMeters||0);
+    const inside=Math.abs(east)<=dims.patchWidth*.62&&Math.abs(north)<=dims.patchHeight*.62;
+    slot.group.enabled=inside;if(!inside)continue;
+    visibleCount++;activeDrawCallEstimate+=slot.children.length;
+    const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),t=clamp(age/slot.lifetimeMs,0,1),ground=localGroundHeightUnits(east,north,frame);
+    let scale=1,liftMeters=.035;
+    if(slot.kind==="dust"){
+      // Keep the three pooled soft-alpha puffs low and spread laterally so
+      // movement reads as a short road-surface disturbance, not one tall oval.
+      scale=.96+t*.26;liftMeters=.030+t*.080;
+      const spread=.18*t,rise=.16*t;
+      const bases=[[-.48,.09,-.12],[0,.14,.04],[.46,.08,.14]];
+      for(let i=0;i<slot.children.length;i++){
+        const b=bases[i],side=i-1;
+        slot.children[i].setLocalPosition(b[0]+side*spread,b[1]+rise*(i===1?1:.55),b[2]+side*.08*t);
+      }
+    }else if(slot.kind==="grassBend"){
+      // Keep width stable and settle only slightly so phone-landscape remains
+      // readable without growing into a marker-like symbol.
+      scale=1-t*.04;liftMeters=.020;
+    }else{scale=1-t*.06;liftMeters=.055;}
+    slot.group.setLocalPosition(east/unit,ground+liftMeters/unit,-north/unit);
+    slot.group.setLocalScale(scale/unit,scale/unit,scale/unit);
+    slot.group.setLocalEulerAngles(0,slot.directionDegrees,0);
+  }
+  const ms=performance.now()-started;
+  environmentalReactions={...environmentalReactions,activeCount,visibleCount,activeDrawCallEstimate,peakActiveCount:Math.max(environmentalReactions.peakActiveCount,activeCount),lastUpdateMs:Number(ms.toFixed(4)),maxUpdateMs:Math.max(Number(environmentalReactions.maxUpdateMs||0),Number(ms.toFixed(4)))};
+}
+
+function ensureLocalStaticMaterials(){
+  if(localStaticMaterials||!pc)return;
+  const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
+  const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
+  localStaticMaterials={
+    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.285,.19,.075,1),square:make("LocalSquare",.48,.35,.18),
+    wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
+    stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.11),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.90);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
+    microWater:make("LocalMicroWater",.07,.28,.42,.52),
+    microStone:make("LocalMicroStone",.67,.64,.56),microWood:make("LocalMicroWood",.57,.34,.14),
+    microDark:make("LocalMicroDark",.11,.075,.045),microCloth:make("LocalMicroCloth",.76,.56,.27),
+    microAccent:make("LocalMicroAccent",1.0,.45,.08),microSoil:make("LocalMicroSoil",.43,.25,.10,.18),
+    microGround:make("LocalMicroGround",.31,.20,.08,.22),microMoss:make("LocalMicroMoss",.12,.28,.07,.18),
+    activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activityForge:(()=>{const m=make("LocalActivityForge",1,1,1);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    activitySmoke:make("LocalActivitySmoke",.48,.49,.47,.58),
+    activityProp:make("LocalActivityProp",.39,.24,.10),
+    surroundings:(()=>{const m=make("LocalBuildingSurroundings",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    campaignWear:(()=>{const m=make("LocalCampaignWear",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    consequenceDamage:make("LocalConsequenceDamage",.62,.18,.08),
+    consequenceBlocked:make("LocalConsequenceBlocked",.82,.47,.11),
+    consequenceAbandoned:make("LocalConsequenceAbandoned",.24,.40,.14),
+    wayfinding:(()=>{const m=make("LocalWayfindingSigns",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    wilderness:wildernessMaterial,fauna:(()=>{const m=make("LocalFauna",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})()
+  };
+  // Route and lot overview meshes are tangent-plane quads. Render both sides so
+  // their visibility does not depend on the local tangent entity orientation.
+  localStaticMaterials.lotOverview.vertexColors=true;localStaticMaterials.lotOverview.diffuseVertexColor=true;
+  for(const material of [localStaticMaterials.road,localStaticMaterials.roadOverview,localStaticMaterials.lotOverview,localStaticMaterials.microWater,localStaticMaterials.microGround,localStaticMaterials.microMoss,localStaticMaterials.microSoil]){material.cull=pc.CULLFACE_NONE;material.update();}
+}
+function sharedLocalPrimitive(type){
+  if(localSharedPrimitives[type])return localSharedPrimitives[type];
+  let mesh;
+  if(type==="micro-ground-patch"||type==="micro-water-ribbon"){
+    mesh=new pc.Mesh(device);
+    const ring=type==="micro-water-ribbon"
+      ?[[-.30,-.52],[.16,-.52],[.29,-.34],[.20,-.12],[.34,.08],[.28,.28],[.17,.52],[-.24,.52],[-.19,.31],[-.31,.13],[-.22,-.10],[-.36,-.31]]
+      :[[-.52,-.12],[-.40,-.40],[-.08,-.53],[.26,-.48],[.49,-.26],[.53,.05],[.39,.35],[.10,.52],[-.24,.48],[-.49,.25]];
+    const positions=[0,0,0],normals=[0,1,0],indices=[];
+    for(const p of ring){positions.push(p[0],0,p[1]);normals.push(0,1,0);}
+    for(let i=0;i<ring.length;i++)indices.push(0,i+1,((i+1)%ring.length)+1);
+    mesh.setPositions(positions);mesh.setNormals(normals);mesh.setIndices(indices);mesh.update();
+  }else if(type==="micro-tent"){
+    mesh=pc.createCone(device,{baseRadius:.5,peakRadius:.045,height:1,capSegments:4});
+  }else if(type==="dust-puff"){
+    // Three softly textured quads inside one shared mesh give broad coverage
+    // from the fixed oblique gameplay camera without a faceted solid silhouette.
+    mesh=new pc.Mesh(device);
+    const positions=[],normals=[],uvs=[],indices=[];
+    const addQuad=(verts,normal)=>{
+      const base=positions.length/3;
+      for(const v of verts){positions.push(v[0],v[1],v[2]);normals.push(normal[0],normal[1],normal[2]);}
+      uvs.push(0,1, 1,1, 0,0, 1,0);
+      indices.push(base,base+1,base+2, base+1,base+3,base+2);
+    };
+    addQuad([[-.62,0,-.50],[.62,0,-.50],[-.62,0,.50],[.62,0,.50]],[0,1,0]);
+    addQuad([[-.58,-.16,0],[.58,-.16,0],[-.58,.68,0],[.58,.68,0]],[0,0,1]);
+    addQuad([[0,-.14,-.56],[0,-.14,.56],[0,.62,-.56],[0,.62,.56]],[1,0,0]);
+    mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
+  }else if(type==="bent-grass-blade"){
+    // One horizontal UV plane per pooled drawable. The shared alpha texture
+    // carries many irregular pressed strands, so four rotated instances read as
+    // vegetation rather than a symmetric arrow/chevron marker.
+    mesh=new pc.Mesh(device);
+    mesh.setPositions([-.62,0,-.54, .62,0,-.54, -.62,0,.54, .62,0,.54]);
+    mesh.setNormals([0,1,0, 0,1,0, 0,1,0, 0,1,0]);
+    mesh.setUvs(0,[0,1, 1,1, 0,0, 1,0]);
+    mesh.setIndices([0,1,2, 1,3,2]);mesh.update();
+  }else if(type==="activity-market-accessory"||type==="activity-forge-accessory"||type==="activity-warm-opening"){
+    // Activity state is rendered through one reusable architectural accessory
+    // mesh per cue type. Coordinates are normalized to the canonical building
+    // width/height/depth, so accessories share addCanonicalBuilding()'s exact
+    // local basis instead of inferring detached screen-facing marker positions.
+    mesh=new pc.Mesh(device);
+    const positions=[],normals=[],colors=[],indices=[];
+    const face=(verts,n,color)=>{
+      const base=positions.length/3,cc=color||[255,255,255,255];
+      for(const v of verts){positions.push(v[0],v[1],v[2]);normals.push(n[0],n[1],n[2]);colors.push(cc[0],cc[1],cc[2],cc[3]??255);}
+      indices.push(base,base+1,base+2,base,base+2,base+3);
+    };
+    const box=(cx,cy,cz,sx,sy,sz,color)=>{
+      const x0=cx-sx*.5,x1=cx+sx*.5,y0=cy-sy*.5,y1=cy+sy*.5,z0=cz-sz*.5,z1=cz+sz*.5;
+      face([[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]],[0,0,1],color);
+      face([[x1,y0,z0],[x0,y0,z0],[x0,y1,z0],[x1,y1,z0]],[0,0,-1],color);
+      face([[x1,y0,z1],[x1,y0,z0],[x1,y1,z0],[x1,y1,z1]],[1,0,0],color);
+      face([[x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y1,z0]],[-1,0,0],color);
+      face([[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z0]],[0,1,0],color);
+      face([[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]],[0,-1,0],color);
+    };
+    if(type==="activity-market-accessory"){
+      const cloth=[242,160,62,255],cloth2=[255,215,118,255],wood=[92,58,32,255];
+      // A narrow roof-edge awning plus an unmistakable hanging board. Both
+      // extend outside the roof footprint, but remain physically connected.
+      box(0,.55,-.60,.76,.075,.34,cloth);
+      box(-.25,.555,-.60,.18,.082,.35,cloth2);
+      box(.25,.555,-.60,.18,.082,.35,cloth2);
+      box(.47,.63,-.575,.045,.30,.045,wood);
+      box(.60,.67,-.575,.22,.18,.055,wood);
+      box(.57,.80,-.575,.30,.045,.045,wood);
+    }else if(type==="activity-forge-accessory"){
+      const soot=[38,36,34,255],iron=[176,181,176,255],ironMid=[125,130,128,255],ironDark=[67,72,72,255],stone=[132,119,101,255],wood=[92,61,36,255],ember=[232,83,24,255];
+      // Active smithy: a dark roof-exterior stack/hood plus an unmistakable
+      // neutral anvil silhouette on the eave apron. The stepped horn is broad
+      // in plan view so it survives the fixed near-top-down camera without a
+      // detached UI marker, glow slab, smoke primitive, light or emitter.
+      box(-.50,1.00,-.28,.24,.80,.24,stone);
+      box(-.50,1.435,-.28,.38,.11,.38,soot);
+      box(-.43,.79,-.35,.50,.17,.44,ironDark);
+      box(-.38,.61,-.625,.48,.34,.16,stone);
+      box(-.38,.60,-.716,.20,.07,.030,ember);
+
+      // Grounded anvil pedestal + waist.
+      box(.12,.12,-.745,.16,.24,.18,ironDark);
+      box(.12,.255,-.745,.30,.10,.23,ironMid);
+      // Broad face and square heel.
+      box(.14,.365,-.745,.56,.14,.30,iron);
+      box(.48,.365,-.745,.18,.17,.29,ironMid);
+      // Three-step taper creates a clear horn silhouette from above.
+      box(-.22,.365,-.745,.24,.12,.23,iron);
+      box(-.405,.365,-.745,.15,.10,.15,ironMid);
+      box(-.515,.365,-.745,.085,.075,.085,ironDark);
+
+      // Compact hammer beside, not across, the anvil so the main silhouette
+      // stays readable instead of becoming another rectangular workbench.
+      box(.38,.075,-.535,.08,.08,.38,wood);
+      box(.38,.155,-.735,.26,.14,.14,ironDark);
+    }else{
+      const warm=[255,196,68,255],hot=[255,236,166,255],frame=[64,43,28,255];
+      // Roof-flush framed skylights are deliberately broad enough to survive the
+      // portrait view. Dark mullions make them read as windows rather than tabs.
+      // The detached eave lantern is intentionally removed.
+      const pane=(side,cx,color)=>{
+        const x0=cx-.16,x1=cx+.16,z0=-.50,z1=-.12;
+        const outerY0=side<0?1.015:1.115,outerY1=side<0?1.115:1.015;
+        const n=side<0?[.40,.92,0]:[-.40,.92,0],slope=(outerY1-outerY0)/(x1-x0);
+        const y=x=>outerY0+(x-x0)*slope;
+        const quad=(xa,xb,za,zb,c,off=.018)=>face([[xa,y(xa)+off,za],[xb,y(xb)+off,za],[xb,y(xb)+off,zb],[xa,y(xa)+off,zb]],n,c);
+        face([[x0,outerY0,z0],[x1,outerY1,z0],[x1,outerY1,z1],[x0,outerY0,z1]],n,frame);
+        const ix0=x0+.035,ix1=x1-.035,iz0=z0+.040,iz1=z1-.040;
+        quad(ix0,ix1,iz0,iz1,color,.020);
+        quad(cx-.014,cx+.014,iz0,iz1,frame,.026);
+        const zm=(iz0+iz1)*.5;
+        quad(ix0,ix1,zm-.014,zm+.014,frame,.027);
+      };
+      pane(-1,-.22,warm);
+      pane(1,.22,hot);
+    }
+    mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
+  }else{
+    mesh=type==="cylinder"?pc.createCylinder(device,{radius:.5,height:1}):type==="sphere"?pc.createSphere(device,{radius:.5,latitudeBands:8,longitudeBands:10}):type==="cone"?pc.createCone(device,{baseRadius:.5,peakRadius:.08,height:1,capSegments:8}):pc.createBox(device);
+  }
+  mesh.incRefCount();// keep alive across static-world rebuilds
+  return localSharedPrimitives[type]=mesh;
+}
+function addLocalPrimitive(parent,name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0){
+  const e=new pc.Entity(name);
+  e.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});e.render.meshInstances=[new pc.MeshInstance(sharedLocalPrimitive(type),material,e)];
+  e.setLocalPosition(x,y,z);e.setLocalScale(sx,sy,sz);e.setLocalEulerAngles(rx,ry,rz);parent.addChild(e);return e;
+}
+function addLocalStatic(name,type,material,x,y,z,sx,sy,sz,rx=0,ry=0,rz=0){
+  return addLocalPrimitive(localStaticRoot,name,type,material,x,y,z,sx,sy,sz,rx,ry,rz);
+}
+function revealHashText(value){
+  let h=2166136261>>>0;
+  for(const ch of String(value)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}
+  return (h>>>0).toString(16).toUpperCase().padStart(8,"0");
+}
+function settlementRevealTierForScalar(value=zoomState.scalar){
+  return semanticLayerSpec(semanticScaleIndexForScalar(value),false).settlementRevealTier;
+}
+function canonicalStartingVillageReveal(resource){
+  if(!activeSeed||!resource||!window.StartingVillage||!window.HousePlans||!window.SpecialLots||!window.SettlementArchetypes||!window.PoliticalGeography)return null;
+  // Settlement visibility is a property of the canonical player view, never of
+  // whichever SLOD cell happens to be active. Using the resource center here
+  // made the same 1/N view drop the village exactly when an east/west child
+  // became ready. A conservative viewport half-diagonal keeps the canonical
+  // village resident while any part of its established reveal radius can still
+  // be on-screen, independent of parent/child handoff timing.
+  const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const resourceTile=mapWorldTileAt(resource.lat0,resource.lon0);
+  const distanceTiles=Math.hypot(Number(BigInt(focusTile.x)),Number(BigInt(focusTile.y)));
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const viewportRadiusTiles=Math.hypot(
+    Math.max(0,Number(zoomState.visibleFootprintWidthMeters||0)),
+    Math.max(0,Number(zoomState.visibleFootprintHeightMeters||0))
+  )/(2*tileMeters);
+  const canonicalRevealRadiusTiles=512;
+  if(distanceTiles>viewportRadiusTiles+canonicalRevealRadiusTiles)return null;
+  const key=activeSeed+"|starting-village";
+  if(settlementRevealCache.key!==key){
+    const country=window.PoliticalGeography.countryAt(activeSeed,"0","0");
+    const settlement=(window.SettlementArchetypes.settlementsForCountry(activeSeed,country,3)||[]).find(item=>item.role==="starting-village")||null;
+    const village=window.StartingVillage.plan(activeSeed);
+    const houses=window.HousePlans.build(activeSeed)||[];
+    const specialLots=window.SpecialLots.build(activeSeed)||[];
+    if(!settlement||!village||!houses.length){settlementRevealCache={key,value:null};}
+    else{
+      const layoutSource=[
+        settlement.id,settlement.revision,village.gatewayDirection,
+        ...houses.map(item=>[item.id,item.bounds.minX,item.bounds.minY,item.bounds.maxX,item.bounds.maxY].join(":")),
+        ...specialLots.map(item=>[item.id,item.kind,item.bounds.minX,item.bounds.minY,item.bounds.maxX,item.bounds.maxY].join(":"))
+      ].join("|");
+      settlementRevealCache={key,value:Object.freeze({
+        settlement,village,houses:Object.freeze(houses.slice()),specialLots:Object.freeze(specialLots.slice()),
+        layoutSignature:"SVL-"+revealHashText(layoutSource),
+        tileMeters:Math.max(1,Number(window.WorldStandards?.TILE_METERS||2))
+      })};
+    }
+  }
+  const base=settlementRevealCache.value;if(!base)return null;
+  return Object.freeze({...base,focusTile,resourceTile,distanceTiles,viewportRadiusTiles,canonicalRevealRadiusTiles});
+}
+function revealPresentationScale(dims,tier,coreDiameterMeters){
+  if(tier==="full")return 1;
+  // Keep the authoritative settlement composition large enough to read as
+  // actual world structure, not a locator glyph, then converge rapidly to 1:1.
+  const targetFraction=tier==="footprint"?.38:tier==="route"?.68:tier==="coarse"?.20:.20;
+  const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
+  // Route overview stays presentation-only. The final Phase 16 evidence showed
+  // the real connected village was still undersized at 1/2500, so give the same
+  // authoritative footprints/access geometry more screen area without moving,
+  // synthesizing, or reconnecting any world record.
+  const cap=tier==="footprint"?14:tier==="route"?20:tier==="coarse"?5:18;
+  return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
+}
+function settlementPresentationLift(tier,value=zoomState.scalar){
+  // The overview envelope is a terrain-adjacent boundary, not a raised locator.
+  if(tier==="footprint")return .08;
+  if(tier==="route")return Number(clamp(.06+(.84-clamp(value,.70,.84))/.14*.18,.06,.24).toFixed(4));
+  if(tier==="coarse")return .045;
+  return .012;
+}
+function canonicalSemanticAnchor(frame){
+  return {east:Number(frame?.semanticAnchorEastMeters||0),north:Number(frame?.semanticAnchorNorthMeters||0)};
+}
+function canonicalSemanticGroundHeightUnits(eastMeters,northMeters,frame){
+  const anchor=canonicalSemanticAnchor(frame);
+  return localGroundHeightUnits(anchor.east+Number(eastMeters||0),anchor.north+Number(northMeters||0),frame);
+}
+function canonicalSemanticPosition(eastMeters,northMeters,presentationScale,unit,frame){
+  const anchor=canonicalSemanticAnchor(frame),scale=Number(presentationScale||1),u=Math.max(1e-9,Number(unit)||1);
+  return {x:(anchor.east+Number(eastMeters||0)*scale)/u,z:-(anchor.north+Number(northMeters||0)*scale)/u};
+}
+function addCanonicalRoadSegment(name,x1,y1,x2,y2,widthMeters,presentationScale,unit,frame,lift=0,material=localStaticMaterials.road){
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const east1=x1*tileMeters,north1=y1*tileMeters,east2=x2*tileMeters,north2=y2*tileMeters;
+  const centerEast=(east1+east2)/2,centerNorth=(north1+north2)/2;
+  const dx=(east2-east1)*presentationScale,dz=-(north2-north1)*presentationScale;
+  const length=Math.max(widthMeters*presentationScale,Math.hypot(dx,dz));
+  const angle=Math.atan2(dx,dz)*180/Math.PI;
+  const ground=canonicalSemanticGroundHeightUnits(centerEast,centerNorth,frame)+lift+.028,pos=canonicalSemanticPosition(centerEast,centerNorth,presentationScale,unit,frame);
+  addLocalStatic(name,"box",material,pos.x,ground,pos.z,widthMeters*presentationScale/unit,.058,length/unit,0,angle,0);
+}
+function settlementEnvelopeHull(reveal){
+  const points=[],push=(x,y)=>{if(Number.isFinite(Number(x))&&Number.isFinite(Number(y)))points.push([Number(x),Number(y)]);};
+  const records=[...(window.StartingVillage?.buildPlots?.(activeSeed)||[]),...(reveal?.specialLots||[])];
+  let roadAuthorityQueryCount=0;
+  for(const record of records){
+    const b=record?.bounds;if(!b)continue;
+    push(Number(b.minX)-.5,Number(b.minY)-.5);push(Number(b.maxX)+.5,Number(b.minY)-.5);
+    push(Number(b.maxX)+.5,Number(b.maxY)+.5);push(Number(b.minX)-.5,Number(b.maxY)+.5);
+    // Only road cells adjacent to an occupied lot contribute to the overview
+    // envelope. This avoids the old circular settlement wash and keeps the
+    // boundary tied to actual occupied/connected world structure.
+    for(let y=Number(b.minY)-2;y<=Number(b.maxY)+2;y++)for(let x=Number(b.minX)-2;x<=Number(b.maxX)+2;x++){
+      const local=window.StartingVillage?.local?.(activeSeed,String(x),String(y));
+      const infra=local&&window.StartingVillage?.infrastructureAt?.(activeSeed,local);roadAuthorityQueryCount++;
+      if(!infra)continue;
+      push(x-.5,y-.5);push(x+.5,y-.5);push(x+.5,y+.5);push(x-.5,y+.5);
+    }
+  }
+  const squareHalf=Number(window.StartingVillage?.PUBLIC_HALF_SIZE||3)+.5;
+  push(-squareHalf,-squareHalf);push(squareHalf,-squareHalf);push(squareHalf,squareHalf);push(-squareHalf,squareHalf);
+  const unique=[...new Map(points.map(p=>[p[0].toFixed(3)+","+p[1].toFixed(3),p])).values()]
+    .sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  if(unique.length<3)return Object.freeze({points:Object.freeze(unique),roadAuthorityQueryCount});
+  const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+  const lower=[];for(const p of unique){while(lower.length>=2&&cross(lower[lower.length-2],lower[lower.length-1],p)<=0)lower.pop();lower.push(p);}
+  const upper=[];for(let i=unique.length-1;i>=0;i--){const p=unique[i];while(upper.length>=2&&cross(upper[upper.length-2],upper[upper.length-1],p)<=0)upper.pop();upper.push(p);}
+  const hull=lower.slice(0,-1).concat(upper.slice(0,-1));
+  return Object.freeze({points:Object.freeze(hull.map(p=>Object.freeze({x:p[0],y:p[1]}))),roadAuthorityQueryCount});
+}
+function addCanonicalSettlementEnvelope(reveal,presentationScale,unit,frame,lift,tier){
+  const envelope=settlementEnvelopeHull(reveal),points=envelope.points||[];
+  if(points.length<3)return Object.freeze({active:false,segmentCount:0,roadAuthorityQueryCount:envelope.roadAuthorityQueryCount||0,mode:"none"});
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const widthMeters=tileMeters*(tier==="footprint"?.52:.30);
+  for(let i=0;i<points.length;i++){
+    const a=points[i],b=points[(i+1)%points.length];
+    addCanonicalRoadSegment("CanonicalOccupiedEnvelope-"+i,a.x,a.y,b.x,b.y,widthMeters,presentationScale,unit,frame,lift+.008,localStaticMaterials.footprint);
+  }
+  return Object.freeze({active:true,segmentCount:points.length,roadAuthorityQueryCount:envelope.roadAuthorityQueryCount||0,mode:"authoritative-lot-road-envelope-v2"});
+}
+function routeOverviewPlan(reveal){
+  const village=window.StartingVillage;
+  if(!reveal||!village?.local)return Object.freeze({records:Object.freeze([]),recordIds:Object.freeze([]),targetCount:0,revision:"route-overview-plan-v1"});
+  const specials=[...(reveal.specialLots||[])].filter(record=>record?.bounds)
+    .sort((a,b)=>String(a?.id||"").localeCompare(String(b?.id||"")));
+  const houses=[...(reveal.houses||[])].filter(record=>record?.bounds&&record?.entrance?.target);
+  const score=record=>{
+    const target=record?.entrance?.target;if(!target)return {forward:-Infinity,lateral:Infinity};
+    const local=village.local(activeSeed,String(target.x),String(target.y));
+    return {forward:Number(local?.forward??-Infinity),lateral:Math.abs(Number(local?.lateral??Infinity))};
+  };
+  houses.sort((a,b)=>{
+    const aa=score(a),bb=score(b);
+    return bb.forward-aa.forward||aa.lateral-bb.lateral||String(a?.id||"").localeCompare(String(b?.id||""));
+  });
+  const cap=18,records=[];
+  for(const record of specials){if(records.length>=3||records.length>=cap)break;records.push(record);}
+  for(const record of houses){if(records.length>=cap)break;if(!records.some(item=>String(item?.id||"")===String(record?.id||"")))records.push(record);}
+  const frozen=Object.freeze(records.slice());
+  return Object.freeze({
+    records:frozen,
+    recordIds:Object.freeze(frozen.map(record=>String(record?.id||""))),
+    targetCount:frozen.filter(record=>record?.entrance?.target).length,
+    revision:"route-overview-plan-v1"
+  });
+}
+function addCanonicalOccupiedLotContext(reveal,presentationScale,unit,frame,lift,tier,routePlan=null){
+  localSettlementLotGeometry?.destroy?.();localSettlementLotGeometry=null;
+  if(!pc||!device)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
+  const records=tier==="route"?(routePlan?.records||[]):[...(window.StartingVillage?.buildPlots?.(activeSeed)||[]),...(reveal?.specialLots||[])];
+  const specialIds=new Set((reveal?.specialLots||[]).map(item=>String(item?.id||"")));
+  const tileMeters=Math.max(1,Number(reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
+  const positions=[],normals=[],uvs=[],colors=[],indices=[];let count=0,outlineSegmentCount=0,connectorSegmentCount=0,publicSquareContextCount=0;
+  const addPolygonQuad=(corners,color,extraLift=0)=>{
+    if(!Array.isArray(corners)||corners.length!==4)return false;
+    const base=positions.length/3;
+    for(const [cx,cy] of corners){
+      if(!Number.isFinite(Number(cx))||!Number.isFinite(Number(cy)))return false;
+      const east=Number(cx)*tileMeters,north=Number(cy)*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
+      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.020+extraLift;
+      positions.push(pos.x,ground,pos.z);normals.push(0,1,0);colors.push(color[0],color[1],color[2],255);
+    }
+    uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);return true;
+  };
+  const addQuad=(x0,y0,x1,y1,color,extraLift=0)=>{
+    if(!(x1>x0&&y1>y0))return false;
+    return addPolygonQuad([[x0,y0],[x1,y0],[x1,y1],[x0,y1]],color,extraLift);
+  };
+  const addConnector=(x1,y1,x2,y2,width,color)=>{
+    const dx=Number(x2)-Number(x1),dy=Number(y2)-Number(y1),len=Math.hypot(dx,dy);
+    if(!(len>0))return false;
+    const hw=Math.max(.055,Number(width||.12))*.5,nx=-dy/len*hw,ny=dx/len*hw;
+    return addPolygonQuad([[x1+nx,y1+ny],[x2+nx,y2+ny],[x2-nx,y2-ny],[x1-nx,y1-ny]],color,.010);
+  };
+  for(const record of records){
+    const b=record?.bounds;if(!b)continue;
+    const footprintPad=tier==="route"?.42:.28;
+    const minX=Number(b.minX)-footprintPad,maxX=Number(b.maxX)+footprintPad,minY=Number(b.minY)-footprintPad,maxY=Number(b.maxY)+footprintPad;
+    if(![minX,maxX,minY,maxY].every(Number.isFinite)||maxX<=minX||maxY<=minY)continue;
+    const special=specialIds.has(String(record?.id||"")),
+      fill=special?[206,151,74]:(tier==="route"?[153,111,59]:[142,101,58]),
+      border=special?[238,190,102]:[190,153,88];
+    count++;
+    // Route overview exposes only a bounded priority subset of real
+    // HousePlans/SpecialLots footprints. At this map scale a single flat quad
+    // read like an abstract block, so split the *same authoritative footprint*
+    // into two restrained roof tones and a thin center ridge. No new building
+    // position/shape/authority is invented and everything stays in one mesh.
+    if(tier==="route"){
+      const width=maxX-minX,height=maxY-minY;
+      const dark=special?[181,111,43]:[127,88,49],light=special?[224,164,73]:[181,135,77];
+      if(width>=height){
+        const mid=(minY+maxY)*.5,ridgeHalf=Math.min(.10,Math.max(.055,height*.035));
+        if(addQuad(minX,minY,maxX,mid,dark,0))outlineSegmentCount++;
+        if(addQuad(minX,mid,maxX,maxY,light,.003))outlineSegmentCount++;
+        if(addQuad(minX,mid-ridgeHalf,maxX,mid+ridgeHalf,border,.012))outlineSegmentCount++;
+      }else{
+        const mid=(minX+maxX)*.5,ridgeHalf=Math.min(.10,Math.max(.055,width*.035));
+        if(addQuad(minX,minY,mid,maxY,dark,0))outlineSegmentCount++;
+        if(addQuad(mid,minY,maxX,maxY,light,.003))outlineSegmentCount++;
+        if(addQuad(mid-ridgeHalf,minY,mid+ridgeHalf,maxY,border,.012))outlineSegmentCount++;
+      }
+      const bw=Math.min(.20,Math.max(.10,Math.min(width,height)*.060));
+      if(addQuad(minX,minY,maxX,minY+bw,border,.008))outlineSegmentCount++;
+      if(addQuad(minX,maxY-bw,maxX,maxY,border,.008))outlineSegmentCount++;
+      if(addQuad(minX,minY+bw,minX+bw,maxY-bw,border,.008))outlineSegmentCount++;
+      if(addQuad(maxX-bw,minY+bw,maxX,maxY-bw,border,.008))outlineSegmentCount++;
+    }else{
+      if(special)addQuad(minX,minY,maxX,maxY,fill,0);
+      const bw=Math.min(.23,Math.max(.12,Math.min(maxX-minX,maxY-minY)*.070));
+      if(addQuad(minX,minY,maxX,minY+bw,border,.006))outlineSegmentCount++;
+      if(addQuad(minX,maxY-bw,maxX,maxY,border,.006))outlineSegmentCount++;
+      if(addQuad(minX,minY+bw,minX+bw,maxY-bw,border,.006))outlineSegmentCount++;
+      if(addQuad(maxX-bw,minY+bw,maxX,maxY-bw,border,.006))outlineSegmentCount++;
+    }
+  }
+  // Route-tier composition also includes the canonical StartingVillage public
+  // square. This is existing world authority at its exact tile coordinates and
+  // gives the real occupied footprints a readable civic center without adding
+  // any synthetic lot, building, or road.
+  if(tier==="route"){
+    const squareHalf=Math.max(1,Number(window.StartingVillage?.PUBLIC_HALF_SIZE||3));
+    if(addQuad(-squareHalf,-squareHalf,squareHalf,squareHalf,[146,136,108],.002))publicSquareContextCount=1;
+    // Same canonical public-square bounds, presentation-only perimeter. This
+    // gives the real route/footprint cluster a readable civic anchor without
+    // inventing a new cell, lot, road, or connection.
+    const squareBorder=Math.min(.24,Math.max(.14,squareHalf*.055)),squareColor=[93,77,52];
+    if(addQuad(-squareHalf,-squareHalf,squareHalf,-squareHalf+squareBorder,squareColor,.010))outlineSegmentCount++;
+    if(addQuad(-squareHalf,squareHalf-squareBorder,squareHalf,squareHalf,squareColor,.010))outlineSegmentCount++;
+    if(addQuad(-squareHalf,-squareHalf+squareBorder,-squareHalf+squareBorder,squareHalf-squareBorder,squareColor,.010))outlineSegmentCount++;
+    if(addQuad(squareHalf-squareBorder,-squareHalf+squareBorder,squareHalf,squareHalf-squareBorder,squareColor,.010))outlineSegmentCount++;
+  }
+  // HousePlans exposes the canonical exterior entrance and its already-chosen
+  // nearby road target. Keep those true access links in the same merged
+  // overview mesh so parent fallback and settlement approach read as connected
+  // village fabric without inventing roads or moving any authoritative cell.
+  const connectorRecords=tier==="route"?(routePlan?.records||[]):(reveal?.houses||[]);
+  for(const house of connectorRecords){
+    const entrance=house?.entrance,target=entrance?.target;
+    if(!entrance||!target)continue;
+    const accessWidth=tier==="route"?.72:(tier==="footprint"?.38:.24);
+    if(addConnector(Number(entrance.x),Number(entrance.y),Number(target.x),Number(target.y),accessWidth,[55,43,24]))connectorSegmentCount++;
+  }
+  if(!count)return Object.freeze({count:0,segmentCount:0,triangleCount:0,mode:"none"});
+  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
+  const entity=new pc.Entity("CanonicalOccupiedLotFills");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
+  entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.lotOverview,entity)];
+  localStaticRoot.addChild(entity);localSettlementLotGeometry=mesh;
+  return Object.freeze({count,segmentCount:count+outlineSegmentCount+connectorSegmentCount+publicSquareContextCount,outlineSegmentCount,connectorSegmentCount,publicSquareContextCount,triangleCount:indices.length/3,mode:tier==="route"?"authoritative-priority-house-footprint-access-v13":"authoritative-occupied-lot-perimeter-access-v10"});
+}
+function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tier,routePlan=null){
+  localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;
+  const village=window.StartingVillage;
+  if(!village?.local||!village?.infrastructureAt||!pc||!device)return Object.freeze({active:false,cellCount:0,queryCount:0,triangleCount:0,mode:"none",overviewStats:null});
+  const extent=Math.max(Number(village.CORE_RADIUS_TILES||26)+3,Number(village.GATEWAY_MAINLAND_EDGE_TILES||29)+4);
+  const tileMeters=Math.max(1,Number(reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
+  const roadCells=[],roadSet=new Set();let queryCount=0;
+  for(let y=-extent;y<=extent;y++)for(let x=-extent;x<=extent;x++){
+    const local=village.local(activeSeed,String(x),String(y)),infra=local&&village.infrastructureAt(activeSeed,local);queryCount++;
+    if(!infra||infra.type==="square")continue;
+    roadCells.push([x,y,String(infra.kind||infra.type||"road")]);roadSet.add(x+","+y);
+  }
+  if(!roadCells.length)return Object.freeze({active:false,cellCount:0,queryCount,triangleCount:0,mode:"none",overviewStats:null});
+  const positions=[],normals=[],uvs=[],indices=[];let segmentCount=0,renderedRoadCellCount=0;
+  let overviewStats=null;
+  const addQuad=(x0,y0,x1,y1)=>{
+    if(!(x1>x0&&y1>y0))return;
+    const base=positions.length/3;
+    for(const [cx,cy] of [[x0,y0],[x1,y0],[x1,y1],[x0,y1]]){
+      const east=cx*tileMeters,north=cy*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
+      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.030;
+      positions.push(pos.x,ground,pos.z);normals.push(0,1,0);
+    }
+    uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
+  };
+  const addSegment=(x0,y0,x1,y1,width)=>{
+    const dx=Number(x1)-Number(x0),dy=Number(y1)-Number(y0),len=Math.hypot(dx,dy);
+    if(!(len>0))return;
+    const hw=Math.max(.018,Number(width||.16)*.5),nx=-dy/len*hw,ny=dx/len*hw;
+    const base=positions.length/3;
+    for(const [cx,cy] of [[x0+nx,y0+ny],[x1+nx,y1+ny],[x1-nx,y1-ny],[x0-nx,y0-ny]]){
+      const east=cx*tileMeters,north=cy*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
+      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.030;
+      positions.push(pos.x,ground,pos.z);normals.push(0,1,0);
+    }
+    uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
+  };
+  if(tier==="route"||tier==="footprint"){
+    const ringRadius=Math.max(1,Number(village.RING_RADIUS_TILES||14)),selected=[],selectedMap=new Map();
+    const roadByKey=new Map(roadCells.map(([x,y,kind])=>[x+","+y,{x,y,kind}]));
+    const classByKey=new Map();
+    const classify=cell=>{
+      const key=cell.x+","+cell.y;if(classByKey.has(key))return classByKey.get(key);
+      const local=village.local(activeSeed,String(cell.x),String(cell.y));
+      const ringCell=Boolean(local&&Math.abs(Number(local.radius||0)-ringRadius)<=1.25);
+      const outwardBranch=Boolean(local&&cell.kind==="main-road"&&Number(local.forward||0)>ringRadius+1);
+      const gatewayStem=Boolean(local&&cell.kind==="main-road"&&Number(local.forward||0)>=0&&!ringCell&&Math.abs(Number(local.lateral||0))<=1.5);
+      const centerAvenue=Boolean(local&&cell.kind==="main-road"&&Number(local.radius||0)<=ringRadius+1.5&&
+        (Math.abs(Number(local.x||0))<=1.5||Math.abs(Number(local.y||0))<=1.5));
+      const localPath=cell.kind==="local-path";
+      const c={...cell,ringCell,outwardBranch,gatewayStem,centerAvenue,localPath};classByKey.set(key,c);return c;
+    };
+    const routePathKeys=new Set(),accessTargetKeys=[];
+    if(tier==="route"){
+      // Route overview is deliberately not the full cell raster. Build a single
+      // deterministic centerline from existing main-road cells: for each
+      // gateway-forward coordinate choose the real cell closest to the canonical
+      // gateway axis. Entrance connectors terminate on their real road target,
+      // represented by one small target node. Full road authority is unchanged.
+      const mainByForward=new Map();
+      for(const [x,y,kind] of roadCells){
+        if(kind!=="main-road")continue;
+        const local=village.local(activeSeed,String(x),String(y));if(!local)continue;
+        const forward=Number(local.forward??-Infinity),lateral=Number(local.lateral??Infinity);
+        if(!Number.isFinite(forward)||forward<0)continue;
+        const fk=Math.round(forward);
+        if(!mainByForward.has(fk))mainByForward.set(fk,[]);
+        mainByForward.get(fk).push({key:x+","+y,x,y,lateral});
+      }
+      let centerlineCellCount=0;
+      for(const forward of [...mainByForward.keys()].sort((a,b)=>a-b)){
+        const candidates=mainByForward.get(forward).sort((a,b)=>Math.abs(a.lateral)-Math.abs(b.lateral)||a.lateral-b.lateral||a.y-b.y||a.x-b.x);
+        const chosen=candidates[0];
+        if(chosen){routePathKeys.add(chosen.key);centerlineCellCount++;}
+      }
+      const centerlineKeys=new Set(routePathKeys);
+      for(const record of routePlan?.records||[]){
+        const target=record?.entrance?.target;if(!target)continue;
+        const tx=Number(target.x),ty=Number(target.y);if(!Number.isFinite(tx)||!Number.isFinite(ty))continue;
+        for(const [dx,dy] of [[0,0],[-1,0],[1,0],[0,-1],[0,1]]){
+          const key=(tx+dx)+","+(ty+dy);
+          if(roadByKey.has(key)){accessTargetKeys.push(key);routePathKeys.add(key);break;}
+        }
+      }
+      // Connect each real access target to the existing real gateway centerline
+      // only through road cells already returned by StartingVillage authority.
+      // The bounded search never invents connectivity and never runs per frame.
+      const uniqueTargets=[...new Set(accessTargetKeys)].sort();
+      const neighbors=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+      let connectedTargetCount=0,maxAcceptedPathCells=0,acceptedPathCellCount=0;
+      for(const targetKey of uniqueTargets){
+        if(centerlineKeys.has(targetKey)){connectedTargetCount++;continue;}
+        const [sx,sy]=targetKey.split(",").map(Number),queue=[{x:sx,y:sy,key:targetKey,path:[targetKey]}],seen=new Set([targetKey]);
+        let accepted=null;
+        while(queue.length){
+          const current=queue.shift();
+          if(current.path.length>18)continue;
+          if(current.key!==targetKey&&centerlineKeys.has(current.key)){accepted=current.path;break;}
+          for(const [dx,dy] of neighbors){
+            const x=current.x+dx,y=current.y+dy,key=x+","+y;
+            if(seen.has(key)||!roadByKey.has(key))continue;
+            seen.add(key);queue.push({x,y,key,path:[...current.path,key]});
+          }
+        }
+        if(!accepted)continue;
+        connectedTargetCount++;maxAcceptedPathCells=Math.max(maxAcceptedPathCells,accepted.length);
+        acceptedPathCellCount+=accepted.length;
+        for(const key of accepted)routePathKeys.add(key);
+      }
+      const selectedClasses=[...routePathKeys].map(k=>classify(roadByKey.get(k))).filter(Boolean);
+      const ringCellCount=selectedClasses.filter(c=>c.ringCell).length;
+      overviewStats=Object.freeze({
+        revision:"route-gateway-centerline-v16",accessTargetCount:uniqueTargets.length,connectedTargetCount,
+        localClusterTargetCount:acceptedPathCellCount,selectedCellCount:selectedClasses.length,ringCellCount,
+        ringArcShare:Number((ringCellCount/Math.max(1,selectedClasses.length)).toFixed(4)),
+        gatewayCellCount:selectedClasses.filter(c=>c.gatewayStem||c.outwardBranch).length,
+        localPathCellCount:selectedClasses.filter(c=>c.localPath).length,centerlineCellCount,
+        maxPathCells:18,maxRingCellsOnAcceptedPath:0,maxAcceptedPathCells,maxAcceptedRingCells:0,maxAcceptedWeightedCost:0,
+        fullCanonicalRoadCount:roadCells.length
+      });
+    }
+    for(const [x,y,kind] of roadCells){
+      const c=classify({x,y,kind}),{ringCell,outwardBranch,gatewayStem,centerAvenue,localPath}=c;
+      if(tier==="footprint"){
+        if(!outwardBranch&&!gatewayStem&&!centerAvenue&&!localPath)continue;
+      }else if(!routePathKeys.has(x+","+y))continue;
+      const half=tier==="footprint"
+        ?(outwardBranch?.28:gatewayStem?.14:centerAvenue?.075:.11)
+        :(outwardBranch?.185:gatewayStem?.145:localPath?.098:ringCell?.086:centerAvenue?.110:.092);
+      const cell={x,y,half};selected.push(cell);selectedMap.set(x+","+y,cell);
+    }
+    renderedRoadCellCount=selected.length;
+    for(const cell of selected){
+      const {x,y,half}=cell,nodeFloor=tier==="route"?.072:.040,nodeHalf=Math.max(nodeFloor,half*.76);
+      const neighborCount=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]
+        .filter(([dx,dy])=>selectedMap.has((x+dx)+","+(y+dy))).length;
+      if(neighborCount!==2)addQuad(x-nodeHalf,y-nodeHalf,x+nodeHalf,y+nodeHalf);
+      for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
+        const other=selectedMap.get((x+dx)+","+(y+dy));if(!other)continue;
+        if(dx&&dy&&(selectedMap.has((x+dx)+","+y)||selectedMap.has(x+","+(y+dy))))continue;
+        const segmentFloor=tier==="route"?.082:.055;
+        addSegment(x,y,other.x,other.y,Math.max(segmentFloor,Math.min(half,other.half)*(tier==="route"?2.85:2)));
+      }
+    }
+  }else{
+    for(const [x,y] of roadCells)addQuad(x-.5,y-.5,x+.5,y+.5);
+  }
+  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
+  const entity=new pc.Entity("CanonicalAuthoritativeRoadCells");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
+  const roadMaterial=(tier==="route"||tier==="footprint")?localStaticMaterials.roadOverview:localStaticMaterials.road;
+  entity.render.meshInstances=[new pc.MeshInstance(mesh,roadMaterial,entity)];localStaticRoot.addChild(entity);localSettlementRoadGeometry=mesh;
+  return Object.freeze({active:true,cellCount:(tier==="route"||tier==="footprint")?renderedRoadCellCount:roadCells.length,segmentCount,queryCount,triangleCount:indices.length/3,overviewStats,
+    mode:tier==="footprint"?"StartingVillage.gateway-stem-overview-v1":tier==="route"?"StartingVillage.infrastructureAt-gateway-centerline-v16":"StartingVillage.infrastructureAt-cell-mesh-v1"});
+}
+function clearCanonicalWayfindingSignposts(){
+  clearInspectionKeySet(localSignInspectionKeys,false);
+  localWayfindingEntity?.destroy?.();localWayfindingEntity=null;
+  localWayfindingMesh?.destroy?.();localWayfindingMesh=null;
+  wayfindingPanelAnchors=[];wayfindingSignAnchors.clear();
+  if(wayfindingTextContext&&wayfindingTextCanvas){
+    wayfindingTextContext.setTransform(1,0,0,1,0,0);
+    wayfindingTextContext.clearRect(0,0,wayfindingTextCanvas.width,wayfindingTextCanvas.height);
+  }
+  wayfindingSignposts={...wayfindingSignposts,active:false,signCount:0,panelCount:0,triangleCount:0,geometryDrawCallEstimate:0,
+    visibleTextCount:0,routeQueryCount:0,routeQueryMs:0,buildMs:0,signs:[],signature:null,authority:"unavailable",
+    fallbackScope:null,interSettlementRoadAuthorityAvailable:false,remoteConnectivityInvented:false};
+}
+function ensureWayfindingTextCanvas(){
+  if(wayfindingTextCanvas?.isConnected&&wayfindingTextContext)return wayfindingTextCanvas;
+  if(!root)return null;
+  const layer=document.createElement("canvas");
+  layer.className="wayfinding-sign-text-layer";
+  layer.setAttribute("aria-hidden","true");
+  Object.assign(layer.style,{position:"absolute",inset:"0",width:"100%",height:"100%",pointerEvents:"none",zIndex:"7"});
+  root.appendChild(layer);
+  wayfindingTextCanvas=layer;wayfindingTextContext=layer.getContext("2d");
+  wayfindingSignposts={...wayfindingSignposts,textCanvasCount:wayfindingTextContext?1:0};
+  return layer;
+}
+function wayfindingWorldPoint(localPoint){
+  if(!localStaticRoot||!pc||!localPoint)return null;
+  return localStaticRoot.getWorldTransform().transformPoint(new pc.Vec3(localPoint.x,localPoint.y,localPoint.z),new pc.Vec3());
+}
+function projectWayfindingPoint(localPoint){
+  if(!cameraEntity?.camera||!canvas||!device||!pc)return null;
+  const world=wayfindingWorldPoint(localPoint);if(!world)return null;
+  const camera=cameraEntity.camera,projected=camera.worldToScreen(world,new pc.Vec3());
+  if(!projected||![projected.x,projected.y,projected.z].every(Number.isFinite))return null;
+  // worldToScreen().z is unnormalized clip depth and is not a reliable
+  // behind-camera test for orthographic cameras. Use camera-view depth:
+  // visible points are in front of the camera on negative view-space Z.
+  const viewSpace=camera.viewMatrix?.transformPoint?.(world,new pc.Vec3());
+  if(!viewSpace||!Number.isFinite(viewSpace.z)||viewSpace.z>=0)return null;
+  // PlayCanvas worldToScreen returns CSS pixels from the canvas top-left.
+  // Normalize only against the CSS client size (not the drawing-buffer size)
+  // so high-DPR mobile displays keep labels aligned with their physical signs.
+  const rect=canvas.getBoundingClientRect(),sourceW=Math.max(1,Number(canvas.clientWidth||rect.width)),sourceH=Math.max(1,Number(canvas.clientHeight||rect.height));
+  return {x:projected.x*(rect.width/sourceW),y:projected.y*(rect.height/sourceH),z:-viewSpace.z,world};
+}
+function wayfindingSignScreenBounds(signId){
+  const localPoint=wayfindingSignAnchors.get(String(signId));const p=projectWayfindingPoint(localPoint);if(!p)return null;
+  const rect=canvas?.getBoundingClientRect?.(),narrow=(rect?.width||0)<600,halfW=narrow?42:52,topPad=narrow?54:62,bottomPad=narrow?28:34;
+  return {left:(rect?.left||0)+p.x-halfW,right:(rect?.left||0)+p.x+halfW,top:(rect?.top||0)+p.y-topPad,bottom:(rect?.top||0)+p.y+bottomPad};
+}
+function wayfindingSignScreenDepth(signId){
+  const localPoint=wayfindingSignAnchors.get(String(signId)),world=wayfindingWorldPoint(localPoint),camera=cameraEntity?.getPosition?.();
+  if(!world||!camera)return Infinity;return (world.x-camera.x)**2+(world.y-camera.y)**2+(world.z-camera.z)**2;
+}
+function updateWayfindingTextOverlay(force=false){
+  if(!wayfindingSignposts.active||!wayfindingPanelAnchors.length||!root||!canvas||!cameraEntity?.camera){
+    if(wayfindingTextContext&&wayfindingTextCanvas){wayfindingTextContext.setTransform(1,0,0,1,0,0);wayfindingTextContext.clearRect(0,0,wayfindingTextCanvas.width,wayfindingTextCanvas.height);}
+    return;
+  }
+  const now=performance.now();if(!force&&now-wayfindingLastTextDrawAt<50)return;wayfindingLastTextDrawAt=now;
+  const started=performance.now(),layer=ensureWayfindingTextCanvas(),ctx=wayfindingTextContext;if(!layer||!ctx)return;
+  const rect=canvas.getBoundingClientRect(),width=Math.max(1,Math.round(rect.width)),height=Math.max(1,Math.round(rect.height)),dpr=Math.min(2,Math.max(1,Number(window.devicePixelRatio||1)));
+  const pixelW=Math.max(1,Math.round(width*dpr)),pixelH=Math.max(1,Math.round(height*dpr));
+  if(layer.width!==pixelW||layer.height!==pixelH){layer.width=pixelW;layer.height=pixelH;}
+  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,layer.width,layer.height);ctx.setTransform(dpr,0,0,dpr,0,0);
+  if(inspection?.selectedType==="signpost"||root?.dataset?.travelEncounterFocus==="true"){
+    // During a focused rare encounter, the physical sign mesh and canonical
+    // route truth stay present/clickable while only the screen-space lettering
+    // yields. This prevents route boards from covering actors or fixed map UI.
+    const elapsed=Number((performance.now()-started).toFixed(4));
+    wayfindingSignposts={...wayfindingSignposts,visibleTextCount:0,textUpdateCount:Number(wayfindingSignposts.textUpdateCount||0)+1,lastTextDrawMs:elapsed,maxTextDrawMs:Math.max(Number(wayfindingSignposts.maxTextDrawMs||0),elapsed)};
+    return;
+  }
+  const activeWorkCenters=[];
+  for(const record of localNpcEntities.values()){
+    if(!record?.tool?.enabled||!record?.body?.enabled)continue;
+    const world=record.body.getPosition?.();if(!world)continue;
+    const projected=cameraEntity.camera.worldToScreen(world,new pc.Vec3());
+    if(projected&&Number.isFinite(projected.x)&&Number.isFinite(projected.y))activeWorkCenters.push({x:projected.x,y:projected.y});
+  }
+  const signCandidates=[],workDeclutterRadius=width<600?180:260,centerWorkRadius=Math.max(76,Math.min(170,Math.min(width,height)*.25));
+  const centeredWork=activeWorkCenters.some(worker=>Math.hypot(worker.x-width*.5,worker.y-height*.5)<=centerWorkRadius);
+  for(const [signId,localPoint] of wayfindingSignAnchors){
+    const p=projectWayfindingPoint(localPoint);
+    if(!p||p.x<-60||p.x>width+60||p.y<-60||p.y>height+60)continue;
+    // Centered authoritative work outranks route lettering at close scale.
+    // Physical signs and route truth stay present/clickable; only text yields.
+    if(centeredWork||activeWorkCenters.some(worker=>(worker.x-p.x)**2+(worker.y-p.y)**2<workDeclutterRadius*workDeclutterRadius))continue;
+    signCandidates.push({signId,p,d2:(p.x-width*.5)**2+(p.y-height*.5)**2});
+  }
+  signCandidates.sort((a,b)=>a.d2-b.d2||a.signId.localeCompare(b.signId));
+  const chosen=signCandidates[0]||null;
+  const panels=chosen?wayfindingPanelAnchors.filter(panel=>panel.signId===chosen.signId):[];
+  const narrow=width<600,rowH=narrow?25:28,gap=2,edgePad=narrow?6:9,maxBoardW=Math.max(118,Math.min(narrow?184:224,width-edgePad*2));
+  ctx.textAlign="center";ctx.textBaseline="middle";ctx.lineJoin="round";ctx.font=(narrow?"700 10px":"700 11px")+" system-ui, sans-serif";
+  let visible=0;
+  if(chosen&&panels.length){
+    const totalH=panels.length*rowH+Math.max(0,panels.length-1)*gap;
+    // A one-panel sign is aligned to the projected physical board instead of
+    // the post anchor. This keeps the post/base visibly connected beside and
+    // below the plank at village exits while multi-board signs retain their
+    // compact decluttered stack.
+    const singlePanelPoint=panels.length===1?projectWayfindingPoint(panels[0].localPoint):null;
+    const stackAnchor=singlePanelPoint||chosen.p;
+    const startY=Math.max(edgePad,Math.min(height-totalH-edgePad,stackAnchor.y-totalH*.5));
+    const plankFills=["rgba(124,79,39,.98)","rgba(103,62,31,.98)","rgba(145,91,43,.98)"];
+    for(let index=0;index<panels.length;index++){
+      const panel=panels[index];
+      const label=panel.directionLabel+" · "+panel.destinationName+" · "+panel.distanceLabel;
+      const boardW=Math.min(maxBoardW,Math.max(narrow?128:146,ctx.measureText(label).width+20));
+      const panelPoint=panels.length===1?(singlePanelPoint||chosen.p):chosen.p;
+      const cx=Math.max(boardW*.5+edgePad,Math.min(width-boardW*.5-edgePad,panelPoint.x));
+      const cy=startY+index*(rowH+gap)+rowH*.5,left=cx-boardW*.5,right=cx+boardW*.5,top=cy-rowH*.5,bottom=cy+rowH*.5;
+      // One-panel signs need an unmistakable physical support from the fixed
+      // near-top-down camera. Draw the visible face of the same timber post in
+      // this one shared canvas behind the plank; this is presentation-only and
+      // mirrors the underlying 3D post without adding DOM/world authority.
+      if(panels.length===1){
+        const stemW=narrow?5:6,stemBottom=Math.min(height-edgePad,cy+rowH*.5+(narrow?18:22));
+        ctx.fillStyle="rgba(69,40,20,.98)";
+        ctx.fillRect(cx-stemW*.5,cy+rowH*.14,stemW,Math.max(8,stemBottom-(cy+rowH*.14)));
+        ctx.beginPath();
+        ctx.moveTo(cx-(narrow?8:9),stemBottom);ctx.lineTo(cx+(narrow?8:9),stemBottom);
+        ctx.lineTo(cx+(narrow?6:7),Math.min(height-edgePad,stemBottom+4));ctx.lineTo(cx-(narrow?6:7),Math.min(height-edgePad,stemBottom+4));ctx.closePath();
+        ctx.fillStyle="rgba(91,73,50,.98)";ctx.fill();
+      }
+      // Shared-canvas text is drawn as the visible face of the physical wood
+      // boards, directly centered on the post rather than as floating UI.
+      ctx.beginPath();
+      ctx.moveTo(left+4,top);ctx.lineTo(right-5,top+1);ctx.lineTo(right,cy);
+      ctx.lineTo(right-4,bottom-1);ctx.lineTo(left+3,bottom);ctx.lineTo(left,cy);ctx.closePath();
+      ctx.fillStyle=plankFills[index%plankFills.length];ctx.fill();
+      ctx.lineWidth=1.25;ctx.strokeStyle="rgba(225,176,96,.96)";ctx.stroke();
+      ctx.beginPath();ctx.moveTo(left+8,top+5);ctx.lineTo(right-9,top+5);
+      ctx.lineWidth=.75;ctx.strokeStyle="rgba(72,42,22,.72)";ctx.stroke();
+      ctx.beginPath();ctx.arc(left+8,cy,1.4,0,Math.PI*2);ctx.arc(right-8,cy,1.4,0,Math.PI*2);
+      ctx.fillStyle="rgba(222,178,102,.9)";ctx.fill();
+      ctx.lineWidth=2.4;ctx.strokeStyle="rgba(47,27,14,.88)";ctx.strokeText(label,cx,cy,boardW-14);
+      ctx.fillStyle="#fff0c0";ctx.fillText(label,cx,cy,boardW-14);
+      visible++;
+    }
+  }
+  const elapsed=Number((performance.now()-started).toFixed(4));
+  wayfindingSignposts={...wayfindingSignposts,visibleTextCount:visible,textUpdateCount:Number(wayfindingSignposts.textUpdateCount||0)+1,lastTextDrawMs:elapsed,maxTextDrawMs:Math.max(Number(wayfindingSignposts.maxTextDrawMs||0),elapsed)};
+}
+function buildCanonicalWayfindingSignposts(reveal,tier,frame,presentationScale,unit,lift){
+  const started=performance.now();clearCanonicalWayfindingSignposts();
+  if(!["refined","full"].includes(String(tier))||!window.RoadSignposts?.build||!localStaticRoot||!pc||!device)return 0;
+  ensureLocalStaticMaterials();
+  const model=window.RoadSignposts.build(activeSeed),positions=[],normals=[],colors=[],indices=[],panelAnchors=[];
+  const s=Number(presentationScale||1)/Math.max(1e-9,Number(unit)||1),tm=Math.max(1,Number(reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
+  const rotate=(x,z,a)=>{const c=Math.cos(a),q=Math.sin(a);return [x*c-z*q,x*q+z*c];};
+  const face=(verts,normal,color)=>{
+    const base=positions.length/3,cc=color||[255,255,255,255];
+    for(const v of verts){positions.push(v[0],v[1],v[2]);normals.push(normal[0],normal[1],normal[2]);colors.push(cc[0],cc[1],cc[2],cc[3]??255);}
+    indices.push(base,base+1,base+2,base,base+2,base+3);
+  };
+  const box=(cx,cy,cz,sx,sy,sz,color,yaw=0)=>{
+    const x0=-sx*.5,x1=sx*.5,y0=cy-sy*.5,y1=cy+sy*.5,z0=-sz*.5,z1=sz*.5;
+    const rv=(x,y,z)=>{const q=rotate(x,z,yaw);return [cx+q[0],y,cz+q[1]];};
+    const rn=(x,y,z)=>{const q=rotate(x,z,yaw);return [q[0],y,q[1]];};
+    face([rv(x0,y0,z1),rv(x1,y0,z1),rv(x1,y1,z1),rv(x0,y1,z1)],rn(0,0,1),color);
+    face([rv(x1,y0,z0),rv(x0,y0,z0),rv(x0,y1,z0),rv(x1,y1,z0)],rn(0,0,-1),color);
+    face([rv(x1,y0,z1),rv(x1,y0,z0),rv(x1,y1,z0),rv(x1,y1,z1)],rn(1,0,0),color);
+    face([rv(x0,y0,z0),rv(x0,y0,z1),rv(x0,y1,z1),rv(x0,y1,z0)],rn(-1,0,0),color);
+    face([rv(x0,y1,z1),rv(x1,y1,z1),rv(x1,y1,z0),rv(x0,y1,z0)],[0,1,0],color);
+    face([rv(x0,y0,z0),rv(x1,y0,z0),rv(x1,y0,z1),rv(x0,y0,z1)],[0,-1,0],color);
+  };
+  const postColor=[74,45,24,255],baseColor=[82,71,56,255],boardColors=[[178,119,60,255],[151,94,45,255],[194,136,72,255]];
+  for(const sign of model.signs||[]){
+    const east=Number(sign.anchor.x)*tm,north=Number(sign.anchor.y)*tm,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame),ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift;
+    const isVillageExit=String(sign.purpose)==="village-exit";
+    const postH=(isVillageExit?3.58:3.35)*s,baseSize=(isVillageExit?1.12:.95)*s,postSize=(isVillageExit?.52:.42)*s;
+    box(pos.x,ground+.09*s,pos.z,baseSize,.18*s,baseSize,baseColor,0);box(pos.x,ground+postH*.5,pos.z,postSize,postH,postSize,postColor,0);
+    const topPoint={x:pos.x,y:ground+(isVillageExit?2.82:2.65)*s,z:pos.z};wayfindingSignAnchors.set(String(sign.id),topPoint);
+    (sign.branches||[]).forEach((branch,index)=>{
+      const dx=Number(branch.dx||0),dz=-Number(branch.dy||0),yaw=Math.atan2(dz,dx),boardOffset=(isVillageExit?1.08:.62)*s,centerX=pos.x+dx*boardOffset,centerZ=pos.z+dz*boardOffset,centerY=ground+((isVillageExit?2.68:2.50)-index*.56)*s;
+      box(centerX,centerY,centerZ,4.15*s,.58*s,.72*s,boardColors[index%boardColors.length],yaw);
+      // Small pale end-cap makes branch direction physical without relying on a
+      // screen-space arrow icon whose meaning would change under camera rotation.
+      box(centerX+dx*1.86*s,centerY,centerZ+dz*1.86*s,.30*s,.42*s,.76*s,[236,199,126,255],yaw);
+      panelAnchors.push(Object.freeze({signId:String(sign.id),destinationId:String(branch.destinationId),destinationName:String(branch.destinationName),distanceLabel:String(branch.distanceLabel),directionLabel:String(branch.directionLabel),localPoint:Object.freeze({x:centerX,y:centerY,z:centerZ})}));
+    });
+    registerLocalInspection({
+      id:String(sign.id),type:"signpost",name:sign.purpose==="village-exit"?"Village Exit Sign":sign.purpose==="three-way-junction"?"Three-way Road Sign":"Crossroads Signpost",
+      branches:Object.freeze((sign.branches||[]).slice()),authority:sign.authority,pickPriority:3,
+      visible:()=>wayfindingSignposts.active&&["refined","full"].includes(String(localStatic.revealTier)),
+      screenBounds:()=>wayfindingSignScreenBounds(sign.id),screenDepth:()=>wayfindingSignScreenDepth(sign.id)
+    },localSignInspectionKeys);
+  }
+  if(positions.length){
+    const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
+    const entity=new pc.Entity("CanonicalWayfindingSigns");entity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});
+    entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.wayfinding,entity)];localStaticRoot.addChild(entity);
+    localWayfindingMesh=mesh;localWayfindingEntity=entity;
+  }
+  wayfindingPanelAnchors=panelAnchors;
+  ensureWayfindingTextCanvas();
+  wayfindingSignposts={
+    ...wayfindingSignposts,active:Boolean(model.signCount&&positions.length),version:model.version||window.RoadSignposts.VERSION||null,
+    signCount:Number(model.signCount||0),panelCount:Number(model.panelCount||0),triangleCount:indices.length/3,
+    geometryDrawCallEstimate:positions.length?1:0,textCanvasCount:wayfindingTextContext?1:0,visibleTextCount:0,
+    routeQueryCount:Number(model.routeQueryCount||0),routeQueryMs:Number(model.routeQueryMs||0),buildMs:Number((performance.now()-started).toFixed(3)),
+    signs:Object.freeze((model.signs||[]).slice()),signature:model.signature||null,
+    authority:"RoadSignposts: StartingVillage bounded local road graph + canonical local labels",fallbackScope:model.fallbackScope||null,
+    interSettlementRoadAuthorityAvailable:Boolean(model.interSettlementRoadAuthorityAvailable),remoteConnectivityInvented:Boolean(model.remoteConnectivityInvented),
+    presentationOnly:true,simulationAuthority:false,bounded:model.bounded!==false,fullWorldScan:Boolean(model.fullWorldScan),perFrameRouteQuery:Boolean(model.perFrameRouteQuery)
+  };
+  updateWayfindingTextOverlay(true);
+  return wayfindingSignposts.geometryDrawCallEstimate;
+}
+
+function clearInspectionKeySet(keys,preserveSelected=false){
+  const selectedKey=inspection.selectedId===null?null:inspectionRegistryKey(inspection.selectedType,inspection.selectedId);
+  for(const key of keys)inspectionPickables.delete(key);
+  keys.clear();
+  if(!preserveSelected&&selectedKey&&!inspectionPickables.has(selectedKey))dismissInspection();
+}
+function registerLocalInspection(record,keys){
+  if(!registerInspectionPickable(record))return false;
+  keys.add(inspectionRegistryKey(record.type,record.id));return true;
+}
+function inspectionEntityBounds(entities,padding=5){
+  if(!cameraEntity?.camera||!canvas||!device||!pc)return null;
+  const rect=canvas.getBoundingClientRect(),sourceW=Math.max(1,Number(canvas.clientWidth||rect.width)),sourceH=Math.max(1,Number(canvas.clientHeight||rect.height));
+  let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity,seen=0;
+  const project=world=>{
+    const camera=cameraEntity.camera,p=camera.worldToScreen(world,new pc.Vec3());
+    if(!p||![p.x,p.y,p.z].every(Number.isFinite))return;
+    // Orthographic worldToScreen().z is unnormalized clip depth and may be
+    // negative for visible points. Use camera-view depth: visible points are < 0.
+    const viewSpace=camera.viewMatrix?.transformPoint?.(world,new pc.Vec3());
+    if(!viewSpace||!Number.isFinite(viewSpace.z)||viewSpace.z>=0)return;
+    const x=rect.left+p.x*(rect.width/sourceW),y=rect.top+p.y*(rect.height/sourceH);
+    left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);seen++;
+  };
+  for(const entity of entities||[]){
+    if(!entity?.enabled||!entity.parent)continue;
+    for(const meshInstance of entity.render?.meshInstances||[]){
+      const aabb=meshInstance.aabb,c=aabb?.center,h=aabb?.halfExtents;if(!c||!h)continue;
+      for(const dx of [-1,1])for(const dy of [-1,1])for(const dz of [-1,1])project(new pc.Vec3(c.x+h.x*dx,c.y+h.y*dy,c.z+h.z*dz));
+    }
+  }
+  if(!seen)return null;
+  return {left:left-padding,right:right+padding,top:top-padding,bottom:bottom+padding};
+}
+function inspectionEntityDepth(entities){
+  const camera=cameraEntity?.getPosition?.();if(!camera)return Infinity;let best=Infinity;
+  for(const entity of entities||[]){if(!entity?.enabled||!entity.parent)continue;const p=entity.getPosition();best=Math.min(best,(p.x-camera.x)**2+(p.y-camera.y)**2+(p.z-camera.z)**2);}
+  return best;
+}
+function readableTitle(value,fallback){
+  const text=String(value??"").trim();if(!text)return fallback;
+  return text.replace(/[-_]+/g," ").replace(/\b\w/g,ch=>ch.toUpperCase());
+}
+function inspectionFantasyStamp(){
+  const hour=Number.isFinite(Number(atmosphere.authoritativeHour))?Number(atmosphere.authoritativeHour):12.5;
+  const whole=Math.floor(hour),minute=Math.round((hour-whole)*60);
+  return Object.freeze({year:1100,month:1,day:1,hour:whole,minute:Math.min(59,minute),second:0});
+}
+function resolvedResidentActivity(resident,when){
+  if(!resident||!window.DailyActivity?.resolveActionTarget)return null;
+  const base=window.DailyActivity.resolveActionTarget(activeSeed,resident,when)||null;
+  return window.WorkCycles?.resolve?.(activeSeed,resident,when,base)||base;
+}
+function residentInspectionState(residentId){
+  const resident=window.DailyActivity?.build?.(activeSeed)?.find(item=>item.id===String(residentId))||null;
+  if(!resident)return null;
+  const scheduled=resolvedResidentActivity(resident,inspectionFantasyStamp());
+  const movement=window.ResidentMovement?.get?.(resident.id)||null;
+  const executing=window.ActionExecutor?.get?.("resident",resident.id)||movement?.actionExecution||null;
+  let activity=executing?.label||scheduled?.label||"Idle";
+  if(movement?.status==="moving"){
+    const state=String(scheduled?.state||"");
+    activity=state==="return-home"?"Going home":state==="work"?"Walking to work":"Traveling";
+  }else if(executing?.status==="active")activity=executing.label||"Working";
+  return Object.freeze({
+    residentId:resident.id,
+    displayName:String(resident.displayName||resident.name||"Resident"),
+    profession:readableTitle(resident.profession,"Unassigned"),
+    activity:readableTitle(activity,"Idle"),
+    scheduled,
+    movement,
+    authority:Object.freeze({identityId:resident.id,homeId:resident.homePlanId||null,workplaceId:resident.workplaceId||null,scheduleTimestamp:scheduled?.timestamp||null})
+  });
+}
+function residentPresentationState(resident){
+  const movement=window.ResidentMovement?.presentation?.(resident.id)||null;
+  const movementState=window.ResidentMovement?.get?.(resident.id)||null;
+  const scheduled=resolvedResidentActivity(resident,inspectionFantasyStamp());
+  const point=movement?.point||scheduled?.target||null;if(!point)return null;
+  const offset=movement?.offset||{x:0,y:0};
+  // Worksites/frontage points are authoritative outdoor choreography targets.
+  // A SpecialLot/nav cell may still carry a buildingId for collision/routing,
+  // so do not hide an arrived worker merely because navigation classifies the
+  // target cell as belonging to that lot.
+  const scheduledOutside=Boolean(
+    scheduled?.targetSource==="outdoor-worksite"||
+    (scheduled?.targetSource==="work-choreography"&&scheduled?.interactionObjectType==="exterior")
+  );
+  const indoors=movementState?Boolean(movementState.occupiesBuilding&&!scheduledOutside):scheduled?.targetSource==="interior-interaction";
+  return Object.freeze({x:Number(point.x)+Number(offset.x||0),y:Number(point.y)+Number(offset.y||0),indoors,scheduled,movementState});
+}
+function ensureLocalNpcMaterials(){
+  if(localNpcMaterials||!pc)return;
+  const make=(name,r,g,b)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.88;m.metalness=0;m.update();return m;};
+  localNpcMaterials={
+    body:make("LocalResidentBody",.19,.42,.72),head:make("LocalResidentHead",.86,.68,.50),tool:make("LocalResidentWorkTool",.30,.23,.15),
+    timber:make("LocalResidentWorkTimber",.42,.26,.13),metal:make("LocalResidentWorkMetal",.24,.27,.30),
+    ember:make("LocalResidentWorkEmber",.72,.22,.08),stock:make("LocalResidentWorkStock",.62,.48,.20),
+    localEvents:Object.freeze({
+      "market-day-setup":make("LocalEventMarket",.80,.47,.14),
+      "village-gathering":make("LocalEventGathering",.18,.58,.62),
+      "minor-argument":make("LocalEventArgument",.68,.20,.14),
+      "predator-warning":make("LocalEventWarning",.78,.61,.15)
+    }),
+    professions:Object.freeze({
+      farmer:make("ResidentFarmer",.26,.46,.24),smith:make("ResidentSmith",.48,.24,.19),
+      "tavern-keeper":make("ResidentTavernKeeper",.55,.39,.20),shopkeeper:make("ResidentShopkeeper",.39,.30,.52),
+      woodcutter:make("ResidentWoodcutter",.42,.30,.19),guard:make("ResidentGuard",.20,.34,.55)
+    })
+  };
+}
+function ensureLocalCrowdMaterials(){
+  if(localCrowdMaterials||!pc)return;
+  const material=new pc.StandardMaterial();
+  material.name="AnonymousCrowdMerged";
+  material.diffuse.set(1,1,1);
+  material.__atmosphereBaseDiffuse=[1,1,1];
+  material.vertexColors=true;
+  material.diffuseVertexColor=true;
+  material.emissive.set(.14,.14,.12);
+  material.emissiveIntensity=.7;
+  material.roughness=.92;
+  material.metalness=0;
+  if(pc.CULLFACE_NONE!==undefined)material.cull=pc.CULLFACE_NONE;
+  material.update();
+  localCrowdMaterials=Object.freeze({merged:material});
+}
+function resetLocalCrowdTelemetry(){
+  localCrowdPresentation={
+    active:false,generatedCount:0,visibleCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,
+    settlementId:null,settlementName:null,settlementClass:null,districtBand:"none",districtFactor:0,
+    population:0,populationSource:null,rhythmBand:"unknown",activityFactor:0,cap:0,candidateChecks:0,
+    exactPersistentNpcCount:Number(localNpcEntities.size||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
+    mobile:false,pooledStableIds:true,localCulling:true,lowFrequencyMotion:true,
+    presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,
+    inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
+  };
+}
+function clearLocalCrowdPresentation(){
+  localCrowdMesh?.destroy?.();localCrowdMesh=null;
+  localCrowdRoot?.destroy?.();localCrowdRoot=null;localCrowdContext=null;localCrowdEntities=[];
+  if(root?.dataset)root.dataset.travelEncounterFocus="false";
+  resetLocalCrowdTelemetry();
+}
+function currentCrowdAvoidPoints(){
+  const points=[];
+  for(const record of localNpcEntities.values()){
+    const state=residentPresentationState(record.resident);if(!state)continue;
+    points.push(Object.freeze({x:String(Math.round(Number(state.x)||0)),y:String(Math.round(Number(state.y)||0))}));
+  }
+  return points;
+}
+function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
+  clearLocalCrowdPresentation();
+  if(!resource||!frame?.dims||(!window.CrowdPresentation&&!window.TravelEncounters)||!tangentPatch)return;
+  const started=performance.now(),focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const rect=canvas?.getBoundingClientRect?.(),mobile=Math.min(Number(rect?.width||1280),Number(rect?.height||720))<=520;
+  const stamp=whenOverride||window.GameTime?.getTimestampKey?.()||window.GameTime?.getNow?.()||inspectionFantasyStamp();
+  const settlementCrowdActive=["refined","full"].includes(String(tier));
+  const crowd=settlementCrowdActive&&window.CrowdPresentation?CrowdPresentation.snapshot(activeSeed,stamp,focusTile,{mobile,avoidPoints:currentCrowdAvoidPoints()}):null;
+  const encounter=window.TravelEncounters?.localPresentation?.(activeSeed,focusTile,stamp,{mobile})||null;
+  if(root?.dataset)root.dataset.travelEncounterFocus=String(Boolean(encounter?.active));
+  const routineSpecs=crowd?.active&&Array.isArray(crowd.specs)?crowd.specs:[];
+  const encounterSpecs=encounter?.active&&Array.isArray(encounter.exactActors)?encounter.exactActors:[];
+  const specs=[...routineSpecs,...encounterSpecs];
+  localCrowdContext={resource,frame,tier,stamp};
+  if(!specs.length){
+    localCrowdPresentation={...localCrowdPresentation,
+      settlementId:crowd?.settlementId||null,settlementName:crowd?.settlementName||null,settlementClass:crowd?.settlementClass||null,
+      districtBand:crowd?.districtBand||"none",districtFactor:Number(crowd?.districtFactor||0),
+      population:Number(crowd?.population||0),populationSource:crowd?.populationSource||null,rhythmBand:crowd?.rhythmBand||"unknown",
+      activityFactor:Number(crowd?.activityFactor||0),cap:Number(crowd?.cap||0),candidateChecks:Number(crowd?.candidateChecks||0),mobile,
+      travelEncounterCount:Number(encounter?.exactActorCount||0),visibleTravelEncounterCount:0,
+      travelEncounterId:encounter?.encounter?.id||null,travelEncounterType:encounter?.encounter?.type||null,
+      travelEncounterBuildMs:Number(encounter?.updateMs||0),travelEncounterBodyMinPx:null,travelEncounterBodyMaxPx:null,
+      travelEncounterVisualAnchorSource:encounter?.encounter?.visualAnchor?.source||null,
+      travelerSilhouetteRevision:"travel-encounter-silhouette-v3",
+      buildTimeMs:Number((performance.now()-started).toFixed(3))
+    };
+    return;
+  }
+  ensureLocalCrowdMaterials();
+  const dims=frame.dims,unit=Math.max(1e-9,Number(dims.metersPerUnit)||1),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const halfW=Math.max(1,Number(dims.patchWidth||0)*.55),halfH=Math.max(1,Number(dims.patchHeight||0)*.55);
+  const resourceTile=mapWorldTileAt(resource.lat0,resource.lon0);
+  const positions=[],normals=[],colors=[],indices=[],visibleSpecs=[];
+  const roleColors=Object.freeze({
+    market:Object.freeze([196,132,72,255]),traveler:Object.freeze([96,142,196,255]),
+    laborer:Object.freeze([166,118,76,255]),guard:Object.freeze([78,116,181,255]),
+    farmer:Object.freeze([105,154,81,255]),craft:Object.freeze([183,105,81,255]),
+    merchant:Object.freeze([211,151,70,255]),caravan:Object.freeze([168,112,69,255]),bard:Object.freeze([145,91,183,255]),
+    pilgrim:Object.freeze([137,123,91,255]),messenger:Object.freeze([66,145,190,255]),hunter:Object.freeze([73,127,76,255])
+  });
+  const propColors=Object.freeze({
+    pack:Object.freeze([105,69,42,255]),satchel:Object.freeze([125,78,45,255]),bundle:Object.freeze([148,102,58,255]),
+    lute:Object.freeze([167,112,59,255]),staff:Object.freeze([111,83,52,255]),spear:Object.freeze([159,161,154,255]),
+    bow:Object.freeze([126,84,48,255]),"field-pack":Object.freeze([89,93,65,255])
+  });
+  const travelerOutline=Object.freeze([24,29,27,255]),travelerSkin=Object.freeze([229,184,140,255]),travelerHighlight=Object.freeze([246,220,149,255]);
+  const quad=(x0,z0,x1,z1,ground,height,color,nx,nz)=>{
+    const base=positions.length/3;
+    positions.push(x0,ground,z0,x1,ground,z1,x0,ground+height,z0,x1,ground+height,z1);
+    for(let i=0;i<4;i++){normals.push(nx,0,nz);colors.push(...color);}
+    indices.push(base,base+2,base+1,base+1,base+2,base+3);
+  };
+  const diamond=(x,z,y,r,color)=>{
+    const base=positions.length/3;
+    positions.push(x-r,y,z,x,y,z-r,x+r,y,z,x,y,z+r);
+    for(let i=0;i<4;i++){normals.push(0,1,0);colors.push(...color);}
+    indices.push(base,base+1,base+2,base,base+2,base+3);
+  };
+  const topRect=(x,z,y,halfX,halfZ,color)=>{
+    const base=positions.length/3;
+    positions.push(x-halfX,y,z-halfZ,x+halfX,y,z-halfZ,x+halfX,y,z+halfZ,x-halfX,y,z+halfZ);
+    for(let i=0;i<4;i++){normals.push(0,1,0);colors.push(...color);}
+    indices.push(base,base+1,base+2,base,base+2,base+3);
+  };
+  const screenFootprint=(x,z,y,halfX,halfZ)=>{
+    if(!cameraEntity?.camera||!canvas?.getBoundingClientRect)return null;
+    const transform=tangentPatch.getWorldTransform?.();if(!transform)return null;
+    const project=(px,pz)=>{
+      const world=transform.transformPoint(new pc.Vec3(px,y,pz),new pc.Vec3()),screen=cameraEntity.camera.worldToScreen(world,new pc.Vec3());
+      return Number.isFinite(Number(screen?.x))&&Number.isFinite(Number(screen?.y))?{x:Number(screen.x),y:Number(screen.y)}:null;
+    };
+    const pts=[project(x-halfX,z-halfZ),project(x+halfX,z-halfZ),project(x+halfX,z+halfZ),project(x-halfX,z+halfZ)].filter(Boolean);
+    if(pts.length!==4)return null;
+    const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y),bounds={left:Math.min(...xs),right:Math.max(...xs),top:Math.min(...ys),bottom:Math.max(...ys)};
+    const view=canvas.getBoundingClientRect(),centerX=(bounds.left+bounds.right)/2,centerY=(bounds.top+bounds.bottom)/2;
+    return Object.freeze({
+      screen:Object.freeze({x:Number(centerX.toFixed(3)),y:Number(centerY.toFixed(3)),width:Number(view.width.toFixed(3)),height:Number(view.height.toFixed(3))}),
+      bodyScreenSizePx:Object.freeze({width:Number((bounds.right-bounds.left).toFixed(3)),height:Number((bounds.bottom-bounds.top).toFixed(3))}),
+      inViewport:Boolean(centerX>=0&&centerX<=view.width&&centerY>=0&&centerY<=view.height)
+    });
+  };
+  for(const spec of specs){
+    let east=0,north=0,directLocal=true;
+    try{
+      const dx=Number(BigInt(String(spec.point.x))-BigInt(String(resourceTile.x)));
+      const dy=Number(BigInt(String(spec.point.y))-BigInt(String(resourceTile.y)));
+      if(!Number.isFinite(dx)||!Number.isFinite(dy)||Math.abs(dx)>128||Math.abs(dy)>128)throw new Error("crowd-local-wrap");
+      east=dx*tileMeters;north=dy*tileMeters;
+    }catch(_){
+      directLocal=false;
+      const ll=worldLatLonForTile(spec.point.x,spec.point.y),delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,ll.latitudeRadians,ll.longitudeRadians);
+      east=Number(delta.eastMeters||0);north=Number(delta.northMeters||0);
+    }
+    east+=Number(spec.presentationOffset?.x||0)*tileMeters;north+=Number(spec.presentationOffset?.y||0)*tileMeters;
+    if(Math.abs(east)>halfW||Math.abs(north)>halfH)continue;
+    const ground=localGroundHeightUnits(east,north,frame)+.018,posX=east/unit,posZ=-north/unit,isEncounter=Boolean(spec.travelEncounter);
+    const height=Math.max(isEncounter ? .16 : .09,(isEncounter?1.76:1.56)/unit);
+    const halfWidth=Math.max(isEncounter ? .045 : .022,(isEncounter ? .38 : .28)/unit),headRadius=Math.max(isEncounter ? .03 : .018,(isEncounter ? .25 : .20)/unit);
+    const color=roleColors[spec.visualRole]||roleColors.traveler;
+    quad(posX-halfWidth,posZ,posX+halfWidth,posZ,ground,height,color,0,1);
+    quad(posX,posZ-halfWidth,posX,posZ+halfWidth,ground,height,color,1,0);
+    let screenEvidence=null;
+    if(isEncounter){
+      const topHalfX=Math.max(.06,.56/unit),topHalfZ=Math.max(.075,.78/unit),topY=ground+height*.55;
+      // Ground-camera readability: keep one merged draw call, but layer a dark
+      // top-facing outline, role-colored torso, warm sash, and skin-toned head.
+      // This is presentation-only geometry at the canonical encounter anchor.
+      topRect(posX,posZ,topY,topHalfX*1.10,topHalfZ*1.10,travelerOutline);
+      topRect(posX,posZ,topY+.006,topHalfX*.88,topHalfZ*.90,color);
+      topRect(posX,posZ-topHalfZ*.03,topY+.010,topHalfX*.26,topHalfZ*.56,travelerHighlight);
+      const headZ=posZ-topHalfZ*.58,outerHead=Math.max(headRadius*1.28,.036);
+      diamond(posX,headZ,ground+height*.915,outerHead,travelerOutline);
+      diamond(posX,headZ,ground+height*.922,Math.max(headRadius*.78,.026),travelerSkin);
+      const propColor=propColors[spec.propKind]||propColors.pack,side=Number(spec.presentationOffset?.x||0)>=0?1:-1;
+      if(spec.propKind==="staff"||spec.propKind==="spear"||spec.propKind==="bow")topRect(posX+side*topHalfX*.98,posZ,topY+.014,Math.max(.014,.07/unit),Math.max(.08,.75/unit),propColor);
+      else topRect(posX+side*topHalfX*.94,posZ+topHalfZ*.22,topY+.014,Math.max(.025,.20/unit),Math.max(.03,.28/unit),propColor);
+      screenEvidence=screenFootprint(posX,posZ,topY,topHalfX*1.10,topHalfZ*1.10);
+    }else diamond(posX,posZ,ground+height*.86,headRadius,color);
+    visibleSpecs.push(Object.freeze({...spec,directLocalProjection:directLocal,screen:screenEvidence?.screen||null,bodyScreenSizePx:screenEvidence?.bodyScreenSizePx||null,inViewport:Boolean(screenEvidence?.inViewport)}));
+  }
+  let mergedEntity=null;
+  if(positions.length){
+    localCrowdMesh=new pc.Mesh(device);localCrowdMesh.setPositions(positions);localCrowdMesh.setNormals(normals);localCrowdMesh.setColors32(colors);localCrowdMesh.setIndices(indices);localCrowdMesh.update();
+    localCrowdRoot=new pc.Entity("AnonymousCrowdPresentation");localCrowdRoot.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
+    localCrowdRoot.render.meshInstances=[new pc.MeshInstance(localCrowdMesh,localCrowdMaterials.merged,localCrowdRoot)];tangentPatch.addChild(localCrowdRoot);mergedEntity=localCrowdRoot;
+  }
+  localCrowdEntities=visibleSpecs.map(spec=>Object.freeze({
+    id:String(spec.id),entity:mergedEntity,point:spec.point,visualRole:String(spec.visualRole||"market"),travelEncounter:Boolean(spec.travelEncounter),
+    encounterType:spec.encounterType||null,propKind:spec.propKind||null,screen:spec.screen||null,bodyScreenSizePx:spec.bodyScreenSizePx||null,inViewport:Boolean(spec.inViewport)
+  }));
+  const travelRows=localCrowdEntities.filter(item=>item.travelEncounter),travelSizes=travelRows.map(item=>Math.max(Number(item.bodyScreenSizePx?.width||0),Number(item.bodyScreenSizePx?.height||0))).filter(Number.isFinite);
+  const elapsed=performance.now()-started;
+  // CrowdPresentation source resolution predates rare encounters and can be much
+  // more expensive than the merged mesh itself on SwiftShader/mobile runners.
+  // Keep total build telemetry, but expose the incremental presentation phase
+  // separately so WP-S007-013 can enforce its own rendering cost without
+  // disguising unrelated anonymous-crowd source work.
+  const sourceCostMs=Math.max(0,Number(crowd?.totalUpdateMs||0))+Math.max(0,Number(encounter?.updateMs||0));
+  const mergedPresentationBuildMs=Math.max(0,elapsed-sourceCostMs);
+  localCrowdPresentation={
+    active:localCrowdEntities.length>0,generatedCount:Number(crowd?.activeCount||0)+Number(encounter?.exactActorCount||0),visibleCount:localCrowdEntities.length,
+    entityCount:mergedEntity?1:0,drawCallEstimate:mergedEntity?1:0,buildTimeMs:Number(elapsed.toFixed(3)),mergedPresentationBuildMs:Number(mergedPresentationBuildMs.toFixed(3)),
+    settlementId:crowd?.settlementId||null,settlementName:crowd?.settlementName||null,settlementClass:crowd?.settlementClass||null,
+    districtBand:crowd?.districtBand||"none",districtFactor:Number(crowd?.districtFactor||0),population:Number(crowd?.population||0),populationSource:crowd?.populationSource||null,
+    rhythmBand:crowd?.rhythmBand||"unknown",activityFactor:Number(crowd?.activityFactor||0),cap:Number(crowd?.cap||0),candidateChecks:Number(crowd?.candidateChecks||0),
+    resolveMs:Number(crowd?.resolveMs||0),sourceUpdateMs:Number(crowd?.updateMs||0),totalSourceUpdateMs:Number(crowd?.totalUpdateMs||0),
+    exactPersistentNpcCount:Number(localNpcEntities.size||0),visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
+    travelEncounterCount:Number(encounter?.exactActorCount||0),visibleTravelEncounterCount:travelRows.length,travelEncounterId:encounter?.encounter?.id||null,
+    travelEncounterType:encounter?.encounter?.type||null,travelEncounterBuildMs:Number(encounter?.updateMs||0),
+    travelEncounterBodyMinPx:travelSizes.length?Number(Math.min(...travelSizes).toFixed(3)):null,travelEncounterBodyMaxPx:travelSizes.length?Number(Math.max(...travelSizes).toFixed(3)):null,
+    travelEncounterVisualAnchorSource:encounter?.encounter?.visualAnchor?.source||null,travelerSilhouetteRevision:"travel-encounter-silhouette-v3",
+    mobile,pooledStableIds:Boolean(crowd?.pooledStableIds!==false),localCulling:true,lowFrequencyMotion:Boolean(crowd?.lowFrequencyMotion!==false),mergedBatch:true,sharedMaterialCount:mergedEntity?1:0,
+    directLocalProjectionCount:visibleSpecs.filter(spec=>spec.directLocalProjection).length,topFacingHeadMarkers:true,topFacingTravelerBodies:true,
+    presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
+  };
+}
+function refreshLocalCrowdPresentation(whenOverride=null){
+  if(!localCrowdContext)return;
+  const c=localCrowdContext;rebuildLocalCrowdPresentation(c.resource,c.frame,c.tier,whenOverride);
+}
+function registerCanonicalBuildingInspection(record,entities){
+  const typeLabel=readableTitle(record?.function||record?.kind||record?.type,"Building");
+  const explicitName=String(record?.label||record?.name||"").trim();
+  const name=explicitName||typeLabel+" "+String(record?.id||"").trim();
+  registerLocalInspection({
+    id:String(record.id),type:"building",name,functionLabel:typeLabel,buildingType:typeLabel,pickPriority:1,
+    authority:Object.freeze({buildingId:String(record.id),kind:record?.kind||null,function:record?.function||null}),
+    visible:()=>entities.some(entity=>entity?.enabled&&entity.parent),
+    screenBounds:()=>inspectionEntityBounds(entities,6),
+    screenDepth:()=>inspectionEntityDepth(entities)
+  },localBuildingInspectionKeys);
+}
+function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,unit,lift=0,preserveSelection=false){
+  const started=performance.now(),selectedNpc=inspection.selectedType==="npc"?inspection.selectedId:null;
+  clearInspectionKeySet(localNpcInspectionKeys,preserveSelection);localNpcRoot?.destroy?.();localNpcRoot=null;localNpcEntities.clear();
+  localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0,activeWorkCycleToolCount:0,activeWorkCyclePropCount:0,activeWorkCycleResidentIds:Object.freeze([]),activeLocalEventCueCount:0,activeLocalEventResidentIds:Object.freeze([])};
+  localNpcContext={reveal,tier,frame,presentationScale,unit,lift};
+  if(!["refined","full"].includes(tier)||!window.DailyActivity?.build)return;
+  ensureLocalNpcMaterials();localNpcRoot=new pc.Entity("CanonicalResidents");tangentPatch.addChild(localNpcRoot);
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),roster=window.DailyActivity.build(activeSeed)||[];
+  let activeCount=0,entityCount=0;
+  for(const resident of roster){
+    const state=residentPresentationState(resident);if(!state)continue;
+    const initiallyVisible=!state.indoors;
+    const east=state.x*tileMeters,north=state.y*tileMeters,ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.015;
+    const bodyHeight=Math.max(.10,1.18*presentationScale/unit),bodyWidth=Math.max(.045,.48*presentationScale/unit),headSize=Math.max(.045,.44*presentationScale/unit);
+    const pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame),x=pos.x,z=pos.z;
+    const bodyMaterial=localNpcMaterials.professions?.[resident.profession]||localNpcMaterials.body;
+    const body=addLocalPrimitive(localNpcRoot,"ResidentBody-"+resident.id,"cylinder",bodyMaterial,x,ground+bodyHeight*.5,z,bodyWidth,bodyHeight,bodyWidth);
+    const head=addLocalPrimitive(localNpcRoot,"ResidentHead-"+resident.id,"sphere",localNpcMaterials.head,x,ground+bodyHeight+headSize*.48,z,headSize,headSize,headSize);
+    const tool=addLocalPrimitive(localNpcRoot,"ResidentWorkTool-"+resident.id,"box",localNpcMaterials.tool,x,ground+bodyHeight*.62,z,bodyWidth*.26,bodyHeight*.72,bodyWidth*.26);
+    const workPropA=addLocalPrimitive(localNpcRoot,"ResidentWorkPropA-"+resident.id,"box",localNpcMaterials.timber,x,ground,z,bodyWidth,bodyWidth,bodyWidth);
+    const workPropB=addLocalPrimitive(localNpcRoot,"ResidentWorkPropB-"+resident.id,"box",localNpcMaterials.metal,x,ground,z,bodyWidth,bodyWidth,bodyWidth);
+    const workPropC=addLocalPrimitive(localNpcRoot,"ResidentWorkPropC-"+resident.id,"box",localNpcMaterials.stock,x,ground,z,bodyWidth,bodyWidth,bodyWidth);
+    const eventHalo=addLocalPrimitive(localNpcRoot,"ResidentEventHalo-"+resident.id,"cylinder",localNpcMaterials.localEvents["village-gathering"],x,ground,z,bodyWidth,bodyWidth*.08,bodyWidth);
+    tool.enabled=false;workPropA.enabled=false;workPropB.enabled=false;workPropC.enabled=false;eventHalo.enabled=false;
+    localNpcEntities.set(resident.id,{resident,body,head,tool,workPropA,workPropB,workPropC,eventHalo,bodyHeight,bodyWidth,headSize,presentationScale,unit,frame,lift});
+    body.enabled=initiallyVisible;head.enabled=initiallyVisible;
+    const entities=[body,head,tool,workPropA,workPropB,workPropC,eventHalo];
+    registerLocalInspection({
+      id:resident.id,type:"npc",residentId:resident.id,pickPriority:3,
+      authority:Object.freeze({residentId:resident.id,identitySource:"DailyActivity",professionSource:"ResidentAssignments",activitySource:"DailyActivity.resolveActionTarget"}),
+      inspect:()=>residentInspectionState(resident.id),
+      visible:()=>entities.some(entity=>entity?.enabled&&entity.parent),
+      screenBounds:()=>inspectionEntityBounds(entities,5),
+      screenDepth:()=>inspectionEntityDepth(entities)
+    },localNpcInspectionKeys);
+    if(initiallyVisible)activeCount++;entityCount+=7;
+  }
+  localNpcPresentation={...localNpcPresentation,active:activeCount>0,activeCount,entityCount,drawCallEstimate:entityCount,buildTimeMs:Number((performance.now()-started).toFixed(3)),time:inspectionFantasyStamp()};
+  if(selectedNpc&&!inspectionPickables.has(inspectionRegistryKey("npc",selectedNpc)))dismissInspection();
+}
+function refreshCanonicalNpcPresentation(){
+  if(!localNpcContext)return;
+  const c=localNpcContext;rebuildCanonicalNpcPresentation(c.reveal,c.tier,c.frame,c.presentationScale,c.unit,c.lift,true);
+}
+function updateCanonicalNpcMotion(){
+  if(!localNpcRoot||!localNpcContext||!localNpcEntities.size)return;
+  const started=performance.now(),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),rhythmStamp=inspectionFantasyStamp();
+  const rhythm=window.SettlementActivityRhythm?.snapshot?.(activeSeed,rhythmStamp,[...localNpcEntities.values()].map(record=>record.resident))||null;
+  let activeTools=0,activeProps=0,activeEventCues=0,visibleCount=0,centeredWorkAction=false,rhythmPriorityTotal=0,rhythmPriorityCount=0;
+  const activeWorkCycleResidentIds=[],activeLocalEventResidentIds=[],viewportRect=canvas?.getBoundingClientRect?.()||null;
+  for(const record of localNpcEntities.values()){
+    const state=residentPresentationState(record.resident),visible=Boolean(state&&!state.indoors);
+    record.body.enabled=visible;record.head.enabled=visible;record.tool.enabled=false;
+    for(const prop of [record.workPropA,record.workPropB,record.workPropC,record.eventHalo])if(prop)prop.enabled=false;
+    if(!visible)continue;
+    visibleCount++;
+    const east=state.x*tileMeters,north=state.y*tileMeters;
+    const ground=canonicalSemanticGroundHeightUnits(east,north,record.frame)+record.lift+.015;
+    const pos=canonicalSemanticPosition(east,north,record.presentationScale,record.unit,record.frame);
+    const working=Boolean(state.movementState?.workCycle&&state.movementState?.status==="arrived");
+    const localEvent=window.LocalEventVignettes?.stateFor?.(record.resident.id,activeSeed)||null;
+    const eventActive=Boolean(localEvent?.activityOverride);
+    const rhythmResident=window.SettlementActivityRhythm?.residentPresentation?.(activeSeed,record.resident,rhythmStamp,state.scheduled)||null;
+    const rhythmPriority=Math.max(0,Math.min(1,Number(rhythmResident?.priority??.5)));
+    rhythmPriorityTotal+=rhythmPriority;rhythmPriorityCount++;
+    const rhythmScale=working?1:(.95+rhythmPriority*.45);
+    const phase=frameCount*.22+Number(String(record.resident.id).replace(/\D/g,"")||0);
+    const pulse=(working||eventActive)?Math.sin(phase)*.035:0,actionScale=eventActive?3.62:(working?3.05:rhythmScale);
+    // Arrived workers keep the accepted WP-S004-007 silhouette scale. Other
+    // outdoor residents get only a bounded presentation emphasis from fantasy-
+    // time rhythm; positions, schedules, collision and routes stay authoritative.
+    record.body.setLocalScale(record.bodyWidth*actionScale,record.bodyHeight*actionScale,record.bodyWidth*actionScale);
+    record.head.setLocalScale(record.headSize*actionScale,record.headSize*actionScale,record.headSize*actionScale);
+    record.body.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale*.5,pos.z);
+    record.head.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale+record.headSize*actionScale*(.48+pulse),pos.z);
+    if(eventActive){
+      if(viewportRect&&cameraEntity?.camera){
+        const screen=cameraEntity.camera.worldToScreen(record.body.getPosition(),new pc.Vec3());
+        const cx=viewportRect.width*.5,cy=viewportRect.height*.5,priorityRadius=Math.max(84,Math.min(180,Math.min(viewportRect.width,viewportRect.height)*.28));
+        if(Number.isFinite(screen?.x)&&Number.isFinite(screen?.y)&&Math.hypot(screen.x-cx,screen.y-cy)<=priorityRadius)centeredWorkAction=true;
+      }
+      const eventType=String(localEvent.type||""),eventMaterial=localNpcMaterials.localEvents?.[eventType]||localNpcMaterials.stock;
+      const bw=record.bodyWidth*actionScale,bh=record.bodyHeight*actionScale,swing=Math.sin(phase);
+      if(record.eventHalo){
+        if(eventMaterial&&record.eventHalo.render?.meshInstances?.[0])record.eventHalo.render.meshInstances[0].material=eventMaterial;
+        // Elongate the same pooled halo into a compact top-down shoulder/torso
+        // silhouette. It stays within the participant footprint but remains
+        // visible behind the head under the fixed near-top-down camera.
+        record.eventHalo.setLocalScale(bw*.92,Math.max(.010,bw*.055),bw*1.58);
+        record.eventHalo.setLocalPosition(pos.x,ground+.006,pos.z+bw*.28);
+        record.eventHalo.enabled=true;activeEventCues++;
+      }
+      if(record.tool){
+        if(eventMaterial&&record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=eventMaterial;
+        record.tool.setLocalScale(bw*1.58,Math.max(.012,bw*.07),bw*.38);
+        record.tool.setLocalPosition(pos.x,ground+.013,pos.z-bw*.12);
+        record.tool.setLocalEulerAngles(0,0,0);record.tool.enabled=true;activeEventCues++;
+      }
+      const setEventProp=(entity,material,sx,sy,sz,dx,dy,dz,ry=0)=>{
+        if(!entity)return;
+        if(material&&entity.render?.meshInstances?.[0])entity.render.meshInstances[0].material=material;
+        entity.setLocalScale(sx,sy,sz);entity.setLocalPosition(pos.x+dx,ground+dy,pos.z+dz);entity.setLocalEulerAngles(0,ry,0);entity.enabled=true;activeProps++;activeEventCues++;
+      };
+      // Compact event props stay inside roughly one resident-width of the
+      // authoritative walkable participant coordinate. They are presentation
+      // only and intentionally much smaller than the rejected slab-like cues.
+      if(eventType==="market-day-setup"){
+        setEventProp(record.workPropA,localNpcMaterials.stock,bw*.68,bw*.32,bw*.68,bw*.94,bw*.20,bw*.18,12);
+        setEventProp(record.workPropB,localNpcMaterials.timber,bw*.56,bw*.24,bw*.82,-bw*.82,bw*.16,-bw*.14,-10);
+      }else if(eventType==="village-gathering"){
+        setEventProp(record.workPropA,localNpcMaterials.timber,bw*1.18,bw*.13,bw*.34,0,bw*.11,bw*.90,10*swing);
+      }else if(eventType==="minor-argument"){
+        setEventProp(record.workPropA,localNpcMaterials.ember,bw*.20,bw*.13,bw*1.30,bw*.50,bw*.13,bw*.34,42+10*swing);
+        setEventProp(record.workPropB,localNpcMaterials.metal,bw*.20,bw*.12,bw*1.16,-bw*.50,bw*.12,-bw*.26,-42-10*swing);
+      }else if(eventType==="predator-warning"){
+        setEventProp(record.workPropA,localNpcMaterials.stock,bw*.22,bw*.14,bw*1.42,bw*.64,bw*.13,0,8+5*swing);
+        setEventProp(record.workPropB,localNpcMaterials.ember,bw*.50,bw*.24,bw*.50,-bw*.64,bw*.17,bw*.20,45);
+      }
+      activeLocalEventResidentIds.push(String(record.resident.id));
+    }else if(working){
+      if(viewportRect&&cameraEntity?.camera){
+        const screen=cameraEntity.camera.worldToScreen(record.body.getPosition(),new pc.Vec3());
+        const cx=viewportRect.width*.5,cy=viewportRect.height*.5,priorityRadius=Math.max(72,Math.min(160,Math.min(viewportRect.width,viewportRect.height)*.24));
+        if(Number.isFinite(screen?.x)&&Number.isFinite(screen?.y)&&Math.hypot(screen.x-cx,screen.y-cy)<=priorityRadius)centeredWorkAction=true;
+      }
+      const profession=String(record.resident.profession||""),stepId=String(state.movementState?.workCycle?.stepId||"");
+      const cueScale=2.34,bw=record.bodyWidth*actionScale*cueScale,bh=record.bodyHeight*actionScale*cueScale,swing=Math.sin(phase);
+      const setProp=(entity,material,sx,sy,sz,dx,dy,dz,rx=0,ry=0,rz=0)=>{
+        if(!entity)return;
+        if(material&&entity.render?.meshInstances?.[0])entity.render.meshInstances[0].material=material;
+        entity.setLocalScale(sx,sy,sz);entity.setLocalPosition(pos.x+dx,ground+dy,pos.z+dz);entity.setLocalEulerAngles(rx,ry,rz);entity.enabled=true;activeProps++;
+      };
+      // Every cue is presentation-only and anchored to the authoritative arrived
+      // work-step coordinate. Shared materials and at most three bounded props
+      // keep the action legible without creating economy/resource authority.
+      if(profession==="smith"){
+        // One unmistakable work vignette: an orange forge, a broad metal anvil,
+        // and a T-shaped hammer laid across the tangent plane. All four pieces
+        // remain presentation-only and anchored to the arrived work coordinate.
+        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.timber;
+        record.tool.setLocalScale(bw*.11,bw*.12,bw*3.10);
+        record.tool.setLocalPosition(pos.x+bw*.38,ground+bw*.20,pos.z-bw*.22);
+        record.tool.setLocalEulerAngles(0,38+38*swing,0);record.tool.enabled=true;activeTools++;
+        setProp(record.workPropA,localNpcMaterials.metal,bw*2.55,bw*.24,bw*1.28,-bw*1.72,bw*.18,bw*.18,0,-8,0);
+        setProp(record.workPropB,localNpcMaterials.ember,bw*1.48,bw*.18,bw*1.48,bw*1.86,bw*.18,bw*.56,0,8,0);
+        setProp(record.workPropC,localNpcMaterials.metal,bw*1.58,bw*.16,bw*.62,bw*.98,bw*.24,-bw*1.30,0,38+38*swing,0);
+      }else if(profession==="shopkeeper"){
+        // Symmetric counter + stock stacks read as a storefront from above.
+        // The actor remains at the same authoritative shop-frontage coordinate.
+        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.stock;
+        record.tool.setLocalScale(bw*1.62,bw*.11,bw*.70);
+        record.tool.setLocalPosition(pos.x,ground+bw*.42,pos.z+bw*1.42);record.tool.setLocalEulerAngles(0,0,0);record.tool.enabled=true;activeTools++;
+        setProp(record.workPropA,localNpcMaterials.timber,bw*4.10,bw*.24,bw*1.00,0,bw*.16,bw*1.16,0,0,0);
+        setProp(record.workPropB,localNpcMaterials.stock,bw*1.02,bw*.52,bw*1.02,-bw*1.48,bw*.40,bw*.52,0,10,0);
+        setProp(record.workPropC,localNpcMaterials.stock,bw*1.02,bw*.52,bw*1.02,bw*1.48,bw*.40,bw*.52,0,-10,0);
+      }else if(profession==="guard"){
+        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.timber;
+        // Spear remains a long unmistakable axis, while the shield is a broad
+        // offset plate. The point is a separate metal cap.
+        record.tool.setLocalScale(bw*.11,bw*.13,bw*4.65);
+        record.tool.setLocalPosition(pos.x+bw*.88,ground+bw*.20,pos.z);record.tool.setLocalEulerAngles(0,7+2*swing,0);record.tool.enabled=true;activeTools++;
+        setProp(record.workPropA,localNpcMaterials.metal,bw*.60,bw*.16,bw*.88,bw*.88,bw*.22,-bw*2.56,0,7+2*swing,0);
+        setProp(record.workPropB,localNpcMaterials.professions.guard,bw*2.05,bw*.22,bw*1.62,-bw*1.30,bw*.24,bw*.40,0,18,0);
+      }else if(profession==="woodcutter"){
+        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.timber;
+        // Axe + crossed log stack reads differently from guard/shop geometry.
+        record.tool.setLocalScale(bw*.11,bw*.13,bw*3.55);
+        record.tool.setLocalPosition(pos.x+bw*.62,ground+bw*.22,pos.z+bw*.02);record.tool.setLocalEulerAngles(0,-34+34*swing,0);record.tool.enabled=true;activeTools++;
+        setProp(record.workPropA,localNpcMaterials.timber,bw*3.25,bw*.34,bw*.72,bw*1.72,bw*.19,-bw*.52,0,22,0);
+        setProp(record.workPropB,localNpcMaterials.timber,bw*2.95,bw*.32,bw*.70,bw*1.58,bw*.54,bw*.64,0,-20,0);
+        setProp(record.workPropC,localNpcMaterials.metal,bw*1.34,bw*.18,bw*.58,bw*1.05,bw*.27,-bw*1.24,0,-34+34*swing,0);
+      }else if(profession==="farmer"){
+        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.timber;
+        record.tool.setLocalScale(bw*.18,bh*1.12,bw*.18);
+        record.tool.setLocalPosition(pos.x+bw*.66,ground+bh*(.68+.045*swing),pos.z);record.tool.setLocalEulerAngles(50+26*swing,0,28);record.tool.enabled=true;activeTools++;
+        setProp(record.workPropA,localNpcMaterials.stock,bw*1.20,bw*.62,bw*.88,bw*1.35,bw*.33,-bw*.25);
+        setProp(record.workPropB,localNpcMaterials.stock,bw*.92,bw*.54,bw*.72,bw*1.72,bw*.30,bw*.46);
+      }else if(profession==="tavern-keeper"){
+        if(record.tool.render?.meshInstances?.[0])record.tool.render.meshInstances[0].material=localNpcMaterials.stock;
+        record.tool.setLocalScale(bw*1.48,bw*.16,bw*.86);
+        record.tool.setLocalPosition(pos.x+bw*.35,ground+bh*(.74+.02*swing),pos.z);record.tool.setLocalEulerAngles(0,0,0);record.tool.enabled=true;activeTools++;
+        setProp(record.workPropA,localNpcMaterials.ember,bw*.42,bw*.70,bw*.42,bw*.12,bh*.83,-bw*.20);
+        setProp(record.workPropB,localNpcMaterials.ember,bw*.42,bw*.70,bw*.42,bw*.60,bh*.83,bw*.18);
+      }else{
+        record.tool.setLocalScale(bw*.24,bh*.82,bw*.24);
+        record.tool.setLocalPosition(pos.x+bw*.58,ground+bh*.62,pos.z);record.tool.setLocalEulerAngles(48,0,28);record.tool.enabled=true;activeTools++;
+      }
+      activeWorkCycleResidentIds.push(String(record.resident.id));
+    }
+  }
+  activeWorkCycleResidentIds.sort();activeLocalEventResidentIds.sort();
+  // Keep the gameplay-center anchor exact, but move its concise readout away
+  // from a centered authoritative work action and soften only the ring.
+  const centerMarker=root?.querySelector?.(".planet-world-center"),centerCode=centerMarker?.querySelector?.("code"),centerGlyph=centerMarker?.querySelector?.("i");
+  if(root)root.dataset.workFocus=centeredWorkAction?"true":"false";
+  if(centerMarker)centerMarker.dataset.workPriority=centeredWorkAction?"true":"false";
+  if(centerCode){
+    if(centeredWorkAction){
+      centerCode.style.position="absolute";centerCode.style.left="50%";centerCode.style.top="-82px";
+      centerCode.style.transform="translateX(-50%) scale(.86)";centerCode.style.opacity=".12";
+    }else{
+      centerCode.style.position="";centerCode.style.left="";centerCode.style.top="";centerCode.style.transform="";centerCode.style.opacity="";
+    }
+  }
+  if(centerGlyph){centerGlyph.style.opacity=centeredWorkAction?".16":"";centerGlyph.style.transform=centeredWorkAction?"scale(.38)":"";}
+  const elapsed=performance.now()-started;
+  localNpcPresentation={...localNpcPresentation,active:visibleCount>0,activeCount:visibleCount,activeWorkCycleToolCount:activeTools,activeWorkCyclePropCount:activeProps,
+    activeWorkCycleResidentIds:Object.freeze(activeWorkCycleResidentIds),
+    activeLocalEventCueCount:activeEventCues,activeLocalEventResidentIds:Object.freeze(activeLocalEventResidentIds),
+    rhythmBand:rhythm?.band||"unknown",rhythmModifiers:rhythm?.modifiers||null,rhythmCounts:rhythm?.counts||null,
+    rhythmAveragePresentationPriority:rhythmPriorityCount?Number((rhythmPriorityTotal/rhythmPriorityCount).toFixed(4)):0,
+    drawCallEstimate:visibleCount*2+activeTools+activeProps,
+    motionUpdateCount:Number(localNpcPresentation.motionUpdateCount||0)+1,lastMotionUpdateMs:Number(elapsed.toFixed(4)),
+    maxMotionUpdateMs:Math.max(Number(localNpcPresentation.maxMotionUpdateMs||0),Number(elapsed.toFixed(4)))};
+}
+function canonicalRoofSegmentColor(state,plane,band,lane,landmark){
+  const visualState=String(state||"normal");
+  const normal=landmark?[219,149,54,255]:[108,49,31,255];
+  if(visualState==="worn")return landmark?[178,132,79,255]:[124,91,68,255];
+  if(visualState==="damaged")return landmark?[151,91,43,255]:[105,70,51,255];
+  if(visualState==="repaired")return normal;
+  if(visualState==="overgrown")return landmark?[168,122,69,255]:[112,82,55,255];
+  return normal;
+}
+function canonicalRoofMeshData(entry,state){
+  const positions=[],normals=[],colors=[],indices=[];
+  const visualState=["normal","worn","damaged","repaired","overgrown"].includes(String(state))?String(state):"normal";
+  const runMeters=Math.max(1,entry.w*.55),roofRiseMeters=Math.max(1.05,Math.min(2.55,entry.w*.245));
+  const roofRise=roofRiseMeters*entry.presentationScale/entry.unit,outerY=entry.ground+entry.h+.018;
+  const normalFor=side=>{const slope=roofRiseMeters/runMeters,l=Math.hypot(slope,1);return [side*slope/l,1/l,0];};
+  const point=(side,t,northFactor,liftMeters=0)=>{
+    const east=entry.east+side*runMeters*(1-t),north=entry.north+northFactor*entry.d,p=canonicalSemanticPosition(east,north,entry.presentationScale,entry.unit,entry.frame);
+    const lift=liftMeters*entry.presentationScale/entry.unit;
+    // Detail remains inside the canonical footprint. A tiny vertical lift
+    // avoids z-fighting without pushing repair/moss beyond the eave silhouette.
+    return [p.x,outerY+roofRise*t+lift,p.z];
+  };
+  const variedColor=(color,salt,corner)=>{
+    const n=localHash(entry.east+salt*1.73+corner*.47,entry.north+salt*.91-corner*.31,7301+salt*17+corner*11);
+    const amount=visualState==="normal"?.018:.030,factor=1+(n-.5)*2*amount;
+    return [Math.round(clamp(color[0]*factor,0,255)),Math.round(clamp(color[1]*factor,0,255)),Math.round(clamp(color[2]*factor,0,255)),color[3]??255];
+  };
+  const addQuad=(a,b,c,d,n,color,salt=0)=>{
+    const base=positions.length/3,verts=[a,b,c,d];
+    for(let corner=0;corner<4;corner++){
+      const q=verts[corner],cc=variedColor(color,salt,corner);
+      positions.push(q[0],q[1],q[2]);normals.push(n[0],n[1],n[2]);colors.push(cc[0],cc[1],cc[2],cc[3]);
+    }
+    indices.push(base,base+1,base+2,base,base+2,base+3);
+  };
+  const addTri=(a,b,c,n,color,salt=0)=>{
+    const base=positions.length/3,verts=[a,b,c];
+    for(let corner=0;corner<3;corner++){
+      const q=verts[corner],cc=variedColor(color,salt,corner);
+      positions.push(q[0],q[1],q[2]);normals.push(n[0],n[1],n[2]);colors.push(cc[0],cc[1],cc[2],cc[3]);
+    }
+    indices.push(base,base+1,base+2);
+  };
+  const addPatch=(side,t0,t1,n0,n1,color,salt,lift=.010,skew=0)=>{
+    const n=normalFor(side);
+    addQuad(
+      point(side,t0,n0,lift),
+      point(side,t1,n0+skew,lift),
+      point(side,t1,n1-skew,lift),
+      point(side,t0,n1,lift),
+      n,color,salt
+    );
+  };
+  const addLeafCluster=(side,t,northFactor,color,salt,scaleT=.065,scaleN=.038)=>{
+    const n=normalFor(side),lift=.014;
+    addTri(
+      point(side,t-scaleT*.45,northFactor,lift),
+      point(side,t+scaleT*.72,northFactor-scaleN,lift),
+      point(side,t+scaleT*.32,northFactor+scaleN*.78,lift),
+      n,color,salt
+    );
+    addTri(
+      point(side,t-scaleT*.18,northFactor+scaleN*.15,lift+.002),
+      point(side,t+scaleT*.48,northFactor+scaleN*1.05,lift+.002),
+      point(side,t+scaleT*.88,northFactor+scaleN*.08,lift+.002),
+      n,color,salt+1
+    );
+  };
+
+  const baseColor=canonicalRoofSegmentColor(visualState,0,0,0,entry.landmark);
+  const addPlane=(side,plane)=>{
+    const n=normalFor(side);
+    if(visualState==="damaged"&&plane===0){
+      // Stepped, unequal eave losses make a broken silhouette while retaining
+      // the same authoritative roof footprint and ridge.
+      addQuad(point(side,.44,-.55),point(side,1,-.55),point(side,1,-.41),point(side,.44,-.41),n,baseColor,20);
+      addQuad(point(side,.35,-.41),point(side,1,-.41),point(side,1,-.30),point(side,.35,-.30),n,baseColor,21);
+      addQuad(point(side,.25,-.30),point(side,1,-.30),point(side,1,-.18),point(side,.25,-.18),n,baseColor,22);
+      addQuad(point(side,0,-.18),point(side,1,-.18),point(side,1,.55),point(side,0,.55),n,baseColor,23);
+    }else{
+      addQuad(point(side,0,-.55),point(side,1,-.55),point(side,1,.55),point(side,0,.55),n,baseColor,plane);
+    }
+  };
+  addPlane(-1,0);addPlane(1,1);
+
+  for(let plane=0;plane<2;plane++){
+    const side=plane===0?-1:1,drop=Math.max(.025,.16*entry.presentationScale/entry.unit);
+    const edgeColor=visualState==="overgrown"?[54,91,42,255]:visualState==="worn"?[96,76,60,255]:visualState==="damaged"?[59,40,31,255]:
+      visualState==="repaired"&&plane===0?[170,94,38,255]:entry.landmark?[151,87,31,255]:[68,30,23,255];
+    const fascia=(n0,n1,salt)=>{
+      const a=point(side,0,n0),b=point(side,0,n1);
+      addQuad(a,b,[b[0],b[1]-drop,b[2]],[a[0],a[1]-drop,a[2]],[side,0,0],edgeColor,salt);
+    };
+    if(visualState==="damaged"&&plane===0)fascia(-.18,.55,40);
+    else fascia(-.55,.55,41+plane);
+  }
+
+  if(visualState==="worn"){
+    const light=[177,145,111,255],mid=[151,120,91,255],dark=[88,65,50,255];
+    // Narrow, staggered shingle runs replace the former square patches.
+    [
+      [-1,.05,.28,-.49,-.435,light,101,.008,.010],
+      [-1,.18,.43,-.18,-.125,mid,102,.008,-.012],
+      [-1,.06,.30,.155,.215,light,103,.008,.014],
+      [-1,.47,.72,.345,.397,dark,104,.007,-.010],
+      [ 1,.08,.31,-.31,-.255,light,105,.008,-.012],
+      [ 1,.29,.53,-.035,.020,mid,106,.008,.011],
+      [ 1,.10,.34,.275,.332,light,107,.008,-.013],
+      [ 1,.53,.77,-.485,-.435,dark,108,.007,.010]
+    ].forEach(v=>addPatch(...v));
+  }else if(visualState==="damaged"){
+    const char=[45,35,30,255],burn=[111,56,34,255],ash=[143,117,88,255];
+    addPatch(-1,.42,.50,-.535,-.425,char,121,.010,.020);
+    addPatch(-1,.34,.41,-.395,-.305,burn,122,.010,-.016);
+    addPatch(-1,.23,.31,-.285,-.195,ash,123,.009,.012);
+    addLeafCluster(-1,.18,-.13,[84,54,40,255],125,.045,.025);
+    addPatch(1,.08,.19,-.44,-.385,[101,68,50,255],126,.007,.010);
+  }else if(visualState==="repaired"){
+    const fresh=[[224,156,72,255],[239,187,101,255],[198,124,55,255],[215,145,66,255]];
+    // Four slim replacement boards sit fully inside the missing-damage zone.
+    const strips=[[-.515,-.445,.34],[-.425,-.355,.30],[-.335,-.265,.37],[-.245,-.175,.28]];
+    strips.forEach((r,i)=>addPatch(-1,.035,r[2],r[0],r[1],fresh[i],140+i,.009,(i%2?-.009:.009)));
+    addPatch(-1,.285,.335,-.515,-.175,[147,87,42,255],148,.010,.004);
+  }else if(visualState==="overgrown"){
+    const moss=[62,112,50,255],mossLight=[94,139,62,255],leaf=[43,88,42,255];
+    // Moss follows short shingle runs while paired triangles form irregular
+    // leaf clusters; nothing recolors a broad rectangular roof region.
+    addPatch(-1,.04,.27,-.475,-.425,moss,161,.009,.012);
+    addPatch(-1,.13,.34,.075,.125,mossLight,162,.009,-.012);
+    addPatch(1,.05,.28,-.255,-.205,mossLight,163,.009,.010);
+    addPatch(1,.20,.40,.315,.360,moss,164,.009,-.010);
+    addLeafCluster(-1,.24,-.31,leaf,170,.060,.032);
+    addLeafCluster(-1,.42,.23,moss,172,.055,.030);
+    addLeafCluster(1,.30,-.055,leaf,174,.060,.032);
+    addLeafCluster(1,.53,.18,mossLight,176,.052,.030);
+    addLeafCluster(-1,.12,.39,mossLight,178,.050,.026);
+  }else{
+    const tone=entry.landmark?[204,132,47,255]:[101,43,29,255];
+    addPatch(-1,.31,.34,-.46,.46,tone,181,.004,0);
+    addPatch(1,.55,.58,-.44,.44,tone,182,.004,0);
+  }
+  return {positions,normals,colors,indices,visualState};
+}
+function buildCanonicalRoofMesh(entry,state){
+  const data=canonicalRoofMeshData(entry,state),mesh=new pc.Mesh(device);
+  mesh.setPositions(data.positions);mesh.setNormals(data.normals);mesh.setColors32(data.colors);mesh.setIndices(data.indices);mesh.update();
+  return {mesh,data};
+}
+function clearCanonicalRoofRegistry(){
+  for(const entry of localCanonicalBuildingRoofs.values())entry.mesh?.destroy?.();
+  localCanonicalBuildingRoofs.clear();
+}
+function applyCanonicalBuildingWearState(recordId,state){
+  const entry=localCanonicalBuildingRoofs.get(String(recordId));if(!entry||!entry.entity?.render)return false;
+  const visualState=["normal","worn","damaged","repaired","overgrown"].includes(String(state))?String(state):"normal";
+  if(entry.visualState===visualState)return true;
+  const built=buildCanonicalRoofMesh(entry,visualState),old=entry.mesh;
+  entry.entity.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.stateRoof,entry.entity)];
+  entry.mesh=built.mesh;entry.visualState=visualState;entry.triangleCount=built.data.indices.length/3;
+  old?.destroy?.();
+  return true;
+}
+function addCanonicalBuilding(record,index,presentationScale,unit,frame,detailed,landmark,lift=0){
+  const b=record.bounds,tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),entities=[];
+  const cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
+  const w=(Number(b.maxX)-Number(b.minX)+1)*tileMeters,d=(Number(b.maxY)-Number(b.minY)+1)*tileMeters;
+  const east=cx*tileMeters,north=cy*tileMeters,ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift;
+  const wall=landmark?localStaticMaterials.landmark:localStaticMaterials.wall,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
+  if(!detailed){
+    const h=Math.max(.045,Math.min(.16,3.2*presentationScale/unit));
+    entities.push(addLocalStatic("CanonicalBlock-"+record.id,"box",wall,pos.x,ground+h*.5,pos.z,w*presentationScale/unit,h,d*presentationScale/unit));
+    return entities.length;
+  }
+  const physicalHeight=record.kind==="meeting-hall"?7.2:record.kind==="barn"?6.2:5.4;
+  const h=Math.max(.08,physicalHeight*presentationScale/unit);
+  entities.push(addLocalStatic("CanonicalBody-"+record.id,"box",wall,pos.x,ground+h*.5,pos.z,w*presentationScale/unit,h,d*presentationScale/unit));
+  const roofEntity=new pc.Entity("CanonicalRoof-"+record.id);roofEntity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});
+  const entry={id:String(record.id),record,east,north,w,d,ground,h,presentationScale,unit,frame,landmark:Boolean(landmark),entity:roofEntity,mesh:null,visualState:"normal",triangleCount:0};
+  const built=buildCanonicalRoofMesh(entry,"normal");entry.mesh=built.mesh;entry.triangleCount=built.data.indices.length/3;
+  roofEntity.render.meshInstances=[new pc.MeshInstance(built.mesh,localStaticMaterials.stateRoof,roofEntity)];localStaticRoot.addChild(roofEntity);entities.push(roofEntity);
+  localCanonicalBuildingRoofs.set(entry.id,entry);
+  registerCanonicalBuildingInspection(record,entities);
+  return entities.length;
+}
+
+function clearLocalBuildingActivity(){
+  localBuildingActivityRoot?.destroy?.();localBuildingActivityRoot=null;
+}
+function buildingActivityTimeBand(hour){
+  const h=((Number(hour)||0)%24+24)%24;
+  if(h<6)return "night";
+  if(h<8)return "morning";
+  if(h<18)return "day";
+  if(h<20)return "evening";
+  return "night";
+}
+function canonicalBuildingActivityState(reveal){
+  if(!reveal||!window.DailyActivity?.build||!window.DailyActivity?.resolveActionTarget)return null;
+  const started=performance.now(),stamp=inspectionFantasyStamp(),hour=Number(stamp.hour)+Number(stamp.minute||0)/60;
+  const rhythm=window.SettlementActivityRhythm?.snapshot?.(activeSeed,stamp)||null;
+  const byBuilding=new Map();
+  const ensure=id=>{
+    const key=String(id||"");if(!key)return null;
+    if(!byBuilding.has(key))byBuilding.set(key,{scheduledResidentCount:0,occupiedResidentCount:0,workCount:0,homeCount:0,socialCount:0,states:new Set()});
+    return byBuilding.get(key);
+  };
+  const residents=window.DailyActivity.build(activeSeed)||[];
+  for(const resident of residents){
+    let scheduled=null;try{scheduled=resolvedResidentActivity(resident,stamp);}catch(_){scheduled=null;}
+    const scheduledId=String(scheduled?.buildingId||"");
+    if(scheduledId){
+      const stats=ensure(scheduledId),state=String(scheduled?.state||scheduled?.kind||"");
+      stats.scheduledResidentCount++;stats.states.add(state);
+      if(state==="work")stats.workCount++;
+      if(["sleep","prepare","breakfast","return-home"].includes(state))stats.homeCount++;
+      if(["lunch","social"].includes(state))stats.socialCount++;
+    }
+    let movement=null;try{movement=window.ResidentMovement?.get?.(resident.id)||null;}catch(_){movement=null;}
+    if(movement?.occupiesBuilding&&movement?.buildingId){
+      const stats=ensure(movement.buildingId);stats.occupiedResidentCount++;
+    }
+  }
+  const records=[...(reveal.houses||[]),...(reveal.specialLots||[])],night=hour>=19||hour<6;
+  const buildings=records.map(record=>{
+    const id=String(record.id),fn=String(record.function||"home"),stats=byBuilding.get(id)||{scheduledResidentCount:0,occupiedResidentCount:0,workCount:0,homeCount:0,socialCount:0,states:new Set()};
+    const workActive=stats.workCount>0,homeActive=fn==="home"&&stats.homeCount>0,socialActive=stats.socialCount>0;
+    const active=stats.occupiedResidentCount>0||workActive||homeActive||socialActive;
+    const modifiers=rhythm?.modifiers||{},cueStrength=Math.max(.05,Math.min(1,
+      fn==="market"?Number(modifiers.marketPublicActivity??.5):
+      fn==="lodging"?Number(modifiers.tavernSocialActivity??.5):
+      fn==="civic"?Number(modifiers.guardPatrolPresence??.5):
+      ["craft","farm","outdoor-work"].includes(fn)?Number(modifiers.workSiteOccupancy??.5):
+      fn==="home"?1-Number(modifiers.outdoorResidentShare??.5):
+      Number(modifiers.ambientTrafficLikelihood??.5)
+    ));
+    let cue=null;
+    if(active&&night&&(fn==="home"||fn==="lodging"||fn==="civic"))cue="warm-window";
+    else if(fn==="market"&&workActive)cue="open-sign";
+    else if(fn==="craft"&&workActive)cue="forge-glow";
+    else if(active&&["home","lodging","farm"].includes(fn))cue="chimney-smoke";
+    else if(active)cue="work-prop";
+    const bounds=record.bounds||{},centerTile=Object.freeze({
+      x:String(Math.round((Number(bounds.minX||0)+Number(bounds.maxX||0))/2)),
+      y:String(Math.round((Number(bounds.minY||0)+Number(bounds.maxY||0))/2))
+    });
+    return Object.freeze({
+      id,label:String(record.label||record.name||id),kind:String(record.kind||"building"),function:fn,centerTile,
+      active,workActive,homeActive,socialActive,scheduledResidentCount:stats.scheduledResidentCount,
+      occupiedResidentCount:stats.occupiedResidentCount,states:Object.freeze([...stats.states].sort()),cue,
+      cueStrength:Number(cueStrength.toFixed(4))
+    });
+  });
+  const signature="BA|"+revealHashText([activeSeed,Math.floor(hour*4),...buildings.map(x=>[x.id,x.active?1:0,x.cue||"-",Math.round(x.cueStrength*20),x.scheduledResidentCount,x.occupiedResidentCount].join(":"))].join("|"));
+  return Object.freeze({
+    stamp:Object.freeze({...stamp}),hour:Number(hour.toFixed(3)),timeBand:rhythm?.band||buildingActivityTimeBand(hour),signature,
+    rhythm:rhythm?Object.freeze({band:rhythm.band,modifiers:rhythm.modifiers,counts:rhythm.counts,averagePresentationPriority:rhythm.averagePresentationPriority}):null,
+    residentsEvaluated:residents.length,occupancySourceAvailable:Boolean(window.ResidentMovement?.get),
+    buildings:Object.freeze(buildings),buildMs:Number((performance.now()-started).toFixed(4))
+  });
+}
+function activityBuildingGeometry(record,presentationScale,unit,frame,lift){
+  const b=record?.bounds;if(!b)return null;
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
+  const w=(Number(b.maxX)-Number(b.minX)+1)*tileMeters,d=(Number(b.maxY)-Number(b.minY)+1)*tileMeters;
+  const east=cx*tileMeters,north=cy*tileMeters,ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift;
+  const physicalHeight=record.kind==="meeting-hall"?7.2:record.kind==="barn"?6.2:5.4;
+  return {east,north,w,d,ground,height:physicalHeight,presentationScale,unit};
+}
+function addBuildingActivityCue(record,state,context,index){
+  const g=activityBuildingGeometry(record,context.presentationScale,context.unit,context.frame,context.lift);if(!g||!state?.cue)return 0;
+  const cueScale=.80+Math.max(.05,Math.min(1,Number(state.cueStrength||.5)))*.90;
+  const s=g.presentationScale/g.unit*cueScale,pos=canonicalSemanticPosition(g.east,g.north,g.presentationScale,g.unit,context.frame),x=pos.x,z=pos.z,h=g.height*s;
+  const buildingW=Math.max(.08,g.w*s),buildingD=Math.max(.08,g.d*s),name="BuildingActivity-"+state.cue+"-"+state.id+"-"+index;
+  if(state.cue==="warm-window"){
+    const e=addLocalPrimitive(localBuildingActivityRoot,name,"activity-warm-opening",localStaticMaterials.activityWarm,x,g.ground,z,buildingW,h,buildingD);
+    e.render.castShadows=false;
+  }else if(state.cue==="open-sign"){
+    const e=addLocalPrimitive(localBuildingActivityRoot,name,"activity-market-accessory",localStaticMaterials.activityOpen,x,g.ground,z,buildingW,h,buildingD);
+    e.render.castShadows=false;
+  }else if(state.cue==="forge-glow"){
+    const e=addLocalPrimitive(localBuildingActivityRoot,name,"activity-forge-accessory",localStaticMaterials.activityForge,x,g.ground,z,buildingW,h,buildingD);
+    e.render.castShadows=false;
+  }else if(state.cue==="chimney-smoke"){
+    addLocalPrimitive(localBuildingActivityRoot,name,"sphere",localStaticMaterials.activitySmoke,x+g.w*.20*s,g.ground+h+Math.max(.10,1.75*s),z,Math.max(.08,2.20*s),Math.max(.11,3.00*s),Math.max(.08,2.20*s));
+  }else{
+    const front=canonicalSemanticPosition(g.east,g.north+g.d*.505,g.presentationScale,g.unit,context.frame),frontZ=front.z;
+    addLocalPrimitive(localBuildingActivityRoot,name,"box",localStaticMaterials.activityProp,x+g.w*.24*s,g.ground+Math.max(.04,.62*s),frontZ-Math.max(.03,.70*s),Math.max(.06,1.35*s),Math.max(.06,1.22*s),Math.max(.06,1.35*s));
+  }
+  return 1;
+}
+function rebuildCanonicalBuildingActivityPresentation(reason="settlement-rebuild"){
+  const context=localBuildingActivityContext,started=performance.now();clearLocalBuildingActivity();
+  if(!context||!["refined","full"].includes(context.tier)||!tangentPatch){
+    buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastUpdateMs:Number((performance.now()-started).toFixed(4)),lastSignature:null};
+    return;
+  }
+  ensureLocalStaticMaterials();
+  const state=canonicalBuildingActivityState(context.reveal);
+  if(!state)return;
+  localBuildingActivityRoot=new pc.Entity("CanonicalBuildingActivity");tangentPatch.addChild(localBuildingActivityRoot);
+  const records=[...(context.reveal.houses||[]),...(context.reveal.specialLots||[])],recordById=new Map(records.map(x=>[String(x.id),x]));
+  let cueCount=0;
+  for(let i=0;i<state.buildings.length;i++){
+    const item=state.buildings[i],record=recordById.get(item.id);if(item.cue&&record)cueCount+=addBuildingActivityCue(record,item,context,i);
+  }
+  const count=cue=>state.buildings.filter(x=>x.cue===cue).length;
+  const active=state.buildings.filter(x=>x.active);
+  const elapsed=performance.now()-started;
+  buildingActivity={
+    active:cueCount>0,authoritativeHour:state.hour,timeBand:state.timeBand,buildingCount:state.buildings.length,
+    activeBuildingCount:active.length,occupiedBuildingCount:state.buildings.filter(x=>x.occupiedResidentCount>0).length,
+    activeWorkplaceCount:state.buildings.filter(x=>x.workActive).length,activeHomeCount:state.buildings.filter(x=>x.homeActive).length,
+    warmWindowCount:count("warm-window"),smokeCueCount:count("chimney-smoke"),openMarketCount:count("open-sign"),
+    forgeGlowCount:count("forge-glow"),workPropCount:count("work-prop"),cueCount,drawCallEstimate:cueCount,
+    dynamicLightCount:0,particleEmitterCount:0,sharedMaterialCount:5,
+    updateCount:Number(buildingActivity.updateCount||0)+1,lastUpdateMs:Number(elapsed.toFixed(4)),
+    maxUpdateMs:Math.max(Number(buildingActivity.maxUpdateMs||0),Number(elapsed.toFixed(4))),
+    lastSignature:state.signature,buildings:state.buildings,residentsEvaluated:state.residentsEvaluated,
+    rhythmBand:state.rhythm?.band||state.timeBand,rhythmModifiers:state.rhythm?.modifiers||null,rhythmCounts:state.rhythm?.counts||null,
+    rhythmAveragePresentationPriority:Number(state.rhythm?.averagePresentationPriority||0),
+    occupancySourceAvailable:state.occupancySourceAvailable,activitySource:"DailyActivity.resolveActionTarget",
+    rhythmSource:"SettlementActivityRhythm presentation-only",occupancySource:"ResidentMovement.get when available",updateReason:String(reason),
+    presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false
+  };
+}
+function refreshCanonicalBuildingActivityPresentation(){
+  if(localBuildingActivityContext)rebuildCanonicalBuildingActivityPresentation("authoritative-time-change");
+}
+
+
+function clearCanonicalBuildingSurroundings(){
+  localBuildingSurroundingsMesh?.destroy?.();localBuildingSurroundingsMesh=null;
+  buildingSurroundings={...buildingSurroundings,active:false,buildingCount:0,functionCount:0,propCount:0,drawCallEstimate:0,triangleCount:0,functions:[],buildings:[],doorClearanceViolations:0,roadClearanceViolations:0,ownershipCueCount:0,buildMs:0};
+}
+function buildCanonicalBuildingSurroundings(reveal,tier,frame,presentationScale,unit,lift){
+  const started=performance.now();clearCanonicalBuildingSurroundings();
+  if(!reveal||!["refined","full"].includes(tier)||!localStaticRoot||!pc||!device)return 0;
+  const records=[
+    ...(reveal.houses||[]).map(x=>({...x,function:"home",label:x.kind==="cabin"?"Cabin":"Residence"})),
+    ...(reveal.specialLots||[])
+  ];
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const positions=[],normals=[],colors=[],indices=[],summaries=[],groundHeightCache=new Map();let propCount=0,doorViolations=0,roadViolations=0,treeOcclusionRejects=0,anchorSelectionAttempts=0,groundHeightSampleCount=0,groundHeightCacheHits=0;
+  const C={
+    wood:[.34,.18,.07],woodLight:[.52,.31,.13],fabric:[.69,.27,.10],metal:[.24,.26,.25],stone:[.38,.39,.36],
+    hay:[.73,.56,.16],soil:[.34,.20,.08],green:[.20,.42,.12],civic:[.63,.49,.24],crate:[.45,.28,.12]
+  };
+  const addVertex=(x,y,z,c)=>{positions.push(x,y,z);normals.push(0,1,0);colors.push(Math.round(c[0]*255),Math.round(c[1]*255),Math.round(c[2]*255),255);return positions.length/3-1;};
+  const cachedGroundHeight=(east,north)=>{
+    let row=groundHeightCache.get(east);
+    if(!row){row=new Map();groundHeightCache.set(east,row);}
+    if(row.has(north)){groundHeightCacheHits++;return row.get(north);}
+    const value=canonicalSemanticGroundHeightUnits(east,north,frame);row.set(north,value);groundHeightSampleCount++;return value;
+  };
+  const box=(anchor,basis,u,v,along,depth,height,color,yOffset=0)=>{
+    const ce=anchor.east+basis.tx*u+basis.ox*v,cn=anchor.north+basis.tn*u+basis.on*v;
+    const ground=cachedGroundHeight(ce,cn)+lift+.014+yOffset*presentationScale/unit;
+    const ha=along*.5,hd=depth*.5;
+    const corners=[[-ha,-hd],[ha,-hd],[ha,hd],[-ha,hd]].map(([a,d])=>{
+      const e=ce+basis.tx*a+basis.ox*d,n=cn+basis.tn*a+basis.on*d;return canonicalSemanticPosition(e,n,presentationScale,unit,frame);
+    });
+    const top=ground+height*presentationScale/unit,base=positions.length/3;
+    for(const p of corners)addVertex(p.x,ground,p.z,color);
+    for(const p of corners)addVertex(p.x,top,p.z,color);
+    indices.push(base,base+1,base+2, base,base+2,base+3, base+4,base+6,base+5, base+4,base+7,base+6);
+    for(let i=0;i<4;i++){const j=(i+1)%4;indices.push(base+i,base+j,base+4+j, base+i,base+4+j,base+4+i);}
+    propCount++;
+  };
+  const blockedByOther=(record,x,y)=>records.some(other=>String(other.id)!==String(record.id)&&other.bounds&&x>=Number(other.bounds.minX)-.75&&x<=Number(other.bounds.maxX)+.75&&y>=Number(other.bounds.minY)-.75&&y<=Number(other.bounds.maxY)+.75);
+  const roadAt=(x,y)=>{const l=window.StartingVillage?.local?.(activeSeed,String(Math.round(x)),String(Math.round(y)));return Boolean(l&&window.StartingVillage?.isRoadReserved?.(activeSeed,l));};
+  // Match the deterministic canonical settlement tree ring below so a critical
+  // function cue does not get placed under a tree crown. This is a bounded
+  // local check (<=12 tree centers), not a world/viewport scan.
+  const canonicalTreeCount=tier==="refined"?10:tier==="full"?12:0;
+  const canonicalTreeCrowns=Object.freeze(Array.from({length:canonicalTreeCount},(_,i)=>{
+    const angle=i/Math.max(1,canonicalTreeCount)*Math.PI*2+localHash(i*17,canonicalTreeCount,91)*.22;
+    const radiusTiles=22+localHash(i*31,canonicalTreeCount,92)*4;
+    return Object.freeze({x:Math.cos(angle)*radiusTiles,y:Math.sin(angle)*radiusTiles,radiusTiles:2.35});
+  }));
+  const blockedByTree=(x,y)=>canonicalTreeCrowns.some(tree=>Math.hypot(Number(x)-tree.x,Number(y)-tree.y)<tree.radiusTiles);
+  const sideBasis=side=>side==="N"?{ox:0,on:-1,tx:1,tn:0}:side==="S"?{ox:0,on:1,tx:-1,tn:0}:side==="W"?{ox:-1,on:0,tx:0,tn:-1}:{ox:1,on:0,tx:0,tn:1};
+  const anchorFor=record=>{
+    const b=record.bounds,access=record.entrance||record.access||null,opposite=access?.side==="S"?"N":access?.side==="N"?"S":access?.side==="E"?"W":access?.side==="W"?"E":"N",fn=String(record.function||"home");
+    const cameraPreferred=access?.side==="S"?"E":access?.side==="E"?"S":access?.side==="N"?"E":access?.side==="W"?"S":"S";
+    // Lodging and craft need a stable open plan-view shoulder from the fixed
+    // ground camera. W is deterministic and was the clearest legal side in the
+    // canonical starting-village plan; if W is the entrance, use cameraPreferred.
+    const preferred=((fn==="lodging"||fn==="craft")&&access?.side!=="W")?"W":cameraPreferred;
+    const order=[...new Set([preferred,opposite,...["S","E","N","W"].filter(x=>x!==preferred&&x!==opposite&&x!==access?.side),access?.side].filter(Boolean))];
+    const outset=fn==="lodging"?2.65:fn==="craft"?1.85:1.55;
+    for(const side of order){
+      anchorSelectionAttempts++;
+      const basis=sideBasis(side),cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
+      const half=side==="N"||side==="S"?(Number(b.maxY)-Number(b.minY)+1)/2:(Number(b.maxX)-Number(b.minX)+1)/2;
+      const x=cx+basis.ox*(half+outset),y=cy+basis.on*(half+outset);
+      if(roadAt(x,y)||blockedByOther(record,x,y))continue;
+      if(blockedByTree(x,y)){treeOcclusionRejects++;continue;}
+      if(access&&Math.hypot(x-Number(access.x),y-Number(access.y))<2.2)continue;
+      return {side,basis,east:x*tileMeters,north:y*tileMeters,tileX:x,tileY:y};
+    }
+    const basis=sideBasis(opposite),cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
+    return {side:opposite,basis,east:(cx+basis.ox*3)*tileMeters,north:(cy+basis.on*3)*tileMeters,tileX:cx+basis.ox*3,tileY:cy+basis.on*3};
+  };
+  const decorate=(record,anchor)=>{
+    const fn=String(record.function||"home"),b=anchor.basis,propsBefore=propCount;
+    // Readability comes from a grounded composition with a function-specific
+    // footprint, not a detached icon. Every piece is still merged into the one
+    // shared surroundings mesh below.
+    if(fn==="home"){
+      box(anchor,b,0,0,4.6,2.8,.07,[.22,.34,.11]);
+      box(anchor,b,-1.25,.15,2.1,.90,.70,C.wood);
+      box(anchor,b,1.15,.05,1.6,1.15,.15,C.green);
+    }else if(fn==="lodging"){
+      // Broad stable yard: readable first as paddock + horse + water trough,
+      // then as public lodging through tables/sign. Twelve merged boxes total.
+      box(anchor,b,0,0,8.8,6.0,.07,[.48,.36,.17]);
+      box(anchor,b,-.70,.12,5.85,3.55,.11,[.76,.58,.19],.05);
+      box(anchor,b,-3.55,.72,.30,4.65,.68,[.18,.09,.035],.12);
+      box(anchor,b,2.15,.72,.30,4.65,.68,[.18,.09,.035],.12);
+      box(anchor,b,-.70,2.10,5.95,.30,.68,[.18,.09,.035],.12);
+      box(anchor,b,-2.25,-.38,2.90,1.05,.38,[.12,.36,.43],.16);
+      box(anchor,b,-.55,.62,3.25,1.18,.66,[.20,.09,.035],.22);
+      box(anchor,b,1.10,.72,.90,.76,.62,[.25,.12,.045],.46);
+      box(anchor,b,3.05,-.72,1.70,1.08,.20,C.woodLight,.60);
+      box(anchor,b,3.05,.66,1.70,1.08,.20,C.woodLight,.60);
+      box(anchor,b,3.75,1.82,.26,.26,2.05,C.wood);
+      box(anchor,b,3.75,1.82,1.34,.18,.76,[.84,.60,.23],1.62);
+    }else if(fn==="market"){
+      box(anchor,b,0,0,6.8,4.0,.07,[.47,.36,.18]);
+      box(anchor,b,0,.15,5.4,1.15,.78,C.woodLight);
+      box(anchor,b,0,.10,6.0,3.15,.18,[.82,.62,.24],2.25);
+      // Three raised cloth strips make the canopy read as a market stall from
+      // the near-top-down view instead of one anonymous tan rectangle.
+      box(anchor,b,-1.75,.10,1.25,3.18,.07,[.57,.18,.08],2.44);
+      box(anchor,b,0,.10,1.25,3.18,.07,[.89,.72,.33],2.44);
+      box(anchor,b,1.75,.10,1.25,3.18,.07,[.57,.18,.08],2.44);
+      box(anchor,b,-2.45,.10,.20,.20,2.30,C.wood);
+      box(anchor,b,2.45,.10,.20,.20,2.30,C.wood);
+    }else if(fn==="craft"){
+      box(anchor,b,0,0,7.0,4.6,.07,[.23,.22,.20]);
+      // High-contrast smithing apron with a contained orange hearth.
+      box(anchor,b,-1.76,.30,2.75,2.25,.12,[.13,.14,.14],.08);
+      box(anchor,b,-1.76,.18,1.55,1.28,.48,[.30,.30,.28],.18);
+      box(anchor,b,-1.76,.04,.92,.64,.18,[.88,.29,.06],.66);
+      // Plan-view anvil: bright broad cap, visible stem and offset horn on a dark
+      // stump. It is intentionally wider than the old equipment-stack silhouette.
+      box(anchor,b,.42,.02,1.08,1.18,.66,[.29,.19,.10],.06);
+      box(anchor,b,.42,.02,3.25,.94,.34,[.53,.56,.55],.66);
+      box(anchor,b,-.72,.02,1.35,.60,.30,[.53,.56,.55],.70);
+      box(anchor,b,1.72,.02,.96,.52,.26,[.53,.56,.55],.72);
+      // Neutral chimney/hood anchors the forge without becoming a UI-like glow.
+      box(anchor,b,-1.76,.64,.88,.88,2.38,C.stone,1.02);
+      box(anchor,b,-1.76,.64,1.12,1.12,.22,[.10,.10,.09],3.36);
+      // Fuel and ore piles retain the smithy work-yard cue without tiny rack geometry.
+      box(anchor,b,2.18,.42,1.62,1.02,.54,C.wood,.02);
+      box(anchor,b,2.40,-.15,.92,.84,.48,[.20,.21,.20],.10);
+    }else if(fn==="storage"){
+      box(anchor,b,0,0,6.4,3.8,.07,[.42,.35,.24]);
+      box(anchor,b,-1.75,.10,1.45,1.45,1.20,C.crate);
+      box(anchor,b,-.15,.10,1.45,1.45,.78,C.crate);
+      box(anchor,b,1.45,.10,1.45,1.45,1.48,C.crate);
+      box(anchor,b,1.2,1.25,3.1,1.55,.48,C.wood);
+    }else if(fn==="farm"){
+      box(anchor,b,0,0,7.4,5.6,.06,[.31,.24,.10]);
+      box(anchor,b,-2.45,0,.82,5.15,.16,[.52,.36,.10]);
+      box(anchor,b,-1.22,0,.82,5.15,.16,[.20,.43,.10]);
+      box(anchor,b,0,0,.82,5.15,.16,[.55,.38,.10]);
+      box(anchor,b,1.22,0,.82,5.15,.16,[.20,.43,.10]);
+      box(anchor,b,2.45,0,.82,5.15,.16,[.55,.38,.10]);
+      box(anchor,b,0,1.85,2.6,1.65,1.05,C.hay);
+    }else if(fn==="civic"){
+      // Pale paved forecourt gives the public/meeting function a distinct base.
+      box(anchor,b,0,0,6.8,4.6,.08,[.56,.52,.42]);
+      // Broad raised notice dais with dark frame and three high-contrast notices.
+      box(anchor,b,0,.18,3.75,2.20,.24,[.29,.22,.14],.18);
+      box(anchor,b,0,.18,3.28,1.74,.12,[.76,.64,.38],.45);
+      box(anchor,b,-1.02,.18,.62,.84,.08,[.73,.29,.13],.60);
+      box(anchor,b,0,.18,.62,.84,.08,[.88,.76,.43],.61);
+      box(anchor,b,1.02,.18,.62,.84,.08,[.73,.29,.13],.60);
+      // Posts + lintel + bell remain vertically legible from the oblique view.
+      box(anchor,b,-1.48,.32,.30,.30,2.85,C.wood);
+      box(anchor,b,1.48,.32,.30,.30,2.85,C.wood);
+      box(anchor,b,0,.32,3.35,.26,.28,C.woodLight,2.62);
+      box(anchor,b,0,1.32,.72,.72,.86,[.78,.55,.13],2.16);
+      // Facing benches make the composition read as a public meeting place.
+      box(anchor,b,-1.78,1.48,2.70,.72,.48,C.woodLight,.24);
+      box(anchor,b,1.78,1.48,2.70,.72,.48,C.woodLight,.24);
+    }else{
+      // Outdoor-work yard: high-contrast lumber and saw-table silhouette.
+      box(anchor,b,0,0,7.0,4.8,.08,[.34,.27,.17]);
+      // Three long parallel timbers are intentionally broader than the old
+      // single log so they survive the exact 844x390 ground-scale viewport.
+      box(anchor,b,-1.78,-.55,3.70,.48,.42,[.68,.43,.17],.22);
+      box(anchor,b,-1.78,.05,3.35,.48,.50,[.58,.34,.12],.28);
+      box(anchor,b,-1.78,.65,3.95,.48,.38,[.76,.51,.22],.20);
+      // Raised saw table with a steel cutting strip and two dark trestles.
+      box(anchor,b,1.05,.15,3.85,1.20,.28,C.woodLight,.72);
+      box(anchor,b,1.05,.15,.16,1.34,.12,[.70,.72,.69],1.02);
+      box(anchor,b,-.15,.15,.34,1.55,.82,[.25,.16,.08],.16);
+      box(anchor,b,2.25,.15,.34,1.55,.82,[.25,.16,.08],.16);
+      // Tall tool rack plus a compact cart/handle shape at the rear.
+      box(anchor,b,1.90,1.55,.30,.30,2.45,C.wood);
+      box(anchor,b,1.90,1.55,2.35,.24,.28,C.woodLight,2.02);
+      box(anchor,b,1.28,1.55,.18,.18,1.18,C.metal,1.02);
+      box(anchor,b,1.92,1.55,.18,.18,1.42,C.metal,.88);
+      box(anchor,b,2.52,1.55,.18,.18,1.06,C.metal,1.00);
+      box(anchor,b,-.20,1.55,1.65,.92,.48,C.crate,.14);
+      box(anchor,b,-1.15,1.55,1.45,.18,.20,C.woodLight,.54);
+    }
+    return propCount-propsBefore;
+  };
+  for(const record of records){
+    if(!record?.bounds)continue;
+    const anchor=anchorFor(record),count=decorate(record,anchor),access=record.entrance||record.access||null;
+    if(access&&Math.hypot(anchor.tileX-Number(access.x),anchor.tileY-Number(access.y))<2.2)doorViolations++;
+    if(roadAt(anchor.tileX,anchor.tileY))roadViolations++;
+    const fn=String(record.function||"home");
+    const semanticSilhouette={home:"yard/woodpile",lodging:"stable/horse/tables",market:"striped-canopy/stall",craft:"anvil/forge/chimney",storage:"crate/loading-stack",farm:"furrows/hay",civic:"notice-board/bell/benches","outdoor-work":"sawhorse/log/tool-rack"}[fn]||"workyard";
+    summaries.push(Object.freeze({id:String(record.id),label:String(record.label||record.kind||record.id),function:fn,semanticSilhouette,propCount:count,side:anchor.side,anchorTile:Object.freeze({x:Number(anchor.tileX.toFixed(2)),y:Number(anchor.tileY.toFixed(2))})}));
+  }
+  if(!positions.length)return 0;
+  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();localBuildingSurroundingsMesh=mesh;
+  const entity=new pc.Entity("CanonicalBuildingSurroundings");entity.addComponent("render",{type:"asset",castShadows:true,receiveShadows:true});entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.surroundings,entity)];localStaticRoot.addChild(entity);
+  const functions=[...new Set(summaries.map(x=>x.function))].sort();
+  buildingSurroundings={
+    active:true,buildingCount:summaries.length,functionCount:functions.length,propCount,drawCallEstimate:1,triangleCount:indices.length/3,sharedMaterialCount:1,
+    functions:Object.freeze(functions),buildings:Object.freeze(summaries),doorClearanceViolations:doorViolations,roadClearanceViolations:roadViolations,ownershipCueCount:0,
+    treeOcclusionRejectCount:treeOcclusionRejects,anchorSelectionAttempts,canonicalTreeOcclusionChecks:canonicalTreeCrowns.length,
+    groundHeightSampleCount,groundHeightCacheHits,groundHeightCacheEntryCount:groundHeightSampleCount,
+    criticalCueOcclusionAvoidance:true,authoritativeFunctionSource:"HousePlans + SpecialLots.function",ownershipSource:"no-canonical-building-owner-name-exposed",
+    presentationOnly:true,simulationAuthority:false,bounded:true,fullSettlementPerFrameScan:false,buildMs:Number((performance.now()-started).toFixed(4))
+  };
+  return 1;
+}
+
+
+function clearCanonicalCampaignWearProjection(resetRoofs=true){
+  localCampaignWearMesh?.destroy?.();localCampaignWearMesh=null;
+  localCampaignWearGeometry?.destroy?.();localCampaignWearGeometry=null;
+  if(resetRoofs)for(const id of localCanonicalBuildingRoofs.keys())applyCanonicalBuildingWearState(id,"normal");
+  localCampaignWearRelevantIds.clear();
+  campaignWearProjection={...campaignWearProjection,active:false,buildingCount:0,changedBuildingCount:0,visualPrimitiveCount:0,drawCallEstimate:0,triangleCount:0,
+    canonicalRoofStateAware:true,canonicalRoofVariantCount:0,
+    stateCounts:{normal:0,worn:0,damaged:0,repaired:0,overgrown:0},buildings:[],revisionSignature:null,maxRevision:0,deltaSequence:0,localQueryCount:0,buildMs:0,lastBuildReason:"cleared"};
+}
+function campaignWearRefs(reveal){
+  if(!activeSeed||!reveal||!window.WorldState?.structuralRef)return {settlement:null,records:[]};
+  const village=reveal.village||window.StartingVillage?.plan?.(activeSeed)||null;
+  if(!village)return {settlement:null,records:[]};
+  const settlement=window.WorldState.structuralRef(activeSeed,"settlement","WORLD","starting-village",{name:village.name,center:village.center});
+  const records=[...(reveal.houses||[]),...(reveal.specialLots||[])].map(record=>({
+    record,
+    ref:window.WorldState.structuralRef(activeSeed,"building",settlement.id,String(record.id),{
+      planId:String(record.id),kind:String(record.kind||"building"),plotId:record.plotId==null?null:String(record.plotId)
+    })
+  }));
+  return {settlement,records};
+}
+function campaignWearVisualState(resolved){
+  const current=resolved?.current||{},campaign=current.campaignState||{},condition=String(
+    campaign.environmentalCondition??campaign.exteriorCondition??campaign.condition??current.environmentalCondition??"normal"
+  ).toLowerCase();
+  const damage=Number(campaign.damageLevel??campaign.damage??current.damageLevel??0)||0;
+  const wear=Number(campaign.wearLevel??campaign.wear??current.wearLevel??0)||0;
+  const repair=Number(campaign.repairLevel??campaign.recoveryLevel??campaign.repair??current.repairLevel??0)||0;
+  const abandoned=campaign.abandoned===true||current.abandoned===true||condition.includes("abandon")||condition.includes("overgrown");
+  if(abandoned||condition.includes("overgrown"))return "overgrown";
+  if(damage>=.25||condition.includes("damage")||condition.includes("burn")||condition.includes("ruin"))return "damaged";
+  if(repair>=.45||condition.includes("repair")||condition.includes("recover")||condition.includes("clean"))return "repaired";
+  if(wear>=.30||condition.includes("worn")||condition.includes("wear"))return "worn";
+  return "normal";
+}
+function campaignWearResolvedState(reveal){
+  const started=performance.now(),refs=campaignWearRefs(reveal),buildings=[],stateCounts={normal:0,worn:0,damaged:0,repaired:0,overgrown:0};
+  localCampaignWearRelevantIds.clear();
+  let localQueryCount=0,maxRevision=0,settlementRevision=0,deltaSequence=0;
+  if(refs.settlement){
+    localCampaignWearRelevantIds.add(String(refs.settlement.id));
+    const resolved=window.WorldState?.resolve?.(activeSeed,refs.settlement)||null;localQueryCount++;
+    settlementRevision=Number(resolved?.delta?.revision||0);maxRevision=Math.max(maxRevision,settlementRevision);
+  }
+  for(const pair of refs.records){
+    const resolved=window.WorldState?.resolve?.(activeSeed,pair.ref)||null;localQueryCount++;
+    localCampaignWearRelevantIds.add(String(pair.ref.id));
+    const visualState=campaignWearVisualState(resolved),revision=Number(resolved?.delta?.revision||0),campaign=resolved?.current?.campaignState||{};
+    maxRevision=Math.max(maxRevision,revision);stateCounts[visualState]=(stateCounts[visualState]||0)+1;
+    const b=pair.record.bounds||{},centerTile=Object.freeze({
+      x:String(Math.round((Number(b.minX||0)+Number(b.maxX||0))/2)),
+      y:String(Math.round((Number(b.minY||0)+Number(b.maxY||0))/2))
+    });
+    buildings.push(Object.freeze({
+      id:String(pair.record.id),entityId:String(pair.ref.id),kind:String(pair.record.kind||"building"),centerTile,
+      visualState,revision,evidenceTarget:String(campaign.evidenceWp||"")==="WP-S003-021",
+      condition:String(campaign.environmentalCondition||"normal"),wearLevel:Number(campaign.wearLevel||0),
+      damageLevel:Number(campaign.damageLevel||0),repairLevel:Number(campaign.repairLevel||0),abandoned:Boolean(campaign.abandoned)
+    }));
+  }
+  try{deltaSequence=Number(window.WorldState?.deltaSnapshot?.(activeSeed)?.sequence||0)}catch(_){deltaSequence=0}
+  const signature="CWP|"+revealHashText([activeSeed,settlementRevision,...buildings.map(x=>[x.entityId,x.revision,x.visualState].join(":"))].join("|"));
+  return {refs,buildings,stateCounts,signature,maxRevision,deltaSequence,localQueryCount,resolveMs:Number((performance.now()-started).toFixed(4))};
+}
+function rebuildCanonicalCampaignWearProjection(reason="settlement-rebuild"){
+  const started=performance.now(),context=localCampaignWearContext;clearCanonicalCampaignWearProjection();
+  if(!context||!["refined","full"].includes(context.tier)||!pc||!device||!tangentPatch||!window.WorldState?.resolve){
+    campaignWearProjection={...campaignWearProjection,lastBuildReason:String(reason),buildMs:Number((performance.now()-started).toFixed(4))};
+    return 0;
+  }
+  ensureLocalStaticMaterials();
+  const state=campaignWearResolvedState(context.reveal),positions=[],normals=[],colors=[],indices=[];
+  for(const item of state.buildings)applyCanonicalBuildingWearState(item.id,item.visualState);
+  let primitiveCount=0;
+  const addVertex=(x,y,z,color,normal)=>{positions.push(x,y,z);normals.push(normal[0],normal[1],normal[2]);colors.push(color[0],color[1],color[2],color[3]??255);return positions.length/3-1;};
+  const box=(east,north,yMeters,sxMeters,syMeters,szMeters,color)=>{
+    const p=canonicalSemanticPosition(east,north,context.presentationScale,context.unit,context.frame),s=context.presentationScale/context.unit;
+    const x0=p.x-sxMeters*s*.5,x1=p.x+sxMeters*s*.5,z0=p.z-szMeters*s*.5,z1=p.z+szMeters*s*.5;
+    const y0=canonicalSemanticGroundHeightUnits(east,north,context.frame)+context.lift+yMeters*s,y1=y0+Math.max(.015,syMeters*s);
+    const base=positions.length/3,cc=color;
+    const verts=[
+      [x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1],
+      [x1,y0,z0],[x0,y0,z0],[x0,y1,z0],[x1,y1,z0],
+      [x1,y0,z1],[x1,y0,z0],[x1,y1,z0],[x1,y1,z1],
+      [x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y1,z0],
+      [x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z0],
+      [x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]
+    ],faceNormals=[[0,0,1],[0,0,-1],[1,0,0],[-1,0,0],[0,1,0],[0,-1,0]];
+    for(let f=0;f<6;f++)for(let v=0;v<4;v++)addVertex(...verts[f*4+v],cc,faceNormals[f]);
+    for(let f=0;f<6;f++){const b=base+f*4;indices.push(b,b+1,b+2,b,b+2,b+3);}
+    primitiveCount++;
+  };
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const byId=new Map([...(context.reveal.houses||[]),...(context.reveal.specialLots||[])].map(x=>[String(x.id),x]));
+  const s=context.presentationScale/context.unit;
+  const orientedBox=(east,north,centerY,sxMeters,syMeters,szMeters,color,rollDeg=0)=>{
+    const p=canonicalSemanticPosition(east,north,context.presentationScale,context.unit,context.frame);
+    const sx=Math.max(.015,sxMeters*s),sy=Math.max(.015,syMeters*s),sz=Math.max(.015,szMeters*s);
+    const hx=sx*.5,hy=sy*.5,hz=sz*.5,rad=rollDeg*Math.PI/180,cr=Math.cos(rad),sr=Math.sin(rad);
+    const transform=(x,y,z)=>[p.x+x*cr-y*sr,centerY+x*sr+y*cr,p.z+z];
+    const normal=(x,y,z)=>[x*cr-y*sr,x*sr+y*cr,z];
+    const x0=-hx,x1=hx,y0=-hy,y1=hy,z0=-hz,z1=hz,base=positions.length/3;
+    const faces=[
+      {v:[[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]],n:[0,0,1]},
+      {v:[[x1,y0,z0],[x0,y0,z0],[x0,y1,z0],[x1,y1,z0]],n:[0,0,-1]},
+      {v:[[x1,y0,z1],[x1,y0,z0],[x1,y1,z0],[x1,y1,z1]],n:[1,0,0]},
+      {v:[[x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y1,z0]],n:[-1,0,0]},
+      {v:[[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z0]],n:[0,1,0]},
+      {v:[[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]],n:[0,-1,0]}
+    ];
+    for(const face of faces){const n=normal(...face.n);for(const v of face.v)addVertex(...transform(...v),color,n);}
+    for(let face=0;face<6;face++){const b=base+face*4;indices.push(b,b+1,b+2,b,b+2,b+3);}
+    primitiveCount++;
+  };
+  const groundBox=(east,north,yMeters,sxMeters,syMeters,szMeters,color)=>{
+    const ground=canonicalSemanticGroundHeightUnits(east,north,context.frame)+context.lift;
+    orientedBox(east,north,ground+yMeters*s+Math.max(.015,syMeters*s)*.5,sxMeters,syMeters,szMeters,color,0);
+  };
+  const C={
+    wear:[122,82,42,255],wearDark:[66,48,32,255],weather:[165,119,67,255],
+    char:[34,31,29,255],burn:[116,47,24,255],ash:[167,145,108,255],debris:[93,80,65,255],
+    newWood:[211,146,66,255],newWoodLight:[244,205,126,255],repairDark:[139,85,42,255],
+    green:[29,91,39,255],greenLight:[76,151,61,255],moss:[142,171,70,255]
+  };
+  for(const item of state.buildings){
+    const record=byId.get(item.id),b=record?.bounds;if(!record||!b||item.visualState==="normal")continue;
+    const cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2,w=(Number(b.maxX)-Number(b.minX)+1)*tileMeters,d=(Number(b.maxY)-Number(b.minY)+1)*tileMeters;
+    const east=cx*tileMeters,north=cy*tileMeters,ground=canonicalSemanticGroundHeightUnits(east,north,context.frame)+context.lift;
+    const physicalHeight=record.kind==="meeting-hall"?7.2:record.kind==="barn"?6.2:5.4;
+    const roofCenter=ground+physicalHeight*s+.025;
+    const leftEast=east-w*.20,rightEast=east+w*.20;
+    if(item.visualState==="worn"){
+      // The actual roof surface carries irregular weathering. Three tiny,
+      // separated missing-shingle/eave cues keep the legacy visible-projection
+      // evidence gate meaningful without reverting to broad overlay strips.
+      orientedBox(leftEast-w*.13,north-d*.20,roofCenter-.004,Math.max(.22,w*.038),.035,Math.max(.50,d*.09),C.wearDark,-24);
+      orientedBox(rightEast+w*.12,north+d*.24,roofCenter-.003,Math.max(.20,w*.034),.032,Math.max(.44,d*.08),C.weather,24);
+      orientedBox(leftEast+w*.10,north+d*.31,roofCenter-.002,Math.max(.17,w*.030),.030,Math.max(.36,d*.065),C.wear,-24);
+    }else if(item.visualState==="damaged"){
+      // A real roof segment is missing in the state-aware canonical mesh.
+      // Exposed rafters and grounded debris make that silhouette change legible.
+      orientedBox(leftEast-w*.14,north-d*.31,roofCenter-.020,Math.max(.18,w*.032),.095,Math.max(.72,d*.13),C.char,-24);
+      orientedBox(leftEast-w*.10,north-d*.12,roofCenter-.015,Math.max(.16,w*.029),.082,Math.max(.58,d*.10),C.burn,-24);
+      groundBox(east-w*.58,north-d*.48,.018,.82,.28,.58,C.debris);
+      groundBox(east-w*.66,north-d*.22,.018,.56,.22,.76,C.char);
+    }else if(item.visualState==="repaired"){
+      // Fresh board color now lives in the same bounded roof section that is
+      // missing when damaged; two short battens clarify the integrated repair.
+      orientedBox(leftEast-w*.11,north-d*.34,roofCenter+.006,Math.max(.17,w*.030),.038,Math.max(.62,d*.11),C.repairDark,-24);
+      orientedBox(leftEast+w*.05,north-d*.22,roofCenter+.008,Math.max(.15,w*.027),.035,Math.max(.50,d*.09),C.newWoodLight,-24);
+    }else if(item.visualState==="overgrown"){
+      // Green vertex-color bands are part of the real roof eave. Narrow facade
+      // vines connect those bands to the ground without detached foliage blobs.
+      orientedBox(east-w*.25,north+d*.505,ground+physicalHeight*s*.47,Math.max(.09,w*.015),Math.max(1.85,physicalHeight*.48),.08,C.green,7);
+      orientedBox(east+w*.10,north+d*.508,ground+physicalHeight*s*.38,Math.max(.08,w*.013),Math.max(1.35,physicalHeight*.36),.07,C.greenLight,-6);
+      groundBox(east-w*.20,north+d*.57,.018,Math.max(.44,w*.072),.055,Math.max(.34,d*.060),C.moss);
+    }
+  }
+  if(positions.length){
+    const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setColors32(colors);mesh.setIndices(indices);mesh.update();
+    const entity=new pc.Entity("CanonicalCampaignWear");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
+    entity.render.meshInstances=[new pc.MeshInstance(mesh,localStaticMaterials.campaignWear,entity)];tangentPatch.addChild(entity);
+    localCampaignWearMesh=entity;localCampaignWearGeometry=mesh;
+  }
+  const changed=state.buildings.filter(x=>x.visualState!=="normal"),elapsed=performance.now()-started,target=state.buildings.find(x=>x.evidenceTarget)||changed[0]||state.buildings[0]||null;
+  campaignWearProjection={
+    active:primitiveCount>0,buildingCount:state.buildings.length,changedBuildingCount:changed.length,visualPrimitiveCount:primitiveCount,
+    canonicalRoofStateAware:true,canonicalRoofVariantCount:changed.length,
+    drawCallEstimate:primitiveCount>0?1:0,triangleCount:indices.length/3,sharedMaterialCount:1,stateCounts:state.stateCounts,buildings:state.buildings,
+    revisionSignature:state.signature,maxRevision:state.maxRevision,deltaSequence:state.deltaSequence,localQueryCount:state.localQueryCount,localQueryLimit:16,
+    evidenceTargetBuildingId:target?.id||null,evidenceTargetEntityId:target?.entityId||null,evidenceTargetState:target?.visualState||null,evidenceTargetRevision:Number(target?.revision||0),
+    persistent:true,historyReplay:false,lazyLocal:true,authoritativeSource:"WorldState.resolve local structural building refs",
+    evidenceHookAvailable:true,lastBuildReason:String(reason),presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameScan:false,
+    resolveMs:state.resolveMs,buildMs:Number(elapsed.toFixed(4))
+  };
+  if(localStatic){
+    localStatic={...localStatic,persistentRevisionSignature:state.signature,persistentPresentationSignature:String(localStatic.signature||"")+"|"+state.signature,
+      campaignWearDrawCallEstimate:campaignWearProjection.drawCallEstimate,campaignWearTriangleCount:campaignWearProjection.triangleCount};
+  }
+  return campaignWearProjection.drawCallEstimate;
+}
+function setCampaignWearEvidenceState(stateValue){
+  const stateName=String(stateValue||"normal").toLowerCase(),allowed=new Set(["normal","worn","damaged","repaired","overgrown"]);
+  if(!allowed.has(stateName))return Object.freeze({ok:false,reason:"unsupported-state",state:stateName});
+  if(!activeSeed||!window.WorldState?.applyDelta||!window.WorldState?.structuralRef||!window.StartingVillage?.plan||!window.HousePlans?.build)return Object.freeze({ok:false,reason:"authority-unavailable"});
+  const delta=window.WorldState.deltaSnapshot?.(activeSeed)||null;
+  if(!delta?.bound){
+    let campaign=window.SeedSystem?.getCampaign?.()||null,reset=false;
+    if(!campaign||String(campaign.seed||"")!==String(activeSeed)){
+      let restored=null;try{restored=window.SeedSystem?.loadCampaign?.()||null;}catch(_){}
+      if(restored?.ok&&String(restored.campaign?.seed||"")===String(activeSeed))campaign=restored.campaign;
+    }
+    if(!campaign||String(campaign.seed||"")!==String(activeSeed)){
+      const started=window.SeedSystem?.startNewCampaign?.(activeSeed)||null;
+      if(!started?.ok||!started.campaign)return Object.freeze({ok:false,reason:"campaign-bind-unavailable"});
+      campaign=started.campaign;reset=true;
+    }
+    const bound=window.WorldState.bindCampaign?.(campaign,{reset})||null;
+    if(!bound?.ok)return Object.freeze({ok:false,reason:"campaign-bind-failed"});
+  }
+  const village=window.StartingVillage.plan(activeSeed),houses=(window.HousePlans.build(activeSeed)||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))),record=houses[0]||null;
+  if(!village||!record)return Object.freeze({ok:false,reason:"target-unavailable"});
+  const settlement=window.WorldState.structuralRef(activeSeed,"settlement","WORLD","starting-village",{name:village.name,center:village.center});
+  const ref=window.WorldState.structuralRef(activeSeed,"building",settlement.id,String(record.id),{planId:String(record.id),kind:String(record.kind||"building"),plotId:record.plotId==null?null:String(record.plotId)});
+  const patches={
+    normal:{environmentalCondition:"normal",wearLevel:0,damageLevel:0,repairLevel:0,abandoned:false},
+    worn:{environmentalCondition:"worn",wearLevel:.88,damageLevel:0,repairLevel:0,abandoned:false},
+    damaged:{environmentalCondition:"damaged",wearLevel:.58,damageLevel:.92,repairLevel:0,abandoned:false},
+    repaired:{environmentalCondition:"repaired",wearLevel:.05,damageLevel:0,repairLevel:.96,abandoned:false},
+    overgrown:{environmentalCondition:"overgrown",wearLevel:.72,damageLevel:.18,repairLevel:0,abandoned:true}
+  };
+  const result=window.WorldState.applyDelta(activeSeed,ref,{campaignState:{...patches[stateName],evidenceWp:"WP-S003-021"}},"WP-S003-021 controlled visual evidence");
+  if(localCampaignWearContext)rebuildCanonicalCampaignWearProjection("evidence-hook");
+  const b=record.bounds||{},targetTile=Object.freeze({x:String(Math.round((Number(b.minX||0)+Number(b.maxX||0))/2)),y:String(Math.round((Number(b.minY||0)+Number(b.maxY||0))/2))});
+  return Object.freeze({ok:Boolean(result?.ok),state:stateName,targetBuildingId:String(record.id),targetEntityId:String(ref.id),targetTile,revision:Number(result?.entry?.revision||0),stored:Boolean(result?.stored)});
+}
+function handleCampaignWearDeltaChange(event){
+  const detail=event?.detail||{};
+  if(!activeSeed||String(detail.seed||"")!==String(activeSeed)||!localCampaignWearContext)return;
+  if(!localCampaignWearRelevantIds.has(String(detail.entityId||"")))return;
+  rebuildCanonicalCampaignWearProjection("persistent-delta-event");
+}
+window.addEventListener("advisor:world-state-delta-change",handleCampaignWearDeltaChange);
+
+function resetPersistentConsequenceProjection(reason="cleared"){
+  localPersistentConsequenceRoot?.destroy?.();localPersistentConsequenceRoot=null;
+  persistentConsequenceProjection={
+    ...persistentConsequenceProjection,active:false,recordCount:0,activeCount:0,projectedActiveCount:0,recoveredCount:0,
+    worldCueCount:0,buildingStateCueCount:0,primitiveCueCount:0,drawCallEstimate:0,triangleCount:0,
+    registryRevision:0,sourceDeltaRevision:0,records:Object.freeze([]),lastBuildReason:String(reason),buildMs:0
+  };
+}
+function persistentConsequenceBuilding(reveal,id){
+  const key=String(id||"");
+  return [...(reveal?.houses||[]),...(reveal?.specialLots||[])].find(record=>String(record?.id||"")===key)||null;
+}
+function addPersistentConsequenceWorldCue(record,context,index){
+  const result={primitiveCount:0,buildingStateCueCount:0,triangleCount:0};
+  if(!record||record.status!=="active"||!localPersistentConsequenceRoot)return result;
+  const type=String(record.type||""),scale=Number(context.presentationScale||1),unit=Math.max(1e-9,Number(context.unit)||1),s=scale/unit;
+  if(type==="road-blockage"){
+    const a=record.target?.anchor;if(!a)return result;
+    const tm=Math.max(1,Number(context.reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
+    const east=Number(a.x)*tm,north=Number(a.y)*tm,pos=canonicalSemanticPosition(east,north,scale,unit,context.frame);
+    const ground=canonicalSemanticGroundHeightUnits(east,north,context.frame)+Number(context.lift||0)+.028;
+    const beamL=Math.max(.11,3.25*s),beamW=Math.max(.028,.34*s),beamH=Math.max(.026,.30*s),postH=Math.max(.05,.78*s),postOffset=Math.max(.06,1.28*s);
+    addLocalPrimitive(localPersistentConsequenceRoot,"ConsequenceBlockadeA-"+index,"box",localStaticMaterials.consequenceBlocked,pos.x,ground+beamH*.65,pos.z,beamL,beamH,beamW,0,45,0);
+    addLocalPrimitive(localPersistentConsequenceRoot,"ConsequenceBlockadeB-"+index,"box",localStaticMaterials.consequenceBlocked,pos.x,ground+beamH*.92,pos.z,beamL,beamH,beamW,0,-45,0);
+    addLocalPrimitive(localPersistentConsequenceRoot,"ConsequencePostA-"+index,"box",localStaticMaterials.activityProp,pos.x-postOffset,ground+postH*.5,pos.z,beamW*1.18,postH,beamW*1.18);
+    addLocalPrimitive(localPersistentConsequenceRoot,"ConsequencePostB-"+index,"box",localStaticMaterials.activityProp,pos.x+postOffset,ground+postH*.5,pos.z,beamW*1.18,postH,beamW*1.18);
+    result.primitiveCount=4;result.triangleCount=48;return result;
+  }
+  const building=persistentConsequenceBuilding(context.reveal,record.target?.entityId);if(!building)return result;
+  const state=type==="damaged-building"?"damaged":type==="abandoned-workplace"?"overgrown":null;
+  if(state&&applyCanonicalBuildingWearState(building.id,state))result.buildingStateCueCount=1;
+  const g=activityBuildingGeometry(building,scale,unit,context.frame,context.lift);if(!g)return result;
+  const pos=canonicalSemanticPosition(g.east,g.north,scale,unit,context.frame),front=canonicalSemanticPosition(g.east,g.north+g.d*.56,scale,unit,context.frame);
+  if(type==="damaged-building"){
+    const specs=[[-1.15,.18,.18,1.45,.32,.58,12],[.18,.12,-.05,1.10,.28,.50,-18],[1.18,.16,.15,1.32,.30,.54,27]];
+    for(let i=0;i<specs.length;i++){
+      const q=specs[i];
+      addLocalPrimitive(localPersistentConsequenceRoot,"ConsequenceDebris-"+index+"-"+i,"box",localStaticMaterials.consequenceDamage,pos.x+q[0]*s,g.ground+q[1]*s,front.z+q[2]*s,q[3]*s,q[4]*s,q[5]*s,0,q[6],0);
+    }
+    result.primitiveCount=3;result.triangleCount=36;
+  }else if(type==="abandoned-workplace"){
+    const spread=Math.max(.5,g.w*.22),specs=[[-spread,.12,.20,1.25,.18,1.10,9],[0,.10,-.18,1.55,.16,1.00,-11],[spread,.13,.12,1.18,.20,1.16,16]];
+    for(let i=0;i<specs.length;i++){
+      const q=specs[i];
+      addLocalPrimitive(localPersistentConsequenceRoot,"ConsequenceOvergrowth-"+index+"-"+i,"box",localStaticMaterials.consequenceAbandoned,pos.x+q[0]*s,g.ground+q[1]*s,front.z+q[2]*s,q[3]*s,q[4]*s,q[5]*s,0,q[6],0);
+    }
+    result.primitiveCount=3;result.triangleCount=36;
+  }
+  return result;
+}
+function rebuildPersistentConsequenceProjection(reason="settlement-rebuild"){
+  const started=performance.now(),context=localCampaignWearContext;
+  localPersistentConsequenceRoot?.destroy?.();localPersistentConsequenceRoot=null;
+  if(!context||!["refined","full"].includes(String(context.tier))||!localStaticRoot||!window.PersistentConsequences?.projection){
+    resetPersistentConsequenceProjection(reason);return 0;
+  }
+  let view=null;try{view=window.PersistentConsequences.projection(activeSeed)}catch(_){view=null;}
+  if(!view){resetPersistentConsequenceProjection(reason);return 0;}
+  const records=(view.records||[]).slice(0,8),active=records.filter(record=>record?.status==="active").slice(0,3);
+  localPersistentConsequenceRoot=new pc.Entity("PersistentConsequenceProjection");localStaticRoot.addChild(localPersistentConsequenceRoot);
+  let primitiveCueCount=0,buildingStateCueCount=0,triangleCount=0;
+  const projected=[];
+  for(let i=0;i<active.length;i++){
+    const record=active[i],cue=addPersistentConsequenceWorldCue(record,context,i);
+    primitiveCueCount+=cue.primitiveCount;buildingStateCueCount+=cue.buildingStateCueCount;triangleCount+=cue.triangleCount;
+    projected.push(Object.freeze({id:String(record.id),type:String(record.type),targetId:String(record.target?.entityId||""),primitiveCueCount:cue.primitiveCount,buildingStateCueCount:cue.buildingStateCueCount}));
+  }
+  if(!primitiveCueCount){localPersistentConsequenceRoot.destroy();localPersistentConsequenceRoot=null;}
+  persistentConsequenceProjection={
+    ...persistentConsequenceProjection,active:(primitiveCueCount+buildingStateCueCount)>0,
+    recordCount:Number(view.recordCount||records.length),activeCount:Number(view.activeCount||0),projectedActiveCount:active.length,recoveredCount:Number(view.recoveredCount||0),
+    worldCueCount:primitiveCueCount+buildingStateCueCount,buildingStateCueCount,primitiveCueCount,
+    drawCallEstimate:primitiveCueCount,triangleCount,registryRevision:Number(view.registryRevision||0),sourceDeltaRevision:Number(view.sourceDeltaRevision||0),
+    records:Object.freeze(projected),lastBuildReason:String(reason),buildMs:Number((performance.now()-started).toFixed(4)),
+    authority:"PersistentConsequences + canonical HousePlans/StartingVillage coordinates",
+    presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameScan:false
+  };
+  return persistentConsequenceProjection.drawCallEstimate;
+}
+function handlePersistentConsequenceDeltaChange(event){
+  const detail=event?.detail||{};
+  if(!activeSeed||String(detail.seed||"")!==String(activeSeed)||String(detail.entityKind||"")!=="consequence-registry"||!localCampaignWearContext||!localStaticRoot)return;
+  const oldDraw=Number(localStatic.persistentConsequenceDrawCallEstimate||0),oldTriangles=Number(localStatic.persistentConsequenceTriangleCount||0);
+  rebuildCanonicalCampaignWearProjection("persistent-consequence-base");
+  const drawCalls=rebuildPersistentConsequenceProjection("persistent-delta-event"),triangles=Number(persistentConsequenceProjection.triangleCount||0);
+  localStatic={
+    ...localStatic,entityCount:Number(localStaticRoot?.children?.length||localStatic.entityCount||0),
+    drawCallEstimate:Math.max(0,Number(localStatic.drawCallEstimate||0)-oldDraw+drawCalls),
+    triangleEstimate:Math.max(0,Number(localStatic.triangleEstimate||0)-oldTriangles+triangles),
+    campaignWearDrawCallEstimate:Number(campaignWearProjection.drawCallEstimate||0),campaignWearTriangleCount:Number(campaignWearProjection.triangleCount||0),
+    persistentRevisionSignature:campaignWearProjection.revisionSignature,persistentPresentationSignature:String(localStatic.signature||"")+"|"+String(campaignWearProjection.revisionSignature||"CWP|0"),
+    persistentConsequenceActiveCount:Number(persistentConsequenceProjection.activeCount||0),persistentConsequenceProjectedActiveCount:Number(persistentConsequenceProjection.projectedActiveCount||0),
+    persistentConsequenceWorldCueCount:Number(persistentConsequenceProjection.worldCueCount||0),persistentConsequenceDrawCallEstimate:Number(persistentConsequenceProjection.drawCallEstimate||0),
+    persistentConsequenceTriangleCount:Number(persistentConsequenceProjection.triangleCount||0),persistentConsequenceBuildMs:Number(persistentConsequenceProjection.buildMs||0),
+    persistentConsequenceRegistryRevision:Number(persistentConsequenceProjection.registryRevision||0)
+  };
+}
+window.addEventListener("advisor:world-state-delta-change",handlePersistentConsequenceDeltaChange);
+
+function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
+  const started=performance.now(),dims=resource.dims,unit=dims.metersPerUnit,plan=reveal.settlement,village=reveal.village;
+  const scale=revealPresentationScale(dims,tier,Number(village.approximateCoreDiameterMeters||104));
+  const villageOrigin=worldLatLonForTile(village.center.x,village.center.y),anchorDelta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,villageOrigin.latitudeRadians,villageOrigin.longitudeRadians);
+  const semanticFrame={...frame,semanticAnchorEastMeters:Number(anchorDelta.eastMeters||0),semanticAnchorNorthMeters:Number(anchorDelta.northMeters||0)};
+  ensureLocalStaticMaterials();localStaticRoot=new pc.Entity("CanonicalSettlementReveal");tangentPatch.addChild(localStaticRoot);
+  const lift=settlementPresentationLift(tier);
+  const routePlan=tier==="route"?routeOverviewPlan(reveal):null;
+  const centerGround=canonicalSemanticGroundHeightUnits(0,0,semanticFrame)+lift+.012,centerPos=canonicalSemanticPosition(0,0,scale,unit,semanticFrame);
+  // Overview settlement shape is now derived from occupied StartingVillage lots
+  // plus their adjacent authoritative road cells. It is a thin boundary, never
+  // a filled circular wash or camera-relative locator.
+  const envelope=tier==="route"
+    ?addCanonicalSettlementEnvelope(reveal,scale,unit,semanticFrame,lift,tier)
+    :Object.freeze({active:false,segmentCount:0,roadAuthorityQueryCount:0,mode:"none"});
+  // Flat occupied-lot patches expose the settlement's real irregular land-use
+  // pattern at overview scales without leaking building geometry or inventing a
+  // circular locator. They remain subordinate to roads through alpha + height.
+  const lotContext=(tier==="footprint"||tier==="route")?addCanonicalOccupiedLotContext(reveal,scale,unit,semanticFrame,lift,tier,routePlan):Object.freeze({count:0,mode:"none"});
+  const occupiedAreaCount=envelope.active||lotContext.count?1:0;
+  let roadCount=0,coarseBuildings=0,fullBuildings=0,landmarks=0,vegetation=0,triangles=envelope.segmentCount*12+Number(lotContext.triangleCount||0);
+  let roadGeometry=Object.freeze({active:false,cellCount:0,queryCount:0,triangleCount:0,mode:"none"});
+  const squareHalf=Number(window.StartingVillage.PUBLIC_HALF_SIZE||3);
+  if(tier!=="none"){
+    // Materialize literal StartingVillage road/path cells into one bounded mesh.
+    // This retains the true ring width, secondary connectors and SEED-derived
+    // gateway curvature instead of approximating them as a perfect cross/ring.
+    roadGeometry=buildCanonicalRoadCellMesh(reveal,scale,unit,semanticFrame,lift,tier,routePlan);
+    roadCount=roadGeometry.cellCount;
+    const sq=(squareHalf*2+1)*reveal.tileMeters;
+    // The route-tier road mesh already exposes the authoritative square
+    // connections. Delay the filled square itself until buildings are visible
+    // so the 1/2500 handoff reads as a road network, not a target/cross glyph.
+    if(tier==="coarse"||tier==="refined"||tier==="full"){
+      addLocalStatic("CanonicalPublicSquare","box",localStaticMaterials.square,centerPos.x,centerGround+.012,centerPos.z,sq*scale/unit,.032,sq*scale/unit);roadCount++;triangles+=12;
+    }
+    triangles+=roadGeometry.triangleCount;
+  }
+  const meeting=reveal.specialLots.find(item=>item.kind==="meeting-hall")||reveal.specialLots[0]||null;
+  const ordinary=[...reveal.houses,...reveal.specialLots.filter(item=>!meeting||item.id!==meeting.id)];
+  // Route overview already carries up to 12 real HousePlans/SpecialLots as one
+  // merged two-tone footprint/access mesh. Do not cover that clean map-scale
+  // silhouette with separate primitive building boxes; those blocks were the
+  // remaining diagrammatic look at 1/2500. Coarse+ tiers still materialize the
+  // normal canonical building presentation as before.
+  const targetCount=tier==="route"?0:tier==="coarse"?Math.min(ordinary.length,10):(tier==="refined"||tier==="full"?ordinary.length:0);
+  const detailed=tier==="refined"||tier==="full";
+  for(let i=0;i<targetCount;i++){
+    addCanonicalBuilding(ordinary[i],i,scale,unit,semanticFrame,detailed,false,lift);
+    if(detailed)fullBuildings++;else coarseBuildings++;
+  }
+  if((tier==="coarse"||tier==="refined"||tier==="full")&&meeting){
+    addCanonicalBuilding(meeting,targetCount,scale,unit,semanticFrame,detailed,true,lift);
+    landmarks=1;if(detailed)fullBuildings++;else coarseBuildings++;
+  }
+  const wayfindingDrawCalls=buildCanonicalWayfindingSignposts(reveal,tier,semanticFrame,scale,unit,lift);
+  const surroundingsDrawCalls=buildCanonicalBuildingSurroundings(reveal,tier,semanticFrame,scale,unit,lift);
+  localCampaignWearContext={reveal,tier,frame:semanticFrame,presentationScale:scale,unit,lift};
+  const campaignWearDrawCalls=rebuildCanonicalCampaignWearProjection("settlement-rebuild");
+  const consequenceDrawCalls=rebuildPersistentConsequenceProjection("settlement-rebuild");
+  const treeCount=tier==="route"?7:tier==="coarse"?6:tier==="refined"?10:tier==="full"?12:0;
+  for(let i=0;i<treeCount;i++){
+    const angle=i/Math.max(1,treeCount)*Math.PI*2+localHash(i*17,treeCount,91)*.22;
+    const radiusTiles=22+localHash(i*31,treeCount,92)*4;
+    const east=Math.cos(angle)*radiusTiles*reveal.tileMeters,north=Math.sin(angle)*radiusTiles*reveal.tileMeters;
+    const ground=canonicalSemanticGroundHeightUnits(east,north,semanticFrame)+lift,h=(4.5+localHash(i*43,treeCount,93)*2.5)*scale/unit,pos=canonicalSemanticPosition(east,north,scale,unit,semanticFrame);
+    addLocalStatic("CanonicalTreeTrunk-"+i,"cylinder",localStaticMaterials.trunk,pos.x,ground+h*.28,pos.z,.65*scale/unit,Math.max(.04,h*.56),.65*scale/unit);
+    addLocalStatic("CanonicalTreeCrown-"+i,"sphere",localStaticMaterials.leaf,pos.x,ground+h*.78,pos.z,3.8*scale/unit,Math.max(.06,h*.82),3.8*scale/unit);
+    vegetation++;triangles+=180;
+  }
+  const wild=renderLocalWilderness(resource,frame,reveal);
+  rebuildCanonicalNpcPresentation(reveal,tier,semanticFrame,scale,unit,lift,false);
+  rebuildLocalCrowdPresentation(resource,semanticFrame,tier);
+  localBuildingActivityContext={reveal,tier,frame:semanticFrame,presentationScale:scale,unit,lift};
+  rebuildCanonicalBuildingActivityPresentation("settlement-rebuild");
+  const entityCount=localStaticRoot.children.length;
+  triangles+=(coarseBuildings*12)+(fullBuildings*36);
+  localStatic={
+    ...localStatic,active:entityCount>0,signature:resource.signature,level:dims.levelId,revealTier:tier,
+    settlementId:plan.id,settlementName:plan.name,settlementClass:plan.classId,settlementRole:plan.role,
+    settlementPlanRevision:plan.revision,layoutSignature:reveal.layoutSignature,
+    canonicalCenterTile:Object.freeze({x:String(village.center.x),y:String(village.center.y)}),
+    presentationScale:scale,occupiedAreaCount,
+    coarseRoadCount:(tier==="footprint"||tier==="route"||tier==="coarse")?roadCount:0,
+    coarseBuildingCount:coarseBuildings,landmarkCount:landmarks,
+    fullRoadCount:detailed?roadCount:0,fullBuildingCount:fullBuildings,
+    roadCount,buildingCount:coarseBuildings+fullBuildings,vegetationCount:vegetation,wildernessCount:wild.accepted,ambientFaunaCount:wild.fauna,waterCount:0,
+    entityCount,triangleEstimate:triangles+wild.triangles+Number(buildingSurroundings.triangleCount||0)+Number(campaignWearProjection.triangleCount||0)+Number(persistentConsequenceProjection.triangleCount||0)+Number(wayfindingSignposts.triangleCount||0),
+    drawCallEstimate:entityCount+wild.fauna+Number(campaignWearDrawCalls||0)+Number(consequenceDrawCalls||0),
+    footprintMode:envelope.mode,occupiedLotMode:lotContext.mode,occupiedLotCount:Number(lotContext.count||0),routeGeometryMode:roadGeometry.mode,
+    routeOverviewStats:roadGeometry.overviewStats||null,routeOverviewPlanRevision:routePlan?.revision||null,routeOverviewRecordCount:Number(routePlan?.records?.length||0),
+    roadAuthorityQueryCount:Number(envelope.roadAuthorityQueryCount||0)+Number(roadGeometry.queryCount||0),
+    wayfindingSignCount:Number(wayfindingSignposts.signCount||0),wayfindingPanelCount:Number(wayfindingSignposts.panelCount||0),wayfindingDrawCallEstimate:Number(wayfindingDrawCalls||0),
+    persistentRevisionSignature:campaignWearProjection.revisionSignature,persistentPresentationSignature:String(resource.signature||"")+"|"+String(campaignWearProjection.revisionSignature||"CWP|0"),
+    campaignWearDrawCallEstimate:Number(campaignWearProjection.drawCallEstimate||0),campaignWearTriangleCount:Number(campaignWearProjection.triangleCount||0),
+    persistentConsequenceActiveCount:Number(persistentConsequenceProjection.activeCount||0),persistentConsequenceProjectedActiveCount:Number(persistentConsequenceProjection.projectedActiveCount||0),
+    persistentConsequenceWorldCueCount:Number(persistentConsequenceProjection.worldCueCount||0),persistentConsequenceDrawCallEstimate:Number(persistentConsequenceProjection.drawCallEstimate||0),
+    persistentConsequenceTriangleCount:Number(persistentConsequenceProjection.triangleCount||0),persistentConsequenceBuildMs:Number(persistentConsequenceProjection.buildMs||0),
+    persistentConsequenceRegistryRevision:Number(persistentConsequenceProjection.registryRevision||0),
+    buildTimeMs:Number((performance.now()-started).toFixed(3)),
+    grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,
+    authority:"SettlementArchetypes + StartingVillage + HousePlans + SpecialLots"
+  };
+}
+
+function resetMicroLocationPresentation(){
+  if(root)root.dataset.microLocationFocus="false";
+  microLocationPresentation={
+    active:false,locationCount:0,propCount:0,primitiveCount:0,drawCallEstimate:0,triangleEstimate:0,
+    queryCellCount:0,maxQueryCells:Number(window.MicroLocations?.MAX_QUERY_CELLS_PER_CHUNK||0),buildMs:0,bounds:null,
+    ids:Object.freeze([]),types:Object.freeze([]),locations:Object.freeze([]),
+    focusedLocationId:null,focusDistanceTiles:null,focusDeclutterActive:false,
+    sourceAuthority:"MicroLocations + WorldDestinations.poiCell",
+    deterministic:true,seedOnly:true,lazy:true,bounded:true,fullWorldScan:false,perFrameScan:false,
+    presentationOnly:true,simulationAuthority:false,collisionAuthority:false,navigationAuthority:false
+  };
+  return microLocationPresentation;
+}
+function microLocationBounds(resource){
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const center=mapWorldTileAt(resource.lat0,resource.lon0),dims=resource.dims||{};
+  const halfX=Math.max(12,Math.ceil(Math.max(24,Number(dims.patchWidth||64))/(tileMeters*2)));
+  const halfY=Math.max(12,Math.ceil(Math.max(24,Number(dims.patchHeight||64))/(tileMeters*2)));
+  const x=BigInt(String(center.x)),y=BigInt(String(center.y));
+  return Object.freeze({
+    minX:String(x-BigInt(halfX)),maxX:String(x+BigInt(halfX)),
+    minY:String(y-BigInt(halfY)),maxY:String(y+BigInt(halfY)),
+    center:Object.freeze({x:String(center.x),y:String(center.y)}),halfX,halfY
+  });
+}
+function rotateMicroOffset(dx,dz,yawDegrees){
+  const a=Number(yawDegrees||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
+  return Object.freeze({x:Number(dx||0)*c-Number(dz||0)*s,z:Number(dx||0)*s+Number(dz||0)*c});
+}
+function renderCanonicalMicroProp(prop,resource,frame,index){
+  const target=worldLatLonForTile(prop.x,prop.y);
+  const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,target.latitudeRadians,target.longitudeRadians);
+  const east=Number(delta.eastMeters||0),north=Number(delta.northMeters||0),dims=resource.dims||{};
+  if(Math.abs(east)>Number(dims.patchWidth||0)*.68||Math.abs(north)>Number(dims.patchHeight||0)*.68)return Object.freeze({primitiveCount:0,triangleEstimate:0});
+  const unit=Math.max(1e-9,Number(dims.metersPerUnit||1)),ground=localGroundHeightUnits(east,north,frame)+.022;
+  const yaw=Number(prop.rotation||0),semantic=String(prop.semantic||""),variant=Math.max(0,Math.min(2,Number(prop.variant||0)));
+  let primitives=0,triangles=0;
+  // Slightly strengthen the existing deterministic silhouettes at ground scale.
+  // This is presentation-only scaling of already-authoritative props: no new
+  // prop IDs, placement decisions, query radius, collision or simulation truth.
+  const presentationScale=semantic==="unusual-tree"?1.10:semantic==="dock"?1.16:(semantic==="tent"||semantic==="fish-rack"||semantic==="signpost")?1.30:1.24;
+  const add=(type,material,dx,dz,sx,sy,sz,yMeters=sy*.5,rx=0,ry=yaw,rz=0)=>{
+    const off=rotateMicroOffset(dx,dz,yaw);
+    addLocalStatic("Micro-"+String(prop.microLocationId||"loc")+"-"+index+"-"+primitives,type,material,
+      (east+off.x)/unit,ground+Number(yMeters||0)*presentationScale/unit,(-north+off.z)/unit,
+      Number(sx||1)*presentationScale/unit,Number(sy||1)*presentationScale/unit,Number(sz||1)*presentationScale/unit,rx,ry,rz);
+    primitives++;
+    triangles+=type==="sphere"?160:type==="cylinder"||type==="cone"?64:type==="micro-tent"?16:12;
+  };
+  const box=(mat,dx,dz,sx,sy,sz,y=sy*.5,localYaw=yaw)=>add("box",mat,dx,dz,sx,sy,sz,y,0,localYaw,0);
+  const sphere=(mat,dx,dz,sx,sy,sz,y=sy*.5)=>add("sphere",mat,dx,dz,sx,sy,sz,y,0,0,0);
+  const cone=(mat,dx,dz,sx,sy,sz,y=sy*.5,localYaw=yaw)=>add("cone",mat,dx,dz,sx,sy,sz,y,0,localYaw,0);
+  const stone=localStaticMaterials.microStone,wood=localStaticMaterials.microWood,dark=localStaticMaterials.microDark,
+    cloth=localStaticMaterials.microCloth,accent=localStaticMaterials.microAccent,soil=localStaticMaterials.microSoil,
+    leaf=localStaticMaterials.leaf,trunk=localStaticMaterials.trunk;
+  if(semantic==="campfire"){
+    for(let i=0;i<8;i++){const a=Math.PI*2*i/8;sphere(stone,Math.cos(a)*.62,Math.sin(a)*.62,.30,.22,.30,.13);}
+    box(wood,-.23,0,1.08,.18,.18,.16,yaw+34);box(wood,.23,0,1.08,.18,.18,.16,yaw-34);
+    sphere(accent,0,0,.58,.72,.58,.48);sphere(localStaticMaterials.activityWarm,0,0,.28,.46,.28,.80);
+  }else if(semantic==="tent"){
+    add("micro-tent",cloth,0,0,3.55,2.70,3.55,1.36,0,yaw+45,0);
+    box(wood,0,0,.14,2.92,.14,1.46);
+    box(dark,0,1.36,1.18,1.22,.14,.61,yaw);
+    // Presentation-only guy poles and entrance apron make the same canonical
+    // tent legible from the default high camera without inventing a new prop.
+    box(wood,-1.55,.88,.12,.82,.12,.41,yaw+10);box(wood,1.55,.88,.12,.82,.12,.41,yaw-10);
+    box(cloth,0,1.88,1.72,.10,1.02,.055,yaw);
+  }else if(semantic==="ruin-wall"){
+    box(stone,-.58,0,1.72,2.25,.72,1.13);box(stone,.55,.10,1.02,1.38,.72,.69);
+    sphere(stone,1.12,.34,.58,.42,.54,.22);sphere(stone,-1.08,.38,.44,.34,.42,.18);
+  }else if(semantic==="shrine"){
+    box(stone,0,0,2.05,.34,1.52,.17);box(stone,0,0,.68,2.20,.68,1.22);
+    box(stone,0,0,1.28,.26,.82,2.34);sphere(accent,0,0,.40,.32,.40,2.62);
+  }else if(semantic==="grave"){
+    box(soil,0,.26,1.46,.13,2.46,.085);
+    box(stone,0,-.72,.82,1.34,.30,.73);box(stone,0,-.72,1.02,.20,.22,1.22);
+    box(stone,-.63,.28,.13,.18,1.92,.10,yaw);box(stone,.63,.28,.13,.18,1.92,.10,yaw);
+    sphere(accent,.38,.68,.20,.18,.20,.13);
+  }else if(semantic==="marker-stone"){
+    box(stone,0,0,.78,1.52,.82,.78,yaw+variant*12);
+  }else if(semantic==="dock"){
+    box(wood,0,.24,1.92,.20,3.45,.14);
+    box(dark,-.74,-1.12,.16,1.02,.16,.50);box(dark,.74,-1.12,.16,1.02,.16,.50);
+    box(dark,-.74,1.52,.16,.82,.16,.40);box(dark,.74,1.52,.16,.82,.16,.40);
+    box(dark,-.79,.25,.10,.20,3.18,.25,yaw);box(dark,.79,.25,.10,.20,3.18,.25,yaw);
+  }else if(semantic==="fish-rack"){
+    box(wood,-.92,0,.16,1.88,.16,.94);box(wood,.92,0,.16,1.88,.16,.94);box(wood,0,0,2.02,.16,.16,1.62);
+    box(cloth,-.58,0,.22,.78,.10,1.12);box(cloth,-.18,0,.22,.86,.10,1.16);
+    box(accent,.24,0,.22,.72,.10,1.14);box(cloth,.62,0,.22,.82,.10,1.13);
+  }else if(semantic==="unusual-tree"){
+    box(trunk,0,0,1.00,5.2,1.00,2.60);
+    sphere(leaf,0,0,4.75,3.05,4.15,5.75);sphere(leaf,-1.45,.30,2.35,1.88,2.20,5.20);sphere(leaf,1.38,-.28,2.42,1.95,2.26,5.35);
+  }else if(semantic==="quarry"){
+    sphere(stone,-.90,-.38,1.48,.98,1.28,.50);sphere(stone,.78,-.20,1.26,.86,1.12,.43);
+    sphere(stone,.12,.88,1.08,.72,.96,.36);box(wood,0,-1.24,1.82,.18,.18,.14);
+  }else if(semantic==="cave-mouth"){
+    sphere(stone,-1.02,0,1.50,1.84,1.22,.96);sphere(stone,1.02,0,1.50,1.84,1.22,.96);
+    sphere(stone,0,-.24,2.12,1.18,1.32,1.88);box(dark,0,.42,1.42,1.58,.30,.80);
+  }else if(semantic==="cart"){
+    box(wood,0,0,2.65,.44,1.48,.52);box(wood,0,-1.12,2.15,.18,.18,.35);
+    sphere(dark,-.92,.62,.68,.88,.28,.43);sphere(dark,.92,.62,.68,.88,.28,.43);
+    sphere(dark,-.92,-.42,.68,.88,.28,.43);sphere(dark,.92,-.42,.68,.88,.28,.43);
+    box(dark,-1.18,.10,.12,.78,1.62,.45,yaw);box(dark,1.18,.10,.12,.78,1.62,.45,yaw);
+    box(cloth,0,.12,2.20,.14,1.10,1.10,yaw);
+  }else if(semantic==="signpost"){
+    box(wood,0,0,.22,2.25,.22,1.13);box(wood,.34,0,1.52,.46,.18,1.82);
+  }else if(semantic==="crate"){
+    box(wood,0,0,1.24,1.08,1.24,.54);
+  }else if(semantic==="barrel"){
+    box(wood,0,0,1.02,1.28,1.02,.64);box(dark,0,0,1.10,.10,1.10,.32);box(dark,0,0,1.10,.10,1.10,.96);
+  }else if(semantic==="sack"){
+    sphere(cloth,0,0,1.02,1.22,.88,.62);
+  }else if(semantic==="woodpile"){
+    box(wood,-.52,-.28,1.06,.22,.24,.14);box(wood,.50,-.26,1.06,.22,.24,.14);
+    box(wood,-.30,.30,1.06,.22,.24,.37);box(wood,.52,.28,1.06,.22,.24,.37);
+  }else if(semantic==="bench"){
+    box(wood,0,0,2.00,.20,.62,.54);box(wood,-.74,0,.20,.82,.20,.40);box(wood,.74,0,.20,.82,.20,.40);
+    box(wood,0,-.30,2.00,.72,.16,.90);
+  }else if(semantic==="bush"){
+    sphere(leaf,0,0,1.42+variant*.12,.96,1.12,.50);sphere(leaf,.50,-.20,.82,.70,.82,.42);
+  }else if(semantic==="flower"){
+    sphere(leaf,0,0,.62,.38,.62,.22);sphere(accent,-.26,.08,.24,.30,.24,.44);
+    sphere(accent,.18,-.14,.26,.32,.26,.47);sphere(accent,.36,.16,.22,.27,.22,.43);
+  }else if(semantic==="work-prop"){
+    box(wood,0,0,1.58,.92,1.02,.46);box(dark,.48,-.26,.44,.24,.44,1.02,yaw+24);box(dark,-.46,.24,.38,.22,.38,.98,yaw-18);
+  }else{
+    box(soil,0,0,1.28,.14,1.28,.07);
+  }
+  return Object.freeze({primitiveCount:primitives,triangleEstimate:triangles});
+}
+function prepareCanonicalMicroLocations(resource,tier){
+  microLocationClearanceCenters=[];
+  if(!window.MicroLocations?.forChunk||!activeSeed||!resource?.dims?.staticWorld||!["refined","full"].includes(String(tier||""))){
+    return Object.freeze({plan:null,bounds:null});
+  }
+  const bounds=microLocationBounds(resource),plan=window.MicroLocations.forChunk(activeSeed,bounds);
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  for(const location of plan?.locations||[]){
+    const target=worldLatLonForTile(location.anchor.x,location.anchor.y);
+    const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,target.latitudeRadians,target.longitudeRadians);
+    microLocationClearanceCenters.push(Object.freeze({
+      east:Number(delta.eastMeters||0),north:Number(delta.northMeters||0),
+      radiusMeters:Math.min(11,Math.max(7,Number(location.footprintRadiusTiles||5)*tileMeters*.72))
+    }));
+  }
+  return Object.freeze({plan,bounds});
+}
+function renderMicroLocationGrounding(location,resource,frame){
+  const type=String(location?.compositionType||""),target=worldLatLonForTile(location.anchor.x,location.anchor.y);
+  const delta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,target.latitudeRadians,target.longitudeRadians);
+  const east=Number(delta.eastMeters||0),north=Number(delta.northMeters||0),dims=resource.dims||{},unit=Math.max(1e-9,Number(dims.metersPerUnit||1));
+  if(Math.abs(east)>Number(dims.patchWidth||0)*.68||Math.abs(north)>Number(dims.patchHeight||0)*.68)return Object.freeze({primitiveCount:0,triangleEstimate:0});
+  const yaw=Number(location.rotation||0),ground=localGroundHeightUnits(east,north,frame)+.008;
+  let count=0,triangles=0;
+  const surface=(name,shape,material,dx,dz,sx,sz,localYaw=yaw,yOffset=.004)=>{
+    const off=rotateMicroOffset(dx,dz,yaw);
+    addLocalStatic(name+"-"+location.id+"-"+count,shape,material,(east+off.x)/unit,ground+yOffset/unit,(-north+off.z)/unit,sx/unit,1,sz/unit,0,localYaw,0);
+    count++;triangles+=shape==="micro-water-ribbon"?12:10;
+  };
+  if(["river-crossing","fishing-spot","waterfall-crossing"].includes(type)){
+    // WorldDestinations/WorldField remains the water-context authority. Two
+    // reusable irregular ribbon meshes form one shallow, bending corridor
+    // beside the exact canonical shoreline anchor without inventing water truth.
+    surface("MicroWater","micro-water-ribbon",localStaticMaterials.microWater,0,4.2,7.1,12.4,yaw-3,-.010);
+    surface("MicroWater","micro-water-ribbon",localStaticMaterials.microWater,1.45,9.0,5.2,7.4,yaw+13,-.011);
+  }else if(["hunter-camp","abandoned-cart-campsite","hidden-clearing"].includes(type)){
+    surface("MicroWorn","micro-ground-patch",localStaticMaterials.microGround,0,0,6.4,4.9,yaw+5,.003);
+    surface("MicroWorn","micro-ground-patch",localStaticMaterials.microGround,1.55,-.72,3.5,2.7,yaw-15,.004);
+  }else if(type==="burial-site"){
+    surface("MicroBurialGround","micro-ground-patch",localStaticMaterials.microSoil,0,.30,6.0,6.6,yaw+3,.003);
+    surface("MicroBurialMoss","micro-ground-patch",localStaticMaterials.microMoss,-1.45,-.65,3.4,3.0,yaw-16,.004);
+  }else if(type==="unusual-grove"){
+    surface("MicroGroveFloor","micro-ground-patch",localStaticMaterials.microMoss,0,0,7.8,6.6,yaw,.003);
+    surface("MicroGroveFloor","micro-ground-patch",localStaticMaterials.microMoss,1.85,1.25,4.0,3.2,yaw+19,.004);
+  }
+  return Object.freeze({primitiveCount:count,triangleEstimate:triangles});
+}
+
+function renderCanonicalMicroLocations(resource,frame,tier,prepared=null){
+  resetMicroLocationPresentation();
+  const prep=prepared||prepareCanonicalMicroLocations(resource,tier),plan=prep?.plan,bounds=prep?.bounds;
+  if(!plan||!bounds)return microLocationPresentation;
+  const started=performance.now(),locations=Array.isArray(plan?.locations)?plan.locations:[];
+  const focusTile=mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  let focusMatch=null;
+  for(const location of locations){
+    try{
+      const dx=Number(BigInt(String(location.anchor.x))-BigInt(String(focusTile.x)));
+      const dy=Number(BigInt(String(location.anchor.y))-BigInt(String(focusTile.y)));
+      const distanceTiles=Math.hypot(dx,dy),focusRadius=Math.max(2,Number(location.footprintRadiusTiles||0)*.75);
+      if(distanceTiles<=focusRadius&&(!focusMatch||distanceTiles<focusMatch.distanceTiles)){
+        focusMatch={id:String(location.id),distanceTiles:Number(distanceTiles.toFixed(3))};
+      }
+    }catch(_){}
+  }
+  if(root)root.dataset.microLocationFocus=String(Boolean(focusMatch));
+  let propCount=0,primitiveCount=0,triangleEstimate=0;
+  const rendered=[];
+  for(const location of locations){
+    const grounding=renderMicroLocationGrounding(location,resource,frame);
+    let locationPrimitives=grounding.primitiveCount,locationTriangles=grounding.triangleEstimate,locationProps=0;
+    for(let i=0;i<(location.props||[]).length;i++){
+      const result=renderCanonicalMicroProp(location.props[i],resource,frame,i);
+      if(result.primitiveCount>0){locationProps++;locationPrimitives+=result.primitiveCount;locationTriangles+=result.triangleEstimate;}
+    }
+    if(locationPrimitives>0){
+      propCount+=locationProps;primitiveCount+=locationPrimitives;triangleEstimate+=locationTriangles;
+      rendered.push(Object.freeze({
+        id:String(location.id),compositionType:String(location.compositionType),sourceDestinationId:String(location.sourceDestinationId),
+        signature:String(location.signature),anchor:Object.freeze({x:String(location.anchor.x),y:String(location.anchor.y)}),
+        propCount:locationProps,primitiveCount:locationPrimitives,triangleEstimate:locationTriangles
+      }));
+    }
+  }
+  microLocationPresentation={
+    active:primitiveCount>0,locationCount:rendered.length,propCount,primitiveCount,
+    drawCallEstimate:primitiveCount,triangleEstimate,queryCellCount:Number(plan?.diagnostics?.queryCellCount||0),
+    maxQueryCells:Number(plan?.diagnostics?.maxQueryCells||window.MicroLocations?.MAX_QUERY_CELLS_PER_CHUNK||0),
+    buildMs:Number((performance.now()-started).toFixed(3)),bounds,
+    ids:Object.freeze(rendered.map(item=>item.id)),types:Object.freeze(rendered.map(item=>item.compositionType)),
+    locations:Object.freeze(rendered),focusedLocationId:focusMatch?.id||null,
+    focusDistanceTiles:focusMatch?.distanceTiles??null,focusDeclutterActive:Boolean(focusMatch),
+    sourceAuthority:"MicroLocations + WorldDestinations.poiCell",
+    deterministic:true,seedOnly:true,lazy:true,bounded:true,fullWorldScan:false,perFrameScan:false,
+    presentationOnly:true,simulationAuthority:false,collisionAuthority:false,navigationAuthority:false
+  };
+  return microLocationPresentation;
+}
+
+function rebuildLocalStaticPresentation(resource){
+  if(!tangentPatch||!device||!geography||!resource)return;
+  const started=performance.now(),dims=resource.dims,frame={lat0:resource.lat0,lon0:resource.lon0,dims,groundDetailWeight:resource.groundDetailWeight,centerElevation:resource.centerElevation},eligible=dims.staticWorld;
+  clearInspectionKeySet(localBuildingInspectionKeys,false);clearInspectionKeySet(localNpcInspectionKeys,false);clearCanonicalWayfindingSignposts();
+  localNpcRoot?.destroy?.();localNpcRoot=null;localNpcContext=null;localNpcPresentation={...localNpcPresentation,active:false,activeCount:0,entityCount:0,drawCallEstimate:0,buildTimeMs:0};
+  clearLocalCrowdPresentation();
+  clearLocalBuildingActivity();localBuildingActivityContext=null;
+  buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
+  clearCanonicalBuildingSurroundings();
+  clearCanonicalCampaignWearProjection(false);localCampaignWearContext=null;
+  resetPersistentConsequenceProjection("static-rebuild");
+  clearLocalFauna();
+  localStaticRoot?.destroy?.();localStaticRoot=null;localSettlementRoadGeometry?.destroy?.();localSettlementRoadGeometry=null;localSettlementLotGeometry?.destroy?.();localSettlementLotGeometry=null;clearCanonicalRoofRegistry();
+  const tier=settlementRevealTierForScalar();
+  resetMicroLocationPresentation();microLocationClearanceCenters=[];
+  localStatic={...localStatic,active:false,signature:resource.signature,level:dims.levelId,revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,wildernessCount:0,ambientFaunaCount:0,waterCount:0,microLocationCount:0,microLocationPropCount:0,microLocationPrimitiveCount:0,microLocationDrawCallEstimate:0,microLocationTriangleEstimate:0,persistentConsequenceActiveCount:0,persistentConsequenceProjectedActiveCount:0,persistentConsequenceWorldCueCount:0,persistentConsequenceDrawCallEstimate:0,persistentConsequenceTriangleCount:0,persistentConsequenceBuildMs:0,persistentConsequenceRegistryRevision:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,presentationOnly:true,simulationAuthority:false};
+  const reveal=canonicalStartingVillageReveal(resource);
+  if(reveal&&tier!=="none"){
+    rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame);
+    return;
+  }
+  if(!eligible){
+    rebuildLocalFauna(null,frame,null);
+    wilderness={...wilderness,localActive:false,localSignature:null,localLevel:dims.levelId,localBiome:null,localCandidateCount:0,localAcceptedStaticProps:0,localAmbientFaunaActiveCount:0,localRejectedWater:0,localRejectedManaged:0,localRejectedRoad:0,localFamilyCounts:{},localBiomeCounts:{},localDrawCalls:0,localTriangles:0,localPreparationMs:0,localPlanCached:false,localLayoutSignature:null,localFullWorldScan:false,localDeterministicGlobalCells:true};
+    return;
+  }
+  ensureLocalStaticMaterials();localStaticRoot=new pc.Entity("LocalStaticWorld");tangentPatch.addChild(localStaticRoot);
+  const unit=dims.metersPerUnit,center=geography.sampleLatLon(resource.lat0,resource.lon0);
+  if(center?.land){
+    const preparedMicro=prepareCanonicalMicroLocations(resource,tier);
+    const wild=renderLocalWilderness(resource,frame,null);
+    const micro=renderCanonicalMicroLocations(resource,frame,tier,preparedMicro);
+    rebuildLocalCrowdPresentation(resource,frame,tier);
+    localStatic.wildernessCount=wild.accepted;localStatic.ambientFaunaCount=wild.fauna;localStatic.vegetationCount=Object.entries(wilderness.localFamilyCounts||{}).filter(([k])=>["grass","flower","bush","sapling","reed"].includes(k)).reduce((sum,[,v])=>sum+Number(v||0),0);
+    localStatic.microLocationCount=micro.locationCount;localStatic.microLocationPropCount=micro.propCount;localStatic.microLocationPrimitiveCount=micro.primitiveCount;
+    localStatic.microLocationDrawCallEstimate=micro.drawCallEstimate;localStatic.microLocationTriangleEstimate=micro.triangleEstimate;
+    localStatic.triangleEstimate+=wild.triangles+micro.triangleEstimate;localStatic.drawCallEstimate+=wild.drawCalls+micro.drawCallEstimate;
+  }else{
+    rebuildLocalFauna(null,frame,null);wilderness={...wilderness,localActive:false,localAmbientFaunaActiveCount:0};
+    const y=localGroundHeightUnits(0,0,frame)+.02;addLocalStatic("SeedWaterSurface","box",localStaticMaterials.water,0,y,0,dims.patchWidth*.88/unit,.035,dims.patchHeight*.88/unit);
+    localStatic.waterCount=1;localStatic.triangleEstimate+=12;localStatic.drawCallEstimate+=1;
+  }
+  localStatic.entityCount=localStaticRoot.children.length;localStatic.active=localStatic.entityCount>0||localFaunaActors.length>0;localStatic.buildTimeMs=Number((performance.now()-started).toFixed(3));
+}
+function scheduleLocalStaticPresentationRefresh(){
+  if(localStaticRefreshScheduled||!displayResource)return;
+  // Semantic/static detail may not advance ahead of the supporting terrain cell.
+  // Preserve the current ready presentation during asynchronous refinement.
+  if(localResources.requestedSignature&&displayResource.signature!==localResources.requestedSignature)return;
+  const desired=settlementRevealTierForScalar();
+  if(localStatic.signature===displayResource.signature&&localStatic.revealTier===desired)return;
+  localStaticRefreshScheduled=true;
+  setTimeout(()=>{
+    localStaticRefreshScheduled=false;
+    if(displayResource&&(!localResources.requestedSignature||displayResource.signature===localResources.requestedSignature))rebuildLocalStaticPresentation(displayResource);
+  },0);
+}
+// ---- Cooperative LOD preparation -------------------------------------------
+// A local LOD resource (heightfield mesh + detail texture + 3x surround texture)
+// is produced by a generator that yields after every row. The pump runs it in
+// bounded slices off the wheel/pinch path; only a finished resource is ever
+// swapped in (double buffering), and the previous one stays visible meanwhile.
+function* tangentMeshSteps(job){
+  const {dims,lat0,lon0}=job,cosLat=Math.max(.08,Math.cos(lat0));
+  const columns=Math.max(2,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters)+1);
+  const rows=Math.max(2,Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)+1);
+  const positions=new Float32Array(columns*rows*3),normals=new Float32Array(columns*rows*3),uvs=new Float32Array(columns*rows*2);
+  let minHeightUnits=Infinity,maxHeightUnits=-Infinity;
+  const frame={lat0,lon0,dims,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation};
+  for(let z=0;z<rows;z++){
+    const vz=z/(rows-1),northMeters=(vz-.5)*dims.patchHeight;
+    for(let x=0;x<columns;x++){
+      const ux=x/(columns-1),eastMeters=(ux-.5)*dims.patchWidth,v=z*columns+x;
+      // Macro height identity is clamped to the tier's relief window, micro
+      // relief is layered in near the ground, and the outer 12% feathers down
+      // to the coarse surround so the LOD edge never reads as a slab.
+      const heightUnits=localGroundHeightUnits(eastMeters,northMeters,frame);
+      positions[v*3]=eastMeters/dims.metersPerUnit;positions[v*3+1]=heightUnits;positions[v*3+2]=-northMeters/dims.metersPerUnit;
+      minHeightUnits=Math.min(minHeightUnits,heightUnits);maxHeightUnits=Math.max(maxHeightUnits,heightUnits);
+      normals[v*3+1]=1;uvs[v*2]=ux;uvs[v*2+1]=vz;
+    }
+    yield 1;
+  }
+  const indices=new Uint32Array((columns-1)*(rows-1)*6);let k=0;
+  for(let z=0;z<rows-1;z++)for(let x=0;x<columns-1;x++){const a=z*columns+x,b=a+1,c=a+columns,d=c+1;indices[k++]=a;indices[k++]=c;indices[k++]=b;indices[k++]=b;indices[k++]=c;indices[k++]=d;}
+  const minUnits=Number.isFinite(minHeightUnits)?minHeightUnits:0,maxUnits=Number.isFinite(maxHeightUnits)?maxHeightUnits:0,spanUnits=Math.max(0,maxUnits-minUnits);
+  return {positions,normals,uvs,indices,columns,rows,meshHeightRange:Object.freeze({
+    minUnits:Number(minUnits.toFixed(6)),maxUnits:Number(maxUnits.toFixed(6)),spanUnits:Number(spanUnits.toFixed(6)),
+    minMeters:Number((minUnits*dims.metersPerUnit).toFixed(3)),maxMeters:Number((maxUnits*dims.metersPerUnit).toFixed(3)),
+    spanMeters:Number((spanUnits*dims.metersPerUnit).toFixed(3)),metersPerUnit:Number(dims.metersPerUnit.toFixed(6))
+  })};
+}
+// Presentation-only relief and land cover, anchored to continuous world meters.
+// Each octave fades in once it spans >2 texels, so every LOD shows structure at
+// its own scale without aliasing, and finer LODs add detail instead of blur.
+const TERRAIN_DETAIL_OCTAVES=Object.freeze([[48000,700],[16000,320],[5200,140],[1700,56],[560,20],[180,7],[60,2.4],[20,.8]]);
+// Narrow cross-LOD visual handoff. The old 18% edge feather made the canonical
+// focus patch read as a giant blurred square at 1/500-1/2500. Colors are
+// already world-coordinate stitched, so only a small bounded blend is needed.
+const LOCAL_TEXTURE_HANDOFF_FEATHER=.12;
+function detailOctaveWeight(wavelengthMeters,metersPerTexel){return smoothstep01((wavelengthMeters/Math.max(1e-6,metersPerTexel)-2)/4);}
+function terrainDetailHeight(east,north,metersPerTexel,salt){
+  let h=0;
+  for(let k=0;k<TERRAIN_DETAIL_OCTAVES.length;k++){
+    const [wavelength,amplitude]=TERRAIN_DETAIL_OCTAVES[k],w=detailOctaveWeight(wavelength,metersPerTexel);
+    if(w<=0)break;
+    h+=surfaceValueNoise(east,north,wavelength,salt+k*131)*amplitude*w;
+  }
+  return h;
+}
+function landCoverTint(east,north,metersPerTexel,salt,elevation){
+  // Presentation-only cover is continuous and registered in world meters. A
+  // low-frequency deterministic domain warp prevents the value-noise lattice
+  // from reading as square mosaic fields without introducing camera/LOD identity.
+  const warpEast=surfaceValueNoise(east,north,6200,salt+101)*980;
+  const warpNorth=surfaceValueNoise(east,north,5400,salt+107)*860;
+  const we=east+warpEast,wn=north+warpNorth;
+  const wStrategic=detailOctaveWeight(48000,metersPerTexel),wStrategicMid=detailOctaveWeight(16000,metersPerTexel),
+    wStrategicFine=detailOctaveWeight(5200,metersPerTexel);
+  const wBroad=detailOctaveWeight(3600,metersPerTexel),wMid=detailOctaveWeight(1500,metersPerTexel),
+    wField=detailOctaveWeight(700,metersPerTexel),wFine=detailOctaveWeight(280,metersPerTexel),
+    wCopse=detailOctaveWeight(120,metersPerTexel);
+  if(wStrategic<=0&&wBroad<=0)return [0,0,0];
+  const alpine=smoothstep01((elevation-2200)/900),lowland=1-alpine;
+  // Strategic map tiers need resolvable structure before farm/copse wavelengths
+  // become visible. The field is anchored only to Campaign-SEED registered
+  // meters and fades out before local terrain detail takes over.
+  const strategicWeight=smoothstep01(clamp((metersPerTexel-180)/900,0,1));
+  // At first-parent map scale the old strategic mix over-weighted the 48 km
+  // term, producing one broad blurred mountain band. Rebalance the exact same
+  // already-sampled registered fields toward the physically readable 16 km and
+  // 5.2 km terms; this changes only presentation weights, not sampling/authority.
+  const strategic=(
+    surfaceValueNoise(we,wn,48000,salt+3)*.010*wStrategic+
+    surfaceValueNoise(we,wn,16000,salt+5)*.048*wStrategicMid+
+    surfaceValueNoise(we,wn,5200,salt+6)*.052*wStrategicFine
+  )*strategicWeight;
+  const broad=surfaceValueNoise(we,wn,3600,salt+7)*.22*wBroad+
+    surfaceValueNoise(we,wn,1500,salt+11)*.30*wMid+
+    surfaceValueNoise(we,wn,700,salt+13)*.34*wField;
+  const forestCover=clamp(.44+broad*.62,0,1)*lowland;
+  const forestDelta=(forestCover-.44*lowland)*wBroad;
+  const parcel=surfaceValueNoise(we,wn,700,salt+19)*.66*wField+
+    surfaceValueNoise(we,wn,340,salt+23)*.48*wFine;
+  const dryField=Math.max(0,parcel)*lowland,meadow=Math.max(0,-parcel)*lowland;
+  const copse=surfaceValueNoise(we,wn,120,salt+29)*wCopse*lowland;
+  const mottle=surfaceValueNoise(we,wn,700,salt+31)*.026*wField+
+    surfaceValueNoise(we,wn,280,salt+37)*.028*wFine+
+    surfaceValueNoise(we,wn,120,salt+41)*.016*wCopse;
+  // Map-scale readability comes from one continuous registered-meter cover
+  // field, not from parcel meshes or camera-relative decoration. Stronger chroma
+  // separation reveals woodland/meadow/dry openings only when physically
+  // resolvable, so refinement adds information without changing world identity.
+  const coverContrast=lerp(1.18,1.62,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
+  return [
+    (mottle*.76-forestDelta*.105-copse*.026+dryField*.095+meadow*.010)*coverContrast+strategic*(.72+.20*alpine),
+    (mottle*.94-forestDelta*.010-copse*.008+dryField*.038+meadow*.086)*coverContrast+strategic*(1.00-.18*alpine),
+    (mottle*.48-forestDelta*.082-copse*.024+dryField*.006+meadow*.016)*coverContrast+strategic*(.50+.14*alpine)
+  ];
+}
+function makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,size){
+  const lat0=job.lat0,lon0=job.lon0,cache=new Array(size*size);
+  const centerRegistered=job.biomeCoordinateProof?.registeredMeters||canonicalRegisteredMetersForLatLon(lat0,lon0);
+  const centerRegisteredEast=Number(centerRegistered.east??centerRegistered.eastMeters??0),registeredPeriod=Math.PI*2*WORLD_RADIUS_METERS;
+  const unwrapRegisteredEast=value=>{
+    const delta=Number(value||0)-centerRegisteredEast;
+    return centerRegisteredEast+(delta-Math.round(delta/registeredPeriod)*registeredPeriod);
+  };
+  const authorityAt=(ax,ay)=>{
+    const ix=Math.max(0,Math.min(size-1,ax)),iy=Math.max(0,Math.min(size-1,ay)),key=iy*size+ix;
+    if(cache[key])return cache[key];
+    const au=ix/(size-1),av=iy/(size-1);
+    const aeast=(au-.5)*spanEast,anorth=(.5-av)*spanNorth,geo=canonicalLatLonForLocalOffset(lat0,lon0,aeast,anorth);
+    const natural=geography.sampleLatLon(geo.latitudeRadians,geo.longitudeRadians),registered=canonicalRegisteredMetersForLatLon(geo.latitudeRadians,geo.longitudeRadians);
+    return cache[key]={natural,registeredEastMeters:unwrapRegisteredEast(registered.eastMeters),registeredNorthMeters:Number(registered.northMeters||0)};
+  };
+  const bilerp=(va,vb,vc,vd,tx,ty)=>lerp(lerp(Number(va)||0,Number(vb)||0,tx),lerp(Number(vc)||0,Number(vd)||0,tx),ty);
+  const sample=(east,north)=>{
+    const u=clamp(Number(east||0)/spanEast+.5,0,1),v=clamp(.5-Number(north||0)/spanNorth,0,1);
+    const gx=u*(size-1),gy=v*(size-1),x0=Math.floor(gx),y0=Math.floor(gy),x1=Math.min(size-1,x0+1),y1=Math.min(size-1,y0+1),tx=gx-x0,ty=gy-y0;
+    const aa=authorityAt(x0,y0),bb=authorityAt(x1,y0),cc=authorityAt(x0,y1),dd=authorityAt(x1,y1);
+    const a=aa.natural,b=bb.natural,c=cc.natural,d=dd.natural;
+    const color=[0,1,2].map(i=>bilerp(a.color?.[i],b.color?.[i],c.color?.[i],d.color?.[i],tx,ty));
+    const landWeight=bilerp(a.land?1:0,b.land?1:0,c.land?1:0,d.land?1:0,tx,ty);
+    return {
+      land:landWeight>=.5,color,
+      elevationMeters:bilerp(a.elevationMeters,b.elevationMeters,c.elevationMeters,d.elevationMeters,tx,ty),
+      moisture:bilerp(a.moisture,b.moisture,c.moisture,d.moisture,tx,ty),
+      mountainInfluence:bilerp(a.mountainInfluence,b.mountainInfluence,c.mountainInfluence,d.mountainInfluence,tx,ty),
+      registeredEastMeters:bilerp(aa.registeredEastMeters,bb.registeredEastMeters,cc.registeredEastMeters,dd.registeredEastMeters,tx,ty),
+      registeredNorthMeters:bilerp(aa.registeredNorthMeters,bb.registeredNorthMeters,cc.registeredNorthMeters,dd.registeredNorthMeters,tx,ty)
+    };
+  };
+  return Object.freeze({size,spanEast,spanNorth,sample});
+}
+function broadAuthorityRasterSizes(levelIndex){
+  // Broad map parents must become usable before animated zoom outruns them.
+  // Reduce only coarse-parent sampling density; finer local tiers keep the
+  // existing 160x/96x authority rasters unchanged.
+  const index=Math.max(0,Number(levelIndex)||0);
+  if(index===0)return Object.freeze({shared:80,focus:64});
+  if(index===1)return Object.freeze({shared:96,focus:72});
+  if(index===2)return Object.freeze({shared:128,focus:80});
+  return Object.freeze({shared:160,focus:96});
+}
+function sharedSurfaceAuthority(job){
+  if(job?.surfaceAuthority)return job.surfaceAuthority;
+  const spanEast=Math.max(1,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR),spanNorth=Math.max(1,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR);
+  const raster=broadAuthorityRasterSizes(job.levelIndex);
+  job.surfaceAuthority=makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,raster.shared);
+  return job.surfaceAuthority;
+}
+function focusSurfaceAuthority(job){
+  if(job?.focusSurfaceAuthority)return job.focusSurfaceAuthority;
+  // The bounded 1x child remains canonical and edge-matched to its parent.
+  // Broad tiers use a smaller raster only to reduce preparation latency; local
+  // terrain tiers retain the previous 96x focus authority unchanged.
+  const spanEast=Math.max(1,job.dims.patchWidth*1.08),spanNorth=Math.max(1,job.dims.patchHeight*1.08);
+  const raster=broadAuthorityRasterSizes(job.levelIndex);
+  job.focusSurfaceAuthority=makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,raster.focus);
+  return job.focusSurfaceAuthority;
+}
+function blendSurfaceAuthoritySamples(coarse,fine,t){
+  const w=clamp(Number(t)||0,0,1),mix=(a,b)=>lerp(Number(a)||0,Number(b)||0,w);
+  return {
+    land:w>=.5?Boolean(fine?.land):Boolean(coarse?.land),
+    color:[0,1,2].map(i=>mix(coarse?.color?.[i],fine?.color?.[i])),
+    elevationMeters:mix(coarse?.elevationMeters,fine?.elevationMeters),
+    moisture:mix(coarse?.moisture,fine?.moisture),
+    mountainInfluence:mix(coarse?.mountainInfluence,fine?.mountainInfluence),
+    registeredEastMeters:mix(coarse?.registeredEastMeters,fine?.registeredEastMeters),
+    registeredNorthMeters:mix(coarse?.registeredNorthMeters,fine?.registeredNorthMeters)
+  };
+}
+function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRing=false,evidenceLayerRole="focus"){
+  const lat0=job.lat0,lon0=job.lon0,data=new Uint8ClampedArray(size*size*4);
+  const metersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
+  const captureContributorPixels=Boolean(EVIDENCE_SURFACE_CONTRIBUTORS&&job.levelIndex<=2);
+  const contributorLayers=captureContributorPixels?Object.fromEntries(["base","macro","structure","landCover","final"].map(name=>[name,new Uint8ClampedArray(size*size*4)])):null;
+  const evidenceProbeTargets=captureContributorPixels?[
+    ["west",-.28,0],["west-inner",-.14,0],["center",0,0],["east-inner",.14,0],["east",.28,0],["north",0,.18],["south",0,-.18]
+  ].map(([id,fx,fy])=>{
+    const east=Number(fx)*job.dims.patchWidth,north=Number(fy)*job.dims.patchHeight;
+    return {id,east,north,x:Math.max(0,Math.min(size-1,Math.floor((east/spanEast+.5)*size))),y:Math.max(0,Math.min(size-1,Math.floor((.5-north/spanNorth)*size)))};
+  }):null;
+  const evidenceProbes=[];
+  const writeContributorRgb=(name,offset,rgb)=>{
+    const target=contributorLayers?.[name];if(!target)return;
+    target[offset]=Math.round(clamp(Number(rgb?.[0])||0,0,1)*255);
+    target[offset+1]=Math.round(clamp(Number(rgb?.[1])||0,0,1)*255);
+    target[offset+2]=Math.round(clamp(Number(rgb?.[2])||0,0,1)*255);
+    target[offset+3]=255;
+  };
+  const writeContributionRgb=(name,offset,rgb,gain)=>writeContributorRgb(name,offset,[0,1,2].map(i=>.5+(Number(rgb?.[i])||0)*gain));
+  // Bounded presentation-only contributor telemetry. These ranges reuse values
+  // already computed for this texture build; they add no geography queries or
+  // world scans and never participate in terrain authority.
+  const componentRanges={
+    sourceLuma:[Infinity,-Infinity],paletteLuma:[Infinity,-Infinity],baseLuma:[Infinity,-Infinity],
+    macro:[Infinity,-Infinity],coverLuma:[Infinity,-Infinity],landCoverLuma:[Infinity,-Infinity],structureTone:[Infinity,-Infinity],shade:[Infinity,-Infinity],finalLuma:[Infinity,-Infinity],
+    elevation:[Infinity,-Infinity],moisture:[Infinity,-Infinity],curvature:[Infinity,-Infinity],moistureGradient:[Infinity,-Infinity],ridgeValleyTint:[Infinity,-Infinity],registeredReliefShade:[Infinity,-Infinity]
+  };
+  const pushRange=(name,value)=>{
+    const n=Number(value);if(!Number.isFinite(n))return;
+    const r=componentRanges[name];if(!r)return;
+    if(n<r[0])r[0]=n;if(n>r[1])r[1]=n;
+  };
+  const luma3=v=>Number(v?.[0]||0)*.28+Number(v?.[1]||0)*.58+Number(v?.[2]||0)*.14;
+  // One shared coarse photometric basis is sampled by every concentric ring.
+  // Resolution still falls with distance, while only the focus layer adds a
+  // restrained fine-frequency delta. This prevents LOD identity from appearing
+  // as a differently tinted/contrasted patch.
+  const focusTextureSize=Math.max(1,Number(LOCAL_DETAIL_LEVELS[job.levelIndex]?.textureSize||size));
+  const sharedMetersPerTexel=Math.max(job.dims.patchWidth,job.dims.patchHeight)*LOCAL_SURROUND_SPAN_FACTOR/focusTextureSize;
+  // Phase 18 final acceptance: strategic concentric representations must apply
+  // the same low-frequency transfer to their common parent sample. Native texel
+  // size is reserved for the registered high-pass residual only.
+  const sharedPhotometryLock=job.levelIndex<=2;
+  const baseTransferMetersPerTexel=sharedPhotometryLock?sharedMetersPerTexel:metersPerTexel;
+  // Medium-context sampling is physically denser than the outer 6x fallback.
+  // Admit only a bounded share of that resolvable bandwidth so the parent
+  // representation keeps terrain structure without becoming a differently
+  // tinted LOD surface. The outer ring stays on the common coarse basis.
+  const contextResolutionRatio=clamp(sharedMetersPerTexel/Math.max(1,metersPerTexel),1,2);
+  const contextRefineWeight=contextRing?(sharedPhotometryLock?0:smoothstep01(clamp((contextResolutionRatio-1)/.55,0,1))*.18):0;
+  const useMicroDetail=metersPerTexel<=4&&!contextRing;
+  const phase=seededUnit("local-texture-macro")*Math.PI*2;
+  // Surface relief is presented as continuous hillshade, not synthetic
+  // cartographic contour bands. The previous 420 m sine contours and strong
+  // regional hillshade created giant concentric/diagonal shapes at 1/500 that
+  // looked like broken LOD seams. Keep the same canonical elevation/color
+  // samples, but use restrained scale-aware lighting instead.
+  // All focus/context layers use the same photometric transfer function. LOD
+  // differences come only from physical texel size / available frequencies,
+  // so a ready child reads as added detail instead of a tinted rectangle.
+  const contextHillshadeStrength=sharedMetersPerTexel<=8?.48:sharedMetersPerTexel<=30?.38:sharedMetersPerTexel<=100?.30:.24;
+  const contextDetailStrength=1;
+  const detailSalt=((seededUnit("local-terrain-detail")*1e6)|0)^0x2c1b3c6d;
+  const light=(()=>{const v=[-.55,.62,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
+  const flatShade=light[2];
+  // Fine terrain/biome detail is sampled in the Campaign-SEED registered
+  // coordinate frame. Patch recentering, viewport changes and LOD changes may
+  // change presentation, but never the world-space inputs to the detail field.
+  const surfaceAuthority=sharedSurfaceAuthority(job),focusAuthority=contextRing?null:focusSurfaceAuthority(job);
+  const mixSample=(ux,vz)=>{
+    const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth,coarse=surfaceAuthority.sample(east,north);
+    if(!focusAuthority)return coarse;
+    const edge=Math.min(ux,1-ux,vz,1-vz),refine=smoothstep01(clamp((edge-.025)/.145,0,1));
+    return refine<=0?coarse:blendSurfaceAuthoritySamples(coarse,focusAuthority.sample(east,north),refine);
+  };
+  for(let y=0;y<size;y++){
+    for(let x=0;x<size;x++){
+      const ux=(x+.5)/size,vz=(y+.5)/size,pixelOffset=(y*size+x)*4;
+      const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
+      const sample=mixSample(ux,vz),parentSample=surfaceAuthority.sample(east,north);
+      const sourceColor=Array.isArray(parentSample?.color)?parentSample.color:(parentSample?.land?[.28,.46,.20]:[.06,.22,.42]);
+      // PlanetGeography carries intentionally broad macro color fields. At local
+      // map scales those low-frequency fields can read as giant polygon wedges.
+      // Keep their SEED-derived identity as an accent, while deriving most local
+      // albedo from the same authoritative land/elevation state at every LOD.
+      const elevationBase=Number(parentSample?.elevationMeters||0),moistureBase=clamp(Number(parentSample?.moisture||.5),0,1);
+      const mountainIdentity=clamp(Number(parentSample?.mountainInfluence||0),0,1);
+      const alpineBase=smoothstep01((elevationBase-1700)/2600);
+      const broadPaletteWeight=parentSample?.land?lerp(.20,1,smoothstep01(clamp((58-baseTransferMetersPerTexel)/36,0,1))):1;
+      const paletteMoisture=lerp(.52,moistureBase,broadPaletteWeight),dry=1-paletteMoisture;
+      // Keep lowland, upland, and alpine presentation distinguishable using only
+      // canonical elevation/moisture/mountain inputs. These weights never create
+      // simulation identity; they expose existing SEED geography at map scale.
+      const uplandBase=smoothstep01((elevationBase-620)/2150),uplandWeight=clamp(Math.max(uplandBase,mountainIdentity*.58),0,1);
+      // At map scale, absolute kilometre-scale elevation bands should remain
+      // recognizable context rather than dominate local albedo as a giant pale
+      // contour. Retain a bounded share of the same canonical elevation identity
+      // while curvature/drainage/registered detail carry the readable structure.
+      const strategicBaseFlattenBand=parentSample?.land
+        ?smoothstep01(clamp((baseTransferMetersPerTexel-700)/650,0,1))*(1-smoothstep01(clamp((baseTransferMetersPerTexel-34000)/18000,0,1)))
+        :0;
+      const absoluteElevationPaletteWeight=parentSample?.land
+        ?lerp(lerp(.34,1,smoothstep01(clamp((58-baseTransferMetersPerTexel)/36,0,1))),.12,strategicBaseFlattenBand)
+        :1;
+      const paletteUplandWeight=uplandWeight*absoluteElevationPaletteWeight;
+      const paletteAlpineWeight=alpineBase*absoluteElevationPaletteWeight;
+      const lowlandPalette=[.16+.10*dry,.35+.14*paletteMoisture,.105+.065*paletteMoisture];
+      const uplandPalette=[.255+.080*dry,.365+.070*paletteMoisture,.190+.050*paletteMoisture];
+      const alpinePalette=[.440,.455,.410];
+      const foothillPalette=lowlandPalette.map((v,i)=>lerp(v,uplandPalette[i],paletteUplandWeight));
+      const localPalette=parentSample?.land?foothillPalette.map((v,i)=>lerp(v,alpinePalette[i],paletteAlpineWeight)):[.050,.18,.34];
+      // Preserve enough canonical globe hue to keep the same macro terrain
+      // recognizable through the projection handoff, then converge smoothly.
+      const coarseIdentity=smoothstep01(clamp((baseTransferMetersPerTexel-4)/70,0,1));
+      // The canonical globe source color can be nearly white on high peaks. At
+      // strategic tangent scale that imported broad chroma/luma created the
+      // remaining gray-white mountain smear even after curvature was clamped.
+      // Keep source-color identity, but cap its share as physical texels become
+      // coarse; elevation/moisture/mountain identity remains in localPalette.
+      const strategicSourceBand=smoothstep01(clamp((baseTransferMetersPerTexel-220)/900,0,1));
+      const strategicSourceCap=lerp(.110,.046,strategicSourceBand);
+      const macroIdentityWeight=clamp(.040+coarseIdentity*.050+mountainIdentity*.012,.040,strategicSourceCap);
+      let base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
+      pushRange("sourceLuma",luma3(sourceColor));pushRange("paletteLuma",luma3(localPalette));
+      pushRange("elevation",elevationBase);pushRange("moisture",moistureBase);
+      // Map-scale views should show terrain structure, not one kilometre-scale
+      // brightness wedge. Compress only land luminance above ~35 m/texel while
+      // preserving RGB differences; near-ground presentation is unchanged.
+      if(parentSample?.land&&baseTransferMetersPerTexel>35){
+        const compression=smoothstep01(clamp((baseTransferMetersPerTexel-35)/120,0,1))*.58;
+        const luma=base[0]*.28+base[1]*.58+base[2]*.14;
+        const targetLuma=.325+paletteAlpineWeight*.012;
+        const shift=(targetLuma-luma)*compression;
+        base=base.map(v=>clamp(v+shift,0,1));
+      }
+      const elevation=Number(sample?.elevationMeters||0);
+      const relief=clamp(elevationBase/5200,0,1);
+      // Detail frequencies are anchored to canonical SEED-registered meters.
+      // Rebuilding the same coordinates from a different patch/LOD therefore
+      // reveals the same field instead of rolling a new patch-relative pattern.
+      const worldEast=parentSample.registeredEastMeters,worldNorth=parentSample.registeredNorthMeters;
+      // Center-first refinement must add *information*, not a differently tinted
+      // tile. Keep the outer edge on the exact shared photometric basis and
+      // progressively admit finer registered-meter frequencies toward focus.
+      // Only frequency bandwidth changes; canonical geography/color authority
+      // remains identical for focus, medium and outer representations.
+      const focusEdgeDistance=Math.min(ux,1-ux,vz,1-vz);
+      // Fine information is an edge-feathered residual over the shared parent,
+      // not a radial brightness field. This removes the visible oval/ring at
+      // 1/500 while keeping the same registered-meter authority everywhere.
+      const focusRefineWeight=contextRing?0:smoothstep01(clamp((focusEdgeDistance-.018)/.105,0,1));
+      const photometricMetersPerTexel=contextRing
+        ? lerp(sharedMetersPerTexel,metersPerTexel,contextRefineWeight*.36)
+        : lerp(sharedMetersPerTexel,Math.max(metersPerTexel,sharedMetersPerTexel*.14),focusRefineWeight*.94);
+      const sharedMacro=worldSurfaceDetailValue(worldEast,worldNorth,sharedMetersPerTexel,phase)*contextDetailStrength;
+      const nativeMacro=worldSurfaceDetailValue(worldEast,worldNorth,metersPerTexel,phase);
+      // Keep the shared parent term at one constant gain over the whole child.
+      // Only the fine-minus-parent residual is feathered toward focus. A radial
+      // or edge-varying gain on the parent itself produced the pale 1/500 LOD
+      // boundary seen in fresh evidence.
+      const strategicFocusResidualScale=contextRing?1:lerp(.16,1,smoothstep01(clamp((1200-metersPerTexel)/900,0,1)));
+      const refinementGain=contextRing?contextRefineWeight*.22:focusRefineWeight*.86*strategicFocusResidualScale;
+      // Regional parents are physically coarse but still need readable landform
+      // structure while finer children stream. Reuse the already-computed,
+      // registered-meter macro signal and increase only its presentation gain in
+      // the 0.4-5 km/texel strategic band. No extra geography/noise samples are
+      // introduced, so preparation cost and canonical world identity stay fixed.
+      const strategicMapBand=smoothstep01(clamp((metersPerTexel-320)/900,0,1))*
+        (1-smoothstep01(clamp((metersPerTexel-5000)/5200,0,1)));
+      // Final Phase 16 evidence showed the remaining 1/75 ridge is not geometry:
+      // it is the already-computed regional macro/cover field being magnified
+      // before district refinement. Quiet only that coarse residual while the
+      // canonical base palette remains fully visible.
+      const coarseRegionalResidualBand=smoothstep01(clamp((metersPerTexel-700)/700,0,1))*
+        (1-smoothstep01(clamp((metersPerTexel-5000)/5200,0,1)));
+      const sharedCoarseRegionalResidualBand=smoothstep01(clamp((sharedMetersPerTexel-700)/700,0,1))*
+        (1-smoothstep01(clamp((sharedMetersPerTexel-34000)/18000,0,1)));
+      // The exact-screen contributor capture isolates the remaining broad
+      // regional band to coarse base/parent photometry. Suppress only the shared
+      // low-frequency parent term while retaining the already-generated
+      // fine-minus-parent registered residual as the physically resolvable
+      // high-pass signal. This adds no samples and changes no world authority.
+      const coarseRegionalSharedGain=1-sharedCoarseRegionalResidualBand*.82;
+      const coarseRegionalFineGain=1+coarseRegionalResidualBand*.08;
+      const sharedStrategicMapBand=smoothstep01(clamp((sharedMetersPerTexel-320)/900,0,1))*
+        (1-smoothstep01(clamp((sharedMetersPerTexel-34000)/18000,0,1)));
+      const sharedStrategicMacroGain=1+sharedStrategicMapBand*.26;
+      const residualStrategicMacroGain=1+strategicMapBand*(contextRing?.22:.48);
+      const sharedMacroContrast=(sharedPhotometryLock?1.08:(contextRing?1.06:1.10))*sharedStrategicMacroGain;
+      const residualMacroContrast=(contextRing?1.20:lerp(1.18,1.52,focusRefineWeight))*residualStrategicMacroGain;
+      const macro=sharedMacro*sharedMacroContrast*coarseRegionalSharedGain+
+        (nativeMacro-sharedMacro)*refinementGain*residualMacroContrast*coarseRegionalFineGain;
+      pushRange("baseLuma",luma3(base));pushRange("macro",macro);
+      let shade=1,cover=[0,0,0],structureContribution=[0,0,0],landCoverContribution=[0,0,0];
+      if(parentSample?.land){
+        // Shared context remains restrained while focus progressively samples
+        // a finer, still world-registered relief gradient. This restores
+        // readable 1/500 landform structure without a rectangular LOD edge.
+        // Sample relief over a physically resolvable baseline. At map scale a
+        // one-texel derivative can collapse broad canonical slopes into a flat wash;
+        // widening only the presentation gradient reveals coherent ridges/valleys
+        // while all heights still come from the same SEED-registered authority.
+        const mapDerivativeBand=smoothstep01(clamp((metersPerTexel-30)/100,0,1))*(1-smoothstep01(clamp((metersPerTexel-520)/380,0,1)));
+        const derivativeScale=lerp(2.2,1.25,mapDerivativeBand),derivativeCap=lerp(900,420,mapDerivativeBand);
+        const step=Math.max(photometricMetersPerTexel*derivativeScale,Math.min(derivativeCap,metersPerTexel*lerp(4.25,2.25,mapDerivativeBand))),dux=step/spanEast,dvz=step/spanNorth;
+        const sxP=mixSample(Math.min(1,ux+dux),vz),sxN=mixSample(Math.max(0,ux-dux),vz);
+        const syP=mixSample(ux,Math.max(0,vz-dvz)),syN=mixSample(ux,Math.min(1,vz+dvz));
+        const h0=elevation,hxP=Number(sxP.elevationMeters||0),hxN=Number(sxN.elevationMeters||0),hyP=Number(syP.elevationMeters||0),hyN=Number(syN.elevationMeters||0);
+        // Symmetric derivatives avoid directional smearing. The curvature term
+        // exposes broad ridges/valleys even when the local palette is nearly
+        // uniform, without inventing contour bands or patch-relative noise.
+        const canonicalGx=(hxP-hxN)/(2*step),canonicalGy=(hyP-hyN)/(2*step);
+        const curvatureMeters=(hxP+hxN+hyP+hyN-4*h0);
+        const curvatureSignal=clamp(-curvatureMeters/Math.max(1,step*.16),-1,1);
+        const slopeMagnitude=Math.hypot(canonicalGx,canonicalGy);
+        const slopeSignal=smoothstep01(clamp((slopeMagnitude-.006)/.13,0,1));
+        const mxP=Number(sxP.moisture??moistureBase),mxN=Number(sxN.moisture??moistureBase),myP=Number(syP.moisture??moistureBase),myN=Number(syN.moisture??moistureBase);
+        const moistureCurve=clamp(-(mxP+mxN+myP+myN-4*moistureBase)/.055,-1,1);
+        const moistureGradient=clamp(Math.hypot(mxP-mxN,myP-myN)/.16,0,1);
+        const topoRefine=contextRing?lerp(.78,1,contextRefineWeight):lerp(.88,1,focusRefineWeight);
+        const exaggeration=lerp(3.4,6.8,smoothstep01(clamp((metersPerTexel-2)/110,0,1)))*topoRefine;
+        const gx=canonicalGx*exaggeration,gy=canonicalGy*exaggeration,nl=Math.hypot(gx,gy,1);
+        const lit=(-gx*light[0]-gy*light[1]+light[2])/nl;
+        // A continental slope is truthful geography, but at 1/500 it should read
+        // as broad elevation context rather than a giant light/dark sweep. Fade
+        // directional slope lighting out above ~30 m/texel and keep local
+        // curvature/drainage contrast, which is stable in registered meters.
+        const slopeLightingWeight=smoothstep01(clamp((34-metersPerTexel)/28,0,1));
+        // At the 1/500 map tier, broad slope/curvature lighting can still turn a
+        // truthful kilometre-scale landform into one conspicuous pale arc. Fade
+        // only that low-frequency presentation component while retaining the
+        // registered-meter cover/macro field and full near-ground relief.
+        const nearReliefWeight=lerp(.30,1,smoothstep01(clamp((24-metersPerTexel)/16,0,1)));
+        const broadReliefWeight=lerp(.36,1,smoothstep01(clamp((58-metersPerTexel)/34,0,1)));
+        const rawHillshadeStrength=clamp((.05+focusRefineWeight*.26)*slopeLightingWeight*nearReliefWeight*broadReliefWeight,.010,.68);
+        const hillshadeCap=metersPerTexel<=6?.70:metersPerTexel<=30?.26:metersPerTexel<=120?.055:.025;
+        const focusHillshadeStrength=Math.min(rawHillshadeStrength,hillshadeCap);
+        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.94:.91,contextRing?1.06:1.09);
+        const mapStructureBoost=lerp(1.06,1,smoothstep01(clamp((30-metersPerTexel)/28,0,1)));
+        // 1/500 needs readable ridges/valleys without restoring the broad
+        // low-frequency pale sweep. Boost only the high-pass curvature/drainage
+        // residual in the physically map-scale band; near-ground and very coarse
+        // parent photometry remain unchanged.
+        const mapHighPassBand=smoothstep01(clamp((metersPerTexel-32)/86,0,1))*(1-smoothstep01(clamp((metersPerTexel-420)/360,0,1)));
+        const baseStructureScale=lerp(.52,1,smoothstep01(clamp((52-metersPerTexel)/30,0,1)))*broadReliefWeight;
+        // Keep the existing near-map high-pass band, but carry a restrained
+        // version of the same canonical curvature/drainage form into the first
+        // regional parent. This prevents the ready parent from reading as a
+        // featureless color wash during animated zoom.
+        const mapStructureScale=clamp(
+          baseStructureScale+
+          mapHighPassBand*(contextRing?.16:.34)+
+          strategicMapBand*(contextRing?.22:.42),
+          0,1.08
+        );
+        const curvatureReliefWeight=lerp(nearReliefWeight,1,Math.max(mapHighPassBand*.92,strategicMapBand*.58));
+        const curvatureTone=curvatureSignal*(contextRing?lerp(.030,.048,contextRefineWeight):lerp(.046,.080,focusRefineWeight))*mapStructureBoost*mapStructureScale*curvatureReliefWeight;
+        const slopeTone=-slopeSignal*(contextRing?lerp(.006,.014,contextRefineWeight):lerp(.010,.024,focusRefineWeight))*slopeLightingWeight;
+        const drainageTone=(moistureCurve*(contextRing?lerp(.010,.018,contextRefineWeight):lerp(.016,.032,focusRefineWeight))-moistureGradient*(contextRing?.008:.012))*mapStructureScale*lerp(.9,1.22,mapHighPassBand);
+        // Directional shading is admitted only where the local high-pass shape
+        // actually bends or drains. A uniform continental slope therefore stays
+        // quiet, while real ridges/valleys gain readable form at 1/500.
+        const terrainShapeGate=clamp(Math.abs(curvatureSignal)*.78+moistureGradient*.42,0,1);
+        const directionalBand=mapHighPassBand+strategicMapBand*(contextRing?.38:.62);
+        const directionalShapeTone=(lit-flatShade)*directionalBand*terrainShapeGate*(contextRing?.052:.095);
+        // Coarse authority rasters can legitimately contain strong kilometre-scale
+        // curvature, but letting that term reach full local-map contrast makes one
+        // soft ridge dominate the first parent. Clamp only the combined strategic
+        // presentation residual; the signed canonical inputs remain unchanged.
+        const rawStructureTone=curvatureTone+slopeTone+drainageTone+directionalShapeTone;
+        const strategicStructureLimit=lerp(.090,.044,strategicMapBand);
+        const structureTone=clamp(rawStructureTone,-strategicStructureLimit,strategicStructureLimit);
+        pushRange("structureTone",structureTone);
+        cover=[
+          structureTone-moistureGradient*mapHighPassBand*.006,
+          structureTone*.95+drainageTone*.16+moistureCurve*mapHighPassBand*.005,
+          curvatureTone*.74+slopeTone*.64+drainageTone*.64+directionalShapeTone*.72
+        ];
+        // At strategic-map bandwidth, expose signed canonical landform shape as
+        // hue as well as luminance: convex ridges become slightly warmer/drier,
+        // while concave/moist drainage becomes cooler/greener. This is derived
+        // only from the same registered elevation/moisture samples above, so it
+        // adds coherent ridge/valley readability without generic noise or a
+        // camera-relative tint.
+        const shapedCurvature=Math.sign(curvatureSignal)*Math.sqrt(Math.abs(curvatureSignal));
+        const shapedMoistureCurve=Math.sign(moistureCurve)*Math.sqrt(Math.abs(moistureCurve));
+        const strategicFormBand=Math.max(mapHighPassBand,strategicMapBand*.58);
+        const ridgeSignal=Math.max(0,shapedCurvature)*strategicFormBand*mapStructureScale;
+        const valleySignal=Math.max(0,-shapedCurvature)*strategicFormBand*mapStructureScale;
+        const wetValleySignal=Math.max(0,shapedMoistureCurve)*strategicFormBand*mapStructureScale;
+        const drainageSignal=Math.sqrt(Math.max(0,moistureGradient))*strategicFormBand*mapStructureScale;
+        const strategicFormGain=1+strategicMapBand*(contextRing?.08:.12);
+        const formStrength=(contextRing?.58:1)*strategicFormGain;
+        const formTint=[
+          (ridgeSignal*.086-valleySignal*.030-wetValleySignal*.012)*formStrength,
+          (valleySignal*.074+wetValleySignal*.034+drainageSignal*.012-ridgeSignal*.014)*formStrength,
+          (valleySignal*.026+wetValleySignal*.020+drainageSignal*.012-ridgeSignal*.034)*formStrength
+        ];
+        cover=cover.map((v,i)=>v+formTint[i]);
+        pushRange("curvature",curvatureSignal);pushRange("moistureGradient",moistureGradient);pushRange("ridgeValleyTint",luma3(formTint));
+        // The map-scale albedo field can remain soft even when canonical
+        // PlanetGeography elevation is locally smooth. Read a directional
+        // derivative from the existing registered-meter terrain-detail field:
+        // this turns coherent SEED structure into ridge/valley lighting rather
+        // than another brightness blob. Two bounded samples per pixel are used,
+        // with no geography query or simulation authority.
+        const registeredReliefBand=smoothstep01(clamp((metersPerTexel-28)/110,0,1))*
+          (1-smoothstep01(clamp((metersPerTexel-500)/420,0,1)));
+        let registeredReliefShade=0;
+        if(registeredReliefBand>.001){
+          const reliefMpt=Math.max(45,metersPerTexel),reliefStep=Math.max(150,Math.min(920,metersPerTexel*4.6));
+          const relief0=registeredMapReliefValue(worldEast,worldNorth,reliefMpt,detailSalt+503);
+          const reliefLit=registeredMapReliefValue(
+            worldEast-light[0]*reliefStep,
+            worldNorth-light[1]*reliefStep,
+            reliefMpt,
+            detailSalt+503
+          );
+          const derivative=clamp((reliefLit-relief0)*.78,-.052,.052);
+          registeredReliefShade=clamp(derivative*registeredReliefBand*(contextRing?.45:1),-.048,.048);
+          cover=[
+            cover[0]+registeredReliefShade*.88,
+            cover[1]+registeredReliefShade,
+            cover[2]+registeredReliefShade*.78
+          ];
+        }
+        pushRange("registeredReliefShade",registeredReliefShade);
+        // Phase 16 flat-height A/B proved the residual defect is in albedo
+        // composition, not tangent geometry. Keep repeated curvature/drainage
+        // morphology strongly suppressed through regional/district/map bandwidth
+        // and fade that suppression out only as genuinely local detail resolves.
+        const strategicStructureMetersPerTexel=sharedPhotometryLock?baseTransferMetersPerTexel:metersPerTexel;
+        const strategicStructureUpperStart=sharedPhotometryLock?34000:5200;
+        const strategicStructureUpperSpan=sharedPhotometryLock?18000:4800;
+        const strategicStructureAttenuationBand=
+          smoothstep01(clamp((strategicStructureMetersPerTexel-30)/150,0,1))*
+          (1-smoothstep01(clamp((strategicStructureMetersPerTexel-strategicStructureUpperStart)/strategicStructureUpperSpan,0,1)));
+        // Phase 19: strategic context rings must suppress the same coarse
+        // structure family as the focus child. At the local-map tier, however,
+        // recover only physically resolvable registered-meter structure so
+        // 1/500 does not collapse into a featureless green wash.
+        const localMapStructureRecovery=sharedPhotometryLock?0:smoothstep01(clamp((260-metersPerTexel)/150,0,1));
+        const strategicStructureSuppression=lerp(.86,.42,localMapStructureRecovery);
+        const strategicStructureGain=1-strategicStructureAttenuationBand*strategicStructureSuppression;
+        if(strategicStructureAttenuationBand>.001)cover=cover.map(v=>v*strategicStructureGain);
+        // Phase 19 final: the fresh transition evidence isolates the remaining
+        // gray ridge to strategic medium/outer context, while the focus child is
+        // already clean. Strategic context therefore keeps the exact shared
+        // parent/base and registered cover, but drops native coarse directional
+        // structure/lighting that becomes an unreadable ridge when magnified.
+        // Local-map tiers keep the recovered registered-meter structure.
+        if(sharedPhotometryLock&&contextRing){cover=[0,0,0];shade=1;}
+        structureContribution=cover.slice();
+        const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevationBase).map(v=>v*contextDetailStrength);
+        const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevationBase);
+        const coverGain=contextRing?contextRefineWeight*.38:focusRefineWeight*.98*strategicFocusResidualScale;
+        // Prefer the already SEED-registered land-cover field for strategic-map
+        // readability. Its 3.6 km / 1.5 km / 700 m structure is physically
+        // resolvable at 1/500 and avoids re-amplifying continental relief.
+        const mapCoverBoost=1+smoothstep01(clamp((220-metersPerTexel)/180,0,1))*.20;
+        const sharedMapCoverBoost=1+smoothstep01(clamp((220-sharedMetersPerTexel)/180,0,1))*.20;
+        const strategicCoverBoost=1+strategicMapBand*(contextRing?.03:.06);
+        const sharedStrategicCoverBoost=1+sharedStrategicMapBand*.045;
+        const sharedCoverContrast=(sharedPhotometryLock?1.08:(contextRing?1.06:1.10))*sharedMapCoverBoost*sharedStrategicCoverBoost;
+        const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost*strategicCoverBoost;
+        const sharedCoarseRegionalCoverGain=1-sharedCoarseRegionalResidualBand*.48;
+        const residualCoarseRegionalCoverGain=1-coarseRegionalResidualBand*.16;
+        const landCover=sharedCover.map((v,i)=>v*sharedCoverContrast*sharedCoarseRegionalCoverGain+
+          (nativeCover[i]-v)*coverGain*residualCoverContrast*residualCoarseRegionalCoverGain);
+        landCoverContribution=landCover.slice();
+        pushRange("landCoverLuma",luma3(landCover));
+        cover=cover.map((v,i)=>v+landCover[i]);
+      }
+      const reliefTintWeight=parentSample?.land&&baseTransferMetersPerTexel>35?lerp(.06,1,smoothstep01(clamp((180-baseTransferMetersPerTexel)/145,0,1))):1;
+      const identityTint=parentSample?.land?[relief*.040*reliefTintWeight,relief*.036*reliefTintWeight,relief*.020*reliefTintWeight]:[-.010,-.003,.024];
+      pushRange("coverLuma",luma3(cover));pushRange("shade",shade);
+      const authoritative=base.map((v,i)=>clamp((v+macro*(i===2?.70:1)+identityTint[i]+cover[i])*shade,0,1));
+      let displayColor=authoritative;
+      // The first regional parent already contains canonical macro, curvature,
+      // drainage and land-cover structure, but their combined tone can collapse
+      // into a soft green wash at strategic scale. Increase only the contrast of
+      // those already-computed values around the canonical local palette. This
+      // adds no geography/noise query and leaves near-ground photometry alone.
+      if(parentSample?.land&&(sharedPhotometryLock?sharedStrategicMapBand:strategicMapBand)>.001){
+        const regionalContrast=1+(sharedPhotometryLock?sharedStrategicMapBand:strategicMapBand)*(sharedPhotometryLock?.04:(contextRing?.03:.05));
+        const palettePivot=clamp(luma3(localPalette),.20,.58);
+        displayColor=displayColor.map(v=>clamp(palettePivot+(v-palettePivot)*regionalContrast,0,1));
+      }
+      // At the 1/500-style local-map band, boost only contrast already present
+      // in the registered macro/curvature/cover composite. This is a display
+      // transfer, not new noise or geography sampling, and fades out before
+      // ground-scale rendering.
+      if(parentSample?.land){
+        const localMapReadabilityBand=smoothstep01(clamp((metersPerTexel-18)/34,0,1))*
+          (1-smoothstep01(clamp((metersPerTexel-230)/170,0,1)));
+        if(localMapReadabilityBand>.001){
+          const pivot=clamp(luma3(localPalette),.20,.58),gain=1+localMapReadabilityBand*.18;
+          displayColor=displayColor.map(v=>clamp(pivot+(v-pivot)*gain,0,1));
+        }
+      }
+      // Coarse tangent tiles should retain the land hue already present in the
+      // canonical moisture/elevation palette rather than collapsing into gray
+      // under broad low-frequency relief. Restore chroma while preserving the
+      // computed luminance, so this changes only presentation and not authority.
+      if(parentSample?.land&&baseTransferMetersPerTexel>18){
+        const chromaRestore=.42*smoothstep01(clamp((baseTransferMetersPerTexel-18)/82,0,1));
+        const displayLuma=luma3(displayColor),paletteLuma=luma3(localPalette);
+        const chromaTarget=localPalette.map(v=>clamp(v+(displayLuma-paletteLuma),0,1));
+        displayColor=displayColor.map((v,i)=>lerp(v,chromaTarget[i],chromaRestore));
+      }
+      if(useMicroDetail){
+        const micro=localSurfaceSample(worldEast,worldNorth,sample).color;
+        // As the physical texel size approaches gameplay scale, let canonical
+        // registered-meter micro terrain carry more of the surface. This keeps
+        // close props visually grounded while coarser views retain macro identity.
+        const closeWeight=smoothstep01((4-metersPerTexel)/3.5),microWeight=lerp(.16,.32,closeWeight);
+        displayColor=authoritative.map((v,i)=>clamp(v*(1-microWeight)+micro[i]*microWeight,0,1));
+      }
+      // High peaks are legitimately snow-covered, but the canonical near-white
+      // macro palette plus hillshade used to saturate into featureless white.
+      // Compress only alpine highlights, preserving SEED-derived hue/detail.
+      if(parentSample?.land&&elevation>3400){
+        const snowWeight=smoothstep01((elevation-3400)/2600),cool=[0,.008,.018];
+        displayColor=displayColor.map((v,i)=>{
+          const compressed=v<=.52?v:.52+(v-.52)*.56;
+          return clamp(lerp(v,compressed,snowWeight)+cool[i]*snowWeight,0,.84);
+        });
+      }
+      // Fine canonical albedo roughness keeps close alpine terrain readable
+      // without inventing patch-local noise. Frequencies remain registered-meter
+      // anchored, so the same coordinate has the same mottling in every rebuild.
+      if(parentSample?.land&&metersPerTexel<=8){
+        const coarseScale=Math.max(2,metersPerTexel*6),fineScale=Math.max(.75,metersPerTexel*2);
+        const rough=surfaceValueNoise(worldEast,worldNorth,coarseScale,detailSalt+211)*.040+
+          surfaceValueNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.018;
+        displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.82:i===1?.94:1),0,.86));
+      }
+      pushRange("finalLuma",luma3(displayColor));
+      if(evidenceProbeTargets){
+        for(const target of evidenceProbeTargets){
+          if(target.x!==x||target.y!==y)continue;
+          const probeEdge=Math.min(ux,1-ux,vz,1-vz);
+          const probeAlpha=featherEdges?smoothstep01(clamp(probeEdge/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1)):1;
+          evidenceProbes.push(Object.freeze({
+            id:target.id,layerRole:String(evidenceLayerRole),pixel:Object.freeze({x,y}),uv:Object.freeze({u:Number(ux.toFixed(6)),v:Number(vz.toFixed(6))}),
+            offsetMeters:Object.freeze({east:Number(east.toFixed(3)),north:Number(north.toFixed(3))}),
+            registeredMeters:Object.freeze({east:Number(Number(parentSample?.registeredEastMeters||0).toFixed(3)),north:Number(Number(parentSample?.registeredNorthMeters||0).toFixed(3))}),
+            sourceColor:Object.freeze(sourceColor.map(v=>Number(Number(v||0).toFixed(6)))),localPalette:Object.freeze(localPalette.map(v=>Number(Number(v||0).toFixed(6)))),
+            base:Object.freeze(base.map(v=>Number(Number(v||0).toFixed(6)))),final:Object.freeze(displayColor.map(v=>Number(Number(v||0).toFixed(6)))),
+            elevationMeters:Number(elevationBase.toFixed(3)),moisture:Number(moistureBase.toFixed(6)),alpha:Number(probeAlpha.toFixed(6)),
+            metersPerTexel:Number(metersPerTexel.toFixed(3))
+          }));
+        }
+      }
+      if(contributorLayers){
+        writeContributorRgb("base",pixelOffset,base);
+        writeContributionRgb("macro",pixelOffset,[macro,macro,macro],3.2);
+        writeContributionRgb("structure",pixelOffset,structureContribution,5.0);
+        writeContributionRgb("landCover",pixelOffset,landCoverContribution,5.0);
+        writeContributorRgb("final",pixelOffset,displayColor);
+      }
+      const rgba=rgbaFromColor(displayColor),i=pixelOffset;
+      // Shared photometry makes the rectangular resource edge visually neutral;
+      // use only a broad edge feather for the subtle fine-frequency delta.
+      const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
+      const edgeCoverage=smoothstep01(clamp(edgeDistance/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
+      data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*edgeCoverage):255;
+      // Texture generation is cooperative below a full row. This protects the
+      // main-thread budget on slower/software renderers without changing any
+      // pixel value, coordinate sample, or deterministic ordering.
+      if((x&31)===31&&x+1<size)yield .0625;
+    }
+    yield 1;
+  }
+  const roundedRanges=Object.fromEntries(Object.entries(componentRanges).map(([name,range])=>[
+    name,Object.freeze({
+      min:Number((Number.isFinite(range[0])?range[0]:0).toFixed(5)),
+      max:Number((Number.isFinite(range[1])?range[1]:0).toFixed(5)),
+      span:Number(((Number.isFinite(range[1])?range[1]:0)-(Number.isFinite(range[0])?range[0]:0)).toFixed(5))
+    })
+  ]));
+  return {
+    data,size,metersPerTexel,
+    componentRanges:Object.freeze(roundedRanges),
+    contributorPixels:captureContributorPixels?{revision:"wp020-surface-contributors-v2",layerRole:String(evidenceLayerRole),size,spanEast:Number(spanEast),spanNorth:Number(spanNorth),metersPerTexel:Number(metersPerTexel.toFixed(3)),layers:contributorLayers,probes:Object.freeze(evidenceProbes.slice())}:null,
+    coordinateAuthority:"Campaign-SEED + SeedCoordinateFabric.registeredMeters",
+    coordinateRevision:coordinateFabricAuthority()?.revisionSignature||null,
+    patchRelativeBiomeNoise:false
+  };
+}
+function stitchSurroundCenterToDetail(detail,surround,spanFactor){
+  const ds=Number(detail?.size||0),ss=Number(surround?.size||0),factor=Math.max(1,Number(spanFactor||1));
+  if(!ds||!ss||!detail?.data||!surround?.data||factor<=1)return;
+  // The central 1/spanFactor area of the surround covers exactly the detail
+  // patch's world bounds. Blend that center toward the already-generated detail
+  // using the same edge feather curve as the foreground patch. The outer
+  // surround remains coarse/bounded, while the overlap becomes photometrically
+  // continuous instead of exposing a rectangular LOD seam.
+  for(let sy=0;sy<ss;sy++){
+    const sv=(sy+.5)/ss,dv=(sv-.5)*factor+.5;
+    if(dv<=0||dv>=1)continue;
+    const dy=Math.max(0,Math.min(ds-1,Math.floor(dv*ds)));
+    for(let sx=0;sx<ss;sx++){
+      const su=(sx+.5)/ss,du=(su-.5)*factor+.5;
+      if(du<=0||du>=1)continue;
+      const dx=Math.max(0,Math.min(ds-1,Math.floor(du*ds)));
+      const edge=Math.min(du,1-du,dv,1-dv),w=smoothstep01(clamp(edge/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
+      if(w<=0)continue;
+      const si=(sy*ss+sx)*4,di=(dy*ds+dx)*4;
+      surround.data[si]=Math.round(lerp(surround.data[si],detail.data[di],w));
+      surround.data[si+1]=Math.round(lerp(surround.data[si+1],detail.data[di+1],w));
+      surround.data[si+2]=Math.round(lerp(surround.data[si+2],detail.data[di+2],w));
+    }
+  }
+}
+function carveNestedRingCenterAlpha(pixels,innerCoverageRatio){
+  const size=Number(pixels?.size||0),data=pixels?.data,ratio=Math.max(1,Number(innerCoverageRatio||1));
+  if(!size||!data||ratio<=1)return;
+  // Keep the coarse parent fully present through the child's feather band, then
+  // remove it only where the finer child is already almost opaque. This avoids
+  // both transparent-sort blur in the focus core and the old 0.75-alpha hole.
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const u=(x+.5)/size,v=(y+.5)/size,innerU=(u-.5)*ratio+.5,innerV=(v-.5)*ratio+.5;
+    if(innerU<=0||innerU>=1||innerV<=0||innerV>=1)continue;
+    const edge=Math.min(innerU,1-innerU,innerV,1-innerV);
+    const innerCoverage=smoothstep01(clamp(edge/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
+    const coreCut=smoothstep01(clamp((innerCoverage-.92)/.075,0,1));
+    if(coreCut<=0)continue;
+    const i=(y*size+x)*4;
+    data[i+3]=Math.round(Number(data[i+3]||0)*(1-coreCut));
+  }
+}
+function* localResourceSteps(job){
+  job.currentPreparationPhase="mesh-heightfield";
+  const meshData=yield* tangentMeshSteps(job);
+  const size=LOCAL_DETAIL_LEVELS[job.levelIndex].textureSize;
+  // Center-first streaming presentation: build the authoritative 1x focus
+  // patch first, then a cheaper 3x medium ring, then the 6x coarse fallback.
+  // All three sample the same SEED-registered coordinates; only presentation
+  // density differs.
+  job.currentPreparationPhase="texture-focus";
+  const detail=yield* surfaceTextureSteps(job,job.dims.patchWidth,job.dims.patchHeight,size,true,false,"focus");
+  const broadParent=job.levelIndex<=1;
+  const mediumSize=broadParent?Math.max(80,Math.round(size*.50)):Math.max(96,Math.round(size*LOCAL_MEDIUM_RING_TEXTURE_SCALE));
+  const surroundSize=broadParent?Math.max(96,Math.round(size*.58)):size;
+  job.currentPreparationPhase="texture-medium";
+  const medium=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR,job.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR,mediumSize,true,true,"medium");
+  job.currentPreparationPhase="texture-surround";
+  const surround=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,job.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR,surroundSize,false,true,"outer");
+  job.currentPreparationPhase="ring-compose";
+  yield {forceSlice:true};
+  // Phase 19: at strategic tiers the focus child is already an edge-feathered
+  // registered residual over the shared parent. Keep the medium parent fully
+  // continuous underneath it instead of rewriting/carving the parent center;
+  // the old nested carve could make the focus footprint visible as a rectangle.
+  // Local/ground tiers retain the established true-ring path.
+  if(job.levelIndex<=2){
+    // Phase 19 final: strategic children are already edge-feathered registered
+    // residuals over one shared parent basis. Keep BOTH coarser parents fully
+    // continuous underneath them. Rewriting/carving either parent reintroduces
+    // a magnified rectangular/ridge handoff during animated strategic zoom.
+  }else{
+    stitchSurroundCenterToDetail(detail,medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
+    stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
+    carveNestedRingCenterAlpha(medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
+    carveNestedRingCenterAlpha(surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
+  }
+  yield {forceSlice:true};
+  job.currentPreparationPhase="wilderness-plan";
+  const wildernessPlan=yield* prepareLocalWildernessPlanSteps(job);
+  // Normal alpha compositing already gives continuous coverage when the
+  // feathered finer layer is drawn over an opaque/coarser parent. Carving the
+  // parent to (1-childAlpha) creates an opacity hole: a + (1-a)^2 bottoms out
+  // at 0.75, exposing the lower representation as a dark rectangular halo.
+  // Keep medium fully present beneath detail, and surround fully present beneath
+  // medium; z ordering and the shared world-stitched colors perform the handoff.
+  return {meshData,detail,medium,surround,wildernessPlan};
+}
+function textureFromPixels(pixels){
+  const canvas2d=document.createElement("canvas");canvas2d.width=pixels.size;canvas2d.height=pixels.size;
+  // Preserve the detail texture's edge alpha; opacityMap uses this exact
+  // channel to feather the canonical child into its world-matched surround.
+  const ctx=canvas2d.getContext("2d",{alpha:true});ctx.putImageData(new ImageData(pixels.data,pixels.size,pixels.size),0,0);
+  const texture=new pc.Texture(device,{width:pixels.size,height:pixels.size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
+  texture.flipY=true;
+  texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
+  texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.anisotropy=localTextureAnisotropy();texture.setSource(canvas2d);
+  return texture;
+}
+function surfaceContributorEvidence(){
+  const records=displayResource?.surfaceContributorPixels||null;
+  if(!EVIDENCE_SURFACE_CONTRIBUTORS||!records?.focus?.layers)return Object.freeze({available:false,enabled:Boolean(EVIDENCE_SURFACE_CONTRIBUTORS),reason:"no-layer-contributor-capture"});
+  const roles={};
+  for(const [role,record] of Object.entries(records)){
+    if(!record?.layers)continue;
+    const images={};
+    for(const [name,pixels] of Object.entries(record.layers)){
+      const c=document.createElement("canvas");c.width=record.size;c.height=record.size;
+      c.getContext("2d",{alpha:false}).putImageData(new ImageData(pixels,record.size,record.size),0,0);
+      images[name]=c.toDataURL("image/png");
+    }
+    roles[role]=Object.freeze({layerRole:record.layerRole,size:record.size,spanEast:record.spanEast,spanNorth:record.spanNorth,metersPerTexel:record.metersPerTexel,images:Object.freeze(images),probes:Object.freeze((record.probes||[]).slice())});
+  }
+  return Object.freeze({
+    available:true,enabled:true,revision:records.focus.revision,resourceSignature:displayResource?.signature||null,
+    level:displayResource?.dims?.levelId||null,
+    componentRanges:displayResource?.detail?.surfaceComponentRanges||null,
+    roles:Object.freeze(roles),worldResampleCount:0,geographyQueryCount:0
+  });
+}
+function clearWp020EvidenceFlatMesh(){
+  if(!wp020EvidenceFlatMesh)return;
+  try{wp020EvidenceFlatMesh.destroy?.();}catch(_){}
+  wp020EvidenceFlatMesh=null;wp020EvidenceFlatMeshSignature=null;
+}
+function wp020PresentationEvidenceState(){
+  const dims=displayResource?.dims||null,detail=displayResource?.detail||null;
+  const color3=color=>color?Object.freeze([Number(color.r.toFixed(6)),Number(color.g.toFixed(6)),Number(color.b.toFixed(6))]):null;
+  const rect=canvas?.getBoundingClientRect?.()||{width:0,height:0};
+  const compensation=Number(projectionPresentation?.presentationCompensation??(dims?localPresentationCompensation(zoomState.scalar,displayResource.levelIndex):1));
+  return Object.freeze({
+    scalar:Number(zoomState.scalar.toFixed(9)),targetScalar:Number(zoomState.targetScalar.toFixed(9)),
+    focusLatitudeRadians:Number(zoomState.focusLatitudeRadians.toFixed(9)),focusLongitudeRadians:Number(zoomState.focusLongitudeRadians.toFixed(9)),
+    yawDegrees:Number(yawDegrees.toFixed(6)),pitchDegrees:Number(pitchDegrees.toFixed(6)),
+    viewport:Object.freeze({width:Number(rect.width.toFixed(3)),height:Number(rect.height.toFixed(3))}),
+    resourceSignature:displayResource?.signature||null,level:dims?.levelId||null,
+    presentationCompensation:Number(compensation.toFixed(6)),
+    patchScale:Number(Number(projectionPresentation?.patchScale||0).toFixed(9)),
+    shownHeightMeters:Number(Number(projectionPresentation?.shownHeightMeters||0).toFixed(3)),
+    tangentOpacity:Number(Number(projectionPresentation?.tangentOpacity||0).toFixed(6)),
+    mapScaleShellOpacity:Number(Number(projectionPresentation?.mapScaleShellOpacity||0).toFixed(6)),
+    reliefGlobeOpacity:Number(Number(projectionPresentation?.reliefGlobeOpacity||0).toFixed(6)),
+    representationOwner:projectionPresentation?.representationOwner||null,
+    cameraOrthoHeight:Number(Number(cameraEntity?.camera?.orthoHeight||0).toFixed(9)),
+    meshHeightRange:detail?.meshHeightRange||null,
+    detailMetersPerTexel:Number(Number(detail?.detailMetersPerTexel||0).toFixed(3)),
+    texture:Object.freeze({minFilter:detail?.minFilter||null,magFilter:detail?.magFilter||null,anisotropy:Number(detail?.anisotropy||0)}),
+    material:Object.freeze({
+      diffuse:color3(tangentPatchMaterial?.diffuse),emissive:color3(tangentPatchMaterial?.emissive),
+      emissiveIntensity:Number(Number(tangentPatchMaterial?.emissiveIntensity||0).toFixed(6)),
+      opacity:Number(Number(tangentPatchMaterial?.opacity||0).toFixed(6)),opacityMapChannel:tangentPatchMaterial?.opacityMapChannel||null
+    })
+  });
+}
+function applyWp020EvidenceLayerVisibility(){
+  if(!EVIDENCE_WP020_PRESENTATION_ISOLATION)return;
+  const layerMode=["focus-only","medium-only","outer-only"].includes(wp020EvidencePresentationMode)?wp020EvidencePresentationMode:null;
+  if(!layerMode)return;
+  if(!wp020EvidenceVisibilityRestore)wp020EvidenceVisibilityRestore={focus:Boolean(tangentPatch?.enabled),medium:Boolean(focusRingPatch?.enabled),outer:Boolean(horizonSkirt?.enabled)};
+  if(tangentPatch)tangentPatch.enabled=layerMode==="focus-only";
+  if(focusRingPatch)focusRingPatch.enabled=layerMode==="medium-only";
+  if(horizonSkirt)horizonSkirt.enabled=layerMode==="outer-only";
+}
+function restoreWp020EvidenceLayerVisibility(){
+  if(!wp020EvidenceVisibilityRestore)return;
+  if(tangentPatch)tangentPatch.enabled=Boolean(wp020EvidenceVisibilityRestore.focus);
+  if(focusRingPatch)focusRingPatch.enabled=Boolean(wp020EvidenceVisibilityRestore.medium);
+  if(horizonSkirt)horizonSkirt.enabled=Boolean(wp020EvidenceVisibilityRestore.outer);
+  wp020EvidenceVisibilityRestore=null;
+}
+function armWp020TransitionEvidenceFreeze(options={}){
+  if(!EVIDENCE_WP020_PRESENTATION_ISOLATION)return Object.freeze({available:false,enabled:false,armed:false,frozen:false,reason:"evidence-flag-required"});
+  const minScalar=clamp(Number(options?.minScalar??.67),ZOOM_MIN,ZOOM_MAX),level=String(options?.level||"regional-detail");
+  wp020EvidenceTransitionFreeze=false;
+  wp020EvidenceTransitionFreezeState=null;
+  wp020EvidenceTransitionArm=Object.freeze({minScalar,level});
+  return Object.freeze({available:true,enabled:true,armed:true,frozen:false,minScalar,level});
+}
+function wp020TransitionEvidenceFreezeState(){
+  return Object.freeze({
+    available:Boolean(EVIDENCE_WP020_PRESENTATION_ISOLATION),
+    armed:Boolean(wp020EvidenceTransitionArm),
+    frozen:Boolean(wp020EvidenceTransitionFreeze),
+    arm:wp020EvidenceTransitionArm,
+    state:wp020EvidenceTransitionFreezeState
+  });
+}
+function releaseWp020TransitionEvidenceFreeze(){
+  wp020EvidenceTransitionFreeze=false;
+  wp020EvidenceTransitionArm=null;
+  const previous=wp020EvidenceTransitionFreezeState;
+  wp020EvidenceTransitionFreezeState=null;
+  return Object.freeze({available:Boolean(EVIDENCE_WP020_PRESENTATION_ISOLATION),released:true,previous});
+}
+function setWp020PresentationEvidenceMode(mode="normal"){
+  const requested=String(mode||"normal");
+  if(!EVIDENCE_WP020_PRESENTATION_ISOLATION)return Object.freeze({available:false,enabled:false,mode:"normal",reason:"evidence-flag-required"});
+  if(!displayResource||!tangentPatch?.render||!tangentPatchMaterial||!pc||!device)return Object.freeze({available:false,enabled:true,mode:wp020EvidencePresentationMode,reason:"display-resource-unavailable"});
+  if(!["normal","flat-height","focus-only","medium-only","outer-only"].includes(requested))return Object.freeze({available:false,enabled:true,mode:wp020EvidencePresentationMode,reason:"unsupported-mode"});
+  restoreWp020EvidenceLayerVisibility();
+  if(requested==="flat-height"){
+    if(!wp020EvidenceFlatMesh||wp020EvidenceFlatMeshSignature!==displayResource.signature){
+      clearWp020EvidenceFlatMesh();
+      wp020EvidenceFlatMesh=skirtMeshForDims(displayResource.dims,1);
+      wp020EvidenceFlatMeshSignature=displayResource.signature;
+    }
+    tangentPatch.render.meshInstances=[new pc.MeshInstance(wp020EvidenceFlatMesh,tangentPatchMaterial,tangentPatch)];
+    wp020EvidencePresentationMode="flat-height";
+  }else{
+    tangentPatch.render.meshInstances=[new pc.MeshInstance(displayResource.mesh,tangentPatchMaterial,tangentPatch)];
+    wp020EvidencePresentationMode="normal";
+    clearWp020EvidenceFlatMesh();
+  }
+  if(["focus-only","medium-only","outer-only"].includes(requested)){
+    wp020EvidencePresentationMode=requested;
+    tangentPatch.render.meshInstances=[new pc.MeshInstance(displayResource.mesh,tangentPatchMaterial,tangentPatch)];
+    clearWp020EvidenceFlatMesh();
+    applyWp020EvidenceLayerVisibility();
+  }
+  const layerState=()=>{
+    const state=(entity,material,role)=>{
+      const pos=entity?.getLocalPosition?.();
+      return Object.freeze({role,enabled:Boolean(entity?.enabled),opacity:Number(Number(material?.opacity||0).toFixed(6)),z:Number(Number(pos?.z||0).toFixed(6)),diffuse:material?.diffuse?Object.freeze([material.diffuse.r,material.diffuse.g,material.diffuse.b].map(v=>Number(Number(v).toFixed(6)))):null,emissive:material?.emissive?Object.freeze([material.emissive.r,material.emissive.g,material.emissive.b].map(v=>Number(Number(v).toFixed(6)))):null,emissiveIntensity:Number(Number(material?.emissiveIntensity||0).toFixed(6))});
+    };
+    return Object.freeze({focus:state(tangentPatch,tangentPatchMaterial,"focus"),medium:state(focusRingPatch,focusRingMaterial,"medium"),outer:state(horizonSkirt,horizonSkirtMaterial,"outer")});
+  };
+  return Object.freeze({
+    available:true,enabled:true,mode:wp020EvidencePresentationMode,
+    resourceSignature:displayResource.signature,level:displayResource?.dims?.levelId||null,
+    textureIdentityUnchanged:true,materialIdentityUnchanged:true,
+    geometryMode:wp020EvidencePresentationMode==="flat-height"?"flat-focus-quad":"canonical-heightfield",
+    state:wp020PresentationEvidenceState(),layers:layerState(),
+    worldResampleCount:0,geographyQueryCount:0
+  });
+}
+function skirtMeshForDims(dims,spanFactor=LOCAL_SURROUND_SPAN_FACTOR){
+  const halfX=dims.patchWidth*spanFactor*.5/dims.metersPerUnit,halfZ=dims.patchHeight*spanFactor*.5/dims.metersPerUnit,mesh=new pc.Mesh(device);
+  mesh.setPositions([-halfX,0,-halfZ,halfX,0,-halfZ,-halfX,0,halfZ,halfX,0,halfZ]);
+  mesh.setNormals([0,1,0,0,1,0,0,1,0,0,1,0]);mesh.setUvs(0,[0,1,1,1,0,0,1,0]);mesh.setIndices([0,2,1,1,2,3]);mesh.update();
+  return mesh;
+}
+function finalizeLocalResource(job,result){
+  const started=performance.now(),dims=job.dims,{meshData,detail,medium,surround,wildernessPlan}=result,phaseMs={};
+  let phaseStarted=performance.now();
+  const mesh=new pc.Mesh(device);mesh.setPositions(meshData.positions);mesh.setNormals(meshData.normals);mesh.setUvs(0,meshData.uvs);mesh.setIndices(meshData.indices);mesh.update();
+  mesh.incRefCount();// owned by the LRU cache, not by whichever MeshInstance shows it
+  phaseMs.meshUpload=performance.now()-phaseStarted;phaseStarted=performance.now();
+  const mediumMesh=skirtMeshForDims(dims,LOCAL_MEDIUM_RING_SPAN_FACTOR);mediumMesh.incRefCount();
+  const skirtMesh=skirtMeshForDims(dims,LOCAL_SURROUND_SPAN_FACTOR);skirtMesh.incRefCount();
+  phaseMs.ringMeshUpload=performance.now()-phaseStarted;phaseStarted=performance.now();
+  const detailTexture=textureFromPixels(detail),mediumTexture=textureFromPixels(medium),surroundTexture=textureFromPixels(surround),textureSize=detail.size;
+  phaseMs.textureUpload=performance.now()-phaseStarted;phaseStarted=performance.now();
+  const detailMetersPerTexel=detail.metersPerTexel,mediumMetersPerTexel=medium.metersPerTexel,surroundMetersPerTexel=surround.metersPerTexel;
+  const vertices=meshData.positions.length/3,triangles=meshData.indices.length/3;
+  const surfaceContributorPixels=(detail.contributorPixels||medium.contributorPixels||surround.contributorPixels)?Object.freeze({focus:detail.contributorPixels||null,medium:medium.contributorPixels||null,outer:surround.contributorPixels||null}):null;
+  const contributorBytes=surfaceContributorPixels?Object.values(surfaceContributorPixels).reduce((sum,record)=>sum+Object.values(record?.layers||{}).reduce((inner,pixels)=>inner+Number(pixels?.byteLength||0),0),0):0;
+  const estimatedBytes=meshData.positions.byteLength+meshData.normals.byteLength+meshData.uvs.byteLength+meshData.indices.byteLength+detail.size*detail.size*4+medium.size*medium.size*4+surround.size*surround.size*4+contributorBytes;
+  phaseMs.wildernessPlan=0;
+  const regenerationSignature=localResourceRegenerationSignature(job);
+  const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,surfaceContributorPixels,
+    detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
+      coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
+      surfaceComponentRanges:Object.freeze({
+        focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
+      }),
+      surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
+      meshHeightRange:meshData.meshHeightRange||null,
+      topographicSignalRevision:"canonical-continuous-strategic-rings-map-detail-v35",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      biomeCoordinateProof:job.biomeCoordinateProof,
+      visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
+  localResourceCache.set(job.signature,resource);
+  const evicted=localRecentEvictions.get(job.signature)||null;
+  if(evicted){
+    localResources.revisitCount++;localResources.revisitRegenerationSignature=regenerationSignature;
+    localResources.revisitRegenerationPass=String(evicted.regenerationSignature||"")===String(regenerationSignature);
+    localRecentEvictions.delete(job.signature);
+  }
+  setLocalResidencyState(job.signature,"ready",{cellId:job.spatialCell?.id||null,level:dims.levelId,regenerationSignature,prefetchKind:job.prewarm?job.prewarmKind:null,readyAtMs:performance.now()});
+  if(job.prewarm&&job.prewarmKind==="motion"){localResources.prefetchCompleted++;localMotionPrefetchTargets.delete(job.signature);}
+  trimLocalResourceCache();
+  localResources.cachedResourceCount=localResourceCache.size;
+  localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);
+  phaseMs.cacheBookkeeping=performance.now()-phaseStarted;
+  const finalizeMs=performance.now()-started;
+  localResources.lastFinalizeMs=Number(finalizeMs.toFixed(3));
+  localResources.maxFinalizeMs=Math.max(Number(localResources.maxFinalizeMs||0),localResources.lastFinalizeMs);
+  localResources.lastFinalizationPhaseMs=Object.fromEntries(Object.entries(phaseMs).map(([name,ms])=>[name,Number(ms.toFixed(3))]));
+  for(const [name,ms] of Object.entries(phaseMs)){
+    localResources.finalizationPhaseMaxMs[name]=Math.max(Number(localResources.finalizationPhaseMaxMs[name]||0),Number(ms.toFixed(3)));
+  }
+  return resource;
+}
+function destroyCachedLocalResource(resource){
+  if(!resource||resource===displayResource)return;
+  for(const mesh of [resource.mesh,resource.mediumMesh,resource.skirtMesh]){if(!mesh)continue;mesh.decRefCount();if(mesh.refCount<1)mesh.destroy();localResources.destroyedMeshes++;}
+  resource.detailTexture?.destroy?.();resource.mediumTexture?.destroy?.();resource.surroundTexture?.destroy?.();localResources.destroyedTextures+=3;
+}
+function trimLocalResourceCache(){
+  const cacheBytes=()=>Array.from(localResourceCache.values()).reduce((sum,item)=>sum+Number(item?.estimatedBytes||0),0);
+  let bytes=cacheBytes();
+  localResources.cacheBudgetExceeded=bytes>LOCAL_RESOURCE_CACHE_BUDGET_BYTES;
+  if(localResourceCache.size<=LOCAL_RESOURCE_CACHE_LIMIT&&bytes<=LOCAL_RESOURCE_CACHE_BUDGET_BYTES)return;
+  const now=performance.now(),candidates=[...localResourceCache.entries()].filter(([,resource])=>resource!==displayResource&&resource?.signature!==localResources.requestedSignature&&resource?.signature!==localResources.preparingSignature);
+  candidates.sort((a,b)=>{
+    const ae=localResidency.get(a[0])||{},be=localResidency.get(b[0])||{};
+    const ag=ae.state==="grace"&&Number(ae.graceUntilMs||0)>now,bg=be.state==="grace"&&Number(be.graceUntilMs||0)>now;
+    if(ag!==bg)return ag?1:-1;
+    return Number(ae.lastStateAtMs||0)-Number(be.lastStateAtMs||0);
+  });
+  for(const [key,resource] of candidates){
+    if(localResourceCache.size<=LOCAL_RESOURCE_CACHE_LIMIT&&bytes<=LOCAL_RESOURCE_CACHE_BUDGET_BYTES)break;
+    const entry=localResidency.get(key)||{};
+    localResourceCache.delete(key);destroyCachedLocalResource(resource);
+    localRecentEvictions.set(key,{regenerationSignature:resource.regenerationSignature||null,cellId:resource.spatialCell?.id||null,evictedAtMs:now});
+    setLocalResidencyState(key,"evicted",{...entry,regenerationSignature:resource.regenerationSignature||entry.regenerationSignature||null,evictedAtMs:now});
+    localResources.evictions++;localResources.lastEvictionReason=bytes>LOCAL_RESOURCE_CACHE_BUDGET_BYTES?"bounded-byte-pressure":(entry.state==="grace"?"bounded-grace-pressure":"bounded-lru");
+    bytes=Math.max(0,bytes-Number(resource?.estimatedBytes||0));
+  }
+  localResources.cacheBudgetExceeded=bytes>LOCAL_RESOURCE_CACHE_BUDGET_BYTES;
+  pruneLocalResidency();
+}
+function spatialDepthForLevel(index){
+  const level=LOCAL_DETAIL_LEVELS[clamp(Math.round(index),0,LOCAL_DETAIL_LEVELS.length-1)];
+  const maxCellSize=Math.max(1,Number(level.visibleHeightMeters||1)*SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO);
+  // ceil() guarantees the selected canonical cell never exceeds the safe span.
+  return clamp(Math.ceil(Math.log2(SPATIAL_LOD_ROOT_CELL_METERS/maxCellSize)),0,SPATIAL_LOD_MAX_DEPTH);
+}
+function spatialCellAtDepth(depth,registered){
+  const d=clamp(Math.round(depth),0,SPATIAL_LOD_MAX_DEPTH),size=SPATIAL_LOD_ROOT_CELL_METERS/Math.pow(2,d);
+  const x=Math.floor(Number(registered.eastMeters||0)/size),y=Math.floor(Number(registered.northMeters||0)/size);
+  const revision=coordinateFabricAuthority()?.revisionSignature||"legacy-coordinate";
+  const id=["SLOD",revision,d,x,y].join("|");
+  const minEast=x*size,minNorth=y*size,maxEast=minEast+size,maxNorth=minNorth+size;
+  const centerRegistered={eastMeters:minEast+size*.5,northMeters:minNorth+size*.5};
+  const ll=coordinateFabricAuthority()?.latLonForRegisteredMeters?.(centerRegistered.eastMeters,centerRegistered.northMeters)||null;
+  return Object.freeze({id,depth:d,cellX:x,cellY:y,cellSizeMeters:Number(size.toFixed(3)),
+    worldBounds:Object.freeze({minEastMeters:Number(minEast.toFixed(3)),maxEastMeters:Number(maxEast.toFixed(3)),minNorthMeters:Number(minNorth.toFixed(3)),maxNorthMeters:Number(maxNorth.toFixed(3))}),
+    centerRegisteredMeters:Object.freeze({east:Number(centerRegistered.eastMeters.toFixed(3)),north:Number(centerRegistered.northMeters.toFixed(3))}),
+    centerLatitudeRadians:Number(ll?.latitudeRadians||0),centerLongitudeRadians:Number(ll?.longitudeRadians||0)});
+}
+function canonicalSpatialCellFor(index,lat,lon){
+  const registered=canonicalRegisteredMetersForLatLon(lat,lon),depth=spatialDepthForLevel(index),cell=spatialCellAtDepth(depth,registered);
+  const parent=depth>0?spatialCellAtDepth(depth-1,registered):null;
+  const renderParent=index>0?spatialCellAtDepth(spatialDepthForLevel(index-1),registered):null;
+  return Object.freeze({...cell,parentId:parent?.id||null,renderParentId:renderParent?.id||null,
+    levelIndex:index,levelId:LOCAL_DETAIL_LEVELS[index]?.id||null,
+    registeredFocus:Object.freeze({east:Number(registered.eastMeters.toFixed(3)),north:Number(registered.northMeters.toFixed(3))})});
+}
+function localSignatureFor(index,lat,lon){
+  const d=patchDimensionsForLevel(index),cell=canonicalSpatialCellFor(index,lat,lon),revision=coordinateFabricAuthority()?.revisionSignature||"legacy-coordinate";
+  return [activeSeed,revision,cell.id,d.levelId,Math.ceil(d.patchWidth/d.sampleSpacingMeters),Math.ceil(d.patchHeight/d.sampleSpacingMeters)].join("|");
+}
+function localResourceRegenerationSignature(job){
+  const proof=job?.biomeCoordinateProof||{};
+  return "LRES-"+seededHash32([
+    "temporal-residency-v1",job?.spatialCell?.id||"",job?.dims?.levelId||"",
+    proof.signature||proof.coordinateRevision||"",job?.dims?.sampleSpacingMeters||0
+  ].join("|")).toString(16).toUpperCase().padStart(8,"0");
+}
+function pruneLocalResidency(){
+  while(localResidency.size>LOCAL_RESIDENCY_RECORD_LIMIT){
+    const first=localResidency.keys().next().value;if(first==null)break;
+    if(first===displayResource?.signature){const entry=localResidency.get(first);localResidency.delete(first);localResidency.set(first,entry);continue;}
+    localResidency.delete(first);
+  }
+  while(localRecentEvictions.size>LOCAL_PREFETCH_RECORD_LIMIT)localRecentEvictions.delete(localRecentEvictions.keys().next().value);
+  while(localMotionPrefetchTargets.size>LOCAL_PREFETCH_RECORD_LIMIT)localMotionPrefetchTargets.delete(localMotionPrefetchTargets.keys().next().value);
+}
+function setLocalResidencyState(signature,state,extra={}){
+  if(!signature)return null;
+  const now=performance.now(),previous=localResidency.get(signature)||{};
+  const next={...previous,...extra,signature,state,lastStateAtMs:now};
+  localResidency.delete(signature);localResidency.set(signature,next);pruneLocalResidency();return next;
+}
+function updateLocalMotion(lat,lon){
+  const current=canonicalRegisteredMetersForLatLon(lat,lon),previous=localLastRequestRegistered;
+  if(previous){
+    const east=Number(current.eastMeters||0)-Number(previous.eastMeters||0),north=Number(current.northMeters||0)-Number(previous.northMeters||0),magnitude=Math.hypot(east,north);
+    if(magnitude>.01)localMotionVector={east,north,magnitude};
+  }
+  localLastRequestRegistered={eastMeters:Number(current.eastMeters||0),northMeters:Number(current.northMeters||0)};
+}
+function localResidencyDiagnostics(){
+  const now=performance.now(),counts={requested:0,preparing:0,ready:0,active:0,grace:0,evicted:0};
+  const cells=[];
+  for(const [signature,entry] of localResidency){
+    let state=entry.state;
+    if(state==="grace"&&Number(entry.graceUntilMs||0)<=now){
+      state=localResourceCache.has(signature)?"ready":"evicted";
+      entry.state=state;entry.lastStateAtMs=now;localResidency.set(signature,entry);
+    }
+    if(counts[state]!=null)counts[state]++;
+    if(cells.length<20)cells.push(Object.freeze({
+      signature,state,cellId:entry.cellId||null,level:entry.level||null,
+      graceRemainingMs:state==="grace"?Math.max(0,Number(entry.graceUntilMs||0)-now):0,
+      regenerationSignature:entry.regenerationSignature||null,prefetchKind:entry.prefetchKind||null
+    }));
+  }
+  localResources.requestedCellCount=counts.requested;localResources.preparingCellCount=counts.preparing;localResources.readyCellCount=counts.ready;
+  localResources.activeCellCount=counts.active;localResources.graceResidentCellCount=counts.grace;localResources.evictedCellCount=counts.evicted;
+  return Object.freeze({
+    revision:"temporal-residency-v1",counts:Object.freeze({...counts}),cells:Object.freeze(cells),
+    parentFallbackCount:Number(localResources.parentFallbackCount||0),rootFallbackCount:Number(localResources.rootFallbackCount||0),missingCoverageCount:Number(localResources.missingCoverageCount||0),
+    graceReuseCount:Number(localResources.graceReuseCount||0),prefetch:Object.freeze({
+      requests:Number(localResources.prefetchRequests||0),completed:Number(localResources.prefetchCompleted||0),
+      hits:Number(localResources.prefetchHits||0),misses:Number(localResources.prefetchMisses||0),
+      pendingTargets:localMotionPrefetchTargets.size
+    }),
+    handoff:Object.freeze({
+      lastLatencyMs:Number(localResources.lastHandoffLatencyMs||0),longestLatencyMs:Number(localResources.longestHandoffLatencyMs||0),
+      fallbackActive:Boolean(localResources.standInActive),readyChild:Boolean(localResources.requestedSignature&&localResources.activeSignature===localResources.requestedSignature)
+    }),
+    revisit:Object.freeze({
+      count:Number(localResources.revisitCount||0),regenerationSignature:localResources.revisitRegenerationSignature||null,
+      pass:localResources.revisitRegenerationPass!==false
+    }),
+    budget:Object.freeze({requestsPerFrame:1,buildJobs:1,prefetchQueue:1,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,cacheLimit:LOCAL_RESOURCE_CACHE_LIMIT,graceMs:LOCAL_GRACE_RESIDENCY_MS}),
+    motion:Object.freeze({east:Number(localMotionVector.east.toFixed(3)),north:Number(localMotionVector.north.toFixed(3)),magnitude:Number(localMotionVector.magnitude.toFixed(3))}),
+    bounded:true,fullWorldScan:false
+  });
+}
+function motionPrefetchCandidate(index){
+  if(!displayResource||localMotionVector.magnitude<1)return null;
+  const cell=canonicalSpatialCellFor(index,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians),size=Number(cell.cellSizeMeters||0);
+  if(size<=0)return null;
+  const ax=Math.abs(localMotionVector.east),ay=Math.abs(localMotionVector.north);
+  let dx=0,dy=0;
+  if(ax>=ay*.45)dx=localMotionVector.east>0?1:-1;
+  if(ay>=ax*.45)dy=localMotionVector.north>0?1:-1;
+  if(dx===0&&dy===0)return null;
+  const east=Number(cell.centerRegisteredMeters?.east||0)+dx*size,north=Number(cell.centerRegisteredMeters?.north||0)+dy*size;
+  const ll=coordinateFabricAuthority()?.latLonForRegisteredMeters?.(east,north);if(!ll)return null;
+  const signature=localSignatureFor(index,ll.latitudeRadians,ll.longitudeRadians);
+  return {index,lat:ll.latitudeRadians,lon:ll.longitudeRadians,signature,cellId:canonicalSpatialCellFor(index,ll.latitudeRadians,ll.longitudeRadians).id};
+}
+function startLocalJob(index,lat,lon,signature,prewarm,prewarmKind="lod"){
+  const dims=patchDimensionsForLevel(index),size=LOCAL_DETAIL_LEVELS[index].textureSize,spatialCell=canonicalSpatialCellFor(index,lat,lon);
+  const anchorLat=spatialCell.centerLatitudeRadians,anchorLon=spatialCell.centerLongitudeRadians;
+  const columns=Math.max(2,Math.ceil(dims.patchWidth/dims.sampleSpacingMeters)+1),rows=Math.max(2,Math.ceil(dims.patchHeight/dims.sampleSpacingMeters)+1);
+  const biomeCoordinateProof=localBiomeCoordinateProof(anchorLat,anchorLon);
+  const job={token:++localPreparationToken,signature,levelIndex:index,dims,lat0:anchorLat,lon0:anchorLon,requestedLat0:lat,requestedLon0:lon,spatialCell,prewarm,prewarmKind,groundDetailWeight:groundDetailWeightForLevel(index),centerElevation:Number(geography?.sampleLatLon?.(anchorLat,anchorLon)?.elevationMeters||0),biomeCoordinateProof,
+    totalSteps:rows+size*2,steps:0,busyMs:0,slices:0,maxSliceMs:0,currentPreparationPhase:"queued",phaseSliceMaxMs:{},phaseBusyMs:{},startedAtMs:performance.now(),iterator:null};
+  job.iterator=localResourceSteps(job);
+  localJob=job;localResources.cacheMisses+=prewarm?0:1;
+  setLocalResidencyState(signature,"preparing",{cellId:spatialCell.id,level:dims.levelId,prefetchKind:prewarm?prewarmKind:null,requestedAtMs:prewarm?null:performance.now()});
+  localResources.preparing=true;localResources.preparingPrewarm=prewarm;localResources.preparingSignature=signature;localResources.preparingLevel=dims.levelId;localResources.preparationProgress=0;
+  localResources.lastPreparationQueuedAtMs=Number(job.startedAtMs.toFixed(3));localFrameStats.maxDuringPreparationMs=0;
+  scheduleLocalPump();
+}
+function recordLocalPreparationPhase(job,ms){
+  const phase=String(job?.currentPreparationPhase||"unknown"),rounded=Number(Math.max(0,Number(ms)||0).toFixed(3));
+  job.phaseSliceMaxMs[phase]=Math.max(Number(job.phaseSliceMaxMs[phase]||0),rounded);
+  job.phaseBusyMs[phase]=Number((Number(job.phaseBusyMs[phase]||0)+rounded).toFixed(3));
+  localResources.lastPreparationPhase=phase;
+  localResources.preparationPhaseMaxMs[phase]=Math.max(Number(localResources.preparationPhaseMaxMs[phase]||0),rounded);
+  localResources.preparationPhaseBusyMs[phase]=Number((Number(localResources.preparationPhaseBusyMs[phase]||0)+rounded).toFixed(3));
+}
+let localPumpScheduled=false;
+function scheduleLocalPump(){
+  if(localPumpScheduled||!localJob)return;
+  localPumpScheduled=true;
+  // Macrotask yield between slices lets input, rAF and rendering run; the
+  // generator never holds the main thread longer than one slice budget.
+  setTimeout(pumpLocalPreparation,0);
+}
+function pumpLocalPreparation(){
+  localPumpScheduled=false;
+  const job=localJob;if(!job||!device)return;
+  const sliceStart=performance.now();let step=null;
+  try{
+    while(!(step=job.iterator.next()).done){
+      job.steps++;
+      if(step?.value&&typeof step.value==="object"&&step.value.forceSlice)break;
+      if(performance.now()-sliceStart>=LOCAL_PREP_SLICE_BUDGET_MS)break;
+    }
+  }catch(error){
+    // A failed preparation must never wedge the pipeline: drop it, keep the
+    // last valid representation on screen and record the failure.
+    const failedSignature=localJob?.signature||null;
+    localJob=null;localQueuedRequest=null;if(failedSignature)localResidency.delete(failedSignature);localMotionPrefetchTargets.delete(failedSignature);
+    localResources.preparing=false;localResources.preparingSignature=null;localResources.preparingLevel=null;
+    localResources.failedPreparations=(localResources.failedPreparations||0)+1;localResources.lastPreparationError=String(error?.message||error);
+    localResources.pendingPreparationCount=0;
+    console.error("Local LOD preparation failed.",error);
+    return;
+  }
+  let sliceMs=performance.now()-sliceStart;
+  recordLocalPreparationPhase(job,sliceMs);
+  if(step.done){
+    const resource=finalizeLocalResource(job,step.value);
+    sliceMs=performance.now()-sliceStart;
+    localJob=null;
+    localResources.lastBuildMs=Number((job.busyMs+sliceMs).toFixed(3));
+    resource.detail.buildTimeMs=localResources.lastBuildMs;
+    localResources.preparing=false;localResources.preparingSignature=null;localResources.preparingLevel=null;localResources.preparationProgress=1;
+    localResources.lastPreparationWallMs=Number((performance.now()-job.startedAtMs).toFixed(3));
+    localResources.lastPreparationBusyMs=Number((job.busyMs+sliceMs).toFixed(3));
+    localResources.lastPreparationSlices=job.slices+1;
+    localResources.lastPreparationCompletedAtMs=Number(performance.now().toFixed(3));
+    localResources.maxFrameMsDuringPreparation=Number(localFrameStats.maxDuringPreparationMs.toFixed(3));
+    localResources.preparedSignature=resource.signature;
+    if(job.prewarm)localResources.prewarmCompleted++;
+    if(job.prewarm&&job.prewarmKind==="zoom-target"&&job.signature===zoomState.targetPrefetchSignature){zoomState.targetPrefetchCompleted++;zoomState.targetPrefetchState="ready";}
+    job.slices++;job.maxSliceMs=Math.max(job.maxSliceMs,sliceMs);localResources.maxPreparationSliceMs=Math.max(localResources.maxPreparationSliceMs,Number(sliceMs.toFixed(3)));
+    const queued=localQueuedRequest;localQueuedRequest=null;
+    const sameFocusRequest=Math.abs(Number(job.requestedLat0)-Number(zoomState.focusLatitudeRadians))<1e-10&&Math.abs(Number(job.requestedLon0)-Number(zoomState.focusLongitudeRadians))<1e-10;
+    const requestedIndexNow=requestedLodIndexForZoom(zoomState.scalar);
+    const progressiveParent=sameFocusRequest&&job.levelIndex<requestedIndexNow&&(!displayResource||job.levelIndex>displayResource.levelIndex);
+    if(resource.signature===localResources.requestedSignature||progressiveParent){activateLocalDetailResource(resource.signature,false);refreshZoomPresentation();}
+    if(queued&&queued.signature===localResources.requestedSignature&&displayResource?.signature!==queued.signature){
+      if(localResourceCache.has(queued.signature)){activateLocalDetailResource(queued.signature,true);refreshZoomPresentation();}
+      else startLocalJob(queued.index,queued.lat,queued.lon,queued.signature,false);
+    }
+    if(!localJob){scheduleFocusedMapPrewarm();scheduleLocalPrewarm();}
+    return;
+  }
+  job.busyMs+=sliceMs;job.slices++;job.maxSliceMs=Math.max(job.maxSliceMs,sliceMs);
+  localResources.maxPreparationSliceMs=Math.max(localResources.maxPreparationSliceMs,Number(sliceMs.toFixed(3)));
+  localResources.preparationProgress=Number(clamp(job.steps/Math.max(1,job.totalSteps),0,1).toFixed(4));
+  scheduleLocalPump();
+}
+// Called from the zoom/rotation path: records the request and at most swaps
+// an already-prepared resource. It never generates geometry or textures.
+function requestLocalDetailResource(index){
+  const lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians,cell=canonicalSpatialCellFor(index,lat,lon),signature=localSignatureFor(index,lat,lon);
+  updateLocalMotion(lat,lon);
+  const previousRequested=localResources.requestedSignature,priorResidency=localResidency.get(signature)||null;
+  localResources.requestedSignature=signature;localResources.requestedLevel=LOCAL_DETAIL_LEVELS[index].id;localResources.requestedCellId=cell.id;
+  setLocalResidencyState(signature,"requested",{cellId:cell.id,level:LOCAL_DETAIL_LEVELS[index].id,requestedAtMs:performance.now()});
+  if(previousRequested!==signature&&displayResource?.signature!==signature){
+    localResources.lastHandoffRequestedAtMs=Number(performance.now().toFixed(3));
+    localResources.handoffRequestScalar=Number(zoomState.scalar.toFixed(6));
+    // A prepared local representation is the immediate previous/parent fallback.
+    // Before the first local resource exists the canonical globe is still the
+    // ready root representation, so this is coverage, not a hole.
+    if(displayResource)localResources.parentFallbackCount++;
+    else if(ready&&projectionState.blend>0)localResources.rootFallbackCount++;
+  }
+  if(displayResource?.signature===signature){localResources.pendingPreparationCount=0;setLocalResidencyState(signature,"active",{cellId:cell.id,level:LOCAL_DETAIL_LEVELS[index].id});return;}
+  localResources.pendingPreparationCount=1;
+  if(localResourceCache.has(signature)){
+    const cached=localResourceCache.get(signature);
+    if(priorResidency?.state==="grace"&&Number(priorResidency.graceUntilMs||0)>performance.now())localResources.graceReuseCount++;
+    if(cached?.prefetchKind==="motion")localResources.prefetchHits++;
+    if(cached?.prefetchKind==="zoom-target"){localResources.prefetchHits++;zoomState.targetPrefetchHits++;zoomState.targetPrefetchState="hit";}
+    localMotionPrefetchTargets.delete(signature);
+    activateLocalDetailResource(signature,true);return;
+  }
+  if(localJob){
+    if(localJob.signature===signature){
+      if(localJob.prewarm&&localJob.prewarmKind==="motion"){localResources.prefetchMisses++;localMotionPrefetchTargets.delete(signature);}
+      if(localJob.prewarm&&localJob.prewarmKind==="zoom-target"){localResources.prefetchHits++;zoomState.targetPrefetchHits++;zoomState.targetPrefetchState="promoted";}
+      localJob.prewarm=false;localResources.preparingPrewarm=false;return;
+    }
+    // Keep a same-focus coarser build alive while zooming inward. It is a valid
+    // canonical parent and can become immediate coverage while the finer child
+    // is queued. Compare the requested focus, not the SLOD cell-center anchor.
+    const sameFocus=Math.abs(Number(localJob.requestedLat0)-Number(lat))<1e-10&&Math.abs(Number(localJob.requestedLon0)-Number(lon))<1e-10;
+    const progressiveParent=sameFocus&&localJob.levelIndex<index;
+    if(progressiveParent||(sameFocus&&!localJob.prewarm&&localJob.steps/Math.max(1,localJob.totalSteps)>=.5)){localQueuedRequest={index,lat,lon,signature};localResources.deferredRequests++;return;}
+    const cancelledSignature=localJob.signature;
+    localResources.cancelledPreparations++;localJob=null;
+    localResidency.delete(cancelledSignature);localMotionPrefetchTargets.delete(cancelledSignature);
+  }
+  localQueuedRequest=null;
+  startLocalJob(index,lat,lon,signature,false);
+}
+function scheduleFocusedMapPrewarm(){
+  // Explicit globe focus changes get a bounded two-tier head start. This is
+  // presentation scheduling only: each resource still comes from the same
+  // Campaign-SEED/SLOD authority and occupies the normal cache budget.
+  if(!ready||!activeSeed||!geography||localJob||displayResource||zoomState.scalar>projectionState.transitionStart)return;
+  const lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians;
+  for(const index of [0,1]){
+    const signature=localSignatureFor(index,lat,lon);
+    if(localResourceCache.has(signature))continue;
+    startLocalJob(index,lat,lon,signature,true,"globe-focus");return;
+  }
+}
+function scheduleLocalPrewarm(){
+  if(localJob||!displayResource||projectionState.blend<=0)return;
+  if(localResources.requestedSignature!==displayResource.signature)return;
+  const lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians,index=displayResource.levelIndex;
+  const motion=motionPrefetchCandidate(index);
+  if(motion&&!localResourceCache.has(motion.signature)&&motion.signature!==displayResource.signature){
+    localMotionPrefetchTargets.set(motion.signature,{cellId:motion.cellId,requestedAtMs:performance.now()});pruneLocalResidency();
+    localResources.prefetchRequests++;
+    startLocalJob(motion.index,motion.lat,motion.lon,motion.signature,true,"motion");return;
+  }
+  for(const candidate of [index+lastZoomDirection,index-lastZoomDirection]){
+    if(candidate<0||candidate>=LOCAL_DETAIL_LEVELS.length)continue;
+    const signature=localSignatureFor(candidate,lat,lon);
+    if(localResourceCache.has(signature))continue;
+    startLocalJob(candidate,lat,lon,signature,true,"lod");return;
+  }
+}
+// Double-buffered swap: only a fully prepared resource becomes visible.
+function activateLocalDetailResource(signature,fromCache){
+  if(wp020EvidenceTransitionFreeze&&displayResource&&String(signature)!==String(displayResource.signature))return false;
+  if(!tangentPatch?.render||!device||!tangentPatchMaterial||!horizonSkirtMaterial)return false;
+  const resource=localResourceCache.get(signature);if(!resource)return false;
+  const swapStarted=performance.now();
+  localResourceCache.delete(signature);localResourceCache.set(signature,resource);
+  if(fromCache){localResources.cacheHits++;if(resource.builtAsPrewarm)localResources.prewarmHits++;wilderness={...wilderness,cacheReuse:Boolean(resource.wildernessPlan)};}else wilderness={...wilderness,cacheReuse:false};
+  const previousDisplay=displayResource;
+  if(previousDisplay&&previousDisplay.signature!==signature){
+    setLocalResidencyState(previousDisplay.signature,"grace",{cellId:previousDisplay.spatialCell?.id||null,level:previousDisplay.dims?.levelId||null,regenerationSignature:previousDisplay.regenerationSignature||null,graceUntilMs:performance.now()+LOCAL_GRACE_RESIDENCY_MS,lastVisibleAtMs:performance.now()});
+  }
+  displayResource=resource;
+  // A resource swap always restores the canonical product mesh; evidence-only
+  // flat-height comparison never persists across LOD ownership changes.
+  if(wp020EvidencePresentationMode!=="normal"){wp020EvidencePresentationMode="normal";clearWp020EvidenceFlatMesh();}
+  setLocalResidencyState(signature,"active",{cellId:resource.spatialCell?.id||null,level:resource.dims?.levelId||null,regenerationSignature:resource.regenerationSignature||null,activatedAtMs:performance.now()});
+  if(zoomState.animating&&localResources.firstReadyScalar===null){
+    localResources.firstReadyScalar=Number(zoomState.scalar.toFixed(6));
+    localResources.firstReadyLevel=resource.dims?.levelId||null;
+    localResources.firstReadyLatencyMs=Number(Math.max(0,performance.now()-Number(zoomState.animationStartAtMs||performance.now())).toFixed(3));
+  }
+  if(localResources.requestedSignature===signature&&localResources.lastHandoffRequestedAtMs){
+    const latency=Math.max(0,performance.now()-Number(localResources.lastHandoffRequestedAtMs||0));
+    localResources.lastHandoffLatencyMs=Number(latency.toFixed(3));localResources.longestHandoffLatencyMs=Math.max(Number(localResources.longestHandoffLatencyMs||0),localResources.lastHandoffLatencyMs);
+    localResources.lastHandoffCompletedAtMs=Number(performance.now().toFixed(3));
+  }
+  localDetail={...resource.detail,rebuildCount:(localDetail.rebuildCount||0)+1};
+  tangentPatch.render.meshInstances=[new pc.MeshInstance(resource.mesh,tangentPatchMaterial,tangentPatch)];
+  tangentPatchMaterial.diffuseMap=resource.detailTexture;tangentPatchMaterial.emissiveMap=resource.detailTexture;tangentPatchMaterial.opacityMap=resource.detailTexture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
+  if(focusRingPatch?.render&&focusRingMaterial){
+    focusRingPatch.render.meshInstances=[new pc.MeshInstance(resource.mediumMesh,focusRingMaterial,focusRingPatch)];
+    focusRingMaterial.diffuseMap=resource.mediumTexture;focusRingMaterial.emissiveMap=resource.mediumTexture;focusRingMaterial.opacityMap=resource.mediumTexture;focusRingMaterial.opacityMapChannel="a";focusRingMaterial.diffuse.set(1,1,1);focusRingMaterial.emissive.set(1,1,1);focusRingMaterial.emissiveIntensity=.78;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
+    localResources.mediumRingSpanFactor=LOCAL_MEDIUM_RING_SPAN_FACTOR;localResources.mediumRingWidthMeters=Number((resource.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR).toFixed(3));localResources.mediumRingHeightMeters=Number((resource.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR).toFixed(3));localResources.mediumRingWorldMatched=true;
+  }
+  if(horizonSkirt?.render){
+    horizonSkirt.render.meshInstances=[new pc.MeshInstance(resource.skirtMesh,horizonSkirtMaterial,horizonSkirt)];
+    localResources.surroundSpanFactor=LOCAL_SURROUND_SPAN_FACTOR;localResources.surroundWidthMeters=Number((resource.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundHeightMeters=Number((resource.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundWorldMatched=true;
+  }
+  horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.opacityMap=resource.surroundTexture;horizonSkirtMaterial.opacityMapChannel="a";horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.78;horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;horizonSkirtMaterial.depthWrite=false;horizonSkirtMaterial.update();
+  // Keep the atomic terrain swap bounded. Static settlement/wilderness
+  // presentation can involve entity destruction/rebuild and canonical local
+  // queries; doing that synchronously here caused >100 ms swap spikes after
+  // richer map-scale presentation was added. Retain the previous valid static
+  // layer for this handoff and rebuild it on the existing deferred refresh
+  // path once the new terrain resource is authoritative/active.
+  if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);
+  trimLocalResourceCache();
+  localResources.activeSignature=signature;localResources.visibleLevel=resource.dims.levelId;localResources.activeCellId=resource.spatialCell?.id||null;localResources.activeResourceCount=1;localResources.cachedResourceCount=localResourceCache.size;
+  localResources.pendingPreparationCount=localResources.requestedSignature===signature?0:1;
+  localResources.estimatedCacheBytes=Array.from(localResourceCache.values()).reduce((sum,item)=>sum+(item.estimatedBytes||0),0);
+  const swapMs=performance.now()-swapStarted;localResources.lastSwapMs=Number(swapMs.toFixed(3));localResources.maxSwapMs=Math.max(localResources.maxSwapMs,localResources.lastSwapMs);localResources.swapCount++;
+  scheduleLocalStaticPresentationRefresh();
+  return true;
+}
+// Compile the tangent/surround/static-world shader variants during startup
+// (behind the loading overlay and hidden inside the globe) so the first
+// planet-to-local handoff does not stall on shader compilation.
+async function warmLocalRepresentationShaders(){
+  if(!app||!device||!pc)return;
+  ensureTangentPatch();ensureFocusRingPatch();ensureHorizonSkirt();ensureLocalStaticMaterials();
+  const texture=new pc.Texture(device,{width:4,height:4,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
+  const pixels=texture.lock();pixels.fill(255);texture.unlock();
+  texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;
+  const quad=skirtMeshForDims({patchWidth:1,patchHeight:1,metersPerUnit:10},1);quad.incRefCount();
+  tangentPatchMaterial.diffuseMap=texture;tangentPatchMaterial.emissiveMap=texture;tangentPatchMaterial.opacityMap=texture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.opacity=.5;tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
+  focusRingMaterial.diffuseMap=texture;focusRingMaterial.emissiveMap=texture;focusRingMaterial.opacityMap=texture;focusRingMaterial.opacityMapChannel="a";focusRingMaterial.opacity=.5;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
+  horizonSkirtMaterial.diffuseMap=texture;horizonSkirtMaterial.emissiveMap=texture;horizonSkirtMaterial.opacityMap=texture;horizonSkirtMaterial.opacityMapChannel="a";horizonSkirtMaterial.opacity=.5;horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;horizonSkirtMaterial.depthWrite=false;horizonSkirtMaterial.update();
+  tangentPatch.render.meshInstances=[new pc.MeshInstance(quad,tangentPatchMaterial,tangentPatch)];
+  focusRingPatch.render.meshInstances=[new pc.MeshInstance(quad,focusRingMaterial,focusRingPatch)];
+  horizonSkirt.render.meshInstances=[new pc.MeshInstance(quad,horizonSkirtMaterial,horizonSkirt)];
+  const holder=new pc.Entity("LocalShaderWarmup");app.root.addChild(holder);
+  const previousRoot=localStaticRoot;localStaticRoot=holder;
+  for(const [type,material] of [["box",localStaticMaterials.road],["box",localStaticMaterials.wall],["box",localStaticMaterials.roof],["cylinder",localStaticMaterials.trunk],["sphere",localStaticMaterials.leaf],["box",localStaticMaterials.water]])addLocalStatic("Warm-"+material.name,type,material,0,0,0,.01,.01,.01);
+  localStaticRoot=previousRoot;
+  tangentPatch.enabled=true;focusRingPatch.enabled=true;horizonSkirt.enabled=true;
+  await yieldPaint();await yieldPaint();
+  tangentPatch.enabled=false;focusRingPatch.enabled=false;horizonSkirt.enabled=false;
+  tangentPatch.render.meshInstances=[];focusRingPatch.render.meshInstances=[];horizonSkirt.render.meshInstances=[];holder.destroy();
+  quad.decRefCount();quad.destroy();texture.destroy();
+  tangentPatchMaterial.diffuseMap=null;tangentPatchMaterial.emissiveMap=null;tangentPatchMaterial.opacityMap=null;tangentPatchMaterial.update();
+  focusRingMaterial.diffuseMap=null;focusRingMaterial.emissiveMap=null;focusRingMaterial.opacityMap=null;focusRingMaterial.update();
+  horizonSkirtMaterial.diffuseMap=null;horizonSkirtMaterial.emissiveMap=null;horizonSkirtMaterial.opacityMap=null;horizonSkirtMaterial.update();
+}
+function recordLocalFrame(dt){
+  const ms=Math.max(0,Number(dt)||0)*1000;localFrameStats.lastFrameMs=ms;
+  window.WorldSimulationBudget?.recordVisibleFrame?.(ms,activeSeed);
+  localFrameStats.recent.push(ms);if(localFrameStats.recent.length>120)localFrameStats.recent.shift();
+  if(localJob)localFrameStats.maxDuringPreparationMs=Math.max(localFrameStats.maxDuringPreparationMs,ms);
+  localResources.lastFrameMs=Number(ms.toFixed(3));localResources.recentMaxFrameMs=Number(Math.max(0,...localFrameStats.recent).toFixed(3));
+  if(localJob)localResources.maxFrameMsDuringPreparation=Number(localFrameStats.maxDuringPreparationMs.toFixed(3));
+}
+function ensureTangentPatch(){
+  if(tangentPatch)return;
+  tangentPatchMaterial=new pc.StandardMaterial();tangentPatchMaterial.name="SeededTangentSurface";tangentPatchMaterial.diffuse.set(1,1,1);tangentPatchMaterial.emissive.set(1,1,1);tangentPatchMaterial.emissiveIntensity=.78;tangentPatchMaterial.__atmosphereBaseDiffuse=[1,1,1];tangentPatchMaterial.useLighting=false;tangentPatchMaterial.cull=pc.CULLFACE_NONE;tangentPatchMaterial.roughness=.9;tangentPatchMaterial.update();
+  tangentPatch=new pc.Entity("LocalTangentSurface");tangentPatch.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
+  // Empty until the first cooperatively prepared resource is swapped in.
+  tangentPatch.render.meshInstances=[];
+  tangentPatch.enabled=false;app.root.addChild(tangentPatch);
+}
+function ensureFocusRingPatch(){
+  if(focusRingPatch||!device)return;
+  focusRingMaterial=new pc.StandardMaterial();focusRingMaterial.name="SeededFocusMediumRing";
+  focusRingMaterial.diffuse.set(1,1,1);focusRingMaterial.emissive.set(1,1,1);focusRingMaterial.emissiveIntensity=.78;focusRingMaterial.__atmosphereBaseDiffuse=[1,1,1];
+  focusRingMaterial.useLighting=false;focusRingMaterial.cull=pc.CULLFACE_NONE;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
+  focusRingPatch=new pc.Entity("LocalFocusMediumRing");focusRingPatch.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
+  focusRingPatch.render.meshInstances=[];focusRingPatch.enabled=false;app.root.addChild(focusRingPatch);
+}
+function ensureHorizonSkirt(){
+  if(horizonSkirt||!device)return;
+  horizonSkirtMaterial=new pc.StandardMaterial();horizonSkirtMaterial.name="LocalHorizonSkirt";
+  horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.78;horizonSkirtMaterial.__atmosphereBaseDiffuse=[.2,.34,.17];
+  horizonSkirtMaterial.useLighting=false;horizonSkirtMaterial.cull=pc.CULLFACE_NONE;horizonSkirtMaterial.update();
+  horizonSkirt=new pc.Entity("LocalHorizonSkirt");horizonSkirt.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
+  horizonSkirt.render.meshInstances=[];horizonSkirt.enabled=false;app.root.addChild(horizonSkirt);
+}
+// Zoom/rotation path: record the requested tier (may swap in a ready one).
+function updateLocalRequest(){
+  if(!planet||projectionState.blend<=0)return;
+  ensureTangentPatch();ensureFocusRingPatch();ensureHorizonSkirt();
+  requestLocalDetailResource(requestedLodIndexForZoom());
+}
+// visibleHeightUnits: vertical extent, in scene units, that the camera sees at
+// the tangent-patch focus. The patch is scaled so it shows exactly the ladder
+// footprint (or, for a stand-in, the closest footprint it can honestly show).
+function updateProjectionPresentation(visibleHeightUnits=1){
+  if(!planet)return;
+  const blend=projectionState.blend;
+  const scalar=clamp(zoomState.scalar,0,1);
+  // The relief globe is a strong far-view representation but its exaggerated
+  // mountain mesh becomes visually misleading when magnified. A smooth shell
+  // with the identical canonical geography texture owns only that loading gap,
+  // then yields once a local tangent resource is physically appropriate.
+  // Transition to the already-built smooth canonical shell before the relief
+  // globe is magnified enough for its coarse height mesh to become visibly
+  // faceted. The shell uses the identical geography texture/UV registration and
+  // adds no geography queries or identity; it only removes exaggerated relief
+  // from strategic map scale while the first tangent parent prepares.
+  // Complete relief→smooth-shell ownership before the 1/50 display milestone.
+  // The previous .50→.575 crossfade happened while the globe was already highly
+  // magnified, making partially transparent relief facets more obvious. Moving
+  // the same smooth transition earlier preserves animation while it is still
+  // visually coarse enough to hide the representation handoff.
+  const mapShellIn=smoothstep01(clamp((scalar-.40)/.08,0,1));
+  const mapShellOut=displayResource?projectionPresentationBlendForZoom(scalar):0;
+  // Partition strategic representation opacity instead of layering independent
+  // fades. If the optional smooth shell is absent (trusted fast-start evidence),
+  // its ownership is exactly zero so relief+tangent still sum to 1.0.
+  const strategicShellOwnership=mapScaleShell?mapShellIn:0;
+  const reliefGlobeOpacity=(1-strategicShellOwnership)*(1-mapShellOut);
+  const mapShellOpacity=strategicShellOwnership*(1-mapShellOut);
+  if(mapScaleShell&&mapScaleShellMaterial){
+    mapScaleShell.enabled=mapShellOpacity>.003;
+    mapScaleShellMaterial.opacity=mapShellOpacity;
+    mapScaleShellMaterial.blendType=pc.BLEND_NORMAL;
+    mapScaleShellMaterial.depthWrite=false;
+    mapScaleShellMaterial.update();
+  }
+  if(tangentPatch){
+    const handoff=projectionHandoffForZoom();
+    // Nothing local is shown until a prepared resource exists; the globe keeps
+    // ownership meanwhile, so a preparing LOD can never produce a blank frame.
+    const tangentVisible=handoff>.02&&Boolean(displayResource);
+    // Google-Earth-style handoff: once a local parent is prepared, keep that
+    // valid textured parent fully visible while its finer child is preparing.
+    // The child still swaps atomically; loading never reveals the low-detail
+    // globe underneath an already-ready local representation.
+    const preparedReveal=projectionPresentationBlendForZoom();
+    // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.
+    const fineVisible=tangentVisible&&zoomState.scalar>=projectionState.transitionStart;
+    // The foreground tangent plane is closest to the camera, so keep it hidden
+    // until the smooth parent begins yielding. Medium/outer local coverage may
+    // continue preparing behind the shell without exposing unfinished map-scale
+    // photometry to the player.
+    tangentPatch.enabled=fineVisible&&(!mapScaleShell||mapShellOut>.02);
+    ensureFocusRingPatch();ensureHorizonSkirt();
+    const viewBlend=blend;
+    if(focusRingPatch){
+      focusRingPatch.enabled=tangentVisible;
+      const mediumReveal=preparedReveal;
+      focusRingMaterial.opacity=mediumReveal;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
+    }
+    if(horizonSkirt){
+      horizonSkirt.enabled=tangentVisible;
+      // Reveal the canonical tangent continuation quickly enough that the
+      // settlement frame is fully owned by the same local geography, rather
+      // than looking through a fading globe shell at a different surface.
+      const tangentReveal=preparedReveal;
+      horizonSkirtMaterial.opacity=tangentReveal;
+      horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;
+      horizonSkirtMaterial.depthWrite=false;
+      horizonSkirtMaterial.update();
+    }
+    // LOD refinement occupies the same camera-facing tangent plane; zoom never changes viewing angle.
+    tangentPatch.setLocalEulerAngles(90,0,0);
+    const dims=localPatchDimensions(),level=LOCAL_DETAIL_LEVELS[dims.levelIndex];
+    const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
+    const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
+    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters()};
+    tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
+    // A prepared stand-in normally remains exactly world-anchored while a new
+    // focus resource is built. At ground scale a small pointer drag can request
+    // a focus many kilometres away, which would translate the old 3x surround
+    // completely outside the viewport and expose the clear color. Preserve the
+    // exact offset while the old surround still covers the requested viewport;
+    // otherwise clamp only the temporary stand-in translation to the coverage
+    // margin. The requested focus remains authoritative and the new resource is
+    // still swapped atomically as soon as preparation completes.
+    const rawOffset=displayResource?localFocusOffsetMeters(displayResource):{east:0,north:0};
+    const standInActive=Boolean(displayResource)&&localResources.requestedSignature!==displayResource.signature;
+    let offset={east:rawOffset.east,north:rawOffset.north},standInOffsetClamped=false;
+    if(standInActive&&displayResource){
+      const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
+      const visibleHeightMeters=shownHeightMeters,visibleWidthMeters=visibleHeightMeters*aspect;
+      const surroundWidthMeters=displayResource.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR,surroundHeightMeters=displayResource.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR;
+      const safeEast=Math.max(0,(surroundWidthMeters-visibleWidthMeters)/2);
+      const safeNorth=Math.max(0,(surroundHeightMeters-visibleHeightMeters)/2);
+      const bounded={east:clamp(rawOffset.east,-safeEast,safeEast),north:clamp(rawOffset.north,-safeNorth,safeNorth)};
+      standInOffsetClamped=Math.abs(bounded.east-rawOffset.east)>.001||Math.abs(bounded.north-rawOffset.north)>.001;
+      // Once exact world anchoring would move any requested viewport beyond the
+      // prepared 3x surround, center the last valid representation instead of
+      // parking the camera on its edge. This is presentation-only and lasts
+      // only until the authoritative requested-focus resource atomically swaps.
+      offset=standInOffsetClamped?{east:0,north:0}:bounded;
+    }
+    // Terrain must continue zooming while the child prepares, but semantic/static
+    // objects from the previous coarse tier must not balloon or clip. Hold their
+    // screen-scale until the refined resource atomically activates.
+    const semanticHoldScale=standInActive&&Number(dims.presentationCompensation||1)>1
+      ? 1/Number(dims.presentationCompensation||1):1;
+    // Child-local Y is terrain-normal/elevation. Compensate only the tangent-plane
+    // axes so the previous-ready semantic world keeps its ground contact while
+    // the terrain stand-in is magnified during an asynchronous child handoff.
+    // Root inverse-scaling holds semantic size, but root translation must also
+    // pivot around the canonical settlement anchor. Otherwise the parent patch
+    // translation/scale magnifies the SLOD-cell-to-village registration offset
+    // and the village slides toward a viewport edge while the child prepares.
+    let semanticAnchorLocalX=0,semanticAnchorLocalZ=0;
+    const semanticCenterTile=localStatic?.canonicalCenterTile;
+    if(semanticCenterTile&&displayResource){
+      const semanticOrigin=worldLatLonForTile(semanticCenterTile.x,semanticCenterTile.y);
+      const semanticDelta=canonicalRegisteredDeltaMeters(displayResource.lat0,displayResource.lon0,semanticOrigin.latitudeRadians,semanticOrigin.longitudeRadians);
+      semanticAnchorLocalX=Number(semanticDelta.eastMeters||0)/dims.metersPerUnit;
+      semanticAnchorLocalZ=-Number(semanticDelta.northMeters||0)/dims.metersPerUnit;
+    }
+    const semanticAnchorCompensation=1-semanticHoldScale;
+    for(const rootNode of [localStaticRoot,localNpcRoot,localBuildingActivityRoot,localCampaignWearMesh]){
+      if(rootNode?.setLocalScale)rootNode.setLocalScale(semanticHoldScale,1,semanticHoldScale);
+      if(rootNode?.setLocalPosition)rootNode.setLocalPosition(semanticAnchorLocalX*semanticAnchorCompensation,0,semanticAnchorLocalZ*semanticAnchorCompensation);
+    }
+    localResources.standInSemanticScale=Number(semanticHoldScale.toFixed(6));
+    tangentPatch.setLocalPosition(offset.east/dims.metersPerUnit*patchScale,offset.north/dims.metersPerUnit*patchScale,DISPLAY_RADIUS_UNITS+.002);
+    const requestedIndex=requestedLodIndex,visibleIndex=displayResource?.levelIndex??requestedIndex;
+    localResources.standInActive=standInActive;
+    localResources.standInOffsetClamped=standInOffsetClamped;
+    localResources.standInPinnedToViewport=standInActive&&standInOffsetClamped;
+    localResources.standInRawOffsetMeters={east:Number(rawOffset.east.toFixed(3)),north:Number(rawOffset.north.toFixed(3))};
+    localResources.standInAppliedOffsetMeters={east:Number(offset.east.toFixed(3)),north:Number(offset.north.toFixed(3))};
+    localResources.standInMagnification=Number(Math.max(1,dims.presentationCompensation).toFixed(4));
+    localResources.visibleLevel=displayResource?.dims.levelId??null;
+    localResources.requestedLevelIndex=requestedIndex;localResources.visibleLevelIndex=displayResource?visibleIndex:null;
+    if(focusRingPatch){
+      const mediumScale=patchScale;
+      focusRingPatch.setLocalEulerAngles(90,0,0);
+      focusRingPatch.setLocalScale(mediumScale,mediumScale,mediumScale);
+      focusRingPatch.setLocalPosition(offset.east/dims.metersPerUnit*mediumScale,offset.north/dims.metersPerUnit*mediumScale,DISPLAY_RADIUS_UNITS-.004);
+      projectionPresentation={...projectionPresentation,mediumScale};
+    }
+    if(horizonSkirt){
+      // The 6x world-matched continuation shares the patch scale. During a
+      // large focus jump the bounded stand-in offset guarantees that this last
+      // valid terrain representation still covers the viewport until swap.
+      const surroundScale=patchScale;
+      horizonSkirt.setLocalEulerAngles(90,0,0);
+      horizonSkirt.setLocalScale(surroundScale,surroundScale,surroundScale);
+      horizonSkirt.setLocalPosition(offset.east/dims.metersPerUnit*surroundScale,offset.north/dims.metersPerUnit*surroundScale,DISPLAY_RADIUS_UNITS-.010);
+      projectionPresentation={...projectionPresentation,surroundScale};
+    }
+  }
+  // Keep both representations alive during the projection handoff. The old
+  // threshold disabled the globe almost exactly when the tangent camera jumped
+  // above the patch, making a fixed geographic focus look like a new location.
+  // The overlap lets camera motion remain continuous while both surfaces are
+  // still derived from the same canonical lat/lon focus.
+  const handoff=projectionHandoffForZoom();
+  const tangentReveal=displayResource?projectionPresentationBlendForZoom():0;
+  // mapShellOut and tangentReveal are the same prepared-parent handoff weight.
+  // Use the partition computed above so the old relief globe cannot reappear
+  // underneath the shell while tangent ownership increases.
+  const reliefOpacity=clamp(reliefGlobeOpacity,0,1);
+  const globeFade=1-reliefOpacity;
+  planet.enabled=reliefOpacity>.0005;
+  if(surfaceMaterial){
+    surfaceMaterial.opacity=reliefOpacity;
+    surfaceMaterial.blendType=handoff>.001?pc.BLEND_NORMAL:pc.BLEND_NONE;
+    // The tangent patch is geometrically inside the globe. Once the handoff
+    // starts, a depth-writing sphere would mask the canonical tangent surface
+    // even while its color is fading. Stop writing depth almost immediately
+    // and let opacity alone perform the representation crossfade.
+    surfaceMaterial.depthWrite=handoff<.02;
+    surfaceMaterial.update();
+  }
+  if(tangentPatchMaterial){
+    tangentPatchMaterial.opacity=tangentReveal;
+    tangentPatchMaterial.blendType=pc.BLEND_NORMAL;
+    tangentPatchMaterial.depthWrite=false;
+    tangentPatchMaterial.update();
+  }
+  projectionPresentation={...projectionPresentation,
+    globeOpacity:Number(reliefOpacity.toFixed(6)),
+    reliefGlobeOpacity:Number(reliefOpacity.toFixed(6)),
+    tangentOpacity:Number(tangentReveal.toFixed(6)),
+    horizonOpacity:Number(tangentReveal.toFixed(6)),
+    mapScaleShellOpacity:Number(mapShellOpacity.toFixed(6)),
+    mapScaleShellActive:Boolean(mapScaleShell&&mapShellOpacity>.003),
+    strategicShellOwnership:Number(strategicShellOwnership.toFixed(6)),
+    representationOpacitySum:Number((reliefOpacity+mapShellOpacity+tangentReveal).toFixed(6)),
+    representationOwner:tangentReveal>=Math.max(reliefOpacity,mapShellOpacity)?"tangent-parent":mapShellOpacity>=reliefOpacity?"smooth-map-shell":"relief-globe",
+    globeDepthWrite:Boolean(handoff<.02)
+  };
+  localResources.visibleParentOpacity=Number(mapShellOpacity.toFixed(6));
+  localResources.visibleChildOpacity=Number(tangentReveal.toFixed(6));
+  localResources.visibleResourceSignature=displayResource?.signature||null;
+  localResources.visibleMetersPerTexel=displayResource?Number(displayResource.detail?.detailMetersPerTexel||0):null;
+  if(cloudLayer)cloudLayer.enabled=globeFade<.35;
+  localResources.culledOuterRepresentations=planet.enabled?0:1+(cloudLayer?1:0);
+  if(blend<=0){localResources.activeResourceCount=0;localResources.pendingPreparationCount=0;localResources.standInActive=false;if(focusRingPatch)focusRingPatch.enabled=false;}
+  applyWp020EvidenceLayerVisibility();
+}
+function applyCameraZoom(updateMap=true){
+  if(!cameraEntity||!zoomState.baseCameraDistance)return;
+  const scalar=clamp(zoomState.scalar,ZOOM_MIN,ZOOM_MAX);
+  zoomState.requestedBand=zoomBandFor(scalar);
+  updateProjectionState();
+  updateLocalRequest();
+  scheduleLocalStaticPresentationRefresh();
+  const targetHeightMeters=Math.max(2,presentationTargetHeightMeters(scalar));
+  const visibleHeightUnits=Math.max(1e-6,targetHeightMeters/WORLD_RADIUS_METERS*DISPLAY_RADIUS_UNITS);
+  const orthoHeight=Math.max(1e-6,visibleHeightUnits*.5);
+  cameraEntity.setLocalPosition(0,0,zoomState.baseCameraDistance);
+  cameraEntity.lookAt(0,0,0);
+  if(cameraEntity.camera){cameraEntity.camera.projection=pc.PROJECTION_ORTHOGRAPHIC;cameraEntity.camera.orthoHeight=orthoHeight;cameraEntity.camera.fov=GLOBE_VERTICAL_FOV_DEGREES;}
+  zoomState.cameraDistance=zoomState.baseCameraDistance;
+  const handoff=projectionHandoffForZoom(scalar),representationBlend=displayResource?projectionPresentationBlendForZoom(scalar):0;
+  projectionPresentation={...projectionPresentation,viewBlend:projectionState.blend,handoff,representationBlend,angleBlend:0,orientationStart:null,orientationEnd:null,cameraY:0,cameraZ:zoomState.baseCameraDistance,fov:GLOBE_VERTICAL_FOV_DEGREES,orthoHeight,cameraPitchDegrees:0,lookVector:Object.freeze([0,0,-1]),cameraTarget:Object.freeze([0,0,0]),zoomTransform:"orthographic-magnification-only",cameraPoseInvariant:true};
+  updateProjectionPresentation(visibleHeightUnits);
+  const tangentOwnsView=projectionState.blend>LOCAL_TANGENT_OWNERSHIP_BLEND&&Boolean(displayResource);
+  const footprintHeight=tangentOwnsView?Number(projectionPresentation.shownHeightMeters||targetHeightMeters):targetHeightMeters;
+  const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.1,(rect?.width||1)/(rect?.height||1));
+  zoomState.visibleFootprintHeightMeters=Math.max(2,footprintHeight);
+  zoomState.visibleFootprintWidthMeters=Math.max(2,footprintHeight*aspect);
+  zoomState.band=visibleBandFor(zoomState.requestedBand,tangentOwnsView);
+  if(updateMap)updateMapPresentation("zoom-settle",true);
+}
+// Semantic band shown to the player never claims a finer scale than the
+// representation currently on screen.
+function visibleBandFor(requestedBand,tangentOwnsView){
+  const order=ZOOM_BANDS.map(b=>b.id),requested=order.indexOf(requestedBand);
+  if(!displayResource||projectionState.blend<=0)return requested>order.indexOf("country-region")?"country-region":requestedBand;
+  const visible=order.indexOf(displayResource.dims.band);
+  if(!tangentOwnsView)return requested>visible?order[Math.min(requested,visible)]:requestedBand;
+  return requested>visible?order[visible]:requestedBand;
+}
+function refreshZoomPresentation(){if(cameraEntity&&zoomState.baseCameraDistance)applyCameraZoom();}
+function localFocusOffsetMeters(resource){
+  const delta=canonicalRegisteredDeltaMeters(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians,resource.lat0,resource.lon0);
+  return {east:Number(delta.eastMeters||0),north:Number(delta.northMeters||0)};
+}
+function requestZoomTargetPrefetch(){
+  if(!ready||!activeSeed||!geography||!zoomState.animating)return;
+  const target=clamp(Number(zoomState.targetScalar)||0,ZOOM_MIN,ZOOM_MAX);
+  if(target<=projectionState.transitionStart){
+    zoomState.targetPrefetchState="globe-coverage";
+    zoomState.targetPrefetchSignature=null;zoomState.targetPrefetchLevel=null;
+    return;
+  }
+  const finalIndex=rawLodIndexForZoom(target),lat=zoomState.focusLatitudeRadians,lon=zoomState.focusLongitudeRadians;
+  // Stage animated zoom prewarm through the next canonical parent instead of
+  // jumping straight to the final deep tier. This avoids spending the single
+  // build slot on a resource that intermediate zoom requests immediately cancel.
+  const index=displayResource?Math.min(finalIndex,displayResource.levelIndex+1):Math.min(finalIndex,0);
+  const signature=localSignatureFor(index,lat,lon),level=LOCAL_DETAIL_LEVELS[index]?.id||null;
+  zoomState.targetPrefetchSignature=signature;zoomState.targetPrefetchLevel=level;
+  if(displayResource?.signature===signature||localResourceCache.has(signature)){
+    zoomState.targetPrefetchState="ready";zoomState.targetPrefetchHits++;localResources.prefetchHits++;return;
+  }
+  if(localJob){
+    zoomState.targetPrefetchState=localJob.signature===signature?"preparing":"deferred";
+    return;
+  }
+  zoomState.targetPrefetchRequests++;localResources.prefetchRequests++;
+  zoomState.targetPrefetchStartedAtMs=Number(performance.now().toFixed(3));
+  zoomState.targetPrefetchState="preparing";
+  startLocalJob(index,lat,lon,signature,true,"zoom-target");
+}
+function setZoomTargetScalar(value,source="input"){
+  const next=clamp(value,ZOOM_MIN,ZOOM_MAX);
+  if(Math.abs(next-(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar))<1e-7)return null;
+  const now=performance.now();
+  if(zoomState.animating)zoomState.animationRetargetCount++;
+  lastZoomDirection=next>zoomState.scalar?1:-1;
+  zoomState.targetScalar=next;zoomState.animating=Math.abs(next-zoomState.scalar)>ZOOM_ANIMATION_SETTLE_EPSILON;
+  zoomState.animationStartScalar=zoomState.scalar;zoomState.animationStartAtMs=now;zoomState.animationFrameCount=0;
+  zoomState.lastAnimationInputSource=String(source||"input");zoomState.zoomChanges++;
+  zoomState.targetPrefetchState="idle";zoomState.targetPrefetchSignature=null;zoomState.targetPrefetchLevel=null;
+  localResources.firstReadyScalar=null;localResources.firstReadyLevel=null;localResources.firstReadyLatencyMs=0;
+  if(zoomState.animating)requestZoomTargetPrefetch();
+  navigationPerformance.zoomCommandSnapshotAvoidedCount++;
+  return null;
+}
+function animatedZoomReadinessCapScalar(){
+  if(lastZoomDirection<=0)return ZOOM_MAX;
+  if(!displayResource){
+    localResources.zoomReadinessSourceVisibleHeightMeters=null;
+    localResources.zoomReadinessCurrentMagnification=1;
+    return Math.max(projectionState.transitionStart,ZOOM_ROOT_READINESS_CAP_SCALAR);
+  }
+  // patchDimensionsForLevel() stores the native physical viewport as
+  // dims.visibleHeight (detail snapshots expose the same value as
+  // visibleHeightMeters). The v1 leash accidentally read dims.visibleHeightMeters,
+  // fell back to 36 m and therefore returned scalar 1.0 for every prepared
+  // parent. Use the actual resource dimension so a ready parent can never be
+  // stretched far beyond its physical information density while its child builds.
+  const nativeVisibleHeight=Math.max(
+    GROUND_FOOTPRINT_HEIGHT_METERS,
+    Number(displayResource.dims?.visibleHeight||displayResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)
+  );
+  const targetVisibleHeight=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(zoomState.scalar));
+  const currentMagnification=Math.max(1,nativeVisibleHeight/targetVisibleHeight);
+  localResources.zoomReadinessSourceVisibleHeightMeters=Number(nativeVisibleHeight.toFixed(3));
+  localResources.zoomReadinessCurrentMagnification=Number(currentMagnification.toFixed(4));
+  localResources.zoomReadinessMaxMagnification=Math.max(
+    Number(localResources.zoomReadinessMaxMagnification||1),
+    localResources.zoomReadinessCurrentMagnification
+  );
+  const readableHeight=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,nativeVisibleHeight/ZOOM_READY_PARENT_MAX_MAGNIFICATION);
+  return clamp(scalarForFootprintHeight(readableHeight),zoomState.scalar,ZOOM_MAX);
+}
+function updateAnimatedZoom(dt){
+  if(wp020EvidenceTransitionFreeze)return false;
+  if(!zoomState.animating)return false;
+  const seconds=Math.min(ZOOM_ANIMATION_MAX_STEP_SECONDS,Math.max(1/240,Number(dt)||1/60));
+  const previous=zoomState.scalar,target=clamp(zoomState.targetScalar,ZOOM_MIN,ZOOM_MAX),delta=target-previous;
+  const alpha=1-Math.exp(-seconds/ZOOM_ANIMATION_TIME_CONSTANT_SECONDS);
+  let next=previous+delta*alpha;
+  const readinessCap=target>previous?animatedZoomReadinessCapScalar():ZOOM_MAX;
+  const readinessHold=target>previous&&next>readinessCap+1e-7;
+  if(readinessHold)next=Math.max(previous,readinessCap);
+  if(Math.abs(target-next)<=ZOOM_ANIMATION_SETTLE_EPSILON)next=target;
+  localResources.zoomReadinessHoldActive=readinessHold;
+  localResources.zoomReadinessCapScalar=Number(readinessCap.toFixed(6));
+  if(readinessHold)localResources.zoomReadinessHoldFrames++;
+  if(!displayResource&&target<=projectionState.transitionStart){
+    localResources.zoomReadinessSourceVisibleHeightMeters=null;
+    localResources.zoomReadinessCurrentMagnification=1;
+  }
+  zoomState.scalar=next;zoomState.zoomVelocity=(next-previous)/seconds;zoomState.animationFrameCount++;zoomState.totalAnimationFrames++;
+  const displayIndex=displayScaleIndexForScalar(next),now=performance.now();
+  applyCameraZoom(false);
+  if(EVIDENCE_WP020_PRESENTATION_ISOLATION&&wp020EvidenceTransitionArm&&!wp020EvidenceTransitionFreeze){
+    const arm=wp020EvidenceTransitionArm,level=String(displayResource?.dims?.levelId||"");
+    if(next>=Number(arm.minScalar||0)&&level===String(arm.level||"regional-detail")){
+      wp020EvidenceTransitionFreeze=true;
+      wp020EvidenceTransitionFreezeState=Object.freeze({
+        scalar:Number(next.toFixed(6)),
+        level,
+        resourceSignature:displayResource?.signature||null,
+        requestedSignature:localResources.requestedSignature||null,
+        requestedLevel:localResources.requestedLevel||null,
+        pendingPreparationCount:Number(localResources.pendingPreparationCount||0),
+        frozenAtMs:Number(performance.now().toFixed(3))
+      });
+    }
+  }
+  const milestoneChanged=displayIndex!==zoomState.lastDisplayScaleIndex;
+  if(milestoneChanged||now-Number(zoomState.lastAnimationMapUpdateAtMs||0)>=ZOOM_MAP_PRESENTATION_INTERVAL_MS){
+    zoomState.lastDisplayScaleIndex=displayIndex;zoomState.lastAnimationMapUpdateAtMs=now;updateMapPresentation("zoom-animation");
+  }
+  if(zoomState.targetPrefetchState==="deferred"&&!localJob)requestZoomTargetPrefetch();
+  if(next===target){
+    zoomState.animating=false;zoomState.zoomVelocity=0;zoomState.animationSettledCount++;
+    zoomState.lastAnimationDurationMs=Number(Math.max(0,now-Number(zoomState.animationStartAtMs||now)).toFixed(3));
+    applyCameraZoom(true);
+  }
+  return true;
+}
+function setZoomScalar(value){
+  const next=clamp(value,ZOOM_MIN,ZOOM_MAX);
+  if(Math.abs(next-zoomState.scalar)<1e-7&&Math.abs(next-(zoomState.targetScalar??next))<1e-7)return null;
+  lastZoomDirection=next>zoomState.scalar?1:-1;
+  zoomState.scalar=next;zoomState.targetScalar=next;zoomState.animating=false;zoomState.zoomVelocity=0;zoomState.animationFrameCount=0;
+  zoomState.lastDisplayScaleIndex=displayScaleIndexForScalar(next);zoomState.targetPrefetchState="idle";
+  zoomState.zoomChanges++;applyCameraZoom();navigationPerformance.zoomCommandSnapshotAvoidedCount++;return null;
+}
+function zoomBy(delta){const d=Number(delta||0);return d===0?null:stepAnimatedScale(d>0?1:-1,"zoomBy");}
+function applyRotation(){
+  if(!planet)return;
+  planet.setLocalEulerAngles(pitchDegrees,yawDegrees,0);
+  mapScaleShell?.setLocalEulerAngles?.(pitchDegrees,yawDegrees,0);
+  updateZoomFocusFromRotation();
+  rotationChangeCount++;
+}
+function setRotationInternal(yaw,pitch,{snapshotResult=true,semanticReason="rotation",semanticUpdate=true}={}){
+  const beforeLatitudeRadians=zoomState.focusLatitudeRadians,beforeLongitudeRadians=zoomState.focusLongitudeRadians;
+  yawDegrees=normalizeYaw(yaw);
+  pitchDegrees=clamp(pitch,-82,82);
+  applyRotation();
+  if(zoomState.scalar>projectionState.transitionStart)applyCameraZoom(false);
+  if(semanticUpdate)updateMapPresentation(semanticReason);
+  recordEnvironmentNavigationPassage(beforeLatitudeRadians,beforeLongitudeRadians,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  return snapshotResult?snapshot():null;
+}
+function setRotation(yaw,pitch){navigationPerformance.programmaticRotationSnapshotAvoidedCount++;return setRotationInternal(yaw,pitch,{snapshotResult:false,semanticReason:"rotation"});}
+function rotateBy(deltaYaw,deltaPitch){
+  return setRotation(yawDegrees+Number(deltaYaw||0),pitchDegrees+Number(deltaPitch||0));
+}
+function rotationForLatLon(latitudeRadians,longitudeRadians){
+  // Solve the exact inverse of PlayCanvas XYZ Euler rotation for the canonical
+  // local direction d=[cos(lat)sin(lon), sin(lat), cos(lat)cos(lon)] such that
+  // R(pitch,yaw,0)*d == world +Z. Choose the yaw branch whose cos(yaw) has the
+  // same sign as d.z; that keeps the required pitch in the minimal +/-90 range.
+  const lat=clamp(Number(latitudeRadians)||0,-Math.PI*.499999,Math.PI*.499999),lon=wrapLongitudeRadians(longitudeRadians);
+  const c=Math.cos(lat),dx=c*Math.sin(lon),dy=Math.sin(lat),dz=c*Math.cos(lon);
+  const yz=Math.hypot(dy,dz),signCosYaw=dz<0?-1:1;
+  const yaw=Math.atan2(-dx,signCosYaw*yz);
+  const pitch=yz<1e-12?0:Math.atan2(dy*signCosYaw,Math.abs(dz));
+  return Object.freeze({
+    yawDegrees:normalizeYaw(yaw*180/Math.PI),
+    pitchDegrees:clamp(pitch*180/Math.PI,-82,82)
+  });
+}
+function setViewTarget(target,{forceSemantic=true,snapshotResult=true,semanticUpdate=true}={}){
+  if(!target)return snapshotResult?snapshot():null;
+  const rotation=rotationForLatLon(Number(target.latitudeRadians)||0,Number(target.longitudeRadians)||0);
+  const result=setRotationInternal(rotation.yawDegrees,rotation.pitchDegrees,{snapshotResult:false,semanticReason:"rotation",semanticUpdate});
+  if(semanticUpdate&&forceSemantic)updateMapPresentation("view-target",true);
+  scheduleFocusedMapPrewarm();
+  return snapshotResult?snapshot():result;
+}
+function rgbaFromColor(color){
+  return [
+    Math.round(clamp(color[0],0,1)*255),
+    Math.round(clamp(color[1],0,1)*255),
+    Math.round(clamp(color[2],0,1)*255),
+    255
+  ];
+}
+async function makeGeographyTexture(){
+  const source=document.createElement("canvas");
+  source.width=TEXTURE_WIDTH;
+  source.height=TEXTURE_HEIGHT;
+  const ctx=source.getContext("2d",{alpha:false});
+  const image=ctx.createImageData(TEXTURE_WIDTH,TEXTURE_HEIGHT);
+  const data=image.data;
+  // The temporary strategic map shell needs the same canonical geography
+  // identity without magnifying the globe atlas's near-white alpine chroma.
+  // Build a second presentation texture in this exact existing SEED sample pass:
+  // no extra geography queries, coordinates, jobs, or world authority.
+  const strategicSource=document.createElement("canvas");
+  strategicSource.width=TEXTURE_WIDTH;
+  strategicSource.height=TEXTURE_HEIGHT;
+  const strategicCtx=strategicSource.getContext("2d",{alpha:false});
+  const strategicImage=strategicCtx.createImageData(TEXTURE_WIDTH,TEXTURE_HEIGHT);
+  const strategicData=strategicImage.data;
+
+  let minElevation=Infinity,maxElevation=-Infinity;
+  let landSamples=0,oceanSamples=0,islandSamples=0,mountainSamples=0,peakSamples=0;
+  let highest=null,deepest=null,bestIsland=null,bestMountain=null,bestContinent=null,bestContinuity=null,bestContinuityScore=-Infinity;
+  const polarReferenceByRow=new Map(),polarBlendStart=80*Math.PI/180,polarBlendSpan=10*Math.PI/180;
+
+  await runSlicedRange(TEXTURE_WIDTH*TEXTURE_HEIGHT,index=>{
+    const py=Math.floor(index/TEXTURE_WIDTH),px=index-py*TEXTURE_WIDTH;
+    const v=(py+0.5)/TEXTURE_HEIGHT;
+    const lat=(0.5-v)*Math.PI;
+    const u=(px+0.5)/TEXTURE_WIDTH;
+    const lon=(u-0.5)*Math.PI*2;
+    const sample=geography.sampleLatLon(lat,lon);
+    let renderColor=sample.color;
+    const absLat=Math.abs(lat);
+    if(absLat>polarBlendStart){
+      let reference=polarReferenceByRow.get(py);
+      if(!reference){reference=geography.sampleLatLon(lat,0).color;polarReferenceByRow.set(py,reference);}
+      const t=smoothstep01((absLat-polarBlendStart)/polarBlendSpan);
+      renderColor=sample.color.map((value,channel)=>lerp(value,reference[channel],t));
+    }
+    const rgba=rgbaFromColor(renderColor);
+    const dataIndex=index*4;
+    data[dataIndex]=rgba[0];data[dataIndex+1]=rgba[1];data[dataIndex+2]=rgba[2];data[dataIndex+3]=255;
+    // Presentation-only land palette for the smooth strategic fallback.
+    // Water remains byte-identical to the canonical globe atlas. Land keeps
+    // SEED elevation/moisture/mountain identity, but high peaks cannot become
+    // a broad gray/white smear when the 640x320 shell is temporarily magnified.
+    let strategicColor=renderColor;
+    if(sample.land){
+      const moisture=clamp(Number(sample.moisture??.5),0,1),dry=1-moisture;
+      const elevation=Number(sample.elevationMeters||0),mountain=clamp(Number(sample.mountainInfluence||0),0,1);
+      const upland=clamp(Math.max(smoothstep01((elevation-620)/2400),mountain*.48),0,1)*.55;
+      const alpine=smoothstep01((elevation-2200)/3200)*.22;
+      const lowlandPalette=[.155+.085*dry,.335+.115*moisture,.100+.055*moisture];
+      const uplandPalette=[.230+.060*dry,.320+.065*moisture,.160+.045*moisture];
+      const alpinePalette=[.330,.350,.300];
+      const foothill=lowlandPalette.map((value,channel)=>lerp(value,uplandPalette[channel],upland));
+      const strategicPalette=foothill.map((value,channel)=>lerp(value,alpinePalette[channel],alpine));
+      strategicColor=strategicPalette.map((value,channel)=>clamp(lerp(value,Number(renderColor[channel])||0,.08),0,1));
+    }
+    const strategicRgba=rgbaFromColor(strategicColor);
+    strategicData[dataIndex]=strategicRgba[0];strategicData[dataIndex+1]=strategicRgba[1];strategicData[dataIndex+2]=strategicRgba[2];strategicData[dataIndex+3]=255;
+    minElevation=Math.min(minElevation,sample.elevationMeters);
+    maxElevation=Math.max(maxElevation,sample.elevationMeters);
+    if(sample.land)landSamples++;else oceanSamples++;
+    if(sample.islandInfluence>0.28&&sample.continentInfluence<0.22&&sample.land)islandSamples++;
+    if(sample.mountainInfluence>0.18)mountainSamples++;
+    if(sample.elevationMeters>=3400)peakSamples++;
+    const descriptor=Object.freeze({latitudeRadians:sample.latitudeRadians,longitudeRadians:sample.longitudeRadians,latitudeDegrees:Number((sample.latitudeRadians*180/Math.PI).toFixed(3)),longitudeDegrees:Number((sample.longitudeRadians*180/Math.PI).toFixed(3)),elevationMeters:sample.elevationMeters,surfaceClass:sample.surfaceClass,continentInfluence:sample.continentInfluence,islandInfluence:sample.islandInfluence,mountainInfluence:sample.mountainInfluence});
+    if(!highest||sample.elevationMeters>highest.elevationMeters)highest=descriptor;
+    if(!deepest||sample.elevationMeters<deepest.elevationMeters)deepest=descriptor;
+    if(sample.land&&sample.islandInfluence>0.22&&sample.continentInfluence<0.28&&(!bestIsland||sample.islandInfluence>bestIsland.islandInfluence))bestIsland=descriptor;
+    if(sample.land&&(!bestMountain||sample.mountainInfluence>bestMountain.mountainInfluence||(sample.mountainInfluence===bestMountain.mountainInfluence&&sample.elevationMeters>bestMountain.elevationMeters)))bestMountain=descriptor;
+    if(sample.land&&(!bestContinent||sample.continentInfluence>bestContinent.continentInfluence))bestContinent=descriptor;
+    if(sample.land&&Math.abs(descriptor.latitudeDegrees)<=60){
+      const continuityScore=sample.continentInfluence*3+sample.moisture*.35-Math.abs(sample.elevationMeters-650)/7000-sample.islandInfluence*.45;
+      if(continuityScore>bestContinuityScore){bestContinuityScore=continuityScore;bestContinuity=descriptor;}
+    }
+  });
+  ctx.putImageData(image,0,0);
+  strategicCtx.putImageData(strategicImage,0,0);
+
+  const texture=new pc.Texture(device,{
+    width:TEXTURE_WIDTH,
+    height:TEXTURE_HEIGHT,
+    format:pc.PIXELFORMAT_R8_G8_B8_A8,
+    mipmaps:true
+  });
+  texture.name="SeededPlanetGeography";
+  texture.flipY=true;
+  texture.addressU=pc.ADDRESS_REPEAT;
+  texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
+  texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;
+  texture.magFilter=pc.FILTER_LINEAR;
+  texture.setSource(source);
+
+  const strategicTexture=new pc.Texture(device,{
+    width:TEXTURE_WIDTH,
+    height:TEXTURE_HEIGHT,
+    format:pc.PIXELFORMAT_R8_G8_B8_A8,
+    mipmaps:true
+  });
+  strategicTexture.name="SeededStrategicMapShell";
+  strategicTexture.flipY=true;
+  strategicTexture.addressU=pc.ADDRESS_REPEAT;
+  strategicTexture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
+  strategicTexture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;
+  strategicTexture.magFilter=pc.FILTER_LINEAR;
+  strategicTexture.setSource(strategicSource);
+
+  generatedTexture=texture;
+  mapScaleShellTexture=strategicTexture;
+  geographyStats=Object.freeze({
+    textureWidth:TEXTURE_WIDTH,
+    textureHeight:TEXTURE_HEIGHT,
+    totalTextureSamples:TEXTURE_WIDTH*TEXTURE_HEIGHT,
+    minElevationMeters:Number(minElevation.toFixed(2)),
+    maxElevationMeters:Number(maxElevation.toFixed(2)),
+    landSamples,oceanSamples,islandSamples,mountainSamples,peakSamples,
+    landFraction:Number((landSamples/(landSamples+oceanSamples)).toFixed(5)),
+    oceanFraction:Number((oceanSamples/(landSamples+oceanSamples)).toFixed(5))
+  });
+  featureTargets=Object.freeze({
+    continent:bestContinent,
+    continuityFocus:bestContinuity||bestContinent,
+    mountain:bestMountain||highest,
+    island:bestIsland,
+    peak:highest,
+    deepOcean:deepest
+  });
+  buildDestinationDescriptors();
+  return texture;
+}
+function greatCircleDistanceKm(a,b){
+  const lat1=Number(a?.latitudeRadians)||0,lat2=Number(b?.latitudeRadians)||0;
+  const dLat=lat2-lat1,dLon=(Number(b?.longitudeRadians)||0)-(Number(a?.longitudeRadians)||0);
+  const q=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  return WORLD_RADIUS_METERS*(2*Math.atan2(Math.sqrt(q),Math.sqrt(Math.max(0,1-q))))/1000;
+}
+function currentViewTarget(){return {latitudeRadians:-pitchDegrees*Math.PI/180,longitudeRadians:-yawDegrees*Math.PI/180};}
+function buildDestinationDescriptors(){
+  const started=performance.now(),center=currentViewTarget();
+  let baseDescriptors=[];
+  try{
+    const query=window.WorldDestinations?.queryNearby?.(activeSeed,center,{radiusMeters:80000,maxResults:16});
+    baseDescriptors=(query?.results||[]).map(item=>{
+      const coordinates=item.coordinates||{};
+      return Object.freeze({
+        ...item,
+        latitudeRadians:Number(coordinates.latitudeRadians)||0,
+        longitudeRadians:Number(coordinates.longitudeRadians)||0,
+        latitudeDegrees:Number(coordinates.latitudeDegrees)||0,
+        longitudeDegrees:Number(coordinates.longitudeDegrees)||0,
+        elevationMeters:Number(item.evidence?.elevationMeters)||0,
+        worldAuthority:true,
+        destinationAuthority:"WorldDestinations",
+        localMaterialized:false
+      });
+    });
+  }catch(_){baseDescriptors=[];}
+  const rumorLeads=(window.LocalRumors?.navigatorLeads?.(activeSeed)||[]).slice(0,5),leadByDestinationId=new Map(rumorLeads.map(lead=>[String(lead.id),lead]));
+  const merged=baseDescriptors.map(descriptor=>{
+    const lead=leadByDestinationId.get(descriptor.id);if(!lead)return descriptor;
+    return Object.freeze({...descriptor,rumorLead:true,knowledgeStatus:lead.knowledgeStatus||"uncertain",leadId:lead.leadId||null,leadSpeakerId:lead.leadSpeakerId||null,
+      description:String(lead.description||descriptor.description),worldAuthority:true,leadKnowledgeAuthority:false});
+  });
+  const baseIds=new Set(baseDescriptors.map(item=>item.id));
+  const extras=rumorLeads.filter(lead=>!baseIds.has(String(lead.id))).map(lead=>Object.freeze({...lead,worldAuthority:false,leadKnowledgeAuthority:false}));
+  destinationNavigator.descriptors=[...merged,...extras].slice(0,16);
+  destinationNavigator.queryCount++;
+  destinationNavigator.lastQueryMs=Number((performance.now()-started).toFixed(3));
+}
+function renderDestinationNavigator(){
+  if(!root)return;
+  let button=root.querySelector(".planet-places-button");
+  if(!button){
+    button=document.createElement("button");button.type="button";button.className="planet-places-button";button.textContent="Places";button.setAttribute("aria-expanded","false");
+    button.addEventListener("click",()=>{destinationNavigator.open=!destinationNavigator.open;renderDestinationNavigator();});
+    root.appendChild(button);
+  }
+  button.setAttribute("aria-expanded",String(destinationNavigator.open));
+  let panel=root.querySelector(".planet-places-panel");
+  if(!destinationNavigator.open){panel?.remove();return;}
+  if(!panel){panel=document.createElement("section");panel.className="planet-places-panel";panel.setAttribute("aria-label","World destinations");root.appendChild(panel);}
+  const categories=[["all","All"],["settlements","Settlements"],["cities","Cities / Towns"],["historical","Ruins"],["hunting","Hunting"],["fishing","Fishing"],["water","Water"],["nature","Nature"]];
+  const center=currentViewTarget();
+  const visible=destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).map(d=>({d,distance:greatCircleDistanceKm(center,d)})).sort((a,b)=>a.distance-b.distance||(b.d.importance||0)-(a.d.importance||0));
+  panel.replaceChildren();
+  const head=document.createElement("div");head.className="planet-places-head";head.innerHTML="<div><small>WORLD NAVIGATOR</small><strong>Places</strong></div>";
+  const close=document.createElement("button");close.type="button";close.className="planet-places-close";close.textContent="×";close.setAttribute("aria-label","Close places");close.onclick=()=>{destinationNavigator.open=false;renderDestinationNavigator();};head.appendChild(close);panel.appendChild(head);
+  const filters=document.createElement("div");filters.className="planet-places-filters";
+  for(const [id,label] of categories){const b=document.createElement("button");b.type="button";b.textContent=label;b.dataset.active=String(destinationNavigator.category===id);b.onclick=()=>{destinationNavigator.category=id;renderDestinationNavigator();};filters.appendChild(b);}panel.appendChild(filters);
+  const list=document.createElement("div");list.className="planet-places-list";
+  for(const entry of visible){
+    const d=entry.d,row=document.createElement("article");row.className="planet-place-row";row.dataset.selected=String(destinationNavigator.selectedId===d.id);
+    const info=document.createElement("div");
+    info.innerHTML="<strong></strong><span></span><small></small>";info.querySelector("strong").textContent=d.name;info.querySelector("span").textContent=(d.rumorLead?"LEAD · ":"")+d.type+" · "+Math.round(entry.distance).toLocaleString()+" km from view";info.querySelector("small").textContent=d.description+" · "+Math.round(d.elevationMeters).toLocaleString()+" m";
+    const go=document.createElement("button");go.type="button";go.textContent="View";go.onclick=()=>{destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,type:d.type,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();};
+    row.append(info,go);list.appendChild(row);
+  }
+  panel.appendChild(list);
+  const foot=document.createElement("p");foot.className="planet-places-foot";foot.textContent="Camera view only · "+visible.length+" bounded seeded destinations · no world scan";panel.appendChild(foot);
+}
+function wildernessHash(label){
+  let h=2166136261>>>0;for(const ch of String(activeSeed)+"|wilderness|"+label){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}return h>>>0;
+}
+function buildWildernessDescriptors(){
+  const started=performance.now(),vegetation=[],rocks=[],fauna=[];let cells=0,rejectedWater=0;
+  for(let lat=-72;lat<=72;lat+=8)for(let lon=-176;lon<180;lon+=8){
+    cells++;const jLat=((wildernessHash("lat:"+lat+":"+lon)%1000)/999-.5)*3.2,jLon=((wildernessHash("lon:"+lat+":"+lon)%1000)/999-.5)*3.2;
+    const sample=geography.sampleLatLon((lat+jLat)*Math.PI/180,(lon+jLon)*Math.PI/180);
+    if(!sample.land){rejectedWater++;continue;}
+    const descriptor={latitudeRadians:sample.latitudeRadians,longitudeRadians:sample.longitudeRadians,elevationMeters:sample.elevationMeters,surfaceClass:sample.surfaceClass,moisture:sample.moisture};
+    const roll=wildernessHash("kind:"+lat+":"+lon)%100;
+    if(sample.elevationMeters>1450||sample.mountainInfluence>.22){if(roll<72)rocks.push(descriptor);}    else if(sample.moisture>.40){if(roll<78)vegetation.push(descriptor);}
+    else if(roll<48)rocks.push(descriptor);else if(roll<82)vegetation.push(descriptor);
+    if(sample.moisture>.46&&sample.elevationMeters<1200&&(wildernessHash("fauna:"+lat+":"+lon)%100)<12)fauna.push(descriptor);
+  }
+  wilderness={generated:true,cellCount:cells,acceptedStaticProps:vegetation.length+rocks.length,vegetationClusters:vegetation.length,rockClusters:rocks.length,ambientFaunaZones:fauna.length,rejectedWater,drawCalls:0,triangles:0,preparationMs:Number((performance.now()-started).toFixed(3)),cacheReuse:false,perFrameScatter:false,simulationAuthority:false};
+  return {vegetation,rocks,fauna};
+}
+function buildWildernessMesh(items,size){
+  const positions=[],normals=[],indices=[];
+  for(const item of items){
+    const d=window.PlanetGeography.directionFromLatLon(item.latitudeRadians,item.longitudeRadians);
+    const radius=DISPLAY_RADIUS_UNITS*(1+(Math.max(40,item.elevationMeters)/WORLD_RADIUS_METERS)*HEIGHT_EXAGGERATION)+.012;
+    const base={x:d.x*radius,y:d.y*radius,z:d.z*radius};
+    const ref=Math.abs(d.y)<.88?{x:0,y:1,z:0}:{x:1,y:0,z:0};
+    let ux=ref.y*d.z-ref.z*d.y,uy=ref.z*d.x-ref.x*d.z,uz=ref.x*d.y-ref.y*d.x;const ul=Math.hypot(ux,uy,uz)||1;ux/=ul;uy/=ul;uz/=ul;
+    const vx=d.y*uz-d.z*uy,vy=d.z*ux-d.x*uz,vz=d.x*uy-d.y*ux;
+    const start=positions.length/3,half=size*.90;
+    positions.push(base.x+ux*half,base.y+uy*half,base.z+uz*half,base.x-ux*half,base.y-uy*half,base.z-uz*half,base.x+vx*half,base.y+vy*half,base.z+vz*half,base.x+d.x*size*.28,base.y+d.y*size*.28,base.z+d.z*size*.28);
+    for(let i=0;i<4;i++)normals.push(d.x,d.y,d.z);    indices.push(start,start+1,start+3,start+1,start+2,start+3,start+2,start,start+3);
+  }
+  if(!positions.length)return null;
+  const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setIndices(indices);mesh.update();wilderness.triangles+=indices.length/3;return mesh;
+}
+function buildWildernessPresentation(){
+  const groups=buildWildernessDescriptors();
+  const specs=[[groups.vegetation,.028,[.18,.38,.13],"WildernessVegetation"],[groups.rocks,.024,[.38,.33,.25],"WildernessRock"]];
+  for(const [items,size,color,name] of specs){const mesh=buildWildernessMesh(items,size);if(!mesh)continue;const material=new pc.StandardMaterial();material.name=name+"Material";material.diffuse.set(...color);material.roughness=.92;material.update();const entity=new pc.Entity(name);entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});entity.render.meshInstances=[new pc.MeshInstance(mesh,material,entity)];planet.addChild(entity);wilderness.drawCalls++;}
+}
+function visualElevationMeters(sample){
+  if(sample.land)return Math.max(40,Number(sample.elevationMeters)||0);
+  return Math.max(-520,(Number(sample.elevationMeters)||0)*OCEAN_VISUAL_DEPTH_FACTOR);
+}
+async function buildPlanetMesh(){
+  if(EVIDENCE_FAST_START){
+    // Trusted local-evidence bootstrap: the WP frames never inspect the globe,
+    // and all local terrain/settlement resources are built later from the same
+    // canonical SEED + coordinates. Avoid the custom height-mesh buffer/upload
+    // path entirely because Chrome/SwiftShader can stall there before local
+    // evidence starts. Production never enters this branch.
+    startupScheduler.evidenceFastStart=true;
+    startupScheduler.evidencePlanetPlaceholder=true;
+    startupScheduler.planetMeshLatitudeSegments=4;
+    startupScheduler.planetMeshLongitudeSegments=8;
+    const started=performance.now();
+    const mesh=pc.createSphere(device,{radius:DISPLAY_RADIUS_UNITS,latitudeBands:4,longitudeBands:8});
+    startupScheduler.phaseTimings.planetMeshPlaceholderMs=Number((performance.now()-started).toFixed(3));
+    meshVertexCount=45;
+    meshTriangleCount=64;
+    await yieldBrowser();
+    return mesh;
+  }
+  const positions=[];
+  const uvs=[];
+  const indices=[];
+  const normals=[];
+  const latitudeSegments=EVIDENCE_LAYERED_START?EVIDENCE_LATITUDE_SEGMENTS:LATITUDE_SEGMENTS;
+  const longitudeSegments=EVIDENCE_LAYERED_START?EVIDENCE_LONGITUDE_SEGMENTS:LONGITUDE_SEGMENTS;
+  const stride=longitudeSegments+1;
+  startupScheduler.evidenceFastStart=false;
+  startupScheduler.evidencePlanetPlaceholder=false;
+  startupScheduler.planetMeshLatitudeSegments=latitudeSegments;
+  startupScheduler.planetMeshLongitudeSegments=longitudeSegments;
+
+  await runSlicedRange(latitudeSegments+1,latIndex=>{
+    const v=latIndex/latitudeSegments;
+    const lat=(0.5-v)*Math.PI;
+    for(let lonIndex=0;lonIndex<=longitudeSegments;lonIndex++){
+      const u=lonIndex/longitudeSegments;
+      const lon=(u-0.5)*Math.PI*2;
+      const direction=window.PlanetGeography.directionFromLatLon(lat,lon);
+      const sample=geography.sampleDirection(direction);
+      const visualMeters=visualElevationMeters(sample);
+      const radius=DISPLAY_RADIUS_UNITS*(1+(visualMeters/WORLD_RADIUS_METERS)*HEIGHT_EXAGGERATION);
+      positions.push(direction.x*radius,direction.y*radius,direction.z*radius);
+      // Every longitude collapses to one geometric point at each pole. Give
+      // those duplicate pole vertices one canonical U so the equirectangular
+      // texture cannot create a radial seam/fan at the singularity.
+      uvs.push((latIndex===0||latIndex===latitudeSegments)?.5:u,1-v);normals.push(0,0,0);
+    }
+  });
+  await runSlicedRange(latitudeSegments,lat=>{
+    for(let lon=0;lon<longitudeSegments;lon++){
+      const a=lat*stride+lon;
+      const b=a+1;
+      const c=a+stride;
+      const d=c+1;
+      indices.push(a,c,b,b,c,d);
+    }
+  });
+  const faceCount=indices.length/3;
+  await runSlicedRange(faceCount,face=>{
+    const i=face*3,ia=indices[i],ib=indices[i+1],ic=indices[i+2];
+    const ax=positions[ia*3],ay=positions[ia*3+1],az=positions[ia*3+2];
+    const bx=positions[ib*3],by=positions[ib*3+1],bz=positions[ib*3+2];
+    const cx=positions[ic*3],cy=positions[ic*3+1],cz=positions[ic*3+2];
+    const abx=bx-ax,aby=by-ay,abz=bz-az;
+    const acx=cx-ax,acy=cy-ay,acz=cz-az;
+    const nx=aby*acz-abz*acy;
+    const ny=abz*acx-abx*acz;
+    const nz=abx*acy-aby*acx;
+    normals[ia*3]+=nx;normals[ia*3+1]+=ny;normals[ia*3+2]+=nz;
+    normals[ib*3]+=nx;normals[ib*3+1]+=ny;normals[ib*3+2]+=nz;
+    normals[ic*3]+=nx;normals[ic*3+1]+=ny;normals[ic*3+2]+=nz;
+  });
+  await runSlicedRange(normals.length/3,index=>{
+    const i=index*3,len=Math.hypot(normals[i],normals[i+1],normals[i+2])||1;
+    normals[i]/=len;normals[i+1]/=len;normals[i+2]/=len;
+  });
+  await runSlicedRange(latitudeSegments+1,lat=>{
+    const a=lat*stride,b=a+longitudeSegments;
+    const nx=normals[a*3]+normals[b*3],ny=normals[a*3+1]+normals[b*3+1],nz=normals[a*3+2]+normals[b*3+2];
+    const len=Math.hypot(nx,ny,nz)||1;
+    normals[a*3]=normals[b*3]=nx/len;
+    normals[a*3+1]=normals[b*3+1]=ny/len;
+    normals[a*3+2]=normals[b*3+2]=nz/len;
+  });
+  for(const row of [0,latitudeSegments]){
+    let nx=0,ny=0,nz=0;
+    for(let lon=0;lon<=longitudeSegments;lon++){
+      const index=row*stride+lon;
+      nx+=normals[index*3];ny+=normals[index*3+1];nz+=normals[index*3+2];
+    }
+    const len=Math.hypot(nx,ny,nz)||1;
+    nx/=len;ny/=len;nz/=len;
+    for(let lon=0;lon<=longitudeSegments;lon++){
+      const index=row*stride+lon;
+      normals[index*3]=nx;normals[index*3+1]=ny;normals[index*3+2]=nz;
+    }
+    await yieldBrowser();
+  }
+
+  const mesh=new pc.Mesh(device);
+  const commitStarted=performance.now();
+  mesh.setPositions(positions);
+  mesh.setNormals(normals);
+  mesh.setUvs(0,uvs);
+  mesh.setIndices(indices);
+  startupScheduler.phaseTimings.planetMeshBufferStageMs=Number((performance.now()-commitStarted).toFixed(3));
+  await yieldBrowser();
+  const uploadStarted=performance.now();
+  mesh.update();
+  startupScheduler.phaseTimings.planetMeshUploadMs=Number((performance.now()-uploadStarted).toFixed(3));
+  meshVertexCount=positions.length/3;
+  meshTriangleCount=indices.length/3;
+  return mesh;
+}
+function buildMapScaleShellMesh(){
+  // Smooth canonical map parent used only during the deep globe→tangent handoff.
+  // It reuses the exact globe geography texture/UV registration but deliberately
+  // omits exaggerated relief, so loading never turns the approach into bright
+  // faceted mountain bands. This is presentation-only and adds no world truth.
+  const latitudeSegments=48,longitudeSegments=80,stride=longitudeSegments+1;
+  const positions=[],normals=[],uvs=[],indices=[],radius=DISPLAY_RADIUS_UNITS+.006;
+  for(let latIndex=0;latIndex<=latitudeSegments;latIndex++){
+    const v=latIndex/latitudeSegments,lat=(.5-v)*Math.PI;
+    for(let lonIndex=0;lonIndex<=longitudeSegments;lonIndex++){
+      const u=lonIndex/longitudeSegments,lon=(u-.5)*Math.PI*2;
+      const direction=window.PlanetGeography.directionFromLatLon(lat,lon);
+      positions.push(direction.x*radius,direction.y*radius,direction.z*radius);
+      normals.push(direction.x,direction.y,direction.z);
+      uvs.push((latIndex===0||latIndex===latitudeSegments)?.5:u,1-v);
+    }
+  }
+  for(let lat=0;lat<latitudeSegments;lat++)for(let lon=0;lon<longitudeSegments;lon++){
+    const a=lat*stride+lon,b=a+1,c=a+stride,d=c+1;
+    indices.push(a,c,b,b,c,d);
+  }
+  const mesh=new pc.Mesh(device);
+  mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
+  return mesh;
+}
+function resize(){
+  if(!app||!device||!root)return;
+  // Preserve the current and target physical footprints across responsive
+  // reframing so an in-flight animated zoom does not jump to a different scale.
+  const hadCameraFrame=Number(zoomState.baseCameraDistance||0)>0;
+  const preservedCurrentHeight=hadCameraFrame?presentationTargetHeightMeters(zoomState.scalar):null;
+  const preservedTargetHeight=hadCameraFrame?presentationTargetHeightMeters(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar):null;
+  const width=Math.max(1,Math.round(root.clientWidth||window.innerWidth||1));
+  const height=Math.max(1,Math.round(root.clientHeight||window.innerHeight||1));
+  const dpr=Math.min(1.5,Math.max(1,Number(window.devicePixelRatio||1)));
+  device.maxPixelRatio=dpr;
+  app.setCanvasFillMode(pc.FILLMODE_NONE,width,height);
+  app.setCanvasResolution(pc.RESOLUTION_AUTO);
+  app.resizeCanvas(width,height);
+  app.updateCanvasSize?.();
+  if(cameraEntity){
+    const verticalHalfFov=(34*Math.PI/180)*0.5;
+    const aspect=Math.max(0.1,width/height);
+    const horizontalHalfFov=Math.atan(Math.tan(verticalHalfFov)*aspect);
+    const limitingHalfFov=Math.max(0.05,Math.min(verticalHalfFov,horizontalHalfFov));
+    const maxReliefFactor=1+(7000/WORLD_RADIUS_METERS)*HEIGHT_EXAGGERATION;
+    const framingMargin=(height<=500&&aspect>1.7)?0.78:(aspect>1.7?1.015:1.055);
+    const distance=(DISPLAY_RADIUS_UNITS*maxReliefFactor/Math.sin(limitingHalfFov))*framingMargin;
+    zoomState.baseCameraDistance=distance;
+    if(hadCameraFrame){zoomState.scalar=scalarForFootprintHeight(preservedCurrentHeight);zoomState.targetScalar=scalarForFootprintHeight(preservedTargetHeight);}
+    else{zoomState.scalar=0;zoomState.targetScalar=0;zoomState.animating=false;zoomState.zoomVelocity=0;}
+    zoomState.lastDisplayScaleIndex=displayScaleIndexForScalar(zoomState.scalar);
+    applyCameraZoom();
+  }
+}
+function dismissInspection(){const hadSelection=inspection.selectedId!==null||inspection.selectedType!==null||!!root?.querySelector?.(".world-inspection-tooltip");inspection.selectedId=null;inspection.selectedType=null;if(hadSelection)inspection.dismissCount++;root?.querySelector?.(".world-inspection-tooltip")?.remove();}
+function inspectionIdText(id){return String(id).trim();}
+function inspectionRegistryKey(type,id){return String(type)+":"+inspectionIdText(id);}
+function registerInspectionPickable(record){
+  if(record?.id===undefined||record.id===null||inspectionIdText(record.id).length===0||!["npc","building","signpost"].includes(record.type)||typeof record.screenBounds!=="function")return false;
+  inspectionPickables.set(inspectionRegistryKey(record.type,record.id),record);return true;
+}
+function unregisterInspectionPickable(id,type=null){
+  const idText=inspectionIdText(id),keys=type?[inspectionRegistryKey(type,idText)]:Array.from(inspectionPickables.entries()).filter(([,record])=>inspectionIdText(record.id)===idText).map(([key])=>key);
+  if(inspection.selectedId===idText&&(!type||inspection.selectedType===type))dismissInspection();
+  let removed=false;for(const key of keys)removed=inspectionPickables.delete(key)||removed;return removed;
+}
+function readableInspectionLines(record){
+  const readable=(value,fallback)=>{const text=String(value??"").trim();return text||fallback;};
+  if(record.type==="npc"){
+    let live=null;try{live=typeof record.inspect==="function"?record.inspect():null;}catch{live=null;}
+    return [readable(live?.displayName||record.name,"Unknown resident"),readable(live?.profession||record.job,"Unassigned"),readable(live?.activity||record.activity,"Activity unavailable")];
+  }
+  if(record.type==="signpost"){
+    return [readable(record.name,"Road signpost"),...(record.branches||[]).slice(0,3).map(branch=>readable(branch.destinationName,"Destination")+" — "+readable(branch.distanceLabel,"route")+" "+readable(branch.directionLabel,""))];
+  }
+  const functionLabel=String(record.functionLabel??"").trim(),buildingType=String(record.buildingType??"").trim(),typeLabel=functionLabel||buildingType||"Building",name=String(record.name??"").trim();
+  return name&&name!==typeLabel?[name,typeLabel]:[typeLabel];
+}
+function renderInspectionTooltip(record,knownBounds=null){
+  let tip=root?.querySelector?.(".world-inspection-tooltip");if(!tip){tip=document.createElement("aside");tip.className="world-inspection-tooltip";tip.setAttribute("role","status");root.appendChild(tip);}
+  const started=performance.now();let bounds=knownBounds;try{if(bounds===null)bounds=record.screenBounds();}catch{bounds=null;}
+  if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite)||bounds.left>bounds.right||bounds.top>bounds.bottom){dismissInspection();return false;}
+  const now=performance.now(),recordKey=inspectionRegistryKey(record.type,record.id),selectionChanged=tip.dataset.recordKey!==recordKey;
+  if(selectionChanged||tip.dataset.contentKey===undefined||now-inspection.lastContentRefreshAtMs>=250){
+    const lines=readableInspectionLines(record),contentKey=lines.join("\u001f");
+    if(tip.dataset.contentKey!==contentKey){
+      tip.replaceChildren();lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=line;tip.appendChild(el);});
+      tip.dataset.contentKey=contentKey;inspection.contentRefreshes++;
+    }
+    inspection.lastContentRefreshAtMs=now;
+  }
+  if(selectionChanged)tip.dataset.recordKey=recordKey;
+  const rootRect=root.getBoundingClientRect(),anchorX=(bounds.left+bounds.right)/2-rootRect.left,anchorY=bounds.top-rootRect.top;
+  tip.style.visibility="hidden";tip.style.left="0px";tip.style.top="0px";
+  const tipRect=tip.getBoundingClientRect(),halfWidth=Math.min(rootRect.width/2,tipRect.width/2),margin=12;
+  const clampX=value=>clamp(value,margin+halfWidth,Math.max(margin+halfWidth,rootRect.width-margin-halfWidth));
+  const clampY=(value,below)=>below
+    ?clamp(value,margin,Math.max(margin,rootRect.height-tipRect.height-margin))
+    :clamp(value,margin+tipRect.height,Math.max(margin+tipRect.height,rootRect.height-margin));
+  const boxFor=(x,y,below)=>({left:x-halfWidth,right:x+halfWidth,top:below?y:y-tipRect.height,bottom:below?y+tipRect.height:y});
+  const overlaps=(a,b)=>!(a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top);
+  const reserved=[".planet-map-context",".planet-places-button",".planet-scale-ruler"].map(selector=>root.querySelector?.(selector)?.getBoundingClientRect?.()).filter(Boolean).map(r=>({left:r.left-rootRect.left-margin/2,right:r.right-rootRect.left+margin/2,top:r.top-rootRect.top-margin/2,bottom:r.bottom-rootRect.top+margin/2}));
+  const preferredBelow=anchorY-tipRect.height-margin<margin,candidates=[];
+  const addCandidate=(x,y,below)=>{
+    const cx=clampX(x),cy=clampY(y,below),box=boxFor(cx,cy,below);
+    if(reserved.some(r=>overlaps(box,r)))return;
+    const centerY=below?cy+tipRect.height/2:cy-tipRect.height/2;
+    candidates.push({x:cx,y:cy,below,score:Math.hypot(cx-anchorX,centerY-anchorY)+(below===preferredBelow?0:8)});
+  };
+  for(const below of [preferredBelow,!preferredBelow]){
+    const anchorYForSide=below?anchorY+margin:anchorY-margin;
+    addCandidate(anchorX,anchorYForSide,below);
+    for(const r of reserved){
+      addCandidate(r.right+margin+halfWidth,anchorYForSide,below);
+      addCandidate(r.left-margin-halfWidth,anchorYForSide,below);
+      addCandidate(anchorX,below?r.bottom+margin:r.top-margin,below);
+    }
+  }
+  const chosen=(candidates.sort((a,b)=>a.score-b.score)[0])||{x:clampX(anchorX),y:clampY(preferredBelow?anchorY+margin:anchorY-margin,preferredBelow),below:preferredBelow};
+  tip.classList.toggle("below-anchor",chosen.below);tip.dataset.placement=chosen.below?"below":"above";tip.style.left=chosen.x+"px";tip.style.top=chosen.y+"px";tip.style.visibility="";inspection.tooltipUpdates++;inspection.lastTooltipUpdateMs=Number((performance.now()-started).toFixed(3));return true;
+}
+function pickInspection(clientX,clientY){
+  const started=performance.now(),candidates=[];
+  for(const record of inspectionPickables.values()){
+    let visible=true;try{visible=record.visible?.()!==false;}catch{visible=false;}if(!visible)continue;
+    let b=null;try{b=record.screenBounds();}catch{continue;}
+    if(!b||![b.left,b.right,b.top,b.bottom].every(Number.isFinite)||b.left>b.right||b.top>b.bottom)continue;
+    if(clientX<b.left||clientX>b.right||clientY<b.top||clientY>b.bottom)continue;
+    if(typeof record.hitTest==="function"){
+      let hit=false;try{hit=record.hitTest(clientX,clientY,b)!==false;}catch{hit=false;}
+      if(!hit)continue;
+    }
+    candidates.push({record,bounds:b});
+  }
+  const depthOf=record=>{let raw=Infinity;try{raw=typeof record.screenDepth==="function"?record.screenDepth():record.screenDepth??Infinity;}catch{return Infinity;}const value=Number(raw);return Number.isFinite(value)?value:Infinity;};
+  const priorityOf=record=>{const value=Number(record.pickPriority??0);return Number.isFinite(value)?value:0;};
+  candidates.sort((a,b)=>priorityOf(b.record)-priorityOf(a.record)||depthOf(a.record)-depthOf(b.record)||inspectionRegistryKey(a.record.type,a.record.id).localeCompare(inspectionRegistryKey(b.record.type,b.record.id)));
+  inspection.pickQueries++;inspection.lastPickCandidateCount=candidates.length;inspection.lastPickQueryMs=Number((performance.now()-started).toFixed(3));
+  const picked=candidates[0];if(!picked){dismissInspection();return null;}inspection.selectedId=inspectionIdText(picked.record.id);inspection.selectedType=picked.record.type;if(!renderInspectionTooltip(picked.record,picked.bounds))return null;return picked.record;
+}
+function updateInspectionTooltip(){if(inspection.selectedId===null)return;const record=inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId));if(!record){dismissInspection();return;}let visible=true;try{visible=record.visible?.()!==false;}catch{visible=false;}if(!visible){dismissInspection();return;}renderInspectionTooltip(record);}
+function bindInput(){
+  canvas.tabIndex=0;
+  canvas.setAttribute("role","application");
+  canvas.setAttribute("aria-label","Rotatable seeded fantasy planet. Drag to rotate; wheel or pinch to smoothly zoom.");
+  canvas.addEventListener("contextmenu",event=>event.preventDefault());
+  canvas.addEventListener("wheel",event=>{zoomState.wheelEvents++;if(event.deltaY!==0)stepAnimatedScale(event.deltaY<0?1:-1,"wheel");event.preventDefault();},{passive:false});
+  canvas.addEventListener("pointerdown",event=>{
+    if(event.pointerType==="mouse"&&event.button!==0)return;
+    activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+    if(activePointers.size===2){const pts=Array.from(activePointers.values());lastPinchDistance=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);dragging=false;pointerId=null;event.preventDefault();return;}
+    if(dragging||pointerId!==null){activePointers.delete(event.pointerId);return;}
+    dragging=true;pointerId=event.pointerId;
+    lastPointerX=event.clientX;lastPointerY=event.clientY;inspection.pointerDownX=event.clientX;inspection.pointerDownY=event.clientY;inspection.dragDistance=0;
+    canvas.setPointerCapture?.(event.pointerId);
+    canvas.focus({preventScroll:true});
+    pointerDragCount++;event.preventDefault();
+  },{passive:false});
+  canvas.addEventListener("pointermove",event=>{
+    if(activePointers.has(event.pointerId))activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+    if(activePointers.size>=2){const pts=Array.from(activePointers.values()).slice(0,2),distance=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);if(lastPinchDistance!==null&&Math.abs(distance-lastPinchDistance)>=4){const pinchDelta=(distance-lastPinchDistance)*ZOOM_PINCH_SENSITIVITY;zoomState.pinchEvents++;setZoomTargetScalar((Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar)+pinchDelta,"pinch");lastPinchDistance=distance;}event.preventDefault();return;}
+    if(!dragging||event.pointerId!==pointerId)return;
+    const dx=event.clientX-lastPointerX,dy=event.clientY-lastPointerY;
+    inspection.dragDistance=Math.max(inspection.dragDistance,Math.hypot(event.clientX-inspection.pointerDownX,event.clientY-inspection.pointerDownY));
+    lastPointerX=event.clientX;lastPointerY=event.clientY;
+    rotateByScreenPixels(dx,dy);event.preventDefault();
+  },{passive:false});
+  const endPointer=event=>{
+    activePointers.delete(event.pointerId);if(activePointers.size<2)lastPinchDistance=null;
+    if(event.pointerId!==pointerId)return;
+    dragging=false;canvas.releasePointerCapture?.(event.pointerId);pointerId=null;updateMapPresentation("pointer-settle",true);if(event.type==="pointerup"&&inspection.dragDistance<=6)pickInspection(event.clientX,event.clientY);
+  };
+  canvas.addEventListener("pointerup",endPointer);
+  canvas.addEventListener("pointercancel",endPointer);
+  canvas.addEventListener("keydown",event=>{
+    let handled=true;
+    if(event.key==="ArrowLeft")rotateByScreenFraction(-.08,0);
+    else if(event.key==="ArrowRight")rotateByScreenFraction(.08,0);
+    else if(event.key==="ArrowUp")rotateByScreenFraction(0,-.08);
+    else if(event.key==="ArrowDown")rotateByScreenFraction(0,.08);
+    else if(event.key==="+"||event.key==="=")stepAnimatedScale(1,"keyboard");
+    else if(event.key==="-"||event.key==="_")stepAnimatedScale(-1,"keyboard");
+    else if(event.key==="Escape"){dismissInspection();}
+    else handled=false;
+    if(handled)event.preventDefault();
+  });
+}
+function seededUnit(label){
+  let h=2166136261>>>0;for(const ch of String(activeSeed)+"|"+label){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)>>>0;}return (h>>>0)/4294967295;
+}
+function makeCloudTexture(){
+  const source=document.createElement("canvas");source.width=256;source.height=128;
+  const ctx=source.getContext("2d");const image=ctx.createImageData(source.width,source.height),data=image.data;
+  const phaseA=seededUnit("cloud-a")*Math.PI*2,phaseB=seededUnit("cloud-b")*Math.PI*2,phaseC=seededUnit("cloud-c")*Math.PI*2;
+  for(let y=0;y<source.height;y++)for(let x=0;x<source.width;x++){
+    const u=x/source.width,v=y/source.height,lat=(v-.5)*Math.PI;
+    const field=Math.sin(u*Math.PI*10+phaseA)*.34+Math.sin(u*Math.PI*22+v*Math.PI*5+phaseB)*.22+Math.cos(u*Math.PI*7-v*Math.PI*13+phaseC)*.18+Math.cos(lat*3)*.20;
+    // Longitude is singular at a sphere pole and every longitude wedge shares
+    // the same physical pole. Even tiny non-zero alpha there stacks through
+    // coincident translucent triangles as a radial fan. Keep a true zero-alpha
+    // polar cap, then ease clouds back in before normal latitudes.
+    const poleDistance=Math.min(v,1-v);
+    const polarT=clamp((poleDistance-.05)/.05,0,1),polarFade=polarT*polarT*(3-2*polarT);
+    const alpha=Math.round(clamp((field-.12)*260,0,112)*polarFade);const i=(y*source.width+x)*4;
+    data[i]=232;data[i+1]=241;data[i+2]=246;data[i+3]=alpha;
+  }
+  ctx.putImageData(image,0,0);
+  const texture=new pc.Texture(device,{width:source.width,height:source.height,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
+  texture.name="SeededPlanetClouds";texture.addressU=pc.ADDRESS_REPEAT;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.setSource(source);return texture;
+}
+function buildAmbientMotion(surfaceMesh){
+  const material=new pc.StandardMaterial();const texture=makeCloudTexture();
+  material.name="SeededCloudLayer";material.diffuse.set(1,1,1);material.emissive.set(.72,.78,.84);material.__atmosphereBaseDiffuse=[1,1,1];material.emissiveMap=texture;material.emissiveIntensity=.9;material.opacityMap=texture;material.opacityMapChannel="a";material.opacity=.58;material.blendType=pc.BLEND_NORMAL;material.depthWrite=false;material.cull=pc.CULLFACE_BACK;material.useLighting=false;material.update();
+  cloudLayer=new pc.Entity("AmbientCloudLayer");cloudLayer.setLocalScale(1.018,1.018,1.018);cloudLayer.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});cloudLayer.render.meshInstances=[new pc.MeshInstance(surfaceMesh,material,cloudLayer)];planet.addChild(cloudLayer);
+  ambientMotion={...ambientMotion,cloudLayerCount:1,animatedEntityCount:1,drawCallEstimate:1};
+}
+function updateAmbientMotion(dt){
+  if(!ambientMotion.enabled||dragging)return;
+  const started=performance.now(),step=Math.min(.12,Math.max(0,Number(dt)||0));ambientMotion.cloudYawDegrees=(ambientMotion.cloudYawDegrees+step*2.4)%360;
+  if(cloudLayer)cloudLayer.setLocalEulerAngles(0,ambientMotion.cloudYawDegrees,0);
+  localFaunaClock=(localFaunaClock+step)%10000;
+  localFaunaReactionAccumulator+=step;
+  if(localFaunaReactionAccumulator>=LOCAL_FAUNA_REACTION_TICK_SECONDS){
+    localFaunaReactionAccumulator%=LOCAL_FAUNA_REACTION_TICK_SECONDS;
+    tickLocalFaunaReactionTriggers();
+  }
+  const faunaStarted=performance.now();
+  updateLocalFaunaMotion(step);
+  updateEnvironmentalReactions();
+  const faunaMs=performance.now()-faunaStarted;
+  wilderness={...wilderness,localFrameUpdateMs:Number(faunaMs.toFixed(4)),localMaxFrameUpdateMs:Math.max(Number(wilderness.localMaxFrameUpdateMs||0),Number(faunaMs.toFixed(4))),localAmbientFaunaActiveCount:localFaunaActors.length};
+  ambientMotion.updateCount++;ambientMotion.lastUpdateMs=performance.now()-started;ambientMotion.maxUpdateMs=Math.max(ambientMotion.maxUpdateMs,ambientMotion.lastUpdateMs);
+}
+function lerp(a,b,t){return a+(b-a)*t;}
+function mixRgb(a,b,t){return a.map((v,i)=>lerp(v,b[i],t));}
+function fantasyHourFromStamp(stamp){
+  if(stamp&&typeof stamp==="object"&&Number.isFinite(Number(stamp.hour)))return ((Number(stamp.hour)%24)+24)%24+clamp(Number(stamp.minute||0),0,59)/60;
+  const m=/(?:T|\s)(\d{1,2}):(\d{2})/.exec(String(stamp||""));return m?((Number(m[1])%24)+24)%24+clamp(Number(m[2]),0,59)/60:null;
+}
+function paletteForHour(hour){
+  const stops=[
+    {h:0,phase:"night",key:[.50,.62,.92],fill:[.24,.34,.64],ambient:[.20,.23,.36],sky:[.012,.024,.072],keyI:.78,fillI:.72,emissive:.090,worldTint:[.72,.80,1],terrainTint:[.58,.70,1],localTint:[.72,.82,1],terrainI:.58,localE:.045,cloudTint:[.60,.70,.92],cloudI:.72},
+    {h:5,phase:"dawn",key:[1,.68,.42],fill:[.40,.44,.68],ambient:[.36,.30,.34],sky:[.12,.075,.14],keyI:1.18,fillI:.82,emissive:.080,worldTint:[1,.86,.72],terrainTint:[1,.76,.58],localTint:[1,.88,.76],terrainI:.73,localE:.025,cloudTint:[1,.80,.76],cloudI:.80},
+    {h:8,phase:"day",key:[1,.93,.72],fill:[.36,.54,.82],ambient:[.42,.46,.54],sky:[.018,.045,.09],keyI:1.38,fillI:.90,emissive:.025,worldTint:[1,.97,.88],terrainTint:[1,.95,.84],localTint:[1,.98,.90],terrainI:.76,localE:.008,cloudTint:[.92,.96,1],cloudI:.90},
+    {h:12,phase:"day",key:[1,.97,.90],fill:[.34,.50,.78],ambient:[.40,.43,.50],sky:[.004,.008,.018],keyI:1.50,fillI:.94,emissive:.022,worldTint:[1,1,.98],terrainTint:[1,1,.96],localTint:[1,1,.96],terrainI:.78,localE:.006,cloudTint:[.96,.98,1],cloudI:.94},
+    {h:17,phase:"late-day",key:[1,.78,.48],fill:[.46,.42,.70],ambient:[.38,.32,.40],sky:[.085,.052,.105],keyI:1.30,fillI:.86,emissive:.070,worldTint:[1,.84,.68],terrainTint:[1,.72,.52],localTint:[1,.85,.70],terrainI:.70,localE:.026,cloudTint:[1,.78,.70],cloudI:.82},
+    {h:20,phase:"night",key:[.60,.68,.98],fill:[.27,.38,.70],ambient:[.24,.27,.40],sky:[.018,.03,.082],keyI:.88,fillI:.76,emissive:.085,worldTint:[.76,.82,1],terrainTint:[.60,.72,1],localTint:[.74,.82,1],terrainI:.60,localE:.040,cloudTint:[.64,.72,.94],cloudI:.74},
+    {h:24,phase:"night",key:[.50,.62,.92],fill:[.24,.34,.64],ambient:[.20,.23,.36],sky:[.012,.024,.072],keyI:.78,fillI:.72,emissive:.090,worldTint:[.72,.80,1],terrainTint:[.58,.70,1],localTint:[.72,.82,1],terrainI:.58,localE:.045,cloudTint:[.60,.70,.92],cloudI:.72}
+  ];
+  let a=stops[0],b=stops[1];for(let i=0;i<stops.length-1;i++){if(hour>=stops[i].h&&hour<=stops[i+1].h){a=stops[i];b=stops[i+1];break;}}
+  const t=clamp((hour-a.h)/Math.max(.001,b.h-a.h),0,1),phase=(t<.5?a.phase:b.phase);
+  return {
+    phase,key:mixRgb(a.key,b.key,t),fill:mixRgb(a.fill,b.fill,t),ambient:mixRgb(a.ambient,b.ambient,t),sky:mixRgb(a.sky,b.sky,t),
+    keyI:lerp(a.keyI,b.keyI,t),fillI:lerp(a.fillI,b.fillI,t),emissive:lerp(a.emissive,b.emissive,t),
+    worldTint:mixRgb(a.worldTint,b.worldTint,t),terrainTint:mixRgb(a.terrainTint,b.terrainTint,t),localTint:mixRgb(a.localTint,b.localTint,t),
+    terrainI:lerp(a.terrainI,b.terrainI,t),localE:lerp(a.localE,b.localE,t),cloudTint:mixRgb(a.cloudTint,b.cloudTint,t),cloudI:lerp(a.cloudI,b.cloudI,t)
+  };
+}
+function gradeAtmosphereLocalMaterial(material,tint,emissiveStrength=0){
+  // Material registries may contain nested frozen lookup tables (for example
+  // localNpcMaterials.professions). Only grade actual PlayCanvas materials.
+  if(!material?.diffuse?.set||!material?.emissive?.set||typeof material.update!=="function")return false;
+  const base=material.__atmosphereBaseDiffuse||[material.diffuse.r??1,material.diffuse.g??1,material.diffuse.b??1];
+  if(Object.isExtensible(material))material.__atmosphereBaseDiffuse=base;
+  material.diffuse.set(base[0]*tint[0],base[1]*tint[1],base[2]*tint[2]);
+  const effectiveEmissive=Math.max(Number(emissiveStrength)||0,Number(material.__activityEmissiveBoost)||0);
+  material.emissive.set(base[0]*tint[0]*effectiveEmissive,base[1]*tint[1]*effectiveEmissive,base[2]*tint[2]*effectiveEmissive);
+  material.emissiveIntensity=1;
+  material.update();return true;
+}
+function gradeAtmosphereMaterialRegistry(registry,tint,emissiveStrength=0){
+  if(!registry)return 0;
+  let count=0;
+  for(const value of Object.values(registry)){
+    if(gradeAtmosphereLocalMaterial(value,tint,emissiveStrength)){count++;continue;}
+    if(value&&typeof value==="object"){
+      for(const nested of Object.values(value))if(gradeAtmosphereLocalMaterial(nested,tint,emissiveStrength))count++;
+    }
+  }
+  return count;
+}
+function applyAtmosphereMaterialPalette(p){
+  if(!p)return 0;
+  let materialCount=0;
+  if(surfaceMaterial){
+    surfaceMaterial.diffuse.set(...p.worldTint);
+    surfaceMaterial.emissive.set(p.emissive*p.worldTint[0],p.emissive*p.worldTint[1],p.emissive*p.worldTint[2]);
+    surfaceMaterial.update();materialCount++;
+  }
+  if(mapScaleShellMaterial){
+    mapScaleShellMaterial.diffuse.set(...p.worldTint);
+    mapScaleShellMaterial.emissive.set(p.emissive*p.worldTint[0],p.emissive*p.worldTint[1],p.emissive*p.worldTint[2]);
+    mapScaleShellMaterial.update();materialCount++;
+  }
+  if(tangentPatchMaterial){
+    tangentPatchMaterial.diffuse.set(...p.terrainTint);tangentPatchMaterial.emissive.set(...p.terrainTint);tangentPatchMaterial.emissiveIntensity=p.terrainI;tangentPatchMaterial.update();materialCount++;
+  }
+  // The focus, medium and outer registered terrain layers are one visual
+  // surface. Apply the same fantasy-time photometry to every layer so a valid
+  // medium parent cannot become a neutral gray/white band during handoff.
+  if(focusRingMaterial){
+    focusRingMaterial.diffuse.set(...p.terrainTint);focusRingMaterial.emissive.set(...p.terrainTint);focusRingMaterial.emissiveIntensity=p.terrainI;focusRingMaterial.update();materialCount++;
+  }
+  if(horizonSkirtMaterial){
+    horizonSkirtMaterial.diffuse.set(...p.terrainTint);horizonSkirtMaterial.emissive.set(...p.terrainTint);horizonSkirtMaterial.emissiveIntensity=p.terrainI;horizonSkirtMaterial.update();materialCount++;
+  }
+  materialCount+=gradeAtmosphereMaterialRegistry(localStaticMaterials,p.localTint,p.localE);
+  materialCount+=gradeAtmosphereMaterialRegistry(localNpcMaterials,p.localTint,p.localE*1.35);
+  materialCount+=gradeAtmosphereMaterialRegistry(localCrowdMaterials,p.localTint,p.localE*.9);
+  const cloudMaterial=cloudLayer?.render?.meshInstances?.[0]?.material;
+  if(cloudMaterial){cloudMaterial.emissive.set(...p.cloudTint);cloudMaterial.emissiveIntensity=p.cloudI;cloudMaterial.update();materialCount++;}
+  return materialCount;
+}
+function scheduleAtmospherePresentationRefresh(stamp){
+  atmospherePresentationRefresh.stamp=stamp;
+  if(atmospherePresentationRefresh.scheduled)return;
+  atmospherePresentationRefresh.scheduled=true;atmospherePresentationRefresh.step=0;atmospherePresentationRefresh.sequence++;
+  const runStep=()=>{
+    const current=atmospherePresentationRefresh.stamp,step=atmospherePresentationRefresh.step++;
+    if(step===0)refreshCanonicalNpcPresentation();
+    else if(step===1)refreshLocalCrowdPresentation(current);
+    else if(step===2)refreshCanonicalBuildingActivityPresentation();
+    else{
+      if(inspection.selectedId!==null){
+        inspection.lastContentRefreshAtMs=Number.NEGATIVE_INFINITY;
+        updateInspectionTooltip();
+      }
+      atmospherePresentationRefresh.scheduled=false;atmospherePresentationRefresh.step=0;return;
+    }
+    setTimeout(runStep,0);
+  };
+  setTimeout(runStep,0);
+}
+function applyAuthoritativeFantasyTime(stamp,source="authoritative-fantasy-time",{snapshotResult=true,deferPresentation=false}={}){
+  const hour=fantasyHourFromStamp(stamp);if(hour===null||!keyLight||!fillLight||!surfaceMaterial||!cameraEntity)return snapshotResult?snapshot():null;
+  const p=paletteForHour(hour);atmospherePalette=p;
+  keyLight.light.color.set(...p.key);keyLight.light.intensity=p.keyI;fillLight.light.color.set(...p.fill);fillLight.light.intensity=p.fillI;
+  app.scene.ambientLight.set(...p.ambient);cameraEntity.camera.clearColor.set(...p.sky);
+  const materialCount=applyAtmosphereMaterialPalette(p);
+  atmosphere={
+    active:true,authoritativeHour:Number(hour.toFixed(3)),phase:p.phase,source:String(source),dynamicLightCount:2,materialCount,drawCallImpact:0,simulationAuthority:false,
+    keyIntensity:Number(p.keyI.toFixed(3)),fillIntensity:Number(p.fillI.toFixed(3)),ambient:p.ambient.map(v=>Number(v.toFixed(3))),sky:p.sky.map(v=>Number(v.toFixed(3))),
+    worldTint:p.worldTint.map(v=>Number(v.toFixed(3))),terrainTint:p.terrainTint.map(v=>Number(v.toFixed(3))),localTint:p.localTint.map(v=>Number(v.toFixed(3))),
+    terrainEmissiveIntensity:Number(p.terrainI.toFixed(3)),localEmissiveStrength:Number(p.localE.toFixed(3)),cloudTint:p.cloudTint.map(v=>Number(v.toFixed(3))),cloudIntensity:Number(p.cloudI.toFixed(3)),
+    groundPaletteIntegrated:true,postProcess:false,weatherSimulation:false
+  };
+  if(deferPresentation)scheduleAtmospherePresentationRefresh(stamp);
+  else{
+    refreshCanonicalNpcPresentation();
+    refreshLocalCrowdPresentation(stamp);
+    refreshCanonicalBuildingActivityPresentation();
+    if(inspection.selectedId!==null){
+      inspection.lastContentRefreshAtMs=Number.NEGATIVE_INFINITY;
+      updateInspectionTooltip();
+    }
+  }
+  return snapshotResult?snapshot():null;
+}
+function atmosphereTimestampKey(value){
+  if(!value)return null;
+  try{return window.GameTime?.toTimestampKey?.(value)||[value.year,value.month,value.day,value.hour,value.minute,value.second].join("-");}catch(_){return null;}
+}
+function initializeAtmosphereTimeBinding(){
+  const available=Boolean(window.SeedSystem?.loadCampaign&&window.SeedSystem?.getCampaign&&window.GameTime?.getNow);
+  atmosphereTimeBinding={...atmosphereTimeBinding,available,active:false,source:available?"GameTime.getNow":"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:performance.now(),lastAppliedAtMs:0,error:null};
+  if(!available)return false;
+  try{
+    if(!window.SeedSystem.getCampaign())window.SeedSystem.loadCampaign();
+    const campaign=window.SeedSystem.getCampaign();
+    if(!campaign){atmosphereTimeBinding={...atmosphereTimeBinding,source:"no-existing-campaign"};return false;}
+    const now=window.GameTime.getNow();if(!now){atmosphereTimeBinding={...atmosphereTimeBinding,source:"campaign-without-time"};return false;}
+    const key=atmosphereTimestampKey(now);
+    applyAuthoritativeFantasyTime(now,"GameTime.getNow",{snapshotResult:false});
+    atmosphereTimeBinding={...atmosphereTimeBinding,active:true,source:"GameTime.getNow",campaignSeed:String(campaign.seed||""),lastTimestampKey:key,lastAppliedAtMs:performance.now(),error:null};
+    return true;
+  }catch(error){
+    atmosphereTimeBinding={...atmosphereTimeBinding,active:false,source:"binding-error",error:String(error?.message||error)};
+    return false;
+  }
+}
+function updateAtmosphereTimeBinding(){
+  if(!atmosphereTimeBinding.available)return;
+  const nowMs=performance.now();
+  if(nowMs-Number(atmosphereTimeBinding.lastPollAtMs||0)<Number(atmosphereTimeBinding.pollIntervalMs||1000))return;
+  atmosphereTimeBinding={...atmosphereTimeBinding,lastPollAtMs:nowMs};
+  try{
+    const campaign=window.SeedSystem?.getCampaign?.()||null;
+    if(!campaign){atmosphereTimeBinding={...atmosphereTimeBinding,active:false,source:"no-existing-campaign",campaignSeed:null};return;}
+    const now=window.GameTime?.getNow?.();if(!now)return;
+    const key=atmosphereTimestampKey(now);
+    if(key&&key!==atmosphereTimeBinding.lastTimestampKey){
+      applyAuthoritativeFantasyTime(now,"GameTime.getNow",{snapshotResult:false,deferPresentation:true});
+      atmosphereTimeBinding={...atmosphereTimeBinding,active:true,source:"GameTime.getNow",campaignSeed:String(campaign.seed||""),lastTimestampKey:key,lastAppliedAtMs:nowMs,error:null};
+    }else if(!atmosphereTimeBinding.active){
+      atmosphereTimeBinding={...atmosphereTimeBinding,active:true,source:"GameTime.getNow",campaignSeed:String(campaign.seed||""),lastTimestampKey:key,error:null};
+    }
+  }catch(error){atmosphereTimeBinding={...atmosphereTimeBinding,active:false,source:"binding-error",error:String(error?.message||error)};}
+}
+async function buildScene(){  const started=performance.now();
+  setStartupProgress("geography","Generating continents, oceans and islands…",52);
+  if(!window.PlanetGeography)throw new Error("PlanetGeography is unavailable");
+  activeSeed=window.PlanetGeography.resolveSeed();
+  if(window.WorldState?.bindCampaign&&window.SeedSystem?.loadCampaign){
+    let versioned=null;
+    try{versioned=window.CampaignPersistence?.stored?.()||null;}catch(_){versioned=null;}
+    if(versioned?.ok&&String(versioned.save?.seed||"")===String(activeSeed)&&window.CampaignPersistence?.restoreAndResume){
+      setStartupProgress("geography","Restoring campaign state…",46);
+      const resumed=await window.CampaignPersistence.restoreAndResume(versioned.save,{
+        targetTimestamp:window.GameTime?.getTimestampKey?.()||versioned.save?.gameTime?.currentAuthoritativeFantasyTimestamp,
+        maxBatches:16,priority:"current"
+      });
+      if(!resumed?.ok||!resumed?.authoritativeReady){
+        throw new Error("Saved campaign could not reach an authoritative resume state. Start a new campaign or clear the saved campaign data.");
+      }
+    }else if(versioned&&!versioned.ok&&versioned.reason!=="save-required"){
+      throw new Error("Saved campaign is incompatible or corrupt ("+String(versioned.reason||"unknown")+"). Start a new campaign or clear the saved campaign data.");
+    }else{
+      let restored=null;
+      try{restored=window.SeedSystem.loadCampaign();}catch(_){}
+      if(restored?.ok&&String(restored.campaign?.seed||"")===String(activeSeed)){
+        if(window.GeneratedWorldStore?.bindCampaign)await window.GeneratedWorldStore.bindCampaign(restored.campaign,{primeLimit:128,resumeReason:"existing-campaign"});
+        window.WorldState.bindCampaign(restored.campaign,{reset:false});
+        if(window.CatchUpSimulation?.bindCampaign){
+          window.CatchUpSimulation.bindCampaign(restored.campaign,{reset:false});
+          const target=window.GameTime?.getTimestampKey?.();
+          const catchUp=target?await window.CatchUpSimulation.resumeTo(restored.campaign.seed,target,{maxBatches:16,priority:"current"}):null;
+          if(catchUp&&!catchUp.complete)throw new Error("Existing campaign catch-up did not reach an authoritative state.");
+          window.CampaignPersistence?.createSave?.({campaign:restored.campaign,persist:true});
+        }
+      }else window.WorldState.bindCampaign(null,{reset:false});
+    }
+  }
+  geography=window.PlanetGeography.create(activeSeed);
+  worldProjectionAnchorCache=null;
+  politicalScaleEvidenceCache=null;
+  mapContextCache={key:null,value:null};
+  mapBorderCache={key:null,segments:[],sampleCount:0,landSampleCount:0,waterSampleCount:0,ownerQueryCount:0,ownerCount:0,worldVertexCount:0,topologySignature:null,waterClippedCount:0,diagnostics:[],builtAtMs:0};
+  mapBorderEndpointSnapCache.clear();
+  atlasEntityCache.clear();atlasIdentityCache.clear();atlasStickyEntities.clear();atlasLabelPlacementCache.clear();
+  geographySignature=geography.signature();
+  geographyVerification=null;
+  if(EVIDENCE_FAST_START){
+    // The production globe texture normally populates geographyStats while it
+    // samples the canonical geography. Trusted local evidence skips that GPU-
+    // bound texture, so preserve the exact verification contract from the
+    // canonical PlanetGeography.signature() sample instead of bypassing verify().
+    // signature() samples 16 latitude rows x 36 longitude columns.
+    const totalSignatureSamples=16*36;
+    const landSamples=Number(geographySignature?.landCount||0);
+    geographyStats=Object.freeze({
+      textureWidth:0,textureHeight:0,totalTextureSamples:totalSignatureSamples,
+      minElevationMeters:Number(geographySignature?.minElevationMeters||0),
+      maxElevationMeters:Number(geographySignature?.maxElevationMeters||0),
+      landSamples,
+      oceanSamples:Math.max(0,totalSignatureSamples-landSamples),
+      islandSamples:Number(geographySignature?.islandCount||0),
+      mountainSamples:Number(geographySignature?.mountainCount||0),
+      peakSamples:Number(geographySignature?.maxElevationMeters||0)>=3400?1:0,
+      landFraction:Number((landSamples/totalSignatureSamples).toFixed(5)),
+      oceanFraction:Number(((totalSignatureSamples-landSamples)/totalSignatureSamples).toFixed(5)),
+      evidenceSource:"PlanetGeography.signature"
+    });
+    startupScheduler.evidenceGeographyStatsSource="PlanetGeography.signature";
+  }
+  setStartupProgress("surface","Painting planetary surface and relief…",68);
+
+  app.scene.ambientLight=new pc.Color(0.34,0.37,0.43);
+
+  cameraEntity=new pc.Entity("PlanetCamera");
+  cameraEntity.addComponent("camera",{
+    clearColor:new pc.Color(0.004,0.008,0.018),
+    projection:pc.PROJECTION_ORTHOGRAPHIC,
+    orthoHeight:DISPLAY_RADIUS_UNITS*1.1,
+    fov:34,
+    nearClip:0.1,
+    farClip:100
+  });
+  app.root.addChild(cameraEntity);
+
+  surfaceMaterial=new pc.StandardMaterial();
+  surfaceMaterial.name="SeededPlanetSurface";
+  surfaceMaterial.diffuse.set(1,1,1);
+  if(EVIDENCE_FAST_START){
+    // Trusted local evidence never renders the globe. Avoid the full 640x320
+    // equirectangular geography texture build; canonical PlanetGeography is
+    // still initialized above and local tangent resources sample it normally.
+    startupScheduler.evidenceGlobeTextureSkipped=true;
+    surfaceMaterial.diffuseMap=null;
+  }else{
+    surfaceMaterial.diffuseMap=await makeGeographyTexture();
+  }
+  surfaceMaterial.gloss=0.16;
+  surfaceMaterial.metalness=0;
+  surfaceMaterial.specular.set(0.18,0.22,0.25);
+  surfaceMaterial.emissive.set(0.002,0.004,0.007);
+  surfaceMaterial.update();
+
+  planet=new pc.Entity("FantasyPlanet");
+  if(EVIDENCE_FAST_START){
+    // Trusted local-evidence bootstrap. WP-S003-015 frames immediately move to
+    // the canonical tangent/local world and never inspect the globe. Skip the
+    // irrelevant globe render mesh and global ambient/wilderness mesh uploads
+    // entirely so software WebGL cannot stall before local evidence begins.
+    // Planet entity transforms, SEED geography, coordinates, local terrain,
+    // settlement generation, camera authority and Simulation truth are unchanged.
+    startupScheduler.evidenceFastStart=true;
+    startupScheduler.evidencePlanetSkipped=true;
+    startupScheduler.planetMeshLatitudeSegments=0;
+    startupScheduler.planetMeshLongitudeSegments=0;
+    meshVertexCount=0;
+    meshTriangleCount=0;
+    app.root.addChild(planet);
+    setStartupProgress("mesh","Skipping globe mesh for trusted local evidence…",84);
+    await yieldBrowser();
+  }else{
+    planet.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
+    setStartupProgress("mesh","Building planetary height mesh…",84);
+    const mesh=await buildPlanetMesh();
+    planet.render.meshInstances=[new pc.MeshInstance(mesh,surfaceMaterial,planet)];
+    app.root.addChild(planet);
+    // Keep one cheap smooth parent available for the map-scale handoff. It uses
+    // the same canonical equirectangular geography texture as the relief globe.
+    mapScaleShellMaterial=new pc.StandardMaterial();
+    mapScaleShellMaterial.name="CanonicalMapScaleShell";
+    mapScaleShellMaterial.diffuse.set(1,1,1);
+    mapScaleShellMaterial.diffuseMap=mapScaleShellTexture||surfaceMaterial.diffuseMap;
+    mapScaleShellMaterial.emissive.set(.04,.04,.04);
+    mapScaleShellMaterial.emissiveMap=mapScaleShellTexture||surfaceMaterial.diffuseMap;
+    mapScaleShellMaterial.emissiveIntensity=.22;
+    mapScaleShellMaterial.useLighting=false;
+    mapScaleShellMaterial.cull=pc.CULLFACE_NONE;
+    mapScaleShellMaterial.opacity=0;
+    mapScaleShellMaterial.blendType=pc.BLEND_NORMAL;
+    mapScaleShellMaterial.depthWrite=false;
+    mapScaleShellMaterial.update();
+    mapScaleShell=new pc.Entity("CanonicalMapScaleShell");
+    mapScaleShell.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
+    mapScaleShell.render.meshInstances=[new pc.MeshInstance(buildMapScaleShellMesh(),mapScaleShellMaterial,mapScaleShell)];
+    mapScaleShell.enabled=false;app.root.addChild(mapScaleShell);
+    buildAmbientMotion(mesh);
+    if(EVIDENCE_LAYERED_START){
+      // Global scatter is not part of this WP's far-globe criterion and is not
+      // visible at 1/10. Local wilderness still comes from the normal streamed
+      // resource path once the camera approaches the focus.
+      startupScheduler.evidenceGlobalWildernessSkipped=true;
+    }else buildWildernessPresentation();
+  }
+
+  keyLight=new pc.Entity("PlanetKeyLight");
+  keyLight.addComponent("light",{
+    type:"directional",
+    color:new pc.Color(1.0,0.97,0.90),
+    intensity:1.42,
+    castShadows:false
+  });
+  keyLight.setLocalEulerAngles(26,-42,0);
+  app.root.addChild(keyLight);
+
+  fillLight=new pc.Entity("PlanetFillLight");
+  fillLight.addComponent("light",{
+    type:"directional",
+    color:new pc.Color(0.30,0.44,0.72),
+    intensity:0.86,
+    castShadows:false
+  });
+  fillLight.setLocalEulerAngles(-18,138,0);
+  app.root.addChild(fillLight);
+
+  applyRotation();
+  if(EVIDENCE_FAST_START)buildDestinationDescriptors();
+  setStartupProgress("scene","Finalizing first playable planet…",95);
+  buildTimeMs=performance.now()-started;
+}
+async function start(){
+  if(ready)return snapshot();
+  try{
+    root=document.getElementById("planetStageRoot");
+    if(!root)throw new Error("Planet stage root is missing");
+    beginResponsivenessTelemetry();
+    presentStartupProgress();
+    await yieldPaint();
+    setStartupProgress("engine","Loading renderer…",15);
+    await yieldPaint();
+    document.body.classList.add("planet-stage-active");
+
+    pc=await measuredPhase("engineImportMs",()=>import(ENGINE_URL));
+    setStartupProgress("renderer","Initializing PlayCanvas…",32);
+    await yieldPaint();
+    canvas=document.createElement("canvas");
+    canvas.id="planetCanvas";
+    canvas.className="planet-stage-canvas";
+    canvas.dataset.renderer="playcanvas";
+    const loader=root.querySelector(".planet-stage-loading");
+    root.replaceChildren(canvas);
+    if(loader)root.appendChild(loader);
+
+    device=await measuredPhase("graphicsDeviceMs",()=>pc.createGraphicsDevice(canvas,{
+      deviceTypes:[pc.DEVICETYPE_WEBGL2],
+      antialias:true,
+      depth:true,
+      powerPreference:"high-performance"
+    }));
+    const options=new pc.AppOptions();
+    options.graphicsDevice=device;
+    options.componentSystems=[pc.RenderComponentSystem,pc.CameraComponentSystem,pc.LightComponentSystem];
+    options.resourceHandlers=[pc.TextureHandler];
+
+    app=new pc.AppBase(canvas);
+    await measuredPhase("appInitMs",async()=>app.init(options));
+    controlledWorkActive=true;    await measuredPhase("buildSceneMs",()=>buildScene());
+    warmResidentMovementScheduler();
+    controlledWorkActive=false;
+    await yieldPaint();
+    bindInput();
+    resize();
+    app.on?.("update",dt=>{
+      const frameStarted=performance.now();frameCount++;
+      let phaseStarted=performance.now();updateAnimatedZoom(dt);recordNavigationFramePhase("zoom",phaseStarted);
+      navigationPerformance.framePhaseLastMs.residentAdvance=0;
+      phaseStarted=performance.now();updateCanonicalNpcMotion();recordNavigationFramePhase("npcMotion",phaseStarted);
+      phaseStarted=performance.now();recordLocalFrame(dt);recordNavigationFramePhase("frameStats",phaseStarted);
+      phaseStarted=performance.now();updateAtmosphereTimeBinding();recordNavigationFramePhase("atmosphere",phaseStarted);
+      phaseStarted=performance.now();updateInspectionTooltip();recordNavigationFramePhase("inspection",phaseStarted);
+      phaseStarted=performance.now();updateWayfindingTextOverlay();recordNavigationFramePhase("wayfinding",phaseStarted);
+      phaseStarted=performance.now();updateAmbientMotion(dt);recordNavigationFramePhase("ambientMotion",phaseStarted);
+      const elapsed=performance.now()-frameStarted;navigationPerformance.frameUpdateCount++;
+      navigationPerformance.lastFrameUpdateMs=Number(elapsed.toFixed(3));navigationPerformance.maxFrameUpdateMs=Math.max(navigationPerformance.maxFrameUpdateMs,navigationPerformance.lastFrameUpdateMs);
+      if(elapsed>50)navigationPerformance.frameUpdateOver50Count++;
+    });
+    let navigationRenderStarted=0;
+    app.on?.("prerender",()=>{navigationRenderStarted=performance.now();});
+    app.on?.("postrender",()=>{
+      if(!navigationRenderStarted)return;
+      const elapsed=Math.max(0,performance.now()-navigationRenderStarted);navigationPerformance.lastRenderCpuMs=Number(elapsed.toFixed(3));
+      navigationPerformance.maxRenderCpuMs=Math.max(navigationPerformance.maxRenderCpuMs,navigationPerformance.lastRenderCpuMs);
+      if(elapsed>50)navigationPerformance.renderCpuOver50Count++;
+    });
+    await measuredPhase("appStartMs",async()=>app.start());
+    if(EVIDENCE_FAST_START){
+      // Trusted local screenshot runs do not need the synthetic hidden shader
+      // warmup scene. On software WebGL that pre-playable compile can stall
+      // before any canonical local resource is requested. Let the actual local
+      // evidence resource compile the same shaders on demand instead.
+      startupScheduler.evidenceShaderWarmupSkipped=true;
+      startupScheduler.phaseTimings.localShaderWarmupMs=0;
+    }else{
+      await measuredPhase("localShaderWarmupMs",()=>warmLocalRepresentationShaders());
+    }
+    initializeAtmosphereTimeBinding();
+
+    if("ResizeObserver" in window){
+      resizeObserver=new ResizeObserver(resize);
+      resizeObserver.observe(root);
+    }else window.addEventListener("resize",resize);
+
+    ready=true;
+    window.GeneratedWorldStore?.markFirstPlayable?.();
+    beginNavigationPerformanceTelemetry();
+    startResidentMovementScheduler();
+    setStartupProgress("ready","First playable planet ready",100,"ready");
+    startupProgress.gameplayReadyAtMs=Date.now();
+    startupScheduler.backgroundPreparationCompleteAtMs=startupProgress.gameplayReadyAtMs;
+    startupScheduler.optionalPostReadyWorkCount=0;    endResponsivenessTelemetry();
+    await yieldPaint();
+    root.dataset.ready="true";
+    root.dataset.seed=activeSeed;
+    renderDestinationNavigator();
+    return snapshot();
+  }catch(error){
+    controlledWorkActive=false;
+    endResponsivenessTelemetry();
+    startupError=String(error?.stack||error);
+    startupProgress={...startupProgress,mode:"failed",phaseId:"error",phaseLabel:"The planet could not finish preparing."};
+    presentStartupProgress();
+    if(root){
+      root.dataset.ready="false";
+      root.dataset.error=startupError;
+      root.textContent=/Saved campaign|campaign catch-up|authoritative resume/i.test(String(error?.message||error))
+        ?String(error?.message||error)
+        :"Planet renderer failed to start.";
+    }
+    console.error("Planet stage startup failed.",error);
+    throw error;
+  }
+}
+function entityTransformTelemetry(entity){
+  if(!entity)return null;
+  const p=entity.getPosition?.(),q=entity.getRotation?.(),e=entity.getEulerAngles?.();
+  return Object.freeze({position:Object.freeze([Number((p?.x||0).toFixed(6)),Number((p?.y||0).toFixed(6)),Number((p?.z||0).toFixed(6))]),rotationQuaternion:Object.freeze([Number((q?.x||0).toFixed(9)),Number((q?.y||0).toFixed(9)),Number((q?.z||0).toFixed(9)),Number((q?.w??1).toFixed(9))]),eulerDegrees:Object.freeze([Number((e?.x||0).toFixed(6)),Number((e?.y||0).toFixed(6)),Number((e?.z||0).toFixed(6))])});
+}
+function canonicalScreenFocusTelemetry(){
+  const rect=canvas?.getBoundingClientRect?.(),centerX=(rect?.width||0)*.5,centerY=(rect?.height||0)*.5;
+  const direction=window.PlanetGeography?.directionFromLatLon?.(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  let screen=null,facingDot=null;
+  if(direction&&planet&&cameraEntity?.camera&&pc){
+    const local=new pc.Vec3(direction.x*DISPLAY_RADIUS_UNITS,direction.y*DISPLAY_RADIUS_UNITS,direction.z*DISPLAY_RADIUS_UNITS);
+    const world=planet.getWorldTransform().transformPoint(local,new pc.Vec3());
+    const center=planet.getPosition(),normal=world.clone().sub(center),toCamera=cameraEntity.getPosition().clone().sub(world);
+    facingDot=normal.dot(toCamera);
+    screen=cameraEntity.camera.worldToScreen(world);
+  }
+  const x=Number(screen?.x),y=Number(screen?.y),valid=Number.isFinite(x)&&Number.isFinite(y);
+  return Object.freeze({valid,screenX:valid?Number(x.toFixed(3)):null,screenY:valid?Number(y.toFixed(3)):null,centerX:Number(centerX.toFixed(3)),centerY:Number(centerY.toFixed(3)),deltaPixels:valid?Number(Math.hypot(x-centerX,y-centerY).toFixed(3)):null,facingDot:facingDot===null?null:Number(facingDot.toFixed(6)),source:"canonical-sphere-transform"});
+}
+function focusStreamingDiagnostics(){
+  const requestedIndex=requestedLodIndexForZoom(zoomState.scalar),visibleIndex=displayResource?.levelIndex??null;
+  const stateCounts={requested:0,preparing:0,ready:0,active:0,grace:0,evicted:0},byLevel={};
+  for(const entry of localResidency.values()){
+    const state=String(entry?.state||"unknown"),level=String(entry?.level||"unknown");
+    if(stateCounts[state]!=null)stateCounts[state]++;
+    if(!byLevel[level])byLevel[level]={requested:0,preparing:0,ready:0,active:0,grace:0,evicted:0};
+    if(byLevel[level][state]!=null)byLevel[level][state]++;
+  }
+  const baseLayers=["terrain-elevation","coast-water"];
+  const mapLayers=[];
+  if(Number(mapPresentation?.projectedBorderSegmentCount||0)>0||Boolean(mapPresentation?.borderVisible))mapLayers.push("political-boundaries");
+  if(Number(mapPresentation?.atlasVisibleLabelCount||0)>0)mapLayers.push("major-labels");
+  const localLayers=[];
+  if(Number(localStatic?.occupiedAreaCount||0)>0)localLayers.push("settlement-footprint");
+  if(Number(localStatic?.roadCount||0)>0)localLayers.push("routes-roads");
+  if(Number(localStatic?.buildingCount||0)>0||Number(localStatic?.vegetationCount||0)>0)localLayers.push("local-biome-vegetation-buildings");
+  const requestedReady=Boolean(localResources.requestedSignature&&localResources.activeSignature===localResources.requestedSignature);
+  const focusState=!displayResource?"root-fallback":(localResources.standInActive?"parent-fallback":(requestedReady?"ready":"active"));
+  const detail=displayResource?.detail||localDetail||{};
+  const ring=(id,spanFactor,priority,metersPerTexel,layers,status)=>Object.freeze({
+    id,spanFactor,priority,distanceRank:priority,cellId:displayResource?.spatialCell?.id||null,
+    requestedLevel:LOCAL_DETAIL_LEVELS[requestedIndex]?.id||null,visibleLevel:visibleIndex===null?null:LOCAL_DETAIL_LEVELS[visibleIndex]?.id||null,
+    metersPerTexel:Number.isFinite(Number(metersPerTexel))?Number(Number(metersPerTexel).toFixed(3)):null,
+    layers:Object.freeze(layers.slice()),status,worldMatched:true
+  });
+  return Object.freeze({
+    revision:"focus-streaming-v1",centerFirst:true,canonicalAuthority:"Campaign-SEED + SeedCoordinateFabric + SLOD quadtree",
+    priorityOrder:Object.freeze(["focus-request","focus-medium-ring","motion-overscan","zoom-direction-neighbor","reverse-neighbor"]),
+    rings:Object.freeze([
+      ring("focus",1,0,detail.detailMetersPerTexel,[...baseLayers,...mapLayers,...localLayers],focusState),
+      ring("medium",LOCAL_MEDIUM_RING_SPAN_FACTOR,1,detail.mediumMetersPerTexel,[...baseLayers,...mapLayers],displayResource?"ready":"root-fallback"),
+      ring("outer",LOCAL_SURROUND_SPAN_FACTOR,2,detail.surroundMetersPerTexel,baseLayers,displayResource?"ready":"root-fallback"),
+      Object.freeze({id:"global-root",spanFactor:null,priority:3,distanceRank:3,cellId:null,requestedLevel:null,visibleLevel:"global-globe",metersPerTexel:null,layers:Object.freeze(baseLayers.concat(mapLayers)),status:planet?.enabled?"visible":"resident-fallback",worldMatched:true})
+    ]),
+    activeCellsByLod:Object.freeze(Object.fromEntries(Object.entries(byLevel).map(([k,v])=>[k,Object.freeze({...v})]))),
+    states:Object.freeze({...stateCounts}),
+    cache:Object.freeze({entries:localResourceCache.size,usedBytes:Number(localResources.estimatedCacheBytes||0),budgetBytes:LOCAL_RESOURCE_CACHE_BUDGET_BYTES,limit:LOCAL_RESOURCE_CACHE_LIMIT,budgetExceeded:Boolean(localResources.cacheBudgetExceeded),graceMs:LOCAL_GRACE_RESIDENCY_MS}),
+    handoff:Object.freeze({fallbackActive:Boolean(localResources.standInActive),lastLatencyMs:Number(localResources.lastHandoffLatencyMs||0),longestLatencyMs:Number(localResources.longestHandoffLatencyMs||0),missingCoverageCount:Number(localResources.missingCoverageCount||0),atomicSwap:true}),
+    budget:Object.freeze({requestsPerFrame:1,buildJobs:1,prefetchQueue:1,sliceBudgetMs:LOCAL_PREP_SLICE_BUDGET_MS,overscanRadiusCells:SPATIAL_OVERSCAN_CELL_RADIUS}),
+    motionPrefetch:Object.freeze({activeTargets:localMotionPrefetchTargets.size,eastMeters:Number(localMotionVector.east.toFixed(3)),northMeters:Number(localMotionVector.north.toFixed(3)),magnitudeMeters:Number(localMotionVector.magnitude.toFixed(3))}),
+    fullWorldScan:false,globalHighDetailMaterialized:false,viewportBounded:true,cameraAssignsIdentity:false,loadOrderAssignsIdentity:false
+  });
+}
+function spatialLodDiagnostics(){
+  const requestedIndex=requestedLodIndexForZoom(zoomState.scalar);
+  const requestedCell=canonicalSpatialCellFor(requestedIndex,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const visibleIndex=displayResource?.levelIndex??null,visibleCell=displayResource?.spatialCell||null;
+  const bounds=visibleCell?.worldBounds||null;
+  const registered=canonicalRegisteredMetersForLatLon(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+  const visibleContainsFocus=Boolean(bounds&&registered.eastMeters>=bounds.minEastMeters&&registered.eastMeters<=bounds.maxEastMeters&&registered.northMeters>=bounds.minNorthMeters&&registered.northMeters<=bounds.maxNorthMeters);
+  const parentFallbackActive=Boolean(localResources.standInActive&&visibleCell&&visibleIndex!==null&&visibleIndex<requestedIndex&&visibleContainsFocus);
+  const overscanCells=[];
+  for(let dy=-SPATIAL_OVERSCAN_CELL_RADIUS;dy<=SPATIAL_OVERSCAN_CELL_RADIUS;dy++)for(let dx=-SPATIAL_OVERSCAN_CELL_RADIUS;dx<=SPATIAL_OVERSCAN_CELL_RADIUS;dx++){
+    const size=requestedCell.cellSizeMeters,x=requestedCell.cellX+dx,y=requestedCell.cellY+dy;
+    overscanCells.push(["SLOD",coordinateFabricAuthority()?.revisionSignature||"legacy-coordinate",requestedCell.depth,x,y].join("|"));
+  }
+  const requestedDims=patchDimensionsForLevel(requestedIndex);
+  const requestedOffset=localFocusOffsetMeters({lat0:requestedCell.centerLatitudeRadians,lon0:requestedCell.centerLongitudeRadians,dims:requestedDims});
+  const marginEast=Math.max(0,(requestedDims.patchWidth-requestedDims.visibleWidth)*.5),marginNorth=Math.max(0,(requestedDims.patchHeight-requestedDims.visibleHeight)*.5);
+  const canonicalAnchorCoveragePass=Math.abs(requestedOffset.east)<=marginEast+.01&&Math.abs(requestedOffset.north)<=marginNorth+.01;
+  return {
+    selectionMode:"screen-space-error",canonicalHierarchy:"SEED-coordinate-quadtree",
+    targetPixelError:SSE_TARGET_PIXELS,refinePixelError:SSE_REFINE_PIXELS,coarsenPixelError:SSE_COARSEN_PIXELS,
+    metersPerScreenPixel:Number(metersPerScreenPixelForZoom().toFixed(6)),
+    requestedLevelIndex:requestedIndex,requestedLevel:LOCAL_DETAIL_LEVELS[requestedIndex]?.id||null,
+    requestedWorldSpaceErrorMeters:Number(worldSpaceErrorForLevel(requestedIndex).toFixed(6)),
+    requestedProjectedPixelError:Number(projectedPixelErrorForLevel(requestedIndex).toFixed(6)),
+    requestedNativeMagnification:Number(nativeMagnificationForLevel(requestedIndex).toFixed(6)),
+    maxNativeMagnification:SSE_MAX_NATIVE_MAGNIFICATION,
+    visibleLevelIndex:visibleIndex,visibleLevel:visibleIndex===null?null:LOCAL_DETAIL_LEVELS[visibleIndex]?.id||null,
+    visibleWorldSpaceErrorMeters:visibleIndex===null?null:Number(worldSpaceErrorForLevel(visibleIndex).toFixed(6)),
+    visibleProjectedPixelError:visibleIndex===null?null:Number(projectedPixelErrorForLevel(visibleIndex).toFixed(6)),
+    visibleNativeMagnification:visibleIndex===null?null:Number(nativeMagnificationForLevel(visibleIndex).toFixed(6)),
+    requestedCell,visibleCell,parentFallbackActive,readyChildHandoff:Boolean(!localResources.standInActive&&visibleCell?.id===requestedCell.id),
+    requestedAnchorOffsetMeters:Object.freeze({east:Number(requestedOffset.east.toFixed(3)),north:Number(requestedOffset.north.toFixed(3))}),
+    requestedPatchMarginMeters:Object.freeze({east:Number(marginEast.toFixed(3)),north:Number(marginNorth.toFixed(3))}),
+    canonicalAnchorCoveragePass,
+    visibleContainsFocus,overscanCellIds:Object.freeze(overscanCells),overscanCellCount:overscanCells.length,
+    temporalResidency:localResidencyDiagnostics(),
+    semanticHiddenReasons:Object.freeze({
+      hemisphere:Number(mapPresentation.hiddenHemisphereCulledCount||0),behindCamera:Number(mapPresentation.behindCameraCulledCount||0),
+      offscreen:Number(mapPresentation.offscreenCulledCount||0),occluded:Number(mapPresentation.occludedCulledCount||0),overlap:Number(mapPresentation.overlapRejectedCount||0)
+    }),
+    rootCellMeters:SPATIAL_LOD_ROOT_CELL_METERS,maxDepth:SPATIAL_LOD_MAX_DEPTH,cellMaxLevelHeightRatio:SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,
+    focusStreaming:focusStreamingDiagnostics(),
+    hysteresis:true,viewportBounded:true,fullWorldScan:false,cameraAssignsIdentity:false,viewportAssignsIdentity:false
+  };
+}
+function snapshot(){
+  return Object.freeze({
+    version:VERSION,
+    geographyVersion:String(window.PlanetGeography?.VERSION||""),
+    stage:"seeded-planetary-geography",
+    ready,
+    engine:"PlayCanvas",
+    engineVersion:ENGINE_VERSION,
+    canvasCount:root?.querySelectorAll?.("canvas")?.length||0,
+    activeSeed,
+    geographyHash:geographySignature?.hash||null,
+    geographySignature,
+    geographyVerification,
+    geographyLayout:geography?.layout||null,
+    geographyStats,
+    coordinateFabric:coordinateFabricDiagnostics(),
+    featureTargets,
+    worldScaleFraction:WORLD_SCALE_FRACTION,
+    earthReferenceRadiusMeters:EARTH_REFERENCE_RADIUS_METERS,
+    worldRadiusMeters:WORLD_RADIUS_METERS,
+    worldDiameterMeters:WORLD_DIAMETER_METERS,
+    worldCircumferenceMeters:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
+    displayRadiusUnits:DISPLAY_RADIUS_UNITS,
+    heightExaggeration:HEIGHT_EXAGGERATION,
+    oceanVisualDepthFactor:OCEAN_VISUAL_DEPTH_FACTOR,
+    texture:Object.freeze({width:TEXTURE_WIDTH,height:TEXTURE_HEIGHT}),
+    mesh:Object.freeze({
+      latitudeSegments:LATITUDE_SEGMENTS,
+      longitudeSegments:LONGITUDE_SEGMENTS,
+      vertexCount:meshVertexCount,
+      triangleCount:meshTriangleCount
+    }),
+    buildTimeMs:Number(buildTimeMs.toFixed(3)),
+    rotation:Object.freeze({
+      yawDegrees:Number(yawDegrees.toFixed(3)),
+      pitchDegrees:Number(pitchDegrees.toFixed(3))
+    }),
+    input:Object.freeze({
+      dragging,pointerDragCount,rotationChangeCount,
+      mouseDrag:true,touchDrag:true,keyboardRotation:true,wheelZoom:true,pinchZoom:true,keyboardZoom:true,
+      wheelSensitivity:ZOOM_WHEEL_SENSITIVITY,pinchSensitivity:ZOOM_PINCH_SENSITIVITY,zoomInputRateFraction:.5,
+      dragSensitivity:navigationSensitivity(),scaleAwareDrag:true,scaleAwareKeyboard:true,zoomStepsOnly:true
+    }),
+    canonicalFocus:Object.freeze({
+      latitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),
+      longitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(6)),
+      sphericalVector:tangentFrame(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians).up,
+      worldTile:mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians),
+      tangentOriginMeters:projectionState.tangentOrigin,
+      activeLodOriginMeters:projectionState.tangentOrigin,
+      screenSpaceTargetPercent:Object.freeze([50,50]),
+      screenSpaceFocus:canonicalScreenFocusTelemetry(),
+      screenSpaceFocusDeltaPixels:canonicalScreenFocusTelemetry().deltaPixels,
+      authority:"rotation-derived-canonical-latlon",
+      zoomMayRelocateFocus:false,
+      surfaceIdentity:canonicalSurfaceIdentity()
+    }),
+    zoom:Object.freeze({
+      scalar:Number(zoomState.scalar.toFixed(6)),targetScalar:Number((zoomState.targetScalar??zoomState.scalar).toFixed(6)),band:zoomState.band,requestedBand:zoomState.requestedBand||zoomState.band,visibleBand:zoomState.band,
+      scaleIndex:scaleStateForScalar().index,scaleLabel:scaleStateForScalar().label,scaleLadder:SCALE_LADDER.slice(),
+      displayScaleIndex:displayScaleStateForScalar().index,displayScaleLabel:displayScaleStateForScalar().label,displayScaleLadder:ZOOM_DISPLAY_LADDER.slice(),
+      targetDisplayScaleIndex:displayScaleStateForScalar(zoomState.targetScalar??zoomState.scalar).index,targetDisplayScaleLabel:displayScaleStateForScalar(zoomState.targetScalar??zoomState.scalar).label,
+      requestedLevel:localResources.requestedLevel,visibleLevel:localResources.visibleLevel,
+      focusLatitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),
+      focusLongitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(6)),
+      cameraDistance:Number(zoomState.cameraDistance.toFixed(6)),
+      baseCameraDistance:Number(zoomState.baseCameraDistance.toFixed(6)),
+      visibleFootprintWidthMeters:Number(zoomState.visibleFootprintWidthMeters.toFixed(3)),
+      visibleFootprintHeightMeters:Number(zoomState.visibleFootprintHeightMeters.toFixed(3)),
+      wheelEvents:zoomState.wheelEvents,pinchEvents:zoomState.pinchEvents,zoomChanges:zoomState.zoomChanges,
+      animation:Object.freeze({active:Boolean(zoomState.animating),velocityScalarPerSecond:Number(zoomState.zoomVelocity.toFixed(6)),timeConstantSeconds:ZOOM_ANIMATION_TIME_CONSTANT_SECONDS,settleEpsilon:ZOOM_ANIMATION_SETTLE_EPSILON,frameCount:zoomState.animationFrameCount,totalFrames:zoomState.totalAnimationFrames,retargetCount:zoomState.animationRetargetCount,settledCount:zoomState.animationSettledCount,lastDurationMs:zoomState.lastAnimationDurationMs,inputSource:zoomState.lastAnimationInputSource,currentDisplayScale:displayScaleStateForScalar().label,targetDisplayScale:displayScaleStateForScalar(zoomState.targetScalar??zoomState.scalar).label,prefetchState:zoomState.targetPrefetchState,prefetchLevel:zoomState.targetPrefetchLevel,prefetchSignature:zoomState.targetPrefetchSignature,prefetchRequests:zoomState.targetPrefetchRequests,prefetchHits:zoomState.targetPrefetchHits,prefetchCompleted:zoomState.targetPrefetchCompleted}),
+      bands:ZOOM_BANDS.map(b=>b.id),detailLevels:LOCAL_DETAIL_LEVELS.map(level=>level.id),sameSphericalAuthority:true,
+      dragSensitivity:navigationSensitivity(),
+      pose:Object.freeze({sphere:entityTransformTelemetry(planet),camera:entityTransformTelemetry(cameraEntity),cameraLookVector:Object.freeze([0,0,-1]),cameraTarget:Object.freeze([0,0,0]),screenFocus:canonicalScreenFocusTelemetry(),cameraPoseInvariant:true,zoomTransform:"orthographic-magnification-only"}),
+      ladder:Object.freeze({labels:SCALE_LADDER.slice(),displayLabels:ZOOM_DISPLAY_LADDER.slice(),displayDenominators:ZOOM_DISPLAY_DENOMINATORS.slice(),startScalar:LADDER_START_SCALAR,startHeightMeters:Number(ladderState().startHeight.toFixed(1)),groundHeightMeters:GROUND_FOOTPRINT_HEIGHT_METERS,levelMaxScalars:ladderState().levelMax.slice(),logUniformBelowStart:true})
+    }),
+    projection:Object.freeze({
+      mode:projectionState.mode,
+      blend:Number(projectionState.blend.toFixed(6)),
+      transitionStart:projectionState.transitionStart,
+      transitionEnd:projectionState.transitionEnd,
+      tangentOrigin:projectionState.tangentOrigin,
+      basis:projectionState.basis,
+      cameraTarget:projectionState.cameraTarget,
+      continuityErrorMeters:projectionState.continuityErrorMeters,
+      derivedFromSphericalAuthority:true,
+      localWorldAuthority:false,
+      worldTileProjection:Object.freeze({...planetWorldAnchor(),roundTripOrigin:mapWorldTileAt(worldLatLonForTile("0","0").latitudeRadians,worldLatLonForTile("0","0").longitudeRadians),tileMeters:Number(window.WorldStandards?.TILE_METERS||2),registrationRoundTrip:geography?.registrationRoundTrip?.("0","0",Number(window.WorldStandards?.TILE_METERS||2),WORLD_RADIUS_METERS)||null,authority:"PlanetGeography.seed-fixed-spherical-frame"}),
+      tangentPatchActive:Boolean(tangentPatch?.enabled),
+      tangentPatchDerivedFromFocus:true,
+      tangentPatchSpanMeters:Math.max(localDetail.patchWidthMeters,localDetail.patchHeightMeters),
+      localDetail:Object.freeze({...localDetail,viewportBounded:true,fullWorldMaterialized:false}),
+      spatialLod:Object.freeze(spatialLodDiagnostics()),
+      localStatic:Object.freeze({...localStatic,focusLatitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),focusLongitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(6)),visibleFootprintWidthMeters:Number(zoomState.visibleFootprintWidthMeters.toFixed(3)),visibleFootprintHeightMeters:Number(zoomState.visibleFootprintHeightMeters.toFixed(3))}),
+      resourceBudget:Object.freeze({...localResources,cacheLimit:LOCAL_RESOURCE_CACHE_LIMIT,cacheBudgetBytes:LOCAL_RESOURCE_CACHE_BUDGET_BYTES,lodHysteresis:LOCAL_LOD_HYSTERESIS,offscreenFineDetailActive:false,viewportPriority:true,centerFirst:true}),
+      presentation:Object.freeze({...projectionPresentation})
+    }),
+    activeSystems:Object.freeze({
+      protagonistEnabled:false,
+      npcEnabled:Boolean(localNpcPresentation.activeCount>0),
+      crowdEnabled:Boolean(localCrowdPresentation.visibleCount>0),
+      tileSystemActive:false,
+      localTerrainActive:Boolean(tangentPatch?.enabled),
+      settlementGenerationActive:false,
+      buildingGenerationActive:Boolean(localStatic.active&&localStatic.buildingCount>0),
+      worldDetailSimulationActive:false
+    }),
+    generation:Object.freeze({
+      generatedOnce:true,
+      perFrameGeneration:false,
+      sphericalAuthority:true,
+      planarTileAuthority:false,
+      physicalElevationMeters:true
+    }),
+    frameCount,
+    ambientMotion:Object.freeze({...ambientMotion,lastUpdateMs:Number(ambientMotion.lastUpdateMs.toFixed(4)),maxUpdateMs:Number(ambientMotion.maxUpdateMs.toFixed(4)),presentationOnly:true,simulationAuthority:false}),
+    atmosphere:Object.freeze({...atmosphere}),
+    atmosphereTimeBinding:Object.freeze({...atmosphereTimeBinding}),
+    wilderness:Object.freeze({...wilderness}),
+    microLocations:Object.freeze({...microLocationPresentation,ids:Object.freeze((microLocationPresentation.ids||[]).slice()),types:Object.freeze((microLocationPresentation.types||[]).slice()),locations:Object.freeze((microLocationPresentation.locations||[]).slice())}),
+    localEvents:window.LocalEventVignettes?.snapshot?.(activeSeed)||null,
+    travelEncounters:window.TravelEncounters?.snapshot?.(activeSeed)||null,
+    wildlifeReaction:Object.freeze({...wildlifeReaction,actors:Object.freeze(localFaunaActors.map(localFaunaActorSnapshot)),memoryEntryCount:localFaunaReactionMemory.size,
+      speciesRules:Object.freeze(Object.fromEntries(Object.entries(LOCAL_FAUNA_SPECS).map(([kind,spec])=>[kind,Object.freeze({...spec})])))}),
+    environmentalReactions:Object.freeze({...environmentalReactions,activeSlots:Object.freeze(environmentalReactionPool.filter(slot=>slot.active).map(slot=>Object.freeze({kind:slot.kind,index:slot.index,ageMs:Number((performance.now()-slot.startedAtMs).toFixed(1)),lifetimeMs:slot.lifetimeMs,latitudeDegrees:Number((slot.latitudeRadians*180/Math.PI).toFixed(6)),longitudeDegrees:Number((slot.longitudeRadians*180/Math.PI).toFixed(6))})))}),
+    inspection:Object.freeze({...inspection,activePickableCount:inspectionPickables.size,activeNpcCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="npc").length,activeBuildingCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="building").length,activeSignpostCount:Array.from(inspectionPickables.values()).filter(x=>x.type==="signpost").length,selectedAuthority:inspection.selectedId===null?null:(inspectionPickables.get(inspectionRegistryKey(inspection.selectedType,inspection.selectedId))?.authority||null),boundedActiveRegistry:true,fullWorldScan:false,selectedStateRefreshIntervalMs:250}),
+    wayfindingSignposts:Object.freeze({...wayfindingSignposts,signs:Object.freeze((wayfindingSignposts.signs||[]).slice())}),
+    npcPresentation:Object.freeze({...localNpcPresentation}),
+    crowdPresentation:Object.freeze({...localCrowdPresentation,
+      exactPersistentNpcCount:Number(localNpcEntities.size||0),
+      visibleExactNpcCount:Number(localNpcPresentation.activeCount||0),
+      inspectionRegistered:false,selectable:false,persistentIdentity:false,collision:false,
+      actors:Object.freeze(localCrowdEntities.map(item=>Object.freeze({id:item.id,point:item.point,visualRole:item.visualRole,visible:Boolean(item.entity?.enabled),travelEncounter:Boolean(item.travelEncounter),encounterType:item.encounterType||null,propKind:item.propKind||null,inViewport:Boolean(item.inViewport),screen:item.screen||null,bodyScreenSizePx:item.bodyScreenSizePx||null})))
+    }),
+    buildingActivity:Object.freeze({...buildingActivity,buildings:Object.freeze((buildingActivity.buildings||[]).slice())}),
+    buildingSurroundings:Object.freeze({...buildingSurroundings,functions:Object.freeze((buildingSurroundings.functions||[]).slice()),buildings:Object.freeze((buildingSurroundings.buildings||[]).slice())}),
+    campaignWearProjection:Object.freeze({...campaignWearProjection,stateCounts:Object.freeze({...campaignWearProjection.stateCounts}),buildings:Object.freeze((campaignWearProjection.buildings||[]).slice())}),
+    destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),names:Object.freeze(destinationNavigator.descriptors.map(d=>d.name)),leadCount:destinationNavigator.descriptors.filter(d=>d.rumorLead).length,leadIds:Object.freeze(destinationNavigator.descriptors.filter(d=>d.rumorLead).map(d=>d.leadId||d.id)),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,queryCenter:Object.freeze({latitudeDegrees:Number((-pitchDegrees).toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
+    mapPresentation:Object.freeze({...mapPresentation}),
+    navigationPerformance:Object.freeze({...navigationPerformance,framePhaseLastMs:Object.freeze({...navigationPerformance.framePhaseLastMs}),framePhaseMaxMs:Object.freeze({...navigationPerformance.framePhaseMaxMs}),averageSemanticUpdateMs:Number((navigationPerformance.semanticUpdateRenderCount?navigationPerformance.totalSemanticUpdateMs/navigationPerformance.semanticUpdateRenderCount:0).toFixed(3)),pendingReason:mapPresentationSchedule.pendingReason}),
+    politicalScale:politicalScaleEvidence(),
+    startupError,
+    startupProgress:Object.freeze({...startupProgress,loadingProofActive:Boolean(loadingProof)}),
+    loadingPresentation:Object.freeze({...((loadingProof||startupProgress)),loadingProofActive:Boolean(loadingProof)}),
+    startupScheduler:Object.freeze({...startupScheduler,progressMonotonic:true,sharedCooperativeScheduler:true,criticalPathOnly:true}),
+    generatedWorldStore:window.GeneratedWorldStore?.telemetry?.()||null
+  });
+}
+function inspectionTargets(){
+  return Object.freeze(Array.from(inspectionPickables.values()).map(record=>{
+    let bounds=null;try{bounds=record.screenBounds?.()||null;}catch{bounds=null;}
+    if(!bounds||![bounds.left,bounds.right,bounds.top,bounds.bottom].every(Number.isFinite))return null;
+    return Object.freeze({id:String(record.id),type:record.type,bounds:Object.freeze({...bounds}),authority:record.authority||null});
+  }).filter(Boolean));
+}
+function workCycleEvidenceState(residentId){
+  const id=String(residentId||""),record=localNpcEntities.get(id)||null,rect=canvas?.getBoundingClientRect?.()||null;
+  if(!record||!rect||!cameraEntity?.camera)return Object.freeze({residentId:id,exists:Boolean(record),visible:false,toolEnabled:false,inViewport:false});
+  const entities=[record.body,record.head,record.tool].filter(Boolean);
+  const enabled=entities.filter(entity=>entity.enabled&&entity.parent);
+  const bodyBounds=inspectionEntityBounds([record.body,record.head].filter(entity=>entity?.enabled&&entity.parent),0);
+  const eventSilhouetteBounds=inspectionEntityBounds([record.eventHalo,record.tool].filter(entity=>entity?.enabled&&entity.parent),0);
+  const sizeOf=bounds=>bounds?Object.freeze({width:Number(Math.max(0,bounds.right-bounds.left).toFixed(3)),height:Number(Math.max(0,bounds.bottom-bounds.top).toFixed(3))}):null;
+  const rectOf=bounds=>bounds?Object.freeze({left:Number(bounds.left.toFixed(3)),right:Number(bounds.right.toFixed(3)),top:Number(bounds.top.toFixed(3)),bottom:Number(bounds.bottom.toFixed(3))}):null;
+  const projected=enabled.map(entity=>{
+    const world=entity.getPosition?.();if(!world)return null;
+    const screen=cameraEntity.camera.worldToScreen(world,new pc.Vec3());
+    const sx=Number(screen?.x),sy=Number(screen?.y),sz=Number(screen?.z);
+    return Number.isFinite(sx)&&Number.isFinite(sy)?Object.freeze({x:sx,y:sy,z:Number.isFinite(sz)?sz:null}):null;
+  }).filter(Boolean);
+  const center=projected.length?Object.freeze({
+    x:projected.reduce((sum,p)=>sum+p.x,0)/projected.length,
+    y:projected.reduce((sum,p)=>sum+p.y,0)/projected.length
+  }):null;
+  const inViewport=Boolean(center&&center.x>=0&&center.x<=rect.width&&center.y>=0&&center.y<=rect.height);
+  const movement=window.ResidentMovement?.get?.(id)||null;
+  return Object.freeze({
+    residentId:id,exists:true,visible:enabled.length>0,toolEnabled:Boolean(record.tool?.enabled),
+    inViewport,screen:center?Object.freeze({x:Number(center.x.toFixed(3)),y:Number(center.y.toFixed(3)),width:Number(rect.width.toFixed(3)),height:Number(rect.height.toFixed(3))}):null,
+    bodyBoundsPx:rectOf(bodyBounds),eventSilhouetteBoundsPx:rectOf(eventSilhouetteBounds),
+    bodyScreenSizePx:sizeOf(bodyBounds),eventSilhouetteScreenSizePx:sizeOf(eventSilhouetteBounds),
+    movementStatus:movement?.status||null,workCycle:movement?.workCycle||null,
+    localTier:localStatic?.revealTier||null,localBuildingCount:Number(localStatic?.buildingCount||0),
+    presentationOnly:true,simulationAuthority:false
+  });
+}
+function verify(){
+  const stage=snapshot();
+  const check=geographyVerification||(window.PlanetGeography?.verifyDeterminism?.(activeSeed)||null);
+  geographyVerification=check;
+  return Object.freeze({
+    pass:Boolean(
+      stage.ready&&
+      check?.pass===true&&
+      stage.geographyHash&&
+      stage.geographyStats?.landSamples>0&&
+      stage.geographyStats?.oceanSamples>0&&
+      stage.geographyStats?.islandSamples>0&&
+      stage.geographyStats?.mountainSamples>0&&
+      stage.geographyStats?.maxElevationMeters>3000&&
+      stage.activeSystems?.tileSystemActive===false&&
+      stage.generation?.perFrameGeneration===false
+    ),
+    stage,check
+  });
+}
+function destroy(){
+  stopResidentMovementScheduler();
+  cancelMapPresentationSchedule();navigationLongTaskObserver?.disconnect?.();navigationLongTaskObserver=null;
+  resizeObserver?.disconnect?.();resizeObserver=null;
+  if(!("ResizeObserver" in window))window.removeEventListener("resize",resize);
+  generatedTexture?.destroy?.();generatedTexture=null;
+  mapScaleShellTexture?.destroy?.();mapScaleShellTexture=null;
+  releaseWp020TransitionEvidenceFreeze();restoreWp020EvidenceLayerVisibility();clearWp020EvidenceFlatMesh();wp020EvidencePresentationMode="normal";
+  for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
+  clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection(false);localCampaignWearContext=null;clearCanonicalWayfindingSignposts();clearCanonicalRoofRegistry();
+  app?.destroy?.();
+  app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localPersistentConsequenceRoot=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
+  environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionTextures=null;environmentalReactionPool=[];
+  environmentalReactions={enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,activeDrawCallEstimate:0,peakActiveCount:0,triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,terrainMutation:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameWorldScan:false};
+  clearLocalBuildingActivity();localBuildingActivityRoot=null;localBuildingActivityContext=null;
+  buildingActivity={...buildingActivity,active:false,buildingCount:0,activeBuildingCount:0,occupiedBuildingCount:0,activeWorkplaceCount:0,activeHomeCount:0,warmWindowCount:0,smokeCueCount:0,openMarketCount:0,forgeGlowCount:0,workPropCount:0,cueCount:0,drawCallEstimate:0,buildings:[],lastSignature:null};
+  localNpcRoot=null;localNpcMaterials=null;localNpcContext=null;localNpcEntities.clear();
+  localCrowdRoot=null;localCrowdMaterials=null;localCrowdContext=null;localCrowdEntities=[];resetLocalCrowdTelemetry();ready=false;
+  inspectionPickables.clear();localBuildingInspectionKeys.clear();localNpcInspectionKeys.clear();localSignInspectionKeys.clear();
+  wayfindingTextCanvas?.remove?.();wayfindingTextCanvas=null;wayfindingTextContext=null;wayfindingPanelAnchors=[];wayfindingSignAnchors.clear();
+  inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
+  atmospherePalette=null;atmosphereTimeBinding={available:false,active:false,readOnly:true,directRealClockRead:false,campaignMutation:false,source:"unavailable",campaignSeed:null,lastTimestampKey:null,lastPollAtMs:0,lastAppliedAtMs:0,pollIntervalMs:1000,error:null};
+  geography=null;coordinateFabric=null;politicalScaleEvidenceCache=null;worldProjectionAnchorCache=null;settlementRevealCache={key:null,value:null};atlasLabelCache={key:null,candidates:[],queryCellCount:0,buildMs:0};atlasStickyBand=null;atlasStickyEntities.clear();atlasLabelPlacementCache.clear();atlasEntityCache.clear();atlasIdentityCache.clear();semanticScaleState={index:0,initialized:false,changes:0,holds:0,lastRawIndex:0};localResidency.clear();localRecentEvictions.clear();localMotionPrefetchTargets.clear();localLastRequestRegistered=null;localMotionVector={east:0,north:0,magnitude:0};localStaticRefreshScheduled=false;mapPresentationSchedule={raf:0,timer:0,lastRenderedAtMs:0,pendingReason:null};navigationPerformance={revision:"world-map-navigation-budget-v1",semanticUpdateRequestCount:0,semanticUpdateRenderCount:0,semanticUpdateCoalescedCount:0,semanticUpdateForcedCount:0,semanticUpdatePending:false,semanticUpdateMinIntervalMs:NAV_SEMANTIC_MIN_INTERVAL_MS,lastSemanticUpdateMs:0,maxSemanticUpdateMs:0,totalSemanticUpdateMs:0,semanticPhaseLastMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},semanticPhaseMaxMs:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},semanticPhaseOver50Count:{contextQuery:0,contextDomCommit:0,borderBuild:0,borderProjection:0,labelQueryLayout:0,markerScaleCommit:0},rotationRequestCount:0,zoomRequestCount:0,authorityRefreshRequestCount:0,pointerSettleFlushCount:0,pointerMoveCount:0,pointerMoveSnapshotCount:0,pointerMoveSnapshotAvoidedCount:0,programmaticRotationSnapshotAvoidedCount:0,zoomCommandSnapshotAvoidedCount:0,frameUpdateCount:0,lastFrameUpdateMs:0,maxFrameUpdateMs:0,lastRenderCpuMs:0,maxRenderCpuMs:0,frameUpdateOver50Count:0,renderCpuOver50Count:0,framePhaseLastMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},framePhaseMaxMs:{zoom:0,residentAdvance:0,npcMotion:0,frameStats:0,atmosphere:0,inspection:0,wayfinding:0,ambientMotion:0},residentAdvanceSnapshotSuppressed:true,residentSchedulerMode:"fixed-step-cooperative",residentSchedulerCalls:0,residentSchedulerLastMs:0,residentSchedulerMaxMs:0,residentSchedulerOver50Count:0,residentSchedulerPendingDrains:0,residentSchedulerWarmupMs:0,longTask50Count:0,longTaskWorstMs:0,eventDrivenSemanticUpdates:true,cameraMotionImmediate:true,perFrameFullPlanetIteration:false,bounded:true,fullWorldScan:false};projectionPresentation={viewBlend:0,angleBlend:0,presentationCompensation:1,patchScale:0,cameraY:0,cameraZ:0,fov:34,targetHeightMeters:650000};root?.replaceChildren?.();
+}
+window.PlanetStage=Object.freeze({
+  VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setZoomTargetScalar,setScaleIndex,stepScale,setAnimatedScaleIndex,stepAnimatedScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},placeDescriptors:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();return Object.freeze(destinationNavigator.descriptors.map(item=>Object.freeze({...item})))},refreshPlaces:()=>{buildDestinationDescriptors();renderDestinationNavigator();return snapshot();},openPlaces:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
+  setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},
+  workCycleEvidenceState,surfaceContributorEvidence,setWp020PresentationEvidenceMode,armWp020TransitionEvidenceFreeze,wp020TransitionEvidenceFreezeState,releaseWp020TransitionEvidenceFreeze,
+  focusWayfindingSignForEvidence:(id)=>{const sign=(wayfindingSignposts.signs||[]).find(item=>String(item.id)===String(id));if(sign){setWorldTileFocus(sign.anchor.x,sign.anchor.y);setZoomScalar(1);}return snapshot();},
+  selectWayfindingSignForEvidence:(id)=>{const key=inspectionRegistryKey("signpost",String(id)),record=inspectionPickables.get(key);if(record){inspection.selectedId=String(id);inspection.selectedType="signpost";renderInspectionTooltip(record);}return snapshot();},
+  destroy,
+  constants:Object.freeze({
+    EARTH_REFERENCE_RADIUS_METERS,WORLD_SCALE_FRACTION,WORLD_RADIUS_METERS,WORLD_DIAMETER_METERS,
+    WORLD_CIRCUMFERENCE_METERS:Number(WORLD_CIRCUMFERENCE_METERS.toFixed(3)),
+    TEXTURE_WIDTH,TEXTURE_HEIGHT,LATITUDE_SEGMENTS,LONGITUDE_SEGMENTS,HEIGHT_EXAGGERATION,ZOOM_MIN,ZOOM_MAX,ZOOM_BANDS,SCALE_LADDER,SCALE_DENOMINATORS,SCALE_FOOTPRINT_PROGRESS_EXPONENT,SEMANTIC_SCALE_HYSTERESIS_RATIO,SEMANTIC_LAYER_SPECS,SEMANTIC_MARKER_POLICY_REVISION,SEMANTIC_MARKER_CLASSES,SEMANTIC_MARKER_SPECS,LOCAL_DETAIL_LEVELS,LADDER_START_SCALAR,GROUND_FOOTPRINT_HEIGHT_METERS,ZOOM_WHEEL_SENSITIVITY,ZOOM_PINCH_SENSITIVITY,LOCAL_RESOURCE_CACHE_LIMIT,LOCAL_GRACE_RESIDENCY_MS,LOCAL_LOD_HYSTERESIS,SPATIAL_LOD_ROOT_CELL_METERS,SPATIAL_CELL_MAX_LEVEL_HEIGHT_RATIO,SSE_TARGET_PIXELS,SSE_REFINE_PIXELS,SSE_COARSEN_PIXELS,LOCAL_SURROUND_SPAN_FACTOR,SSE_MAX_NATIVE_MAGNIFICATION
+  })
+});
+const boot=()=>start().catch(()=>{});
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});
+else boot();
+})();

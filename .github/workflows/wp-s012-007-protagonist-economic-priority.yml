@@ -1,0 +1,115 @@
+name: WP-S012-007 Protagonist Economic Priority
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/world/protagonist-economic-priority.js"
+      - "scripts/tests/wp-s012-007-protagonist-economic-priority.test.js"
+      - ".github/workflows/wp-s012-007-protagonist-economic-priority.yml"
+      - "scripts/world/protagonist-needs.js"
+      - "scripts/world/protagonist-housing.js"
+      - "scripts/world/protagonist-wealth.js"
+      - "scripts/world/protagonist-inventory.js"
+      - "scripts/world/protagonist-goals.js"
+      - "scripts/world/protagonist-authority.js"
+      - "scripts/world/local-market.js"
+      - "scripts/world/protagonist-profession-opportunities.js"
+      - "scripts/world/protagonist-action-runtime.js"
+      - "scripts/world/protagonist-command-evaluator.js"
+      - "index.html"
+      - "docs/ROADMAP.md"
+      - "docs/changelog.txt"
+      - "docs/suggest_log.txt"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/world/protagonist-economic-priority.js"
+      - "scripts/tests/wp-s012-007-protagonist-economic-priority.test.js"
+      - ".github/workflows/wp-s012-007-protagonist-economic-priority.yml"
+      - "scripts/world/protagonist-needs.js"
+      - "scripts/world/protagonist-housing.js"
+      - "scripts/world/protagonist-wealth.js"
+      - "scripts/world/protagonist-inventory.js"
+      - "scripts/world/protagonist-goals.js"
+      - "scripts/world/protagonist-authority.js"
+      - "scripts/world/local-market.js"
+      - "scripts/world/protagonist-profession-opportunities.js"
+      - "scripts/world/protagonist-action-runtime.js"
+      - "scripts/world/protagonist-command-evaluator.js"
+      - "index.html"
+      - "docs/ROADMAP.md"
+      - "docs/changelog.txt"
+      - "docs/suggest_log.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Autonomous economic priority evidence
+        run: node scripts/tests/wp-s012-007-protagonist-economic-priority.test.js
+      - name: Needs, work and economy authority regressions
+        run: |
+          node scripts/tests/wp-s010-001-protagonist-action-runtime.test.js
+          node scripts/tests/wp-s010-004-protagonist-self-care.test.js
+          node scripts/tests/wp-s010-005-protagonist-work-routine.test.js
+          node scripts/tests/wp-s012-001-protagonist-wealth.test.js
+          node scripts/tests/wp-s012-002-local-market.test.js
+          node scripts/tests/wp-s012-005-protagonist-housing.test.js
+          node scripts/tests/wp-s012-006-protagonist-profession-opportunities.test.js
+      - name: Verify exact product is live on GitHub Pages
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://sgoxel.github.io/The_Advisor_Game"
+          MODE="accepted"
+          if grep -q 'WP-S012-007.*COMPLETED' docs/ROADMAP.md; then MODE="completed"; fi
+          for attempt in $(seq 1 48); do
+            curl -fsSL --max-time 20 "$BASE/scripts/world/protagonist-economic-priority.js?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-economic-priority.js || true
+            curl -fsSL --max-time 20 "$BASE/index.html?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-index.html || true
+            curl -fsSL --max-time 20 "$BASE/docs/ROADMAP.md?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-roadmap.md || true
+            product_ok=0
+            state_ok=0
+            grep -q 'VERSION="protagonist-economic-priority-v1"' /tmp/live-economic-priority.js 2>/dev/null &&               grep -q 'scripts/world/protagonist-economic-priority.js?v=protagonist-economic-priority-v1' /tmp/live-index.html 2>/dev/null && product_ok=1 || true
+            if [ "$MODE" = "completed" ]; then
+              grep -q 'WP-S012-007.*COMPLETED' /tmp/live-roadmap.md 2>/dev/null && state_ok=1 || true
+            else
+              state_ok=1
+            fi
+            if [ "$product_ok" -eq 1 ] && [ "$state_ok" -eq 1 ]; then
+              echo "GitHub Pages exposes WP-S012-007 mode=$MODE for commit $GITHUB_SHA"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "GitHub Pages did not expose expected WP-S012-007 $MODE markers in time." >&2
+          exit 1
+      - name: Comment exact run on Issue 249
+        if: always() && github.event_name == 'push'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ job.status }}';
+            const sha = context.sha;
+            const url = 'https://github.com/'+context.repo.owner+'/'+context.repo.repo+'/actions/runs/'+context.runId;
+            const body = [
+              'AGENT #6 WP-S012-007 exact-head workflow: **'+status.toUpperCase()+'**',
+              'Commit: '+sha,
+              'Run: '+url,
+              status === 'success'
+                ? 'Autonomous economic-priority evidence, selected needs/work/economy regressions, and GitHub Pages verification passed. VISUAL: N/A — functional-only selection/runtime handoff.'
+                : 'Economic-priority evidence, regression, or GitHub Pages verification failed; WP remains incomplete.'
+            ].join('\n');
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:249,body});
+# exact-head trigger
