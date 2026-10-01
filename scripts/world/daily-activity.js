@@ -375,13 +375,8 @@ function schedulePattern(seed,resident){
   ]);
 }
 
-function buildResident(seed,index){
-  const identity=identityForIndex(seed,index);
-  const assignment=assignmentForResident(seed,identity.id);
-  const professionConfig=assignment.professionConfig;
-  const home=assignment.home;
-  const work=assignment.work;
-  const resident=Object.freeze({
+function residentFoundation(identity,professionConfig,home,work){
+  return Object.freeze({
     id:identity.id,
     name:identity.name,
     firstName:identity.firstName,
@@ -415,6 +410,11 @@ function buildResident(seed,index){
     workplaceDoor:work.workplaceDoor,
     schedule:null
   });
+}
+function buildResident(seed,index){
+  const identity=identityForIndex(seed,index);
+  const assignment=assignmentForResident(seed,identity.id);
+  const resident=residentFoundation(identity,assignment.professionConfig,assignment.home,assignment.work);
   const schedule=schedulePattern(seed,resident);
   return Object.freeze(Object.assign({},resident,{schedule}));
 }
@@ -462,15 +462,46 @@ async function buildCooperative(seedValue,options={}){
   if(cooperativeBuilds.has(seed))return cooperativeBuilds.get(seed);
   const pending=(async()=>{
     const roster=[];
+    const now=()=>typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
+    const record=(started,index,phase)=>{
+      const elapsed=now()-started;
+      try{options.onUnit?.(elapsed,index,phase);}catch(_){}
+    };
+    const pause=async()=>{
+      if(typeof options.yield==="function")await options.yield();
+      else await new Promise(resolve=>setTimeout(resolve,0));
+    };
     for(let index=0;index<12;index++){
-      const started=typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
-      roster.push(buildResident(seed,index));
-      const ended=typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
-      try{options.onUnit?.(ended-started,index);}catch(_){}
-      if(index<11){
-        if(typeof options.yield==="function")await options.yield();
-        else await new Promise(resolve=>setTimeout(resolve,0));
-      }
+      let started=now();
+      const identity=identityForIndex(seed,index);
+      record(started,index,"identity");
+      await pause();
+
+      started=now();
+      const professionConfig=professionForResident(seed,identity.id);
+      record(started,index,"profession");
+      await pause();
+
+      started=now();
+      const home=homeForResident(seed,identity.id);
+      record(started,index,"home");
+      await pause();
+
+      started=now();
+      const work=workplaceForResident(seed,identity.id,professionConfig);
+      record(started,index,"workplace");
+      await pause();
+
+      started=now();
+      const resident=residentFoundation(identity,professionConfig,home,work);
+      record(started,index,"foundation");
+      await pause();
+
+      started=now();
+      const schedule=schedulePattern(seed,resident);
+      roster.push(Object.freeze(Object.assign({},resident,{schedule})));
+      record(started,index,"schedule");
+      if(index<11)await pause();
     }
     const frozen=Object.freeze(roster.map(r=>Object.freeze(r)));
     cache.set(seed,frozen);
