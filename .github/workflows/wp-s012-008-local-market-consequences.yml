@@ -104,3 +104,4 @@ jobs:
                 : 'Market consequence evidence, regression, or GitHub Pages verification failed; WP remains incomplete.'
             ].join('\n');
             await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:250,body});
+# exact-head trigger
