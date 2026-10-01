@@ -270,7 +270,7 @@ def _validate_character_frames(frames):
             raise RuntimeError(f"frame {index} has no protagonist billboard: {p}")
         if p.get("billboardOnlyAtGround") is not True:
             raise RuntimeError(f"frame {index} lost ground-only contract: {p}")
-        if p.get("cameraPresentation")!="orthographic-top-down":
+        if p.get("cameraPresentation")!="orthographic-3q":
             raise RuntimeError(f"frame {index} lost orthographic camera presentation: {p}")
         focus=(stage.get("canonicalFocus") or {}).get("worldTile") or {}
         focus_keys.append((str(focus.get("x")),str(focus.get("y"))))
