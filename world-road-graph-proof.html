@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>World Road Graph Evidence</title>
+<style>
+:root{color-scheme:dark;--bg:#071019;--panel:#0d1b24;--line:#243d48;--ink:#eef6f3;--muted:#9db2b4;--accent:#e7c36b;--trunk:#f2cf72;--primary:#d7b06c;--secondary:#b78e62;--local:#8f765f;--water:#2f6778}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 20% -10%,#17313f 0,#071019 48%);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1500px;margin:auto;padding:22px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:end}.hero h1{margin:0 0 6px;font-size:clamp(25px,3vw,42px);line-height:1}.hero p{margin:0;color:var(--muted);max-width:820px}.badge{padding:7px 10px;border:1px solid #4d746f;border-radius:999px;background:#0b2524;color:#d4eee2;white-space:nowrap}
+.stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:18px 0}.stat,.panel{background:linear-gradient(180deg,#13252e,#0b171e);border:1px solid var(--line);border-radius:16px}.stat{padding:11px}.stat strong{display:block;font-size:20px}.stat span{color:var(--muted);font-size:11px}
+.grid{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(260px,.7fr);gap:14px}.panel{padding:14px}.panel h2{margin:0 0 5px;font-size:17px}.panel p{margin:0 0 10px;color:var(--muted);font-size:12px}
+.map-wrap{position:relative;border:1px solid #2b4651;border-radius:14px;overflow:hidden;background:linear-gradient(180deg,#11241d,#0b1b1a);min-height:560px}
+#network{width:100%;height:560px;display:block}.legend{position:absolute;left:12px;bottom:12px;display:flex;flex-wrap:wrap;gap:8px;padding:8px 10px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(4,12,16,.78);backdrop-filter:blur(5px);font-size:11px}.legend i{display:inline-block;width:22px;height:3px;vertical-align:middle;margin-right:5px;border-radius:5px}
+.stack{display:grid;gap:10px}.mini{padding:11px;border:1px solid #263f49;border-radius:12px;background:#0a151b}.mini strong{display:block;margin-bottom:5px}.mini code{font-size:10px;color:#cde4df;word-break:break-all}.rows{display:grid;gap:6px}.row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)}.row:last-child{border-bottom:0}.row span{color:var(--muted)}
+.pass{color:#bce5cb}.warn{color:#efcf7f}
+@media(max-width:760px){main{padding:12px}.hero{align-items:flex-start;flex-direction:column}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}.map-wrap,#network{height:520px;min-height:520px}.legend{right:10px}.panel{padding:10px}}
+</style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <div><h1>Hierarchical inter-settlement road graph</h1><p>Deterministic strategic road authority generated from canonical settlements and fixed geography. The map below is a descriptor-level presentation; local detailed segments remain unmaterialized until relevant.</p></div>
+    <div class="badge" id="status">Building graph…</div>
+  </section>
+  <section class="stats" id="stats"></section>
+  <section class="grid">
+    <article class="panel">
+      <h2 id="mapTitle">Road network</h2>
+      <p>Road width shows hierarchy. Circles are canonical settlement nodes; gold rings mark graph junctions. Corridor bends come from bounded terrain/elevation sampling.</p>
+      <div class="map-wrap">
+        <svg id="network" viewBox="0 0 1000 620" role="img" aria-label="Deterministic hierarchical road network"></svg>
+        <div class="legend">
+          <span><i style="background:var(--trunk);height:7px"></i>Trunk</span>
+          <span><i style="background:var(--primary);height:5px"></i>Primary</span>
+          <span><i style="background:var(--secondary);height:4px"></i>Secondary</span>
+          <span><i style="background:var(--local);height:3px"></i>Local</span>
+        </div>
+      </div>
+    </article>
+    <aside class="stack">
+      <section class="panel"><h2>Authority</h2><div class="rows" id="authority"></div></section>
+      <section class="panel"><h2>Representative route</h2><div class="mini" id="route"></div></section>
+      <section class="panel"><h2>Junctions</h2><div class="rows" id="junctions"></div></section>
+      <section class="panel"><h2>Bounds</h2><div class="rows" id="bounds"></div></section>
+    </aside>
+  </section>
+</main>
+<script src="scripts/data/config.js"></script>
+<script src="scripts/data/world-standards.js"></script>
+<script src="scripts/core/prng.js"></script>
+<script src="scripts/world/coordinates.js"></script>
+<script src="scripts/core/seed.js"></script>
+<script src="scripts/core/game-time.js"></script>
+<script src="scripts/world/place-naming.js"></script>
+<script src="scripts/world/planet-geography.js"></script>
+<script src="scripts/world/geography.js"></script>
+<script src="scripts/world/political-geography.js"></script>
+<script src="scripts/world/country-profile.js"></script>
+<script src="scripts/world/region-profile.js"></script>
+<script src="scripts/world/country-relations.js"></script>
+<script src="scripts/world/starting-village.js"></script>
+<script src="scripts/world/settlement-archetypes.js"></script>
+<script src="scripts/world/world-road-graph.js"></script>
+<script>
+(function(){
+"use strict";
+const qs=new URLSearchParams(location.search),seed=qs.get("seed")||"WP_S006_009_ACCEPTANCE";
+function esc(v){return String(v==null?"":v).replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[ch]))}
+function row(k,v,cls=""){return '<div class="row"><span>'+esc(k)+'</span><strong class="'+cls+'">'+esc(v)+'</strong></div>'}
+function metric(k,v){return '<div class="stat"><strong>'+esc(v)+'</strong><span>'+esc(k)+'</span></div>'}
+try{
+  const country=PoliticalGeography.countryAt(seed,"0","0"),graph=WorldRoadGraph.graphForCountry(seed,country,{radius:4}),proof=WorldRoadGraph.proof(seed,country);
+  if(!graph||!graph.nodes.length)throw new Error("Road graph unavailable");
+  const nodeMap=new Map(graph.nodes.map(n=>[n.id,n])),all=[];
+  for(const n of graph.nodes)all.push(n.center);
+  for(const e of graph.edges)for(const p of e.geometry.points)all.push(p);
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(const p of all){const x=Number(p.x),y=Number(p.y);minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y)}
+  const padX=Math.max(500,(maxX-minX)*.08),padY=Math.max(500,(maxY-minY)*.08);minX-=padX;maxX+=padX;minY-=padY;maxY+=padY;
+  const sx=x=>58+(Number(x)-minX)/Math.max(1,maxX-minX)*884,sy=y=>56+(Number(y)-minY)/Math.max(1,maxY-minY)*500;
+  const svg=document.getElementById("network"),parts=[];
+  parts.push('<defs><filter id="roadShadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".38"/></filter><pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M50 0H0V50" fill="none" stroke="rgba(204,235,219,.045)" stroke-width="1"/></pattern></defs><rect width="1000" height="620" fill="url(#grid)"/>');
+  const widths={trunk:9,primary:7,secondary:5,local:3.5},colors={trunk:"var(--trunk)",primary:"var(--primary)",secondary:"var(--secondary)",local:"var(--local)"};
+  for(const edge of graph.edges){
+    const pts=edge.geometry.points.map(p=>sx(p.x).toFixed(1)+","+sy(p.y).toFixed(1)).join(" ");
+    parts.push('<polyline points="'+pts+'" fill="none" stroke="rgba(0,0,0,.38)" stroke-width="'+(widths[edge.roadClass]+5)+'" stroke-linecap="round" stroke-linejoin="round"/>');
+    parts.push('<polyline points="'+pts+'" fill="none" stroke="'+colors[edge.roadClass]+'" stroke-width="'+widths[edge.roadClass]+'" stroke-linecap="round" stroke-linejoin="round" filter="url(#roadShadow)"/>');
+    for(const c of edge.geometry.crossings||[])parts.push('<circle cx="'+sx(c.x)+'" cy="'+sy(c.y)+'" r="5" fill="var(--water)" stroke="#d7edf0" stroke-width="1.5"/>');
+  }
+  const junctionIds=new Set(graph.junctions.map(j=>j.nodeId));
+  for(const node of graph.nodes){
+    const x=sx(node.center.x),y=sy(node.center.y),r=6+node.priority*2.1,ring=junctionIds.has(node.id);
+    if(ring)parts.push('<circle cx="'+x+'" cy="'+y+'" r="'+(r+6)+'" fill="none" stroke="var(--accent)" stroke-width="2" opacity=".9"/>');
+    parts.push('<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="#d7e7cf" stroke="#102018" stroke-width="2"/>');
+    const anchor=node.localApproach?.anchor;if(anchor&&node.localApproach.kind==="starting-village-gateway"){parts.push('<line x1="'+x+'" y1="'+y+'" x2="'+sx(anchor.x)+'" y2="'+sy(anchor.y)+'" stroke="#b7dfd6" stroke-width="2" stroke-dasharray="5 4"/><circle cx="'+sx(anchor.x)+'" cy="'+sy(anchor.y)+'" r="4" fill="#b7dfd6"/>')}
+    const dx=x>780?-10:10,anchorText=x>780?"end":"start";
+    parts.push('<text x="'+(x+dx)+'" y="'+(y-9)+'" text-anchor="'+anchorText+'" fill="#f1f6ec" font-size="'+(node.priority>=4?16:13)+'" font-weight="'+(node.priority>=3?700:600)+'" paint-order="stroke" stroke="#071019" stroke-width="4" stroke-linejoin="round">'+esc(node.name)+'</text>');
+    parts.push('<text x="'+(x+dx)+'" y="'+(y+8)+'" text-anchor="'+anchorText+'" fill="#a9bdbb" font-size="10" paint-order="stroke" stroke="#071019" stroke-width="3">'+esc(node.importanceClass)+'</text>');
+  }
+  svg.innerHTML=parts.join("");
+  document.getElementById("status").textContent=proof.pass?"PASS · deterministic / connected":"CHECK REQUIRED";
+  document.getElementById("status").className="badge "+(proof.pass?"pass":"warn");
+  document.getElementById("mapTitle").textContent=graph.countryName+" · "+graph.nodes.length+" settlements";
+  document.getElementById("stats").innerHTML=[
+    metric("Graph nodes",graph.diagnostics.nodeCount),metric("Graph edges",graph.diagnostics.edgeCount),
+    metric("Junctions",graph.diagnostics.junctionCount),metric("Redundancy edges",graph.diagnostics.redundancyEdgeCount),
+    metric("Water crossings",graph.diagnostics.waterCrossingCount),metric("Planning",graph.diagnostics.planningMs+" ms")
+  ].join("");
+  document.getElementById("authority").innerHTML=
+    row("Campaign seed",seed)+row("Graph signature",graph.signature)+row("Connected components",graph.diagnostics.connectedComponents,"pass")+
+    row("Geography influenced",graph.diagnostics.geographyInfluencedEdgeCount+"/"+graph.diagnostics.edgeCount,"pass")+
+    row("Full-world scan",String(graph.diagnostics.fullWorldScan),graph.diagnostics.fullWorldScan?"warn":"pass")+
+    row("Local detail materialized",graph.diagnostics.detailedSegmentsMaterialized,"pass");
+  const from=graph.nodes[graph.nodes.length-1],to=graph.nodes[0],route=WorldRoadGraph.route(seed,country,from.id,to.id,{radius:4});
+  document.getElementById("route").innerHTML='<strong>'+esc(from.name)+' → '+esc(to.name)+'</strong><div>'+route.edgeIds.length+' graph edges · '+Math.round(route.distanceMeters/100)/10+' km · '+route.expandedNodes+' expanded nodes</div><code>'+esc(route.edgeIds.join(" → "))+'</code>';
+  document.getElementById("junctions").innerHTML=(graph.junctions.slice(0,6).map(j=>row(j.name,j.degree+" branches")) .join("")||row("Graph junctions","none in bounded sample"));
+  document.getElementById("bounds").innerHTML=row("Max nodes",WorldRoadGraph.MAX_NODES)+row("Max edges",WorldRoadGraph.MAX_EDGES)+row("Route expansions",WorldRoadGraph.MAX_ROUTE_EXPANSIONS)+row("Per-frame planning",String(graph.diagnostics.perFramePlanning),graph.diagnostics.perFramePlanning?"warn":"pass");
+  window.__roadGraphEvidence={seed,countryId:graph.countryId,signature:graph.signature,proof,graphSummary:{nodeCount:graph.diagnostics.nodeCount,edgeCount:graph.diagnostics.edgeCount,junctionCount:graph.diagnostics.junctionCount,connectedComponents:graph.diagnostics.connectedComponents,geographyInfluencedEdgeCount:graph.diagnostics.geographyInfluencedEdgeCount,detouredEdgeCount:graph.diagnostics.detouredEdgeCount,waterCrossingCount:graph.diagnostics.waterCrossingCount,planningMs:graph.diagnostics.planningMs,fullWorldScan:graph.diagnostics.fullWorldScan,localChunkMaterialization:graph.diagnostics.localChunkMaterialization,detailedSegmentsMaterialized:graph.diagnostics.detailedSegmentsMaterialized,perFramePlanning:graph.diagnostics.perFramePlanning},route:{found:route.found,edgeCount:route.edgeIds.length,distanceMeters:route.distanceMeters,expandedNodes:route.expandedNodes}};
+  document.documentElement.dataset.ready=proof.pass?"true":"failed";
+}catch(err){
+  console.error(err);document.getElementById("status").textContent="FAILED · "+err.message;document.documentElement.dataset.ready="failed";
+}
+})();
+</script>
+</body>
+</html>
