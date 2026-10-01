@@ -12,6 +12,7 @@ on:
       - "scripts/world/protagonist-authority.js"
       - "scripts/world/protagonist-interaction-pipeline.js"
       - "scripts/world/protagonist-employment.js"
+      - "scripts/world/social-state.js"
       - "scripts/world/world-state.js"
       - "scripts/world/campaign-persistence.js"
       - "index.html"
@@ -39,6 +40,7 @@ jobs:
           node scripts/tests/wp-s010-003-protagonist-interaction-pipeline.test.js
           node scripts/tests/wp-s012-003-protagonist-employment.test.js
           node scripts/tests/wp-s012-006-protagonist-profession-opportunities.test.js
+          node tools/tests/wp-s004-008-contextual-reactions.test.js
           node tools/tests/wp-s007-009-campaign-persistence.test.js
       - name: Verify exact product is live on GitHub Pages
         shell: bash
