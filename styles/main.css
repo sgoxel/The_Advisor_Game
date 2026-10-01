@@ -2599,3 +2599,35 @@ body.advisor-economy-open .advisor-chat-launcher,body.advisor-economy-open .advi
   .advisor-econ-empty{font-size:6px}
   .advisor-econ-foot{padding:4px 7px;font-size:5.6px}
 }
+
+
+/* WP-S012-009 visual attempt 3 — guarantee recent outcome visibility in short landscape */
+@media(max-height:430px) and (orientation:landscape){
+  .advisor-economy-panel{
+    grid-template-rows:28px 12px 36px minmax(0,1fr) 12px;
+  }
+  .advisor-econ-head{height:28px;padding:2px 7px}
+  .advisor-econ-head strong{font-size:12px}
+  .advisor-econ-close{width:22px;height:22px;flex-basis:22px}
+  .advisor-econ-fixture{height:10px;margin:1px 7px 0;padding:1px 5px}
+  .advisor-econ-summary{padding:2px 7px}
+  .advisor-econ-summary article{padding:3px 5px}
+  .advisor-econ-detail{grid-template-rows:minmax(0,1fr) 28px;gap:3px}
+  .advisor-econ-selected{gap:2px;padding:4px 5px}
+  .advisor-econ-selected header strong{font-size:8.2px}
+  .advisor-econ-selected dl{gap:2px}
+  .advisor-econ-selected dl>div{padding:2px 4px}
+  .advisor-econ-selected dt{font-size:4.7px}
+  .advisor-econ-selected dd{margin-top:1px;font-size:5.8px}
+  .advisor-econ-recent{grid-template-rows:10px minmax(0,1fr);gap:1px}
+  .advisor-econ-recent .advisor-econ-section-title small{font-size:4.8px}
+  .advisor-econ-recent .advisor-econ-section-title strong{display:none}
+  .advisor-econ-recent .advisor-econ-section-title>span{font-size:4.8px}
+  .advisor-econ-outcomes{gap:1px}
+  .advisor-econ-outcomes article{grid-template-columns:minmax(0,1fr) auto auto;gap:1px 5px;padding:2px 4px}
+  .advisor-econ-outcomes article>span{display:flex;gap:5px;align-items:center}
+  .advisor-econ-outcomes article>span small{display:none}
+  .advisor-econ-outcomes article code{grid-column:auto;max-width:92px}
+  .advisor-econ-empty{padding:2px 4px;line-height:1.1}
+  .advisor-econ-foot{padding:1px 7px;font-size:4.7px;white-space:nowrap}
+}
