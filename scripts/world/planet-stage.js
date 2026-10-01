@@ -5065,7 +5065,13 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
   let activeCount=0,entityCount=protagonistBillboardVisible?1:0;
   for(const resident of roster){
     const state=residentPresentationState(resident);if(!state)continue;
-    const initiallyVisible=!state.indoors;
+    const billboardTexture=groundArt?groundCharacterTextureUrl(resident.profession):null;
+    const hasGroundBillboard=Boolean(billboardTexture);
+    // Ground NPC billboards are the authoritative presentation layer at the final
+    // settlement view. Interior/home schedules may still classify the resident as
+    // "indoors", but the canonical ground layer intentionally keeps their art
+    // active so the settlement feels populated at the ground zoom.
+    const initiallyVisible=groundArt ? (hasGroundBillboard || !state.indoors) : !state.indoors;
     const east=state.x*tileMeters,north=state.y*tileMeters,ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.015;
     const bodyHeight=Math.max(.10,1.18*presentationScale/unit),bodyWidth=Math.max(.045,.48*presentationScale/unit),headSize=Math.max(.045,.44*presentationScale/unit);
     const pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame),x=pos.x,z=pos.z;
@@ -5074,6 +5080,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     const head=addLocalPrimitive(localNpcRoot,"ResidentHead-"+resident.id,"sphere",localNpcMaterials.head,x,ground+bodyHeight+headSize*.48,z,headSize,headSize,headSize);
     const textureUrl=groundArt?groundCharacterTextureUrl(resident.profession):null;
     const billboard=textureUrl?createGroundCharacterBillboard(localNpcRoot,"ResidentBillboard-"+resident.id,textureUrl,x,ground,z,presentationScale,unit,1.74):null;
+    if(billboard){billboard.enabled=initiallyVisible;}
     if(billboard){residentBillboardCount++;billboardUrls.add(textureUrl);}
     const tool=addLocalPrimitive(localNpcRoot,"ResidentWorkTool-"+resident.id,"box",localNpcMaterials.tool,x,ground+bodyHeight*.62,z,bodyWidth*.26,bodyHeight*.72,bodyWidth*.26);
     const workPropA=addLocalPrimitive(localNpcRoot,"ResidentWorkPropA-"+resident.id,"box",localNpcMaterials.timber,x,ground,z,bodyWidth,bodyWidth,bodyWidth);
@@ -5106,10 +5113,11 @@ function updateCanonicalNpcMotion(){
   if(!localWorldPresentationEligibility().visible||!localNpcRoot||!localNpcContext||!localNpcEntities.size)return;
   const started=performance.now(),tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2)),rhythmStamp=inspectionFantasyStamp();
   const rhythm=window.SettlementActivityRhythm?.snapshot?.(activeSeed,rhythmStamp,[...localNpcEntities.values()].map(record=>record.resident))||null;
+  const groundArt=groundCharacterLayerEligible();
   let activeTools=0,activeProps=0,activeEventCues=0,visibleCount=0,centeredWorkAction=false,rhythmPriorityTotal=0,rhythmPriorityCount=0;
   const activeWorkCycleResidentIds=[],activeLocalEventResidentIds=[],viewportRect=canvas?.getBoundingClientRect?.()||null;
   for(const record of localNpcEntities.values()){
-    const state=residentPresentationState(record.resident),visible=Boolean(state&&!state.indoors),artVisible=Boolean(visible&&record.billboard);
+    const state=residentPresentationState(record.resident),visible=Boolean(state)&&(groundArt?Boolean(record.billboard||!state.indoors):!state.indoors),artVisible=Boolean(groundArt&&record.billboard&&visible);
     record.body.enabled=visible&&!artVisible;record.head.enabled=visible&&!artVisible;if(record.billboard)record.billboard.enabled=artVisible;record.tool.enabled=false;
     for(const prop of [record.workPropA,record.workPropB,record.workPropC,record.eventHalo])if(prop)prop.enabled=false;
     if(!visible)continue;
