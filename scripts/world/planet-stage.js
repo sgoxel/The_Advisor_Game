@@ -9510,7 +9510,8 @@ async function buildScene(){  const started=performance.now();
     mapScaleShellMaterial.update();
     mapScaleShell=new pc.Entity("CanonicalMapScaleShell");
     mapScaleShell.addComponent("render",{type:"asset",castShadows:false,receiveShadows:false});
-    const mapScaleShellMesh=await buildMapScaleShellMesh();\n    mapScaleShell.render.meshInstances=[new pc.MeshInstance(mapScaleShellMesh,mapScaleShellMaterial,mapScaleShell)];
+    const mapScaleShellMesh=await buildMapScaleShellMesh();
+    mapScaleShell.render.meshInstances=[new pc.MeshInstance(mapScaleShellMesh,mapScaleShellMaterial,mapScaleShell)];
     mapScaleShell.enabled=false;app.root.addChild(mapScaleShell);
     // Clouds and broad wilderness dressing are not required for the first safe
     // playable planet view. Keep the exact same deterministic routines, but
