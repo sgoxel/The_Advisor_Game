@@ -53,7 +53,7 @@ jobs:
           elif grep -q 'WP-S013-005.*FUNCTIONAL accepted' docs/ROADMAP.md; then
             MODE="accepted"
           fi
-          for attempt in $(seq 1 60); do
+          for attempt in $(seq 1 120); do
             curl -fsSL --max-time 20 "$BASE/scripts/world/protagonist-appointment-resolution.js?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-appointment.js || true
             curl -fsSL --max-time 20 "$BASE/index.html?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-index.html || true
             curl -fsSL --max-time 20 "$BASE/docs/ROADMAP.md?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-roadmap.md || true
