@@ -496,6 +496,33 @@ function canonicalSettlementAtPoint(seedValue,classIdValue,x,y){
   const cell=hierarchyCellFor(classId,x,y);
   return cell?canonicalSettlementAtCell(seedValue,classId,cell.x,cell.y):null;
 }
+function canonicalStartingVillageIdentity(seedValue){
+  const seed=String(seedValue==null?"":seedValue);
+  if(!seed)return null;
+  const village=GeographyFoundation.villageAtCell(seed,0n,0n);
+  if(!village||String(village.x)!=="0"||String(village.y)!=="0")return null;
+  const classId="village",cellX="0",cellY="0";
+  return Object.freeze({
+    id:"HSET|VILLAGE|"+hashText(seed+"|"+classId+"|"+cellX+"|"+cellY),
+    name:String(village.name||"Starting Village"),
+    classId,
+    importanceClass:classId,
+    role:"starting-village",
+    center:Object.freeze({x:"0",y:"0"}),
+    generationCell:Object.freeze({
+      id:"HSC|VILLAGE|0|0",
+      classId,
+      cellX,
+      cellY,
+      cellSizeTiles:HIERARCHY_CLASS_SPECS.village.cellTiles
+    }),
+    canonicalIdentityOnly:true,
+    seedOnly:true,
+    cameraIndependent:true,
+    viewportIndependent:true,
+    authority:"SettlementArchetypes canonical origin-village identity"
+  });
+}
 function hierarchyBoundedCells(minX,maxX,minY,maxY,classId){
   const a=hierarchyCellFor(classId,minX,minY),b=hierarchyCellFor(classId,maxX,maxY);
   if(!a||!b)return Object.freeze([]);
@@ -1315,7 +1342,7 @@ function renderDebugPanel(seedValue,planIndexValue,rootNode){
 const api=Object.freeze({
   VERSION,SUPPORTED_CLASSES,CLASS_SCALE,build,settlementsForCountry,representatives,proof,renderDebugPanel,
   HIERARCHY_VERSION,HIERARCHY_CLASS_ORDER,HIERARCHY_CLASS_SPECS,
-  canonicalSettlementAtCell,canonicalSettlementAtCellCacheStatus,stepCanonicalSettlementAtCellPrewarm,canonicalSettlementAtPoint,canonicalSettlementsInBounds,createCanonicalSettlementsInBoundsQuery,stepCanonicalSettlementsInBoundsQuery,canonicalSettlementsForCountry,canonicalConsumerProof,
+  canonicalSettlementAtCell,canonicalSettlementAtCellCacheStatus,stepCanonicalSettlementAtCellPrewarm,canonicalSettlementAtPoint,canonicalStartingVillageIdentity,canonicalSettlementsInBounds,createCanonicalSettlementsInBoundsQuery,stepCanonicalSettlementsInBoundsQuery,canonicalSettlementsForCountry,canonicalConsumerProof,
   canonicalHierarchySnapshot,canonicalHierarchyProof,clearCanonicalHierarchyCache
 });
 window.SettlementArchetypes=api;
