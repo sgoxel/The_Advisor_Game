@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-import json, os, time, threading
-from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+import json, os, time
 from pathlib import Path
 from urllib.parse import urlsplit,urlunsplit,parse_qsl,urlencode
 from selenium import webdriver
@@ -9,14 +8,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from screenshot_tool import set_exact_viewport
 
 TARGET=os.environ.get("TARGET","http://127.0.0.1:8000/")
-_server=None
-_server_thread=None
-if TARGET.startswith("http://127.0.0.1:8000") or TARGET.startswith("http://localhost:8000"):
-    class QuietHandler(SimpleHTTPRequestHandler):
-        def log_message(self, format, *args): pass
-    _server=ThreadingHTTPServer(("127.0.0.1",8000),QuietHandler)
-    _server_thread=threading.Thread(target=_server.serve_forever,daemon=True)
-    _server_thread.start()
 OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s014-010"));OUT.mkdir(parents=True,exist_ok=True)
 VIEWPORTS={"phone-portrait":(390,844),"phone-landscape":(844,390),"desktop":(1280,720)}
 MATRIX={"phone-portrait":["active","recovered"],"phone-landscape":["retreat","terminal"],"desktop":["active","retreat","terminal","recovered"]}
@@ -118,6 +109,3 @@ try:
     print(json.dumps({"pass":True,"wp":"WP-S014-010","screenshots":len(records)+len(cleared_records)+1,"movementAnchorDelta":probe["after"]["delta"],"groundedAnchorDelta":grounded["delta"]},indent=2))
 finally:
     driver.quit()
-    if _server is not None:
-        _server.shutdown()
-        _server.server_close()
