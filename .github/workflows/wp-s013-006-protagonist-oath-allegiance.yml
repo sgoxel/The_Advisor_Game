@@ -1,4 +1,4 @@
-# WP-S013-006 exact-head gate — functional oath/allegiance authority verification
+# WP-S013-006 reconciled exact-head gate v2\n# WP-S013-006 exact-head gate — functional oath/allegiance authority verification
 name: WP-S013-006 Oath Allegiance Authority
 on:
   push:
