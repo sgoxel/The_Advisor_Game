@@ -9,6 +9,7 @@ on:
       - "scripts/ui/advisor-conversation-ui.js"
       - "scripts/tests/wp-s014-009-advisor-security-readout.test.js"
       - "tools/wp_s014_009_evidence.py"
+      - "tools/screenshot_tool.py"
       - ".github/workflows/wp-s014-009-advisor-security-readout.yml"
       - "docs/ROADMAP.md"
       - "docs/changelog.txt"
@@ -37,7 +38,7 @@ jobs:
           node --check scripts/ui/advisor-security-readout-ui.js
           node --check scripts/ui/advisor-conversation-ui.js
           node --check scripts/tests/wp-s014-009-advisor-security-readout.test.js
-          python -m py_compile tools/wp_s014_009_evidence.py
+          python -m py_compile tools/screenshot_tool.py tools/wp_s014_009_evidence.py
           node scripts/tests/wp-s014-009-advisor-security-readout.test.js
           node scripts/tests/wp-s009-004-protagonist-inventory.test.js
           node scripts/tests/wp-s009-005-protagonist-health.test.js
