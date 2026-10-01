@@ -8051,7 +8051,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     const dims=localPatchDimensions(),level=LOCAL_DETAIL_LEVELS[dims.levelIndex];
     const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
     const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
-    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters()};
+    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters(),tangentPitchDegrees:LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES};
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     // A prepared stand-in normally remains exactly world-anchored while a new
     // focus resource is built. At ground scale a small pointer drag can request
