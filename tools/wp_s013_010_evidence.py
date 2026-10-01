@@ -101,7 +101,7 @@ try:
         driver.save_screenshot(str(OUT/"startup-failure.png"));raise
     init=initialize_campaign()
     if not init.get("ok"):raise RuntimeError("campaign init failed "+json.dumps(init))
-    wait.until(lambda d:ready());time.sleep(.5)
+    time.sleep(.35)
     matrix=[("phone","ordinary"),("phone","known"),("phone","unknown"),("desktop","authority"),("desktop","known"),("desktop","unknown")]
     for profile,mode in matrix:
         driver.set_window_size(*VIEWPORTS[profile]);time.sleep(.35)
