@@ -106,3 +106,4 @@ jobs:
             await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:250,body});
 # exact-head trigger
 # clean-docs exact-head trigger
+# completed-mode exact-head trigger
