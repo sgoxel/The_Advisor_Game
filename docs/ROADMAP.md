@@ -13,7 +13,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S001-005` — Viewport-Filling Solid-Color Tiles — COMPLETED
 - `WP-S001-006` — Camera Movement Through the Infinite World — COMPLETED
 
-# Stage 2 — Starting Village Physical Foundation
+# Stage 2 — Starting Village Physical + Spatial Foundation
 
 - `WP-S002-001-001` — Starting Village Core + Mainland Connection — COMPLETED
 - `WP-S002-001-002` — Tile-Based House Plans + Wall Foundation — COMPLETED
@@ -26,7 +26,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S002-004` — Deterministic Local Route Planning — COMPLETED
 - `WP-S002-004-001` — Elevation-Aware Route Cost + Valley/Pass Preference — COMPLETED
 
-# Stage 3 — TOP PRIORITY BLOCKER: SEED Coordinate Fabric + Spatial Registration + Landmark Callouts
+# Stage 3 — World Rendering, Visual Style + Planet-to-Ground Foundation
 
 - `WP-S003-001` — Legacy PixiJS GPU 2.5D Renderer Foundation — COMPLETED
 - `WP-S003-001-001` — PlayCanvas Engine 2 Renderer Migration Foundation — COMPLETED
@@ -128,43 +128,43 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-021` — Campaign-State Environmental Wear, Damage + Recovery Projection — COMPLETED
 - `WP-S003-022` — Crossroads Direction Signposts + Named Route Wayfinding — COMPLETED
 
-# Stage 4 — Starting Village Population + Indoor Activity Foundation
+# Stage 4 — World Geography, Settlements/Cities, Roads + Focused Environment Foundation
 
-- `WP-S004-001` — Deterministic Starting Village Resident Roster — COMPLETED
-- `WP-S004-002` — Homes, Professions + Indoor Workplace Assignment — COMPLETED
-- `WP-S004-003` — Deterministic Daily Activity + Action Targets — COMPLETED
-- `WP-S004-004` — Autonomous Indoor/Outdoor Route Execution + Visible Movement — COMPLETED
-- `WP-S004-004-001` — NPC Building Approach, Occlusion + Separation — COMPLETED
-- `WP-S004-005` — Interior Action Execution + Character State Presentation — COMPLETED
-- `WP-S004-006` — Local NPC Social Encounters + Group Activity — COMPLETED
-- `WP-S004-007` — Profession-Specific Visible Work Cycles + Workplace Choreography — COMPLETED
-- `WP-S004-008` — Contextual NPC Reactions + Local Social Boundaries — COMPLETED
-- `WP-S004-009` — Time-of-Day Settlement Activity Rhythm — COMPLETED
-- `WP-S004-010` — Density-Scaled Local Crowd Presentation — COMPLETED
+- `WP-S004-001` — Deterministic Country Territories + Political Centers — COMPLETED
+- `WP-S004-002` — Region/Province Profiles + Terrain/Resource Identity — COMPLETED
+- `WP-S004-003` — Settlement Archetypes + Country/Region/Terrain Inheritance — COMPLETED
+- `WP-S004-003-001` — Population-Scaled Settlement Footprints + Realistic Urban Morphology — COMPLETED
+- `WP-S004-004` — Settlement Building Catalog + Contextual Composition Rules — COMPLETED
+- `WP-S004-005` — Hierarchical Inter-Settlement Road Graph + Geography-Aware Main Routes — COMPLETED
+- `WP-S004-006` — Deterministic World Destinations + Points-of-Interest Foundation — COMPLETED
+- `WP-S004-006-001` — Discoverable Micro-Locations + Wilderness POI Composition — COMPLETED
+- `WP-S004-007` — Deterministic Place Naming + Toponym Hierarchy — COMPLETED
+- `WP-S004-008` — Country Profile: Wealth, Governance + Strategic Orientation — COMPLETED
+- `WP-S004-009` — Country Relations + Diplomacy Baseline — COMPLETED
 
-# Stage 5 — Advisor Interaction + Social Foundation
+# Stage 5 — Starting Village Population + Visible Activity Foundation
 
-- `WP-S005-001` — Advisor Interface + Persistent Advice Channel — COMPLETED
-- `WP-S005-002` — Character Memory, Observation Log + World Fact Model — COMPLETED
-- `WP-S005-003` — Local Dialogue, Social Context + Trust Framing — COMPLETED
-- `WP-S005-004` — Advice Acceptance, Rejection + Influence Resolution — COMPLETED
-- `WP-S005-005` — Relationship, Reputation + Duty State Foundation — COMPLETED
-- `WP-S005-006` — NPC Recognition + Personal Interaction Memory — COMPLETED
-- `WP-S005-007` — Local Rumors, Knowledge Exchange + Discoverable Leads — COMPLETED
+- `WP-S005-001` — Deterministic Starting Village Resident Roster — COMPLETED
+- `WP-S005-002` — Homes, Professions + Indoor Workplace Assignment — COMPLETED
+- `WP-S005-003` — Deterministic Daily Activity + Action Targets — COMPLETED
+- `WP-S005-004` — Autonomous Indoor/Outdoor Route Execution + Visible Movement — COMPLETED
+- `WP-S005-004-001` — NPC Building Approach, Occlusion + Separation — COMPLETED
+- `WP-S005-005` — Interior Action Execution + Character State Presentation — COMPLETED
+- `WP-S005-006` — Profession-Specific Visible Work Cycles + Workplace Choreography — COMPLETED
+- `WP-S005-007` — Time-of-Day Settlement Activity Rhythm — COMPLETED
+- `WP-S005-008` — Density-Scaled Local Crowd Presentation — COMPLETED
+- `WP-S005-009` — Local NPC Social Encounters + Group Activity — COMPLETED
+- `WP-S005-010` — Contextual NPC Reactions + Local Social Boundaries — COMPLETED
 
-# Stage 6 — Political Geography + Settlement Diversity Foundation
+# Stage 6 — Advisor Interaction + Social Foundation
 
-- `WP-S006-001` — Deterministic Country Territories + Political Centers — COMPLETED
-- `WP-S006-002` — Country Profile: Wealth, Governance + Strategic Orientation — COMPLETED
-- `WP-S006-003` — Region/Province Profiles + Terrain/Resource Identity — COMPLETED
-- `WP-S006-004` — Country Relations + Diplomacy Baseline — COMPLETED
-- `WP-S006-005` — Settlement Archetypes + Country/Region/Terrain Inheritance — COMPLETED
-- `WP-S006-005-001` — Population-Scaled Settlement Footprints + Realistic Urban Morphology — COMPLETED
-- `WP-S006-006` — Settlement Building Catalog + Contextual Composition Rules — COMPLETED
-- `WP-S006-007` — Deterministic World Destinations + Points-of-Interest Foundation — COMPLETED
-- `WP-S006-007-001` — Discoverable Micro-Locations + Wilderness POI Composition — COMPLETED
-- `WP-S006-008` — Deterministic Place Naming + Toponym Hierarchy — COMPLETED
-- `WP-S006-009` — Hierarchical Inter-Settlement Road Graph + Geography-Aware Main Routes — COMPLETED
+- `WP-S006-001` — Advisor Interface + Persistent Advice Channel — COMPLETED
+- `WP-S006-002` — Character Memory, Observation Log + World Fact Model — COMPLETED
+- `WP-S006-003` — Local Dialogue, Social Context + Trust Framing — COMPLETED
+- `WP-S006-004` — Advice Acceptance, Rejection + Influence Resolution — COMPLETED
+- `WP-S006-005` — Relationship, Reputation + Duty State Foundation — COMPLETED
+- `WP-S006-006` — NPC Recognition + Personal Interaction Memory — COMPLETED
+- `WP-S006-007` — Local Rumors, Knowledge Exchange + Discoverable Leads — COMPLETED
 
 # Stage 7 — Hierarchical Lazy World Simulation + Deterministic Persistence
 
