@@ -258,7 +258,7 @@ function cooperativePlan(seed,state,activity,reason){
     }
   }
   const routeStarted=performance.now();
-  const progress=RoutePlanner.advanceRouteSearch(pending.search,COOPERATIVE_ROUTE_POPS);
+  const progress=RoutePlanner.advanceRouteSearch(pending.search,COOPERATIVE_ROUTE_POPS,7.5);
   recordPerformance("routePlan",routeStarted,state,pending.reason+"-slice");
   if(!progress.done)return Object.freeze({pending:true,found:false});
   state.pendingRoutePlan=null;
@@ -390,6 +390,10 @@ function advanceTickInitialization(tick,cooperative,started,budgetMs){
       position:point(state.position),status:state.status,activity,
       actionExecution:window.ActionExecutor?.get?.("resident",state.residentId)||null
     }));
+    // A cooperative call prepares at most one resident activity. This keeps
+    // startup/runtime callbacks independently bounded instead of allowing a
+    // sequence of cheap lookups to accumulate into a larger outer unit.
+    if(cooperative&&tick.initCursor<tick.residents.length)return false;
     if(cooperative&&performance.now()-started>=budgetMs)return false;
   }
   if(tick.phase==="social"){
