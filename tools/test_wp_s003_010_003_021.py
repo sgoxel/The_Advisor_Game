@@ -12,7 +12,12 @@ SEED="AGENT6-NAV-PERF-A"
 
 def driver_for(w=390,h=844):
     o=Options()
-    for a in ("--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader"): o.add_argument(a)
+    args=["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist"]
+    # Linux CI is proven with SwiftShader. On Apple Silicon hosted runners,
+    # forcing that backend can leave WebGL unavailable; native/default ANGLE
+    # provides the browser's supported Metal-backed path instead.
+    if sys.platform!="darwin": args.append("--use-angle=swiftshader")
+    for a in args:o.add_argument(a)
     o.add_argument(f"--window-size={w},{h}")
     o.set_capability("goog:loggingPrefs",{"browser":"ALL"})
     d=webdriver.Chrome(options=o); d.set_script_timeout(240)
@@ -27,9 +32,33 @@ def metrics(d,w,h):
 
 def snap(d): return d.execute_script("return window.PlanetStage?.snapshot?.()||null")
 
+def startup_diagnostics(d,label="startup"):
+    OUT.mkdir(parents=True,exist_ok=True)
+    info={"label":label,"platform":sys.platform}
+    try:
+        info["page"]=d.execute_script("""const root=document.getElementById('planetStageRoot'),c=document.createElement('canvas');
+        let gl2=false,gl=false;try{gl2=!!c.getContext('webgl2');gl=!!c.getContext('webgl');}catch(_){}
+        let snap=null;try{snap=window.PlanetStage?.snapshot?.()||null;}catch(e){snap={snapshotError:String(e)}}
+        return {readyState:document.readyState,url:location.href,title:document.title,rootDataset:root?{...root.dataset}:null,
+        canvasCount:document.querySelectorAll('canvas').length,planetStage:Boolean(window.PlanetStage),playcanvas:Boolean(window.pc),
+        webgl2:gl2,webgl:gl,snapshot:snap,bodyText:(document.body?.innerText||'').slice(0,1800)};""")
+    except Exception as e: info["pageError"]=repr(e)
+    try: info["browserLog"]=d.get_log("browser")[-50:]
+    except Exception as e: info["browserLogError"]=repr(e)
+    try:
+        p=OUT/f"{label}.png"
+        if d.save_screenshot(str(p)):info["screenshot"]=p.name
+    except Exception as e: info["screenshotError"]=repr(e)
+    (OUT/f"{label}.json").write_text(json.dumps(info,indent=2,sort_keys=True),encoding="utf-8")
+    return info
+
 def wait_ready(d):
     WebDriverWait(d,180).until(lambda x:x.execute_script("return document.readyState==='complete'"))
-    WebDriverWait(d,300).until(lambda x:x.execute_script("return document.getElementById('planetStageRoot')?.dataset?.ready==='true'"))
+    try:
+        WebDriverWait(d,300).until(lambda x:x.execute_script("return document.getElementById('planetStageRoot')?.dataset?.ready==='true'"))
+    except Exception:
+        startup_diagnostics(d,"startup-not-ready")
+        raise
 
 def set_seed(d):
     r=d.execute_script("const s=String(arguments[0]);const c=window.SeedSystem.startNewCampaign(s);const p=window.PlanetGeography.persistSeed(s);return {c,p};",SEED)
@@ -185,7 +214,12 @@ def main():
         if severe: raise AssertionError(f"severe browser errors: {severe[-8:]}")
         ev["pass"]=True
     except Exception as e:
-        ev["error"]=repr(e); raise
+        ev["error"]=repr(e)
+        try:
+            if not (OUT/"failure-state.json").exists(): startup_diagnostics(d,"failure-state")
+        except Exception as diag_error:
+            ev["diagnosticError"]=repr(diag_error)
+        raise
     finally:
         (OUT/"evidence.json").write_text(json.dumps(ev,indent=2,sort_keys=True),encoding="utf-8")
         d.quit()
