@@ -80,8 +80,8 @@ jobs:
             curl -fsSL --max-time 20 "$BASE/styles/main.css?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live.css || true
             curl -fsSL --max-time 20 "$BASE/docs/ROADMAP.md?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-roadmap.md || true
             product=0; state=0
-            grep -q 'VERSION="local-conflict-presentation-v1"' /tmp/live.js 2>/dev/null \
-              && grep -q 'scripts/ui/local-conflict-presentation.js?v=local-conflict-presentation-v1' /tmp/live-index.html 2>/dev/null \
+            grep -q 'VERSION="local-conflict-presentation-v2"' /tmp/live.js 2>/dev/null \
+              && grep -q 'scripts/ui/local-conflict-presentation.js?v=local-conflict-presentation-v2' /tmp/live-index.html 2>/dev/null \
               && grep -q 'WP-S014-010 — visible local conflict' /tmp/live.css 2>/dev/null \
               && product=1 || true
             if [ "$MODE" = completed ]; then grep -q 'WP-S014-010.*COMPLETED' /tmp/live-roadmap.md 2>/dev/null && state=1 || true; else state=1; fi

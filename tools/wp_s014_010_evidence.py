@@ -63,10 +63,10 @@ def grounded_anchor_probe():
     result=driver.execute_script("""
       const targets=(window.PlanetStage.inspectionTargets?.()||[]).filter(x=>x.type==='building'&&x.bounds);
       const target=targets[0];if(!target)return {ok:false,reason:'no-visible-building-target'};
-      const out=window.LocalConflictPresentation.present({validated:true,phase:'active',summary:'Grounded conflict-location anchor evidence.',sourceRef:{kind:'simulation-event',id:'EVIDENCE-GROUNDED-ANCHOR'},locationRef:{kind:'building',id:target.id}});
+      const out=window.LocalConflictPresentation.setEvidenceMode('active',{kind:'building',id:target.id});
       window.LocalConflictPresentation.syncAnchor();
       const a=window.LocalConflictPresentation.snapshot().anchor,b=target.bounds,expected={x:(b.left+b.right)/2,y:(b.top+b.bottom)/2};
-      return {ok:Boolean(out?.ok),targetId:target.id,targetType:target.type,source:a?.source||null,expected,actual:a?{x:a.x,y:a.y}:null,delta:a?Math.hypot(a.x-expected.x,a.y-expected.y):null};
+      return {ok:Boolean(out?.visible),targetId:target.id,targetType:target.type,source:a?.source||null,expected,actual:a?{x:a.x,y:a.y}:null,delta:a?Math.hypot(a.x-expected.x,a.y-expected.y):null};
     """)
     if not result.get("ok"):raise RuntimeError("grounded anchor probe unavailable "+json.dumps(result))
     if result.get("source")!="PlanetStage.inspectionTargets":raise RuntimeError("grounded location did not use active world projection "+json.dumps(result))
@@ -81,6 +81,7 @@ try:
     wait.until(lambda d:d.execute_script("return (window.PlanetStage.inspectionTargets?.()||[]).some(x=>x.type==='building'&&x.bounds)"))
     time.sleep(.35)
     grounded=grounded_anchor_probe()
+    driver.save_screenshot(str(OUT/"desktop-grounded-location.png"))
     driver.execute_script("window.LocalConflictPresentation.setEvidenceMode('active')")
     probe=move_probe()
     for profile,(w,h) in VIEWPORTS.items():
@@ -89,6 +90,12 @@ try:
             driver.execute_script("window.LocalConflictPresentation.setEvidenceMode(arguments[0]);window.LocalConflictPresentation.syncAnchor();",mode);time.sleep(.14)
             s=visual_state(mode,profile);assert_visual(s)
             name=f"{profile}-{mode}.png";driver.save_screenshot(str(OUT/name));s["screenshot"]=name;records.append(s)
+    cleared_records=[]
+    for profile in ["phone-portrait","desktop"]:
+        w,h=VIEWPORTS[profile];set_exact_viewport(driver,w,h);driver.execute_script("window.LocalConflictPresentation.setEvidenceMode('cleared')");time.sleep(.12)
+        row=driver.execute_script("const l=document.getElementById('localConflictPresentation');return{hidden:l.hidden,visible:window.LocalConflictPresentation.snapshot().visible,markerVisible:Boolean(l.querySelector('.local-conflict-anchor')&&!l.querySelector('.local-conflict-anchor').hidden),cardVisible:Boolean(l.querySelector('.local-conflict-card')&&!l.querySelector('.local-conflict-card').hidden)}")
+        if not row["hidden"] or row["visible"] or row["markerVisible"] or row["cardVisible"]:raise RuntimeError("cleared state left visible conflict presentation "+json.dumps(row))
+        name=f"{profile}-cleared.png";driver.save_screenshot(str(OUT/name));row.update({"profile":profile,"screenshot":name});cleared_records.append(row)
     driver.execute_script("window.LocalConflictPresentation.setEvidenceMode('cleared')");time.sleep(.1)
     cleared=driver.execute_script("const l=document.getElementById('localConflictPresentation');return{hidden:l.hidden,visible:window.LocalConflictPresentation.snapshot().visible,markerCount:l.querySelectorAll('.local-conflict-anchor').length,cardCount:l.querySelectorAll('.local-conflict-card').length}")
     if not cleared["hidden"] or cleared["visible"]:raise RuntimeError("cleared state left a visible conflict cue "+json.dumps(cleared))
@@ -97,8 +104,8 @@ try:
     if resumed!={"markerCount":1,"cardCount":1,"visible":True}:raise RuntimeError("state transition duplicated or lost presentation nodes "+json.dumps(resumed))
     logs=[x for x in driver.get_log("browser") if x.get("level") in ("SEVERE","ERROR")]
     if logs:raise RuntimeError("browser console errors "+json.dumps(logs))
-    result={"pass":True,"wp":"WP-S014-010","classification":"MIXED","records":records,"movementProbe":probe,"groundedAnchorProbe":grounded,"cleared":cleared,"resumed":resumed}
+    result={"pass":True,"wp":"WP-S014-010","classification":"MIXED","records":records,"clearedRecords":cleared_records,"groundedScreenshot":"desktop-grounded-location.png","movementProbe":probe,"groundedAnchorProbe":grounded,"cleared":cleared,"resumed":resumed}
     (OUT/"evidence.json").write_text(json.dumps(result,indent=2),encoding="utf-8")
-    print(json.dumps({"pass":True,"wp":"WP-S014-010","screenshots":len(records),"movementAnchorDelta":probe["after"]["delta"],"groundedAnchorDelta":grounded["delta"]},indent=2))
+    print(json.dumps({"pass":True,"wp":"WP-S014-010","screenshots":len(records)+len(cleared_records)+1,"movementAnchorDelta":probe["after"]["delta"],"groundedAnchorDelta":grounded["delta"]},indent=2))
 finally:
     driver.quit()

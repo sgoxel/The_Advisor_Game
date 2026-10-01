@@ -6,16 +6,18 @@ if(root)root.LocalConflictPresentation=api;
 })(typeof globalThis!=="undefined"?globalThis:this,function(root){
 "use strict";
 
-const VERSION="local-conflict-presentation-v1";
+const VERSION="local-conflict-presentation-v2";
 const EVIDENCE_MODES=Object.freeze(["active","retreat","terminal","recovered","cleared"]);
 const SOURCE_READ_LIMIT=5;
 const TERMINAL_CUE_SECONDS=300;
 const ANCHOR_SYNC_MS=80;
+const FANTASY_TIME_CHECK_MS=1000;
+const RELEVANT_DELTA_KINDS=Object.freeze(["local-security-incident-registry","personal-combat-exchange-state","protagonist-health-state"]);
 const UNTRUSTED_KINDS=Object.freeze(["ui","advisor","llm","provider","render","camera","viewport","device"]);
 const state={
   evidenceMode:null,explicitEvidence:null,lastModel:null,mounted:false,
   modelBuilds:0,renders:0,anchorSyncs:0,anchorStageReads:0,sourceReadTotal:0,
-  sourceReads:{stage:0,threats:0,combat:0,health:0,time:0},timer:null,lastAnchor:null
+  sourceReads:{stage:0,threats:0,combat:0,health:0,time:0},timer:null,timeTimer:null,lastAnchor:null,worldStateEvents:0,relevantWorldStateEvents:0,timeChecks:0,refreshQueued:false
 };
 
 function freeze(value){if(value==null||typeof value!=="object"||Object.isFrozen(value))return value;for(const x of Object.values(value))freeze(x);return Object.freeze(value)}
@@ -87,6 +89,27 @@ function runtimeModel(optionsValue={}){
   if(threat)return presentationModel({phase:"active",title:clean(threat.summary||title(threat.category||"local threat"),100),detail:"Known local security incident. Resolution remains pending.",status:clean((threat.epistemicStatus||"known")+" · "+(threat.severity||"severity unknown"),70),badges:[String(threat.epistemicStatus||"KNOWN").toUpperCase(),String(threat.severity||"ACTIVE").toUpperCase()],sourceRef:threat.sourceRef||freeze({kind:"security-incident",id:id(threat.id)}),locationRef:threat.locationRef||null,worldAnchor,fantasyTimestamp:threat.updatedTimestamp||threat.createdTimestamp});
   return presentationModel({phase:"cleared",worldAnchor,detail:"No bounded active conflict evidence is available."});
 }
+function shouldRefreshForDelta(detailValue,seedValue){
+  const detail=detailValue&&typeof detailValue==="object"?detailValue:{},seed=clean(seedValue||currentSeed(),160),detailSeed=clean(detail.seed,160),kind=id(detail.entityKind,120).toLowerCase();
+  return Boolean(seed&&detailSeed===seed&&RELEVANT_DELTA_KINDS.includes(kind));
+}
+function queueSourceRefresh(reason="world-state-delta"){
+  if(state.evidenceMode||state.explicitEvidence||state.refreshQueued)return false;
+  state.refreshQueued=true;
+  const run=()=>{state.refreshQueued=false;refresh(reason)};
+  if(typeof root.queueMicrotask==="function")root.queueMicrotask(run);else if(typeof root.setTimeout==="function")root.setTimeout(run,0);else run();
+  return true;
+}
+function checkFantasyTimeExpiry(){
+  state.timeChecks++;
+  if(state.evidenceMode||state.explicitEvidence)return false;
+  const model=state.lastModel;if(!model?.visible||!model.terminal||model.recovery||!model.fantasyTimestamp)return false;
+  let now=null;try{now=root.GameTime?.getTimestampKey?.()||null}catch(_){now=null}
+  const start=fantasySecondIndex(model.fantasyTimestamp),current=fantasySecondIndex(now);
+  if(start===null||current===null||current<start||current-start<=TERMINAL_CUE_SECONDS)return false;
+  render(presentationModel({phase:"cleared",worldAnchor:model.worldAnchor,detail:"Terminal conflict cue expired against authoritative Fantasy Game Time."}),"fantasy-time-expiry");
+  return true;
+}
 function getLayer(){return typeof document!=="undefined"?document.getElementById("localConflictPresentation"):null}
 function markup(model){
   if(!model?.visible)return '<div class="local-conflict-anchor" hidden></div><aside class="local-conflict-card" hidden></aside>';
@@ -126,27 +149,35 @@ function syncAnchor(){
   layer.dataset.anchorSource=anchor.source;return anchor;
 }
 function render(modelValue,reason="render"){
-  const model=modelValue||state.lastModel||runtimeModel(),layer=ensureLayer();if(!layer)return model;state.lastModel=model;state.renders++;
+  const model=modelValue||state.lastModel||runtimeModel();state.lastModel=model;
+  const layer=ensureLayer();if(!layer)return model;state.renders++;
   layer.dataset.phase=model.phase;layer.dataset.visible=String(Boolean(model.visible));layer.dataset.reason=clean(reason,60);layer.hidden=!model.visible;layer.innerHTML=markup(model);
   if(model.visible)syncAnchor();return model;
 }
 function refresh(reason="refresh"){return render(state.explicitEvidence?state.explicitEvidence:(state.evidenceMode?evidenceModel(state.evidenceMode):runtimeModel()),reason)}
 function present(value){const n=normalizeExplicit(value);if(!n.ok)return n;state.explicitEvidence=n.model;state.evidenceMode=null;render(n.model,"explicit-event");return freeze({ok:true,model:n.model})}
 function clear(reason="cleared"){state.explicitEvidence=presentationModel({phase:"cleared",detail:clean(reason,100)});state.evidenceMode=null;render(state.explicitEvidence,"clear");return state.explicitEvidence}
-function setEvidenceMode(modeValue){const mode=EVIDENCE_MODES.includes(modeValue)?modeValue:"active";state.evidenceMode=mode;state.explicitEvidence=null;render(evidenceModel(mode),"evidence");return snapshot()}
+function setEvidenceMode(modeValue,locationRefValue=null){
+  const mode=EVIDENCE_MODES.includes(modeValue)?modeValue:"active",base=evidenceModel(mode),loc=locationRefValue&&typeof locationRefValue==="object"?freeze({kind:id(locationRefValue.kind,60),id:id(locationRefValue.id,180),label:clean(locationRefValue.label||"",100)}):null;
+  state.evidenceMode=mode;state.explicitEvidence=null;
+  render(loc?presentationModel({...clone(base),locationRef:loc,evidenceOnly:true}):base,"evidence");
+  return snapshot();
+}
 function startAnchorSync(){if(typeof root.setInterval!=="function"||state.timer)return;state.timer=root.setInterval(()=>{if(state.lastModel?.visible)syncAnchor()},ANCHOR_SYNC_MS)}
-function stopAnchorSync(){if(state.timer&&typeof root.clearInterval==="function")root.clearInterval(state.timer);state.timer=null}
-function snapshot(){return freeze({version:VERSION,evidenceMode:state.evidenceMode,model:state.lastModel,anchor:state.lastAnchor,mounted:state.mounted,visible:Boolean(state.lastModel?.visible),phase:state.lastModel?.phase||"cleared",modelBuilds:state.modelBuilds,renders:state.renders,anchorSyncs:state.anchorSyncs,anchorStageReads:state.anchorStageReads,sourceReadTotal:state.sourceReadTotal,sourceReads:freeze(clone(state.sourceReads)),limits:freeze({sourceReadLimit:SOURCE_READ_LIMIT,anchorSyncMs:ANCHOR_SYNC_MS,terminalCueSeconds:TERMINAL_CUE_SECONDS,maxVisibleRecords:1,maxBadges:3}),authority:freeze({readOnly:true,presentationOnly:true,eventDriven:true,sourcePolling:false,anchorPresentationTickOnly:true,fullWorldScan:false,wholeSettlementScan:false,wholeHistoryScan:false,perFrameSourceScan:false,directWorldMutation:false,directActionExecution:false,combatResolution:false,healthMutation:false,standingMutation:false,relationshipMutation:false,rankMutation:false,movementMutation:false,simulationAuthority:false})})}
+function startFantasyTimeChecks(){if(typeof root.setInterval!=="function"||state.timeTimer)return;state.timeTimer=root.setInterval(checkFantasyTimeExpiry,FANTASY_TIME_CHECK_MS)}
+function stopAnchorSync(){if(state.timer&&typeof root.clearInterval==="function")root.clearInterval(state.timer);if(state.timeTimer&&typeof root.clearInterval==="function")root.clearInterval(state.timeTimer);state.timer=null;state.timeTimer=null}
+function snapshot(){return freeze({version:VERSION,evidenceMode:state.evidenceMode,model:state.lastModel,anchor:state.lastAnchor,mounted:state.mounted,visible:Boolean(state.lastModel?.visible),phase:state.lastModel?.phase||"cleared",modelBuilds:state.modelBuilds,renders:state.renders,anchorSyncs:state.anchorSyncs,anchorStageReads:state.anchorStageReads,sourceReadTotal:state.sourceReadTotal,sourceReads:freeze(clone(state.sourceReads)),worldStateEvents:state.worldStateEvents,relevantWorldStateEvents:state.relevantWorldStateEvents,timeChecks:state.timeChecks,limits:freeze({sourceReadLimit:SOURCE_READ_LIMIT,anchorSyncMs:ANCHOR_SYNC_MS,fantasyTimeCheckMs:FANTASY_TIME_CHECK_MS,terminalCueSeconds:TERMINAL_CUE_SECONDS,maxVisibleRecords:1,maxBadges:3,relevantDeltaKinds:RELEVANT_DELTA_KINDS}),authority:freeze({readOnly:true,presentationOnly:true,eventDriven:true,sourcePolling:false,worldStateEventDriven:true,fantasyTimeAuthority:"GameTime.getTimestampKey",anchorPresentationTickOnly:true,fullWorldScan:false,wholeSettlementScan:false,wholeHistoryScan:false,perFrameSourceScan:false,directWorldMutation:false,directActionExecution:false,combatResolution:false,healthMutation:false,standingMutation:false,relationshipMutation:false,rankMutation:false,movementMutation:false,simulationAuthority:false})})}
 function init(){
   if(typeof document==="undefined")return false;ensureLayer();
   let requested=null;try{requested=new URLSearchParams(root.location?.search||"").get("conflictPresentationEvidence")}catch(_){}
   if(EVIDENCE_MODES.includes(requested))state.evidenceMode=requested;
-  const boot=()=>{const ready=Boolean(root.PlanetStage?.snapshot?.()?.ready);if(!ready)return false;refresh("stage-ready");startAnchorSync();return true};
+  const boot=()=>{const ready=Boolean(root.PlanetStage?.snapshot?.()?.ready);if(!ready)return false;refresh("stage-ready");startAnchorSync();startFantasyTimeChecks();return true};
   if(!boot()){let tries=0;const wait=root.setInterval?.(()=>{tries++;if(boot()||tries>2400)root.clearInterval?.(wait)},100)}
   root.addEventListener?.("resize",syncAnchor,{passive:true});
-  document.addEventListener?.("advisor:conflict-presentation-refresh",()=>refresh("event"));
+  root.addEventListener?.("advisor:world-state-delta-change",event=>{state.worldStateEvents++;if(shouldRefreshForDelta(event?.detail)){state.relevantWorldStateEvents++;queueSourceRefresh("world-state-delta")}});
+  document.addEventListener?.("advisor:conflict-presentation-refresh",()=>queueSourceRefresh("explicit-refresh-event"));
   return true;
 }
 if(typeof document!=="undefined"){if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init()}
-return freeze({VERSION,EVIDENCE_MODES,SOURCE_READ_LIMIT,TERMINAL_CUE_SECONDS,ANCHOR_SYNC_MS,evidenceModel,normalizeExplicit,runtimeModel,presentationModel,present,clear,setEvidenceMode,refresh,render,syncAnchor,snapshot,init,stopAnchorSync});
+return freeze({VERSION,EVIDENCE_MODES,SOURCE_READ_LIMIT,TERMINAL_CUE_SECONDS,ANCHOR_SYNC_MS,FANTASY_TIME_CHECK_MS,RELEVANT_DELTA_KINDS,evidenceModel,normalizeExplicit,runtimeModel,presentationModel,present,clear,setEvidenceMode,refresh,render,syncAnchor,shouldRefreshForDelta,checkFantasyTimeExpiry,snapshot,init,stopAnchorSync});
 });

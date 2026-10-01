@@ -9,7 +9,7 @@ let now='1201-10-01 18:48:00';
 global.GameTime={getTimestampKey(){return now}};
 const UI=require('../ui/local-conflict-presentation.js');
 
-assert.equal(UI.VERSION,'local-conflict-presentation-v1');
+assert.equal(UI.VERSION,'local-conflict-presentation-v2');
 assert.deepEqual(UI.EVIDENCE_MODES,['active','retreat','terminal','recovered','cleared']);
 for(const mode of UI.EVIDENCE_MODES){
   const m=UI.evidenceModel(mode);
@@ -28,6 +28,10 @@ assert.equal(tele.sourceReadTotal,5);
 assert.equal(tele.authority.perFrameSourceScan,false);
 assert.equal(tele.authority.fullWorldScan,false);
 assert.equal(tele.authority.directActionExecution,false);
+assert.equal(tele.authority.worldStateEventDriven,true);
+assert.equal(UI.shouldRefreshForDelta({seed:'WP-S014-010-SEED',entityKind:'personal-combat-exchange-state'}),true);
+assert.equal(UI.shouldRefreshForDelta({seed:'OTHER',entityKind:'personal-combat-exchange-state'}),false);
+assert.equal(UI.shouldRefreshForDelta({seed:'WP-S014-010-SEED',entityKind:'unrelated-state'}),false);
 
 const bad=UI.normalizeExplicit({validated:true,phase:'active',sourceRef:{kind:'ui',id:'FAKE'}});
 assert.equal(bad.ok,false);
@@ -44,6 +48,11 @@ global.PersonalCombatExchange.list=()=>[{id:'CBT-1',resolution:'stalemate',fanta
 let terminal=UI.runtimeModel({seed:'WP-S014-010-SEED'});
 assert.equal(terminal.phase,'terminal');
 assert.equal(terminal.title,'Stalemate');
+UI.render(terminal,'headless-expiry-fixture');
+now='1201-10-01 19:00:00';
+assert.equal(UI.checkFantasyTimeExpiry(),true);
+assert.equal(UI.snapshot().phase,'cleared');
+now='1201-10-01 18:48:00';
 
 global.PersonalCombatExchange.list=()=>[{id:'CBT-2',resolution:'opponent-advantage',fantasyTimestamp:'1201-10-01 18:46:00',terminal:true,locationRef:{kind:'workplace',id:'mill-crossing'},protagonistInjuryEvidence:{sourceRef:{kind:'combat-result',id:'CBT-2'}}}];
 global.ProtagonistHealth.snapshot=()=>({compatible:true,injuries:[{id:'INJ-1',sourceRef:{kind:'combat-result',id:'CBT-2'}}]});
