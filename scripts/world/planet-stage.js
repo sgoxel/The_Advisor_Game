@@ -3983,10 +3983,12 @@ function settlementRevealTierForScalar(value=zoomState.scalar){
 }
 function localWorldPresentationEligibility(value=zoomState.scalar){
   const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX),revealTier=settlementRevealTierForScalar(scalar);
-  const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
-  const activeStaticWorld=Boolean(displayResource?.dims?.staticWorld)||Boolean((displayResource?.levelIndex!==undefined)&&((LOCAL_DETAIL_LEVELS[displayResource.levelIndex]||{}).staticWorld));
-  const staticWorldVisible=Boolean(level?.staticWorld)||activeStaticWorld;
-  return Object.freeze({visible:revealTier!=="none"||staticWorldVisible,revealTier,rawLevelIndex:rawIndex,rawLevelId:level?.id||null,rawStaticWorld:Boolean(level?.staticWorld)||activeStaticWorld});
+  const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0],requestedStaticWorld=Boolean(level?.staticWorld);
+  // Presentation eligibility follows the scale requested now. A previously
+  // ready ground resource may remain as terrain coverage during a coarsening
+  // handoff, but its props/NPCs/decorative roots must not leak into map scale.
+  const staleDisplayStaticWorld=Boolean(displayResource?.dims?.staticWorld)&&!requestedStaticWorld;
+  return Object.freeze({visible:revealTier!=="none"||requestedStaticWorld,revealTier,rawLevelIndex:rawIndex,rawLevelId:level?.id||null,rawStaticWorld:requestedStaticWorld,staleDisplayStaticWorldIgnored:staleDisplayStaticWorld});
 }
 function applyLocalWorldPresentationVisibility(){
   const gate=localWorldPresentationEligibility(),nodes=[localStaticRoot,localNpcRoot,localCrowdRoot,localBuildingActivityRoot,localCampaignWearMesh,localFaunaRoot,environmentalReactionRoot,localWayfindingEntity].filter(Boolean);
