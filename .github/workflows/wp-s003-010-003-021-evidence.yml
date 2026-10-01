@@ -8,6 +8,14 @@ on:
       - scripts/world/planet-stage.js
       - scripts/world/seasonal-presentation.js
       - index.html
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/wp-s003-010-003-021-evidence.yml
+      - tools/test_wp_s003_010_003_021.py
+      - scripts/world/planet-stage.js
+      - scripts/world/seasonal-presentation.js
+      - index.html
   workflow_dispatch:
   issue_comment:
     types: [created]

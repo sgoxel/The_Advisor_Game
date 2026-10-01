@@ -108,12 +108,30 @@ def drag_probe(d,w,h,steps=18):
     return {"beforeLabels":before_labels,"steps":per,"midScreenshot":mid,"before":before["navigationPerformance"],"during":during["navigationPerformance"],"after":after["navigationPerformance"],"afterLabels":labels(d)}
 
 def assert_regional_clean(s):
-    ls=s["projection"]["localStatic"]; rb=s["projection"]["resourceBudget"]; mp=s["mapPresentation"]
+    ls=s["projection"]["localStatic"]; rb=s["projection"]["resourceBudget"]; mp=s["mapPresentation"]; pp=s["projection"].get("presentation") or {}
     if str(ls.get("revealTier"))!="none": raise AssertionError(f"regional reveal tier not none: {ls.get('revealTier')}")
     if ls.get("mapScaleSuppressedDecorative") is not True: raise AssertionError(f"map-scale decorative suppression missing: {ls}")
     if rb.get("mapScalePresentationEligible") is not False: raise AssertionError(f"map-scale local presentation unexpectedly eligible: {rb}")
+    if abs(float(pp.get("tangentPitchDegrees") or 90)-90)>0.01: raise AssertionError(f"regional tangent is not map-facing: {pp}")
+    if pp.get("groundPresentationReady") is True: raise AssertionError(f"ground 3/4 presentation leaked into regional scale: {pp}")
     if int(ls.get("buildingCount") or 0) or int(ls.get("vegetationCount") or 0) or int(ls.get("microLocationPrimitiveCount") or 0): raise AssertionError(f"local decorative geometry leaked into regional scale: {ls}")
     if int(mp.get("markerStandaloneDecorativeGlyphCount") or 0)!=0 or int(mp.get("markerUnknownProductionCount") or 0)!=0: raise AssertionError("standalone/unknown marker glyph leaked")
+
+def zoomout_stale_resource_probe(d):
+    before=snap(d)
+    result=d.execute_script("""
+      window.PlanetStage.setScaleIndex(4);
+      const s=window.PlanetStage.snapshot();
+      const root=document.getElementById('planetStageRoot');
+      return {snapshot:s,localDecorativeEligible:root?.dataset?.localDecorativeEligible||null};
+    """)
+    s=result["snapshot"]; rb=s["projection"]["resourceBudget"]; pp=s["projection"].get("presentation") or {}
+    if int(s["zoom"]["scaleIndex"])!=4: raise AssertionError(f"zoom-out request did not reach regional scale immediately: {s['zoom']}")
+    if result.get("localDecorativeEligible")!="false": raise AssertionError(f"stale local decorative root remained eligible during zoom-out: {result}")
+    if rb.get("mapScalePresentationEligible") is not False: raise AssertionError(f"stale static resource kept regional local presentation eligible: {rb}")
+    if abs(float(pp.get("tangentPitchDegrees") or 90)-90)>0.01: raise AssertionError(f"stale static resource kept RPG tangent pitch during zoom-out: {pp}")
+    if pp.get("groundPresentationReady") is True: raise AssertionError(f"stale ground resource retained ground presentation during zoom-out: {pp}")
+    return {"beforeVisibleLevel":before["zoom"].get("visibleLevel"),"afterVisibleLevel":s["zoom"].get("visibleLevel"),"requestedLevel":s["zoom"].get("requestedLevel"),"pendingPreparationCount":rb.get("pendingPreparationCount"),"mapScalePresentationEligible":rb.get("mapScalePresentationEligible"),"tangentPitchDegrees":pp.get("tangentPitchDegrees"),"groundPresentationReady":pp.get("groundPresentationReady"),"localDecorativeEligible":result.get("localDecorativeEligible")}
 
 def main():
     OUT.mkdir(parents=True,exist_ok=True)
@@ -126,6 +144,7 @@ def main():
             if view_index==0:
                 close=settle_index(d,7)
                 ev["views"].append({"viewport":[w,h],"phase":"close-materialized","scale":close["zoom"]["scaleLabel"],"localStatic":close["projection"]["localStatic"]})
+                ev["zoomoutStaleResourceProbe"]=zoomout_stale_resource_probe(d)
             regional,target=regional_mid(d); assert_regional_clean(regional)
             seasonal=d.execute_script("return window.SeasonalPresentation?.snapshot?.()||null")
             if not seasonal: raise AssertionError("seasonal presentation telemetry unavailable")
