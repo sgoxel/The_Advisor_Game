@@ -29,12 +29,18 @@ def ready():
     except Exception:return False
 
 def initialize_campaign():
-    return driver.execute_async_script("""
-      const done=arguments[arguments.length-1],candidates=['AGENT6-WP-S013-010-A','AGENT6-WP-S013-010-B','AGENT6-WP-S013-010-C','AGENT6-WP-S013-010-D'];
+    return driver.execute_script("""
+      const candidates=['AGENT6-WP-S013-010-A','AGENT6-WP-S013-010-B','AGENT6-WP-S013-010-C','AGENT6-WP-S013-010-D'];
       try{
-        const seed=candidates.find(s=>(window.SpecialLots?.build?.(s)||[]).some(x=>x.kind==='meeting-hall'))||candidates[0];
-        Promise.resolve(window.AppUI.startNewCampaignForEvidence(seed)).then(()=>done({ok:true,seed})).catch(e=>done({ok:false,error:String(e)}));
-      }catch(e){done({ok:false,error:String(e)})}
+        const active=String(window.PlanetStage?.snapshot?.()?.activeSeed||'');
+        const activeHasHall=active&&(window.SpecialLots?.build?.(active)||[]).some(x=>x.kind==='meeting-hall');
+        const seed=activeHasHall?active:(candidates.find(s=>(window.SpecialLots?.build?.(s)||[]).some(x=>x.kind==='meeting-hall'))||candidates[0]);
+        const set=window.SeedSystem?.setSettingsSeed?.(seed);
+        const started=window.SeedSystem?.startNewCampaign?.(seed);
+        const campaign=started?.campaign||window.SeedSystem?.getCampaign?.()||null;
+        if(!set?.ok||!campaign)return{ok:false,error:'synchronous campaign initialization failed',seed,active};
+        return{ok:true,seed:String(campaign.seed),activeSeed:active,rendererSeedMatches:String(campaign.seed)===active};
+      }catch(e){return{ok:false,error:String(e)}}
     """)
 
 def set_scenario(mode):
