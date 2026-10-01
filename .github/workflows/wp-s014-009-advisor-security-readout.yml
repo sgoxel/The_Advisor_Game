@@ -48,6 +48,13 @@ jobs:
           node scripts/tests/wp-s014-001-local-security-incidents.test.js
           node scripts/tests/wp-s014-002-protagonist-martial-readiness.test.js
           node scripts/tests/wp-s014-004-personal-combat-exchange.test.js
+      - name: Report functional result
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body='AGENT #6 WP-S014-009 functional workflow: **${{ job.status }}**\nCommit: '+context.sha+'\nRun: https://github.com/'+context.repo.owner+'/'+context.repo.repo+'/actions/runs/'+context.runId;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:285,body});
   visual:
     needs: functional
     runs-on: ubuntu-latest
