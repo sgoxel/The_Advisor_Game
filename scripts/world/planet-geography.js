@@ -495,6 +495,45 @@ function create(seedValue){
       maxElevationMeters:Number(maxElevation.toFixed(2))
     });
   }
+  async function signatureCooperative(options={}){
+    const budgetMs=Math.max(.5,Number(options.budgetMs)||6);
+    const now=()=>typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
+    const pause=async()=>{
+      if(typeof options.yield==="function")await options.yield();
+      else await new Promise(resolve=>setTimeout(resolve,0));
+    };
+    let h=2166136261>>>0;
+    let landCount=0,mountainCount=0,islandCount=0,minElevation=Infinity,maxElevation=-Infinity;
+    let sliceStarted=now(),sampleCount=0;
+    for(let lat=-75;lat<=75;lat+=10){
+      for(let lon=-180;lon<180;lon+=10){
+        const s=sampleLatLon(lat*Math.PI/180,lon*Math.PI/180);
+        const q=Math.round(s.elevationMeters/10);
+        h^=(q&0xffff);h=Math.imul(h,16777619)>>>0;
+        h^=hash32(s.surfaceClass);h=Math.imul(h,16777619)>>>0;
+        if(s.land)landCount++;
+        if(s.mountainInfluence>0.18)mountainCount++;
+        if(s.islandInfluence>0.28&&s.continentInfluence<0.2)islandCount++;
+        minElevation=Math.min(minElevation,s.elevationMeters);
+        maxElevation=Math.max(maxElevation,s.elevationMeters);
+        sampleCount++;
+        const elapsed=now()-sliceStarted;
+        if(elapsed>=budgetMs&&sampleCount<576){
+          try{options.onSlice?.(elapsed,sampleCount);}catch(_){}
+          await pause();
+          sliceStarted=now();
+        }
+      }
+    }
+    try{options.onSlice?.(now()-sliceStarted,sampleCount);}catch(_){}
+    return Object.freeze({
+      version:VERSION,seed,
+      hash:h.toString(16).padStart(8,"0"),
+      landCount,mountainCount,islandCount,
+      minElevationMeters:Number(minElevation.toFixed(2)),
+      maxElevationMeters:Number(maxElevation.toFixed(2))
+    });
+  }
   function seamProof(){
     const samples=[-75,-45,-15,0,15,45,75].map(degrees=>{
       const lat=degrees*Math.PI/180;
@@ -518,7 +557,7 @@ function create(seedValue){
   }
   const instance=Object.freeze({
     VERSION,seed,
-    sampleDirection,sampleLatLon,signature,seamProof,continentById,
+    sampleDirection,sampleLatLon,signature,signatureCooperative,seamProof,continentById,
     worldLatLonForTile,worldTileForLatLon,registrationRoundTrip,
     registration:Object.freeze({
       authority:"PlanetGeography.seed-fixed-spherical-frame",
