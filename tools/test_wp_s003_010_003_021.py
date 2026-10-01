@@ -5,6 +5,7 @@ from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException
 
 TARGET=sys.argv[1] if len(sys.argv)>1 else "http://127.0.0.1:8000/?evidence_fast_start=1"
 OUT=Path(sys.argv[2] if len(sys.argv)>2 else "tools/wp_s003_010_003_021_artifact")
@@ -27,9 +28,33 @@ def metrics(d,w,h):
 
 def snap(d): return d.execute_script("return window.PlanetStage?.snapshot?.()||null")
 
+def startup_diagnostics(d,reason):
+    OUT.mkdir(parents=True,exist_ok=True)
+    try:
+        state=d.execute_script("""const root=document.getElementById('planetStageRoot'),overlay=root?.querySelector?.('.planet-stage-loading');let snap=null,snapshotError=null;try{snap=window.PlanetStage?.snapshot?.()||null}catch(e){snapshotError=String(e?.stack||e)}return {reason:arguments[0],documentReady:document.readyState,rootDataset:root?Object.fromEntries([...root.attributes].filter(a=>a.name.startsWith('data-')).map(a=>[a.name,a.value])):null,loading:overlay?{hidden:overlay.hidden,mode:overlay.dataset.mode||null,phase:overlay.dataset.phase||null,title:overlay.querySelector('.planet-stage-loading-title')?.textContent?.trim()||null,phaseText:overlay.querySelector('.planet-stage-loading-phase')?.textContent?.trim()||null,percent:overlay.querySelector('.planet-stage-loading-percent')?.textContent?.trim()||null}:null,snapshot:snap,snapshotError};""",reason)
+    except Exception as e:
+        state={"reason":reason,"diagnosticError":repr(e)}
+    try: state["browserLogs"]=d.get_log("browser")[-120:]
+    except Exception as e: state["browserLogError"]=repr(e)
+    try:
+        p=OUT/"startup-failure.png"
+        if d.save_screenshot(str(p)): state["screenshot"]=p.name
+    except Exception as e: state["screenshotError"]=repr(e)
+    (OUT/"startup-diagnostic.json").write_text(json.dumps(state,indent=2,sort_keys=True,default=str),encoding="utf-8")
+    return state
+
 def wait_ready(d):
     WebDriverWait(d,180).until(lambda x:x.execute_script("return document.readyState==='complete'"))
-    WebDriverWait(d,300).until(lambda x:x.execute_script("return document.getElementById('planetStageRoot')?.dataset?.ready==='true'"))
+    deadline=time.time()+300
+    while time.time()<deadline:
+        state=d.execute_script("""const root=document.getElementById('planetStageRoot'),overlay=root?.querySelector?.('.planet-stage-loading');let snap=null;try{snap=window.PlanetStage?.snapshot?.()||null}catch(_){};return {ready:root?.dataset?.ready==='true',error:root?.dataset?.error||null,mode:snap?.startupProgress?.mode||overlay?.dataset?.mode||null,phase:snap?.startupProgress?.phaseId||overlay?.dataset?.phase||null,label:snap?.startupProgress?.phaseLabel||overlay?.querySelector?.('.planet-stage-loading-phase')?.textContent?.trim()||null};""")
+        if state.get("ready"): return
+        if state.get("error") or state.get("mode")=="failed":
+            diag=startup_diagnostics(d,"startup-failed")
+            raise RuntimeError(f"PlanetStage startup failed before ready: {diag.get('rootDataset') or diag.get('loading')}")
+        time.sleep(.25)
+    startup_diagnostics(d,"startup-timeout")
+    raise TimeoutException("PlanetStage did not reach data-ready=true within 300 seconds")
 
 def set_seed(d):
     r=d.execute_script("const s=String(arguments[0]);const c=window.SeedSystem.startNewCampaign(s);const p=window.PlanetGeography.persistSeed(s);return {c,p};",SEED)
