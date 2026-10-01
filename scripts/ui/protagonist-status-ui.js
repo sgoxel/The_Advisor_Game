@@ -46,35 +46,6 @@ function normalizeAuthority(snap){
   const role=snap.currentRole||snap.role||{},scopes=Array.isArray(snap.scopes)?snap.scopes:Array.isArray(role.scopes)?role.scopes:[];
   return freeze({role:cleanText(role.label||role.name||snap.roleLabel||snap.roleId||"Local resident",90),rankTier:Number.isFinite(Number(snap.rankTier??role.rankTier))?Number(snap.rankTier??role.rankTier):0,scopes:scopes.slice(0,MAX_SCOPES).map(x=>cleanText(x,80))});
 }
-function normalizeStatusContext(snap){
-  if(!snap)return null;
-  const role=snap.role||snap.currentRole||{},scopes=Array.isArray(snap.scopes)?snap.scopes:Array.isArray(role.scopes)?role.scopes:[];
-  const duties=Array.isArray(snap.duties)?snap.duties:Array.isArray(snap.obligations)?snap.obligations:[];
-  const opportunities=Array.isArray(snap.opportunities)?snap.opportunities:[];
-  const advancement=snap.advancement||snap.progression||null;
-  return freeze({
-    role:cleanText(role.label||role.name||snap.roleLabel||snap.roleId||"Local resident",90),
-    rankTier:Number.isFinite(Number(snap.rankTier??role.rankTier))?Number(snap.rankTier??role.rankTier):0,
-    scopes:scopes.slice(0,MAX_SCOPES).map(x=>cleanText(x,80)),
-    duties:duties.slice(0,MAX_SCOPES).map(item=>freeze({
-      label:cleanText(item?.label||item?.dutyId||item?.kind||item?.category||"Duty",110),
-      detail:cleanText(item?.detail||item?.requiredScope||item?.state||item?.status||"Standing",80),
-      state:cleanText(item?.state||item?.status||"standing",32)
-    })),
-    opportunities:opportunities.slice(0,MAX_SCOPES).map(item=>freeze({
-      label:cleanText(item?.label||item?.title||item?.intent||item?.sourceNpcLabel||"Opportunity",110),
-      detail:cleanText(item?.detail||item?.sourceNpcRef?.id||item?.sourceRef?.id||item?.status||item?.reason||"Grounded status context",80),
-      state:cleanText(item?.state||item?.status||"available",32)
-    })),
-    advancement:advancement?freeze({
-      status:cleanText(advancement.status||advancement.reason||"evaluated",50),
-      selected:cleanText(advancement.selectedOpportunityId||advancement.selectedOpportunity||"",120),
-      reason:cleanText(advancement.reason||"",110),
-      blockers:(Array.isArray(advancement.blockers)?advancement.blockers:[]).slice(0,4).map(x=>cleanText(x,80)),
-      available:Boolean(advancement.available!==false)
-    }):null
-  });
-}
 function normalizeGuidance(snap){
   const rows=Array.isArray(snap?.records)?snap.records:[];
   return rows.filter(r=>String(r.status||"active")==="active").slice(0,MAX_GUIDANCE).map(r=>freeze({label:cleanText(r.principle||r.topic||"Guidance",130),priority:pct(r.priority,50),stance:cleanId(r.stance||"neutral",30)}));
@@ -82,11 +53,11 @@ function normalizeGuidance(snap){
 function sourceState(value,kind="authoritative"){return freeze({available:value!=null,kind:value==null?"unavailable":kind,value:value||null})}
 function model(base){
   state.modelBuilds++;
-  const identity=base.identity||null,needs=base.needs||null,goals=base.goals||null,inventory=base.inventory||null,health=base.health||null,authority=base.authority||null,status=base.status||null,opportunities=base.opportunities||null,advancement=base.advancement||null,guidance=base.guidance||null;
-  const unavailable=["identity","needs","goals","inventory","health","authority","status","opportunities","advancement","guidance"].filter(key=>base[key]==null);
+  const identity=base.identity||null,needs=base.needs||null,goals=base.goals||null,inventory=base.inventory||null,health=base.health||null,authority=base.authority||null,guidance=base.guidance||null;
+  const unavailable=["identity","needs","goals","inventory","health","authority","guidance"].filter(key=>base[key]==null);
   const result=freeze({
     version:VERSION,mode:base.mode||"runtime",when:cleanText(base.when||"",32),
-    identity:sourceState(identity),needs:sourceState(needs),goals:sourceState(goals),inventory:sourceState(inventory),health:sourceState(health),authority:sourceState(authority),status:sourceState(status),opportunities:sourceState(opportunities),advancement:sourceState(advancement),guidance:sourceState(guidance,"advisory"),
+    identity:sourceState(identity),needs:sourceState(needs),goals:sourceState(goals),inventory:sourceState(inventory),health:sourceState(health),authority:sourceState(authority),guidance:sourceState(guidance,"advisory"),
     unavailable:freeze(unavailable),readOnly:true,eventDriven:true,bounded:true,
     authorityFlags:freeze({directWorldMutation:false,directExecution:false,actionProposal:false,providerPayloadRendered:false,wholeWorldScan:false,perFrameRender:false,authoritativeVsAdvisoryLabeled:true})
   });
@@ -100,41 +71,25 @@ function evidenceModel(modeValue){
   const guidance=[{label:"Keep explicit promises unless safety makes them impossible.",priority:80,stance:"encourage"}];
   const authorityLow={role:"Village resident",rankTier:0,scopes:["self"]};
   const authorityHigh={role:"Village steward",rankTier:2,scopes:["self","settlement:administration","settlement:records"]};
-  const status={role:authorityHigh.role,rankTier:authorityHigh.rankTier,scopes:authorityHigh.scopes,duties:[{label:"Attend village administration",detail:"settlement:administration",state:"standing"},{label:"Honor guild commitments",detail:"guild:participate",state:"standing"}],opportunities:[{label:"Advancement discussion with the guildmaster",detail:"guildmaster · grounded",state:"available"},{label:"Service sponsorship at the watch-house",detail:"guard captain · grounded",state:"available"}],advancement:{status:"pursue",selectedOpportunityId:"ADV-GUILD",reason:"Guild appointment aligns with ambition",blockers:[],available:true}};
-  if(mode==="healthy")return model({mode,when,identity,needs:[{key:"hunger",label:"Hunger",value:18},{key:"fatigue",label:"Fatigue",value:12},{key:"safety",label:"Safety",value:8},{key:"social",label:"Social",value:22}],goals:[{id:"GOAL-NORTH",label:"Inspect the north gate",status:"active",priority:74}],inventory,health:{condition:96,fatigue:12,injuries:[]},authority:authorityLow,status:normalizeStatusContext(status),opportunities:status.opportunities,advancement:status.advancement,guidance});
-  if(mode==="pressure")return model({mode,when,identity,needs:[{key:"hunger",label:"Hunger",value:84},{key:"fatigue",label:"Fatigue",value:61},{key:"safety",label:"Safety",value:27},{key:"social",label:"Social",value:58}],goals:[{id:"GOAL-PROMISE",label:"Deliver the miller's message",status:"active",priority:91},{id:"GOAL-MEAL",label:"Find food before patrol",status:"active",priority:88}],inventory,health:{condition:78,fatigue:55,injuries:[]},authority:authorityLow,status:normalizeStatusContext({...status,advancement:{...status.advancement,status:"defer",reason:"Urgent local duties compress the opportunity window",blockers:["urgent-self-care"]}}),opportunities:status.opportunities,advancement:{...status.advancement,status:"defer",reason:"Urgent local duties compress the opportunity window",blockers:["urgent-self-care"],available:true},guidance});
-  if(mode==="injured")return model({mode,when,identity,needs:[{key:"hunger",label:"Hunger",value:41},{key:"fatigue",label:"Fatigue",value:86},{key:"safety",label:"Safety",value:66},{key:"social",label:"Social",value:31}],goals:[{id:"GOAL-REST",label:"Recover before leaving the village",status:"active",priority:96},{id:"GOAL-GATE",label:"Gate inspection",status:"deferred",priority:72}],inventory,health:{condition:48,fatigue:86,injuries:["Sprained ankle · recovering"]},authority:authorityLow,status:normalizeStatusContext({...status,advancement:{...status.advancement,status:"defer",reason:"Recovery and mobility constraints take precedence",blockers:["unsafe-to-advance"]}}),opportunities:status.opportunities,advancement:{...status.advancement,status:"defer",reason:"Recovery and mobility constraints take precedence",blockers:["unsafe-to-advance"],available:true},guidance});
-  if(mode==="authority")return model({mode,when,identity:{...identity,subtitle:"Persistent protagonist · entrusted local office"},needs:[{key:"hunger",label:"Hunger",value:26},{key:"fatigue",label:"Fatigue",value:33},{key:"safety",label:"Safety",value:19},{key:"social",label:"Social",value:42}],goals:[{id:"GOAL-LEDGER",label:"Review storehouse allocations",status:"active",priority:82}],inventory,health:{condition:91,fatigue:29,injuries:[]},authority:authorityHigh,status:normalizeStatusContext({role:authorityHigh,rankTier:authorityHigh.rankTier,scopes:authorityHigh.scopes,duties:[{label:"Attend village administration",detail:"settlement:administration",state:"standing"},{label:"Honor guild commitments",detail:"guild:participate",state:"standing"}],opportunities:[{label:"Advancement discussion with the guildmaster",detail:"guildmaster · grounded",state:"available"},{label:"Service sponsorship at the watch-house",detail:"guard captain · grounded",state:"available"}],advancement:{status:"pursue",selectedOpportunityId:"ADV-GUILD",reason:"Guild appointment aligns with local office obligations",blockers:[],available:true}}),opportunities:[{label:"Advancement discussion with the guildmaster",detail:"guildmaster · grounded",state:"available"},{label:"Service sponsorship at the watch-house",detail:"guard captain · grounded",state:"available"}],advancement:{status:"pursue",selectedOpportunityId:"ADV-GUILD",reason:"Guild appointment aligns with local office obligations",blockers:[],available:true},guidance:[...guidance,{label:"Use office authority only for duties that genuinely require it.",priority:92,stance:"caution"}]});
-  return model({mode,when,identity,needs:[{key:"hunger",label:"Hunger",value:33},{key:"fatigue",label:"Fatigue",value:24},{key:"safety",label:"Safety",value:15},{key:"social",label:"Social",value:28}],goals:null,inventory:null,health:{condition:88,fatigue:24,injuries:[]},authority:null,status:null,opportunities:null,advancement:null,guidance:null});
+  if(mode==="healthy")return model({mode,when,identity,needs:[{key:"hunger",label:"Hunger",value:18},{key:"fatigue",label:"Fatigue",value:12},{key:"safety",label:"Safety",value:8},{key:"social",label:"Social",value:22}],goals:[{id:"GOAL-NORTH",label:"Inspect the north gate",status:"active",priority:74}],inventory,health:{condition:96,fatigue:12,injuries:[]},authority:authorityLow,guidance});
+  if(mode==="pressure")return model({mode,when,identity,needs:[{key:"hunger",label:"Hunger",value:84},{key:"fatigue",label:"Fatigue",value:61},{key:"safety",label:"Safety",value:27},{key:"social",label:"Social",value:58}],goals:[{id:"GOAL-PROMISE",label:"Deliver the miller's message",status:"active",priority:91},{id:"GOAL-MEAL",label:"Find food before patrol",status:"active",priority:88}],inventory,health:{condition:78,fatigue:55,injuries:[]},authority:authorityLow,guidance});
+  if(mode==="injured")return model({mode,when,identity,needs:[{key:"hunger",label:"Hunger",value:41},{key:"fatigue",label:"Fatigue",value:86},{key:"safety",label:"Safety",value:66},{key:"social",label:"Social",value:31}],goals:[{id:"GOAL-REST",label:"Recover before leaving the village",status:"active",priority:96},{id:"GOAL-GATE",label:"Gate inspection",status:"deferred",priority:72}],inventory,health:{condition:48,fatigue:86,injuries:["Sprained ankle · recovering"]},authority:authorityLow,guidance});
+  if(mode==="authority")return model({mode,when,identity:{...identity,subtitle:"Persistent protagonist · entrusted local office"},needs:[{key:"hunger",label:"Hunger",value:26},{key:"fatigue",label:"Fatigue",value:33},{key:"safety",label:"Safety",value:19},{key:"social",label:"Social",value:42}],goals:[{id:"GOAL-LEDGER",label:"Review storehouse allocations",status:"active",priority:82}],inventory,health:{condition:91,fatigue:29,injuries:[]},authority:authorityHigh,guidance:[...guidance,{label:"Use office authority only for duties that genuinely require it.",priority:92,stance:"caution"}]});
+  return model({mode,when,identity,needs:[{key:"hunger",label:"Hunger",value:33},{key:"fatigue",label:"Fatigue",value:24},{key:"safety",label:"Safety",value:15},{key:"social",label:"Social",value:28}],goals:null,inventory:null,health:{condition:88,fatigue:24,injuries:[]},authority:null,guidance:null});
 }
 function runtimeModel(ctx){
   state.runtimeBuilds++;
   const seed=cleanText(ctx?.seed||"",160),identityKey="protagonist",when=cleanText(ctx?.when||"",32);
-  let profile=null,needs=null,goals=null,inventory=null,health=null,authority=null,status=null,opportunities=null,advancement=null,guidance=null;
+  let profile=null,needs=null,goals=null,inventory=null,health=null,authority=null,guidance=null;
   try{profile=root.ProtagonistProfile?.derive?.(seed,identityKey)||null}catch(_){}
   try{needs=root.ProtagonistNeeds?.snapshot?.(seed,identityKey)||null}catch(_){}
   try{goals=root.ProtagonistGoals?.snapshot?.(seed,identityKey)||null}catch(_){}
   try{inventory=root.ProtagonistInventory?.snapshot?.(seed,identityKey)||null}catch(_){}
   try{health=root.ProtagonistHealth?.decisionContext?.(seed,identityKey)||root.ProtagonistHealth?.snapshot?.(seed,identityKey)||null}catch(_){}
   try{authority=root.ProtagonistAuthority?.decisionContext?.(seed,identityKey)||root.ProtagonistAuthority?.snapshot?.(seed,identityKey)||null}catch(_){}
-  try{status=root.ProtagonistStatusObligations?.decisionContext?.(seed,when,identityKey)||root.ProtagonistStatusObligations?.resolve?.(seed,when,identityKey)||null}catch(_){ }
-  try{opportunities=root.ProtagonistPatronageOpportunities?.list?.(seed,when,{limit:3},identityKey)||[]; if(!Array.isArray(opportunities)) opportunities=[]; }catch(_){ opportunities=[]; }
-  try{
-    const profileInfo=profile||{},needsInfo=needs||{},goalsInfo=goals||{records:[]},authorityInfo=authority||{currentRole:{roleId:"local-resident",rankTier:0,scopes:["self"]}},employmentInfo=root.ProtagonistEmployment?.current?.(seed,when,identityKey)||{status:"none",contract:null};
-    const wealthInfo=root.ProtagonistWealth?.snapshot?.(seed,identityKey)||{balanceCopper:0};
-    const advancementInput={seed,when,profile:profileInfo,needs:needsInfo,health:health||{condition:0.75,fatigue:0.2,mobilityBlocked:false},goals:goalsInfo,authority:authorityInfo,employment:employmentInfo,wealth:wealthInfo,obligations:Array.isArray(status?.obligations)?status.obligations:[],opportunities:Array.isArray(opportunities)?opportunities:[]};
-    const output=root.ProtagonistAdvancementGoal?.evaluate?.(advancementInput); if(output&&output.ok){ advancement={status:output.status,selectedOpportunityId:output.selectedOpportunityId,reason:output.reason,blockers:(output.selectedOpportunity?.hardBlockers||output.selectedOpportunity?.softBlockers||[]),available:Boolean(output.selectedProposal||output.status!=="reject")} } 
-  }catch(_){ }
-  try{guidance=root.ProtagonistGuidance?.snapshot?.(seed,identityKey)||null}catch(_){ }
+  try{guidance=root.ProtagonistGuidance?.snapshot?.(seed,identityKey)||null}catch(_){}
   const identity=profile?{id:cleanId(profile.protagonistId||"protagonist",120),name:cleanText(profile.birthIdentity?.fullName||"Protagonist",120),subtitle:"Persistent protagonist",traits:normalizeTraits(profile)}:null;
-  const authorityRole=authority?.currentRole||authority?.role||status?.role||{label:"Local resident",rankTier:0,scopes:["self"]};
-  const authorityScopes=Array.isArray(authority?.currentRole?.scopes)?authority.currentRole.scopes:Array.isArray(authority?.scopes)?authority.scopes:Array.isArray(status?.role?.scopes)?status.role.scopes:Array.isArray(authorityRole?.scopes)?authorityRole.scopes:[];
-  const authorityRank=Number.isFinite(Number(authority?.rankTier ?? authorityRole?.rankTier ?? status?.role?.rankTier ?? status?.rankTier ?? 0))?Number(authority?.rankTier ?? authorityRole?.rankTier ?? status?.role?.rankTier ?? status?.rankTier ?? 0):0;
-  const derivedDuties=Array.isArray(status?.duties)&&status.duties.length?status.duties:(Array.isArray(status?.obligations)&&status.obligations.length?status.obligations.map(item=>({label:item.label||item.kind||"Duty",detail:item.detail||item.state||"standing",state:item.state||item.status||"standing"})):[]);
-  const derivedOpportunities=Array.isArray(opportunities)&&opportunities.length?opportunities:Array.isArray(status?.opportunities)?status.opportunities:[];
-  const derivedAdvancement=advancement||status?.advancement||((Array.isArray(goals?.records)&&goals.records.length)?{status:"pursue",selectedOpportunityId:null,reason:"Current goals and authority context are available.",blockers:[],available:true}:null);
-  const normalizedStatus=normalizeStatusContext({role:authorityRole,rankTier:authorityRank,scopes:authorityScopes,duties:derivedDuties.length?derivedDuties:[{label:"Continue active personal obligations",detail:(Array.isArray(goals?.records)&&goals.records[0]?.topic)?goals.records[0].topic:"local responsibility",state:"standing"}],opportunities:derivedOpportunities,advancement:derivedAdvancement});
-  return model({mode:"runtime",when,identity,needs:needs?normalizeNeeds(needs):null,goals:goals?normalizeGoals(goals):null,inventory:inventory?normalizeInventory(inventory):null,health:normalizeHealth(health),authority:normalizeAuthority(authority||{currentRole:authorityRole,rankTier:authorityRank,scopes:authorityScopes}),status:normalizedStatus,opportunities:normalizedStatus?.opportunities||[],advancement:normalizedStatus?.advancement||derivedAdvancement||null,guidance:guidance?normalizeGuidance(guidance):null});
+  return model({mode:"runtime",when,identity,needs:needs?normalizeNeeds(needs):null,goals:goals?normalizeGoals(goals):null,inventory:inventory?normalizeInventory(inventory):null,health:normalizeHealth(health),authority:normalizeAuthority(authority),guidance:guidance?normalizeGuidance(guidance):null});
 }
 function currentModel(ctx){return state.evidenceMode?evidenceModel(state.evidenceMode):runtimeModel(ctx||{})}
 function setEvidenceMode(modeValue){state.evidenceMode=EVIDENCE_MODES.includes(String(modeValue||""))?String(modeValue):null;return currentModel({seed:"EVIDENCE",when:"1201-09-30 14:20:00"})}
@@ -161,15 +116,6 @@ function markup(modelValue){
   const traitHtml=identity?.traits?.length?'<div class="advisor-status-traits">'+identity.traits.slice(0,MAX_TRAITS).map(t=>'<span class="advisor-status-trait">'+esc(t.label)+' '+esc(t.value)+'</span>').join("")+'</div>':"";
   const healthRows=health?[{label:"Condition",detail:health.condition+"%"},{label:"Fatigue",detail:health.fatigue+"%"},...(health.injuries||[]).map(x=>({label:x,detail:"constraint"}))]:null;
   const authorityRows=authority?[{label:authority.role,detail:"rank "+authority.rankTier},...(authority.scopes||[]).slice(0,MAX_SCOPES).map(x=>({label:title(x),detail:"scope"}))]:null;
-  const statusContext=m.status.value||null;
-  const dutyRows=statusContext?.duties?.length?statusContext.duties.map(x=>({label:x.label,detail:x.detail+" · "+x.state})):null;
-  const opportunityRows=statusContext?.opportunities?.length?statusContext.opportunities.map(x=>({label:x.label,detail:x.state+" · "+x.detail})):null;
-  const advancement=statusContext?.advancement||null;
-  const advancementRows=advancement?[
-    {label:"Status",detail:advancement.status},
-    {label:"Selected",detail:advancement.selected||"No grounded option selected"},
-    ...(advancement.blockers||[]).slice(0,3).map(blocker=>({label:"Blocker",detail:blocker}))
-  ]:null;
   const guidanceRows=guidance?.map(x=>({label:x.label,detail:(x.stance||"advice")+" · P"+x.priority}));
   return '<details class="advisor-status-readout" data-status-mode="'+esc(m.mode)+'"'+open+'>'+
     '<summary><span class="advisor-status-summary-copy"><small>PROTAGONIST READOUT</small><strong>'+esc(identity?.name||"Current state")+' · '+esc(subtitle)+'</strong></span><span class="advisor-status-summary-meta">'+chip("Current","")+chip(signalLabel,signalKind)+'</span></summary>'+
@@ -181,9 +127,6 @@ function markup(modelValue){
         '<section class="advisor-status-card">'+cardHead("Goals","Authoritative")+lines(goals,"Goal state unavailable.")+'</section>'+
         '<section class="advisor-status-card">'+cardHead("Inventory","Authoritative")+lines(inventory,"Inventory state unavailable.")+'</section>'+
         '<section class="advisor-status-card">'+cardHead("Role / authority","Authoritative")+lines(authorityRows,"Rank and authority unavailable.")+'</section>'+
-        '<section class="advisor-status-card">'+cardHead("Status duties","Grounded")+lines(dutyRows,"No active local duties or obligations are currently grounded.")+'</section>'+
-        '<section class="advisor-status-card">'+cardHead("Advancement","Grounded")+lines(advancementRows,"No grounded advancement context is currently available.")+'</section>'+
-        '<section class="advisor-status-card">'+cardHead("Local opportunities","Grounded")+lines(opportunityRows,"No grounded local opportunities are currently available.")+'</section>'+
         '<section class="advisor-status-card" data-kind="'+(m.guidance.available?"advisory":"unavailable")+'">'+cardHead("Long-term guidance",m.guidance.available?"Advisory":"Unavailable")+lines(guidanceRows,"No guidance snapshot available.")+(m.guidance.available?'<p class="advisor-status-note advisory">Guidance can inform evaluation; it never grants authority or forces an action.</p>':"")+'</section>'+
       '</div>'+
       '<footer class="advisor-status-foot"><span>'+esc(m.when||"Fantasy time unavailable")+'</span><span>Read-only · event-driven</span></footer>'+
