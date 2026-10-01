@@ -50,6 +50,15 @@ assert.equal(conditional.status,'conditional');assert.equal(conditional.permitte
 const conditionalAttempt=Rank.attemptAccess(seed,'protagonist',when,{requiredScope:'settlement:administration',requiredRoleId:'village-steward',action:'request-hearing'});
 assert.equal(conditionalAttempt.ok,false);assert.equal(conditionalAttempt.status,'conditional');assert.equal(conditionalAttempt.delegatesTo,'Simulation');
 
+// ObjectInteractions must also fail closed if a future local metadata rule resolves to conditional.
+const realRankAccess=global.ProtagonistRankAccess;
+global.ProtagonistRankAccess={...realRankAccess,localAccessContext(){return{status:'conditional',permitted:false,conditional:true,reason:'status-authority-higher-role-conditional',requiredScope:'settlement:administration',requiredRoleId:'village-steward',role:{title:'Guild Member',rankTier:1},presentation:'Conditional local access.'}}};
+const conditionalCtx=Obj.context(seed,'HALL:table:01',actor),conditionalWork=conditionalCtx.actions.find(x=>x.id==='work');
+assert.equal(conditionalWork.enabled,false);assert.equal(conditionalWork.reason,'status-conditional');
+const conditionalObjectAttempt=Obj.attempt(seed,{actorKind:'protagonist',actorId:'protagonist',actorPosition:actor,objectId:'HALL:table:01',action:'work'});
+assert.equal(conditionalObjectAttempt.ok,false);assert.equal(conditionalObjectAttempt.reason,'status-conditional');assert.equal(actionCalls,2);
+global.ProtagonistRankAccess=realRankAccess;
+
 role={roleId:'village-steward',title:'Village Steward',rankTier:2,rankLabel:'local-authority',scopes:['self','settlement:administration']};
 const known=Rank.npcReaction(seed,'R-KNOWN','protagonist',when,{label:'the meeting hall'}),unknown=Rank.npcReaction(seed,'R-UNKNOWN','protagonist',when,{label:'the meeting hall'});
 assert.equal(known.recognized,true);assert.equal(known.knowledge.memoryKnown,true);assert.equal(known.knowledge.statusEvidence,true);assert(known.message.includes('Village Steward'));
@@ -66,6 +75,8 @@ assert(!rankSource.includes('relationshipDelta'),'presentation must not fabricat
 const objectSource=fs.readFileSync(path.resolve(__dirname,'../world/object-interactions.js'),'utf8');
 assert(objectSource.includes('building?.kind==="meeting-hall"&&descriptor.type==="table"&&action==="work"'));
 assert(objectSource.includes('actorKind==="protagonist"?rankStatus'),'resident routines must be isolated from protagonist status');
+assert(objectSource.includes('access.status==="conditional"'),'conditional access must have an explicit fail-closed branch');
+assert(objectSource.includes('reason:"status-conditional"'),'conditional access must never execute as ready');
 const uiSource=fs.readFileSync(path.resolve(__dirname,'../ui/app-ui.js'),'utf8');
 for(const phrase of ['STATUS "+String(accessStatus).toUpperCase()','status never bypasses Simulation','Simulation still validates the action and outcome','data'])void phrase;
 assert(uiSource.includes('STATUS "+String(accessStatus).toUpperCase()'));assert(uiSource.includes('status never bypasses Simulation'));assert(uiSource.includes('Simulation still validates the action and outcome'));

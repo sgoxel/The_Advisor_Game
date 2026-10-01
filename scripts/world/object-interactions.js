@@ -179,14 +179,14 @@ function actionContext(seed,descriptor,actorPosition,action,accessValue){
   const actor=point(actorPosition),target=nearestInteractionPoint(descriptor,actor);
   const distance=target&&actor?manhattan(actor,target):Infinity,range=actionRange(action),rangeReady=Number.isFinite(distance)&&distance<=range;
   const access=accessValue===undefined?rankStatus(seed,descriptor,window.GameTime?.getTimestampKey?.()||"1201-01-01 00:00:00",action):accessValue;
-  const statusReady=!access||access.status!=="restricted";
+  const statusReady=!access||access.status==="permitted";
   return Object.freeze({
     id:action,
     label:ACTION_LABELS[action]||action,
     rangeTiles:range,
     distanceTiles:distance,
     enabled:rangeReady&&statusReady,
-    reason:!rangeReady?"out-of-range":statusReady?"ready":"status-restricted",
+    reason:!rangeReady?"out-of-range":statusReady?"ready":access?.status==="conditional"?"status-conditional":"status-restricted",
     target,
     access:access?Object.freeze({status:access.status,permitted:access.permitted,conditional:access.conditional,reason:access.reason,requiredScope:access.requiredScope,requiredRoleId:access.requiredRoleId,roleTitle:access.role?.title||null,rankTier:access.role?.rankTier??null,presentation:access.presentation}):null
   });
@@ -316,6 +316,10 @@ function attempt(seed,request){
   if(access&&access.status==="restricted"){
     telemetry.rejectedAttempts++;
     return Object.freeze({ok:false,status:"rejected",reason:"status-restricted",objectId:descriptor.id,action,authoritative:true,access:{status:access.status,permitted:access.permitted,conditional:access.conditional,reason:access.reason}});
+  }
+  if(access&&access.status==="conditional"){
+    telemetry.rejectedAttempts++;
+    return Object.freeze({ok:false,status:"rejected",reason:"status-conditional",objectId:descriptor.id,action,authoritative:true,access:{status:access.status,permitted:access.permitted,conditional:access.conditional,reason:access.reason}});
   }
   const actionState=actionContext(seed,descriptor,actorPosition,action,access);
   if(!actionState.enabled){
