@@ -46,12 +46,15 @@ function identityBirthDate(seed,index){
   const day=1+Number(PRNG.foundationUint32(seed,"resident-roster:birth-day:"+index))%28;
   return `${year}-${pad2(month)}-${pad2(day)}`;
 }
-function identityBirthplace(seed){
-  const plan=StartingVillage.plan(seed);
-  return Object.freeze({
-    name:String(plan.name||"Starting Village"),
-    center:Object.freeze({x:String(plan.center.x),y:String(plan.center.y)})
-  });
+const STARTING_VILLAGE_BIRTHPLACE=Object.freeze({
+  name:"Starting Village",
+  center:Object.freeze({x:"0",y:"0"})
+});
+function identityBirthplace(){
+  // StartingVillage.plan() currently defines this exact immutable identity.
+  // Resident identity creation does not need plot/road planning, so avoid
+  // materializing that heavier presentation structure in each roster unit.
+  return STARTING_VILLAGE_BIRTHPLACE;
 }
 function ageAtBirthDate(birthDate,when){
   const current=normalizeTimestamp(when);
