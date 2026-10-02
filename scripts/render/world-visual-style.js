@@ -62,10 +62,10 @@ const STYLE=Object.freeze({
   }),
   terrainGrade:Object.freeze({
     green:Object.freeze({saturation:1.14,brightness:1.035,redScale:1.055,greenScale:0.990,blueScale:0.850,redOffset:0.018,greenOffset:0.010,blueOffset:-0.004}),
-    water:Object.freeze({saturation:1.22,brightness:1.035,redScale:0.900,greenScale:1.015,blueScale:1.080,redOffset:-0.006,greenOffset:0.004,blueOffset:0.020}),
+    water:Object.freeze({saturation:1.12,brightness:1.025,redScale:0.930,greenScale:1.020,blueScale:1.065,redOffset:0,greenOffset:0.006,blueOffset:0.016}),
     earth:Object.freeze({saturation:1.18,brightness:1.035,redScale:1.075,greenScale:1.015,blueScale:0.880,redOffset:0.018,greenOffset:0.006,blueOffset:-0.004}),
     constructed:Object.freeze({saturation:1.14,brightness:1.025,redScale:1.045,greenScale:1.005,blueScale:0.920,redOffset:0.010,greenOffset:0.002,blueOffset:-0.004}),
-    neutral:Object.freeze({saturation:1.20,brightness:1.030,redScale:0.985,greenScale:1.025,blueScale:0.945,redOffset:0,greenOffset:0.014,blueOffset:0})
+    neutral:Object.freeze({saturation:1.06,brightness:1.025,redScale:1.020,greenScale:1.010,blueScale:0.965,redOffset:0.006,greenOffset:0.004,blueOffset:0.002})
   }),
   localDetail:Object.freeze({
     maxMetersPerTexel:28,
