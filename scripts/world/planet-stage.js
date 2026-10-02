@@ -1166,9 +1166,26 @@ function ensureMapPresentationDom(){
   const borders=document.createElementNS("http://www.w3.org/2000/svg","svg");borders.setAttribute("class","planet-map-borders");borders.setAttribute("viewBox","0 0 1000 1000");borders.setAttribute("preserveAspectRatio","none");borders.setAttribute("aria-hidden","true");
   const labels=document.createElement("div");labels.className="planet-map-labels";labels.setAttribute("aria-hidden","true");
   const center=document.createElement("div");center.className="planet-world-center";center.setAttribute("aria-label","Canonical gameplay-area center");center.innerHTML='<i aria-hidden="true"></i><code></code>';
+  const protagonist=document.createElement("button");protagonist.type="button";protagonist.className="planet-protagonist-marker";protagonist.setAttribute("aria-label","Select protagonist");protagonist.innerHTML='<i aria-hidden="true">◆</i><span>PROTAGONIST</span>';protagonist.addEventListener("click",event=>{event.preventDefault();event.stopPropagation();const record=inspectionPickables.get(inspectionRegistryKey("protagonist","protagonist"));if(record){inspection.selectedId="protagonist";inspection.selectedType="protagonist";renderInspectionTooltip(record);}});
   const info=document.createElement("section");info.className="planet-map-context";info.setAttribute("aria-label","Geographic context");
   const scale=document.createElement("div");scale.className="planet-scale-ruler";scale.innerHTML='<div class="planet-scale-meta"><strong></strong><span></span></div><div class="planet-scale-line"><i></i></div><small></small>';
-  layer.append(borders,labels,center,info,scale);root.appendChild(layer);return layer;
+  layer.append(borders,labels,center,protagonist,info,scale);root.appendChild(layer);return layer;
+}
+function updateProtagonistMapMarker(layer){
+  const marker=layer?.querySelector?.(".planet-protagonist-marker");if(!marker)return null;
+  const target=authoritativeProtagonistFocusTarget(),groundBillboardOwns=Boolean(localNpcPresentation.protagonistBillboardVisible&&groundCharacterLayerEligible());
+  if(!target||groundBillboardOwns){marker.hidden=true;return Object.freeze({visible:false,reason:groundBillboardOwns?"ground-billboard-active":"authoritative-position-unavailable",worldTile:target?.point||null});}
+  const projected=projectGeographicAnchor(target.coordinate,{surfaceOffsetMeters:18});
+  if(!projected){marker.hidden=true;return Object.freeze({visible:false,reason:"projection-hidden",worldTile:target.point});}
+  const rect=canvas.getBoundingClientRect(),rootRect=root.getBoundingClientRect(),offsetX=rect.left-rootRect.left,offsetY=rect.top-rootRect.top;
+  marker.hidden=false;marker.style.left=(offsetX+projected.screenX).toFixed(2)+"px";marker.style.top=(offsetY+projected.screenY).toFixed(2)+"px";
+  const record={
+    id:"protagonist",type:"protagonist",name:"Protagonist",pickPriority:5,
+    authority:Object.freeze({positionSource:"Protagonist.getPosition",cameraOnlyFocus:true,simulationMutation:false,semanticMarker:true}),
+    visible:()=>Boolean(marker.isConnected&&!marker.hidden),screenBounds:()=>marker.getBoundingClientRect(),screenDepth:()=>Number(projected.viewDepth||0)
+  };
+  registerInspectionPickable(record);
+  return Object.freeze({visible:true,reason:"canonical-protagonist-position",worldTile:target.point,latitudeDegrees:target.coordinate.latitudeDegrees,longitudeDegrees:target.coordinate.longitudeDegrees,screenX:Number(projected.screenX.toFixed(2)),screenY:Number(projected.screenY.toFixed(2)),projection:projected.mode});
 }
 function geographicScenePoint(latitudeRadians,longitudeRadians,surfaceOffsetMeters=0){
   if(!pc||!cameraEntity?.camera||!window.PlanetGeography?.directionFromLatLon)return null;
@@ -2364,7 +2381,7 @@ function renderMapPresentation(){
   const rect=canvas?.getBoundingClientRect?.(),portrait=(rect?.height||1)>(rect?.width||1),semantic=currentSemanticLayerPolicy(portrait);
   const started=performance.now(),contextStarted=performance.now(),context=mapContextForFocus(),contextKinds=semantic.contextKinds,placeKinds=semantic.placeKinds;
   recordSemanticPhase("contextQuery",contextStarted);
-  const contextDomStarted=performance.now(),centerMarker=gameplayCenterMarkerTelemetry(layer);
+  const contextDomStarted=performance.now(),centerMarker=gameplayCenterMarkerTelemetry(layer),protagonistMarker=updateProtagonistMapMarker(layer);
   const info=layer.querySelector(".planet-map-context");info.replaceChildren();
   const heading=document.createElement("div");heading.className="planet-map-context-head";heading.innerHTML="<small>WORLD MAP</small><strong></strong>";heading.querySelector("strong").textContent=semantic.displayBand;info.appendChild(heading);
   const names=document.createElement("div");names.className="planet-map-context-names";
@@ -2529,7 +2546,7 @@ function renderMapPresentation(){
     scaleDistanceMeters:ruler.distanceMeters,scaleLabel:formatDistanceMeters(ruler.distanceMeters),scaleStateIndex:scaleState.index,scaleStateLabel:scaleState.label,
     displayScaleIndex:displayScaleState.index,displayScaleLabel:displayScaleState.label,targetDisplayScaleIndex:targetDisplayScaleState.index,targetDisplayScaleLabel:targetDisplayScaleState.label,
     scalePixelLength:ruler.pixelLength,metersPerScreenPixel:ruler.metersPerScreenPixel,rulerTruthErrorMeters:ruler.truthErrorMeters,internalZoomScalar:Number(zoomState.scalar.toFixed(6)),targetZoomScalar:Number((zoomState.targetScalar??zoomState.scalar).toFixed(6)),zoomAnimating:Boolean(zoomState.animating),
-    centerMarker,coordinateFabricRevision:coordinateFabricAuthority()?.revisionSignature||null,
+    centerMarker,protagonistMarker,coordinateFabricRevision:coordinateFabricAuthority()?.revisionSignature||null,
     coordinateFabricStreamedCellIds:coordinateFabricAuthority()?.snapshot?.(mapWorldTileAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians))?.streamedCellIds||[],
     updateCount:mapPresentation.updateCount+1,lastUpdateMs:Number((performance.now()-started).toFixed(3)),lastBorderBuildMs:mapBorderCache.builtAtMs,bounded:true,fullWorldScan:false
   };
