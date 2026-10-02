@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import statistics
 import sys
 import time
 from pathlib import Path
@@ -16,12 +17,14 @@ TARGET = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000/"
 OUT = Path(sys.argv[2] if len(sys.argv) > 2 else "tools/wp_s003_001_002_001_artifact")
 SEED = "WP-S003-001-002-001-SEED"
 TESTED_HEAD = os.environ.get("WP_EVIDENCE_HEAD")
+BASELINE_ENGINE = "2.22.3"
+CURRENT_ENGINE = "2.23.0"
 
 
 def url_with(params):
     p = urlsplit(TARGET)
     q = dict(parse_qsl(p.query, keep_blank_values=True))
-    q.update(params)
+    q.update({k: str(v) for k, v in params.items() if v is not None})
     return urlunsplit((p.scheme, p.netloc, p.path, urlencode(q), p.fragment))
 
 
@@ -81,7 +84,70 @@ def settle_ground(d):
         (!r.requestedSignature || r.standInActive || String(r.activeSignature||'')===String(r.requestedSignature||'')) &&
         (ls.revealTier==='full'||ls.revealTier==='refined'));
     """, 240)
-    time.sleep(1.0)
+    time.sleep(.8)
+
+
+def fixed_navigation_sequence(d):
+    # Same deterministic camera/scale sequence for every engine/backend run.
+    d.execute_script("window.PlanetStage.setScaleIndex(7);")
+    time.sleep(.35)
+    d.execute_script("window.PlanetStage.setRotation(-15,-8);")
+    time.sleep(.35)
+    d.execute_script("window.PlanetStage.setRotation(-18,-10);")
+    time.sleep(.35)
+    d.execute_script("window.PlanetStage.setScaleIndex(9);")
+    time.sleep(.55)
+    settle_ground(d)
+
+
+def percentile(values, p):
+    if not values:
+        return None
+    vals = sorted(float(v) for v in values)
+    idx = min(len(vals)-1, max(0, int((len(vals)*p + .999999)) - 1))
+    return vals[idx]
+
+
+def sample_performance(d, count=30):
+    rows=[]
+    for _ in range(count):
+        row=d.execute_script("return window.PlanetStage?.snapshot?.()?.rendererBackend?.performance||null")
+        if row:
+            rows.append(row)
+        time.sleep(.05)
+    def nums(key):
+        out=[]
+        for row in rows:
+            v=row.get(key)
+            if isinstance(v,(int,float)):
+                out.append(float(v))
+        return out
+    frame=nums("latestFrameMs")
+    if not frame:
+        frame=nums("medianFrameMs")
+    update=nums("cpuUpdateMs")
+    render=nums("cpuRenderMs")
+    gpu=nums("gpuFrameMs")
+    draw=nums("drawCalls")
+    return {
+        "samples":len(rows),
+        "source": rows[-1].get("source") if rows else None,
+        "appStatsPublicApi": bool(rows and rows[-1].get("appStatsPublicApi")),
+        "frameMedianMs": statistics.median(frame) if frame else None,
+        "frameP95Ms": percentile(frame,.95),
+        "frameWorstMs": max(frame) if frame else None,
+        "cpuUpdateMedianMs": statistics.median(update) if update else None,
+        "cpuRenderMedianMs": statistics.median(render) if render else None,
+        "gpuFrameMedianMs": statistics.median(gpu) if gpu else None,
+        "drawCallsMedian": statistics.median(draw) if draw else None,
+        "primitiveCountLatest": rows[-1].get("primitiveCount") if rows else None,
+        "vramTotalBytes": rows[-1].get("vramTotalBytes") if rows else None,
+        "vramTextureBytes": rows[-1].get("vramTextureBytes") if rows else None,
+        "vramVertexBufferBytes": rows[-1].get("vramVertexBufferBytes") if rows else None,
+        "vramIndexBufferBytes": rows[-1].get("vramIndexBufferBytes") if rows else None,
+        "vramUniformBufferBytes": rows[-1].get("vramUniformBufferBytes") if rows else None,
+        "vramStorageBufferBytes": rows[-1].get("vramStorageBufferBytes") if rows else None,
+    }
 
 
 def backend_record(d, label):
@@ -97,6 +163,7 @@ def backend_record(d, label):
     """)
     return {
         "label": label,
+        "engineVersion": s.get("engineVersion"),
         "activeSeed": s.get("activeSeed"),
         "geographyHash": s.get("geographyHash"),
         "focusTile": (s.get("canonicalFocus") or {}).get("worldTile"),
@@ -116,12 +183,14 @@ def backend_record(d, label):
     }
 
 
-def run_success(label, gpu_mode, expected, ground=False, disable_webgpu=False):
+def run_success(label, gpu_mode, expected, engine=CURRENT_ENGINE, ground=True, disable_webgpu=False, build="release"):
     d = driver_for(disable_webgpu=disable_webgpu)
     try:
         d.get(url_with({
             "gpu": gpu_mode,
             "dev": "1",
+            "pc_version": engine if engine == BASELINE_ENGINE else None,
+            "pc_build": build if build != "release" else None,
             "evidence_fast_start": "1",
             "evidence_skip_destinations": "1",
         }))
@@ -130,24 +199,31 @@ def run_success(label, gpu_mode, expected, ground=False, disable_webgpu=False):
         wait(d, "return Boolean(document.querySelector('.renderer-backend-debug'))", 30)
         if ground:
             settle_ground(d)
-        time.sleep(2.0)
+        fixed_navigation_sequence(d)
+        perf=sample_performance(d)
         rec = backend_record(d, label)
+        rec["performanceSequence"]=perf
         active = (rec["backend"] or {}).get("active")
         if active != expected:
             raise AssertionError(f"{label}: expected {expected}, got {active}: {rec}")
+        if rec["engineVersion"] != engine:
+            raise AssertionError(f"{label}: expected engine {engine}, got {rec['engineVersion']}")
         if rec["activeSeed"] != SEED:
             raise AssertionError(f"{label}: seed mismatch {rec['activeSeed']}")
         if not rec["badge"] or expected.upper() not in rec["badge"]["text"].upper():
             raise AssertionError(f"{label}: developer backend badge missing active backend: {rec['badge']}")
+        if engine == CURRENT_ENGINE and CURRENT_ENGINE not in rec["badge"]["text"]:
+            raise AssertionError(f"{label}: developer badge missing engine version: {rec['badge']}")
         if gpu_mode == "auto" and expected == "webgpu" and (rec["backend"] or {}).get("selection") != "preferred":
             raise AssertionError(f"{label}: auto WebGPU was not marked preferred: {rec}")
         if gpu_mode == "auto" and expected == "webgl2" and not (rec["backend"] or {}).get("fallbackReason"):
             raise AssertionError(f"{label}: fallback reason missing: {rec}")
         if gpu_mode != "auto" and (rec["backend"] or {}).get("selection") != "developer-forced test":
             raise AssertionError(f"{label}: forced backend not marked developer-forced: {rec}")
-        perf=(rec["backend"] or {}).get("performance") or {}
-        if int(perf.get("sampleCount") or 0) < 10:
-            raise AssertionError(f"{label}: insufficient performance samples: {perf}")
+        if int((rec["backend"].get("performance") or {}).get("sampleCount") or 0) < 10:
+            raise AssertionError(f"{label}: insufficient performance samples: {rec['backend'].get('performance')}")
+        if engine == CURRENT_ENGINE and perf.get("appStatsPublicApi") is not True:
+            raise AssertionError(f"{label}: PlayCanvas 2.23 public AppStats not active: {perf}")
         path = OUT / f"{label}.png"
         if not d.save_screenshot(str(path)):
             raise RuntimeError(f"screenshot failed: {path}")
@@ -176,10 +252,42 @@ def run_forced_webgpu_failure():
         """)
         if "forced WebGPU" not in str(state.get("error")) and "forced WebGPU" not in str(state.get("fallback")):
             raise AssertionError(f"forced-WebGPU failure was not explicit: {state}")
-        path = OUT / "forced-webgpu-unavailable.png"
+        path = OUT / "07-forced-webgpu-unavailable.png"
         d.save_screenshot(str(path))
         state["screenshot"] = path.name
         return state
+    finally:
+        d.quit()
+
+
+def run_device_loss():
+    d=driver_for()
+    try:
+        d.get(url_with({
+            "gpu":"webgpu","dev":"1","pc_build":"debug",
+            "evidence_fast_start":"1","evidence_skip_destinations":"1"
+        }))
+        wait(d,"return window.PlanetStage?.snapshot?.()?.ready===true",240)
+        settle_ground(d)
+        before=backend_record(d,"device-loss-before")
+        if before["engineVersion"] != CURRENT_ENGINE or before["backend"].get("active")!="webgpu":
+            raise AssertionError(f"device-loss debug run not on 2.23 WebGPU: {before}")
+        pre=OUT/"08-device-loss-before.png"
+        d.save_screenshot(str(pre))
+        result=d.execute_async_script("""
+          const done=arguments[arguments.length-1];
+          window.RendererBackendPolicy.testDeviceLoss(650).then(done).catch(e=>done({error:String(e)}));
+        """)
+        if not result or result.get("supported") is not True or result.get("recovered") is not True:
+            raise AssertionError(f"device-loss recovery failed/unavailable: {result}")
+        wait(d,"return window.PlanetStage?.snapshot?.()?.ready===true",60)
+        time.sleep(.75)
+        after=backend_record(d,"device-loss-after")
+        if after["activeSeed"]!=before["activeSeed"] or after["geographyHash"]!=before["geographyHash"] or after["focusTile"]!=before["focusTile"]:
+            raise AssertionError(f"device loss changed deterministic world truth: before={before} after={after}")
+        post=OUT/"09-device-loss-after.png"
+        d.save_screenshot(str(post))
+        return {"result":result,"before":before,"after":after,"beforeScreenshot":pre.name,"afterScreenshot":post.name}
     finally:
         d.quit()
 
@@ -188,24 +296,33 @@ def compare_truth(records):
     base = records[0]
     for r in records[1:]:
         if r["activeSeed"] != base["activeSeed"] or r["geographyHash"] != base["geographyHash"]:
-            raise AssertionError(f"backend changed world identity: {base['label']} vs {r['label']}")
+            raise AssertionError(f"backend/engine changed world identity: {base['label']} vs {r['label']}")
         if r["focusTile"] != base["focusTile"] or r["zoom"] != base["zoom"] or r["rotation"] != base["rotation"]:
-            raise AssertionError(f"backend comparison scene mismatch: {base['label']} vs {r['label']}")
+            raise AssertionError(f"backend/engine comparison scene mismatch: {base['label']} vs {r['label']}")
 
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     report = {"wp":"WP-S003-001-002-001","testedHead":TESTED_HEAD,"seed":SEED,"pass":False,"records":[]}
     try:
-        auto = run_success("01-auto-webgpu", "auto", "webgpu", ground=True)
-        forced_gpu = run_success("02-forced-webgpu", "webgpu", "webgpu", ground=True)
-        forced_gl = run_success("03-forced-webgl2", "webgl2", "webgl2", ground=True)
-        fallback = run_success("04-auto-fallback-webgl2", "auto", "webgl2", ground=True, disable_webgpu=True)
+        baseline_gl = run_success("01-baseline-2223-webgl2", "webgl2", "webgl2", engine=BASELINE_ENGINE)
+        baseline_gpu = run_success("02-baseline-2223-webgpu", "webgpu", "webgpu", engine=BASELINE_ENGINE)
+        auto = run_success("03-current-2230-auto-webgpu", "auto", "webgpu")
+        forced_gpu = run_success("04-current-2230-webgpu", "webgpu", "webgpu")
+        forced_gl = run_success("05-current-2230-webgl2", "webgl2", "webgl2")
+        fallback = run_success("06-current-2230-auto-fallback", "auto", "webgl2", disable_webgpu=True)
         failure = run_forced_webgpu_failure()
-        records=[auto,forced_gpu,forced_gl,fallback]
+        device_loss = run_device_loss()
+        records=[baseline_gl,baseline_gpu,auto,forced_gpu,forced_gl,fallback]
         compare_truth(records)
         report["records"]=records
         report["forcedWebgpuFailure"]=failure
+        report["deviceLoss"]=device_loss
+        report["engineComparison"]={
+            "webgl2":{"baseline":baseline_gl["performanceSequence"],"current":forced_gl["performanceSequence"]},
+            "webgpu":{"baseline":baseline_gpu["performanceSequence"],"current":forced_gpu["performanceSequence"]},
+            "noAssumedWinner":True,
+        }
         report["backendParity"]={
             "sameSeed":True,
             "sameGeographyHash":True,
@@ -215,6 +332,12 @@ def main():
             "webgpuActive":auto["backend"]["active"]=="webgpu" and forced_gpu["backend"]["active"]=="webgpu",
             "webgl2Active":forced_gl["backend"]["active"]=="webgl2",
             "fallbackActive":fallback["backend"]["active"]=="webgl2" and bool(fallback["backend"].get("fallbackReason")),
+            "deviceLossRecovered":bool(device_loss["result"].get("recovered")),
+        }
+        report["entitylessEvaluation"]={
+            "adopted":False,
+            "reason":"No new entityless rewrite in this WP: existing high-count wilderness uses one batched MeshInstance and fauna is bounded; changing low-count interactive/static entities without a measured candidate would add complexity without evidence.",
+            "followUpOnlyIfMeasuredHotspot":True,
         }
         report["pass"]=all(report["backendParity"].values())
     except Exception as exc:
