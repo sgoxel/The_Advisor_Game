@@ -8531,6 +8531,17 @@ function scheduleLocalPrewarm(){
     startLocalJob(candidate,lat,lon,signature,true,"lod");return;
   }
 }
+// Transparent tangent tiers overlap by design. The World transparent pass sorts
+// by distance, and equal/near-equal AABB distances can resolve differently
+// across WebGL2/WebGPU. Give the nested terrain tiers explicit canonical sort
+// distances so the coarse surround always draws first, then medium, then focus.
+// This affects presentation ordering only; all pixels still come from the same
+// SEED-derived resources.
+function localTerrainMeshInstance(mesh,material,node,sortDistance){
+  const instance=new pc.MeshInstance(mesh,material,node);
+  instance.calculateSortDistance=()=>Number(sortDistance);
+  return instance;
+}
 // Double-buffered swap: only a fully prepared resource becomes visible.
 function activateLocalDetailResource(signature,fromCache){
   if(wp020EvidenceTransitionFreeze&&displayResource&&String(signature)!==String(displayResource.signature))return false;
@@ -8559,15 +8570,15 @@ function activateLocalDetailResource(signature,fromCache){
     localResources.lastHandoffCompletedAtMs=Number(performance.now().toFixed(3));
   }
   localDetail={...resource.detail,rebuildCount:(localDetail.rebuildCount||0)+1};
-  tangentPatch.render.meshInstances=[new pc.MeshInstance(resource.mesh,tangentPatchMaterial,tangentPatch)];
+  tangentPatch.render.meshInstances=[localTerrainMeshInstance(resource.mesh,tangentPatchMaterial,tangentPatch,1)];
   tangentPatchMaterial.diffuseMap=resource.detailTexture;tangentPatchMaterial.emissiveMap=resource.detailTexture;tangentPatchMaterial.opacityMap=resource.detailTexture;tangentPatchMaterial.opacityMapChannel="a";tangentPatchMaterial.blendType=pc.BLEND_NORMAL;tangentPatchMaterial.depthWrite=false;tangentPatchMaterial.update();
   if(focusRingPatch?.render&&focusRingMaterial){
-    focusRingPatch.render.meshInstances=[new pc.MeshInstance(resource.mediumMesh,focusRingMaterial,focusRingPatch)];
+    focusRingPatch.render.meshInstances=[localTerrainMeshInstance(resource.mediumMesh,focusRingMaterial,focusRingPatch,2)];
     focusRingMaterial.diffuseMap=resource.mediumTexture;focusRingMaterial.emissiveMap=resource.mediumTexture;focusRingMaterial.opacityMap=resource.mediumTexture;focusRingMaterial.opacityMapChannel="a";focusRingMaterial.diffuse.set(1,1,1);focusRingMaterial.emissive.set(1,1,1);focusRingMaterial.emissiveIntensity=.78;focusRingMaterial.blendType=pc.BLEND_NORMAL;focusRingMaterial.depthWrite=false;focusRingMaterial.update();
     localResources.mediumRingSpanFactor=LOCAL_MEDIUM_RING_SPAN_FACTOR;localResources.mediumRingWidthMeters=Number((resource.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR).toFixed(3));localResources.mediumRingHeightMeters=Number((resource.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR).toFixed(3));localResources.mediumRingWorldMatched=true;
   }
   if(horizonSkirt?.render){
-    horizonSkirt.render.meshInstances=[new pc.MeshInstance(resource.skirtMesh,horizonSkirtMaterial,horizonSkirt)];
+    horizonSkirt.render.meshInstances=[localTerrainMeshInstance(resource.skirtMesh,horizonSkirtMaterial,horizonSkirt,3)];
     localResources.surroundSpanFactor=LOCAL_SURROUND_SPAN_FACTOR;localResources.surroundWidthMeters=Number((resource.dims.patchWidth*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundHeightMeters=Number((resource.dims.patchHeight*LOCAL_SURROUND_SPAN_FACTOR).toFixed(3));localResources.surroundWorldMatched=true;
   }
   horizonSkirtMaterial.diffuseMap=resource.surroundTexture;horizonSkirtMaterial.emissiveMap=resource.surroundTexture;horizonSkirtMaterial.opacityMap=resource.surroundTexture;horizonSkirtMaterial.opacityMapChannel="a";horizonSkirtMaterial.diffuse.set(1,1,1);horizonSkirtMaterial.emissive.set(1,1,1);horizonSkirtMaterial.emissiveIntensity=.78;horizonSkirtMaterial.blendType=pc.BLEND_NORMAL;horizonSkirtMaterial.depthWrite=false;horizonSkirtMaterial.update();
