@@ -13,7 +13,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 TARGET = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000/?evidence_fast_start=1"
 OUT_DIR = Path(sys.argv[2] if len(sys.argv) > 2 else "tools/wp_s003_010_003_018_artifact")
-DISPLAY_LADDER = [
+INTERPOLATION_LADDER = [
     "1/10","1/15","1/20","1/30","1/50","1/75","1/100","1/150","1/250",
     "1/375","1/500","1/750","1/1000","1/1500","1/2500","1/3750",
     "1/5000","1/7500","1/10000"
@@ -101,8 +101,11 @@ def wait_ready(driver):
     stage = snap(driver)
     if stage.get("version") != "planet-smooth-zoom-v1":
         raise AssertionError(f"unexpected PlanetStage version: {stage.get('version')}")
-    if stage["zoom"].get("displayScaleLadder") != DISPLAY_LADDER:
-        raise AssertionError(f"display ladder mismatch: {stage['zoom'].get('displayScaleLadder')}")
+    canonical = ["1/10","1/20","1/50","1/100","1/250","1/500","1/1000","1/2500","1/5000","1/10000"]
+    if stage["zoom"].get("displayScaleLadder") != canonical:
+        raise AssertionError(f"canonical display ladder mismatch: {stage['zoom'].get('displayScaleLadder')}")
+    if stage["zoom"].get("interpolationScaleLadder") != INTERPOLATION_LADDER:
+        raise AssertionError(f"interpolation ladder mismatch: {stage['zoom'].get('interpolationScaleLadder')}")
 
 
 def deterministic_land_target(driver):
@@ -183,7 +186,7 @@ def transition_to(driver, index, tag, focus0, pose0, screenshot=True, settle_det
     driver.execute_script("window.PlanetStage.setAnimatedScaleIndex(arguments[0],arguments[1]);", int(index), tag)
     commanded = snap(driver)
     target_scalar = float(commanded["zoom"]["targetScalar"])
-    if commanded["zoom"]["targetDisplayScaleIndex"] != index:
+    if commanded["zoom"]["targetInterpolationScaleIndex"] != index:
         raise AssertionError(f"{tag}: target index mismatch: {commanded['zoom']}")
     if abs(target_scalar - before_scalar) > 1e-7:
         if commanded["zoom"]["animation"].get("active") is not True:
@@ -208,7 +211,7 @@ def transition_to(driver, index, tag, focus0, pose0, screenshot=True, settle_det
         if direction < 0 and scalar - 2e-6 > last_scalar:
             raise AssertionError(f"{tag}: non-monotonic reverse scalar {last_scalar}->{scalar}")
         last_scalar = scalar
-        labels.append(s["zoom"]["displayScaleLabel"])
+        labels.append(s["zoom"]["interpolationScaleLabel"])
         lods.append(s["zoom"].get("requestedLevel"))
         fd = float((s["canonicalFocus"].get("screenSpaceFocus") or {}).get("deltaPixels") or 0)
         max_focus_delta = max(max_focus_delta, fd)
@@ -216,15 +219,15 @@ def transition_to(driver, index, tag, focus0, pose0, screenshot=True, settle_det
             samples.append({
                 "scalar": scalar,
                 "targetScalar": float(s["zoom"]["targetScalar"]),
-                "displayScale": s["zoom"]["displayScaleLabel"],
-                "targetScale": s["zoom"]["targetDisplayScaleLabel"],
+                "displayScale": s["zoom"]["interpolationScaleLabel"],
+                "targetScale": s["zoom"]["targetInterpolationScaleLabel"],
                 "active": bool(s["zoom"]["animation"]["active"]),
                 "velocity": float(s["zoom"]["animation"]["velocityScalarPerSecond"]),
                 "requestedLevel": s["zoom"].get("requestedLevel"),
                 "visibleLevel": s["zoom"].get("visibleLevel"),
                 "prefetchState": s["zoom"]["animation"].get("prefetchState"),
             })
-        if not s["zoom"]["animation"]["active"] and s["zoom"]["displayScaleLabel"] == DISPLAY_LADDER[index]:
+        if not s["zoom"]["animation"]["active"] and s["zoom"]["interpolationScaleLabel"] == INTERPOLATION_LADDER[index]:
             break
         time.sleep(.04)
     else:
@@ -248,7 +251,7 @@ def transition_to(driver, index, tag, focus0, pose0, screenshot=True, settle_det
     return {
         "tag": tag,
         "index": index,
-        "label": DISPLAY_LADDER[index],
+        "label": INTERPOLATION_LADDER[index],
         "startScalar": before_scalar,
         "targetScalar": target_scalar,
         "durationMs": float(final["zoom"]["animation"].get("lastDurationMs") or 0),
@@ -276,6 +279,7 @@ def main():
         evidence["seed"] = base["activeSeed"]
         evidence["targetFocus"] = {"target":target,"latitudeDegrees":focus0[0],"longitudeDegrees":focus0[1]}
         evidence["displayLadder"] = base["zoom"]["displayScaleLadder"]
+        evidence["interpolationLadder"] = base["zoom"]["interpolationScaleLadder"]
 
         # Normal wheel input must retarget without teleporting the rendered view.
         canvas = driver.find_element("id", "planetCanvas")
@@ -283,8 +287,10 @@ def main():
         wheel_before = snap(driver)
         driver.execute_script("arguments[0].dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}));", canvas)
         wheel_commanded = snap(driver)
-        if wheel_commanded["zoom"]["targetDisplayScaleLabel"] != "1/15":
-            raise AssertionError(f"wheel did not target 1/15: {wheel_commanded['zoom']}")
+        if wheel_commanded["zoom"]["targetInterpolationScaleLabel"] != "1/15":
+            raise AssertionError(f"wheel did not target internal 1/15 milestone: {wheel_commanded['zoom']}")
+        if wheel_commanded["zoom"]["targetDisplayScaleLabel"] not in base["zoom"]["displayScaleLadder"]:
+            raise AssertionError(f"wheel exposed non-canonical player scale: {wheel_commanded['zoom']}")
         if wheel_commanded["zoom"]["animation"].get("active") is not True:
             raise AssertionError("wheel zoom was instantaneous")
         assert_bounded_first_progress(
@@ -326,7 +332,7 @@ def main():
                     transitions.append({"tag":"forward-1_10","index":0,"label":"1/10","startScalar":0,"targetScalar":0,"durationMs":0,"animationFrames":0,"labelsSeen":["1/10"],"lodsSeen":[],"maxScreenFocusDeltaPixels":float((s["canonicalFocus"].get("screenSpaceFocus") or {}).get("deltaPixels") or 0),"prefetchState":s["zoom"]["animation"].get("prefetchState"),"prefetchRequests":int(s["zoom"]["animation"].get("prefetchRequests") or 0),"screenshot":shot})
                     target_scalars.append(0.0)
                     continue
-                rec = transition_to(driver, index, f"forward-{DISPLAY_LADDER[index].replace('/','_')}", focus0, pose0, screenshot=True)
+                rec = transition_to(driver, index, f"forward-{INTERPOLATION_LADDER[index].replace('/','_')}", focus0, pose0, screenshot=True)
                 transitions.append(rec)
                 target_scalars.append(rec["targetScalar"])
         if any(b <= a for a,b in zip(target_scalars, target_scalars[1:])):
@@ -336,7 +342,7 @@ def main():
         reverse = []
         reverse_capture = {17,14,12,8,4,0}
         for index in reverse_indices:
-            reverse.append(transition_to(driver, index, f"reverse-{DISPLAY_LADDER[index].replace('/','_')}", focus0, pose0, screenshot=index in reverse_capture))
+            reverse.append(transition_to(driver, index, f"reverse-{INTERPOLATION_LADDER[index].replace('/','_')}", focus0, pose0, screenshot=index in reverse_capture))
         evidence["forward"] = transitions
         evidence["reverse"] = reverse
 
@@ -364,7 +370,7 @@ def main():
         final = snap(driver)
         evidence["summary"] = {
             "version": final["version"],
-            "displayMilestoneCount": len(DISPLAY_LADDER),
+            "displayMilestoneCount": len(INTERPOLATION_LADDER),
             "forwardTransitionCount": len(transitions),
             "reverseTransitionCount": len(reverse),
             "retargetCount": int(final["zoom"]["animation"].get("retargetCount") or 0),
