@@ -349,6 +349,29 @@ def _canonical_focus_starting_village(driver):
         raise RuntimeError(f"could not prepare canonical focus village: {result}")
     return result
 
+def _canonical_focus_protagonist_wide_setup(driver):
+    result=driver.execute_script("""
+      const stage=window.PlanetStage;
+      const read=()=>window.Protagonist?.getPosition?.()||window.SeedSystem?.getCampaign?.()?.protagonist||null;
+      const before=read();
+      if(!stage||!before)return {ok:false,reason:'authoritative-protagonist-unavailable'};
+      stage.closePlaces?.();
+      stage.setWorldTileFocus(String(before.x),String(before.y));
+      const scalar=stage.scalarForFootprintHeight(80);
+      stage.setZoomScalar(scalar);
+      const after=read();
+      return {
+        ok:true,scalar,
+        before:{x:String(before.x),y:String(before.y)},
+        after:after?{x:String(after.x),y:String(after.y)}:null
+      };
+    """)
+    if not result or not result.get("ok"):
+        raise RuntimeError(f"could not prepare wider-view protagonist focus: {result}")
+    if result.get("before")!=result.get("after"):
+        raise RuntimeError(f"wider-view camera setup mutated protagonist simulation position: {result}")
+    return result
+
 def _canonical_focus_frame(driver,index,timeout):
     if index==0:
         set_exact_viewport(driver,1440,900)
@@ -381,16 +404,20 @@ def _canonical_focus_frame(driver,index,timeout):
         return {"action":"places-canonical-view","viewport":_inner_viewport(driver),"stage":_stage_snapshot(driver),"ui":_canonical_focus_ui_state(driver),"setup":{**prep,"selected":selected}}
     if index==1:
         set_exact_viewport(driver,1440,900)
-        prep=_canonical_focus_starting_village(driver)
-        driver.execute_script("""
-          const stage=window.PlanetStage;
-          stage.setZoomScalar(stage.scalarForFootprintHeight(80));
-        """)
+        prep=_canonical_focus_protagonist_wide_setup(driver)
         _wait(driver,"""
-          const s=window.PlanetStage?.snapshot?.(),p=s?.npcPresentation||{};
-          const nonFinal=Number(s?.zoom?.scalar)<0.999999;
-          const nearReady=s?.zoom?.visibleLevel==='near-ground-close'||s?.zoom?.requestedLevel==='near-ground-close';
-          return Boolean(s?.ready && nonFinal && nearReady && p?.protagonistMarkerVisible===true && p?.protagonistBillboardVisible!==true && (window.PlanetStage?.inspectionTargets?.()||[]).some(x=>x.type==='protagonist'));
+          const s=window.PlanetStage?.snapshot?.(),p=s?.npcPresentation||{},ls=s?.projection?.localStatic||{};
+          const t=(window.PlanetStage?.inspectionTargets?.()||[]).find(x=>x.type==='protagonist');
+          const c=document.getElementById('planetCanvas')?.getBoundingClientRect?.(),b=t?.bounds;
+          const cx=b?(Number(b.left)+Number(b.right))/2:NaN,cy=b?(Number(b.top)+Number(b.bottom))/2:NaN;
+          const inViewport=Boolean(c&&Number.isFinite(cx)&&Number.isFinite(cy)&&cx>=0&&cx<=Number(c.width)&&cy>=0&&cy<=Number(c.height));
+          return Boolean(
+            s?.ready && Number(s?.zoom?.scalar)<0.999999 &&
+            s?.zoom?.visibleLevel==='near-ground-close' &&
+            ls?.revealTier==='refined' &&
+            p?.protagonistMarkerVisible===true && p?.protagonistBillboardVisible!==true &&
+            t && inViewport
+          );
         """,timeout,"80m wider-view protagonist marker")
         picked=driver.execute_script("""
           const t=(window.PlanetStage.inspectionTargets()||[]).find(x=>x.type==='protagonist');
