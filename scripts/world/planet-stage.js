@@ -3470,6 +3470,10 @@ function buildLocalWildernessMesh(plan,frame,reveal){
     // rare large outcrops at wider local views; all deterministic items remain
     // in the cached plan and materialize again when their physical scale is legible.
     if(viewHeight>45&&item.family!=="outcrop")continue;
+    // Box-like fallen wood/stumps are useful semantic dressing but visually
+    // dominate the final orthographic ground frame when repeated. Keep them as
+    // deterministic rare accents while preserving every item in the cached plan.
+    if(viewHeight<=45&&["log","driftwood","stump"].includes(item.family)&&Number(item.variant||0)<.72)continue;
     const managed=localWildernessManaged(item,reveal);if(managed.reject){rejectedManaged++;if(managed.road)rejectedRoad++;continue;}
     const x=item.east/unit,z=-item.north/unit,y=localGroundHeightUnits(item.east,item.north,frame)+.012,baseColor=wildernessColor(item.family,item.biome);
     const variant=clamp(Number(item.variant??.5),0,1),tone=.90+variant*.18,color=[clamp(baseColor[0]*tone,0,1),clamp(baseColor[1]*tone,0,1),clamp(baseColor[2]*tone,0,1),255];
@@ -7716,7 +7720,12 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // the medium context so the 1x focus does not appear as a sharp richer patch.
   // Strategic tiers remain locked to one parent photometry basis.
   const contextRefineWeight=contextRing?(sharedPhotometryLock?0:smoothstep01(clamp((contextResolutionRatio-1)/.55,0,1))*.90):0;
-  const useMicroDetail=metersPerTexel<=4&&!contextRing;
+  // The medium context ring can be physically sub-4 m/texel at the last local
+  // tiers. Excluding it from the same registered micro-surface family made the
+  // 1x child visibly richer inside a rectangular footprint. Let any physically
+  // eligible layer sample the identical world-registered micro field; context
+  // gain is bounded below by its refinement weight.
+  const useMicroDetail=metersPerTexel<=4;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   // Surface relief is presented as continuous hillshade, not synthetic
   // cartographic contour bands. The previous 420 m sine contours and strong
@@ -8083,7 +8092,9 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // As the physical texel size approaches gameplay scale, let canonical
         // registered-meter micro terrain carry more of the surface. This keeps
         // close props visually grounded while coarser views retain macro identity.
-        const closeWeight=smoothstep01((4-metersPerTexel)/3.5),microWeight=lerp(.16,.32,closeWeight);
+        const closeWeight=smoothstep01((4-metersPerTexel)/3.5);
+        const contextMicroContinuity=contextRing?lerp(.78,1,contextRefineWeight):1;
+        const microWeight=lerp(.16,.32,closeWeight)*contextMicroContinuity;
         displayColor=authoritative.map((v,i)=>clamp(v*(1-microWeight)+micro[i]*microWeight,0,1));
       }
       // High peaks are legitimately snow-covered, but the canonical near-white
@@ -8110,7 +8121,12 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // views keep their coarse canonical atlas transfer; near/max zoom gains
       // the warm, colorful living-world hierarchy without adding world detail.
       const styleContract=worldVisualStyle()?.localDetail||{},styleMax=Math.max(4,Number(styleContract.maxMetersPerTexel||28));
-      const livingWorldStyleWeight=contextRing?0:smoothstep01(clamp((styleMax-metersPerTexel)/(styleMax-4),0,1));
+      const localStyleBand=smoothstep01(clamp((styleMax-metersPerTexel)/(styleMax-4),0,1));
+      // Keep the 3x medium ring on the same local color family once its physical
+      // texel size can resolve that treatment. The ring remains slightly more
+      // restrained until its registered high-pass refinement converges, but it
+      // no longer presents an ungraded backdrop around the graded 1x child.
+      const livingWorldStyleWeight=localStyleBand*(contextRing?lerp(.78,1,contextRefineWeight):1);
       if(livingWorldStyleWeight>.001){
         const role=localSurfaceStyleRole(parentSample),styled=worldStyleRgb(role,displayColor);
         displayColor=displayColor.map((v,i)=>clamp(lerp(v,styled[i],livingWorldStyleWeight),0,1));
