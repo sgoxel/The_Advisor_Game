@@ -10527,15 +10527,22 @@ async function buildScene(){  const started=performance.now();
   mapBorderEndpointSnapCache.clear();
   atlasEntityCache.clear();atlasIdentityCache.clear();atlasStickyEntities.clear();atlasLabelPlacementCache.clear();
   if(typeof geography.signatureCooperative==="function"){
+    const signatureSamples=16*36;
+    let lastSignatureProgress=52;
     geographySignature=await geography.signatureCooperative({
       budgetMs:STARTUP_SLICE_BUDGET_MS,
       yield:yieldBrowser,
-      onSlice:elapsed=>{
+      onSlice:(elapsed,sampleCount)=>{
         startupScheduler.geographySignatureSliceCount++;
         startupScheduler.geographySignatureMaxSliceMs=Math.max(
           Number(startupScheduler.geographySignatureMaxSliceMs||0),
           Number((Number(elapsed)||0).toFixed(3))
         );
+        const progress=52+14*Math.min(1,Math.max(0,Number(sampleCount)||0)/signatureSamples);
+        if(progress>=lastSignatureProgress+.5||sampleCount>=signatureSamples){
+          lastSignatureProgress=progress;
+          setStartupProgress("geography","Generating continents, oceans and islands…",progress);
+        }
       }
     });
   }else geographySignature=geography.signature();

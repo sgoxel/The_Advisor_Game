@@ -144,6 +144,19 @@ def focus_starting_village(driver):
         raise RuntimeError("starting village unavailable")
     return result
 
+def align_protagonist_with_starting_village(driver,village):
+    result=js(driver,"""
+      const campaign=window.SeedSystem?.getCampaign?.();
+      if(!campaign)return null;
+      campaign.protagonist=window.WorldCoordinates.position(String(arguments[0]),String(arguments[1]));
+      const p=window.Protagonist?.getPosition?.()||campaign.protagonist;
+      return {x:String(p.x),y:String(p.y)};
+    """,village["center"]["x"],village["center"]["y"])
+    expected={"x":village["center"]["x"],"y":village["center"]["y"]}
+    if result!=expected:
+        raise RuntimeError("could not place the evidence protagonist at the canonical starting village: "+json.dumps({"expected":expected,"actual":result}))
+    return result
+
 def descriptors(driver):
     return js(driver,"""
       return (window.PlanetStage.placeDescriptors()||[]).map(d=>({
@@ -254,12 +267,11 @@ def wait_marker(driver):
       const before=read();
       if(!before)return {ok:false,reason:'authoritative-protagonist-unavailable'};
       stage.setWorldTileFocus(String(before.x),String(before.y));
-      // 240 m is deliberately inside the current near-ground-close SSE
-      // ownership window at the 1280x800 evidence viewport. 80 m now
-      // legitimately resolves to the finer ground LOD under the 2 px SSE
-      // target, so it cannot prove the required wider-view marker state.
+      // Use the normal animated path so local resources can become ready
+      // before the wider-view marker assertion, rather than jumping over LOD
+      // preparation with a direct scalar assignment.
       const footprintMeters=240,scalar=stage.scalarForFootprintHeight(footprintMeters);
-      stage.setZoomScalar(scalar);
+      stage.setZoomTargetScalar(scalar,'wp-s003-008-008-evidence-wide-view');
       const after=read();
       return {
         ok:true,scalar,footprintMeters,
@@ -271,20 +283,30 @@ def wait_marker(driver):
         raise RuntimeError("could not prepare wider-view protagonist focus: "+json.dumps(result))
     if result.get("before")!=result.get("after"):
         raise RuntimeError("wider-view camera setup mutated protagonist simulation position: "+json.dumps(result))
-    _wait(driver,"""
-      const s=window.PlanetStage?.snapshot?.(),p=s?.npcPresentation||{},ls=s?.projection?.localStatic||{};
-      const t=(window.PlanetStage?.inspectionTargets?.()||[]).find(x=>x.type==='protagonist');
-      const c=document.getElementById('planetCanvas')?.getBoundingClientRect?.(),b=t?.bounds;
-      const cx=b?(Number(b.left)+Number(b.right))/2:NaN,cy=b?(Number(b.top)+Number(b.bottom))/2:NaN;
-      const inViewport=Boolean(c&&Number.isFinite(cx)&&Number.isFinite(cy)&&cx>=0&&cx<=Number(c.width)&&cy>=0&&cy<=Number(c.height));
-      return Boolean(
-        s?.ready&&Number(s?.zoom?.scalar)<0.999999&&
-        s?.zoom?.visibleLevel==='near-ground-close'&&
-        ls?.revealTier==='refined'&&
-        p?.protagonistMarkerVisible===true&&p?.protagonistBillboardVisible!==true&&
-        t&&inViewport
-      );
-    """,200,"inspectable wider-view protagonist")
+    try:
+        _wait(driver,"""
+          const s=window.PlanetStage?.snapshot?.(),p=s?.npcPresentation||{},ls=s?.projection?.localStatic||{};
+          const t=(window.PlanetStage?.inspectionTargets?.()||[]).find(x=>x.type==='protagonist');
+          const c=document.getElementById('planetCanvas')?.getBoundingClientRect?.(),b=t?.bounds;
+          const cx=b?(Number(b.left)+Number(b.right))/2:NaN,cy=b?(Number(b.top)+Number(b.bottom))/2:NaN;
+          const inViewport=Boolean(c&&Number.isFinite(cx)&&Number.isFinite(cy)&&cx>=0&&cx<=Number(c.width)&&cy>=0&&cy<=Number(c.height));
+          return Boolean(
+            s?.ready&&Number(s?.zoom?.scalar)<0.999999&&
+            s?.zoom?.visibleLevel==='near-ground-close'&&
+            ls?.revealTier==='refined'&&
+            p?.protagonistMarkerVisible===true&&p?.protagonistBillboardVisible!==true&&
+            t&&inViewport
+          );
+        """,240,"inspectable wider-view protagonist")
+    except RuntimeError as error:
+        state=js(driver,"""
+          const s=window.PlanetStage?.snapshot?.(),p=s?.npcPresentation||{},l=s?.projection?.localStatic||{};
+          const t=(window.PlanetStage?.inspectionTargets?.()||[]).find(x=>x.type==='protagonist');
+          return {zoom:s?.zoom,local:{active:l.active,level:l.level,revealTier:l.revealTier,requested:s?.projection?.requestedLodIndex,signature:l.signature},
+            npc:{active:p.active,marker:p.protagonistMarkerVisible,billboard:p.protagonistBillboardVisible,ready:p.groundRepresentationReady},
+            protagonist:t||null};
+        """)
+        raise RuntimeError(f"{error}; wider-view state={json.dumps(state,sort_keys=True)}") from error
     return result
 
 def protagonist_focus_assert(driver,moved=False):
@@ -394,6 +416,7 @@ for seed in SEEDS:
             raise RuntimeError(f"{seed}: repeated same-target focus proof missing")
         invalid=invalid_target_assert(driver)
         focus_starting_village(driver)
+        align_protagonist_with_starting_village(driver,village)
         wait_marker(driver)
         protagonist_first=protagonist_focus_assert(driver,False)
         moved_to=move_protagonist_for_evidence(driver)
