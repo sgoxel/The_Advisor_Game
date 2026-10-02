@@ -5,7 +5,7 @@
 // The loading presentation supplies the palette/mood language only. Gameplay
 // keeps its own geometry, sprites, UI and renderer architecture.
 const STYLE=Object.freeze({
-  signature:"living-world-style-v7",
+  signature:"living-world-style-v8",
   reference:"scene-loading-color-language",
   palette:Object.freeze({
     gold:Object.freeze([0.949,0.831,0.494]),
@@ -42,9 +42,11 @@ const STYLE=Object.freeze({
     metalness:0
   }),
   celLighting:Object.freeze({
-    model:"four-band-lambert",
+    model:"four-band-lambert-filled-shadow",
     thresholds:Object.freeze([0.14,0.43,0.76]),
-    diffuseLevels:Object.freeze([0,0.34,0.68,1]),
+    diffuseLevels:Object.freeze([0.16,0.40,0.70,1]),
+    shadowFloor:0.16,
+    fillBalanced:true,
     sharedWorldMaterials:true,
     unlitMaterialsUnaffected:true
   }),
@@ -94,18 +96,18 @@ let litMaterialApplicationCount=0;
 const CEL_LIGHTING_GLSL=`
 float getLightDiffuse(vec3 worldNormal, vec3 viewDir, vec3 lightDirNorm) {
   float diffuse = max(dot(worldNormal, -lightDirNorm), 0.0);
-  if (diffuse < 0.14) return 0.0;
-  if (diffuse < 0.43) return 0.34;
-  if (diffuse < 0.76) return 0.68;
+  if (diffuse < 0.14) return 0.16;
+  if (diffuse < 0.43) return 0.40;
+  if (diffuse < 0.76) return 0.70;
   return 1.0;
 }
 `;
 const CEL_LIGHTING_WGSL=`
 fn getLightDiffuse(worldNormal: vec3f, viewDir: vec3f, lightDirNorm: vec3f) -> f32 {
   let diffuse = max(dot(worldNormal, -lightDirNorm), 0.0);
-  if (diffuse < 0.14) { return 0.0; }
-  if (diffuse < 0.43) { return 0.34; }
-  if (diffuse < 0.76) { return 0.68; }
+  if (diffuse < 0.14) { return 0.16; }
+  if (diffuse < 0.43) { return 0.40; }
+  if (diffuse < 0.76) { return 0.70; }
   return 1.0;
 }
 `;
