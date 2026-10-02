@@ -9475,9 +9475,13 @@ async function makeGeographyTexture(){
   return texture;
 }
 function canonicalTargetCoordinate(target){
-  let lat=Number(target?.latitudeRadians),lon=Number(target?.longitudeRadians);
-  if(!Number.isFinite(lat)&&Number.isFinite(Number(target?.latitudeDegrees)))lat=Number(target.latitudeDegrees)*Math.PI/180;
-  if(!Number.isFinite(lon)&&Number.isFinite(Number(target?.longitudeDegrees)))lon=Number(target.longitudeDegrees)*Math.PI/180;
+  const hasLatRadians=target?.latitudeRadians!==undefined&&target?.latitudeRadians!==null&&String(target.latitudeRadians).trim()!=="";
+  const hasLonRadians=target?.longitudeRadians!==undefined&&target?.longitudeRadians!==null&&String(target.longitudeRadians).trim()!=="";
+  const hasLatDegrees=target?.latitudeDegrees!==undefined&&target?.latitudeDegrees!==null&&String(target.latitudeDegrees).trim()!=="";
+  const hasLonDegrees=target?.longitudeDegrees!==undefined&&target?.longitudeDegrees!==null&&String(target.longitudeDegrees).trim()!=="";
+  let lat=hasLatRadians?Number(target.latitudeRadians):NaN,lon=hasLonRadians?Number(target.longitudeRadians):NaN;
+  if(!Number.isFinite(lat)&&hasLatDegrees&&Number.isFinite(Number(target.latitudeDegrees)))lat=Number(target.latitudeDegrees)*Math.PI/180;
+  if(!Number.isFinite(lon)&&hasLonDegrees&&Number.isFinite(Number(target.longitudeDegrees)))lon=Number(target.longitudeDegrees)*Math.PI/180;
   if(!Number.isFinite(lat)||!Number.isFinite(lon)||lat<(-Math.PI/2-1e-9)||lat>(Math.PI/2+1e-9))return null;
   const wrapped=wrapLongitudeRadians(lon);
   return Object.freeze({
