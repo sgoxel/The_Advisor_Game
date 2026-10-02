@@ -336,6 +336,26 @@ def _canonical_focus_ui_state(driver):
       };
     """)
 
+def _install_canonical_focus_campaign(driver):
+    seed="CANONICAL-FOCUS-008008-VISUAL"
+    campaign=json.dumps({
+        "seed":seed,
+        "realStartMs":int(time.time()*1000),
+        "fantasyStart":{"year":1100,"month":1,"day":1,"hour":11,"minute":30,"second":0,"millisecond":0},
+        "protagonist":{"x":"0","y":"0"},
+        "restartCount":0,
+    },separators=(",",":"))
+    settings=json.dumps({"seed":seed},separators=(",",":"))
+    source=f"""
+      try {{
+        localStorage.setItem('theAdvisorGame.wp001.campaign.v2', {json.dumps(campaign)});
+        localStorage.setItem('theAdvisorGame.wp001.settings.v2', {json.dumps(settings)});
+        localStorage.setItem('advisor.planet.seed.v1', {json.dumps(seed)});
+      }} catch (_) {{}}
+    """
+    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument",{"source":source})
+    return seed
+
 def _canonical_focus_starting_village(driver):
     result=driver.execute_script("""
       const stage=window.PlanetStage,seed=stage?.snapshot?.()?.activeSeed;
@@ -1257,6 +1277,10 @@ def run_capture(args):
     try:
         set_exact_viewport(driver,width,height)
         url=_target_url(args.target)
+        if args.scenario==WP_CANONICAL_FOCUS_SCENARIO:
+            _install_canonical_focus_campaign(driver)
+            sep="&" if "?" in url else "?"
+            url=url+sep+"evidence_fast_start=1&dev=1&gpu=webgl2"
         driver.get(url)
         _wait_document(driver,args.ready_timeout)
         _wait_stage(driver,args.ready_timeout)
