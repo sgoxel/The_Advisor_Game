@@ -2795,6 +2795,7 @@ body:has(.advisor-rank-readout[open]) .advisor-economy-launcher{
 
 /* WP-S003-008-007 — universal draggable/minimizable window shell */
 [data-window-shell]{box-sizing:border-box}
+[data-window-shell][hidden]{display:none!important}
 .local-event-vignette[data-window-shell]{pointer-events:auto}
 .window-shell-handle{position:relative;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 .window-shell-handle:active{cursor:grabbing}
@@ -2812,8 +2813,8 @@ body:has(.advisor-rank-readout[open]) .advisor-economy-launcher{
 .local-event-kicker.window-shell-handle>.window-shell-minimize,
 .local-event-kicker.window-shell-handle>.window-shell-close{width:30px;height:30px;flex-basis:30px;border-radius:9px;font-size:18px}
 .window-shell-dock{
-  position:fixed;left:max(10px,env(safe-area-inset-left));bottom:max(10px,env(safe-area-inset-bottom));z-index:120;
-  display:flex;flex-wrap:wrap;gap:7px;max-width:calc(100vw - 20px);pointer-events:auto
+  position:fixed;left:50%;top:max(96px,calc(env(safe-area-inset-top) + 88px));z-index:120;
+  display:flex;flex-wrap:wrap;gap:7px;max-width:calc(100vw - 20px);transform:translateX(-50%);pointer-events:auto
 }
 .window-shell-dock[hidden]{display:none!important}
 .window-shell-dock-item{
@@ -2826,12 +2827,12 @@ body.window-shell-dragging{user-select:none;-webkit-user-select:none}
 body.window-shell-dragging .planet-stage-root canvas{pointer-events:none!important}
 @media(max-width:600px){
   .window-shell-minimize,.window-shell-close{width:34px;height:34px;flex-basis:34px}
-  .window-shell-dock{left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));max-width:none}
+  .window-shell-dock{top:max(96px,calc(env(safe-area-inset-top) + 88px));max-width:calc(100vw - 16px)}
   .window-shell-dock-item{min-height:40px;padding:0 9px}
 }
 @media(max-height:430px) and (orientation:landscape){
   .window-shell-minimize,.window-shell-close{width:28px;height:28px;flex-basis:28px;border-radius:8px;font-size:17px}
-  .window-shell-dock{gap:5px;bottom:6px}
+  .window-shell-dock{gap:5px;top:max(96px,calc(env(safe-area-inset-top) + 88px))}
   .window-shell-dock-item{min-height:34px;padding:0 8px;border-radius:10px}
   .window-shell-dock-item b{font-size:8px}
 }

@@ -36,7 +36,7 @@ def rect(driver,sel):
     """,sel)
 
 def inside(r,w,h):
-    return bool(r and r["left"]>=-0.5 and r["top"]>=-0.5 and r["right"]<=w+0.5 and r["bottom"]<=h+0.5)
+    return bool(r and not r["hidden"] and r["width"]>0 and r["height"]>0 and r["left"]>=-0.5 and r["top"]>=-0.5 and r["right"]<=w+0.5 and r["bottom"]<=h+0.5)
 
 def ws(driver):
     return driver.execute_script("return window.WindowShell?.snapshot?.()||null;")
@@ -63,8 +63,8 @@ def hit_tested_window_drag(driver,panel_sel,handle_sel,distance_x=120,distance_y
       const panel=document.querySelector(arguments[0]),handle=document.querySelector(arguments[1]);
       if(!panel||!handle)return null;
       const pr=panel.getBoundingClientRect(),hr=handle.getBoundingClientRect(),safe=10;
-      const xs=[hr.left+24,(hr.left+hr.right)/2,hr.right-24];
-      const ys=[hr.top+10,(hr.top+hr.bottom)/2,hr.bottom-10];
+      const xs=[(hr.left+hr.right)/2,hr.left+24,hr.right-24];
+      const ys=[(hr.top+hr.bottom)/2,hr.top+10,hr.bottom-10];
       let point=null;
       for(const y of ys){
         for(const x of xs){
@@ -89,6 +89,15 @@ def hit_tested_window_drag(driver,panel_sel,handle_sel,distance_x=120,distance_y
     if abs(plan["dx"])<35 and abs(plan["dy"])<35:
         raise RuntimeError("no usable in-viewport drag direction for "+panel_sel+": "+json.dumps(plan))
     before_shell=ws(driver)
+    driver.execute_script("""
+      window.__windowShellPointerProbe=[];
+      document.addEventListener("pointerdown",e=>{
+        if(e.target.closest(arguments[0]))window.__windowShellPointerProbe.push({
+          x:e.clientX,y:e.clientY,button:e.button,target:e.target.tagName+"."+String(e.target.className||""),
+          handle:Boolean(e.target.closest(".window-shell-handle"))
+        });
+      },true);
+    """,panel_sel)
     handle=driver.find_element(By.CSS_SELECTOR,handle_sel)
     hr=plan["handle"]
     ox=plan["point"]["x"]-(hr["left"]+hr["width"]/2)
@@ -98,7 +107,8 @@ def hit_tested_window_drag(driver,panel_sel,handle_sel,distance_x=120,distance_y
     after_shell=ws(driver)
     bt=before_shell["telemetry"];at=after_shell["telemetry"]
     if at["dragStartCount"]<bt["dragStartCount"]+1 or at["dragEndCount"]<bt["dragEndCount"]+1:
-        raise RuntimeError("shared drag telemetry did not advance for "+panel_sel+": "+json.dumps({"plan":plan,"before":bt,"after":at}))
+        probe=driver.execute_script("return window.__windowShellPointerProbe||[];")
+        raise RuntimeError("shared drag telemetry did not advance for "+panel_sel+": "+json.dumps({"plan":plan,"before":bt,"after":at,"pointerProbe":probe}))
     if at["worldInputSuppressions"]<=bt["worldInputSuppressions"]:
         raise RuntimeError("world input was not suppressed during drag for "+panel_sel)
     return {"plan":plan,"telemetryBefore":bt,"telemetryAfter":at}
@@ -174,6 +184,7 @@ try:
     wait_js(driver,"(()=>{const n=document.getElementById('localEventVignette');if(!n||n.hidden)return false;const r=n.getBoundingClientRect();return r.width>40&&r.height>40&&getComputedStyle(n).display!=='none'&&document.querySelector('#localEventVignette .window-shell-minimize')&&document.querySelector('#localEventVignette .window-shell-close');})()",30)
     initial_active_ids=list(activation["active"].get("activeEventIds",[]))
     initial_focus=focus(driver)
+    time.sleep(.75)
     records.append({"name":"desktop-local-event-open","file":shot(driver,"01-desktop-local-event-open.png"),"rect":rect(driver,"#localEventVignette"),"shell":ws(driver)})
 
     handle=driver.find_element(By.CSS_SELECTOR,"#localEventVignette .window-shell-handle")
@@ -190,28 +201,36 @@ try:
 
     driver.find_element(By.CSS_SELECTOR,"#localEventVignette .window-shell-minimize").click()
     wait_js(driver,'document.getElementById("localEventVignette").hidden&&document.querySelector(\'#windowShellDock .window-shell-dock-item[data-window-key="local-event"]\')',10)
-    records.append({"name":"desktop-local-event-minimized","file":shot(driver,"03-desktop-local-event-minimized.png"),"shell":ws(driver)})
+    dock_rect=rect(driver,"#windowShellDock");scale_rect=rect(driver,".planet-scale-ruler")
+    if dock_rect and scale_rect and dock_rect["left"]<scale_rect["right"] and dock_rect["right"]>scale_rect["left"] and dock_rect["top"]<scale_rect["bottom"] and dock_rect["bottom"]>scale_rect["top"]:
+        raise RuntimeError(f"minimized dock overlaps scale ruler: dock={dock_rect}, scale={scale_rect}")
+    records.append({"name":"desktop-local-event-minimized","file":shot(driver,"03-desktop-local-event-minimized.png"),"dock":dock_rect,"scale":scale_rect,"shell":ws(driver)})
 
     driver.find_element(By.CSS_SELECTOR,'#windowShellDock .window-shell-dock-item[data-window-key="local-event"]').click()
     wait_js(driver,"!document.getElementById('localEventVignette').hidden",10)
     restored=rect(driver,"#localEventVignette")
     if abs(restored["left"]-after["left"])>2 or abs(restored["top"]-after["top"])>2:
         raise RuntimeError(f"restored position drifted: {after} -> {restored}")
+    driver.find_element(By.CSS_SELECTOR,"#localEventVignette .window-shell-minimize").click()
+    wait_js(driver,'document.getElementById("localEventVignette").hidden&&document.querySelector(\'#windowShellDock .window-shell-dock-item[data-window-key="local-event"]\')',10)
 
     open_places(driver)
     open_advisor(driver)
     driver.execute_script("window.WindowShell.scan();")
     wait_js(driver,"document.querySelector('.planet-places-panel .window-shell-minimize')&&document.querySelector('#advisorChatPanel .window-shell-minimize')",10)
+    driver.execute_script("window.__placesHandleBeforeRender=document.querySelector('.planet-places-panel .planet-places-head');")
+    driver.find_element(By.CSS_SELECTOR,".planet-places-filters button").click()
+    wait_js(driver,"document.querySelector('.planet-places-panel .planet-places-head')!==window.__placesHandleBeforeRender&&document.querySelector('.planet-places-panel .window-shell-minimize')&&document.querySelector('.planet-places-panel .planet-places-close')",10)
     # Prove shared minimize/restore on Advisor.
     driver.find_element(By.CSS_SELECTOR,"#advisorChatPanel .window-shell-minimize").click()
-    wait_js(driver,'document.getElementById("advisorChatPanel").hidden&&document.querySelector(\'#windowShellDock .window-shell-dock-item[data-window-key="advisor-chat"]\')',10)
+    wait_js(driver,'document.getElementById("advisorChatPanel").hidden&&getComputedStyle(document.getElementById("advisorChatPanel")).display==="none"&&document.querySelector(\'#windowShellDock .window-shell-dock-item[data-window-key="advisor-chat"]\')',10)
     driver.find_element(By.CSS_SELECTOR,'#windowShellDock .window-shell-dock-item[data-window-key="advisor-chat"]').click()
     wait_js(driver,"!document.getElementById('advisorChatPanel').hidden",10)
     # Drag Places through an actually exposed title point and choose a direction
     # with available viewport room so clamping cannot turn the evidence gesture
     # into a false negative when the panel starts near an edge.
     pb=rect(driver,".planet-places-panel")
-    places_drag=hit_tested_window_drag(driver,".planet-places-panel",".planet-places-panel .window-shell-handle")
+    places_drag=hit_tested_window_drag(driver,".planet-places-panel",".planet-places-panel .window-shell-handle",850,60)
     pa=rect(driver,".planet-places-panel")
     if abs(pa["left"]-pb["left"])<30 and abs(pa["top"]-pb["top"])<30:
         raise RuntimeError("Places did not use shared drag behavior: "+json.dumps({"before":pb,"after":pa,"drag":places_drag}))
@@ -220,6 +239,8 @@ try:
         raise RuntimeError("simultaneous windows not visible")
     if snap["windows"]["places"]["z"]<=snap["windows"]["advisor-chat"]["z"]:
         raise RuntimeError("Places drag did not raise focused window above Advisor")
+    if pa["left"]<rect(driver,"#advisorChatPanel")["right"] and pa["right"]>rect(driver,"#advisorChatPanel")["left"] and pa["top"]<rect(driver,"#advisorChatPanel")["bottom"] and pa["bottom"]>rect(driver,"#advisorChatPanel")["top"]:
+        raise RuntimeError("shared windows overlap after deterministic test placement")
     records.append({"name":"desktop-shared-places-advisor","file":shot(driver,"04-desktop-shared-places-advisor.png"),"placesBefore":pb,"placesAfter":pa,"placesDrag":places_drag,"shell":snap})
 
     # Close presentation only; authoritative local event remains active. The Places
@@ -230,7 +251,9 @@ try:
     driver.find_element(By.CSS_SELECTOR,"#advisorChatPanel .window-shell-minimize").click()
     wait_js(driver,"document.getElementById('advisorChatPanel').hidden",10)
     driver.find_element(By.CSS_SELECTOR,".planet-places-panel .window-shell-minimize").click()
-    wait_js(driver,"document.querySelector('.planet-places-panel').hidden",10)
+    wait_js(driver,'(()=>{const n=document.querySelector(".planet-places-panel");return n.hidden&&getComputedStyle(n).display==="none";})()',10)
+    driver.find_element(By.CSS_SELECTOR,'#windowShellDock .window-shell-dock-item[data-window-key="local-event"]').click()
+    wait_js(driver,"!document.getElementById('localEventVignette').hidden",10)
     wait_js(driver,"(()=>{const n=document.getElementById('localEventVignette');if(!n||n.hidden)return false;const r=n.getBoundingClientRect();const c=document.querySelector('#localEventVignette .window-shell-close');if(!c)return false;const cr=c.getBoundingClientRect();const hit=document.elementFromPoint(cr.left+cr.width/2,cr.top+cr.height/2);return Boolean(hit&&(hit===c||c.contains(hit)));})()",10)
     driver.find_element(By.CSS_SELECTOR,"#localEventVignette .window-shell-close").click()
     wait_js(driver,"document.getElementById('localEventVignette').hidden",10)

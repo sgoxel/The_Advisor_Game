@@ -18,6 +18,7 @@ let drag=null;
 let observer=null;
 let dock=null;
 let dockSignature=null;
+let dragEndBound=false;
 const telemetry={registerCount:0,activeCount:0,minimizedCount:0,dragStartCount:0,dragEndCount:0,clampCorrections:0,focusChanges:0,worldInputSuppressions:0,closeCount:0,restoreCount:0,resizeCount:0};
 
 function stateFor(key){
@@ -64,7 +65,7 @@ function clampNode(key,node){
   node.style.bottom="auto";
   node.style.transform="none";
   node.style.maxWidth="calc(100vw - 16px)";
-  node.style.maxHeight="calc(100vh - 16px)";
+  if(getComputedStyle(node).maxHeight==="none")node.style.maxHeight="calc(100vh - 16px)";
   node.style.zIndex=String(s.z);
 }
 function setMinimized(key,value){
@@ -141,6 +142,15 @@ function installControls(cfg,node,handle){
   }
 }
 function suppress(e){e.stopPropagation();telemetry.worldInputSuppressions++;}
+function endDrag(e){
+  if(!drag||drag.pointerId!==e.pointerId)return;
+  const active=drag;
+  clampNode(active.key,active.node);
+  drag=null;
+  telemetry.dragEndCount++;
+  suppress(e);
+  document.body.classList.remove("window-shell-dragging");
+}
 function bindDrag(cfg,node,handle){
   if(handle.dataset.windowShellDragBound)return;
   handle.dataset.windowShellDragBound="true";
@@ -160,17 +170,19 @@ function bindDrag(cfg,node,handle){
     const s=stateFor(cfg.key);s.x=drag.baseX+(e.clientX-drag.startX);s.y=drag.baseY+(e.clientY-drag.startY);
     clampNode(cfg.key,node);suppress(e);
   },true);
-  const end=e=>{
-    if(!drag||drag.key!==cfg.key||drag.pointerId!==e.pointerId)return;
-    clampNode(cfg.key,node);drag=null;telemetry.dragEndCount++;suppress(e);document.body.classList.remove("window-shell-dragging");
-  };
-  handle.addEventListener("pointerup",end,true);handle.addEventListener("pointercancel",end,true);
   node.addEventListener("pointerdown",()=>focus(cfg.key,node),true);
 }
 function register(cfg,node){
   if(!node)return null;
   const existing=registry.get(cfg.key);
-  if(existing?.node===node){applyState(cfg,node);return existing;}
+  if(existing?.node===node){
+    const handle=node.querySelector(cfg.handle)||node;
+    installControls(cfg,node,handle);
+    bindDrag(cfg,node,handle);
+    existing.handle=handle;
+    applyState(cfg,node);
+    return existing;
+  }
   const handle=node.querySelector(cfg.handle)||node;
   node.dataset.windowShell=cfg.key;
   node.dataset.windowShellVersion=VERSION;
@@ -206,6 +218,11 @@ function start(){
   if(typeof document==="undefined")return;
   ensureDock();scan();
   if(!observer){observer=new MutationObserver(()=>scan());observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:["hidden","data-event-id","data-window-instance"]});}
+  if(!dragEndBound){
+    document.addEventListener("pointerup",endDrag,true);
+    document.addEventListener("pointercancel",endDrag,true);
+    dragEndBound=true;
+  }
   addEventListener("resize",onResize,{passive:true});
   addEventListener("orientationchange",onResize,{passive:true});
   document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;const visible=[...registry.entries()].filter(([,r])=>r.node?.isConnected&&!r.node.hidden).sort((a,b)=>stateFor(b[0]).z-stateFor(a[0]).z);const top=visible[0];if(!top)return;const [key,rec]=top;const native=rec.cfg.close?rec.node.querySelector(rec.cfg.close):null;if(native)native.click();else closeWindow(key);});
