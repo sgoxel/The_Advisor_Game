@@ -7513,6 +7513,18 @@ const TERRAIN_DETAIL_OCTAVES=Object.freeze([[48000,700],[16000,320],[5200,140],[
 // focus patch read as a giant blurred square at 1/500-1/2500. Colors are
 // already world-coordinate stitched, so only a small bounded blend is needed.
 const LOCAL_TEXTURE_HANDOFF_FEATHER=.12;
+// Medium continuation textures are presentation coverage, not canonical tile
+// boundaries. Fade them radially across most of their span so the prepared
+// parent remains continuous without exposing a rectangular streaming footprint.
+const LOCAL_CONTEXT_RING_RADIAL_FEATHER=.62;
+function localTextureHandoffCoverage(u,v,contextRing){
+  if(contextRing){
+    const radialDistance=Math.hypot((u-.5)*2,(v-.5)*2);
+    return smoothstep01(clamp((1-radialDistance)/LOCAL_CONTEXT_RING_RADIAL_FEATHER,0,1));
+  }
+  const edgeDistance=Math.min(u,1-u,v,1-v);
+  return smoothstep01(clamp(edgeDistance/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
+}
 function detailOctaveWeight(wavelengthMeters,metersPerTexel){return smoothstep01((wavelengthMeters/Math.max(1e-6,metersPerTexel)-2)/4);}
 function terrainDetailHeight(east,north,metersPerTexel,salt){
   let h=0;
@@ -8150,8 +8162,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       if(evidenceProbeTargets){
         for(const target of evidenceProbeTargets){
           if(target.x!==x||target.y!==y)continue;
-          const probeEdge=Math.min(ux,1-ux,vz,1-vz);
-          const probeAlpha=featherEdges?smoothstep01(clamp(probeEdge/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1)):1;
+          const probeAlpha=featherEdges?localTextureHandoffCoverage(ux,vz,contextRing):1;
           evidenceProbes.push(Object.freeze({
             id:target.id,layerRole:String(evidenceLayerRole),pixel:Object.freeze({x,y}),uv:Object.freeze({u:Number(ux.toFixed(6)),v:Number(vz.toFixed(6))}),
             offsetMeters:Object.freeze({east:Number(east.toFixed(3)),north:Number(north.toFixed(3))}),
@@ -8173,8 +8184,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       const rgba=rgbaFromColor(displayColor),i=pixelOffset;
       // Shared photometry makes the rectangular resource edge visually neutral;
       // use only a broad edge feather for the subtle fine-frequency delta.
-      const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
-      const edgeCoverage=smoothstep01(clamp(edgeDistance/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
+      const edgeCoverage=localTextureHandoffCoverage(ux,vz,contextRing);
       data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*edgeCoverage):255;
       // Texture generation is cooperative below a full row. This protects the
       // main-thread budget on slower/software renderers without changing any
