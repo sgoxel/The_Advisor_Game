@@ -104,6 +104,38 @@ def snap(d):
     return d.execute_script("return window.PlanetStage?.snapshot?.()||null")
 
 
+def wait_for_presentation_frames(d, frames=4):
+    """Wait for actual browser presentation frames before screenshot capture.
+
+    SwiftShader/WebGPU CI can render at only a few frames per second. A fixed
+    sub-second sleep can therefore capture the previous material/resource frame
+    even though deterministic state is already updated. Waiting on rAF keeps the
+    visual A/B comparison tied to freshly presented frames without changing game
+    state, renderer policy, or authoritative world data.
+    """
+    previous_timeout = d.timeouts.script
+    try:
+        d.set_script_timeout(30)
+        return d.execute_async_script("""
+          const requested=Math.max(2,Number(arguments[0])||4);
+          const done=arguments[arguments.length-1];
+          let count=0;
+          const tick=()=>{
+            count++;
+            if(count>=requested){done({frames:count});return;}
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        """, frames)
+    finally:
+        try:
+            d.set_script_timeout(previous_timeout)
+        except Exception:
+            pass
+
+
+
+
 def browser_logs(d):
     try:
         return [
@@ -417,7 +449,7 @@ def run_success(label, gpu_mode, expected, engine=CURRENT_ENGINE, ground=True, d
         navigation_after=navigation_streaming_snapshot(d)
         perf=sample_performance(d)
         apply_evidence_time(d)
-        time.sleep(.15)
+        wait_for_presentation_frames(d, 4)
         rec = backend_record(d, label)
         rec["performanceSequence"]=perf
         rec["navigationStreamingSequence"]={"before":navigation_before,"after":navigation_after}
