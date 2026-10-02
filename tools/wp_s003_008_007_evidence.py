@@ -118,11 +118,15 @@ try:
 
     activation=driver.execute_script("""
       const seed=window.PlanetStage.snapshot().activeSeed;
-      const result=window.LocalEventVignettes.proofActivate(seed,'village-gathering','1201-02-01 12:00:00');
+      const proofNow=window.GameTime?.getTimestampKey?.();
+      if(!proofNow)throw new Error('Fantasy Game Time unavailable for Local Event proof activation');
+      const result=window.LocalEventVignettes.proofActivate(seed,'village-gathering',proofNow);
       window.WindowShell.scan();
-      return {seed,eventId:result.event?.id||null,active:window.LocalEventVignettes.snapshot(seed)};
+      const node=document.getElementById('localEventVignette'),r=node?.getBoundingClientRect?.();
+      return {seed,proofNow,eventId:result.event?.id||null,active:window.LocalEventVignettes.snapshot(seed),
+        geometry:r?{left:r.left,top:r.top,width:r.width,height:r.height,hidden:node.hidden}:null};
     """)
-    wait_js(driver,"document.getElementById('localEventVignette')&&!document.getElementById('localEventVignette').hidden&&document.querySelector('#localEventVignette .window-shell-minimize')&&document.querySelector('#localEventVignette .window-shell-close')",30)
+    wait_js(driver,"(()=>{const n=document.getElementById('localEventVignette');if(!n||n.hidden)return false;const r=n.getBoundingClientRect();return r.width>40&&r.height>40&&getComputedStyle(n).display!=='none'&&document.querySelector('#localEventVignette .window-shell-minimize')&&document.querySelector('#localEventVignette .window-shell-close');})()",30)
     initial_active_ids=list(activation["active"].get("activeEventIds",[]))
     initial_focus=focus(driver)
     records.append({"name":"desktop-local-event-open","file":shot(driver,"01-desktop-local-event-open.png"),"rect":rect(driver,"#localEventVignette"),"shell":ws(driver)})
