@@ -29,12 +29,12 @@ function loadEngine(){
   if(!enginePromise)enginePromise=import(ENGINE_URL);
   return enginePromise;
 }
-function normalizePreference(value){const v=String(value||"webgl2").toLowerCase();return ["webgl2","webgpu","auto"].includes(v)?v:"webgl2";}
+function normalizePreference(value){const v=String(value||"auto").toLowerCase();return ["webgl2","webgpu","auto"].includes(v)?v:"auto";}
 function finiteOrNull(value){if(value===null||value===undefined||value==="")return null;const n=Number(value);return Number.isFinite(n)?n:null;}
 function clamp(value,min,max){return Math.min(max,Math.max(min,value));}
 function worldVisualStyle(){return window.AdvisorWorldVisualStyle||null;}
 
-function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}={}){
+function create({backendPreference="auto",maxPixelRatio=null,renderScale=null}={}){
   const preference=normalizePreference(backendPreference),maxPixelRatioOverride=finiteOrNull(maxPixelRatio),renderScaleOverride=finiteOrNull(renderScale);
   let pc=null,app=null,device=null,host=null,canvas=null,resizeObserver=null,lastModel=null,proofState=null,occlusionProofState=null,beforeInit=null,afterInit=null,sceneAnchor=null,quality=null;
   let sceneAnchorRevision=0,lastPositionedAnchorRevision=0,lastResizeSignature="",lastCameraBillboardYawDegrees=45;
@@ -62,7 +62,7 @@ function create({backendPreference="webgl2",maxPixelRatio=null,renderScale=null}
   };
   const ambientFrameTelemetry={calls:0,totalMs:0,lastMs:0,maxMs:0,lastActiveResources:0};
 
-  function requestedDeviceTypes(){if(preference==="webgpu")return [pc.DEVICETYPE_WEBGPU,pc.DEVICETYPE_WEBGL2];if(preference==="auto"&&navigator.gpu)return [pc.DEVICETYPE_WEBGPU,pc.DEVICETYPE_WEBGL2];return [pc.DEVICETYPE_WEBGL2];}
+  function requestedDeviceTypes(){if(preference==="webgl2")return [pc.DEVICETYPE_WEBGL2];return [pc.DEVICETYPE_WEBGPU];}
   function deviceClass(){const width=Math.max(1,Number(window.innerWidth||host?.clientWidth||1)),height=Math.max(1,Number(window.innerHeight||host?.clientHeight||1)),shortSide=Math.min(width,height),longSide=Math.max(width,height),coarse=Boolean(window.matchMedia?.("(pointer:coarse)")?.matches);if(shortSide<=520||(longSide<=900&&shortSide<=520))return "phone";if(shortSide<=900||coarse)return "tablet";return "desktop";}
   function renderQualitySnapshot(){return window.RuntimeRenderQuality?.snapshot?.()||null;}
   function resolveQuality(width,height){
