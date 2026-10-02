@@ -323,7 +323,7 @@ function renderCard(seedValue){
   if(typeof document==="undefined")return null;
   const started=typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
   const seed=String(seedValue||activeSeed||""),events=activeEvents(seed),node=card();if(!node)return null;
-  const event=events[0]||null;node.hidden=!event;node.dataset.active=String(Boolean(event));node.dataset.eventType=event?.type||"";
+  const event=events[0]||null;node.hidden=!event;node.dataset.active=String(Boolean(event));node.dataset.eventType=event?.type||"";node.dataset.eventId=event?.id||"";node.dataset.windowInstance=event?.id||"";
   if(event){
     const q=s=>node.querySelector(s);
     if(q(".local-event-icon"))q(".local-event-icon").textContent=event.icon;
@@ -331,7 +331,7 @@ function renderCard(seedValue){
     if(q(".local-event-description"))q(".local-event-description").textContent=event.description;
     if(q(".local-event-meta"))q(".local-event-meta").textContent=event.location.label+" · until "+event.endTimestamp.slice(11,16);
     if(q(".local-event-participants"))q(".local-event-participants").textContent=event.participants.map(p=>p.name).join(" · ");
-    placeCard(node,event,seed);
+    placeCard(node,event,seed);\n    window.WindowShell?.refresh?.(node);
     if(typeof window!=="undefined"&&window.requestAnimationFrame)window.requestAnimationFrame(()=>{
       if(!node.hidden&&node.dataset.eventType===event.type)placeCard(node,event,seed);
     });
