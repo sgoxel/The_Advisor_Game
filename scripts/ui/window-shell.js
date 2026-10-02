@@ -27,13 +27,6 @@ function stateFor(key){
 function instanceKey(node,key){
   return String(node?.dataset?.windowInstance||node?.dataset?.eventId||node?.dataset?.eventType||key);
 }
-function setHidden(node,value){
-  if(!node)return false;
-  const next=Boolean(value);
-  if(node.hidden===next)return false;
-  node.hidden=next;
-  return true;
-}
 function ensureDock(){
   if(typeof document==="undefined")return null;
   if(dock&&dock.isConnected)return dock;
