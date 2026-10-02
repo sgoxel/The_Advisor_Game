@@ -3483,10 +3483,15 @@ function buildLocalWildernessMesh(plan,frame,reveal){
       const id=push(icx-tx*innerLength+bx*innerDepth,py+.001,icz-tz*innerLength+bz*innerDepth,inner);quad(ia,ib,ic,id);
       shoreAccentCount++;
     }
-    if(!["grass","flower"].includes(item.family)){
-      const patch=item.biome==="wet"?[.07,.20,.17]:item.biome==="rocky"?[.17,.16,.14]:item.biome==="wooded"?[.10,.20,.06]:[.23,.29,.08];
-      const pr=m*(item.family==="outcrop"?1.24:1.48),py=y+.002;
-      const pa=push(x-pr,py,z,patch),pb=push(x,py,z-pr*.72,patch),pcv=push(x+pr,py,z,patch),pd=push(x,py,z+pr*.72,patch);quad(pa,pb,pcv,pd);
+    // Ground contact accents belong only under heavy natural objects. The old
+    // blanket diamond under every bush/sapling/log produced large flat marker-
+    // like tiles at near-ground/ground zoom. Keep a much smaller irregular soil
+    // contact for rocks/outcrops/logs/stumps while vegetation stands directly on
+    // the terrain surface.
+    if(["rock","outcrop","log","driftwood","stump"].includes(item.family)){
+      const patch=item.biome==="wet"?[.09,.18,.14]:item.biome==="rocky"?[.19,.17,.13]:item.biome==="wooded"?[.11,.16,.07]:[.20,.20,.08];
+      const pr=m*(item.family==="outcrop"?.82:item.family==="rock"?.66:.58),py=y+.002;
+      const pa=push(x-pr,py,z,patch),pb=push(x+pr*.08,py,z-pr*.54,patch),pcv=push(x+pr,py,z+pr*.08,patch),pd=push(x-pr*.12,py,z+pr*.50,patch);quad(pa,pb,pcv,pd);
     }
     if(item.family==="rock"||item.family==="outcrop"){
       const ridge=item.family==="outcrop",apexEast=(variant-.5)*m*.58,apexNorth=(.5-variant)*m*.38;
@@ -7507,7 +7512,8 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   const wBroad=detailOctaveWeight(3600,metersPerTexel),wMid=detailOctaveWeight(1500,metersPerTexel),
     wField=detailOctaveWeight(700,metersPerTexel),wParcelDetail=detailOctaveWeight(460,metersPerTexel),
     wFine=detailOctaveWeight(280,metersPerTexel),wCopse=detailOctaveWeight(120,metersPerTexel),
-    wGroundDetail=detailOctaveWeight(90,metersPerTexel);
+    wGroundDetail=detailOctaveWeight(90,metersPerTexel),wLocalDetail=detailOctaveWeight(48,metersPerTexel),
+    wMicroDetail=detailOctaveWeight(18,metersPerTexel);
   if(wStrategic<=0&&wBroad<=0)return [0,0,0];
   const alpine=smoothstep01((elevation-2200)/900),lowland=1-alpine;
   // Strategic map tiers need resolvable structure before farm/copse wavelengths
@@ -7536,16 +7542,23 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
     surfaceValueNoise(we,wn,280,salt+23)*.34*wFine;
   const dryField=Math.max(0,parcel)*lowland,meadow=Math.max(0,-parcel)*lowland;
   const copse=surfaceValueNoise(we,wn,120,salt+29)*wCopse*lowland;
-  const mottle=surfaceValueNoise(we,wn,700,salt+31)*.024*wField+
+  // Preserve the already-visible broad field while adding two genuinely finer
+  // registered-meter octaves as the physical texel size shrinks. This prevents
+  // the settlement/near-ground children from becoming smoother than their
+  // parent even though their source raster and geometry are denser.
+  const closeDetailGain=1+smoothstep01(clamp((80-metersPerTexel)/72,0,1))*.38;
+  const mottle=(surfaceValueNoise(we,wn,700,salt+31)*.024*wField+
     surfaceValueNoise(we,wn,460,salt+33)*.030*wParcelDetail+
     surfaceValueNoise(we,wn,280,salt+37)*.026*wFine+
     surfaceValueNoise(we,wn,120,salt+41)*.016*wCopse+
-    surfaceValueNoise(we,wn,90,salt+43)*.010*wGroundDetail;
+    surfaceValueNoise(we,wn,90,salt+43)*.010*wGroundDetail+
+    surfaceValueNoise(we,wn,48,salt+47)*.014*wLocalDetail+
+    surfaceValueNoise(we,wn,18,salt+53)*.008*wMicroDetail)*closeDetailGain;
   // Map-scale readability comes from one continuous registered-meter cover
   // field, not from parcel meshes or camera-relative decoration. Stronger chroma
   // separation reveals woodland/meadow/dry openings only when physically
   // resolvable, so refinement adds information without changing world identity.
-  const coverContrast=lerp(1.18,1.74,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
+  const coverContrast=lerp(1.18,1.92,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
   return [
     (mottle*.76-forestDelta*.105-copse*.026+dryField*.095+meadow*.010)*coverContrast+strategic*(.72+.20*alpine),
     (mottle*.94-forestDelta*.010-copse*.008+dryField*.038+meadow*.086)*coverContrast+strategic*(1.00-.18*alpine),
@@ -7680,7 +7693,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // representation keeps terrain structure without becoming a differently
   // tinted LOD surface. The outer ring stays on the common coarse basis.
   const contextResolutionRatio=clamp(sharedMetersPerTexel/Math.max(1,metersPerTexel),1,2);
-  const contextRefineWeight=contextRing?(sharedPhotometryLock?0:smoothstep01(clamp((contextResolutionRatio-1)/.55,0,1))*.18):0;
+  // The 3x medium ring is still physically able to resolve substantially more
+  // detail than the 6x parent. Carry that registered high-pass information into
+  // the medium context so the 1x focus does not appear as a sharp richer patch.
+  // Strategic tiers remain locked to one parent photometry basis.
+  const contextRefineWeight=contextRing?(sharedPhotometryLock?0:smoothstep01(clamp((contextResolutionRatio-1)/.55,0,1))*.48):0;
   const useMicroDetail=metersPerTexel<=4&&!contextRing;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   // Surface relief is presented as continuous hillshade, not synthetic
