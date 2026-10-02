@@ -78,14 +78,15 @@ def compact_state():
       };
     """)
 
-def proof_building_points():
+def proof_building_points(excluded_ids=None):
     result=js("""
+      const excluded=new Set((arguments[0]||[]).map(String));
       const seed=window.PlanetStage?.snapshot?.()?.activeSeed;
       const interiors=seed&&window.BuildingInteriors?.build?.(seed)||[];
       const walk=(x,y)=>{try{const c=window.Walkability?.classify?.(seed,String(x),String(y));return Boolean(c?.walkable&&!c?.buildingId)}catch(_){return false}};
       for(const interior of interiors){
         const b=interior?.bounds,inside=interior?.interiorTarget;
-        if(!b||!inside)continue;
+        if(!b||!inside||excluded.has(String(interior.id)))continue;
         const cx=Math.floor((Number(b.minX)+Number(b.maxX))/2),cy=Math.floor((Number(b.minY)+Number(b.maxY))/2);
         const candidates=[
           {x:cx,y:Number(b.minY)-2,side:'south'},
@@ -104,8 +105,8 @@ def proof_building_points():
           behind:{x:String(behind.x),y:String(behind.y),side:behind.side}
         };
       }
-      return {ok:false,reason:'no-enterable-building-with-two-outdoor-proof-points'};
-    """)
+      return {ok:false,reason:'no-enterable-building-with-two-outdoor-proof-points-outside-resident-cutaways',excluded:[...excluded]};
+    """,list(excluded_ids or []))
     if not result or not result.get("ok"):
         raise RuntimeError("could not derive building depth/cutaway proof points: "+json.dumps(result))
     return result
@@ -152,7 +153,7 @@ def add_overlay(label,state):
         '<div>'+String(s.scaleLabel||'')+' · visible LOD '+String(s.visibleLevel||'')+' · '+String(s.revealTier||'')+'</div>'+
         '<div>Detailed billboards '+s.detailedBillboardCount+' · visible residents '+s.activeResidentCount+' · 2× art '+s.presentationScaleMultiplier.toFixed(1)+'</div>'+
         '<div style="opacity:.70;margin-top:2px">'+(textures||'no detailed character textures')+'</div>'+
-        '<div>cutaway '+(s.groundBuildingCutaway?.active?'ON '+String(s.groundBuildingCutaway.buildingId||''):'OFF')+' · protagonist '+String(s.protagonistPosition?.x||'?')+','+String(s.protagonistPosition?.y||'?')+'</div>'+
+        '<div>cutaway '+(s.groundBuildingCutaway?.buildingId?'PROTAGONIST '+String(s.groundBuildingCutaway.buildingId):Number(s.groundBuildingCutaway?.residentCutawayBuildingCount||0)>0?'RESIDENT '+String(s.groundBuildingCutaway.residentCutawayBuildingCount):'OFF')+' · protagonist '+String(s.protagonistPosition?.x||'?')+','+String(s.protagonistPosition?.y||'?')+'</div>'+
         '<div style="opacity:.58">camera '+String(s.cameraPresentation||'')+' · tangent '+String(s.tangentPresentationPitchDegrees||0)+'° · pure zoom pose invariant '+String(s.cameraPoseInvariant)+'</div>';
       document.body.appendChild(card);
     """,label,state)
@@ -184,13 +185,29 @@ def validate(label,index,state,mode="overview",proof=None):
     if state["cameraPresentation"]!="orthographic-3q" or not 45<=float(state["tangentPresentationPitchDegrees"])<=75:
         raise RuntimeError(label+" missing fixed orthographic 3/4 tangent presentation: "+json.dumps(state))
     cut=state.get("groundBuildingCutaway") or {}
-    if mode=="inside":
-        if not cut.get("active") or str(cut.get("buildingId"))!=str((proof or {}).get("buildingId")):
-            raise RuntimeError(label+" did not activate the authoritative occupied-building cutaway: "+json.dumps(cut))
-        if int(cut.get("hiddenRoofCount") or 0)!=1 or int(cut.get("loweredShellCount") or 0)!=1 or int(cut.get("interiorFloorCount") or 0)!=1:
-            raise RuntimeError(label+" cutaway did not expose roof/shell/floor contract: "+json.dumps(cut))
-    elif mode in ("front","behind","overview") and cut.get("active"):
-        raise RuntimeError(label+" unexpectedly activated building cutaway outside the interior: "+json.dumps(cut))
+    resident_ids=[str(x) for x in (cut.get("residentCutawayBuildingIds") or [])]
+    resident_count=int(cut.get("residentCutawayBuildingCount") or 0)
+    resident_resident_count=int(cut.get("residentCutawayResidentCount") or 0)
+    if resident_count!=len(resident_ids) or resident_count>4:
+        raise RuntimeError(label+" resident cutaway set is not bounded/coherent: "+json.dumps(cut))
+    if resident_count>0 and resident_resident_count<resident_count:
+        raise RuntimeError(label+" resident cutaways lack authoritative resident occupancy: "+json.dumps(cut))
+    if index==8:
+        if cut.get("active") or int(cut.get("hiddenRoofCount") or 0)!=0 or resident_count!=0:
+            raise RuntimeError(label+" leaked ground-only building cutaways below final ground: "+json.dumps(cut))
+    elif mode=="inside":
+        proof_id=str((proof or {}).get("buildingId"))
+        if not cut.get("active") or str(cut.get("buildingId"))!=proof_id:
+            raise RuntimeError(label+" did not activate the authoritative protagonist occupied-building cutaway: "+json.dumps(cut))
+        expected=resident_count+(0 if proof_id in resident_ids else 1)
+        if expected<1 or int(cut.get("hiddenRoofCount") or 0)!=expected or int(cut.get("loweredShellCount") or 0)!=expected or int(cut.get("interiorFloorCount") or 0)!=expected:
+            raise RuntimeError(label+" cutaway did not expose the protagonist + bounded resident roof/shell/floor contract: "+json.dumps(cut))
+    elif mode in ("front","behind","overview"):
+        if cut.get("buildingId") is not None or cut.get("buildingLabel") is not None:
+            raise RuntimeError(label+" unexpectedly activated the protagonist-specific cutaway outside the interior: "+json.dumps(cut))
+        expected=resident_count
+        if bool(cut.get("active"))!=(expected>0) or int(cut.get("hiddenRoofCount") or 0)!=expected or int(cut.get("loweredShellCount") or 0)!=expected or int(cut.get("interiorFloorCount") or 0)!=expected:
+            raise RuntimeError(label+" resident-only cutaway telemetry is not bounded/coherent: "+json.dumps(cut))
 
 records=[]
 try:
@@ -200,8 +217,10 @@ try:
     reset_seed_and_focus()
     driver.refresh();wait.until(lambda _d: ready())
     prime=js("""const s=PlanetStage.snapshot(),p=StartingVillage.plan(s.activeSeed),c=p?.center||{x:'0',y:'0'};PlanetStage.applyAuthoritativeFantasyTime(arguments[0],'WP-S003-004-004 daytime visual evidence',{snapshotResult:false});PlanetStage.setWorldTileFocus(String(c.x),String(c.y));return {activeSeed:s.activeSeed,center:{x:String(c.x),y:String(c.y)},village:p?.name||'Starting Village',when:arguments[0]};""",EVIDENCE_TIME)
-    proof=proof_building_points()
     overview_point={"x":str(prime["center"]["x"]),"y":str(prime["center"]["y"])}
+    ground_probe=set_scale(9)
+    resident_cutaway_ids=(ground_probe.get("groundBuildingCutaway") or {}).get("residentCutawayBuildingIds") or []
+    proof=proof_building_points(resident_cutaway_ids)
     for label,width,height,index,mode in VIEWS:
         set_exact_viewport(driver,width,height)
         target_point=overview_point if mode=="overview" else proof[mode]
