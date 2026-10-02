@@ -654,6 +654,9 @@ def main():
     report = {"wp":"WP-S003-001-002-001","testedHead":TESTED_HEAD,"seed":SEED,"pass":False,"records":[]}
     try:
         report["retainedBootstrapPolicy"]=verify_retained_bootstrap_policy()
+        # Fail fast on the one remaining acceptance gate. If this succeeds,
+        # the unchanged full engine/backend/mobile matrix still runs below.
+        device_loss = run_device_loss()
         baseline_gl = run_success("01-baseline-2223-map-webgl2", "webgl2", "webgl2", engine=BASELINE_ENGINE, ground=False, lightweight_engine_compare=True)
         baseline_gpu_result = run_baseline_webgpu()
         baseline_gpu = baseline_gpu_result.get("record")
@@ -665,7 +668,6 @@ def main():
         fallback = run_success("08-current-2230-auto-fallback-ground", "auto", "webgl2", disable_webgpu=True)
         failure = run_forced_webgpu_failure()
         normal_mode = run_normal_mode_saved_force_ignored()
-        device_loss = run_device_loss()
         mobile_gpu = run_success("10-current-2230-mobile-webgpu", "webgpu", "webgpu", viewport=(844,390))
         mobile_gl = run_success("11-current-2230-mobile-webgl2", "webgl2", "webgl2", viewport=(844,390))
         engine_records=[baseline_gl]
