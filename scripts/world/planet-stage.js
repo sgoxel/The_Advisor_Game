@@ -5765,22 +5765,60 @@ function applyCanonicalGroundBuildingCutaway(tier){
       entry.bodyEntity.setLocalPosition(entry.bodyEntity.getLocalPosition().x,entry.ground+entry.h*.5,entry.bodyEntity.getLocalPosition().z);
     }
   }
-  groundBuildingCutaway={...groundBuildingCutaway,active:false,buildingId:null,buildingLabel:null,protagonistTile:null,hiddenRoofCount:0,loweredShellCount:0,interiorFloorCount:0};
-  if(String(tier||"")!=="full"||String(displayResource?.dims?.levelId||"")!=="ground")return groundBuildingCutaway;
-  const protagonist=authoritativeProtagonistGroundPoint();if(!protagonist)return groundBuildingCutaway;
-  const entry=Array.from(localCanonicalBuildingRoofs.values()).find(item=>canonicalPointInsideBounds(protagonist,item?.record?.bounds))||null;
-  if(!entry)return groundBuildingCutaway;
-  if(entry.entity)entry.entity.enabled=false;
-  if(entry.interiorFloor)entry.interiorFloor.enabled=true;
-  if(entry.bodyEntity){
-    const low=Math.max(.028,entry.h*.18),p=entry.bodyEntity.getLocalPosition();
-    entry.bodyEntity.setLocalScale(entry.bodyW,low,entry.bodyD);
-    entry.bodyEntity.setLocalPosition(p.x,entry.ground+low*.5,p.z);
-  }
   groundBuildingCutaway={
-    ...groundBuildingCutaway,active:true,buildingId:entry.id,buildingLabel:String(entry.record?.label||entry.record?.name||entry.id),
-    protagonistTile:Object.freeze({x:String(protagonist.x),y:String(protagonist.y)}),
-    hiddenRoofCount:entry.entity?1:0,loweredShellCount:entry.bodyEntity?1:0,interiorFloorCount:entry.interiorFloor?1:0
+    ...groundBuildingCutaway,active:false,buildingId:null,buildingLabel:null,protagonistTile:null,
+    hiddenRoofCount:0,loweredShellCount:0,interiorFloorCount:0,
+    residentCutawayBuildingCount:0,residentCutawayResidentCount:0,residentCutawayBuildingIds:Object.freeze([])
+  };
+  if(String(tier||"")!=="full"||String(displayResource?.dims?.levelId||"")!=="ground")return groundBuildingCutaway;
+  const entries=Array.from(localCanonicalBuildingRoofs.values()),cutIds=new Set();
+  const cutEntry=entry=>{
+    if(!entry||cutIds.has(entry.id))return false;
+    cutIds.add(entry.id);
+    if(entry.entity)entry.entity.enabled=false;
+    if(entry.interiorFloor)entry.interiorFloor.enabled=true;
+    if(entry.bodyEntity){
+      const low=Math.max(.028,entry.h*.18),p=entry.bodyEntity.getLocalPosition();
+      entry.bodyEntity.setLocalScale(entry.bodyW,low,entry.bodyD);
+      entry.bodyEntity.setLocalPosition(p.x,entry.ground+low*.5,p.z);
+    }
+    return true;
+  };
+  const protagonist=authoritativeProtagonistGroundPoint();
+  const protagonistEntry=protagonist?entries.find(item=>canonicalPointInsideBounds(protagonist,item?.record?.bounds))||null:null;
+  if(protagonistEntry)cutEntry(protagonistEntry);
+
+  // At final RPG zoom, residents keep their authoritative positions even when
+  // DailyActivity places them inside a home/workplace. Open only a small,
+  // deterministic set of those occupied buildings so character art can be read
+  // without moving NPCs, changing schedules, or making roof visibility a
+  // simulation rule. This runs on bounded local-presentation rebuilds only.
+  const occupied=new Map();let residentCutawayResidentCount=0;
+  for(const record of localNpcEntities.values()){
+    if(!record?.billboard?.enabled)continue;
+    const state=residentPresentationState(record.resident);if(!state)continue;
+    const point={x:String(Math.round(Number(state.x)||0)),y:String(Math.round(Number(state.y)||0))};
+    const entry=entries.find(item=>canonicalPointInsideBounds(point,item?.record?.bounds))||null;
+    if(!entry)continue;
+    residentCutawayResidentCount++;
+    const dx=Number(point.x),dy=Number(point.y),prior=occupied.get(entry.id);
+    const distance2=dx*dx+dy*dy;
+    if(!prior||distance2<prior.distance2)occupied.set(entry.id,{entry,distance2});
+  }
+  const residentEntries=[...occupied.values()].sort((a,b)=>a.distance2-b.distance2||String(a.entry.id).localeCompare(String(b.entry.id))).slice(0,4);
+  for(const item of residentEntries)cutEntry(item.entry);
+  const residentIds=residentEntries.map(item=>String(item.entry.id));
+
+  groundBuildingCutaway={
+    ...groundBuildingCutaway,active:cutIds.size>0,
+    buildingId:protagonistEntry?.id||null,
+    buildingLabel:protagonistEntry?String(protagonistEntry.record?.label||protagonistEntry.record?.name||protagonistEntry.id):null,
+    protagonistTile:protagonist?Object.freeze({x:String(protagonist.x),y:String(protagonist.y)}):null,
+    hiddenRoofCount:[...cutIds].filter(id=>localCanonicalBuildingRoofs.get(id)?.entity).length,
+    loweredShellCount:[...cutIds].filter(id=>localCanonicalBuildingRoofs.get(id)?.bodyEntity).length,
+    interiorFloorCount:[...cutIds].filter(id=>localCanonicalBuildingRoofs.get(id)?.interiorFloor).length,
+    residentCutawayBuildingCount:residentIds.length,residentCutawayResidentCount,
+    residentCutawayBuildingIds:Object.freeze(residentIds)
   };
   return groundBuildingCutaway;
 }
@@ -6589,7 +6627,6 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     addCanonicalBuilding(meeting,targetCount,scale,unit,semanticFrame,detailed,true,lift);
     landmarks=1;if(detailed)fullBuildings++;else coarseBuildings++;
   }
-  applyCanonicalGroundBuildingCutaway(tier);
   const wayfindingDrawCalls=buildCanonicalWayfindingSignposts(reveal,tier,semanticFrame,scale,unit,lift);
   const surroundingsDrawCalls=buildCanonicalBuildingSurroundings(reveal,tier,semanticFrame,scale,unit,lift);
   const dressingStats=(tier==="coarse"||tier==="refined"||tier==="full")?addCanonicalSettlementDressing(reveal,tier,semanticFrame,scale,unit,lift):{count:0,triangles:0};
@@ -6614,6 +6651,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   }
   const wild=renderLocalWilderness(resource,frame,reveal);
   rebuildCanonicalNpcPresentation(reveal,tier,semanticFrame,scale,unit,lift,false);
+  applyCanonicalGroundBuildingCutaway(tier);
   rebuildLocalCrowdPresentation(resource,semanticFrame,tier);
   localBuildingActivityContext={reveal,tier,frame:semanticFrame,presentationScale:scale,unit,lift};
   rebuildCanonicalBuildingActivityPresentation("settlement-rebuild");
