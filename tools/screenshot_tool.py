@@ -320,8 +320,6 @@ def _prepare_starting_village_scene(driver,timeout):
             "Starting Village final-ground readiness failed; "
             f"failedConditions={failed}; diagnostic=tools/screenshots/starting-village-readiness-failure.json"
         ) from exc
-    # Let the just-materialized billboard scene survive two paint frames before
-    # capture; the wait condition above observes scene state, not rendered pixels.
     driver.execute_async_script("""
       const done=arguments[0];
       requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
@@ -392,9 +390,6 @@ def _canonical_focus_protagonist_wide_setup(driver):
       if(!stage||!before)return {ok:false,reason:'authoritative-protagonist-unavailable'};
       stage.closePlaces?.();
       stage.setWorldTileFocus(String(before.x),String(before.y));
-      // Keep the selection frame genuinely wider than final ground while
-      // respecting the current SSE selector. At these desktop evidence
-      // viewports 240 m owns near-ground-close; 80 m now resolves to ground.
       const footprintMeters=240,scalar=stage.scalarForFootprintHeight(footprintMeters);
       stage.setZoomScalar(scalar);
       const after=read();
@@ -494,14 +489,16 @@ def _validate_canonical_focus_frames(frames):
     if len(frames)<WP_CANONICAL_FOCUS_SHOTS:
         raise RuntimeError(f"{WP_CANONICAL_FOCUS_SCENARIO} requires {WP_CANONICAL_FOCUS_SHOTS} fresh frames")
     places=frames[0];pnav=((places.get("stage") or {}).get("explicitFocusNavigation") or {}).get("active") or {}
-    if not (places.get("ui") or {}).get("placesVisible") or pnav.get("targetType")!="place" or float(pnav.get("focusErrorMeters") or 999999)>1:
+    pnav_error=pnav.get("focusErrorMeters")
+    if not (places.get("ui") or {}).get("placesVisible") or pnav.get("targetType")!="place" or float(pnav_error if pnav_error is not None else 999999)>1:
         raise RuntimeError(f"Places exact-focus frame invalid: {places}")
     inspect=frames[1];ui=inspect.get("ui") or {};npc=(inspect.get("stage") or {}).get("npcPresentation") or {}
     if not ui.get("tooltipVisible") or not ui.get("focusButtonVisible") or npc.get("protagonistMarkerVisible") is not True:
         raise RuntimeError(f"protagonist inspection frame invalid: {inspect}")
     for frame in frames[2:WP_CANONICAL_FOCUS_SHOTS]:
         stage=frame.get("stage") or {};nav=(stage.get("explicitFocusNavigation") or {}).get("active") or {};npc=stage.get("npcPresentation") or {}
-        if nav.get("targetType")!="protagonist" or nav.get("state")!="committed" or nav.get("maximumScaleReached") is not True or float(nav.get("focusErrorMeters") or 999999)>1:
+        nav_error=nav.get("focusErrorMeters")
+        if nav.get("targetType")!="protagonist" or nav.get("state")!="committed" or nav.get("maximumScaleReached") is not True or float(nav_error if nav_error is not None else 999999)>1:
             raise RuntimeError(f"protagonist focus transaction not committed exactly: {frame}")
         if (stage.get("zoom") or {}).get("visibleLevel")!="ground" or npc.get("protagonistBillboardVisible") is not True:
             raise RuntimeError(f"protagonist ground representation missing: {frame}")
@@ -647,18 +644,11 @@ def _prepare_surface_refinement_focus(driver):
 def _surface_refinement_frame(driver,index,timeout):
     scalar,label=WP_SURFACE_REFINEMENT_PLAN[index]
     set_exact_viewport(driver,1280,800)
-    # ResizeObserver preserves physical footprint by recomputing the scalar.
-    # Let the fixed evidence viewport finish that reframing before applying the
-    # exact checkpoint, otherwise a late resize callback can legitimately move
-    # the scalar after this harness sets it and the exact-value wait never ends.
     driver.execute_async_script("""
       const done=arguments[0];
       requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
     """)
     driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);",float(scalar))
-    # One more paint pair makes the checkpoint resilient to a trailing browser
-    # metrics callback; reapplying the same target is deterministic and changes
-    # camera presentation only, never canonical focus/world authority.
     driver.execute_async_script("""
       const done=arguments[0];
       requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
@@ -675,8 +665,6 @@ def _surface_refinement_frame(driver,index,timeout):
       );
       return Boolean(s?.ready&&zoomOk&&resourceOk);
     """,timeout,f"surface refinement {label} readiness")
-    # Capture only after two paint frames so a just-swapped child texture/mesh is
-    # actually visible rather than merely reported ready by telemetry.
     driver.execute_async_script("""
       const done=arguments[0];
       requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
@@ -760,8 +748,6 @@ def _validate_surface_refinement_frames(frames):
     if len(density)<5:
         raise RuntimeError(f"too few refined terrain samples: {density}")
     for a,b in zip(density,density[1:]):
-        # Reusing one ready native resource over adjacent checkpoints is valid,
-        # but world-space texel and geometry density must never get coarser.
         if b[1]>a[1]*1.001 or b[2]>a[2]*1.001 or b[3]>a[3]*1.001:
             raise RuntimeError(f"closer zoom lost world-space terrain/source density: {a} -> {b}")
     if density[-1][1]>=density[0][1] or density[-1][2]>=density[0][2] or density[-1][3]>=density[0][3]:
@@ -960,8 +946,6 @@ def _validate_scale_handoff_frames(frames):
         raise RuntimeError(f"scale handoff evidence changed canonical focus: {focus_keys}")
     if pending_handoffs<2:
         raise RuntimeError(f"scale handoff evidence did not observe enough cooperative visible-owner preparations: {pending_handoffs}")
-    # A deferred static rebuild can legitimately finish before the next paint.
-    # Validate any observable handoff interval, but do not require a rendered gap.
 
 def _wp_starting_village_targets(driver):
     targets=driver.execute_script("""
@@ -978,10 +962,6 @@ def _wp_starting_village_targets(driver):
         const b=record?.bounds;if(!b)return null;
         return add(village.center,Math.round((Number(b.minX)+Number(b.maxX))/2),Math.round((Number(b.minY)+Number(b.maxY))/2));
       };
-      // Narrow viewports should frame the authored exterior yard rather than the
-      // middle of a building footprint. Derive that frontage deterministically
-      // from the canonical lot bounds and the village center; this moves only
-      // the evidence camera and never changes lot/resident/world authority.
       const frontageOf=record=>{
         const b=record?.bounds;if(!b)return null;
         const minX=Number(b.minX),maxX=Number(b.maxX),minY=Number(b.minY),maxY=Number(b.maxY);
@@ -1104,7 +1084,6 @@ def _validate_wp_starting_village_frames(frames):
         raise RuntimeError(f"Starting Village context evidence did not move across enough authoritative targets: {focus_keys}")
 
 
-
 def _settlement_reveal_frame(driver,index,timeout):
     scalar,label=WP_SETTLEMENT_REVEAL_PLAN[index]
     expected=WP_SETTLEMENT_REVEAL_TIERS[index]
@@ -1190,7 +1169,6 @@ def _validate_settlement_reveal_frames(frames):
         raise RuntimeError(f"ground tier did not converge to physical 1:1 scale: {ground.get('presentationScale')}")
 
 
-
 def _atlas_live_state(driver):
     return driver.execute_script("""
       const s=window.PlanetStage?.snapshot?.()||{};
@@ -1263,9 +1241,6 @@ def _wait_atlas_responsive_labels(driver,timeout,label):
       );
     """
     _wait(driver,predicate,timeout,label)
-    # ResizeObserver / camera projection work can enqueue one final semantic pass
-    # on the next paint. Wait through two paints, then require the same stable
-    # condition again so telemetry and the screenshot describe the same DOM.
     driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
     _wait(driver,predicate,timeout,label+" after paint settle")
 
@@ -1370,9 +1345,6 @@ def _generic_frames(driver,shots,width,height,timeout,interval):
 
 def run_capture(args):
     width,height=PROFILES.get(args.profile,(args.width,args.height))
-    # Surface-refinement acceptance has one canonical 1280x800 viewport. Start
-    # the browser at that size so the game never boots at one aspect ratio and
-    # receives a first-checkpoint resize after its zoom/LOD state is live.
     if args.scenario in {WP_SURFACE_REFINEMENT_SCENARIO,WP_SCALE_HANDOFF_SCENARIO,WP_SETTLEMENT_REVEAL_SCENARIO,WP_ATLAS_LIVE_SCENARIO}:
         width,height=1280,800
     total=max(1,int(args.shots))
@@ -1402,7 +1374,7 @@ def run_capture(args):
         if args.scenario==WP_CANONICAL_FOCUS_SCENARIO:
             _install_canonical_focus_campaign(driver)
             sep="&" if "?" in url else "?"
-            url=url+sep+"evidence_fast_start=1&dev=1&gpu=webgl2"
+            url=url+sep+"evidence_fast_start=1"
         driver.get(url)
         _wait_document(driver,args.ready_timeout)
         _wait_stage(driver,args.ready_timeout)
@@ -1443,10 +1415,6 @@ def run_capture(args):
                 frames.append(frame)
             _validate_wp_starting_village_frames(frames)
         elif args.scenario==STARTING_VILLAGE_SCENARIO:
-            # Parent art-direction acceptance needs more than one center-frame.
-            # Capture the canonical civic center, one authored worksite context,
-            # and a wider near-max village overview without inventing any camera-
-            # relative world position. Every target comes from StartingVillage.
             focus=_prepare_starting_village_scene(driver,args.ready_timeout)
             pack=_wp_starting_village_targets(driver)
             by_context={str(item.get("context")):item for item in pack["targets"]}
