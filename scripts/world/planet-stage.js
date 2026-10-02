@@ -9006,11 +9006,9 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     const preparedReveal=projectionPresentationBlendForZoom();
     // Keep bounded fine geometry hidden at map scale; the seeded coarse surround owns the viewport until near-ground.
     const fineVisible=tangentVisible&&zoomState.scalar>=projectionState.transitionStart;
-    // The foreground tangent plane is closest to the camera, so keep it hidden
-    // until the smooth parent begins yielding. Medium/outer local coverage may
-    // continue preparing behind the shell without exposing unfinished map-scale
-    // photometry to the player.
-    tangentPatch.enabled=fineVisible&&(!mapScaleShell||mapShellOut>.02);
+    // Resolve foreground ownership only after checking physical viewport coverage.
+    // The larger world-matched continuation stays valid while a finer child is
+    // ready but still too small to cover the requested scale without a tile edge.
     ensureFocusRingPatch();ensureHorizonSkirt();
     const viewBlend=blend;
     if(focusRingPatch){
@@ -9034,8 +9032,13 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     tangentPatch.setLocalEulerAngles(LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES,0,0);
     const dims=localPatchDimensions(),level=LOCAL_DETAIL_LEVELS[dims.levelIndex];
     const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
+    const viewportRect=canvas?.getBoundingClientRect?.(),viewportAspect=Math.max(.35,(viewportRect?.width||1)/(viewportRect?.height||1));
+    const coverageDims=displayResource?.dims||dims;
+    const finePatchCoversViewport=Number(coverageDims.patchHeight||0)>=shownHeightMeters*1.02&&Number(coverageDims.patchWidth||0)>=shownHeightMeters*viewportAspect*1.02;
+    tangentPatch.enabled=fineVisible&&finePatchCoversViewport&&(!mapScaleShell||mapShellOut>.02);
+    localResources.foregroundPatchCoversViewport=finePatchCoversViewport;
     const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
-    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters()};
+    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters(),foregroundPatchCoversViewport:finePatchCoversViewport};
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     // A prepared stand-in normally remains exactly world-anchored while a new
     // focus resource is built. At ground scale a small pointer drag can request
