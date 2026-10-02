@@ -316,6 +316,7 @@ let startupAbortError=null;
 let controlledWorkActive=false;
 let lastHeartbeatAt=0;
 let destinationNavigator={open:false,category:"all",descriptors:[],selectedId:null,queryCount:0,lastQueryMs:0,navigationCount:0,lastTarget:null};
+let destinationQueryPromise=null;
 const inspectionPickables=new Map();
 let inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
 let cloudLayer=null;
@@ -2743,11 +2744,7 @@ function scheduleResidentMovementWarmup(){
     await yieldResidentWarmup();
     try{
       await warmResidentMovementScheduler();
-      // Destination discovery is optional for first control input. Keep the
-      // routine enabled, but resolve it cooperatively after first playable so
-      // canonical settlement/POI discovery cannot monopolize startup.
-      if(!EVIDENCE_SKIP_DESTINATIONS)await buildDestinationDescriptorsCooperative();
-      else{startupScheduler.evidenceDestinationNavigatorSkipped=true;destinationNavigator.descriptors=[];}
+      if(EVIDENCE_SKIP_DESTINATIONS){startupScheduler.evidenceDestinationNavigatorSkipped=true;destinationNavigator.descriptors=[];}
       await warmPostReadyGlobalPresentation();
     }catch(error){
       startupScheduler.residentWarmupError=String(error?.stack||error);
@@ -9322,12 +9319,26 @@ async function buildDestinationDescriptorsCooperative(){
   if(destinationNavigator.open)renderDestinationNavigator();
   return descriptors;
 }
+function ensureDestinationDescriptorsCooperative(){
+  if(destinationNavigator.queryCount>0)return Promise.resolve(destinationNavigator.descriptors);
+  if(!destinationQueryPromise){
+    destinationQueryPromise=buildDestinationDescriptorsCooperative().finally(()=>{
+      destinationQueryPromise=null;
+      if(destinationNavigator.open)renderDestinationNavigator();
+    });
+  }
+  return destinationQueryPromise;
+}
 function renderDestinationNavigator(){
   if(!root)return;
   let button=root.querySelector(".planet-places-button");
   if(!button){
     button=document.createElement("button");button.type="button";button.className="planet-places-button";button.textContent="Places";button.setAttribute("aria-expanded","false");
-    button.addEventListener("click",()=>{destinationNavigator.open=!destinationNavigator.open;renderDestinationNavigator();});
+    button.addEventListener("click",()=>{
+      destinationNavigator.open=!destinationNavigator.open;
+      if(destinationNavigator.open&&!destinationNavigator.descriptors.length)ensureDestinationDescriptorsCooperative();
+      renderDestinationNavigator();
+    });
     root.appendChild(button);
   }
   button.setAttribute("aria-expanded",String(destinationNavigator.open));
@@ -9351,6 +9362,11 @@ function renderDestinationNavigator(){
     row.append(info,go);list.appendChild(row);
   }
   panel.appendChild(list);
+  if(!destinationNavigator.descriptors.length){
+    const status=document.createElement("p");status.className="planet-places-status";
+    status.textContent=destinationQueryPromise?"Discovering nearby places…":"No nearby places are currently available.";
+    panel.appendChild(status);
+  }
   const foot=document.createElement("p");foot.className="planet-places-foot";foot.textContent="Camera view only · "+visible.length+" bounded seeded destinations · no world scan";panel.appendChild(foot);
 }
 function wildernessHash(label){
@@ -10429,7 +10445,7 @@ function snapshot(){
     geographyVerification,
     geographyLayout:geography?.layout||null,
     geographyStats,
-    coordinateFabric:coordinateFabricDiagnostics(),
+    coordinateFabric:null, // Request detailed spatial diagnostics explicitly via coordinateDiagnostics().
     featureTargets,
     worldScaleFraction:WORLD_SCALE_FRACTION,
     earthReferenceRadiusMeters:EARTH_REFERENCE_RADIUS_METERS,

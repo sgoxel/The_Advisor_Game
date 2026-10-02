@@ -119,6 +119,8 @@ try:
         raise AssertionError("work-cycle route warmup did not use cooperative route slices: " + repr(background_scheduler))
     if float(background_scheduler.get("residentWarmupMaxRouteSliceMs") or 0) >= 50:
         raise AssertionError("cooperative work-cycle route slice exceeded 50 ms: " + repr(background_scheduler))
+    if background_scheduler.get("destinationQueryStartedAtMs") is not None:
+        raise AssertionError("optional destination discovery blocked automatic post-ready preparation: " + repr(background_scheduler))
     work_cycles = js("return window.WorkCycles?.snapshot?.(window.PlanetStage.snapshot().activeSeed) || null;")
     if not work_cycles:
         raise AssertionError("WorkCycles telemetry unavailable after background preparation")
@@ -218,6 +220,8 @@ try:
         raise AssertionError("healthy retry tripped watchdog: " + repr(retry_scheduler))
     if retry_scheduler.get("simulationAuthorityPreserved") is not True:
         raise AssertionError("retry path lost Simulation authority isolation")
+    if retry_scheduler.get("destinationQueryStartedAtMs") is not None:
+        raise AssertionError("retry automatically started optional destination discovery: " + repr(retry_scheduler))
 
     severe = severe_logs()
     if severe:
