@@ -47,7 +47,7 @@ for(const forbidden of ["campaign.protagonist=","SeedSystem.getCampaign().protag
 assert(focus.includes("authoritativeProtagonistFocusTarget"),"protagonist focus must resolve authoritative target");
 assert(focus.includes("maxZoom:true"),"protagonist focus must request final ground");
 
-const follow=segment("function updateFocusNavigation()","function rotationForLatLon");
+const follow=segment("function updateFocusNavigation()","function rgbaFromColor");
 assert(follow.includes('request.targetType!=="protagonist"'),"follow path must be protagonist-only");
 assert(follow.includes("focusNavigationReady(request)"),"follow path must stop when final focus is ready");
 assert(follow.includes("focusNavigation.protagonistRefreshCount++"),"follow telemetry missing");
