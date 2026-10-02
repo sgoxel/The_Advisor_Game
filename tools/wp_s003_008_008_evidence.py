@@ -156,19 +156,6 @@ def descriptors(driver):
       }));
     """)
 
-def bounded_water_candidate(driver,x,y):
-    return js(driver,"""
-      const seed=window.PlanetStage.snapshot().activeSeed;
-      const q=window.WorldDestinations.queryNearby(seed,{x:String(arguments[0]),y:String(arguments[1])},{
-        radiusMeters:80000,maxResults:1,categories:['water']
-      });
-      const d=(q?.results||[])[0]||null;
-      return d?{
-        id:String(d.id),name:String(d.name||d.id),type:String(d.type||''),category:String(d.category||''),
-        center:d.center?{x:String(d.center.x),y:String(d.center.y)}:null
-      }:null;
-    """,str(x),str(y))
-
 def canonical_water_probe_origin(driver):
     return js(driver,"""
       const seed=window.PlanetStage.snapshot().activeSeed,pg=window.PlanetGeography.create(seed);
@@ -345,26 +332,24 @@ for seed in SEEDS:
                 break
 
         if "water-destination" not in found:
-            probe_origins=[(start_x+ox,start_y+oy) for ox,oy in OFFSETS]
             canonical_water_origin=canonical_water_probe_origin(driver)
             if canonical_water_origin:
-                probe_origins.append((canonical_water_origin["x"],canonical_water_origin["y"]))
                 water_probe["canonicalWaterOrigin"]=canonical_water_origin
-            for target_x,target_y in probe_origins:
                 water_probe["probeCount"]+=1
-                candidate=bounded_water_candidate(driver,target_x,target_y)
-                if not candidate:
-                    continue
-                water_probe["available"]=True;water_probe["candidate"]=candidate
-                center=candidate.get("center") or {}
-                if center.get("x") is None or center.get("y") is None:
-                    continue
-                js(driver,"""window.PlanetStage.setWorldTileFocus(arguments[0],arguments[1]);window.PlanetStage.setScaleIndex(4);window.PlanetStage.refreshPlaces();""",center["x"],center["y"])
-                exact=next((item for item in descriptors(driver) if item.get("id")==candidate.get("id")),None)
-                if exact and exact.get("canonicalCoordinateValid") and exact.get("latitudeRadians") is not None and exact.get("longitudeRadians") is not None:
-                    found["water-destination"]=select_and_assert(driver,exact,"water-destination")
+                js(driver,"""window.PlanetStage.setWorldTileFocus(arguments[0],arguments[1]);window.PlanetStage.setScaleIndex(4);window.PlanetStage.refreshPlaces();""",canonical_water_origin["x"],canonical_water_origin["y"])
+                water_items=[
+                    item for item in descriptors(driver)
+                    if item.get("canonicalCoordinateValid")
+                    and item.get("latitudeRadians") is not None
+                    and item.get("longitudeRadians") is not None
+                    and (item.get("category")=="water" or str(item.get("expectedSurfaceClass") or "").lower()=="water")
+                ]
+                if water_items:
+                    candidate=water_items[0]
+                    water_probe["available"]=True
+                    water_probe["candidate"]={"id":candidate["id"],"center":candidate.get("center")}
+                    found["water-destination"]=select_and_assert(driver,candidate,"water-destination")
                     water_probe["tested"]=True
-                    break
 
         missing=sorted({"current-village","other-settlement","land-poi"}-set(found))
         if missing:
