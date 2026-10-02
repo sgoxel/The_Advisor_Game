@@ -197,13 +197,21 @@ def wait_marker(driver):
     """,200,"inspectable wider-view protagonist")
 
 def protagonist_focus_assert(driver,moved=False):
-    before=js(driver,"""const p=window.Protagonist.getPosition();return {x:String(p.x),y:String(p.y)};""")
-    response=js(driver,"""
-      const before=window.Protagonist.getPosition(),response=window.PlanetStage.focusProtagonist(),after=window.Protagonist.getPosition();
-      return {response,before:{x:String(before.x),y:String(before.y)},after:{x:String(after.x),y:String(after.y)}};
+    before=js(driver,"""
+      const p=window.Protagonist?.getPosition?.()||window.SeedSystem?.getCampaign?.()?.protagonist||null;
+      if(!p)return null;
+      return {x:String(p.x),y:String(p.y),source:window.Protagonist?.getPosition?'Protagonist.getPosition':'SeedSystem.campaign.protagonist'};
     """)
-    if response.get("before")!=response.get("after"):
-        raise RuntimeError("protagonist focus teleported simulation position: "+json.dumps(response))
+    if not before:
+        raise RuntimeError("authoritative protagonist position unavailable")
+    response=js(driver,"""
+      const read=()=>window.Protagonist?.getPosition?.()||window.SeedSystem?.getCampaign?.()?.protagonist||null;
+      const before=read(),response=window.PlanetStage.focusProtagonist(),after=read();
+      return {response,before:before?{x:String(before.x),y:String(before.y)}:null,after:after?{x:String(after.x),y:String(after.y)}:null};
+    """)
+    expected_before={"x":before["x"],"y":before["y"]}
+    if response.get("before")!=response.get("after") or response.get("before")!=expected_before:
+        raise RuntimeError("protagonist focus teleported or changed authoritative simulation position: "+json.dumps({"before":before,"response":response}))
     _wait(driver,"""
       const s=window.PlanetStage?.snapshot?.(),n=s?.explicitFocusNavigation?.active,p=s?.npcPresentation||{};
       return Boolean(n?.targetType==='protagonist'&&n?.state==='committed'&&n?.maximumScaleReached===true&&Number(n?.focusErrorMeters)<=1&&s?.zoom?.visibleLevel==='ground'&&p?.protagonistBillboardVisible===true);
@@ -211,17 +219,18 @@ def protagonist_focus_assert(driver,moved=False):
     final=snapshot(driver);nav=(final.get("explicitFocusNavigation") or {}).get("active") or {}
     req=nav.get("protagonistPositionAtRequest") or {}
     if str(req.get("x"))!=str(before.get("x")) or str(req.get("y"))!=str(before.get("y")):
-        raise RuntimeError("protagonist focus did not resolve current authoritative position: "+json.dumps(final))
+        raise RuntimeError("protagonist focus did not resolve current authoritative position: "+json.dumps({"before":before,"final":final}))
     if nav.get("followCurrentUntilCommit") is not True or nav.get("simulationMutation") is not False:
         raise RuntimeError("protagonist focus policy telemetry invalid: "+json.dumps(final))
     return {"moved":moved,"before":before,"response":response,"final":final}
 
 def move_protagonist_for_evidence(driver):
     return js(driver,"""
-      const campaign=window.SeedSystem.getCampaign(),p=window.Protagonist.getPosition();
+      const campaign=window.SeedSystem?.getCampaign?.(),p=window.Protagonist?.getPosition?.()||campaign?.protagonist||null;
+      if(!campaign||!p)return null;
       const next=window.WorldCoordinates.position(String(BigInt(String(p.x))+17n),String(BigInt(String(p.y))+11n));
       campaign.protagonist=next;
-      return {x:String(next.x),y:String(next.y)};
+      return {x:String(next.x),y:String(next.y),source:'SeedSystem.campaign.protagonist'};
     """)
 
 all_records=[]
@@ -300,11 +309,15 @@ for seed in SEEDS:
         wait_marker(driver)
         protagonist_first=protagonist_focus_assert(driver,False)
         moved_to=move_protagonist_for_evidence(driver)
+        if not moved_to:
+            raise RuntimeError(f"{seed}: could not establish second authoritative protagonist position")
         js(driver,"window.PlanetStage.setScaleIndex(8);")
         wait_marker(driver)
         protagonist_moved=protagonist_focus_assert(driver,True)
-        if protagonist_moved["before"]!=moved_to:
-            raise RuntimeError(f"{seed}: moved protagonist authority mismatch")
+        moved_expected={"x":moved_to["x"],"y":moved_to["y"]}
+        moved_actual={"x":protagonist_moved["before"]["x"],"y":protagonist_moved["before"]["y"]}
+        if moved_actual!=moved_expected:
+            raise RuntimeError(f"{seed}: moved protagonist authority mismatch: expected {moved_expected}, got {moved_actual}")
         all_records.append({
             "seed":seed,"village":village,"places":found,"repeatSameTarget":repeat_target,"waterProbe":water_probe,"invalidTarget":invalid,
             "protagonistInitial":protagonist_first,"movedTo":moved_to,"protagonistMoved":protagonist_moved,
