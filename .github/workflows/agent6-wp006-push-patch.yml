@@ -1,0 +1,74 @@
+name: Agent6 WP006 Push Patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/agent6-wp006-push-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'chore(agent6): execute WP006 coverage patch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Apply coverage-safe foreground ownership
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/world/planet-stage.js')
+          text = path.read_text()
+          old1 = '''    const fineVisible=tangentVisible&&zoomState.scalar>=projectionState.transitionStart;
+    // The foreground tangent plane is closest to the camera, so keep it hidden
+    // until the smooth parent begins yielding. Medium/outer local coverage may
+    // continue preparing behind the shell without exposing unfinished map-scale
+    // photometry to the player.
+    tangentPatch.enabled=fineVisible&&(!mapScaleShell||mapShellOut>.02);
+    ensureFocusRingPatch();ensureHorizonSkirt();
+'''
+          new1 = '''    const fineVisible=tangentVisible&&zoomState.scalar>=projectionState.transitionStart;
+    // Resolve foreground ownership only after checking physical viewport coverage.
+    // The larger world-matched continuation stays valid while a finer child is
+    // ready but still too small to cover the requested scale without a tile edge.
+    ensureFocusRingPatch();ensureHorizonSkirt();
+'''
+          old2 = '''    const dims=localPatchDimensions(),level=LOCAL_DETAIL_LEVELS[dims.levelIndex];
+    const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
+    const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
+    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters()};
+    tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
+'''
+          new2 = '''    const dims=localPatchDimensions(),level=LOCAL_DETAIL_LEVELS[dims.levelIndex];
+    const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
+    const viewportRect=canvas?.getBoundingClientRect?.(),viewportAspect=Math.max(.35,(viewportRect?.width||1)/(viewportRect?.height||1));
+    const coverageDims=displayResource?.dims||dims;
+    const finePatchCoversViewport=Number(coverageDims.patchHeight||0)>=shownHeightMeters*1.02&&Number(coverageDims.patchWidth||0)>=shownHeightMeters*viewportAspect*1.02;
+    tangentPatch.enabled=fineVisible&&finePatchCoversViewport&&(!mapScaleShell||mapShellOut>.02);
+    localResources.foregroundPatchCoversViewport=finePatchCoversViewport;
+    const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
+    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters(),foregroundPatchCoversViewport:finePatchCoversViewport};
+    tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
+'''
+          if text.count(old1) != 1:
+              raise SystemExit(f'expected foreground block once, found {text.count(old1)}')
+          if text.count(old2) != 1:
+              raise SystemExit(f'expected scale block once, found {text.count(old2)}')
+          path.write_text(text.replace(old1, new1).replace(old2, new2))
+          PY
+      - name: Commit patch and clean runner
+        shell: bash
+        run: |
+          rm .github/workflows/agent6-wp006-push-patch.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/world/planet-stage.js .github/workflows/agent6-wp006-push-patch.yml
+          git commit -m 'fix(wp-s003-010-003-006): hide undersized foreground tiles'
+          git pull --rebase origin main
+          git push origin HEAD:main
