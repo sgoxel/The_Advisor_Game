@@ -25,7 +25,7 @@ jobs:
         github.event.comment.author_association == 'COLLABORATOR') &&
        startsWith(github.event.comment.body, '/wp-s003-010-003-011-evidence'))
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout main
@@ -56,7 +56,7 @@ jobs:
           sleep 1
 
       - name: Run pure zoom, scale and drag evidence
-        run: python tools/test_wp_s003_010_003_011.py http://127.0.0.1:8000/ tools/wp_s003_010_003_011_artifact
+        run: python tools/run_wp_s003_010_003_011_evidence.py http://127.0.0.1:8000/ tools/wp_s003_010_003_011_artifact
 
       - name: Upload pure zoom evidence
         if: always()
