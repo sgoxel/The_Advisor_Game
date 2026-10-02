@@ -2,6 +2,7 @@
 "use strict";
 
 const BACKEND_KEY="advisor.renderer.backend";
+const DEVELOPMENT_MODE_KEY="the-advisor-game:development-mode";
 const ASSET_PREPARATION_URL="scripts/render/playcanvas/asset-preparation.js";
 const WORLD_ASSETS_URL="scripts/render/playcanvas/world-assets.js";
 let readyPromise=null;
@@ -11,10 +12,17 @@ let assetPreparationPromise=null;
 let worldAssetsPromise=null;
 
 function query(){return new URLSearchParams(location.search);}
+function developerModeEnabled(){
+  const q=query();
+  if(q.get("dev")==="1"||q.get("developer")==="1"||q.get("backend_debug")==="1")return true;
+  try{return localStorage.getItem(DEVELOPMENT_MODE_KEY)==="true"}catch(_){return false}
+}
 function readBackend(){
-  const requested=query().get("gpu");
-  if(["webgl2","webgpu","auto"].includes(requested))return requested;
-  try{const saved=localStorage.getItem(BACKEND_KEY);if(["webgl2","webgpu","auto"].includes(saved))return saved;}catch(_){}
+  const requested=String(query().get("gpu")||"").toLowerCase(),developer=developerModeEnabled();
+  if(["webgl2","webgpu","auto"].includes(requested)&&(requested==="auto"||developer))return requested;
+  if(developer){
+    try{const saved=String(localStorage.getItem(BACKEND_KEY)||"").toLowerCase();if(["webgl2","webgpu","auto"].includes(saved))return saved;}catch(_){}
+  }
   return "auto";
 }
 function readNumber(name,min,max){const raw=query().get(name);if(raw===null||String(raw).trim()==="")return null;const value=Number(raw);if(!Number.isFinite(value))return null;return Math.min(max,Math.max(min,value));}
