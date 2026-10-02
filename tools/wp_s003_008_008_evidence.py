@@ -249,15 +249,37 @@ def invalid_target_assert(driver):
 
 def wait_marker(driver):
     result=js(driver,"""
-      const stage=window.PlanetStage,scalar=stage.scalarForFootprintHeight(80);
+      const stage=window.PlanetStage;
+      const read=()=>window.Protagonist?.getPosition?.()||window.SeedSystem?.getCampaign?.()?.protagonist||null;
+      const before=read();
+      if(!before)return {ok:false,reason:'authoritative-protagonist-unavailable'};
+      stage.setWorldTileFocus(String(before.x),String(before.y));
+      const scalar=stage.scalarForFootprintHeight(80);
       stage.setZoomScalar(scalar);
-      return {scalar};
+      const after=read();
+      return {
+        ok:true,scalar,
+        before:{x:String(before.x),y:String(before.y)},
+        after:after?{x:String(after.x),y:String(after.y)}:null
+      };
     """)
+    if not result or not result.get("ok"):
+        raise RuntimeError("could not prepare wider-view protagonist focus: "+json.dumps(result))
+    if result.get("before")!=result.get("after"):
+        raise RuntimeError("wider-view camera setup mutated protagonist simulation position: "+json.dumps(result))
     _wait(driver,"""
-      const s=window.PlanetStage?.snapshot?.(),p=s?.npcPresentation||{};
-      const nonFinal=Number(s?.zoom?.scalar)<0.999999;
-      const nearReady=s?.zoom?.visibleLevel==='near-ground-close'||s?.zoom?.requestedLevel==='near-ground-close';
-      return Boolean(s?.ready&&nonFinal&&nearReady&&p?.protagonistMarkerVisible===true&&p?.protagonistBillboardVisible!==true&&(window.PlanetStage?.inspectionTargets?.()||[]).some(x=>x.type==='protagonist'));
+      const s=window.PlanetStage?.snapshot?.(),p=s?.npcPresentation||{},ls=s?.projection?.localStatic||{};
+      const t=(window.PlanetStage?.inspectionTargets?.()||[]).find(x=>x.type==='protagonist');
+      const c=document.getElementById('planetCanvas')?.getBoundingClientRect?.(),b=t?.bounds;
+      const cx=b?(Number(b.left)+Number(b.right))/2:NaN,cy=b?(Number(b.top)+Number(b.bottom))/2:NaN;
+      const inViewport=Boolean(c&&Number.isFinite(cx)&&Number.isFinite(cy)&&cx>=0&&cx<=Number(c.width)&&cy>=0&&cy<=Number(c.height));
+      return Boolean(
+        s?.ready&&Number(s?.zoom?.scalar)<0.999999&&
+        s?.zoom?.visibleLevel==='near-ground-close'&&
+        ls?.revealTier==='refined'&&
+        p?.protagonistMarkerVisible===true&&p?.protagonistBillboardVisible!==true&&
+        t&&inViewport
+      );
     """,200,"inspectable 80m wider-view protagonist")
     return result
 
