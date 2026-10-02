@@ -3880,7 +3880,7 @@ function localStylePatternTexture(kind){
   const ctx=canvas.getContext("2d",{alpha:false});if(!ctx)return null;
   const palette={
     road:["#e0cfb1","#bda786","#f0e3ca"],
-    stone:["#ddd1b9","#aaa28f","#f2e8d4"],
+    stone:["#cbbfa9","#7f7566","#efe4cf"],
     roof:["#f1d4b8","#a9674b","#ffe7c9"],
     plaster:["#f2e4c9","#ccb996","#fff2d9"],
     wood:["#d7b181","#9d744e","#ead0a7"]
@@ -3888,10 +3888,15 @@ function localStylePatternTexture(kind){
   ctx.fillStyle=palette[0];ctx.fillRect(0,0,size,size);
   ctx.lineCap="round";ctx.lineJoin="round";
   if(key==="stone"){
-    ctx.strokeStyle=palette[1];ctx.globalAlpha=.30;ctx.lineWidth=1;
+    ctx.strokeStyle=palette[1];ctx.globalAlpha=.40;ctx.lineWidth=1.15;
     for(let y=0,row=0;y<size;y+=11,row++){
       ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(size,y+.5);ctx.stroke();
       const offset=row%2?6:0;for(let x=offset;x<size;x+=13){ctx.beginPath();ctx.moveTo(x+.5,y);ctx.lineTo(x+.5,Math.min(size,y+11));ctx.stroke();}
+    }
+    ctx.fillStyle=palette[2];ctx.globalAlpha=.12;
+    for(let i=0;i<12;i++){
+      const x=(i*17+5)%58,y=(i*29+7)%58,w=3+(i%3),h=2+((i+1)%3);
+      ctx.fillRect(x,y,w,h);
     }
   }else if(key==="roof"){
     ctx.strokeStyle=palette[1];ctx.globalAlpha=.34;ctx.lineWidth=1.15;
@@ -3929,7 +3934,7 @@ function ensureLocalStaticMaterials(){
   };
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.60,.54,.43,1,"terrain:road","road",1.8),roadOverview:make("LocalRoadOverview",.55,.49,.39,1,"terrain:road","road",1.55),square:make("LocalSquare",.70,.58,.39,1,"terrain:square","stone",3.4),
+    road:make("LocalRoad",.60,.54,.43,1,"terrain:road","road",1.8),roadOverview:make("LocalRoadOverview",.55,.49,.39,1,"terrain:road","road",1.55),square:make("LocalSquare",.565,.535,.475,1,"terrain:square","stone",3.65),
     wall:make("LocalWall",.86,.73,.53,1,"terrain:building","plaster",2.6),roof:make("LocalRoof",.48,.19,.10,1,"terrain:building","roof",3.2),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1,1,null,"roof",4.8);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     landmark:make("LocalLandmark",.92,.72,.38,1,"terrain:building","plaster",2.8),footprint:make("LocalSettlementFootprint",.52,.44,.29,.09,"terrain:building"),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.90);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -5002,7 +5007,7 @@ function requestGroundCharacterMaterial(url){
             const pixels=scanCtx.getImageData(0,0,sw,sh).data;
             let minX=sw,minY=sh,maxX=-1,maxY=-1;
             for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){
-              if(pixels[(y*sw+x)*4+3]<=12)continue;
+              if(pixels[(y*sw+x)*4+3]<=64)continue;
               if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
             }
             if(maxX>=minX&&maxY>=minY){
@@ -5019,7 +5024,7 @@ function requestGroundCharacterMaterial(url){
         texture.name="GroundCharacterTexture-"+key.split("/").pop();texture.setSource(textureSource);
         const material=new pc.StandardMaterial();material.name="GroundCharacter-"+key.split("/").pop();
         const treatment=worldVisualStyle()?.spriteTreatment?.character||{},diffuseTint=Array.isArray(treatment.diffuseTint)?treatment.diffuseTint:[1,1,1],emissiveTint=Array.isArray(treatment.emissiveTint)?treatment.emissiveTint:[.78,.78,.78];
-        material.diffuse.set(...diffuseTint);material.emissive.set(...emissiveTint);material.emissiveIntensity=.46;
+        material.diffuse.set(...diffuseTint);material.emissive.set(...emissiveTint);material.emissiveIntensity=.56;
         material.diffuseMap=texture;material.emissiveMap=texture;material.opacityMap=texture;material.opacityMapChannel="a";
         material.alphaTest=Number(treatment.alphaTest??.10);material.blendType=pc.BLEND_NONE;material.depthWrite=true;material.depthTest=true;material.cull=pc.CULLFACE_NONE;material.useLighting=Boolean(treatment.useLighting??false);material.update();
         groundCharacterTextures.set(key,texture);groundCharacterMaterials.set(key,material);resolve(material);

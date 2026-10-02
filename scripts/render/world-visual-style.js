@@ -5,7 +5,7 @@
 // The loading presentation supplies the palette/mood language only. Gameplay
 // keeps its own geometry, sprites, UI and renderer architecture.
 const STYLE=Object.freeze({
-  signature:"living-world-style-v4",
+  signature:"living-world-style-v5",
   reference:"scene-loading-color-language",
   palette:Object.freeze({
     gold:Object.freeze([0.949,0.831,0.494]),
@@ -64,7 +64,7 @@ const STYLE=Object.freeze({
     green:Object.freeze({saturation:1.14,brightness:1.035,redScale:1.055,greenScale:0.990,blueScale:0.850,redOffset:0.018,greenOffset:0.010,blueOffset:-0.004}),
     water:Object.freeze({saturation:1.12,brightness:1.025,redScale:0.930,greenScale:1.020,blueScale:1.065,redOffset:0,greenOffset:0.006,blueOffset:0.016}),
     earth:Object.freeze({saturation:1.18,brightness:1.035,redScale:1.075,greenScale:1.015,blueScale:0.880,redOffset:0.018,greenOffset:0.006,blueOffset:-0.004}),
-    constructed:Object.freeze({saturation:1.14,brightness:1.025,redScale:1.045,greenScale:1.005,blueScale:0.920,redOffset:0.010,greenOffset:0.002,blueOffset:-0.004}),
+    constructed:Object.freeze({saturation:1.055,brightness:1.018,redScale:1.025,greenScale:1.012,blueScale:0.975,redOffset:0.006,greenOffset:0.004,blueOffset:0.002}),
     neutral:Object.freeze({saturation:1.06,brightness:1.025,redScale:1.020,greenScale:1.010,blueScale:0.965,redOffset:0.006,greenOffset:0.004,blueOffset:0.002})
   }),
   localDetail:Object.freeze({
