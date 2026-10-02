@@ -110,6 +110,7 @@ let horizonSkirt=null;
 let horizonSkirtMaterial=null;
 let localStaticRoot=null;
 let localStaticMaterials=null;
+let localStyleTextures=null;
 let localStyleTextures=new Map();
 let localSettlementRoadGeometry=null;
 let localSettlementLotGeometry=null;
@@ -3910,6 +3911,40 @@ function localStylePatternTexture(kind){
   const texture=new pc.Texture(device,{width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8,mipmaps:true,minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,addressU:pc.ADDRESS_REPEAT,addressV:pc.ADDRESS_REPEAT});
   texture.name="LocalLivingWorldPattern-"+key;texture.setSource(canvas);localStyleTextures.set(key,texture);return texture;
 }
+function makeLocalStyleTexture(name,kind){
+  if(!pc||!device||typeof document==="undefined")return null;
+  const size=96,canvas=document.createElement("canvas");canvas.width=size;canvas.height=size;
+  const ctx=canvas.getContext("2d",{alpha:false});if(!ctx)return null;
+  const unit=(index,salt=0)=>((seededHash32(String(activeSeed)+"|living-world|"+name+"|"+salt+"|"+index)>>>0)/4294967295);
+  if(kind==="road"){
+    ctx.fillStyle="#7c542d";ctx.fillRect(0,0,size,size);
+    for(let i=0;i<88;i++){
+      const x=unit(i,1)*size,y=unit(i,2)*size,r=.45+unit(i,3)*1.25;
+      const tones=["rgba(219,171,101,.28)","rgba(74,43,23,.24)","rgba(157,111,61,.25)"];
+      ctx.fillStyle=tones[Math.floor(unit(i,4)*tones.length)%tones.length];ctx.beginPath();ctx.ellipse(x,y,r*1.8,r,unit(i,5)*Math.PI,0,Math.PI*2);ctx.fill();
+    }
+    ctx.strokeStyle="rgba(66,39,22,.16)";ctx.lineWidth=1.15;
+    for(let i=0;i<5;i++){const y=13+i*18+unit(i,6)*4;ctx.beginPath();ctx.moveTo(0,y);ctx.bezierCurveTo(28,y-2,61,y+3,size,y-1);ctx.stroke();}
+  }else{
+    ctx.fillStyle="#ad8755";ctx.fillRect(0,0,size,size);
+    const tile=16;
+    for(let gy=0;gy<size/tile;gy++)for(let gx=0;gx<size/tile;gx++){
+      const n=unit(gx+gy*16,9),v=Math.round(150+n*26);
+      ctx.fillStyle="rgb("+Math.min(196,v+24)+","+Math.min(164,v)+","+Math.min(116,v-35)+")";
+      ctx.fillRect(gx*tile+1,gy*tile+1,tile-2,tile-2);
+    }
+    ctx.strokeStyle="rgba(72,48,29,.30)";ctx.lineWidth=1;
+    for(let i=0;i<=size;i+=tile){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,size);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(size,i);ctx.stroke();}
+  }
+  const texture=new pc.Texture(device,{name:"LivingWorld-"+name,width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true,minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,addressU:pc.ADDRESS_REPEAT,addressV:pc.ADDRESS_REPEAT});
+  texture.setSource(canvas);return texture;
+}
+function ensureLocalStyleTextures(){
+  if(localStyleTextures)return localStyleTextures;
+  localStyleTextures={road:makeLocalStyleTexture("road","road"),square:makeLocalStyleTexture("square","square")};
+  return localStyleTextures;
+}
+
 function ensureLocalStaticMaterials(){
   if(localStaticMaterials||!pc)return;
   const make=(name,r,g,b,opacity=1,styleRole=null,patternKind=null,repeat=1)=>{
@@ -3946,6 +3981,9 @@ function ensureLocalStaticMaterials(){
   // Route and lot overview meshes are tangent-plane quads. Render both sides so
   // their visibility does not depend on the local tangent entity orientation.
   localStaticMaterials.lotOverview.vertexColors=true;localStaticMaterials.lotOverview.diffuseVertexColor=true;
+  const styleTextures=ensureLocalStyleTextures();
+  if(styleTextures?.road){for(const material of [localStaticMaterials.road,localStaticMaterials.roadOverview]){material.diffuseMap=styleTextures.road;material.update();}}
+  if(styleTextures?.square){localStaticMaterials.square.diffuseMap=styleTextures.square;localStaticMaterials.square.update();}
   for(const material of [localStaticMaterials.road,localStaticMaterials.roadOverview,localStaticMaterials.lotOverview,localStaticMaterials.microWater,localStaticMaterials.microGround,localStaticMaterials.microMoss,localStaticMaterials.microSoil]){material.cull=pc.CULLFACE_NONE;material.update();}
 }
 function sharedLocalPrimitive(type){
@@ -7238,10 +7276,12 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // registered-meter cover/macro field and full near-ground relief.
         const nearReliefWeight=lerp(.30,1,smoothstep01(clamp((24-metersPerTexel)/16,0,1)));
         const broadReliefWeight=lerp(.36,1,smoothstep01(clamp((58-metersPerTexel)/34,0,1)));
-        const rawHillshadeStrength=clamp((.05+focusRefineWeight*.26)*slopeLightingWeight*nearReliefWeight*broadReliefWeight,.010,.68);
-        const hillshadeCap=metersPerTexel<=6?.70:metersPerTexel<=30?.26:metersPerTexel<=120?.055:.025;
+        const closeLivingRelief=worldVisualStyle()?smoothstep01(clamp((5-metersPerTexel)/4.5,0,1)):0;
+        const rawHillshadeStrength=clamp((.05+focusRefineWeight*(.26+closeLivingRelief*.22))*slopeLightingWeight*nearReliefWeight*broadReliefWeight,.010,.90);
+        const hillshadeCap=metersPerTexel<=2?lerp(.70,.90,closeLivingRelief):metersPerTexel<=6?.70:metersPerTexel<=30?.26:metersPerTexel<=120?.055:.025;
         const focusHillshadeStrength=Math.min(rawHillshadeStrength,hillshadeCap);
-        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,contextRing?.94:.91,contextRing?1.06:1.09);
+        const shadeFloor=lerp(contextRing?.94:.91,.82,closeLivingRelief),shadeCeil=lerp(contextRing?1.06:1.09,1.18,closeLivingRelief);
+        shade=clamp(1+(lit-flatShade)*focusHillshadeStrength,shadeFloor,shadeCeil);
         const mapStructureBoost=lerp(1.06,1,smoothstep01(clamp((30-metersPerTexel)/28,0,1)));
         // 1/500 needs readable ridges/valleys without restoring the broad
         // low-frequency pale sweep. Boost only the high-pass curvature/drainage
@@ -7445,10 +7485,17 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // when the physical texel footprint is genuinely local. Distant/regional
       // views keep their coarse canonical atlas transfer; near/max zoom gains
       // the warm, colorful living-world hierarchy without adding world detail.
-      const livingWorldStyleWeight=contextRing?0:smoothstep01(clamp((28-metersPerTexel)/24,0,1));
+      const styleContract=worldVisualStyle()?.localDetail||{},styleMax=Math.max(4,Number(styleContract.maxMetersPerTexel||28));
+      const livingWorldStyleWeight=contextRing?0:smoothstep01(clamp((styleMax-metersPerTexel)/(styleMax-4),0,1));
       if(livingWorldStyleWeight>.001){
-        const styled=worldStyleRgb(localSurfaceStyleRole(parentSample),displayColor);
+        const role=localSurfaceStyleRole(parentSample),styled=worldStyleRgb(role,displayColor);
         displayColor=displayColor.map((v,i)=>clamp(lerp(v,styled[i],livingWorldStyleWeight),0,1));
+        const closeTextureBand=styleContract.closeSurfaceVariation===false?0:livingWorldStyleWeight*smoothstep01(clamp((4-metersPerTexel)/3.5,0,1));
+        if(closeTextureBand>.001&&["terrain:grass","terrain:forest","terrain:farmland"].includes(role)){
+          const broadStyle=surfaceValueNoise(worldEast,worldNorth,5.5,detailSalt+307),fineStyle=surfaceValueNoise(worldEast,worldNorth,1.4,detailSalt+331);
+          const patch=(broadStyle*.070+fineStyle*.026)*closeTextureBand;
+          displayColor=[clamp(displayColor[0]+patch*1.05,0,1),clamp(displayColor[1]+patch*.55,0,1),clamp(displayColor[2]-patch*.20,0,1)];
+        }
       }
       pushRange("finalLuma",luma3(displayColor));
       if(evidenceProbeTargets){
@@ -10143,6 +10190,7 @@ function destroy(){
   clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection(false);localCampaignWearContext=null;clearCanonicalWayfindingSignposts();clearCanonicalRoofRegistry();
   app?.destroy?.();
   for(const texture of localStyleTextures.values())texture?.destroy?.();localStyleTextures.clear();
+  if(localStyleTextures){for(const texture of Object.values(localStyleTextures))try{texture?.destroy?.();}catch(_){} localStyleTextures=null;}
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localPersistentConsequenceRoot=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
   environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionTextures=null;environmentalReactionPool=[];
   environmentalReactions={enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,activeDrawCallEstimate:0,peakActiveCount:0,triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,terrainMutation:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameWorldScan:false};
