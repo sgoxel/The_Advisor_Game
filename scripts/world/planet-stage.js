@@ -590,47 +590,59 @@ function rendererFrameStatistics(){
   const sorted=samples.slice().sort((a,b)=>a-b);
   const pick=p=>sorted.length?sorted[Math.min(sorted.length-1,Math.max(0,Math.ceil(sorted.length*p)-1))]:0;
   const median=sorted.length?(sorted.length%2?sorted[(sorted.length-1)/2]:(sorted[sorted.length/2-1]+sorted[sorted.length/2])/2):0;
-  const stats=app?.stats||null,frame=stats?.frame||null,draw=stats?.drawCalls||null,vram=stats?.vram||null,gpu=stats?.gpu||null;
+  const stats=app?.stats||null,legacyFrame=stats?.frame||null,legacyDraw=stats?.drawCalls||null,legacyVram=stats?.vram||null,legacyGpu=stats?.gpu||null;
   const num=value=>Number.isFinite(Number(value))?Number(value):null;
+  const publicStats=engineVersionInUse==="2.23.0"?stats:null;
+  const publicFrameMs=num(publicStats?.frameTime),publicFps=num(publicStats?.fps),publicDrawCalls=num(publicStats?.drawCallCount);
+  const publicPrimitiveCount=num(publicStats?.primitiveCount),publicGpuFrameMs=num(publicStats?.gpuFrameTime);
+  const publicCpuUpdateMs=num(publicStats?.cpuUpdateTime),publicCpuRenderMs=num(publicStats?.cpuRenderTime);
+  const publicCpuSystemUpdateMs=num(publicStats?.cpuSystemUpdateTime),publicCpuSystemPostUpdateMs=num(publicStats?.cpuSystemPostUpdateTime);
+  const publicVramTotalBytes=num(publicStats?.vramTotalBytes),publicVramTextureBytes=num(publicStats?.vramTextureBytes);
+  const publicVramVertexBufferBytes=num(publicStats?.vramVertexBufferBytes),publicVramIndexBufferBytes=num(publicStats?.vramIndexBufferBytes);
+  const publicVramUniformBufferBytes=num(publicStats?.vramUniformBufferBytes),publicVramStorageBufferBytes=num(publicStats?.vramStorageBufferBytes);
   const gpuPassTimings={};
-  if(gpu instanceof Map)for(const [name,value] of gpu.entries()){const n=num(value);if(n!==null)gpuPassTimings[String(name)]=n;}
-  const gpuPassValues=Object.values(gpuPassTimings),gpuPassTotalMs=gpuPassValues.length?gpuPassValues.reduce((sum,value)=>sum+value,0):null;
+  if(legacyGpu instanceof Map)for(const [name,value] of legacyGpu.entries()){const n=num(value);if(n!==null)gpuPassTimings[String(name)]=n;}
+  const gpuPassValues=Object.values(gpuPassTimings),legacyGpuPassTotalMs=gpuPassValues.length?gpuPassValues.reduce((sum,value)=>sum+value,0):null;
   const browserDevicePixelRatio=Math.max(1,num(globalThis.devicePixelRatio)||1),maxPixelRatio=Math.max(.1,num(device?.maxPixelRatio)||browserDevicePixelRatio);
   const cssWidth=Math.max(1,num(canvas?.clientWidth)||num(root?.clientWidth)||1),cssHeight=Math.max(1,num(canvas?.clientHeight)||num(root?.clientHeight)||1);
   const bufferWidth=Math.max(1,num(canvas?.width)||Math.round(cssWidth*Math.min(browserDevicePixelRatio,maxPixelRatio)));
   const bufferHeight=Math.max(1,num(canvas?.height)||Math.round(cssHeight*Math.min(browserDevicePixelRatio,maxPixelRatio)));
   const effectivePixelRatio=Number((bufferWidth/cssWidth).toFixed(4)),nativePixelRatio=Math.min(browserDevicePixelRatio,maxPixelRatio);
   const renderScale=Number((effectivePixelRatio/Math.max(.0001,nativePixelRatio)).toFixed(4));
+  const publicAppStatsAvailable=Boolean(publicStats&&(
+    publicFrameMs!==null||publicFps!==null||publicDrawCalls!==null||publicCpuUpdateMs!==null||
+    publicCpuRenderMs!==null||publicGpuFrameMs!==null||publicVramTotalBytes!==null
+  ));
   return Object.freeze({
-    source:engineVersionInUse==="2.23.0"?"PlayCanvas AppStats 2.23 public frame/drawCalls/vram/gpu + bounded local frame history":"PlayCanvas AppStats + bounded local frame history",
+    source:publicAppStatsAvailable?"PlayCanvas AppStats 2.23 public getters + bounded local frame history":"bounded local frame history + legacy PlayCanvas counters where exposed",
     engineVersion:engineVersionInUse,engineBuild:engineBuildInUse,
     sampleCount:sorted.length,
-    fps:num(frame?.fps)??(median>0?Number((1000/median).toFixed(2)):0),
-    latestFrameMs:num(frame?.ms),
+    fps:publicFps??num(legacyFrame?.fps)??(median>0?Number((1000/median).toFixed(2)):0),
+    latestFrameMs:publicFrameMs??num(legacyFrame?.ms),
     medianFrameMs:Number(median.toFixed(3)),
     p95FrameMs:Number(pick(.95).toFixed(3)),
     worstFrameMs:Number((sorted.length?sorted[sorted.length-1]:0).toFixed(3)),
-    drawCalls:num(draw?.total),
-    primitiveCount:num(frame?.triangles),
-    triangles:num(frame?.triangles),
-    shaderSwitches:num(frame?.shaders),
-    materialSwitches:num(frame?.materials),
-    gpuFrameMs:gpuPassValues.length===1?Number(gpuPassTotalMs.toFixed(4)):null,
-    gpuPassTotalMs:gpuPassTotalMs===null?null:Number(gpuPassTotalMs.toFixed(4)),
+    drawCalls:publicDrawCalls??num(legacyDraw?.total),
+    primitiveCount:publicPrimitiveCount??num(legacyFrame?.triangles),
+    triangles:publicPrimitiveCount??num(legacyFrame?.triangles),
+    shaderSwitches:num(legacyFrame?.shaders),
+    materialSwitches:num(legacyFrame?.materials),
+    gpuFrameMs:publicGpuFrameMs,
+    gpuPassTotalMs:legacyGpuPassTotalMs===null?null:Number(legacyGpuPassTotalMs.toFixed(4)),
     gpuPassTimings:Object.freeze(gpuPassTimings),
-    gpuFrameTimeAvailable:gpuPassValues.length===1,
-    gpuTimestampTimingsAvailable:gpuPassValues.length>0,
-    gpuTimingMode:gpuPassValues.length===0?"unavailable":gpuPassValues.length===1?"single-public-pass":"public-per-pass",
-    cpuUpdateMs:num(frame?.updateTime)??Number(navigationPerformance.lastFrameUpdateMs||0),
-    cpuRenderMs:num(frame?.renderTime)??Number(navigationPerformance.lastRenderCpuMs||0),
-    cpuSystemUpdateMs:num(frame?.scriptUpdate),
-    cpuSystemPostUpdateMs:num(frame?.scriptPostUpdate),
-    vramTotalBytes:num(vram?.totalUsed),
-    vramTextureBytes:num(vram?.tex),
-    vramVertexBufferBytes:num(vram?.vb),
-    vramIndexBufferBytes:num(vram?.ib),
-    vramUniformBufferBytes:num(vram?.ub),
-    vramStorageBufferBytes:num(vram?.sb),
+    gpuFrameTimeAvailable:publicGpuFrameMs!==null,
+    gpuTimestampTimingsAvailable:publicGpuFrameMs!==null||gpuPassValues.length>0,
+    gpuTimingMode:publicGpuFrameMs!==null?"public-frame":gpuPassValues.length?"legacy-per-pass":"unavailable",
+    cpuUpdateMs:publicCpuUpdateMs??num(legacyFrame?.updateTime)??Number(navigationPerformance.lastFrameUpdateMs||0),
+    cpuRenderMs:publicCpuRenderMs??num(legacyFrame?.renderTime)??Number(navigationPerformance.lastRenderCpuMs||0),
+    cpuSystemUpdateMs:publicCpuSystemUpdateMs??num(legacyFrame?.scriptUpdate),
+    cpuSystemPostUpdateMs:publicCpuSystemPostUpdateMs??num(legacyFrame?.scriptPostUpdate),
+    vramTotalBytes:publicVramTotalBytes??num(legacyVram?.totalUsed),
+    vramTextureBytes:publicVramTextureBytes??num(legacyVram?.tex),
+    vramVertexBufferBytes:publicVramVertexBufferBytes??num(legacyVram?.vb),
+    vramIndexBufferBytes:publicVramIndexBufferBytes??num(legacyVram?.ib),
+    vramUniformBufferBytes:publicVramUniformBufferBytes??num(legacyVram?.ub),
+    vramStorageBufferBytes:publicVramStorageBufferBytes??num(legacyVram?.sb),
     viewport:Object.freeze({
       cssWidth,cssHeight,bufferWidth,bufferHeight,
       browserDevicePixelRatio:Number(browserDevicePixelRatio.toFixed(4)),
@@ -640,8 +652,8 @@ function rendererFrameStatistics(){
     }),
     visibleEntityEstimate:Number((localStatic?.entityCount||0)+(localNpcPresentation?.activeCount||0)+(localCrowdPresentation?.visibleCount||0)+1),
     materialCountEstimate:Number((localStaticMaterials?Object.keys(localStaticMaterials).length:0)+localStyleTextures.size+(surfaceMaterial?1:0)+(tangentPatchMaterial?1:0)),
-    appStatsPublicApi:Boolean(stats&&frame&&draw&&vram),
-    appStatsStructure:"frame/drawCalls/vram/gpu",
+    appStatsPublicApi:publicAppStatsAvailable,
+    appStatsStructure:publicAppStatsAvailable?"flat-public-getters":"legacy-nested-counters",
     boundedRecentSamples:true
   });
 }
