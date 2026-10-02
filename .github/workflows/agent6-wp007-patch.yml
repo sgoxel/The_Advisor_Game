@@ -1,8 +1,11 @@
 name: Agent6 WP007 Harness Patch
 
 on:
-  issue_comment:
-    types: [created]
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/agent6-wp007-patch.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,9 +16,6 @@ concurrency:
 
 jobs:
   patch:
-    if: >-
-      github.event.issue.number == 159 &&
-      startsWith(github.event.comment.body, '/agent6-wp007-patch')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +51,8 @@ WP_SETTLEMENT_REVEAL_PLAN=(
 )
 WP_SETTLEMENT_REVEAL_TIERS=("none","footprint","footprint","route","route","route","coarse","refined","full","full")
 WP_SCALE_HANDOFF_PLAN=('''
-          if old not in text: raise SystemExit('constants anchor missing')
+          if old not in text:
+              raise SystemExit('constants anchor missing')
           text=text.replace(old,new,1)
 
           anchor='\n\n\ndef _atlas_live_state(driver):\n'
@@ -140,12 +141,14 @@ def _validate_settlement_reveal_frames(frames):
     if abs(float(ground.get("presentationScale") or 0)-1.0)>0.001:
         raise RuntimeError(f"ground tier did not converge to physical 1:1 scale: {ground.get('presentationScale')}")
 '''
-          if anchor not in text: raise SystemExit('function anchor missing')
+          if anchor not in text:
+              raise SystemExit('function anchor missing')
           text=text.replace(anchor,block+anchor,1)
 
           old='if args.scenario in {WP_SURFACE_REFINEMENT_SCENARIO,WP_SCALE_HANDOFF_SCENARIO,WP_ATLAS_LIVE_SCENARIO}:'
           new='if args.scenario in {WP_SURFACE_REFINEMENT_SCENARIO,WP_SCALE_HANDOFF_SCENARIO,WP_SETTLEMENT_REVEAL_SCENARIO,WP_ATLAS_LIVE_SCENARIO}:'
-          if old not in text: raise SystemExit('viewport anchor missing')
+          if old not in text:
+              raise SystemExit('viewport anchor missing')
           text=text.replace(old,new,1)
 
           old='''    elif args.scenario==WP_SCALE_HANDOFF_SCENARIO:
@@ -156,7 +159,8 @@ def _validate_settlement_reveal_frames(frames):
     elif args.scenario==WP_SETTLEMENT_REVEAL_SCENARIO:
         total=max(total,WP_SETTLEMENT_REVEAL_SHOTS)
     elif args.scenario==WP_CANONICAL_FOCUS_SCENARIO:'''
-          if old not in text: raise SystemExit('shot-count anchor missing')
+          if old not in text:
+              raise SystemExit('shot-count anchor missing')
           text=text.replace(old,new,1)
 
           old='''            _validate_scale_handoff_frames(frames)
@@ -175,7 +179,8 @@ def _validate_settlement_reveal_frames(frames):
                 frames.append(frame)
             _validate_settlement_reveal_frames(frames)
         elif args.scenario==WP_CANONICAL_FOCUS_SCENARIO:'''
-          if old not in text: raise SystemExit('capture branch anchor missing')
+          if old not in text:
+              raise SystemExit('capture branch anchor missing')
           text=text.replace(old,new,1)
 
           p.write_text(text,encoding='utf-8')
@@ -184,7 +189,10 @@ def _validate_settlement_reveal_frames(frames):
           python -m py_compile tools/screenshot_tool.py
           git diff --check
           git add tools/screenshot_tool.py
-          git diff --cached --quiet && exit 0
+          if git diff --cached --quiet; then
+            echo 'WP007 harness already current; nothing to commit.'
+            exit 0
+          fi
           git commit -m 'WP-S003-010-003-007 restore dedicated visual evidence harness'
           git pull --rebase origin main
           git push origin HEAD:main
