@@ -78,7 +78,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-008-007` — Universal Window Shell: Close, Drag, Minimize-to-Icon + Restore — IN PROGRESS (fresh acceptance capped 2026-10-02; Local Event and shared Places drag are proven, but dynamic Places panel replacement drops the injected Minimize control and the minimized dock overlaps the scale HUD before the responsive matrix can complete)
 - `WP-S003-008-008` — Canonical Places View Targeting + Protagonist Max-Zoom Focus
 - `WP-S003-009` — Grounded Painterly Cel-Shaded Living World Visual Direction Foundation — IN PROGRESS
-- `WP-S003-009-001` — Starting Village Environmental Dressing + Semantic Prop Placement
+- `WP-S003-009-001` — Starting Village Environmental Dressing + Semantic Prop Placement — IN PROGRESS (reopen repair accepted at VISUAL 8.1/10; final deployment verification pending)
 - `WP-S003-009-002` — Road Network Hierarchy + Raised Surface + Door Connector Paths — COMPLETED
 - `WP-S003-009-003` — Terrain/Object Contact Shadows + Grounding — COMPLETED
 - `WP-S003-009-004` — Deterministic Material Variation + Effective Ultra Texture Quality — COMPLETED
