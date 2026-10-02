@@ -6147,7 +6147,7 @@ function canonicalSettlementDressingPlan(reveal){
         items.push({x,y,ring,roadAdjacent,score,roadRank:prefersRoad&&roadAdjacent?1:0,terrainType:cell.terrainType});
       }
     }
-    items.sort((a,b)=>b.roadRank-a.roadRank||b.score-a.score||a.ring-b.ring||a.y-b.y||a.x-b.x);
+    items.sort((a,b)=>b.roadRank-a.roadRank||a.ring-b.ring||b.score-a.score||a.y-b.y||a.x-b.x);
     return items;
   };
   for(const record of records){
@@ -6202,38 +6202,120 @@ function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
     triangles+=type==="sphere"?24:type==="cylinder"?48:12;
     return true;
   };
-  const plazaHalf=Math.max(1,Number(window.StartingVillage?.PUBLIC_HALF_SIZE||3)*tileMeters),corner=plazaHalf*.68;
+  const plazaHalf=Math.max(1,Number(window.StartingVillage?.PUBLIC_HALF_SIZE||3)*tileMeters),corner=plazaHalf*.70;
+  const benchSpecs=[[-corner,0,0],[corner,0,0],[0,-corner,90],[0,corner,90]];
+  for(let i=0;i<benchSpecs.length;i++){
+    const [x,y,yaw]=benchSpecs[i];
+    addWorldPrimitive("public-square-bench-"+i,"box",localStaticMaterials.microWood,x,y,1.85,.32,.48,yaw,.34);
+  }
   for(const [x,y,index] of [[-corner,-corner,0],[corner,-corner,1],[-corner,corner,2],[corner,corner,3]]){
-    addWorldPrimitive("public-square-bench-"+index,"box",localStaticMaterials.microWood,x,y,2.0,.34,.50,45+index*90,.34);
-    const bedX=x+(x<0?-.48:.48),bedY=y+(y<0?-.48:.48);
-    addWorldPrimitive("public-square-planter-"+index,"box",localStaticMaterials.microSoil,bedX,bedY,1.10,.28,.84,0,.20);
-    addWorldPrimitive("public-square-flower-"+index,"sphere",localStaticMaterials.microAccent,bedX,bedY,.48,.58,.48,0,.36);
+    addWorldPrimitive("public-square-planter-"+index,"box",localStaticMaterials.microSoil,x,y,1.06,.24,.82,0,.16);
+    addWorldPrimitive("public-square-flower-"+index,"sphere",localStaticMaterials.microAccent,x,y,.44,.58,.44,0,.34);
   }
-  if(inFocusedArea(-corner,-corner,.8)){
-    addWorldPrimitive("public-square-well","cylinder",localStaticMaterials.microStone,-corner,-corner,1.32,.90,1.32,0,.02);
-  }
+  addWorldPrimitive("public-square-well","cylinder",localStaticMaterials.microStone,-corner*.42,corner*.34,1.25,.84,1.25,0,.02);
 
+  const rotateOffset=(dx,dz,yaw)=>{
+    const r=Number(yaw||0)*Math.PI/180,c=Math.cos(r),q=Math.sin(r);
+    return {east:dx*c-dz*q,north:dx*q+dz*c};
+  };
   const renderDescriptor=descriptor=>{
     const east=Number(descriptor.x)*tileMeters,north=Number(descriptor.y)*tileMeters;
     if(!inFocusedArea(east,north,tileMeters*.8))return false;
     const yaw=Number(descriptor.rotation||0),variant=Number(descriptor.variant||0),v=1+(variant-1)*.08;
+    const fullDetail=String(tier)==="full";
     let added=false;
-    switch(String(descriptor.semantic||"")){
-      case "garden":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microSoil,east,north,1.75*v,.16,1.35*v,yaw,.04);break;
-      case "woodpile":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,1.35*v,.46,.74*v,yaw,.02);break;
-      case "bush":added=addWorldPrimitive(descriptor.id,"sphere",localStaticMaterials.leaf,east,north,.92*v,.82*v,.92*v,yaw,.02);break;
-      case "flower":added=addWorldPrimitive(descriptor.id,"sphere",localStaticMaterials.microAccent,east,north,.62*v,.74*v,.62*v,yaw,.04);break;
-      case "fence":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,1.85*v,.56,.14,yaw,.18);break;
-      case "signpost":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microAccent,east,north,1.10*v,.56,.16,yaw,.92);break;
-      case "barrel":added=addWorldPrimitive(descriptor.id,"cylinder",localStaticMaterials.microDark,east,north,.72*v,.88,.72*v,yaw,.02);break;
-      case "crate":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,.78*v,.76,.78*v,yaw,.02);break;
-      case "cart":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,1.60*v,.48,.94*v,yaw,.18);break;
-      case "sack":added=addWorldPrimitive(descriptor.id,"sphere",localStaticMaterials.microCloth,east,north,.72*v,.92*v,.66*v,yaw,.02);break;
-      case "work-prop":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microDark,east,north,1.16*v,.54,.76*v,yaw,.12);break;
-      case "pen":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,1.90*v,.50,.14,yaw,.16);break;
-      case "well":added=addWorldPrimitive(descriptor.id,"cylinder",localStaticMaterials.microStone,east,north,1.28*v,.86,1.28*v,yaw,.02);break;
-      case "bench":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,1.62*v,.34,.50*v,yaw,.34);break;
-      default:added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,.82*v,.50,.82*v,yaw,.02);break;
+    const part=(suffix,type,material,dx,dz,sx,sy,sz,partYaw=yaw,raise=0)=>{
+      if(count>=64)return false;
+      const o=rotateOffset(dx,dz,yaw);
+      const ok=addWorldPrimitive(descriptor.id+"-"+suffix,type,material,east+o.east,north+o.north,sx,sy,sz,partYaw,raise);
+      added=added||ok;return ok;
+    };
+    const simple=()=>{
+      switch(String(descriptor.semantic||"")){
+        case "garden":return part("garden","box",localStaticMaterials.microSoil,0,0,1.75*v,.16,1.35*v);
+        case "woodpile":return part("woodpile","box",localStaticMaterials.microWood,0,0,1.35*v,.46,.74*v);
+        case "bush":return part("bush","sphere",localStaticMaterials.leaf,0,0,.92*v,.82*v,.92*v);
+        case "flower":return part("flower","sphere",localStaticMaterials.microAccent,0,0,.62*v,.74*v,.62*v);
+        case "fence":return part("fence","box",localStaticMaterials.microWood,0,0,1.85*v,.56,.14,yaw,.18);
+        case "signpost":return part("sign","box",localStaticMaterials.microAccent,0,0,1.10*v,.56,.16,yaw,.92);
+        case "barrel":return part("barrel","cylinder",localStaticMaterials.microWood,0,0,.72*v,.88,.72*v);
+        case "crate":return part("crate","box",localStaticMaterials.microWood,0,0,.78*v,.76,.78*v);
+        case "cart":return part("cart","box",localStaticMaterials.microWood,0,0,1.60*v,.48,.94*v,yaw,.18);
+        case "sack":return part("sack","sphere",localStaticMaterials.microCloth,0,0,.72*v,.92*v,.66*v);
+        case "work-prop":return part("work","box",localStaticMaterials.microDark,0,0,1.16*v,.54,.76*v,yaw,.12);
+        case "pen":return part("pen","box",localStaticMaterials.microWood,0,0,1.90*v,.50,.14,yaw,.16);
+        case "well":return part("well","cylinder",localStaticMaterials.microStone,0,0,1.28*v,.86,1.28*v);
+        case "bench":return part("bench","box",localStaticMaterials.microWood,0,0,1.62*v,.34,.50*v,yaw,.34);
+        default:return part("prop","box",localStaticMaterials.microWood,0,0,.82*v,.50,.82*v);
+      }
+    };
+    if(!fullDetail){
+      simple();
+    }else{
+      switch(String(descriptor.semantic||"")){
+        case "garden":
+          part("bed","box",localStaticMaterials.microSoil,0,0,1.80*v,.14,1.40*v);
+          part("crop-a","box",localStaticMaterials.leaf,-.42,0,.20,.34,1.02*v,yaw,.18);
+          part("crop-b","box",localStaticMaterials.leaf,.42,0,.20,.34,1.02*v,yaw,.18);
+          break;
+        case "woodpile":
+          part("log-a","box",localStaticMaterials.microWood,-.34,-.16,1.05*v,.22,.24,yaw,.12);
+          part("log-b","box",localStaticMaterials.microWood,.24,.10,1.05*v,.22,.24,yaw,.18);
+          part("log-c","box",localStaticMaterials.microDark,-.02,.26,.92*v,.18,.20,yaw,.28);
+          break;
+        case "flower":
+          part("leaf","sphere",localStaticMaterials.leaf,0,0,.52*v,.45,.52*v);
+          part("bloom","sphere",localStaticMaterials.microAccent,0,0,.36*v,.38,.36*v,yaw,.38);
+          break;
+        case "fence":
+          part("rail","box",localStaticMaterials.microWood,0,0,1.90*v,.18,.14,yaw,.48);
+          part("post-a","box",localStaticMaterials.microDark,-.78,0,.18,.82,.18,yaw,.12);
+          part("post-b","box",localStaticMaterials.microDark,.78,0,.18,.82,.18,yaw,.12);
+          break;
+        case "signpost":
+          part("post","box",localStaticMaterials.microWood,0,0,.18,1.45,.18,yaw,.02);
+          part("board","box",localStaticMaterials.microAccent,0,0,1.10*v,.52,.15,yaw,.88);
+          break;
+        case "barrel":
+          part("cask","cylinder",localStaticMaterials.microWood,0,0,.76*v,.90,.76*v);
+          part("band","box",localStaticMaterials.microDark,0,0,.82*v,.12,.82*v,yaw,.36);
+          break;
+        case "crate":
+          part("body","box",localStaticMaterials.microWood,0,0,.80*v,.76,.80*v);
+          part("strap","box",localStaticMaterials.microDark,0,0,.12,.80,.84*v,yaw,.02);
+          break;
+        case "cart":
+          part("bed","box",localStaticMaterials.microWood,0,0,1.55*v,.40,.88*v,yaw,.34);
+          part("wheel-a","sphere",localStaticMaterials.microDark,-.64,.38,.38,.52,.20,yaw,.10);
+          part("wheel-b","sphere",localStaticMaterials.microDark,.64,.38,.38,.52,.20,yaw,.10);
+          break;
+        case "work-prop":
+          part("bench","box",localStaticMaterials.microWood,0,0,1.22*v,.28,.68*v,yaw,.42);
+          part("tool","box",localStaticMaterials.microDark,.18,0,.18,.18,.92*v,yaw+32,.68);
+          break;
+        case "pen":
+          part("rail-a","box",localStaticMaterials.microWood,0,-.48,1.86*v,.18,.12,yaw,.46);
+          part("rail-b","box",localStaticMaterials.microWood,0,.48,1.86*v,.18,.12,yaw,.46);
+          part("side","box",localStaticMaterials.microWood,-.82,0,.12,.18,1.05*v,yaw,.46);
+          break;
+        case "well":
+          part("basin","cylinder",localStaticMaterials.microStone,0,0,1.30*v,.74,1.30*v);
+          part("post","box",localStaticMaterials.microWood,-.48,0,.16,1.32,.16,yaw,.42);
+          part("beam","box",localStaticMaterials.microWood,0,0,1.24,.16,.16,yaw,.98);
+          break;
+        case "bench":
+          part("seat","box",localStaticMaterials.microWood,0,0,1.62*v,.22,.48*v,yaw,.42);
+          part("leg-a","box",localStaticMaterials.microDark,-.56,0,.16,.52,.18,yaw,.08);
+          part("leg-b","box",localStaticMaterials.microDark,.56,0,.16,.52,.18,yaw,.08);
+          break;
+        case "bush":
+        case "sack":
+          simple();
+          break;
+        default:
+          simple();
+          break;
+      }
     }
     if(added){
       descriptorCount++;
