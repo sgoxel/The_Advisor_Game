@@ -20,7 +20,7 @@ let dock=null;
 const telemetry={registerCount:0,activeCount:0,minimizedCount:0,dragStartCount:0,dragEndCount:0,clampCorrections:0,focusChanges:0,worldInputSuppressions:0,closeCount:0,restoreCount:0,resizeCount:0};
 
 function stateFor(key){
-  if(!states.has(key))states.set(key,{x:null,y:null,minimized:false,closedInstance:null,z:++zCounter});
+  if(!states.has(key))states.set(key,{x:null,y:null,minimized:false,minimizedInstance:null,closedInstance:null,z:++zCounter});
   return states.get(key);
 }
 function instanceKey(node,key){
@@ -84,7 +84,7 @@ function closeWindow(key){
 }
 function restoreWindow(key){
   const rec=registry.get(key),s=stateFor(key);
-  s.minimized=false;s.closedInstance=null;
+  s.minimized=false;s.minimizedInstance=null;s.closedInstance=null;
   if(rec?.node){rec.node.hidden=false;clampNode(key,rec.node);focus(key,rec.node);}
   telemetry.restoreCount++;
   syncDock();
@@ -120,7 +120,7 @@ function installControls(cfg,node,handle){
     close.setAttribute("aria-label",close.getAttribute("aria-label")||("Close "+cfg.title));
     if(!close.dataset.windowShellBound){
       close.dataset.windowShellBound="true";
-      close.addEventListener("click",()=>{const s=stateFor(cfg.key);s.minimized=false;s.closedInstance=null;telemetry.closeCount++;syncDock();},{capture:true});
+      close.addEventListener("click",()=>{const s=stateFor(cfg.key);s.minimized=false;s.minimizedInstance=null;s.closedInstance=null;telemetry.closeCount++;syncDock();},{capture:true});
     }
   }else if(!node.querySelector(":scope .window-shell-close")){
     close=button("Close "+cfg.title,"window-shell-close","×",()=>closeWindow(cfg.key));
@@ -186,7 +186,7 @@ function refresh(node){
 function onResize(){telemetry.resizeCount++;for(const [key,rec] of registry)if(rec.node?.isConnected&&!rec.node.hidden)clampNode(key,rec.node);syncDock();}
 function snapshot(){
   const windows={};
-  for(const cfg of configs){const rec=registry.get(cfg.key),s=stateFor(cfg.key),r=rec?.node?.isConnected?rec.node.getBoundingClientRect():null;windows[cfg.key]={registered:Boolean(rec?.node?.isConnected),visible:Boolean(rec?.node?.isConnected&&!rec.node.hidden),minimized:s.minimized,closedInstance:s.closedInstance,position:r?{left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}:null,z:s.z};}
+  for(const cfg of configs){const rec=registry.get(cfg.key),s=stateFor(cfg.key),r=rec?.node?.isConnected?rec.node.getBoundingClientRect():null;windows[cfg.key]={registered:Boolean(rec?.node?.isConnected),visible:Boolean(rec?.node?.isConnected&&!rec.node.hidden),minimized:s.minimized,minimizedInstance:s.minimizedInstance,closedInstance:s.closedInstance,position:r?{left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}:null,z:s.z};}
   return Object.freeze({version:VERSION,dragging:Boolean(drag),telemetry:{...telemetry},windows});
 }
 function start(){
