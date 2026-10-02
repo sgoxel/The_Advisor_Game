@@ -99,10 +99,23 @@ all.push(...localSettlementQuery.results);
 
 const categoryCoverageQueries=[];
 for(const origin of origins){
-  for(const category of ["fishing","water"]){
-    categoryCoverageQueries.push(api.queryNearby(seed,origin,{radiusMeters:80000,maxResults:32,categories:[category]}));
-  }
+  categoryCoverageQueries.push(api.queryNearby(seed,origin,{radiusMeters:80000,maxResults:32,categories:["fishing"]}));
 }
+const pg=global.PlanetGeography.create(seed);
+let canonicalWaterOrigin=null;
+for(const latDeg of [-60,-30,0,30,60]){
+  for(const lonDeg of [-150,-90,-30,30,90,150]){
+    const lat=latDeg*Math.PI/180,lon=lonDeg*Math.PI/180,sample=pg.sampleLatLon(lat,lon);
+    if(sample?.land===false){
+      const tile=pg.worldTileForLatLon(lat,lon,api.TILE_METERS,global.PlanetGeography.DEFAULT_WORLD_RADIUS_METERS);
+      canonicalWaterOrigin={x:String(tile.x),y:String(tile.y),latDeg,lonDeg};
+      break;
+    }
+  }
+  if(canonicalWaterOrigin)break;
+}
+assert(canonicalWaterOrigin,"deterministic canonical water probe found no ocean coordinate");
+categoryCoverageQueries.push(api.queryNearby(seed,canonicalWaterOrigin,{radiusMeters:80000,maxResults:32,categories:["water"]}));
 for(const query of categoryCoverageQueries){
   assert(query.diagnostics.bounded&&query.diagnostics.fullWorldScan===false,"category coverage query lost bounded execution");
   all.push(...query.results);
@@ -156,6 +169,7 @@ console.log(JSON.stringify({
   summaries,
   uniqueDestinationCount:unique.length,
   settlementTypes:[...settlementTypes].sort(),
+  canonicalWaterProbe:canonicalWaterOrigin,
   requiredExamples:{
     historical:{id:historical.id,type:historical.type,name:historical.name,distanceMeters:historical.distanceMeters,direction:historical.directionLabel,country:historical.countryName,region:historical.regionName},
     hunting:{id:hunting.id,name:hunting.name,forestSamples:hunting.evidence.forestSamples,biome:hunting.evidence.biome},
