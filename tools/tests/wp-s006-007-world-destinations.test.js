@@ -80,6 +80,17 @@ for(const origin of origins){
   summaries.push({origin,signature:api.signature(first),count:first.results.length,queryMs:first.diagnostics.queryMs,queryCellCount:first.diagnostics.queryCellCount,settlementQueryCellCount:first.diagnostics.settlementQueryCellCount});
 }
 
+const canonicalStartingVillage=global.SettlementArchetypes.canonicalStartingVillageIdentity(seed);
+assert(canonicalStartingVillage,"canonical starting-village identity unavailable");
+const wideOriginQuery=api.queryNearby(seed,{x:"0",y:"0"},{radiusMeters:80000,maxResults:32});
+const wideStartingVillage=wideOriginQuery.results.find(item=>item.id===canonicalStartingVillage.id);
+assert(wideStartingVillage,"80 km Places query omitted canonical current village");
+assert.strictEqual(wideStartingVillage.type,"village","canonical current village descriptor type changed");
+assert.strictEqual(wideStartingVillage.category,"settlements","canonical current village category changed");
+assert.deepStrictEqual(wideStartingVillage.center,{x:"0",y:"0"},"canonical current village center changed");
+assert.notStrictEqual(String(wideStartingVillage.evidence?.terrain||""),"water","canonical current village resolved to water");
+assert(Number.isFinite(Number(wideStartingVillage.coordinates?.latitudeRadians))&&Number.isFinite(Number(wideStartingVillage.coordinates?.longitudeRadians)),"canonical current village coordinate unavailable");
+
 const localSettlementQuery=api.queryNearby(seed,{x:"0",y:"0"},{radiusMeters:18000,maxResults:32});
 assert(localSettlementQuery.diagnostics.settlementClasses.includes("village"),"local query omitted village class");
 assert(localSettlementQuery.diagnostics.settlementClasses.includes("hamlet"),"local query omitted hamlet class");
