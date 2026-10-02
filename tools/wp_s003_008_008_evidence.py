@@ -99,6 +99,24 @@ def bounded_water_candidate(driver,x,y):
       }:null;
     """,str(x),str(y))
 
+def canonical_water_probe_origin(driver):
+    return js(driver,"""
+      const seed=window.PlanetStage.snapshot().activeSeed,pg=window.PlanetGeography.create(seed);
+      const candidates=[[-60,-150],[-60,-90],[-60,-30],[-60,30],[-60,90],[-60,150],
+        [-30,-150],[-30,-90],[-30,-30],[-30,30],[-30,90],[-30,150],
+        [0,-150],[0,-90],[0,-30],[0,30],[0,90],[0,150],
+        [30,-150],[30,-90],[30,-30],[30,30],[30,90],[30,150],
+        [60,-150],[60,-90],[60,-30],[60,30],[60,90],[60,150]];
+      for(const [latDeg,lonDeg] of candidates){
+        const lat=latDeg*Math.PI/180,lon=lonDeg*Math.PI/180,sample=pg.sampleLatLon(lat,lon);
+        if(sample?.land===false){
+          const tile=pg.worldTileForLatLon(lat,lon,window.WorldDestinations.TILE_METERS,window.PlanetGeography.DEFAULT_WORLD_RADIUS_METERS);
+          return {x:String(tile.x),y:String(tile.y),latitudeDegrees:latDeg,longitudeDegrees:lonDeg,surfaceClass:String(sample.surfaceClass||''),land:false};
+        }
+      }
+      return null;
+    """)
+
 def select_and_assert(driver,d,label,stream_handoff=False):
     initial=js(driver,"""
       const id=String(arguments[0]),before=window.Protagonist?.getPosition?.()||null;
@@ -248,8 +266,12 @@ for seed in SEEDS:
                 break
 
         if "water-destination" not in found:
-            for ox,oy in OFFSETS:
-                target_x=start_x+ox;target_y=start_y+oy
+            probe_origins=[(start_x+ox,start_y+oy) for ox,oy in OFFSETS]
+            canonical_water_origin=canonical_water_probe_origin(driver)
+            if canonical_water_origin:
+                probe_origins.append((canonical_water_origin["x"],canonical_water_origin["y"]))
+                water_probe["canonicalWaterOrigin"]=canonical_water_origin
+            for target_x,target_y in probe_origins:
                 water_probe["probeCount"]+=1
                 candidate=bounded_water_candidate(driver,target_x,target_y)
                 if not candidate:
