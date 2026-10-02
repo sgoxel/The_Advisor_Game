@@ -8,6 +8,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 
 TARGET=os.environ.get("TARGET","http://127.0.0.1:8000/")
+SEED="AGENT6-WINDOW-SHELL-A"
 OUT=Path(os.environ.get("OUT","tools/screenshots/wp-s003-008-007"))
 OUT.mkdir(parents=True,exist_ok=True)
 
@@ -66,6 +67,8 @@ opts.add_argument("--use-gl=angle")
 opts.add_argument("--use-angle=swiftshader")
 opts.add_argument("--enable-gpu")
 opts.add_argument("--use-gpu-in-tests")
+opts.add_argument("--enable-webgl")
+opts.add_argument("--disable-search-engine-choice-screen")
 opts.add_argument("--window-size=1280,800")
 opts.set_capability("goog:loggingPrefs",{"browser":"ALL"})
 # The game intentionally performs substantial startup/streaming work after navigation.
@@ -79,12 +82,32 @@ driver.set_script_timeout(240)
 # This WP validates presentation mechanics, not renderer-backend parity. Force the
 # supported WebGL2 fallback so an unrelated WebGPU/CI device-loss path cannot make
 # this independently executable UI package depend on another renderer WP.
-driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument",{"source":"try{Object.defineProperty(navigator,'gpu',{value:undefined,configurable:true});}catch(_){} try{Object.defineProperty(Navigator.prototype,'gpu',{get:()=>undefined,configurable:true});}catch(_){} try{localStorage.setItem('the-advisor-game:development-mode','false');}catch(_){}"})
+campaign_bootstrap=json.dumps({
+    "seed":SEED,
+    "realStartMs":int(time.time()*1000),
+    "fantasyStart":{"year":1201,"month":2,"day":1,"hour":12,"minute":0,"second":0,"millisecond":0},
+    "protagonist":{"x":"0","y":"0"},
+    "restartCount":0,
+},separators=(",",":"))
+settings_bootstrap=json.dumps({"seed":SEED},separators=(",",":"))
+driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument",{"source":f"""
+try {{
+  Object.defineProperty(navigator,'gpu',{{value:undefined,configurable:true}});
+  Object.defineProperty(Navigator.prototype,'gpu',{{get:()=>undefined,configurable:true}});
+}} catch (_) {{}}
+try {{
+  localStorage.setItem('the-advisor-game:development-mode','false');
+  localStorage.setItem('theAdvisorGame.wp001.campaign.v2', {json.dumps(campaign_bootstrap)});
+  localStorage.setItem('theAdvisorGame.wp001.settings.v2', {json.dumps(settings_bootstrap)});
+  localStorage.setItem('advisor.planet.seed.v1', {json.dumps(SEED)});
+}} catch (_) {{}}
+"""})
 records=[]
 try:
     exact(driver,1280,800)
-    driver.get(TARGET)
-    wait_js(driver,"document.getElementById('planetStageRoot')?.dataset?.ready==='true'&&window.PlanetStage?.snapshot?.()?.ready&&window.WindowShell",180)
+    evidence_target=TARGET+("&" if "?" in TARGET else "?")+"evidence_fast_start=1&dev=1&gpu=webgl2"
+    driver.get(evidence_target)
+    wait_js(driver,"document.getElementById('planetStageRoot')?.dataset?.ready==='true'&&window.PlanetStage?.snapshot?.()?.ready&&window.WindowShell",300)
 
     activation=driver.execute_script("""
       const seed=window.PlanetStage.snapshot().activeSeed;
