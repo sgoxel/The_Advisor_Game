@@ -5470,7 +5470,20 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
       if(spec.propKind==="staff"||spec.propKind==="spear"||spec.propKind==="bow")topRect(posX+side*topHalfX*.98,posZ,topY+.014,Math.max(.014,.07/unit),Math.max(.08,.75/unit),propColor);
       else topRect(posX+side*topHalfX*.94,posZ+topHalfZ*.22,topY+.014,Math.max(.025,.20/unit),Math.max(.03,.28/unit),propColor);
       screenEvidence=screenFootprint(posX,posZ,topY,topHalfX*1.10,topHalfZ*1.10);
-    }else diamond(posX,posZ,ground+height*.86,headRadius,color);
+    }else{
+      // The routine crowd is deliberately anonymous, but at the final RPG camera
+      // it must still read as people rather than map markers. Keep the existing
+      // crossed upright silhouette for side/depth readability and add a compact
+      // top-facing body treatment in the same merged mesh/draw call. Geometry is
+      // presentation-only at the already-authoritative crowd anchor.
+      const topHalfX=Math.max(.035,.34/unit),topHalfZ=Math.max(.050,.50/unit),topY=ground+height*.54;
+      topRect(posX,posZ,topY,topHalfX*1.14,topHalfZ*1.12,travelerOutline);
+      topRect(posX,posZ,topY+.006,topHalfX*.88,topHalfZ*.86,color);
+      topRect(posX,posZ-topHalfZ*.02,topY+.010,topHalfX*.20,topHalfZ*.50,travelerHighlight);
+      const headZ=posZ-topHalfZ*.60,outerHead=Math.max(headRadius*1.32,.024);
+      diamond(posX,headZ,ground+height*.91,outerHead,travelerOutline);
+      diamond(posX,headZ,ground+height*.918,Math.max(headRadius*.80,.018),travelerSkin);
+    }
     visibleSpecs.push(Object.freeze({...spec,directLocalProjection:directLocal,screen:screenEvidence?.screen||null,bodyScreenSizePx:screenEvidence?.bodyScreenSizePx||null,inViewport:Boolean(screenEvidence?.inViewport)}));
   }
   let mergedEntity=null;
@@ -5505,7 +5518,8 @@ function rebuildLocalCrowdPresentation(resource,frame,tier,whenOverride=null){
     travelEncounterBodyMinPx:travelSizes.length?Number(Math.min(...travelSizes).toFixed(3)):null,travelEncounterBodyMaxPx:travelSizes.length?Number(Math.max(...travelSizes).toFixed(3)):null,
     travelEncounterVisualAnchorSource:encounter?.encounter?.visualAnchor?.source||null,travelerSilhouetteRevision:"travel-encounter-silhouette-v3",
     mobile,pooledStableIds:Boolean(crowd?.pooledStableIds!==false),localCulling:true,lowFrequencyMotion:Boolean(crowd?.lowFrequencyMotion!==false),mergedBatch:true,sharedMaterialCount:mergedEntity?1:0,
-    directLocalProjectionCount:visibleSpecs.filter(spec=>spec.directLocalProjection).length,topFacingHeadMarkers:true,topFacingTravelerBodies:true,
+    directLocalProjectionCount:visibleSpecs.filter(spec=>spec.directLocalProjection).length,topFacingHeadMarkers:true,topFacingTravelerBodies:true,topFacingRoutineBodies:true,
+    routineSilhouetteRevision:"anonymous-crowd-grounded-v4",
     presentationOnly:true,simulationAuthority:false,persistentIdentity:false,selectable:false,collision:false,inspectionRegistered:false,exactNpcReplacement:false,bounded:true,fullSettlementPerFrameScan:false,globalScan:false
   };
 }
