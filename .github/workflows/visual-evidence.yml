@@ -300,6 +300,8 @@ jobs:
             target='http://127.0.0.1:8000/'
             if printf '%s' "$HEAD_COMMIT_MESSAGE" | grep -q '^WP-S003-004-004'; then
               scenario='wp-s003-004-004'
+            elif printf '%s' "$HEAD_COMMIT_MESSAGE" | grep -q '^WP-S003-009'; then
+              scenario='starting-village'
             else
               scenario='wp-s003-010-003-005-002'
             fi
