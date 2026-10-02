@@ -718,7 +718,7 @@ def _wp_starting_village_targets(driver):
         {label:'village-overview',context:'overview',mode:'refined',point:village.center},
         {label:'residential-yard',context:'residential',mode:'full',point:centerOf(house)},
         {label:'market-frontage',context:'commercial',mode:'full',point:centerOf(market)},
-        {label:'workshop-yard',context:'workshop',mode:'full',point:centerOf(workshop),portraitPoint:frontageOf(workshop)},
+        {label:'workshop-yard',context:'workshop',mode:'full',portraitMode:'refined',point:centerOf(workshop),portraitPoint:frontageOf(workshop)},
         {label:'farm-yard',context:'farm',mode:'full',point:centerOf(farm)},
         {label:'gateway-road-edge',context:'road-edge',mode:'full',point:gateway},
         {label:'public-square-phone',context:'civic',mode:'full',point:village.center,portrait:true}
@@ -738,8 +738,8 @@ def _wp_starting_village_frame(driver,target,base_width,base_height,timeout):
     portrait=bool(target.get("portrait"))
     width,height=(1080,1440) if portrait else (base_width,base_height)
     set_exact_viewport(driver,width,height)
-    mode=str(target.get("mode") or "full")
     narrow=height>width
+    mode=str((target.get("portraitMode") if narrow else None) or target.get("mode") or "full")
     framing_point=(target.get("portraitPoint") if narrow else None) or target["point"]
     focus_key=f"{framing_point['x']},{framing_point['y']}"
     result=driver.execute_script("""
@@ -780,6 +780,7 @@ def _wp_starting_village_frame(driver,target,base_width,base_height,timeout):
         "target":target.get("point"),
         "framingTarget":framing_point,
         "narrowViewportFraming":bool(narrow and target.get("portraitPoint")),
+        "narrowViewportModeOverride":bool(narrow and target.get("portraitMode")),
         "zoomRequest":result,
         "viewport":_inner_viewport(driver),
         "stage":_stage_snapshot(driver),
