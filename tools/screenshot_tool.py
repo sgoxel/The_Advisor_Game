@@ -21,6 +21,7 @@ PROFILES={"landscape":(1920,1080),"portrait":(1080,1920),"tablet":(1920,1080),"p
 WP_CHARACTER_SCENARIO="wp-s003-004-004"
 WP_CHARACTER_SHOTS=5
 STARTING_VILLAGE_SCENARIO="starting-village"
+STARTING_VILLAGE_SHOTS=3
 WP_STARTING_VILLAGE_DRESSING_SCENARIO="wp-s003-009-001"
 WP_STARTING_VILLAGE_DRESSING_SHOTS=7
 WP_SURFACE_REFINEMENT_SCENARIO="wp-s003-010-003-005-002"
@@ -752,6 +753,8 @@ def run_capture(args):
         total=max(total,WP_CHARACTER_SHOTS)
     elif args.scenario==WP_STARTING_VILLAGE_DRESSING_SCENARIO:
         total=max(total,WP_STARTING_VILLAGE_DRESSING_SHOTS)
+    elif args.scenario==STARTING_VILLAGE_SCENARIO:
+        total=max(total,STARTING_VILLAGE_SHOTS)
     elif args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:
         total=max(total,WP_SURFACE_REFINEMENT_SHOTS)
     elif args.scenario==WP_CANONICAL_FOCUS_SCENARIO:
@@ -803,16 +806,41 @@ def run_capture(args):
                 frames.append(frame)
             _validate_wp_starting_village_frames(frames)
         elif args.scenario==STARTING_VILLAGE_SCENARIO:
+            # Parent art-direction acceptance needs more than one center-frame.
+            # Capture the canonical civic center, one authored worksite context,
+            # and a wider near-max village overview without inventing any camera-
+            # relative world position. Every target comes from StartingVillage.
             focus=_prepare_starting_village_scene(driver,args.ready_timeout)
-            frames=_generic_frames(driver,total,width,height,args.ready_timeout,args.interval)
-            for frame in frames:
-                frame["action"]="starting-village-ground"
+            pack=_wp_starting_village_targets(driver)
+            by_context={str(item.get("context")):item for item in pack["targets"]}
+            targets=[
+                {"label":"civic-center","context":"civic","mode":"full","point":focus["center"]},
+                by_context["workshop"],
+                by_context["overview"],
+            ]
+            frames=[]
+            for index in range(total):
+                target=targets[index%len(targets)]
+                frame=_wp_starting_village_frame(driver,target,width,height,args.ready_timeout)
+                if str(target.get("mode") or "full")=="full":
+                    _wait(driver,"""
+                      const s=window.PlanetStage?.snapshot?.(),p=s?.npcPresentation||{};
+                      return Boolean(
+                        s?.zoom?.visibleLevel==='ground' &&
+                        p?.groundRepresentationReady===true &&
+                        p?.billboardLayerActive===true &&
+                        p?.protagonistBillboardVisible===true &&
+                        Number(p?.residentBillboardCount||0)>0
+                      );
+                    """,args.ready_timeout,"Starting Village readable final-ground character layer")
+                    driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+                    frame["stage"]=_stage_snapshot(driver)
                 frame["focusPreparation"]=focus
-            for index,frame in enumerate(frames,start=1):
-                path=_file_name(args.filename,index,total,args.timestamp_names)
+                path=_file_name(args.filename,index+1,total,args.timestamp_names)
                 _capture(driver,path)
-                frame["index"]=index;frame["file"]=path.name
+                frame["index"]=index+1;frame["file"]=path.name
                 frame["captured_at"]=datetime.now(timezone.utc).isoformat()
+                frames.append(frame)
         elif args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:
             focus=_prepare_surface_refinement_focus(driver)
             frames=[]
