@@ -254,11 +254,15 @@ def wait_marker(driver):
       const before=read();
       if(!before)return {ok:false,reason:'authoritative-protagonist-unavailable'};
       stage.setWorldTileFocus(String(before.x),String(before.y));
-      const scalar=stage.scalarForFootprintHeight(80);
+      // 240 m is deliberately inside the current near-ground-close SSE
+      // ownership window at the 1280x800 evidence viewport. 80 m now
+      // legitimately resolves to the finer ground LOD under the 2 px SSE
+      // target, so it cannot prove the required wider-view marker state.
+      const footprintMeters=240,scalar=stage.scalarForFootprintHeight(footprintMeters);
       stage.setZoomScalar(scalar);
       const after=read();
       return {
-        ok:true,scalar,
+        ok:true,scalar,footprintMeters,
         before:{x:String(before.x),y:String(before.y)},
         after:after?{x:String(after.x),y:String(after.y)}:null
       };
@@ -280,7 +284,7 @@ def wait_marker(driver):
         p?.protagonistMarkerVisible===true&&p?.protagonistBillboardVisible!==true&&
         t&&inViewport
       );
-    """,200,"inspectable 80m wider-view protagonist")
+    """,200,"inspectable wider-view protagonist")
     return result
 
 def protagonist_focus_assert(driver,moved=False):
