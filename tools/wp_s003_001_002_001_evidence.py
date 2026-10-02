@@ -175,6 +175,41 @@ def sample_performance(d, count=30):
     }
 
 
+def navigation_streaming_snapshot(d):
+    return d.execute_script("""
+      const s=window.PlanetStage?.snapshot?.()||{},n=s.navigationPerformance||{},r=s.projection?.resourceBudget||{};
+      return {
+        navigation:{
+          maxFrameUpdateMs:n.maxFrameUpdateMs??null,
+          maxRenderCpuMs:n.maxRenderCpuMs??null,
+          maxSemanticUpdateMs:n.maxSemanticUpdateMs??null,
+          liveProjectionMaxMs:n.liveProjectionMaxMs??null,
+          liveProjectionOver8MsCount:n.liveProjectionOver8MsCount??null,
+          frameUpdateOver50Count:n.frameUpdateOver50Count??null,
+          renderCpuOver50Count:n.renderCpuOver50Count??null,
+          streamingRequestDeferredCount:n.streamingRequestDeferredCount??null,
+          pointerSettleStreamingRefreshCount:n.pointerSettleStreamingRefreshCount??null
+        },
+        streaming:{
+          lastBuildMs:r.lastBuildMs??null,
+          lastPreparationWallMs:r.lastPreparationWallMs??null,
+          maxPreparationSliceMs:r.maxPreparationSliceMs??null,
+          maxFinalizeMs:r.maxFinalizeMs??null,
+          maxSwapMs:r.maxSwapMs??null,
+          maxFrameMsDuringPreparation:r.maxFrameMsDuringPreparation??null,
+          recentMaxFrameMs:r.recentMaxFrameMs??null,
+          cacheHits:r.cacheHits??null,
+          cacheMisses:r.cacheMisses??null,
+          prewarmHits:r.prewarmHits??null,
+          prewarmCompleted:r.prewarmCompleted??null,
+          pendingPreparationCount:r.pendingPreparationCount??null,
+          missingCoverageCount:r.missingCoverageCount??null,
+          longestHandoffLatencyMs:r.longestHandoffLatencyMs??null
+        }
+      };
+    """)
+
+
 def backend_record(d, label):
     s = snap(d)
     rb = s.get("rendererBackend") or {}
@@ -245,12 +280,15 @@ def run_success(label, gpu_mode, expected, engine=CURRENT_ENGINE, ground=True, d
         wait(d, "return Boolean(document.querySelector('.renderer-backend-debug'))", 30)
         if ground:
             settle_ground(d)
+        navigation_before=navigation_streaming_snapshot(d)
         fixed_navigation_sequence(d)
+        navigation_after=navigation_streaming_snapshot(d)
         perf=sample_performance(d)
         apply_evidence_time(d)
         time.sleep(.15)
         rec = backend_record(d, label)
         rec["performanceSequence"]=perf
+        rec["navigationStreamingSequence"]={"before":navigation_before,"after":navigation_after}
         active = (rec["backend"] or {}).get("active")
         if active != expected:
             raise AssertionError(f"{label}: expected {expected}, got {active}: {rec}")
