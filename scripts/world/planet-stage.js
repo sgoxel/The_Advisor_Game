@@ -2666,6 +2666,24 @@ function updateProjectionState(){
 }
 
 function clamp(value,min,max){return Math.min(max,Math.max(min,Number(value)||0));}
+function worldVisualStyle(){return window.AdvisorWorldVisualStyle||null;}
+function worldStyleRgb(role,color){
+  const source=Array.isArray(color)?color:[0,0,0];
+  const styled=worldVisualStyle()?.gradeRgb?.(role,[Number(source[0])||0,Number(source[1])||0,Number(source[2])||0,1]);
+  return Array.isArray(styled)?styled.slice(0,3):source.slice(0,3);
+}
+function localSurfaceStyleRole(sample){
+  if(!sample?.land)return "terrain:water";
+  const raw=String(sample?.surfaceClass||"").toLowerCase();
+  if(raw.includes("water")||raw.includes("ocean")||raw.includes("lake"))return "terrain:water";
+  if(raw.includes("sand"))return "terrain:sand";
+  if(raw.includes("mud"))return "terrain:mud";
+  if(raw.includes("rock")||raw.includes("mountain"))return "terrain:rock";
+  if(raw.includes("farm")||raw.includes("field"))return "terrain:farmland";
+  if(raw.includes("forest")||raw.includes("wood"))return "terrain:forest";
+  if(raw.includes("dirt")||raw.includes("earth"))return "terrain:dirt";
+  return "terrain:grass";
+}
 function loadingSeconds(ms){
   const seconds=Math.max(0,Number(ms)||0)/1000;
   return seconds<10?seconds.toFixed(1)+"s":Math.round(seconds)+"s";
@@ -3856,19 +3874,19 @@ function updateEnvironmentalReactions(){
 
 function ensureLocalStaticMaterials(){
   if(localStaticMaterials||!pc)return;
-  const make=(name,r,g,b,opacity=1)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
+  const make=(name,r,g,b,opacity=1,styleRole=null)=>{const source=[r,g,b],styled=styleRole?worldStyleRgb(styleRole,source):source;const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(...styled);m.__atmosphereBaseDiffuse=styled.slice();m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.32,.20,.085),roadOverview:make("LocalRoadOverview",.285,.19,.075,1),square:make("LocalSquare",.48,.35,.18),
-    wall:make("LocalWall",.68,.50,.30),roof:make("LocalRoof",.30,.095,.055),
+    road:make("LocalRoad",.32,.20,.085,1,"terrain:road"),roadOverview:make("LocalRoadOverview",.285,.19,.075,1,"terrain:road"),square:make("LocalSquare",.48,.35,.18,1,"terrain:square"),
+    wall:make("LocalWall",.68,.50,.30,1,"terrain:building"),roof:make("LocalRoof",.30,.095,.055,1,"terrain:building"),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14),footprint:make("LocalSettlementFootprint",.40,.34,.18,.11),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.90);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    trunk:make("LocalTrunk",.24,.13,.06),leaf:make("LocalLeaf",.16,.39,.12),water:make("LocalWater",.08,.31,.48,.72),
-    microWater:make("LocalMicroWater",.07,.28,.42,.52),
-    microStone:make("LocalMicroStone",.67,.64,.56),microWood:make("LocalMicroWood",.57,.34,.14),
+    landmark:make("LocalLandmark",.86,.57,.14,1,"terrain:building"),footprint:make("LocalSettlementFootprint",.40,.34,.18,.11,"terrain:building"),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.90);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    trunk:make("LocalTrunk",.24,.13,.06,1,"terrain:dirt"),leaf:make("LocalLeaf",.16,.39,.12,1,"terrain:forest"),water:make("LocalWater",.08,.31,.48,.72,"terrain:water"),
+    microWater:make("LocalMicroWater",.07,.28,.42,.52,"terrain:water"),
+    microStone:make("LocalMicroStone",.67,.64,.56,1,"terrain:rock"),microWood:make("LocalMicroWood",.57,.34,.14,1,"terrain:dirt"),
     microDark:make("LocalMicroDark",.11,.075,.045),microCloth:make("LocalMicroCloth",.76,.56,.27),
-    microAccent:make("LocalMicroAccent",1.0,.45,.08),microSoil:make("LocalMicroSoil",.43,.25,.10,.18),
-    microGround:make("LocalMicroGround",.31,.20,.08,.22),microMoss:make("LocalMicroMoss",.12,.28,.07,.18),
+    microAccent:make("LocalMicroAccent",1.0,.45,.08),microSoil:make("LocalMicroSoil",.43,.25,.10,.18,"terrain:dirt"),
+    microGround:make("LocalMicroGround",.31,.20,.08,.22,"terrain:dirt"),microMoss:make("LocalMicroMoss",.12,.28,.07,.18,"terrain:grass"),
     activityWarm:(()=>{const m=make("LocalActivityWarm",1,.72,.26);m.__activityEmissiveBoost=.92;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityOpen:(()=>{const m=make("LocalActivityOpen",1,.82,.42);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     activityForge:(()=>{const m=make("LocalActivityForge",1,1,1);m.__activityEmissiveBoost=.10;m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -4855,9 +4873,10 @@ function requestGroundCharacterMaterial(url){
         const texture=new pc.Texture(device,{mipmaps:true,minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,addressU:pc.ADDRESS_CLAMP_TO_EDGE,addressV:pc.ADDRESS_CLAMP_TO_EDGE});
         texture.name="GroundCharacterTexture-"+key.split("/").pop();texture.setSource(image);
         const material=new pc.StandardMaterial();material.name="GroundCharacter-"+key.split("/").pop();
-        material.diffuse.set(1,1,1);material.emissive.set(.78,.78,.78);material.emissiveIntensity=.46;
+        const treatment=worldVisualStyle()?.spriteTreatment?.character||{},diffuseTint=Array.isArray(treatment.diffuseTint)?treatment.diffuseTint:[1,1,1],emissiveTint=Array.isArray(treatment.emissiveTint)?treatment.emissiveTint:[.78,.78,.78];
+        material.diffuse.set(...diffuseTint);material.emissive.set(...emissiveTint);material.emissiveIntensity=.46;
         material.diffuseMap=texture;material.emissiveMap=texture;material.opacityMap=texture;material.opacityMapChannel="a";
-        material.alphaTest=.10;material.blendType=pc.BLEND_NONE;material.depthWrite=true;material.depthTest=true;material.cull=pc.CULLFACE_NONE;material.useLighting=false;material.update();
+        material.alphaTest=Number(treatment.alphaTest??.10);material.blendType=pc.BLEND_NONE;material.depthWrite=true;material.depthTest=true;material.cull=pc.CULLFACE_NONE;material.useLighting=Boolean(treatment.useLighting??false);material.update();
         groundCharacterTextures.set(key,texture);groundCharacterMaterials.set(key,material);resolve(material);
       }catch(_){groundCharacterFailures.add(key);resolve(null);}
       finally{groundCharacterPendingLoads=Math.max(0,groundCharacterPendingLoads-1);groundCharacterLoads.delete(key);scheduleGroundCharacterRefresh();}
@@ -7369,6 +7388,15 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
           surfaceValueNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.018;
         displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.82:i===1?.94:1),0,.86));
       }
+      // WP-S003-009: apply the shared loading-screen-derived world grade only
+      // when the physical texel footprint is genuinely local. Distant/regional
+      // views keep their coarse canonical atlas transfer; near/max zoom gains
+      // the warm, colorful living-world hierarchy without adding world detail.
+      const livingWorldStyleWeight=contextRing?0:smoothstep01(clamp((28-metersPerTexel)/24,0,1));
+      if(livingWorldStyleWeight>.001){
+        const styled=worldStyleRgb(localSurfaceStyleRole(parentSample),displayColor);
+        displayColor=displayColor.map((v,i)=>clamp(lerp(v,styled[i],livingWorldStyleWeight),0,1));
+      }
       pushRange("finalLuma",luma3(displayColor));
       if(evidenceProbeTargets){
         for(const target of evidenceProbeTargets){
@@ -9847,6 +9875,8 @@ function snapshot(){
     engineVersion:ENGINE_VERSION,
     canvasCount:root?.querySelectorAll?.("canvas")?.length||0,
     activeSeed,
+    worldVisualStyle:worldVisualStyle()?.snapshot?.()||null,
+    worldVisualStyleIntegration:Object.freeze({active:Boolean(worldVisualStyle()),signature:worldVisualStyle()?.signature||null,localDetailOnly:true,activationMaxMetersPerTexel:28,postProcessing:false,extraLights:0,simulationAuthorityPreserved:true}),
     geographyHash:geographySignature?.hash||null,
     geographySignature,
     geographyVerification,
