@@ -86,6 +86,12 @@ def assert_runtime(label, snap, steady=True):
         raise AssertionError(f"{label}: bounded lazy contract failed: {snap}")
     if snap.get("pooledAccents") is not True or snap.get("cameraLocalPresentation") is not True:
         raise AssertionError(f"{label}: pooled/camera-local presentation missing: {snap}")
+    if snap.get("worldAnchoredAccents") is not True or snap.get("screenSpaceNormalizedAccents") is not False:
+        raise AssertionError(f"{label}: seasonal microdetail is not world anchored: {snap}")
+    if snap.get("accentAnchorMode") != "canonical-world-tile-grid":
+        raise AssertionError(f"{label}: unexpected seasonal anchor authority: {snap}")
+    if snap.get("groundTreatmentMode") != "uniform-seasonal-tint":
+        raise AssertionError(f"{label}: localized screen-space ground treatment remains: {snap}")
     if int(snap.get("accentCount") or 0) > int(snap.get("accentLimit") or 0):
         raise AssertionError(f"{label}: accent limit exceeded: {snap}")
     if int(snap.get("profileCacheEntries") or 0) > int(snap.get("profileCacheLimit") or 0):
@@ -194,7 +200,91 @@ def main():
         if climate["cold"]["temp"] < climate["warm"]["temp"] and cold_winter < warm_winter:
             raise AssertionError(f"Climate override inverted winter intensity: {climate} cold={cold_profile} warm={warm_profile}")
 
+        # World-anchor regression proof: the same canonical accent cohort must
+        # reproject with physical zoom instead of staying fixed in screen space.
+        close_stage = set_focus(driver)
+        close = set_season(driver, dates["spring"], "spring")
+        wait(driver, "return (window.SeasonalPresentation.snapshot().accentProjectionSamples||[]).length>0", 15)
+        close = season_snap(driver)
+        close_stage = stage_snap(driver)
+        close_draw = int(close.get("drawCount") or 0)
+        close_samples = {row["id"]: row for row in close.get("accentProjectionSamples") or []}
+        if not close_samples:
+            raise AssertionError(f"No close world-anchored seasonal samples: {close}")
+        evidence["frames"].append({
+            "name": capture(driver, "06-anchor-close"),
+            "season": "spring",
+            "seasonal": close,
+            "stage": {"footprintHeightMeters": close_stage.get("zoom", {}).get("visibleFootprintHeightMeters")},
+        })
+
+        mid_target = 90.0
+        mid_scalar = driver.execute_script("return window.PlanetStage.scalarForFootprintHeight(arguments[0]);", mid_target)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);", mid_scalar)
+        wait(driver, """
+            const s=window.PlanetStage.snapshot(),r=s.projection?.resourceBudget||{};
+            return Math.abs(Number(s.zoom?.visibleFootprintHeightMeters||0)-arguments[0])<=arguments[0]*.10&&
+                   Number(r.pendingPreparationCount||0)===0;
+        """, 180, mid_target)
+        driver.execute_script("window.SeasonalPresentation.refresh()")
+        wait(driver, "return Number(window.SeasonalPresentation.snapshot().drawCount||0)>arguments[0]", 20, close_draw)
+        mid = season_snap(driver)
+        mid_stage = stage_snap(driver)
+        assert_runtime("anchor-mid", mid)
+        if mid.get("mapScaleAccentEligible") is not True:
+            raise AssertionError(f"90 m local view unexpectedly suppressed seasonal microdetail: {mid}")
+        mid_samples = {row["id"]: row for row in mid.get("accentProjectionSamples") or []}
+        common = sorted(set(close_samples).intersection(mid_samples))
+        if not common:
+            raise AssertionError(f"No stable canonical accent IDs survived pure zoom: close={close_samples} mid={mid_samples}")
+        close_focus = close_stage.get("canonicalFocus", {}).get("screenSpaceFocus") or {}
+        mid_focus = mid_stage.get("canonicalFocus", {}).get("screenSpaceFocus") or {}
+        zoom_proofs = []
+        for anchor_id in common:
+            a, b = close_samples[anchor_id], mid_samples[anchor_id]
+            da = ((float(a["screenX"])-float(close_focus.get("screenX") or 640))**2 + (float(a["screenY"])-float(close_focus.get("screenY") or 400))**2)**.5
+            db = ((float(b["screenX"])-float(mid_focus.get("screenX") or 640))**2 + (float(b["screenY"])-float(mid_focus.get("screenY") or 400))**2)**.5
+            if da > 8 and float(a.get("sizePx") or 0) > 0:
+                zoom_proofs.append({
+                    "id": anchor_id, "closeDistancePx": da, "midDistancePx": db,
+                    "closeSizePx": float(a.get("sizePx") or 0), "midSizePx": float(b.get("sizePx") or 0),
+                })
+        if not zoom_proofs:
+            raise AssertionError(f"No measurable off-center anchor available for zoom proof: {common}")
+        proof = max(zoom_proofs, key=lambda row: row["closeDistancePx"])
+        if proof["midDistancePx"] >= proof["closeDistancePx"] * .78:
+            raise AssertionError(f"World anchor did not move toward focus when zooming out: {proof}")
+        if proof["midSizePx"] >= proof["closeSizePx"] * .78:
+            raise AssertionError(f"World-sized seasonal accent did not shrink with zoom: {proof}")
+        evidence["frames"].append({
+            "name": capture(driver, "07-anchor-mid"),
+            "season": "spring",
+            "seasonal": mid,
+            "stage": {"footprintHeightMeters": mid_stage.get("zoom", {}).get("visibleFootprintHeightMeters")},
+            "zoomAnchorProof": proof,
+        })
+
+        broad_target = 500.0
+        broad_scalar = driver.execute_script("return window.PlanetStage.scalarForFootprintHeight(arguments[0]);", broad_target)
+        driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);", broad_scalar)
+        wait(driver, "return Math.abs(Number(window.PlanetStage.snapshot().zoom?.visibleFootprintHeightMeters||0)-arguments[0])<=arguments[0]*.10", 120, broad_target)
+        broad = driver.execute_script("return window.SeasonalPresentation.refresh()")
+        time.sleep(.15)
+        broad = season_snap(driver)
+        assert_runtime("broad-suppressed", broad)
+        if int(broad.get("accentCount") or 0) != 0 or int(broad.get("renderedAccentCount") or 0) != 0:
+            raise AssertionError(f"Seasonal microdetail leaked into broad physical scale: {broad}")
+        if broad.get("physicalScaleAccentSuppressed") is not True:
+            raise AssertionError(f"Broad physical suppression telemetry missing: {broad}")
+        evidence["frames"].append({
+            "name": capture(driver, "08-broad-suppressed"),
+            "season": "spring",
+            "seasonal": broad,
+            "stage": {"footprintHeightMeters": stage_snap(driver).get("zoom", {}).get("visibleFootprintHeightMeters")},
+        })
+
         driver.set_window_size(390, 844)
+        set_focus(driver)
         time.sleep(.3)
         phone = set_season(driver, dates["autumn"], "autumn")
         assert_runtime("phone-autumn", phone)
@@ -224,6 +314,9 @@ def main():
             "maxDrawMs": max(float(f["seasonal"].get("maxDrawMs") or 0) for f in evidence["frames"]),
             "phoneAccentLimit": int(phone.get("accentLimit") or 0),
             "phoneAccentCount": int(phone.get("accentCount") or 0),
+            "worldAnchorProof": proof,
+            "maxAccentFootprintHeightMeters": close.get("maxAccentFootprintHeightMeters"),
+            "broadAccentCount": int(broad.get("accentCount") or 0),
         }
         (OUT_DIR / "evidence.json").write_text(json.dumps(evidence, indent=2, sort_keys=True), encoding="utf-8")
         print(json.dumps(evidence["summary"], indent=2, sort_keys=True))
