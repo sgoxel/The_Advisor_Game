@@ -5590,7 +5590,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     const body=addLocalPrimitive(localNpcRoot,"ResidentBody-"+resident.id,"cylinder",bodyMaterial,x,ground+bodyHeight*.5,z,bodyWidth,bodyHeight,bodyWidth);
     const head=addLocalPrimitive(localNpcRoot,"ResidentHead-"+resident.id,"sphere",localNpcMaterials.head,x,ground+bodyHeight+headSize*.48,z,headSize,headSize,headSize);
     const textureUrl=groundArt?groundCharacterTextureUrl(resident.profession):null;
-    const billboard=textureUrl?createGroundCharacterBillboard(localNpcRoot,"ResidentBillboard-"+resident.id,textureUrl,x,ground,z,presentationScale,unit,1.98):null;
+    // A modest final-ground presentation lift keeps resident source art readable beside the protagonist at the fixed 3/4 camera without changing canonical feet coordinates, collision, routes or simulation state.\n    const billboard=textureUrl?createGroundCharacterBillboard(localNpcRoot,"ResidentBillboard-"+resident.id,textureUrl,x,ground,z,presentationScale,unit,2.18):null;
     if(billboard){billboard.enabled=initiallyVisible;}
     if(billboard){residentBillboardCount++;billboardUrls.add(textureUrl);}
     const tool=addLocalPrimitive(localNpcRoot,"ResidentWorkTool-"+resident.id,"box",localNpcMaterials.tool,x,ground+bodyHeight*.62,z,bodyWidth*.26,bodyHeight*.72,bodyWidth*.26);
