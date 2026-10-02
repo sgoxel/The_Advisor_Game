@@ -698,6 +698,19 @@ def _wp_starting_village_targets(driver):
         const b=record?.bounds;if(!b)return null;
         return add(village.center,Math.round((Number(b.minX)+Number(b.maxX))/2),Math.round((Number(b.minY)+Number(b.maxY))/2));
       };
+      // Narrow viewports should frame the authored exterior yard rather than the
+      // middle of a building footprint. Derive that frontage deterministically
+      // from the canonical lot bounds and the village center; this moves only
+      // the evidence camera and never changes lot/resident/world authority.
+      const frontageOf=record=>{
+        const b=record?.bounds;if(!b)return null;
+        const minX=Number(b.minX),maxX=Number(b.maxX),minY=Number(b.minY),maxY=Number(b.maxY);
+        const cx=(minX+maxX)/2,cy=(minY+maxY)/2,margin=3;
+        let x=cx,y=cy;
+        if(Math.abs(cx)>=Math.abs(cy))x=cx>=0?minX-margin:maxX+margin;
+        else y=cy>=0?minY-margin:maxY+margin;
+        return add(village.center,Math.round(x),Math.round(y));
+      };
       const pickLot=(fn,kind)=>lots.find(item=>String(item.function||'')===fn)||lots.find(item=>String(item.kind||'')===kind)||null;
       const direction=StartingVillage.direction(seed),gateway=add(village.center,Number(direction?.dx||0)*14,Number(direction?.dy||0)*14);
       const house=houses[0]||null,market=pickLot('market','shop'),workshop=pickLot('craft','workshop'),farm=pickLot('farm','barn');
@@ -705,13 +718,15 @@ def _wp_starting_village_targets(driver):
         {label:'village-overview',context:'overview',mode:'refined',point:village.center},
         {label:'residential-yard',context:'residential',mode:'full',point:centerOf(house)},
         {label:'market-frontage',context:'commercial',mode:'full',point:centerOf(market)},
-        {label:'workshop-yard',context:'workshop',mode:'full',point:centerOf(workshop)},
+        {label:'workshop-yard',context:'workshop',mode:'full',point:centerOf(workshop),portraitPoint:frontageOf(workshop)},
         {label:'farm-yard',context:'farm',mode:'full',point:centerOf(farm)},
         {label:'gateway-road-edge',context:'road-edge',mode:'full',point:gateway},
         {label:'public-square-phone',context:'civic',mode:'full',point:village.center,portrait:true}
       ];
       const usable=raw.filter(item=>item.point&&item.point.x!=null&&item.point.y!=null).map(item=>({
-        ...item,point:{x:String(item.point.x),y:String(item.point.y)}
+        ...item,
+        point:{x:String(item.point.x),y:String(item.point.y)},
+        portraitPoint:item.portraitPoint?{x:String(item.portraitPoint.x),y:String(item.portraitPoint.y)}:null
       }));
       return {ok:usable.length===raw.length,seed,name:village.name||'Starting Village',targets:usable};
     """)
@@ -724,7 +739,9 @@ def _wp_starting_village_frame(driver,target,base_width,base_height,timeout):
     width,height=(1080,1440) if portrait else (base_width,base_height)
     set_exact_viewport(driver,width,height)
     mode=str(target.get("mode") or "full")
-    focus_key=f"{target['point']['x']},{target['point']['y']}"
+    narrow=height>width
+    framing_point=(target.get("portraitPoint") if narrow else None) or target["point"]
+    focus_key=f"{framing_point['x']},{framing_point['y']}"
     result=driver.execute_script("""
       const target=arguments[0],mode=arguments[1],stage=window.PlanetStage;
       stage.setWorldTileFocus(String(target.x),String(target.y));
@@ -733,7 +750,7 @@ def _wp_starting_village_frame(driver,target,base_width,base_height,timeout):
         :Number(stage.constants?.ZOOM_MAX??1);
       stage.setZoomScalar(scalar);
       return {scalar,mode};
-    """,target["point"],mode)
+    """,framing_point,mode)
     expected_scalar=float(result.get("scalar") or 0)
     predicate=f"""
       const s=window.PlanetStage?.snapshot?.(),local=s?.projection?.localStatic||{{}},r=s?.projection?.resourceBudget||{{}};
@@ -761,6 +778,8 @@ def _wp_starting_village_frame(driver,target,base_width,base_height,timeout):
         "action":target.get("label"),
         "context":target.get("context"),
         "target":target.get("point"),
+        "framingTarget":framing_point,
+        "narrowViewportFraming":bool(narrow and target.get("portraitPoint")),
         "zoomRequest":result,
         "viewport":_inner_viewport(driver),
         "stage":_stage_snapshot(driver),
