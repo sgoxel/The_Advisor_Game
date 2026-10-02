@@ -709,10 +709,14 @@ def _scale_handoff_compact(driver):
         requestedLevel:z.requestedLevel||r.requestedLevel||null,visibleLevel:z.visibleLevel||r.visibleLevel||null,
         visibleFootprintHeightMeters:Number(z.visibleFootprintHeightMeters||0),
         blend:Number(s.projection?.blend||0),
-        localStatic:{active:Boolean(l.active),revealTier:l.revealTier||"none",roadCount:Number(l.roadCount||0),buildingCount:Number(l.buildingCount||0)},
+        localStatic:{
+          active:Boolean(l.active),signature:l.signature||null,level:l.level||null,revealTier:l.revealTier||"none",
+          roadCount:Number(l.roadCount||0),buildingCount:Number(l.buildingCount||0)
+        },
         resource:{
           pendingPreparationCount:Number(r.pendingPreparationCount||0),
           requestedSignature:r.requestedSignature||null,activeSignature:r.activeSignature||null,preparedSignature:r.preparedSignature||null,preparingSignature:r.preparingSignature||null,
+          visibleLevelIndex:Number.isFinite(Number(r.visibleLevelIndex))?Number(r.visibleLevelIndex):null,
           standInActive:Boolean(r.standInActive),mapScalePresentationEligible:r.mapScalePresentationEligible,
           mapScaleSuppressionActive:Boolean(r.mapScaleSuppressionActive),blockingZoomBuilds:Number(r.blockingZoomBuilds||0),
           lastPreparationWallMs:Number(r.lastPreparationWallMs||0),lastPreparationBusyMs:Number(r.lastPreparationBusyMs||0),
@@ -744,26 +748,60 @@ def _scale_handoff_frame(driver,index,timeout):
         "return Number(window.PlanetStage.scalarForFootprintHeight(arguments[0]));",float(height)
     ))
     before=_scale_handoff_compact(driver)
-    driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);",scalar)
-    immediate=_scale_handoff_compact(driver)
-    driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>done(true));")
-    during=_scale_handoff_compact(driver)
-    _wait(driver,f"""
-      const target={scalar!r},s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{{}};
-      const exact=Math.abs(Number(s?.zoom?.scalar)-target)<0.00001 && !s?.zoom?.animation?.active;
-      const tangentRequired=Number(s?.projection?.blend||0)>.02;
-      const ready=!tangentRequired || (
-        Number(r.pendingPreparationCount||0)===0 &&
-        (!r.requestedSignature || String(r.activeSignature||'')===String(r.requestedSignature||''))
-      );
-      return Boolean(s?.ready&&exact&&ready);
-    """,max(float(timeout),240.0),f"scale handoff {label} ready resource")
+    timeline=driver.execute_async_script("""
+      const target=Number(arguments[0]),timeoutMs=Number(arguments[1]),done=arguments[arguments.length-1];
+      const started=performance.now(),samples=[];let lastKey="";
+      const read=()=>{
+        const s=window.PlanetStage?.snapshot?.()||{},z=s.zoom||{},r=s.projection?.resourceBudget||{},l=s.projection?.localStatic||{};
+        return {
+          scalar:Number(z.scalar||0),requestedBand:z.requestedBand||z.band||null,visibleBand:z.visibleBand||z.band||null,
+          requestedLevel:z.requestedLevel||r.requestedLevel||null,visibleLevel:z.visibleLevel||r.visibleLevel||null,
+          blend:Number(s.projection?.blend||0),
+          localStatic:{signature:l.signature||null,level:l.level||null,revealTier:l.revealTier||"none",roadCount:Number(l.roadCount||0),buildingCount:Number(l.buildingCount||0)},
+          resource:{
+            pendingPreparationCount:Number(r.pendingPreparationCount||0),requestedSignature:r.requestedSignature||null,activeSignature:r.activeSignature||null,
+            visibleLevelIndex:Number.isFinite(Number(r.visibleLevelIndex))?Number(r.visibleLevelIndex):null,
+            blockingZoomBuilds:Number(r.blockingZoomBuilds||0),standInActive:Boolean(r.standInActive),
+            mapScalePresentationEligible:r.mapScalePresentationEligible
+          }
+        };
+      };
+      const record=()=>{
+        const sample=read(),r=sample.resource,l=sample.localStatic;
+        const key=JSON.stringify([sample.requestedBand,sample.visibleBand,sample.requestedLevel,sample.visibleLevel,r.pendingPreparationCount,r.activeSignature,r.requestedSignature,r.visibleLevelIndex,l.signature,l.level,l.revealTier,l.roadCount,l.buildingCount]);
+        if(key!==lastKey){lastKey=key;samples.push(sample);}
+        return sample;
+      };
+      window.PlanetStage.setZoomScalar(target);
+      const tick=()=>{
+        const sample=record(),r=sample.resource,l=sample.localStatic;
+        const exact=Math.abs(Number(sample.scalar)-target)<0.00001;
+        const tangentOwns=sample.blend>.02;
+        const resourceReady=!tangentOwns || (
+          r.pendingPreparationCount===0 &&
+          !!r.activeSignature &&
+          (!r.requestedSignature || String(r.activeSignature)===String(r.requestedSignature))
+        );
+        const staticNeeded=tangentOwns && Number.isInteger(r.visibleLevelIndex) && r.visibleLevelIndex>=8;
+        const staticReady=!staticNeeded || (!!l.signature && String(l.signature)===String(r.activeSignature));
+        if(exact&&resourceReady&&staticReady){
+          done({ok:true,samples,last:sample,durationMs:Number((performance.now()-started).toFixed(3))});return;
+        }
+        if(performance.now()-started>=timeoutMs){
+          done({ok:false,samples,last:sample,durationMs:Number((performance.now()-started).toFixed(3))});return;
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    """,scalar,min(max(float(timeout),180.0),220.0)*1000.0)
+    if not timeline or not timeline.get("ok"):
+        raise RuntimeError(f"scale handoff {label} did not reach visible-owner readiness: {timeline}")
     driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
     stage=_stage_snapshot(driver)
     settled=_scale_handoff_compact(driver)
     return {
         "action":label,"viewport":_inner_viewport(driver),"stage":stage,
-        "handoffProof":{"targetHeightMeters":height,"targetScalar":scalar,"before":before,"immediate":immediate,"duringPaint":during,"settled":settled}
+        "handoffProof":{"targetHeightMeters":height,"targetScalar":scalar,"before":before,"timeline":timeline.get("samples") or [],"durationMs":timeline.get("durationMs"),"settled":settled}
     }
 
 def _validate_scale_handoff_frames(frames):
@@ -779,11 +817,9 @@ def _validate_scale_handoff_frames(frames):
         "near-ground-wide":"settlement","near-ground":"settlement","near-ground-close":"near-ground","ground":"ground"
     }
     band_order=["planet","continent","country-region","regional-overview","regional-detail","district","local-area","settlement","near-ground","ground"]
-    tier_order={"none":0,"footprint":1,"route":2,"refined":3,"full":4}
-    allowed_tier={"near-ground-wide":"footprint","near-ground":"route","near-ground-close":"refined","ground":"full"}
-    focus_keys=set();prior_footprint=None;pending_handoffs=0
+    focus_keys=set();prior_footprint=None;pending_handoffs=0;semantic_hold_samples=0
     for index,frame in enumerate(frames,start=1):
-        stage=frame.get("stage") or {};z=stage.get("zoom") or {};r=(stage.get("projection") or {}).get("resourceBudget") or {}
+        stage=frame.get("stage") or {};projection=stage.get("projection") or {};z=stage.get("zoom") or {};r=projection.get("resourceBudget") or {};local=projection.get("localStatic") or {}
         canonical=stage.get("canonicalFocus") or {};tile=canonical.get("worldTile") or {}
         focus_keys.add((str(tile.get("x")),str(tile.get("y")),canonical.get("latitudeDegrees"),canonical.get("longitudeDegrees")))
         footprint=float(z.get("visibleFootprintHeightMeters") or 0)
@@ -791,41 +827,54 @@ def _validate_scale_handoff_frames(frames):
         if prior_footprint is not None and footprint>=prior_footprint:
             raise RuntimeError(f"frame {index} closer target did not shrink visible footprint: {prior_footprint} -> {footprint}")
         prior_footprint=footprint
-        if int(r.get("pendingPreparationCount") or 0)!=0:
-            raise RuntimeError(f"frame {index} captured before requested resource settled: {r}")
-        if r.get("requestedSignature") and str(r.get("activeSignature") or "")!=str(r.get("requestedSignature")):
-            raise RuntimeError(f"frame {index} requested/active resource mismatch after settle: {r}")
+        tangent=float(projection.get("blend") or 0)>.02
+        if tangent and int(r.get("pendingPreparationCount") or 0)!=0:
+            raise RuntimeError(f"frame {index} captured before visible local resource settled: {r}")
+        if tangent and r.get("requestedSignature") and str(r.get("activeSignature") or "")!=str(r.get("requestedSignature")):
+            raise RuntimeError(f"frame {index} requested/active visible resource mismatch after settle: {r}")
         if int(r.get("blockingZoomBuilds") or 0)!=0:
             raise RuntimeError(f"frame {index} used a blocking zoom build: {r}")
         req_band=str(z.get("requestedBand") or z.get("band") or "")
         vis_band=str(z.get("visibleBand") or z.get("band") or "")
         if req_band in band_order and vis_band in band_order and band_order.index(vis_band)>band_order.index(req_band):
             raise RuntimeError(f"frame {index} visible semantic band is finer than requested: {vis_band} > {req_band}")
+        visible_level=str(z.get("visibleLevel") or r.get("visibleLevel") or "")
+        if tangent and visible_level in level_order and level_order.index(visible_level)>=8:
+            if not local.get("signature") or str(local.get("signature"))!=str(r.get("activeSignature") or ""):
+                raise RuntimeError(f"frame {index} static presentation is not ready for visible resource: local={local} resource={r}")
+            if vis_band in {"settlement","near-ground","ground"} and (int(local.get("roadCount") or 0)<=0 or int(local.get("buildingCount") or 0)<=0):
+                raise RuntimeError(f"frame {index} announced {vis_band} without visible roads + buildings: {local}")
+            expected=level_band.get(visible_level)
+            if expected in band_order and req_band in band_order:
+                expected=band_order[min(band_order.index(expected),band_order.index(req_band))]
+                if vis_band!=expected:
+                    raise RuntimeError(f"frame {index} semantic band did not advance to the completed ready representation: expected={expected} actual={vis_band}")
         proof=frame.get("handoffProof") or {}
-        for probe_name in ("immediate","duringPaint"):
-            probe=proof.get(probe_name) or {};pr=probe.get("resource") or {}
-            if int(pr.get("pendingPreparationCount") or 0)<=0: continue
-            pending_handoffs+=1
-            requested=str(probe.get("requestedLevel") or "");visible=str(probe.get("visibleLevel") or "")
-            if requested not in level_order or visible not in level_order: continue
-            req_i=level_order.index(requested);vis_i=level_order.index(visible)
-            vis_band_probe=str(probe.get("visibleBand") or "")
-            physical_band=level_band.get(visible)
-            if vis_band_probe in band_order and physical_band in band_order and band_order.index(vis_band_probe)>band_order.index(physical_band):
-                raise RuntimeError(f"{probe_name} frame {index} announced {vis_band_probe} while visible ready resource was only {visible}/{physical_band}: {probe}")
-            if req_i>vis_i:
-                local=probe.get("localStatic") or {}
-                if req_i>=8 and vis_i<8 and pr.get("mapScalePresentationEligible") is True:
-                    raise RuntimeError(f"{probe_name} frame {index} revealed local/static presentation before first static-world resource was ready: {probe}")
-                if vis_i>=8:
-                    cap=allowed_tier.get(visible,"none")
-                    tier=str(local.get("revealTier") or "none")
-                    if tier_order.get(tier,99)>tier_order.get(cap,0):
-                        raise RuntimeError(f"{probe_name} frame {index} advanced reveal tier {tier} beyond visible ready {visible}/{cap}: {probe}")
+        for sample in proof.get("timeline") or []:
+            pr=sample.get("resource") or {};ls=sample.get("localStatic") or {}
+            if int(pr.get("blockingZoomBuilds") or 0)!=0:
+                raise RuntimeError(f"frame {index} timeline used a blocking zoom build: {sample}")
+            if int(pr.get("pendingPreparationCount") or 0)>0 and float(sample.get("blend") or 0)>.02:
+                pending_handoffs+=1
+            visible=str(sample.get("visibleLevel") or "")
+            if visible not in level_order: continue
+            vis_i=level_order.index(visible)
+            if vis_i<8: continue
+            active=str(pr.get("activeSignature") or "")
+            local_sig=str(ls.get("signature") or "")
+            if active and local_sig!=active:
+                semantic_hold_samples+=1
+                fallback_level=str(ls.get("level") or "")
+                cap_band=level_band.get(fallback_level,"local-area")
+                sample_band=str(sample.get("visibleBand") or "")
+                if sample_band in band_order and cap_band in band_order and band_order.index(sample_band)>band_order.index(cap_band):
+                    raise RuntimeError(f"frame {index} semantic band advanced before static presentation was ready: cap={cap_band} sample={sample}")
     if len(focus_keys)!=1:
         raise RuntimeError(f"scale handoff evidence changed canonical focus: {focus_keys}")
     if pending_handoffs<2:
-        raise RuntimeError(f"scale handoff evidence did not observe enough cooperative pending handoffs: {pending_handoffs}")
+        raise RuntimeError(f"scale handoff evidence did not observe enough cooperative visible-owner preparations: {pending_handoffs}")
+    if semantic_hold_samples<1:
+        raise RuntimeError("scale handoff evidence never observed the terrain-ready/static-presentation-pending handoff interval")
 
 def _wp_starting_village_targets(driver):
     targets=driver.execute_script("""
