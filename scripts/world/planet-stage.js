@@ -4962,9 +4962,11 @@ function groundCharacterTextureUrl(profession){
 }
 function groundCharacterLayerEligible(){
   const requestedLevel=String(localResources.requestedLevel||LOCAL_DETAIL_LEVELS[requestedLodIndexForZoom(zoomState.scalar)]?.id||"");
+  const visibleLevel=String(localResources.visibleLevel||displayResource?.dims?.levelId||requestedLevel||"");
   const rawIndex=rawLodIndexForZoom(zoomState.scalar),rawLevel=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
-  const levelId=String(displayResource?.dims?.levelId||requestedLevel||rawLevel?.id||"");
-  return Boolean(localWorldPresentationEligibility().visible&&String(rawLevel?.id||requestedLevel||"")==="ground"&&levelId==="ground"&&String(localNpcContext?.tier||"")==="full"&&tangentPatch?.enabled);
+  const levelId=String(visibleLevel||requestedLevel||rawLevel?.id||"");
+  const groundRequested=requestedLevel==="ground"||rawLevel?.id==="ground"||levelId==="ground";
+  return Boolean(localWorldPresentationEligibility().visible&&groundRequested&&String(localNpcContext?.tier||"")==="full"&&tangentPatch?.enabled);
 }
 function scheduleGroundCharacterRefresh(){
   if(groundCharacterRefreshScheduled||groundCharacterPendingLoads>0||!groundCharacterLayerEligible()||!localNpcContext)return;
