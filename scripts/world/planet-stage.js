@@ -590,35 +590,58 @@ function rendererFrameStatistics(){
   const sorted=samples.slice().sort((a,b)=>a-b);
   const pick=p=>sorted.length?sorted[Math.min(sorted.length-1,Math.max(0,Math.ceil(sorted.length*p)-1))]:0;
   const median=sorted.length?(sorted.length%2?sorted[(sorted.length-1)/2]:(sorted[sorted.length/2-1]+sorted[sorted.length/2])/2):0;
-  const stats=app?.stats||null,num=value=>Number.isFinite(Number(value))?Number(value):null;
-  const drawCalls=num(stats?.drawCallCount),primitiveCount=num(stats?.primitiveCount),gpuFrameMs=num(stats?.gpuFrameTime);
+  const stats=app?.stats||null,frame=stats?.frame||null,draw=stats?.drawCalls||null,vram=stats?.vram||null,gpu=stats?.gpu||null;
+  const num=value=>Number.isFinite(Number(value))?Number(value):null;
+  const gpuPassTimings={};
+  if(gpu instanceof Map)for(const [name,value] of gpu.entries()){const n=num(value);if(n!==null)gpuPassTimings[String(name)]=n;}
+  const gpuPassValues=Object.values(gpuPassTimings),gpuPassTotalMs=gpuPassValues.length?gpuPassValues.reduce((sum,value)=>sum+value,0):null;
+  const browserDevicePixelRatio=Math.max(1,num(globalThis.devicePixelRatio)||1),maxPixelRatio=Math.max(.1,num(device?.maxPixelRatio)||browserDevicePixelRatio);
+  const cssWidth=Math.max(1,num(canvas?.clientWidth)||num(root?.clientWidth)||1),cssHeight=Math.max(1,num(canvas?.clientHeight)||num(root?.clientHeight)||1);
+  const bufferWidth=Math.max(1,num(canvas?.width)||Math.round(cssWidth*Math.min(browserDevicePixelRatio,maxPixelRatio)));
+  const bufferHeight=Math.max(1,num(canvas?.height)||Math.round(cssHeight*Math.min(browserDevicePixelRatio,maxPixelRatio)));
+  const effectivePixelRatio=Number((bufferWidth/cssWidth).toFixed(4)),nativePixelRatio=Math.min(browserDevicePixelRatio,maxPixelRatio);
+  const renderScale=Number((effectivePixelRatio/Math.max(.0001,nativePixelRatio)).toFixed(4));
   return Object.freeze({
-    source:engineVersionInUse==="2.23.0"?"PlayCanvas AppStats 2.23 + bounded local frame history":"bounded local frame history + legacy engine counters where exposed",
+    source:engineVersionInUse==="2.23.0"?"PlayCanvas AppStats 2.23 public frame/drawCalls/vram/gpu + bounded local frame history":"PlayCanvas AppStats + bounded local frame history",
     engineVersion:engineVersionInUse,engineBuild:engineBuildInUse,
     sampleCount:sorted.length,
-    fps:num(stats?.fps)??(median>0?Number((1000/median).toFixed(2)):0),
-    latestFrameMs:num(stats?.frameTime),
+    fps:num(frame?.fps)??(median>0?Number((1000/median).toFixed(2)):0),
+    latestFrameMs:num(frame?.ms),
     medianFrameMs:Number(median.toFixed(3)),
     p95FrameMs:Number(pick(.95).toFixed(3)),
     worstFrameMs:Number((sorted.length?sorted[sorted.length-1]:0).toFixed(3)),
-    drawCalls,
-    primitiveCount,
-    triangles:primitiveCount,
-    gpuFrameMs,
-    gpuFrameTimeAvailable:gpuFrameMs!==null,
-    cpuUpdateMs:num(stats?.cpuUpdateTime)??Number(navigationPerformance.lastFrameUpdateMs||0),
-    cpuRenderMs:num(stats?.cpuRenderTime)??Number(navigationPerformance.lastRenderCpuMs||0),
-    cpuSystemUpdateMs:num(stats?.cpuSystemUpdateTime),
-    cpuSystemPostUpdateMs:num(stats?.cpuSystemPostUpdateTime),
-    vramTotalBytes:num(stats?.vramTotalBytes),
-    vramTextureBytes:num(stats?.vramTextureBytes),
-    vramVertexBufferBytes:num(stats?.vramVertexBufferBytes),
-    vramIndexBufferBytes:num(stats?.vramIndexBufferBytes),
-    vramUniformBufferBytes:num(stats?.vramUniformBufferBytes),
-    vramStorageBufferBytes:num(stats?.vramStorageBufferBytes),
+    drawCalls:num(draw?.total),
+    primitiveCount:num(frame?.triangles),
+    triangles:num(frame?.triangles),
+    shaderSwitches:num(frame?.shaders),
+    materialSwitches:num(frame?.materials),
+    gpuFrameMs:gpuPassValues.length===1?Number(gpuPassTotalMs.toFixed(4)):null,
+    gpuPassTotalMs:gpuPassTotalMs===null?null:Number(gpuPassTotalMs.toFixed(4)),
+    gpuPassTimings:Object.freeze(gpuPassTimings),
+    gpuFrameTimeAvailable:gpuPassValues.length===1,
+    gpuTimestampTimingsAvailable:gpuPassValues.length>0,
+    gpuTimingMode:gpuPassValues.length===0?"unavailable":gpuPassValues.length===1?"single-public-pass":"public-per-pass",
+    cpuUpdateMs:num(frame?.updateTime)??Number(navigationPerformance.lastFrameUpdateMs||0),
+    cpuRenderMs:num(frame?.renderTime)??Number(navigationPerformance.lastRenderCpuMs||0),
+    cpuSystemUpdateMs:num(frame?.scriptUpdate),
+    cpuSystemPostUpdateMs:num(frame?.scriptPostUpdate),
+    vramTotalBytes:num(vram?.totalUsed),
+    vramTextureBytes:num(vram?.tex),
+    vramVertexBufferBytes:num(vram?.vb),
+    vramIndexBufferBytes:num(vram?.ib),
+    vramUniformBufferBytes:num(vram?.ub),
+    vramStorageBufferBytes:num(vram?.sb),
+    viewport:Object.freeze({
+      cssWidth,cssHeight,bufferWidth,bufferHeight,
+      browserDevicePixelRatio:Number(browserDevicePixelRatio.toFixed(4)),
+      maxPixelRatio:Number(maxPixelRatio.toFixed(4)),
+      effectivePixelRatio,
+      renderScale
+    }),
     visibleEntityEstimate:Number((localStatic?.entityCount||0)+(localNpcPresentation?.activeCount||0)+(localCrowdPresentation?.visibleCount||0)+1),
     materialCountEstimate:Number((localStaticMaterials?Object.keys(localStaticMaterials).length:0)+localStyleTextures.size+(surfaceMaterial?1:0)+(tangentPatchMaterial?1:0)),
-    appStatsPublicApi:Boolean(stats&&engineVersionInUse==="2.23.0"),
+    appStatsPublicApi:Boolean(stats&&frame&&draw&&vram),
+    appStatsStructure:"frame/drawCalls/vram/gpu",
     boundedRecentSamples:true
   });
 }
