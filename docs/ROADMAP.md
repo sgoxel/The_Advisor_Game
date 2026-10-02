@@ -31,6 +31,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-001` — Legacy PixiJS GPU 2.5D Renderer Foundation — COMPLETED
 - `WP-S003-001-001` — PlayCanvas Engine 2 Renderer Migration Foundation — COMPLETED
 - `WP-S003-001-002` — Orthographic 3D Scene + Mobile WebGL2/WebGPU Baseline — COMPLETED
+- `WP-S003-001-002-001` — WebGPU-Preferred Runtime + WebGL2 Fallback + Developer Backend Comparison
 - `WP-S003-001-003` — Canonical Root PlayCanvas Cutover — COMPLETED
 - `WP-S003-002` — Authoritative Enterable Building Interiors — COMPLETED
 - `WP-S003-003` — Interior Objects + Interaction Points — COMPLETED
