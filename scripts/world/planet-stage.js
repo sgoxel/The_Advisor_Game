@@ -523,12 +523,14 @@ function rendererEngineUrl(version,build){
   return "https://cdn.jsdelivr.net/npm/playcanvas@"+version+"/+esm";
 }
 function readRendererBackendRequest(){
-  const q=backendQuery(),requested=String(q.get("gpu")||"").toLowerCase();
-  if(RENDERER_BACKEND_MODES.includes(requested))return Object.freeze({requested,source:"query",forced:requested!=="auto"});
-  try{
-    const saved=String(localStorage.getItem(RENDERER_BACKEND_KEY)||"").toLowerCase();
-    if(RENDERER_BACKEND_MODES.includes(saved))return Object.freeze({requested:saved,source:"saved",forced:saved!=="auto"});
-  }catch(_){}
+  const q=backendQuery(),requested=String(q.get("gpu")||"").toLowerCase(),developer=developerModeEnabled();
+  if(RENDERER_BACKEND_MODES.includes(requested)&&(requested==="auto"||developer))return Object.freeze({requested,source:"query",forced:requested!=="auto"});
+  if(developer){
+    try{
+      const saved=String(localStorage.getItem(RENDERER_BACKEND_KEY)||"").toLowerCase();
+      if(RENDERER_BACKEND_MODES.includes(saved))return Object.freeze({requested:saved,source:"saved",forced:saved!=="auto"});
+    }catch(_){}
+  }
   return Object.freeze({requested:"auto",source:"default",forced:false});
 }
 function rendererDeviceTypes(requested){
