@@ -5096,9 +5096,12 @@ function groundCharacterLayerEligible(){
   // Detailed character PNGs belong only to the final RPG representation. A
   // previously-ready ground terrain cell may remain as visual fallback while a
   // coarser request prepares, but fallback coverage does not retain ground-only
-  // character art. Conversely, requesting ground does not reveal art until the
-  // ready visible representation is also ground.
-  const groundOwned=requestedLevel==="ground"&&visibleLevel==="ground";
+  // character art. LOD hysteresis may also retain a ground request for the first
+  // adjacent zoom-out step, so final semantic scale ownership is required too.
+  // Conversely, final ground does not reveal art until its ready visible
+  // representation is also ground.
+  const finalGroundScale=scaleIndexForScalar(zoomState.scalar)===SCALE_LADDER.length-1;
+  const groundOwned=finalGroundScale&&requestedLevel==="ground"&&visibleLevel==="ground";
   return Boolean(localWorldPresentationEligibility().visible&&groundOwned&&String(localNpcContext?.tier||"")==="full"&&tangentPatch?.enabled);
 }
 function syncGroundCharacterScaleOwnership(){
