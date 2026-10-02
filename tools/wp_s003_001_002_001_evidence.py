@@ -19,6 +19,7 @@ SEED = "WP-S003-001-002-001-SEED"
 TESTED_HEAD = os.environ.get("WP_EVIDENCE_HEAD")
 BASELINE_ENGINE = "2.22.3"
 CURRENT_ENGINE = "2.23.0"
+EVIDENCE_TIME = "1100-01-01 11:30:00"
 
 
 def url_with(params):
@@ -71,12 +72,27 @@ def snap(d):
     return d.execute_script("return window.PlanetStage?.snapshot?.()||null")
 
 
+def apply_evidence_time(d):
+    d.execute_script("""
+      window.PlanetStage.applyAuthoritativeFantasyTime(
+        arguments[0],
+        "WP-S003-001-002-001 backend comparison",
+        {snapshotResult:false}
+      );
+    """, EVIDENCE_TIME)
+
+
 def settle_ground(d):
     d.execute_script("""
       const s=window.PlanetStage.snapshot(),p=window.StartingVillage?.plan?.(s.activeSeed),c=p?.center||{x:'0',y:'0'};
+      window.PlanetStage.applyAuthoritativeFantasyTime(
+        arguments[0],
+        "WP-S003-001-002-001 backend comparison",
+        {snapshotResult:false}
+      );
       window.PlanetStage.setWorldTileFocus(String(c.x),String(c.y));
       window.PlanetStage.setScaleIndex(9);
-    """)
+    """, EVIDENCE_TIME)
     wait(d, """
       const s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{},ls=s?.projection?.localStatic||{};
       return Boolean(s?.ready && Number(s?.zoom?.scaleIndex)===9 &&
@@ -147,6 +163,11 @@ def sample_performance(d, count=30):
         "vramIndexBufferBytes": rows[-1].get("vramIndexBufferBytes") if rows else None,
         "vramUniformBufferBytes": rows[-1].get("vramUniformBufferBytes") if rows else None,
         "vramStorageBufferBytes": rows[-1].get("vramStorageBufferBytes") if rows else None,
+        "shaderSwitchesLatest": rows[-1].get("shaderSwitches") if rows else None,
+        "materialSwitchesLatest": rows[-1].get("materialSwitches") if rows else None,
+        "gpuPassTotalMs": rows[-1].get("gpuPassTotalMs") if rows else None,
+        "gpuTimestampTimingsAvailable": bool(rows and rows[-1].get("gpuTimestampTimingsAvailable")),
+        "viewport": rows[-1].get("viewport") if rows else None,
     }
 
 
@@ -160,6 +181,14 @@ def backend_record(d, label):
     root = d.execute_script("""
       const r=document.getElementById('planetStageRoot');
       return r?{requested:r.dataset.rendererRequestedBackend,active:r.dataset.rendererActiveBackend,selection:r.dataset.rendererBackendSelection,fallback:r.dataset.rendererFallbackReason||null,webgpu:r.dataset.rendererWebgpuAvailable}:null;
+    """)
+    atmosphere=s.get("atmosphere") or {}
+    quality=d.execute_script("""
+      const r=window.RuntimeRenderQuality?.snapshot?.()||null,t=window.RuntimeTextureQuality?.snapshot?.()||null;
+      return {
+        render:r?{mode:r.mode||null,activeLevel:r.activeLevel||null,maxPixelRatio:r.maxPixelRatio??null,renderScale:r.renderScale??null,targetFps:r.targetFps??null}:null,
+        texture:t?{qualityProfile:t.qualityProfile||null,cacheSignature:t.cacheSignature||null,maxMaterialTextureResolution:t.maxMaterialTextureResolution??null,anisotropy:t.anisotropy??null}:null
+      };
     """)
     return {
         "label": label,
@@ -178,6 +207,19 @@ def backend_record(d, label):
         "backend": rb,
         "badge": badge,
         "rootDataset": root,
+        "comparisonContext": {
+            "evidenceTime": EVIDENCE_TIME,
+            "atmosphere": {
+                "authoritativeHour": atmosphere.get("authoritativeHour"),
+                "phase": atmosphere.get("phase"),
+                "keyIntensity": atmosphere.get("keyIntensity"),
+                "fillIntensity": atmosphere.get("fillIntensity"),
+                "ambient": atmosphere.get("ambient"),
+                "sky": atmosphere.get("sky"),
+            },
+            "quality": quality,
+            "viewport": (rb.get("performance") or {}).get("viewport"),
+        },
         "worldVisualStyle": s.get("worldVisualStyleIntegration"),
         "simulationAuthorityPreserved": bool(rb.get("simulationAuthority") is False),
     }
@@ -201,6 +243,8 @@ def run_success(label, gpu_mode, expected, engine=CURRENT_ENGINE, ground=True, d
             settle_ground(d)
         fixed_navigation_sequence(d)
         perf=sample_performance(d)
+        apply_evidence_time(d)
+        time.sleep(.15)
         rec = backend_record(d, label)
         rec["performanceSequence"]=perf
         active = (rec["backend"] or {}).get("active")
@@ -299,6 +343,12 @@ def compare_truth(records):
             raise AssertionError(f"backend/engine changed world identity: {base['label']} vs {r['label']}")
         if r["focusTile"] != base["focusTile"] or r["zoom"] != base["zoom"] or r["rotation"] != base["rotation"]:
             raise AssertionError(f"backend/engine comparison scene mismatch: {base['label']} vs {r['label']}")
+        bc=base.get("comparisonContext") or {}
+        rc=r.get("comparisonContext") or {}
+        if rc.get("evidenceTime") != bc.get("evidenceTime") or rc.get("atmosphere") != bc.get("atmosphere"):
+            raise AssertionError(f"backend/engine comparison lighting mismatch: {base['label']} vs {r['label']}")
+        if rc.get("viewport") != bc.get("viewport") or rc.get("quality") != bc.get("quality"):
+            raise AssertionError(f"backend/engine comparison viewport/quality mismatch: {base['label']} vs {r['label']}")
 
 
 def main():
@@ -323,12 +373,15 @@ def main():
             "webgpu":{"baseline":baseline_gpu["performanceSequence"],"current":forced_gpu["performanceSequence"]},
             "noAssumedWinner":True,
         }
+        report["comparisonContext"]=baseline_gl["comparisonContext"]
         report["backendParity"]={
             "sameSeed":True,
             "sameGeographyHash":True,
             "sameFocusTile":True,
             "sameRotation":True,
             "sameZoom":True,
+            "sameViewportAndQuality":True,
+            "sameLightingState":True,
             "webgpuActive":auto["backend"]["active"]=="webgpu" and forced_gpu["backend"]["active"]=="webgpu",
             "webgl2Active":forced_gl["backend"]["active"]=="webgl2",
             "fallbackActive":fallback["backend"]["active"]=="webgl2" and bool(fallback["backend"].get("fallbackReason")),
