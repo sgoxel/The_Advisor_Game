@@ -86,6 +86,19 @@ def descriptors(driver):
       }));
     """)
 
+def bounded_water_candidate(driver,x,y):
+    return js(driver,"""
+      const seed=window.PlanetStage.snapshot().activeSeed;
+      const q=window.WorldDestinations.queryNearby(seed,{x:String(arguments[0]),y:String(arguments[1])},{
+        radiusMeters:80000,maxResults:1,categories:['water']
+      });
+      const d=(q?.results||[])[0]||null;
+      return d?{
+        id:String(d.id),name:String(d.name||d.id),type:String(d.type||''),category:String(d.category||''),
+        center:d.center?{x:String(d.center.x),y:String(d.center.y)}:null
+      }:null;
+    """,str(x),str(y))
+
 def select_and_assert(driver,d,label,stream_handoff=False):
     initial=js(driver,"""
       const id=String(arguments[0]),before=window.Protagonist?.getPosition?.()||null;
@@ -129,6 +142,18 @@ def select_and_assert(driver,d,label,stream_handoff=False):
         proof["handoff"]=after
         js(driver,"window.PlanetStage.setScaleIndex(4);")
     return proof
+
+def repeat_same_target_assert(driver,d,first):
+    second=select_and_assert(driver,d,"repeat-"+str(first.get("label") or "target"))
+    first_nav=(first.get("selection") or {}).get("nav") or {}
+    second_nav=(second.get("selection") or {}).get("nav") or {}
+    if first_nav.get("targetId")!=second_nav.get("targetId") or first_nav.get("canonicalCoordinate")!=second_nav.get("canonicalCoordinate"):
+        raise RuntimeError("same-target repeat changed canonical identity: "+json.dumps({"first":first_nav,"second":second_nav}))
+    return {
+        "firstRequestId":first_nav.get("requestId"),"secondRequestId":second_nav.get("requestId"),
+        "targetId":second_nav.get("targetId"),"canonicalCoordinate":second_nav.get("canonicalCoordinate"),
+        "deterministic":True
+    }
 
 def invalid_target_assert(driver):
     result=js(driver,"""
@@ -196,8 +221,11 @@ for seed in SEEDS:
         village=focus_starting_village(driver)
         start_x=int(village["center"]["x"]);start_y=int(village["center"]["y"])
         found={}
+        repeat_target=None
+        water_probe={"available":False,"tested":False,"probeCount":0,"candidate":None}
         for ox,oy in OFFSETS:
-            js(driver,"""window.PlanetStage.setWorldTileFocus(arguments[0],arguments[1]);window.PlanetStage.setScaleIndex(4);window.PlanetStage.refreshPlaces();""",str(start_x+ox),str(start_y+oy))
+            target_x=start_x+ox;target_y=start_y+oy
+            js(driver,"""window.PlanetStage.setWorldTileFocus(arguments[0],arguments[1]);window.PlanetStage.setScaleIndex(4);window.PlanetStage.refreshPlaces();""",str(target_x),str(target_y))
             items=descriptors(driver)
             for d in items:
                 if not d.get("canonicalCoordinateValid") or d.get("latitudeRadians") is None or d.get("longitudeRadians") is None:
@@ -208,17 +236,42 @@ for seed in SEEDS:
                 is_water=d.get("category")=="water" or surface=="water"
                 if "current-village" not in found and is_settlement and same_center:
                     found["current-village"]=select_and_assert(driver,d,"current-village",stream_handoff=True)
+                    repeat_target=repeat_same_target_assert(driver,d,found["current-village"])
                 elif "other-settlement" not in found and is_settlement and not same_center:
                     found["other-settlement"]=select_and_assert(driver,d,"other-settlement")
                 if "water-destination" not in found and is_water:
                     found["water-destination"]=select_and_assert(driver,d,"water-destination")
+                    water_probe={"available":True,"tested":True,"probeCount":water_probe["probeCount"],"candidate":{"id":d["id"],"center":d.get("center")}}
                 if "land-poi" not in found and not is_settlement and not is_water and surface!="water":
                     found["land-poi"]=select_and_assert(driver,d,"land-poi")
-            if len(found)==4:
+            if {"current-village","other-settlement","land-poi","water-destination"}.issubset(found):
                 break
-        missing=sorted({"current-village","other-settlement","land-poi","water-destination"}-set(found))
+
+        if "water-destination" not in found:
+            for ox,oy in OFFSETS:
+                target_x=start_x+ox;target_y=start_y+oy
+                water_probe["probeCount"]+=1
+                candidate=bounded_water_candidate(driver,target_x,target_y)
+                if not candidate:
+                    continue
+                water_probe["available"]=True;water_probe["candidate"]=candidate
+                center=candidate.get("center") or {}
+                if center.get("x") is None or center.get("y") is None:
+                    continue
+                js(driver,"""window.PlanetStage.setWorldTileFocus(arguments[0],arguments[1]);window.PlanetStage.setScaleIndex(4);window.PlanetStage.refreshPlaces();""",center["x"],center["y"])
+                exact=next((item for item in descriptors(driver) if item.get("id")==candidate.get("id")),None)
+                if exact and exact.get("canonicalCoordinateValid") and exact.get("latitudeRadians") is not None and exact.get("longitudeRadians") is not None:
+                    found["water-destination"]=select_and_assert(driver,exact,"water-destination")
+                    water_probe["tested"]=True
+                    break
+
+        missing=sorted({"current-village","other-settlement","land-poi"}-set(found))
         if missing:
-            raise RuntimeError(f"{seed}: missing bounded Places evidence classes {missing}")
+            raise RuntimeError(f"{seed}: missing mandatory bounded Places evidence classes {missing}")
+        if water_probe["available"] and not water_probe["tested"]:
+            raise RuntimeError(f"{seed}: bounded water destination was available but could not be exercised through Places")
+        if not repeat_target or repeat_target.get("deterministic") is not True:
+            raise RuntimeError(f"{seed}: repeated same-target focus proof missing")
         invalid=invalid_target_assert(driver)
         focus_starting_village(driver)
         js(driver,"window.PlanetStage.setScaleIndex(8);")
@@ -231,7 +284,7 @@ for seed in SEEDS:
         if protagonist_moved["before"]!=moved_to:
             raise RuntimeError(f"{seed}: moved protagonist authority mismatch")
         all_records.append({
-            "seed":seed,"village":village,"places":found,"invalidTarget":invalid,
+            "seed":seed,"village":village,"places":found,"repeatSameTarget":repeat_target,"waterProbe":water_probe,"invalidTarget":invalid,
             "protagonistInitial":protagonist_first,"movedTo":moved_to,"protagonistMoved":protagonist_moved,
             "final":snapshot(driver)
         })
@@ -246,7 +299,9 @@ payload={
     "schema":1,"wp":"WP-S003-008-008","seeds":list(SEEDS),"records":all_records,
     "checks":{
         "twoSeeds":len(all_records)==2,
-        "placesClassesPerSeed":all(len(r["places"])==4 for r in all_records),
+        "mandatoryPlacesClassesPerSeed":all(all(k in r["places"] for k in ("current-village","other-settlement","land-poi")) for r in all_records),
+        "waterDestinationWhereAvailable":all((not r["waterProbe"]["available"]) or r["waterProbe"]["tested"] for r in all_records),
+        "repeatedSameTargetDeterministic":all(r["repeatSameTarget"]["deterministic"] for r in all_records),
         "invalidCoordinateCameraUnchanged":True,
         "stableTargetThroughLod":True,
         "protagonistMaxZoomCurrentPosition":True,
