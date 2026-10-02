@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="planet-focus-streaming-v3";
+const VERSION="planet-focus-streaming-v4";
 const ENGINE_VERSION="2.23.0";
 const BASELINE_ENGINE_VERSION="2.22.3";
 const RENDERER_BACKEND_KEY="advisor.renderer.backend";
@@ -9513,7 +9513,7 @@ function greatCircleDistanceKm(a,b){
   const q=Math.sin(dLat/2)**2+Math.cos(aa.latitudeRadians)*Math.cos(bb.latitudeRadians)*Math.sin(dLon/2)**2;
   return WORLD_RADIUS_METERS*(2*Math.atan2(Math.sqrt(q),Math.sqrt(Math.max(0,1-q))))/1000;
 }
-function currentViewTarget(){return {latitudeRadians:-pitchDegrees*Math.PI/180,longitudeRadians:-yawDegrees*Math.PI/180};}
+function currentViewTarget(){return {latitudeRadians:zoomState.focusLatitudeRadians,longitudeRadians:zoomState.focusLongitudeRadians};}
 function commitDestinationDescriptors(query,started){
   let baseDescriptors=[];
   try{
@@ -10835,7 +10835,7 @@ function snapshot(){
     groundBuildingCutaway:Object.freeze({...groundBuildingCutaway}),
     buildingSurroundings:Object.freeze({...buildingSurroundings,functions:Object.freeze((buildingSurroundings.functions||[]).slice()),buildings:Object.freeze((buildingSurroundings.buildings||[]).slice())}),
     campaignWearProjection:Object.freeze({...campaignWearProjection,stateCounts:Object.freeze({...campaignWearProjection.stateCounts}),buildings:Object.freeze((campaignWearProjection.buildings||[]).slice())}),
-    destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),names:Object.freeze(destinationNavigator.descriptors.map(d=>d.name)),leadCount:destinationNavigator.descriptors.filter(d=>d.rumorLead).length,leadIds:Object.freeze(destinationNavigator.descriptors.filter(d=>d.rumorLead).map(d=>d.leadId||d.id)),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,lastError:destinationNavigator.lastError,invalidCoordinateCount:destinationNavigator.descriptors.filter(d=>d.canonicalCoordinateValid===false).length,queryCenter:Object.freeze({latitudeDegrees:Number((-pitchDegrees).toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
+    destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),names:Object.freeze(destinationNavigator.descriptors.map(d=>d.name)),leadCount:destinationNavigator.descriptors.filter(d=>d.rumorLead).length,leadIds:Object.freeze(destinationNavigator.descriptors.filter(d=>d.rumorLead).map(d=>d.leadId||d.id)),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,lastError:destinationNavigator.lastError,invalidCoordinateCount:destinationNavigator.descriptors.filter(d=>d.canonicalCoordinateValid===false).length,queryCenter:Object.freeze({latitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(3)),longitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
     explicitFocusNavigation:explicitFocusNavigationSnapshot(),
     mapPresentation:Object.freeze({...mapPresentation}),
     navigationPerformance:Object.freeze({...navigationPerformance,framePhaseLastMs:Object.freeze({...navigationPerformance.framePhaseLastMs}),framePhaseMaxMs:Object.freeze({...navigationPerformance.framePhaseMaxMs}),averageSemanticUpdateMs:Number((navigationPerformance.semanticUpdateRenderCount?navigationPerformance.totalSemanticUpdateMs/navigationPerformance.semanticUpdateRenderCount:0).toFixed(3)),pendingReason:mapPresentationSchedule.pendingReason}),
