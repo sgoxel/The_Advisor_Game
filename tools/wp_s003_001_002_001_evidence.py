@@ -29,7 +29,8 @@ def url_with(params):
     return urlunsplit((p.scheme, p.netloc, p.path, urlencode(q), p.fragment))
 
 
-def driver_for(disable_webgpu=False):
+def driver_for(disable_webgpu=False, viewport=(1280,800)):
+    width,height=viewport
     o = Options()
     for arg in [
         "--headless=new",
@@ -43,7 +44,7 @@ def driver_for(disable_webgpu=False):
         "--enable-unsafe-webgpu",
         "--use-webgpu-adapter=swiftshader",
         "--use-gpu-in-tests",
-        "--window-size=1280,800",
+        f"--window-size={width},{height}",
     ]:
         o.add_argument(arg)
     o.set_capability("goog:loggingPrefs", {"browser": "ALL"})
@@ -225,8 +226,8 @@ def backend_record(d, label):
     }
 
 
-def run_success(label, gpu_mode, expected, engine=CURRENT_ENGINE, ground=True, disable_webgpu=False, build="release"):
-    d = driver_for(disable_webgpu=disable_webgpu)
+def run_success(label, gpu_mode, expected, engine=CURRENT_ENGINE, ground=True, disable_webgpu=False, build="release", viewport=(1280,800)):
+    d = driver_for(disable_webgpu=disable_webgpu, viewport=viewport)
     try:
         d.get(url_with({
             "gpu": gpu_mode,
@@ -363,9 +364,13 @@ def main():
         fallback = run_success("06-current-2230-auto-fallback", "auto", "webgl2", disable_webgpu=True)
         failure = run_forced_webgpu_failure()
         device_loss = run_device_loss()
+        mobile_gpu = run_success("10-current-2230-mobile-webgpu", "webgpu", "webgpu", viewport=(844,390))
+        mobile_gl = run_success("11-current-2230-mobile-webgl2", "webgl2", "webgl2", viewport=(844,390))
         records=[baseline_gl,baseline_gpu,auto,forced_gpu,forced_gl,fallback]
         compare_truth(records)
+        compare_truth([mobile_gpu,mobile_gl])
         report["records"]=records
+        report["mobileRecords"]=[mobile_gpu,mobile_gl]
         report["forcedWebgpuFailure"]=failure
         report["deviceLoss"]=device_loss
         report["engineComparison"]={
@@ -386,6 +391,15 @@ def main():
             "webgl2Active":forced_gl["backend"]["active"]=="webgl2",
             "fallbackActive":fallback["backend"]["active"]=="webgl2" and bool(fallback["backend"].get("fallbackReason")),
             "deviceLossRecovered":bool(device_loss["result"].get("recovered")),
+            "mobileViewportBackendParity":mobile_gpu["comparisonContext"]==mobile_gl["comparisonContext"] and mobile_gpu["activeSeed"]==mobile_gl["activeSeed"] and mobile_gpu["geographyHash"]==mobile_gl["geographyHash"],
+        }
+        report["mobileConfigurationEvidence"]={
+            "viewportCssTarget":{"width":844,"height":390},
+            "browserEngine":"desktop Chrome mobile-sized viewport",
+            "realMobileGpu":False,
+            "limitation":"CI evidence validates mobile-layout/backend parity only; it is not a substitute for real mobile/tablet GPU performance measurements.",
+            "webgpuScreenshot":mobile_gpu.get("screenshot"),
+            "webgl2Screenshot":mobile_gl.get("screenshot"),
         }
         report["entitylessEvaluation"]={
             "adopted":False,
