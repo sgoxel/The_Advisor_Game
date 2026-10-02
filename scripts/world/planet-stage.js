@@ -315,7 +315,8 @@ let startupWatchdogTimer=null;
 let startupAbortError=null;
 let controlledWorkActive=false;
 let lastHeartbeatAt=0;
-let destinationNavigator={open:false,category:"all",descriptors:[],selectedId:null,queryCount:0,lastQueryMs:0,navigationCount:0,lastTarget:null};
+let destinationNavigator={open:false,category:"all",descriptors:[],selectedId:null,queryCount:0,lastQueryMs:0,navigationCount:0,lastTarget:null,lastError:null};
+let focusNavigation={sequence:0,active:null,last:null,rejectedCount:0,completedCount:0,supersededCount:0,destinationFocusCount:0,protagonistFocusCount:0,protagonistRefreshCount:0};
 let destinationQueryPromise=null;
 const inspectionPickables=new Map();
 let inspection={selectedId:null,selectedType:null,pointerDownX:0,pointerDownY:0,dragDistance:0,pickQueries:0,lastPickCandidateCount:0,lastPickQueryMs:0,tooltipUpdates:0,lastTooltipUpdateMs:0,contentRefreshes:0,lastContentRefreshAtMs:0,dismissCount:0};
@@ -5539,7 +5540,16 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     if(protagonist){
       const east=protagonist.x*tileMeters,north=protagonist.y*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame),ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.015;
       const protagonistBillboard=createGroundCharacterBillboard(localNpcRoot,"ProtagonistBillboard",GROUND_CHARACTER_PROTAGONIST_TEXTURE,pos.x,ground,pos.z,presentationScale,unit,1.82);
-      if(protagonistBillboard){protagonistBillboardVisible=true;billboardUrls.add(GROUND_CHARACTER_PROTAGONIST_TEXTURE);}
+      if(protagonistBillboard){
+        protagonistBillboardVisible=true;billboardUrls.add(GROUND_CHARACTER_PROTAGONIST_TEXTURE);
+        registerLocalInspection({
+          id:"protagonist",type:"protagonist",name:"Protagonist",pickPriority:5,
+          authority:Object.freeze({positionSource:"Protagonist.getPosition",cameraOnlyFocus:true,simulationMutation:false}),
+          visible:()=>Boolean(protagonistBillboard.enabled&&protagonistBillboard.parent),
+          screenBounds:()=>inspectionEntityBounds([protagonistBillboard],7),
+          screenDepth:()=>inspectionEntityDepth([protagonistBillboard])
+        },localNpcInspectionKeys);
+      }
     }else requestGroundCharacterMaterial(GROUND_CHARACTER_PROTAGONIST_TEXTURE);
   }
   let activeCount=0,entityCount=protagonistBillboardVisible?1:0;
@@ -9088,13 +9098,160 @@ function rotationForLatLon(latitudeRadians,longitudeRadians){
     pitchDegrees:clamp(pitch*180/Math.PI,-82,82)
   });
 }
+function validFocusCoordinate(target){
+  const latitudeRadians=Number(target?.latitudeRadians),longitudeRadians=Number(target?.longitudeRadians);
+  return Boolean(Number.isFinite(latitudeRadians)&&Number.isFinite(longitudeRadians)&&Math.abs(latitudeRadians)<=Math.PI/2+1e-9&&Math.abs(longitudeRadians)<=Math.PI*2+1e-9);
+}
 function setViewTarget(target,{forceSemantic=true,snapshotResult=true,semanticUpdate=true}={}){
-  if(!target)return snapshotResult?snapshot():null;
-  const rotation=rotationForLatLon(Number(target.latitudeRadians)||0,Number(target.longitudeRadians)||0);
+  if(!validFocusCoordinate(target))return snapshotResult?snapshot():null;
+  const rotation=rotationForLatLon(Number(target.latitudeRadians),Number(target.longitudeRadians));
   const result=setRotationInternal(rotation.yawDegrees,rotation.pitchDegrees,{snapshotResult:false,semanticReason:"rotation",semanticUpdate});
   if(semanticUpdate&&forceSemantic)updateMapPresentation("view-target",true);
   scheduleFocusedMapPrewarm();
   return snapshotResult?snapshot():result;
+}
+function strictWorldLatLonForTile(xValue,yValue){
+  if(xValue===undefined||xValue===null||yValue===undefined||yValue===null)return null;
+  let geo=null;
+  try{geo=coordinateFabricAuthority()?.worldLatLonForTile?.(String(xValue),String(yValue))||null;}catch(_){geo=null;}
+  if(!geo){
+    try{
+      const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||window.PlanetGeography?.DEFAULT_TILE_METERS||2));
+      geo=geography?.worldLatLonForTile?.(String(xValue),String(yValue),tileMeters,WORLD_RADIUS_METERS)||
+        window.PlanetGeography?.worldLatLonForTile?.(activeSeed,String(xValue),String(yValue),tileMeters,WORLD_RADIUS_METERS)||null;
+    }catch(_){geo=null;}
+  }
+  if(!validFocusCoordinate(geo))return null;
+  return Object.freeze({
+    latitudeRadians:Number(geo.latitudeRadians),longitudeRadians:wrapLongitudeRadians(Number(geo.longitudeRadians)),
+    latitudeDegrees:Number.isFinite(Number(geo.latitudeDegrees))?Number(geo.latitudeDegrees):Number(geo.latitudeRadians)*180/Math.PI,
+    longitudeDegrees:Number.isFinite(Number(geo.longitudeDegrees))?Number(geo.longitudeDegrees):wrapLongitudeRadians(Number(geo.longitudeRadians))*180/Math.PI,
+    worldTile:Object.freeze({x:String(geo.worldTile?.x??xValue),y:String(geo.worldTile?.y??yValue)}),
+    authority:String(geo.authority||"canonical coordinate fabric")
+  });
+}
+function canonicalDestinationCoordinate(descriptor){
+  const coordinates=descriptor?.coordinates||null;
+  if(!validFocusCoordinate(coordinates))return null;
+  const tile=coordinates.tile||descriptor?.center||null;
+  return Object.freeze({
+    latitudeRadians:Number(coordinates.latitudeRadians),longitudeRadians:wrapLongitudeRadians(Number(coordinates.longitudeRadians)),
+    latitudeDegrees:Number.isFinite(Number(coordinates.latitudeDegrees))?Number(coordinates.latitudeDegrees):Number(coordinates.latitudeRadians)*180/Math.PI,
+    longitudeDegrees:Number.isFinite(Number(coordinates.longitudeDegrees))?Number(coordinates.longitudeDegrees):wrapLongitudeRadians(Number(coordinates.longitudeRadians))*180/Math.PI,
+    worldTile:tile&&tile.x!=null&&tile.y!=null?Object.freeze({x:String(tile.x),y:String(tile.y)}):null,
+    authority:String(coordinates.authority||descriptor.destinationAuthority||descriptor.authority||"WorldDestinations")
+  });
+}
+function focusSurfaceAt(latitudeRadians,longitudeRadians){
+  let tile=null,terrain=null;
+  try{tile=mapWorldTileAt(latitudeRadians,longitudeRadians);}catch(_){tile=null;}
+  if(tile){
+    try{terrain=String(window.GeographyFoundation?.getTerrainType?.(activeSeed,String(tile.x),String(tile.y))||"");}catch(_){terrain=null;}
+  }
+  return Object.freeze({worldTile:tile?Object.freeze({x:String(tile.x),y:String(tile.y)}):null,terrain:terrain||null});
+}
+function focusErrorMeters(target){
+  if(!validFocusCoordinate(target))return null;
+  return greatCircleDistanceKm(target,{latitudeRadians:zoomState.focusLatitudeRadians,longitudeRadians:zoomState.focusLongitudeRadians})*1000;
+}
+function focusNavigationReady(request){
+  if(!request||!validFocusCoordinate(request.coordinate))return false;
+  const error=focusErrorMeters(request.coordinate);
+  if(error===null||error>2)return false;
+  if(!request.maxZoom)return true;
+  const finalScale=scaleIndexForScalar(zoomState.scalar)===SCALE_LADDER.length-1;
+  return Boolean(finalScale&&!zoomState.animating&&String(localResources.requestedLevel||"")==="ground"&&String(localResources.visibleLevel||displayResource?.dims?.levelId||"")==="ground"&&localNpcPresentation.groundRepresentationReady&&localNpcPresentation.protagonistBillboardVisible);
+}
+function focusNavigationSnapshot(){
+  const request=focusNavigation.active;
+  if(!request)return Object.freeze({
+    active:false,status:focusNavigation.last?.status||"idle",last:focusNavigation.last?Object.freeze({...focusNavigation.last}):null,
+    rejectedCount:focusNavigation.rejectedCount,completedCount:focusNavigation.completedCount,supersededCount:focusNavigation.supersededCount,
+    destinationFocusCount:focusNavigation.destinationFocusCount,protagonistFocusCount:focusNavigation.protagonistFocusCount,
+    protagonistRefreshCount:focusNavigation.protagonistRefreshCount,presentationOnly:true,simulationAuthority:false
+  });
+  const error=focusErrorMeters(request.coordinate),reached=Object.freeze({
+    latitudeRadians:Number(zoomState.focusLatitudeRadians),longitudeRadians:Number(zoomState.focusLongitudeRadians),
+    latitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(9)),longitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(9))
+  }),surface=focusSurfaceAt(zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians),ready=focusNavigationReady(request);
+  return Object.freeze({
+    active:true,requestId:request.requestId,targetId:request.targetId,targetType:request.targetType,targetName:request.targetName,source:request.source,
+    status:ready?"reached":"navigating",maxZoom:request.maxZoom,canonicalCoordinate:request.coordinate,reachedCoordinate:reached,
+    authoritativeWorldTile:request.worldTile||null,focusErrorMeters:error===null?null:Number(error.toFixed(4)),
+    expectedSurface:request.expectedSurface||null,reachedSurface:surface.terrain,reachedWorldTile:surface.worldTile,
+    finalScaleIndex:scaleIndexForScalar(zoomState.scalar),finalScaleLabel:SCALE_LADDER[scaleIndexForScalar(zoomState.scalar)],
+    requestedLevel:String(localResources.requestedLevel||""),visibleLevel:String(localResources.visibleLevel||displayResource?.dims?.levelId||""),
+    streamingPending:Number(localResources.pendingPreparationCount||0),fallbackUsed:false,
+    protagonistVisible:Boolean(localNpcPresentation.protagonistBillboardVisible),protagonistRefreshCount:focusNavigation.protagonistRefreshCount,
+    rejectedCount:focusNavigation.rejectedCount,completedCount:focusNavigation.completedCount,supersededCount:focusNavigation.supersededCount,
+    destinationFocusCount:focusNavigation.destinationFocusCount,protagonistFocusCount:focusNavigation.protagonistFocusCount,
+    presentationOnly:true,simulationAuthority:false,cameraOnly:true
+  });
+}
+function rejectFocusNavigation(targetId,targetType,targetName,reason,source){
+  focusNavigation.rejectedCount++;
+  focusNavigation.last=Object.freeze({status:"unavailable",targetId:String(targetId||""),targetType:String(targetType||""),targetName:String(targetName||""),reason:String(reason||"invalid-canonical-coordinate"),source:String(source||"explicit-focus"),fallbackUsed:false});
+  return focusNavigationSnapshot();
+}
+function beginFocusNavigation({targetId,targetType,targetName,coordinate,worldTile=null,expectedSurface=null,maxZoom=false,source="explicit-focus"}){
+  if(!validFocusCoordinate(coordinate))return rejectFocusNavigation(targetId,targetType,targetName,"invalid-canonical-coordinate",source);
+  if(focusNavigation.active&&!focusNavigationReady(focusNavigation.active))focusNavigation.supersededCount++;
+  const requestId="FOCUS-"+String(++focusNavigation.sequence).padStart(4,"0");
+  focusNavigation.active={
+    requestId,targetId:String(targetId||requestId),targetType:String(targetType||"place"),targetName:String(targetName||targetId||"Target"),
+    coordinate:Object.freeze({
+      latitudeRadians:Number(coordinate.latitudeRadians),longitudeRadians:wrapLongitudeRadians(Number(coordinate.longitudeRadians)),
+      latitudeDegrees:Number.isFinite(Number(coordinate.latitudeDegrees))?Number(coordinate.latitudeDegrees):Number(coordinate.latitudeRadians)*180/Math.PI,
+      longitudeDegrees:Number.isFinite(Number(coordinate.longitudeDegrees))?Number(coordinate.longitudeDegrees):wrapLongitudeRadians(Number(coordinate.longitudeRadians))*180/Math.PI,
+      authority:String(coordinate.authority||"canonical coordinate authority")
+    }),
+    worldTile:worldTile?Object.freeze({x:String(worldTile.x),y:String(worldTile.y)}):(coordinate.worldTile||null),
+    expectedSurface,maxZoom:Boolean(maxZoom),source:String(source),settled:false
+  };
+  setViewTarget(focusNavigation.active.coordinate,{snapshotResult:false});
+  if(maxZoom)setZoomTargetScalar(ZOOM_MAX,"explicit-protagonist-focus");
+  return focusNavigationSnapshot();
+}
+function focusDestination(descriptor){
+  if(!descriptor)return rejectFocusNavigation("","place","Unknown destination","destination-missing","places-view");
+  const coordinate=canonicalDestinationCoordinate(descriptor);
+  if(!coordinate){
+    destinationNavigator.lastError="Canonical coordinate unavailable";
+    destinationNavigator.lastTarget={id:descriptor.id,name:descriptor.name,type:descriptor.type,status:"unavailable",fallbackUsed:false};
+    return rejectFocusNavigation(descriptor.id,descriptor.type,descriptor.name,"canonical-coordinate-unavailable","places-view");
+  }
+  destinationNavigator.selectedId=descriptor.id;destinationNavigator.navigationCount++;destinationNavigator.lastError=null;
+  const expectedSurface=descriptor.category==="water"||String(descriptor.evidence?.terrain||"")==="water"?"water":"land";
+  destinationNavigator.lastTarget={id:descriptor.id,name:descriptor.name,type:descriptor.type,latitudeDegrees:coordinate.latitudeDegrees,longitudeDegrees:coordinate.longitudeDegrees,status:"requested",fallbackUsed:false};
+  focusNavigation.destinationFocusCount++;
+  return beginFocusNavigation({targetId:descriptor.id,targetType:descriptor.type,targetName:descriptor.name,coordinate,worldTile:coordinate.worldTile||descriptor.center,expectedSurface,maxZoom:false,source:"places-view"});
+}
+function authoritativeProtagonistFocusTarget(){
+  const point=authoritativeProtagonistGroundPoint();
+  if(!point||!Number.isFinite(Number(point.x))||!Number.isFinite(Number(point.y)))return null;
+  const coordinate=strictWorldLatLonForTile(String(point.x),String(point.y));
+  if(!coordinate)return null;
+  return Object.freeze({point:Object.freeze({x:String(point.x),y:String(point.y),source:String(point.source||"Protagonist.getPosition")}),coordinate});
+}
+function focusProtagonist(){
+  const target=authoritativeProtagonistFocusTarget();
+  if(!target)return rejectFocusNavigation("protagonist","protagonist","Protagonist","authoritative-position-unavailable","protagonist-inspection");
+  focusNavigation.protagonistFocusCount++;
+  return beginFocusNavigation({targetId:"protagonist",targetType:"protagonist",targetName:"Protagonist",coordinate:target.coordinate,worldTile:target.point,expectedSurface:null,maxZoom:true,source:"protagonist-inspection"});
+}
+function updateFocusNavigation(){
+  const request=focusNavigation.active;if(!request||request.settled)return;
+  if(focusNavigationReady(request)){
+    request.settled=true;focusNavigation.completedCount++;focusNavigation.last=Object.freeze({...focusNavigationSnapshot(),active:false,status:"reached"});return;
+  }
+  if(request.targetType!=="protagonist")return;
+  const latest=authoritativeProtagonistFocusTarget();if(!latest)return;
+  const previous=request.worldTile;
+  if(previous&&String(previous.x)===String(latest.point.x)&&String(previous.y)===String(latest.point.y))return;
+  request.worldTile=Object.freeze({x:String(latest.point.x),y:String(latest.point.y)});
+  request.coordinate=latest.coordinate;
+  focusNavigation.protagonistRefreshCount++;
+  setViewTarget(latest.coordinate,{snapshotResult:false});
 }
 function rgbaFromColor(color){
   return [
@@ -9279,13 +9436,13 @@ function commitDestinationDescriptors(query,started){
   let baseDescriptors=[];
   try{
     baseDescriptors=(query?.results||[]).map(item=>{
-      const coordinates=item.coordinates||{};
+      const coordinates=item.coordinates||{},latitudeRadians=Number(coordinates.latitudeRadians),longitudeRadians=Number(coordinates.longitudeRadians),latitudeDegrees=Number(coordinates.latitudeDegrees),longitudeDegrees=Number(coordinates.longitudeDegrees);
       return Object.freeze({
         ...item,
-        latitudeRadians:Number(coordinates.latitudeRadians)||0,
-        longitudeRadians:Number(coordinates.longitudeRadians)||0,
-        latitudeDegrees:Number(coordinates.latitudeDegrees)||0,
-        longitudeDegrees:Number(coordinates.longitudeDegrees)||0,
+        latitudeRadians:Number.isFinite(latitudeRadians)?latitudeRadians:null,
+        longitudeRadians:Number.isFinite(longitudeRadians)?longitudeRadians:null,
+        latitudeDegrees:Number.isFinite(latitudeDegrees)?latitudeDegrees:null,
+        longitudeDegrees:Number.isFinite(longitudeDegrees)?longitudeDegrees:null,
         elevationMeters:Number(item.evidence?.elevationMeters)||0,
         worldAuthority:true,
         destinationAuthority:"WorldDestinations",
@@ -9376,7 +9533,7 @@ function renderDestinationNavigator(){
     const d=entry.d,row=document.createElement("article");row.className="planet-place-row";row.dataset.selected=String(destinationNavigator.selectedId===d.id);
     const info=document.createElement("div");
     info.innerHTML="<strong></strong><span></span><small></small>";info.querySelector("strong").textContent=d.name;info.querySelector("span").textContent=(d.rumorLead?"LEAD · ":"")+d.type+" · "+Math.round(entry.distance).toLocaleString()+" km from view";info.querySelector("small").textContent=d.description+" · "+Math.round(d.elevationMeters).toLocaleString()+" m";
-    const go=document.createElement("button");go.type="button";go.textContent="View";go.onclick=()=>{destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,type:d.type,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();};
+    const go=document.createElement("button");go.type="button";const coordinate=canonicalDestinationCoordinate(d);go.textContent=coordinate?"View":"Unavailable";go.disabled=!coordinate;go.setAttribute("aria-label",coordinate?("View "+d.name):("Canonical location unavailable for "+d.name));go.onclick=()=>{focusDestination(d);renderDestinationNavigator();};
     row.append(info,go);list.appendChild(row);
   }
   panel.appendChild(list);
@@ -9627,7 +9784,7 @@ function dismissInspection(){const hadSelection=inspection.selectedId!==null||in
 function inspectionIdText(id){return String(id).trim();}
 function inspectionRegistryKey(type,id){return String(type)+":"+inspectionIdText(id);}
 function registerInspectionPickable(record){
-  if(record?.id===undefined||record.id===null||inspectionIdText(record.id).length===0||!["npc","building","signpost"].includes(record.type)||typeof record.screenBounds!=="function")return false;
+  if(record?.id===undefined||record.id===null||inspectionIdText(record.id).length===0||!["npc","protagonist","building","signpost"].includes(record.type)||typeof record.screenBounds!=="function")return false;
   inspectionPickables.set(inspectionRegistryKey(record.type,record.id),record);return true;
 }
 function unregisterInspectionPickable(id,type=null){
@@ -9654,6 +9811,10 @@ function readableInspectionLines(record,accessValue=null){
     let live=null;try{live=typeof record.inspect==="function"?record.inspect():null;}catch{live=null;}
     return [readable(live?.displayName||record.name,"Unknown resident"),readable(live?.profession||record.job,"Unassigned"),readable(live?.activity||record.activity,"Activity unavailable")];
   }
+  if(record.type==="protagonist"){
+    const target=authoritativeProtagonistFocusTarget();
+    return ["Protagonist",target?("Tile "+target.point.x+", "+target.point.y):"Authoritative position unavailable","Explicit Focus moves the camera only"];
+  }
   if(record.type==="signpost"){
     return [readable(record.name,"Road signpost"),...(record.branches||[]).slice(0,3).map(branch=>readable(branch.destinationName,"Destination")+" — "+readable(branch.distanceLabel,"route")+" "+readable(branch.directionLabel,""))];
   }
@@ -9674,10 +9835,16 @@ function renderInspectionTooltip(record,knownBounds=null){
     const access=inspectionRankAccess(record);
     tip.dataset.rankAccess=access?.status||"ordinary";
     tip.dataset.rankReason=access?.reason||"";
-    const lines=readableInspectionLines(record,access),contentKey=lines.join("\u001f");
+    const lines=readableInspectionLines(record,access),actionable=record.type==="protagonist",contentKey=lines.join("\u001f")+"|action:"+(actionable?"focus":"none");
     if(tip.dataset.contentKey!==contentKey){
       tip.replaceChildren();lines.forEach((line,index)=>{const el=document.createElement(index===0?"strong":"span");el.textContent=line;tip.appendChild(el);});
-      tip.dataset.contentKey=contentKey;inspection.contentRefreshes++;
+      if(actionable){
+        const action=document.createElement("button");action.type="button";action.className="world-inspection-focus";action.textContent="View / Focus";action.setAttribute("aria-label","Focus camera on protagonist at maximum zoom");
+        action.addEventListener("pointerdown",event=>event.stopPropagation());
+        action.addEventListener("click",event=>{event.preventDefault();event.stopPropagation();focusProtagonist();});
+        tip.appendChild(action);
+      }
+      tip.dataset.actionable=String(actionable);tip.dataset.contentKey=contentKey;inspection.contentRefreshes++;
     }
     inspection.lastContentRefreshAtMs=now;
   }
@@ -10264,7 +10431,7 @@ async function start(){
     resize();
     app.on?.("update",dt=>{
       const frameStarted=performance.now();frameCount++;
-      let phaseStarted=performance.now();updateAnimatedZoom(dt);recordNavigationFramePhase("zoom",phaseStarted);
+      let phaseStarted=performance.now();updateAnimatedZoom(dt);updateFocusNavigation();recordNavigationFramePhase("zoom",phaseStarted);
       navigationPerformance.framePhaseLastMs.residentAdvance=0;
       phaseStarted=performance.now();updateCanonicalNpcMotion();recordNavigationFramePhase("npcMotion",phaseStarted);
       phaseStarted=performance.now();recordLocalFrame(dt);recordNavigationFramePhase("frameStats",phaseStarted);
@@ -10586,7 +10753,7 @@ function snapshot(){
     groundBuildingCutaway:Object.freeze({...groundBuildingCutaway}),
     buildingSurroundings:Object.freeze({...buildingSurroundings,functions:Object.freeze((buildingSurroundings.functions||[]).slice()),buildings:Object.freeze((buildingSurroundings.buildings||[]).slice())}),
     campaignWearProjection:Object.freeze({...campaignWearProjection,stateCounts:Object.freeze({...campaignWearProjection.stateCounts}),buildings:Object.freeze((campaignWearProjection.buildings||[]).slice())}),
-    destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),names:Object.freeze(destinationNavigator.descriptors.map(d=>d.name)),leadCount:destinationNavigator.descriptors.filter(d=>d.rumorLead).length,leadIds:Object.freeze(destinationNavigator.descriptors.filter(d=>d.rumorLead).map(d=>d.leadId||d.id)),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,queryCenter:Object.freeze({latitudeDegrees:Number((-pitchDegrees).toFixed(3)),longitudeDegrees:Number((-yawDegrees).toFixed(3))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
+    destinationNavigator:Object.freeze({open:destinationNavigator.open,category:destinationNavigator.category,resultCount:destinationNavigator.descriptors.filter(d=>destinationNavigator.category==="all"||d.category===destinationNavigator.category).length,totalDescriptorCount:destinationNavigator.descriptors.length,categories:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.category))),types:Array.from(new Set(destinationNavigator.descriptors.map(d=>d.type))),names:Object.freeze(destinationNavigator.descriptors.map(d=>d.name)),leadCount:destinationNavigator.descriptors.filter(d=>d.rumorLead).length,leadIds:Object.freeze(destinationNavigator.descriptors.filter(d=>d.rumorLead).map(d=>d.leadId||d.id)),selectedId:destinationNavigator.selectedId,queryCount:destinationNavigator.queryCount,lastQueryMs:destinationNavigator.lastQueryMs,navigationCount:destinationNavigator.navigationCount,lastTarget:destinationNavigator.lastTarget,lastError:destinationNavigator.lastError,focusNavigation:focusNavigationSnapshot(),queryCenter:Object.freeze({latitudeDegrees:Number((zoomState.focusLatitudeRadians*180/Math.PI).toFixed(6)),longitudeDegrees:Number((zoomState.focusLongitudeRadians*180/Math.PI).toFixed(6))}),boundedQuery:true,descriptorLimit:16,fullWorldScan:false,cameraOnly:true,localChunkMaterialization:false}),
     mapPresentation:Object.freeze({...mapPresentation}),
     navigationPerformance:Object.freeze({...navigationPerformance,framePhaseLastMs:Object.freeze({...navigationPerformance.framePhaseLastMs}),framePhaseMaxMs:Object.freeze({...navigationPerformance.framePhaseMaxMs}),averageSemanticUpdateMs:Number((navigationPerformance.semanticUpdateRenderCount?navigationPerformance.totalSemanticUpdateMs/navigationPerformance.semanticUpdateRenderCount:0).toFixed(3)),pendingReason:mapPresentationSchedule.pendingReason}),
     politicalScale:politicalScaleEvidence(),
@@ -10688,7 +10855,7 @@ function destroy(){
 }
 window.PlanetStage=Object.freeze({
   VERSION,start,snapshot,verify,setRotation,rotateBy,rotateByScreenPixels,rotateByScreenFraction,setViewTarget,setWorldTileFocus,worldLatLonForTile,coordinateDiagnostics:coordinateFabricDiagnostics,rotationForLatLon,setZoomScalar,setZoomTargetScalar,setScaleIndex,stepScale,setAnimatedScaleIndex,stepAnimatedScale,zoomBy,scalarForFootprintHeight:(heightMeters)=>Number(scalarForFootprintHeight(heightMeters).toFixed(6)),setLoadingProof,clearLoadingProof,setStartupWatchdogProofForEvidence,evaluateStartupWatchdogForEvidence:(noProgressMs)=>startupWatchdogDecision(noProgressMs),applyAuthoritativeFantasyTime,inspectionTargets,setCampaignWearEvidenceState,clearEnvironmentalReactions,setEnvironmentalReactionEnabled:(enabled)=>{environmentalReactions={...environmentalReactions,enabled:Boolean(enabled)};if(!enabled)clearEnvironmentalReactions();return snapshot();},setWildlifeReactionEnabled:(enabled)=>{wildlifeReaction={...wildlifeReaction,enabled:Boolean(enabled),lastPresenceEastMeters:null,lastPresenceNorthMeters:null,presenceMoveMeters:0};return snapshot();},setWildernessEnabled:(enabled)=>{localWildernessEnabled=Boolean(enabled);wilderness={...wilderness,localEnabled:localWildernessEnabled};if(displayResource)rebuildLocalStaticPresentation(displayResource);if(atmospherePalette)applyAtmosphereMaterialPalette(atmospherePalette);return snapshot();},placeDescriptors:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();return Object.freeze(destinationNavigator.descriptors.map(item=>Object.freeze({...item})))},refreshPlaces:()=>{buildDestinationDescriptors();renderDestinationNavigator();return snapshot();},openPlaces:()=>{if(!destinationNavigator.descriptors.length)buildDestinationDescriptors();destinationNavigator.open=true;renderDestinationNavigator();return snapshot();},closePlaces:()=>{destinationNavigator.open=false;renderDestinationNavigator();return snapshot();},registerInspectionPickable,unregisterInspectionPickable,dismissInspection,pickInspection,
-  setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d){destinationNavigator.selectedId=d.id;destinationNavigator.navigationCount++;destinationNavigator.lastTarget={id:d.id,name:d.name,latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees};setViewTarget(d);renderDestinationNavigator();}return snapshot();},
+  setPlacesCategory:(category)=>{destinationNavigator.category=["all","settlements","cities","historical","hunting","fishing","landmark","nature","water"].includes(category)?category:"all";renderDestinationNavigator();return snapshot();},selectPlace:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===id);if(d)focusDestination(d);else rejectFocusNavigation(id,"place","Unknown destination","destination-not-found","places-api");renderDestinationNavigator();return snapshot();},focusProtagonist,focusDestinationById:(id)=>{const d=destinationNavigator.descriptors.find(x=>x.id===String(id));if(d)focusDestination(d);else rejectFocusNavigation(id,"place","Unknown destination","destination-not-found","places-api");return focusNavigationSnapshot();},focusNavigationSnapshot,
   workCycleEvidenceState,surfaceContributorEvidence,setWp020PresentationEvidenceMode,armWp020TransitionEvidenceFreeze,wp020TransitionEvidenceFreezeState,releaseWp020TransitionEvidenceFreeze,
   focusWayfindingSignForEvidence:(id)=>{const sign=(wayfindingSignposts.signs||[]).find(item=>String(item.id)===String(id));if(sign){setWorldTileFocus(sign.anchor.x,sign.anchor.y);setZoomScalar(1);}return snapshot();},
   selectWayfindingSignForEvidence:(id)=>{const key=inspectionRegistryKey("signpost",String(id)),record=inspectionPickables.get(key);if(record){inspection.selectedId=String(id);inspection.selectedType="signpost";renderInspectionTooltip(record);}return snapshot();},
