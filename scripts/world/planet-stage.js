@@ -7459,7 +7459,10 @@ function scheduleLocalStaticPresentationRefresh(){
   localStaticRefreshScheduled=true;
   setTimeout(()=>{
     localStaticRefreshScheduled=false;
-    if(displayResource&&(!localResources.requestedSignature||displayResource.signature===localResources.requestedSignature))rebuildLocalStaticPresentation(displayResource);
+    if(displayResource&&(!localResources.requestedSignature||displayResource.signature===localResources.requestedSignature)){
+      rebuildLocalStaticPresentation(displayResource);
+      refreshReadySemanticBand();
+    }
   },0);
 }
 // ---- Cooperative LOD preparation -------------------------------------------
@@ -9178,14 +9181,45 @@ function applyCameraZoom(updateMap=true,options={}){
   zoomState.band=visibleBandFor(zoomState.requestedBand,tangentOwnsView);
   if(updateMap)updateMapPresentation("zoom-settle",true);
 }
-// Semantic band shown to the player never claims a finer scale than the
-// representation currently on screen.
+// Static-world terrain and the local/static presentation are separate readiness
+// products. A terrain child may swap in first, but the player-facing semantic
+// band must remain owned by the last complete presentation until the matching
+// local/static signature is ready. This keeps ready-before-swap semantics
+// truthful without making cooperative terrain preparation synchronous.
+function readyPresentationBand(resource=displayResource){
+  if(!resource?.dims)return null;
+  const levelIndex=Number.isFinite(Number(resource.levelIndex))
+    ?Math.max(0,Math.min(LOCAL_DETAIL_LEVELS.length-1,Math.round(Number(resource.levelIndex))))
+    :LOCAL_DETAIL_LEVELS.findIndex(item=>item.id===resource.dims.levelId);
+  const level=LOCAL_DETAIL_LEVELS[levelIndex]||null;
+  if(!level?.staticWorld)return resource.dims.band;
+  if(localStatic.signature===resource.signature&&localStatic.level===resource.dims.levelId)return resource.dims.band;
+  const completedIndex=LOCAL_DETAIL_LEVELS.findIndex(item=>item.id===localStatic.level);
+  if(completedIndex>=0&&localStatic.signature)return LOCAL_DETAIL_LEVELS[completedIndex].band;
+  for(let index=Math.max(0,levelIndex-1);index>=0;index--){
+    const candidate=LOCAL_DETAIL_LEVELS[index];
+    if(!candidate.staticWorld)return candidate.band;
+  }
+  return "local-area";
+}
 function visibleBandFor(requestedBand,tangentOwnsView){
   const order=ZOOM_BANDS.map(b=>b.id),requested=order.indexOf(requestedBand);
   if(!displayResource||projectionState.blend<=0)return requested>order.indexOf("country-region")?"country-region":requestedBand;
-  const visible=order.indexOf(displayResource.dims.band);
+  const readyBand=readyPresentationBand(displayResource)||displayResource.dims.band;
+  const visible=order.indexOf(readyBand);
+  if(visible<0)return requestedBand;
   if(!tangentOwnsView)return requested>visible?order[Math.min(requested,visible)]:requestedBand;
   return requested>visible?order[visible]:requestedBand;
+}
+function refreshReadySemanticBand(){
+  if(!displayResource)return false;
+  const tangentOwnsView=projectionState.blend>LOCAL_TANGENT_OWNERSHIP_BLEND;
+  const requestedBand=zoomState.requestedBand||zoomBandFor(zoomState.scalar);
+  const nextBand=visibleBandFor(requestedBand,tangentOwnsView);
+  if(!nextBand||nextBand===zoomState.band)return false;
+  zoomState.band=nextBand;
+  updateMapPresentation("ready-lod-handoff",true);
+  return true;
 }
 function refreshZoomPresentation(){if(cameraEntity&&zoomState.baseCameraDistance)applyCameraZoom();}
 function localFocusOffsetMeters(resource){
