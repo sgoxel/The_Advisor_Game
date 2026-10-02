@@ -87,14 +87,25 @@ def descriptors(driver):
     """)
 
 def select_and_assert(driver,d,label,stream_handoff=False):
-    result=js(driver,"""
+    initial=js(driver,"""
       const id=String(arguments[0]),before=window.Protagonist?.getPosition?.()||null;
-      const snap=window.PlanetStage.selectPlace(id),nav=snap.explicitFocusNavigation?.active||null,after=window.Protagonist?.getPosition?.()||null;
-      return {nav,before:before?{x:String(before.x),y:String(before.y)}:null,after:after?{x:String(after.x),y:String(after.y)}:null,canonical:snap.canonicalFocus};
+      const snap=window.PlanetStage.selectPlace(id),nav=snap.explicitFocusNavigation?.active||null;
+      return {requestId:nav?.requestId||null,before:before?{x:String(before.x),y:String(before.y)}:null,nav};
     """,d["id"])
+    request_id=(initial or {}).get("requestId")
+    if not request_id:
+        raise RuntimeError(f"{label}: focus request was not created: {initial}")
+    _wait(driver,f"""
+      const n=window.PlanetStage?.snapshot?.()?.explicitFocusNavigation?.active;
+      return Boolean(n&&n.requestId==={json.dumps(request_id)}&&n.targetId==={json.dumps(d["id"])}&&n.targetType==='place'&&n.state==='committed'&&Number(n.focusErrorMeters)<=1);
+    """,180,f"{label} canonical focus commit")
+    result=js(driver,"""
+      const snap=window.PlanetStage.snapshot(),after=window.Protagonist?.getPosition?.()||null;
+      return {nav:snap.explicitFocusNavigation?.active||null,before:arguments[0],after:after?{x:String(after.x),y:String(after.y)}:null,canonical:snap.canonicalFocus};
+    """,(initial or {}).get("before"))
     nav=(result or {}).get("nav") or {}
-    if nav.get("targetId")!=d["id"] or nav.get("targetType")!="place":
-        raise RuntimeError(f"{label}: target identity mismatch: {result}")
+    if nav.get("targetId")!=d["id"] or nav.get("targetType")!="place" or nav.get("state")!="committed":
+        raise RuntimeError(f"{label}: target identity/commit mismatch: {result}")
     if float(nav.get("focusErrorMeters") if nav.get("focusErrorMeters") is not None else 999999)>1:
         raise RuntimeError(f"{label}: final coordinate error > 1m: {result}")
     coord=nav.get("canonicalCoordinate") or {}
