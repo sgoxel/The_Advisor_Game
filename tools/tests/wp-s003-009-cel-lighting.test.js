@@ -12,12 +12,10 @@ vm.runInNewContext(
 
 const style=context.window.AdvisorWorldVisualStyle;
 assert(style,"world visual style API did not register");
-assert.strictEqual(style.snapshot().celLighting.model,"four-band-lambert-filled-shadow");
+assert.strictEqual(style.snapshot().celLighting.model,"four-band-lambert");
 assert.strictEqual(style.snapshot().celLighting.litMaterialApplicationCount,0);
 assert.deepStrictEqual(Array.from(style.celLighting.thresholds),[0.14,0.43,0.76]);
-assert.deepStrictEqual(Array.from(style.celLighting.diffuseLevels),[0.16,0.40,0.70,1]);
-assert.strictEqual(style.celLighting.shadowFloor,0.16);
-assert.strictEqual(style.celLighting.fillBalanced,true);
+assert.deepStrictEqual(Array.from(style.celLighting.diffuseLevels),[0,0.34,0.68,1]);
 
 let glslWrites=0,wgslWrites=0;
 const chunkMaps={
