@@ -547,7 +547,32 @@ def run_device_loss():
             "gpu":"webgpu","dev":"1","pc_build":"debug",
             "evidence_fast_start":"1","evidence_skip_destinations":"1"
         }))
-        wait(d,"return window.PlanetStage?.snapshot?.()?.ready===true",240)
+        ready_started=time.time()
+        try:
+            wait(d,"return window.PlanetStage?.snapshot?.()?.ready===true",240)
+        except Exception as error:
+            timeout_state=d.execute_script("""
+              const root=document.getElementById('planetStageRoot');
+              const loading=root?.querySelector?.('.planet-stage-loading');
+              return {
+                elapsedSeconds: arguments[0],
+                documentReadyState: document.readyState,
+                rootDataset: root ? {...root.dataset} : null,
+                loadingText: loading?.innerText||null,
+                backendPolicy: window.RendererBackendPolicy?.snapshot?.()||null,
+                planetSnapshot: window.PlanetStage?.snapshot?.()||null
+              };
+            """, round(time.time()-ready_started,3))
+            timeout_state["renderSurface"]=render_surface_diagnostics(d)
+            timeout_state["browserLogs"]=browser_logs(d)
+            timeout_state["error"]=repr(error)
+            timeout_state["engineUrl"]="bundled debug ESM"
+            persist_run_diagnostics("08-device-loss-pre-ready-timeout", timeout_state)
+            try:
+                d.save_screenshot(str(OUT/"08-device-loss-pre-ready-timeout.png"))
+            except Exception:
+                pass
+            raise
         settle_ground(d)
         before=backend_record(d,"device-loss-before")
         if before["engineVersion"] != CURRENT_ENGINE or before["backend"].get("active")!="webgpu":
