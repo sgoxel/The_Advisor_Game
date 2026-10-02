@@ -228,11 +228,34 @@ function orderedCellsForClass(origin,classId,radiusMeters){
   cells.sort((a,b)=>a.d2-b.d2||(a.cy<b.cy?-1:a.cy>b.cy?1:a.cx<b.cx?-1:a.cx>b.cx?1:0));
   return Object.freeze(cells.slice(0,SETTLEMENT_CELL_LIMIT_PER_CLASS));
 }
+function canonicalOriginVillageRecord(seed,origin,radiusMeters){
+  const identity=window.SettlementArchetypes?.canonicalStartingVillageIdentity?.(seed)||null;
+  if(!identity||tileDistanceMeters(origin,identity.center)>radiusMeters)return null;
+  const x=String(identity.center.x),y=String(identity.center.y),terrain=safeTerrain(seed,x,y);
+  let country=null,region=null;
+  try{country=window.PoliticalGeography?.ownerAt?.(seed,x,y)||null;}catch(_){}
+  try{region=window.RegionProfile?.descriptorAt?.(seed,x,y)||window.RegionProfile?.at?.(seed,x,y)||null;}catch(_){}
+  return Object.freeze({
+    ...identity,
+    center:Object.freeze({x,y,terrain}),
+    countryId:String(country?.id||""),
+    regionId:String(region?.id||""),
+    roadNetworkRole:"local-node",
+    source:String(identity.authority||"SettlementArchetypes canonical origin-village identity"),
+    authority:String(identity.authority||"SettlementArchetypes canonical origin-village identity")
+  });
+}
+function addCanonicalOriginVillage(records,seen,seed,origin,radiusMeters){
+  let record=null;try{record=canonicalOriginVillageRecord(seed,origin,radiusMeters);}catch(_){record=null;}
+  if(!record||seen.has(record.id))return false;
+  seen.add(record.id);records.push(record);return true;
+}
 function boundedSettlementQuery(seed,origin,radiusMeters){
   const classes=settlementClassesForRadius(radiusMeters),cacheKey=[seed,origin.x,origin.y,Math.round(radiusMeters),classes.join(",")].join("|");
   if(settlementQueryCache.has(cacheKey))return settlementQueryCache.get(cacheKey);
   const records=[],seen=new Set();let queryCellCount=0;
   const radiusTiles=BigInt(Math.ceil(radiusMeters/TILE_METERS)),ox=BigInt(origin.x),oy=BigInt(origin.y),minX=ox-radiusTiles,maxX=ox+radiusTiles,minY=oy-radiusTiles,maxY=oy+radiusTiles;
+  addCanonicalOriginVillage(records,seen,seed,origin,radiusMeters);
   if(classes.includes("national-capital")){
     try{
       const caps=window.SettlementArchetypes?.canonicalSettlementsInBounds?.(seed,{minX:String(minX),maxX:String(maxX),minY:String(minY),maxY:String(maxY)},["national-capital"]);
@@ -263,6 +286,7 @@ async function boundedSettlementQueryCooperative(seed,origin,radiusMeters,option
   const record=(started,label)=>{try{options.onUnit?.(now()-started,label);}catch(_){}};
   const records=[],seen=new Set();let queryCellCount=0;
   const radiusTiles=BigInt(Math.ceil(radiusMeters/TILE_METERS)),ox=BigInt(origin.x),oy=BigInt(origin.y),minX=ox-radiusTiles,maxX=ox+radiusTiles,minY=oy-radiusTiles,maxY=oy+radiusTiles;
+  addCanonicalOriginVillage(records,seen,seed,origin,radiusMeters);
   if(classes.includes("national-capital")){
     const archetypes=window.SettlementArchetypes;
     try{
