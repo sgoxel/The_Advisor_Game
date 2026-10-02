@@ -26,6 +26,23 @@ WP_STARTING_VILLAGE_DRESSING_SCENARIO="wp-s003-009-001"
 WP_STARTING_VILLAGE_DRESSING_SHOTS=7
 WP_SURFACE_REFINEMENT_SCENARIO="wp-s003-010-003-005-002"
 WP_SURFACE_REFINEMENT_SHOTS=10
+WP_SCALE_HANDOFF_SCENARIO="wp-s003-010-003-006"
+WP_SCALE_HANDOFF_SHOTS=13
+WP_SCALE_HANDOFF_PLAN=(
+    (None,"fixed-focus:0.20x"),
+    (400000,"regional-overview:400km"),
+    (140000,"regional-detail:140km"),
+    (50000,"district:50km"),
+    (20000,"local-area-wide:20km"),
+    (10000,"local-area:10km"),
+    (5000,"terrain-settlement-wide:5km"),
+    (2000,"terrain-settlement:2km"),
+    (1000,"terrain-settlement-core:1km"),
+    (500,"settlement-ready:500m"),
+    (200,"settlement-ready:200m"),
+    (80,"near-ground-ready:80m"),
+    (36,"ground-ready:36m"),
+)
 WP_CANONICAL_FOCUS_SCENARIO="wp-s003-008-008"
 WP_CANONICAL_FOCUS_SHOTS=5
 WP_SURFACE_REFINEMENT_PLAN=(
@@ -683,6 +700,133 @@ def _validate_surface_refinement_frames(frames):
         raise RuntimeError(f"surface refinement did not materially improve density: {density[0]} -> {density[-1]}")
 
 
+def _scale_handoff_compact(driver):
+    return driver.execute_script("""
+      const s=window.PlanetStage?.snapshot?.()||{},z=s.zoom||{},r=s.projection?.resourceBudget||{},l=s.projection?.localStatic||{};
+      return {
+        ready:Boolean(s.ready),
+        scalar:Number(z.scalar||0),requestedBand:z.requestedBand||z.band||null,visibleBand:z.visibleBand||z.band||null,
+        requestedLevel:z.requestedLevel||r.requestedLevel||null,visibleLevel:z.visibleLevel||r.visibleLevel||null,
+        visibleFootprintHeightMeters:Number(z.visibleFootprintHeightMeters||0),
+        blend:Number(s.projection?.blend||0),
+        localStatic:{active:Boolean(l.active),revealTier:l.revealTier||"none",roadCount:Number(l.roadCount||0),buildingCount:Number(l.buildingCount||0)},
+        resource:{
+          pendingPreparationCount:Number(r.pendingPreparationCount||0),
+          requestedSignature:r.requestedSignature||null,activeSignature:r.activeSignature||null,preparedSignature:r.preparedSignature||null,preparingSignature:r.preparingSignature||null,
+          standInActive:Boolean(r.standInActive),mapScalePresentationEligible:r.mapScalePresentationEligible,
+          mapScaleSuppressionActive:Boolean(r.mapScaleSuppressionActive),blockingZoomBuilds:Number(r.blockingZoomBuilds||0),
+          lastPreparationWallMs:Number(r.lastPreparationWallMs||0),lastPreparationBusyMs:Number(r.lastPreparationBusyMs||0),
+          lastPreparationSlices:Number(r.lastPreparationSlices||0),maxPreparationSliceMs:Number(r.maxPreparationSliceMs||0),
+          lastSwapMs:Number(r.lastSwapMs||0),maxSwapMs:Number(r.maxSwapMs||0),
+          maxFrameMsDuringPreparation:Number(r.maxFrameMsDuringPreparation||0),recentMaxFrameMs:Number(r.recentMaxFrameMs||0)
+        }
+      };
+    """)
+
+def _prepare_scale_handoff_focus(driver):
+    set_exact_viewport(driver,1280,800)
+    focus=_prepare_starting_village_focus(driver)
+    driver.execute_script("""
+      const evidenceTime={year:1100,month:1,day:1,hour:11,minute:30,second:0};
+      window.PlanetStage?.applyAuthoritativeFantasyTime?.(
+        evidenceTime,'wp-s003-010-003-006-visual-evidence',
+        {snapshotResult:false,deferPresentation:false}
+      );
+      window.PlanetStage?.setZoomScalar?.(.20);
+    """)
+    _wait(driver,"return Boolean(window.PlanetStage?.snapshot?.()?.ready);",180,"scale handoff starting-village focus")
+    driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+    return focus
+
+def _scale_handoff_frame(driver,index,timeout):
+    height,label=WP_SCALE_HANDOFF_PLAN[index]
+    scalar=.20 if height is None else float(driver.execute_script(
+        "return Number(window.PlanetStage.scalarForFootprintHeight(arguments[0]));",float(height)
+    ))
+    before=_scale_handoff_compact(driver)
+    driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);",scalar)
+    immediate=_scale_handoff_compact(driver)
+    driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>done(true));")
+    during=_scale_handoff_compact(driver)
+    _wait(driver,f"""
+      const target={scalar!r},s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{{}};
+      const exact=Math.abs(Number(s?.zoom?.scalar)-target)<0.00001 && !s?.zoom?.animation?.active;
+      const tangentRequired=Number(s?.projection?.blend||0)>.02;
+      const ready=!tangentRequired || (
+        Number(r.pendingPreparationCount||0)===0 &&
+        (!r.requestedSignature || String(r.activeSignature||'')===String(r.requestedSignature||''))
+      );
+      return Boolean(s?.ready&&exact&&ready);
+    """,max(float(timeout),240.0),f"scale handoff {label} ready resource")
+    driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+    stage=_stage_snapshot(driver)
+    settled=_scale_handoff_compact(driver)
+    return {
+        "action":label,"viewport":_inner_viewport(driver),"stage":stage,
+        "handoffProof":{"targetHeightMeters":height,"targetScalar":scalar,"before":before,"immediate":immediate,"duringPaint":during,"settled":settled}
+    }
+
+def _validate_scale_handoff_frames(frames):
+    if len(frames)!=WP_SCALE_HANDOFF_SHOTS:
+        raise RuntimeError(f"{WP_SCALE_HANDOFF_SCENARIO} requires {WP_SCALE_HANDOFF_SHOTS} fixed-focus frames")
+    level_order=[
+        "regional-overview","regional-detail","district","local-area-wide","local-area",
+        "settlement-wide","settlement","settlement-core","near-ground-wide","near-ground","near-ground-close","ground"
+    ]
+    level_band={
+        "regional-overview":"regional-overview","regional-detail":"regional-detail","district":"district",
+        "local-area-wide":"local-area","local-area":"local-area","settlement-wide":"local-area","settlement":"local-area","settlement-core":"local-area",
+        "near-ground-wide":"settlement","near-ground":"settlement","near-ground-close":"near-ground","ground":"ground"
+    }
+    band_order=["planet","continent","country-region","regional-overview","regional-detail","district","local-area","settlement","near-ground","ground"]
+    tier_order={"none":0,"footprint":1,"route":2,"refined":3,"full":4}
+    allowed_tier={"near-ground-wide":"footprint","near-ground":"route","near-ground-close":"refined","ground":"full"}
+    focus_keys=set();prior_footprint=None;pending_handoffs=0
+    for index,frame in enumerate(frames,start=1):
+        stage=frame.get("stage") or {};z=stage.get("zoom") or {};r=(stage.get("projection") or {}).get("resourceBudget") or {}
+        canonical=stage.get("canonicalFocus") or {};tile=canonical.get("worldTile") or {}
+        focus_keys.add((str(tile.get("x")),str(tile.get("y")),canonical.get("latitudeDegrees"),canonical.get("longitudeDegrees")))
+        footprint=float(z.get("visibleFootprintHeightMeters") or 0)
+        if footprint<=0: raise RuntimeError(f"frame {index} missing visible footprint")
+        if prior_footprint is not None and footprint>=prior_footprint:
+            raise RuntimeError(f"frame {index} closer target did not shrink visible footprint: {prior_footprint} -> {footprint}")
+        prior_footprint=footprint
+        if int(r.get("pendingPreparationCount") or 0)!=0:
+            raise RuntimeError(f"frame {index} captured before requested resource settled: {r}")
+        if r.get("requestedSignature") and str(r.get("activeSignature") or "")!=str(r.get("requestedSignature")):
+            raise RuntimeError(f"frame {index} requested/active resource mismatch after settle: {r}")
+        if int(r.get("blockingZoomBuilds") or 0)!=0:
+            raise RuntimeError(f"frame {index} used a blocking zoom build: {r}")
+        req_band=str(z.get("requestedBand") or z.get("band") or "")
+        vis_band=str(z.get("visibleBand") or z.get("band") or "")
+        if req_band in band_order and vis_band in band_order and band_order.index(vis_band)>band_order.index(req_band):
+            raise RuntimeError(f"frame {index} visible semantic band is finer than requested: {vis_band} > {req_band}")
+        proof=frame.get("handoffProof") or {}
+        for probe_name in ("immediate","duringPaint"):
+            probe=proof.get(probe_name) or {};pr=probe.get("resource") or {}
+            if int(pr.get("pendingPreparationCount") or 0)<=0: continue
+            pending_handoffs+=1
+            requested=str(probe.get("requestedLevel") or "");visible=str(probe.get("visibleLevel") or "")
+            if requested not in level_order or visible not in level_order: continue
+            req_i=level_order.index(requested);vis_i=level_order.index(visible)
+            vis_band_probe=str(probe.get("visibleBand") or "")
+            physical_band=level_band.get(visible)
+            if vis_band_probe in band_order and physical_band in band_order and band_order.index(vis_band_probe)>band_order.index(physical_band):
+                raise RuntimeError(f"{probe_name} frame {index} announced {vis_band_probe} while visible ready resource was only {visible}/{physical_band}: {probe}")
+            if req_i>vis_i:
+                local=probe.get("localStatic") or {}
+                if req_i>=8 and vis_i<8 and pr.get("mapScalePresentationEligible") is True:
+                    raise RuntimeError(f"{probe_name} frame {index} revealed local/static presentation before first static-world resource was ready: {probe}")
+                if vis_i>=8:
+                    cap=allowed_tier.get(visible,"none")
+                    tier=str(local.get("revealTier") or "none")
+                    if tier_order.get(tier,99)>tier_order.get(cap,0):
+                        raise RuntimeError(f"{probe_name} frame {index} advanced reveal tier {tier} beyond visible ready {visible}/{cap}: {probe}")
+    if len(focus_keys)!=1:
+        raise RuntimeError(f"scale handoff evidence changed canonical focus: {focus_keys}")
+    if pending_handoffs<2:
+        raise RuntimeError(f"scale handoff evidence did not observe enough cooperative pending handoffs: {pending_handoffs}")
+
 def _wp_starting_village_targets(driver):
     targets=driver.execute_script("""
       const stage=window.PlanetStage,s=stage?.snapshot?.(),seed=s?.activeSeed;
@@ -842,7 +986,7 @@ def run_capture(args):
     # Surface-refinement acceptance has one canonical 1280x800 viewport. Start
     # the browser at that size so the game never boots at one aspect ratio and
     # receives a first-checkpoint resize after its zoom/LOD state is live.
-    if args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:
+    if args.scenario in {WP_SURFACE_REFINEMENT_SCENARIO,WP_SCALE_HANDOFF_SCENARIO}:
         width,height=1280,800
     total=max(1,int(args.shots))
     if args.scenario==WP_CHARACTER_SCENARIO:
@@ -853,6 +997,8 @@ def run_capture(args):
         total=max(total,STARTING_VILLAGE_SHOTS)
     elif args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:
         total=max(total,WP_SURFACE_REFINEMENT_SHOTS)
+    elif args.scenario==WP_SCALE_HANDOFF_SCENARIO:
+        total=max(total,WP_SCALE_HANDOFF_SHOTS)
     elif args.scenario==WP_CANONICAL_FOCUS_SCENARIO:
         total=max(total,WP_CANONICAL_FOCUS_SHOTS)
     if args.no_publish:
@@ -949,6 +1095,18 @@ def run_capture(args):
                 frame["captured_at"]=datetime.now(timezone.utc).isoformat()
                 frames.append(frame)
             _validate_surface_refinement_frames(frames)
+        elif args.scenario==WP_SCALE_HANDOFF_SCENARIO:
+            focus=_prepare_scale_handoff_focus(driver)
+            frames=[]
+            for index in range(WP_SCALE_HANDOFF_SHOTS):
+                frame=_scale_handoff_frame(driver,index,args.ready_timeout)
+                frame["focusPreparation"]=focus
+                path=_file_name(args.filename,index+1,WP_SCALE_HANDOFF_SHOTS,args.timestamp_names)
+                _capture(driver,path)
+                frame["index"]=index+1;frame["file"]=path.name
+                frame["captured_at"]=datetime.now(timezone.utc).isoformat()
+                frames.append(frame)
+            _validate_scale_handoff_frames(frames)
         elif args.scenario==WP_CANONICAL_FOCUS_SCENARIO:
             frames=[]
             for index in range(WP_CANONICAL_FOCUS_SHOTS):
