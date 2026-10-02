@@ -67,16 +67,20 @@ function clampNode(key,node){
 }
 function setMinimized(key,value){
   const rec=registry.get(key),s=stateFor(key);s.minimized=Boolean(value);
+  s.minimizedInstance=s.minimized?instanceKey(rec?.node,key):null;
   if(rec?.node)rec.node.hidden=s.minimized||Boolean(s.closedInstance);
   syncDock();
 }
 function clearClosedForNewInstance(key,node){
-  const s=stateFor(key);
-  if(s.closedInstance&&s.closedInstance!==instanceKey(node,key))s.closedInstance=null;
+  const s=stateFor(key),current=instanceKey(node,key);
+  if(s.closedInstance&&s.closedInstance!==current)s.closedInstance=null;
+  if(s.minimized&&s.minimizedInstance&&s.minimizedInstance!==current){
+    s.minimized=false;s.minimizedInstance=null;
+  }
 }
 function closeWindow(key){
   const rec=registry.get(key),s=stateFor(key);
-  s.minimized=false;
+  s.minimized=false;s.minimizedInstance=null;
   s.closedInstance=instanceKey(rec?.node,key);
   if(rec?.node)rec.node.hidden=true;
   telemetry.closeCount++;
