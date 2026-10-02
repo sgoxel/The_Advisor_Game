@@ -46,6 +46,7 @@ function focus(key,node){
   telemetry.focusChanges++;
 }
 function clampValue(v,min,max){return Math.max(min,Math.min(max,v))}
+function setHidden(node,value){if(node&&node.hidden!==Boolean(value))node.hidden=Boolean(value)}
 function clampNode(key,node){
   if(!node||node.hidden)return;
   const s=stateFor(key),r=node.getBoundingClientRect();
@@ -69,7 +70,7 @@ function clampNode(key,node){
 function setMinimized(key,value){
   const rec=registry.get(key),s=stateFor(key);s.minimized=Boolean(value);
   s.minimizedInstance=s.minimized?instanceKey(rec?.node,key):null;
-  if(rec?.node)rec.node.hidden=s.minimized||Boolean(s.closedInstance);
+  if(rec?.node)setHidden(rec.node,s.minimized||Boolean(s.closedInstance));
   syncDock();
 }
 function clearClosedForNewInstance(key,node){
@@ -83,14 +84,14 @@ function closeWindow(key){
   const rec=registry.get(key),s=stateFor(key);
   s.minimized=false;s.minimizedInstance=null;
   s.closedInstance=instanceKey(rec?.node,key);
-  if(rec?.node)rec.node.hidden=true;
+  if(rec?.node)setHidden(rec.node,true);
   telemetry.closeCount++;
   syncDock();
 }
 function restoreWindow(key){
   const rec=registry.get(key),s=stateFor(key);
   s.minimized=false;s.minimizedInstance=null;s.closedInstance=null;
-  if(rec?.node){rec.node.hidden=false;clampNode(key,rec.node);focus(key,rec.node);}
+  if(rec?.node){setHidden(rec.node,false);clampNode(key,rec.node);focus(key,rec.node);}
   telemetry.restoreCount++;
   syncDock();
 }
@@ -182,7 +183,7 @@ function register(cfg,node){
 function applyState(cfg,node){
   clearClosedForNewInstance(cfg.key,node);
   const s=stateFor(cfg.key);
-  if(s.closedInstance===instanceKey(node,cfg.key)||s.minimized){node.hidden=true;syncDock();return;}
+  if(s.closedInstance===instanceKey(node,cfg.key)||s.minimized){setHidden(node,true);syncDock();return;}
   if(!node.hidden)clampNode(cfg.key,node);
   node.style.zIndex=String(s.z);syncDock();
 }
