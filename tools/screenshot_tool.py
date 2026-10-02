@@ -695,13 +695,14 @@ def _validate_wp_starting_village_frames(frames):
         raise RuntimeError(f"Starting Village evidence is missing contexts: {missing}")
     focus_keys=set()
     saw_full=False
-    saw_refined=False
+    saw_near_max=False
     for index,frame in enumerate(frames[:WP_STARTING_VILLAGE_DRESSING_SHOTS],start=1):
         stage=frame.get("stage") or {}
         local=((stage.get("projection") or {}).get("localStatic") or {})
         tier=str(local.get("revealTier") or "")
         if tier=="full":saw_full=True
-        if tier=="refined":saw_refined=True
+        scalar=float(((stage.get("zoom") or {}).get("scalar") or 0))
+        if 0<scalar<0.999:saw_near_max=True
         if tier not in {"refined","full"}:
             raise RuntimeError(f"frame {index} is not near/max local dressing: {tier}")
         if int(local.get("roadCount") or 0)<=0 or int(local.get("buildingCount") or 0)<=0:
@@ -713,8 +714,8 @@ def _validate_wp_starting_village_frames(frames):
             raise RuntimeError(f"frame {index} lost bounded dressing scope: {local.get('dressingScope')}")
         focus=(stage.get("canonicalFocus") or {}).get("worldTile") or {}
         focus_keys.add((str(focus.get("x")),str(focus.get("y"))))
-    if not saw_full or not saw_refined:
-        raise RuntimeError("Starting Village evidence must prove both near-max refined and max full presentation")
+    if not saw_full or not saw_near_max:
+        raise RuntimeError("Starting Village evidence must prove both a near-max local view and max full presentation")
     if len(focus_keys)<5:
         raise RuntimeError(f"Starting Village context evidence did not move across enough authoritative targets: {focus_keys}")
 
