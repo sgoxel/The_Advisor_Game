@@ -211,7 +211,11 @@ def validate(label,index,state,mode="overview",proof=None):
 
 records=[]
 try:
-    target=TARGET+("&" if "?" in TARGET else "?")+"evidence_fast_start=1&evidence_skip_destinations=1"
+    # This WP is backend-neutral. The generic Visual Evidence runner launches
+    # SwiftShader/WebGL but normal runtime policy now prefers WebGPU, so pin this
+    # dedicated acceptance path to the already-supported developer WebGL2 mode.
+    # Cross-backend parity is covered by completed WP-S003-001-002-001.
+    target=TARGET+("&" if "?" in TARGET else "?")+"evidence_fast_start=1&evidence_skip_destinations=1&dev=1&gpu=webgl2"
     # Install the deterministic evidence campaign before application scripts run.
     # This avoids a second complete startup after SeedSystem.startNewCampaign(),
     # which can exceed the evidence timeout on constrained SwiftShader runners.
@@ -231,7 +235,26 @@ try:
       }} catch (_) {{}}
     """})
     driver.get(target)
-    wait.until(lambda _d: ready())
+    try:
+        wait.until(lambda _d: ready())
+    except TimeoutException as exc:
+        diagnostic=js("""
+          let bootstrap=null,stage=null;
+          try{bootstrap=window.RendererBootstrap?.status?.()||null}catch(error){bootstrap={error:String(error)}}
+          try{stage=window.PlanetStage?.snapshot?.()||null}catch(error){stage={error:String(error)}}
+          return {
+            href:location.href,
+            rootReady:document.getElementById('planetStageRoot')?.dataset?.ready||null,
+            rendererBootstrap:bootstrap,
+            gameRenderer:Boolean(window.GameRenderer),
+            planetStageReady:Boolean(stage?.ready),
+            planetStageError:stage?.error||null
+          };
+        """)
+        diagnostic["browserLog"]=driver.get_log("browser")[-30:]
+        (OUT/"startup-timeout.json").write_text(json.dumps(diagnostic,indent=2))
+        driver.save_screenshot(str(OUT/"startup-timeout.png"))
+        raise RuntimeError("WP-S003-004-004 startup did not reach ready: "+json.dumps(diagnostic)) from exc
     prime=js("""const s=PlanetStage.snapshot(),p=StartingVillage.plan(s.activeSeed),c=p?.center||{x:'0',y:'0'};PlanetStage.applyAuthoritativeFantasyTime(arguments[0],'WP-S003-004-004 daytime visual evidence',{snapshotResult:false});PlanetStage.setWorldTileFocus(String(c.x),String(c.y));return {activeSeed:s.activeSeed,center:{x:String(c.x),y:String(c.y)},village:p?.name||'Starting Village',when:arguments[0]};""",EVIDENCE_TIME)
     if str(prime.get("activeSeed"))!=SEED:
         raise RuntimeError("evidence campaign seed did not load before startup: "+json.dumps(prime))
