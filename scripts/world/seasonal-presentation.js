@@ -253,8 +253,13 @@ function accentPlan(profile,seed,limit,view){
   const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||2));
   const gridTiles=Math.max(1,Math.round(ACCENT_GRID_METERS/tileMeters)),gridTileBig=BigInt(gridTiles),fx=BigInt(String(view.focusTile.x)),fy=BigInt(String(view.focusTile.y));
   const centerCellX=floorDivBigInt(fx,gridTileBig),centerCellY=floorDivBigInt(fy,gridTileBig);
-  const radiusX=Math.min(48,Math.max(2,Math.ceil(view.widthMeters*.68/(gridTiles*tileMeters))+1));
-  const radiusY=Math.min(48,Math.max(2,Math.ceil(view.heightMeters*.68/(gridTiles*tileMeters))+1));
+  // Keep one bounded focus-local materialization window for every eligible
+  // close zoom. With an unchanged focus this preserves exactly the same
+  // canonical anchor cohort while zoom only changes projection and apparent size.
+  const aspect=Math.max(.6,Math.min(2.4,view.cssWidth/Math.max(1,view.cssHeight)));
+  const materializedWidthMeters=MAX_ACCENT_FOOTPRINT_HEIGHT_METERS*aspect;
+  const radiusX=Math.min(48,Math.max(2,Math.ceil(materializedWidthMeters*.58/(gridTiles*tileMeters))+1));
+  const radiusY=Math.min(48,Math.max(2,Math.ceil(MAX_ACCENT_FOOTPRINT_HEIGHT_METERS*.58/(gridTiles*tileMeters))+1));
   const candidates=[];
   for(let oy=-radiusY;oy<=radiusY;oy++)for(let ox=-radiusX;ox<=radiusX;ox++){
     const cellX=centerCellX+BigInt(ox),cellY=centerCellY+BigInt(oy),tileX=cellX*gridTileBig,tileY=cellY*gridTileBig;
