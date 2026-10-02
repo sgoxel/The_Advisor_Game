@@ -24,6 +24,8 @@ jobs:
           python-version: '3.11'
       - name: Install screenshot dependencies
         run: python -m pip install -r tools/requirements.txt
+      - name: Evidence harness syntax
+        run: python -m py_compile tools/wp_s003_008_008_evidence.py
       - name: Start branch-local game server
         run: |
           python -m http.server 8000 --bind 127.0.0.1 >/tmp/advisor-http.log 2>&1 &

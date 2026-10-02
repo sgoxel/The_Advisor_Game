@@ -16,7 +16,8 @@ options=Options()
 for arg in ["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader","--disable-search-engine-choice-screen"]:
     options.add_argument(arg)
 options.add_argument("--window-size=1280,800")
-options.set_capability("goog:loggingPrefs",{"browser":"ALL"})\noptions.set_capability("pageLoadStrategy","none")
+options.set_capability("goog:loggingPrefs",{"browser":"ALL"})
+options.set_capability("pageLoadStrategy","none")
 driver=webdriver.Chrome(options=options)
 driver.set_script_timeout(180)
 wait=WebDriverWait(driver,300)
@@ -143,6 +144,13 @@ def load_seed(seed):
     driver.get(url)
     wait.until(lambda _d: ready())
     wait.until(lambda _d: js("return window.SeedSystem?.getCampaign?.()?.seed===arguments[0]",seed))
+    centered=js("""
+      const seed=arguments[0],plan=window.StartingVillage?.plan?.(seed);
+      if(!plan?.center)return {ok:false};
+      window.PlanetStage.setWorldTileFocus(String(plan.center.x),String(plan.center.y));
+      return {ok:true,name:String(plan.name||"Starting Village"),center:{x:String(plan.center.x),y:String(plan.center.y)}};
+    """,seed)
+    if not centered or not centered.get("ok"): raise RuntimeError("starting village focus unavailable for "+seed)
     set_scale(7)
     js("window.PlanetStage.refreshPlaces()")
     wait.until(lambda _d: len(js("return window.PlanetStage.placeDescriptors()"))>0)
@@ -249,5 +257,8 @@ finally:
     try: driver.quit()
     except Exception: pass
 
-if not report.get("functionalPass"): raise SystemExit("focus evidence functional validation failed")
+required=report.get("requiredCoverage") or {}
+required_keys=["twoSeeds","primarySettlement","secondarySettlement","terrestrialPoi","invalidFailsSafe","protagonistMaxGround","cameraOnly","secondCurrentPosition"]
+if not report.get("functionalPass") or not all(bool(required.get(k)) for k in required_keys):
+    raise SystemExit("focus evidence acceptance validation failed: "+json.dumps({"functionalPass":report.get("functionalPass"),"requiredCoverage":required}))
 print(json.dumps(report,indent=2))
