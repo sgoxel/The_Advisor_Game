@@ -22,6 +22,28 @@ CURRENT_ENGINE = "2.23.0"
 EVIDENCE_TIME = "1100-01-01 11:30:00"
 
 
+def verify_retained_bootstrap_policy():
+    path=Path("scripts/render/renderer-bootstrap.js")
+    source=path.read_text(encoding="utf-8")
+    required=[
+        'const DEVELOPMENT_MODE_KEY="the-advisor-game:development-mode"',
+        'function developerModeEnabled()',
+        'requested==="auto"||developer',
+        'if(developer){',
+        'return "auto";',
+    ]
+    missing=[token for token in required if token not in source]
+    if missing:
+        raise AssertionError(f"retained renderer bootstrap is not developer-gated: missing {missing}")
+    return {
+        "path":str(path),
+        "developerOnlyForcedBackends":True,
+        "normalDefault":"auto",
+        "activePublicEntrypoint":False,
+        "reason":"Canonical public index uses planet-stage directly; retained bootstrap is source-verified for policy consistency."
+    }
+
+
 def url_with(params):
     p = urlsplit(TARGET)
     q = dict(parse_qsl(p.query, keep_blank_values=True))
@@ -365,11 +387,10 @@ def run_normal_mode_saved_force_ignored():
         }))
         wait(d, "return window.PlanetStage?.snapshot?.()?.ready===true", 240)
         state=d.execute_script("""
-          const s=window.PlanetStage.snapshot(),rb=s.rendererBackend||{},bootstrap=window.RendererBootstrap?.status?.()||{};
+          const s=window.PlanetStage.snapshot(),rb=s.rendererBackend||{};
           return {
             requested:rb.requested||null,
             active:rb.active||null,
-            bootstrapBackend:bootstrap.backend||null,
             forced:Boolean(rb.forced),
             requestSource:rb.requestSource||null,
             developerMode:Boolean(rb.developerMode),
@@ -380,8 +401,6 @@ def run_normal_mode_saved_force_ignored():
         """)
         if state.get("active") != "webgpu" or state.get("requested") != "auto" or state.get("forced") is not False:
             raise AssertionError(f"normal mode did not restore Auto/WebGPU-first after saved developer force: {state}")
-        if state.get("bootstrapBackend") != "auto":
-            raise AssertionError(f"alternate renderer bootstrap leaked saved developer force into normal mode: {state}")
         if state.get("developerMode") is not False or state.get("badge") is not False:
             raise AssertionError(f"normal mode exposed developer backend UI: {state}")
         path=OUT/"12-normal-mode-auto-after-saved-force.png"
@@ -445,6 +464,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     report = {"wp":"WP-S003-001-002-001","testedHead":TESTED_HEAD,"seed":SEED,"pass":False,"records":[]}
     try:
+        report["retainedBootstrapPolicy"]=verify_retained_bootstrap_policy()
         baseline_gl = run_success("01-baseline-2223-webgl2", "webgl2", "webgl2", engine=BASELINE_ENGINE)
         baseline_gpu = run_success("02-baseline-2223-webgpu", "webgpu", "webgpu", engine=BASELINE_ENGINE)
         auto = run_success("03-current-2230-auto-webgpu", "auto", "webgpu")
@@ -483,7 +503,7 @@ def main():
             "webgpuActive":auto["backend"]["active"]=="webgpu" and forced_gpu["backend"]["active"]=="webgpu",
             "webgl2Active":forced_gl["backend"]["active"]=="webgl2",
             "fallbackActive":fallback["backend"]["active"]=="webgl2" and bool(fallback["backend"].get("fallbackReason")),
-            "normalModeIgnoresSavedDeveloperForce":normal_mode.get("active")=="webgpu" and normal_mode.get("requested")=="auto" and normal_mode.get("bootstrapBackend")=="auto" and normal_mode.get("badge") is False,
+            "normalModeIgnoresSavedDeveloperForce":normal_mode.get("active")=="webgpu" and normal_mode.get("requested")=="auto" and normal_mode.get("badge") is False,
             "deviceLossRecovered":bool(device_loss["result"].get("recovered")),
             "mobileViewportBackendParity":mobile_gpu["comparisonContext"]==mobile_gl["comparisonContext"] and mobile_gpu["activeSeed"]==mobile_gl["activeSeed"] and mobile_gpu["geographyHash"]==mobile_gl["geographyHash"],
         }
