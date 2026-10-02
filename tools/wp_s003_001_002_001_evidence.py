@@ -56,7 +56,6 @@ def driver_for(disable_webgpu=False, viewport=(1280,800), saved_backend=None):
     width,height=viewport
     o = Options()
     for arg in [
-        "--headless=new",
         "--no-sandbox",
         "--disable-dev-shm-usage",
         "--disable-search-engine-choice-screen",
