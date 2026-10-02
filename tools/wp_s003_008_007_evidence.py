@@ -80,6 +80,7 @@ def hit_tested_window_drag(driver,panel_sel,handle_sel,distance_x=120,distance_y
       const dx=(rightRoom>=leftRoom?1:-1)*Math.min(arguments[2],Math.max(0,(rightRoom>=leftRoom?rightRoom:leftRoom)-8));
       const dy=(bottomRoom>=topRoom?1:-1)*Math.min(arguments[3],Math.max(0,(bottomRoom>=topRoom?bottomRoom:topRoom)-8));
       return {point,dx,dy,panel:{left:pr.left,top:pr.top,right:pr.right,bottom:pr.bottom,width:pr.width,height:pr.height},
+        handle:{left:hr.left,top:hr.top,right:hr.right,bottom:hr.bottom,width:hr.width,height:hr.height},
         rooms:{left:leftRoom,right:rightRoom,top:topRoom,bottom:bottomRoom},
         hitTag:document.elementFromPoint(point.x,point.y)?.tagName||null};
     """,panel_sel,handle_sel,distance_x,distance_y)
@@ -88,14 +89,11 @@ def hit_tested_window_drag(driver,panel_sel,handle_sel,distance_x=120,distance_y
     if abs(plan["dx"])<35 and abs(plan["dy"])<35:
         raise RuntimeError("no usable in-viewport drag direction for "+panel_sel+": "+json.dumps(plan))
     before_shell=ws(driver)
-    sx,sy=plan["point"]["x"],plan["point"]["y"]
-    driver.execute_cdp_cmd("Input.dispatchMouseEvent",{"type":"mouseMoved","x":sx,"y":sy,"button":"none","buttons":0})
-    driver.execute_cdp_cmd("Input.dispatchMouseEvent",{"type":"mousePressed","x":sx,"y":sy,"button":"left","buttons":1,"clickCount":1})
-    steps=6
-    for i in range(1,steps+1):
-        x=sx+plan["dx"]*i/steps;y=sy+plan["dy"]*i/steps
-        driver.execute_cdp_cmd("Input.dispatchMouseEvent",{"type":"mouseMoved","x":x,"y":y,"button":"left","buttons":1})
-    driver.execute_cdp_cmd("Input.dispatchMouseEvent",{"type":"mouseReleased","x":sx+plan["dx"],"y":sy+plan["dy"],"button":"left","buttons":0,"clickCount":1})
+    handle=driver.find_element(By.CSS_SELECTOR,handle_sel)
+    hr=plan["handle"]
+    ox=plan["point"]["x"]-(hr["left"]+hr["width"]/2)
+    oy=plan["point"]["y"]-(hr["top"]+hr["height"]/2)
+    ActionChains(driver).move_to_element_with_offset(handle,ox,oy).click_and_hold().move_by_offset(plan["dx"],plan["dy"]).release().perform()
     time.sleep(.25)
     after_shell=ws(driver)
     bt=before_shell["telemetry"];at=after_shell["telemetry"]
