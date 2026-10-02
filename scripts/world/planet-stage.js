@@ -7231,8 +7231,9 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   const wStrategic=detailOctaveWeight(48000,metersPerTexel),wStrategicMid=detailOctaveWeight(16000,metersPerTexel),
     wStrategicFine=detailOctaveWeight(5200,metersPerTexel);
   const wBroad=detailOctaveWeight(3600,metersPerTexel),wMid=detailOctaveWeight(1500,metersPerTexel),
-    wField=detailOctaveWeight(700,metersPerTexel),wFine=detailOctaveWeight(280,metersPerTexel),
-    wCopse=detailOctaveWeight(120,metersPerTexel);
+    wField=detailOctaveWeight(700,metersPerTexel),wParcelDetail=detailOctaveWeight(460,metersPerTexel),
+    wFine=detailOctaveWeight(280,metersPerTexel),wCopse=detailOctaveWeight(120,metersPerTexel),
+    wGroundDetail=detailOctaveWeight(90,metersPerTexel);
   if(wStrategic<=0&&wBroad<=0)return [0,0,0];
   const alpine=smoothstep01((elevation-2200)/900),lowland=1-alpine;
   // Strategic map tiers need resolvable structure before farm/copse wavelengths
@@ -7253,18 +7254,24 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
     surfaceValueNoise(we,wn,700,salt+13)*.34*wField;
   const forestCover=clamp(.44+broad*.62,0,1)*lowland;
   const forestDelta=(forestCover-.44*lowland)*wBroad;
-  const parcel=surfaceValueNoise(we,wn,700,salt+19)*.66*wField+
-    surfaceValueNoise(we,wn,340,salt+23)*.48*wFine;
+  // 460 m parcel structure becomes physically resolvable around the local-map
+  // handoff. It is registered in world meters and therefore persists into finer
+  // children instead of appearing as a new camera-relative pattern.
+  const parcel=surfaceValueNoise(we,wn,700,salt+19)*.58*wField+
+    surfaceValueNoise(we,wn,460,salt+17)*.44*wParcelDetail+
+    surfaceValueNoise(we,wn,280,salt+23)*.34*wFine;
   const dryField=Math.max(0,parcel)*lowland,meadow=Math.max(0,-parcel)*lowland;
   const copse=surfaceValueNoise(we,wn,120,salt+29)*wCopse*lowland;
-  const mottle=surfaceValueNoise(we,wn,700,salt+31)*.026*wField+
-    surfaceValueNoise(we,wn,280,salt+37)*.028*wFine+
-    surfaceValueNoise(we,wn,120,salt+41)*.016*wCopse;
+  const mottle=surfaceValueNoise(we,wn,700,salt+31)*.024*wField+
+    surfaceValueNoise(we,wn,460,salt+33)*.030*wParcelDetail+
+    surfaceValueNoise(we,wn,280,salt+37)*.026*wFine+
+    surfaceValueNoise(we,wn,120,salt+41)*.016*wCopse+
+    surfaceValueNoise(we,wn,90,salt+43)*.010*wGroundDetail;
   // Map-scale readability comes from one continuous registered-meter cover
   // field, not from parcel meshes or camera-relative decoration. Stronger chroma
   // separation reveals woodland/meadow/dry openings only when physically
   // resolvable, so refinement adds information without changing world identity.
-  const coverContrast=lerp(1.18,1.62,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
+  const coverContrast=lerp(1.18,1.74,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
   return [
     (mottle*.76-forestDelta*.105-copse*.026+dryField*.095+meadow*.010)*coverContrast+strategic*(.72+.20*alpine),
     (mottle*.94-forestDelta*.010-copse*.008+dryField*.038+meadow*.086)*coverContrast+strategic*(1.00-.18*alpine),
@@ -7308,13 +7315,17 @@ function makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,size){
 }
 function broadAuthorityRasterSizes(levelIndex){
   // Broad map parents must become usable before animated zoom outruns them.
-  // Reduce only coarse-parent sampling density; finer local tiers keep the
-  // existing 160x/96x authority rasters unchanged.
+  // Keep the 6x context source bounded, but refine the 1x canonical focus
+  // source as its physical footprint shrinks. The previous fixed 96x focus
+  // raster forced 320-448px child textures to interpolate a much coarser
+  // authority field, so closer zoom could look softer despite finer texels.
   const index=Math.max(0,Number(levelIndex)||0);
   if(index===0)return Object.freeze({shared:80,focus:64});
   if(index===1)return Object.freeze({shared:96,focus:72});
   if(index===2)return Object.freeze({shared:128,focus:80});
-  return Object.freeze({shared:160,focus:96});
+  if(index===3)return Object.freeze({shared:160,focus:112});
+  if(index===4)return Object.freeze({shared:160,focus:128});
+  return Object.freeze({shared:160,focus:144});
 }
 function sharedSurfaceAuthority(job){
   if(job?.surfaceAuthority)return job.surfaceAuthority;
@@ -7326,8 +7337,9 @@ function sharedSurfaceAuthority(job){
 function focusSurfaceAuthority(job){
   if(job?.focusSurfaceAuthority)return job.focusSurfaceAuthority;
   // The bounded 1x child remains canonical and edge-matched to its parent.
-  // Broad tiers use a smaller raster only to reduce preparation latency; local
-  // terrain tiers retain the previous 96x focus authority unchanged.
+  // Its raster follows a capped per-level source ladder, so refinement increases
+  // authoritative world-space sampling density without materializing fine
+  // geography outside the focused patch.
   const spanEast=Math.max(1,job.dims.patchWidth*1.08),spanNorth=Math.max(1,job.dims.patchHeight*1.08);
   const raster=broadAuthorityRasterSizes(job.levelIndex);
   job.focusSurfaceAuthority=makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,raster.focus);
@@ -8107,6 +8119,12 @@ function finalizeLocalResource(job,result){
   const detailTexture=textureFromPixels(detail),mediumTexture=textureFromPixels(medium),surroundTexture=textureFromPixels(surround),textureSize=detail.size;
   phaseMs.textureUpload=performance.now()-phaseStarted;phaseStarted=performance.now();
   const detailMetersPerTexel=detail.metersPerTexel,mediumMetersPerTexel=medium.metersPerTexel,surroundMetersPerTexel=surround.metersPerTexel;
+  const sharedAuthorityRasterSize=Number(job.surfaceAuthority?.size||broadAuthorityRasterSizes(job.levelIndex).shared||0);
+  const focusAuthorityRasterSize=Number(job.focusSurfaceAuthority?.size||broadAuthorityRasterSizes(job.levelIndex).focus||0);
+  const sharedAuthoritySpanMeters=Math.max(dims.patchWidth,dims.patchHeight)*LOCAL_SURROUND_SPAN_FACTOR;
+  const focusAuthoritySpanMeters=Math.max(dims.patchWidth,dims.patchHeight)*1.08;
+  const sharedAuthorityMetersPerSample=sharedAuthorityRasterSize>1?sharedAuthoritySpanMeters/(sharedAuthorityRasterSize-1):null;
+  const focusAuthorityMetersPerSample=focusAuthorityRasterSize>1?focusAuthoritySpanMeters/(focusAuthorityRasterSize-1):null;
   const vertices=meshData.positions.length/3,triangles=meshData.indices.length/3;
   const surfaceContributorPixels=(detail.contributorPixels||medium.contributorPixels||surround.contributorPixels)?Object.freeze({focus:detail.contributorPixels||null,medium:medium.contributorPixels||null,outer:surround.contributorPixels||null}):null;
   const contributorBytes=surfaceContributorPixels?Object.values(surfaceContributorPixels).reduce((sum,record)=>sum+Object.values(record?.layers||{}).reduce((inner,pixels)=>inner+Number(pixels?.byteLength||0),0),0):0;
@@ -8121,7 +8139,7 @@ function finalizeLocalResource(job,result){
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
       meshHeightRange:meshData.meshHeightRange||null,
-      topographicSignalRevision:"canonical-continuous-strategic-rings-map-detail-v35",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters, with finer local tiers retaining the full 160x/96x authority density; registered-meter terrain detail supplies a bounded directional presentation-relief derivative shared across the hierarchy",sharedAuthorityRasterSize:Number(job.surfaceAuthority?.size||0),focusAuthorityRasterSize:Number(job.focusSurfaceAuthority?.size||0),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-continuous-cross-lod-source-v36",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters; the 1x focus source increases from 64 to 144 samples as physical LOD shrinks while the 6x context source remains capped at 160. Registered-meter terrain detail adds only physically resolvable presentation frequencies.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
