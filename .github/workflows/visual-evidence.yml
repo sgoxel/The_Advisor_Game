@@ -235,7 +235,7 @@ jobs:
         github.event.comment.author_association == 'COLLABORATOR') &&
        startsWith(github.event.comment.body, '/visual-evidence'))
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout event commit
