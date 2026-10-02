@@ -339,7 +339,7 @@ const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=8;
 const LOCAL_RESOURCE_CACHE_BUDGET_BYTES=48*1024*1024;
 const LOCAL_MEDIUM_RING_SPAN_FACTOR=3;
-const LOCAL_MEDIUM_RING_TEXTURE_SCALE=.75;
+const LOCAL_MEDIUM_RING_TEXTURE_SCALE=.90;
 const LOCAL_GRACE_RESIDENCY_MS=4500;
 const LOCAL_RESIDENCY_RECORD_LIMIT=64;
 const LOCAL_PREFETCH_RECORD_LIMIT=16;
@@ -3377,7 +3377,10 @@ function* prepareLocalWildernessPlanSteps(job){
   const minY=Math.floor((centerY-halfY)/spacing),maxY=Math.ceil((centerY+halfY)/spacing);
   const raw=[],fauna=[],familyCounts={},biomeCounts={};let candidates=0,rejectedWater=0;
   const salt=((seededUnit("local-wilderness-cells")*0x7fffffff)|0)^0x63d83595;
-  const maxStatic=dims.visibleHeight<=90?96:dims.visibleHeight<=240?112:128;
+  // Keep local natural detail dense enough to read, but avoid turning final
+  // ground into a field of repeated primitive silhouettes. Distance LOD retains
+  // rare large outcrops while smaller presentation props resolve only at ground.
+  const maxStatic=dims.visibleHeight<=45?48:dims.visibleHeight<=90?56:dims.visibleHeight<=240?72:80;
   // Scan the complete bounded patch. The previous ordered early stop filled the
   // budget from one side of the grid, producing the visible horizontal prop
   // band. Global-cell hashes now choose a uniformly distributed bounded subset.
@@ -3457,11 +3460,16 @@ function wildernessColor(family,biome){
 }
 function buildLocalWildernessMesh(plan,frame,reveal){
   if(!plan?.items?.length||!localWildernessEnabled)return {mesh:null,accepted:0,rejectedManaged:0,rejectedRoad:0,shoreAccentCount:0,triangles:0,familyCounts:{},biomeCounts:{}};
-  const unit=frame.dims.metersPerUnit,positions=[],normals=[],colors=[],indices=[],familyCounts={},biomeCounts={};let accepted=0,rejectedManaged=0,rejectedRoad=0,shoreAccentCount=0;
+  const unit=frame.dims.metersPerUnit,viewHeight=Number(frame.dims.visibleHeight||frame.dims.visibleHeightMeters||500),positions=[],normals=[],colors=[],indices=[],familyCounts={},biomeCounts={};let accepted=0,rejectedManaged=0,rejectedRoad=0,shoreAccentCount=0;
   const push=(x,y,z,color)=>{positions.push(x,y,z);normals.push(0,1,0);colors.push(Math.round(color[0]*255),Math.round(color[1]*255),Math.round(color[2]*255),255);return positions.length/3-1;};
   const tri=(a,b,c)=>indices.push(a,b,c);
   const quad=(a,b,c,d)=>{tri(a,b,c);tri(a,c,d);};
   for(const item of plan.items){
+    // Local-distance LOD: small vegetation/props are unreadable above the final
+    // ground tier and previously appeared as UI-like dots/diamonds. Retain only
+    // rare large outcrops at wider local views; all deterministic items remain
+    // in the cached plan and materialize again when their physical scale is legible.
+    if(viewHeight>45&&item.family!=="outcrop")continue;
     const managed=localWildernessManaged(item,reveal);if(managed.reject){rejectedManaged++;if(managed.road)rejectedRoad++;continue;}
     const x=item.east/unit,z=-item.north/unit,y=localGroundHeightUnits(item.east,item.north,frame)+.012,baseColor=wildernessColor(item.family,item.biome);
     const variant=clamp(Number(item.variant??.5),0,1),tone=.90+variant*.18,color=[clamp(baseColor[0]*tone,0,1),clamp(baseColor[1]*tone,0,1),clamp(baseColor[2]*tone,0,1),255];
@@ -3518,13 +3526,20 @@ function buildLocalWildernessMesh(plan,frame,reveal){
       const e=push(x-m*.7,y+h,z-m*.7,color),ff=push(x+m*.7,y+h,z-m*.7,color),g=push(x+m*.7,y+h,z+m*.7,color),hh=push(x-m*.7,y+h,z+m*.7,color);
       quad(a,b,ff,e);quad(b,cc,g,ff);quad(cc,d,hh,g);quad(d,a,e,hh);quad(e,ff,g,hh);
     }else if(item.family==="bush"){
-      const top=push(x-m*.18,y+h,z+m*.06,color),bottom=push(x,y+h*.08,z,color),ring=[
-        push(x-m,y+h*.48,z,color),push(x,y+h*.48,z-m,color),push(x+m,y+h*.48,z,color),push(x,y+h*.48,z+m,color)
-      ];
-      for(let k=0;k<4;k++){const n=(k+1)%4;tri(top,ring[k],ring[n]);tri(bottom,ring[n],ring[k]);}
-      const side=[color[0]*.88,color[1]*.94,color[2]*.86,255],sm=m*.58,sx=x+m*.46,sz=z-m*.18,st=push(sx,y+h*.78,sz,side),sb=push(sx,y+h*.12,sz,side);
-      const sr=[push(sx-sm,y+h*.38,sz,side),push(sx,y+h*.38,sz-sm,side),push(sx+sm,y+h*.38,sz,side),push(sx,y+h*.38,sz+sm,side)];
-      for(let k=0;k<4;k++){const n=(k+1)%4;tri(st,sr[k],sr[n]);tri(sb,sr[n],sr[k]);}
+      // Rounded low-poly clumps avoid the old four-point octahedron reading as
+      // a flat green diamond from the orthographic ground camera.
+      const top=push(x-m*.12,y+h,z+m*.04,color),bottom=push(x,y+h*.10,z,color),ring=[];
+      for(let k=0;k<8;k++){
+        const a=item.rotation+k*Math.PI/4,r=m*(.88+(k%2)*.12);
+        ring.push(push(x+Math.cos(a)*r,y+h*(.43+(k%3)*.025),z+Math.sin(a)*r,color));
+      }
+      for(let k=0;k<ring.length;k++){const n=(k+1)%ring.length;tri(top,ring[k],ring[n]);tri(bottom,ring[n],ring[k]);}
+      const side=[color[0]*.88,color[1]*.94,color[2]*.86,255],sm=m*.54,sx=x+m*.42,sz=z-m*.16,st=push(sx,y+h*.76,sz,side),sb=push(sx,y+h*.16,sz,side),sr=[];
+      for(let k=0;k<6;k++){
+        const a=item.rotation+.35+k*Math.PI/3,r=sm*(.88+(k%2)*.12);
+        sr.push(push(sx+Math.cos(a)*r,y+h*.39,sz+Math.sin(a)*r,side));
+      }
+      for(let k=0;k<sr.length;k++){const n=(k+1)%sr.length;tri(st,sr[k],sr[n]);tri(sb,sr[n],sr[k]);}
     }else if(item.family==="sapling"){
       const trunk=[.31,.18,.07],tw=m*.16,th=h*.58;
       const a=push(x-tw,y,z,trunk),b=push(x+tw,y,z,trunk),cc=push(x+tw,y+th,z,trunk),d=push(x-tw,y+th,z,trunk);quad(a,b,cc,d);
@@ -7546,19 +7561,19 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   // registered-meter octaves as the physical texel size shrinks. This prevents
   // the settlement/near-ground children from becoming smoother than their
   // parent even though their source raster and geometry are denser.
-  const closeDetailGain=1+smoothstep01(clamp((80-metersPerTexel)/72,0,1))*.38;
+  const closeDetailGain=1+smoothstep01(clamp((80-metersPerTexel)/72,0,1))*.55;
   const mottle=(surfaceValueNoise(we,wn,700,salt+31)*.024*wField+
     surfaceValueNoise(we,wn,460,salt+33)*.030*wParcelDetail+
     surfaceValueNoise(we,wn,280,salt+37)*.026*wFine+
     surfaceValueNoise(we,wn,120,salt+41)*.016*wCopse+
     surfaceValueNoise(we,wn,90,salt+43)*.010*wGroundDetail+
-    surfaceValueNoise(we,wn,48,salt+47)*.014*wLocalDetail+
-    surfaceValueNoise(we,wn,18,salt+53)*.008*wMicroDetail)*closeDetailGain;
+    surfaceValueNoise(we,wn,48,salt+47)*.018*wLocalDetail+
+    surfaceValueNoise(we,wn,18,salt+53)*.012*wMicroDetail)*closeDetailGain;
   // Map-scale readability comes from one continuous registered-meter cover
   // field, not from parcel meshes or camera-relative decoration. Stronger chroma
   // separation reveals woodland/meadow/dry openings only when physically
   // resolvable, so refinement adds information without changing world identity.
-  const coverContrast=lerp(1.18,1.92,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
+  const coverContrast=lerp(1.18,2.05,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
   return [
     (mottle*.76-forestDelta*.105-copse*.026+dryField*.095+meadow*.010)*coverContrast+strategic*(.72+.20*alpine),
     (mottle*.94-forestDelta*.010-copse*.008+dryField*.038+meadow*.086)*coverContrast+strategic*(1.00-.18*alpine),
@@ -7697,7 +7712,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // detail than the 6x parent. Carry that registered high-pass information into
   // the medium context so the 1x focus does not appear as a sharp richer patch.
   // Strategic tiers remain locked to one parent photometry basis.
-  const contextRefineWeight=contextRing?(sharedPhotometryLock?0:smoothstep01(clamp((contextResolutionRatio-1)/.55,0,1))*.48):0;
+  const contextRefineWeight=contextRing?(sharedPhotometryLock?0:smoothstep01(clamp((contextResolutionRatio-1)/.55,0,1))*.90):0;
   const useMicroDetail=metersPerTexel<=4&&!contextRing;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   // Surface relief is presented as continuous hillshade, not synthetic
