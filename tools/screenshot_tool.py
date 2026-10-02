@@ -153,6 +153,7 @@ def _stage_snapshot(driver):
     return driver.execute_script("""
       const s=window.PlanetStage?.snapshot?.()||null;
       if(!s)return null;
+      const r=window.GameRenderer?.snapshot?.()||{};
       return {
         ready:s.ready,activeSeed:s.activeSeed,
         canonicalFocus:s.canonicalFocus,
@@ -176,7 +177,22 @@ def _stage_snapshot(driver):
         navigationPerformance:s.navigationPerformance,
         startupError:s.startupError,
         frameCount:s.frameCount,
-        renderQuality:window.RuntimeRenderQuality?.snapshot?.()||null
+        renderQuality:window.RuntimeRenderQuality?.snapshot?.()||null,
+        rendererEvidence:{
+          engine:r.engine||null,
+          engineVersion:r.engineVersion||null,
+          backend:r.backend||null,
+          scene:{
+            entityCount:Number(r.scene?.entityCount||0),
+            materialCount:Number(r.scene?.materialCount||0),
+            materialVariantCount:Number(r.scene?.materialVariantCount||0)
+          },
+          performance:r.performance||null,
+          materialTextureQuality:r.materialTextureQuality||null,
+          terrainChunks:r.terrainChunks||null,
+          quality:r.quality||null,
+          simulationAuthorityPreserved:r.simulationAuthorityPreserved!==false
+        }
       };
     """)
 
@@ -215,7 +231,7 @@ def _prepare_starting_village_scene(driver,timeout):
         npc?.protagonistBillboardVisible===true &&
         residents>0 && detailed>=residents+1
       );
-    """,timeout,"Starting Village final-ground living-world presentation with character billboards")
+    """,max(float(timeout),300.0),"Starting Village final-ground living-world presentation with character billboards")
     # Let the just-materialized billboard scene survive two paint frames before
     # capture; the wait condition above observes scene state, not rendered pixels.
     driver.execute_async_script("""

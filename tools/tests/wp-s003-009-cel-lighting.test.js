@@ -18,30 +18,34 @@ assert.deepStrictEqual(Array.from(style.celLighting.thresholds),[0.14,0.43,0.76]
 assert.deepStrictEqual(Array.from(style.celLighting.diffuseLevels),[0,0.34,0.68,1]);
 
 let glslWrites=0,wgslWrites=0;
+const chunkMaps={
+  glsl:new Map([["lightDiffuseLambertPS","default-glsl"]]),
+  wgsl:new Map([["lightDiffuseLambertPS","default-wgsl"]])
+};
 const material={
   useLighting:true,
-  shaderChunks:{
-    glsl:new Map([["lightDiffuseLambertPS","default-glsl"]]),
-    wgsl:new Map([["lightDiffuseLambertPS","default-wgsl"]])
-  }
+  shaderChunksVersion:null,
+  getShaderChunks(language){return chunkMaps[language]||null;}
 };
-const glslSet=material.shaderChunks.glsl.set.bind(material.shaderChunks.glsl);
-const wgslSet=material.shaderChunks.wgsl.set.bind(material.shaderChunks.wgsl);
-material.shaderChunks.glsl.set=(...args)=>{glslWrites++;return glslSet(...args)};
-material.shaderChunks.wgsl.set=(...args)=>{wgslWrites++;return wgslSet(...args)};
+const glslSet=chunkMaps.glsl.set.bind(chunkMaps.glsl);
+const wgslSet=chunkMaps.wgsl.set.bind(chunkMaps.wgsl);
+chunkMaps.glsl.set=(...args)=>{glslWrites++;return glslSet(...args)};
+chunkMaps.wgsl.set=(...args)=>{wgslWrites++;return wgslSet(...args)};
 
 assert.strictEqual(style.applyLitMaterial(material),true);
-const glsl=material.shaderChunks.glsl.get("lightDiffuseLambertPS");
-const wgsl=material.shaderChunks.wgsl.get("lightDiffuseLambertPS");
+const glsl=chunkMaps.glsl.get("lightDiffuseLambertPS");
+const wgsl=chunkMaps.wgsl.get("lightDiffuseLambertPS");
 assert.match(glsl,/vec3 worldNormal/);
 assert.match(glsl,/diffuse < 0\.43/);
 assert.match(wgsl,/worldNormal: vec3f/);
 assert.match(wgsl,/diffuse < 0\.76/);
 assert.strictEqual(material.useLighting,true,"style application changed material lighting mode");
+assert.strictEqual(material.shaderChunksVersion,"2.23","PlayCanvas shader chunk version was not pinned");
 assert.strictEqual(style.applyLitMaterial(material),false,"style application was not idempotent");
 assert.strictEqual(style.snapshot().celLighting.litMaterialApplicationCount,1);
 assert.strictEqual(glslWrites,1,"GLSL chunk was written more than once");
 assert.strictEqual(wgslWrites,1,"WGSL chunk was written more than once");
 assert.throws(()=>style.applyLitMaterial(null),/Grounded cel lighting requires/);
+assert.throws(()=>style.applyLitMaterial({}),/Grounded cel lighting requires/);
 
 console.log("WP-S003-009 cel-lighting material contract passed");

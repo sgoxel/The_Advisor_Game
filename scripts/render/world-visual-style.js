@@ -5,7 +5,7 @@
 // The loading presentation supplies the palette/mood language only. Gameplay
 // keeps its own geometry, sprites, UI and renderer architecture.
 const STYLE=Object.freeze({
-  signature:"living-world-style-v6",
+  signature:"living-world-style-v7",
   reference:"scene-loading-color-language",
   palette:Object.freeze({
     gold:Object.freeze([0.949,0.831,0.494]),
@@ -156,12 +156,21 @@ function snapshot(){
   });
 }
 function applyLitMaterial(material){
-  if(!material||!material.shaderChunks?.glsl||!material.shaderChunks?.wgsl){
+  // PlayCanvas 2.23 exposes per-language chunk maps through getShaderChunks().
+  // Do not rely on the removed/unsupported material.shaderChunks.glsl shape:
+  // doing so prevents the local ground representation from materializing.
+  if(!material||typeof material.getShaderChunks!=="function"){
     throw new TypeError("Grounded cel lighting requires a PlayCanvas StandardMaterial");
   }
   if(material._advisorWorldVisualStyleSignature===STYLE.signature)return false;
-  material.shaderChunks.glsl.set("lightDiffuseLambertPS",CEL_LIGHTING_GLSL);
-  material.shaderChunks.wgsl.set("lightDiffuseLambertPS",CEL_LIGHTING_WGSL);
+  const glsl=material.getShaderChunks("glsl");
+  const wgsl=material.getShaderChunks("wgsl");
+  if(!glsl?.set||!wgsl?.set){
+    throw new TypeError("Grounded cel lighting requires PlayCanvas 2.23 shader chunk maps");
+  }
+  material.shaderChunksVersion="2.23";
+  glsl.set("lightDiffuseLambertPS",CEL_LIGHTING_GLSL);
+  wgsl.set("lightDiffuseLambertPS",CEL_LIGHTING_WGSL);
   material._advisorWorldVisualStyleSignature=STYLE.signature;
   litMaterialApplicationCount++;
   return true;
