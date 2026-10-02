@@ -647,6 +647,8 @@ def _wp_starting_village_frame(driver,target,base_width,base_height,timeout):
     width,height=(1080,1440) if portrait else (base_width,base_height)
     set_exact_viewport(driver,width,height)
     mode=str(target.get("mode") or "full")
+    expected_tier="refined" if mode=="refined" else "full"
+    focus_key=f"{target['point']['x']},{target['point']['y']}"
     result=driver.execute_script("""
       const target=arguments[0],mode=arguments[1],stage=window.PlanetStage;
       stage.setWorldTileFocus(String(target.x),String(target.y));
@@ -656,22 +658,23 @@ def _wp_starting_village_frame(driver,target,base_width,base_height,timeout):
       stage.setZoomScalar(scalar);
       return {scalar,mode};
     """,target["point"],mode)
-    expected_tier="refined" if mode=="refined" else "full"
     expected_scalar=float(result.get("scalar") or 0)
-    _wait(driver,f"""
+    predicate=f"""
       const s=window.PlanetStage?.snapshot?.(),local=s?.projection?.localStatic||{{}},r=s?.projection?.resourceBudget||{{}};
       const readyResource=!r?.requestedSignature||String(r.activeSignature||'')===String(r.requestedSignature||'');
       const scalarReady=Math.abs(Number(s?.zoom?.scalar||0)-{expected_scalar!r})<0.00001;
       return Boolean(
         s?.ready && !s?.zoom?.animation?.active && readyResource && scalarReady &&
         local?.active===true &&
-        String(local?.revealTier||'')==={JSON.stringify("PLACEHOLDER")} &&
+        String(local?.revealTier||'')==={json.dumps(expected_tier)} &&
+        String(local?.dressingFocusKey||'')==={json.dumps(focus_key)} &&
         Number(local?.roadCount||0)>0 &&
         Number(local?.buildingCount||0)>0 &&
         Number(local?.dressingCount||0)>0 &&
         String(local?.dressingScope||'')==='focused-visible+3-tile-preload'
       );
-    """.replace('"PLACEHOLDER"',repr(expected_tier)),timeout,
+    """
+    _wait(driver,predicate,timeout,
         f"Starting Village {expected_tier} dressing context {target.get('label')}")
     driver.execute_async_script("""
       const done=arguments[0];
