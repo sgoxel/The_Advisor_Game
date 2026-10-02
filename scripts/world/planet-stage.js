@@ -6082,11 +6082,26 @@ function applyCanonicalGroundBuildingCutaway(tier){
 
 function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
   if(!reveal||!['refined','full'].includes(String(tier)))return {count:0,triangles:0};
-  const records=[...(Array.isArray(reveal.houses)?reveal.houses:[]),...(Array.isArray(reveal.specialLots)?reveal.specialLots:[])];
   const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const focusX=Number(reveal.focusTile?.x||0),focusY=Number(reveal.focusTile?.y||0);
+  // The dressing budget belongs to the focused local view. Sort authoritative
+  // buildings by distance to the canonical focus before spending that bounded
+  // budget so a farm/workshop/house under inspection cannot lose its props just
+  // because a farther house happened to appear earlier in the plan arrays.
+  const recordFocusDistance2=record=>{
+    const b=record?.bounds||{},cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
+    return (cx-focusX)**2+(cy-focusY)**2;
+  };
+  const records=[...(Array.isArray(reveal.houses)?reveal.houses:[]),...(Array.isArray(reveal.specialLots)?reveal.specialLots:[])]
+    .sort((a,b)=>recordFocusDistance2(a)-recordFocusDistance2(b)||String(a.id||"").localeCompare(String(b.id||"")));
   const margin=tileMeters*3;
   const halfWidth=Math.max(0,Number(frame?.dims?.patchWidth||0)*.5)+margin;
   const halfHeight=Math.max(0,Number(frame?.dims?.patchHeight||0)*.5)+margin;
+  // Dressing uses the authoritative anchors/semantics unchanged, but close RPG
+  // tiers need slightly stronger silhouettes than map-scale primitives. This is
+  // presentation-only scaling; placement, route protection and Simulation truth
+  // remain unchanged. The scaled footprint is also used by route clearance.
+  const dressingVisualScale=tier==="full"?1.42:1.18;
   let count=0,triangles=0;
   const samples=[];
   const recordSample=(label,east,north)=>{
@@ -6098,19 +6113,21 @@ function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
     return x+radius>=-halfWidth&&x-radius<=halfWidth&&z+radius>=-halfHeight&&z-radius<=halfHeight;
   };
   const addWorldBox=(label,material,east,north,halfW,halfH,halfD,rotationY=0,raiseMeters=0)=>{
-    if(count>=64||!inFocusedArea(east,north,Math.max(halfW,halfD)))return false;
+    const visualW=halfW*dressingVisualScale,visualH=halfH*dressingVisualScale,visualD=halfD*dressingVisualScale;
+    if(count>=64||!inFocusedArea(east,north,Math.max(visualW,visualD)))return false;
     const pos=canonicalSemanticPosition(east,north,scale,unit,frame);
-    const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+(raiseMeters+halfH)*scale/unit;
-    addLocalStatic("CanonicalDressing-"+label,"box",material,pos.x,ground,pos.z,halfW*2*scale/unit,halfH*2*scale/unit,halfD*2*scale/unit,0,rotationY,0);
+    const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+(raiseMeters+visualH)*scale/unit;
+    addLocalStatic("CanonicalDressing-"+label,"box",material,pos.x,ground,pos.z,visualW*2*scale/unit,visualH*2*scale/unit,visualD*2*scale/unit,0,rotationY,0);
     recordSample(label,east,north);
     count++;triangles+=12;
     return true;
   };
   const addWorldBall=(label,material,east,north,radiusX,radiusY,radiusZ,raiseMeters=0)=>{
-    if(count>=64||!inFocusedArea(east,north,Math.max(radiusX,radiusZ)))return false;
+    const visualX=radiusX*dressingVisualScale,visualY=radiusY*dressingVisualScale,visualZ=radiusZ*dressingVisualScale;
+    if(count>=64||!inFocusedArea(east,north,Math.max(visualX,visualZ)))return false;
     const pos=canonicalSemanticPosition(east,north,scale,unit,frame);
     const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+raiseMeters*scale/unit;
-    addLocalStatic("CanonicalDressing-"+label,"sphere",material,pos.x,ground+radiusY*scale/unit,pos.z,radiusX*scale/unit,radiusY*scale/unit,radiusZ*scale/unit);
+    addLocalStatic("CanonicalDressing-"+label,"sphere",material,pos.x,ground+visualY*scale/unit,pos.z,visualX*scale/unit,visualY*scale/unit,visualZ*scale/unit);
     recordSample(label,east,north);
     count++;triangles+=24;
     return true;
@@ -6133,7 +6150,7 @@ function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
     const centerEast=((Number(bounds.minX)+Number(bounds.maxX))/2)*tileMeters;
     const centerNorth=((Number(bounds.minY)+Number(bounds.maxY))/2)*tileMeters;
     const east=centerEast+offsetEast,north=centerNorth+offsetNorth;
-    if(!routeClear(record,east,north,Math.max(halfW,halfD)))return false;
+    if(!routeClear(record,east,north,Math.max(halfW,halfD)*dressingVisualScale))return false;
     return addWorldBox(record.id+"-"+label,material,east,north,halfW,halfH,halfD,rotationY);
   };
   const addBall=(record,label,material,offsetEast,offsetNorth,radiusX,radiusY,radiusZ)=>{
@@ -6141,7 +6158,7 @@ function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
     const centerEast=((Number(bounds.minX)+Number(bounds.maxX))/2)*tileMeters;
     const centerNorth=((Number(bounds.minY)+Number(bounds.maxY))/2)*tileMeters;
     const east=centerEast+offsetEast,north=centerNorth+offsetNorth;
-    if(!routeClear(record,east,north,Math.max(radiusX,radiusZ)))return false;
+    if(!routeClear(record,east,north,Math.max(radiusX,radiusZ)*dressingVisualScale))return false;
     return addWorldBall(record.id+"-"+label,material,east,north,radiusX,radiusY,radiusZ);
   };
   const plazaHalf=Math.max(1,Number(window.StartingVillage?.PUBLIC_HALF_SIZE||3)*tileMeters);
@@ -6154,7 +6171,7 @@ function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
     if(index===0&&count<64&&inFocusedArea(x,y,.66)){
       const pos=canonicalSemanticPosition(x,y,scale,unit,frame);
       const ground=canonicalSemanticGroundHeightUnits(x,y,frame)+lift+1.0*scale/unit;
-      addLocalStatic("CanonicalDressing-public-square-well","cylinder",localStaticMaterials.microStone,pos.x,ground,pos.z,.66*scale/unit,.90*scale/unit,.66*scale/unit);
+      addLocalStatic("CanonicalDressing-public-square-well","cylinder",localStaticMaterials.microStone,pos.x,ground,pos.z,.66*dressingVisualScale*scale/unit,.90*dressingVisualScale*scale/unit,.66*dressingVisualScale*scale/unit);
       count++;triangles+=60;recordSample("public-square-well",x,y);
     }
   }
@@ -6210,7 +6227,7 @@ function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
     }
     if(count>=64)break;
   }
-  return {count,triangles,scope:"focused-visible+3-tile-preload",samples:Object.freeze(samples)};
+  return {count,triangles,scope:"focused-visible+3-tile-preload",presentationScale:dressingVisualScale,samples:Object.freeze(samples)};
 }
 
 function clearLocalBuildingActivity(){
@@ -6991,7 +7008,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     coarseRoadCount:(tier==="footprint"||tier==="route"||tier==="coarse")?roadCount:0,
     coarseBuildingCount:coarseBuildings,landmarkCount:landmarks,
     fullRoadCount:detailed?roadCount:0,fullBuildingCount:fullBuildings,
-    roadCount,buildingCount:coarseBuildings+fullBuildings,vegetationCount:vegetation,dressingCount:Number(dressingStats.count||0),dressingScope:String(dressingStats.scope||"not-required"),dressingSamples:Object.freeze([...(dressingStats.samples||[])]),wildernessCount:wild.accepted,ambientFaunaCount:wild.fauna,waterCount:0,
+    roadCount,buildingCount:coarseBuildings+fullBuildings,vegetationCount:vegetation,dressingCount:Number(dressingStats.count||0),dressingScope:String(dressingStats.scope||"not-required"),dressingPresentationScale:Number(dressingStats.presentationScale||1),dressingSamples:Object.freeze([...(dressingStats.samples||[])]),wildernessCount:wild.accepted,ambientFaunaCount:wild.fauna,waterCount:0,
     dressingFocusKey,
     entityCount,triangleEstimate:triangles+wild.triangles+Number(buildingSurroundings.triangleCount||0)+Number(campaignWearProjection.triangleCount||0)+Number(persistentConsequenceProjection.triangleCount||0)+Number(wayfindingSignposts.triangleCount||0),
     drawCallEstimate:entityCount+wild.fauna+Number(campaignWearDrawCalls||0)+Number(consequenceDrawCalls||0),
