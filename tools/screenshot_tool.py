@@ -23,6 +23,8 @@ WP_CHARACTER_SHOTS=5
 STARTING_VILLAGE_SCENARIO="starting-village"
 WP_SURFACE_REFINEMENT_SCENARIO="wp-s003-010-003-005-002"
 WP_SURFACE_REFINEMENT_SHOTS=10
+WP_CANONICAL_FOCUS_SCENARIO="wp-s003-008-008"
+WP_CANONICAL_FOCUS_SHOTS=5
 WP_SURFACE_REFINEMENT_PLAN=(
     (0.451545,"fixed-focus:0.08x"),
     (0.588046,"fixed-focus:0.15x"),
@@ -160,6 +162,9 @@ def _stage_snapshot(driver):
           presentation:s.projection?.presentation
         },
         npcPresentation:s.npcPresentation,
+        destinationNavigator:s.destinationNavigator,
+        explicitFocusNavigation:s.explicitFocusNavigation,
+        inspection:s.inspection,
         atmosphere:s.atmosphere,
         worldVisualStyle:s.worldVisualStyle,
         worldVisualStyleIntegration:s.worldVisualStyleIntegration,
@@ -213,6 +218,133 @@ def _prepare_starting_village_scene(driver,timeout):
       requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
     """)
     return {**focus,"zoom":result}
+
+
+def _canonical_focus_ui_state(driver):
+    return driver.execute_script("""
+      const stage=window.PlanetStage?.snapshot?.()||{};
+      const protagonist=(window.PlanetStage?.inspectionTargets?.()||[]).find(item=>item.type==='protagonist')||null;
+      const places=document.querySelector('.planet-places-panel');
+      const tip=document.querySelector('.world-inspection-tooltip');
+      const focusButton=document.querySelector('.world-inspection-focus');
+      return {
+        placesVisible:Boolean(places),
+        placesText:places?.innerText||'',
+        tooltipVisible:Boolean(tip&&getComputedStyle(tip).visibility!=='hidden'),
+        tooltipText:tip?.innerText||'',
+        focusButtonVisible:Boolean(focusButton),
+        protagonistTarget:protagonist,
+        destinationNavigator:stage.destinationNavigator||null,
+        explicitFocusNavigation:stage.explicitFocusNavigation||null,
+        npcPresentation:stage.npcPresentation||null,
+        zoom:stage.zoom||null,
+        canonicalFocus:stage.canonicalFocus||null
+      };
+    """)
+
+def _canonical_focus_starting_village(driver):
+    result=driver.execute_script("""
+      const stage=window.PlanetStage,seed=stage?.snapshot?.()?.activeSeed;
+      const village=seed&&window.StartingVillage?.plan?.(seed),center=village?.center;
+      if(!stage||!center)return {ok:false,reason:'starting-village-unavailable'};
+      stage.closePlaces?.();
+      stage.setWorldTileFocus(String(center.x),String(center.y));
+      return {ok:true,seed,center:{x:String(center.x),y:String(center.y)},name:village?.name||'Starting Village'};
+    """)
+    if not result or not result.get("ok"):
+        raise RuntimeError(f"could not prepare canonical focus village: {result}")
+    return result
+
+def _canonical_focus_frame(driver,index,timeout):
+    if index==0:
+        set_exact_viewport(driver,1440,900)
+        prep=_canonical_focus_starting_village(driver)
+        driver.execute_script("""
+          const stage=window.PlanetStage;
+          stage.setScaleIndex(4);
+          stage.refreshPlaces();
+          stage.openPlaces();
+        """)
+        _wait(driver,"""
+          const s=window.PlanetStage?.snapshot?.();
+          return Boolean(s?.destinationNavigator?.totalDescriptorCount>0 && document.querySelector('.planet-places-panel'));
+        """,timeout,"bounded Places descriptors")
+        selected=driver.execute_script("""
+          const stage=window.PlanetStage,items=stage.placeDescriptors();
+          const valid=items.filter(d=>d?.canonicalCoordinateValid!==false&&d?.latitudeRadians!==null&&d?.latitudeRadians!==undefined&&d?.longitudeRadians!==null&&d?.longitudeRadians!==undefined);
+          const d=valid.find(x=>x.category==='cities'||x.category==='settlements')||valid[0];
+          if(!d)return {ok:false,reason:'no-valid-destination'};
+          const result=stage.selectPlace(d.id);
+          return {ok:true,id:String(d.id),name:String(d.name||d.id),category:String(d.category||''),type:String(d.type||''),latitudeDegrees:d.latitudeDegrees,longitudeDegrees:d.longitudeDegrees,result};
+        """)
+        if not selected or not selected.get("ok"):
+            raise RuntimeError(f"could not select canonical Places destination: {selected}")
+        _wait(driver,"""
+          const n=window.PlanetStage?.snapshot?.()?.explicitFocusNavigation?.active;
+          return Boolean(n?.targetType==='place' && Number(n?.focusErrorMeters)<=1);
+        """,timeout,"exact Places canonical target")
+        driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+        return {"action":"places-canonical-view","viewport":_inner_viewport(driver),"stage":_stage_snapshot(driver),"ui":_canonical_focus_ui_state(driver),"setup":{**prep,"selected":selected}}
+    if index==1:
+        set_exact_viewport(driver,1440,900)
+        prep=_canonical_focus_starting_village(driver)
+        driver.execute_script("window.PlanetStage.setScaleIndex(8);")
+        _wait(driver,"""
+          const s=window.PlanetStage?.snapshot?.(),p=s?.npcPresentation||{};
+          return Boolean(s?.zoom?.scaleIndex===8 && p?.protagonistMarkerVisible===true && (window.PlanetStage?.inspectionTargets?.()||[]).some(x=>x.type==='protagonist'));
+        """,timeout,"wider-view protagonist marker")
+        picked=driver.execute_script("""
+          const t=(window.PlanetStage.inspectionTargets()||[]).find(x=>x.type==='protagonist');
+          if(!t?.bounds)return {ok:false,reason:'protagonist-bounds-missing'};
+          const x=(Number(t.bounds.left)+Number(t.bounds.right))/2,y=(Number(t.bounds.top)+Number(t.bounds.bottom))/2;
+          const record=window.PlanetStage.pickInspection(x,y);
+          return {ok:Boolean(record?.type==='protagonist'),type:record?.type||null,x,y,bounds:t.bounds};
+        """)
+        if not picked or not picked.get("ok"):
+            raise RuntimeError(f"could not inspect protagonist marker: {picked}")
+        _wait(driver,"return Boolean(document.querySelector('.world-inspection-focus'));",timeout,"protagonist explicit Focus action")
+        driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+        return {"action":"protagonist-inspection-before-focus","viewport":_inner_viewport(driver),"stage":_stage_snapshot(driver),"ui":_canonical_focus_ui_state(driver),"setup":{**prep,"picked":picked}}
+    if index==2:
+        button=driver.find_element("css selector",".world-inspection-focus")
+        button.click()
+        _wait(driver,"""
+          const s=window.PlanetStage?.snapshot?.(),n=s?.explicitFocusNavigation?.active,p=s?.npcPresentation||{};
+          return Boolean(n?.targetType==='protagonist' && n?.state==='committed' && n?.maximumScaleReached===true && Number(n?.focusErrorMeters)<=1 && s?.zoom?.visibleLevel==='ground' && p?.protagonistBillboardVisible===true);
+        """,timeout,"committed protagonist max-zoom focus")
+        driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+        return {"action":"protagonist-max-zoom-committed","viewport":_inner_viewport(driver),"stage":_stage_snapshot(driver),"ui":_canonical_focus_ui_state(driver)}
+    if index==3:
+        set_exact_viewport(driver,390,844)
+        _wait(driver,"return window.innerWidth===390 && window.innerHeight===844;",timeout,"phone portrait viewport")
+        driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+        return {"action":"phone-portrait-protagonist-focus","viewport":_inner_viewport(driver),"stage":_stage_snapshot(driver),"ui":_canonical_focus_ui_state(driver)}
+    if index==4:
+        set_exact_viewport(driver,844,390)
+        _wait(driver,"return window.innerWidth===844 && window.innerHeight===390;",timeout,"phone landscape viewport")
+        driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+        return {"action":"phone-landscape-protagonist-focus","viewport":_inner_viewport(driver),"stage":_stage_snapshot(driver),"ui":_canonical_focus_ui_state(driver)}
+    return {"action":"canonical-focus-extra","viewport":_inner_viewport(driver),"stage":_stage_snapshot(driver),"ui":_canonical_focus_ui_state(driver)}
+
+def _validate_canonical_focus_frames(frames):
+    if len(frames)<WP_CANONICAL_FOCUS_SHOTS:
+        raise RuntimeError(f"{WP_CANONICAL_FOCUS_SCENARIO} requires {WP_CANONICAL_FOCUS_SHOTS} fresh frames")
+    places=frames[0];pnav=((places.get("stage") or {}).get("explicitFocusNavigation") or {}).get("active") or {}
+    if not (places.get("ui") or {}).get("placesVisible") or pnav.get("targetType")!="place" or float(pnav.get("focusErrorMeters") or 999999)>1:
+        raise RuntimeError(f"Places exact-focus frame invalid: {places}")
+    inspect=frames[1];ui=inspect.get("ui") or {};npc=(inspect.get("stage") or {}).get("npcPresentation") or {}
+    if not ui.get("tooltipVisible") or not ui.get("focusButtonVisible") or npc.get("protagonistMarkerVisible") is not True:
+        raise RuntimeError(f"protagonist inspection frame invalid: {inspect}")
+    for frame in frames[2:WP_CANONICAL_FOCUS_SHOTS]:
+        stage=frame.get("stage") or {};nav=(stage.get("explicitFocusNavigation") or {}).get("active") or {};npc=stage.get("npcPresentation") or {}
+        if nav.get("targetType")!="protagonist" or nav.get("state")!="committed" or nav.get("maximumScaleReached") is not True or float(nav.get("focusErrorMeters") or 999999)>1:
+            raise RuntimeError(f"protagonist focus transaction not committed exactly: {frame}")
+        if (stage.get("zoom") or {}).get("visibleLevel")!="ground" or npc.get("protagonistBillboardVisible") is not True:
+            raise RuntimeError(f"protagonist ground representation missing: {frame}")
+    if frames[3].get("viewport")!={"width":390,"height":844}:
+        raise RuntimeError(f"phone portrait viewport mismatch: {frames[3].get('viewport')}")
+    if frames[4].get("viewport")!={"width":844,"height":390}:
+        raise RuntimeError(f"phone landscape viewport mismatch: {frames[4].get('viewport')}")
 
 def _set_character_scale(driver,mode):
     if mode=="near":
@@ -496,6 +628,8 @@ def run_capture(args):
         total=max(total,WP_CHARACTER_SHOTS)
     elif args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:
         total=max(total,WP_SURFACE_REFINEMENT_SHOTS)
+    elif args.scenario==WP_CANONICAL_FOCUS_SCENARIO:
+        total=max(total,WP_CANONICAL_FOCUS_SHOTS)
     if args.no_publish:
         _clean_ephemeral_capture_dir()
     driver=_driver()
@@ -543,6 +677,16 @@ def run_capture(args):
                 frame["captured_at"]=datetime.now(timezone.utc).isoformat()
                 frames.append(frame)
             _validate_surface_refinement_frames(frames)
+        elif args.scenario==WP_CANONICAL_FOCUS_SCENARIO:
+            frames=[]
+            for index in range(WP_CANONICAL_FOCUS_SHOTS):
+                frame=_canonical_focus_frame(driver,index,args.ready_timeout)
+                path=_file_name(args.filename,index+1,WP_CANONICAL_FOCUS_SHOTS,args.timestamp_names)
+                _capture(driver,path)
+                frame["index"]=index+1;frame["file"]=path.name
+                frame["captured_at"]=datetime.now(timezone.utc).isoformat()
+                frames.append(frame)
+            _validate_canonical_focus_frames(frames)
         else:
             frames=_generic_frames(driver,total,width,height,args.ready_timeout,args.interval)
             for index,frame in enumerate(frames,start=1):
