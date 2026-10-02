@@ -13,6 +13,9 @@ function segment(start,end){
 }
 
 has("function validFocusCoordinate(target)","shared focus coordinate validator missing");
+const validator=segment("function validFocusCoordinate(target)","function setViewTarget");
+assert(validator.includes("rawLatitude===null")&&validator.includes("rawLongitude===null"),"null canonical coordinates must be rejected before numeric coercion");
+assert(validator.includes('typeof rawLatitude==="string"&&!rawLatitude.trim()')&&validator.includes('typeof rawLongitude==="string"&&!rawLongitude.trim()'),"blank canonical coordinates must be rejected before numeric coercion");
 has("function canonicalDestinationCoordinate(descriptor)","destination canonical coordinate resolver missing");
 has("function beginFocusNavigation(","shared explicit focus transaction missing");
 has('const requestId="FOCUS-"+String(++focusNavigation.sequence).padStart(4,"0")',"stable focus request id missing");

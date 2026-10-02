@@ -9116,7 +9116,10 @@ function rotationForLatLon(latitudeRadians,longitudeRadians){
   });
 }
 function validFocusCoordinate(target){
-  const latitudeRadians=Number(target?.latitudeRadians),longitudeRadians=Number(target?.longitudeRadians);
+  const rawLatitude=target?.latitudeRadians,rawLongitude=target?.longitudeRadians;
+  if(rawLatitude===null||rawLatitude===undefined||rawLongitude===null||rawLongitude===undefined)return false;
+  if((typeof rawLatitude==="string"&&!rawLatitude.trim())||(typeof rawLongitude==="string"&&!rawLongitude.trim()))return false;
+  const latitudeRadians=Number(rawLatitude),longitudeRadians=Number(rawLongitude);
   return Boolean(Number.isFinite(latitudeRadians)&&Number.isFinite(longitudeRadians)&&Math.abs(latitudeRadians)<=Math.PI/2+1e-9&&Math.abs(longitudeRadians)<=Math.PI*2+1e-9);
 }
 function setViewTarget(target,{forceSemantic=true,snapshotResult=true,semanticUpdate=true}={}){
