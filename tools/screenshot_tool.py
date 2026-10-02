@@ -45,6 +45,8 @@ WP_SCALE_HANDOFF_PLAN=(
 )
 WP_CANONICAL_FOCUS_SCENARIO="wp-s003-008-008"
 WP_CANONICAL_FOCUS_SHOTS=5
+WP_ATLAS_LIVE_SCENARIO="wp-s003-010-003-008"
+WP_ATLAS_LIVE_SHOTS=7
 WP_SURFACE_REFINEMENT_PLAN=(
     (0.451545,"fixed-focus:0.08x"),
     (0.588046,"fixed-focus:0.15x"),
@@ -187,6 +189,7 @@ def _stage_snapshot(driver):
         npcPresentation:s.npcPresentation,
         destinationNavigator:s.destinationNavigator,
         explicitFocusNavigation:s.explicitFocusNavigation,
+        mapPresentation:s.mapPresentation,
         inspection:s.inspection,
         atmosphere:s.atmosphere,
         worldVisualStyle:s.worldVisualStyle,
@@ -1017,6 +1020,158 @@ def _validate_wp_starting_village_frames(frames):
         raise RuntimeError(f"Starting Village context evidence did not move across enough authoritative targets: {focus_keys}")
 
 
+
+def _atlas_live_state(driver):
+    return driver.execute_script("""
+      const s=window.PlanetStage?.snapshot?.()||{};
+      const canvas=document.querySelector('#planetStageCanvas')||document.querySelector('canvas');
+      const root=document.getElementById('planetStageRoot');
+      const rootRect=root?.getBoundingClientRect?.()||{left:0,top:0,right:0,bottom:0,width:0,height:0};
+      const labels=[...document.querySelectorAll('.planet-atlas-label,.planet-map-landmark')].map(el=>{
+        const r=el.getBoundingClientRect();
+        const cs=getComputedStyle(el);
+        return {
+          id:String(el.dataset.canonicalId||''),
+          kind:String(el.dataset.kind||''),
+          hidden:Boolean(el.hidden||cs.visibility==='hidden'||cs.display==='none'||Number(cs.opacity||1)<=0.01),
+          left:Number(r.left.toFixed(2)),top:Number(r.top.toFixed(2)),
+          right:Number(r.right.toFixed(2)),bottom:Number(r.bottom.toFixed(2)),
+          centerX:Number((r.left+r.width*.5).toFixed(2)),
+          centerY:Number((r.top+r.height*.5).toFixed(2))
+        };
+      });
+      return {
+        mapPresentation:s.mapPresentation||null,
+        navigationPerformance:s.navigationPerformance||null,
+        zoom:s.zoom||null,
+        canonicalFocus:s.canonicalFocus||null,
+        viewport:{width:window.innerWidth,height:window.innerHeight},
+        canvas:canvas?{width:canvas.getBoundingClientRect().width,height:canvas.getBoundingClientRect().height}:null,
+        rootRect:{
+          left:Number(rootRect.left.toFixed(2)),top:Number(rootRect.top.toFixed(2)),
+          right:Number(rootRect.right.toFixed(2)),bottom:Number(rootRect.bottom.toFixed(2)),
+          width:Number(rootRect.width.toFixed(2)),height:Number(rootRect.height.toFixed(2))
+        },
+        labels
+      };
+    """)
+
+def _prepare_atlas_live_scene(driver,timeout):
+    set_exact_viewport(driver,1280,800)
+    result=driver.execute_script("""
+      const stage=window.PlanetStage;
+      if(!stage)return {ok:false,reason:'stage-unavailable'};
+      stage.setWorldTileFocus('0','0');
+      stage.setZoomScalar(0.05);
+      return {ok:true};
+    """)
+    if not result or not result.get("ok"):
+        raise RuntimeError(f"could not prepare atlas live-projection scene: {result}")
+    _wait(driver,"""
+      const s=window.PlanetStage?.snapshot?.()||{},m=s.mapPresentation||{},n=s.navigationPerformance||{};
+      return Boolean(
+        s.ready && !s.zoom?.animation?.active &&
+        Number(m.atlasVisibleLabelCount||0)>0 &&
+        Array.isArray(m.visibleLabels) && m.visibleLabels.length>0 &&
+        Number(n.liveProjectionOver8MsCount||0)===0
+      );
+    """,timeout,"far-globe atlas labels ready")
+    driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+    return _atlas_live_state(driver)
+
+def _atlas_live_frame(driver,index,timeout):
+    from selenium.webdriver.common.action_chains import ActionChains
+    if index==0:
+        state=_prepare_atlas_live_scene(driver,timeout)
+        state["action"]="desktop-before-drag"
+        return state
+    canvas=driver.find_element("css selector","#planetStageCanvas, canvas")
+    if index==1:
+        ActionChains(driver).move_to_element(canvas).click_and_hold().move_by_offset(55,14).perform()
+        time.sleep(.12)
+        action="desktop-mid-drag-1"
+    elif index==2:
+        ActionChains(driver).move_by_offset(55,14).perform()
+        time.sleep(.12)
+        action="desktop-mid-drag-2"
+    elif index==3:
+        ActionChains(driver).move_by_offset(55,14).perform()
+        time.sleep(.12)
+        action="desktop-mid-drag-3"
+    elif index==4:
+        ActionChains(driver).release().perform()
+        _wait(driver,"""
+          const s=window.PlanetStage?.snapshot?.()||{},n=s.navigationPerformance||{};
+          return Boolean(!n.semanticUpdatePending && Number(n.pointerSettleFlushCount||0)>=1);
+        """,timeout,"post-drag atlas semantic settle")
+        driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+        action="desktop-after-settle"
+    elif index==5:
+        set_exact_viewport(driver,844,390)
+        _wait(driver,"""
+          const s=window.PlanetStage?.snapshot?.()||{},m=s.mapPresentation||{};
+          return Boolean(s.ready && Number(m.atlasVisibleLabelCount||0)>0);
+        """,timeout,"phone-landscape atlas labels")
+        driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+        action="phone-landscape"
+    else:
+        set_exact_viewport(driver,390,844)
+        _wait(driver,"""
+          const s=window.PlanetStage?.snapshot?.()||{},m=s.mapPresentation||{};
+          return Boolean(s.ready && Number(m.atlasVisibleLabelCount||0)>0);
+        """,timeout,"phone-portrait atlas labels")
+        driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+        action="phone-portrait"
+    state=_atlas_live_state(driver)
+    state["action"]=action
+    return state
+
+def _validate_atlas_live_frames(frames):
+    if len(frames)<WP_ATLAS_LIVE_SHOTS:
+        raise RuntimeError(f"{WP_ATLAS_LIVE_SCENARIO} requires {WP_ATLAS_LIVE_SHOTS} fresh frames")
+    baseline=frames[0]
+    drag=frames[1:4]
+    settled=frames[4]
+    previous=int((baseline.get("navigationPerformance") or {}).get("liveProjectionCount") or 0)
+    for index,frame in enumerate(drag,start=1):
+        nav=frame.get("navigationPerformance") or {}
+        presentation=frame.get("mapPresentation") or {}
+        current=int(nav.get("liveProjectionCount") or 0)
+        if current<=previous:
+            raise RuntimeError(f"live atlas projection did not advance during drag frame {index}: {previous} -> {current}")
+        if int(nav.get("liveProjectionOver8MsCount") or 0)!=0:
+            raise RuntimeError(f"live atlas projection exceeded 8ms budget in drag frame {index}: {nav}")
+        if int(presentation.get("liveProjectedLabelCount") or 0)<=0:
+            raise RuntimeError(f"drag frame {index} updated no existing atlas labels: {presentation}")
+        previous=current
+    base_labels={item.get("id"):item for item in baseline.get("labels") or [] if item.get("id") and not item.get("hidden")}
+    last_labels={item.get("id"):item for item in drag[-1].get("labels") or [] if item.get("id") and not item.get("hidden")}
+    common=sorted(set(base_labels)&set(last_labels))
+    if not common:
+        raise RuntimeError("no canonical atlas label remained visible across active drag")
+    moved=max(
+        ((last_labels[key]["centerX"]-base_labels[key]["centerX"])**2+
+         (last_labels[key]["centerY"]-base_labels[key]["centerY"])**2)**0.5
+        for key in common
+    )
+    if moved<8:
+        raise RuntimeError(f"visible atlas labels did not move with their world anchors during drag: max {moved:.2f}px")
+    settled_nav=settled.get("navigationPerformance") or {}
+    if int(settled_nav.get("pointerSettleFlushCount") or 0)<1:
+        raise RuntimeError("pointer settle did not flush semantic atlas layout")
+    if int(settled_nav.get("liveProjectionOver8MsCount") or 0)!=0:
+        raise RuntimeError(f"settled atlas exceeded live projection budget: {settled_nav}")
+    for frame_index in (4,5,6):
+        frame=frames[frame_index]
+        viewport=frame.get("viewport") or {}
+        width=float(viewport.get("width") or 0);height=float(viewport.get("height") or 0)
+        visible=[item for item in frame.get("labels") or [] if not item.get("hidden")]
+        if not visible:
+            raise RuntimeError(f"atlas frame {frame_index+1} has no visible labels")
+        for item in visible:
+            if item["left"]<-1 or item["right"]>width+1 or item["top"]<-1 or item["bottom"]>height+1:
+                raise RuntimeError(f"atlas label clips viewport in frame {frame_index+1}: {item} viewport={viewport}")
+
 def _generic_frames(driver,shots,width,height,timeout,interval):
     set_exact_viewport(driver,width,height)
     _wait_stage(driver,timeout)
@@ -1035,7 +1190,7 @@ def run_capture(args):
     # Surface-refinement acceptance has one canonical 1280x800 viewport. Start
     # the browser at that size so the game never boots at one aspect ratio and
     # receives a first-checkpoint resize after its zoom/LOD state is live.
-    if args.scenario in {WP_SURFACE_REFINEMENT_SCENARIO,WP_SCALE_HANDOFF_SCENARIO}:
+    if args.scenario in {WP_SURFACE_REFINEMENT_SCENARIO,WP_SCALE_HANDOFF_SCENARIO,WP_ATLAS_LIVE_SCENARIO}:
         width,height=1280,800
     total=max(1,int(args.shots))
     if args.scenario==WP_CHARACTER_SCENARIO:
@@ -1050,6 +1205,8 @@ def run_capture(args):
         total=max(total,WP_SCALE_HANDOFF_SHOTS)
     elif args.scenario==WP_CANONICAL_FOCUS_SCENARIO:
         total=max(total,WP_CANONICAL_FOCUS_SHOTS)
+    elif args.scenario==WP_ATLAS_LIVE_SCENARIO:
+        total=max(total,WP_ATLAS_LIVE_SHOTS)
     if args.no_publish:
         _clean_ephemeral_capture_dir()
     driver=_driver()
@@ -1166,6 +1323,16 @@ def run_capture(args):
                 frame["captured_at"]=datetime.now(timezone.utc).isoformat()
                 frames.append(frame)
             _validate_canonical_focus_frames(frames)
+        elif args.scenario==WP_ATLAS_LIVE_SCENARIO:
+            frames=[]
+            for index in range(WP_ATLAS_LIVE_SHOTS):
+                frame=_atlas_live_frame(driver,index,args.ready_timeout)
+                path=_file_name(args.filename,index+1,WP_ATLAS_LIVE_SHOTS,args.timestamp_names)
+                _capture(driver,path)
+                frame["index"]=index+1;frame["file"]=path.name
+                frame["captured_at"]=datetime.now(timezone.utc).isoformat()
+                frames.append(frame)
+            _validate_atlas_live_frames(frames)
         else:
             frames=_generic_frames(driver,total,width,height,args.ready_timeout,args.interval)
             for index,frame in enumerate(frames,start=1):
