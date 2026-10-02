@@ -1,0 +1,103 @@
+name: WP-S012-004 Economic Transactions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/world/economic-transaction.js"
+      - "scripts/tests/wp-s012-004-economic-transaction.test.js"
+      - ".github/workflows/wp-s012-004-economic-transaction.yml"
+      - "scripts/world/local-market.js"
+      - "scripts/world/protagonist-wealth.js"
+      - "scripts/world/protagonist-inventory.js"
+      - "scripts/world/world-state.js"
+      - "scripts/world/campaign-persistence.js"
+      - "index.html"
+      - "docs/ROADMAP.md"
+      - "docs/changelog.txt"
+      - "docs/suggest_log.txt"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/world/economic-transaction.js"
+      - "scripts/tests/wp-s012-004-economic-transaction.test.js"
+      - ".github/workflows/wp-s012-004-economic-transaction.yml"
+      - "scripts/world/local-market.js"
+      - "scripts/world/protagonist-wealth.js"
+      - "scripts/world/protagonist-inventory.js"
+      - "scripts/world/world-state.js"
+      - "scripts/world/campaign-persistence.js"
+      - "index.html"
+      - "docs/ROADMAP.md"
+      - "docs/changelog.txt"
+      - "docs/suggest_log.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validated economic transaction evidence
+        run: node scripts/tests/wp-s012-004-economic-transaction.test.js
+      - name: Economy, inventory and persistence regressions
+        run: |
+          node scripts/tests/wp-s012-001-protagonist-wealth.test.js
+          node scripts/tests/wp-s012-002-local-market.test.js
+          node scripts/tests/wp-s012-003-protagonist-employment.test.js
+          node scripts/tests/wp-s009-004-protagonist-inventory.test.js
+          node tools/tests/wp-s007-009-campaign-persistence.test.js
+      - name: Verify exact product is live on GitHub Pages
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://sgoxel.github.io/The_Advisor_Game"
+          MODE="accepted"
+          if grep -q 'WP-S012-004.*COMPLETED' docs/ROADMAP.md; then MODE="completed"; fi
+          for attempt in $(seq 1 48); do
+            curl -fsSL --max-time 20 "$BASE/scripts/world/economic-transaction.js?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-transaction.js || true
+            curl -fsSL --max-time 20 "$BASE/index.html?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-index.html || true
+            curl -fsSL --max-time 20 "$BASE/docs/ROADMAP.md?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-roadmap.md || true
+            product_ok=0
+            state_ok=0
+            grep -q 'VERSION="economic-transaction-v1"' /tmp/live-transaction.js 2>/dev/null && \
+              grep -q 'scripts/world/economic-transaction.js?v=economic-transaction-v1' /tmp/live-index.html 2>/dev/null && product_ok=1 || true
+            if [ "$MODE" = "completed" ]; then
+              grep -q 'WP-S012-004.*COMPLETED' /tmp/live-roadmap.md 2>/dev/null && state_ok=1 || true
+            else
+              state_ok=1
+            fi
+            if [ "$product_ok" -eq 1 ] && [ "$state_ok" -eq 1 ]; then
+              echo "GitHub Pages exposes WP-S012-004 mode=$MODE for commit $GITHUB_SHA"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "GitHub Pages did not expose expected WP-S012-004 $MODE markers in time." >&2
+          exit 1
+      - name: Comment exact run on Issue 246
+        if: always() && github.event_name == 'push'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ job.status }}';
+            const sha = context.sha;
+            const url = 'https://github.com/'+context.repo.owner+'/'+context.repo.repo+'/actions/runs/'+context.runId;
+            const body = [
+              'AGENT #6 WP-S012-004 exact-head workflow: **'+status.toUpperCase()+'**',
+              'Commit: '+sha,
+              'Run: '+url,
+              status === 'success'
+                ? 'Economic transaction evidence, selected economy/inventory/persistence regressions, and GitHub Pages product verification passed.'
+                : 'Workflow, regression, or GitHub Pages verification failed; WP remains incomplete.'
+            ].join('\n');
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:246,body});

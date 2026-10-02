@@ -1,0 +1,94 @@
+name: WP-S010-005 Protagonist Work Routine
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/world/protagonist-work-routine.js"
+      - "scripts/tests/wp-s010-005-protagonist-work-routine.test.js"
+      - ".github/workflows/wp-s010-005-protagonist-work-routine.yml"
+      - "scripts/world/protagonist-needs.js"
+      - "scripts/world/protagonist-health.js"
+      - "scripts/world/protagonist-goals.js"
+      - "scripts/world/protagonist-authority.js"
+      - "scripts/world/protagonist-self-care.js"
+      - "scripts/world/protagonist-action-runtime.js"
+      - "scripts/world/protagonist-command-evaluator.js"
+      - "scripts/world/protagonist-interaction-pipeline.js"
+      - "scripts/world/daily-activity.js"
+      - "scripts/world/work-cycles.js"
+      - "index.html"
+      - "docs/ROADMAP.md"
+      - "docs/changelog.txt"
+      - "docs/suggest_log.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Profession and duty work-selection evidence
+        run: node scripts/tests/wp-s010-005-protagonist-work-routine.test.js
+      - name: Work and authority regressions
+        run: |
+          node scripts/tests/wp-s009-002-protagonist-needs.test.js
+          node scripts/tests/wp-s009-003-protagonist-goals.test.js
+          node scripts/tests/wp-s009-005-protagonist-health.test.js
+          node scripts/tests/wp-s009-006-protagonist-authority.test.js
+          node scripts/tests/wp-s010-001-protagonist-action-runtime.test.js
+          node scripts/tests/wp-s010-003-protagonist-interaction-pipeline.test.js
+          node scripts/tests/wp-s010-004-protagonist-self-care.test.js
+          node scripts/tests/wp-s008-005-protagonist-command-evaluator.test.js
+          node tools/tests/wp-s004-007-work-cycles.test.js
+      - name: Verify exact product is live on GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://sgoxel.github.io/The_Advisor_Game"
+          MODE="accepted"
+          if grep -q 'WP-S010-005.*COMPLETED' docs/ROADMAP.md; then MODE="completed"; fi
+          for attempt in $(seq 1 72); do
+            curl -fsSL --max-time 20 "$BASE/scripts/world/protagonist-work-routine.js?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-work-routine.js || true
+            curl -fsSL --max-time 20 "$BASE/index.html?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-index.html || true
+            curl -fsSL --max-time 20 "$BASE/docs/ROADMAP.md?sha=${GITHUB_SHA}&try=${attempt}" -o /tmp/live-roadmap.md || true
+            product_ok=0
+            state_ok=0
+            grep -q 'VERSION="protagonist-work-routine-v1"' /tmp/live-work-routine.js 2>/dev/null && grep -q 'scripts/world/protagonist-work-routine.js?v=protagonist-work-routine-v1' /tmp/live-index.html 2>/dev/null && product_ok=1 || true
+            if [ "$MODE" = "completed" ]; then
+              grep -q 'WP-S010-005.*COMPLETED' /tmp/live-roadmap.md 2>/dev/null && state_ok=1 || true
+            else
+              state_ok=1
+            fi
+            if [ "$product_ok" -eq 1 ] && [ "$state_ok" -eq 1 ]; then
+              echo "GitHub Pages exposes WP-S010-005 mode=$MODE for commit $GITHUB_SHA"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "GitHub Pages did not expose expected WP-S010-005 $MODE markers in time." >&2
+          exit 1
+      - name: Comment exact run on Issue 208
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status='${{ job.status }}';
+            const body=[
+              'AGENT #6 WP-S010-005 exact-head workflow: **'+status.toUpperCase()+'**',
+              'Commit: '+context.sha,
+              'Run: https://github.com/'+context.repo.owner+'/'+context.repo.repo+'/actions/runs/'+context.runId,
+              status==='success'
+                ? 'Profession/duty work-selection evidence, authority/work regressions, real evaluator/runtime handoff, and public Pages product verification passed. VISUAL: N/A — functional-only work selection/runtime handoff.'
+                : 'Work routine evidence, regression, evaluator/runtime handoff, or public Pages verification failed; WP remains incomplete.'
+            ].join('\n');
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:208,body});

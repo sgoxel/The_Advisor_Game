@@ -1,0 +1,62 @@
+name: WP-S005-007 Rumor Knowledge Evidence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/wp-s005-007-functional.yml
+      - scripts/world/local-rumors.js
+      - scripts/world/character-memory.js
+      - scripts/world/dialogue-context.js
+      - scripts/world/planet-stage.js
+      - tools/tests/wp-s005-007-rumors.test.js
+      - index.html
+  workflow_dispatch:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  functional:
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (!github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/wp-s005-007-evidence'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Syntax check rumor integration
+        run: |
+          node --check scripts/world/local-rumors.js
+          node --check scripts/world/dialogue-context.js
+          node --check scripts/world/planet-stage.js
+
+      - name: Run bounded rumor knowledge proof
+        run: node tools/tests/wp-s005-007-rumors.test.js
+
+      - name: Comment run link on Issue
+        if: github.event_name == 'issue_comment' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const ok = '${{ job.status }}' === 'success';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: ok
+                ? `WP-S005-007 evidence completed. [Open workflow run and logs](${url}).`
+                : `WP-S005-007 evidence FAILED. [Open workflow run and logs](${url}).`
+            });

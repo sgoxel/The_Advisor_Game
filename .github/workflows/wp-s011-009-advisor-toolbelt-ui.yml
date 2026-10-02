@@ -1,0 +1,93 @@
+name: WP-S011-009 Advisor Progression Toolbelt UI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "index.html"
+      - "styles/main.css"
+      - "docs/ROADMAP.md"
+      - "docs/changelog.txt"
+      - "docs/suggest_log.txt"
+      - "scripts/ui/advisor-conversation-ui.js"
+      - "scripts/ui/advisor-toolbelt-ui.js"
+      - "scripts/tests/wp-s011-009-advisor-toolbelt-ui.test.js"
+      - "tools/wp_s011_009_evidence.py"
+      - ".github/workflows/wp-s011-009-advisor-toolbelt-ui.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wp-s011-009-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  functional:
+    name: Functional authority + bounded reads
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Syntax checks
+        run: |
+          node --check scripts/ui/advisor-toolbelt-ui.js
+          node --check scripts/ui/advisor-conversation-ui.js
+          node --check scripts/tests/wp-s011-009-advisor-toolbelt-ui.test.js
+          python -m py_compile tools/wp_s011_009_evidence.py
+
+      - name: Stage 11 authority regressions
+        run: |
+          node scripts/tests/wp-s011-001-advisor-progression.test.js
+          node scripts/tests/wp-s011-008-advisor-tool-resolution.test.js
+          node scripts/tests/wp-s008-007-advisor-chat-ui.test.js
+          node scripts/tests/wp-s011-009-advisor-toolbelt-ui.test.js
+
+  visual:
+    name: Fresh responsive screenshots
+    needs: functional
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install screenshot dependencies
+        run: python -m pip install -r tools/requirements.txt
+
+      - name: Verify browser
+        run: |
+          google-chrome --version || google-chrome-stable --version || chromium --version
+
+      - name: Start exact-head game server
+        run: |
+          python -m http.server 8000 --bind 127.0.0.1 >/tmp/advisor-wp-s011-009-http.log 2>&1 &
+          echo $! >/tmp/advisor-wp-s011-009-http.pid
+          sleep 1
+
+      - name: Capture Advisor toolbelt evidence
+        env:
+          TARGET: http://127.0.0.1:8000/
+          OUT: tools/screenshots/wp-s011-009
+        run: python tools/wp_s011_009_evidence.py
+
+      - name: Upload fresh evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-s011-009-advisor-toolbelt-${{ github.sha }}
+          path: tools/screenshots/wp-s011-009/
+          if-no-files-found: error
+          retention-days: 14
