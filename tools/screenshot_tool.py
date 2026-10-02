@@ -106,7 +106,9 @@ def _driver():
     options=Options()
     for arg in (
         "--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl",
-        "--ignore-gpu-blocklist","--use-angle=swiftshader","--disable-search-engine-choice-screen",
+        "--ignore-gpu-blocklist","--use-angle=swiftshader","--enable-unsafe-swiftshader",
+        "--disable-background-timer-throttling","--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding","--disable-search-engine-choice-screen",
         "--disable-background-networking","--window-size=1920,1080"
     ):
         options.add_argument(arg)
