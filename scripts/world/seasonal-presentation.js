@@ -261,13 +261,17 @@ function accentPlan(profile,seed,limit,view){
   const materializedWidthMeters=ACCENT_MATERIALIZATION_HEIGHT_METERS*aspect;
   const radiusX=Math.min(24,Math.max(2,Math.ceil(materializedWidthMeters*.58/(gridTiles*tileMeters))+1));
   const radiusY=Math.min(24,Math.max(2,Math.ceil(ACCENT_MATERIALIZATION_HEIGHT_METERS*.58/(gridTiles*tileMeters))+1));
-  const candidates=[];
+  const candidateCount=(radiusX*2+1)*(radiusY*2+1),selectionThreshold=Math.min(1,(targetCount+8)/Math.max(1,candidateCount)),candidates=[];
+  // The canonical absolute cell hash is the admission test. Rejected cells pay
+  // one hash only; jitter and rendering metadata are generated only for the
+  // small admitted cohort. This preserves world anchoring without sorting or
+  // fully materializing thousands of irrelevant candidates on a cold refresh.
   for(let oy=-radiusY;oy<=radiusY;oy++)for(let ox=-radiusX;ox<=radiusX;ox++){
     const cellX=centerCellX+BigInt(ox),cellY=centerCellY+BigInt(oy),tileX=cellX*gridTileBig,tileY=cellY*gridTileBig;
-    const id=tileX.toString()+","+tileY.toString(),base="season-field:"+id+":";
+    const id=tileX.toString()+","+tileY.toString(),base="season-field:"+id+":",priority=foundationUnit(seed,base+"priority");
+    if(priority>selectionThreshold)continue;
     candidates.push({
-      id,tileX:tileX.toString(),tileY:tileY.toString(),
-      priority:foundationUnit(seed,base+"priority"),
+      id,tileX:tileX.toString(),tileY:tileY.toString(),priority,
       jitterEastMeters:(foundationUnit(seed,base+"jx")-.5)*ACCENT_GRID_METERS*.66,
       jitterNorthMeters:(foundationUnit(seed,base+"jy")-.5)*ACCENT_GRID_METERS*.66
     });
