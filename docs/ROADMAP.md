@@ -102,7 +102,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-010-003-005-002` — True Cross-LOD Surface Refinement + Texel/Geometry Density Continuity — IN PROGRESS (AGENT #6; capped continuation 2026-10-02. Final fresh run `37055412212` / artifact `11248497571`: functional density/cache PASS; all ten screenshots directly inspected at VISUAL 7.2/10 FAIL. Remaining defect: near-ground frames 8–9 still expose a bounded richer focus/context seam; final-ground wilderness is cleaner but still visibly primitive. No completion claim.)
 - `WP-S003-010-003-006` — Streaming-Safe Scale Ladder + Ready-LOD Semantic Handoffs
 - `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground
-- `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling — ACCEPTED; DEPLOYMENT VERIFICATION PENDING
+- `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling — COMPLETED
 - `WP-S003-010-003-009` — Canonical Planet/World Coordinate Registration + Political Atlas Integrity — COMPLETED
 - `WP-S003-010-003-010` — TOP PRIORITY BUG: SEED-Only Canonical Political Boundaries + SEED-Only Important-Place Placement — COMPLETED
 - `WP-S003-010-003-011` — TOP PRIORITY BUG: Pure Zoom + Canonical 1/N Scale Ladder + Scale-Aware Navigation
