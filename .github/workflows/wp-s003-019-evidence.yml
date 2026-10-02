@@ -28,10 +28,10 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Checkout main
+      - name: Checkout trigger head
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 1
 
       - name: Set up Python
@@ -53,7 +53,11 @@ jobs:
           sleep 1
 
       - name: Run deterministic seasonal evidence
-        run: python tools/test_wp_s003_019.py http://127.0.0.1:8000/ tools/wp_s003_019_artifact
+        env:
+          WP_EVIDENCE_HEAD: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$WP_EVIDENCE_HEAD"
+          python tools/test_wp_s003_019.py http://127.0.0.1:8000/ tools/wp_s003_019_artifact
 
       - name: Upload seasonal evidence
         if: always()
