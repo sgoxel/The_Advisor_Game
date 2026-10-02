@@ -8,12 +8,17 @@ const EVIDENCE_QUERY_KEY="seasonEvidence";
 const DESKTOP_ACCENT_LIMIT=64;
 const TABLET_ACCENT_LIMIT=40;
 const PHONE_ACCENT_LIMIT=24;
+const MAX_ACCENT_FOOTPRINT_HEIGHT_METERS=140;
+const ACCENT_GRID_METERS=4;
+const ANCHOR_REPROJECT_INTERVAL_MS=32;
 
 let overlay=null,ctx=null,groundWash=null,timer=null,resizeObserver=null,evidenceStamp=null,lastSnapshot=null;
 let lastWidth=0,lastHeight=0,lastDpr=1,hidden=false;
 let spatialKey="",spatialRegion=null,profileCache=new Map();
 let spatialHits=0,profileHits=0,updateCount=0,lastUpdateMs=0,maxUpdateMs=0,drawCount=0,lastDrawMs=0,maxDrawMs=0;
 let rootNode=null,centerMarker=null,coarsePointerQuery=null,reducedMotionQuery=null,pendingDraw=0,pendingPlan=null,lastGroundSignature="",contextObserver=null,cachedRootReady=false,cachedSeed="",cachedTile=null;
+let activePlan=null,activeProfile=null,activeSeed="",lastProjectedSamples=Object.freeze([]),lastRenderedAccentCount=0,anchorProjectionUpdates=0;
+let anchorFollowRaf=0,anchorFollowUntil=0,lastAnchorFrameAt=0,navigationListenersBound=false;
 
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function round(v,d=4){const f=10**d;return Math.round(Number(v)*f)/f}
@@ -70,6 +75,77 @@ function stageRoot(){
 function foundationUnit(seed,key){
   if(!window.PRNG?.foundationUint32)return 0;
   return Number(window.PRNG.foundationUint32(String(seed),String(key))>>>0)/4294967296;
+}
+function floorDivBigInt(value,divisor){
+  let q=value/divisor,r=value%divisor;
+  if(r<0n)q-=1n;
+  return q;
+}
+function emptyAccentPlan(view=null){
+  return Object.freeze({entries:Object.freeze([]),counts:Object.freeze({count:0,flower:0,leaf:0,frost:0,snow:0}),view,worldAnchored:true,anchorMode:"canonical-world-tile-grid"});
+}
+function stageView(root=stageRoot()){
+  const stage=window.PlanetStage?.snapshot?.()||null;
+  if(!stage?.ready)return null;
+  const focusTile=stage.canonicalFocus?.worldTile||null,focusScreen=stage.canonicalFocus?.screenSpaceFocus||null;
+  const widthMeters=Number(stage.zoom?.visibleFootprintWidthMeters||0),heightMeters=Number(stage.zoom?.visibleFootprintHeightMeters||0);
+  const rect=root?.getBoundingClientRect?.()||null,cssWidth=Math.max(1,Number(rect?.width||innerWidth||1)),cssHeight=Math.max(1,Number(rect?.height||innerHeight||1));
+  if(!focusTile||!Number.isFinite(widthMeters)||!Number.isFinite(heightMeters)||widthMeters<=0||heightMeters<=0)return null;
+  const localDecorative=String(root?.dataset?.localDecorativeEligible||"true")!=="false";
+  const tangent=Boolean(stage.projection?.tangentPatchActive);
+  const physicalScaleEligible=localDecorative&&tangent&&heightMeters<=MAX_ACCENT_FOOTPRINT_HEIGHT_METERS;
+  return Object.freeze({
+    focusTile:Object.freeze({x:String(focusTile.x),y:String(focusTile.y)}),
+    focusX:Number.isFinite(Number(focusScreen?.screenX))?Number(focusScreen.screenX):cssWidth*.5,
+    focusY:Number.isFinite(Number(focusScreen?.screenY))?Number(focusScreen.screenY):cssHeight*.5,
+    widthMeters,heightMeters,cssWidth,cssHeight,physicalScaleEligible,tangent,localDecorative,
+    scaleLabel:String(stage.zoom?.scaleLabel||""),scaleIndex:Number(stage.zoom?.scaleIndex||0)
+  });
+}
+function projectAccent(entry,view){
+  if(!entry||!view?.focusTile)return null;
+  const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||2));
+  let dxTiles=0,dyTiles=0;
+  try{
+    dxTiles=Number(BigInt(String(entry.tileX))-BigInt(String(view.focusTile.x)));
+    dyTiles=Number(BigInt(String(entry.tileY))-BigInt(String(view.focusTile.y)));
+  }catch{return null}
+  const eastMeters=dxTiles*tileMeters+Number(entry.jitterEastMeters||0),northMeters=dyTiles*tileMeters+Number(entry.jitterNorthMeters||0);
+  const x=view.focusX+(eastMeters/view.widthMeters)*view.cssWidth;
+  const y=view.focusY-(northMeters/view.heightMeters)*view.cssHeight;
+  const sizeCss=(Number(entry.worldSizeMeters||0)/view.heightMeters)*view.cssHeight;
+  return Object.freeze({id:entry.id,x,y,sizeCss,eastMeters,northMeters});
+}
+function requestAnchorFollow(durationMs=900){
+  anchorFollowUntil=Math.max(anchorFollowUntil,performance.now()+Math.max(120,Number(durationMs)||900));
+  if(!anchorFollowRaf)anchorFollowRaf=requestAnimationFrame(anchorFollowTick);
+}
+function anchorFollowTick(now){
+  anchorFollowRaf=0;
+  if(now-lastAnchorFrameAt>=ANCHOR_REPROJECT_INTERVAL_MS&&lastSnapshot?.active&&activePlan&&activeProfile){
+    lastAnchorFrameAt=now;
+    const view=stageView();
+    draw(activeProfile,activeSeed,activePlan,view);
+  }
+  if(now<anchorFollowUntil&&lastSnapshot?.active)anchorFollowRaf=requestAnimationFrame(anchorFollowTick);
+}
+function onNavigationInput(event){
+  if(event?.type==="pointermove"&&!event.buttons)return;
+  requestAnchorFollow();
+}
+function bindNavigationListeners(){
+  if(navigationListenersBound)return;
+  navigationListenersBound=true;
+  window.addEventListener("wheel",onNavigationInput,{passive:true,capture:true});
+  window.addEventListener("pointermove",onNavigationInput,{passive:true,capture:true});
+  window.addEventListener("touchmove",onNavigationInput,{passive:true,capture:true});
+}
+function unbindNavigationListeners(){
+  if(!navigationListenersBound)return;
+  navigationListenersBound=false;
+  window.removeEventListener("wheel",onNavigationInput,true);
+  window.removeEventListener("pointermove",onNavigationInput,true);
+  window.removeEventListener("touchmove",onNavigationInput,true);
 }
 function rootContext(tileOverride=null,stampOverride=null){
   const root=stageRoot();
@@ -169,63 +245,97 @@ function accentKind(profile,unit){
   for(const k of ["flower","leaf","frost","snow"]){x-=w[k];if(x<=0)return k}
   return "flower";
 }
-function accentPlan(profile,seed,limit){
+function accentPlan(profile,seed,limit,view){
+  if(!profile||!view?.physicalScaleEligible||limit<=0)return emptyAccentPlan(view);
   const intensity=clamp(profile.flowerDensity+profile.leafFall+profile.frost+profile.snow,0,1.8);
-  const count=Math.min(limit,Math.max(0,Math.round(limit*clamp(intensity*.72,0,1)))),entries=[],counts={count,flower:0,leaf:0,frost:0,snow:0};
-  for(let i=0;i<count;i++){
-    const prefix="season-accent:"+profile.signature+":"+i+":",kind=accentKind(profile,foundationUnit(seed,prefix+"kind"));if(!kind)continue;
-    counts[kind]++;entries.push(Object.freeze({kind,x:foundationUnit(seed,prefix+"x"),y:.18+foundationUnit(seed,prefix+"y")*.76,size:foundationUnit(seed,prefix+"size"),rot:foundationUnit(seed,prefix+"rot"),hue:foundationUnit(seed,prefix+"hue")}));
+  const targetCount=Math.min(limit,Math.max(0,Math.round(limit*clamp(intensity*.72,0,1))));
+  if(targetCount<=0)return emptyAccentPlan(view);
+  const tileMeters=Math.max(.001,Number(window.WorldStandards?.TILE_METERS||2));
+  const gridTiles=Math.max(1,Math.round(ACCENT_GRID_METERS/tileMeters)),gridTileBig=BigInt(gridTiles),fx=BigInt(String(view.focusTile.x)),fy=BigInt(String(view.focusTile.y));
+  const centerCellX=floorDivBigInt(fx,gridTileBig),centerCellY=floorDivBigInt(fy,gridTileBig);
+  const radiusX=Math.min(48,Math.max(2,Math.ceil(view.widthMeters*.68/(gridTiles*tileMeters))+1));
+  const radiusY=Math.min(48,Math.max(2,Math.ceil(view.heightMeters*.68/(gridTiles*tileMeters))+1));
+  const candidates=[];
+  for(let oy=-radiusY;oy<=radiusY;oy++)for(let ox=-radiusX;ox<=radiusX;ox++){
+    const cellX=centerCellX+BigInt(ox),cellY=centerCellY+BigInt(oy),tileX=cellX*gridTileBig,tileY=cellY*gridTileBig;
+    const id=tileX.toString()+","+tileY.toString(),base="season-field:"+id+":";
+    candidates.push({
+      id,tileX:tileX.toString(),tileY:tileY.toString(),
+      priority:foundationUnit(seed,base+"priority"),
+      jitterEastMeters:(foundationUnit(seed,base+"jx")-.5)*ACCENT_GRID_METERS*.66,
+      jitterNorthMeters:(foundationUnit(seed,base+"jy")-.5)*ACCENT_GRID_METERS*.66
+    });
   }
-  return Object.freeze({entries:Object.freeze(entries),counts:Object.freeze(counts)});
+  candidates.sort((a,b)=>a.priority-b.priority||a.id.localeCompare(b.id));
+  const entries=[],counts={count:0,flower:0,leaf:0,frost:0,snow:0};
+  for(const candidate of candidates.slice(0,targetCount)){
+    const prefix="season-accent:"+profile.signature+":"+candidate.id+":",kind=accentKind(profile,foundationUnit(seed,prefix+"kind"));if(!kind)continue;
+    const sizeUnit=foundationUnit(seed,prefix+"size");
+    const worldSizeMeters=kind==="flower"?.18+sizeUnit*.20:kind==="leaf"?.20+sizeUnit*.26:kind==="frost"?.34+sizeUnit*.36:.30+sizeUnit*.34;
+    counts[kind]++;counts.count++;
+    entries.push(Object.freeze({
+      id:candidate.id,kind,tileX:candidate.tileX,tileY:candidate.tileY,
+      jitterEastMeters:round(candidate.jitterEastMeters,3),jitterNorthMeters:round(candidate.jitterNorthMeters,3),
+      worldSizeMeters:round(worldSizeMeters,3),rot:foundationUnit(seed,prefix+"rot"),hue:foundationUnit(seed,prefix+"hue")
+    }));
+  }
+  return Object.freeze({entries:Object.freeze(entries),counts:Object.freeze(counts),view,worldAnchored:true,anchorMode:"canonical-world-tile-grid"});
 }
 function applyGroundTreatment(profile,seed){
   if(!groundWash||!profile)return;
   if(lastGroundSignature===profile.signature)return;lastGroundSignature=profile.signature;
-  const u=(k)=>Math.round(12+foundationUnit(seed,"season-ground:"+profile.signature+":"+k)*76);
-  let color="132,210,116",strength=.18;
-  if(profile.season==="summer"){color="214,164,74";strength=.14+profile.dryGrass*.20}
-  else if(profile.season==="autumn"){color="194,93,36";strength=.22+profile.autumnFoliage*.18}
-  else if(profile.season==="winter"){color="205,226,235";strength=.17+profile.frost*.15+profile.snow*.18}
-  else strength=.20+profile.flowerDensity*.08;
-  const a=Math.min(.48,strength),a2=Math.min(.32,a*.68),x1=u("x1"),y1=u("y1"),x2=u("x2"),y2=u("y2"),x3=u("x3"),y3=u("y3");
+  let color="132,210,116",strength=.10;
+  if(profile.season==="summer"){color="214,164,74";strength=.07+profile.dryGrass*.10}
+  else if(profile.season==="autumn"){color="194,93,36";strength=.09+profile.autumnFoliage*.10}
+  else if(profile.season==="winter"){color="205,226,235";strength=.08+profile.frost*.08+profile.snow*.08}
+  else strength=.09+profile.flowerDensity*.04;
+  const a=Math.min(.24,strength);
   groundWash.style.opacity="1";
-  groundWash.style.background=[
-    "radial-gradient(ellipse at "+x1+"% "+y1+"%, rgba("+color+","+a.toFixed(3)+") 0%, rgba("+color+","+(a*.46).toFixed(3)+") 28%, rgba("+color+",0) 66%)",
-    "radial-gradient(ellipse at "+x2+"% "+y2+"%, rgba("+color+","+a2.toFixed(3)+") 0%, rgba("+color+",0) 62%)",
-    "radial-gradient(ellipse at "+x3+"% "+y3+"%, rgba("+color+","+(a2*.86).toFixed(3)+") 0%, rgba("+color+",0) 58%)",
-    "linear-gradient(rgba("+profile.tint[0]+","+profile.tint[1]+","+profile.tint[2]+","+(profile.tint[3]*.72).toFixed(3)+"),rgba("+profile.tint[0]+","+profile.tint[1]+","+profile.tint[2]+","+(profile.tint[3]*.42).toFixed(3)+"))"
-  ].join(",");
+  // Seasonal ground tone is deliberately uniform. Localized seasonal microdetail
+  // is projected from canonical world anchors below rather than painted at fixed
+  // normalized screen positions.
+  groundWash.style.background="linear-gradient(rgba("+color+","+a.toFixed(3)+"),rgba("+profile.tint[0]+","+profile.tint[1]+","+profile.tint[2]+","+(profile.tint[3]*.34).toFixed(3)+"))";
 }
-function draw(profile,seed,plan){
+function draw(profile,seed,plan,viewOverride=null){
   if(!ctx||!overlay||!profile||!plan)return;
   const started=performance.now();if(!lastWidth||!lastHeight)resizeOverlay();const w=overlay.width,h=overlay.height;ctx.clearRect(0,0,w,h);
-  const t=profile.tint;ctx.fillStyle="rgba("+t[0]+","+t[1]+","+t[2]+","+Math.min(.16,t[3]*.52)+")";ctx.fillRect(0,0,w,h);
-  for(const e of plan.entries){
-    const x=e.x*w,y=e.y*h,sz=(1.8+e.size*3.6)*lastDpr;
-    if(e.kind==="flower"){
-      ctx.fillStyle=e.hue>.5?"rgba(255,221,99,.82)":"rgba(241,155,213,.78)";
-      for(let p=0;p<3;p++){const a=p*Math.PI*2/3;ctx.beginPath();ctx.arc(x+Math.cos(a)*sz*.72,y+Math.sin(a)*sz*.38,sz*.72,0,Math.PI*2);ctx.fill()}
-      ctx.fillStyle="rgba(246,242,185,.82)";ctx.beginPath();ctx.arc(x,y,sz*.42,0,Math.PI*2);ctx.fill();
-    }else if(e.kind==="leaf"){
-      ctx.save();ctx.translate(x,y);ctx.rotate(e.rot*Math.PI);ctx.fillStyle=e.hue>.52?"rgba(206,103,38,.76)":"rgba(168,79,35,.72)";ctx.beginPath();ctx.ellipse(0,0,sz*2.0,sz*.72,0,0,Math.PI*2);ctx.fill();ctx.restore();
-    }else if(e.kind==="frost"){
-      ctx.strokeStyle="rgba(231,245,248,.72)";ctx.lineWidth=Math.max(1,lastDpr*.72);for(let a=0;a<3;a++){const r=a*Math.PI/3;ctx.beginPath();ctx.moveTo(x-Math.cos(r)*sz*1.35,y-Math.sin(r)*sz*.72);ctx.lineTo(x+Math.cos(r)*sz*1.35,y+Math.sin(r)*sz*.72);ctx.stroke()}
-    }else{
-      ctx.fillStyle="rgba(244,250,255,.54)";ctx.beginPath();ctx.ellipse(x,y,sz*2.5,sz*.82,e.rot*Math.PI,0,Math.PI*2);ctx.fill();
+  const view=viewOverride||stageView(),scaleX=w/Math.max(1,view?.cssWidth||w),scaleY=h/Math.max(1,view?.cssHeight||h);
+  const t=profile.tint;ctx.fillStyle="rgba("+t[0]+","+t[1]+","+t[2]+","+Math.min(.12,t[3]*.38)+")";ctx.fillRect(0,0,w,h);
+  const projectedSamples=[];let rendered=0;
+  if(view?.physicalScaleEligible){
+    for(const e of plan.entries){
+      const p=projectAccent(e,view);if(!p)continue;
+      const x=p.x*scaleX,y=p.y*scaleY,sz=p.sizeCss*scaleY;
+      if(sz<.55*lastDpr||x<-sz*3||x>w+sz*3||y<-sz*3||y>h+sz*3)continue;
+      rendered++;
+      if(projectedSamples.length<8)projectedSamples.push(Object.freeze({id:e.id,kind:e.kind,screenX:round(p.x,2),screenY:round(p.y,2),sizePx:round(p.sizeCss,2),eastMeters:round(p.eastMeters,3),northMeters:round(p.northMeters,3),worldSizeMeters:e.worldSizeMeters}));
+      if(e.kind==="flower"){
+        ctx.fillStyle=e.hue>.5?"rgba(255,221,99,.82)":"rgba(241,155,213,.78)";
+        for(let petal=0;petal<3;petal++){const a=petal*Math.PI*2/3;ctx.beginPath();ctx.arc(x+Math.cos(a)*sz*.58,y+Math.sin(a)*sz*.34,sz*.58,0,Math.PI*2);ctx.fill()}
+        ctx.fillStyle="rgba(246,242,185,.82)";ctx.beginPath();ctx.arc(x,y,sz*.34,0,Math.PI*2);ctx.fill();
+      }else if(e.kind==="leaf"){
+        ctx.save();ctx.translate(x,y);ctx.rotate(e.rot*Math.PI);ctx.fillStyle=e.hue>.52?"rgba(206,103,38,.76)":"rgba(168,79,35,.72)";ctx.beginPath();ctx.ellipse(0,0,sz*1.35,sz*.52,0,0,Math.PI*2);ctx.fill();ctx.restore();
+      }else if(e.kind==="frost"){
+        ctx.strokeStyle="rgba(231,245,248,.70)";ctx.lineWidth=Math.max(.65,lastDpr*.58);for(let a=0;a<3;a++){const r=a*Math.PI/3;ctx.beginPath();ctx.moveTo(x-Math.cos(r)*sz*.92,y-Math.sin(r)*sz*.52);ctx.lineTo(x+Math.cos(r)*sz*.92,y+Math.sin(r)*sz*.52);ctx.stroke()}
+      }else{
+        ctx.fillStyle="rgba(244,250,255,.50)";ctx.beginPath();ctx.ellipse(x,y,sz*1.45,sz*.55,e.rot*Math.PI,0,Math.PI*2);ctx.fill();
+      }
     }
   }
+  lastProjectedSamples=Object.freeze(projectedSamples);lastRenderedAccentCount=rendered;anchorProjectionUpdates++;
   drawCount++;lastDrawMs=performance.now()-started;maxDrawMs=Math.max(maxDrawMs,lastDrawMs);
-  if(lastSnapshot)lastSnapshot=Object.freeze({...lastSnapshot,drawCount,lastDrawMs:round(lastDrawMs),maxDrawMs:round(maxDrawMs)});
+  if(lastSnapshot)lastSnapshot=Object.freeze({...lastSnapshot,drawCount,lastDrawMs:round(lastDrawMs),maxDrawMs:round(maxDrawMs),renderedAccentCount:lastRenderedAccentCount,anchorProjectionUpdates,accentProjectionSamples:lastProjectedSamples});
 }
 function scheduleDraw(profile,seed,plan){
-  pendingPlan=plan;if(pendingDraw)return;
-  pendingDraw=requestAnimationFrame(()=>{pendingDraw=0;const next=pendingPlan;pendingPlan=null;if(lastSnapshot?.active&&next)draw(profile,seed,next)});
+  pendingPlan=plan;activePlan=plan;activeProfile=profile;activeSeed=seed;
+  if(pendingDraw)return;
+  pendingDraw=requestAnimationFrame(()=>{pendingDraw=0;const next=pendingPlan;pendingPlan=null;if(lastSnapshot?.active&&next)draw(profile,seed,next,stageView())});
 }
 function refresh(){
   const started=performance.now(),contextStarted=performance.now(),context=rootContext(),contextMs=performance.now()-contextStarted,profileStarted=performance.now(),profile=buildProfile(context),profileMs=performance.now()-profileStarted,root=context?.root||stageRoot();
-  const active=Boolean(context&&profile&&root?.dataset?.ready==="true"),mapScaleAccentEligible=String(root?.dataset?.localDecorativeEligible||"true")!=="false",cls=deviceClass(),limit=accentLimit(cls),planStarted=performance.now(),plan=profile?accentPlan(profile,context?.seed||"",mapScaleAccentEligible?limit:0):Object.freeze({entries:Object.freeze([]),counts:Object.freeze({count:0,flower:0,leaf:0,frost:0,snow:0})}),planMs=performance.now()-planStarted,counts=plan.counts;
+  const active=Boolean(context&&profile&&root?.dataset?.ready==="true"),view=active?stageView(root):null,mapScaleAccentEligible=Boolean(view?.physicalScaleEligible),cls=deviceClass(),limit=accentLimit(cls),planStarted=performance.now(),plan=profile?accentPlan(profile,context?.seed||"",mapScaleAccentEligible?limit:0,view):emptyAccentPlan(view),planMs=performance.now()-planStarted,counts=plan.counts;
   if(active){ensureOverlay();applyGroundTreatment(profile,context.seed);scheduleDraw(profile,context.seed,plan)}
-  else{if(ctx&&overlay)ctx.clearRect(0,0,overlay.width,overlay.height);if(groundWash)groundWash.style.background="none"}
+  else{activePlan=null;activeProfile=null;activeSeed="";lastProjectedSamples=Object.freeze([]);lastRenderedAccentCount=0;if(ctx&&overlay)ctx.clearRect(0,0,overlay.width,overlay.height);if(groundWash)groundWash.style.background="none"}
   updateCount++;lastUpdateMs=performance.now()-started;maxUpdateMs=Math.max(maxUpdateMs,lastUpdateMs);
   lastSnapshot=Object.freeze({
     version:VERSION,active,ready:Boolean(context&&profile),seed:context?.seed||null,focusTile:context?.tile||null,
@@ -233,8 +343,11 @@ function refresh(){
     profile,season:profile?.season||"pending",seasonSignature:profile?.signature||null,
     region:context?Object.freeze({id:context.region.id,name:context.region.name,revision:context.region.revision,climate:context.region.identity?.climate||"unknown"}):null,
     deviceClass:cls,accentLimit:limit,accentCount:counts.count,flowerAccentCount:counts.flower,leafAccentCount:counts.leaf,frostAccentCount:counts.frost,snowAccentCount:counts.snow,
-    mapScaleAccentEligible,mapScaleAccentSuppressed:Boolean(active&&!mapScaleAccentEligible),
-    overlayZIndex:2,cameraLocalPresentation:true,pooledAccents:true,groundTreatmentActive:Boolean(active&&groundWash),groundPatchCount:active?3:0,materialParameterCount:3,instanceVariationCount:counts.count,
+    mapScaleAccentEligible,mapScaleAccentSuppressed:Boolean(active&&!mapScaleAccentEligible),physicalScaleAccentSuppressed:Boolean(active&&!mapScaleAccentEligible),maxAccentFootprintHeightMeters:MAX_ACCENT_FOOTPRINT_HEIGHT_METERS,
+    accentFootprintWidthMeters:view?round(view.widthMeters,3):null,accentFootprintHeightMeters:view?round(view.heightMeters,3):null,accentScaleLabel:view?.scaleLabel||null,
+    overlayZIndex:2,cameraLocalPresentation:true,pooledAccents:true,worldAnchoredAccents:true,screenSpaceNormalizedAccents:false,accentAnchorMode:"canonical-world-tile-grid",
+    renderedAccentCount:lastRenderedAccentCount,anchorProjectionUpdates,accentProjectionSamples:lastProjectedSamples,
+    groundTreatmentActive:Boolean(active&&groundWash),groundTreatmentMode:"uniform-seasonal-tint",groundPatchCount:active?1:0,materialParameterCount:3,instanceVariationCount:counts.count,
     updateIntervalMs:UPDATE_INTERVAL_MS,profileCacheEntries:profileCache.size,profileCacheLimit:PROFILE_CACHE_LIMIT,spatialCacheHits:spatialHits,profileCacheHits:profileHits,
     updatePhasesMs:Object.freeze({context:round(contextMs),profile:round(profileMs),plan:round(planMs)}),
     updateCount,lastUpdateMs:round(lastUpdateMs),maxUpdateMs:round(maxUpdateMs),drawCount,lastDrawMs:round(lastDrawMs),maxDrawMs:round(maxDrawMs),
@@ -250,15 +363,15 @@ function setEvidenceStamp(stamp){
 }
 function clearEvidenceStamp(){evidenceStamp=null;return refresh()}
 function shutdown(){
-  if(timer){clearInterval(timer);timer=null}if(pendingDraw){cancelAnimationFrame(pendingDraw);pendingDraw=0}resizeObserver?.disconnect?.();resizeObserver=null;contextObserver?.disconnect?.();contextObserver=null;groundWash?.remove?.();groundWash=null;overlay?.remove?.();overlay=null;ctx=null;lastSnapshot=null;pendingPlan=null;lastGroundSignature="";profileCache.clear();spatialKey="";spatialRegion=null;rootNode=null;centerMarker=null;cachedRootReady=false;cachedSeed="";cachedTile=null;coarsePointerQuery=null;reducedMotionQuery=null;
+  if(timer){clearInterval(timer);timer=null}if(pendingDraw){cancelAnimationFrame(pendingDraw);pendingDraw=0}if(anchorFollowRaf){cancelAnimationFrame(anchorFollowRaf);anchorFollowRaf=0}unbindNavigationListeners();resizeObserver?.disconnect?.();resizeObserver=null;contextObserver?.disconnect?.();contextObserver=null;groundWash?.remove?.();groundWash=null;overlay?.remove?.();overlay=null;ctx=null;lastSnapshot=null;pendingPlan=null;activePlan=null;activeProfile=null;activeSeed="";lastProjectedSamples=Object.freeze([]);lastRenderedAccentCount=0;lastGroundSignature="";profileCache.clear();spatialKey="";spatialRegion=null;rootNode=null;centerMarker=null;cachedRootReady=false;cachedSeed="";cachedTile=null;coarsePointerQuery=null;reducedMotionQuery=null;
 }
 function bootstrap(){
-  refresh();timer=setInterval(()=>{if(!document.hidden)refresh()},UPDATE_INTERVAL_MS);
+  bindNavigationListeners();refresh();timer=setInterval(()=>{if(!document.hidden)refresh()},UPDATE_INTERVAL_MS);
   document.addEventListener("visibilitychange",()=>{hidden=document.hidden;if(!hidden)refresh()});
 }
 window.SeasonalPresentation=Object.freeze({
   VERSION,snapshot,refresh,previewAt,setEvidenceStamp,clearEvidenceStamp,shutdown,
-  constants:Object.freeze({UPDATE_INTERVAL_MS,PROFILE_CACHE_LIMIT,DESKTOP_ACCENT_LIMIT,TABLET_ACCENT_LIMIT,PHONE_ACCENT_LIMIT})
+  constants:Object.freeze({UPDATE_INTERVAL_MS,PROFILE_CACHE_LIMIT,DESKTOP_ACCENT_LIMIT,TABLET_ACCENT_LIMIT,PHONE_ACCENT_LIMIT,MAX_ACCENT_FOOTPRINT_HEIGHT_METERS,ACCENT_GRID_METERS,ANCHOR_REPROJECT_INTERVAL_MS})
 });
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",bootstrap,{once:true});else bootstrap();
 })();
