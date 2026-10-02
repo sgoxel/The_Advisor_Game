@@ -1505,6 +1505,7 @@ body.planet-stage-active{
   font:600 12px/1.35 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 }
 .local-event-vignette[hidden]{display:none!important}
+.local-event-vignette[data-window-shell]{pointer-events:auto}
 .local-event-kicker{
   color:#d9bd73;
   font-size:9px;
