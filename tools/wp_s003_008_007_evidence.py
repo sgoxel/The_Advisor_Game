@@ -64,7 +64,13 @@ opts.add_argument("--disable-gpu")
 opts.add_argument("--use-gl=swiftshader")
 opts.add_argument("--window-size=1280,800")
 opts.set_capability("goog:loggingPrefs",{"browser":"ALL"})
+# The game intentionally performs substantial startup/streaming work after navigation.
+# Do not make Selenium wait for the browser load event: readiness is owned by the
+# explicit PlanetStage/WindowShell gate below. This avoids false 120 s transport
+# timeouts before evidence begins while preserving the same 180 s playable gate.
+opts.page_load_strategy="none"
 driver=webdriver.Chrome(options=opts)
+driver.set_page_load_timeout(30)
 records=[]
 try:
     exact(driver,1280,800)
