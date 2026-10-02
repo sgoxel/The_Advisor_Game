@@ -7546,7 +7546,7 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
     wField=detailOctaveWeight(700,metersPerTexel),wParcelDetail=detailOctaveWeight(460,metersPerTexel),
     wFine=detailOctaveWeight(280,metersPerTexel),wCopse=detailOctaveWeight(120,metersPerTexel),
     wGroundDetail=detailOctaveWeight(90,metersPerTexel),wLocalDetail=detailOctaveWeight(48,metersPerTexel),
-    wMicroDetail=detailOctaveWeight(18,metersPerTexel);
+    wMicroDetail=detailOctaveWeight(18,metersPerTexel),wSubLocalDetail=detailOctaveWeight(9,metersPerTexel);
   if(wStrategic<=0&&wBroad<=0)return [0,0,0];
   const alpine=smoothstep01((elevation-2200)/900),lowland=1-alpine;
   // Strategic map tiers need resolvable structure before farm/copse wavelengths
@@ -7586,7 +7586,8 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
     surfaceValueNoise(we,wn,120,salt+41)*.016*wCopse+
     surfaceValueNoise(we,wn,90,salt+43)*.010*wGroundDetail+
     surfaceValueNoise(we,wn,48,salt+47)*.018*wLocalDetail+
-    surfaceValueNoise(we,wn,18,salt+53)*.012*wMicroDetail)*closeDetailGain;
+    surfaceValueNoise(we,wn,18,salt+53)*.026*wMicroDetail+
+    surfaceValueNoise(we,wn,9,salt+61)*.018*wSubLocalDetail)*closeDetailGain;
   // Map-scale readability comes from one continuous registered-meter cover
   // field, not from parcel meshes or camera-relative decoration. Stronger chroma
   // separation reveals woodland/meadow/dry openings only when physically
@@ -8152,7 +8153,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const closeTextureBand=styleContract.closeSurfaceVariation===false?0:livingWorldStyleWeight*smoothstep01(clamp((4-metersPerTexel)/3.5,0,1));
         if(closeTextureBand>.001&&["terrain:grass","terrain:forest","terrain:farmland"].includes(role)){
           const broadStyle=surfaceValueNoise(worldEast,worldNorth,5.5,detailSalt+307),fineStyle=surfaceValueNoise(worldEast,worldNorth,1.4,detailSalt+331),microStyle=surfaceValueNoise(worldEast,worldNorth,.62,detailSalt+349);
-          const patch=(broadStyle*.100+fineStyle*.046+microStyle*.020)*closeTextureBand;
+          const patch=(broadStyle*.145+fineStyle*.070+microStyle*.035)*closeTextureBand;
           displayColor=[clamp(displayColor[0]+patch*.92,0,1),clamp(displayColor[1]+patch*.68,0,1),clamp(displayColor[2]-patch*.12,0,1)];
         }
       }
@@ -9048,7 +9049,11 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     // also hid the valid settlement presentation and caused the .985 -> 1.00
     // disappearance/pop. Keep the transform container alive for eligible local
     // semantics while disabling only the foreground terrain renderer.
-    const fineTerrainVisible=fineVisible&&finePatchCoversViewport&&(!mapScaleShell||mapShellOut>.02);
+    // The focus mesh is a bounded 1x child, not a viewport-sized replacement.
+    // Medium and outer rings provide complete coverage beneath its feathered
+    // edge, so hiding the child until it alone covers the viewport suppresses
+    // every higher-density LOD during the exact zoom range meant to reveal it.
+    const fineTerrainVisible=fineVisible&&(!mapScaleShell||mapShellOut>.02);
     const localPresentationVisible=localWorldPresentationEligibility().visible;
     tangentPatch.enabled=fineVisible||localPresentationVisible;
     if(tangentPatch.render)tangentPatch.render.enabled=fineTerrainVisible;

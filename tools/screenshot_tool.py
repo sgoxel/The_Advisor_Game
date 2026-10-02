@@ -695,6 +695,8 @@ def _surface_refinement_frame(driver,index,timeout):
         "cached":budget.get("cachedResourceCount"),
         "offscreenFine":budget.get("offscreenFineDetailActive"),
         "visibleNativeMagnification":(((stage or {}).get("projection") or {}).get("spatialLod") or {}).get("visibleNativeMagnification"),
+        "foregroundPatchVisible":budget.get("foregroundPatchVisible"),
+        "foregroundPatchCoversViewport":budget.get("foregroundPatchCoversViewport"),
         "renderQuality":(stage or {}).get("renderQuality"),
     }
     return {"action":label,"viewport":_inner_viewport(driver),"stage":stage,"densityProof":proof}
@@ -720,6 +722,8 @@ def _validate_surface_refinement_frames(frames):
         budget=((stage.get("projection") or {}).get("resourceBudget") or {})
         if budget.get("offscreenFineDetailActive") is not False:
             raise RuntimeError(f"frame {index} activated offscreen fine detail: {budget}")
+        if float(zoom.get("scalar") or 0)>=.70 and detail.get("active") and budget.get("foregroundPatchVisible") is not True:
+            raise RuntimeError(f"frame {index} hid the prepared fine terrain beneath its covering rings: {budget}")
         cache_count=int(budget.get("cachedResourceCount") or 0)
         cache_limit=int(budget.get("cacheLimit") or 0)
         cache_bytes=int(budget.get("estimatedCacheBytes") or 0)
