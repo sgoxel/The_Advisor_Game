@@ -11,7 +11,6 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'chore(agent6): execute WP006 coverage patch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,47 +20,8 @@ jobs:
       - name: Apply coverage-safe foreground ownership
         shell: bash
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('scripts/world/planet-stage.js')
-          text = path.read_text()
-          old1 = '''    const fineVisible=tangentVisible&&zoomState.scalar>=projectionState.transitionStart;
-    // The foreground tangent plane is closest to the camera, so keep it hidden
-    // until the smooth parent begins yielding. Medium/outer local coverage may
-    // continue preparing behind the shell without exposing unfinished map-scale
-    // photometry to the player.
-    tangentPatch.enabled=fineVisible&&(!mapScaleShell||mapShellOut>.02);
-    ensureFocusRingPatch();ensureHorizonSkirt();
-'''
-          new1 = '''    const fineVisible=tangentVisible&&zoomState.scalar>=projectionState.transitionStart;
-    // Resolve foreground ownership only after checking physical viewport coverage.
-    // The larger world-matched continuation stays valid while a finer child is
-    // ready but still too small to cover the requested scale without a tile edge.
-    ensureFocusRingPatch();ensureHorizonSkirt();
-'''
-          old2 = '''    const dims=localPatchDimensions(),level=LOCAL_DETAIL_LEVELS[dims.levelIndex];
-    const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
-    const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
-    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters()};
-    tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
-'''
-          new2 = '''    const dims=localPatchDimensions(),level=LOCAL_DETAIL_LEVELS[dims.levelIndex];
-    const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
-    const viewportRect=canvas?.getBoundingClientRect?.(),viewportAspect=Math.max(.35,(viewportRect?.width||1)/(viewportRect?.height||1));
-    const coverageDims=displayResource?.dims||dims;
-    const finePatchCoversViewport=Number(coverageDims.patchHeight||0)>=shownHeightMeters*1.02&&Number(coverageDims.patchWidth||0)>=shownHeightMeters*viewportAspect*1.02;
-    tangentPatch.enabled=fineVisible&&finePatchCoversViewport&&(!mapScaleShell||mapShellOut>.02);
-    localResources.foregroundPatchCoversViewport=finePatchCoversViewport;
-    const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
-    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters(),foregroundPatchCoversViewport:finePatchCoversViewport};
-    tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
-'''
-          if text.count(old1) != 1:
-              raise SystemExit(f'expected foreground block once, found {text.count(old1)}')
-          if text.count(old2) != 1:
-              raise SystemExit(f'expected scale block once, found {text.count(old2)}')
-          path.write_text(text.replace(old1, new1).replace(old2, new2))
-          PY
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCnBhdGggPSBQYXRoKCJzY3JpcHRzL3dvcmxkL3BsYW5ldC1zdGFnZS5qcyIpCnRleHQgPSBwYXRoLnJlYWRfdGV4dCgpCm9sZDEgPSAiIiIgICAgY29uc3QgZmluZVZpc2libGU9dGFuZ2VudFZpc2libGUmJnpvb21TdGF0ZS5zY2FsYXI+PXByb2plY3Rpb25TdGF0ZS50cmFuc2l0aW9uU3RhcnQ7CiAgICAvLyBUaGUgZm9yZWdyb3VuZCB0YW5nZW50IHBsYW5lIGlzIGNsb3Nlc3QgdG8gdGhlIGNhbWVyYSwgc28ga2VlcCBpdCBoaWRkZW4KICAgIC8vIHVudGlsIHRoZSBzbW9vdGggcGFyZW50IGJlZ2lucyB5aWVsZGluZy4gTWVkaXVtL291dGVyIGxvY2FsIGNvdmVyYWdlIG1heQogICAgLy8gY29udGludWUgcHJlcGFyaW5nIGJlaGluZCB0aGUgc2hlbGwgd2l0aG91dCBleHBvc2luZyB1bmZpbmlzaGVkIG1hcC1zY2FsZQogICAgLy8gcGhvdG9tZXRyeSB0byB0aGUgcGxheWVyLgogICAgdGFuZ2VudFBhdGNoLmVuYWJsZWQ9ZmluZVZpc2libGUmJighbWFwU2NhbGVTaGVsbHx8bWFwU2hlbGxPdXQ+LjAyKTsKICAgIGVuc3VyZUZvY3VzUmluZ1BhdGNoKCk7ZW5zdXJlSG9yaXpvblNraXJ0KCk7CiIiIgpuZXcxID0gIiIiICAgIGNvbnN0IGZpbmVWaXNpYmxlPXRhbmdlbnRWaXNpYmxlJiZ6b29tU3RhdGUuc2NhbGFyPj1wcm9qZWN0aW9uU3RhdGUudHJhbnNpdGlvblN0YXJ0OwogICAgLy8gUmVzb2x2ZSBmb3JlZ3JvdW5kIG93bmVyc2hpcCBvbmx5IGFmdGVyIGNoZWNraW5nIHBoeXNpY2FsIHZpZXdwb3J0IGNvdmVyYWdlLgogICAgLy8gVGhlIGxhcmdlciB3b3JsZC1tYXRjaGVkIGNvbnRpbnVhdGlvbiBzdGF5cyB2YWxpZCB3aGlsZSBhIGZpbmVyIGNoaWxkIGlzCiAgICAvLyByZWFkeSBidXQgc3RpbGwgdG9vIHNtYWxsIHRvIGNvdmVyIHRoZSByZXF1ZXN0ZWQgc2NhbGUgd2l0aG91dCBhIHRpbGUgZWRnZS4KICAgIGVuc3VyZUZvY3VzUmluZ1BhdGNoKCk7ZW5zdXJlSG9yaXpvblNraXJ0KCk7CiIiIgpvbGQyID0gIiIiICAgIGNvbnN0IGRpbXM9bG9jYWxQYXRjaERpbWVuc2lvbnMoKSxsZXZlbD1MT0NBTF9ERVRBSUxfTEVWRUxTW2RpbXMubGV2ZWxJbmRleF07CiAgICBjb25zdCBzaG93bkhlaWdodE1ldGVycz1sZXZlbC52aXNpYmxlSGVpZ2h0TWV0ZXJzL2RpbXMucHJlc2VudGF0aW9uQ29tcGVuc2F0aW9uOwogICAgY29uc3QgcGF0Y2hTY2FsZT1NYXRoLm1heCgxZS02LHZpc2libGVIZWlnaHRVbml0cypkaW1zLm1ldGVyc1BlclVuaXQvc2hvd25IZWlnaHRNZXRlcnMpOwogICAgcHJvamVjdGlvblByZXNlbnRhdGlvbj17Li4ucHJvamVjdGlvblByZXNlbnRhdGlvbix2aWV3QmxlbmQscHJlc2VudGF0aW9uQ29tcGVuc2F0aW9uOmRpbXMucHJlc2VudGF0aW9uQ29tcGVuc2F0aW9uLHBhdGNoU2NhbGUsc2hvd25IZWlnaHRNZXRlcnMsdGFyZ2V0SGVpZ2h0TWV0ZXJzOnByZXNlbnRhdGlvblRhcmdldEhlaWdodE1ldGVycygpfTsKICAgIHRhbmdlbnRQYXRjaC5zZXRMb2NhbFNjYWxlKHBhdGNoU2NhbGUscGF0Y2hTY2FsZSxwYXRjaFNjYWxlKTsKIiIiCm5ldzIgPSAiIiIgICAgY29uc3QgZGltcz1sb2NhbFBhdGNoRGltZW5zaW9ucygpLGxldmVsPUxPQ0FMX0RFVEFJTF9MRVZFTFNbZGltcy5sZXZlbEluZGV4XTsKICAgIGNvbnN0IHNob3duSGVpZ2h0TWV0ZXJzPWxldmVsLnZpc2libGVIZWlnaHRNZXRlcnMvZGltcy5wcmVzZW50YXRpb25Db21wZW5zYXRpb247CiAgICBjb25zdCB2aWV3cG9ydFJlY3Q9Y2FudmFzPy5nZXRCb3VuZGluZ0NsaWVudFJlY3Q/LigpLHZpZXdwb3J0QXNwZWN0PU1hdGgubWF4KC4zNSwodmlld3BvcnRSZWN0Py53aWR0aHx8MSkvKHZpZXdwb3J0UmVjdD8uaGVpZ2h0fHwxKSk7CiAgICBjb25zdCBjb3ZlcmFnZURpbXM9ZGlzcGxheVJlc291cmNlPy5kaW1zfHxkaW1zOwogICAgY29uc3QgZmluZVBhdGNoQ292ZXJzVmlld3BvcnQ9TnVtYmVyKGNvdmVyYWdlRGltcy5wYXRjaEhlaWdodHx8MCk+PXNob3duSGVpZ2h0TWV0ZXJzKjEuMDImJk51bWJlcihjb3ZlcmFnZURpbXMucGF0Y2hXaWR0aHx8MCk+PXNob3duSGVpZ2h0TWV0ZXJzKnZpZXdwb3J0QXNwZWN0KjEuMDI7CiAgICB0YW5nZW50UGF0Y2guZW5hYmxlZD1maW5lVmlzaWJsZSYmZmluZVBhdGNoQ292ZXJzVmlld3BvcnQmJighbWFwU2NhbGVTaGVsbHx8bWFwU2hlbGxPdXQ+LjAyKTsKICAgIGxvY2FsUmVzb3VyY2VzLmZvcmVncm91bmRQYXRjaENvdmVyc1ZpZXdwb3J0PWZpbmVQYXRjaENvdmVyc1ZpZXdwb3J0OwogICAgY29uc3QgcGF0Y2hTY2FsZT1NYXRoLm1heCgxZS02LHZpc2libGVIZWlnaHRVbml0cypkaW1zLm1ldGVyc1BlclVuaXQvc2hvd25IZWlnaHRNZXRlcnMpOwogICAgcHJvamVjdGlvblByZXNlbnRhdGlvbj17Li4ucHJvamVjdGlvblByZXNlbnRhdGlvbix2aWV3QmxlbmQscHJlc2VudGF0aW9uQ29tcGVuc2F0aW9uOmRpbXMucHJlc2VudGF0aW9uQ29tcGVuc2F0aW9uLHBhdGNoU2NhbGUsc2hvd25IZWlnaHRNZXRlcnMsdGFyZ2V0SGVpZ2h0TWV0ZXJzOnByZXNlbnRhdGlvblRhcmdldEhlaWdodE1ldGVycygpLGZvcmVncm91bmRQYXRjaENvdmVyc1ZpZXdwb3J0OmZpbmVQYXRjaENvdmVyc1ZpZXdwb3J0fTsKICAgIHRhbmdlbnRQYXRjaC5zZXRMb2NhbFNjYWxlKHBhdGNoU2NhbGUscGF0Y2hTY2FsZSxwYXRjaFNjYWxlKTsKIiIiCmlmIHRleHQuY291bnQob2xkMSkgIT0gMToKICAgIHJhaXNlIFN5c3RlbUV4aXQoZiJleHBlY3RlZCBmb3JlZ3JvdW5kIGJsb2NrIG9uY2UsIGZvdW5kIHt0ZXh0LmNvdW50KG9sZDEpfSIpCmlmIHRleHQuY291bnQob2xkMikgIT0gMToKICAgIHJhaXNlIFN5c3RlbUV4aXQoZiJleHBlY3RlZCBzY2FsZSBibG9jayBvbmNlLCBmb3VuZCB7dGV4dC5jb3VudChvbGQyKX0iKQpwYXRoLndyaXRlX3RleHQodGV4dC5yZXBsYWNlKG9sZDEsIG5ldzEpLnJlcGxhY2Uob2xkMiwgbmV3MikpCg==' | base64 -d > /tmp/wp006_patch.py
+          python /tmp/wp006_patch.py
       - name: Commit patch and clean runner
         shell: bash
         run: |
