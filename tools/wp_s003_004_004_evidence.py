@@ -23,7 +23,7 @@ VIEWS=[
 ]
 
 options=Options()
-for arg in ["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--disable-webgpu","--ignore-gpu-blocklist","--use-angle=swiftshader","--disable-search-engine-choice-screen"]:
+for arg in ["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader","--disable-search-engine-choice-screen"]:
     options.add_argument(arg)
 options.add_argument("--window-size=1280,800")
 options.set_capability("goog:loggingPrefs",{"browser":"ALL"})
@@ -146,7 +146,7 @@ def add_overlay(label,state):
       const label=arguments[0],s=arguments[1];
       document.getElementById('wp-s003-004-004-evidence-card')?.remove();
       const card=document.createElement('aside');card.id='wp-s003-004-004-evidence-card';
-      Object.assign(card.style,{position:'fixed',left:'8px',top:window.innerWidth<=500?'100px':'60px',zIndex:'99999',width:'min(310px,calc(100vw - 16px))',padding:'8px 10px',borderRadius:'9px',background:'rgba(8,12,17,.86)',color:'#f3ead0',border:'1px solid rgba(224,190,116,.62)',font:'600 10px/1.32 system-ui,sans-serif',pointerEvents:'none'});
+      Object.assign(card.style,{position:'fixed',left:'8px',top:'8px',zIndex:'99999',width:'min(310px,calc(100vw - 16px))',padding:'8px 10px',borderRadius:'9px',background:'rgba(8,12,17,.86)',color:'#f3ead0',border:'1px solid rgba(224,190,116,.62)',font:'600 10px/1.32 system-ui,sans-serif',pointerEvents:'none'});
       const textures=(s.billboardTextureUrls||[]).map(x=>String(x).split('/').pop()).join(', ');
       card.innerHTML='<div style="font-size:9px;letter-spacing:.1em;color:#e3bf73">WP-S003-004-004 · GROUND CHARACTER ART</div>'+
         '<div style="font-size:13px;margin:2px 0">'+label.replaceAll('-',' ')+'</div>'+
