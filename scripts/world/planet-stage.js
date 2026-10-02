@@ -9216,9 +9216,22 @@ function readyPresentationBand(resource=displayResource){
     :LOCAL_DETAIL_LEVELS.findIndex(item=>item.id===resource.dims.levelId);
   const level=LOCAL_DETAIL_LEVELS[levelIndex]||null;
   if(!level?.staticWorld)return resource.dims.band;
-  if(localStatic.signature===resource.signature&&localStatic.level===resource.dims.levelId)return resource.dims.band;
+  const revealTier=String(localStatic.revealTier||"");
+  const contentReady=localStatic.active&&(revealTier==="refined"||revealTier==="full")
+    &&Number(localStatic.roadCount||0)>0&&Number(localStatic.buildingCount||0)>0;
+  const band=localStatic.signature===resource.signature&&localStatic.level===resource.dims.levelId
+    ?resource.dims.band
+    :null;
+  if(band){
+    const requiresSettlementContent=band==="settlement"||band==="near-ground"||band==="ground";
+    return !contentReady&&requiresSettlementContent?"local-area":band;
+  }
   const completedIndex=LOCAL_DETAIL_LEVELS.findIndex(item=>item.id===localStatic.level);
-  if(completedIndex>=0&&localStatic.signature)return LOCAL_DETAIL_LEVELS[completedIndex].band;
+  if(completedIndex>=0&&localStatic.signature){
+    const completedBand=LOCAL_DETAIL_LEVELS[completedIndex].band;
+    const requiresSettlementContent=completedBand==="settlement"||completedBand==="near-ground"||completedBand==="ground";
+    return !contentReady&&requiresSettlementContent?"local-area":completedBand;
+  }
   for(let index=Math.max(0,levelIndex-1);index>=0;index--){
     const candidate=LOCAL_DETAIL_LEVELS[index];
     if(!candidate.staticWorld)return candidate.band;

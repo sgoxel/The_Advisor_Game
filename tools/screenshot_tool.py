@@ -810,7 +810,7 @@ def _scale_handoff_frame(driver,index,timeout):
           scalar:Number(z.scalar||0),requestedBand:z.requestedBand||z.band||null,visibleBand:z.visibleBand||z.band||null,
           requestedLevel:z.requestedLevel||r.requestedLevel||null,visibleLevel:z.visibleLevel||r.visibleLevel||null,
           blend:Number(s.projection?.blend||0),
-          localStatic:{signature:l.signature||null,level:l.level||null,revealTier:l.revealTier||"none",roadCount:Number(l.roadCount||0),buildingCount:Number(l.buildingCount||0)},
+          localStatic:{active:Boolean(l.active),signature:l.signature||null,level:l.level||null,revealTier:l.revealTier||"none",roadCount:Number(l.roadCount||0),buildingCount:Number(l.buildingCount||0)},
           resource:{
             pendingPreparationCount:Number(r.pendingPreparationCount||0),requestedSignature:r.requestedSignature||null,activeSignature:r.activeSignature||null,
             visibleLevelIndex:Number.isFinite(Number(r.visibleLevelIndex))?Number(r.visibleLevelIndex):null,
@@ -898,6 +898,14 @@ def _validate_scale_handoff_frames(frames):
             if vis_band in {"settlement","near-ground","ground"} and (int(local.get("roadCount") or 0)<=0 or int(local.get("buildingCount") or 0)<=0):
                 raise RuntimeError(f"frame {index} announced {vis_band} without visible roads + buildings: {local}")
             expected=level_band.get(visible_level)
+            content_ready=(
+                local.get("active") is True
+                and str(local.get("revealTier") or "") in {"refined","full"}
+                and int(local.get("roadCount") or 0)>0
+                and int(local.get("buildingCount") or 0)>0
+            )
+            if expected in {"settlement","near-ground","ground"} and not content_ready:
+                expected="local-area"
             if expected in band_order and req_band in band_order:
                 expected=band_order[min(band_order.index(expected),band_order.index(req_band))]
                 if vis_band!=expected:
@@ -915,13 +923,24 @@ def _validate_scale_handoff_frames(frames):
             if vis_i<8: continue
             active=str(pr.get("activeSignature") or "")
             local_sig=str(ls.get("signature") or "")
+            content_ready=(
+                ls.get("active") is True
+                and str(ls.get("revealTier") or "") in {"refined","full"}
+                and int(ls.get("roadCount") or 0)>0
+                and int(ls.get("buildingCount") or 0)>0
+            )
             if active and local_sig!=active:
                 semantic_hold_samples+=1
                 fallback_level=str(ls.get("level") or "")
                 cap_band=level_band.get(fallback_level,"local-area")
+            else:
+                cap_band=level_band.get(visible,"local-area")
+            if cap_band in {"settlement","near-ground","ground"} and not content_ready:
+                cap_band="local-area"
+            if active:
                 sample_band=str(sample.get("visibleBand") or "")
                 if sample_band in band_order and cap_band in band_order and band_order.index(sample_band)>band_order.index(cap_band):
-                    raise RuntimeError(f"frame {index} semantic band advanced before static presentation was ready: cap={cap_band} sample={sample}")
+                    raise RuntimeError(f"frame {index} semantic band advanced before its visible content was ready: cap={cap_band} sample={sample}")
     if len(focus_keys)!=1:
         raise RuntimeError(f"scale handoff evidence changed canonical focus: {focus_keys}")
     if pending_handoffs<2:
