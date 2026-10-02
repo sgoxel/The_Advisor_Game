@@ -2,8 +2,8 @@
 "use strict";
 
 const VERSION="planet-focus-streaming-v2";
-const ENGINE_VERSION="2.22.3";
-const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
+const ENGINE_VERSION="2.23.0";
+const BASELINE_ENGINE_VERSION="2.22.3";
 const RENDERER_BACKEND_KEY="advisor.renderer.backend";
 const DEVELOPMENT_MODE_KEY="the-advisor-game:development-mode";
 const RENDERER_BACKEND_MODES=Object.freeze(["auto","webgpu","webgl2"]);
@@ -282,6 +282,9 @@ let ready=false;
 let startupError=null;
 let frameCount=0;
 let rendererBackendBadge=null;
+let engineVersionInUse=ENGINE_VERSION;
+let engineBuildInUse="release";
+let rendererDeviceLossState=Object.freeze({lossCount:0,restoreCount:0,lastLostAtMs:null,lastRestoredAtMs:null,lastReason:null,recoveryPending:false,cpuRegenerationSource:"Campaign SEED + retained CPU geometry/texture sources",applicationGpuOnlyAuthority:false,simulationAuthority:false});
 let rendererBackendState=Object.freeze({
   requested:"auto",requestSource:"default",forced:false,preferred:"webgpu",active:null,
   selection:"initializing",fallbackReason:null,webgpuAvailable:Boolean(globalThis.navigator?.gpu),
@@ -508,6 +511,17 @@ function developerModeEnabled(){
   if(q.get("dev")==="1"||q.get("developer")==="1"||q.get("backend_debug")==="1")return true;
   try{return localStorage.getItem(DEVELOPMENT_MODE_KEY)==="true"}catch(_){return false}
 }
+function readRendererEngineRequest(){
+  const q=backendQuery(),requested=String(q.get("pc_version")||"").trim(),build=String(q.get("pc_build")||"release").toLowerCase();
+  const developer=developerModeEnabled();
+  const version=developer&&requested===BASELINE_ENGINE_VERSION?BASELINE_ENGINE_VERSION:ENGINE_VERSION;
+  const selectedBuild=developer&&build==="debug"?"debug":"release";
+  return Object.freeze({version,build:selectedBuild,baseline:version===BASELINE_ENGINE_VERSION,developer});
+}
+function rendererEngineUrl(version,build){
+  if(build==="debug")return "https://cdn.jsdelivr.net/npm/playcanvas@"+version+"/build/playcanvas.dbg/src/index.js";
+  return "https://cdn.jsdelivr.net/npm/playcanvas@"+version+"/+esm";
+}
 function readRendererBackendRequest(){
   const q=backendQuery(),requested=String(q.get("gpu")||"").toLowerCase();
   if(RENDERER_BACKEND_MODES.includes(requested))return Object.freeze({requested,source:"query",forced:requested!=="auto"});
@@ -576,21 +590,35 @@ function rendererFrameStatistics(){
   const sorted=samples.slice().sort((a,b)=>a-b);
   const pick=p=>sorted.length?sorted[Math.min(sorted.length-1,Math.max(0,Math.ceil(sorted.length*p)-1))]:0;
   const median=sorted.length?(sorted.length%2?sorted[(sorted.length-1)/2]:(sorted[sorted.length/2-1]+sorted[sorted.length/2])/2):0;
-  const pcStats=app?.stats||null,drawCalls=Number(pcStats?.drawCalls?.total),triangles=Number(pcStats?.triangles?.total);
+  const stats=app?.stats||null,num=value=>Number.isFinite(Number(value))?Number(value):null;
+  const drawCalls=num(stats?.drawCallCount),primitiveCount=num(stats?.primitiveCount),gpuFrameMs=num(stats?.gpuFrameTime);
   return Object.freeze({
+    source:engineVersionInUse==="2.23.0"?"PlayCanvas AppStats 2.23 + bounded local frame history":"bounded local frame history + legacy engine counters where exposed",
+    engineVersion:engineVersionInUse,engineBuild:engineBuildInUse,
     sampleCount:sorted.length,
-    fps:median>0?Number((1000/median).toFixed(2)):Number(pcStats?.frame?.fps||0),
+    fps:num(stats?.fps)??(median>0?Number((1000/median).toFixed(2)):0),
+    latestFrameMs:num(stats?.frameTime),
     medianFrameMs:Number(median.toFixed(3)),
     p95FrameMs:Number(pick(.95).toFixed(3)),
     worstFrameMs:Number((sorted.length?sorted[sorted.length-1]:0).toFixed(3)),
-    drawCalls:Number.isFinite(drawCalls)?drawCalls:null,
-    triangles:Number.isFinite(triangles)?triangles:null,
-    gpuFrameMs:null,
-    gpuFrameTimeAvailable:false,
-    updateCpuMs:Number(navigationPerformance.lastFrameUpdateMs||0),
-    renderCpuMs:Number(navigationPerformance.lastRenderCpuMs||0),
+    drawCalls,
+    primitiveCount,
+    triangles:primitiveCount,
+    gpuFrameMs,
+    gpuFrameTimeAvailable:gpuFrameMs!==null,
+    cpuUpdateMs:num(stats?.cpuUpdateTime)??Number(navigationPerformance.lastFrameUpdateMs||0),
+    cpuRenderMs:num(stats?.cpuRenderTime)??Number(navigationPerformance.lastRenderCpuMs||0),
+    cpuSystemUpdateMs:num(stats?.cpuSystemUpdateTime),
+    cpuSystemPostUpdateMs:num(stats?.cpuSystemPostUpdateTime),
+    vramTotalBytes:num(stats?.vramTotalBytes),
+    vramTextureBytes:num(stats?.vramTextureBytes),
+    vramVertexBufferBytes:num(stats?.vramVertexBufferBytes),
+    vramIndexBufferBytes:num(stats?.vramIndexBufferBytes),
+    vramUniformBufferBytes:num(stats?.vramUniformBufferBytes),
+    vramStorageBufferBytes:num(stats?.vramStorageBufferBytes),
     visibleEntityEstimate:Number((localStatic?.entityCount||0)+(localNpcPresentation?.activeCount||0)+(localCrowdPresentation?.visibleCount||0)+1),
     materialCountEstimate:Number((localStaticMaterials?Object.keys(localStaticMaterials).length:0)+localStyleTextures.size+(surfaceMaterial?1:0)+(tangentPatchMaterial?1:0)),
+    appStatsPublicApi:Boolean(stats&&engineVersionInUse==="2.23.0"),
     boundedRecentSamples:true
   });
 }
@@ -601,13 +629,27 @@ function setNextRendererBackend(mode){
   return normalized;
 }
 function clearNextRendererBackend(){try{localStorage.removeItem(RENDERER_BACKEND_KEY)}catch(_){}return "auto";}
+async function testRendererDeviceLoss(delayMs=1000){
+  if(!rendererBackendState.developerMode)throw new Error("Device-loss testing requires developer mode.");
+  if(engineBuildInUse!=="debug"||typeof device?.debugLoseContext!=="function")return Object.freeze({supported:false,reason:"PlayCanvas debug build required",engineVersion:engineVersionInUse,engineBuild:engineBuildInUse});
+  const before={...rendererDeviceLossState},waitMs=Math.max(100,Math.min(5000,Number(delayMs)||1000));
+  device.debugLoseContext(waitMs);
+  const deadline=performance.now()+Math.max(8000,waitMs+6000);
+  while(performance.now()<deadline){
+    if(rendererDeviceLossState.restoreCount>Number(before.restoreCount||0)&&!rendererDeviceLossState.recoveryPending){
+      return Object.freeze({supported:true,recovered:true,delayMs:waitMs,before:Object.freeze(before),after:Object.freeze({...rendererDeviceLossState}),simulationAuthority:false});
+    }
+    await new Promise(resolve=>setTimeout(resolve,50));
+  }
+  return Object.freeze({supported:true,recovered:false,delayMs:waitMs,before:Object.freeze(before),after:Object.freeze({...rendererDeviceLossState}),simulationAuthority:false});
+}
 function rendererBackendPolicySnapshot(){
-  return Object.freeze({...rendererBackendState,deviceTypes:Object.freeze([...(rendererBackendState.deviceTypes||[])]),label:rendererBackendText(rendererBackendState),performance:rendererFrameStatistics()});
+  return Object.freeze({...rendererBackendState,engineVersion:engineVersionInUse,engineBuild:engineBuildInUse,baselineEngine:engineVersionInUse===BASELINE_ENGINE_VERSION,deviceTypes:Object.freeze([...(rendererBackendState.deviceTypes||[])]),label:rendererBackendText(rendererBackendState),performance:rendererFrameStatistics(),deviceLoss:Object.freeze({...rendererDeviceLossState})});
 }
 window.RendererBackendPolicy=Object.freeze({
   modes:RENDERER_BACKEND_MODES.slice(),snapshot:rendererBackendPolicySnapshot,
-  setNextBackend:setNextRendererBackend,clearNextBackend:clearNextRendererBackend,
-  queryParameter:"gpu",developmentQueryParameter:"dev"
+  setNextBackend:setNextRendererBackend,clearNextBackend:clearNextRendererBackend,testDeviceLoss:testRendererDeviceLoss,
+  queryParameter:"gpu",developmentQueryParameter:"dev",engineVersionQueryParameter:"pc_version",engineBuildQueryParameter:"pc_build"
 });
 
 function freshNavigationPerformance(){
@@ -10051,8 +10093,10 @@ async function start(){
     await yieldPaint();
     document.body.classList.add("planet-stage-active");
 
-    pc=await measuredPhase("engineImportMs",()=>import(ENGINE_URL));
-    setStartupProgress("renderer","Initializing PlayCanvas…",32);
+    const engineRequest=readRendererEngineRequest();
+    engineVersionInUse=engineRequest.version;engineBuildInUse=engineRequest.build;
+    pc=await measuredPhase("engineImportMs",()=>import(rendererEngineUrl(engineVersionInUse,engineBuildInUse)));
+    setStartupProgress("renderer","Initializing PlayCanvas "+engineVersionInUse+"…",32);
     await yieldPaint();
     canvas=document.createElement("canvas");
     canvas.id="planetCanvas";
@@ -10090,6 +10134,12 @@ async function start(){
       device?.destroy?.();device=null;
       throw new Error("Developer-forced WebGPU test failed: "+reason+". Use ?gpu=auto for compatibility fallback.");
     }
+    device.on?.("devicelost",event=>{
+      rendererDeviceLossState=Object.freeze({...rendererDeviceLossState,lossCount:Number(rendererDeviceLossState.lossCount||0)+1,lastLostAtMs:Date.now(),lastReason:String(event?.reason||event?.message||"device-lost"),recoveryPending:true});
+    });
+    device.on?.("devicerestored",()=>{
+      rendererDeviceLossState=Object.freeze({...rendererDeviceLossState,restoreCount:Number(rendererDeviceLossState.restoreCount||0)+1,lastRestoredAtMs:Date.now(),recoveryPending:false});
+    });
     const options=new pc.AppOptions();
     options.graphicsDevice=device;
     options.componentSystems=[pc.RenderComponentSystem,pc.CameraComponentSystem,pc.LightComponentSystem];
@@ -10097,6 +10147,7 @@ async function start(){
 
     app=new pc.AppBase(canvas);
     await measuredPhase("appInitMs",async()=>app.init(options));
+    if(rendererBackendState.developerMode&&device?.gpuProfiler)device.gpuProfiler.enabled=true;
     await measuredControlledPhase("buildSceneMs",()=>buildScene());
     setStartupProgress("finalizing","Starting first playable renderer…",96);
     await yieldPaint();
@@ -10292,7 +10343,7 @@ function snapshot(){
     stage:"seeded-planetary-geography",
     ready,
     engine:"PlayCanvas",
-    engineVersion:ENGINE_VERSION,
+    engineVersion:engineVersionInUse,
     canvasCount:root?.querySelectorAll?.("canvas")?.length||0,
     rendererBackend:rendererBackendPolicySnapshot(),
     activeSeed,
@@ -10507,6 +10558,7 @@ function destroy(){
   clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection(false);localCampaignWearContext=null;clearCanonicalWayfindingSignposts();clearCanonicalRoofRegistry();
   app?.destroy?.();
   rendererBackendBadge?.remove?.();rendererBackendBadge=null;
+  engineVersionInUse=ENGINE_VERSION;engineBuildInUse="release";rendererDeviceLossState=Object.freeze({lossCount:0,restoreCount:0,lastLostAtMs:null,lastRestoredAtMs:null,lastReason:null,recoveryPending:false,cpuRegenerationSource:"Campaign SEED + retained CPU geometry/texture sources",applicationGpuOnlyAuthority:false,simulationAuthority:false});
   rendererBackendState=Object.freeze({requested:"auto",requestSource:"default",forced:false,preferred:"webgpu",active:null,selection:"initializing",fallbackReason:null,webgpuAvailable:Boolean(globalThis.navigator?.gpu),deviceTypes:Object.freeze([]),developerMode:false,simulationAuthority:false});
   for(const texture of localStyleTextures.values())texture?.destroy?.();localStyleTextures.clear();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localPersistentConsequenceRoot=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
