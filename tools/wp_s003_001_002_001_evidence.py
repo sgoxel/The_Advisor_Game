@@ -29,7 +29,7 @@ def url_with(params):
     return urlunsplit((p.scheme, p.netloc, p.path, urlencode(q), p.fragment))
 
 
-def driver_for(disable_webgpu=False, viewport=(1280,800)):
+def driver_for(disable_webgpu=False, viewport=(1280,800), saved_backend=None):
     width,height=viewport
     o = Options()
     for arg in [
@@ -49,10 +49,11 @@ def driver_for(disable_webgpu=False, viewport=(1280,800)):
         o.add_argument(arg)
     o.set_capability("goog:loggingPrefs", {"browser": "ALL"})
     d = webdriver.Chrome(options=o)
+    backend_bootstrap = "localStorage.removeItem('advisor.renderer.backend');" if saved_backend is None else f"localStorage.setItem('advisor.renderer.backend', {json.dumps(saved_backend)});"
     bootstrap = f"""
       try {{
         localStorage.setItem('advisor.planet.seed.v1', {json.dumps(SEED)});
-        localStorage.removeItem('advisor.renderer.backend');
+        {backend_bootstrap}
         localStorage.setItem('the-advisor-game:development-mode','false');
         localStorage.setItem('the-advisor-game:render-quality-mode','standard');
         localStorage.setItem('the-advisor-game:texture-quality-profile','standard');
@@ -355,6 +356,39 @@ def run_forced_webgpu_failure():
         d.quit()
 
 
+def run_normal_mode_saved_force_ignored():
+    d = driver_for(saved_backend="webgl2")
+    try:
+        d.get(url_with({
+            "evidence_fast_start": "1",
+            "evidence_skip_destinations": "1",
+        }))
+        wait(d, "return window.PlanetStage?.snapshot?.()?.ready===true", 240)
+        state=d.execute_script("""
+          const s=window.PlanetStage.snapshot(),rb=s.rendererBackend||{};
+          return {
+            requested:rb.requested||null,
+            active:rb.active||null,
+            forced:Boolean(rb.forced),
+            requestSource:rb.requestSource||null,
+            developerMode:Boolean(rb.developerMode),
+            badge:Boolean(document.querySelector('.renderer-backend-debug')),
+            seed:s.activeSeed||null,
+            geographyHash:s.geographyHash||null
+          };
+        """)
+        if state.get("active") != "webgpu" or state.get("requested") != "auto" or state.get("forced") is not False:
+            raise AssertionError(f"normal mode did not restore Auto/WebGPU-first after saved developer force: {state}")
+        if state.get("developerMode") is not False or state.get("badge") is not False:
+            raise AssertionError(f"normal mode exposed developer backend UI: {state}")
+        path=OUT/"12-normal-mode-auto-after-saved-force.png"
+        d.save_screenshot(str(path))
+        state["screenshot"]=path.name
+        return state
+    finally:
+        d.quit()
+
+
 def run_device_loss():
     d=driver_for()
     try:
@@ -415,6 +449,7 @@ def main():
         forced_gl = run_success("05-current-2230-webgl2", "webgl2", "webgl2")
         fallback = run_success("06-current-2230-auto-fallback", "auto", "webgl2", disable_webgpu=True)
         failure = run_forced_webgpu_failure()
+        normal_mode = run_normal_mode_saved_force_ignored()
         device_loss = run_device_loss()
         mobile_gpu = run_success("10-current-2230-mobile-webgpu", "webgpu", "webgpu", viewport=(844,390))
         mobile_gl = run_success("11-current-2230-mobile-webgl2", "webgl2", "webgl2", viewport=(844,390))
@@ -424,6 +459,7 @@ def main():
         report["records"]=records
         report["mobileRecords"]=[mobile_gpu,mobile_gl]
         report["forcedWebgpuFailure"]=failure
+        report["normalModeSavedForceReset"]=normal_mode
         report["deviceLoss"]=device_loss
         report["engineComparison"]={
             "webgl2":{"baseline":baseline_gl["performanceSequence"],"current":forced_gl["performanceSequence"]},
@@ -444,6 +480,7 @@ def main():
             "webgpuActive":auto["backend"]["active"]=="webgpu" and forced_gpu["backend"]["active"]=="webgpu",
             "webgl2Active":forced_gl["backend"]["active"]=="webgl2",
             "fallbackActive":fallback["backend"]["active"]=="webgl2" and bool(fallback["backend"].get("fallbackReason")),
+            "normalModeIgnoresSavedDeveloperForce":normal_mode.get("active")=="webgpu" and normal_mode.get("requested")=="auto" and normal_mode.get("badge") is False,
             "deviceLossRecovered":bool(device_loss["result"].get("recovered")),
             "mobileViewportBackendParity":mobile_gpu["comparisonContext"]==mobile_gl["comparisonContext"] and mobile_gpu["activeSeed"]==mobile_gl["activeSeed"] and mobile_gpu["geographyHash"]==mobile_gl["geographyHash"],
         }
