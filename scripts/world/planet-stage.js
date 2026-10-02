@@ -5005,13 +5005,24 @@ function requestGroundCharacterMaterial(url){
           if(scanCtx){
             scanCtx.clearRect(0,0,sw,sh);scanCtx.drawImage(image,0,0,sw,sh);
             const pixels=scanCtx.getImageData(0,0,sw,sh).data;
-            let minX=sw,minY=sh,maxX=-1,maxY=-1;
+            const rowCounts=new Uint16Array(sh),colCounts=new Uint16Array(sw);
+            let rawMinX=sw,rawMinY=sh,rawMaxX=-1,rawMaxY=-1;
             for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){
               if(pixels[(y*sw+x)*4+3]<=64)continue;
-              if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+              rowCounts[y]++;colCounts[x]++;
+              if(x<rawMinX)rawMinX=x;if(x>rawMaxX)rawMaxX=x;if(y<rawMinY)rawMinY=y;if(y>rawMaxY)rawMaxY=y;
             }
+            // Ignore sparse alpha outliers (soft shadows / isolated decorative
+            // pixels) so the fixed 2x billboard height describes the readable
+            // figure. Dense rows/columns preserve hats, tools and limbs while
+            // avoiding per-profession hard-coded crop values.
+            const minRowPixels=Math.max(2,Math.round(sw*.016)),minColPixels=Math.max(2,Math.round(sh*.016));
+            let minX=sw,minY=sh,maxX=-1,maxY=-1;
+            for(let x=0;x<sw;x++)if(colCounts[x]>=minColPixels){if(x<minX)minX=x;if(x>maxX)maxX=x;}
+            for(let y=0;y<sh;y++)if(rowCounts[y]>=minRowPixels){if(y<minY)minY=y;if(y>maxY)maxY=y;}
+            if(maxX<minX||maxY<minY){minX=rawMinX;minY=rawMinY;maxX=rawMaxX;maxY=rawMaxY;}
             if(maxX>=minX&&maxY>=minY){
-              const pad=Math.max(1,Math.round(Math.max(maxX-minX+1,maxY-minY+1)*.035));
+              const pad=Math.max(1,Math.round(Math.max(maxX-minX+1,maxY-minY+1)*.025));
               minX=Math.max(0,minX-pad);minY=Math.max(0,minY-pad);maxX=Math.min(sw-1,maxX+pad);maxY=Math.min(sh-1,maxY+pad);
               const sx=Math.max(0,Math.floor(minX/scanScale)),sy=Math.max(0,Math.floor(minY/scanScale));
               const ex=Math.min(iw,Math.ceil((maxX+1)/scanScale)),ey=Math.min(ih,Math.ceil((maxY+1)/scanScale));
@@ -5831,6 +5842,27 @@ function applyCanonicalGroundBuildingCutaway(tier){
   return groundBuildingCutaway;
 }
 
+function addCanonicalPublicSquareDressing(squareHalf,reveal,frame,scale,unit,surfaceHeight){
+  if(!reveal||!localStaticMaterials)return {count:0,triangles:0};
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
+  const halfExtent=(Math.max(0,Number(squareHalf)||0)*2+1)*tileMeters*.5;
+  const inset=Math.max(tileMeters*1.35,halfExtent-tileMeters*1.15);
+  const s=Math.max(1e-9,Number(scale||1))/Math.max(1e-9,Number(unit)||1);
+  const top=Number(surfaceHeight||0)+.071;
+  const specs=[[-inset,-inset],[inset,-inset],[-inset,inset],[inset,inset]];
+  let count=0,triangles=0;
+  for(let i=0;i<specs.length;i++){
+    const [east,north]=specs[i],pos=canonicalSemanticPosition(east,north,scale,unit,frame);
+    const rotate=i%2?90:0,boxW=1.12*s,boxH=.22*s,boxD=.72*s;
+    addLocalStatic("CanonicalSquarePlanter-"+i,"box",localStaticMaterials.microWood,pos.x,top+boxH*.5,pos.z,boxW,boxH,boxD,0,rotate,0);
+    const side=i%2?-1:1,shrubY=top+boxH+.34*s;
+    addLocalStatic("CanonicalSquareShrub-"+i,"sphere",localStaticMaterials.leaf,pos.x+side*.18*s,shrubY,pos.z,.44*s,.46*s,.44*s);
+    addLocalStatic("CanonicalSquareFlower-"+i,"sphere",localStaticMaterials.microAccent,pos.x-side*.32*s,top+boxH+.16*s,pos.z+.20*s,.13*s,.16*s,.13*s);
+    count+=3;triangles+=60;
+  }
+  return {count,triangles};
+}
+
 function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
   if(!reveal||!['refined','full'].includes(String(tier)))return {count:0,triangles:0};
   const records=[...(Array.isArray(reveal.houses)?reveal.houses:[]),...(Array.isArray(reveal.specialLots)?reveal.specialLots:[])];
@@ -6593,7 +6625,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   // circular locator. They remain subordinate to roads through alpha + height.
   const lotContext=(tier==="footprint"||tier==="route")?addCanonicalOccupiedLotContext(reveal,scale,unit,semanticFrame,lift,tier,routePlan):Object.freeze({count:0,mode:"none"});
   const occupiedAreaCount=envelope.active||lotContext.count?1:0;
-  let roadCount=0,coarseBuildings=0,fullBuildings=0,landmarks=0,vegetation=0,triangles=envelope.segmentCount*12+Number(lotContext.triangleCount||0);
+  let roadCount=0,coarseBuildings=0,fullBuildings=0,landmarks=0,vegetation=0,triangles=envelope.segmentCount*12+Number(lotContext.triangleCount||0),plazaDressingCount=0;
   let roadGeometry=Object.freeze({active:false,cellCount:0,queryCount:0,triangleCount:0,mode:"none"});
   const squareHalf=Number(window.StartingVillage.PUBLIC_HALF_SIZE||3);
   if(tier!=="none"){
@@ -6615,6 +6647,10 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
         canonicalSemanticGroundHeightUnits(squareHalfMeters,squareHalfMeters,semanticFrame)+lift,
         canonicalSemanticGroundHeightUnits(-squareHalfMeters,squareHalfMeters,semanticFrame)+lift);
       addLocalStatic("CanonicalPublicSquare","box",localStaticMaterials.square,centerPos.x,squareSurface+.035,centerPos.z,sq*scale/unit,.070,sq*scale/unit);roadCount++;triangles+=12;
+      if(tier==="full"){
+        const plazaDressing=addCanonicalPublicSquareDressing(squareHalf,reveal,semanticFrame,scale,unit,squareSurface);
+        plazaDressingCount=Number(plazaDressing.count||0);triangles+=Number(plazaDressing.triangles||0);
+      }
     }
     triangles+=roadGeometry.triangleCount;
   }
@@ -6674,7 +6710,7 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     coarseRoadCount:(tier==="footprint"||tier==="route"||tier==="coarse")?roadCount:0,
     coarseBuildingCount:coarseBuildings,landmarkCount:landmarks,
     fullRoadCount:detailed?roadCount:0,fullBuildingCount:fullBuildings,
-    roadCount,buildingCount:coarseBuildings+fullBuildings,vegetationCount:vegetation,dressingCount:Number(dressingStats.count||0),wildernessCount:wild.accepted,ambientFaunaCount:wild.fauna,waterCount:0,
+    roadCount,buildingCount:coarseBuildings+fullBuildings,vegetationCount:vegetation,dressingCount:Number(dressingStats.count||0)+plazaDressingCount,wildernessCount:wild.accepted,ambientFaunaCount:wild.fauna,waterCount:0,
     entityCount,triangleEstimate:triangles+wild.triangles+Number(buildingSurroundings.triangleCount||0)+Number(campaignWearProjection.triangleCount||0)+Number(persistentConsequenceProjection.triangleCount||0)+Number(wayfindingSignposts.triangleCount||0),
     drawCallEstimate:entityCount+wild.fauna+Number(campaignWearDrawCalls||0)+Number(consequenceDrawCalls||0),
     footprintMode:envelope.mode,occupiedLotMode:lotContext.mode,occupiedLotCount:Number(lotContext.count||0),routeGeometryMode:roadGeometry.mode,
