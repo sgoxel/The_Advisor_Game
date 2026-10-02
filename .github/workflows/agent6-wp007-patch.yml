@@ -39,5 +39,7 @@ jobs:
             exit 0
           fi
           git commit -m "test(WP-S003-010-003-007): restore settlement reveal evidence"
+          git reset --hard HEAD
+          git clean -fd
           git pull --rebase origin main
           git push origin HEAD:main
