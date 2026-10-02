@@ -268,7 +268,16 @@ def fixed_engine_comparison_sequence(d):
       window.PlanetStage.setScaleIndex(4);
     """)
     wait(d, "return Number(window.PlanetStage?.snapshot?.()?.zoom?.scaleIndex)===4", 120)
-    time.sleep(.75)
+    # A fair engine/backend map A/B must compare the same ready terrain resource,
+    # not whichever parent/child happens to have finished on a slower adapter.
+    wait(d, """
+      const s=window.PlanetStage?.snapshot?.()||{},r=s.projection?.resourceBudget||{};
+      return Number(s.zoom?.scaleIndex)===4 &&
+        Number(r.pendingPreparationCount||0)===0 &&
+        (!r.requestedSignature ||
+          (Boolean(r.activeSignature) && String(r.activeSignature)===String(r.requestedSignature)));
+    """, 240)
+    wait_for_presentation_frames(d, 4)
 
 
 def percentile(values, p):
@@ -401,8 +410,14 @@ def backend_record(d, label):
             "scaleLabel": (s.get("zoom") or {}).get("scaleLabel"),
             "visibleFootprintHeightMeters": (s.get("zoom") or {}).get("visibleFootprintHeightMeters"),
         },
+        "terrainSignature": ((s.get("projection") or {}).get("resourceBudget") or {}).get("activeSignature"),
+        "terrainRequestedSignature": ((s.get("projection") or {}).get("resourceBudget") or {}).get("requestedSignature"),
+        "terrainVisibleLevel": ((s.get("projection") or {}).get("resourceBudget") or {}).get("visibleLevel"),
+        "terrainRequestedLevel": ((s.get("projection") or {}).get("resourceBudget") or {}).get("requestedLevel"),
+        "terrainPendingPreparationCount": ((s.get("projection") or {}).get("resourceBudget") or {}).get("pendingPreparationCount"),
         "localSignature": ((s.get("projection") or {}).get("localStatic") or {}).get("signature"),
         "localRevealTier": ((s.get("projection") or {}).get("localStatic") or {}).get("revealTier"),
+        "localStaticActive": bool(((s.get("projection") or {}).get("localStatic") or {}).get("active")),
         "backend": rb,
         "badge": badge,
         "rootDataset": root,
@@ -665,13 +680,23 @@ def run_baseline_webgpu():
         },
     }
 
-def compare_truth(records):
+def compare_truth(records, require_local_static=False):
     base = records[0]
     for r in records[1:]:
         if r["activeSeed"] != base["activeSeed"] or r["geographyHash"] != base["geographyHash"]:
             raise AssertionError(f"backend/engine changed world identity: {base['label']} vs {r['label']}")
-        if r["localSignature"] != base["localSignature"] or r["localRevealTier"] != base["localRevealTier"]:
-            raise AssertionError(f"backend/engine changed local presentation identity: {base['label']} vs {r['label']}")
+        if (
+            r.get("terrainSignature") != base.get("terrainSignature") or
+            r.get("terrainVisibleLevel") != base.get("terrainVisibleLevel") or
+            r.get("terrainRequestedLevel") != base.get("terrainRequestedLevel")
+        ):
+            raise AssertionError(f"backend/engine changed terrain presentation identity: {base['label']} vs {r['label']}")
+        if require_local_static and (
+            r["localSignature"] != base["localSignature"] or
+            r["localRevealTier"] != base["localRevealTier"] or
+            r.get("localStaticActive") != base.get("localStaticActive")
+        ):
+            raise AssertionError(f"backend/engine changed required static-world presentation identity: {base['label']} vs {r['label']}")
         if r["focusTile"] != base["focusTile"] or r["zoom"] != base["zoom"] or r["rotation"] != base["rotation"]:
             raise AssertionError(f"backend/engine comparison scene mismatch: {base['label']} vs {r['label']}")
         bc=base.get("comparisonContext") or {}
@@ -740,9 +765,9 @@ def main():
         engine_records.extend([current_engine_gl,current_engine_gpu])
         ground_records=[auto,forced_gpu,forced_gl,fallback]
         records=engine_records+ground_records
-        compare_truth(engine_records)
-        compare_truth(ground_records)
-        compare_truth([mobile_gpu,mobile_gl])
+        compare_truth(engine_records, require_local_static=False)
+        compare_truth(ground_records, require_local_static=True)
+        compare_truth([mobile_gpu,mobile_gl], require_local_static=True)
         report["records"]=records
         report["baselineWebgpu"]=baseline_gpu_result
         report["mobileRecords"]=[mobile_gpu,mobile_gl]
