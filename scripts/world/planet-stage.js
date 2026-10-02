@@ -5153,8 +5153,10 @@ function residentPresentationState(resident){
 function ensureLocalNpcMaterials(){
   if(localNpcMaterials||!pc)return;
   const make=(name,r,g,b)=>{const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(r,g,b);m.__atmosphereBaseDiffuse=[r,g,b];m.roughness=.88;m.metalness=0;m.update();return m;};
+  const contactShadow=make("LocalCharacterContactShadow",.055,.065,.035);
+  contactShadow.useLighting=false;contactShadow.opacity=.30;contactShadow.blendType=pc.BLEND_NORMAL;contactShadow.depthWrite=false;contactShadow.update();
   localNpcMaterials={
-    body:make("LocalResidentBody",.19,.42,.72),protagonist:make("LocalProtagonistMarker",.78,.56,.20),head:make("LocalResidentHead",.86,.68,.50),tool:make("LocalResidentWorkTool",.30,.23,.15),
+    body:make("LocalResidentBody",.19,.42,.72),protagonist:make("LocalProtagonistMarker",.78,.56,.20),head:make("LocalResidentHead",.86,.68,.50),shadow:contactShadow,tool:make("LocalResidentWorkTool",.30,.23,.15),
     timber:make("LocalResidentWorkTimber",.42,.26,.13),metal:make("LocalResidentWorkMetal",.24,.27,.30),
     ember:make("LocalResidentWorkEmber",.72,.22,.08),stock:make("LocalResidentWorkStock",.62,.48,.20),
     localEvents:Object.freeze({
@@ -5557,8 +5559,13 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     const east=protagonist.x*tileMeters,north=protagonist.y*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame),ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.015,protagonistEntities=[];
     if(groundArt){
       const protagonistBillboard=createGroundCharacterBillboard(localNpcRoot,"ProtagonistBillboard",GROUND_CHARACTER_PROTAGONIST_TEXTURE,pos.x,ground,pos.z,presentationScale,unit,1.82);
-      if(protagonistBillboard){protagonistBillboardVisible=true;billboardUrls.add(GROUND_CHARACTER_PROTAGONIST_TEXTURE);protagonistEntities.push(protagonistBillboard);protagonistEntityCount=1;}
-      else requestGroundCharacterMaterial(GROUND_CHARACTER_PROTAGONIST_TEXTURE);
+      if(protagonistBillboard){
+        protagonistBillboardVisible=true;billboardUrls.add(GROUND_CHARACTER_PROTAGONIST_TEXTURE);protagonistEntities.push(protagonistBillboard);
+        const shadowRadius=Math.max(.08,.62*presentationScale/Math.max(1e-9,unit));
+        const contactShadow=addLocalPrimitive(localNpcRoot,"ProtagonistContactShadow","cylinder",localNpcMaterials.shadow,pos.x,ground+.018,pos.z,shadowRadius,.012,shadowRadius*.72);
+        if(contactShadow){contactShadow.render.castShadows=false;contactShadow.render.receiveShadows=false;protagonistEntities.push(contactShadow);}
+        protagonistEntityCount=protagonistEntities.length;
+      }else requestGroundCharacterMaterial(GROUND_CHARACTER_PROTAGONIST_TEXTURE);
     }else{
       const markerHeight=Math.max(.12,1.35*presentationScale/unit),markerWidth=Math.max(.05,.52*presentationScale/unit);
       const body=addLocalPrimitive(localNpcRoot,"ProtagonistMarkerBody","cylinder",localNpcMaterials.protagonist,pos.x,ground+markerHeight*.5,pos.z,markerWidth,markerHeight,markerWidth);
@@ -5592,6 +5599,8 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     const textureUrl=groundArt?groundCharacterTextureUrl(resident.profession):null;
     // A modest final-ground presentation lift keeps resident source art readable beside the protagonist at the fixed 3/4 camera without changing canonical feet coordinates, collision, routes or simulation state.
     const billboard=textureUrl?createGroundCharacterBillboard(localNpcRoot,"ResidentBillboard-"+resident.id,textureUrl,x,ground,z,presentationScale,unit,2.18):null;
+    const contactShadow=billboard?addLocalPrimitive(localNpcRoot,"ResidentContactShadow-"+resident.id,"cylinder",localNpcMaterials.shadow,x,ground+.018,z,Math.max(.07,bodyWidth*1.42),.012,Math.max(.055,bodyWidth*1.02)):null;
+    if(contactShadow){contactShadow.enabled=initiallyVisible;contactShadow.render.castShadows=false;contactShadow.render.receiveShadows=false;}
     if(billboard){billboard.enabled=initiallyVisible;}
     if(billboard){residentBillboardCount++;billboardUrls.add(textureUrl);}
     const tool=addLocalPrimitive(localNpcRoot,"ResidentWorkTool-"+resident.id,"box",localNpcMaterials.tool,x,ground+bodyHeight*.62,z,bodyWidth*.26,bodyHeight*.72,bodyWidth*.26);
@@ -5600,9 +5609,9 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     const workPropC=addLocalPrimitive(localNpcRoot,"ResidentWorkPropC-"+resident.id,"box",localNpcMaterials.stock,x,ground,z,bodyWidth,bodyWidth,bodyWidth);
     const eventHalo=addLocalPrimitive(localNpcRoot,"ResidentEventHalo-"+resident.id,"cylinder",localNpcMaterials.localEvents["village-gathering"],x,ground,z,bodyWidth,bodyWidth*.08,bodyWidth);
     tool.enabled=false;workPropA.enabled=false;workPropB.enabled=false;workPropC.enabled=false;eventHalo.enabled=false;
-    localNpcEntities.set(resident.id,{resident,body,head,billboard,textureUrl,tool,workPropA,workPropB,workPropC,eventHalo,bodyHeight,bodyWidth,headSize,presentationScale,unit,frame,lift});
-    body.enabled=initiallyVisible&&!billboard;head.enabled=initiallyVisible&&!billboard;if(billboard)billboard.enabled=initiallyVisible;
-    const entities=[billboard,body,head,tool,workPropA,workPropB,workPropC,eventHalo].filter(Boolean);
+    localNpcEntities.set(resident.id,{resident,body,head,billboard,contactShadow,textureUrl,tool,workPropA,workPropB,workPropC,eventHalo,bodyHeight,bodyWidth,headSize,presentationScale,unit,frame,lift});
+    body.enabled=initiallyVisible&&!billboard;head.enabled=initiallyVisible&&!billboard;if(billboard)billboard.enabled=initiallyVisible;if(contactShadow)contactShadow.enabled=initiallyVisible;
+    const entities=[billboard,contactShadow,body,head,tool,workPropA,workPropB,workPropC,eventHalo].filter(Boolean);
     registerLocalInspection({
       id:resident.id,type:"npc",residentId:resident.id,pickPriority:3,
       authority:Object.freeze({residentId:resident.id,identitySource:"DailyActivity",professionSource:"ResidentAssignments",activitySource:"DailyActivity.resolveActionTarget"}),
@@ -5611,7 +5620,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
       screenBounds:()=>inspectionEntityBounds(entities,5),
       screenDepth:()=>inspectionEntityDepth(entities)
     },localNpcInspectionKeys);
-    if(initiallyVisible)activeCount++;entityCount+=7+(billboard?1:0);
+    if(initiallyVisible)activeCount++;entityCount+=7+(billboard?1:0)+(contactShadow?1:0);
   }
   const detailedBillboardCount=residentBillboardCount+(protagonistBillboardVisible?1:0);
   localNpcPresentation={...localNpcPresentation,active:activeCount>0||protagonistBillboardVisible||protagonistMarkerVisible,activeCount,entityCount,drawCallEstimate:entityCount,buildTimeMs:Number((performance.now()-started).toFixed(3)),time:inspectionFantasyStamp(),billboardLayerActive:groundArt&&detailedBillboardCount>0,detailedBillboardCount,residentBillboardCount,protagonistBillboardVisible,protagonistMarkerVisible,billboardTextureUrls:Object.freeze(Array.from(billboardUrls).sort()),groundRepresentationReady:groundArt,cameraPresentation:"orthographic-3q",tangentPresentationPitchDegrees:LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES};
@@ -5642,7 +5651,7 @@ function updateCanonicalNpcMotion(){
   const activeWorkCycleResidentIds=[],activeLocalEventResidentIds=[],viewportRect=canvas?.getBoundingClientRect?.()||null;
   for(const record of localNpcEntities.values()){
     const state=residentPresentationState(record.resident),visible=Boolean(state)&&(groundArt?Boolean(record.billboard||!state.indoors):!state.indoors),artVisible=Boolean(groundArt&&record.billboard&&visible);
-    record.body.enabled=visible&&!artVisible;record.head.enabled=visible&&!artVisible;if(record.billboard)record.billboard.enabled=artVisible;record.tool.enabled=false;
+    record.body.enabled=visible&&!artVisible;record.head.enabled=visible&&!artVisible;if(record.billboard)record.billboard.enabled=artVisible;if(record.contactShadow)record.contactShadow.enabled=artVisible;record.tool.enabled=false;
     for(const prop of [record.workPropA,record.workPropB,record.workPropC,record.eventHalo])if(prop)prop.enabled=false;
     if(!visible)continue;
     visibleCount++;
@@ -5665,6 +5674,7 @@ function updateCanonicalNpcMotion(){
     record.head.setLocalScale(record.headSize*actionScale,record.headSize*actionScale,record.headSize*actionScale);
     record.body.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale*.5,pos.z);
     record.head.setLocalPosition(pos.x,ground+record.bodyHeight*actionScale+record.headSize*actionScale*(.48+pulse),pos.z);
+    if(record.contactShadow)record.contactShadow.setLocalPosition(pos.x,ground+.018,pos.z);
     if(record.billboard){
       const base=record.billboard._advisorBillboard||{},emphasis=eventActive?1.08:working?1.045:1;
       const h=Math.max(.1,Number(base.height||1)*emphasis),w=Math.max(.1,Number(base.width||1)*emphasis),feet=Math.max(.01,Number(base.feetOffset||h*.47)*emphasis);
@@ -10802,6 +10812,26 @@ function spatialLodDiagnostics(){
     hysteresis:true,viewportBounded:true,fullWorldScan:false,cameraAssignsIdentity:false,viewportAssignsIdentity:false
   };
 }
+function planetRendererEvidenceSnapshot(){
+  const stats=app?.stats||{},frameMs=Number(stats.frame?.ms||0);
+  const materialSet=new Set(),addMaterial=value=>{
+    if(!value)return;
+    if(value instanceof Map){for(const item of value.values())addMaterial(item);return;}
+    if(Array.isArray(value)){for(const item of value)addMaterial(item);return;}
+    if(typeof value==="object"&&typeof value.update==="function"&&value.diffuse!==undefined){materialSet.add(value);return;}
+    if(typeof value==="object"){for(const item of Object.values(value))addMaterial(item);}
+  };
+  addMaterial([surfaceMaterial,mapScaleShellMaterial,tangentPatchMaterial,focusRingMaterial,horizonSkirtMaterial,localStaticMaterials,localNpcMaterials,groundCharacterMaterials]);
+  const drawCalls=Number(stats.drawCalls?.total??device?._drawCallsPerFrame??0),triangles=Number(stats.frame?.triangles??device?._primitiveCount??0);
+  return Object.freeze({
+    engine:"PlayCanvas",engineVersion:engineVersionInUse,backend:device?.deviceType||null,
+    activeMaterialCount:materialSet.size,groundCharacterMaterialCount:groundCharacterMaterials.size,sharedPatternTextureCount:localStyleTextures.size,
+    drawCalls,triangles,frameMs:Number(frameMs.toFixed(3)),fps:frameMs>0?Number((1000/frameMs).toFixed(1)):null,
+    lighting:Object.freeze({keyLight:Boolean(keyLight?.enabled!==false),fillLight:Boolean(fillLight?.enabled!==false),postProcessing:false,extraLights:0}),
+    textureQuality:window.RuntimeTextureQuality?.snapshot?.()||null,renderQuality:window.RuntimeRenderQuality?.snapshot?.()||null,
+    boundedMaterialRegistry:true,fullSceneScan:false,simulationAuthorityPreserved:true
+  });
+}
 function snapshot(){
   return Object.freeze({
     version:VERSION,
@@ -10815,6 +10845,7 @@ function snapshot(){
     activeSeed,
     worldVisualStyle:worldVisualStyle()?.snapshot?.()||null,
     worldVisualStyleIntegration:Object.freeze({active:Boolean(worldVisualStyle()),signature:worldVisualStyle()?.signature||null,localDetailOnly:true,activationMaxMetersPerTexel:28,sharedPatternTextureCount:localStyleTextures.size,deterministicLocalPatternTextures:true,postProcessing:false,extraLights:0,simulationAuthorityPreserved:true}),
+    rendererEvidence:planetRendererEvidenceSnapshot(),
     geographyHash:geographySignature?.hash||null,
     geographySignature,
     geographyVerification,
