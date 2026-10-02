@@ -3881,6 +3881,7 @@ function localStylePatternTexture(kind){
   const palette={
     road:["#e0cfb1","#bda786","#f0e3ca"],
     stone:["#ddd1b9","#aaa28f","#f2e8d4"],
+    roof:["#f1d4b8","#a9674b","#ffe7c9"],
     plaster:["#f2e4c9","#ccb996","#fff2d9"],
     wood:["#d7b181","#9d744e","#ead0a7"]
   }[key]||["#ece2cf","#c5b69a","#fff4dc"];
@@ -3892,6 +3893,14 @@ function localStylePatternTexture(kind){
       ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(size,y+.5);ctx.stroke();
       const offset=row%2?6:0;for(let x=offset;x<size;x+=13){ctx.beginPath();ctx.moveTo(x+.5,y);ctx.lineTo(x+.5,Math.min(size,y+11));ctx.stroke();}
     }
+  }else if(key==="roof"){
+    ctx.strokeStyle=palette[1];ctx.globalAlpha=.34;ctx.lineWidth=1.15;
+    for(let y=6,row=0;y<size;y+=9,row++){
+      ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(size,y+.5);ctx.stroke();
+      const offset=row%2?8:0;for(let x=offset;x<size;x+=16){ctx.beginPath();ctx.moveTo(x+.5,y-8);ctx.lineTo(x+.5,y);ctx.stroke();}
+    }
+    ctx.strokeStyle=palette[2];ctx.globalAlpha=.16;ctx.lineWidth=.8;
+    for(let y=2;y<size;y+=18){ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(size,y+.5);ctx.stroke();}
   }else if(key==="plaster"){
     ctx.strokeStyle=palette[1];ctx.globalAlpha=.16;ctx.lineWidth=1;
     for(let i=0;i<18;i++){const x=(i*23+7)%64,y=(i*37+11)%64;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(Math.min(64,x+5+(i%4)),Math.min(64,y+1+(i%3)));ctx.stroke();}
@@ -3920,11 +3929,11 @@ function ensureLocalStaticMaterials(){
   };
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.43,.31,.17,1,"terrain:road","road",1.5),roadOverview:make("LocalRoadOverview",.40,.29,.16,1,"terrain:road","road",1.25),square:make("LocalSquare",.54,.43,.27,1,"terrain:square","stone",3),
-    wall:make("LocalWall",.76,.61,.41,1,"terrain:building","plaster",2),roof:make("LocalRoof",.40,.14,.08,1,"terrain:building"),
-    stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.78,.55,.25,1,"terrain:building","plaster",2),footprint:make("LocalSettlementFootprint",.44,.37,.23,.11,"terrain:building"),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.90);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    trunk:make("LocalTrunk",.30,.18,.09,1,"terrain:dirt","wood",1.5),leaf:make("LocalLeaf",.20,.38,.14,1,"terrain:forest"),water:make("LocalWater",.08,.31,.48,.72,"terrain:water"),
+    road:make("LocalRoad",.66,.51,.31,1,"terrain:road","road",1.8),roadOverview:make("LocalRoadOverview",.60,.46,.28,1,"terrain:road","road",1.55),square:make("LocalSquare",.70,.58,.39,1,"terrain:square","stone",3.4),
+    wall:make("LocalWall",.86,.73,.53,1,"terrain:building","plaster",2.6),roof:make("LocalRoof",.48,.19,.10,1,"terrain:building","roof",3.2),
+    stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1,1,null,"roof",3.4);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    landmark:make("LocalLandmark",.92,.72,.38,1,"terrain:building","plaster",2.8),footprint:make("LocalSettlementFootprint",.52,.44,.29,.09,"terrain:building"),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.90);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    trunk:make("LocalTrunk",.34,.20,.10,1,"terrain:dirt","wood",1.8),leaf:make("LocalLeaf",.31,.54,.17,1,"terrain:forest"),water:make("LocalWater",.08,.31,.48,.72,"terrain:water"),
     microWater:make("LocalMicroWater",.07,.28,.42,.52,"terrain:water"),
     microStone:make("LocalMicroStone",.67,.64,.56,1,"terrain:rock","stone",1.5),microWood:make("LocalMicroWood",.57,.34,.14,1,"terrain:dirt","wood",1.5),
     microDark:make("LocalMicroDark",.11,.075,.045),microCloth:make("LocalMicroCloth",.76,.56,.27),
@@ -7461,9 +7470,9 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         displayColor=displayColor.map((v,i)=>clamp(lerp(v,styled[i],livingWorldStyleWeight),0,1));
         const closeTextureBand=styleContract.closeSurfaceVariation===false?0:livingWorldStyleWeight*smoothstep01(clamp((4-metersPerTexel)/3.5,0,1));
         if(closeTextureBand>.001&&["terrain:grass","terrain:forest","terrain:farmland"].includes(role)){
-          const broadStyle=surfaceValueNoise(worldEast,worldNorth,5.5,detailSalt+307),fineStyle=surfaceValueNoise(worldEast,worldNorth,1.4,detailSalt+331);
-          const patch=(broadStyle*.070+fineStyle*.026)*closeTextureBand;
-          displayColor=[clamp(displayColor[0]+patch*1.05,0,1),clamp(displayColor[1]+patch*.55,0,1),clamp(displayColor[2]-patch*.20,0,1)];
+          const broadStyle=surfaceValueNoise(worldEast,worldNorth,5.5,detailSalt+307),fineStyle=surfaceValueNoise(worldEast,worldNorth,1.4,detailSalt+331),microStyle=surfaceValueNoise(worldEast,worldNorth,.62,detailSalt+349);
+          const patch=(broadStyle*.100+fineStyle*.046+microStyle*.020)*closeTextureBand;
+          displayColor=[clamp(displayColor[0]+patch*.92,0,1),clamp(displayColor[1]+patch*.68,0,1),clamp(displayColor[2]-patch*.12,0,1)];
         }
       }
       pushRange("finalLuma",luma3(displayColor));
