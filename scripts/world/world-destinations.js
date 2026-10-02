@@ -236,22 +236,57 @@ async function boundedSettlementQueryCooperative(seed,origin,radiusMeters,option
   const records=[],seen=new Set();let queryCellCount=0;
   const radiusTiles=BigInt(Math.ceil(radiusMeters/TILE_METERS)),ox=BigInt(origin.x),oy=BigInt(origin.y),minX=ox-radiusTiles,maxX=ox+radiusTiles,minY=oy-radiusTiles,maxY=oy+radiusTiles;
   if(classes.includes("national-capital")){
-    const unitStarted=now();
+    const archetypes=window.SettlementArchetypes;
     try{
-      const caps=window.SettlementArchetypes?.canonicalSettlementsInBounds?.(seed,{minX:String(minX),maxX:String(maxX),minY:String(minY),maxY:String(maxY)},["national-capital"]);
-      queryCellCount+=Number(caps?.diagnostics?.queryCellCount||0);
-      for(const record of caps?.settlements||[])if(!seen.has(record.id)){seen.add(record.id);records.push(record);}
+      if(archetypes?.createCanonicalSettlementsInBoundsQuery&&archetypes?.stepCanonicalSettlementsInBoundsQuery){
+        const state=archetypes.createCanonicalSettlementsInBoundsQuery(seed,{minX:String(minX),maxX:String(maxX),minY:String(minY),maxY:String(maxY)},["national-capital"]);
+        let stepped=null;
+        while(!state.done){
+          const unitStarted=now();
+          stepped=archetypes.stepCanonicalSettlementsInBoundsQuery(state,1);
+          record(unitStarted,"settlement-national-capital-step");
+          if(!stepped?.done)await pause();
+        }
+        const caps=stepped?.result||state.result;
+        queryCellCount+=Number(caps?.diagnostics?.queryCellCount||0);
+        for(const capital of caps?.settlements||[])if(!seen.has(capital.id)){seen.add(capital.id);records.push(capital);}
+      }else{
+        const unitStarted=now();
+        const caps=archetypes?.canonicalSettlementsInBounds?.(seed,{minX:String(minX),maxX:String(maxX),minY:String(minY),maxY:String(maxY)},["national-capital"]);
+        record(unitStarted,"settlement-national-capital");
+        queryCellCount+=Number(caps?.diagnostics?.queryCellCount||0);
+        for(const capital of caps?.settlements||[])if(!seen.has(capital.id)){seen.add(capital.id);records.push(capital);}
+      }
     }catch(_){}
-    record(unitStarted,"settlement-national-capital");
     await pause();
   }
   for(const classId of classes.filter(x=>x!=="national-capital")){
     let accepted=0;
     for(const cell of orderedCellsForClass(origin,classId,radiusMeters)){
-      const unitStarted=now();queryCellCount++;
+      queryCellCount++;
       let settlement=null;
-      try{settlement=window.SettlementArchetypes?.canonicalSettlementAtCell?.(seed,classId,cell.cx,cell.cy)||null;}catch(_){settlement=null;}
-      record(unitStarted,"settlement-"+classId);
+      const archetypes=window.SettlementArchetypes;
+      if(typeof archetypes?.stepCanonicalSettlementAtCellPrewarm==="function"){
+        let resolved=false;
+        for(let prewarmStep=0;prewarmStep<256;prewarmStep++){
+          const unitStarted=now();
+          let step=null;
+          try{step=archetypes.stepCanonicalSettlementAtCellPrewarm(seed,classId,cell.cx,cell.cy);}catch(_){step=null;}
+          record(unitStarted,"settlement-"+classId+"-"+String(step?.phase||"prewarm"));
+          if(step?.ready){settlement=step.record||null;resolved=true;break;}
+          if(!step)break;
+          await pause();
+        }
+        if(!resolved){
+          const unitStarted=now();
+          try{settlement=archetypes?.canonicalSettlementAtCell?.(seed,classId,cell.cx,cell.cy)||null;}catch(_){settlement=null;}
+          record(unitStarted,"settlement-"+classId+"-fallback");
+        }
+      }else{
+        const unitStarted=now();
+        try{settlement=archetypes?.canonicalSettlementAtCell?.(seed,classId,cell.cx,cell.cy)||null;}catch(_){settlement=null;}
+        record(unitStarted,"settlement-"+classId);
+      }
       if(settlement&&!seen.has(settlement.id)&&tileDistanceMeters(origin,settlement.center)<=radiusMeters){
         seen.add(settlement.id);records.push(settlement);accepted++;
       }
@@ -260,7 +295,7 @@ async function boundedSettlementQueryCooperative(seed,origin,radiusMeters,option
     }
   }
   records.sort((a,b)=>tileDistanceMeters(origin,a.center)-tileDistanceMeters(origin,b.center)||String(a.id).localeCompare(String(b.id)));
-  const result=Object.freeze({settlements:Object.freeze(records),diagnostics:Object.freeze({queryCellCount,bounded:true,classes:Object.freeze(classes.slice()),cellLimitPerClass:SETTLEMENT_CELL_LIMIT_PER_CLASS,resultLimitPerClass:SETTLEMENT_RESULT_LIMIT_PER_CLASS,cacheHit:false,cooperative:true})});
+  const result=Object.freeze({settlements:Object.freeze(records),diagnostics:Object.freeze({queryCellCount,bounded:true,classes:Object.freeze(classes.slice()),cellLimitPerClass:SETTLEMENT_CELL_LIMIT_PER_CLASS,resultLimitPerClass:SETTLEMENT_RESULT_LIMIT_PER_CLASS,cacheHit:false,cooperative:true,settlementPrewarm:true})});
   settlementQueryCache.set(cacheKey,result);if(settlementQueryCache.size>SETTLEMENT_QUERY_CACHE_LIMIT)settlementQueryCache.delete(settlementQueryCache.keys().next().value);
   return result;
 }
