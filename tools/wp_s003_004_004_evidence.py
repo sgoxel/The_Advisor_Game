@@ -23,7 +23,7 @@ VIEWS=[
 ]
 
 options=Options()
-for arg in ["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader","--disable-search-engine-choice-screen"]:
+for arg in ["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--disable-webgpu","--ignore-gpu-blocklist","--use-angle=swiftshader","--disable-search-engine-choice-screen"]:
     options.add_argument(arg)
 options.add_argument("--window-size=1280,800")
 options.set_capability("goog:loggingPrefs",{"browser":"ALL"})
