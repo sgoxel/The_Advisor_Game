@@ -1,0 +1,45 @@
+name: Agent6 WP011 Scale Contract Patch
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/agent6-wp011-scale-contract-patch.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp011-scale-contract-patch
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply canonical player scale contract
+        run: |
+          python tools/agent6_wp011_scale_contract_patch.py
+          node --check scripts/world/planet-stage.js
+          python -m py_compile tools/test_wp_s003_010_003_018.py tools/test_wp_s003_010_003_011.py
+          git diff --check
+      - name: Commit runtime and regression-test fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/world/planet-stage.js tools/test_wp_s003_010_003_018.py
+          if git diff --cached --quiet; then
+            echo "WP011 scale contract already current"
+            exit 0
+          fi
+          git commit -m "fix(WP-S003-010-003-011): restore canonical player scale ladder"
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
+          git push origin HEAD:main
