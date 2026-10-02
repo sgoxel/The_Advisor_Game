@@ -32,6 +32,7 @@ has('className="planet-protagonist-marker"',"wider protagonist semantic marker m
 has("function updateProtagonistMapMarker(layer)","wider protagonist marker projection missing");
 has("focusNavigation:focusNavigationSnapshot()","focus telemetry missing from snapshot");
 has("focusProtagonist,focusDestinationById:","public focus APIs missing");
+has('return d?focusDestination(d):rejectFocusNavigation(id,"place","Unknown destination","destination-not-found","places-api")',"missing-target API must return the unavailable result directly");
 assert(css.includes('.planet-protagonist-marker{'),"protagonist marker CSS missing");
 assert(css.includes('.world-inspection-tooltip[data-actionable="true"]{pointer-events:auto}'),"actionable inspection CSS missing");
 

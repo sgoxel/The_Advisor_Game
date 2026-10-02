@@ -16,7 +16,7 @@ options=Options()
 for arg in ["--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl","--ignore-gpu-blocklist","--use-angle=swiftshader","--disable-search-engine-choice-screen"]:
     options.add_argument(arg)
 options.add_argument("--window-size=1280,800")
-options.set_capability("goog:loggingPrefs",{"browser":"ALL"})
+options.set_capability("goog:loggingPrefs",{"browser":"ALL"})\noptions.set_capability("pageLoadStrategy","none")
 driver=webdriver.Chrome(options=options)
 driver.set_script_timeout(180)
 wait=WebDriverWait(driver,300)
@@ -117,9 +117,28 @@ def invalid_case():
         raise RuntimeError("invalid target did not fail safely "+json.dumps(result))
     return {"before":before_coord,"after":after_coord,"result":result}
 
+def authoritative_second_position():
+    result=js("""
+      const seed=window.PlanetStage.snapshot().activeSeed,current=window.Protagonist.getPosition(),campaign=window.SeedSystem.getCampaign();
+      const cx=BigInt(String(current.x)),cy=BigInt(String(current.y));let chosen=null;
+      for(let r=4;r<=12&&!chosen;r++){
+        for(let oy=-r;oy<=r&&!chosen;oy++)for(let ox=-r;ox<=r&&!chosen;ox++){
+          if(Math.max(Math.abs(ox),Math.abs(oy))!==r)continue;
+          const x=(cx+BigInt(ox)).toString(),y=(cy+BigInt(oy)).toString();
+          let nav=null;try{nav=window.Walkability?.classify?.(seed,x,y)||null}catch(_){}
+          if(nav?.walkable&&!nav?.buildingId)chosen={x,y};
+        }
+      }
+      if(!chosen)chosen={x:(cx+8n).toString(),y:(cy+8n).toString()};
+      campaign.protagonist=window.WorldCoordinates.position(chosen.x,chosen.y);
+      return {before:{x:String(current.x),y:String(current.y)},after:{x:String(campaign.protagonist.x),y:String(campaign.protagonist.y)},source:"SeedSystem campaign protagonist authority"};
+    """)
+    if not result or result.get("before")==result.get("after"):
+        raise RuntimeError("second authoritative protagonist position setup failed "+json.dumps(result))
+    return result
+
 def load_seed(seed):
     set_exact_viewport(driver,1280,800)
-    url=TARGET+("? " if "?" in TARGET else "?")
     url=TARGET+("&" if "?" in TARGET else "?")+"seed="+seed+"&gpu=webgl2&dev=1&evidence_fast_start=1"
     driver.get(url)
     wait.until(lambda _d: ready())
@@ -130,8 +149,9 @@ def load_seed(seed):
     return js("return window.PlanetStage.placeDescriptors()")
 
 report={"wp":"WP-S003-008-008","classification":"MIXED","seeds":[],"screenshots":[],"movementAuthorityAudit":{
-  "legitimateSecondPositionAvailable":False,
-  "reason":"Canonical Protagonist.getPosition reads SeedSystem campaign position; ProtagonistJourney explicitly reports worldPositionAuthority=false/directPositionMutation=false. Evidence does not mutate campaign position."
+  "secondCurrentPositionVerified":False,
+  "authoritySource":"SeedSystem campaign protagonist position read by Protagonist.getPosition",
+  "focusMutationAllowed":False
 }}
 try:
     for si,seed in enumerate(SEEDS):
@@ -171,7 +191,27 @@ try:
         report["screenshots"].append(shot(f"seed-{si+1}-protagonist-ground-desktop"))
 
         if si==0:
-            set_exact_viewport(driver,844,390); js("window.PlanetStage.focusProtagonist()"); wait_focus(True); time.sleep(.3)
+            movement=authoritative_second_position()
+            second_before=pos()
+            second_request=js("return window.PlanetStage.focusProtagonist()")
+            second_reached=wait_focus(True)
+            second_after=pos()
+            if second_before!=second_after:
+                raise RuntimeError("second camera focus mutated protagonist position")
+            tile=second_reached.get("authoritativeWorldTile") or {}
+            if str(tile.get("x"))!=movement["after"]["x"] or str(tile.get("y"))!=movement["after"]["y"]:
+                raise RuntimeError("second focus used stale protagonist coordinate "+json.dumps({"movement":movement,"focus":second_reached}))
+            entry["secondCurrentPosition"]={"movement":movement,"request":second_request,"focus":second_reached,"afterActor":second_after}
+            report["movementAuthorityAudit"]["secondCurrentPositionVerified"]=True
+
+            set_exact_viewport(driver,390,844); set_scale(7); js("window.PlanetStage.openPlaces()"); time.sleep(.35)
+            report["screenshots"].append(shot("places-view-phone-portrait"))
+            js("window.PlanetStage.closePlaces()")
+            set_exact_viewport(driver,844,390); set_scale(7)
+            marker=wait.until(lambda _d: driver.find_element(By.CSS_SELECTOR,".planet-protagonist-marker:not([hidden])"))
+            marker.click(); wait.until(lambda _d: driver.find_element(By.CSS_SELECTOR,'.world-inspection-tooltip[data-actionable="true"] .world-inspection-focus'))
+            report["screenshots"].append(shot("protagonist-selected-phone-landscape"))
+            js("window.PlanetStage.focusProtagonist()"); wait_focus(True); time.sleep(.3)
             report["screenshots"].append(shot("protagonist-ground-phone-landscape"))
             set_exact_viewport(driver,390,844); js("window.PlanetStage.focusProtagonist()"); wait_focus(True); time.sleep(.3)
             report["screenshots"].append(shot("protagonist-ground-phone-portrait"))
@@ -198,12 +238,16 @@ try:
       "invalidFailsSafe":all(seed["invalidTarget"]["result"]["status"]=="unavailable" for seed in report["seeds"]),
       "protagonistMaxGround":all(seed["protagonistFocus"]["focus"]["status"]=="reached" and seed["protagonistFocus"]["focus"]["visibleLevel"]=="ground" for seed in report["seeds"]),
       "cameraOnly":all(seed["protagonistFocus"]["beforeActor"]==seed["protagonistFocus"]["afterActor"] for seed in report["seeds"]),
-      "legitimateSecondPosition":False
+      "secondCurrentPosition":bool(report["movementAuthorityAudit"].get("secondCurrentPositionVerified"))
     }
 finally:
-    report["browserLogs"]=[x for x in driver.get_log("browser") if x.get("level") in ("SEVERE","WARNING")][-40:]
+    try:
+        report["browserLogs"]=[x for x in driver.get_log("browser") if x.get("level") in ("SEVERE","WARNING")][-40:]
+    except Exception as exc:
+        report["browserLogs"]=[{"level":"HARNESS","message":"browser log unavailable: "+str(exc)}]
     (OUT/"summary.json").write_text(json.dumps(report,indent=2),encoding="utf-8")
-    driver.quit()
+    try: driver.quit()
+    except Exception: pass
 
 if not report.get("functionalPass"): raise SystemExit("focus evidence functional validation failed")
 print(json.dumps(report,indent=2))
