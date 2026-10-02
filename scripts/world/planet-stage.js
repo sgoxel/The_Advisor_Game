@@ -1107,7 +1107,7 @@ function gameplayCenterMarkerTelemetry(layer){
     code.textContent=settlementOverview?"CELL "+shortCell:"CELL "+shortCell+" · "+center.latitudeDegrees.toFixed(3)+"°, "+center.longitudeDegrees.toFixed(3)+"°";
     // Keep the exact center marker, but move its readout off canonical local
     // structure when that structure itself is the focused visual subject.
-    const microLocationFocus=root?.dataset?.microLocationFocus==="true",travelEncounterFocus=root?.dataset?.travelEncounterFocus==="true",groundCharacterFocus=groundCharacterLayerEligible();
+    const microLocationFocus=root?.dataset?.microLocationFocus==="true",travelEncounterFocus=root?.dataset?.travelEncounterFocus==="true",groundCharacterFocus=groundCharacterLayerEligible()||zoomState.scalar>=ZOOM_MAX-1e-7;
     // The canonical center glyph remains world-anchored and visible at final
     // ground, but its map-coordinate readout yields to the RPG character scene.
     code.style.display=(microLocationFocus||travelEncounterFocus||groundCharacterFocus)?"none":"";
@@ -1743,7 +1743,7 @@ function renderAtlasLabels(labelsLayer,portrait,spec){
     // marker; suppress only the current focused town/village at route scale.
     const suppressFocusSettlementLabel=entity.currentFocus===true&&
       (entity.type==="village"||entity.type==="town")&&
-      (spec.settlementRevealTier==="route"||groundCharacterLayerEligible());
+      (spec.settlementRevealTier==="route"||groundCharacterLayerEligible()||zoomState.scalar>=ZOOM_MAX-1e-7);
     if(suppressFocusSettlementLabel){
       visibilityReasonById.set(entity.id,"focus-settlement-fabric-visible");
       continue;
@@ -4556,7 +4556,7 @@ function updateWayfindingTextOverlay(force=false){
   // physical signposts in-world/clickable, but suppress their shared-canvas
   // lettering while detailed ground character art owns the view so characters,
   // building depth and interaction space remain readable.
-  if(groundCharacterLayerEligible()){
+  if(groundCharacterLayerEligible()||zoomState.scalar>=ZOOM_MAX-1e-7){
     if(wayfindingTextContext&&wayfindingTextCanvas){wayfindingTextContext.setTransform(1,0,0,1,0,0);wayfindingTextContext.clearRect(0,0,wayfindingTextCanvas.width,wayfindingTextCanvas.height);}
     if(Number(wayfindingSignposts.visibleTextCount||0)!==0)wayfindingSignposts={...wayfindingSignposts,visibleTextCount:0};
     return;
