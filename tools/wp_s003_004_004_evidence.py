@@ -55,6 +55,7 @@ def compact_state():
     return js("""
       const s=window.PlanetStage.snapshot(),rb=s.projection?.resourceBudget||{},ls=s.projection?.localStatic||{},np=s.npcPresentation||{},pp=s.projection?.presentation||{};
       const targets=(window.PlanetStage.inspectionTargets?.()||[]).filter(x=>x.type==='npc');
+      const wayfindingCanvas=document.querySelector('.wayfinding-sign-text-layer');
       return {
         ready:Boolean(s.ready),activeSeed:s.activeSeed,scaleIndex:Number(s.zoom?.scaleIndex),scaleLabel:s.zoom?.displayScaleLabel||s.zoom?.scaleLabel||null,
         requestedBand:s.zoom?.requestedBand||null,visibleBand:s.zoom?.band||null,
@@ -67,6 +68,9 @@ def compact_state():
         tangentPresentationPitchDegrees:Number(np.tangentPresentationPitchDegrees||0),
         protagonistPosition:window.Protagonist?.getPosition?.()||window.SeedSystem?.getCampaign?.()?.protagonist||null,
         groundBuildingCutaway:s.groundBuildingCutaway||null,
+        wayfindingVisibleTextCount:Number(s.wayfindingSignposts?.visibleTextCount||0),
+        wayfindingCanvasCount:document.querySelectorAll('.wayfinding-sign-text-layer').length,
+        wayfindingCanvasDisplay:wayfindingCanvas?getComputedStyle(wayfindingCanvas).display:null,
         cameraPoseInvariant:s.zoom?.pose?.cameraPoseInvariant!==false,cameraPitchDegrees:Number(pp.cameraPitchDegrees||0),zoomTransform:s.zoom?.pose?.zoomTransform||pp.zoomTransform||null,
         residentTargetCount:targets.length,residentTargets:targets.slice(0,8).map(t=>({id:String(t.id),bounds:t.bounds||null})),
         navigation:{longTask50Count:Number(s.navigationPerformance?.longTask50Count||0),longTaskWorstMs:Number(s.navigationPerformance?.longTaskWorstMs||0),framePhaseMaxMs:s.navigationPerformance?.framePhaseMaxMs||{}},
@@ -159,6 +163,8 @@ def validate(label,index,state,mode="overview",proof=None):
     if index==8:
         if state["visibleLevel"]=="ground" or state["detailedBillboardCount"]!=0 or state["billboardLayerActive"] or state["protagonistBillboardVisible"]:
             raise RuntimeError(label+" leaked detailed character art outside final ground: "+json.dumps(state))
+        if state["wayfindingCanvasCount"]!=1 or state["wayfindingCanvasDisplay"]=="none":
+            raise RuntimeError(label+" did not restore the bounded wayfinding text layer below final ground: "+json.dumps(state))
     if index==9:
         if state["visibleLevel"]!="ground" or state["revealTier"]!="full" or not state["groundRepresentationReady"]:
             raise RuntimeError(label+" did not reach ready ground representation: "+json.dumps(state))
@@ -168,6 +174,8 @@ def validate(label,index,state,mode="overview",proof=None):
             raise RuntimeError(label+" lacks multiple visible authoritative residents: "+json.dumps(state))
         if state["presentationScaleMultiplier"]<1.99:
             raise RuntimeError(label+" ground character presentation is below intended 2x scale: "+json.dumps(state))
+        if state["wayfindingVisibleTextCount"]!=0 or state["wayfindingCanvasCount"]!=1 or state["wayfindingCanvasDisplay"]!="none":
+            raise RuntimeError(label+" leaked route-board text canvas into final ground RPG presentation: "+json.dumps(state))
         urls=state["billboardTextureUrls"]
         if "assets/characters/protagonist_male.png" not in urls or not any("npc_" in str(u) for u in urls):
             raise RuntimeError(label+" did not use required character PNG assets: "+json.dumps(urls))
