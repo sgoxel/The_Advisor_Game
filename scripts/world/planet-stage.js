@@ -4519,8 +4519,23 @@ function clearCanonicalWayfindingSignposts(){
     visibleTextCount:0,routeQueryCount:0,routeQueryMs:0,buildMs:0,signs:[],signature:null,authority:"unavailable",
     fallbackScope:null,interSettlementRoadAuthorityAvailable:false,remoteConnectivityInvented:false};
 }
+function finalGroundWayfindingTextSuppressed(){
+  return Boolean(groundCharacterLayerEligible()||scaleIndexForScalar(zoomState.scalar)===SCALE_LADDER.length-1);
+}
+function syncWayfindingTextCanvasVisibility(){
+  const suppressed=finalGroundWayfindingTextSuppressed();
+  if(wayfindingTextCanvas){
+    wayfindingTextCanvas.style.display=suppressed?"none":"";
+    if(suppressed&&wayfindingTextContext){
+      wayfindingTextContext.setTransform(1,0,0,1,0,0);
+      wayfindingTextContext.clearRect(0,0,wayfindingTextCanvas.width,wayfindingTextCanvas.height);
+    }
+  }
+  if(suppressed&&Number(wayfindingSignposts.visibleTextCount||0)!==0)wayfindingSignposts={...wayfindingSignposts,visibleTextCount:0};
+  return !suppressed;
+}
 function ensureWayfindingTextCanvas(){
-  if(wayfindingTextCanvas?.isConnected&&wayfindingTextContext)return wayfindingTextCanvas;
+  if(wayfindingTextCanvas?.isConnected&&wayfindingTextContext){syncWayfindingTextCanvasVisibility();return wayfindingTextCanvas;}
   if(!root)return null;
   const layer=document.createElement("canvas");
   layer.className="wayfinding-sign-text-layer";
@@ -4529,6 +4544,7 @@ function ensureWayfindingTextCanvas(){
   root.appendChild(layer);
   wayfindingTextCanvas=layer;wayfindingTextContext=layer.getContext("2d");
   wayfindingSignposts={...wayfindingSignposts,textCanvasCount:wayfindingTextContext?1:0};
+  syncWayfindingTextCanvasVisibility();
   return layer;
 }
 function wayfindingWorldPoint(localPoint){
@@ -4561,6 +4577,7 @@ function wayfindingSignScreenDepth(signId){
   if(!world||!camera)return Infinity;return (world.x-camera.x)**2+(world.y-camera.y)**2+(world.z-camera.z)**2;
 }
 function updateWayfindingTextOverlay(force=false){
+  if(!syncWayfindingTextCanvasVisibility())return;
   if(!localWorldPresentationEligibility().visible){
     if(wayfindingTextContext&&wayfindingTextCanvas){wayfindingTextContext.setTransform(1,0,0,1,0,0);wayfindingTextContext.clearRect(0,0,wayfindingTextCanvas.width,wayfindingTextCanvas.height);}
     if(Number(wayfindingSignposts.visibleTextCount||0)!==0)wayfindingSignposts={...wayfindingSignposts,visibleTextCount:0};
@@ -4570,15 +4587,8 @@ function updateWayfindingTextOverlay(force=false){
     if(wayfindingTextContext&&wayfindingTextCanvas){wayfindingTextContext.setTransform(1,0,0,1,0,0);wayfindingTextContext.clearRect(0,0,wayfindingTextCanvas.width,wayfindingTextCanvas.height);}
     return;
   }
-  // Final ground play is an RPG scene, not a route-reading map. Keep the
-  // physical signposts in-world/clickable, but suppress their shared-canvas
-  // lettering while detailed ground character art owns the view so characters,
-  // building depth and interaction space remain readable.
-  if(groundCharacterLayerEligible()||scaleIndexForScalar(zoomState.scalar)===SCALE_LADDER.length-1){
-    if(wayfindingTextContext&&wayfindingTextCanvas){wayfindingTextContext.setTransform(1,0,0,1,0,0);wayfindingTextContext.clearRect(0,0,wayfindingTextCanvas.width,wayfindingTextCanvas.height);}
-    if(Number(wayfindingSignposts.visibleTextCount||0)!==0)wayfindingSignposts={...wayfindingSignposts,visibleTextCount:0};
-    return;
-  }
+  // Final-ground suppression is enforced by syncWayfindingTextCanvasVisibility()
+  // so stale pixels cannot survive a scale/reposition handoff.
   const now=performance.now();if(!force&&now-wayfindingLastTextDrawAt<50)return;wayfindingLastTextDrawAt=now;
   const started=performance.now(),layer=ensureWayfindingTextCanvas(),ctx=wayfindingTextContext;if(!layer||!ctx)return;
   const rect=canvas.getBoundingClientRect(),width=Math.max(1,Math.round(rect.width)),height=Math.max(1,Math.round(rect.height)),dpr=Math.min(2,Math.max(1,Number(window.devicePixelRatio||1)));
@@ -8383,6 +8393,10 @@ function updateProjectionPresentation(visibleHeightUnits=1){
 function applyCameraZoom(updateMap=true,options={}){
   if(!cameraEntity||!zoomState.baseCameraDistance)return;
   const scalar=clamp(zoomState.scalar,ZOOM_MIN,ZOOM_MAX);
+  // Route-board lettering is a scale-owned presentation layer. Hide/clear it
+  // synchronously when final semantic ground takes ownership, rather than
+  // relying on a later frame update to erase pixels drawn during the handoff.
+  syncWayfindingTextCanvasVisibility();
   zoomState.requestedBand=zoomBandFor(scalar);
   updateProjectionState();
   const deferStreaming=Boolean(options?.deferStreaming);
