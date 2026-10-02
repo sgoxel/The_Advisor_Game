@@ -4,6 +4,9 @@
 const VERSION="planet-focus-streaming-v2";
 const ENGINE_VERSION="2.22.3";
 const ENGINE_URL="https://cdn.jsdelivr.net/npm/playcanvas@"+ENGINE_VERSION+"/+esm";
+const RENDERER_BACKEND_KEY="advisor.renderer.backend";
+const DEVELOPMENT_MODE_KEY="the-advisor-game:development-mode";
+const RENDERER_BACKEND_MODES=Object.freeze(["auto","webgpu","webgl2"]);
 
 const EARTH_REFERENCE_RADIUS_METERS=6_371_000;
 const WORLD_SCALE_FRACTION=0.10;
@@ -278,6 +281,12 @@ let rotationChangeCount=0;
 let ready=false;
 let startupError=null;
 let frameCount=0;
+let rendererBackendBadge=null;
+let rendererBackendState=Object.freeze({
+  requested:"auto",requestSource:"default",forced:false,preferred:"webgpu",active:null,
+  selection:"initializing",fallbackReason:null,webgpuAvailable:Boolean(globalThis.navigator?.gpu),
+  deviceTypes:Object.freeze([]),developerMode:false,simulationAuthority:false
+});
 let activeSeed=null;
 let geography=null;
 let geographySignature=null;
@@ -491,6 +500,116 @@ let navigationLongTaskObserver=null;
 let residentMovementTimer=0,residentMovementDrainTimer=0,residentMovementLastSchedulerAtMs=0;
 let residentWarmupPromise=null;
 let postReadyGlobalPresentationSurfaceMesh=null;
+function backendQuery(){
+  try{return new URLSearchParams(location.search)}catch(_){return new URLSearchParams()}
+}
+function developerModeEnabled(){
+  const q=backendQuery();
+  if(q.get("dev")==="1"||q.get("developer")==="1"||q.get("backend_debug")==="1")return true;
+  try{return localStorage.getItem(DEVELOPMENT_MODE_KEY)==="true"}catch(_){return false}
+}
+function readRendererBackendRequest(){
+  const q=backendQuery(),requested=String(q.get("gpu")||"").toLowerCase();
+  if(RENDERER_BACKEND_MODES.includes(requested))return Object.freeze({requested,source:"query",forced:requested!=="auto"});
+  try{
+    const saved=String(localStorage.getItem(RENDERER_BACKEND_KEY)||"").toLowerCase();
+    if(RENDERER_BACKEND_MODES.includes(saved))return Object.freeze({requested:saved,source:"saved",forced:saved!=="auto"});
+  }catch(_){}
+  return Object.freeze({requested:"auto",source:"default",forced:false});
+}
+function rendererDeviceTypes(requested){
+  if(requested==="webgl2")return Object.freeze([pc.DEVICETYPE_WEBGL2]);
+  // PlayCanvas appends WebGL2 automatically when WebGPU cannot initialize.
+  // Keeping only WEBGPU here makes the preference explicit while preserving
+  // the engine's supported compatibility fallback.
+  return Object.freeze([pc.DEVICETYPE_WEBGPU]);
+}
+function rendererFallbackReason(requested,active){
+  if(requested!=="auto"||active!=="webgl2")return null;
+  return globalThis.navigator?.gpu?"WebGPU initialization failed or adapter unavailable":"WebGPU unavailable";
+}
+function rendererSelectionLabel(state=rendererBackendState){
+  if(state.forced)return "developer-forced test";
+  if(state.active==="webgpu")return "preferred";
+  if(state.active==="webgl2"&&state.fallbackReason)return "fallback — "+state.fallbackReason;
+  return state.selection||"initializing";
+}
+function rendererBackendText(state=rendererBackendState){
+  const active=state.active==="webgpu"?"WebGPU":state.active==="webgl2"?"WebGL2":"Pending";
+  const requested=state.requested==="auto"?"Preferred/Auto":state.requested==="webgpu"?"WebGPU":"WebGL2";
+  const availability=state.webgpuAvailable?"available":"unavailable";
+  return "Renderer: "+active+" ("+rendererSelectionLabel(state)+") · Requested: "+requested+" · WebGPU: "+availability;
+}
+function renderBackendBadge(){
+  const enabled=Boolean(rendererBackendState.developerMode);
+  if(!enabled){rendererBackendBadge?.remove?.();rendererBackendBadge=null;return}
+  if(!rendererBackendBadge){
+    rendererBackendBadge=document.createElement("div");
+    rendererBackendBadge.className="renderer-backend-debug";
+    rendererBackendBadge.setAttribute("role","status");
+    rendererBackendBadge.setAttribute("aria-live","polite");
+    Object.assign(rendererBackendBadge.style,{
+      position:"fixed",left:"50%",top:"10px",transform:"translateX(-50%)",zIndex:"2147483000",
+      maxWidth:"calc(100vw - 24px)",padding:"6px 9px",border:"1px solid rgba(196,219,230,.38)",
+      borderRadius:"8px",background:"rgba(8,14,20,.88)",boxShadow:"0 8px 24px rgba(0,0,0,.35)",
+      color:"#e8f4f7",font:"700 11px/1.25 ui-monospace,SFMono-Regular,Consolas,monospace",
+      letterSpacing:".01em",pointerEvents:"none",whiteSpace:"normal",textAlign:"center"
+    });
+    document.body.appendChild(rendererBackendBadge);
+  }
+  rendererBackendBadge.dataset.active=String(rendererBackendState.active||"pending");
+  rendererBackendBadge.dataset.requested=rendererBackendState.requested;
+  rendererBackendBadge.dataset.selection=rendererSelectionLabel(rendererBackendState);
+  rendererBackendBadge.textContent=rendererBackendText(rendererBackendState);
+}
+function setBackendDataset(){
+  if(!root?.dataset)return;
+  root.dataset.rendererRequestedBackend=String(rendererBackendState.requested||"auto");
+  root.dataset.rendererActiveBackend=String(rendererBackendState.active||"pending");
+  root.dataset.rendererBackendSelection=rendererSelectionLabel(rendererBackendState);
+  root.dataset.rendererWebgpuAvailable=String(Boolean(rendererBackendState.webgpuAvailable));
+  if(rendererBackendState.fallbackReason)root.dataset.rendererFallbackReason=rendererBackendState.fallbackReason;
+  else delete root.dataset.rendererFallbackReason;
+}
+function rendererFrameStatistics(){
+  const samples=(localFrameStats.recent||[]).map(Number).filter(v=>Number.isFinite(v)&&v>=0);
+  const sorted=samples.slice().sort((a,b)=>a-b);
+  const pick=p=>sorted.length?sorted[Math.min(sorted.length-1,Math.max(0,Math.ceil(sorted.length*p)-1))]:0;
+  const median=sorted.length?(sorted.length%2?sorted[(sorted.length-1)/2]:(sorted[sorted.length/2-1]+sorted[sorted.length/2])/2):0;
+  const pcStats=app?.stats||null,drawCalls=Number(pcStats?.drawCalls?.total),triangles=Number(pcStats?.triangles?.total);
+  return Object.freeze({
+    sampleCount:sorted.length,
+    fps:median>0?Number((1000/median).toFixed(2)):Number(pcStats?.frame?.fps||0),
+    medianFrameMs:Number(median.toFixed(3)),
+    p95FrameMs:Number(pick(.95).toFixed(3)),
+    worstFrameMs:Number((sorted.length?sorted[sorted.length-1]:0).toFixed(3)),
+    drawCalls:Number.isFinite(drawCalls)?drawCalls:null,
+    triangles:Number.isFinite(triangles)?triangles:null,
+    gpuFrameMs:null,
+    gpuFrameTimeAvailable:false,
+    updateCpuMs:Number(navigationPerformance.lastFrameUpdateMs||0),
+    renderCpuMs:Number(navigationPerformance.lastRenderCpuMs||0),
+    visibleEntityEstimate:Number((localStatic?.entityCount||0)+(localNpcPresentation?.activeCount||0)+(localCrowdPresentation?.visibleCount||0)+1),
+    materialCountEstimate:Number((localStaticMaterials?Object.keys(localStaticMaterials).length:0)+localStyleTextures.size+(surfaceMaterial?1:0)+(tangentPatchMaterial?1:0)),
+    boundedRecentSamples:true
+  });
+}
+function setNextRendererBackend(mode){
+  const normalized=String(mode||"").toLowerCase();
+  if(!RENDERER_BACKEND_MODES.includes(normalized))throw new Error("Renderer backend must be auto, webgpu, or webgl2");
+  try{localStorage.setItem(RENDERER_BACKEND_KEY,normalized)}catch(_){}
+  return normalized;
+}
+function clearNextRendererBackend(){try{localStorage.removeItem(RENDERER_BACKEND_KEY)}catch(_){}return "auto";}
+function rendererBackendPolicySnapshot(){
+  return Object.freeze({...rendererBackendState,deviceTypes:Object.freeze([...(rendererBackendState.deviceTypes||[])]),label:rendererBackendText(rendererBackendState),performance:rendererFrameStatistics()});
+}
+window.RendererBackendPolicy=Object.freeze({
+  modes:RENDERER_BACKEND_MODES.slice(),snapshot:rendererBackendPolicySnapshot,
+  setNextBackend:setNextRendererBackend,clearNextBackend:clearNextRendererBackend,
+  queryParameter:"gpu",developmentQueryParameter:"dev"
+});
+
 function freshNavigationPerformance(){
   return {
     revision:"world-map-navigation-budget-v2",
@@ -9940,12 +10059,34 @@ async function start(){
     root.replaceChildren(canvas);
     if(loader)root.appendChild(loader);
 
+    const backendRequest=readRendererBackendRequest(),deviceTypes=rendererDeviceTypes(backendRequest.requested);
+    rendererBackendState=Object.freeze({
+      requested:backendRequest.requested,requestSource:backendRequest.source,forced:backendRequest.forced,preferred:"webgpu",active:null,
+      selection:backendRequest.forced?"developer-forced test":"initializing",fallbackReason:null,webgpuAvailable:Boolean(globalThis.navigator?.gpu),
+      deviceTypes:Object.freeze(deviceTypes.slice()),developerMode:developerModeEnabled(),simulationAuthority:false
+    });
+    setBackendDataset();renderBackendBadge();
     device=await measuredPhase("graphicsDeviceMs",()=>pc.createGraphicsDevice(canvas,{
-      deviceTypes:[pc.DEVICETYPE_WEBGL2],
+      deviceTypes:[...deviceTypes],
       antialias:true,
       depth:true,
       powerPreference:"high-performance"
     }));
+    const activeBackend=String(device?.deviceType||"unknown");
+    const fallbackReason=rendererFallbackReason(backendRequest.requested,activeBackend);
+    rendererBackendState=Object.freeze({
+      ...rendererBackendState,active:activeBackend,
+      selection:backendRequest.forced?"developer-forced test":activeBackend==="webgpu"?"preferred":fallbackReason?"fallback":"selected",
+      fallbackReason
+    });
+    setBackendDataset();renderBackendBadge();
+    if(backendRequest.requested==="webgpu"&&activeBackend!=="webgpu"){
+      const reason=globalThis.navigator?.gpu?"forced WebGPU initialization failed":"forced WebGPU unavailable";
+      rendererBackendState=Object.freeze({...rendererBackendState,fallbackReason:reason,selection:"developer-forced test failed"});
+      setBackendDataset();renderBackendBadge();
+      device?.destroy?.();device=null;
+      throw new Error("Developer-forced WebGPU test failed: "+reason+". Use ?gpu=auto for compatibility fallback.");
+    }
     const options=new pc.AppOptions();
     options.graphicsDevice=device;
     options.componentSystems=[pc.RenderComponentSystem,pc.CameraComponentSystem,pc.LightComponentSystem];
@@ -10150,6 +10291,7 @@ function snapshot(){
     engine:"PlayCanvas",
     engineVersion:ENGINE_VERSION,
     canvasCount:root?.querySelectorAll?.("canvas")?.length||0,
+    rendererBackend:rendererBackendPolicySnapshot(),
     activeSeed,
     worldVisualStyle:worldVisualStyle()?.snapshot?.()||null,
     worldVisualStyleIntegration:Object.freeze({active:Boolean(worldVisualStyle()),signature:worldVisualStyle()?.signature||null,localDetailOnly:true,activationMaxMetersPerTexel:28,sharedPatternTextureCount:localStyleTextures.size,deterministicLocalPatternTextures:true,postProcessing:false,extraLights:0,simulationAuthorityPreserved:true}),
@@ -10361,6 +10503,8 @@ function destroy(){
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
   clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection(false);localCampaignWearContext=null;clearCanonicalWayfindingSignposts();clearCanonicalRoofRegistry();
   app?.destroy?.();
+  rendererBackendBadge?.remove?.();rendererBackendBadge=null;
+  rendererBackendState=Object.freeze({requested:"auto",requestSource:"default",forced:false,preferred:"webgpu",active:null,selection:"initializing",fallbackReason:null,webgpuAvailable:Boolean(globalThis.navigator?.gpu),deviceTypes:Object.freeze([]),developerMode:false,simulationAuthority:false});
   for(const texture of localStyleTextures.values())texture?.destroy?.();localStyleTextures.clear();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localPersistentConsequenceRoot=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
   environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionTextures=null;environmentalReactionPool=[];
