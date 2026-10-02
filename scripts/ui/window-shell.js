@@ -172,7 +172,7 @@ function applyState(cfg,node){
   const s=stateFor(cfg.key);
   if(s.closedInstance===instanceKey(node,cfg.key)||s.minimized){node.hidden=true;syncDock();return;}
   if(!node.hidden)clampNode(cfg.key,node);
-  focus(cfg.key,node);syncDock();
+  node.style.zIndex=String(s.z);syncDock();
 }
 function scan(){
   if(typeof document==="undefined")return;
