@@ -95,7 +95,7 @@ try:
     records.append({"name":"desktop-local-event-dragged","file":shot(driver,"02-desktop-local-event-dragged.png"),"before":before,"after":after,"focus":after_focus,"shell":ws(driver)})
 
     driver.find_element(By.CSS_SELECTOR,"#localEventVignette .window-shell-minimize").click()
-    wait_js(driver,"document.getElementById('localEventVignette').hidden&&document.querySelector('#windowShellDock .window-shell-dock-item[data-window-key="local-event"]')",10)
+    wait_js(driver,'document.getElementById("localEventVignette").hidden&&document.querySelector(\'#windowShellDock .window-shell-dock-item[data-window-key="local-event"]\')',10)
     records.append({"name":"desktop-local-event-minimized","file":shot(driver,"03-desktop-local-event-minimized.png"),"shell":ws(driver)})
 
     driver.find_element(By.CSS_SELECTOR,'#windowShellDock .window-shell-dock-item[data-window-key="local-event"]').click()
@@ -110,7 +110,7 @@ try:
     wait_js(driver,"document.querySelector('.planet-places-panel .window-shell-minimize')&&document.querySelector('#advisorChatPanel .window-shell-minimize')",10)
     # Prove shared minimize/restore on Advisor.
     driver.find_element(By.CSS_SELECTOR,"#advisorChatPanel .window-shell-minimize").click()
-    wait_js(driver,"document.getElementById('advisorChatPanel').hidden&&document.querySelector('#windowShellDock .window-shell-dock-item[data-window-key="advisor-chat"]')",10)
+    wait_js(driver,'document.getElementById("advisorChatPanel").hidden&&document.querySelector(\'#windowShellDock .window-shell-dock-item[data-window-key="advisor-chat"]\')',10)
     driver.find_element(By.CSS_SELECTOR,'#windowShellDock .window-shell-dock-item[data-window-key="advisor-chat"]').click()
     wait_js(driver,"!document.getElementById('advisorChatPanel').hidden",10)
     # Drag Places to prove the same shared handle path.
@@ -149,9 +149,9 @@ try:
 
     # Lifecycle cleanup: minimized time-limited event must not leave a stale dock icon.
     driver.find_element(By.CSS_SELECTOR,"#localEventVignette .window-shell-minimize").click()
-    wait_js(driver,"document.querySelector('#windowShellDock .window-shell-dock-item[data-window-key="local-event"]')",10)
+    wait_js(driver,'document.querySelector(\'#windowShellDock .window-shell-dock-item[data-window-key="local-event"]\')',10)
     driver.execute_script("window.LocalEventVignettes.clearActive(arguments[0]);",activation["seed"])
-    wait_js(driver,"!document.querySelector('#windowShellDock .window-shell-dock-item[data-window-key="local-event"]')",10)
+    wait_js(driver,'!document.querySelector(\'#windowShellDock .window-shell-dock-item[data-window-key="local-event"]\')',10)
     records.append({"name":"event-expired-cleanup","file":shot(driver,"07-event-expired-cleanup.png"),"shell":ws(driver)})
 
     final=ws(driver)
