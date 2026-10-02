@@ -75,6 +75,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-008-003` — Functional Projection-Aware Mini Map — COMPLETED
 - `WP-S003-008-004` — Responsive Startup Work Slicing + Main-Thread Stall Prevention
 - `WP-S003-008-005` — World Destination Navigator + Nearby Places Popup — COMPLETED
+- `WP-S003-008-007` — Universal Window Shell: Close, Drag, Minimize-to-Icon + Restore
 - `WP-S003-009` — Grounded Painterly Cel-Shaded Living World Visual Direction Foundation — IN PROGRESS
 - `WP-S003-009-001` — Starting Village Environmental Dressing + Semantic Prop Placement
 - `WP-S003-009-002` — Road Network Hierarchy + Raised Surface + Door Connector Paths — COMPLETED
