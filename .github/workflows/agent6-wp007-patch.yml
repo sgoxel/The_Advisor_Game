@@ -1,4 +1,4 @@
-name: Agent6 WP007 Harness Patch
+name: Agent6 WP007 Runtime Patch
 
 on:
   push:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: agent6-wp007-harness-patch
+  group: agent6-wp007-runtime-patch
   cancel-in-progress: false
 
 jobs:
@@ -23,22 +23,21 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Restore dedicated WP007 evidence harness
+      - name: Apply WP007 runtime continuity fix
         run: |
-          python tools/agent6_wp007_patch.py
-          python -m py_compile tools/screenshot_tool.py
+          python tools/agent6_wp007_runtime_patch.py
+          node --check scripts/world/planet-stage.js
           git diff --check
-          rm -rf tools/__pycache__
-      - name: Commit harness repair
+      - name: Commit runtime fix
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tools/screenshot_tool.py
+          git add scripts/world/planet-stage.js
           if git diff --cached --quiet; then
-            echo "WP007 harness already current"
+            echo "WP007 runtime already current"
             exit 0
           fi
-          git commit -m "test(WP-S003-010-003-007): restore settlement reveal evidence"
+          git commit -m "fix(WP-S003-010-003-007): preserve progressive settlement reveal"
           git reset --hard HEAD
           git clean -fd
           git pull --rebase origin main
