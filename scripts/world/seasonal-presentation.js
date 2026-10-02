@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION="seasonal-presentation-v2";
+const VERSION="seasonal-presentation-v3";
 const UPDATE_INTERVAL_MS=1500;
 const PROFILE_CACHE_LIMIT=24;
 const EVIDENCE_QUERY_KEY="seasonEvidence";
@@ -9,6 +9,7 @@ const DESKTOP_ACCENT_LIMIT=64;
 const TABLET_ACCENT_LIMIT=40;
 const PHONE_ACCENT_LIMIT=24;
 const MAX_ACCENT_FOOTPRINT_HEIGHT_METERS=140;
+const ACCENT_MATERIALIZATION_HEIGHT_METERS=52;
 const ACCENT_GRID_METERS=4;
 const ANCHOR_REPROJECT_INTERVAL_MS=32;
 
@@ -182,7 +183,7 @@ function buildProfile(context){
   const i=context.region.identity||{},season=seasonForMonth(context.stamp.month),band=climateBand(i);
   const dry=String(i.climate||"").includes("Dry"),wet=String(i.climate||"").includes("Wet");
   const temp=Number(i.averageTemperatureC||0),moist=clamp(Number(i.averageMoisturePercent||50)/100,0,1);
-  const key=[context.seed,context.region.id,context.region.revision,context.stamp.year,season].join("|");
+  const key=[VERSION,context.seed,context.region.id,context.region.revision,context.stamp.year,season].join("|");
   if(profileCache.has(key)){
     const cached=profileCache.get(key);profileCache.delete(key);profileCache.set(key,cached);profileHits++;return cached;
   }
@@ -209,7 +210,7 @@ function buildProfile(context){
   }
   const accentWeights={flower,leaf:leafFall,frost,snow};
   const totalAccent=Object.values(accentWeights).reduce((a,b)=>a+b,0);
-  const signature="SEASON|"+context.seed+"|"+context.region.revision+"|"+context.stamp.year+"|"+season+"|"+band+"|"+Math.round(foliage*1000)+"|"+Math.round(totalAccent*1000);
+  const signature="SEASON|"+VERSION+"|"+context.seed+"|"+context.region.revision+"|"+context.stamp.year+"|"+season+"|"+band+"|"+Math.round(foliage*1000)+"|"+Math.round(totalAccent*1000);
   const profile=Object.freeze({
     season,climateBand:band,climate:String(i.climate||"unknown"),averageTemperatureC:temp,averageMoisturePercent:Number(i.averageMoisturePercent||0),
     foliageDensity:round(foliage),flowerDensity:round(flower),dryGrass:round(dryGrass),autumnFoliage:round(autumn),leafFall:round(leafFall),frost:round(frost),snow:round(snow),
@@ -256,10 +257,10 @@ function accentPlan(profile,seed,limit,view){
   // Keep one bounded focus-local materialization window for every eligible
   // close zoom. With an unchanged focus this preserves exactly the same
   // canonical anchor cohort while zoom only changes projection and apparent size.
-  const aspect=Math.max(.6,Math.min(2.4,view.cssWidth/Math.max(1,view.cssHeight)));
-  const materializedWidthMeters=MAX_ACCENT_FOOTPRINT_HEIGHT_METERS*aspect;
-  const radiusX=Math.min(48,Math.max(2,Math.ceil(materializedWidthMeters*.58/(gridTiles*tileMeters))+1));
-  const radiusY=Math.min(48,Math.max(2,Math.ceil(MAX_ACCENT_FOOTPRINT_HEIGHT_METERS*.58/(gridTiles*tileMeters))+1));
+  const aspect=Math.max(.45,Math.min(2.2,view.cssWidth/Math.max(1,view.cssHeight)));
+  const materializedWidthMeters=ACCENT_MATERIALIZATION_HEIGHT_METERS*aspect;
+  const radiusX=Math.min(24,Math.max(2,Math.ceil(materializedWidthMeters*.58/(gridTiles*tileMeters))+1));
+  const radiusY=Math.min(24,Math.max(2,Math.ceil(ACCENT_MATERIALIZATION_HEIGHT_METERS*.58/(gridTiles*tileMeters))+1));
   const candidates=[];
   for(let oy=-radiusY;oy<=radiusY;oy++)for(let ox=-radiusX;ox<=radiusX;ox++){
     const cellX=centerCellX+BigInt(ox),cellY=centerCellY+BigInt(oy),tileX=cellX*gridTileBig,tileY=cellY*gridTileBig;
@@ -348,7 +349,7 @@ function refresh(){
     profile,season:profile?.season||"pending",seasonSignature:profile?.signature||null,
     region:context?Object.freeze({id:context.region.id,name:context.region.name,revision:context.region.revision,climate:context.region.identity?.climate||"unknown"}):null,
     deviceClass:cls,accentLimit:limit,accentCount:counts.count,flowerAccentCount:counts.flower,leafAccentCount:counts.leaf,frostAccentCount:counts.frost,snowAccentCount:counts.snow,
-    mapScaleAccentEligible,mapScaleAccentSuppressed:Boolean(active&&!mapScaleAccentEligible),physicalScaleAccentSuppressed:Boolean(active&&!mapScaleAccentEligible),maxAccentFootprintHeightMeters:MAX_ACCENT_FOOTPRINT_HEIGHT_METERS,
+    mapScaleAccentEligible,mapScaleAccentSuppressed:Boolean(active&&!mapScaleAccentEligible),physicalScaleAccentSuppressed:Boolean(active&&!mapScaleAccentEligible),maxAccentFootprintHeightMeters:MAX_ACCENT_FOOTPRINT_HEIGHT_METERS,accentMaterializationHeightMeters:ACCENT_MATERIALIZATION_HEIGHT_METERS,
     accentFootprintWidthMeters:view?round(view.widthMeters,3):null,accentFootprintHeightMeters:view?round(view.heightMeters,3):null,accentScaleLabel:view?.scaleLabel||null,
     overlayZIndex:2,cameraLocalPresentation:true,pooledAccents:true,worldAnchoredAccents:true,screenSpaceNormalizedAccents:false,accentAnchorMode:"canonical-world-tile-grid",
     renderedAccentCount:lastRenderedAccentCount,anchorProjectionUpdates,accentProjectionSamples:lastProjectedSamples,
@@ -376,7 +377,7 @@ function bootstrap(){
 }
 window.SeasonalPresentation=Object.freeze({
   VERSION,snapshot,refresh,previewAt,setEvidenceStamp,clearEvidenceStamp,shutdown,
-  constants:Object.freeze({UPDATE_INTERVAL_MS,PROFILE_CACHE_LIMIT,DESKTOP_ACCENT_LIMIT,TABLET_ACCENT_LIMIT,PHONE_ACCENT_LIMIT,MAX_ACCENT_FOOTPRINT_HEIGHT_METERS,ACCENT_GRID_METERS,ANCHOR_REPROJECT_INTERVAL_MS})
+  constants:Object.freeze({UPDATE_INTERVAL_MS,PROFILE_CACHE_LIMIT,DESKTOP_ACCENT_LIMIT,TABLET_ACCENT_LIMIT,PHONE_ACCENT_LIMIT,MAX_ACCENT_FOOTPRINT_HEIGHT_METERS,ACCENT_MATERIALIZATION_HEIGHT_METERS,ACCENT_GRID_METERS,ANCHOR_REPROJECT_INTERVAL_MS})
 });
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",bootstrap,{once:true});else bootstrap();
 })();
