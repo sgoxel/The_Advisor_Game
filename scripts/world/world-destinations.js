@@ -121,6 +121,7 @@ function contextAt(seed,xValue,yValue){
   const step=BigInt(SAMPLE_STEP_TILES),nearOffsets=[[0n,0n],[step,0n],[-step,0n],[0n,step],[0n,-step]];
   const near=nearOffsets.map(([dx,dy])=>samplePoint(seed,x+dx,y+dy)),center=near[0],elevations=near.map(p=>p.elevationMeters);
   const waterNear=near.filter(p=>p.terrain==="water").length;
+  const detailWaterNear=near.filter(p=>p.detailSurfaceClass==="water").length;
   const forestNear=near.filter(p=>p.terrain==="forest"||/forest|woodland/i.test(p.biome)).length;
   const rockNear=near.filter(p=>p.terrain==="rock").length;
   const openNear=near.filter(p=>["grass","farmland","dirt","sand"].includes(p.terrain)).length;
@@ -132,7 +133,7 @@ function contextAt(seed,xValue,yValue){
   const xSaddle=Math.min(Math.min(east,west)-c,c-Math.max(north,south)),ySaddle=Math.min(Math.min(north,south)-c,c-Math.max(east,west));
   const saddleStrength=Math.max(0,xSaddle,ySaddle),passSignal=clamp((saddleStrength-2)/24,0,1)*clamp((slopeMeters-34)/150,0,1),cliffSignal=clamp((slopeDegrees-31)/25,0,1)*clamp((slopeMeters-72)/220,0,1);
   const result=Object.freeze({
-    center,near:freezeArray(near),far:Object.freeze([]),waterNear,forestNear,rockNear,openNear,
+    center,near:freezeArray(near),far:Object.freeze([]),waterNear,detailWaterNear,forestNear,rockNear,openNear,
     roadNear:false,waterArms,landNear,oppositeWater,slopeMeters,
     maxElevationMeters:Math.max(...elevations),minElevationMeters:Math.min(...elevations),
     slopeDegrees:Number(slopeDegrees.toFixed(3)),passSignal:Number(passSignal.toFixed(4)),
@@ -160,7 +161,7 @@ function poiCandidatesForCell(seed,cxValue,cyValue){
   const x=baseX+jx,y=baseY+jy,ctx=contextAt(seed,x,y),c=ctx.center,h=unit(seed,"history:"+cx+":"+cy),g=unit(seed,"activity:"+cx+":"+cy),out=[];
   let roadNear=false;
   if(h>.83||(ctx.waterNear>=2&&h>.58)){let routeTerrain="";try{routeTerrain=safeTerrain(seed,x,y);}catch(_){}roadNear=["road","bridge"].includes(routeTerrain);}
-  const ev={terrain:c.terrain,elevationMeters:c.elevationMeters,biome:c.biome,waterSamples:ctx.waterNear,forestSamples:ctx.forestNear,rockSamples:ctx.rockNear,openSamples:ctx.openNear,slopeMeters:Math.round(ctx.slopeMeters),roadNear,waterArms:ctx.waterArms,canonicalSurfaceClass:c.canonicalSurfaceClass||null,canonicalLand:c.canonicalLand,surfaceAuthority:c.surfaceAuthority||null};
+  const ev={terrain:c.terrain,elevationMeters:c.elevationMeters,biome:c.biome,waterSamples:Math.max(ctx.waterNear,ctx.detailWaterNear),canonicalWaterSamples:ctx.waterNear,detailWaterSamples:ctx.detailWaterNear,forestSamples:ctx.forestNear,rockSamples:ctx.rockNear,openSamples:ctx.openNear,slopeMeters:Math.round(ctx.slopeMeters),roadNear,waterArms:ctx.waterArms,canonicalSurfaceClass:c.canonicalSurfaceClass||null,canonicalLand:c.canonicalLand,surfaceAuthority:c.surfaceAuthority||null};
   if(c.terrain==="water"){
     if(c.waterKind==="river"&&ctx.waterArms>=3&&ctx.landNear>=2)out.push(rawCandidate(seed,"confluence",x,y,.90,3,420,"A meeting of seeded river corridors with multiple approach arms.",["water","navigation","river"],ev));
     else if(c.waterKind==="river"&&(ctx.oppositeWater||ctx.waterArms>=2))out.push(rawCandidate(seed,"river-location",x,y,.78,2,500,"A notable reach on the continuous seeded river field.",["water","river"],ev));
@@ -173,7 +174,7 @@ function poiCandidatesForCell(seed,cxValue,cyValue){
     if((c.terrain==="rock"||ctx.rockNear>=2)&&ctx.slopeMeters>=180&&unit(seed,"cave:"+cx+":"+cy)>.72)out.push(rawCandidate(seed,"cave",x,y,.70,2,140,"A cave site where rocky relief supports a plausible opening.",["rock","shelter"],ev));
     if(ctx.forestNear>=4)out.push(rawCandidate(seed,"forest",x,y,.68+ctx.forestNear/100,2,700,"A notable grove or forest pocket grounded in the local biome.",["woodland","gathering"],ev));
   }
-  if(c.terrain!=="water"&&(ctx.waterNear>=2||ctx.waterArms>=1))out.push(rawCandidate(seed,"fishing",x,y,.65+ctx.waterNear/20,2,620,"A fishing area placed beside reachable seeded water.",["fishing","water-access"],ev));
+  if(c.terrain!=="water"&&(ctx.waterNear>=2||ctx.detailWaterNear>=2||ctx.waterArms>=1))out.push(rawCandidate(seed,"fishing",x,y,.65+Math.max(ctx.waterNear,ctx.detailWaterNear)/20,2,620,"A fishing area placed on canonical land beside reachable seeded water detail.",["fishing","water-access"],ev));
   if(c.terrain!=="water"&&(ctx.forestNear>=3||["Woodland","Highland"].includes(c.biome))&&!roadNear&&g>.18)out.push(rawCandidate(seed,"hunting",x,y,.61+ctx.forestNear/20,2,1100,"A hunting area derived from wilderness cover, relief and low route pressure.",["hunting","wilderness"],ev));
   if(c.terrain!=="water"&&ctx.openNear>=4&&g>.36)out.push(rawCandidate(seed,"grazing",x,y,.60+ctx.openNear/30,1,900,"Open country suitable for grazing, derived from seeded ground cover.",["grazing","open-country"],ev));
   if(c.terrain!=="water"&&(ctx.forestNear>=3||ctx.rockNear>=2)&&g>.42)out.push(rawCandidate(seed,"gathering",x,y,.58+(ctx.forestNear+ctx.rockNear)/40,1,520,"A gathering area tied to local woodland or exposed material resources.",["gathering","resources"],ev));
