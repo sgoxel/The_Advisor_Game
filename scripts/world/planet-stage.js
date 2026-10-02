@@ -4126,8 +4126,10 @@ function localStylePatternTexture(kind){
     for(let i=0;i<7;i++){const y=8+i*9;ctx.beginPath();ctx.moveTo((i*11)%18,y);ctx.bezierCurveTo(20,y-2,42,y+2,64,y-1);ctx.stroke();}
   }
   ctx.globalAlpha=1;
-  const texture=new pc.Texture(device,{width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8,mipmaps:true,minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,addressU:pc.ADDRESS_REPEAT,addressV:pc.ADDRESS_REPEAT});
-  texture.name="LocalLivingWorldPattern-"+key;texture.setSource(canvas);localStyleTextures.set(key,texture);return texture;
+  const texture=new pc.Texture(device,{width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true,minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,addressU:pc.ADDRESS_REPEAT,addressV:pc.ADDRESS_REPEAT});
+  texture.name="LocalLivingWorldPattern-"+key;
+  uploadRgba8Texture(texture,ctx.getImageData(0,0,size,size).data,size,size,true);
+  localStyleTextures.set(key,texture);return texture;
 }
 function ensureLocalStaticMaterials(){
   if(localStaticMaterials||!pc)return;
@@ -7992,15 +7994,32 @@ function* localResourceSteps(job){
   // medium; z ordering and the shared world-stitched colors perform the handoff.
   return {meshData,detail,medium,surround,wildernessPlan};
 }
+function uploadRgba8Texture(texture,source,width,height,flipY=false){
+  const bytes=source instanceof Uint8Array
+    ?source
+    :new Uint8Array(source.buffer,source.byteOffset||0,source.byteLength);
+  const target=texture.lock();
+  if(!target?.set){try{texture.unlock()}catch(_){}throw new Error("PlayCanvas RGBA8 texture lock unavailable");}
+  const rowBytes=Math.max(1,Number(width)||1)*4,totalRows=Math.max(1,Number(height)||1);
+  if(flipY){
+    for(let y=0;y<totalRows;y++){
+      const from=(totalRows-1-y)*rowBytes,to=y*rowBytes;
+      target.set(bytes.subarray(from,from+rowBytes),to);
+    }
+  }else target.set(bytes.subarray(0,Math.min(bytes.length,target.length)));
+  texture.unlock();
+  return texture;
+}
 function textureFromPixels(pixels){
-  const canvas2d=document.createElement("canvas");canvas2d.width=pixels.size;canvas2d.height=pixels.size;
-  // Preserve the detail texture's edge alpha; opacityMap uses this exact
-  // channel to feather the canonical child into its world-matched surround.
-  const ctx=canvas2d.getContext("2d",{alpha:true});ctx.putImageData(new ImageData(pixels.data,pixels.size,pixels.size),0,0);
+  // Upload the deterministic RGBA bytes directly. WebGPU's browser
+  // copyExternalImageToTexture path can lose the device on software/CI adapters
+  // when fed transient 2D canvases; direct Texture.lock/unlock keeps the same
+  // generated pixels and avoids external-image ownership entirely.
   const texture=new pc.Texture(device,{width:pixels.size,height:pixels.size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
-  texture.flipY=true;
+  texture.flipY=false;
   texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
-  texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.anisotropy=localTextureAnisotropy();texture.setSource(canvas2d);
+  texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.anisotropy=localTextureAnisotropy();
+  uploadRgba8Texture(texture,pixels.data,pixels.size,pixels.size,true);
   return texture;
 }
 function surfaceContributorEvidence(){
