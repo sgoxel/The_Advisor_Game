@@ -3929,7 +3929,7 @@ function ensureLocalStaticMaterials(){
   };
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.66,.51,.31,1,"terrain:road","road",1.8),roadOverview:make("LocalRoadOverview",.60,.46,.28,1,"terrain:road","road",1.55),square:make("LocalSquare",.70,.58,.39,1,"terrain:square","stone",3.4),
+    road:make("LocalRoad",.60,.54,.43,1,"terrain:road","road",1.8),roadOverview:make("LocalRoadOverview",.55,.49,.39,1,"terrain:road","road",1.55),square:make("LocalSquare",.70,.58,.39,1,"terrain:square","stone",3.4),
     wall:make("LocalWall",.86,.73,.53,1,"terrain:building","plaster",2.6),roof:make("LocalRoof",.48,.19,.10,1,"terrain:building","roof",3.2),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1,1,null,"roof",4.8);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     landmark:make("LocalLandmark",.92,.72,.38,1,"terrain:building","plaster",2.8),footprint:make("LocalSettlementFootprint",.52,.44,.29,.09,"terrain:building"),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.90);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
@@ -4984,8 +4984,37 @@ function requestGroundCharacterMaterial(url){
     const image=new Image();image.decoding="async";
     image.onload=()=>{
       try{
+        // Character source art may contain large transparent margins. Crop them
+        // once at load time so billboard world height describes the visible
+        // character rather than invisible canvas padding. The scan is bounded
+        // to 256 px on the longest side; the resulting crop is deterministic
+        // presentation data and never changes character position or identity.
+        let textureSource=image;
+        if(typeof document!=="undefined"){
+          const iw=Math.max(1,Number(image.naturalWidth||image.width||1)),ih=Math.max(1,Number(image.naturalHeight||image.height||1));
+          const scanScale=Math.min(1,256/Math.max(iw,ih)),sw=Math.max(1,Math.round(iw*scanScale)),sh=Math.max(1,Math.round(ih*scanScale));
+          const scan=document.createElement("canvas");scan.width=sw;scan.height=sh;
+          const scanCtx=scan.getContext("2d",{willReadFrequently:true});
+          if(scanCtx){
+            scanCtx.clearRect(0,0,sw,sh);scanCtx.drawImage(image,0,0,sw,sh);
+            const pixels=scanCtx.getImageData(0,0,sw,sh).data;
+            let minX=sw,minY=sh,maxX=-1,maxY=-1;
+            for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){
+              if(pixels[(y*sw+x)*4+3]<=12)continue;
+              if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+            }
+            if(maxX>=minX&&maxY>=minY){
+              const pad=Math.max(1,Math.round(Math.max(maxX-minX+1,maxY-minY+1)*.035));
+              minX=Math.max(0,minX-pad);minY=Math.max(0,minY-pad);maxX=Math.min(sw-1,maxX+pad);maxY=Math.min(sh-1,maxY+pad);
+              const sx=Math.max(0,Math.floor(minX/scanScale)),sy=Math.max(0,Math.floor(minY/scanScale));
+              const ex=Math.min(iw,Math.ceil((maxX+1)/scanScale)),ey=Math.min(ih,Math.ceil((maxY+1)/scanScale));
+              const cw=Math.max(1,ex-sx),ch=Math.max(1,ey-sy),crop=document.createElement("canvas");crop.width=cw;crop.height=ch;
+              const cropCtx=crop.getContext("2d");if(cropCtx){cropCtx.clearRect(0,0,cw,ch);cropCtx.drawImage(image,sx,sy,cw,ch,0,0,cw,ch);textureSource=crop;}
+            }
+          }
+        }
         const texture=new pc.Texture(device,{mipmaps:true,minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,addressU:pc.ADDRESS_CLAMP_TO_EDGE,addressV:pc.ADDRESS_CLAMP_TO_EDGE});
-        texture.name="GroundCharacterTexture-"+key.split("/").pop();texture.setSource(image);
+        texture.name="GroundCharacterTexture-"+key.split("/").pop();texture.setSource(textureSource);
         const material=new pc.StandardMaterial();material.name="GroundCharacter-"+key.split("/").pop();
         const treatment=worldVisualStyle()?.spriteTreatment?.character||{},diffuseTint=Array.isArray(treatment.diffuseTint)?treatment.diffuseTint:[1,1,1],emissiveTint=Array.isArray(treatment.emissiveTint)?treatment.emissiveTint:[.78,.78,.78];
         material.diffuse.set(...diffuseTint);material.emissive.set(...emissiveTint);material.emissiveIntensity=.46;
@@ -5304,7 +5333,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     const body=addLocalPrimitive(localNpcRoot,"ResidentBody-"+resident.id,"cylinder",bodyMaterial,x,ground+bodyHeight*.5,z,bodyWidth,bodyHeight,bodyWidth);
     const head=addLocalPrimitive(localNpcRoot,"ResidentHead-"+resident.id,"sphere",localNpcMaterials.head,x,ground+bodyHeight+headSize*.48,z,headSize,headSize,headSize);
     const textureUrl=groundArt?groundCharacterTextureUrl(resident.profession):null;
-    const billboard=textureUrl?createGroundCharacterBillboard(localNpcRoot,"ResidentBillboard-"+resident.id,textureUrl,x,ground,z,presentationScale,unit,2.95):null;
+    const billboard=textureUrl?createGroundCharacterBillboard(localNpcRoot,"ResidentBillboard-"+resident.id,textureUrl,x,ground,z,presentationScale,unit,1.98):null;
     if(billboard){billboard.enabled=initiallyVisible;}
     if(billboard){residentBillboardCount++;billboardUrls.add(textureUrl);}
     const tool=addLocalPrimitive(localNpcRoot,"ResidentWorkTool-"+resident.id,"box",localNpcMaterials.tool,x,ground+bodyHeight*.62,z,bodyWidth*.26,bodyHeight*.72,bodyWidth*.26);
@@ -5382,7 +5411,7 @@ function updateCanonicalNpcMotion(){
       const h=Math.max(.1,Number(base.height||1)*emphasis),w=Math.max(.1,Number(base.width||1)*emphasis),feet=Math.max(.01,Number(base.feetOffset||h*.47)*emphasis);
       const pose=groundCharacterBillboardPose(h,feet);
       record.billboard.setLocalScale(w,1,h);
-      record.billboard.setLocalPosition(pos.x,ground+.052+pose.centerLift,pos.z-pose.centerBack);
+      record.billboard.setLocalPosition(pos.x,ground+.068+pose.centerLift,pos.z-pose.centerBack);
       record.billboard.setLocalEulerAngles(pose.pitchDegrees,0,0);
     }
     if(eventActive){
@@ -6570,14 +6599,17 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const treeCount=tier==="route"?7:tier==="coarse"?6:tier==="refined"?10:tier==="full"?12:0;
   for(let i=0;i<treeCount;i++){
     const angle=i/Math.max(1,treeCount)*Math.PI*2+localHash(i*17,treeCount,91)*.22;
-    // At final ground, keep the same deterministic 12 presentation trees but
-    // bring their ring inside the actual 64x36 m play footprint. Wider tiers
-    // retain the previous outer-ring placement.
+    // Final-ground vegetation keeps the same deterministic count and anchors,
+    // but varies silhouette proportions so the ring reads as planted/natural
+    // scenery rather than repeated identical spheres.
     const radiusTiles=tier==="full"?(7+localHash(i*31,treeCount,92)*5):(22+localHash(i*31,treeCount,92)*4);
     const east=Math.cos(angle)*radiusTiles*reveal.tileMeters,north=Math.sin(angle)*radiusTiles*reveal.tileMeters;
     const ground=canonicalSemanticGroundHeightUnits(east,north,semanticFrame)+lift,h=(4.5+localHash(i*43,treeCount,93)*2.5)*scale/unit,pos=canonicalSemanticPosition(east,north,scale,unit,semanticFrame);
-    addLocalStatic("CanonicalTreeTrunk-"+i,"cylinder",localStaticMaterials.trunk,pos.x,ground+h*.28,pos.z,.65*scale/unit,Math.max(.04,h*.56),.65*scale/unit);
-    addLocalStatic("CanonicalTreeCrown-"+i,"sphere",localStaticMaterials.leaf,pos.x,ground+h*.78,pos.z,4.2*scale/unit,Math.max(.06,h*.84),4.2*scale/unit);
+    const trunkWidth=(.52+localHash(i*53,treeCount,94)*.26)*scale/unit;
+    const crownW=(3.45+localHash(i*59,treeCount,95)*1.20)*scale/unit,crownD=(3.30+localHash(i*61,treeCount,96)*1.35)*scale/unit;
+    const crownH=Math.max(.06,h*(.66+localHash(i*67,treeCount,97)*.24));
+    addLocalStatic("CanonicalTreeTrunk-"+i,"cylinder",localStaticMaterials.trunk,pos.x,ground+h*.28,pos.z,trunkWidth,Math.max(.04,h*.56),trunkWidth);
+    addLocalStatic("CanonicalTreeCrown-"+i,"sphere",localStaticMaterials.leaf,pos.x,ground+h*.78,pos.z,crownW,crownH,crownD);
     vegetation++;triangles+=180;
   }
   const wild=renderLocalWilderness(resource,frame,reveal);
