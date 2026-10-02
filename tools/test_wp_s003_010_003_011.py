@@ -25,6 +25,10 @@ def driver_for():
     options.add_argument("--ignore-gpu-blocklist")
     options.add_argument("--use-angle=swiftshader")
     options.add_argument("--window-size=1280,800")
+    # Do not make Selenium's navigation command synchronously own the full
+    # deterministic world rebuild. wait_ready() below is the authoritative
+    # readiness gate and has explicit, observable timeouts.
+    options.page_load_strategy = "none"
     options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
     return webdriver.Chrome(options=options)
 
