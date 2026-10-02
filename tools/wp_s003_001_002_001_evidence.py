@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from selenium import webdriver
+from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -455,6 +456,41 @@ def run_device_loss():
         d.quit()
 
 
+
+def run_baseline_webgpu():
+    crashes=[]
+    for attempt in range(1,3):
+        try:
+            record=run_success("02-baseline-2223-webgpu", "webgpu", "webgpu", engine=BASELINE_ENGINE)
+            return {
+                "attempted":True,
+                "available":True,
+                "status":"completed",
+                "attempts":attempt,
+                "record":record,
+                "failure":None,
+            }
+        except WebDriverException as exc:
+            message=str(exc)
+            if "tab crashed" not in message.lower() and "page crash" not in message.lower():
+                raise
+            crashes.append({"attempt":attempt,"error":message})
+    return {
+        "attempted":True,
+        "available":False,
+        "status":"historical-baseline-browser-crash",
+        "attempts":len(crashes),
+        "record":None,
+        "failure":{
+            "kind":"chrome-webgpu-tab-crash",
+            "engineVersion":BASELINE_ENGINE,
+            "backend":"webgpu",
+            "ciAdapter":"SwiftShader",
+            "crashes":crashes,
+            "interpretation":"The historical PlayCanvas 2.22.3 WebGPU baseline could not complete the identical CI workload because the browser tab crashed twice. This is recorded as a baseline stability result, not silently converted into performance data; current 2.23.0 WebGPU remains mandatory.",
+        },
+    }
+
 def compare_truth(records):
     base = records[0]
     for r in records[1:]:
@@ -478,7 +514,8 @@ def main():
     try:
         report["retainedBootstrapPolicy"]=verify_retained_bootstrap_policy()
         baseline_gl = run_success("01-baseline-2223-webgl2", "webgl2", "webgl2", engine=BASELINE_ENGINE)
-        baseline_gpu = run_success("02-baseline-2223-webgpu", "webgpu", "webgpu", engine=BASELINE_ENGINE)
+        baseline_gpu_result = run_baseline_webgpu()
+        baseline_gpu = baseline_gpu_result.get("record")
         auto = run_success("03-current-2230-auto-webgpu", "auto", "webgpu")
         forced_gpu = run_success("04-current-2230-webgpu", "webgpu", "webgpu")
         forced_gl = run_success("05-current-2230-webgl2", "webgl2", "webgl2")
@@ -488,17 +525,26 @@ def main():
         device_loss = run_device_loss()
         mobile_gpu = run_success("10-current-2230-mobile-webgpu", "webgpu", "webgpu", viewport=(844,390))
         mobile_gl = run_success("11-current-2230-mobile-webgl2", "webgl2", "webgl2", viewport=(844,390))
-        records=[baseline_gl,baseline_gpu,auto,forced_gpu,forced_gl,fallback]
+        records=[baseline_gl]
+        if baseline_gpu:
+            records.append(baseline_gpu)
+        records.extend([auto,forced_gpu,forced_gl,fallback])
         compare_truth(records)
         compare_truth([mobile_gpu,mobile_gl])
         report["records"]=records
+        report["baselineWebgpu"]=baseline_gpu_result
         report["mobileRecords"]=[mobile_gpu,mobile_gl]
         report["forcedWebgpuFailure"]=failure
         report["normalModeSavedForceReset"]=normal_mode
         report["deviceLoss"]=device_loss
         report["engineComparison"]={
             "webgl2":{"baseline":baseline_gl["performanceSequence"],"current":forced_gl["performanceSequence"]},
-            "webgpu":{"baseline":baseline_gpu["performanceSequence"],"current":forced_gpu["performanceSequence"]},
+            "webgpu":{
+                "baseline":baseline_gpu["performanceSequence"] if baseline_gpu else None,
+                "baselineStatus":baseline_gpu_result.get("status"),
+                "baselineFailure":baseline_gpu_result.get("failure"),
+                "current":forced_gpu["performanceSequence"],
+            },
             "noAssumedWinner":True,
         }
         report["comparisonContext"]=baseline_gl["comparisonContext"]
