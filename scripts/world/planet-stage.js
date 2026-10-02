@@ -7439,20 +7439,17 @@ function makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,size){
   return Object.freeze({size,spanEast,spanNorth,sample});
 }
 function broadAuthorityRasterSizes(levelIndex){
-  // Keep the broadest parent cheap enough for cooperative software/WebGL2
-  // preparation, then spend source samples only as the physical viewport
-  // shrinks. The focus source remains denser than (or equal to) its shared
-  // context and rises monotonically through the local ladder without ever
-  // materializing offscreen/full-world high-resolution geography.
-  //
-  // The previous 96/128/192/... restoration made the first 0.08x resource
-  // exceed the bounded evidence readiness window on SwiftShader. This revised
-  // ladder preserves the actual refinement gain at the important mid/local
-  // tiers while keeping broad-map startup bounded.
+  // Expensive PlanetGeography sampling stays on the proven cooperative ladder.
+  // Closer LODs still refine this canonical base in world space, while the
+  // per-output-texel Campaign-SEED registered detail fields supply the additional
+  // local frequencies without multiplying geography queries or offscreen work.
   const index=Math.max(0,Number(levelIndex)||0);
-  const shared=index===0?72:index===1?88:index===2?112:144;
-  const focus=index===0?80:index===1?112:index===2?160:index===3?224:index===4?288:352;
-  return Object.freeze({shared,focus});
+  if(index===0)return Object.freeze({shared:80,focus:64});
+  if(index===1)return Object.freeze({shared:96,focus:72});
+  if(index===2)return Object.freeze({shared:128,focus:80});
+  if(index===3)return Object.freeze({shared:160,focus:112});
+  if(index===4)return Object.freeze({shared:160,focus:128});
+  return Object.freeze({shared:160,focus:144});
 }
 function sharedSurfaceAuthority(job){
   if(job?.surfaceAuthority)return job.surfaceAuthority;
@@ -7645,8 +7642,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Only the fine-minus-parent residual is feathered toward focus. A radial
       // or edge-varying gain on the parent itself produced the pale 1/500 LOD
       // boundary seen in fresh evidence.
-      const strategicFocusResidualScale=contextRing?1:lerp(.16,1,smoothstep01(clamp((1200-metersPerTexel)/900,0,1)));
-      const refinementGain=contextRing?contextRefineWeight*.22:focusRefineWeight*.86*strategicFocusResidualScale;
+      const strategicFocusResidualScale=contextRing?1:lerp(.24,1,smoothstep01(clamp((1200-metersPerTexel)/900,0,1)));
+      const refinementGain=contextRing?contextRefineWeight*.22:focusRefineWeight*.94*strategicFocusResidualScale;
       // Regional parents are physically coarse but still need readable landform
       // structure while finer children stream. Reuse the already-computed,
       // registered-meter macro signal and increase only its presentation gain in
@@ -7846,10 +7843,10 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // Prefer the already SEED-registered land-cover field for strategic-map
         // readability. Its 3.6 km / 1.5 km / 700 m structure is physically
         // resolvable at 1/500 and avoids re-amplifying continental relief.
-        const mapCoverBoost=1+smoothstep01(clamp((220-metersPerTexel)/180,0,1))*.20;
-        const sharedMapCoverBoost=1+smoothstep01(clamp((220-sharedMetersPerTexel)/180,0,1))*.20;
-        const strategicCoverBoost=1+strategicMapBand*(contextRing?.03:.06);
-        const sharedStrategicCoverBoost=1+sharedStrategicMapBand*.045;
+        const mapCoverBoost=1+smoothstep01(clamp((220-metersPerTexel)/180,0,1))*.32;
+        const sharedMapCoverBoost=1+smoothstep01(clamp((220-sharedMetersPerTexel)/180,0,1))*.26;
+        const strategicCoverBoost=1+strategicMapBand*(contextRing?.045:.10);
+        const sharedStrategicCoverBoost=1+sharedStrategicMapBand*.055;
         const sharedCoverContrast=(sharedPhotometryLock?1.08:(contextRing?1.06:1.10))*sharedMapCoverBoost*sharedStrategicCoverBoost;
         const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost*strategicCoverBoost;
         const sharedCoarseRegionalCoverGain=1-sharedCoarseRegionalResidualBand*.48;
@@ -7871,7 +7868,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // those already-computed values around the canonical local palette. This
       // adds no geography/noise query and leaves near-ground photometry alone.
       if(parentSample?.land&&(sharedPhotometryLock?sharedStrategicMapBand:strategicMapBand)>.001){
-        const regionalContrast=1+(sharedPhotometryLock?sharedStrategicMapBand:strategicMapBand)*(sharedPhotometryLock?.04:(contextRing?.03:.05));
+        const regionalContrast=1+(sharedPhotometryLock?sharedStrategicMapBand:strategicMapBand)*(sharedPhotometryLock?.08:(contextRing?.05:.09));
         const palettePivot=clamp(luma3(localPalette),.20,.58);
         displayColor=displayColor.map(v=>clamp(palettePivot+(v-palettePivot)*regionalContrast,0,1));
       }
@@ -7883,7 +7880,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const localMapReadabilityBand=smoothstep01(clamp((metersPerTexel-18)/34,0,1))*
           (1-smoothstep01(clamp((metersPerTexel-230)/170,0,1)));
         if(localMapReadabilityBand>.001){
-          const pivot=clamp(luma3(localPalette),.20,.58),gain=1+localMapReadabilityBand*.18;
+          const pivot=clamp(luma3(localPalette),.20,.58),gain=1+localMapReadabilityBand*.28;
           displayColor=displayColor.map(v=>clamp(pivot+(v-pivot)*gain,0,1));
         }
       }
@@ -8283,14 +8280,14 @@ function finalizeLocalResource(job,result){
   phaseMs.wildernessPlan=0;
   const regenerationSignature=localResourceRegenerationSignature(job);
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,surfaceContributorPixels,
-    detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:focusAuthorityRasterSize,sourceTextureHeight:focusAuthorityRasterSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),mipmaps:false,minFilter:"linear",magFilter:"linear",samplingPolicy:"single-level-linear-transition-alpha",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
+    detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),mipmaps:false,minFilter:"linear",magFilter:"linear",samplingPolicy:"single-level-linear-transition-alpha",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
       meshHeightRange:meshData.meshHeightRange||null,
-      topographicSignalRevision:"canonical-continuous-cross-lod-source-v36",topographicSignalAuthority:"PlanetGeography elevation/color/moisture sampled from bounded level-aware canonical parent/focus rasters; the 1x focus source increases from 64 to 144 samples as physical LOD shrinks while the 6x context source remains capped at 160. Registered-meter terrain detail adds only physically resolvable presentation frequencies.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-continuous-cross-lod-source-v37",topographicSignalAuthority:"PlanetGeography elevation/color/moisture stays on the bounded 64→144 focus / 80→160 shared raster ladder; the uploaded focus texture itself refines from 160 to 448 pixels and adds only physically resolvable Campaign-SEED registered-meter terrain and land-cover frequencies per output texel.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
