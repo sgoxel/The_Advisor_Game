@@ -1,0 +1,41 @@
+name: Agent6 WP006 Dispatch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/agent6-wp006-dispatch.yml
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Dispatch exact WP006 evidence run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run visual-evidence.yml \
+            --ref main \
+            -f wp=wp-s003-010-003-006 \
+            -f issue=158 \
+            -f mode=landscape \
+            -f orientation=both \
+            -f ref=e4744470f8405d89aad3cc551f338c7e6a970cb7 \
+            -f publish=false
+      - name: Clean dispatch workflow
+        run: |
+          rm .github/workflows/agent6-wp006-dispatch.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/agent6-wp006-dispatch.yml
+          git commit -m 'chore(agent6): clean WP006 evidence dispatcher'
+          git pull --rebase origin main
+          git push origin HEAD:main
