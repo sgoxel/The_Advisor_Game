@@ -42,11 +42,81 @@ def install_seed(driver,seed):
     """
     driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument",{"source":source})
 
-def ready(driver,timeout=240):
-    _wait(driver,"""
-      const root=document.getElementById('planetStageRoot'),s=window.PlanetStage?.snapshot?.();
-      return Boolean(root?.dataset?.ready==='true'&&s?.ready&&s?.activeSeed&&window.StartingVillage&&window.WorldDestinations);
-    """,timeout,"WP-S003-008-008 stage readiness")
+def startup_probe(driver):
+    return driver.execute_script("""
+      const root=document.getElementById('planetStageRoot'),s=window.PlanetStage?.snapshot?.()||null;
+      const p=s?.startupProgress||{},scheduler=s?.startupScheduler||{},backend=s?.rendererBackend||{};
+      return {
+        ok:Boolean(root?.dataset?.ready==='true'&&s?.ready&&s?.activeSeed&&window.StartingVillage&&window.WorldDestinations),
+        failed:Boolean(root?.dataset?.error||s?.startupError||p?.mode==='failed'),
+        documentReady:document.readyState,
+        rootExists:Boolean(root),
+        rootReady:root?.dataset?.ready||null,
+        rootError:root?.dataset?.error||null,
+        stagePresent:Boolean(window.PlanetStage),
+        activeSeed:s?.activeSeed||null,
+        startupError:s?.startupError||null,
+        startupProgress:{
+          mode:p?.mode||null,phaseId:p?.phaseId||null,phaseLabel:p?.phaseLabel||null,
+          measuredPercent:p?.measuredPercent??null,watchdogStatus:p?.watchdogStatus||null,
+          lastProgressLabel:p?.lastProgressLabel||null
+        },
+        startupScheduler:{
+          phaseTimings:scheduler?.phaseTimings||null,
+          watchdogChecks:scheduler?.watchdogChecks??null,
+          watchdogStallCount:scheduler?.watchdogStallCount??null,
+          evidenceFastStart:scheduler?.evidenceFastStart??null,
+          evidencePlanetPlaceholder:scheduler?.evidencePlanetPlaceholder??null,
+          evidenceShaderWarmupSkipped:scheduler?.evidenceShaderWarmupSkipped??null
+        },
+        rendererBackend:{
+          requested:backend?.requested||null,active:backend?.active||null,
+          selection:backend?.selection||null,fallbackReason:backend?.fallbackReason||null
+        },
+        canvasCount:s?.canvasCount??0,
+        frameCount:s?.frameCount??0,
+        startingVillage:Boolean(window.StartingVillage),
+        worldDestinations:Boolean(window.WorldDestinations)
+      };
+    """)
+
+def startup_diagnostic(driver,seed,error,probe=None):
+    state=probe
+    if state is None:
+        try:
+            state=startup_probe(driver)
+        except Exception as exc:
+            state={"probeError":str(exc)}
+    try:
+        logs=driver.get_log("browser")
+        browser_logs=[{
+            "level":str(row.get("level","")),
+            "message":str(row.get("message",""))[-4000:]
+        } for row in logs[-80:]]
+    except Exception as exc:
+        browser_logs=[{"level":"diagnostic","message":"browser log unavailable: "+str(exc)}]
+    payload={"seed":seed,"error":str(error),"probe":state,"browserLogs":browser_logs}
+    (OUT/f"{seed}-startup-diagnostic.json").write_text(json.dumps(payload,indent=2,sort_keys=True),encoding="utf-8")
+    return payload
+
+def ready(driver,seed,timeout=240):
+    deadline=time.monotonic()+float(timeout)
+    last=None
+    while time.monotonic()<deadline:
+        try:
+            last=startup_probe(driver)
+            if last.get("ok"):
+                return last
+            if last.get("failed"):
+                diagnostic=startup_diagnostic(driver,seed,"PlanetStage reported startup failure",last)
+                raise RuntimeError("WP-S003-008-008 startup failed: "+json.dumps(diagnostic,sort_keys=True))
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            last={"probeError":str(exc)}
+        time.sleep(.25)
+    diagnostic=startup_diagnostic(driver,seed,"stage readiness timeout",last)
+    raise RuntimeError("timeout waiting for WP-S003-008-008 stage readiness: "+json.dumps(diagnostic,sort_keys=True))
 
 def js(driver,script,*args):
     return driver.execute_script(script,*args)
@@ -241,7 +311,7 @@ for seed in SEEDS:
         set_exact_viewport(driver,1280,800)
         install_seed(driver,seed)
         driver.get(target_url())
-        ready(driver)
+        ready(driver,seed)
         state=snapshot(driver)
         if state.get("activeSeed")!=seed:
             raise RuntimeError(f"seed bootstrap mismatch: expected {seed}, got {state.get('activeSeed')}")
