@@ -351,6 +351,22 @@ def _prepare_surface_refinement_focus(driver):
 def _surface_refinement_frame(driver,index,timeout):
     scalar,label=WP_SURFACE_REFINEMENT_PLAN[index]
     set_exact_viewport(driver,1280,800)
+    # ResizeObserver preserves physical footprint by recomputing the scalar.
+    # Let the fixed evidence viewport finish that reframing before applying the
+    # exact checkpoint, otherwise a late resize callback can legitimately move
+    # the scalar after this harness sets it and the exact-value wait never ends.
+    driver.execute_async_script("""
+      const done=arguments[0];
+      requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
+    """)
+    driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);",float(scalar))
+    # One more paint pair makes the checkpoint resilient to a trailing browser
+    # metrics callback; reapplying the same target is deterministic and changes
+    # camera presentation only, never canonical focus/world authority.
+    driver.execute_async_script("""
+      const done=arguments[0];
+      requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
+    """)
     driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);",float(scalar))
     _wait(driver,f"""
       const target={float(scalar)!r},s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{{}};
@@ -470,6 +486,11 @@ def _generic_frames(driver,shots,width,height,timeout,interval):
 
 def run_capture(args):
     width,height=PROFILES.get(args.profile,(args.width,args.height))
+    # Surface-refinement acceptance has one canonical 1280x800 viewport. Start
+    # the browser at that size so the game never boots at one aspect ratio and
+    # receives a first-checkpoint resize after its zoom/LOD state is live.
+    if args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:
+        width,height=1280,800
     total=max(1,int(args.shots))
     if args.scenario==WP_CHARACTER_SCENARIO:
         total=max(total,WP_CHARACTER_SHOTS)
