@@ -8273,8 +8273,6 @@ function* localResourceSteps(job){
   }else{
     stitchSurroundCenterToDetail(detail,medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
     stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
-    carveNestedRingCenterAlpha(medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
-    carveNestedRingCenterAlpha(surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
   }
   yield {forceSlice:true};
   job.currentPreparationPhase="wilderness-plan";
