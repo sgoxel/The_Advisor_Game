@@ -66,6 +66,9 @@ def driver_for(disable_webgpu=False, viewport=(1280,800), saved_backend=None):
         "--use-angle=swiftshader",
         "--enable-unsafe-webgpu",
         "--use-webgpu-adapter=swiftshader",
+        "--enable-gpu",
+        "--enable-features=Vulkan",
+        "--use-vulkan=swiftshader",
         "--use-gpu-in-tests",
         f"--window-size={width},{height}",
     ]:
