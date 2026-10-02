@@ -365,10 +365,11 @@ def run_normal_mode_saved_force_ignored():
         }))
         wait(d, "return window.PlanetStage?.snapshot?.()?.ready===true", 240)
         state=d.execute_script("""
-          const s=window.PlanetStage.snapshot(),rb=s.rendererBackend||{};
+          const s=window.PlanetStage.snapshot(),rb=s.rendererBackend||{},bootstrap=window.RendererBootstrap?.status?.()||{};
           return {
             requested:rb.requested||null,
             active:rb.active||null,
+            bootstrapBackend:bootstrap.backend||null,
             forced:Boolean(rb.forced),
             requestSource:rb.requestSource||null,
             developerMode:Boolean(rb.developerMode),
@@ -379,6 +380,8 @@ def run_normal_mode_saved_force_ignored():
         """)
         if state.get("active") != "webgpu" or state.get("requested") != "auto" or state.get("forced") is not False:
             raise AssertionError(f"normal mode did not restore Auto/WebGPU-first after saved developer force: {state}")
+        if state.get("bootstrapBackend") != "auto":
+            raise AssertionError(f"alternate renderer bootstrap leaked saved developer force into normal mode: {state}")
         if state.get("developerMode") is not False or state.get("badge") is not False:
             raise AssertionError(f"normal mode exposed developer backend UI: {state}")
         path=OUT/"12-normal-mode-auto-after-saved-force.png"
@@ -480,7 +483,7 @@ def main():
             "webgpuActive":auto["backend"]["active"]=="webgpu" and forced_gpu["backend"]["active"]=="webgpu",
             "webgl2Active":forced_gl["backend"]["active"]=="webgl2",
             "fallbackActive":fallback["backend"]["active"]=="webgl2" and bool(fallback["backend"].get("fallbackReason")),
-            "normalModeIgnoresSavedDeveloperForce":normal_mode.get("active")=="webgpu" and normal_mode.get("requested")=="auto" and normal_mode.get("badge") is False,
+            "normalModeIgnoresSavedDeveloperForce":normal_mode.get("active")=="webgpu" and normal_mode.get("requested")=="auto" and normal_mode.get("bootstrapBackend")=="auto" and normal_mode.get("badge") is False,
             "deviceLossRecovered":bool(device_loss["result"].get("recovered")),
             "mobileViewportBackendParity":mobile_gpu["comparisonContext"]==mobile_gl["comparisonContext"] and mobile_gpu["activeSeed"]==mobile_gl["activeSeed"] and mobile_gpu["geographyHash"]==mobile_gl["geographyHash"],
         }
