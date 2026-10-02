@@ -4444,7 +4444,7 @@ function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
   // Keep the authoritative settlement composition large enough to read as
   // actual world structure, not a locator glyph, then converge rapidly to 1:1.
-  const targetFraction=tier==="footprint"?.38:tier==="route"?.68:tier==="coarse"?.20:.20;
+  const targetFraction=tier==="footprint"?.38:tier==="route"?.82:tier==="coarse"?.20:.20;
   const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
   // Route overview stays presentation-only. The final Phase 16 evidence showed
   // the real connected village was still undersized at 1/2500, so give the same
@@ -7106,18 +7106,16 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   }
   const meeting=reveal.specialLots.find(item=>item.kind==="meeting-hall")||reveal.specialLots[0]||null;
   const ordinary=[...reveal.houses,...reveal.specialLots.filter(item=>!meeting||item.id!==meeting.id)];
-  // Route overview already carries up to 12 real HousePlans/SpecialLots as one
-  // merged two-tone footprint/access mesh. Do not cover that clean map-scale
-  // silhouette with separate primitive building boxes; those blocks were the
-  // remaining diagrammatic look at 1/2500. Coarse+ tiers still materialize the
-  // normal canonical building presentation as before.
-  const targetCount=tier==="route"?0:tier==="coarse"?Math.min(ordinary.length,10):(tier==="refined"||tier==="full"?ordinary.length:0);
+  // Keep footprint and route tiers readable against broad terrain LODs with a
+  // small cluster of low-profile canonical building masses. Roofs, dressing and
+  // other full building detail remain deferred to the near-ground tiers.
+  const targetCount=tier==="footprint"?Math.min(ordinary.length,8):tier==="route"?Math.min(ordinary.length,6):tier==="coarse"?Math.min(ordinary.length,10):(tier==="refined"||tier==="full"?ordinary.length:0);
   const detailed=tier==="refined"||tier==="full";
   for(let i=0;i<targetCount;i++){
     addCanonicalBuilding(ordinary[i],i,scale,unit,semanticFrame,detailed,false,lift);
     if(detailed)fullBuildings++;else coarseBuildings++;
   }
-  if((tier==="coarse"||tier==="refined"||tier==="full")&&meeting){
+  if((tier==="footprint"||tier==="route"||tier==="coarse"||tier==="refined"||tier==="full")&&meeting){
     addCanonicalBuilding(meeting,targetCount,scale,unit,semanticFrame,detailed,true,lift);
     landmarks=1;if(detailed)fullBuildings++;else coarseBuildings++;
   }
