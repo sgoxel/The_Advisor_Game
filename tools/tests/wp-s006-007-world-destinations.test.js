@@ -97,6 +97,15 @@ assert(localSettlementQuery.diagnostics.settlementClasses.includes("hamlet"),"lo
 assert(localSettlementQuery.diagnostics.queryMs<=5000,"local settlement query exceeded 5s acceptance budget");
 all.push(...localSettlementQuery.results);
 
+const categoryCoverageQueries=[
+  api.queryNearby(seed,{x:"0",y:"0"},{radiusMeters:80000,maxResults:32,categories:["fishing"]}),
+  api.queryNearby(seed,{x:"0",y:"0"},{radiusMeters:80000,maxResults:32,categories:["water"]})
+];
+for(const query of categoryCoverageQueries){
+  assert(query.diagnostics.bounded&&query.diagnostics.fullWorldScan===false,"category coverage query lost bounded execution");
+  all.push(...query.results);
+}
+
 const byId=new Map(all.map(x=>[x.id,x]));
 const unique=[...byId.values()];
 const settlementTypes=new Set(unique.filter(x=>["hamlet","village","town","city","capital"].includes(x.type)).map(x=>x.type));
