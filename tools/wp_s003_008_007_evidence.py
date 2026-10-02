@@ -176,7 +176,27 @@ try:
     records.append({"name":"desktop-shared-places-advisor","file":shot(driver,"04-desktop-shared-places-advisor.png"),"placesBefore":pb,"placesAfter":pa,"shell":snap})
 
     # Close presentation only; authoritative local event remains active.
+    # The shared-window frame intentionally overlaps windows to prove z-order. Raise
+    # Local Event through a real hit-tested click on its exposed surface before
+    # pressing X, exactly as a player would focus a partially covered window.
     before_close=driver.execute_script("return window.LocalEventVignettes.snapshot(arguments[0]);",activation["seed"])
+    before_focus_z=ws(driver)["windows"]["local-event"]["z"]
+    focus_point=driver.execute_script("""
+      const n=document.getElementById('localEventVignette'),r=n?.getBoundingClientRect?.();
+      if(!n||!r)return null;
+      for(const y of [r.top+14,r.top+24,r.top+40]){
+        for(let x=r.left+14;x<Math.min(r.right-14,r.left+140);x+=18){
+          const hit=document.elementFromPoint(x,y);
+          if(hit&&(hit===n||hit.closest?.('#localEventVignette')))return {x,y};
+        }
+      }
+      return null;
+    """)
+    if not focus_point:
+        raise RuntimeError("Local Event has no exposed hit-tested focus surface while windows overlap")
+    driver.execute_cdp_cmd("Input.dispatchMouseEvent",{"type":"mousePressed","x":focus_point["x"],"y":focus_point["y"],"button":"left","buttons":1,"clickCount":1})
+    driver.execute_cdp_cmd("Input.dispatchMouseEvent",{"type":"mouseReleased","x":focus_point["x"],"y":focus_point["y"],"button":"left","buttons":0,"clickCount":1})
+    wait_js(driver,f"window.WindowShell.snapshot().windows['local-event'].z>{before_focus_z}",10)
     driver.find_element(By.CSS_SELECTOR,"#localEventVignette .window-shell-close").click()
     wait_js(driver,"document.getElementById('localEventVignette').hidden",10)
     after_close=driver.execute_script("return window.LocalEventVignettes.snapshot(arguments[0]);",activation["seed"])
