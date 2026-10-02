@@ -5,7 +5,7 @@
 // The loading presentation supplies the palette/mood language only. Gameplay
 // keeps its own geometry, sprites, UI and renderer architecture.
 const STYLE=Object.freeze({
-  signature:"living-world-style-v3",
+  signature:"living-world-style-v4",
   reference:"scene-loading-color-language",
   palette:Object.freeze({
     gold:Object.freeze([0.949,0.831,0.494]),
@@ -61,11 +61,18 @@ const STYLE=Object.freeze({
     sharedMaterialOnly:true
   }),
   terrainGrade:Object.freeze({
-    green:Object.freeze({saturation:1.30,brightness:1.045,redScale:0.955,greenScale:1.045,blueScale:0.915,redOffset:-0.004,greenOffset:0.022,blueOffset:0}),
+    green:Object.freeze({saturation:1.14,brightness:1.035,redScale:1.055,greenScale:0.990,blueScale:0.850,redOffset:0.018,greenOffset:0.010,blueOffset:-0.004}),
     water:Object.freeze({saturation:1.22,brightness:1.035,redScale:0.900,greenScale:1.015,blueScale:1.080,redOffset:-0.006,greenOffset:0.004,blueOffset:0.020}),
-    earth:Object.freeze({saturation:1.22,brightness:1.025,redScale:1.055,greenScale:1.005,blueScale:0.900,redOffset:0.012,greenOffset:0.004,blueOffset:0}),
-    constructed:Object.freeze({saturation:1.10,brightness:1.010,redScale:1.010,greenScale:1.000,blueScale:0.970,redOffset:0.004,greenOffset:0,blueOffset:0}),
+    earth:Object.freeze({saturation:1.18,brightness:1.035,redScale:1.075,greenScale:1.015,blueScale:0.880,redOffset:0.018,greenOffset:0.006,blueOffset:-0.004}),
+    constructed:Object.freeze({saturation:1.14,brightness:1.025,redScale:1.045,greenScale:1.005,blueScale:0.920,redOffset:0.010,greenOffset:0.002,blueOffset:-0.004}),
     neutral:Object.freeze({saturation:1.20,brightness:1.030,redScale:0.985,greenScale:1.025,blueScale:0.945,redOffset:0,greenOffset:0.014,blueOffset:0})
+  }),
+  localDetail:Object.freeze({
+    maxMetersPerTexel:28,
+    litTerrainMaxMetersPerTexel:4,
+    closeSurfaceVariation:true,
+    sharedRoadTexture:true,
+    sharedPavingTexture:true
   }),
   performance:Object.freeze({
     postProcessing:false,
@@ -112,6 +119,7 @@ function snapshot(){
     materials:STYLE.materials,
     spriteTreatment:STYLE.spriteTreatment,
     terrainGrade:STYLE.terrainGrade,
+    localDetail:STYLE.localDetail,
     performance:STYLE.performance,
     stylized:true,
     typeAwareTerrainGrade:true,
@@ -130,6 +138,7 @@ window.AdvisorWorldVisualStyle=Object.freeze({
   materials:STYLE.materials,
   spriteTreatment:STYLE.spriteTreatment,
   terrainGrade:STYLE.terrainGrade,
+  localDetail:STYLE.localDetail,
   performance:STYLE.performance,
   gradeRgb,
   snapshot
