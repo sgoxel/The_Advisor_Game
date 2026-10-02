@@ -9244,7 +9244,7 @@ function authoritativeProtagonistFocusTarget(){
   return Object.freeze({coordinate:canonical,position:Object.freeze({x:Number(point.x),y:Number(point.y),source:String(point.source||"authoritative protagonist")})});
 }
 function updateExplicitFocusNavigation(){
-  const active=explicitFocusNavigation.active;if(!active)return;
+  const active=explicitFocusNavigation.active;if(!active||active.committedAtMs!==null)return;
   if(active.targetType==="protagonist"&&active.tracking&&active.committedAtMs===null){
     const resolved=authoritativeProtagonistFocusTarget();
     if(resolved){
