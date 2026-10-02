@@ -58,6 +58,53 @@ def open_advisor(driver):
     driver.execute_script("window.AdvisorConversationUI?.setOpen?.(true);")
     wait_js(driver,"document.getElementById('advisorChatPanel')&&!document.getElementById('advisorChatPanel').hidden",30)
 
+def hit_tested_window_drag(driver,panel_sel,handle_sel,distance_x=120,distance_y=60):
+    plan=driver.execute_script("""
+      const panel=document.querySelector(arguments[0]),handle=document.querySelector(arguments[1]);
+      if(!panel||!handle)return null;
+      const pr=panel.getBoundingClientRect(),hr=handle.getBoundingClientRect(),safe=10;
+      const xs=[hr.left+24,(hr.left+hr.right)/2,hr.right-24];
+      const ys=[hr.top+10,(hr.top+hr.bottom)/2,hr.bottom-10];
+      let point=null;
+      for(const y of ys){
+        for(const x of xs){
+          const hit=document.elementFromPoint(x,y);
+          if(!hit||hit.closest('button,input,textarea,select,a,summary'))continue;
+          if(hit===handle||handle.contains(hit)){point={x,y};break;}
+        }
+        if(point)break;
+      }
+      if(!point)return {error:'no-exposed-handle-point',panel:{left:pr.left,top:pr.top,right:pr.right,bottom:pr.bottom,width:pr.width,height:pr.height}};
+      const leftRoom=Math.max(0,pr.left-safe),rightRoom=Math.max(0,innerWidth-safe-pr.right);
+      const topRoom=Math.max(0,pr.top-safe),bottomRoom=Math.max(0,innerHeight-safe-pr.bottom);
+      const dx=(rightRoom>=leftRoom?1:-1)*Math.min(arguments[2],Math.max(0,(rightRoom>=leftRoom?rightRoom:leftRoom)-8));
+      const dy=(bottomRoom>=topRoom?1:-1)*Math.min(arguments[3],Math.max(0,(bottomRoom>=topRoom?bottomRoom:topRoom)-8));
+      return {point,dx,dy,panel:{left:pr.left,top:pr.top,right:pr.right,bottom:pr.bottom,width:pr.width,height:pr.height},
+        rooms:{left:leftRoom,right:rightRoom,top:topRoom,bottom:bottomRoom},
+        hitTag:document.elementFromPoint(point.x,point.y)?.tagName||null};
+    """,panel_sel,handle_sel,distance_x,distance_y)
+    if not plan or plan.get("error"):
+        raise RuntimeError("no exposed hit-tested drag surface for "+panel_sel+": "+json.dumps(plan))
+    if abs(plan["dx"])<35 and abs(plan["dy"])<35:
+        raise RuntimeError("no usable in-viewport drag direction for "+panel_sel+": "+json.dumps(plan))
+    before_shell=ws(driver)
+    sx,sy=plan["point"]["x"],plan["point"]["y"]
+    driver.execute_cdp_cmd("Input.dispatchMouseEvent",{"type":"mouseMoved","x":sx,"y":sy,"button":"none","buttons":0})
+    driver.execute_cdp_cmd("Input.dispatchMouseEvent",{"type":"mousePressed","x":sx,"y":sy,"button":"left","buttons":1,"clickCount":1})
+    steps=6
+    for i in range(1,steps+1):
+        x=sx+plan["dx"]*i/steps;y=sy+plan["dy"]*i/steps
+        driver.execute_cdp_cmd("Input.dispatchMouseEvent",{"type":"mouseMoved","x":x,"y":y,"button":"left","buttons":1})
+    driver.execute_cdp_cmd("Input.dispatchMouseEvent",{"type":"mouseReleased","x":sx+plan["dx"],"y":sy+plan["dy"],"button":"left","buttons":0,"clickCount":1})
+    time.sleep(.25)
+    after_shell=ws(driver)
+    bt=before_shell["telemetry"];at=after_shell["telemetry"]
+    if at["dragStartCount"]<bt["dragStartCount"]+1 or at["dragEndCount"]<bt["dragEndCount"]+1:
+        raise RuntimeError("shared drag telemetry did not advance for "+panel_sel+": "+json.dumps({"plan":plan,"before":bt,"after":at}))
+    if at["worldInputSuppressions"]<=bt["worldInputSuppressions"]:
+        raise RuntimeError("world input was not suppressed during drag for "+panel_sel)
+    return {"plan":plan,"telemetryBefore":bt,"telemetryAfter":at}
+
 opts=Options()
 for arg in [
     "--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl",
@@ -162,18 +209,18 @@ try:
     wait_js(driver,'document.getElementById("advisorChatPanel").hidden&&document.querySelector(\'#windowShellDock .window-shell-dock-item[data-window-key="advisor-chat"]\')',10)
     driver.find_element(By.CSS_SELECTOR,'#windowShellDock .window-shell-dock-item[data-window-key="advisor-chat"]').click()
     wait_js(driver,"!document.getElementById('advisorChatPanel').hidden",10)
-    # Drag Places to prove the same shared handle path.
-    ph=driver.find_element(By.CSS_SELECTOR,".planet-places-panel .window-shell-handle")
+    # Drag Places through an actually exposed title point and choose a direction
+    # with available viewport room so clamping cannot turn the evidence gesture
+    # into a false negative when the panel starts near an edge.
     pb=rect(driver,".planet-places-panel")
-    ActionChains(driver).move_to_element_with_offset(ph,18,14).click_and_hold().move_by_offset(-120,60).release().perform()
-    time.sleep(.2)
+    places_drag=hit_tested_window_drag(driver,".planet-places-panel",".planet-places-panel .window-shell-handle")
     pa=rect(driver,".planet-places-panel")
     if abs(pa["left"]-pb["left"])<30 and abs(pa["top"]-pb["top"])<30:
-        raise RuntimeError("Places did not use shared drag behavior")
+        raise RuntimeError("Places did not use shared drag behavior: "+json.dumps({"before":pb,"after":pa,"drag":places_drag}))
     snap=ws(driver)
     if not (snap["windows"]["places"]["visible"] and snap["windows"]["advisor-chat"]["visible"]):
         raise RuntimeError("simultaneous windows not visible")
-    records.append({"name":"desktop-shared-places-advisor","file":shot(driver,"04-desktop-shared-places-advisor.png"),"placesBefore":pb,"placesAfter":pa,"shell":snap})
+    records.append({"name":"desktop-shared-places-advisor","file":shot(driver,"04-desktop-shared-places-advisor.png"),"placesBefore":pb,"placesAfter":pa,"placesDrag":places_drag,"shell":snap})
 
     # Close presentation only; authoritative local event remains active.
     # The shared-window frame intentionally overlaps windows to prove z-order. Raise
