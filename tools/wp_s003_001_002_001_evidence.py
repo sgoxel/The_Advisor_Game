@@ -296,6 +296,8 @@ def run_success(label, gpu_mode, expected, engine=CURRENT_ENGINE, ground=True, d
             raise AssertionError(f"{label}: expected engine {engine}, got {rec['engineVersion']}")
         if rec["activeSeed"] != SEED:
             raise AssertionError(f"{label}: seed mismatch {rec['activeSeed']}")
+        if rec["simulationAuthorityPreserved"] is not True:
+            raise AssertionError(f"{label}: renderer backend escaped presentation-only authority: {rec['backend']}")
         if not rec["badge"] or expected.upper() not in rec["badge"]["text"].upper():
             raise AssertionError(f"{label}: developer backend badge missing active backend: {rec['badge']}")
         if engine == CURRENT_ENGINE and CURRENT_ENGINE not in rec["badge"]["text"]:
@@ -390,6 +392,8 @@ def compare_truth(records):
     for r in records[1:]:
         if r["activeSeed"] != base["activeSeed"] or r["geographyHash"] != base["geographyHash"]:
             raise AssertionError(f"backend/engine changed world identity: {base['label']} vs {r['label']}")
+        if r["localSignature"] != base["localSignature"] or r["localRevealTier"] != base["localRevealTier"]:
+            raise AssertionError(f"backend/engine changed local presentation identity: {base['label']} vs {r['label']}")
         if r["focusTile"] != base["focusTile"] or r["zoom"] != base["zoom"] or r["rotation"] != base["rotation"]:
             raise AssertionError(f"backend/engine comparison scene mismatch: {base['label']} vs {r['label']}")
         bc=base.get("comparisonContext") or {}
@@ -433,6 +437,8 @@ def main():
             "sameFocusTile":True,
             "sameRotation":True,
             "sameZoom":True,
+            "sameLocalPresentationIdentity":True,
+            "simulationAuthorityPreserved":all(r["simulationAuthorityPreserved"] for r in records+[mobile_gpu,mobile_gl]),
             "sameViewportAndQuality":True,
             "sameLightingState":True,
             "webgpuActive":auto["backend"]["active"]=="webgpu" and forced_gpu["backend"]["active"]=="webgpu",
