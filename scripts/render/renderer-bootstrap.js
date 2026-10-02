@@ -5,7 +5,7 @@ const BACKEND_KEY="advisor.renderer.backend";
 const ASSET_PREPARATION_URL="scripts/render/playcanvas/asset-preparation.js";
 const WORLD_ASSETS_URL="scripts/render/playcanvas/world-assets.js";
 let readyPromise=null;
-let selectedBackend="webgl2";
+let selectedBackend="auto";
 let lastError=null;
 let assetPreparationPromise=null;
 let worldAssetsPromise=null;
@@ -15,7 +15,7 @@ function readBackend(){
   const requested=query().get("gpu");
   if(["webgl2","webgpu","auto"].includes(requested))return requested;
   try{const saved=localStorage.getItem(BACKEND_KEY);if(["webgl2","webgpu","auto"].includes(saved))return saved;}catch(_){}
-  return "webgl2";
+  return "auto";
 }
 function readNumber(name,min,max){const raw=query().get(name);if(raw===null||String(raw).trim()==="")return null;const value=Number(raw);if(!Number.isFinite(value))return null;return Math.min(max,Math.max(min,value));}
 function loadScript(url,readyCheck,label){
