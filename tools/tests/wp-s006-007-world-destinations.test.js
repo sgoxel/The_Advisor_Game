@@ -97,10 +97,12 @@ assert(localSettlementQuery.diagnostics.settlementClasses.includes("hamlet"),"lo
 assert(localSettlementQuery.diagnostics.queryMs<=5000,"local settlement query exceeded 5s acceptance budget");
 all.push(...localSettlementQuery.results);
 
-const categoryCoverageQueries=[
-  api.queryNearby(seed,{x:"0",y:"0"},{radiusMeters:80000,maxResults:32,categories:["fishing"]}),
-  api.queryNearby(seed,{x:"0",y:"0"},{radiusMeters:80000,maxResults:32,categories:["water"]})
-];
+const categoryCoverageQueries=[];
+for(const origin of origins){
+  for(const category of ["fishing","water"]){
+    categoryCoverageQueries.push(api.queryNearby(seed,origin,{radiusMeters:80000,maxResults:32,categories:[category]}));
+  }
+}
 for(const query of categoryCoverageQueries){
   assert(query.diagnostics.bounded&&query.diagnostics.fullWorldScan===false,"category coverage query lost bounded execution");
   all.push(...query.results);
