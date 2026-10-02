@@ -7439,14 +7439,19 @@ function makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,size){
   return Object.freeze({size,spanEast,spanNorth,sample});
 }
 function broadAuthorityRasterSizes(levelIndex){
-  // Keep the 6x context source cheap, but do not let the focused child become
-  // an upscaled copy of a much coarser geography raster. The focus ladder is
-  // bounded (<=384 samples) and grows with physical refinement, matching the
-  // proven cross-LOD source-density progression without materializing any
-  // offscreen or full-world high-resolution surface.
+  // Keep the broadest parent cheap enough for cooperative software/WebGL2
+  // preparation, then spend source samples only as the physical viewport
+  // shrinks. The focus source remains denser than (or equal to) its shared
+  // context and rises monotonically through the local ladder without ever
+  // materializing offscreen/full-world high-resolution geography.
+  //
+  // The previous 96/128/192/... restoration made the first 0.08x resource
+  // exceed the bounded evidence readiness window on SwiftShader. This revised
+  // ladder preserves the actual refinement gain at the important mid/local
+  // tiers while keeping broad-map startup bounded.
   const index=Math.max(0,Number(levelIndex)||0);
-  const shared=index===0?80:index===1?96:index===2?128:160;
-  const focus=index===0?96:index===1?128:index===2?192:index===3?256:index===4?320:384;
+  const shared=index===0?72:index===1?88:index===2?112:144;
+  const focus=index===0?80:index===1?112:index===2?160:index===3?224:index===4?288:352;
   return Object.freeze({shared,focus});
 }
 function sharedSurfaceAuthority(job){
