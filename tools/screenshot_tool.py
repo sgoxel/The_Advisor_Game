@@ -1110,16 +1110,26 @@ def _atlas_live_frame(driver,index,timeout):
         set_exact_viewport(driver,844,390)
         _wait(driver,"""
           const s=window.PlanetStage?.snapshot?.()||{},m=s.mapPresentation||{};
-          return Boolean(s.ready && Number(m.atlasVisibleLabelCount||0)>0);
-        """,timeout,"phone-landscape atlas labels")
+          const visible=[...document.querySelectorAll('.planet-atlas-label,.planet-map-landmark')].some(el=>{
+            const cs=getComputedStyle(el),r=el.getBoundingClientRect();
+            return !el.hidden && cs.visibility!=='hidden' && cs.display!=='none' && Number(cs.opacity||1)>0.01 &&
+              r.width>0 && r.height>0 && r.right>0 && r.bottom>0 && r.left<innerWidth && r.top<innerHeight;
+          });
+          return Boolean(s.ready && Number(m.atlasVisibleLabelCount||0)>0 && visible);
+        """,timeout,"phone-landscape atlas labels with live DOM")
         driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
         action="phone-landscape"
     else:
         set_exact_viewport(driver,390,844)
         _wait(driver,"""
           const s=window.PlanetStage?.snapshot?.()||{},m=s.mapPresentation||{};
-          return Boolean(s.ready && Number(m.atlasVisibleLabelCount||0)>0);
-        """,timeout,"phone-portrait atlas labels")
+          const visible=[...document.querySelectorAll('.planet-atlas-label,.planet-map-landmark')].some(el=>{
+            const cs=getComputedStyle(el),r=el.getBoundingClientRect();
+            return !el.hidden && cs.visibility!=='hidden' && cs.display!=='none' && Number(cs.opacity||1)>0.01 &&
+              r.width>0 && r.height>0 && r.right>0 && r.bottom>0 && r.left<innerWidth && r.top<innerHeight;
+          });
+          return Boolean(s.ready && Number(m.atlasVisibleLabelCount||0)>0 && visible);
+        """,timeout,"phone-portrait atlas labels with live DOM")
         driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
         action="phone-portrait"
     state=_atlas_live_state(driver)
