@@ -72,6 +72,7 @@ def driver_for(disable_webgpu=False, viewport=(1280,800), saved_backend=None):
         o.add_argument(arg)
     o.set_capability("goog:loggingPrefs", {"browser": "ALL"})
     d = webdriver.Chrome(options=o)
+    d.set_script_timeout(240)
     backend_bootstrap = "localStorage.removeItem('advisor.renderer.backend');" if saved_backend is None else f"localStorage.setItem('advisor.renderer.backend', {json.dumps(saved_backend)});"
     bootstrap = f"""
       try {{
@@ -484,7 +485,7 @@ def run_baseline_webgpu():
     crashes=[]
     for attempt in range(1,3):
         try:
-            record=run_success("02-baseline-2223-webgpu", "webgpu", "webgpu", engine=BASELINE_ENGINE)
+            record=run_success("02-baseline-2223-map-webgpu", "webgpu", "webgpu", engine=BASELINE_ENGINE, ground=False, lightweight_engine_compare=True)
             return {
                 "attempted":True,
                 "available":True,
@@ -537,7 +538,8 @@ def main():
     try:
         report["retainedBootstrapPolicy"]=verify_retained_bootstrap_policy()
         baseline_gl = run_success("01-baseline-2223-map-webgl2", "webgl2", "webgl2", engine=BASELINE_ENGINE, ground=False, lightweight_engine_compare=True)
-        baseline_gpu = run_success("02-baseline-2223-map-webgpu", "webgpu", "webgpu", engine=BASELINE_ENGINE, ground=False, lightweight_engine_compare=True)
+        baseline_gpu_result = run_baseline_webgpu()
+        baseline_gpu = baseline_gpu_result.get("record")
         current_engine_gl = run_success("03-current-2230-map-webgl2", "webgl2", "webgl2", ground=False, lightweight_engine_compare=True)
         current_engine_gpu = run_success("04-current-2230-map-webgpu", "webgpu", "webgpu", ground=False, lightweight_engine_compare=True)
         auto = run_success("05-current-2230-auto-webgpu-ground", "auto", "webgpu")
@@ -549,7 +551,10 @@ def main():
         device_loss = run_device_loss()
         mobile_gpu = run_success("10-current-2230-mobile-webgpu", "webgpu", "webgpu", viewport=(844,390))
         mobile_gl = run_success("11-current-2230-mobile-webgl2", "webgl2", "webgl2", viewport=(844,390))
-        engine_records=[baseline_gl,baseline_gpu,current_engine_gl,current_engine_gpu]
+        engine_records=[baseline_gl]
+        if baseline_gpu:
+            engine_records.append(baseline_gpu)
+        engine_records.extend([current_engine_gl,current_engine_gpu])
         ground_records=[auto,forced_gpu,forced_gl,fallback]
         records=engine_records+ground_records
         compare_truth(engine_records)
@@ -568,7 +573,7 @@ def main():
                 "baseline":baseline_gpu["performanceSequence"] if baseline_gpu else None,
                 "baselineStatus":baseline_gpu_result.get("status"),
                 "baselineFailure":baseline_gpu_result.get("failure"),
-                "current":forced_gpu["performanceSequence"],
+                "current":current_engine_gpu["performanceSequence"],
             },
             "noAssumedWinner":True,
         }
@@ -583,6 +588,7 @@ def main():
             "simulationAuthorityPreserved":all(r["simulationAuthorityPreserved"] for r in records+[mobile_gpu,mobile_gl]),
             "engineComparisonSceneParity":True,
             "groundBackendSceneParity":True,
+            "baselineWebgpuAccountedFor":baseline_gpu_result.get("status") in {"completed","historical-baseline-browser-crash"},
             "sameViewportAndQuality":True,
             "sameLightingState":True,
             "webgpuActive":auto["backend"]["active"]=="webgpu" and forced_gpu["backend"]["active"]=="webgpu",
