@@ -543,6 +543,7 @@ function rendererFallbackReason(requested,active){
   return globalThis.navigator?.gpu?"WebGPU initialization failed or adapter unavailable":"WebGPU unavailable";
 }
 function rendererSelectionLabel(state=rendererBackendState){
+  if(state.selection==="developer-forced test failed")return state.fallbackReason?"developer-forced test failed — "+state.fallbackReason:"developer-forced test failed";
   if(state.forced)return "developer-forced test";
   if(state.active==="webgpu")return "preferred";
   if(state.active==="webgl2"&&state.fallbackReason)return "fallback — "+state.fallbackReason;
