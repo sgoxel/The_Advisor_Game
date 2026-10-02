@@ -379,13 +379,16 @@ def _surface_refinement_frame(driver,index,timeout):
         "textureSize":detail.get("textureSize"),
         "sourceTextureWidth":detail.get("sourceTextureWidth"),
         "sourceTextureHeight":detail.get("sourceTextureHeight"),
+        "sourceMetersPerSample":detail.get("focusAuthorityMetersPerSample"),
         "metersPerTexel":detail.get("detailMetersPerTexel"),
         "mediumMetersPerTexel":detail.get("mediumMetersPerTexel"),
         "surroundMetersPerTexel":detail.get("surroundMetersPerTexel"),
         "geometrySpacing":detail.get("geometrySampleSpacingMeters") or detail.get("sampleSpacingMeters"),
         "anisotropy":detail.get("anisotropy"),
+        "mipmaps":detail.get("mipmaps"),
         "minFilter":detail.get("minFilter"),
         "magFilter":detail.get("magFilter"),
+        "samplingPolicy":detail.get("samplingPolicy"),
         "detailBands":detail.get("detailBandCount"),
         "visibleFootprint":[zoom.get("visibleFootprintWidthMeters"),zoom.get("visibleFootprintHeightMeters")],
         "buildMs":budget.get("lastBuildMs"),
@@ -417,8 +420,14 @@ def _validate_surface_refinement_frames(frames):
         budget=((stage.get("projection") or {}).get("resourceBudget") or {})
         if budget.get("offscreenFineDetailActive") is not False:
             raise RuntimeError(f"frame {index} activated offscreen fine detail: {budget}")
-        if int(budget.get("cachedResourceCount") or 0)>4:
-            raise RuntimeError(f"frame {index} exceeded bounded local cache: {budget}")
+        cache_count=int(budget.get("cachedResourceCount") or 0)
+        cache_limit=int(budget.get("cacheLimit") or 0)
+        cache_bytes=int(budget.get("estimatedCacheBytes") or 0)
+        cache_budget=int(budget.get("cacheBudgetBytes") or 0)
+        if cache_limit<=0 or cache_count>cache_limit:
+            raise RuntimeError(f"frame {index} exceeded bounded local cache count: {budget}")
+        if cache_budget<=0 or cache_bytes>cache_budget or budget.get("cacheBudgetExceeded") is True:
+            raise RuntimeError(f"frame {index} exceeded bounded local cache bytes: {budget}")
         if detail.get("active"):
             mpt=float(detail.get("detailMetersPerTexel") or 0)
             spacing=float(detail.get("geometrySampleSpacingMeters") or detail.get("sampleSpacingMeters") or 0)
@@ -426,9 +435,14 @@ def _validate_surface_refinement_frames(frames):
             source_h=int(detail.get("sourceTextureHeight") or detail.get("textureSize") or 0)
             if mpt<=0 or spacing<=0 or source_w<=0 or source_h<=0:
                 raise RuntimeError(f"frame {index} missing density telemetry: {detail}")
-            if int(detail.get("anisotropy") or 0)<1 or detail.get("minFilter")!="linear-mipmap-linear" or detail.get("magFilter")!="linear":
+            source_mps=float(detail.get("focusAuthorityMetersPerSample") or 0)
+            if source_mps<=0:
+                raise RuntimeError(f"frame {index} missing canonical source-density telemetry: {detail}")
+            if int(detail.get("anisotropy") or 0)<1 or detail.get("mipmaps") is not False or detail.get("minFilter")!="linear" or detail.get("magFilter")!="linear":
                 raise RuntimeError(f"frame {index} invalid texture sampling telemetry: {detail}")
-            density.append((index,mpt,spacing,source_w,source_h,str(detail.get("level") or "")))
+            if detail.get("samplingPolicy")!="single-level-linear-transition-alpha":
+                raise RuntimeError(f"frame {index} missing deterministic transition-texture sampling policy: {detail}")
+            density.append((index,mpt,spacing,source_mps,source_w,source_h,str(detail.get("level") or "")))
     if len(set(focus))!=1:
         raise RuntimeError(f"surface refinement evidence changed canonical focus: {focus}")
     if len(density)<5:
@@ -436,9 +450,9 @@ def _validate_surface_refinement_frames(frames):
     for a,b in zip(density,density[1:]):
         # Reusing one ready native resource over adjacent checkpoints is valid,
         # but world-space texel and geometry density must never get coarser.
-        if b[1]>a[1]*1.001 or b[2]>a[2]*1.001:
-            raise RuntimeError(f"closer zoom lost world-space terrain density: {a} -> {b}")
-    if density[-1][1]>=density[0][1] or density[-1][2]>=density[0][2]:
+        if b[1]>a[1]*1.001 or b[2]>a[2]*1.001 or b[3]>a[3]*1.001:
+            raise RuntimeError(f"closer zoom lost world-space terrain/source density: {a} -> {b}")
+    if density[-1][1]>=density[0][1] or density[-1][2]>=density[0][2] or density[-1][3]>=density[0][3]:
         raise RuntimeError(f"surface refinement did not materially improve density: {density[0]} -> {density[-1]}")
 
 def _generic_frames(driver,shots,width,height,timeout,interval):
