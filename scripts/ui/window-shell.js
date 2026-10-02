@@ -16,7 +16,8 @@ const registry=new Map();
 let zCounter=Z_BASE;
 let drag=null;
 let observer=null;
-let dock=null;\nlet dockSignature=null;
+let dock=null;
+let dockSignature=null;
 const telemetry={registerCount:0,activeCount:0,minimizedCount:0,dragStartCount:0,dragEndCount:0,clampCorrections:0,focusChanges:0,worldInputSuppressions:0,closeCount:0,restoreCount:0,resizeCount:0};
 
 function stateFor(key){
