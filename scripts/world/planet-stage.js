@@ -4549,7 +4549,19 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       }
     }
   }else{
-    for(const [x,y] of roadCells)addQuad(x-.5,y-.5,x+.5,y+.5);
+    // Final-ground roads keep the exact authoritative road-cell set, but render
+    // it as a connected lane network instead of filling every 2 m cell. This
+    // removes the stair-stepped brown raster without changing routes/walkability.
+    const fullRoadMap=new Set(roadCells.map(([x,y])=>x+","+y));
+    const nodeHalf=.31,cardinalWidth=.62,diagonalWidth=.54;
+    for(const [x,y] of roadCells){
+      addQuad(x-nodeHalf,y-nodeHalf,x+nodeHalf,y+nodeHalf);
+      for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
+        if(!fullRoadMap.has((x+dx)+","+(y+dy)))continue;
+        if(dx&&dy&&(fullRoadMap.has((x+dx)+","+y)||fullRoadMap.has(x+","+(y+dy))))continue;
+        addSegment(x,y,x+dx,y+dy,dx&&dy?diagonalWidth:cardinalWidth);
+      }
+    }
   }
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
   const entity=new pc.Entity("CanonicalAuthoritativeRoadCells");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
@@ -4971,7 +4983,11 @@ function createGroundCharacterBillboard(parent,name,url,x,ground,z,presentationS
   // camera. Offset the card center along the inverse parent pitch so the lower
   // visible edge lands exactly on the canonical terrain point instead of
   // intersecting the terrain and being clipped by depth testing.
-  const entity=addLocalPrimitive(parent,name,"character-billboard",material,x,ground+.035+pose.centerLift,z-pose.centerBack,w,1,h);
+  // The plaza is presentation-only paving raised above terrain relief. Give
+  // character art a tiny additional depth clearance only at the final layer so
+  // feet remain visually attached while the paving can no longer clip the card.
+  const surfaceClearance=name==="ProtagonistBillboard"?.082:.052;
+  const entity=addLocalPrimitive(parent,name,"character-billboard",material,x,ground+surfaceClearance+pose.centerLift,z-pose.centerBack,w,1,h);
   entity.setLocalEulerAngles(pose.pitchDegrees,0,0);
   if(entity?.render){entity.render.castShadows=false;entity.render.receiveShadows=false;}
   entity._advisorBillboard={url,width:w,height:h,feetOffset:pose.feetOffset};
@@ -5326,7 +5342,7 @@ function updateCanonicalNpcMotion(){
       const h=Math.max(.1,Number(base.height||1)*emphasis),w=Math.max(.1,Number(base.width||1)*emphasis),feet=Math.max(.01,Number(base.feetOffset||h*.47)*emphasis);
       const pose=groundCharacterBillboardPose(h,feet);
       record.billboard.setLocalScale(w,1,h);
-      record.billboard.setLocalPosition(pos.x,ground+.035+pose.centerLift,pos.z-pose.centerBack);
+      record.billboard.setLocalPosition(pos.x,ground+.052+pose.centerLift,pos.z-pose.centerBack);
       record.billboard.setLocalEulerAngles(pose.pitchDegrees,0,0);
     }
     if(eventActive){
@@ -5614,7 +5630,14 @@ function canonicalRoofMeshData(entry,state){
 }
 function buildCanonicalRoofMesh(entry,state){
   const data=canonicalRoofMeshData(entry,state),mesh=new pc.Mesh(device);
-  mesh.setPositions(data.positions);mesh.setNormals(data.normals);mesh.setColors32(data.colors);mesh.setIndices(data.indices);mesh.update();
+  // Roof geometry is custom, so StandardMaterial diffuse maps need explicit
+  // deterministic planar UVs. Keep mapping inside the canonical footprint.
+  const center=canonicalSemanticPosition(entry.east,entry.north,entry.presentationScale,entry.unit,entry.frame);
+  const spanX=Math.max(1e-9,entry.bodyW||1),spanZ=Math.max(1e-9,entry.bodyD||1),uvs=[];
+  for(let i=0;i<data.positions.length;i+=3){
+    uvs.push((data.positions[i]-center.x)/spanX+.5,(data.positions[i+2]-center.z)/spanZ+.5);
+  }
+  mesh.setPositions(data.positions);mesh.setNormals(data.normals);mesh.setUvs(0,uvs);mesh.setColors32(data.colors);mesh.setIndices(data.indices);mesh.update();
   return {mesh,data};
 }
 function clearCanonicalRoofRegistry(){
@@ -6507,11 +6530,14 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const treeCount=tier==="route"?7:tier==="coarse"?6:tier==="refined"?10:tier==="full"?12:0;
   for(let i=0;i<treeCount;i++){
     const angle=i/Math.max(1,treeCount)*Math.PI*2+localHash(i*17,treeCount,91)*.22;
-    const radiusTiles=22+localHash(i*31,treeCount,92)*4;
+    // At final ground, keep the same deterministic 12 presentation trees but
+    // bring their ring inside the actual 64x36 m play footprint. Wider tiers
+    // retain the previous outer-ring placement.
+    const radiusTiles=tier==="full"?(7+localHash(i*31,treeCount,92)*5):(22+localHash(i*31,treeCount,92)*4);
     const east=Math.cos(angle)*radiusTiles*reveal.tileMeters,north=Math.sin(angle)*radiusTiles*reveal.tileMeters;
     const ground=canonicalSemanticGroundHeightUnits(east,north,semanticFrame)+lift,h=(4.5+localHash(i*43,treeCount,93)*2.5)*scale/unit,pos=canonicalSemanticPosition(east,north,scale,unit,semanticFrame);
     addLocalStatic("CanonicalTreeTrunk-"+i,"cylinder",localStaticMaterials.trunk,pos.x,ground+h*.28,pos.z,.65*scale/unit,Math.max(.04,h*.56),.65*scale/unit);
-    addLocalStatic("CanonicalTreeCrown-"+i,"sphere",localStaticMaterials.leaf,pos.x,ground+h*.78,pos.z,3.8*scale/unit,Math.max(.06,h*.82),3.8*scale/unit);
+    addLocalStatic("CanonicalTreeCrown-"+i,"sphere",localStaticMaterials.leaf,pos.x,ground+h*.78,pos.z,4.2*scale/unit,Math.max(.06,h*.84),4.2*scale/unit);
     vegetation++;triangles+=180;
   }
   const wild=renderLocalWilderness(resource,frame,reveal);
