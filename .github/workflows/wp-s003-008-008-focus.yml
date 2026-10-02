@@ -1,0 +1,21 @@
+name: WP-S003-008-008 Focus Navigation Evidence
+
+on:
+  push:
+    branches:
+      - agent6/wp-s003-008-008
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check
+        run: node --check scripts/world/planet-stage.js
+      - name: Focus navigation guards
+        run: node scripts/tests/wp-s003-008-008-focus-navigation.test.js
