@@ -3380,7 +3380,7 @@ function* prepareLocalWildernessPlanSteps(job){
   // Keep local natural detail dense enough to read, but avoid turning final
   // ground into a field of repeated primitive silhouettes. Distance LOD retains
   // rare large outcrops while smaller presentation props resolve only at ground.
-  const maxStatic=dims.visibleHeight<=45?48:dims.visibleHeight<=90?56:dims.visibleHeight<=240?72:80;
+  const maxStatic=dims.visibleHeight<=45?32:dims.visibleHeight<=90?56:dims.visibleHeight<=240?72:80;
   // Scan the complete bounded patch. The previous ordered early stop filled the
   // budget from one side of the grid, producing the visible horizontal prop
   // band. Global-cell hashes now choose a uniformly distributed bounded subset.
@@ -3477,7 +3477,7 @@ function buildLocalWildernessMesh(plan,frame,reveal){
     const managed=localWildernessManaged(item,reveal);if(managed.reject){rejectedManaged++;if(managed.road)rejectedRoad++;continue;}
     const x=item.east/unit,z=-item.north/unit,y=localGroundHeightUnits(item.east,item.north,frame)+.012,baseColor=wildernessColor(item.family,item.biome);
     const variant=clamp(Number(item.variant??.5),0,1),tone=.90+variant*.18,color=[clamp(baseColor[0]*tone,0,1),clamp(baseColor[1]*tone,0,1),clamp(baseColor[2]*tone,0,1),255];
-    const m=(item.family==="outcrop"?1.48:item.family==="rock"?.76:item.family==="log"||item.family==="driftwood"?1.20:item.family==="sapling"?1.08:item.family==="bush"?.92:item.family==="stump"?.72:.62)*item.scale/unit;
+    const m=(item.family==="outcrop"?1.36:item.family==="rock"?.70:item.family==="log"||item.family==="driftwood"?1.20:item.family==="sapling"?1.08:item.family==="bush"?.92:item.family==="stump"?.72:item.family==="flower"?.42:.62)*item.scale/unit;
     const h=(item.family==="outcrop"?.88:item.family==="sapling"?4.2:item.family==="reed"?1.75:item.family==="bush"?1.18:item.family==="stump"?.74:item.family==="rock"?.43:item.family==="log"||item.family==="driftwood"?.55:item.family==="flower"?.78:.92)*item.scale/unit;
     const ca=Math.cos(item.rotation),sa=Math.sin(item.rotation);
     if(item.biome==="wet"&&item.shoreAccent&&Math.hypot(Number(item.waterEast||0),Number(item.waterNorth||0))>.1){
@@ -3506,19 +3506,22 @@ function buildLocalWildernessMesh(plan,frame,reveal){
       const pa=push(x-pr,py,z,patch),pb=push(x+pr*.08,py,z-pr*.54,patch),pcv=push(x+pr,py,z+pr*.08,patch),pd=push(x-pr*.12,py,z+pr*.50,patch);quad(pa,pb,pcv,pd);
     }
     if(item.family==="rock"||item.family==="outcrop"){
-      const ridge=item.family==="outcrop",apexEast=(variant-.5)*m*.58,apexNorth=(.5-variant)*m*.38;
-      const a=push(x-m*(1.02+variant*.22),y,z-m*(.58+(1-variant)*.18),color),b=push(x+m*(.86+(1-variant)*.28),y,z-m*(.54+variant*.16),color);
-      const c=push(x+m*(.64+variant*.18),y,z+m*(.76+(1-variant)*.24),color),d=push(x-m*(.62+(1-variant)*.22),y,z+m*(.70+variant*.20),color);
-      const e=push(x+apexEast,y+h*(.72+variant*.38),z+apexNorth,color);
-      tri(a,b,e);tri(b,c,e);tri(c,d,e);tri(d,a,e);quad(a,d,c,b);
-      if(ridge){
-        // A low secondary lobe follows the deterministic rotation so outcrops
-        // read as varied ridge clusters rather than repeated twin pyramids.
-        const shade=[color[0]*.86,color[1]*.86,color[2]*.86,255],rm=m*(.46+(1-variant)*.14),rh=h*(.48+variant*.18);
-        const ox=ca*m*(.62+variant*.28),oz=sa*m*(.62+variant*.28);
-        const aa=push(x+ox-rm,y+.01,z+oz-rm*.50,shade),bb=push(x+ox+rm,y+.01,z+oz-rm*.44,shade);
-        const cc=push(x+ox+rm*.60,y+.01,z+oz+rm*.62,shade),dd=push(x+ox-rm*.58,y+.01,z+oz+rm*.58,shade),ee=push(x+ox*.82,y+rh,z+oz*.82,shade);
-        tri(aa,bb,ee);tri(bb,cc,ee);tri(cc,dd,ee);tri(dd,aa,ee);quad(aa,dd,cc,bb);
+      // Rounded irregular low-poly boulders replace the old four-corner pyramid,
+      // which projected as large gray trapezoids in the orthographic ground view.
+      const ridge=item.family==="outcrop",sides=ridge?8:7,baseRing=[],shoulderRing=[];
+      for(let k=0;k<sides;k++){
+        const a=item.rotation+k*Math.PI*2/sides;
+        const irregular=.86+.12*Math.sin((k+1)*2.17+variant*3.1);
+        const radius=m*irregular;
+        baseRing.push(push(x+Math.cos(a)*radius,y,z+Math.sin(a)*radius,color));
+        shoulderRing.push(push(x+Math.cos(a)*radius*.70,y+h*(.38+.05*((k+2)%3)),z+Math.sin(a)*radius*.70,color));
+      }
+      const apexOffset=m*(variant-.5)*.18;
+      const apex=push(x+ca*apexOffset,y+h*(.82+variant*.18),z+sa*apexOffset,color);
+      for(let k=0;k<sides;k++){
+        const n=(k+1)%sides;
+        quad(baseRing[k],baseRing[n],shoulderRing[n],shoulderRing[k]);
+        tri(shoulderRing[k],shoulderRing[n],apex);
       }
     }else if(item.family==="log"||item.family==="driftwood"){
       const dx=ca*m,dz=sa*m,px=-sa*h*.42,pz=ca*h*.42,top=y+h*.58;
@@ -3559,7 +3562,7 @@ function buildLocalWildernessMesh(plan,frame,reveal){
         const p=push(x-dz,y,z+dx,stem),q=push(x+dz,y,z-dx,stem),r=push(x+lean,y+h*(.78+k*.055),z-lean*.35,stem);tri(p,q,r);
       }
       if(item.family==="flower"){
-        const bloom=[.98,.68,.12],center=push(x,y+h,z,bloom),petal=m*.46;
+        const bloom=[.90,.60,.14],center=push(x,y+h,z,bloom),petal=m*.30;
         const p0=push(x-petal,y+h,z,bloom),p1=push(x,y+h+.03,z-petal,bloom),p2=push(x+petal,y+h,z,bloom),p3=push(x,y+h+.03,z+petal,bloom);
         tri(center,p0,p1);tri(center,p1,p2);tri(center,p2,p3);tri(center,p3,p0);
       }
@@ -7836,7 +7839,13 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // or edge-varying gain on the parent itself produced the pale 1/500 LOD
       // boundary seen in fresh evidence.
       const strategicFocusResidualScale=contextRing?1:lerp(.24,1,smoothstep01(clamp((1200-metersPerTexel)/900,0,1)));
-      const refinementGain=contextRing?contextRefineWeight*.22:focusRefineWeight*.94*strategicFocusResidualScale;
+      // Once the 3x context ring itself reaches local physical resolution, carry
+      // most of the same registered high-pass bandwidth as the 1x child. Keeping
+      // it at the old fixed 22% residual made the child read as a richer rectangle
+      // even though both layers sampled the same canonical coordinates.
+      const contextLocalContinuity=contextRing?smoothstep01(clamp((8-metersPerTexel)/6.5,0,1)):0;
+      const contextResidualGain=contextRing?lerp(.22,.72,contextLocalContinuity):0;
+      const refinementGain=contextRing?contextRefineWeight*contextResidualGain:focusRefineWeight*.94*strategicFocusResidualScale;
       // Regional parents are physically coarse but still need readable landform
       // structure while finer children stream. Reuse the already-computed,
       // registered-meter macro signal and increase only its presentation gain in
@@ -7910,7 +7919,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const nearReliefWeight=lerp(.30,1,smoothstep01(clamp((24-metersPerTexel)/16,0,1)));
         const broadReliefWeight=lerp(.36,1,smoothstep01(clamp((58-metersPerTexel)/34,0,1)));
         const closeLivingRelief=worldVisualStyle()?smoothstep01(clamp((5-metersPerTexel)/4.5,0,1)):0;
-        const rawHillshadeStrength=clamp((.05+focusRefineWeight*(.26+closeLivingRelief*.22))*slopeLightingWeight*nearReliefWeight*broadReliefWeight,.010,.90);
+        const reliefRefineWeight=contextRing?contextLocalContinuity*lerp(.72,1,contextRefineWeight):focusRefineWeight;
+        const rawHillshadeStrength=clamp((.05+reliefRefineWeight*(.26+closeLivingRelief*.22))*slopeLightingWeight*nearReliefWeight*broadReliefWeight,.010,.90);
         const hillshadeCap=metersPerTexel<=2?lerp(.70,.90,closeLivingRelief):metersPerTexel<=6?.70:metersPerTexel<=30?.26:metersPerTexel<=120?.055:.025;
         const focusHillshadeStrength=Math.min(rawHillshadeStrength,hillshadeCap);
         const shadeFloor=lerp(contextRing?.94:.91,.82,closeLivingRelief),shadeCeil=lerp(contextRing?1.06:1.09,1.18,closeLivingRelief);
@@ -8032,7 +8042,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         structureContribution=cover.slice();
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevationBase).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevationBase);
-        const coverGain=contextRing?contextRefineWeight*.38:focusRefineWeight*.98*strategicFocusResidualScale;
+        const contextCoverGain=contextRing?lerp(.38,.82,contextLocalContinuity):0;
+        const coverGain=contextRing?contextRefineWeight*contextCoverGain:focusRefineWeight*.98*strategicFocusResidualScale;
         // Prefer the already SEED-registered land-cover field for strategic-map
         // readability. Its 3.6 km / 1.5 km / 700 m structure is physically
         // resolvable at 1/500 and avoids re-amplifying continental relief.
