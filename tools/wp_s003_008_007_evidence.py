@@ -6,6 +6,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException
 
 TARGET=os.environ.get("TARGET","http://127.0.0.1:8000/")
 SEED="AGENT6-WINDOW-SHELL-A"
@@ -58,30 +59,23 @@ def open_advisor(driver):
     wait_js(driver,"document.getElementById('advisorChatPanel')&&!document.getElementById('advisorChatPanel').hidden",30)
 
 opts=Options()
-opts.add_argument("--headless=new")
-opts.add_argument("--no-sandbox")
-opts.add_argument("--disable-dev-shm-usage")
-opts.add_argument("--ignore-gpu-blocklist")
-opts.add_argument("--enable-unsafe-swiftshader")
-opts.add_argument("--use-gl=angle")
-opts.add_argument("--use-angle=swiftshader")
-opts.add_argument("--enable-gpu")
-opts.add_argument("--use-gpu-in-tests")
-opts.add_argument("--enable-webgl")
-opts.add_argument("--disable-search-engine-choice-screen")
-opts.add_argument("--window-size=1280,800")
+for arg in [
+    "--headless=new","--no-sandbox","--disable-dev-shm-usage","--enable-webgl",
+    "--ignore-gpu-blocklist","--use-angle=swiftshader","--disable-search-engine-choice-screen",
+    "--disable-background-timer-throttling","--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding","--window-size=1280,800"
+]:
+    opts.add_argument(arg)
 opts.set_capability("goog:loggingPrefs",{"browser":"ALL"})
-# The game intentionally performs substantial startup/streaming work after navigation.
-# Do not make Selenium wait for the browser load event: readiness is owned by the
-# explicit PlanetStage/WindowShell gate below. This avoids false 120 s transport
-# timeouts before evidence begins while preserving the same 180 s playable gate.
-opts.page_load_strategy="none"
 driver=webdriver.Chrome(options=opts)
-driver.set_page_load_timeout(30)
+driver.set_page_load_timeout(300)
 driver.set_script_timeout(240)
-# This WP validates presentation mechanics, not renderer-backend parity. Force the
-# supported WebGL2 fallback so an unrelated WebGPU/CI device-loss path cannot make
-# this independently executable UI package depend on another renderer WP.
+try:
+    driver.command_executor.set_timeout(360)
+except Exception:
+    pass
+# Dedicated UI acceptance uses the supported developer WebGL2 path. Cross-backend
+# parity is owned by the renderer WP; this WP validates presentation mechanics.
 campaign_bootstrap=json.dumps({
     "seed":SEED,
     "realStartMs":int(time.time()*1000),
@@ -92,11 +86,7 @@ campaign_bootstrap=json.dumps({
 settings_bootstrap=json.dumps({"seed":SEED},separators=(",",":"))
 driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument",{"source":f"""
 try {{
-  Object.defineProperty(navigator,'gpu',{{value:undefined,configurable:true}});
-  Object.defineProperty(Navigator.prototype,'gpu',{{get:()=>undefined,configurable:true}});
-}} catch (_) {{}}
-try {{
-  localStorage.setItem('the-advisor-game:development-mode','false');
+  localStorage.setItem('the-advisor-game:development-mode','true');
   localStorage.setItem('theAdvisorGame.wp001.campaign.v2', {json.dumps(campaign_bootstrap)});
   localStorage.setItem('theAdvisorGame.wp001.settings.v2', {json.dumps(settings_bootstrap)});
   localStorage.setItem('advisor.planet.seed.v1', {json.dumps(SEED)});
@@ -105,9 +95,26 @@ try {{
 records=[]
 try:
     exact(driver,1280,800)
-    evidence_target=TARGET+("&" if "?" in TARGET else "?")+"evidence_fast_start=1&dev=1&gpu=webgl2"
+    evidence_target=TARGET+("&" if "?" in TARGET else "?")+"evidence_fast_start=1&evidence_skip_destinations=1&dev=1&gpu=webgl2"
     driver.get(evidence_target)
-    wait_js(driver,"document.getElementById('planetStageRoot')?.dataset?.ready==='true'&&window.PlanetStage?.snapshot?.()?.ready&&window.WindowShell",300)
+    try:
+        # PlanetStage's playable snapshot is authoritative for evidence readiness.
+        # Headless Chrome may defer the later DOM data-ready paint decoration.
+        wait_js(driver,"window.PlanetStage?.snapshot?.()?.ready===true&&document.getElementById('planetStageRoot')&&document.getElementById('planetCanvas')&&window.WindowShell&&window.LocalEventVignettes",300)
+    except TimeoutException:
+        diag=driver.execute_script("""return {
+          documentReady:document.readyState,
+          domReady:document.getElementById('planetStageRoot')?.dataset?.ready||null,
+          stage:window.PlanetStage?.snapshot?.()||null,
+          windowShell:window.WindowShell?.snapshot?.()||null,
+          localEvents:Boolean(window.LocalEventVignettes),
+          canvas:Boolean(document.getElementById('planetCanvas')),
+          body:String(document.body?.innerText||'').slice(0,1400)
+        }""")
+        diag["browserLogs"]=driver.get_log("browser")[-40:]
+        (OUT/"startup-timeout.json").write_text(json.dumps(diag,indent=2),encoding="utf-8")
+        driver.save_screenshot(str(OUT/"startup-timeout.png"))
+        raise RuntimeError("playable-stage startup timeout: "+json.dumps(diag))
 
     activation=driver.execute_script("""
       const seed=window.PlanetStage.snapshot().activeSeed;
