@@ -248,10 +248,18 @@ def invalid_target_assert(driver):
     return result
 
 def wait_marker(driver):
+    result=js(driver,"""
+      const stage=window.PlanetStage,scalar=stage.scalarForFootprintHeight(80);
+      stage.setZoomScalar(scalar);
+      return {scalar};
+    """)
     _wait(driver,"""
       const s=window.PlanetStage?.snapshot?.(),p=s?.npcPresentation||{};
-      return Boolean(s?.zoom?.scaleIndex===8&&p?.protagonistMarkerVisible===true&&(window.PlanetStage?.inspectionTargets?.()||[]).some(x=>x.type==='protagonist'));
-    """,200,"inspectable wider-view protagonist")
+      const nonFinal=Number(s?.zoom?.scalar)<0.999999;
+      const nearReady=s?.zoom?.visibleLevel==='near-ground-close'||s?.zoom?.requestedLevel==='near-ground-close';
+      return Boolean(s?.ready&&nonFinal&&nearReady&&p?.protagonistMarkerVisible===true&&p?.protagonistBillboardVisible!==true&&(window.PlanetStage?.inspectionTargets?.()||[]).some(x=>x.type==='protagonist'));
+    """,200,"inspectable 80m wider-view protagonist")
+    return result
 
 def protagonist_focus_assert(driver,moved=False):
     before=js(driver,"""
@@ -360,13 +368,11 @@ for seed in SEEDS:
             raise RuntimeError(f"{seed}: repeated same-target focus proof missing")
         invalid=invalid_target_assert(driver)
         focus_starting_village(driver)
-        js(driver,"window.PlanetStage.setScaleIndex(8);")
         wait_marker(driver)
         protagonist_first=protagonist_focus_assert(driver,False)
         moved_to=move_protagonist_for_evidence(driver)
         if not moved_to:
             raise RuntimeError(f"{seed}: could not establish second authoritative protagonist position")
-        js(driver,"window.PlanetStage.setScaleIndex(8);")
         wait_marker(driver)
         protagonist_moved=protagonist_focus_assert(driver,True)
         moved_expected={"x":moved_to["x"],"y":moved_to["y"]}
