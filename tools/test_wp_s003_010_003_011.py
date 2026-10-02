@@ -25,10 +25,9 @@ def driver_for():
     options.add_argument("--ignore-gpu-blocklist")
     options.add_argument("--use-angle=swiftshader")
     options.add_argument("--window-size=1280,800")
-    # Do not make Selenium's navigation command synchronously own the full
-    # deterministic world rebuild. wait_ready() below is the authoritative
-    # readiness gate and has explicit, observable timeouts.
-    options.page_load_strategy = "none"
+    # A shared runner-local profile lets the independent-seed check restart
+    # Chrome without losing the authoritative campaign/planet persistence.
+    options.add_argument("--user-data-dir=/tmp/wp011-chrome-profile")
     options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
     return webdriver.Chrome(options=options)
 
@@ -280,7 +279,13 @@ def main():
         )
         if not result or result.get("campaign", {}).get("ok") is not True or result.get("planet") != second_seed:
             raise AssertionError(f"Could not create independent authoritative seed: {result}")
-        driver.refresh()
+        # A full browser restart avoids coupling a synchronous WebDriver refresh
+        # command to the expensive deterministic world rebuild. The persistent
+        # profile above carries only the just-written authoritative seed state.
+        driver.quit()
+        time.sleep(.5)
+        driver = driver_for()
+        driver.get(TARGET)
         wait_ready(driver)
         if snap(driver).get("activeSeed") != second_seed:
             raise AssertionError(f"Second planet seed did not become authoritative: {snap(driver).get('activeSeed')}")
