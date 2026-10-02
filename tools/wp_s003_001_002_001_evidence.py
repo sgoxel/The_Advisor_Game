@@ -247,9 +247,18 @@ def backend_record(d, label):
     atmosphere=s.get("atmosphere") or {}
     quality=d.execute_script("""
       const r=window.RuntimeRenderQuality?.snapshot?.()||null,t=window.RuntimeTextureQuality?.snapshot?.()||null;
+      let storedRender=null,storedTexture=null;
+      try{
+        storedRender=localStorage.getItem('the-advisor-game:render-quality-mode');
+        storedTexture=localStorage.getItem('the-advisor-game:texture-quality-profile');
+      }catch(_){}
       return {
-        render:r?{mode:r.mode||null,activeLevel:r.activeLevel||null,maxPixelRatio:r.maxPixelRatio??null,renderScale:r.renderScale??null,targetFps:r.targetFps??null}:null,
-        texture:t?{qualityProfile:t.qualityProfile||null,cacheSignature:t.cacheSignature||null,maxMaterialTextureResolution:t.maxMaterialTextureResolution??null,anisotropy:t.anisotropy??null}:null
+        render:r
+          ?{mode:r.mode||storedRender||null,activeLevel:r.activeLevel||null,maxPixelRatio:r.maxPixelRatio??null,renderScale:r.renderScale??null,targetFps:r.targetFps??null,apiAvailable:true,source:"runtime-api"}
+          :{mode:storedRender||null,activeLevel:storedRender||null,maxPixelRatio:null,renderScale:null,targetFps:null,apiAvailable:false,source:"persisted-test-input"},
+        texture:t
+          ?{qualityProfile:t.qualityProfile||storedTexture||null,cacheSignature:t.cacheSignature||null,maxMaterialTextureResolution:t.maxMaterialTextureResolution??null,anisotropy:t.anisotropy??null,apiAvailable:true,source:"runtime-api"}
+          :{qualityProfile:storedTexture||null,cacheSignature:null,maxMaterialTextureResolution:null,anisotropy:null,apiAvailable:false,source:"persisted-test-input"}
       };
     """)
     return {
@@ -337,9 +346,12 @@ def run_success(label, gpu_mode, expected, engine=CURRENT_ENGINE, ground=True, d
         render_quality=quality.get("render") or {}
         texture_quality=quality.get("texture") or {}
         if render_quality.get("mode") != "standard" or render_quality.get("activeLevel") != "standard":
-            raise AssertionError(f"{label}: render quality was not pinned to standard: {render_quality}")
+            raise AssertionError(f"{label}: render quality test input was not pinned to standard: {render_quality}")
         if texture_quality.get("qualityProfile") != "standard":
-            raise AssertionError(f"{label}: texture quality was not pinned to standard: {texture_quality}")
+            raise AssertionError(f"{label}: texture quality test input was not pinned to standard: {texture_quality}")
+        viewport=(rec.get("backend") or {}).get("performance",{}).get("viewport") or {}
+        if not viewport or viewport.get("maxPixelRatio") is None or viewport.get("renderScale") is None:
+            raise AssertionError(f"{label}: effective renderer quality telemetry missing: {viewport}")
         if engine == CURRENT_ENGINE and perf.get("appStatsPublicApi") is not True:
             raise AssertionError(f"{label}: PlayCanvas 2.23 public AppStats not active: {perf}")
         path = OUT / f"{label}.png"
