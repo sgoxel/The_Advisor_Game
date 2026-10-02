@@ -21,6 +21,20 @@ PROFILES={"landscape":(1920,1080),"portrait":(1080,1920),"tablet":(1920,1080),"p
 WP_CHARACTER_SCENARIO="wp-s003-004-004"
 WP_CHARACTER_SHOTS=5
 STARTING_VILLAGE_SCENARIO="starting-village"
+WP_SURFACE_REFINEMENT_SCENARIO="wp-s003-010-003-005-002"
+WP_SURFACE_REFINEMENT_SHOTS=10
+WP_SURFACE_REFINEMENT_PLAN=(
+    (0.451545,"fixed-focus:0.08x"),
+    (0.588046,"fixed-focus:0.15x"),
+    (0.731199,"fixed-focus:0.29x"),
+    (0.821726,"fixed-focus:0.44x"),
+    (0.866461,"fixed-focus:0.54x"),
+    (0.899670,"fixed-focus:0.63x"),
+    (0.909559,"fixed-focus:0.66x"),
+    (0.946047,"fixed-focus:0.78x"),
+    (0.954243,"fixed-focus:0.81x"),
+    (1.000000,"fixed-focus:1.00x"),
+)
 
 def _inner_viewport(driver):
     inner=driver.execute_script("return {width:window.innerWidth,height:window.innerHeight};")
@@ -139,7 +153,9 @@ def _stage_snapshot(driver):
         projection:{
           mode:s.projection?.mode,
           blend:s.projection?.blend,
+          localDetail:s.projection?.localDetail,
           localStatic:s.projection?.localStatic,
+          spatialLod:s.projection?.spatialLod,
           resourceBudget:s.projection?.resourceBudget,
           presentation:s.projection?.presentation
         },
@@ -149,7 +165,8 @@ def _stage_snapshot(driver):
         worldVisualStyleIntegration:s.worldVisualStyleIntegration,
         navigationPerformance:s.navigationPerformance,
         startupError:s.startupError,
-        frameCount:s.frameCount
+        frameCount:s.frameCount,
+        renderQuality:window.RuntimeRenderQuality?.snapshot?.()||null
       };
     """)
 
@@ -312,6 +329,118 @@ def _validate_character_frames(frames):
     if len(set(focus_keys))!=1:
         raise RuntimeError(f"pure zoom/viewport evidence changed canonical focus: {focus_keys}")
 
+def _prepare_surface_refinement_focus(driver):
+    result=driver.execute_script("""
+      const stage=window.PlanetStage,s=stage?.snapshot?.();
+      const target=s?.featureTargets?.continuityFocus||s?.featureTargets?.continent||s?.featureTargets?.mountain||s?.featureTargets?.peak;
+      if(!stage||!s?.ready||!target)return {ok:false,reason:'continuity-focus-unavailable'};
+      stage.setViewTarget(target);
+      const after=stage.snapshot();
+      return {
+        ok:true,
+        seed:after.activeSeed,
+        latitudeDegrees:after.canonicalFocus?.latitudeDegrees,
+        longitudeDegrees:after.canonicalFocus?.longitudeDegrees,
+        worldTile:after.canonicalFocus?.worldTile||null
+      };
+    """)
+    if not result or not result.get("ok"):
+        raise RuntimeError(f"could not prepare fixed surface-refinement focus: {result}")
+    return result
+
+def _surface_refinement_frame(driver,index,timeout):
+    scalar,label=WP_SURFACE_REFINEMENT_PLAN[index]
+    set_exact_viewport(driver,1280,800)
+    driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);",float(scalar))
+    _wait(driver,f"""
+      const target={float(scalar)!r},s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{{}};
+      const zoomOk=Math.abs(Number(s?.zoom?.scalar)-target)<0.00001 && !s?.zoom?.animation?.active;
+      const tangentRequired=Number(s?.projection?.blend||0)>.02;
+      const resourceOk=!tangentRequired || (
+        Number(r?.pendingPreparationCount||0)===0 &&
+        !!r?.activeSignature &&
+        r?.activeSignature===r?.requestedSignature
+      );
+      return Boolean(s?.ready&&zoomOk&&resourceOk);
+    """,timeout,f"surface refinement {label} readiness")
+    # Capture only after two paint frames so a just-swapped child texture/mesh is
+    # actually visible rather than merely reported ready by telemetry.
+    driver.execute_async_script("""
+      const done=arguments[0];
+      requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
+    """)
+    stage=_stage_snapshot(driver)
+    detail=((stage or {}).get("projection") or {}).get("localDetail") or {}
+    budget=((stage or {}).get("projection") or {}).get("resourceBudget") or {}
+    zoom=(stage or {}).get("zoom") or {}
+    proof={
+        "scalar":zoom.get("scalar"),
+        "level":detail.get("level"),
+        "textureSize":detail.get("textureSize"),
+        "sourceTextureWidth":detail.get("sourceTextureWidth"),
+        "sourceTextureHeight":detail.get("sourceTextureHeight"),
+        "metersPerTexel":detail.get("detailMetersPerTexel"),
+        "mediumMetersPerTexel":detail.get("mediumMetersPerTexel"),
+        "surroundMetersPerTexel":detail.get("surroundMetersPerTexel"),
+        "geometrySpacing":detail.get("geometrySampleSpacingMeters") or detail.get("sampleSpacingMeters"),
+        "anisotropy":detail.get("anisotropy"),
+        "minFilter":detail.get("minFilter"),
+        "magFilter":detail.get("magFilter"),
+        "detailBands":detail.get("detailBandCount"),
+        "visibleFootprint":[zoom.get("visibleFootprintWidthMeters"),zoom.get("visibleFootprintHeightMeters")],
+        "buildMs":budget.get("lastBuildMs"),
+        "cached":budget.get("cachedResourceCount"),
+        "offscreenFine":budget.get("offscreenFineDetailActive"),
+        "visibleNativeMagnification":(((stage or {}).get("projection") or {}).get("spatialLod") or {}).get("visibleNativeMagnification"),
+        "renderQuality":(stage or {}).get("renderQuality"),
+    }
+    return {"action":label,"viewport":_inner_viewport(driver),"stage":stage,"densityProof":proof}
+
+def _validate_surface_refinement_frames(frames):
+    if len(frames)!=WP_SURFACE_REFINEMENT_SHOTS:
+        raise RuntimeError(f"{WP_SURFACE_REFINEMENT_SCENARIO} requires {WP_SURFACE_REFINEMENT_SHOTS} fixed-focus frames")
+    focus=[]
+    density=[]
+    prior_footprint=None
+    for index,frame in enumerate(frames,start=1):
+        stage=frame.get("stage") or {}
+        canonical=stage.get("canonicalFocus") or {}
+        focus.append((canonical.get("latitudeDegrees"),canonical.get("longitudeDegrees"),str((canonical.get("worldTile") or {}).get("x")),str((canonical.get("worldTile") or {}).get("y"))))
+        zoom=stage.get("zoom") or {}
+        footprint=float(zoom.get("visibleFootprintHeightMeters") or 0)
+        if footprint<=0:
+            raise RuntimeError(f"frame {index} is missing visible footprint telemetry")
+        if prior_footprint is not None and footprint>=prior_footprint:
+            raise RuntimeError(f"closer zoom did not shrink visible footprint: {prior_footprint} -> {footprint}")
+        prior_footprint=footprint
+        detail=((stage.get("projection") or {}).get("localDetail") or {})
+        budget=((stage.get("projection") or {}).get("resourceBudget") or {})
+        if budget.get("offscreenFineDetailActive") is not False:
+            raise RuntimeError(f"frame {index} activated offscreen fine detail: {budget}")
+        if int(budget.get("cachedResourceCount") or 0)>4:
+            raise RuntimeError(f"frame {index} exceeded bounded local cache: {budget}")
+        if detail.get("active"):
+            mpt=float(detail.get("detailMetersPerTexel") or 0)
+            spacing=float(detail.get("geometrySampleSpacingMeters") or detail.get("sampleSpacingMeters") or 0)
+            source_w=int(detail.get("sourceTextureWidth") or detail.get("textureSize") or 0)
+            source_h=int(detail.get("sourceTextureHeight") or detail.get("textureSize") or 0)
+            if mpt<=0 or spacing<=0 or source_w<=0 or source_h<=0:
+                raise RuntimeError(f"frame {index} missing density telemetry: {detail}")
+            if int(detail.get("anisotropy") or 0)<1 or detail.get("minFilter")!="linear-mipmap-linear" or detail.get("magFilter")!="linear":
+                raise RuntimeError(f"frame {index} invalid texture sampling telemetry: {detail}")
+            density.append((index,mpt,spacing,source_w,source_h,str(detail.get("level") or "")))
+    if len(set(focus))!=1:
+        raise RuntimeError(f"surface refinement evidence changed canonical focus: {focus}")
+    if len(density)<5:
+        raise RuntimeError(f"too few refined terrain samples: {density}")
+    for a,b in zip(density,density[1:]):
+        # Reusing one ready native resource over adjacent checkpoints is valid,
+        # but world-space texel and geometry density must never get coarser.
+        if b[1]>a[1]*1.001 or b[2]>a[2]*1.001:
+            raise RuntimeError(f"closer zoom lost world-space terrain density: {a} -> {b}")
+    if density[-1][1]>=density[0][1] or density[-1][2]>=density[0][2]:
+        raise RuntimeError(f"surface refinement did not materially improve density: {density[0]} -> {density[-1]}")
+
 def _generic_frames(driver,shots,width,height,timeout,interval):
     set_exact_viewport(driver,width,height)
     _wait_stage(driver,timeout)
@@ -330,6 +459,8 @@ def run_capture(args):
     total=max(1,int(args.shots))
     if args.scenario==WP_CHARACTER_SCENARIO:
         total=max(total,WP_CHARACTER_SHOTS)
+    elif args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:
+        total=max(total,WP_SURFACE_REFINEMENT_SHOTS)
     if args.no_publish:
         _clean_ephemeral_capture_dir()
     driver=_driver()
@@ -365,6 +496,18 @@ def run_capture(args):
                 _capture(driver,path)
                 frame["index"]=index;frame["file"]=path.name
                 frame["captured_at"]=datetime.now(timezone.utc).isoformat()
+        elif args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:
+            focus=_prepare_surface_refinement_focus(driver)
+            frames=[]
+            for index in range(WP_SURFACE_REFINEMENT_SHOTS):
+                frame=_surface_refinement_frame(driver,index,args.ready_timeout)
+                frame["focusPreparation"]=focus
+                path=_file_name(args.filename,index+1,WP_SURFACE_REFINEMENT_SHOTS,args.timestamp_names)
+                _capture(driver,path)
+                frame["index"]=index+1;frame["file"]=path.name
+                frame["captured_at"]=datetime.now(timezone.utc).isoformat()
+                frames.append(frame)
+            _validate_surface_refinement_frames(frames)
         else:
             frames=_generic_frames(driver,total,width,height,args.ready_timeout,args.interval)
             for index,frame in enumerate(frames,start=1):
