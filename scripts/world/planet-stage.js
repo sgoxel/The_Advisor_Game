@@ -3931,7 +3931,7 @@ function ensureLocalStaticMaterials(){
   localStaticMaterials={
     road:make("LocalRoad",.66,.51,.31,1,"terrain:road","road",1.8),roadOverview:make("LocalRoadOverview",.60,.46,.28,1,"terrain:road","road",1.55),square:make("LocalSquare",.70,.58,.39,1,"terrain:square","stone",3.4),
     wall:make("LocalWall",.86,.73,.53,1,"terrain:building","plaster",2.6),roof:make("LocalRoof",.48,.19,.10,1,"terrain:building","roof",3.2),
-    stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1,1,null,"roof",3.4);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1,1,null,"roof",4.8);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     landmark:make("LocalLandmark",.92,.72,.38,1,"terrain:building","plaster",2.8),footprint:make("LocalSettlementFootprint",.52,.44,.29,.09,"terrain:building"),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.90);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
     trunk:make("LocalTrunk",.34,.20,.10,1,"terrain:dirt","wood",1.8),leaf:make("LocalLeaf",.31,.54,.17,1,"terrain:forest"),water:make("LocalWater",.08,.31,.48,.72,"terrain:water"),
     microWater:make("LocalMicroWater",.07,.28,.42,.52,"terrain:water"),
@@ -4418,13 +4418,14 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
   }
   if(!roadCells.length)return Object.freeze({active:false,cellCount:0,queryCount,triangleCount:0,mode:"none",overviewStats:null});
   const positions=[],normals=[],uvs=[],indices=[];let segmentCount=0,renderedRoadCellCount=0;
+  const roadSurfaceClearance=tier==="full"?.082:.055;
   let overviewStats=null;
   const addQuad=(x0,y0,x1,y1)=>{
     if(!(x1>x0&&y1>y0))return;
     const base=positions.length/3;
     for(const [cx,cy] of [[x0,y0],[x1,y0],[x1,y1],[x0,y1]]){
       const east=cx*tileMeters,north=cy*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
-      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.055;
+      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+roadSurfaceClearance;
       positions.push(pos.x,ground,pos.z);normals.push(0,1,0);
     }
     uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
@@ -4436,7 +4437,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
     const base=positions.length/3;
     for(const [cx,cy] of [[x0+nx,y0+ny],[x1+nx,y1+ny],[x1-nx,y1-ny],[x0-nx,y0-ny]]){
       const east=cx*tileMeters,north=cy*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
-      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.055;
+      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+roadSurfaceClearance;
       positions.push(pos.x,ground,pos.z);normals.push(0,1,0);
     }
     uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
@@ -4586,7 +4587,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       const ak=a.x+","+a.y,bk=b.x+","+b.y,key=ak<bk?ak+"|"+bk:bk+"|"+ak;
       if(segmentKeys.has(key))return;segmentKeys.add(key);addSegment(a.x,a.y,b.x,b.y,width);
     };
-    const selected=[...selectedMap.values()],nodeHalf=.37,laneWidth=.74;
+    const selected=[...selectedMap.values()],nodeHalf=.44,laneWidth=.86;
     for(const cell of selected){
       addQuad(cell.x-nodeHalf,cell.y-nodeHalf,cell.x+nodeHalf,cell.y+nodeHalf);
       for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
@@ -4596,8 +4597,8 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       }
     }
     const connectOrdered=(cells,close=false)=>{
-      for(let i=1;i<cells.length;i++)if(Math.hypot(cells[i].x-cells[i-1].x,cells[i].y-cells[i-1].y)<=2.25)connect(cells[i-1],cells[i],laneWidth);
-      if(close&&cells.length>2&&Math.hypot(cells[0].x-cells.at(-1).x,cells[0].y-cells.at(-1).y)<=2.25)connect(cells.at(-1),cells[0],laneWidth);
+      for(let i=1;i<cells.length;i++)if(Math.hypot(cells[i].x-cells[i-1].x,cells[i].y-cells[i-1].y)<=3.25)connect(cells[i-1],cells[i],laneWidth);
+      if(close&&cells.length>2&&Math.hypot(cells[0].x-cells.at(-1).x,cells[0].y-cells.at(-1).y)<=3.25)connect(cells.at(-1),cells[0],laneWidth);
     };
     connectOrdered(ringCells,true);connectOrdered(gatewayCells,false);
     renderedRoadCellCount=selected.length;
@@ -5025,7 +5026,7 @@ function createGroundCharacterBillboard(parent,name,url,x,ground,z,presentationS
   // The plaza is presentation-only paving raised above terrain relief. Give
   // character art a tiny additional depth clearance only at the final layer so
   // feet remain visually attached while the paving can no longer clip the card.
-  const surfaceClearance=name==="ProtagonistBillboard"?.082:.052;
+  const surfaceClearance=name==="ProtagonistBillboard"?.082:.068;
   const entity=addLocalPrimitive(parent,name,"character-billboard",material,x,ground+surfaceClearance+pose.centerLift,z-pose.centerBack,w,1,h);
   entity.setLocalEulerAngles(pose.pitchDegrees,0,0);
   if(entity?.render){entity.render.castShadows=false;entity.render.receiveShadows=false;}
@@ -5303,7 +5304,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     const body=addLocalPrimitive(localNpcRoot,"ResidentBody-"+resident.id,"cylinder",bodyMaterial,x,ground+bodyHeight*.5,z,bodyWidth,bodyHeight,bodyWidth);
     const head=addLocalPrimitive(localNpcRoot,"ResidentHead-"+resident.id,"sphere",localNpcMaterials.head,x,ground+bodyHeight+headSize*.48,z,headSize,headSize,headSize);
     const textureUrl=groundArt?groundCharacterTextureUrl(resident.profession):null;
-    const billboard=textureUrl?createGroundCharacterBillboard(localNpcRoot,"ResidentBillboard-"+resident.id,textureUrl,x,ground,z,presentationScale,unit,2.35):null;
+    const billboard=textureUrl?createGroundCharacterBillboard(localNpcRoot,"ResidentBillboard-"+resident.id,textureUrl,x,ground,z,presentationScale,unit,2.95):null;
     if(billboard){billboard.enabled=initiallyVisible;}
     if(billboard){residentBillboardCount++;billboardUrls.add(textureUrl);}
     const tool=addLocalPrimitive(localNpcRoot,"ResidentWorkTool-"+resident.id,"box",localNpcMaterials.tool,x,ground+bodyHeight*.62,z,bodyWidth*.26,bodyHeight*.72,bodyWidth*.26);
