@@ -144,6 +144,7 @@ def _stage_snapshot(driver):
           presentation:s.projection?.presentation
         },
         npcPresentation:s.npcPresentation,
+        atmosphere:s.atmosphere,
         worldVisualStyle:s.worldVisualStyle,
         worldVisualStyleIntegration:s.worldVisualStyleIntegration,
         navigationPerformance:s.navigationPerformance,
@@ -169,8 +170,10 @@ def _prepare_starting_village_scene(driver,timeout):
     focus=_prepare_starting_village_focus(driver)
     result=driver.execute_script("""
       const stage=window.PlanetStage;
+      const evidenceTime={year:1100,month:1,day:1,hour:11,minute:30,second:0};
+      stage.applyAuthoritativeFantasyTime?.(evidenceTime,'wp-s003-009-visual-evidence',{snapshotResult:false,deferPresentation:false});
       stage.setZoomScalar(1);
-      return {scalar:1};
+      return {scalar:1,evidenceTime};
     """)
     _wait(driver,"""
       const s=window.PlanetStage?.snapshot?.(),local=s?.projection?.localStatic||{};
