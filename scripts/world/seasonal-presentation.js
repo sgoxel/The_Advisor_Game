@@ -261,27 +261,24 @@ function accentPlan(profile,seed,limit,view){
   const materializedWidthMeters=ACCENT_MATERIALIZATION_HEIGHT_METERS*aspect;
   const radiusX=Math.min(24,Math.max(2,Math.ceil(materializedWidthMeters*.58/(gridTiles*tileMeters))+1));
   const radiusY=Math.min(24,Math.max(2,Math.ceil(ACCENT_MATERIALIZATION_HEIGHT_METERS*.58/(gridTiles*tileMeters))+1));
-  const widthCells=radiusX*2+1,heightCells=radiusY*2+1,candidateCount=widthCells*heightCells,candidates=[];
-  const gcd=(a,b)=>{while(b){const t=a%b;a=b;b=t}return a};
-  let stride=37;
-  while(gcd(stride,candidateCount)!==1)stride+=2;
-  const phaseKey="season-field-phase:"+centerCellX.toString()+":"+centerCellY.toString()+":"+radiusX+":"+radiusY;
-  const start=Math.floor(foundationUnit(seed,phaseKey)*candidateCount)%Math.max(1,candidateCount);
-  // Sample only as many canonical cells as can actually render. A coprime
-  // stride walks unique cells through the bounded focus-local window, so cold
-  // planning cost is O(accent budget) rather than O(window area).
-  for(let i=0;i<targetCount;i++){
-    const slot=(start+i*stride)%candidateCount,ox=(slot%widthCells)-radiusX,oy=Math.floor(slot/widthCells)-radiusY;
+  const candidateCount=(radiusX*2+1)*(radiusY*2+1),selectionThreshold=Math.min(1,(targetCount+8)/Math.max(1,candidateCount)),candidates=[];
+  // The canonical absolute cell hash is the admission test. Rejected cells pay
+  // one hash only; jitter and rendering metadata are generated only for the
+  // small admitted cohort. This preserves world anchoring without sorting or
+  // fully materializing thousands of irrelevant candidates on a cold refresh.
+  for(let oy=-radiusY;oy<=radiusY;oy++)for(let ox=-radiusX;ox<=radiusX;ox++){
     const cellX=centerCellX+BigInt(ox),cellY=centerCellY+BigInt(oy),tileX=cellX*gridTileBig,tileY=cellY*gridTileBig;
-    const id=tileX.toString()+","+tileY.toString(),base="season-field:"+id+":";
+    const id=tileX.toString()+","+tileY.toString(),base="season-field:"+id+":",priority=foundationUnit(seed,base+"priority");
+    if(priority>selectionThreshold)continue;
     candidates.push({
-      id,tileX:tileX.toString(),tileY:tileY.toString(),
+      id,tileX:tileX.toString(),tileY:tileY.toString(),priority,
       jitterEastMeters:(foundationUnit(seed,base+"jx")-.5)*ACCENT_GRID_METERS*.66,
       jitterNorthMeters:(foundationUnit(seed,base+"jy")-.5)*ACCENT_GRID_METERS*.66
     });
   }
+  candidates.sort((a,b)=>a.priority-b.priority||a.id.localeCompare(b.id));
   const entries=[],counts={count:0,flower:0,leaf:0,frost:0,snow:0};
-  for(const candidate of candidates){
+  for(const candidate of candidates.slice(0,targetCount)){
     const prefix="season-accent:"+profile.signature+":"+candidate.id+":",kind=accentKind(profile,foundationUnit(seed,prefix+"kind"));if(!kind)continue;
     const sizeUnit=foundationUnit(seed,prefix+"size");
     const worldSizeMeters=kind==="flower"?.18+sizeUnit*.20:kind==="leaf"?.20+sizeUnit*.26:kind==="frost"?.34+sizeUnit*.36:.30+sizeUnit*.34;
