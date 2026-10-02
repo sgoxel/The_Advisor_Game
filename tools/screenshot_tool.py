@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 PROFILES={"landscape":(1920,1080),"portrait":(1080,1920),"tablet":(1920,1080),"phone":(1080,1920)}
 WP_CHARACTER_SCENARIO="wp-s003-004-004"
 WP_CHARACTER_SHOTS=5
+STARTING_VILLAGE_SCENARIO="starting-village"
 
 def _inner_viewport(driver):
     inner=driver.execute_script("return {width:window.innerWidth,height:window.innerHeight};")
