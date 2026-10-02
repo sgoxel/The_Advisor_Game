@@ -54,6 +54,9 @@ def driver_for(disable_webgpu=False, viewport=(1280,800)):
         localStorage.setItem('advisor.planet.seed.v1', {json.dumps(SEED)});
         localStorage.removeItem('advisor.renderer.backend');
         localStorage.setItem('the-advisor-game:development-mode','false');
+        localStorage.setItem('the-advisor-game:render-quality-mode','standard');
+        localStorage.setItem('the-advisor-game:texture-quality-profile','standard');
+        localStorage.removeItem('the-advisor-game:tile-texture-resolution');
       }} catch (_) {{}}
     """
     if disable_webgpu:
@@ -267,6 +270,13 @@ def run_success(label, gpu_mode, expected, engine=CURRENT_ENGINE, ground=True, d
             raise AssertionError(f"{label}: forced backend not marked developer-forced: {rec}")
         if int((rec["backend"].get("performance") or {}).get("sampleCount") or 0) < 10:
             raise AssertionError(f"{label}: insufficient performance samples: {rec['backend'].get('performance')}")
+        quality=(rec.get("comparisonContext") or {}).get("quality") or {}
+        render_quality=quality.get("render") or {}
+        texture_quality=quality.get("texture") or {}
+        if render_quality.get("mode") != "standard" or render_quality.get("activeLevel") != "standard":
+            raise AssertionError(f"{label}: render quality was not pinned to standard: {render_quality}")
+        if texture_quality.get("qualityProfile") != "standard":
+            raise AssertionError(f"{label}: texture quality was not pinned to standard: {texture_quality}")
         if engine == CURRENT_ENGINE and perf.get("appStatsPublicApi") is not True:
             raise AssertionError(f"{label}: PlayCanvas 2.23 public AppStats not active: {perf}")
         path = OUT / f"{label}.png"
