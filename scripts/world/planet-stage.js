@@ -4415,7 +4415,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
     const base=positions.length/3;
     for(const [cx,cy] of [[x0,y0],[x1,y0],[x1,y1],[x0,y1]]){
       const east=cx*tileMeters,north=cy*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
-      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.030;
+      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.055;
       positions.push(pos.x,ground,pos.z);normals.push(0,1,0);
     }
     uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
@@ -4427,7 +4427,7 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
     const base=positions.length/3;
     for(const [cx,cy] of [[x0+nx,y0+ny],[x1+nx,y1+ny],[x1-nx,y1-ny],[x0-nx,y0-ny]]){
       const east=cx*tileMeters,north=cy*tileMeters,pos=canonicalSemanticPosition(east,north,presentationScale,unit,frame);
-      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.030;
+      const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+.055;
       positions.push(pos.x,ground,pos.z);normals.push(0,1,0);
     }
     uvs.push(0,0,1,0,1,1,0,1);indices.push(base,base+1,base+2,base,base+2,base+3);segmentCount++;
@@ -6460,7 +6460,14 @@ function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
     // connections. Delay the filled square itself until buildings are visible
     // so the 1/2500 handoff reads as a road network, not a target/cross glyph.
     if(tier==="coarse"||tier==="refined"||tier==="full"){
-      addLocalStatic("CanonicalPublicSquare","box",localStaticMaterials.square,centerPos.x,centerGround+.012,centerPos.z,sq*scale/unit,.032,sq*scale/unit);roadCount++;triangles+=12;
+      // Constructed paving is leveled to the highest sampled corner so the
+      // close-ground relief cannot visibly punch through the plaza surface.
+      const squareHalfMeters=sq*.5,squareSurface=Math.max(centerGround-.012,
+        canonicalSemanticGroundHeightUnits(-squareHalfMeters,-squareHalfMeters,semanticFrame)+lift,
+        canonicalSemanticGroundHeightUnits(squareHalfMeters,-squareHalfMeters,semanticFrame)+lift,
+        canonicalSemanticGroundHeightUnits(squareHalfMeters,squareHalfMeters,semanticFrame)+lift,
+        canonicalSemanticGroundHeightUnits(-squareHalfMeters,squareHalfMeters,semanticFrame)+lift);
+      addLocalStatic("CanonicalPublicSquare","box",localStaticMaterials.square,centerPos.x,squareSurface+.035,centerPos.z,sq*scale/unit,.070,sq*scale/unit);roadCount++;triangles+=12;
     }
     triangles+=roadGeometry.triangleCount;
   }
