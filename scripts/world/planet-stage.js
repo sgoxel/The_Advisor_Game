@@ -4974,10 +4974,22 @@ function groundCharacterTextureUrl(profession){
 function groundCharacterLayerEligible(){
   const requestedLevel=String(localResources.requestedLevel||LOCAL_DETAIL_LEVELS[requestedLodIndexForZoom(zoomState.scalar)]?.id||"");
   const visibleLevel=String(localResources.visibleLevel||displayResource?.dims?.levelId||requestedLevel||"");
-  const rawIndex=rawLodIndexForZoom(zoomState.scalar),rawLevel=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
-  const levelId=String(visibleLevel||requestedLevel||rawLevel?.id||"");
-  const groundRequested=requestedLevel==="ground"||rawLevel?.id==="ground"||levelId==="ground";
-  return Boolean(localWorldPresentationEligibility().visible&&groundRequested&&String(localNpcContext?.tier||"")==="full"&&tangentPatch?.enabled);
+  // Detailed character PNGs belong only to the final RPG representation. A
+  // previously-ready ground terrain cell may remain as visual fallback while a
+  // coarser request prepares, but fallback coverage does not retain ground-only
+  // character art. Conversely, requesting ground does not reveal art until the
+  // ready visible representation is also ground.
+  const groundOwned=requestedLevel==="ground"&&visibleLevel==="ground";
+  return Boolean(localWorldPresentationEligibility().visible&&groundOwned&&String(localNpcContext?.tier||"")==="full"&&tangentPatch?.enabled);
+}
+function syncGroundCharacterScaleOwnership(){
+  if(!localNpcContext)return false;
+  const eligible=groundCharacterLayerEligible(),current=Boolean(localNpcPresentation.groundRepresentationReady);
+  if(eligible===current)return false;
+  // This is a bounded local presentation rebuild (protagonist + current local
+  // resident roster), triggered only when ground-art ownership changes.
+  refreshCanonicalNpcPresentation();
+  return true;
 }
 function scheduleGroundCharacterRefresh(){
   if(groundCharacterRefreshScheduled||groundCharacterPendingLoads>0||!groundCharacterLayerEligible()||!localNpcContext)return;
@@ -5784,7 +5796,7 @@ function applyCanonicalGroundBuildingCutaway(tier){
     hiddenRoofCount:0,loweredShellCount:0,interiorFloorCount:0,
     residentCutawayBuildingCount:0,residentCutawayResidentCount:0,residentCutawayBuildingIds:Object.freeze([])
   };
-  if(String(tier||"")!=="full"||String(displayResource?.dims?.levelId||"")!=="ground")return groundBuildingCutaway;
+  if(String(tier||"")!=="full"||String(displayResource?.dims?.levelId||"")!=="ground"||!groundCharacterLayerEligible())return groundBuildingCutaway;
   const entries=Array.from(localCanonicalBuildingRoofs.values()),cutIds=new Set();
   const cutEntry=entry=>{
     if(!entry||cutIds.has(entry.id))return false;
@@ -8621,7 +8633,10 @@ function applyCameraZoom(updateMap=true,options={}){
   navigationPerformance.interactionStreamingDeferred=deferStreaming;
   localResources.interactionStreamingDeferred=deferStreaming;
   if(deferStreaming)navigationPerformance.streamingRequestDeferredCount++;
-  else updateLocalRequest();
+  else{
+    updateLocalRequest();
+    syncGroundCharacterScaleOwnership();
+  }
   if(!deferStreaming)scheduleLocalStaticPresentationRefresh();
   const targetHeightMeters=Math.max(2,presentationTargetHeightMeters(scalar));
   const visibleHeightUnits=Math.max(1e-6,targetHeightMeters/WORLD_RADIUS_METERS*DISPLAY_RADIUS_UNITS);
