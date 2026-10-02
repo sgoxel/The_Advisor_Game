@@ -21,6 +21,8 @@ PROFILES={"landscape":(1920,1080),"portrait":(1080,1920),"tablet":(1920,1080),"p
 WP_CHARACTER_SCENARIO="wp-s003-004-004"
 WP_CHARACTER_SHOTS=5
 STARTING_VILLAGE_SCENARIO="starting-village"
+WP_STARTING_VILLAGE_DRESSING_SCENARIO="wp-s003-009-001"
+WP_STARTING_VILLAGE_DRESSING_SHOTS=7
 WP_SURFACE_REFINEMENT_SCENARIO="wp-s003-010-003-005-002"
 WP_SURFACE_REFINEMENT_SHOTS=10
 WP_CANONICAL_FOCUS_SCENARIO="wp-s003-008-008"
@@ -603,6 +605,120 @@ def _validate_surface_refinement_frames(frames):
     if density[-1][1]>=density[0][1] or density[-1][2]>=density[0][2] or density[-1][3]>=density[0][3]:
         raise RuntimeError(f"surface refinement did not materially improve density: {density[0]} -> {density[-1]}")
 
+
+def _wp_starting_village_targets(driver):
+    targets=driver.execute_script("""
+      const stage=window.PlanetStage,s=stage?.snapshot?.(),seed=s?.activeSeed;
+      if(!stage||!seed||!window.StartingVillage?.plan||!window.HousePlans?.build||!window.SpecialLots?.build){
+        return {ok:false,reason:'village-authority-unavailable'};
+      }
+      const village=StartingVillage.plan(seed),houses=HousePlans.build(seed)||[],lots=SpecialLots.build(seed)||[];
+      const add=(base,dx,dy)=>{
+        if(window.WorldCoordinates?.add)return WorldCoordinates.add(base,String(dx),String(dy));
+        return {x:String(Number(base?.x||0)+Number(dx||0)),y:String(Number(base?.y||0)+Number(dy||0))};
+      };
+      const centerOf=record=>{
+        const b=record?.bounds;if(!b)return null;
+        return add(village.center,Math.round((Number(b.minX)+Number(b.maxX))/2),Math.round((Number(b.minY)+Number(b.maxY))/2));
+      };
+      const pickLot=(fn,kind)=>lots.find(item=>String(item.function||'')===fn)||lots.find(item=>String(item.kind||'')===kind)||null;
+      const direction=StartingVillage.direction(seed),gateway=add(village.center,Number(direction?.dx||0)*14,Number(direction?.dy||0)*14);
+      const house=houses[0]||null,market=pickLot('market','shop'),workshop=pickLot('craft','workshop'),farm=pickLot('farm','barn');
+      const raw=[
+        {label:'village-overview',context:'overview',mode:'refined',point:village.center},
+        {label:'residential-yard',context:'residential',mode:'full',point:centerOf(house)},
+        {label:'market-frontage',context:'commercial',mode:'full',point:centerOf(market)},
+        {label:'workshop-yard',context:'workshop',mode:'full',point:centerOf(workshop)},
+        {label:'farm-yard',context:'farm',mode:'full',point:centerOf(farm)},
+        {label:'gateway-road-edge',context:'road-edge',mode:'full',point:gateway},
+        {label:'public-square-phone',context:'civic',mode:'full',point:village.center,portrait:true}
+      ];
+      const usable=raw.filter(item=>item.point&&item.point.x!=null&&item.point.y!=null).map(item=>({
+        ...item,point:{x:String(item.point.x),y:String(item.point.y)}
+      }));
+      return {ok:usable.length===raw.length,seed,name:village.name||'Starting Village',targets:usable};
+    """)
+    if not targets or not targets.get("ok"):
+        raise RuntimeError(f"could not build Starting Village dressing evidence targets: {targets}")
+    return targets
+
+def _wp_starting_village_frame(driver,target,base_width,base_height,timeout):
+    portrait=bool(target.get("portrait"))
+    width,height=(1080,1440) if portrait else (base_width,base_height)
+    set_exact_viewport(driver,width,height)
+    mode=str(target.get("mode") or "full")
+    result=driver.execute_script("""
+      const target=arguments[0],mode=arguments[1],stage=window.PlanetStage;
+      stage.setWorldTileFocus(String(target.x),String(target.y));
+      const scalar=mode==='refined'
+        ?stage.scalarForFootprintHeight(80)
+        :Number(stage.constants?.ZOOM_MAX??1);
+      stage.setZoomScalar(scalar);
+      return {scalar,mode};
+    """,target["point"],mode)
+    _wait(driver,"""
+      const s=window.PlanetStage?.snapshot?.(),local=s?.projection?.localStatic||{},r=s?.projection?.resourceBudget||{};
+      const readyResource=!r?.requestedSignature||String(r.activeSignature||'')===String(r.requestedSignature||'');
+      return Boolean(
+        s?.ready && !s?.zoom?.animation?.active && readyResource &&
+        local?.active===true &&
+        ['refined','full'].includes(String(local?.revealTier||'')) &&
+        Number(local?.roadCount||0)>0 &&
+        Number(local?.buildingCount||0)>0 &&
+        Number(local?.dressingCount||0)>0 &&
+        String(local?.dressingScope||'')==='focused-visible+3-tile-preload'
+      );
+    """,timeout,f"Starting Village dressing context {target.get('label')}")
+    driver.execute_async_script("""
+      const done=arguments[0];
+      requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
+    """)
+    return {
+        "action":target.get("label"),
+        "context":target.get("context"),
+        "target":target.get("point"),
+        "zoomRequest":result,
+        "viewport":_inner_viewport(driver),
+        "stage":_stage_snapshot(driver),
+    }
+
+def _validate_wp_starting_village_frames(frames):
+    if len(frames)<WP_STARTING_VILLAGE_DRESSING_SHOTS:
+        raise RuntimeError(
+            f"{WP_STARTING_VILLAGE_DRESSING_SCENARIO} requires "
+            f"{WP_STARTING_VILLAGE_DRESSING_SHOTS} fresh context frames"
+        )
+    required={"overview","residential","commercial","workshop","farm","road-edge","civic"}
+    contexts={str(frame.get("context") or "") for frame in frames[:WP_STARTING_VILLAGE_DRESSING_SHOTS]}
+    missing=sorted(required-contexts)
+    if missing:
+        raise RuntimeError(f"Starting Village evidence is missing contexts: {missing}")
+    focus_keys=set()
+    saw_full=False
+    saw_refined=False
+    for index,frame in enumerate(frames[:WP_STARTING_VILLAGE_DRESSING_SHOTS],start=1):
+        stage=frame.get("stage") or {}
+        local=((stage.get("projection") or {}).get("localStatic") or {})
+        tier=str(local.get("revealTier") or "")
+        if tier=="full":saw_full=True
+        if tier=="refined":saw_refined=True
+        if tier not in {"refined","full"}:
+            raise RuntimeError(f"frame {index} is not near/max local dressing: {tier}")
+        if int(local.get("roadCount") or 0)<=0 or int(local.get("buildingCount") or 0)<=0:
+            raise RuntimeError(f"frame {index} lost coherent settlement structure: {local}")
+        dressing=int(local.get("dressingCount") or 0)
+        if dressing<=0 or dressing>64:
+            raise RuntimeError(f"frame {index} lost bounded semantic dressing: {dressing}")
+        if local.get("dressingScope")!="focused-visible+3-tile-preload":
+            raise RuntimeError(f"frame {index} lost bounded dressing scope: {local.get('dressingScope')}")
+        focus=(stage.get("canonicalFocus") or {}).get("worldTile") or {}
+        focus_keys.add((str(focus.get("x")),str(focus.get("y"))))
+    if not saw_full or not saw_refined:
+        raise RuntimeError("Starting Village evidence must prove both near-max refined and max full presentation")
+    if len(focus_keys)<5:
+        raise RuntimeError(f"Starting Village context evidence did not move across enough authoritative targets: {focus_keys}")
+
+
 def _generic_frames(driver,shots,width,height,timeout,interval):
     set_exact_viewport(driver,width,height)
     _wait_stage(driver,timeout)
@@ -626,6 +742,8 @@ def run_capture(args):
     total=max(1,int(args.shots))
     if args.scenario==WP_CHARACTER_SCENARIO:
         total=max(total,WP_CHARACTER_SHOTS)
+    elif args.scenario==WP_STARTING_VILLAGE_DRESSING_SCENARIO:
+        total=max(total,WP_STARTING_VILLAGE_DRESSING_SHOTS)
     elif args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:
         total=max(total,WP_SURFACE_REFINEMENT_SHOTS)
     elif args.scenario==WP_CANONICAL_FOCUS_SCENARIO:
@@ -654,6 +772,28 @@ def run_capture(args):
                 frame["captured_at"]=datetime.now(timezone.utc).isoformat()
                 frames.append(frame)
             _validate_character_frames(frames[:WP_CHARACTER_SHOTS])
+        elif args.scenario==WP_STARTING_VILLAGE_DRESSING_SCENARIO:
+            focus=_prepare_starting_village_focus(driver)
+            driver.execute_script("""
+              const evidenceTime={year:1100,month:1,day:1,hour:11,minute:30,second:0};
+              window.PlanetStage?.applyAuthoritativeFantasyTime?.(
+                evidenceTime,'wp-s003-009-001-visual-evidence',
+                {snapshotResult:false,deferPresentation:false}
+              );
+            """)
+            target_pack=_wp_starting_village_targets(driver)
+            targets=target_pack["targets"]
+            frames=[]
+            for index in range(total):
+                target=targets[index%len(targets)]
+                frame=_wp_starting_village_frame(driver,target,width,height,args.ready_timeout)
+                frame["focusPreparation"]=focus
+                path=_file_name(args.filename,index+1,total,args.timestamp_names)
+                _capture(driver,path)
+                frame["index"]=index+1;frame["file"]=path.name
+                frame["captured_at"]=datetime.now(timezone.utc).isoformat()
+                frames.append(frame)
+            _validate_wp_starting_village_frames(frames)
         elif args.scenario==STARTING_VILLAGE_SCENARIO:
             focus=_prepare_starting_village_scene(driver,args.ready_timeout)
             frames=_generic_frames(driver,total,width,height,args.ready_timeout,args.interval)
