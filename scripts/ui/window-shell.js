@@ -16,7 +16,7 @@ const registry=new Map();
 let zCounter=Z_BASE;
 let drag=null;
 let observer=null;
-let dock=null;
+let dock=null;\nlet dockSignature=null;
 const telemetry={registerCount:0,activeCount:0,minimizedCount:0,dragStartCount:0,dragEndCount:0,clampCorrections:0,focusChanges:0,worldInputSuppressions:0,closeCount:0,restoreCount:0,resizeCount:0};
 
 function stateFor(key){
@@ -95,9 +95,17 @@ function restoreWindow(key){
 }
 function syncDock(){
   const d=ensureDock();if(!d)return;
+  const minimized=configs.filter(cfg=>states.get(cfg.key)?.minimized);
+  const signature=minimized.map(cfg=>cfg.key).join("|");
+  telemetry.minimizedCount=minimized.length;
+  if(dockSignature===signature){
+    const hidden=!minimized.length;
+    if(d.hidden!==hidden)d.hidden=hidden;
+    return;
+  }
+  dockSignature=signature;
   d.replaceChildren();
-  for(const cfg of configs){
-    const s=states.get(cfg.key);if(!s?.minimized)continue;
+  for(const cfg of minimized){
     const b=document.createElement("button");
     b.type="button";b.className="window-shell-dock-item";b.dataset.windowKey=cfg.key;
     b.setAttribute("aria-label","Restore "+cfg.title);
@@ -105,8 +113,7 @@ function syncDock(){
     b.addEventListener("click",()=>restoreWindow(cfg.key));
     d.appendChild(b);
   }
-  d.hidden=!d.childElementCount;
-  telemetry.minimizedCount=d.childElementCount;
+  d.hidden=!minimized.length;
 }
 function button(label,cls,text,handler){
   const b=document.createElement("button");b.type="button";b.className=cls;b.textContent=text;b.setAttribute("aria-label",label);b.addEventListener("click",e=>{e.stopPropagation();handler();});return b;
