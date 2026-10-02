@@ -209,6 +209,51 @@ def _prepare_starting_village_focus(driver):
         raise RuntimeError(f"could not focus canonical starting village: {result}")
     return result
 
+def _starting_village_readiness_state(driver):
+    return driver.execute_script("""
+      const s=window.PlanetStage?.snapshot?.()||{},local=s?.projection?.localStatic||{},npc=s?.npcPresentation||{};
+      const residents=Number(npc?.residentBillboardCount||0),detailed=Number(npc?.detailedBillboardCount||0);
+      const conditions={
+        stageReady:Boolean(s?.ready),
+        zoomSettled:!Boolean(s?.zoom?.animation?.active),
+        visibleGround:s?.zoom?.visibleLevel==='ground',
+        fullReveal:local?.revealTier==='full',
+        worldVisualStyle:Boolean(s?.worldVisualStyleIntegration?.active===true),
+        groundRepresentationReady:Boolean(npc?.groundRepresentationReady===true),
+        billboardLayerActive:Boolean(npc?.billboardLayerActive===true),
+        protagonistBillboardVisible:Boolean(npc?.protagonistBillboardVisible===true),
+        residentBillboards:residents>0,
+        detailedBillboardsComplete:detailed>=residents+1
+      };
+      return {
+        ready:Object.values(conditions).every(Boolean),
+        conditions,
+        counts:{residents,detailed},
+        zoom:s?.zoom||null,
+        localStatic:local,
+        npcPresentation:npc,
+        projectionResourceBudget:s?.projection?.resourceBudget||null,
+        worldVisualStyleIntegration:s?.worldVisualStyleIntegration||null,
+        stageStartupError:s?.startupError||null,
+        gameRenderer:window.GameRenderer?.snapshot?.()||null
+      };
+    """)
+
+def _persist_starting_village_readiness_failure(driver):
+    directory=_screenshots_dir()
+    diagnostic={"readiness":None,"browserLogs":[]}
+    try: diagnostic["readiness"]=_starting_village_readiness_state(driver)
+    except Exception as exc: diagnostic["readinessError"]=repr(exc)
+    try: diagnostic["browserLogs"]=_browser_logs(driver)
+    except Exception as exc: diagnostic["browserLogError"]=repr(exc)
+    diagnostic["captured_at"]=datetime.now(timezone.utc).isoformat()
+    json_path=directory/"starting-village-readiness-failure.json"
+    json_path.write_text(json.dumps(diagnostic,indent=2,sort_keys=True),encoding="utf-8")
+    try: driver.save_screenshot(str(directory/"starting-village-readiness-failure.png"))
+    except Exception as exc: diagnostic["screenshotError"]=repr(exc)
+    print("STARTING_VILLAGE_READINESS_DIAGNOSTIC="+json.dumps(diagnostic,sort_keys=True),file=sys.stderr)
+    return diagnostic
+
 def _prepare_starting_village_scene(driver,timeout):
     focus=_prepare_starting_village_focus(driver)
     result=driver.execute_script("""
@@ -218,20 +263,28 @@ def _prepare_starting_village_scene(driver,timeout):
       stage.setZoomScalar(1);
       return {scalar:1,evidenceTime};
     """)
-    _wait(driver,"""
-      const s=window.PlanetStage?.snapshot?.(),local=s?.projection?.localStatic||{},npc=s?.npcPresentation||{};
-      const residents=Number(npc?.residentBillboardCount||0),detailed=Number(npc?.detailedBillboardCount||0);
-      return Boolean(
-        s?.ready && !s?.zoom?.animation?.active &&
-        s?.zoom?.visibleLevel==='ground' &&
-        local?.revealTier==='full' &&
-        s?.worldVisualStyleIntegration?.active===true &&
-        npc?.groundRepresentationReady===true &&
-        npc?.billboardLayerActive===true &&
-        npc?.protagonistBillboardVisible===true &&
-        residents>0 && detailed>=residents+1
-      );
-    """,max(float(timeout),300.0),"Starting Village final-ground living-world presentation with character billboards")
+    try:
+        _wait(driver,"""
+          const s=window.PlanetStage?.snapshot?.(),local=s?.projection?.localStatic||{},npc=s?.npcPresentation||{};
+          const residents=Number(npc?.residentBillboardCount||0),detailed=Number(npc?.detailedBillboardCount||0);
+          return Boolean(
+            s?.ready && !s?.zoom?.animation?.active &&
+            s?.zoom?.visibleLevel==='ground' &&
+            local?.revealTier==='full' &&
+            s?.worldVisualStyleIntegration?.active===true &&
+            npc?.groundRepresentationReady===true &&
+            npc?.billboardLayerActive===true &&
+            npc?.protagonistBillboardVisible===true &&
+            residents>0 && detailed>=residents+1
+          );
+        """,max(float(timeout),300.0),"Starting Village final-ground living-world presentation with character billboards")
+    except Exception as exc:
+        diagnostic=_persist_starting_village_readiness_failure(driver)
+        failed=[key for key,value in (diagnostic.get("readiness",{}).get("conditions",{}) or {}).items() if not value]
+        raise RuntimeError(
+            "Starting Village final-ground readiness failed; "
+            f"failedConditions={failed}; diagnostic=tools/screenshots/starting-village-readiness-failure.json"
+        ) from exc
     # Let the just-materialized billboard scene survive two paint frames before
     # capture; the wait condition above observes scene state, not rendered pixels.
     driver.execute_async_script("""
