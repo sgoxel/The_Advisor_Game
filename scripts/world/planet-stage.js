@@ -3473,14 +3473,7 @@ function buildLocalWildernessMesh(plan,frame,reveal){
     // Box-like fallen wood/stumps are useful semantic dressing but visually
     // dominate the final orthographic ground frame when repeated. Keep them as
     // deterministic rare accents while preserving every item in the cached plan.
-    if(viewHeight<=45){
-      // Final-ground acceptance should emphasize the refined terrain surface,
-      // not unreplaced primitive prop silhouettes. Preserve the deterministic
-      // plan but materialize only vegetation forms whose scale/silhouette reads
-      // naturally in the current orthographic presentation.
-      if(!["grass","bush","sapling","reed"].includes(item.family))continue;
-      if(Number(item.variant||0)<.34)continue;
-    }
+    if(viewHeight<=45&&["log","driftwood","stump"].includes(item.family)&&Number(item.variant||0)<.72)continue;
     const managed=localWildernessManaged(item,reveal);if(managed.reject){rejectedManaged++;if(managed.road)rejectedRoad++;continue;}
     const x=item.east/unit,z=-item.north/unit,y=localGroundHeightUnits(item.east,item.north,frame)+.012,baseColor=wildernessColor(item.family,item.biome);
     const variant=clamp(Number(item.variant??.5),0,1),tone=.90+variant*.18,color=[clamp(baseColor[0]*tone,0,1),clamp(baseColor[1]*tone,0,1),clamp(baseColor[2]*tone,0,1),255];
@@ -7733,20 +7726,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // 1x child visibly richer inside a rectangular footprint. Let any physically
   // eligible layer sample the identical world-registered micro field; context
   // gain is bounded below by its refinement weight.
-  // Absolute micro-color blending can shift the mean albedo of the 1x child.
-  // Reserve it for the final ground tier; near-ground refinement instead uses
-  // zero-mean registered roughness/cover residuals that stitch cleanly to context.
-  const useMicroDetail=metersPerTexel<=.35;
-  // At sub-meter focus tiers, preserve true fine detail while compositing it as
-  // a high-frequency refinement over the physically-resolvable 3x context.
-  // A wider feather plus partial opacity removes the visible 1x resource card
-  // without changing canonical samples, coordinates, or LOD/cache selection.
-  const closeCompositeBand=contextRing?0:smoothstep01(clamp((1.15-metersPerTexel)/.95,0,1));
-  // Keep the focus quad fully opaque. Partial material opacity produces a dark
-  // card in the current lighting/blend path. Continuity comes from matching the
-  // parent photometry and a modestly wider edge handoff, not transparency.
-  const focusCompositeOpacity=1;
-  const handoffFeather=lerp(LOCAL_TEXTURE_HANDOFF_FEATHER,.18,closeCompositeBand);
+  const useMicroDetail=metersPerTexel<=4;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   // Surface relief is presented as continuous hillshade, not synthetic
   // cartographic contour bands. The previous 420 m sine contours and strong
@@ -7768,14 +7748,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   const mixSample=(ux,vz)=>{
     const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth,coarse=surfaceAuthority.sample(east,north);
     if(!focusAuthority)return coarse;
-    const edge=Math.min(ux,1-ux,vz,1-vz);
-    // Fine PlanetGeography rasters refine canonical elevation/moisture/color,
-    // but at sub-meter presentation their low-frequency interpolation must not
-    // become a differently toned 1x card. Preserve a bounded share of that fine
-    // authority while registered-meter macro/cover/roughness carries the visible
-    // high-frequency refinement. Coarser tiers retain the full fine-authority mix.
-    const subMeterAuthorityGain=metersPerTexel<1?lerp(.58,.72,smoothstep01(clamp((.45-metersPerTexel)/.35,0,1))):1;
-    const refine=smoothstep01(clamp((edge-.025)/.175,0,1))*subMeterAuthorityGain;
+    const edge=Math.min(ux,1-ux,vz,1-vz),refine=smoothstep01(clamp((edge-.025)/.145,0,1));
     return refine<=0?coarse:blendSurfaceAuthoritySamples(coarse,focusAuthority.sample(east,north),refine);
   };
   for(let y=0;y<size;y++){
@@ -8148,16 +8121,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // anchored, so the same coordinate has the same mottling in every rebuild.
       if(parentSample?.land&&metersPerTexel<=8){
         const coarseScale=Math.max(2,metersPerTexel*6),fineScale=Math.max(.75,metersPerTexel*2);
-        const nativeRough=surfaceValueNoise(worldEast,worldNorth,coarseScale,detailSalt+211)*.040+
+        const rough=surfaceValueNoise(worldEast,worldNorth,coarseScale,detailSalt+211)*.040+
           surfaceValueNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.018;
-        // Focus roughness is a true fine-minus-parent residual over the exact
-        // physical 3x context bandwidth. This keeps the overlapping mean field
-        // identical while allowing the child to add finer registered structure.
-        const parentMpt=contextRing?metersPerTexel:metersPerTexel*(LOCAL_MEDIUM_RING_SPAN_FACTOR/LOCAL_MEDIUM_RING_TEXTURE_SCALE);
-        const parentCoarse=Math.max(2,parentMpt*6),parentFine=Math.max(.75,parentMpt*2);
-        const parentRough=surfaceValueNoise(worldEast,worldNorth,parentCoarse,detailSalt+211)*.040+
-          surfaceValueNoise(worldEast,worldNorth,parentFine,detailSalt+233)*.018;
-        const rough=contextRing?nativeRough:parentRough+(nativeRough-parentRough)*focusRefineWeight;
         displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.82:i===1?.94:1),0,.86));
       }
       // WP-S003-009: apply the shared loading-screen-derived world grade only
@@ -8186,7 +8151,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         for(const target of evidenceProbeTargets){
           if(target.x!==x||target.y!==y)continue;
           const probeEdge=Math.min(ux,1-ux,vz,1-vz);
-          const probeAlpha=featherEdges?smoothstep01(clamp(probeEdge/handoffFeather,0,1))*focusCompositeOpacity:focusCompositeOpacity;
+          const probeAlpha=featherEdges?smoothstep01(clamp(probeEdge/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1)):1;
           evidenceProbes.push(Object.freeze({
             id:target.id,layerRole:String(evidenceLayerRole),pixel:Object.freeze({x,y}),uv:Object.freeze({u:Number(ux.toFixed(6)),v:Number(vz.toFixed(6))}),
             offsetMeters:Object.freeze({east:Number(east.toFixed(3)),north:Number(north.toFixed(3))}),
@@ -8209,8 +8174,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Shared photometry makes the rectangular resource edge visually neutral;
       // use only a broad edge feather for the subtle fine-frequency delta.
       const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
-      const edgeCoverage=smoothstep01(clamp(edgeDistance/handoffFeather,0,1));
-      data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=Math.round(255*(featherEdges?edgeCoverage:1)*focusCompositeOpacity);
+      const edgeCoverage=smoothstep01(clamp(edgeDistance/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
+      data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*edgeCoverage):255;
       // Texture generation is cooperative below a full row. This protects the
       // main-thread budget on slower/software renderers without changing any
       // pixel value, coordinate sample, or deterministic ordering.
