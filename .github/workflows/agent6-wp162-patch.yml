@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   patch:
-    if: "github.event.head_commit.message == 'chore(agent6): relaunch WP162 parent-ring continuity patch'"
+    if: "github.event.head_commit.message == 'chore(agent6): retry WP162 parent-ring continuity patch'"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,24 +24,16 @@ jobs:
           from pathlib import Path
           path = Path('scripts/world/planet-stage.js')
           text = path.read_text()
-          old = '''  }else{
-            stitchSurroundCenterToDetail(detail,medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
-            stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
-            carveNestedRingCenterAlpha(medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
-            carveNestedRingCenterAlpha(surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
-          }'''
-          new = '''  }else{
-            // Keep local/ground parent rings continuously opaque beneath the
-            // feathered finer child. The textures are already world-registered
-            // and center-stitched; carving transparent rectangular cores makes
-            // the 1x/3x ownership boundary visible during near-ground handoff.
-            stitchSurroundCenterToDetail(detail,medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
-            stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
-          }'''
-          count = text.count(old)
-          if count != 1:
-              raise SystemExit(f'expected one ring-compose block, found {count}')
-          path.write_text(text.replace(old, new, 1))
+          targets = (
+              '    carveNestedRingCenterAlpha(medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);\n',
+              '    carveNestedRingCenterAlpha(surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);\n',
+          )
+          for target in targets:
+              count = text.count(target)
+              if count != 1:
+                  raise SystemExit(f'expected one exact carve call, found {count}: {target.strip()}')
+              text = text.replace(target, '', 1)
+          path.write_text(text)
           PY
           git diff --check
           git diff -- scripts/world/planet-stage.js
