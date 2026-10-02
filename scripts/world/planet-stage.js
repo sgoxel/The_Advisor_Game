@@ -552,7 +552,7 @@ function rendererBackendText(state=rendererBackendState){
   const active=state.active==="webgpu"?"WebGPU":state.active==="webgl2"?"WebGL2":"Pending";
   const requested=state.requested==="auto"?"Preferred/Auto":state.requested==="webgpu"?"WebGPU":"WebGL2";
   const availability=state.webgpuAvailable?"available":"unavailable";
-  return "Renderer: "+active+" ("+rendererSelectionLabel(state)+") · Requested: "+requested+" · WebGPU: "+availability;
+  return "Renderer: "+active+" ("+rendererSelectionLabel(state)+") · PlayCanvas "+engineVersionInUse+(engineBuildInUse==="debug"?" debug":"")+" · Requested: "+requested+" · WebGPU: "+availability;
 }
 function renderBackendBadge(){
   const enabled=Boolean(rendererBackendState.developerMode);
