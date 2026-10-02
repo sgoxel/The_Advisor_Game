@@ -10,8 +10,8 @@ permissions:
   issues: write
 
 concurrency:
-  group: wp-s003-001-002-001-${{ github.event.issue.number || github.run_id }}
-  cancel-in-progress: true
+  group: wp-s003-001-002-001-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   evidence:
