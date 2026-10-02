@@ -4137,6 +4137,7 @@ function ensureLocalStaticMaterials(){
     const source=[r,g,b],styled=styleRole?worldStyleRgb(styleRole,source):source,m=new pc.StandardMaterial();
     m.name=name;m.diffuse.set(...styled);m.__atmosphereBaseDiffuse=styled.slice();m.roughness=.92;m.opacity=opacity;
     if(patternKind){const texture=localStylePatternTexture(patternKind);if(texture){m.diffuseMap=texture;m.diffuseMapTiling=new pc.Vec2(repeat,repeat);}}
+    if(styleRole!=="terrain:water")worldVisualStyle()?.applyLitMaterial?.(m);
     if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;
   };
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();

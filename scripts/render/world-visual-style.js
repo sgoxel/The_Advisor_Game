@@ -5,7 +5,7 @@
 // The loading presentation supplies the palette/mood language only. Gameplay
 // keeps its own geometry, sprites, UI and renderer architecture.
 const STYLE=Object.freeze({
-  signature:"living-world-style-v5",
+  signature:"living-world-style-v6",
   reference:"scene-loading-color-language",
   palette:Object.freeze({
     gold:Object.freeze([0.949,0.831,0.494]),
@@ -40,6 +40,13 @@ const STYLE=Object.freeze({
     sharedGloss:0.10,
     presentationGlossMax:0.11,
     metalness:0
+  }),
+  celLighting:Object.freeze({
+    model:"four-band-lambert",
+    thresholds:Object.freeze([0.14,0.43,0.76]),
+    diffuseLevels:Object.freeze([0,0.34,0.68,1]),
+    sharedWorldMaterials:true,
+    unlitMaterialsUnaffected:true
   }),
   spriteTreatment:Object.freeze({
     character:Object.freeze({
@@ -82,7 +89,26 @@ const STYLE=Object.freeze({
     preparationTimeColorGrade:true
   })
 });
+let litMaterialApplicationCount=0;
 
+const CEL_LIGHTING_GLSL=`
+float getLightDiffuse(vec3 worldNormal, vec3 viewDir, vec3 lightDirNorm) {
+  float diffuse = max(dot(worldNormal, -lightDirNorm), 0.0);
+  if (diffuse < 0.14) return 0.0;
+  if (diffuse < 0.43) return 0.34;
+  if (diffuse < 0.76) return 0.68;
+  return 1.0;
+}
+`;
+const CEL_LIGHTING_WGSL=`
+fn getLightDiffuse(worldNormal: vec3f, viewDir: vec3f, lightDirNorm: vec3f) -> f32 {
+  let diffuse = max(dot(worldNormal, -lightDirNorm), 0.0);
+  if (diffuse < 0.14) { return 0.0; }
+  if (diffuse < 0.43) { return 0.34; }
+  if (diffuse < 0.76) { return 0.68; }
+  return 1.0;
+}
+`;
 const GREEN_TYPES=new Set(["grass","forest","farmland","plot"]);
 const EARTH_TYPES=new Set(["dirt","mud","sand","rock"]);
 const CONSTRUCTED_TYPES=new Set(["road","path","square","building","floor","door","wall","bridge"]);
@@ -117,6 +143,7 @@ function snapshot(){
     hierarchy:STYLE.hierarchy,
     lighting:STYLE.lighting,
     materials:STYLE.materials,
+    celLighting:Object.freeze({...STYLE.celLighting,litMaterialApplicationCount}),
     spriteTreatment:STYLE.spriteTreatment,
     terrainGrade:STYLE.terrainGrade,
     localDetail:STYLE.localDetail,
@@ -128,6 +155,17 @@ function snapshot(){
     simulationAuthorityPreserved:true
   });
 }
+function applyLitMaterial(material){
+  if(!material||!material.shaderChunks?.glsl||!material.shaderChunks?.wgsl){
+    throw new TypeError("Grounded cel lighting requires a PlayCanvas StandardMaterial");
+  }
+  if(material._advisorWorldVisualStyleSignature===STYLE.signature)return false;
+  material.shaderChunks.glsl.set("lightDiffuseLambertPS",CEL_LIGHTING_GLSL);
+  material.shaderChunks.wgsl.set("lightDiffuseLambertPS",CEL_LIGHTING_WGSL);
+  material._advisorWorldVisualStyleSignature=STYLE.signature;
+  litMaterialApplicationCount++;
+  return true;
+}
 
 window.AdvisorWorldVisualStyle=Object.freeze({
   signature:STYLE.signature,
@@ -136,11 +174,13 @@ window.AdvisorWorldVisualStyle=Object.freeze({
   hierarchy:STYLE.hierarchy,
   lighting:STYLE.lighting,
   materials:STYLE.materials,
+  celLighting:STYLE.celLighting,
   spriteTreatment:STYLE.spriteTreatment,
   terrainGrade:STYLE.terrainGrade,
   localDetail:STYLE.localDetail,
   performance:STYLE.performance,
   gradeRgb,
+  applyLitMaterial,
   snapshot
 });
 })();
