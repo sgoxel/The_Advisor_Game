@@ -463,7 +463,7 @@ function scalarForFootprintHeight(heightMeters){
   return (lo+hi)/2;
 }
 function levelMaxScalar(index){return ladderState().levelMax[index]??1;}
-let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,geometrySampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,textureSize:0,sourceTextureWidth:0,sourceTextureHeight:0,detailMetersPerTexel:0,surroundMetersPerTexel:0,anisotropy:1,minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:0,surroundDetailBandCount:0,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
+let localDetail={active:false,level:"inactive",sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,geometrySampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,textureSize:0,sourceTextureWidth:0,sourceTextureHeight:0,detailMetersPerTexel:0,surroundMetersPerTexel:0,anisotropy:1,mipmaps:false,minFilter:"linear",magFilter:"linear",samplingPolicy:"single-level-linear-transition-alpha",detailBandCount:0,surroundDetailBandCount:0,visibleWidthMeters:0,visibleHeightMeters:0,patchWidthMeters:0,patchHeightMeters:0,columns:0,rows:0,vertices:0,triangles:0,estimatedBytes:0,buildTimeMs:0,rebuildCount:0,activePatchCount:0,signature:null};
 let requestedLodIndex=0;
 let displayResource=null;
 let localJob=null;
@@ -7439,18 +7439,15 @@ function makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,size){
   return Object.freeze({size,spanEast,spanNorth,sample});
 }
 function broadAuthorityRasterSizes(levelIndex){
-  // Broad map parents must become usable before animated zoom outruns them.
-  // Keep the 6x context source bounded, but refine the 1x canonical focus
-  // source as its physical footprint shrinks. The previous fixed 96x focus
-  // raster forced 320-448px child textures to interpolate a much coarser
-  // authority field, so closer zoom could look softer despite finer texels.
+  // Keep the 6x context source cheap, but do not let the focused child become
+  // an upscaled copy of a much coarser geography raster. The focus ladder is
+  // bounded (<=384 samples) and grows with physical refinement, matching the
+  // proven cross-LOD source-density progression without materializing any
+  // offscreen or full-world high-resolution surface.
   const index=Math.max(0,Number(levelIndex)||0);
-  if(index===0)return Object.freeze({shared:80,focus:64});
-  if(index===1)return Object.freeze({shared:96,focus:72});
-  if(index===2)return Object.freeze({shared:128,focus:80});
-  if(index===3)return Object.freeze({shared:160,focus:112});
-  if(index===4)return Object.freeze({shared:160,focus:128});
-  return Object.freeze({shared:160,focus:144});
+  const shared=index===0?80:index===1?96:index===2?128:160;
+  const focus=index===0?96:index===1?128:index===2?192:index===3?256:index===4?320:384;
+  return Object.freeze({shared,focus});
 }
 function sharedSurfaceAuthority(job){
   if(job?.surfaceAuthority)return job.surfaceAuthority;
@@ -8281,7 +8278,7 @@ function finalizeLocalResource(job,result){
   phaseMs.wildernessPlan=0;
   const regenerationSignature=localResourceRegenerationSignature(job);
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,surfaceContributorPixels,
-    detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
+    detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:focusAuthorityRasterSize,sourceTextureHeight:focusAuthorityRasterSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),mipmaps:false,minFilter:"linear",magFilter:"linear",samplingPolicy:"single-level-linear-transition-alpha",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
