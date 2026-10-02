@@ -73,7 +73,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-008-002` — Colorful Animated Scene Loading Status + Ready Transition — COMPLETED
 - `WP-S003-008-002-001` — Real First-Playable Loading Progress + Animated Phase Feedback — COMPLETED
 - `WP-S003-008-003` — Functional Projection-Aware Mini Map — COMPLETED
-- `WP-S003-008-004` — Responsive Startup Work Slicing + Main-Thread Stall Prevention
+- `WP-S003-008-004` — Responsive Startup Work Slicing + Main-Thread Stall Prevention — COMPLETED
 - `WP-S003-008-005` — World Destination Navigator + Nearby Places Popup — COMPLETED
 - `WP-S003-008-007` — Universal Window Shell: Close, Drag, Minimize-to-Icon + Restore
 - `WP-S003-008-008` — Canonical Places View Targeting + Protagonist Max-Zoom Focus
