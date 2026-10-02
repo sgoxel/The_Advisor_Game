@@ -101,6 +101,78 @@ def snap(d):
     return d.execute_script("return window.PlanetStage?.snapshot?.()||null")
 
 
+def browser_logs(d):
+    try:
+        return [
+            {
+                "level": row.get("level"),
+                "message": row.get("message"),
+                "source": row.get("source"),
+                "timestamp": row.get("timestamp"),
+            }
+            for row in d.get_log("browser")
+        ]
+    except Exception as error:
+        return [{"level": "HARNESS", "message": f"browser-log-read-failed: {error!r}", "source": "evidence-harness", "timestamp": None}]
+
+
+def render_surface_diagnostics(d):
+    try:
+        return d.execute_script("""
+          const c=document.getElementById('planetCanvas');
+          const root=document.getElementById('planetStageRoot');
+          const s=window.PlanetStage?.snapshot?.()||{};
+          const rect=c?.getBoundingClientRect?.()||null;
+          const rootRect=root?.getBoundingClientRect?.()||null;
+          const style=c?getComputedStyle(c):null;
+          const rootStyle=root?getComputedStyle(root):null;
+          const cx=rect?rect.left+rect.width*.5:0,cy=rect?rect.top+rect.height*.5:0;
+          const top=document.elementFromPoint?.(cx,cy)||null;
+          return {
+            ready:Boolean(s.ready),
+            frameCount:Number(s.frameCount||0),
+            rendererBackend:s.rendererBackend||null,
+            atmosphere:s.atmosphere||null,
+            zoom:s.zoom?{scaleIndex:s.zoom.scaleIndex,scaleLabel:s.zoom.scaleLabel,visibleFootprintHeightMeters:s.zoom.visibleFootprintHeightMeters}:null,
+            projection:s.projection?{
+              mode:s.projection.mode,
+              representationOwner:s.projection.representationOwner||null,
+              resourceBudget:s.projection.resourceBudget||null
+            }:null,
+            canvas:c?{
+              id:c.id,
+              cssWidth:Number(rect?.width||0),
+              cssHeight:Number(rect?.height||0),
+              backingWidth:Number(c.width||0),
+              backingHeight:Number(c.height||0),
+              opacity:style?.opacity||null,
+              display:style?.display||null,
+              visibility:style?.visibility||null,
+              backgroundColor:style?.backgroundColor||null,
+              backgroundImage:style?.backgroundImage||null
+            }:null,
+            root:root?{
+              cssWidth:Number(rootRect?.width||0),
+              cssHeight:Number(rootRect?.height||0),
+              backgroundColor:rootStyle?.backgroundColor||null,
+              backgroundImage:rootStyle?.backgroundImage||null
+            }:null,
+            centerTopElement:top?{tag:top.tagName,id:top.id||null,className:String(top.className||'')}:null,
+            devicePixelRatio:Number(window.devicePixelRatio||1),
+            viewport:{innerWidth:Number(window.innerWidth||0),innerHeight:Number(window.innerHeight||0)}
+          };
+        """)
+    except Exception as error:
+        return {"diagnosticError": repr(error)}
+
+
+def persist_run_diagnostics(label, payload):
+    OUT.mkdir(parents=True, exist_ok=True)
+    path=OUT/f"{label}.diagnostics.json"
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str), encoding="utf-8")
+    return path.name
+
+
 def apply_evidence_time(d):
     d.execute_script("""
       window.PlanetStage.applyAuthoritativeFantasyTime(
@@ -383,7 +455,25 @@ def run_success(label, gpu_mode, expected, engine=CURRENT_ENGINE, ground=True, d
         if not d.save_screenshot(str(path)):
             raise RuntimeError(f"screenshot failed: {path}")
         rec["screenshot"] = path.name
+        rec["surfaceDiagnostics"] = render_surface_diagnostics(d)
+        rec["browserLogs"] = browser_logs(d)
+        rec["diagnostics"] = persist_run_diagnostics(label, rec)
         return rec
+    except Exception as error:
+        diagnostic={
+            "label":label,
+            "error":repr(error),
+            "surfaceDiagnostics":render_surface_diagnostics(d),
+            "browserLogs":browser_logs(d),
+        }
+        try:
+            failure_path=OUT/f"{label}-failure.png"
+            if d.save_screenshot(str(failure_path)):
+                diagnostic["failureScreenshot"]=failure_path.name
+        except Exception as screenshot_error:
+            diagnostic["failureScreenshotError"]=repr(screenshot_error)
+        persist_run_diagnostics(label, diagnostic)
+        raise
     finally:
         d.quit()
 
