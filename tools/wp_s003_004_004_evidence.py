@@ -211,7 +211,7 @@ def validate(label,index,state,mode="overview",proof=None):
 
 records=[]
 try:
-    target=TARGET+("&" if "?" in TARGET else "?")+"evidence_fast_start=1"
+    target=TARGET+("&" if "?" in TARGET else "?")+"evidence_fast_start=1&evidence_skip_destinations=1"
     # Install the deterministic evidence campaign before application scripts run.
     # This avoids a second complete startup after SeedSystem.startNewCampaign(),
     # which can exceed the evidence timeout on constrained SwiftShader runners.

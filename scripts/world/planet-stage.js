@@ -20,6 +20,7 @@ const LONGITUDE_SEGMENTS=160;
 // It only lowers the irrelevant pre-zoom globe tessellation when the trusted
 // local screenshot harness explicitly requests it.
 const EVIDENCE_FAST_START=typeof location!=="undefined"&&new URLSearchParams(location.search).get("evidence_fast_start")==="1";
+const EVIDENCE_SKIP_DESTINATIONS=EVIDENCE_FAST_START&&typeof location!=="undefined"&&new URLSearchParams(location.search).get("evidence_skip_destinations")==="1";
 // WP-019 needs both a real far globe and the local streaming path. This mode
 // preserves the full SEED geography texture/feature scan, but reduces only the
 // evidence globe tessellation so SwiftShader does not dominate the test.
@@ -9883,7 +9884,8 @@ async function buildScene(){  const started=performance.now();
   app.root.addChild(fillLight);
 
   applyRotation();
-  if(EVIDENCE_FAST_START)await buildDestinationDescriptorsCooperative();
+  if(EVIDENCE_FAST_START&&!EVIDENCE_SKIP_DESTINATIONS)await buildDestinationDescriptorsCooperative();
+  else if(EVIDENCE_SKIP_DESTINATIONS){startupScheduler.evidenceDestinationNavigatorSkipped=true;destinationNavigator.descriptors=[];}
   setStartupProgress("scene","Finalizing first playable planet…",95);
   buildTimeMs=performance.now()-started;
 }
