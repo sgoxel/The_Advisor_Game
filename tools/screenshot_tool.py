@@ -309,11 +309,16 @@ def _canonical_focus_frame(driver,index,timeout):
     if index==1:
         set_exact_viewport(driver,1440,900)
         prep=_canonical_focus_starting_village(driver)
-        driver.execute_script("window.PlanetStage.setScaleIndex(8);")
+        driver.execute_script("""
+          const stage=window.PlanetStage;
+          stage.setZoomScalar(stage.scalarForFootprintHeight(80));
+        """)
         _wait(driver,"""
           const s=window.PlanetStage?.snapshot?.(),p=s?.npcPresentation||{};
-          return Boolean(s?.zoom?.scaleIndex===8 && p?.protagonistMarkerVisible===true && (window.PlanetStage?.inspectionTargets?.()||[]).some(x=>x.type==='protagonist'));
-        """,timeout,"wider-view protagonist marker")
+          const nonFinal=Number(s?.zoom?.scalar)<0.999999;
+          const nearReady=s?.zoom?.visibleLevel==='near-ground-close'||s?.zoom?.requestedLevel==='near-ground-close';
+          return Boolean(s?.ready && nonFinal && nearReady && p?.protagonistMarkerVisible===true && p?.protagonistBillboardVisible!==true && (window.PlanetStage?.inspectionTargets?.()||[]).some(x=>x.type==='protagonist'));
+        """,timeout,"80m wider-view protagonist marker")
         picked=driver.execute_script("""
           const t=(window.PlanetStage.inspectionTargets()||[]).find(x=>x.type==='protagonist');
           if(!t?.bounds)return {ok:false,reason:'protagonist-bounds-missing'};
