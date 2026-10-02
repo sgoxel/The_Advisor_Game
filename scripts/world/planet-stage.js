@@ -5196,6 +5196,12 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
   // rebuilt, immediately reconcile the shared text canvas so stale lettering
   // cannot survive into the final RPG frame.
   updateWayfindingTextOverlay(true);
+  if(groundArt&&detailedBillboardCount>0){
+    // Map semantics may have rendered while character textures were still
+    // loading. Reconcile once the final ground layer actually owns the frame so
+    // map-only readouts/labels cannot remain stale over the RPG presentation.
+    updateMapPresentation("ground-character-ready",true);
+  }
   if(selectedNpc&&!inspectionPickables.has(inspectionRegistryKey("npc",selectedNpc)))dismissInspection();
 }
 function refreshCanonicalNpcPresentation(){
