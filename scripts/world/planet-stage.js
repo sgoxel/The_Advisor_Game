@@ -8012,10 +8012,17 @@ function textureFromPixels(pixels){
   // copyExternalImageToTexture path can lose the device on software/CI adapters
   // when fed transient 2D canvases; direct Texture.lock/unlock keeps the same
   // generated pixels and avoids external-image ownership entirely.
-  const texture=new pc.Texture(device,{width:pixels.size,height:pixels.size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:true});
+  //
+  // These transition rasters carry feathered coverage in alpha. Backend-specific
+  // mip/derivative selection can average that alpha differently at wide map
+  // minification, making the same canonical resource look detailed on one
+  // backend and collapse toward the parent surface on another. Keep this bounded
+  // presentation texture single-level with linear sampling so WebGPU/WebGL2 see
+  // the same authored RGBA texels. Canonical world data is unchanged.
+  const texture=new pc.Texture(device,{width:pixels.size,height:pixels.size,format:pc.PIXELFORMAT_R8_G8_B8_A8,mipmaps:false});
   texture.flipY=false;
   texture.addressU=pc.ADDRESS_CLAMP_TO_EDGE;texture.addressV=pc.ADDRESS_CLAMP_TO_EDGE;
-  texture.minFilter=pc.FILTER_LINEAR_MIPMAP_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.anisotropy=localTextureAnisotropy();
+  texture.minFilter=pc.FILTER_LINEAR;texture.magFilter=pc.FILTER_LINEAR;texture.anisotropy=localTextureAnisotropy();
   uploadRgba8Texture(texture,pixels.data,pixels.size,pixels.size,true);
   return texture;
 }
@@ -8186,7 +8193,7 @@ function finalizeLocalResource(job,result){
   phaseMs.wildernessPlan=0;
   const regenerationSignature=localResourceRegenerationSignature(job);
   const resource={signature:job.signature,regenerationSignature,levelIndex:job.levelIndex,dims,lat0:job.lat0,lon0:job.lon0,spatialCell:job.spatialCell,groundDetailWeight:job.groundDetailWeight,centerElevation:job.centerElevation,biomeCoordinateProof:job.biomeCoordinateProof,builtAsPrewarm:job.prewarm,prefetchKind:job.prewarmKind||null,mesh,mediumMesh,skirtMesh,detailTexture,mediumTexture,surroundTexture,wildernessPlan,estimatedBytes,surfaceContributorPixels,
-    detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear-mipmap-linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
+    detail:{active:true,level:dims.levelId,band:dims.band,sampleSpacingMeters:dims.sampleSpacingMeters,geometrySampleSpacingMeters:dims.sampleSpacingMeters,textureSize,sourceTextureWidth:textureSize,sourceTextureHeight:textureSize,detailMetersPerTexel:Number(detailMetersPerTexel.toFixed(3)),mediumMetersPerTexel:Number(mediumMetersPerTexel.toFixed(3)),surroundMetersPerTexel:Number(surroundMetersPerTexel.toFixed(3)),anisotropy:localTextureAnisotropy(),minFilter:"linear",magFilter:"linear",detailBandCount:surfaceDetailBandCount(detailMetersPerTexel),mediumDetailBandCount:surfaceDetailBandCount(mediumMetersPerTexel),surroundDetailBandCount:surfaceDetailBandCount(surroundMetersPerTexel),
       coordinateAuthority:detail.coordinateAuthority,coordinateRevision:detail.coordinateRevision,patchRelativeBiomeNoise:false,
       surfaceComponentRanges:Object.freeze({
         focus:detail.componentRanges,medium:medium.componentRanges,outer:surround.componentRanges
