@@ -227,6 +227,7 @@ try:
       try {{
         localStorage.setItem('theAdvisorGame.wp001.campaign.v2', {json.dumps(campaign_bootstrap)});
         localStorage.setItem('theAdvisorGame.wp001.settings.v2', {json.dumps(settings_bootstrap)});
+        localStorage.setItem('advisor.planet.seed.v1', {json.dumps(SEED)});
       }} catch (_) {{}}
     """})
     driver.get(target)
