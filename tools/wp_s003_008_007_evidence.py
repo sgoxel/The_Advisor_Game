@@ -60,8 +60,12 @@ opts=Options()
 opts.add_argument("--headless=new")
 opts.add_argument("--no-sandbox")
 opts.add_argument("--disable-dev-shm-usage")
-opts.add_argument("--disable-gpu")
-opts.add_argument("--use-gl=swiftshader")
+opts.add_argument("--ignore-gpu-blocklist")
+opts.add_argument("--enable-unsafe-swiftshader")
+opts.add_argument("--use-gl=angle")
+opts.add_argument("--use-angle=swiftshader")
+opts.add_argument("--enable-gpu")
+opts.add_argument("--use-gpu-in-tests")
 opts.add_argument("--window-size=1280,800")
 opts.set_capability("goog:loggingPrefs",{"browser":"ALL"})
 # The game intentionally performs substantial startup/streaming work after navigation.
@@ -71,6 +75,11 @@ opts.set_capability("goog:loggingPrefs",{"browser":"ALL"})
 opts.page_load_strategy="none"
 driver=webdriver.Chrome(options=opts)
 driver.set_page_load_timeout(30)
+driver.set_script_timeout(240)
+# This WP validates presentation mechanics, not renderer-backend parity. Force the
+# supported WebGL2 fallback so an unrelated WebGPU/CI device-loss path cannot make
+# this independently executable UI package depend on another renderer WP.
+driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument",{"source":"try{Object.defineProperty(navigator,'gpu',{value:undefined,configurable:true});}catch(_){} try{Object.defineProperty(Navigator.prototype,'gpu',{get:()=>undefined,configurable:true});}catch(_){} try{localStorage.setItem('the-advisor-game:development-mode','false');}catch(_){}"})
 records=[]
 try:
     exact(driver,1280,800)
