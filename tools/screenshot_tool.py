@@ -1079,6 +1079,27 @@ def _prepare_atlas_live_scene(driver,timeout):
     driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
     return _atlas_live_state(driver)
 
+def _wait_atlas_responsive_labels(driver,timeout,label):
+    predicate="""
+      const s=window.PlanetStage?.snapshot?.()||{},m=s.mapPresentation||{},n=s.navigationPerformance||{};
+      const visible=[...document.querySelectorAll('.planet-atlas-label,.planet-map-landmark')].some(el=>{
+        const cs=getComputedStyle(el),r=el.getBoundingClientRect();
+        return !el.hidden && cs.visibility!=='hidden' && cs.display!=='none' && Number(cs.opacity||1)>0.01 &&
+          r.width>0 && r.height>0 && r.right>0 && r.bottom>0 && r.left<innerWidth && r.top<innerHeight;
+      });
+      return Boolean(
+        s.ready && !n.semanticUpdatePending && !n.pendingReason &&
+        Number(m.atlasVisibleLabelCount||0)>0 && visible
+      );
+    """
+    _wait(driver,predicate,timeout,label)
+    # ResizeObserver / camera projection work can enqueue one final semantic pass
+    # on the next paint. Wait through two paints, then require the same stable
+    # condition again so telemetry and the screenshot describe the same DOM.
+    driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+    _wait(driver,predicate,timeout,label+" after paint settle")
+
+
 def _atlas_live_frame(driver,index,timeout):
     from selenium.webdriver.common.action_chains import ActionChains
     if index==0:
@@ -1108,29 +1129,11 @@ def _atlas_live_frame(driver,index,timeout):
         action="desktop-after-settle"
     elif index==5:
         set_exact_viewport(driver,844,390)
-        _wait(driver,"""
-          const s=window.PlanetStage?.snapshot?.()||{},m=s.mapPresentation||{};
-          const visible=[...document.querySelectorAll('.planet-atlas-label,.planet-map-landmark')].some(el=>{
-            const cs=getComputedStyle(el),r=el.getBoundingClientRect();
-            return !el.hidden && cs.visibility!=='hidden' && cs.display!=='none' && Number(cs.opacity||1)>0.01 &&
-              r.width>0 && r.height>0 && r.right>0 && r.bottom>0 && r.left<innerWidth && r.top<innerHeight;
-          });
-          return Boolean(s.ready && Number(m.atlasVisibleLabelCount||0)>0 && visible);
-        """,timeout,"phone-landscape atlas labels with live DOM")
-        driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+        _wait_atlas_responsive_labels(driver,timeout,"phone-landscape atlas labels with settled live DOM")
         action="phone-landscape"
     else:
         set_exact_viewport(driver,390,844)
-        _wait(driver,"""
-          const s=window.PlanetStage?.snapshot?.()||{},m=s.mapPresentation||{};
-          const visible=[...document.querySelectorAll('.planet-atlas-label,.planet-map-landmark')].some(el=>{
-            const cs=getComputedStyle(el),r=el.getBoundingClientRect();
-            return !el.hidden && cs.visibility!=='hidden' && cs.display!=='none' && Number(cs.opacity||1)>0.01 &&
-              r.width>0 && r.height>0 && r.right>0 && r.bottom>0 && r.left<innerWidth && r.top<innerHeight;
-          });
-          return Boolean(s.ready && Number(m.atlasVisibleLabelCount||0)>0 && visible);
-        """,timeout,"phone-portrait atlas labels with live DOM")
-        driver.execute_async_script("const done=arguments[0];requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));")
+        _wait_atlas_responsive_labels(driver,timeout,"phone-portrait atlas labels with settled live DOM")
         action="phone-portrait"
     state=_atlas_live_state(driver)
     state["action"]=action
