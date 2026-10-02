@@ -520,7 +520,7 @@ function readRendererEngineRequest(){
   return Object.freeze({version,build:selectedBuild,baseline:version===BASELINE_ENGINE_VERSION,developer});
 }
 function rendererEngineUrl(version,build){
-  if(build==="debug")return "https://cdn.jsdelivr.net/npm/playcanvas@"+version+"/build/playcanvas.dbg/src/index.js";
+  if(build==="debug")return "https://cdn.jsdelivr.net/npm/playcanvas@"+version+"/build/playcanvas.dbg.mjs";
   return "https://cdn.jsdelivr.net/npm/playcanvas@"+version+"/+esm";
 }
 function readRendererBackendRequest(){
