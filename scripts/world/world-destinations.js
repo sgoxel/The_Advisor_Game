@@ -227,6 +227,100 @@ function boundedSettlementQuery(seed,origin,radiusMeters){
   settlementQueryCache.set(cacheKey,result);if(settlementQueryCache.size>SETTLEMENT_QUERY_CACHE_LIMIT)settlementQueryCache.delete(settlementQueryCache.keys().next().value);
   return result;
 }
+async function boundedSettlementQueryCooperative(seed,origin,radiusMeters,options={}){
+  const classes=settlementClassesForRadius(radiusMeters),cacheKey=[seed,origin.x,origin.y,Math.round(radiusMeters),classes.join(",")].join("|");
+  if(settlementQueryCache.has(cacheKey))return settlementQueryCache.get(cacheKey);
+  const now=()=>typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
+  const pause=typeof options.yield==="function"?options.yield:()=>new Promise(resolve=>setTimeout(resolve,0));
+  const record=(started,label)=>{try{options.onUnit?.(now()-started,label);}catch(_){}};
+  const records=[],seen=new Set();let queryCellCount=0;
+  const radiusTiles=BigInt(Math.ceil(radiusMeters/TILE_METERS)),ox=BigInt(origin.x),oy=BigInt(origin.y),minX=ox-radiusTiles,maxX=ox+radiusTiles,minY=oy-radiusTiles,maxY=oy+radiusTiles;
+  if(classes.includes("national-capital")){
+    const unitStarted=now();
+    try{
+      const caps=window.SettlementArchetypes?.canonicalSettlementsInBounds?.(seed,{minX:String(minX),maxX:String(maxX),minY:String(minY),maxY:String(maxY)},["national-capital"]);
+      queryCellCount+=Number(caps?.diagnostics?.queryCellCount||0);
+      for(const record of caps?.settlements||[])if(!seen.has(record.id)){seen.add(record.id);records.push(record);}
+    }catch(_){}
+    record(unitStarted,"settlement-national-capital");
+    await pause();
+  }
+  for(const classId of classes.filter(x=>x!=="national-capital")){
+    let accepted=0;
+    for(const cell of orderedCellsForClass(origin,classId,radiusMeters)){
+      const unitStarted=now();queryCellCount++;
+      let settlement=null;
+      try{settlement=window.SettlementArchetypes?.canonicalSettlementAtCell?.(seed,classId,cell.cx,cell.cy)||null;}catch(_){settlement=null;}
+      record(unitStarted,"settlement-"+classId);
+      if(settlement&&!seen.has(settlement.id)&&tileDistanceMeters(origin,settlement.center)<=radiusMeters){
+        seen.add(settlement.id);records.push(settlement);accepted++;
+      }
+      await pause();
+      if(accepted>=SETTLEMENT_RESULT_LIMIT_PER_CLASS)break;
+    }
+  }
+  records.sort((a,b)=>tileDistanceMeters(origin,a.center)-tileDistanceMeters(origin,b.center)||String(a.id).localeCompare(String(b.id)));
+  const result=Object.freeze({settlements:Object.freeze(records),diagnostics:Object.freeze({queryCellCount,bounded:true,classes:Object.freeze(classes.slice()),cellLimitPerClass:SETTLEMENT_CELL_LIMIT_PER_CLASS,resultLimitPerClass:SETTLEMENT_RESULT_LIMIT_PER_CLASS,cacheHit:false,cooperative:true})});
+  settlementQueryCache.set(cacheKey,result);if(settlementQueryCache.size>SETTLEMENT_QUERY_CACHE_LIMIT)settlementQueryCache.delete(settlementQueryCache.keys().next().value);
+  return result;
+}
+async function queryNearbyCooperative(seedValue,originValue,optionsValue){
+  const started=typeof performance!=="undefined"&&performance.now?performance.now():Date.now(),seed=String(seedValue==null?"":seedValue),origin=normalizeOrigin(seed,originValue||{}),options=optionsValue||{};
+  const radiusMeters=clamp(options.radiusMeters==null?40000:options.radiusMeters,250,MAX_QUERY_RADIUS_METERS),maxResults=Math.max(1,Math.min(MAX_QUERY_RESULTS,Math.floor(Number(options.maxResults)||16))),minImportance=clamp(options.minImportance||1,1,5),categories=normalizeCategories(options.categories||options.category),types=normalizeCategories(options.types||options.type);
+  const radiusTiles=BigInt(Math.ceil(radiusMeters/TILE_METERS)),ox=BigInt(origin.x),oy=BigInt(origin.y),minX=ox-radiusTiles,maxX=ox+radiusTiles,minY=oy-radiusTiles,maxY=oy+radiusTiles;
+  const phaseNow=()=>typeof performance!=="undefined"&&performance.now?performance.now():Date.now();
+  const pause=typeof options.yield==="function"?options.yield:()=>new Promise(resolve=>setTimeout(resolve,0));
+  let cooperativeUnitCount=0,cooperativeMaxUnitMs=0;
+  const record=(elapsed,label)=>{
+    const measured=Math.max(0,Number(elapsed)||0);cooperativeUnitCount++;cooperativeMaxUnitMs=Math.max(cooperativeMaxUnitMs,measured);
+    try{options.onUnit?.(measured,label);}catch(_){}
+  };
+  const settlementStarted=phaseNow(),settlementQuery=await boundedSettlementQueryCooperative(seed,origin,radiusMeters,{yield:pause,onUnit:record}),settlementEnded=phaseNow(),settlementClasses=settlementQuery.diagnostics.classes;
+  const raw=[];for(const settlement of settlementQuery.settlements||[])raw.push(settlementRaw(settlement));
+  const minCx=floorDiv(minX,POI_CELL_TILES),maxCx=floorDiv(maxX,POI_CELL_TILES),minCy=floorDiv(minY,POI_CELL_TILES),maxCy=floorDiv(maxY,POI_CELL_TILES),cells=[];
+  const ccx=floorDiv(ox,POI_CELL_TILES),ccy=floorDiv(oy,POI_CELL_TILES);
+  for(let cy=minCy;cy<=maxCy;cy++)for(let cx=minCx;cx<=maxCx;cx++){const dx=Number(cx-ccx),dy=Number(cy-ccy);cells.push({cx,cy,d:dx*dx+dy*dy});}
+  cells.sort((a,b)=>{
+    if(a.d!==b.d)return a.d-b.d;
+    if(a.cy!==b.cy)return a.cy<b.cy?-1:1;
+    if(a.cx!==b.cx)return a.cx<b.cx?-1:1;
+    return 0;
+  });const boundedCells=cells.slice(0,Math.min(MAX_QUERY_CELLS,ACTIVE_POI_QUERY_CELLS));
+  const poiStarted=phaseNow();
+  for(const cell of boundedCells){
+    const unitStarted=phaseNow();raw.push(...poiCandidatesForCell(seed,cell.cx,cell.cy));record(phaseNow()-unitStarted,"poi-cell");
+    await pause();
+  }
+  const poiEnded=phaseNow(),filterStarted=phaseNow();
+  const settlementAnchors=raw.filter(item=>["hamlet","village","town","city","capital"].includes(item.type));
+  const unique=new Map();
+  for(let index=0;index<raw.length;index++){
+    const unitStarted=phaseNow(),rawItem=raw[index];let item=rawItem;const distance=tileDistanceMeters(origin,item.center);
+    if(distance<=radiusMeters+item.footprintRadiusMeters&&item.importance>=minImportance&&(!categories||categories.has(item.category))&&(!types||types.has(item.type))){
+      if(item.type==="hunting"){
+        let nearest=Infinity;for(const settlement of settlementAnchors)nearest=Math.min(nearest,tileDistanceMeters(item.center,settlement.center));
+        if(nearest>=1800)item=Object.freeze({...item,evidence:Object.freeze({...item.evidence,settlementPressureMeters:Number.isFinite(nearest)?Number(nearest.toFixed(1)):null})});
+        else item=null;
+      }
+      if(item){const prev=unique.get(item.id);if(!prev||distance<prev.distance)unique.set(item.id,{item,distance});}
+    }
+    record(phaseNow()-unitStarted,"filter-item");
+    if(index<raw.length-1)await pause();
+  }
+  const ranked=[...unique.values()].sort((a,b)=>a.distance-b.distance||b.item.importance-a.item.importance||b.item.score-a.item.score||a.item.id.localeCompare(b.item.id)),filterEnded=phaseNow(),enrichStarted=phaseNow();
+  const results=[];
+  for(let index=0;index<ranked.length&&results.length<maxResults;index++){
+    const unitStarted=phaseNow(),entry=ranked[index],item=enrich(seed,entry.item);
+    if(discoveredPass(item,options)){
+      const dir=bearing(origin,item.center);
+      results.push(Object.freeze({...item,distanceMeters:Number(entry.distance.toFixed(2)),bearingDegrees:dir.degrees,directionLabel:dir.label}));
+    }
+    record(phaseNow()-unitStarted,"enrich-item");
+    if(index<ranked.length-1&&results.length<maxResults)await pause();
+  }
+  const ended=phaseNow();
+  return Object.freeze({seed,origin,radiusMeters,results:Object.freeze(results),diagnostics:Object.freeze({version:VERSION,queryMs:Number((ended-started).toFixed(3)),phaseMs:Object.freeze({settlements:Number((settlementEnded-settlementStarted).toFixed(3)),poi:Number((poiEnded-poiStarted).toFixed(3)),filterRank:Number((filterEnded-filterStarted).toFixed(3)),enrich:Number((ended-enrichStarted).toFixed(3))}),queryCellCount:boundedCells.length,maxQueryCells:MAX_QUERY_CELLS,activePoiQueryCellLimit:ACTIVE_POI_QUERY_CELLS,settlementQueryCellCount:Number(settlementQuery.diagnostics?.queryCellCount||0),settlementClasses:Object.freeze(settlementClasses.slice()),poiCellCacheSize:poiCellCache.size,poiCellCacheLimit:POI_CELL_CACHE_LIMIT,candidateCount:raw.length,resultCount:results.length,bounded:true,fullWorldScan:false,localChunkMaterialization:false,descriptorOnly:true,seedOnly:true,cameraIndependent:true,viewportIndependent:true,cooperative:true,cooperativeUnitCount,cooperativeMaxUnitMs:Number(cooperativeMaxUnitMs.toFixed(3))})});
+}
 function queryNearby(seedValue,originValue,optionsValue){
   const started=typeof performance!=="undefined"&&performance.now?performance.now():Date.now(),seed=String(seedValue==null?"":seedValue),origin=normalizeOrigin(seed,originValue||{}),options=optionsValue||{};
   const radiusMeters=clamp(options.radiusMeters==null?40000:options.radiusMeters,250,MAX_QUERY_RADIUS_METERS),maxResults=Math.max(1,Math.min(MAX_QUERY_RESULTS,Math.floor(Number(options.maxResults)||16))),minImportance=clamp(options.minImportance||1,1,5),categories=normalizeCategories(options.categories||options.category),types=normalizeCategories(options.types||options.type);
@@ -269,5 +363,5 @@ function descriptorById(seedValue,idValue,originValue,optionsValue){const id=Str
 function signature(query){return hash32((query?.results||[]).map(item=>[item.id,item.type,item.center.x,item.center.y,item.countryId,item.regionId,item.importance].join(":")).join("|")).toString(16).padStart(8,"0");}
 function verify(seedValue,originValue){const seed=String(seedValue==null?"":seedValue),origin=normalizeOrigin(seed,originValue||{x:"0",y:"0"}),a=queryNearby(seed,origin,{radiusMeters:80000,maxResults:32}),b=queryNearby(seed,origin,{radiusMeters:80000,maxResults:32}),sa=signature(a),sb=signature(b),settlement=a.results.some(x=>["hamlet","village","town","city","capital"].includes(x.type)),nonSettlement=a.results.some(x=>!["hamlet","village","town","city","capital"].includes(x.type));return Object.freeze({pass:sa===sb&&settlement&&nonSettlement&&a.diagnostics.bounded&&!a.diagnostics.fullWorldScan&&!a.diagnostics.localChunkMaterialization,seed,signatureA:sa,signatureB:sb,deterministic:sa===sb,settlement,nonSettlement,query:a});}
 
-window.WorldDestinations=Object.freeze({VERSION,TILE_METERS,POI_CELL_TILES,MAX_QUERY_RADIUS_METERS,MAX_QUERY_RESULTS,MAX_QUERY_CELLS,ACTIVE_POI_QUERY_CELLS,LOCAL_POI_CELL_QUERY_LIMIT,POI_CELL_CACHE_LIMIT,CONTEXT_CACHE_LIMIT,SETTLEMENT_CELL_LIMIT_PER_CLASS,SETTLEMENT_RESULT_LIMIT_PER_CLASS,SETTLEMENT_QUERY_CACHE_LIMIT,queryNearby,poiCell,descriptorById,verify,signature});
+window.WorldDestinations=Object.freeze({VERSION,TILE_METERS,POI_CELL_TILES,MAX_QUERY_RADIUS_METERS,MAX_QUERY_RESULTS,MAX_QUERY_CELLS,ACTIVE_POI_QUERY_CELLS,LOCAL_POI_CELL_QUERY_LIMIT,POI_CELL_CACHE_LIMIT,CONTEXT_CACHE_LIMIT,SETTLEMENT_CELL_LIMIT_PER_CLASS,SETTLEMENT_RESULT_LIMIT_PER_CLASS,SETTLEMENT_QUERY_CACHE_LIMIT,queryNearby,queryNearbyCooperative,poiCell,descriptorById,verify,signature});
 })();
