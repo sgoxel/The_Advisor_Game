@@ -28,6 +28,7 @@ jobs:
           python tools/agent6_wp007_patch.py
           python -m py_compile tools/screenshot_tool.py
           git diff --check
+          rm -rf tools/__pycache__
       - name: Commit harness repair
         run: |
           git config user.name "github-actions[bot]"
