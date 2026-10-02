@@ -4549,19 +4549,58 @@ function buildCanonicalRoadCellMesh(reveal,presentationScale,unit,frame,lift,tie
       }
     }
   }else{
-    // Final-ground roads keep the exact authoritative road-cell set, but render
-    // it as a connected lane network instead of filling every 2 m cell. This
-    // removes the stair-stepped brown raster without changing routes/walkability.
-    const fullRoadMap=new Set(roadCells.map(([x,y])=>x+","+y));
-    const nodeHalf=.31,cardinalWidth=.62,diagonalWidth=.54;
-    for(const [x,y] of roadCells){
-      addQuad(x-nodeHalf,y-nodeHalf,x+nodeHalf,y+nodeHalf);
-      for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
-        if(!fullRoadMap.has((x+dx)+","+(y+dy)))continue;
-        if(dx&&dy&&(fullRoadMap.has((x+dx)+","+y)||fullRoadMap.has(x+","+(y+dy))))continue;
-        addSegment(x,y,x+dx,y+dy,dx&&dy?diagonalWidth:cardinalWidth);
+    // Final ground presents the authoritative multi-cell road reservations as
+    // one readable lane skeleton. Every lane node is an actual road cell from
+    // StartingVillage; only redundant width cells are omitted visually.
+    const ringRadius=Math.max(1,Number(village.RING_RADIUS_TILES||14));
+    const selectedMap=new Map(),ringBins=new Map(),gatewayByForward=new Map();
+    const select=(cell)=>selectedMap.set(cell.x+","+cell.y,cell);
+    for(const [x,y,kind] of roadCells){
+      const local=village.local(activeSeed,String(x),String(y));if(!local)continue;
+      const cell={x,y,kind,local},radius=Number(local.radius||0),forward=Number(local.forward||0);
+      if(kind==="local-path"){select(cell);continue;}
+      const centerAvenue=kind==="main-road"&&radius<=ringRadius+1.5&&
+        ((x===0&&Math.abs(y)<=ringRadius+1)||(y===0&&Math.abs(x)<=ringRadius+1));
+      if(centerAvenue)select(cell);
+      if(kind==="main-road"&&Math.abs(radius-ringRadius)<=1.25){
+        const theta=(Number(local.theta||0)+Math.PI*2)%(Math.PI*2),bin=Math.floor(theta/(Math.PI*2)*64);
+        const prior=ringBins.get(bin),error=Math.abs(radius-ringRadius);
+        if(!prior||error<prior.error-1e-9||(Math.abs(error-prior.error)<1e-9&&(y<prior.cell.y||(y===prior.cell.y&&x<prior.cell.x)))){
+          ringBins.set(bin,{cell,error,theta});
+        }
+      }
+      if(kind==="main-road"&&forward>ringRadius+1){
+        const key=Math.round(forward);if(!gatewayByForward.has(key))gatewayByForward.set(key,[]);
+        gatewayByForward.get(key).push(cell);
       }
     }
+    const ringCells=[...ringBins.values()].sort((a,b)=>a.theta-b.theta).map(v=>v.cell);
+    for(const cell of ringCells)select(cell);
+    const gatewayCells=[];
+    for(const key of [...gatewayByForward.keys()].sort((a,b)=>a-b)){
+      const candidates=gatewayByForward.get(key).sort((a,b)=>Number(a.local.lateral||0)-Number(b.local.lateral||0)||a.y-b.y||a.x-b.x);
+      const chosen=candidates[Math.floor((candidates.length-1)/2)];if(chosen){select(chosen);gatewayCells.push(chosen);}
+    }
+    const segmentKeys=new Set(),connect=(a,b,width)=>{
+      if(!a||!b)return;
+      const ak=a.x+","+a.y,bk=b.x+","+b.y,key=ak<bk?ak+"|"+bk:bk+"|"+ak;
+      if(segmentKeys.has(key))return;segmentKeys.add(key);addSegment(a.x,a.y,b.x,b.y,width);
+    };
+    const selected=[...selectedMap.values()],nodeHalf=.37,laneWidth=.74;
+    for(const cell of selected){
+      addQuad(cell.x-nodeHalf,cell.y-nodeHalf,cell.x+nodeHalf,cell.y+nodeHalf);
+      for(const [dx,dy] of [[1,0],[0,1],[1,1],[1,-1]]){
+        const other=selectedMap.get((cell.x+dx)+","+(cell.y+dy));if(!other)continue;
+        if(dx&&dy&&(selectedMap.has((cell.x+dx)+","+cell.y)||selectedMap.has(cell.x+","+(cell.y+dy))))continue;
+        connect(cell,other,laneWidth);
+      }
+    }
+    const connectOrdered=(cells,close=false)=>{
+      for(let i=1;i<cells.length;i++)if(Math.hypot(cells[i].x-cells[i-1].x,cells[i].y-cells[i-1].y)<=2.25)connect(cells[i-1],cells[i],laneWidth);
+      if(close&&cells.length>2&&Math.hypot(cells[0].x-cells.at(-1).x,cells[0].y-cells.at(-1).y)<=2.25)connect(cells.at(-1),cells[0],laneWidth);
+    };
+    connectOrdered(ringCells,true);connectOrdered(gatewayCells,false);
+    renderedRoadCellCount=selected.length;
   }
   const mesh=new pc.Mesh(device);mesh.setPositions(positions);mesh.setNormals(normals);mesh.setUvs(0,uvs);mesh.setIndices(indices);mesh.update();
   const entity=new pc.Entity("CanonicalAuthoritativeRoadCells");entity.addComponent("render",{type:"asset",castShadows:false,receiveShadows:true});
@@ -5264,7 +5303,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
     const body=addLocalPrimitive(localNpcRoot,"ResidentBody-"+resident.id,"cylinder",bodyMaterial,x,ground+bodyHeight*.5,z,bodyWidth,bodyHeight,bodyWidth);
     const head=addLocalPrimitive(localNpcRoot,"ResidentHead-"+resident.id,"sphere",localNpcMaterials.head,x,ground+bodyHeight+headSize*.48,z,headSize,headSize,headSize);
     const textureUrl=groundArt?groundCharacterTextureUrl(resident.profession):null;
-    const billboard=textureUrl?createGroundCharacterBillboard(localNpcRoot,"ResidentBillboard-"+resident.id,textureUrl,x,ground,z,presentationScale,unit,1.74):null;
+    const billboard=textureUrl?createGroundCharacterBillboard(localNpcRoot,"ResidentBillboard-"+resident.id,textureUrl,x,ground,z,presentationScale,unit,2.35):null;
     if(billboard){billboard.enabled=initiallyVisible;}
     if(billboard){residentBillboardCount++;billboardUrls.add(textureUrl);}
     const tool=addLocalPrimitive(localNpcRoot,"ResidentWorkTool-"+resident.id,"box",localNpcMaterials.tool,x,ground+bodyHeight*.62,z,bodyWidth*.26,bodyHeight*.72,bodyWidth*.26);
@@ -5497,11 +5536,11 @@ function canonicalRoofSegmentColor(state,plane,band,lane,landmark){
 function canonicalRoofMeshData(entry,state){
   const positions=[],normals=[],colors=[],indices=[];
   const visualState=["normal","worn","damaged","repaired","overgrown"].includes(String(state))?String(state):"normal";
-  const runMeters=Math.max(1,entry.w*.55),roofRiseMeters=Math.max(1.05,Math.min(2.55,entry.w*.245));
+  const runMeters=Math.max(1,entry.w*.50),roofRiseMeters=Math.max(1.05,Math.min(2.55,entry.w*.245)),roofDepthScale=.91;
   const roofRise=roofRiseMeters*entry.presentationScale/entry.unit,outerY=entry.ground+entry.h+.018;
   const normalFor=side=>{const slope=roofRiseMeters/runMeters,l=Math.hypot(slope,1);return [side*slope/l,1/l,0];};
   const point=(side,t,northFactor,liftMeters=0)=>{
-    const east=entry.east+side*runMeters*(1-t),north=entry.north+northFactor*entry.d,p=canonicalSemanticPosition(east,north,entry.presentationScale,entry.unit,entry.frame);
+    const east=entry.east+side*runMeters*(1-t),north=entry.north+northFactor*entry.d*roofDepthScale,p=canonicalSemanticPosition(east,north,entry.presentationScale,entry.unit,entry.frame);
     const lift=liftMeters*entry.presentationScale/entry.unit;
     // Detail remains inside the canonical footprint. A tiny vertical lift
     // avoids z-fighting without pushing repair/moss beyond the eave silhouette.
