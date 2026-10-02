@@ -5373,6 +5373,7 @@ function rebuildCanonicalNpcPresentation(reveal,tier,frame,presentationScale,uni
 function refreshCanonicalNpcPresentation(){
   if(!localNpcContext||!localWorldPresentationEligibility().visible)return;
   const c=localNpcContext;rebuildCanonicalNpcPresentation(c.reveal,c.tier,c.frame,c.presentationScale,c.unit,c.lift,true);
+  applyCanonicalGroundBuildingCutaway(c.tier);
 }
 function updateCanonicalNpcMotion(){
   if(!localWorldPresentationEligibility().visible||!localNpcRoot||!localNpcContext||!localNpcEntities.size)return;
