@@ -212,11 +212,28 @@ def validate(label,index,state,mode="overview",proof=None):
 records=[]
 try:
     target=TARGET+("&" if "?" in TARGET else "?")+"evidence_fast_start=1"
+    # Install the deterministic evidence campaign before application scripts run.
+    # This avoids a second complete startup after SeedSystem.startNewCampaign(),
+    # which can exceed the evidence timeout on constrained SwiftShader runners.
+    campaign_bootstrap=json.dumps({
+        "seed":SEED,
+        "realStartMs":int(time.time()*1000),
+        "fantasyStart":{"year":1100,"month":1,"day":1,"hour":11,"minute":30,"second":0,"millisecond":0},
+        "protagonist":{"x":"0","y":"0"},
+        "restartCount":0,
+    },separators=(",",":"))
+    settings_bootstrap=json.dumps({"seed":SEED},separators=(",",":"))
+    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument",{"source":f"""
+      try {{
+        localStorage.setItem('theAdvisorGame.wp001.campaign.v2', {json.dumps(campaign_bootstrap)});
+        localStorage.setItem('theAdvisorGame.wp001.settings.v2', {json.dumps(settings_bootstrap)});
+      }} catch (_) {{}}
+    """})
     driver.get(target)
     wait.until(lambda _d: ready())
-    reset_seed_and_focus()
-    driver.refresh();wait.until(lambda _d: ready())
     prime=js("""const s=PlanetStage.snapshot(),p=StartingVillage.plan(s.activeSeed),c=p?.center||{x:'0',y:'0'};PlanetStage.applyAuthoritativeFantasyTime(arguments[0],'WP-S003-004-004 daytime visual evidence',{snapshotResult:false});PlanetStage.setWorldTileFocus(String(c.x),String(c.y));return {activeSeed:s.activeSeed,center:{x:String(c.x),y:String(c.y)},village:p?.name||'Starting Village',when:arguments[0]};""",EVIDENCE_TIME)
+    if str(prime.get("activeSeed"))!=SEED:
+        raise RuntimeError("evidence campaign seed did not load before startup: "+json.dumps(prime))
     overview_point={"x":str(prime["center"]["x"]),"y":str(prime["center"]["y"])}
     ground_probe=set_scale(9)
     resident_cutaway_ids=(ground_probe.get("groundBuildingCutaway") or {}).get("residentCutawayBuildingIds") or []
