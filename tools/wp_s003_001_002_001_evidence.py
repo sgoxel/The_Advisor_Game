@@ -13,6 +13,7 @@ from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
+from PIL import Image, ImageChops, ImageStat
 
 TARGET = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000/"
 OUT = Path(sys.argv[2] if len(sys.argv) > 2 else "tools/wp_s003_001_002_001_artifact")
@@ -649,6 +650,29 @@ def compare_truth(records):
             raise AssertionError(f"backend/engine comparison viewport/quality mismatch: {base['label']} vs {r['label']}")
 
 
+def screenshot_parity_metrics(path_a, path_b):
+    with Image.open(path_a) as source_a, Image.open(path_b) as source_b:
+        a=source_a.convert("RGB")
+        b=source_b.convert("RGB")
+        if a.size != b.size:
+            raise AssertionError(f"visual parity screenshot size mismatch: {a.size} vs {b.size}")
+        width,height=a.size
+        # Compare the gameplay surface while excluding intentional backend badge
+        # text and the densest edge UI. This is an automated regression guard;
+        # direct screenshot inspection remains the source of the visual score.
+        crop_box=(round(width*.15),round(height*.12),round(width*.85),round(height*.82))
+        diff=ImageChops.difference(a.crop(crop_box),b.crop(crop_box))
+        stat=ImageStat.Stat(diff)
+        mean_abs=sum(stat.mean)/len(stat.mean)
+        rms=(sum(value*value for value in stat.rms)/len(stat.rms))**.5
+        return {
+            "cropBox":list(crop_box),
+            "meanAbs":round(mean_abs,4),
+            "rms":round(rms,4),
+            "thresholdMeanAbs":1.0,
+        }
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     report = {"wp":"WP-S003-001-002-001","testedHead":TESTED_HEAD,"seed":SEED,"pass":False,"records":[]}
@@ -662,9 +686,17 @@ def main():
         baseline_gpu = baseline_gpu_result.get("record")
         current_engine_gl = run_success("03-current-2230-map-webgl2", "webgl2", "webgl2", ground=False, lightweight_engine_compare=True)
         current_engine_gpu = run_success("04-current-2230-map-webgpu", "webgpu", "webgpu", ground=False, lightweight_engine_compare=True)
+        map_visual_parity=screenshot_parity_metrics(OUT/current_engine_gl["screenshot"],OUT/current_engine_gpu["screenshot"])
+        report["visualParityMetrics"]={"mapWebgl2VsWebgpu":map_visual_parity}
+        if map_visual_parity["meanAbs"] > map_visual_parity["thresholdMeanAbs"]:
+            raise AssertionError(f"regional-map backend visual parity exceeded threshold: {map_visual_parity}")
         auto = run_success("05-current-2230-auto-webgpu-ground", "auto", "webgpu")
         forced_gpu = run_success("06-current-2230-webgpu-ground", "webgpu", "webgpu")
         forced_gl = run_success("07-current-2230-webgl2-ground", "webgl2", "webgl2")
+        ground_visual_parity=screenshot_parity_metrics(OUT/forced_gpu["screenshot"],OUT/forced_gl["screenshot"])
+        report["visualParityMetrics"]["groundWebgpuVsWebgl2"]=ground_visual_parity
+        if ground_visual_parity["meanAbs"] > ground_visual_parity["thresholdMeanAbs"]:
+            raise AssertionError(f"ground backend visual parity exceeded threshold: {ground_visual_parity}")
         fallback = run_success("08-current-2230-auto-fallback-ground", "auto", "webgl2", disable_webgpu=True)
         failure = run_forced_webgpu_failure()
         normal_mode = run_normal_mode_saved_force_ignored()
