@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -115,7 +116,7 @@ def capture(driver, name):
 
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    evidence = {"wp": "WP-S003-019", "target": TARGET, "frames": [], "pass": False}
+    evidence = {"wp": "WP-S003-019", "target": TARGET, "triggerHead": os.environ.get("WP_EVIDENCE_HEAD"), "frames": [], "pass": False}
     driver = driver_for()
     try:
         driver.get(evidence_url(TARGET))
@@ -299,6 +300,7 @@ def main():
         evidence["pass"] = True
         evidence["summary"] = {
             "seed": seed,
+            "testedHead": evidence.get("triggerHead"),
             "fixedTile": tile,
             "fixedRegion": region_id,
             "signatures": signatures,
