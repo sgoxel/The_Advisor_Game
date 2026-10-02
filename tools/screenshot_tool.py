@@ -178,7 +178,7 @@ def _stage_snapshot(driver):
         startupError:s.startupError,
         frameCount:s.frameCount,
         renderQuality:window.RuntimeRenderQuality?.snapshot?.()||null,
-        rendererEvidence:{
+        rendererEvidence:s.rendererEvidence||{
           engine:r.engine||null,
           engineVersion:r.engineVersion||null,
           backend:r.backend||null,
