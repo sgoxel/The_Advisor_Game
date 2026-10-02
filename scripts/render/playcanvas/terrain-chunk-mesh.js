@@ -49,6 +49,11 @@ const ROAD_PROFILE_LIFTS=Object.freeze({road:0.12,path:0.08,square:0.055});
 const ROAD_PROFILE_CORE_RADIUS_TILES=0.80;
 const ROAD_PROFILE_OUTER_RADIUS_TILES=2.15;
 const ROAD_PROFILE_SHOULDER_WIDTH_TILES=ROAD_PROFILE_OUTER_RADIUS_TILES-ROAD_PROFILE_CORE_RADIUS_TILES;
+// WP-S003-009 — final-ground roads use the same authoritative cells/routes but
+// present them as connected ribbons instead of nearly full-cell tan slabs.
+const ROAD_SURFACE_HALF_WIDTH_METERS=0.56;
+const ROAD_SURFACE_HALF_LENGTH_METERS=1.04;
+const ROAD_DIAGONAL_HALF_WIDTH_METERS=0.56;
 const BUILDING_MATERIAL_VARIANTS=Object.freeze([
   Object.freeze({roof:Object.freeze([1.00,0.92,0.86]),wall:Object.freeze([1.00,0.97,0.90]),trim:Object.freeze([0.92,0.86,0.76])}),
   Object.freeze({roof:Object.freeze([0.88,0.96,1.00]),wall:Object.freeze([0.91,0.98,1.00]),trim:Object.freeze([0.86,0.90,0.92])}),
@@ -209,6 +214,15 @@ function terrainTypeAt(seed,x,y){
 }
 function underlyingTerrainTypeAt(seed,x,y){
   return semanticSurfaceType(worldFieldSample(seed,x,y).surfaceType||"grass");
+}
+function routeUnderlayVisualType(seed,x,y,surfaceType,bridgeOverWater=false){
+  if(bridgeOverWater)return "water";
+  const type=semanticSurfaceType(surfaceType);
+  // Roads/paths retain their authoritative structural type and conditioned
+  // height. Only the base visual fill returns to the natural terrain; the
+  // dedicated connected route mesh below owns the visible constructed surface.
+  if(type==="road"||type==="path")return underlyingTerrainTypeAt(seed,x,y);
+  return type;
 }
 function hydrologyWaterReference(seed,x,y,typeOverride=null){
   const type=String(typeOverride||terrainTypeAt(seed,x,y));
@@ -1172,7 +1186,11 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     return "terminal";
   }
   function routeExtents(type,orientation){
-    if(type==="road")return {halfX:0.97,halfZ:0.97};
+    if(type==="road"){
+      if(orientation==="horizontal")return {halfX:ROAD_SURFACE_HALF_LENGTH_METERS,halfZ:ROAD_SURFACE_HALF_WIDTH_METERS};
+      if(orientation==="vertical")return {halfX:ROAD_SURFACE_HALF_WIDTH_METERS,halfZ:ROAD_SURFACE_HALF_LENGTH_METERS};
+      return {halfX:ROAD_SURFACE_HALF_WIDTH_METERS,halfZ:ROAD_SURFACE_HALF_WIDTH_METERS};
+    }
     if(type==="square")return {halfX:0.985,halfZ:0.985};
     if(orientation==="horizontal")return {halfX:1.04,halfZ:0.42};
     if(orientation==="vertical")return {halfX:0.42,halfZ:1.04};
@@ -1183,7 +1201,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
     const seed=String(seedProvider()||"");
     const counts={road:0,path:0,square:0,connector:0};
     const samples=[];
-    let triangleCount=0,edgeStripCount=0,diagonalBridgeCount=0,diagonalRibbonOnlyCellCount=0;
+    let triangleCount=0,edgeStripCount=0,diagonalBridgeCount=0,diagonalRibbonOnlyCellCount=0,roadRibbonQuadCount=0;
     const routeTypes=new Set(["road","path","square"]);
     const edgeMaterial=presentationMaterial("route-edge",0.25,0.18,0.11,0.02);
     const edgeBatch=batchFor(batches,edgeMaterial.name,edgeMaterial);
@@ -1223,7 +1241,23 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const mat=routeSurfaceMaterial(type);
       const batch=batchFor(batches,mat.name,mat);
       if(!diagonalRibbonOnly){
-        triangleCount+=appendRouteQuad(batch,worldData,cell.x,cell.y,extents.halfX,extents.halfZ,type==="square"?0.028:0.032);
+        if(type==="road"){
+          // Build one non-overlapping center plus only the connected cardinal
+          // arms. This keeps corners/T-junctions continuous without restoring a
+          // full-cell road slab, while remaining inside the same shared batch.
+          const n=routeLike(cardinalTypes[0]),e=routeLike(cardinalTypes[1]);
+          const so=routeLike(cardinalTypes[2]),w=routeLike(cardinalTypes[3]);
+          triangleCount+=appendRouteQuad(batch,worldData,cell.x,cell.y,ROAD_SURFACE_HALF_WIDTH_METERS,ROAD_SURFACE_HALF_WIDTH_METERS,0.032);
+          roadRibbonQuadCount++;
+          const armHalf=(ROAD_SURFACE_HALF_LENGTH_METERS-ROAD_SURFACE_HALF_WIDTH_METERS)*0.5;
+          const armCenter=ROAD_SURFACE_HALF_WIDTH_METERS+armHalf;
+          if(e){triangleCount+=appendRouteQuad(batch,worldData,cell.x,cell.y,armHalf,ROAD_SURFACE_HALF_WIDTH_METERS,0.032,armCenter,0);roadRibbonQuadCount++;}
+          if(w){triangleCount+=appendRouteQuad(batch,worldData,cell.x,cell.y,armHalf,ROAD_SURFACE_HALF_WIDTH_METERS,0.032,-armCenter,0);roadRibbonQuadCount++;}
+          if(n){triangleCount+=appendRouteQuad(batch,worldData,cell.x,cell.y,ROAD_SURFACE_HALF_WIDTH_METERS,armHalf,0.032,0,-armCenter);roadRibbonQuadCount++;}
+          if(so){triangleCount+=appendRouteQuad(batch,worldData,cell.x,cell.y,ROAD_SURFACE_HALF_WIDTH_METERS,armHalf,0.032,0,armCenter);roadRibbonQuadCount++;}
+        }else{
+          triangleCount+=appendRouteQuad(batch,worldData,cell.x,cell.y,extents.halfX,extents.halfZ,type==="square"?0.028:0.032);
+        }
       }else{
         diagonalRibbonOnlyCellCount++;
       }
@@ -1246,11 +1280,11 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
           const sideA=routeNeighborType(seed,cell.x,cell.y,dx,0);
           const sideB=routeNeighborType(seed,cell.x,cell.y,0,dy);
           if(routeLike(sideA)||routeLike(sideB))continue;
-          triangleCount+=appendDiagonalRouteBridge(batch,worldData,cell.x,cell.y,dx,dy,diagonalRibbonOnly?0.78:0.94,0.033);
+          triangleCount+=appendDiagonalRouteBridge(batch,worldData,cell.x,cell.y,dx,dy,ROAD_DIAGONAL_HALF_WIDTH_METERS,0.033);
           diagonalBridgeCount++;
         }
       }
-      if((type==="road"||type==="square")&&!diagonalRibbonOnly){
+      if(type==="square"&&!diagonalRibbonOnly){
         for(const [side,dx,dy] of [["n",0,-1],["e",1,0],["s",0,1],["w",-1,0]]){
           const neighbor=routeNeighborType(seed,cell.x,cell.y,dx,dy);
           if(!routeLike(neighbor)&&!diagonalRoadAcrossSide(cell,side))appendEdge(cell,side);
@@ -1277,8 +1311,11 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       counts:Object.freeze({...counts}),
       surfaceCellCount:counts.road+counts.path+counts.square,
       connectorCellCount:counts.connector,
-      edgeStripCount,diagonalBridgeCount,diagonalRibbonOnlyCellCount,
-      sourcePrimitiveCount:counts.road+counts.path+counts.square-diagonalRibbonOnlyCellCount+counts.connector+edgeStripCount+diagonalBridgeCount,
+      edgeStripCount,diagonalBridgeCount,diagonalRibbonOnlyCellCount,roadRibbonQuadCount,
+      roadPresentationRevision:"ground-road-ribbon-v1",
+      roadSurfaceHalfWidthMeters:ROAD_SURFACE_HALF_WIDTH_METERS,
+      roadNaturalUnderlay:true,
+      sourcePrimitiveCount:roadRibbonQuadCount+counts.path+counts.square+counts.connector+edgeStripCount+diagonalBridgeCount,
       triangleCount,
       samples:Object.freeze(samples),
       contactShadowMaterialCount:contactShadowMaterials.size,
@@ -2061,7 +2098,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
       const surfaceType=resolvedSurface.type;
       const hydro=surfaceType==="bridge"?hydrologyAtTile(seed,String(worldX),String(worldZ)):null;
       const bridgeOverWater=Boolean(surfaceType==="bridge"&&hydro?.bridgeUnderlyingWater===true);
-      const baseVisualType=bridgeOverWater?"water":surfaceType;
+      const baseVisualType=routeUnderlayVisualType(seed,worldX,worldZ,surfaceType,bridgeOverWater);
       const rect=semanticAtlasReady?(activeAtlas?.meshUvRect?.(baseVisualType)||activeAtlas?.uvRect?.(baseVisualType)):null;
       const x0=gx*metersPerTile-half,x1=(gx+1)*metersPerTile-half;
       const z0=gz*metersPerTile-half,z1=(gz+1)*metersPerTile-half;
@@ -2653,7 +2690,7 @@ function create({pc,device,parent,material,textureAtlasProvider=()=>null,buildin
         const bridgeOverWater=Boolean(
           surfaceType==="bridge"&&cellHydrology?.active&&cellHydrology?.bridgeUnderlyingWater===true
         );
-        const baseVisualType=bridgeOverWater?"water":surfaceType;
+        const baseVisualType=routeUnderlayVisualType(seed,cellWorldX,cellWorldZ,surfaceType,bridgeOverWater);
         const rect=semanticAtlasReady?(activeAtlas?.meshUvRect?.(baseVisualType)||activeAtlas?.uvRect?.(baseVisualType)):null;
         if(rect){texturedBlockCount++;texturedSurfaceTypes.add(baseVisualType);}
         else{colorFallbackBlockCount++;fallbackSurfaceTypes.add(baseVisualType);}
