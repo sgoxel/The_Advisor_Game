@@ -331,7 +331,8 @@ function renderCard(seedValue){
     if(q(".local-event-description"))q(".local-event-description").textContent=event.description;
     if(q(".local-event-meta"))q(".local-event-meta").textContent=event.location.label+" · until "+event.endTimestamp.slice(11,16);
     if(q(".local-event-participants"))q(".local-event-participants").textContent=event.participants.map(p=>p.name).join(" · ");
-    placeCard(node,event,seed);\n    window.WindowShell?.refresh?.(node);
+    placeCard(node,event,seed);
+    window.WindowShell?.refresh?.(node);
     if(typeof window!=="undefined"&&window.requestAnimationFrame)window.requestAnimationFrame(()=>{
       if(!node.hidden&&node.dataset.eventType===event.type)placeCard(node,event,seed);
     });
