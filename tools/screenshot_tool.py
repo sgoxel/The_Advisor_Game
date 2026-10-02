@@ -176,14 +176,25 @@ def _prepare_starting_village_scene(driver,timeout):
       return {scalar:1,evidenceTime};
     """)
     _wait(driver,"""
-      const s=window.PlanetStage?.snapshot?.(),local=s?.projection?.localStatic||{};
+      const s=window.PlanetStage?.snapshot?.(),local=s?.projection?.localStatic||{},npc=s?.npcPresentation||{};
+      const residents=Number(npc?.residentBillboardCount||0),detailed=Number(npc?.detailedBillboardCount||0);
       return Boolean(
         s?.ready && !s?.zoom?.animation?.active &&
         s?.zoom?.visibleLevel==='ground' &&
         local?.revealTier==='full' &&
-        s?.worldVisualStyleIntegration?.active===true
+        s?.worldVisualStyleIntegration?.active===true &&
+        npc?.groundRepresentationReady===true &&
+        npc?.billboardLayerActive===true &&
+        npc?.protagonistBillboardVisible===true &&
+        residents>0 && detailed>=residents+1
       );
-    """,timeout,"Starting Village final-ground living-world presentation")
+    """,timeout,"Starting Village final-ground living-world presentation with character billboards")
+    # Let the just-materialized billboard scene survive two paint frames before
+    # capture; the wait condition above observes scene state, not rendered pixels.
+    driver.execute_async_script("""
+      const done=arguments[0];
+      requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
+    """)
     return {**focus,"zoom":result}
 
 def _set_character_scale(driver,mode):
