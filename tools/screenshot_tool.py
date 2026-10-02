@@ -357,11 +357,14 @@ def _canonical_focus_protagonist_wide_setup(driver):
       if(!stage||!before)return {ok:false,reason:'authoritative-protagonist-unavailable'};
       stage.closePlaces?.();
       stage.setWorldTileFocus(String(before.x),String(before.y));
-      const scalar=stage.scalarForFootprintHeight(80);
+      // Keep the selection frame genuinely wider than final ground while
+      // respecting the current SSE selector. At these desktop evidence
+      // viewports 240 m owns near-ground-close; 80 m now resolves to ground.
+      const footprintMeters=240,scalar=stage.scalarForFootprintHeight(footprintMeters);
       stage.setZoomScalar(scalar);
       const after=read();
       return {
-        ok:true,scalar,
+        ok:true,scalar,footprintMeters,
         before:{x:String(before.x),y:String(before.y)},
         after:after?{x:String(after.x),y:String(after.y)}:null
       };
@@ -418,7 +421,7 @@ def _canonical_focus_frame(driver,index,timeout):
             p?.protagonistMarkerVisible===true && p?.protagonistBillboardVisible!==true &&
             t && inViewport
           );
-        """,timeout,"80m wider-view protagonist marker")
+        """,timeout,"wider-view protagonist marker")
         picked=driver.execute_script("""
           const t=(window.PlanetStage.inspectionTargets()||[]).find(x=>x.type==='protagonist');
           if(!t?.bounds)return {ok:false,reason:'protagonist-bounds-missing'};
