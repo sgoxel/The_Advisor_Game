@@ -306,8 +306,11 @@ jobs:
               scenario='wp-s003-010-003-005-002'
             fi
           elif [ "$EVENT_NAME" = 'issue_comment' ]; then
-            requested="$(printf '%s' "$COMMENT_BODY" | awk '{print $2}')"
-            requested_profile="$(printf '%s' "$COMMENT_BODY" | awk '{print $3}')"
+            # Parse only the command line. Explanatory text on later lines must
+            # never become part of the scenario/profile tokens.
+            comment_line="$(printf '%s\n' "$COMMENT_BODY" | sed -n '1p' | tr -d '\r')"
+            requested="$(printf '%s' "$comment_line" | awk '{print $2}')"
+            requested_profile="$(printf '%s' "$comment_line" | awk '{print $3}')"
             [ -n "$requested" ] && scenario="$requested"
             [ -n "$requested_profile" ] && profile="$requested_profile"
             if [ "$scenario" = 'playcanvas-root-cutover' ]; then
