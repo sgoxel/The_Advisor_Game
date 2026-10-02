@@ -1,7 +1,7 @@
 (function(){
 "use strict";
 
-const VERSION=2;
+const VERSION=3;
 const TILE_METERS=2;
 const POI_CELL_TILES=8192;
 const MAX_QUERY_RADIUS_METERS=80000;
@@ -22,7 +22,7 @@ const poiCellCache=new Map();
 const NAME_STEMS=Object.freeze(["Alder","Ash","Black","Bright","Cedar","Dawn","Elder","Falcon","Green","Grey","High","Iron","Kings","Lake","North","Oak","Raven","Red","River","Silver","Stone","Sun","Thorn","Vale","West","White","Wolf"]);
 const TYPE_SUFFIX=Object.freeze({
   ruin:["Watch","Keep","Hall","Rest"],fort:["Fort","Watch","Hold"],tower:["Tower","Watch","Beacon"],bridge:["Bridge","Crossing","Ford"],
-  lake:["Lake","Mere","Water"],"river-location":["Reach","Bend","Ford"],confluence:["Meeting","Confluence","Fork"],waterfall:["Falls","Cascade","Drop"],
+  lake:["Lake","Mere","Water"],"water-location":["Waters","Reach","Sound"],"river-location":["Reach","Bend","Ford"],confluence:["Meeting","Confluence","Fork"],waterfall:["Falls","Cascade","Drop"],
   cliff:["Cliffs","Scar","Crag"],outcrop:["Crag","Rocks","Tor"],"mountain-pass":["Pass","Gap","Gate"],cave:["Cave","Hollow","Grotto"],forest:["Wood","Grove","Forest"],
   hunting:["Chase","Hunt","Wilds"],fishing:["Fishery","Waters","Reach"],grazing:["Downs","Pastures","Meadow"],gathering:["Gathering","Forage","Grounds"]
 });
@@ -39,7 +39,7 @@ function categoryForType(type){
   if(["town","city","capital"].includes(type))return "cities";
   if(["ruin","fort","tower","bridge"].includes(type))return "historical";
   if(type==="hunting")return "hunting";if(type==="fishing")return "fishing";
-  if(["lake","river-location","confluence","waterfall"].includes(type))return "water";
+  if(["lake","water-location","river-location","confluence","waterfall"].includes(type))return "water";
   return "nature";
 }
 function strategicTier(type,importance){
@@ -77,16 +77,43 @@ function meterCoordinate(tileValue){
   return Number.isInteger(TILE_METERS)?(tile*BigInt(TILE_METERS)).toString():String(Number(tile)*TILE_METERS);
 }
 function samplePoint(seed,x,y){
+  let field=null;try{field=window.WorldField?.sample?.(seed,meterCoordinate(x),meterCoordinate(y))||null;}catch(_){field=null;}
   try{
-    const field=window.WorldField?.sample?.(seed,meterCoordinate(x),meterCoordinate(y));
-    if(field)return Object.freeze({
-      x:String(x),y:String(y),terrain:String(field.surfaceType||"water"),
-      elevationMeters:Number(field.elevationMeters)||0,moisturePercent:Number(field.moisturePercent)||0,
-      biome:String(field.biome||""),waterKind:field.waterKind||null
-    });
+    const coordinates=coordinatesFor(seed,x,y),pg=window.PlanetGeography?.create?.(seed);
+    const planet=pg&&Number.isFinite(Number(coordinates.latitudeRadians))&&Number.isFinite(Number(coordinates.longitudeRadians))
+      ?pg.sampleLatLon(coordinates.latitudeRadians,coordinates.longitudeRadians):null;
+    if(planet){
+      const macroWater=planet.land===false,detailTerrain=String(field?.surfaceType||"");
+      let terrain="water";
+      if(!macroWater){
+        if(detailTerrain&&detailTerrain!=="water")terrain=detailTerrain;
+        else if(Number(planet.elevationMeters)>=1800)terrain="rock";
+        else if(Number(planet.moisture)>=.62)terrain="forest";
+        else terrain="grass";
+      }
+      const fieldWaterKind=String(field?.waterKind||"");
+      const waterKind=macroWater?(detailTerrain==="water"&&fieldWaterKind==="river"?"river":"ocean"):null;
+      return Object.freeze({
+        x:String(x),y:String(y),terrain,
+        elevationMeters:Number(planet.elevationMeters)||0,
+        moisturePercent:Math.round(clamp(Number(planet.moisture||0)*100,0,100)),
+        biome:macroWater?"Ocean":String(field?.biome||planet.surfaceClass||""),
+        waterKind,
+        canonicalSurfaceClass:String(planet.surfaceClass||""),
+        canonicalLand:Boolean(planet.land),
+        detailSurfaceClass:detailTerrain||null,
+        surfaceAuthority:"PlanetGeography macro + compatible WorldField detail"
+      });
+    }
   }catch(_){}
+  if(field)return Object.freeze({
+    x:String(x),y:String(y),terrain:String(field.surfaceType||"water"),
+    elevationMeters:Number(field.elevationMeters)||0,moisturePercent:Number(field.moisturePercent)||0,
+    biome:String(field.biome||""),waterKind:field.waterKind||null,
+    canonicalSurfaceClass:null,canonicalLand:null,detailSurfaceClass:String(field.surfaceType||""),surfaceAuthority:"WorldField fallback"
+  });
   const terrain=safeTerrain(seed,x,y),env=safeEnvironment(seed,x,y);
-  return Object.freeze({x:String(x),y:String(y),terrain,elevationMeters:Number(env.elevationMeters)||0,moisturePercent:Number(env.moisturePercent)||0,biome:String(env.biome||""),waterKind:null});
+  return Object.freeze({x:String(x),y:String(y),terrain,elevationMeters:Number(env.elevationMeters)||0,moisturePercent:Number(env.moisturePercent)||0,biome:String(env.biome||""),waterKind:null,canonicalSurfaceClass:null,canonicalLand:null,detailSurfaceClass:null,surfaceAuthority:"GeographyFoundation fallback"});
 }
 function contextAt(seed,xValue,yValue){
   const x=BigInt(String(xValue)),y=BigInt(String(yValue)),cacheKey=String(seed)+"|"+x+"|"+y;
@@ -133,11 +160,12 @@ function poiCandidatesForCell(seed,cxValue,cyValue){
   const x=baseX+jx,y=baseY+jy,ctx=contextAt(seed,x,y),c=ctx.center,h=unit(seed,"history:"+cx+":"+cy),g=unit(seed,"activity:"+cx+":"+cy),out=[];
   let roadNear=false;
   if(h>.83||(ctx.waterNear>=2&&h>.58)){let routeTerrain="";try{routeTerrain=safeTerrain(seed,x,y);}catch(_){}roadNear=["road","bridge"].includes(routeTerrain);}
-  const ev={terrain:c.terrain,elevationMeters:c.elevationMeters,biome:c.biome,waterSamples:ctx.waterNear,forestSamples:ctx.forestNear,rockSamples:ctx.rockNear,openSamples:ctx.openNear,slopeMeters:Math.round(ctx.slopeMeters),roadNear,waterArms:ctx.waterArms};
+  const ev={terrain:c.terrain,elevationMeters:c.elevationMeters,biome:c.biome,waterSamples:ctx.waterNear,forestSamples:ctx.forestNear,rockSamples:ctx.rockNear,openSamples:ctx.openNear,slopeMeters:Math.round(ctx.slopeMeters),roadNear,waterArms:ctx.waterArms,canonicalSurfaceClass:c.canonicalSurfaceClass||null,canonicalLand:c.canonicalLand,surfaceAuthority:c.surfaceAuthority||null};
   if(c.terrain==="water"){
     if(c.waterKind==="river"&&ctx.waterArms>=3&&ctx.landNear>=2)out.push(rawCandidate(seed,"confluence",x,y,.90,3,420,"A meeting of seeded river corridors with multiple approach arms.",["water","navigation","river"],ev));
     else if(c.waterKind==="river"&&(ctx.oppositeWater||ctx.waterArms>=2))out.push(rawCandidate(seed,"river-location",x,y,.78,2,500,"A notable reach on the continuous seeded river field.",["water","river"],ev));
     if(c.waterKind==="river"&&ctx.slopeMeters>=120&&ctx.landNear>=2)out.push(rawCandidate(seed,"waterfall",x,y,.86,3,260,"A steep seeded river transition where local relief drops sharply.",["water","landmark","river"],ev));
+    if(!out.length)out.push(rawCandidate(seed,"water-location",x,y,.62,1,700,"A named water location anchored to the canonical planetary surface.",["water","navigation"],ev));
   }else{
     if(ctx.cliffSignal>=.22||(ctx.slopeMeters>=180&&c.elevationMeters>=500))out.push(rawCandidate(seed,"cliff",x,y,.79,3,360,"A steep exposed escarpment derived from the continuous landform field.",["rock","landmark"],ev));
     else if((c.terrain==="rock"||ctx.rockNear>=3)&&ctx.slopeMeters>=80)out.push(rawCandidate(seed,"outcrop",x,y,.72,2,230,"An exposed rocky outcrop supported by seeded terrain and relief.",["rock","gathering"],ev));
