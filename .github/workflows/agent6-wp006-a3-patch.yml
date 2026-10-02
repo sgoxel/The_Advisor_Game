@@ -18,9 +18,39 @@ jobs:
           ref: main
           fetch-depth: 0
       - name: Apply radial continuation handoff
+        shell: bash
         run: |
-          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCnBhdGggPSBQYXRoKCJzY3JpcHRzL3dvcmxkL3BsYW5ldC1zdGFnZS5qcyIpCnRleHQgPSBwYXRoLnJlYWRfdGV4dCgpCm9sZDAgPSAiIiJjb25zdCBMT0NBTF9URVhUVVJFX0hBTkRPRkZfRkVBVEhFUj0uMTI7CmZ1bmN0aW9uIGRldGFpbE9jdGF2ZVdlaWdodCh3YXZlbGVuZ3RoTWV0ZXJzLG1ldGVyc1BlclRleGVsKXtyZXR1cm4gc21vb3Roc3RlcDAxKCh3YXZlbGVuZ3RoTWV0ZXJzL01hdGgubWF4KDFlLTYsbWV0ZXJzUGVyVGV4ZWwpLTIpLzQpO30iIiIKbmV3MCA9ICIiImNvbnN0IExPQ0FMX1RFWFRVUkVfSEFORE9GRl9GRUFUSEVSPC4xMjsKLy8gTWVkaXVtIGNvbnRpbnVhdGlvbiB0ZXh0dXJlcyBhcmUgcHJlc2VudGF0aW9uIGNvdmVyYWdlLCBub3QgY2Fub25pY2FsIHRpbGUKLy8gYm91bmRhcmllcy4gRmFkZSB0aGVtIHJhZGlhbGx5IGFjcm9zcyBtb3N0IG9mIHRoZWlyIHNwYW4gc28gdGhlIHByZXBhcmVkCi8vIHBhcmVudCByZW1haW5zIGNvbnRpbnVvdXMgd2l0aG91dCBleHBvc2luZyBhIHJlY3Rhbmd1bGFyIHN0cmVhbWluZyBmb290cHJpbnQuCmNvbnN0IExPQ0FMX0NPTlRFWFRfUklOR19SQURJQUxfRkVBVEhFUj0uNjI7CmZ1bmN0aW9uIGxvY2FsVGV4dHVyZUhhbmRvZmZDb3ZlcmFnZSh1LHYsY29udGV4dFJpbmcpewogIGlmKGNvbnRleHRSaW5nKXsKICAgIGNvbnN0IHJhZGlhbERpc3RhbmNlPU1hdGguaHlwb3QoKHUtLjUpKjIsKHYtLjUpKjIpOwogICAgcmV0dXJuIHNtb290aHN0ZXAwMShjbGFtcCgoMS1yYWRpYWxEaXN0YW5jZSkvTE9DQUxfQ09OVEVYVF9SSU5HX1JBRElBTF9GRUFUSEVSLDAsMSkpOwogIH0KICBjb25zdCBlZGdlRGlzdGFuY2U9TWF0aC5taW4odSwxLXUsdiwxLXYpOwogIHJldHVybiBzbW9vdGhzdGVwMDEoY2xhbXAoZWRnZURpc3RhbmNlL0xPQ0FMX1RFWFRVUkVfSEFORE9GRl9GRUFUSEVSLDAsMSkpOwp9CmZ1bmN0aW9uIGRldGFpbE9jdGF2ZVdlaWdodCh3YXZlbGVuZ3RoTWV0ZXJzLG1ldGVyc1BlclRleGVsKXtyZXR1cm4gc21vb3Roc3RlcDAxKCh3YXZlbGVuZ3RoTWV0ZXJzL01hdGgubWF4KDFlLTYsbWV0ZXJzUGVyVGV4ZWwpLTIpLzQpO30iIiIKb2xkMSA9ICIiIiAgICAgICAgICBjb25zdCBwcm9iZUVkZ2U9TWF0aC5taW4odXgsMS11eCx2eiwxLXZ6KTsKICAgICAgICAgIGNvbnN0IHByb2JlQWxwaGE9ZmVhdGhlckVkZ2VzP3Ntb290aHN0ZXAwMShjbGFtcChwcm9iZUVkZ2UvTE9DQUxfVEVYVFVSRV9IQU5ET0ZGX0ZFQVRIRVIsMCwxKSk6MTsiIiIKbmV3MSA9ICIiIiAgICAgICAgICBjb25zdCBwcm9iZUFscGhhPWZlYXRoZXJFZGdlcz9sb2NhbFRleHR1cmVIYW5kb2ZmQ292ZXJhZ2UodXgsdnosY29udGV4dFJpbmcpOjE7IiIiCm9sZDIgPSAiIiIgICAgICBjb25zdCBlZGdlRGlzdGFuY2U9TWF0aC5taW4odXgsMS11eCx2eiwxLXZ6KTsKICAgICAgY29uc3QgZWRnZUNvdmVyYWdlPXNtb290aHN0ZXAwMShjbGFtcChlZGdlRGlzdGFuY2UvTE9DQUxfVEVYVFVSRV9IQU5ET0ZGX0ZFQVRIRVIsMCwxKSk7IiIiCm5ldzIgPSAiIiIgICAgICBjb25zdCBlZGdlQ292ZXJhZ2U9bG9jYWxUZXh0dXJlSGFuZG9mZkNvdmVyYWdlKHV4LHZ6LGNvbnRleHRSaW5nKTsiIiIKZm9yIGxhYmVsLCBvbGQgaW4gWyGiaGVscGVyIiwgb2xkMCksICgicHJvYmUiLCBvbGQxKSwgKCJjb3ZlcmFnZSIsIG9sZDIpXToKICAgIGlmIHRleHQuY291bnQob2xkKSAhPSAxOgogICAgICAgIHJhaXNlIFN5c3RlbUV4aXQoZiJleHBlY3RlZCB7bGFiZWx9IGJsb2NrIG9uY2UsIGZvdW5kIHt0ZXh0LmNvdW50KG9sZCl9IikKcGF0aC53cml0ZV90ZXh0KHRleHQucmVwbGFjZShvbGQwLG5ldzApLnJlcGxhY2Uob2xkMSxuZXcxKS5yZXBsYWNlKG9sZDIsbmV3MikpCg==' | base64 -d > /tmp/wp006_a3_patch.py
-          python /tmp/wp006_a3_patch.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/world/planet-stage.js')
+          text = path.read_text()
+          old0 = '''const LOCAL_TEXTURE_HANDOFF_FEATHER=.12;
+          function detailOctaveWeight(wavelengthMeters,metersPerTexel){return smoothstep01((wavelengthMeters/Math.max(1e-6,metersPerTexel)-2)/4);}'''
+          new0 = '''const LOCAL_TEXTURE_HANDOFF_FEATHER=.12;
+          // Medium continuation textures are presentation coverage, not canonical tile
+          // boundaries. Fade them radially across most of their span so the prepared
+          // parent remains continuous without exposing a rectangular streaming footprint.
+          const LOCAL_CONTEXT_RING_RADIAL_FEATHER=.62;
+          function localTextureHandoffCoverage(u,v,contextRing){
+            if(contextRing){
+              const radialDistance=Math.hypot((u-.5)*2,(v-.5)*2);
+              return smoothstep01(clamp((1-radialDistance)/LOCAL_CONTEXT_RING_RADIAL_FEATHER,0,1));
+            }
+            const edgeDistance=Math.min(u,1-u,v,1-v);
+            return smoothstep01(clamp(edgeDistance/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
+          }
+          function detailOctaveWeight(wavelengthMeters,metersPerTexel){return smoothstep01((wavelengthMeters/Math.max(1e-6,metersPerTexel)-2)/4);}'''
+          old1 = '''          const probeEdge=Math.min(ux,1-ux,vz,1-vz);
+                    const probeAlpha=featherEdges?smoothstep01(clamp(probeEdge/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1)):1;'''
+          new1 = '''          const probeAlpha=featherEdges?localTextureHandoffCoverage(ux,vz,contextRing):1;'''
+          old2 = '''      const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
+                const edgeCoverage=smoothstep01(clamp(edgeDistance/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));'''
+          new2 = '''      const edgeCoverage=localTextureHandoffCoverage(ux,vz,contextRing);'''
+          for label, old in [('helper',old0),('probe',old1),('coverage',old2)]:
+              if text.count(old) != 1:
+                  raise SystemExit(f'expected {label} block once, found {text.count(old)}')
+          path.write_text(text.replace(old0,new0).replace(old1,new1).replace(old2,new2))
+          PY
       - name: Commit patch and clean runner
         run: |
           rm .github/workflows/agent6-wp006-a3-patch.yml
