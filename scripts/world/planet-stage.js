@@ -259,7 +259,7 @@ let localCrowdPresentation={
 const localBuildingInspectionKeys=new Set();
 const localNpcInspectionKeys=new Set();
 const localSignInspectionKeys=new Set();
-let localStatic={active:false,signature:null,level:"inactive",revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,dressingFocusKey:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,dressingCount:0,dressingScope:"inactive",dressingSamples:Object.freeze([]),wildernessCount:0,ambientFaunaCount:0,waterCount:0,microLocationCount:0,microLocationPropCount:0,microLocationPrimitiveCount:0,microLocationDrawCallEstimate:0,microLocationTriangleEstimate:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,authority:"spherical-seed-focus-presentation"};
+let localStatic={active:false,signature:null,level:"inactive",revealTier:"none",settlementId:null,settlementName:null,settlementClass:null,settlementRole:null,settlementPlanRevision:null,layoutSignature:null,canonicalCenterTile:null,dressingFocusKey:null,presentationScale:1,occupiedAreaCount:0,coarseRoadCount:0,coarseBuildingCount:0,landmarkCount:0,fullRoadCount:0,fullBuildingCount:0,roadCount:0,buildingCount:0,vegetationCount:0,dressingCount:0,dressingDescriptorCount:0,dressingPlannedDescriptorCount:0,dressingRouteSafetyPass:true,dressingContextCounts:Object.freeze({}),dressingSemanticCounts:Object.freeze({}),dressingScope:"inactive",dressingSamples:Object.freeze([]),wildernessCount:0,ambientFaunaCount:0,waterCount:0,microLocationCount:0,microLocationPropCount:0,microLocationPrimitiveCount:0,microLocationDrawCallEstimate:0,microLocationTriangleEstimate:0,entityCount:0,triangleEstimate:0,drawCallEstimate:0,buildTimeMs:0,grounded:true,viewportBounded:true,presentationOnly:true,simulationAuthority:false,footprintMode:"none",routeGeometryMode:"none",roadAuthorityQueryCount:0,authority:"spherical-seed-focus-presentation"};
 let microLocationPresentation={
   active:false,locationCount:0,propCount:0,primitiveCount:0,drawCallEstimate:0,triangleEstimate:0,
   queryCellCount:0,maxQueryCells:0,buildMs:0,bounds:null,ids:Object.freeze([]),types:Object.freeze([]),
@@ -6080,30 +6080,111 @@ function applyCanonicalGroundBuildingCutaway(tier){
   return groundBuildingCutaway;
 }
 
-function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
-  if(!reveal||!['refined','full'].includes(String(tier)))return {count:0,triangles:0};
-  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
-  const focusX=Number(reveal.focusTile?.x||0),focusY=Number(reveal.focusTile?.y||0);
-  // The dressing budget belongs to the focused local view. Sort authoritative
-  // buildings by distance to the canonical focus before spending that bounded
-  // budget so a farm/workshop/house under inspection cannot lose its props just
-  // because a farther house happened to appear earlier in the plan arrays.
-  const recordFocusDistance2=record=>{
-    const b=record?.bounds||{},cx=(Number(b.minX)+Number(b.maxX))/2,cy=(Number(b.minY)+Number(b.maxY))/2;
-    return (cx-focusX)**2+(cy-focusY)**2;
+function canonicalSettlementDressingPlan(reveal){
+  const key=[String(activeSeed||""),String(reveal?.layoutSignature||""),"canonical-dressing-v2"].join("|");
+  if(canonicalSettlementDressingPlan.cacheKey===key&&Array.isArray(canonicalSettlementDressingPlan.cacheValue)){
+    return canonicalSettlementDressingPlan.cacheValue;
+  }
+  const houses=Array.isArray(reveal?.houses)?reveal.houses:[],special=Array.isArray(reveal?.specialLots)?reveal.specialLots:[];
+  const records=[...houses,...special],houseIds=new Set(houses.map(item=>String(item.id)));
+  const allowedTerrain=new Set(["grass","dirt","farmland","plot","mud"]);
+  const used=new Set(),cellCache=new Map(),roadCache=new Map(),out=[];
+  const palettes=Object.freeze({
+    residential:Object.freeze(["garden","woodpile","bush","flower","fence"]),
+    commercial:Object.freeze(["signpost","barrel","crate","cart","sack"]),
+    workshop:Object.freeze(["woodpile","crate","barrel","cart","work-prop"]),
+    farm:Object.freeze(["fence","garden","pen","sack","cart"]),
+    civic:Object.freeze(["well","signpost","flower","bush","bench"])
+  });
+  const contextFor=record=>{
+    if(houseIds.has(String(record?.id)))return "residential";
+    const fn=String(record?.function||"").toLowerCase(),kind=String(record?.kind||"").toLowerCase();
+    if(fn==="farm"||kind==="barn")return "farm";
+    if(fn==="craft"||fn==="outdoor-work"||kind==="workshop"||kind==="workyard")return "workshop";
+    if(fn==="civic"||kind==="meeting-hall")return "civic";
+    return "commercial";
   };
-  const records=[...(Array.isArray(reveal.houses)?reveal.houses:[]),...(Array.isArray(reveal.specialLots)?reveal.specialLots:[])]
-    .sort((a,b)=>recordFocusDistance2(a)-recordFocusDistance2(b)||String(a.id||"").localeCompare(String(b.id||"")));
+  const insideAnyBuilding=(x,y)=>records.some(record=>{
+    const b=record?.bounds;if(!b)return false;
+    return x>=Number(b.minX)&&x<=Number(b.maxX)&&y>=Number(b.minY)&&y<=Number(b.maxY);
+  });
+  const roadAt=(x,y)=>{
+    const key=x+","+y;if(roadCache.has(key))return roadCache.get(key);
+    const local=window.StartingVillage?.local?.(activeSeed,String(x),String(y))||null;
+    const road=Boolean(local&&window.StartingVillage?.isRoadReserved?.(activeSeed,local));
+    roadCache.set(key,road);return road;
+  };
+  const baseCell=(x,y)=>{
+    const key=x+","+y;if(cellCache.has(key))return cellCache.get(key);
+    if(insideAnyBuilding(x,y)||roadAt(x,y)){cellCache.set(key,null);return null;}
+    let terrainType="";
+    try{
+      const tile=window.TerrainFoundation?.getTile?.(activeSeed,String(x),String(y))||null;
+      terrainType=String(tile?.type||"");
+      if(tile?.buildingId||(["water","road","path","square","bridge","door","wall","floor","building"].includes(terrainType))){
+        cellCache.set(key,null);return null;
+      }
+      if(terrainType&&!allowedTerrain.has(terrainType)){cellCache.set(key,null);return null;}
+    }catch(_){}
+    const cell=Object.freeze({x,y,terrainType:terrainType||"ground"});
+    cellCache.set(key,cell);return cell;
+  };
+  const adjacentRoad=(x,y)=>[[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy])=>roadAt(x+dx,y+dy));
+  const candidates=(record,semantic)=>{
+    const b=record?.bounds;if(!b)return [];
+    const minX=Number(b.minX),maxX=Number(b.maxX),minY=Number(b.minY),maxY=Number(b.maxY);
+    const access=record?.entrance||record?.access||null,items=[];
+    for(let ring=1;ring<=3;ring++){
+      for(let y=minY-ring;y<=maxY+ring;y++)for(let x=minX-ring;x<=maxX+ring;x++){
+        if(x!==minX-ring&&x!==maxX+ring&&y!==minY-ring&&y!==maxY+ring)continue;
+        const key=x+","+y;if(used.has(key))continue;
+        if(access&&Math.abs(x-Number(access.x))+Math.abs(y-Number(access.y))<=2)continue;
+        const cell=baseCell(x,y);if(!cell)continue;
+        if((semantic==="garden"||semantic==="pen")&&!["grass","farmland","plot","dirt","ground"].includes(cell.terrainType))continue;
+        const roadAdjacent=adjacentRoad(x,y);
+        const prefersRoad=semantic==="signpost"||semantic==="cart"||semantic==="barrel";
+        const score=seededHash32(["canonical-dressing",record.id,semantic,x,y].join("|"));
+        items.push({x,y,ring,roadAdjacent,score,roadRank:prefersRoad&&roadAdjacent?1:0,terrainType:cell.terrainType});
+      }
+    }
+    items.sort((a,b)=>b.roadRank-a.roadRank||b.score-a.score||a.ring-b.ring||a.y-b.y||a.x-b.x);
+    return items;
+  };
+  for(const record of records){
+    const context=contextFor(record),palette=palettes[context]||palettes.residential;
+    const target=houseIds.has(String(record.id))?3:4;
+    const shift=seededHash32("canonical-dressing-palette|"+String(record.id))%palette.length;
+    for(let i=0;i<target;i++){
+      const semantic=palette[(i+shift)%palette.length],selected=candidates(record,semantic)[0];
+      if(!selected)continue;
+      const cellKey=selected.x+","+selected.y;used.add(cellKey);
+      const transformHash=seededHash32(["canonical-dressing-transform",record.id,semantic,selected.x,selected.y].join("|"));
+      out.push(Object.freeze({
+        id:"dressing:"+String(record.id)+":"+i+":"+semantic,
+        recordId:String(record.id),context,semantic,
+        x:selected.x,y:selected.y,sourceTerrain:selected.terrainType,
+        roadAdjacent:Boolean(selected.roadAdjacent),routeSafe:true,
+        rotation:(transformHash%4)*90,variant:(transformHash>>>3)%3
+      }));
+    }
+  }
+  const result=Object.freeze(out.sort((a,b)=>a.id.localeCompare(b.id)));
+  canonicalSettlementDressingPlan.cacheKey=key;
+  canonicalSettlementDressingPlan.cacheValue=result;
+  return result;
+}
+canonicalSettlementDressingPlan.cacheKey=null;
+canonicalSettlementDressingPlan.cacheValue=null;
+
+function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
+  if(!reveal||!["refined","full"].includes(String(tier)))return {count:0,triangles:0,descriptorCount:0,plannedDescriptorCount:0,routeSafetyPass:true,contextCounts:{},semanticCounts:{}};
+  const tileMeters=Math.max(1,Number(window.WorldStandards?.TILE_METERS||2));
   const margin=tileMeters*3;
   const halfWidth=Math.max(0,Number(frame?.dims?.patchWidth||0)*.5)+margin;
   const halfHeight=Math.max(0,Number(frame?.dims?.patchHeight||0)*.5)+margin;
-  // Dressing uses the authoritative anchors/semantics unchanged, but close RPG
-  // tiers need slightly stronger silhouettes than map-scale primitives. This is
-  // presentation-only scaling; placement, route protection and Simulation truth
-  // remain unchanged. The scaled footprint is also used by route clearance.
-  const dressingVisualScale=tier==="full"?1.42:1.18;
-  let count=0,triangles=0;
-  const samples=[];
+  const plan=canonicalSettlementDressingPlan(reveal);
+  let count=0,triangles=0,descriptorCount=0;
+  const samples=[],contextCounts={},semanticCounts={};
   const recordSample=(label,east,north)=>{
     if(samples.length<24)samples.push(Object.freeze({id:String(label),eastMeters:Number(east.toFixed(2)),northMeters:Number(north.toFixed(2))}));
   };
@@ -6112,122 +6193,65 @@ function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
     const x=pos.x*unit,z=pos.z*unit;
     return x+radius>=-halfWidth&&x-radius<=halfWidth&&z+radius>=-halfHeight&&z-radius<=halfHeight;
   };
-  const addWorldBox=(label,material,east,north,halfW,halfH,halfD,rotationY=0,raiseMeters=0)=>{
-    const visualW=halfW*dressingVisualScale,visualH=halfH*dressingVisualScale,visualD=halfD*dressingVisualScale;
-    if(count>=64||!inFocusedArea(east,north,Math.max(visualW,visualD)))return false;
+  const addWorldPrimitive=(label,type,material,east,north,sx,sy,sz,rotationY=0,raiseMeters=0)=>{
+    if(count>=64||!inFocusedArea(east,north,Math.max(sx,sz)*.5))return false;
     const pos=canonicalSemanticPosition(east,north,scale,unit,frame);
-    const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+(raiseMeters+visualH)*scale/unit;
-    addLocalStatic("CanonicalDressing-"+label,"box",material,pos.x,ground,pos.z,visualW*2*scale/unit,visualH*2*scale/unit,visualD*2*scale/unit,0,rotationY,0);
-    recordSample(label,east,north);
-    count++;triangles+=12;
+    const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+(raiseMeters+sy*.5)*scale/unit;
+    addLocalStatic("CanonicalDressing-"+label,type,material,pos.x,ground,pos.z,sx*scale/unit,sy*scale/unit,sz*scale/unit,0,rotationY,0);
+    recordSample(label,east,north);count++;
+    triangles+=type==="sphere"?24:type==="cylinder"?48:12;
     return true;
   };
-  const addWorldBall=(label,material,east,north,radiusX,radiusY,radiusZ,raiseMeters=0)=>{
-    const visualX=radiusX*dressingVisualScale,visualY=radiusY*dressingVisualScale,visualZ=radiusZ*dressingVisualScale;
-    if(count>=64||!inFocusedArea(east,north,Math.max(visualX,visualZ)))return false;
-    const pos=canonicalSemanticPosition(east,north,scale,unit,frame);
-    const ground=canonicalSemanticGroundHeightUnits(east,north,frame)+lift+raiseMeters*scale/unit;
-    addLocalStatic("CanonicalDressing-"+label,"sphere",material,pos.x,ground+visualY*scale/unit,pos.z,visualX*scale/unit,visualY*scale/unit,visualZ*scale/unit);
-    recordSample(label,east,north);
-    count++;triangles+=24;
-    return true;
-  };
-  const routeClear=(record,east,north,radius)=>{
-    const access=record?.entrance||record?.access||null;
-    if(access){
-      const tileX=east/tileMeters,tileY=north/tileMeters;
-      if(Math.abs(tileX-Number(access.x))+Math.abs(tileY-Number(access.y))<=2)return false;
-    }
-    const checks=[[0,0],[radius,0],[-radius,0],[0,radius],[0,-radius]];
-    return checks.every(([dx,dy])=>{
-      const x=String(Math.round((east+dx)/tileMeters)),y=String(Math.round((north+dy)/tileMeters));
-      const local=window.StartingVillage?.local?.(activeSeed,x,y)||null;
-      return !local||!window.StartingVillage?.isRoadReserved?.(activeSeed,local);
-    });
-  };
-  const addBox=(record,label,material,offsetEast,offsetNorth,halfW,halfH,halfD,rotationY=0)=>{
-    const bounds=record?.bounds||{};
-    const centerEast=((Number(bounds.minX)+Number(bounds.maxX))/2)*tileMeters;
-    const centerNorth=((Number(bounds.minY)+Number(bounds.maxY))/2)*tileMeters;
-    const east=centerEast+offsetEast,north=centerNorth+offsetNorth;
-    if(!routeClear(record,east,north,Math.max(halfW,halfD)*dressingVisualScale))return false;
-    return addWorldBox(record.id+"-"+label,material,east,north,halfW,halfH,halfD,rotationY);
-  };
-  const addBall=(record,label,material,offsetEast,offsetNorth,radiusX,radiusY,radiusZ)=>{
-    const bounds=record?.bounds||{};
-    const centerEast=((Number(bounds.minX)+Number(bounds.maxX))/2)*tileMeters;
-    const centerNorth=((Number(bounds.minY)+Number(bounds.maxY))/2)*tileMeters;
-    const east=centerEast+offsetEast,north=centerNorth+offsetNorth;
-    if(!routeClear(record,east,north,Math.max(radiusX,radiusZ)*dressingVisualScale))return false;
-    return addWorldBall(record.id+"-"+label,material,east,north,radiusX,radiusY,radiusZ);
-  };
-  const plazaHalf=Math.max(1,Number(window.StartingVillage?.PUBLIC_HALF_SIZE||3)*tileMeters);
-  const corner=plazaHalf*.68;
+  const plazaHalf=Math.max(1,Number(window.StartingVillage?.PUBLIC_HALF_SIZE||3)*tileMeters),corner=plazaHalf*.68;
   for(const [x,y,index] of [[-corner,-corner,0],[corner,-corner,1],[-corner,corner,2],[corner,corner,3]]){
-    addWorldBox("public-square-bench-"+index,localStaticMaterials.microWood,x,y,1.0,.28,.25,45+index*90,.35);
+    addWorldPrimitive("public-square-bench-"+index,"box",localStaticMaterials.microWood,x,y,2.0,.34,.50,45+index*90,.34);
     const bedX=x+(x<0?-.48:.48),bedY=y+(y<0?-.48:.48);
-    addWorldBox("public-square-planter-"+index,localStaticMaterials.microSoil,bedX,bedY,.55,.16,.42,0,.28);
-    addWorldBall("public-square-flower-"+index,localStaticMaterials.microAccent,bedX,bedY,.24,.30,.24,.42);
-    if(index===0&&count<64&&inFocusedArea(x,y,.66)){
-      const pos=canonicalSemanticPosition(x,y,scale,unit,frame);
-      const ground=canonicalSemanticGroundHeightUnits(x,y,frame)+lift+1.0*scale/unit;
-      addLocalStatic("CanonicalDressing-public-square-well","cylinder",localStaticMaterials.microStone,pos.x,ground,pos.z,.66*dressingVisualScale*scale/unit,.90*dressingVisualScale*scale/unit,.66*dressingVisualScale*scale/unit);
-      count++;triangles+=60;recordSample("public-square-well",x,y);
-    }
+    addWorldPrimitive("public-square-planter-"+index,"box",localStaticMaterials.microSoil,bedX,bedY,1.10,.28,.84,0,.20);
+    addWorldPrimitive("public-square-flower-"+index,"sphere",localStaticMaterials.microAccent,bedX,bedY,.48,.58,.48,0,.36);
   }
-  for(let i=0;i<records.length;i++){
-    const record=records[i];
-    if(!record?.bounds)continue;
-    const bounds=record.bounds;
-    const cx=(Number(bounds.minX)+Number(bounds.maxX))/2;
-    const cy=(Number(bounds.minY)+Number(bounds.maxY))/2;
-    const east=cx*tileMeters,north=cy*tileMeters;
-    const kind=String(record.kind||"").toLowerCase();
-    const fn=String(record.function||"").toLowerCase();
-    const isResidential=/house|home|residential/.test(kind) || (/^h[0-9]/.test(String(record.id||""))&&record.kind!=="meeting-hall");
-    const isFarm=fn==="farm"||kind==="barn";
-    const isWorkshop=fn==="craft"||fn==="outdoor-work"||/workshop|smith|forge|workyard|tavern|shop|market|storage/.test(kind);
-    const isCivic=fn==="civic"||/meeting|hall|well|civic|public/.test(kind);
-    if(isResidential){
-      addBox(record,"garden-base",localStaticMaterials.microGround,-1.1*tileMeters,1.1*tileMeters,.72,.04,.82);
-      addBall(record,"garden-bush-a",localStaticMaterials.leaf,-0.8*tileMeters,1.3*tileMeters,.22,.22,.22);
-      addBall(record,"garden-bush-b",localStaticMaterials.leaf,-1.8*tileMeters,0.5*tileMeters,.26,.18,.26);
-      addBall(record,"garden-bush-c",localStaticMaterials.leaf,-0.3*tileMeters,1.6*tileMeters,.20,.20,.20);
-      for(let row=-1;row<=1;row++){
-        addBall(record,"garden-crop-"+(row+1),localStaticMaterials.leaf,-1.1*tileMeters+row*.42*tileMeters,1.0*tileMeters,.12,.25,.12);
-        addBall(record,"garden-flower-"+(row+1),localStaticMaterials.microAccent,-1.1*tileMeters+row*.42*tileMeters,1.48*tileMeters,.08,.12,.08);
-      }
-      addBox(record,"yard-wood",localStaticMaterials.microWood,0.8*tileMeters,-1.1*tileMeters,.28,.22,.38);
-      addBox(record,"yard-crate",localStaticMaterials.microWood,1.35*tileMeters,0.55*tileMeters,.22,.22,.22,10);
-    }else if(isFarm){
-      addBox(record,"farm-garden-base",localStaticMaterials.microSoil,-1.0*tileMeters,1.2*tileMeters,1.05,.035,.82);
-      for(let row=-1;row<=1;row++){
-        addBall(record,"farm-crop-"+(row+1),localStaticMaterials.leaf,-1.0*tileMeters+row*.52*tileMeters,1.2*tileMeters,.18,.30,.16);
-      }
-      addBox(record,"farm-fence",localStaticMaterials.microWood,-1.0*tileMeters,2.35*tileMeters,1.15,.20,.07);
-      addBall(record,"farm-sack",localStaticMaterials.microCloth,.8*tileMeters,-1.0*tileMeters,.26,.23,.24);
-    }else if(isWorkshop){
-      addBox(record,"work-woodpile",localStaticMaterials.microWood,-1.15*tileMeters,-1.1*tileMeters,.48,.16,.44);
-      addBox(record,"work-crate-a",localStaticMaterials.microWood,1.15*tileMeters,-0.8*tileMeters,.24,.26,.24,12);
-      addBox(record,"work-crate-b",localStaticMaterials.microWood,1.55*tileMeters,0.9*tileMeters,.24,.26,.24,-16);
-      addBox(record,"work-barrel",localStaticMaterials.microDark,0.90*tileMeters,1.20*tileMeters,.19,.42,.19,0);
-      if(fn==="market"||fn==="lodging"){
-        addBox(record,"market-stall",localStaticMaterials.microCloth,-1.0*tileMeters,1.0*tileMeters,.55,.38,.42,12);
-      }
-    }else if(isCivic){
-      addBall(record,"well-ring-a",localStaticMaterials.microStone,0.0,1.4*tileMeters,.26,.18,.26);
-      addBall(record,"well-ring-b",localStaticMaterials.microStone,-0.32*tileMeters,1.25*tileMeters,.20,.16,.20);
-      addBall(record,"well-ring-c",localStaticMaterials.microStone,0.32*tileMeters,1.25*tileMeters,.20,.16,.20);
-      addBox(record,"well-post",localStaticMaterials.microWood,1.1*tileMeters,0.2*tileMeters,.12,.74,.12,0);
-      addBox(record,"well-sign",localStaticMaterials.microCloth,1.55*tileMeters,0.1*tileMeters,.36,.22,.10,12);
-    }else{
-      addBox(record,"yard-fence",localStaticMaterials.microWood,-0.9*tileMeters,1.0*tileMeters,.07,.26,.65,18);
-      addBall(record,"yard-bush",localStaticMaterials.leaf,1.1*tileMeters,1.0*tileMeters,.24,.20,.24);
-      addBall(record,"yard-flower",localStaticMaterials.microAccent,1.5*tileMeters,-0.4*tileMeters,.12,.14,.12);
+  if(inFocusedArea(-corner,-corner,.8)){
+    addWorldPrimitive("public-square-well","cylinder",localStaticMaterials.microStone,-corner,-corner,1.32,.90,1.32,0,.02);
+  }
+
+  const renderDescriptor=descriptor=>{
+    const east=Number(descriptor.x)*tileMeters,north=Number(descriptor.y)*tileMeters;
+    if(!inFocusedArea(east,north,tileMeters*.8))return false;
+    const yaw=Number(descriptor.rotation||0),variant=Number(descriptor.variant||0),v=1+(variant-1)*.08;
+    let added=false;
+    switch(String(descriptor.semantic||"")){
+      case "garden":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microSoil,east,north,1.75*v,.16,1.35*v,yaw,.04);break;
+      case "woodpile":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,1.35*v,.46,.74*v,yaw,.02);break;
+      case "bush":added=addWorldPrimitive(descriptor.id,"sphere",localStaticMaterials.leaf,east,north,.92*v,.82*v,.92*v,yaw,.02);break;
+      case "flower":added=addWorldPrimitive(descriptor.id,"sphere",localStaticMaterials.microAccent,east,north,.62*v,.74*v,.62*v,yaw,.04);break;
+      case "fence":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,1.85*v,.56,.14,yaw,.18);break;
+      case "signpost":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microAccent,east,north,1.10*v,.56,.16,yaw,.92);break;
+      case "barrel":added=addWorldPrimitive(descriptor.id,"cylinder",localStaticMaterials.microDark,east,north,.72*v,.88,.72*v,yaw,.02);break;
+      case "crate":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,.78*v,.76,.78*v,yaw,.02);break;
+      case "cart":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,1.60*v,.48,.94*v,yaw,.18);break;
+      case "sack":added=addWorldPrimitive(descriptor.id,"sphere",localStaticMaterials.microCloth,east,north,.72*v,.92*v,.66*v,yaw,.02);break;
+      case "work-prop":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microDark,east,north,1.16*v,.54,.76*v,yaw,.12);break;
+      case "pen":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,1.90*v,.50,.14,yaw,.16);break;
+      case "well":added=addWorldPrimitive(descriptor.id,"cylinder",localStaticMaterials.microStone,east,north,1.28*v,.86,1.28*v,yaw,.02);break;
+      case "bench":added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,1.62*v,.34,.50*v,yaw,.34);break;
+      default:added=addWorldPrimitive(descriptor.id,"box",localStaticMaterials.microWood,east,north,.82*v,.50,.82*v,yaw,.02);break;
     }
+    if(added){
+      descriptorCount++;
+      contextCounts[descriptor.context]=(contextCounts[descriptor.context]||0)+1;
+      semanticCounts[descriptor.semantic]=(semanticCounts[descriptor.semantic]||0)+1;
+    }
+    return added;
+  };
+  for(const descriptor of plan){
     if(count>=64)break;
+    renderDescriptor(descriptor);
   }
-  return {count,triangles,scope:"focused-visible+3-tile-preload",presentationScale:dressingVisualScale,samples:Object.freeze(samples)};
+  return {
+    count,triangles,descriptorCount,plannedDescriptorCount:plan.length,
+    routeSafetyPass:plan.every(item=>item.routeSafe===true),
+    contextCounts:Object.freeze({...contextCounts}),semanticCounts:Object.freeze({...semanticCounts}),
+    scope:"focused-visible+3-tile-preload",samples:Object.freeze(samples)
+  };
 }
 
 function clearLocalBuildingActivity(){
