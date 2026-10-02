@@ -144,6 +144,8 @@ def _stage_snapshot(driver):
           presentation:s.projection?.presentation
         },
         npcPresentation:s.npcPresentation,
+        worldVisualStyle:s.worldVisualStyle,
+        worldVisualStyleIntegration:s.worldVisualStyleIntegration,
         navigationPerformance:s.navigationPerformance,
         startupError:s.startupError,
         frameCount:s.frameCount
