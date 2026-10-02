@@ -656,19 +656,23 @@ def _wp_starting_village_frame(driver,target,base_width,base_height,timeout):
       stage.setZoomScalar(scalar);
       return {scalar,mode};
     """,target["point"],mode)
-    _wait(driver,"""
-      const s=window.PlanetStage?.snapshot?.(),local=s?.projection?.localStatic||{},r=s?.projection?.resourceBudget||{};
+    expected_tier="refined" if mode=="refined" else "full"
+    expected_scalar=float(result.get("scalar") or 0)
+    _wait(driver,f"""
+      const s=window.PlanetStage?.snapshot?.(),local=s?.projection?.localStatic||{{}},r=s?.projection?.resourceBudget||{{}};
       const readyResource=!r?.requestedSignature||String(r.activeSignature||'')===String(r.requestedSignature||'');
+      const scalarReady=Math.abs(Number(s?.zoom?.scalar||0)-{expected_scalar!r})<0.00001;
       return Boolean(
-        s?.ready && !s?.zoom?.animation?.active && readyResource &&
+        s?.ready && !s?.zoom?.animation?.active && readyResource && scalarReady &&
         local?.active===true &&
-        ['refined','full'].includes(String(local?.revealTier||'')) &&
+        String(local?.revealTier||'')==={JSON.stringify("PLACEHOLDER")} &&
         Number(local?.roadCount||0)>0 &&
         Number(local?.buildingCount||0)>0 &&
         Number(local?.dressingCount||0)>0 &&
         String(local?.dressingScope||'')==='focused-visible+3-tile-preload'
       );
-    """,timeout,f"Starting Village dressing context {target.get('label')}")
+    """.replace('"PLACEHOLDER"',repr(expected_tier)),timeout,
+        f"Starting Village {expected_tier} dressing context {target.get('label')}")
     driver.execute_async_script("""
       const done=arguments[0];
       requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
