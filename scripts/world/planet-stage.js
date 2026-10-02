@@ -110,6 +110,7 @@ let horizonSkirt=null;
 let horizonSkirtMaterial=null;
 let localStaticRoot=null;
 let localStaticMaterials=null;
+let localStyleTextures=new Map();
 let localSettlementRoadGeometry=null;
 let localSettlementLotGeometry=null;
 let localWayfindingMesh=null;
@@ -3872,18 +3873,60 @@ function updateEnvironmentalReactions(){
   environmentalReactions={...environmentalReactions,activeCount,visibleCount,activeDrawCallEstimate,peakActiveCount:Math.max(environmentalReactions.peakActiveCount,activeCount),lastUpdateMs:Number(ms.toFixed(4)),maxUpdateMs:Math.max(Number(environmentalReactions.maxUpdateMs||0),Number(ms.toFixed(4)))};
 }
 
+function localStylePatternTexture(kind){
+  const key=String(kind||"");if(!key||!pc||!device||typeof document==="undefined")return null;
+  if(localStyleTextures.has(key))return localStyleTextures.get(key);
+  const size=64,canvas=document.createElement("canvas");canvas.width=size;canvas.height=size;
+  const ctx=canvas.getContext("2d",{alpha:false});if(!ctx)return null;
+  const palette={
+    road:["#e0cfb1","#bda786","#f0e3ca"],
+    stone:["#ddd1b9","#aaa28f","#f2e8d4"],
+    plaster:["#f2e4c9","#ccb996","#fff2d9"],
+    wood:["#d7b181","#9d744e","#ead0a7"]
+  }[key]||["#ece2cf","#c5b69a","#fff4dc"];
+  ctx.fillStyle=palette[0];ctx.fillRect(0,0,size,size);
+  ctx.lineCap="round";ctx.lineJoin="round";
+  if(key==="stone"){
+    ctx.strokeStyle=palette[1];ctx.globalAlpha=.30;ctx.lineWidth=1;
+    for(let y=0,row=0;y<size;y+=11,row++){
+      ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(size,y+.5);ctx.stroke();
+      const offset=row%2?6:0;for(let x=offset;x<size;x+=13){ctx.beginPath();ctx.moveTo(x+.5,y);ctx.lineTo(x+.5,Math.min(size,y+11));ctx.stroke();}
+    }
+  }else if(key==="plaster"){
+    ctx.strokeStyle=palette[1];ctx.globalAlpha=.16;ctx.lineWidth=1;
+    for(let i=0;i<18;i++){const x=(i*23+7)%64,y=(i*37+11)%64;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(Math.min(64,x+5+(i%4)),Math.min(64,y+1+(i%3)));ctx.stroke();}
+    ctx.fillStyle=palette[2];ctx.globalAlpha=.10;for(let i=0;i<16;i++){const x=(i*31+3)%64,y=(i*17+19)%64;ctx.fillRect(x,y,1+(i%2),1);}
+  }else if(key==="wood"){
+    ctx.strokeStyle=palette[1];ctx.globalAlpha=.28;ctx.lineWidth=1;
+    for(let x=5;x<size;x+=9){ctx.beginPath();ctx.moveTo(x,0);ctx.bezierCurveTo(x-2,16,x+2,42,x,size);ctx.stroke();}
+    ctx.strokeStyle=palette[2];ctx.globalAlpha=.20;for(let x=9;x<size;x+=18){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,size);ctx.stroke();}
+  }else{
+    ctx.fillStyle=palette[1];ctx.globalAlpha=.20;
+    for(let i=0;i<40;i++){const x=(i*29+5)%64,y=(i*43+13)%64,r=.6+(i%3)*.35;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();}
+    ctx.strokeStyle=palette[2];ctx.globalAlpha=.18;ctx.lineWidth=1.1;
+    for(let i=0;i<7;i++){const y=8+i*9;ctx.beginPath();ctx.moveTo((i*11)%18,y);ctx.bezierCurveTo(20,y-2,42,y+2,64,y-1);ctx.stroke();}
+  }
+  ctx.globalAlpha=1;
+  const texture=new pc.Texture(device,{width:size,height:size,format:pc.PIXELFORMAT_R8_G8_B8,mipmaps:true,minFilter:pc.FILTER_LINEAR_MIPMAP_LINEAR,magFilter:pc.FILTER_LINEAR,addressU:pc.ADDRESS_REPEAT,addressV:pc.ADDRESS_REPEAT});
+  texture.name="LocalLivingWorldPattern-"+key;texture.setSource(canvas);localStyleTextures.set(key,texture);return texture;
+}
 function ensureLocalStaticMaterials(){
   if(localStaticMaterials||!pc)return;
-  const make=(name,r,g,b,opacity=1,styleRole=null)=>{const source=[r,g,b],styled=styleRole?worldStyleRgb(styleRole,source):source;const m=new pc.StandardMaterial();m.name=name;m.diffuse.set(...styled);m.__atmosphereBaseDiffuse=styled.slice();m.roughness=.92;m.opacity=opacity;if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;};
+  const make=(name,r,g,b,opacity=1,styleRole=null,patternKind=null,repeat=1)=>{
+    const source=[r,g,b],styled=styleRole?worldStyleRgb(styleRole,source):source,m=new pc.StandardMaterial();
+    m.name=name;m.diffuse.set(...styled);m.__atmosphereBaseDiffuse=styled.slice();m.roughness=.92;m.opacity=opacity;
+    if(patternKind){const texture=localStylePatternTexture(patternKind);if(texture){m.diffuseMap=texture;m.diffuseMapTiling=new pc.Vec2(repeat,repeat);}}
+    if(opacity<1){m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}m.update();return m;
+  };
   const wildernessMaterial=make("LocalWilderness",1,1,1);wildernessMaterial.vertexColors=true;wildernessMaterial.diffuseVertexColor=true;wildernessMaterial.cull=pc.CULLFACE_NONE;wildernessMaterial.update();
   localStaticMaterials={
-    road:make("LocalRoad",.32,.20,.085,1,"terrain:road"),roadOverview:make("LocalRoadOverview",.285,.19,.075,1,"terrain:road"),square:make("LocalSquare",.48,.35,.18,1,"terrain:square"),
-    wall:make("LocalWall",.68,.50,.30,1,"terrain:building"),roof:make("LocalRoof",.30,.095,.055,1,"terrain:building"),
+    road:make("LocalRoad",.43,.31,.17,1,"terrain:road","road",1.5),roadOverview:make("LocalRoadOverview",.40,.29,.16,1,"terrain:road","road",1.25),square:make("LocalSquare",.54,.43,.27,1,"terrain:square","stone",3),
+    wall:make("LocalWall",.76,.61,.41,1,"terrain:building","plaster",2),roof:make("LocalRoof",.40,.14,.08,1,"terrain:building"),
     stateRoof:(()=>{const m=make("LocalStateAwareRoof",1,1,1);m.vertexColors=true;m.diffuseVertexColor=true;m.emissiveVertexColor=true;m.__activityEmissiveBoost=.10;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    landmark:make("LocalLandmark",.86,.57,.14,1,"terrain:building"),footprint:make("LocalSettlementFootprint",.40,.34,.18,.11,"terrain:building"),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.90);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
-    trunk:make("LocalTrunk",.24,.13,.06,1,"terrain:dirt"),leaf:make("LocalLeaf",.16,.39,.12,1,"terrain:forest"),water:make("LocalWater",.08,.31,.48,.72,"terrain:water"),
+    landmark:make("LocalLandmark",.78,.55,.25,1,"terrain:building","plaster",2),footprint:make("LocalSettlementFootprint",.44,.37,.23,.11,"terrain:building"),lotOverview:(()=>{const m=make("LocalOccupiedLotOverview",1,1,1,.90);m.vertexColors=true;m.diffuseVertexColor=true;m.cull=pc.CULLFACE_NONE;m.update();return m;})(),
+    trunk:make("LocalTrunk",.30,.18,.09,1,"terrain:dirt","wood",1.5),leaf:make("LocalLeaf",.20,.38,.14,1,"terrain:forest"),water:make("LocalWater",.08,.31,.48,.72,"terrain:water"),
     microWater:make("LocalMicroWater",.07,.28,.42,.52,"terrain:water"),
-    microStone:make("LocalMicroStone",.67,.64,.56,1,"terrain:rock"),microWood:make("LocalMicroWood",.57,.34,.14,1,"terrain:dirt"),
+    microStone:make("LocalMicroStone",.67,.64,.56,1,"terrain:rock","stone",1.5),microWood:make("LocalMicroWood",.57,.34,.14,1,"terrain:dirt","wood",1.5),
     microDark:make("LocalMicroDark",.11,.075,.045),microCloth:make("LocalMicroCloth",.76,.56,.27),
     microAccent:make("LocalMicroAccent",1.0,.45,.08),microSoil:make("LocalMicroSoil",.43,.25,.10,.18,"terrain:dirt"),
     microGround:make("LocalMicroGround",.31,.20,.08,.22,"terrain:dirt"),microMoss:make("LocalMicroMoss",.12,.28,.07,.18,"terrain:grass"),
@@ -5419,7 +5462,7 @@ function updateCanonicalNpcMotion(){
 }
 function canonicalRoofSegmentColor(state,plane,band,lane,landmark){
   const visualState=String(state||"normal");
-  const normal=landmark?[219,149,54,255]:[108,49,31,255];
+  const normal=landmark?[178,112,50,255]:[132,62,39,255];
   if(visualState==="worn")return landmark?[178,132,79,255]:[124,91,68,255];
   if(visualState==="damaged")return landmark?[151,91,43,255]:[105,70,51,255];
   if(visualState==="repaired")return normal;
@@ -5505,7 +5548,7 @@ function canonicalRoofMeshData(entry,state){
   for(let plane=0;plane<2;plane++){
     const side=plane===0?-1:1,drop=Math.max(.025,.16*entry.presentationScale/entry.unit);
     const edgeColor=visualState==="overgrown"?[54,91,42,255]:visualState==="worn"?[96,76,60,255]:visualState==="damaged"?[59,40,31,255]:
-      visualState==="repaired"&&plane===0?[170,94,38,255]:entry.landmark?[151,87,31,255]:[68,30,23,255];
+      visualState==="repaired"&&plane===0?[176,101,45,255]:entry.landmark?[119,70,37,255]:[72,39,28,255];
     const fascia=(n0,n1,salt)=>{
       const a=point(side,0,n0),b=point(side,0,n1);
       addQuad(a,b,[b[0],b[1]-drop,b[2]],[a[0],a[1]-drop,a[2]],[side,0,0],edgeColor,salt);
@@ -5554,7 +5597,7 @@ function canonicalRoofMeshData(entry,state){
     addLeafCluster(1,.53,.18,mossLight,176,.052,.030);
     addLeafCluster(-1,.12,.39,mossLight,178,.050,.026);
   }else{
-    const tone=entry.landmark?[204,132,47,255]:[101,43,29,255];
+    const tone=entry.landmark?[194,128,57,255]:[118,54,35,255];
     addPatch(-1,.31,.34,-.46,.46,tone,181,.004,0);
     addPatch(1,.55,.58,-.44,.44,tone,182,.004,0);
   }
@@ -9890,7 +9933,7 @@ function snapshot(){
     canvasCount:root?.querySelectorAll?.("canvas")?.length||0,
     activeSeed,
     worldVisualStyle:worldVisualStyle()?.snapshot?.()||null,
-    worldVisualStyleIntegration:Object.freeze({active:Boolean(worldVisualStyle()),signature:worldVisualStyle()?.signature||null,localDetailOnly:true,activationMaxMetersPerTexel:28,postProcessing:false,extraLights:0,simulationAuthorityPreserved:true}),
+    worldVisualStyleIntegration:Object.freeze({active:Boolean(worldVisualStyle()),signature:worldVisualStyle()?.signature||null,localDetailOnly:true,activationMaxMetersPerTexel:28,sharedPatternTextureCount:localStyleTextures.size,deterministicLocalPatternTextures:true,postProcessing:false,extraLights:0,simulationAuthorityPreserved:true}),
     geographyHash:geographySignature?.hash||null,
     geographySignature,
     geographyVerification,
@@ -10099,6 +10142,7 @@ function destroy(){
   for(const resource of localResourceCache.values())destroyCachedLocalResource(resource);localResourceCache.clear();localPreparationToken++;localJob=null;localQueuedRequest=null;displayResource=null;localResources=freshLocalResources();
   clearLocalFauna();clearCanonicalBuildingSurroundings();clearCanonicalCampaignWearProjection(false);localCampaignWearContext=null;clearCanonicalWayfindingSignposts();clearCanonicalRoofRegistry();
   app?.destroy?.();
+  for(const texture of localStyleTextures.values())texture?.destroy?.();localStyleTextures.clear();
   app=null;device=null;pc=null;planet=null;cameraEntity=null;canvas=null;localStaticRoot=null;localStaticMaterials=null;localPersistentConsequenceRoot=null;localFaunaRoot=null;localFaunaActors=[];localFaunaClock=0;localFaunaReactionAccumulator=0;localFaunaReactionMemory.clear();wildlifeReaction=freshWildlifeReaction();localWildernessEnabled=true;
   environmentalReactionRoot=null;environmentalReactionMaterials=null;environmentalReactionTextures=null;environmentalReactionPool=[];
   environmentalReactions={enabled:true,poolInitialized:false,poolGroupCount:0,poolDrawableCount:0,activeCount:0,visibleCount:0,activeDrawCallEstimate:0,peakActiveCount:0,triggerCount:0,expiredCount:0,reuseCount:0,triggerByKind:{dust:0,grassBend:0,footprint:0},lastKind:null,lastSurfaceType:null,lastMovementMeters:0,lastTriggerAtMs:0,lastUpdateMs:0,maxUpdateMs:0,minMoveMeters:ENVIRONMENT_REACTION_MIN_MOVE_METERS,maxMoveMeters:ENVIRONMENT_REACTION_MAX_MOVE_METERS,triggerIntervalMs:ENVIRONMENT_REACTION_TRIGGER_INTERVAL_MS,desktopActiveCap:6,phoneActiveCap:4,source:"canonical ground-scale navigation + TerrainFoundation",poolAllocationsAfterInit:0,terrainMutation:false,presentationOnly:true,simulationAuthority:false,bounded:true,fullWorldScan:false,perFrameWorldScan:false};
