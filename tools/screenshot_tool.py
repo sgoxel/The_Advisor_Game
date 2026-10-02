@@ -162,6 +162,24 @@ def _prepare_starting_village_focus(driver):
         raise RuntimeError(f"could not focus canonical starting village: {result}")
     return result
 
+def _prepare_starting_village_scene(driver,timeout):
+    focus=_prepare_starting_village_focus(driver)
+    result=driver.execute_script("""
+      const stage=window.PlanetStage;
+      stage.setZoomScalar(1);
+      return {scalar:1};
+    """)
+    _wait(driver,"""
+      const s=window.PlanetStage?.snapshot?.(),local=s?.projection?.localStatic||{};
+      return Boolean(
+        s?.ready && !s?.zoom?.animation?.active &&
+        s?.zoom?.visibleLevel==='ground' &&
+        local?.revealTier==='full' &&
+        s?.worldVisualStyleIntegration?.active===true
+      );
+    """,timeout,"Starting Village final-ground living-world presentation")
+    return {**focus,"zoom":result}
+
 def _set_character_scale(driver,mode):
     if mode=="near":
         result=driver.execute_script("""
@@ -319,6 +337,17 @@ def run_capture(args):
                 frame["captured_at"]=datetime.now(timezone.utc).isoformat()
                 frames.append(frame)
             _validate_character_frames(frames[:WP_CHARACTER_SHOTS])
+        elif args.scenario==STARTING_VILLAGE_SCENARIO:
+            focus=_prepare_starting_village_scene(driver,args.ready_timeout)
+            frames=_generic_frames(driver,total,width,height,args.ready_timeout,args.interval)
+            for frame in frames:
+                frame["action"]="starting-village-ground"
+                frame["focusPreparation"]=focus
+            for index,frame in enumerate(frames,start=1):
+                path=_file_name(args.filename,index,total,args.timestamp_names)
+                _capture(driver,path)
+                frame["index"]=index;frame["file"]=path.name
+                frame["captured_at"]=datetime.now(timezone.utc).isoformat()
         else:
             frames=_generic_frames(driver,total,width,height,args.ready_timeout,args.interval)
             for index,frame in enumerate(frames,start=1):
