@@ -1,0 +1,44 @@
+name: Agent6 WP011 Attempt3 Harness Patch
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/agent6-wp011-attempt3-patch.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp011-attempt3-patch
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Patch final evidence seed transition
+        run: |
+          python tools/agent6_wp011_attempt3_patch.py
+          python -m py_compile tools/test_wp_s003_010_003_011.py
+          git diff --check
+      - name: Commit final evidence harness repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/test_wp_s003_010_003_011.py
+          if git diff --cached --quiet; then
+            echo "WP011 final evidence harness already current"
+            exit 0
+          fi
+          git commit -m "test(WP-S003-010-003-011): restart browser between authoritative seeds"
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
+          git push origin HEAD:main
