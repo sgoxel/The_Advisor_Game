@@ -3473,7 +3473,14 @@ function buildLocalWildernessMesh(plan,frame,reveal){
     // Box-like fallen wood/stumps are useful semantic dressing but visually
     // dominate the final orthographic ground frame when repeated. Keep them as
     // deterministic rare accents while preserving every item in the cached plan.
-    if(viewHeight<=45&&["log","driftwood","stump"].includes(item.family)&&Number(item.variant||0)<.72)continue;
+    if(viewHeight<=45){
+      // Final-ground acceptance should emphasize the refined terrain surface,
+      // not unreplaced primitive prop silhouettes. Preserve the deterministic
+      // plan but materialize only vegetation forms whose scale/silhouette reads
+      // naturally in the current orthographic presentation.
+      if(!["grass","bush","sapling","reed"].includes(item.family))continue;
+      if(Number(item.variant||0)<.34)continue;
+    }
     const managed=localWildernessManaged(item,reveal);if(managed.reject){rejectedManaged++;if(managed.road)rejectedRoad++;continue;}
     const x=item.east/unit,z=-item.north/unit,y=localGroundHeightUnits(item.east,item.north,frame)+.012,baseColor=wildernessColor(item.family,item.biome);
     const variant=clamp(Number(item.variant??.5),0,1),tone=.90+variant*.18,color=[clamp(baseColor[0]*tone,0,1),clamp(baseColor[1]*tone,0,1),clamp(baseColor[2]*tone,0,1),255];
@@ -7729,6 +7736,13 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // eligible layer sample the identical world-registered micro field; context
   // gain is bounded below by its refinement weight.
   const useMicroDetail=metersPerTexel<=4;
+  // At sub-meter focus tiers, preserve true fine detail while compositing it as
+  // a high-frequency refinement over the physically-resolvable 3x context.
+  // A wider feather plus partial opacity removes the visible 1x resource card
+  // without changing canonical samples, coordinates, or LOD/cache selection.
+  const closeCompositeBand=contextRing?0:smoothstep01(clamp((1.15-metersPerTexel)/.95,0,1));
+  const focusCompositeOpacity=contextRing?1:lerp(1,.80,closeCompositeBand);
+  const handoffFeather=lerp(LOCAL_TEXTURE_HANDOFF_FEATHER,.24,closeCompositeBand);
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   // Surface relief is presented as continuous hillshade, not synthetic
   // cartographic contour bands. The previous 420 m sine contours and strong
@@ -8153,7 +8167,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         for(const target of evidenceProbeTargets){
           if(target.x!==x||target.y!==y)continue;
           const probeEdge=Math.min(ux,1-ux,vz,1-vz);
-          const probeAlpha=featherEdges?smoothstep01(clamp(probeEdge/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1)):1;
+          const probeAlpha=featherEdges?smoothstep01(clamp(probeEdge/handoffFeather,0,1))*focusCompositeOpacity:focusCompositeOpacity;
           evidenceProbes.push(Object.freeze({
             id:target.id,layerRole:String(evidenceLayerRole),pixel:Object.freeze({x,y}),uv:Object.freeze({u:Number(ux.toFixed(6)),v:Number(vz.toFixed(6))}),
             offsetMeters:Object.freeze({east:Number(east.toFixed(3)),north:Number(north.toFixed(3))}),
@@ -8176,8 +8190,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Shared photometry makes the rectangular resource edge visually neutral;
       // use only a broad edge feather for the subtle fine-frequency delta.
       const edgeDistance=Math.min(ux,1-ux,vz,1-vz);
-      const edgeCoverage=smoothstep01(clamp(edgeDistance/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
-      data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=featherEdges?Math.round(255*edgeCoverage):255;
+      const edgeCoverage=smoothstep01(clamp(edgeDistance/handoffFeather,0,1));
+      data[i]=rgba[0];data[i+1]=rgba[1];data[i+2]=rgba[2];data[i+3]=Math.round(255*(featherEdges?edgeCoverage:1)*focusCompositeOpacity);
       // Texture generation is cooperative below a full row. This protects the
       // main-thread budget on slower/software renderers without changing any
       // pixel value, coordinate sample, or deterministic ordering.
