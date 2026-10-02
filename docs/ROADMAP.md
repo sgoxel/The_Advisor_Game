@@ -39,7 +39,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-004-001` — Tall 2.5D Building Mass + Local Character Occlusion Cutouts — COMPLETED
 - `WP-S003-004-002` — 2D Character Billboard Rendering in the 3D World — COMPLETED
 - `WP-S003-004-003` — Correct Gabled Roof Geometry + Building Contact — COMPLETED
-- `WP-S003-004-004` — Max-Zoom Ground RPG Camera + 2D Character Billboard Integration
+- `WP-S003-004-004` — Max-Zoom Ground RPG Camera + 2D Character Billboard Integration — COMPLETED
 - `WP-S003-004-005` — 2× Active Character Billboard Presentation Scale — COMPLETED
 - `WP-S003-004-006` — NPC Viewport-Edge Visibility Stability — COMPLETED
 - `WP-S003-005` — PlayCanvas 3D Asset + Material Preparation Pipeline — COMPLETED
