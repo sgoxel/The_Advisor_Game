@@ -35,5 +35,23 @@ replace_once(
     'elif args.scenario in {WP_SURFACE_REFINEMENT_SCENARIO,WP_VIEWPORT_REFINEMENT_SCENARIO}:\n            focus=_prepare_surface_refinement_focus(driver)',
     "capture routing",
 )
+# The frame helper itself historically forced 1280x800, silently overriding the
+# requested profile after run_capture had already selected a real phone viewport.
+# Thread the selected viewport into every refinement checkpoint instead.
+replace_once(
+    'def _surface_refinement_frame(driver,index,timeout):',
+    'def _surface_refinement_frame(driver,index,timeout,viewport=(1280,800)):',
+    "refinement frame viewport parameter",
+)
+replace_once(
+    '    set_exact_viewport(driver,1280,800)\n    driver.execute_async_script("""',
+    '    set_exact_viewport(driver,*viewport)\n    driver.execute_async_script("""',
+    "refinement frame exact viewport",
+)
+replace_once(
+    '                frame=_surface_refinement_frame(driver,index,args.ready_timeout)',
+    '                frame=_surface_refinement_frame(driver,index,args.ready_timeout,(width,height))',
+    "refinement frame caller viewport",
+)
 
 PATH.write_text(text, encoding="utf-8")
