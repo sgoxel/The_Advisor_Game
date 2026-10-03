@@ -32,10 +32,18 @@ jobs:
           from pathlib import Path
           path = Path('scripts/world/planet-stage.js')
           text = path.read_text()
-          old = '''  const transitionText=zoomState.animating&&scaleState.label!==targetScaleState.label
-            ?scaleState.label+" → "+targetScaleState.label
-            :semantic.displayBand;
-          const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=scaleState.label;scale.querySelector(".planet-scale-meta span").textContent=transitionText;scale.querySelector(".planet-scale-line").style.width=ruler.pixelLength.toFixed(2)+"px";scale.querySelector("small").textContent=formatDistanceMeters(ruler.distanceMeters);'''
+          if 'const readyRepresentationPending=' in text:
+              print('ready-visible scale presentation already patched')
+              raise SystemExit(0)
+          anchor = '  const transitionText=zoomState.animating&&scaleState.label!==targetScaleState.label'
+          if text.count(anchor) != 1:
+              raise SystemExit(f'Expected exactly one transition anchor, found {text.count(anchor)}')
+          start = text.index(anchor)
+          end = text.index('\n  mapPresentation={', start)
+          old = text[start:end]
+          expected = 'scale.querySelector(".planet-scale-meta strong").textContent=scaleState.label'
+          if expected not in old:
+              raise SystemExit('Scale-strip assignment changed unexpectedly; refusing patch')
           new = '''  // WP-S003-010-003-014: while a finer requested resource is still preparing,
           // every scale/semantic cue must describe the representation that is actually
           // ready and visible. Never advertise the requested target ahead of the atomic handoff.
@@ -47,13 +55,7 @@ jobs:
             ?readyScaleState.label+" → "+targetScaleState.label
             :semantic.displayBand;
           const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=readyScaleState.label;scale.querySelector(".planet-scale-meta span").textContent=transitionText;scale.querySelector(".planet-scale-line").style.width=ruler.pixelLength.toFixed(2)+"px";scale.querySelector("small").textContent=formatDistanceMeters(ruler.distanceMeters);'''
-          count = text.count(old)
-          if count != 1:
-              if 'const readyRepresentationPending=' in text:
-                  print('ready-visible scale presentation already patched')
-                  raise SystemExit(0)
-              raise SystemExit(f'Expected exactly one scale presentation target, found {count}')
-          path.write_text(text.replace(old, new, 1))
+          path.write_text(text[:start] + new + text[end:])
           PY
       - name: Commit patch
         run: |
