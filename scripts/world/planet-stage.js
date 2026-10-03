@@ -3235,7 +3235,7 @@ function localTextureAnisotropy(){
 }
 function surfaceDetailBandCount(metersPerTexel){
   const m=Math.max(0,Number(metersPerTexel)||0);
-  return (m<=24000?1:0)+(m<=6000?1:0)+(m<=1200?1:0)+(m<=100?1:0)+(m<=30?1:0)+(m<=4?1:0);
+  return (m<=24000?1:0)+(m<=6000?1:0)+(m<=1200?1:0)+(m<=100?1:0)+(m<=30?1:0)+(m<=16?1:0)+(m<=8?1:0)+(m<=2.5?1:0)+(m<=.8?1:0);
 }
 function seededHash32(label){
   let h=2166136261>>>0;
@@ -3267,7 +3267,10 @@ function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel
   if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.032;
   if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,260,salt+89)*.034;
   if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.025;
-  if(metersPerTexel<=4)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.016;
+  if(metersPerTexel<=16)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,48,salt+109)*.020;
+  if(metersPerTexel<=8)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.018;
+  if(metersPerTexel<=2.5)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,8,salt+149)*.012;
+  if(metersPerTexel<=.8)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,3,salt+163)*.008;
   return detail;
 }
 function registeredMapReliefValue(worldEastMeters,worldNorthMeters,metersPerTexel,salt){
@@ -3283,6 +3286,17 @@ function registeredMapReliefValue(worldEastMeters,worldNorthMeters,metersPerTexe
   }
   return weight?value/weight:0;
 }
+function localPatchMarginForLevel(levelIndex){
+  const index=clamp(Math.round(levelIndex),0,LOCAL_DETAIL_LEVELS.length-1);
+  // Strategic parents need more camera/projection overscan. Once the tangent
+  // surface owns the view, 1.65x keeps a generous feather outside the accepted
+  // viewport; final ground needs only a compact deterministic guard band.
+  if(index<=1)return 2.35;
+  if(index===2)return 2.00;
+  if(index===3)return 1.75;
+  if(index<=10)return 1.65;
+  return 1.40;
+}
 
 function patchDimensionsForLevel(index){
   const rect=canvas?.getBoundingClientRect?.(),aspect=Math.max(.35,(rect?.width||1)/(rect?.height||1));
@@ -3290,10 +3304,11 @@ function patchDimensionsForLevel(index){
   const portraitFactor=aspect>=1?1:(82/54);
   const visibleHeight=level.visibleHeightMeters*portraitFactor;
   const visibleWidth=visibleHeight*aspect;
-  const patchWidth=visibleWidth*LOCAL_PATCH_MARGIN,patchHeight=visibleHeight*LOCAL_PATCH_MARGIN;
+  const patchMargin=localPatchMarginForLevel(levelIndex);
+  const patchWidth=visibleWidth*patchMargin,patchHeight=visibleHeight*patchMargin;
   // Normalize every physical LOD footprint into a bounded presentation mesh.
   const metersPerUnit=Math.max(1,Math.max(patchWidth,patchHeight)/8);
-  return {levelIndex,levelId:level.id,band:level.band,visibleWidth,visibleHeight,patchWidth,patchHeight,sampleSpacingMeters:level.sampleSpacingMeters,reliefClampMeters:level.reliefClampMeters,reliefGain:level.reliefGain,maxHeightUnits:level.maxHeightUnits,metersPerUnit,staticWorld:Boolean(level.staticWorld)};
+  return {levelIndex,levelId:level.id,band:level.band,visibleWidth,visibleHeight,patchWidth,patchHeight,patchMargin,sampleSpacingMeters:level.sampleSpacingMeters,reliefClampMeters:level.reliefClampMeters,reliefGain:level.reliefGain,maxHeightUnits:level.maxHeightUnits,metersPerUnit,staticWorld:Boolean(level.staticWorld)};
 }
 // Dimensions of the representation that is actually on screen (the displayed,
 // fully prepared resource), with the compensation that maps it to the target
@@ -7788,7 +7803,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // 1x child visibly richer inside a rectangular footprint. Let any physically
   // eligible layer sample the identical world-registered micro field; context
   // gain is bounded below by its refinement weight.
-  const useMicroDetail=metersPerTexel<=6;
+  const useMicroDetail=contextRing?sharedMetersPerTexel<=4:metersPerTexel<=8;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   // Surface relief is presented as continuous hillshade, not synthetic
   // cartographic contour bands. The previous 420 m sine contours and strong
@@ -8583,7 +8598,7 @@ function finalizeLocalResource(job,result){
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
       meshHeightRange:meshData.meshHeightRange||null,
-      topographicSignalRevision:"canonical-continuous-cross-lod-source-v38",topographicSignalAuthority:"PlanetGeography elevation/color/moisture uses the bounded 192→384 canonical focus raster for the 1x child and the 80→160 shared raster only for 3x/12x context; uploaded focus textures refine from 320 to 512 pixels while registered-meter residual frequencies add only when physically resolvable.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,focusAuthorityApplied:true,
+      topographicSignalRevision:"canonical-continuous-cross-lod-source-v39",topographicSignalAuthority:"PlanetGeography elevation/color/moisture uses the bounded 192→384 canonical focus raster for the 1x child and the 80→160 shared raster only for 3x/12x context; uploaded focus textures refine from 320 to 512 pixels while registered-meter residual frequencies add only when physically resolvable.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,focusAuthorityApplied:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
