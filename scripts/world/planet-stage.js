@@ -8220,12 +8220,19 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const w34=colorDetailOctaveWeight(34,metersPerTexel);
         const w12=colorDetailOctaveWeight(12,metersPerTexel);
         const w42=colorDetailOctaveWeight(4.2,metersPerTexel);
+        const w7=colorDetailOctaveWeight(7,metersPerTexel);
+        const w28=colorDetailOctaveWeight(2.8,metersPerTexel);
         const registeredMicro=
           surfaceMaterialNoise(worldEast,worldNorth,34,microSurfaceSalt+11)*.042*w34+
           surfaceMaterialNoise(worldEast,worldNorth,12,microSurfaceSalt+29)*.030*w12+
           surfaceMaterialNoise(worldEast,worldNorth,4.2,microSurfaceSalt+47)*.019*w42;
-        const closeGain=lerp(.92,1.28,smoothstep01(clamp((6-metersPerTexel)/5.5,0,1)));
-        displayColor=displayColor.map((v,i)=>clamp(v+registeredMicro*closeGain*(i===0?1:i===1?.92:.72),0,.88));
+        // The 7 m slope band is fully resolved by near-ground-close (~1.1 m/texel)
+        // but remains absent from settlement (~3.9 m/texel). The 2.8 m child then
+        // eases in toward ground. Both are the same registered signal at every LOD.
+        const registeredFine=(w7>0?surfaceStructuredNoise(worldEast,worldNorth,7,microSurfaceSalt+71)*.058*w7:0)+
+          (w28>0?surfaceStructuredNoise(worldEast,worldNorth,2.8,microSurfaceSalt+89)*.026*w28:0);
+        const closeGain=lerp(.92,1.34,smoothstep01(clamp((6-metersPerTexel)/5.5,0,1)));
+        displayColor=displayColor.map((v,i)=>clamp(v+registeredMicro*closeGain*(i===0?1:i===1?.92:.72)+registeredFine*(i===0?.72:i===1?1:.50),0,.88));
       }
       // High peaks are legitimately snow-covered, but the canonical near-white
       // macro palette plus hillshade used to saturate into featureless white.
@@ -8623,7 +8630,7 @@ function finalizeLocalResource(job,result){
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
       meshHeightRange:meshData.meshHeightRange||null,
-      topographicSignalRevision:"canonical-continuous-cross-lod-source-v41",topographicSignalAuthority:"PlanetGeography elevation/color/moisture uses the bounded 192→384 canonical focus raster for the 1x child and the 80→160 shared raster only for 3x/12x context; uploaded focus textures refine from 320 to 512 pixels while registered-meter residual frequencies add only when physically resolvable.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,focusAuthorityApplied:true,structuredFrequencyTransform:true,structuredSlopeTransform:true,materialFrequencyTransform:true,
+      topographicSignalRevision:"canonical-continuous-cross-lod-source-v42",topographicSignalAuthority:"PlanetGeography elevation/color/moisture uses the bounded 192→384 canonical focus raster for the 1x child and the 80→160 shared raster only for 3x/12x context; uploaded focus textures refine from 320 to 512 pixels while registered-meter residual frequencies add only when physically resolvable.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,focusAuthorityApplied:true,structuredFrequencyTransform:true,structuredSlopeTransform:true,materialFrequencyTransform:true,nearGroundRegisteredMicroV3:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
