@@ -1,0 +1,19 @@
+const fs=require('fs');
+const path=require('path');
+const root=path.resolve(__dirname,'../..');
+const focus=fs.readFileSync(path.join(root,'scripts/ui/protagonist-focus-ui.js'),'utf8');
+const status=fs.readFileSync(path.join(root,'scripts/ui/protagonist-status-ui.js'),'utf8');
+function ok(value,message){if(!value)throw new Error(message)}
+ok(focus.includes('const VERSION="protagonist-focus-ui-v1"'),'missing focus UI version');
+ok(focus.includes('root.PlanetStage.focusProtagonist()'),'focus UI must use canonical protagonist focus transaction');
+ok(focus.includes('root.PlanetStage?.openPlaces?.()'),'free exploration must use canonical Places navigation');
+ok(focus.includes('forcedReturnCount:0'),'forced-return telemetry must start and remain zero');
+ok(!/forcedReturnCount\s*\+\+/.test(focus),'focus UI must never force-return remote exploration');
+ok(focus.includes('followDeadZone')&&focus.includes('FOLLOW_DURATION_MS'),'bounded soft-follow/dead-zone behavior missing');
+ok(focus.includes('setWorldTileFocus')&&focus.includes('FOLLOW_STEPS'),'follow correction must use bounded camera-only canonical focus updates');
+ok(focus.includes('simulationMutation:false')&&focus.includes('simulationAuthorityPreserved:true'),'simulation authority telemetry missing');
+ok(focus.includes('randomCorrection:false')&&!focus.includes('Math.random'),'random focus correction is forbidden');
+ok(focus.includes('computeSafeRect')&&focus.includes('contextWidgetBounds')&&focus.includes('projectedProtagonist'),'safe-area/projection telemetry missing');
+ok(focus.includes('EVIDENCE_FAST&&!OWN_EVIDENCE'),'unrelated evidence isolation missing');
+ok(status.includes('protagonist-focus-ui.js'),'protagonist status bootstrap must load the focus UX controller');
+console.log(JSON.stringify({wp:'WP-S003-010-003-005-003',pass:true,checks:12}));
