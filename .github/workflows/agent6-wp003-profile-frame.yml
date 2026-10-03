@@ -1,0 +1,54 @@
+name: Agent6 WP003 Profile Frame Evidence Fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/agent6-wp003-profile-frame.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp003-profile-frame
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply exact profile preservation
+        run: |
+          set -euo pipefail
+          python tools/agent6_wp003_profile_frame_patch.py
+          PYTHONDONTWRITEBYTECODE=1 python -m py_compile tools/screenshot_tool.py
+          rm -rf tools/__pycache__
+          git diff --check
+          grep -q 'def _surface_refinement_frame(driver,index,timeout,viewport=(1280,800))' tools/screenshot_tool.py
+          grep -q '_surface_refinement_frame(driver,index,args.ready_timeout,(width,height))' tools/screenshot_tool.py
+      - name: Commit harness through Contents API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          file_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/tools/screenshot_tool.py?ref=main" --jq .sha)"
+          python - "$file_sha" <<'PY'
+          import base64,json,sys
+          from pathlib import Path
+          payload={
+              "message":"test(WP-S003-010-003): preserve exact evidence viewport per frame",
+              "content":base64.b64encode(Path("tools/screenshot_tool.py").read_bytes()).decode("ascii"),
+              "sha":sys.argv[1],
+              "branch":"main",
+          }
+          Path('/tmp/wp003-profile-frame.json').write_text(json.dumps(payload),encoding='utf-8')
+          PY
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/tools/screenshot_tool.py" --input /tmp/wp003-profile-frame.json
