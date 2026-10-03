@@ -388,15 +388,15 @@ const LOCAL_DETAIL_LEVELS=Object.freeze([
   Object.freeze({id:"regional-overview",band:"regional-overview",visibleHeightMeters:400000,sampleSpacingMeters:12000,textureSize:160,reliefClampMeters:7000,reliefGain:6,maxHeightUnits:.58,staticWorld:false}),
   Object.freeze({id:"regional-detail",band:"regional-detail",visibleHeightMeters:140000,sampleSpacingMeters:4000,textureSize:192,reliefClampMeters:7000,reliefGain:5.5,maxHeightUnits:.56,staticWorld:false}),
   Object.freeze({id:"district",band:"district",visibleHeightMeters:50000,sampleSpacingMeters:1400,textureSize:256,reliefClampMeters:6000,reliefGain:9,maxHeightUnits:.65,staticWorld:false}),
-  Object.freeze({id:"local-area-wide",band:"local-area",visibleHeightMeters:20000,sampleSpacingMeters:480,textureSize:448,reliefClampMeters:5000,reliefGain:8,maxHeightUnits:.60,staticWorld:false}),
-  Object.freeze({id:"local-area",band:"local-area",visibleHeightMeters:10000,sampleSpacingMeters:220,textureSize:384,reliefClampMeters:4200,reliefGain:7,maxHeightUnits:.55,staticWorld:false}),
+  Object.freeze({id:"local-area-wide",band:"local-area",visibleHeightMeters:20000,sampleSpacingMeters:480,textureSize:640,reliefClampMeters:5000,reliefGain:8,maxHeightUnits:.60,staticWorld:false}),
+  Object.freeze({id:"local-area",band:"local-area",visibleHeightMeters:10000,sampleSpacingMeters:220,textureSize:640,reliefClampMeters:4200,reliefGain:7,maxHeightUnits:.55,staticWorld:false}),
   // These physical terrain tiers do not contain settlement geometry yet, so keep
   // the player-facing semantic band at LOCAL AREA until a static-world resource
   // is actually visible. This prevents the UI/ruler from claiming SETTLEMENT
   // while the frame still contains terrain only.
-  Object.freeze({id:"settlement-wide",band:"local-area",visibleHeightMeters:5000,sampleSpacingMeters:110,textureSize:512,reliefClampMeters:3000,reliefGain:5.5,maxHeightUnits:.50,staticWorld:false}),
-  Object.freeze({id:"settlement",band:"local-area",visibleHeightMeters:2000,sampleSpacingMeters:44,textureSize:448,reliefClampMeters:1600,reliefGain:4,maxHeightUnits:.42,staticWorld:false}),
-  Object.freeze({id:"settlement-core",band:"local-area",visibleHeightMeters:1000,sampleSpacingMeters:22,textureSize:448,reliefClampMeters:900,reliefGain:3,maxHeightUnits:.38,staticWorld:false}),
+  Object.freeze({id:"settlement-wide",band:"local-area",visibleHeightMeters:5000,sampleSpacingMeters:110,textureSize:640,reliefClampMeters:3000,reliefGain:5.5,maxHeightUnits:.50,staticWorld:false}),
+  Object.freeze({id:"settlement",band:"local-area",visibleHeightMeters:2000,sampleSpacingMeters:44,textureSize:640,reliefClampMeters:1600,reliefGain:4,maxHeightUnits:.42,staticWorld:false}),
+  Object.freeze({id:"settlement-core",band:"local-area",visibleHeightMeters:1000,sampleSpacingMeters:22,textureSize:640,reliefClampMeters:900,reliefGain:3,maxHeightUnits:.38,staticWorld:false}),
   // The first two static-world tiers visibly contain the road/building layout,
   // so they own SETTLEMENT semantics. NEAR GROUND begins only once the closer
   // resource is ready, preserving truthfulness through asynchronous handoffs.
