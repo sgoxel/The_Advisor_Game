@@ -109,12 +109,14 @@ def assert_safe(state,label):
         raise RuntimeError(f"{label}: protagonist projection outside unobscured gameplay rect: {ui}")
 
 
-def wait_protagonist_focus(driver,timeout=240):
-    _wait(driver,"""
-      window.ProtagonistFocusUI.refresh();
-      const s=PlanetStage.snapshot(),u=ProtagonistFocusUI.snapshot(),n=s.explicitFocusNavigation?.active;
-      return Boolean(u.mode==='protagonist'&&u.followEnabled&&n?.targetType==='protagonist'&&(n.state==='committed'||n.committedAtMs!=null)&&s.zoom?.visibleLevel==='ground');
-    """,timeout,"committed protagonist ground focus")
+def wait_protagonist_focus(driver,timeout=260):
+    deadline=time.monotonic()+float(timeout);last=None
+    while time.monotonic()<deadline:
+        last=snap(driver);ui=last.get("focusUI") or {};nav=(last.get("navigation") or {}).get("active") or {};zoom=last.get("zoom") or {}
+        if ui.get("focusTransactionState")=="failed":raise RuntimeError("protagonist focus transaction failed: "+json.dumps(last,sort_keys=True))
+        if ui.get("mode")=="protagonist" and ui.get("followEnabled") and nav.get("targetType")=="protagonist" and (nav.get("state")=="committed" or nav.get("committedAtMs") is not None) and zoom.get("visibleLevel")=="ground" and ui.get("focusTransactionState")=="settled":return last
+        time.sleep(.25)
+    raise RuntimeError("timeout waiting for committed protagonist ground focus; last="+json.dumps(last,sort_keys=True))
 
 
 def choose_remote(driver,village):
@@ -193,11 +195,11 @@ def core_run(seed,full):
         _wait(driver,"""
           window.ProtagonistFocusUI.refresh();
           const s=PlanetStage.snapshot(),u=ProtagonistFocusUI.snapshot(),n=s.explicitFocusNavigation?.active;
-          return Boolean(n?.targetType==='protagonist'&&u.mode==='protagonist'&&u.focusMarkerVisible===true&&s.zoom?.visibleLevel!=='ground');
+          return Boolean(n?.targetType==='protagonist'&&u.mode==='protagonist'&&u.followEnabled&&u.focusTransactionState==='settled'&&s.zoom?.visibleLevel!=='ground');
         """,8,"refreshed protagonist identity after LOD handoff")
         handoff=shot(driver,seed,"06-lod-focus-identity",records,(1440,900))
         nav=(handoff.get("navigation") or {}).get("active") or {};hui=handoff.get("focusUI") or {}
-        if nav.get("targetType")!="protagonist" or hui.get("mode")!="protagonist" or hui.get("focusMarkerVisible") is not True:raise RuntimeError("protagonist focus identity lost through LOD handoff")
+        if nav.get("targetType")!="protagonist" or hui.get("mode")!="protagonist" or hui.get("followEnabled") is not True or hui.get("focusTransactionState")!="settled":raise RuntimeError("protagonist focus identity lost through LOD handoff")
         js(driver,"window.PlanetStage.setScaleIndex(9);")
         _wait(driver,"return !PlanetStage.snapshot().zoom?.animation?.active;",120,"ground restore settle")
 

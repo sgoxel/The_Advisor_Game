@@ -1,12 +1,14 @@
 (function(root){
 "use strict";
 
-const VERSION="protagonist-focus-ui-v1";
+const VERSION="protagonist-focus-ui-v2";
 const POLL_MS=180;
 const FOLLOW_DURATION_MS=360;
 const FOLLOW_STEPS=6;
 const MIN_DEAD_ZONE_METERS=2;
 const MAX_DEAD_ZONE_METERS=36;
+const FOCUS_TRANSACTION_TIMEOUT_MS=240000;
+const FOCUS_TRANSACTION_STALE_RETRY_MS=60000;
 const EVIDENCE_FAST=typeof location!=="undefined"&&new URLSearchParams(location.search).get("evidence_fast_start")==="1";
 const OWN_EVIDENCE=typeof location!=="undefined"&&new URLSearchParams(location.search).get("wp005003_focus_evidence")==="1";
 const MANUAL_EVIDENCE_START=OWN_EVIDENCE&&typeof location!=="undefined"&&new URLSearchParams(location.search).get("wp005003_manual_start")==="1";
@@ -20,7 +22,9 @@ const state={
   safeRect:null,projectedProtagonist:null,contextWidgetBounds:null,lastFrameMs:null,
   lastProtagonist:null,lastCameraTarget:null,lastTargetId:"protagonist",lastTargetType:"protagonist",
   pointerDown:null,pointerDragSuspensions:0,telemetryUpdates:0,startedAtMs:0,
-  responsiveRefocusCount:0,focusMarkerVisible:false
+  responsiveRefocusCount:0,focusMarkerVisible:false,
+  focusTransactionState:"idle",focusTransactionSource:null,focusTransactionStartedAtMs:0,focusTransactionCompletedAtMs:0,
+  focusTransactionReason:null,focusTransactionRetryCount:0,focusTransactionHistory:[],lastFocusReadiness:null
 };
 
 let dock=null,labelNode=null,metaNode=null,exploreButton=null,returnButton=null,focusMarker=null;
@@ -143,24 +147,65 @@ function attachManualExplorationListeners(){
   host.addEventListener("pointermove",event=>{const p=state.pointerDown;if(!p||p.pointerId!==event.pointerId||!state.followEnabled)return;const d=Math.hypot(event.clientX-p.x,event.clientY-p.y);if(d>=8){state.pointerDown=null;state.pointerDragSuspensions++;markRemote("manual-camera-drag")}},true);
   const clear=()=>{state.pointerDown=null};host.addEventListener("pointerup",clear,true);host.addEventListener("pointercancel",clear,true);
 }
+function setFocusTransactionPhase(phase,reason=null){
+  const next=String(phase||"idle"),why=reason==null?null:String(reason);
+  if(state.focusTransactionState===next&&state.focusTransactionReason===why)return;
+  const stamp=Number(now().toFixed(2));state.focusTransactionState=next;state.focusTransactionReason=why;
+  state.focusTransactionHistory=[...state.focusTransactionHistory,{phase:next,atMs:stamp,reason:why}].slice(-12);
+  if(next==="requested"){state.focusTransactionStartedAtMs=stamp;state.focusTransactionCompletedAtMs=0}
+  if(next==="settled"||next==="failed"||next==="cancelled")state.focusTransactionCompletedAtMs=stamp;
+}
+function beginFocusTransaction(source,result,{preserveMode=false}={}){
+  state.focusTransactionSource=String(source||"protagonist-focus");state.focusTransactionRetryCount=0;state.lastFocusReadiness=null;state.focusTransactionHistory=[];
+  state.focusRequestId=result?.requestId||null;
+  if(result?.ok===false){state.lastError=String(result.reason||"focus request failed");setFocusTransactionPhase("failed",state.lastError);if(!preserveMode)state.mode="unavailable";return false}
+  setFocusTransactionPhase("requested",state.focusTransactionSource);return Boolean(state.focusRequestId);
+}
+function focusTransactionReadiness(snapshot,nav){
+  const spatial=snapshot?.projection?.spatialLod||{};
+  const readiness={
+    requestMatches:Boolean(nav?.targetType==="protagonist"&&nav?.requestId===state.focusRequestId),stageState:nav?.state||null,
+    committed:Boolean(nav?.state==="committed"||nav?.committedAtMs!=null),focusErrorMeters:Number(nav?.focusErrorMeters??Infinity),
+    maximumScaleReached:nav?.maximumScaleReached===true,visibleLevel:snapshot?.zoom?.visibleLevel||null,
+    protagonistBillboardVisible:Boolean(snapshot?.npcPresentation?.protagonistBillboardVisible),visibleContainsFocus:Boolean(spatial?.visibleContainsFocus)
+  };state.lastFocusReadiness=readiness;return readiness;
+}
+function syncFocusTransaction(snapshot,nav){
+  const active=["requested","preparing","ready","committed"].includes(state.focusTransactionState);if(!active)return;
+  const readiness=focusTransactionReadiness(snapshot,nav),elapsed=Math.max(0,now()-Number(state.focusTransactionStartedAtMs||now()));
+  if(readiness.requestMatches&&readiness.committed){
+    setFocusTransactionPhase("committed");state.lastTargetId="protagonist";state.lastTargetType="protagonist";state.mode="protagonist";state.followEnabled=true;state.lastError=null;render();setFocusTransactionPhase("settled");return;
+  }
+  if(readiness.requestMatches){
+    const ready=readiness.focusErrorMeters<=1&&readiness.maximumScaleReached&&readiness.visibleLevel==="ground"&&readiness.protagonistBillboardVisible&&readiness.visibleContainsFocus;
+    setFocusTransactionPhase(ready?"ready":"preparing");
+  }
+  if(elapsed>=FOCUS_TRANSACTION_STALE_RETRY_MS&&state.focusTransactionRetryCount===0&&!readiness.requestMatches){
+    try{const retry=root.PlanetStage.focusProtagonist();state.focusTransactionRetryCount=1;state.focusRequestId=retry?.requestId||state.focusRequestId;setFocusTransactionPhase("requested","stale-navigation-retry");return}
+    catch(err){state.lastError=String(err?.message||err)}
+  }
+  if(elapsed>=FOCUS_TRANSACTION_TIMEOUT_MS){
+    const reason="focus transaction timeout: "+JSON.stringify(readiness);state.lastError=reason;state.followEnabled=false;state.mode="unavailable";setFocusTransactionPhase("failed",reason);render();
+  }
+}
 function startDefaultFocus(){
   if(state.defaultFocusStarted||!stageReady())return false;
   state.defaultFocusStarted=true;state.defaultFocusCount++;state.mode="focusing";state.followEnabled=false;const before=protagonistPoint(),t=now();
   try{
-    const result=root.PlanetStage.focusProtagonist();state.focusRequestId=result?.requestId||null;state.lastAction="default-protagonist-focus";state.lastError=result?.ok===false?String(result.reason||"focus request failed"):null;
+    const result=root.PlanetStage.focusProtagonist();state.lastAction="default-protagonist-focus";state.lastError=result?.ok===false?String(result.reason||"focus request failed"):null;beginFocusTransaction(state.lastAction,result);
   }catch(err){state.lastError=String(err?.message||err);state.mode="unavailable"}
   state.lastActionMs=Number((now()-t).toFixed(2));const after=protagonistPoint();if(before&&after&&(before.x!==after.x||before.y!==after.y))state.lastError="camera focus mutated protagonist position";render();return !state.lastError;
 }
 function returnToProtagonist(source="explicit-return"){
   if(!stageReady())return false;cancelFollowAnimation();state.explicitReturnCount++;state.mode="returning";state.followEnabled=false;const before=protagonistPoint(),t=now();
-  try{const result=root.PlanetStage.focusProtagonist();state.focusRequestId=result?.requestId||null;state.lastAction=source;state.lastError=result?.ok===false?String(result.reason||"focus request failed"):null}catch(err){state.lastError=String(err?.message||err)}
+  try{const result=root.PlanetStage.focusProtagonist();state.lastAction=source;state.lastError=result?.ok===false?String(result.reason||"focus request failed"):null;beginFocusTransaction(source,result)}catch(err){state.lastError=String(err?.message||err);setFocusTransactionPhase("failed",state.lastError)}
   state.lastActionMs=Number((now()-t).toFixed(2));const after=protagonistPoint();if(before&&after&&(before.x!==after.x||before.y!==after.y))state.lastError="camera return mutated protagonist position";render();return !state.lastError;
 }
 function responsiveRefocus(){
   if(!stageReady()||state.mode!=="protagonist"||!state.followEnabled)return false;
   const before=protagonistPoint();
   try{
-    const result=root.PlanetStage.focusProtagonist();state.focusRequestId=result?.requestId||state.focusRequestId;state.responsiveRefocusCount++;state.lastAction="responsive-safe-area-refocus";
+    const result=root.PlanetStage.focusProtagonist();state.responsiveRefocusCount++;state.lastAction="responsive-safe-area-refocus";beginFocusTransaction(state.lastAction,result,{preserveMode:true});
   }catch(err){state.lastError=String(err?.message||err);return false}
   const after=protagonistPoint();if(before&&after&&(before.x!==after.x||before.y!==after.y))state.lastError="responsive camera refocus mutated protagonist position";
   return !state.lastError;
@@ -202,9 +247,10 @@ function updateProjected(snapshot,protagonist){
 function poll(){
   if(!stageReady())return;const snapshot=stageSnapshot(),protagonist=protagonistPoint(),nav=snapshot?.explicitFocusNavigation?.active||null;state.telemetryUpdates++;state.lastProtagonist=protagonist;state.lastCameraTarget=asStringPoint(snapshot?.canonicalFocus?.worldTile);
   if(nav?.targetType==="place"&&nav.requestId!==state.lastPlaceRequestId){state.lastPlaceRequestId=nav.requestId;state.lastTargetId=String(nav.targetId||"place");state.lastTargetType="place";markRemote("canonical-place-focus")}
+  syncFocusTransaction(snapshot,nav);
   if(nav?.targetType==="protagonist"&&nav.requestId===state.focusRequestId){
     state.lastTargetId="protagonist";state.lastTargetType="protagonist";
-    if(nav.state==="committed"||nav.committedAtMs!=null){state.mode="protagonist";state.followEnabled=true;state.lastError=null;render()}
+    if(nav.state==="committed"||nav.committedAtMs!=null){state.mode="protagonist";state.followEnabled=true;state.lastError=null;if(state.focusTransactionState!=="settled"){setFocusTransactionPhase("committed");setFocusTransactionPhase("settled")}render()}
   }
   if(state.mode==="protagonist")followDeadZone(snapshot,protagonist);updateProjected(snapshot,protagonist);updateFocusMarker(snapshot);
   if(state.telemetryUpdates%5===0){computeSafeRect();render()}
@@ -222,6 +268,8 @@ function snapshot(){
     safeRect:state.safeRect,contextWidgetBounds:state.contextWidgetBounds,deadZoneMeters:state.deadZoneMeters,lastFollowDistanceMeters:state.lastFollowDistanceMeters,
     followCorrections:state.followCorrections,followAnimationActive:state.followAnimationActive,followAnimationCancels:state.followAnimationCancels,hardSnapCount:state.hardSnapCount,pointerDragSuspensions:state.pointerDragSuspensions,responsiveRefocusCount:state.responsiveRefocusCount,focusMarkerVisible:state.focusMarkerVisible,
     navigationTimingMs:state.lastActionMs,lastAction:state.lastAction,lastFrameMs:state.lastFrameMs,lastError:state.lastError,
+    focusTransactionState:state.focusTransactionState,focusTransactionSource:state.focusTransactionSource,focusTransactionReason:state.focusTransactionReason,
+    focusTransactionStartedAtMs:state.focusTransactionStartedAtMs,focusTransactionCompletedAtMs:state.focusTransactionCompletedAtMs,focusTransactionRetryCount:state.focusTransactionRetryCount,focusTransactionHistory:state.focusTransactionHistory.map(item=>({...item})),lastFocusReadiness:state.lastFocusReadiness?{...state.lastFocusReadiness}:null,
     activeFootprint:stage?.projection?.spatialLod?.activeFootprint||stage?.zoom?.visibleFootprintHeightMeters||null,
     stageFocusMode:nav?.targetType||null,stageTargetId:nav?.targetId||null,stageNavigationState:nav?.state||null,
     simulationMutation:false,simulationAuthorityPreserved:true,randomCorrection:false,fullWorldScan:false,perFrameWorldScan:false
