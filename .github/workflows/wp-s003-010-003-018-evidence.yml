@@ -56,74 +56,98 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
 
           path = Path('tools/test_wp_s003_010_003_018.py')
-          text = path.read_text(encoding='utf-8')
+          lines = path.read_text(encoding='utf-8').splitlines()
 
-          def sub_once(pattern, replacement, label, flags=0):
-              global text
-              text, count = re.subn(pattern, replacement, text, count=1, flags=flags)
-              if count != 1:
-                  raise SystemExit(f'{label}: expected one match, found {count}')
+          def find_line(value, start=0):
+              for i in range(start, len(lines)):
+                  if lines[i].strip() == value:
+                      return i
+              raise SystemExit(f'missing source line: {value}')
 
-          sub_once(
-              r'def assert_bounded_first_progress\(start_scalar, current_scalar, target_scalar, label\):.*?(?=\n\ndef transition_to)',
-              '''def assert_command_continuity(start_scalar, current_scalar, target_scalar, label):
-              delta = abs(current_scalar - start_scalar)
-              if delta > 1e-7:
-                  raise AssertionError(
-                      f"{label}: rendered scalar changed in the same command task "
-                      f"(start={start_scalar}, current={current_scalar}, target={target_scalar}, delta={delta})"
-                  )''',
-              'continuity helper',
-              re.S,
-          )
+          helper_start = find_line('def assert_bounded_first_progress(start_scalar, current_scalar, target_scalar, label):')
+          transition_start = find_line('def transition_to(driver, index, tag, focus0, pose0, screenshot=True, settle_detail=True):', helper_start + 1)
+          helper = [
+              'def assert_command_continuity(start_scalar, current_scalar, target_scalar, label):',
+              '    delta = abs(current_scalar - start_scalar)',
+              '    if delta > 1e-7:',
+              '        raise AssertionError(',
+              '            f"{label}: rendered scalar changed in the same command task "',
+              '            f"(start={start_scalar}, current={current_scalar}, target={target_scalar}, delta={delta})"',
+              '        )',
+              '',
+              '',
+          ]
+          lines[helper_start:transition_start] = helper
 
-          sub_once(
-              r'(def transition_to\(driver, index, tag, focus0, pose0, screenshot=True, settle_detail=True\):\n)\s*before = snap\(driver\)\n\s*before_scalar = float\(before\["zoom"\]\["scalar"\]\)\n\s*driver\.execute_script\("window\.PlanetStage\.setAnimatedScaleIndex\(arguments\[0\],arguments\[1\]\);", int\(index\), tag\)\n\s*commanded = snap\(driver\)',
-              '''\\1    command_probe = driver.execute_script("""
-              const before=window.PlanetStage.snapshot();
-              window.PlanetStage.setAnimatedScaleIndex(arguments[0],arguments[1]);
-              const commanded=window.PlanetStage.snapshot();
-              return {before,commanded};
-            """, int(index), tag)
-              before = command_probe["before"]
-              before_scalar = float(before["zoom"]["scalar"])
-              commanded = command_probe["commanded"]''',
-              'transition atomic probe',
-          )
+          transition_start = find_line('def transition_to(driver, index, tag, focus0, pose0, screenshot=True, settle_detail=True):')
+          expected = [
+              'before = snap(driver)',
+              'before_scalar = float(before["zoom"]["scalar"])',
+              'driver.execute_script("window.PlanetStage.setAnimatedScaleIndex(arguments[0],arguments[1]);", int(index), tag)',
+              'commanded = snap(driver)',
+          ]
+          if [lines[transition_start + j].strip() for j in range(1, 5)] != expected:
+              raise SystemExit('transition command source changed')
+          transition_probe = [
+              '    command_probe = driver.execute_script("""',
+              '      const before=window.PlanetStage.snapshot();',
+              '      window.PlanetStage.setAnimatedScaleIndex(arguments[0],arguments[1]);',
+              '      const commanded=window.PlanetStage.snapshot();',
+              '      return {before,commanded};',
+              '    """, int(index), tag)',
+              '    before = command_probe["before"]',
+              '    before_scalar = float(before["zoom"]["scalar"])',
+              '    commanded = command_probe["commanded"]',
+          ]
+          lines[transition_start + 1:transition_start + 5] = transition_probe
+
+          wheel = find_line('wheel_before = snap(driver)')
+          wheel_expected = [
+              'wheel_before = snap(driver)',
+              'driver.execute_script("arguments[0].dispatchEvent(new WheelEvent(\'wheel\',{deltaY:-100,bubbles:true,cancelable:true}));", canvas)',
+              'wheel_commanded = snap(driver)',
+          ]
+          if [lines[wheel + j].strip() for j in range(3)] != wheel_expected:
+              raise SystemExit('wheel command source changed')
+          wheel_probe = [
+              '        wheel_probe = driver.execute_script("""',
+              '          const before=window.PlanetStage.snapshot();',
+              '          arguments[0].dispatchEvent(new WheelEvent(\'wheel\',{deltaY:-100,bubbles:true,cancelable:true}));',
+              '          const commanded=window.PlanetStage.snapshot();',
+              '          return {before,commanded};',
+              '        """, canvas)',
+              '        wheel_before = wheel_probe["before"]',
+              '        wheel_commanded = wheel_probe["commanded"]',
+          ]
+          lines[wheel:wheel + 3] = wheel_probe
+
+          retarget = find_line('mid = snap(driver)')
+          retarget_expected = [
+              'mid = snap(driver)',
+              'scalar_mid = float(mid["zoom"]["scalar"])',
+              'driver.execute_script("window.PlanetStage.setAnimatedScaleIndex(3,\'retarget-reverse\');")',
+              'immediately = snap(driver)',
+          ]
+          if [lines[retarget + j].strip() for j in range(4)] != retarget_expected:
+              raise SystemExit('retarget command source changed')
+          retarget_probe = [
+              '        retarget_probe = driver.execute_script("""',
+              '          const before=window.PlanetStage.snapshot();',
+              '          window.PlanetStage.setAnimatedScaleIndex(3,\'retarget-reverse\');',
+              '          const commanded=window.PlanetStage.snapshot();',
+              '          return {before,commanded};',
+              '        """)',
+              '        mid = retarget_probe["before"]',
+              '        scalar_mid = float(mid["zoom"]["scalar"])',
+              '        immediately = retarget_probe["commanded"]',
+          ]
+          lines[retarget:retarget + 4] = retarget_probe
+
+          text = '\n'.join(lines) + '\n'
           text = text.replace('assert_bounded_first_progress(', 'assert_command_continuity(')
-
-          sub_once(
-              r'\s*wheel_before = snap\(driver\)\n\s*driver\.execute_script\("arguments\[0\]\.dispatchEvent\(new WheelEvent\(\'wheel\',\{deltaY:-100,bubbles:true,cancelable:true\}\)\);", canvas\)\n\s*wheel_commanded = snap\(driver\)',
-              '''
-              wheel_probe = driver.execute_script("""
-                const before=window.PlanetStage.snapshot();
-                arguments[0].dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}));
-                const commanded=window.PlanetStage.snapshot();
-                return {before,commanded};
-              """, canvas)
-              wheel_before = wheel_probe["before"]
-              wheel_commanded = wheel_probe["commanded"]''',
-              'wheel atomic probe',
-          )
-
-          sub_once(
-              r'\s*mid = snap\(driver\)\n\s*scalar_mid = float\(mid\["zoom"\]\["scalar"\]\)\n\s*driver\.execute_script\("window\.PlanetStage\.setAnimatedScaleIndex\(3,\'retarget-reverse\'\);"\)\n\s*immediately = snap\(driver\)',
-              '''
-              retarget_probe = driver.execute_script("""
-                const before=window.PlanetStage.snapshot();
-                window.PlanetStage.setAnimatedScaleIndex(3,'retarget-reverse');
-                const commanded=window.PlanetStage.snapshot();
-                return {before,commanded};
-              """)
-              mid = retarget_probe["before"]
-              scalar_mid = float(mid["zoom"]["scalar"])
-              immediately = retarget_probe["commanded"]''',
-              'retarget atomic probe',
-          )
-
+          compile(text, str(path), 'exec')
           path.write_text(text, encoding='utf-8')
           PY
 
