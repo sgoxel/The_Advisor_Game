@@ -141,3 +141,17 @@ try{
 
 return freeze({VERSION,EVIDENCE_MODES,MAX_GOALS,MAX_ITEMS,MAX_GUIDANCE,MAX_SCOPES,evidenceModel,runtimeModel,currentModel,setEvidenceMode,markup,snapshot});
 });
+/* WP-S003-010-003-005-003: presentation-only focus UX bootstrap. */
+;(function(root){
+  "use strict";
+  if(typeof document==="undefined")return;
+  function load(){
+    if(root.ProtagonistFocusUI||document.querySelector('script[data-protagonist-focus-ui-loader]'))return;
+    const script=document.createElement("script");
+    script.src="scripts/ui/protagonist-focus-ui.js?v=protagonist-focus-ui-v1";
+    script.async=false;
+    script.dataset.protagonistFocusUiLoader="true";
+    document.head.appendChild(script);
+  }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",load,{once:true});else load();
+})(typeof globalThis!=="undefined"?globalThis:this);
