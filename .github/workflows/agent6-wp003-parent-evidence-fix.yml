@@ -31,16 +31,20 @@ jobs:
           git diff --check
           grep -q 'WP_VIEWPORT_REFINEMENT_SCENARIO="wp-s003-010-003"' tools/screenshot_tool.py
           grep -q 'WP_SURFACE_REFINEMENT_SCENARIO,WP_VIEWPORT_REFINEMENT_SCENARIO' tools/screenshot_tool.py
-      - name: Commit evidence harness correction
+      - name: Commit evidence harness correction through Contents API
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tools/screenshot_tool.py
-          if git diff --cached --quiet; then
+          if git diff --quiet -- tools/screenshot_tool.py; then
             echo "WP003 parent evidence routing already current"
             exit 0
           fi
-          git commit -m "test(WP-S003-010-003): capture refinement sequence for parent WP"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          file_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/tools/screenshot_tool.py?ref=main" --jq .sha)"
+          content="$(base64 -w0 tools/screenshot_tool.py)"
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/tools/screenshot_tool.py" \
+            -f message='test(WP-S003-010-003): capture refinement sequence for parent WP' \
+            -f content="$content" \
+            -f sha="$file_sha" \
+            -f branch=main >/tmp/wp003-parent-evidence-update.json
+          cat /tmp/wp003-parent-evidence-update.json
