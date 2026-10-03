@@ -7559,9 +7559,9 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   const wStrategic=detailOctaveWeight(48000,metersPerTexel),wStrategicMid=detailOctaveWeight(16000,metersPerTexel),
     wStrategicFine=detailOctaveWeight(5200,metersPerTexel);
   const wBroad=detailOctaveWeight(3600,metersPerTexel),wMid=detailOctaveWeight(1500,metersPerTexel),
-    wField=detailOctaveWeight(700,metersPerTexel),wParcelDetail=colorDetailOctaveWeight(460,metersPerTexel),
-    wFine=colorDetailOctaveWeight(280,metersPerTexel),wCopse=colorDetailOctaveWeight(120,metersPerTexel),
-    wGroundDetail=colorDetailOctaveWeight(90,metersPerTexel),wLocalDetail=colorDetailOctaveWeight(48,metersPerTexel),
+    wField=detailOctaveWeight(700,metersPerTexel),wParcelDetail=detailOctaveWeight(460,metersPerTexel),
+    wFine=detailOctaveWeight(280,metersPerTexel),wCopse=detailOctaveWeight(120,metersPerTexel),
+    wGroundDetail=detailOctaveWeight(90,metersPerTexel),wLocalDetail=colorDetailOctaveWeight(48,metersPerTexel),
     wMicroDetail=colorDetailOctaveWeight(18,metersPerTexel),wSubLocalDetail=colorDetailOctaveWeight(9,metersPerTexel);
   if(wStrategic<=0&&wBroad<=0)return [0,0,0];
   const alpine=smoothstep01((elevation-2200)/900),lowland=1-alpine;
@@ -7595,7 +7595,7 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   // registered-meter octaves as the physical texel size shrinks. This prevents
   // the settlement/near-ground children from becoming smoother than their
   // parent even though their source raster and geometry are denser.
-  const closeDetailGain=1+smoothstep01(clamp((80-metersPerTexel)/72,0,1))*.75;
+  const closeDetailGain=1+smoothstep01(clamp((80-metersPerTexel)/72,0,1))*.55;
   const mottle=(surfaceValueNoise(we,wn,700,salt+31)*.024*wField+
     surfaceValueNoise(we,wn,460,salt+33)*.030*wParcelDetail+
     surfaceValueNoise(we,wn,280,salt+37)*.026*wFine+
@@ -7753,7 +7753,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // 1x child visibly richer inside a rectangular footprint. Let any physically
   // eligible layer sample the identical world-registered micro field; context
   // gain is bounded below by its refinement weight.
-  const useMicroDetail=sharedMetersPerTexel<=4;
+  const useMicroDetail=metersPerTexel<=6;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   // Surface relief is presented as continuous hillshade, not synthetic
   // cartographic contour bands. The previous 420 m sine contours and strong
@@ -7875,7 +7875,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // every layer. Strengthen only this zero-mean refinement as physical texel
       // size enters the local range; the common parent photometry is unchanged.
       const localNativeResidualBand=smoothstep01(clamp((72-metersPerTexel)/60,0,1));
-      const localNativeResidualBoost=1+localNativeResidualBand*.60;
+      const localNativeResidualBoost=1+localNativeResidualBand*.38;
       const refinementGain=(contextRing?contextRefineWeight*contextResidualGain:focusRefineWeight*.94*strategicFocusResidualScale)*localNativeResidualBoost;
       // Regional parents are physically coarse but still need readable landform
       // structure while finer children stream. Reuse the already-computed,
@@ -8131,11 +8131,12 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       }
       if(useMicroDetail){
         const micro=localSurfaceSample(worldEast,worldNorth,sample).color;
-        // As the physical texel size approaches gameplay scale, let canonical
-        // registered-meter micro terrain carry more of the surface. This keeps
-        // close props visually grounded while coarser views retain macro identity.
-        const closeWeight=smoothstep01((4-baseTransferMetersPerTexel)/3.5);
-        const microWeight=lerp(.16,.32,closeWeight);
+        // Admit the already-authoritative 34/12/4.2 m micro field by this
+        // layer's real texel density, not by the coarsest fallback. Edge/context
+        // ownership weights make this a refinement residual instead of a card.
+        const closeWeight=smoothstep01(clamp((6-metersPerTexel)/5.5,0,1));
+        const microContinuity=contextRing?clamp(Math.max(.32,contextRefineWeight),0,1):focusRefineWeight;
+        const microWeight=lerp(.10,.30,closeWeight)*microContinuity;
         displayColor=displayColor.map((v,i)=>clamp(v*(1-microWeight)+micro[i]*microWeight,0,1));
       }
       // High peaks are legitimately snow-covered, but the canonical near-white
@@ -8171,7 +8172,9 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       if(livingWorldStyleWeight>.001){
         const role=localSurfaceStyleRole(parentSample),styled=worldStyleRgb(role,displayColor);
         displayColor=displayColor.map((v,i)=>clamp(lerp(v,styled[i],livingWorldStyleWeight),0,1));
-        const closeTextureBand=styleContract.closeSurfaceVariation===false?0:livingWorldStyleWeight*smoothstep01(clamp((4-baseTransferMetersPerTexel)/3.5,0,1));
+        const closeTextureEligibility=smoothstep01(clamp((2.4-metersPerTexel)/2,0,1));
+        const closeTextureContinuity=contextRing?contextRefineWeight:focusRefineWeight;
+        const closeTextureBand=styleContract.closeSurfaceVariation===false?0:livingWorldStyleWeight*closeTextureEligibility*closeTextureContinuity;
         if(closeTextureBand>.001&&["terrain:grass","terrain:forest","terrain:farmland"].includes(role)){
           const broadStyle=surfaceValueNoise(worldEast,worldNorth,5.5,detailSalt+307),fineStyle=surfaceValueNoise(worldEast,worldNorth,1.4,detailSalt+331),microStyle=surfaceValueNoise(worldEast,worldNorth,.62,detailSalt+349);
           const patch=(broadStyle*.145+fineStyle*.070+microStyle*.035)*closeTextureBand;
