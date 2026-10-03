@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   patch:
-    if: github.event_name == 'push' || (github.event.issue.number == 169 && github.event.comment.body == '/agent6-wp014-patch-scale')
+    if: github.event_name == 'push' || (github.event.issue.number == 169 && github.event.comment.body == '/agent6-wp014-patch-readiness')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,25 +26,25 @@ jobs:
           fetch-depth: 0
       - name: Rebase on latest main
         run: git pull --ff-only origin main
-      - name: Patch ready-visible scale presentation
+      - name: Patch ready-visible scale and progressive readiness handoff
         run: |
           python - <<'PY'
           from pathlib import Path
           path = Path('scripts/world/planet-stage.js')
           text = path.read_text()
-          if 'const readyRepresentationPending=' in text:
-              print('ready-visible scale presentation already patched')
-              raise SystemExit(0)
-          anchor = '  const transitionText=zoomState.animating&&scaleState.label!==targetScaleState.label'
-          if text.count(anchor) != 1:
-              raise SystemExit(f'Expected exactly one transition anchor, found {text.count(anchor)}')
-          start = text.index(anchor)
-          end = text.index('\n  mapPresentation={', start)
-          old = text[start:end]
-          expected = 'scale.querySelector(".planet-scale-meta strong").textContent=scaleState.label'
-          if expected not in old:
-              raise SystemExit('Scale-strip assignment changed unexpectedly; refusing patch')
-          new = '''  // WP-S003-010-003-014: while a finer requested resource is still preparing,
+          changed = False
+
+          if 'const readyRepresentationPending=' not in text:
+              anchor = '  const transitionText=zoomState.animating&&scaleState.label!==targetScaleState.label'
+              if text.count(anchor) != 1:
+                  raise SystemExit(f'Expected exactly one transition anchor, found {text.count(anchor)}')
+              start = text.index(anchor)
+              end = text.index('\n  mapPresentation={', start)
+              old = text[start:end]
+              expected = 'scale.querySelector(".planet-scale-meta strong").textContent=scaleState.label'
+              if expected not in old:
+                  raise SystemExit('Scale-strip assignment changed unexpectedly; refusing patch')
+              new = '''  // WP-S003-010-003-014: while a finer requested resource is still preparing,
           // every scale/semantic cue must describe the representation that is actually
           // ready and visible. Never advertise the requested target ahead of the atomic handoff.
           const readyRepresentationPending=Boolean(localResources.requestedSignature&&localResources.activeSignature!==localResources.requestedSignature);
@@ -55,7 +55,49 @@ jobs:
             ?readyScaleState.label+" → "+targetScaleState.label
             :semantic.displayBand;
           const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=readyScaleState.label;scale.querySelector(".planet-scale-meta span").textContent=transitionText;scale.querySelector(".planet-scale-line").style.width=ruler.pixelLength.toFixed(2)+"px";scale.querySelector("small").textContent=formatDistanceMeters(ruler.distanceMeters);'''
-          path.write_text(text[:start] + new + text[end:])
+              text = text[:start] + new + text[end:]
+              changed = True
+
+          if 'const readinessResource=' not in text:
+              old = '''  const nativeVisibleHeight=Math.max(
+    GROUND_FOOTPRINT_HEIGHT_METERS,
+    Number(displayResource.dims?.visibleHeight||displayResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)
+  );'''
+              if text.count(old) != 1:
+                  raise SystemExit(f'Expected exactly one readiness-height anchor, found {text.count(old)}')
+              new = '''  // A completed next-child prewarm is already real ready coverage. Let the
+  // camera advance far enough to request/swap that cached child; otherwise the
+  // parent leash can hold below the child threshold forever even though the
+  // child is prepared, creating a deterministic zoom-readiness deadlock.
+  let readinessResource=displayResource;
+  if(zoomState.animating&&zoomState.targetScalar>zoomState.scalar&&displayResource.levelIndex<LOCAL_DETAIL_LEVELS.length-1){
+    const readyChildSignature=localSignatureFor(displayResource.levelIndex+1,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+    const readyChild=localResourceCache.get(readyChildSignature);
+    if(readyChild)readinessResource=readyChild;
+  }
+  const nativeVisibleHeight=Math.max(
+    GROUND_FOOTPRINT_HEIGHT_METERS,
+    Number(readinessResource.dims?.visibleHeight||readinessResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)
+  );'''
+              text = text.replace(old, new, 1)
+              changed = True
+
+          if 'const activePrefetchNeedsNext=' not in text:
+              old = '  if(zoomState.targetPrefetchState==="deferred"&&!localJob)requestZoomTargetPrefetch();'
+              if text.count(old) != 1:
+                  raise SystemExit(f'Expected exactly one target-prefetch continuation anchor, found {text.count(old)}')
+              new = '''  // Once a prepared target child has become the active ready representation,
+  // immediately stage the next canonical child toward the same final zoom target.
+  // This keeps deep animated zoom progressive without bypassing atomic readiness.
+  const activePrefetchNeedsNext=zoomState.targetPrefetchState==="ready"&&!localJob&&displayResource?.signature===zoomState.targetPrefetchSignature&&displayResource.levelIndex<rawLodIndexForZoom(target);
+  if((zoomState.targetPrefetchState==="deferred"&&!localJob)||activePrefetchNeedsNext)requestZoomTargetPrefetch();'''
+              text = text.replace(old, new, 1)
+              changed = True
+
+          if changed:
+              path.write_text(text)
+          else:
+              print('WP014 readiness patch already present')
           PY
       - name: Commit patch
         run: |
@@ -67,6 +109,6 @@ jobs:
             exit 0
           fi
           git diff --cached --check
-          git commit -m "fix(WP-S003-010-003-014): bind scale cues to ready representation"
+          git commit -m "fix(WP-S003-010-003-014): advance through ready prefetched children"
           git pull --rebase origin main
           git push origin HEAD:main
