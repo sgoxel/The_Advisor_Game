@@ -1,0 +1,96 @@
+name: AGENT6 WP005003 Focus UX
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/agent6-wp005003-focus.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp005003-focus
+  cancel-in-progress: false
+
+jobs:
+  implement-and-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install evidence dependencies
+        run: python -m pip install -r tools/requirements.txt
+      - name: Wire focus controller through existing protagonist UI bootstrap
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/ui/protagonist-status-ui.js')
+          text=p.read_text(encoding='utf-8')
+          marker='data-protagonist-focus-ui-loader'
+          if marker not in text:
+              text += r'''
+
+/* WP-S003-010-003-005-003: presentation-only focus UX bootstrap. */
+;(function(root){
+  "use strict";
+  if(typeof document==="undefined")return;
+  function load(){
+    if(root.ProtagonistFocusUI||document.querySelector('script[data-protagonist-focus-ui-loader]'))return;
+    const script=document.createElement("script");
+    script.src="scripts/ui/protagonist-focus-ui.js?v=protagonist-focus-ui-v1";
+    script.async=false;
+    script.dataset.protagonistFocusUiLoader="true";
+    document.head.appendChild(script);
+  }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",load,{once:true});else load();
+})(typeof globalThis!=="undefined"?globalThis:this);
+'''
+              p.write_text(text,encoding='utf-8')
+          PY
+      - name: Static contract test
+        run: node tools/tests/wp-s003-010-003-005-003-protagonist-focus-ui.test.js
+      - name: Commit and push product wiring
+        id: product
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/ui/protagonist-status-ui.js
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat(WP-S003-010-003-005-003): wire protagonist-first focus UX'
+          fi
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Start exact product server
+        run: |
+          python -m http.server 8000 --bind 127.0.0.1 >/tmp/wp005003-http.log 2>&1 &
+          echo $! >/tmp/wp005003-http.pid
+          sleep 1
+      - name: Functional and fresh visual evidence
+        id: evidence
+        run: |
+          rm -rf tools/screenshots/wp-s003-010-003-005-003
+          TARGET=http://127.0.0.1:8000/ python tools/wp_s003_010_003_005_003_evidence.py | tee /tmp/wp005003-evidence.log
+          cp /tmp/wp005003-evidence.log tools/screenshots/wp-s003-010-003-005-003/run.log
+          printf '%s\n' '${{ steps.product.outputs.sha }}' > tools/screenshots/wp-s003-010-003-005-003/product-sha.txt
+      - name: Upload evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-s003-010-003-005-003-focus-evidence
+          path: |
+            tools/screenshots/wp-s003-010-003-005-003
+            /tmp/wp005003-http.log
+          if-no-files-found: warn
+          retention-days: 14
