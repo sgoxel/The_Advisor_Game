@@ -37,10 +37,11 @@ jobs:
             echo "WP007 runtime already current"
             exit 0
           fi
-          git commit -m "fix(WP-S003-010-003-007): restore early settlement readability"
+          git commit -m "fix(WP-S003-010-003-007): smooth progressive settlement reveal"
           git reset --hard HEAD
           git clean -fd
           git pull --rebase origin main
           git push origin HEAD:main
 
 # AGENT #6 Attempt 1 trigger: 2026-10-03T04:19+03:00
+# AGENT #6 continuation trigger: monotonic 18/28/46 percent reveal ladder
