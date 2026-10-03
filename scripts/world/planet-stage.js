@@ -4456,7 +4456,9 @@ function revealPresentationScale(dims,tier,coreDiameterMeters){
   // WP-S003-010-003-007: keep overview sizing bound to the prepared world
   // resource so apparent village size remains stable across a resource handoff.
   // Only the coarse tier gets a modest readability lift before refined 1:1 detail.
-  const targetFraction=tier==="footprint"?.16:tier==="route"?.17:tier==="coarse"?.33:.22;
+  // Match the coarse overview footprint to the next canonical near-ground framing so
+  // zoom refinement adds detail without making the same village jump larger on screen.
+  const targetFraction=tier==="footprint"?.16:tier==="route"?.17:tier==="coarse"?.52:.22;
   const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
   const cap=tier==="footprint"?400:tier==="route"?200:tier==="coarse"?90:18;
   return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
@@ -5036,7 +5038,9 @@ function updateWayfindingTextOverlay(force=false){
 }
 function buildCanonicalWayfindingSignposts(reveal,tier,frame,presentationScale,unit,lift){
   const started=performance.now();clearCanonicalWayfindingSignposts();
-  if(!["refined","full"].includes(String(tier))||!window.RoadSignposts?.build||!localStaticRoot||!pc||!device)return 0;
+  // Refined scale is the topology/detail handoff: keep large destination panels out of
+  // the settlement center until full/ground presentation, where they no longer mask it.
+  if(String(tier)!=="full"||!window.RoadSignposts?.build||!localStaticRoot||!pc||!device)return 0;
   ensureLocalStaticMaterials();
   const model=window.RoadSignposts.build(activeSeed),positions=[],normals=[],colors=[],indices=[],panelAnchors=[];
   const s=Number(presentationScale||1)/Math.max(1e-9,Number(unit)||1),tm=Math.max(1,Number(reveal?.tileMeters||window.WorldStandards?.TILE_METERS||2));
@@ -6378,8 +6382,11 @@ function addCanonicalSettlementDressing(reveal,tier,frame,scale,unit,lift=0){
     }
     return added;
   };
+  // Phase bounded canonical dressing across the refined -> full handoff instead of
+  // materializing the whole prop set at the same instant as roofs/facades.
+  const descriptorCap=tier==="refined"?24:64;
   for(const descriptor of plan){
-    if(count>=64)break;
+    if(count>=descriptorCap)break;
     renderDescriptor(descriptor);
   }
   return {
