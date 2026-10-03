@@ -4446,16 +4446,16 @@ function canonicalStartingVillageReveal(resource){
   const base=settlementRevealCache.value;if(!base)return null;
   return Object.freeze({...base,focusTile,resourceTile,distanceTiles,viewportRadiusTiles,canonicalRevealRadiusTiles});
 }
-function revealPresentationScale(dims,tier,coreDiameterMeters){
+function revealPresentationScale(dims,tier,coreDiameterMeters,visibleHeightMeters=zoomState.visibleFootprintHeightMeters){
   if(tier==="full")return 1;
   // WP-S003-010-003-007: the coarse settlement envelope must remain readable
-  // in screen space while preserving the exact canonical plan underneath it.
-  // These values restore the previously accepted progressive reveal contract:
-  // early tiers may exaggerate authoritative geometry for readability, then the
-  // representation converges naturally to physical 1:1 by the full tier.
-  const targetFraction=tier==="footprint"?.16:tier==="route"?.17:tier==="coarse"?.22:.22;
-  const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
-  const cap=tier==="footprint"?400:tier==="route"?200:tier==="coarse"?90:18;
+  // in screen space across terrain-resource swaps while preserving the exact
+  // canonical plan underneath it. Terrain patch dimensions vary by LOD, so they
+  // cannot be used as a stable presentation scale reference.
+  const targetFraction=tier==="footprint"?.24:tier==="route"?.34:tier==="coarse"?.42:.42;
+  const visibleHeight=Number(visibleHeightMeters),referenceHeight=Number.isFinite(visibleHeight)&&visibleHeight>0?visibleHeight:Number(dims.patchHeight||0);
+  const desiredSpan=Math.max(coreDiameterMeters,referenceHeight*targetFraction);
+  const cap=tier==="footprint"?750:tier==="route"?600:tier==="coarse"?90:18;
   return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
 }
 function settlementPresentationLift(tier,value=zoomState.scalar){
@@ -7066,7 +7066,7 @@ window.addEventListener("advisor:world-state-delta-change",handlePersistentConse
 function rebuildCanonicalSettlementPresentation(resource,reveal,tier,frame){
   const started=performance.now(),dims=resource.dims,unit=dims.metersPerUnit,plan=reveal.settlement,village=reveal.village;
   const dressingFocusKey=String(reveal.focusTile?.x||"")+","+String(reveal.focusTile?.y||"");
-  const scale=revealPresentationScale(dims,tier,Number(village.approximateCoreDiameterMeters||104));
+  const scale=revealPresentationScale(dims,tier,Number(village.approximateCoreDiameterMeters||104),zoomState.visibleFootprintHeightMeters);
   const villageOrigin=worldLatLonForTile(village.center.x,village.center.y),anchorDelta=canonicalRegisteredDeltaMeters(resource.lat0,resource.lon0,villageOrigin.latitudeRadians,villageOrigin.longitudeRadians);
   const semanticFrame={...frame,semanticAnchorEastMeters:Number(anchorDelta.eastMeters||0),semanticAnchorNorthMeters:Number(anchorDelta.northMeters||0)};
   ensureLocalStaticMaterials();localStaticRoot=new pc.Entity("CanonicalSettlementReveal");tangentPatch.addChild(localStaticRoot);
