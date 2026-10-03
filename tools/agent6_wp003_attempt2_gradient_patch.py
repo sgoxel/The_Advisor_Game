@@ -38,8 +38,10 @@ new_helper='''function surfaceStructuredNoise(worldEastMeters,worldNorthMeters,s
 }'''
 updated=replace_once(updated,old_helper,new_helper,"structured helper")
 
-# Lower contrast in the mid/high bands that inspection showed as coarse mottling.
-# The same physical wavelengths and admission thresholds remain unchanged.
+# Inspection isolated the coarse mottling to the first six admitted bands.
+# Lower only those confirmed anchors; later frequencies keep their current-main
+# values and still receive the slope transform, avoiding guesses across other
+# agents' concurrently revised close-scale tuning.
 replacements={
     '32000,salt+11)*.018':'32000,salt+11)*.016',
     '9500,salt+29)*.034':'9500,salt+29)*.028',
@@ -47,17 +49,9 @@ replacements={
     '1200,salt+59)*.026':'1200,salt+59)*.018',
     '420,salt+71)*.014':'420,salt+71)*.010',
     '160,salt+83)*.032':'160,salt+83)*.014',
-    '260,salt+101)*.034':'260,salt+101)*.014',
-    '95,salt+113)*.025':'95,salt+113)*.012',
-    '48,salt+127)*.020':'48,salt+127)*.010',
-    '24,salt+139)*.018':'24,salt+139)*.008',
-    '8,salt+151)*.012':'8,salt+151)*.007',
-    '3,salt+163)*.008':'3,salt+163)*.005',
 }
 for old,new in replacements.items():
-    if old not in updated:
-        raise SystemExit(f"gain anchor missing: {old}")
-    updated=updated.replace(old,new,1)
+    updated=replace_once(updated,old,new,f"gain {old}")
 
 updated=replace_once(
     updated,
