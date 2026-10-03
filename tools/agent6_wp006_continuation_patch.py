@@ -3,19 +3,32 @@ from pathlib import Path
 
 path = Path("scripts/world/planet-stage.js")
 text = path.read_text(encoding="utf-8")
-old = '''// Medium continuation textures are presentation coverage, not canonical tile
-// boundaries. Fade them radially across most of their span so the prepared
-// parent remains continuous without exposing a rectangular streaming footprint.
-const LOCAL_CONTEXT_RING_RADIAL_FEATHER=.62;'''
-new = '''// Medium continuation textures are presentation coverage, not canonical tile
-// boundaries. Keep their higher-density ready parent opaque across the viewport
-// and feather only near the physical 3x ring edge, where the 6x outer fallback
-// takes over. This prevents a centered LOD ownership footprint while retaining
-// bounded world-matched fallback coverage during larger focus offsets.
-const LOCAL_CONTEXT_RING_RADIAL_FEATHER=.16;'''
-count = text.count(old)
-if count != 1:
-    raise SystemExit(f"WP006 continuation feather anchor: expected 1, found {count}")
-updated = text.replace(old, new, 1)
+updated = text
+
+anchors = [
+    (
+        "const LOCAL_MEDIUM_RING_SPAN_FACTOR=3;",
+        "const LOCAL_MEDIUM_RING_SPAN_FACTOR=6;",
+        "medium continuation span",
+    ),
+    (
+        "const LOCAL_SURROUND_SPAN_FACTOR=6;",
+        "const LOCAL_SURROUND_SPAN_FACTOR=12;",
+        "outer continuation span",
+    ),
+    (
+        "and feather only near the physical 3x ring edge, where the 6x outer fallback\n// takes over.",
+        "and feather only near the physical 6x ring edge, where the 12x outer fallback\n// takes over.",
+        "continuation comment",
+    ),
+]
+for old, new, label in anchors:
+    count = updated.count(old)
+    if count != 1:
+        raise SystemExit(f"WP006 {label}: expected 1 anchor, found {count}")
+    updated = updated.replace(old, new, 1)
+
+if updated == text:
+    raise SystemExit("WP006 attempt 3 produced no change")
 path.write_text(updated, encoding="utf-8")
-print("patched WP-S003-010-003-006 continuation feather")
+print("patched WP-S003-010-003-006 continuation spans to 6x/12x")
