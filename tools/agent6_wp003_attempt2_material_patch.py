@@ -13,18 +13,24 @@ def replace_once(source,old,new,label):
     return source.replace(old,new,1)
 
 # WP-S003-010-003 / AGENT #6 / Attempt 2.
-# Attempt 1 proved that converting only the macro residual to a ridge-like signal
-# still leaves the dominant land-cover and close albedo paths as bilinearly smooth
-# value-noise. Keep the identical Campaign-SEED registered sample locations and
-# call count, but make those already-paid material frequencies read as bounded
-# vegetation/soil regions and edges as physical texel size shrinks.
+# The directional-slope pass is now the accepted Attempt-2 base. Keep that exact
+# registered terrain helper and add a separate presentation-only material transform
+# for land cover / close albedo paths that still read as bilinearly smooth fields.
 anchor='''function surfaceStructuredNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt){
-  const value=surfaceValueNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt);
-  // E[value] and E[.25-|value|] are both approximately zero for the seeded
-  // interpolation field. Blending them keeps photometry centered while turning
-  // broad blobs into readable ridge/valley structure without another noise query.
-  const ridge=.25-Math.abs(value);
-  return clamp(value*.62+ridge*.76,-.5,.5);
+  const x=worldEastMeters/scaleMeters,y=worldNorthMeters/scaleMeters;
+  const x0=Math.floor(x),y0=Math.floor(y),fx=x-x0,fy=y-y0;
+  const tx=smoothstep01(fx),ty=smoothstep01(fy);
+  const a=surfaceHash2(x0,y0,salt),b=surfaceHash2(x0+1,y0,salt),c=surfaceHash2(x0,y0+1,salt),d=surfaceHash2(x0+1,y0+1,salt);
+  const value=lerp(lerp(a,b,tx),lerp(c,d,tx),ty)-.5;
+  // Reuse the exact four deterministic interpolation corners to expose slope
+  // structure instead of folding value noise with abs(), which produced a mossy
+  // high-frequency texture. The salt selects one of two diagonal directions per
+  // physical band; no extra hash/world query or camera-dependent state is added.
+  const dtx=6*fx*(1-fx),dty=6*fy*(1-fy);
+  const dx=(lerp(b,d,ty)-lerp(a,c,ty))*dtx;
+  const dy=(lerp(c,d,tx)-lerp(a,b,tx))*dty;
+  const slope=((salt>>>3)&1)?(dx+dy)*.70710678:(dx-dy)*.70710678;
+  return clamp(value*.24+slope*.42,-.5,.5);
 }
 '''
 material_helper=anchor+'''function surfaceMaterialNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt){
@@ -52,8 +58,8 @@ body=body.replace("surfaceValueNoise(","surfaceStructuredNoise(")
 updated=updated[:match.start()]+body+updated[match.end():]
 
 # Preserve smooth low-frequency domain warp. Transform only the actual cover
-# octaves, so all existing 48 km -> 9 m physical admission thresholds and the
-# total number of deterministic samples remain unchanged.
+# octaves, so all existing physical admission thresholds and deterministic
+# sample counts remain unchanged.
 pattern=re.compile(r"function landCoverTint\(east,north,metersPerTexel,salt,elevation\)\{.*?\n\}",re.S)
 match=pattern.search(updated)
 if not match:
@@ -69,9 +75,9 @@ body=body.replace("__WARP_E__","surfaceValueNoise(east,north,6200,salt+101)")
 body=body.replace("__WARP_N__","surfaceValueNoise(east,north,5400,salt+107)")
 updated=updated[:match.start()]+body+updated[match.end():]
 
-# The near-ground residual and final close-albedo roughness were still the old
-# smooth scalar family in Attempt 1. Reuse the same three/two samples with the
-# material transform and a bounded contrast increase; no new calls or authority.
+# The near-ground residual and final close-albedo roughness remain registered to
+# the same meter coordinates and use the same sample count. Increase only their
+# presentation contrast and material structure.
 updated=replace_once(updated,
 '''        const registeredMicro=
           surfaceValueNoise(worldEast,worldNorth,34,microSurfaceSalt+11)*.024*w34+
@@ -91,13 +97,11 @@ updated=replace_once(updated,
           surfaceMaterialNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.026;''',
 "close material roughness")
 
+if 'topographicSignalRevision:"canonical-continuous-cross-lod-source-v41"' not in updated:
+    raise SystemExit("v41 slope base missing")
 updated=replace_once(updated,
-'topographicSignalRevision:"canonical-continuous-cross-lod-source-v40"',
-'topographicSignalRevision:"canonical-continuous-cross-lod-source-v41"',
-"topographic revision")
-updated=replace_once(updated,
-'structuredFrequencyTransform:true,',
-'structuredFrequencyTransform:true,materialFrequencyTransform:true,',
+'structuredFrequencyTransform:true,structuredSlopeTransform:true,',
+'structuredFrequencyTransform:true,structuredSlopeTransform:true,materialFrequencyTransform:true,',
 "material telemetry")
 
 if updated==text:
@@ -108,4 +112,4 @@ if 'canonical-continuous-cross-lod-source-v41' not in updated:
     raise SystemExit("v41 telemetry missing")
 
 PATH.write_text(updated,encoding="utf-8")
-print("Applied WP-S003-010-003 Attempt 2 registered material refinement")
+print("Applied WP-S003-010-003 Attempt 2 registered material refinement on v41")
