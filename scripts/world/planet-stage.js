@@ -388,9 +388,9 @@ const LOCAL_SURROUND_SPAN_FACTOR=12;
 // ~2.5x of visible-footprint range, so presentation compensation never has to
 // shrink or magnify a tier far enough to read as a scale pop or blurry stretch.
 const LOCAL_DETAIL_LEVELS=Object.freeze([
-  Object.freeze({id:"regional-overview",band:"regional-overview",visibleHeightMeters:400000,sampleSpacingMeters:12000,textureSize:160,reliefClampMeters:7000,reliefGain:6,maxHeightUnits:.58,staticWorld:false}),
-  Object.freeze({id:"regional-detail",band:"regional-detail",visibleHeightMeters:140000,sampleSpacingMeters:4000,textureSize:192,reliefClampMeters:7000,reliefGain:5.5,maxHeightUnits:.56,staticWorld:false}),
-  Object.freeze({id:"district",band:"district",visibleHeightMeters:50000,sampleSpacingMeters:1400,textureSize:256,reliefClampMeters:6000,reliefGain:9,maxHeightUnits:.65,staticWorld:false}),
+  Object.freeze({id:"regional-overview",band:"regional-overview",visibleHeightMeters:400000,sampleSpacingMeters:12000,textureSize:320,reliefClampMeters:7000,reliefGain:6,maxHeightUnits:.58,staticWorld:false}),
+  Object.freeze({id:"regional-detail",band:"regional-detail",visibleHeightMeters:140000,sampleSpacingMeters:4000,textureSize:384,reliefClampMeters:7000,reliefGain:5.5,maxHeightUnits:.56,staticWorld:false}),
+  Object.freeze({id:"district",band:"district",visibleHeightMeters:50000,sampleSpacingMeters:1400,textureSize:448,reliefClampMeters:6000,reliefGain:9,maxHeightUnits:.65,staticWorld:false}),
   Object.freeze({id:"local-area-wide",band:"local-area",visibleHeightMeters:20000,sampleSpacingMeters:480,textureSize:512,reliefClampMeters:5000,reliefGain:8,maxHeightUnits:.60,staticWorld:false}),
   Object.freeze({id:"local-area",band:"local-area",visibleHeightMeters:10000,sampleSpacingMeters:220,textureSize:512,reliefClampMeters:4200,reliefGain:7,maxHeightUnits:.55,staticWorld:false}),
   // These physical terrain tiers do not contain settlement geometry yet, so keep
@@ -7675,17 +7675,19 @@ function makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,size){
   return Object.freeze({size,spanEast,spanNorth,sample});
 }
 function broadAuthorityRasterSizes(levelIndex){
-  // Expensive PlanetGeography sampling stays on the proven cooperative ladder.
-  // Closer LODs still refine this canonical base in world space, while the
-  // per-output-texel Campaign-SEED registered detail fields supply the additional
-  // local frequencies without multiplying geography queries or offscreen work.
+  // Expensive PlanetGeography sampling stays on a bounded cooperative ladder.
+  // The shared 12x authority remains intentionally coarse context, while the
+  // viewport-bounded focus authority now has enough canonical samples to add
+  // real source information as physical LODs refine instead of magnifying the
+  // surround raster and relying on presentation-only residuals.
   const index=Math.max(0,Number(levelIndex)||0);
-  if(index===0)return Object.freeze({shared:80,focus:64});
-  if(index===1)return Object.freeze({shared:96,focus:72});
-  if(index===2)return Object.freeze({shared:128,focus:80});
-  if(index===3)return Object.freeze({shared:160,focus:112});
-  if(index===4)return Object.freeze({shared:160,focus:128});
-  return Object.freeze({shared:160,focus:144});
+  if(index===0)return Object.freeze({shared:80,focus:192});
+  if(index===1)return Object.freeze({shared:96,focus:224});
+  if(index===2)return Object.freeze({shared:128,focus:256});
+  if(index===3)return Object.freeze({shared:160,focus:288});
+  if(index===4)return Object.freeze({shared:160,focus:320});
+  if(index<=7)return Object.freeze({shared:160,focus:352});
+  return Object.freeze({shared:160,focus:384});
 }
 function sharedSurfaceAuthority(job){
   if(job?.surfaceAuthority)return job.surfaceAuthority;
@@ -7805,7 +7807,13 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // Fine terrain/biome detail is sampled in the Campaign-SEED registered
   // coordinate frame. Patch recentering, viewport changes and LOD changes may
   // change presentation, but never the world-space inputs to the detail field.
-  const surfaceAuthority=sharedSurfaceAuthority(job),focusAuthority=null;
+  // Only the 1x focus layer may consume the bounded fine authority. Medium
+  // and outer coverage remain on the shared parent so their larger physical
+  // spans never clamp or stretch the child raster. The focus patch itself is
+  // three viewport heights wide and edge-feathered inside that spare coverage,
+  // so every viewport-relevant focus pixel is backed by the finer canonical
+  // source before the child becomes the visible owner.
+  const surfaceAuthority=sharedSurfaceAuthority(job),focusAuthority=contextRing?null:focusSurfaceAuthority(job);
   const mixSample=(ux,vz,coarseSample=null)=>{
     const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth,coarse=coarseSample||surfaceAuthority.sample(east,north);
     if(!focusAuthority)return coarse;
@@ -7817,13 +7825,14 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       const ux=(x+.5)/size,vz=(y+.5)/size,pixelOffset=(y*size+x)*4;
       const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
       const parentSample=surfaceAuthority.sample(east,north),sample=mixSample(ux,vz,parentSample);
-      const sourceColor=Array.isArray(parentSample?.color)?parentSample.color:(parentSample?.land?[.28,.46,.20]:[.06,.22,.42]);
+      const sourceSample=sample||parentSample;
+      const sourceColor=Array.isArray(sourceSample?.color)?sourceSample.color:(sourceSample?.land?[.28,.46,.20]:[.06,.22,.42]);
       // PlanetGeography carries intentionally broad macro color fields. At local
       // map scales those low-frequency fields can read as giant polygon wedges.
       // Keep their SEED-derived identity as an accent, while deriving most local
       // albedo from the same authoritative land/elevation state at every LOD.
-      const elevationBase=Number(parentSample?.elevationMeters||0),moistureBase=clamp(Number(parentSample?.moisture||.5),0,1);
-      const mountainIdentity=clamp(Number(parentSample?.mountainInfluence||0),0,1);
+      const elevationBase=Number(sourceSample?.elevationMeters||0),moistureBase=clamp(Number(sourceSample?.moisture||.5),0,1);
+      const mountainIdentity=clamp(Number(sourceSample?.mountainInfluence||0),0,1);
       const alpineBase=smoothstep01((elevationBase-1700)/2600);
       const broadPaletteWeight=parentSample?.land?lerp(.20,1,smoothstep01(clamp((58-baseTransferMetersPerTexel)/36,0,1))):1;
       const paletteMoisture=lerp(.52,moistureBase,broadPaletteWeight),dry=1-paletteMoisture;
@@ -7877,7 +7886,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Detail frequencies are anchored to canonical SEED-registered meters.
       // Rebuilding the same coordinates from a different patch/LOD therefore
       // reveals the same field instead of rolling a new patch-relative pattern.
-      const worldEast=parentSample.registeredEastMeters,worldNorth=parentSample.registeredNorthMeters;
+      const worldEast=sourceSample.registeredEastMeters,worldNorth=sourceSample.registeredNorthMeters;
       // Center-first refinement must add *information*, not a differently tinted
       // tile. Keep the outer edge on the exact shared photometric basis and
       // progressively admit finer registered-meter frequencies toward focus.
@@ -8574,7 +8583,7 @@ function finalizeLocalResource(job,result){
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
       meshHeightRange:meshData.meshHeightRange||null,
-      topographicSignalRevision:"canonical-continuous-cross-lod-source-v37",topographicSignalAuthority:"PlanetGeography elevation/color/moisture stays on the bounded 64→144 focus / 80→160 shared raster ladder; the uploaded focus texture itself refines from 160 to 448 pixels and adds only physically resolvable Campaign-SEED registered-meter terrain and land-cover frequencies per output texel.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,
+      topographicSignalRevision:"canonical-continuous-cross-lod-source-v38",topographicSignalAuthority:"PlanetGeography elevation/color/moisture uses the bounded 192→384 canonical focus raster for the 1x child and the 80→160 shared raster only for 3x/12x context; uploaded focus textures refine from 320 to 512 pixels while registered-meter residual frequencies add only when physically resolvable.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,focusAuthorityApplied:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
