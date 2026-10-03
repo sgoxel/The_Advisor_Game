@@ -74,6 +74,10 @@ def capture(driver, name):
     return str(path)
 
 
+def scale_meta_text(driver):
+    return driver.find_element("css selector", ".planet-scale-meta span").text.strip()
+
+
 def main():
     parts = urlsplit(TARGET)
     query = dict(parse_qsl(parts.query, keep_blank_values=True))
@@ -91,6 +95,17 @@ def main():
         )
         wait(driver, "return window.PlanetStage?.snapshot?.()?.ready===true")
         wait(driver, "return window.PlanetStage?.snapshot?.()?.mapPresentation?.active===true", 60)
+
+        # Keep every visual state on the same canonical land focus used by the
+        # original accepted WP-014 evidence. This changes camera focus only; the
+        # world tile remains the authoritative Starting Village tile and no
+        # display-layer identity is invented for the test.
+        driver.execute_script("window.PlanetStage.setWorldTileFocus('0','0');")
+        wait(driver, """
+          const t=window.PlanetStage.snapshot()?.canonicalFocus?.worldTile;
+          return String(t?.x)==='0'&&String(t?.y)==='0';
+        """, 60)
+        time.sleep(.2)
 
         # Probe immediately after changing requested scale, before the finer
         # local representation has necessarily finished preparing.
@@ -113,6 +128,7 @@ def main():
                 "semanticDisplayBand": state["mapPresentation"]["semanticDisplayBand"],
                 "semanticScaleIndex": state["mapPresentation"]["semanticScaleIndex"],
                 "settlementLayers": state["mapPresentation"]["semanticSettlementLayersEligible"],
+                "scaleMetaText": scale_meta_text(driver),
                 "screenshot": frame,
             })
 
@@ -130,8 +146,19 @@ def main():
         """, 10, poll=0.02)
         state = snapshot(driver)
         assert_semantic_owner("same-label-transition", state)
-        if "→" in driver.find_element("css selector", ".planet-scale-meta span").text:
+        transition_text = scale_meta_text(driver)
+        if "→" in transition_text:
             raise AssertionError("same-label scale transition was redundantly displayed")
+        frame = capture(driver, "same-label-transition")
+        records.append({
+            "label": "same-label-transition",
+            "visibleBand": state["zoom"]["visibleBand"],
+            "semanticDisplayBand": state["mapPresentation"]["semanticDisplayBand"],
+            "semanticScaleIndex": state["mapPresentation"]["semanticScaleIndex"],
+            "settlementLayers": state["mapPresentation"]["semanticSettlementLayersEligible"],
+            "scaleMetaText": transition_text,
+            "screenshot": frame,
+        })
 
         print(json.dumps({"pass": True, "states": records}, indent=2))
     finally:
