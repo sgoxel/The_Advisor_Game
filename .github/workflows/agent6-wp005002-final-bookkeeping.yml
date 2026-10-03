@@ -1,0 +1,48 @@
+name: AGENT6 WP005002 Final Bookkeeping
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/agent6-wp005002-final-bookkeeping.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp005002-final-bookkeeping
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure Git identity
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Record WP acceptance result and future direction
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          grep -F 'WP-S003-010-003-005-002' docs/ROADMAP.md | grep -F 'IN PROGRESS'
+          printf '\n%s | WP-S003-010-003-005-002 | AGENT #6 final Attempt 3: canonical coverage/density remained functional, but fresh visual acceptance was 4.9/10 and performance/phone evidence did not meet acceptance; Issue #162 remains open.\n' "$stamp" >> docs/changelog.txt
+          printf '\n%s | WP-S003-010-003-005-002 | Phase 3 | Future: replace value-noise-like close albedo with cheap band-limited canonical relief/drainage/material structure whose visible frequency increases with physical scale; preserve single-owner coverage, add valid phone portrait capture, and reduce cooperative preparation/handoff cost before re-evaluation.\n' "$stamp" >> docs/suggest_log.txt
+          rm .github/workflows/agent6-wp005002-final-bookkeeping.yml
+
+      - name: Commit bookkeeping without completion marker
+        shell: bash
+        run: |
+          git add docs/changelog.txt docs/suggest_log.txt .github/workflows/agent6-wp005002-final-bookkeeping.yml
+          git commit -m 'docs(WP-S003-010-003-005-002): record capped acceptance findings'
+          git pull --rebase origin main
+          git push origin main
