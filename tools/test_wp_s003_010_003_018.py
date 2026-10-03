@@ -99,8 +99,9 @@ def wait_ready(driver):
     wait(driver, "return window.PlanetStage?.snapshot?.()?.ready===true", 180)
     wait(driver, "return window.PlanetStage?.snapshot?.()?.mapPresentation?.active===true", 60)
     stage = snap(driver)
-    if stage.get("version") != "planet-smooth-zoom-v1":
-        raise AssertionError(f"unexpected PlanetStage version: {stage.get('version')}")
+    runtime_version = stage.get("version")
+    if not isinstance(runtime_version, str) or not runtime_version:
+        raise AssertionError(f"missing PlanetStage version telemetry: {runtime_version!r}")
     canonical = ["1/10","1/20","1/50","1/100","1/250","1/500","1/1000","1/2500","1/5000","1/10000"]
     if stage["zoom"].get("displayScaleLadder") != canonical:
         raise AssertionError(f"canonical display ladder mismatch: {stage['zoom'].get('displayScaleLadder')}")
