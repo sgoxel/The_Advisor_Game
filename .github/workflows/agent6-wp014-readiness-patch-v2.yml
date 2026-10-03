@@ -1,0 +1,41 @@
+name: Agent6 WP014 Readiness Patch v2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/agent6-wp014-readiness-patch-v2.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp014-readiness-patch-v2
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Sync latest main
+        run: git pull --ff-only origin main
+      - name: Apply WP014 readiness patch
+        run: python tools/agent6_wp014_readiness_patch.py
+      - name: Commit product update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/world/planet-stage.js
+          if git diff --cached --quiet; then
+            echo "No product change needed"
+            exit 0
+          fi
+          git diff --cached --check
+          git commit -m "fix(WP-S003-010-003-014): advance through ready prefetched children"
+          git pull --rebase origin main
+          git push origin HEAD:main
