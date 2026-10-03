@@ -1,0 +1,53 @@
+name: Agent6 WP016 Finalize
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/agent6-wp016-finalize.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp016-finalize
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Prepare accepted docs and clean temporary evidence helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --ff-only origin main
+          python tools/agent6_wp016_finalize.py
+          node --check scripts/world/planet-stage.js
+          python -m py_compile tools/screenshot_tool.py
+          find tools -type d -name __pycache__ -prune -exec rm -rf {} +
+          git rm -f \
+            tools/agent6_wp016_atomic_handoff_patch.py \
+            .github/workflows/agent6-wp016-atomic-handoff-patch.yml \
+            .github/workflows/agent6-wp016-visual-evidence.yml \
+            tools/agent6_wp016_finalize.py \
+            .github/workflows/agent6-wp016-finalize.yml
+          git diff --check
+      - name: Commit and push final implementation/docs state
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ROADMAP.md docs/changelog.txt docs/suggest_log.txt
+          git commit -m "docs(WP-S003-010-003-016): record accepted atomic handoff"
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
+          git push origin HEAD:main
+          echo "FINAL_IMPLEMENTATION_DOCS_SHA=$(git rev-parse HEAD)"
