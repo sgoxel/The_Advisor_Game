@@ -1,0 +1,45 @@
+name: Agent6 WP016 Complete
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/agent6-wp016-complete.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp016-complete
+  cancel-in-progress: false
+
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Mark roadmap complete and remove bookkeeping helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --ff-only origin main
+          python tools/agent6_wp016_complete.py
+          git rm -f tools/agent6_wp016_complete.py .github/workflows/agent6-wp016-complete.yml
+          git diff --check
+      - name: Commit and push completion bookkeeping
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ROADMAP.md
+          git commit -m "docs(WP-S003-010-003-016): mark completed"
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
+          git push origin HEAD:main
+          echo "FINAL_BOOKKEEPING_SHA=$(git rev-parse HEAD)"
