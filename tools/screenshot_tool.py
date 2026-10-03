@@ -644,9 +644,9 @@ def _prepare_surface_refinement_focus(driver):
         raise RuntimeError(f"could not prepare fixed surface-refinement focus: {result}")
     return result
 
-def _surface_refinement_frame(driver,index,timeout):
+def _surface_refinement_frame(driver,index,timeout,viewport=(1280,800)):
     scalar,label=WP_SURFACE_REFINEMENT_PLAN[index]
-    set_exact_viewport(driver,1280,800)
+    set_exact_viewport(driver,*viewport)
     driver.execute_async_script("""
       const done=arguments[0];
       requestAnimationFrame(()=>requestAnimationFrame(()=>done(true)));
@@ -1583,7 +1583,7 @@ def run_capture(args):
             focus=_prepare_surface_refinement_focus(driver)
             frames=[]
             for index in range(WP_SURFACE_REFINEMENT_SHOTS):
-                frame=_surface_refinement_frame(driver,index,args.ready_timeout)
+                frame=_surface_refinement_frame(driver,index,args.ready_timeout,(width,height))
                 frame["focusPreparation"]=focus
                 path=_file_name(args.filename,index+1,WP_SURFACE_REFINEMENT_SHOTS,args.timestamp_names)
                 _capture(driver,path)
