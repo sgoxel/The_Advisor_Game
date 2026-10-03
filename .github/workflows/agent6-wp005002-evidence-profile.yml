@@ -1,0 +1,42 @@
+name: AGENT6 WP005002 Evidence Profile Fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/agent6-wp005002-evidence-profile.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Sync exact current main
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
+      - name: Patch evidence viewport handling
+        run: python tools/agent6_wp005002_evidence_profile_patch.py
+      - name: Validate harness
+        run: |
+          python -m py_compile tools/screenshot_tool.py
+          grep -F 'elif args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:' tools/screenshot_tool.py
+          grep -F 'width,height=PROFILES.get(args.profile,(args.width,args.height))' tools/screenshot_tool.py
+      - name: Commit tested harness correction
+        run: |
+          if git diff --quiet -- tools/screenshot_tool.py; then
+            echo 'Evidence harness already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tools/screenshot_tool.py
+          git commit -m 'fix(WP-S003-010-003-005-002): preserve phone evidence viewport'
+          git pull --rebase origin main
+          git push origin HEAD:main
