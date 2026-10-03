@@ -2508,7 +2508,7 @@ function renderMapPresentation(){
 // ready and visible. Never advertise the requested target ahead of the atomic handoff.
 const readyRepresentationPending=Boolean(localResources.requestedSignature&&localResources.activeSignature!==localResources.requestedSignature);
 const readyScaleState=readyRepresentationPending&&displayResource
-  ?scaleStateForScalar(levelNativeScalar(displayResource.levelIndex))
+  ?scaleStateForScalar(scalarForFootprintHeight(LOCAL_DETAIL_LEVELS[Math.max(0,Math.min(LOCAL_DETAIL_LEVELS.length-1,Number(displayResource.levelIndex)||0))].visibleHeightMeters))
   :scaleState;
 const transitionText=!readyRepresentationPending&&zoomState.animating&&readyScaleState.label!==targetScaleState.label
   ?readyScaleState.label+" → "+targetScaleState.label
