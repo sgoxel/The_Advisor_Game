@@ -1,17 +1,18 @@
-name: Agent6 WP003 Attempt2 Evidence
+name: Agent6 WP003 Final Evidence
 
 on:
   push:
     branches: [main]
     paths:
       - "scripts/world/planet-stage.js"
+      - ".github/workflows/agent6-wp003-attempt2-evidence.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: agent6-wp003-attempt2-evidence-${{ github.sha }}
+  group: agent6-wp003-final-evidence-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -36,38 +37,40 @@ jobs:
           python tools/screenshot_tool.py http://127.0.0.1:8000/ visual-wp-s003-010-003 \
             --profile landscape --scenario wp-s003-010-003 --shots 10 --timestamp-names \
             --wait-min 1 --wait-max 1 --no-publish \
-            --evidence-json evidence-wp-s003-010-003-attempt2-landscape.json
+            --evidence-json evidence-wp-s003-010-003-final-landscape.json
       - name: Preserve landscape
         run: |
-          mkdir -p /tmp/wp003-attempt2/landscape
-          cp tools/screenshots/*.png /tmp/wp003-attempt2/landscape/
-          cp tools/screenshots/evidence-wp-s003-010-003-attempt2-landscape.json /tmp/wp003-attempt2/landscape/
-          rm -f tools/screenshots/*.png tools/screenshots/evidence-wp-s003-010-003-attempt2-landscape.json
+          mkdir -p /tmp/wp003-final/landscape
+          cp tools/screenshots/*.png /tmp/wp003-final/landscape/
+          cp tools/screenshots/evidence-wp-s003-010-003-final-landscape.json /tmp/wp003-final/landscape/
+          rm -f tools/screenshots/*.png tools/screenshots/evidence-wp-s003-010-003-final-landscape.json
       - name: Capture real phone portrait parent acceptance
         run: |
           python tools/screenshot_tool.py http://127.0.0.1:8000/ visual-wp-s003-010-003 \
             --profile portrait --scenario wp-s003-010-003 --shots 10 --timestamp-names \
             --wait-min 1 --wait-max 1 --no-publish \
-            --evidence-json evidence-wp-s003-010-003-attempt2-portrait.json
+            --evidence-json evidence-wp-s003-010-003-final-portrait.json
       - name: Preserve portrait and assert 390x844
         run: |
-          mkdir -p /tmp/wp003-attempt2/portrait
-          cp tools/screenshots/*.png /tmp/wp003-attempt2/portrait/
-          cp tools/screenshots/evidence-wp-s003-010-003-attempt2-portrait.json /tmp/wp003-attempt2/portrait/
+          mkdir -p /tmp/wp003-final/portrait
+          cp tools/screenshots/*.png /tmp/wp003-final/portrait/
+          cp tools/screenshots/evidence-wp-s003-010-003-final-portrait.json /tmp/wp003-final/portrait/
           python - <<'PY'
           import json
           from pathlib import Path
           from PIL import Image
-          root=Path('/tmp/wp003-attempt2/portrait')
-          data=json.loads((root/'evidence-wp-s003-010-003-attempt2-portrait.json').read_text())
+          root=Path('/tmp/wp003-final/portrait')
+          data=json.loads((root/'evidence-wp-s003-010-003-final-portrait.json').read_text())
           assert len(data['frames'])==10, len(data['frames'])
-          for p in root.glob('*.png'):
+          pngs=list(root.glob('*.png'))
+          assert len(pngs)==10, len(pngs)
+          for p in pngs:
               assert Image.open(p).size==(390,844), (p.name,Image.open(p).size)
           PY
-      - name: Upload Attempt 2 evidence
+      - name: Upload final evidence
         uses: actions/upload-artifact@v4
         with:
-          name: agent6-wp003-attempt2-${{ github.sha }}
-          path: /tmp/wp003-attempt2/
+          name: agent6-wp003-final-${{ github.sha }}
+          path: /tmp/wp003-final/
           if-no-files-found: error
           retention-days: 2
