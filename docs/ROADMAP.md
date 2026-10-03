@@ -76,7 +76,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-008-004` — Responsive Startup Work Slicing + Main-Thread Stall Prevention — COMPLETED
 - `WP-S003-008-005` — World Destination Navigator + Nearby Places Popup — COMPLETED
 - `WP-S003-008-007` — Universal Window Shell: Close, Drag, Minimize-to-Icon + Restore — COMPLETED
-- `WP-S003-008-008` — Canonical Places View Targeting + Protagonist Max-Zoom Focus — IN PROGRESS (continuation acceptance capped 2026-10-02; exact-head final run 37040113839 timed out waiting for PlanetStage readiness and its artifact 11241916865 was directly inspected at VISUAL 2/10; already-running attempt 37040059594 later reached seed B but found a bounded canonical water destination that the refreshed Places list could not surface/exercise by the same stable ID; no completion claim)
+- `WP-S003-008-008` — Canonical Places View Targeting + Protagonist Max-Zoom Focus — COMPLETED
 - `WP-S003-009` — Grounded Painterly Cel-Shaded Living World Visual Direction Foundation — COMPLETED
 - `WP-S003-009-001` — Starting Village Environmental Dressing + Semantic Prop Placement — COMPLETED
 - `WP-S003-009-002` — Road Network Hierarchy + Raised Surface + Door Connector Paths — COMPLETED
