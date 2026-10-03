@@ -13,101 +13,75 @@ path = Path("scripts/world/planet-stage.js")
 text = path.read_text(encoding="utf-8")
 updated = text
 
-# WP-S003-010-003-005-002 continuation, current-run Attempt 1.
-# The 3x context was being forced to the 12x fallback's photometric bandwidth,
-# which makes a physically denser ring look equally soft and exposes the 1x
-# child as a centered detail island. Keep every texture on its actual source
-# meters/texel; the existing shared-parent residuals + feathering remain intact.
+# WP-S003-010-003-005-002 current-run Attempt 2.
+# Exact 4db8c0 evidence proved the 22% focus feather is geometrically too wide
+# for LOCAL_PATCH_MARGIN=1.50: only 56% of the patch is fully opaque, or ~84%
+# of the viewport. The parent/context halo is therefore guaranteed even though
+# the foreground geometry covers the viewport. Keep a real transition band, but
+# make the settled opaque core wider than the viewport.
 updated = replace_once(
     updated,
-    "const unifiedContinuationBasis=contextRing&&job.levelIndex<=8;\n  if(unifiedContinuationBasis)metersPerTexel=sharedMetersPerTexel;",
-    "const unifiedContinuationBasis=false;\n  if(unifiedContinuationBasis)metersPerTexel=sharedMetersPerTexel;",
-    "physical context bandwidth",
+    "const LOCAL_TEXTURE_HANDOFF_FEATHER=.22;",
+    "const LOCAL_TEXTURE_HANDOFF_FEATHER=.12;",
+    "viewport-safe focus feather",
 )
 
-# The strategic lock also zeroed contextRefineWeight through settlement scale.
-# Preserve the common parent term but admit only the already-computed registered
-# native-minus-parent residual according to the ring's real density.
+# Context is fallback coverage outside the focused viewport. It must remain
+# world-matched, but it does not need near-focus raster density. Reducing only
+# the medium/outer presentation rasters cuts bounded cooperative work and cache
+# pressure without changing canonical coordinates, geometry, or world authority.
 updated = replace_once(
     updated,
-    "const sharedPhotometryLock=job.levelIndex<=2;",
-    "const sharedPhotometryLock=false;",
-    "registered context refinement unlock",
+    "const LOCAL_MEDIUM_RING_TEXTURE_SCALE=.90;",
+    "const LOCAL_MEDIUM_RING_TEXTURE_SCALE=.72;",
+    "medium fallback raster scale",
 )
-
 updated = replace_once(
     updated,
-    "const detailSalt=((seededUnit(\"local-terrain-detail\")*1e6)|0)^0x2c1b3c6d;",
-    "const detailSalt=((seededUnit(\"local-terrain-detail\")*1e6)|0)^0x2c1b3c6d;\n  const microSurfaceSalt=((seededUnit(\"local-ground\")*1e9)|0)^0x51f15e;",
-    "micro surface salt",
+    "const WP006_SINGLE_PARENT_OUTER_TEXTURE_SCALE=.86;",
+    "const WP006_SINGLE_PARENT_OUTER_TEXTURE_SCALE=.50;",
+    "outer fallback raster scale",
 )
 
-old_micro = """      if(useMicroDetail){
-        const microSample=localSurfaceSample(worldEast,worldNorth,sample),micro=microSample.color;
-        // Admit the already-authoritative 34/12/4.2 m micro field by this
-        // layer's real texel density, not by the coarsest fallback. Edge/context
-        // ownership weights make this a refinement residual instead of a card.
-        const closeWeight=smoothstep01(clamp((6-metersPerTexel)/5.5,0,1));
-        const microContinuity=contextRing?contextRefineWeight:focusRefineWeight;
-        const microWeight=lerp(.14,.34,closeWeight)*microContinuity;
-        displayColor=displayColor.map((v,i)=>clamp(v*(1-microWeight)+micro[i]*microWeight,0,1));
-        // microElevation is the signed form of the same registered field already
-        // sampled above. A small zero-mean tonal cue exposes its physical relief
-        // at sub-6 m/texel without adding a second texture identity or extra work.
-        const microRelief=clamp(Number(microSample.microElevation||0)/5.2,-1,1);
-        const microReliefGain=lerp(.018,.050,closeWeight)*microContinuity;
-        displayColor=displayColor.map((v,i)=>clamp(v+microRelief*microReliefGain*(i===2?.76:i===1?.94:1),0,.88));
-      }"""
-new_micro = """      if(useMicroDetail){
-        // Use the exact existing local-ground SEED frequencies as a zero-mean
-        // registered residual. Each octave enters only when this layer can
-        // physically resolve it, so focus/context differ only by real bandwidth,
-        // never by a centered ownership/palette weight.
-        const w34=colorDetailOctaveWeight(34,metersPerTexel);
-        const w12=colorDetailOctaveWeight(12,metersPerTexel);
-        const w42=colorDetailOctaveWeight(4.2,metersPerTexel);
-        const registeredMicro=
-          surfaceValueNoise(worldEast,worldNorth,34,microSurfaceSalt+11)*.024*w34+
-          surfaceValueNoise(worldEast,worldNorth,12,microSurfaceSalt+29)*.017*w12+
-          surfaceValueNoise(worldEast,worldNorth,4.2,microSurfaceSalt+47)*.011*w42;
-        const closeGain=lerp(.86,1.18,smoothstep01(clamp((6-metersPerTexel)/5.5,0,1)));
-        displayColor=displayColor.map((v,i)=>clamp(v+registeredMicro*closeGain*(i===0?1:i===1?.92:.72),0,.88));
-      }"""
-updated = replace_once(updated, old_micro, new_micro, "zero-mean registered micro field")
+# The 640 px intermediate focus tiers dominate preparation cost while the
+# physical patch footprint shrinks strongly between tiers. 512 px still gives a
+# strictly improving meters/texel ladder, removes the resolution reversal into
+# near-ground-wide (already 512), and cuts those focus raster pixels by 36%.
+level_ids=("local-area-wide","local-area","settlement-wide","settlement","settlement-core")
+for level_id in level_ids:
+    old=f'id:"{level_id}",'
+    pos=updated.find(old)
+    if pos<0:
+        raise SystemExit(f"texture ladder: missing level {level_id}")
+    end=updated.find("}),",pos)
+    if end<0:
+        raise SystemExit(f"texture ladder: malformed level {level_id}")
+    chunk=updated[pos:end]
+    if "textureSize:640" not in chunk:
+        raise SystemExit(f"texture ladder: expected 640 px at {level_id}")
+    updated=updated[:pos]+chunk.replace("textureSize:640","textureSize:512",1)+updated[end:]
 
-# Fine albedo roughness should use each texture's actual density as well. The
-# prior shared-density condition preserved a coarse blur even when the child or
-# medium context could resolve a smaller registered scale.
-updated = replace_once(
-    updated,
-    "if(parentSample?.land&&sharedMetersPerTexel<=8){\n        const coarseScale=Math.max(2,sharedMetersPerTexel*6),fineScale=Math.max(.75,sharedMetersPerTexel*2);",
-    "if(parentSample?.land&&metersPerTexel<=8){\n        const coarseScale=Math.max(2,metersPerTexel*6),fineScale=Math.max(.75,metersPerTexel*2);",
-    "physical roughness bandwidth",
-)
-
-# The structured close-surface style added after the prior attempt was focus-only
-# and therefore another potential detail card. Keep the same registered 5.5/1.4/
-# .62 m fields, but filter each frequency by physical meters/texel and allow any
-# eligible context layer to carry the same world-space signal.
-old_style = """        const closeTextureEligibility=smoothstep01(clamp((2.4-metersPerTexel)/2,0,1));
-        const closeTextureContinuity=contextRing?0:focusRefineWeight;
-        const closeTextureBand=styleContract.closeSurfaceVariation===false?0:livingWorldStyleWeight*closeTextureEligibility*closeTextureContinuity;
-        if(closeTextureBand>.001&&[\"terrain:grass\",\"terrain:forest\",\"terrain:farmland\"].includes(role)){
-          const broadStyle=surfaceValueNoise(worldEast,worldNorth,5.5,detailSalt+307),fineStyle=surfaceValueNoise(worldEast,worldNorth,1.4,detailSalt+331),microStyle=surfaceValueNoise(worldEast,worldNorth,.62,detailSalt+349);
-          const patch=(broadStyle*.145+fineStyle*.070+microStyle*.035)*closeTextureBand;
-          displayColor=[clamp(displayColor[0]+patch*.92,0,1),clamp(displayColor[1]+patch*.68,0,1),clamp(displayColor[2]-patch*.12,0,1)];
-        }"""
-new_style = """        const closeTextureEligibility=smoothstep01(clamp((2.4-metersPerTexel)/2,0,1));
-        const closeTextureBand=styleContract.closeSurfaceVariation===false?0:livingWorldStyleWeight*closeTextureEligibility;
-        if(closeTextureBand>.001&&[\"terrain:grass\",\"terrain:forest\",\"terrain:farmland\"].includes(role)){
-          const broadStyle=surfaceValueNoise(worldEast,worldNorth,5.5,detailSalt+307),fineStyle=surfaceValueNoise(worldEast,worldNorth,1.4,detailSalt+331),microStyle=surfaceValueNoise(worldEast,worldNorth,.62,detailSalt+349);
-          const broadWeight=colorDetailOctaveWeight(5.5,metersPerTexel),fineWeight=colorDetailOctaveWeight(1.4,metersPerTexel),microWeight=colorDetailOctaveWeight(.62,metersPerTexel);
-          const patch=(broadStyle*.145*broadWeight+fineStyle*.070*fineWeight+microStyle*.035*microWeight)*closeTextureBand;
-          displayColor=[clamp(displayColor[0]+patch*.92,0,1),clamp(displayColor[1]+patch*.68,0,1),clamp(displayColor[2]-patch*.12,0,1)];
-        }"""
-updated = replace_once(updated, old_style, new_style, "physical close-surface style continuity")
+# README now establishes simple 3D meshes with cel/toon shading as the primary
+# presentation direction. Reuse the already-computed deterministic albedo and
+# lighting signal and quantize only luminance at physically local scales. This
+# adds zero geography/noise samples, preserves hue/authority, and turns smooth
+# value-noise gradients into readable stylized terrain planes instead of blur.
+toon_anchor = """      pushRange(\"finalLuma\",luma3(displayColor));"""
+toon_block = """      if(parentSample?.land){
+        const toonBand=smoothstep01(clamp((220-metersPerTexel)/190,0,1));
+        if(toonBand>.001){
+          const luma=luma3(displayColor);
+          const closeToon=smoothstep01(clamp((18-metersPerTexel)/17.5,0,1));
+          const stepSize=lerp(.050,.028,closeToon);
+          const quantized=clamp(Math.round(luma/stepSize)*stepSize,0,1);
+          const shift=(quantized-luma)*toonBand*.68;
+          displayColor=displayColor.map(v=>clamp(v+shift,0,.88));
+        }
+      }
+      pushRange(\"finalLuma\",luma3(displayColor));"""
+updated = replace_once(updated, toon_anchor, toon_block, "toon terrain luminance")
 
 if updated == text:
-    raise SystemExit("no WP005002 current-run attempt-1 changes applied")
+    raise SystemExit("no WP005002 current-run attempt-2 changes applied")
 path.write_text(updated, encoding="utf-8")
-print("patched WP-S003-010-003-005-002 physical context/detail bandwidth")
+print("patched WP-S003-010-003-005-002 viewport-core toon refinement")
