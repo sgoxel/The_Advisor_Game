@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 
 PATH = Path("scripts/world/planet-stage.js")
 text = PATH.read_text(encoding="utf-8")
@@ -97,15 +98,17 @@ updated = replace_once(
     "detail-band telemetry",
 )
 
-# The focus owner is already required to cover the viewport before it becomes
-# visible. Let that fully-covering owner use its native physical micro bandwidth;
-# keep context rings on the shared-family gate so no different-frequency card can
-# leak into fallback coverage.
-updated = replace_once(
-    updated,
-    "const useMicroDetail=sharedMetersPerTexel<=4;",
+# The exact declaration changed during earlier compositor work. Replace whichever
+# single current physical eligibility expression exists, while proving it is a
+# unique declaration and leaving all subsequent blending/ownership logic intact.
+micro_pattern = re.compile(r"const useMicroDetail=[^;\n]+;")
+matches = list(micro_pattern.finditer(updated))
+if len(matches) != 1:
+    raise SystemExit(f"focus-native micro-detail eligibility: expected one declaration, found {len(matches)}")
+updated = micro_pattern.sub(
     "const useMicroDetail=contextRing?sharedMetersPerTexel<=4:metersPerTexel<=8;",
-    "focus-native micro-detail eligibility",
+    updated,
+    count=1,
 )
 
 # Evidence/debug authority text should state the actual strategy being rendered.
