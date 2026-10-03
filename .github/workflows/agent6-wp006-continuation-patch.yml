@@ -32,6 +32,7 @@ jobs:
           python tools/agent6_wp006_continuation_patch.py
           node --check scripts/world/planet-stage.js
           python -m py_compile tools/screenshot_tool.py
+          rm -rf tools/__pycache__
           git diff --check
       - name: Commit tested runtime and evidence patch
         shell: bash
