@@ -1,11 +1,11 @@
-name: AGENT6 WP005003 Focus UX
+name: Agent6 WP005003 Focus UX
 
 on:
-  workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - .github/workflows/agent6-wp005003-focus.yml
+      - ".github/workflows/agent6-wp005003-focus.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -19,54 +19,36 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout current main
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Install evidence dependencies
         run: python -m pip install -r tools/requirements.txt
       - name: Wire focus controller through existing protagonist UI bootstrap
+        env:
+          LOADER_B64: Ci8qIFdQLVMwMDMtMDEwLTAwMy0wMDUtMDAzOiBwcmVzZW50YXRpb24tb25seSBmb2N1cyBVWCBib290c3RyYXAuICovCjsoZnVuY3Rpb24ocm9vdCl7CiAgInVzZSBzdHJpY3QiOwogIGlmKHR5cGVvZiBkb2N1bWVudD09PSJ1bmRlZmluZWQiKXJldHVybjsKICBmdW5jdGlvbiBsb2FkKCl7CiAgICBpZihyb290LlByb3RhZ29uaXN0Rm9jdXNVSXx8ZG9jdW1lbnQucXVlcnlTZWxlY3Rvcignc2NyaXB0W2RhdGEtcHJvdGFnb25pc3QtZm9jdXMtdWktbG9hZGVyXScpKXJldHVybjsKICAgIGNvbnN0IHNjcmlwdD1kb2N1bWVudC5jcmVhdGVFbGVtZW50KCJzY3JpcHQiKTsKICAgIHNjcmlwdC5zcmM9InNjcmlwdHMvdWkvcHJvdGFnb25pc3QtZm9jdXMtdWkuanM/dj1wcm90YWdvbmlzdC1mb2N1cy11aS12MSI7CiAgICBzY3JpcHQuYXN5bmM9ZmFsc2U7CiAgICBzY3JpcHQuZGF0YXNldC5wcm90YWdvbmlzdEZvY3VzVWlMb2FkZXI9InRydWUiOwogICAgZG9jdW1lbnQuaGVhZC5hcHBlbmRDaGlsZChzY3JpcHQpOwogIH0KICBpZihkb2N1bWVudC5yZWFkeVN0YXRlPT09ImxvYWRpbmciKWRvY3VtZW50LmFkZEV2ZW50TGlzdGVuZXIoIkRPTUNvbnRlbnRMb2FkZWQiLGxvYWQse29uY2U6dHJ1ZX0pO2Vsc2UgbG9hZCgpOwp9KSh0eXBlb2YgZ2xvYmFsVGhpcyE9PSJ1bmRlZmluZWQiP2dsb2JhbFRoaXM6dGhpcyk7Cg==
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          p=Path('scripts/ui/protagonist-status-ui.js')
-          text=p.read_text(encoding='utf-8')
-          marker='data-protagonist-focus-ui-loader'
-          if marker not in text:
-              text += r'''
-
-/* WP-S003-010-003-005-003: presentation-only focus UX bootstrap. */
-;(function(root){
-  "use strict";
-  if(typeof document==="undefined")return;
-  function load(){
-    if(root.ProtagonistFocusUI||document.querySelector('script[data-protagonist-focus-ui-loader]'))return;
-    const script=document.createElement("script");
-    script.src="scripts/ui/protagonist-focus-ui.js?v=protagonist-focus-ui-v1";
-    script.async=false;
-    script.dataset.protagonistFocusUiLoader="true";
-    document.head.appendChild(script);
-  }
-  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",load,{once:true});else load();
-})(typeof globalThis!=="undefined"?globalThis:this);
-'''
-              p.write_text(text,encoding='utf-8')
-          PY
+          set -euo pipefail
+          python -c 'import os,base64; from pathlib import Path; p=Path("scripts/ui/protagonist-status-ui.js"); t=p.read_text(encoding="utf-8"); loader=base64.b64decode(os.environ["LOADER_B64"]).decode(); p.write_text(t if "data-protagonist-focus-ui-loader" in t else t+loader,encoding="utf-8")'
       - name: Static contract test
-        run: node tools/tests/wp-s003-010-003-005-003-protagonist-focus-ui.test.js
+        run: |
+          set -euo pipefail
+          node --check scripts/ui/protagonist-focus-ui.js
+          node tools/tests/wp-s003-010-003-005-003-protagonist-focus-ui.test.js
+          git diff --check
       - name: Commit and push product wiring
         id: product
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add scripts/ui/protagonist-status-ui.js
           if ! git diff --cached --quiet; then
-            git commit -m 'feat(WP-S003-010-003-005-003): wire protagonist-first focus UX'
+            git commit -m "feat(WP-S003-010-003-005-003): wire protagonist-first focus UX"
           fi
           git fetch origin main
           git rebase origin/main
@@ -78,8 +60,8 @@ jobs:
           echo $! >/tmp/wp005003-http.pid
           sleep 1
       - name: Functional and fresh visual evidence
-        id: evidence
         run: |
+          set -euo pipefail
           rm -rf tools/screenshots/wp-s003-010-003-005-003
           TARGET=http://127.0.0.1:8000/ python tools/wp_s003_010_003_005_003_evidence.py | tee /tmp/wp005003-evidence.log
           cp /tmp/wp005003-evidence.log tools/screenshots/wp-s003-010-003-005-003/run.log
@@ -89,8 +71,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wp-s003-010-003-005-003-focus-evidence
-          path: |
-            tools/screenshots/wp-s003-010-003-005-003
-            /tmp/wp005003-http.log
+          path: tools/screenshots/wp-s003-010-003-005-003
           if-no-files-found: warn
           retention-days: 14
