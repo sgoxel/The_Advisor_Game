@@ -7848,11 +7848,12 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // or edge-varying gain on the parent itself produced the pale 1/500 LOD
       // boundary seen in fresh evidence.
       const strategicFocusResidualScale=contextRing?1:lerp(.24,1,smoothstep01(clamp((1200-metersPerTexel)/900,0,1)));
-      // Once the 3x context ring itself reaches local physical resolution, carry
-      // most of the same registered high-pass bandwidth as the 1x child. Keeping
-      // it at the old fixed 22% residual made the child read as a richer rectangle
-      // even though both layers sampled the same canonical coordinates.
-      const contextLocalContinuity=contextRing?smoothstep01(clamp((8-metersPerTexel)/6.5,0,1)):0;
+      // Begin context continuity as soon as the 3x ring can physically resolve
+      // the coarser registered local bands. At ~11 m/texel the ring cannot admit
+      // the 18 m band, but it can preserve the 48 m+ structure already visible
+      // in the 1x child. Letting that resolvable parent bandwidth stay at the old
+      // 22% residual exposed the 1x streaming footprint as a rectangular card.
+      const contextLocalContinuity=contextRing?smoothstep01(clamp((20-metersPerTexel)/14,0,1)):0;
       const contextResidualGain=contextRing?lerp(.22,.72,contextLocalContinuity):0;
       const refinementGain=contextRing?contextRefineWeight*contextResidualGain:focusRefineWeight*.94*strategicFocusResidualScale;
       // Regional parents are physically coarse but still need readable landform
