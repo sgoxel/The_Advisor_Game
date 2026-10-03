@@ -4443,15 +4443,14 @@ function canonicalStartingVillageReveal(resource){
 }
 function revealPresentationScale(dims,tier,coreDiameterMeters){
   if(tier==="full")return 1;
-  // Keep the authoritative settlement composition large enough to read as
-  // actual world structure, not a locator glyph, then converge rapidly to 1:1.
-  const targetFraction=tier==="footprint"?.38:tier==="route"?.82:tier==="coarse"?.20:.20;
+  // WP-S003-010-003-007: the coarse settlement envelope must remain readable
+  // in screen space while preserving the exact canonical plan underneath it.
+  // These values restore the previously accepted progressive reveal contract:
+  // early tiers may exaggerate authoritative geometry for readability, then the
+  // representation converges naturally to physical 1:1 by the full tier.
+  const targetFraction=tier==="footprint"?.16:tier==="route"?.17:tier==="coarse"?.22:.22;
   const desiredSpan=Math.max(coreDiameterMeters,dims.patchHeight*targetFraction);
-  // Route overview stays presentation-only. The final Phase 16 evidence showed
-  // the real connected village was still undersized at 1/2500, so give the same
-  // authoritative footprints/access geometry more screen area without moving,
-  // synthesizing, or reconnecting any world record.
-  const cap=tier==="footprint"?14:tier==="route"?20:tier==="coarse"?5:18;
+  const cap=tier==="footprint"?400:tier==="route"?200:tier==="coarse"?90:18;
   return Number(clamp(desiredSpan/Math.max(1,coreDiameterMeters),1,cap).toFixed(4));
 }
 function settlementPresentationLift(tier,value=zoomState.scalar){
