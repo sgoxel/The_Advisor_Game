@@ -340,6 +340,7 @@ const LOCAL_RESOURCE_CACHE_LIMIT=8;
 const LOCAL_RESOURCE_CACHE_BUDGET_BYTES=48*1024*1024;
 const LOCAL_MEDIUM_RING_SPAN_FACTOR=6;
 const LOCAL_MEDIUM_RING_TEXTURE_SCALE=.90;
+const LOCAL_SURROUND_RING_TEXTURE_SCALE=.58;
 const LOCAL_GRACE_RESIDENCY_MS=4500;
 const LOCAL_RESIDENCY_RECORD_LIMIT=64;
 const LOCAL_PREFETCH_RECORD_LIMIT=16;
@@ -7538,6 +7539,7 @@ function localTextureHandoffCoverage(u,v,contextRing){
   return smoothstep01(clamp(edgeDistance/LOCAL_TEXTURE_HANDOFF_FEATHER,0,1));
 }
 function detailOctaveWeight(wavelengthMeters,metersPerTexel){return smoothstep01((wavelengthMeters/Math.max(1e-6,metersPerTexel)-2)/4);}
+function colorDetailOctaveWeight(wavelengthMeters,metersPerTexel){return smoothstep01(clamp((wavelengthMeters/Math.max(1e-6,metersPerTexel)-2)/1.75,0,1));}
 function terrainDetailHeight(east,north,metersPerTexel,salt){
   let h=0;
   for(let k=0;k<TERRAIN_DETAIL_OCTAVES.length;k++){
@@ -7557,10 +7559,10 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   const wStrategic=detailOctaveWeight(48000,metersPerTexel),wStrategicMid=detailOctaveWeight(16000,metersPerTexel),
     wStrategicFine=detailOctaveWeight(5200,metersPerTexel);
   const wBroad=detailOctaveWeight(3600,metersPerTexel),wMid=detailOctaveWeight(1500,metersPerTexel),
-    wField=detailOctaveWeight(700,metersPerTexel),wParcelDetail=detailOctaveWeight(460,metersPerTexel),
-    wFine=detailOctaveWeight(280,metersPerTexel),wCopse=detailOctaveWeight(120,metersPerTexel),
-    wGroundDetail=detailOctaveWeight(90,metersPerTexel),wLocalDetail=detailOctaveWeight(48,metersPerTexel),
-    wMicroDetail=detailOctaveWeight(18,metersPerTexel),wSubLocalDetail=detailOctaveWeight(9,metersPerTexel);
+    wField=detailOctaveWeight(700,metersPerTexel),wParcelDetail=colorDetailOctaveWeight(460,metersPerTexel),
+    wFine=colorDetailOctaveWeight(280,metersPerTexel),wCopse=colorDetailOctaveWeight(120,metersPerTexel),
+    wGroundDetail=colorDetailOctaveWeight(90,metersPerTexel),wLocalDetail=colorDetailOctaveWeight(48,metersPerTexel),
+    wMicroDetail=colorDetailOctaveWeight(18,metersPerTexel),wSubLocalDetail=colorDetailOctaveWeight(9,metersPerTexel);
   if(wStrategic<=0&&wBroad<=0)return [0,0,0];
   const alpine=smoothstep01((elevation-2200)/900),lowland=1-alpine;
   // Strategic map tiers need resolvable structure before farm/copse wavelengths
@@ -7593,7 +7595,7 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   // registered-meter octaves as the physical texel size shrinks. This prevents
   // the settlement/near-ground children from becoming smoother than their
   // parent even though their source raster and geometry are denser.
-  const closeDetailGain=1+smoothstep01(clamp((80-metersPerTexel)/72,0,1))*.55;
+  const closeDetailGain=1+smoothstep01(clamp((80-metersPerTexel)/72,0,1))*.75;
   const mottle=(surfaceValueNoise(we,wn,700,salt+31)*.024*wField+
     surfaceValueNoise(we,wn,460,salt+33)*.030*wParcelDetail+
     surfaceValueNoise(we,wn,280,salt+37)*.026*wFine+
@@ -7873,7 +7875,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // every layer. Strengthen only this zero-mean refinement as physical texel
       // size enters the local range; the common parent photometry is unchanged.
       const localNativeResidualBand=smoothstep01(clamp((72-metersPerTexel)/60,0,1));
-      const localNativeResidualBoost=1+localNativeResidualBand*.38;
+      const localNativeResidualBoost=1+localNativeResidualBand*.60;
       const refinementGain=(contextRing?contextRefineWeight*contextResidualGain:focusRefineWeight*.94*strategicFocusResidualScale)*localNativeResidualBoost;
       // Regional parents are physically coarse but still need readable landform
       // structure while finer children stream. Reuse the already-computed,
@@ -8281,7 +8283,7 @@ function* localResourceSteps(job){
   const detail=yield* surfaceTextureSteps(job,job.dims.patchWidth,job.dims.patchHeight,size,true,false,"focus");
   const broadParent=job.levelIndex<=1;
   const mediumSize=broadParent?Math.max(80,Math.round(size*.50)):Math.max(96,Math.round(size*LOCAL_MEDIUM_RING_TEXTURE_SCALE));
-  const surroundSize=broadParent?Math.max(96,Math.round(size*.58)):size;
+  const surroundSize=Math.max(96,Math.round(size*LOCAL_SURROUND_RING_TEXTURE_SCALE));
   job.currentPreparationPhase="texture-medium";
   const medium=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR,job.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR,mediumSize,true,true,"medium");
   job.currentPreparationPhase="texture-surround";
