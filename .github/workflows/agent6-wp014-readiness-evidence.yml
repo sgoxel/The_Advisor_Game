@@ -7,6 +7,8 @@ on:
       - ".github/workflows/agent6-wp014-readiness-evidence.yml"
       - "tools/test_wp_s003_010_003_014.py"
       - "scripts/world/planet-stage.js"
+  issue_comment:
+    types: [created]
   workflow_dispatch:
 
 permissions:
@@ -18,6 +20,7 @@ concurrency:
 
 jobs:
   evidence:
+    if: github.event_name != 'issue_comment' || (github.event.issue.number == 169 && github.event.comment.body == '/agent6-wp014-readiness')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
