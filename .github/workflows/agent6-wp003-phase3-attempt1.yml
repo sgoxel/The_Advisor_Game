@@ -1,0 +1,46 @@
+name: Agent6 WP003 Phase3 Attempt1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/agent6-wp003-phase3-attempt1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp003-phase3-attempt1
+  cancel-in-progress: false
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply canonical geomorphology continuity
+        run: |
+          set -euo pipefail
+          python tools/agent6_wp003_phase3_attempt1_patch.py
+          node --check scripts/world/planet-stage.js
+          git diff --check
+          grep -q 'canonical-continuous-cross-lod-source-v43' scripts/world/planet-stage.js
+          grep -q 'canonicalGeomorphologyV1:true' scripts/world/planet-stage.js
+          grep -q 'groundStyleGeomorphologyContinuity:true' scripts/world/planet-stage.js
+      - name: Commit tested product correction
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/world/planet-stage.js
+          if git diff --cached --quiet; then
+            echo "Phase 3 Attempt 1 product already current"
+            exit 0
+          fi
+          git commit -m "fix(WP-S003-010-003): carry geomorphology through ground"
+          git pull --rebase origin main
+          git push origin HEAD:main
