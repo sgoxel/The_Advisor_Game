@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
+# AGENT #6 attempt-2 rerun marker: apply to exact current main after concurrent work.
 
 def replace_once(text, old, new, label):
     count=text.count(old)
