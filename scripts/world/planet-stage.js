@@ -7735,7 +7735,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // the same low-frequency transfer to their common parent sample. Native texel
   // size is reserved for the registered high-pass residual only.
   const sharedPhotometryLock=job.levelIndex<=2;
-  const baseTransferMetersPerTexel=sharedPhotometryLock?sharedMetersPerTexel:metersPerTexel;
+  const baseTransferMetersPerTexel=sharedMetersPerTexel;
   // Medium-context sampling is physically denser than the outer 6x fallback.
   // Admit only a bounded share of that resolvable bandwidth so the parent
   // representation keeps terrain structure without becoming a differently
@@ -7751,7 +7751,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // 1x child visibly richer inside a rectangular footprint. Let any physically
   // eligible layer sample the identical world-registered micro field; context
   // gain is bounded below by its refinement weight.
-  const useMicroDetail=metersPerTexel<=4;
+  const useMicroDetail=sharedMetersPerTexel<=4;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   // Surface relief is presented as continuous hillshade, not synthetic
   // cartographic contour bands. The previous 420 m sine contours and strong
@@ -8105,8 +8105,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // transfer, not new noise or geography sampling, and fades out before
       // ground-scale rendering.
       if(parentSample?.land){
-        const localMapReadabilityBand=smoothstep01(clamp((metersPerTexel-18)/34,0,1))*
-          (1-smoothstep01(clamp((metersPerTexel-230)/170,0,1)));
+        const localMapReadabilityBand=smoothstep01(clamp((baseTransferMetersPerTexel-18)/34,0,1))*
+          (1-smoothstep01(clamp((baseTransferMetersPerTexel-230)/170,0,1)));
         if(localMapReadabilityBand>.001){
           const pivot=clamp(luma3(localPalette),.20,.58),gain=1+localMapReadabilityBand*.28;
           displayColor=displayColor.map(v=>clamp(pivot+(v-pivot)*gain,0,1));
@@ -8127,10 +8127,9 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // As the physical texel size approaches gameplay scale, let canonical
         // registered-meter micro terrain carry more of the surface. This keeps
         // close props visually grounded while coarser views retain macro identity.
-        const closeWeight=smoothstep01((4-metersPerTexel)/3.5);
-        const contextMicroContinuity=contextRing?lerp(.78,1,contextRefineWeight):1;
-        const microWeight=lerp(.16,.32,closeWeight)*contextMicroContinuity;
-        displayColor=authoritative.map((v,i)=>clamp(v*(1-microWeight)+micro[i]*microWeight,0,1));
+        const closeWeight=smoothstep01((4-baseTransferMetersPerTexel)/3.5);
+        const microWeight=lerp(.16,.32,closeWeight);
+        displayColor=displayColor.map((v,i)=>clamp(v*(1-microWeight)+micro[i]*microWeight,0,1));
       }
       // High peaks are legitimately snow-covered, but the canonical near-white
       // macro palette plus hillshade used to saturate into featureless white.
@@ -8145,8 +8144,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Fine canonical albedo roughness keeps close alpine terrain readable
       // without inventing patch-local noise. Frequencies remain registered-meter
       // anchored, so the same coordinate has the same mottling in every rebuild.
-      if(parentSample?.land&&metersPerTexel<=8){
-        const coarseScale=Math.max(2,metersPerTexel*6),fineScale=Math.max(.75,metersPerTexel*2);
+      if(parentSample?.land&&sharedMetersPerTexel<=8){
+        const coarseScale=Math.max(2,sharedMetersPerTexel*6),fineScale=Math.max(.75,sharedMetersPerTexel*2);
         const rough=surfaceValueNoise(worldEast,worldNorth,coarseScale,detailSalt+211)*.040+
           surfaceValueNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.018;
         displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.82:i===1?.94:1),0,.86));
@@ -8156,16 +8155,16 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // views keep their coarse canonical atlas transfer; near/max zoom gains
       // the warm, colorful living-world hierarchy without adding world detail.
       const styleContract=worldVisualStyle()?.localDetail||{},styleMax=Math.max(4,Number(styleContract.maxMetersPerTexel||28));
-      const localStyleBand=smoothstep01(clamp((styleMax-metersPerTexel)/(styleMax-4),0,1));
+      const localStyleBand=smoothstep01(clamp((styleMax-baseTransferMetersPerTexel)/(styleMax-4),0,1));
       // Keep the 3x medium ring on the same local color family once its physical
       // texel size can resolve that treatment. The ring remains slightly more
       // restrained until its registered high-pass refinement converges, but it
       // no longer presents an ungraded backdrop around the graded 1x child.
-      const livingWorldStyleWeight=localStyleBand*(contextRing?lerp(.78,1,contextRefineWeight):1);
+      const livingWorldStyleWeight=localStyleBand;
       if(livingWorldStyleWeight>.001){
         const role=localSurfaceStyleRole(parentSample),styled=worldStyleRgb(role,displayColor);
         displayColor=displayColor.map((v,i)=>clamp(lerp(v,styled[i],livingWorldStyleWeight),0,1));
-        const closeTextureBand=styleContract.closeSurfaceVariation===false?0:livingWorldStyleWeight*smoothstep01(clamp((4-metersPerTexel)/3.5,0,1));
+        const closeTextureBand=styleContract.closeSurfaceVariation===false?0:livingWorldStyleWeight*smoothstep01(clamp((4-baseTransferMetersPerTexel)/3.5,0,1));
         if(closeTextureBand>.001&&["terrain:grass","terrain:forest","terrain:farmland"].includes(role)){
           const broadStyle=surfaceValueNoise(worldEast,worldNorth,5.5,detailSalt+307),fineStyle=surfaceValueNoise(worldEast,worldNorth,1.4,detailSalt+331),microStyle=surfaceValueNoise(worldEast,worldNorth,.62,detailSalt+349);
           const patch=(broadStyle*.145+fineStyle*.070+microStyle*.035)*closeTextureBand;
@@ -9058,7 +9057,8 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
     const viewportRect=canvas?.getBoundingClientRect?.(),viewportAspect=Math.max(.35,(viewportRect?.width||1)/(viewportRect?.height||1));
     const coverageDims=displayResource?.dims||dims;
-    const finePatchCoversViewport=Number(coverageDims.patchHeight||0)>=shownHeightMeters*1.02&&Number(coverageDims.patchWidth||0)>=shownHeightMeters*viewportAspect*1.02;
+    const fineCoverageTolerance=.995;
+    const finePatchCoversViewport=Number(coverageDims.patchHeight||0)>=shownHeightMeters*fineCoverageTolerance&&Number(coverageDims.patchWidth||0)>=shownHeightMeters*viewportAspect*fineCoverageTolerance;
     // Terrain coverage and canonical local-world children have separate visual
     // ownership. Keep the tangent transform container alive for eligible local
     // semantics, but let only a viewport-covering fine terrain child take over
