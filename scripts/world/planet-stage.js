@@ -7867,9 +7867,14 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // the 18 m band, but it can preserve the 48 m+ structure already visible
       // in the 1x child. Letting that resolvable parent bandwidth stay at the old
       // 22% residual exposed the 1x streaming footprint as a rectangular card.
-      const contextLocalContinuity=contextRing?smoothstep01(clamp((20-metersPerTexel)/14,0,1)):0;
-      const contextResidualGain=contextRing?lerp(.22,.72,contextLocalContinuity):0;
-      const refinementGain=contextRing?contextRefineWeight*contextResidualGain:focusRefineWeight*.94*strategicFocusResidualScale;
+      const contextLocalContinuity=contextRing?smoothstep01(clamp((48-metersPerTexel)/36,0,1)):0;
+      const contextResidualGain=contextRing?lerp(.38,.92,contextLocalContinuity):0;
+      // Native-minus-shared is a registered high-pass term already computed for
+      // every layer. Strengthen only this zero-mean refinement as physical texel
+      // size enters the local range; the common parent photometry is unchanged.
+      const localNativeResidualBand=smoothstep01(clamp((72-metersPerTexel)/60,0,1));
+      const localNativeResidualBoost=1+localNativeResidualBand*.38;
+      const refinementGain=(contextRing?contextRefineWeight*contextResidualGain:focusRefineWeight*.94*strategicFocusResidualScale)*localNativeResidualBoost;
       // Regional parents are physically coarse but still need readable landform
       // structure while finer children stream. Reuse the already-computed,
       // registered-meter macro signal and increase only its presentation gain in
@@ -8066,8 +8071,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         structureContribution=cover.slice();
         const sharedCover=landCoverTint(worldEast,worldNorth,sharedMetersPerTexel,detailSalt,elevationBase).map(v=>v*contextDetailStrength);
         const nativeCover=landCoverTint(worldEast,worldNorth,metersPerTexel,detailSalt,elevationBase);
-        const contextCoverGain=contextRing?lerp(.38,.82,contextLocalContinuity):0;
-        const coverGain=contextRing?contextRefineWeight*contextCoverGain:focusRefineWeight*.98*strategicFocusResidualScale;
+        const contextCoverGain=contextRing?lerp(.48,.94,contextLocalContinuity):0;
+        const coverGain=(contextRing?contextRefineWeight*contextCoverGain:focusRefineWeight*.98*strategicFocusResidualScale)*localNativeResidualBoost;
         // Prefer the already SEED-registered land-cover field for strategic-map
         // readability. Its 3.6 km / 1.5 km / 700 m structure is physically
         // resolvable at 1/500 and avoids re-amplifying continental relief.
@@ -9057,23 +9062,28 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     const shownHeightMeters=level.visibleHeightMeters/dims.presentationCompensation;
     const viewportRect=canvas?.getBoundingClientRect?.(),viewportAspect=Math.max(.35,(viewportRect?.width||1)/(viewportRect?.height||1));
     const coverageDims=displayResource?.dims||dims;
-    const fineCoverageTolerance=.995;
-    const finePatchCoversViewport=Number(coverageDims.patchHeight||0)>=shownHeightMeters*fineCoverageTolerance&&Number(coverageDims.patchWidth||0)>=shownHeightMeters*viewportAspect*fineCoverageTolerance;
+    const coverageTolerance=.995;
+    const covers=(factor)=>Number(coverageDims.patchHeight||0)*factor>=shownHeightMeters*coverageTolerance&&Number(coverageDims.patchWidth||0)*factor>=shownHeightMeters*viewportAspect*coverageTolerance;
+    const finePatchCoversViewport=covers(1);
+    const mediumRingCoversViewport=covers(LOCAL_MEDIUM_RING_SPAN_FACTOR);
+    const surroundCoversViewport=covers(LOCAL_SURROUND_SPAN_FACTOR);
+    const foregroundFamilyCoversViewport=finePatchCoversViewport||mediumRingCoversViewport||surroundCoversViewport;
     // Terrain coverage and canonical local-world children have separate visual
-    // ownership. Keep the tangent transform container alive for eligible local
-    // semantics, but let only a viewport-covering fine terrain child take over
-    // from the already-ready world-matched medium/outer parents beneath it.
-    // This preserves local buildings/roads while an undersized 1x focus child is
-    // ready, and prevents its feathered footprint from reading as a rectangular
-    // LOD ownership boundary during continuous zoom.
-    const fineTerrainVisible=fineVisible&&finePatchCoversViewport&&(!mapScaleShell||mapShellOut>.02);
+    // ownership. The foreground terrain resource is the concentric 1x/3x/6x
+    // family, not the 1x texture in isolation. Keep its feathered fine child
+    // visible whenever that same prepared, world-matched family covers the
+    // viewport; this preserves continuous refinement during between-tier zoom.
+    const fineTerrainVisible=fineVisible&&foregroundFamilyCoversViewport&&(!mapScaleShell||mapShellOut>.02);
     const localPresentationVisible=localWorldPresentationEligibility().visible;
     tangentPatch.enabled=fineVisible||localPresentationVisible;
     if(tangentPatch.render)tangentPatch.render.enabled=fineTerrainVisible;
-    localResources.foregroundPatchCoversViewport=finePatchCoversViewport;
+    localResources.finePatchCoversViewport=finePatchCoversViewport;
+    localResources.mediumRingCoversViewport=mediumRingCoversViewport;
+    localResources.surroundCoversViewport=surroundCoversViewport;
+    localResources.foregroundPatchCoversViewport=foregroundFamilyCoversViewport;
     localResources.foregroundPatchVisible=fineTerrainVisible;
     const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
-    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters(),foregroundPatchCoversViewport:finePatchCoversViewport};
+    projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters(),finePatchCoversViewport,foregroundPatchCoversViewport:foregroundFamilyCoversViewport};
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
     // A prepared stand-in normally remains exactly world-anchored while a new
     // focus resource is built. At ground scale a small pointer drag can request
