@@ -5,7 +5,7 @@ const VERSION="protagonist-focus-ui-v1";
 const POLL_MS=180;
 const FOLLOW_DURATION_MS=360;
 const FOLLOW_STEPS=6;
-const MIN_DEAD_ZONE_METERS=10;
+const MIN_DEAD_ZONE_METERS=2;
 const MAX_DEAD_ZONE_METERS=36;
 const EVIDENCE_FAST=typeof location!=="undefined"&&new URLSearchParams(location.search).get("evidence_fast_start")==="1";
 const OWN_EVIDENCE=typeof location!=="undefined"&&new URLSearchParams(location.search).get("wp005003_focus_evidence")==="1";
