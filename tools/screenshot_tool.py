@@ -1090,10 +1090,10 @@ def _validate_wp_starting_village_frames(frames):
         raise RuntimeError(f"Starting Village context evidence did not move across enough authoritative targets: {focus_keys}")
 
 
-def _settlement_reveal_frame(driver,index,timeout):
+def _settlement_reveal_frame(driver,index,timeout,viewport=(1280,800)):
     scalar,label=WP_SETTLEMENT_REVEAL_PLAN[index]
     expected=WP_SETTLEMENT_REVEAL_TIERS[index]
-    set_exact_viewport(driver,1280,800)
+    set_exact_viewport(driver,*viewport)
     driver.execute_script("window.PlanetStage.setZoomScalar(arguments[0]);",float(scalar))
     _wait(driver,f"""
       const target={float(scalar)!r},s=window.PlanetStage?.snapshot?.(),r=s?.projection?.resourceBudget||{{}};
@@ -1635,6 +1635,29 @@ def run_capture(args):
                 path.write_text(json.dumps(diagnostic,indent=2,sort_keys=True),encoding="utf-8")
                 print("SETTLEMENT_REVEAL_VALIDATION_DIAGNOSTIC="+json.dumps(diagnostic,sort_keys=True),file=sys.stderr)
                 raise
+            # WP007 requires one acceptance matrix: desktop landscape plus true
+            # phone portrait and phone landscape. Keep the existing issue-comment
+            # trigger stable and capture the mobile variants inside the same run.
+            if args.profile=="landscape":
+                matrix={"desktop-landscape":frames}
+                for profile,viewport in (("phone-portrait",(390,844)),("phone-landscape",(844,390))):
+                    profile_frames=[]
+                    for index in range(WP_SETTLEMENT_REVEAL_SHOTS):
+                        frame=_settlement_reveal_frame(driver,index,args.ready_timeout,viewport)
+                        frame["focusPreparation"]=focus
+                        frame["profile"]=profile
+                        path=_file_name(f"{args.filename}-{profile}",index+1,WP_SETTLEMENT_REVEAL_SHOTS,args.timestamp_names)
+                        _capture(driver,path)
+                        frame["index"]=index+1;frame["file"]=path.name
+                        frame["captured_at"]=datetime.now(timezone.utc).isoformat()
+                        profile_frames.append(frame)
+                    matrix[profile]=profile_frames
+                    matrix_path=_screenshots_dir()/f"wp-s003-010-003-007-{profile}-frames.json"
+                    matrix_path.write_text(json.dumps(profile_frames,indent=2,sort_keys=True),encoding="utf-8")
+                    _validate_settlement_reveal_frames(profile_frames)
+                (_screenshots_dir()/"wp-s003-010-003-007-required-profile-matrix.json").write_text(
+                    json.dumps(matrix,indent=2,sort_keys=True),encoding="utf-8"
+                )
         elif args.scenario==WP_CANONICAL_FOCUS_SCENARIO:
             frames=[]
             for index in range(WP_CANONICAL_FOCUS_SHOTS):
