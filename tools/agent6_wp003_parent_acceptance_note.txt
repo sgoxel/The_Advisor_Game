@@ -1,0 +1,1 @@
+Parent WP acceptance uses the same ten-checkpoint fixed-focus refinement plan as the child surface-refinement scenario. Evidence harness only; no gameplay authority changes.
