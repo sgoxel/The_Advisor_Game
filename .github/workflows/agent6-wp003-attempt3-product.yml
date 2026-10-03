@@ -1,0 +1,57 @@
+name: Agent6 WP003 Attempt3 Product
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/agent6-wp003-attempt3-product.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp003-attempt3-product
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply final deterministic near-ground micro-band refinement
+        run: |
+          set -euo pipefail
+          python tools/agent6_wp003_attempt3_microband_patch.py
+          node --check scripts/world/planet-stage.js
+          git diff --check
+          grep -F 'canonical-continuous-cross-lod-source-v42' scripts/world/planet-stage.js
+          grep -F 'nearGroundRegisteredMicroV3:true' scripts/world/planet-stage.js
+          grep -F 'surfaceStructuredNoise(worldEast,worldNorth,7,microSurfaceSalt+71)' scripts/world/planet-stage.js
+      - name: Publish product source through Contents API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- scripts/world/planet-stage.js; then
+            echo "Attempt 3 product already current"
+            exit 0
+          fi
+          file_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/scripts/world/planet-stage.js?ref=main" --jq .sha)"
+          python - "$file_sha" <<'PY'
+          import base64,json,sys
+          from pathlib import Path
+          payload={
+              "message":"fix(WP-S003-010-003): resolve near-ground texture regression",
+              "content":base64.b64encode(Path("scripts/world/planet-stage.js").read_bytes()).decode("ascii"),
+              "sha":sys.argv[1],
+              "branch":"main",
+          }
+          Path('/tmp/wp003-attempt3-product.json').write_text(json.dumps(payload),encoding='utf-8')
+          PY
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/scripts/world/planet-stage.js" \
+            --input /tmp/wp003-attempt3-product.json > /tmp/wp003-attempt3-result.json
+          cat /tmp/wp003-attempt3-result.json
