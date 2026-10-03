@@ -32,32 +32,25 @@ jobs:
           changed = False
 
           if 'const readinessResource=' not in text:
-              old = '''  const nativeVisibleHeight=Math.max(
-            GROUND_FOOTPRINT_HEIGHT_METERS,
-            Number(displayResource.dims?.visibleHeight||displayResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)
-          );'''
-              if text.count(old) != 1:
-                  old = '''  const nativeVisibleHeight=Math.max(
-    GROUND_FOOTPRINT_HEIGHT_METERS,
-    Number(displayResource.dims?.visibleHeight||displayResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)
-  );'''
+              old = "  const nativeVisibleHeight=Math.max(\n    GROUND_FOOTPRINT_HEIGHT_METERS,\n    Number(displayResource.dims?.visibleHeight||displayResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)\n  );"
               if text.count(old) != 1:
                   raise SystemExit(f'Expected exactly one readiness-height anchor, found {text.count(old)}')
-              indent = '          ' if '\n            GROUND_FOOTPRINT_HEIGHT_METERS,' in old else ''
-              new = '''  // A completed next-child prewarm is already real ready coverage. Let the
-  // camera advance far enough to request/swap that cached child; otherwise the
-  // parent leash can hold below the child threshold forever even though the
-  // child is prepared, creating a deterministic zoom-readiness deadlock.
-  let readinessResource=displayResource;
-  if(zoomState.animating&&zoomState.targetScalar>zoomState.scalar&&displayResource.levelIndex<LOCAL_DETAIL_LEVELS.length-1){
-    const readyChildSignature=localSignatureFor(displayResource.levelIndex+1,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
-    const readyChild=localResourceCache.get(readyChildSignature);
-    if(readyChild)readinessResource=readyChild;
-  }
-  const nativeVisibleHeight=Math.max(
-    GROUND_FOOTPRINT_HEIGHT_METERS,
-    Number(readinessResource.dims?.visibleHeight||readinessResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)
-  );'''
+              new = "\n".join([
+                  "  // A completed next-child prewarm is already real ready coverage. Let the",
+                  "  // camera advance far enough to request/swap that cached child; otherwise the",
+                  "  // parent leash can hold below the child threshold forever even though the",
+                  "  // child is prepared, creating a deterministic zoom-readiness deadlock.",
+                  "  let readinessResource=displayResource;",
+                  "  if(zoomState.animating&&zoomState.targetScalar>zoomState.scalar&&displayResource.levelIndex<LOCAL_DETAIL_LEVELS.length-1){",
+                  "    const readyChildSignature=localSignatureFor(displayResource.levelIndex+1,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);",
+                  "    const readyChild=localResourceCache.get(readyChildSignature);",
+                  "    if(readyChild)readinessResource=readyChild;",
+                  "  }",
+                  "  const nativeVisibleHeight=Math.max(",
+                  "    GROUND_FOOTPRINT_HEIGHT_METERS,",
+                  "    Number(readinessResource.dims?.visibleHeight||readinessResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)",
+                  "  );",
+              ])
               text = text.replace(old, new, 1)
               changed = True
 
@@ -65,11 +58,13 @@ jobs:
               old = '  if(zoomState.targetPrefetchState==="deferred"&&!localJob)requestZoomTargetPrefetch();'
               if text.count(old) != 1:
                   raise SystemExit(f'Expected exactly one target-prefetch continuation anchor, found {text.count(old)}')
-              new = '''  // Once a prepared target child has become the active ready representation,
-  // immediately stage the next canonical child toward the same final zoom target.
-  // This keeps deep animated zoom progressive without bypassing atomic readiness.
-  const activePrefetchNeedsNext=zoomState.targetPrefetchState==="ready"&&!localJob&&displayResource?.signature===zoomState.targetPrefetchSignature&&displayResource.levelIndex<rawLodIndexForZoom(target);
-  if((zoomState.targetPrefetchState==="deferred"&&!localJob)||activePrefetchNeedsNext)requestZoomTargetPrefetch();'''
+              new = "\n".join([
+                  "  // Once a prepared target child has become the active ready representation,",
+                  "  // immediately stage the next canonical child toward the same final zoom target.",
+                  "  // This keeps deep animated zoom progressive without bypassing atomic readiness.",
+                  '  const activePrefetchNeedsNext=zoomState.targetPrefetchState==="ready"&&!localJob&&displayResource?.signature===zoomState.targetPrefetchSignature&&displayResource.levelIndex<rawLodIndexForZoom(target);',
+                  '  if((zoomState.targetPrefetchState==="deferred"&&!localJob)||activePrefetchNeedsNext)requestZoomTargetPrefetch();',
+              ])
               text = text.replace(old, new, 1)
               changed = True
 
