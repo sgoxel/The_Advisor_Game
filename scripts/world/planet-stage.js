@@ -7765,7 +7765,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // 1x child visibly richer inside a rectangular footprint. Let any physically
   // eligible layer sample the identical world-registered micro field; context
   // gain is bounded below by its refinement weight.
-  const useMicroDetail=!contextRing&&metersPerTexel<=6;
+  const useMicroDetail=metersPerTexel<=6;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   // Surface relief is presented as continuous hillshade, not synthetic
   // cartographic contour bands. The previous 420 m sine contours and strong
@@ -8147,7 +8147,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // layer's real texel density, not by the coarsest fallback. Edge/context
         // ownership weights make this a refinement residual instead of a card.
         const closeWeight=smoothstep01(clamp((6-metersPerTexel)/5.5,0,1));
-        const microWeight=lerp(.10,.30,closeWeight)*focusRefineWeight;
+        const microContinuity=contextRing?contextRefineWeight:focusRefineWeight;
+        const microWeight=lerp(.14,.34,closeWeight)*microContinuity;
         displayColor=displayColor.map((v,i)=>clamp(v*(1-microWeight)+micro[i]*microWeight,0,1));
       }
       // High peaks are legitimately snow-covered, but the canonical near-white
