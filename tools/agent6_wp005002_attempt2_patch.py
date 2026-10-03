@@ -16,9 +16,8 @@ updated = text
 # WP-S003-010-003-005-002 current-run Attempt 2.
 # Exact 4db8c0 evidence proved the 22% focus feather is geometrically too wide
 # for LOCAL_PATCH_MARGIN=1.50: only 56% of the patch is fully opaque, or ~84%
-# of the viewport. The parent/context halo is therefore guaranteed even though
-# the foreground geometry covers the viewport. Keep a real transition band, but
-# make the settled opaque core wider than the viewport.
+# of the viewport. Keep a real transition band, but make the settled opaque core
+# wider than the viewport so the fallback never reads as a centered halo.
 updated = replace_once(
     updated,
     "const LOCAL_TEXTURE_HANDOFF_FEATHER=.22;",
@@ -26,10 +25,9 @@ updated = replace_once(
     "viewport-safe focus feather",
 )
 
-# Context is fallback coverage outside the focused viewport. It must remain
-# world-matched, but it does not need near-focus raster density. Reducing only
-# the medium/outer presentation rasters cuts bounded cooperative work and cache
-# pressure without changing canonical coordinates, geometry, or world authority.
+# Context remains world-matched fallback coverage outside the focused viewport,
+# but does not need near-focus raster density. Lower only disposable presentation
+# density; canonical coordinates, geometry, and Simulation remain unchanged.
 updated = replace_once(
     updated,
     "const LOCAL_MEDIUM_RING_TEXTURE_SCALE=.90;",
@@ -43,31 +41,29 @@ updated = replace_once(
     "outer fallback raster scale",
 )
 
-# The 640 px intermediate focus tiers dominate preparation cost while the
-# physical patch footprint shrinks strongly between tiers. 512 px still gives a
-# strictly improving meters/texel ladder, removes the resolution reversal into
-# near-ground-wide (already 512), and cuts those focus raster pixels by 36%.
-level_ids=("local-area-wide","local-area","settlement-wide","settlement","settlement-core")
-for level_id in level_ids:
-    old=f'id:"{level_id}",'
-    pos=updated.find(old)
-    if pos<0:
-        raise SystemExit(f"texture ladder: missing level {level_id}")
-    end=updated.find("}),",pos)
-    if end<0:
-        raise SystemExit(f"texture ladder: malformed level {level_id}")
-    chunk=updated[pos:end]
-    if "textureSize:640" not in chunk:
-        raise SystemExit(f"texture ladder: expected 640 px at {level_id}")
-    updated=updated[:pos]+chunk.replace("textureSize:640","textureSize:512",1)+updated[end:]
+# Exact per-tier anchors avoid accidental cross-line matching. 512 px still
+# yields a strictly improving physical meters/texel ladder while cutting the
+# costly 640 px intermediate focus rasters by 36% and removing the 640->512
+# source-size reversal at the near-ground-wide handoff.
+for level_id in ("local-area-wide","local-area","settlement-wide","settlement","settlement-core"):
+    old_prefix=f'Object.freeze({{id:"{level_id}",'
+    start=updated.find(old_prefix)
+    if start<0:
+        raise SystemExit(f"texture ladder: missing exact level {level_id}")
+    line_end=updated.find("\n",start)
+    if line_end<0: line_end=len(updated)
+    line=updated[start:line_end]
+    if line.count("textureSize:640")!=1:
+        raise SystemExit(f"texture ladder: expected one 640 px token at {level_id}, line={line!r}")
+    updated=updated[:start]+line.replace("textureSize:640","textureSize:512",1)+updated[line_end:]
 
 # README now establishes simple 3D meshes with cel/toon shading as the primary
-# presentation direction. Reuse the already-computed deterministic albedo and
-# lighting signal and quantize only luminance at physically local scales. This
-# adds zero geography/noise samples, preserves hue/authority, and turns smooth
-# value-noise gradients into readable stylized terrain planes instead of blur.
-toon_anchor = """      pushRange(\"finalLuma\",luma3(displayColor));"""
-toon_block = """      if(parentSample?.land){
+# presentation direction. Reuse already-computed deterministic albedo/lighting
+# and quantize only luminance at physically local scales. This adds no world or
+# noise samples and converts smooth value-noise gradients into readable stylized
+# terrain planes instead of amplifying fuzzy texture.
+toon_anchor = '      pushRange("finalLuma",luma3(displayColor));'
+toon_block = '''      if(parentSample?.land){
         const toonBand=smoothstep01(clamp((220-metersPerTexel)/190,0,1));
         if(toonBand>.001){
           const luma=luma3(displayColor);
@@ -78,7 +74,7 @@ toon_block = """      if(parentSample?.land){
           displayColor=displayColor.map(v=>clamp(v+shift,0,.88));
         }
       }
-      pushRange(\"finalLuma\",luma3(displayColor));"""
+      pushRange("finalLuma",luma3(displayColor));'''
 updated = replace_once(updated, toon_anchor, toon_block, "toon terrain luminance")
 
 if updated == text:
