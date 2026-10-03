@@ -1,4 +1,4 @@
-name: Agent 6 WP011 Patch
+name: Agent 6 WP011 Finalize Accepted Evidence
 
 on:
   push:
@@ -11,25 +11,25 @@ permissions:
   contents: write
 
 jobs:
-  patch:
+  finalize:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-      - name: Apply patch
+      - name: Record accepted evidence and clean temporary helpers
         run: python tools/agent6_wp011_patch.py
       - name: Parse check
         run: node --check scripts/world/planet-stage.js
-      - name: Commit patch
+      - name: Commit final implementation docs
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+sgoxel@users.noreply.github.com'
-          git add scripts/world/planet-stage.js
+          git add -A
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'fix(WP-S003-010-003-011): declutter center scale labels'
+          git commit -m 'docs(WP-S003-010-003-011): record accepted evidence and clean helpers'
           git pull --rebase origin main
           git push origin HEAD:main
