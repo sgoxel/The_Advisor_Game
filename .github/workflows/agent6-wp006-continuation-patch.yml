@@ -32,7 +32,8 @@ jobs:
           python tools/agent6_wp006_continuation_patch.py
           node --check scripts/world/planet-stage.js
           python -m py_compile tools/screenshot_tool.py
-          rm -rf tools/__pycache__
+          git checkout -- tools/__pycache__/screenshot_tool.cpython-312.pyc 2>/dev/null || true
+          rm -f tools/__pycache__/screenshot_tool.cpython-311.pyc
           git diff --check
       - name: Commit tested runtime and evidence patch
         shell: bash
@@ -40,12 +41,11 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+sgoxel@users.noreply.github.com"
-          git add scripts/world/planet-stage.js tools/screenshot_tool.py .github/workflows/visual-evidence.yml
+          git add scripts/world/planet-stage.js tools/screenshot_tool.py
           if git diff --cached --quiet; then
             echo "WP006 viewport-safe patch already current"
             exit 0
           fi
           git commit -m "fix(WP-S003-010-003-006): make fine owner viewport-safe"
-          git status --porcelain
           git pull --rebase --autostash origin main
           git push origin HEAD:main
