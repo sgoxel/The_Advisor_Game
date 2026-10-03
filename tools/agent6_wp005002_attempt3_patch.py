@@ -115,3 +115,4 @@ if "focusAuthorityApplied:true" not in text:
 
 PATH.write_text(text, encoding="utf-8")
 print("Applied WP-S003-010-003-005-002 Attempt 3 canonical focus source refinement")
+# Harness revision 2: source patch unchanged; rerun after removing invalid npm step.
