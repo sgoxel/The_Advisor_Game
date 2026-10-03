@@ -1,10 +1,11 @@
-name: Agent6 WP005002 Viewport-Core Toon Patch
+name: Agent6 WP005002 Viewport-Core Toon Patch v2
 
 on:
   push:
     branches: [main]
     paths:
       - ".github/workflows/agent6-wp005002-attempt2-patch.yml"
+      - "tools/agent6_wp005002_attempt2_patch.py"
   workflow_dispatch:
 
 permissions:
