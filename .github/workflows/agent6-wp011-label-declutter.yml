@@ -1,0 +1,62 @@
+name: Agent 6 WP011 Label Declutter
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.issue.number == 165 && contains(github.event.comment.body, '/agent6-wp011-label-declutter')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply deterministic declutter patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --ff-only origin main
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/world/planet-stage.js')
+          text = path.read_text()
+          old = '''    const microLocationFocus=root?.dataset?.microLocationFocus==="true",travelEncounterFocus=root?.dataset?.travelEncounterFocus==="true",groundCharacterFocus=groundCharacterLayerEligible()||scaleIndexForScalar(zoomState.scalar)===SCALE_LADDER.length-1;
+    // The canonical center glyph remains world-anchored and visible at final
+    // ground, but its map-coordinate readout yields to the RPG character scene.
+    code.style.display=(microLocationFocus||travelEncounterFocus||groundCharacterFocus)?"none":"";'''
+          new = '''    const microLocationFocus=root?.dataset?.microLocationFocus==="true",travelEncounterFocus=root?.dataset?.travelEncounterFocus==="true",groundCharacterFocus=groundCharacterLayerEligible()||scaleIndexForScalar(zoomState.scalar)===SCALE_LADDER.length-1;
+    // WP-S003-010-003-011: at regional-detail/local-network scales the
+    // coordinate readout occupied the same screen lane as the authoritative
+    // focus geography label. Preserve the exact world-anchored center glyph,
+    // but yield the redundant coordinate text in those two public scale bands.
+    const mapLabelCollisionBand=[4,5].includes(scaleIndexForScalar(zoomState.scalar));
+    // The canonical center glyph remains world-anchored and visible at final
+    // ground, but its map-coordinate readout yields to the RPG character scene.
+    code.style.display=(microLocationFocus||travelEncounterFocus||groundCharacterFocus||mapLabelCollisionBand)?"none":"";'''
+          if old not in text:
+              raise SystemExit('expected center readout snippet not found')
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one snippet, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          node --check scripts/world/planet-stage.js
+      - name: Commit and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/world/planet-stage.js
+          git commit -m 'fix(WP-S003-010-003-011): declutter center scale labels'
+          for attempt in 1 2 3; do
+            git pull --rebase origin main
+            if git push origin HEAD:main; then exit 0; fi
+            sleep 2
+          done
+          exit 1
