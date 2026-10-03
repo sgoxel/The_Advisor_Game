@@ -9,6 +9,8 @@ from pathlib import Path
 
 from selenium.webdriver.support.ui import WebDriverWait
 
+# Reopened regression acceptance intentionally exercises a close-materialized
+# settlement before returning through every broad 1/10–1/500 map checkpoint.
 TARGET = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000/"
 OUT_DIR = Path(sys.argv[2] if len(sys.argv) > 2 else "tools/wp_s003_010_003_017_reopen_artifact")
 BASE_PATH = Path(__file__).with_name("test_wp_s003_010_003_017.py")
