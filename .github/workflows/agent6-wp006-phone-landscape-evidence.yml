@@ -1,0 +1,50 @@
+name: Agent6 WP006 Phone Landscape Evidence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/agent6-wp006-phone-landscape-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r tools/requirements.txt
+      - name: Start local game server
+        run: |
+          python -m http.server 8000 --bind 127.0.0.1 >/tmp/wp006-phone-landscape-http.log 2>&1 &
+          sleep 1
+      - name: Capture WP006 phone landscape
+        run: |
+          python tools/screenshot_tool.py \
+            http://127.0.0.1:8000/ \
+            visual-wp-s003-010-003-006-phone-landscape \
+            --profile phone-landscape \
+            --scenario wp-s003-010-003-006 \
+            --shots 13 \
+            --timestamp-names \
+            --wait-min 1 \
+            --wait-max 1 \
+            --evidence-json evidence-wp-s003-010-003-006-phone-landscape-${GITHUB_RUN_ID}.json \
+            --issue 158 \
+            --no-publish
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-s003-010-003-006-phone-landscape-${{ github.run_id }}
+          path: tools/screenshots/
+          if-no-files-found: warn
+          retention-days: 14
