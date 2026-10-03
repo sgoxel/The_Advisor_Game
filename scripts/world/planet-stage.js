@@ -339,10 +339,10 @@ const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=8;
 const LOCAL_RESOURCE_CACHE_BUDGET_BYTES=48*1024*1024;
 const LOCAL_MEDIUM_RING_SPAN_FACTOR=6;
-const LOCAL_MEDIUM_RING_TEXTURE_SCALE=.90;
+const LOCAL_MEDIUM_RING_TEXTURE_SCALE=.72;
 const LOCAL_SURROUND_RING_TEXTURE_SCALE=.58;
 const WP006_SINGLE_PARENT_MAX_LEVEL=8;
-const WP006_SINGLE_PARENT_OUTER_TEXTURE_SCALE=.86;
+const WP006_SINGLE_PARENT_OUTER_TEXTURE_SCALE=.50;
 const LOCAL_GRACE_RESIDENCY_MS=4500;
 const LOCAL_RESIDENCY_RECORD_LIMIT=64;
 const LOCAL_PREFETCH_RECORD_LIMIT=16;
@@ -391,15 +391,15 @@ const LOCAL_DETAIL_LEVELS=Object.freeze([
   Object.freeze({id:"regional-overview",band:"regional-overview",visibleHeightMeters:400000,sampleSpacingMeters:12000,textureSize:160,reliefClampMeters:7000,reliefGain:6,maxHeightUnits:.58,staticWorld:false}),
   Object.freeze({id:"regional-detail",band:"regional-detail",visibleHeightMeters:140000,sampleSpacingMeters:4000,textureSize:192,reliefClampMeters:7000,reliefGain:5.5,maxHeightUnits:.56,staticWorld:false}),
   Object.freeze({id:"district",band:"district",visibleHeightMeters:50000,sampleSpacingMeters:1400,textureSize:256,reliefClampMeters:6000,reliefGain:9,maxHeightUnits:.65,staticWorld:false}),
-  Object.freeze({id:"local-area-wide",band:"local-area",visibleHeightMeters:20000,sampleSpacingMeters:480,textureSize:640,reliefClampMeters:5000,reliefGain:8,maxHeightUnits:.60,staticWorld:false}),
-  Object.freeze({id:"local-area",band:"local-area",visibleHeightMeters:10000,sampleSpacingMeters:220,textureSize:640,reliefClampMeters:4200,reliefGain:7,maxHeightUnits:.55,staticWorld:false}),
+  Object.freeze({id:"local-area-wide",band:"local-area",visibleHeightMeters:20000,sampleSpacingMeters:480,textureSize:512,reliefClampMeters:5000,reliefGain:8,maxHeightUnits:.60,staticWorld:false}),
+  Object.freeze({id:"local-area",band:"local-area",visibleHeightMeters:10000,sampleSpacingMeters:220,textureSize:512,reliefClampMeters:4200,reliefGain:7,maxHeightUnits:.55,staticWorld:false}),
   // These physical terrain tiers do not contain settlement geometry yet, so keep
   // the player-facing semantic band at LOCAL AREA until a static-world resource
   // is actually visible. This prevents the UI/ruler from claiming SETTLEMENT
   // while the frame still contains terrain only.
-  Object.freeze({id:"settlement-wide",band:"local-area",visibleHeightMeters:5000,sampleSpacingMeters:110,textureSize:640,reliefClampMeters:3000,reliefGain:5.5,maxHeightUnits:.50,staticWorld:false}),
-  Object.freeze({id:"settlement",band:"local-area",visibleHeightMeters:2300,sampleSpacingMeters:44,textureSize:640,reliefClampMeters:1600,reliefGain:4,maxHeightUnits:.42,staticWorld:false}),
-  Object.freeze({id:"settlement-core",band:"local-area",visibleHeightMeters:1000,sampleSpacingMeters:22,textureSize:640,reliefClampMeters:900,reliefGain:3,maxHeightUnits:.38,staticWorld:false}),
+  Object.freeze({id:"settlement-wide",band:"local-area",visibleHeightMeters:5000,sampleSpacingMeters:110,textureSize:512,reliefClampMeters:3000,reliefGain:5.5,maxHeightUnits:.50,staticWorld:false}),
+  Object.freeze({id:"settlement",band:"local-area",visibleHeightMeters:2300,sampleSpacingMeters:44,textureSize:512,reliefClampMeters:1600,reliefGain:4,maxHeightUnits:.42,staticWorld:false}),
+  Object.freeze({id:"settlement-core",band:"local-area",visibleHeightMeters:1000,sampleSpacingMeters:22,textureSize:512,reliefClampMeters:900,reliefGain:3,maxHeightUnits:.38,staticWorld:false}),
   // The first two static-world tiers visibly contain the road/building layout,
   // so they own SETTLEMENT semantics. NEAR GROUND begins only once the closer
   // resource is ready, preserving truthfulness through asynchronous handoffs.
@@ -7528,7 +7528,7 @@ const TERRAIN_DETAIL_OCTAVES=Object.freeze([[48000,700],[16000,320],[5200,140],[
 // handoff without creating the old tinted/blurred card. Reuse this single curve
 // for focus authority, registered high-pass, alpha and center stitching so no
 // independent square boundary can become visible during zoom.
-const LOCAL_TEXTURE_HANDOFF_FEATHER=.22;
+const LOCAL_TEXTURE_HANDOFF_FEATHER=.12;
 // Medium continuation textures are presentation coverage, not canonical tile
 // boundaries. Keep their higher-density ready parent opaque across the viewport
 // and feather only near the physical 6x ring edge, where the 12x outer fallback
@@ -8199,6 +8199,17 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
           const broadWeight=colorDetailOctaveWeight(5.5,metersPerTexel),fineWeight=colorDetailOctaveWeight(1.4,metersPerTexel),microWeight=colorDetailOctaveWeight(.62,metersPerTexel);
           const patch=(broadStyle*.145*broadWeight+fineStyle*.070*fineWeight+microStyle*.035*microWeight)*closeTextureBand;
           displayColor=[clamp(displayColor[0]+patch*.92,0,1),clamp(displayColor[1]+patch*.68,0,1),clamp(displayColor[2]-patch*.12,0,1)];
+        }
+      }
+      if(parentSample?.land){
+        const toonBand=smoothstep01(clamp((220-metersPerTexel)/190,0,1));
+        if(toonBand>.001){
+          const luma=luma3(displayColor);
+          const closeToon=smoothstep01(clamp((18-metersPerTexel)/17.5,0,1));
+          const stepSize=lerp(.050,.028,closeToon);
+          const quantized=clamp(Math.round(luma/stepSize)*stepSize,0,1);
+          const shift=(quantized-luma)*toonBand*.68;
+          displayColor=displayColor.map(v=>clamp(v+shift,0,.88));
         }
       }
       pushRange("finalLuma",luma3(displayColor));
