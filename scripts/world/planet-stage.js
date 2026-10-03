@@ -1029,10 +1029,17 @@ function semanticMarkerClassBudget(spec,markerClass){
   if(markerClass==="landmark-poi")return Number(spec.classBudgets?.landmark||0);
   return 0;
 }
+function semanticPolicyIndexForVisibleBand(index,value){
+  if(!Number.isFinite(Number(value))||!Number.isFinite(Number(zoomState.scalar))
+    ||Math.abs(Number(value)-Number(zoomState.scalar))>1e-9)return index;
+  const visibleIndex=ZOOM_BANDS.findIndex(band=>band.id===zoomState.band);
+  return visibleIndex<0?index:Math.min(index,visibleIndex);
+}
 function semanticScaleIndexForScalar(value=zoomState.scalar){
   const raw=scaleIndexForScalar(value),height=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(value));
   if(!semanticScaleState.initialized){
-    semanticScaleState={index:raw,initialized:true,changes:0,holds:0,lastRawIndex:raw};return raw;
+    semanticScaleState={index:raw,initialized:true,changes:0,holds:0,lastRawIndex:raw};
+    return semanticPolicyIndexForVisibleBand(raw,value);
   }
   let index=semanticScaleState.index;
   while(raw>index&&index<SEMANTIC_LAYER_SPECS.length-1){
@@ -1047,7 +1054,7 @@ function semanticScaleIndexForScalar(value=zoomState.scalar){
   }
   const changed=index!==semanticScaleState.index;
   semanticScaleState={index,initialized:true,changes:semanticScaleState.changes+(changed?1:0),holds:semanticScaleState.holds+(!changed&&raw!==index?1:0),lastRawIndex:raw};
-  return index;
+  return semanticPolicyIndexForVisibleBand(index,value);
 }
 function currentSemanticLayerPolicy(portrait=false){return semanticLayerSpec(semanticScaleIndexForScalar(zoomState.scalar),portrait);}
 function mapContextKindsForBand(_band){return currentSemanticLayerPolicy(false).contextKinds.slice();}
@@ -2488,7 +2495,10 @@ function renderMapPresentation(){
   const citySpacingPass=cityMinSeparationMeters==null||cityMinSeparationMeters+2>=requiredCitySeparation;
   const maxLandmarkCount=spec.budget;
   const scaleState=scaleStateForScalar(),targetScaleState=scaleStateForScalar(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar),interpolationScaleState=interpolationScaleStateForScalar(),targetInterpolationScaleState=interpolationScaleStateForScalar(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar),localLayers=semanticLocalLayerDiagnostics(semantic),ruler=scaleRulerForViewport(zoomState.visibleFootprintWidthMeters,rect?.width||1);
-  const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=scaleState.label;scale.querySelector(".planet-scale-meta span").textContent=zoomState.animating?(scaleState.label+" → "+targetScaleState.label):semantic.displayBand;scale.querySelector(".planet-scale-line").style.width=ruler.pixelLength.toFixed(2)+"px";scale.querySelector("small").textContent=formatDistanceMeters(ruler.distanceMeters);
+  const transitionText=zoomState.animating&&scaleState.label!==targetScaleState.label
+    ?scaleState.label+" → "+targetScaleState.label
+    :semantic.displayBand;
+  const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=scaleState.label;scale.querySelector(".planet-scale-meta span").textContent=transitionText;scale.querySelector(".planet-scale-line").style.width=ruler.pixelLength.toFixed(2)+"px";scale.querySelector("small").textContent=formatDistanceMeters(ruler.distanceMeters);
   mapPresentation={
     active:true,context,visibleContextKinds:contextKinds,visiblePlaceKinds:placeKinds,labelCount:legacyLabelCount,
     atlasVisibleLabelCount:visible.length,atlasCandidateCount:atlas.query.candidates.length,atlasQueryCellCount:atlas.query.queryCellCount,
