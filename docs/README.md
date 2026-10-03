@@ -428,7 +428,8 @@ Offline progression should preserve believable world continuity without changing
 
 # 🎨 World Presentation and Rendering Architecture
 
-The final world renderer is **PlayCanvas Engine 2**. The game keeps an authoritative deterministic 2D Simulation/world model, while PlayCanvas renders that world as an orthographic 3D scene.
+The final world renderer is **PlayCanvas Engine 2**. The game will be adjusted for high performance WebGPU but it will use WebGL2 as fallback.
+The game will be mainly use 3d simple meshes with Cel-Shading (Toon-Shading) technic for textures, but it will also use 2d character artistic images for dialogues. 
 
 The architecture is intentionally split:
 
