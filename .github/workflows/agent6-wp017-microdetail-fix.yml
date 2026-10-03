@@ -1,0 +1,61 @@
+name: Agent 6 WP017 microdetail fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/agent6-wp017-microdetail-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gate local presentation outside broad map scales
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/world/planet-stage.js')
+          s=p.read_text(encoding='utf-8')
+          old='''function localWorldPresentationEligibility(value=zoomState.scalar){
+  const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX),revealTier=settlementRevealTierForScalar(scalar);
+  const requestedLevel=String(localResources.requestedLevel||LOCAL_DETAIL_LEVELS[requestedLodIndexForZoom(scalar)]?.id||"");
+  const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
+  // Retained parent resources are terrain-coverage fallbacks only. Presentation
+  // eligibility is determined by the requested scale so stale local roots and
+  // seasonal accents cannot survive at regional/strategic map scales.
+  const staticWorldVisible=Boolean(level?.staticWorld)||requestedLevel==="ground";
+  return Object.freeze({visible:revealTier!=="none"||staticWorldVisible,revealTier,rawLevelIndex:rawIndex,rawLevelId:requestedLevel==="ground"?"ground":level?.id||null,rawStaticWorld:staticWorldVisible});
+}'''
+          new='''function localWorldPresentationEligibility(value=zoomState.scalar){
+  const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX),revealTier=settlementRevealTierForScalar(scalar);
+  const requestedScaleIndex=Number(scaleStateForScalar(scalar)?.index??0),broadMapScale=requestedScaleIndex<=5;
+  const requestedLevel=String(localResources.requestedLevel||LOCAL_DETAIL_LEVELS[requestedLodIndexForZoom(scalar)]?.id||"");
+  const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
+  // Retained parent resources are terrain-coverage fallbacks only. Presentation
+  // eligibility is determined by the requested physical/map scale so stale local
+  // roots, settlement microdetail, fauna, dressing, and seasonal accents cannot
+  // survive at the strategic/regional 1/10 through 1/500 map scales.
+  const staticWorldVisible=Boolean(level?.staticWorld)||requestedLevel==="ground";
+  const effectiveRevealTier=broadMapScale?"none":revealTier;
+  return Object.freeze({visible:!broadMapScale&&(effectiveRevealTier!=="none"||staticWorldVisible),revealTier:effectiveRevealTier,requestedScaleIndex,broadMapScale,rawLevelIndex:rawIndex,rawLevelId:requestedLevel==="ground"?"ground":level?.id||null,rawStaticWorld:staticWorldVisible});
+}'''
+          if old not in s:
+              raise SystemExit('localWorldPresentationEligibility source did not match expected current main')
+          p.write_text(s.replace(old,new,1),encoding='utf-8')
+          PY
+          git rm .github/workflows/agent6-wp017-microdetail-fix.yml
+          git add scripts/world/planet-stage.js
+          git commit -m 'fix(WP-S003-010-003-017): suppress local microdetail at broad map scales'
+          git pull --rebase origin main
+          git push origin HEAD:main
