@@ -9046,15 +9046,13 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     const coverageDims=displayResource?.dims||dims;
     const finePatchCoversViewport=Number(coverageDims.patchHeight||0)>=shownHeightMeters*1.02&&Number(coverageDims.patchWidth||0)>=shownHeightMeters*viewportAspect*1.02;
     // Terrain coverage and canonical local-world children have separate visual
-    // ownership. Hiding the whole tangent entity to protect an undersized child
-    // also hid the valid settlement presentation and caused the .985 -> 1.00
-    // disappearance/pop. Keep the transform container alive for eligible local
-    // semantics while disabling only the foreground terrain renderer.
-    // The focus mesh is a bounded 1x child, not a viewport-sized replacement.
-    // Medium and outer rings provide complete coverage beneath its feathered
-    // edge, so hiding the child until it alone covers the viewport suppresses
-    // every higher-density LOD during the exact zoom range meant to reveal it.
-    const fineTerrainVisible=fineVisible&&(!mapScaleShell||mapShellOut>.02);
+    // ownership. Keep the tangent transform container alive for eligible local
+    // semantics, but let only a viewport-covering fine terrain child take over
+    // from the already-ready world-matched medium/outer parents beneath it.
+    // This preserves local buildings/roads while an undersized 1x focus child is
+    // ready, and prevents its feathered footprint from reading as a rectangular
+    // LOD ownership boundary during continuous zoom.
+    const fineTerrainVisible=fineVisible&&finePatchCoversViewport&&(!mapScaleShell||mapShellOut>.02);
     const localPresentationVisible=localWorldPresentationEligibility().visible;
     tangentPatch.enabled=fineVisible||localPresentationVisible;
     if(tangentPatch.render)tangentPatch.render.enabled=fineTerrainVisible;
