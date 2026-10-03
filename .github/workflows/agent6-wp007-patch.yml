@@ -46,3 +46,4 @@ jobs:
 # AGENT #6 Attempt 1 trigger: 2026-10-03T04:19+03:00
 # AGENT #6 continuation trigger: monotonic 18/28/46 percent reveal ladder
 # AGENT #6 retry trigger: exact targetFraction anchor
+# AGENT #6 final trigger: world-matched overview sizing + complete coarse canonical footprint
