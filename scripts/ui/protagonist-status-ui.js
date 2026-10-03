@@ -155,3 +155,18 @@ return freeze({VERSION,EVIDENCE_MODES,MAX_GOALS,MAX_ITEMS,MAX_GUIDANCE,MAX_SCOPE
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",load,{once:true});else load();
 })(typeof globalThis!=="undefined"?globalThis:this);
+
+/* WP-S003-010-003-005-003: read-only protagonist position bootstrap. */
+;(function(root){
+  "use strict";
+  if(typeof document==="undefined")return;
+  function load(){
+    if(root.Protagonist||document.querySelector('script[data-protagonist-entity-loader]'))return;
+    const script=document.createElement("script");
+    script.src="scripts/entities/protagonist.js?v=protagonist-entity-v1";
+    script.async=false;
+    script.dataset.protagonistEntityLoader="true";
+    document.head.appendChild(script);
+  }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",load,{once:true});else load();
+})(typeof globalThis!=="undefined"?globalThis:this);
