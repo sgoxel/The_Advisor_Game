@@ -64,5 +64,9 @@ jobs:
           git add -f tools/screenshots/agent6-wp003-attempt1
           git diff --cached --stat
           git commit -m "test(WP-S003-010-003): publish attempt 1 screenshots"
+          # The screenshot harness may update ignored/local runtime files. They are
+          # not part of evidence and must not prevent rebasing the evidence commit.
+          git restore --worktree .
+          git clean -fd
           git pull --rebase origin main
           git push origin HEAD:main
