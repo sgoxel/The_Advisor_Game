@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/agent6-wp003-parent-evidence-fix.yml"
+      - "tools/agent6_wp003_parent_evidence_patch.py"
   workflow_dispatch:
 
 permissions:
@@ -31,6 +32,9 @@ jobs:
           git diff --check
           grep -q 'WP_VIEWPORT_REFINEMENT_SCENARIO="wp-s003-010-003"' tools/screenshot_tool.py
           grep -q 'WP_SURFACE_REFINEMENT_SCENARIO,WP_VIEWPORT_REFINEMENT_SCENARIO' tools/screenshot_tool.py
+          grep -q 'def _surface_refinement_frame(driver,index,timeout,viewport=(1280,800)):' tools/screenshot_tool.py
+          grep -Fq 'set_exact_viewport(driver,*viewport)' tools/screenshot_tool.py
+          grep -Fq '_surface_refinement_frame(driver,index,args.ready_timeout,(width,height))' tools/screenshot_tool.py
       - name: Commit evidence harness correction through Contents API
         env:
           GH_TOKEN: ${{ github.token }}
@@ -46,7 +50,7 @@ jobs:
           import base64,json,sys
           from pathlib import Path
           payload={
-              "message":"test(WP-S003-010-003): capture refinement sequence for parent WP",
+              "message":"test(WP-S003-010-003): preserve requested refinement viewport",
               "content":base64.b64encode(Path("tools/screenshot_tool.py").read_bytes()).decode("ascii"),
               "sha":sys.argv[1],
               "branch":"main",
