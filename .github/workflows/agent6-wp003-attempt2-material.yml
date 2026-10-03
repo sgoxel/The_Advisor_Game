@@ -1,0 +1,54 @@
+name: Agent6 WP003 Attempt2 Material Refinement
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/agent6-wp003-attempt2-material.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp003-attempt2-material
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply deterministic material refinement
+        run: |
+          set -euo pipefail
+          python tools/agent6_wp003_attempt2_material_patch.py
+          node --check scripts/world/planet-stage.js
+          git diff --check
+          grep -q 'canonical-continuous-cross-lod-source-v41' scripts/world/planet-stage.js
+          grep -q 'materialFrequencyTransform:true' scripts/world/planet-stage.js
+          test "$(grep -c 'function surfaceMaterialNoise(' scripts/world/planet-stage.js)" -eq 1
+      - name: Commit product file through Contents API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          file_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/scripts/world/planet-stage.js?ref=main" --jq .sha)"
+          python - "$file_sha" <<'PY'
+          import base64,json,sys
+          from pathlib import Path
+          payload={
+              "message":"fix(WP-S003-010-003): add registered material refinement",
+              "content":base64.b64encode(Path("scripts/world/planet-stage.js").read_bytes()).decode("ascii"),
+              "sha":sys.argv[1],
+              "branch":"main",
+          }
+          Path("/tmp/wp003-attempt2.json").write_text(json.dumps(payload),encoding="utf-8")
+          PY
+          gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/scripts/world/planet-stage.js" --input /tmp/wp003-attempt2.json
