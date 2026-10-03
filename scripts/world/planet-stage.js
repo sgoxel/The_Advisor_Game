@@ -3253,24 +3253,32 @@ function surfaceValueNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt){
   const a=surfaceHash2(x0,y0,salt),b=surfaceHash2(x0+1,y0,salt),c=surfaceHash2(x0,y0+1,salt),d=surfaceHash2(x0+1,y0+1,salt);
   return lerp(lerp(a,b,tx),lerp(c,d,tx),ty)-.5;
 }
+function surfaceStructuredNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt){
+  const value=surfaceValueNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt);
+  // E[value] and E[.25-|value|] are both approximately zero for the seeded
+  // interpolation field. Blending them keeps photometry centered while turning
+  // broad blobs into readable ridge/valley structure without another noise query.
+  const ridge=.25-Math.abs(value);
+  return clamp(value*.62+ridge*.76,-.5,.5);
+}
 function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel,phase){
   const salt=((phase*100000)|0)^0x5f356495;
   let detail=0;
   // Keep continental-scale variation as a quiet identity cue, then spend most
   // visible contrast on frequencies the current physical texel can actually
   // resolve. This prevents one macro slope from dominating the 1/500 frame.
-  if(metersPerTexel<=24000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.012;
-  if(metersPerTexel<=6000)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.026;
-  if(metersPerTexel<=1200)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.036;
-  if(metersPerTexel<=900)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.026;
-  if(metersPerTexel<=300)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.014;
-  if(metersPerTexel<=120)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.032;
-  if(metersPerTexel<=100)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,260,salt+89)*.034;
-  if(metersPerTexel<=30)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.025;
-  if(metersPerTexel<=16)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,48,salt+109)*.020;
-  if(metersPerTexel<=8)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.018;
-  if(metersPerTexel<=2.5)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,8,salt+149)*.012;
-  if(metersPerTexel<=.8)detail+=surfaceValueNoise(worldEastMeters,worldNorthMeters,3,salt+163)*.008;
+  if(metersPerTexel<=24000)detail+=surfaceStructuredNoise(worldEastMeters,worldNorthMeters,32000,salt+11)*.018;
+  if(metersPerTexel<=6000)detail+=surfaceStructuredNoise(worldEastMeters,worldNorthMeters,9500,salt+29)*.034;
+  if(metersPerTexel<=1200)detail+=surfaceStructuredNoise(worldEastMeters,worldNorthMeters,2600,salt+47)*.036;
+  if(metersPerTexel<=900)detail+=surfaceStructuredNoise(worldEastMeters,worldNorthMeters,1200,salt+59)*.026;
+  if(metersPerTexel<=300)detail+=surfaceStructuredNoise(worldEastMeters,worldNorthMeters,420,salt+71)*.014;
+  if(metersPerTexel<=120)detail+=surfaceStructuredNoise(worldEastMeters,worldNorthMeters,160,salt+83)*.032;
+  if(metersPerTexel<=100)detail+=surfaceStructuredNoise(worldEastMeters,worldNorthMeters,260,salt+89)*.034;
+  if(metersPerTexel<=30)detail+=surfaceStructuredNoise(worldEastMeters,worldNorthMeters,95,salt+97)*.025;
+  if(metersPerTexel<=16)detail+=surfaceStructuredNoise(worldEastMeters,worldNorthMeters,48,salt+109)*.020;
+  if(metersPerTexel<=8)detail+=surfaceStructuredNoise(worldEastMeters,worldNorthMeters,24,salt+131)*.018;
+  if(metersPerTexel<=2.5)detail+=surfaceStructuredNoise(worldEastMeters,worldNorthMeters,8,salt+149)*.012;
+  if(metersPerTexel<=.8)detail+=surfaceStructuredNoise(worldEastMeters,worldNorthMeters,3,salt+163)*.008;
   return detail;
 }
 function registeredMapReliefValue(worldEastMeters,worldNorthMeters,metersPerTexel,salt){
@@ -3334,9 +3342,9 @@ function localHash(eastMeters,northMeters,salt=0){
 }
 function localSurfaceSample(registeredEastMeters,registeredNorthMeters,base){
   const salt=((seededUnit("local-ground")*1e9)|0)^0x51f15e;
-  const broad=surfaceValueNoise(registeredEastMeters,registeredNorthMeters,34,salt+11)*1.15;
-  const medium=surfaceValueNoise(registeredEastMeters,registeredNorthMeters,12,salt+29)*.72;
-  const fine=surfaceValueNoise(registeredEastMeters,registeredNorthMeters,4.2,salt+47)*.38;
+  const broad=surfaceStructuredNoise(registeredEastMeters,registeredNorthMeters,34,salt+11)*1.15;
+  const medium=surfaceStructuredNoise(registeredEastMeters,registeredNorthMeters,12,salt+29)*.72;
+  const fine=surfaceStructuredNoise(registeredEastMeters,registeredNorthMeters,4.2,salt+47)*.38;
   const field=(broad+medium+fine)/2.25;
   const land=!!base?.land;
   const microElevation=land?field*5.2:field*.45;
@@ -8598,7 +8606,7 @@ function finalizeLocalResource(job,result){
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
       meshHeightRange:meshData.meshHeightRange||null,
-      topographicSignalRevision:"canonical-continuous-cross-lod-source-v39",topographicSignalAuthority:"PlanetGeography elevation/color/moisture uses the bounded 192→384 canonical focus raster for the 1x child and the 80→160 shared raster only for 3x/12x context; uploaded focus textures refine from 320 to 512 pixels while registered-meter residual frequencies add only when physically resolvable.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,focusAuthorityApplied:true,
+      topographicSignalRevision:"canonical-continuous-cross-lod-source-v40",topographicSignalAuthority:"PlanetGeography elevation/color/moisture uses the bounded 192→384 canonical focus raster for the 1x child and the 80→160 shared raster only for 3x/12x context; uploaded focus textures refine from 320 to 512 pixels while registered-meter residual frequencies add only when physically resolvable.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,focusAuthorityApplied:true,structuredFrequencyTransform:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
