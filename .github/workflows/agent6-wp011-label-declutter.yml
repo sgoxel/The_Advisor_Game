@@ -1,15 +1,16 @@
 name: Agent 6 WP011 Label Declutter
 
 on:
-  issue_comment:
-    types: [created]
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/agent6-wp011-label-declutter.yml'
 
 permissions:
   contents: write
 
 jobs:
   patch:
-    if: github.event.issue.number == 165 && contains(github.event.comment.body, '/agent6-wp011-label-declutter')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
