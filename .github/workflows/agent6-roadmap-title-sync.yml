@@ -1,0 +1,55 @@
+name: Agent 6 Stage 3 Roadmap Title Sync
+
+on:
+  push:
+    paths:
+      - .github/workflows/agent6-roadmap-title-sync.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync-roadmap-titles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Update roadmap titles only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/ROADMAP.md')
+          text = path.read_text(encoding='utf-8')
+          replacements = {
+              '- `WP-S003-010-003` — Zoom-Driven Detail Refinement + Off-Screen Eviction': '- `WP-S003-010-003` — Canonical Progressive LOD Refinement + Viewport-Bounded Residency/Performance',
+              '- `WP-S003-010-003-005-002` — Structured Cross-LOD Terrain Information Refinement + Physical Density Continuity — IN PROGRESS': '- `WP-S003-010-003-005-002` — Persistent Cross-LOD Geomorphology + Monotonic Visible Information/Density — IN PROGRESS',
+              '- `WP-S003-010-003-005-003` — Protagonist-First Mobile Safe-Area Framing + Context Hierarchy + Free Exploration — IN PROGRESS': '- `WP-S003-010-003-005-003` — Protagonist-First Focus Transactions + Mobile Safe-Area Context/Free Exploration — IN PROGRESS',
+              '- `WP-S003-010-003-006` — Ready-Representation-Owned Scale/Ruler/Semantics + Seamless LOD Handoffs': '- `WP-S003-010-003-006` — Presented-Ready Scale/Ruler/Semantics + Atomic LOD Handoffs',
+              '- `WP-S003-010-003-007` — World-Matched Progressive Settlement Reveal + No LOD Scale/Composition Pop — IN PROGRESS': '- `WP-S003-010-003-007` — Canonical Settlement Footprint Continuity + Progressive Reveal Without LOD Pop — IN PROGRESS',
+              '- `WP-S003-010-003-013` — Screen-Space-Error Hierarchical Spatial LOD + Canonical Cell Refinement': '- `WP-S003-010-003-013` — Screen-Space-Error Canonical Cell LOD + Resolution-Independent Refinement',
+              '- `WP-S003-010-003-014` — Ready-State Physical Information Hierarchy + Safe-Area Stable Decluttering — IN PROGRESS': '- `WP-S003-010-003-014` — Gameplay-First Information Priority + Safe-Area Decluttering Across Viewports — IN PROGRESS',
+              '- `WP-S003-010-003-018` — Continuous Pure-Zoom Retargeting + Cross-Input Focus/Gesture Stability — IN PROGRESS': '- `WP-S003-010-003-018` — Unified Pure-Zoom Transaction State + Wheel/Trackpad/Pinch Focus Stability — IN PROGRESS',
+              '- `WP-S003-010-003-020` — Minimal Planet-First Bootstrap + Frame/GPU/Memory Budgets Across Devices': '- `WP-S003-010-003-020` — Minimal Planet-First Lazy Bootstrap + First-Playable/CPU/GPU/Memory Budgets',
+              '- `WP-S003-010-003-022` — Canonical Click/Tap Selection + Gesture Disambiguation + Safe-Area Target Framing': '- `WP-S003-010-003-022` — Canonical Selection + Tap/Drag/Pinch Disambiguation + Safe Target Framing',
+              '- `WP-S003-010-004` — Canonical Planet-to-Local 3D Continuity + Grounding + Responsive Safe-Area Framing': '- `WP-S003-010-004` — Continuous Planet→Local→Ground 3D Identity + Grounding + Responsive Framing',
+              '- `WP-S003-010-005` — README Production Acceptance: Startup/Performance + UI/UX + Mobile/WebGL2 Compatibility': '- `WP-S003-010-005` — README Production Acceptance: First-Playable + Sustained Performance + UI/UX/Touch + WebGL2 Device Matrix',
+          }
+
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one roadmap title match for {old!r}, found {count}')
+              text = text.replace(old, new)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Commit roadmap sync and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/agent6-roadmap-title-sync.yml
+          git add docs/ROADMAP.md
+          git commit -m "docs: align Stage 3 WP titles with README acceptance"
+          git push origin HEAD:main
