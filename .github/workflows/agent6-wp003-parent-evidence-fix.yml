@@ -35,21 +35,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -u
+          set -euo pipefail
           : >/tmp/wp003-parent-api.log
           if git diff --quiet -- tools/screenshot_tool.py; then
             echo "WP003 parent evidence routing already current" | tee -a /tmp/wp003-parent-api.log
             exit 0
           fi
-          file_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/tools/screenshot_tool.py?ref=main" --jq .sha 2>>/tmp/wp003-parent-api.log)"
-          printf 'file_sha=%s\n' "$file_sha" >>/tmp/wp003-parent-api.log
-          content="$(base64 -w0 tools/screenshot_tool.py)"
+          file_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/tools/screenshot_tool.py?ref=main" --jq .sha)"
+          python - "$file_sha" <<'PY'
+          import base64,json,sys
+          from pathlib import Path
+          payload={
+              "message":"test(WP-S003-010-003): capture refinement sequence for parent WP",
+              "content":base64.b64encode(Path("tools/screenshot_tool.py").read_bytes()).decode("ascii"),
+              "sha":sys.argv[1],
+              "branch":"main",
+          }
+          Path("/tmp/wp003-parent-payload.json").write_text(json.dumps(payload),encoding="utf-8")
+          PY
           set +e
           gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/tools/screenshot_tool.py" \
-            -f message='test(WP-S003-010-003): capture refinement sequence for parent WP' \
-            -f content="$content" \
-            -f sha="$file_sha" \
-            -f branch=main >>/tmp/wp003-parent-api.log 2>&1
+            --input /tmp/wp003-parent-payload.json >>/tmp/wp003-parent-api.log 2>&1
           status=$?
           set -e
           printf '\nstatus=%s\n' "$status" >>/tmp/wp003-parent-api.log
