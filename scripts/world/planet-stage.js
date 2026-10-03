@@ -338,7 +338,7 @@ const LOCAL_SAMPLE_SPACING_METERS=2;
 const LOCAL_PATCH_MARGIN=1.50;
 const LOCAL_RESOURCE_CACHE_LIMIT=8;
 const LOCAL_RESOURCE_CACHE_BUDGET_BYTES=48*1024*1024;
-const LOCAL_MEDIUM_RING_SPAN_FACTOR=3;
+const LOCAL_MEDIUM_RING_SPAN_FACTOR=6;
 const LOCAL_MEDIUM_RING_TEXTURE_SCALE=.90;
 const LOCAL_GRACE_RESIDENCY_MS=4500;
 const LOCAL_RESIDENCY_RECORD_LIMIT=64;
@@ -380,7 +380,7 @@ const SPATIAL_OVERSCAN_CELL_RADIUS=1;
 // offsets and child preparation without exposing the clear-color rectangle.
 // Keep it bounded to one shared quad/texture while sampling a wider canonical
 // SEED footprint; this adds no draw calls or alternate geography authority.
-const LOCAL_SURROUND_SPAN_FACTOR=6;
+const LOCAL_SURROUND_SPAN_FACTOR=12;
 // Every physical LOD is native at its band's upper scalar and covers at most
 // ~2.5x of visible-footprint range, so presentation compensation never has to
 // shrink or magnify a tier far enough to read as a scale pop or blurry stretch.
@@ -7527,7 +7527,7 @@ const TERRAIN_DETAIL_OCTAVES=Object.freeze([[48000,700],[16000,320],[5200,140],[
 const LOCAL_TEXTURE_HANDOFF_FEATHER=.12;
 // Medium continuation textures are presentation coverage, not canonical tile
 // boundaries. Keep their higher-density ready parent opaque across the viewport
-// and feather only near the physical 3x ring edge, where the 6x outer fallback
+// and feather only near the physical 6x ring edge, where the 12x outer fallback
 // takes over. This prevents a centered LOD ownership footprint while retaining
 // bounded world-matched fallback coverage during larger focus offsets.
 const LOCAL_CONTEXT_RING_RADIAL_FEATHER=.16;
