@@ -56,51 +56,33 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('tools/test_wp_s003_010_003_018.py')
           text = path.read_text(encoding='utf-8')
 
-          def replace_once(old, new, label):
+          def sub_once(pattern, replacement, label, flags=0):
               global text
-              count = text.count(old)
+              text, count = re.subn(pattern, replacement, text, count=1, flags=flags)
               if count != 1:
-                  raise SystemExit(f'{label}: expected one anchor, found {count}')
-              text = text.replace(old, new, 1)
+                  raise SystemExit(f'{label}: expected one match, found {count}')
 
-          replace_once(
-              '''def assert_bounded_first_progress(start_scalar, current_scalar, target_scalar, label):
-              total = target_scalar - start_scalar
-              if abs(total) <= 1e-7:
-                  return
-              progress = (current_scalar - start_scalar) / total
-              # Selenium can yield to one or more rAF ticks between dispatching the input
-              # and reading the next snapshot. A valid smooth zoom may therefore have
-              # advanced slightly; reject only a backwards jump or an effectively
-              # instantaneous arrival near the target.
-              if progress < -0.03 or progress >= 0.80:
-                  raise AssertionError(
-                      f"{label}: rendered scalar jumped too far on command "
-                      f"(start={start_scalar}, current={current_scalar}, target={target_scalar}, progress={progress})"
-                  )
-          ''',
+          sub_once(
+              r'def assert_bounded_first_progress\(start_scalar, current_scalar, target_scalar, label\):.*?(?=\n\ndef transition_to)',
               '''def assert_command_continuity(start_scalar, current_scalar, target_scalar, label):
               delta = abs(current_scalar - start_scalar)
               if delta > 1e-7:
                   raise AssertionError(
                       f"{label}: rendered scalar changed in the same command task "
                       f"(start={start_scalar}, current={current_scalar}, target={target_scalar}, delta={delta})"
-                  )
-          ''',
+                  )''',
               'continuity helper',
+              re.S,
           )
 
-          replace_once(
-              '''    before = snap(driver)
-              before_scalar = float(before["zoom"]["scalar"])
-              driver.execute_script("window.PlanetStage.setAnimatedScaleIndex(arguments[0],arguments[1]);", int(index), tag)
-              commanded = snap(driver)
-          ''',
-              '''    command_probe = driver.execute_script("""
+          sub_once(
+              r'(def transition_to\(driver, index, tag, focus0, pose0, screenshot=True, settle_detail=True\):\n)\s*before = snap\(driver\)\n\s*before_scalar = float\(before\["zoom"\]\["scalar"\]\)\n\s*driver\.execute_script\("window\.PlanetStage\.setAnimatedScaleIndex\(arguments\[0\],arguments\[1\]\);", int\(index\), tag\)\n\s*commanded = snap\(driver\)',
+              '''\\1    command_probe = driver.execute_script("""
               const before=window.PlanetStage.snapshot();
               window.PlanetStage.setAnimatedScaleIndex(arguments[0],arguments[1]);
               const commanded=window.PlanetStage.snapshot();
@@ -108,36 +90,29 @@ jobs:
             """, int(index), tag)
               before = command_probe["before"]
               before_scalar = float(before["zoom"]["scalar"])
-              commanded = command_probe["commanded"]
-          ''',
+              commanded = command_probe["commanded"]''',
               'transition atomic probe',
           )
           text = text.replace('assert_bounded_first_progress(', 'assert_command_continuity(')
 
-          replace_once(
-              '''        wheel_before = snap(driver)
-              driver.execute_script("arguments[0].dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}));", canvas)
-              wheel_commanded = snap(driver)
-          ''',
-              '''        wheel_probe = driver.execute_script("""
+          sub_once(
+              r'\s*wheel_before = snap\(driver\)\n\s*driver\.execute_script\("arguments\[0\]\.dispatchEvent\(new WheelEvent\(\'wheel\',\{deltaY:-100,bubbles:true,cancelable:true\}\)\);", canvas\)\n\s*wheel_commanded = snap\(driver\)',
+              '''
+              wheel_probe = driver.execute_script("""
                 const before=window.PlanetStage.snapshot();
                 arguments[0].dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}));
                 const commanded=window.PlanetStage.snapshot();
                 return {before,commanded};
               """, canvas)
               wheel_before = wheel_probe["before"]
-              wheel_commanded = wheel_probe["commanded"]
-          ''',
+              wheel_commanded = wheel_probe["commanded"]''',
               'wheel atomic probe',
           )
 
-          replace_once(
-              '''        mid = snap(driver)
-              scalar_mid = float(mid["zoom"]["scalar"])
-              driver.execute_script("window.PlanetStage.setAnimatedScaleIndex(3,'retarget-reverse');")
-              immediately = snap(driver)
-          ''',
-              '''        retarget_probe = driver.execute_script("""
+          sub_once(
+              r'\s*mid = snap\(driver\)\n\s*scalar_mid = float\(mid\["zoom"\]\["scalar"\]\)\n\s*driver\.execute_script\("window\.PlanetStage\.setAnimatedScaleIndex\(3,\'retarget-reverse\'\);"\)\n\s*immediately = snap\(driver\)',
+              '''
+              retarget_probe = driver.execute_script("""
                 const before=window.PlanetStage.snapshot();
                 window.PlanetStage.setAnimatedScaleIndex(3,'retarget-reverse');
                 const commanded=window.PlanetStage.snapshot();
@@ -145,8 +120,7 @@ jobs:
               """)
               mid = retarget_probe["before"]
               scalar_mid = float(mid["zoom"]["scalar"])
-              immediately = retarget_probe["commanded"]
-          ''',
+              immediately = retarget_probe["commanded"]''',
               'retarget atomic probe',
           )
 
