@@ -69,8 +69,10 @@ function interpolateCoordinate(from,to,alpha){
 }
 function protagonistPosition(){
   try{
-    const value=root.Protagonist?.getPosition?.();
-    if(value&&value.x!=null&&value.y!=null)return Object.freeze({x:String(value.x),y:String(value.y)});
+    const apiValue=root.Protagonist?.getPosition?.()||null;
+    if(apiValue&&apiValue.x!=null&&apiValue.y!=null)return Object.freeze({x:String(apiValue.x),y:String(apiValue.y),source:"Protagonist.getPosition"});
+    const stored=root.SeedSystem?.getCampaign?.()?.protagonist||null;
+    if(stored&&stored.x!=null&&stored.y!=null)return Object.freeze({x:String(stored.x),y:String(stored.y),source:"SeedSystem.campaign.protagonist"});
   }catch(_){}
   return null;
 }
