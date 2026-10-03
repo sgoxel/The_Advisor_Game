@@ -102,7 +102,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-010-003-005-002` — Viewport-Bounded Cross-LOD Terrain Refinement + Structural Detail Continuity — IN PROGRESS
 - `WP-S003-010-003-005-003` — Protagonist-First Focus UX + Persistent Local Context + Free Canonical World Exploration
 - `WP-S003-010-003-006` — Ready-Representation Canonical Scale Ladder + Truthful Semantic/LOD Handoffs
-- `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground — COMPLETED
+- `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground — IN PROGRESS
 - `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling — COMPLETED
 - `WP-S003-010-003-009` — Canonical Planet/World Coordinate Registration + Political Atlas Integrity — COMPLETED
 - `WP-S003-010-003-010` — TOP PRIORITY BUG: SEED-Only Canonical Political Boundaries + SEED-Only Important-Place Placement — COMPLETED
