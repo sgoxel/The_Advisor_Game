@@ -2503,10 +2503,17 @@ function renderMapPresentation(){
   const citySpacingPass=cityMinSeparationMeters==null||cityMinSeparationMeters+2>=requiredCitySeparation;
   const maxLandmarkCount=spec.budget;
   const scaleState=scaleStateForScalar(),targetScaleState=scaleStateForScalar(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar),interpolationScaleState=interpolationScaleStateForScalar(),targetInterpolationScaleState=interpolationScaleStateForScalar(Number.isFinite(zoomState.targetScalar)?zoomState.targetScalar:zoomState.scalar),localLayers=semanticLocalLayerDiagnostics(semantic),ruler=scaleRulerForViewport(zoomState.visibleFootprintWidthMeters,rect?.width||1);
-  const transitionText=zoomState.animating&&scaleState.label!==targetScaleState.label
-    ?scaleState.label+" → "+targetScaleState.label
-    :semantic.displayBand;
-  const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=scaleState.label;scale.querySelector(".planet-scale-meta span").textContent=transitionText;scale.querySelector(".planet-scale-line").style.width=ruler.pixelLength.toFixed(2)+"px";scale.querySelector("small").textContent=formatDistanceMeters(ruler.distanceMeters);
+  // WP-S003-010-003-014: while a finer requested resource is still preparing,
+// every scale/semantic cue must describe the representation that is actually
+// ready and visible. Never advertise the requested target ahead of the atomic handoff.
+const readyRepresentationPending=Boolean(localResources.requestedSignature&&localResources.activeSignature!==localResources.requestedSignature);
+const readyScaleState=readyRepresentationPending&&displayResource
+  ?scaleStateForScalar(levelNativeScalar(displayResource.levelIndex))
+  :scaleState;
+const transitionText=!readyRepresentationPending&&zoomState.animating&&readyScaleState.label!==targetScaleState.label
+  ?readyScaleState.label+" → "+targetScaleState.label
+  :semantic.displayBand;
+const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=readyScaleState.label;scale.querySelector(".planet-scale-meta span").textContent=transitionText;scale.querySelector(".planet-scale-line").style.width=ruler.pixelLength.toFixed(2)+"px";scale.querySelector("small").textContent=formatDistanceMeters(ruler.distanceMeters);
   mapPresentation={
     active:true,context,visibleContextKinds:contextKinds,visiblePlaceKinds:placeKinds,labelCount:legacyLabelCount,
     atlasVisibleLabelCount:visible.length,atlasCandidateCount:atlas.query.candidates.length,atlasQueryCellCount:atlas.query.queryCellCount,
