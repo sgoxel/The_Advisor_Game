@@ -341,6 +341,8 @@ const LOCAL_RESOURCE_CACHE_BUDGET_BYTES=48*1024*1024;
 const LOCAL_MEDIUM_RING_SPAN_FACTOR=6;
 const LOCAL_MEDIUM_RING_TEXTURE_SCALE=.90;
 const LOCAL_SURROUND_RING_TEXTURE_SCALE=.58;
+const WP006_SINGLE_PARENT_MAX_LEVEL=8;
+const WP006_SINGLE_PARENT_OUTER_TEXTURE_SCALE=.86;
 const LOCAL_GRACE_RESIDENCY_MS=4500;
 const LOCAL_RESIDENCY_RECORD_LIMIT=64;
 const LOCAL_PREFETCH_RECORD_LIMIT=16;
@@ -8298,7 +8300,7 @@ function* localResourceSteps(job){
   const detail=yield* surfaceTextureSteps(job,job.dims.patchWidth,job.dims.patchHeight,size,true,false,"focus");
   const broadParent=job.levelIndex<=1;
   const mediumSize=broadParent?Math.max(80,Math.round(size*.50)):Math.max(96,Math.round(size*LOCAL_MEDIUM_RING_TEXTURE_SCALE));
-  const surroundSize=Math.max(96,Math.round(size*LOCAL_SURROUND_RING_TEXTURE_SCALE));
+  const surroundSize=Math.max(96,Math.round(size*(job.levelIndex<=WP006_SINGLE_PARENT_MAX_LEVEL?WP006_SINGLE_PARENT_OUTER_TEXTURE_SCALE:LOCAL_SURROUND_RING_TEXTURE_SCALE)));
   job.currentPreparationPhase="texture-medium";
   const medium=yield* surfaceTextureSteps(job,job.dims.patchWidth*LOCAL_MEDIUM_RING_SPAN_FACTOR,job.dims.patchHeight*LOCAL_MEDIUM_RING_SPAN_FACTOR,mediumSize,true,true,"medium");
   job.currentPreparationPhase="texture-surround";
@@ -9103,6 +9105,16 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     localResources.surroundCoversViewport=surroundCoversViewport;
     localResources.foregroundPatchCoversViewport=foregroundFamilyCoversViewport;
     localResources.foregroundPatchVisible=fineTerrainVisible;
+    // WP-006 single-parent ownership: when the fine child cannot cover the
+    // viewport but the bounded outer continuation can, painting the medium
+    // continuation creates a second finite-frequency island. Let the outer
+    // parent own that frame alone. Retain medium coverage when it is actually
+    // needed, or once the fine child already covers the viewport and its edge
+    // refinement can safely blend over the parent family.
+    const singleParentContinuation=Boolean(displayResource&&displayResource.levelIndex<=WP006_SINGLE_PARENT_MAX_LEVEL&&!finePatchCoversViewport&&surroundCoversViewport);
+    if(focusRingPatch?.render)focusRingPatch.render.enabled=!singleParentContinuation;
+    localResources.mediumRingPresentationEnabled=Boolean(focusRingPatch?.render?.enabled);
+    localResources.singleParentContinuationActive=singleParentContinuation;
     const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
     projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters(),finePatchCoversViewport,foregroundPatchCoversViewport:foregroundFamilyCoversViewport};
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
