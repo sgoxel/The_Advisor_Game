@@ -4382,8 +4382,13 @@ function localWorldPresentationEligibility(value=zoomState.scalar){
   // eligibility is determined by the requested scale so stale local roots and
   // seasonal accents cannot survive at regional/strategic map scales.
   const staticWorldVisible=Boolean(level?.staticWorld)||requestedLevel==="ground";
-  const effectiveRevealTier=broadMapScale?"none":revealTier;
-  return Object.freeze({visible:!broadMapScale&&(effectiveRevealTier!=="none"||staticWorldVisible),revealTier:effectiveRevealTier,requestedScaleIndex,broadMapScale,rawLevelIndex:rawIndex,rawLevelId:requestedLevel==="ground"?"ground":level?.id||null,rawStaticWorld:staticWorldVisible});
+  // WP-S003-010-003-007: broad-map suppression applies to decorative/full local
+  // materialization, not the bounded canonical footprint/route previews whose
+  // purpose is to keep inhabited structure truthful before settlement scale.
+  const broadMapRevealAllowed=revealTier==="footprint"||revealTier==="route";
+  const effectiveRevealTier=broadMapScale&&!broadMapRevealAllowed?"none":revealTier;
+  const revealVisible=effectiveRevealTier!=="none";
+  return Object.freeze({visible:revealVisible||(!broadMapScale&&staticWorldVisible),revealTier:effectiveRevealTier,requestedScaleIndex,broadMapScale,rawLevelIndex:rawIndex,rawLevelId:requestedLevel==="ground"?"ground":level?.id||null,rawStaticWorld:staticWorldVisible});
 }
 function applyLocalWorldPresentationVisibility(){
   const gate=localWorldPresentationEligibility(),nodes=[localStaticRoot,localNpcRoot,localCrowdRoot,localBuildingActivityRoot,localCampaignWearMesh,localFaunaRoot,environmentalReactionRoot,localWayfindingEntity].filter(Boolean);
