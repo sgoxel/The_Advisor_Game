@@ -99,7 +99,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-010-003-004` — Terrain-Anchored Landmarks + World-Projected Political Borders — COMPLETED
 - `WP-S003-010-003-005` — Seamless Viewport-Filling Multi-LOD Terrain Continuity — COMPLETED
 - `WP-S003-010-003-005-001` — Zero-Movement Geographic Identity + Focus Lock Across LODs — COMPLETED
-- `WP-S003-010-003-005-002` — True Cross-LOD Surface Refinement + Texel/Geometry Density Continuity — IN PROGRESS (AGENT #6; capped continuation 2026-10-03 07:55 +03:00. Functional density/coverage gate PASS on final product `dc917f6abf7269538941ce238ae6d0c02ef86be7`; fresh Visual Evidence run `37100218836` / artifact `11265754151`, all ten 1280×800 screenshots directly inspected at VISUAL 5.9/10 FAIL. Remaining defects: regional/local terrain still reads as coarse or enlarged mottled texture, near-ground 0.78×/0.81× retains a richer center against smoother context, and ground remains soft. Peak captured local-resource build time `22796.6 ms`, longest handoff `79723.6 ms`, cache occupancy 8. Third-attempt cap reached; no completion claim.)
+- `WP-S003-010-003-005-002` — True Cross-LOD Surface Refinement + Texel/Geometry Density Continuity — IN PROGRESS
 - `WP-S003-010-003-006` — Streaming-Safe Scale Ladder + Ready-LOD Semantic Handoffs
 - `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground — COMPLETED
 - `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling — COMPLETED
