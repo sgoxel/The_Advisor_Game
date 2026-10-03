@@ -3269,6 +3269,15 @@ function surfaceStructuredNoise(worldEastMeters,worldNorthMeters,scaleMeters,sal
   const slope=((salt>>>3)&1)?(dx+dy)*.70710678:(dx-dy)*.70710678;
   return clamp(value*.24+slope*.42,-.5,.5);
 }
+function surfaceMaterialNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt){
+  const value=surfaceValueNoise(worldEastMeters,worldNorthMeters,scaleMeters,salt);
+  // Presentation-only material structure from the same registered scalar.
+  // A bounded terraced component makes vegetation/soil regions and their edges
+  // readable as physical texel size shrinks instead of leaving a bilinear blur.
+  const ridge=.25-Math.abs(value);
+  const terraced=Math.round(value*10)/10;
+  return clamp(value*.34+ridge*.62+terraced*.46,-.5,.5);
+}
 function worldSurfaceDetailValue(worldEastMeters,worldNorthMeters,metersPerTexel,phase){
   const salt=((phase*100000)|0)^0x5f356495;
   let detail=0;
@@ -3297,7 +3306,7 @@ function registeredMapReliefValue(worldEastMeters,worldNorthMeters,metersPerTexe
   let value=0,weight=0;
   for(const [wavelength,gain] of [[5200,.32],[2600,.62],[1200,.54],[560,.30]]){
     if(wavelength/m<2.25)continue;
-    value+=surfaceValueNoise(worldEastMeters,worldNorthMeters,wavelength,salt+Math.round(wavelength))*gain;
+    value+=surfaceStructuredNoise(worldEastMeters,worldNorthMeters,wavelength,salt+Math.round(wavelength))*gain;
     weight+=gain;
   }
   return weight?value/weight:0;
@@ -7629,36 +7638,36 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   // already-sampled registered fields toward the physically readable 16 km and
   // 5.2 km terms; this changes only presentation weights, not sampling/authority.
   const strategic=(
-    surfaceValueNoise(we,wn,48000,salt+3)*.010*wStrategic+
-    surfaceValueNoise(we,wn,16000,salt+5)*.048*wStrategicMid+
-    surfaceValueNoise(we,wn,5200,salt+6)*.052*wStrategicFine
+    surfaceMaterialNoise(we,wn,48000,salt+3)*.010*wStrategic+
+    surfaceMaterialNoise(we,wn,16000,salt+5)*.048*wStrategicMid+
+    surfaceMaterialNoise(we,wn,5200,salt+6)*.052*wStrategicFine
   )*strategicWeight;
-  const broad=surfaceValueNoise(we,wn,3600,salt+7)*.22*wBroad+
-    surfaceValueNoise(we,wn,1500,salt+11)*.30*wMid+
-    surfaceValueNoise(we,wn,700,salt+13)*.34*wField;
+  const broad=surfaceMaterialNoise(we,wn,3600,salt+7)*.22*wBroad+
+    surfaceMaterialNoise(we,wn,1500,salt+11)*.30*wMid+
+    surfaceMaterialNoise(we,wn,700,salt+13)*.34*wField;
   const forestCover=clamp(.44+broad*.62,0,1)*lowland;
   const forestDelta=(forestCover-.44*lowland)*wBroad;
   // 460 m parcel structure becomes physically resolvable around the local-map
   // handoff. It is registered in world meters and therefore persists into finer
   // children instead of appearing as a new camera-relative pattern.
-  const parcel=surfaceValueNoise(we,wn,700,salt+19)*.58*wField+
-    surfaceValueNoise(we,wn,460,salt+17)*.44*wParcelDetail+
-    surfaceValueNoise(we,wn,280,salt+23)*.34*wFine;
+  const parcel=surfaceMaterialNoise(we,wn,700,salt+19)*.58*wField+
+    surfaceMaterialNoise(we,wn,460,salt+17)*.44*wParcelDetail+
+    surfaceMaterialNoise(we,wn,280,salt+23)*.34*wFine;
   const dryField=Math.max(0,parcel)*lowland,meadow=Math.max(0,-parcel)*lowland;
-  const copse=surfaceValueNoise(we,wn,120,salt+29)*wCopse*lowland;
+  const copse=surfaceMaterialNoise(we,wn,120,salt+29)*wCopse*lowland;
   // Preserve the already-visible broad field while adding two genuinely finer
   // registered-meter octaves as the physical texel size shrinks. This prevents
   // the settlement/near-ground children from becoming smoother than their
   // parent even though their source raster and geometry are denser.
   const closeDetailGain=1+smoothstep01(clamp((80-metersPerTexel)/72,0,1))*.55;
-  const mottle=(surfaceValueNoise(we,wn,700,salt+31)*.024*wField+
-    surfaceValueNoise(we,wn,460,salt+33)*.030*wParcelDetail+
-    surfaceValueNoise(we,wn,280,salt+37)*.026*wFine+
-    surfaceValueNoise(we,wn,120,salt+41)*.016*wCopse+
-    surfaceValueNoise(we,wn,90,salt+43)*.010*wGroundDetail+
-    surfaceValueNoise(we,wn,48,salt+47)*.018*wLocalDetail+
-    surfaceValueNoise(we,wn,18,salt+53)*.026*wMicroDetail+
-    surfaceValueNoise(we,wn,9,salt+61)*.018*wSubLocalDetail)*closeDetailGain;
+  const mottle=(surfaceMaterialNoise(we,wn,700,salt+31)*.024*wField+
+    surfaceMaterialNoise(we,wn,460,salt+33)*.030*wParcelDetail+
+    surfaceMaterialNoise(we,wn,280,salt+37)*.026*wFine+
+    surfaceMaterialNoise(we,wn,120,salt+41)*.016*wCopse+
+    surfaceMaterialNoise(we,wn,90,salt+43)*.010*wGroundDetail+
+    surfaceMaterialNoise(we,wn,48,salt+47)*.018*wLocalDetail+
+    surfaceMaterialNoise(we,wn,18,salt+53)*.026*wMicroDetail+
+    surfaceMaterialNoise(we,wn,9,salt+61)*.018*wSubLocalDetail)*closeDetailGain;
   // Map-scale readability comes from one continuous registered-meter cover
   // field, not from parcel meshes or camera-relative decoration. Stronger chroma
   // separation reveals woodland/meadow/dry openings only when physically
@@ -8212,10 +8221,10 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const w12=colorDetailOctaveWeight(12,metersPerTexel);
         const w42=colorDetailOctaveWeight(4.2,metersPerTexel);
         const registeredMicro=
-          surfaceValueNoise(worldEast,worldNorth,34,microSurfaceSalt+11)*.024*w34+
-          surfaceValueNoise(worldEast,worldNorth,12,microSurfaceSalt+29)*.017*w12+
-          surfaceValueNoise(worldEast,worldNorth,4.2,microSurfaceSalt+47)*.011*w42;
-        const closeGain=lerp(.86,1.18,smoothstep01(clamp((6-metersPerTexel)/5.5,0,1)));
+          surfaceMaterialNoise(worldEast,worldNorth,34,microSurfaceSalt+11)*.042*w34+
+          surfaceMaterialNoise(worldEast,worldNorth,12,microSurfaceSalt+29)*.030*w12+
+          surfaceMaterialNoise(worldEast,worldNorth,4.2,microSurfaceSalt+47)*.019*w42;
+        const closeGain=lerp(.92,1.28,smoothstep01(clamp((6-metersPerTexel)/5.5,0,1)));
         displayColor=displayColor.map((v,i)=>clamp(v+registeredMicro*closeGain*(i===0?1:i===1?.92:.72),0,.88));
       }
       // High peaks are legitimately snow-covered, but the canonical near-white
@@ -8233,8 +8242,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // anchored, so the same coordinate has the same mottling in every rebuild.
       if(parentSample?.land&&metersPerTexel<=8){
         const coarseScale=Math.max(2,metersPerTexel*6),fineScale=Math.max(.75,metersPerTexel*2);
-        const rough=surfaceValueNoise(worldEast,worldNorth,coarseScale,detailSalt+211)*.040+
-          surfaceValueNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.018;
+        const rough=surfaceMaterialNoise(worldEast,worldNorth,coarseScale,detailSalt+211)*.052+
+          surfaceMaterialNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.026;
         displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.82:i===1?.94:1),0,.86));
       }
       // WP-S003-009: apply the shared loading-screen-derived world grade only
@@ -8614,7 +8623,7 @@ function finalizeLocalResource(job,result){
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
       meshHeightRange:meshData.meshHeightRange||null,
-      topographicSignalRevision:"canonical-continuous-cross-lod-source-v41",topographicSignalAuthority:"PlanetGeography elevation/color/moisture uses the bounded 192→384 canonical focus raster for the 1x child and the 80→160 shared raster only for 3x/12x context; uploaded focus textures refine from 320 to 512 pixels while registered-meter residual frequencies add only when physically resolvable.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,focusAuthorityApplied:true,structuredFrequencyTransform:true,structuredSlopeTransform:true,
+      topographicSignalRevision:"canonical-continuous-cross-lod-source-v41",topographicSignalAuthority:"PlanetGeography elevation/color/moisture uses the bounded 192→384 canonical focus raster for the 1x child and the 80→160 shared raster only for 3x/12x context; uploaded focus textures refine from 320 to 512 pixels while registered-meter residual frequencies add only when physically resolvable.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,focusAuthorityApplied:true,structuredFrequencyTransform:true,structuredSlopeTransform:true,materialFrequencyTransform:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
