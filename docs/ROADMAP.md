@@ -100,7 +100,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-010-003-005` — Seamless Viewport-Filling Multi-LOD Terrain Continuity — COMPLETED
 - `WP-S003-010-003-005-001` — Zero-Movement Geographic Identity + Focus Lock Across LODs — COMPLETED
 - `WP-S003-010-003-005-002` — True Cross-LOD Surface Refinement + Texel/Geometry Density Continuity — IN PROGRESS
-- `WP-S003-010-003-005-003` — Protagonist-First Focus UX + Safe-Area Local Context + Free Canonical Exploration
+- `WP-S003-010-003-005-003` — Protagonist-First Focus UX + Safe-Area Local Context + Free Canonical Exploration — IN PROGRESS
 - `WP-S003-010-003-006` — Truthful Ready-LOD Scale/Semantic Handoffs + Zero Visible Ownership Boundaries
 - `WP-S003-010-003-007` — Pre-Ground Settlement Structure Reveal + No Grass-to-Village Pop — IN PROGRESS
 - `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling — COMPLETED
