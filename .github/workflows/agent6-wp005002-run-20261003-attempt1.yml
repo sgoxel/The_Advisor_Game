@@ -1,0 +1,50 @@
+name: AGENT6 WP005002 New Run Attempt 1
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/agent6-wp005002-run-20261003-attempt1.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp005002-run-20261003-attempt1
+  cancel-in-progress: false
+
+jobs:
+  patch-test-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Sync exact current main
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
+      - name: Apply deterministic refinement patch
+        run: python tools/agent6_wp005002_run_20261003_attempt1_patch.py
+      - name: Validate source and invariants
+        run: |
+          node --check scripts/world/planet-stage.js
+          grep -F 'function localPatchMarginForLevel(levelIndex)' scripts/world/planet-stage.js
+          grep -F 'const patchMargin=localPatchMarginForLevel(levelIndex);' scripts/world/planet-stage.js
+          grep -F 'const useMicroDetail=contextRing?sharedMetersPerTexel<=4:metersPerTexel<=8;' scripts/world/planet-stage.js
+          grep -F 'canonical-continuous-cross-lod-source-v39' scripts/world/planet-stage.js
+          grep -F 'surfaceValueNoise(worldEastMeters,worldNorthMeters,8,salt+149)*.012' scripts/world/planet-stage.js
+          grep -F 'surfaceValueNoise(worldEastMeters,worldNorthMeters,3,salt+163)*.008' scripts/world/planet-stage.js
+      - name: Commit tested product source
+        run: |
+          if git diff --quiet -- scripts/world/planet-stage.js; then
+            echo 'Product source already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/world/planet-stage.js
+          git commit -m 'fix(WP-S003-010-003-005-002): right-size physical LOD refinement'
+          git pull --rebase origin main
+          git push origin HEAD:main
