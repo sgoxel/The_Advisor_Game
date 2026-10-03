@@ -1622,7 +1622,19 @@ def run_capture(args):
                 frame["index"]=index+1;frame["file"]=path.name
                 frame["captured_at"]=datetime.now(timezone.utc).isoformat()
                 frames.append(frame)
-            _validate_settlement_reveal_frames(frames)
+            try:
+                _validate_settlement_reveal_frames(frames)
+            except Exception as exc:
+                diagnostic={
+                    "scenario":WP_SETTLEMENT_REVEAL_SCENARIO,
+                    "validationError":repr(exc),
+                    "frames":frames,
+                    "captured_at":datetime.now(timezone.utc).isoformat(),
+                }
+                path=_screenshots_dir()/"wp-s003-010-003-007-validation-failure.json"
+                path.write_text(json.dumps(diagnostic,indent=2,sort_keys=True),encoding="utf-8")
+                print("SETTLEMENT_REVEAL_VALIDATION_DIAGNOSTIC="+json.dumps(diagnostic,sort_keys=True),file=sys.stderr)
+                raise
         elif args.scenario==WP_CANONICAL_FOCUS_SCENARIO:
             frames=[]
             for index in range(WP_CANONICAL_FOCUS_SHOTS):
