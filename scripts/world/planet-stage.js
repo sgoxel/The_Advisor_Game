@@ -7745,12 +7745,12 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // raster boundary cannot appear as a higher-frequency island. Keep the real
   // sourceMetersPerTexel for density/streaming telemetry and restore native
   // context refinement only once near-ground resources own the viewport.
-  const unifiedContinuationBasis=contextRing&&job.levelIndex<=8;
+  const unifiedContinuationBasis=false;
   if(unifiedContinuationBasis)metersPerTexel=sharedMetersPerTexel;
   // Phase 18 final acceptance: strategic concentric representations must apply
   // the same low-frequency transfer to their common parent sample. Native texel
   // size is reserved for the registered high-pass residual only.
-  const sharedPhotometryLock=job.levelIndex<=2;
+  const sharedPhotometryLock=false;
   const baseTransferMetersPerTexel=sharedMetersPerTexel;
   // Medium-context sampling is physically denser than the outer 6x fallback.
   // Admit only a bounded share of that resolvable bandwidth so the parent
@@ -7780,6 +7780,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   const contextHillshadeStrength=sharedMetersPerTexel<=8?.48:sharedMetersPerTexel<=30?.38:sharedMetersPerTexel<=100?.30:.24;
   const contextDetailStrength=1;
   const detailSalt=((seededUnit("local-terrain-detail")*1e6)|0)^0x2c1b3c6d;
+  const microSurfaceSalt=((seededUnit("local-ground")*1e9)|0)^0x51f15e;
   const light=(()=>{const v=[-.55,.62,.56],l=Math.hypot(...v);return v.map(x=>x/l);})();
   const flatShade=light[2];
   // Fine terrain/biome detail is sampled in the Campaign-SEED registered
@@ -8144,20 +8145,19 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         displayColor=displayColor.map((v,i)=>lerp(v,chromaTarget[i],chromaRestore));
       }
       if(useMicroDetail){
-        const microSample=localSurfaceSample(worldEast,worldNorth,sample),micro=microSample.color;
-        // Admit the already-authoritative 34/12/4.2 m micro field by this
-        // layer's real texel density, not by the coarsest fallback. Edge/context
-        // ownership weights make this a refinement residual instead of a card.
-        const closeWeight=smoothstep01(clamp((6-metersPerTexel)/5.5,0,1));
-        const microContinuity=contextRing?contextRefineWeight:focusRefineWeight;
-        const microWeight=lerp(.14,.34,closeWeight)*microContinuity;
-        displayColor=displayColor.map((v,i)=>clamp(v*(1-microWeight)+micro[i]*microWeight,0,1));
-        // microElevation is the signed form of the same registered field already
-        // sampled above. A small zero-mean tonal cue exposes its physical relief
-        // at sub-6 m/texel without adding a second texture identity or extra work.
-        const microRelief=clamp(Number(microSample.microElevation||0)/5.2,-1,1);
-        const microReliefGain=lerp(.018,.050,closeWeight)*microContinuity;
-        displayColor=displayColor.map((v,i)=>clamp(v+microRelief*microReliefGain*(i===2?.76:i===1?.94:1),0,.88));
+        // Use the exact existing local-ground SEED frequencies as a zero-mean
+        // registered residual. Each octave enters only when this layer can
+        // physically resolve it, so focus/context differ only by real bandwidth,
+        // never by a centered ownership/palette weight.
+        const w34=colorDetailOctaveWeight(34,metersPerTexel);
+        const w12=colorDetailOctaveWeight(12,metersPerTexel);
+        const w42=colorDetailOctaveWeight(4.2,metersPerTexel);
+        const registeredMicro=
+          surfaceValueNoise(worldEast,worldNorth,34,microSurfaceSalt+11)*.024*w34+
+          surfaceValueNoise(worldEast,worldNorth,12,microSurfaceSalt+29)*.017*w12+
+          surfaceValueNoise(worldEast,worldNorth,4.2,microSurfaceSalt+47)*.011*w42;
+        const closeGain=lerp(.86,1.18,smoothstep01(clamp((6-metersPerTexel)/5.5,0,1)));
+        displayColor=displayColor.map((v,i)=>clamp(v+registeredMicro*closeGain*(i===0?1:i===1?.92:.72),0,.88));
       }
       // High peaks are legitimately snow-covered, but the canonical near-white
       // macro palette plus hillshade used to saturate into featureless white.
@@ -8172,8 +8172,8 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Fine canonical albedo roughness keeps close alpine terrain readable
       // without inventing patch-local noise. Frequencies remain registered-meter
       // anchored, so the same coordinate has the same mottling in every rebuild.
-      if(parentSample?.land&&sharedMetersPerTexel<=8){
-        const coarseScale=Math.max(2,sharedMetersPerTexel*6),fineScale=Math.max(.75,sharedMetersPerTexel*2);
+      if(parentSample?.land&&metersPerTexel<=8){
+        const coarseScale=Math.max(2,metersPerTexel*6),fineScale=Math.max(.75,metersPerTexel*2);
         const rough=surfaceValueNoise(worldEast,worldNorth,coarseScale,detailSalt+211)*.040+
           surfaceValueNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.018;
         displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.82:i===1?.94:1),0,.86));
@@ -8193,11 +8193,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const role=localSurfaceStyleRole(parentSample),styled=worldStyleRgb(role,displayColor);
         displayColor=displayColor.map((v,i)=>clamp(lerp(v,styled[i],livingWorldStyleWeight),0,1));
         const closeTextureEligibility=smoothstep01(clamp((2.4-metersPerTexel)/2,0,1));
-        const closeTextureContinuity=contextRing?0:focusRefineWeight;
-        const closeTextureBand=styleContract.closeSurfaceVariation===false?0:livingWorldStyleWeight*closeTextureEligibility*closeTextureContinuity;
+        const closeTextureBand=styleContract.closeSurfaceVariation===false?0:livingWorldStyleWeight*closeTextureEligibility;
         if(closeTextureBand>.001&&["terrain:grass","terrain:forest","terrain:farmland"].includes(role)){
           const broadStyle=surfaceValueNoise(worldEast,worldNorth,5.5,detailSalt+307),fineStyle=surfaceValueNoise(worldEast,worldNorth,1.4,detailSalt+331),microStyle=surfaceValueNoise(worldEast,worldNorth,.62,detailSalt+349);
-          const patch=(broadStyle*.145+fineStyle*.070+microStyle*.035)*closeTextureBand;
+          const broadWeight=colorDetailOctaveWeight(5.5,metersPerTexel),fineWeight=colorDetailOctaveWeight(1.4,metersPerTexel),microWeight=colorDetailOctaveWeight(.62,metersPerTexel);
+          const patch=(broadStyle*.145*broadWeight+fineStyle*.070*fineWeight+microStyle*.035*microWeight)*closeTextureBand;
           displayColor=[clamp(displayColor[0]+patch*.92,0,1),clamp(displayColor[1]+patch*.68,0,1),clamp(displayColor[2]-patch*.12,0,1)];
         }
       }
