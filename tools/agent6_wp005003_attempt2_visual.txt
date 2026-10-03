@@ -1,0 +1,8 @@
+WP-S003-010-003-005-003 Attempt 2 visual review
+Product: 553dbaabd772e647528bbe198dee63b57dfba6d3
+Run: 37118524221
+Artifact: 11272452762
+Digest: sha256:aadb9bb7e3199f7e5651b14c9e18f8d6be8dce19657d3fda23d8331188be9688
+Fresh screenshots directly inspected: 16
+VISUAL: 6.6/10 FAIL
+Primary defects: protagonist billboard visibly clipped at the right viewport edge in both phone-portrait screenshots; protagonist focus dock overlays the optional geographic context readout at upper left, creating avoidable context clutter. Functional gate passed, including zero forced camera returns, camera-only Simulation preservation, latest-position return, bounded soft follow, and focus identity through LOD.
