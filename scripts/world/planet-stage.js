@@ -4373,13 +4373,15 @@ function settlementRevealTierForScalar(value=zoomState.scalar){
 }
 function localWorldPresentationEligibility(value=zoomState.scalar){
   const scalar=clamp(Number(value)||0,ZOOM_MIN,ZOOM_MAX),revealTier=settlementRevealTierForScalar(scalar);
+  const requestedScaleIndex=Number(scaleStateForScalar(scalar)?.index??0),broadMapScale=requestedScaleIndex<=5;
   const requestedLevel=String(localResources.requestedLevel||LOCAL_DETAIL_LEVELS[requestedLodIndexForZoom(scalar)]?.id||"");
   const rawIndex=rawLodIndexForZoom(scalar),level=LOCAL_DETAIL_LEVELS[rawIndex]||LOCAL_DETAIL_LEVELS[0];
   // Retained parent resources are terrain-coverage fallbacks only. Presentation
   // eligibility is determined by the requested scale so stale local roots and
   // seasonal accents cannot survive at regional/strategic map scales.
   const staticWorldVisible=Boolean(level?.staticWorld)||requestedLevel==="ground";
-  return Object.freeze({visible:revealTier!=="none"||staticWorldVisible,revealTier,rawLevelIndex:rawIndex,rawLevelId:requestedLevel==="ground"?"ground":level?.id||null,rawStaticWorld:staticWorldVisible});
+  const effectiveRevealTier=broadMapScale?"none":revealTier;
+  return Object.freeze({visible:!broadMapScale&&(effectiveRevealTier!=="none"||staticWorldVisible),revealTier:effectiveRevealTier,requestedScaleIndex,broadMapScale,rawLevelIndex:rawIndex,rawLevelId:requestedLevel==="ground"?"ground":level?.id||null,rawStaticWorld:staticWorldVisible});
 }
 function applyLocalWorldPresentationVisibility(){
   const gate=localWorldPresentationEligibility(),nodes=[localStaticRoot,localNpcRoot,localCrowdRoot,localBuildingActivityRoot,localCampaignWearMesh,localFaunaRoot,environmentalReactionRoot,localWayfindingEntity].filter(Boolean);
