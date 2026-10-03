@@ -92,34 +92,34 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-010` — Continuous Planet-to-Ground Zoom + Multi-Scale Focus Foundation — COMPLETED
 - `WP-S003-010-001` — Globe-to-Surface Focus Anchor + Projection Transition — COMPLETED
 - `WP-S003-010-002` — Viewport-Bounded Ground Detail + 2 m Surface Resolution — COMPLETED
-- `WP-S003-010-003` — Zoom-Driven Detail Refinement + Off-Screen Eviction
+- `WP-S003-010-003` — Canonical Progressive LOD Refinement + Viewport-Bounded Residency/Performance
 - `WP-S003-010-003-001` — Zoom-Aware Geographic Labels, Borders, Scale Ruler + Streaming Pace — COMPLETED
 - `WP-S003-010-003-002` — Smooth Mid-Zoom Projection + Country/Region Scale Rebalance — COMPLETED
 - `WP-S003-010-003-003` — Zoom-Only Camera Orientation + Focus Continuity — COMPLETED
 - `WP-S003-010-003-004` — Terrain-Anchored Landmarks + World-Projected Political Borders — COMPLETED
 - `WP-S003-010-003-005` — Seamless Viewport-Filling Multi-LOD Terrain Continuity — COMPLETED
 - `WP-S003-010-003-005-001` — Zero-Movement Geographic Identity + Focus Lock Across LODs — COMPLETED
-- `WP-S003-010-003-005-002` — Structured Cross-LOD Terrain Information Refinement + Physical Density Continuity — IN PROGRESS
-- `WP-S003-010-003-005-003` — Protagonist-First Mobile Safe-Area Framing + Context Hierarchy + Free Exploration — IN PROGRESS
-- `WP-S003-010-003-006` — Ready-Representation-Owned Scale/Ruler/Semantics + Seamless LOD Handoffs
-- `WP-S003-010-003-007` — World-Matched Progressive Settlement Reveal + No LOD Scale/Composition Pop — IN PROGRESS
+- `WP-S003-010-003-005-002` — Persistent Cross-LOD Geomorphology + Monotonic Visible Information/Density — IN PROGRESS
+- `WP-S003-010-003-005-003` — Protagonist-First Focus Transactions + Mobile Safe-Area Context/Free Exploration — IN PROGRESS
+- `WP-S003-010-003-006` — Presented-Ready Scale/Ruler/Semantics + Atomic LOD Handoffs
+- `WP-S003-010-003-007` — Canonical Settlement Footprint Continuity + Progressive Reveal Without LOD Pop — IN PROGRESS
 - `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling — COMPLETED
 - `WP-S003-010-003-009` — Canonical Planet/World Coordinate Registration + Political Atlas Integrity — COMPLETED
 - `WP-S003-010-003-010` — TOP PRIORITY BUG: SEED-Only Canonical Political Boundaries + SEED-Only Important-Place Placement — COMPLETED
 - `WP-S003-010-003-011` — TOP PRIORITY BUG: Pure Zoom + Canonical 1/N Scale Ladder + Scale-Aware Navigation — COMPLETED
 - `WP-S003-010-003-012` — TOP PRIORITY BUG: SEED Coordinate Fabric + Gameplay-Center Marker + Landmark Callouts — COMPLETED
-- `WP-S003-010-003-013` — Screen-Space-Error Hierarchical Spatial LOD + Canonical Cell Refinement
-- `WP-S003-010-003-014` — Ready-State Physical Information Hierarchy + Safe-Area Stable Decluttering — IN PROGRESS
+- `WP-S003-010-003-013` — Screen-Space-Error Canonical Cell LOD + Resolution-Independent Refinement
+- `WP-S003-010-003-014` — Gameplay-First Information Priority + Safe-Area Decluttering Across Viewports — IN PROGRESS
 - `WP-S003-010-003-015` — TOP PRIORITY BUG: SEED-Only Settlement Hierarchy + Realistic Physical Spacing — COMPLETED
 - `WP-S003-010-003-016` — Temporal-Coherent Detail Residency + Ready-Child Handoff + Navigation Prefetch — COMPLETED
 - `WP-S003-010-003-017` — TOP PRIORITY REGRESSION: Planet-Scale Semantic Cleanup + Explainable Marker Visibility — COMPLETED
-- `WP-S003-010-003-018` — Continuous Pure-Zoom Retargeting + Cross-Input Focus/Gesture Stability — IN PROGRESS
+- `WP-S003-010-003-018` — Unified Pure-Zoom Transaction State + Wheel/Trackpad/Pinch Focus Stability — IN PROGRESS
 - `WP-S003-010-003-019` — Focus-Centric Layered World Streaming + Center-First Detail Refinement — COMPLETED
-- `WP-S003-010-003-020` — Minimal Planet-First Bootstrap + Frame/GPU/Memory Budgets Across Devices
+- `WP-S003-010-003-020` — Minimal Planet-First Lazy Bootstrap + First-Playable/CPU/GPU/Memory Budgets
 - `WP-S003-010-003-021` — World-Map Interaction Coherence + Streaming Stutter Cleanup — COMPLETED
-- `WP-S003-010-003-022` — Canonical Click/Tap Selection + Gesture Disambiguation + Safe-Area Target Framing
-- `WP-S003-010-004` — Canonical Planet-to-Local 3D Continuity + Grounding + Responsive Safe-Area Framing
-- `WP-S003-010-005` — README Production Acceptance: Startup/Performance + UI/UX + Mobile/WebGL2 Compatibility
+- `WP-S003-010-003-022` — Canonical Selection + Tap/Drag/Pinch Disambiguation + Safe Target Framing
+- `WP-S003-010-004` — Continuous Planet→Local→Ground 3D Identity + Grounding + Responsive Framing
+- `WP-S003-010-005` — README Production Acceptance: First-Playable + Sustained Performance + UI/UX/Touch + WebGL2 Device Matrix
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips — COMPLETED
 - `WP-S003-012` — Day/Night Atmospheric Color + Lighting Palette — COMPLETED
 - `WP-S003-013` — Performance-Bounded Biome Wilderness Dressing + Ambient Fauna
