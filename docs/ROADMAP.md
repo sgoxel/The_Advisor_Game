@@ -99,9 +99,9 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-010-003-004` — Terrain-Anchored Landmarks + World-Projected Political Borders — COMPLETED
 - `WP-S003-010-003-005` — Seamless Viewport-Filling Multi-LOD Terrain Continuity — COMPLETED
 - `WP-S003-010-003-005-001` — Zero-Movement Geographic Identity + Focus Lock Across LODs — COMPLETED
-- `WP-S003-010-003-005-002` — True Cross-LOD Surface Refinement + Texel/Geometry Density Continuity — IN PROGRESS
-- `WP-S003-010-003-005-003` — Protagonist Default Focus + Persistent Local Context + Free 3D World Exploration
-- `WP-S003-010-003-006` — Streaming-Safe Canonical Scale Ladder + Ready-LOD Semantic Handoffs
+- `WP-S003-010-003-005-002` — Viewport-Bounded Cross-LOD Terrain Refinement + Structural Detail Continuity — IN PROGRESS
+- `WP-S003-010-003-005-003` — Protagonist-First Focus UX + Persistent Local Context + Free Canonical World Exploration
+- `WP-S003-010-003-006` — Ready-Representation Canonical Scale Ladder + Truthful Semantic/LOD Handoffs
 - `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground — COMPLETED
 - `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling — COMPLETED
 - `WP-S003-010-003-009` — Canonical Planet/World Coordinate Registration + Political Atlas Integrity — COMPLETED
@@ -109,17 +109,17 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-010-003-011` — TOP PRIORITY BUG: Pure Zoom + Canonical 1/N Scale Ladder + Scale-Aware Navigation — COMPLETED
 - `WP-S003-010-003-012` — TOP PRIORITY BUG: SEED Coordinate Fabric + Gameplay-Center Marker + Landmark Callouts — COMPLETED
 - `WP-S003-010-003-013` — Screen-Space-Error Hierarchical Spatial LOD + Canonical Cell Refinement — COMPLETED
-- `WP-S003-010-003-014` — Physical-Scale Semantic Layer Ladder + Stable Label/Border/Route Decluttering — IN PROGRESS
+- `WP-S003-010-003-014` — Physical-Scale Information Hierarchy + Stable Label/Border/Route Decluttering — IN PROGRESS
 - `WP-S003-010-003-015` — TOP PRIORITY BUG: SEED-Only Settlement Hierarchy + Realistic Physical Spacing — COMPLETED
 - `WP-S003-010-003-016` — Temporal-Coherent Detail Residency + Ready-Child Handoff + Navigation Prefetch — COMPLETED
 - `WP-S003-010-003-017` — TOP PRIORITY REGRESSION: Planet-Scale Semantic Cleanup + Explainable Marker Visibility — COMPLETED
-- `WP-S003-010-003-018` — Smooth Pure-Zoom Animation Between Canonical Physical Scales
+- `WP-S003-010-003-018` — Smooth Focus-Locked Pure Zoom + Canonical Scale Interpolation
 - `WP-S003-010-003-019` — Focus-Centric Layered World Streaming + Center-First Detail Refinement — COMPLETED
-- `WP-S003-010-003-020` — Cross-Device World Navigation Performance + Frame/GPU/Memory Budget
+- `WP-S003-010-003-020` — Cross-Device Startup + Navigation Performance + Frame/GPU/Memory Budget
 - `WP-S003-010-003-021` — World-Map Interaction Coherence + Streaming Stutter Cleanup — COMPLETED
-- `WP-S003-010-003-022` — Hierarchical Click-to-Focus + Stable Selection Context + Local Max Zoom
-- `WP-S003-010-004` — Canonical Ground-Level 3D World Projection + Responsive Gameplay Area
-- `WP-S003-010-005` — Cross-Device Planet-to-Ground UX, Performance + README Acceptance
+- `WP-S003-010-003-022` — Canonical Click-to-Focus + Safe-Area Selection Context + Local Max Zoom
+- `WP-S003-010-004` — Canonical Planet-to-Ground 3D Projection + Responsive Safe-Area Gameplay Framing
+- `WP-S003-010-005` — README End-to-End Planet-to-Ground UX + Performance + Cross-Device Acceptance
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips — COMPLETED
 - `WP-S003-012` — Day/Night Atmospheric Color + Lighting Palette — COMPLETED
 - `WP-S003-013` — Performance-Bounded Biome Wilderness Dressing + Ambient Fauna
