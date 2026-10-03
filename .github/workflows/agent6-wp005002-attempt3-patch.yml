@@ -1,0 +1,64 @@
+name: AGENT6 WP005002 Attempt3 Canonical Focus Patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/agent6_wp005002_attempt3_patch.py
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp005002-attempt3-patch
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure Git identity
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Apply Attempt 3 canonical focus patch
+        run: python tools/agent6_wp005002_attempt3_patch.py
+
+      - name: Verify canonical focus authority is active
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('scripts/world/planet-stage.js').read_text(encoding='utf-8')
+          assert 'focusAuthority=contextRing?null:focusSurfaceAuthority(job)' in text
+          assert 'const sourceSample=sample||parentSample;' in text
+          assert 'focusAuthorityApplied:true' in text
+          assert 'focusAuthority=null' not in text
+          print('canonical focus authority assertions passed')
+          PY
+
+      - name: Validate JavaScript syntax
+        run: node --check scripts/world/planet-stage.js
+
+      - name: Run script syntax suite
+        run: npm run test:script-syntax
+
+      - name: Commit implementation to main
+        shell: bash
+        run: |
+          if git diff --quiet -- scripts/world/planet-stage.js; then
+            echo 'No source changes to commit.'
+            exit 0
+          fi
+          git add scripts/world/planet-stage.js
+          git commit -m 'WP-S003-010-003-005-002 activate canonical focus source refinement'
+          git pull --rebase origin main
+          git push origin main
