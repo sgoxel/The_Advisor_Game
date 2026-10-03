@@ -7526,9 +7526,11 @@ const TERRAIN_DETAIL_OCTAVES=Object.freeze([[48000,700],[16000,320],[5200,140],[
 // already world-coordinate stitched, so only a small bounded blend is needed.
 const LOCAL_TEXTURE_HANDOFF_FEATHER=.12;
 // Medium continuation textures are presentation coverage, not canonical tile
-// boundaries. Fade them radially across most of their span so the prepared
-// parent remains continuous without exposing a rectangular streaming footprint.
-const LOCAL_CONTEXT_RING_RADIAL_FEATHER=.62;
+// boundaries. Keep their higher-density ready parent opaque across the viewport
+// and feather only near the physical 3x ring edge, where the 6x outer fallback
+// takes over. This prevents a centered LOD ownership footprint while retaining
+// bounded world-matched fallback coverage during larger focus offsets.
+const LOCAL_CONTEXT_RING_RADIAL_FEATHER=.16;
 function localTextureHandoffCoverage(u,v,contextRing){
   if(contextRing){
     const radialDistance=Math.hypot((u-.5)*2,(v-.5)*2);
