@@ -113,7 +113,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-010-003-015` — TOP PRIORITY BUG: SEED-Only Settlement Hierarchy + Realistic Physical Spacing — COMPLETED
 - `WP-S003-010-003-016` — Temporal-Coherent Detail Residency + Ready-Child Handoff + Navigation Prefetch — COMPLETED
 - `WP-S003-010-003-017` — TOP PRIORITY REGRESSION: Planet-Scale Semantic Cleanup + Explainable Marker Visibility — COMPLETED
-- `WP-S003-010-003-018` — Continuous Pure Zoom Interpolation + Input/Focus Stability
+- `WP-S003-010-003-018` — Continuous Pure Zoom Interpolation + Input/Focus Stability — IN PROGRESS
 - `WP-S003-010-003-019` — Focus-Centric Layered World Streaming + Center-First Detail Refinement — COMPLETED
 - `WP-S003-010-003-020` — First-Playable + Navigation Frame/GPU/Memory Budgets Across Devices
 - `WP-S003-010-003-021` — World-Map Interaction Coherence + Streaming Stutter Cleanup — COMPLETED
