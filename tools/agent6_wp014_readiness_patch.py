@@ -5,9 +5,12 @@ text = path.read_text()
 changed = False
 
 if "const readinessResource=" not in text:
-    old = "  const nativeVisibleHeight=Math.max(\n    GROUND_FOOTPRINT_HEIGHT_METERS,\n    Number(displayResource.dims?.visibleHeight||displayResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)\n  );"
-    if text.count(old) != 1:
-        raise SystemExit(f"Expected exactly one readiness-height anchor, found {text.count(old)}")
+    fn = text.index("function animatedZoomReadinessCapScalar(){")
+    start = text.index("  const nativeVisibleHeight=Math.max(", fn)
+    end = text.index("\n  const targetVisibleHeight=", start)
+    old = text[start:end]
+    if "displayResource.dims?.visibleHeight" not in old or "GROUND_FOOTPRINT_HEIGHT_METERS" not in old:
+        raise SystemExit("Readiness-height block changed unexpectedly; refusing patch")
     new = "\n".join([
         "  // WP-S003-010-003-014: a completed next-child prewarm is real ready coverage.",
         "  // Let the camera advance far enough to request/swap that cached child; otherwise",
@@ -23,20 +26,20 @@ if "const readinessResource=" not in text:
         "    Number(readinessResource.dims?.visibleHeight||readinessResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)",
         "  );",
     ])
-    text = text.replace(old, new, 1)
+    text = text[:start] + new + text[end:]
     changed = True
 
 if "const activePrefetchNeedsNext=" not in text:
-    old = '  if(zoomState.targetPrefetchState==="deferred"&&!localJob)requestZoomTargetPrefetch();'
-    if text.count(old) != 1:
-        raise SystemExit(f"Expected exactly one target-prefetch continuation anchor, found {text.count(old)}")
+    fn = text.index("function updateAnimatedZoom(dt){")
+    start = text.index('  if(zoomState.targetPrefetchState==="deferred"&&!localJob)requestZoomTargetPrefetch();', fn)
+    end = start + len('  if(zoomState.targetPrefetchState==="deferred"&&!localJob)requestZoomTargetPrefetch();')
     new = "\n".join([
         "  // WP-S003-010-003-014: after the staged child is atomically active, prepare the",
         "  // next canonical child toward the same final target instead of ending prefetch early.",
         '  const activePrefetchNeedsNext=zoomState.targetPrefetchState==="ready"&&!localJob&&displayResource?.signature===zoomState.targetPrefetchSignature&&displayResource.levelIndex<rawLodIndexForZoom(target);',
         '  if((zoomState.targetPrefetchState==="deferred"&&!localJob)||activePrefetchNeedsNext)requestZoomTargetPrefetch();',
     ])
-    text = text.replace(old, new, 1)
+    text = text[:start] + new + text[end:]
     changed = True
 
 if changed:
