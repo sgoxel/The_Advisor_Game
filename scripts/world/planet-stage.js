@@ -7520,10 +7520,11 @@ function* tangentMeshSteps(job){
 // Each octave fades in once it spans >2 texels, so every LOD shows structure at
 // its own scale without aliasing, and finer LODs add detail instead of blur.
 const TERRAIN_DETAIL_OCTAVES=Object.freeze([[48000,700],[16000,320],[5200,140],[1700,56],[560,20],[180,7],[60,2.4],[20,.8]]);
-// Narrow cross-LOD visual handoff. The old 18% edge feather made the canonical
-// focus patch read as a giant blurred square at 1/500-1/2500. Colors are
-// already world-coordinate stitched, so only a small bounded blend is needed.
-const LOCAL_TEXTURE_HANDOFF_FEATHER=.12;
+// Shared photometry lets the child refinement fade over a broader bounded
+// handoff without creating the old tinted/blurred card. Reuse this single curve
+// for focus authority, registered high-pass, alpha and center stitching so no
+// independent square boundary can become visible during zoom.
+const LOCAL_TEXTURE_HANDOFF_FEATHER=.22;
 // Medium continuation textures are presentation coverage, not canonical tile
 // boundaries. Keep their higher-density ready parent opaque across the viewport
 // and feather only near the physical 6x ring edge, where the 12x outer fallback
@@ -7753,7 +7754,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // 1x child visibly richer inside a rectangular footprint. Let any physically
   // eligible layer sample the identical world-registered micro field; context
   // gain is bounded below by its refinement weight.
-  const useMicroDetail=metersPerTexel<=6;
+  const useMicroDetail=!contextRing&&metersPerTexel<=6;
   const phase=seededUnit("local-texture-macro")*Math.PI*2;
   // Surface relief is presented as continuous hillshade, not synthetic
   // cartographic contour bands. The previous 420 m sine contours and strong
@@ -7772,17 +7773,17 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // coordinate frame. Patch recentering, viewport changes and LOD changes may
   // change presentation, but never the world-space inputs to the detail field.
   const surfaceAuthority=sharedSurfaceAuthority(job),focusAuthority=contextRing?null:focusSurfaceAuthority(job);
-  const mixSample=(ux,vz)=>{
-    const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth,coarse=surfaceAuthority.sample(east,north);
+  const mixSample=(ux,vz,coarseSample=null)=>{
+    const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth,coarse=coarseSample||surfaceAuthority.sample(east,north);
     if(!focusAuthority)return coarse;
-    const edge=Math.min(ux,1-ux,vz,1-vz),refine=smoothstep01(clamp((edge-.025)/.145,0,1));
+    const refine=localTextureHandoffCoverage(ux,vz,false);
     return refine<=0?coarse:blendSurfaceAuthoritySamples(coarse,focusAuthority.sample(east,north),refine);
   };
   for(let y=0;y<size;y++){
     for(let x=0;x<size;x++){
       const ux=(x+.5)/size,vz=(y+.5)/size,pixelOffset=(y*size+x)*4;
       const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth;
-      const sample=mixSample(ux,vz),parentSample=surfaceAuthority.sample(east,north);
+      const parentSample=surfaceAuthority.sample(east,north),sample=mixSample(ux,vz,parentSample);
       const sourceColor=Array.isArray(parentSample?.color)?parentSample.color:(parentSample?.land?[.28,.46,.20]:[.06,.22,.42]);
       // PlanetGeography carries intentionally broad macro color fields. At local
       // map scales those low-frequency fields can read as giant polygon wedges.
@@ -7853,7 +7854,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Fine information is an edge-feathered residual over the shared parent,
       // not a radial brightness field. This removes the visible oval/ring at
       // 1/500 while keeping the same registered-meter authority everywhere.
-      const focusRefineWeight=contextRing?0:smoothstep01(clamp((focusEdgeDistance-.018)/.105,0,1));
+      const focusRefineWeight=contextRing?0:localTextureHandoffCoverage(ux,vz,false);
       const photometricMetersPerTexel=contextRing
         ? lerp(sharedMetersPerTexel,metersPerTexel,contextRefineWeight*.36)
         : lerp(sharedMetersPerTexel,Math.max(metersPerTexel,sharedMetersPerTexel*.14),focusRefineWeight*.94);
@@ -8135,8 +8136,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         // layer's real texel density, not by the coarsest fallback. Edge/context
         // ownership weights make this a refinement residual instead of a card.
         const closeWeight=smoothstep01(clamp((6-metersPerTexel)/5.5,0,1));
-        const microContinuity=contextRing?clamp(Math.max(.32,contextRefineWeight),0,1):focusRefineWeight;
-        const microWeight=lerp(.10,.30,closeWeight)*microContinuity;
+        const microWeight=lerp(.10,.30,closeWeight)*focusRefineWeight;
         displayColor=displayColor.map((v,i)=>clamp(v*(1-microWeight)+micro[i]*microWeight,0,1));
       }
       // High peaks are legitimately snow-covered, but the canonical near-white
@@ -8173,7 +8173,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const role=localSurfaceStyleRole(parentSample),styled=worldStyleRgb(role,displayColor);
         displayColor=displayColor.map((v,i)=>clamp(lerp(v,styled[i],livingWorldStyleWeight),0,1));
         const closeTextureEligibility=smoothstep01(clamp((2.4-metersPerTexel)/2,0,1));
-        const closeTextureContinuity=contextRing?contextRefineWeight:focusRefineWeight;
+        const closeTextureContinuity=contextRing?0:focusRefineWeight;
         const closeTextureBand=styleContract.closeSurfaceVariation===false?0:livingWorldStyleWeight*closeTextureEligibility*closeTextureContinuity;
         if(closeTextureBand>.001&&["terrain:grass","terrain:forest","terrain:farmland"].includes(role)){
           const broadStyle=surfaceValueNoise(worldEast,worldNorth,5.5,detailSalt+307),fineStyle=surfaceValueNoise(worldEast,worldNorth,1.4,detailSalt+331),microStyle=surfaceValueNoise(worldEast,worldNorth,.62,detailSalt+349);
