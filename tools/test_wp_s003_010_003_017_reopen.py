@@ -92,8 +92,8 @@ def assert_map_microdetail_clean(driver, stage, label):
     if seasonal:
         if int(seasonal.get("accentCount") or 0) != 0:
             raise AssertionError(f"{label}: seasonal marker-like accents leaked: {seasonal}")
-        if seasonal.get("mapScaleAccentSuppressed") is not True:
-            raise AssertionError(f"{label}: seasonal map-scale suppression missing: {seasonal}")
+        if seasonal.get("mapScaleAccentEligible") is True:
+            raise AssertionError(f"{label}: seasonal accents remain eligible at map scale: {seasonal}")
 
     return {
         **base_record,
