@@ -25,6 +25,7 @@ STARTING_VILLAGE_SHOTS=3
 WP_STARTING_VILLAGE_DRESSING_SCENARIO="wp-s003-009-001"
 WP_STARTING_VILLAGE_DRESSING_SHOTS=7
 WP_SURFACE_REFINEMENT_SCENARIO="wp-s003-010-003-005-002"
+WP_VIEWPORT_REFINEMENT_SCENARIO="wp-s003-010-003"
 WP_SURFACE_REFINEMENT_SHOTS=10
 WP_SCALE_HANDOFF_SCENARIO="wp-s003-010-003-006"
 WP_SCALE_HANDOFF_SHOTS=13
@@ -1472,8 +1473,8 @@ def run_capture(args):
     width,height=PROFILES.get(args.profile,(args.width,args.height))
     if args.scenario in {WP_TEMPORAL_RESIDENCY_SCENARIO,WP_SETTLEMENT_REVEAL_SCENARIO,WP_ATLAS_LIVE_SCENARIO}:
         width,height=1280,800
-    elif args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:
-        # WP005002 requires both desktop landscape and modern-phone evidence.
+    elif args.scenario in {WP_SURFACE_REFINEMENT_SCENARIO,WP_VIEWPORT_REFINEMENT_SCENARIO}:
+        # WP003 and WP005002 require both desktop landscape and modern-phone evidence.
         # Preserve the explicitly requested profile instead of coercing phone
         # captures to the historical 1280x800 desktop viewport.
         width,height=PROFILES.get(args.profile,(args.width,args.height))
@@ -1484,7 +1485,7 @@ def run_capture(args):
         total=max(total,WP_STARTING_VILLAGE_DRESSING_SHOTS)
     elif args.scenario==STARTING_VILLAGE_SCENARIO:
         total=max(total,STARTING_VILLAGE_SHOTS)
-    elif args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:
+    elif args.scenario in {WP_SURFACE_REFINEMENT_SCENARIO,WP_VIEWPORT_REFINEMENT_SCENARIO}:
         total=max(total,WP_SURFACE_REFINEMENT_SHOTS)
     elif args.scenario==WP_SCALE_HANDOFF_SCENARIO:
         total=max(total,WP_SCALE_HANDOFF_SHOTS)
@@ -1578,7 +1579,7 @@ def run_capture(args):
                 frame["index"]=index+1;frame["file"]=path.name
                 frame["captured_at"]=datetime.now(timezone.utc).isoformat()
                 frames.append(frame)
-        elif args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:
+        elif args.scenario in {WP_SURFACE_REFINEMENT_SCENARIO,WP_VIEWPORT_REFINEMENT_SCENARIO}:
             focus=_prepare_surface_refinement_focus(driver)
             frames=[]
             for index in range(WP_SURFACE_REFINEMENT_SHOTS):
