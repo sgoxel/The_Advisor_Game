@@ -22,10 +22,17 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Record capped run and clean temporary AGENT 6 files
+      - name: Record capped run and clean temporary AGENT 6 files safely
         run: |
           set -euo pipefail
-          python - <<'PY'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+
+            python - <<'PY'
           from pathlib import Path
 
           changelog = Path('docs/changelog.txt')
@@ -50,20 +57,31 @@ jobs:
               'Profile cooperative preparation/caching so close-tier builds do not require multi-second software preparation. Require fresh desktop and real-phone evidence with VISUAL >=8/10 before changing completion state. Do not implement unless explicitly requested.\n'
           )
 
-          changelog.write_text(changelog_entry + changelog.read_text(encoding='utf-8'), encoding='utf-8')
-          suggest.write_text(suggest_entry + suggest.read_text(encoding='utf-8'), encoding='utf-8')
+          current = changelog.read_text(encoding='utf-8')
+          if changelog_entry not in current:
+              changelog.write_text(changelog_entry + current, encoding='utf-8')
+          current = suggest.read_text(encoding='utf-8')
+          if suggest_entry not in current:
+              suggest.write_text(suggest_entry + current, encoding='utf-8')
           PY
 
-          rm -rf tools/screenshots/agent6-wp003-attempt1
-          rm -f tools/agent6_wp003_*
-          rm -f tools/agent6-wp003-*
-          rm -f .github/workflows/agent6-wp003-*
+            rm -rf tools/screenshots/agent6-wp003-attempt1
+            rm -f tools/agent6_wp003_*
+            rm -f tools/agent6-wp003-*
+            rm -f .github/workflows/agent6-wp003-*
 
-          git status --short
-          git diff --check
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "docs(WP-S003-010-003): record capped run and clean evidence"
-          git pull --rebase origin main
-          git push origin HEAD:main
+            git diff --check
+            git add -A
+            if git diff --cached --quiet; then
+              echo "Cleanup already present on current main."
+              exit 0
+            fi
+            git commit -m "docs(WP-S003-010-003): record capped run and clean evidence"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Concurrent main update detected; retrying from latest main ($attempt/5)."
+          done
+
+          echo "Unable to publish cleanup after five safe retries." >&2
+          exit 1
