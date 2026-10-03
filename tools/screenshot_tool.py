@@ -1470,8 +1470,13 @@ def _generic_frames(driver,shots,width,height,timeout,interval):
 
 def run_capture(args):
     width,height=PROFILES.get(args.profile,(args.width,args.height))
-    if args.scenario in {WP_SURFACE_REFINEMENT_SCENARIO,WP_TEMPORAL_RESIDENCY_SCENARIO,WP_SETTLEMENT_REVEAL_SCENARIO,WP_ATLAS_LIVE_SCENARIO}:
+    if args.scenario in {WP_TEMPORAL_RESIDENCY_SCENARIO,WP_SETTLEMENT_REVEAL_SCENARIO,WP_ATLAS_LIVE_SCENARIO}:
         width,height=1280,800
+    elif args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:
+        # WP005002 requires both desktop landscape and modern-phone evidence.
+        # Preserve the explicitly requested profile instead of coercing phone
+        # captures to the historical 1280x800 desktop viewport.
+        width,height=PROFILES.get(args.profile,(args.width,args.height))
     total=max(1,int(args.shots))
     if args.scenario==WP_CHARACTER_SCENARIO:
         total=max(total,WP_CHARACTER_SHOTS)
