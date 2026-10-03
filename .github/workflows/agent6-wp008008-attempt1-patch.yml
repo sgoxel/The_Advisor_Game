@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - ".github/workflows/agent6-wp008008-attempt1-patch.yml"
+      - "tools/agent6_wp008008_attempt1_patch.py"
   workflow_dispatch:
 
 permissions:
