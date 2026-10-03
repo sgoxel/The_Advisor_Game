@@ -30,7 +30,8 @@ jobs:
           set -euo pipefail
           git pull --ff-only origin main
           python tools/agent6_wp007_evidence_diagnostic_patch.py
-          python -m py_compile tools/screenshot_tool.py
+          PYTHONDONTWRITEBYTECODE=1 python -m py_compile tools/screenshot_tool.py
+          rm -rf tools/__pycache__
           git diff --check
       - name: Commit evidence harness improvement
         shell: bash
