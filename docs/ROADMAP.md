@@ -100,6 +100,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-010-003-005` — Seamless Viewport-Filling Multi-LOD Terrain Continuity — COMPLETED
 - `WP-S003-010-003-005-001` — Zero-Movement Geographic Identity + Focus Lock Across LODs — COMPLETED
 - `WP-S003-010-003-005-002` — True Cross-LOD Surface Refinement + Texel/Geometry Density Continuity — IN PROGRESS
+- `WP-S003-010-003-005-003` — Protagonist Click-to-Focus + Persistent Local Gameplay Center
 - `WP-S003-010-003-006` — Streaming-Safe Scale Ladder + Ready-LOD Semantic Handoffs
 - `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground — COMPLETED
 - `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling — COMPLETED
@@ -117,7 +118,6 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-010-003-020` — World-Map Navigation Performance Budget + Main-Thread Stutter Elimination
 - `WP-S003-010-003-021` — World-Map Interaction Coherence + Streaming Stutter Cleanup — COMPLETED (AGENT #6; reopened regression accepted on product head `abb7f3b782745009210c9577869ff37a6876f7c1`. Fresh exact-head workflow `36932355324` SUCCESS; artifact `11196193026`: FUNCTIONAL PASS / VISUAL 8.1/10 after direct inspection of all six fresh 390×844 and 844×390 before/mid-drag/after frames. 36/36 pointer moves reprojected existing labels with no per-move semantic rebuild; `liveProjectionMaxMs=0.2`, `liveProjectionOver8MsCount=0`, 36 streaming deferrals, 2 settle flush/streaming refreshes, `missingCoverageCount=0`, regional decorative/unknown marker counts zero, seasonal marker-like accents zero. Reopened startup regression was traced to a TDZ crash and fixed by moving `LOCAL_TANGENT_PRESENTATION_PITCH_DEGREES` before its initial presentation use. Product head deployed successfully via Pages run `36932352923`; acceptance/docs head `39a030e76baaad05c5a59b718546076063996108` deployed successfully via Pages run `36933335604`; final bookkeeping is this COMPLETED record.)
 - `WP-S003-010-003-022` — Hierarchical Click-to-Focus Camera Centering + Local Max Zoom
-- `WP-S003-010-003-023` — Protagonist Click-to-Focus + Persistent Local Gameplay Center
 - `WP-S003-010-004` — Ground-Level Static World Projection + 3D Gameplay Area
 - `WP-S003-010-005` — Zero-Movement Planet-to-Ground Zoom End-to-End Acceptance
 - `WP-S003-011` — Clickable NPC + Building Inspection Tooltips — COMPLETED
