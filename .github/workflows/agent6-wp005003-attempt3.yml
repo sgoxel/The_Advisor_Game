@@ -1,0 +1,72 @@
+name: Agent6 WP005003 Attempt3 Responsive Focus
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/agent6-wp005003-attempt3.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp005003-attempt3
+  cancel-in-progress: false
+
+jobs:
+  patch-and-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install evidence dependencies
+        run: python -m pip install -r tools/requirements.txt
+      - name: Apply responsive focus fix
+        run: |
+          set -euo pipefail
+          python tools/agent6_wp005003_attempt3_patch.py
+          node --check scripts/ui/protagonist-focus-ui.js
+          node tools/tests/wp-s003-010-003-005-003-protagonist-focus-ui.test.js
+          python -m py_compile tools/wp_s003_010_003_005_003_evidence.py
+          git diff --check
+      - name: Commit product and evidence fix
+        id: product
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/ui/protagonist-focus-ui.js tools/wp_s003_010_003_005_003_evidence.py
+          git commit -m "fix(WP-S003-010-003-005-003): keep protagonist inside responsive safe area"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Start exact product server
+        run: |
+          python -m http.server 8000 --bind 127.0.0.1 >/tmp/wp005003-a3-http.log 2>&1 &
+          echo $! >/tmp/wp005003-a3-http.pid
+          sleep 1
+      - name: Functional and fresh visual evidence
+        run: |
+          set -euo pipefail
+          rm -rf tools/screenshots/wp-s003-010-003-005-003
+          TARGET=http://127.0.0.1:8000/ python tools/wp_s003_010_003_005_003_evidence.py | tee /tmp/wp005003-a3-evidence.log
+          cp /tmp/wp005003-a3-evidence.log tools/screenshots/wp-s003-010-003-005-003/run.log
+          printf '%s\n' '${{ steps.product.outputs.sha }}' > tools/screenshots/wp-s003-010-003-005-003/product-sha.txt
+      - name: Upload evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-s003-010-003-005-003-attempt3-evidence
+          path: |
+            tools/screenshots/wp-s003-010-003-005-003
+            /tmp/wp005003-a3-http.log
+          if-no-files-found: warn
+          retention-days: 14
