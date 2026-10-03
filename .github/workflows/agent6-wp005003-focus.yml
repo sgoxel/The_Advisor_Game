@@ -1,5 +1,5 @@
 name: Agent6 WP005003 Focus UX
-# AGENT #6 acceptance attempt 2 2026-10-03T18:08+03:00
+# AGENT #6 final acceptance attempt 3 2026-10-03T18:22+03:00
 
 on:
   push:
@@ -29,7 +29,7 @@ jobs:
           python-version: '3.11'
       - name: Install evidence dependencies
         run: python -m pip install -r tools/requirements.txt
-      - name: Tighten phone-safe protagonist presentation
+      - name: Tighten phone-safe protagonist presentation and evidence polling
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -49,6 +49,16 @@ jobs:
           elif new_media not in t:
               raise SystemExit('unexpected protagonist narrow-screen hierarchy source')
           p.write_text(t,encoding='utf-8')
+
+          ep=Path('tools/wp_s003_010_003_005_003_evidence.py')
+          et=ep.read_text(encoding='utf-8')
+          old_wait='''    _wait(driver,"""\n      const s=PlanetStage.snapshot(),u=ProtagonistFocusUI.snapshot(),n=s.explicitFocusNavigation?.active;\n      return Boolean(u.mode==='protagonist'&&u.followEnabled&&n?.targetType==='protagonist'&&(n.state==='committed'||n.committedAtMs!=null)&&s.zoom?.visibleLevel==='ground');\n    """,timeout,"committed protagonist ground focus")'''
+          new_wait='''    _wait(driver,"""\n      window.ProtagonistFocusUI.refresh();\n      const s=PlanetStage.snapshot(),u=ProtagonistFocusUI.snapshot(),n=s.explicitFocusNavigation?.active;\n      return Boolean(u.mode==='protagonist'&&u.followEnabled&&n?.targetType==='protagonist'&&(n.state==='committed'||n.committedAtMs!=null)&&s.zoom?.visibleLevel==='ground');\n    """,timeout,"committed protagonist ground focus")'''
+          if old_wait in et:
+              et=et.replace(old_wait,new_wait,1)
+          elif new_wait not in et:
+              raise SystemExit('unexpected protagonist evidence wait source')
+          ep.write_text(et,encoding='utf-8')
           PY
       - name: Static contract test
         run: |
@@ -57,17 +67,18 @@ jobs:
           node tools/tests/wp-s003-010-003-005-003-protagonist-focus-ui.test.js
           grep -q 'const MIN_DEAD_ZONE_METERS=2;' scripts/ui/protagonist-focus-ui.js
           grep -q 'renderer-backend-debug{display:none!important}' scripts/ui/protagonist-focus-ui.js
+          grep -q 'window.ProtagonistFocusUI.refresh();' tools/wp_s003_010_003_005_003_evidence.py
           python -m py_compile tools/wp_s003_010_003_005_003_evidence.py
           git diff --check
-      - name: Commit and push product fix
+      - name: Commit and push final tested source
         id: product
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add scripts/ui/protagonist-focus-ui.js
+          git add scripts/ui/protagonist-focus-ui.js tools/wp_s003_010_003_005_003_evidence.py
           if ! git diff --cached --quiet; then
-            git commit -m "fix(WP-S003-010-003-005-003): keep phone focus hierarchy clear"
+            git commit -m "test(WP-S003-010-003-005-003): refresh canonical focus evidence"
           fi
           git fetch origin main
           git rebase origin/main
@@ -89,7 +100,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: wp-s003-010-003-005-003-focus-evidence-attempt2
+          name: wp-s003-010-003-005-003-focus-evidence-attempt3
           path: tools/screenshots/wp-s003-010-003-005-003
           if-no-files-found: warn
           retention-days: 14
