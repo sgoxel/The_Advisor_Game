@@ -446,7 +446,7 @@ def _canonical_focus_frame(driver,index,timeout):
           const inViewport=Boolean(c&&Number.isFinite(cx)&&Number.isFinite(cy)&&cx>=0&&cx<=Number(c.width)&&cy>=0&&cy<=Number(c.height));
           return Boolean(
             s?.ready && Number(s?.zoom?.scalar)<0.999999 &&
-            s?.zoom?.visibleLevel==='near-ground-close' &&
+            String(s?.zoom?.visibleLevel||'')!=='ground' &&
             ls?.revealTier==='refined' &&
             p?.protagonistMarkerVisible===true && p?.protagonistBillboardVisible!==true &&
             t && inViewport
