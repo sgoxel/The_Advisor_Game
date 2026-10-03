@@ -43,8 +43,8 @@ def js(driver,script,*args):
 
 def ready(driver,timeout=240):
     return _wait(driver,"""
-      const root=document.getElementById('planetStageRoot'),s=window.PlanetStage?.snapshot?.();
-      return Boolean(root?.dataset?.ready==='true'&&s?.ready&&s?.activeSeed&&window.ProtagonistFocusUI?.snapshot?.().ready);
+      const root=document.getElementById('planetStageRoot'),s=window.PlanetStage?.snapshot?.(),campaign=window.SeedSystem?.getCampaign?.();
+      return Boolean(root?.dataset?.ready==='true'&&s?.ready&&s?.activeSeed&&campaign?.protagonist&&window.ProtagonistFocusUI?.snapshot?.().ready);
     """,timeout,"protagonist focus stage readiness")
 
 
@@ -58,26 +58,26 @@ def shot(driver,name):
 
 def state(driver):
     return js(driver,"""
-      const s=PlanetStage.snapshot(),f=ProtagonistFocusUI.snapshot(),p=Protagonist?.getPosition?.()||null;
+      const s=window.PlanetStage.snapshot(),f=window.ProtagonistFocusUI.snapshot(),campaign=window.SeedSystem?.getCampaign?.(),p=window.Protagonist?.getPosition?.()||campaign?.protagonist||null;
       return {
         activeSeed:s.activeSeed,canonicalFocus:s.canonicalFocus,zoom:s.zoom,
         explicitFocusNavigation:s.explicitFocusNavigation,destinationNavigator:s.destinationNavigator,
         npcPresentation:s.npcPresentation,projection:s.projection,navigationPerformance:s.navigationPerformance,
         focus:f,protagonist:p?{x:String(p.x),y:String(p.y)}:null,
-        fantasyTimestamp:GameTime?.getTimestampKey?.()||null
+        fantasyTimestamp:window.GameTime?.getTimestampKey?.()||null
       };
     """)
 
 
 def align_to_starting_village(driver):
     value=js(driver,"""
-      const s=PlanetStage.snapshot(),v=StartingVillage.plan(s.activeSeed),c=v?.center,campaign=SeedSystem?.getCampaign?.();
+      const s=window.PlanetStage.snapshot(),v=window.StartingVillage.plan(s.activeSeed),c=v?.center,campaign=window.SeedSystem?.getCampaign?.();
       if(!c||!campaign)return null;
-      campaign.protagonist=WorldCoordinates.position(String(c.x),String(c.y));
-      PlanetStage.setWorldTileFocus(String(c.x),String(c.y));
-      PlanetStage.setScaleIndex(2);
-      PlanetStage.refreshPlaces();
-      const p=Protagonist?.getPosition?.()||campaign.protagonist;
+      campaign.protagonist=window.WorldCoordinates.position(String(c.x),String(c.y));
+      window.PlanetStage.setWorldTileFocus(String(c.x),String(c.y));
+      window.PlanetStage.setScaleIndex(2);
+      window.PlanetStage.refreshPlaces();
+      const p=window.Protagonist?.getPosition?.()||campaign.protagonist;
       return {name:String(v.name||'Starting Village'),center:{x:String(c.x),y:String(c.y)},position:{x:String(p.x),y:String(p.y)}};
     """)
     if not value:
@@ -86,27 +86,28 @@ def align_to_starting_village(driver):
 
 
 def wait_mode(driver,mode,timeout=220):
-    return _wait(driver,f"return ProtagonistFocusUI?.snapshot?.().focusMode==={json.dumps(mode)};",timeout,"focus mode "+mode)
+    return _wait(driver,f"return window.ProtagonistFocusUI?.snapshot?.().focusMode==={json.dumps(mode)};",timeout,"focus mode "+mode)
 
 
 def wait_ground_focus(driver,timeout=220):
     return _wait(driver,"""
-      const s=PlanetStage.snapshot(),f=ProtagonistFocusUI.snapshot(),n=s.explicitFocusNavigation?.active;
-      return Boolean(f.focusMode==='protagonist-local'&&n?.targetType==='protagonist'&&n?.state==='committed'&&Number(n.focusErrorMeters)<=1.1&&s.zoom?.scalar>=.999&&s.projection?.resourceBudget?.visibleLevel==='ground');
+      const s=window.PlanetStage.snapshot(),f=window.ProtagonistFocusUI.snapshot(),n=s.explicitFocusNavigation?.active;
+      const visible=s.zoom?.visibleLevel||s.projection?.resourceBudget?.visibleLevel||null;
+      return Boolean(f.focusMode==='protagonist-local'&&n?.targetType==='protagonist'&&n?.state==='committed'&&Number(n.focusErrorMeters)<=1.1&&s.zoom?.scalar>=.999&&visible==='ground');
     """,timeout,"ground protagonist focus")
 
 
 def wait_remote(driver,target_id,timeout=220):
     target=json.dumps(str(target_id))
     return _wait(driver,f"""
-      const s=PlanetStage.snapshot(),f=ProtagonistFocusUI.snapshot(),n=s.explicitFocusNavigation?.active;
+      const s=window.PlanetStage.snapshot(),f=window.ProtagonistFocusUI.snapshot(),n=s.explicitFocusNavigation?.active;
       return Boolean(f.focusMode==='world-exploration'&&n?.targetType==='place'&&String(n.targetId)==={target}&&n?.state==='committed'&&Number(n.focusErrorMeters)<=1.1);
     """,timeout,"remote canonical focus")
 
 
 def descriptors(driver):
     return js(driver,"""
-      return (PlanetStage.placeDescriptors()||[]).map(d=>({
+      return (window.PlanetStage.placeDescriptors()||[]).map(d=>({
         id:String(d.id),name:String(d.name||d.id),type:String(d.type||''),category:String(d.category||''),
         latitudeRadians:Number(d.latitudeRadians),longitudeRadians:Number(d.longitudeRadians),
         center:d.center?{x:String(d.center.x),y:String(d.center.y)}:null,
@@ -139,18 +140,31 @@ def assert_camera_only(row,label):
 
 def move_authoritative_actor(driver,dx,dy):
     value=js(driver,"""
-      const campaign=SeedSystem?.getCampaign?.(),before=Protagonist?.getPosition?.()||campaign?.protagonist;
+      const campaign=window.SeedSystem?.getCampaign?.(),before=window.Protagonist?.getPosition?.()||campaign?.protagonist;
       if(!campaign||!before)return null;
-      campaign.protagonist=WorldCoordinates.position(
+      campaign.protagonist=window.WorldCoordinates.position(
         String(BigInt(String(before.x))+BigInt(arguments[0])),
         String(BigInt(String(before.y))+BigInt(arguments[1]))
       );
-      const after=Protagonist?.getPosition?.()||campaign.protagonist;
+      const after=window.Protagonist?.getPosition?.()||campaign.protagonist;
       return {before:{x:String(before.x),y:String(before.y)},after:{x:String(after.x),y:String(after.y)}};
     """,int(dx),int(dy))
     if not value or value.get("before")==value.get("after"):
         raise RuntimeError("authoritative protagonist evidence movement failed")
     return value
+
+
+def advance_time_while_remote(driver):
+    before=js(driver,"return window.GameTime?.getTimestampKey?.()||null;")
+    time.sleep(1.25)
+    js(driver,"""
+      const now=window.GameTime?.getNow?.();
+      if(now)window.PlanetStage.applyAuthoritativeFantasyTime(now,'WP-S003-010-003-005-003 remote simulation',{snapshotResult:false,deferPresentation:false});
+    """)
+    after=js(driver,"return window.GameTime?.getTimestampKey?.()||null;")
+    if before and after and before==after:
+        raise RuntimeError("Fantasy Game Time did not advance while remote")
+    return {"before":before,"after":after}
 
 
 def run_seed(driver,seed,index):
@@ -163,7 +177,7 @@ def run_seed(driver,seed,index):
     images=[shot(driver,f"{index:02d}-{seed}-01-wide-before-focus.png")]
 
     remote,poi=choose_targets(descriptors(driver))
-    request=js(driver,"return ProtagonistFocusUI.ensureDefaultFocus({force:true});")
+    request=js(driver,"return window.ProtagonistFocusUI.ensureDefaultFocus({force:true});")
     if not request or not request.get("requestId"):
         raise RuntimeError("default protagonist focus request missing")
     wait_mode(driver,"transitioning-to-protagonist",30)
@@ -177,7 +191,7 @@ def run_seed(driver,seed,index):
     movement=move_authoritative_actor(driver,6,2)
     before_follow=state(driver)
     prior=int((((before_follow.get("focus") or {}).get("follow") or {}).get("stepCount")) or 0)
-    _wait(driver,f"return Number(ProtagonistFocusUI.snapshot().follow.stepCount)>{prior};",30,"soft follow step")
+    _wait(driver,f"return Number(window.ProtagonistFocusUI.snapshot().follow.stepCount)>{prior};",30,"soft follow step")
     time.sleep(.8)
     followed=state(driver)
     images.append(shot(driver,f"{index:02d}-{seed}-04-soft-follow.png"))
@@ -186,7 +200,7 @@ def run_seed(driver,seed,index):
         raise RuntimeError("soft follow unexpectedly suspended")
 
     protagonist_before_remote=dict(followed.get("protagonist") or {})
-    js(driver,"PlanetStage.selectPlace(arguments[0]);",remote["id"])
+    js(driver,"window.PlanetStage.selectPlace(arguments[0]);",remote["id"])
     wait_remote(driver,remote["id"])
     remote_settlement=state(driver)
     images.append(shot(driver,f"{index:02d}-{seed}-05-remote-settlement.png"))
@@ -194,8 +208,8 @@ def run_seed(driver,seed,index):
     if remote_settlement.get("protagonist")!=protagonist_before_remote:
         raise RuntimeError("remote camera selection moved protagonist")
 
-    js(driver,"PlanetStage.setZoomTargetScalar(1,'wp-005-003-remote-ground');")
-    _wait(driver,"return PlanetStage.snapshot().zoom?.scalar>=.999;",180,"remote ground zoom")
+    js(driver,"window.PlanetStage.setZoomTargetScalar(1,'wp-005-003-remote-ground');")
+    _wait(driver,"return window.PlanetStage.snapshot().zoom?.scalar>=.999;",180,"remote ground zoom")
     time.sleep(1.0)
     remote_ground=state(driver)
     images.append(shot(driver,f"{index:02d}-{seed}-06-remote-ground.png"))
@@ -206,25 +220,20 @@ def run_seed(driver,seed,index):
         raise RuntimeError("remote exploration forced protagonist return")
 
     if poi["id"]!=remote["id"]:
-        js(driver,"PlanetStage.selectPlace(arguments[0]);",poi["id"])
+        js(driver,"window.PlanetStage.selectPlace(arguments[0]);",poi["id"])
         wait_remote(driver,poi["id"])
     poi_state=state(driver)
     images.append(shot(driver,f"{index:02d}-{seed}-07-remote-poi.png"))
     assert_camera_only(poi_state,"remote POI")
 
-    clock_before=poi_state.get("fantasyTimestamp")
-    js(driver,"PlanetStage.applyAuthoritativeFantasyTime({year:1100,month:1,day:1,hour:12,minute:10,second:0},'WP-S003-010-003-005-003 remote simulation',{snapshotResult:false,deferPresentation:false});")
-    time.sleep(.5)
+    time_evidence=advance_time_while_remote(driver)
     autonomous=move_authoritative_actor(driver,9,4)
     remote_advanced=state(driver)
-    clock_after=remote_advanced.get("fantasyTimestamp")
-    if clock_before and clock_after and clock_before==clock_after:
-        raise RuntimeError("Fantasy Game Time did not advance while remote")
     if (remote_advanced.get("focus") or {}).get("focusMode")!="world-exploration":
         raise RuntimeError("remote camera returned after Simulation advance")
 
     latest=remote_advanced.get("protagonist") or {}
-    return_request=js(driver,"return ProtagonistFocusUI.returnToProtagonist();")
+    return_request=js(driver,"return window.ProtagonistFocusUI.returnToProtagonist();")
     if not return_request or not return_request.get("requestId"):
         raise RuntimeError("Return to Protagonist request missing")
     wait_ground_focus(driver)
@@ -236,14 +245,14 @@ def run_seed(driver,seed,index):
     if str(applied.get("x"))!=str(latest.get("x")) or str(applied.get("y"))!=str(latest.get("y")):
         raise RuntimeError(f"return target was stale: latest={latest} applied={applied}")
 
-    js(driver,"PlanetStage.setScaleIndex(3);")
+    js(driver,"window.PlanetStage.setScaleIndex(3);")
     time.sleep(.8)
     regional=state(driver)
     images.append(shot(driver,f"{index:02d}-{seed}-09-regional-after-time.png"))
 
     mobile=[]
     if index==1:
-        js(driver,"ProtagonistFocusUI.returnToProtagonist();")
+        js(driver,"window.ProtagonistFocusUI.returnToProtagonist();")
         wait_ground_focus(driver)
         for label,width,height in (("phone-portrait",430,900),("phone-landscape",900,430)):
             set_exact_viewport(driver,width,height)
@@ -258,7 +267,7 @@ def run_seed(driver,seed,index):
 
     return {
         "seed":seed,"village":village,"remoteTarget":remote,"poiTarget":poi,
-        "defaultRequest":request,"authoritativeFollowMotion":movement,"remoteAutonomousMotion":autonomous,
+        "defaultRequest":request,"authoritativeFollowMotion":movement,"remoteAutonomousMotion":autonomous,"timeAdvance":time_evidence,
         "states":{"wide":wide,"transition":transition,"local":local,"followed":followed,"remoteSettlement":remote_settlement,"remoteGround":remote_ground,"remotePoi":poi_state,"remoteAdvanced":remote_advanced,"returned":returned,"regional":regional},
         "screenshots":images,"mobile":mobile
     }
@@ -295,6 +304,7 @@ def main():
         raise
     finally:
         driver.quit()
+
 
 if __name__=="__main__":
     main()
