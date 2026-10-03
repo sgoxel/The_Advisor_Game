@@ -69,7 +69,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+sgoxel@users.noreply.github.com"
-          git add docs/ROADMAP.md docs/changelog.txt docs/suggest_log.txt .github/workflows/agent6-wp162-bookkeeping.yml
+          git add -A -- docs/ROADMAP.md docs/changelog.txt docs/suggest_log.txt .github/workflows/agent6-wp162-bookkeeping.yml
           if git diff --cached --quiet; then
             echo "Bookkeeping already current"
             exit 0
