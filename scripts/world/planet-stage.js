@@ -9126,16 +9126,25 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     localResources.surroundCoversViewport=surroundCoversViewport;
     localResources.foregroundPatchCoversViewport=foregroundFamilyCoversViewport;
     localResources.foregroundPatchVisible=fineTerrainVisible;
-    // WP-006 single-parent ownership: when the fine child cannot cover the
-    // viewport but the bounded outer continuation can, painting the medium
-    // continuation creates a second finite-frequency island. Let the outer
-    // parent own that frame alone. Retain medium coverage when it is actually
-    // needed, or once the fine child already covers the viewport and its edge
-    // refinement can safely blend over the parent family.
-    const singleParentContinuation=Boolean(displayResource&&displayResource.levelIndex<=WP006_SINGLE_PARENT_MAX_LEVEL&&!finePatchCoversViewport&&surroundCoversViewport);
-    if(focusRingPatch?.render)focusRingPatch.render.enabled=!singleParentContinuation;
+    // WP006_ATOMIC_VIEWPORT_OWNER_V2: a finer registered child may paint only
+    // after its own physical coverage contains the entire viewport. Until then,
+    // promote the smallest ready parent that truthfully covers the viewport to
+    // sole terrain owner. This keeps the higher-density parent when its 6x span
+    // is sufficient, falls back to the 12x parent only when necessary, and
+    // prevents a finite fine/medium rectangle from being composited over a
+    // different-frequency parent. All layers remain canonical, focus-anchored,
+    // deterministic presentation resources; Simulation/world coordinates are
+    // untouched.
+    const atomicMediumOwner=Boolean(displayResource&&displayResource.levelIndex<=WP006_SINGLE_PARENT_MAX_LEVEL&&!finePatchCoversViewport&&mediumRingCoversViewport);
+    const atomicOuterOwner=Boolean(displayResource&&displayResource.levelIndex<=WP006_SINGLE_PARENT_MAX_LEVEL&&!finePatchCoversViewport&&!mediumRingCoversViewport&&surroundCoversViewport);
+    const atomicParentOwner=atomicMediumOwner||atomicOuterOwner;
+    if(tangentPatch?.render)tangentPatch.render.enabled=!atomicParentOwner;
+    if(focusRingPatch?.render)focusRingPatch.render.enabled=!atomicOuterOwner;
+    localResources.finePatchPresentationEnabled=Boolean(tangentPatch?.render?.enabled);
     localResources.mediumRingPresentationEnabled=Boolean(focusRingPatch?.render?.enabled);
-    localResources.singleParentContinuationActive=singleParentContinuation;
+    localResources.singleParentContinuationActive=atomicParentOwner;
+    localResources.viewportTerrainOwnerRole=atomicMediumOwner?"medium":atomicOuterOwner?"outer":"fine";
+    localResources.viewportTerrainOwnerCoversViewport=atomicMediumOwner?mediumRingCoversViewport:atomicOuterOwner?surroundCoversViewport:finePatchCoversViewport;
     const patchScale=Math.max(1e-6,visibleHeightUnits*dims.metersPerUnit/shownHeightMeters);
     projectionPresentation={...projectionPresentation,viewBlend,presentationCompensation:dims.presentationCompensation,patchScale,shownHeightMeters,targetHeightMeters:presentationTargetHeightMeters(),finePatchCoversViewport,foregroundPatchCoversViewport:foregroundFamilyCoversViewport};
     tangentPatch.setLocalScale(patchScale,patchScale,patchScale);
