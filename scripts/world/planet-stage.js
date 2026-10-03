@@ -7604,6 +7604,33 @@ function localTextureHandoffCoverage(u,v,contextRing){
 }
 function detailOctaveWeight(wavelengthMeters,metersPerTexel){return smoothstep01((wavelengthMeters/Math.max(1e-6,metersPerTexel)-2)/4);}
 function colorDetailOctaveWeight(wavelengthMeters,metersPerTexel){return smoothstep01(clamp((wavelengthMeters/Math.max(1e-6,metersPerTexel)-2)/1.75,0,1));}
+function surfaceGeomorphologySignal(worldEastMeters,worldNorthMeters,scaleMeters,salt){
+  const x=worldEastMeters/scaleMeters,y=worldNorthMeters/scaleMeters;
+  const x0=Math.floor(x),y0=Math.floor(y),fx=x-x0,fy=y-y0;
+  const tx=smoothstep01(fx),ty=smoothstep01(fy);
+  const a=surfaceHash2(x0,y0,salt),b=surfaceHash2(x0+1,y0,salt),c=surfaceHash2(x0,y0+1,salt),d=surfaceHash2(x0+1,y0+1,salt);
+  const value=lerp(lerp(a,b,tx),lerp(c,d,tx),ty)-.5;
+  const dtx=6*fx*(1-fx),dty=6*fy*(1-fy);
+  const dx=(lerp(b,d,ty)-lerp(a,c,ty))*dtx;
+  const dy=(lerp(c,d,tx)-lerp(a,b,tx))*dty;
+  const along=((salt>>>3)&1)?(dx+dy)*.70710678:(dx-dy)*.70710678;
+  // Signed ridge/valley bands come from the same continuous scalar field as the
+  // slope derivative. Positive and negative bands are symmetric, so this adds
+  // readable landform boundaries without a camera-relative brightness bias.
+  const ridge=1-smoothstep01(clamp(Math.abs(value-.17)*7.0,0,1));
+  const valley=1-smoothstep01(clamp(Math.abs(value+.17)*7.0,0,1));
+  return clamp(along*.28+(ridge-valley)*.24+value*.08,-.5,.5);
+}
+function localGeomorphologySignal(worldEastMeters,worldNorthMeters,metersPerTexel,salt){
+  const m=Math.max(.05,Number(metersPerTexel)||1);
+  let signal=0;
+  for(const [wavelength,gain,offset] of [[120,.022,41],[48,.030,53],[18,.034,67],[7,.030,79],[2.8,.018,97]]){
+    const weight=colorDetailOctaveWeight(wavelength,m);
+    if(weight<=0)continue;
+    signal+=surfaceGeomorphologySignal(worldEastMeters,worldNorthMeters,wavelength,salt+offset)*gain*weight;
+  }
+  return signal;
+}
 function terrainDetailHeight(east,north,metersPerTexel,salt){
   let h=0;
   for(let k=0;k<TERRAIN_DETAIL_OCTAVES.length;k++){
@@ -7659,24 +7686,29 @@ function landCoverTint(east,north,metersPerTexel,salt,elevation){
   // registered-meter octaves as the physical texel size shrinks. This prevents
   // the settlement/near-ground children from becoming smoother than their
   // parent even though their source raster and geometry are denser.
-  const closeDetailGain=1+smoothstep01(clamp((80-metersPerTexel)/72,0,1))*.55;
-  const mottle=(surfaceMaterialNoise(we,wn,700,salt+31)*.024*wField+
+  const closeDetailGain=1+smoothstep01(clamp((80-metersPerTexel)/72,0,1))*.42;
+  const closeGeomorphBand=smoothstep01(clamp((42-metersPerTexel)/36,0,1));
+  // Broad material regions stay as low-frequency identity, but they may not own
+  // the near-ground image. Fade their residual contrast as fixed registered
+  // ridge/valley/drainage bands become physically resolvable.
+  const broadMottleRetention=lerp(1,.24,closeGeomorphBand);
+  const transitionalRetention=lerp(1,.38,closeGeomorphBand);
+  const broadMottle=(surfaceMaterialNoise(we,wn,700,salt+31)*.024*wField+
     surfaceMaterialNoise(we,wn,460,salt+33)*.030*wParcelDetail+
-    surfaceMaterialNoise(we,wn,280,salt+37)*.026*wFine+
-    surfaceMaterialNoise(we,wn,120,salt+41)*.016*wCopse+
-    surfaceMaterialNoise(we,wn,90,salt+43)*.010*wGroundDetail+
-    surfaceMaterialNoise(we,wn,48,salt+47)*.018*wLocalDetail+
-    surfaceMaterialNoise(we,wn,18,salt+53)*.026*wMicroDetail+
-    surfaceMaterialNoise(we,wn,9,salt+61)*.018*wSubLocalDetail)*closeDetailGain;
-  // Map-scale readability comes from one continuous registered-meter cover
-  // field, not from parcel meshes or camera-relative decoration. Stronger chroma
-  // separation reveals woodland/meadow/dry openings only when physically
-  // resolvable, so refinement adds information without changing world identity.
-  const coverContrast=lerp(1.18,2.05,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
+    surfaceMaterialNoise(we,wn,280,salt+37)*.026*wFine)*broadMottleRetention;
+  const transitionalMottle=(surfaceMaterialNoise(we,wn,120,salt+41)*.014*wCopse+
+    surfaceMaterialNoise(we,wn,90,salt+43)*.009*wGroundDetail)*transitionalRetention;
+  const localForm=localGeomorphologySignal(we,wn,metersPerTexel,salt+37)*lerp(.35,1.12,closeGeomorphBand);
+  const mottle=(broadMottle+transitionalMottle+localForm)*closeDetailGain;
+  // Keep broad land-cover category identity, but at near-ground let the same
+  // registered geomorphology carry most visible contrast instead of kilometer
+  // regions reading as magnified blurry blobs.
+  const regionPersistence=lerp(1,.52,closeGeomorphBand);
+  const coverContrast=lerp(1.18,1.86,smoothstep01(clamp((220-metersPerTexel)/215,0,1)));
   return [
-    (mottle*.76-forestDelta*.105-copse*.026+dryField*.095+meadow*.010)*coverContrast+strategic*(.72+.20*alpine),
-    (mottle*.94-forestDelta*.010-copse*.008+dryField*.038+meadow*.086)*coverContrast+strategic*(1.00-.18*alpine),
-    (mottle*.48-forestDelta*.082-copse*.024+dryField*.006+meadow*.016)*coverContrast+strategic*(.50+.14*alpine)
+    (mottle*.76+(-forestDelta*.105-copse*.026+dryField*.095+meadow*.010)*regionPersistence)*coverContrast+strategic*(.72+.20*alpine),
+    (mottle*.94+(-forestDelta*.010-copse*.008+dryField*.038+meadow*.086)*regionPersistence)*coverContrast+strategic*(1.00-.18*alpine),
+    (mottle*.48+(-forestDelta*.082-copse*.024+dryField*.006+meadow*.016)*regionPersistence)*coverContrast+strategic*(.50+.14*alpine)
   ];
 }
 function makeCanonicalSurfaceAuthority(job,spanEast,spanNorth,size){
@@ -8223,16 +8255,17 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const w7=colorDetailOctaveWeight(7,metersPerTexel);
         const w28=colorDetailOctaveWeight(2.8,metersPerTexel);
         const registeredMicro=
-          surfaceMaterialNoise(worldEast,worldNorth,34,microSurfaceSalt+11)*.042*w34+
-          surfaceMaterialNoise(worldEast,worldNorth,12,microSurfaceSalt+29)*.030*w12+
-          surfaceMaterialNoise(worldEast,worldNorth,4.2,microSurfaceSalt+47)*.019*w42;
-        // The 7 m slope band is fully resolved by near-ground-close (~1.1 m/texel)
-        // but remains absent from settlement (~3.9 m/texel). The 2.8 m child then
-        // eases in toward ground. Both are the same registered signal at every LOD.
-        const registeredFine=(w7>0?surfaceStructuredNoise(worldEast,worldNorth,7,microSurfaceSalt+71)*.058*w7:0)+
-          (w28>0?surfaceStructuredNoise(worldEast,worldNorth,2.8,microSurfaceSalt+89)*.026*w28:0);
-        const closeGain=lerp(.92,1.34,smoothstep01(clamp((6-metersPerTexel)/5.5,0,1)));
-        displayColor=displayColor.map((v,i)=>clamp(v+registeredMicro*closeGain*(i===0?1:i===1?.92:.72)+registeredFine*(i===0?.72:i===1?1:.50),0,.88));
+          surfaceGeomorphologySignal(worldEast,worldNorth,34,detailSalt+48)*.038*w34+
+          surfaceGeomorphologySignal(worldEast,worldNorth,12,detailSalt+66)*.030*w12+
+          surfaceGeomorphologySignal(worldEast,worldNorth,4.2,detailSalt+84)*.020*w42;
+        // Reuse the same fixed registered geomorphology family that landCoverTint
+        // carries through close tiers. The 7 m and 2.8 m bands therefore sharpen
+        // existing landform identity instead of introducing a separate ground look.
+        const registeredFine=(w7>0?surfaceGeomorphologySignal(worldEast,worldNorth,7,detailSalt+116)*.040*w7:0)+
+          (w28>0?surfaceGeomorphologySignal(worldEast,worldNorth,2.8,detailSalt+134)*.024*w28:0);
+        const persistentForm=localGeomorphologySignal(worldEast,worldNorth,metersPerTexel,detailSalt+37);
+        const closeGain=lerp(.88,1.18,smoothstep01(clamp((6-metersPerTexel)/5.5,0,1)));
+        displayColor=displayColor.map((v,i)=>clamp(v+(registeredMicro*closeGain+persistentForm*.52)*(i===0?1:i===1?.94:.72)+registeredFine*(i===0?.70:i===1?1:.52),0,.88));
       }
       // High peaks are legitimately snow-covered, but the canonical near-white
       // macro palette plus hillshade used to saturate into featureless white.
@@ -8248,10 +8281,10 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // without inventing patch-local noise. Frequencies remain registered-meter
       // anchored, so the same coordinate has the same mottling in every rebuild.
       if(parentSample?.land&&metersPerTexel<=8){
-        const coarseScale=Math.max(2,metersPerTexel*6),fineScale=Math.max(.75,metersPerTexel*2);
-        const rough=surfaceMaterialNoise(worldEast,worldNorth,coarseScale,detailSalt+211)*.052+
-          surfaceMaterialNoise(worldEast,worldNorth,fineScale,detailSalt+233)*.026;
-        displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.82:i===1?.94:1),0,.86));
+        // Fine roughness must reinforce the same fixed registered landform family;
+        // do not derive a new LOD-sized noise scale that changes identity per tier.
+        const rough=localGeomorphologySignal(worldEast,worldNorth,metersPerTexel,detailSalt+37)*.46;
+        displayColor=displayColor.map((v,i)=>clamp(v+rough*(i===2?.78:i===1?.94:1),0,.86));
       }
       // WP-S003-009: apply the shared loading-screen-derived world grade only
       // when the physical texel footprint is genuinely local. Distant/regional
@@ -8270,10 +8303,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const closeTextureEligibility=smoothstep01(clamp((2.4-metersPerTexel)/2,0,1));
         const closeTextureBand=styleContract.closeSurfaceVariation===false?0:livingWorldStyleWeight*closeTextureEligibility;
         if(closeTextureBand>.001&&["terrain:grass","terrain:forest","terrain:farmland"].includes(role)){
-          const broadStyle=surfaceValueNoise(worldEast,worldNorth,5.5,detailSalt+307),fineStyle=surfaceValueNoise(worldEast,worldNorth,1.4,detailSalt+331),microStyle=surfaceValueNoise(worldEast,worldNorth,.62,detailSalt+349);
-          const broadWeight=colorDetailOctaveWeight(5.5,metersPerTexel),fineWeight=colorDetailOctaveWeight(1.4,metersPerTexel),microWeight=colorDetailOctaveWeight(.62,metersPerTexel);
-          const patch=(broadStyle*.145*broadWeight+fineStyle*.070*fineWeight+microStyle*.035*microWeight)*closeTextureBand;
-          displayColor=[clamp(displayColor[0]+patch*.92,0,1),clamp(displayColor[1]+patch*.68,0,1),clamp(displayColor[2]-patch*.12,0,1)];
+          // Ground styling follows the same canonical landform signal already
+          // visible at near-ground; style adds chroma, not a new patch pattern.
+          const form=localGeomorphologySignal(worldEast,worldNorth,metersPerTexel,detailSalt+37);
+          const patch=form*closeTextureBand*.62;
+          displayColor=[clamp(displayColor[0]+patch*.78,0,1),clamp(displayColor[1]+patch*.62,0,1),clamp(displayColor[2]-patch*.10,0,1)];
         }
       }
       if(parentSample?.land){
@@ -8281,9 +8315,11 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         if(toonBand>.001){
           const luma=luma3(displayColor);
           const closeToon=smoothstep01(clamp((18-metersPerTexel)/17.5,0,1));
-          const stepSize=lerp(.050,.028,closeToon);
+          // Preserve cel readability without flattening away the geomorphology
+          // that is finally resolved at near-ground/ground physical texel sizes.
+          const stepSize=lerp(.050,.016,closeToon);
           const quantized=clamp(Math.round(luma/stepSize)*stepSize,0,1);
-          const shift=(quantized-luma)*toonBand*.68;
+          const shift=(quantized-luma)*toonBand*lerp(.68,.44,closeToon);
           displayColor=displayColor.map(v=>clamp(v+shift,0,.88));
         }
       }
@@ -8630,7 +8666,7 @@ function finalizeLocalResource(job,result){
       }),
       surfaceContributorCapture:Boolean(surfaceContributorPixels),surfaceContributorCaptureBytes:contributorBytes,
       meshHeightRange:meshData.meshHeightRange||null,
-      topographicSignalRevision:"canonical-continuous-cross-lod-source-v42",topographicSignalAuthority:"PlanetGeography elevation/color/moisture uses the bounded 192→384 canonical focus raster for the 1x child and the 80→160 shared raster only for 3x/12x context; uploaded focus textures refine from 320 to 512 pixels while registered-meter residual frequencies add only when physically resolvable.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,focusAuthorityApplied:true,structuredFrequencyTransform:true,structuredSlopeTransform:true,materialFrequencyTransform:true,nearGroundRegisteredMicroV3:true,
+      topographicSignalRevision:"canonical-continuous-cross-lod-source-v43",topographicSignalAuthority:"PlanetGeography elevation/color/moisture uses the bounded 192→384 canonical focus raster for the 1x child and the 80→160 shared raster only for 3x/12x context; uploaded focus textures refine from 320 to 512 pixels while registered-meter residual frequencies add only when physically resolvable.",sharedAuthorityRasterSize,focusAuthorityRasterSize,sharedAuthorityMetersPerSample:sharedAuthorityMetersPerSample===null?null:Number(sharedAuthorityMetersPerSample.toFixed(3)),focusAuthorityMetersPerSample:focusAuthorityMetersPerSample===null?null:Number(focusAuthorityMetersPerSample.toFixed(3)),sharedAuthorityReusedAcrossRings:true,focusAuthorityEdgeMatched:true,focusAuthorityApplied:true,structuredFrequencyTransform:true,structuredSlopeTransform:true,materialFrequencyTransform:true,nearGroundRegisteredMicroV3:true,canonicalGeomorphologyV1:true,groundStyleGeomorphologyContinuity:true,
       biomeCoordinateProof:job.biomeCoordinateProof,
       visibleWidthMeters:dims.visibleWidth,visibleHeightMeters:dims.visibleHeight,patchWidthMeters:dims.patchWidth,patchHeightMeters:dims.patchHeight,columns:meshData.columns,rows:meshData.rows,vertices,triangles,estimatedBytes,buildTimeMs:Number(job.busyMs.toFixed(3)),activePatchCount:1,signature:job.signature}};
   localResourceCache.set(job.signature,resource);
