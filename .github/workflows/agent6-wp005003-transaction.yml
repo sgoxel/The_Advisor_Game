@@ -1,0 +1,149 @@
+name: Agent6 WP005003 Focus Transaction
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/agent6-wp005003-transaction.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp005003-transaction
+  cancel-in-progress: false
+
+jobs:
+  implement-and-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install evidence dependencies
+        run: python -m pip install -r tools/requirements.txt
+      - name: Implement deterministic focus transaction lifecycle
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          p=Path('scripts/ui/protagonist-focus-ui.js')
+          t=p.read_text(encoding='utf-8')
+          t=t.replace('const VERSION="protagonist-focus-ui-v1";','const VERSION="protagonist-focus-ui-v2";',1)
+          anchor='const MAX_DEAD_ZONE_METERS=36;\n'
+          addition='const FOCUS_TRANSACTION_TIMEOUT_MS=240000;\nconst FOCUS_TRANSACTION_STALE_RETRY_MS=60000;\n'
+          if addition not in t:
+              if anchor not in t: raise SystemExit('focus constants anchor missing')
+              t=t.replace(anchor,anchor+addition,1)
+          old='''  responsiveRefocusCount:0,focusMarkerVisible:false\n};'''
+          new='''  responsiveRefocusCount:0,focusMarkerVisible:false,\n  focusTransactionState:"idle",focusTransactionSource:null,focusTransactionStartedAtMs:0,focusTransactionCompletedAtMs:0,\n  focusTransactionReason:null,focusTransactionRetryCount:0,focusTransactionHistory:[],lastFocusReadiness:null\n};'''
+          if old in t:t=t.replace(old,new,1)
+          elif new not in t:raise SystemExit('focus state anchor missing')
+
+          helper_anchor='''function startDefaultFocus(){\n'''
+          helpers='''function setFocusTransactionPhase(phase,reason=null){\n  const next=String(phase||"idle"),why=reason==null?null:String(reason);\n  if(state.focusTransactionState===next&&state.focusTransactionReason===why)return;\n  const stamp=Number(now().toFixed(2));state.focusTransactionState=next;state.focusTransactionReason=why;\n  state.focusTransactionHistory=[...state.focusTransactionHistory,{phase:next,atMs:stamp,reason:why}].slice(-12);\n  if(next==="requested"){state.focusTransactionStartedAtMs=stamp;state.focusTransactionCompletedAtMs=0}\n  if(next==="settled"||next==="failed"||next==="cancelled")state.focusTransactionCompletedAtMs=stamp;\n}\nfunction beginFocusTransaction(source,result,{preserveMode=false}={}){\n  state.focusTransactionSource=String(source||"protagonist-focus");state.focusTransactionRetryCount=0;state.lastFocusReadiness=null;state.focusTransactionHistory=[];\n  state.focusRequestId=result?.requestId||null;\n  if(result?.ok===false){state.lastError=String(result.reason||"focus request failed");setFocusTransactionPhase("failed",state.lastError);if(!preserveMode)state.mode="unavailable";return false}\n  setFocusTransactionPhase("requested",state.focusTransactionSource);return Boolean(state.focusRequestId);\n}\nfunction focusTransactionReadiness(snapshot,nav){\n  const spatial=snapshot?.projection?.spatialLod||{};\n  const readiness={\n    requestMatches:Boolean(nav?.targetType==="protagonist"&&nav?.requestId===state.focusRequestId),stageState:nav?.state||null,\n    committed:Boolean(nav?.state==="committed"||nav?.committedAtMs!=null),focusErrorMeters:Number(nav?.focusErrorMeters??Infinity),\n    maximumScaleReached:nav?.maximumScaleReached===true,visibleLevel:snapshot?.zoom?.visibleLevel||null,\n    protagonistBillboardVisible:Boolean(snapshot?.npcPresentation?.protagonistBillboardVisible),visibleContainsFocus:Boolean(spatial?.visibleContainsFocus)\n  };state.lastFocusReadiness=readiness;return readiness;\n}\nfunction syncFocusTransaction(snapshot,nav){\n  const active=["requested","preparing","ready","committed"].includes(state.focusTransactionState);if(!active)return;\n  const readiness=focusTransactionReadiness(snapshot,nav),elapsed=Math.max(0,now()-Number(state.focusTransactionStartedAtMs||now()));\n  if(readiness.requestMatches&&readiness.committed){\n    setFocusTransactionPhase("committed");state.lastTargetId="protagonist";state.lastTargetType="protagonist";state.mode="protagonist";state.followEnabled=true;state.lastError=null;render();setFocusTransactionPhase("settled");return;\n  }\n  if(readiness.requestMatches){\n    const ready=readiness.focusErrorMeters<=1&&readiness.maximumScaleReached&&readiness.visibleLevel==="ground"&&readiness.protagonistBillboardVisible&&readiness.visibleContainsFocus;\n    setFocusTransactionPhase(ready?"ready":"preparing");\n  }\n  if(elapsed>=FOCUS_TRANSACTION_STALE_RETRY_MS&&state.focusTransactionRetryCount===0&&!readiness.requestMatches){\n    try{const retry=root.PlanetStage.focusProtagonist();state.focusTransactionRetryCount=1;state.focusRequestId=retry?.requestId||state.focusRequestId;setFocusTransactionPhase("requested","stale-navigation-retry");return}\n    catch(err){state.lastError=String(err?.message||err)}\n  }\n  if(elapsed>=FOCUS_TRANSACTION_TIMEOUT_MS){\n    const reason="focus transaction timeout: "+JSON.stringify(readiness);state.lastError=reason;state.followEnabled=false;state.mode="unavailable";setFocusTransactionPhase("failed",reason);render();\n  }\n}\n'''
+          if helpers not in t:
+              if helper_anchor not in t:raise SystemExit('default focus anchor missing')
+              t=t.replace(helper_anchor,helpers+helper_anchor,1)
+
+          old_default='''    const result=root.PlanetStage.focusProtagonist();state.focusRequestId=result?.requestId||null;state.lastAction="default-protagonist-focus";state.lastError=result?.ok===false?String(result.reason||"focus request failed"):null;'''
+          new_default='''    const result=root.PlanetStage.focusProtagonist();state.lastAction="default-protagonist-focus";state.lastError=result?.ok===false?String(result.reason||"focus request failed"):null;beginFocusTransaction(state.lastAction,result);'''
+          if old_default in t:t=t.replace(old_default,new_default,1)
+          elif new_default not in t:raise SystemExit('default focus request anchor missing')
+
+          old_return='''  try{const result=root.PlanetStage.focusProtagonist();state.focusRequestId=result?.requestId||null;state.lastAction=source;state.lastError=result?.ok===false?String(result.reason||"focus request failed"):null}catch(err){state.lastError=String(err?.message||err)}'''
+          new_return='''  try{const result=root.PlanetStage.focusProtagonist();state.lastAction=source;state.lastError=result?.ok===false?String(result.reason||"focus request failed"):null;beginFocusTransaction(source,result)}catch(err){state.lastError=String(err?.message||err);setFocusTransactionPhase("failed",state.lastError)}'''
+          if old_return in t:t=t.replace(old_return,new_return,1)
+          elif new_return not in t:raise SystemExit('return focus request anchor missing')
+
+          old_responsive='''    const result=root.PlanetStage.focusProtagonist();state.focusRequestId=result?.requestId||state.focusRequestId;state.responsiveRefocusCount++;state.lastAction="responsive-safe-area-refocus";'''
+          new_responsive='''    const result=root.PlanetStage.focusProtagonist();state.responsiveRefocusCount++;state.lastAction="responsive-safe-area-refocus";beginFocusTransaction(state.lastAction,result,{preserveMode:true});'''
+          if old_responsive in t:t=t.replace(old_responsive,new_responsive,1)
+          elif new_responsive not in t:raise SystemExit('responsive focus request anchor missing')
+
+          poll_anchor='''  if(nav?.targetType==="place"&&nav.requestId!==state.lastPlaceRequestId){state.lastPlaceRequestId=nav.requestId;state.lastTargetId=String(nav.targetId||"place");state.lastTargetType="place";markRemote("canonical-place-focus")}\n'''
+          if 'syncFocusTransaction(snapshot,nav);' not in t:
+              if poll_anchor not in t:raise SystemExit('poll anchor missing')
+              t=t.replace(poll_anchor,poll_anchor+'  syncFocusTransaction(snapshot,nav);\n',1)
+          old_commit='''    if(nav.state==="committed"||nav.committedAtMs!=null){state.mode="protagonist";state.followEnabled=true;state.lastError=null;render()}'''
+          new_commit='''    if(nav.state==="committed"||nav.committedAtMs!=null){state.mode="protagonist";state.followEnabled=true;state.lastError=null;if(state.focusTransactionState!=="settled"){setFocusTransactionPhase("committed");setFocusTransactionPhase("settled")}render()}'''
+          if old_commit in t:t=t.replace(old_commit,new_commit,1)
+          elif new_commit not in t:raise SystemExit('poll commit anchor missing')
+
+          snap_anchor='''    navigationTimingMs:state.lastActionMs,lastAction:state.lastAction,lastFrameMs:state.lastFrameMs,lastError:state.lastError,\n'''
+          snap_add='''    focusTransactionState:state.focusTransactionState,focusTransactionSource:state.focusTransactionSource,focusTransactionReason:state.focusTransactionReason,\n    focusTransactionStartedAtMs:state.focusTransactionStartedAtMs,focusTransactionCompletedAtMs:state.focusTransactionCompletedAtMs,focusTransactionRetryCount:state.focusTransactionRetryCount,focusTransactionHistory:state.focusTransactionHistory.map(item=>({...item})),lastFocusReadiness:state.lastFocusReadiness?{...state.lastFocusReadiness}:null,\n'''
+          if snap_add not in t:
+              if snap_anchor not in t:raise SystemExit('snapshot anchor missing')
+              t=t.replace(snap_anchor,snap_anchor+snap_add,1)
+          p.write_text(t,encoding='utf-8')
+
+          tp=Path('tools/tests/wp-s003-010-003-005-003-protagonist-focus-ui.test.js')
+          tt=tp.read_text(encoding='utf-8')
+          tt=tt.replace('const VERSION="protagonist-focus-ui-v1"','const VERSION="protagonist-focus-ui-v2"')
+          tt=tt.replace("ok(status.includes('protagonist-focus-ui.js'),'protagonist status bootstrap must load the focus UX controller');", "ok(focus.includes('FOCUS_TRANSACTION_TIMEOUT_MS')&&focus.includes('FOCUS_TRANSACTION_STALE_RETRY_MS'),'bounded focus transaction timing missing');\nok(focus.includes('setFocusTransactionPhase')&&focus.includes('syncFocusTransaction'),'focus transaction lifecycle missing');\nok(focus.includes('focusTransactionHistory')&&focus.includes('lastFocusReadiness'),'focus transaction diagnostics missing');\nok(status.includes('protagonist-focus-ui.js'),'protagonist status bootstrap must load the focus UX controller');")
+          tt=tt.replace("checks:12","checks:15")
+          tp.write_text(tt,encoding='utf-8')
+
+          ep=Path('tools/wp_s003_010_003_005_003_evidence.py')
+          et=ep.read_text(encoding='utf-8')
+          old='''def wait_protagonist_focus(driver,timeout=240):\n    _wait(driver,"""\n      window.ProtagonistFocusUI.refresh();\n      const s=PlanetStage.snapshot(),u=ProtagonistFocusUI.snapshot(),n=s.explicitFocusNavigation?.active;\n      return Boolean(u.mode==='protagonist'&&u.followEnabled&&n?.targetType==='protagonist'&&(n.state==='committed'||n.committedAtMs!=null)&&s.zoom?.visibleLevel==='ground');\n    """,timeout,"committed protagonist ground focus")\n'''
+          new='''def wait_protagonist_focus(driver,timeout=260):\n    deadline=time.monotonic()+float(timeout);last=None\n    while time.monotonic()<deadline:\n        last=snap(driver);ui=last.get("focusUI") or {};nav=(last.get("navigation") or {}).get("active") or {};zoom=last.get("zoom") or {}\n        if ui.get("focusTransactionState")=="failed":raise RuntimeError("protagonist focus transaction failed: "+json.dumps(last,sort_keys=True))\n        if ui.get("mode")=="protagonist" and ui.get("followEnabled") and nav.get("targetType")=="protagonist" and (nav.get("state")=="committed" or nav.get("committedAtMs") is not None) and zoom.get("visibleLevel")=="ground" and ui.get("focusTransactionState")=="settled":return last\n        time.sleep(.25)\n    raise RuntimeError("timeout waiting for committed protagonist ground focus; last="+json.dumps(last,sort_keys=True))\n'''
+          if old in et:et=et.replace(old,new,1)
+          elif new not in et:raise SystemExit('evidence focus wait anchor missing')
+          old_handoff='''          return Boolean(n?.targetType==='protagonist'&&u.mode==='protagonist'&&u.focusMarkerVisible===true&&s.zoom?.visibleLevel!=='ground');'''
+          new_handoff='''          return Boolean(n?.targetType==='protagonist'&&u.mode==='protagonist'&&u.followEnabled&&u.focusTransactionState==='settled'&&s.zoom?.visibleLevel!=='ground');'''
+          if old_handoff in et:et=et.replace(old_handoff,new_handoff,1)
+          elif new_handoff not in et:raise SystemExit('evidence handoff wait anchor missing')
+          old_assert='''        if nav.get("targetType")!="protagonist" or hui.get("mode")!="protagonist" or hui.get("focusMarkerVisible") is not True:raise RuntimeError("protagonist focus identity lost through LOD handoff")'''
+          new_assert='''        if nav.get("targetType")!="protagonist" or hui.get("mode")!="protagonist" or hui.get("followEnabled") is not True or hui.get("focusTransactionState")!="settled":raise RuntimeError("protagonist focus identity lost through LOD handoff")'''
+          if old_assert in et:et=et.replace(old_assert,new_assert,1)
+          elif new_assert not in et:raise SystemExit('evidence handoff assertion anchor missing')
+          ep.write_text(et,encoding='utf-8')
+          PY
+      - name: Static contract tests
+        run: |
+          set -euo pipefail
+          node --check scripts/ui/protagonist-focus-ui.js
+          node tools/tests/wp-s003-010-003-005-003-protagonist-focus-ui.test.js
+          python -m py_compile tools/wp_s003_010_003_005_003_evidence.py
+          git diff --check
+      - name: Commit and push tested source
+        id: product
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/ui/protagonist-focus-ui.js tools/tests/wp-s003-010-003-005-003-protagonist-focus-ui.test.js tools/wp_s003_010_003_005_003_evidence.py
+          git commit -m "fix(WP-S003-010-003-005-003): make focus transactions deterministic"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Start exact product server
+        run: |
+          python -m http.server 8000 --bind 127.0.0.1 >/tmp/wp005003-http.log 2>&1 &
+          echo $! >/tmp/wp005003-http.pid
+          sleep 1
+      - name: Functional and fresh visual evidence
+        env:
+          TARGET: http://127.0.0.1:8000/
+        run: |
+          set -euo pipefail
+          rm -rf tools/screenshots/wp-s003-010-003-005-003
+          python tools/wp_s003_010_003_005_003_evidence.py | tee /tmp/wp005003-evidence.log
+          cp /tmp/wp005003-evidence.log tools/screenshots/wp-s003-010-003-005-003/run.log
+          printf '%s\n' '${{ steps.product.outputs.sha }}' > tools/screenshots/wp-s003-010-003-005-003/product-sha.txt
+      - name: Upload evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-s003-010-003-005-003-focus-transaction-attempt1
+          path: tools/screenshots/wp-s003-010-003-005-003
+          if-no-files-found: warn
+          retention-days: 14
