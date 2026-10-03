@@ -3,13 +3,11 @@ name: Agent6 WP014 Atomic Patch
 on:
   push:
     branches: [main]
-    paths: [.github/workflows/agent6-wp014-patch.yml]
-  issue_comment:
-    types: [created]
+    paths:
+      - ".github/workflows/agent6-wp014-patch.yml"
 
 permissions:
   contents: write
-  issues: read
 
 concurrency:
   group: agent6-wp014-atomic-patch
@@ -17,7 +15,6 @@ concurrency:
 
 jobs:
   patch:
-    if: github.event_name == 'push' || (github.event.issue.number == 169 && github.event.comment.body == '/agent6-wp014-patch-readiness')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +23,7 @@ jobs:
           fetch-depth: 0
       - name: Rebase on latest main
         run: git pull --ff-only origin main
-      - name: Patch ready-visible scale and progressive readiness handoff
+      - name: Patch progressive readiness handoff
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -34,37 +31,19 @@ jobs:
           text = path.read_text()
           changed = False
 
-          if 'const readyRepresentationPending=' not in text:
-              anchor = '  const transitionText=zoomState.animating&&scaleState.label!==targetScaleState.label'
-              if text.count(anchor) != 1:
-                  raise SystemExit(f'Expected exactly one transition anchor, found {text.count(anchor)}')
-              start = text.index(anchor)
-              end = text.index('\n  mapPresentation={', start)
-              old = text[start:end]
-              expected = 'scale.querySelector(".planet-scale-meta strong").textContent=scaleState.label'
-              if expected not in old:
-                  raise SystemExit('Scale-strip assignment changed unexpectedly; refusing patch')
-              new = '''  // WP-S003-010-003-014: while a finer requested resource is still preparing,
-          // every scale/semantic cue must describe the representation that is actually
-          // ready and visible. Never advertise the requested target ahead of the atomic handoff.
-          const readyRepresentationPending=Boolean(localResources.requestedSignature&&localResources.activeSignature!==localResources.requestedSignature);
-          const readyScaleState=readyRepresentationPending&&displayResource
-            ?scaleStateForScalar(levelNativeScalar(displayResource.levelIndex))
-            :scaleState;
-          const transitionText=!readyRepresentationPending&&zoomState.animating&&readyScaleState.label!==targetScaleState.label
-            ?readyScaleState.label+" → "+targetScaleState.label
-            :semantic.displayBand;
-          const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=readyScaleState.label;scale.querySelector(".planet-scale-meta span").textContent=transitionText;scale.querySelector(".planet-scale-line").style.width=ruler.pixelLength.toFixed(2)+"px";scale.querySelector("small").textContent=formatDistanceMeters(ruler.distanceMeters);'''
-              text = text[:start] + new + text[end:]
-              changed = True
-
           if 'const readinessResource=' not in text:
               old = '''  const nativeVisibleHeight=Math.max(
+            GROUND_FOOTPRINT_HEIGHT_METERS,
+            Number(displayResource.dims?.visibleHeight||displayResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)
+          );'''
+              if text.count(old) != 1:
+                  old = '''  const nativeVisibleHeight=Math.max(
     GROUND_FOOTPRINT_HEIGHT_METERS,
     Number(displayResource.dims?.visibleHeight||displayResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)
   );'''
               if text.count(old) != 1:
                   raise SystemExit(f'Expected exactly one readiness-height anchor, found {text.count(old)}')
+              indent = '          ' if '\n            GROUND_FOOTPRINT_HEIGHT_METERS,' in old else ''
               new = '''  // A completed next-child prewarm is already real ready coverage. Let the
   // camera advance far enough to request/swap that cached child; otherwise the
   // parent leash can hold below the child threshold forever even though the
@@ -97,7 +76,7 @@ jobs:
           if changed:
               path.write_text(text)
           else:
-              print('WP014 readiness patch already present')
+              print('WP014 progressive readiness patch already present')
           PY
       - name: Commit patch
         run: |
