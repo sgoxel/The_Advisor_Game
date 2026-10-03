@@ -1,0 +1,50 @@
+name: Agent6 WP017 acceptance bookkeeping
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/agent6-wp017-acceptance-bookkeeping.yml
+
+permissions:
+  contents: write
+
+jobs:
+  bookkeeping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Record accepted reopened regression and clean temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          python - <<'PY'
+          from pathlib import Path
+
+          changelog=Path('docs/changelog.txt')
+          marker='2026-10-03 10:32 +03:00 | AGENT #6 | WP-S003-010-003-017 | MIXED ACCEPTED'
+          entry=marker+' — Reopened planet/regional semantic-cleanup regression accepted on final Attempt 3. Product fix f7eaaf7c3e7e3e911928256f14082042fe80f644 makes player-facing 1/10–1/500 geography-first map scales ineligible for retained local settlement roots/microdetail while preserving canonical SEED/world truth and restoring local presentation from 1/1000 inward. Exact acceptance head 97e9f4ace3e110a74fb3b6b483f8cd5be66bf174 passed workflow 37105818236; artifact 11267409871 (sha256:f113913a4f3bf58d80cfe317cda7aaec7aa63d04411153442cb3a69109f696f4). Original two-seed marker matrix remained green; the new close→broad two-seed matrix first materialized real Starting Village detail at 1/2500 and then verified every 1/10–1/500 frame with revealTier=none, mapScalePresentationEligible=false, zero local decorative counts, zero seasonal accents, and no unknown/minor/debug production-marker leakage. All 16 fresh screenshots were directly inspected; VISUAL 8.4/10 PASS. Product head deployed via Pages run 37105684225 and exact acceptance head via run 37105817437.\n'
+          cur=changelog.read_text(encoding='utf-8')
+          if marker not in cur:
+              changelog.write_text(entry+cur,encoding='utf-8')
+
+          suggest=Path('docs/suggest_log.txt')
+          smarker='2026-10-03 10:32 +03:00 | WP-S003-010-003-017 | Phase reopened-semantic-cleanup-acceptance | FUTURE'
+          sentry=smarker+' — Improve broad-map terrain/material sharpness, especially near 1/500, without relaxing the accepted 1/10–1/500 geography-first local-detail gate or reintroducing settlement props, fauna, seasonal accents, mystery markers, or debug presentation. Preserve canonical Campaign-SEED coordinates, world-anchored gameplay-center visibility, bounded marker queries, deterministic label ordering, and production/debug separation. Re-run the close-materialized→broad two-seed regression plus fresh responsive screenshots before changing the map presentation contract. Do not implement unless explicitly requested.\n'
+          scur=suggest.read_text(encoding='utf-8')
+          if smarker not in scur:
+              suggest.write_text(sentry+scur,encoding='utf-8')
+          PY
+          if [ -f .github/workflows/agent6-wp017-product-fix.yml ]; then
+            git rm .github/workflows/agent6-wp017-product-fix.yml
+          fi
+          git rm .github/workflows/agent6-wp017-acceptance-bookkeeping.yml
+          git add docs/changelog.txt docs/suggest_log.txt
+          git commit -m 'docs(WP-S003-010-003-017): record reopened acceptance'
+          git pull --rebase origin main
+          git push origin HEAD:main
