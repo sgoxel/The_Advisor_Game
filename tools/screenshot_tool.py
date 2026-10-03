@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-PROFILES={"landscape":(1920,1080),"portrait":(1080,1920),"tablet":(1920,1080),"phone":(1080,1920)}
+PROFILES={"landscape":(1365,768),"portrait":(390,844),"tablet":(1024,768),"phone":(390,844),"phone-landscape":(844,390)}
 WP_CHARACTER_SCENARIO="wp-s003-004-004"
 WP_CHARACTER_SHOTS=5
 STARTING_VILLAGE_SCENARIO="starting-village"
@@ -1470,7 +1470,7 @@ def _generic_frames(driver,shots,width,height,timeout,interval):
 
 def run_capture(args):
     width,height=PROFILES.get(args.profile,(args.width,args.height))
-    if args.scenario in {WP_SURFACE_REFINEMENT_SCENARIO,WP_SCALE_HANDOFF_SCENARIO,WP_TEMPORAL_RESIDENCY_SCENARIO,WP_SETTLEMENT_REVEAL_SCENARIO,WP_ATLAS_LIVE_SCENARIO}:
+    if args.scenario in {WP_SURFACE_REFINEMENT_SCENARIO,WP_TEMPORAL_RESIDENCY_SCENARIO,WP_SETTLEMENT_REVEAL_SCENARIO,WP_ATLAS_LIVE_SCENARIO}:
         width,height=1280,800
     total=max(1,int(args.shots))
     if args.scenario==WP_CHARACTER_SCENARIO:

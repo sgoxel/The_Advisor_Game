@@ -335,7 +335,7 @@ const activePointers=new Map();
 let lastPinchDistance=null;
 let projectionState={mode:"globe",blend:0,transitionStart:.45,transitionEnd:.82,tangentOrigin:null,basis:null,cameraTarget:null,continuityErrorMeters:0};
 const LOCAL_SAMPLE_SPACING_METERS=2;
-const LOCAL_PATCH_MARGIN=1.50;
+const LOCAL_PATCH_MARGIN=3.00; // WP006_VIEWPORT_SAFE_FINE_COVERAGE_V3
 const LOCAL_RESOURCE_CACHE_LIMIT=8;
 const LOCAL_RESOURCE_CACHE_BUDGET_BYTES=48*1024*1024;
 const LOCAL_MEDIUM_RING_SPAN_FACTOR=6;
@@ -9131,7 +9131,7 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     localResources.surroundCoversViewport=surroundCoversViewport;
     localResources.foregroundPatchCoversViewport=foregroundFamilyCoversViewport;
     localResources.foregroundPatchVisible=fineTerrainVisible;
-    // WP006_ATOMIC_VIEWPORT_OWNER_V2: a finer registered child may paint only
+    // WP006_ATOMIC_VIEWPORT_OWNER_V3: a finer registered child may paint only
     // after its own physical coverage contains the entire viewport. Until then,
     // promote the smallest ready parent that truthfully covers the viewport to
     // sole terrain owner. This keeps the higher-density parent when its 6x span
@@ -9140,8 +9140,8 @@ function updateProjectionPresentation(visibleHeightUnits=1){
     // different-frequency parent. All layers remain canonical, focus-anchored,
     // deterministic presentation resources; Simulation/world coordinates are
     // untouched.
-    const atomicMediumOwner=Boolean(displayResource&&displayResource.levelIndex<=WP006_SINGLE_PARENT_MAX_LEVEL&&!finePatchCoversViewport&&mediumRingCoversViewport);
-    const atomicOuterOwner=Boolean(displayResource&&displayResource.levelIndex<=WP006_SINGLE_PARENT_MAX_LEVEL&&!finePatchCoversViewport&&!mediumRingCoversViewport&&surroundCoversViewport);
+    const atomicMediumOwner=Boolean(displayResource&&!finePatchCoversViewport&&mediumRingCoversViewport);
+    const atomicOuterOwner=Boolean(displayResource&&!finePatchCoversViewport&&!mediumRingCoversViewport&&surroundCoversViewport);
     const atomicParentOwner=atomicMediumOwner||atomicOuterOwner;
     if(tangentPatch?.render)tangentPatch.render.enabled=!atomicParentOwner;
     if(focusRingPatch?.render)focusRingPatch.render.enabled=!atomicOuterOwner;
