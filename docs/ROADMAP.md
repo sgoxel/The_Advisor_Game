@@ -101,7 +101,7 @@ Keep only Stage headings and WP code/title/status lines here. WP details, eviden
 - `WP-S003-010-003-005-001` — Zero-Movement Geographic Identity + Focus Lock Across LODs — COMPLETED
 - `WP-S003-010-003-005-002` — True Cross-LOD Surface Refinement + Texel/Geometry Density Continuity — IN PROGRESS (AGENT #6; capped continuation 2026-10-03. Functional density/cache gate remains PASS. Best fresh visual in this continuation: run `37062086802` / artifact `11250309429` on `d42ac146e8cd218268b96bf2c7d288a3320bc54c`, all ten screenshots directly inspected at VISUAL 7.6/10 FAIL. Final Attempt 3 run `37064377133` / artifact `11252431778` on `539804340400f994bafedd6bed891a729099cafd` regressed frames 8–9 to a dark rectangular 1x card and scored VISUAL 6.3/10 FAIL; failed close-compositing changes were reverted by `c6f4ee9c3fe69caf80aaff118d19bfa2065133ce`. Remaining defects: 0.63x–0.66x terrain still reads too soft, and the near-ground focus/context handoff remains perceptible. Three-attempt cap reached; no completion claim.)
 - `WP-S003-010-003-006` — Streaming-Safe Scale Ladder + Ready-LOD Semantic Handoffs
-- `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground
+- `WP-S003-010-003-007` — Progressive Local/Settlement World Reveal Before Ground — COMPLETED
 - `WP-S003-010-003-008` — Canonical Zoom-Aware Globe Atlas Labels + Visible-Screen Culling — COMPLETED
 - `WP-S003-010-003-009` — Canonical Planet/World Coordinate Registration + Political Atlas Integrity — COMPLETED
 - `WP-S003-010-003-010` — TOP PRIORITY BUG: SEED-Only Canonical Political Boundaries + SEED-Only Important-Place Placement — COMPLETED
