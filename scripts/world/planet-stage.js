@@ -9440,9 +9440,19 @@ function animatedZoomReadinessCapScalar(){
   // fell back to 36 m and therefore returned scalar 1.0 for every prepared
   // parent. Use the actual resource dimension so a ready parent can never be
   // stretched far beyond its physical information density while its child builds.
+  // A completed next-child prewarm is already real ready coverage. Let the
+  // camera advance far enough to request/swap that cached child; otherwise the
+  // parent leash can hold below the child threshold forever even though the
+  // child is prepared, creating a deterministic zoom-readiness deadlock.
+  let readinessResource=displayResource;
+  if(zoomState.animating&&zoomState.targetScalar>zoomState.scalar&&displayResource.levelIndex<LOCAL_DETAIL_LEVELS.length-1){
+    const readyChildSignature=localSignatureFor(displayResource.levelIndex+1,zoomState.focusLatitudeRadians,zoomState.focusLongitudeRadians);
+    const readyChild=localResourceCache.get(readyChildSignature);
+    if(readyChild)readinessResource=readyChild;
+  }
   const nativeVisibleHeight=Math.max(
     GROUND_FOOTPRINT_HEIGHT_METERS,
-    Number(displayResource.dims?.visibleHeight||displayResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)
+    Number(readinessResource.dims?.visibleHeight||readinessResource.detail?.visibleHeightMeters||GROUND_FOOTPRINT_HEIGHT_METERS)
   );
   const targetVisibleHeight=Math.max(GROUND_FOOTPRINT_HEIGHT_METERS,presentationTargetHeightMeters(zoomState.scalar));
   const currentMagnification=Math.max(1,nativeVisibleHeight/targetVisibleHeight);
@@ -9495,7 +9505,11 @@ function updateAnimatedZoom(dt){
   if(milestoneChanged||now-Number(zoomState.lastAnimationMapUpdateAtMs||0)>=ZOOM_MAP_PRESENTATION_INTERVAL_MS){
     zoomState.lastInterpolationScaleIndex=displayIndex;zoomState.lastAnimationMapUpdateAtMs=now;updateMapPresentation("zoom-animation");
   }
-  if(zoomState.targetPrefetchState==="deferred"&&!localJob)requestZoomTargetPrefetch();
+  // Once a prepared target child has become the active ready representation,
+  // immediately stage the next canonical child toward the same final zoom target.
+  // This keeps deep animated zoom progressive without bypassing atomic readiness.
+  const activePrefetchNeedsNext=zoomState.targetPrefetchState==="ready"&&!localJob&&displayResource?.signature===zoomState.targetPrefetchSignature&&displayResource.levelIndex<rawLodIndexForZoom(target);
+  if((zoomState.targetPrefetchState==="deferred"&&!localJob)||activePrefetchNeedsNext)requestZoomTargetPrefetch();
   if(next===target){
     zoomState.animating=false;zoomState.zoomVelocity=0;zoomState.animationSettledCount++;
     zoomState.lastAnimationDurationMs=Number(Math.max(0,now-Number(zoomState.animationStartAtMs||now)).toFixed(3));
