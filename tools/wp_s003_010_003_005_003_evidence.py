@@ -111,6 +111,7 @@ def assert_safe(state,label):
 
 def wait_protagonist_focus(driver,timeout=240):
     _wait(driver,"""
+      window.ProtagonistFocusUI.refresh();
       const s=PlanetStage.snapshot(),u=ProtagonistFocusUI.snapshot(),n=s.explicitFocusNavigation?.active;
       return Boolean(u.mode==='protagonist'&&u.followEnabled&&n?.targetType==='protagonist'&&(n.state==='committed'||n.committedAtMs!=null)&&s.zoom?.visibleLevel==='ground');
     """,timeout,"committed protagonist ground focus")
