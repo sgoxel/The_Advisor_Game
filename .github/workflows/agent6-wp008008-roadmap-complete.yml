@@ -1,0 +1,66 @@
+name: Agent6 WP008008 Roadmap Completion
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/agent6-wp008008-roadmap-complete.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp008008-roadmap-complete
+  cancel-in-progress: false
+
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Mark WP-S003-008-008 completed and remove helper workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          apply_changes() {
+            python - <<'PY'
+          from pathlib import Path
+
+          roadmap = Path("docs/ROADMAP.md")
+          lines = roadmap.read_text(encoding="utf-8").splitlines()
+          prefix = "- `WP-S003-008-008` —"
+          matches = [i for i, line in enumerate(lines) if line.startswith(prefix)]
+          if len(matches) != 1:
+              raise SystemExit(f"expected exactly one WP-S003-008-008 ROADMAP line, found {len(matches)}")
+          lines[matches[0]] = "- `WP-S003-008-008` — Canonical Places View Targeting + Protagonist Max-Zoom Focus — COMPLETED"
+          roadmap.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          Path(".github/workflows/agent6-wp008008-roadmap-complete.yml").unlink(missing_ok=True)
+          PY
+          }
+
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            apply_changes
+            git add -A -- docs/ROADMAP.md .github/workflows/agent6-wp008008-roadmap-complete.yml
+            git diff --cached --check
+            if git diff --cached --quiet; then
+              echo "WP-S003-008-008 ROADMAP completion already current"
+              exit 0
+            fi
+            git commit -m "docs(WP-S003-008-008): mark completed"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Concurrent main update detected; retrying on newest head"
+          done
+          echo "Failed to publish WP-S003-008-008 ROADMAP completion after bounded retries" >&2
+          exit 1
