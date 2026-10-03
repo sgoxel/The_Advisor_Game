@@ -1,0 +1,45 @@
+name: Agent6 WP003 Attempt2 Terrain Structure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/agent6-wp003-attempt2-gradient.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp003-attempt2-gradient
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply deterministic directional-slope refinement
+        run: |
+          set -euo pipefail
+          python tools/agent6_wp003_attempt2_gradient_patch.py
+          node --check scripts/world/planet-stage.js
+          git diff --check
+          grep -q 'canonical-continuous-cross-lod-source-v41' scripts/world/planet-stage.js
+          grep -q 'structuredSlopeTransform:true' scripts/world/planet-stage.js
+      - name: Commit product correction
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/world/planet-stage.js
+          if git diff --cached --quiet; then
+            echo "Attempt 2 product already current"
+            exit 0
+          fi
+          git commit -m "fix(WP-S003-010-003): refine terrain slope structure"
+          git pull --rebase origin main
+          git push origin HEAD:main
