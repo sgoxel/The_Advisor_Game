@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/wp-s003-010-003-017-evidence.yml
       - tools/test_wp_s003_010_003_017.py
+      - tools/test_wp_s003_010_003_017_reopen.py
       - scripts/world/planet-stage.js
       - styles/main.css
       - index.html
@@ -41,6 +42,9 @@ jobs:
 
       - name: Run semantic marker evidence
         run: python tools/test_wp_s003_010_003_017.py http://127.0.0.1:8000/ tools/wp_s003_010_003_017_artifact
+
+      - name: Run reopened close-to-map microdetail regression
+        run: python tools/test_wp_s003_010_003_017_reopen.py http://127.0.0.1:8000/ tools/wp_s003_010_003_017_artifact
 
       - name: Upload evidence artifact
         if: always()
