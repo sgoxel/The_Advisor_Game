@@ -17,10 +17,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - name: Upload directly inspectable screenshots
+      - name: Upload exact current WP source and evidence harness
         uses: actions/upload-artifact@v4
         with:
-          name: agent6-wp003-attempt1-inspection
-          path: tools/screenshots/agent6-wp003-attempt1/
+          name: agent6-wp003-source-inspection
+          path: |
+            scripts/world/planet-stage.js
+            tools/screenshot_tool.py
           if-no-files-found: error
           retention-days: 1
