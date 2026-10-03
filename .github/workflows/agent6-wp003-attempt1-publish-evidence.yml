@@ -38,15 +38,24 @@ jobs:
           set -euo pipefail
           rm -rf tools/screenshots/agent6-wp003-attempt1
           mkdir -p tools/screenshots/agent6-wp003-attempt1/landscape tools/screenshots/agent6-wp003-attempt1/portrait
-          python tools/screenshot_tool.py http://127.0.0.1:8000/ agent6-wp003-attempt1/landscape \
+
+          python tools/screenshot_tool.py http://127.0.0.1:8000/ visual-wp-s003-010-003 \
             --profile landscape --scenario wp-s003-010-003 --shots 1 --timestamp-names \
             --wait-min 1 --wait-max 1 --no-publish \
             --evidence-json evidence-wp-s003-010-003-attempt1-landscape.json
-          python tools/screenshot_tool.py http://127.0.0.1:8000/ agent6-wp003-attempt1/portrait \
+          find tools/screenshots -maxdepth 1 -type f \( -name '*.png' -o -name 'evidence-wp-s003-010-003-attempt1-landscape.json' \) \
+            -exec mv {} tools/screenshots/agent6-wp003-attempt1/landscape/ \;
+
+          python tools/screenshot_tool.py http://127.0.0.1:8000/ visual-wp-s003-010-003 \
             --profile portrait --scenario wp-s003-010-003 --shots 1 --timestamp-names \
             --wait-min 1 --wait-max 1 --no-publish \
             --evidence-json evidence-wp-s003-010-003-attempt1-portrait.json
-          find tools/screenshots/agent6-wp003-attempt1 -type f -maxdepth 3 -print | sort
+          find tools/screenshots -maxdepth 1 -type f \( -name '*.png' -o -name 'evidence-wp-s003-010-003-attempt1-portrait.json' \) \
+            -exec mv {} tools/screenshots/agent6-wp003-attempt1/portrait/ \;
+
+          test "$(find tools/screenshots/agent6-wp003-attempt1/landscape -name '*.png' | wc -l)" -ge 1
+          test "$(find tools/screenshots/agent6-wp003-attempt1/portrait -name '*.png' | wc -l)" -ge 1
+          find tools/screenshots/agent6-wp003-attempt1 -type f -print | sort
       - name: Commit inspectable evidence only
         run: |
           set -euo pipefail
