@@ -1,0 +1,61 @@
+name: Agent6 WP005002 Attempt2 Evidence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/agent6-wp005002-attempt2-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent6-wp005002-attempt2-evidence
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 943e13918215b30ddd16f4959435e9eced85163e
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install screenshot dependencies
+        run: python -m pip install -r tools/requirements.txt
+      - name: Verify browser
+        run: google-chrome --version || google-chrome-stable --version || chromium --version
+      - name: Start exact-product local server
+        run: |
+          python -m http.server 8000 --bind 127.0.0.1 >/tmp/advisor-http.log 2>&1 &
+          echo $! >/tmp/advisor-http.pid
+          sleep 1
+      - name: Capture unchanged WP005002 scenario
+        run: |
+          set -euo pipefail
+          python tools/screenshot_tool.py \
+            http://127.0.0.1:8000/ \
+            visual-wp-s003-010-003-005-002 \
+            --profile landscape \
+            --scenario wp-s003-010-003-005-002 \
+            --shots 1 \
+            --timestamp-names \
+            --wait-min 1 \
+            --wait-max 1 \
+            --evidence-json evidence-wp-s003-010-003-005-002-${GITHUB_RUN_ID}.json \
+            --no-publish
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-s003-010-003-005-002-agent6-attempt2
+          path: |
+            tools/screenshots/visual-wp-s003-010-003-005-002*.png
+            evidence-wp-s003-010-003-005-002-*.json
+          if-no-files-found: error
+          retention-days: 14
