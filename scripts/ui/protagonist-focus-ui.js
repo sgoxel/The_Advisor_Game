@@ -19,10 +19,11 @@ const state={
   lastFollowDistanceMeters:0,deadZoneMeters:MIN_DEAD_ZONE_METERS,lastFollowTarget:null,
   safeRect:null,projectedProtagonist:null,contextWidgetBounds:null,lastFrameMs:null,
   lastProtagonist:null,lastCameraTarget:null,lastTargetId:"protagonist",lastTargetType:"protagonist",
-  pointerDown:null,pointerDragSuspensions:0,telemetryUpdates:0,startedAtMs:0
+  pointerDown:null,pointerDragSuspensions:0,telemetryUpdates:0,startedAtMs:0,
+  responsiveRefocusCount:0,focusMarkerVisible:false
 };
 
-let dock=null,labelNode=null,metaNode=null,exploreButton=null,returnButton=null;
+let dock=null,labelNode=null,metaNode=null,exploreButton=null,returnButton=null,focusMarker=null;
 let pollTimer=0,frameTimer=0,followToken=0,resizeTimer=0;
 
 function now(){return typeof performance!=="undefined"?performance.now():Date.now()}
@@ -58,7 +59,7 @@ function safeInsets(){
 function computeSafeRect(){
   const vv=root.visualViewport,iw=Math.max(1,Math.round(vv?.width||innerWidth||1)),ih=Math.max(1,Math.round(vv?.height||innerHeight||1)),ins=safeInsets(),gap=8;
   let left=ins.left+gap,top=ins.top+gap,right=iw-ins.right-gap,bottom=ih-ins.bottom-gap;
-  const selectors=["#advisorChatPanel",".planet-places-panel","#windowShellDock",".window-shell-dock",".advisor-toolbelt-panel",".advisor-economy-panel",".travel-encounter-card",".local-event-vignette"];
+  const selectors=["#advisorChatPanel",".planet-places-panel","#windowShellDock",".window-shell-dock",".advisor-toolbelt-panel",".advisor-economy-panel",".travel-encounter-card",".local-event-vignette",".planet-map-context",".renderer-backend-debug"];
   const seen=new Set();
   for(const selector of selectors){for(const el of document.querySelectorAll(selector)){
     if(seen.has(el)||!visible(el))continue;seen.add(el);const r=el.getBoundingClientRect();
@@ -93,6 +94,13 @@ function installStyle(){
 .protagonist-focus-action[data-kind="return"]{border-color:rgba(109,217,206,.35);color:#bcebe5}.protagonist-focus-action[hidden]{display:none!important}
 @media(max-width:620px){#protagonistFocusDock{gap:4px;padding:5px 6px 5px 8px;border-radius:12px}.protagonist-focus-copy small{max-width:112px}.protagonist-focus-action{height:28px;padding:0 8px;font-size:8px}}
 @media(max-height:430px) and (orientation:landscape){#protagonistFocusDock{padding:4px 5px 4px 7px}.protagonist-focus-copy small{display:none}.protagonist-focus-action{height:26px}}
+/* Focus context outranks optional geography/debug chrome without deleting it. */
+#planetStageRoot[data-protagonist-focus-mode] .planet-map-context{top:max(72px,calc(env(safe-area-inset-top) + 72px))!important}
+#planetStageRoot[data-protagonist-focus-mode] .renderer-backend-debug{opacity:.16!important;transform:translateX(-50%) scale(.72)!important;transform-origin:top center!important;pointer-events:none!important}
+#protagonistFocusMarker{position:fixed;left:50%;top:50%;z-index:72;transform:translate(-50%,-52px);display:none;pointer-events:none;padding:5px 8px;border:1px solid rgba(226,186,104,.56);border-radius:999px;background:rgba(7,15,22,.80);box-shadow:0 5px 20px rgba(0,0,0,.28);color:#f0d394;font:800 9px/1 system-ui,-apple-system,Segoe UI,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+#protagonistFocusMarker[data-visible="true"]{display:block}
+@media(max-width:620px){#planetStageRoot[data-protagonist-focus-mode] .planet-map-context{display:none!important}#protagonistFocusDock{max-width:calc(100vw - 24px)}#protagonistFocusMarker{transform:translate(-50%,-46px)}}
+@media(max-height:430px) and (orientation:landscape){#planetStageRoot[data-protagonist-focus-mode] .planet-map-context{display:none!important}}
 `;
   document.head.appendChild(style);
 }
@@ -103,6 +111,7 @@ function mount(){
   labelNode=dock.querySelector("strong");metaNode=dock.querySelector("small");exploreButton=dock.querySelector('[data-kind="explore"]');returnButton=dock.querySelector('[data-kind="return"]');
   dock.querySelector(".protagonist-focus-identity").addEventListener("click",()=>returnToProtagonist("identity"));
   exploreButton.addEventListener("click",()=>beginExploration());returnButton.addEventListener("click",()=>returnToProtagonist("return-button"));
+  focusMarker=document.createElement("div");focusMarker.id="protagonistFocusMarker";focusMarker.textContent="Protagonist focus";focusMarker.setAttribute("aria-hidden","true");document.body.appendChild(focusMarker);
   document.body.appendChild(dock);state.mounted=true;computeSafeRect();attachManualExplorationListeners();render();
 }
 function render(){
@@ -147,6 +156,24 @@ function returnToProtagonist(source="explicit-return"){
   try{const result=root.PlanetStage.focusProtagonist();state.focusRequestId=result?.requestId||null;state.lastAction=source;state.lastError=result?.ok===false?String(result.reason||"focus request failed"):null}catch(err){state.lastError=String(err?.message||err)}
   state.lastActionMs=Number((now()-t).toFixed(2));const after=protagonistPoint();if(before&&after&&(before.x!==after.x||before.y!==after.y))state.lastError="camera return mutated protagonist position";render();return !state.lastError;
 }
+function responsiveRefocus(){
+  if(!stageReady()||state.mode!=="protagonist"||!state.followEnabled)return false;
+  const before=protagonistPoint();
+  try{
+    const result=root.PlanetStage.focusProtagonist();state.focusRequestId=result?.requestId||state.focusRequestId;state.responsiveRefocusCount++;state.lastAction="responsive-safe-area-refocus";
+  }catch(err){state.lastError=String(err?.message||err);return false}
+  const after=protagonistPoint();if(before&&after&&(before.x!==after.x||before.y!==after.y))state.lastError="responsive camera refocus mutated protagonist position";
+  return !state.lastError;
+}
+function updateFocusMarker(snapshot){
+  if(!focusMarker)return;
+  const coarse=state.mode==="protagonist"&&snapshot?.zoom?.visibleLevel&&snapshot.zoom.visibleLevel!=="ground";
+  focusMarker.dataset.visible=String(Boolean(coarse));state.focusMarkerVisible=Boolean(coarse);
+}
+function scheduleResponsiveLayout(){
+  clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{computeSafeRect();responsiveRefocus();setTimeout(()=>poll(),80)},110);
+}
+
 function followDeadZone(snapshot,protagonist){
   if(!state.followEnabled||state.mode!=="protagonist"||state.followAnimationActive)return;
   const cam=asStringPoint(snapshot?.canonicalFocus?.worldTile);if(!cam||!protagonist)return;
@@ -179,7 +206,7 @@ function poll(){
     state.lastTargetId="protagonist";state.lastTargetType="protagonist";
     if(nav.state==="committed"||nav.committedAtMs!=null){state.mode="protagonist";state.followEnabled=true;state.lastError=null;render()}
   }
-  if(state.mode==="protagonist")followDeadZone(snapshot,protagonist);updateProjected(snapshot,protagonist);
+  if(state.mode==="protagonist")followDeadZone(snapshot,protagonist);updateProjected(snapshot,protagonist);updateFocusMarker(snapshot);
   if(state.telemetryUpdates%5===0){computeSafeRect();render()}
 }
 function sampleFrameTime(){
@@ -193,7 +220,7 @@ function snapshot(){
     focusRequestId:state.focusRequestId,targetId:state.lastTargetId,targetType:state.lastTargetType,
     protagonist:state.lastProtagonist,cameraTarget:state.lastCameraTarget,projectedProtagonist:state.projectedProtagonist,
     safeRect:state.safeRect,contextWidgetBounds:state.contextWidgetBounds,deadZoneMeters:state.deadZoneMeters,lastFollowDistanceMeters:state.lastFollowDistanceMeters,
-    followCorrections:state.followCorrections,followAnimationActive:state.followAnimationActive,followAnimationCancels:state.followAnimationCancels,hardSnapCount:state.hardSnapCount,pointerDragSuspensions:state.pointerDragSuspensions,
+    followCorrections:state.followCorrections,followAnimationActive:state.followAnimationActive,followAnimationCancels:state.followAnimationCancels,hardSnapCount:state.hardSnapCount,pointerDragSuspensions:state.pointerDragSuspensions,responsiveRefocusCount:state.responsiveRefocusCount,focusMarkerVisible:state.focusMarkerVisible,
     navigationTimingMs:state.lastActionMs,lastAction:state.lastAction,lastFrameMs:state.lastFrameMs,lastError:state.lastError,
     activeFootprint:stage?.projection?.spatialLod?.activeFootprint||stage?.zoom?.visibleFootprintHeightMeters||null,
     stageFocusMode:nav?.targetType||null,stageTargetId:nav?.targetId||null,stageNavigationState:nav?.state||null,
@@ -205,8 +232,8 @@ function start(){
   if(EVIDENCE_FAST&&!OWN_EVIDENCE)return true;
   mount();pollTimer=setInterval(poll,POLL_MS);frameTimer=setInterval(sampleFrameTime,1000);
   const readyTimer=setInterval(()=>{if(!stageReady())return;clearInterval(readyTimer);computeSafeRect();if(!MANUAL_EVIDENCE_START)startDefaultFocus();poll()},120);
-  addEventListener("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(computeSafeRect,80)},{passive:true});
-  root.visualViewport?.addEventListener?.("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(computeSafeRect,80)},{passive:true});
+  addEventListener("resize",scheduleResponsiveLayout,{passive:true});
+  root.visualViewport?.addEventListener?.("resize",scheduleResponsiveLayout,{passive:true});
   return true;
 }
 

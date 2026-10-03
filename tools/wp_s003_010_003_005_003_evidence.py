@@ -164,18 +164,20 @@ def core_run(seed,full):
         js(driver,"window.PlanetStage.setScaleIndex(8);")
         _wait(driver,"return !PlanetStage.snapshot().zoom?.animation?.active;",120,"LOD handoff settle")
         handoff=shot(driver,seed,"06-lod-focus-identity",records)
-        nav=(handoff.get("navigation") or {}).get("active") or {}
-        if nav.get("targetType")!="protagonist" or (handoff.get("focusUI") or {}).get("mode")!="protagonist":raise RuntimeError("protagonist focus identity lost through LOD handoff")
+        nav=(handoff.get("navigation") or {}).get("active") or {};hui=handoff.get("focusUI") or {}
+        if nav.get("targetType")!="protagonist" or hui.get("mode")!="protagonist" or hui.get("focusMarkerVisible") is not True:raise RuntimeError("protagonist focus identity lost through LOD handoff")
         js(driver,"window.PlanetStage.setScaleIndex(9);")
         _wait(driver,"return !PlanetStage.snapshot().zoom?.animation?.active;",120,"ground restore settle")
 
         if full:
             for name,w,h in (("07-tablet",1024,768),("08-phone-portrait",390,844),("09-phone-landscape",844,390)):
-                set_exact_viewport(driver,w,h);js(driver,"window.ProtagonistFocusUI.refresh();");time.sleep(.45)
+                set_exact_viewport(driver,w,h);js(driver,"window.ProtagonistFocusUI.refresh();");time.sleep(1.25)
                 responsive=shot(driver,seed,name,records);assert_safe(responsive,name)
+                if (responsive.get("focusUI") or {}).get("responsiveRefocusCount",0)<1:raise RuntimeError(name+": responsive canonical refocus did not run")
         else:
-            set_exact_viewport(driver,390,844);js(driver,"window.ProtagonistFocusUI.refresh();");time.sleep(.45)
+            set_exact_viewport(driver,390,844);js(driver,"window.ProtagonistFocusUI.refresh();");time.sleep(1.25)
             responsive=shot(driver,seed,"07-second-seed-phone",records);assert_safe(responsive,"second seed phone")
+            if (responsive.get("focusUI") or {}).get("responsiveRefocusCount",0)<1:raise RuntimeError("second seed phone: responsive canonical refocus did not run")
 
         end=snap(driver);functional.update({"remote":remote,"remoteAfterMove":remote_after_move,"returned":returned,"followed":followed,"final":end})
         if (end.get("focusUI") or {}).get("forcedReturnCount")!=0:raise RuntimeError("forced camera return detected")
