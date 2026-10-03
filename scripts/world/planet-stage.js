@@ -7696,7 +7696,8 @@ function blendSurfaceAuthoritySamples(coarse,fine,t){
 }
 function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRing=false,evidenceLayerRole="focus"){
   const lat0=job.lat0,lon0=job.lon0,data=new Uint8ClampedArray(size*size*4);
-  const metersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
+  const sourceMetersPerTexel=Math.max(spanEast,spanNorth)/Math.max(1,size);
+  let metersPerTexel=sourceMetersPerTexel;
   const captureContributorPixels=Boolean(EVIDENCE_SURFACE_CONTRIBUTORS&&job.levelIndex<=2);
   const contributorLayers=captureContributorPixels?Object.fromEntries(["base","macro","structure","landCover","final"].map(name=>[name,new Uint8ClampedArray(size*size*4)])):null;
   const evidenceProbeTargets=captureContributorPixels?[
@@ -7734,6 +7735,14 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // as a differently tinted/contrasted patch.
   const focusTextureSize=Math.max(1,Number(LOCAL_DETAIL_LEVELS[job.levelIndex]?.textureSize||size));
   const sharedMetersPerTexel=Math.max(job.dims.patchWidth,job.dims.patchHeight)*LOCAL_SURROUND_SPAN_FACTOR/focusTextureSize;
+  // WP-006 continuation ownership: at intermediate tiers the medium and outer
+  // layers are coverage for one ready parent, not separate visual LODs. Drive
+  // both through the same physical photometry bandwidth so their finite mesh or
+  // raster boundary cannot appear as a higher-frequency island. Keep the real
+  // sourceMetersPerTexel for density/streaming telemetry and restore native
+  // context refinement only once near-ground resources own the viewport.
+  const unifiedContinuationBasis=contextRing&&job.levelIndex<=8;
+  if(unifiedContinuationBasis)metersPerTexel=sharedMetersPerTexel;
   // Phase 18 final acceptance: strategic concentric representations must apply
   // the same low-frequency transfer to their common parent sample. Native texel
   // size is reserved for the registered high-pass residual only.
@@ -8224,9 +8233,9 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
     })
   ]));
   return {
-    data,size,metersPerTexel,
+    data,size,metersPerTexel:sourceMetersPerTexel,
     componentRanges:Object.freeze(roundedRanges),
-    contributorPixels:captureContributorPixels?{revision:"wp020-surface-contributors-v2",layerRole:String(evidenceLayerRole),size,spanEast:Number(spanEast),spanNorth:Number(spanNorth),metersPerTexel:Number(metersPerTexel.toFixed(3)),layers:contributorLayers,probes:Object.freeze(evidenceProbes.slice())}:null,
+    contributorPixels:captureContributorPixels?{revision:"wp020-surface-contributors-v2",layerRole:String(evidenceLayerRole),size,spanEast:Number(spanEast),spanNorth:Number(spanNorth),metersPerTexel:Number(sourceMetersPerTexel.toFixed(3)),layers:contributorLayers,probes:Object.freeze(evidenceProbes.slice())}:null,
     coordinateAuthority:"Campaign-SEED + SeedCoordinateFabric.registeredMeters",
     coordinateRevision:coordinateFabricAuthority()?.revisionSignature||null,
     patchRelativeBiomeNoise:false
