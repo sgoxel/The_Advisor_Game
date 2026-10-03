@@ -99,7 +99,7 @@ function installStyle(){
 #planetStageRoot[data-protagonist-focus-mode] .renderer-backend-debug{opacity:.16!important;transform:translateX(-50%) scale(.72)!important;transform-origin:top center!important;pointer-events:none!important}
 #protagonistFocusMarker{position:fixed;left:50%;top:50%;z-index:72;transform:translate(-50%,-52px);display:none;pointer-events:none;padding:5px 8px;border:1px solid rgba(226,186,104,.56);border-radius:999px;background:rgba(7,15,22,.80);box-shadow:0 5px 20px rgba(0,0,0,.28);color:#f0d394;font:800 9px/1 system-ui,-apple-system,Segoe UI,sans-serif;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
 #protagonistFocusMarker[data-visible="true"]{display:block}
-@media(max-width:620px){#planetStageRoot[data-protagonist-focus-mode] .planet-map-context{display:none!important}#protagonistFocusDock{max-width:calc(100vw - 24px)}#protagonistFocusMarker{transform:translate(-50%,-46px)}}
+@media(max-width:620px){#planetStageRoot[data-protagonist-focus-mode] .planet-map-context,#planetStageRoot[data-protagonist-focus-mode] .renderer-backend-debug{display:none!important}#protagonistFocusDock{max-width:calc(100vw - 24px)}#protagonistFocusMarker{transform:translate(-50%,-46px)}}
 @media(max-height:430px) and (orientation:landscape){#planetStageRoot[data-protagonist-focus-mode] .planet-map-context{display:none!important}}
 `;
   document.head.appendChild(style);
