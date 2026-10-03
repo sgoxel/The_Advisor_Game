@@ -398,14 +398,14 @@ const LOCAL_DETAIL_LEVELS=Object.freeze([
   // is actually visible. This prevents the UI/ruler from claiming SETTLEMENT
   // while the frame still contains terrain only.
   Object.freeze({id:"settlement-wide",band:"local-area",visibleHeightMeters:5000,sampleSpacingMeters:110,textureSize:640,reliefClampMeters:3000,reliefGain:5.5,maxHeightUnits:.50,staticWorld:false}),
-  Object.freeze({id:"settlement",band:"local-area",visibleHeightMeters:2000,sampleSpacingMeters:44,textureSize:640,reliefClampMeters:1600,reliefGain:4,maxHeightUnits:.42,staticWorld:false}),
+  Object.freeze({id:"settlement",band:"local-area",visibleHeightMeters:2300,sampleSpacingMeters:44,textureSize:640,reliefClampMeters:1600,reliefGain:4,maxHeightUnits:.42,staticWorld:false}),
   Object.freeze({id:"settlement-core",band:"local-area",visibleHeightMeters:1000,sampleSpacingMeters:22,textureSize:640,reliefClampMeters:900,reliefGain:3,maxHeightUnits:.38,staticWorld:false}),
   // The first two static-world tiers visibly contain the road/building layout,
   // so they own SETTLEMENT semantics. NEAR GROUND begins only once the closer
   // resource is ready, preserving truthfulness through asynchronous handoffs.
-  Object.freeze({id:"near-ground-wide",band:"settlement",visibleHeightMeters:500,sampleSpacingMeters:11,textureSize:512,reliefClampMeters:400,reliefGain:2.2,maxHeightUnits:.33,staticWorld:true}),
+  Object.freeze({id:"near-ground-wide",band:"settlement",visibleHeightMeters:750,sampleSpacingMeters:11,textureSize:512,reliefClampMeters:400,reliefGain:2.2,maxHeightUnits:.33,staticWorld:true}),
   Object.freeze({id:"near-ground",band:"settlement",visibleHeightMeters:200,sampleSpacingMeters:5,textureSize:384,reliefClampMeters:180,reliefGain:1.5,maxHeightUnits:.28,staticWorld:true}),
-  Object.freeze({id:"near-ground-close",band:"near-ground",visibleHeightMeters:80,sampleSpacingMeters:3,textureSize:384,reliefClampMeters:60,reliefGain:.9,maxHeightUnits:.22,staticWorld:true}),
+  Object.freeze({id:"near-ground-close",band:"near-ground",visibleHeightMeters:160,sampleSpacingMeters:3,textureSize:384,reliefClampMeters:60,reliefGain:.9,maxHeightUnits:.22,staticWorld:true}),
   Object.freeze({id:"ground",band:"ground",visibleHeightMeters:36,sampleSpacingMeters:LOCAL_SAMPLE_SPACING_METERS,textureSize:384,reliefClampMeters:10,reliefGain:.35,maxHeightUnits:.18,staticWorld:true})
 ]);
 const LOCAL_PREP_SLICE_BUDGET_MS=6;
@@ -7786,7 +7786,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
   // Fine terrain/biome detail is sampled in the Campaign-SEED registered
   // coordinate frame. Patch recentering, viewport changes and LOD changes may
   // change presentation, but never the world-space inputs to the detail field.
-  const surfaceAuthority=sharedSurfaceAuthority(job),focusAuthority=contextRing?null:focusSurfaceAuthority(job);
+  const surfaceAuthority=sharedSurfaceAuthority(job),focusAuthority=null;
   const mixSample=(ux,vz,coarseSample=null)=>{
     const east=(ux-.5)*spanEast,north=(.5-vz)*spanNorth,coarse=coarseSample||surfaceAuthority.sample(east,north);
     if(!focusAuthority)return coarse;
@@ -7838,7 +7838,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
       // Keep source-color identity, but cap its share as physical texels become
       // coarse; elevation/moisture/mountain identity remains in localPalette.
       const strategicSourceBand=smoothstep01(clamp((baseTransferMetersPerTexel-220)/900,0,1));
-      const strategicSourceCap=lerp(.110,.046,strategicSourceBand);
+      const strategicSourceCap=lerp(.120,.078,strategicSourceBand);
       const macroIdentityWeight=clamp(.040+coarseIdentity*.050+mountainIdentity*.012,.040,strategicSourceCap);
       let base=sourceColor.map((v,i)=>clamp(lerp(localPalette[i],Number(v)||0,macroIdentityWeight),0,1));
       pushRange("sourceLuma",luma3(sourceColor));pushRange("paletteLuma",luma3(localPalette));
@@ -8318,15 +8318,12 @@ function* localResourceSteps(job){
   // continuous underneath it instead of rewriting/carving the parent center;
   // the old nested carve could make the focus footprint visible as a rectangle.
   // Local/ground tiers retain the established true-ring path.
-  if(job.levelIndex<=2){
-    // Phase 19 final: strategic children are already edge-feathered registered
-    // residuals over one shared parent basis. Keep BOTH coarser parents fully
-    // continuous underneath them. Rewriting/carving either parent reintroduces
-    // a magnified rectangular/ridge handoff during animated strategic zoom.
-  }else{
-    stitchSurroundCenterToDetail(detail,medium,LOCAL_MEDIUM_RING_SPAN_FACTOR);
-    stitchSurroundCenterToDetail(medium,surround,LOCAL_SURROUND_SPAN_FACTOR/LOCAL_MEDIUM_RING_SPAN_FACTOR);
-  }
+  // Cross-LOD continuity: each raster remains an independent sampling of
+  // the same canonical world coordinates. Do not bake a finer child/medium
+  // center into its coarser parent; that persists as a rectangular frequency
+  // island even when the finer mesh is not rendered. Feathered child alpha over
+  // an opaque world-matched parent performs the transition without rewriting
+  // either owner's source texture.
   yield {forceSlice:true};
   job.currentPreparationPhase="wilderness-plan";
   const wildernessPlan=yield* prepareLocalWildernessPlanSteps(job);
