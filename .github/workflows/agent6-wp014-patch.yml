@@ -1,6 +1,9 @@
 name: Agent6 WP014 Atomic Patch
 
 on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/agent6-wp014-patch.yml]
   issue_comment:
     types: [created]
 
@@ -14,7 +17,7 @@ concurrency:
 
 jobs:
   patch:
-    if: github.event.issue.number == 169 && github.event.comment.body == '/agent6-wp014-patch-scale'
+    if: github.event_name == 'push' || (github.event.issue.number == 169 && github.event.comment.body == '/agent6-wp014-patch-scale')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +49,9 @@ jobs:
           const scale=layer.querySelector(".planet-scale-ruler");scale.querySelector(".planet-scale-meta strong").textContent=readyScaleState.label;scale.querySelector(".planet-scale-meta span").textContent=transitionText;scale.querySelector(".planet-scale-line").style.width=ruler.pixelLength.toFixed(2)+"px";scale.querySelector("small").textContent=formatDistanceMeters(ruler.distanceMeters);'''
           count = text.count(old)
           if count != 1:
+              if 'const readyRepresentationPending=' in text:
+                  print('ready-visible scale presentation already patched')
+                  raise SystemExit(0)
               raise SystemExit(f'Expected exactly one scale presentation target, found {count}')
           path.write_text(text.replace(old, new, 1))
           PY
@@ -54,6 +60,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add scripts/world/planet-stage.js
+          if git diff --cached --quiet; then
+            echo "No product change needed"
+            exit 0
+          fi
           git diff --cached --check
           git commit -m "fix(WP-S003-010-003-014): bind scale cues to ready representation"
           git pull --rebase origin main
