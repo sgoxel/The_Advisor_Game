@@ -1,0 +1,48 @@
+name: Agent6 WP006 Continuation Patch
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/agent6-wp006-continuation-patch.yml"
+      - "tools/agent6_wp006_continuation_patch.py"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp006-continuation-patch
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply WP006 continuation ownership fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --ff-only origin main
+          python tools/agent6_wp006_continuation_patch.py
+          node --check scripts/world/planet-stage.js
+          git diff --check
+      - name: Commit tested runtime patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+sgoxel@users.noreply.github.com"
+          git add scripts/world/planet-stage.js
+          if git diff --cached --quiet; then
+            echo "WP006 continuation patch already current"
+            exit 0
+          fi
+          git commit -m "fix(WP-S003-010-003-006): move continuation feather off viewport"
+          git pull --rebase origin main
+          git push origin HEAD:main
