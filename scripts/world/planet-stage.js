@@ -8095,10 +8095,10 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const mapCoverBoost=1+smoothstep01(clamp((220-metersPerTexel)/180,0,1))*.32;
         const sharedMapCoverBoost=1+smoothstep01(clamp((220-sharedMetersPerTexel)/180,0,1))*.26;
         const strategicCoverBoost=1+strategicMapBand*(contextRing?.045:.10);
-        const sharedStrategicCoverBoost=1+sharedStrategicMapBand*.055;
+        const sharedStrategicCoverBoost=1+sharedStrategicMapBand*.30;
         const sharedCoverContrast=(sharedPhotometryLock?1.08:(contextRing?1.06:1.10))*sharedMapCoverBoost*sharedStrategicCoverBoost;
         const residualCoverContrast=(contextRing?1.18:lerp(1.16,1.36,focusRefineWeight))*mapCoverBoost*strategicCoverBoost;
-        const sharedCoarseRegionalCoverGain=1-sharedCoarseRegionalResidualBand*.48;
+        const sharedCoarseRegionalCoverGain=1-sharedCoarseRegionalResidualBand*.30;
         const residualCoarseRegionalCoverGain=1-coarseRegionalResidualBand*.16;
         const landCover=sharedCover.map((v,i)=>v*sharedCoverContrast*sharedCoarseRegionalCoverGain+
           (nativeCover[i]-v)*coverGain*residualCoverContrast*residualCoarseRegionalCoverGain);
@@ -8144,7 +8144,7 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         displayColor=displayColor.map((v,i)=>lerp(v,chromaTarget[i],chromaRestore));
       }
       if(useMicroDetail){
-        const micro=localSurfaceSample(worldEast,worldNorth,sample).color;
+        const microSample=localSurfaceSample(worldEast,worldNorth,sample),micro=microSample.color;
         // Admit the already-authoritative 34/12/4.2 m micro field by this
         // layer's real texel density, not by the coarsest fallback. Edge/context
         // ownership weights make this a refinement residual instead of a card.
@@ -8152,6 +8152,12 @@ function* surfaceTextureSteps(job,spanEast,spanNorth,size,featherEdges,contextRi
         const microContinuity=contextRing?contextRefineWeight:focusRefineWeight;
         const microWeight=lerp(.14,.34,closeWeight)*microContinuity;
         displayColor=displayColor.map((v,i)=>clamp(v*(1-microWeight)+micro[i]*microWeight,0,1));
+        // microElevation is the signed form of the same registered field already
+        // sampled above. A small zero-mean tonal cue exposes its physical relief
+        // at sub-6 m/texel without adding a second texture identity or extra work.
+        const microRelief=clamp(Number(microSample.microElevation||0)/5.2,-1,1);
+        const microReliefGain=lerp(.018,.050,closeWeight)*microContinuity;
+        displayColor=displayColor.map((v,i)=>clamp(v+microRelief*microReliefGain*(i===2?.76:i===1?.94:1),0,.88));
       }
       // High peaks are legitimately snow-covered, but the canonical near-white
       // macro palette plus hillshade used to saturate into featureless white.
