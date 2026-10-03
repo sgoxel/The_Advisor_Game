@@ -24,12 +24,16 @@ jobs:
       - name: Patch evidence viewport handling
         run: python tools/agent6_wp005002_evidence_profile_patch.py
       - name: Validate harness
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
         run: |
           python -m py_compile tools/screenshot_tool.py
+          rm -rf tools/__pycache__
           grep -F 'elif args.scenario==WP_SURFACE_REFINEMENT_SCENARIO:' tools/screenshot_tool.py
           grep -F 'width,height=PROFILES.get(args.profile,(args.width,args.height))' tools/screenshot_tool.py
       - name: Commit tested harness correction
         run: |
+          rm -rf tools/__pycache__
           if git diff --quiet -- tools/screenshot_tool.py; then
             echo 'Evidence harness already current.'
             exit 0
