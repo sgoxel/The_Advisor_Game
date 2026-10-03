@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/agent6-wp005003-attempt3.yml"
+      - "tools/agent6_wp005003_attempt3_patch.py"
   workflow_dispatch:
 
 permissions:
