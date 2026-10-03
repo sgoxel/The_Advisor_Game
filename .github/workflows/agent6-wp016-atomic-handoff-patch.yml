@@ -32,7 +32,6 @@ jobs:
           python tools/agent6_wp016_atomic_handoff_patch.py
           node --check scripts/world/planet-stage.js
           python -m py_compile tools/screenshot_tool.py
-          find tools -type d -name __pycache__ -prune -exec rm -rf {} +
           git diff --check
       - name: Commit tested runtime and evidence patch
         shell: bash
@@ -46,5 +45,10 @@ jobs:
             exit 0
           fi
           git commit -m "fix(WP-S003-010-003-016): make local handoff paint-atomic"
+          # Remove only transient runner changes after the intended commit is
+          # safely in HEAD. This keeps rebase/push reproducible even if validation
+          # tools generate bytecode or other local-only files.
+          git reset --hard HEAD
+          git clean -fd
           git pull --rebase origin main
           git push origin HEAD:main
