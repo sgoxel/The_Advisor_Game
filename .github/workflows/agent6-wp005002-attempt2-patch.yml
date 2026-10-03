@@ -1,4 +1,4 @@
-name: Agent6 WP005002 Physical Context Patch v2
+name: Agent6 WP005002 Viewport-Core Toon Patch
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Apply deterministic physical-context refinement patch
+      - name: Apply deterministic viewport-core toon refinement
         run: |
           set -euo pipefail
           python tools/agent6_wp005002_attempt2_patch.py
@@ -35,10 +35,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add scripts/world/planet-stage.js
           if git diff --cached --quiet; then
-            echo "WP005002 physical-context product already current"
+            echo "WP005002 viewport-core toon product already current"
             exit 0
           fi
-          git commit -m "fix(WP-S003-010-003-005-002): use physical context detail bandwidth"
+          git commit -m "fix(WP-S003-010-003-005-002): keep detail core over viewport"
           git reset --hard HEAD
           git clean -fd
           git pull --rebase origin main
