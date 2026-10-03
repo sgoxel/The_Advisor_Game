@@ -1,0 +1,69 @@
+name: Agent6 WP003 Capped Cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/agent6-wp003-capped-cleanup.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent6-wp003-capped-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Record capped run and clean temporary AGENT 6 files
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          changelog = Path('docs/changelog.txt')
+          suggest = Path('docs/suggest_log.txt')
+
+          changelog_entry = (
+              '2026-10-03 17:36 +03:00 | AGENT #6 | WP-S003-010-003 | MIXED INCOMPLETE — '
+              'Reopened Zoom-Driven Detail Refinement + Off-Screen Eviction continuation reached the three-attempt cap. '
+              'Final retained product head 58f9cc97ab4f1f4b4693f0c139c55d72cb66f6c8 preserves deterministic registered structured/material refinement, '
+              'viewport-complete foreground coverage, off-screen fine-detail inactivity, monotonic physical source density and an 8-resource cache cap. '
+              'Final fresh runs 37129344172 / artifact 11276407179 (sha256:8a25ce8ea72ea0bc750baf4f9ab699b70077f3590cd8c2db37e106697030136b) and '
+              '37129351570 / artifact 11275868633 (sha256:dcbd5a64ee6ea4e45b3fbaf1e97a8f7c5672f344c44fc32b2032efb63d410ea0) were retrieved and directly inspected. '
+              'VISUAL 6.0/10 FAIL: local/settlement tiers gain some contrast, but near-ground frames still collapse into broad blurred green forms and the ground frame changes to flatter cel-like patches instead of continuing the same terrain at higher fidelity. '
+              'The requested phone portrait evidence also remained 1280x800, so responsive phone acceptance is invalid. Software evidence preparation remains expensive, so no performance pass is claimed. '
+              'WP remains open; ROADMAP completion state is unchanged.\n'
+          )
+          suggest_entry = (
+              '2026-10-03 17:36 +03:00 | WP-S003-010-003 | Phase 3 | FUTURE — '
+              'Preserve the proven Campaign-SEED coordinate authority, fixed-focus pure zoom, viewport-bounded ownership, off-screen eviction, monotonic physical density and bounded cache. '
+              'In the next claim, stop deriving close terrain identity mainly from transformed value-noise color fields: derive reusable canonical geomorphology/material structure such as ridge/valley/drainage lines, slope/material regions and registered ground-surface boundaries from the existing world foundation, then refine those same structures by scale without a near-ground/ground presentation reset. '
+              'Separately repair the visual-evidence profile path so a requested phone portrait capture asserts 390x844 (or the configured real profile) before scenario execution and fails immediately on dimension mismatch. '
+              'Profile cooperative preparation/caching so close-tier builds do not require multi-second software preparation. Require fresh desktop and real-phone evidence with VISUAL >=8/10 before changing completion state. Do not implement unless explicitly requested.\n'
+          )
+
+          changelog.write_text(changelog_entry + changelog.read_text(encoding='utf-8'), encoding='utf-8')
+          suggest.write_text(suggest_entry + suggest.read_text(encoding='utf-8'), encoding='utf-8')
+          PY
+
+          rm -rf tools/screenshots/agent6-wp003-attempt1
+          rm -f tools/agent6_wp003_*
+          rm -f tools/agent6-wp003-*
+          rm -f .github/workflows/agent6-wp003-*
+
+          git status --short
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs(WP-S003-010-003): record capped run and clean evidence"
+          git pull --rebase origin main
+          git push origin HEAD:main
