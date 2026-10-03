@@ -38,21 +38,23 @@ jobs:
       - name: Capture WP016 temporal coherence evidence
         run: |
           set -euo pipefail
-          rm -rf artifacts/wp016-temporal
-          mkdir -p artifacts/wp016-temporal
           python tools/screenshot_tool.py \
-            --target http://127.0.0.1:8000/ \
+            http://127.0.0.1:8000/ \
+            visual-wp-s003-010-003-016 \
             --profile landscape \
             --scenario wp-s003-010-003-016 \
             --shots 5 \
-            --output-dir artifacts/wp016-temporal \
-            --headless \
-            --require-webgl2
+            --wait-min 1 \
+            --wait-max 1 \
+            --evidence-json evidence-wp-s003-010-003-016-${GITHUB_RUN_ID}.json \
+            --no-publish
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: wp-s003-010-003-016-agent6-attempt1
-          path: artifacts/wp016-temporal/
+          path: |
+            tools/screenshots/visual-wp-s003-010-003-016*.png
+            evidence-wp-s003-010-003-016-*.json
           if-no-files-found: error
           retention-days: 14
