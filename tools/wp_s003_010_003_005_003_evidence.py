@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json, os, time
 from pathlib import Path
+from PIL import Image
 from screenshot_tool import _driver, _wait, set_exact_viewport
 
 TARGET=os.environ.get("TARGET","http://127.0.0.1:8000/")
@@ -52,9 +53,34 @@ def snap(driver):
     """)
 
 
-def shot(driver,seed,name,records):
-    path=OUT/f"{seed}-{name}.png";driver.save_screenshot(str(path));
-    state=snap(driver);state["seed"]=seed;state["shot"]=name;state["file"]=path.name;records.append(state);return state
+def shot(driver,seed,name,records,expected=None):
+    path=OUT/f"{seed}-{name}.png"
+    driver.save_screenshot(str(path))
+    metrics=js(driver,"""
+      const vv=window.visualViewport;
+      return {
+        cssWidth:window.innerWidth,cssHeight:window.innerHeight,
+        visualWidth:vv?.width||window.innerWidth,visualHeight:vv?.height||window.innerHeight,
+        dpr:window.devicePixelRatio||1,
+        orientation:window.innerHeight>window.innerWidth?'portrait':'landscape'
+      };
+    """)
+    with Image.open(path) as image:
+        screenshot_width,screenshot_height=image.size
+    metrics["screenshotWidth"]=screenshot_width
+    metrics["screenshotHeight"]=screenshot_height
+    if expected:
+        expected_width,expected_height=expected
+        expected_orientation="portrait" if expected_height>expected_width else "landscape"
+        if int(metrics.get("cssWidth") or 0)!=expected_width or int(metrics.get("cssHeight") or 0)!=expected_height:
+            raise RuntimeError(f"{name}: CSS viewport mismatch: {metrics}, expected={expected}")
+        if screenshot_width!=expected_width or screenshot_height!=expected_height:
+            raise RuntimeError(f"{name}: screenshot dimension mismatch: {metrics}, expected={expected}")
+        if metrics.get("orientation")!=expected_orientation:
+            raise RuntimeError(f"{name}: orientation mismatch: {metrics}, expected={expected_orientation}")
+        if float(metrics.get("dpr") or 0)<=0:
+            raise RuntimeError(f"{name}: invalid DPR telemetry: {metrics}")
+    state=snap(driver);state["seed"]=seed;state["shot"]=name;state["file"]=path.name;state["viewport"]=metrics;records.append(state);return state
 
 
 def point_add(p,dx,dy):return {"x":str(int(p["x"])+dx),"y":str(int(p["y"])+dy)}
@@ -127,11 +153,11 @@ def core_run(seed,full):
     try:
         set_exact_viewport(driver,1440,900);install_seed(driver,seed);driver.get(url());ready(driver)
         setup=align_protagonist_to_village(driver);functional["setup"]=setup
-        wide=shot(driver,seed,"01-wide-before-focus",records);functional["wideBeforeFocus"]=wide
+        wide=shot(driver,seed,"01-wide-before-focus",records,(1440,900));functional["wideBeforeFocus"]=wide
         before=wide["protagonist"].copy();
         if js(driver,"return window.ProtagonistFocusUI.startDefaultFocus();") is not True:raise RuntimeError("default protagonist focus did not start")
         wait_protagonist_focus(driver)
-        focused=shot(driver,seed,"02-protagonist-ground",records);assert_safe(focused,"default ground focus")
+        focused=shot(driver,seed,"02-protagonist-ground",records,(1440,900));assert_safe(focused,"default ground focus")
         if focused["protagonist"]!=before:raise RuntimeError("camera focus mutated Simulation protagonist position")
         ui=focused["focusUI"]
         if ui.get("defaultFocusCount")!=1 or ui.get("forcedReturnCount")!=0 or ui.get("hardSnapCount")!=0:raise RuntimeError("invalid default-focus telemetry: "+json.dumps(ui))
@@ -139,7 +165,7 @@ def core_run(seed,full):
         remote=choose_remote(driver,setup["center"])
         if not remote or not remote.get("ok"):raise RuntimeError("no remote canonical place available: "+json.dumps(remote))
         wait_remote(driver,remote["id"])
-        remote_state=shot(driver,seed,"03-remote-exploration",records)
+        remote_state=shot(driver,seed,"03-remote-exploration",records,(1440,900))
         if remote_state["protagonist"]!=remote["before"]:raise RuntimeError("remote camera navigation mutated protagonist")
         time.sleep(1.0);stable=snap(driver)
         if (stable.get("focusUI") or {}).get("mode")!="remote" or (stable.get("focusUI") or {}).get("forcedReturnCount")!=0:
@@ -149,13 +175,13 @@ def core_run(seed,full):
         if (remote_after_move.get("focusUI") or {}).get("mode")!="remote":raise RuntimeError("protagonist movement forced camera return during remote exploration")
         if js(driver,"return window.ProtagonistFocusUI.returnToProtagonist('evidence-return');") is not True:raise RuntimeError("Return to Protagonist failed to start")
         wait_protagonist_focus(driver)
-        returned=shot(driver,seed,"04-return-latest-position",records);assert_safe(returned,"return latest")
+        returned=shot(driver,seed,"04-return-latest-position",records,(1440,900));assert_safe(returned,"return latest")
         if returned["protagonist"]!=latest:raise RuntimeError("Return did not preserve latest authoritative position")
         if (returned["focusUI"] or {}).get("explicitReturnCount")!=1:raise RuntimeError("explicit return telemetry missing")
 
         before_follow=(returned.get("focusUI") or {}).get("followCorrections",0);moved=mutate_protagonist(driver,74,18)
         _wait(driver,f"return (window.ProtagonistFocusUI?.snapshot?.()?.followCorrections||0)>{int(before_follow)};",15,"soft follow correction")
-        time.sleep(.45);followed=shot(driver,seed,"05-soft-follow",records);assert_safe(followed,"soft follow")
+        time.sleep(.45);followed=shot(driver,seed,"05-soft-follow",records,(1440,900));assert_safe(followed,"soft follow")
         if followed["protagonist"]!=moved:raise RuntimeError("soft follow mutated protagonist authoritative position")
         fui=followed["focusUI"]
         if fui.get("hardSnapCount")!=0 or fui.get("forcedReturnCount")!=0 or fui.get("followCorrections",0)<=before_follow:
@@ -163,7 +189,12 @@ def core_run(seed,full):
 
         js(driver,"window.PlanetStage.setScaleIndex(8);")
         _wait(driver,"return !PlanetStage.snapshot().zoom?.animation?.active;",120,"LOD handoff settle")
-        handoff=shot(driver,seed,"06-lod-focus-identity",records)
+        _wait(driver,"""
+          window.ProtagonistFocusUI.refresh();
+          const s=PlanetStage.snapshot(),u=ProtagonistFocusUI.snapshot(),n=s.explicitFocusNavigation?.active;
+          return Boolean(n?.targetType==='protagonist'&&u.mode==='protagonist'&&u.focusMarkerVisible===true&&s.zoom?.visibleLevel!=='ground');
+        """,8,"refreshed protagonist identity after LOD handoff")
+        handoff=shot(driver,seed,"06-lod-focus-identity",records,(1440,900))
         nav=(handoff.get("navigation") or {}).get("active") or {};hui=handoff.get("focusUI") or {}
         if nav.get("targetType")!="protagonist" or hui.get("mode")!="protagonist" or hui.get("focusMarkerVisible") is not True:raise RuntimeError("protagonist focus identity lost through LOD handoff")
         js(driver,"window.PlanetStage.setScaleIndex(9);")
@@ -172,11 +203,11 @@ def core_run(seed,full):
         if full:
             for name,w,h in (("07-tablet",1024,768),("08-phone-portrait",390,844),("09-phone-landscape",844,390)):
                 set_exact_viewport(driver,w,h);js(driver,"window.ProtagonistFocusUI.refresh();");time.sleep(1.25)
-                responsive=shot(driver,seed,name,records);assert_safe(responsive,name)
+                responsive=shot(driver,seed,name,records,(w,h));assert_safe(responsive,name)
                 if (responsive.get("focusUI") or {}).get("responsiveRefocusCount",0)<1:raise RuntimeError(name+": responsive canonical refocus did not run")
         else:
             set_exact_viewport(driver,390,844);js(driver,"window.ProtagonistFocusUI.refresh();");time.sleep(1.25)
-            responsive=shot(driver,seed,"07-second-seed-phone",records);assert_safe(responsive,"second seed phone")
+            responsive=shot(driver,seed,"07-second-seed-phone",records,(390,844));assert_safe(responsive,"second seed phone")
             if (responsive.get("focusUI") or {}).get("responsiveRefocusCount",0)<1:raise RuntimeError("second seed phone: responsive canonical refocus did not run")
 
         end=snap(driver);functional.update({"remote":remote,"remoteAfterMove":remote_after_move,"returned":returned,"followed":followed,"final":end})
