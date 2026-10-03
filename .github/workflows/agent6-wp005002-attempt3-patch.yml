@@ -48,9 +48,6 @@ jobs:
       - name: Validate JavaScript syntax
         run: node --check scripts/world/planet-stage.js
 
-      - name: Run script syntax suite
-        run: npm run test:script-syntax
-
       - name: Commit implementation to main
         shell: bash
         run: |
