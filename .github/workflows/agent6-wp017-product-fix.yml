@@ -1,0 +1,66 @@
+name: Agent6 WP017 Broad Map Gate Fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/agent6-wp017-product-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply physical-scale broad-map gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --ff-only origin main
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/world/planet-stage.js')
+          text = path.read_text(encoding='utf-8')
+          old_reveal = '''  if(scalar>=.985)return "full";
+          if(scalar>=.940)return "refined";
+          if(scalar>=.880)return "coarse";
+          if(scalar>=.750)return "route";
+          if(scalar>=.630)return "footprint";
+          return "none";
+          }'''
+          new_reveal = '''  // WP-S003-010-003-017: the canonical 1/10 through 1/500 range is
+          // geography-first map space. Local settlement masses, props and seasonal
+          // microdetail become physically meaningful only from 1/1000 inward.
+          if(scaleIndexForScalar(scalar)<=5)return "none";
+          if(scalar>=.985)return "full";
+          if(scalar>=.940)return "refined";
+          if(scalar>=.880)return "coarse";
+          if(scalar>=.750)return "route";
+          if(scalar>=.630)return "footprint";
+          return "none";
+          }'''
+          if old_reveal not in text:
+              raise SystemExit('settlementRevealTierForScalar target not found')
+          text = text.replace(old_reveal, new_reveal, 1)
+
+          old_visible = '''  const staticWorldVisible=Boolean(level?.staticWorld)||requestedLevel==="ground";
+          return Object.freeze({visible:revealTier!=="none"||staticWorldVisible,revealTier,rawLevelIndex:rawIndex,rawLevelId:requestedLevel==="ground"?"ground":level?.id||null,rawStaticWorld:staticWorldVisible});'''
+          new_visible = '''  const staticWorldVisible=Boolean(level?.staticWorld)||requestedLevel==="ground";
+          const broadMapScale=scaleIndexForScalar(scalar)<=5;
+          return Object.freeze({visible:!broadMapScale&&(revealTier!=="none"||staticWorldVisible),revealTier:broadMapScale?"none":revealTier,rawLevelIndex:rawIndex,rawLevelId:requestedLevel==="ground"?"ground":level?.id||null,rawStaticWorld:staticWorldVisible,broadMapScale});'''
+          if old_visible not in text:
+              raise SystemExit('localWorldPresentationEligibility target not found')
+          text = text.replace(old_visible, new_visible, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+          git rm .github/workflows/agent6-wp017-product-fix.yml
+          git add scripts/world/planet-stage.js
+          git commit -m 'fix(WP-S003-010-003-017): suppress local detail through 1/500'
+          git pull --rebase origin main
+          git push origin HEAD:main
