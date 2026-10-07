@@ -20,7 +20,7 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 
 ## STAGE S002 — Round, Natural World Foundation
 
-- WP-S002-001-001 — Reference analysis and root contracts for canonical planet scale, pure-zoom UX, wrapped coordinates and performance budgets
+- WP-S002-001-001 — Reference analysis and root contracts for canonical planet scale, pure-zoom UX, wrapped coordinates and performance budgets — COMPLETED
 - WP-S002-002-001 — Globe Realm view: the Realm level rendered as a sphere — COMPLETED
 - WP-S002-002-002 — Focus-preserving pure-zoom globe↔local handoff with LOD prefetch and no blank frames
 - WP-S002-002-003 — Responsive globe/local navigation HUD: scale ladder, touch drag, centre marker, coordinates, ruler and labels
