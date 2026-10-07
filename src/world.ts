@@ -94,9 +94,12 @@ export function provinceSeed(cx: number, cz: number): ProvinceSeed {
     elevationLimit: 150,
   };
 }
+// Neighbouring samples almost always share a region: remember the last one built.
+let lastRegion: RegionSeed | undefined;
 export function regionSeed(cx: number, cz: number): RegionSeed {
   const x = Math.floor(cx / 100),
     z = Math.floor(cz / 100);
+  if (lastRegion && lastRegion.x === x && lastRegion.z === z) return lastRegion;
   const parent = provinceSeed(cx, cz);
   const code = `${parent.code}/L2/${x - parent.x * 10}/${z - parent.z * 10}`;
   const blockX = Math.floor(x / 3),
@@ -108,7 +111,7 @@ export function regionSeed(cx: number, cz: number): RegionSeed {
       ? "Island"
       : "Ocean"
     : "Mainland";
-  return {
+  return (lastRegion = {
     code,
     x,
     z,
@@ -116,7 +119,7 @@ export function regionSeed(cx: number, cz: number): RegionSeed {
     radius: 64 + (digest(code) % 12),
     elevationLimit: landform === "Island" ? 18 : parent.elevationLimit,
     parent,
-  };
+  });
 }
 export function districtSeed(cx: number, cz: number): DistrictSeed {
   const parent = regionSeed(cx, cz),

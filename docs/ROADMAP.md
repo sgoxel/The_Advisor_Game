@@ -21,7 +21,7 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 ## STAGE S002 — Round, Natural World Foundation
 
 - WP-S002-001-001 — Reference analysis and root contracts for the wrapped planet, globe Realm view and world scale
-- WP-S002-002-001 — Globe Realm view: the Realm level rendered as a sphere
+- WP-S002-002-001 — Globe Realm view: the Realm level rendered as a sphere — IMPLEMENTED, DEPLOYMENT PENDING
 - WP-S002-002-002 — Seamless pure-zoom handoff between the globe and the flat levels
 - WP-S002-002-003 — Globe navigation and HUD: scale-aware drag, centre marker, coordinates and truthful ruler
 - WP-S002-003-001 — Canonical wrapped coordinate fabric with east–west wrap
@@ -35,9 +35,6 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 - WP-S002-004-006 — Natural seeded vegetation and ground detail without lattice patterns
 - WP-S002-004-007 — Seeded terrain-aware placement of countries, cities and villages
 - WP-S002-004-008 — Terrain-aware village routes and the one-fantasy-hour minimum
-- WP-S002-004-009 — Organic seeded settlement layouts, village services, borders and guarded gate infrastructure
+- WP-S002-004-009 — Organic seeded settlement layouts shaped by terrain
 - WP-S002-004-010 — Seam-safe and pole-safe seeded terrain
-- WP-S002-004-011 — Seeded NPC home ownership, workplaces and gate-guard duties
-- WP-S002-004-012 — Seeded priority composition and road/settlement terrain earthworks
-- WP-S002-004-013 — Seeded ruins and critical quest-place reservations
 - WP-S002-005-001 — Performance budgets and telemetry for the globe, wrapped streaming and natural terrain

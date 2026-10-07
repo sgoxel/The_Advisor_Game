@@ -31,3 +31,32 @@ The code requests WebGPU through PlayCanvas 2.23.0, then falls back to WebGL2. T
 ## Deployment
 
 The first implementation commit `37e814f` built and deployed successfully in [GitHub Actions](https://github.com/sgoxel/The_Advisor_Game/actions/runs/37599513531). The final formatted implementation `5c6f10d` also [built and deployed successfully](https://github.com/sgoxel/The_Advisor_Game/actions/runs/37599997018). A public-page browser check returned HTTP 200, no uncaught errors, the fixed seed, three continents and 270 villages. Final completion-commit deployment evidence is recorded in [work package #1](https://github.com/sgoxel/The_Advisor_Game/issues/1) before closure.
+
+## Realm globe view (WP-S002-002-001)
+
+Verified on 7 October 2026 against the local production build. Classification: MIXED.
+
+- `npm test`: 27 passing checks, including a flat position mapped to the globe and back returning to the same cell, every globe texel matching the flat terrain colour, and byte-identical rebuilds.
+- `npm run build`: TypeScript and Vite production build passed.
+- Real WebGPU (software adapter): the world test including the globe step passed.
+- WebGL2 fallback: the new globe test and the blocked-adapter test passed after the final test layout; the other three startup cases and the both-fail case passed in the run before it.
+- Desktop exploration spec (not part of CI): passed with the globe, turn, zoom-back and focus checks; it needs about six minutes on a software renderer.
+- Two memoisations were added to shared generation lookups; a hash over the globe surface, five tile meshes and five cells is identical before and after.
+
+Screenshots were captured with `tools/screenshot_tool.py` on WebGL2 (and one by the WebGPU test), then opened and inspected. Visual score: **8/10**.
+
+- Globe framed clear of the header, panel, controls and footer at 1440 × 900, 960 × 640, 390 × 844 and 844 × 390; smooth edge, soft limb shading, no seam or pole artefact.
+- Continent lettering is readable and hidden when it would leave the screen; on a phone both names can be hidden at once when the continents sit near the edge.
+- Coasts are stair-stepped in 2 km blocks and the hill shading is a uniform maze without distinct ranges. This is what the current world data contains, not a rendering fault.
+- No deserts, ice caps, large lakes or large forests appear because the data has none yet.
+- On a phone in landscape the globe is small (about 206 px across) because the header limits it.
+- The capture machine could not load the web fonts, so headings show a fallback serif in these images.
+
+Not verified: frame rate, surface build time and memory on real phones and GPUs.
+
+- [Globe, desktop](evidence/globe-desktop.png)
+- [Globe turned east, desktop](evidence/globe-desktop-turned.png)
+- [Globe, phone](evidence/globe-phone.png)
+- [Globe, phone landscape](evidence/globe-phone-landscape.png)
+- [Globe on real WebGPU](evidence/globe-webgpu.png)
+- [Village after returning from the globe](evidence/village-after-globe.png)

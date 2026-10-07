@@ -95,13 +95,20 @@ for (const place of places) {
   bucket.push(place);
   buckets.set(key, bucket);
 }
-export function nearbyPlaces(x: number, z: number): Place[] {
+// Neighbourhood lists are immutable too: build each once, then reuse it.
+const neighbourhoods = new Map<string, readonly Place[]>();
+export function nearbyPlaces(x: number, z: number): readonly Place[] {
   const bx = Math.floor(x / 2048),
     bz = Math.floor(z / 2048),
-    result: Place[] = [];
-  for (let dz = -1; dz <= 1; dz++)
-    for (let dx = -1; dx <= 1; dx++)
-      result.push(...(buckets.get(`${bx + dx}/${bz + dz}`) || []));
+    key = `${bx}/${bz}`;
+  let result = neighbourhoods.get(key);
+  if (!result) {
+    const found: Place[] = [];
+    for (let dz = -1; dz <= 1; dz++)
+      for (let dx = -1; dx <= 1; dx++)
+        found.push(...(buckets.get(`${bx + dx}/${bz + dz}`) || []));
+    neighbourhoods.set(key, (result = found));
+  }
   return result;
 }
 export function nearestPlace(x: number, z: number): Place | undefined {

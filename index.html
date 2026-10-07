@@ -31,10 +31,14 @@
     <aside class="panel region-panel">
       <div class="eyebrow">THE VERDANT MARCHES</div>
       <h2 id="place-name">Alderwick</h2>
-      <p>3 continents · 30 countries<br />90 cities · 270 villages</p>
-      <div class="divider"></div>
-      <div class="seed-label">WORLD SEED <span>FIXED</span></div>
-      <code id="world-seed"></code>
+      <p class="region-counts">
+        3 continents · 30 countries<br />90 cities · 270 villages
+      </p>
+      <div class="seed-block">
+        <div class="divider"></div>
+        <div class="seed-label">WORLD SEED <span>FIXED</span></div>
+        <code id="world-seed"></code>
+      </div>
       <div class="region-actions">
         <button id="home">⌂ Return to village</button
         ><button id="overview">↗ Realm view</button>
@@ -42,21 +46,23 @@
       <button id="open-travel" class="travel-button">
         Explore a country or settlement →
       </button>
-      <div class="divider"></div>
-      <div class="eyebrow">MAP LAYERS</div>
-      <label
-        ><input type="checkbox" id="structures" checked /> Settlements &amp;
-        keeps <span class="swatch stone"></span
-      ></label>
-      <label
-        ><input type="checkbox" id="nature" checked /> Woodland &amp; small
-        details <span class="swatch forest"></span
-      ></label>
-      <label
-        ><input type="checkbox" id="grid" /> Tile boundaries
-        <span class="swatch gold"></span
-      ></label>
-      <p class="hint">Select the landscape to inspect a cell.</p>
+      <div class="layer-controls flat-only">
+        <div class="divider"></div>
+        <div class="eyebrow">MAP LAYERS</div>
+        <label
+          ><input type="checkbox" id="structures" checked /> Settlements &amp;
+          keeps <span class="swatch stone"></span
+        ></label>
+        <label
+          ><input type="checkbox" id="nature" checked /> Woodland &amp; small
+          details <span class="swatch forest"></span
+        ></label>
+        <label
+          ><input type="checkbox" id="grid" /> Tile boundaries
+          <span class="swatch gold"></span
+        ></label>
+        <p class="hint">Select the landscape to inspect a cell.</p>
+      </div>
     </aside>
     <aside class="panel cell-panel" id="cell-panel" hidden>
       <div class="eyebrow">
@@ -126,11 +132,17 @@
         <span class="eyebrow">VIEW DETAIL</span
         ><strong id="detail-name">Village</strong>
         <div class="detail-dots" aria-hidden="true">
-          <i></i><i></i><i></i><i></i>
+          <i></i><i></i><i></i><i></i><i></i>
         </div>
       </div>
       <div class="travel-hint">
-        Drag to travel <b>·</b> Scroll to explore <b>·</b> Q / E to rotate
+        <span class="flat-only"
+          >Drag to travel <b>·</b> Scroll to explore <b>·</b> Q / E to
+          rotate</span
+        ><span class="globe-only"
+          >Drag to turn the globe <b>·</b> Scroll to zoom <b>·</b> Q / E to
+          rotate</span
+        >
       </div>
       <div class="scale">
         <div id="scale-line"></div>

@@ -12,7 +12,6 @@ try{
   await page.goto(url);await shot('village-desktop');
   await page.locator('#world').click({position:{x:840,y:470}});await shot('cell-desktop');await page.locator('#close-cell').click();
   await page.locator('#overview').click();await shot('realm-desktop');
-  await page.locator('#grid').check();await shot('realm-tiles');await page.locator('#grid').uncheck();
   await page.locator('#home').click();await settle();await page.locator('#zoom-in').click();await page.locator('#zoom-in').click();await shot('street-desktop');
   await page.locator('#open-travel').click();await page.locator('#continent-select').selectOption('1');await page.locator('#visit-city').click();await shot('city-westreach');
   await page.setViewportSize({width:390,height:844});await page.goto(url);await shot('village-phone');

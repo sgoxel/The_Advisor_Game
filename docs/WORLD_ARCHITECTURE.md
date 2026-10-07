@@ -49,6 +49,18 @@ There are separate terrain, structures, nature and small-detail meshes per tile.
 
 The steady cache budget is 200 tile records. A transition may temporarily retain both complete representations, bounded by the combined selected/active budget plus the root. The cache returns to its normal budget after the swap. Quality must be benchmarked on actual mobile GPUs; software-rendered CI frames do not establish a production FPS target.
 
+## Realm globe view
+
+At the Realm level the world is shown as a globe; every closer level stays flat. The flat world remains the authority and the globe is a presentation of it.
+
+- **Mapping** (`src/planet.ts`): the flat width is one full turn east–west, so the planet's circumference is the world width (262.144 km, radius about 41.7 km). Longitude is `x / radius`, latitude is `-z / radius`, and the poles lie a quarter turn (65.536 km) north and south of `z = 0`. Mapping a flat position to the globe and back returns the same cell.
+- **When it appears**: from a view half-height of 0.9 planet radii upward (about 37.5 km) the level indicator reads Realm and the globe replaces the flat tiles. Below that the flat levels are Street, Village, Province and Country. "Realm view" frames the whole globe on the current focus, clear of the interface.
+- **Surface** (`src/globe-surface.ts`, `src/globe-worker.ts`): an equirectangular image whose every texel is the flat terrain's own colour (`terrainTint`) with hill shading from `heightAt`. It adds no rules and no features of its own. A worker builds a 512 × 256 preview and then a 1024 × 512 image with 2 × 2 supersampling, once per page load, starting when the view first leaves Province level.
+- **Drawing** (`src/globe-view.ts`): one unlit sphere of 9,024 triangles, one shading fan for the limb and rim, and two textures. Built-in PlayCanvas materials only, so WebGPU and WebGL2 draw the same picture. Continent labels are anchored to the globe and hidden on the far side.
+- **Turning**: dragging changes the focus, which turns the globe; east–west it continues past the wrap line and north–south it stops at the poles. Zoom changes only the scale.
+
+Not done yet: the flat levels still end at the east and west edges, the switch between globe and flat is immediate rather than blended, and the globe shows only what the current world data contains (no deserts, ice caps or large lakes exist in the data yet). Those belong to later S002 work packages.
+
 ## Lazy simulation
 
 `LazySimulation` is independent of PlayCanvas. The current country has a detailed resident pool, including settlements outside the visible viewport. City populations are initially 2400 and village populations 80, yielding 7920 tracked residents per country. Only the current country allocates these resident objects. At most 96 nearby resident billboards appear in the renderer.
@@ -60,14 +72,6 @@ The steady cache budget is 200 tile records. A transition may temporarily retain
 Switching countries releases the previous detailed pool. Resident schedules and grain summaries are analytical functions of seed identity and fantasy tick, so refining an old area catches up directly instead of replaying every missed tick. Interest cannot produce a different result for the same tick.
 
 This is an implemented foundation with walking/trading/patrol schedules and a simple grain-production summary. It does not yet simulate diplomacy, wars, complex decision-making, births/deaths, inventory transactions, collision-aware destinations inside buildings, or save mutations. Those systems need authoritative event/state contracts before adding real gameplay. Treating every country's arbitrary future gameplay interactions as analytically recoverable would be incorrect; persisted events will be necessary for those systems.
-
-## Planned settlement housing — Stage S002
-
-The current resident `home` field identifies a settlement, not an owned house. Current decorative houses and keeps do not implement individual ownership, required village services, enclosed borders or staffed gates. The owner selected updating the Stage S002 plan with these requirements; see [settlement contracts and acceptance evidence](SETTLEMENT_PLAN.md) and [the binding design](README.md#seeded-settlement-design-and-npc-homes). WP-S002-004-009 covers layouts and building/gate infrastructure; WP-S002-004-011 covers individual houses, staffed workplaces and real resident guard duties. Neither package is marked implemented by this planning update.
-
-## Planned world-building priorities — Stage S002
-
-The owner's foundation sequence is oceans 0 → continents 1 → islands 2 → natural biomes/mountains 3 → lakes/rivers 4 → countries 5 → capitals/big cities 6 → villages 7 → roads 8 → ruins/critical quest places 9. [Priority and terrain-earthwork contracts](WORLD_BUILDING_PRIORITY.md) define bounded cuts/fills, dirt roadbeds, housing perimeters, final vegetation/walkability and lazy cross-tile composition. WP-S002-004-012 covers the shared compositor and road/housing edits; WP-S002-004-013 covers ruin/critical-site reservations. These are planned requirements, separate from the current build and from rendering detail levels.
 
 ## Shared fantasy clock
 

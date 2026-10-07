@@ -59,7 +59,9 @@ for (const scenario of [
       expect(
         await page.evaluate(() => window.advisorWorld.state.view.halfHeight),
       ).toBeLessThan(97);
-      await page.screenshot({ path: "test-results/fallback-blocked-detail.png" });
+      await page.screenshot({
+        path: "test-results/fallback-blocked-detail.png",
+      });
     }
     await page.locator("#world").click({ position: { x: 275, y: 485 } });
     await expect(page.locator("#cell-panel")).toBeVisible();
@@ -69,6 +71,44 @@ for (const scenario of [
     expect(errors).toEqual([]);
   });
 }
+test("the Realm globe renders through WebGL2 and returns to the flat village", async ({
+  page,
+}) => {
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, "gpu", {
+      value: undefined,
+      configurable: true,
+    }),
+  );
+  await page.goto("/");
+  await page.waitForFunction(() => window.advisorWorld?.state.ready);
+  await page.locator("#overview").click();
+  await page.waitForFunction(
+    () =>
+      window.advisorWorld.state.presentation === "globe" &&
+      window.advisorWorld.state.globe.complete &&
+      window.advisorWorld.state.settled,
+  );
+  expect(await page.evaluate(() => window.advisorRenderer.backend)).toBe(
+    "webgl2",
+  );
+  await expect(page.locator("#detail-name")).toHaveText("Realm");
+  await expect(page.locator("#error")).toBeHidden();
+  // The compact phone panel leaves the globe uncovered.
+  const panel = await page.locator(".region-panel").boundingBox();
+  expect(panel.y + panel.height).toBeLessThanOrEqual(200);
+  await page.screenshot({ path: "test-results/fallback-globe-phone.png" });
+  await page.locator("#home").click();
+  await page.waitForFunction(
+    () =>
+      window.advisorWorld.state.presentation === "flat" &&
+      window.advisorWorld.state.view.halfHeight === 97,
+  );
+  expect(errors).toEqual([]);
+});
 test("both unavailable backends show an actionable failure", async ({
   page,
 }) => {

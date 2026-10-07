@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 test("desktop exploration, LOD, cell inspection and return navigation", async ({
   page,
 }) => {
-  test.setTimeout(180000);
+  test.setTimeout(420000);
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -17,14 +17,46 @@ test("desktop exploration, LOD, cell inspection and return navigation", async ({
   await page.locator("#overview").click();
   await page.waitForFunction(
     () =>
-      window.advisorWorld.state.view.halfHeight === 100000 &&
-      window.advisorWorld.state.settled &&
-      window.advisorWorld.state.levels.every((l) => l < 6),
+      window.advisorWorld.state.presentation === "globe" &&
+      window.advisorWorld.state.globe.complete &&
+      window.advisorWorld.state.settled,
   );
+  // Realm view keeps the focus and shows the whole globe clear of the interface.
+  const globe = await page.evaluate(() => window.advisorWorld.state);
+  expect(globe.view.x).toBe(0);
+  expect(globe.view.z).toBe(14);
+  expect(globe.view.halfHeight).toBeGreaterThan(
+    await page.evaluate(() => window.advisorWorld.planet.radius),
+  );
+  await expect(page.locator("#detail-name")).toHaveText("Realm");
+  await expect(page.locator("#place-name")).toHaveText("Eldermere");
+  await expect(page.locator("#grid")).toBeHidden();
+  await expect(
+    page.locator(".map-label.continent", { hasText: "Eldermere" }),
+  ).toBeVisible();
   await page.screenshot({ path: "test-results/realm-desktop.png" });
-  await page.locator("#grid").check();
-  await page.screenshot({ path: "test-results/realm-tiles.png" });
-  await page.locator("#grid").uncheck();
+  // Dragging turns the globe east–west past the wrap line without an edge.
+  await page.mouse.move(720, 450);
+  await page.mouse.down();
+  await page.mouse.move(420, 450, { steps: 10 });
+  await page.mouse.up();
+  const turned = await page.evaluate(() => window.advisorWorld.state.view);
+  expect(turned.x).toBeGreaterThan(0);
+  expect(turned.halfHeight).toBe(globe.view.halfHeight);
+  // Zooming in below the Realm level returns to the flat map at the same focus.
+  for (let i = 0; i < 4; i++) {
+    if (
+      (await page.evaluate(() => window.advisorWorld.state.presentation)) ===
+      "flat"
+    )
+      break;
+    await page.locator("#zoom-in").click();
+  }
+  const flat = await page.evaluate(() => window.advisorWorld.state);
+  expect(flat.presentation).toBe("flat");
+  expect(flat.view.x).toBeCloseTo(turned.x, 6);
+  expect(flat.view.z).toBeCloseTo(turned.z, 6);
+  await expect(page.locator("#grid")).toBeVisible();
   await page.locator("#home").click();
   await page.waitForFunction(
     () =>

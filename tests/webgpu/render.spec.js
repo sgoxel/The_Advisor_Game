@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 test("the real WebGPU backend renders the seeded world", async ({ page }) => {
+  test.setTimeout(240000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
@@ -48,5 +49,22 @@ test("the real WebGPU backend renders the seeded world", async ({ page }) => {
   await page.locator("#zoom-in").click();
   await page.waitForFunction(() => window.advisorWorld.state.settled);
   await page.screenshot({ path: "test-results/webgpu-detail.png" });
+  // Realm level: the same world drawn as a globe by the same backend.
+  await page.locator("#overview").click();
+  await page.waitForFunction(
+    () =>
+      window.advisorWorld.state.presentation === "globe" &&
+      window.advisorWorld.state.globe.complete &&
+      window.advisorWorld.state.settled,
+  );
+  await expect(page.locator("#detail-name")).toHaveText("Realm");
+  await expect(page.locator(".map-label.continent").first()).toBeVisible();
+  await page.screenshot({ path: "test-results/webgpu-globe.png" });
+  await page.locator("#home").click();
+  await page.waitForFunction(
+    () =>
+      window.advisorWorld.state.presentation === "flat" &&
+      window.advisorWorld.state.settled,
+  );
   expect(errors).toEqual([]);
 });

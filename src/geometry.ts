@@ -126,7 +126,7 @@ class Builder {
     };
   }
 }
-function terrainTint(x: number, z: number, scale = 32): RGB {
+export function terrainTint(x: number, z: number, scale = 32): RGB {
   if (scale > 512) {
     const f = field(x, z, 9000, 44);
     return color(106 + f * 24, 133 + f * 24, 83 + f * 20);

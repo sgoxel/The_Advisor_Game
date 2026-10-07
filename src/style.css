@@ -728,3 +728,182 @@ h2 {
     display: none;
   }
 }
+
+/* ==========================================================================
+   View-mode utilities
+   main.ts adds `globe-mode` to <body> while the Realm globe is shown.
+   ========================================================================== */
+body:not(.globe-mode) .globe-only,
+body.globe-mode .flat-only {
+  display: none !important;
+}
+
+/* ==========================================================================
+   Globe view
+   The globe is a circle centred on the viewport, drawn on deep ink (#0f1a17).
+   Everything here hangs off body.globe-mode; without the class nothing below
+   applies. Goal: keep the overlays readable on the dark backdrop and leave the
+   largest possible free circle around the viewport centre.
+   ========================================================================== */
+
+/* -- Legibility on the dark backdrop ------------------------------------- */
+/* The compass is dark ink with a pale halo for the light map; invert it. */
+body.globe-mode .compass {
+  color: #e9dfc6;
+  text-shadow: 0 1px 6px #0b1512;
+}
+/* The pale telemetry sticker glares on dark ink; make it an ink chip. */
+body.globe-mode .telemetry {
+  color: var(--muted);
+  background: #162521eb;
+  box-shadow: inset 0 0 0 1px #d8b97926;
+}
+/* Continent names as atlas lettering on the lit surface of the globe. They
+   scale with the viewport, like the globe itself. */
+body.globe-mode .map-label.continent {
+  font-size: clamp(15px, min(4.6vw, 4vh), 29px);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  /* extra left padding balances the trailing letter-space, so the name stays
+     centred on its anchor */
+  padding: 4px 10px 4px calc(10px + 0.2em);
+  color: #f7eed6;
+  white-space: nowrap;
+  text-shadow:
+    0 1px 2px #0b1512e6,
+    0 0 9px #0b1512cc,
+    0 0 22px #0b151299;
+}
+
+/* -- Region panel: landscape (panel stays at the left) -------------------- */
+body.globe-mode .region-panel .region-actions {
+  flex-wrap: wrap;
+}
+body.globe-mode .region-panel .region-actions button {
+  flex: 1 1 auto;
+}
+@media (min-width: 701px) {
+  body.globe-mode {
+    /* The header's bottom edge is 84px from the top and the panel starts 30px
+       from the left. Narrowing the panel to 50vw - 50dvh + 54px keeps its
+       right edge as far from the viewport centre as the header is, so the
+       panel is never what limits the globe (down to a 216px minimum). */
+    --globe-panel-width: clamp(216px, calc(50vw - 50dvh + 54px), 270px);
+  }
+  body.globe-mode .region-panel {
+    width: var(--globe-panel-width);
+    padding-inline: clamp(18px, calc(var(--globe-panel-width) - 198px), 23px);
+  }
+  body.globe-mode .travel-button {
+    padding-inline: 6px;
+  }
+  body.globe-mode .travel-panel {
+    left: calc(45px + var(--globe-panel-width));
+  }
+}
+@media (min-width: 701px) and (max-height: 760px) {
+  body.globe-mode .region-panel {
+    padding-inline: 18px;
+  }
+}
+/* Short landscape screens (phones on their side): name and actions only. */
+@media (max-height: 600px) {
+  body.globe-mode .region-panel {
+    max-height: calc(100dvh - 185px);
+    padding-block: 14px;
+  }
+  body.globe-mode .region-panel h2 {
+    font-size: 28px;
+    margin: 5px 0 8px;
+  }
+  body.globe-mode .seed-block {
+    display: none;
+  }
+}
+@media (max-height: 600px) and (max-width: 700px) {
+  body.globe-mode .region-panel h2 {
+    font-size: 23px;
+  }
+  body.globe-mode .region-panel .region-actions {
+    margin-top: 10px;
+  }
+  body.globe-mode .travel-button {
+    margin-top: 5px;
+    padding: 6px;
+  }
+}
+
+/* -- Region panel: portrait (compact strip under the header) -------------- */
+@media (orientation: portrait) {
+  body.globe-mode .region-panel {
+    top: 72px;
+    right: 17px;
+    width: auto;
+    max-height: none;
+    overflow: visible;
+    padding: 11px 13px 13px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.5fr);
+    column-gap: 6px;
+  }
+  body.globe-mode .region-panel > .eyebrow,
+  body.globe-mode .region-panel h2 {
+    grid-column: 1 / -1;
+  }
+  body.globe-mode .region-panel h2 {
+    font-size: 26px;
+    line-height: 1.15;
+    margin: 3px 0 9px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  body.globe-mode .region-counts,
+  body.globe-mode .seed-block {
+    display: none;
+  }
+  /* The three actions share one row of touch-sized buttons. */
+  body.globe-mode .region-panel .region-actions {
+    display: contents;
+  }
+  body.globe-mode .region-panel .region-actions button,
+  body.globe-mode .travel-button {
+    min-height: 42px;
+    margin: 0;
+    padding: 4px;
+    font-size: clamp(10px, 2.8vw, 11px);
+    line-height: 1.3;
+    white-space: normal;
+  }
+  /* When opened, the travel menu covers the strip exactly. */
+  body.globe-mode .travel-panel {
+    top: 72px;
+  }
+}
+@media (orientation: portrait) and (min-width: 701px) {
+  body.globe-mode .region-panel {
+    top: 103px;
+    right: 30px;
+    padding: 16px 20px 18px;
+    column-gap: 8px;
+  }
+  body.globe-mode .region-panel > .eyebrow,
+  body.globe-mode .region-panel h2 {
+    grid-column: 1 / 3;
+  }
+  body.globe-mode .region-panel h2 {
+    font-size: 32px;
+    margin: 4px 0 12px;
+  }
+  body.globe-mode .region-counts {
+    display: block;
+    grid-column: 3;
+    grid-row: 1 / 3;
+    align-self: center;
+    text-align: right;
+  }
+  body.globe-mode .travel-panel {
+    top: 259px;
+    left: 30px;
+  }
+}

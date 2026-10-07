@@ -14,6 +14,8 @@ import {
 } from "./world.ts";
 import {
   nearestPlace,
+  continentAt,
+  continentalEnvelope,
   continents,
   countries,
   cities,
@@ -24,6 +26,25 @@ import type { Geometry, TileGeometry } from "./geometry.ts";
 import { LazySimulation } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
+import { GlobeView } from "./globe-view.ts";
+import {
+  PLANET_RADIUS,
+  POLE_DISTANCE,
+  flatToLonLat,
+  lonLatToFlat,
+  wrapX,
+} from "./planet.ts";
+
+/** The Realm level: from this view half-height upward the world is shown as a globe. */
+const GLOBE_FROM = PLANET_RADIUS * 0.9;
+/** Surface image passes: a quick preview, then the final image. */
+const GLOBE_PASSES = [
+  { width: 512, samples: 1 },
+  { width: 1024, samples: 2 },
+];
+/** Hill-shading strength: enough for highlands to read without drowning the land. */
+const GLOBE_RELIEF = 0.6;
+const FLAT_BACKDROP = new pc.Color(0.65, 0.71, 0.65);
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -41,7 +62,13 @@ let ready = false,
   activeKeys: string[] = [],
   wanted: Tile[] = [],
   errorText = "";
-let app: pc.AppBase, camera: pc.Entity;
+let app: pc.AppBase, camera: pc.Entity, flatRoot: pc.Entity;
+let globe: GlobeView | undefined,
+  globeWorker: Worker | undefined,
+  globeShown = false,
+  globePass = 0, // surface passes applied so far
+  globeFit = PLANET_RADIUS * 2.6; // view half-height that frames the whole globe
+const globePoint = new pc.Vec3();
 const tileCache = new Map<
   string,
   { tile: Tile; entity: pc.Entity; meshes: pc.Mesh[]; used: number }
@@ -64,7 +91,85 @@ function fail(message: string) {
   $("error").hidden = false;
   $("error").textContent = message;
 }
+/** Largest circle around the screen centre that no interface block covers, in pixels. */
+function freeRadius(): number {
+  const cx = innerWidth / 2,
+    cy = innerHeight / 2;
+  let radius = Math.min(cx, cy);
+  for (const selector of [
+    ".masthead",
+    ".region-panel",
+    ".map-controls",
+    ".bottom-bar",
+  ]) {
+    const box = document.querySelector(selector)?.getBoundingClientRect();
+    if (!box || !box.width) continue;
+    radius = Math.min(
+      radius,
+      Math.hypot(
+        Math.max(box.left - cx, 0, cx - box.right),
+        Math.max(box.top - cy, 0, cy - box.bottom),
+      ),
+    );
+  }
+  return Math.max(60, radius - 8);
+}
+/** Start preparing the globe surface off the main thread; each pass runs once. */
+function prepareGlobe() {
+  if (globeWorker || globePass >= GLOBE_PASSES.length || !globe) return;
+  globeWorker = new Worker(new URL("./globe-worker.ts", import.meta.url), {
+    type: "module",
+  });
+  const request = () => {
+    const { width, samples } = GLOBE_PASSES[globePass];
+    globeWorker!.postMessage({
+      id: globePass,
+      width,
+      height: width / 2,
+      samples,
+      relief: GLOBE_RELIEF,
+    });
+  };
+  globeWorker.onmessage = (event) => {
+    if (event.data.error) {
+      fail(`Globe surface failed: ${event.data.error}`);
+      return;
+    }
+    globe!.setSurface(event.data);
+    globePass++;
+    if (globePass < GLOBE_PASSES.length) request();
+    else {
+      globeWorker!.terminate();
+      globeWorker = undefined;
+    }
+  };
+  globeWorker.onerror = (event) =>
+    fail(`Globe worker could not start: ${event.message}`);
+  request();
+}
+/** Switch between the flat map and the Realm globe. Presentation only. */
+function setPresentation(showGlobe: boolean) {
+  globeShown = showGlobe;
+  document.body.classList.toggle("globe-mode", showGlobe);
+  flatRoot.enabled = !showGlobe;
+  globe!.setVisible(showGlobe);
+  camera.camera!.clearColor = showGlobe ? globe!.backdropColor : FLAT_BACKDROP;
+  if (showGlobe) {
+    $("cell-panel").hidden = true;
+    globeFit = (PLANET_RADIUS * innerHeight) / (2 * freeRadius());
+    prepareGlobe();
+  }
+}
 function updateCamera() {
+  const showGlobe = Boolean(globe) && view.halfHeight >= GLOBE_FROM;
+  if (showGlobe !== globeShown) setPresentation(showGlobe);
+  if (globeShown) {
+    const { lon, lat } = flatToLonLat(view.x, view.z);
+    globe!.orient(lon, lat, view.yaw);
+    globe!.placeCamera(camera, view.halfHeight);
+    selectionDirty = true;
+    return;
+  }
   const distance = view.halfHeight * 2.2 + 200;
   const targetY = Math.max(0, heightAt(view.x, view.z));
   camera.setPosition(
@@ -78,9 +183,20 @@ function updateCamera() {
   selectionDirty = true;
 }
 function navigate(x: number, z: number, height = view.halfHeight) {
-  view.x = Math.max(WORLD_MIN + 100, Math.min(-WORLD_MIN - 100, x));
-  view.z = Math.max(WORLD_MIN + 100, Math.min(-WORLD_MIN - 100, z));
-  view.halfHeight = Math.max(2, Math.min(150000, height));
+  view.halfHeight = Math.max(
+    2,
+    Math.min(Math.max(GLOBE_FROM, globeFit) * 1.3, height),
+  );
+  if (view.halfHeight >= GLOBE_FROM) {
+    // The globe turns east–west without an edge and stops at the poles.
+    view.x = wrapX(x);
+    view.z = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, z));
+  } else {
+    view.x = Math.max(WORLD_MIN + 100, Math.min(-WORLD_MIN - 100, x));
+    view.z = Math.max(WORLD_MIN + 100, Math.min(-WORLD_MIN - 100, z));
+  }
+  // Leaving Province level means the globe may be needed soon.
+  if (view.halfHeight >= 900) prepareGlobe();
   updateCamera();
 }
 function uploadGeometry(
@@ -141,15 +257,22 @@ function refreshSelection() {
         ? "Village"
         : view.halfHeight < 900
           ? "Province"
-          : "Realm";
+          : view.halfHeight < GLOBE_FROM
+            ? "Country"
+            : "Realm";
   $("detail-name").textContent = name;
-  const dotCount = { Street: 4, Village: 3, Province: 2, Realm: 1 }[name];
+  const dotCount = { Street: 5, Village: 4, Province: 3, Country: 2, Realm: 1 }[
+    name
+  ];
   document
     .querySelectorAll(".detail-dots i")
     .forEach((dot, i) => dot.classList.toggle("active", i < dotCount));
   const s = nearestPlace(view.x, view.z);
-  $("place-name").textContent =
-    s && Math.hypot(view.x - s.x, view.z - s.z) < 200
+  $("place-name").textContent = globeShown
+    ? continentalEnvelope(view.x, view.z) < 1
+      ? continentAt(view.x, view.z).name
+      : "The open sea"
+    : s && Math.hypot(view.x - s.x, view.z - s.z) < 200
       ? s.name
       : "The wild marches";
   const metresPerPixel = (view.halfHeight * 2) / innerHeight;
@@ -177,7 +300,7 @@ function processStreaming(material: pc.StandardMaterial) {
       if (mesh) meshes.push(mesh);
     }
     entity.enabled = false;
-    app.root.addChild(entity);
+    flatRoot.addChild(entity);
     tileCache.set(next.tile.key, {
       tile: next.tile,
       entity,
@@ -229,8 +352,9 @@ function processStreaming(material: pc.StandardMaterial) {
       }
     }
   }
-  $("tile-status").textContent =
-    `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`;
+  $("tile-status").textContent = globeShown
+    ? `Globe · ${globePass < GLOBE_PASSES.length ? "refining" : "ready"}`
+    : `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`;
 }
 function inspectCell(screenX: number, screenY: number) {
   const origin = camera.camera!.screenToWorld(screenX, screenY, 0);
@@ -334,13 +458,22 @@ function setupControls() {
     const scale = (view.halfHeight * 2) / innerHeight,
       c = Math.cos(view.yaw),
       s = Math.sin(view.yaw);
+    if (globeShown) {
+      // Keep the grabbed point under the pointer: meridians converge toward the poles.
+      const shrink = Math.max(0.2, Math.cos(flatToLonLat(view.x, view.z).lat));
+      navigate(
+        view.x - ((dx * c + dy * s) * scale) / shrink,
+        view.z + (dx * s - dy * c) * scale,
+      );
+      return;
+    }
     navigate(
       view.x - dx * scale * c - (dy * scale * s) / Math.sin(Math.PI / 3),
       view.z + dx * scale * s - (dy * scale * c) / Math.sin(Math.PI / 3),
     );
   });
   canvas.addEventListener("pointerup", (event) => {
-    if (!moved && pointers.size === 1)
+    if (!moved && pointers.size === 1 && !globeShown)
       inspectCell(event.clientX, event.clientY);
     pointers.delete(event.pointerId);
     lastPinch = 0;
@@ -367,9 +500,10 @@ function setupControls() {
     $("cell-panel").hidden = true;
   };
   $("overview").onclick = () => {
+    // Realm view: the whole globe, centred on the current focus, north up.
     view.yaw = 0;
-    navigate(-10000, 6500, 100000);
-    $("cell-panel").hidden = true;
+    navigate(view.x, view.z, GLOBE_FROM);
+    navigate(view.x, view.z, Math.max(GLOBE_FROM, globeFit));
   };
   $("zoom-in").onclick = () => navigate(view.x, view.z, view.halfHeight / 1.4);
   $("zoom-out").onclick = () => navigate(view.x, view.z, view.halfHeight * 1.4);
@@ -420,6 +554,8 @@ function setupControls() {
     app.resizeCanvas();
     view.aspect = innerWidth / innerHeight;
     view.pixels = Math.min(innerHeight, 1000);
+    if (globeShown)
+      globeFit = (PLANET_RADIUS * innerHeight) / (2 * freeRadius());
     updateCamera();
   });
 }
@@ -576,11 +712,14 @@ async function start() {
   camera = new pc.Entity("Atlas camera");
   camera.addComponent("camera", {
     projection: pc.PROJECTION_ORTHOGRAPHIC,
-    clearColor: new pc.Color(0.65, 0.71, 0.65),
+    clearColor: FLAT_BACKDROP,
     nearClip: 0.1,
     farClip: 22000,
   });
   app.root.addChild(camera);
+  flatRoot = new pc.Entity("Flat world");
+  app.root.addChild(flatRoot);
+  globe = new GlobeView(app);
   const sun = new pc.Entity("Late afternoon sun");
   sun.addComponent("light", {
     type: "directional",
@@ -624,7 +763,8 @@ async function start() {
   let lastSimulationRealSecond = -1;
   const labelNodes = new Map<string, HTMLElement>();
   const labels = $("map-labels");
-  $("backend").textContent = `PlayCanvas 2.23.0 · ${device.deviceType === "webgpu" ? "WebGPU" : "WebGL2"}`;
+  $("backend").textContent =
+    `PlayCanvas 2.23.0 · ${device.deviceType === "webgpu" ? "WebGPU" : "WebGL2"}`;
   $("backend").title = rendererState.fallbackReason;
   let statsElapsed = 0,
     frames = 0,
@@ -658,7 +798,7 @@ async function start() {
             material: characterMaterials[visible[i].variant % 3],
           });
           actor.setLocalScale(2.2, 1, 3.3);
-          app.root.addChild(actor);
+          flatRoot.addChild(actor);
           actors.push(actor);
         }
         actors[i].enabled = true;
@@ -678,7 +818,7 @@ async function start() {
       }
     sun.light!.castShadows = view.halfHeight < 500;
     const destinations =
-      view.halfHeight > 25000
+      globeShown || view.halfHeight > 25000
         ? continents.map((c) => ({
             ...c,
             id: `continent-${c.id}`,
@@ -691,18 +831,30 @@ async function start() {
             : villages;
     const visibleLabels = new Set<string>();
     for (const place of destinations) {
-      if (
-        Math.abs(place.x - view.x) > view.halfHeight * view.aspect * 1.4 ||
-        Math.abs(place.z - view.z) > view.halfHeight * 1.5
-      )
-        continue;
-      const screen = camera.camera!.worldToScreen(
-        new pc.Vec3(
-          place.x,
-          Math.max(0, heightAt(place.x, place.z)) + 2,
-          place.z,
-        ),
-      );
+      let screen: pc.Vec3;
+      if (globeShown) {
+        // Anchored to the globe; hidden on the far side and near the edge.
+        const { lon, lat } = flatToLonLat(place.x, place.z);
+        if (
+          !globe!.worldPoint(lon, lat, globePoint) ||
+          globePoint.y < PLANET_RADIUS * 0.62
+        )
+          continue;
+        screen = camera.camera!.worldToScreen(globePoint);
+      } else {
+        if (
+          Math.abs(place.x - view.x) > view.halfHeight * view.aspect * 1.4 ||
+          Math.abs(place.z - view.z) > view.halfHeight * 1.5
+        )
+          continue;
+        screen = camera.camera!.worldToScreen(
+          new pc.Vec3(
+            place.x,
+            Math.max(0, heightAt(place.x, place.z)) + 2,
+            place.z,
+          ),
+        );
+      }
       if (
         screen.x < 15 ||
         screen.x > innerWidth - 15 ||
@@ -721,6 +873,14 @@ async function start() {
         labelNodes.set(id, label);
       }
       label.style.transform = `translate(${screen.x}px,${screen.y}px) translate(-50%,-100%)`;
+      if (globeShown) {
+        // Lettering is wide next to a small globe: never let it run off the screen.
+        const half = label.offsetWidth / 2;
+        label.style.visibility =
+          screen.x - half < 6 || screen.x + half > innerWidth - 6
+            ? "hidden"
+            : "visible";
+      } else label.style.visibility = "visible";
     }
     for (const [id, label] of labelNodes)
       if (!visibleLabels.has(id)) {
@@ -748,7 +908,7 @@ async function start() {
       updateCamera();
     }
     if (!errorText) processStreaming(material);
-    if (layers.grid)
+    if (layers.grid && !globeShown)
       for (const key of activeKeys) {
         const t = tileCache.get(key)!.tile;
         const corners = [
@@ -784,11 +944,19 @@ async function start() {
       cellSeed,
       geography: { continents, countries, cities, villages, roads },
       clock,
+      planet: { radius: PLANET_RADIUS, flatToLonLat, lonLatToFlat },
       renderer: rendererState,
       get state() {
         return {
           ready,
           error: errorText,
+          presentation: globeShown ? "globe" : "flat",
+          globe: {
+            passes: globePass,
+            complete: globePass >= GLOBE_PASSES.length,
+            fit: globeFit,
+            ...globe!.stats,
+          },
           view: { ...view },
           fps,
           active: activeKeys.length,
@@ -799,6 +967,7 @@ async function start() {
           ],
           simulation: simulation.stats,
           settled:
+            (!globeShown || globePass >= GLOBE_PASSES.length) &&
             !selectionDirty &&
             pending.size === 0 &&
             activeKeys.length === wanted.length &&
