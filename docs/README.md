@@ -206,9 +206,9 @@ The canonical fantasy planet uses **10% of Earth's linear scale**:
 - reference Earth mean radius: **6,371 km**;
 - fantasy world radius: **637.1 km**;
 - fantasy world diameter: **1,274.2 km**;
-- fantasy world circumference: approximately **4,003.0 km**.
+- fantasy world circumference: **4,003.01736 km**.
 
-The displayed PlayCanvas sphere is a visualization of that physical world, not a literal meter-per-engine-unit mesh. Physical measurements remain in meters/kilometers independently of renderer scale.
+The displayed PlayCanvas sphere is a visualization of that physical world, not a literal meter-per-engine-unit mesh. Physical measurements remain in meters/kilometers independently of renderer scale. The binding numeric, coordinate, handoff, precision, compatibility, performance and telemetry contracts are defined in [Stage S002 canonical planet architecture](PLANET_ARCHITECTURE.md). The legacy S001 `WORLD_SIZE = 262144 m` runtime remains transitional implementation data until the dedicated rescale WP and is not an alternative physical-world authority.
 
 ### Pure Zoom Interaction Rule
 
@@ -224,9 +224,11 @@ The player-facing scale display uses this exact ordered ladder and does not use 
 
 `1/10 → 1/20 → 1/50 → 1/100 → 1/250 → 1/500 → 1/1000 → 1/2500 → 1/5000 → 1/10000`
 
-Each scale state corresponds to a specific visible planet-space footprint and detail tier. The on-screen distance ruler must be physically truthful to that footprint: its displayed distance and line length must match the measured world-space distance represented on screen. A convenient rounded label must never be retained when it makes the line physically false.
+For Stage S002 each scale state has a canonical vertical planet-space footprint, defined by `planet diameter × denominator / 10000`: 1/10 = 1.2742 km, 1/20 = 2.5484 km, 1/50 = 6.371 km, 1/100 = 12.742 km, 1/250 = 31.855 km, 1/500 = 63.710 km, 1/1000 = 127.420 km, 1/2500 = 318.550 km, 1/5000 = 637.100 km and 1/10000 = 1,274.200 km. Internal zoom may interpolate continuously between those presentation anchors. Later gameplay may only extend the ladder through an explicit owner-approved design change, never by silently introducing `x` multipliers.
 
-Drag/rotation sensitivity is also scale-aware. The same pointer movement must not produce the same angular/geographic movement at every scale. Wide planet views may traverse large distances; close/local views must move proportionally small distances so a short drag while viewing local terrain cannot jump across a country or continent.
+The on-screen distance ruler must be physically truthful to the current footprint: its displayed distance and line length must match measured canonical world-space distance. A convenient rounded label must never be retained when it makes the line physically false. Globe ruler error must be no more than 2% against measured great-circle distance at the view center.
+
+Drag/rotation sensitivity is also scale-aware. The same pointer movement must not produce the same angular/geographic movement at every scale. Wide planet views may traverse large distances; close/local views must move proportionally small distances so a short drag while viewing local terrain cannot jump across a country or continent. Browser acceptance error for a known drag distance is at most 5% at representative globe/local scales.
 
 Scale, ruler calculation and navigation sensitivity are presentation/control behavior only. They must never assign or alter Campaign-SEED world-foundation values.
 
@@ -236,7 +238,7 @@ The world is a **finite continuous sphere**, not an unbounded planar tile grid. 
 
 At campaign creation/load, Campaign-SEED code establishes one canonical planet coordinate fabric for the fixed world foundation. Every fixed spatial entity and structure—terrain, coasts, rivers, countries, regions, borders, capitals, cities, towns, villages, roads, paths, bridges, buildings, landmarks, POIs and later fixed actor/object spawn positions—must resolve through that same SEED-generated spatial authority.
 
-The coordinate fabric must provide stable reversible mapping among spherical latitude/longitude, planet-space meters, stable global spatial IDs/cells, local tangent coordinates and render projection. Lazy streaming may materialize only the required cells/detail, but it must address them by those same canonical global coordinates. Camera position, zoom, viewport, render bucket, loading order, device state and frame timing must never assign or alter foundation coordinates.
+The coordinate fabric provides stable reversible mapping among spherical latitude/longitude, physical planet-space meters, stable global spatial IDs/cells, local east-north-up tangent coordinates and render projection. Longitude wraps naturally; helper `wrappedX` uses equatorial arc meters and `wrappedX ± circumference` resolves to the same world position. Stable global cell ownership uses the cube-sphere hierarchy defined in `PLANET_ARCHITECTURE.md`, including deterministic face-edge/pole ownership. Lazy streaming may materialize only required detail, but camera position, zoom, viewport, render bucket, loading order, device state and frame timing must never assign or alter foundation coordinates.
 
 The currently active gameplay-area center must be visibly identifiable on the sphere/map by a world-anchored center marker and concise coordinate readout. Pure zoom changes only scale/detail and never changes that center world coordinate.
 
@@ -484,8 +486,8 @@ The architecture is intentionally split:
 
 Simulation remains authoritative for:
 
-- Campaign SEED and world coordinates;
-- the 2 m × 2 m logical tile scale;
+- Campaign SEED and canonical spherical world coordinates;
+- stable global spatial IDs/cells and local 2 m-or-finer gameplay sampling where required;
 - terrain identity and settlement generation;
 - walkability, collision legality and routing;
 - building footprints, rooms, entrances and interaction points;
@@ -523,13 +525,13 @@ The supported production baseline is:
 - adaptive render scale and pixel-ratio limits protect mobile GPU performance;
 - phone, tablet and desktop remain first-class targets.
 
-Renderer quality may scale by device capability, but Simulation fidelity must not be reduced to gain graphics performance.
+Renderer quality may scale by device capability, but Simulation fidelity must not be reduced to gain graphics performance. Concrete initial frame-time, queue, cache, memory, DPR/render-scale and telemetry budgets are binding in [Stage S002 canonical planet architecture](PLANET_ARCHITECTURE.md); later physical-device measurements may tighten them but must not silently trade away Simulation correctness.
 
 ## Chunk-Native 3D Terrain
 
-The infinite world is never instantiated as one giant 3D scene.
+The finite continuous planet is never instantiated as one giant detailed 3D scene.
 
-Logical terrain remains tile-addressed by the deterministic world system, but rendering is chunk-native:
+Canonical world data is addressed through the deterministic spherical coordinate/ID system, while rendering is chunk-native:
 
 **SEED/world data → complete logical chunk → prepared terrain/building data → PlayCanvas mesh/entities → Active / Prepared / Cached**
 
@@ -546,7 +548,7 @@ Each prepared chunk may contain:
 
 A chunk is prepared as a complete chunk before it is considered ready. Normal camera movement through prepared territory must primarily move the camera and activate/deactivate retained chunk entities instead of regenerating terrain.
 
-Chunk size, preparation radius and cache budget remain adjustable performance controls.
+Chunk size, preparation radius and cache budget remain adjustable performance controls. No detailed whole-planet array may scale with every 2 m/200 m local sample; detailed data must stay sparse, hierarchical and focus-bounded.
 
 ## 3D Asset Standard
 
@@ -606,7 +608,7 @@ Performance work should prioritize:
 - dynamic render scale and mobile quality budgets;
 - telemetry for CPU frame time, GPU frame time where available, draw calls, triangles, entity counts, chunk activity, cache behavior and navigation spikes.
 
-The design target is **60 FPS on capable hardware** with **30 FPS as the minimum supported gameplay fallback**, without changing Simulation correctness.
+The design target is **60 FPS on capable hardware** with **30 FPS as the minimum supported gameplay fallback**, without changing Simulation correctness. Software-rendered CI validates functional counters and bounded behavior; it is not evidence of physical-device FPS.
 
 The visual direction remains a readable, grounded **seinen medieval-fantasy / old-school RPG** style. Real 3D is used to improve spatial depth, buildings, settlements and terrain while 2D character artwork preserves the intended illustrated character identity.
 
