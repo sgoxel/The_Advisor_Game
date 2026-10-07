@@ -16,7 +16,7 @@ An inhabited village starts with a public center and water point; market; inn; b
 
 Each mandatory service has a staffed workplace identity. Gate duty references a gate/post, an actual NPC and that NPC's home. Rotating rosters may support work and rest, but preserve the required one or two on-duty guards per gate. Rendering a guard model is presentation of that assignment, not creation of a new NPC. Layer hiding and unloading never remove ownership or duties from the logical world.
 
-Layouts follow terrain and access: suitable site → border/gates and routes → streets/center → services/homes → entrances/props → terrain fill. Test footprints, access and frontage; a roster of building names is not enough. Homes have safe entrances connected to the street network; NPC movement follows that network instead of cutting through roofs, walls or water. Houses and guard posts remain traceable across detail levels.
+Layouts follow the [0–9 world-building priorities](WORLD_BUILDING_PRIORITY.md). Within city/village phases, reserve border/gates and route connections → streets/center → services/homes → entrances/props. Seeded house and living-area pads may cut mountainsides, grade usable ground and clear vegetation; final road cuts join legal entrances/gates. Final terrain composition honors these reservations. Test footprints, access and frontage; a roster of building names is not enough. Homes have safe entrances connected to the street network; NPC movement follows that network instead of cutting through roofs, walls or water. Houses and guard posts remain traceable across detail levels.
 
 ## Reference notes and implementation boundaries
 

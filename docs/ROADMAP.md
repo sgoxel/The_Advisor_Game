@@ -38,4 +38,6 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 - WP-S002-004-009 — Organic seeded settlement layouts, village services, borders and guarded gate infrastructure
 - WP-S002-004-010 — Seam-safe and pole-safe seeded terrain
 - WP-S002-004-011 — Seeded NPC home ownership, workplaces and gate-guard duties
+- WP-S002-004-012 — Seeded priority composition and road/settlement terrain earthworks
+- WP-S002-004-013 — Seeded ruins and critical quest-place reservations
 - WP-S002-005-001 — Performance budgets and telemetry for the globe, wrapped streaming and natural terrain

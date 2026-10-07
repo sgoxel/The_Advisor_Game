@@ -291,7 +291,24 @@ The overall world is continuous but finite because it is represented on the cano
 
 ## World Planning Order
 
-World generation uses a permanent reservation order: **roads/public infrastructure → buildings → important objects → terrain fill**. This is a planning rule, not just drawing order. Buildings must query the already-planned road/path/public-space reservations and choose another deterministic placement if they overlap. Important objects then avoid both infrastructure and buildings. Terrain is the final fill and cannot erase planned infrastructure or structures.
+The canonical world-building sequence is:
+
+| Priority | Layer |
+| --- | --- |
+| 0 | Oceans |
+| 1 | Continents |
+| 2 | Islands |
+| 3 | Forests, deserts, grasslands and mountains |
+| 4 | Lakes and rivers |
+| 5 | Countries |
+| 6 | Capital cities and big cities |
+| 7 | Villages |
+| 8 | Roads |
+| 9 | Ruins and critical quest places |
+
+These are SEED-defined foundation priorities, evaluated from 0 to 9, separate from rendering detail levels and loading order. Later infrastructure and settlement layers may reshape earlier natural terrain locally: roads may cut mountains and clear forest to create a graded near-flat dirt foundation with a road surface above it; houses and their usable perimeter may cut mountainside terrain and clear vegetation for proper living areas. Edits must affect terrain, materials, vegetation and walkability consistently, with bounded transition zones rather than floating meshes or whole-mountain flattening.
+
+Within a village/city subplan, reserve streets, public space, gates and road access before accepting individual building footprints. Road grading follows these legal reservations and joins house entrances without destroying homes, mandatory services or gates. Ruins and quest sites respect existing occupied plots and access. Water crossings remain valid bridges/culverts or alternate routes; terrain cuts must preserve drainage and the minimum village walking time on the final road network. All detail levels query the same final SEED-defined terrain and modifier plan. See [world-building priority contracts](WORLD_BUILDING_PRIORITY.md). These are Stage S002 planning requirements.
 
 ## World Scale and Travel
 
@@ -334,7 +351,7 @@ Every inhabited village must start with the following minimum facilities:
 - A basic enclosing border, such as a seeded timber palisade, hedge or suitable wall.
 - Exactly **one or two gates**, decided by the village SEED code; **one or two guards at each gate**, with their own NPC identities, houses and duty assignments.
 
-Village design follows logical placement rules: suitable terrain and incoming routes → border and reachable gate openings → connected main streets and public center → service plots and residential plots → entrances and important objects → vegetation and terrain fill. The center and market are accessible from the gates; inn and trade services face usable streets; farms have suitable land and access. Houses, services, fields, roads and the border must not overlap incorrectly or stand in water. The border encloses the inhabited core; connected farmland may sit outside it. Gate openings align with external routes and must not block the existing village travel-time rules.
+Within the village phase, design follows logical placement rules: suitable terrain and incoming routes → border and reachable gate openings → connected main streets and public center → service plots and residential plots → entrances and important objects → final priority-composed ground and vegetation. Seeded living-area pads and later road earthworks may prepare mountain/forest terrain. The center and market are accessible from the gates; inn and trade services face usable streets; farms have suitable land and access. Houses, services, fields, roads and the border must not overlap incorrectly or stand in water. The border encloses the inhabited core; connected farmland may sit outside it. Gate openings align with external routes and must not block the existing village travel-time rules.
 
 SEED codes decide the layout, house identities, service identities, gate count, initial guard assignments and initial home/work relationships. Villages must vary in shape, plots and orientation with terrain and routes rather than repeating a rigid grid. Cities scale housing and services to their resident population. Castles require a defined residential area for their inhabitants; a decorative keep without assigned homes does not satisfy the rule. The existing three continents, thirty countries, ninety cities and two hundred seventy villages remain the world counts; castle residences do not silently replace counted settlements.
 
