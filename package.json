@@ -10,6 +10,12 @@
     "test": "node --experimental-strip-types --test tests/world.test.ts",
     "test:browser": "playwright test"
   },
-  "dependencies": { "playcanvas": "2.23.0" },
-  "devDependencies": { "@playwright/test": "1.63.0", "typescript": "~5.9.3", "vite": "8.3.3" }
+  "dependencies": {
+    "playcanvas": "2.23.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "typescript": "~5.9.3",
+    "vite": "8.3.3"
+  }
 }

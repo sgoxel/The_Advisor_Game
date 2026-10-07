@@ -21,13 +21,13 @@ Root invariants:
 
 The seed is `ADVISOR-0126-ALDERWICK`, generator `v1`.
 
-| Level | Footprint | Responsibility |
-| --- | --- | --- |
+| Level       | Footprint                       | Responsibility                                             |
+| ----------- | ------------------------------- | ---------------------------------------------------------- |
 | L1 province | 1000 × 1000 cells / 2 km × 2 km | Mainland or coastal archipelago domain; elevation envelope |
-| L2 region | 100 × 100 cells / 200 m × 200 m | Mainland, island or ocean; bounded island radius |
-| L3 district | 10 × 10 cells / 20 m × 20 m | Coastline controls and allowable beach width |
-| L4 patch | 2 × 2 cells / 4 m × 4 m | Local surface grain within district constraints |
-| L5 cell | 1 cell / 2 m × 2 m | Canonical identity and bounded surface refinement |
+| L2 region   | 100 × 100 cells / 200 m × 200 m | Mainland, island or ocean; bounded island radius           |
+| L3 district | 10 × 10 cells / 20 m × 20 m     | Coastline controls and allowable beach width               |
+| L4 patch    | 2 × 2 cells / 4 m × 4 m         | Local surface grain within district constraints            |
+| L5 cell     | 1 cell / 2 m × 2 m              | Canonical identity and bounded surface refinement          |
 
 Negative coordinates use mathematical floor division. Child indices stay in their parent's bounds. Codes contain coordinates and preserve uniqueness even if their integer digests collide. Cells are addressable without storing billions of objects. The cell inspector exposes the full ancestry.
 

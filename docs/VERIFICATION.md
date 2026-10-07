@@ -28,4 +28,4 @@ The code requests WebGPU through PlayCanvas 2.23.0, then falls back to WebGL2. T
 
 ## Deployment
 
-Pending verification of the first GitHub Actions/Pages deployment. The roadmap work package remains in progress until the final main commit is deployed.
+The first implementation commit `37e814f` built and deployed successfully in [GitHub Actions](https://github.com/sgoxel/The_Advisor_Game/actions/runs/37599513531). The final formatted implementation and bookkeeping commits will also be verified before the work package is closed.
