@@ -127,7 +127,6 @@ let rulerState = {
   start: { lon: 0, lat: 0 },
   end: { lon: 0, lat: 0 },
 };
-let screenHeading = 0;
 let labelState: {
   id: string;
   anchor: { x: number; y: number };
@@ -213,15 +212,9 @@ function updateNavigationHud() {
   );
   $("compass-needle").style.transform =
     `rotate(${(view.yaw * 180) / Math.PI}deg)`;
-  const up = surfaceAtScreen(innerWidth / 2, innerHeight / 2 - 2);
-  if (up) {
-    const d = up.lon - focus.lon;
-    screenHeading = Math.atan2(
-      Math.sin(d) * Math.cos(up.lat),
-      Math.cos(focus.lat) * Math.sin(up.lat) -
-        Math.sin(focus.lat) * Math.cos(up.lat) * Math.cos(d),
-    );
-  }
+  // North's screen direction comes from the shared camera attitude. Inferring
+  // it from geographic pick deltas introduces projection-dependent zoom drift.
+  const screenHeading = -view.yaw || 0;
   $("compass").title =
     `Heading ${(((((screenHeading * 180) / Math.PI) % 360) + 360) % 360).toFixed(0)}° · reset north`;
   const scale = scaleLabelForHalfHeight(view.halfHeight);
@@ -1360,7 +1353,7 @@ async function start() {
           canonicalFootprintM: canonicalFootprintForHalfHeight(view.halfHeight),
           navigation: {
             focus: flatToLonLat(view.x, view.z),
-            heading: screenHeading,
+            heading: -view.yaw || 0,
             ruler: { ...rulerState },
             labels: labelState,
           },

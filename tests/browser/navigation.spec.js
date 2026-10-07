@@ -165,11 +165,21 @@ test("pointer touch keyboard and canonical wrapping", async ({ page }) => {
     ).toBeLessThan(0.05);
   }
   await page.locator("#rotate").click();
+  await page.evaluate(() => window.advisorWorld.navigation.setFocus(0.3, 1));
   const heading = await page.evaluate(() => window.advisorWorld.state.view.yaw);
-  await page.locator("#map-scale").selectOption("5000");
-  expect(await page.evaluate(() => window.advisorWorld.state.view.yaw)).toBe(
-    heading,
+  const compass = await page.evaluate(
+    () => window.advisorWorld.state.navigation.heading,
   );
+  for (const scale of ["20", "5000"]) {
+    await page.locator("#map-scale").selectOption(scale);
+    await page.waitForFunction(() => window.advisorWorld.state.settled);
+    expect(await page.evaluate(() => window.advisorWorld.state.view.yaw)).toBe(
+      heading,
+    );
+    expect(
+      await page.evaluate(() => window.advisorWorld.state.navigation.heading),
+    ).toBe(compass);
+  }
   await page.locator("#compass").click();
   expect(await page.evaluate(() => window.advisorWorld.state.view.yaw)).toBe(0);
   await page.evaluate(() => window.advisorWorld.navigation.setFocus(0.2, 0.4));
