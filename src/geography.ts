@@ -21,15 +21,19 @@ export type Place = {
   city: number;
 };
 
-const SOURCE_ANGLE = (Math.PI * 2) / 262_144;
-const CONTINENT_LAT = -6_500 * SOURCE_ANGLE;
-const CONTINENT_LON = 80_000 * SOURCE_ANGLE;
-const COUNTRY_LON_STEP = 7_000 * SOURCE_ANGLE;
-const COUNTRY_LAT_STEP = 13_000 * SOURCE_ANGLE;
-const CITY_DX = [0, -2_400, 2_400].map((value) => value * SOURCE_ANGLE);
-const CITY_DZ = [-600, 2_000, 2_000].map((value) => value * SOURCE_ANGLE);
-const VILLAGE_LON_STEP = 420 * SOURCE_ANGLE;
-const VILLAGE_LAT_OFFSET = 600 * SOURCE_ANGLE;
+/**
+ * Temporary v1 canonical placement constants in radians. They preserve the S001
+ * layout while making longitude/latitude authoritative; later natural-world WPs
+ * may replace the pattern without changing the coordinate/identity contract.
+ */
+const CONTINENT_LAT = -0.15579492376963544;
+const CONTINENT_LON = 1.9174759848570515;
+const COUNTRY_LON_STEP = 0.167779148674992;
+const COUNTRY_LAT_STEP = 0.3115898475392709;
+const CITY_DX = [0, -0.05752427954571154, 0.05752427954571154] as const;
+const CITY_DZ = [-0.014381069886427886, 0.047936899621426284, 0.047936899621426284] as const;
+const VILLAGE_LON_STEP = 0.01006674892049952;
+const VILLAGE_LAT_OFFSET = 0.014381069886427886;
 
 const canonicalPosition = (
   lon: number,
