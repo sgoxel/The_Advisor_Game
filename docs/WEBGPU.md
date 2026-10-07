@@ -18,7 +18,7 @@ WP-S001-003-001: 16 functional tests and the production build pass. Fresh [block
 
 The software-test launch options follow [Chromium's SwiftShader WebGPU test configuration](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/blink/web_tests/FlagSpecificConfig). These flags apply only to the test browser; the game does not change browser settings or require them on supported hardware.
 
-Fallback verification uses `npx playwright test --config playwright.fallback.config.js`, with only software WebGL test flags. The Vulkan compositor configuration required for the WebGPU suite hung the first fallback CI browser; the two driver configurations are kept separate. Neither changes production browser settings.
+Fallback verification uses `npx playwright test --config playwright.fallback.config.js`, with only software WebGL test flags. The two driver configurations are kept separate. CI logs and screenshots confirmed startup rendering worked; the first two attempts exhausted their test time during zoom refinement on the software renderer. The fallback suite has a 180-second software-rendering budget and verifies full zoom refinement in the representative blocked-adapter case. All four startup failures still verify actual world rendering and cell inspection. Neither test configuration changes production browser settings.
 
 Historical WebGPU-only verification: the build and 14 functional checks passed. The Linux runner rendered WebGPU village and detail without GPU/shader errors in [run 37605770976](https://github.com/sgoxel/The_Advisor_Game/actions/runs/37605770976). This earlier version had no fallback; the current policy above supersedes it.
 

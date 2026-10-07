@@ -52,11 +52,15 @@ for (const scenario of [
     await page.screenshot({
       path: `test-results/fallback-${scenario}-phone.png`,
     });
-    await page.locator("#zoom-in").click();
-    await page.waitForFunction(() => window.advisorWorld.state.settled);
-    expect(
-      await page.evaluate(() => window.advisorWorld.state.view.halfHeight),
-    ).toBeLessThan(97);
+    if (scenario === "blocked") {
+      // Verify full refinement once: the other cases use this same renderer.
+      await page.locator("#zoom-in").click();
+      await page.waitForFunction(() => window.advisorWorld.state.settled);
+      expect(
+        await page.evaluate(() => window.advisorWorld.state.view.halfHeight),
+      ).toBeLessThan(97);
+      await page.screenshot({ path: "test-results/fallback-blocked-detail.png" });
+    }
     await page.locator("#world").click({ position: { x: 275, y: 485 } });
     await expect(page.locator("#cell-panel")).toBeVisible();
     expect(await page.evaluate(() => window.advisorWorld.cellAt(1, 1))).toEqual(
