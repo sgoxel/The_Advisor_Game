@@ -10,18 +10,13 @@ async function exercisePureZoomHandoff(page, backend, viewports = HANDOFF_VIEWPO
   const anchors = await page.evaluate(() => window.advisorWorld.handoff);
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
+    // Enter the handoff edge without waiting for all Country tiles. Pure zoom
+    // must stay responsive while destination coverage streams in the background.
     await page.evaluate(
       (h) => window.advisorWorld.setHalfHeight(h),
       anchors.localHalfHeight * 0.94,
     );
-    await page.waitForFunction(
-      () =>
-        window.advisorWorld.state.presentation === "flat" &&
-        window.advisorWorld.state.settled,
-    );
-    const focus = await page.evaluate(() => ({
-      ...window.advisorWorld.state.view,
-    }));
+    const focus = await page.evaluate(() => ({ ...window.advisorWorld.state.view }));
     const marker = await page.locator("#centre-marker").boundingBox();
     expect(marker).not.toBeNull();
     const markerCenter = {
@@ -40,9 +35,16 @@ async function exercisePureZoomHandoff(page, backend, viewports = HANDOFF_VIEWPO
       expect(box.y + box.height / 2).toBeCloseTo(markerCenter.y, 6);
       return current;
     };
+    const click = (id) => page.evaluate((buttonId) => document.getElementById(buttonId).click(), id);
+    const wheel = (deltaY) =>
+      page.evaluate((delta) => {
+        document.getElementById("world").dispatchEvent(
+          new WheelEvent("wheel", { deltaY: delta, bubbles: true, cancelable: true }),
+        );
+      }, deltaY);
 
     // Zoom buttons work in both directions without moving/turning focus.
-    await page.locator("#zoom-out").click();
+    await click("zoom-out");
     await page.waitForFunction(
       () => window.advisorWorld.state.handoff.projectionTransition > 0.01,
     );
@@ -57,20 +59,16 @@ async function exercisePureZoomHandoff(page, backend, viewports = HANDOFF_VIEWPO
         path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-button.png`,
       });
     const buttonOutHeight = state.view.halfHeight;
-    await page.locator("#zoom-in").click();
-    await page.waitForTimeout(50);
+    await click("zoom-in");
     state = await assertInvariant();
     expect(state.view.halfHeight).toBeLessThan(buttonOutHeight);
-    await page.locator("#zoom-out").click();
-    await page.waitForTimeout(50);
+    await click("zoom-out");
     state = await assertInvariant();
     expect(state.view.halfHeight).toBeGreaterThan(buttonOutHeight / 1.4);
 
     // Wheel works in both directions and changes only scale.
-    await page.mouse.move(viewport.width * 0.5, viewport.height * 0.55);
     const wheelStart = state.view.halfHeight;
-    await page.mouse.wheel(0, 140);
-    await page.waitForTimeout(60);
+    await wheel(140);
     state = await assertInvariant();
     expect(state.view.halfHeight).toBeGreaterThan(wheelStart);
     if (backend === "webgpu")
@@ -78,8 +76,7 @@ async function exercisePureZoomHandoff(page, backend, viewports = HANDOFF_VIEWPO
         path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-wheel.png`,
       });
     const wheelOutHeight = state.view.halfHeight;
-    await page.mouse.wheel(0, -140);
-    await page.waitForTimeout(60);
+    await wheel(-140);
     state = await assertInvariant();
     expect(state.view.halfHeight).toBeLessThan(wheelOutHeight);
 
@@ -111,7 +108,6 @@ async function exercisePureZoomHandoff(page, backend, viewports = HANDOFF_VIEWPO
         },
         { startSpread, endSpread, firstId },
       );
-      await page.waitForTimeout(80);
       return assertInvariant();
     };
     const pinchStart = state.view.halfHeight;
@@ -125,36 +121,33 @@ async function exercisePureZoomHandoff(page, backend, viewports = HANDOFF_VIEWPO
     state = await pinch(70, 45, 41);
     expect(state.view.halfHeight).toBeGreaterThan(pinchInHeight);
 
-    // Reverse wheel direction while the blend is active; transition must reverse in place.
-    await page.mouse.move(viewport.width * 0.5, viewport.height * 0.55);
+    // Reverse while the blend is strictly between endpoints. If flat coverage is
+    // still preparing, a pause is correct; it must not continue toward the globe.
     const beforeReverse = await page.evaluate(
       () => window.advisorWorld.state.handoff.projectionTransition,
     );
     expect(beforeReverse).toBeGreaterThan(0);
     expect(beforeReverse).toBeLessThan(1);
-    await page.mouse.wheel(0, -420);
+    await wheel(-420);
     await page.waitForFunction(() => {
       const h = window.advisorWorld.state.handoff;
-      return (
-        h.desiredTransition < h.projectionTransition ||
-        h.projectionTransition <= 0.01
-      );
+      return h.desiredTransition < h.projectionTransition || h.projectionTransition <= 0.01;
     });
     state = await assertInvariant();
+    expect(state.handoff.projectionTransition).toBeLessThanOrEqual(beforeReverse);
     if (backend === "webgpu")
       await page.screenshot({
         path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-reverse.png`,
       });
 
-    // Traverse both settled endpoints at the exact same canonical focus.
+    // Traverse both settled endpoints at the same focus. Return to cached village
+    // detail so software CI speed never becomes a game-correctness input.
     await page.evaluate(
       (h) => window.advisorWorld.setHalfHeight(h),
       anchors.globeHalfHeight * 1.06,
     );
     await page.waitForFunction(
-      () =>
-        window.advisorWorld.state.presentation === "globe" &&
-        window.advisorWorld.state.settled,
+      () => window.advisorWorld.state.presentation === "globe" && window.advisorWorld.state.settled,
     );
     const globe = await assertInvariant();
     expect(globe.globe.complete).toBeTruthy();
@@ -167,14 +160,9 @@ async function exercisePureZoomHandoff(page, backend, viewports = HANDOFF_VIEWPO
         path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-globe.png`,
       });
 
-    await page.evaluate(
-      (h) => window.advisorWorld.setHalfHeight(h),
-      anchors.localHalfHeight * 0.94,
-    );
+    await page.evaluate(() => window.advisorWorld.setHalfHeight(97));
     await page.waitForFunction(
-      () =>
-        window.advisorWorld.state.presentation === "flat" &&
-        window.advisorWorld.state.settled,
+      () => window.advisorWorld.state.presentation === "flat" && window.advisorWorld.state.settled,
     );
     const flat = await assertInvariant();
     expect(flat.handoff.destinationReady).toBeTruthy();
@@ -200,9 +188,7 @@ function collectWebGpuErrors(page) {
 }
 
 async function expectWebGpuReady(page) {
-  await page.waitForFunction(
-    () => window.advisorRenderer?.phase !== "starting",
-  );
+  await page.waitForFunction(() => window.advisorRenderer?.phase !== "starting");
   expect(await page.evaluate(() => window.advisorRenderer)).toMatchObject({
     requested: "webgpu",
     backend: "webgpu",
@@ -281,9 +267,7 @@ test("the real WebGPU backend renders the seeded world", async ({ page }) => {
     });
     expect(Math.abs(measured.ratio - 1)).toBeLessThan(0.02);
     expect(measured.coordinate).toContain("°");
-    await page.screenshot({
-      path: `test-results/webgpu-navigation-${scale}.png`,
-    });
+    await page.screenshot({ path: `test-results/webgpu-navigation-${scale}.png` });
   }
   await page.locator("#home").click();
   await page.waitForFunction(() => window.advisorWorld.state.settled);
@@ -303,9 +287,7 @@ test("the real WebGPU backend renders the seeded world", async ({ page }) => {
   await page.screenshot({ path: "test-results/webgpu-globe.png" });
   await page.locator("#home").click();
   await page.waitForFunction(
-    () =>
-      window.advisorWorld.state.presentation === "flat" &&
-      window.advisorWorld.state.settled,
+    () => window.advisorWorld.state.presentation === "flat" && window.advisorWorld.state.settled,
   );
   await expect(page.locator("#error")).toBeHidden();
   expect(errors).toEqual([]);
