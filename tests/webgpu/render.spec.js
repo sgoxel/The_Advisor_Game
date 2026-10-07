@@ -27,12 +27,17 @@ async function exercisePureZoomHandoff(page, backend) {
       () => window.advisorWorld.state.handoff.projectionTransition > 0.01,
     );
     let state = await page.evaluate(() => window.advisorWorld.state);
+    expect(state.globe.complete).toBeTruthy();
+    expect(state.handoff.destinationReady).toBeTruthy();
+    expect(state.handoff.waitingForDestination).toBeFalsy();
+    expect(state.handoff.preparationWaitMs).toBeGreaterThanOrEqual(0);
+    expect(state.handoff.blendDurationMs).toBeGreaterThan(0);
     expect(state.view.x).toBe(focus.x);
     expect(state.view.z).toBe(focus.z);
     expect(state.view.yaw).toBe(focus.yaw);
     if (backend === "webgpu")
       await page.screenshot({
-        path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}.png`,
+        path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-button.png`,
       });
 
     // Wheel changes scale only.
@@ -43,6 +48,10 @@ async function exercisePureZoomHandoff(page, backend) {
     expect(state.view.x).toBe(focus.x);
     expect(state.view.z).toBe(focus.z);
     expect(state.view.yaw).toBe(focus.yaw);
+    if (backend === "webgpu")
+      await page.screenshot({
+        path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-wheel.png`,
+      });
 
     // Two-pointer pinch exercises the production pointer handler and also changes only scale.
     await page.evaluate(() => {
@@ -73,6 +82,10 @@ async function exercisePureZoomHandoff(page, backend) {
     expect(state.view.x).toBe(focus.x);
     expect(state.view.z).toBe(focus.z);
     expect(state.view.yaw).toBe(focus.yaw);
+    if (backend === "webgpu")
+      await page.screenshot({
+        path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-pinch.png`,
+      });
 
     // Reverse wheel direction while the blend is active; transition must reverse in place.
     await page.mouse.move(viewport.width * 0.5, viewport.height * 0.55);
@@ -88,6 +101,10 @@ async function exercisePureZoomHandoff(page, backend) {
     expect(state.view.x).toBe(focus.x);
     expect(state.view.z).toBe(focus.z);
     expect(state.view.yaw).toBe(focus.yaw);
+    if (backend === "webgpu")
+      await page.screenshot({
+        path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-reverse.png`,
+      });
 
     // Traverse both settled endpoints at the exact same canonical focus.
     await page.evaluate(
@@ -103,7 +120,15 @@ async function exercisePureZoomHandoff(page, backend) {
     expect(globe.view.x).toBe(focus.x);
     expect(globe.view.z).toBe(focus.z);
     expect(globe.view.yaw).toBe(focus.yaw);
+    expect(globe.globe.complete).toBeTruthy();
     expect(globe.handoff.destinationReady).toBeTruthy();
+    expect(globe.handoff.waitingForDestination).toBeFalsy();
+    expect(globe.handoff.preparationWaitMs).toBeGreaterThanOrEqual(0);
+    expect(globe.handoff.blendDurationMs).toBeGreaterThan(0);
+    if (backend === "webgpu")
+      await page.screenshot({
+        path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-globe.png`,
+      });
 
     await page.evaluate(
       (h) => window.advisorWorld.setHalfHeight(h),
@@ -118,6 +143,12 @@ async function exercisePureZoomHandoff(page, backend) {
     expect(flat.view.x).toBe(focus.x);
     expect(flat.view.z).toBe(focus.z);
     expect(flat.view.yaw).toBe(focus.yaw);
+    expect(flat.handoff.destinationReady).toBeTruthy();
+    expect(flat.handoff.waitingForDestination).toBeFalsy();
+    if (backend === "webgpu")
+      await page.screenshot({
+        path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-flat-return.png`,
+      });
   }
 }
 
