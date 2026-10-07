@@ -25,20 +25,20 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 - WP-S002-002-002 — Latency-bounded focus-preserving pure-zoom globe↔local handoff with destination-ready LOD and zero blank frames — COMPLETED
 - WP-S002-002-003 — Responsive globe/local navigation HUD and Realm framing: truthful scale/ruler, wrap-safe input, labels and seven-viewport UX — COMPLETED
 - WP-S002-003-001 — Canonical spherical coordinate and identity authority: remove legacy planar world truth with wrap/pole-safe reversible mapping — COMPLETED
-- WP-S002-003-002 — Precision-safe ENU/camera-relative rendering, picking, labels and rebasing at canonical planet scale
-- WP-S002-003-003 — Bounded canonical-ID streaming: continuous wrap/pole navigation, device budgets and stable cache/queue behavior
-- WP-S002-004-001 — Reference analysis and contracts for natural seeded geography, readable settlement UX and lazy mobile generation
-- WP-S002-004-002 — Canonical world rescale and travel migration: remove legacy WORLD_SIZE/420 m/1.4 m/s authority
-- WP-S002-004-003 — SEED-derived natural planet macro-geography: irregular continents/islands, seas, lakes and mountain ranges across LOD
-- WP-S002-004-004 — Climate/biome continuity and Realm readability: frozen poles, deserts, forests and grasslands across LOD
-- WP-S002-004-005 — Natural seeded terrain/hydrology: no grid artifacts, truthful walkability and seam-safe LOD continuity
-- WP-S002-004-006 — Natural seeded vegetation/ground detail: non-lattice scatter, instancing and mobile draw-call budgets
-- WP-S002-004-007 — Terrain-aware settlement placement: irregular SEED positions, full site/access envelopes and canonical labels
-- WP-S002-004-008 — Truthful village routing UX: shortest legal paths, all-pair ≥60 fantasy minutes and route visualization
-- WP-S002-004-009 — Organic readable settlements: services, borders, gates, housing access and mobile render budgets
-- WP-S002-004-010 — Seam/pole/LOD-safe composed world: no cracks, duplicates, healed modifiers or logical discontinuities
-- WP-S002-004-011 — Inspectable living residents: seeded homes/workplaces/gate duties, legal routes and bounded schedules
-- WP-S002-004-012 — Deterministic priority compositor and earthworks: one terrain/walkability authority across rendering, routing and LOD
-- WP-S002-004-013 — Discoverable seeded ruins/quest places: legal access, readable labels and bounded lazy detail
-- WP-S002-004-014 — Inspectable connected transport graph: terrain-aware roads/bridges/junctions/harbors with stable canonical profiles
-- WP-S002-005-001 — S002 performance acceptance gate: frame/input/worker/upload latency, adaptive quality, memory telemetry and WebGPU/WebGL2 parity
+- WP-S002-003-002 — Precision-safe ENU local rendering: camera-relative patches, canonical picking/labels/shadows and deterministic rebasing
+- WP-S002-003-003 — Canonical wrap/pole streaming: stable IDs, no-blank coverage, device/byte budgets and eviction-safe caches
+- WP-S002-004-001 — Reference analysis and contracts for natural world generation, readable settlement/living-world UX and mobile budgets
+- WP-S002-004-002 — Canonical scale/travel migration: remove legacy planar metres and obsolete 420 m/1.4 m/s player-facing travel truth
+- WP-S002-004-003 — Natural Realm macro-geography: SEED-shaped continents/islands/seas/lakes/ranges with phone-readable cross-LOD continuity
+- WP-S002-004-004 — Shared climate/biome authority: readable frozen poles, deserts, forests and grasslands across Realm↔local LOD
+- WP-S002-004-005 — Natural terrain/hydrology authority: grid-free coasts/ridges/rivers/lakes, truthful walkability and seam-safe LOD
+- WP-S002-004-006 — Natural vegetation/ground detail: non-lattice scatter, stable ownership, instancing and mobile draw-call budgets
+- WP-S002-004-007 — Terrain-aware settlement siting: irregular SEED placement, full capacity/access envelopes and canonical labels
+- WP-S002-004-008 — Truthful village travel UX: shortest legal routes, all-pair ≥60 fantasy minutes and route visualization
+- WP-S002-004-009 — Organic settlement UX: distinct archetypes, services/homes/gates/access and mobile render budgets
+- WP-S002-004-010 — Composed-world continuity gate: wrap/pole/LOD seams, unique ownership and no healed modifiers
+- WP-S002-004-011 — Inspectable living residents: owned homes/workplaces/gate duties, legal schedules and bounded focused simulation
+- WP-S002-004-012 — Single terrain/walkability compositor: deterministic priority earthworks shared by rendering, routing, vegetation and collision
+- WP-S002-004-013 — Seeded ruins/critical places: discoverable labels, legal road access and bounded lazy detail
+- WP-S002-004-014 — Canonical transport graph: connected terrain-aware roads/bridges/junctions/harbors with stable profiles
+- WP-S002-005-001 — S002 performance/compatibility acceptance gate: responsive input, adaptive quality, byte budgets, telemetry and WebGPU/WebGL2 parity
