@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   CANONICAL_PLANET_CIRCUMFERENCE,
   CANONICAL_PLANET_DIAMETER,
@@ -21,7 +22,15 @@ import {
   sourceToLonLat,
   unitToCubeFace,
   wrapCanonicalX,
+  type CubeCell,
 } from "../src/planet.ts";
+import {
+  canonicalCellCenter,
+  canonicalCellNeighbor,
+  canonicalCellNeighbors,
+  canonicalFoundationSample,
+} from "../src/spatial-authority.ts";
+import { nearestPlaceAt, places } from "../src/geography.ts";
 
 const close = (actual: number, expected: number, tolerance: number, message?: string) =>
   assert.ok(
@@ -50,6 +59,10 @@ test("longitude and wrapped canonical metres repeat exactly after a full turn", 
     close(wrapCanonicalX(metres - CANONICAL_PLANET_CIRCUMFERENCE), metres, 1e-7);
     assert.equal(canonicalCellId(lon, 0), canonicalCellId(lon + Math.PI * 2, 0));
     assert.equal(canonicalCellId(lon, 0), canonicalCellId(lon - Math.PI * 2, 0));
+    assert.deepEqual(
+      canonicalFoundationSample(lon, 0),
+      canonicalFoundationSample(lon + Math.PI * 2, 0),
+    );
   }
 });
 
@@ -98,6 +111,26 @@ test("cube face edge and corner ties have deterministic ownership", () => {
   }
 });
 
+test("canonical neighbor helpers cross cube faces without duplicate ownership", () => {
+  const edge: CubeCell = {
+      face: 0,
+      level: 4,
+      u: 15,
+      v: 8,
+      id: "test/edge",
+    },
+    center = canonicalCellCenter(edge),
+    recaptured = canonicalCell(center.lon, center.lat, edge.level),
+    east = canonicalCellNeighbor(edge, 1, 0),
+    neighbors = canonicalCellNeighbors(edge);
+  assert.equal(recaptured.face, edge.face);
+  assert.equal(recaptured.u, edge.u);
+  assert.equal(recaptured.v, edge.v);
+  assert.notEqual(east.face, edge.face, "crossing the final +u cell must change face");
+  assert.equal(new Set(Object.values(neighbors).map((cell) => cell.id)).size, 4);
+  assert.ok(Object.values(neighbors).every((cell) => cell.id.includes("/PLANET/v1/F")));
+});
+
 test("great-circle distance takes the short antimeridian path", () => {
   const deg = Math.PI / 180,
     distance = greatCircleDistance(
@@ -138,10 +171,11 @@ test("transitional source wrap maps to one canonical identity without becoming a
     close(normalizeLongitude(a.lon - west.lon), 0, 1e-12);
     assert.equal(canonicalCellId(a.lon, a.lat), canonicalCellId(east.lon, east.lat));
     assert.equal(canonicalCellId(a.lon, a.lat), canonicalCellId(west.lon, west.lat));
+    assert.deepEqual(canonicalFoundationSample(a.lon, a.lat), canonicalFoundationSample(west.lon, west.lat));
   }
 });
 
-test("canonical IDs are query-order independent", () => {
+test("canonical IDs and foundation facts are query-order independent", () => {
   const points = [
     { lon: -3.1, lat: 0.1 },
     { lon: 1.7, lat: -0.6 },
@@ -149,7 +183,39 @@ test("canonical IDs are query-order independent", () => {
     { lon: 2.2, lat: 1.2 },
     { lon: -0.7, lat: -1.4 },
   ];
-  const first = new Map(points.map((point) => [JSON.stringify(point), canonicalCellId(point.lon, point.lat)]));
+  const first = new Map(
+    points.map((point) => [JSON.stringify(point), canonicalFoundationSample(point.lon, point.lat)]),
+  );
   for (const point of [...points].reverse())
-    assert.equal(canonicalCellId(point.lon, point.lat), first.get(JSON.stringify(point)));
+    assert.deepEqual(
+      canonicalFoundationSample(point.lon, point.lat),
+      first.get(JSON.stringify(point)),
+    );
+});
+
+test("geography has canonical positions and canonical lookup is wrap-safe", () => {
+  assert.ok(places.every((place) => Number.isFinite(place.canonicalPosition.lon)));
+  const point = places[0].canonicalPosition,
+    a = nearestPlaceAt(point),
+    b = nearestPlaceAt({ lon: point.lon + Math.PI * 2, lat: point.lat });
+  assert.equal(a?.code, places[0].code);
+  assert.equal(b?.code, places[0].code);
+});
+
+test("active S002 authority is isolated from legacy planar world truth", () => {
+  const planetSource = readFileSync(new URL("../src/planet.ts", import.meta.url), "utf8"),
+    spatialSource = readFileSync(new URL("../src/spatial-authority.ts", import.meta.url), "utf8"),
+    geographySource = readFileSync(new URL("../src/geography.ts", import.meta.url), "utf8"),
+    simulationSource = readFileSync(new URL("../src/simulation.ts", import.meta.url), "utf8"),
+    inspectorSource = readFileSync(new URL("../src/canonical-inspector.ts", import.meta.url), "utf8"),
+    indexSource = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  assert.doesNotMatch(planetSource, /from\s+["']\.\/world\.ts["']/);
+  assert.doesNotMatch(spatialSource, /WORLD_SIZE|WORLD_MIN|cellSeed|tileAt/);
+  assert.match(geographySource, /canonicalPosition/);
+  assert.match(geographySource, /greatCircleDistance/);
+  assert.match(simulationSource, /position:\s*CanonicalPosition/);
+  assert.match(inspectorSource, /derivedPresentationOnly:\s*true/);
+  assert.doesNotMatch(indexSource, /CANONICAL CELL CODE|Five seed levels/);
+  assert.match(indexSource, /CANONICAL PLANET CELL/);
+  assert.match(indexSource, /canonical-inspector\.ts/);
 });
