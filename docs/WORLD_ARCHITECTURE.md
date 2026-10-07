@@ -61,6 +61,10 @@ Switching countries releases the previous detailed pool. Resident schedules and 
 
 This is an implemented foundation with walking/trading/patrol schedules and a simple grain-production summary. It does not yet simulate diplomacy, wars, complex decision-making, births/deaths, inventory transactions, collision-aware destinations inside buildings, or save mutations. Those systems need authoritative event/state contracts before adding real gameplay. Treating every country's arbitrary future gameplay interactions as analytically recoverable would be incorrect; persisted events will be necessary for those systems.
 
+## Planned settlement housing — Stage S002
+
+The current resident `home` field identifies a settlement, not an owned house. Current decorative houses and keeps do not implement individual ownership, required village services, enclosed borders or staffed gates. The owner selected updating the Stage S002 plan with these requirements; see [settlement contracts and acceptance evidence](SETTLEMENT_PLAN.md) and [the binding design](README.md#seeded-settlement-design-and-npc-homes). WP-S002-004-009 covers layouts and building/gate infrastructure; WP-S002-004-011 covers individual houses, staffed workplaces and real resident guard duties. Neither package is marked implemented by this planning update.
+
 ## Shared fantasy clock
 
 The fixed real epoch is `2026-10-07T08:48:29Z` (11:48:29 in Europe/Istanbul). Its fantasy origin is `07.10.0126 11:48:29`. The explicitly requested year offset is 1900, superseding the earlier README's 900-year example.

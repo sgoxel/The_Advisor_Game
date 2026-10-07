@@ -322,6 +322,26 @@ When the player returns to a known place, it should reflect accumulated campaign
 
 As the protagonist rises in authority, play expands naturally from local village life toward towns, cities, regions, kingdoms and multiple realms without replacing the living world with menu-only gameplay.
 
+## Seeded Settlement Design and NPC Homes
+
+Every NPC must have their own distinct, persistent house in a village, city or castle residential area. A settlement name or ID alone is not a home assignment. Each NPC's foundation record must link its NPC SEED code to a specific home-building SEED code, entrance, settlement and owner. Initial ownership comes only from the Campaign SEED; later relocation or ownership changes are persisted Simulation actions using SEED + Fantasy Game Time. Regenerating or unloading an area never changes the assignment or deletes the logical house.
+
+Every inhabited village must start with the following minimum facilities:
+
+- A village center / public square, with a shared water point.
+- A market, inn, blacksmith workshop, farmstead with usable fields, butcher and guard office (the medieval equivalent of a police office).
+- Enough distinct houses for every generated resident, including service workers and guards.
+- A basic enclosing border, such as a seeded timber palisade, hedge or suitable wall.
+- Exactly **one or two gates**, decided by the village SEED code; **one or two guards at each gate**, with their own NPC identities, houses and duty assignments.
+
+Village design follows logical placement rules: suitable terrain and incoming routes → border and reachable gate openings → connected main streets and public center → service plots and residential plots → entrances and important objects → vegetation and terrain fill. The center and market are accessible from the gates; inn and trade services face usable streets; farms have suitable land and access. Houses, services, fields, roads and the border must not overlap incorrectly or stand in water. The border encloses the inhabited core; connected farmland may sit outside it. Gate openings align with external routes and must not block the existing village travel-time rules.
+
+SEED codes decide the layout, house identities, service identities, gate count, initial guard assignments and initial home/work relationships. Villages must vary in shape, plots and orientation with terrain and routes rather than repeating a rigid grid. Cities scale housing and services to their resident population. Castles require a defined residential area for their inhabitants; a decorative keep without assigned homes does not satisfy the rule. The existing three continents, thirty countries, ninety cities and two hundred seventy villages remain the world counts; castle residences do not silently replace counted settlements.
+
+Service buildings must have assigned NPC operators, and gate guards must be actual residents rather than anonymous decoration. Daily travel, working, resting and guard shifts use SEED + Fantasy Game Time and follow walkable connections between home entrances, workplaces, public areas and guard posts. One or two guards remain assigned on duty per village gate; shift changes must not discard home ownership or duplicate NPCs. The assignment must remain true when its visual model is outside the rendered area.
+
+These are Stage S002 requirements, not features already implemented in the current atlas. World-level settlement and population summaries stay lightweight; detailed home records, building meshes and NPC schedules are reconstructed lazily for the focused area. Streaming, level of detail, device capabilities and loading order may change presentation cost, never resident identity, ownership or settlement design.
+
 ## Economy, Factions, Diplomacy and War
 
 As responsibility expands, the game may include resources, population, prosperity, stability, legitimacy, production, trade, buildings, settlement development and military readiness.
