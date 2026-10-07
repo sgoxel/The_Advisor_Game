@@ -247,6 +247,12 @@ Important landmark labels must appear at the scale tiers where they are intended
 For Stage 1, protagonist, NPC, settlement, building and local-terrain systems are deliberately dormant. Later stages will add planetary geography first, then progressively finer detail while preserving the same canonical planet scale.
 
 
+## Diversity and a Lively Natural World
+
+Terrain, villages and NPCs must be diverse, coherent and natural. SEED-derived regional terrain/vegetation should vary in shape, density and transitions; villages vary in street/plot geometry, building forms/materials, fields, service placement and economic character while keeping every required facility and owned home. NPCs have individual names, appearance descriptors, roles, birth dates and baseline behavioral tendencies linked to stable NPC/home/work codes. These foundations use SEED alone; current age and purposeful daily activity follow Fantasy Game Time and the established live-action rules.
+
+Residents must visibly use their homes, workplaces, public areas and guard posts through varied work, travel, idle/rest and duty routines on legal connected paths. The scene should feel inhabited without cloned appearances, synchronized perpetual wandering or camera-generated crowds. Reusable optimized assets and focused simulation are permitted, but never alter identities, ownership or same-SEED/time results. See [diversity and living-world acceptance rules](LIVING_WORLD_PLAN.md). These are requirements for the existing Stage S002 packages, not a claim that all activities are implemented.
+
 ## Starting Village
 
 Every new campaign begins with the protagonist as an ordinary low-rank character in a **SEED-generated inhabited village**.
@@ -269,7 +275,7 @@ Local roles may include butcher, produce seller, woodcutter, charcoal burner, ta
 
 These characters are not decorative crowd sprites. They are Simulation-backed participants with identity, location, occupation, relationships, needs and potential interactions.
 
-Persistent residents normally have a valid home. Explicitly transient visitors such as traveling merchants or caravans may enter, work or trade and later leave without receiving an invented residence.
+Every NPC has a registered SEED-defined owned home under the settlement housing rules. Transient visitors such as traveling merchants or caravans may enter, work or trade and later leave while keeping their home elsewhere; visiting a settlement does not invent a new local house or replace their existing identity/home.
 
 Working characters use profession-compatible workplaces or outdoor worksites. Farmers may use fields, hunters wilderness areas, fishers reachable banks or coasts, and similar outdoor professions should use terrain-appropriate locations.
 

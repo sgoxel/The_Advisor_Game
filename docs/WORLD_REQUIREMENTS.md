@@ -28,6 +28,10 @@ Terrain must look irregular, diverse and natural: varied ridges/valleys/coasts, 
 
 No real randomness or entropy is permitted: no Math.random, cryptographic randomness, unseeded generator or device/wall-clock inputs for foundations. Foundation settings do not depend on fantasy time, camera, viewport, LOD, cache, worker order or which place was visited first. Use stable SEED-derived identities and numeric rules; geometry/material/navigation queries share those records.
 
+## Diversity and observable life
+
+The owner additionally requires diverse terrain, villages and NPCs and a lively, natural world. [Living-world requirements](LIVING_WORLD_PLAN.md) turn this into observable quality checks: coherent regional/local landscape variation; different terrain-shaped village layouts and economic roles while keeping mandatory services; individual SEED-defined NPC appearance/identity/home/work descriptors; and varied purposeful work, travel, idle/rest and guard activities under Fantasy Game Time. Repeated palettes/layouts, cloned residents or camera-generated wandering crowds do not satisfy those goals. These requirements extend the existing terrain, settlement and NPC scopes without creating a duplicate work package.
+
 ## Acceptance and existing packages
 
 - WP-S002-004-002 / 007 / 008: demonstrate all-pair village minimum-time proofs or route checks, terrain-caused longer walks, correct fantasy/real units and revalidation after infrastructure modifications. Preserve world counts and normal walking-speed contracts.
