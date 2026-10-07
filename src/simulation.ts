@@ -1,10 +1,12 @@
 import { countries, places, type Place } from "./geography.ts";
-import { WORLD_SEED, WALK_SPEED_MPS } from "./config.ts";
-import { digest, heightAt, cellAt } from "./world.ts";
+import { WALK_SPEED_MPS } from "./config.ts";
+import { digest, heightAt } from "./world.ts";
 import { TIME_SCALE } from "./clock.ts";
 import {
-  enuToPosition,
+  CANONICAL_PLANET_RADIUS,
+  clampLatitude,
   lonLatToSource,
+  normalizeLongitude,
   type CanonicalPosition,
 } from "./planet.ts";
 
@@ -30,10 +32,39 @@ export type CountryState = {
 const populationOf = (place: Place) => (place.kind === "city" ? 2400 : 80);
 
 /**
- * V1 canonical lane scale in physical metres. This preserves the current visible
- * resident spacing while keeping simulation motion authoritative in ENU metres.
+ * Cached tangent coefficients are presentation-independent acceleration data.
+ * Current resident lanes are at most 261 m from their settlement centre, so this
+ * local spherical tangent approximation remains below one centimetre of curvature
+ * error while avoiding full ECEF/ENU trigonometry for thousands of residents.
  */
-const V1_LANE_UNIT_M = 15.270299374405344;
+const tangentMetrics = new Map<
+  string,
+  { radiansPerEastM: number; radiansPerNorthM: number }
+>();
+function metricsFor(place: Place) {
+  let result = tangentMetrics.get(place.code);
+  if (!result) {
+    const cosLat = Math.max(1e-9, Math.abs(Math.cos(place.canonicalPosition.lat)));
+    result = {
+      radiansPerEastM: 1 / (CANONICAL_PLANET_RADIUS * cosLat),
+      radiansPerNorthM: 1 / CANONICAL_PLANET_RADIUS,
+    };
+    tangentMetrics.set(place.code, result);
+  }
+  return result;
+}
+function canonicalOffset(place: Place, eastM: number, northM: number): CanonicalPosition {
+  const metrics = metricsFor(place);
+  return {
+    lon: normalizeLongitude(
+      place.canonicalPosition.lon + eastM * metrics.radiansPerEastM,
+    ),
+    lat: clampLatitude(
+      place.canonicalPosition.lat + northM * metrics.radiansPerNorthM,
+    ),
+    elevation: place.canonicalPosition.elevation,
+  };
+}
 
 export function summaryAt(code: string, tick: number): CountryState {
   const baseline = digest(code) % 5000;
@@ -54,10 +85,10 @@ export function residentAt(
   const code = `${place.code}/RESIDENT/${index}`,
     variant = digest(code),
     span = place.kind === "city" ? 250 : 28;
-  // Four deterministic canonical ENU lanes around a settlement; no stochastic
-  // destination selection and no render tile/camera input.
-  const radius = (12 + (variant % span)) * V1_LANE_UNIT_M,
-    speed = (WALK_SPEED_MPS / TIME_SCALE) * V1_LANE_UNIT_M,
+  // Four deterministic lanes in canonical physical metres. No source atlas scale,
+  // render tile, camera, viewport or stochastic destination selection is an input.
+  const radius = 12 + (variant % span),
+    speed = WALK_SPEED_MPS / TIME_SCALE,
     perimeter = radius * 8;
   const distance =
     (tick * speed + (variant % Math.ceil(perimeter))) % perimeter;
@@ -81,13 +112,10 @@ export function residentAt(
   // Keep/house interiors are not implemented yet: use the two central street axes.
   const horizontal = index % 2 === 0,
     offset = Math.abs(horizontal ? east : north),
-    candidate = enuToPosition(
-      {
-        east: horizontal ? east : 0,
-        north: horizontal ? 0 : north,
-        up: 0,
-      },
-      place.canonicalPosition,
+    candidate = canonicalOffset(
+      place,
+      horizontal ? east : 0,
+      horizontal ? 0 : north,
     ),
     presentation = lonLatToSource(candidate.lon, candidate.lat),
     legal = heightAt(presentation.x, presentation.z) > 0.1,
@@ -102,12 +130,7 @@ export function residentAt(
     position: { lon: surface.lon, lat: surface.lat, elevation },
     x: source.x,
     z: source.z,
-    task:
-      offset < 4 * V1_LANE_UNIT_M
-        ? "Trading"
-        : index % 3 === 0
-          ? "Patrolling"
-          : "Walking",
+    task: offset < 4 ? "Trading" : index % 3 === 0 ? "Patrolling" : "Walking",
   };
 }
 export class LazySimulation {
