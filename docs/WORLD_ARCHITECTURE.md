@@ -77,6 +77,10 @@ This is an implemented foundation with walking/trading/patrol schedules and a si
 
 The current resident `home` field identifies a settlement, not an owned house. Current decorative houses and keeps do not implement individual ownership, required village services, enclosed borders or staffed gates. The owner selected updating the Stage S002 plan with these requirements; see [settlement contracts and acceptance evidence](SETTLEMENT_PLAN.md) and [the binding design](README.md#seeded-settlement-design-and-npc-homes). WP-S002-004-009 covers layouts and building/gate infrastructure; WP-S002-004-011 covers individual houses, staffed workplaces and real resident guard duties. Neither package is marked implemented by this planning update.
 
+## Planned connected road network — Stage S002
+
+[Canonical road/transport contracts](ROAD_NETWORK_PLAN.md) require road access for all villages/cities, country backbones, ruins, bridges and critical structures/areas. Alignment uses river bridges, lake detours, hill grading and low mountain passes, with exact SEED-defined endpoints, profiles and joined junctions preserved through lazy regeneration. The owner approved road-connected harbors and ferry/ship links between landmasses. WP-S002-004-014 covers this network foundation; the rule is planned rather than claimed implemented by this documentation update.
+
 ## Planned world-building priorities — Stage S002
 
 The owner's foundation sequence is oceans 0 → continents 1 → islands 2 → natural biomes/mountains 3 → lakes/rivers 4 → countries 5 → capitals/big cities 6 → villages 7 → roads 8 → ruins/critical quest places 9. [Priority and terrain-earthwork contracts](WORLD_BUILDING_PRIORITY.md) define bounded cuts/fills, dirt roadbeds, housing perimeters, final vegetation/walkability and lazy cross-tile composition. WP-S002-004-012 covers the shared compositor and road/housing edits; WP-S002-004-013 covers ruin/critical-site reservations. These are planned requirements, separate from the current build and from rendering detail levels.
