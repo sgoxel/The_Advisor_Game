@@ -12,7 +12,8 @@ export async function createRenderer(
 ): Promise<pc.GraphicsDevice> {
   const options = {
     antialias: true,
-    powerPreference: "high-performance" as const,
+    powerPreference: "default" as const,
+    xrCompatible: false,
   };
   try {
     const device = await initializeRenderer<
