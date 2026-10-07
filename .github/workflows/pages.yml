@@ -36,7 +36,8 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/handoff-capture --scenario handoff --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 180
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/handoff-capture-webgl2 --scenario handoff --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 180
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/handoff-capture-webgpu --scenario handoff --profile desktop,phone,phone-landscape --renderer webgpu --timeout 180
       - uses: actions/upload-artifact@v4
         if: always()
         with:
