@@ -1,6 +1,7 @@
 import { chromium } from "@playwright/test";
+import webgpu from "../playwright.webgpu.config.js";
 const url = process.argv[2] || "https://sgoxel.github.io/The_Advisor_Game/";
-const browser = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+const browser = await chromium.launch(webgpu.use.launchOptions);
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
   const errors = [];

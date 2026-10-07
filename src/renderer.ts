@@ -31,6 +31,8 @@ export async function createRenderer(
     );
     // Temporary device-level diagnostics while validating the mapped-buffer path.
     const gpu = Reflect.get(device, "wgpu");
+    const nativeDestroy = gpu.destroy.bind(gpu);
+    gpu.destroy = () => { console.error("WebGPU explicit device destruction", new Error().stack); nativeDestroy(); };
     const staging = gpu.createBuffer({ size: 102400, usage: 6, mappedAtCreation: true });
     console.info("Engine WebGPU staging preflight", staging.getMappedRange().byteLength);
     staging.unmap(); staging.destroy();

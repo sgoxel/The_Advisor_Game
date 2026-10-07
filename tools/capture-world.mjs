@@ -1,9 +1,10 @@
 // Capture the built atlas. Start `npm run preview -- --port 4173` first.
 import {chromium} from '@playwright/test';
+import webgpu from '../playwright.webgpu.config.js';
 import {mkdir} from 'node:fs/promises';
 const url=process.argv[2]||'http://127.0.0.1:4173';
 const directory='docs/evidence';await mkdir(directory,{recursive:true});
-const browser=await chromium.launch({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+const browser=await chromium.launch(webgpu.use.launchOptions);
 try{
   const page=await browser.newPage({viewport:{width:1440,height:900}});
   const settle=()=>page.waitForFunction(()=>window.advisorWorld?.state.ready&&window.advisorWorld.state.settled,null,{timeout:90000});
