@@ -140,7 +140,7 @@ test("layer controls hide structure details without leaving floating decorations
 });
 
 
-test("pure zoom handoff preserves focus through buttons wheel pinch and reversal", async ({ page }) => {
+test("pure zoom handoff preserves focus through both directions of every input", async ({ page }) => {
   test.setTimeout(420000);
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -156,64 +156,116 @@ test("pure zoom handoff preserves focus through buttons wheel pinch and reversal
     await page.evaluate((h) => window.advisorWorld.setHalfHeight(h), anchors.localHalfHeight * 0.94);
     await page.waitForFunction(() => window.advisorWorld.state.settled);
     const focus = await page.evaluate(() => ({ ...window.advisorWorld.state.view }));
+    const marker = await page.locator("#centre-marker").boundingBox();
+    expect(marker).not.toBeNull();
+    const markerCenter = {
+      x: marker.x + marker.width / 2,
+      y: marker.y + marker.height / 2,
+    };
+    const assertInvariant = async () => {
+      const current = await page.evaluate(() => window.advisorWorld.state);
+      expect(current.view.x).toBe(focus.x);
+      expect(current.view.z).toBe(focus.z);
+      expect(current.view.yaw).toBe(focus.yaw);
+      expect(current.navigation.heading).toBe(-focus.yaw || 0);
+      const box = await page.locator("#centre-marker").boundingBox();
+      expect(box).not.toBeNull();
+      expect(box.x + box.width / 2).toBeCloseTo(markerCenter.x, 6);
+      expect(box.y + box.height / 2).toBeCloseTo(markerCenter.y, 6);
+      return current;
+    };
+
     await page.locator("#zoom-out").click();
     await page.waitForFunction(() => window.advisorWorld.state.handoff.projectionTransition > 0.01);
-    let state = await page.evaluate(() => window.advisorWorld.state);
+    let state = await assertInvariant();
     expect(state.globe.complete).toBeTruthy();
     expect(state.handoff.destinationReady).toBeTruthy();
     expect(state.handoff.waitingForDestination).toBeFalsy();
     expect(state.handoff.preparationWaitMs).toBeGreaterThanOrEqual(0);
     expect(state.handoff.blendDurationMs).toBeGreaterThan(0);
-    expect(state.view.x).toBe(focus.x);
-    expect(state.view.z).toBe(focus.z);
-    expect(state.view.yaw).toBe(focus.yaw);
-    await page.locator("#world").hover();
-    await page.mouse.wheel(0, -220);
-    await page.waitForTimeout(60);
-    state = await page.evaluate(() => window.advisorWorld.state);
-    expect(state.view.x).toBe(focus.x);
-    expect(state.view.z).toBe(focus.z);
-    expect(state.view.yaw).toBe(focus.yaw);
-    // Two-pointer pinch: synthetic pointer events exercise the same production handler.
-    await page.evaluate(() => {
-      const c = document.getElementById("world"), r = c.getBoundingClientRect();
-      const fire = (type, id, x, y) => c.dispatchEvent(new PointerEvent(type, {
-        bubbles: true, pointerId: id, pointerType: "touch", clientX: x, clientY: y,
-        buttons: type === "pointerup" ? 0 : 1,
-      }));
-      const cy = r.top + r.height * 0.55, cx = r.left + r.width * 0.5;
-      fire("pointerdown", 31, cx - 45, cy); fire("pointerdown", 32, cx + 45, cy);
-      fire("pointermove", 31, cx - 70, cy); fire("pointermove", 32, cx + 70, cy);
-      fire("pointerup", 31, cx - 70, cy); fire("pointerup", 32, cx + 70, cy);
-    });
-    await page.waitForTimeout(80);
-    state = await page.evaluate(() => window.advisorWorld.state);
-    expect(state.view.x).toBe(focus.x);
-    expect(state.view.z).toBe(focus.z);
-    expect(state.view.yaw).toBe(focus.yaw);
-    // Reverse mid-transition and then traverse both settled endpoints.
-    await page.mouse.wheel(0, -350);
+    const buttonOutHeight = state.view.halfHeight;
+    await page.locator("#zoom-in").click();
     await page.waitForTimeout(50);
-    expect((await page.evaluate(() => window.advisorWorld.state.handoff)).direction).not.toBe("to-globe");
+    state = await assertInvariant();
+    expect(state.view.halfHeight).toBeLessThan(buttonOutHeight);
+    await page.locator("#zoom-out").click();
+    await page.waitForTimeout(50);
+    state = await assertInvariant();
+    expect(state.view.halfHeight).toBeGreaterThan(buttonOutHeight / 1.4);
+
+    await page.locator("#world").hover();
+    const wheelStart = state.view.halfHeight;
+    await page.mouse.wheel(0, 140);
+    await page.waitForTimeout(60);
+    state = await assertInvariant();
+    expect(state.view.halfHeight).toBeGreaterThan(wheelStart);
+    const wheelOutHeight = state.view.halfHeight;
+    await page.mouse.wheel(0, -140);
+    await page.waitForTimeout(60);
+    state = await assertInvariant();
+    expect(state.view.halfHeight).toBeLessThan(wheelOutHeight);
+
+    const pinch = async (startSpread, endSpread, firstId) => {
+      await page.evaluate(
+        ({ startSpread, endSpread, firstId }) => {
+          const c = document.getElementById("world"),
+            r = c.getBoundingClientRect(),
+            fire = (type, id, x, y) => c.dispatchEvent(new PointerEvent(type, {
+              bubbles: true,
+              pointerId: id,
+              pointerType: "touch",
+              clientX: x,
+              clientY: y,
+              buttons: type === "pointerup" ? 0 : 1,
+            })),
+            cy = r.top + r.height * 0.55,
+            cx = r.left + r.width * 0.5;
+          fire("pointerdown", firstId, cx - startSpread, cy);
+          fire("pointerdown", firstId + 1, cx + startSpread, cy);
+          fire("pointermove", firstId, cx - endSpread, cy);
+          fire("pointermove", firstId + 1, cx + endSpread, cy);
+          fire("pointerup", firstId, cx - endSpread, cy);
+          fire("pointerup", firstId + 1, cx + endSpread, cy);
+        },
+        { startSpread, endSpread, firstId },
+      );
+      await page.waitForTimeout(80);
+      return assertInvariant();
+    };
+    const pinchStart = state.view.halfHeight;
+    state = await pinch(45, 70, 31);
+    expect(state.view.halfHeight).toBeLessThan(pinchStart);
+    const pinchInHeight = state.view.halfHeight;
+    state = await pinch(70, 45, 41);
+    expect(state.view.halfHeight).toBeGreaterThan(pinchInHeight);
+
+    // Explicit reversal while projectionTransition is strictly between 0 and 1.
+    await page.mouse.move(viewport.width * 0.5, viewport.height * 0.55);
+    const beforeReverse = await page.evaluate(
+      () => window.advisorWorld.state.handoff.projectionTransition,
+    );
+    expect(beforeReverse).toBeGreaterThan(0);
+    expect(beforeReverse).toBeLessThan(1);
+    await page.mouse.wheel(0, -420);
+    await page.waitForFunction(() => {
+      const h = window.advisorWorld.state.handoff;
+      return h.desiredTransition < h.projectionTransition || h.projectionTransition <= 0.01;
+    });
+    state = await assertInvariant();
+
     await page.evaluate((h) => window.advisorWorld.setHalfHeight(h), anchors.globeHalfHeight * 1.06);
     await page.waitForFunction(() => window.advisorWorld.state.presentation === "globe" && window.advisorWorld.state.settled);
-    const globe = await page.evaluate(() => window.advisorWorld.state);
-    expect(globe.view.x).toBe(focus.x);
-    expect(globe.view.z).toBe(focus.z);
-    expect(globe.view.yaw).toBe(focus.yaw);
-    expect(globe.globe.complete).toBeTruthy();
-    expect(globe.handoff.destinationReady).toBeTruthy();
-    expect(globe.handoff.waitingForDestination).toBeFalsy();
-    expect(globe.handoff.preparationWaitMs).toBeGreaterThanOrEqual(0);
-    expect(globe.handoff.blendDurationMs).toBeGreaterThan(0);
+    const globeState = await assertInvariant();
+    expect(globeState.globe.complete).toBeTruthy();
+    expect(globeState.handoff.destinationReady).toBeTruthy();
+    expect(globeState.handoff.waitingForDestination).toBeFalsy();
+    expect(globeState.handoff.preparationWaitMs).toBeGreaterThanOrEqual(0);
+    expect(globeState.handoff.blendDurationMs).toBeGreaterThan(0);
     await page.evaluate((h) => window.advisorWorld.setHalfHeight(h), anchors.localHalfHeight * 0.94);
     await page.waitForFunction(() => window.advisorWorld.state.presentation === "flat" && window.advisorWorld.state.settled);
-    const flat = await page.evaluate(() => window.advisorWorld.state);
-    expect(flat.view.x).toBe(focus.x);
-    expect(flat.view.z).toBe(focus.z);
-    expect(flat.view.yaw).toBe(focus.yaw);
-    expect(flat.handoff.destinationReady).toBeTruthy();
-    expect(flat.handoff.waitingForDestination).toBeFalsy();
+    const flatState = await assertInvariant();
+    expect(flatState.handoff.destinationReady).toBeTruthy();
+    expect(flatState.handoff.waitingForDestination).toBeFalsy();
     await expect(page.locator("#error")).toBeHidden();
   }
   expect(errors).toEqual([]);
