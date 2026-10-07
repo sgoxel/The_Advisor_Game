@@ -19,6 +19,12 @@ import {
   sourceToLonLat,
   wrapCanonicalX,
 } from "./planet.ts";
+import {
+  canonicalCellCenter,
+  canonicalCellNeighbor,
+  canonicalCellNeighbors,
+  canonicalFoundationSample,
+} from "./spatial-authority.ts";
 
 const CANONICAL_ID_LEVEL = 20;
 
@@ -84,11 +90,19 @@ function install(world: AdvisorWorld) {
   // sample is retained only under an explicitly derived presentation field.
   world.cellAt = (x: number, z: number) => {
     const source = sourceCellAt(x, z),
-      { position, canonical } = canonicalFromSourceCell(source);
+      { position, canonical } = canonicalFromSourceCell(source),
+      foundation = canonicalFoundationSample(
+        position.lon,
+        position.lat,
+        CANONICAL_ID_LEVEL,
+        WORLD_SEED,
+        GENERATOR_VERSION,
+      );
     return {
       code: canonical.id,
       canonicalId: canonical.id,
       canonicalCell: canonical,
+      foundation,
       position: { ...position, elevation: source.elevation },
       elevation: source.elevation,
       biome: source.biome,
@@ -112,6 +126,10 @@ function install(world: AdvisorWorld) {
     identityLevel: CANONICAL_ID_LEVEL,
     canonicalCell,
     canonicalCellId,
+    canonicalCellCenter,
+    canonicalCellNeighbor,
+    canonicalCellNeighbors,
+    canonicalFoundationSample,
     normalizeLongitude,
     wrapCanonicalX,
     lonLatToMeters,
