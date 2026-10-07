@@ -132,37 +132,125 @@ test("both unavailable backends show an actionable failure", async ({
   );
 });
 
-
-test("WebGL2 fallback keeps the same focus through the handoff and pinch", async ({ page }) => {
+test("WebGL2 fallback keeps the same focus through handoff controls on every target viewport", async ({ page }) => {
+  test.setTimeout(300000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.setViewportSize({ width: 844, height: 390 });
-  await page.addInitScript(() => Object.defineProperty(navigator, "gpu", { value: undefined, configurable: true }));
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, "gpu", {
+      value: undefined,
+      configurable: true,
+    }),
+  );
   await page.goto("/");
   await page.waitForFunction(() => window.advisorWorld?.state.ready);
-  const anchors = await page.evaluate(() => window.advisorWorld.handoff);
-  await page.evaluate((h) => window.advisorWorld.setHalfHeight(h), anchors.localHalfHeight * 1.15);
-  await page.waitForFunction(() => window.advisorWorld.state.handoff.projectionTransition > 0.01);
-  const focus = await page.evaluate(() => ({ ...window.advisorWorld.state.view }));
-  await page.locator("#zoom-out").click();
-  await page.locator("#world").hover();
-  await page.mouse.wheel(0, 100);
-  await page.evaluate(() => {
-    const c = document.getElementById("world"), r = c.getBoundingClientRect();
-    const fire = (type, id, x) => c.dispatchEvent(new PointerEvent(type, {
-      bubbles: true, pointerId: id, pointerType: "touch", clientX: x,
-      clientY: r.top + r.height * 0.55, buttons: type === "pointerup" ? 0 : 1,
-    }));
-    const cx = r.left + r.width / 2;
-    fire("pointerdown", 41, cx - 35); fire("pointerdown", 42, cx + 35);
-    fire("pointermove", 41, cx - 55); fire("pointermove", 42, cx + 55);
-    fire("pointerup", 41, cx - 55); fire("pointerup", 42, cx + 55);
-  });
-  await page.waitForTimeout(100);
-  const state = await page.evaluate(() => window.advisorWorld.state);
-  expect(state.view.x).toBe(focus.x);
-  expect(state.view.z).toBe(focus.z);
-  expect(state.view.yaw).toBe(focus.yaw);
   expect(await page.evaluate(() => window.advisorRenderer.backend)).toBe("webgl2");
+  const anchors = await page.evaluate(() => window.advisorWorld.handoff);
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.evaluate(
+      (h) => window.advisorWorld.setHalfHeight(h),
+      anchors.localHalfHeight * 0.94,
+    );
+    await page.waitForFunction(
+      () =>
+        window.advisorWorld.state.presentation === "flat" &&
+        window.advisorWorld.state.settled,
+    );
+    const focus = await page.evaluate(() => ({ ...window.advisorWorld.state.view }));
+
+    await page.locator("#zoom-out").click();
+    await page.waitForFunction(
+      () => window.advisorWorld.state.handoff.projectionTransition > 0.01,
+    );
+    let state = await page.evaluate(() => window.advisorWorld.state);
+    expect(state.view.x).toBe(focus.x);
+    expect(state.view.z).toBe(focus.z);
+    expect(state.view.yaw).toBe(focus.yaw);
+
+    await page.mouse.move(viewport.width * 0.5, viewport.height * 0.55);
+    await page.mouse.wheel(0, 100);
+    await page.waitForTimeout(70);
+    state = await page.evaluate(() => window.advisorWorld.state);
+    expect(state.view.x).toBe(focus.x);
+    expect(state.view.z).toBe(focus.z);
+    expect(state.view.yaw).toBe(focus.yaw);
+
+    await page.evaluate(() => {
+      const c = document.getElementById("world"),
+        r = c.getBoundingClientRect(),
+        fire = (type, id, x, y) =>
+          c.dispatchEvent(
+            new PointerEvent(type, {
+              bubbles: true,
+              pointerId: id,
+              pointerType: "touch",
+              clientX: x,
+              clientY: y,
+              buttons: type === "pointerup" ? 0 : 1,
+            }),
+          ),
+        cy = r.top + r.height * 0.55,
+        cx = r.left + r.width * 0.5;
+      fire("pointerdown", 41, cx - 45, cy);
+      fire("pointerdown", 42, cx + 45, cy);
+      fire("pointermove", 41, cx - 70, cy);
+      fire("pointermove", 42, cx + 70, cy);
+      fire("pointerup", 41, cx - 70, cy);
+      fire("pointerup", 42, cx + 70, cy);
+    });
+    await page.waitForTimeout(80);
+    state = await page.evaluate(() => window.advisorWorld.state);
+    expect(state.view.x).toBe(focus.x);
+    expect(state.view.z).toBe(focus.z);
+    expect(state.view.yaw).toBe(focus.yaw);
+
+    await page.mouse.move(viewport.width * 0.5, viewport.height * 0.55);
+    await page.mouse.wheel(0, -420);
+    await page.waitForFunction(
+      () => {
+        const h = window.advisorWorld.state.handoff;
+        return (
+          h.desiredTransition < h.projectionTransition ||
+          h.projectionTransition <= 0.01
+        );
+      },
+    );
+    state = await page.evaluate(() => window.advisorWorld.state);
+    expect(state.view.x).toBe(focus.x);
+    expect(state.view.z).toBe(focus.z);
+    expect(state.view.yaw).toBe(focus.yaw);
+
+    await page.evaluate(
+      (h) => window.advisorWorld.setHalfHeight(h),
+      anchors.globeHalfHeight * 1.06,
+    );
+    await page.waitForFunction(
+      () =>
+        window.advisorWorld.state.presentation === "globe" &&
+        window.advisorWorld.state.settled,
+    );
+    state = await page.evaluate(() => window.advisorWorld.state);
+    expect(state.view.x).toBe(focus.x);
+    expect(state.view.z).toBe(focus.z);
+    expect(state.view.yaw).toBe(focus.yaw);
+    expect(state.handoff.destinationReady).toBeTruthy();
+
+    await page.evaluate(
+      (h) => window.advisorWorld.setHalfHeight(h),
+      anchors.localHalfHeight * 0.94,
+    );
+    await page.waitForFunction(
+      () =>
+        window.advisorWorld.state.presentation === "flat" &&
+        window.advisorWorld.state.settled,
+    );
+  }
+  await expect(page.locator("#error")).toBeHidden();
   expect(errors).toEqual([]);
 });
