@@ -49,6 +49,7 @@ import {
 } from "./handoff.ts";
 import {
   coordinateLabel,
+  distanceLabel,
   draggedFocus,
   parallelDragFocus,
   surfaceDistance,
@@ -238,10 +239,7 @@ function updateNavigationHud() {
     const distanceM = surfaceDistance(start, end);
     rulerState = { pixels, distanceM, start, end };
     $("scale-line").style.width = `${pixels}px`;
-    $("scale-text").textContent =
-      distanceM >= 1000
-        ? `${(distanceM / 1000).toFixed(distanceM >= 100000 ? 0 : 1)} km`
-        : `${distanceM.toFixed(distanceM >= 100 ? 0 : 1)} m`;
+    $("scale-text").textContent = distanceLabel(distanceM);
     $("scale-text").title = "Surface distance at map focus";
   }
 }
@@ -427,7 +425,9 @@ function updateHandoff(dt: number) {
   }
   if (needsTransition)
     handoffDirection =
-      desiredProjectionTransition > projectionTransition ? "to-globe" : "to-flat";
+      desiredProjectionTransition > projectionTransition
+        ? "to-globe"
+        : "to-flat";
 
   if (needsTransition && !destinationReady) {
     if (!handoffWaitingForDestination) {
@@ -1338,7 +1338,9 @@ async function start() {
         const flatReady = flatCoverageReady(),
           destinationReady = destinationCoverageReady(flatReady),
           activePreparationWaitMs = handoffWaitingForDestination
-            ? handoffPreparationWaitMs + performance.now() - handoffPreparationStarted
+            ? handoffPreparationWaitMs +
+              performance.now() -
+              handoffPreparationStarted
             : handoffPreparationWaitMs;
         return {
           ready,

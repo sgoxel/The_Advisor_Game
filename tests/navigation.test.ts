@@ -5,6 +5,7 @@ import {
   draggedFocus,
   parallelDragFocus,
   coordinateLabel,
+  distanceLabel,
   placeLabels,
   overlaps,
 } from "../src/navigation.ts";
@@ -74,6 +75,17 @@ test("coordinates expose precision and hemispheres", () => {
     /\d+\.\d{5}°N · \d+\.\d{5}°W/,
   );
   assert.match(coordinateLabel({ lon: 0.1, lat: -0.1 }, false), /\d+\.\d{4}°S/);
+});
+test("ruler labels stay within two percent from polar sub-metres to long arcs", () => {
+  for (const metres of [
+    1e-8, 0.03234, 1.045, 99.96, 100.49, 1049, 1482, 9999, 10001, 100000,
+    1100001, 2001508,
+  ]) {
+    const label = distanceLabel(metres),
+      displayed = parseFloat(label) * (label.endsWith("km") ? 1000 : 1);
+    assert.ok(Math.abs(displayed / metres - 1) < 0.02, `${metres}: ${label}`);
+  }
+  assert.equal(distanceLabel(0), "0 m");
 });
 test("a complete eastward turn returns to the same focus at multiple latitudes", () => {
   for (const lat of [-1.4, 0, 0.7, 1.4]) {

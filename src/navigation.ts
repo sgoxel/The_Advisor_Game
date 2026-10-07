@@ -66,6 +66,11 @@ export function coordinateLabel(focus: LonLat, local: boolean): string {
     lon = (focus.lon * 180) / Math.PI;
   return `${Math.abs(lat).toFixed(digits)}°${lat < 0 ? "S" : "N"} · ${Math.abs(lon).toFixed(digits)}°${lon < 0 ? "W" : "E"}`;
 }
+/** Three significant digits keep every nonzero ruler label within 0.5%. */
+export function distanceLabel(metres: number): string {
+  const kilometres = metres >= 1000;
+  return `${Number((kilometres ? metres / 1000 : metres).toPrecision(3))} ${kilometres ? "km" : "m"}`;
+}
 /** A north-aligned horizontal turn follows a latitude parallel without pole drift. */
 export function parallelDragFocus(
   focus: LonLat,
