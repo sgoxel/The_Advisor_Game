@@ -222,7 +222,7 @@ function updateNavigationHud() {
   const approximate =
     Math.abs(canonicalFootprintForHalfHeight(view.halfHeight) / anchor - 1) >
     0.001;
-  for (const option of $<HTMLSelectElement>("map-scale").options)
+  for (const option of Array.from($<HTMLSelectElement>("map-scale").options))
     option.textContent = `1/${option.value}${approximate && option.selected ? " ≈" : ""}`;
   $("scale-caption").textContent = approximate ? "Scale ≈" : "Scale";
   let pixels = innerWidth < 700 ? 64 : 104;
