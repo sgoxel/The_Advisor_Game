@@ -16,3 +16,4 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 
 - WP-S001-001-001 — Google Earth reference analysis, five-level seeded world atlas, lazy simulation and fantasy clock — COMPLETED
 - WP-S001-002-001 — Explicit WebGPU renderer initialization and real-backend validation — COMPLETED
+- WP-S001-003-001 — Default Chrome rendering with WebGPU preference and WebGL2 fallback — IN PROGRESS

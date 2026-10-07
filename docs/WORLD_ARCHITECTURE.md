@@ -1,6 +1,6 @@
 # Seeded world atlas and simulation
 
-The world opens through the root `index.html`, built with PlayCanvas 2.23.0, TypeScript and Vite. WebGPU initializes directly and exclusively. Devices without a WebGPU adapter receive a reason and a retry option. No compatibility backend is included. Engine and tooling versions are locked in `package-lock.json`. See [WebGPU implementation](WEBGPU.md).
+The world opens through the root `index.html`, built with PlayCanvas 2.23.0, TypeScript and Vite. WebGPU initializes first; unavailable or failed adapters automatically select WebGL2. Both display identical seeded geometry and simulation without requiring experimental Chrome flags. Engine and tooling versions are locked in `package-lock.json`. See [renderer implementation](WEBGPU.md).
 
 ## Reference analysis: Google Earth
 

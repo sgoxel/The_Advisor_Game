@@ -428,7 +428,7 @@ Offline progression should preserve believable world continuity without changing
 
 # 🎨 World Presentation and Rendering Architecture
 
-The final world renderer is **PlayCanvas Engine 2** with **WebGPU exclusively**. A WebGPU-capable browser and graphics adapter are required; there is no WebGL2 fallback.
+The world renderer is **PlayCanvas Engine 2**, preferring **WebGPU** with automatic **WebGL2** fallback when the browser cannot initialize WebGPU. Playing with default Chrome settings is mandatory; players must not need experimental flags or GPU blocklist overrides. A usable WebGPU or WebGL2 graphics context is required.
 The game will be mainly use 3d simple meshes with Cel-Shading (Toon-Shading) technic for textures, but it will also use 2d character artistic images for dialogues. 
 
 The architecture is intentionally split:
@@ -470,7 +470,7 @@ The default gameplay camera is **orthographic top-down / 3/4 view**. Perspective
 The supported production baseline is:
 
 - **PlayCanvas Engine 2**;
-- **WebGPU** is required on desktop, phone and tablet;
+- **WebGPU** is preferred on desktop, phone and tablet, with automatic **WebGL2** fallback;
 - WebGPU device support must be checked at startup;
 - rendering quality changes must preserve identical Simulation behavior;
 - adaptive render scale and pixel-ratio limits protect mobile GPU performance;

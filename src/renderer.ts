@@ -5,6 +5,7 @@ export const rendererState = {
   backend: "" as string,
   phase: "starting" as "starting" | "ready" | "failed" | "lost",
   error: "",
+  fallbackReason: "",
 };
 Object.defineProperty(window, "advisorRenderer", { value: rendererState });
 export async function createRenderer(
@@ -16,7 +17,7 @@ export async function createRenderer(
     xrCompatible: false,
   };
   try {
-    const device = await initializeRenderer<
+    const { device, fallbackReason } = await initializeRenderer<
       pc.GraphicsDevice & {
         initWebGpu?: (
           glslangUrl: undefined,
@@ -33,8 +34,16 @@ export async function createRenderer(
           ...options,
           featureLevel: "bare",
         }),
+      () => {
+        // A canvas bound to WebGPU cannot acquire a WebGL2 context, even after
+        // device destruction. Use a fresh surface after any GPU failure.
+        const replacement = canvas.cloneNode(false) as HTMLCanvasElement;
+        canvas.replaceWith(replacement);
+        return new pc.WebglGraphicsDevice(replacement, options);
+      },
     );
     rendererState.backend = device.deviceType;
+    rendererState.fallbackReason = fallbackReason;
     rendererState.phase = "ready";
     return device;
   } catch (error) {

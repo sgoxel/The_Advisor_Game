@@ -27,7 +27,7 @@ import { createRenderer, rendererState } from "./renderer.ts";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
-const canvas = $<HTMLCanvasElement>("world");
+let canvas = $<HTMLCanvasElement>("world");
 const view: View = {
   x: 0,
   z: 14,
@@ -543,6 +543,7 @@ async function start() {
   $("world-seed").textContent = WORLD_SEED;
   $("fantasy-time").textContent = clock.labelAt(Date.now());
   const device = await createRenderer(canvas);
+  canvas = device.canvas as HTMLCanvasElement;
   device.on("devicelost", () => {
     rendererState.phase = "lost";
     rendererState.error =
@@ -623,7 +624,8 @@ async function start() {
   let lastSimulationRealSecond = -1;
   const labelNodes = new Map<string, HTMLElement>();
   const labels = $("map-labels");
-  $("backend").textContent = "PlayCanvas 2.23.0 · WebGPU";
+  $("backend").textContent = `PlayCanvas 2.23.0 · ${device.deviceType === "webgpu" ? "WebGPU" : "WebGL2"}`;
+  $("backend").title = rendererState.fallbackReason;
   let statsElapsed = 0,
     frames = 0,
     fps = 0;
@@ -823,7 +825,7 @@ function showRendererActions() {
   const actions = document.createElement("div");
   actions.className = "renderer-actions";
   const retry = document.createElement("button");
-  retry.textContent = "Retry WebGPU";
+  retry.textContent = "Retry rendering";
   retry.onclick = () => {
     const url = new URL(location.href);
     url.searchParams.delete("renderer");
@@ -834,7 +836,7 @@ function showRendererActions() {
 }
 start().catch((error) => {
   fail(error instanceof Error ? error.message : String(error));
-  $("backend").textContent = "WebGPU unavailable";
+  $("backend").textContent = "3D renderer unavailable";
   $("tile-status").textContent = "Renderer initialization failed";
   showRendererActions();
 });
