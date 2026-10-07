@@ -59,6 +59,17 @@ SCENARIOS: dict[str, str] = {
     "province": "zoom-out:3",
     "realm": "click:#overview",
     "realm-tiles": "click:#overview;check:#grid",
+    "handoff": (
+        "eval:window.advisorWorld.setHalfHeight(window.advisorWorld.handoff.localHalfHeight*0.92);settle;shot:flat;"
+        "eval:window.advisorWorld.setHalfHeight(window.advisorWorld.handoff.localHalfHeight*1.18);settle;shot:in-25;"
+        "eval:window.advisorWorld.setHalfHeight(Math.sqrt(window.advisorWorld.handoff.localHalfHeight*window.advisorWorld.handoff.globeHalfHeight));settle;shot:in-50;"
+        "eval:window.advisorWorld.setHalfHeight(window.advisorWorld.handoff.globeHalfHeight*0.88);settle;shot:in-80;"
+        "eval:window.advisorWorld.setHalfHeight(window.advisorWorld.handoff.globeHalfHeight*1.04);settle;shot:globe;"
+        "eval:window.advisorWorld.setHalfHeight(window.advisorWorld.handoff.globeHalfHeight*0.86);settle;shot:out-80;"
+        "eval:window.advisorWorld.setHalfHeight(Math.sqrt(window.advisorWorld.handoff.localHalfHeight*window.advisorWorld.handoff.globeHalfHeight));settle;shot:out-50;"
+        "eval:window.advisorWorld.setHalfHeight(window.advisorWorld.handoff.localHalfHeight*1.16);settle;shot:out-25;"
+        "eval:window.advisorWorld.setHalfHeight(window.advisorWorld.handoff.localHalfHeight*0.92);settle;shot:flat-return"
+    ),
     "cell": "tap;visible:#cell-panel",
     "travel-city": "click:#open-travel;select:#continent-select=1;click:#visit-city",
 }
@@ -92,6 +103,8 @@ STATE_JS = """() => {
     fallbackReason: renderer.fallbackReason || '', presentation: state.presentation ?? null,
     view: state.view ?? null, active: state.active ?? null,
     cached: state.cached ?? null, pending: state.pending ?? null,
+    handoff: state.handoff ?? null, scaleLabel: state.scaleLabel ?? null,
+    canonicalFootprintM: state.canonicalFootprintM ?? null,
     detailName: detail ? detail.textContent.trim() : null,
     error: state.error || (box && !box.hidden ? box.textContent.trim() : ''),
   };

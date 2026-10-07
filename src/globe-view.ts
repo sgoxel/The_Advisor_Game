@@ -85,18 +85,19 @@ function sphereMesh(device: pc.GraphicsDevice): pc.Mesh {
 
 /** Unit disc in the XZ plane, fanned from the centre: u = radius, v = 0.5. */
 function fanMesh(device: pc.GraphicsDevice): pc.Mesh {
+  // Screen-facing XY disc; GlobeView.placeCamera gives it the camera rotation.
   const positions = new Float32Array((SHADE_SEGMENTS + 1) * 3),
     normals = new Float32Array((SHADE_SEGMENTS + 1) * 3),
     uvs = new Float32Array((SHADE_SEGMENTS + 1) * 2),
     indices = new Uint16Array(SHADE_SEGMENTS * 3);
-  normals[1] = 1;
+  normals[2] = 1;
   uvs[1] = 0.5;
   for (let i = 0; i < SHADE_SEGMENTS; i++) {
     const angle = (i / SHADE_SEGMENTS) * 2 * Math.PI,
       v = i + 1;
     positions[v * 3] = Math.cos(angle);
-    positions[v * 3 + 2] = Math.sin(angle);
-    normals[v * 3 + 1] = 1;
+    positions[v * 3 + 1] = Math.sin(angle);
+    normals[v * 3 + 2] = 1;
     uvs[v * 2] = 1;
     uvs[v * 2 + 1] = 0.5;
     indices[i * 3] = 0;
@@ -186,6 +187,8 @@ export class GlobeView {
   private readonly rotation = new pc.Quat();
   private readonly turn = new pc.Quat();
   private readonly point = new pc.Vec3();
+  private readonly viewAxis = new pc.Vec3(0, 1, 0);
+  private readonly shade: pc.Entity;
 
   constructor(app: pc.AppBase) {
     const device = (this.device = app.graphicsDevice);
@@ -236,14 +239,14 @@ export class GlobeView {
     // Drawn after the sphere (transparent pass) with no depth test: it can never
     // z-fight. It lies flat above the globe because the camera looks straight down.
     const fan = fanMesh(device);
-    const shade = new pc.Entity("Globe shading");
+    const shade = (this.shade = new pc.Entity("Globe shading"));
     shade.addComponent("render", {
       meshInstances: [new pc.MeshInstance(fan, this.shadeMaterial)],
       castShadows: false,
       receiveShadows: false,
     });
     const reach = PLANET_RADIUS * SHADE_REACH;
-    shade.setLocalScale(reach, 1, reach);
+    shade.setLocalScale(reach, reach, 1);
     shade.setLocalPosition(0, PLANET_RADIUS * 1.25, 0);
     this.root.addChild(shade);
 
@@ -297,6 +300,13 @@ export class GlobeView {
     previous.destroy();
   }
 
+  setBlend(alpha: number) {
+    const value = Math.max(0, Math.min(1, alpha));
+    this.shade.enabled = value > 0.001;
+    this.shadeMaterial.opacity = value;
+    this.shadeMaterial.update();
+  }
+
   setVisible(visible: boolean) {
     this.root.enabled = visible;
   }
@@ -313,16 +323,26 @@ export class GlobeView {
     this.sphere.setLocalRotation(this.rotation);
   }
 
-  /** Put an orthographic camera straight above the globe centre, looking down -Y with
-   * screen-up = -Z (screen-right = +X). Never shortens the camera's far clip. */
-  placeCamera(camera: pc.Entity, halfHeight: number) {
-    const lens = camera.camera!;
-    camera.setPosition(0, CAMERA_HEIGHT, 0);
-    camera.setRotation(DOWN);
+  /** Use the same fixed 60°-above-ground camera angle as the flat presentation.
+   * The focused surface point remains at the screen centre at every zoom. */
+  placeCamera(camera: pc.Entity, halfHeight: number, yaw: number) {
+    const lens = camera.camera!,
+      distance = halfHeight * 2.2 + 200,
+      target = new pc.Vec3(0, PLANET_RADIUS, 0),
+      position = new pc.Vec3(
+        Math.sin(yaw) * distance * 0.5,
+        PLANET_RADIUS + distance * Math.sin(Math.PI / 3),
+        Math.cos(yaw) * distance * 0.5,
+      );
+    camera.setPosition(position);
+    camera.lookAt(target);
     lens.orthoHeight = halfHeight;
-    if (lens.farClip < CAMERA_FAR) lens.farClip = CAMERA_FAR;
-    // The engine refreshes a camera's cached view matrix only at "prerender"; without
-    // this, worldToScreen would use the previous pose until the next frame was drawn.
+    lens.farClip = Math.max(lens.farClip, PLANET_RADIUS * 6 + distance);
+    this.viewAxis.copy(position).sub(target).normalize();
+    // The radial halo is a camera-facing overlay centred on the projected sphere disc.
+    const centreToCamera = position.clone().normalize();
+    this.shade.setPosition(centreToCamera.mulScalar(PLANET_RADIUS * 1.25));
+    this.shade.setRotation(camera.getRotation());
     lens.onAppPrerender();
   }
 
@@ -332,7 +352,11 @@ export class GlobeView {
     const c = Math.cos(lat);
     this.point.set(c * Math.sin(lon), Math.sin(lat), c * Math.cos(lon));
     this.rotation.transformVector(this.point, out).mulScalar(PLANET_RADIUS);
-    return out.y > 0;
+    return out.dot(this.viewAxis) > 0;
+  }
+
+  frontness(point: pc.Vec3): number {
+    return point.dot(this.viewAxis) / PLANET_RADIUS;
   }
 
   destroy() {

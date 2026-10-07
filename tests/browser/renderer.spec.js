@@ -131,3 +131,38 @@ test("both unavailable backends show an actionable failure", async ({
     "failed",
   );
 });
+
+
+test("WebGL2 fallback keeps the same focus through the handoff and pinch", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.addInitScript(() => Object.defineProperty(navigator, "gpu", { value: undefined, configurable: true }));
+  await page.goto("/");
+  await page.waitForFunction(() => window.advisorWorld?.state.ready);
+  const anchors = await page.evaluate(() => window.advisorWorld.handoff);
+  await page.evaluate((h) => window.advisorWorld.setHalfHeight(h), anchors.localHalfHeight * 1.15);
+  await page.waitForFunction(() => window.advisorWorld.state.handoff.projectionTransition > 0.01);
+  const focus = await page.evaluate(() => ({ ...window.advisorWorld.state.view }));
+  await page.locator("#zoom-out").click();
+  await page.locator("#world").hover();
+  await page.mouse.wheel(0, 100);
+  await page.evaluate(() => {
+    const c = document.getElementById("world"), r = c.getBoundingClientRect();
+    const fire = (type, id, x) => c.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, pointerId: id, pointerType: "touch", clientX: x,
+      clientY: r.top + r.height * 0.55, buttons: type === "pointerup" ? 0 : 1,
+    }));
+    const cx = r.left + r.width / 2;
+    fire("pointerdown", 41, cx - 35); fire("pointerdown", 42, cx + 35);
+    fire("pointermove", 41, cx - 55); fire("pointermove", 42, cx + 55);
+    fire("pointerup", 41, cx - 55); fire("pointerup", 42, cx + 55);
+  });
+  await page.waitForTimeout(100);
+  const state = await page.evaluate(() => window.advisorWorld.state);
+  expect(state.view.x).toBe(focus.x);
+  expect(state.view.z).toBe(focus.z);
+  expect(state.view.yaw).toBe(focus.yaw);
+  expect(await page.evaluate(() => window.advisorRenderer.backend)).toBe("webgl2");
+  expect(errors).toEqual([]);
+});

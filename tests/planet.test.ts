@@ -6,6 +6,8 @@ import {
   PLANET_CIRCUMFERENCE,
   PLANET_RADIUS,
   POLE_DISTANCE,
+  CANONICAL_PLANET_RADIUS,
+  CANONICAL_PLANET_CIRCUMFERENCE,
   flatToLonLat,
   lonLatToFlat,
   lonLatToUnit,
@@ -13,7 +15,9 @@ import {
   wrapX,
 } from "../src/planet.ts";
 
-test("the planet is the flat world: one turn east-west, poles a quarter turn from the equator", () => {
+test("the transitional source domain wraps exactly while canonical physical scale is explicit", () => {
+  assert.equal(CANONICAL_PLANET_RADIUS, 637100);
+  assert.ok(Math.abs(CANONICAL_PLANET_CIRCUMFERENCE - 4003017.36) < 0.01);
   assert.equal(PLANET_CIRCUMFERENCE, WORLD_SIZE);
   assert.ok(Math.abs(2 * Math.PI * PLANET_RADIUS - WORLD_SIZE) < 1e-6);
   assert.equal(POLE_DISTANCE, WORLD_SIZE / 4);

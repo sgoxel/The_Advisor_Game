@@ -7,6 +7,18 @@ export const PLANET_RADIUS = PLANET_CIRCUMFERENCE / (2 * Math.PI);
 /** Flat metres from the equator (z = 0) to either pole. */
 export const POLE_DISTANCE = PLANET_CIRCUMFERENCE / 4;
 
+/** Binding S002 physical planet scale. The S001 source coordinate domain is intentionally
+ * kept separate until WP-S002-004-002 performs the runtime world rescale. */
+export const CANONICAL_PLANET_RADIUS = 637_100;
+export const CANONICAL_PLANET_CIRCUMFERENCE = 2 * Math.PI * CANONICAL_PLANET_RADIUS;
+export const CANONICAL_PLANET_DIAMETER = 2 * CANONICAL_PLANET_RADIUS;
+/** Physical metres represented by one transitional S001 source-coordinate metre. */
+export const CANONICAL_METRES_PER_SOURCE_METRE = CANONICAL_PLANET_CIRCUMFERENCE / WORLD_SIZE;
+export const canonicalFootprintForHalfHeight = (halfHeight: number) =>
+  halfHeight * 2 * CANONICAL_METRES_PER_SOURCE_METRE;
+export const halfHeightForCanonicalFootprint = (footprint: number) =>
+  footprint / (2 * CANONICAL_METRES_PER_SOURCE_METRE);
+
 /** Radians. Longitude is east-positive in [-π, π); latitude is north-positive. */
 export type LonLat = { lon: number; lat: number };
 export type Unit = [number, number, number];
