@@ -1,5 +1,5 @@
 import { chromium } from "@playwright/test";
-const url = process.argv[2] || "https://sgoxel.github.io/The_Advisor_Game/?renderer=webgl2";
+const url = process.argv[2] || "https://sgoxel.github.io/The_Advisor_Game/";
 const browser = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });

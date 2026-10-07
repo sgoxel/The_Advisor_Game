@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
-import { initializeRenderer, rendererMode } from "./renderer-policy.ts";
+import { initializeRenderer } from "./renderer-policy.ts";
 export const rendererState = {
-  requested: rendererMode(location.search),
+  requested: "webgpu",
   backend: "" as string,
   phase: "starting" as "starting" | "ready" | "failed" | "lost",
   error: "",
@@ -23,17 +23,18 @@ export async function createRenderer(
         ) => Promise<unknown>;
       }
     >(
-      rendererState.requested,
       {
         secure: isSecureContext,
         gpuAvailable: !!(navigator as Navigator & { gpu?: unknown }).gpu,
       },
-      {
-        // The world uses core WebGPU; optional adapter features are unnecessary.
-        webgpu: () => new pc.WebgpuGraphicsDevice(canvas, { ...options, featureLevel: "bare" }),
-        webgl2: () => new pc.WebglGraphicsDevice(canvas, options),
-      },
+      () => new pc.WebgpuGraphicsDevice(canvas, { ...options, featureLevel: "bare" }),
     );
+    // Temporary device-level diagnostics while validating the mapped-buffer path.
+    const gpu = Reflect.get(device, "wgpu");
+    const staging = gpu.createBuffer({ size: 102400, usage: 6, mappedAtCreation: true });
+    console.info("Engine WebGPU staging preflight", staging.getMappedRange().byteLength);
+    staging.unmap(); staging.destroy();
+    gpu.lost.then((info: { reason: string; message: string }) => console.error("WebGPU device lost", info.reason, info.message));
     rendererState.backend = device.deviceType;
     rendererState.phase = "ready";
     return device;

@@ -6,7 +6,7 @@ test("desktop exploration, LOD, cell inspection and return navigation", async ({
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/?renderer=webgl2");
+  await page.goto("/");
   await page.waitForFunction(() => window.advisorWorld?.state.ready);
   await page.screenshot({ path: "test-results/village-desktop.png" });
   const first = await page.evaluate(() => window.advisorWorld.cellAt(1, 1));
@@ -70,7 +70,7 @@ test("desktop exploration, LOD, cell inspection and return navigation", async ({
 });
 test("phone portrait shows world and usable controls", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/?renderer=webgl2");
+  await page.goto("/");
   await page.waitForFunction(() => window.advisorWorld?.state.ready);
   await expect(page.locator("#home")).toBeVisible();
   await expect(page.locator("#zoom-in")).toBeVisible();
@@ -86,7 +86,7 @@ test("layer controls hide structure details without leaving floating decorations
   page,
 }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
-  await page.goto("/?renderer=webgl2");
+  await page.goto("/");
   await page.waitForFunction(() => window.advisorWorld?.state.ready);
   const initial = await page.evaluate(
     () => window.advisorWorld.state.visibleMeshes,

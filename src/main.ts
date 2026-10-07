@@ -549,7 +549,7 @@ async function start() {
       "The GPU connection was lost. Reload the page to restore rendering.";
     if (app) app.autoRender = false;
     fail(rendererState.error);
-    showRendererActions(false);
+    showRendererActions();
   });
   device.on("devicerestored", () => {
     rendererState.phase = "ready";
@@ -820,7 +820,7 @@ async function start() {
   });
   app.start();
 }
-function showRendererActions(allowCompatibility: boolean) {
+function showRendererActions() {
   const actions = document.createElement("div");
   actions.className = "renderer-actions";
   const retry = document.createElement("button");
@@ -831,22 +831,11 @@ function showRendererActions(allowCompatibility: boolean) {
     location.assign(url);
   };
   actions.append(retry);
-  if (allowCompatibility) {
-    const compatibility = document.createElement("button");
-    compatibility.id = "use-webgl2";
-    compatibility.textContent = "Continue with WebGL2";
-    compatibility.onclick = () => {
-      const url = new URL(location.href);
-      url.searchParams.set("renderer", "webgl2");
-      location.assign(url);
-    };
-    actions.append(compatibility);
-  }
   $("error").append(actions);
 }
 start().catch((error) => {
   fail(error instanceof Error ? error.message : String(error));
-  $("backend").textContent = rendererState.requested === "webgpu" ? "WebGPU unavailable" : "WebGL2 unavailable";
+  $("backend").textContent = "WebGPU unavailable";
   $("tile-status").textContent = "Renderer initialization failed";
-  showRendererActions(rendererState.requested === "webgpu");
+  showRendererActions();
 });
