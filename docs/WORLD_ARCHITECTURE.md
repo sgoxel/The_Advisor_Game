@@ -73,6 +73,10 @@ Switching countries releases the previous detailed pool. Resident schedules and 
 
 This is an implemented foundation with walking/trading/patrol schedules and a simple grain-production summary. It does not yet simulate diplomacy, wars, complex decision-making, births/deaths, inventory transactions, collision-aware destinations inside buildings, or save mutations. Those systems need authoritative event/state contracts before adding real gameplay. Treating every country's arbitrary future gameplay interactions as analytically recoverable would be incorrect; persisted events will be necessary for those systems.
 
+## Reaffirmed natural-world and village-time requirements — Stage S002
+
+[Binding world requirements](WORLD_REQUIREMENTS.md) specify at least 60 fantasy minutes for every village pair's shortest legal walk, allowing terrain to lengthen it, and one SEED-owned geography/environment shared by the Realm sphere and all closer views. Natural, non-lattice continent/island placement, visible major terrain/biome/water features and both frozen poles belong to the existing scale/geography/climate/route packages. The current globe's completion does not imply those natural-generation and village-scale packages are complete. This update records planning requirements without changing runtime generation.
+
 ## Planned settlement housing — Stage S002
 
 The current resident `home` field identifies a settlement, not an owned house. Current decorative houses and keeps do not implement individual ownership, required village services, enclosed borders or staffed gates. The owner selected updating the Stage S002 plan with these requirements; see [settlement contracts and acceptance evidence](SETTLEMENT_PLAN.md) and [the binding design](README.md#seeded-settlement-design-and-npc-homes). WP-S002-004-009 covers layouts and building/gate infrastructure; WP-S002-004-011 covers individual houses, staffed workplaces and real resident guard duties. Neither package is marked implemented by this planning update.
