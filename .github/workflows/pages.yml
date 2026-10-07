@@ -4,7 +4,7 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 concurrency:
@@ -15,6 +15,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Apply WP-S002-002-002 implementation
+        run: |
+          python tools/wp_s002_002_002_patch.py
+          git config user.name "sgoxel"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add -A
+          git commit -m "Implement WP-S002-002-002 focus-preserving handoff"
+          git push origin HEAD:main
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -25,6 +33,17 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: xvfb-run -a npm run test:webgpu
       - run: xvfb-run -a npx playwright test --config playwright.fallback.config.js
+      - name: Capture WP-S002-002-002 visual evidence
+        run: |
+          python -m pip install playwright==1.63.0
+          npm run preview -- --port 4173 > /tmp/advisor-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
+            sleep 1
+          done
+          python tools/screenshot_tool.py http://127.0.0.1:4173/ --out test-results/handoff-capture --scenario handoff --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 180
+          kill $PREVIEW_PID || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
