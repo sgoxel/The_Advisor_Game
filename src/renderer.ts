@@ -29,7 +29,8 @@ export async function createRenderer(
         gpuAvailable: !!(navigator as Navigator & { gpu?: unknown }).gpu,
       },
       {
-        webgpu: () => new pc.WebgpuGraphicsDevice(canvas, options),
+        // The world uses core WebGPU; optional adapter features are unnecessary.
+        webgpu: () => new pc.WebgpuGraphicsDevice(canvas, { ...options, featureLevel: "bare" }),
         webgl2: () => new pc.WebglGraphicsDevice(canvas, options),
       },
     );
