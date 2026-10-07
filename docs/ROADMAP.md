@@ -15,4 +15,4 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 ## STAGE S001 — Seeded 3D World Foundation
 
 - WP-S001-001-001 — Google Earth reference analysis, five-level seeded world atlas, lazy simulation and fantasy clock — COMPLETED
-- WP-S001-002-001 — Explicit WebGPU renderer initialization and real-backend validation — IN PROGRESS
+- WP-S001-002-001 — Explicit WebGPU renderer initialization and real-backend validation — COMPLETED
