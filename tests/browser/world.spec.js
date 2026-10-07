@@ -159,6 +159,11 @@ test("pure zoom handoff preserves focus through buttons wheel pinch and reversal
     await page.locator("#zoom-out").click();
     await page.waitForFunction(() => window.advisorWorld.state.handoff.projectionTransition > 0.01);
     let state = await page.evaluate(() => window.advisorWorld.state);
+    expect(state.globe.complete).toBeTruthy();
+    expect(state.handoff.destinationReady).toBeTruthy();
+    expect(state.handoff.waitingForDestination).toBeFalsy();
+    expect(state.handoff.preparationWaitMs).toBeGreaterThanOrEqual(0);
+    expect(state.handoff.blendDurationMs).toBeGreaterThan(0);
     expect(state.view.x).toBe(focus.x);
     expect(state.view.z).toBe(focus.z);
     expect(state.view.yaw).toBe(focus.yaw);
@@ -196,13 +201,19 @@ test("pure zoom handoff preserves focus through buttons wheel pinch and reversal
     expect(globe.view.x).toBe(focus.x);
     expect(globe.view.z).toBe(focus.z);
     expect(globe.view.yaw).toBe(focus.yaw);
+    expect(globe.globe.complete).toBeTruthy();
     expect(globe.handoff.destinationReady).toBeTruthy();
+    expect(globe.handoff.waitingForDestination).toBeFalsy();
+    expect(globe.handoff.preparationWaitMs).toBeGreaterThanOrEqual(0);
+    expect(globe.handoff.blendDurationMs).toBeGreaterThan(0);
     await page.evaluate((h) => window.advisorWorld.setHalfHeight(h), anchors.localHalfHeight * 0.94);
     await page.waitForFunction(() => window.advisorWorld.state.presentation === "flat" && window.advisorWorld.state.settled);
     const flat = await page.evaluate(() => window.advisorWorld.state);
     expect(flat.view.x).toBe(focus.x);
     expect(flat.view.z).toBe(focus.z);
     expect(flat.view.yaw).toBe(focus.yaw);
+    expect(flat.handoff.destinationReady).toBeTruthy();
+    expect(flat.handoff.waitingForDestination).toBeFalsy();
     await expect(page.locator("#error")).toBeHidden();
   }
   expect(errors).toEqual([]);

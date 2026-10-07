@@ -95,8 +95,12 @@ let projectionTransition = 0,
   desiredProjectionTransition = 0,
   handoffActive = false,
   handoffDirection = "none",
-  handoffStarted = 0,
+  handoffRequestedAt = 0,
   handoffDurationMs = 0,
+  handoffPreparationStarted = 0,
+  handoffPreparationWaitMs = 0,
+  handoffBlendDurationMs = 0,
+  handoffWaitingForDestination = false,
   slowFrameCount = 0,
   droppedFrameCount = 0,
   lastFlatOpacity = -1;
@@ -329,6 +333,19 @@ function flatCoverageReady() {
     wanted.every((tile) => tileCache.has(tile.key))
   );
 }
+function globeCoverageReady() {
+  return globePass >= GLOBE_PASSES.length;
+}
+function destinationCoverageReady(flatReady = flatCoverageReady()): boolean {
+  const globeReady = globeCoverageReady();
+  if (desiredProjectionTransition > projectionTransition + 0.001)
+    return globeReady;
+  if (desiredProjectionTransition < projectionTransition - 0.001)
+    return flatReady;
+  if (desiredProjectionTransition >= 0.999) return globeReady;
+  if (desiredProjectionTransition <= 0.001) return flatReady;
+  return globeReady && flatReady;
+}
 function applyPresentation() {
   if (!globe) return;
   desiredProjectionTransition = projectionTransitionForHalfHeight(
@@ -401,32 +418,57 @@ function updateHandoff(dt: number) {
     view.halfHeight,
   );
   if (desiredProjectionTransition > 0) prepareGlobe();
-  const flatReady = flatCoverageReady(),
-    globeReady = globePass > 0;
-  let target = desiredProjectionTransition;
-  if (target > projectionTransition && !globeReady)
-    target = projectionTransition;
-  if (target < projectionTransition && !flatReady)
-    target = projectionTransition;
-  const canMove = Math.abs(target - projectionTransition) > 0.001;
-  if (canMove && !handoffActive) {
+  const now = performance.now(),
+    flatReady = flatCoverageReady(),
+    destinationReady = destinationCoverageReady(flatReady),
+    needsTransition =
+      Math.abs(desiredProjectionTransition - projectionTransition) > 0.001;
+
+  if (needsTransition && !handoffActive) {
     handoffActive = true;
-    handoffDirection = target > projectionTransition ? "to-globe" : "to-flat";
-    handoffStarted = performance.now();
-  } else if (canMove) {
-    handoffDirection = target > projectionTransition ? "to-globe" : "to-flat";
+    handoffRequestedAt = now;
+    handoffDurationMs = 0;
+    handoffPreparationWaitMs = 0;
+    handoffBlendDurationMs = 0;
+    handoffWaitingForDestination = false;
   }
+  if (needsTransition)
+    handoffDirection =
+      desiredProjectionTransition > projectionTransition ? "to-globe" : "to-flat";
+
+  if (needsTransition && !destinationReady) {
+    if (!handoffWaitingForDestination) {
+      handoffWaitingForDestination = true;
+      handoffPreparationStarted = now;
+    }
+  } else if (handoffWaitingForDestination) {
+    handoffPreparationWaitMs += now - handoffPreparationStarted;
+    handoffPreparationStarted = 0;
+    handoffWaitingForDestination = false;
+  }
+
+  const target = destinationReady
+      ? desiredProjectionTransition
+      : projectionTransition,
+    canMove = Math.abs(target - projectionTransition) > 0.001;
+  if (canMove) handoffBlendDurationMs += Math.max(0, dt * 1000);
   projectionTransition = advanceProjectionTransition(
     projectionTransition,
     target,
     dt,
   );
+
   if (
     handoffActive &&
     Math.abs(projectionTransition - desiredProjectionTransition) <= 0.001 &&
-    (desiredProjectionTransition === 0 ? flatReady : globeReady)
+    destinationCoverageReady(flatReady)
   ) {
-    handoffDurationMs = performance.now() - handoffStarted;
+    if (handoffWaitingForDestination) {
+      handoffPreparationWaitMs += now - handoffPreparationStarted;
+      handoffPreparationStarted = 0;
+      handoffWaitingForDestination = false;
+    }
+    handoffDurationMs = now - handoffRequestedAt;
     handoffActive = false;
     handoffDirection = "none";
   }
@@ -1300,6 +1342,11 @@ async function start() {
       },
       renderer: rendererState,
       get state() {
+        const flatReady = flatCoverageReady(),
+          destinationReady = destinationCoverageReady(flatReady),
+          activePreparationWaitMs = handoffWaitingForDestination
+            ? handoffPreparationWaitMs + performance.now() - handoffPreparationStarted
+            : handoffPreparationWaitMs;
         return {
           ready,
           error: errorText,
@@ -1323,19 +1370,19 @@ async function start() {
             active: handoffActive,
             direction: handoffDirection,
             durationMs: handoffActive
-              ? performance.now() - handoffStarted
+              ? performance.now() - handoffRequestedAt
               : handoffDurationMs,
-            destinationReady:
-              desiredProjectionTransition >= projectionTransition
-                ? globePass > 0
-                : flatCoverageReady(),
+            preparationWaitMs: activePreparationWaitMs,
+            blendDurationMs: handoffBlendDurationMs,
+            waitingForDestination: handoffWaitingForDestination,
+            destinationReady,
             outstandingGeneration: pending.size + uploads.length + inFlight,
             slowFrames: slowFrameCount,
             droppedFrames: droppedFrameCount,
           },
           globe: {
             passes: globePass,
-            complete: globePass >= GLOBE_PASSES.length,
+            complete: globeCoverageReady(),
             fit: globeFit,
             ...globe!.stats,
           },
@@ -1351,8 +1398,8 @@ async function start() {
           settled:
             Math.abs(projectionTransition - desiredProjectionTransition) <=
               0.001 &&
-            (desiredProjectionTransition <= 0.001 || globePass > 0) &&
-            (!globeShown || globePass >= GLOBE_PASSES.length) &&
+            (desiredProjectionTransition <= 0.001 || globeCoverageReady()) &&
+            (!globeShown || globeCoverageReady()) &&
             !selectionDirty &&
             pending.size === 0 &&
             activeKeys.length === wanted.length &&
