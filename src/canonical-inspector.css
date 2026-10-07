@@ -1,0 +1,4 @@
+/* The world-focus marker belongs to the map, not to modal/inspection chrome. */
+#cell-panel:not([hidden]) ~ #centre-marker {
+  z-index: 1;
+}
