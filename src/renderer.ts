@@ -28,7 +28,11 @@ export async function createRenderer(
         secure: isSecureContext,
         gpuAvailable: !!(navigator as Navigator & { gpu?: unknown }).gpu,
       },
-      () => new pc.WebgpuGraphicsDevice(canvas, { ...options, featureLevel: "bare" }),
+      () =>
+        new pc.WebgpuGraphicsDevice(canvas, {
+          ...options,
+          featureLevel: "bare",
+        }),
     );
     rendererState.backend = device.deviceType;
     rendererState.phase = "ready";

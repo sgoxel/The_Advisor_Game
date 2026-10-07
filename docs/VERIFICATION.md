@@ -24,6 +24,8 @@ Remaining visual limitations include regular city grids, blocky coarse shoreline
 
 ## WebGPU and performance limit
 
+Update for WP-S001-002-001: the renderer now requires WebGPU exclusively. Fourteen functional checks pass, and actual WebGPU village/detail rendering passed without GPU/shader errors in [the Linux CI deployment run](https://github.com/sgoxel/The_Advisor_Game/actions/runs/37605770976). Earlier fallback-based evidence below describes the original foundation only. New WebGPU evidence is recorded in [WEBGPU.md](WEBGPU.md); hardware/mobile performance targets remain unverified.
+
 The code requests WebGPU through PlayCanvas 2.23.0, then falls back to WebGL2. Three local Chromium adapter probes (default hardware, Dawn SwiftShader and Vulkan SwiftShader) returned no WebGPU adapter. Browser evidence uses WebGL2 software rendering. Actual WebGPU output and hardware/mobile frame rates remain unverified; these checks do not certify the design's future 60/30 FPS targets.
 
 ## Deployment

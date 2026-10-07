@@ -712,3 +712,19 @@ h2 {
     overflow: auto;
   }
 }
+@media (min-width: 701px) and (max-height: 760px) {
+  .region-panel {
+    padding: 18px;
+    max-height: calc(100dvh - 230px);
+    overflow: auto;
+  }
+  .region-panel .divider {
+    margin: 12px 0;
+  }
+  .region-panel label {
+    margin-top: 12px;
+  }
+  .region-panel .hint {
+    display: none;
+  }
+}

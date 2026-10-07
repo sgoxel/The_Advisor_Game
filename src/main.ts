@@ -623,8 +623,7 @@ async function start() {
   let lastSimulationRealSecond = -1;
   const labelNodes = new Map<string, HTMLElement>();
   const labels = $("map-labels");
-  $("backend").textContent =
-    `PlayCanvas 2.23.0 · ${device.deviceType === "webgpu" ? "WebGPU" : "WebGL2"}`;
+  $("backend").textContent = "PlayCanvas 2.23.0 · WebGPU";
   let statsElapsed = 0,
     frames = 0,
     fps = 0;
