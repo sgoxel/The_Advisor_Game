@@ -1,12 +1,23 @@
 import { countries, places, type Place } from "./geography.ts";
-import { WORLD_SEED, WALK_SPEED_MPS } from "./config.ts";
-import { digest, heightAt, cellAt } from "./world.ts";
+import { WALK_SPEED_MPS } from "./config.ts";
+import { digest, heightAt } from "./world.ts";
 import { TIME_SCALE } from "./clock.ts";
+import {
+  CANONICAL_PLANET_RADIUS,
+  clampLatitude,
+  lonLatToSource,
+  normalizeLongitude,
+  type CanonicalPosition,
+} from "./planet.ts";
+
 export type Resident = {
   code: string;
   home: string;
   index: number;
   variant: number;
+  /** Canonical spherical simulation position. */
+  position: CanonicalPosition;
+  /** Transitional renderer/source coordinates; never stable world identity. */
   x: number;
   z: number;
   task: string;
@@ -19,6 +30,42 @@ export type CountryState = {
   tier: "live" | "interested" | "coarse";
 };
 const populationOf = (place: Place) => (place.kind === "city" ? 2400 : 80);
+
+/**
+ * Cached tangent coefficients are presentation-independent acceleration data.
+ * Current resident lanes are at most 261 m from their settlement centre, keeping
+ * the local spherical tangent approximation well below one metre of position error
+ * while avoiding full ECEF/ENU trigonometry for thousands of residents.
+ */
+const tangentMetrics = new Map<
+  string,
+  { radiansPerEastM: number; radiansPerNorthM: number }
+>();
+function metricsFor(place: Place) {
+  let result = tangentMetrics.get(place.code);
+  if (!result) {
+    const cosLat = Math.max(1e-9, Math.abs(Math.cos(place.canonicalPosition.lat)));
+    result = {
+      radiansPerEastM: 1 / (CANONICAL_PLANET_RADIUS * cosLat),
+      radiansPerNorthM: 1 / CANONICAL_PLANET_RADIUS,
+    };
+    tangentMetrics.set(place.code, result);
+  }
+  return result;
+}
+function canonicalOffset(place: Place, eastM: number, northM: number): CanonicalPosition {
+  const metrics = metricsFor(place);
+  return {
+    lon: normalizeLongitude(
+      place.canonicalPosition.lon + eastM * metrics.radiansPerEastM,
+    ),
+    lat: clampLatitude(
+      place.canonicalPosition.lat + northM * metrics.radiansPerNorthM,
+    ),
+    elevation: place.canonicalPosition.elevation,
+  };
+}
+
 export function summaryAt(code: string, tick: number): CountryState {
   const baseline = digest(code) % 5000;
   // Analytical catch-up is independent of update cadence and render interest.
@@ -38,7 +85,8 @@ export function residentAt(
   const code = `${place.code}/RESIDENT/${index}`,
     variant = digest(code),
     span = place.kind === "city" ? 250 : 28;
-  // Four deterministic lanes around a settlement; no stochastic destination selection.
+  // Four deterministic lanes in canonical physical metres. No source atlas scale,
+  // render tile, camera, viewport or stochastic destination selection is an input.
   const radius = 12 + (variant % span),
     speed = WALK_SPEED_MPS / TIME_SCALE,
     perimeter = radius * 8;
@@ -46,34 +94,42 @@ export function residentAt(
     (tick * speed + (variant % Math.ceil(perimeter))) % perimeter;
   const side = Math.floor(distance / (radius * 2)),
     along = distance % (radius * 2);
-  let dx = 0,
-    dz = 0;
+  let east = 0,
+    north = 0;
   if (side === 0) {
-    dx = -radius + along;
-    dz = -radius;
+    east = -radius + along;
+    north = radius;
   } else if (side === 1) {
-    dx = radius;
-    dz = -radius + along;
+    east = radius;
+    north = radius - along;
   } else if (side === 2) {
-    dx = radius - along;
-    dz = radius;
+    east = radius - along;
+    north = -radius;
   } else {
-    dx = -radius;
-    dz = radius - along;
+    east = -radius;
+    north = -radius + along;
   }
   // Keep/house interiors are not implemented yet: use the two central street axes.
-  const horizontal = index % 2 === 0;
-  const offset = Math.abs(horizontal ? dx : dz);
-  const x = place.x + (horizontal ? dx : 0),
-    z = place.z + (horizontal ? 0 : dz);
-  const legal = heightAt(x, z) > 0.1;
+  const horizontal = index % 2 === 0,
+    offset = Math.abs(horizontal ? east : north),
+    candidate = canonicalOffset(
+      place,
+      horizontal ? east : 0,
+      horizontal ? 0 : north,
+    ),
+    presentation = lonLatToSource(candidate.lon, candidate.lat),
+    legal = heightAt(presentation.x, presentation.z) > 0.1,
+    surface = legal ? candidate : place.canonicalPosition,
+    source = legal ? presentation : { x: place.x, z: place.z },
+    elevation = heightAt(source.x, source.z);
   return {
     code,
     home: place.id,
     index,
     variant,
-    x: legal ? x : place.x,
-    z: legal ? z : place.z,
+    position: { lon: surface.lon, lat: surface.lat, elevation },
+    x: source.x,
+    z: source.z,
     task: offset < 4 ? "Trading" : index % 3 === 0 ? "Patrolling" : "Walking",
   };
 }
@@ -145,6 +201,7 @@ export class LazySimulation {
     for (const code of this.residents.keys())
       if (code !== this.activeCountry) this.residents.delete(code);
   }
+  /** Renderer-interest query in transitional source coordinates only. */
   focusedResidents(x: number, z: number, radius: number) {
     return [...this.residents.values()]
       .flat()
