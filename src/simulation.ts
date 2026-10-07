@@ -2,11 +2,16 @@ import { countries, places, type Place } from "./geography.ts";
 import { WORLD_SEED, WALK_SPEED_MPS } from "./config.ts";
 import { digest, heightAt, cellAt } from "./world.ts";
 import { TIME_SCALE } from "./clock.ts";
+import { sourceToLonLat, type CanonicalPosition } from "./planet.ts";
+
 export type Resident = {
   code: string;
   home: string;
   index: number;
   variant: number;
+  /** Canonical spherical simulation position. */
+  position: CanonicalPosition;
+  /** Transitional renderer/source coordinates; never stable world identity. */
   x: number;
   z: number;
   task: string;
@@ -64,16 +69,21 @@ export function residentAt(
   // Keep/house interiors are not implemented yet: use the two central street axes.
   const horizontal = index % 2 === 0;
   const offset = Math.abs(horizontal ? dx : dz);
-  const x = place.x + (horizontal ? dx : 0),
-    z = place.z + (horizontal ? 0 : dz);
-  const legal = heightAt(x, z) > 0.1;
+  const candidateX = place.x + (horizontal ? dx : 0),
+    candidateZ = place.z + (horizontal ? 0 : dz),
+    legal = heightAt(candidateX, candidateZ) > 0.1,
+    x = legal ? candidateX : place.x,
+    z = legal ? candidateZ : place.z,
+    surface = sourceToLonLat(x, z),
+    elevation = heightAt(x, z);
   return {
     code,
     home: place.id,
     index,
     variant,
-    x: legal ? x : place.x,
-    z: legal ? z : place.z,
+    position: { ...surface, elevation },
+    x,
+    z,
     task: offset < 4 ? "Trading" : index % 3 === 0 ? "Patrolling" : "Walking",
   };
 }
@@ -145,6 +155,7 @@ export class LazySimulation {
     for (const code of this.residents.keys())
       if (code !== this.activeCountry) this.residents.delete(code);
   }
+  /** Renderer-interest query in transitional source coordinates only. */
   focusedResidents(x: number, z: number, radius: number) {
     return [...this.residents.values()]
       .flat()
