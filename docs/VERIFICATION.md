@@ -28,4 +28,4 @@ The code requests WebGPU through PlayCanvas 2.23.0, then falls back to WebGL2. T
 
 ## Deployment
 
-The first implementation commit `37e814f` built and deployed successfully in [GitHub Actions](https://github.com/sgoxel/The_Advisor_Game/actions/runs/37599513531). The final formatted implementation and bookkeeping commits will also be verified before the work package is closed.
+The first implementation commit `37e814f` built and deployed successfully in [GitHub Actions](https://github.com/sgoxel/The_Advisor_Game/actions/runs/37599513531). The final formatted implementation `5c6f10d` also [built and deployed successfully](https://github.com/sgoxel/The_Advisor_Game/actions/runs/37599997018). A public-page browser check returned HTTP 200, no uncaught errors, the fixed seed, three continents and 270 villages. Final completion-commit deployment evidence is recorded in [work package #1](https://github.com/sgoxel/The_Advisor_Game/issues/1) before closure.
