@@ -251,28 +251,39 @@ function fail(message: string) {
   $("error").hidden = false;
   $("error").textContent = message;
 }
-/** Largest circle around the screen centre that no interface block covers, in pixels. */
+/** Fit the projected sphere, whose centre sits half a radius below the surface focus. */
 function freeRadius(): number {
   const cx = innerWidth / 2,
     cy = innerHeight / 2;
-  let radius = Math.min(cx, cy);
+  const obstacles: DOMRect[] = [];
   for (const selector of [
     ".masthead",
     ".region-panel",
     ".map-controls",
     ".bottom-bar",
+    "#focus-coordinates",
   ]) {
     const box = document.querySelector(selector)?.getBoundingClientRect();
     if (!box || !box.width) continue;
-    radius = Math.min(
-      radius,
-      Math.hypot(
-        Math.max(box.left - cx, 0, cx - box.right),
-        Math.max(box.top - cy, 0, cy - box.bottom),
-      ),
-    );
+    obstacles.push(box);
   }
-  return Math.max(60, radius - 8);
+  let low = 0,
+    high = Math.min(cx - 8, (innerHeight - cy - 8) / 1.5);
+  for (let i = 0; i < 24; i++) {
+    const radius = (low + high) / 2,
+      centreY = cy + radius * 0.5;
+    const clear = obstacles.every(
+      (box) =>
+        Math.hypot(
+          Math.max(box.left - cx, 0, cx - box.right),
+          Math.max(box.top - centreY, 0, centreY - box.bottom),
+        ) >=
+        radius + 8,
+    );
+    if (clear) low = radius;
+    else high = radius;
+  }
+  return Math.max(60, low);
 }
 /** Start preparing the globe surface off the main thread; each pass runs once. */
 function prepareGlobe() {
@@ -734,7 +745,10 @@ function setupControls() {
   $("overview").onclick = () => {
     // Realm view: the whole globe, centred on the current focus, north up.
     view.yaw = 0;
-    navigate(view.x, view.z, GLOBE_FROM);
+    const wasGlobe = document.body.classList.contains("globe-mode");
+    document.body.classList.add("globe-mode");
+    globeFit = (PLANET_RADIUS * innerHeight) / (2 * freeRadius());
+    document.body.classList.toggle("globe-mode", wasGlobe);
     navigate(view.x, view.z, Math.max(GLOBE_FROM, globeFit));
   };
   $("zoom-in").onclick = () => navigate(view.x, view.z, view.halfHeight / 1.4);
