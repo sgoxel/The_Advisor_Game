@@ -66,6 +66,22 @@ export function coordinateLabel(focus: LonLat, local: boolean): string {
     lon = (focus.lon * 180) / Math.PI;
   return `${Math.abs(lat).toFixed(digits)}°${lat < 0 ? "S" : "N"} · ${Math.abs(lon).toFixed(digits)}°${lon < 0 ? "W" : "E"}`;
 }
+/** A north-aligned horizontal turn follows a latitude parallel without pole drift. */
+export function parallelDragFocus(
+  focus: LonLat,
+  previous: LonLat,
+  current: LonLat,
+): LonLat {
+  return {
+    lon:
+      focus.lon +
+      Math.atan2(
+        Math.sin(previous.lon - current.lon),
+        Math.cos(previous.lon - current.lon),
+      ),
+    lat: focus.lat,
+  };
+}
 export type Rect = { x: number; y: number; width: number; height: number };
 export type Label = {
   id: string;

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   surfaceDistance,
   draggedFocus,
+  parallelDragFocus,
   coordinateLabel,
   placeLabels,
   overlaps,
@@ -73,4 +74,19 @@ test("coordinates expose precision and hemispheres", () => {
     /\d+\.\d{5}°N · \d+\.\d{5}°W/,
   );
   assert.match(coordinateLabel({ lon: 0.1, lat: -0.1 }, false), /\d+\.\d{4}°S/);
+});
+test("a complete eastward turn returns to the same focus at multiple latitudes", () => {
+  for (const lat of [-1.4, 0, 0.7, 1.4]) {
+    const original = { lon: 3.12, lat };
+    let focus = original;
+    for (let i = 0; i < 36; i++) {
+      const next = parallelDragFocus(focus, focus, {
+        lon: focus.lon - Math.PI / 18,
+        lat: focus.lat + 0.001,
+      });
+      const flat = lonLatToFlat(next.lon, next.lat);
+      focus = flatToLonLat(flat.x, flat.z);
+    }
+    assert.ok(surfaceDistance(original, focus) < 1e-6);
+  }
 });

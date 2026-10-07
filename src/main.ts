@@ -50,6 +50,7 @@ import {
 import {
   coordinateLabel,
   draggedFocus,
+  parallelDragFocus,
   surfaceDistance,
   placeLabels,
   type Rect,
@@ -163,8 +164,11 @@ function panScreen(ax: number, ay: number, bx: number, by: number) {
     current = surfaceAtScreen(bx, by);
   if (previous && current) {
     const focus = flatToLonLat(view.x, view.z);
-    const next =
-      projectionTransition > 0.5
+    const parallel =
+      Math.abs(by - ay) < 0.001 && Math.abs(Math.sin(view.yaw)) < 1e-9;
+    const next = parallel
+      ? parallelDragFocus(focus, previous, current)
+      : projectionTransition > 0.5
         ? draggedFocus(focus, previous, current)
         : {
             lon:
@@ -177,7 +181,7 @@ function panScreen(ax: number, ay: number, bx: number, by: number) {
           };
     const flat = lonLatToFlat(next.lon, next.lat);
     const latitude = focus.lat + previous.lat - current.lat;
-    if (Math.abs(latitude) > Math.PI / 2)
+    if (!parallel && Math.abs(latitude) > Math.PI / 2)
       flat.z = latitude > 0 ? -POLE_DISTANCE : POLE_DISTANCE;
     navigate(flat.x, flat.z);
   }
