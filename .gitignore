@@ -1,24 +1,46 @@
-# Compiled class file
-*.class
+# This .gitignore is appropriate for repositories deployed to GitHub Pages and using
+# a Gemfile as specified at https://github.com/github/pages-gem#conventional
 
-# Log file
-*.log
+# Basic Jekyll gitignores (synchronize to Jekyll.gitignore)
+_site/
+.sass-cache/
+.jekyll-cache/
+.jekyll-metadata
 
-# BlueJ files
-*.ctxt
+# Additional Ruby/bundler ignore for when you run: bundle install
+/vendor
 
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
+# Specific ignore for GitHub Pages
+# GitHub Pages will always use its own deployed version of pages-gem
+# This means GitHub Pages will NOT use your Gemfile.lock and therefore it is
+# counterproductive to check this file into the repository.
+# Details at https://github.com/github/pages-gem/issues/768
+Gemfile.lock
 
-# Package Files #
-*.jar
-*.war
-*.nar
-*.ear
-*.zip
-*.tar.gz
-*.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
-hs_err_pid*
-replay_pid*
+# Google Drive temporary upload files
+.tmp.driveupload/
+**/.tmp.driveupload/
+
+# Windows metadata
+desktop.ini
+Desktop.ini
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+~$*
+*.bak
+*.swp
+*.swo
+
+# Google Drive / sync temporary files
+*.gdoc
+*.gsheet
+*.gslides
+*.part
+*.crdownload
+
+# Common OS metadata
+.DS_Store
