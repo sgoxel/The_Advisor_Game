@@ -7,10 +7,13 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:4173",
     browserName: "chromium",
     launchOptions: {
+      ignoreDefaultArgs: ["--disable-dev-shm-usage"],
       args: [
         "--enable-unsafe-webgpu",
         "--use-webgpu-adapter=swiftshader",
-        "--disable-dawn-features=disallow_unsafe_apis",
+        "--enable-dawn-features=allow_unsafe_apis",
+        "--disable-dawn-features=use_dxc",
+        "--enable-webgpu-developer-features",
         "--use-gpu-in-tests",
         "--enable-accelerated-2d-canvas",
         "--use-angle=swiftshader",
