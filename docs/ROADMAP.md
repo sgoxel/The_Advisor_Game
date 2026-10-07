@@ -24,7 +24,7 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 - WP-S002-002-001 — Globe Realm view: the Realm level rendered as a sphere — COMPLETED
 - WP-S002-002-002 — Latency-bounded focus-preserving pure-zoom globe↔local handoff with destination-ready LOD and zero blank frames — COMPLETED
 - WP-S002-002-003 — Responsive globe/local navigation HUD and Realm framing: truthful scale/ruler, wrap-safe input, labels and seven-viewport UX — COMPLETED
-- WP-S002-003-001 — Canonical spherical coordinate and identity authority: remove legacy planar world truth with wrap/pole-safe reversible mapping
+- WP-S002-003-001 — Canonical spherical coordinate and identity authority: remove legacy planar world truth with wrap/pole-safe reversible mapping — COMPLETED
 - WP-S002-003-002 — Precision-safe ENU/camera-relative rendering, picking, labels and rebasing at canonical planet scale
 - WP-S002-003-003 — Bounded canonical-ID streaming: continuous wrap/pole navigation, device budgets and stable cache/queue behavior
 - WP-S002-004-001 — Reference analysis and contracts for natural seeded geography, readable settlement UX and lazy mobile generation
