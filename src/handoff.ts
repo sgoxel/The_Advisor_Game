@@ -33,7 +33,7 @@ export function scaleLabelForHalfHeight(halfHeight: number): string {
   const footprint = canonicalFootprintForHalfHeight(halfHeight);
   const diameter = 1_274_200;
   const denominator = Math.max(10, Math.min(10000, (footprint / diameter) * 10000));
-  let best = SCALE_LADDER[0];
+  let best: number = SCALE_LADDER[0];
   for (const candidate of SCALE_LADDER)
     if (Math.abs(Math.log(candidate / denominator)) < Math.abs(Math.log(best / denominator))) best = candidate;
   return `1/${best}`;
