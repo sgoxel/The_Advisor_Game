@@ -21,7 +21,7 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 ## STAGE S002 — Round, Natural World Foundation
 
 - WP-S002-001-001 — Reference analysis and root contracts for the wrapped planet, globe Realm view and world scale
-- WP-S002-002-001 — Globe Realm view: the Realm level rendered as a sphere — IMPLEMENTED, DEPLOYMENT PENDING
+- WP-S002-002-001 — Globe Realm view: the Realm level rendered as a sphere — COMPLETED
 - WP-S002-002-002 — Seamless pure-zoom handoff between the globe and the flat levels
 - WP-S002-002-003 — Globe navigation and HUD: scale-aware drag, centre marker, coordinates and truthful ruler
 - WP-S002-003-001 — Canonical wrapped coordinate fabric with east–west wrap
