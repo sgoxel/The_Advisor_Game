@@ -1,5 +1,4 @@
 import { WORLD_SEED } from "./config.ts";
-import { GENERATOR_VERSION } from "./world.ts";
 import {
   CANONICAL_PLANET_CIRCUMFERENCE,
   CANONICAL_PLANET_DIAMETER,
@@ -20,6 +19,7 @@ import {
   wrapCanonicalX,
 } from "./planet.ts";
 import {
+  CANONICAL_GENERATOR_VERSION,
   canonicalCellCenter,
   canonicalCellNeighbor,
   canonicalCellNeighbors,
@@ -63,7 +63,7 @@ function canonicalFromSourceCell(cell: LegacyCell) {
       position.lat,
       CANONICAL_ID_LEVEL,
       WORLD_SEED,
-      GENERATOR_VERSION,
+      CANONICAL_GENERATOR_VERSION,
     );
   return { sourceX, sourceZ, position, canonical };
 }
@@ -94,7 +94,7 @@ function install(world: AdvisorWorld) {
         position.lat,
         CANONICAL_ID_LEVEL,
         WORLD_SEED,
-        GENERATOR_VERSION,
+        CANONICAL_GENERATOR_VERSION,
       );
     return {
       code: canonical.id,
@@ -122,6 +122,7 @@ function install(world: AdvisorWorld) {
     circumferenceM: CANONICAL_PLANET_CIRCUMFERENCE,
     poleDistanceM: CANONICAL_POLE_DISTANCE,
     identityLevel: CANONICAL_ID_LEVEL,
+    generatorVersion: CANONICAL_GENERATOR_VERSION,
     canonicalCell,
     canonicalCellId,
     canonicalCellCenter,
