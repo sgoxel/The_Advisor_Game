@@ -23,9 +23,19 @@ export const SOURCE_PRESENTATION_POLE_DISTANCE = SOURCE_PRESENTATION_WIDTH / 4;
 export const CANONICAL_METRES_PER_SOURCE_UNIT =
   CANONICAL_PLANET_CIRCUMFERENCE / SOURCE_PRESENTATION_WIDTH;
 
-/** Explicit render aliases used by the current globe/local presentation only. */
+/** Explicit render values used by the current globe/local presentation only. */
 export const RENDER_PLANET_RADIUS = SOURCE_PRESENTATION_RADIUS;
 export const RENDER_POLE_DISTANCE = SOURCE_PRESENTATION_POLE_DISTANCE;
+
+/**
+ * Temporary compatibility aliases for existing rendering/navigation modules.
+ * These names describe presentation/source units only and MUST NOT be used as
+ * canonical physical scale or stable identity inputs.
+ */
+export const PLANET_CIRCUMFERENCE = SOURCE_PRESENTATION_WIDTH;
+export const PLANET_RADIUS = RENDER_PLANET_RADIUS;
+export const POLE_DISTANCE = RENDER_POLE_DISTANCE;
+export const CANONICAL_METRES_PER_SOURCE_METRE = CANONICAL_METRES_PER_SOURCE_UNIT;
 
 /** Radians. Longitude is east-positive in [-π, π); latitude is north-positive. */
 export type LonLat = { lon: number; lat: number };
@@ -134,6 +144,7 @@ export const lonLatToFlat = lonLatToSource;
 export function wrapSourceX(x: number): number {
   return lonLatToSource(sourceToLonLat(x, 0).lon, 0).x;
 }
+export const wrapX = wrapSourceX;
 
 export const canonicalFootprintForHalfHeight = (halfHeight: number) =>
   halfHeight * 2 * CANONICAL_METRES_PER_SOURCE_UNIT;
@@ -325,7 +336,12 @@ export function canonicalCell(
     index = (value: number) =>
       Math.max(
         0,
-        Math.min(count - 1, Math.floor(((Math.max(-1, Math.min(1, value)) + 1) / 2) * count)),
+        Math.min(
+          count - 1,
+          Math.floor(
+            ((Math.max(-1, Math.min(1, value)) + 1) / 2) * count,
+          ),
+        ),
       ),
     u = index(mapped.u),
     v = index(mapped.v);
