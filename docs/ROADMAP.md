@@ -20,25 +20,25 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 
 ## STAGE S002 — Round, Natural World Foundation
 
-- WP-S002-001-001 — Reference analysis and root contracts for the wrapped planet, globe Realm view and world scale
+- WP-S002-001-001 — Reference analysis and root contracts for canonical planet scale, pure-zoom UX, wrapped coordinates and performance budgets
 - WP-S002-002-001 — Globe Realm view: the Realm level rendered as a sphere — COMPLETED
-- WP-S002-002-002 — Seamless pure-zoom handoff between the globe and the flat levels
-- WP-S002-002-003 — Globe navigation and HUD: scale-aware drag, centre marker, coordinates and truthful ruler
-- WP-S002-003-001 — Canonical wrapped coordinate fabric with east–west wrap
-- WP-S002-003-002 — Precision-safe rendering for planet-scale coordinates
-- WP-S002-003-003 — Wrap-aware tile streaming and continuous east–west travel
-- WP-S002-004-001 — Reference analysis and contracts for natural seeded terrain, water and settlement placement
-- WP-S002-004-002 — World rescale: planet size, settlement spacing and fantasy-time walking speeds
-- WP-S002-004-003 — Seeded planet geography: continents, islands, seas and mountain ranges
-- WP-S002-004-004 — Planet climate and biomes: frozen poles, deserts, forests and grasslands that drive every closer level
-- WP-S002-004-005 — Natural seeded terrain: mountains, cliffs, rivers, lakes and coasts without grid patterns
-- WP-S002-004-006 — Natural seeded vegetation and ground detail without lattice patterns
-- WP-S002-004-007 — Seeded terrain-aware placement of countries, cities and villages
-- WP-S002-004-008 — Terrain-aware village routes and the one-fantasy-hour minimum
-- WP-S002-004-009 — Organic seeded settlement layouts, village services, borders and guarded gate infrastructure
-- WP-S002-004-010 — Seam-safe and pole-safe seeded terrain
-- WP-S002-004-011 — Seeded NPC home ownership, workplaces and gate-guard duties
-- WP-S002-004-012 — Seeded priority composition and road/settlement terrain earthworks
-- WP-S002-004-013 — Seeded ruins and critical quest-place reservations
-- WP-S002-004-014 — Connected seeded road network, terrain-aware junctions and sea links
-- WP-S002-005-001 — Performance budgets and telemetry for the globe, wrapped streaming and natural terrain
+- WP-S002-002-002 — Focus-preserving pure-zoom globe↔local handoff with LOD prefetch and no blank frames
+- WP-S002-002-003 — Responsive globe/local navigation HUD: scale ladder, touch drag, centre marker, coordinates, ruler and labels
+- WP-S002-003-001 — Canonical README-aligned planet coordinate and identity fabric with wrap-safe distance and reversible globe↔local mapping
+- WP-S002-003-002 — Precision-safe camera-relative rendering, picking and label alignment at canonical planet scale
+- WP-S002-003-003 — Bounded wrap-aware streaming with continuous east–west navigation, pole limits and stable cache/queue behavior
+- WP-S002-004-001 — Reference analysis and contracts for natural seeded geography, settlement readability and lazy mobile generation
+- WP-S002-004-002 — Canonical world rescale and travel model: README planet size, settlement spacing and fantasy-time movement
+- WP-S002-004-003 — Seeded planet macro-geography readable across globe and local views: continents, islands, seas and ranges
+- WP-S002-004-004 — Climate and biome continuity across LOD: readable frozen poles, deserts, forests and grasslands
+- WP-S002-004-005 — Natural seeded terrain and hydrology without grid artifacts, with walkability and LOD continuity
+- WP-S002-004-006 — Natural seeded vegetation and ground detail with non-lattice scatter, instancing and mobile draw-call budgets
+- WP-S002-004-007 — Terrain-aware seeded settlement placement with complete site envelopes, access and readable labels
+- WP-S002-004-008 — Terrain-aware village routing UX with shortest legal paths, truthful travel times and route visualization
+- WP-S002-004-009 — Organic seeded settlements with readable services, borders, gates, housing access and mobile rendering budgets
+- WP-S002-004-010 — Seam-, pole- and LOD-safe seeded world with no visual cracks, duplicate features or logical discontinuities
+- WP-S002-004-011 — Seeded NPC homes, workplaces and gate duties with inspectable UX and lazy deterministic schedules
+- WP-S002-004-012 — Deterministic priority composition and terrain earthworks shared by rendering, navigation and LOD
+- WP-S002-004-013 — Seeded ruins and critical quest places with discoverable labels, legal access and bounded lazy detail
+- WP-S002-004-014 — Inspectable connected seeded transport graph with terrain-aware roads, junctions, bridges and sea links
+- WP-S002-005-001 — Cross-device performance, interaction latency, memory telemetry and WebGPU/WebGL2 parity
