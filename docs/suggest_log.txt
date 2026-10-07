@@ -1,0 +1,1 @@
+2026-10-07 12:04 Europe/Istanbul — WP-S001-001-001, phase 1: Future work should validate WebGPU on actual desktop/mobile adapters, benchmark GPU/CPU budgets, add persisted authoritative gameplay events, collision-aware resident destinations, political border geometry, less regular urban layouts and coast geomorphing. These suggestions are not implemented in this work package.

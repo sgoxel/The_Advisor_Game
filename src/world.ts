@@ -1,0 +1,201 @@
+/** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
+import {WORLD_SEED} from './config.ts';
+import {continentalEnvelope,nearestPlace,places,roadAt} from './geography.ts';
+export {WORLD_SEED} from './config.ts';
+export const GENERATOR_VERSION = 'v1';
+export const WORLD_SIZE = 262144;
+export const WORLD_MIN = -WORLD_SIZE / 2;
+export const CELL_SIZE = 2;
+export const MAX_LEVEL = 17; // Finest render tile and logical cell are both 2 × 2 m.
+export type Tile = { level: number; x: number; z: number; key: string; size: number; minX: number; minZ: number };
+export type Feature = { kind: 'house' | 'keep' | 'tree' | 'rock' | 'field' | 'well'; x: number; z: number; y: number; code: string; variant: number };
+export type Cell = { code: string; x: number; z: number; elevation: number; biome: string; walkable: boolean; tile: string };
+export type ProvinceSeed = { code: string; x: number; z: number; domain: 'Mainland' | 'Archipelago'; elevationLimit: number };
+export type RegionSeed = { code: string; x: number; z: number; landform: 'Mainland' | 'Island' | 'Ocean'; radius: number; elevationLimit: number; parent: ProvinceSeed };
+export type DistrictSeed = { code: string; x: number; z: number; parent: RegionSeed; coastOffset: number; beachWidth: number };
+export type PatchSeed = { code: string; x: number; z: number; parent: DistrictSeed; grain: number };
+
+/** Stable integer coordinate digest. A content lookup, never a pseudorandom stream.
+ * Digests can collide; coordinate-containing canonical codes are the actual identities. */
+export function digest(text: string): number {
+  let value = 2166136261;
+  for (let i = 0; i < text.length; i++) value = Math.imul(value ^ text.charCodeAt(i), 16777619);
+  return value >>> 0;
+}
+export const SEED_VALUE = digest(`${WORLD_SEED}/${GENERATOR_VERSION}`);
+/** Five nested generation levels (1000 / 100 / 10 / 2 / 1 cells).
+ * All scale ratios are integral; the quadtree is a separate display hierarchy. */
+export function provinceSeed(cx: number, cz: number): ProvinceSeed {
+  const x=Math.floor(cx/1000),z=Math.floor(cz/1000),code=`${WORLD_SEED}/${GENERATOR_VERSION}/L1/${x}/${z}`;
+  const coastal=continentalEnvelope(x*2000+1000,z*2000+1000)>1;
+  return {code,x,z,domain:coastal?'Archipelago':'Mainland',elevationLimit:150};
+}
+export function regionSeed(cx: number, cz: number): RegionSeed {
+  const x = Math.floor(cx / 100), z = Math.floor(cz / 100);
+  const parent=provinceSeed(cx,cz);
+  const code = `${parent.code}/L2/${x-parent.x*10}/${z-parent.z*10}`;
+  const blockX = Math.floor(x / 3), blockZ = Math.floor(z / 3);
+  const archipelago = parent.domain==='Archipelago';
+  const islandBelt=continentalEnvelope(x*200+100,z*200+100)<1.12;
+  const landform = archipelago ? (islandBelt&&x - blockX * 3 === 1 && z - blockZ * 3 === 1 ? 'Island' : 'Ocean') : 'Mainland';
+  return { code, x, z, landform, radius: 64 + digest(code) % 12, elevationLimit: landform === 'Island' ? 18 : parent.elevationLimit, parent };
+}
+export function districtSeed(cx: number, cz: number): DistrictSeed {
+  const parent = regionSeed(cx, cz), x = Math.floor(cx / 10) - parent.x * 10, z = Math.floor(cz / 10) - parent.z * 10;
+  const code = `${parent.code}/L3/${x}/${z}`, value = digest(code);
+  return { code, x, z, parent, coastOffset: (value % 13) - 6, beachWidth: 3 + (value >>> 8) % 4 };
+}
+export function patchSeed(cx: number,cz: number):PatchSeed {
+  const parent=districtSeed(cx,cz),x=Math.floor(cx/2)-(parent.parent.x*50+parent.x*5),z=Math.floor(cz/2)-(parent.parent.z*50+parent.z*5);
+  const code=`${parent.code}/L4/${x}/${z}`;
+  return{code,x,z,parent,grain:digest(code)%5};
+}
+export function cellSeed(cx: number, cz: number) {
+  const parent=patchSeed(cx,cz),x=cx-Math.floor(cx/2)*2,z=cz-Math.floor(cz/2)*2;
+  const code = `${parent.code}/L5/${x}/${z}`;
+  return { code, x, z, parent, surface: (parent.grain+digest(code)%3)%5 };
+}
+/** Interpolate L2 coastline controls inside L1's bounded island envelope. */
+export function islandCoast(x: number, z: number, region: RegionSeed) {
+  const lx = x - region.x * 200, lz = z - region.z * 200;
+  const fx = Math.max(0, Math.min(9, lx / 20)), fz = Math.max(0, Math.min(9, lz / 20));
+  const ix = Math.floor(fx), iz = Math.floor(fz);
+  const offset = (a: number, b: number) => districtSeed(region.x * 100 + Math.min(9,a) * 10, region.z * 100 + Math.min(9,b) * 10).coastOffset;
+  const coastOffset = lerp(lerp(offset(ix,iz),offset(ix+1,iz),smooth(fx-ix)),lerp(offset(ix,iz+1),offset(ix+1,iz+1),smooth(fx-ix)),smooth(fz-iz));
+  return region.radius + coastOffset - Math.hypot(lx-100,lz-100);
+}
+export function coordinateValue(x: number, z: number, layer: number): number {
+  let n = SEED_VALUE ^ Math.imul(x, 374761393) ^ Math.imul(z, 668265263) ^ Math.imul(layer, 1274126177);
+  n = Math.imul(n ^ (n >>> 13), 1274126177);
+  return (n ^ (n >>> 16)) >>> 0;
+}
+const smooth = (t: number) => t * t * (3 - 2 * t);
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+export function field(x: number, z: number, spacing: number, layer: number): number {
+  const gx = Math.floor(x / spacing), gz = Math.floor(z / spacing);
+  const tx = smooth(x / spacing - gx), tz = smooth(z / spacing - gz);
+  const at = (a: number, b: number) => (coordinateValue(a, b, layer) % 10001) / 10000;
+  return lerp(lerp(at(gx, gz), at(gx + 1, gz), tx), lerp(at(gx, gz + 1), at(gx + 1, gz + 1), tx), tz);
+}
+export function riverX(z: number): number { return 125 + 42 * Math.sin(z / 150) + 18 * Math.sin(z / 57); }
+export function settlement(sx: number, sz: number): { x: number; z: number; name: string } {
+  const v = coordinateValue(sx, sz, 10);
+  return { x: sx * 512, z: sz * 512, name: sx === 0 && sz === 0 ? 'Alderwick' : ['Briarford', 'Greyhaven', 'Oakmere', 'Westwatch', 'Ashbourne', 'Thornfield'][v % 6] };
+}
+/** Global height, evaluated identically at every tile boundary and detail level. */
+export function heightAt(x: number, z: number): number {
+  const cx = Math.floor(x / 2), cz = Math.floor(z / 2), region = regionSeed(cx, cz);
+  if(region.landform === 'Ocean') return -2.8;
+  if(region.landform === 'Island') {
+    const coast = islandCoast(x,z,region);
+    return lerp(-2.8, Math.min(region.elevationLimit, 3 + field(x,z,48,2)*12), smooth(Math.max(0,Math.min(1,(coast+4)/20))));
+  }
+  const s = nearestPlace(x,z);
+  const d = s?Math.hypot(x-s.x,z-s.z):1000;
+  const radius=s?.kind==='city'?430:90;
+  let flatten = smooth(Math.min(1, Math.max(0, (d - radius) / 80)));
+  const road=roadAt(x,z);if(road)flatten=Math.min(flatten,smooth(Math.min(1,Math.max(0,(Math.abs(z-road.z)-5)/7))));
+  const hills = 3 + field(x, z, 160, 1) * 9 + field(x, z, 48, 2) * 2;
+  const mountains = Math.max(0, field(x, z, 700, 3) - .52) * 260;
+  const land = Math.min(region.elevationLimit,lerp(3, hills + mountains, flatten));
+  const bank = Math.abs(x - riverX(z));
+  return lerp(-2.8, land, smooth(Math.min(1, Math.max(0, (bank - 12) / 19))));
+}
+export function biomeAt(x: number, z: number): string {
+  const h = heightAt(x, z), hierarchy = cellSeed(Math.floor(x/2),Math.floor(z/2));
+  const region = hierarchy.parent.parent.parent;
+  if(region.landform==='Ocean') return 'Ocean';
+  if(region.landform==='Island') {
+    if(h<.1) return 'Ocean';
+    if(islandCoast(x,z,region) < hierarchy.parent.parent.beachWidth + 5 + hierarchy.surface*.15) return 'Sandy beach';
+    return 'Island meadow';
+  }
+  if (h < .1) return 'River';
+  if (Math.abs(x - riverX(z)) < 32) return 'Riverbank';
+  const s=nearestPlace(x,z);
+  if(s&&Math.hypot(x-s.x,z-s.z)<(s.kind==='city'?420:84))return 'Settlement';
+  if(roadAt(x,z))return 'Road';
+  if (h > 70) return 'Highlands';
+  return field(x, z, 90, 4) > .45 ? 'Woodland' : 'Meadow';
+}
+export function tileAt(level: number, x: number, z: number): Tile {
+  const count = 2 ** level;
+  if (!Number.isInteger(level) || level < 0 || level > MAX_LEVEL || !Number.isInteger(x) || !Number.isInteger(z) || x < 0 || z < 0 || x >= count || z >= count) throw new RangeError('Tile outside world hierarchy');
+  const size = WORLD_SIZE / count;
+  return { level, x, z, key: `${WORLD_SEED}/${GENERATOR_VERSION}/T/${level}/${x}/${z}`, size, minX: WORLD_MIN + x * size, minZ: WORLD_MIN + z * size };
+}
+export function tileForPosition(x: number, z: number, level = MAX_LEVEL): Tile {
+  if (x < WORLD_MIN || x >= -WORLD_MIN || z < WORLD_MIN || z >= -WORLD_MIN) throw new RangeError('Position outside generated realm');
+  const size = WORLD_SIZE / 2 ** level;
+  return tileAt(level, Math.floor((x - WORLD_MIN) / size), Math.floor((z - WORLD_MIN) / size));
+}
+export function cellAt(x: number, z: number): Cell {
+  const tile = tileForPosition(x, z);
+  const cx = Math.floor(x / CELL_SIZE), cz = Math.floor(z / CELL_SIZE);
+  const px = cx * CELL_SIZE + 1, pz = cz * CELL_SIZE + 1;
+  const road=roadAt(px,pz),bridge=road&&Math.abs(pz-road.z)<=5&&heightAt(px,pz)<2.9;
+  const elevation = bridge?3:heightAt(px, pz), biome = bridge?'Bridge':biomeAt(px, pz);
+  const slope = Math.max(Math.abs(heightAt(px + 1, pz) - heightAt(px - 1, pz)), Math.abs(heightAt(px, pz + 1) - heightAt(px, pz - 1)));
+  return { code: cellSeed(cx,cz).code, x: cx, z: cz, elevation, biome, walkable: Boolean(bridge)||(elevation > .1 && slope < 2), tile: `${tile.level}/${tile.x}/${tile.z}` };
+}
+/** Features are owned by their anchor tile; tile order/zoom never changes them. */
+export function featuresFor(tile: Tile): Feature[] {
+  const features: Feature[] = [];
+  const add = (kind: Feature['kind'], x: number, z: number, variant: number, id: string) => {
+    if (x < tile.minX || x >= tile.minX + tile.size || z < tile.minZ || z >= tile.minZ + tile.size) return;
+    if (heightAt(x, z) < .2) return;
+    features.push({ kind, x, z, y: heightAt(x, z), variant, code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}` });
+  };
+  for(const s of places) {
+      const extent=s.kind==='city'?440:80;
+      if(s.x<tile.minX-extent||s.x>tile.minX+tile.size+extent||s.z<tile.minZ-extent||s.z>tile.minZ+tile.size+extent)continue;
+      const sx=Math.floor(s.x/2),sz=Math.floor(s.z/2),id=s.id;
+      add('keep', s.x - 30, s.z - 28, coordinateValue(sx, sz, 11), `${id}/${s.kind}/keep`);
+      add('well', s.x, s.z, 0, `${id}/${s.kind}/well`);
+      for (let i = 0; i < 18; i++) {
+        const v = coordinateValue(sx, sz, 20 + i);
+        const side = i % 2 === 0 ? -1 : 1;
+        const x = s.x + (i < 10 ? side * (15 + v % 6) : (i - 14) * 13);
+        const z = s.z + (i < 10 ? (Math.floor(i / 2) - 2) * 14 : side * (42 + v % 5));
+        if (Math.hypot(x - (s.x - 30), z - (s.z - 28)) > 19) add('house', x, z, v, `${id}/${s.kind}/house/${i}`);
+      }
+      for (let i = 0; i < 4; i++) add('field', s.x + (i % 2 === 0 ? -1 : 1)*(s.kind==='city'?350:65), s.z + 16 + Math.floor(i / 2) * 24, i, `${id}/${s.kind}/field/${i}`);
+      if(s.kind==='city')for(let i=0;i<400;i++){
+        const gx=(i%20-9.5)*29,gz=(Math.floor(i/20)-9.5)*29;
+        if(Math.abs(gx)>40||Math.abs(gz)>55)add('house',s.x+gx,s.z+gz,coordinateValue(sx,sz,80+i),`${id}/urban-house/${i}`);
+      }
+  }
+  if (tile.size <= 256) {
+    for (let gz = Math.floor(tile.minZ / 10)-1; gz < (tile.minZ + tile.size) / 10+1; gz++) {
+      for (let gx = Math.floor(tile.minX / 10)-1; gx < (tile.minX + tile.size) / 10+1; gx++) {
+        const v = coordinateValue(gx, gz, 30);
+        const x = gx * 10 + (v % 7) - 3, z = gz * 10 + ((v >>> 5) % 7) - 3;
+        const biome = biomeAt(x, z);
+        if (biome === 'Woodland' && v % 4 !== 0) add('tree', x, z, v, `tree/${gx}/${gz}`);
+        else if (biome !== 'Settlement' && biome !== 'Ocean' && v % 31 === 0) add('rock', x, z, v, `rock/${gx}/${gz}`);
+      }
+    }
+  }
+  return features;
+}
+export type View = { x: number; z: number; halfHeight: number; aspect: number; yaw: number; pixels: number };
+/** Viewport bounds of the tilted orthographic camera, enlarged by one tile for prefetch. */
+export function viewBounds(view: View) {
+  const hw = view.halfHeight * view.aspect, hz = view.halfHeight / Math.sin(Math.PI / 3);
+  const c = Math.abs(Math.cos(view.yaw)), s = Math.abs(Math.sin(view.yaw));
+  const margin=Math.max(4,Math.min(48,view.halfHeight*.35));
+  return { rx: hw * c + hz * s + margin, rz: hw * s + hz * c + margin };
+}
+export function selectTiles(view: View,threshold=190): Tile[] {
+  const { rx, rz } = viewBounds(view), selected: Tile[] = [];
+  const visit = (t: Tile) => {
+    if (t.minX > view.x + rx || t.minX + t.size < view.x - rx || t.minZ > view.z + rz || t.minZ + t.size < view.z - rz) return;
+    const projectedPixels = t.size * view.pixels / (view.halfHeight * 2);
+    if (t.level < MAX_LEVEL && projectedPixels > threshold) {
+      for (let dz = 0; dz < 2; dz++) for (let dx = 0; dx < 2; dx++) visit(tileAt(t.level + 1, t.x * 2 + dx, t.z * 2 + dz));
+    } else selected.push(t);
+  };
+  visit(tileAt(0, 0, 0));
+  if(selected.length>160)return selectTiles(view,threshold*1.25);
+  return selected.sort((a, b) => Math.hypot(a.minX + a.size / 2 - view.x, a.minZ + a.size / 2 - view.z) - Math.hypot(b.minX + b.size / 2 - view.x, b.minZ + b.size / 2 - view.z));
+}

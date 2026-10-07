@@ -414,9 +414,9 @@ Day and night presentation follows game time:
 A new campaign's fantasy date and time derive from the accepted real-world creation time:
 
 - day, month and time-of-day match;
-- **fantasy year = real-world year − 900**.
+- **fantasy year = real-world year − 1900**.
 
-Example: `21.09.2026 → 21.09.1126`.
+Example: `07.10.2026 → 07.10.0126`.
 
 The world continues to progress while the player is away. At the default policy:
 

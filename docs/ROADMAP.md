@@ -11,3 +11,7 @@ These rules are the explicit exception to the compact ROADMAP format below and m
 ## Roadmap Rule
 
 Apart from the Fundamental Planning Rules above, keep only Stage headings and WP code/title/status lines here. WP details, evidence and implementation notes belong in the corresponding GitHub Issue.
+
+## STAGE S001 — Seeded 3D World Foundation
+
+- WP-S001-001-001 — Google Earth reference analysis, five-level seeded world atlas, lazy simulation and fantasy clock — IN PROGRESS

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#162521" />
+  <meta name="description" content="Explore a deterministic medieval world, from an entire realm to individual two-metre cells." />
+  <title>The Advisor · World Atlas</title>
+</head>
+<body>
+  <canvas id="world" aria-label="Interactive 3D medieval world. Drag to travel, scroll to zoom, or use the map controls." tabindex="0"></canvas>
+  <header class="masthead">
+    <div class="crest" aria-hidden="true">♜</div>
+    <div><div class="eyebrow">THE ADVISOR</div><h1>Atlas of the realm</h1></div>
+    <span class="live"><i></i> WORLD EXPLORER</span>
+    <div class="world-clock"><span class="eyebrow">FANTASY TIME · 24×</span><time id="fantasy-time">07.10.0126</time></div>
+  </header>
+  <aside class="panel region-panel">
+    <div class="eyebrow">THE VERDANT MARCHES</div>
+    <h2 id="place-name">Alderwick</h2>
+    <p>3 continents · 30 countries<br />90 cities · 270 villages</p>
+    <div class="divider"></div>
+    <div class="seed-label">WORLD SEED <span>FIXED</span></div>
+    <code id="world-seed"></code>
+    <div class="region-actions"><button id="home">⌂ Return to village</button><button id="overview">↗ Realm view</button></div>
+    <button id="open-travel" class="travel-button">Explore a country or settlement →</button>
+    <div class="divider"></div>
+    <div class="eyebrow">MAP LAYERS</div>
+    <label><input type="checkbox" id="structures" checked /> Settlements &amp; keeps <span class="swatch stone"></span></label>
+    <label><input type="checkbox" id="nature" checked /> Woodland &amp; small details <span class="swatch forest"></span></label>
+    <label><input type="checkbox" id="grid" /> Tile boundaries <span class="swatch gold"></span></label>
+    <p class="hint">Select the landscape to inspect a cell.</p>
+  </aside>
+  <aside class="panel cell-panel" id="cell-panel" hidden>
+    <div class="eyebrow">SELECTED WORLD CELL <button id="close-cell" aria-label="Close cell inspector">×</button></div>
+    <h2 id="cell-biome">Meadow</h2>
+    <div class="cell-coordinates" id="cell-coordinates"></div>
+    <div class="divider"></div>
+    <div class="seed-label">CANONICAL CELL CODE</div><code id="cell-code"></code>
+    <dl><dt>Cell footprint</dt><dd>2 × 2 metres</dd><dt>Elevation</dt><dd id="cell-height"></dd><dt>Tile address</dt><dd id="cell-tile"></dd><dt>Walkable terrain</dt><dd id="cell-walkable"></dd></dl>
+    <details><summary>Five seed levels</summary><ol id="seed-levels"></ol></details>
+    <button id="copy-code">Copy cell code</button><span id="copy-status" role="status"></span>
+  </aside>
+  <aside class="panel travel-panel" id="travel-panel" hidden>
+    <div class="eyebrow">EXPLORE THE REALM <button id="close-travel" aria-label="Close travel menu">×</button></div>
+    <h2>Choose a destination</h2>
+    <label for="continent-select">Continent</label><select id="continent-select"></select>
+    <label for="country-select">Country</label><select id="country-select"></select>
+    <label for="city-select">City</label><select id="city-select"></select>
+    <label for="village-select">Village</label><select id="village-select"></select>
+    <div class="region-actions"><button id="visit-city">Visit city</button><button id="visit-village">Visit village</button></div>
+    <p class="hint">Neighbouring villages: 420 m by road.<br />Five minutes on foot at 1.4 m/s.</p>
+    <div class="divider"></div><div class="eyebrow">LIVING WORLD</div>
+    <p id="simulation-status">Focused country: live · distant countries: coarse</p>
+  </aside>
+  <nav class="map-controls" aria-label="Map navigation">
+    <div class="compass" title="North points toward negative Z">N<span>↑</span></div>
+    <button id="zoom-in" aria-label="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out">−</button>
+    <button id="rotate" aria-label="Rotate view clockwise">↻</button>
+  </nav>
+  <footer class="bottom-bar">
+    <div class="detail"><span class="eyebrow">VIEW DETAIL</span><strong id="detail-name">Village</strong><div class="detail-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div></div>
+    <div class="travel-hint">Drag to travel <b>·</b> Scroll to explore <b>·</b> Q / E to rotate</div>
+    <div class="scale"><div id="scale-line"></div><span id="scale-text">50 m</span></div>
+  </footer>
+  <div class="telemetry"><span id="backend">Connecting renderer</span><b>·</b><span id="tile-status">Preparing terrain</span></div>
+  <div id="map-labels" aria-hidden="true"></div>
+  <div id="loading" role="status"><div class="loading-mark">♜</div><h2>Unfolding the realm</h2><p>Reading the land from its seed…</p></div>
+  <div id="error" role="alert" hidden></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

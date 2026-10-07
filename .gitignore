@@ -44,3 +44,9 @@ Thumbs.db
 
 # Common OS metadata
 .DS_Store
+
+# Web build and local verification
+node_modules/
+dist/
+test-results/
+playwright-report/
