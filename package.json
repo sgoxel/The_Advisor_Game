@@ -7,8 +7,9 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "node --experimental-strip-types --test tests/world.test.ts",
-    "test:browser": "playwright test"
+    "test": "node --experimental-strip-types --test tests/world.test.ts tests/renderer.test.ts",
+    "test:browser": "playwright test",
+    "test:webgpu": "playwright test --config playwright.webgpu.config.js"
   },
   "dependencies": {
     "playcanvas": "2.23.0"

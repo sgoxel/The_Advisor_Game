@@ -23,6 +23,7 @@ import {
 import type { Geometry, TileGeometry } from "./geometry.ts";
 import { LazySimulation } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
+import { createRenderer, rendererState } from "./renderer.ts";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -59,7 +60,7 @@ const clock = new FantasyClock();
 
 function fail(message: string) {
   errorText = message;
-  $("loading").classList.add("done");
+  $("loading").hidden = true;
   $("error").hidden = false;
   $("error").textContent = message;
 }
@@ -540,10 +541,22 @@ function characterMaterial(variant: number): pc.StandardMaterial {
 }
 async function start() {
   $("world-seed").textContent = WORLD_SEED;
-  // Official device creation negotiates WebGPU and falls back to WebGL2.
-  const device = await pc.createGraphicsDevice(canvas, {
-    deviceTypes: [pc.DEVICETYPE_WEBGPU, pc.DEVICETYPE_WEBGL2],
-    antialias: true,
+  $("fantasy-time").textContent = clock.labelAt(Date.now());
+  const device = await createRenderer(canvas);
+  device.on("devicelost", () => {
+    rendererState.phase = "lost";
+    rendererState.error =
+      "The GPU connection was lost. Reload the page to restore rendering.";
+    if (app) app.autoRender = false;
+    fail(rendererState.error);
+    showRendererActions(false);
+  });
+  device.on("devicerestored", () => {
+    rendererState.phase = "ready";
+    rendererState.error = "";
+    errorText = "";
+    $("error").hidden = true;
+    app.autoRender = true;
   });
   device.maxPixelRatio = Math.min(devicePixelRatio, 1.5);
   const options = new pc.AppOptions();
@@ -616,6 +629,7 @@ async function start() {
     frames = 0,
     fps = 0;
   app.on("update", (dt: number) => {
+    if (rendererState.phase === "lost") return;
     const now = Date.now(),
       realSecond = Math.floor(now / 1000);
     const simulationTick = clock.tickAt(now);
@@ -769,6 +783,7 @@ async function start() {
       cellSeed,
       geography: { continents, countries, cities, villages, roads },
       clock,
+      renderer: rendererState,
       get state() {
         return {
           ready,
@@ -805,8 +820,33 @@ async function start() {
   });
   app.start();
 }
-start().catch((error) =>
-  fail(
-    `The 3D world could not open. Try a browser with WebGL2 or WebGPU enabled. ${String(error)}`,
-  ),
-);
+function showRendererActions(allowCompatibility: boolean) {
+  const actions = document.createElement("div");
+  actions.className = "renderer-actions";
+  const retry = document.createElement("button");
+  retry.textContent = "Retry WebGPU";
+  retry.onclick = () => {
+    const url = new URL(location.href);
+    url.searchParams.delete("renderer");
+    location.assign(url);
+  };
+  actions.append(retry);
+  if (allowCompatibility) {
+    const compatibility = document.createElement("button");
+    compatibility.id = "use-webgl2";
+    compatibility.textContent = "Continue with WebGL2";
+    compatibility.onclick = () => {
+      const url = new URL(location.href);
+      url.searchParams.set("renderer", "webgl2");
+      location.assign(url);
+    };
+    actions.append(compatibility);
+  }
+  $("error").append(actions);
+}
+start().catch((error) => {
+  fail(error instanceof Error ? error.message : String(error));
+  $("backend").textContent = rendererState.requested === "webgpu" ? "WebGPU unavailable" : "WebGL2 unavailable";
+  $("tile-status").textContent = "Renderer initialization failed";
+  showRendererActions(rendererState.requested === "webgpu");
+});

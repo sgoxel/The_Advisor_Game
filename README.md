@@ -1,6 +1,6 @@
 # The Advisor Game
 
-A medieval 3D world atlas built with PlayCanvas 2.23.0, preferring WebGPU. Its fixed seed, five nested generation levels and fantasy clock determine world content and resident schedules without random-number APIs.
+A medieval 3D world atlas built with PlayCanvas 2.23.0, using WebGPU by default. Its fixed seed, five nested generation levels and fantasy clock determine world content and resident schedules without random-number APIs. If WebGPU is unavailable, choose the explicit WebGL2 compatibility option. See [WebGPU setup and verification](docs/WEBGPU.md).
 
 The realm has three continents, 30 countries, 90 cities and 270 villages. Two-metre cells and lazy tile streaming keep detailed generation local to the camera. The focused country's residents update live; distant countries retain coarse summaries.
 

@@ -1,7 +1,7 @@
 // Capture the built atlas. Start `npm run preview -- --port 4173` first.
 import {chromium} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
-const url=process.argv[2]||'http://127.0.0.1:4173';
+const url=process.argv[2]||'http://127.0.0.1:4173/?renderer=webgl2';
 const directory='docs/evidence';await mkdir(directory,{recursive:true});
 const browser=await chromium.launch({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 try{
