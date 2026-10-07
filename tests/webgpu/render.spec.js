@@ -20,75 +20,116 @@ async function exercisePureZoomHandoff(page, backend) {
     const focus = await page.evaluate(() => ({
       ...window.advisorWorld.state.view,
     }));
+    const marker = await page.locator("#centre-marker").boundingBox();
+    expect(marker).not.toBeNull();
+    const markerCenter = {
+      x: marker.x + marker.width / 2,
+      y: marker.y + marker.height / 2,
+    };
+    const assertInvariant = async () => {
+      const current = await page.evaluate(() => window.advisorWorld.state);
+      expect(current.view.x).toBe(focus.x);
+      expect(current.view.z).toBe(focus.z);
+      expect(current.view.yaw).toBe(focus.yaw);
+      expect(current.navigation.heading).toBe(-focus.yaw || 0);
+      const box = await page.locator("#centre-marker").boundingBox();
+      expect(box).not.toBeNull();
+      expect(box.x + box.width / 2).toBeCloseTo(markerCenter.x, 6);
+      expect(box.y + box.height / 2).toBeCloseTo(markerCenter.y, 6);
+      return current;
+    };
 
-    // Zoom button starts the globe-bound transition without moving/turning focus.
+    // Zoom buttons work in both directions without moving/turning focus.
     await page.locator("#zoom-out").click();
     await page.waitForFunction(
       () => window.advisorWorld.state.handoff.projectionTransition > 0.01,
     );
-    let state = await page.evaluate(() => window.advisorWorld.state);
+    let state = await assertInvariant();
     expect(state.globe.complete).toBeTruthy();
     expect(state.handoff.destinationReady).toBeTruthy();
     expect(state.handoff.waitingForDestination).toBeFalsy();
     expect(state.handoff.preparationWaitMs).toBeGreaterThanOrEqual(0);
     expect(state.handoff.blendDurationMs).toBeGreaterThan(0);
-    expect(state.view.x).toBe(focus.x);
-    expect(state.view.z).toBe(focus.z);
-    expect(state.view.yaw).toBe(focus.yaw);
     if (backend === "webgpu")
       await page.screenshot({
         path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-button.png`,
       });
+    const buttonOutHeight = state.view.halfHeight;
+    await page.locator("#zoom-in").click();
+    await page.waitForTimeout(50);
+    state = await assertInvariant();
+    expect(state.view.halfHeight).toBeLessThan(buttonOutHeight);
+    await page.locator("#zoom-out").click();
+    await page.waitForTimeout(50);
+    state = await assertInvariant();
+    expect(state.view.halfHeight).toBeGreaterThan(buttonOutHeight / 1.4);
 
-    // Wheel changes scale only.
+    // Wheel works in both directions and changes only scale.
     await page.mouse.move(viewport.width * 0.5, viewport.height * 0.55);
-    await page.mouse.wheel(0, 100);
-    await page.waitForTimeout(70);
-    state = await page.evaluate(() => window.advisorWorld.state);
-    expect(state.view.x).toBe(focus.x);
-    expect(state.view.z).toBe(focus.z);
-    expect(state.view.yaw).toBe(focus.yaw);
+    const wheelStart = state.view.halfHeight;
+    await page.mouse.wheel(0, 140);
+    await page.waitForTimeout(60);
+    state = await assertInvariant();
+    expect(state.view.halfHeight).toBeGreaterThan(wheelStart);
     if (backend === "webgpu")
       await page.screenshot({
         path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-wheel.png`,
       });
+    const wheelOutHeight = state.view.halfHeight;
+    await page.mouse.wheel(0, -140);
+    await page.waitForTimeout(60);
+    state = await assertInvariant();
+    expect(state.view.halfHeight).toBeLessThan(wheelOutHeight);
 
-    // Two-pointer pinch exercises the production pointer handler and also changes only scale.
-    await page.evaluate(() => {
-      const c = document.getElementById("world"),
-        r = c.getBoundingClientRect(),
-        fire = (type, id, x, y) =>
-          c.dispatchEvent(
-            new PointerEvent(type, {
-              bubbles: true,
-              pointerId: id,
-              pointerType: "touch",
-              clientX: x,
-              clientY: y,
-              buttons: type === "pointerup" ? 0 : 1,
-            }),
-          ),
-        cy = r.top + r.height * 0.55,
-        cx = r.left + r.width * 0.5;
-      fire("pointerdown", 31, cx - 45, cy);
-      fire("pointerdown", 32, cx + 45, cy);
-      fire("pointermove", 31, cx - 70, cy);
-      fire("pointermove", 32, cx + 70, cy);
-      fire("pointerup", 31, cx - 70, cy);
-      fire("pointerup", 32, cx + 70, cy);
-    });
-    await page.waitForTimeout(80);
-    state = await page.evaluate(() => window.advisorWorld.state);
-    expect(state.view.x).toBe(focus.x);
-    expect(state.view.z).toBe(focus.z);
-    expect(state.view.yaw).toBe(focus.yaw);
+    // Two-pointer pinch works in both directions through the production handler.
+    const pinch = async (startSpread, endSpread, firstId) => {
+      await page.evaluate(
+        ({ startSpread, endSpread, firstId }) => {
+          const c = document.getElementById("world"),
+            r = c.getBoundingClientRect(),
+            fire = (type, id, x, y) =>
+              c.dispatchEvent(
+                new PointerEvent(type, {
+                  bubbles: true,
+                  pointerId: id,
+                  pointerType: "touch",
+                  clientX: x,
+                  clientY: y,
+                  buttons: type === "pointerup" ? 0 : 1,
+                }),
+              ),
+            cy = r.top + r.height * 0.55,
+            cx = r.left + r.width * 0.5;
+          fire("pointerdown", firstId, cx - startSpread, cy);
+          fire("pointerdown", firstId + 1, cx + startSpread, cy);
+          fire("pointermove", firstId, cx - endSpread, cy);
+          fire("pointermove", firstId + 1, cx + endSpread, cy);
+          fire("pointerup", firstId, cx - endSpread, cy);
+          fire("pointerup", firstId + 1, cx + endSpread, cy);
+        },
+        { startSpread, endSpread, firstId },
+      );
+      await page.waitForTimeout(80);
+      return assertInvariant();
+    };
+    const pinchStart = state.view.halfHeight;
+    state = await pinch(45, 70, 31);
+    expect(state.view.halfHeight).toBeLessThan(pinchStart);
     if (backend === "webgpu")
       await page.screenshot({
         path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-pinch.png`,
       });
+    const pinchInHeight = state.view.halfHeight;
+    state = await pinch(70, 45, 41);
+    expect(state.view.halfHeight).toBeGreaterThan(pinchInHeight);
 
     // Reverse wheel direction while the blend is active; transition must reverse in place.
     await page.mouse.move(viewport.width * 0.5, viewport.height * 0.55);
+    const beforeReverse = await page.evaluate(
+      () => window.advisorWorld.state.handoff.projectionTransition,
+    );
+    expect(beforeReverse).toBeGreaterThan(0);
+    expect(beforeReverse).toBeLessThan(1);
     await page.mouse.wheel(0, -420);
     await page.waitForFunction(() => {
       const h = window.advisorWorld.state.handoff;
@@ -97,10 +138,7 @@ async function exercisePureZoomHandoff(page, backend) {
         h.projectionTransition <= 0.01
       );
     });
-    state = await page.evaluate(() => window.advisorWorld.state);
-    expect(state.view.x).toBe(focus.x);
-    expect(state.view.z).toBe(focus.z);
-    expect(state.view.yaw).toBe(focus.yaw);
+    state = await assertInvariant();
     if (backend === "webgpu")
       await page.screenshot({
         path: `test-results/webgpu-handoff-${viewport.width}x${viewport.height}-reverse.png`,
@@ -116,10 +154,7 @@ async function exercisePureZoomHandoff(page, backend) {
         window.advisorWorld.state.presentation === "globe" &&
         window.advisorWorld.state.settled,
     );
-    const globe = await page.evaluate(() => window.advisorWorld.state);
-    expect(globe.view.x).toBe(focus.x);
-    expect(globe.view.z).toBe(focus.z);
-    expect(globe.view.yaw).toBe(focus.yaw);
+    const globe = await assertInvariant();
     expect(globe.globe.complete).toBeTruthy();
     expect(globe.handoff.destinationReady).toBeTruthy();
     expect(globe.handoff.waitingForDestination).toBeFalsy();
@@ -139,10 +174,7 @@ async function exercisePureZoomHandoff(page, backend) {
         window.advisorWorld.state.presentation === "flat" &&
         window.advisorWorld.state.settled,
     );
-    const flat = await page.evaluate(() => window.advisorWorld.state);
-    expect(flat.view.x).toBe(focus.x);
-    expect(flat.view.z).toBe(focus.z);
-    expect(flat.view.yaw).toBe(focus.yaw);
+    const flat = await assertInvariant();
     expect(flat.handoff.destinationReady).toBeTruthy();
     expect(flat.handoff.waitingForDestination).toBeFalsy();
     if (backend === "webgpu")
