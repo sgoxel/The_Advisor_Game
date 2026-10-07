@@ -9,7 +9,15 @@ export const HANDOFF_LOCAL_HALF_HEIGHT = halfHeightForCanonicalFootprint(HANDOFF
 export const HANDOFF_GLOBE_HALF_HEIGHT = halfHeightForCanonicalFootprint(HANDOFF_GLOBE_FOOTPRINT);
 export const SCALE_LADDER = [10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 10000] as const;
 
-const smoothstep = (t: number) => t * t * (3 - 2 * t);
+/**
+ * The local mesh is authoritative at the inner anchor, but it becomes a coarse,
+ * disposable LOD very quickly as the footprint grows. Let the already-prepared
+ * globe surface take visual ownership early enough that those coarse mesh seams
+ * cannot dominate the handoff. 0.998 deliberately stays below the runtime's
+ * full-globe threshold; only the canonical 1/2500 anchor returns exactly 1.
+ */
+const VISUAL_BLEND_POWER = 10;
+const ALMOST_GLOBE = 0.998;
 
 /** Presentation-only globe blend derived solely from continuous zoom. */
 export function projectionTransitionForHalfHeight(halfHeight: number): number {
@@ -18,7 +26,7 @@ export function projectionTransitionForHalfHeight(halfHeight: number): number {
   const a = Math.log(HANDOFF_LOCAL_HALF_HEIGHT);
   const b = Math.log(HANDOFF_GLOBE_HALF_HEIGHT);
   const t = Math.max(0, Math.min(1, (Math.log(halfHeight) - a) / (b - a)));
-  return smoothstep(t);
+  return Math.min(ALMOST_GLOBE, 1 - (1 - t) ** VISUAL_BLEND_POWER);
 }
 
 /** Reversible easing: changing the target mid-transition simply changes direction. */
