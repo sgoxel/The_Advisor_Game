@@ -33,9 +33,9 @@ const populationOf = (place: Place) => (place.kind === "city" ? 2400 : 80);
 
 /**
  * Cached tangent coefficients are presentation-independent acceleration data.
- * Current resident lanes are at most 261 m from their settlement centre, so this
- * local spherical tangent approximation remains below one centimetre of curvature
- * error while avoiding full ECEF/ENU trigonometry for thousands of residents.
+ * Current resident lanes are at most 261 m from their settlement centre, keeping
+ * the local spherical tangent approximation well below one metre of position error
+ * while avoiding full ECEF/ENU trigonometry for thousands of residents.
  */
 const tangentMetrics = new Map<
   string,
