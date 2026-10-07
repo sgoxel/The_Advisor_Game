@@ -1,12 +1,13 @@
 import { WORLD_SEED, WALK_SPEED_MPS, VILLAGE_SPACING_M } from "./config.ts";
 import {
   greatCircleDistance,
-  sourceToLonLat,
+  lonLatToSource,
+  normalizeLongitude,
   type CanonicalPosition,
   type LonLat,
 } from "./planet.ts";
 
-/** x/z are transitional source/render coordinates; canonicalPosition is world truth. */
+/** x/z are derived source/render coordinates; canonicalPosition is world truth. */
 export type Place = {
   id: string;
   code: string;
@@ -20,26 +21,56 @@ export type Place = {
   city: number;
 };
 
-const canonicalPosition = (x: number, z: number): CanonicalPosition => ({
-  ...sourceToLonLat(x, z),
-  elevation: 0,
+const SOURCE_ANGLE = (Math.PI * 2) / 262_144;
+const CONTINENT_LAT = -6_500 * SOURCE_ANGLE;
+const CONTINENT_LON = 80_000 * SOURCE_ANGLE;
+const COUNTRY_LON_STEP = 7_000 * SOURCE_ANGLE;
+const COUNTRY_LAT_STEP = 13_000 * SOURCE_ANGLE;
+const CITY_DX = [0, -2_400, 2_400].map((value) => value * SOURCE_ANGLE);
+const CITY_DZ = [-600, 2_000, 2_000].map((value) => value * SOURCE_ANGLE);
+const VILLAGE_LON_STEP = 420 * SOURCE_ANGLE;
+const VILLAGE_LAT_OFFSET = 600 * SOURCE_ANGLE;
+
+const canonicalPosition = (
+  lon: number,
+  lat: number,
+  elevation = 0,
+): CanonicalPosition => ({
+  lon: normalizeLongitude(lon),
+  lat: Math.max(-Math.PI / 2, Math.min(Math.PI / 2, lat)),
+  elevation,
 });
 
+const withPresentation = <T extends { canonicalPosition: CanonicalPosition }>(record: T) => {
+  const { x, z } = lonLatToSource(
+    record.canonicalPosition.lon,
+    record.canonicalPosition.lat,
+  );
+  return { ...record, x, z };
+};
+
 export const continents = [
-  { id: 0, name: "Eldermere", x: 0, z: 6500 },
-  { id: 1, name: "Westreach", x: -80000, z: 6500 },
-  { id: 2, name: "Dawnlands", x: 80000, z: 6500 },
-].map((continent) => ({
-  ...continent,
-  canonicalPosition: canonicalPosition(continent.x, continent.z),
-}));
+  { id: 0, name: "Eldermere", canonicalPosition: canonicalPosition(0, CONTINENT_LAT) },
+  {
+    id: 1,
+    name: "Westreach",
+    canonicalPosition: canonicalPosition(-CONTINENT_LON, CONTINENT_LAT),
+  },
+  {
+    id: 2,
+    name: "Dawnlands",
+    canonicalPosition: canonicalPosition(CONTINENT_LON, CONTINENT_LAT),
+  },
+].map(withPresentation);
 
 export const countries = continents.flatMap((continent) =>
   Array.from({ length: 10 }, (_, id) => {
     const slot = (id + 2) % 10,
-      x = continent.x + ((slot % 5) - 2) * 7000,
-      z = Math.floor(slot / 5) * 13000;
-    return {
+      position = canonicalPosition(
+        continent.canonicalPosition.lon + ((slot % 5) - 2) * COUNTRY_LON_STEP,
+        -Math.floor(slot / 5) * COUNTRY_LAT_STEP,
+      );
+    return withPresentation({
       id,
       continent: continent.id,
       code: `${WORLD_SEED}/CONT/${continent.id}/COUNTRY/${id}`,
@@ -55,42 +86,34 @@ export const countries = continents.flatMap((continent) =>
         "Stonefen",
         "Dunvale",
       ][id],
-      x,
-      z,
-      canonicalPosition: canonicalPosition(x, z),
-    };
+      canonicalPosition: position,
+    });
   }),
 );
 
 export const cities: Place[] = countries.flatMap((country) =>
-  [
-    [0, -600],
-    [-2400, 2000],
-    [2400, 2000],
-  ].map(([dx, dz], city) => {
+  [0, 1, 2].map((city) => {
     const id = `${country.continent}/${country.id}/${city}`,
-      x = country.x + dx,
-      z = country.z + dz;
-    return {
+      position = canonicalPosition(
+        country.canonicalPosition.lon + CITY_DX[city],
+        country.canonicalPosition.lat - CITY_DZ[city],
+      );
+    return withPresentation({
       id,
       code: `${country.code}/CITY/${city}`,
       name: `${country.name} ${["Citadel", "Market", "Harbour"][city]}`,
-      x,
-      z,
-      canonicalPosition: canonicalPosition(x, z),
+      canonicalPosition: position,
       kind: "city" as const,
       continent: country.continent,
       country: country.id,
       city,
-    };
+    });
   }),
 );
 
 export const villages: Place[] = cities.flatMap((city) =>
-  Array.from({ length: 3 }, (_, v) => {
-    const x = city.x + v * VILLAGE_SPACING_M,
-      z = city.z + 600;
-    return {
+  Array.from({ length: 3 }, (_, v) =>
+    withPresentation({
       ...city,
       id: `${city.id}/${v}`,
       code: `${city.code}/VILLAGE/${v}`,
@@ -99,26 +122,29 @@ export const villages: Place[] = cities.flatMap((city) =>
         city.continent === 0 && city.country === 0 && city.city === 0 && v === 0
           ? "Alderwick"
           : `${["Briarford", "Oakmere", "Thornfield"][v]} ${city.continent + 1}.${city.country + 1}.${city.city + 1}`,
-      x,
-      z,
-      canonicalPosition: canonicalPosition(x, z),
-    };
-  }),
+      canonicalPosition: canonicalPosition(
+        city.canonicalPosition.lon + v * VILLAGE_LON_STEP,
+        city.canonicalPosition.lat - VILLAGE_LAT_OFFSET,
+      ),
+    }),
+  ),
 );
 
 export const places = [...cities, ...villages];
 
 export const roads = cities.flatMap((city) =>
   [0, 1].map((index) => {
-    const minX = city.x + index * VILLAGE_SPACING_M,
-      maxX = city.x + (index + 1) * VILLAGE_SPACING_M,
-      z = city.z + 600,
-      fromPosition = canonicalPosition(minX, z),
-      toPosition = canonicalPosition(maxX, z);
+    const fromPlace = villages.find((place) => place.id === `${city.id}/${index}`)!,
+      toPlace = villages.find((place) => place.id === `${city.id}/${index + 1}`)!,
+      fromPosition = fromPlace.canonicalPosition,
+      toPosition = toPlace.canonicalPosition,
+      minX = Math.min(fromPlace.x, toPlace.x),
+      maxX = Math.max(fromPlace.x, toPlace.x),
+      z = fromPlace.z;
     return {
       code: `${city.code}/ROAD/${index}`,
-      from: `${city.id}/${index}`,
-      to: `${city.id}/${index + 1}`,
+      from: fromPlace.id,
+      to: toPlace.id,
       minX,
       maxX,
       z,
