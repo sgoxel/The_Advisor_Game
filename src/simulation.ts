@@ -2,7 +2,11 @@ import { countries, places, type Place } from "./geography.ts";
 import { WORLD_SEED, WALK_SPEED_MPS } from "./config.ts";
 import { digest, heightAt, cellAt } from "./world.ts";
 import { TIME_SCALE } from "./clock.ts";
-import { sourceToLonLat, type CanonicalPosition } from "./planet.ts";
+import {
+  enuToPosition,
+  lonLatToSource,
+  type CanonicalPosition,
+} from "./planet.ts";
 
 export type Resident = {
   code: string;
@@ -24,6 +28,13 @@ export type CountryState = {
   tier: "live" | "interested" | "coarse";
 };
 const populationOf = (place: Place) => (place.kind === "city" ? 2400 : 80);
+
+/**
+ * V1 canonical lane scale in physical metres. This preserves the current visible
+ * resident spacing while keeping simulation motion authoritative in ENU metres.
+ */
+const V1_LANE_UNIT_M = 15.270299374405344;
+
 export function summaryAt(code: string, tick: number): CountryState {
   const baseline = digest(code) % 5000;
   // Analytical catch-up is independent of update cadence and render interest.
@@ -43,48 +54,60 @@ export function residentAt(
   const code = `${place.code}/RESIDENT/${index}`,
     variant = digest(code),
     span = place.kind === "city" ? 250 : 28;
-  // Four deterministic lanes around a settlement; no stochastic destination selection.
-  const radius = 12 + (variant % span),
-    speed = WALK_SPEED_MPS / TIME_SCALE,
+  // Four deterministic canonical ENU lanes around a settlement; no stochastic
+  // destination selection and no render tile/camera input.
+  const radius = (12 + (variant % span)) * V1_LANE_UNIT_M,
+    speed = (WALK_SPEED_MPS / TIME_SCALE) * V1_LANE_UNIT_M,
     perimeter = radius * 8;
   const distance =
     (tick * speed + (variant % Math.ceil(perimeter))) % perimeter;
   const side = Math.floor(distance / (radius * 2)),
     along = distance % (radius * 2);
-  let dx = 0,
-    dz = 0;
+  let east = 0,
+    north = 0;
   if (side === 0) {
-    dx = -radius + along;
-    dz = -radius;
+    east = -radius + along;
+    north = radius;
   } else if (side === 1) {
-    dx = radius;
-    dz = -radius + along;
+    east = radius;
+    north = radius - along;
   } else if (side === 2) {
-    dx = radius - along;
-    dz = radius;
+    east = radius - along;
+    north = -radius;
   } else {
-    dx = -radius;
-    dz = radius - along;
+    east = -radius;
+    north = -radius + along;
   }
   // Keep/house interiors are not implemented yet: use the two central street axes.
-  const horizontal = index % 2 === 0;
-  const offset = Math.abs(horizontal ? dx : dz);
-  const candidateX = place.x + (horizontal ? dx : 0),
-    candidateZ = place.z + (horizontal ? 0 : dz),
-    legal = heightAt(candidateX, candidateZ) > 0.1,
-    x = legal ? candidateX : place.x,
-    z = legal ? candidateZ : place.z,
-    surface = sourceToLonLat(x, z),
-    elevation = heightAt(x, z);
+  const horizontal = index % 2 === 0,
+    offset = Math.abs(horizontal ? east : north),
+    candidate = enuToPosition(
+      {
+        east: horizontal ? east : 0,
+        north: horizontal ? 0 : north,
+        up: 0,
+      },
+      place.canonicalPosition,
+    ),
+    presentation = lonLatToSource(candidate.lon, candidate.lat),
+    legal = heightAt(presentation.x, presentation.z) > 0.1,
+    surface = legal ? candidate : place.canonicalPosition,
+    source = legal ? presentation : { x: place.x, z: place.z },
+    elevation = heightAt(source.x, source.z);
   return {
     code,
     home: place.id,
     index,
     variant,
-    position: { ...surface, elevation },
-    x,
-    z,
-    task: offset < 4 ? "Trading" : index % 3 === 0 ? "Patrolling" : "Walking",
+    position: { lon: surface.lon, lat: surface.lat, elevation },
+    x: source.x,
+    z: source.z,
+    task:
+      offset < 4 * V1_LANE_UNIT_M
+        ? "Trading"
+        : index % 3 === 0
+          ? "Patrolling"
+          : "Walking",
   };
 }
 export class LazySimulation {
