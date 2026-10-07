@@ -1,12 +1,14 @@
 import { test, expect } from "@playwright/test";
 
-async function exercisePureZoomHandoff(page, backend) {
+const HANDOFF_VIEWPORTS = [
+  { width: 1440, height: 900 },
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+];
+
+async function exercisePureZoomHandoff(page, backend, viewports = HANDOFF_VIEWPORTS) {
   const anchors = await page.evaluate(() => window.advisorWorld.handoff);
-  for (const viewport of [
-    { width: 1440, height: 900 },
-    { width: 390, height: 844 },
-    { width: 844, height: 390 },
-  ]) {
+  for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     await page.evaluate(
       (h) => window.advisorWorld.setHalfHeight(h),
@@ -184,8 +186,7 @@ async function exercisePureZoomHandoff(page, backend) {
   }
 }
 
-test("the real WebGPU backend renders the seeded world", async ({ page }) => {
-  test.setTimeout(420000);
+function collectWebGpuErrors(page) {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
@@ -195,6 +196,26 @@ test("the real WebGPU backend renders the seeded world", async ({ page }) => {
     )
       errors.push(message.text());
   });
+  return errors;
+}
+
+async function expectWebGpuReady(page) {
+  await page.waitForFunction(
+    () => window.advisorRenderer?.phase !== "starting",
+  );
+  expect(await page.evaluate(() => window.advisorRenderer)).toMatchObject({
+    requested: "webgpu",
+    backend: "webgpu",
+    phase: "ready",
+    error: "",
+  });
+  await page.waitForFunction(() => window.advisorWorld?.state.settled);
+  await expect(page.locator("#backend")).toContainText("WebGPU");
+}
+
+test("the real WebGPU backend renders the seeded world", async ({ page }) => {
+  test.setTimeout(420000);
+  const errors = collectWebGpuErrors(page);
   await page.setViewportSize({ width: 960, height: 640 });
   // Verify the test browser can map the staging buffers used by the engine.
   await page.goto("/PLAYCANVAS-LICENSE.txt");
@@ -219,17 +240,7 @@ test("the real WebGPU backend renders the seeded world", async ({ page }) => {
   console.log("WebGPU staging-buffer probe", mapping);
   expect(mapping.bytes).toBe(102400);
   await page.goto("/");
-  await page.waitForFunction(
-    () => window.advisorRenderer?.phase !== "starting",
-  );
-  expect(await page.evaluate(() => window.advisorRenderer)).toMatchObject({
-    requested: "webgpu",
-    backend: "webgpu",
-    phase: "ready",
-    error: "",
-  });
-  await page.waitForFunction(() => window.advisorWorld?.state.settled);
-  await expect(page.locator("#backend")).toContainText("WebGPU");
+  await expectWebGpuReady(page);
   await page.screenshot({ path: "test-results/webgpu-village.png" });
   for (const scale of ["10", "10000"]) {
     await page.locator("#map-scale").selectOption(scale);
@@ -296,8 +307,19 @@ test("the real WebGPU backend renders the seeded world", async ({ page }) => {
       window.advisorWorld.state.presentation === "flat" &&
       window.advisorWorld.state.settled,
   );
-
-  await exercisePureZoomHandoff(page, "webgpu");
   await expect(page.locator("#error")).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+for (const viewport of HANDOFF_VIEWPORTS) {
+  test(`real WebGPU pure-zoom handoff ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test.setTimeout(420000);
+    const errors = collectWebGpuErrors(page);
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await expectWebGpuReady(page);
+    await exercisePureZoomHandoff(page, "webgpu", [viewport]);
+    await expect(page.locator("#error")).toBeHidden();
+    expect(errors).toEqual([]);
+  });
+}
