@@ -70,13 +70,16 @@ export function clampLatitude(lat: number): number {
 export function wrapCanonicalX(wrappedX: number): number {
   if (!Number.isFinite(wrappedX))
     throw new RangeError("Wrapped planet X must be finite");
-  const half = CANONICAL_PLANET_CIRCUMFERENCE / 2;
-  return (
-    ((((wrappedX + half) % CANONICAL_PLANET_CIRCUMFERENCE) +
-      CANONICAL_PLANET_CIRCUMFERENCE) %
-      CANONICAL_PLANET_CIRCUMFERENCE) -
-    half
-  );
+  const half = CANONICAL_PLANET_CIRCUMFERENCE / 2,
+    wrapped =
+      ((((wrappedX + half) % CANONICAL_PLANET_CIRCUMFERENCE) +
+        CANONICAL_PLANET_CIRCUMFERENCE) %
+        CANONICAL_PLANET_CIRCUMFERENCE) -
+      half,
+    seamTolerance = CANONICAL_PLANET_CIRCUMFERENCE * Number.EPSILON * 8;
+  // Floating point may land an exact full-turn input a few ulps below +C/2.
+  // Collapse that numerical representation to the canonical half-open -C/2 seam.
+  return Math.abs(wrapped - half) <= seamTolerance ? -half : wrapped;
 }
 
 export function lonLatToMeters(
@@ -155,7 +158,12 @@ export const halfHeightForCanonicalFootprint = (footprint: number) =>
 export function lonLatToUnit(lon: number, lat: number): Unit {
   const canonicalLon = normalizeLongitude(lon),
     canonicalLat = clampLatitude(lat),
-    c = Math.cos(canonicalLat);
+    poleDelta = Math.abs(Math.abs(canonicalLat) - Math.PI / 2);
+  // Longitude is undefined at a pole. Pin exact/numerically exact poles to one
+  // vector so every longitude path resolves to identical cube ownership and ID.
+  if (poleDelta <= Number.EPSILON * 4)
+    return [0, canonicalLat < 0 ? -1 : 1, 0];
+  const c = Math.cos(canonicalLat);
   return [
     c * Math.sin(canonicalLon),
     Math.sin(canonicalLat),
