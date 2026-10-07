@@ -74,10 +74,8 @@ function decorateGeography(value: unknown): unknown {
     if (!record || typeof record !== "object") return record;
     const item = record as Record<string, unknown>;
     if (typeof item.x !== "number" || typeof item.z !== "number") return record;
-    const position = sourceToLonLat(item.x, item.z);
     return {
       ...item,
-      canonicalPosition: { ...position, elevation: 0 },
       sourcePosition: { x: item.x, z: item.z, derivedPresentationOnly: true },
     };
   });
