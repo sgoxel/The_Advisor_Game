@@ -23,7 +23,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:webgpu
+      - run: xvfb-run -a npm run test:webgpu
       - uses: actions/upload-artifact@v4
         if: always()
         with:
