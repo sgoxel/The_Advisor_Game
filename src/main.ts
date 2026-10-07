@@ -383,7 +383,10 @@ function applyPresentation() {
       worldMaterial.opacity = opacity;
       worldMaterial.blendType =
         opacity < 0.999 ? pc.BLEND_NORMAL : pc.BLEND_NONE;
-      worldMaterial.depthWrite = opacity >= 0.999;
+      // Keep the nearest flat surface in the depth buffer while it remains
+      // visible. Without this, overlapping tile skirts alpha-blend together
+      // during the handoff and expose rectangular tile seams.
+      worldMaterial.depthWrite = opacity > 0.001;
       worldMaterial.update();
     }
   }
