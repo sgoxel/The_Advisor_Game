@@ -186,6 +186,9 @@ function install(world: AdvisorWorld) {
     new MutationObserver(updateInspector).observe(panel, {
       attributes: true,
       attributeFilter: ["hidden"],
+      childList: true,
+      characterData: true,
+      subtree: true,
     });
   }
 
