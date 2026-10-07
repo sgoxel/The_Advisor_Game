@@ -18,6 +18,8 @@ WP-S001-003-001: 16 functional tests and the production build pass. Fresh [block
 
 The software-test launch options follow [Chromium's SwiftShader WebGPU test configuration](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/blink/web_tests/FlagSpecificConfig). These flags apply only to the test browser; the game does not change browser settings or require them on supported hardware.
 
+Fallback verification uses `npx playwright test --config playwright.fallback.config.js`, with only software WebGL test flags. The Vulkan compositor configuration required for the WebGPU suite hung the first fallback CI browser; the two driver configurations are kept separate. Neither changes production browser settings.
+
 Historical WebGPU-only verification: the build and 14 functional checks passed. The Linux runner rendered WebGPU village and detail without GPU/shader errors in [run 37605770976](https://github.com/sgoxel/The_Advisor_Game/actions/runs/37605770976). This earlier version had no fallback; the current policy above supersedes it.
 
 The initial CI failures came from [headless canvas presentation without a GPU-enabled Vulkan compositor and X display](https://github.com/visgl/luma.gl/issues/2874). Acquiring the swapchain texture dropped the native device and made later staging-buffer allocations fail. CI now runs with Xvfb, GPU-enabled headless rendering and Vulkan/SwiftShader compositing. Temporary native-device diagnostics were removed. Software WebGPU rendering is verified; hardware/mobile frame-rate benchmarking remains future work.
