@@ -49,6 +49,7 @@ from playwright.sync_api import Browser, Error as PlaywrightError, Locator, Page
 PROFILES: dict[str, tuple[int, int]] = {
     "desktop": (1440, 900), "laptop": (1280, 720), "tablet": (1024, 768),
     "phone": (390, 844), "phone-landscape": (844, 390),
+    "phone-small": (360, 800), "tablet-portrait": (768, 1024),
 }
 
 # Named step presets. Add a line here to give a new scene a name.
@@ -58,6 +59,7 @@ SCENARIOS: dict[str, str] = {
     # 97 m half-height x 1.4^3 = 266 m: the 230-900 m "Province" band in src/main.ts.
     "province": "zoom-out:3",
     "realm": "click:#overview",
+    "navigation": "select:#map-scale=10;settle;shot:local;select:#map-scale=10000;settle;shot:realm",
     "realm-tiles": "click:#overview;check:#grid",
     "handoff": (
         "eval:window.advisorWorld.setHalfHeight(window.advisorWorld.handoff.localHalfHeight*0.92);settle;shot:flat;"
@@ -105,6 +107,7 @@ STATE_JS = """() => {
     cached: state.cached ?? null, pending: state.pending ?? null,
     handoff: state.handoff ?? null, scaleLabel: state.scaleLabel ?? null,
     canonicalFootprintM: state.canonicalFootprintM ?? null,
+    navigation: state.navigation ?? null,
     detailName: detail ? detail.textContent.trim() : null,
     error: state.error || (box && !box.hidden ? box.textContent.trim() : ''),
   };

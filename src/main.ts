@@ -2,7 +2,6 @@ import * as pc from "playcanvas";
 import "./style.css";
 import {
   WORLD_SEED,
-  WORLD_MIN,
   WORLD_SIZE,
   cellAt,
   cellSeed,
@@ -36,6 +35,9 @@ import {
   flatToLonLat,
   lonLatToFlat,
   wrapX,
+  halfHeightForCanonicalFootprint,
+  CANONICAL_PLANET_DIAMETER,
+  type LonLat,
 } from "./planet.ts";
 import {
   HANDOFF_LOCAL_HALF_HEIGHT,
@@ -43,7 +45,15 @@ import {
   projectionTransitionForHalfHeight,
   advanceProjectionTransition,
   scaleLabelForHalfHeight,
+  SCALE_LADDER,
 } from "./handoff.ts";
+import {
+  coordinateLabel,
+  draggedFocus,
+  surfaceDistance,
+  placeLabels,
+  type Rect,
+} from "./navigation.ts";
 
 /** Canonical 1/2500 globe-dominant anchor, converted through the temporary S001 presentation adapter. */
 const GLOBE_FROM = HANDOFF_GLOBE_HALF_HEIGHT;
@@ -78,7 +88,8 @@ let globe: GlobeView | undefined,
   globeShown = false,
   globePass = 0, // surface passes applied so far
   globeFit = PLANET_RADIUS * 2.6; // view half-height that frames the whole globe
-const globePoint = new pc.Vec3(), flatLabelPoint = new pc.Vec3();
+const globePoint = new pc.Vec3(),
+  flatLabelPoint = new pc.Vec3();
 let projectionTransition = 0,
   desiredProjectionTransition = 0,
   handoffActive = false,
@@ -104,6 +115,135 @@ const layers = { structures: true, nature: true, grid: false };
 const pressed = new Set<string>();
 const simulation = new LazySimulation();
 const clock = new FantasyClock();
+let navigationFingerprint = "";
+let rulerState = {
+  pixels: 0,
+  distanceM: 0,
+  start: { lon: 0, lat: 0 },
+  end: { lon: 0, lat: 0 },
+};
+let screenHeading = 0;
+let labelState: {
+  id: string;
+  anchor: { x: number; y: number };
+  rect: Rect;
+  leader: boolean;
+}[] = [];
+
+function surfaceAtScreen(x: number, y: number): LonLat | undefined {
+  const lens = camera.camera!;
+  app.graphicsDevice.updateClientRect();
+  lens.aspectRatio = view.aspect;
+  lens.onAppPrerender();
+  const origin = lens.screenToWorld(x, y, 0),
+    direction = lens.screenToWorld(x, y, lens.farClip).sub(origin).normalize();
+  if (projectionTransition > 0.5 && globe) {
+    const b = origin.dot(direction),
+      d = b * b - origin.lengthSq() + PLANET_RADIUS * PLANET_RADIUS;
+    if (d < 0) return undefined;
+    const distance = -b - Math.sqrt(d);
+    if (distance < 0) return undefined;
+    return globe.coordinatesOf(origin.add(direction.mulScalar(distance)));
+  }
+  const yPlane =
+    projectionTransition > 0.001
+      ? PLANET_RADIUS
+      : Math.max(0, heightAt(view.x, view.z));
+  const distance = (yPlane - origin.y) / direction.y;
+  if (!Number.isFinite(distance) || distance < 0) return undefined;
+  const point = origin.add(direction.mulScalar(distance));
+  return flatToLonLat(
+    point.x + (projectionTransition > 0.001 ? view.x : 0),
+    point.z + (projectionTransition > 0.001 ? view.z : 0),
+  );
+}
+
+function panScreen(ax: number, ay: number, bx: number, by: number) {
+  const previous = surfaceAtScreen(ax, ay),
+    current = surfaceAtScreen(bx, by);
+  if (previous && current) {
+    const focus = flatToLonLat(view.x, view.z);
+    const next =
+      projectionTransition > 0.5
+        ? draggedFocus(focus, previous, current)
+        : {
+            lon:
+              focus.lon +
+              Math.atan2(
+                Math.sin(previous.lon - current.lon),
+                Math.cos(previous.lon - current.lon),
+              ),
+            lat: focus.lat + previous.lat - current.lat,
+          };
+    const flat = lonLatToFlat(next.lon, next.lat);
+    const latitude = focus.lat + previous.lat - current.lat;
+    if (Math.abs(latitude) > Math.PI / 2)
+      flat.z = latitude > 0 ? -POLE_DISTANCE : POLE_DISTANCE;
+    navigate(flat.x, flat.z);
+  }
+}
+
+function updateNavigationHud() {
+  const fingerprint = [
+    view.x,
+    view.z,
+    view.yaw,
+    view.halfHeight,
+    projectionTransition,
+    innerWidth,
+    innerHeight,
+    camera.camera!.aspectRatio,
+    app.graphicsDevice.clientRect.width,
+    app.graphicsDevice.clientRect.height,
+  ].join("/");
+  if (fingerprint === navigationFingerprint) return;
+  navigationFingerprint = fingerprint;
+  const focus = flatToLonLat(view.x, view.z);
+  $("focus-coordinates").textContent = coordinateLabel(
+    focus,
+    projectionTransition <= 0.5,
+  );
+  $("compass-needle").style.transform =
+    `rotate(${(view.yaw * 180) / Math.PI}deg)`;
+  const up = surfaceAtScreen(innerWidth / 2, innerHeight / 2 - 2);
+  if (up) {
+    const d = up.lon - focus.lon;
+    screenHeading = Math.atan2(
+      Math.sin(d) * Math.cos(up.lat),
+      Math.cos(focus.lat) * Math.sin(up.lat) -
+        Math.sin(focus.lat) * Math.cos(up.lat) * Math.cos(d),
+    );
+  }
+  $("compass").title =
+    `Heading ${(((((screenHeading * 180) / Math.PI) % 360) + 360) % 360).toFixed(0)}° · reset north`;
+  const scale = scaleLabelForHalfHeight(view.halfHeight);
+  $<HTMLSelectElement>("map-scale").value = scale.slice(2);
+  const anchor = (CANONICAL_PLANET_DIAMETER * Number(scale.slice(2))) / 10000;
+  const approximate =
+    Math.abs(canonicalFootprintForHalfHeight(view.halfHeight) / anchor - 1) >
+    0.001;
+  for (const option of $<HTMLSelectElement>("map-scale").options)
+    option.textContent = `1/${option.value}${approximate && option.selected ? " ≈" : ""}`;
+  $("scale-caption").textContent = approximate ? "Scale ≈" : "Scale";
+  let pixels = innerWidth < 700 ? 64 : 104;
+  let start: LonLat | undefined, end: LonLat | undefined;
+  while (pixels >= 16) {
+    start = surfaceAtScreen(innerWidth / 2 - pixels / 2, innerHeight / 2);
+    end = surfaceAtScreen(innerWidth / 2 + pixels / 2, innerHeight / 2);
+    if (start && end) break;
+    pixels -= 8;
+  }
+  if (start && end) {
+    const distanceM = surfaceDistance(start, end);
+    rulerState = { pixels, distanceM, start, end };
+    $("scale-line").style.width = `${pixels}px`;
+    $("scale-text").textContent =
+      distanceM >= 1000
+        ? `${(distanceM / 1000).toFixed(distanceM >= 100000 ? 0 : 1)} km`
+        : `${distanceM.toFixed(distanceM >= 100 ? 0 : 1)} m`;
+    $("scale-text").title = "Surface distance at map focus";
+  }
+}
 
 function fail(message: string) {
   errorText = message;
@@ -168,11 +308,17 @@ function prepareGlobe() {
   request();
 }
 function flatCoverageReady() {
-  return !selectionDirty && wanted.length > 0 && wanted.every((tile) => tileCache.has(tile.key));
+  return (
+    !selectionDirty &&
+    wanted.length > 0 &&
+    wanted.every((tile) => tileCache.has(tile.key))
+  );
 }
 function applyPresentation() {
   if (!globe) return;
-  desiredProjectionTransition = projectionTransitionForHalfHeight(view.halfHeight);
+  desiredProjectionTransition = projectionTransitionForHalfHeight(
+    view.halfHeight,
+  );
   const active = projectionTransition > 0.001,
     fullGlobe = projectionTransition >= 0.999,
     targetY = Math.max(0, heightAt(view.x, view.z));
@@ -205,15 +351,21 @@ function applyPresentation() {
   }
   if (worldMaterial) {
     const opacity = 1 - projectionTransition;
-    if (Math.abs(opacity - lastFlatOpacity) > 0.004 || opacity === 0 || opacity === 1) {
+    if (
+      Math.abs(opacity - lastFlatOpacity) > 0.004 ||
+      opacity === 0 ||
+      opacity === 1
+    ) {
       lastFlatOpacity = opacity;
       worldMaterial.opacity = opacity;
-      worldMaterial.blendType = opacity < 0.999 ? pc.BLEND_NORMAL : pc.BLEND_NONE;
+      worldMaterial.blendType =
+        opacity < 0.999 ? pc.BLEND_NORMAL : pc.BLEND_NONE;
       worldMaterial.depthWrite = opacity >= 0.999;
       worldMaterial.update();
     }
   }
-  const backdrop = globe.backdropColor, t = projectionTransition;
+  const backdrop = globe.backdropColor,
+    t = projectionTransition;
   camera.camera!.clearColor.set(
     FLAT_BACKDROP.r + (backdrop.r - FLAT_BACKDROP.r) * t,
     FLAT_BACKDROP.g + (backdrop.g - FLAT_BACKDROP.g) * t,
@@ -223,17 +375,24 @@ function applyPresentation() {
   selectionDirty = true;
 }
 function updateCamera() {
-  desiredProjectionTransition = projectionTransitionForHalfHeight(view.halfHeight);
+  desiredProjectionTransition = projectionTransitionForHalfHeight(
+    view.halfHeight,
+  );
   if (desiredProjectionTransition > 0) prepareGlobe();
   applyPresentation();
 }
 function updateHandoff(dt: number) {
-  desiredProjectionTransition = projectionTransitionForHalfHeight(view.halfHeight);
+  desiredProjectionTransition = projectionTransitionForHalfHeight(
+    view.halfHeight,
+  );
   if (desiredProjectionTransition > 0) prepareGlobe();
-  const flatReady = flatCoverageReady(), globeReady = globePass > 0;
+  const flatReady = flatCoverageReady(),
+    globeReady = globePass > 0;
   let target = desiredProjectionTransition;
-  if (target > projectionTransition && !globeReady) target = projectionTransition;
-  if (target < projectionTransition && !flatReady) target = projectionTransition;
+  if (target > projectionTransition && !globeReady)
+    target = projectionTransition;
+  if (target < projectionTransition && !flatReady)
+    target = projectionTransition;
   const canMove = Math.abs(target - projectionTransition) > 0.001;
   if (canMove && !handoffActive) {
     handoffActive = true;
@@ -242,7 +401,11 @@ function updateHandoff(dt: number) {
   } else if (canMove) {
     handoffDirection = target > projectionTransition ? "to-globe" : "to-flat";
   }
-  projectionTransition = advanceProjectionTransition(projectionTransition, target, dt);
+  projectionTransition = advanceProjectionTransition(
+    projectionTransition,
+    target,
+    dt,
+  );
   if (
     handoffActive &&
     Math.abs(projectionTransition - desiredProjectionTransition) <= 0.001 &&
@@ -259,14 +422,8 @@ function navigate(x: number, z: number, height = view.halfHeight) {
     2,
     Math.min(Math.max(GLOBE_FROM, globeFit) * 1.3, height),
   );
-  if (view.halfHeight >= HANDOFF_LOCAL_HALF_HEIGHT) {
-    // The globe turns east–west without an edge and stops at the poles.
-    view.x = wrapX(x);
-    view.z = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, z));
-  } else {
-    view.x = Math.max(WORLD_MIN + 100, Math.min(-WORLD_MIN - 100, x));
-    view.z = Math.max(WORLD_MIN + 100, Math.min(-WORLD_MIN - 100, z));
-  }
+  view.x = wrapX(x);
+  view.z = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, z));
   // Leaving Province level means the globe may be needed soon.
   if (view.halfHeight >= 900) prepareGlobe();
   updateCamera();
@@ -347,18 +504,7 @@ function refreshSelection() {
     : s && Math.hypot(view.x - s.x, view.z - s.z) < 200
       ? s.name
       : "The wild marches";
-  const metresPerPixel = (view.halfHeight * 2) / innerHeight;
-  const maxPixels = innerWidth < 700 ? 65 : 110;
-  const target = metresPerPixel * maxPixels;
-  const magnitude = 10 ** Math.floor(Math.log10(target));
-  const distance =
-    [1, 2, 5, 10]
-      .map((n) => n * magnitude)
-      .filter((n) => n <= target)
-      .at(-1) || magnitude;
-  $("scale-line").style.width = `${distance / metresPerPixel}px`;
-  $("scale-text").textContent =
-    distance >= 1000 ? `${distance / 1000} km` : `${distance} m`;
+  updateNavigationHud();
 }
 function processStreaming(material: pc.StandardMaterial) {
   if (selectionDirty) refreshSelection();
@@ -424,11 +570,12 @@ function processStreaming(material: pc.StandardMaterial) {
       }
     }
   }
-  $("tile-status").textContent = projectionTransition >= 0.999
-    ? `Globe · ${globePass < GLOBE_PASSES.length ? "refining" : "ready"}`
-    : projectionTransition > 0.001
-      ? `Handoff · ${Math.round(projectionTransition * 100)}% · ${pending.size ? "preparing terrain" : "ready"}`
-      : `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`;
+  $("tile-status").textContent =
+    projectionTransition >= 0.999
+      ? `Globe · ${globePass < GLOBE_PASSES.length ? "refining" : "ready"}`
+      : projectionTransition > 0.001
+        ? `Handoff · ${Math.round(projectionTransition * 100)}% · ${pending.size ? "preparing terrain" : "ready"}`
+        : `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`;
 }
 function inspectCell(screenX: number, screenY: number) {
   const origin = camera.camera!.screenToWorld(screenX, screenY, 0);
@@ -493,13 +640,39 @@ function inspectCell(screenX: number, screenY: number) {
   }
 }
 function setupControls() {
+  $<HTMLSelectElement>("map-scale").replaceChildren(
+    ...SCALE_LADDER.map((value) => {
+      const option = document.createElement("option");
+      option.value = String(value);
+      option.textContent = `1/${value}`;
+      return option;
+    }),
+  );
+  $<HTMLSelectElement>("map-scale").onchange = (event) =>
+    navigate(
+      view.x,
+      view.z,
+      halfHeightForCanonicalFootprint(
+        (CANONICAL_PLANET_DIAMETER *
+          Number((event.target as HTMLSelectElement).value)) /
+          10000,
+      ),
+    );
+  $("compass").onclick = () => {
+    view.yaw = 0;
+    updateCamera();
+  };
   const pointers = new Map<number, { x: number; y: number }>();
   let startX = 0,
     startY = 0,
     moved = false,
     lastPinch = 0;
   canvas.addEventListener("pointerdown", (event) => {
-    try { canvas.setPointerCapture(event.pointerId); } catch { /* synthetic browser tests */ }
+    try {
+      canvas.setPointerCapture(event.pointerId);
+    } catch {
+      /* synthetic browser tests */
+    }
     canvas.focus({ preventScroll: true });
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     startX = event.clientX;
@@ -514,8 +687,6 @@ function setupControls() {
   canvas.addEventListener("pointermove", (event) => {
     const previous = pointers.get(event.pointerId);
     if (!previous) return;
-    const dx = event.clientX - previous.x,
-      dy = event.clientY - previous.y;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
@@ -526,25 +697,12 @@ function setupControls() {
       moved = true;
       return;
     }
-    if (Math.hypot(event.clientX - startX, event.clientY - startY) > 5)
+    if (!moved) {
+      if (Math.hypot(event.clientX - startX, event.clientY - startY) <= 5)
+        return;
       moved = true;
-    if (!moved) return;
-    const scale = (view.halfHeight * 2) / innerHeight,
-      c = Math.cos(view.yaw),
-      s = Math.sin(view.yaw);
-    if (globeShown) {
-      // Keep the grabbed point under the pointer: meridians converge toward the poles.
-      const shrink = Math.max(0.2, Math.cos(flatToLonLat(view.x, view.z).lat));
-      navigate(
-        view.x - ((dx * c + dy * s) * scale) / shrink,
-        view.z + (dx * s - dy * c) * scale,
-      );
-      return;
-    }
-    navigate(
-      view.x - dx * scale * c - (dy * scale * s) / Math.sin(Math.PI / 3),
-      view.z + dx * scale * s - (dy * scale * c) / Math.sin(Math.PI / 3),
-    );
+      panScreen(startX, startY, event.clientX, event.clientY);
+    } else panScreen(previous.x, previous.y, event.clientX, event.clientY);
   });
   canvas.addEventListener("pointerup", (event) => {
     if (!moved && pointers.size === 1 && projectionTransition <= 0.001)
@@ -837,6 +995,7 @@ async function start() {
   let lastSimulationRealSecond = -1;
   const labelNodes = new Map<string, HTMLElement>();
   const labels = $("map-labels");
+  let labelFingerprint = "";
   $("backend").textContent =
     `PlayCanvas 2.23.0 · ${device.deviceType === "webgpu" ? "WebGPU" : "WebGL2"}`;
   $("backend").title = rendererState.fallbackReason;
@@ -893,7 +1052,8 @@ async function start() {
     if (dt > 1 / 30) slowFrameCount++;
     droppedFrameCount += Math.max(0, Math.floor(dt / (1 / 60)) - 1);
     updateHandoff(dt);
-    sun.light!.castShadows = view.halfHeight < 500 && projectionTransition <= 0.001;
+    sun.light!.castShadows =
+      view.halfHeight < 500 && projectionTransition <= 0.001;
     const destinations =
       projectionTransition > 0.001 || view.halfHeight > 25000
         ? continents.map((c) => ({
@@ -907,6 +1067,13 @@ async function start() {
             ? cities
             : villages;
     const visibleLabels = new Set<string>();
+    const anchors: {
+      id: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }[] = [];
     for (const place of destinations) {
       let screen: pc.Vec3;
       if (projectionTransition > 0.001) {
@@ -919,10 +1086,14 @@ async function start() {
         const flatScreen = camera.camera!.worldToScreen(flatLabelPoint);
         const { lon, lat } = flatToLonLat(place.x, place.z),
           onFront = globe!.worldPoint(lon, lat, globePoint);
-        if ((!onFront || globe!.frontness(globePoint) < 0.08) && projectionTransition > 0.55)
+        if (
+          (!onFront || globe!.frontness(globePoint) < 0.08) &&
+          projectionTransition > 0.55
+        )
           continue;
         if (onFront) {
-          const globeScreen = camera.camera!.worldToScreen(globePoint), t = projectionTransition;
+          const globeScreen = camera.camera!.worldToScreen(globePoint),
+            t = projectionTransition;
           screen = new pc.Vec3(
             flatScreen.x + (globeScreen.x - flatScreen.x) * t,
             flatScreen.y + (globeScreen.y - flatScreen.y) * t,
@@ -960,22 +1131,79 @@ async function start() {
         labels.append(label);
         labelNodes.set(id, label);
       }
-      label.style.transform = `translate(${screen.x}px,${screen.y}px) translate(-50%,-100%)`;
-      if (globeShown) {
-        // Lettering is wide next to a small globe: never let it run off the screen.
-        const half = label.offsetWidth / 2;
-        label.style.visibility =
-          screen.x - half < 6 || screen.x + half > innerWidth - 6
-            ? "hidden"
-            : "visible";
-      } else label.style.visibility = "visible";
+      anchors.push({
+        id,
+        x: screen.x,
+        y: screen.y,
+        width: label.offsetWidth,
+        height: label.offsetHeight,
+      });
     }
     for (const [id, label] of labelNodes)
       if (!visibleLabels.has(id)) {
         label.remove();
         labelNodes.delete(id);
       }
-    const speed = view.halfHeight * dt * 0.8;
+    const obstacles = [
+      "masthead",
+      "region-panel",
+      "cell-panel",
+      "travel-panel",
+      "bottom-bar",
+      "map-controls",
+      "telemetry",
+      "focus-coordinates",
+      "centre-marker",
+    ]
+      .flatMap((name) =>
+        Array.from(document.querySelectorAll(`#${name},.${name}`)),
+      )
+      .map((node) => node.getBoundingClientRect())
+      .filter((r) => r.width && r.height)
+      .map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height }));
+    const fingerprint = JSON.stringify([
+      innerWidth,
+      innerHeight,
+      anchors.map((a) => [
+        a.id,
+        Math.round(a.x),
+        Math.round(a.y),
+        a.width,
+        a.height,
+      ]),
+      obstacles,
+    ]);
+    if (fingerprint !== labelFingerprint) {
+      labelFingerprint = fingerprint;
+      const placed = placeLabels(anchors, innerWidth, innerHeight, obstacles);
+      labelState = placed.map((p) => ({
+        id: p.id,
+        anchor: { x: p.x, y: p.y },
+        rect: p.rect,
+        leader: p.leader,
+      }));
+      const leaders = $("label-leaders");
+      leaders.replaceChildren();
+      for (const p of placed) {
+        labelNodes.get(p.id)!.style.transform =
+          `translate(${p.rect.x}px,${p.rect.y}px)`;
+        if (p.leader) {
+          const line = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "line",
+          );
+          for (const [key, value] of Object.entries({
+            x1: p.x,
+            y1: p.y,
+            x2: p.endX,
+            y2: p.endY,
+          }))
+            line.setAttribute(key, String(value));
+          leaders.append(line);
+        }
+      }
+    }
+    const speed = innerHeight * Math.min(dt, 0.05) * 0.2;
     const dx =
       (pressed.has("d") || pressed.has("ArrowRight") ? 1 : 0) -
       (pressed.has("a") || pressed.has("ArrowLeft") ? 1 : 0);
@@ -983,18 +1211,17 @@ async function start() {
       (pressed.has("s") || pressed.has("ArrowDown") ? 1 : 0) -
       (pressed.has("w") || pressed.has("ArrowUp") ? 1 : 0);
     if (dx || dz)
-      navigate(
-        view.x +
-          dx * speed * Math.cos(view.yaw) +
-          dz * speed * Math.sin(view.yaw),
-        view.z -
-          dx * speed * Math.sin(view.yaw) +
-          dz * speed * Math.cos(view.yaw),
+      panScreen(
+        innerWidth / 2,
+        innerHeight / 2,
+        innerWidth / 2 - dx * speed,
+        innerHeight / 2 - dz * speed,
       );
     if (pressed.has("q") || pressed.has("e")) {
       view.yaw += (pressed.has("e") ? 1 : -1) * dt * 0.7;
       updateCamera();
     }
+    updateNavigationHud();
     if (!errorText) processStreaming(material);
     if (layers.grid && !globeShown)
       for (const key of activeKeys) {
@@ -1046,6 +1273,13 @@ async function start() {
       setHalfHeight(height: number) {
         navigate(view.x, view.z, height);
       },
+      navigation: {
+        surfaceAtScreen,
+        setFocus(lon: number, lat: number) {
+          const p = lonLatToFlat(lon, lat);
+          navigate(p.x, p.z);
+        },
+      },
       renderer: rendererState,
       get state() {
         return {
@@ -1059,14 +1293,24 @@ async function start() {
                 : "transition",
           scaleLabel: scaleLabelForHalfHeight(view.halfHeight),
           canonicalFootprintM: canonicalFootprintForHalfHeight(view.halfHeight),
+          navigation: {
+            focus: flatToLonLat(view.x, view.z),
+            heading: screenHeading,
+            ruler: { ...rulerState },
+            labels: labelState,
+          },
           handoff: {
             projectionTransition,
             desiredTransition: desiredProjectionTransition,
             active: handoffActive,
             direction: handoffDirection,
-            durationMs: handoffActive ? performance.now() - handoffStarted : handoffDurationMs,
+            durationMs: handoffActive
+              ? performance.now() - handoffStarted
+              : handoffDurationMs,
             destinationReady:
-              desiredProjectionTransition >= projectionTransition ? globePass > 0 : flatCoverageReady(),
+              desiredProjectionTransition >= projectionTransition
+                ? globePass > 0
+                : flatCoverageReady(),
             outstandingGeneration: pending.size + uploads.length + inFlight,
             slowFrames: slowFrameCount,
             droppedFrames: droppedFrameCount,
@@ -1087,7 +1331,8 @@ async function start() {
           ],
           simulation: simulation.stats,
           settled:
-            Math.abs(projectionTransition - desiredProjectionTransition) <= 0.001 &&
+            Math.abs(projectionTransition - desiredProjectionTransition) <=
+              0.001 &&
             (desiredProjectionTransition <= 0.001 || globePass > 0) &&
             (!globeShown || globePass >= GLOBE_PASSES.length) &&
             !selectionDirty &&

@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { PLANET_RADIUS } from "./planet.ts";
+import { PLANET_RADIUS, unitToLonLat, type Unit } from "./planet.ts";
 import { coordinateValue } from "./world.ts";
 
 /** Longitude / latitude segments of the sphere: 96 × 48 quads, 3.75° each. */
@@ -303,7 +303,8 @@ export class GlobeView {
   setBlend(alpha: number) {
     const value = Math.max(0, Math.min(1, alpha));
     this.surfaceMaterial.opacity = value;
-    this.surfaceMaterial.blendType = value < 0.999 ? pc.BLEND_NORMAL : pc.BLEND_NONE;
+    this.surfaceMaterial.blendType =
+      value < 0.999 ? pc.BLEND_NORMAL : pc.BLEND_NONE;
     this.surfaceMaterial.depthWrite = value >= 0.999;
     this.surfaceMaterial.update();
     this.shade.enabled = value > 0.001;
@@ -361,6 +362,14 @@ export class GlobeView {
 
   frontness(point: pc.Vec3): number {
     return point.dot(this.viewAxis) / PLANET_RADIUS;
+  }
+
+  coordinatesOf(point: pc.Vec3) {
+    const local = this.rotation
+      .clone()
+      .invert()
+      .transformVector(point, new pc.Vec3());
+    return unitToLonLat([local.x, local.y, local.z] as Unit);
   }
 
   destroy() {

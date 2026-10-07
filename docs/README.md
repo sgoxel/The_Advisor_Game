@@ -232,6 +232,8 @@ Drag/rotation sensitivity is also scale-aware. The same pointer movement must no
 
 Scale, ruler calculation and navigation sensitivity are presentation/control behavior only. They must never assign or alter Campaign-SEED world-foundation values.
 
+The atlas footer provides the ten scale anchors. Wheel/pinch and the zoom buttons interpolate between them; an approximate selected anchor is marked `≈`. Drag the surface to move the geographic focus, or focus the map and use WASD/arrow keys. Q/E and the rotation button turn the view; the compass arrow follows north and its button resets north. The centre crosshair and latitude/longitude identify the retained focus. The ruler measures surface distance across a short horizontal segment at that focus, with globe sphere intersections and canonical great-circle distance. Displaced landmark labels retain a leader to their world anchor. Realm view fits the globe into the available space; choosing a scale anchor instead sets its exact vertical footprint.
+
 The world is a **finite continuous sphere**, not an unbounded planar tile grid. No tile is authoritative world state. Future local terrain and LOD systems may use bounded render patches or caches, but those patches must sample planet-space world data and remain disposable presentation/performance structures rather than defining world truth.
 
 ### Canonical SEED Coordinate Fabric

@@ -25,6 +25,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: xvfb-run -a npm run test:webgpu
       - run: xvfb-run -a npx playwright test --config playwright.fallback.config.js
+      - run: xvfb-run -a npx playwright test --config playwright.navigation.config.js
       - name: Capture WP-S002-002-002 handoff evidence
         run: |
           python -m pip install playwright==1.63.0

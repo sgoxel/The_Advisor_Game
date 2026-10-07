@@ -120,14 +120,23 @@
       </p>
     </aside>
     <nav class="map-controls" aria-label="Map navigation">
-      <div class="compass" title="North points toward negative Z">
-        N<span>↑</span>
-      </div>
+      <button
+        id="compass"
+        class="compass"
+        aria-label="Reset north"
+        title="Reset north"
+      >
+        <span id="compass-needle">↑</span><span>N</span>
+      </button>
       <button id="zoom-in" aria-label="Zoom in">+</button
       ><button id="zoom-out" aria-label="Zoom out">−</button>
       <button id="rotate" aria-label="Rotate view clockwise">↻</button>
     </nav>
     <footer class="bottom-bar">
+      <label class="scale-choice" for="map-scale"
+        ><span id="scale-caption">Scale</span
+        ><select id="map-scale" aria-label="Map scale"></select
+      ></label>
       <div class="detail">
         <span class="eyebrow">VIEW DETAIL</span
         ><strong id="detail-name">Village</strong>
@@ -154,6 +163,12 @@
       ><span id="tile-status">Preparing terrain</span>
     </div>
     <div id="map-labels" aria-hidden="true"></div>
+    <svg id="label-leaders" aria-hidden="true"></svg>
+    <div id="centre-marker" aria-label="Map focus"><span>+</span></div>
+    <output
+      id="focus-coordinates"
+      aria-label="Focus latitude and longitude"
+    ></output>
     <div id="loading" role="status">
       <div class="loading-mark">♜</div>
       <h2>Unfolding the realm</h2>

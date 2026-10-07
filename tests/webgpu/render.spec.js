@@ -17,7 +17,9 @@ async function exercisePureZoomHandoff(page, backend) {
         window.advisorWorld.state.presentation === "flat" &&
         window.advisorWorld.state.settled,
     );
-    const focus = await page.evaluate(() => ({ ...window.advisorWorld.state.view }));
+    const focus = await page.evaluate(() => ({
+      ...window.advisorWorld.state.view,
+    }));
 
     // Zoom button starts the globe-bound transition without moving/turning focus.
     await page.locator("#zoom-out").click();
@@ -75,15 +77,13 @@ async function exercisePureZoomHandoff(page, backend) {
     // Reverse wheel direction while the blend is active; transition must reverse in place.
     await page.mouse.move(viewport.width * 0.5, viewport.height * 0.55);
     await page.mouse.wheel(0, -420);
-    await page.waitForFunction(
-      () => {
-        const h = window.advisorWorld.state.handoff;
-        return (
-          h.desiredTransition < h.projectionTransition ||
-          h.projectionTransition <= 0.01
-        );
-      },
-    );
+    await page.waitForFunction(() => {
+      const h = window.advisorWorld.state.handoff;
+      return (
+        h.desiredTransition < h.projectionTransition ||
+        h.projectionTransition <= 0.01
+      );
+    });
     state = await page.evaluate(() => window.advisorWorld.state);
     expect(state.view.x).toBe(focus.x);
     expect(state.view.z).toBe(focus.z);
@@ -168,6 +168,51 @@ test("the real WebGPU backend renders the seeded world", async ({ page }) => {
   await page.waitForFunction(() => window.advisorWorld?.state.settled);
   await expect(page.locator("#backend")).toContainText("WebGPU");
   await page.screenshot({ path: "test-results/webgpu-village.png" });
+  for (const scale of ["10", "10000"]) {
+    await page.locator("#map-scale").selectOption(scale);
+    await page.waitForFunction(() => window.advisorWorld.state.settled);
+    const measured = await page.evaluate(() => {
+      const nav = window.advisorWorld.state.navigation,
+        r = nav.ruler;
+      const a = window.advisorWorld.navigation.surfaceAtScreen(
+          innerWidth / 2 - r.pixels / 2,
+          innerHeight / 2,
+        ),
+        b = window.advisorWorld.navigation.surfaceAtScreen(
+          innerWidth / 2 + r.pixels / 2,
+          innerHeight / 2,
+        );
+      const u = (p) => [
+          Math.cos(p.lat) * Math.sin(p.lon),
+          Math.sin(p.lat),
+          Math.cos(p.lat) * Math.cos(p.lon),
+        ],
+        v = u(a),
+        w = u(b);
+      const metres =
+        637100 *
+        Math.atan2(
+          Math.hypot(
+            v[1] * w[2] - v[2] * w[1],
+            v[2] * w[0] - v[0] * w[2],
+            v[0] * w[1] - v[1] * w[0],
+          ),
+          v.reduce((s, n, i) => s + n * w[i], 0),
+        );
+      return {
+        ratio: r.distanceM / metres,
+        coordinate: document.getElementById("focus-coordinates").textContent,
+        labels: nav.labels.length,
+      };
+    });
+    expect(Math.abs(measured.ratio - 1)).toBeLessThan(0.02);
+    expect(measured.coordinate).toContain("°");
+    await page.screenshot({
+      path: `test-results/webgpu-navigation-${scale}.png`,
+    });
+  }
+  await page.locator("#home").click();
+  await page.waitForFunction(() => window.advisorWorld.state.settled);
   await page.locator("#zoom-in").click();
   await page.waitForFunction(() => window.advisorWorld.state.settled);
   await page.screenshot({ path: "test-results/webgpu-detail.png" });
