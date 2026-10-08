@@ -10,9 +10,9 @@ Setup: pip install playwright && python -m playwright install chromium
 
 Examples:
     python tools/screenshot_tool.py http://127.0.0.1:4173/ --out shots
-    python tools/screenshot_tool.py http://127.0.0.1:4173/ --out shots \\
+    python tools/screenshot_tool.py http://127.0.0.1:4173/ --out shots \
         --scenario village,street,realm --profile desktop,phone
-    python tools/screenshot_tool.py http://127.0.0.1:4173/ --out shots --name pan \\
+    python tools/screenshot_tool.py http://127.0.0.1:4173/ --out shots --name pan \
         --steps "drag:50%,50%>30%,60%;settle;shot:moved;wheel:400;settle;shot:far"
 
 Steps, separated by ';' (write '\\;' for a semicolon inside eval):
@@ -94,7 +94,16 @@ SETTLED_JS = """() => {
   if (!world || (loading && !loading.hidden && getComputedStyle(loading).opacity !== '0')) return false;
   return world.state.ready && world.state.settled;
 }"""
-TWO_FRAMES_JS = "() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))"
+TWO_FRAMES_JS = """timeoutMs => new Promise(resolve => {
+  let finished = false;
+  const done = value => {
+    if (finished) return;
+    finished = true;
+    resolve(value);
+  };
+  requestAnimationFrame(() => requestAnimationFrame(() => done(true)));
+  setTimeout(() => done(false), timeoutMs);
+})"""
 # The keys below are written to capture.json unchanged.
 STATE_JS = """() => {
   const world = window.advisorWorld, state = world ? world.state : {};
@@ -170,7 +179,9 @@ class Session:
     def settle(self) -> None:
         if self.page.wait_for_function(SETTLED_JS, polling=250).json_value() == "error":
             raise CaptureError(f"page reports an error: {self.page.evaluate(STATE_JS)['error']}")
-        self.page.evaluate(TWO_FRAMES_JS)
+        frame_timeout_ms = min(self.args.timeout * 1000, 10_000)
+        if not self.page.evaluate(TWO_FRAMES_JS, frame_timeout_ms):
+            raise CaptureError("timed out waiting for two animation frames")
 
     def locate(self, selector: str) -> Locator:
         locator = self.page.locator(selector).first
