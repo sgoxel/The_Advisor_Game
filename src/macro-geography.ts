@@ -41,6 +41,17 @@ export type MacroIsland = {
   harmonic: { frequency: number; amplitude: number; phase: number };
 };
 
+export type MacroLake = {
+  id: number;
+  code: string;
+  continent: number;
+  canonicalPosition: CanonicalPosition;
+  majorRadius: number;
+  minorRadius: number;
+  rotation: number;
+  harmonic: { frequency: number; amplitude: number; phase: number };
+};
+
 export type MountainSystem = {
   id: number;
   code: string;
@@ -59,6 +70,7 @@ export type MacroGeography = {
   version: string;
   continents: readonly MacroContinent[];
   islands: readonly MacroIsland[];
+  lakes: readonly MacroLake[];
   mountainSystems: readonly MountainSystem[];
 };
 
@@ -66,6 +78,8 @@ export type MacroSample = {
   landform: "Mainland" | "Island" | "Ocean";
   continent: number | null;
   island: number | null;
+  lake: number | null;
+  lakeCode: string | null;
   landScore: number;
   mountainSystem: string | null;
   mountainKind: MountainKind | null;
@@ -142,16 +156,30 @@ function continentScore(continent: MacroContinent, position: LonLat) {
   return outline - radius;
 }
 
-function islandScore(island: MacroIsland, position: LonLat) {
-  const local = localPoint(island.canonicalPosition, position),
-    p = rotate(local.x, local.y, island.rotation),
-    angle = Math.atan2(p.y / island.minorRadius, p.x / island.majorRadius),
-    radius = Math.hypot(p.x / island.majorRadius, p.y / island.minorRadius),
+function ellipticalFeatureScore(
+  feature: Pick<
+    MacroIsland | MacroLake,
+    "canonicalPosition" | "majorRadius" | "minorRadius" | "rotation" | "harmonic"
+  >,
+  position: LonLat,
+) {
+  const local = localPoint(feature.canonicalPosition, position),
+    p = rotate(local.x, local.y, feature.rotation),
+    angle = Math.atan2(p.y / feature.minorRadius, p.x / feature.majorRadius),
+    radius = Math.hypot(p.x / feature.majorRadius, p.y / feature.minorRadius),
     outline =
       1 +
-      island.harmonic.amplitude *
-        Math.sin(island.harmonic.frequency * angle + island.harmonic.phase);
+      feature.harmonic.amplitude *
+        Math.sin(feature.harmonic.frequency * angle + feature.harmonic.phase);
   return outline - radius;
+}
+
+function islandScore(island: MacroIsland, position: LonLat) {
+  return ellipticalFeatureScore(island, position);
+}
+
+function lakeScore(lake: MacroLake, position: LonLat) {
+  return ellipticalFeatureScore(lake, position);
 }
 
 function makeContinent(seed: string, id: number, accepted: readonly MacroContinent[]) {
@@ -323,16 +351,80 @@ function makeMountainSystems(seed: string, continents: readonly MacroContinent[]
   return systems;
 }
 
+function makeLakes(
+  seed: string,
+  continents: readonly MacroContinent[],
+  mountainSystems: readonly MountainSystem[],
+) {
+  const lakes: MacroLake[] = [];
+  for (const continent of continents) {
+    const count = 1 + (macroDigest(`${continent.code}/LAKE-COUNT`) % 2);
+    for (let i = 0; i < count; i++) {
+      let placed = false;
+      for (let attempt = 0; attempt < 48; attempt++) {
+        const key = `LAKE/${continent.id}/${i}/ATTEMPT/${attempt}`,
+          angle = unit(seed, `${key}/ANGLE`) * TAU,
+          radius = 0.12 + unit(seed, `${key}/RADIUS`) * 0.42,
+          origin = continentLocalPosition(
+            continent,
+            Math.cos(angle) * radius,
+            Math.sin(angle) * radius,
+          ),
+          interior = continentScore(continent, origin);
+        if (interior < 0.34 || Math.abs(origin.lat) > 1.25) continue;
+        const majorRadius = 0.045 + unit(seed, `${key}/MAJOR`) * 0.055,
+          minorRadius = majorRadius * (0.48 + unit(seed, `${key}/ASPECT`) * 0.34);
+        if (
+          mountainSystems.some(
+            (system) =>
+              system.continent === continent.id &&
+              angularDistance(origin, system.canonicalPosition) <
+                Math.max(0.12, system.width * 1.8),
+          ) ||
+          lakes.some(
+            (other) =>
+              other.continent === continent.id &&
+              angularDistance(origin, other.canonicalPosition) <
+                majorRadius + other.majorRadius * 1.25,
+          )
+        )
+          continue;
+        lakes.push({
+          id: lakes.length,
+          code: `${seed}/${WORLD_FOUNDATION_VERSION}/MACRO/LAKE/${continent.id}/${i}`,
+          continent: continent.id,
+          canonicalPosition: origin,
+          majorRadius,
+          minorRadius,
+          rotation: unit(seed, `${key}/ROTATION`) * TAU,
+          harmonic: {
+            frequency: 2 + (macroDigest(`${seed}/${key}/FREQUENCY`) % 4),
+            amplitude: 0.045 + unit(seed, `${key}/AMP`) * 0.09,
+            phase: unit(seed, `${key}/PHASE`) * TAU,
+          },
+        });
+        placed = true;
+        break;
+      }
+      if (!placed)
+        throw new Error(`Unable to place macro lake ${continent.id}/${i}`);
+    }
+  }
+  return lakes;
+}
+
 export function buildMacroGeography(seed = WORLD_SEED): MacroGeography {
   const continents: MacroContinent[] = [];
   for (let id = 0; id < 3; id++)
     continents.push(makeContinent(seed, id, continents));
+  const mountainSystems = makeMountainSystems(seed, continents);
   return Object.freeze({
     seed,
     version: WORLD_FOUNDATION_VERSION,
     continents: Object.freeze(continents),
     islands: Object.freeze(makeIslands(seed, continents)),
-    mountainSystems: Object.freeze(makeMountainSystems(seed, continents)),
+    lakes: Object.freeze(makeLakes(seed, continents, mountainSystems)),
+    mountainSystems: Object.freeze(mountainSystems),
   });
 }
 
@@ -422,6 +514,19 @@ export function sampleMacroGeography(
     }
   }
 
+  let lake: MacroLake | undefined,
+    bestLakeScore = -Infinity;
+  if (bestContinentScore > 0 && continent)
+    for (const candidate of geography.lakes) {
+      if (candidate.continent !== continent.id) continue;
+      const score = lakeScore(candidate, position);
+      if (score > bestLakeScore) {
+        bestLakeScore = score;
+        lake = candidate;
+      }
+    }
+  const insideLake = bestContinentScore > 0 && bestLakeScore > 0;
+
   let island: MacroIsland | undefined,
     bestIslandScore = -Infinity;
   if (bestContinentScore <= 0)
@@ -434,20 +539,23 @@ export function sampleMacroGeography(
     }
 
   const landform =
-      bestContinentScore > 0
-        ? "Mainland"
-        : bestIslandScore > 0
-          ? "Island"
-          : "Ocean",
+      insideLake
+        ? "Ocean"
+        : bestContinentScore > 0
+          ? "Mainland"
+          : bestIslandScore > 0
+            ? "Island"
+            : "Ocean",
     owningContinent =
       landform === "Mainland"
         ? continent?.id ?? null
         : landform === "Island"
           ? island?.continent ?? null
-          : null;
+          : null,
+    sampleContinent = insideLake ? lake?.continent ?? null : owningContinent;
   let mountain: MountainSystem | undefined,
     mountainStrength = 0;
-  if (owningContinent !== null)
+  if (!insideLake && owningContinent !== null)
     for (const candidate of geography.mountainSystems) {
       if (candidate.continent !== owningContinent) continue;
       const strength = mountainInfluence(candidate, position);
@@ -459,10 +567,13 @@ export function sampleMacroGeography(
 
   return {
     landform,
-    continent: owningContinent,
+    continent: sampleContinent,
     island: landform === "Island" ? island?.id ?? null : null,
-    landScore:
-      landform === "Mainland"
+    lake: insideLake ? lake?.id ?? null : null,
+    lakeCode: insideLake ? lake?.code ?? null : null,
+    landScore: insideLake
+      ? -Math.max(0.001, bestLakeScore)
+      : landform === "Mainland"
         ? bestContinentScore
         : landform === "Island"
           ? bestIslandScore
