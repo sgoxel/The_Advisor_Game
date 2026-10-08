@@ -631,7 +631,12 @@ function request(tile: Tile) {
   worker.postMessage(tile);
 }
 function refreshSelection() {
-  wanted = selectTiles(view, 190, Math.min(160, streamingBudget.active));
+  const refinementTarget = streamingClass === "phone" ? 96 : 160;
+  wanted = selectTiles(
+    view,
+    190,
+    Math.min(refinementTarget, streamingBudget.active),
+  );
   revision++;
   selectionDirty = false;
   const name =
@@ -678,6 +683,7 @@ function ensureCacheCapacity(
     if (!overBudget()) break;
     record.entity.destroy();
     tileCache.delete(key);
+    activeKeys = activeKeys.filter((activeKey) => activeKey !== key);
     cacheCpuBytes = Math.max(0, cacheCpuBytes - record.cpuBytes);
     cacheGpuBytes = Math.max(0, cacheGpuBytes - record.gpuBytes);
     evictions++;
