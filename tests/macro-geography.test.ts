@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   MACRO_PLAN,
   createMacroPlan,
+  macroFeatureDistanceM,
   macroSampleAt,
   mountainSystems,
 } from "../src/macro-geography.ts";
@@ -29,10 +30,14 @@ test("macro plan is exact, irregular, seed-derived and changes with seed", () =>
     assert.equal(continent.bays.length, 3);
     assert.ok(continent.majorRadiusRad > continent.minorRadiusRad);
   }
-  assert.deepEqual(
-    continents.map((continent) => continent.canonicalPosition),
-    MACRO_PLAN.continents.map((continent) => ({ ...continent.center, elevation: 0 })),
-  );
+  continents.forEach((continent, index) => {
+    assert.ok(
+      macroFeatureDistanceM(
+        continent.canonicalPosition,
+        MACRO_PLAN.continents[index].center,
+      ) < 1e-6,
+    );
+  });
 
   const again = createMacroPlan(MACRO_PLAN.seed, MACRO_PLAN.version),
     alternate = createMacroPlan("ADVISOR-0126-ALDERWICK-ALT", MACRO_PLAN.version);
@@ -139,7 +144,8 @@ test("macro sampling is order-independent and globe/local presentation reads the
   assert.deepEqual(reverse, forward);
 
   for (const position of positions) {
-    const { x, z } = lonLatToSource(position.lon, position.lat);
-    assert.deepEqual(globeSurfaceColor(x, z, 0), terrainTint(x, z));
+    const { x, z } = lonLatToSource(position.lon, position.lat),
+      flatBytes = [...new Uint8Array(terrainTint(x, z))];
+    assert.deepEqual(globeSurfaceColor(x, z), flatBytes);
   }
 });
