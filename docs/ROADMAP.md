@@ -29,16 +29,16 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 - WP-S002-003-003 — Canonical wrap/pole streaming: stable IDs, no-blank coverage, device/byte budgets and eviction-safe caches — COMPLETED
 - WP-S002-004-001 — Reference analysis/contracts for natural-world authority, readable 3D settlement/living-world UX and mobile performance — COMPLETED
 - WP-S002-004-002 — Canonical planet-scale/travel migration UX: physical metres, route-derived time, truthful ruler/copy and legacy cleanup — COMPLETED
-- WP-S002-004-003 — Realm macro-geography UX/performance: irregular continents/islands, distinct mountain systems/volcanoes and phone-readable lazy LOD
-- WP-S002-004-004 — Climate/biome/material authority: grass/desert/dirt/beach/cliff/forest/snow/poles with cross-LOD semantic readability
-- WP-S002-004-005 — Terrain/hydrology/walkability authority: natural coasts/cliffs, distributed freshwater, seam-safe routing/collision and bounded queries
-- WP-S002-004-006 — Vegetation/ground-detail rendering performance: natural scatter, LOD-stable ownership, instancing/atlasing and mobile draw-call budgets
-- WP-S002-004-007 — Political/settlement map UX: full-continent countries, visible borders, 1/1000 labels and irregular accessible siting
-- WP-S002-004-008 — Route-truth travel UX/performance: shortest legal paths, all-pair ≥60 fantasy minutes, bounded search and responsive route/time UI
-- WP-S002-004-009 — Organic settlement/building UX: road-connected plots, logical services/homes/gates, on-demand interiors and mobile budgets
-- WP-S002-004-010 — Continuous-zoom world continuity: stable materials/colors, seam-free LOD/wrap/poles and unique canonical ownership
-- WP-S002-004-011 — Living-resident UX/performance: owned homes/work/gates, purposeful schedules, pooled actors and inspectable state
-- WP-S002-004-012 — Unified terrain/walkability compositor: deterministic earthworks, one render/routing/collision truth and bounded modifier queries
-- WP-S002-004-013 — Ruins/critical-place UX: 1/1000 discoverability, legal access, inspectable labels and bounded lazy detail
-- WP-S002-004-014 — Canonical transport-network UX/performance: connected roads/bridges/harbors, readable routes and bounded regional generation
-- WP-S002-005-001 — S002 release acceptance: input/zoom/label responsiveness, DOM/GPU/memory budgets, adaptive quality and WebGPU/WebGL2/default-Chrome parity
+- WP-S002-004-003 — Seeded Realm macro-geography UX/performance: irregular continents/islands, distinct mountain/volcanic systems, shared LOD and phone-readable silhouettes
+- WP-S002-004-004 — Climate/biome/material authority and zoom-stable semantics: grass/desert/dirt/beach/cliff/forest/snow/poles with cross-LOD readable color/material identity
+- WP-S002-004-005 — Terrain/hydrology/walkability base authority: natural coasts/cliffs, distributed freshwater, one canonical traversal surface and bounded seam-safe queries
+- WP-S002-004-006 — Vegetation/ground-detail UX/performance: natural deterministic scatter, shared assets/instancing, LOD-stable ownership and mobile draw-call budgets
+- WP-S002-004-007 — Political/settlement map UX/performance: full-continent countries, deterministic generated counts, visible borders, 1/1000 labels and dense-label responsiveness
+- WP-S002-004-008 — Shortest-legal-route engine and travel UX: all-pair ≥60 fantasy minutes, terrain-aware bounded search and truthful route/time presentation
+- WP-S002-004-009 — Organic settlement/building UX/performance: road-connected logical plots/services/homes/gates, lazy usable interiors and mobile-safe presentation
+- WP-S002-004-010 — Continuous-zoom material/LOD continuity: stable semantic color, threshold regression checks, seam-free wrap/poles and unique canonical ownership
+- WP-S002-004-011 — Living-resident UX/performance: canonical homes/work/gates, analytical schedules, pooled actors, inspection and bounded allocation
+- WP-S002-004-012 — Unified terrain/walkability compositor architecture: deterministic earthworks, one render/routing/collision/material truth and bounded modifier queries
+- WP-S002-004-013 — Ruins/critical-place UX/performance: 1/1000 discoverability, legal access, deterministic labels and bounded lazy detail
+- WP-S002-004-014 — Canonical transport-network architecture/UX: connected roads/bridges/harbors, terrain-aware topology, stable profiles and bounded regional generation
+- WP-S002-005-001 — S002 release compatibility/performance acceptance: responsive safe-area UI, label/DOM/GPU/memory budgets, adaptive quality, backend parity and README/runtime reconciliation
