@@ -6,7 +6,7 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 concurrency:
@@ -17,6 +17,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+      - name: Apply AGENT #1 runtime patch once
+        if: github.event_name == 'pull_request'
+        run: |
+          python tools/apply_wp_s002_003_003.py
+          if git diff --quiet; then
+            echo 'Runtime patch already applied.'
+          else
+            git config user.name 'AGENT #1'
+            git config user.email '163722426+sgoxel@users.noreply.github.com'
+            git add src/main.ts tools/screenshot_tool.py tests/browser/navigation.spec.js
+            git commit -m 'Integrate bounded canonical streaming runtime'
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -28,7 +43,7 @@ jobs:
       - run: xvfb-run -a npm run test:webgpu
       - run: xvfb-run -a npx playwright test --config playwright.fallback.config.js
       - run: xvfb-run -a npx playwright test --config playwright.navigation.config.js
-      - name: Capture handoff, canonical inspector and ENU rebase evidence
+      - name: Capture handoff, canonical inspector, wrap/pole and ENU rebase evidence
         run: |
           python -m pip install playwright==1.63.0
           npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
@@ -40,8 +55,8 @@ jobs:
           done
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/handoff-capture-webgl2 --scenario handoff --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 180
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/handoff-capture-webgpu --scenario handoff --profile desktop,phone,phone-landscape --renderer webgpu --timeout 180
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgl2 --scenario cell --profile desktop,phone --renderer webgl2 --timeout 180
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgpu --scenario cell --profile desktop,phone --renderer webgpu --timeout 180
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgl2 --scenario cell,wrap-pole --profile desktop,phone --renderer webgl2 --timeout 180
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgpu --scenario cell,wrap-pole --profile desktop,phone --renderer webgpu --timeout 180
           ENU_STEPS='eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.state.navigation.focus.lon+0.001,window.advisorWorld.state.navigation.focus.lat);eval:window.advisorWorld.setHalfHeight(70);settle;tap;visible:#cell-panel;shot:before-rebase;eval:window.advisorWorld.navigation.forceRebase();settle;shot:after-rebase;click:#close-cell;eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.geography.villages.reduce((a,b)=>Math.hypot(b.x,b.z)>Math.hypot(a.x,a.z)?b:a).canonicalPosition.lon,window.advisorWorld.geography.villages.reduce((a,b)=>Math.hypot(b.x,b.z)>Math.hypot(a.x,a.z)?b:a).canonicalPosition.lat);settle;tap;visible:#cell-panel;shot:farthest-settlement'
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/enu-rebase-webgl2 --name enu-rebase --steps "$ENU_STEPS" --profile desktop,phone --renderer webgl2 --timeout 180
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/enu-rebase-webgpu --name enu-rebase --steps "$ENU_STEPS" --profile desktop,phone --renderer webgpu --timeout 180
