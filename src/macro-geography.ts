@@ -98,13 +98,13 @@ const SLOT_ATTEMPTS = 128;
 const ISLAND_COUNT = 18;
 const LAKE_COUNT = 6;
 const MOUNTAIN_ARCHETYPES: readonly [MountainKind, number, number, number][] = [
-  ["long-chain", 0.62, 0.055, 220],
-  ["compact-massif", 0.22, 0.11, 260],
-  ["hooked-range", 0.52, 0.055, 300],
-  ["low-highlands", 0.34, 0.15, 75],
-  ["dominant-spine", 0.5, 0.06, 420],
-  ["volcanic-chain", 0.3, 0.045, 300],
-  ["volcano", 0.12, 0.09, 480],
+  ["long-chain", 0.7, 0.045, 220],
+  ["compact-massif", 0.18, 0.08, 260],
+  ["hooked-range", 0.58, 0.045, 300],
+  ["low-highlands", 0.42, 0.12, 75],
+  ["dominant-spine", 0.62, 0.04, 500],
+  ["volcanic-chain", 0.38, 0.035, 320],
+  ["volcano", 0.05, 0.035, 520],
 ];
 
 /** Stable addressed digest. It is a content lookup, never a mutable PRNG stream. */
@@ -130,7 +130,9 @@ function basisAt({ lon, lat }: LonLat): Basis {
   };
 }
 function angularDistance(a: LonLat, b: LonLat): number {
-  return Math.acos(Math.max(-1, Math.min(1, dot(lonLatToUnit(a.lon, a.lat), lonLatToUnit(b.lon, b.lat)))));
+  return Math.acos(
+    Math.max(-1, Math.min(1, dot(lonLatToUnit(a.lon, a.lat), lonLatToUnit(b.lon, b.lat)))),
+  );
 }
 function destination(origin: LonLat, bearing: number, distance: number): LonLat {
   const sinLat =
@@ -151,14 +153,14 @@ function destination(origin: LonLat, bearing: number, distance: number): LonLat 
 function localPoint(continent: ContinentRecipe, east: number, north: number): LonLat {
   const projected = Math.min(0.98, Math.hypot(east, north));
   if (projected < 1e-12) return { ...continent.center };
-  return destination(
-    continent.center,
-    Math.atan2(east, north),
-    Math.asin(projected),
-  );
+  return destination(continent.center, Math.atan2(east, north), Math.asin(projected));
 }
 function project(basis: Basis, point: Unit) {
-  return { east: dot(point, basis.east), north: dot(point, basis.north), up: dot(point, basis.up) };
+  return {
+    east: dot(point, basis.east),
+    north: dot(point, basis.north),
+    up: dot(point, basis.up),
+  };
 }
 function shapeScore(shape: Shape, east: number, north: number): number {
   const c = Math.cos(shape.rotation),
@@ -168,8 +170,8 @@ function shapeScore(shape: Shape, east: number, north: number): number {
     x = c * dx + s * dy,
     y = -s * dx + c * dy,
     // Continuous domain warp keeps boundaries irregular without tying them to a grid/LOD.
-    wx = x + shape.radiusEast * 0.035 * Math.sin((5.2 * y) / shape.radiusNorth + shape.phase),
-    wy = y + shape.radiusNorth * 0.035 * Math.sin((4.3 * x) / shape.radiusEast - shape.phase * 0.7);
+    wx = x + shape.radiusEast * 0.07 * Math.sin((5.2 * y) / shape.radiusNorth + shape.phase),
+    wy = y + shape.radiusNorth * 0.065 * Math.sin((4.3 * x) / shape.radiusEast - shape.phase * 0.7);
   return 1 - Math.hypot(wx / shape.radiusEast, wy / shape.radiusNorth);
 }
 function continentScore(continent: ContinentRecipe, point: Unit): number {
@@ -178,11 +180,12 @@ function continentScore(continent: ContinentRecipe, point: Unit): number {
   let score = -10;
   for (const lobe of continent.lobes)
     score = Math.max(score, shapeScore(lobe, local.east, local.north));
-  // Bays are guaranteed edge-facing notches. They create concave coasts/straits,
-  // not independent random holes, while the central core keeps the mainland connected.
+  // Only cut bays through the outer shelf of the already-composed mainland. This
+  // guarantees coastline-facing notches rather than round inland ocean holes.
+  const uncutScore = score;
   for (const bay of continent.bays) {
     const cut = shapeScore(bay, local.east, local.north);
-    if (cut > 0) score = Math.min(score, -cut * 0.8);
+    if (cut > 0 && uncutScore < 0.32) score = Math.min(score, -cut * 0.8);
   }
   return score;
 }
@@ -249,11 +252,15 @@ function mountainAtUnit(plan: MacroPlan, point: Unit, continentId: number): Moun
         }
       }
     }
-    const raw = Math.max(0, 1 - distance / Math.max(width, 1e-7));
+    const widthVariation =
+        system.kind === "volcano"
+          ? 1
+          : 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(pathPosition * Math.PI * 3.7 + system.id * 2.1)),
+      raw = Math.max(0, 1 - distance / Math.max(width * widthVariation, 1e-7));
     if (raw <= 0) continue;
     const intensity = smooth01(raw),
       ridgeVariation =
-        0.78 + 0.22 * (0.5 + 0.5 * Math.cos(pathPosition * Math.PI * 5 + system.id * 1.7));
+        0.7 + 0.3 * (0.5 + 0.5 * Math.cos(pathPosition * Math.PI * 5 + system.id * 1.7));
     let reliefM = system.reliefM * intensity * ridgeVariation;
     if (system.kind === "dominant-spine") {
       const peak = system.localPath[Math.floor(system.localPath.length / 2)],
@@ -263,9 +270,9 @@ function mountainAtUnit(plan: MacroPlan, point: Unit, continentId: number): Moun
             Math.hypot(local.east - peak[0], local.north - peak[1]) /
               Math.max(width * 1.5, 1e-7),
         );
-      reliefM += system.reliefM * 0.6 * peakWeight * peakWeight;
+      reliefM += system.reliefM * 0.7 * peakWeight * peakWeight;
     } else if (system.kind === "volcano") {
-      reliefM = system.reliefM * raw ** 1.45;
+      reliefM = system.reliefM * raw ** 2.25;
     }
     if (!best || reliefM > best.reliefM) best = { system, reliefM, intensity };
   }
@@ -345,12 +352,12 @@ export function createMacroPlan(
       for (let bay = 0; bay < 3; bay++) {
         const base = `${prefix}/bay/${bay}`,
           angle = TAU * addressed(seed, version, `${base}/theta`),
-          offset = 0.72 + 0.14 * addressed(seed, version, `${base}/offset`);
+          offset = 0.84 + 0.14 * addressed(seed, version, `${base}/offset`);
         bays.push({
           east: Math.sin(angle) * major * offset,
           north: Math.cos(angle) * minor * offset,
-          radiusEast: major * (0.14 + 0.1 * addressed(seed, version, `${base}/east-radius`)),
-          radiusNorth: minor * (0.14 + 0.11 * addressed(seed, version, `${base}/north-radius`)),
+          radiusEast: major * (0.12 + 0.08 * addressed(seed, version, `${base}/east-radius`)),
+          radiusNorth: minor * (0.12 + 0.08 * addressed(seed, version, `${base}/north-radius`)),
           rotation:
             orientationRad + (addressed(seed, version, `${base}/rotation`) - 0.5) * 1.6,
           phase: TAU * addressed(seed, version, `${base}/phase`),
@@ -420,11 +427,6 @@ export function createMacroPlan(
     const [kind, lengthFactor, widthFactor, reliefM] = MOUNTAIN_ARCHETYPES[id],
       continent = continents[(id + assignmentShift) % continents.length],
       base = `mountain/${id}/${kind}`,
-      centerAngle = TAU * addressed(seed, version, `${base}/center-angle`),
-      centerRadius = 0.08 + 0.18 * addressed(seed, version, `${base}/center-radius`),
-      centerEast = Math.sin(centerAngle) * Math.sin(continent.majorRadiusRad) * centerRadius,
-      centerNorth = Math.cos(centerAngle) * Math.sin(continent.minorRadiusRad) * centerRadius,
-      axis = TAU * addressed(seed, version, `${base}/axis`),
       length = Math.sin(continent.majorRadiusRad) * lengthFactor,
       width = Math.sin(continent.minorRadiusRad) * widthFactor;
     let points: [number, number][];
@@ -436,17 +438,44 @@ export function createMacroPlan(
       points = [[-length / 2, 0], [0, length * 0.08], [length / 2, 0]];
     else if (kind === "volcano") points = [[0, 0]];
     else points = [[-length / 2, 0], [length / 2, 0]];
-    const c = Math.cos(axis),
-      s = Math.sin(axis),
-      localPath = points.map(
-        ([east, north]) =>
-          [
-            centerEast + c * east - s * north,
-            centerNorth + s * east + c * north,
-          ] as [number, number],
-      ),
-      path = localPath.map(([east, north]) => localPoint(continent, east, north)),
-      center = localPoint(continent, centerEast, centerNorth);
+
+    let center: LonLat | undefined,
+      localPath: [number, number][] = [],
+      path: LonLat[] = [];
+    for (let attempt = 0; attempt < SLOT_ATTEMPTS; attempt++) {
+      const placement = `${base}/placement/${attempt}`,
+        centerAngle = TAU * addressed(seed, version, `${placement}/center-angle`),
+        centerRadius = 0.12 + 0.46 * Math.sqrt(addressed(seed, version, `${placement}/center-radius`)),
+        centerEast = Math.sin(centerAngle) * Math.sin(continent.majorRadiusRad) * centerRadius,
+        centerNorth = Math.cos(centerAngle) * Math.sin(continent.minorRadiusRad) * centerRadius,
+        axis = TAU * addressed(seed, version, `${placement}/axis`),
+        c = Math.cos(axis),
+        s = Math.sin(axis),
+        candidatePath = points.map(
+          ([east, north]) =>
+            [
+              centerEast + c * east - s * north,
+              centerNorth + s * east + c * north,
+            ] as [number, number],
+        ),
+        candidateWorldPath = candidatePath.map(([east, north]) => localPoint(continent, east, north)),
+        candidateCenter = localPoint(continent, centerEast, centerNorth),
+        edgeSafe = candidateWorldPath.every(
+          (point) => continentScore(continent, lonLatToUnit(point.lon, point.lat)) > 0.06,
+        ),
+        minGap = kind === "volcano" ? 0.24 : kind === "low-highlands" ? 0.2 : 0.18,
+        separated = plan.mountainSystems.every(
+          (other) =>
+            other.continent !== continent.id || angularDistance(candidateCenter, other.center) >= minGap,
+        );
+      if (!edgeSafe || !separated) continue;
+      center = candidateCenter;
+      localPath = candidatePath;
+      path = candidateWorldPath;
+      break;
+    }
+    if (!center)
+      throw new Error(`Seeded macro plan could not place mountain system ${id}/${kind}`);
     plan.mountainSystems.push({
       id,
       code: `${seed}/${version}/MACRO/MOUNTAIN/${id}/${kind}`,
@@ -468,8 +497,7 @@ export function createMacroPlan(
     for (let attempt = 0; attempt < SLOT_ATTEMPTS; attempt++) {
       const base = `lake/${lakeId}/${attempt}`,
         bearing = TAU * addressed(seed, version, `${base}/bearing`),
-        distance =
-          0.1 + 0.34 * Math.sqrt(addressed(seed, version, `${base}/distance`)),
+        distance = 0.1 + 0.34 * Math.sqrt(addressed(seed, version, `${base}/distance`)),
         center = destination(continent.center, bearing, distance),
         point = lonLatToUnit(center.lon, center.lat),
         score = continentScore(continent, point),
