@@ -1,5 +1,6 @@
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
+  SOURCE_PRESENTATION_WIDTH,
   greatCircleDistance,
   lonLatToSource,
   normalizeLongitude,
@@ -50,7 +51,9 @@ const PLANET_RADIUS_M = 637_100;
 const VILLAGE_SEPARATION_M = 6_000;
 const TEMPORARY_VILLAGE_CHAIN_EAST_M = 14_000;
 const TEMPORARY_CORRIDOR_SAMPLE_STEP_SOURCE = 7;
-const ROAD_BUCKET_SIZE_SOURCE = 2048;
+const SPATIAL_BUCKET_SIZE_SOURCE = 2048;
+const SOURCE_BUCKET_COUNT = SOURCE_PRESENTATION_WIDTH / SPATIAL_BUCKET_SIZE_SOURCE;
+const SOURCE_BUCKET_MIN = -SOURCE_BUCKET_COUNT / 2;
 const ROAD_INDEX_STEP_SOURCE = 512;
 
 const hashUnit = (key: string) =>
@@ -73,6 +76,16 @@ const withPresentation = <T extends { canonicalPosition: CanonicalPosition }>(re
     record.canonicalPosition.lat,
   );
   return { ...record, x, z };
+};
+
+const sourceBucketIndex = (x: number) =>
+  Math.floor(wrapSourceX(x) / SPATIAL_BUCKET_SIZE_SOURCE);
+const wrapSourceBucketIndex = (index: number) => {
+  const offset = index - SOURCE_BUCKET_MIN;
+  return (
+    ((offset % SOURCE_BUCKET_COUNT) + SOURCE_BUCKET_COUNT) % SOURCE_BUCKET_COUNT +
+    SOURCE_BUCKET_MIN
+  );
 };
 
 /** Canonical macro continents own the presentation centres and visible landmark registry. */
@@ -269,7 +282,7 @@ export const roads = cities.flatMap((city) =>
 type Road = (typeof roads)[number];
 const roadBuckets = new Map<string, Road[]>();
 const roadBucketKey = (x: number, z: number) =>
-  `${Math.floor(wrapSourceX(x) / ROAD_BUCKET_SIZE_SOURCE)}/${Math.floor(z / ROAD_BUCKET_SIZE_SOURCE)}`;
+  `${sourceBucketIndex(x)}/${Math.floor(z / SPATIAL_BUCKET_SIZE_SOURCE)}`;
 for (const road of roads) {
   const steps = Math.max(
     1,
@@ -285,14 +298,12 @@ for (const road of roads) {
 }
 
 function nearbyRoads(x: number, z: number): readonly Road[] {
-  const wx = wrapSourceX(x),
-    bx = Math.floor(wx / ROAD_BUCKET_SIZE_SOURCE),
-    bz = Math.floor(z / ROAD_BUCKET_SIZE_SOURCE),
+  const bx = sourceBucketIndex(x),
+    bz = Math.floor(z / SPATIAL_BUCKET_SIZE_SOURCE),
     found = new Map<string, Road>();
   for (let dz = -1; dz <= 1; dz++)
     for (let dx = -1; dx <= 1; dx++) {
-      const sampleX = wrapSourceX((bx + dx) * ROAD_BUCKET_SIZE_SOURCE),
-        wrappedBucketX = Math.floor(sampleX / ROAD_BUCKET_SIZE_SOURCE),
+      const wrappedBucketX = wrapSourceBucketIndex(bx + dx),
         bucket = roadBuckets.get(`${wrappedBucketX}/${bz + dz}`) || [];
       for (const road of bucket) found.set(road.code, road);
     }
@@ -330,7 +341,7 @@ export function continentAtPosition(position: LonLat) {
 
 const buckets = new Map<string, Place[]>();
 for (const place of places) {
-  const key = `${Math.floor(place.x / 2048)}/${Math.floor(place.z / 2048)}`;
+  const key = `${sourceBucketIndex(place.x)}/${Math.floor(place.z / SPATIAL_BUCKET_SIZE_SOURCE)}`;
   const bucket = buckets.get(key) || [];
   bucket.push(place);
   buckets.set(key, bucket);
@@ -338,17 +349,15 @@ for (const place of places) {
 
 const neighbourhoods = new Map<string, readonly Place[]>();
 export function nearbyPlaces(x: number, z: number): readonly Place[] {
-  const wx = wrapSourceX(x),
-    bx = Math.floor(wx / 2048),
-    bz = Math.floor(z / 2048),
+  const bx = sourceBucketIndex(x),
+    bz = Math.floor(z / SPATIAL_BUCKET_SIZE_SOURCE),
     key = `${bx}/${bz}`;
   let result = neighbourhoods.get(key);
   if (!result) {
     const found: Place[] = [];
     for (let dz = -1; dz <= 1; dz++)
       for (let dx = -1; dx <= 1; dx++) {
-        const sampleX = wrapSourceX((bx + dx) * 2048),
-          wrappedBucketX = Math.floor(sampleX / 2048);
+        const wrappedBucketX = wrapSourceBucketIndex(bx + dx);
         found.push(...(buckets.get(`${wrappedBucketX}/${bz + dz}`) || []));
       }
     neighbourhoods.set(key, (result = found));
