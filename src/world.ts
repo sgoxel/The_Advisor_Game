@@ -521,14 +521,18 @@ export function selectTiles(
 ): Tile[] {
   const bounds = viewBounds(view),
     focus = sourceToLonLat(view.x, view.z),
+    atPole = Math.abs(Math.abs(focus.lat) - Math.PI / 2) <= 1e-12,
+    streamX = atPole ? 0 : view.x,
     longitudeScale = Math.max(0.02, Math.abs(Math.cos(focus.lat))),
-    rx = Math.min(WORLD_SIZE / 2, bounds.rx / longitudeScale),
+    rx = atPole
+      ? WORLD_SIZE / 2
+      : Math.min(WORLD_SIZE / 2, bounds.rx / longitudeScale),
     rz = bounds.rz,
     selected = new Map<string, Tile>(),
-    centres = [view.x];
+    centres = [streamX];
 
-  if (view.x - rx < WORLD_MIN) centres.push(view.x + WORLD_SIZE);
-  if (view.x + rx > -WORLD_MIN) centres.push(view.x - WORLD_SIZE);
+  if (streamX - rx < WORLD_MIN) centres.push(streamX + WORLD_SIZE);
+  if (streamX + rx > -WORLD_MIN) centres.push(streamX - WORLD_SIZE);
 
   const visit = (t: Tile, centreX: number) => {
     const maxZ = t.minZ + t.size;
@@ -568,11 +572,11 @@ export function selectTiles(
   return [...selected.values()].sort(
     (a, b) =>
       Math.hypot(
-        wrappedTileDistanceX(a.minX + a.size / 2, view.x),
+        wrappedTileDistanceX(a.minX + a.size / 2, streamX),
         a.minZ + a.size / 2 - view.z,
       ) -
       Math.hypot(
-        wrappedTileDistanceX(b.minX + b.size / 2, view.x),
+        wrappedTileDistanceX(b.minX + b.size / 2, streamX),
         b.minZ + b.size / 2 - view.z,
       ),
   );
