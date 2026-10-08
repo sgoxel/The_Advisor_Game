@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   MACRO_PLAN,
   createMacroPlan,
-  macroFeatureDistanceM,
   macroSampleAt,
   mountainSystems,
 } from "../src/macro-geography.ts";
@@ -31,12 +30,9 @@ test("macro plan is exact, irregular, seed-derived and changes with seed", () =>
     assert.ok(continent.majorRadiusRad > continent.minorRadiusRad);
   }
   continents.forEach((continent, index) => {
-    assert.ok(
-      macroFeatureDistanceM(
-        continent.canonicalPosition,
-        MACRO_PLAN.continents[index].center,
-      ) < 1e-6,
-    );
+    const macro = MACRO_PLAN.continents[index].center;
+    assert.ok(Math.abs(continent.canonicalPosition.lon - macro.lon) < 1e-12);
+    assert.ok(Math.abs(continent.canonicalPosition.lat - macro.lat) < 1e-12);
   });
 
   const again = createMacroPlan(MACRO_PLAN.seed, MACRO_PLAN.version),
