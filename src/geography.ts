@@ -49,6 +49,7 @@ const VILLAGE_NAMES = ["Briarford", "Oakmere", "Thornfield"] as const;
 const PLANET_RADIUS_M = 637_100;
 const VILLAGE_SEPARATION_M = 6_000;
 const TEMPORARY_VILLAGE_CHAIN_EAST_M = 14_000;
+const TEMPORARY_CORRIDOR_SAMPLE_STEP_M = 500;
 
 const hashUnit = (key: string) =>
   macroDigest(`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/${key}`) / 0xffffffff;
@@ -116,6 +117,27 @@ export const countries = MACRO_GEOGRAPHY.continents.flatMap((continent) => {
   });
 });
 
+function temporaryVillageCorridorIsMainland(
+  candidate: CanonicalPosition,
+  continentId: number,
+) {
+  const samples = Math.ceil(
+    TEMPORARY_VILLAGE_CHAIN_EAST_M / TEMPORARY_CORRIDOR_SAMPLE_STEP_M,
+  );
+  for (let i = 0; i <= samples; i++) {
+    const eastM = (TEMPORARY_VILLAGE_CHAIN_EAST_M * i) / samples,
+      point = macroOffset(candidate, eastM / PLANET_RADIUS_M, 0),
+      sample = sampleMacroGeography(point);
+    if (
+      sample.landform !== "Mainland" ||
+      sample.continent !== continentId ||
+      sample.landScore < 0.015
+    )
+      return false;
+  }
+  return true;
+}
+
 function cityPosition(
   country: (typeof countries)[number],
   city: number,
@@ -130,20 +152,12 @@ function cityPosition(
         Math.cos(angle) * radius,
         Math.sin(angle) * radius,
       ),
-      sample = sampleMacroGeography(candidate),
-      temporaryRoadEnd = macroOffset(
-        candidate,
-        TEMPORARY_VILLAGE_CHAIN_EAST_M / PLANET_RADIUS_M,
-        0,
-      ),
-      roadEndSample = sampleMacroGeography(temporaryRoadEnd);
+      sample = sampleMacroGeography(candidate);
     if (
       sample.landform !== "Mainland" ||
       sample.continent !== country.continent ||
       sample.landScore < 0.085 ||
-      roadEndSample.landform !== "Mainland" ||
-      roadEndSample.continent !== country.continent ||
-      roadEndSample.landScore < 0.015
+      !temporaryVillageCorridorIsMainland(candidate, country.continent)
     )
       continue;
     if (accepted.some((other) => greatCircleDistance(candidate, other) < 24_000))
