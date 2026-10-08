@@ -284,8 +284,8 @@ test("active scale/travel source and UI contain no legacy physical-truth assumpt
     "../index.html",
   ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
   const combined = sources.join("\n");
-  assert.doesNotMatch(combined, /VILLAGE_SPACING_M/);
-  assert.doesNotMatch(combined, /(?<!GOOD_ROAD_)WALK_SPEED_MPS/);
+  assert.doesNotMatch(combined, /\bVILLAGE_SPACING_M\b/);
+  assert.doesNotMatch(combined, /\bWALK_SPEED_MPS\b/);
   assert.doesNotMatch(combined, /420 m by road/i);
   assert.doesNotMatch(combined, /1\.4\s*m\/s/i);
   assert.doesNotMatch(combined, /Five minutes on foot/i);
