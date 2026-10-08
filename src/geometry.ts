@@ -1,5 +1,7 @@
 import { biomeAt, featuresFor, field, heightAt, type Tile } from "./world.ts";
 import { nearestPlace, roadAt, roads } from "./geography.ts";
+import { sampleMacroGeography } from "./macro-geography.ts";
+import { sourceToLonLat, wrapSourceX } from "./planet.ts";
 type RGB = [number, number, number];
 type Point = [number, number, number];
 export type Geometry = {
@@ -15,6 +17,7 @@ export type TileGeometry = {
   detail: Geometry;
 };
 const color = (r: number, g: number, b: number): RGB => [r, g, b];
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 class Builder {
   p: number[] = [];
   n: number[] = [];
@@ -135,8 +138,17 @@ class Builder {
 }
 export function terrainTint(x: number, z: number, scale = 32): RGB {
   if (scale > 512) {
-    const f = field(x, z, 9000, 44);
-    return color(106 + f * 24, 133 + f * 24, 83 + f * 20);
+    const f = field(x, z, 9000, 44),
+      elevation = heightAt(x, z),
+      mountain = clamp01((elevation - 22) / 150);
+    // Coarse flat LODs still need the same major range silhouettes that are visible
+    // on the globe. Height comes from the shared macro authority, so this only makes
+    // existing mountains readable; it does not introduce a presentation-only map.
+    return color(
+      106 + f * 24 - mountain * 43,
+      133 + f * 24 - mountain * 36,
+      83 + f * 20 + mountain * 4,
+    );
   }
   const s = nearestPlace(x, z);
   const dx = s ? Math.abs(x - s.x) : 1000,
@@ -155,8 +167,24 @@ export function terrainTint(x: number, z: number, scale = 32): RGB {
   if (biome === "River" || biome === "Ocean") return color(94, 137, 139);
   if (biome === "Sandy beach") return color(203, 190, 141);
   if (biome === "Riverbank") return color(163, 159, 113);
-  if (biome === "Highlands")
-    return color(129 + f * 25, 139 + f * 20, 116 + f * 15);
+  if (biome === "Highlands") {
+    const macro = sampleMacroGeography(sourceToLonLat(wrapSourceX(x), z)),
+      relief = clamp01((macro.mountainRelief - 12) / 210);
+    // Volcanic cones/chains keep a warmer charcoal signature while ordinary ranges
+    // become progressively darker with macro relief. The plan-view silhouette and
+    // elevation remain the authoritative SEED geometry at every LOD.
+    if (macro.mountainKind === "volcanic")
+      return color(
+        112 + f * 13 - relief * 38,
+        111 + f * 11 - relief * 31,
+        101 + f * 9 - relief * 24,
+      );
+    return color(
+      132 + f * 19 - relief * 43,
+      143 + f * 17 - relief * 36,
+      119 + f * 13 - relief * 25,
+    );
+  }
   if (biome === "Woodland")
     return color(72 + f * 19, 105 + f * 22, 69 + f * 15);
   return color(116 + f * 22, 140 + f * 24, 79 + f * 20);

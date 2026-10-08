@@ -1,4 +1,4 @@
-import { WORLD_SEED } from "./config.ts";
+import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
   canonicalCell,
   cubeFaceToUnit,
@@ -6,12 +6,25 @@ import {
   type CubeCell,
   type LonLat,
 } from "./planet.ts";
+import {
+  MACRO_GEOGRAPHY,
+  buildMacroGeography,
+  sampleMacroGeography,
+  type MountainKind,
+} from "./macro-geography.ts";
 
-export const CANONICAL_GENERATOR_VERSION = "v1";
+export const CANONICAL_GENERATOR_VERSION = WORLD_FOUNDATION_VERSION;
 
 export type FoundationSample = {
   id: string;
   sample: number;
+  landform: "Mainland" | "Island" | "Ocean";
+  continent: number | null;
+  island: number | null;
+  lake: number | null;
+  lakeCode: string | null;
+  mountainSystem: string | null;
+  mountainKind: MountainKind | null;
 };
 
 /** Stable content digest: a coordinate lookup, never a mutable RNG stream. */
@@ -30,10 +43,7 @@ export function canonicalCellCenter(cell: CubeCell): LonLat {
   return unitToLonLat(cubeFaceToUnit(cell.face, u, v));
 }
 
-/**
- * Neighbor by logical cell offsets. Crossing a face edge/corner is resolved by
- * projecting through the cube direction and then applying the one-owner face rule.
- */
+/** Neighbor through cube projection; face-edge ownership remains canonical. */
 export function canonicalCellNeighbor(
   cell: CubeCell,
   du: number,
@@ -63,10 +73,7 @@ export function canonicalCellNeighbors(
   };
 }
 
-/**
- * Seed + canonical ID is the only input to this foundation sample. It is safe
- * to query in any order and is invariant across camera, LOD, backend and wrap.
- */
+/** Seed + canonical position is the sole foundation input, including macro identity. */
 export function canonicalFoundationSample(
   lon: number,
   lat: number,
@@ -74,9 +81,20 @@ export function canonicalFoundationSample(
   seed = WORLD_SEED,
   generation = CANONICAL_GENERATOR_VERSION,
 ): FoundationSample {
-  const cell = canonicalCell(lon, lat, level, seed, generation);
+  const cell = canonicalCell(lon, lat, level, seed, generation),
+    authority = seed === WORLD_SEED && generation === WORLD_FOUNDATION_VERSION
+      ? MACRO_GEOGRAPHY
+      : buildMacroGeography(seed),
+    macro = sampleMacroGeography({ lon, lat }, authority);
   return {
     id: cell.id,
     sample: digest(`${cell.id}/FOUNDATION`),
+    landform: macro.landform,
+    continent: macro.continent,
+    island: macro.island,
+    lake: macro.lake,
+    lakeCode: macro.lakeCode,
+    mountainSystem: macro.mountainSystem,
+    mountainKind: macro.mountainKind,
   };
 }

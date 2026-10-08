@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { WORLD_FOUNDATION_VERSION } from "../src/config.ts";
 import {
   CANONICAL_PLANET_CIRCUMFERENCE,
   CANONICAL_PLANET_DIAMETER,
@@ -128,7 +129,11 @@ test("canonical neighbor helpers cross cube faces without duplicate ownership", 
   assert.equal(recaptured.v, edge.v);
   assert.notEqual(east.face, edge.face, "crossing the final +u cell must change face");
   assert.equal(new Set(Object.values(neighbors).map((cell) => cell.id)).size, 4);
-  assert.ok(Object.values(neighbors).every((cell) => cell.id.includes("/PLANET/v1/F")));
+  assert.ok(
+    Object.values(neighbors).every((cell) =>
+      cell.id.includes(`/PLANET/${WORLD_FOUNDATION_VERSION}/F`),
+    ),
+  );
 });
 
 test("great-circle distance takes the short antimeridian path", () => {

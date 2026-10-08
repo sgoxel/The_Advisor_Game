@@ -25,6 +25,7 @@ import {
   canonicalCellNeighbors,
   canonicalFoundationSample,
 } from "./spatial-authority.ts";
+import { MACRO_GEOGRAPHY } from "./macro-geography.ts";
 
 const CANONICAL_ID_LEVEL = 20;
 
@@ -137,6 +138,14 @@ function install(world: AdvisorWorld) {
     greatCircleDistance,
     sourceToLonLat,
     lonLatToSource,
+    macro: {
+      seed: MACRO_GEOGRAPHY.seed,
+      version: MACRO_GEOGRAPHY.version,
+      continents: MACRO_GEOGRAPHY.continents,
+      islands: MACRO_GEOGRAPHY.islands,
+      lakes: MACRO_GEOGRAPHY.lakes,
+      mountainSystems: MACRO_GEOGRAPHY.mountainSystems,
+    },
     presentation: {
       sourceWidth: SOURCE_PRESENTATION_WIDTH,
       renderRadius: RENDER_PLANET_RADIUS,
@@ -173,12 +182,28 @@ function install(world: AdvisorWorld) {
     if (height)
       height.title = `Canonical position: lon ${position.lon.toFixed(9)}, lat ${position.lat.toFixed(9)}, elevation ${source.elevation.toFixed(2)} m`;
     if (tile) tile.textContent = `${source.tile} · derived render tile`;
-    if (levels)
+    if (levels) {
+      let planetLevel = levels.querySelector<HTMLElement>("[data-planet-level]");
+      if (!planetLevel) {
+        planetLevel = document.createElement("li");
+        planetLevel.dataset.planetLevel = "true";
+        planetLevel.append("Planet · Macro geography");
+        const text = document.createElement("code");
+        text.textContent = `${WORLD_SEED}/${CANONICAL_GENERATOR_VERSION}/MACRO`;
+        planetLevel.append(text);
+        levels.prepend(planetLevel);
+      }
       for (const item of Array.from(levels.children)) {
+        if ((item as HTMLElement).dataset.planetLevel) continue;
         const first = item.firstChild;
-        if (first?.nodeType === Node.TEXT_NODE && first.textContent)
+        if (
+          first?.nodeType === Node.TEXT_NODE &&
+          first.textContent &&
+          !first.textContent.startsWith("Derived source · ")
+        )
           first.textContent = `Derived source · ${first.textContent}`;
       }
+    }
   };
 
   if (panel) {
