@@ -200,7 +200,7 @@ export const villages: Place[] = (() => {
         anchorDistance = 0.001 + 0.026 * Math.sqrt(addressed(`${prefix}/anchor-distance`)),
         anchor = destination(city.canonicalPosition, anchorBearing, anchorDistance),
         lat = Math.max(-1.35, Math.min(1.35, anchor.lat)),
-        lonStep = 0.0064 / Math.max(0.35, Math.abs(Math.cos(lat))),
+        lonStep = 0.00945 / Math.max(0.35, Math.abs(Math.cos(lat))),
         candidates = [-1, 0, 1].map((offset) =>
           canonicalPosition(anchor.lon + offset * lonStep, lat),
         );
