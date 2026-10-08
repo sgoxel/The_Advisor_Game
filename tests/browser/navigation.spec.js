@@ -232,12 +232,20 @@ test("pointer touch keyboard and canonical wrapping", async ({ page }) => {
   expect(
     await page.evaluate(() => window.advisorWorld.state.view.x),
   ).toBeGreaterThan(pinched.x);
+  expect(await page.evaluate(() => document.activeElement?.id)).toBe("world");
   const keyboardBefore = await page.evaluate(
     () => window.advisorWorld.state.view.x,
   );
   await page.keyboard.down("ArrowRight");
-  await page.waitForTimeout(200);
-  await page.keyboard.up("ArrowRight");
+  try {
+    await page.waitForFunction(
+      (before) => window.advisorWorld.state.view.x > before,
+      keyboardBefore,
+      { timeout: 10000 },
+    );
+  } finally {
+    await page.keyboard.up("ArrowRight");
+  }
   expect(
     await page.evaluate(() => window.advisorWorld.state.view.x),
   ).toBeGreaterThan(keyboardBefore);
