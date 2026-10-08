@@ -2,8 +2,14 @@
  * terrain colour and height, sampled through the shared generation functions. */
 import { places } from "./geography.ts";
 import { terrainTint } from "./geometry.ts";
-import { lonLatToFlat, PLANET_CIRCUMFERENCE, POLE_DISTANCE } from "./planet.ts";
-import { CELL_SIZE, heightAt, regionSeed } from "./world.ts";
+import { macroSampleAt } from "./macro-geography.ts";
+import {
+  lonLatToFlat,
+  sourceToLonLat,
+  PLANET_CIRCUMFERENCE,
+  POLE_DISTANCE,
+} from "./planet.ts";
+import { CELL_SIZE, heightAt } from "./world.ts";
 
 /** Equirectangular RGBA8, row-major, row 0 at the north edge, alpha 255. */
 export type GlobeSurface = {
@@ -28,9 +34,9 @@ const EXAGGERATION = 3.5;
 const SHADE_MIN = 0.6,
   SHADE_MAX = 1.3;
 
-// One entry per generation region (the L2 seed square) of the planet. An ocean region
-// far from every place has one colour and one height, so three quarters of the planet
-// cost a table lookup; everything else is sampled through the terrain rules.
+// One entry per source-detail generation region. Open-ocean regions can reuse one
+// colour/height, but the macro coast/island authority must first prove the whole
+// region is ocean. This keeps the shortcut from swallowing irregular coast slivers.
 const REGION = CELL_SIZE * 100,
   HALF = PLANET_CIRCUMFERENCE / 2,
   COL0 = Math.floor(-HALF / REGION),
@@ -63,7 +69,24 @@ function regionStates(): Uint8Array {
           regions[(rz - ROW0) * COLS + rx - COL0] = DETAILED;
   return regions;
 }
-/** Memoised: is the generation region holding this position open ocean? */
+
+/**
+ * Conservative bounded proof for the open-ocean cache. Macro islands/lakes are
+ * much wider than a 200-source-unit region, so a 3×3 probe catches any canonical
+ * feature intersecting the region. Any uncertainty stays DETAILED rather than
+ * inventing ocean. This runs once per visited region, never per frame.
+ */
+function regionIsOpenOcean(rx: number, rz: number): boolean {
+  for (const v of [0.05, 0.5, 0.95])
+    for (const u of [0.05, 0.5, 0.95]) {
+      const x = (rx + u) * REGION,
+        z = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, (rz + v) * REGION));
+      if (macroSampleAt(sourceToLonLat(x, z)).domain !== "Ocean") return false;
+    }
+  return true;
+}
+
+/** Memoised: is the generation region holding this position proven open ocean? */
 function openOcean(x: number, z: number): boolean {
   if (x < -HALF || x >= HALF || z < -POLE_DISTANCE || z > POLE_DISTANCE)
     return false;
@@ -71,17 +94,8 @@ function openOcean(x: number, z: number): boolean {
     rx = Math.floor(x / REGION),
     rz = Math.floor(z / REGION),
     index = (rz - ROW0) * COLS + rx - COL0;
-  if (states[index] === UNKNOWN) {
-    const region = regionSeed(
-      Math.floor(x / CELL_SIZE),
-      Math.floor(z / CELL_SIZE),
-    );
-    // The index check keeps the shortcut honest if the seed hierarchy is ever rescaled.
-    states[index] =
-      region.landform === "Ocean" && region.x === rx && region.z === rz
-        ? OPEN_OCEAN
-        : DETAILED;
-  }
+  if (states[index] === UNKNOWN)
+    states[index] = regionIsOpenOcean(rx, rz) ? OPEN_OCEAN : DETAILED;
   return states[index] === OPEN_OCEAN;
 }
 /** The one colour and height of open ocean, read once from the shared functions. */
@@ -196,7 +210,7 @@ export function buildGlobeSurface(
             cr = c[0] | 0,
             cg = c[1] | 0,
             cb = c[2] | 0;
-          // Rivers and island shallows share the ocean colour and stay unshaded too.
+          // Rivers, lakes and island shallows share the ocean colour and stay unshaded too.
           if (
             cr === water.color[0] &&
             cg === water.color[1] &&
