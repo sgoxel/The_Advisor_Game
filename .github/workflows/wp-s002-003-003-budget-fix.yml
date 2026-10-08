@@ -1,0 +1,56 @@
+name: Fix WP-S002-003-003 budget transition
+on:
+  push:
+    branches: [wp-s002-003-003-agent1]
+    paths: [.github/workflows/wp-s002-003-003-budget-fix.yml]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply budget-pressure streaming fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/main.ts')
+          text = path.read_text()
+          replacements = [
+            (
+              'function refreshSelection() {\n  wanted = selectTiles(view, 190, Math.min(160, streamingBudget.active));',
+              'function refreshSelection() {\n  const refinementTarget = streamingClass === "phone" ? 96 : 160;\n  wanted = selectTiles(\n    view,\n    190,\n    Math.min(refinementTarget, streamingBudget.active),\n  );'
+            ),
+            (
+              '    protect = new Set([...activeKeys, ...wantedKeys, rootKey]),',
+              '    protect = new Set([...wantedKeys, rootKey]),'
+            ),
+            (
+              '    tileCache.delete(key);\n    cacheCpuBytes = Math.max(0, cacheCpuBytes - record.cpuBytes);',
+              '    tileCache.delete(key);\n    activeKeys = activeKeys.filter((activeKey) => activeKey !== key);\n    cacheCpuBytes = Math.max(0, cacheCpuBytes - record.cpuBytes);'
+            ),
+          ]
+          for old, new in replacements:
+            count = text.count(old)
+            if count != 1:
+              raise SystemExit(f'expected one match, found {count}: {old[:80]!r}')
+            text = text.replace(old, new)
+          path.write_text(text)
+          PY
+          rm .github/workflows/wp-s002-003-003-budget-fix.yml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit tested fix
+        run: |
+          git config user.name "AGENT #1"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Avoid budget deadlock during streaming refinement"
+          git push origin HEAD:wp-s002-003-003-agent1
