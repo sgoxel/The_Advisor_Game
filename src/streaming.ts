@@ -11,6 +11,7 @@ export type StreamingBudget = {
 };
 
 const MiB = 1024 * 1024;
+export const STREAMING_UPLOADS_PER_FRAME = 1;
 
 export const STREAMING_BUDGETS: Readonly<Record<DeviceClass, StreamingBudget>> =
   Object.freeze({
