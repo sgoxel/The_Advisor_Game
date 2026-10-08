@@ -1,5 +1,4 @@
 name: Agent1 temporary runtime patch
-# retrigger after workflow exists on branch
 on:
   push:
     branches: [agent1/wp-s002-003-003]
@@ -19,6 +18,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Correct helper match for current state getter
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('tools/wp-s002-003-003-runtime-patch.mjs')
+          s = p.read_text()
+          old = '`              : handoffPreparationWaitMs;\\n        return {`'
+          new = '`            : handoffPreparationWaitMs;\\n        return {`'
+          if old not in s:
+              raise SystemExit('ready-byte helper target not found')
+          p.write_text(s.replace(old, new))
+          PY
       - run: node tools/wp-s002-003-003-runtime-patch.mjs
       - name: Commit generated runtime edit
         run: |
