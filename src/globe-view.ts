@@ -22,6 +22,17 @@ const DEG = 180 / Math.PI;
 /** Camera rotation that looks down -Y with screen-up = -Z. */
 const DOWN = new pc.Quat().setFromEulerAngles(-90, 0, 0);
 
+const SPHERE_VERTICES = (LON_SEGMENTS + 1) * (LAT_SEGMENTS + 1);
+const SPHERE_INDICES = LON_SEGMENTS * (LAT_SEGMENTS * 2 - 2) * 3;
+const FAN_VERTICES = SHADE_SEGMENTS + 1;
+const FAN_INDICES = SHADE_SEGMENTS * 3;
+/** Approximate app-owned GPU bytes for the static sphere/fan vertex and index buffers. */
+const STATIC_MESH_GPU_BYTES =
+  SPHERE_VERTICES * (3 + 3 + 2) * 4 +
+  SPHERE_INDICES * 2 +
+  FAN_VERTICES * (3 + 3 + 2) * 4 +
+  FAN_INDICES * 2;
+
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
@@ -177,13 +188,26 @@ export class GlobeView {
     INK[1] / 255,
     INK[2] / 255,
   );
-  readonly stats = { triangles: 0, textureWidth: 0, textureHeight: 0 };
+  readonly stats = {
+    triangles: 0,
+    drawCalls: 2,
+    textureWidth: 0,
+    textureHeight: 0,
+    surfaceBuilds: 0,
+    surfaceBuildCpuMs: 0,
+    surfaceUploadCpuMs: 0,
+    surfaceReuseHits: 0,
+    orientationUpdates: 0,
+    cpuResourceBytesEstimated: 0,
+    gpuResourceBytesEstimated: 0,
+  };
   private readonly device: pc.GraphicsDevice;
   private readonly sphere: pc.Entity;
   private readonly surfaceMaterial: pc.StandardMaterial;
   private readonly shadeMaterial: pc.StandardMaterial;
   private readonly shadeTexture: pc.Texture;
   private surfaceTexture: pc.Texture;
+  private surfaceReady = false;
   private readonly rotation = new pc.Quat();
   private readonly turn = new pc.Quat();
   private readonly point = new pc.Vec3();
@@ -252,8 +276,19 @@ export class GlobeView {
 
     this.stats.triangles =
       LON_SEGMENTS * (LAT_SEGMENTS * 2 - 2) + SHADE_SEGMENTS;
+    this.updateResourceEstimates();
     this.orient(0, 0, 0);
     app.root.addChild(this.root);
+  }
+
+  private updateResourceEstimates() {
+    const surfaceBytes = this.stats.textureWidth * this.stats.textureHeight * 4,
+      shadeBytes = SHADE_TEXELS * 4,
+      surfaceGpuBytes = Math.ceil((surfaceBytes * 4) / 3);
+    // Texture pixel levels remain app-owned for deterministic device restoration.
+    this.stats.cpuResourceBytesEstimated = surfaceBytes + shadeBytes;
+    this.stats.gpuResourceBytesEstimated =
+      surfaceGpuBytes + shadeBytes + STATIC_MESH_GPU_BYTES;
   }
 
   private createSurface(width: number, height: number, pixels: Uint8Array) {
@@ -278,7 +313,12 @@ export class GlobeView {
 
   /** Replace the surface image. Destroys the previous texture. Safe to call repeatedly.
    * The pixel array is kept by the texture (for re-upload after a lost device). */
-  setSurface(surface: { width: number; height: number; pixels: Uint8Array }) {
+  setSurface(surface: {
+    width: number;
+    height: number;
+    pixels: Uint8Array;
+    buildMs?: number;
+  }) {
     const { width, height, pixels } = surface;
     if (
       !Number.isInteger(height) ||
@@ -293,11 +333,18 @@ export class GlobeView {
       throw Error(
         `Globe surface is ${width} px wide; this device allows ${this.device.maxTextureSize}.`,
       );
-    const previous = this.surfaceTexture;
+    const uploadStarted = performance.now(),
+      previous = this.surfaceTexture;
     this.surfaceTexture = this.createSurface(width, height, pixels);
     this.surfaceMaterial.emissiveMap = this.surfaceTexture;
     this.surfaceMaterial.update();
     previous.destroy();
+    this.surfaceReady = true;
+    this.stats.surfaceBuilds++;
+    if (Number.isFinite(surface.buildMs))
+      this.stats.surfaceBuildCpuMs += Math.max(0, surface.buildMs ?? 0);
+    this.stats.surfaceUploadCpuMs += Math.max(0, performance.now() - uploadStarted);
+    this.updateResourceEstimates();
   }
 
   setBlend(alpha: number) {
@@ -321,6 +368,8 @@ export class GlobeView {
    * the flat map's sense: the compass direction at the top of the screen is north turned
    * `yaw` toward the west, so a positive yaw turns the picture clockwise. */
   orient(lon: number, lat: number, yaw: number) {
+    this.stats.orientationUpdates++;
+    if (this.surfaceReady) this.stats.surfaceReuseHits++;
     this.rotation
       .setFromAxisAngle(pc.Vec3.UP, -yaw * DEG)
       .mul(this.turn.setFromAxisAngle(pc.Vec3.RIGHT, lat * DEG - 90))
