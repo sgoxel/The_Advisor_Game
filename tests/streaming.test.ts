@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { WORLD_FOUNDATION_VERSION } from "../src/config.ts";
 import {
   MAX_LEVEL,
   WORLD_MIN,
@@ -94,7 +95,11 @@ test("render patch cache keys are canonical global IDs rather than planar tile a
     [MAX_LEVEL, 65535, 65536],
   ] as const) {
     const tile = tileAt(level, x, z);
-    assert.match(tile.key, /^ADVISOR-0126-ALDERWICK\/PLANET\/v1\/F[0-5]\/L\d+\/\d+\/\d+\/PATCH$/);
+    assert.match(
+      tile.key,
+      /^ADVISOR-0126-ALDERWICK\/PLANET\/v\d+\/F[0-5]\/L\d+\/\d+\/\d+\/PATCH$/,
+    );
+    assert.ok(tile.key.includes(`/PLANET/${WORLD_FOUNDATION_VERSION}/`));
     assert.doesNotMatch(tile.key, /\/T\//);
     assert.equal(tileAt(level, x, z).key, tile.key);
   }
