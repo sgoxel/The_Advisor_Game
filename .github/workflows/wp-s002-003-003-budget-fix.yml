@@ -24,10 +24,6 @@ jobs:
               'function refreshSelection() {\n  const refinementTarget = streamingClass === "phone" ? 96 : 160;\n  wanted = selectTiles(\n    view,\n    190,\n    Math.min(refinementTarget, streamingBudget.active),\n  );'
             ),
             (
-              '    protect = new Set([...activeKeys, ...wantedKeys, rootKey]),',
-              '    protect = new Set([...wantedKeys, rootKey]),'
-            ),
-            (
               '    tileCache.delete(key);\n    cacheCpuBytes = Math.max(0, cacheCpuBytes - record.cpuBytes);',
               '    tileCache.delete(key);\n    activeKeys = activeKeys.filter((activeKey) => activeKey !== key);\n    cacheCpuBytes = Math.max(0, cacheCpuBytes - record.cpuBytes);'
             ),
