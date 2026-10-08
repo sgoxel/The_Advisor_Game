@@ -27,7 +27,7 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 - WP-S002-003-001 — Canonical spherical coordinate and identity authority: remove legacy planar world truth with wrap/pole-safe reversible mapping — COMPLETED
 - WP-S002-003-002 — Precision-safe ENU local rendering: camera-relative patches, canonical picking/labels/shadows and deterministic rebasing — COMPLETED
 - WP-S002-003-003 — Canonical wrap/pole streaming: stable IDs, no-blank coverage, device/byte budgets and eviction-safe caches
-- WP-S002-004-001 — Reference analysis/contracts for natural-world authority, readable 3D settlement/living-world UX and mobile performance
+- WP-S002-004-001 — Reference analysis/contracts for natural-world authority, readable 3D settlement/living-world UX and mobile performance — IN PROGRESS
 - WP-S002-004-002 — Canonical planet-scale and travel-truth migration: remove legacy planar metres, prototype speeds/text and UI inconsistencies
 - WP-S002-004-003 — Natural Realm macro-geography and LOD readability: irregular SEED continents/islands/water/ranges across phone and desktop
 - WP-S002-004-004 — Shared climate/biome authority and visual readability: frozen poles, deserts, forests and grasslands across Realm↔local LOD
