@@ -198,7 +198,7 @@ test("light comes from the north-west", () => {
   assert.ok(lit > 10, `north-west shores brighten (${lit})`);
   assert.ok(shadowed < -10, `south-east shores darken (${shadowed})`);
 });
-test("the globe worker answers with a transferred surface or an error", async () => {
+test("the globe worker answers with a transferred surface, timing telemetry or an error", async () => {
   const sent: [Record<string, unknown>, { transfer?: unknown[] }?][] = [];
   const scope = globalThis as unknown as {
     self?: unknown;
@@ -219,8 +219,9 @@ test("the globe worker answers with a transferred surface or an error", async ()
     scope.self = previous;
   }
   const [message, options] = sent[0];
-  assert.deepEqual(Object.keys(message), ["id", "width", "height", "pixels"]);
+  assert.deepEqual(Object.keys(message), ["id", "width", "height", "pixels", "buildMs"]);
   assert.equal(message.id, 7);
+  assert.ok(Number.isFinite(message.buildMs) && Number(message.buildMs) >= 0);
   assert.deepEqual(
     message.pixels,
     buildGlobeSurface(64, 32, { samples: 2, relief: 1 }).pixels,
@@ -230,7 +231,7 @@ test("the globe worker answers with a transferred surface or an error", async ()
   assert.equal(sent[1][0].id, 8);
   assert.match(String(sent[1][0].error), /RangeError/);
 });
-test("globe sources use no random-number API or clock", () => {
+test("globe sources use no random-number API or wall clock", () => {
   for (const file of ["globe-surface.ts", "globe-worker.ts"]) {
     const source = readFileSync(
       new URL(`../src/${file}`, import.meta.url),
@@ -240,6 +241,6 @@ test("globe sources use no random-number API or clock", () => {
       source,
       /Math\.random\s*\(|getRandomValues\s*\(|randomUUID\s*\(/,
     );
-    assert.doesNotMatch(source, /Date\.now\s*\(|new Date\s*\(|performance\./);
+    assert.doesNotMatch(source, /Date\.now\s*\(|new Date\s*\(/);
   }
 });
