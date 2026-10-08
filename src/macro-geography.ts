@@ -373,35 +373,37 @@ function makeLakes(
           interior = continentScore(continent, origin);
         if (interior < 0.24 || Math.abs(origin.lat) > 1.25) continue;
         const majorRadius = 0.04 + unit(seed, `${key}/MAJOR`) * 0.04,
-          minorRadius = majorRadius * (0.5 + unit(seed, `${key}/ASPECT`) * 0.3);
+          minorRadius = majorRadius * (0.5 + unit(seed, `${key}/ASPECT`) * 0.3),
+          lake: MacroLake = {
+            id: lakes.length,
+            code: `${seed}/${WORLD_FOUNDATION_VERSION}/MACRO/LAKE/${continent.id}/${i}`,
+            continent: continent.id,
+            canonicalPosition: origin,
+            majorRadius,
+            minorRadius,
+            rotation: unit(seed, `${key}/ROTATION`) * TAU,
+            harmonic: {
+              frequency: 2 + (macroDigest(`${seed}/${key}/FREQUENCY`) % 4),
+              amplitude: 0.045 + unit(seed, `${key}/AMP`) * 0.09,
+              phase: unit(seed, `${key}/PHASE`) * TAU,
+            },
+          };
         if (
+          lakeScore(lake, continent.canonicalPosition) > 0 ||
           mountainSystems.some(
             (system) =>
               system.continent === continent.id &&
-              angularDistance(origin, system.canonicalPosition) < majorRadius * 1.35,
+              lakeScore(lake, system.canonicalPosition) > 0,
           ) ||
           lakes.some(
             (other) =>
               other.continent === continent.id &&
-              angularDistance(origin, other.canonicalPosition) <
-                majorRadius + other.majorRadius * 1.25,
+              (lakeScore(lake, other.canonicalPosition) > 0 ||
+                lakeScore(other, lake.canonicalPosition) > 0),
           )
         )
           continue;
-        lakes.push({
-          id: lakes.length,
-          code: `${seed}/${WORLD_FOUNDATION_VERSION}/MACRO/LAKE/${continent.id}/${i}`,
-          continent: continent.id,
-          canonicalPosition: origin,
-          majorRadius,
-          minorRadius,
-          rotation: unit(seed, `${key}/ROTATION`) * TAU,
-          harmonic: {
-            frequency: 2 + (macroDigest(`${seed}/${key}/FREQUENCY`) % 4),
-            amplitude: 0.045 + unit(seed, `${key}/AMP`) * 0.09,
-            phase: unit(seed, `${key}/PHASE`) * TAU,
-          },
-        });
+        lakes.push(lake);
         placed = true;
         break;
       }
