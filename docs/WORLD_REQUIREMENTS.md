@@ -1,5 +1,7 @@
 # Binding Stage S002 world requirements
 
+The dedicated research and testable implementation contracts are now documented in [NATURAL_WORLD.md](NATURAL_WORLD.md), the WP-S002-004-001 output. Its source audit, canonical sampling, housing/schedules, composition/transport, responsive inspection and device budgets refine the existing implementation packages without creating dependencies. These contracts are acceptance targets; the later runtime features and real-device performance remain subject to their own verification.
+
 The owner reaffirmed these rules on 2026-10-07. They are planning requirements for the natural-world/scale packages, not a claim that the current globe already meets every rule. They preserve the existing 3 continents, 30 countries, 90 cities and 270 villages, and the [0–9 foundation priorities](WORLD_BUILDING_PRIORITY.md).
 
 ## Minimum village walking time

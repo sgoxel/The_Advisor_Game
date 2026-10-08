@@ -1,0 +1,204 @@
+# Natural world: research and implementation contracts
+
+WP-S002-004-001 · AGENT #2 (Codex) · research refreshed 2026-10-08.
+
+Classification: FUNCTIONAL. **VISUAL: N/A — this work defines documentation and contracts; it changes no game presentation.** Future implementation must supply its own fresh visual evidence. The numbers below are product acceptance limits, not measured performance or civil-engineering standards.
+
+## 1. Authority and evidence boundary
+
+This analysis implements the planning requirement in [ROADMAP](ROADMAP.md) and reconciles [game design](README.md), [planet architecture](PLANET_ARCHITECTURE.md), [world requirements](WORLD_REQUIREMENTS.md), [composition priorities](WORLD_BUILDING_PRIORITY.md), [settlements](SETTLEMENT_PLAN.md), [transport](ROAD_NETWORK_PLAN.md) and [living world](LIVING_WORLD_PLAN.md). Those owner requirements remain binding. No implementation issue waits on another issue: each supplies the minimum missing contracts for its own scope.
+
+The architecture is Campaign SEED + generator version → immutable planet recipes/registries → canonical queries → simulation validation → prepared presentation. Authoritative coordinates are longitude, latitude and elevation on R=637,100 m, D=1,274,200 m, C≈4,003,017.36 m. Cube-sphere IDs own spatial addresses; source-plane coordinates, local ENU, LOD, tile boundaries and GPU meshes are derived. Keep 3 continents, 30 countries, 90 cities and 270 villages; islands and castle residential districts do not replace counted settlements. No backward compatibility is required for changed foundations: bump and expose the generator version.
+
+Initial geography, buildings, roads, identities, homes and professions use SEED alone. Daily decisions/actions use SEED + absolute fantasy timestamp `YYYY-MM-DD HH:MM:SS`, with no milliseconds. Accepted campaign creation time establishes the calendar epoch under the existing clock rule; it must not become a terrain or identity random input. Persisted events change campaign state without rewriting original foundation records. Camera, device, worker order, cache state, wall clock and RNG APIs cannot decide foundation values.
+
+## 2. Current references and decisions
+
+These are primary sources read during this run. Each paragraph separates observed patterns from our adaptation. No third-party code/assets are imported by this WP.
+
+| Reference | Proven architecture/invariant | Trade-off, failure mode and application |
+| --- | --- | --- |
+| [Red Blob: noise terrain](https://www.redblobgames.com/maps/terrain-from-noise/) | Combine frequency bands; separate environmental fields; consider wrap/infinite sampling. | Noise alone does not ensure drainage, exact counts or connectivity. Our decision: bounded spherical fields plus explicit land/river/site recipes, independently addressed bands and controlled detail amplitudes. |
+| [Red Blob: polygonal island maps](https://www.redblobgames.com/maps/mapgen2/) | Irregular polygon adjacency supports coast/elevation/biome relationships; the author identifies deliberately game-specific geography. | Central island mountains are unsuitable as a universal continent rule. Use irregular adjacency for bounded regional plans; do not copy its island template or allocate a dense fine planet graph. |
+| [Red Blob: mapgen4](https://www.redblobgames.com/maps/mapgen4/) and [drainage basins](https://www.redblobgames.com/x/1723-procedural-river-growing/) | Terrain and drainage can be designed together; mapgen4 relates wind/rainfall, rivers and biomes. | Independent per-tile river sketches cannot establish upstream/downstream consistency. Adopt canonical basin outlets and bounded region refinement; no claim of physically complete erosion. |
+| [Azgaar: current repository](https://github.com/Azgaar/Fantasy-Map-Generator) and [author's biome analysis](https://azgaar.wordpress.com/2017/06/30/biomes-generation-and-rendering/) | Separates world state, generation, editing and visualization; biome design relates environmental inputs to map presentation. | Whole-map editable structures are not a fine-resolution streaming planet. Adopt semantic fields and pure visualization, with sparse regional recipes and explicit permitted mutation events. |
+| [Bridson: Poisson disk sampling](https://www.cs.ubc.ca/~rbridson/docs/bridson-siggraph07-poissondisk.pdf) | Minimum-distance sampling and bounded local neighbor searches; fixed candidate budget gives linear work for the described algorithm. | Its active-list algorithm is traversal-dependent. Do not run it independently on streamed tiles. Adopt addressed candidate rejection with neighbor priority for local scatter; globally ordered acceptance for the small settlement registry. |
+| [Minecraft: world-generation testing](https://www.minecraft.net/en-us/article/new-world-generation-java-available-testing) | Public terrain iteration tests interactions between large landforms, small hills and chunk loading. | Faster traversal can outrun prepared coverage. Adopt multiscale fixtures and retained terrain during preparation. Internal noise-router details and mobile performance are not established by this article. |
+| [Dwarf Fortress: developer feature description](https://bay12games.com/dwarves/features.html) | Persistent regions, civilizations and history across repeated play. | This does not document its home registry or analytical schedules. Adopt persistent identity/history boundaries, not an assumption that its full simulation is suitable for browsers. |
+| [Maxis: Concurrent Interactions in The Sims 4](https://www.gdcvault.com/play/1020190/concurrent-interactions-in-the-sims) | Data-driven interaction constraints determine compatibility and where/when actions are possible. | Full concurrency increases reservation conflicts. Start with bounded home/work/rest/guard states and explicit destination/occupancy constraints; multitasking, full dialogue and economy are outside S002. |
+| [Factorio: deterministic multithreading](https://www.factorio.com/blog/post/fff-415) | The developer describes generation divergence caused by differing worker/core counts. | Worker completion cannot become acceptance order. Immutable addressed recipes and canonical reduction order must reproduce identical outputs; concurrency is a scheduling optimization only. |
+| [Epic: Landscape Splines](https://dev.epicgames.com/documentation/en-us/unreal-engine/landscape-splines-in-unreal-engine) | Centerline controls support raised/lowered terrain and bounded width/falloff/material influence. | Mesh-only roads can disagree with collision or drainage. Adopt shared road profiles and bounded modifiers in PlayCanvas; widths/grades below are our game decisions. |
+| [PlayCanvas: optimization](https://developer.playcanvas.com/user-manual/optimization/guidelines/) | Reuse update objects, limit shader/material variation, budget pixel cost and draw calls. | Per-frame allocation/decoding produces stalls. Use retained chunks, atlases and pooled actors; measure CPU, GPU and DOM separately. |
+| [PlayCanvas: instancing](https://developer.playcanvas.com/user-manual/graphics/advanced-rendering/hardware-instancing/) and [batching](https://developer.playcanvas.com/user-manual/graphics/advanced-rendering/batching/) | Repeated geometry can share submissions; batching trades aggregate bounds against culling. Instancing does not automatically cull each instance. | Planet-wide groups defeat culling. Use spatial chunk groups and explicitly selected instance lists; avoid rebatching unchanged geometry while navigating. |
+| [Red Blob: A*](https://www.redblobgames.com/pathfinding/a-star/introduction.html) | Search acts on a graph with explicit edges/costs; graph design defines what a path means. | Road-only connectivity does not prove the shortest legal off-road walk. Separate route planning from final composed traversal validation and admissible distance lower bounds. |
+| [W3C: target size](https://www.w3.org/WAI/WCAG21/Understanding/target-size.html) | 44 CSS px target guidance supports touch usability. | Dense controls may obscure world features. Preserve the project's 44×44 target requirement and seven-viewport safe-area checks. |
+
+Unverified: proprietary Minecraft/DF generation and resident internals; real-phone FPS, battery/thermal behavior and physical GPU memory; exhaustive biome correctness for every possible SEED. Azgaar's old `modules/*` source URLs returned 404 and its Data-model wiki link redirected to Home; no conclusions rely on those unavailable internals. The current repository architecture and author's biome article were readable. All reference patterns require our own determinism and performance acceptance tests.
+
+## 3. Source audit → replacement and owning package
+
+Audit baseline: main `11a93ca`, inspected on 2026-10-08. Names below identify functions/constants rather than unstable line numbers. Existing canonical identity/ENU work is preserved; moving a fixed template into radians has not made its placement natural.
+
+| Current symptom and source | Replacement contract | WP-S002 owner |
+| --- | --- | --- |
+| `geography.ts`: fixed CONTINENT_LAT/LON; three fixed centers; `continentalEnvelope` ellipses with repeated trigonometric outlines | SEED-addressed spherical centers, independent orientations and irregular connected envelopes; multiple islands | 004-003 |
+| Country 5×2 offsets, CITY_DX/DZ triangles, VILLAGE_LON_STEP rows | Terrain/parent constrained candidates, irregular political adjacency, capacity/access rejection and all-pair separation | 004-002, 004-007 |
+| `config.ts`, road records/UI and `world.test.ts`: 420 m, 1.4 m/s and five-real-minute truth | Canonical metre and 1 m/fantasy-second fastest walk; route-derived fantasy/real duration | 004-002, 004-008 |
+| `world.ts`: L1 island every third source block; `islandCoast` repeated local center/radius; unused `settlement()` 512-grid helper | Stable island recipes; remove unused fixed-site helper; indexing cells never dictate geometry | 004-003, 004-005, 004-007 |
+| `heightAt` repeated scalar hills/mountains; `riverX` one shared sine river; rectangular island hierarchy | Regional ridge/valley descriptors, basin drainage, lake outlets and spherical field continuity | 004-003, 004-005 |
+| `biomeAt`: no desert/ice/large lakes; L5 surface microvariation | Shared latitude/elevation/moisture climate and semantic biome regions; bounded local refinement | 004-004 |
+| `featuresForTile`: 18 house rows, 20-column city grid, repeated keep/well/field offsets; 80/2,400 logical residents lack distinct houses | Full capacity registry, terrain-shaped streets/plots, services, border/gates and entrance graph; castle housing | 004-007, 004-009, 004-011 |
+| Trees jittered around 10-unit lattice, repeated rock slots | Addressed neighbor-rejected scatter, biome clusters and final land-use exclusion | 004-006 |
+| `heightAt` flattening discs/straight road bands; bridge inferred from height/water hit | Bounded channel modifiers, graded station profiles and explicit bank/deck traversal records | 004-012, 004-014 |
+| `geography.ts` two horizontal links per city, no complete country/site/maritime backbone | Required-node connected transport registry; road-connected harbors and typed sea links | 004-014, 004-013 |
+| `simulation.ts`: settlement ID used as home, four repeating lanes, generic tasks, country pool rebuilt each second | Distinct building ownership, destination constraints and analytical schedule segments; bounded dirty events | 004-011 |
+| `main.ts`: three appearance materials, first 96 residents, per-second visible scan/allocation | Persistent appearance descriptors, spatially selected pooled billboards and deterministic role cues | 004-011, 005-001 |
+| Historical `VERIFICATION.md` globe: stair-step coasts, maze hills, missing biomes, hidden labels and small phone landscape globe | Geometry/field-driven coast/ranges; common biome data; eligible labels with leaders; fitted Realm usable area | 004-003/004, 005-001 |
+| Tile-local ownership/LOD refinements and DOM projection work can repeat generation or drop features | Full-support canonical queries, unchanged chunk reuse, dirty UI layout and bounded telemetry | 004-010, 005-001 |
+
+Historical visual defects are reported from the existing evidence record, not rescored here. Navigation/framing has since changed; future captures must assess the actual current implementation before concluding that an old defect remains.
+
+## 4. Canonical sampling and natural geography
+
+**N1 — Addressed determinism.** Encode SEED/version/layer/feature slot with an unambiguous length-prefixed UTF-8 encoding; freeze hash constants and unsigned 32-bit arithmetic, then derive each sample from its address. No mutable shared PRNG sequence. Compare records in ASCII code-unit order, never locale order. Pin sample vectors in tests before generator release. Changes to algorithms/settings affect version, not visits.
+
+**N2 — Sphere continuity.** Sample independently seeded continuous 3D fields on canonical unit-sphere Cartesian coordinates. Normalize wrap and pole ownership before hashing; never use raw unnormalized longitude or face-local noise as the field domain. Cube cells only accelerate indexing. For natural boundaries use signed-distance fields and bounded domain warp in a sphere-tangent direction, projected back onto the sphere. Keep warp displacement below one quarter of the owning macro feature width; do not warp protected drainage/junction endpoints.
+
+**N3 — Macro plan.** Generate exactly three independently oriented continent recipes from SEED slots. Candidate centers use uniform spherical area sampling, not uniform latitude; reject overlap/connectivity failures in a fixed candidate order. Each continent is a connected warped union of lobes/ridges, not one rotated ellipse. Add 4–24 island recipes outside the three mainland components, with 1–20 km nominal radii; validate at least two remain separate dry-land components after coasts/refinement. Store center, axes, signed-distance controls, conservative support and version. Try at most 128 candidates per slot and eight whole-plan variants; explicit deterministic generation failure replaces silent count reduction. These are game tuning bounds, not guarantees for arbitrary inputs.
+
+**N4 — Parent/child inheritance.** Macro land/water, ranges, basin outlets, climate and affiliations constrain refinements. Band amplitudes depend on canonical feature descriptors, never requested LOD. Detail near a protected boundary tapers to zero unless that boundary's own recipe defines the change. LOD filters/resamples this same final function and may omit subpixel presentation only. Globe does not own an independent color/biome map. Store regional ridge direction, relief, valley/soil/rock character so diversity changes forms and placement, not just palettes.
+
+**N5 — Climate.** Use latitude cooling, elevation lapse and independently seeded prevailing wind/ocean moisture sources with bounded regional rain-shadow propagation. Polar zones begin at |latitude|≥75°; the outer |latitude|≥85° must have frozen land/sea presentation and explicit ice semantics. Water domain remains distinct from frozen appearance: sea ice is not automatically walkable land. Outside polar/alpine cold zones, moisture thresholds define desert (<0.20), grassland (0.20–0.55) and forest (>0.55), with continuous transition bands of 0.05. Temperature/soil may refine subtype, but must not contradict the parent class. Representative release fixtures must expose both poles and visible deserts, grasslands, forests, ranges, lakes and seas on the same foundation.
+
+**N6 — Hydrology.** Build a bounded coarse basin graph before regional water geometry. Each drainage node has one downstream successor or a declared lake/ocean/closed-basin terminal. Resolve flats/depressions with deterministic outlet/spill rules; cycles fail validation. Refine shared basin boundary ports from one canonical record, including bed/water level/discharge class and support. Downstream water level cannot increase; lake surfaces share one level and explicit outlet or endorheic status. A region cannot independently create an outlet through another region's ridge. Carve beds/banks using canonical river polylines; bends follow drainage, not a single sinusoid. Local erosion-like shaping is a bounded recipe, not a visit-driven mutable erosion simulation. Keep fine river search regional; whole-basin coarse summaries stay within §9.
+
+**N7 — Vegetation and ground detail.** Candidate addresses come from fixed canonical scatter buckets independent of render chunks, with up to eight subslots and continuous within-bucket positions. For each candidate compare all candidates within its maximum exclusion radius and accept only a local minimum of `(seeded priority, canonical ID)` satisfying climate/soil/slope/final-use constraints. This local dominance rule is independent of visit order; it is not Bridson's active-list algorithm and may leave gaps. Use species/size classes with pair clearance `max(rA,rB)`, canopy radii 2–6 m, and bounded halos across face/wrap boundaries. The bucket supplies an address, never a visible placement center. Cluster density through regional moisture/land-use fields; exclude water, doors, fields, pads, roadbeds/shoulders and posts after final composition. Mesh visibility never changes logical placement.
+
+**N8 — Acceptance.** For ten fixed release SEEDs and at least 10,000 boundary/interior samples per fixture: forward/reverse/shuffled queries, two worker counts, eviction/rebuild and both renderers give identical quantized foundation digests. Same point via ±2π, cube edges/corners and poles has one ID and identical values. Shared final height disagreement ≤1 cm and material/water/ownership equality exact. Compare matching-point globe/local semantic classes, not merely texture pixels. Adjacent LOD geometry must join within 1 cm at local detail or ≤1 CSS px at wide scale, with no duplicate feature owner.
+
+Pattern acceptance: report nearest-neighbor distributions and a 2D point-density periodogram in canonical local metres for scatter fixtures; axis-aligned lattice peaks must not exceed twice the median power in their frequency annulus across three 1 km² forest fixtures. Across ten SEEDs, centers/orientations/coast digests differ; no >25% of non-road natural feature samples share fixed grid-center offsets within 5% of bucket width. Legitimate street frontage/fields are excluded from this natural-scatter test. Metrics supplement inspected screenshots and cannot alone establish natural appearance or an 8/10 score.
+
+## 5. Settlement, ownership and purposeful residents
+
+**S1 — Registry.** A settlement recipe owns population slots, site boundary, street/public graph, plots, buildings, services, border, gates/posts and affiliation. Feature IDs are `<SEED>/<GEN>/<settlementID>/<role>/<slot>`; location's cube cell is a spatial address, not a replacement semantic identity when a footprint crosses cells. Every NPC foundation owns one distinct existing home-building ID, entrance and initial owner. Enforce a bijection between resident ownership slots and occupied home buildings; service buildings do not count as homes unless an explicitly separate habitable home building is registered. Visitors keep their origin home. Castle inhabitants have a residential district and explicit parent settlement; decorative keeps satisfy no housing count.
+
+**S2 — Acceptance before materialization.** Reserve capacity for all residents plus mandatory services before a site is accepted. Current baseline populations imply ≥80 distinct village houses and ≥2,400 city houses; these examples do not mandate new population constants. Reject dry-land/access/capacity failures in the canonical candidate order. All 270 villages require a public center/water point, market, inn, smith workshop, farmstead/fields, butcher, guard office, enclosing core border, and SEED-selected one or two gates. Farms may be outside the border with connected access. Each gate requires SEED-selected one or two actual on-duty guards with registered homes.
+
+**S3 — Geometry.** Plan terrain/site and route entry reservations → border/open gates → connected streets/center → service/home plots → entrances/objects → final composed terrain/scatter. Use irregular terrain-constrained frontage, branch streets and terraces; orientation, center shape, border and economic archetype vary by SEED/site. Required services face usable streets, center/market connect to every gate, footprints do not overlap water/occupied buildings and all entrances join legal traversal. Minimum clear entrance/path width 1.5 m, house usable perimeter 2 m; gate opening ≥road width+1 m. City/castle districts reconstruct lazily by indexed slot; no dense global houses or orphan house exceptions.
+
+**S4 — Schedules.** Immutable NPC descriptors include name, appearance/silhouette/clothing, role, birthdate and baseline tendencies. Birthdate derives from SEED relative to a versioned fixed fantasy reference date; current age uses authoritative campaign fantasy date. Sample daily schedule choices from SEED + canonical day-boundary timestamp plus NPC address, then resolve current task from absolute time and persisted events. Segments reference home/work/public/post IDs, valid opening/occupancy constraints, route ID and start/end fantasy seconds. Reconstruct position analytically by traveled canonical route cost; direct catch-up and incremental updates agree. No reroll at midnight or when the camera changes. Routines keep running logically off screen and only finish their assigned segment/run normally.
+
+**S5 — Staffing and guard continuity.** Every service has a resident operator; its opening hours and absent/staffed state are explicit. Guard rosters reserve enough distinct relief residents, with staggered travel and handoff overlap so the required one/two remain on duty continuously. Outgoing duty ends only when validated incoming arrival covers the post; no NPC is simultaneously at home and on duty. Duty uses integer fantasy seconds and exact boundary tests. Daily travel respects reachable entrances/roads; use idle/work/rest cues instead of eternal generic walking. Appearance uses shared sprite atlases with at least twelve visibly distinct combinations in a representative village group; variants retain NPC ID across visibility changes.
+
+**S6 — Persistence and cost.** Transfer, demolition, relocation and role changes are validated persisted events `{ID, actor, target, canonical timestamp, sequence, result}` over the original foundation; sequence resolves same-second events deterministically. Reconstruct logical residents on query, maintain bounded current schedule/dirty records and reuse visible actor buffers. Never rebuild an entire country's 7,920 baseline residents each second to draw a few actors. Full dialogue/emotion/economy/combat is not claimed here.
+
+Acceptance: enumerate every resident/home/operator/guard logically for villages, a dense city and a castle district; exact ownership uniqueness, service presence and connected access. Check 04:59:59, 05:00:00, work start/end, every shift boundary ±1 second, 21:59:59/22:00:00 and three-day direct catch-up. Compare schedule/position digests under different interest histories. Show three structurally different village archetypes plus identified home/work/post inspection; morning/work/rest evidence must show actual destinations and activity changes. Logical populations stay complete while visible pools obey §9.
+
+## 6. Exact composition and earthworks
+
+| Priority | Semantics | Channels permitted |
+| --- | --- | --- |
+| 0 | Ocean baseline | Water domain, baseline elevation/material |
+| 1 | Continents | Major land envelope/elevation/coast |
+| 2 | Islands | Additional land envelope/elevation/coast |
+| 3 | Biomes and mountains | Natural height, climate/ground, vegetation eligibility |
+| 4 | Lakes and rivers | Water/flow, beds/banks, ground/exclusion |
+| 5 | Countries | Political affiliation only |
+| 6 | Capital/big cities | Reserved uses, bounded pads/streets/entrances |
+| 7 | Villages | Reserved uses, bounded pads/borders/gates/entrances |
+| 8 | Roads | Graded terrain/material/exclusion/traversal; explicit bridge decks |
+| 9 | Ruins/critical sites | Reserved use and bounded site/access preparation |
+
+**C1 — One query.** `sampleFinal(position)` returns terrain height, ground material, water/flow, vegetation exclusion, reserved use, traversal surfaces and affiliation from these layers. Separate terrain height from bridge deck elevation/clearance; a bridge can create an elevated walking surface without filling its river. Countries do not flatten land. Land-use labels coexist with underlying biome rather than replacing climate truth.
+
+**C2 — Compatibility.** Validate conflicts before reduction. Water/occupied home/service/gate reservations cannot be erased by a later dirt layer. Same-priority records sort by channel operation and ASCII canonical ID; exclusive incompatible footprints are rejected/reselected, not silently won by last writer. Compatible exclusion masks union; material/height blends use fixed ordered reductions and quantize after each operation. Junctions and shared pads use one solved target/profile, avoiding competing cuts. Road/site proposals reserve access during planning but compose only at their numeric layer: priority-9 intents become definitive priority-8 spur records before any tile materializes. This replaces the old global roads-first shorthand while preserving street reservations inside settlement phases.
+
+**C3 — Supports.** Index full footprint+shoulder+falloff+drainage support in canonical regions, not only its anchor cell. Neighbor queries include all overlapping records; split support indexing at wrap/face edges without duplicating ownership. `sampleFinal` outside support is byte-identical to unmodified authority. Globes/coarse levels summarize the same final edits; LOD changes never heal cuts, rebuild blocked trees or change walkability. Large cities terrace rather than flatten one huge disc.
+
+**C4 — Physical game limits.** Values are initial versioned design settings, not copied safety standards. Widths refer to canonical metres; fit profiles against final surfaces at ≤2 m station spacing and additionally every junction/curvature extremum.
+
+| Property | Acceptance setting |
+| --- | --- |
+| Footpath / village street / rural trunk width | 1.5 / 3 / 4 m; urban trunk 6 m |
+| Cleared shoulder / outside transition | 1 m per side / 2–8 m; support stores full actual extent |
+| Normal road grade / constrained pass grade | ≤8% / ≤12%; crossfall ≤3% |
+| Maximum road cut/fill depth | 4 m cut / 3 m fill; deeper excavation triggers alternate alignment |
+| Earthwork volume per rural kilometre | ≤20,000 m³ absolute cut+fill; integrate signed cross-section separately |
+| Minimum centerline turn radius | 8 m rural trunk; 3 m local footpath |
+| Home floor pad / usable perimeter grade | ≤1% / ≤3%; ≤3 m cut/fill; falloff 2–6 m outside perimeter |
+| Connected threshold height mismatch | ≤2 cm; no unmodeled step >10 cm |
+| Rural bridge | Clear span ≤120 m; deck width ≥road width; grade ≤8%; ≥1 m clearance above foundation water level |
+
+Preserve basin outflow and adjacent reservations. River crossings use explicit connected bridges; culverts may drain small non-river pad runoff only, not replace mandatory river bridges. Roads detour lakes and avoid open sea. Reject infeasible pads/crossings and reseed candidates within fixed budgets. Natural steep terrain may remain unwalkable; accepted road/house preparation must change authoritative traversal rather than only lifting a mesh. All cut/fill/exclusion records reproduce under eviction.
+
+## 7. Connected transport and truthful travel
+
+**T1 — Topology first.** Register every city/capital, village gate/center, country backbone/border access, ruin/critical entrance, bridge bank/deck and harbor approach. Create per-landmass connected backbones, branches and canonical shared junctions. Separate landmasses connect through road-served harbors and typed ferry/ship edges with explicit endpoints/costs. Sea duration never counts as walking; a route containing sea transport is labeled accordingly. Same-height junctions join; visual line crossings at different deck heights are separate traversal layers.
+
+**T2 — Alignment.** Build deterministic candidate pass/crossing graphs from coarse terrain and immutable region boundary ports. Cost is integer millisecond-equivalent: length at surface speed + grade penalty + earthwork/bridge penalty; forbid water/occupied footprints/grade violations. Search heap ties order by `(total cost, remaining lower bound, canonical node ID)`; adjacency is sorted. Prefer feasible low passes around summits over direct summit trenches; high required destinations still receive graded/switchback approaches. Pin cost weights in generator settings/tests; keep route planning cost separate from displayed walking time. Restrict each search to 65,536 expanded nodes, 16 corridor alternatives and three refinement stages. Budget exhaustion is explicit failure, not proof that no route exists. Try another site/bridge candidate in bounded canonical order.
+
+**T3 — Numerical records.** Serialize canonical lon/lat at 1e-10 rad, heights/widths/stations at 1 cm, route costs at 1 ms-equivalent integers; CPU float64 geometric evaluation with frozen operation order, GPU never assigns records. One owning record holds station profiles, materials, clearance, support, junctions and endpoints. Regional detail reconstructs from topology/ports with a maximum 8,192 stations per segment; split longer roads at deterministic recipe stations. Mesh LOD may simplify drawing but cannot resample an authoritative path into a new route. Final graph validation checks actual approach/deck/entrance continuity, not abstract reachability alone.
+
+**T4 — All-pair village minimum.** Evaluate all 36,315 distinct pairs among 270 villages. Fastest normal walk is 1 m/fantasy second on road/bridge, open ground 3/3.6 m/fantasy second; difficult terrain slower and blocked terrain impassable. Distance uses canonical surface/3D path length. Require shortest legal walking duration ≥3,600 fantasy seconds (60 fantasy minutes, 2.5 real minutes at 24×). Enforce ≥3,600 m canonical geodesic separation as a sufficient lower bound where available; this bound remains valid after cuts/pads as no legal walking surface may exceed fastest speed or teleport. Record each pair's bound/proof, and explicitly solve any unproven pair on final traversal with off-road shortcuts, sites, earthworks and bridge links. A road-only Dijkstra result is insufficient; it can only prove a candidate route upper bound. Use an admissible geodesic lower bound plus refinement of final legal traversal; unresolved approximation cannot certify the minimum. Unreachable same-landmass required destinations fail connectivity rather than using infinity as a pass. Sea-separated pairs record no land path and their separate transport route.
+
+Travel UI shows measured canonical distance, actual surface time and optional real duration at current speed; longer routes remain longer. Evidence includes road/bridge, open-ground and difficult-terrain comparisons, shared junction/deck heights, lake detour, low pass, site branch and harbor/sea edge. Revalidate after all shortcuts/modifiers; no old 420 m/1.4 m/s/five-real-minute copy or constants may survive as active gameplay authority.
+
+## 8. Visible presentation and inspection contracts
+
+Every implementation first establishes its visible surface against these records. PlayCanvas draws 3D terrain/buildings/props and 2D illustrated residents anchored at feet; root pure-zoom/navigation rules persist. Required regression viewports: 360×800, 390×844, 844×390, 768×1024, 1024×768, 1280×720, 1440×900 on WebGPU and automatic WebGL2 fallback.
+
+**U1 — Readability by scale.** Realm shows major land/water/ice/ranges and biome masses through broad forms; no per-tree labels or maze-like high-frequency relief. Country/Province shows settlement/network hierarchy and connected transport types. Village shows distinct center, services, border, open gates and frontage. Close views show entrance, home/work/guard task and legal route. Distinctions use silhouette, icon/text and material as well as color. At least one visible representative of each required macro class appears across a release-fixture turn sequence on phone; local query confirms that same class at its anchor.
+
+**U2 — Labels/selection.** Eligibility is canonical role+scale+hemisphere+viewport, with deterministic collision displacement. Every eligible important anchor remains discoverable; displacements >4 CSS px show a leader. Do not use a shared label quota to silently remove important labels. Prefer clustered secondary labels or explicit expansion. Selected feature uses outline/icon and an inspectable ID/role/position; panel exposes building owner/entrance, NPC home/work/current task, or transport endpoints/profile/cost. Routes have destination and walking/sea type. A visible selection stays inspectable across LOD and rebase; unavailable detail says preparing without invented facts.
+
+**U3 — Layout.** 44×44 CSS px activation targets, safe-area insets and ≥14 CSS px primary status text. Required panels/controls must not overlap selected anchor, focus, ruler or route endpoints; compact/collapse or offset with visible leader. Fitted Realm sphere stays wholly within usable area; its diameter is ≥70% of the maximal circle fitting that area. Coast/range edges refine to ≤2 CSS px boundary error at inspected target scale; actual screenshots must show no obvious staircase/noise defect. Labels/controls remain clear at both 1/10 and fitted Realm on all seven viewports.
+
+**U4 — Visual density.** Suppress subpixel grass/stones, simplify distant roofs/trees and cluster secondary hints; keep logical objects and all eligible important anchors. Dense city count is not a demand to instantiate every house mesh simultaneously. Pool billboards/atlas frames; retain materials/textures across focus changes. Fresh overview/local/selection screenshots on both backends must be ACTUALLY INSPECTED and score ≥8/10 with no major clipping, overlap, floating terrain/roads, cracks or unreadable focus. Numerical terrain tests cannot provide a visual score.
+
+## 9. Lazy generation and device budgets
+
+The root planet limits remain ceilings. Additional limits below are starting acceptance settings derived for this game's scope; WP-S002-005-001 measures/tightens them on real devices without altering world authority. One coarse global registry and bounded basin/climate tables are permissible; fine samples/houses/residents/roads materialize by interest. For example six 256² cube-face coarse cells give 393,216 cells: 12 float32 scalar channels occupy 18 MiB before indices, within a reserved total ≤32 MiB. A 2 m whole-planet array is forbidden. Count structured-record overhead and both replacement/retained resource sets.
+
+| Total app-owned working metric | Phone | Tablet | Desktop |
+| --- | ---: | ---: | ---: |
+| Generation+ready jobs / active patches / prepared cached patches | 4 / 160 / 180 | 6 / 220 / 240 | 8 / 260 / 320 |
+| CPU geometry/recipe bytes / GPU geometry+texture bytes | 96 / 96 MiB | 160 / 160 MiB | 256 / 256 MiB |
+| Total draw calls including shadow/overlay passes | 160 | 220 | 300 |
+| Visible triangles / active entities | 200,000 / 400 | 350,000 / 600 | 600,000 / 900 |
+| Visible nature instances / resident billboards | 4,000 / 48 | 8,000 / 80 | 12,000 / 128 |
+| Shared live materials / decoded texture atlases | 24 / 8 | 32 / 12 | 40 / 16 |
+| Active detailed schedule records | 256 | 512 | 1,024 |
+| Schedule/query CPU p95 per update | 2 ms | 2 ms | 2 ms |
+| Recurring schedule allocation after warm-up | ≤16 KiB/update | ≤24 KiB/update | ≤32 KiB/update |
+| Worker task p95 / main upload p95 | 50 / 4 ms | 35 / 3 ms | 25 / 2 ms |
+| Navigation handler p95 / label+HUD work p95 | 4 / 2 ms | 3 / 2 ms | 2 / 2 ms |
+| Changed-value HUD refresh rate | ≤4 Hz | ≤4 Hz | ≤4 Hz |
+
+Projection of labels during motion can run per rendered frame using reused nodes/buffers; DOM layout measurement ≤10 Hz and only on dirty viewport/panel/label state. Pointer feedback may update immediately. No per-frame texture creation/decoding, unchanged mesh generation, whole-country array reconstruction or HUD subtree replacement. Input/state interpolation is smooth independently of schedule evaluation. Streaming uploads ≤1 group/frame, combining small assets within that group when needed. Large generation jobs yield deterministic continuations rather than occupying the main thread.
+
+Cull spatial instance/batch groups, not one world-sized bounding box. Billboard transparency/shadow passes count toward draw/fill budgets. Shared textures have bounded resolution/mips and are accounted once; buffers, atlas decoded bytes, pending worker payloads and retained coarse/fine coverage count too. Preserve valid coarse/root coverage while obsolete off-screen detail becomes evictable; queue saturation cannot deadlock navigation. Logical residents/homes persist analytically even if absent from visible pools. Lower render resolution/shadows/prop density with hysteresis before limits are exceeded; never reduce simulation fidelity or change SEED facts. Root DPR/adaptive-scale envelopes apply.
+
+Acceptance measurements: fixed 60-second sustained wrap/pole/zoom/focus churn followed by ≤30-second settling on the declared reference device, plus ten dense-city/village unload/revisit cycles. Counters never exceed ceilings, uploads ≤1/frame and queues drain after motion; repeated-cycle retained bytes stabilize within 5% after warm-up. Report CPU/GPU p50/p95/p99, input, worker/upload, draw calls/triangles/entities, logical residents, schedule records, visible actors, allocation, cache hits/misses/evictions and byte estimates. Timings use bounded samples; unsupported GPU timing is null. Minimum sustained gameplay 30 FPS/p95≤33.3 ms, capable target 60 FPS/p95≤16.7 ms. Software CI validates counters/identity and backend operation, not physical-device speed.
+
+## 10. Execution and acceptance map
+
+Each issue implements its own slice, tests missing adapters itself and remains independently solvable. These contract IDs are acceptance outputs of this analysis, not new issue dependencies.
+
+| Existing issue / WP-S002 | Required contracts and evidence |
+| --- | --- |
+| #12 / 004-002 | N1/N8, T4: versioned scale migration; all counts/pair bounds; enumerate every remaining legacy constant reference |
+| #13 / 004-003 | N2–N4/N8, U1/U3: irregular three mainland shapes, multiple islands and range/coast readability on both backends |
+| #14 / 004-004 | N4/N5/N8, U1: same-coordinate climate/biome truth, both frozen poles, all major classes across LOD |
+| #15 / 004-005 | N2/N6/N8, C1: basin outlets/downstream invariants, grid-free geometry and final legal surfaces |
+| #16 / 004-006 | N7/N8, U4/§9: non-lattice scatter metrics plus inspected scenes, canonical exclusion and bounded submissions |
+| #17 / 004-007 | N3/N8, S1–S3, T4: full capacity/access envelopes, irregular site registry and final village separation |
+| #18 / 004-008 | T3/T4, U2/U3: all 36,315 pair proofs or exact final-route checks, off-road shortcuts and truthful travel UI |
+| #19 / 004-009 | S1–S3, C3/C4, U2–U4: three structural archetypes, required services/homes/border/gates, city/castle districts |
+| #20 / 004-010 | N8, C1–C3, T3, §9: wrap/face/pole/LOD parity of composed terrain, modifiers and traversal ownership |
+| #22 / 004-011 | S1/S4–S6, U2/U4, §9: unique homes/staff/guards, continuous shift coverage, replay and analytical dense-city cost |
+| #23 / 004-012 | C1–C4, T4: exact priority/channel reduction, bounded earthworks, profile joins/drainage and unchanged outside support |
+| #24 / 004-013 | C2/C3, T1/T4, U2: canonical sites/reservations, definitive access intents and retained village minimum |
+| #25 / 004-014 | T1–T4, C3/C4: connected required nodes, low passes/lake detours/river bridges and legal harbor/sea edges |
+| #21 / 005-001 | U1–U4/§9: seven-viewport inspected evidence, complete counters/bytes, physical-device limits and backend parity |
+
+Before closure of an implementation issue: keep scoped tests/build and actual WebGPU/WebGL2 checks green; retrieve and inspect required fresh screenshots for MIXED work; preserve the three-attempt evaluation limit; deploy the exact final main commit before completion bookkeeping and closure. This analysis has no in-game feature evidence and no numerical visual score. Its deliverable is this source-grounded contract, the matching issue acceptance additions, and verified final-main deployment.
