@@ -73,6 +73,12 @@ SCENARIOS: dict[str, str] = {
         "eval:window.advisorWorld.setHalfHeight(window.advisorWorld.handoff.localHalfHeight*0.92);settle;shot:flat-return"
     ),
     "cell": "tap;visible:#cell-panel",
+    "wrap-pole": (
+        "select:#map-scale=100;eval:window.advisorWorld.navigation.setFocus(Math.PI-0.0002,0.35);settle;shot:wrap-east;"
+        "eval:window.advisorWorld.navigation.setFocus(-Math.PI+0.0002,0.35);settle;shot:wrap-west;"
+        "eval:window.advisorWorld.navigation.setFocus(0,Math.PI);settle;shot:north-pole;"
+        "eval:window.advisorWorld.navigation.setFocus(Math.PI/2,-Math.PI);settle;shot:south-pole"
+    ),
     "travel-city": "click:#open-travel;select:#continent-select=1;click:#visit-city",
 }
 

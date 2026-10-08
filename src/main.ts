@@ -63,6 +63,11 @@ import {
   placeLabels,
   type Rect,
 } from "./navigation.ts";
+import {
+  estimateTileGeometryBytes,
+  streamingBudgetForViewport,
+  type StreamingBudget,
+} from "./streaming.ts";
 
 /** Canonical 1/2500 globe-dominant anchor, converted through the temporary S001 presentation adapter. */
 const GLOBE_FROM = HANDOFF_GLOBE_HALF_HEIGHT;
@@ -118,12 +123,22 @@ let projectionTransition = 0,
 let worldMaterial: pc.StandardMaterial | undefined;
 const tileCache = new Map<
   string,
-  { tile: Tile; entity: pc.Entity; meshes: pc.Mesh[]; used: number }
+  { tile: Tile; entity: pc.Entity; meshes: pc.Mesh[]; used: number; bytes: number }
 >();
 let revision = 0,
   inFlight = 0,
-  residentLimit = 200,
-  selectionDirty = true;
+  selectionDirty = true,
+  cacheHits = 0,
+  cacheMisses = 0,
+  evictions = 0,
+  cacheGpuBytes = 0,
+  readyCpuBytes = 0,
+  uploadsThisFrame = 0,
+  poleFeedback = "";
+let streamingBudget: StreamingBudget = streamingBudgetForViewport(
+  innerWidth,
+  innerHeight,
+);
 const pending = new Set<string>();
 const uploads: {
   tile: Tile;
@@ -463,9 +478,9 @@ function applyPresentation() {
     FLAT_BACKDROP.b + (backdrop.b - FLAT_BACKDROP.b) * t,
     1,
   );
-  selectionDirty = true;
 }
 function updateCamera() {
+  selectionDirty = true;
   desiredProjectionTransition = projectionTransitionForHalfHeight(
     view.halfHeight,
   );
@@ -540,8 +555,12 @@ function navigate(x: number, z: number, height = view.halfHeight) {
     2,
     Math.min(Math.max(GLOBE_FROM, globeFit) * 1.3, height),
   );
+  const clampedZ = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, z));
+  if (Math.abs(z - clampedZ) > 1e-6)
+    poleFeedback = z < -POLE_DISTANCE ? "North pole limit reached" : "South pole limit reached";
+  else if (Math.abs(clampedZ) < POLE_DISTANCE - 1) poleFeedback = "";
   view.x = wrapX(x);
-  view.z = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, z));
+  view.z = clampedZ;
   rebaseRenderFrame();
   // Leaving Province level means the globe may be needed soon.
   if (view.halfHeight >= 900) prepareGlobe();
@@ -589,13 +608,20 @@ function setLayers() {
     }
 }
 function request(tile: Tile) {
-  if (tileCache.has(tile.key) || pending.has(tile.key)) return;
+  if (tileCache.has(tile.key)) {
+    cacheHits++;
+    return;
+  }
+  if (pending.has(tile.key) || pending.size >= streamingBudget.generationReadyQueue)
+    return;
+  cacheMisses++;
   pending.add(tile.key);
   inFlight++;
   worker.postMessage(tile);
 }
 function refreshSelection() {
-  wanted = selectTiles(view);
+  streamingBudget = streamingBudgetForViewport(innerWidth, innerHeight);
+  wanted = selectTiles(view, 190, streamingBudget.activePatches);
   revision++;
   selectionDirty = false;
   const name =
@@ -627,9 +653,12 @@ function refreshSelection() {
 }
 function processStreaming(material: pc.StandardMaterial) {
   if (selectionDirty) refreshSelection();
-  // At most one GPU mesh group per frame. Generation is isolated in a worker.
+  uploadsThisFrame = 0;
   const next = uploads.shift();
   if (next) {
+    uploadsThisFrame = 1;
+    const bytes = estimateTileGeometryBytes(next.data);
+    readyCpuBytes = Math.max(0, readyCpuBytes - bytes);
     const entity = new pc.Entity(next.tile.key),
       meshes: pc.Mesh[] = [];
     for (const [name, g] of Object.entries(next.data)) {
@@ -644,7 +673,9 @@ function processStreaming(material: pc.StandardMaterial) {
       entity,
       meshes,
       used: revision,
+      bytes,
     });
+    cacheGpuBytes += bytes;
     if (next.tile.size <= 512) {
       detailedMaxHorizontalM = Math.max(
         detailedMaxHorizontalM,
@@ -657,56 +688,56 @@ function processStreaming(material: pc.StandardMaterial) {
     }
     pending.delete(next.tile.key);
   }
-  const root = tileAt(0, 0, 0);
-  if (!tileCache.has(root.key)) {
-    if (inFlight + uploads.length < 3) request(root);
-  } else {
-    const complete = wanted.every((tile) => tileCache.has(tile.key));
-    if (complete) {
-      const newKeys = wanted.map((t) => t.key),
-        active = new Set(newKeys);
-      for (const [key, record] of tileCache) {
-        record.entity.enabled = active.has(key);
-        if (active.has(key)) record.used = revision;
-      }
-      activeKeys = newKeys;
-      if (!ready) {
-        ready = true;
-        $("loading").classList.add("done");
-      }
-    } else {
-      // Keep the previous coverage and coarse root until the replacement is complete.
-      tileCache.get(root.key)!.entity.enabled = true;
-      if (!ready && tileCache.size > 1) $("loading").classList.add("done");
-      for (const tile of wanted) {
-        if (inFlight + uploads.length >= 3) break;
-        request(tile);
-      }
+
+  const complete = wanted.length > 0 && wanted.every((tile) => tileCache.has(tile.key));
+  if (complete) {
+    const newKeys = wanted.map((tile) => tile.key),
+      active = new Set(newKeys);
+    for (const [key, record] of tileCache) {
+      record.entity.enabled = active.has(key);
+      if (active.has(key)) record.used = revision;
     }
-    if (tileCache.size > residentLimit) {
-      const protect = new Set([
-        ...activeKeys,
-        ...wanted.map((t) => t.key),
-        root.key,
-      ]);
-      const obsolete = [...tileCache.entries()]
-        .filter(([key]) => !protect.has(key))
-        .sort((a, b) => a[1].used - b[1].used);
-      for (const [key, record] of obsolete) {
-        if (tileCache.size <= residentLimit) break;
-        // MeshInstance destruction releases its mesh reference and GPU buffers.
-        record.entity.destroy();
-        tileCache.delete(key);
-      }
+    activeKeys = newKeys;
+    if (!ready) {
+      ready = true;
+      $("loading").classList.add("done");
+    }
+  } else {
+    for (const key of activeKeys) {
+      const record = tileCache.get(key);
+      if (record) record.entity.enabled = true;
+    }
+    for (const tile of wanted) {
+      if (pending.size >= streamingBudget.generationReadyQueue) break;
+      request(tile);
     }
   }
+
+  const protect = new Set([...activeKeys, ...wanted.map((tile) => tile.key)]),
+    obsolete = [...tileCache.entries()]
+      .filter(([key]) => !protect.has(key))
+      .sort((a, b) => a[1].used - b[1].used);
+  for (const [key, record] of obsolete) {
+    if (
+      tileCache.size <= streamingBudget.cachedPatches &&
+      cacheGpuBytes <= streamingBudget.gpuBytes
+    )
+      break;
+    record.entity.destroy();
+    tileCache.delete(key);
+    cacheGpuBytes = Math.max(0, cacheGpuBytes - record.bytes);
+    evictions++;
+  }
+
+  const notice = poleFeedback ? ` · ${poleFeedback}` : "";
   $("tile-status").textContent =
     projectionTransition >= 0.999
-      ? `Globe · ${globePass < GLOBE_PASSES.length ? "refining" : "ready"}`
+      ? `Globe · ${globePass < GLOBE_PASSES.length ? "refining" : "ready"}${notice}`
       : projectionTransition > 0.001
-        ? `Handoff · ${Math.round(projectionTransition * 100)}% · ${pending.size ? "preparing terrain" : "ready"}`
-        : `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`;
+        ? `Handoff · ${Math.round(projectionTransition * 100)}% · ${pending.size ? "preparing terrain" : "ready"}${notice}`
+        : `${activeKeys.length || 1} patches · ${pending.size ? "refining" : "ready"}${notice}`;
 }
+
 function inspectCell(screenX: number, screenY: number) {
   const origin = camera.camera!.screenToWorld(screenX, screenY, 0);
   const far = camera.camera!.screenToWorld(screenX, screenY, 600000);
@@ -1123,6 +1154,7 @@ async function start() {
       fail(`Tile generation failed: ${event.data.error}`);
       return;
     }
+    readyCpuBytes += estimateTileGeometryBytes(event.data.data);
     uploads.push(event.data);
   };
   worker.onerror = (event) =>
@@ -1414,7 +1446,10 @@ async function start() {
       navigation: {
         surfaceAtScreen,
         setFocus(lon: number, lat: number) {
-          const p = lonLatToFlat(lon, lat);
+          const boundedLat = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, lat));
+          if (boundedLat !== lat)
+            poleFeedback = lat > 0 ? "North pole limit reached" : "South pole limit reached";
+          const p = lonLatToFlat(lon, boundedLat);
           navigate(p.x, p.z);
         },
         forceRebase() {
@@ -1469,7 +1504,7 @@ async function start() {
             blendDurationMs: handoffBlendDurationMs,
             waitingForDestination: handoffWaitingForDestination,
             destinationReady,
-            outstandingGeneration: pending.size + uploads.length + inFlight,
+            outstandingGeneration: pending.size,
             slowFrames: slowFrameCount,
             droppedFrames: droppedFrameCount,
           },
@@ -1481,6 +1516,37 @@ async function start() {
           },
           view: { ...view },
           fps,
+          performance: {
+            backend: rendererState.backend,
+            activePatches: activeKeys.length,
+            preparedPatches: uploads.length,
+            cachedPatches: tileCache.size,
+            pendingGeneration: inFlight,
+            readyUploads: uploads.length,
+            cacheHits,
+            cacheMisses,
+            evictions,
+            cpuResourceBytesEstimated: readyCpuBytes,
+            gpuResourceBytesEstimated: cacheGpuBytes,
+            uploadsThisFrame,
+          },
+          streaming: {
+            deviceClass: streamingBudget.deviceClass,
+            budget: { ...streamingBudget },
+            activePatches: activeKeys.length,
+            cachedPatches: tileCache.size,
+            pendingGeneration: inFlight,
+            readyUploads: uploads.length,
+            queuedTotal: pending.size,
+            cacheHits,
+            cacheMisses,
+            evictions,
+            cpuBytesEstimated: readyCpuBytes,
+            gpuBytesEstimated: cacheGpuBytes,
+            uploadsThisFrame,
+            poleFeedback: poleFeedback || null,
+            activeCanonicalKeys: [...activeKeys],
+          },
           active: activeKeys.length,
           cached: tileCache.size,
           pending: pending.size,
