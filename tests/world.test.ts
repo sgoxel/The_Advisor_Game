@@ -22,6 +22,22 @@ import {
   villages,
   roads,
 } from "../src/geography.ts";
+import { WORLD_FOUNDATION_VERSION } from "../src/config.ts";
+import {
+  CANONICAL_PLANET_CIRCUMFERENCE,
+  CANONICAL_PLANET_RADIUS,
+  SOURCE_PRESENTATION_WIDTH,
+  greatCircleDistance,
+} from "../src/planet.ts";
+import {
+  DIFFICULT_TERRAIN_WALK_SPEED_MPS,
+  GOOD_ROAD_WALK_SPEED_MPS,
+  MIN_VILLAGE_FASTEST_DISTANCE_M,
+  MIN_VILLAGE_WALK_FANTASY_SECONDS,
+  OPEN_GROUND_WALK_SPEED_MPS,
+  fantasyTravelSeconds,
+  realSecondsForFantasy,
+} from "../src/travel.ts";
 import { LazySimulation, summaryAt, residentAt } from "../src/simulation.ts";
 import { FantasyClock, TIME_SCALE } from "../src/clock.ts";
 
@@ -158,6 +174,7 @@ test("application source contains no random-number API or clock-driven world gen
     "simulation.ts",
     "tile-worker.ts",
     "main.ts",
+    "travel.ts",
   ]) {
     const source = readFileSync(
       new URL(`../src/${file}`, import.meta.url),
@@ -199,17 +216,83 @@ test("three continents each have ten countries, three cities per country and thr
       heightAt(place.x, place.z) > 0.1,
       `${place.name} must be on land`,
     );
-  assert.equal(262144 / 2 ** MAX_LEVEL, 2);
+  assert.equal(SOURCE_PRESENTATION_WIDTH / 2 ** MAX_LEVEL, 2);
+  assert.notEqual(SOURCE_PRESENTATION_WIDTH, CANONICAL_PLANET_CIRCUMFERENCE);
 });
-test("all village links take five minutes and are traversable including river bridges", () => {
+
+test("canonical scale/travel foundation is versioned and all village pairs satisfy the fastest-speed minimum", () => {
+  assert.equal(WORLD_FOUNDATION_VERSION, "v2");
+  assert.equal(CANONICAL_PLANET_RADIUS, 637_100);
+  assert.equal(GOOD_ROAD_WALK_SPEED_MPS, 1);
+  assert.equal(OPEN_GROUND_WALK_SPEED_MPS, 5 / 6);
+  assert.ok(DIFFICULT_TERRAIN_WALK_SPEED_MPS < OPEN_GROUND_WALK_SPEED_MPS);
+  assert.equal(MIN_VILLAGE_FASTEST_DISTANCE_M, 3600);
+  assert.equal(MIN_VILLAGE_WALK_FANTASY_SECONDS, 3600);
+  let pairs = 0,
+    shortest = Infinity;
+  for (let i = 0; i < villages.length; i++)
+    for (let j = i + 1; j < villages.length; j++) {
+      const distance = greatCircleDistance(
+        villages[i].canonicalPosition,
+        villages[j].canonicalPosition,
+      );
+      shortest = Math.min(shortest, distance);
+      assert.ok(
+        distance >= MIN_VILLAGE_FASTEST_DISTANCE_M,
+        `${villages[i].code} ↔ ${villages[j].code} is only ${distance.toFixed(2)} m`,
+      );
+      pairs++;
+    }
+  assert.equal(pairs, (270 * 269) / 2);
+  assert.ok(shortest > 5_900 && shortest < 6_100);
+});
+
+test("prototype road records expose canonical distance and route-derived fantasy time", () => {
   for (const road of roads) {
-    assert.equal(road.length, 420);
-    assert.equal(road.walkSeconds, 300);
-    assert.equal(road.fantasyWalkSeconds, 7200);
+    const expectedDistance = greatCircleDistance(road.fromPosition, road.toPosition);
+    assert.ok(Math.abs(road.surfaceLengthM - expectedDistance) < 1e-7);
+    assert.ok(road.presentationLengthSourceUnits > 0);
+    assert.equal(road.walkSurface, "good-road");
+    assert.equal(road.walkSpeedMps, GOOD_ROAD_WALK_SPEED_MPS);
+    assert.equal(road.fantasyWalkSeconds, road.surfaceLengthM);
+    assert.equal(road.realWalkSeconds, road.fantasyWalkSeconds / TIME_SCALE);
+    assert.ok(road.fantasyWalkSeconds > MIN_VILLAGE_WALK_FANTASY_SECONDS);
+    assert.ok(
+      fantasyTravelSeconds(road.surfaceLengthM, "open-ground") >
+        road.fantasyWalkSeconds,
+    );
+    assert.ok(
+      fantasyTravelSeconds(road.surfaceLengthM, "difficult-terrain") >
+        fantasyTravelSeconds(road.surfaceLengthM, "open-ground"),
+    );
+    assert.equal(
+      realSecondsForFantasy(road.fantasyWalkSeconds),
+      road.realWalkSeconds,
+    );
     for (let x = road.minX; x < road.maxX; x += 14)
       assert.ok(cellAt(x, road.z).walkable, `${road.code} blocked at ${x}`);
   }
 });
+
+test("active scale/travel source and UI contain no legacy physical-truth assumptions", () => {
+  const sources = [
+    "../src/config.ts",
+    "../src/geography.ts",
+    "../src/simulation.ts",
+    "../src/travel.ts",
+    "../src/travel-ui.ts",
+    "../index.html",
+  ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
+  const combined = sources.join("\n");
+  assert.doesNotMatch(combined, /\bVILLAGE_SPACING_M\b/);
+  assert.doesNotMatch(combined, /\bWALK_SPEED_MPS\b/);
+  assert.doesNotMatch(combined, /420 m by road/i);
+  assert.doesNotMatch(combined, /1\.4\s*m\/s/i);
+  assert.doesNotMatch(combined, /Five minutes on foot/i);
+  assert.match(combined, /WORLD_FOUNDATION_VERSION/);
+  assert.match(combined, /canonical route distance and fantasy travel time/i);
+});
+
 test("fantasy epoch maps 2026 to 0126 and advances one day per real hour, including offline", () => {
   const epoch = Date.parse("2026-10-07T08:48:29Z"),
     clock = new FantasyClock(epoch);

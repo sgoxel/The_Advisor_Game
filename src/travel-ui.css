@@ -1,0 +1,13 @@
+@media (max-width: 700px) {
+  body.travel-panel-open .map-controls,
+  body.travel-panel-open .region-panel {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  body.travel-panel-open .travel-panel {
+    max-height: calc(100dvh - 176px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
