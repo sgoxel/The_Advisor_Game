@@ -27,16 +27,19 @@ const localView = (x: number, z: number): View => ({
   pixels: 720,
 });
 
-const sortedKeys = (view: View, limit = 160) =>
+const sortedKeys = (
+  view: View,
+  limit = STREAMING_BUDGETS.desktop.activePatches,
+) =>
   selectTiles(view, 190, limit)
     .map((tile) => tile.key)
     .sort();
 
-test("Stage S002 streaming budgets match phone tablet and desktop envelopes", () => {
+test("Stage S002 streaming budgets stay within binding envelopes and reserve rollover headroom", () => {
   assert.deepEqual(STREAMING_BUDGETS.phone, {
     deviceClass: "phone",
     generationReady: 4,
-    activePatches: 160,
+    activePatches: 89,
     cachedPatches: 180,
     cpuBytes: 96 * 1024 * 1024,
     gpuBytes: 96 * 1024 * 1024,
@@ -44,7 +47,7 @@ test("Stage S002 streaming budgets match phone tablet and desktop envelopes", ()
   assert.deepEqual(STREAMING_BUDGETS.tablet, {
     deviceClass: "tablet",
     generationReady: 6,
-    activePatches: 220,
+    activePatches: 119,
     cachedPatches: 240,
     cpuBytes: 160 * 1024 * 1024,
     gpuBytes: 160 * 1024 * 1024,
@@ -52,11 +55,16 @@ test("Stage S002 streaming budgets match phone tablet and desktop envelopes", ()
   assert.deepEqual(STREAMING_BUDGETS.desktop, {
     deviceClass: "desktop",
     generationReady: 8,
-    activePatches: 260,
+    activePatches: 159,
     cachedPatches: 320,
     cpuBytes: 256 * 1024 * 1024,
     gpuBytes: 256 * 1024 * 1024,
   });
+  for (const budget of Object.values(STREAMING_BUDGETS))
+    assert.ok(
+      budget.activePatches * 2 + 1 <= budget.cachedPatches,
+      `${budget.deviceClass} must fit previous + destination active sets + root`,
+    );
   assert.equal(streamingBudgetForViewport(390, 844).deviceClass, "phone");
   assert.equal(streamingBudgetForViewport(844, 390).deviceClass, "phone");
   assert.equal(streamingBudgetForViewport(768, 1024).deviceClass, "tablet");
@@ -67,7 +75,7 @@ test("Stage S002 streaming budgets match phone tablet and desktop envelopes", ()
     withinStreamingBudget(
       {
         generationReady: 4,
-        activePatches: 160,
+        activePatches: 89,
         cachedPatches: 180,
         cpuBytes: 96 * 1024 * 1024,
         gpuBytes: 96 * 1024 * 1024,
@@ -93,10 +101,11 @@ test("render patch cache keys are canonical global IDs rather than planar tile a
 });
 
 test("a seam-straddling local view streams both longitude edges exactly once", () => {
-  const view = localView(-WORLD_MIN - 10, 0),
-    tiles = selectTiles(view, 190, 160),
+  const limit = STREAMING_BUDGETS.desktop.activePatches,
+    view = localView(-WORLD_MIN - 10, 0),
+    tiles = selectTiles(view, 190, limit),
     keys = tiles.map((tile) => tile.key);
-  assert.ok(tiles.length > 0 && tiles.length <= 160);
+  assert.ok(tiles.length > 0 && tiles.length <= limit);
   assert.equal(new Set(keys).size, keys.length);
   assert.ok(
     tiles.some((tile) => tile.minX <= WORLD_MIN + tile.size),
@@ -117,12 +126,13 @@ test("one full circumference returns identical canonical streaming ownership", (
 });
 
 test("exact pole coverage is unique bounded and independent of degenerate longitude", () => {
-  const northA = localView(0, -SOURCE_PRESENTATION_POLE_DISTANCE),
+  const limit = STREAMING_BUDGETS.desktop.activePatches,
+    northA = localView(0, -SOURCE_PRESENTATION_POLE_DISTANCE),
     northB = localView(74123, -SOURCE_PRESENTATION_POLE_DISTANCE),
     south = localView(-52177, SOURCE_PRESENTATION_POLE_DISTANCE);
   for (const view of [northA, northB, south]) {
-    const tiles = selectTiles(view, 190, 160);
-    assert.ok(tiles.length > 0 && tiles.length <= 160);
+    const tiles = selectTiles(view, 190, limit);
+    assert.ok(tiles.length > 0 && tiles.length <= limit);
     assert.equal(new Set(tiles.map((tile) => tile.key)).size, tiles.length);
     for (const tile of tiles) {
       assert.ok(tile.minZ >= -SOURCE_PRESENTATION_POLE_DISTANCE);
