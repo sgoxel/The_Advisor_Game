@@ -110,9 +110,8 @@
         <button id="visit-city">Visit city</button
         ><button id="visit-village">Visit village</button>
       </div>
-      <p class="hint">
-        Neighbouring villages: 420 m by road.<br />Five minutes on foot at 1.4
-        m/s.
+      <p class="hint" id="travel-summary" aria-live="polite">
+        Calculating canonical route distance and fantasy travel time…
       </p>
       <div class="divider"></div>
       <div class="eyebrow">LIVING WORLD</div>
@@ -178,5 +177,6 @@
     <div id="error" role="alert" hidden></div>
     <script type="module" src="/src/main.ts"></script>
     <script type="module" src="/src/canonical-inspector.ts"></script>
+    <script type="module" src="/src/travel-ui.ts"></script>
   </body>
 </html>
