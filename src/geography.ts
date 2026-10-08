@@ -45,6 +45,9 @@ const COUNTRY_NAMES = [
 ] as const;
 const CITY_NAMES = ["Citadel", "Market", "Harbour"] as const;
 const VILLAGE_NAMES = ["Briarford", "Oakmere", "Thornfield"] as const;
+const PLANET_RADIUS_M = 637_100;
+const VILLAGE_SEPARATION_M = 6_000;
+const TEMPORARY_VILLAGE_CHAIN_EAST_M = 14_000;
 
 const hashUnit = (key: string) =>
   macroDigest(`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/${key}`) / 0xffffffff;
@@ -117,7 +120,7 @@ function cityPosition(
   city: number,
   accepted: readonly CanonicalPosition[],
 ) {
-  for (let attempt = 0; attempt < 48; attempt++) {
+  for (let attempt = 0; attempt < 64; attempt++) {
     const key = `CITY/${country.continent}/${country.id}/${city}/ATTEMPT/${attempt}`,
       angle = hashUnit(`${key}/ANGLE`) * Math.PI * 2,
       radius = 0.027 + hashUnit(`${key}/RADIUS`) * 0.025,
@@ -126,14 +129,29 @@ function cityPosition(
         Math.cos(angle) * radius,
         Math.sin(angle) * radius,
       ),
-      sample = sampleMacroGeography(candidate);
-    if (sample.landform !== "Mainland" || sample.continent !== country.continent || sample.landScore < 0.045)
+      sample = sampleMacroGeography(candidate),
+      temporaryRoadEnd = macroOffset(
+        candidate,
+        TEMPORARY_VILLAGE_CHAIN_EAST_M / PLANET_RADIUS_M,
+        0,
+      ),
+      roadEndSample = sampleMacroGeography(temporaryRoadEnd);
+    if (
+      sample.landform !== "Mainland" ||
+      sample.continent !== country.continent ||
+      sample.landScore < 0.085 ||
+      roadEndSample.landform !== "Mainland" ||
+      roadEndSample.continent !== country.continent ||
+      roadEndSample.landScore < 0.015
+    )
       continue;
     if (accepted.some((other) => greatCircleDistance(candidate, other) < 24_000))
       continue;
     return candidate;
   }
-  return country.canonicalPosition;
+  throw new Error(
+    `Unable to place city ${country.continent}/${country.id}/${city} with a legal temporary road corridor`,
+  );
 }
 
 export const cities: Place[] = countries.flatMap((country) => {
@@ -162,11 +180,9 @@ export const cities: Place[] = countries.flatMap((country) => {
  * follows its SEED-owned continent/country position and every step is a canonical
  * 6 km surface displacement, preserving the one-hour fastest-speed lower bound.
  */
-const VILLAGE_SEPARATION_M = 6_000;
 export const villages: Place[] = cities.flatMap((city) => {
   const cosLat = Math.max(0.2, Math.abs(Math.cos(city.canonicalPosition.lat))),
-    radiusM = 637_100,
-    step = VILLAGE_SEPARATION_M / (radiusM * cosLat);
+    step = VILLAGE_SEPARATION_M / (PLANET_RADIUS_M * cosLat);
   return Array.from({ length: 3 }, (_, v) =>
     withPresentation({
       ...city,
