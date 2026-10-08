@@ -1,11 +1,22 @@
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
+  SOURCE_PRESENTATION_WIDTH,
   greatCircleDistance,
   lonLatToSource,
   normalizeLongitude,
+  sourceToLonLat,
+  wrapSourceX,
   type CanonicalPosition,
   type LonLat,
 } from "./planet.ts";
+import {
+  MACRO_PLAN,
+  macroFeatureDistanceM,
+  macroSampleAt,
+  mountainSystems,
+  macroIslands,
+  macroLakes,
+} from "./macro-geography.ts";
 import { travelMetrics } from "./travel.ts";
 
 /** x/z are derived source/render coordinates; canonicalPosition is world truth. */
@@ -22,30 +33,52 @@ export type Place = {
   city: number;
 };
 
-/**
- * Temporary v2 canonical placement constants in radians. They preserve the S001
- * layout while making longitude/latitude authoritative; later natural-world WPs
- * may replace the pattern without changing the coordinate/identity contract.
- */
-const CONTINENT_LAT = -0.15579492376963544;
-const CONTINENT_LON = 1.9174759848570515;
-const COUNTRY_LON_STEP = 0.167779148674992;
-const COUNTRY_LAT_STEP = 0.3115898475392709;
-const CITY_DX = [0, -0.05752427954571154, 0.05752427954571154] as const;
-const CITY_DZ = [-0.014381069886427886, 0.047936899621426284, 0.047936899621426284] as const;
-const VILLAGE_LON_STEP = 0.01006674892049952;
-const VILLAGE_LAT_OFFSET = 0.014381069886427886;
+const COUNTRY_NAMES = [
+  "Aldermarch",
+  "Briarhold",
+  "Greyvale",
+  "Oakward",
+  "Westwatch",
+  "Ashbourne",
+  "Thornreach",
+  "Highmere",
+  "Stonefen",
+  "Dunvale",
+] as const;
+const CITY_NAMES = ["Citadel", "Market", "Harbour"] as const;
+const VILLAGE_NAMES = ["Briarford", "Oakmere", "Thornfield"] as const;
+const TAU = Math.PI * 2;
 
-const canonicalPosition = (
-  lon: number,
-  lat: number,
-  elevation = 0,
-): CanonicalPosition => ({
-  lon: normalizeLongitude(lon),
-  lat: Math.max(-Math.PI / 2, Math.min(Math.PI / 2, lat)),
-  elevation,
-});
-
+function digest(text: string): number {
+  let value = 2166136261;
+  for (let i = 0; i < text.length; i++)
+    value = Math.imul(value ^ text.charCodeAt(i), 16777619);
+  return value >>> 0;
+}
+function addressed(address: string) {
+  return digest(`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/${address}`) / 4294967296;
+}
+function canonicalPosition(lon: number, lat: number, elevation = 0): CanonicalPosition {
+  return {
+    lon: normalizeLongitude(lon),
+    lat: Math.max(-Math.PI / 2, Math.min(Math.PI / 2, lat)),
+    elevation,
+  };
+}
+function destination(origin: LonLat, bearing: number, distance: number): CanonicalPosition {
+  const sinLat =
+      Math.sin(origin.lat) * Math.cos(distance) +
+      Math.cos(origin.lat) * Math.sin(distance) * Math.cos(bearing),
+    lat = Math.asin(Math.max(-1, Math.min(1, sinLat))),
+    lon = normalizeLongitude(
+      origin.lon +
+        Math.atan2(
+          Math.sin(bearing) * Math.sin(distance) * Math.cos(origin.lat),
+          Math.cos(distance) - Math.sin(origin.lat) * Math.sin(lat),
+        ),
+    );
+  return canonicalPosition(lon, lat);
+}
 const withPresentation = <T extends { canonicalPosition: CanonicalPosition }>(record: T) => {
   const { x, z } = lonLatToSource(
     record.canonicalPosition.lon,
@@ -54,86 +87,154 @@ const withPresentation = <T extends { canonicalPosition: CanonicalPosition }>(re
   return { ...record, x, z };
 };
 
-export const continents = [
-  { id: 0, name: "Eldermere", canonicalPosition: canonicalPosition(0, CONTINENT_LAT) },
-  {
-    id: 1,
-    name: "Westreach",
-    canonicalPosition: canonicalPosition(-CONTINENT_LON, CONTINENT_LAT),
-  },
-  {
-    id: 2,
-    name: "Dawnlands",
-    canonicalPosition: canonicalPosition(CONTINENT_LON, CONTINENT_LAT),
-  },
-].map(withPresentation);
+/** Continent labels/anchors are views of the same seed-derived macro recipes as terrain. */
+export const continents = MACRO_PLAN.continents.map((continent) =>
+  withPresentation({
+    id: continent.id,
+    name: continent.name,
+    code: continent.code,
+    canonicalPosition: canonicalPosition(continent.center.lon, continent.center.lat),
+    majorRadiusRad: continent.majorRadiusRad,
+    minorRadiusRad: continent.minorRadiusRad,
+    orientationRad: continent.orientationRad,
+  }),
+);
 
-export const countries = continents.flatMap((continent) =>
-  Array.from({ length: 10 }, (_, id) => {
-    const slot = (id + 2) % 10,
-      position = canonicalPosition(
-        continent.canonicalPosition.lon + ((slot % 5) - 2) * COUNTRY_LON_STEP,
-        -Math.floor(slot / 5) * COUNTRY_LAT_STEP,
-      );
+/**
+ * Political anchors are deterministic rejection samples inside their parent
+ * mainland. The sequence is addressed by seed + semantic slot, never a mutable
+ * random stream, and explicitly fails instead of silently reducing counts.
+ */
+export const countries = continents.flatMap((continent) => {
+  const accepted: CanonicalPosition[] = [];
+  return Array.from({ length: 10 }, (_, id) => {
+    let position: CanonicalPosition | undefined;
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const prefix = `COUNTRY/${continent.id}/${id}/${attempt}`,
+        bearing = TAU * addressed(`${prefix}/bearing`),
+        distance = 0.08 + 0.43 * Math.sqrt(addressed(`${prefix}/distance`)),
+        candidate = destination(continent.canonicalPosition, bearing, distance),
+        macro = macroSampleAt(candidate);
+      if (
+        macro.domain !== "Mainland" ||
+        macro.continentId !== continent.id ||
+        macro.reliefM > 55 ||
+        accepted.some((other) => macroFeatureDistanceM(candidate, other) < 92_000)
+      )
+        continue;
+      position = candidate;
+      break;
+    }
+    if (!position)
+      throw new Error(`Seeded geography could not place country ${continent.id}/${id}`);
+    accepted.push(position);
     return withPresentation({
       id,
       continent: continent.id,
       code: `${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/CONT/${continent.id}/COUNTRY/${id}`,
-      name: [
-        "Aldermarch",
-        "Briarhold",
-        "Greyvale",
-        "Oakward",
-        "Westwatch",
-        "Ashbourne",
-        "Thornreach",
-        "Highmere",
-        "Stonefen",
-        "Dunvale",
-      ][id],
+      name: COUNTRY_NAMES[id],
       canonicalPosition: position,
     });
-  }),
-);
+  });
+});
 
-export const cities: Place[] = countries.flatMap((country) =>
-  [0, 1, 2].map((city) => {
-    const id = `${country.continent}/${country.id}/${city}`,
-      position = canonicalPosition(
-        country.canonicalPosition.lon + CITY_DX[city],
-        country.canonicalPosition.lat - CITY_DZ[city],
+export const cities: Place[] = (() => {
+  const result: Place[] = [],
+    allAccepted: CanonicalPosition[] = [];
+  for (const country of countries) {
+    const localAccepted: CanonicalPosition[] = [];
+    for (let city = 0; city < 3; city++) {
+      let position: CanonicalPosition | undefined;
+      for (let attempt = 0; attempt < 200; attempt++) {
+        const prefix = `CITY/${country.continent}/${country.id}/${city}/${attempt}`,
+          bearing = TAU * addressed(`${prefix}/bearing`),
+          distance = 0.035 + 0.055 * addressed(`${prefix}/distance`),
+          candidate = destination(country.canonicalPosition, bearing, distance),
+          macro = macroSampleAt(candidate);
+        if (
+          macro.domain !== "Mainland" ||
+          macro.continentId !== country.continent ||
+          macro.reliefM > 65 ||
+          localAccepted.some((other) => macroFeatureDistanceM(candidate, other) < 33_000) ||
+          allAccepted.some((other) => macroFeatureDistanceM(candidate, other) < 25_000)
+        )
+          continue;
+        position = candidate;
+        break;
+      }
+      if (!position)
+        throw new Error(`Seeded geography could not place city ${country.continent}/${country.id}/${city}`);
+      localAccepted.push(position);
+      allAccepted.push(position);
+      const id = `${country.continent}/${country.id}/${city}`;
+      result.push(
+        withPresentation({
+          id,
+          code: `${country.code}/CITY/${city}`,
+          name: `${country.name} ${CITY_NAMES[city]}`,
+          canonicalPosition: position,
+          kind: "city" as const,
+          continent: country.continent,
+          country: country.id,
+          city,
+        }),
       );
-    return withPresentation({
-      id,
-      code: `${country.code}/CITY/${city}`,
-      name: `${country.name} ${["Citadel", "Market", "Harbour"][city]}`,
-      canonicalPosition: position,
-      kind: "city" as const,
-      continent: country.continent,
-      country: country.id,
-      city,
-    });
-  }),
-);
+    }
+  }
+  return result;
+})();
 
-export const villages: Place[] = cities.flatMap((city) =>
-  Array.from({ length: 3 }, (_, v) =>
-    withPresentation({
-      ...city,
-      id: `${city.id}/${v}`,
-      code: `${city.code}/VILLAGE/${v}`,
-      kind: "village" as const,
-      name:
-        city.continent === 0 && city.country === 0 && city.city === 0 && v === 0
-          ? "Alderwick"
-          : `${["Briarford", "Oakmere", "Thornfield"][v]} ${city.continent + 1}.${city.country + 1}.${city.city + 1}`,
-      canonicalPosition: canonicalPosition(
-        city.canonicalPosition.lon + v * VILLAGE_LON_STEP,
-        city.canonicalPosition.lat - VILLAGE_LAT_OFFSET,
-      ),
-    }),
-  ),
-);
+/**
+ * Villages remain connected by the prototype straight good-road records, but
+ * each row is re-sited from seed inside its city's actual mainland. Longitude
+ * step is latitude-adjusted so every adjacent pair stays about six km apart.
+ */
+export const villages: Place[] = (() => {
+  const result: Place[] = [],
+    accepted: CanonicalPosition[] = [];
+  for (const city of cities) {
+    let row: CanonicalPosition[] | undefined;
+    for (let attempt = 0; attempt < 96; attempt++) {
+      const latOffset = (addressed(`VILLAGE/${city.id}/${attempt}/latitude`) - 0.5) * 0.022,
+        lat = Math.max(-1.35, Math.min(1.35, city.canonicalPosition.lat + latOffset)),
+        lonStep = 0.00945 / Math.max(0.35, Math.abs(Math.cos(lat))),
+        candidates = [-1, 0, 1].map((offset) =>
+          canonicalPosition(city.canonicalPosition.lon + offset * lonStep, lat),
+        );
+      const legal = candidates.every((candidate) => {
+        const macro = macroSampleAt(candidate);
+        return (
+          macro.domain === "Mainland" &&
+          macro.continentId === city.continent &&
+          macro.reliefM <= 85 &&
+          accepted.every((other) => macroFeatureDistanceM(candidate, other) >= 3_900)
+        );
+      });
+      if (legal) {
+        row = candidates;
+        break;
+      }
+    }
+    if (!row) throw new Error(`Seeded geography could not place village row ${city.id}`);
+    row.forEach((position, v) => {
+      accepted.push(position);
+      result.push(
+        withPresentation({
+          ...city,
+          id: `${city.id}/${v}`,
+          code: `${city.code}/VILLAGE/${v}`,
+          kind: "village" as const,
+          name:
+            city.continent === 0 && city.country === 0 && city.city === 0 && v === 0
+              ? "Alderwick"
+              : `${VILLAGE_NAMES[v]} ${city.continent + 1}.${city.country + 1}.${city.city + 1}`,
+          canonicalPosition: position,
+        }),
+      );
+    });
+  }
+  return result;
+})();
 
 export const places = [...cities, ...villages];
 
@@ -143,8 +244,10 @@ export const roads = cities.flatMap((city) =>
       toPlace = villages.find((place) => place.id === `${city.id}/${index + 1}`)!,
       fromPosition = fromPlace.canonicalPosition,
       toPosition = toPlace.canonicalPosition,
-      minX = Math.min(fromPlace.x, toPlace.x),
-      maxX = Math.max(fromPlace.x, toPlace.x),
+      dx = wrapSourceX(toPlace.x - fromPlace.x),
+      toUnwrappedX = fromPlace.x + dx,
+      minX = Math.min(fromPlace.x, toUnwrappedX),
+      maxX = Math.max(fromPlace.x, toUnwrappedX),
       z = fromPlace.z,
       surfaceLengthM = greatCircleDistance(fromPosition, toPosition),
       travel = travelMetrics(surfaceLengthM, "good-road");
@@ -152,16 +255,15 @@ export const roads = cities.flatMap((city) =>
       code: `${city.code}/ROAD/${index}`,
       from: fromPlace.id,
       to: toPlace.id,
+      fromX: fromPlace.x,
+      toX: toUnwrappedX,
       minX,
       maxX,
       z,
       fromPosition,
       toPosition,
       /** Disposable source/render span. This is not a physical metre value. */
-      presentationLengthSourceUnits: Math.hypot(
-        toPlace.x - fromPlace.x,
-        toPlace.z - fromPlace.z,
-      ),
+      presentationLengthSourceUnits: Math.abs(dx),
       /** Authoritative spherical route distance in canonical physical metres. */
       surfaceLengthM,
       walkSurface: "good-road" as const,
@@ -186,31 +288,22 @@ export function nearestPlaceAt(position: LonLat): Place | undefined {
   return result;
 }
 
-/** Canonical nearest-continent lookup; independent of antimeridian presentation. */
+/** The macro authority owns continent affiliation even for its islands and nearby sea. */
 export function continentAtPosition(position: LonLat) {
-  let result = continents[0],
-    distance = greatCircleDistance(position, result.canonicalPosition);
-  for (const continent of continents.slice(1)) {
-    const candidate = greatCircleDistance(position, continent.canonicalPosition);
-    if (candidate < distance) {
-      distance = candidate;
-      result = continent;
-    }
-  }
-  return result;
+  return continents[macroSampleAt(position).continentId];
 }
 
-// Immutable source/render spatial buckets avoid scanning all settlements at every
-// terrain sample. They are a presentation acceleration structure, never identity.
+// Immutable source/render spatial buckets avoid scanning every settlement at every
+// terrain sample. Seam-shifted aliases are presentation acceleration only.
 const buckets = new Map<string, Place[]>();
-for (const place of places) {
-  const key = `${Math.floor(place.x / 2048)}/${Math.floor(place.z / 2048)}`;
-  const bucket = buckets.get(key) || [];
-  bucket.push(place);
-  buckets.set(key, bucket);
-}
+for (const place of places)
+  for (const x of [place.x - SOURCE_PRESENTATION_WIDTH, place.x, place.x + SOURCE_PRESENTATION_WIDTH]) {
+    const key = `${Math.floor(x / 2048)}/${Math.floor(place.z / 2048)}`,
+      bucket = buckets.get(key) || [];
+    bucket.push(place);
+    buckets.set(key, bucket);
+  }
 
-// Neighbourhood lists are immutable too: build each once, then reuse it.
 const neighbourhoods = new Map<string, readonly Place[]>();
 export function nearbyPlaces(x: number, z: number): readonly Place[] {
   const bx = Math.floor(x / 2048),
@@ -218,11 +311,12 @@ export function nearbyPlaces(x: number, z: number): readonly Place[] {
     key = `${bx}/${bz}`;
   let result = neighbourhoods.get(key);
   if (!result) {
-    const found: Place[] = [];
+    const found = new Map<string, Place>();
     for (let dz = -1; dz <= 1; dz++)
       for (let dx = -1; dx <= 1; dx++)
-        found.push(...(buckets.get(`${bx + dx}/${bz + dz}`) || []));
-    neighbourhoods.set(key, (result = found));
+        for (const place of buckets.get(`${bx + dx}/${bz + dz}`) || []) found.set(place.id, place);
+    result = [...found.values()];
+    neighbourhoods.set(key, result);
   }
   return result;
 }
@@ -232,7 +326,7 @@ export function nearestPlace(x: number, z: number): Place | undefined {
   let result: Place | undefined,
     distance = Infinity;
   for (const place of nearbyPlaces(x, z)) {
-    const d = Math.hypot(x - place.x, z - place.z);
+    const d = Math.hypot(wrapSourceX(x - place.x), z - place.z);
     if (d < distance) {
       distance = d;
       result = place;
@@ -241,25 +335,18 @@ export function nearestPlace(x: number, z: number): Place | undefined {
   return result;
 }
 
-/** Transitional source/render lookup used by the current local terrain envelope. */
 export function continentAt(x: number, z: number) {
-  let result = continents[0];
-  for (const c of continents)
-    if (Math.hypot(x - c.x, z - c.z) < Math.hypot(x - result.x, z - result.z))
-      result = c;
-  return result;
+  return continentAtPosition(sourceToLonLat(x, z));
 }
 
+/**
+ * Compatibility scalar for presentation callers: <1 means dry macro land and
+ * >1 means water. The geometry itself comes only from macroSampleAt().
+ */
 export function continentalEnvelope(x: number, z: number) {
-  const c = continentAt(x, z),
-    nx = (x - c.x) / (27000 + c.id * 3000),
-    nz = (z - c.z) / (25000 + (c.id % 2) * 2500);
-  const angle = Math.atan2(nz, nx);
-  const outline =
-    1 +
-    0.09 * Math.sin(angle * 3 + c.id * 1.3) +
-    0.05 * Math.cos(angle * 5 - c.id);
-  return Math.hypot(nx, nz) / outline;
+  const sample = macroSampleAt(sourceToLonLat(x, z));
+  if (sample.land) return Math.max(0.5, 1 - Math.max(0.02, sample.coastDistanceRad) * 5);
+  return Math.min(1.5, 1 + Math.max(0.02, -sample.coastDistanceRad) * 5);
 }
 
 /** Transitional source/render road hit test; road identity is its seed code. */
@@ -270,11 +357,24 @@ export function roadAt(x: number, z: number) {
       .map((place) => place.id),
   );
   if (!localVillageIds.size) return undefined;
-  return roads.find(
-    (road) =>
-      Math.abs(z - road.z) < 12 &&
-      x >= road.minX - 8 &&
-      x <= road.maxX + 8 &&
-      (localVillageIds.has(road.from) || localVillageIds.has(road.to)),
-  );
+  return roads.find((road) => {
+    if (
+      Math.abs(z - road.z) >= 12 ||
+      (!localVillageIds.has(road.from) && !localVillageIds.has(road.to))
+    )
+      return false;
+    const relative = wrapSourceX(x - road.fromX),
+      extent = road.toX - road.fromX,
+      min = Math.min(0, extent) - 8,
+      max = Math.max(0, extent) + 8;
+    return relative >= min && relative <= max;
+  });
 }
+
+/** Exposed diagnostics are immutable macro identities, not a second render dataset. */
+export const macroGeography = {
+  planVersion: WORLD_FOUNDATION_VERSION,
+  islands: macroIslands,
+  lakes: macroLakes,
+  mountainSystems,
+} as const;
