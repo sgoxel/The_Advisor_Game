@@ -76,9 +76,9 @@ export type GeometryBufferSet = Record<
 >;
 
 /** Known application-owned mesh-buffer bytes, used as a conservative cache estimate. */
-export function estimateGeometryBytes(data: GeometryBufferSet): number {
+export function estimateGeometryBytes(data: object): number {
   let bytes = 0;
-  for (const geometry of Object.values(data)) {
+  for (const geometry of Object.values(data) as GeometryBufferSet[string][]) {
     bytes += geometry.positions.byteLength;
     bytes += geometry.normals.byteLength;
     bytes += geometry.colors.byteLength;
