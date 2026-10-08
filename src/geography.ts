@@ -210,7 +210,7 @@ export const villages: Place[] = (() => {
           macro.domain === "Mainland" &&
           macro.continentId === city.continent &&
           macro.reliefM <= 85 &&
-          accepted.every((other) => macroFeatureDistanceM(candidate, other) >= 3_900)
+          accepted.every((other) => macroFeatureDistanceM(candidate, other) >= 6_000)
         );
       });
       if (legal) {
