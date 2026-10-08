@@ -1,4 +1,4 @@
-import { WORLD_SEED, WALK_SPEED_MPS, VILLAGE_SPACING_M } from "./config.ts";
+import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
   greatCircleDistance,
   lonLatToSource,
@@ -6,6 +6,7 @@ import {
   type CanonicalPosition,
   type LonLat,
 } from "./planet.ts";
+import { travelMetrics } from "./travel.ts";
 
 /** x/z are derived source/render coordinates; canonicalPosition is world truth. */
 export type Place = {
@@ -22,7 +23,7 @@ export type Place = {
 };
 
 /**
- * Temporary v1 canonical placement constants in radians. They preserve the S001
+ * Temporary v2 canonical placement constants in radians. They preserve the S001
  * layout while making longitude/latitude authoritative; later natural-world WPs
  * may replace the pattern without changing the coordinate/identity contract.
  */
@@ -77,7 +78,7 @@ export const countries = continents.flatMap((continent) =>
     return withPresentation({
       id,
       continent: continent.id,
-      code: `${WORLD_SEED}/CONT/${continent.id}/COUNTRY/${id}`,
+      code: `${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/CONT/${continent.id}/COUNTRY/${id}`,
       name: [
         "Aldermarch",
         "Briarhold",
@@ -144,7 +145,9 @@ export const roads = cities.flatMap((city) =>
       toPosition = toPlace.canonicalPosition,
       minX = Math.min(fromPlace.x, toPlace.x),
       maxX = Math.max(fromPlace.x, toPlace.x),
-      z = fromPlace.z;
+      z = fromPlace.z,
+      surfaceLengthM = greatCircleDistance(fromPosition, toPosition),
+      travel = travelMetrics(surfaceLengthM, "good-road");
     return {
       code: `${city.code}/ROAD/${index}`,
       from: fromPlace.id,
@@ -154,12 +157,17 @@ export const roads = cities.flatMap((city) =>
       z,
       fromPosition,
       toPosition,
-      /** Transitional source-route span retained for current local rendering. */
-      length: VILLAGE_SPACING_M,
-      /** Authoritative spherical distance of the current endpoints. */
-      surfaceLengthM: greatCircleDistance(fromPosition, toPosition),
-      walkSeconds: VILLAGE_SPACING_M / WALK_SPEED_MPS,
-      fantasyWalkSeconds: (VILLAGE_SPACING_M / WALK_SPEED_MPS) * 24,
+      /** Disposable source/render span. This is not a physical metre value. */
+      presentationLengthSourceUnits: Math.hypot(
+        toPlace.x - fromPlace.x,
+        toPlace.z - fromPlace.z,
+      ),
+      /** Authoritative spherical route distance in canonical physical metres. */
+      surfaceLengthM,
+      walkSurface: "good-road" as const,
+      walkSpeedMps: travel.speedMps,
+      fantasyWalkSeconds: travel.fantasySeconds,
+      realWalkSeconds: travel.realSeconds,
     };
   }),
 );
@@ -256,22 +264,17 @@ export function continentalEnvelope(x: number, z: number) {
 
 /** Transitional source/render road hit test; road identity is its seed code. */
 export function roadAt(x: number, z: number) {
-  // City groups are far apart; nearby villages identify only relevant roads.
-  const local = nearbyPlaces(x, z).filter(
-    (p) =>
-      p.kind === "village" &&
-      Math.abs(z - p.z) < 12 &&
-      x >= p.x - 420 &&
-      x <= p.x + 840,
+  const localVillageIds = new Set(
+    nearbyPlaces(x, z)
+      .filter((place) => place.kind === "village")
+      .map((place) => place.id),
   );
-  if (!local.length) return undefined;
+  if (!localVillageIds.size) return undefined;
   return roads.find(
-    (r) =>
-      Math.abs(z - r.z) < 12 &&
-      x >= r.minX - 8 &&
-      x <= r.maxX + 8 &&
-      local.some((p) =>
-        p.id.startsWith(r.from.slice(0, r.from.lastIndexOf("/")) + "/"),
-      ),
+    (road) =>
+      Math.abs(z - road.z) < 12 &&
+      x >= road.minX - 8 &&
+      x <= road.maxX + 8 &&
+      (localVillageIds.has(road.from) || localVillageIds.has(road.to)),
   );
 }
