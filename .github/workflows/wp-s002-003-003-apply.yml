@@ -1,0 +1,33 @@
+name: Apply WP-S002-003-003 patch
+on:
+  push:
+    branches: [wp-s002-003-003-agent1]
+    paths: [.github/wp-s002-003-003.patch]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply implementation patch
+        run: |
+          git apply --check .github/wp-s002-003-003.patch
+          git apply .github/wp-s002-003-003.patch
+          rm .github/wp-s002-003-003.patch .github/workflows/wp-s002-003-003-apply.yml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit tested implementation
+        run: |
+          git config user.name "AGENT #1"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Implement WP-S002-003-003 canonical streaming"
+          git push origin HEAD:wp-s002-003-003-agent1
