@@ -57,7 +57,11 @@ test("WebGPU local ENU frame rebases without changing canonical selection or cac
 
   await page.locator("#close-cell").click();
   await page.evaluate(() => {
-    const village = window.advisorWorld.geography.villages.at(-1);
+    const village = window.advisorWorld.geography.villages.reduce((best, candidate) =>
+      Math.hypot(candidate.x, candidate.z) > Math.hypot(best.x, best.z)
+        ? candidate
+        : best,
+    );
     window.advisorWorld.navigation.setFocus(
       village.canonicalPosition.lon,
       village.canonicalPosition.lat,
@@ -74,6 +78,6 @@ test("WebGPU local ENU frame rebases without changing canonical selection or cac
   expect(
     await page.evaluate(() => window.advisorWorld.state.navigation.selectedCanonicalId),
   ).toContain("/PLANET/");
-  await page.screenshot({ path: "test-results/webgpu-enu-far-settlement.png" });
+  await page.screenshot({ path: "test-results/webgpu-enu-farthest-settlement.png" });
   expect(errors).toEqual([]);
 });
