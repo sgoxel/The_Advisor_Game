@@ -187,17 +187,17 @@ export const cities: Place[] = (() => {
 /**
  * Villages remain connected by the prototype straight good-road records, but
  * each row is re-sited from seed inside its city's actual mainland. Longitude
- * step is latitude-adjusted so every adjacent pair stays about six km apart.
+ * step is latitude-adjusted so every adjacent pair stays safely above 3.9 km.
  */
 export const villages: Place[] = (() => {
   const result: Place[] = [],
     accepted: CanonicalPosition[] = [];
   for (const city of cities) {
     let row: CanonicalPosition[] | undefined;
-    for (let attempt = 0; attempt < 96; attempt++) {
-      const latOffset = (addressed(`VILLAGE/${city.id}/${attempt}/latitude`) - 0.5) * 0.022,
+    for (let attempt = 0; attempt < 128; attempt++) {
+      const latOffset = (addressed(`VILLAGE/${city.id}/${attempt}/latitude`) - 0.5) * 0.018,
         lat = Math.max(-1.35, Math.min(1.35, city.canonicalPosition.lat + latOffset)),
-        lonStep = 0.00945 / Math.max(0.35, Math.abs(Math.cos(lat))),
+        lonStep = 0.0064 / Math.max(0.35, Math.abs(Math.cos(lat))),
         candidates = [-1, 0, 1].map((offset) =>
           canonicalPosition(city.canonicalPosition.lon + offset * lonStep, lat),
         );
