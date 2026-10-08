@@ -1,24 +1,20 @@
 /** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
-import { WORLD_SEED } from "./config.ts";
+import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
   canonicalCellId,
   SOURCE_PRESENTATION_POLE_DISTANCE,
   sourceToLonLat,
   wrapSourceX,
 } from "./planet.ts";
+import { sampleMacroGeography } from "./macro-geography.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
-import {
-  continentalEnvelope,
-  nearestPlace,
-  places,
-  roadAt,
-} from "./geography.ts";
+import { nearestPlace, places, roadAt } from "./geography.ts";
 export { WORLD_SEED } from "./config.ts";
-export const GENERATOR_VERSION = "v1";
+export const GENERATOR_VERSION = WORLD_FOUNDATION_VERSION;
 export const WORLD_SIZE = 262144;
 export const WORLD_MIN = -WORLD_SIZE / 2;
 export const CELL_SIZE = 2;
-export const MAX_LEVEL = 17; // Finest render tile and logical cell are both 2 × 2 m.
+export const MAX_LEVEL = 17; // Finest render tile and logical cell are both 2 × 2 source units.
 export type Tile = {
   level: number;
   x: number;
@@ -77,8 +73,7 @@ export type PatchSeed = {
   grain: number;
 };
 
-/** Stable integer coordinate digest. A content lookup, never a pseudorandom stream.
- * Digests can collide; coordinate-containing canonical codes are the actual identities. */
+/** Stable integer coordinate digest. A content lookup, never a pseudorandom stream. */
 export function digest(text: string): number {
   let value = 2166136261;
   for (let i = 0; i < text.length; i++)
@@ -86,48 +81,57 @@ export function digest(text: string): number {
   return value >>> 0;
 }
 export const SEED_VALUE = digest(`${WORLD_SEED}/${GENERATOR_VERSION}`);
-/** Five nested generation levels (1000 / 100 / 10 / 2 / 1 cells).
- * All scale ratios are integral; the quadtree is a separate display hierarchy. */
+const smooth = (t: number) => t * t * (3 - 2 * t);
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+function macroAtSource(x: number, z: number) {
+  return sampleMacroGeography(sourceToLonLat(wrapSourceX(x), z));
+}
+
+/** Five nested detail levels remain disposable local addressing beneath the planet authority. */
 export function provinceSeed(cx: number, cz: number): ProvinceSeed {
   const x = Math.floor(cx / 1000),
     z = Math.floor(cz / 1000),
-    code = `${WORLD_SEED}/${GENERATOR_VERSION}/L1/${x}/${z}`;
-  const coastal = continentalEnvelope(x * 2000 + 1000, z * 2000 + 1000) > 1;
+    code = `${WORLD_SEED}/${GENERATOR_VERSION}/L1/${x}/${z}`,
+    sample = macroAtSource(x * 2000 + 1000, z * 2000 + 1000);
   return {
     code,
     x,
     z,
-    domain: coastal ? "Archipelago" : "Mainland",
-    elevationLimit: 150,
+    domain: sample.landform === "Mainland" ? "Mainland" : "Archipelago",
+    elevationLimit: 320,
   };
 }
-// Neighbouring samples almost always share a region: remember the last one built.
+
 let lastRegion: RegionSeed | undefined;
 export function regionSeed(cx: number, cz: number): RegionSeed {
   const x = Math.floor(cx / 100),
     z = Math.floor(cz / 100);
   if (lastRegion && lastRegion.x === x && lastRegion.z === z) return lastRegion;
-  const parent = provinceSeed(cx, cz);
-  const code = `${parent.code}/L2/${x - parent.x * 10}/${z - parent.z * 10}`;
-  const blockX = Math.floor(x / 3),
-    blockZ = Math.floor(z / 3);
-  const archipelago = parent.domain === "Archipelago";
-  const islandBelt = continentalEnvelope(x * 200 + 100, z * 200 + 100) < 1.12;
-  const landform = archipelago
-    ? islandBelt && x - blockX * 3 === 1 && z - blockZ * 3 === 1
-      ? "Island"
-      : "Ocean"
-    : "Mainland";
+  const parent = provinceSeed(cx, cz),
+    code = `${parent.code}/L2/${x - parent.x * 10}/${z - parent.z * 10}`,
+    sourceX = x * 200 + 100,
+    sourceZ = z * 200 + 100,
+    centre = macroAtSource(sourceX, sourceZ),
+    // Keep the open-ocean shortcut conservative. A region close to any canonical
+    // shoreline stays detailed so a coastline cannot be erased by a centre sample.
+    landform = centre.landform === "Ocean" && centre.landScore < -0.025
+      ? "Ocean"
+      : centre.landform === "Island"
+        ? "Island"
+        : "Mainland";
   return (lastRegion = {
     code,
     x,
     z,
     landform,
-    radius: 64 + (digest(code) % 12),
-    elevationLimit: landform === "Island" ? 18 : parent.elevationLimit,
+    radius: 100,
+    elevationLimit: landform === "Island" ? 180 : parent.elevationLimit,
     parent,
   });
 }
+
 export function districtSeed(cx: number, cz: number): DistrictSeed {
   const parent = regionSeed(cx, cz),
     x = Math.floor(cx / 10) - parent.x * 10,
@@ -146,15 +150,15 @@ export function districtSeed(cx: number, cz: number): DistrictSeed {
 export function patchSeed(cx: number, cz: number): PatchSeed {
   const parent = districtSeed(cx, cz),
     x = Math.floor(cx / 2) - (parent.parent.x * 50 + parent.x * 5),
-    z = Math.floor(cz / 2) - (parent.parent.z * 50 + parent.z * 5);
-  const code = `${parent.code}/L4/${x}/${z}`;
+    z = Math.floor(cz / 2) - (parent.parent.z * 50 + parent.z * 5),
+    code = `${parent.code}/L4/${x}/${z}`;
   return { code, x, z, parent, grain: digest(code) % 5 };
 }
 export function cellSeed(cx: number, cz: number) {
   const parent = patchSeed(cx, cz),
     x = cx - Math.floor(cx / 2) * 2,
-    z = cz - Math.floor(cz / 2) * 2;
-  const code = `${parent.code}/L5/${x}/${z}`;
+    z = cz - Math.floor(cz / 2) * 2,
+    code = `${parent.code}/L5/${x}/${z}`;
   return {
     code,
     x,
@@ -163,26 +167,13 @@ export function cellSeed(cx: number, cz: number) {
     surface: (parent.grain + (digest(code) % 3)) % 5,
   };
 }
-/** Interpolate L2 coastline controls inside L1's bounded island envelope. */
-export function islandCoast(x: number, z: number, region: RegionSeed) {
-  const lx = x - region.x * 200,
-    lz = z - region.z * 200;
-  const fx = Math.max(0, Math.min(9, lx / 20)),
-    fz = Math.max(0, Math.min(9, lz / 20));
-  const ix = Math.floor(fx),
-    iz = Math.floor(fz);
-  const offset = (a: number, b: number) =>
-    districtSeed(
-      region.x * 100 + Math.min(9, a) * 10,
-      region.z * 100 + Math.min(9, b) * 10,
-    ).coastOffset;
-  const coastOffset = lerp(
-    lerp(offset(ix, iz), offset(ix + 1, iz), smooth(fx - ix)),
-    lerp(offset(ix, iz + 1), offset(ix + 1, iz + 1), smooth(fx - ix)),
-    smooth(fz - iz),
-  );
-  return region.radius + coastOffset - Math.hypot(lx - 100, lz - 100);
+
+/** Compatibility coast value. Positive values are canonical island interior. */
+export function islandCoast(x: number, z: number, _region: RegionSeed) {
+  const sample = macroAtSource(x, z);
+  return sample.landform === "Island" ? sample.landScore * 140 : -20;
 }
+
 export function coordinateValue(x: number, z: number, layer: number): number {
   let n =
     SEED_VALUE ^
@@ -192,33 +183,25 @@ export function coordinateValue(x: number, z: number, layer: number): number {
   n = Math.imul(n ^ (n >>> 13), 1274126177);
   return (n ^ (n >>> 16)) >>> 0;
 }
-const smooth = (t: number) => t * t * (3 - 2 * t);
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-export function field(
-  x: number,
-  z: number,
-  spacing: number,
-  layer: number,
-): number {
+export function field(x: number, z: number, spacing: number, layer: number): number {
   const gx = Math.floor(x / spacing),
-    gz = Math.floor(z / spacing);
-  const tx = smooth(x / spacing - gx),
-    tz = smooth(z / spacing - gz);
-  const at = (a: number, b: number) =>
-    (coordinateValue(a, b, layer) % 10001) / 10000;
+    gz = Math.floor(z / spacing),
+    tx = smooth(x / spacing - gx),
+    tz = smooth(z / spacing - gz),
+    at = (a: number, b: number) =>
+      (coordinateValue(a, b, layer) % 10001) / 10000;
   return lerp(
     lerp(at(gx, gz), at(gx + 1, gz), tx),
     lerp(at(gx, gz + 1), at(gx + 1, gz + 1), tx),
     tz,
   );
 }
+
+/** Temporary local river presentation; WP-S002-004-005 replaces it with drainage truth. */
 export function riverX(z: number): number {
   return 125 + 42 * Math.sin(z / 150) + 18 * Math.sin(z / 57);
 }
-export function settlement(
-  sx: number,
-  sz: number,
-): { x: number; z: number; name: string } {
+export function settlement(sx: number, sz: number): { x: number; z: number; name: string } {
   const v = coordinateValue(sx, sz, 10);
   return {
     x: sx * 512,
@@ -226,84 +209,55 @@ export function settlement(
     name:
       sx === 0 && sz === 0
         ? "Alderwick"
-        : [
-            "Briarford",
-            "Greyhaven",
-            "Oakmere",
-            "Westwatch",
-            "Ashbourne",
-            "Thornfield",
-          ][v % 6],
+        : ["Briarford", "Greyhaven", "Oakmere", "Westwatch", "Ashbourne", "Thornfield"][v % 6],
   };
 }
-/** Global height, evaluated identically at every tile boundary and detail level. */
+
+/** Global height: macro geography owns land/sea and major mountain systems. */
 export function heightAt(x: number, z: number): number {
-  const cx = Math.floor(x / 2),
-    cz = Math.floor(z / 2),
-    region = regionSeed(cx, cz);
-  if (region.landform === "Ocean") return -2.8;
-  if (region.landform === "Island") {
-    const coast = islandCoast(x, z, region);
-    return lerp(
-      -2.8,
-      Math.min(region.elevationLimit, 3 + field(x, z, 48, 2) * 12),
-      smooth(Math.max(0, Math.min(1, (coast + 4) / 20))),
-    );
-  }
-  const s = nearestPlace(x, z);
-  const d = s ? Math.hypot(x - s.x, z - s.z) : 1000;
-  const radius = s?.kind === "city" ? 430 : 90;
-  let flatten = smooth(Math.min(1, Math.max(0, (d - radius) / 80)));
+  const macro = macroAtSource(x, z);
+  if (macro.landform === "Ocean") return -2.8;
+  const edge = smooth(clamp01((macro.landScore + 0.012) / 0.075)),
+    s = nearestPlace(x, z),
+    d = s ? Math.hypot(x - s.x, z - s.z) : 1000,
+    radius = s?.kind === "city" ? 430 : 90;
+  let flatten = smooth(clamp01((d - radius) / 80));
   const road = roadAt(x, z);
   if (road)
     flatten = Math.min(
       flatten,
-      smooth(Math.min(1, Math.max(0, (Math.abs(z - road.z) - 5) / 7))),
+      smooth(clamp01((Math.abs(z - road.z) - 5) / 7)),
     );
-  const hills = 3 + field(x, z, 160, 1) * 9 + field(x, z, 48, 2) * 2;
-  const mountains = Math.max(0, field(x, z, 700, 3) - 0.52) * 260;
-  const land = Math.min(
-    region.elevationLimit,
-    lerp(3, hills + mountains, flatten),
-  );
-  const bank = Math.abs(x - riverX(z));
-  return lerp(-2.8, land, smooth(Math.min(1, Math.max(0, (bank - 12) / 19))));
+  const hills = 3 + field(x, z, 180, 1) * 10 + field(x, z, 52, 2) * 3,
+    foothills = macro.mountainRelief * (0.74 + field(x, z, 260, 3) * 0.34),
+    roughness = macro.mountainRelief > 2 ? (field(x, z, 72, 5) - 0.5) * Math.min(22, macro.mountainRelief * 0.11) : 0,
+    natural = hills + foothills + roughness,
+    prepared = lerp(3, natural, flatten),
+    land = Math.max(0.4, lerp(0.5, prepared, edge)),
+    bank = Math.abs(x - riverX(z));
+  // Do not let the temporary prototype river erase the new canonical settlement
+  // locations. Hydrology receives its own authoritative package later in S002.
+  if (d < 520) return land;
+  return lerp(-2.8, land, smooth(clamp01((bank - 12) / 19)));
 }
+
 export function biomeAt(x: number, z: number): string {
-  const h = heightAt(x, z),
-    hierarchy = cellSeed(Math.floor(x / 2), Math.floor(z / 2));
-  const region = hierarchy.parent.parent.parent;
-  if (region.landform === "Ocean") return "Ocean";
-  if (region.landform === "Island") {
-    if (h < 0.1) return "Ocean";
-    if (
-      islandCoast(x, z, region) <
-      hierarchy.parent.parent.beachWidth + 5 + hierarchy.surface * 0.15
-    )
-      return "Sandy beach";
-    return "Island meadow";
-  }
-  if (h < 0.1) return "River";
-  if (Math.abs(x - riverX(z)) < 32) return "Riverbank";
+  const macro = macroAtSource(x, z),
+    h = heightAt(x, z);
+  if (macro.landform === "Ocean" || h < 0.1) return "Ocean";
   const s = nearestPlace(x, z);
   if (s && Math.hypot(x - s.x, z - s.z) < (s.kind === "city" ? 420 : 84))
     return "Settlement";
   if (roadAt(x, z)) return "Road";
-  if (h > 70) return "Highlands";
+  if (macro.landScore < 0.045) return "Sandy beach";
+  if (macro.mountainRelief > 36 || h > 70) return "Highlands";
+  if (macro.landform === "Island") return "Island meadow";
+  if (Math.abs(x - riverX(z)) < 32 && (!s || Math.hypot(x - s.x, z - s.z) > 520))
+    return "Riverbank";
   return field(x, z, 90, 4) > 0.45 ? "Woodland" : "Meadow";
 }
 
-/**
- * Transitional equirectangular render patches are addressed by a canonical
- * cube-sphere anchor. The address is stable across wrap direction and visit
- * order; the patch rectangle remains disposable presentation data.
- */
-function canonicalPatchKey(
-  level: number,
-  minX: number,
-  minZ: number,
-  size: number,
-): string {
+function canonicalPatchKey(level: number, minX: number, minZ: number, size: number): string {
   const centre = sourceToLonLat(
       wrapSourceX(minX + size / 2),
       Math.max(
@@ -338,15 +292,7 @@ export function tileAt(level: number, x: number, z: number): Tile {
   const size = WORLD_SIZE / count,
     minX = WORLD_MIN + x * size,
     minZ = WORLD_MIN + z * size;
-  return {
-    level,
-    x,
-    z,
-    key: canonicalPatchKey(level, minX, minZ, size),
-    size,
-    minX,
-    minZ,
-  };
+  return { level, x, z, key: canonicalPatchKey(level, minX, minZ, size), size, minX, minZ };
 }
 export function tileForPosition(x: number, z: number, level = MAX_LEVEL): Tile {
   if (x < WORLD_MIN || x >= -WORLD_MIN || z < WORLD_MIN || z >= -WORLD_MIN)
@@ -359,19 +305,19 @@ export function tileForPosition(x: number, z: number, level = MAX_LEVEL): Tile {
   );
 }
 export function cellAt(x: number, z: number): Cell {
-  const tile = tileForPosition(x, z);
-  const cx = Math.floor(x / CELL_SIZE),
-    cz = Math.floor(z / CELL_SIZE);
-  const px = cx * CELL_SIZE + 1,
-    pz = cz * CELL_SIZE + 1;
-  const road = roadAt(px, pz),
-    bridge = road && Math.abs(pz - road.z) <= 5 && heightAt(px, pz) < 2.9;
-  const elevation = bridge ? 3 : heightAt(px, pz),
-    biome = bridge ? "Bridge" : biomeAt(px, pz);
-  const slope = Math.max(
-    Math.abs(heightAt(px + 1, pz) - heightAt(px - 1, pz)),
-    Math.abs(heightAt(px, pz + 1) - heightAt(px, pz - 1)),
-  );
+  const tile = tileForPosition(x, z),
+    cx = Math.floor(x / CELL_SIZE),
+    cz = Math.floor(z / CELL_SIZE),
+    px = cx * CELL_SIZE + 1,
+    pz = cz * CELL_SIZE + 1,
+    road = roadAt(px, pz),
+    bridge = road && Math.abs(pz - road.z) <= 5 && heightAt(px, pz) < 2.9,
+    elevation = bridge ? 3 : heightAt(px, pz),
+    biome = bridge ? "Bridge" : biomeAt(px, pz),
+    slope = Math.max(
+      Math.abs(heightAt(px + 1, pz) - heightAt(px - 1, pz)),
+      Math.abs(heightAt(px, pz + 1) - heightAt(px, pz - 1)),
+    );
   return {
     code: cellSeed(cx, cz).code,
     x: cx,
@@ -382,6 +328,7 @@ export function cellAt(x: number, z: number): Cell {
     tile: `${tile.level}/${tile.x}/${tile.z}`,
   };
 }
+
 /** Features are owned by their anchor tile; tile order/zoom never changes them. */
 export function featuresFor(tile: Tile): Feature[] {
   const features: Feature[] = [];
@@ -421,20 +368,13 @@ export function featuresFor(tile: Tile): Feature[] {
     const sx = Math.floor(s.x / 2),
       sz = Math.floor(s.z / 2),
       id = s.id;
-    add(
-      "keep",
-      s.x - 30,
-      s.z - 28,
-      coordinateValue(sx, sz, 11),
-      `${id}/${s.kind}/keep`,
-    );
+    add("keep", s.x - 30, s.z - 28, coordinateValue(sx, sz, 11), `${id}/${s.kind}/keep`);
     add("well", s.x, s.z, 0, `${id}/${s.kind}/well`);
     for (let i = 0; i < 18; i++) {
-      const v = coordinateValue(sx, sz, 20 + i);
-      const side = i % 2 === 0 ? -1 : 1;
-      const x = s.x + (i < 10 ? side * (15 + (v % 6)) : (i - 14) * 13);
-      const z =
-        s.z + (i < 10 ? (Math.floor(i / 2) - 2) * 14 : side * (42 + (v % 5)));
+      const v = coordinateValue(sx, sz, 20 + i),
+        side = i % 2 === 0 ? -1 : 1,
+        x = s.x + (i < 10 ? side * (15 + (v % 6)) : (i - 14) * 13),
+        z = s.z + (i < 10 ? (Math.floor(i / 2) - 2) * 14 : side * (42 + (v % 5)));
       if (Math.hypot(x - (s.x - 30), z - (s.z - 28)) > 19)
         add("house", x, z, v, `${id}/${s.kind}/house/${i}`);
     }
@@ -465,25 +405,25 @@ export function featuresFor(tile: Tile): Feature[] {
       let gz = Math.floor(tile.minZ / 10) - 1;
       gz < (tile.minZ + tile.size) / 10 + 1;
       gz++
-    ) {
+    )
       for (
         let gx = Math.floor(tile.minX / 10) - 1;
         gx < (tile.minX + tile.size) / 10 + 1;
         gx++
       ) {
-        const v = coordinateValue(gx, gz, 30);
-        const x = gx * 10 + (v % 7) - 3,
-          z = gz * 10 + ((v >>> 5) % 7) - 3;
-        const biome = biomeAt(x, z);
+        const v = coordinateValue(gx, gz, 30),
+          x = gx * 10 + (v % 7) - 3,
+          z = gz * 10 + ((v >>> 5) % 7) - 3,
+          biome = biomeAt(x, z);
         if (biome === "Woodland" && v % 4 !== 0)
           add("tree", x, z, v, `tree/${gx}/${gz}`);
         else if (biome !== "Settlement" && biome !== "Ocean" && v % 31 === 0)
           add("rock", x, z, v, `rock/${gx}/${gz}`);
       }
-    }
   }
   return features;
 }
+
 export type View = {
   x: number;
   z: number;
@@ -492,28 +432,20 @@ export type View = {
   yaw: number;
   pixels: number;
 };
-/** Viewport bounds of the tilted orthographic camera, enlarged by one tile for prefetch. */
 export function viewBounds(view: View) {
   const hw = view.halfHeight * view.aspect,
-    hz = view.halfHeight / Math.sin(Math.PI / 3);
-  const c = Math.abs(Math.cos(view.yaw)),
-    s = Math.abs(Math.sin(view.yaw));
-  const margin = Math.max(4, Math.min(48, view.halfHeight * 0.35));
+    hz = view.halfHeight / Math.sin(Math.PI / 3),
+    c = Math.abs(Math.cos(view.yaw)),
+    s = Math.abs(Math.sin(view.yaw)),
+    margin = Math.max(4, Math.min(48, view.halfHeight * 0.35));
   return { rx: hw * c + hz * s + margin, rz: hw * s + hz * c + margin };
 }
-
 function wrappedTileDistanceX(x: number, focusX: number): number {
   return Math.abs(wrapSourceX(x - focusX));
 }
-
-/** Exact-pole tangent coverage is a radial presentation ring, not world authority. */
 const POLE_ACTIVE_PATCH_LIMIT = 16;
 
-/**
- * Wrap-aware local patch selection. Near a pole, longitude convergence expands
- * the source-domain search so the tangent view receives a complete ring of
- * canonical coverage instead of a narrow equirectangular wedge.
- */
+/** Wrap-aware local patch selection, including deterministic exact-pole ownership. */
 export function selectTiles(
   view: View,
   threshold = 190,
@@ -525,26 +457,18 @@ export function selectTiles(
   const bounds = viewBounds(view),
     focus = sourceToLonLat(view.x, view.z),
     atPole = Math.abs(Math.abs(focus.lat) - Math.PI / 2) <= 1e-12,
-    selectionLimit = atPole
-      ? Math.min(activeLimit, POLE_ACTIVE_PATCH_LIMIT)
-      : activeLimit,
+    selectionLimit = atPole ? Math.min(activeLimit, POLE_ACTIVE_PATCH_LIMIT) : activeLimit,
     streamX = atPole ? 0 : view.x,
     longitudeScale = Math.max(0.02, Math.abs(Math.cos(focus.lat))),
-    rx = atPole
-      ? WORLD_SIZE / 2
-      : Math.min(WORLD_SIZE / 2, bounds.rx / longitudeScale),
+    rx = atPole ? WORLD_SIZE / 2 : Math.min(WORLD_SIZE / 2, bounds.rx / longitudeScale),
     rz = bounds.rz,
     selected = new Map<string, Tile>(),
     centres = [streamX];
-
   if (streamX - rx < WORLD_MIN) centres.push(streamX + WORLD_SIZE);
   if (streamX + rx > -WORLD_MIN) centres.push(streamX - WORLD_SIZE);
 
   const visit = (t: Tile, centreX: number) => {
     const maxZ = t.minZ + t.size;
-    // The S001 source plane extends past the canonical poles. Never stream
-    // those invalid bands. Subdivide coarse crossing patches until the exact
-    // level-2 pole boundaries can be selected without folded duplicates.
     if (
       t.minZ >= SOURCE_PRESENTATION_POLE_DISTANCE ||
       maxZ <= -SOURCE_PRESENTATION_POLE_DISTANCE
@@ -561,10 +485,7 @@ export function selectTiles(
     )
       return;
     const projectedPixels = (t.size * view.pixels) / (view.halfHeight * 2);
-    if (
-      t.level < MAX_LEVEL &&
-      (crossesPole || projectedPixels > threshold)
-    ) {
+    if (t.level < MAX_LEVEL && (crossesPole || projectedPixels > threshold)) {
       for (let dz = 0; dz < 2; dz++)
         for (let dx = 0; dx < 2; dx++)
           visit(tileAt(t.level + 1, t.x * 2 + dx, t.z * 2 + dz), centreX);
@@ -574,7 +495,6 @@ export function selectTiles(
   for (const centreX of centres) visit(tileAt(0, 0, 0), centreX);
   if (selected.size > selectionLimit)
     return selectTiles(view, threshold * 1.25, selectionLimit);
-
   return [...selected.values()].sort(
     (a, b) =>
       Math.hypot(
