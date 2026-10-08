@@ -6,6 +6,13 @@ import {
   places,
   roadAt,
 } from "./geography.ts";
+import {
+  SOURCE_PRESENTATION_POLE_DISTANCE,
+  canonicalCellId,
+  greatCircleDistance,
+  sourceToLonLat,
+  wrapSourceX,
+} from "./planet.ts";
 export { WORLD_SEED } from "./config.ts";
 export const GENERATOR_VERSION = "v1";
 export const WORLD_SIZE = 262144;
@@ -299,15 +306,25 @@ export function tileAt(level: number, x: number, z: number): Tile {
     z >= count
   )
     throw new RangeError("Tile outside world hierarchy");
-  const size = WORLD_SIZE / count;
+  const size = WORLD_SIZE / count,
+    minX = WORLD_MIN + x * size,
+    minZ = WORLD_MIN + z * size,
+    canonical = sourceToLonLat(minX + size / 2, minZ + size / 2),
+    canonicalKey = canonicalCellId(
+      canonical.lon,
+      canonical.lat,
+      24,
+      WORLD_SEED,
+      GENERATOR_VERSION,
+    );
   return {
     level,
     x,
     z,
-    key: `${WORLD_SEED}/${GENERATOR_VERSION}/T/${level}/${x}/${z}`,
+    key: `${canonicalKey}/RENDER/L${level}`,
     size,
-    minX: WORLD_MIN + x * size,
-    minZ: WORLD_MIN + z * size,
+    minX,
+    minZ,
   };
 }
 export function tileForPosition(x: number, z: number, level = MAX_LEVEL): Tile {
@@ -463,10 +480,16 @@ export function viewBounds(view: View) {
   const margin = Math.max(4, Math.min(48, view.halfHeight * 0.35));
   return { rx: hw * c + hz * s + margin, rz: hw * s + hz * c + margin };
 }
-export function selectTiles(view: View, threshold = 190): Tile[] {
+
+function selectFiniteTiles(
+  view: View,
+  threshold: number,
+  selected: Map<string, Tile>,
+) {
   const { rx, rz } = viewBounds(view),
-    selected: Tile[] = [];
+    pole = SOURCE_PRESENTATION_POLE_DISTANCE;
   const visit = (t: Tile) => {
+    if (t.minZ >= pole || t.minZ + t.size <= -pole) return;
     if (
       t.minX > view.x + rx ||
       t.minX + t.size < view.x - rx ||
@@ -474,18 +497,71 @@ export function selectTiles(view: View, threshold = 190): Tile[] {
       t.minZ + t.size < view.z - rz
     )
       return;
-    const projectedPixels = (t.size * view.pixels) / (view.halfHeight * 2);
-    if (t.level < MAX_LEVEL && projectedPixels > threshold) {
+    const crossesPoleBoundary =
+        (t.minZ < -pole && t.minZ + t.size > -pole) ||
+        (t.minZ < pole && t.minZ + t.size > pole),
+      projectedPixels = (t.size * view.pixels) / (view.halfHeight * 2);
+    if (
+      t.level < MAX_LEVEL &&
+      (crossesPoleBoundary || projectedPixels > threshold)
+    ) {
       for (let dz = 0; dz < 2; dz++)
         for (let dx = 0; dx < 2; dx++)
           visit(tileAt(t.level + 1, t.x * 2 + dx, t.z * 2 + dz));
-    } else selected.push(t);
+    } else selected.set(t.key, t);
   };
   visit(tileAt(0, 0, 0));
-  if (selected.length > 160) return selectTiles(view, threshold * 1.25);
-  return selected.sort(
-    (a, b) =>
-      Math.hypot(a.minX + a.size / 2 - view.x, a.minZ + a.size / 2 - view.z) -
-      Math.hypot(b.minX + b.size / 2 - view.x, b.minZ + b.size / 2 - view.z),
-  );
+}
+
+/**
+ * Canonical wrap/pole-aware local selection. Longitude seam views query both
+ * finite source edges, while pole-straddling views query the reflected opposite
+ * longitude. Cache identity remains the canonical tile key, so approach side,
+ * full-circumference turns and reflected pole coverage cannot duplicate authority.
+ */
+export function selectTiles(
+  view: View,
+  threshold = 190,
+  maxTiles = 160,
+): Tile[] {
+  if (!(maxTiles > 0)) throw new RangeError("Tile budget must be positive");
+  const pole = SOURCE_PRESENTATION_POLE_DISTANCE,
+    base: View = {
+      ...view,
+      x: wrapSourceX(view.x),
+      z: Math.max(-pole, Math.min(pole, view.z)),
+    },
+    { rx, rz } = viewBounds(base),
+    selected = new Map<string, Tile>(),
+    variants: View[] = [];
+  const addWrapped = (candidate: View) => {
+    variants.push(candidate);
+    const bounds = viewBounds(candidate);
+    if (candidate.x - bounds.rx < WORLD_MIN)
+      variants.push({ ...candidate, x: candidate.x + WORLD_SIZE });
+    if (candidate.x + bounds.rx > -WORLD_MIN)
+      variants.push({ ...candidate, x: candidate.x - WORLD_SIZE });
+  };
+  addWrapped(base);
+  if (base.z - rz < -pole)
+    addWrapped({
+      ...base,
+      x: wrapSourceX(base.x + WORLD_SIZE / 2),
+      z: -2 * pole - base.z,
+    });
+  if (base.z + rz > pole)
+    addWrapped({
+      ...base,
+      x: wrapSourceX(base.x + WORLD_SIZE / 2),
+      z: 2 * pole - base.z,
+    });
+  for (const candidate of variants) selectFiniteTiles(candidate, threshold, selected);
+  if (selected.size > maxTiles)
+    return selectTiles(base, threshold * 1.25, maxTiles);
+  const focus = sourceToLonLat(base.x, base.z);
+  return [...selected.values()].sort((a, b) => {
+    const ca = sourceToLonLat(a.minX + a.size / 2, a.minZ + a.size / 2),
+      cb = sourceToLonLat(b.minX + b.size / 2, b.minZ + b.size / 2);
+    return greatCircleDistance(focus, ca) - greatCircleDistance(focus, cb);
+  });
 }
