@@ -68,7 +68,7 @@ test("WebGPU desktop wrap crossings keep one canonical bounded cache", async ({
   const before = await page.evaluate(() => ({
     focus: window.advisorWorld.state.navigation.focus,
     keys: [...window.advisorWorld.state.streaming.activeCanonicalKeys].sort(),
-    hits: window.advisorWorld.state.streaming.cacheHits,
+    misses: window.advisorWorld.state.streaming.cacheMisses,
   }));
   await page.evaluate(() =>
     window.advisorWorld.navigation.setFocus(0.42 + Math.PI * 2, 0.2),
@@ -78,7 +78,7 @@ test("WebGPU desktop wrap crossings keep one canonical bounded cache", async ({
   expect(state.navigation.focus.lon).toBeCloseTo(before.focus.lon, 10);
   expect(state.navigation.focus.lat).toBeCloseTo(before.focus.lat, 10);
   expect([...state.streaming.activeCanonicalKeys].sort()).toEqual(before.keys);
-  expect(state.streaming.cacheHits).toBeGreaterThan(before.hits);
+  expect(state.streaming.cacheMisses).toBe(before.misses);
 
   const seam = Math.PI - 0.00025;
   for (const lon of [seam, -seam, seam, -seam]) {
