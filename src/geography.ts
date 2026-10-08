@@ -3,9 +3,18 @@ import {
   greatCircleDistance,
   lonLatToSource,
   normalizeLongitude,
+  sourceToLonLat,
   type CanonicalPosition,
   type LonLat,
 } from "./planet.ts";
+import {
+  MACRO_GEOGRAPHY,
+  continentLocalPosition,
+  macroDigest,
+  macroOffset,
+  sampleMacroGeography,
+  type MacroContinent,
+} from "./macro-geography.ts";
 import { travelMetrics } from "./travel.ts";
 
 /** x/z are derived source/render coordinates; canonicalPosition is world truth. */
@@ -22,19 +31,24 @@ export type Place = {
   city: number;
 };
 
-/**
- * Temporary v2 canonical placement constants in radians. They preserve the S001
- * layout while making longitude/latitude authoritative; later natural-world WPs
- * may replace the pattern without changing the coordinate/identity contract.
- */
-const CONTINENT_LAT = -0.15579492376963544;
-const CONTINENT_LON = 1.9174759848570515;
-const COUNTRY_LON_STEP = 0.167779148674992;
-const COUNTRY_LAT_STEP = 0.3115898475392709;
-const CITY_DX = [0, -0.05752427954571154, 0.05752427954571154] as const;
-const CITY_DZ = [-0.014381069886427886, 0.047936899621426284, 0.047936899621426284] as const;
-const VILLAGE_LON_STEP = 0.01006674892049952;
-const VILLAGE_LAT_OFFSET = 0.014381069886427886;
+const COUNTRY_NAMES = [
+  "Aldermarch",
+  "Briarhold",
+  "Greyvale",
+  "Oakward",
+  "Westwatch",
+  "Ashbourne",
+  "Thornreach",
+  "Highmere",
+  "Stonefen",
+  "Dunvale",
+] as const;
+const CITY_NAMES = ["Citadel", "Market", "Harbour"] as const;
+const VILLAGE_NAMES = ["Briarford", "Oakmere", "Thornfield"] as const;
+
+const hashUnit = (key: string) =>
+  macroDigest(`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/${key}`) / 0xffffffff;
+const hashSigned = (key: string) => hashUnit(key) * 2 - 1;
 
 const canonicalPosition = (
   lon: number,
@@ -54,70 +68,111 @@ const withPresentation = <T extends { canonicalPosition: CanonicalPosition }>(re
   return { ...record, x, z };
 };
 
-export const continents = [
-  { id: 0, name: "Eldermere", canonicalPosition: canonicalPosition(0, CONTINENT_LAT) },
-  {
-    id: 1,
-    name: "Westreach",
-    canonicalPosition: canonicalPosition(-CONTINENT_LON, CONTINENT_LAT),
-  },
-  {
-    id: 2,
-    name: "Dawnlands",
-    canonicalPosition: canonicalPosition(CONTINENT_LON, CONTINENT_LAT),
-  },
-].map(withPresentation);
+/** Canonical macro continents own the presentation centres and visible landmark registry. */
+export const continents = MACRO_GEOGRAPHY.continents.map((continent) =>
+  withPresentation({
+    ...continent,
+    mountainSystems: MACRO_GEOGRAPHY.mountainSystems.filter(
+      (system) => system.continent === continent.id,
+    ),
+    islands: MACRO_GEOGRAPHY.islands.filter(
+      (island) => island.continent === continent.id,
+    ),
+  }),
+);
 
-export const countries = continents.flatMap((continent) =>
-  Array.from({ length: 10 }, (_, id) => {
-    const slot = (id + 2) % 10,
-      position = canonicalPosition(
-        continent.canonicalPosition.lon + ((slot % 5) - 2) * COUNTRY_LON_STEP,
-        -Math.floor(slot / 5) * COUNTRY_LAT_STEP,
-      );
+function countryPosition(continent: MacroContinent, id: number, accepted: readonly CanonicalPosition[]) {
+  for (let attempt = 0; attempt < 64; attempt++) {
+    const key = `COUNTRY/${continent.id}/${id}/ATTEMPT/${attempt}`,
+      east = hashSigned(`${key}/EAST`) * 0.64,
+      north = hashSigned(`${key}/NORTH`) * 0.64,
+      candidate = continentLocalPosition(continent, east, north),
+      sample = sampleMacroGeography(candidate);
+    if (sample.landform !== "Mainland" || sample.continent !== continent.id || sample.landScore < 0.1)
+      continue;
+    if (accepted.some((other) => greatCircleDistance(candidate, other) < 48_000))
+      continue;
+    return candidate;
+  }
+  throw new Error(`Unable to place country ${continent.id}/${id}`);
+}
+
+const countryPositions: CanonicalPosition[][] = [];
+export const countries = MACRO_GEOGRAPHY.continents.flatMap((continent) => {
+  const accepted: CanonicalPosition[] = [];
+  countryPositions[continent.id] = accepted;
+  return Array.from({ length: 10 }, (_, id) => {
+    const position = countryPosition(continent, id, accepted);
+    accepted.push(position);
     return withPresentation({
       id,
       continent: continent.id,
       code: `${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/CONT/${continent.id}/COUNTRY/${id}`,
-      name: [
-        "Aldermarch",
-        "Briarhold",
-        "Greyvale",
-        "Oakward",
-        "Westwatch",
-        "Ashbourne",
-        "Thornreach",
-        "Highmere",
-        "Stonefen",
-        "Dunvale",
-      ][id],
+      name: COUNTRY_NAMES[id],
       canonicalPosition: position,
     });
-  }),
-);
+  });
+});
 
-export const cities: Place[] = countries.flatMap((country) =>
-  [0, 1, 2].map((city) => {
+function cityPosition(
+  country: (typeof countries)[number],
+  city: number,
+  accepted: readonly CanonicalPosition[],
+) {
+  for (let attempt = 0; attempt < 48; attempt++) {
+    const key = `CITY/${country.continent}/${country.id}/${city}/ATTEMPT/${attempt}`,
+      angle = hashUnit(`${key}/ANGLE`) * Math.PI * 2,
+      radius = 0.027 + hashUnit(`${key}/RADIUS`) * 0.025,
+      candidate = macroOffset(
+        country.canonicalPosition,
+        Math.cos(angle) * radius,
+        Math.sin(angle) * radius,
+      ),
+      sample = sampleMacroGeography(candidate);
+    if (sample.landform !== "Mainland" || sample.continent !== country.continent || sample.landScore < 0.045)
+      continue;
+    if (accepted.some((other) => greatCircleDistance(candidate, other) < 24_000))
+      continue;
+    return candidate;
+  }
+  // Country candidates are deliberately interior. This deterministic fallback is
+  // still canonical and keeps the WP independently solvable if a tiny peninsula
+  // receives a difficult set of city candidates.
+  return country.canonicalPosition;
+}
+
+export const cities: Place[] = countries.flatMap((country) => {
+  const accepted: CanonicalPosition[] = [];
+  return [0, 1, 2].map((city) => {
     const id = `${country.continent}/${country.id}/${city}`,
-      position = canonicalPosition(
-        country.canonicalPosition.lon + CITY_DX[city],
-        country.canonicalPosition.lat - CITY_DZ[city],
-      );
+      position = cityPosition(country, city, accepted);
+    accepted.push(position);
     return withPresentation({
       id,
       code: `${country.code}/CITY/${city}`,
-      name: `${country.name} ${["Citadel", "Market", "Harbour"][city]}`,
+      name: `${country.name} ${CITY_NAMES[city]}`,
       canonicalPosition: position,
       kind: "city" as const,
       continent: country.continent,
       country: country.id,
       city,
     });
-  }),
-);
+  });
+});
 
-export const villages: Place[] = cities.flatMap((city) =>
-  Array.from({ length: 3 }, (_, v) =>
+/**
+ * WP-S002-004-007 owns organic settlement siting. Until that package replaces
+ * this local arrangement, keep the three villages on one seeded city latitude so
+ * the existing prototype road renderer remains truthful. The city itself already
+ * follows its SEED-owned continent/country position and every step is a canonical
+ * 6 km surface displacement, preserving the one-hour fastest-speed lower bound.
+ */
+const VILLAGE_SEPARATION_M = 6_000;
+export const villages: Place[] = cities.flatMap((city) => {
+  const cosLat = Math.max(0.2, Math.abs(Math.cos(city.canonicalPosition.lat))),
+    radiusM = 637_100,
+    step = VILLAGE_SEPARATION_M / (radiusM * cosLat);
+  return Array.from({ length: 3 }, (_, v) =>
     withPresentation({
       ...city,
       id: `${city.id}/${v}`,
@@ -126,14 +181,14 @@ export const villages: Place[] = cities.flatMap((city) =>
       name:
         city.continent === 0 && city.country === 0 && city.city === 0 && v === 0
           ? "Alderwick"
-          : `${["Briarford", "Oakmere", "Thornfield"][v]} ${city.continent + 1}.${city.country + 1}.${city.city + 1}`,
+          : `${VILLAGE_NAMES[v]} ${city.continent + 1}.${city.country + 1}.${city.city + 1}`,
       canonicalPosition: canonicalPosition(
-        city.canonicalPosition.lon + v * VILLAGE_LON_STEP,
-        city.canonicalPosition.lat - VILLAGE_LAT_OFFSET,
+        city.canonicalPosition.lon + v * step,
+        city.canonicalPosition.lat,
       ),
     }),
-  ),
-);
+  );
+});
 
 export const places = [...cities, ...villages];
 
@@ -188,6 +243,9 @@ export function nearestPlaceAt(position: LonLat): Place | undefined {
 
 /** Canonical nearest-continent lookup; independent of antimeridian presentation. */
 export function continentAtPosition(position: LonLat) {
+  const sample = sampleMacroGeography(position),
+    owned = sample.continent === null ? undefined : continents[sample.continent];
+  if (owned) return owned;
   let result = continents[0],
     distance = greatCircleDistance(position, result.canonicalPosition);
   for (const continent of continents.slice(1)) {
@@ -241,25 +299,20 @@ export function nearestPlace(x: number, z: number): Place | undefined {
   return result;
 }
 
-/** Transitional source/render lookup used by the current local terrain envelope. */
+/** Source/render helper backed by canonical macro ownership. */
 export function continentAt(x: number, z: number) {
-  let result = continents[0];
-  for (const c of continents)
-    if (Math.hypot(x - c.x, z - c.z) < Math.hypot(x - result.x, z - result.z))
-      result = c;
-  return result;
+  return continentAtPosition(sourceToLonLat(x, z));
 }
 
+/**
+ * Compatibility helper for existing UI/seed hierarchy. Values below 1 are
+ * mainland, 1..1.2 are seeded island margins, and larger values are ocean.
+ */
 export function continentalEnvelope(x: number, z: number) {
-  const c = continentAt(x, z),
-    nx = (x - c.x) / (27000 + c.id * 3000),
-    nz = (z - c.z) / (25000 + (c.id % 2) * 2500);
-  const angle = Math.atan2(nz, nx);
-  const outline =
-    1 +
-    0.09 * Math.sin(angle * 3 + c.id * 1.3) +
-    0.05 * Math.cos(angle * 5 - c.id);
-  return Math.hypot(nx, nz) / outline;
+  const sample = sampleMacroGeography(sourceToLonLat(x, z));
+  if (sample.landform === "Mainland") return Math.max(0, 1 - sample.landScore);
+  if (sample.landform === "Island") return 1.05;
+  return 1.4 + Math.min(0.6, Math.max(0, -sample.landScore));
 }
 
 /** Transitional source/render road hit test; road identity is its seed code. */
