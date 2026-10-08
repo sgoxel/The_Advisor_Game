@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildTile } from "../src/geometry.ts";
+import { roads, villages } from "../src/geography.ts";
+import { residentAt } from "../src/simulation.ts";
 import {
   GPU_LOCAL_LIMIT_M,
   REBASE_THRESHOLD_M,
@@ -10,6 +12,7 @@ import {
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
   canonicalCellId,
+  lonLatToSource,
   normalizeLongitude,
   sourceToLonLat,
 } from "../src/planet.ts";
@@ -47,6 +50,47 @@ test("local render frame round-trips canonical surface points at far, wrap and h
         canonicalCellId(original.lon, original.lat),
       );
     }
+  }
+});
+
+test("render frame stays canonical at cube edges, cube corners and both pole limits", () => {
+  const cubeCornerLat = Math.asin(1 / Math.sqrt(3)),
+    cases = [
+      { name: "east/front edge", lon: Math.PI / 4, lat: 0 },
+      { name: "positive cube corner", lon: Math.PI / 4, lat: cubeCornerLat },
+      { name: "negative cube corner", lon: -3 * Math.PI / 4, lat: -cubeCornerLat },
+      { name: "north pole", lon: 0, lat: Math.PI / 2 },
+      { name: "south pole", lon: 0, lat: -Math.PI / 2 },
+    ];
+  for (const sample of cases) {
+    const source = lonLatToSource(sample.lon, sample.lat),
+      frame = new LocalRenderFrame(source.x, source.z),
+      expectedId = canonicalCellId(sample.lon, sample.lat),
+      initial = frame.sourceToRender(source.x, source.z),
+      initialRoundTrip = frame.renderToLonLat(initial.x, initial.z);
+    assert.equal(
+      canonicalCellId(initialRoundTrip.lon, initialRoundTrip.lat),
+      expectedId,
+      `${sample.name} changed identity at its initial render origin`,
+    );
+
+    // Move the presentation origin without moving the canonical point under test.
+    // At the poles move toward the equator because longitude itself is undefined.
+    const rebaseX = Math.abs(sample.lat) === Math.PI / 2 ? source.x : source.x + 180,
+      rebaseZ =
+        sample.lat === Math.PI / 2
+          ? source.z + 180
+          : sample.lat === -Math.PI / 2
+            ? source.z - 180
+            : source.z + 70;
+    assert.equal(frame.rebase(rebaseX, rebaseZ), true, `${sample.name} should rebase`);
+    const moved = frame.sourceToRender(source.x, source.z),
+      movedRoundTrip = frame.renderToLonLat(moved.x, moved.z);
+    assert.equal(
+      canonicalCellId(movedRoundTrip.lon, movedRoundTrip.lat),
+      expectedId,
+      `${sample.name} changed identity after rebase`,
+    );
   }
 });
 
@@ -107,5 +151,34 @@ test("repeated reverse rebases preserve tile/cache identity and picking result",
     assert.equal(canonicalCellId(restored.lon, restored.lat), id);
     assert.equal(tile.key, key);
   }
+  assert.equal(frame.stats.resourceRebuildsOnRebase, 0);
+});
+
+test("presentation-only rebases cannot mutate simulation positions or route costs", () => {
+  const frame = new LocalRenderFrame(villages[0].x, villages[0].z),
+    residentBefore = residentAt(villages[0], 17, 12_345),
+    routeBefore = {
+      code: roads[0].code,
+      surfaceLengthM: roads[0].surfaceLengthM,
+      walkSeconds: roads[0].walkSeconds,
+      fantasyWalkSeconds: roads[0].fantasyWalkSeconds,
+    };
+  for (const [x, z] of [
+    [villages.at(-1)!.x, villages.at(-1)!.z],
+    [131_060, -62_000],
+    [-131_060, 62_000],
+    [villages[0].x, villages[0].z],
+  ] as const)
+    frame.rebase(x, z);
+  assert.deepEqual(residentAt(villages[0], 17, 12_345), residentBefore);
+  assert.deepEqual(
+    {
+      code: roads[0].code,
+      surfaceLengthM: roads[0].surfaceLengthM,
+      walkSeconds: roads[0].walkSeconds,
+      fantasyWalkSeconds: roads[0].fantasyWalkSeconds,
+    },
+    routeBefore,
+  );
   assert.equal(frame.stats.resourceRebuildsOnRebase, 0);
 });
