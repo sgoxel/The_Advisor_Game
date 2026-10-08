@@ -21,15 +21,43 @@ async function expectStreamingBudget(page) {
   return state;
 }
 
-async function navigateAndSettleWithinBudget(page, lon, lat) {
+function streamingSample(state) {
+  const p = state.performance;
+  return {
+    settled: state.settled,
+    error: state.error,
+    pendingSet: state.pending,
+    pendingGeneration: p.pendingGeneration,
+    readyUploads: p.readyUploads,
+    generationReady: p.generationReady,
+    activePatches: p.activePatches,
+    cachedPatches: p.cachedPatches,
+    wantedPatches: p.wantedCanonicalKeys.length,
+    missingFromActive: p.wantedCanonicalKeys.filter(
+      (key) => !p.activeCanonicalKeys.includes(key),
+    ).length,
+    withinBudget: p.withinBudget,
+  };
+}
+
+async function navigateAndSettleWithinBudget(
+  page,
+  lon,
+  lat,
+  timeoutMs = 120000,
+  label = "navigation",
+) {
   await page.evaluate(
     ({ lon, lat }) => window.advisorWorld.navigation.setFocus(lon, lat),
     { lon, lat },
   );
-  const deadline = Date.now() + 120000;
+  const deadline = Date.now() + timeoutMs;
+  let nextSample = Date.now();
+  const samples = [];
+  let lastState;
   while (Date.now() < deadline) {
     await page.waitForTimeout(100);
-    const state = await page.evaluate(() => window.advisorWorld.state);
+    const state = (lastState = await page.evaluate(() => window.advisorWorld.state));
     const p = state.performance;
     expect(p.backend).toBe("webgpu");
     expect(p.generationReady).toBeLessThanOrEqual(p.budget.generationReady);
@@ -41,8 +69,15 @@ async function navigateAndSettleWithinBudget(page, lon, lat) {
     expect(p.canonicalKeysUnique).toBeTruthy();
     expect(p.withinBudget).toBeTruthy();
     if (state.settled) return state;
+    if (Date.now() >= nextSample) {
+      samples.push(streamingSample(state));
+      nextSample = Date.now() + 5000;
+    }
   }
-  throw new Error("streaming did not settle within 120 seconds");
+  throw new Error(
+    `${label} did not settle within ${timeoutMs / 1000} seconds; ` +
+      JSON.stringify({ samples, final: streamingSample(lastState) }),
+  );
 }
 
 for (const viewport of VIEWPORTS) {
@@ -90,7 +125,13 @@ for (const viewport of VIEWPORTS) {
     expect([...returned.performance.activeCanonicalKeys].sort()).toEqual(baselineKeys);
     expect(returned.navigation.labels.map((label) => label.id).sort()).toEqual(baselineLabels);
 
-    const north = await navigateAndSettleWithinBudget(page, 0.8, Math.PI);
+    const north = await navigateAndSettleWithinBudget(
+      page,
+      0.8,
+      Math.PI,
+      120000,
+      "north rollover",
+    );
     const poleFeedback = north.navigation.poleLimit;
     expect(poleFeedback.side).toBe("north");
     expect(poleFeedback.stops).toBeGreaterThan(0);
@@ -101,7 +142,13 @@ for (const viewport of VIEWPORTS) {
       fullPage: true,
     });
 
-    const south = await navigateAndSettleWithinBudget(page, -0.8, -Math.PI);
+    const south = await navigateAndSettleWithinBudget(
+      page,
+      -0.8,
+      -Math.PI,
+      30000,
+      "south rollover diagnostic",
+    );
     expect(south.navigation.poleLimit.side).toBe("south");
     expect(south.navigation.focus.lat).toBeCloseTo(-Math.PI / 2, 9);
     await page.screenshot({
@@ -109,7 +156,13 @@ for (const viewport of VIEWPORTS) {
       fullPage: true,
     });
 
-    const northReturn = await navigateAndSettleWithinBudget(page, 1.4, Math.PI);
+    const northReturn = await navigateAndSettleWithinBudget(
+      page,
+      1.4,
+      Math.PI,
+      120000,
+      "north return",
+    );
     expect(northReturn.navigation.focus.lat).toBeCloseTo(Math.PI / 2, 9);
     expect([...northReturn.performance.activeCanonicalKeys].sort()).toEqual(northKeys);
     expect(northReturn.performance.pendingGeneration).toBe(0);
