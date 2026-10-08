@@ -208,7 +208,7 @@ The canonical fantasy planet uses **10% of Earth's linear scale**:
 - fantasy world diameter: **1,274.2 km**;
 - fantasy world circumference: **4,003.01736 km**.
 
-The displayed PlayCanvas sphere is a visualization of that physical world, not a literal meter-per-engine-unit mesh. Physical measurements remain in meters/kilometers independently of renderer scale. The binding numeric, coordinate, handoff, precision, compatibility, performance and telemetry contracts are defined in [Stage S002 canonical planet architecture](PLANET_ARCHITECTURE.md). The legacy S001 `WORLD_SIZE = 262144 m` runtime remains transitional implementation data until the dedicated rescale WP and is not an alternative physical-world authority.
+The displayed PlayCanvas sphere is a visualization of that physical world, not a literal meter-per-engine-unit mesh. Physical measurements remain in meters/kilometers independently of renderer scale. The binding numeric, coordinate, handoff, precision, compatibility, performance and telemetry contracts are defined in [Stage S002 canonical planet architecture](PLANET_ARCHITECTURE.md). The S002 scale migration is complete: canonical physical distance comes only from the 637.1 km-radius spherical authority. The legacy S001 `WORLD_SIZE = 262144` value may remain only as explicitly named source/presentation-space data for transitional atlas/render adapters; it has no metre unit or physical-world authority in S002 and must never drive settlement, travel, ruler, scale or Simulation truth.
 
 ### Pure Zoom Interaction Rule
 
