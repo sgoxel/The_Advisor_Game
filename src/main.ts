@@ -64,12 +64,13 @@ import {
   type Rect,
 } from "./navigation.ts";
 import {
-  STREAMING_BUDGETS,
-  canonicalStreamTileKey,
-  classifyStreamingDevice,
-  estimateTileGeometryBytes,
+  estimateGeometryBytes,
+  streamingBudgetForViewport,
+  withinStreamingBudget,
+  type StreamingBudget,
 } from "./streaming.ts";
 
+/** WP-S002-003-003 runtime streaming budgets. */
 /** Canonical 1/2500 globe-dominant anchor, converted through the temporary S001 presentation adapter. */
 const GLOBE_FROM = HANDOFF_GLOBE_HALF_HEIGHT;
 /** Surface image passes: a quick preview, then the final image. */
@@ -122,37 +123,36 @@ let projectionTransition = 0,
   detailedMaxHorizontalM = 0,
   detailedMaxFloat32ErrorM = 0;
 let worldMaterial: pc.StandardMaterial | undefined;
-const tileCache = new Map<
-  string,
-  {
-    tile: Tile;
-    entity: pc.Entity;
-    meshes: pc.Mesh[];
-    used: number;
-    cpuBytes: number;
-    gpuBytes: number;
-  }
->();
+type CachedTile = {
+  tile: Tile;
+  entity: pc.Entity;
+  meshes: pc.Mesh[];
+  used: number;
+  bytes: number;
+};
+const tileCache = new Map<string, CachedTile>();
 let revision = 0,
   inFlight = 0,
   selectionDirty = true,
-  cacheCpuBytes = 0,
-  cacheGpuBytes = 0,
   cacheHits = 0,
   cacheMisses = 0,
   evictions = 0,
-  uploadsTotal = 0,
+  cachedGeometryBytes = 0,
   uploadsThisFrame = 0,
-  maxUploadsPerFrameObserved = 0;
-const streamingClass = classifyStreamingDevice(innerWidth, innerHeight),
-  streamingBudget = STREAMING_BUDGETS[streamingClass];
-let poleLimit: "north" | "south" | null = null;
+  maxUploadsPerFrame = 0,
+  poleStopCount = 0;
+let streamingBudget: StreamingBudget = streamingBudgetForViewport(
+  innerWidth,
+  innerHeight,
+);
+let poleLimit: "north" | "south" | null = null,
+  poleLimitUntil = 0;
+const previousWantedKeys = new Set<string>();
 const pending = new Set<string>();
 const uploads: {
   tile: Tile;
   data: TileGeometry;
   precision: PatchConversionStats;
-  bytes: { cpuBytes: number; gpuBytes: number };
 }[] = [];
 let worker: Worker;
 const layers = { structures: true, nature: true, grid: false };
@@ -268,8 +268,10 @@ function panScreen(ax: number, ay: number, bx: number, by: number) {
           };
     const flat = lonLatToFlat(next.lon, next.lat);
     const latitude = focus.lat + previous.lat - current.lat;
-    if (!parallel && Math.abs(latitude) > Math.PI / 2)
+    if (!parallel && Math.abs(latitude) > Math.PI / 2) {
+      notePoleLimit(latitude > 0 ? "north" : "south");
       flat.z = latitude > 0 ? -POLE_DISTANCE : POLE_DISTANCE;
+    }
     navigate(flat.x, flat.z);
   }
 }
@@ -405,7 +407,7 @@ function flatCoverageReady() {
   return (
     !selectionDirty &&
     wanted.length > 0 &&
-    wanted.every((tile) => tileCache.has(canonicalStreamTileKey(tile)))
+    wanted.every((tile) => tileCache.has(tile.key))
   );
 }
 function globeCoverageReady() {
@@ -487,9 +489,9 @@ function applyPresentation() {
     FLAT_BACKDROP.b + (backdrop.b - FLAT_BACKDROP.b) * t,
     1,
   );
-  selectionDirty = true;
 }
 function updateCamera() {
+  selectionDirty = true;
   desiredProjectionTransition = projectionTransitionForHalfHeight(
     view.halfHeight,
   );
@@ -559,19 +561,20 @@ function updateHandoff(dt: number) {
   }
   applyPresentation();
 }
+function notePoleLimit(side: "north" | "south") {
+  poleLimit = side;
+  poleLimitUntil = performance.now() + 1600;
+  poleStopCount++;
+}
 function navigate(x: number, z: number, height = view.halfHeight) {
   view.halfHeight = Math.max(
     2,
     Math.min(Math.max(GLOBE_FROM, globeFit) * 1.3, height),
   );
-  poleLimit =
-    z <= -POLE_DISTANCE
-      ? "north"
-      : z >= POLE_DISTANCE
-        ? "south"
-        : null;
+  const boundedZ = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, z));
+  if (boundedZ !== z) notePoleLimit(z < -POLE_DISTANCE ? "north" : "south");
   view.x = wrapX(x);
-  view.z = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, z));
+  view.z = boundedZ;
   rebaseRenderFrame();
   // Leaving Province level means the globe may be needed soon.
   if (view.halfHeight >= 900) prepareGlobe();
@@ -619,19 +622,22 @@ function setLayers() {
     }
 }
 function request(tile: Tile) {
-  const key = canonicalStreamTileKey(tile);
-  if (tileCache.has(key)) {
-    cacheHits++;
-    return;
-  }
-  if (pending.has(key) || pending.size >= streamingBudget.queue) return;
-  cacheMisses++;
-  pending.add(key);
+  if (tileCache.has(tile.key) || pending.has(tile.key)) return;
+  if (inFlight + uploads.length >= streamingBudget.generationReady) return;
+  pending.add(tile.key);
   inFlight++;
   worker.postMessage(tile);
 }
 function refreshSelection() {
-  wanted = selectTiles(view, 190, streamingBudget.active);
+  wanted = selectTiles(view, 190, streamingBudget.activePatches);
+  const nextWantedKeys = new Set(wanted.map((tile) => tile.key));
+  for (const tile of wanted)
+    if (!previousWantedKeys.has(tile.key)) {
+      if (tileCache.has(tile.key)) cacheHits++;
+      else cacheMisses++;
+    }
+  previousWantedKeys.clear();
+  for (const key of nextWantedKeys) previousWantedKeys.add(key);
   revision++;
   selectionDirty = false;
   const name =
@@ -661,50 +667,14 @@ function refreshSelection() {
       : "The wild marches";
   updateNavigationHud();
 }
-function ensureCacheCapacity(
-  protect: Set<string>,
-  reserve: { cpuBytes: number; gpuBytes: number },
-  reserveEntries: number,
-): boolean {
-  const overBudget = () =>
-    tileCache.size + reserveEntries > streamingBudget.cached ||
-    cacheCpuBytes + reserve.cpuBytes > streamingBudget.cpuBytes ||
-    cacheGpuBytes + reserve.gpuBytes > streamingBudget.gpuBytes;
-  if (!overBudget()) return true;
-  const obsolete = [...tileCache.entries()]
-    .filter(([key]) => !protect.has(key))
-    .sort((a, b) => a[1].used - b[1].used || a[0].localeCompare(b[0]));
-  for (const [key, record] of obsolete) {
-    if (!overBudget()) break;
-    record.entity.destroy();
-    tileCache.delete(key);
-    cacheCpuBytes = Math.max(0, cacheCpuBytes - record.cpuBytes);
-    cacheGpuBytes = Math.max(0, cacheGpuBytes - record.gpuBytes);
-    evictions++;
-  }
-  return !overBudget();
-}
 function processStreaming(material: pc.StandardMaterial) {
   uploadsThisFrame = 0;
   if (selectionDirty) refreshSelection();
-  const root = tileAt(0, 0, 0),
-    rootKey = canonicalStreamTileKey(root),
-    wantedKeys = wanted.map(canonicalStreamTileKey),
-    protect = new Set([...activeKeys, ...wantedKeys, rootKey]),
-    readyCpuBytes = uploads.reduce((sum, upload) => sum + upload.bytes.cpuBytes, 0);
-  ensureCacheCapacity(protect, { cpuBytes: readyCpuBytes, gpuBytes: 0 }, 0);
-  const next = uploads[0];
-  if (
-    next &&
-    ensureCacheCapacity(
-      new Set([...protect, canonicalStreamTileKey(next.tile)]),
-      { cpuBytes: readyCpuBytes, gpuBytes: next.bytes.gpuBytes },
-      1,
-    )
-  ) {
-    uploads.shift();
-    const key = canonicalStreamTileKey(next.tile),
-      entity = new pc.Entity(key),
+  // At most one GPU mesh group per frame. Generation is isolated in a worker.
+  const next = uploads.shift();
+  if (next) {
+    const bytes = estimateGeometryBytes(next.data);
+    const entity = new pc.Entity(next.tile.key),
       meshes: pc.Mesh[] = [];
     for (const [name, g] of Object.entries(next.data)) {
       const mesh = uploadGeometry(g, entity, name, material);
@@ -713,19 +683,16 @@ function processStreaming(material: pc.StandardMaterial) {
     entity.enabled = false;
     applyTileRenderTransform(next.tile, entity);
     flatRoot.addChild(entity);
-    tileCache.set(key, {
+    tileCache.set(next.tile.key, {
       tile: next.tile,
       entity,
       meshes,
       used: revision,
-      cpuBytes: next.bytes.cpuBytes,
-      gpuBytes: next.bytes.gpuBytes,
+      bytes,
     });
-    cacheCpuBytes += next.bytes.cpuBytes;
-    cacheGpuBytes += next.bytes.gpuBytes;
+    cachedGeometryBytes += bytes;
     uploadsThisFrame = 1;
-    uploadsTotal++;
-    maxUploadsPerFrameObserved = Math.max(maxUploadsPerFrameObserved, uploadsThisFrame);
+    maxUploadsPerFrame = Math.max(maxUploadsPerFrame, uploadsThisFrame);
     if (next.tile.size <= 512) {
       detailedMaxHorizontalM = Math.max(
         detailedMaxHorizontalM,
@@ -736,14 +703,15 @@ function processStreaming(material: pc.StandardMaterial) {
         next.precision.maxFloat32ErrorM,
       );
     }
-    pending.delete(key);
+    pending.delete(next.tile.key);
   }
-  if (!tileCache.has(rootKey)) {
-    request(root);
+  const root = tileAt(0, 0, 0);
+  if (!tileCache.has(root.key)) {
+    if (inFlight + uploads.length < streamingBudget.generationReady) request(root);
   } else {
-    const complete = wantedKeys.every((key) => tileCache.has(key));
+    const complete = wanted.every((tile) => tileCache.has(tile.key));
     if (complete) {
-      const newKeys = wantedKeys,
+      const newKeys = wanted.map((t) => t.key),
         active = new Set(newKeys);
       for (const [key, record] of tileCache) {
         record.entity.enabled = active.has(key);
@@ -755,23 +723,48 @@ function processStreaming(material: pc.StandardMaterial) {
         $("loading").classList.add("done");
       }
     } else {
-      tileCache.get(rootKey)!.entity.enabled = true;
+      // Keep the previous coverage and coarse root until the replacement is complete.
+      tileCache.get(root.key)!.entity.enabled = true;
       if (!ready && tileCache.size > 1) $("loading").classList.add("done");
-      for (const tile of wanted) request(tile);
+      for (const tile of wanted) {
+        if (inFlight + uploads.length >= streamingBudget.generationReady) break;
+        request(tile);
+      }
     }
-    ensureCacheCapacity(protect, { cpuBytes: readyCpuBytes, gpuBytes: 0 }, 0);
+    const overCacheBudget = () =>
+      tileCache.size > streamingBudget.cachedPatches ||
+      cachedGeometryBytes > streamingBudget.cpuBytes ||
+      cachedGeometryBytes > streamingBudget.gpuBytes;
+    if (overCacheBudget()) {
+      const protect = new Set([
+        ...activeKeys,
+        ...wanted.map((t) => t.key),
+        root.key,
+      ]);
+      const obsolete = [...tileCache.entries()]
+        .filter(([key]) => !protect.has(key))
+        .sort((a, b) => a[1].used - b[1].used || a[0].localeCompare(b[0]));
+      for (const [key, record] of obsolete) {
+        if (!overCacheBudget()) break;
+        // MeshInstance destruction releases its mesh reference and GPU buffers.
+        record.entity.destroy();
+        tileCache.delete(key);
+        cachedGeometryBytes = Math.max(0, cachedGeometryBytes - record.bytes);
+        evictions++;
+      }
+    }
   }
-  const baseStatus =
-    projectionTransition >= 0.999
+  const poleFeedback =
+    poleLimit && performance.now() < poleLimitUntil
+      ? ` · ${poleLimit === "north" ? "North" : "South"} pole limit`
+      : "";
+  $("tile-status").textContent =
+    (projectionTransition >= 0.999
       ? `Globe · ${globePass < GLOBE_PASSES.length ? "refining" : "ready"}`
       : projectionTransition > 0.001
         ? `Handoff · ${Math.round(projectionTransition * 100)}% · ${pending.size ? "preparing terrain" : "ready"}`
-        : `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`;
-  $("tile-status").textContent =
-    baseStatus +
-    (poleLimit
-      ? ` · ${poleLimit === "north" ? "North" : "South"} pole limit`
-      : "");
+        : `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`) +
+    poleFeedback;
 }
 function inspectCell(screenX: number, screenY: number) {
   const origin = camera.camera!.screenToWorld(screenX, screenY, 0);
@@ -993,6 +986,7 @@ function setupControls() {
     app.resizeCanvas();
     view.aspect = innerWidth / innerHeight;
     view.pixels = Math.min(innerHeight, 1000);
+    streamingBudget = streamingBudgetForViewport(innerWidth, innerHeight);
     if (projectionTransition > 0.001)
       globeFit = (PLANET_RADIUS * innerHeight) / (2 * freeRadius());
     updateCamera();
@@ -1184,16 +1178,12 @@ async function start() {
   });
   worker.onmessage = (event) => {
     inFlight--;
-    const key = canonicalStreamTileKey(event.data.tile);
     if (event.data.error) {
-      pending.delete(key);
+      pending.delete(event.data.tile.key);
       fail(`Tile generation failed: ${event.data.error}`);
       return;
     }
-    uploads.push({
-      ...event.data,
-      bytes: estimateTileGeometryBytes(event.data.data),
-    });
+    uploads.push(event.data);
   };
   worker.onerror = (event) =>
     fail(`World worker could not start: ${event.message}`);
@@ -1484,6 +1474,8 @@ async function start() {
       navigation: {
         surfaceAtScreen,
         setFocus(lon: number, lat: number) {
+          if (lat > Math.PI / 2) notePoleLimit("north");
+          else if (lat < -Math.PI / 2) notePoleLimit("south");
           const p = lonLatToFlat(lon, lat);
           navigate(p.x, p.z);
         },
@@ -1499,7 +1491,11 @@ async function start() {
             ? handoffPreparationWaitMs +
               performance.now() -
               handoffPreparationStarted
-            : handoffPreparationWaitMs;
+              : handoffPreparationWaitMs,
+          readyGeometryBytes = uploads.reduce(
+            (sum, upload) => sum + estimateGeometryBytes(upload.data),
+            0,
+          );
         return {
           ready,
           error: errorText,
@@ -1517,28 +1513,11 @@ async function start() {
             ruler: { ...rulerState },
             labels: labelState,
             selectedCanonicalId: selectedCode || null,
-            poleLimit,
-          },
-          streaming: {
-            deviceClass: streamingClass,
-            budget: { ...streamingBudget },
-            activePatches: activeKeys.length,
-            cachedPatches: tileCache.size,
-            pendingGeneration: inFlight,
-            readyUploads: uploads.length,
-            generationReadyQueue: pending.size,
-            cacheHits,
-            cacheMisses,
-            evictions,
-            uploadsTotal,
-            uploadsThisFrame,
-            maxUploadsPerFrameObserved,
-            cpuResourceBytesEstimated:
-              cacheCpuBytes +
-              uploads.reduce((sum, upload) => sum + upload.bytes.cpuBytes, 0),
-            gpuResourceBytesEstimated: cacheGpuBytes,
-            activeCanonicalKeys: [...activeKeys],
-            wantedCanonicalKeys: wanted.map(canonicalStreamTileKey),
+            poleLimit: {
+              side: poleLimit,
+              active: Boolean(poleLimit && performance.now() < poleLimitUntil),
+              stops: poleStopCount,
+            },
           },
           renderFrame: {
             origin: renderFrame.canonicalOrigin,
@@ -1561,7 +1540,7 @@ async function start() {
             blendDurationMs: handoffBlendDurationMs,
             waitingForDestination: handoffWaitingForDestination,
             destinationReady,
-            outstandingGeneration: pending.size + uploads.length + inFlight,
+            outstandingGeneration: inFlight + uploads.length,
             slowFrames: slowFrameCount,
             droppedFrames: droppedFrameCount,
           },
@@ -1570,6 +1549,38 @@ async function start() {
             complete: globeCoverageReady(),
             fit: globeFit,
             ...globe!.stats,
+          },
+          performance: {
+            backend: device.deviceType,
+            deviceClass: streamingBudget.deviceClass,
+            budget: { ...streamingBudget },
+            activePatches: activeKeys.length,
+            preparedPatches: uploads.length,
+            cachedPatches: tileCache.size,
+            pendingGeneration: inFlight,
+            readyUploads: uploads.length,
+            generationReady: inFlight + uploads.length,
+            cacheHits,
+            cacheMisses,
+            evictions,
+            cpuResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes,
+            gpuResourceBytesEstimated: cachedGeometryBytes,
+            uploadsThisFrame,
+            maxUploadsPerFrame,
+            canonicalKeysUnique: new Set(activeKeys).size === activeKeys.length,
+            activeCanonicalKeys: [...activeKeys],
+            wantedCanonicalKeys: wanted.map((tile) => tile.key),
+            poleStops: poleStopCount,
+            withinBudget: withinStreamingBudget(
+              {
+                generationReady: inFlight + uploads.length,
+                activePatches: activeKeys.length,
+                cachedPatches: tileCache.size,
+                cpuBytes: cachedGeometryBytes + readyGeometryBytes,
+                gpuBytes: cachedGeometryBytes,
+              },
+              streamingBudget,
+            ),
           },
           view: { ...view },
           fps,
@@ -1587,12 +1598,8 @@ async function start() {
             (!globeShown || globeCoverageReady()) &&
             !selectionDirty &&
             pending.size === 0 &&
-            uploads.length === 0 &&
-            inFlight === 0 &&
             activeKeys.length === wanted.length &&
-            activeKeys.every((key) =>
-              wanted.some((t) => canonicalStreamTileKey(t) === key),
-            ),
+            activeKeys.every((key) => wanted.some((t) => t.key === key)),
           visibleMeshes: Object.fromEntries(
             ["terrain", "structures", "nature", "detail"].map((name) => [
               name,

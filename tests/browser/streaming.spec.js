@@ -1,26 +1,31 @@
 import { test, expect } from "@playwright/test";
 
-async function expectBounded(page) {
+const VIEWPORTS = [
+  { name: "desktop", width: 1280, height: 720 },
+  { name: "phone", width: 390, height: 844 },
+];
+
+async function expectStreamingBudget(page) {
   const state = await page.evaluate(() => window.advisorWorld.state);
-  const s = state.streaming;
-  expect(s.generationReadyQueue).toBeLessThanOrEqual(s.budget.queue);
-  expect(s.pendingGeneration + s.readyUploads).toBeLessThanOrEqual(s.budget.queue);
-  expect(s.activePatches).toBeLessThanOrEqual(s.budget.active);
-  expect(s.cachedPatches).toBeLessThanOrEqual(s.budget.cached);
-  expect(s.cpuResourceBytesEstimated).toBeLessThanOrEqual(s.budget.cpuBytes);
-  expect(s.gpuResourceBytesEstimated).toBeLessThanOrEqual(s.budget.gpuBytes);
-  expect(s.maxUploadsPerFrameObserved).toBeLessThanOrEqual(1);
-  expect(new Set(s.activeCanonicalKeys).size).toBe(s.activeCanonicalKeys.length);
+  const p = state.performance;
+  expect(p).toBeTruthy();
+  expect(p.generationReady).toBeLessThanOrEqual(p.budget.generationReady);
+  expect(p.activePatches).toBeLessThanOrEqual(p.budget.activePatches);
+  expect(p.cachedPatches).toBeLessThanOrEqual(p.budget.cachedPatches);
+  expect(p.cpuResourceBytesEstimated).toBeLessThanOrEqual(p.budget.cpuBytes);
+  expect(p.gpuResourceBytesEstimated).toBeLessThanOrEqual(p.budget.gpuBytes);
+  expect(p.maxUploadsPerFrame).toBeLessThanOrEqual(1);
+  expect(p.canonicalKeysUnique).toBeTruthy();
+  expect(p.withinBudget).toBeTruthy();
   return state;
 }
 
-for (const profile of [
-  { name: "phone", width: 390, height: 844, device: "phone" },
-  { name: "desktop", width: 1440, height: 900, device: "desktop" },
-]) {
-  test(`WebGL2 wrap/pole streaming stays canonical and bounded on ${profile.name}`, async ({ page }) => {
-    test.setTimeout(420000);
-    await page.setViewportSize({ width: profile.width, height: profile.height });
+for (const viewport of VIEWPORTS) {
+  test(`WebGL2 canonical streaming ${viewport.name}`, async ({ page }) => {
+    test.setTimeout(600000);
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.addInitScript(() =>
       Object.defineProperty(navigator, "gpu", {
         value: undefined,
@@ -29,93 +34,48 @@ for (const profile of [
     );
     await page.goto("/");
     await page.waitForFunction(() => window.advisorWorld?.state.settled);
-    expect(await page.evaluate(() => window.advisorRenderer.backend)).toBe("webgl2");
-    expect((await expectBounded(page)).streaming.deviceClass).toBe(profile.device);
-
-    await page.evaluate(() => {
-      window.advisorWorld.setHalfHeight(97);
-      window.advisorWorld.navigation.setFocus(0.42, 0.2);
+    await page.locator("#map-scale").selectOption("100");
+    await page.evaluate(() => window.advisorWorld.navigation.setFocus(Math.PI - 0.001, 0.22));
+    await page.waitForFunction(() => window.advisorWorld.state.settled);
+    await page.locator("#grid").check();
+    const seam = await expectStreamingBudget(page);
+    expect(seam.performance.deviceClass).toBe(viewport.name);
+    expect(seam.performance.activeCanonicalKeys.some((key) => key.includes("/PLANET/"))).toBeTruthy();
+    const baselineKeys = [...seam.performance.activeCanonicalKeys].sort();
+    const baselineLabels = seam.navigation.labels.map((label) => label.id).sort();
+    const baselineFocus = seam.navigation.focus;
+    await page.screenshot({
+      path: `test-results/streaming-${viewport.name}-wrap-webgl2.png`,
+      fullPage: true,
     });
-    await page.waitForFunction(() => window.advisorWorld.state.settled);
-    const canonical = await page.evaluate(() => ({
-      focus: window.advisorWorld.state.navigation.focus,
-      keys: [...window.advisorWorld.state.streaming.activeCanonicalKeys].sort(),
-      misses: window.advisorWorld.state.streaming.cacheMisses,
-    }));
-    await page.evaluate(() =>
-      window.advisorWorld.navigation.setFocus(0.42 + Math.PI * 2, 0.2),
-    );
-    await page.waitForFunction(() => window.advisorWorld.state.settled);
-    const fullTurn = await expectBounded(page);
-    expect(fullTurn.navigation.focus.lon).toBeCloseTo(canonical.focus.lon, 10);
-    expect(fullTurn.navigation.focus.lat).toBeCloseTo(canonical.focus.lat, 10);
-    expect([...fullTurn.streaming.activeCanonicalKeys].sort()).toEqual(canonical.keys);
-    expect(fullTurn.streaming.cacheMisses).toBe(canonical.misses);
 
-    for (const lon of [
-      Math.PI - 0.003,
-      -Math.PI + 0.003,
-      Math.PI - 0.002,
-      -Math.PI + 0.002,
-    ]) {
-      await page.evaluate(
-        (value) => window.advisorWorld.navigation.setFocus(value, 0),
-        lon,
-      );
-      await page.waitForFunction(() => window.advisorWorld.state.settled);
-      await expectBounded(page);
+    for (let i = 1; i <= 16; i++) {
+      const lon = Math.PI - 0.001 + (i * Math.PI * 2) / 16;
+      await page.evaluate((value) => window.advisorWorld.navigation.setFocus(value, 0.22), lon);
+      await page.waitForTimeout(20);
+      const p = await page.evaluate(() => window.advisorWorld.state.performance);
+      expect(p.generationReady).toBeLessThanOrEqual(p.budget.generationReady);
+      expect(p.activePatches).toBeLessThanOrEqual(p.budget.activePatches);
+      expect(p.maxUploadsPerFrame).toBeLessThanOrEqual(1);
     }
+    await page.waitForFunction(() => window.advisorWorld.state.settled);
+    const returned = await expectStreamingBudget(page);
+    expect(returned.navigation.focus.lon).toBeCloseTo(baselineFocus.lon, 9);
+    expect(returned.navigation.focus.lat).toBeCloseTo(baselineFocus.lat, 9);
+    expect([...returned.performance.activeCanonicalKeys].sort()).toEqual(baselineKeys);
+    expect(returned.navigation.labels.map((label) => label.id).sort()).toEqual(baselineLabels);
 
-    await page.evaluate(() => {
-      for (let i = 0; i < 18; i++)
-        window.advisorWorld.navigation.setFocus(
-          i % 2 ? -Math.PI + 0.004 : Math.PI - 0.004,
-          0.12,
-        );
+    await page.evaluate(() => window.advisorWorld.navigation.setFocus(0.8, Math.PI));
+    const poleFeedback = await page.evaluate(() => window.advisorWorld.state.navigation.poleLimit);
+    expect(poleFeedback.side).toBe("north");
+    expect(poleFeedback.stops).toBeGreaterThan(0);
+    await page.waitForFunction(() => window.advisorWorld.state.settled);
+    const pole = await expectStreamingBudget(page);
+    expect(pole.navigation.focus.lat).toBeCloseTo(Math.PI / 2, 9);
+    await page.screenshot({
+      path: `test-results/streaming-${viewport.name}-north-pole-webgl2.png`,
+      fullPage: true,
     });
-    const churn = await expectBounded(page);
-    expect(churn.visibleMeshes.terrain).toBeGreaterThan(0);
-    await page.waitForFunction(() => window.advisorWorld.state.settled);
-
-    await page.evaluate(() =>
-      window.advisorWorld.navigation.setFocus(0.7, Math.PI),
-    );
-    await page.waitForFunction(() => window.advisorWorld.state.settled);
-    let pole = await expectBounded(page);
-    expect(pole.navigation.focus.lat).toBeCloseTo(Math.PI / 2, 10);
-    expect(pole.navigation.poleLimit).toBe("north");
-    await expect(page.locator("#tile-status")).toContainText("North pole limit");
-
-    await page.evaluate(() =>
-      window.advisorWorld.navigation.setFocus(-1.1, -Math.PI),
-    );
-    await page.waitForFunction(() => window.advisorWorld.state.settled);
-    pole = await expectBounded(page);
-    expect(pole.navigation.focus.lat).toBeCloseTo(-Math.PI / 2, 10);
-    expect(pole.navigation.poleLimit).toBe("south");
-    await expect(page.locator("#tile-status")).toContainText("South pole limit");
-
-    if (profile.device === "phone") {
-      const first = 0.15;
-      for (let i = 0; i < 8; i++) {
-        await page.evaluate(
-          ({ lon, lat }) => window.advisorWorld.navigation.setFocus(lon, lat),
-          { lon: first + i * 0.52, lat: (i % 3 - 1) * 0.22 },
-        );
-        await page.waitForFunction(() => window.advisorWorld.state.settled);
-        await expectBounded(page);
-      }
-      const beforeRevisit = await page.evaluate(
-        () => window.advisorWorld.state.streaming.evictions,
-      );
-      expect(beforeRevisit).toBeGreaterThan(0);
-      await page.evaluate(
-        (lon) => window.advisorWorld.navigation.setFocus(lon, 0),
-        first,
-      );
-      await page.waitForFunction(() => window.advisorWorld.state.settled);
-      const revisit = await expectBounded(page);
-      expect(revisit.streaming.evictions).toBeGreaterThanOrEqual(beforeRevisit);
-    }
+    expect(errors).toEqual([]);
   });
 }

@@ -1,142 +1,108 @@
-import type { TileGeometry } from "./geometry.ts";
-import {
-  SOURCE_PRESENTATION_POLE_DISTANCE,
-  SOURCE_PRESENTATION_WIDTH,
-  canonicalCellId,
-  sourceToLonLat,
-} from "./planet.ts";
-import type { Tile } from "./world.ts";
-
-const MIB = 1024 * 1024;
-
 export type StreamingDeviceClass = "phone" | "tablet" | "desktop";
+
 export type StreamingBudget = {
-  queue: number;
-  active: number;
-  cached: number;
+  deviceClass: StreamingDeviceClass;
+  generationReady: number;
+  activePatches: number;
+  cachedPatches: number;
   cpuBytes: number;
   gpuBytes: number;
 };
 
-/** Root-contract budgets from docs/PLANET_ARCHITECTURE.md §11.2. */
-export const STREAMING_BUDGETS: Readonly<Record<StreamingDeviceClass, StreamingBudget>> =
-  Object.freeze({
-    phone: Object.freeze({
-      queue: 4,
-      active: 160,
-      cached: 180,
-      cpuBytes: 96 * MIB,
-      gpuBytes: 96 * MIB,
-    }),
-    tablet: Object.freeze({
-      queue: 6,
-      active: 220,
-      cached: 240,
-      cpuBytes: 160 * MIB,
-      gpuBytes: 160 * MIB,
-    }),
-    desktop: Object.freeze({
-      queue: 8,
-      active: 260,
-      cached: 320,
-      cpuBytes: 256 * MIB,
-      gpuBytes: 256 * MIB,
-    }),
-  });
+const MIB = 1024 * 1024;
 
-/** Presentation/device policy only; it never changes world identity or values. */
-export function classifyStreamingDevice(
+/** Binding Stage S002 budgets from docs/PLANET_ARCHITECTURE.md. */
+export const STREAMING_BUDGETS: Readonly<
+  Record<StreamingDeviceClass, StreamingBudget>
+> = Object.freeze({
+  phone: Object.freeze({
+    deviceClass: "phone",
+    generationReady: 4,
+    activePatches: 160,
+    cachedPatches: 180,
+    cpuBytes: 96 * MIB,
+    gpuBytes: 96 * MIB,
+  }),
+  tablet: Object.freeze({
+    deviceClass: "tablet",
+    generationReady: 6,
+    activePatches: 220,
+    cachedPatches: 240,
+    cpuBytes: 160 * MIB,
+    gpuBytes: 160 * MIB,
+  }),
+  desktop: Object.freeze({
+    deviceClass: "desktop",
+    generationReady: 8,
+    activePatches: 260,
+    cachedPatches: 320,
+    cpuBytes: 256 * MIB,
+    gpuBytes: 256 * MIB,
+  }),
+});
+
+/**
+ * Rendering policy only. Device class never enters generation or canonical IDs.
+ * Phone landscape remains a phone; 1024-class layouts remain tablets; laptop
+ * and desktop widths get the desktop envelope.
+ */
+export function streamingDeviceClassForViewport(
   width: number,
   height: number,
 ): StreamingDeviceClass {
+  if (!(width > 0) || !(height > 0)) return "phone";
   const shortSide = Math.min(width, height),
     longSide = Math.max(width, height);
-  if (shortSide <= 480) return "phone";
-  if (longSide < 1200) return "tablet";
+  if (shortSide <= 600) return "phone";
+  if (longSide <= 1100) return "tablet";
   return "desktop";
 }
 
-/** Shortest signed source-domain offset on the canonical east-west wrap. */
-export function wrappedSourceDelta(fromX: number, toX: number): number {
-  const half = SOURCE_PRESENTATION_WIDTH / 2;
-  return (
-    ((((toX - fromX + half) % SOURCE_PRESENTATION_WIDTH) +
-      SOURCE_PRESENTATION_WIDTH) %
-      SOURCE_PRESENTATION_WIDTH) -
-    half
-  );
+export function streamingBudgetForViewport(
+  width: number,
+  height: number,
+): StreamingBudget {
+  return STREAMING_BUDGETS[streamingDeviceClassForViewport(width, height)];
 }
 
-/** A render tile is legal when any of its north-south support intersects the planet. */
-export function tileIntersectsPoleBand(
-  tile: Pick<Tile, "minZ" | "size">,
-): boolean {
-  return (
-    tile.minZ < SOURCE_PRESENTATION_POLE_DISTANCE &&
-    tile.minZ + tile.size > -SOURCE_PRESENTATION_POLE_DISTANCE
-  );
-}
+export type GeometryBufferSet = Record<
+  string,
+  {
+    positions: ArrayBufferView;
+    normals: ArrayBufferView;
+    colors: ArrayBufferView;
+    indices: ArrayBufferView;
+  }
+>;
 
-/** Wrap-aware source-space viewport overlap used only to choose disposable render tiles. */
-export function tileIntersectsWrappedView(
-  tile: Pick<Tile, "minX" | "minZ" | "size">,
-  focusX: number,
-  focusZ: number,
-  radiusX: number,
-  radiusZ: number,
-): boolean {
-  if (!tileIntersectsPoleBand(tile)) return false;
-  const centerX = tile.minX + tile.size / 2,
-    centerZ = tile.minZ + tile.size / 2,
-    dx = Math.abs(wrappedSourceDelta(focusX, centerX)),
-    dz = Math.abs(centerZ - focusZ);
-  return dx <= radiusX + tile.size / 2 && dz <= radiusZ + tile.size / 2;
-}
-
-/** Stable cube-sphere cache identity independent of longitude-wrap representation. */
-export function canonicalStreamTileKey(
-  tile: Pick<Tile, "level" | "minX" | "minZ" | "size">,
-): string {
-  const legalMinZ = Math.max(tile.minZ, -SOURCE_PRESENTATION_POLE_DISTANCE),
-    legalMaxZ = Math.min(
-      tile.minZ + tile.size,
-      SOURCE_PRESENTATION_POLE_DISTANCE,
-    ),
-    sampleZ = (legalMinZ + legalMaxZ) / 2,
-    sampleX = tile.minX + tile.size / 2,
-    { lon, lat } = sourceToLonLat(sampleX, sampleZ);
-  return `${canonicalCellId(lon, lat, 24)}/STREAM/L${tile.level}`;
-}
-
-export type GeometryByteEstimate = { cpuBytes: number; gpuBytes: number };
-
-/** Explicit conservative app-owned geometry estimate for both CPU and GPU residency. */
-export function estimateTileGeometryBytes(
-  data: TileGeometry,
-): GeometryByteEstimate {
+/** Known application-owned mesh-buffer bytes, used as a conservative cache estimate. */
+export function estimateGeometryBytes(data: object): number {
   let bytes = 0;
-  for (const geometry of Object.values(data))
-    bytes +=
-      geometry.positions.byteLength +
-      geometry.normals.byteLength +
-      geometry.colors.byteLength +
-      geometry.indices.byteLength;
-  return { cpuBytes: bytes, gpuBytes: bytes };
+  for (const geometry of Object.values(data) as GeometryBufferSet[string][]) {
+    bytes += geometry.positions.byteLength;
+    bytes += geometry.normals.byteLength;
+    bytes += geometry.colors.byteLength;
+    bytes += geometry.indices.byteLength;
+  }
+  return bytes;
 }
 
+/** Helper shared by runtime and tests so queue/accounting policy has one definition. */
 export function withinStreamingBudget(
+  state: {
+    generationReady: number;
+    activePatches: number;
+    cachedPatches: number;
+    cpuBytes: number;
+    gpuBytes: number;
+  },
   budget: StreamingBudget,
-  active: number,
-  cached: number,
-  queue: number,
-  cpuBytes: number,
-  gpuBytes: number,
 ): boolean {
   return (
-    active <= budget.active &&
-    cached <= budget.cached &&
-    queue <= budget.queue &&
-    cpuBytes <= budget.cpuBytes &&
-    gpuBytes <= budget.gpuBytes
+    state.generationReady <= budget.generationReady &&
+    state.activePatches <= budget.activePatches &&
+    state.cachedPatches <= budget.cachedPatches &&
+    state.cpuBytes <= budget.cpuBytes &&
+    state.gpuBytes <= budget.gpuBytes
   );
 }

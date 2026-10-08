@@ -1,15 +1,18 @@
 /** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
 import { WORLD_SEED } from "./config.ts";
 import {
+  canonicalCellId,
+  SOURCE_PRESENTATION_POLE_DISTANCE,
+  sourceToLonLat,
+  wrapSourceX,
+} from "./planet.ts";
+import { streamingBudgetForViewport } from "./streaming.ts";
+import {
   continentalEnvelope,
   nearestPlace,
   places,
   roadAt,
 } from "./geography.ts";
-import {
-  SOURCE_PRESENTATION_POLE_DISTANCE,
-  SOURCE_PRESENTATION_WIDTH,
-} from "./planet.ts";
 export { WORLD_SEED } from "./config.ts";
 export const GENERATOR_VERSION = "v1";
 export const WORLD_SIZE = 262144;
@@ -289,6 +292,35 @@ export function biomeAt(x: number, z: number): string {
   if (h > 70) return "Highlands";
   return field(x, z, 90, 4) > 0.45 ? "Woodland" : "Meadow";
 }
+
+/**
+ * Transitional equirectangular render patches are addressed by a canonical
+ * cube-sphere anchor. The address is stable across wrap direction and visit
+ * order; the patch rectangle remains disposable presentation data.
+ */
+function canonicalPatchKey(
+  level: number,
+  minX: number,
+  minZ: number,
+  size: number,
+): string {
+  const centre = sourceToLonLat(
+      wrapSourceX(minX + size / 2),
+      Math.max(
+        -SOURCE_PRESENTATION_POLE_DISTANCE,
+        Math.min(SOURCE_PRESENTATION_POLE_DISTANCE, minZ + size / 2),
+      ),
+    ),
+    canonicalLevel = Math.min(24, level + 4);
+  return `${canonicalCellId(
+    centre.lon,
+    centre.lat,
+    canonicalLevel,
+    WORLD_SEED,
+    GENERATOR_VERSION,
+  )}/PATCH`;
+}
+
 export function tileAt(level: number, x: number, z: number): Tile {
   const count = 2 ** level;
   if (
@@ -303,15 +335,17 @@ export function tileAt(level: number, x: number, z: number): Tile {
     z >= count
   )
     throw new RangeError("Tile outside world hierarchy");
-  const size = WORLD_SIZE / count;
+  const size = WORLD_SIZE / count,
+    minX = WORLD_MIN + x * size,
+    minZ = WORLD_MIN + z * size;
   return {
     level,
     x,
     z,
-    key: `${WORLD_SEED}/${GENERATOR_VERSION}/T/${level}/${x}/${z}`,
+    key: canonicalPatchKey(level, minX, minZ, size),
     size,
-    minX: WORLD_MIN + x * size,
-    minZ: WORLD_MIN + z * size,
+    minX,
+    minZ,
   };
 }
 export function tileForPosition(x: number, z: number, level = MAX_LEVEL): Tile {
@@ -467,57 +501,82 @@ export function viewBounds(view: View) {
   const margin = Math.max(4, Math.min(48, view.halfHeight * 0.35));
   return { rx: hw * c + hz * s + margin, rz: hw * s + hz * c + margin };
 }
-/** Signed shortest source-domain east/west delta on the canonical wrap. */
-export function wrappedSourceDelta(fromX: number, toX: number): number {
-  const half = SOURCE_PRESENTATION_WIDTH / 2;
-  return (
-    ((((toX - fromX + half) % SOURCE_PRESENTATION_WIDTH) +
-      SOURCE_PRESENTATION_WIDTH) %
-      SOURCE_PRESENTATION_WIDTH) -
-    half
-  );
+
+function wrappedTileDistanceX(x: number, focusX: number): number {
+  return Math.abs(wrapSourceX(x - focusX));
 }
 
-export function selectTiles(view: View, threshold = 190, maxTiles = 160): Tile[] {
-  const { rx, rz } = viewBounds(view),
-    selected: Tile[] = [];
-  const visit = (t: Tile) => {
+/**
+ * Wrap-aware local patch selection. Near a pole, longitude convergence expands
+ * the source-domain search so the tangent view receives a complete ring of
+ * canonical coverage instead of a narrow equirectangular wedge.
+ */
+export function selectTiles(
+  view: View,
+  threshold = 190,
+  activeLimit = streamingBudgetForViewport(
+    view.pixels * view.aspect,
+    view.pixels,
+  ).activePatches,
+): Tile[] {
+  const bounds = viewBounds(view),
+    focus = sourceToLonLat(view.x, view.z),
+    atPole = Math.abs(Math.abs(focus.lat) - Math.PI / 2) <= 1e-12,
+    streamX = atPole ? 0 : view.x,
+    longitudeScale = Math.max(0.02, Math.abs(Math.cos(focus.lat))),
+    rx = atPole
+      ? WORLD_SIZE / 2
+      : Math.min(WORLD_SIZE / 2, bounds.rx / longitudeScale),
+    rz = bounds.rz,
+    selected = new Map<string, Tile>(),
+    centres = [streamX];
+
+  if (streamX - rx < WORLD_MIN) centres.push(streamX + WORLD_SIZE);
+  if (streamX + rx > -WORLD_MIN) centres.push(streamX - WORLD_SIZE);
+
+  const visit = (t: Tile, centreX: number) => {
     const maxZ = t.minZ + t.size;
+    // The S001 source plane extends past the canonical poles. Never stream
+    // those invalid bands. Subdivide coarse crossing patches until the exact
+    // level-2 pole boundaries can be selected without folded duplicates.
     if (
-      maxZ <= -SOURCE_PRESENTATION_POLE_DISTANCE ||
-      t.minZ >= SOURCE_PRESENTATION_POLE_DISTANCE
+      t.minZ >= SOURCE_PRESENTATION_POLE_DISTANCE ||
+      maxZ <= -SOURCE_PRESENTATION_POLE_DISTANCE
     )
       return;
-    const centreX = t.minX + t.size / 2,
-      crossesPole =
-        (t.minZ < -SOURCE_PRESENTATION_POLE_DISTANCE &&
-          maxZ > -SOURCE_PRESENTATION_POLE_DISTANCE) ||
-        (t.minZ < SOURCE_PRESENTATION_POLE_DISTANCE &&
-          maxZ > SOURCE_PRESENTATION_POLE_DISTANCE);
+    const crossesPole =
+      t.minZ < -SOURCE_PRESENTATION_POLE_DISTANCE ||
+      maxZ > SOURCE_PRESENTATION_POLE_DISTANCE;
     if (
-      Math.abs(wrappedSourceDelta(view.x, centreX)) > rx + t.size / 2 ||
+      t.minX > centreX + rx ||
+      t.minX + t.size < centreX - rx ||
       t.minZ > view.z + rz ||
       maxZ < view.z - rz
     )
       return;
     const projectedPixels = (t.size * view.pixels) / (view.halfHeight * 2);
-    if (t.level < MAX_LEVEL && (crossesPole || projectedPixels > threshold)) {
+    if (
+      t.level < MAX_LEVEL &&
+      (crossesPole || projectedPixels > threshold)
+    ) {
       for (let dz = 0; dz < 2; dz++)
         for (let dx = 0; dx < 2; dx++)
-          visit(tileAt(t.level + 1, t.x * 2 + dx, t.z * 2 + dz));
-    } else selected.push(t);
+          visit(tileAt(t.level + 1, t.x * 2 + dx, t.z * 2 + dz), centreX);
+    } else selected.set(t.key, t);
   };
-  visit(tileAt(0, 0, 0));
-  if (selected.length > maxTiles)
-    return selectTiles(view, threshold * 1.25, maxTiles);
-  return selected.sort(
+
+  for (const centreX of centres) visit(tileAt(0, 0, 0), centreX);
+  if (selected.size > activeLimit)
+    return selectTiles(view, threshold * 1.25, activeLimit);
+
+  return [...selected.values()].sort(
     (a, b) =>
       Math.hypot(
-        wrappedSourceDelta(view.x, a.minX + a.size / 2),
+        wrappedTileDistanceX(a.minX + a.size / 2, streamX),
         a.minZ + a.size / 2 - view.z,
       ) -
       Math.hypot(
-        wrappedSourceDelta(view.x, b.minX + b.size / 2),
+        wrappedTileDistanceX(b.minX + b.size / 2, streamX),
         b.minZ + b.size / 2 - view.z,
       ),
   );

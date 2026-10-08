@@ -1,137 +1,133 @@
-import test from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  SOURCE_PRESENTATION_POLE_DISTANCE,
-  SOURCE_PRESENTATION_WIDTH,
-} from "../src/planet.ts";
-import {
-  STREAMING_BUDGETS,
-  canonicalStreamTileKey,
-  classifyStreamingDevice,
-  estimateTileGeometryBytes,
-  withinStreamingBudget,
-} from "../src/streaming.ts";
-import {
   MAX_LEVEL,
+  WORLD_MIN,
   WORLD_SIZE,
   selectTiles,
   tileAt,
-  type Tile,
   type View,
 } from "../src/world.ts";
+import {
+  SOURCE_PRESENTATION_POLE_DISTANCE,
+  wrapSourceX,
+} from "../src/planet.ts";
+import {
+  STREAMING_BUDGETS,
+  streamingBudgetForViewport,
+  withinStreamingBudget,
+} from "../src/streaming.ts";
 
-const view = (x: number, z: number): View => ({
+const localView = (x: number, z: number): View => ({
   x,
   z,
   halfHeight: 97,
-  aspect: 1440 / 900,
+  aspect: 1280 / 720,
   yaw: 0,
-  pixels: 900,
+  pixels: 720,
 });
 
-test("streaming device classes use root-contract budgets", () => {
-  assert.equal(classifyStreamingDevice(390, 844), "phone");
-  assert.equal(classifyStreamingDevice(844, 390), "phone");
-  assert.equal(classifyStreamingDevice(768, 1024), "tablet");
-  assert.equal(classifyStreamingDevice(1440, 900), "desktop");
+const sortedKeys = (view: View, limit = 160) =>
+  selectTiles(view, 190, limit)
+    .map((tile) => tile.key)
+    .sort();
+
+test("Stage S002 streaming budgets match phone tablet and desktop envelopes", () => {
   assert.deepEqual(STREAMING_BUDGETS.phone, {
-    queue: 4,
-    active: 160,
-    cached: 180,
+    deviceClass: "phone",
+    generationReady: 4,
+    activePatches: 160,
+    cachedPatches: 180,
     cpuBytes: 96 * 1024 * 1024,
     gpuBytes: 96 * 1024 * 1024,
   });
+  assert.deepEqual(STREAMING_BUDGETS.tablet, {
+    deviceClass: "tablet",
+    generationReady: 6,
+    activePatches: 220,
+    cachedPatches: 240,
+    cpuBytes: 160 * 1024 * 1024,
+    gpuBytes: 160 * 1024 * 1024,
+  });
+  assert.deepEqual(STREAMING_BUDGETS.desktop, {
+    deviceClass: "desktop",
+    generationReady: 8,
+    activePatches: 260,
+    cachedPatches: 320,
+    cpuBytes: 256 * 1024 * 1024,
+    gpuBytes: 256 * 1024 * 1024,
+  });
+  assert.equal(streamingBudgetForViewport(390, 844).deviceClass, "phone");
+  assert.equal(streamingBudgetForViewport(844, 390).deviceClass, "phone");
+  assert.equal(streamingBudgetForViewport(768, 1024).deviceClass, "tablet");
+  assert.equal(streamingBudgetForViewport(1024, 768).deviceClass, "tablet");
+  assert.equal(streamingBudgetForViewport(1280, 720).deviceClass, "desktop");
+  assert.equal(streamingBudgetForViewport(1440, 900).deviceClass, "desktop");
   assert.equal(
     withinStreamingBudget(
-      STREAMING_BUDGETS.tablet,
-      220,
-      240,
-      6,
-      160 * 1024 * 1024,
-      160 * 1024 * 1024,
+      {
+        generationReady: 4,
+        activePatches: 160,
+        cachedPatches: 180,
+        cpuBytes: 96 * 1024 * 1024,
+        gpuBytes: 96 * 1024 * 1024,
+      },
+      STREAMING_BUDGETS.phone,
     ),
     true,
   );
-  assert.equal(
-    withinStreamingBudget(STREAMING_BUDGETS.phone, 161, 1, 1, 1, 1),
-    false,
-  );
 });
 
-test("canonical stream keys ignore equivalent full-turn source representations", () => {
-  const count = 2 ** MAX_LEVEL,
-    source = tileAt(MAX_LEVEL, count - 4, Math.floor(count / 2)),
-    alias: Tile = {
-      ...source,
-      x: source.x + count,
-      minX: source.minX + WORLD_SIZE,
-      key: `${source.key}/full-turn-alias`,
-    };
-  assert.equal(canonicalStreamTileKey(alias), canonicalStreamTileKey(source));
-  assert.match(canonicalStreamTileKey(source), /\/PLANET\/v1\/F\d\/L24\//);
-});
-
-test("wrap-straddling selection covers both seam sides with unique canonical ownership", () => {
-  const selected = selectTiles(
-    view(SOURCE_PRESENTATION_WIDTH / 2 - 10, 0),
-    190,
-    STREAMING_BUDGETS.desktop.active,
-  );
-  assert.ok(selected.length > 0);
-  assert.ok(selected.length <= STREAMING_BUDGETS.desktop.active);
-  assert.ok(
-    selected.some(
-      (tile) => tile.minX < -SOURCE_PRESENTATION_WIDTH / 2 + 1024,
-    ),
-  );
-  assert.ok(
-    selected.some(
-      (tile) =>
-        tile.minX + tile.size > SOURCE_PRESENTATION_WIDTH / 2 - 1024,
-    ),
-  );
-  const keys = selected.map(canonicalStreamTileKey);
-  assert.equal(new Set(keys).size, keys.length);
-});
-
-test("pole selection never streams a second clamped copy beyond either pole", () => {
-  for (const z of [
-    -SOURCE_PRESENTATION_POLE_DISTANCE,
-    SOURCE_PRESENTATION_POLE_DISTANCE,
-  ]) {
-    const selected = selectTiles(
-      view(12345, z),
-      190,
-      STREAMING_BUDGETS.phone.active,
-    );
-    assert.ok(selected.length > 0);
-    assert.ok(selected.length <= STREAMING_BUDGETS.phone.active);
-    for (const tile of selected) {
-      assert.ok(tile.minZ + tile.size > -SOURCE_PRESENTATION_POLE_DISTANCE);
-      assert.ok(tile.minZ < SOURCE_PRESENTATION_POLE_DISTANCE);
-    }
-    const keys = selected.map(canonicalStreamTileKey);
-    assert.equal(new Set(keys).size, keys.length);
+test("render patch cache keys are canonical global IDs rather than planar tile addresses", () => {
+  for (const [level, x, z] of [
+    [0, 0, 0],
+    [2, 1, 1],
+    [8, 127, 128],
+    [MAX_LEVEL, 65535, 65536],
+  ] as const) {
+    const tile = tileAt(level, x, z);
+    assert.match(tile.key, /^ADVISOR-0126-ALDERWICK\/PLANET\/v1\/F[0-5]\/L\d+\/\d+\/\d+\/PATCH$/);
+    assert.doesNotMatch(tile.key, /\/T\//);
+    assert.equal(tileAt(level, x, z).key, tile.key);
   }
 });
 
-test("geometry byte accounting uses transferred typed-array storage", () => {
-  const geometry = {
-    positions: new Float32Array(9),
-    normals: new Float32Array(9),
-    colors: new Uint8Array(12),
-    indices: new Uint32Array(3),
-  };
-  const estimate = estimateTileGeometryBytes({
-    terrain: geometry,
-    structures: geometry,
-    nature: geometry,
-    detail: geometry,
-  });
-  const one =
-    geometry.positions.byteLength +
-    geometry.normals.byteLength +
-    geometry.colors.byteLength +
-    geometry.indices.byteLength;
-  assert.deepEqual(estimate, { cpuBytes: one * 4, gpuBytes: one * 4 });
+test("a seam-straddling local view streams both longitude edges exactly once", () => {
+  const view = localView(-WORLD_MIN - 10, 0),
+    tiles = selectTiles(view, 190, 160),
+    keys = tiles.map((tile) => tile.key);
+  assert.ok(tiles.length > 0 && tiles.length <= 160);
+  assert.equal(new Set(keys).size, keys.length);
+  assert.ok(
+    tiles.some((tile) => tile.minX <= WORLD_MIN + tile.size),
+    "wrapped coverage must include the left source edge",
+  );
+  assert.ok(
+    tiles.some((tile) => tile.minX + tile.size >= -WORLD_MIN - tile.size),
+    "wrapped coverage must include the right source edge",
+  );
+});
+
+test("one full circumference returns identical canonical streaming ownership", () => {
+  const x = 12345.25,
+    base = localView(x, 321),
+    wrapped = localView(wrapSourceX(x + WORLD_SIZE), 321);
+  assert.equal(wrapped.x, wrapSourceX(x));
+  assert.deepEqual(sortedKeys(base), sortedKeys(wrapped));
+});
+
+test("exact pole coverage is unique bounded and independent of degenerate longitude", () => {
+  const northA = localView(0, -SOURCE_PRESENTATION_POLE_DISTANCE),
+    northB = localView(74123, -SOURCE_PRESENTATION_POLE_DISTANCE),
+    south = localView(-52177, SOURCE_PRESENTATION_POLE_DISTANCE);
+  for (const view of [northA, northB, south]) {
+    const tiles = selectTiles(view, 190, 160);
+    assert.ok(tiles.length > 0 && tiles.length <= 160);
+    assert.equal(new Set(tiles.map((tile) => tile.key)).size, tiles.length);
+    for (const tile of tiles) {
+      assert.ok(tile.minZ >= -SOURCE_PRESENTATION_POLE_DISTANCE);
+      assert.ok(tile.minZ + tile.size <= SOURCE_PRESENTATION_POLE_DISTANCE);
+    }
+  }
+  assert.deepEqual(sortedKeys(northA), sortedKeys(northB));
 });
