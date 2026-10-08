@@ -108,6 +108,7 @@ STATE_JS = """() => {
     handoff: state.handoff ?? null, scaleLabel: state.scaleLabel ?? null,
     canonicalFootprintM: state.canonicalFootprintM ?? null,
     navigation: state.navigation ?? null,
+    globe: state.globe ?? null, macroGeography: state.macroGeography ?? null,
     detailName: detail ? detail.textContent.trim() : null,
     error: state.error || (box && !box.hidden ? box.textContent.trim() : ''),
   };
