@@ -9,9 +9,11 @@ type Request = {
 self.onmessage = (event: MessageEvent<Request>) => {
   const { id, width, height, samples, relief } = event.data;
   try {
-    const { pixels } = buildGlobeSurface(width, height, { samples, relief });
+    const started = performance.now(),
+      { pixels } = buildGlobeSurface(width, height, { samples, relief }),
+      buildMs = performance.now() - started;
     self.postMessage(
-      { id, width, height, pixels },
+      { id, width, height, pixels, buildMs },
       { transfer: [pixels.buffer] },
     );
   } catch (error) {
