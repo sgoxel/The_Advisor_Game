@@ -255,3 +255,55 @@ test("pointer touch keyboard and canonical wrapping", async ({ page }) => {
   expect(pole.lat).toBeCloseTo(Math.PI / 2, 9);
   expect(errors).toEqual([]);
 });
+
+
+test("canonical streaming remains bounded across wrap and poles", async ({ page }) => {
+  test.setTimeout(300000);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, "gpu", {
+      value: undefined,
+      configurable: true,
+    }),
+  );
+  await page.goto("/");
+  await page.waitForFunction(() => window.advisorWorld?.state.settled);
+  await page.locator("#map-scale").selectOption("100");
+  await page.evaluate(() => window.advisorWorld.navigation.setFocus(Math.PI - 0.0002, 0.35));
+  await page.waitForFunction(() => window.advisorWorld.state.settled);
+  const first = await page.evaluate(() => window.advisorWorld.state.streaming);
+  expect(first.deviceClass).toBe("desktop");
+  expect(first.activePatches).toBeLessThanOrEqual(first.budget.activePatches);
+  expect(first.cachedPatches).toBeLessThanOrEqual(first.budget.cachedPatches);
+  expect(first.queuedTotal).toBeLessThanOrEqual(first.budget.generationReadyQueue);
+  expect(first.gpuBytesEstimated).toBeLessThanOrEqual(first.budget.gpuBytes);
+  expect(new Set(first.activeCanonicalKeys).size).toBe(first.activeCanonicalKeys.length);
+  const keys = [...first.activeCanonicalKeys].sort();
+  await page.evaluate(() =>
+    window.advisorWorld.navigation.setFocus(Math.PI - 0.0002 + Math.PI * 2, 0.35),
+  );
+  await page.waitForFunction(() => window.advisorWorld.state.settled);
+  expect(
+    await page.evaluate(() => [...window.advisorWorld.state.streaming.activeCanonicalKeys].sort()),
+  ).toEqual(keys);
+  await page.evaluate(() => window.advisorWorld.navigation.setFocus(0, Math.PI));
+  await page.waitForFunction(() => window.advisorWorld.state.settled);
+  const north = await page.evaluate(() => ({
+    focus: window.advisorWorld.state.navigation.focus,
+    streaming: window.advisorWorld.state.streaming,
+  }));
+  expect(north.focus.lat).toBeCloseTo(Math.PI / 2, 9);
+  expect(north.streaming.poleFeedback).toContain("North pole");
+  expect(north.streaming.activePatches).toBeGreaterThan(0);
+  expect(new Set(north.streaming.activeCanonicalKeys).size).toBe(
+    north.streaming.activeCanonicalKeys.length,
+  );
+  await page.evaluate(() => window.advisorWorld.navigation.setFocus(Math.PI / 2, -Math.PI));
+  await page.waitForFunction(() => window.advisorWorld.state.settled);
+  const south = await page.evaluate(() => window.advisorWorld.state.streaming);
+  expect(south.poleFeedback).toContain("South pole");
+  expect(south.queuedTotal).toBeLessThanOrEqual(south.budget.generationReadyQueue);
+  expect(errors).toEqual([]);
+});
