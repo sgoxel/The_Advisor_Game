@@ -12,13 +12,10 @@ export type StreamingBudget = {
 const MIB = 1024 * 1024;
 
 /**
- * Binding Stage S002 maximums from docs/PLANET_ARCHITECTURE.md, with stricter
- * working-set envelopes proven by sustained wrap/pole rollover. Every device
- * can retain two completely disjoint maximum active sets plus the coarse root
- * without touching its cache ceiling. Desktop intentionally uses the same
- * patch/queue envelope as the passing phone rollover path; its larger byte
- * ceiling remains available for heavier geometry without allowing hundreds of
- * stale mesh records to accumulate and starve a later pole transition.
+ * Binding Stage S002 maximums from docs/PLANET_ARCHITECTURE.md, with a stricter
+ * active-working-set policy. Two disjoint active sets plus the coarse root must
+ * fit inside the cache so a wrap/pole jump can prepare its destination without
+ * exceeding the cache envelope or deadlocking behind the previous coverage.
  */
 export const STREAMING_BUDGETS: Readonly<
   Record<StreamingDeviceClass, StreamingBudget>
@@ -41,9 +38,9 @@ export const STREAMING_BUDGETS: Readonly<
   }),
   desktop: Object.freeze({
     deviceClass: "desktop",
-    generationReady: 4,
-    activePatches: 89,
-    cachedPatches: 180,
+    generationReady: 8,
+    activePatches: 159,
+    cachedPatches: 320,
     cpuBytes: 256 * MIB,
     gpuBytes: 256 * MIB,
   }),
