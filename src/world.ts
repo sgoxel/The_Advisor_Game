@@ -114,13 +114,12 @@ export function regionSeed(cx: number, cz: number): RegionSeed {
     sourceX = x * 200 + 100,
     sourceZ = z * 200 + 100,
     centre = macroAtSource(sourceX, sourceZ),
-    // Keep the open-ocean shortcut conservative. A region close to any canonical
-    // shoreline stays detailed so a coastline cannot be erased by a centre sample.
-    landform = centre.landform === "Ocean" && centre.landScore < -0.025
-      ? "Ocean"
-      : centre.landform === "Island"
-        ? "Island"
-        : "Mainland";
+    landform =
+      centre.landform === "Ocean" && centre.landScore < -0.025
+        ? "Ocean"
+        : centre.landform === "Island"
+          ? "Island"
+          : "Mainland";
   return (lastRegion = {
     code,
     x,
@@ -215,46 +214,48 @@ export function settlement(sx: number, sz: number): { x: number; z: number; name
 
 /** Global height: macro geography owns land/sea and major mountain systems. */
 export function heightAt(x: number, z: number): number {
-  const macro = macroAtSource(x, z);
+  const wx = wrapSourceX(x),
+    macro = macroAtSource(wx, z);
   if (macro.landform === "Ocean") return -2.8;
   const edge = smooth(clamp01((macro.landScore + 0.012) / 0.075)),
-    s = nearestPlace(x, z),
-    d = s ? Math.hypot(x - s.x, z - s.z) : 1000,
+    s = nearestPlace(wx, z),
+    d = s ? Math.hypot(wrapSourceX(wx - s.x), z - s.z) : 1000,
     radius = s?.kind === "city" ? 430 : 90;
   let flatten = smooth(clamp01((d - radius) / 80));
-  const road = roadAt(x, z);
+  const road = roadAt(wx, z);
   if (road)
     flatten = Math.min(
       flatten,
       smooth(clamp01((Math.abs(z - road.z) - 5) / 7)),
     );
-  const hills = 3 + field(x, z, 180, 1) * 10 + field(x, z, 52, 2) * 3,
-    foothills = macro.mountainRelief * (0.74 + field(x, z, 260, 3) * 0.34),
-    roughness = macro.mountainRelief > 2 ? (field(x, z, 72, 5) - 0.5) * Math.min(22, macro.mountainRelief * 0.11) : 0,
+  const hills = 3 + field(wx, z, 180, 1) * 10 + field(wx, z, 52, 2) * 3,
+    foothills = macro.mountainRelief * (0.74 + field(wx, z, 260, 3) * 0.34),
+    roughness =
+      macro.mountainRelief > 2
+        ? (field(wx, z, 72, 5) - 0.5) * Math.min(22, macro.mountainRelief * 0.11)
+        : 0,
     natural = hills + foothills + roughness,
     prepared = lerp(3, natural, flatten),
     land = Math.max(0.4, lerp(0.5, prepared, edge)),
-    bank = Math.abs(x - riverX(z));
-  // Do not let the temporary prototype river erase the new canonical settlement
-  // locations. Hydrology receives its own authoritative package later in S002.
+    bank = Math.abs(wx - riverX(z));
   if (d < 520) return land;
   return lerp(-2.8, land, smooth(clamp01((bank - 12) / 19)));
 }
 
 export function biomeAt(x: number, z: number): string {
-  const macro = macroAtSource(x, z),
-    h = heightAt(x, z);
+  const wx = wrapSourceX(x),
+    macro = macroAtSource(wx, z),
+    h = heightAt(wx, z);
   if (macro.landform === "Ocean" || h < 0.1) return "Ocean";
-  const s = nearestPlace(x, z);
-  if (s && Math.hypot(x - s.x, z - s.z) < (s.kind === "city" ? 420 : 84))
-    return "Settlement";
-  if (roadAt(x, z)) return "Road";
+  const s = nearestPlace(wx, z),
+    placeDistance = s ? Math.hypot(wrapSourceX(wx - s.x), z - s.z) : Infinity;
+  if (s && placeDistance < (s.kind === "city" ? 420 : 84)) return "Settlement";
+  if (roadAt(wx, z)) return "Road";
   if (macro.landScore < 0.045) return "Sandy beach";
   if (macro.mountainRelief > 36 || h > 70) return "Highlands";
   if (macro.landform === "Island") return "Island meadow";
-  if (Math.abs(x - riverX(z)) < 32 && (!s || Math.hypot(x - s.x, z - s.z) > 520))
-    return "Riverbank";
-  return field(x, z, 90, 4) > 0.45 ? "Woodland" : "Meadow";
+  if (Math.abs(wx - riverX(z)) < 32 && (!s || placeDistance > 520)) return "Riverbank";
+  return field(wx, z, 90, 4) > 0.45 ? "Woodland" : "Meadow";
 }
 
 function canonicalPatchKey(level: number, minX: number, minZ: number, size: number): string {
@@ -295,18 +296,20 @@ export function tileAt(level: number, x: number, z: number): Tile {
   return { level, x, z, key: canonicalPatchKey(level, minX, minZ, size), size, minX, minZ };
 }
 export function tileForPosition(x: number, z: number, level = MAX_LEVEL): Tile {
-  if (x < WORLD_MIN || x >= -WORLD_MIN || z < WORLD_MIN || z >= -WORLD_MIN)
+  const wx = wrapSourceX(x);
+  if (z < WORLD_MIN || z >= -WORLD_MIN)
     throw new RangeError("Position outside generated realm");
   const size = WORLD_SIZE / 2 ** level;
   return tileAt(
     level,
-    Math.floor((x - WORLD_MIN) / size),
+    Math.floor((wx - WORLD_MIN) / size),
     Math.floor((z - WORLD_MIN) / size),
   );
 }
 export function cellAt(x: number, z: number): Cell {
-  const tile = tileForPosition(x, z),
-    cx = Math.floor(x / CELL_SIZE),
+  const wx = wrapSourceX(x),
+    tile = tileForPosition(wx, z),
+    cx = Math.floor(wx / CELL_SIZE),
     cz = Math.floor(z / CELL_SIZE),
     px = cx * CELL_SIZE + 1,
     pz = cz * CELL_SIZE + 1,
@@ -324,7 +327,7 @@ export function cellAt(x: number, z: number): Cell {
     z: cz,
     elevation,
     biome,
-    walkable: Boolean(bridge) || (elevation > 0.1 && slope < 2),
+    walkable: Boolean(road) || (elevation > 0.1 && slope < 2),
     tile: `${tile.level}/${tile.x}/${tile.z}`,
   };
 }
@@ -339,28 +342,29 @@ export function featuresFor(tile: Tile): Feature[] {
     variant: number,
     id: string,
   ) => {
+    const wx = wrapSourceX(x);
     if (
-      x < tile.minX ||
-      x >= tile.minX + tile.size ||
+      wx < tile.minX ||
+      wx >= tile.minX + tile.size ||
       z < tile.minZ ||
       z >= tile.minZ + tile.size
     )
       return;
-    if (heightAt(x, z) < 0.2) return;
+    if (heightAt(wx, z) < 0.2) return;
     features.push({
       kind,
-      x,
+      x: wx,
       z,
-      y: heightAt(x, z),
+      y: heightAt(wx, z),
       variant,
       code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
     });
   };
   for (const s of places) {
-    const extent = s.kind === "city" ? 440 : 80;
+    const extent = s.kind === "city" ? 440 : 80,
+      dxToTile = wrapSourceX(s.x - (tile.minX + tile.size / 2));
     if (
-      s.x < tile.minX - extent ||
-      s.x > tile.minX + tile.size + extent ||
+      Math.abs(dxToTile) > tile.size / 2 + extent ||
       s.z < tile.minZ - extent ||
       s.z > tile.minZ + tile.size + extent
     )
@@ -458,7 +462,7 @@ export function selectTiles(
     focus = sourceToLonLat(view.x, view.z),
     atPole = Math.abs(Math.abs(focus.lat) - Math.PI / 2) <= 1e-12,
     selectionLimit = atPole ? Math.min(activeLimit, POLE_ACTIVE_PATCH_LIMIT) : activeLimit,
-    streamX = atPole ? 0 : view.x,
+    streamX = atPole ? 0 : wrapSourceX(view.x),
     longitudeScale = Math.max(0.02, Math.abs(Math.cos(focus.lat))),
     rx = atPole ? WORLD_SIZE / 2 : Math.min(WORLD_SIZE / 2, bounds.rx / longitudeScale),
     rz = bounds.rz,
