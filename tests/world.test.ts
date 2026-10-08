@@ -22,12 +22,16 @@ import {
   villages,
   roads,
 } from "../src/geography.ts";
+import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
 import { WORLD_FOUNDATION_VERSION } from "../src/config.ts";
 import {
   CANONICAL_PLANET_CIRCUMFERENCE,
   CANONICAL_PLANET_RADIUS,
   SOURCE_PRESENTATION_WIDTH,
   greatCircleDistance,
+  lonLatToSource,
+  sourceToLonLat,
+  wrapSourceX,
 } from "../src/planet.ts";
 import {
   DIFFICULT_TERRAIN_WALK_SPEED_MPS,
@@ -60,7 +64,7 @@ test("reloading cells in reverse order preserves all canonical content", () => {
     /L1\/0\/0\/L2\/0\/0\/L3\/0\/0\/L4\/0\/0\/L5\/0\/0$/,
   );
 });
-test("all five seed levels compose correctly across negative boundaries", () => {
+test("all five source-detail seed levels compose correctly across negative boundaries", () => {
   for (const cx of [-101, -100, -11, -10, -1, 0, 9, 10, 99, 100])
     for (const cz of [-101, -1, 0, 100]) {
       const c = cellSeed(cx, cz),
@@ -80,32 +84,29 @@ test("all five seed levels compose correctly across negative boundaries", () => 
       assert.equal(r.code, regionSeed(cx, cz).code);
     }
 });
-test("child detail cannot violate island or ocean parent constraints", () => {
-  let islandCount = 0,
-    beaches = 0;
-  for (let mz = 0; mz <= 20; mz++)
-    for (let mx = 140; mx <= 170; mx++) {
-      const r = regionSeed(mx * 100, mz * 100);
-      if (r.landform === "Ocean") {
-        assert.equal(heightAt(mx * 200 + 100, mz * 200 + 100), -2.8);
-        continue;
-      }
-      if (r.landform !== "Island") continue;
-      islandCount++;
-      for (let z = 0; z < 100; z += 3)
-        for (let x = 0; x < 100; x += 3) {
-          const c = cellAt(mx * 200 + x * 2 + 1, mz * 200 + z * 2 + 1);
-          assert.ok(c.elevation <= r.elevationLimit);
-          assert.ok(
-            ["Ocean", "Sandy beach", "Island meadow"].includes(c.biome),
-          );
-          if (Math.hypot(x * 2 + 1 - 100, z * 2 + 1 - 100) > r.radius + 6)
-            assert.equal(c.biome, "Ocean");
-          if (c.biome === "Sandy beach") beaches++;
-        }
-    }
-  assert.ok(islandCount > 0);
-  assert.ok(beaches > 0);
+test("source-detail regions inherit seeded macro land, island, lake and ocean authority", () => {
+  const anchors = [
+    ...MACRO_PLAN.continents.map((item) => item.center),
+    ...MACRO_PLAN.islands.slice(0, 6).map((item) => item.center),
+    ...MACRO_PLAN.lakes.slice(0, 3).map((item) => item.center),
+    { lon: 0, lat: Math.PI / 2 },
+  ];
+  const seen = new Set<string>();
+  for (const anchor of anchors) {
+    const source = lonLatToSource(anchor.lon, anchor.lat),
+      region = regionSeed(source.x / 2, source.z / 2),
+      center = sourceToLonLat(region.x * 200 + 100, region.z * 200 + 100),
+      macro = macroSampleAt(center),
+      h = heightAt(source.x, source.z);
+    seen.add(macro.domain);
+    assert.equal(region.landform, macro.domain);
+    if (macroSampleAt(anchor).land) assert.ok(h > 0);
+    else assert.ok(h < 0);
+  }
+  assert.ok(seen.has("Mainland"));
+  assert.ok(seen.has("Island"));
+  assert.ok(seen.has("Lake"));
+  assert.ok(seen.has("Ocean"));
 });
 test("render tiles cover the view without overlapping parent and child areas", () => {
   for (const halfHeight of [28, 97, 500, 3000]) {
@@ -171,6 +172,7 @@ test("application source contains no random-number API or clock-driven world gen
     "world.ts",
     "geometry.ts",
     "geography.ts",
+    "macro-geography.ts",
     "simulation.ts",
     "tile-worker.ts",
     "main.ts",
@@ -221,7 +223,7 @@ test("three continents each have ten countries, three cities per country and thr
 });
 
 test("canonical scale/travel foundation is versioned and all village pairs satisfy the fastest-speed minimum", () => {
-  assert.equal(WORLD_FOUNDATION_VERSION, "v2");
+  assert.equal(WORLD_FOUNDATION_VERSION, "v3");
   assert.equal(CANONICAL_PLANET_RADIUS, 637_100);
   assert.equal(GOOD_ROAD_WALK_SPEED_MPS, 1);
   assert.equal(OPEN_GROUND_WALK_SPEED_MPS, 5 / 6);
@@ -244,7 +246,7 @@ test("canonical scale/travel foundation is versioned and all village pairs satis
       pairs++;
     }
   assert.equal(pairs, (270 * 269) / 2);
-  assert.ok(shortest > 5_900 && shortest < 6_100);
+  assert.ok(shortest > 5_900 && shortest < 6_100, `shortest was ${shortest.toFixed(2)} m`);
 });
 
 test("prototype road records expose canonical distance and route-derived fantasy time", () => {
@@ -269,8 +271,12 @@ test("prototype road records expose canonical distance and route-derived fantasy
       realSecondsForFantasy(road.fantasyWalkSeconds),
       road.realWalkSeconds,
     );
-    for (let x = road.minX; x < road.maxX; x += 14)
+    for (let step = 0; step <= 10; step++) {
+      const x = wrapSourceX(
+        road.fromX + ((road.toX - road.fromX) * step) / 10,
+      );
       assert.ok(cellAt(x, road.z).walkable, `${road.code} blocked at ${x}`);
+    }
   }
 });
 
