@@ -132,7 +132,7 @@ test("exact pole coverage is unique bounded and independent of degenerate longit
     south = localView(-52177, SOURCE_PRESENTATION_POLE_DISTANCE);
   for (const view of [northA, northB, south]) {
     const tiles = selectTiles(view, 190, limit);
-    assert.ok(tiles.length > 0 && tiles.length <= limit);
+    assert.ok(tiles.length > 0 && tiles.length <= 16);
     assert.equal(new Set(tiles.map((tile) => tile.key)).size, tiles.length);
     for (const tile of tiles) {
       assert.ok(tile.minZ >= -SOURCE_PRESENTATION_POLE_DISTANCE);

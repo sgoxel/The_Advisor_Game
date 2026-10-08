@@ -506,6 +506,9 @@ function wrappedTileDistanceX(x: number, focusX: number): number {
   return Math.abs(wrapSourceX(x - focusX));
 }
 
+/** Exact-pole tangent coverage is a radial presentation ring, not world authority. */
+const POLE_ACTIVE_PATCH_LIMIT = 16;
+
 /**
  * Wrap-aware local patch selection. Near a pole, longitude convergence expands
  * the source-domain search so the tangent view receives a complete ring of
@@ -522,6 +525,9 @@ export function selectTiles(
   const bounds = viewBounds(view),
     focus = sourceToLonLat(view.x, view.z),
     atPole = Math.abs(Math.abs(focus.lat) - Math.PI / 2) <= 1e-12,
+    selectionLimit = atPole
+      ? Math.min(activeLimit, POLE_ACTIVE_PATCH_LIMIT)
+      : activeLimit,
     streamX = atPole ? 0 : view.x,
     longitudeScale = Math.max(0.02, Math.abs(Math.cos(focus.lat))),
     rx = atPole
@@ -566,8 +572,8 @@ export function selectTiles(
   };
 
   for (const centreX of centres) visit(tileAt(0, 0, 0), centreX);
-  if (selected.size > activeLimit)
-    return selectTiles(view, threshold * 1.25, activeLimit);
+  if (selected.size > selectionLimit)
+    return selectTiles(view, threshold * 1.25, selectionLimit);
 
   return [...selected.values()].sort(
     (a, b) =>
