@@ -173,12 +173,28 @@ function install(world: AdvisorWorld) {
     if (height)
       height.title = `Canonical position: lon ${position.lon.toFixed(9)}, lat ${position.lat.toFixed(9)}, elevation ${source.elevation.toFixed(2)} m`;
     if (tile) tile.textContent = `${source.tile} · derived render tile`;
-    if (levels)
+    if (levels) {
+      let planetLevel = levels.querySelector<HTMLElement>("[data-planet-level]");
+      if (!planetLevel) {
+        planetLevel = document.createElement("li");
+        planetLevel.dataset.planetLevel = "true";
+        planetLevel.append("Planet · Macro geography");
+        const text = document.createElement("code");
+        text.textContent = `${WORLD_SEED}/${CANONICAL_GENERATOR_VERSION}/MACRO`;
+        planetLevel.append(text);
+        levels.prepend(planetLevel);
+      }
       for (const item of Array.from(levels.children)) {
+        if ((item as HTMLElement).dataset.planetLevel) continue;
         const first = item.firstChild;
-        if (first?.nodeType === Node.TEXT_NODE && first.textContent)
+        if (
+          first?.nodeType === Node.TEXT_NODE &&
+          first.textContent &&
+          !first.textContent.startsWith("Derived source · ")
+        )
           first.textContent = `Derived source · ${first.textContent}`;
       }
+    }
   };
 
   if (panel) {
