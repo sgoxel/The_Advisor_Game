@@ -631,7 +631,7 @@ function request(tile: Tile) {
   worker.postMessage(tile);
 }
 function refreshSelection() {
-  wanted = selectTiles(view, 190, streamingBudget.active);
+  wanted = selectTiles(view, 190, Math.min(160, streamingBudget.active));
   revision++;
   selectionDirty = false;
   const name =
