@@ -22,12 +22,18 @@ import {
   villages,
   roads,
 } from "../src/geography.ts";
+import {
+  MACRO_GEOGRAPHY,
+  buildMacroGeography,
+  sampleMacroGeography,
+} from "../src/macro-geography.ts";
 import { WORLD_FOUNDATION_VERSION } from "../src/config.ts";
 import {
   CANONICAL_PLANET_CIRCUMFERENCE,
   CANONICAL_PLANET_RADIUS,
   SOURCE_PRESENTATION_WIDTH,
   greatCircleDistance,
+  lonLatToSource,
 } from "../src/planet.ts";
 import {
   DIFFICULT_TERRAIN_WALK_SPEED_MPS,
@@ -60,7 +66,8 @@ test("reloading cells in reverse order preserves all canonical content", () => {
     /L1\/0\/0\/L2\/0\/0\/L3\/0\/0\/L4\/0\/0\/L5\/0\/0$/,
   );
 });
-test("all five seed levels compose correctly across negative boundaries", () => {
+
+test("all five local seed levels compose correctly across negative boundaries", () => {
   for (const cx of [-101, -100, -11, -10, -1, 0, 9, 10, 99, 100])
     for (const cz of [-101, -1, 0, 100]) {
       const c = cellSeed(cx, cz),
@@ -80,33 +87,62 @@ test("all five seed levels compose correctly across negative boundaries", () => 
       assert.equal(r.code, regionSeed(cx, cz).code);
     }
 });
-test("child detail cannot violate island or ocean parent constraints", () => {
-  let islandCount = 0,
-    beaches = 0;
-  for (let mz = 0; mz <= 20; mz++)
-    for (let mx = 140; mx <= 170; mx++) {
-      const r = regionSeed(mx * 100, mz * 100);
-      if (r.landform === "Ocean") {
-        assert.equal(heightAt(mx * 200 + 100, mz * 200 + 100), -2.8);
-        continue;
-      }
-      if (r.landform !== "Island") continue;
-      islandCount++;
-      for (let z = 0; z < 100; z += 3)
-        for (let x = 0; x < 100; x += 3) {
-          const c = cellAt(mx * 200 + x * 2 + 1, mz * 200 + z * 2 + 1);
-          assert.ok(c.elevation <= r.elevationLimit);
-          assert.ok(
-            ["Ocean", "Sandy beach", "Island meadow"].includes(c.biome),
-          );
-          if (Math.hypot(x * 2 + 1 - 100, z * 2 + 1 - 100) > r.radius + 6)
-            assert.equal(c.biome, "Ocean");
-          if (c.biome === "Sandy beach") beaches++;
-        }
-    }
-  assert.ok(islandCount > 0);
-  assert.ok(beaches > 0);
+
+test("macro geography is SEED-owned, irregular, island-bearing and order-independent", () => {
+  assert.equal(MACRO_GEOGRAPHY.continents.length, 3);
+  assert.ok(MACRO_GEOGRAPHY.islands.length >= 9);
+  const different = buildMacroGeography("ADVISOR-OTHER-SEED");
+  assert.notDeepEqual(
+    different.continents.map((c) => c.canonicalPosition),
+    MACRO_GEOGRAPHY.continents.map((c) => c.canonicalPosition),
+  );
+  const signatures = MACRO_GEOGRAPHY.continents.map((c) => [
+    c.majorRadius,
+    c.minorRadius,
+    c.rotation,
+    ...c.harmonics.flatMap((h) => [h.amplitude, h.phase]),
+  ]);
+  assert.equal(new Set(signatures.map((v) => v.join("/"))).size, 3);
+
+  const points = [
+    ...MACRO_GEOGRAPHY.continents.map((c) => c.canonicalPosition),
+    ...MACRO_GEOGRAPHY.islands.slice(0, 6).map((i) => i.canonicalPosition),
+  ];
+  const baseline = points.map((p) => sampleMacroGeography(p));
+  const reverse = [...points].reverse().map((p) => sampleMacroGeography(p)).reverse();
+  assert.deepEqual(reverse, baseline);
+  for (let i = 0; i < 3; i++) {
+    assert.equal(baseline[i].landform, "Mainland");
+    assert.equal(baseline[i].continent, i);
+  }
+  for (const island of MACRO_GEOGRAPHY.islands) {
+    const sample = sampleMacroGeography(island.canonicalPosition),
+      source = lonLatToSource(
+        island.canonicalPosition.lon,
+        island.canonicalPosition.lat,
+      );
+    assert.equal(sample.landform, "Island");
+    assert.equal(sample.continent, island.continent);
+    assert.ok(heightAt(source.x, source.z) > 0.1);
+  }
 });
+
+test("macro mountain registry contains distinct continent-scale systems and a volcano", () => {
+  const systems = MACRO_GEOGRAPHY.mountainSystems,
+    kinds = new Set(systems.map((system) => system.kind));
+  assert.ok(systems.length >= 12);
+  for (const kind of ["chain", "hook", "massif", "highland", "ridge", "volcanic"])
+    assert.ok(kinds.has(kind as never), `missing ${kind}`);
+  assert.ok(Math.max(...systems.map((s) => s.length)) > 0.45);
+  assert.ok(Math.min(...systems.map((s) => s.relief)) < 120);
+  assert.ok(Math.max(...systems.map((s) => s.relief)) > 200);
+  for (const system of systems) {
+    const sample = sampleMacroGeography(system.canonicalPosition);
+    assert.equal(sample.continent, system.continent);
+    assert.ok(sample.mountainRelief > 0);
+  }
+});
+
 test("render tiles cover the view without overlapping parent and child areas", () => {
   for (const halfHeight of [28, 97, 500, 3000]) {
     const view = { x: 0, z: 0, halfHeight, aspect: 1.7, yaw: 0, pixels: 768 };
@@ -147,6 +183,7 @@ test("render tiles cover the view without overlapping parent and child areas", (
       }
   }
 });
+
 test("feature identity survives LOD changes and adjacent tile ownership is unique", () => {
   const parent = tileAt(12, 2048, 2048),
     a = tileAt(13, 4096, 4096),
@@ -166,9 +203,11 @@ test("feature identity survives LOD changes and adjacent tile ownership is uniqu
   assert.ok(mesh.terrain.positions.every(Number.isFinite));
   assert.ok(mesh.terrain.positions.length > 0);
 });
+
 test("application source contains no random-number API or clock-driven world generation", () => {
   for (const file of [
     "world.ts",
+    "macro-geography.ts",
     "geometry.ts",
     "geography.ts",
     "simulation.ts",
@@ -189,39 +228,34 @@ test("application source contains no random-number API or clock-driven world gen
   }
   assert.equal(WORLD_SEED, "ADVISOR-0126-ALDERWICK");
 });
-test("three continents each have ten countries, three cities per country and three villages per city", () => {
+
+test("current generated registry satisfies the minimum world counts and follows seeded land", () => {
   assert.equal(continents.length, 3);
-  assert.equal(countries.length, 30);
-  assert.equal(cities.length, 90);
-  assert.equal(villages.length, 270);
+  assert.ok(countries.length >= 30);
+  assert.ok(cities.length >= 90);
+  assert.ok(villages.length >= 270);
   for (const continent of continents)
-    assert.equal(
-      countries.filter((c) => c.continent === continent.id).length,
-      10,
-    );
+    assert.ok(countries.filter((c) => c.continent === continent.id).length >= 10);
   for (const country of countries)
-    assert.equal(
+    assert.ok(
       cities.filter(
         (c) => c.continent === country.continent && c.country === country.id,
-      ).length,
-      3,
+      ).length >= 3,
     );
   for (const city of cities)
-    assert.equal(
-      villages.filter((v) => v.id.startsWith(city.id + "/")).length,
-      3,
-    );
-  for (const place of [...cities, ...villages])
-    assert.ok(
-      heightAt(place.x, place.z) > 0.1,
-      `${place.name} must be on land`,
-    );
+    assert.ok(villages.filter((v) => v.id.startsWith(city.id + "/")).length >= 3);
+  for (const place of [...cities, ...villages]) {
+    assert.ok(heightAt(place.x, place.z) > 0.1, `${place.name} must be on land`);
+    const macro = sampleMacroGeography(place.canonicalPosition);
+    assert.equal(macro.landform, "Mainland", `${place.name} must follow mainland authority`);
+    assert.equal(macro.continent, place.continent);
+  }
   assert.equal(SOURCE_PRESENTATION_WIDTH / 2 ** MAX_LEVEL, 2);
   assert.notEqual(SOURCE_PRESENTATION_WIDTH, CANONICAL_PLANET_CIRCUMFERENCE);
 });
 
 test("canonical scale/travel foundation is versioned and all village pairs satisfy the fastest-speed minimum", () => {
-  assert.equal(WORLD_FOUNDATION_VERSION, "v2");
+  assert.equal(WORLD_FOUNDATION_VERSION, "v3");
   assert.equal(CANONICAL_PLANET_RADIUS, 637_100);
   assert.equal(GOOD_ROAD_WALK_SPEED_MPS, 1);
   assert.equal(OPEN_GROUND_WALK_SPEED_MPS, 5 / 6);
@@ -243,7 +277,7 @@ test("canonical scale/travel foundation is versioned and all village pairs satis
       );
       pairs++;
     }
-  assert.equal(pairs, (270 * 269) / 2);
+  assert.equal(pairs, (villages.length * (villages.length - 1)) / 2);
   assert.ok(shortest > 5_900 && shortest < 6_100);
 });
 
@@ -307,6 +341,7 @@ test("fantasy epoch maps 2026 to 0126 and advances one day per real hour, includ
   assert.equal(clock.tickAt(epoch - 1000), 0);
   assert.equal(TIME_SCALE, 24);
 });
+
 test("lazy country simulation catches up identically regardless of interest or elapsed steps", () => {
   const a = new LazySimulation(),
     b = new LazySimulation();
