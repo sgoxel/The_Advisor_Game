@@ -10,7 +10,7 @@ permissions:
   pages: write
   id-token: write
 concurrency:
-  group: github-pages-${{ github.event_name }}-${{ github.ref }}
+  group: agent1-runtime-${{ github.sha }}
   cancel-in-progress: false
 jobs:
   build:
