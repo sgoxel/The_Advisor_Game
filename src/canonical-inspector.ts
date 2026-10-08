@@ -25,6 +25,7 @@ import {
   canonicalCellNeighbors,
   canonicalFoundationSample,
 } from "./spatial-authority.ts";
+import { MACRO_GEOGRAPHY } from "./macro-geography.ts";
 
 const CANONICAL_ID_LEVEL = 20;
 
@@ -137,6 +138,14 @@ function install(world: AdvisorWorld) {
     greatCircleDistance,
     sourceToLonLat,
     lonLatToSource,
+    macro: {
+      seed: MACRO_GEOGRAPHY.seed,
+      version: MACRO_GEOGRAPHY.version,
+      continents: MACRO_GEOGRAPHY.continents,
+      islands: MACRO_GEOGRAPHY.islands,
+      lakes: MACRO_GEOGRAPHY.lakes,
+      mountainSystems: MACRO_GEOGRAPHY.mountainSystems,
+    },
     presentation: {
       sourceWidth: SOURCE_PRESENTATION_WIDTH,
       renderRadius: RENDER_PLANET_RADIUS,

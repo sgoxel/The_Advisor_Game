@@ -21,6 +21,8 @@ export type FoundationSample = {
   landform: "Mainland" | "Island" | "Ocean";
   continent: number | null;
   island: number | null;
+  lake: number | null;
+  lakeCode: string | null;
   mountainSystem: string | null;
   mountainKind: MountainKind | null;
 };
@@ -90,6 +92,8 @@ export function canonicalFoundationSample(
     landform: macro.landform,
     continent: macro.continent,
     island: macro.island,
+    lake: macro.lake,
+    lakeCode: macro.lakeCode,
     mountainSystem: macro.mountainSystem,
     mountainKind: macro.mountainKind,
   };

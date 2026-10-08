@@ -5,6 +5,7 @@ import {
   buildMacroGeography,
   sampleMacroGeography,
 } from "../src/macro-geography.ts";
+import { canonicalFoundationSample } from "../src/spatial-authority.ts";
 import { heightAt } from "../src/world.ts";
 import { lonLatToSource } from "../src/planet.ts";
 
@@ -23,6 +24,10 @@ test("macro lakes are deterministic seeded inland water bodies", () => {
   for (const lake of MACRO_GEOGRAPHY.lakes) {
     continentsWithLakes.add(lake.continent);
     const sample = sampleMacroGeography(lake.canonicalPosition),
+      foundation = canonicalFoundationSample(
+        lake.canonicalPosition.lon,
+        lake.canonicalPosition.lat,
+      ),
       source = lonLatToSource(
         lake.canonicalPosition.lon,
         lake.canonicalPosition.lat,
@@ -31,6 +36,9 @@ test("macro lakes are deterministic seeded inland water bodies", () => {
     assert.equal(sample.continent, lake.continent);
     assert.equal(sample.lake, lake.id);
     assert.equal(sample.lakeCode, lake.code);
+    assert.equal(foundation.continent, lake.continent);
+    assert.equal(foundation.lake, lake.id);
+    assert.equal(foundation.lakeCode, lake.code);
     assert.ok(heightAt(source.x, source.z) < 0.1);
   }
   assert.equal(continentsWithLakes.size, 3);
