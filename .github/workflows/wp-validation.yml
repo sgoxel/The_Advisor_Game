@@ -14,7 +14,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm test
+      - name: Run unit tests
+        shell: bash
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          npm test 2>&1 | tee test-results/unit-test.log
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: xvfb-run -a npm run test:webgpu
