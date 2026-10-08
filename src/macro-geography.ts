@@ -138,7 +138,6 @@ function continentScore(continent: MacroContinent, position: LonLat) {
   let outline = 1;
   for (const harmonic of continent.harmonics)
     outline += harmonic.amplitude * Math.sin(harmonic.frequency * angle + harmonic.phase);
-  // A gentle asymmetric term prevents mirrored/oval silhouettes.
   outline += 0.045 * Math.cos(angle - continent.rotation * 0.7);
   return outline - radius;
 }
@@ -161,7 +160,7 @@ function makeContinent(seed: string, id: number, accepted: readonly MacroContine
       lon = normalizeLongitude(signed(seed, `${key}/LON`) * Math.PI),
       lat = signed(seed, `${key}/LAT`) * 0.52,
       candidate = { lon, lat };
-    if (accepted.some((other) => angularDistance(candidate, other.canonicalPosition) < 1.55))
+    if (accepted.some((other) => angularDistance(candidate, other.canonicalPosition) < 1.4))
       continue;
     const code = `${seed}/${WORLD_FOUNDATION_VERSION}/MACRO/CONTINENT/${id}`;
     return {
@@ -174,7 +173,10 @@ function makeContinent(seed: string, id: number, accepted: readonly MacroContine
       rotation: unit(seed, `${key}/ROTATION`) * TAU,
       harmonics: [2, 3, 5, 7].map((frequency, index) => ({
         frequency,
-        amplitude: 0.035 + unit(seed, `${key}/HARMONIC/${index}/AMP`) * (index < 2 ? 0.085 : 0.05),
+        amplitude:
+          0.035 +
+          unit(seed, `${key}/HARMONIC/${index}/AMP`) *
+            (index < 2 ? 0.085 : 0.05),
         phase: unit(seed, `${key}/HARMONIC/${index}/PHASE`) * TAU,
       })),
     } satisfies MacroContinent;
@@ -197,7 +199,9 @@ function makeIslands(seed: string, continents: readonly MacroContinent[]) {
             Math.sin(angle) * continent.minorRadius * radius,
           );
         if (Math.abs(origin.lat) > 1.28) continue;
-        const mainlandScore = Math.max(...continents.map((c) => continentScore(c, origin)));
+        const mainlandScore = Math.max(
+          ...continents.map((candidate) => continentScore(candidate, origin)),
+        );
         if (mainlandScore > -0.035) continue;
         const majorRadius = 0.045 + unit(seed, `${key}/MAJOR`) * 0.095,
           minorRadius = majorRadius * (0.45 + unit(seed, `${key}/ASPECT`) * 0.42),
@@ -215,7 +219,13 @@ function makeIslands(seed: string, continents: readonly MacroContinent[]) {
               phase: unit(seed, `${key}/PHASE`) * TAU,
             },
           };
-        if (islands.some((other) => angularDistance(origin, other.canonicalPosition) < majorRadius + other.majorRadius * 0.65))
+        if (
+          islands.some(
+            (other) =>
+              angularDistance(origin, other.canonicalPosition) <
+              majorRadius + other.majorRadius * 0.65,
+          )
+        )
           continue;
         islands.push(island);
         break;
@@ -229,17 +239,47 @@ function mountainParameters(kind: MountainKind, seed: string, key: string) {
   const u = (name: string) => unit(seed, `${key}/${name}`);
   switch (kind) {
     case "chain":
-      return { length: 0.46 + u("L") * 0.22, width: 0.045 + u("W") * 0.035, relief: 135 + u("R") * 65, curve: signed(seed, `${key}/C`) * 0.12 };
+      return {
+        length: 0.46 + u("L") * 0.22,
+        width: 0.045 + u("W") * 0.035,
+        relief: 135 + u("R") * 65,
+        curve: signed(seed, `${key}/C`) * 0.12,
+      };
     case "hook":
-      return { length: 0.35 + u("L") * 0.18, width: 0.055 + u("W") * 0.035, relief: 125 + u("R") * 75, curve: (signed(seed, `${key}/C`) || 1) * (0.28 + u("C2") * 0.24) };
+      return {
+        length: 0.35 + u("L") * 0.18,
+        width: 0.055 + u("W") * 0.035,
+        relief: 125 + u("R") * 75,
+        curve: (signed(seed, `${key}/C`) || 1) * (0.28 + u("C2") * 0.24),
+      };
     case "massif":
-      return { length: 0.16 + u("L") * 0.1, width: 0.11 + u("W") * 0.08, relief: 155 + u("R") * 80, curve: 0 };
+      return {
+        length: 0.16 + u("L") * 0.1,
+        width: 0.11 + u("W") * 0.08,
+        relief: 155 + u("R") * 80,
+        curve: 0,
+      };
     case "highland":
-      return { length: 0.3 + u("L") * 0.18, width: 0.14 + u("W") * 0.09, relief: 55 + u("R") * 55, curve: signed(seed, `${key}/C`) * 0.1 };
+      return {
+        length: 0.3 + u("L") * 0.18,
+        width: 0.14 + u("W") * 0.09,
+        relief: 55 + u("R") * 55,
+        curve: signed(seed, `${key}/C`) * 0.1,
+      };
     case "ridge":
-      return { length: 0.22 + u("L") * 0.17, width: 0.035 + u("W") * 0.028, relief: 90 + u("R") * 65, curve: signed(seed, `${key}/C`) * 0.08 };
+      return {
+        length: 0.22 + u("L") * 0.17,
+        width: 0.035 + u("W") * 0.028,
+        relief: 90 + u("R") * 65,
+        curve: signed(seed, `${key}/C`) * 0.08,
+      };
     case "volcanic":
-      return { length: 0.13 + u("L") * 0.18, width: 0.045 + u("W") * 0.045, relief: 185 + u("R") * 95, curve: signed(seed, `${key}/C`) * 0.08 };
+      return {
+        length: 0.13 + u("L") * 0.18,
+        width: 0.045 + u("W") * 0.045,
+        relief: 185 + u("R") * 95,
+        curve: signed(seed, `${key}/C`) * 0.08,
+      };
   }
 }
 
@@ -250,15 +290,23 @@ function makeMountainSystems(seed: string, continents: readonly MacroContinent[]
     const count = 4 + (macroDigest(`${continent.code}/MOUNTAIN-COUNT`) % 3);
     for (let i = 0; i < count; i++) {
       const key = `MOUNTAIN/${continent.id}/${i}`,
-        kind = requiredKind < MOUNTAIN_KINDS.length
-          ? MOUNTAIN_KINDS[(requiredKind++ + (macroDigest(`${seed}/MOUNTAIN-KIND-OFFSET`) % MOUNTAIN_KINDS.length)) % MOUNTAIN_KINDS.length]
-          : MOUNTAIN_KINDS[macroDigest(`${seed}/${key}/KIND`) % MOUNTAIN_KINDS.length],
+        kind =
+          requiredKind < MOUNTAIN_KINDS.length
+            ? MOUNTAIN_KINDS[
+                (requiredKind++ +
+                  (macroDigest(`${seed}/MOUNTAIN-KIND-OFFSET`) %
+                    MOUNTAIN_KINDS.length)) %
+                  MOUNTAIN_KINDS.length
+              ]
+            : MOUNTAIN_KINDS[
+                macroDigest(`${seed}/${key}/KIND`) % MOUNTAIN_KINDS.length
+              ],
         angle = unit(seed, `${key}/POSITION-ANGLE`) * TAU,
         radius = 0.12 + unit(seed, `${key}/POSITION-RADIUS`) * 0.5,
-        center = macroOffset(
-          continent.canonicalPosition,
-          Math.cos(angle) * continent.majorRadius * radius,
-          Math.sin(angle) * continent.minorRadius * radius,
+        center = continentLocalPosition(
+          continent,
+          Math.cos(angle) * radius,
+          Math.sin(angle) * radius,
         ),
         parameters = mountainParameters(kind, seed, key);
       systems.push({
@@ -277,7 +325,8 @@ function makeMountainSystems(seed: string, continents: readonly MacroContinent[]
 
 export function buildMacroGeography(seed = WORLD_SEED): MacroGeography {
   const continents: MacroContinent[] = [];
-  for (let id = 0; id < 3; id++) continents.push(makeContinent(seed, id, continents));
+  for (let id = 0; id < 3; id++)
+    continents.push(makeContinent(seed, id, continents));
   return Object.freeze({
     seed,
     version: WORLD_FOUNDATION_VERSION,
@@ -289,11 +338,21 @@ export function buildMacroGeography(seed = WORLD_SEED): MacroGeography {
 
 export const MACRO_GEOGRAPHY = buildMacroGeography();
 
-function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
+function distanceToSegment(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+) {
   const dx = bx - ax,
     dy = by - ay,
     length2 = dx * dx + dy * dy || 1,
-    t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / length2)),
+    t = Math.max(
+      0,
+      Math.min(1, ((px - ax) * dx + (py - ay) * dy) / length2),
+    ),
     x = ax + dx * t,
     y = ay + dy * t;
   return Math.hypot(px - x, py - y);
@@ -309,18 +368,41 @@ function mountainInfluence(system: MountainSystem, position: LonLat) {
   } else if (system.kind === "hook") {
     const bend = system.curve >= 0 ? 1 : -1,
       d1 = distanceToSegment(p.x, p.y, -half, 0, half * 0.15, 0),
-      d2 = distanceToSegment(p.x, p.y, half * 0.15, 0, half * 0.45, bend * half * 0.58);
+      d2 = distanceToSegment(
+        p.x,
+        p.y,
+        half * 0.15,
+        0,
+        half * 0.45,
+        bend * half * 0.58,
+      );
     distance = Math.min(d1, d2);
   } else {
-    const curveOffset = system.curve * Math.sin((Math.max(-half, Math.min(half, p.x)) / Math.max(half, 1e-6)) * Math.PI);
+    const curveOffset =
+      system.curve *
+      Math.sin(
+        (Math.max(-half, Math.min(half, p.x)) / Math.max(half, 1e-6)) *
+          Math.PI,
+      );
     distance = distanceToSegment(p.x, p.y, -half, 0, half, curveOffset);
   }
   const cross = Math.max(0, 1 - distance / system.width),
-    along = system.kind === "massif" ? 1 : Math.max(0, 1 - Math.max(0, Math.abs(p.x) - half) / Math.max(system.width, 1e-6)),
+    along =
+      system.kind === "massif"
+        ? 1
+        : Math.max(
+            0,
+            1 -
+              Math.max(0, Math.abs(p.x) - half) /
+                Math.max(system.width, 1e-6),
+          ),
     profile = cross * cross * (3 - 2 * cross) * along;
   if (system.kind === "volcanic") {
     const chain = Math.max(0, 1 - distance / system.width),
-      cone = Math.max(0, 1 - Math.hypot(p.x * 1.6, p.y) / (system.width * 1.7));
+      cone = Math.max(
+        0,
+        1 - Math.hypot(p.x * 1.6, p.y) / (system.width * 1.7),
+      );
     return Math.max(chain * 0.58, cone * cone);
   }
   return profile;
@@ -351,8 +433,18 @@ export function sampleMacroGeography(
       }
     }
 
-  const landform = bestContinentScore > 0 ? "Mainland" : bestIslandScore > 0 ? "Island" : "Ocean",
-    owningContinent = landform === "Mainland" ? continent?.id ?? null : landform === "Island" ? island?.continent ?? null : null;
+  const landform =
+      bestContinentScore > 0
+        ? "Mainland"
+        : bestIslandScore > 0
+          ? "Island"
+          : "Ocean",
+    owningContinent =
+      landform === "Mainland"
+        ? continent?.id ?? null
+        : landform === "Island"
+          ? island?.continent ?? null
+          : null;
   let mountain: MountainSystem | undefined,
     mountainStrength = 0;
   if (owningContinent !== null)
@@ -369,8 +461,14 @@ export function sampleMacroGeography(
     landform,
     continent: owningContinent,
     island: landform === "Island" ? island?.id ?? null : null,
-    landScore: landform === "Mainland" ? bestContinentScore : landform === "Island" ? bestIslandScore : Math.max(bestContinentScore, bestIslandScore),
-    mountainSystem: mountainStrength > 0.015 ? mountain?.code ?? null : null,
+    landScore:
+      landform === "Mainland"
+        ? bestContinentScore
+        : landform === "Island"
+          ? bestIslandScore
+          : Math.max(bestContinentScore, bestIslandScore),
+    mountainSystem:
+      mountainStrength > 0.015 ? mountain?.code ?? null : null,
     mountainKind: mountainStrength > 0.015 ? mountain?.kind ?? null : null,
     mountainRelief: mountain ? mountain.relief * mountainStrength : 0,
   };
