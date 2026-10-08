@@ -55,7 +55,7 @@ test("Stage S002 streaming budgets stay within binding envelopes and reserve rol
   assert.deepEqual(STREAMING_BUDGETS.desktop, {
     deviceClass: "desktop",
     generationReady: 8,
-    activePatches: 159,
+    activePatches: 127,
     cachedPatches: 320,
     cpuBytes: 256 * 1024 * 1024,
     gpuBytes: 256 * 1024 * 1024,
