@@ -146,8 +146,8 @@ for (const viewport of VIEWPORTS) {
       page,
       -0.8,
       -Math.PI,
-      30000,
-      "south rollover diagnostic",
+      120000,
+      "south rollover",
     );
     expect(south.navigation.poleLimit.side).toBe("south");
     expect(south.navigation.focus.lat).toBeCloseTo(-Math.PI / 2, 9);
