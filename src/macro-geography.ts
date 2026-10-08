@@ -358,28 +358,27 @@ function makeLakes(
 ) {
   const lakes: MacroLake[] = [];
   for (const continent of continents) {
-    const count = 1 + (macroDigest(`${continent.code}/LAKE-COUNT`) % 2);
+    const count = 1;
     for (let i = 0; i < count; i++) {
       let placed = false;
-      for (let attempt = 0; attempt < 48; attempt++) {
+      for (let attempt = 0; attempt < 128; attempt++) {
         const key = `LAKE/${continent.id}/${i}/ATTEMPT/${attempt}`,
           angle = unit(seed, `${key}/ANGLE`) * TAU,
-          radius = 0.12 + unit(seed, `${key}/RADIUS`) * 0.42,
+          radius = 0.08 + unit(seed, `${key}/RADIUS`) * 0.28,
           origin = continentLocalPosition(
             continent,
             Math.cos(angle) * radius,
             Math.sin(angle) * radius,
           ),
           interior = continentScore(continent, origin);
-        if (interior < 0.34 || Math.abs(origin.lat) > 1.25) continue;
-        const majorRadius = 0.045 + unit(seed, `${key}/MAJOR`) * 0.055,
-          minorRadius = majorRadius * (0.48 + unit(seed, `${key}/ASPECT`) * 0.34);
+        if (interior < 0.24 || Math.abs(origin.lat) > 1.25) continue;
+        const majorRadius = 0.04 + unit(seed, `${key}/MAJOR`) * 0.04,
+          minorRadius = majorRadius * (0.5 + unit(seed, `${key}/ASPECT`) * 0.3);
         if (
           mountainSystems.some(
             (system) =>
               system.continent === continent.id &&
-              angularDistance(origin, system.canonicalPosition) <
-                Math.max(0.12, system.width * 1.8),
+              angularDistance(origin, system.canonicalPosition) < majorRadius * 1.35,
           ) ||
           lakes.some(
             (other) =>
