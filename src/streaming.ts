@@ -45,9 +45,10 @@ export const STREAMING_BUDGETS: Readonly<Record<StreamingDeviceClass, StreamingB
 
 /** Presentation/device policy only; it never changes world identity or values. */
 export function classifyStreamingDevice(width: number, height: number): StreamingDeviceClass {
-  const shortSide = Math.min(width, height);
+  const shortSide = Math.min(width, height),
+    longSide = Math.max(width, height);
   if (shortSide <= 480) return "phone";
-  if (shortSide <= 900) return "tablet";
+  if (longSide < 1200) return "tablet";
   return "desktop";
 }
 
