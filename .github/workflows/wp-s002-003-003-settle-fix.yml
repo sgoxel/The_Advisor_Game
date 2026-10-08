@@ -1,0 +1,41 @@
+name: Fix WP-S002-003-003 refinement target
+on:
+  push:
+    branches: [wp-s002-003-003-agent1]
+    paths: [.github/workflows/wp-s002-003-003-settle-fix.yml]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Preserve bounded prototype refinement target
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/main.ts')
+          text = path.read_text()
+          old = 'wanted = selectTiles(view, 190, streamingBudget.active);'
+          new = 'wanted = selectTiles(view, 190, Math.min(160, streamingBudget.active));'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one refinement target, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+          PY
+          rm .github/workflows/wp-s002-003-003-settle-fix.yml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit tested fix
+        run: |
+          git config user.name "AGENT #1"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Bound streaming refinement without oversubscribing wide views"
+          git push origin HEAD:wp-s002-003-003-agent1
