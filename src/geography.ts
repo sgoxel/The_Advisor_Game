@@ -82,7 +82,7 @@ export const continents = MACRO_GEOGRAPHY.continents.map((continent) =>
 );
 
 function countryPosition(continent: MacroContinent, id: number, accepted: readonly CanonicalPosition[]) {
-  for (let attempt = 0; attempt < 64; attempt++) {
+  for (let attempt = 0; attempt < 128; attempt++) {
     const key = `COUNTRY/${continent.id}/${id}/ATTEMPT/${attempt}`,
       east = hashSigned(`${key}/EAST`) * 0.64,
       north = hashSigned(`${key}/NORTH`) * 0.64,
@@ -90,17 +90,15 @@ function countryPosition(continent: MacroContinent, id: number, accepted: readon
       sample = sampleMacroGeography(candidate);
     if (sample.landform !== "Mainland" || sample.continent !== continent.id || sample.landScore < 0.1)
       continue;
-    if (accepted.some((other) => greatCircleDistance(candidate, other) < 48_000))
+    if (accepted.some((other) => greatCircleDistance(candidate, other) < 90_000))
       continue;
     return candidate;
   }
   throw new Error(`Unable to place country ${continent.id}/${id}`);
 }
 
-const countryPositions: CanonicalPosition[][] = [];
 export const countries = MACRO_GEOGRAPHY.continents.flatMap((continent) => {
   const accepted: CanonicalPosition[] = [];
-  countryPositions[continent.id] = accepted;
   return Array.from({ length: 10 }, (_, id) => {
     const position = countryPosition(continent, id, accepted);
     accepted.push(position);
@@ -135,9 +133,6 @@ function cityPosition(
       continue;
     return candidate;
   }
-  // Country candidates are deliberately interior. This deterministic fallback is
-  // still canonical and keeps the WP independently solvable if a tiny peninsula
-  // receives a difficult set of city candidates.
   return country.canonicalPosition;
 }
 
@@ -212,12 +207,10 @@ export const roads = cities.flatMap((city) =>
       z,
       fromPosition,
       toPosition,
-      /** Disposable source/render span. This is not a physical metre value. */
       presentationLengthSourceUnits: Math.hypot(
         toPlace.x - fromPlace.x,
         toPlace.z - fromPlace.z,
       ),
-      /** Authoritative spherical route distance in canonical physical metres. */
       surfaceLengthM,
       walkSurface: "good-road" as const,
       walkSpeedMps: travel.speedMps,
@@ -227,7 +220,6 @@ export const roads = cities.flatMap((city) =>
   }),
 );
 
-/** Canonical nearest-place lookup; independent of wrap and source-plane edges. */
 export function nearestPlaceAt(position: LonLat): Place | undefined {
   let result: Place | undefined,
     distance = Infinity;
@@ -241,7 +233,6 @@ export function nearestPlaceAt(position: LonLat): Place | undefined {
   return result;
 }
 
-/** Canonical nearest-continent lookup; independent of antimeridian presentation. */
 export function continentAtPosition(position: LonLat) {
   const sample = sampleMacroGeography(position),
     owned = sample.continent === null ? undefined : continents[sample.continent];
@@ -258,8 +249,6 @@ export function continentAtPosition(position: LonLat) {
   return result;
 }
 
-// Immutable source/render spatial buckets avoid scanning all settlements at every
-// terrain sample. They are a presentation acceleration structure, never identity.
 const buckets = new Map<string, Place[]>();
 for (const place of places) {
   const key = `${Math.floor(place.x / 2048)}/${Math.floor(place.z / 2048)}`;
@@ -268,7 +257,6 @@ for (const place of places) {
   buckets.set(key, bucket);
 }
 
-// Neighbourhood lists are immutable too: build each once, then reuse it.
 const neighbourhoods = new Map<string, readonly Place[]>();
 export function nearbyPlaces(x: number, z: number): readonly Place[] {
   const bx = Math.floor(x / 2048),
@@ -285,7 +273,6 @@ export function nearbyPlaces(x: number, z: number): readonly Place[] {
   return result;
 }
 
-/** Transitional source/render lookup used by local terrain generation. */
 export function nearestPlace(x: number, z: number): Place | undefined {
   let result: Place | undefined,
     distance = Infinity;
@@ -299,15 +286,10 @@ export function nearestPlace(x: number, z: number): Place | undefined {
   return result;
 }
 
-/** Source/render helper backed by canonical macro ownership. */
 export function continentAt(x: number, z: number) {
   return continentAtPosition(sourceToLonLat(x, z));
 }
 
-/**
- * Compatibility helper for existing UI/seed hierarchy. Values below 1 are
- * mainland, 1..1.2 are seeded island margins, and larger values are ocean.
- */
 export function continentalEnvelope(x: number, z: number) {
   const sample = sampleMacroGeography(sourceToLonLat(x, z));
   if (sample.landform === "Mainland") return Math.max(0, 1 - sample.landScore);
@@ -315,7 +297,6 @@ export function continentalEnvelope(x: number, z: number) {
   return 1.4 + Math.min(0.6, Math.max(0, -sample.landScore));
 }
 
-/** Transitional source/render road hit test; road identity is its seed code. */
 export function roadAt(x: number, z: number) {
   const localVillageIds = new Set(
     nearbyPlaces(x, z)
