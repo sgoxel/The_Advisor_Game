@@ -16,6 +16,8 @@ const MIB = 1024 * 1024;
  * active-working-set policy. Two disjoint active sets plus the coarse root must
  * fit inside the cache so a wrap/pole jump can prepare its destination without
  * exceeding the cache envelope or deadlocking behind the previous coverage.
+ * Desktop deliberately stays below the 128-patch exact-pole ring so pole
+ * convergence selects the next coarser deterministic LOD during rollover.
  */
 export const STREAMING_BUDGETS: Readonly<
   Record<StreamingDeviceClass, StreamingBudget>
@@ -39,7 +41,7 @@ export const STREAMING_BUDGETS: Readonly<
   desktop: Object.freeze({
     deviceClass: "desktop",
     generationReady: 8,
-    activePatches: 159,
+    activePatches: 127,
     cachedPatches: 320,
     cpuBytes: 256 * MIB,
     gpuBytes: 256 * MIB,
