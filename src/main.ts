@@ -31,6 +31,7 @@ import {
   POLE_DISTANCE,
   CANONICAL_PLANET_RADIUS,
   CANONICAL_PLANET_CIRCUMFERENCE,
+  canonicalCellId,
   canonicalFootprintForHalfHeight,
   flatToLonLat,
   lonLatToFlat,
@@ -39,6 +40,12 @@ import {
   CANONICAL_PLANET_DIAMETER,
   type LonLat,
 } from "./planet.ts";
+import {
+  GPU_LOCAL_LIMIT_M,
+  REBASE_THRESHOLD_M,
+  LocalRenderFrame,
+  type PatchConversionStats,
+} from "./render-frame.ts";
 import {
   HANDOFF_LOCAL_HALF_HEIGHT,
   HANDOFF_GLOBE_HALF_HEIGHT,
@@ -79,6 +86,7 @@ const view: View = {
   yaw: -0.22,
   pixels: innerHeight,
 };
+const renderFrame = new LocalRenderFrame(view.x, view.z);
 let ready = false,
   selectedCode = "",
   activeKeys: string[] = [],
@@ -104,7 +112,9 @@ let projectionTransition = 0,
   handoffWaitingForDestination = false,
   slowFrameCount = 0,
   droppedFrameCount = 0,
-  lastFlatOpacity = -1;
+  lastFlatOpacity = -1,
+  detailedMaxHorizontalM = 0,
+  detailedMaxFloat32ErrorM = 0;
 let worldMaterial: pc.StandardMaterial | undefined;
 const tileCache = new Map<
   string,
@@ -115,12 +125,17 @@ let revision = 0,
   residentLimit = 200,
   selectionDirty = true;
 const pending = new Set<string>();
-const uploads: { tile: Tile; data: TileGeometry }[] = [];
+const uploads: {
+  tile: Tile;
+  data: TileGeometry;
+  precision: PatchConversionStats;
+}[] = [];
 let worker: Worker;
 const layers = { structures: true, nature: true, grid: false };
 const pressed = new Set<string>();
 const simulation = new LazySimulation();
 const clock = new FantasyClock();
+const actorSources = new Map<pc.Entity, { x: number; z: number }>();
 let navigationFingerprint = "";
 let rulerState = {
   pixels: 0,
@@ -134,6 +149,46 @@ let labelState: {
   rect: Rect;
   leader: boolean;
 }[] = [];
+
+function applyTileRenderTransform(tile: Tile, entity: pc.Entity) {
+  const transform = renderFrame.patchTransform(tile);
+  entity.setLocalPosition(transform.x, 0, transform.z);
+  entity.setLocalEulerAngles(0, transform.yawDegrees, 0);
+}
+
+function positionActor(actor: pc.Entity, x: number, z: number) {
+  const point = renderFrame.sourceToRender(x, z, heightAt(x, z) + 1.65);
+  actor.setLocalPosition(point.x, point.y, point.z);
+}
+
+function refreshRenderFrameTransforms() {
+  for (const { tile, entity } of tileCache.values())
+    applyTileRenderTransform(tile, entity);
+  for (const [actor, source] of actorSources)
+    if (actor.enabled) positionActor(actor, source.x, source.z);
+  navigationFingerprint = "";
+}
+
+function rebaseRenderFrame(force = false) {
+  const changed = force
+    ? renderFrame.rebase(view.x, view.z)
+    : renderFrame.maybeRebase(view.x, view.z);
+  if (changed) refreshRenderFrameTransforms();
+  return changed;
+}
+
+function flatWorldPoint(x: number, z: number, y: number): pc.Vec3 {
+  const point = renderFrame.sourceToRender(x, z, y);
+  if (projectionTransition <= 0.001)
+    return new pc.Vec3(point.x, point.y, point.z);
+  const focus = renderFrame.sourceToRender(view.x, view.z),
+    focusY = Math.max(0, heightAt(view.x, view.z));
+  return new pc.Vec3(
+    point.x - focus.x,
+    PLANET_RADIUS + y - focusY,
+    point.z - focus.z,
+  );
+}
 
 function surfaceAtScreen(x: number, y: number): LonLat | undefined {
   const lens = camera.camera!;
@@ -156,11 +211,15 @@ function surfaceAtScreen(x: number, y: number): LonLat | undefined {
       : Math.max(0, heightAt(view.x, view.z));
   const distance = (yPlane - origin.y) / direction.y;
   if (!Number.isFinite(distance) || distance < 0) return undefined;
-  const point = origin.add(direction.mulScalar(distance));
-  return flatToLonLat(
-    point.x + (projectionTransition > 0.001 ? view.x : 0),
-    point.z + (projectionTransition > 0.001 ? view.z : 0),
-  );
+  const point = origin.add(direction.mulScalar(distance)),
+    focus = renderFrame.sourceToRender(view.x, view.z),
+    localX = point.x + (projectionTransition > 0.001 ? focus.x : 0),
+    localZ = point.z + (projectionTransition > 0.001 ? focus.z : 0);
+  try {
+    return renderFrame.renderToLonLat(localX, localZ);
+  } catch {
+    return undefined;
+  }
 }
 
 function panScreen(ax: number, ay: number, bx: number, by: number) {
@@ -198,6 +257,7 @@ function updateNavigationHud() {
     view.yaw,
     view.halfHeight,
     projectionTransition,
+    renderFrame.stats.rebases,
     innerWidth,
     innerHeight,
     camera.camera!.aspectRatio,
@@ -344,12 +404,17 @@ function applyPresentation() {
   );
   const active = projectionTransition > 0.001,
     fullGlobe = projectionTransition >= 0.999,
-    targetY = Math.max(0, heightAt(view.x, view.z));
+    targetY = Math.max(0, heightAt(view.x, view.z)),
+    focusRender = renderFrame.sourceToRender(view.x, view.z);
   globeShown = fullGlobe;
   document.body.classList.toggle("globe-mode", fullGlobe);
   document.body.classList.toggle("handoff-mode", active && !fullGlobe);
   if (active) {
-    flatRoot.setLocalPosition(-view.x, PLANET_RADIUS - targetY, -view.z);
+    flatRoot.setLocalPosition(
+      -focusRender.x,
+      PLANET_RADIUS - targetY,
+      -focusRender.z,
+    );
     flatRoot.enabled = !fullGlobe;
     const { lon, lat } = flatToLonLat(view.x, view.z);
     globe.orient(lon, lat, 0);
@@ -364,11 +429,11 @@ function applyPresentation() {
     globe.setBlend(0);
     const distance = view.halfHeight * 2.2 + 200;
     camera.setPosition(
-      view.x + Math.sin(view.yaw) * distance * 0.5,
+      focusRender.x + Math.sin(view.yaw) * distance * 0.5,
       targetY + distance * Math.sin(Math.PI / 3),
-      view.z + Math.cos(view.yaw) * distance * 0.5,
+      focusRender.z + Math.cos(view.yaw) * distance * 0.5,
     );
-    camera.lookAt(view.x, targetY, view.z);
+    camera.lookAt(focusRender.x, targetY, focusRender.z);
     camera.camera!.orthoHeight = view.halfHeight;
     camera.camera!.farClip = 600000;
   }
@@ -477,6 +542,7 @@ function navigate(x: number, z: number, height = view.halfHeight) {
   );
   view.x = wrapX(x);
   view.z = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, z));
+  rebaseRenderFrame();
   // Leaving Province level means the globe may be needed soon.
   if (view.halfHeight >= 900) prepareGlobe();
   updateCamera();
@@ -571,6 +637,7 @@ function processStreaming(material: pc.StandardMaterial) {
       if (mesh) meshes.push(mesh);
     }
     entity.enabled = false;
+    applyTileRenderTransform(next.tile, entity);
     flatRoot.addChild(entity);
     tileCache.set(next.tile.key, {
       tile: next.tile,
@@ -578,6 +645,16 @@ function processStreaming(material: pc.StandardMaterial) {
       meshes,
       used: revision,
     });
+    if (next.tile.size <= 512) {
+      detailedMaxHorizontalM = Math.max(
+        detailedMaxHorizontalM,
+        next.precision.maxHorizontalM,
+      );
+      detailedMaxFloat32ErrorM = Math.max(
+        detailedMaxFloat32ErrorM,
+        next.precision.maxFloat32ErrorM,
+      );
+    }
     pending.delete(next.tile.key);
   }
   const root = tileAt(0, 0, 0);
@@ -640,7 +717,8 @@ function inspectCell(screenX: number, screenY: number) {
   const marchStep = Math.max(8, view.halfHeight / 40);
   for (let distance = 0; distance <= 600000; distance += marchStep) {
     const point = origin.clone().add(direction.clone().mulScalar(distance));
-    if (point.y <= Math.max(0, heightAt(point.x, point.z))) {
+    const source = renderFrame.renderToSource(point.x, point.z);
+    if (point.y <= Math.max(0, heightAt(source.x, source.z))) {
       hit = distance;
       break;
     }
@@ -649,22 +727,29 @@ function inspectCell(screenX: number, screenY: number) {
   if (hit < 0) return;
   for (let i = 0; i < 18; i++) {
     const middle = (before + hit) / 2,
-      point = origin.clone().add(direction.clone().mulScalar(middle));
-    if (point.y > Math.max(0, heightAt(point.x, point.z))) before = middle;
+      point = origin.clone().add(direction.clone().mulScalar(middle)),
+      source = renderFrame.renderToSource(point.x, point.z);
+    if (point.y > Math.max(0, heightAt(source.x, source.z))) before = middle;
     else hit = middle;
   }
   const point = origin.add(direction.mulScalar(hit));
   try {
-    const cell = cellAt(point.x, point.z),
-      hierarchy = cellSeed(cell.x, cell.z);
-    selectedCode = cell.code;
+    const source = renderFrame.renderToSource(point.x, point.z),
+      canonical = renderFrame.renderToLonLat(point.x, point.z),
+      cell = cellAt(source.x, source.z),
+      hierarchy = cellSeed(cell.x, cell.z),
+      canonicalId = canonicalCellId(canonical.lon, canonical.lat);
+    selectedCode = canonicalId;
     $("cell-panel").hidden = false;
     $("cell-biome").textContent = cell.biome;
     $("cell-coordinates").textContent =
-      `Cell ${cell.x}, ${cell.z} · ${hierarchy.parent.parent.parent.landform}`;
-    $("cell-code").textContent = cell.code;
+      `${coordinateLabel(canonical, true)} · ${hierarchy.parent.parent.parent.landform}`;
+    $("cell-code").textContent = canonicalId;
+    $("cell-code").dataset.canonicalId = canonicalId;
     $("cell-height").textContent = `${cell.elevation.toFixed(1)} m`;
-    $("cell-tile").textContent = cell.tile;
+    $("cell-height").title =
+      `Canonical position: lon ${canonical.lon.toFixed(9)}, lat ${canonical.lat.toFixed(9)}, elevation ${cell.elevation.toFixed(2)} m`;
+    $("cell-tile").textContent = `${cell.tile} · derived render tile`;
     $("cell-walkable").textContent = cell.walkable ? "Yes" : "No";
     $("copy-status").textContent = "";
     const patch = hierarchy.parent,
@@ -672,11 +757,11 @@ function inspectCell(screenX: number, screenY: number) {
       region = district.parent,
       province = region.parent;
     const levels = [
-      ["Province · 2 km", province.code],
-      ["Region · 200 m", region.code],
-      ["District · 20 m", district.code],
-      ["Patch · 4 m", patch.code],
-      ["Cell · 2 m", hierarchy.code],
+      ["Derived source · Province · 2 km", province.code],
+      ["Derived source · Region · 200 m", region.code],
+      ["Derived source · District · 20 m", district.code],
+      ["Derived source · Patch · 4 m", patch.code],
+      ["Derived source · Cell · 2 m", hierarchy.code],
     ];
     $("seed-levels").replaceChildren(
       ...levels.map(([name, code]) => {
@@ -806,9 +891,9 @@ function setupControls() {
   $("copy-code").onclick = async () => {
     try {
       await navigator.clipboard.writeText(selectedCode);
-      $("copy-status").textContent = "Cell code copied";
+      $("copy-status").textContent = "Canonical planet ID copied";
     } catch {
-      $("copy-status").textContent = "Select the code above to copy it.";
+      $("copy-status").textContent = "Select the canonical ID above to copy it.";
     }
   };
   for (const key of ["structures", "nature", "grid"] as const)
@@ -1091,11 +1176,8 @@ async function start() {
           actors.push(actor);
         }
         actors[i].enabled = true;
-        actors[i].setPosition(
-          visible[i].x,
-          heightAt(visible[i].x, visible[i].z) + 1.65,
-          visible[i].z,
-        );
+        actorSources.set(actors[i], { x: visible[i].x, z: visible[i].z });
+        positionActor(actors[i], visible[i].x, visible[i].z);
       }
       for (let i = visible.length; i < actors.length; i++)
         actors[i].enabled = false;
@@ -1130,14 +1212,17 @@ async function start() {
       width: number;
       height: number;
     }[] = [];
+    const focusRender = renderFrame.sourceToRender(view.x, view.z);
     for (const place of destinations) {
       let screen: pc.Vec3;
+      const placeHeight = Math.max(0, heightAt(place.x, place.z)) + 2,
+        localPoint = renderFrame.sourceToRender(place.x, place.z, placeHeight);
       if (projectionTransition > 0.001) {
         const focusY = Math.max(0, heightAt(view.x, view.z));
         flatLabelPoint.set(
-          place.x - view.x,
-          PLANET_RADIUS + Math.max(0, heightAt(place.x, place.z)) + 2 - focusY,
-          place.z - view.z,
+          localPoint.x - focusRender.x,
+          PLANET_RADIUS + placeHeight - focusY,
+          localPoint.z - focusRender.z,
         );
         const flatScreen = camera.camera!.worldToScreen(flatLabelPoint);
         const { lon, lat } = flatToLonLat(place.x, place.z),
@@ -1158,16 +1243,13 @@ async function start() {
         } else screen = flatScreen;
       } else {
         if (
-          Math.abs(place.x - view.x) > view.halfHeight * view.aspect * 1.4 ||
-          Math.abs(place.z - view.z) > view.halfHeight * 1.5
+          Math.abs(localPoint.x - focusRender.x) >
+            view.halfHeight * view.aspect * 1.4 ||
+          Math.abs(localPoint.z - focusRender.z) > view.halfHeight * 1.5
         )
           continue;
         screen = camera.camera!.worldToScreen(
-          new pc.Vec3(
-            place.x,
-            Math.max(0, heightAt(place.x, place.z)) + 2,
-            place.z,
-          ),
+          new pc.Vec3(localPoint.x, placeHeight, localPoint.z),
         );
       }
       if (
@@ -1292,8 +1374,8 @@ async function start() {
           const a = corners[i],
             b = corners[(i + 1) % 4];
           app.drawLine(
-            new pc.Vec3(a[0], Math.max(0, heightAt(a[0], a[1])) + 0.8, a[1]),
-            new pc.Vec3(b[0], Math.max(0, heightAt(b[0], b[1])) + 0.8, b[1]),
+            flatWorldPoint(a[0], a[1], Math.max(0, heightAt(a[0], a[1])) + 0.8),
+            flatWorldPoint(b[0], b[1], Math.max(0, heightAt(b[0], b[1])) + 0.8),
             new pc.Color(0.91, 0.77, 0.42),
             true,
           );
@@ -1335,6 +1417,9 @@ async function start() {
           const p = lonLatToFlat(lon, lat);
           navigate(p.x, p.z);
         },
+        forceRebase() {
+          if (rebaseRenderFrame(true)) updateCamera();
+        },
       },
       renderer: rendererState,
       get state() {
@@ -1361,6 +1446,16 @@ async function start() {
             heading: -view.yaw || 0,
             ruler: { ...rulerState },
             labels: labelState,
+            selectedCanonicalId: selectedCode || null,
+          },
+          renderFrame: {
+            origin: renderFrame.canonicalOrigin,
+            focusDistanceM: renderFrame.distanceFromOrigin(view.x, view.z),
+            rebaseThresholdM: REBASE_THRESHOLD_M,
+            gpuLocalLimitM: GPU_LOCAL_LIMIT_M,
+            detailedMaxHorizontalM,
+            maxFloat32ErrorM: detailedMaxFloat32ErrorM,
+            ...renderFrame.stats,
           },
           handoff: {
             projectionTransition,
