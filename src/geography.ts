@@ -4,6 +4,7 @@ import {
   lonLatToSource,
   normalizeLongitude,
   sourceToLonLat,
+  wrapSourceX,
   type CanonicalPosition,
   type LonLat,
 } from "./planet.ts";
@@ -209,8 +210,10 @@ export const roads = cities.flatMap((city) =>
       toPlace = villages.find((place) => place.id === `${city.id}/${index + 1}`)!,
       fromPosition = fromPlace.canonicalPosition,
       toPosition = toPlace.canonicalPosition,
-      minX = Math.min(fromPlace.x, toPlace.x),
-      maxX = Math.max(fromPlace.x, toPlace.x),
+      presentationDeltaX = wrapSourceX(toPlace.x - fromPlace.x),
+      presentationEndX = fromPlace.x + presentationDeltaX,
+      minX = Math.min(fromPlace.x, presentationEndX),
+      maxX = Math.max(fromPlace.x, presentationEndX),
       z = fromPlace.z,
       surfaceLengthM = greatCircleDistance(fromPosition, toPosition),
       travel = travelMetrics(surfaceLengthM, "good-road");
@@ -218,13 +221,15 @@ export const roads = cities.flatMap((city) =>
       code: `${city.code}/ROAD/${index}`,
       from: fromPlace.id,
       to: toPlace.id,
+      fromX: fromPlace.x,
+      presentationDeltaX,
       minX,
       maxX,
       z,
       fromPosition,
       toPosition,
       presentationLengthSourceUnits: Math.hypot(
-        toPlace.x - fromPlace.x,
+        presentationDeltaX,
         toPlace.z - fromPlace.z,
       ),
       surfaceLengthM,
@@ -275,25 +280,30 @@ for (const place of places) {
 
 const neighbourhoods = new Map<string, readonly Place[]>();
 export function nearbyPlaces(x: number, z: number): readonly Place[] {
-  const bx = Math.floor(x / 2048),
+  const wx = wrapSourceX(x),
+    bx = Math.floor(wx / 2048),
     bz = Math.floor(z / 2048),
     key = `${bx}/${bz}`;
   let result = neighbourhoods.get(key);
   if (!result) {
     const found: Place[] = [];
     for (let dz = -1; dz <= 1; dz++)
-      for (let dx = -1; dx <= 1; dx++)
-        found.push(...(buckets.get(`${bx + dx}/${bz + dz}`) || []));
+      for (let dx = -1; dx <= 1; dx++) {
+        const sampleX = wrapSourceX((bx + dx) * 2048),
+          wrappedBucketX = Math.floor(sampleX / 2048);
+        found.push(...(buckets.get(`${wrappedBucketX}/${bz + dz}`) || []));
+      }
     neighbourhoods.set(key, (result = found));
   }
   return result;
 }
 
 export function nearestPlace(x: number, z: number): Place | undefined {
+  const wx = wrapSourceX(x);
   let result: Place | undefined,
     distance = Infinity;
-  for (const place of nearbyPlaces(x, z)) {
-    const d = Math.hypot(x - place.x, z - place.z);
+  for (const place of nearbyPlaces(wx, z)) {
+    const d = Math.hypot(wrapSourceX(wx - place.x), z - place.z);
     if (d < distance) {
       distance = d;
       result = place;
@@ -303,28 +313,34 @@ export function nearestPlace(x: number, z: number): Place | undefined {
 }
 
 export function continentAt(x: number, z: number) {
-  return continentAtPosition(sourceToLonLat(x, z));
+  return continentAtPosition(sourceToLonLat(wrapSourceX(x), z));
 }
 
 export function continentalEnvelope(x: number, z: number) {
-  const sample = sampleMacroGeography(sourceToLonLat(x, z));
+  const sample = sampleMacroGeography(sourceToLonLat(wrapSourceX(x), z));
   if (sample.landform === "Mainland") return Math.max(0, 1 - sample.landScore);
   if (sample.landform === "Island") return 1.05;
   return 1.4 + Math.min(0.6, Math.max(0, -sample.landScore));
 }
 
 export function roadAt(x: number, z: number) {
-  const localVillageIds = new Set(
-    nearbyPlaces(x, z)
-      .filter((place) => place.kind === "village")
-      .map((place) => place.id),
-  );
+  const wx = wrapSourceX(x),
+    localVillageIds = new Set(
+      nearbyPlaces(wx, z)
+        .filter((place) => place.kind === "village")
+        .map((place) => place.id),
+    );
   if (!localVillageIds.size) return undefined;
-  return roads.find(
-    (road) =>
-      Math.abs(z - road.z) < 12 &&
-      x >= road.minX - 8 &&
-      x <= road.maxX + 8 &&
-      (localVillageIds.has(road.from) || localVillageIds.has(road.to)),
-  );
+  return roads.find((road) => {
+    if (
+      Math.abs(z - road.z) >= 12 ||
+      (!localVillageIds.has(road.from) && !localVillageIds.has(road.to))
+    )
+      return false;
+    const signedAlong = wrapSourceX(wx - road.fromX),
+      direction = Math.sign(road.presentationDeltaX) || 1,
+      along = signedAlong * direction,
+      length = Math.abs(road.presentationDeltaX);
+    return along >= -8 && along <= length + 8;
+  });
 }
