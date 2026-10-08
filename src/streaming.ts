@@ -1,6 +1,7 @@
 import type { TileGeometry } from "./geometry.ts";
 import {
   SOURCE_PRESENTATION_POLE_DISTANCE,
+  SOURCE_PRESENTATION_WIDTH,
   canonicalCellId,
   sourceToLonLat,
 } from "./planet.ts";
@@ -44,7 +45,10 @@ export const STREAMING_BUDGETS: Readonly<Record<StreamingDeviceClass, StreamingB
   });
 
 /** Presentation/device policy only; it never changes world identity or values. */
-export function classifyStreamingDevice(width: number, height: number): StreamingDeviceClass {
+export function classifyStreamingDevice(
+  width: number,
+  height: number,
+): StreamingDeviceClass {
   const shortSide = Math.min(width, height),
     longSide = Math.max(width, height);
   if (shortSide <= 480) return "phone";
@@ -52,10 +56,52 @@ export function classifyStreamingDevice(width: number, height: number): Streamin
   return "desktop";
 }
 
+/** Shortest signed source-domain offset on the canonical east-west wrap. */
+export function wrappedSourceDelta(fromX: number, toX: number): number {
+  const half = SOURCE_PRESENTATION_WIDTH / 2;
+  return (
+    ((((toX - fromX + half) % SOURCE_PRESENTATION_WIDTH) +
+      SOURCE_PRESENTATION_WIDTH) %
+      SOURCE_PRESENTATION_WIDTH) -
+    half
+  );
+}
+
+/** A render tile is legal when any of its north-south support intersects the planet. */
+export function tileIntersectsPoleBand(
+  tile: Pick<Tile, "minZ" | "size">,
+): boolean {
+  return (
+    tile.minZ < SOURCE_PRESENTATION_POLE_DISTANCE &&
+    tile.minZ + tile.size > -SOURCE_PRESENTATION_POLE_DISTANCE
+  );
+}
+
+/** Wrap-aware source-space viewport overlap used only to choose disposable render tiles. */
+export function tileIntersectsWrappedView(
+  tile: Pick<Tile, "minX" | "minZ" | "size">,
+  focusX: number,
+  focusZ: number,
+  radiusX: number,
+  radiusZ: number,
+): boolean {
+  if (!tileIntersectsPoleBand(tile)) return false;
+  const centerX = tile.minX + tile.size / 2,
+    centerZ = tile.minZ + tile.size / 2,
+    dx = Math.abs(wrappedSourceDelta(focusX, centerX)),
+    dz = Math.abs(centerZ - focusZ);
+  return dx <= radiusX + tile.size / 2 && dz <= radiusZ + tile.size / 2;
+}
+
 /** Stable cube-sphere cache identity independent of longitude-wrap representation. */
-export function canonicalStreamTileKey(tile: Tile): string {
+export function canonicalStreamTileKey(
+  tile: Pick<Tile, "level" | "minX" | "minZ" | "size">,
+): string {
   const legalMinZ = Math.max(tile.minZ, -SOURCE_PRESENTATION_POLE_DISTANCE),
-    legalMaxZ = Math.min(tile.minZ + tile.size, SOURCE_PRESENTATION_POLE_DISTANCE),
+    legalMaxZ = Math.min(
+      tile.minZ + tile.size,
+      SOURCE_PRESENTATION_POLE_DISTANCE,
+    ),
     sampleZ = (legalMinZ + legalMaxZ) / 2,
     sampleX = tile.minX + tile.size / 2,
     { lon, lat } = sourceToLonLat(sampleX, sampleZ);
@@ -65,7 +111,9 @@ export function canonicalStreamTileKey(tile: Tile): string {
 export type GeometryByteEstimate = { cpuBytes: number; gpuBytes: number };
 
 /** Explicit conservative app-owned geometry estimate for both CPU and GPU residency. */
-export function estimateTileGeometryBytes(data: TileGeometry): GeometryByteEstimate {
+export function estimateTileGeometryBytes(
+  data: TileGeometry,
+): GeometryByteEstimate {
   let bytes = 0;
   for (const geometry of Object.values(data))
     bytes +=
