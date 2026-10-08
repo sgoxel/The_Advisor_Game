@@ -1,0 +1,44 @@
+name: Fix WP-S002-003-003 cache deadlock
+on:
+  push:
+    branches: [wp-s002-003-003-agent1]
+    paths: [.github/workflows/wp-s002-003-003-cache-fix.yml]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: wp-s002-003-003-agent1
+      - name: Allow obsolete active detail eviction under hard cache ceiling
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/main.ts')
+          s = p.read_text()
+          old = '    protect = new Set([...activeKeys, ...wantedKeys, rootKey]),\n'
+          new = '    // Wanted patches plus the always-visible root are the hard protection set.\n    // Old detail may be evicted under pressure; the root preserves coverage until\n    // the complete replacement selection is ready, avoiding cache-budget deadlock.\n    protect = new Set([...wantedKeys, rootKey]),\n'
+          assert old in s, 'protection-set context changed'
+          s = s.replace(old, new, 1)
+          old2 = '    tileCache.delete(key);\n    cacheCpuBytes = Math.max(0, cacheCpuBytes - record.cpuBytes);\n'
+          new2 = '    tileCache.delete(key);\n    activeKeys = activeKeys.filter((activeKey) => activeKey !== key);\n    cacheCpuBytes = Math.max(0, cacheCpuBytes - record.cpuBytes);\n'
+          assert old2 in s, 'eviction context changed'
+          s = s.replace(old2, new2, 1)
+          p.write_text(s)
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit tested fix
+        run: |
+          git config user.name sgoxel
+          git config user.email 163722426+sgoxel@users.noreply.github.com
+          git add src/main.ts
+          git diff --cached --quiet || git commit -m "Prevent streaming cache refinement deadlock"
+          git push origin HEAD:wp-s002-003-003-agent1
