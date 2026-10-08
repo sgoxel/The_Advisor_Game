@@ -49,7 +49,7 @@ const VILLAGE_NAMES = ["Briarford", "Oakmere", "Thornfield"] as const;
 const PLANET_RADIUS_M = 637_100;
 const VILLAGE_SEPARATION_M = 6_000;
 const TEMPORARY_VILLAGE_CHAIN_EAST_M = 14_000;
-const TEMPORARY_CORRIDOR_SAMPLE_STEP_M = 500;
+const TEMPORARY_CORRIDOR_SAMPLE_STEP_SOURCE = 7;
 
 const hashUnit = (key: string) =>
   macroDigest(`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/${key}`) / 0xffffffff;
@@ -121,12 +121,21 @@ function temporaryVillageCorridorIsMainland(
   candidate: CanonicalPosition,
   continentId: number,
 ) {
-  const samples = Math.ceil(
-    TEMPORARY_VILLAGE_CHAIN_EAST_M / TEMPORARY_CORRIDOR_SAMPLE_STEP_M,
-  );
+  const start = lonLatToSource(candidate.lon, candidate.lat),
+    endCanonical = macroOffset(
+      candidate,
+      TEMPORARY_VILLAGE_CHAIN_EAST_M / PLANET_RADIUS_M,
+      0,
+    ),
+    end = lonLatToSource(endCanonical.lon, endCanonical.lat),
+    deltaX = wrapSourceX(end.x - start.x),
+    samples = Math.max(
+      1,
+      Math.ceil(Math.abs(deltaX) / TEMPORARY_CORRIDOR_SAMPLE_STEP_SOURCE),
+    );
   for (let i = 0; i <= samples; i++) {
-    const eastM = (TEMPORARY_VILLAGE_CHAIN_EAST_M * i) / samples,
-      point = macroOffset(candidate, eastM / PLANET_RADIUS_M, 0),
+    const x = wrapSourceX(start.x + (deltaX * i) / samples),
+      point = sourceToLonLat(x, start.z),
       sample = sampleMacroGeography(point);
     if (
       sample.landform !== "Mainland" ||
