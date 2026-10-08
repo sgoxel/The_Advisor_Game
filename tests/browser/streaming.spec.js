@@ -40,7 +40,7 @@ for (const profile of [
     const canonical = await page.evaluate(() => ({
       focus: window.advisorWorld.state.navigation.focus,
       keys: [...window.advisorWorld.state.streaming.activeCanonicalKeys].sort(),
-      hits: window.advisorWorld.state.streaming.cacheHits,
+      misses: window.advisorWorld.state.streaming.cacheMisses,
     }));
     await page.evaluate(() =>
       window.advisorWorld.navigation.setFocus(0.42 + Math.PI * 2, 0.2),
@@ -50,7 +50,7 @@ for (const profile of [
     expect(fullTurn.navigation.focus.lon).toBeCloseTo(canonical.focus.lon, 10);
     expect(fullTurn.navigation.focus.lat).toBeCloseTo(canonical.focus.lat, 10);
     expect([...fullTurn.streaming.activeCanonicalKeys].sort()).toEqual(canonical.keys);
-    expect(fullTurn.streaming.cacheHits).toBeGreaterThan(canonical.hits);
+    expect(fullTurn.streaming.cacheMisses).toBe(canonical.misses);
 
     for (const lon of [
       Math.PI - 0.003,
