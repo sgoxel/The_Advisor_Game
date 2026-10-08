@@ -50,6 +50,8 @@ const PLANET_RADIUS_M = 637_100;
 const VILLAGE_SEPARATION_M = 6_000;
 const TEMPORARY_VILLAGE_CHAIN_EAST_M = 14_000;
 const TEMPORARY_CORRIDOR_SAMPLE_STEP_SOURCE = 7;
+const ROAD_BUCKET_SIZE_SOURCE = 2048;
+const ROAD_INDEX_STEP_SOURCE = 512;
 
 const hashUnit = (key: string) =>
   macroDigest(`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/${key}`) / 0xffffffff;
@@ -121,11 +123,11 @@ function temporaryVillageCorridorIsMainland(
   candidate: CanonicalPosition,
   continentId: number,
 ) {
-  const start = lonLatToSource(candidate.lon, candidate.lat),
-    endCanonical = macroOffset(
-      candidate,
-      TEMPORARY_VILLAGE_CHAIN_EAST_M / PLANET_RADIUS_M,
-      0,
+  const cosLat = Math.max(0.2, Math.abs(Math.cos(candidate.lat))),
+    start = lonLatToSource(candidate.lon, candidate.lat),
+    endCanonical = canonicalPosition(
+      candidate.lon + TEMPORARY_VILLAGE_CHAIN_EAST_M / (PLANET_RADIUS_M * cosLat),
+      candidate.lat,
     ),
     end = lonLatToSource(endCanonical.lon, endCanonical.lat),
     deltaX = wrapSourceX(end.x - start.x),
@@ -264,6 +266,39 @@ export const roads = cities.flatMap((city) =>
   }),
 );
 
+type Road = (typeof roads)[number];
+const roadBuckets = new Map<string, Road[]>();
+const roadBucketKey = (x: number, z: number) =>
+  `${Math.floor(wrapSourceX(x) / ROAD_BUCKET_SIZE_SOURCE)}/${Math.floor(z / ROAD_BUCKET_SIZE_SOURCE)}`;
+for (const road of roads) {
+  const steps = Math.max(
+    1,
+    Math.ceil(Math.abs(road.presentationDeltaX) / ROAD_INDEX_STEP_SOURCE),
+  );
+  for (let i = 0; i <= steps; i++) {
+    const x = wrapSourceX(road.fromX + (road.presentationDeltaX * i) / steps),
+      key = roadBucketKey(x, road.z),
+      bucket = roadBuckets.get(key) || [];
+    if (!bucket.includes(road)) bucket.push(road);
+    roadBuckets.set(key, bucket);
+  }
+}
+
+function nearbyRoads(x: number, z: number): readonly Road[] {
+  const wx = wrapSourceX(x),
+    bx = Math.floor(wx / ROAD_BUCKET_SIZE_SOURCE),
+    bz = Math.floor(z / ROAD_BUCKET_SIZE_SOURCE),
+    found = new Map<string, Road>();
+  for (let dz = -1; dz <= 1; dz++)
+    for (let dx = -1; dx <= 1; dx++) {
+      const sampleX = wrapSourceX((bx + dx) * ROAD_BUCKET_SIZE_SOURCE),
+        wrappedBucketX = Math.floor(sampleX / ROAD_BUCKET_SIZE_SOURCE),
+        bucket = roadBuckets.get(`${wrappedBucketX}/${bz + dz}`) || [];
+      for (const road of bucket) found.set(road.code, road);
+    }
+  return [...found.values()];
+}
+
 export function nearestPlaceAt(position: LonLat): Place | undefined {
   let result: Place | undefined,
     distance = Infinity;
@@ -347,19 +382,9 @@ export function continentalEnvelope(x: number, z: number) {
 }
 
 export function roadAt(x: number, z: number) {
-  const wx = wrapSourceX(x),
-    localVillageIds = new Set(
-      nearbyPlaces(wx, z)
-        .filter((place) => place.kind === "village")
-        .map((place) => place.id),
-    );
-  if (!localVillageIds.size) return undefined;
-  return roads.find((road) => {
-    if (
-      Math.abs(z - road.z) >= 12 ||
-      (!localVillageIds.has(road.from) && !localVillageIds.has(road.to))
-    )
-      return false;
+  const wx = wrapSourceX(x);
+  return nearbyRoads(wx, z).find((road) => {
+    if (Math.abs(z - road.z) >= 12) return false;
     const signedAlong = wrapSourceX(wx - road.fromX),
       direction = Math.sign(road.presentationDeltaX) || 1,
       along = signedAlong * direction,
