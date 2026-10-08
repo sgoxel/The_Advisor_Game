@@ -54,9 +54,9 @@ test("Stage S002 streaming budgets stay within binding envelopes and reserve rol
   });
   assert.deepEqual(STREAMING_BUDGETS.desktop, {
     deviceClass: "desktop",
-    generationReady: 8,
-    activePatches: 127,
-    cachedPatches: 320,
+    generationReady: 4,
+    activePatches: 89,
+    cachedPatches: 180,
     cpuBytes: 256 * 1024 * 1024,
     gpuBytes: 256 * 1024 * 1024,
   });
@@ -65,6 +65,19 @@ test("Stage S002 streaming budgets stay within binding envelopes and reserve rol
       budget.activePatches * 2 + 1 <= budget.cachedPatches,
       `${budget.deviceClass} must fit previous + destination active sets + root`,
     );
+  assert.deepEqual(
+    {
+      generationReady: STREAMING_BUDGETS.desktop.generationReady,
+      activePatches: STREAMING_BUDGETS.desktop.activePatches,
+      cachedPatches: STREAMING_BUDGETS.desktop.cachedPatches,
+    },
+    {
+      generationReady: STREAMING_BUDGETS.phone.generationReady,
+      activePatches: STREAMING_BUDGETS.phone.activePatches,
+      cachedPatches: STREAMING_BUDGETS.phone.cachedPatches,
+    },
+    "desktop keeps the sustained-rollover patch envelope proven on phone while retaining its larger byte ceiling",
+  );
   assert.equal(streamingBudgetForViewport(390, 844).deviceClass, "phone");
   assert.equal(streamingBudgetForViewport(844, 390).deviceClass, "phone");
   assert.equal(streamingBudgetForViewport(768, 1024).deviceClass, "tablet");
