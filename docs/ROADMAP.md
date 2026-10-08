@@ -28,7 +28,7 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 - WP-S002-003-002 — Precision-safe ENU local rendering: camera-relative patches, canonical picking/labels/shadows and deterministic rebasing — COMPLETED
 - WP-S002-003-003 — Canonical wrap/pole streaming: stable IDs, no-blank coverage, device/byte budgets and eviction-safe caches — COMPLETED
 - WP-S002-004-001 — Reference analysis/contracts for natural-world authority, readable 3D settlement/living-world UX and mobile performance — COMPLETED
-- WP-S002-004-002 — Canonical planet-scale/travel migration UX: physical metres, route-derived time, truthful ruler/copy and legacy cleanup
+- WP-S002-004-002 — Canonical planet-scale/travel migration UX: physical metres, route-derived time, truthful ruler/copy and legacy cleanup — COMPLETED and REVIEWED at 2026-10-09
 - WP-S002-004-003 — Realm macro-geography visual/performance foundation: seeded continents/islands, distinct mountain/volcanic systems and cross-LOD silhouettes
 - WP-S002-004-004 — Biome/material readability foundation: diverse climates/terrain, stable semantic colors and cross-LOD identity
 - WP-S002-004-005 — Terrain/hydrology/traversal foundation: natural landforms, distributed freshwater, canonical walkability and bounded seam-safe queries
