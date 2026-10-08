@@ -118,6 +118,34 @@ test("every required mountain archetype contributes a stable canonical landform"
   assert.ok(volcanic.reliefM >= 400);
 });
 
+test("mountain systems span materially different footprint, width, relief and plan-view classes", () => {
+  const nonPoint = mountainSystems.filter((system) => system.localPath.length > 1),
+    lengths = nonPoint.map((system) => system.lengthRad),
+    widths = mountainSystems.map((system) => system.widthRad),
+    relief = mountainSystems.map((system) => system.reliefM);
+
+  assert.ok(Math.max(...lengths) / Math.min(...lengths) > 2.5);
+  assert.ok(Math.max(...widths) / Math.min(...widths) > 2.5);
+  assert.ok(Math.max(...relief) / Math.min(...relief) > 5);
+
+  const long = mountainSystems.find((system) => system.kind === "long-chain")!,
+    compact = mountainSystems.find((system) => system.kind === "compact-massif")!,
+    low = mountainSystems.find((system) => system.kind === "low-highlands")!,
+    dominant = mountainSystems.find((system) => system.kind === "dominant-spine")!,
+    hook = mountainSystems.find((system) => system.kind === "hooked-range")!;
+  assert.ok(long.lengthRad > compact.lengthRad * 2.5);
+  assert.ok(low.widthRad > dominant.widthRad * 2);
+  assert.ok(dominant.reliefM > low.reliefM * 5);
+
+  const [a, corner, b] = hook.localPath,
+    ax = a[0] - corner[0],
+    ay = a[1] - corner[1],
+    bx = b[0] - corner[0],
+    by = b[1] - corner[1],
+    cosine = Math.abs((ax * bx + ay * by) / (Math.hypot(ax, ay) * Math.hypot(bx, by)));
+  assert.ok(cosine < 1e-10, "hooked range must retain its seeded L-shaped macro signature");
+});
+
 test("macro sampling is order-independent and globe/local presentation reads the same source", () => {
   const positions = [
     ...MACRO_PLAN.continents.map((item) => item.center),
