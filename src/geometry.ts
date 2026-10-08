@@ -117,6 +117,13 @@ class Builder {
       tint,
     );
   }
+  /** Keep large source coordinates out of Float32 before the worker converts to ENU. */
+  relativeTo(x: number, z: number) {
+    for (let i = 0; i < this.p.length; i += 3) {
+      this.p[i] -= x;
+      this.p[i + 2] -= z;
+    }
+  }
   finish(): Geometry {
     return {
       positions: new Float32Array(this.p),
@@ -407,6 +414,11 @@ export function buildTile(t: Tile): TileGeometry {
         }
       }
     }
+  // Preserve full precision until after the large source anchor is removed.
+  const originX = t.minX + t.size / 2,
+    originZ = t.minZ + t.size / 2;
+  for (const builder of [terrain, structures, nature, detail])
+    builder.relativeTo(originX, originZ);
   return {
     terrain: terrain.finish(),
     structures: structures.finish(),
