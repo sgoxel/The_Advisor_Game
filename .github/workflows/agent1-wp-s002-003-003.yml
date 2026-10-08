@@ -1,0 +1,292 @@
+name: Agent 1 apply WP-S002-003-003 runtime patch
+on:
+  push:
+    branches: [agent1/wp-s002-003-003]
+    paths: [.github/workflows/agent1-wp-s002-003-003.yml]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s002-003-003
+      - name: Apply deterministic runtime and evidence edits
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/main.ts')
+          s = p.read_text()
+          anchor = '} from "./navigation.ts";\n'
+          addition = '''import {\n  estimateTileGeometryBytes,\n  streamingBudgetForViewport,\n  type StreamingBudget,\n} from "./streaming.ts";\n'''
+          assert anchor in s and addition not in s
+          s = s.replace(anchor, anchor + addition, 1)
+
+          old = '''const tileCache = new Map<\n  string,\n  { tile: Tile; entity: pc.Entity; meshes: pc.Mesh[]; used: number }\n>();\nlet revision = 0,\n  inFlight = 0,\n  residentLimit = 200,\n  selectionDirty = true;\n'''
+          new = '''const tileCache = new Map<\n  string,\n  { tile: Tile; entity: pc.Entity; meshes: pc.Mesh[]; used: number; bytes: number }\n>();\nlet revision = 0,\n  inFlight = 0,\n  selectionDirty = true,\n  cacheHits = 0,\n  cacheMisses = 0,\n  evictions = 0,\n  cacheGpuBytes = 0,\n  readyCpuBytes = 0,\n  uploadsThisFrame = 0,\n  poleFeedback = "";\nlet streamingBudget: StreamingBudget = streamingBudgetForViewport(\n  innerWidth,\n  innerHeight,\n);\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''  selectionDirty = true;\n}\nfunction updateCamera() {\n  desiredProjectionTransition = projectionTransitionForHalfHeight(\n'''
+          new = '''}\nfunction updateCamera() {\n  selectionDirty = true;\n  desiredProjectionTransition = projectionTransitionForHalfHeight(\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''  view.x = wrapX(x);\n  view.z = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, z));\n  rebaseRenderFrame();\n'''
+          new = '''  const clampedZ = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, z));\n  if (Math.abs(z - clampedZ) > 1e-6)\n    poleFeedback = z < -POLE_DISTANCE ? "North pole limit reached" : "South pole limit reached";\n  else if (Math.abs(clampedZ) < POLE_DISTANCE - 1) poleFeedback = "";\n  view.x = wrapX(x);\n  view.z = clampedZ;\n  rebaseRenderFrame();\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          start = s.index('function request(tile: Tile) {')
+          end = s.index('\nfunction inspectCell', start)
+          new_stream = r'''function request(tile: Tile) {
+  if (tileCache.has(tile.key)) {
+    cacheHits++;
+    return;
+  }
+  if (pending.has(tile.key) || pending.size >= streamingBudget.generationReadyQueue)
+    return;
+  cacheMisses++;
+  pending.add(tile.key);
+  inFlight++;
+  worker.postMessage(tile);
+}
+function refreshSelection() {
+  streamingBudget = streamingBudgetForViewport(innerWidth, innerHeight);
+  wanted = selectTiles(view, 190, streamingBudget.activePatches);
+  revision++;
+  selectionDirty = false;
+  const name =
+    view.halfHeight < 70
+      ? "Street"
+      : view.halfHeight < 230
+        ? "Village"
+        : view.halfHeight < 900
+          ? "Province"
+          : view.halfHeight < GLOBE_FROM
+            ? "Country"
+            : "Realm";
+  $("detail-name").textContent = name;
+  const dotCount = { Street: 5, Village: 4, Province: 3, Country: 2, Realm: 1 }[
+    name
+  ];
+  document
+    .querySelectorAll(".detail-dots i")
+    .forEach((dot, i) => dot.classList.toggle("active", i < dotCount));
+  const s = nearestPlace(view.x, view.z);
+  $("place-name").textContent = globeShown
+    ? continentalEnvelope(view.x, view.z) < 1
+      ? continentAt(view.x, view.z).name
+      : "The open sea"
+    : s && Math.hypot(view.x - s.x, view.z - s.z) < 200
+      ? s.name
+      : "The wild marches";
+  updateNavigationHud();
+}
+function processStreaming(material: pc.StandardMaterial) {
+  if (selectionDirty) refreshSelection();
+  uploadsThisFrame = 0;
+  // At most one GPU mesh group per rendered frame. Generation remains worker-only.
+  const next = uploads.shift();
+  if (next) {
+    uploadsThisFrame = 1;
+    const bytes = estimateTileGeometryBytes(next.data);
+    readyCpuBytes = Math.max(0, readyCpuBytes - bytes);
+    const entity = new pc.Entity(next.tile.key),
+      meshes: pc.Mesh[] = [];
+    for (const [name, g] of Object.entries(next.data)) {
+      const mesh = uploadGeometry(g, entity, name, material);
+      if (mesh) meshes.push(mesh);
+    }
+    entity.enabled = false;
+    applyTileRenderTransform(next.tile, entity);
+    flatRoot.addChild(entity);
+    tileCache.set(next.tile.key, {
+      tile: next.tile,
+      entity,
+      meshes,
+      used: revision,
+      bytes,
+    });
+    cacheGpuBytes += bytes;
+    if (next.tile.size <= 512) {
+      detailedMaxHorizontalM = Math.max(
+        detailedMaxHorizontalM,
+        next.precision.maxHorizontalM,
+      );
+      detailedMaxFloat32ErrorM = Math.max(
+        detailedMaxFloat32ErrorM,
+        next.precision.maxFloat32ErrorM,
+      );
+    }
+    pending.delete(next.tile.key);
+  }
+
+  const complete = wanted.length > 0 && wanted.every((tile) => tileCache.has(tile.key));
+  if (complete) {
+    const newKeys = wanted.map((tile) => tile.key),
+      active = new Set(newKeys);
+    for (const [key, record] of tileCache) {
+      record.entity.enabled = active.has(key);
+      if (active.has(key)) record.used = revision;
+    }
+    activeKeys = newKeys;
+    if (!ready) {
+      ready = true;
+      $("loading").classList.add("done");
+    }
+  } else {
+    // Retain the last complete coverage until every replacement patch is ready.
+    for (const key of activeKeys) {
+      const record = tileCache.get(key);
+      if (record) record.entity.enabled = true;
+    }
+    for (const tile of wanted) {
+      if (pending.size >= streamingBudget.generationReadyQueue) break;
+      request(tile);
+    }
+  }
+
+  const protect = new Set([...activeKeys, ...wanted.map((tile) => tile.key)]),
+    obsolete = [...tileCache.entries()]
+      .filter(([key]) => !protect.has(key))
+      .sort((a, b) => a[1].used - b[1].used);
+  for (const [key, record] of obsolete) {
+    if (
+      tileCache.size <= streamingBudget.cachedPatches &&
+      cacheGpuBytes <= streamingBudget.gpuBytes
+    )
+      break;
+    record.entity.destroy();
+    tileCache.delete(key);
+    cacheGpuBytes = Math.max(0, cacheGpuBytes - record.bytes);
+    evictions++;
+  }
+
+  const notice = poleFeedback ? ` · ${poleFeedback}` : "";
+  $("tile-status").textContent =
+    projectionTransition >= 0.999
+      ? `Globe · ${globePass < GLOBE_PASSES.length ? "refining" : "ready"}${notice}`
+      : projectionTransition > 0.001
+        ? `Handoff · ${Math.round(projectionTransition * 100)}% · ${pending.size ? "preparing terrain" : "ready"}${notice}`
+        : `${activeKeys.length || 1} patches · ${pending.size ? "refining" : "ready"}${notice}`;
+}
+'''
+          s = s[:start] + new_stream + s[end:]
+
+          old = '''    uploads.push(event.data);\n  };\n'''
+          new = '''    readyCpuBytes += estimateTileGeometryBytes(event.data.data);\n    uploads.push(event.data);\n  };\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''        setFocus(lon: number, lat: number) {\n          const p = lonLatToFlat(lon, lat);\n          navigate(p.x, p.z);\n        },\n'''
+          new = '''        setFocus(lon: number, lat: number) {\n          const boundedLat = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, lat));\n          if (boundedLat !== lat)\n            poleFeedback = lat > 0 ? "North pole limit reached" : "South pole limit reached";\n          const p = lonLatToFlat(lon, boundedLat);\n          navigate(p.x, p.z);\n        },\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          s = s.replace(
+            '            outstandingGeneration: pending.size + uploads.length + inFlight,\n',
+            '            outstandingGeneration: pending.size,\n',
+            1,
+          )
+
+          old = '''          fps,\n          active: activeKeys.length,\n          cached: tileCache.size,\n          pending: pending.size,\n'''
+          new = '''          fps,\n          performance: {\n            backend: rendererState.backend,\n            activePatches: activeKeys.length,\n            preparedPatches: uploads.length,\n            cachedPatches: tileCache.size,\n            pendingGeneration: inFlight,\n            readyUploads: uploads.length,\n            cacheHits,\n            cacheMisses,\n            evictions,\n            cpuResourceBytesEstimated: readyCpuBytes,\n            gpuResourceBytesEstimated: cacheGpuBytes,\n            uploadsThisFrame,\n          },\n          streaming: {\n            deviceClass: streamingBudget.deviceClass,\n            budget: { ...streamingBudget },\n            activePatches: activeKeys.length,\n            cachedPatches: tileCache.size,\n            pendingGeneration: inFlight,\n            readyUploads: uploads.length,\n            queuedTotal: pending.size,\n            cacheHits,\n            cacheMisses,\n            evictions,\n            cpuBytesEstimated: readyCpuBytes,\n            gpuBytesEstimated: cacheGpuBytes,\n            uploadsThisFrame,\n            poleFeedback: poleFeedback || null,\n            activeCanonicalKeys: [...activeKeys],\n          },\n          active: activeKeys.length,\n          cached: tileCache.size,\n          pending: pending.size,\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          p = Path('tools/screenshot_tool.py')
+          s = p.read_text()
+          anchor = '    "cell": "tap;visible:#cell-panel",\n'
+          scenario = '''    "wrap-pole": (\n        "select:#map-scale=100;eval:window.advisorWorld.navigation.setFocus(Math.PI-0.0002,0.35);settle;shot:wrap-east;"\n        "eval:window.advisorWorld.navigation.setFocus(-Math.PI+0.0002,0.35);settle;shot:wrap-west;"\n        "eval:window.advisorWorld.navigation.setFocus(0,Math.PI);settle;shot:north-pole;"\n        "eval:window.advisorWorld.navigation.setFocus(Math.PI/2,-Math.PI);settle;shot:south-pole"\n    ),\n'''
+          assert anchor in s and '"wrap-pole"' not in s
+          s = s.replace(anchor, anchor + scenario, 1)
+          s = s.replace(
+            '    navigation: state.navigation ?? null,\n',
+            '    navigation: state.navigation ?? null, streaming: state.streaming ?? null,\n    performance: state.performance ?? null,\n',
+            1,
+          )
+          p.write_text(s)
+
+          p = Path('tests/browser/navigation.spec.js')
+          s = p.read_text()
+          assert 'canonical streaming remains bounded across wrap and poles' not in s
+          s += r'''
+
+test("canonical streaming remains bounded across wrap and poles", async ({ page }) => {
+  test.setTimeout(300000);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, "gpu", {
+      value: undefined,
+      configurable: true,
+    }),
+  );
+  await page.goto("/");
+  await page.waitForFunction(() => window.advisorWorld?.state.settled);
+  await page.locator("#map-scale").selectOption("100");
+  await page.evaluate(() => window.advisorWorld.navigation.setFocus(Math.PI - 0.0002, 0.35));
+  await page.waitForFunction(() => window.advisorWorld.state.settled);
+  const first = await page.evaluate(() => window.advisorWorld.state.streaming);
+  expect(first.deviceClass).toBe("desktop");
+  expect(first.activePatches).toBeLessThanOrEqual(first.budget.activePatches);
+  expect(first.cachedPatches).toBeLessThanOrEqual(first.budget.cachedPatches);
+  expect(first.queuedTotal).toBeLessThanOrEqual(first.budget.generationReadyQueue);
+  expect(first.gpuBytesEstimated).toBeLessThanOrEqual(first.budget.gpuBytes);
+  expect(new Set(first.activeCanonicalKeys).size).toBe(first.activeCanonicalKeys.length);
+  const keys = [...first.activeCanonicalKeys].sort();
+  await page.evaluate(() =>
+    window.advisorWorld.navigation.setFocus(Math.PI - 0.0002 + Math.PI * 2, 0.35),
+  );
+  await page.waitForFunction(() => window.advisorWorld.state.settled);
+  expect(
+    await page.evaluate(() => [...window.advisorWorld.state.streaming.activeCanonicalKeys].sort()),
+  ).toEqual(keys);
+  await page.evaluate(() => window.advisorWorld.navigation.setFocus(0, Math.PI));
+  await page.waitForFunction(() => window.advisorWorld.state.settled);
+  const north = await page.evaluate(() => ({
+    focus: window.advisorWorld.state.navigation.focus,
+    streaming: window.advisorWorld.state.streaming,
+  }));
+  expect(north.focus.lat).toBeCloseTo(Math.PI / 2, 9);
+  expect(north.streaming.poleFeedback).toContain("North pole");
+  expect(north.streaming.activePatches).toBeGreaterThan(0);
+  expect(new Set(north.streaming.activeCanonicalKeys).size).toBe(
+    north.streaming.activeCanonicalKeys.length,
+  );
+  await page.evaluate(() => window.advisorWorld.navigation.setFocus(Math.PI / 2, -Math.PI));
+  await page.waitForFunction(() => window.advisorWorld.state.settled);
+  const south = await page.evaluate(() => window.advisorWorld.state.streaming);
+  expect(south.poleFeedback).toContain("South pole");
+  expect(south.queuedTotal).toBeLessThanOrEqual(south.budget.generationReadyQueue);
+  expect(errors).toEqual([]);
+});
+'''
+          p.write_text(s)
+
+          p = Path('.github/workflows/wp-validation.yml')
+          s = p.read_text()
+          s = s.replace(
+            '--scenario cell --profile desktop,phone --renderer webgl2',
+            '--scenario cell,wrap-pole --profile desktop,phone --renderer webgl2',
+            1,
+          )
+          s = s.replace(
+            '--scenario cell --profile desktop,phone --renderer webgpu',
+            '--scenario cell,wrap-pole --profile desktop,phone --renderer webgpu',
+            1,
+          )
+          p.write_text(s)
+          PY
+      - name: Commit runtime patch
+        run: |
+          git config user.name "AGENT #1"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add src/main.ts tools/screenshot_tool.py tests/browser/navigation.spec.js .github/workflows/wp-validation.yml
+          git commit -m "Integrate bounded canonical streaming runtime"
+          git push origin HEAD:agent1/wp-s002-003-003
