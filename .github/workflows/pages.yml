@@ -6,32 +6,17 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 concurrency:
-  group: agent1-runtime-${{ github.sha }}
+  group: github-pages-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
-      - name: Apply AGENT #1 runtime patch once
-        if: github.event_name == 'pull_request'
-        run: |
-          python tools/apply_wp_s002_003_003.py
-          if git diff --quiet; then
-            echo 'Runtime patch already applied.'
-          else
-            git config user.name 'AGENT #1'
-            git config user.email '163722426+sgoxel@users.noreply.github.com'
-            git add src/main.ts tools/screenshot_tool.py tests/browser/navigation.spec.js
-            git commit -m 'Integrate bounded canonical streaming runtime'
-            git push origin HEAD:${{ github.event.pull_request.head.ref }}
-          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 24
