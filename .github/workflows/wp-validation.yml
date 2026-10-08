@@ -32,6 +32,10 @@ jobs:
           done
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgl2 --scenario cell --profile desktop,phone --renderer webgl2 --timeout 180
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgpu --scenario cell --profile desktop,phone --renderer webgpu --timeout 180
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp10-wrap-webgl2 --name wrap --profile desktop,phone --renderer webgl2 --timeout 240 --steps "eval:window.advisorWorld.setHalfHeight(97);eval:window.advisorWorld.navigation.setFocus(Math.PI-0.003,0.12);check:#grid;settle;shot:east;eval:window.advisorWorld.navigation.setFocus(-Math.PI+0.003,0.12);settle;shot:west"
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp10-poles-webgl2 --name poles --profile desktop,phone --renderer webgl2 --timeout 240 --steps "eval:window.advisorWorld.setHalfHeight(97);eval:window.advisorWorld.navigation.setFocus(0.55,Math.PI);check:#grid;settle;shot:north;eval:window.advisorWorld.navigation.setFocus(-0.8,-Math.PI);settle;shot:south"
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp10-wrap-webgpu --name wrap --profile desktop,phone --renderer webgpu --timeout 240 --steps "eval:window.advisorWorld.setHalfHeight(97);eval:window.advisorWorld.navigation.setFocus(Math.PI-0.003,0.12);check:#grid;settle;shot:east;eval:window.advisorWorld.navigation.setFocus(-Math.PI+0.003,0.12);settle;shot:west"
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp10-poles-webgpu --name poles --profile desktop,phone --renderer webgpu --timeout 240 --steps "eval:window.advisorWorld.setHalfHeight(97);eval:window.advisorWorld.navigation.setFocus(0.55,Math.PI);check:#grid;settle;shot:north;eval:window.advisorWorld.navigation.setFocus(-0.8,-Math.PI);settle;shot:south"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
