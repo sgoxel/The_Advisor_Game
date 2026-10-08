@@ -14,15 +14,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Run unit tests
-        shell: bash
-        run: |
-          mkdir -p test-results
-          set -o pipefail
-          if ! npm test 2>&1 | tee test-results/unit-test.log; then
-            node --experimental-strip-types tools/road_diagnostic.ts 2>&1 | tee test-results/road-diagnostic.log
-            exit 1
-          fi
+      - run: npm test
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: xvfb-run -a npm run test:webgpu
