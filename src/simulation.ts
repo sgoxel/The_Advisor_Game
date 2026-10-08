@@ -1,7 +1,6 @@
 import { countries, places, type Place } from "./geography.ts";
-import { WALK_SPEED_MPS } from "./config.ts";
+import { GOOD_ROAD_WALK_SPEED_MPS } from "./travel.ts";
 import { digest, heightAt } from "./world.ts";
-import { TIME_SCALE } from "./clock.ts";
 import {
   CANONICAL_PLANET_RADIUS,
   clampLatitude,
@@ -85,10 +84,11 @@ export function residentAt(
   const code = `${place.code}/RESIDENT/${index}`,
     variant = digest(code),
     span = place.kind === "city" ? 250 : 28;
-  // Four deterministic lanes in canonical physical metres. No source atlas scale,
-  // render tile, camera, viewport or stochastic destination selection is an input.
+  // Four deterministic lanes in canonical physical metres. tick is already fantasy
+  // seconds, so movement consumes the fantasy-time road speed directly rather than
+  // dividing by the 24× presentation clock scale.
   const radius = 12 + (variant % span),
-    speed = WALK_SPEED_MPS / TIME_SCALE,
+    speed = GOOD_ROAD_WALK_SPEED_MPS,
     perimeter = radius * 8;
   const distance =
     (tick * speed + (variant % Math.ceil(perimeter))) % perimeter;
