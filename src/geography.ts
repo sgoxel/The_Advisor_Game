@@ -185,21 +185,24 @@ export const cities: Place[] = (() => {
 })();
 
 /**
- * Villages remain connected by the prototype straight good-road records, but
- * each row is re-sited from seed inside its city's actual mainland. Longitude
- * step is latitude-adjusted so every adjacent pair stays safely above 3.9 km.
+ * Villages stay in a simple east-west prototype road row for this WP, but the
+ * whole row is seed-addressed and may shift inland around the parent city. This
+ * keeps the later transport WP independent while avoiding a fixed-grid siting rule.
  */
 export const villages: Place[] = (() => {
   const result: Place[] = [],
     accepted: CanonicalPosition[] = [];
   for (const city of cities) {
     let row: CanonicalPosition[] | undefined;
-    for (let attempt = 0; attempt < 128; attempt++) {
-      const latOffset = (addressed(`VILLAGE/${city.id}/${attempt}/latitude`) - 0.5) * 0.018,
-        lat = Math.max(-1.35, Math.min(1.35, city.canonicalPosition.lat + latOffset)),
+    for (let attempt = 0; attempt < 192; attempt++) {
+      const prefix = `VILLAGE/${city.id}/${attempt}`,
+        anchorBearing = TAU * addressed(`${prefix}/anchor-bearing`),
+        anchorDistance = 0.001 + 0.026 * Math.sqrt(addressed(`${prefix}/anchor-distance`)),
+        anchor = destination(city.canonicalPosition, anchorBearing, anchorDistance),
+        lat = Math.max(-1.35, Math.min(1.35, anchor.lat)),
         lonStep = 0.0064 / Math.max(0.35, Math.abs(Math.cos(lat))),
         candidates = [-1, 0, 1].map((offset) =>
-          canonicalPosition(city.canonicalPosition.lon + offset * lonStep, lat),
+          canonicalPosition(anchor.lon + offset * lonStep, lat),
         );
       const legal = candidates.every((candidate) => {
         const macro = macroSampleAt(candidate);
