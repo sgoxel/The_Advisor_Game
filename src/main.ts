@@ -690,7 +690,9 @@ function processStreaming(material: pc.StandardMaterial) {
   const root = tileAt(0, 0, 0),
     rootKey = canonicalStreamTileKey(root),
     wantedKeys = wanted.map(canonicalStreamTileKey),
-    protect = new Set([...activeKeys, ...wantedKeys, rootKey]),
+    // Requested replacement patches and the coarse root are protected. Old active
+    // patches may be evicted under pressure because the root preserves hole-free coverage.
+    protect = new Set([...wantedKeys, rootKey]),
     readyCpuBytes = uploads.reduce((sum, upload) => sum + upload.bytes.cpuBytes, 0);
   ensureCacheCapacity(protect, { cpuBytes: readyCpuBytes, gpuBytes: 0 }, 0);
   const next = uploads[0];
