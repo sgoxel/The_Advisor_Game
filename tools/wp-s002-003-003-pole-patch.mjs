@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
+// Trigger branch-only patch after workflow registration.
 const path = "src/world.ts";
 let source = readFileSync(path, "utf8");
 const oldSelection = `  const bounds = viewBounds(view),\n    focus = sourceToLonLat(view.x, view.z),\n    longitudeScale = Math.max(0.02, Math.abs(Math.cos(focus.lat))),\n    rx = Math.min(WORLD_SIZE / 2, bounds.rx / longitudeScale),\n    rz = bounds.rz,\n    selected = new Map<string, Tile>(),\n    centres = [view.x];\n\n  if (view.x - rx < WORLD_MIN) centres.push(view.x + WORLD_SIZE);\n  if (view.x + rx > -WORLD_MIN) centres.push(view.x - WORLD_SIZE);`;
