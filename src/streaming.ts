@@ -18,7 +18,7 @@ export type StreamingBudget = {
   gpuBytes: number;
 };
 
-/** Root-contract budgets from docs/PLANET_ARCHITECTURE.md §11.2. */
+/** Root-contract hard ceilings from docs/PLANET_ARCHITECTURE.md §11.2; normal refinement may stay below them. */
 export const STREAMING_BUDGETS: Readonly<Record<StreamingDeviceClass, StreamingBudget>> =
   Object.freeze({
     phone: Object.freeze({
