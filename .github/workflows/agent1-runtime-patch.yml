@@ -1,4 +1,5 @@
 name: Agent1 temporary runtime patch
+# retrigger after workflow exists on branch
 on:
   push:
     branches: [agent1/wp-s002-003-003]
