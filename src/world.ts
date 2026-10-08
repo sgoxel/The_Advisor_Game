@@ -6,6 +6,10 @@ import {
   places,
   roadAt,
 } from "./geography.ts";
+import {
+  SOURCE_PRESENTATION_POLE_DISTANCE,
+  SOURCE_PRESENTATION_WIDTH,
+} from "./planet.ts";
 export { WORLD_SEED } from "./config.ts";
 export const GENERATOR_VERSION = "v1";
 export const WORLD_SIZE = 262144;
@@ -463,29 +467,58 @@ export function viewBounds(view: View) {
   const margin = Math.max(4, Math.min(48, view.halfHeight * 0.35));
   return { rx: hw * c + hz * s + margin, rz: hw * s + hz * c + margin };
 }
-export function selectTiles(view: View, threshold = 190): Tile[] {
+/** Signed shortest source-domain east/west delta on the canonical wrap. */
+export function wrappedSourceDelta(fromX: number, toX: number): number {
+  const half = SOURCE_PRESENTATION_WIDTH / 2;
+  return (
+    ((((toX - fromX + half) % SOURCE_PRESENTATION_WIDTH) +
+      SOURCE_PRESENTATION_WIDTH) %
+      SOURCE_PRESENTATION_WIDTH) -
+    half
+  );
+}
+
+export function selectTiles(view: View, threshold = 190, maxTiles = 160): Tile[] {
   const { rx, rz } = viewBounds(view),
     selected: Tile[] = [];
   const visit = (t: Tile) => {
+    const maxZ = t.minZ + t.size;
     if (
-      t.minX > view.x + rx ||
-      t.minX + t.size < view.x - rx ||
+      maxZ <= -SOURCE_PRESENTATION_POLE_DISTANCE ||
+      t.minZ >= SOURCE_PRESENTATION_POLE_DISTANCE
+    )
+      return;
+    const centreX = t.minX + t.size / 2,
+      crossesPole =
+        (t.minZ < -SOURCE_PRESENTATION_POLE_DISTANCE &&
+          maxZ > -SOURCE_PRESENTATION_POLE_DISTANCE) ||
+        (t.minZ < SOURCE_PRESENTATION_POLE_DISTANCE &&
+          maxZ > SOURCE_PRESENTATION_POLE_DISTANCE);
+    if (
+      Math.abs(wrappedSourceDelta(view.x, centreX)) > rx + t.size / 2 ||
       t.minZ > view.z + rz ||
-      t.minZ + t.size < view.z - rz
+      maxZ < view.z - rz
     )
       return;
     const projectedPixels = (t.size * view.pixels) / (view.halfHeight * 2);
-    if (t.level < MAX_LEVEL && projectedPixels > threshold) {
+    if (t.level < MAX_LEVEL && (crossesPole || projectedPixels > threshold)) {
       for (let dz = 0; dz < 2; dz++)
         for (let dx = 0; dx < 2; dx++)
           visit(tileAt(t.level + 1, t.x * 2 + dx, t.z * 2 + dz));
     } else selected.push(t);
   };
   visit(tileAt(0, 0, 0));
-  if (selected.length > 160) return selectTiles(view, threshold * 1.25);
+  if (selected.length > maxTiles)
+    return selectTiles(view, threshold * 1.25, maxTiles);
   return selected.sort(
     (a, b) =>
-      Math.hypot(a.minX + a.size / 2 - view.x, a.minZ + a.size / 2 - view.z) -
-      Math.hypot(b.minX + b.size / 2 - view.x, b.minZ + b.size / 2 - view.z),
+      Math.hypot(
+        wrappedSourceDelta(view.x, a.minX + a.size / 2),
+        a.minZ + a.size / 2 - view.z,
+      ) -
+      Math.hypot(
+        wrappedSourceDelta(view.x, b.minX + b.size / 2),
+        b.minZ + b.size / 2 - view.z,
+      ),
   );
 }
