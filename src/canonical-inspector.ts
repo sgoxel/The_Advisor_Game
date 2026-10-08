@@ -175,9 +175,11 @@ function install(world: AdvisorWorld) {
     planBytesEstimated = new TextEncoder().encode(JSON.stringify(MACRO_PLAN)).byteLength,
     sphereVertices = (96 + 1) * (48 + 1),
     sphereTriangles = 96 * (48 * 2 - 2),
+    shadeTriangles = 128,
     sphereGeometryBytesEstimated =
       sphereVertices * (3 + 3 + 2) * 4 + sphereTriangles * 3 * 2,
-    shadeGeometryBytesEstimated = (128 + 1) * (3 + 3 + 2) * 4 + 128 * 3 * 2;
+    shadeGeometryBytesEstimated =
+      (shadeTriangles + 1) * (3 + 3 + 2) * 4 + shadeTriangles * 3 * 2;
   if (stateDescriptor?.get) {
     const sourceState = stateDescriptor.get.bind(world);
     Object.defineProperty(world, "state", {
@@ -205,6 +207,8 @@ function install(world: AdvisorWorld) {
           globe: {
             ...globe,
             drawCallsEstimated: 2,
+            trianglesEstimated: sphereTriangles + shadeTriangles,
+            cpuBytesEstimated: planBytesEstimated,
             textureBytesEstimated,
             geometryBytesEstimated:
               sphereGeometryBytesEstimated + shadeGeometryBytesEstimated,
