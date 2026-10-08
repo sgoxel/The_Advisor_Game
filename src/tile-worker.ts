@@ -1,12 +1,10 @@
-import { buildCoarseTile } from "./coarse-geometry.ts";
 import { buildTile } from "./geometry.ts";
 import { convertTileGeometryToEnu } from "./render-frame.ts";
 import type { Tile } from "./world.ts";
-
 self.onmessage = (event: MessageEvent<Tile>) => {
   const tile = event.data;
   try {
-    const data = tile.size > 512 ? buildCoarseTile(tile) : buildTile(tile),
+    const data = buildTile(tile),
       precision = convertTileGeometryToEnu(tile, data);
     const transfer: Transferable[] = [];
     for (const g of Object.values(data))
