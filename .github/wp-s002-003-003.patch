@@ -1,0 +1,845 @@
+diff --git a/src/streaming.ts b/src/streaming.ts
+new file mode 100644
+--- /dev/null
++++ b/src/streaming.ts
+@@ -0,0 +1,95 @@
++import type { TileGeometry } from "./geometry.ts";
++import {
++  SOURCE_PRESENTATION_POLE_DISTANCE,
++  canonicalCellId,
++  sourceToLonLat,
++} from "./planet.ts";
++import type { Tile } from "./world.ts";
++
++const MIB = 1024 * 1024;
++
++export type StreamingDeviceClass = "phone" | "tablet" | "desktop";
++export type StreamingBudget = {
++  queue: number;
++  active: number;
++  cached: number;
++  cpuBytes: number;
++  gpuBytes: number;
++};
++
++/** Root-contract budgets from docs/PLANET_ARCHITECTURE.md §11.2. */
++export const STREAMING_BUDGETS: Readonly<Record<StreamingDeviceClass, StreamingBudget>> =
++  Object.freeze({
++    phone: Object.freeze({
++      queue: 4,
++      active: 160,
++      cached: 180,
++      cpuBytes: 96 * MIB,
++      gpuBytes: 96 * MIB,
++    }),
++    tablet: Object.freeze({
++      queue: 6,
++      active: 220,
++      cached: 240,
++      cpuBytes: 160 * MIB,
++      gpuBytes: 160 * MIB,
++    }),
++    desktop: Object.freeze({
++      queue: 8,
++      active: 260,
++      cached: 320,
++      cpuBytes: 256 * MIB,
++      gpuBytes: 256 * MIB,
++    }),
++  });
++
++/**
++ * Presentation/device policy only. It may alter resource residency, never world
++ * identity or generated values. Rotation keeps phone/tablet classification.
++ */
++export function classifyStreamingDevice(width: number, height: number): StreamingDeviceClass {
++  const shortSide = Math.min(width, height);
++  if (shortSide <= 480) return "phone";
++  if (shortSide <= 900) return "tablet";
++  return "desktop";
++}
++
++/**
++ * Canonical cache identity for a transitional source quadtree patch. The sample
++ * latitude is taken from the portion inside the legal pole band so a coarse
++ * source tile that straddles a pole cannot collapse every longitude to one pole
++ * ID. Fixed cube level 24 makes the identity independent of visit direction,
++ * longitude wrap representation, camera, device and load order.
++ */
++export function canonicalStreamTileKey(tile: Tile): string {
++  const legalMinZ = Math.max(tile.minZ, -SOURCE_PRESENTATION_POLE_DISTANCE),
++    legalMaxZ = Math.min(
++      tile.minZ + tile.size,
++      SOURCE_PRESENTATION_POLE_DISTANCE,
++    ),
++    sampleZ = (legalMinZ + legalMaxZ) / 2,
++    sampleX = tile.minX + tile.size / 2,
++    { lon, lat } = sourceToLonLat(sampleX, sampleZ);
++  return `${canonicalCellId(lon, lat, 24)}/STREAM/L${tile.level}`;
++}
++
++export type GeometryByteEstimate = { cpuBytes: number; gpuBytes: number };
++
++/** Explicit app-owned estimate; intentionally conservative for CPU residency. */
++export function estimateTileGeometryBytes(data: TileGeometry): GeometryByteEstimate {
++  let bytes = 0;
++  for (const geometry of Object.values(data))
++    bytes +=
++      geometry.positions.byteLength +
++      geometry.normals.byteLength +
++      geometry.colors.byteLength +
++      geometry.indices.byteLength;
++  return { cpuBytes: bytes, gpuBytes: bytes };
++}
++
++export function withinStreamingBudget(
++  budget: StreamingBudget,
++  active: number,
++  cached: number,
++  queue: number,
++  cpuBytes: number,
++  gpuBytes: number,
++): boolean {
++  return (
++    active <= budget.active &&
++    cached <= budget.cached &&
++    queue <= budget.queue &&
++    cpuBytes <= budget.cpuBytes &&
++    gpuBytes <= budget.gpuBytes
++  );
++}
+diff --git a/src/world.ts b/src/world.ts
+--- a/src/world.ts
++++ b/src/world.ts
+@@ -7,6 +7,10 @@ import {
+   places,
+   roadAt,
+ } from "./geography.ts";
++import {
++  SOURCE_PRESENTATION_POLE_DISTANCE,
++  SOURCE_PRESENTATION_WIDTH,
++} from "./planet.ts";
+ export { WORLD_SEED } from "./config.ts";
+ export const GENERATOR_VERSION = "v1";
+ export const WORLD_SIZE = 262144;
+@@ -472,33 +476,54 @@ export function viewBounds(view: View) {
+   const margin = Math.max(4, Math.min(48, view.halfHeight * 0.35));
+   return { rx: hw * c + hz * s + margin, rz: hw * s + hz * c + margin };
+ }
+-export function selectTiles(view: View, threshold = 190): Tile[] {
++
++/** Signed shortest source-domain east/west delta on the canonical longitude wrap. */
++export function wrappedSourceDelta(fromX: number, toX: number): number {
++  const half = SOURCE_PRESENTATION_WIDTH / 2;
++  return (
++    ((((toX - fromX + half) % SOURCE_PRESENTATION_WIDTH) +
++      SOURCE_PRESENTATION_WIDTH) %
++      SOURCE_PRESENTATION_WIDTH) -
++    half
++  );
++}
++
++export function selectTiles(view: View, threshold = 190, maxTiles = 160): Tile[] {
+   const { rx, rz } = viewBounds(view),
+     selected: Tile[] = [];
+   const visit = (t: Tile) => {
++    const maxZ = t.minZ + t.size;
++    // Source rows wholly beyond a real pole are not another copy of the pole.
++    if (
++      maxZ <= -SOURCE_PRESENTATION_POLE_DISTANCE ||
++      t.minZ >= SOURCE_PRESENTATION_POLE_DISTANCE
++    )
++      return;
++    const centreX = t.minX + t.size / 2,
++      crossesPole =
++        (t.minZ < -SOURCE_PRESENTATION_POLE_DISTANCE &&
++          maxZ > -SOURCE_PRESENTATION_POLE_DISTANCE) ||
++        (t.minZ < SOURCE_PRESENTATION_POLE_DISTANCE &&
++          maxZ > SOURCE_PRESENTATION_POLE_DISTANCE);
+     if (
+-      t.minX > view.x + rx ||
+-      t.minX + t.size < view.x - rx ||
++      Math.abs(wrappedSourceDelta(view.x, centreX)) > rx + t.size / 2 ||
+       t.minZ > view.z + rz ||
+-      t.minZ + t.size < view.z - rz
++      maxZ < view.z - rz
+     )
+       return;
+     const projectedPixels = (t.size * view.pixels) / (view.halfHeight * 2);
+-    if (t.level < MAX_LEVEL && projectedPixels > threshold) {
++    // Split coarse pole-straddling tiles until the exact ±W/4 pole boundary is
++    // represented; otherwise clamped vertices can create duplicate pole content.
++    if (t.level < MAX_LEVEL && (crossesPole || projectedPixels > threshold)) {
+       for (let dz = 0; dz < 2; dz++)
+         for (let dx = 0; dx < 2; dx++)
+           visit(tileAt(t.level + 1, t.x * 2 + dx, t.z * 2 + dz));
+     } else selected.push(t);
+   };
+   visit(tileAt(0, 0, 0));
+-  if (selected.length > 160) return selectTiles(view, threshold * 1.25);
++  if (selected.length > maxTiles)
++    return selectTiles(view, threshold * 1.25, maxTiles);
+   return selected.sort(
+     (a, b) =>
+-      Math.hypot(a.minX + a.size / 2 - view.x, a.minZ + a.size / 2 - view.z) -
+-      Math.hypot(b.minX + b.size / 2 - view.x, b.minZ + b.size / 2 - view.z),
++      Math.hypot(
++        wrappedSourceDelta(view.x, a.minX + a.size / 2),
++        a.minZ + a.size / 2 - view.z,
++      ) -
++      Math.hypot(
++        wrappedSourceDelta(view.x, b.minX + b.size / 2),
++        b.minZ + b.size / 2 - view.z,
++      ),
+   );
+ }
+diff --git a/src/main.ts b/src/main.ts
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -60,6 +60,12 @@ import {
+   type Rect,
+ } from "./navigation.ts";
++import {
++  STREAMING_BUDGETS,
++  canonicalStreamTileKey,
++  classifyStreamingDevice,
++  estimateTileGeometryBytes,
++} from "./streaming.ts";
+ 
+ /** Canonical 1/2500 globe-dominant anchor, converted through the temporary S001 presentation adapter. */
+ const GLOBE_FROM = HANDOFF_GLOBE_HALF_HEIGHT;
+@@ -113,16 +119,28 @@ let worldMaterial: pc.StandardMaterial | undefined;
+ const tileCache = new Map<
+   string,
+-  { tile: Tile; entity: pc.Entity; meshes: pc.Mesh[]; used: number }
++  {
++    tile: Tile;
++    entity: pc.Entity;
++    meshes: pc.Mesh[];
++    used: number;
++    cpuBytes: number;
++    gpuBytes: number;
++  }
+ >();
+ let revision = 0,
+   inFlight = 0,
+-  residentLimit = 200,
+-  selectionDirty = true;
++  selectionDirty = true,
++  cacheCpuBytes = 0,
++  cacheGpuBytes = 0,
++  cacheHits = 0,
++  cacheMisses = 0,
++  evictions = 0,
++  uploadsTotal = 0,
++  uploadsThisFrame = 0,
++  maxUploadsPerFrameObserved = 0;
++const streamingClass = classifyStreamingDevice(innerWidth, innerHeight),
++  streamingBudget = STREAMING_BUDGETS[streamingClass];
++let poleLimit: "north" | "south" | null = null;
+ const pending = new Set<string>();
+ const uploads: {
+   tile: Tile;
+   data: TileGeometry;
+   precision: PatchConversionStats;
++  bytes: { cpuBytes: number; gpuBytes: number };
+ }[] = [];
+ let worker: Worker;
+@@ -358,7 +376,7 @@ function flatCoverageReady() {
+   return (
+     !selectionDirty &&
+     wanted.length > 0 &&
+-    wanted.every((tile) => tileCache.has(tile.key))
++    wanted.every((tile) => tileCache.has(canonicalStreamTileKey(tile)))
+   );
+ }
+ function globeCoverageReady() {
+@@ -512,8 +530,14 @@ function navigate(x: number, z: number, height = view.halfHeight) {
+     2,
+     Math.min(Math.max(GLOBE_FROM, globeFit) * 1.3, height),
+   );
++  poleLimit =
++    z <= -POLE_DISTANCE
++      ? "north"
++      : z >= POLE_DISTANCE
++        ? "south"
++        : null;
+   view.x = wrapX(x);
+   view.z = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, z));
+   rebaseRenderFrame();
+@@ -562,12 +586,17 @@ function setLayers() {
+     }
+ }
+ function request(tile: Tile) {
+-  if (tileCache.has(tile.key) || pending.has(tile.key)) return;
+-  pending.add(tile.key);
++  const key = canonicalStreamTileKey(tile);
++  if (tileCache.has(key)) {
++    cacheHits++;
++    return;
++  }
++  if (pending.has(key) || pending.size >= streamingBudget.queue) return;
++  cacheMisses++;
++  pending.add(key);
+   inFlight++;
+   worker.postMessage(tile);
+ }
+ function refreshSelection() {
+-  wanted = selectTiles(view);
++  wanted = selectTiles(view, 190, streamingBudget.active);
+   revision++;
+   selectionDirty = false;
+@@ -601,14 +630,57 @@ function refreshSelection() {
+   updateNavigationHud();
+ }
++
++function ensureCacheCapacity(
++  protect: Set<string>,
++  reserve: { cpuBytes: number; gpuBytes: number },
++  reserveEntries: number,
++): boolean {
++  const overBudget = () =>
++    tileCache.size + reserveEntries > streamingBudget.cached ||
++    cacheCpuBytes + reserve.cpuBytes > streamingBudget.cpuBytes ||
++    cacheGpuBytes + reserve.gpuBytes > streamingBudget.gpuBytes;
++  if (!overBudget()) return true;
++  const obsolete = [...tileCache.entries()]
++    .filter(([key]) => !protect.has(key))
++    .sort((a, b) => a[1].used - b[1].used || a[0].localeCompare(b[0]));
++  for (const [key, record] of obsolete) {
++    if (!overBudget()) break;
++    record.entity.destroy();
++    tileCache.delete(key);
++    cacheCpuBytes = Math.max(0, cacheCpuBytes - record.cpuBytes);
++    cacheGpuBytes = Math.max(0, cacheGpuBytes - record.gpuBytes);
++    evictions++;
++  }
++  return !overBudget();
++}
++
+ function processStreaming(material: pc.StandardMaterial) {
++  uploadsThisFrame = 0;
+   if (selectionDirty) refreshSelection();
++  const root = tileAt(0, 0, 0),
++    rootKey = canonicalStreamTileKey(root),
++    wantedKeys = wanted.map(canonicalStreamTileKey),
++    protect = new Set([...activeKeys, ...wantedKeys, rootKey]),
++    readyCpuBytes = uploads.reduce((sum, upload) => sum + upload.bytes.cpuBytes, 0);
++  // Ready CPU buffers count toward the same app-owned envelope as cached
++  // geometry. Reclaim stale cache entries before accepting more residency.
++  ensureCacheCapacity(protect, { cpuBytes: readyCpuBytes, gpuBytes: 0 }, 0);
+   // At most one GPU mesh group per frame. Generation is isolated in a worker.
+-  const next = uploads.shift();
+-  if (next) {
+-    const entity = new pc.Entity(next.tile.key),
++  const next = uploads[0];
++  if (
++    next &&
++    ensureCacheCapacity(
++      new Set([...protect, canonicalStreamTileKey(next.tile)]),
++      { cpuBytes: readyCpuBytes, gpuBytes: next.bytes.gpuBytes },
++      1,
++    )
++  ) {
++    uploads.shift();
++    const key = canonicalStreamTileKey(next.tile),
++      entity = new pc.Entity(key),
+       meshes: pc.Mesh[] = [];
+     for (const [name, g] of Object.entries(next.data)) {
+       const mesh = uploadGeometry(g, entity, name, material);
+@@ -619,11 +691,16 @@ function processStreaming(material: pc.StandardMaterial) {
+     entity.enabled = false;
+     applyTileRenderTransform(next.tile, entity);
+     flatRoot.addChild(entity);
+-    tileCache.set(next.tile.key, {
++    tileCache.set(key, {
+       tile: next.tile,
+       entity,
+       meshes,
+       used: revision,
++      cpuBytes: next.bytes.cpuBytes,
++      gpuBytes: next.bytes.gpuBytes,
+     });
++    cacheCpuBytes += next.bytes.cpuBytes;
++    cacheGpuBytes += next.bytes.gpuBytes;
++    uploadsThisFrame = 1;
++    uploadsTotal++;
++    maxUploadsPerFrameObserved = Math.max(maxUploadsPerFrameObserved, uploadsThisFrame);
+     if (next.tile.size <= 512) {
+       detailedMaxHorizontalM = Math.max(
+         detailedMaxHorizontalM,
+@@ -633,16 +710,15 @@ function processStreaming(material: pc.StandardMaterial) {
+         next.precision.maxFloat32ErrorM,
+       );
+     }
+-    pending.delete(next.tile.key);
++    pending.delete(key);
+   }
+-  const root = tileAt(0, 0, 0);
+-  if (!tileCache.has(root.key)) {
+-    if (inFlight + uploads.length < 3) request(root);
++  if (!tileCache.has(rootKey)) {
++    request(root);
+   } else {
+-    const complete = wanted.every((tile) => tileCache.has(tile.key));
++    const complete = wantedKeys.every((key) => tileCache.has(key));
+     if (complete) {
+-      const newKeys = wanted.map((t) => t.key),
++      const newKeys = wantedKeys,
+         active = new Set(newKeys);
+       for (const [key, record] of tileCache) {
+         record.entity.enabled = active.has(key);
+@@ -656,38 +732,27 @@ function processStreaming(material: pc.StandardMaterial) {
+       }
+     } else {
+       // Keep the previous coverage and coarse root until the replacement is complete.
+-      tileCache.get(root.key)!.entity.enabled = true;
++      tileCache.get(rootKey)!.entity.enabled = true;
+       if (!ready && tileCache.size > 1) $("loading").classList.add("done");
+-      for (const tile of wanted) {
+-        if (inFlight + uploads.length >= 3) break;
+-        request(tile);
+-      }
++      for (const tile of wanted) request(tile);
+     }
+-    if (tileCache.size > residentLimit) {
+-      const protect = new Set([
+-        ...activeKeys,
+-        ...wanted.map((t) => t.key),
+-        root.key,
+-      ]);
+-      const obsolete = [...tileCache.entries()]
+-        .filter(([key]) => !protect.has(key))
+-        .sort((a, b) => a[1].used - b[1].used);
+-      for (const [key, record] of obsolete) {
+-        if (tileCache.size <= residentLimit) break;
+-        // MeshInstance destruction releases its mesh reference and GPU buffers.
+-        record.entity.destroy();
+-        tileCache.delete(key);
+-      }
+-    }
++    ensureCacheCapacity(protect, { cpuBytes: readyCpuBytes, gpuBytes: 0 }, 0);
+   }
+-  $("tile-status").textContent =
+-    projectionTransition >= 0.999
++  const baseStatus =
++    projectionTransition >= 0.999
+       ? `Globe · ${globePass < GLOBE_PASSES.length ? "refining" : "ready"}`
+       : projectionTransition > 0.001
+         ? `Handoff · ${Math.round(projectionTransition * 100)}% · ${pending.size ? "preparing terrain" : "ready"}`
+         : `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`;
++  $("tile-status").textContent =
++    baseStatus +
++    (poleLimit
++      ? ` · ${poleLimit === "north" ? "North" : "South"} pole limit`
++      : "");
+ }
+@@ -1114,12 +1179,15 @@ async function start() {
+   });
+   worker.onmessage = (event) => {
+     inFlight--;
++    const key = canonicalStreamTileKey(event.data.tile);
+     if (event.data.error) {
+-      pending.delete(event.data.tile.key);
++      pending.delete(key);
+       fail(`Tile generation failed: ${event.data.error}`);
+       return;
+     }
+-    uploads.push(event.data);
++    uploads.push({
++      ...event.data,
++      bytes: estimateTileGeometryBytes(event.data.data),
++    });
+   };
+@@ -1421,6 +1489,27 @@ async function start() {
+             ruler: { ...rulerState },
+             labels: labelState,
+             selectedCanonicalId: selectedCode || null,
++            poleLimit,
++          },
++          streaming: {
++            deviceClass: streamingClass,
++            budget: { ...streamingBudget },
++            activePatches: activeKeys.length,
++            cachedPatches: tileCache.size,
++            pendingGeneration: inFlight,
++            readyUploads: uploads.length,
++            generationReadyQueue: pending.size,
++            cacheHits,
++            cacheMisses,
++            evictions,
++            uploadsTotal,
++            uploadsThisFrame,
++            maxUploadsPerFrameObserved,
++            cpuResourceBytesEstimated:
++              cacheCpuBytes +
++              uploads.reduce((sum, upload) => sum + upload.bytes.cpuBytes, 0),
++            gpuResourceBytesEstimated: cacheGpuBytes,
++            activeCanonicalKeys: [...activeKeys],
++            wantedCanonicalKeys: wanted.map(canonicalStreamTileKey),
+           },
+           renderFrame: {
+@@ -1471,7 +1560,9 @@ async function start() {
+             (!globeShown || globeCoverageReady()) &&
+             !selectionDirty &&
+             pending.size === 0 &&
++            uploads.length === 0 &&
++            inFlight === 0 &&
+             activeKeys.length === wanted.length &&
+-            activeKeys.every((key) => wanted.some((t) => t.key === key)),
++            activeKeys.every((key) => wanted.some((t) => canonicalStreamTileKey(t) === key)),
+           visibleMeshes: Object.fromEntries(
+             ["terrain", "structures", "nature", "detail"].map((name) => [
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -7,7 +7,7 @@
+     "dev": "vite --host 127.0.0.1",
+     "build": "tsc --noEmit && vite build",
+     "preview": "vite preview --host 127.0.0.1",
+-    "test": "node --experimental-strip-types --test tests/world.test.ts tests/renderer.test.ts tests/planet.test.ts tests/globe.test.ts tests/handoff.test.ts tests/navigation.test.ts tests/render-frame.test.ts",
++    "test": "node --experimental-strip-types --test tests/world.test.ts tests/renderer.test.ts tests/planet.test.ts tests/globe.test.ts tests/handoff.test.ts tests/navigation.test.ts tests/render-frame.test.ts tests/streaming.test.ts",
+     "test:browser": "playwright test",
+     "test:webgpu": "playwright test --config playwright.webgpu.config.js"
+   },
+diff --git a/tests/streaming.test.ts b/tests/streaming.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tests/streaming.test.ts
+@@ -0,0 +1,139 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import {
++  SOURCE_PRESENTATION_POLE_DISTANCE,
++  SOURCE_PRESENTATION_WIDTH,
++} from "../src/planet.ts";
++import {
++  STREAMING_BUDGETS,
++  canonicalStreamTileKey,
++  classifyStreamingDevice,
++  estimateTileGeometryBytes,
++  withinStreamingBudget,
++} from "../src/streaming.ts";
++import {
++  MAX_LEVEL,
++  WORLD_SIZE,
++  selectTiles,
++  tileAt,
++  type Tile,
++  type View,
++} from "../src/world.ts";
++
++const view = (x: number, z: number): View => ({
++  x,
++  z,
++  halfHeight: 97,
++  aspect: 1440 / 900,
++  yaw: 0,
++  pixels: 900,
++});
++
++test("streaming device classes use the root contract budgets", () => {
++  assert.equal(classifyStreamingDevice(390, 844), "phone");
++  assert.equal(classifyStreamingDevice(844, 390), "phone");
++  assert.equal(classifyStreamingDevice(768, 1024), "tablet");
++  assert.equal(classifyStreamingDevice(1440, 900), "desktop");
++  assert.deepEqual(STREAMING_BUDGETS.phone, {
++    queue: 4,
++    active: 160,
++    cached: 180,
++    cpuBytes: 96 * 1024 * 1024,
++    gpuBytes: 96 * 1024 * 1024,
++  });
++  assert.equal(
++    withinStreamingBudget(STREAMING_BUDGETS.tablet, 220, 240, 6, 160 * 1024 * 1024, 160 * 1024 * 1024),
++    true,
++  );
++  assert.equal(withinStreamingBudget(STREAMING_BUDGETS.phone, 161, 1, 1, 1, 1), false);
++});
++
++test("canonical stream keys ignore equivalent full-turn source representations", () => {
++  const count = 2 ** MAX_LEVEL,
++    source = tileAt(MAX_LEVEL, count - 4, Math.floor(count / 2)),
++    alias: Tile = {
++      ...source,
++      x: source.x + count,
++      minX: source.minX + WORLD_SIZE,
++      key: `${source.key}/full-turn-alias`,
++    };
++  assert.equal(canonicalStreamTileKey(alias), canonicalStreamTileKey(source));
++  assert.match(canonicalStreamTileKey(source), /\/PLANET\/v1\/F\d\/L24\//);
++});
++
++test("wrap-straddling selection covers both seam sides with unique canonical ownership", () => {
++  const selected = selectTiles(
++    view(SOURCE_PRESENTATION_WIDTH / 2 - 10, 0),
++    190,
++    STREAMING_BUDGETS.desktop.active,
++  );
++  assert.ok(selected.length > 0);
++  assert.ok(selected.length <= STREAMING_BUDGETS.desktop.active);
++  assert.ok(selected.some((tile) => tile.minX < -SOURCE_PRESENTATION_WIDTH / 2 + 1024));
++  assert.ok(selected.some((tile) => tile.minX + tile.size > SOURCE_PRESENTATION_WIDTH / 2 - 1024));
++  const keys = selected.map(canonicalStreamTileKey);
++  assert.equal(new Set(keys).size, keys.length);
++});
++
++test("pole selection never streams a second clamped copy beyond either pole", () => {
++  for (const z of [
++    -SOURCE_PRESENTATION_POLE_DISTANCE,
++    SOURCE_PRESENTATION_POLE_DISTANCE,
++  ]) {
++    const selected = selectTiles(view(12345, z), 190, STREAMING_BUDGETS.phone.active);
++    assert.ok(selected.length > 0);
++    assert.ok(selected.length <= STREAMING_BUDGETS.phone.active);
++    for (const tile of selected) {
++      assert.ok(tile.minZ + tile.size > -SOURCE_PRESENTATION_POLE_DISTANCE);
++      assert.ok(tile.minZ < SOURCE_PRESENTATION_POLE_DISTANCE);
++    }
++    const keys = selected.map(canonicalStreamTileKey);
++    assert.equal(new Set(keys).size, keys.length);
++  }
++});
++
++test("geometry byte accounting uses transferred typed-array storage", () => {
++  const geometry = {
++    positions: new Float32Array(9),
++    normals: new Float32Array(9),
++    colors: new Uint8Array(12),
++    indices: new Uint32Array(3),
++  };
++  const estimate = estimateTileGeometryBytes({
++    terrain: geometry,
++    structures: geometry,
++    nature: geometry,
++    detail: geometry,
++  });
++  const one =
++    geometry.positions.byteLength +
++    geometry.normals.byteLength +
++    geometry.colors.byteLength +
++    geometry.indices.byteLength;
++  assert.deepEqual(estimate, { cpuBytes: one * 4, gpuBytes: one * 4 });
++});
+diff --git a/tests/browser/streaming.spec.js b/tests/browser/streaming.spec.js
+new file mode 100644
+--- /dev/null
++++ b/tests/browser/streaming.spec.js
+@@ -0,0 +1,123 @@
++import { test, expect } from "@playwright/test";
++
++async function expectBounded(page) {
++  const state = await page.evaluate(() => window.advisorWorld.state);
++  const s = state.streaming;
++  expect(s.generationReadyQueue).toBeLessThanOrEqual(s.budget.queue);
++  expect(s.pendingGeneration + s.readyUploads).toBeLessThanOrEqual(s.budget.queue);
++  expect(s.activePatches).toBeLessThanOrEqual(s.budget.active);
++  expect(s.cachedPatches).toBeLessThanOrEqual(s.budget.cached);
++  expect(s.cpuResourceBytesEstimated).toBeLessThanOrEqual(s.budget.cpuBytes);
++  expect(s.gpuResourceBytesEstimated).toBeLessThanOrEqual(s.budget.gpuBytes);
++  expect(s.maxUploadsPerFrameObserved).toBeLessThanOrEqual(1);
++  expect(new Set(s.activeCanonicalKeys).size).toBe(s.activeCanonicalKeys.length);
++  return state;
++}
++
++for (const profile of [
++  { name: "phone", width: 390, height: 844, device: "phone" },
++  { name: "desktop", width: 1440, height: 900, device: "desktop" },
++]) {
++  test(`WebGL2 wrap/pole streaming stays canonical and bounded on ${profile.name}`, async ({ page }) => {
++    test.setTimeout(420000);
++    await page.setViewportSize({ width: profile.width, height: profile.height });
++    await page.addInitScript(() =>
++      Object.defineProperty(navigator, "gpu", { value: undefined, configurable: true }),
++    );
++    await page.goto("/");
++    await page.waitForFunction(() => window.advisorWorld?.state.settled);
++    expect(await page.evaluate(() => window.advisorRenderer.backend)).toBe("webgl2");
++    expect((await expectBounded(page)).streaming.deviceClass).toBe(profile.device);
++
++    await page.evaluate(() => {
++      window.advisorWorld.setHalfHeight(97);
++      window.advisorWorld.navigation.setFocus(0.42, 0.2);
++    });
++    await page.waitForFunction(() => window.advisorWorld.state.settled);
++    const canonical = await page.evaluate(() => ({
++      focus: window.advisorWorld.state.navigation.focus,
++      keys: [...window.advisorWorld.state.streaming.activeCanonicalKeys].sort(),
++      hits: window.advisorWorld.state.streaming.cacheHits,
++    }));
++    await page.evaluate(() => window.advisorWorld.navigation.setFocus(0.42 + Math.PI * 2, 0.2));
++    await page.waitForFunction(() => window.advisorWorld.state.settled);
++    const fullTurn = await expectBounded(page);
++    expect(fullTurn.navigation.focus.lon).toBeCloseTo(canonical.focus.lon, 10);
++    expect(fullTurn.navigation.focus.lat).toBeCloseTo(canonical.focus.lat, 10);
++    expect([...fullTurn.streaming.activeCanonicalKeys].sort()).toEqual(canonical.keys);
++    expect(fullTurn.streaming.cacheHits).toBeGreaterThan(canonical.hits);
++
++    for (const lon of [Math.PI - 0.003, -Math.PI + 0.003, Math.PI - 0.002, -Math.PI + 0.002]) {
++      await page.evaluate((value) => window.advisorWorld.navigation.setFocus(value, 0), lon);
++      await page.waitForFunction(() => window.advisorWorld.state.settled);
++      await expectBounded(page);
++    }
++
++    // Rapid reverse-direction churn must retain something drawable while bounded.
++    await page.evaluate(() => {
++      for (let i = 0; i < 18; i++)
++        window.advisorWorld.navigation.setFocus(i % 2 ? -Math.PI + 0.004 : Math.PI - 0.004, 0.12);
++    });
++    const churn = await expectBounded(page);
++    expect(churn.visibleMeshes.terrain).toBeGreaterThan(0);
++    await page.waitForFunction(() => window.advisorWorld.state.settled);
++
++    await page.evaluate(() => window.advisorWorld.navigation.setFocus(0.7, Math.PI));
++    await page.waitForFunction(() => window.advisorWorld.state.settled);
++    let pole = await expectBounded(page);
++    expect(pole.navigation.focus.lat).toBeCloseTo(Math.PI / 2, 10);
++    expect(pole.navigation.poleLimit).toBe("north");
++    await expect(page.locator("#tile-status")).toContainText("North pole limit");
++
++    await page.evaluate(() => window.advisorWorld.navigation.setFocus(-1.1, -Math.PI));
++    await page.waitForFunction(() => window.advisorWorld.state.settled);
++    pole = await expectBounded(page);
++    expect(pole.navigation.focus.lat).toBeCloseTo(-Math.PI / 2, 10);
++    expect(pole.navigation.poleLimit).toBe("south");
++    await expect(page.locator("#tile-status")).toContainText("South pole limit");
++
++    // Phone run deliberately crosses enough disjoint regions to exercise LRU eviction.
++    if (profile.device === "phone") {
++      const first = 0.15;
++      for (let i = 0; i < 8; i++) {
++        await page.evaluate(
++          ({ lon, lat }) => window.advisorWorld.navigation.setFocus(lon, lat),
++          { lon: first + i * 0.52, lat: (i % 3 - 1) * 0.22 },
++        );
++        await page.waitForFunction(() => window.advisorWorld.state.settled);
++        await expectBounded(page);
++      }
++      const beforeRevisit = await page.evaluate(() => window.advisorWorld.state.streaming.evictions);
++      expect(beforeRevisit).toBeGreaterThan(0);
++      await page.evaluate((lon) => window.advisorWorld.navigation.setFocus(lon, 0), first);
++      await page.waitForFunction(() => window.advisorWorld.state.settled);
++      const revisit = await expectBounded(page);
++      expect(revisit.streaming.evictions).toBeGreaterThanOrEqual(beforeRevisit);
++    }
++  });
++}
+diff --git a/tests/webgpu/streaming.spec.js b/tests/webgpu/streaming.spec.js
+new file mode 100644
+--- /dev/null
++++ b/tests/webgpu/streaming.spec.js
+@@ -0,0 +1,65 @@
++import { test, expect } from "@playwright/test";
++
++test("WebGPU wrap and pole streaming uses the same canonical bounded policy", async ({ page }) => {
++  test.setTimeout(420000);
++  await page.setViewportSize({ width: 390, height: 844 });
++  await page.goto("/");
++  await page.waitForFunction(() => window.advisorRenderer?.phase !== "starting");
++  expect(await page.evaluate(() => window.advisorRenderer)).toMatchObject({
++    backend: "webgpu",
++    phase: "ready",
++    error: "",
++  });
++  await page.waitForFunction(() => window.advisorWorld?.state.settled);
++  const assertBounds = async () => {
++    const s = await page.evaluate(() => window.advisorWorld.state.streaming);
++    expect(s.deviceClass).toBe("phone");
++    expect(s.generationReadyQueue).toBeLessThanOrEqual(s.budget.queue);
++    expect(s.activePatches).toBeLessThanOrEqual(s.budget.active);
++    expect(s.cachedPatches).toBeLessThanOrEqual(s.budget.cached);
++    expect(s.cpuResourceBytesEstimated).toBeLessThanOrEqual(s.budget.cpuBytes);
++    expect(s.gpuResourceBytesEstimated).toBeLessThanOrEqual(s.budget.gpuBytes);
++    expect(s.maxUploadsPerFrameObserved).toBeLessThanOrEqual(1);
++    expect(new Set(s.activeCanonicalKeys).size).toBe(s.activeCanonicalKeys.length);
++    return s;
++  };
++
++  await page.evaluate(() => {
++    window.advisorWorld.setHalfHeight(97);
++    window.advisorWorld.navigation.setFocus(Math.PI - 0.003, 0.15);
++  });
++  await page.waitForFunction(() => window.advisorWorld.state.settled);
++  const east = await page.evaluate(() => ({
++    keys: [...window.advisorWorld.state.streaming.activeCanonicalKeys].sort(),
++    queue: window.advisorWorld.state.streaming.generationReadyQueue,
++  }));
++  await assertBounds();
++  expect(east.queue).toBe(0);
++
++  await page.evaluate(() => window.advisorWorld.navigation.setFocus(-Math.PI + 0.003, 0.15));
++  await page.waitForFunction(() => window.advisorWorld.state.settled);
++  await assertBounds();
++
++  await page.evaluate(() => window.advisorWorld.navigation.setFocus(0.25, Math.PI));
++  await page.waitForFunction(() => window.advisorWorld.state.settled);
++  let state = await page.evaluate(() => window.advisorWorld.state);
++  expect(state.navigation.poleLimit).toBe("north");
++  expect(state.navigation.focus.lat).toBeCloseTo(Math.PI / 2, 10);
++  await assertBounds();
++
++  await page.evaluate(() => window.advisorWorld.navigation.setFocus(0.25, -Math.PI));
++  await page.waitForFunction(() => window.advisorWorld.state.settled);
++  state = await page.evaluate(() => window.advisorWorld.state);
++  expect(state.navigation.poleLimit).toBe("south");
++  expect(state.navigation.focus.lat).toBeCloseTo(-Math.PI / 2, 10);
++  await assertBounds();
++  await expect(page.locator("#error")).toBeHidden();
++});
+diff --git a/playwright.fallback.config.js b/playwright.fallback.config.js
+--- a/playwright.fallback.config.js
++++ b/playwright.fallback.config.js
+@@ -3,7 +3,7 @@ import { defineConfig } from "@playwright/test";
+ export default defineConfig({
+   testDir: "./tests/browser",
+   outputDir: "test-results/fallback-run",
+-  testMatch: ["renderer.spec.js", "render-frame.spec.js"],
++  testMatch: ["renderer.spec.js", "render-frame.spec.js", "streaming.spec.js"],
+   timeout: 180000,
+   workers: 1,
+   use: {
+diff --git a/tools/screenshot_tool.py b/tools/screenshot_tool.py
+--- a/tools/screenshot_tool.py
++++ b/tools/screenshot_tool.py
+@@ -68,6 +68,19 @@ SCENARIOS: dict[str, str] = {
+     ),
+     "cell": "tap;visible:#cell-panel",
+     "travel-city": "click:#open-travel;select:#continent-select=1;click:#visit-city",
++    "wrap": (
++        "eval:window.advisorWorld.setHalfHeight(97);"
++        "eval:window.advisorWorld.navigation.setFocus(Math.PI-0.003,0.12);check:#grid;settle;shot:east;"
++        "eval:window.advisorWorld.navigation.setFocus(-Math.PI+0.003,0.12);settle;shot:west"
++    ),
++    "north-pole": (
++        "eval:window.advisorWorld.setHalfHeight(97);"
++        "eval:window.advisorWorld.navigation.setFocus(0.55,Math.PI);check:#grid;settle"
++    ),
++    "south-pole": (
++        "eval:window.advisorWorld.setHalfHeight(97);"
++        "eval:window.advisorWorld.navigation.setFocus(-0.8,-Math.PI);check:#grid;settle"
++    ),
+ }
+@@ -109,6 +122,7 @@ STATE_JS = """() => {
+     canonicalFootprintM: state.canonicalFootprintM ?? null,
+     navigation: state.navigation ?? null,
++    streaming: state.streaming ?? null,
+     detailName: detail ? detail.textContent.trim() : null,
+     error: state.error || (box && !box.hidden ? box.textContent.trim() : ''),
+   };
+diff --git a/.github/workflows/wp-validation.yml b/.github/workflows/wp-validation.yml
+--- a/.github/workflows/wp-validation.yml
++++ b/.github/workflows/wp-validation.yml
+@@ -30,8 +30,10 @@ jobs:
+           for i in $(seq 1 30); do
+             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+             sleep 1
+           done
+-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgl2 --scenario cell --profile desktop,phone --renderer webgl2 --timeout 180
+-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgpu --scenario cell --profile desktop,phone --renderer webgpu --timeout 180
++          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgl2 --scenario cell --profile desktop,phone --renderer webgl2 --timeout 180
++          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgpu --scenario cell --profile desktop,phone --renderer webgpu --timeout 180
++          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s002-003-003-webgl2 --scenario wrap,north-pole,south-pole --profile desktop,phone --renderer webgl2 --timeout 240
++          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s002-003-003-webgpu --scenario wrap,north-pole,south-pole --profile desktop,phone --renderer webgpu --timeout 240
+       - uses: actions/upload-artifact@v4
+         if: always()
+         with:
