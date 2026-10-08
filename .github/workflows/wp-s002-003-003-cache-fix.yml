@@ -1,0 +1,41 @@
+name: Fix WP-S002-003-003 cache transition
+on:
+  push:
+    branches: [wp-s002-003-003-agent1]
+    paths: [.github/workflows/wp-s002-003-003-cache-fix.yml]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Allow obsolete active patches to evict under replacement pressure
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/main.ts')
+          text = path.read_text()
+          old = '    protect = new Set([...activeKeys, ...wantedKeys, rootKey]),'
+          new = '    // Requested replacement patches and the coarse root are protected. Old active\n    // patches may be evicted under pressure because the root preserves hole-free coverage.\n    protect = new Set([...wantedKeys, rootKey]),'
+          if old not in text:
+              raise SystemExit('expected cache protection line not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          rm .github/workflows/wp-s002-003-003-cache-fix.yml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Commit tested fix
+        run: |
+          git config user.name "AGENT #1"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix bounded streaming replacement eviction"
+          git push origin HEAD:wp-s002-003-003-agent1
