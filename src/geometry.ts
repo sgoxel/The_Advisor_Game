@@ -1,7 +1,15 @@
-import { biomeAt, featuresFor, field, heightAt, type Tile } from "./world.ts";
+import {
+  biomeAt,
+  featuresFor,
+  field,
+  heightAt,
+  type Feature,
+  type Tile,
+} from "./world.ts";
 import { nearestPlace, roadAt, roads } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
-import { sourceToLonLat, wrapSourceX } from "./planet.ts";
+import { sourceToLonLat } from "./planet.ts";
+import { streetDistanceAt } from "./settlement-layout.ts";
 import {
   climateSampleAt,
   frozenLatitudeAt,
@@ -96,16 +104,40 @@ class Builder {
     d: number,
     tint: RGB,
   ) {
-    const a = x - w / 2,
-      b = x + w / 2,
-      c = z - d / 2,
-      e = z + d / 2,
+    this.orientedBox(x, y, z, w, h, d, 0, tint);
+  }
+  /**
+   * Box turned about the vertical axis. Local offsets (lx, lz) map to
+   * x = cx + lx*cos + lz*sin, z = cz - lx*sin + lz*cos: a proper rotation, so the
+   * face winding (and outward normals) match the axis-aligned box.
+   */
+  orientedBox(
+    cx: number,
+    y: number,
+    cz: number,
+    w: number,
+    h: number,
+    d: number,
+    yaw: number,
+    tint: RGB,
+  ) {
+    const cos = Math.cos(yaw),
+      sin = Math.sin(yaw);
+    const at = (lx: number, t: number, lz: number): Point => [
+      cx + lx * cos + lz * sin,
+      t,
+      cz - lx * sin + lz * cos,
+    ];
+    const a = -w / 2,
+      b = w / 2,
+      c = -d / 2,
+      e = d / 2,
       t = y + h;
-    this.quad([a, y, c], [a, t, c], [b, t, c], [b, y, c], tint);
-    this.quad([b, y, e], [b, t, e], [a, t, e], [a, y, e], tint);
-    this.quad([a, y, e], [a, t, e], [a, t, c], [a, y, c], tint);
-    this.quad([b, y, c], [b, t, c], [b, t, e], [b, y, e], tint);
-    this.quad([a, t, c], [a, t, e], [b, t, e], [b, t, c], tint);
+    this.quad(at(a, y, c), at(a, t, c), at(b, t, c), at(b, y, c), tint);
+    this.quad(at(b, y, e), at(b, t, e), at(a, t, e), at(a, y, e), tint);
+    this.quad(at(a, y, e), at(a, t, e), at(a, t, c), at(a, y, c), tint);
+    this.quad(at(b, y, c), at(b, t, c), at(b, t, e), at(b, y, e), tint);
+    this.quad(at(a, t, c), at(a, t, e), at(b, t, e), at(b, t, c), tint);
   }
   cone(
     x: number,
@@ -136,32 +168,33 @@ class Builder {
     h: number,
     tint: RGB,
   ) {
-    this.quad(
-      [x - w / 2, y, z - d / 2],
-      [x, y + h, z - d / 2],
-      [x, y + h, z + d / 2],
-      [x - w / 2, y, z + d / 2],
-      tint,
-    );
-    this.quad(
-      [x + w / 2, y, z + d / 2],
-      [x, y + h, z + d / 2],
-      [x, y + h, z - d / 2],
-      [x + w / 2, y, z - d / 2],
-      tint,
-    );
-    this.triangle(
-      [x - w / 2, y, z - d / 2],
-      [x + w / 2, y, z - d / 2],
-      [x, y + h, z - d / 2],
-      tint,
-    );
-    this.triangle(
-      [x + w / 2, y, z + d / 2],
-      [x - w / 2, y, z + d / 2],
-      [x, y + h, z + d / 2],
-      tint,
-    );
+    this.orientedRoof(x, y, z, w, d, h, 0, tint);
+  }
+  /** Gable roof with its ridge along local z (gables on the local ±z faces), turned by yaw. */
+  orientedRoof(
+    cx: number,
+    y: number,
+    cz: number,
+    w: number,
+    d: number,
+    rise: number,
+    yaw: number,
+    tint: RGB,
+  ) {
+    const cos = Math.cos(yaw),
+      sin = Math.sin(yaw);
+    const at = (lx: number, t: number, lz: number): Point => [
+      cx + lx * cos + lz * sin,
+      t,
+      cz - lx * sin + lz * cos,
+    ];
+    const hw = w / 2,
+      hd = d / 2,
+      top = y + rise;
+    this.quad(at(-hw, y, -hd), at(0, top, -hd), at(0, top, hd), at(-hw, y, hd), tint);
+    this.quad(at(hw, y, hd), at(0, top, hd), at(0, top, -hd), at(hw, y, -hd), tint);
+    this.triangle(at(-hw, y, -hd), at(hw, y, -hd), at(0, top, -hd), tint);
+    this.triangle(at(hw, y, hd), at(-hw, y, hd), at(0, top, hd), tint);
   }
   /** Keep large source coordinates out of Float32 before the worker converts to ENU. */
   relativeTo(x: number, z: number) {
@@ -199,15 +232,10 @@ export function terrainTint(
   if (legacy === "Riverbank") return color(151, 143, 99);
 
   const s = scale <= 512 ? nearestPlace(x, z) : undefined,
-    dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,
-    dz = s ? Math.abs(z - s.z) : 1000,
-    urbanRoad =
-      s?.kind === "city" && (Math.abs(dx % 29) < 3 || Math.abs(dz % 29) < 3);
+    street = scale <= 512 ? streetDistanceAt(x, z) : Infinity;
   if (
     scale <= 512 &&
-    ((s &&
-      Math.hypot(dx, dz) < (s.kind === "city" ? 420 : 66) &&
-      (dx < 4 || dz < 4 || Math.hypot(dx, dz) < 11 || urbanRoad)) ||
+    (street < (s?.kind === "city" ? 3.4 : 2.6) ||
       (roadAt(x, z) && Math.abs(z - roadAt(x, z)!.z) < 5))
   )
     return color(170, 151, 113);
@@ -286,6 +314,165 @@ export function terrainTint(
   const protectedSurface = snowWeight > 0.65 || polarWeight > 0.65,
     tint = varyColor(base, variation * (protectedSurface ? 0.3 : 1));
   return tint;
+}
+
+const FLOOR_HEIGHT_M = 3.2;
+const STONE = color(167, 165, 144),
+  TIMBER = color(75, 58, 43),
+  PLASTER = color(210, 190, 145),
+  GLASS = color(54, 64, 53),
+  RED_CLOTH = color(171, 78, 49),
+  CREAM = color(232, 222, 200);
+
+/** World position of a local offset: ox along the feature's x axis, oz along its front (+z). */
+function localAt(f: Feature, ox: number, oz: number): [number, number] {
+  const yaw = f.angle ?? 0,
+    cos = Math.cos(yaw),
+    sin = Math.sin(yaw);
+  return [f.x + ox * cos + oz * sin, f.z - ox * sin + oz * cos];
+}
+/** Oriented box on a feature frame; oy is relative to the feature's ground height. */
+function featureBox(
+  b: Builder,
+  f: Feature,
+  ox: number,
+  oy: number,
+  oz: number,
+  w: number,
+  h: number,
+  d: number,
+  tint: RGB,
+) {
+  const [x, z] = localAt(f, ox, oz);
+  b.orientedBox(x, f.y + oy, z, w, h, d, f.angle ?? 0, tint);
+}
+function featureRoof(
+  b: Builder,
+  f: Feature,
+  ox: number,
+  oy: number,
+  oz: number,
+  w: number,
+  d: number,
+  rise: number,
+  tint: RGB,
+) {
+  const [x, z] = localAt(f, ox, oz);
+  b.orientedRoof(x, f.y + oy, z, w, d, rise, f.angle ?? 0, tint);
+}
+
+/**
+ * Houses by role, oriented by the layout footprint (local +z is the front door side).
+ * Structure boxes stay within a small per-building budget; door, window and trim
+ * detail is emitted only for near tiles (t.size <= 64).
+ */
+function buildHouse(
+  f: Feature,
+  detailOn: boolean,
+  structures: Builder,
+  detail: Builder,
+  variant: number,
+) {
+  const w = f.width ?? 8,
+    d = f.depth ?? 8,
+    floors = f.floors ?? 1,
+    wallH = floors * FLOOR_HEIGHT_M,
+    roofTint = color(113 + (variant % 25), 65 + (variant % 16), 48),
+    front = d / 2 + 0.07;
+  const door = (dw = 1.2, dh = 2.3) =>
+    detailOn && featureBox(detail, f, 0, 0, front, dw, dh, 0.15, TIMBER);
+  const windowAt = (ox: number, oy: number) =>
+    detailOn && featureBox(detail, f, ox, oy, front, 1.0, 1.0, 0.12, GLASS);
+  switch (f.role) {
+    case "inn":
+      featureBox(structures, f, 0, -0.3, 0, w, wallH + 0.3, d, color(122, 90, 64));
+      featureRoof(structures, f, 0, wallH, 0, w + 1.2, d + 1.2, 3.2, color(88, 55, 44));
+      // Hanging sign projecting from the upper front corner.
+      featureBox(structures, f, w / 2 - 0.6, wallH * 0.6, d / 2 + 0.6, 1.4, 1.0, 0.15, RED_CLOTH);
+      if (detailOn) {
+        featureBox(detail, f, 0, FLOOR_HEIGHT_M, 0, w + 0.06, 0.22, d + 0.1, TIMBER);
+        door();
+        windowAt(-w / 4, FLOOR_HEIGHT_M + 0.8);
+        windowAt(w / 4, FLOOR_HEIGHT_M + 0.8);
+      }
+      break;
+    case "market":
+      // Open hall: corner posts and a roof, no walls; low stalls stand underneath.
+      for (const sx of [-1, 1])
+        for (const sz of [-1, 1])
+          featureBox(structures, f, sx * (w / 2 - 0.3), 0, sz * (d / 2 - 0.3), 0.4, 3.6, 0.4, TIMBER);
+      featureRoof(structures, f, 0, 3.6, 0, w + 0.8, d + 0.8, 1.8, color(150, 70, 60));
+      for (const ox of [-w / 4, 0, w / 4])
+        featureBox(structures, f, ox, 0, 0, 1.6, 1.0, 1.4, color(134 + (variant % 20), 101, 62));
+      break;
+    case "blacksmith":
+      featureBox(structures, f, 0, -0.3, 0, w, wallH + 0.3, d, STONE);
+      featureRoof(structures, f, 0, wallH, 0, w + 1, d + 1, 2.4, color(90, 70, 60));
+      featureBox(structures, f, w / 3, wallH + 0.5, -d / 4, 1.2, 4.0, 1.2, STONE);
+      // Open-sided forge lean-to on the -x side: a back post wall and a slab roof.
+      featureBox(structures, f, -w / 2 - 2.3, 0, 0, 0.3, 2.6, d * 0.8, TIMBER);
+      featureBox(structures, f, -w / 2 - 1.2, 2.6, 0, 2.4, 0.25, d * 0.8 + 0.4, color(80, 62, 50));
+      if (detailOn) {
+        door();
+        featureBox(detail, f, -w / 2 - 1.2, 0, 0, 1.2, 0.9, 1.2, STONE);
+      }
+      break;
+    case "barn": {
+      const tall = wallH + 1.6;
+      featureBox(structures, f, 0, -0.3, 0, w, tall + 0.3, d, color(92, 70, 50));
+      featureRoof(structures, f, 0, tall, 0, w + 1, d + 0.8, w * 0.6, color(60, 50, 42));
+      if (detailOn)
+        featureBox(detail, f, 0, 0, front, w * 0.5, tall * 0.65, 0.15, color(70, 55, 40));
+      break;
+    }
+    case "butcher":
+      featureBox(structures, f, 0, -0.3, 0, w, wallH + 0.3, d, PLASTER);
+      featureRoof(structures, f, 0, wallH, 0, w + 1, d + 1, 2.8, roofTint);
+      // Red-and-cream striped awning projecting over the front door.
+      for (const ox of [-w * 0.3, 0, w * 0.3])
+        featureBox(structures, f, ox, 2.4, d / 2 + 0.7, w * 0.3, 0.15, 1.4, ox === 0 ? CREAM : RED_CLOTH);
+      if (detailOn) {
+        door();
+        windowAt(-w / 4, 1.8);
+      }
+      break;
+    case "farmstead":
+      // Long, low single-storey house with a fenced yard in front.
+      featureBox(structures, f, 0, -0.3, 0, w, 2.8 + 0.3, d, PLASTER);
+      featureRoof(structures, f, 0, 2.8, 0, w + 1, d + 1, 2.0, roofTint);
+      for (const sx of [-1, 1])
+        for (const oz of [d / 2 + 0.5, d / 2 + 3.5])
+          featureBox(structures, f, sx * (w / 2 + 2), 0, oz, 0.16, 1.4, 0.16, TIMBER);
+      featureBox(structures, f, 0, 1.0, d / 2 + 3.5, w + 4, 0.14, 0.14, TIMBER);
+      if (detailOn) {
+        door();
+        windowAt(-w / 4, 1.6);
+      }
+      break;
+    case "guard-office":
+      featureBox(structures, f, 0, -0.3, 0, w, wallH + 0.3, d, STONE);
+      featureBox(structures, f, 0, wallH, 0, w + 0.6, 0.35, d + 0.6, color(120, 118, 105));
+      for (const sx of [-1, 1])
+        for (const sz of [-1, 1])
+          featureBox(structures, f, sx * (w / 2 - 0.3), wallH + 0.35, sz * (d / 2 - 0.3), 0.6, 0.9, 0.6, STONE);
+      if (detailOn) {
+        door();
+        windowAt(-w / 4, 1.8);
+        windowAt(w / 4, 1.8);
+      }
+      break;
+    default:
+      // home (and any unrecognised residential role)
+      featureBox(structures, f, 0, -0.3, 0, w, wallH + 0.3, d, PLASTER);
+      featureRoof(structures, f, 0, wallH, 0, w + 1, d + 1, 2.8, roofTint);
+      if (detailOn) {
+        featureBox(detail, f, 0, wallH * 0.55, 0, w + 0.06, 0.22, d + 0.1, TIMBER);
+        door();
+        windowAt(-w / 4, 2.4);
+        windowAt(w / 4, 2.4);
+        featureBox(detail, f, w / 3, wallH + 1, -d / 4, 0.8, 1.8, 0.8, STONE);
+      }
+  }
 }
 
 /** Worker-generated tile meshes. Skirts cover cracks between terrain LOD levels. */
@@ -369,47 +556,9 @@ export function buildTile(t: Tile): TileGeometry {
     for (const f of featuresFor(t)) {
       const { x, y, z, variant: v } = f;
       const stone = color(167, 165, 144),
-        timber = color(75, 58, 43),
-        plaster = color(210, 190, 145);
+        timber = color(75, 58, 43);
       if (f.kind === "house") {
-        const w = 6 + (v % 3),
-          d = 7 + ((v >>> 4) % 3),
-          h = 4.1 + (v % 2) * 1.2;
-        structures.box(x, y - 0.3, z, w, h + 0.3, d, plaster);
-        structures.roof(
-          x,
-          y + h,
-          z,
-          w + 1,
-          d + 1,
-          2.8,
-          color(113 + (v % 25), 65 + (v % 16), 48),
-        );
-        if (t.size <= 64) {
-          for (const offset of [-w / 2 + 0.15, 0, w / 2 - 0.15])
-            detail.box(
-              x + offset,
-              y,
-              z,
-              w === 0 ? 0.1 : 0.22,
-              h,
-              d + 0.06,
-              timber,
-            );
-          detail.box(x, y + h * 0.55, z, w + 0.06, 0.22, d + 0.1, timber);
-          detail.box(x, y, z + d / 2 + 0.07, 1.2, 2.3, 0.15, timber);
-          for (const offset of [-1.9, 1.9])
-            detail.box(
-              x + offset,
-              y + 2.4,
-              z + d / 2 + 0.1,
-              0.9,
-              1,
-              0.15,
-              color(54, 64, 53),
-            );
-          detail.box(x + w / 3, y + h + 1, z - d / 4, 0.8, 1.8, 0.8, stone);
-        }
+        buildHouse(f, t.size <= 64, structures, detail, v);
       } else if (f.kind === "keep") {
         structures.box(x, y - 0.3, z, 15, 10.3, 14, stone);
         structures.roof(x, y + 10, z, 16, 15, 4, color(65, 81, 88));
@@ -487,24 +636,37 @@ export function buildTile(t: Tile): TileGeometry {
           color(133, 143, 123),
         );
       } else if (f.kind === "field") {
-        nature.box(x, y + 0.03, z, 18, 0.15, 18, color(158, 132, 66));
+        const fw = f.width ?? 18,
+          fd = f.depth ?? 18;
+        featureBox(nature, f, 0, 0.03, 0, fw, 0.15, fd, color(158, 132, 66));
         if (t.size <= 64)
           for (let row = 0; row < 8; row++)
-            detail.box(
-              x - 7 + row * 2,
-              y + 0.2,
-              z,
-              0.65,
-              0.45,
-              16,
-              color(184, 158, 83),
-            );
+            featureBox(detail, f, -fw / 2 + ((row + 1) * fw) / 9, 0.2, 0, 0.65, 0.45, fd - 2, color(184, 158, 83));
         if (t.size <= 32)
-          for (const oz of [-9, 9]) {
-            detail.box(x, y + 1, z + oz, 18, 0.18, 0.18, timber);
-            for (let i = -9; i <= 9; i += 3)
-              detail.box(x + i, y, z + oz, 0.16, 1.3, 0.16, timber);
+          for (const side of [-1, 1]) {
+            featureBox(detail, f, 0, 1, (side * fd) / 2, fw, 0.18, 0.18, timber);
+            for (let i = -fw / 2; i <= fw / 2 + 1e-6; i += fw / 6)
+              featureBox(detail, f, i, 0, (side * fd) / 2, 0.16, 1.3, 0.16, timber);
           }
+      } else if (f.kind === "wall") {
+        structures.orientedBox(
+          x,
+          y - 0.2,
+          z,
+          0.8,
+          2.2,
+          f.length ?? 16,
+          f.angle ?? 0,
+          f.role === "city" ? stone : color(104, 78, 52),
+        );
+      } else if (f.kind === "gate") {
+        const half = (f.width ?? 6) / 2;
+        for (const side of [-1, 1])
+          featureBox(structures, f, side * (half + 0.6), -0.2, 0, 1.2, 3.6, 1.2, stone);
+        featureBox(structures, f, 0, 3, 0, 2 * half + 1.2, 0.8, 1.2, stone);
+      } else if (f.kind === "guard-post") {
+        featureBox(structures, f, 0, 0, 0, 1.8, 2.6, 1.8, stone);
+        featureRoof(structures, f, 0, 2.6, 0, 2.2, 2.2, 0.9, color(116, 69, 47));
       } else if (f.kind === "well" && t.size <= 64) {
         structures.box(x, y, z, 2.3, 1, 2.3, stone);
         detail.box(x, y + 1.02, z, 1.4, 0.04, 1.4, color(39, 59, 56));

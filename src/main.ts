@@ -18,9 +18,11 @@ import {
   continents,
   countries,
   cities,
+  places,
   villages,
   roads,
 } from "./geography.ts";
+import { settlementLayout } from "./settlement-layout.ts";
 import type { Geometry, TileGeometry } from "./geometry.ts";
 import { LazySimulation } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
@@ -757,6 +759,17 @@ function processStreaming(material: pc.StandardMaterial) {
         : `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`) +
     poleFeedback;
 }
+const STRUCTURE_LABELS: Record<string, string> = {
+  home: "Home",
+  inn: "Inn",
+  market: "Market",
+  blacksmith: "Blacksmith",
+  farmstead: "Farmstead",
+  barn: "Barn",
+  butcher: "Butcher",
+  "guard-office": "Guard office",
+  keep: "Keep",
+};
 function inspectCell(screenX: number, screenY: number) {
   const origin = camera.camera!.screenToWorld(screenX, screenY, 0);
   const far = camera.camera!.screenToWorld(screenX, screenY, 600000);
@@ -791,7 +804,9 @@ function inspectCell(screenX: number, screenY: number) {
       canonicalId = canonicalCellId(canonical.lon, canonical.lat);
     selectedCode = canonicalId;
     $("cell-panel").hidden = false;
-    $("cell-biome").textContent = cell.biome;
+    $("cell-biome").textContent = cell.structure
+      ? `${cell.biome} · ${STRUCTURE_LABELS[cell.structure.role] ?? cell.structure.role}`
+      : cell.biome;
     $("cell-coordinates").textContent =
       `${coordinateLabel(canonical, true)} · ${hierarchy.parent.parent.parent.landform}`;
     $("cell-code").textContent = canonicalId;
@@ -1467,6 +1482,16 @@ async function start() {
       statsElapsed = 0;
       frames = 0;
     }
+  });
+  // Read-only diagnostic interface: the seed-addressed settlement layout for a place id.
+  Object.defineProperty(window, "advisorSettlements", {
+    value: {
+      layout: (id: string) => {
+        const place = places.find((candidate) => candidate.id === id);
+        if (!place) throw new RangeError(`Unknown settlement ${id}`);
+        return settlementLayout(place);
+      },
+    },
   });
   // Read-only diagnostic interface for deterministic generation and browser verification.
   Object.defineProperty(window, "advisorWorld", {
