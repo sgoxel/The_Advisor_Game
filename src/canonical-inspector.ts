@@ -218,7 +218,7 @@ function install(world: AdvisorWorld) {
           },
           climate: {
             authority: CLIMATE_AUTHORITY_CODE,
-            materialPaletteEntries: 19,
+            materialPaletteEntries: 18,
             recurringMaterialAllocations: 0,
           },
           globe: {
