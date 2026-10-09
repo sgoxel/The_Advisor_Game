@@ -6,7 +6,7 @@ import {
   type Feature,
   type Tile,
 } from "./world.ts";
-import { nearestPlace, roadAt, roads } from "./geography.ts";
+import { roadAt, roads } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { sourceToLonLat } from "./planet.ts";
 import { streetDistanceAt } from "./settlement-layout.ts";
@@ -39,6 +39,9 @@ const blendColor = (a: RGB, b: RGB, amount: number): [number, number, number] =>
     a[2] + (b[2] - a[2]) * t,
   );
 };
+/** Packed-earth street surface; cities use a slightly darker stone-dust tone. */
+const STREET_EARTH = color(170, 151, 113),
+  CITY_STREET_EARTH = color(160, 140, 104);
 const varyColor = (base: RGB, amount: number): [number, number, number] =>
   color(
     Math.max(0, Math.min(255, base[0] + amount)),
@@ -217,10 +220,29 @@ class Builder {
  * Shared semantic material lookup. Realm and local LODs use the same climate
  * identity and palette; only bounded seed-derived detail frequency changes.
  */
+/**
+ * Terrain colour with a soft worn-ground wash near settlement streets. The streets
+ * themselves are flat ribbons (streetRibbon); the wash is wider than the ribbon so
+ * coarse vertex interpolation never draws a stair-stepped street outline.
+ */
 export function terrainTint(
   x: number,
   z: number,
   scale = 32,
+  elevationM?: number,
+): [number, number, number] {
+  const base = surfaceTint(x, z, scale, elevationM);
+  if (scale > 512) return base;
+  const street = streetDistanceAt(x, z);
+  return street < 6
+    ? blendColor(base, STREET_EARTH, 0.35 * (1 - smoothstep(4, 6, street)))
+    : base;
+}
+
+function surfaceTint(
+  x: number,
+  z: number,
+  scale: number,
   elevationM?: number,
 ): [number, number, number] {
   const position = sourceToLonLat(x, z),
@@ -231,14 +253,8 @@ export function terrainTint(
   if (legacy === "River") return color(76, 128, 148);
   if (legacy === "Riverbank") return color(151, 143, 99);
 
-  const s = scale <= 512 ? nearestPlace(x, z) : undefined,
-    street = scale <= 512 ? streetDistanceAt(x, z) : Infinity;
-  if (
-    scale <= 512 &&
-    (street < (s?.kind === "city" ? 3.4 : 2.6) ||
-      (roadAt(x, z) && Math.abs(z - roadAt(x, z)!.z) < 5))
-  )
-    return color(170, 151, 113);
+  if (scale <= 512 && roadAt(x, z) && Math.abs(z - roadAt(x, z)!.z) < 5)
+    return STREET_EARTH;
 
   const detailScale = scale > 512 ? 9000 : sample.forestFamily ? 42 : 68,
     variation = (field(x, z, detailScale, 44) - 0.5) * (scale > 512 ? 6 : 12),
@@ -330,6 +346,33 @@ function localAt(f: Feature, ox: number, oz: number): [number, number] {
     cos = Math.cos(yaw),
     sin = Math.sin(yaw);
   return [f.x + ox * cos + oz * sin, f.z - ox * sin + oz * cos];
+}
+/**
+ * Street piece as a flat ribbon draped on the terrain: local +z runs along the piece
+ * (the wall yaw convention) and local +x is across it. Each cross-section corner is
+ * sampled at its own height so the ribbon follows slopes, and the piece is two quads
+ * (start to middle, middle to end). Corner order gives upward normals.
+ */
+function streetRibbon(b: Builder, f: Feature) {
+  const yaw = f.angle ?? 0,
+    cos = Math.cos(yaw),
+    sin = Math.sin(yaw),
+    half = (f.length ?? 0) / 2,
+    hw = (f.width ?? 4) / 2,
+    tint = f.role === "city" ? CITY_STREET_EARTH : STREET_EARTH;
+  const edge = (along: number, side: number): Point => {
+    const px = f.x + along * sin + side * hw * cos,
+      pz = f.z + along * cos - side * hw * sin;
+    return [px, heightAt(px, pz) + 0.12, pz];
+  };
+  const r0 = edge(-half, -1),
+    r1 = edge(0, -1),
+    r2 = edge(half, -1),
+    l0 = edge(-half, 1),
+    l1 = edge(0, 1),
+    l2 = edge(half, 1);
+  b.quad(r0, r1, l1, l0, tint);
+  b.quad(r1, r2, l2, l1, tint);
 }
 /** Oriented box on a feature frame; oy is relative to the feature's ground height. */
 function featureBox(
@@ -648,6 +691,8 @@ export function buildTile(t: Tile): TileGeometry {
             for (let i = -fw / 2; i <= fw / 2 + 1e-6; i += fw / 6)
               featureBox(detail, f, i, 0, (side * fd) / 2, 0.16, 1.3, 0.16, timber);
           }
+      } else if (f.kind === "street") {
+        streetRibbon(structures, f);
       } else if (f.kind === "wall") {
         structures.orientedBox(
           x,

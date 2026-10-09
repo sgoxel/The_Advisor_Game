@@ -16,6 +16,7 @@ import {
   streetDistanceAt,
   type Border,
   type Gate,
+  type Street,
 } from "./settlement-layout.ts";
 export { WORLD_SEED } from "./config.ts";
 export const GENERATOR_VERSION = WORLD_FOUNDATION_VERSION;
@@ -42,7 +43,8 @@ export type Feature = {
     | "well"
     | "wall"
     | "gate"
-    | "guard-post";
+    | "guard-post"
+    | "street";
   x: number;
   z: number;
   y: number;
@@ -466,6 +468,42 @@ function borderPieces(border: Border, gates: readonly Gate[]) {
   return pieces;
 }
 
+/**
+ * Street centrelines split into pieces of at most 24 m, each anchored at its midpoint.
+ * angle follows the wall convention (local +z runs along the segment). length adds half
+ * a street width so neighbouring pieces overlap at joints instead of leaving gaps.
+ */
+function streetPieces(streets: readonly Street[]) {
+  const pieces: { code: string; x: number; z: number; length: number; angle: number; width: number }[] = [];
+  for (const street of streets) {
+    for (let i = 0; i + 1 < street.points.length; i++) {
+      const a = street.points[i],
+        b = street.points[i + 1],
+        dx = b.x - a.x,
+        dz = b.z - a.z,
+        span = Math.hypot(dx, dz);
+      if (span < 1e-6) continue;
+      const ux = dx / span,
+        uz = dz / span,
+        angle = Math.atan2(ux, uz),
+        count = Math.ceil(span / 24),
+        step = span / count;
+      for (let k = 0; k < count; k++) {
+        const mid = step * (k + 0.5);
+        pieces.push({
+          code: `${street.code}/seg/${i}/${k}`,
+          x: a.x + ux * mid,
+          z: a.z + uz * mid,
+          length: step + street.width * 0.5,
+          angle,
+          width: street.width,
+        });
+      }
+    }
+  }
+  return pieces;
+}
+
 /** Features are owned by their anchor tile; tile order/zoom never changes them. */
 export function featuresFor(tile: Tile): Feature[] {
   const features: Feature[] = [];
@@ -538,6 +576,13 @@ export function featuresFor(tile: Tile): Feature[] {
       emit("wall", piece.x, piece.z, `${layout.border.code}/${piece.code}`, {
         angle: piece.angle,
         length: piece.length,
+        role: s.kind,
+      });
+    for (const piece of streetPieces(layout.streets))
+      emit("street", piece.x, piece.z, piece.code, {
+        angle: piece.angle,
+        length: piece.length,
+        width: piece.width,
         role: s.kind,
       });
     for (const gate of layout.gates) {

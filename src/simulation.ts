@@ -6,7 +6,7 @@ import {
   sourceToLonLat,
   type CanonicalPosition,
 } from "./planet.ts";
-import { settlementLayout, type Point } from "./settlement-layout.ts";
+import { settlementLayout, type Point, type Street } from "./settlement-layout.ts";
 
 export type Resident = {
   code: string;
@@ -47,6 +47,43 @@ function polylineLength(points: readonly Point[]) {
     total += Math.hypot(points[i + 1].x - points[i].x, points[i + 1].z - points[i].z);
   return total;
 }
+/** Per-street lengths of a layout, cached because residents query it every tick. */
+const streetTables = new WeakMap<readonly Street[], { lengths: number[]; total: number }>();
+function streetTableFor(streets: readonly Street[]) {
+  let table = streetTables.get(streets);
+  if (!table) {
+    const lengths = streets.map((street) => polylineLength(street.points));
+    table = { lengths, total: lengths.reduce((sum, length) => sum + length, 0) };
+    streetTables.set(streets, table);
+  }
+  return table;
+}
+/** Golden-ratio fraction: consecutive resident indices land far apart on the cumulative length. */
+const GOLDEN_FRACTION = 0.6180339887498949;
+/**
+ * Street for a resident, chosen with probability proportional to street length:
+ * index * golden ratio (mod 1) picks a point on the cumulative length, so long streets
+ * carry proportionally more walkers. Zero-length streets are never chosen.
+ */
+function streetFor(
+  streets: readonly Street[],
+  index: number,
+): { street: Street; length: number } | undefined {
+  const { lengths, total } = streetTableFor(streets);
+  if (!(total > 0)) return undefined;
+  const target = ((index * GOLDEN_FRACTION) % 1) * total;
+  let cumulative = 0,
+    last = -1;
+  for (let i = 0; i < streets.length; i++) {
+    if (!(lengths[i] > 0)) continue;
+    last = i;
+    cumulative += lengths[i];
+    if (target < cumulative) return { street: streets[i], length: lengths[i] };
+  }
+  // Only reachable through floating-point rounding at the very end of the range.
+  return { street: streets[last], length: lengths[last] };
+}
+
 /** Point after walking `distance` along a polyline; clamps at the final point. */
 function pointAlong(points: readonly Point[], distance: number): Point {
   let remaining = distance;
@@ -65,8 +102,8 @@ function pointAlong(points: readonly Point[], distance: number): Point {
 
 /**
  * Residents walk the settlement's own street network from the seed-addressed
- * layout: each resident is assigned one street (round-robin by index) and walks
- * back and forth along its centreline at the fantasy-time good-road speed. tick is
+ * layout: each resident is assigned one street (weighted by length, see streetFor)
+ * and walks back and forth along its centreline at the fantasy-time good-road speed. tick is
  * already fantasy seconds, so no presentation clock scale is applied. Trading
  * means near the settlement centre, Patrolling means near a gate, otherwise
  * Walking. Interiors and home/work routing are not simulated yet. Positions that
@@ -80,18 +117,16 @@ export function residentAt(
   const code = `${place.code}/RESIDENT/${index}`,
     variant = digest(code),
     layout = settlementLayout(place);
-  const street = layout.streets.length
-    ? layout.streets[index % layout.streets.length]
-    : undefined;
   let point: Point = layout.center;
-  if (street && street.points.length > 1) {
-    const total = polylineLength(street.points);
-    if (total > 0) {
-      const cycle = 2 * total,
-        phase = (tick * GOOD_ROAD_WALK_SPEED_MPS + (variant % total)) % cycle,
-        distance = phase <= total ? phase : cycle - phase;
-      point = pointAlong(street.points, distance);
-    }
+  const picked = streetFor(layout.streets, index);
+  if (picked) {
+    const total = picked.length;
+    // variant is a uint32 digest; its fraction sets the starting point along the street.
+    const cycle = 2 * total,
+      phase =
+        (tick * GOOD_ROAD_WALK_SPEED_MPS + (variant / 2 ** 32) * total) % cycle,
+      distance = phase <= total ? phase : cycle - phase;
+    point = pointAlong(picked.street.points, distance);
   }
   const canonical = sourceToLonLat(point.x, point.z),
     presentation = lonLatToSource(canonical.lon, canonical.lat),
