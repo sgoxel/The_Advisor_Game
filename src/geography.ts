@@ -1,6 +1,7 @@
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
   CANONICAL_PLANET_RADIUS,
+  SOURCE_PRESENTATION_RADIUS,
   SOURCE_PRESENTATION_WIDTH,
   greatCircleDistance,
   lonLatToSource,
@@ -154,6 +155,22 @@ function continentCandidate(
 }
 
 /**
+ * Transitional settlement-site guard for the current local terrain prototype.
+ * Political ownership still comes exclusively from countryAtPosition(). Until the
+ * hydrology WP replaces the old source-domain river, placement simply rejects its
+ * known wet corridor and a narrow coastal margin instead of filling water under a
+ * city or village.
+ */
+function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
+  const macro = macroSampleAt(position);
+  if (!macro.land || macro.reliefM > maxReliefM) return false;
+  if (macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS < 42) return false;
+  const { x, z } = lonLatToSource(position.lon, position.lat),
+    prototypeRiverX = 125 + 42 * Math.sin(z / 150) + 18 * Math.sin(z / 57);
+  return Math.abs(wrapSourceX(x - prototypeRiverX)) > 52;
+}
+
+/**
  * Country anchors are selected by deterministic farthest-candidate sampling over
  * each full seeded mainland footprint. They are not a centre cluster, ring, grid,
  * or mutable random stream.
@@ -253,14 +270,13 @@ export const cities: Place[] = (() => {
     for (let city = 0; city < CITY_NAMES.length; city++) {
       let best: CanonicalPosition | undefined,
         bestScore = -Infinity;
-      for (let attempt = 0; attempt < 180; attempt++) {
+      for (let attempt = 0; attempt < 220; attempt++) {
         const candidate = cityCandidate(country, city, attempt),
-          macro = macroSampleAt(candidate),
           owner = countryAtPosition(candidate);
         if (
           !owner ||
           owner.code !== country.code ||
-          macro.reliefM > 90 ||
+          !locallyDrySettlementSite(candidate, 90) ||
           allAccepted.some((other) => macroFeatureDistanceM(candidate, other) < 18_000)
         )
           continue;
@@ -302,18 +318,17 @@ export const villages: Place[] = (() => {
   for (const city of cities) {
     for (let v = 0; v < VILLAGE_NAMES.length; v++) {
       let position: CanonicalPosition | undefined;
-      for (let attempt = 0; attempt < 224; attempt++) {
+      for (let attempt = 0; attempt < 280; attempt++) {
         const prefix = `VILLAGE/${city.id}/${v}/${attempt}`,
           bearing = TAU * addressed(`${prefix}/bearing`),
           distanceM = 7_000 + 16_000 * addressed(`${prefix}/distance`),
           candidate = destination(city.canonicalPosition, bearing, distanceM / CANONICAL_PLANET_RADIUS),
-          macro = macroSampleAt(candidate),
           owner = countryAtPosition(candidate);
         if (
           !owner ||
           owner.continent !== city.continent ||
           owner.id !== city.country ||
-          macro.reliefM > 95 ||
+          !locallyDrySettlementSite(candidate, 95) ||
           accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000)
         )
           continue;
@@ -383,6 +398,23 @@ export const roads = cities.flatMap((city) =>
     };
   }),
 );
+
+export type Road = (typeof roads)[number];
+
+export function roadDistanceAt(x: number, z: number, road: Road) {
+  const px = road.fromX + wrapSourceX(x - road.fromX),
+    vx = road.toX - road.fromX,
+    vz = road.toZ - road.fromZ,
+    lengthSq = vx * vx + vz * vz;
+  if (!lengthSq) return Math.hypot(px - road.fromX, z - road.fromZ);
+  const t = Math.max(
+      0,
+      Math.min(1, ((px - road.fromX) * vx + (z - road.fromZ) * vz) / lengthSq),
+    ),
+    qx = road.fromX + vx * t,
+    qz = road.fromZ + vz * t;
+  return Math.hypot(px - qx, z - qz);
+}
 
 /** Canonical nearest-place lookup; independent of wrap and source-plane edges. */
 export function nearestPlaceAt(position: LonLat): Place | undefined {
@@ -468,18 +500,11 @@ export function roadAt(x: number, z: number) {
       .map((place) => place.id),
   );
   if (!localVillageIds.size) return undefined;
-  return roads.find((road) => {
-    if (!localVillageIds.has(road.from) && !localVillageIds.has(road.to)) return false;
-    const px = road.fromX + wrapSourceX(x - road.fromX),
-      vx = road.toX - road.fromX,
-      vz = road.toZ - road.fromZ,
-      lengthSq = vx * vx + vz * vz;
-    if (!lengthSq) return false;
-    const t = Math.max(0, Math.min(1, ((px - road.fromX) * vx + (z - road.fromZ) * vz) / lengthSq)),
-      qx = road.fromX + vx * t,
-      qz = road.fromZ + vz * t;
-    return Math.hypot(px - qx, z - qz) < 12;
-  });
+  return roads.find(
+    (road) =>
+      (localVillageIds.has(road.from) || localVillageIds.has(road.to)) &&
+      roadDistanceAt(x, z, road) < 12,
+  );
 }
 
 function borderOwner(x: number, z: number) {
