@@ -184,10 +184,11 @@ function terrainFor(
     return { terrainClass: "tundra", forestFamily: null };
   }
 
-  if (elevationM >= snowLineM && temperatureC < 7)
-    return { terrainClass: "snowy-mountain", forestFamily: null };
+  // Preserve the volcanic archetype as its own readable geology even in cold climates.
   if (macro.volcanic && macro.mountainIntensity > 0.12)
     return { terrainClass: "volcanic", forestFamily: null };
+  if (elevationM >= snowLineM && temperatureC < 7)
+    return { terrainClass: "snowy-mountain", forestFamily: null };
 
   const coastM = Math.max(0, macro.coastDistanceRad * CANONICAL_PLANET_RADIUS),
     beachReachM = 850 + 1250 * seededWave(position, 1);
@@ -239,22 +240,33 @@ export function climateSampleAt(position: LonLat, elevationM?: number): ClimateS
     thermalWave = seededWave(canonical, 0) - 0.5,
     moistureWave = seededWave(canonical, 1),
     rainWave = seededWave(canonical, 2),
-    temperatureC =
+    baseTemperatureC =
       30.5 -
       45 * Math.pow(latitude01, 1.12) -
       elevation * 0.0061 +
       thermalWave * 7.5 -
       continentality * 2.2,
+    // Dominant spines represent the world's highest compressed macro relief. Give
+    // their upper canonical recipe a deterministic alpine microclimate so the
+    // required snowy mountains exist without inventing a camera/LOD-only snow mask.
+    temperatureC =
+      macro.mountainKind === "dominant-spine" && elevation > 260
+        ? Math.min(baseTemperatureC, 3.5 + thermalWave * 5)
+        : baseTemperatureC,
     subtropicalDrying = Math.exp(-Math.pow((latitude01 - 0.31) / 0.14, 2)),
     coastHumidity = macro.land ? (1 - continentality) * 0.12 : 0.15,
     moisture = clamp01(
       0.2 + moistureWave * 0.48 + rainWave * 0.18 + coastHumidity - subtropicalDrying * 0.27,
     ),
     frozen = frozenLatitudeAt(canonical),
-    snowLineM = Math.max(
+    baseSnowLineM = Math.max(
       95,
       650 - latitude01 * 470 + (seededWave(canonical, 2) - 0.5) * 120,
     ),
+    snowLineM =
+      macro.mountainKind === "dominant-spine" && elevation > 260
+        ? Math.min(baseSnowLineM, Math.max(150, elevation * 0.82))
+        : baseSnowLineM,
     ruggedness = clamp01(
       macro.mountainIntensity * 0.78 +
         Math.min(1, elevation / 520) * 0.18 +
