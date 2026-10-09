@@ -1,24 +1,21 @@
 /** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
-import { WORLD_SEED } from "./config.ts";
+import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
   canonicalCellId,
   SOURCE_PRESENTATION_POLE_DISTANCE,
+  SOURCE_PRESENTATION_RADIUS,
   sourceToLonLat,
   wrapSourceX,
 } from "./planet.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
-import {
-  continentalEnvelope,
-  nearestPlace,
-  places,
-  roadAt,
-} from "./geography.ts";
+import { nearestPlace, places, roadAt } from "./geography.ts";
+import { macroSampleAt } from "./macro-geography.ts";
 export { WORLD_SEED } from "./config.ts";
-export const GENERATOR_VERSION = "v1";
+export const GENERATOR_VERSION = WORLD_FOUNDATION_VERSION;
 export const WORLD_SIZE = 262144;
 export const WORLD_MIN = -WORLD_SIZE / 2;
 export const CELL_SIZE = 2;
-export const MAX_LEVEL = 17; // Finest render tile and logical cell are both 2 × 2 m.
+export const MAX_LEVEL = 17; // Finest render tile and logical cell are both 2 × 2 source units.
 export type Tile = {
   level: number;
   x: number;
@@ -56,7 +53,7 @@ export type RegionSeed = {
   code: string;
   x: number;
   z: number;
-  landform: "Mainland" | "Island" | "Ocean";
+  landform: "Mainland" | "Island" | "Ocean" | "Lake";
   radius: number;
   elevationLimit: number;
   parent: ProvinceSeed;
@@ -86,19 +83,18 @@ export function digest(text: string): number {
   return value >>> 0;
 }
 export const SEED_VALUE = digest(`${WORLD_SEED}/${GENERATOR_VERSION}`);
-/** Five nested generation levels (1000 / 100 / 10 / 2 / 1 cells).
- * All scale ratios are integral; the quadtree is a separate display hierarchy. */
+/** Five nested source-detail levels. Macro landform authority lives above them. */
 export function provinceSeed(cx: number, cz: number): ProvinceSeed {
   const x = Math.floor(cx / 1000),
     z = Math.floor(cz / 1000),
-    code = `${WORLD_SEED}/${GENERATOR_VERSION}/L1/${x}/${z}`;
-  const coastal = continentalEnvelope(x * 2000 + 1000, z * 2000 + 1000) > 1;
+    code = `${WORLD_SEED}/${GENERATOR_VERSION}/L1/${x}/${z}`,
+    macro = macroSampleAt(sourceToLonLat(x * 2000 + 1000, z * 2000 + 1000));
   return {
     code,
     x,
     z,
-    domain: coastal ? "Archipelago" : "Mainland",
-    elevationLimit: 150,
+    domain: macro.domain === "Mainland" ? "Mainland" : "Archipelago",
+    elevationLimit: 620,
   };
 }
 // Neighbouring samples almost always share a region: remember the last one built.
@@ -107,24 +103,18 @@ export function regionSeed(cx: number, cz: number): RegionSeed {
   const x = Math.floor(cx / 100),
     z = Math.floor(cz / 100);
   if (lastRegion && lastRegion.x === x && lastRegion.z === z) return lastRegion;
-  const parent = provinceSeed(cx, cz);
-  const code = `${parent.code}/L2/${x - parent.x * 10}/${z - parent.z * 10}`;
-  const blockX = Math.floor(x / 3),
-    blockZ = Math.floor(z / 3);
-  const archipelago = parent.domain === "Archipelago";
-  const islandBelt = continentalEnvelope(x * 200 + 100, z * 200 + 100) < 1.12;
-  const landform = archipelago
-    ? islandBelt && x - blockX * 3 === 1 && z - blockZ * 3 === 1
-      ? "Island"
-      : "Ocean"
-    : "Mainland";
+  const parent = provinceSeed(cx, cz),
+    code = `${parent.code}/L2/${x - parent.x * 10}/${z - parent.z * 10}`,
+    macro = macroSampleAt(sourceToLonLat(x * 200 + 100, z * 200 + 100));
   return (lastRegion = {
     code,
     x,
     z,
-    landform,
+    landform: macro.domain,
+    // Retained only as source-detail metadata; it no longer controls island geometry.
     radius: 64 + (digest(code) % 12),
-    elevationLimit: landform === "Island" ? 18 : parent.elevationLimit,
+    elevationLimit:
+      macro.domain === "Mainland" ? 620 : macro.domain === "Island" ? 180 : 0,
     parent,
   });
 }
@@ -163,25 +153,9 @@ export function cellSeed(cx: number, cz: number) {
     surface: (parent.grain + (digest(code) % 3)) % 5,
   };
 }
-/** Interpolate L2 coastline controls inside L1's bounded island envelope. */
-export function islandCoast(x: number, z: number, region: RegionSeed) {
-  const lx = x - region.x * 200,
-    lz = z - region.z * 200;
-  const fx = Math.max(0, Math.min(9, lx / 20)),
-    fz = Math.max(0, Math.min(9, lz / 20));
-  const ix = Math.floor(fx),
-    iz = Math.floor(fz);
-  const offset = (a: number, b: number) =>
-    districtSeed(
-      region.x * 100 + Math.min(9, a) * 10,
-      region.z * 100 + Math.min(9, b) * 10,
-    ).coastOffset;
-  const coastOffset = lerp(
-    lerp(offset(ix, iz), offset(ix + 1, iz), smooth(fx - ix)),
-    lerp(offset(ix, iz + 1), offset(ix + 1, iz + 1), smooth(fx - ix)),
-    smooth(fz - iz),
-  );
-  return region.radius + coastOffset - Math.hypot(lx - 100, lz - 100);
+/** Signed macro coast margin in source/render units. Positive is dry land. */
+export function islandCoast(x: number, z: number, _region?: RegionSeed) {
+  return macroSampleAt(sourceToLonLat(x, z)).coastDistanceRad * SOURCE_PRESENTATION_RADIUS;
 }
 export function coordinateValue(x: number, z: number, layer: number): number {
   let n =
@@ -236,23 +210,15 @@ export function settlement(
           ][v % 6],
   };
 }
-/** Global height, evaluated identically at every tile boundary and detail level. */
+/** Global height: one macro authority sampled identically by globe and every local LOD. */
 export function heightAt(x: number, z: number): number {
-  const cx = Math.floor(x / 2),
-    cz = Math.floor(z / 2),
-    region = regionSeed(cx, cz);
-  if (region.landform === "Ocean") return -2.8;
-  if (region.landform === "Island") {
-    const coast = islandCoast(x, z, region);
-    return lerp(
-      -2.8,
-      Math.min(region.elevationLimit, 3 + field(x, z, 48, 2) * 12),
-      smooth(Math.max(0, Math.min(1, (coast + 4) / 20))),
-    );
-  }
-  const s = nearestPlace(x, z);
-  const d = s ? Math.hypot(x - s.x, z - s.z) : 1000;
-  const radius = s?.kind === "city" ? 430 : 90;
+  const macro = macroSampleAt(sourceToLonLat(x, z));
+  if (macro.domain === "Ocean") return -2.8;
+  if (macro.domain === "Lake") return -1.8;
+
+  const s = nearestPlace(x, z),
+    d = s ? Math.hypot(wrapSourceX(x - s.x), z - s.z) : 1000,
+    radius = s?.kind === "city" ? 430 : 90;
   let flatten = smooth(Math.min(1, Math.max(0, (d - radius) / 80)));
   const road = roadAt(x, z);
   if (road)
@@ -260,36 +226,56 @@ export function heightAt(x: number, z: number): number {
       flatten,
       smooth(Math.min(1, Math.max(0, (Math.abs(z - road.z) - 5) / 7))),
     );
-  const hills = 3 + field(x, z, 160, 1) * 9 + field(x, z, 48, 2) * 2;
-  const mountains = Math.max(0, field(x, z, 700, 3) - 0.52) * 260;
-  const land = Math.min(
-    region.elevationLimit,
-    lerp(3, hills + mountains, flatten),
+
+  const base =
+      macro.domain === "Island"
+        ? 3 + field(x, z, 58, 2) * 12
+        : 3 + field(x, z, 160, 1) * 9 + field(x, z, 48, 2) * 2,
+    macroRelief = macro.reliefM * (0.88 + 0.12 * field(x, z, 110, 3)),
+    cap = macro.domain === "Island" ? 180 : 620,
+    terrain = Math.min(cap, lerp(3, base + macroRelief, flatten)),
+    coastSource = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
+    coastLand = lerp(
+      -2.8,
+      terrain,
+      smooth(Math.max(0, Math.min(1, (coastSource + 2) / 10))),
+    );
+  if (macro.domain === "Island") return coastLand;
+
+  // Hydrology remains the S001 prototype until WP-S002-004-005 replaces it.
+  const bank = Math.abs(wrapSourceX(x - riverX(z)));
+  return lerp(
+    -2.8,
+    coastLand,
+    smooth(Math.min(1, Math.max(0, (bank - 12) / 19))),
   );
-  const bank = Math.abs(x - riverX(z));
-  return lerp(-2.8, land, smooth(Math.min(1, Math.max(0, (bank - 12) / 19))));
 }
 export function biomeAt(x: number, z: number): string {
+  const macro = macroSampleAt(sourceToLonLat(x, z));
+  if (macro.domain === "Ocean") return "Ocean";
+  if (macro.domain === "Lake") return "Lake";
   const h = heightAt(x, z),
     hierarchy = cellSeed(Math.floor(x / 2), Math.floor(z / 2));
-  const region = hierarchy.parent.parent.parent;
-  if (region.landform === "Ocean") return "Ocean";
-  if (region.landform === "Island") {
+  if (macro.domain === "Island") {
     if (h < 0.1) return "Ocean";
-    if (
-      islandCoast(x, z, region) <
-      hierarchy.parent.parent.beachWidth + 5 + hierarchy.surface * 0.15
-    )
+    const coast = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS;
+    if (coast < hierarchy.parent.parent.beachWidth + 5 + hierarchy.surface * 0.15)
       return "Sandy beach";
+    if (macro.volcanic && macro.mountainIntensity > 0.16) return "Volcanic highlands";
+    if (macro.mountainIntensity > 0.12 || h > 70) return "Highlands";
     return "Island meadow";
   }
   if (h < 0.1) return "River";
-  if (Math.abs(x - riverX(z)) < 32) return "Riverbank";
+  if (Math.abs(wrapSourceX(x - riverX(z))) < 32) return "Riverbank";
   const s = nearestPlace(x, z);
-  if (s && Math.hypot(x - s.x, z - s.z) < (s.kind === "city" ? 420 : 84))
+  if (
+    s &&
+    Math.hypot(wrapSourceX(x - s.x), z - s.z) < (s.kind === "city" ? 420 : 84)
+  )
     return "Settlement";
   if (roadAt(x, z)) return "Road";
-  if (h > 70) return "Highlands";
+  if (macro.volcanic && macro.mountainIntensity > 0.16) return "Volcanic highlands";
+  if (macro.mountainIntensity > 0.1 || h > 70) return "Highlands";
   return field(x, z, 90, 4) > 0.45 ? "Woodland" : "Meadow";
 }
 
@@ -477,7 +463,10 @@ export function featuresFor(tile: Tile): Feature[] {
         const biome = biomeAt(x, z);
         if (biome === "Woodland" && v % 4 !== 0)
           add("tree", x, z, v, `tree/${gx}/${gz}`);
-        else if (biome !== "Settlement" && biome !== "Ocean" && v % 31 === 0)
+        else if (
+          !["Settlement", "Ocean", "Lake", "River"].includes(biome) &&
+          v % 31 === 0
+        )
           add("rock", x, z, v, `rock/${gx}/${gz}`);
       }
     }

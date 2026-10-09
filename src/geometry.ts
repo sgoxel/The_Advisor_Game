@@ -1,5 +1,7 @@
 import { biomeAt, featuresFor, field, heightAt, type Tile } from "./world.ts";
 import { nearestPlace, roadAt, roads } from "./geography.ts";
+import { macroSampleAt } from "./macro-geography.ts";
+import { sourceToLonLat, wrapSourceX } from "./planet.ts";
 type RGB = [number, number, number];
 type Point = [number, number, number];
 export type Geometry = {
@@ -135,11 +137,18 @@ class Builder {
 }
 export function terrainTint(x: number, z: number, scale = 32): RGB {
   if (scale > 512) {
-    const f = field(x, z, 9000, 44);
+    const macro = macroSampleAt(sourceToLonLat(x, z)),
+      f = field(x, z, 9000, 44);
+    if (macro.domain === "Ocean") return color(94, 137, 139);
+    if (macro.domain === "Lake") return color(75, 126, 145);
+    if (macro.volcanic && macro.mountainIntensity > 0.12)
+      return color(102 + f * 12, 98 + f * 10, 87 + f * 8);
+    if (macro.mountainIntensity > 0.08)
+      return color(126 + f * 20, 137 + f * 17, 114 + f * 14);
     return color(106 + f * 24, 133 + f * 24, 83 + f * 20);
   }
   const s = nearestPlace(x, z);
-  const dx = s ? Math.abs(x - s.x) : 1000,
+  const dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,
     dz = s ? Math.abs(z - s.z) : 1000;
   const urbanRoad =
     s?.kind === "city" && (Math.abs(dx % 29) < 3 || Math.abs(dz % 29) < 3);
@@ -153,8 +162,11 @@ export function terrainTint(x: number, z: number, scale = 32): RGB {
   const biome = biomeAt(x, z),
     f = field(x, z, 28, 41);
   if (biome === "River" || biome === "Ocean") return color(94, 137, 139);
+  if (biome === "Lake") return color(75, 126, 145);
   if (biome === "Sandy beach") return color(203, 190, 141);
   if (biome === "Riverbank") return color(163, 159, 113);
+  if (biome === "Volcanic highlands")
+    return color(96 + f * 19, 92 + f * 15, 82 + f * 14);
   if (biome === "Highlands")
     return color(129 + f * 25, 139 + f * 20, 116 + f * 15);
   if (biome === "Woodland")
