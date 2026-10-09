@@ -1,17 +1,16 @@
 import { terrainTint, type Geometry } from "./geometry.ts";
-import { biomeAt, heightAt, type Tile } from "./world.ts";
+import { heightAt, type Tile } from "./world.ts";
 
 type RGB = [number, number, number];
 type Point = [number, number, number];
 type Vertex = { point: Point; tint: RGB };
 
 const WATER_SURFACE_Y = 0;
-const LAND_CLIP_Y = 0.035;
+const LAND_CLIP_Y = 0.06;
 
 function clampByte(value: number) {
   return Math.max(0, Math.min(255, Math.round(value)));
 }
-
 function blend(a: RGB, b: RGB, t: number): RGB {
   return [
     a[0] + (b[0] - a[0]) * t,
@@ -19,21 +18,6 @@ function blend(a: RGB, b: RGB, t: number): RGB {
     a[2] + (b[2] - a[2]) * t,
   ];
 }
-
-/**
- * Preserve semantic water/cliff meaning before road/settlement presentation.
- * geometry.ts historically checked road tint first, which could paint a jagged
- * dry-road triangle over a canonical river crossing.
- */
-function refinedTint(x: number, z: number, scale: number): RGB {
-  const biome = biomeAt(x, z);
-  if (biome === "River" || biome === "Ocean") return [83, 134, 145];
-  if (biome === "Lake") return [69, 123, 148];
-  if (biome === "Cliff") return [111, 116, 108];
-  if (biome === "Riverbank") return [151, 148, 108];
-  return terrainTint(x, z, scale);
-}
-
 function interpolate(a: Vertex, b: Vertex, t: number): Vertex {
   return {
     point: [
@@ -45,8 +29,8 @@ function interpolate(a: Vertex, b: Vertex, t: number): Vertex {
   };
 }
 
-/** Clip coast/ocean cells to the water plane instead of letting one dry corner
- * pull an entire coarse terrain triangle across open water. */
+/** Clip dry terrain against the shared water plane instead of letting a single
+ * dry corner stretch a large triangle over a canonical river/coast. */
 function clipLandPolygon(vertices: Vertex[]): Vertex[] {
   const output: Vertex[] = [];
   for (let i = 0; i < vertices.length; i++) {
@@ -98,7 +82,6 @@ function pushTriangle(
   }
   indices.push(start, start + 1, start + 2);
 }
-
 function pushPolygon(
   positions: number[],
   normals: number[],
@@ -110,7 +93,6 @@ function pushPolygon(
   for (let i = 1; i < polygon.length - 1; i++)
     pushTriangle(positions, normals, colors, indices, polygon[0], polygon[i], polygon[i + 1]);
 }
-
 function pushQuad(
   positions: number[],
   normals: number[],
@@ -124,32 +106,36 @@ function pushQuad(
   pushTriangle(positions, normals, colors, indices, a, b, c);
   pushTriangle(positions, normals, colors, indices, a, c, d);
 }
-
-function darken(tint: RGB, amount = 0.78): RGB {
+function darken(tint: RGB, amount = 0.82): RGB {
   return [tint[0] * amount, tint[1] * amount, tint[2] * amount];
 }
 
 /**
- * Local/Province terrain uses a denser, per-vertex-colored surface than the
- * legacy 16×16 flat-color quads. Canonical height/biome queries are unchanged;
- * this only removes presentation artifacts exposed by WP-S002-004-005 evidence.
+ * Bounded terrain refinement. The prior 40–48 sample grid multiplied expensive
+ * canonical hydrology/climate queries enough to time out the required SwiftShader
+ * WebGPU ENU regression. This version keeps the improvement over the legacy 16×16
+ * mesh while limiting local work to 24×24 and using the already canonical material
+ * lookup once per sampled vertex.
  */
 export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry {
   if (tile.size > 1024 || tile.size < 2) return original;
 
-  const targetResolution = tile.size <= 128 ? 48 : tile.size <= 512 ? 40 : 28,
-    resolution = Math.max(1, Math.min(targetResolution, Math.floor(tile.size / 2))),
-    step = tile.size / resolution,
-    grid: Vertex[][] = [];
+  const targetResolution = tile.size <= 128 ? 24 : tile.size <= 512 ? 20 : 16,
+    resolution = Math.max(1, Math.min(targetResolution, Math.floor(tile.size / 2)));
+  // Coarse tiles are already at the same or higher sample density in geometry.ts.
+  if (resolution <= 16) return original;
 
+  const step = tile.size / resolution,
+    grid: Vertex[][] = [];
   for (let z = 0; z <= resolution; z++) {
     const row: Vertex[] = [];
     for (let x = 0; x <= resolution; x++) {
       const px = tile.minX + x * step,
-        pz = tile.minZ + z * step;
+        pz = tile.minZ + z * step,
+        elevation = heightAt(px, pz);
       row.push({
-        point: [px, heightAt(px, pz), pz],
-        tint: refinedTint(px, pz, tile.size),
+        point: [px, elevation, pz],
+        tint: terrainTint(px, pz, tile.size, elevation),
       });
     }
     grid.push(row);
@@ -159,7 +145,6 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
     normals: number[] = [],
     colors: number[] = [],
     indices: number[] = [];
-
   for (let z = 0; z < resolution; z++)
     for (let x = 0; x < resolution; x++)
       pushPolygon(
@@ -170,37 +155,41 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
         clipLandPolygon([grid[z][x], grid[z + 1][x], grid[z + 1][x + 1], grid[z][x + 1]]),
       );
 
-  // Keep a shallow overlap skirt for LOD replacement, but avoid the previous
-  // deep vertical walls that read as cliffs/seams in Street evidence.
-  const skirtDepth = Math.min(7, Math.max(3, step * 0.45));
-  const skirt = (topA: Vertex, topB: Vertex) => {
-    if (topA.point[1] <= LAND_CLIP_Y && topB.point[1] <= LAND_CLIP_Y) return;
-    const a = {
-        point: [topA.point[0], Math.max(LAND_CLIP_Y, topA.point[1]), topA.point[2]] as Point,
-        tint: topA.tint,
-      },
-      b = {
-        point: [topB.point[0], Math.max(LAND_CLIP_Y, topB.point[1]), topB.point[2]] as Point,
-        tint: topB.tint,
-      },
-      c = {
-        point: [b.point[0], b.point[1] - skirtDepth, b.point[2]] as Point,
-        tint: darken(b.tint),
-      },
-      d = {
-        point: [a.point[0], a.point[1] - skirtDepth, a.point[2]] as Point,
-        tint: darken(a.tint),
+  // Exact close-range neighbors share canonical edge samples. Avoid visible vertical
+  // walls there; retain only a shallow skirt for mixed-LOD Province tiles.
+  if (tile.size > 64) {
+    const skirtDepth = Math.min(4, Math.max(2, step * 0.28)),
+      skirt = (topA: Vertex, topB: Vertex) => {
+        if (topA.point[1] <= LAND_CLIP_Y && topB.point[1] <= LAND_CLIP_Y) return;
+        const a: Vertex = {
+            point: [topA.point[0], Math.max(LAND_CLIP_Y, topA.point[1]), topA.point[2]],
+            tint: topA.tint,
+          },
+          b: Vertex = {
+            point: [topB.point[0], Math.max(LAND_CLIP_Y, topB.point[1]), topB.point[2]],
+            tint: topB.tint,
+          },
+          c: Vertex = {
+            point: [b.point[0], b.point[1] - skirtDepth, b.point[2]],
+            tint: darken(b.tint),
+          },
+          d: Vertex = {
+            point: [a.point[0], a.point[1] - skirtDepth, a.point[2]],
+            tint: darken(a.tint),
+          };
+        pushQuad(positions, normals, colors, indices, a, b, c, d);
       };
-    pushQuad(positions, normals, colors, indices, a, b, c, d);
-  };
-  for (let i = 0; i < resolution; i++) {
-    skirt(grid[0][i], grid[0][i + 1]);
-    skirt(grid[resolution][i + 1], grid[resolution][i]);
-    skirt(grid[i + 1][0], grid[i][0]);
-    skirt(grid[i][resolution], grid[i + 1][resolution]);
+    for (let i = 0; i < resolution; i++) {
+      skirt(grid[0][i], grid[0][i + 1]);
+      skirt(grid[resolution][i + 1], grid[resolution][i]);
+      skirt(grid[i + 1][0], grid[i][0]);
+      skirt(grid[i][resolution], grid[i + 1][resolution]);
+    }
   }
 
-  const water: RGB = [70, 126, 132],
+  // Water remains presentation-only. Dry terrain is clipped above it, preventing
+  // the previous coplanar shoreline triangles while preserving one stable plane.
+  const water: RGB = [70, 126, 142],
     wa: Vertex = { point: [tile.minX, WATER_SURFACE_Y, tile.minZ], tint: water },
     wb: Vertex = { point: [tile.minX, WATER_SURFACE_Y, tile.minZ + tile.size], tint: water },
     wc: Vertex = {
@@ -216,7 +205,6 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
     positions[i] -= originX;
     positions[i + 2] -= originZ;
   }
-
   return {
     positions: new Float32Array(positions),
     normals: new Float32Array(normals),
