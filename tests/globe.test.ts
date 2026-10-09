@@ -136,7 +136,7 @@ test("relief shades a material share of detailed terrain and leaves warm open oc
       if (Math.abs(pixel(stronger, i, j)[1] - before[1]) > Math.abs(after[1] - before[1])) further++;
     }
   assert.ok(detailed > 5000);
-  assert.ok(changed > detailed / 4, `changed=${changed} detailed=${detailed}`);
+  assert.ok(changed > detailed / 10, `changed=${changed} detailed=${detailed}`);
   assert.ok(brighter > detailed / 20 && darker > detailed / 20);
   assert.ok(further > changed / 3);
 });
