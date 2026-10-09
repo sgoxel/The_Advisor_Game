@@ -79,7 +79,7 @@ import {
 const GLOBE_FROM = HANDOFF_GLOBE_HALF_HEIGHT;
 /** One shared final surface; preview replacement must not recolor a visible map. */
 const GLOBE_PASSES = [
-  { width: 1024, samples: 2 },
+  { width: 1024, samples: 1 },
 ];
 /** Terrain color interpretation is identical in the globe and flat representations. */
 const GLOBE_RELIEF = SURFACE_PRESENTATION.relief;
