@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import fixtures from './zoom-fixtures.json' with { type: 'json' };
+import { selectTiles } from '../src/world.ts';
 
 export function zoomTests(test, expect, webgl2) {
   test('same-focus mobile Country palette, every local LOD, handoff and seam/poles', async ({ page }) => {
@@ -43,6 +44,25 @@ export function zoomTests(test, expect, webgl2) {
       const heights=[70,230,900,4172.151340188181];
       for(let size=2;size<=4096;size*=2) heights.push(size*844/(2*190));
       const anchors=await page.evaluate(()=>window.advisorWorld.handoff);
+      // Capacity and latitude can adjust the selector's effective threshold.
+      // Locate actual focus-tile replacements as well as nominal mesh boundaries.
+      const view=await page.evaluate(()=>window.advisorWorld.state.view);
+      const sizeAt=h=>{
+        const tiles=selectTiles({...view,halfHeight:h},190,44);
+        const tile=tiles.find(t=>view.x>=t.minX&&view.x<t.minX+t.size&&view.z>=t.minZ&&view.z<t.minZ+t.size);
+        if(!tile) throw Error('Focus coverage absent in threshold fixture');
+        return tile.size;
+      };
+      let priorHeight=2, priorSize=sizeAt(2);
+      for(let h=2.06;h<anchors.localHalfHeight*1.03;h*=1.03){
+        const size=sizeAt(h);
+        if(size!==priorSize){
+          let low=priorHeight,high=h;
+          for(let i=0;i<16;i++){const middle=(low+high)/2;if(sizeAt(middle)===priorSize)low=middle;else high=middle;}
+          heights.push((low+high)/2);
+        }
+        priorHeight=h; priorSize=size;
+      }
       heights.push(anchors.localHalfHeight,anchors.globeHalfHeight);
       for(const [index,height] of [...new Set(heights)].sort((a,b)=>a-b).entries()) {
         const before=await capture(`${name}-${index}-before`,height*0.999);
