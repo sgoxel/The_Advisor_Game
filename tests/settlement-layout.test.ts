@@ -168,6 +168,26 @@ function checkLayout(place: Place, layout: SettlementLayout): void {
   for (const [code, count] of load) assert.ok(count <= byCode.get(code)!.capacity, `${place.id}: ${code} overfull`);
   const homeCapacity = buildings.filter((b) => b.role === "home").reduce((sum, b) => sum + b.capacity, 0);
   assert.ok(homeCapacity >= residents.length - lords, `${place.id}: homes too small for residents`);
+  // Population is planned with the homes: every required worker (one per service building, one
+  // guard per guard post) plus at least one non-worker household, never more residents than beds.
+  const serviceCount = buildings.filter((b) =>
+    ["inn", "market", "blacksmith", "butcher", "farmstead", "keep"].includes(b.role),
+  ).length;
+  const postCount = gates.reduce((sum, g) => sum + g.guardPosts.length, 0);
+  const requiredWorkers = serviceCount + postCount;
+  assert.equal(residents.filter((r) => r.work).length, requiredWorkers, `${place.id}: worker count`);
+  assert.ok(
+    residents.length >= requiredWorkers + 1,
+    `${place.id}: ${residents.length} residents < ${requiredWorkers} workers + 1`,
+  );
+  assert.ok(
+    homeCapacity >= residents.length - lords,
+    `${place.id}: home capacity ${homeCapacity} < ${residents.length} residents`,
+  );
+  assert.ok(
+    residents.length <= (city ? 520 : 40),
+    `${place.id}: ${residents.length} residents exceed the seeded range`,
+  );
   for (const b of buildings) {
     if (!["inn", "market", "blacksmith", "butcher", "farmstead", "guard-office", "keep"].includes(b.role)) continue;
     assert.ok(

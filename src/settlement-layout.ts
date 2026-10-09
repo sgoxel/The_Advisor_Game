@@ -855,7 +855,13 @@ function gatesFromSpine(
 }
 
 /** Posts sit just inside the wall beside the opening; they must clear buildings and streets. */
-function placeGuardPosts(w: Work, gate: ReturnType<typeof gatesFromSpine>[number], count: number, border: Point[]): GuardPost[] {
+function placeGuardPosts(
+  w: Work,
+  gate: ReturnType<typeof gatesFromSpine>[number],
+  count: number,
+  border: Point[],
+  final: boolean,
+): GuardPost[] {
   const tangent = { x: -gate.dir.z, z: gate.dir.x },
     half = gate.openingWidth / 2 + 2,
     posts: GuardPost[] = [];
@@ -873,6 +879,23 @@ function placeGuardPosts(w: Work, gate: ReturnType<typeof gatesFromSpine>[number
     const near = w.segGrid.query({ minX: p.x - 8, minZ: p.z - 8, maxX: p.x + 8, maxZ: p.z + 8 });
     if (near.some((seg) => distPointSeg(p, seg.a, seg.b) < seg.width / 2 + 1)) continue;
     posts.push({ code: `${gate.code}/post/${posts.length}`, x: p.x, z: p.z, gate: gate.code });
+  }
+  if (posts.length < 1 && final) {
+    // Envelope exhausted, last resort: deeper and wider candidates with the building clearance relaxed to 0.5.
+    for (const depth of [2, 4, 6, 8, 10, 12, 15])
+      for (const lateral of [half, half + 2, half + 4, half + 7])
+        for (const sign of [1, -1]) {
+          if (posts.length >= 1) break;
+          const p = {
+            x: gate.x + gate.inward.x * depth + tangent.x * sign * lateral,
+            z: gate.z + gate.inward.z * depth + tangent.z * sign * lateral,
+          };
+          if (!pointInPolygon(p, border)) continue;
+          if (w.rectGrid.query({ minX: p.x - 1, minZ: p.z - 1, maxX: p.x + 1, maxZ: p.z + 1 }).some((q) => rectPointDistance(q.rect, p) < 0.5)) continue;
+          const near = w.segGrid.query({ minX: p.x - 8, minZ: p.z - 8, maxX: p.x + 8, maxZ: p.z + 8 });
+          if (near.some((seg) => distPointSeg(p, seg.a, seg.b) < seg.width / 2 + 0.5)) continue;
+          posts.push({ code: `${gate.code}/post/${posts.length}`, x: p.x, z: p.z, gate: gate.code });
+        }
   }
   if (posts.length < 1) throw new Shortfall(`guard post at ${gate.code}`);
   return posts;
@@ -1011,7 +1034,7 @@ function buildLayout(place: Place, env: number, city: boolean, final: boolean): 
   // service plus one guard per post) plus one non-worker household is the minimum we must house.
   const gateCount = w.gateEnds.length,
     postBound = Array.from({ length: gateCount }, (_, gi) => 1 + Math.floor(rand("guard/count", gi) * 2)),
-    serviceWorkers = markets.length + inns.length + smiths.length + butchers.length + offices.length * 0 + 1,
+    serviceWorkers = markets.length + inns.length + smiths.length + butchers.length + 1 /* farmer */,
     minHomeCapacity = serviceWorkers + postBound.reduce((a, b) => a + b, 0) + 1;
 
   const homes: Building[] = [];
@@ -1058,9 +1081,9 @@ function buildLayout(place: Place, env: number, city: boolean, final: boolean): 
   // Border, gates and guard posts.
   const border = buildBorder(w, gateEast, gateWest),
     gateData = gatesFromSpine(w, border);
-  const postCounts = gateData.map((_, gi) => 1 + Math.floor(rand("guard/count", gi) * 2));
+  const postCounts = postBound.slice(0, gateData.length);
   gateData.forEach((gate, gi) => {
-    gate.guardPosts = placeGuardPosts(w, gate, postCounts[gi], border);
+    gate.guardPosts = placeGuardPosts(w, gate, postCounts[gi], border, final);
   });
   const totalPosts = gateData.reduce((sum, g) => sum + g.guardPosts.length, 0);
   offices.forEach((office, i) => {
@@ -1083,7 +1106,12 @@ function buildLayout(place: Place, env: number, city: boolean, final: boolean): 
     for (let p = 0; p < posts.length; p++) workers.push({ profession: "guard", work: office });
   });
   if (keep) workers.push({ profession: "lord", work: keep, home: keep });
-  residentTotal = Math.max(residentTotal, workers.length);
+  // Population is sized to the homes that exist: never more residents than beds (the lord sleeps
+  // in the keep), never fewer than every worker plus one non-worker household.
+  const lords = keep ? 1 : 0;
+  residentTotal = Math.min(residentTotal, homeCapacity + lords);
+  residentTotal = Math.max(residentTotal, workers.length + 1);
+  if (residentTotal - lords > homeCapacity) throw new Shortfall(`homes for ${residentTotal} residents`);
   while (workers.length < residentTotal) workers.push({ profession: "resident" });
 
   const remaining = new Map(homes.map((h) => [h.code, h.capacity] as const));
@@ -1133,7 +1161,7 @@ export function computeSettlementLayout(place: Place): SettlementLayout {
   let env = city ? CITY.start : VILLAGE.start;
   for (;;) {
     try {
-      return buildLayout(place, env, city, cap);
+      return buildLayout(place, env, city, env >= cap);
     } catch (error) {
       if (!(error instanceof Shortfall)) throw error;
       if (env >= cap)
