@@ -10,6 +10,7 @@ import {
 import { streamingBudgetForViewport } from "./streaming.ts";
 import { nearestPlace, places, roadAt } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
+import { biomeSampleAtSource } from "./biome.ts";
 export { WORLD_SEED } from "./config.ts";
 export const GENERATOR_VERSION = WORLD_FOUNDATION_VERSION;
 export const WORLD_SIZE = 262144;
@@ -250,23 +251,27 @@ export function heightAt(x: number, z: number): number {
     smooth(Math.min(1, Math.max(0, (bank - 12) / 19))),
   );
 }
+
+function terrainSlopeAt(x: number, z: number): number {
+  return Math.max(
+    Math.abs(heightAt(x + 1, z) - heightAt(x - 1, z)),
+    Math.abs(heightAt(x, z + 1) - heightAt(x, z - 1)),
+  );
+}
+
+/** Local semantic biome refines the same planet climate/material authority used by Realm. */
 export function biomeAt(x: number, z: number): string {
-  const macro = macroSampleAt(sourceToLonLat(x, z));
-  if (macro.domain === "Ocean") return "Ocean";
-  if (macro.domain === "Lake") return "Lake";
-  const h = heightAt(x, z),
-    hierarchy = cellSeed(Math.floor(x / 2), Math.floor(z / 2));
-  if (macro.domain === "Island") {
-    if (h < 0.1) return "Ocean";
-    const coast = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS;
-    if (coast < hierarchy.parent.parent.beachWidth + 5 + hierarchy.surface * 0.15)
-      return "Sandy beach";
-    if (macro.volcanic && macro.mountainIntensity > 0.16) return "Volcanic highlands";
-    if (macro.mountainIntensity > 0.12 || h > 70) return "Highlands";
-    return "Island meadow";
-  }
-  if (h < 0.1) return "River";
-  if (Math.abs(wrapSourceX(x - riverX(z))) < 32) return "Riverbank";
+  const macro = macroSampleAt(sourceToLonLat(x, z)),
+    h = heightAt(x, z),
+    climate = biomeSampleAtSource(x, z, {
+      elevationM: h,
+      slopeM: h > 0.1 ? terrainSlopeAt(x, z) : 0,
+    });
+  if (macro.domain === "Ocean" || macro.domain === "Lake") return climate.material.label;
+  if (h < 0.1)
+    return climate.zone === "Frozen" ? "Frozen river" : "River";
+  if (Math.abs(wrapSourceX(x - riverX(z))) < 32)
+    return climate.zone === "Frozen" ? "Frozen riverbank" : "Riverbank";
   const s = nearestPlace(x, z);
   if (
     s &&
@@ -274,9 +279,7 @@ export function biomeAt(x: number, z: number): string {
   )
     return "Settlement";
   if (roadAt(x, z)) return "Road";
-  if (macro.volcanic && macro.mountainIntensity > 0.16) return "Volcanic highlands";
-  if (macro.mountainIntensity > 0.1 || h > 70) return "Highlands";
-  return field(x, z, 90, 4) > 0.45 ? "Woodland" : "Meadow";
+  return climate.material.label;
 }
 
 /**
@@ -353,11 +356,8 @@ export function cellAt(x: number, z: number): Cell {
   const road = roadAt(px, pz),
     bridge = road && Math.abs(pz - road.z) <= 5 && heightAt(px, pz) < 2.9;
   const elevation = bridge ? 3 : heightAt(px, pz),
-    biome = bridge ? "Bridge" : biomeAt(px, pz);
-  const slope = Math.max(
-    Math.abs(heightAt(px + 1, pz) - heightAt(px - 1, pz)),
-    Math.abs(heightAt(px, pz + 1) - heightAt(px, pz - 1)),
-  );
+    biome = bridge ? "Bridge" : biomeAt(px, pz),
+    slope = terrainSlopeAt(px, pz);
   return {
     code: cellSeed(cx, cz).code,
     x: cx,
@@ -459,15 +459,17 @@ export function featuresFor(tile: Tile): Feature[] {
       ) {
         const v = coordinateValue(gx, gz, 30);
         const x = gx * 10 + (v % 7) - 3,
-          z = gz * 10 + ((v >>> 5) % 7) - 3;
-        const biome = biomeAt(x, z);
-        if (biome === "Woodland" && v % 4 !== 0)
-          add("tree", x, z, v, `tree/${gx}/${gz}`);
+          z = gz * 10 + ((v >>> 5) % 7) - 3,
+          h = heightAt(x, z),
+          natural = biomeSampleAtSource(x, z, { elevationM: h, slopeM: terrainSlopeAt(x, z) });
+        if (natural.forestFamily && v % 100 < Math.round(natural.material.density * 100))
+          add("tree", x, z, v, `tree/${natural.forestFamily}/${gx}/${gz}`);
         else if (
-          !["Settlement", "Ocean", "Lake", "River"].includes(biome) &&
-          v % 31 === 0
+          !natural.material.water &&
+          natural.biome !== "polar-land-ice" &&
+          v % (natural.material.rock ? 9 : 31) === 0
         )
-          add("rock", x, z, v, `rock/${gx}/${gz}`);
+          add("rock", x, z, v, `rock/${natural.biome}/${gx}/${gz}`);
       }
     }
   }
@@ -572,7 +574,7 @@ export function selectTiles(
       ) -
       Math.hypot(
         wrappedTileDistanceX(b.minX + b.size / 2, streamX),
-        b.minZ + b.size / 2 - view.z,
+        a.minZ + a.size / 2 - view.z,
       ),
   );
 }
