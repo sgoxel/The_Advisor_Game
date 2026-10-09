@@ -73,6 +73,11 @@ SCENARIOS: dict[str, str] = {
         "eval:window.advisorWorld.setHalfHeight(window.advisorWorld.handoff.localHalfHeight*0.92);settle;shot:flat-return"
     ),
     "cell": "tap;visible:#cell-panel",
+    # WP-S002-004-009 seeded settlement layouts: two more villages and a city at Village/Province/Street level.
+    "village-oakmere": "eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorSettlements.position('0/0/0/1'));settle;shot:village",
+    "village-briarford": "eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorSettlements.position('0/0/1/0'));settle;shot:village",
+    "city-province": "eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorSettlements.position('0/0/0'));zoom-out:3;settle;shot:province",
+    "city-street": "eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorSettlements.position('0/0/0'));zoom-in:2;settle;shot:street",
     "travel-city": "click:#open-travel;select:#continent-select=1;click:#visit-city",
     # WP-S002-004-008 walking routes. Seeded 6 km road pair (the travel-panel click flow is covered by tests/browser/routes.spec.js).
     "route-road": "eval:window.advisorRoutes.select('2/3/1/1','2/3/1/0');settle;shot:road",

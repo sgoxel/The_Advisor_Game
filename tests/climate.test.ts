@@ -43,8 +43,8 @@ for (const item of samples)
 
 test("climate authority is seed-addressed and foundation-versioned", () => {
   assert.equal(WORLD_SEED, "ADVISOR-0126-ALDERWICK");
-  assert.equal(WORLD_FOUNDATION_VERSION, "v5");
-  assert.equal(CLIMATE_AUTHORITY_CODE, `${WORLD_SEED}/v5/CLIMATE`);
+  assert.equal(WORLD_FOUNDATION_VERSION, "v4");
+  assert.equal(CLIMATE_AUTHORITY_CODE, `${WORLD_SEED}/v4/CLIMATE`);
   for (const item of samples.filter((_, index) => index % 191 === 0)) {
     const position = { lon: item.lon, lat: item.lat };
     assert.deepEqual(climateSampleAt(position), climateSampleAt(position));

@@ -1491,6 +1491,8 @@ async function start() {
         if (!place) throw new RangeError(`Unknown settlement ${id}`);
         return settlementLayout(place);
       },
+      /** Canonical lon/lat of a settlement, for focusing the camera on it. */
+      position: (id: string) => places.find((candidate) => candidate.id === id)?.canonicalPosition,
     },
   });
   // Read-only diagnostic interface for deterministic generation and browser verification.
