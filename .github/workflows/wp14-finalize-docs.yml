@@ -1,0 +1,55 @@
+name: WP14 finalize docs
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/wp14-finalize-docs.yml
+permissions:
+  contents: write
+jobs:
+  patch-docs:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Reconcile README and WP14 logs
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          readme = Path('docs/README.md')
+          text = readme.read_text()
+          old = "The active development build is in **Stage S002 — Round, Natural World Foundation**. It renders the canonical fantasy planet as a Realm globe and uses the same spherical authority for closer flat/local views through the focus-preserving globe↔local handoff. The current build already includes canonical planet-space navigation, camera-relative local terrain patches and SEED-generated macro geography: exactly three irregular continents, multiple islands, seas/lakes and distinct major mountain/volcanic systems whose identities refine across LOD. Later S002 packages still own finer biome/material, hydrology/traversal, vegetation, political partition, settlement/building and living-resident completion; those requirements below must not be read as already complete unless their WP is marked completed in ROADMAP."
+          new = "The active development build is in **Stage S002 — Round, Natural World Foundation**. It renders the canonical fantasy planet as a Realm globe and uses the same spherical authority for closer flat/local views through the focus-preserving globe↔local handoff. The current build already includes canonical planet-space navigation, camera-relative local terrain patches, SEED-generated macro geography—exactly three irregular continents, multiple islands, seas/lakes and distinct major mountain/volcanic systems—and one shared canonical climate/biome/material authority with frozen north and south polar regions, grassland, desert/dryland, bare ground, beaches, cliffs, three forest families, snowy high terrain and stable cross-LOD semantic material identity. Later S002 packages still own hydrology/traversal, detailed vegetation scatter, political partition, settlement/building and living-resident completion; those requirements below must not be read as already complete unless their WP is marked completed in ROADMAP."
+          if old not in text:
+              if new not in text:
+                  raise SystemExit('README baseline sentence not found; refusing broad rewrite')
+          else:
+              readme.write_text(text.replace(old, new, 1))
+
+          changelog = Path('docs/changelog.txt')
+          ctext = changelog.read_text()
+          cmarker = 'WP-S002-004-004, AGENT #1, phase 1 (MIXED)'
+          if cmarker not in ctext:
+              line = "2026-10-09 14:20 Europe/Istanbul — WP-S002-004-004, AGENT #1, phase 1 (MIXED): Implemented one canonical SEED-derived climate/biome/material authority shared by Realm and local rendering, including irregular non-mirrored frozen poles, grassland, desert/dryland, bare ground, narrow beaches, cliffs, three structurally distinct forest families and snowy high terrain. Deterministic climate/material tests, WebGPU/WebGL2 parity and fresh desktop/phone portrait/phone landscape evidence passed; actually inspected final visual evidence scored 8/10. README current-build baseline reconciled; deployment and completion bookkeeping remain pending.\n"
+              changelog.write_text(ctext + ('' if ctext.endswith('\n') or not ctext else '\n') + line)
+
+          suggest = Path('docs/suggest_log.txt')
+          stext = suggest.read_text() if suggest.exists() else ''
+          smarker = 'WP-S002-004-004 — phase 1 visual polish'
+          if smarker not in stext:
+              line = "2026-10-09 14:20 Europe/Istanbul — WP-S002-004-004 — phase 1 visual polish: Future refinement may reduce remaining close-zoom low-poly faceting on coast/snow/ecotone silhouettes and shift local frozen/tundra presentation slightly colder while preserving the canonical semantic material IDs, cross-LOD color authority and current mobile geometry budget. Do not implement outside its owning future WP.\n"
+              suggest.write_text(stext + ('' if stext.endswith('\n') or not stext else '\n') + line)
+          PY
+          git config user.name "AGENT #1"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/README.md docs/changelog.txt docs/suggest_log.txt
+          if git diff --cached --quiet; then
+            echo "Docs already reconciled"
+            exit 0
+          fi
+          git commit -m "docs: reconcile WP-S002-004-004 biome baseline"
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
