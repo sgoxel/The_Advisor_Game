@@ -15,4 +15,5 @@ Moved here from docs/ROADMAP.md to keep agent start-up reading small. Do not rea
 - WP-S002-004-001 — Reference analysis/contracts for natural-world authority, readable 3D settlement/living-world UX and mobile performance — COMPLETED and REVIEWED at 2026-10-08
 - WP-S002-004-002 — Canonical planet-scale/travel migration UX: physical metres, route-derived time, truthful ruler/copy and legacy cleanup — COMPLETED and REVIEWED at 2026-10-09
 - WP-S002-004-003 — Realm macro-geography visual/performance foundation: seeded continents/islands, distinct mountain/volcanic systems and cross-LOD silhouettes — COMPLETED and REVIEWED at 2026-10-09
+- WP-S002-004-004 — Canonical biome/material readability: diverse climates/terrain, non-color-only semantic cues, cross-LOD identity and mobile/backend parity — COMPLETED and REVIEWED at 2026-10-10
 - WP-S002-004-008 — Shortest-legal-route authority/UX: all-pair ≥60-minute proof on final terrain, bounded routing and truthful route preview — COMPLETED (AGENT #2, 2026-10-09): straight-line ≥60-minute proof, on-demand bounded route planner and route overlay; full CI run on 08bf625 passed (unit, WebGL2/WebGPU route captures, deploy)
