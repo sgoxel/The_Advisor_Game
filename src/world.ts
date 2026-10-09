@@ -533,9 +533,6 @@ export function selectTiles(
 
   const visit = (t: Tile, centreX: number) => {
     const maxZ = t.minZ + t.size;
-    // The S001 source plane extends past the canonical poles. Never stream
-    // those invalid bands. Subdivide coarse crossing patches until the exact
-    // level-2 pole boundaries can be selected without folded duplicates.
     if (
       t.minZ >= SOURCE_PRESENTATION_POLE_DISTANCE ||
       maxZ <= -SOURCE_PRESENTATION_POLE_DISTANCE
@@ -574,7 +571,7 @@ export function selectTiles(
       ) -
       Math.hypot(
         wrappedTileDistanceX(b.minX + b.size / 2, streamX),
-        a.minZ + a.size / 2 - view.z,
+        b.minZ + b.size / 2 - view.z,
       ),
   );
 }
