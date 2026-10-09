@@ -13,7 +13,7 @@ concurrency:
   group: github-pages-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  build:
+  package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,41 +24,6 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
-      - run: xvfb-run -a npm run test:webgpu
-      - run: xvfb-run -a npx playwright test --config playwright.fallback.config.js
-      - run: xvfb-run -a npx playwright test --config playwright.navigation.config.js
-      - name: Capture handoff, canonical inspector, ENU rebase, travel, route and macro geography evidence
-        run: |
-          python -m pip install playwright==1.63.0
-          npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
-          PREVIEW_PID=$!
-          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
-            sleep 1
-          done
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/handoff-capture-webgl2 --scenario handoff --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 180
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/handoff-capture-webgpu --scenario handoff --profile desktop,phone,phone-landscape --renderer webgpu --timeout 180
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgl2 --scenario cell --profile desktop,phone --renderer webgl2 --timeout 180
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgpu --scenario cell --profile desktop,phone --renderer webgpu --timeout 180
-          ENU_STEPS='eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.state.navigation.focus.lon+0.001,window.advisorWorld.state.navigation.focus.lat);eval:window.advisorWorld.setHalfHeight(70);settle;tap;visible:#cell-panel;shot:before-rebase;eval:window.advisorWorld.navigation.forceRebase();settle;shot:after-rebase;click:#close-cell;eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.geography.villages.reduce((a,b)=>Math.hypot(b.x,b.z)>Math.hypot(a.x,a.z)?b:a).canonicalPosition.lon,window.advisorWorld.geography.villages.reduce((a,b)=>Math.hypot(b.x,b.z)>Math.hypot(a.x,a.z)?b:a).canonicalPosition.lat);settle;tap;visible:#cell-panel;shot:farthest-settlement'
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/enu-rebase-webgl2 --name enu-rebase --steps "$ENU_STEPS" --profile desktop,phone --renderer webgl2 --timeout 360
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/enu-rebase-webgpu --name enu-rebase --steps "$ENU_STEPS" --profile desktop,phone --renderer webgpu --timeout 360
-          TRAVEL_STEPS='click:#open-travel;visible:#travel-panel;visible:#travel-summary;shot:travel'
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp12-travel-webgl2 --name travel --profile desktop,phone --renderer webgl2 --timeout 180 --steps "$TRAVEL_STEPS"
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp12-travel-webgpu --name travel --profile desktop,phone --renderer webgpu --timeout 180 --steps "$TRAVEL_STEPS"
-          ROUTE_STEPS='click:#open-travel;visible:#route-list .route-row[data-state=ready];click:#route-list .route-row;settle;shot:road;eval:window.advisorRoutes.select("1/8/0/2","1/8/1/2");settle;shot:mountain;eval:window.advisorRoutes.select("1/0/0/0","1/7/2/2");settle;shot:water'
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp18-routes-webgl2 --name routes --profile desktop,phone --renderer webgl2 --timeout 300 --steps "$ROUTE_STEPS"
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp18-routes-webgpu --name routes --profile desktop,phone --renderer webgpu --timeout 300 --steps "$ROUTE_STEPS"
-          MACRO_STEPS='click:#overview;settle;shot:realm-home;eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.continents[1].canonicalPosition);settle;shot:realm-westreach;eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.continents[2].canonicalPosition);settle;shot:realm-dawnlands;eval:(m=>window.advisorWorld.navigation.setFocus(m.center.lon,m.center.lat))(window.advisorWorld.geography.mountainSystems.find(m=>m.kind==="low-highlands"));eval:window.advisorWorld.setHalfHeight(3000);settle;shot:low-highlands-local;eval:(m=>window.advisorWorld.navigation.setFocus(m.center.lon,m.center.lat))(window.advisorWorld.geography.mountainSystems.find(m=>m.kind==="long-chain"));settle;shot:long-chain-local;eval:(m=>window.advisorWorld.navigation.setFocus(m.center.lon,m.center.lat))(window.advisorWorld.geography.mountainSystems.find(m=>m.kind==="dominant-spine"));settle;shot:dominant-spine-local;eval:(m=>window.advisorWorld.navigation.setFocus(m.center.lon,m.center.lat))(window.advisorWorld.geography.mountainSystems.find(m=>m.kind==="hooked-range"));settle;shot:hooked-range-local;eval:(m=>window.advisorWorld.navigation.setFocus(m.center.lon,m.center.lat))(window.advisorWorld.geography.mountainSystems.find(m=>m.kind==="volcano"));eval:window.advisorWorld.setHalfHeight(1400);settle;shot:volcano-local'
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp13-macro-webgl2 --name macro --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 360 --steps "$MACRO_STEPS"
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp13-macro-webgpu --name macro --profile desktop,phone,phone-landscape --renderer webgpu --timeout 360 --steps "$MACRO_STEPS"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: webgpu-evidence
-          path: test-results/
       - uses: actions/configure-pages@v5
         if: github.event_name != 'pull_request'
         with:
@@ -67,9 +32,94 @@ jobs:
         if: github.event_name != 'pull_request'
         with:
           path: dist
+
+  browser:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [webgpu, fallback, navigation]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Run browser validation
+        run: |
+          case "${{ matrix.suite }}" in
+            webgpu) xvfb-run -a npm run test:webgpu ;;
+            fallback) xvfb-run -a npx playwright test --config playwright.fallback.config.js ;;
+            navigation) xvfb-run -a npx playwright test --config playwright.navigation.config.js ;;
+          esac
+
+  evidence:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [handoff, canonical-inspector, enu-rebase, travel, routes, macro]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: python -m pip install playwright==1.63.0
+      - name: Capture ${{ matrix.suite }} evidence
+        run: |
+          npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          case "${{ matrix.suite }}" in
+            handoff)
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/handoff-capture-webgl2 --scenario handoff --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 180
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/handoff-capture-webgpu --scenario handoff --profile desktop,phone,phone-landscape --renderer webgpu --timeout 180
+              ;;
+            canonical-inspector)
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgl2 --scenario cell --profile desktop,phone --renderer webgl2 --timeout 180
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgpu --scenario cell --profile desktop,phone --renderer webgpu --timeout 180
+              ;;
+            enu-rebase)
+              ENU_STEPS='eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.state.navigation.focus.lon+0.001,window.advisorWorld.state.navigation.focus.lat);eval:window.advisorWorld.setHalfHeight(70);settle;tap;visible:#cell-panel;shot:before-rebase;eval:window.advisorWorld.navigation.forceRebase();settle;shot:after-rebase;click:#close-cell;eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.geography.villages.reduce((a,b)=>Math.hypot(b.x,b.z)>Math.hypot(a.x,a.z)?b:a).canonicalPosition.lon,window.advisorWorld.geography.villages.reduce((a,b)=>Math.hypot(b.x,b.z)>Math.hypot(a.x,a.z)?b:a).canonicalPosition.lat);settle;tap;visible:#cell-panel;shot:farthest-settlement'
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/enu-rebase-webgl2 --name enu-rebase --steps "$ENU_STEPS" --profile desktop,phone --renderer webgl2 --timeout 360
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/enu-rebase-webgpu --name enu-rebase --steps "$ENU_STEPS" --profile desktop,phone --renderer webgpu --timeout 360
+              ;;
+            travel)
+              TRAVEL_STEPS='click:#open-travel;visible:#travel-panel;visible:#travel-summary;shot:travel'
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp12-travel-webgl2 --name travel --profile desktop,phone --renderer webgl2 --timeout 180 --steps "$TRAVEL_STEPS"
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp12-travel-webgpu --name travel --profile desktop,phone --renderer webgpu --timeout 180 --steps "$TRAVEL_STEPS"
+              ;;
+            routes)
+              ROUTE_STEPS='click:#open-travel;visible:#route-list .route-row[data-state=ready];click:#route-list .route-row;settle;shot:road;eval:window.advisorRoutes.select("1/8/0/2","1/8/1/2");settle;shot:mountain;eval:window.advisorRoutes.select("1/0/0/0","1/7/2/2");settle;shot:water'
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp18-routes-webgl2 --name routes --profile desktop,phone --renderer webgl2 --timeout 300 --steps "$ROUTE_STEPS"
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp18-routes-webgpu --name routes --profile desktop,phone --renderer webgpu --timeout 300 --steps "$ROUTE_STEPS"
+              ;;
+            macro)
+              MACRO_STEPS='click:#overview;settle;shot:realm-home;eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.continents[1].canonicalPosition);settle;shot:realm-westreach;eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.continents[2].canonicalPosition);settle;shot:realm-dawnlands;eval:(m=>window.advisorWorld.navigation.setFocus(m.center.lon,m.center.lat))(window.advisorWorld.geography.mountainSystems.find(m=>m.kind==="low-highlands"));eval:window.advisorWorld.setHalfHeight(3000);settle;shot:low-highlands-local;eval:(m=>window.advisorWorld.navigation.setFocus(m.center.lon,m.center.lat))(window.advisorWorld.geography.mountainSystems.find(m=>m.kind==="long-chain"));settle;shot:long-chain-local;eval:(m=>window.advisorWorld.navigation.setFocus(m.center.lon,m.center.lat))(window.advisorWorld.geography.mountainSystems.find(m=>m.kind==="dominant-spine"));settle;shot:dominant-spine-local;eval:(m=>window.advisorWorld.navigation.setFocus(m.center.lon,m.center.lat))(window.advisorWorld.geography.mountainSystems.find(m=>m.kind==="hooked-range"));settle;shot:hooked-range-local;eval:(m=>window.advisorWorld.navigation.setFocus(m.center.lon,m.center.lat))(window.advisorWorld.geography.mountainSystems.find(m=>m.kind==="volcano"));eval:window.advisorWorld.setHalfHeight(1400);settle;shot:volcano-local'
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp13-macro-webgl2 --name macro --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 360 --steps "$MACRO_STEPS"
+              python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp13-macro-webgpu --name macro --profile desktop,phone,phone-landscape --renderer webgpu --timeout 360 --steps "$MACRO_STEPS"
+              ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ matrix.suite }}-evidence
+          path: test-results/
+
   deploy:
     if: github.event_name != 'pull_request'
-    needs: build
+    needs: [package, browser, evidence]
     runs-on: ubuntu-latest
     environment:
       name: github-pages
