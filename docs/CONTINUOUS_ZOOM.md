@@ -77,5 +77,25 @@ replacement (tens of Lab units), while permitting gradual detail refinement.
 These are product regression targets, not physical-device performance claims.
 
 Fresh production-UI captures use the `zoom-country` screenshot-tool scenario.
+Installed Windows Chromium channels can be selected with `--browser-channel
+msedge` (or `chrome`) to use their native adapter. Explicit WebGL2 requests hide
+the WebGPU API before boot; capture metadata records the actual backend/channel.
 The validation workflow retains screenshots, sampled inputs and metric results
 for actual visual inspection. Automated measurements do not assign visual scores.
+
+## Accepted evidence — 2026-10-10, Agent #2
+
+Native Edge validated the unchanged final game source at 7e99baf: 91 unit tests,
+build, 12 WebGL2 browser cases and all 10 unique WebGPU cases. The first WebGPU
+suite had a test timing race in landscape reversal; sampling the baseline and
+dispatching the wheel event atomically fixed the test, and all three affected
+viewport cases passed on rerun. No game behavior changed for that test fix.
+Both zoom regressions produced 131 pairs, all 262 passed, maximum stable-ground
+mean DeltaE76 0.305. All 131 canonical focus sample fingerprints matched between
+backends. The comparator rejects both the synthetic broad palette/block fixtures
+and the retained earlier snow-band failure. Fresh production-UI and representative
+biome/LOD, pole/wrap and rebase captures on both backends were actually inspected:
+VISUAL 8/10. Coarse texture/coast approximation is visible; there is no major
+palette replacement, patch grid or inverted/duplicated surface in accepted views.
+Linux jobs remain supplemental cross-platform checks; no physical-device speed
+claim is made. Evidence is retained in the accepted temporary artifact folder.

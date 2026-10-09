@@ -147,10 +147,15 @@ class CaptureError(Exception):
     """A step, wait or page check failed."""
 
 
-def launch(playwright: Playwright, renderer: str, chromium: str | None) -> Browser:
+def launch(playwright: Playwright, renderer: str, chromium: str | None, channel: str | None = None) -> Browser:
     options: dict[str, Any] = {"headless": True, "args": WEBGL2_ARGS}
     if renderer == "webgpu":
         options.update(args=WEBGPU_ARGS, ignore_default_args=["--disable-dev-shm-usage"])
+    if channel:
+        # Installed Chromium channels can use their native adapter on Windows;
+        # Linux SwiftShader/Vulkan flags are reserved for the bundled CI browser.
+        options.update(channel=channel, args=["--ignore-gpu-blocklist"] +
+                       (["--enable-unsafe-webgpu"] if renderer == "webgpu" else []))
     try:
         return playwright.chromium.launch(executable_path=chromium, **options)
     except PlaywrightError as error:
@@ -267,6 +272,7 @@ class Session:
             "url": self.page.url,
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "requestedRenderer": self.args.renderer, "webgpuFellBack": fell_back, **state,
+            "browserChannel": self.args.browser_channel,
             "consoleErrors": list(self.console_errors), "pageErrors": list(self.page_errors),
         }
         if record["presentation"] is None:
@@ -320,6 +326,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--allow-errors", action="store_true", help="report page errors as warnings")
     parser.add_argument("--chromium", default=os.environ.get("ADVISOR_CHROMIUM"),
                         help="Chromium executable (default: env ADVISOR_CHROMIUM)")
+    parser.add_argument("--browser-channel", choices=("chrome", "msedge"), help="installed browser channel with its native adapter")
     args = parser.parse_args(argv)
     args.profiles = [name.strip() for name in args.profile.split(",") if name.strip()]
     names = [name.strip() for name in args.scenario.split(",") if name.strip()]
@@ -343,13 +350,15 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(1))  # close the browser when terminated
     write_records(args.out, records)
     with sync_playwright() as playwright:
-        browser = launch(playwright, args.renderer, args.chromium)
+        browser = launch(playwright, args.renderer, args.chromium, args.browser_channel)
         try:
             for profile in args.profiles:
                 viewport = (args.width or PROFILES[profile][0], args.height or PROFILES[profile][1])
                 context = browser.new_context(
                     viewport={"width": viewport[0], "height": viewport[1]}, device_scale_factor=1)
                 context.set_default_timeout(args.timeout * 1000)
+                if args.renderer == "webgl2":
+                    context.add_init_script("Object.defineProperty(navigator, 'gpu', {value: undefined, configurable: true})")
                 for name, steps in args.jobs:
                     session = Session(context.new_page(), args, name, profile, viewport, records)
                     try:
