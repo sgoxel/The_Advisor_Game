@@ -59,6 +59,14 @@ SCENARIOS: dict[str, str] = {
     # 97 m half-height x 1.4^3 = 266 m: the 230-900 m "Province" band in src/main.ts.
     "province": "zoom-out:3",
     "realm": "click:#overview",
+    "zoom-country": (
+        "eval:window.advisorWorld.navigation.setFocus(-69.7953*Math.PI/180,-10.3192*Math.PI/180);"
+        "eval:window.advisorWorld.setHalfHeight(4168);settle;shot:before;"
+        "eval:window.advisorWorld.setHalfHeight(4172.15134);settle;shot:middle;"
+        "eval:window.advisorWorld.setHalfHeight(4176);settle;shot:after;"
+        "eval:window.advisorWorld.setHalfHeight(4700);settle;shot:handoff;"
+        "eval:window.advisorWorld.setHalfHeight(11000);settle;shot:globe"
+    ),
     "navigation": "select:#map-scale=10;settle;shot:local;select:#map-scale=10000;settle;shot:realm",
     "realm-tiles": "click:#overview;check:#grid",
     "handoff": (

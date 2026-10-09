@@ -1,0 +1,50 @@
+name: Validate continuous surface zoom
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/*zoom*'
+      - 'tests/*surface*'
+      - 'tests/browser/zoom.spec.js'
+      - 'tests/webgpu/zoom.spec.js'
+      - 'tools/verify-zoom-images.py'
+      - '.github/workflows/zoom-validation.yml'
+permissions:
+  contents: read
+jobs:
+  zoom:
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [webgpu, webgl2]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: python -m pip install pillow numpy playwright==1.63.0
+      - name: WebGPU browser suite
+        if: matrix.backend == 'webgpu'
+        run: xvfb-run -a npx playwright test --config playwright.webgpu.config.js
+      - name: WebGL2 browser suite
+        if: matrix.backend == 'webgl2'
+        run: xvfb-run -a npx playwright test --config playwright.fallback.config.js
+      - name: Perceptual palette and block boundary gate
+        run: python tools/verify-zoom-images.py test-results/zoom-${{ matrix.backend }}/pairs.json
+      - name: Named owner Country regression captures
+        run: |
+          npm run preview -- --port 4174 > /tmp/zoom-preview.log 2>&1 &
+          xvfb-run -a python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/zoom-country-${{ matrix.backend }} --scenario zoom-country --profile desktop,phone --renderer ${{ matrix.backend }} --timeout 240
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zoom-evidence-${{ matrix.backend }}
+          path: test-results/

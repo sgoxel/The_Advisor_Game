@@ -77,6 +77,7 @@ export type GeometryBufferSet = Record<
     normals: ArrayBufferView;
     colors: ArrayBufferView;
     indices: ArrayBufferView;
+    uvs?: ArrayBufferView;
   }
 >;
 
@@ -88,6 +89,7 @@ export function estimateGeometryBytes(data: object): number {
     bytes += geometry.normals.byteLength;
     bytes += geometry.colors.byteLength;
     bytes += geometry.indices.byteLength;
+    bytes += geometry.uvs?.byteLength ?? 0;
   }
   return bytes;
 }

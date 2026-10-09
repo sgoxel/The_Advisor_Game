@@ -184,6 +184,7 @@ export class GlobeView {
   private readonly shadeMaterial: pc.StandardMaterial;
   private readonly shadeTexture: pc.Texture;
   private surfaceTexture: pc.Texture;
+  get surface(): pc.Texture { return this.surfaceTexture; }
   private readonly rotation = new pc.Quat();
   private readonly turn = new pc.Quat();
   private readonly point = new pc.Vec3();
@@ -302,6 +303,7 @@ export class GlobeView {
 
   setBlend(alpha: number) {
     const value = Math.max(0, Math.min(1, alpha));
+    if (this.surfaceMaterial.opacity === value && this.shadeMaterial.opacity === value) return;
     this.surfaceMaterial.opacity = value;
     this.surfaceMaterial.blendType =
       value < 0.999 ? pc.BLEND_NORMAL : pc.BLEND_NONE;
