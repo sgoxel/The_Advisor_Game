@@ -51,17 +51,18 @@ export type RGB = readonly [number, number, number];
  * Neighbouring lowland classes intentionally use a compressed luminance/chroma
  * range. The terrain mesh interpolates vertex colours, so large contrast jumps at
  * semantic thresholds reveal the low-poly triangulation as artificial wedges.
- * Shape, vegetation and canonical identity still distinguish the biomes, while
- * snow/ice stay deliberately bright enough to read as frozen on phone screens.
+ * Shape, vegetation and canonical identity still distinguish the biomes. Frozen
+ * land is deliberately cool/high-luminance while cliffs retain a dark neutral rock
+ * cue so those physically meaningful surfaces remain readable on phone screens.
  */
 export const TERRAIN_PALETTE: Readonly<Record<TerrainClass, RGB>> = {
   ocean: [76, 124, 148],
   lake: [70, 124, 151],
-  "sea-ice": [200, 220, 224],
-  "polar-ice": [232, 239, 239],
-  tundra: [181, 190, 172],
-  "snowy-mountain": [235, 237, 232],
-  cliff: [111, 106, 97],
+  "sea-ice": [207, 228, 233],
+  "polar-ice": [241, 247, 248],
+  tundra: [198, 211, 208],
+  "snowy-mountain": [242, 244, 241],
+  cliff: [62, 65, 66],
   beach: [186, 172, 132],
   desert: [176, 151, 104],
   dryland: [151, 135, 93],
