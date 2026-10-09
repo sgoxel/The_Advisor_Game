@@ -33,14 +33,14 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 - WP-S002-004-004 — Biome/material readability foundation: diverse climates/terrain, stable semantic colors and cross-LOD identity
 - WP-S002-004-005 — Terrain/hydrology/traversal foundation: natural landforms, distributed freshwater, canonical walkability and bounded seam-safe queries
 - WP-S002-004-006 — Vegetation/ground-detail presentation: natural deterministic scatter, reusable instancing, stable ownership and mobile budgets
-- WP-S002-004-007 — Political atlas UX/performance: full-continent country partition, scalable settlement counts, readable borders and bounded deterministic 1/1000 labels
-- WP-S002-004-008 — Travel routing UX: shortest legal paths, ≥60 fantasy-minute village separation, bounded search and truthful route/time UI
+- WP-S002-004-007 — Political atlas authority/UX: full-continent country partition, deterministic ≥minimum counts, readable borders and bounded 1/1000 labels
+- WP-S002-004-008 — Shortest-legal-route authority/UX: all-generated-village ≥60-minute proof, bounded routing and truthful route/time presentation
 - WP-S002-004-009 — Settlement/building UX: terrain-shaped non-grid functional layouts, logical building scale, lazy usable interiors and mobile-safe rendering
-- WP-S002-004-010 — Continuous-zoom material/LOD continuity: stable semantic color, threshold blending, tile-patch regressions and wrap/pole ownership
-- WP-S002-004-011 — Living-resident scalability/UX: canonical home/work/gate identity, analytical schedules, spatial queries, pooled actors and inspection
+- WP-S002-004-010 — Continuous-zoom material/LOD continuity: canonical albedo parity, threshold blending, tile-patch regression and wrap/pole ownership
+- WP-S002-004-011 — Living-resident scalability/UX: house-level ownership, analytical schedules, spatial indexing, pooled actors and responsive inspection
 - WP-S002-004-012 — Unified terrain compositor: deterministic earthworks and one render/routing/collision/material authority
 - WP-S002-004-013 — Ruin/critical-place UX: 1/1000 discoverability, legal access, stable labels and bounded lazy detail
-- WP-S002-004-014 — Transport-network UX/architecture: connected roads/bridges/harbors, terrain-aware topology and bounded regional generation
-- WP-S002-005-001 — S002 performance acceptance gate: frame/input/worker/upload/streaming/DOM/simulation/resource budgets, adaptive quality and renderer-loss recovery
-- WP-S002-005-002 — Responsive accessible atlas UI/UX acceptance: safe areas, ≥44px touch targets, focus/modal/keyboard parity, readable HUD/inspection/labels
-- WP-S002-005-003 — README/runtime product-truth compatibility gate: player-authority semantics, canonical world/zoom/travel/count rules and default-Chrome backend recovery
+- WP-S002-004-014 — Transport-network UX/architecture: connected roads/bridges/harbors/ferries, terrain-aware topology and bounded regional generation
+- WP-S002-005-001 — S002 performance release gate: device-class DPR/render-scale/shadow adaptation, full telemetry, UI/simulation/resource budgets and renderer-loss recovery
+- WP-S002-005-002 — Responsive accessibility/UI release gate: safe-area layout, ≥44px hit targets, modal/focus/keyboard parity and dense-label readability
+- WP-S002-005-003 — README/runtime compatibility release gate: player-authority wording, dynamic counts/canonical headings, world/travel truth and Chrome backend recovery
