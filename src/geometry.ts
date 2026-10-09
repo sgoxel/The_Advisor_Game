@@ -17,6 +17,18 @@ export type TileGeometry = {
   detail: Geometry;
 };
 const color = (r: number, g: number, b: number): RGB => [r, g, b];
+const blendColor = (a: RGB, b: RGB, amount: number): RGB => {
+  const t = Math.max(0, Math.min(1, amount));
+  return color(
+    a[0] + (b[0] - a[0]) * t,
+    a[1] + (b[1] - a[1]) * t,
+    a[2] + (b[2] - a[2]) * t,
+  );
+};
+const smoothColorWeight = (value: number): number => {
+  const t = Math.max(0, Math.min(1, value));
+  return t * t * (3 - 2 * t);
+};
 class Builder {
   p: number[] = [];
   n: number[] = [];
@@ -138,14 +150,16 @@ class Builder {
 export function terrainTint(x: number, z: number, scale = 32): RGB {
   if (scale > 512) {
     const macro = macroSampleAt(sourceToLonLat(x, z)),
-      f = field(x, z, 9000, 44);
+      f = field(x, z, 9000, 44),
+      land = color(106 + f * 24, 133 + f * 24, 83 + f * 20),
+      highland = color(126 + f * 20, 137 + f * 17, 114 + f * 14),
+      volcanic = color(102 + f * 12, 98 + f * 10, 87 + f * 8),
+      mountainWeight = smoothColorWeight((macro.mountainIntensity - 0.02) / 0.76);
     if (macro.domain === "Ocean") return color(94, 137, 139);
     if (macro.domain === "Lake") return color(75, 126, 145);
-    if (macro.volcanic && macro.mountainIntensity > 0.12)
-      return color(102 + f * 12, 98 + f * 10, 87 + f * 8);
-    if (macro.mountainIntensity > 0.08)
-      return color(126 + f * 20, 137 + f * 17, 114 + f * 14);
-    return color(106 + f * 24, 133 + f * 24, 83 + f * 20);
+    if (macro.volcanic)
+      return blendColor(land, volcanic, mountainWeight * 0.94);
+    return blendColor(land, highland, mountainWeight * 0.86);
   }
   const s = nearestPlace(x, z);
   const dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,
@@ -160,18 +174,27 @@ export function terrainTint(x: number, z: number, scale = 32): RGB {
   )
     return color(170, 151, 113);
   const biome = biomeAt(x, z),
-    f = field(x, z, 28, 41);
+    f = field(x, z, 28, 41),
+    macro = macroSampleAt(sourceToLonLat(x, z));
   if (biome === "River" || biome === "Ocean") return color(94, 137, 139);
   if (biome === "Lake") return color(75, 126, 145);
   if (biome === "Sandy beach") return color(203, 190, 141);
   if (biome === "Riverbank") return color(163, 159, 113);
-  if (biome === "Volcanic highlands")
-    return color(96 + f * 19, 92 + f * 15, 82 + f * 14);
-  if (biome === "Highlands")
-    return color(129 + f * 25, 139 + f * 20, 116 + f * 15);
-  if (biome === "Woodland")
-    return color(72 + f * 19, 105 + f * 22, 69 + f * 15);
-  return color(116 + f * 22, 140 + f * 24, 79 + f * 20);
+  const meadow = color(116 + f * 22, 140 + f * 24, 79 + f * 20),
+    woodland = color(72 + f * 19, 105 + f * 22, 69 + f * 15),
+    highland = color(129 + f * 25, 139 + f * 20, 116 + f * 15),
+    volcanic = color(96 + f * 19, 92 + f * 15, 82 + f * 14),
+    naturalBase = field(x, z, 90, 4) > 0.45 ? woodland : meadow,
+    mountainWeight = smoothColorWeight((macro.mountainIntensity - 0.02) / 0.76);
+  // Macro mountain material follows the same continuous seeded falloff as relief.
+  // This avoids a binary biome threshold stamping a pale polygon onto low ranges.
+  if (macro.volcanic && mountainWeight > 0)
+    return blendColor(naturalBase, volcanic, mountainWeight * 0.94);
+  if (macro.mountainIntensity > 0.02)
+    return blendColor(naturalBase, highland, mountainWeight * 0.86);
+  if (biome === "Highlands") return highland;
+  if (biome === "Woodland") return woodland;
+  return meadow;
 }
 /** Worker-generated tile meshes. Skirts cover cracks between terrain LOD levels. */
 export function buildTile(t: Tile): TileGeometry {
