@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { buildGlobeSurface, globeSurfaceColor } from "../src/globe-surface.ts";
 import { terrainTint } from "../src/geometry.ts";
+import { biomeSampleAt } from "../src/biome.ts";
 import { continents } from "../src/geography.ts";
 import { flatToLonLat, lonLatToFlat } from "../src/planet.ts";
 import { heightAt } from "../src/world.ts";
@@ -29,15 +30,23 @@ const pixel = (
 const flatTint = (x: number, z: number) => [
   ...new Uint8Array(terrainTint(x, z)),
 ];
-// Far from every continent and island belt.
-const MID_OCEAN = { x: 40000, z: -50000 };
+const findWarmOcean = () => {
+  for (let latDeg = -45; latDeg <= 45; latDeg += 5)
+    for (let lonDeg = -175; lonDeg < 180; lonDeg += 5) {
+      const position = { lon: lonDeg * Math.PI / 180, lat: latDeg * Math.PI / 180 };
+      if (biomeSampleAt(position).biome === "ocean")
+        return lonLatToFlat(position.lon, position.lat);
+    }
+  throw new Error("seed has no warm open-ocean evidence point");
+};
+const MID_OCEAN = findWarmOcean();
 const OCEAN = flatTint(MID_OCEAN.x, MID_OCEAN.z);
 // Shared by several tests to keep the file fast; every build is deterministic.
 const WIDTH = 256,
   HEIGHT = 128,
   flat = buildGlobeSurface(WIDTH, HEIGHT, { samples: 1, relief: 0 }),
   shaded = buildGlobeSurface(WIDTH, HEIGHT, { samples: 1, relief: 1 });
-const isOcean = (i: number, j: number) =>
+const isOpenOcean = (i: number, j: number) =>
   pixel(flat, i, j).join() === OCEAN.join();
 
 test("globe surface honours the texture contract", () => {
@@ -71,7 +80,7 @@ test("unshaded centre samples are exactly the flat terrain's own colours", () =>
   const width = WIDTH,
     height = HEIGHT,
     surface = flat;
-  let land = 0,
+  let detailed = 0,
     ocean = 0;
   for (let j = 0; j < height; j += 3)
     for (let i = j % 2; i < width; i += 5) {
@@ -80,11 +89,10 @@ test("unshaded centre samples are exactly the flat terrain's own colours", () =>
       assert.deepEqual(pixel(surface, i, j), expected);
       assert.deepEqual(globeSurfaceColor(x, z), expected);
       if (expected.join() === OCEAN.join()) ocean++;
-      else land++;
+      else detailed++;
     }
-  // The spread crosses both the ocean shortcut and the detailed terrain path.
-  assert.ok(land > 200 && ocean > 1000);
-  // The shortcut's single ocean height is the shared height everywhere it applies.
+  // The spread crosses both the warm-ocean shortcut and detailed climate materials.
+  assert.ok(detailed > 200 && ocean > 1000);
   for (let j = 1; j < height; j += 9)
     for (let i = 0; i < width; i += 11) {
       const { x, z } = texelFlat(i, j, width, height);
@@ -97,7 +105,6 @@ test("globe surface is deterministic and can be built in row pieces", () => {
   const whole = buildGlobeSurface(128, 64, options);
   assert.deepEqual(buildGlobeSurface(128, 64, options).pixels, whole.pixels);
   const pieces = new Uint8Array(whole.pixels.length);
-  // Reverse order, uneven pieces, one single row and one empty range.
   for (const rows of [
     [40, 64],
     [27, 40],
@@ -114,34 +121,37 @@ test("globe surface is deterministic and can be built in row pieces", () => {
   }
   assert.deepEqual(pieces, whole.pixels);
 });
-test("continents are land and the open ocean is ocean", () => {
+test("continent centres stay land while warm ocean and frozen poles keep distinct materials", () => {
   const smooth = buildGlobeSurface(128, 64, { samples: 2, relief: 1 });
   for (const surface of [flat, shaded, smooth]) {
     const { width, height } = surface;
     for (const continent of continents) {
       const [i, j] = texelOf(continent.x, continent.z, width, height),
-        [r, g, b] = pixel(surface, i, j);
-      assert.notDeepEqual([r, g, b], OCEAN);
-      assert.ok(g > r && g > b, `${continent.name} is green land`);
+        semantic = biomeSampleAt(flatToLonLat(continent.x, continent.z));
+      assert.equal(semantic.material.water, false, `${continent.name} centre remains land`);
+      assert.notDeepEqual(pixel(surface, i, j), OCEAN);
       assert.notDeepEqual(globeSurfaceColor(continent.x, continent.z), OCEAN);
     }
     const [i, j] = texelOf(MID_OCEAN.x, MID_OCEAN.z, width, height);
     assert.deepEqual(pixel(surface, i, j), OCEAN);
-    // East and west edges meet in open ocean, as do both poles.
     for (const [x, y] of [
       [0, height / 2],
       [width - 1, height / 2],
-      [width / 2, 0],
-      [width / 2, height - 1],
     ])
       assert.deepEqual(pixel(surface, x, y), OCEAN);
+    for (const y of [0, height - 1]) {
+      const { x, z } = texelFlat(width / 2, y, width, height),
+        polar = biomeSampleAt(flatToLonLat(x, z));
+      assert.equal(polar.frozen, true);
+      assert.notDeepEqual(pixel(surface, width / 2, y), OCEAN);
+    }
   }
   assert.deepEqual(globeSurfaceColor(MID_OCEAN.x, MID_OCEAN.z), OCEAN);
 });
-test("relief shades land from real heights and leaves water untouched", () => {
+test("relief shades detailed terrain from real heights and leaves warm open ocean untouched", () => {
   const stronger = buildGlobeSurface(WIDTH, HEIGHT, { relief: 2 });
   let changed = 0,
-    land = 0,
+    detailed = 0,
     brighter = 0,
     darker = 0,
     further = 0;
@@ -149,12 +159,12 @@ test("relief shades land from real heights and leaves water untouched", () => {
     for (let i = 0; i < WIDTH; i++) {
       const before = pixel(flat, i, j),
         after = pixel(shaded, i, j);
-      if (isOcean(i, j)) {
+      if (isOpenOcean(i, j)) {
         assert.deepEqual(after, OCEAN);
         assert.deepEqual(pixel(stronger, i, j), OCEAN);
         continue;
       }
-      land++;
+      detailed++;
       if (after.join() !== before.join()) changed++;
       if (after[1] > before[1]) brighter++;
       if (after[1] < before[1]) darker++;
@@ -164,34 +174,30 @@ test("relief shades land from real heights and leaves water untouched", () => {
       )
         further++;
     }
-  assert.ok(land > 5000);
-  assert.ok(changed > land / 2);
-  // Slopes face both toward and away from the light.
-  assert.ok(brighter > land / 10 && darker > land / 10);
+  assert.ok(detailed > 5000);
+  assert.ok(changed > detailed / 2);
+  assert.ok(brighter > detailed / 10 && darker > detailed / 10);
   assert.ok(further > changed / 2);
 });
 test("light comes from the north-west", () => {
-  // Every continent stands above the sea, so its north-west coast faces the
-  // light and its south-east coast faces away.
   let lit = 0,
     shadowed = 0;
   for (let j = 1; j < HEIGHT - 1; j++)
     for (let i = 1; i < WIDTH - 1; i++) {
-      if (isOcean(i, j)) continue;
+      if (isOpenOcean(i, j)) continue;
       const change = pixel(shaded, i, j)[1] - pixel(flat, i, j)[1];
-      // Sea to the north and west, land to the south and east: a north-west shore.
       if (
-        isOcean(i - 1, j) &&
-        isOcean(i, j - 1) &&
-        !isOcean(i + 1, j) &&
-        !isOcean(i, j + 1)
+        isOpenOcean(i - 1, j) &&
+        isOpenOcean(i, j - 1) &&
+        !isOpenOcean(i + 1, j) &&
+        !isOpenOcean(i, j + 1)
       )
         lit += Math.sign(change);
       if (
-        isOcean(i + 1, j) &&
-        isOcean(i, j + 1) &&
-        !isOcean(i - 1, j) &&
-        !isOcean(i, j - 1)
+        isOpenOcean(i + 1, j) &&
+        isOpenOcean(i, j + 1) &&
+        !isOpenOcean(i - 1, j) &&
+        !isOpenOcean(i, j - 1)
       )
         shadowed += Math.sign(change);
     }
