@@ -42,6 +42,9 @@ class Builder {
   c: number[] = [];
   i: number[] = [];
   triangle(a: Point, b: Point, c: Point, tint: RGB) {
+    this.triangleGradient(a, b, c, tint, tint, tint);
+  }
+  triangleGradient(a: Point, b: Point, c: Point, tintA: RGB, tintB: RGB, tintC: RGB) {
     const u = b.map((v, i) => v - a[i]),
       v = c.map((v, i) => v - a[i]);
     const normal = [
@@ -50,17 +53,32 @@ class Builder {
       u[0] * v[1] - u[1] * v[0],
     ];
     const length = Math.hypot(...normal) || 1;
-    const start = this.p.length / 3;
-    for (const point of [a, b, c]) {
-      this.p.push(...point);
+    const start = this.p.length / 3,
+      points = [a, b, c],
+      tints = [tintA, tintB, tintC];
+    for (let index = 0; index < points.length; index++) {
+      this.p.push(...points[index]);
       this.n.push(...normal.map((n) => n / length));
-      this.c.push(...tint, 255);
+      this.c.push(...tints[index], 255);
     }
     this.i.push(start, start + 1, start + 2);
   }
   quad(a: Point, b: Point, c: Point, d: Point, tint: RGB) {
     this.triangle(a, b, c, tint);
     this.triangle(a, c, d, tint);
+  }
+  quadGradient(
+    a: Point,
+    b: Point,
+    c: Point,
+    d: Point,
+    tintA: RGB,
+    tintB: RGB,
+    tintC: RGB,
+    tintD: RGB,
+  ) {
+    this.triangleGradient(a, b, c, tintA, tintB, tintC);
+    this.triangleGradient(a, c, d, tintA, tintC, tintD);
   }
   box(
     x: number,
@@ -159,10 +177,15 @@ class Builder {
  * Shared semantic material lookup. Realm and local LODs use the same climate
  * identity and palette; only bounded seed-derived detail frequency changes.
  */
-export function terrainTint(x: number, z: number, scale = 32): [number, number, number] {
+export function terrainTint(
+  x: number,
+  z: number,
+  scale = 32,
+  elevationM?: number,
+): [number, number, number] {
   const position = sourceToLonLat(x, z),
     macro = macroSampleAt(position),
-    sample = climateSampleAt(position, macro.reliefM),
+    sample = climateSampleAt(position, elevationM ?? macro.reliefM),
     legacy = scale <= 512 ? biomeAt(x, z) : "";
 
   if (legacy === "River") return color(76, 128, 148);
@@ -205,28 +228,29 @@ export function buildTile(t: Tile): TileGeometry {
     structures = new Builder(),
     nature = new Builder(),
     detail = new Builder();
-  const resolution = Math.min(16, t.size / 2),
+  // A modest local tessellation increase improves coast/snow/biome silhouettes while
+  // keeping the same bounded tile allocation model. The semantic field itself is unchanged.
+  const resolution = Math.min(t.size <= 512 ? 20 : 16, t.size / 2),
     step = t.size / resolution;
   for (let z = 0; z < resolution; z++)
     for (let x = 0; x < resolution; x++) {
       const ax = t.minX + x * step,
         az = t.minZ + z * step;
-      const point = (px: number, pz: number): Point => [
-        px,
-        heightAt(px, pz),
-        pz,
-      ];
+      const point = (px: number, pz: number): Point => [px, heightAt(px, pz), pz];
       const a = point(ax, az),
         b = point(ax, az + step),
         c = point(ax + step, az + step),
         d = point(ax + step, az);
       if (Math.max(a[1], b[1], c[1], d[1]) > 0)
-        terrain.quad(
+        terrain.quadGradient(
           a,
           b,
           c,
           d,
-          terrainTint(ax + step / 2, az + step / 2, t.size),
+          terrainTint(a[0], a[2], t.size, a[1]),
+          terrainTint(b[0], b[2], t.size, b[1]),
+          terrainTint(c[0], c[2], t.size, c[1]),
+          terrainTint(d[0], d[2], t.size, d[1]),
         );
       if (z === 0)
         terrain.quad(
@@ -234,7 +258,7 @@ export function buildTile(t: Tile): TileGeometry {
           d,
           [d[0], d[1] - 12, d[2]],
           [a[0], a[1] - 12, a[2]],
-          terrainTint(ax, az),
+          terrainTint(ax, az, t.size, a[1]),
         );
       if (z === resolution - 1)
         terrain.quad(
@@ -242,7 +266,7 @@ export function buildTile(t: Tile): TileGeometry {
           b,
           [b[0], b[1] - 12, b[2]],
           [c[0], c[1] - 12, c[2]],
-          terrainTint(ax, az),
+          terrainTint(ax, az, t.size, c[1]),
         );
       if (x === 0)
         terrain.quad(
@@ -250,7 +274,7 @@ export function buildTile(t: Tile): TileGeometry {
           a,
           [a[0], a[1] - 12, a[2]],
           [b[0], b[1] - 12, b[2]],
-          terrainTint(ax, az),
+          terrainTint(ax, az, t.size, b[1]),
         );
       if (x === resolution - 1)
         terrain.quad(
@@ -258,21 +282,22 @@ export function buildTile(t: Tile): TileGeometry {
           c,
           [c[0], c[1] - 12, c[2]],
           [d[0], d[1] - 12, d[2]],
-          terrainTint(ax, az),
+          terrainTint(ax, az, t.size, d[1]),
         );
     }
-  // The water/ice plane is presentation-only and sits beneath land. Frozen
-  // latitudes use the same climate boundary as the globe rather than a second polar mask.
-  const centrePosition = sourceToLonLat(t.minX + t.size / 2, t.minZ + t.size / 2),
-    waterColor = frozenLatitudeAt(centrePosition)
-      ? TERRAIN_PALETTE["sea-ice"]
-      : TERRAIN_PALETTE.ocean;
-  terrain.quad(
+  // The water/ice plane is presentation-only and sits beneath land. Sample the same
+  // canonical polar boundary at each corner so a tile cannot expose a rectangular ice edge.
+  const waterTint = (x: number, z: number) =>
+    frozenLatitudeAt(sourceToLonLat(x, z)) ? TERRAIN_PALETTE["sea-ice"] : TERRAIN_PALETTE.ocean;
+  terrain.quadGradient(
     [t.minX, 0, t.minZ],
     [t.minX, 0, t.minZ + t.size],
     [t.minX + t.size, 0, t.minZ + t.size],
     [t.minX + t.size, 0, t.minZ],
-    waterColor,
+    waterTint(t.minX, t.minZ),
+    waterTint(t.minX, t.minZ + t.size),
+    waterTint(t.minX + t.size, t.minZ + t.size),
+    waterTint(t.minX + t.size, t.minZ),
   );
   if (t.size <= 512)
     for (const f of featuresFor(t)) {
