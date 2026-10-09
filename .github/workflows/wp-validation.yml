@@ -30,8 +30,9 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgl2 --scenario cell --profile desktop,phone --renderer webgl2 --timeout 180
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgpu --scenario cell --profile desktop,phone --renderer webgpu --timeout 180
+          CLIMATE_INSPECTOR_STEPS='tap;visible:#cell-panel;click:#cell-panel details summary;visible:#seed-levels;shot:climate'
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgl2 --name climate-inspector --profile desktop,phone --renderer webgl2 --timeout 180 --steps "$CLIMATE_INSPECTOR_STEPS"
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/canonical-inspector-webgpu --name climate-inspector --profile desktop,phone --renderer webgpu --timeout 180 --steps "$CLIMATE_INSPECTOR_STEPS"
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp10-wrap-webgl2 --name wrap --profile desktop,phone --renderer webgl2 --timeout 240 --steps "eval:window.advisorWorld.setHalfHeight(97);eval:window.advisorWorld.navigation.setFocus(Math.PI-0.003,0.12);check:#grid;settle;shot:east;eval:window.advisorWorld.navigation.setFocus(-Math.PI+0.003,0.12);settle;shot:west"
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp10-north-webgl2 --name north --profile desktop,phone --renderer webgl2 --timeout 240 --steps "eval:window.advisorWorld.setHalfHeight(97);eval:window.advisorWorld.navigation.setFocus(0.55,Math.PI);check:#grid;settle;shot:pole"
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp10-south-webgl2 --name south --profile desktop,phone --renderer webgl2 --timeout 240 --steps "eval:window.advisorWorld.setHalfHeight(97);eval:window.advisorWorld.navigation.setFocus(-0.8,-Math.PI);check:#grid;settle;shot:pole"
