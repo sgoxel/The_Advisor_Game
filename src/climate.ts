@@ -121,17 +121,20 @@ function seededWave(position: LonLat, layer: number) {
 }
 
 /**
- * Irregular, seed-addressed polar boundary. It is deliberately evaluated from
- * longitude and hemisphere so the north and south frozen regions are related by
- * the same authority but are never mirrored copies.
+ * Irregular, seed-addressed polar boundary. Two bounded long waves avoid a smooth
+ * latitude blob while remaining cheap, continuous, non-mirrored and SEED-only.
  */
 export function polarBoundaryAt(position: LonLat) {
   const hemisphere = position.lat >= 0 ? 1 : -1,
-    wave = seededWave(
+    primary = seededWave(
       { lon: position.lon + hemisphere * 0.37, lat: hemisphere * 0.91 },
       3,
+    ),
+    secondary = seededWave(
+      { lon: position.lon * 1.37 - hemisphere * 0.21, lat: hemisphere * 0.78 },
+      1,
     );
-  return 0.735 + (wave - 0.5) * 0.09;
+  return 0.735 + (primary - 0.5) * 0.075 + (secondary - 0.5) * 0.035;
 }
 
 export function frozenLatitudeAt(position: LonLat) {
@@ -191,7 +194,9 @@ function terrainFor(
     return { terrainClass: "snowy-mountain", forestFamily: null };
 
   const coastM = Math.max(0, macro.coastDistanceRad * CANONICAL_PLANET_RADIUS),
-    beachReachM = 850 + 1250 * seededWave(position, 1);
+    // Beaches are local margins, not kilometre-wide painted bands. SEED still varies
+    // their reach, while rugged/high coasts resolve to cliffs instead.
+    beachReachM = 300 + 700 * seededWave(position, 1);
   if (coastM <= beachReachM) {
     if (ruggedness > 0.58 || elevationM > 105)
       return { terrainClass: "cliff", forestFamily: null };
