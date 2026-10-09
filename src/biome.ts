@@ -139,6 +139,80 @@ function sphericalFieldUnit(p: UnitPoint, channel: FieldChannel): number {
   return Math.max(0, Math.min(1, 0.5 + total / (FIELD_WEIGHT * 2)));
 }
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+const smooth01 = (value: number) => {
+  const t = clamp01(value);
+  return t * t * (3 - 2 * t);
+};
+const mixColor = (
+  a: readonly [number, number, number],
+  b: readonly [number, number, number],
+  amount: number,
+): readonly [number, number, number] => {
+  const t = clamp01(amount);
+  return [
+    a[0] + (b[0] - a[0]) * t,
+    a[1] + (b[1] - a[1]) * t,
+    a[2] + (b[2] - a[2]) * t,
+  ];
+};
+const MATERIAL_VARIANT_STEPS = 32;
+const makeMaterialVariants = (
+  id: BiomeId,
+  colorAt: (t: number) => readonly [number, number, number],
+): readonly BiomeMaterial[] => {
+  const base = BIOME_MATERIALS[id];
+  return Array.from({ length: MATERIAL_VARIANT_STEPS + 1 }, (_, index) => ({
+    ...base,
+    color: colorAt(index / MATERIAL_VARIANT_STEPS),
+  }));
+};
+const dryColorAt = (t: number) => {
+  const moisture = 0.24 + t * 0.25;
+  if (moisture <= 0.35)
+    return mixColor(
+      BIOME_MATERIALS.desert.color,
+      BIOME_MATERIALS.dryland.color,
+      smooth01((moisture - 0.27) / 0.08),
+    );
+  return mixColor(
+    BIOME_MATERIALS.dryland.color,
+    BIOME_MATERIALS.grassland.color,
+    smooth01((moisture - 0.36) / 0.1),
+  );
+};
+const snowColorAt = (t: number) => {
+  const temperatureC = 1 + t * 6,
+    snowWeight = 1 - smooth01((temperatureC - 2.5) / 3.5);
+  return mixColor(
+    BIOME_MATERIALS.highland.color,
+    BIOME_MATERIALS["snowy-mountain"].color,
+    snowWeight,
+  );
+};
+const DRY_MATERIAL_VARIANTS = {
+  desert: makeMaterialVariants("desert", dryColorAt),
+  dryland: makeMaterialVariants("dryland", dryColorAt),
+  grassland: makeMaterialVariants("grassland", dryColorAt),
+} as const;
+const SNOW_MATERIAL_VARIANTS = {
+  highland: makeMaterialVariants("highland", snowColorAt),
+  "snowy-mountain": makeMaterialVariants("snowy-mountain", snowColorAt),
+} as const;
+function presentationMaterial(biome: BiomeId, temperatureC: number, moisture: number): BiomeMaterial {
+  if (biome === "desert" || biome === "dryland" || (biome === "grassland" && temperatureC > 8 && moisture < 0.49)) {
+    const index = Math.round(clamp01((moisture - 0.24) / 0.25) * MATERIAL_VARIANT_STEPS);
+    if (biome === "desert") return DRY_MATERIAL_VARIANTS.desert[index];
+    if (biome === "dryland") return DRY_MATERIAL_VARIANTS.dryland[index];
+    return DRY_MATERIAL_VARIANTS.grassland[index];
+  }
+  if (biome === "snowy-mountain" || (biome === "highland" && temperatureC < 7)) {
+    const index = Math.round(clamp01((temperatureC - 1) / 6) * MATERIAL_VARIANT_STEPS);
+    return biome === "snowy-mountain"
+      ? SNOW_MATERIAL_VARIANTS["snowy-mountain"][index]
+      : SNOW_MATERIAL_VARIANTS.highland[index];
+  }
+  return BIOME_MATERIALS[biome];
+}
 
 function climateZoneFromUnit(position: LonLat, elevationM: number, unit: UnitPoint) {
   const edgeNoise = sphericalFieldUnit(unit, "polar-edge") - 0.5,
@@ -210,7 +284,7 @@ export function biomeSampleAt(
     biome = "grassland";
   }
 
-  const material = BIOME_MATERIALS[biome],
+  const material = presentationMaterial(biome, climate.temperatureC, moisture),
     forestFamily: ForestFamily =
       biome === "boreal-forest" ? "boreal" :
       biome === "temperate-forest" ? "temperate" :
