@@ -33,14 +33,14 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 - WP-S002-004-004 — Biome/material readability foundation: diverse climates/terrain, stable semantic colors and cross-LOD identity
 - WP-S002-004-005 — Terrain/hydrology/traversal foundation: natural landforms, distributed freshwater, canonical walkability and bounded seam-safe queries
 - WP-S002-004-006 — Vegetation/ground-detail presentation: natural deterministic scatter, reusable instancing, stable ownership and mobile budgets
-- WP-S002-004-007 — Political map UX: full-continent countries, scalable settlement counts, visible borders and deterministic 1/1000 label decluttering
+- WP-S002-004-007 — Political atlas UX/performance: full-continent country partition, scalable settlement counts, readable borders and bounded deterministic 1/1000 labels
 - WP-S002-004-008 — Travel routing UX: shortest legal paths, ≥60 fantasy-minute village separation, bounded search and truthful route/time UI
 - WP-S002-004-009 — Settlement/building UX: road-connected functional layouts, logical building scale, lazy usable interiors and mobile-safe rendering
-- WP-S002-004-010 — Continuous-zoom visual continuity: stable material semantics, threshold blending, tile/seam regressions and wrap/pole ownership
-- WP-S002-004-011 — Living-resident UX/performance: canonical homes/work/gates, deterministic schedules, pooled actors and usable inspection
+- WP-S002-004-010 — Continuous-zoom material/LOD continuity: stable semantic color, threshold blending, tile-patch regressions and wrap/pole ownership
+- WP-S002-004-011 — Living-resident scalability/UX: canonical home/work/gate identity, analytical schedules, spatial queries, pooled actors and inspection
 - WP-S002-004-012 — Unified terrain compositor: deterministic earthworks and one render/routing/collision/material authority
 - WP-S002-004-013 — Ruin/critical-place UX: 1/1000 discoverability, legal access, stable labels and bounded lazy detail
 - WP-S002-004-014 — Transport-network UX/architecture: connected roads/bridges/harbors, terrain-aware topology and bounded regional generation
-- WP-S002-005-001 — S002 runtime performance gate: frame/input/streaming/DOM/memory budgets, adaptive quality and renderer-loss telemetry
-- WP-S002-005-002 — Responsive atlas UI/UX acceptance: safe-area layouts, touch/keyboard parity, readable HUD/modals/inspection and deterministic labels
-- WP-S002-005-003 — README/runtime conformance gate: canonical world/zoom/travel rules, feature-truth audit and default-Chrome backend compatibility
+- WP-S002-005-001 — S002 performance acceptance gate: frame/input/worker/upload/streaming/DOM/simulation/resource budgets, adaptive quality and renderer-loss recovery
+- WP-S002-005-002 — Responsive accessible atlas UI/UX acceptance: safe areas, ≥44px touch targets, focus/modal/keyboard parity, readable HUD/inspection/labels
+- WP-S002-005-003 — README/runtime product-truth compatibility gate: player-authority semantics, canonical world/zoom/travel/count rules and default-Chrome backend recovery
