@@ -1,0 +1,103 @@
+#political-borders,
+#political-label-leaders {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+}
+#political-borders {
+  z-index: 1;
+}
+#political-labels,
+#political-label-leaders {
+  z-index: 1;
+}
+.political-border-underlay,
+.political-border-line {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.political-border-underlay {
+  stroke: #102019d9;
+  stroke-width: 4.5px;
+}
+.political-border-line {
+  stroke: #e2ca8fe8;
+  stroke-width: 1.7px;
+  stroke-dasharray: 8 5;
+}
+#political-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.political-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  white-space: nowrap;
+  font: 12px "Cormorant Garamond", Georgia, serif;
+  letter-spacing: 0.7px;
+  color: #f4ead1;
+  background: #14251fd9;
+  border: 1px solid #dec58380;
+  border-radius: 4px;
+  padding: 4px 7px;
+  text-shadow: 0 1px 4px #08110e;
+  box-shadow: 0 1px 4px #08110e99;
+}
+.political-label.country {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  border-color: #e5cf96b3;
+}
+.political-label.city::before {
+  content: "◆ ";
+  color: #e0c27b;
+}
+.political-label.village {
+  font-size: 11px;
+  color: #ded7c6;
+}
+.political-label.village::before {
+  content: "• ";
+  color: #d8b979;
+}
+#political-label-leaders line {
+  stroke: #e2ca8f99;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+body.political-detail-labels #map-labels,
+body.political-detail-labels #label-leaders {
+  display: none;
+}
+#map-context {
+  margin: 5px 0 0;
+  color: #c9c2ae;
+  font-size: 10px;
+  line-height: 1.3;
+}
+@media (max-width: 700px) {
+  .political-label.country {
+    font-size: 12px;
+  }
+  .political-label.city,
+  .political-label.village {
+    font-size: 10px;
+    padding: 3px 5px;
+  }
+  .political-border-underlay {
+    stroke-width: 4px;
+  }
+  .political-border-line {
+    stroke-width: 1.5px;
+  }
+}
