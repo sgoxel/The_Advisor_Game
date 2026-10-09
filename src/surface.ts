@@ -42,16 +42,23 @@ type HydroHit = {
   bed: number;
   code: string | null;
 };
+type PreparedSurface = {
+  elevation: number;
+  hydro: HydroHit;
+  macro: ReturnType<typeof macroSampleAt>;
+};
 
 const BASIN_SIZE = 4096;
 const BASIN_COLUMNS = SOURCE_PRESENTATION_WIDTH / BASIN_SIZE;
 const BASIN_ROWS = (SOURCE_PRESENTATION_POLE_DISTANCE * 2) / BASIN_SIZE;
 const CACHE_LIMIT = 96;
-const RIVER_STEPS = 14;
-const RIVER_STEP = 520;
+const CORE_CACHE_LIMIT = 8192;
+const RIVER_STEPS = 22;
+const RIVER_STEP = 360;
 const GRADIENT_STEP = 180;
 const SEARCH_RADIUS = 2;
 const basinCache = new Map<string, BasinEntry>();
+const coreCache = new Map<string, PreparedSurface>();
 let useTick = 0;
 let generatedBasins = 0;
 let queryCount = 0;
@@ -82,6 +89,15 @@ function sphericalNoise(x: number, z: number, layer: number) {
 function terrainNoise(x: number, z: number) {
   return sphericalNoise(x, z, 0) * 0.5 + sphericalNoise(x, z, 1) * 0.32 + sphericalNoise(x, z, 2) * 0.18;
 }
+function localField(x: number, z: number, spacing: number, layer: number) {
+  const sx = wrapSourceX(x),
+    gx = Math.floor(sx / spacing),
+    gz = Math.floor(z / spacing),
+    tx = smooth01(sx / spacing - gx),
+    tz = smooth01(z / spacing - gz),
+    at = (ix: number, iz: number) => addressed(`LOCAL/${layer}/${ix}/${iz}`);
+  return lerp(lerp(at(gx, gz), at(gx + 1, gz), tx), lerp(at(gx, gz + 1), at(gx + 1, gz + 1), tx), tz);
+}
 
 /** Natural priority-3/4 base before settlement/road earthworks. */
 export function naturalElevationAt(x: number, z: number): number {
@@ -91,10 +107,13 @@ export function naturalElevationAt(x: number, z: number): number {
   if (macro.domain === "Lake") return -1.8;
   const noise = terrainNoise(sx, z),
     broad = sphericalNoise(sx, z, 3),
+    mountainWeight = smooth01(macro.mountainIntensity / 0.46),
+    ridge = 1 - Math.abs(localField(sx, z, 540, 71) * 2 - 1),
+    ridgeDetail = (ridge - 0.44) * Math.min(72, macro.reliefM * 0.2) * mountainWeight,
     base = macro.domain === "Island" ? 3.5 + noise * 13 : 3.5 + broad * 8 + noise * 4.5,
-    macroRelief = macro.reliefM * (0.84 + 0.16 * noise),
+    macroRelief = macro.reliefM * (0.78 + 0.22 * noise) + ridgeDetail,
     cap = macro.domain === "Island" ? 180 : 620,
-    terrain = Math.min(cap, base + macroRelief),
+    terrain = Math.min(cap, Math.max(1.2, base + macroRelief)),
     coastSource = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS;
   return lerp(-2.8, terrain, smooth01((coastSource + 2) / 12));
 }
@@ -115,7 +134,7 @@ function basinAnchor(gx: number, gz: number) {
 function coastSourceAt(x: number, z: number) {
   return macroSampleAt(sourceToLonLat(wrapSourceX(x), z)).coastDistanceRad * SOURCE_PRESENTATION_RADIUS;
 }
-function flowDirection(x: number, z: number, continentId: number, step: number) {
+function flowDirection(x: number, z: number, continentId: number) {
   const sx = wrapSourceX(x),
     left = coastSourceAt(sx - GRADIENT_STEP, z),
     right = coastSourceAt(sx + GRADIENT_STEP, z),
@@ -132,7 +151,7 @@ function flowDirection(x: number, z: number, continentId: number, step: number) 
     fallbackZ = awayZ / awayLength,
     baseX = gradientLength > 0.015 ? -gx / gradientLength : fallbackX,
     baseZ = gradientLength > 0.015 ? -gz / gradientLength : fallbackZ,
-    turn = (addressed(`FLOW/${continentId}/${Math.round(sx / 64)}/${Math.round(z / 64)}/${step}`) - 0.5) * 0.42,
+    turn = (localField(sx, z, 920, 83 + continentId) - 0.5) * 0.62,
     dx = baseX - baseZ * turn,
     dz = baseZ + baseX * turn,
     length = Math.hypot(dx, dz) || 1;
@@ -155,8 +174,8 @@ function evictBasins() {
 function extendToWater(points: DrainagePoint[], continentId: number, key: string): "ocean" | "lake" | null {
   let current = points[points.length - 1],
     previousBed = current.bed;
-  for (let extra = 0; extra < 10; extra++) {
-    const direction = flowDirection(current.x, current.z, continentId, RIVER_STEPS + extra),
+  for (let extra = 0; extra < 14; extra++) {
+    const direction = flowDirection(current.x, current.z, continentId),
       stride = 260 + addressed(`${key}/outlet/${extra}`) * 140,
       nx = wrapSourceX(current.x + direction.x * stride),
       nz = Math.max(-SOURCE_PRESENTATION_POLE_DISTANCE + 8, Math.min(SOURCE_PRESENTATION_POLE_DISTANCE - 8, current.z + direction.z * stride)),
@@ -186,15 +205,15 @@ export function drainageRecipeAt(gx: number, gz: number): DrainageRecipe | null 
   let recipe: DrainageRecipe | null = null;
   if (macro.land && macro.domain !== "Lake" && macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS > 900) {
     const points: DrainagePoint[] = [],
-      width = 10 + addressed(`${key}/width`) * 11;
+      width = 11 + addressed(`${key}/width`) * 12;
     let x = head.x,
       z = head.z,
       previousBed = Math.max(2, naturalElevationAt(x, z) - 1.2),
       outlet: "ocean" | "lake" | null = null;
     points.push({ x, z, bed: previousBed });
     for (let step = 0; step < RIVER_STEPS; step++) {
-      const direction = flowDirection(x, z, macro.continentId, step),
-        stride = RIVER_STEP * (0.82 + addressed(`${key}/stride/${step}`) * 0.36),
+      const direction = flowDirection(x, z, macro.continentId),
+        stride = RIVER_STEP * (0.84 + addressed(`${key}/stride/${step}`) * 0.32),
         nx = wrapSourceX(x + direction.x * stride),
         nz = Math.max(-SOURCE_PRESENTATION_POLE_DISTANCE + 8, Math.min(SOURCE_PRESENTATION_POLE_DISTANCE - 8, z + direction.z * stride)),
         nextMacro = macroSampleAt(sourceToLonLat(nx, nz)),
@@ -222,7 +241,7 @@ export function drainageRecipeAt(gx: number, gz: number): DrainageRecipe | null 
         startX = wrapSourceX(join.x - tangentZ / length * side * (820 + addressed(`${key}/tributary-offset`) * 680)),
         startZ = Math.max(-SOURCE_PRESENTATION_POLE_DISTANCE + 8, Math.min(SOURCE_PRESENTATION_POLE_DISTANCE - 8, join.z + tangentX / length * side * (820 + addressed(`${key}/tributary-offset-z`) * 680))),
         tributary: DrainagePoint[] = [],
-        tributarySteps = 5,
+        tributarySteps = 8,
         startBed = Math.max(join.bed + 2.5, naturalElevationAt(startX, startZ) - 0.7);
       for (let i = 0; i <= tributarySteps; i++) {
         const t = i / tributarySteps,
@@ -233,13 +252,13 @@ export function drainageRecipeAt(gx: number, gz: number): DrainageRecipe | null 
           bed: lerp(startBed, join.bed, t),
         });
       }
-      const lakeIndex = Math.min(points.length - 2, 3),
+      const lakeIndex = Math.min(points.length - 2, 4),
         lakePoint = points[lakeIndex],
         lake = addressed(`${key}/lake`) > 0.72 && macroSampleAt(sourceToLonLat(lakePoint.x, lakePoint.z)).land
           ? {
               x: lakePoint.x,
               z: lakePoint.z,
-              radius: 58 + addressed(`${key}/lake-radius`) * 92,
+              radius: 64 + addressed(`${key}/lake-radius`) * 96,
               level: Math.min(lakePoint.bed + 0.35, naturalElevationAt(lakePoint.x, lakePoint.z) - 0.45),
             }
           : null;
@@ -260,6 +279,20 @@ export function drainageRecipeAt(gx: number, gz: number): DrainageRecipe | null 
   return recipe;
 }
 
+/** Bounded render/query helper. Results are canonical recipes, never camera-derived terrain. */
+export function drainageRecipesNear(x: number, z: number, radius = 3): DrainageRecipe[] {
+  const canonicalX = wrapSourceX(x),
+    gx = Math.floor((canonicalX + SOURCE_PRESENTATION_WIDTH / 2) / BASIN_SIZE),
+    gz = Math.floor((z + SOURCE_PRESENTATION_POLE_DISTANCE) / BASIN_SIZE),
+    result = new Map<string, DrainageRecipe>();
+  for (let dz = -radius; dz <= radius; dz++)
+    for (let dx = -radius; dx <= radius; dx++) {
+      const recipe = drainageRecipeAt(gx + dx, gz + dz);
+      if (recipe) result.set(recipe.code, recipe);
+    }
+  return [...result.values()];
+}
+
 function nearestHydrology(x: number, z: number): HydroHit {
   queryCount++;
   const canonicalX = wrapSourceX(x),
@@ -271,10 +304,11 @@ function nearestHydrology(x: number, z: number): HydroHit {
       const recipe = drainageRecipeAt(gx + dx, gz + dz);
       if (!recipe) continue;
       const headDistance = Math.hypot(wrapSourceX(canonicalX - recipe.points[0].x), z - recipe.points[0].z);
-      if (headDistance > 12_000) continue;
+      if (headDistance > 12_500) continue;
       if (recipe.lake) {
         const distance = Math.hypot(wrapSourceX(canonicalX - recipe.lake.x), z - recipe.lake.z) - recipe.lake.radius;
-        if (distance < best.distance) best = { water: distance <= 0 ? "lake" : "none", bank: distance <= 24, distance, bed: recipe.lake.level, code: recipe.code };
+        if (distance < best.distance)
+          best = { water: distance <= 0 ? "lake" : "none", bank: distance > 0 && distance <= 24, distance, bed: recipe.lake.level, code: recipe.code };
       }
       for (const path of [recipe.points, recipe.tributary]) {
         for (let i = 0; i < path.length - 1; i++) {
@@ -283,7 +317,7 @@ function nearestHydrology(x: number, z: number): HydroHit {
             distance = hit.distance - width,
             bed = lerp(path[i].bed, path[i + 1].bed, hit.t);
           if (distance < best.distance)
-            best = { water: distance <= 0 ? "river" : "none", bank: distance <= width + 20, distance, bed, code: recipe.code };
+            best = { water: distance <= 0 ? "river" : "none", bank: distance > 0 && distance <= 18, distance, bed, code: recipe.code };
         }
       }
     }
@@ -291,17 +325,31 @@ function nearestHydrology(x: number, z: number): HydroHit {
   return best;
 }
 
-function preparedElevationAt(x: number, z: number) {
+function cachePrepared(key: string, value: PreparedSurface) {
+  coreCache.set(key, value);
+  if (coreCache.size > CORE_CACHE_LIMIT) {
+    const first = coreCache.keys().next().value;
+    if (typeof first === "string") coreCache.delete(first);
+  }
+  return value;
+}
+
+function preparedElevationAt(x: number, z: number): PreparedSurface {
   const sx = wrapSourceX(x),
-    macro = macroSampleAt(sourceToLonLat(sx, z));
-  if (macro.domain === "Ocean") return { elevation: -2.8, hydro: { water: "none", bank: false, distance: Infinity, bed: -2.8, code: null } as HydroHit, macro };
-  if (macro.domain === "Lake") return { elevation: -1.8, hydro: { water: "none", bank: false, distance: 0, bed: -1.8, code: macro.code } as HydroHit, macro };
+    key = `${sx}/${z}`,
+    cached = coreCache.get(key);
+  if (cached) return cached;
+  const macro = macroSampleAt(sourceToLonLat(sx, z));
+  if (macro.domain === "Ocean")
+    return cachePrepared(key, { elevation: -2.8, hydro: { water: "none", bank: false, distance: Infinity, bed: -2.8, code: null }, macro });
+  if (macro.domain === "Lake")
+    return cachePrepared(key, { elevation: -1.8, hydro: { water: "none", bank: false, distance: 0, bed: -1.8, code: macro.code }, macro });
   const natural = naturalElevationAt(sx, z),
     hydro = nearestHydrology(sx, z);
   let elevation = natural;
   if (hydro.water === "lake") elevation = hydro.bed - 0.25;
   else if (hydro.water === "river" || hydro.bank) {
-    const influence = smooth01(1 - Math.max(0, hydro.distance) / 28);
+    const influence = smooth01(1 - Math.max(0, hydro.distance) / 24);
     elevation = lerp(natural, Math.min(natural, hydro.bed), hydro.water === "river" ? 1 : influence);
   }
   const place = nearestPlace(sx, z),
@@ -312,7 +360,7 @@ function preparedElevationAt(x: number, z: number) {
     roadBlend = road ? smooth01(Math.max(0, Math.min(1, (Math.abs(z - road.z) - 5) / 7))) : 1,
     flatten = Math.min(placeBlend, roadBlend);
   if (hydro.water === "none") elevation = lerp(3, elevation, flatten);
-  return { elevation, hydro, macro };
+  return cachePrepared(key, { elevation, hydro, macro });
 }
 
 export function surfaceElevationAt(x: number, z: number) {
@@ -324,8 +372,10 @@ export function surfaceAt(x: number, z: number): SurfaceSample {
     macroWater: WaterKind = core.macro.domain === "Ocean" ? "ocean" : core.macro.domain === "Lake" ? "lake" : "none",
     water: WaterKind = macroWater !== "none" ? macroWater : core.hydro.water,
     step = 2,
-    dx = Math.abs(surfaceElevationAt(x + step, z) - surfaceElevationAt(x - step, z)) / (step * 2),
-    dz = Math.abs(surfaceElevationAt(x, z + step) - surfaceElevationAt(x, z - step)) / (step * 2),
+    // Cliff classification follows structural natural relief. Hydrology is queried once,
+    // rather than five times per sample, and river-bank carving never becomes a fake cliff.
+    dx = Math.abs(naturalElevationAt(x + step, z) - naturalElevationAt(x - step, z)) / (step * 2),
+    dz = Math.abs(naturalElevationAt(x, z + step) - naturalElevationAt(x, z - step)) / (step * 2),
     slope = Math.max(dx, dz),
     cliff = water === "none" && slope >= 1.15,
     traversal: TraversalKind = water !== "none" ? "blocked-water" : cliff ? "blocked-cliff" : slope >= 0.42 ? "difficult" : "walkable";
@@ -346,7 +396,7 @@ export function freshwaterDistanceAt(x: number, z: number) {
   const sx = wrapSourceX(x),
     macro = macroSampleAt(sourceToLonLat(sx, z));
   if (macro.domain === "Lake") return 0;
-  return Math.max(0, nearestHydrology(sx, z).distance);
+  return Math.max(0, preparedElevationAt(sx, z).hydro.distance);
 }
 
 export const hydrologyDiagnostics = {
@@ -354,8 +404,12 @@ export const hydrologyDiagnostics = {
   basinColumns: BASIN_COLUMNS,
   basinRows: BASIN_ROWS,
   cacheLimit: CACHE_LIMIT,
+  coreCacheLimit: CORE_CACHE_LIMIT,
   get cacheSize() {
     return basinCache.size;
+  },
+  get coreCacheSize() {
+    return coreCache.size;
   },
   get generatedBasins() {
     return generatedBasins;
