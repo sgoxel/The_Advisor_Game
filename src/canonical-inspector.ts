@@ -26,6 +26,16 @@ import {
   mountainSystems,
 } from "./macro-geography.ts";
 import {
+  BIOME_GENERATOR_VERSION,
+  BIOME_MATERIALS,
+  biomeEvidenceSamples,
+  biomeEvidenceSourceSamples,
+  biomeSampleAt,
+  biomeSampleAtSource,
+  climateZoneAt,
+  polarSignatures,
+} from "./biome.ts";
+import {
   CANONICAL_GENERATOR_VERSION,
   canonicalCellCenter,
   canonicalCellNeighbor,
@@ -62,9 +72,6 @@ function degrees(value: number, positive: string, negative: string) {
 }
 
 function canonicalFromSourceCell(cell: LegacyCell) {
-  // The source cell indices are transitional render/generation detail. Use its
-  // centre only to locate the canonical planet point; never use the L1–L5 code
-  // or source address as global identity.
   const sourceX = cell.x * 2 + 1,
     sourceZ = cell.z * 2 + 1,
     position = sourceToLonLat(sourceX, sourceZ),
@@ -94,8 +101,6 @@ function decorateGeography(value: unknown): unknown {
 function install(world: AdvisorWorld) {
   const sourceCellAt = world.cellAt.bind(world);
 
-  // Public diagnostics return canonical position/identity first. The old source
-  // sample is retained only under an explicitly derived presentation field.
   world.cellAt = (x: number, z: number) => {
     const source = sourceCellAt(x, z),
       { position, canonical } = canonicalFromSourceCell(source),
@@ -106,13 +111,15 @@ function install(world: AdvisorWorld) {
         WORLD_SEED,
         CANONICAL_GENERATOR_VERSION,
       ),
-      macro = macroSampleAt(position);
+      macro = macroSampleAt(position),
+      climate = biomeSampleAt(position, { elevationM: source.elevation, macro });
     return {
       code: canonical.id,
       canonicalId: canonical.id,
       canonicalCell: canonical,
       foundation,
       macro,
+      climate,
       position: { ...position, elevation: source.elevation },
       elevation: source.elevation,
       biome: source.biome,
@@ -136,6 +143,7 @@ function install(world: AdvisorWorld) {
     identityLevel: CANONICAL_ID_LEVEL,
     generatorVersion: CANONICAL_GENERATOR_VERSION,
     macroGeneratorVersion: WORLD_FOUNDATION_VERSION,
+    biomeGeneratorVersion: BIOME_GENERATOR_VERSION,
     canonicalCell,
     canonicalCellId,
     canonicalCellCenter,
@@ -143,6 +151,13 @@ function install(world: AdvisorWorld) {
     canonicalCellNeighbors,
     canonicalFoundationSample,
     macroSampleAt,
+    climateZoneAt,
+    biomeSampleAt,
+    biomeSampleAtSource,
+    biomeMaterials: BIOME_MATERIALS,
+    biomeEvidenceSamples,
+    biomeEvidenceSourceSamples,
+    polarSignatures,
     normalizeLongitude,
     wrapCanonicalX,
     lonLatToMeters,
@@ -169,8 +184,6 @@ function install(world: AdvisorWorld) {
     macroSampleAt,
   });
 
-  // Realm diagnostics keep performance evidence next to the existing renderer
-  // telemetry. No additional generation is performed to collect these values.
   const stateDescriptor = Object.getOwnPropertyDescriptor(world, "state"),
     planBytesEstimated = new TextEncoder().encode(JSON.stringify(MACRO_PLAN)).byteLength,
     sphereVertices = (96 + 1) * (48 + 1),
@@ -198,6 +211,7 @@ function install(world: AdvisorWorld) {
           ...state,
           macroGeography: {
             version: WORLD_FOUNDATION_VERSION,
+            climateVersion: BIOME_GENERATOR_VERSION,
             continents: MACRO_PLAN.continents.length,
             islands: macroIslands.length,
             lakes: macroLakes.length,
@@ -244,17 +258,19 @@ function install(world: AdvisorWorld) {
       source = sourceCellAt(cellX * 2 + 1, cellZ * 2 + 1),
       { position, canonical } = canonicalFromSourceCell(source),
       macro = macroSampleAt(position),
+      climate = biomeSampleAt(position, { elevationM: source.elevation, macro }),
       landform = coordinates.textContent?.split("·").at(-1)?.trim() || "";
 
     coordinates.textContent = `${degrees(position.lat, "N", "S")} · ${degrees(position.lon, "E", "W")}${landform ? ` · ${landform}` : ""}`;
     code.textContent = canonical.id;
     code.dataset.canonicalId = canonical.id;
     if (height)
-      height.title = `Canonical position: lon ${position.lon.toFixed(9)}, lat ${position.lat.toFixed(9)}, elevation ${source.elevation.toFixed(2)} m`;
+      height.title = `Canonical position: lon ${position.lon.toFixed(9)}, lat ${position.lat.toFixed(9)}, elevation ${source.elevation.toFixed(2)} m · ${climate.zone} · ${climate.material.label}`;
     if (tile) tile.textContent = `${source.tile} · derived render tile`;
     if (levels) {
       for (const item of Array.from(levels.children)) {
-        if ((item as HTMLElement).dataset.level === "planet-macro") continue;
+        const level = (item as HTMLElement).dataset.level;
+        if (level === "planet-macro" || level === "planet-climate") continue;
         const first = item.firstChild;
         if (
           first?.nodeType === Node.TEXT_NODE &&
@@ -263,6 +279,21 @@ function install(world: AdvisorWorld) {
         )
           first.textContent = `Derived source · ${first.textContent}`;
       }
+      let climateItem = levels.querySelector<HTMLElement>("[data-level='planet-climate']");
+      if (!climateItem) {
+        climateItem = document.createElement("li");
+        climateItem.dataset.level = "planet-climate";
+        levels.prepend(climateItem);
+      }
+      const climateLabel = `Planet climate · ${climate.zone} · ${climate.material.label} · ${climate.temperatureC.toFixed(1)}° · moisture ${Math.round(climate.moisture * 100)}%`;
+      if (climateItem.dataset.fingerprint !== `${climateLabel}|${climate.code}`) {
+        climateItem.replaceChildren(
+          document.createTextNode(climateLabel),
+          Object.assign(document.createElement("code"), { textContent: climate.code }),
+        );
+        climateItem.dataset.fingerprint = `${climateLabel}|${climate.code}`;
+      }
+
       let macroItem = levels.querySelector<HTMLElement>("[data-level='planet-macro']");
       if (!macroItem) {
         macroItem = document.createElement("li");
