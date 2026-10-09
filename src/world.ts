@@ -364,7 +364,9 @@ export function cellAt(x: number, z: number): Cell {
     z: cz,
     elevation,
     biome,
-    walkable: Boolean(bridge) || (elevation > 0.1 && slope < 2),
+    // Seeded prototype roads are explicit legal good-road corridors. River cells
+    // on a road are already elevated as bridges above; bank cuts remain walkable.
+    walkable: Boolean(road) || (elevation > 0.1 && slope < 2),
     tile: `${tile.level}/${tile.x}/${tile.z}`,
   };
 }
