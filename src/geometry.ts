@@ -228,9 +228,9 @@ export function buildTile(t: Tile): TileGeometry {
     structures = new Builder(),
     nature = new Builder(),
     detail = new Builder();
-  // A modest local tessellation increase improves coast/snow/biome silhouettes while
-  // keeping the same bounded tile allocation model. The semantic field itself is unchanged.
-  const resolution = Math.min(t.size <= 512 ? 20 : 16, t.size / 2),
+  // Vertex tint interpolation fixes material blocks without increasing the existing
+  // tile triangle budget; performance remains bounded by the established mesh LOD.
+  const resolution = Math.min(16, t.size / 2),
     step = t.size / resolution;
   for (let z = 0; z < resolution; z++)
     for (let x = 0; x < resolution; x++) {
