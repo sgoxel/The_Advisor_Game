@@ -9,6 +9,7 @@ Moved here from docs/ROADMAP.md to keep agent start-up reading small. Do not rea
 - WP-S002-002-001 — Globe Realm view: the Realm level rendered as a sphere — COMPLETED and REVIEWED at 2026-10-07
 - WP-S002-002-002 — Latency-bounded focus-preserving pure-zoom globe↔local handoff with destination-ready LOD and zero blank frames — COMPLETED and REVIEWED at 2026-10-08
 - WP-S002-002-003 — Responsive globe/local navigation HUD and Realm framing: truthful scale/ruler, wrap-safe input, labels and seven-viewport UX — COMPLETED and REVIEWED at 2026-10-08
+- WP-S002-002-004 — Pure-zoom orientation regression: consistent ENU/globe axes, drag/picking continuity and deployed evidence — COMPLETED and REVIEWED at 2026-10-10 (AGENT #2; Linux validation 37980899092, VISUAL 8/10; main deployment 37993729653)
 - WP-S002-003-001 — Canonical spherical coordinate and identity authority: remove legacy planar world truth with wrap/pole-safe reversible mapping — COMPLETED and REVIEWED at 2026-10-08
 - WP-S002-003-002 — Precision-safe ENU local rendering: camera-relative patches, canonical picking/labels/shadows and deterministic rebasing — COMPLETED and REVIEWED at 2026-10-08
 - WP-S002-003-003 — Canonical wrap/pole streaming: stable IDs, no-blank coverage, device/byte budgets and eviction-safe caches — COMPLETED and REVIEWED at 2026-10-08
