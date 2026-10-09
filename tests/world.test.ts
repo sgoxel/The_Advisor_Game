@@ -217,7 +217,7 @@ test("three continents preserve owner minimum country, city and village counts",
 });
 
 test("canonical scale/travel foundation is versioned and all village pairs satisfy the fastest-speed minimum", () => {
-  assert.equal(WORLD_FOUNDATION_VERSION, "v4");
+  assert.equal(WORLD_FOUNDATION_VERSION, "v5");
   assert.equal(CANONICAL_PLANET_RADIUS, 637_100);
   assert.equal(GOOD_ROAD_WALK_SPEED_MPS, 1);
   assert.equal(OPEN_GROUND_WALK_SPEED_MPS, 5 / 6);

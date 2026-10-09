@@ -1,3 +1,3 @@
 export const WORLD_SEED = "ADVISOR-0126-ALDERWICK";
 /** Seeded macro-geography + canonical climate/material foundation. Backward compatibility is intentionally not retained. */
-export const WORLD_FOUNDATION_VERSION = "v4";
+export const WORLD_FOUNDATION_VERSION = "v5";
