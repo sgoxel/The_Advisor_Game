@@ -26,6 +26,11 @@ import {
   mountainSystems,
 } from "./macro-geography.ts";
 import {
+  CLIMATE_AUTHORITY_CODE,
+  climateSampleAt,
+  terrainLabel,
+} from "./climate.ts";
+import {
   CANONICAL_GENERATOR_VERSION,
   canonicalCellCenter,
   canonicalCellNeighbor,
@@ -106,16 +111,19 @@ function install(world: AdvisorWorld) {
         WORLD_SEED,
         CANONICAL_GENERATOR_VERSION,
       ),
-      macro = macroSampleAt(position);
+      macro = macroSampleAt(position),
+      climate = climateSampleAt(position, source.elevation);
     return {
       code: canonical.id,
       canonicalId: canonical.id,
       canonicalCell: canonical,
       foundation,
       macro,
+      climate,
       position: { ...position, elevation: source.elevation },
       elevation: source.elevation,
-      biome: source.biome,
+      biome: terrainLabel(climate),
+      sourceBiome: source.biome,
       walkable: source.walkable,
       sourceDetail: {
         code: source.code,
@@ -136,6 +144,7 @@ function install(world: AdvisorWorld) {
     identityLevel: CANONICAL_ID_LEVEL,
     generatorVersion: CANONICAL_GENERATOR_VERSION,
     macroGeneratorVersion: WORLD_FOUNDATION_VERSION,
+    climateAuthorityCode: CLIMATE_AUTHORITY_CODE,
     canonicalCell,
     canonicalCellId,
     canonicalCellCenter,
@@ -143,6 +152,8 @@ function install(world: AdvisorWorld) {
     canonicalCellNeighbors,
     canonicalFoundationSample,
     macroSampleAt,
+    climateSampleAt,
+    terrainLabel,
     normalizeLongitude,
     wrapCanonicalX,
     lonLatToMeters,
@@ -167,10 +178,11 @@ function install(world: AdvisorWorld) {
     mountainSystems,
     macroPlan: MACRO_PLAN,
     macroSampleAt,
+    climateSampleAt,
   });
 
   // Realm diagnostics keep performance evidence next to the existing renderer
-  // telemetry. No additional generation is performed to collect these values.
+  // telemetry. Climate sampling is pure/addressed and allocates no material assets.
   const stateDescriptor = Object.getOwnPropertyDescriptor(world, "state"),
     planBytesEstimated = new TextEncoder().encode(JSON.stringify(MACRO_PLAN)).byteLength,
     sphereVertices = (96 + 1) * (48 + 1),
@@ -203,6 +215,11 @@ function install(world: AdvisorWorld) {
             lakes: macroLakes.length,
             mountainSystems: mountainSystems.length,
             recipeCpuBytesEstimated: planBytesEstimated,
+          },
+          climate: {
+            authority: CLIMATE_AUTHORITY_CODE,
+            materialPaletteEntries: 18,
+            recurringMaterialAllocations: 0,
           },
           globe: {
             ...globe,
@@ -244,9 +261,10 @@ function install(world: AdvisorWorld) {
       source = sourceCellAt(cellX * 2 + 1, cellZ * 2 + 1),
       { position, canonical } = canonicalFromSourceCell(source),
       macro = macroSampleAt(position),
-      landform = coordinates.textContent?.split("·").at(-1)?.trim() || "";
+      climate = climateSampleAt(position, source.elevation),
+      landform = terrainLabel(climate);
 
-    coordinates.textContent = `${degrees(position.lat, "N", "S")} · ${degrees(position.lon, "E", "W")}${landform ? ` · ${landform}` : ""}`;
+    coordinates.textContent = `${degrees(position.lat, "N", "S")} · ${degrees(position.lon, "E", "W")} · ${landform}`;
     code.textContent = canonical.id;
     code.dataset.canonicalId = canonical.id;
     if (height)
@@ -254,7 +272,8 @@ function install(world: AdvisorWorld) {
     if (tile) tile.textContent = `${source.tile} · derived render tile`;
     if (levels) {
       for (const item of Array.from(levels.children)) {
-        if ((item as HTMLElement).dataset.level === "planet-macro") continue;
+        const level = (item as HTMLElement).dataset.level;
+        if (level === "planet-macro" || level === "planet-climate") continue;
         const first = item.firstChild;
         if (
           first?.nodeType === Node.TEXT_NODE &&
@@ -287,6 +306,21 @@ function install(world: AdvisorWorld) {
           Object.assign(document.createElement("code"), { textContent: macroCode }),
         );
         macroItem.dataset.fingerprint = `${label}|${macroCode}`;
+      }
+
+      let climateItem = levels.querySelector<HTMLElement>("[data-level='planet-climate']");
+      if (!climateItem) {
+        climateItem = document.createElement("li");
+        climateItem.dataset.level = "planet-climate";
+        macroItem.after(climateItem);
+      }
+      const climateLabel = `Planet climate · ${climate.zone} · ${landform} · ${climate.temperatureC.toFixed(1)}°C · moisture ${Math.round(climate.moisture * 100)}%`;
+      if (climateItem.dataset.fingerprint !== `${climateLabel}|${climate.code}`) {
+        climateItem.replaceChildren(
+          document.createTextNode(climateLabel),
+          Object.assign(document.createElement("code"), { textContent: climate.code }),
+        );
+        climateItem.dataset.fingerprint = `${climateLabel}|${climate.code}`;
       }
     }
   };
