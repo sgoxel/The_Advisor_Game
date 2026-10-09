@@ -47,25 +47,31 @@ export type RGB = readonly [number, number, number];
  * One semantic base-colour authority for every LOD and renderer. Detail paths may
  * add bounded variation around these values, but may not substitute another
  * palette for the same terrain identity.
+ *
+ * Neighbouring lowland classes intentionally use a compressed luminance/chroma
+ * range. The terrain mesh interpolates vertex colours, so large contrast jumps at
+ * semantic thresholds reveal the low-poly triangulation as artificial wedges.
+ * Shape, vegetation and canonical identity still distinguish the biomes, while
+ * snow/ice stay deliberately bright enough to read as frozen on phone screens.
  */
 export const TERRAIN_PALETTE: Readonly<Record<TerrainClass, RGB>> = {
   ocean: [76, 124, 148],
   lake: [70, 124, 151],
-  "sea-ice": [184, 208, 211],
-  "polar-ice": [218, 226, 221],
-  tundra: [148, 158, 132],
-  "snowy-mountain": [221, 223, 211],
-  cliff: [110, 105, 96],
-  beach: [203, 188, 140],
-  desert: [190, 153, 93],
-  dryland: [159, 137, 86],
-  "bare-earth": [137, 112, 78],
+  "sea-ice": [200, 220, 224],
+  "polar-ice": [232, 239, 239],
+  tundra: [181, 190, 172],
+  "snowy-mountain": [235, 237, 232],
+  cliff: [111, 106, 97],
+  beach: [186, 172, 132],
+  desert: [176, 151, 104],
+  dryland: [151, 135, 93],
+  "bare-earth": [143, 124, 92],
   "conifer-forest": [55, 88, 66],
   "temperate-forest": [73, 108, 65],
   "dry-woodland": [105, 117, 70],
-  grassland: [116, 142, 78],
-  meadow: [128, 151, 89],
-  highland: [126, 132, 111],
+  grassland: [126, 145, 91],
+  meadow: [137, 155, 100],
+  highland: [127, 130, 116],
   volcanic: [92, 88, 79],
 };
 
@@ -221,15 +227,16 @@ function terrainFor(
 
   const coastM = Math.max(0, macro.coastDistanceRad * CANONICAL_PLANET_RADIUS),
     beachSuitability = regionalWave(position, 3),
-    beachReachM = 110 + 390 * beachSuitability;
-  if (coastM <= Math.max(55, beachReachM)) {
+    beachReachM = 75 + 235 * beachSuitability;
+  if (coastM <= Math.max(45, beachReachM)) {
     if (ruggedness > 0.58 || elevationM > 105)
       return { terrainClass: "cliff", forestFamily: null };
-    // Sand/shingle margins are narrow and patchy. At the waterline they remain
-    // readable where suitable; farther inland only strongly suitable coasts stay beach.
+    // Keep beach identity to a narrow, SEED-suitable shoreline. This avoids a
+    // broad stair-stepped sand band on the coarse local terrain mesh while still
+    // preserving sandy/shingle margins at genuinely suitable coasts.
     if (
-      (coastM <= 90 && beachSuitability > 0.22) ||
-      (coastM <= beachReachM && beachSuitability > 0.62)
+      (coastM <= 70 && beachSuitability > 0.26) ||
+      (coastM <= beachReachM && beachSuitability > 0.72)
     )
       return { terrainClass: "beach", forestFamily: null };
   }
