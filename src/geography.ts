@@ -17,6 +17,7 @@ import {
   macroIslands,
   macroLakes,
 } from "./macro-geography.ts";
+import { villagePairMeetsMinimumWalk } from "./routing.ts";
 import { travelMetrics } from "./travel.ts";
 
 /** x/z are derived source/render coordinates; canonicalPosition is world truth. */
@@ -204,13 +205,20 @@ export const villages: Place[] = (() => {
         candidates = [-1, 0, 1].map((offset) =>
           canonicalPosition(anchor.lon + offset * lonStep, lat),
         );
-      const legal = candidates.every((candidate) => {
+      // Besides the 6 km siting spacing, every candidate must keep the 60-fantasy-minute
+      // minimum walk to every other village (geodesic proof first, routed lower bound
+      // only for closer pairs). A failing row is rejected and the next seeded attempt runs.
+      const legal = candidates.every((candidate, index) => {
         const macro = macroSampleAt(candidate);
         return (
           macro.domain === "Mainland" &&
           macro.continentId === city.continent &&
           macro.reliefM <= 85 &&
-          accepted.every((other) => macroFeatureDistanceM(candidate, other) >= 6_000)
+          accepted.every((other) => macroFeatureDistanceM(candidate, other) >= 6_000) &&
+          accepted.every((other) => villagePairMeetsMinimumWalk(candidate, other).ok) &&
+          candidates
+            .slice(0, index)
+            .every((prior) => villagePairMeetsMinimumWalk(candidate, prior).ok)
         );
       });
       if (legal) {
