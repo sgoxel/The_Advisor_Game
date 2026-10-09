@@ -11,7 +11,7 @@ import {
   type TerrainClass,
 } from "../src/climate.ts";
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "../src/config.ts";
-import { macroSampleAt } from "../src/macro-geography.ts";
+import { macroSampleAt, mountainSystems } from "../src/macro-geography.ts";
 import { lonLatToSource } from "../src/planet.ts";
 import { terrainTint } from "../src/geometry.ts";
 
@@ -19,21 +19,27 @@ const radians = (degrees: number) => (degrees * Math.PI) / 180;
 
 function canonicalSamples() {
   const samples: { lon: number; lat: number; climate: ClimateSample }[] = [];
+  const add = (position: { lon: number; lat: number }) => {
+    const macro = macroSampleAt(position),
+      climate = climateSampleAt(position, macro.reliefM);
+    samples.push({ ...position, climate });
+  };
   for (let latDeg = -87.5; latDeg <= 87.5; latDeg += 2.5)
-    for (let lonDeg = -177.5; lonDeg < 180; lonDeg += 2.5) {
-      const lon = radians(lonDeg),
-        lat = radians(latDeg),
-        position = { lon, lat },
-        macro = macroSampleAt(position),
-        climate = climateSampleAt(position, macro.reliefM);
-      samples.push({ lon, lat, climate });
-    }
+    for (let lonDeg = -177.5; lonDeg < 180; lonDeg += 2.5)
+      add({ lon: radians(lonDeg), lat: radians(latDeg) });
+  // Narrow mountain systems can sit between a 2.5° global sampling lattice.
+  // Their canonical recipe centres/paths are part of the seed and must also be tested.
+  for (const system of mountainSystems) {
+    add(system.center);
+    for (const point of system.path) add(point);
+  }
   return samples;
 }
 
 const samples = canonicalSamples();
 const byTerrain = new Map<TerrainClass, (typeof samples)[number]>();
-for (const item of samples) if (!byTerrain.has(item.climate.terrainClass)) byTerrain.set(item.climate.terrainClass, item);
+for (const item of samples)
+  if (!byTerrain.has(item.climate.terrainClass)) byTerrain.set(item.climate.terrainClass, item);
 
 test("climate authority is seed-addressed and foundation-versioned", () => {
   assert.equal(WORLD_SEED, "ADVISOR-0126-ALDERWICK");
@@ -104,7 +110,7 @@ test("coasts, cliffs and snow are physically constrained by canonical samples", 
 });
 
 test("all semantic materials use one bounded renderer-independent RGB authority", () => {
-  assert.equal(Object.keys(TERRAIN_PALETTE).length, 19);
+  assert.equal(Object.keys(TERRAIN_PALETTE).length, 18);
   for (const [terrain, rgb] of Object.entries(TERRAIN_PALETTE)) {
     assert.equal(rgb.length, 3, terrain);
     for (const channel of rgb)
