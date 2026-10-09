@@ -156,7 +156,7 @@ export function terrainTint(x: number, z: number, scale = 32): RGB {
     sample = biomeSampleAtSource(x, z, h === undefined ? {} : { elevationM: h }),
     base = sample.material.color,
     grain = field(x, z, scale > 512 ? 7600 : sample.material.rock ? 45 : 72, 44) - 0.5,
-    amount = scale > 512 ? 8 : sample.material.frozen ? 7 : sample.material.water ? 4 : 13;
+    amount = sample.material.water ? 0 : scale > 512 ? 8 : sample.material.frozen ? 7 : 13;
   return color(
     Math.max(0, Math.min(255, base[0] + grain * amount)),
     Math.max(0, Math.min(255, base[1] + grain * amount)),
