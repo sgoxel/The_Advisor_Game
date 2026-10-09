@@ -24,24 +24,25 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 - WP-S002-002-001 — Globe Realm view: the Realm level rendered as a sphere — COMPLETED and REVIEWED at 2026-10-07
 - WP-S002-002-002 — Latency-bounded focus-preserving pure-zoom globe↔local handoff with destination-ready LOD and zero blank frames — COMPLETED and REVIEWED at 2026-10-08
 - WP-S002-002-003 — Responsive globe/local navigation HUD and Realm framing: truthful scale/ruler, wrap-safe input, labels and seven-viewport UX — COMPLETED and REVIEWED at 2026-10-08
-- WP-S002-002-004 — Fix inverted local/globe orientation and drag continuity during pure zoom — IN PROGRESS (AGENT #2, owner-requested regression fix)
+- WP-S002-002-004 — Pure-zoom orientation regression: consistent ENU/globe axes, drag/picking continuity and deployed evidence — IN PROGRESS (AGENT #2, owner-requested regression fix)
 - WP-S002-003-001 — Canonical spherical coordinate and identity authority: remove legacy planar world truth with wrap/pole-safe reversible mapping — COMPLETED and REVIEWED at 2026-10-08
 - WP-S002-003-002 — Precision-safe ENU local rendering: camera-relative patches, canonical picking/labels/shadows and deterministic rebasing — COMPLETED and REVIEWED at 2026-10-08
 - WP-S002-003-003 — Canonical wrap/pole streaming: stable IDs, no-blank coverage, device/byte budgets and eviction-safe caches — COMPLETED and REVIEWED at 2026-10-08
 - WP-S002-004-001 — Reference analysis/contracts for natural-world authority, readable 3D settlement/living-world UX and mobile performance — COMPLETED and REVIEWED at 2026-10-08
 - WP-S002-004-002 — Canonical planet-scale/travel migration UX: physical metres, route-derived time, truthful ruler/copy and legacy cleanup — COMPLETED and REVIEWED at 2026-10-09
 - WP-S002-004-003 — Realm macro-geography visual/performance foundation: seeded continents/islands, distinct mountain/volcanic systems and cross-LOD silhouettes — COMPLETED and REVIEWED at 2026-10-09
-- WP-S002-004-004 — Biome/material readability foundation: diverse climates/terrain, stable semantic colors and cross-LOD identity
-- WP-S002-004-005 — Terrain/hydrology/traversal foundation: natural landforms, distributed freshwater, canonical walkability and bounded seam-safe queries
-- WP-S002-004-006 — Vegetation/ground-detail presentation: natural deterministic scatter, reusable instancing, stable ownership and mobile budgets
-- WP-S002-004-007 — Political atlas authority/UX: full-continent country partition, deterministic ≥minimum counts, readable borders and bounded 1/1000 labels
-- WP-S002-004-008 — Shortest-legal-route authority/UX: all-generated-village ≥60-minute proof, bounded routing and truthful route/time presentation — IN PROGRESS (AGENT #2, 2026-10-09): implemented and live; waiting for the full CI browser-evidence run (08bf625) to pass before COMPLETED
-- WP-S002-004-009 — Settlement/building UX: terrain-shaped non-grid functional layouts, logical building scale, lazy usable interiors and mobile-safe rendering
-- WP-S002-004-010 — Continuous-zoom material/LOD continuity: canonical albedo parity, threshold blending, tile-patch regression and wrap/pole ownership
-- WP-S002-004-011 — Living-resident scalability/UX: house-level ownership, analytical schedules, spatial indexing, pooled actors and responsive inspection
-- WP-S002-004-012 — Unified terrain compositor: deterministic earthworks and one render/routing/collision/material authority
-- WP-S002-004-013 — Ruin/critical-place UX: 1/1000 discoverability, legal access, stable labels and bounded lazy detail
-- WP-S002-004-014 — Transport-network UX/architecture: connected roads/bridges/harbors/ferries, terrain-aware topology and bounded regional generation
-- WP-S002-005-001 — S002 performance release gate: device-class DPR/render-scale/shadow adaptation, full telemetry, UI/simulation/resource budgets and renderer-loss recovery
-- WP-S002-005-002 — Responsive accessibility/UI release gate: safe-area layout, ≥44px hit targets, modal/focus/keyboard parity and dense-label readability
-- WP-S002-005-003 — README/runtime compatibility release gate: player-authority wording, dynamic counts/canonical headings, world/travel truth and Chrome backend recovery
+- WP-S002-004-004 — Canonical biome/material readability: diverse climates/terrain, non-color-only semantic cues, cross-LOD identity and mobile/backend parity
+- WP-S002-004-005 — Natural terrain/hydrology/traversal authority: irregular landforms, distributed freshwater, canonical walkability and bounded seam-safe queries
+- WP-S002-004-006 — Vegetation/ground-detail presentation: biome-specific deterministic scatter, instanced/reused assets, stable ownership and mobile budgets
+- WP-S002-004-007 — Political atlas authority/UX: full-land country partition, SEED-variable ≥30/90/270 counts, readable borders/names and bounded 1/1000 labels
+- WP-S002-004-008 — Shortest-legal-route authority/UX: all-pair ≥60-minute proof on final terrain, bounded routing and truthful route preview — IN PROGRESS (AGENT #2, 2026-10-09): implemented and live; waiting for the full CI browser-evidence run (08bf625) to pass before COMPLETED
+- WP-S002-004-009 — Settlement/building world UX: terrain-shaped non-grid layouts, entrance-connected homes/services, usable lazy interiors and mobile-safe rendering
+- WP-S002-004-010 — Continuous-zoom visual identity: canonical material/albedo parity, smooth LOD/handoff blending and no tile/palette pop across backends
+- WP-S002-004-011 — Living-resident scalability/UX: persistent home/work identity, analytical schedules, spatial indexing, pooled actors and responsive inspection
+- WP-S002-004-012 — Unified world-surface compositor: deterministic priority 0–9 earthworks with shared render/routing/collision/material truth
+- WP-S002-004-013 — Ruin/critical-place discoverability UX: 1/1000 labels/leaders, legal access, stable canonical identity and bounded lazy detail
+- WP-S002-004-014 — Global transport-network authority/UX: connected roads/bridges/harbors/ferries, terrain-aware topology, shared boundaries and bounded generation
+- WP-S002-004-015 — Invisible-world continuity/performance: SEED-defined shared-boundary recipes, bounded queries and gameplay-focused lazy materialization
+- WP-S002-005-001 — S002 performance/adaptive-rendering release gate: real-device budgets, full telemetry, DOM hot-path control and renderer-loss recovery
+- WP-S002-005-002 — Responsive UI/accessibility release gate: safe areas, ≥44px targets, focus/keyboard parity, dense-label readability and seven-viewport evidence
+- WP-S002-005-003 — README/runtime semantics release gate: Advisor-vs-atlas wording, dynamic registry counts, canonical truth and Chrome/WebGPU→WebGL2 recovery
