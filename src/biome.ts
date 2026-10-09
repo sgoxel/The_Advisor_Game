@@ -124,8 +124,9 @@ export function biomeSampleAt(
     climate = climateZoneAt(position, elevationM),
     coastInfluence = Math.exp(-Math.max(0, macro.coastDistanceRad) / 0.09),
     moistureNoise = sphericalField(position, "moisture"),
+    aridity = sphericalField(position, "aridity"),
     rainShadow = macro.mountainIntensity * (0.08 + 0.12 * sphericalField(position, "rain-shadow")),
-    moisture = clamp01(0.1 + moistureNoise * 0.67 + coastInfluence * 0.2 - rainShadow),
+    moisture = clamp01(0.08 + moistureNoise * 0.64 + coastInfluence * 0.18 - rainShadow - (aridity - 0.5) * 0.2),
     geology = sphericalField(position, "geology"),
     patch = sphericalField(position, "ground-patch");
   let zone: ClimateZone = climate.zone,
@@ -146,12 +147,12 @@ export function biomeSampleAt(
     biome = "beach";
   } else if (climate.temperatureC < 4.5) {
     biome = moisture > 0.44 ? "boreal-forest" : "tundra";
-  } else if (moisture < 0.235 && climate.temperatureC > 14) {
+  } else if (moisture < 0.31 && climate.temperatureC > 14) {
     zone = "Dry";
-    biome = geology > 0.66 || patch < 0.2 ? "bare-ground" : "desert";
-  } else if (moisture < 0.34 && climate.temperatureC > 8) {
+    biome = geology > 0.7 || patch < 0.14 ? "bare-ground" : "desert";
+  } else if (moisture < 0.42 && climate.temperatureC > 8) {
     zone = "Dry";
-    biome = patch > 0.72 ? "bare-ground" : "dryland";
+    biome = patch > 0.76 ? "bare-ground" : "dryland";
   } else if (elevationM > 150 || macro.mountainIntensity > 0.28) {
     biome = geology > 0.7 ? "cliff-rock" : "highland";
   } else if (climate.temperatureC < 10 && moisture > 0.49) {
@@ -160,7 +161,7 @@ export function biomeSampleAt(
     biome = "temperate-forest";
   } else if (climate.temperatureC >= 19 && moisture > 0.43) {
     biome = "warm-woodland";
-  } else if (patch < 0.1 && moisture < 0.44) {
+  } else if (patch < 0.1 && moisture < 0.48) {
     biome = "bare-ground";
   } else {
     biome = "grassland";
@@ -249,8 +250,12 @@ export function biomeEvidenceSourceSamples() {
 }
 
 export function polarSignatures() {
-  const north = [0.1, 1.2, 2.4].map((lon) => biomeSampleAt({ lon, lat: 1.46 }).biome),
-    south = [-0.4, -1.7, 2.1].map((lon) => biomeSampleAt({ lon, lat: -1.46 }).biome);
+  const signature = (lon: number, lat: number) => {
+    const sample = biomeSampleAt({ lon, lat });
+    return `${sample.biome}/${sample.temperatureC.toFixed(3)}/${sample.moisture.toFixed(3)}/${sample.macro.domain}/${sample.macro.mountainIntensity.toFixed(3)}`;
+  };
+  const north = [0.1, 1.2, 2.4].map((lon) => signature(lon, 1.46)),
+    south = [-0.4, -1.7, 2.1].map((lon) => signature(lon, -1.46));
   return { north, south };
 }
 
