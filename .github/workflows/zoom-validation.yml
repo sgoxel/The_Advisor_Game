@@ -38,7 +38,9 @@ jobs:
         if: matrix.backend == 'webgl2'
         run: xvfb-run -a npx playwright test --config playwright.fallback.config.js
       - name: Perceptual palette and block boundary gate
-        run: python tools/verify-zoom-images.py test-results/zoom-${{ matrix.backend }}/pairs.json
+        run: |
+          python tools/verify-zoom-images.py --self-test
+          python tools/verify-zoom-images.py test-results/zoom-${{ matrix.backend }}/pairs.json
       - name: Named owner Country regression captures
         run: |
           npm run preview -- --port 4174 > /tmp/zoom-preview.log 2>&1 &

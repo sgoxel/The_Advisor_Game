@@ -62,6 +62,15 @@ Adjacent frames differ by 0.2% in zoom. The stable-ground gate excludes new prop
 and labels and measures the right-centre ground crop, away from phone controls.
 An 8-pixel box filter tolerates tiny geometry/detail motion. The CIELAB DeltaE76
 budget is mean ≤2 and p95 ≤5; newly strengthened edge contrast is ≤3 Lab units.
+Only an eight-pixel neighbourhood of pre-existing strong contours (>2 Lab units
+per pixel after filtering) is excluded from stable-ground color measurements;
+at least 40% of the crop must remain. Newly introduced block edges stay in the
+gate. An independent symmetric contour check permits at most 5% of strong edge
+pixels to move beyond that eight-pixel neighbourhood. This allowance was
+calibrated from actually inspected Street/Village coast pairs: fine shoreline
+geometry changes a few edge pixels while land/water color families remain fixed.
+It still rejects the earlier snow-band shift at Country (mean DeltaE76 3.64,
+p95 14.94 and contour mismatch 95.4% on the retained failed WebGPU evidence).
 This equivalent perceptual metric rejects broad dark-green→pale-green palette
 replacement (tens of Lab units), while permitting gradual detail refinement.
 `tools/verify-zoom-images.py` records every pair and fails on a budget violation.

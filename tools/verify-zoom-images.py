@@ -28,6 +28,17 @@ def ground(file):
 def edges(a):
     return max(float(np.percentile(np.linalg.norm(np.diff(a,axis=axis),axis=2),99)) for axis in [0,1])
 
+def contour(a):
+    mask=np.zeros(a.shape[:2],dtype=bool)
+    for axis in [0,1]:
+        strong=np.linalg.norm(np.diff(a,axis=axis),axis=2)>2
+        if axis==0: mask[:-1]|=strong; mask[1:]|=strong
+        else: mask[:,:-1]|=strong; mask[:,1:]|=strong
+    return mask
+
+def expand(mask):
+    return np.asarray(Image.fromarray((mask*255).astype(np.uint8)).filter(ImageFilter.MaxFilter(17)))>0
+
 if sys.argv[1:] == ['--self-test']:
     rich=lab(np.full((40,40,3),[55,88,66],dtype=float))
     pale=lab(np.full((40,40,3),[155,168,125],dtype=float))
@@ -40,10 +51,22 @@ if sys.argv[1:] == ['--self-test']:
 results=[]
 for file in sys.argv[1:]:
     for pair in json.loads(Path(file).read_text()):
-        a,b=ground(pair['before']['file']),ground(pair['after']['file'])
+        def retained_image(frame):
+            path=Path(frame['file'])
+            retained=Path(file).parent/path.name
+            return retained if retained.exists() else path
+        a,b=ground(retained_image(pair['before'])),ground(retained_image(pair['after']))
         d=np.linalg.norm(a-b,axis=2)
-        result={'fixture':pair['fixture'],'height':pair['before']['height'],'meanDeltaE76':float(d.mean()),'p95DeltaE76':float(np.percentile(d,95)),'newEdgeContrast':float(max(0,edges(b)-edges(a)))}
-        result['passed']=result['meanDeltaE76']<=2 and result['p95DeltaE76']<=5 and result['newEdgeContrast']<=3
+        ca,cb=contour(a),contour(b)
+        near_a,near_b=expand(ca),expand(cb)
+        # Existing shore/relief contours are changing geometry, not stable
+        # ground. Mask only their pre-existing neighbourhood; new tile/block
+        # edges remain eligible for the color gate and the independent edge gate.
+        stable=~near_a
+        if stable.mean()<0.4: raise ValueError('Too little stable ground in fixture')
+        mismatch=max(float((cb&~near_a).sum()/max(1,cb.sum())),float((ca&~near_b).sum()/max(1,ca.sum())))
+        result={'fixture':pair['fixture'],'height':pair['before']['height'],'meanDeltaE76':float(d[stable].mean()),'p95DeltaE76':float(np.percentile(d[stable],95)),'stableGroundFraction':float(stable.mean()),'contourMismatchFraction':mismatch,'newEdgeContrast':float(max(0,edges(b)-edges(a)))}
+        result['passed']=result['meanDeltaE76']<=2 and result['p95DeltaE76']<=5 and result['newEdgeContrast']<=3 and mismatch<=0.05
         results.append(result)
 Path('test-results/zoom-metrics.json').write_text(json.dumps(results,indent=2))
 failed=[r for r in results if not r['passed']]
