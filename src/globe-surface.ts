@@ -1,5 +1,5 @@
 /** Globe surface image. Presentation only: every texel is the flat world's own
- * terrain colour and height, sampled through the shared generation functions. */
+ * canonical climate/material identity and height, sampled through shared generation functions. */
 import { places } from "./geography.ts";
 import { terrainTint } from "./geometry.ts";
 import { macroSampleAt } from "./macro-geography.ts";
@@ -34,9 +34,9 @@ const EXAGGERATION = 3.5;
 const SHADE_MIN = 0.6,
   SHADE_MAX = 1.3;
 
-// One entry per source-detail generation region. Open-ocean regions can reuse one
-// colour/height, but the macro coast/island authority must first prove the whole
-// region is ocean. This keeps the shortcut from swallowing irregular coast slivers.
+// One entry per source-detail generation region. Open-ocean regions may reuse
+// elevation, but colour still comes from the canonical climate authority so polar
+// sea ice is not collapsed into one global ocean swatch.
 const REGION = CELL_SIZE * 100,
   HALF = PLANET_CIRCUMFERENCE / 2,
   COL0 = Math.floor(-HALF / REGION),
@@ -49,7 +49,7 @@ const UNKNOWN = 0,
   DETAILED = 1,
   OPEN_OCEAN = 2;
 let regions: Uint8Array | undefined;
-let sea: { color: RGB; height: number } | undefined;
+let seaHeight: number | undefined;
 
 function regionStates(): Uint8Array {
   if (regions) return regions;
@@ -98,26 +98,25 @@ function openOcean(x: number, z: number): boolean {
     states[index] = regionIsOpenOcean(rx, rz) ? OPEN_OCEAN : DETAILED;
   return states[index] === OPEN_OCEAN;
 }
-/** The one colour and height of open ocean, read once from the shared functions. */
-function openSea() {
-  if (sea) return sea;
-  for (let rz = ROW0; rz < ROW0 + ROWS && !sea; rz++)
-    for (let rx = COL0; rx < COL0 + COLS && !sea; rx++) {
+
+/** Read the shared ocean elevation once; polar sea ice changes material, not sea level. */
+function openSeaHeight() {
+  if (seaHeight !== undefined) return seaHeight;
+  for (let rz = ROW0; rz < ROW0 + ROWS; rz++)
+    for (let rx = COL0; rx < COL0 + COLS; rx++) {
       const x = (rx + 0.5) * REGION,
         z = (rz + 0.5) * REGION;
-      if (openOcean(x, z))
-        sea = { color: bytes(terrainTint(x, z)), height: heightAt(x, z) };
+      if (openOcean(x, z)) return (seaHeight = heightAt(x, z));
     }
-  return (sea ??= { color: [-1, -1, -1], height: 0 });
+  return (seaHeight = -2.8);
 }
+
 /** Vertex colours reach the flat terrain mesh through a Uint8Array: same truncation. */
 const bytes = ([r, g, b]: RGB): RGB => [r | 0, g | 0, b | 0];
 
-/** Unshaded surface colour at a flat position: the flat terrain's own fine-scale tint. */
+/** Unshaded surface colour at a flat position from the shared semantic material authority. */
 export function globeSurfaceColor(x: number, z: number): RGB {
-  if (!openOcean(x, z)) return bytes(terrainTint(x, z));
-  const [r, g, b] = openSea().color;
-  return [r, g, b];
+  return bytes(terrainTint(x, z, openOcean(x, z) ? 4096 : 32));
 }
 
 export function buildGlobeSurface(
@@ -139,7 +138,7 @@ export function buildGlobeSurface(
   )
     throw new RangeError("Invalid globe surface request");
   const pixels = new Uint8Array(width * height * 4),
-    water = openSea(),
+    oceanHeight = openSeaHeight(),
     count = samples * samples;
   // Flat x depends only on the column and flat z only on the row: map each once.
   const xs = new Float64Array(width * samples),
@@ -159,15 +158,13 @@ export function buildGlobeSurface(
       zs[j * samples + b] = lonLatToFlat(0, lat(j + (b + 0.5) / samples)).z;
   }
   // Heights at texel centres, read on demand and shared by neighbouring texels.
-  const heights = new Float32Array(relief ? (to - from + 2) * width : 0).fill(
-    NaN,
-  );
+  const heights = new Float32Array(relief ? (to - from + 2) * width : 0).fill(NaN);
   const elevation = (i: number, j: number) => {
     const index = (j - from + 1) * width + i;
     if (Number.isNaN(heights[index])) {
       const x = centreX[i],
         z = centreZ[j];
-      heights[index] = openOcean(x, z) ? water.height : heightAt(x, z);
+      heights[index] = openOcean(x, z) ? oceanHeight : heightAt(x, z);
     }
     return heights[index];
   };
@@ -186,7 +183,6 @@ export function buildGlobeSurface(
           ? 0
           : ((elevation(i, south) - elevation(i, north)) * EXAGGERATION) /
             (centreZ[south] - centreZ[north]);
-    // Ground rising eastward faces west; ground rising southward faces north.
     const lit =
       (LIGHT[0] * eastward + LIGHT[1] + LIGHT[2] * southward) /
       Math.sqrt(1 + eastward * eastward + southward * southward);
@@ -197,47 +193,37 @@ export function buildGlobeSurface(
   };
   for (let j = from; j < to; j++)
     for (let i = 0; i < width; i++) {
-      let r = 0,
-        g = 0,
-        b = 0,
+      let landR = 0,
+        landG = 0,
+        landB = 0,
+        waterR = 0,
+        waterG = 0,
+        waterB = 0,
         land = 0;
       for (let sb = 0; sb < samples; sb++) {
         const z = zs[j * samples + sb];
         for (let sa = 0; sa < samples; sa++) {
-          const x = xs[i * samples + sa];
-          if (openOcean(x, z)) continue;
-          const c = terrainTint(x, z),
-            cr = c[0] | 0,
-            cg = c[1] | 0,
-            cb = c[2] | 0;
-          // Rivers, lakes and island shallows share the ocean colour and stay unshaded too.
-          if (
-            cr === water.color[0] &&
-            cg === water.color[1] &&
-            cb === water.color[2]
-          )
-            continue;
-          r += cr;
-          g += cg;
-          b += cb;
-          land++;
+          const x = xs[i * samples + sa],
+            isOpenOcean = openOcean(x, z),
+            c = globeSurfaceColor(x, z),
+            wet = isOpenOcean || heightAt(x, z) <= 0.1;
+          if (wet) {
+            waterR += c[0];
+            waterG += c[1];
+            waterB += c[2];
+          } else {
+            landR += c[0];
+            landG += c[1];
+            landB += c[2];
+            land++;
+          }
         }
       }
-      const wet = count - land,
-        light = land && relief ? shade(i, j) : 1,
+      const light = land && relief ? shade(i, j) : 1,
         offset = (j * width + i) * 4;
-      pixels[offset] = Math.min(
-        255,
-        Math.round((r * light + wet * water.color[0]) / count),
-      );
-      pixels[offset + 1] = Math.min(
-        255,
-        Math.round((g * light + wet * water.color[1]) / count),
-      );
-      pixels[offset + 2] = Math.min(
-        255,
-        Math.round((b * light + wet * water.color[2]) / count),
-      );
+      pixels[offset] = Math.min(255, Math.round((landR * light + waterR) / count));
+      pixels[offset + 1] = Math.min(255, Math.round((landG * light + waterG) / count));
+      pixels[offset + 2] = Math.min(255, Math.round((landB * light + waterB) / count));
       pixels[offset + 3] = 255;
     }
   return { width, height, pixels };
