@@ -15,6 +15,7 @@ import { heightAt } from "./world.ts";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const $svg = (id: string) => document.getElementById(id) as unknown as SVGSVGElement;
 
 type AtlasState = {
   presentation: "flat" | "globe" | "transition";
@@ -127,7 +128,7 @@ function updateContext(state: AtlasState, places: Place[]) {
 }
 
 function updateBorders(state: AtlasState, frame: LocalRenderFrame, scale: number) {
-  const svg = document.getElementById("political-borders") as SVGSVGElement;
+  const svg = $svg("political-borders");
   if (state.presentation !== "flat" || scale > 2500) {
     svg.replaceChildren();
     return;
@@ -196,7 +197,7 @@ function labelCandidateFromPlace(place: Place): LabelCandidate {
 
 function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number, places: Place[]) {
   const root = $("political-labels"),
-    leaders = document.getElementById("political-label-leaders") as SVGSVGElement,
+    leaders = $svg("political-label-leaders"),
     detailed = state.presentation === "flat" && scale <= 1000;
   document.body.classList.toggle("political-detail-labels", detailed);
   if (!detailed) {
