@@ -18,7 +18,7 @@ for (let z = 0; z < hydrologyDiagnostics.basinRows; z++)
 if (!recipes.length) throw new Error("No hydrology recipes generated");
 
 const riverRecipe = recipes.find((r) => r.tributary.length >= 4) || recipes[0],
-  riverPoint = riverRecipe.points[Math.min(3, riverRecipe.points.length - 2)],
+  riverPoint = riverRecipe.points[Math.min(5, riverRecipe.points.length - 2)],
   lakeRecipe = recipes.find((r) => r.lake),
   lakePoint = lakeRecipe?.lake || riverPoint;
 
@@ -35,7 +35,13 @@ outer: for (const mountain of MACRO_PLAN.mountainSystems) {
   }
 }
 
-const village = [...villages].sort(
+// Evidence must show a settlement that has useful freshwater access without
+// intentionally framing a building footprint on top of the water corridor.
+const rankedVillages = [...villages]
+  .map((village) => ({ village, distance: freshwaterDistanceAt(village.x, village.z) }))
+  .filter(({ distance }) => Number.isFinite(distance) && distance >= 120 && distance <= 1200)
+  .sort((a, b) => a.distance - b.distance);
+const village = rankedVillages[0]?.village || [...villages].sort(
   (a, b) => freshwaterDistanceAt(a.x, a.z) - freshwaterDistanceAt(b.x, b.z),
 )[0];
 const mountain = [...MACRO_PLAN.mountainSystems].sort((a, b) => b.reliefM - a.reliefM)[0];
