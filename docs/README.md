@@ -342,7 +342,7 @@ The Campaign SEED deterministically defines the fixed geographic foundation from
 
 The same SEED must reproduce the same unchanged geographic foundation. Fantasy time does not participate in this generation.
 
-Generated geography must also obey realism constraints rather than placing settlements arbitrarily. In particular, two distinct villages must not have a valid walking route between their centers that takes less than **1 fantasy game hour**. This constraint uses the shortest valid walkable route, not straight-line distance. Terrain, elevation, water, bridges, roads, paths and other movement conditions may lengthen the route.
+Generated geography must also obey realism constraints rather than placing settlements arbitrarily. In particular, two distinct villages must not have a valid walking route between their centers that takes less than **1 fantasy game hour**. Because nothing walks faster than 1 m/s, this minimum is guaranteed by plain straight-line separation (at least 3.6 km; the seeded village siting keeps at least 6 km), so world generation never needs pathfinding for it. Terrain, elevation, water, bridges, roads, paths and other movement conditions only lengthen the real route, which the travel panel computes on demand for display (`docs/ROUTING.md`).
 
 If a SEED-generated village candidate would violate this minimum travel-time rule, the generator must deterministically reject that candidate and continue to the next deterministic candidate derived from the same SEED process. Therefore the world remains both realistic and reproducible.
 

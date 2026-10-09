@@ -6,14 +6,8 @@
  */
 import { roads, villages, type Place } from "./geography.ts";
 import { greatCircleDistance } from "./planet.ts";
-import {
-  GRID_LENGTH_OVERESTIMATE,
-  planRoute,
-  villagePairMeetsMinimumWalk,
-  type RoadSegment,
-  type RouteResult,
-} from "./routing.ts";
-import { MIN_VILLAGE_WALK_FANTASY_SECONDS } from "./travel.ts";
+import { planRoute, type RoadSegment, type RouteResult } from "./routing.ts";
+import { villagePairProvenByGeodesic } from "./travel.ts";
 
 export const NEIGHBOUR_LIMIT = 4;
 export const NEIGHBOUR_MAX_DISTANCE_M = 60_000;
@@ -81,43 +75,25 @@ export function neighbouringVillages(
 export type MinimumWalkReport = {
   villages: number;
   pairs: number;
-  provenByGeodesic: number;
-  routedChecks: number;
-  failures: { a: string; b: string; lowerBoundSeconds: number }[];
+  failures: { a: string; b: string; geodesicM: number }[];
   minGeodesicM: number;
-  minLowerBoundSeconds: number;
 };
 
 /**
- * Checks every unordered village pair against the 3,600 fantasy-second minimum.
- * Pairs the geodesic already proves are never routed; closer pairs fall back to the
- * routed lower bound. Failures are reported, never clamped.
+ * Checks every unordered village pair against the 60 fantasy-minute minimum. The
+ * straight-line distance is enough: no walk is faster than 1 m/s, so a geodesic of
+ * at least 3,600 m can never take under 3,600 s. No pathfinding is involved.
  */
 export function verifyVillageMinimumWalk(): MinimumWalkReport {
-  const report: MinimumWalkReport = {
-    villages: villages.length,
-    pairs: 0,
-    provenByGeodesic: 0,
-    routedChecks: 0,
-    failures: [],
-    minGeodesicM: Infinity,
-    minLowerBoundSeconds: Infinity,
-  };
+  const report: MinimumWalkReport = { villages: villages.length, pairs: 0, failures: [], minGeodesicM: Infinity };
   for (let i = 0; i < villages.length; i++)
     for (let j = i + 1; j < villages.length; j++) {
       const a = villages[i],
         b = villages[j],
-        geodesic = greatCircleDistance(a.canonicalPosition, b.canonicalPosition),
-        proof = villagePairMeetsMinimumWalk(a.canonicalPosition, b.canonicalPosition);
+        geodesicM = greatCircleDistance(a.canonicalPosition, b.canonicalPosition);
       report.pairs++;
-      report.minGeodesicM = Math.min(report.minGeodesicM, geodesic);
-      report.minLowerBoundSeconds = Math.min(report.minLowerBoundSeconds, proof.lowerBoundSeconds);
-      if (proof.proof === "geodesic") report.provenByGeodesic++;
-      else report.routedChecks++;
-      if (!proof.ok || proof.lowerBoundSeconds < MIN_VILLAGE_WALK_FANTASY_SECONDS)
-        report.failures.push({ a: a.id, b: b.id, lowerBoundSeconds: proof.lowerBoundSeconds });
+      report.minGeodesicM = Math.min(report.minGeodesicM, geodesicM);
+      if (!villagePairProvenByGeodesic(geodesicM)) report.failures.push({ a: a.id, b: b.id, geodesicM });
     }
   return report;
 }
-
-export { GRID_LENGTH_OVERESTIMATE };

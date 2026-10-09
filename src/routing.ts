@@ -16,7 +16,7 @@
  *   penalties and is walked at good-road speed.
  *
  * The grid is an approximation: it uses 16 move directions, so a routed length
- * can exceed the true shortest length by at most GRID_LENGTH_OVERESTIMATE.
+ * can exceed the true shortest length by roughly 3%.
  * Searches are bounded by cell and expansion caps; larger separations use
  * coarser cells instead of unbounded work.
  */
@@ -32,18 +32,14 @@ import {
   DIFFICULT_TERRAIN_WALK_SPEED_MPS,
   FASTEST_WALK_SPEED_MPS,
   GOOD_ROAD_WALK_SPEED_MPS,
-  MIN_VILLAGE_WALK_FANTASY_SECONDS,
   OPEN_GROUND_WALK_SPEED_MPS,
   realSecondsForFantasy,
-  villagePairProvenByGeodesic,
 } from "./travel.ts";
 
 export const ROUTE_CELL_MIN_M = 40;
 export const ROUTE_MAX_CELLS = 48_000;
 export const ROUTE_MAX_EXPANSIONS = 150_000;
 export const ROUTE_MAX_SEPARATION_M = 120_000;
-/** Worst-case grid length error (16 directions ~2.7%) plus tangent-plane distortion. */
-export const GRID_LENGTH_OVERESTIMATE = 1.03;
 export const CLIFF_SLOPE = 0.7;
 export const DIFFICULT_SLOPE = 0.25;
 export const HIGHLAND_DIFFICULT = 0.35;
@@ -70,12 +66,6 @@ export type RouteRequest = {
   to: LonLat;
   roads?: readonly RoadSegment[];
   terrain?: TerrainSampler;
-  /**
-   * "actual" uses the real surface speeds. "lower-bound" walks every passable
-   * cell at the fastest speed, so the result can only under-estimate the true
-   * minimum time (used for the 60-minute village rule without roads).
-   */
-  speedMode?: "actual" | "lower-bound";
 };
 export type RouteResult = {
   found: boolean;
@@ -243,7 +233,6 @@ function searchOnce(
   marginM: number,
   roads: readonly RoadSegment[],
   terrain: TerrainSampler,
-  speedMode: "actual" | "lower-bound",
 ): Failure | Success {
   const minE = Math.min(0, bEast) - marginM,
     maxE = Math.max(0, bEast) + marginM,
@@ -403,13 +392,11 @@ function searchOnce(
         between.some((b) => !!(flags[b] & FLAG_WATER));
       const kind = wet ? 1 : allRoad ? 0 : difficult ? 3 : 2;
       const speed =
-        speedMode === "lower-bound"
-          ? fastest
-          : kind <= 1
-            ? GOOD_ROAD_WALK_SPEED_MPS
-            : kind === 3
-              ? DIFFICULT_TERRAIN_WALK_SPEED_MPS
-              : OPEN_GROUND_WALK_SPEED_MPS;
+        kind <= 1
+          ? GOOD_ROAD_WALK_SPEED_MPS
+          : kind === 3
+            ? DIFFICULT_TERRAIN_WALK_SPEED_MPS
+            : OPEN_GROUND_WALK_SPEED_MPS;
       const cost = g[current] + length / speed;
       if (cost < g[next]) {
         g[next] = cost;
@@ -457,7 +444,6 @@ function simplify(points: { east: number; north: number }[], tolerance: number) 
 export function planRoute(request: RouteRequest): RouteResult {
   const terrain = request.terrain ?? macroTerrainSampler,
     roads = request.roads ?? [],
-    speedMode = request.speedMode ?? "actual",
     geodesicM = greatCircleDistance(request.from, request.to);
   if (geodesicM > ROUTE_MAX_SEPARATION_M)
     return emptyRoute(geodesicM, "separation-exceeds-local-search", 0, 0, 0);
@@ -478,7 +464,7 @@ export function planRoute(request: RouteRequest): RouteResult {
     expansions = 0;
   for (const margin of margins) {
     attempts++;
-    outcome = searchOnce(origin, b.east, b.north, margin, roads, terrain, speedMode);
+    outcome = searchOnce(origin, b.east, b.north, margin, roads, terrain);
     expansions += outcome.expansions;
     if (outcome.found || outcome.reason !== "no-legal-route") break;
   }
@@ -495,13 +481,11 @@ export function planRoute(request: RouteRequest): RouteResult {
 
   const surfaceM: Record<RouteSurface, number> = { road: 0, bridge: 0, open: 0, difficult: 0 };
   const speedOf = (kind: RouteSurface) =>
-    speedMode === "lower-bound"
-      ? FASTEST_WALK_SPEED_MPS
-      : kind === "road" || kind === "bridge"
-        ? GOOD_ROAD_WALK_SPEED_MPS
-        : kind === "difficult"
-          ? DIFFICULT_TERRAIN_WALK_SPEED_MPS
-          : OPEN_GROUND_WALK_SPEED_MPS;
+    kind === "road" || kind === "bridge"
+      ? GOOD_ROAD_WALK_SPEED_MPS
+      : kind === "difficult"
+        ? DIFFICULT_TERRAIN_WALK_SPEED_MPS
+        : OPEN_GROUND_WALK_SPEED_MPS;
   let distanceM = 0,
     fantasySeconds = 0;
   for (let k = 1; k < centres.length; k++) {
@@ -546,35 +530,4 @@ export function planRoute(request: RouteRequest): RouteResult {
     expansions,
     attempts,
   };
-}
-
-export type MinimumWalkProof = {
-  ok: boolean;
-  proof: "geodesic" | "routed" | "no-route";
-  /** Provable lower bound on the fantasy walking time (seconds). */
-  lowerBoundSeconds: number;
-};
-
-/**
- * Does the shortest legal walk between two village centres last at least 60
- * fantasy minutes? A geodesic of >= 3,600 m settles it without pathfinding; only
- * closer pairs run a routed lower-bound search (every passable cell at 1 m/s,
- * grid overestimate removed), so the answer never depends on roads placed later.
- * Pairs with no legal route are not accepted (a village must be reachable).
- */
-export function villagePairMeetsMinimumWalk(
-  a: LonLat,
-  b: LonLat,
-  terrain: TerrainSampler = macroTerrainSampler,
-): MinimumWalkProof {
-  const geodesicM = greatCircleDistance(a, b);
-  if (villagePairProvenByGeodesic(geodesicM))
-    return { ok: true, proof: "geodesic", lowerBoundSeconds: geodesicM / FASTEST_WALK_SPEED_MPS };
-  const route = planRoute({ from: a, to: b, terrain, speedMode: "lower-bound" });
-  if (!route.found) return { ok: false, proof: "no-route", lowerBoundSeconds: 0 };
-  const lowerBoundSeconds = Math.max(
-    geodesicM / FASTEST_WALK_SPEED_MPS,
-    route.fantasySeconds / GRID_LENGTH_OVERESTIMATE,
-  );
-  return { ok: lowerBoundSeconds >= MIN_VILLAGE_WALK_FANTASY_SECONDS, proof: "routed", lowerBoundSeconds };
 }

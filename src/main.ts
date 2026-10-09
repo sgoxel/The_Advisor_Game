@@ -26,6 +26,7 @@ import { LazySimulation } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
 import { GlobeView } from "./globe-view.ts";
+import { updateRouteOverlay } from "./route-overlay.ts";
 import {
   PLANET_RADIUS,
   POLE_DISTANCE,
@@ -1420,6 +1421,34 @@ async function start() {
       updateCamera();
     }
     updateNavigationHud();
+    // Selected travel route: projected from canonical points, blended like the labels.
+    updateRouteOverlay((point) => {
+      point.height ??= Math.max(0, heightAt(point.x, point.z)) + 3;
+      const local = renderFrame.sourceToRender(point.x, point.z, point.height);
+      if (projectionTransition <= 0.001) {
+        const screen = camera.camera!.worldToScreen(new pc.Vec3(local.x, point.height, local.z));
+        return { x: screen.x, y: screen.y };
+      }
+      // Handoff/globe: same flat-to-globe blend the place labels use.
+      const focusRender = renderFrame.sourceToRender(view.x, view.z),
+        focusY = Math.max(0, heightAt(view.x, view.z));
+      flatLabelPoint.set(
+        local.x - focusRender.x,
+        PLANET_RADIUS + point.height - focusY,
+        local.z - focusRender.z,
+      );
+      const flatScreen = camera.camera!.worldToScreen(flatLabelPoint),
+        onFront = globe!.worldPoint(point.lon, point.lat, globePoint);
+      if ((!onFront || globe!.frontness(globePoint) < 0.08) && projectionTransition > 0.55)
+        return undefined;
+      if (!onFront) return { x: flatScreen.x, y: flatScreen.y };
+      const globeScreen = camera.camera!.worldToScreen(globePoint),
+        t = projectionTransition;
+      return {
+        x: flatScreen.x + (globeScreen.x - flatScreen.x) * t,
+        y: flatScreen.y + (globeScreen.y - flatScreen.y) * t,
+      };
+    });
     if (!errorText) processStreaming(material);
     if (layers.grid && !globeShown)
       for (const key of activeKeys) {

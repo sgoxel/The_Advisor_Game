@@ -34,7 +34,7 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 - WP-S002-004-005 — Terrain/hydrology/traversal foundation: natural landforms, distributed freshwater, canonical walkability and bounded seam-safe queries
 - WP-S002-004-006 — Vegetation/ground-detail presentation: natural deterministic scatter, reusable instancing, stable ownership and mobile budgets
 - WP-S002-004-007 — Political atlas authority/UX: full-continent country partition, deterministic ≥minimum counts, readable borders and bounded 1/1000 labels
-- WP-S002-004-008 — Shortest-legal-route authority/UX: all-generated-village ≥60-minute proof, bounded routing and truthful route/time presentation
+- WP-S002-004-008 — Shortest-legal-route authority/UX: all-generated-village ≥60-minute proof, bounded routing and truthful route/time presentation — IN PROGRESS (AGENT #2, 2026-10-09): straight-line 60-minute guarantee, on-demand walking-route planner and travel-panel route overlay implemented; awaiting deployment verification
 - WP-S002-004-009 — Settlement/building UX: terrain-shaped non-grid functional layouts, logical building scale, lazy usable interiors and mobile-safe rendering
 - WP-S002-004-010 — Continuous-zoom material/LOD continuity: canonical albedo parity, threshold blending, tile-patch regression and wrap/pole ownership
 - WP-S002-004-011 — Living-resident scalability/UX: house-level ownership, analytical schedules, spatial indexing, pooled actors and responsive inspection

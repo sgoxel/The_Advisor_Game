@@ -11,3 +11,131 @@
     overscroll-behavior: contain;
   }
 }
+
+/* Walking routes (WP-S002-004-008) */
+.route-block {
+  margin-top: 14px;
+}
+.route-block .eyebrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.route-block .eyebrow button {
+  font-size: 10px;
+  padding: 4px 8px;
+}
+.route-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.route-row {
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  display: grid;
+  gap: 2px;
+  padding: 7px 9px;
+  border-radius: 5px;
+  border: 1px solid #d8b97933;
+  background: #ffffff08;
+}
+.route-row[aria-pressed="true"] {
+  border-color: #d8b979;
+  background: #d8b97922;
+}
+.route-row .route-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #efece1;
+}
+.route-row .route-meta {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.route-detail {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+#route-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+#route-overlay.visible {
+  opacity: 1;
+}
+#route-overlay .route-casing {
+  fill: none;
+  stroke: #10201b;
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.75;
+}
+#route-overlay .route-line {
+  fill: none;
+  stroke: #f4cf7d;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 2 9;
+}
+#route-overlay .route-end {
+  stroke: #10201b;
+  stroke-width: 3;
+  fill: #f4cf7d;
+}
+#route-overlay .route-finish {
+  fill: #ffffff;
+}
+#route-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: #162521e6;
+  color: #efece1;
+  border: 1px solid #d8b979;
+  border-radius: 4px;
+  padding: 5px 9px;
+  font:
+    600 12px "DM Sans",
+    sans-serif;
+  white-space: pre;
+  line-height: 1.35;
+  max-width: calc(100vw - 24px);
+}
+#route-tag[hidden] {
+  display: none;
+}
+@media (max-width: 700px) {
+  body.travel-panel-open .travel-panel {
+    max-height: calc(100dvh - 120px);
+  }
+  .route-row {
+    min-height: 48px;
+  }
+}
+
+@media (min-width: 701px) {
+  .travel-panel {
+    max-height: calc(100dvh - 115px - 112px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+.route-detail:empty {
+  display: none;
+}

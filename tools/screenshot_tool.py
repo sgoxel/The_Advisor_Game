@@ -74,6 +74,17 @@ SCENARIOS: dict[str, str] = {
     ),
     "cell": "tap;visible:#cell-panel",
     "travel-city": "click:#open-travel;select:#continent-select=1;click:#visit-city",
+    # WP-S002-004-008 walking routes. Seeded 6 km road pair (the travel-panel click flow is covered by tests/browser/routes.spec.js).
+    "route-road": "eval:window.advisorRoutes.select('2/3/1/1','2/3/1/0');settle;shot:road",
+    # Real seeded pair whose highland makes the walk far slower than the straight line.
+    "route-mountain": "eval:window.advisorRoutes.select('1/8/0/2','1/8/1/2');settle;shot:mountain",
+    # Real seeded pair whose straight line crosses water: the route detours around it.
+    "route-water": (
+        "eval:window.advisorRoutes.select('1/0/0/0','1/7/2/2');settle;"
+        # No semicolons inside an eval step: wait until the handoff blend reaches its target.
+        "eval:new Promise(done=>{const t=Date.now(),f=()=>(h=>(!window.advisorRoutes.framing&&!h.active&&Math.abs(h.projectionTransition-h.desiredTransition)<0.002)||Date.now()-t>60000?done():setTimeout(f,250))(window.advisorWorld.state.handoff),_=f()});"
+        "settle;shot:water"
+    ),
 }
 
 # Software rendering flags from playwright.fallback.config.js and playwright.webgpu.config.js.

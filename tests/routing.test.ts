@@ -15,12 +15,12 @@ import {
   ROUTE_MAX_SEPARATION_M,
   macroTerrainSampler,
   planRoute,
-  villagePairMeetsMinimumWalk,
   type RoadSegment,
   type SurfaceSample,
   type TerrainSampler,
 } from "../src/routing.ts";
 import {
+  FASTEST_WALK_SPEED_MPS,
   OPEN_GROUND_WALK_SPEED_MPS,
   MIN_VILLAGE_WALK_FANTASY_SECONDS,
 } from "../src/travel.ts";
@@ -67,16 +67,15 @@ const polylineSamples = (points: LonLat[], stepM = 25) => {
   return out;
 };
 
-test("every village pair keeps the 60-fantasy-minute minimum: geodesic proof or routed lower bound", () => {
+test("every village pair keeps the 60-fantasy-minute minimum by straight-line distance alone", () => {
   const report = verifyVillageMinimumWalk();
   const n = villages.length;
   assert.equal(report.pairs, (n * (n - 1)) / 2);
   assert.ok(n >= 270, "village registry stays at least 270");
   assert.deepEqual(report.failures, []);
   assert.ok(report.minGeodesicM >= 3_600, `closest pair is ${report.minGeodesicM} m`);
-  assert.ok(report.minLowerBoundSeconds >= MIN_VILLAGE_WALK_FANTASY_SECONDS);
-  // Seeded 6 km siting spacing means no pair needs a routed check at all.
-  assert.equal(report.provenByGeodesic + report.routedChecks, report.pairs);
+  // No walk is faster than 1 m/s, so the geodesic alone proves the minimum (no pathfinding).
+  assert.ok(report.minGeodesicM / FASTEST_WALK_SPEED_MPS >= MIN_VILLAGE_WALK_FANTASY_SECONDS);
 });
 
 test("every neighbouring village pair has a valid, bounded route that respects the minimum", () => {
@@ -199,30 +198,6 @@ test("cliffs block off-road walking but a graded road may still pass", () => {
   const cut = planRoute({ from, to, terrain: ridge, roads: [{ from, to }] });
   assert.equal(cut.found, true);
   assert.ok(cut.surfaceM.road > 0);
-});
-
-test("seeded placement rule: geodesic proof first, routed lower bound only for close pairs", () => {
-  const a = at(0);
-  const far = villagePairMeetsMinimumWalk(a, at(6_000));
-  assert.deepEqual([far.ok, far.proof], [true, "geodesic"]);
-
-  const close = villagePairMeetsMinimumWalk(a, at(2_000), () => flat());
-  assert.equal(close.ok, false, "2 km on open ground is under 60 fantasy minutes");
-  assert.equal(close.proof, "routed");
-  assert.ok(close.lowerBoundSeconds < MIN_VILLAGE_WALK_FANTASY_SECONDS);
-
-  // A lake wall between two 3 km apart villages makes the real walk long enough.
-  const wall: TerrainSampler = (p) => {
-    const e = local(p);
-    return flat({ water: Math.abs(e.east - 1_500) < 40 && Math.abs(e.north) < 3_000 });
-  };
-  const separated = villagePairMeetsMinimumWalk(a, at(3_000), wall);
-  assert.deepEqual([separated.ok, separated.proof], [true, "routed"]);
-  assert.ok(separated.lowerBoundSeconds >= MIN_VILLAGE_WALK_FANTASY_SECONDS);
-
-  // No legal route at all is never an acceptable village pair.
-  const unreachable = villagePairMeetsMinimumWalk(a, at(3_000), riverTerrain(1_500, 40));
-  assert.deepEqual([unreachable.ok, unreachable.proof], [false, "no-route"]);
 });
 
 test("routing is deterministic and independent of query order and caching", () => {

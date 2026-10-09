@@ -111,6 +111,14 @@
         <button id="visit-city">Visit city</button
         ><button id="visit-village">Visit village</button>
       </div>
+      <section class="route-block" id="route-block" aria-label="Walking routes">
+        <div class="eyebrow">
+          <span>WALKING ROUTES</span>
+          <button id="route-clear" type="button" hidden>Clear route</button>
+        </div>
+        <p class="hint route-detail" id="route-detail" aria-live="polite"></p>
+        <ul class="route-list" id="route-list"></ul>
+      </section>
       <p class="hint" id="travel-summary" aria-live="polite">
         Calculating canonical route distance and fantasy travel time…
       </p>
@@ -165,6 +173,8 @@
     </div>
     <div id="map-labels" aria-hidden="true"></div>
     <svg id="label-leaders" aria-hidden="true"></svg>
+    <svg id="route-overlay" aria-hidden="true"></svg>
+    <div id="route-tag" aria-hidden="true" hidden></div>
     <div id="centre-marker" aria-label="Map focus"><span>+</span></div>
     <output
       id="focus-coordinates"
