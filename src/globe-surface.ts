@@ -2,6 +2,7 @@
  * terrain colour and height, sampled through the shared generation functions. */
 import { places } from "./geography.ts";
 import { terrainTint } from "./geometry.ts";
+import { biomeSampleAt } from "./biome.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import {
   lonLatToFlat,
@@ -36,7 +37,7 @@ const SHADE_MIN = 0.6,
 
 // One entry per source-detail generation region. Open-ocean regions can reuse one
 // colour/height, but the macro coast/island authority must first prove the whole
-// region is ocean. This keeps the shortcut from swallowing irregular coast slivers.
+// region is temperate open ocean. Polar sea ice is never collapsed to warm sea.
 const REGION = CELL_SIZE * 100,
   HALF = PLANET_CIRCUMFERENCE / 2,
   COL0 = Math.floor(-HALF / REGION),
@@ -70,23 +71,21 @@ function regionStates(): Uint8Array {
   return regions;
 }
 
-/**
- * Conservative bounded proof for the open-ocean cache. Macro islands/lakes are
- * much wider than a 200-source-unit region, so a 3×3 probe catches any canonical
- * feature intersecting the region. Any uncertainty stays DETAILED rather than
- * inventing ocean. This runs once per visited region, never per frame.
- */
+/** Conservative bounded proof for the reusable warm-open-ocean cache. */
 function regionIsOpenOcean(rx: number, rz: number): boolean {
   for (const v of [0.05, 0.5, 0.95])
     for (const u of [0.05, 0.5, 0.95]) {
       const x = (rx + u) * REGION,
-        z = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, (rz + v) * REGION));
-      if (macroSampleAt(sourceToLonLat(x, z)).domain !== "Ocean") return false;
+        z = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, (rz + v) * REGION)),
+        position = sourceToLonLat(x, z),
+        macro = macroSampleAt(position);
+      if (macro.domain !== "Ocean" || biomeSampleAt(position, { macro }).biome !== "ocean")
+        return false;
     }
   return true;
 }
 
-/** Memoised: is the generation region holding this position proven open ocean? */
+/** Memoised: is the generation region holding this position proven warm open ocean? */
 function openOcean(x: number, z: number): boolean {
   if (x < -HALF || x >= HALF || z < -POLE_DISTANCE || z > POLE_DISTANCE)
     return false;
@@ -98,7 +97,7 @@ function openOcean(x: number, z: number): boolean {
     states[index] = regionIsOpenOcean(rx, rz) ? OPEN_OCEAN : DETAILED;
   return states[index] === OPEN_OCEAN;
 }
-/** The one colour and height of open ocean, read once from the shared functions. */
+/** The one colour and height of warm open ocean, read once from the shared functions. */
 function openSea() {
   if (sea) return sea;
   for (let rz = ROW0; rz < ROW0 + ROWS && !sea; rz++)
@@ -108,7 +107,7 @@ function openSea() {
       if (openOcean(x, z))
         sea = { color: bytes(terrainTint(x, z)), height: heightAt(x, z) };
     }
-  return (sea ??= { color: [-1, -1, -1], height: 0 });
+  return (sea ??= { color: [72, 122, 139], height: -2.8 });
 }
 /** Vertex colours reach the flat terrain mesh through a Uint8Array: same truncation. */
 const bytes = ([r, g, b]: RGB): RGB => [r | 0, g | 0, b | 0];
@@ -141,7 +140,6 @@ export function buildGlobeSurface(
   const pixels = new Uint8Array(width * height * 4),
     water = openSea(),
     count = samples * samples;
-  // Flat x depends only on the column and flat z only on the row: map each once.
   const xs = new Float64Array(width * samples),
     zs = new Float64Array(height * samples),
     centreX = new Float64Array(width),
@@ -158,10 +156,7 @@ export function buildGlobeSurface(
     for (let b = 0; b < samples; b++)
       zs[j * samples + b] = lonLatToFlat(0, lat(j + (b + 0.5) / samples)).z;
   }
-  // Heights at texel centres, read on demand and shared by neighbouring texels.
-  const heights = new Float32Array(relief ? (to - from + 2) * width : 0).fill(
-    NaN,
-  );
+  const heights = new Float32Array(relief ? (to - from + 2) * width : 0).fill(NaN);
   const elevation = (i: number, j: number) => {
     const index = (j - from + 1) * width + i;
     if (Number.isNaN(heights[index])) {
@@ -171,8 +166,6 @@ export function buildGlobeSurface(
     }
     return heights[index];
   };
-  // Slopes in flat metres between neighbouring texel centres. The planet closes
-  // east–west; a pole row has no neighbour beyond it.
   const shade = (i: number, j: number) => {
     const west = (i + width - 1) % width,
       east = (i + 1) % width,
@@ -186,7 +179,6 @@ export function buildGlobeSurface(
           ? 0
           : ((elevation(i, south) - elevation(i, north)) * EXAGGERATION) /
             (centreZ[south] - centreZ[north]);
-    // Ground rising eastward faces west; ground rising southward faces north.
     const lit =
       (LIGHT[0] * eastward + LIGHT[1] + LIGHT[2] * southward) /
       Math.sqrt(1 + eastward * eastward + southward * southward);
@@ -210,12 +202,7 @@ export function buildGlobeSurface(
             cr = c[0] | 0,
             cg = c[1] | 0,
             cb = c[2] | 0;
-          // Rivers, lakes and island shallows share the ocean colour and stay unshaded too.
-          if (
-            cr === water.color[0] &&
-            cg === water.color[1] &&
-            cb === water.color[2]
-          )
+          if (cr === water.color[0] && cg === water.color[1] && cb === water.color[2])
             continue;
           r += cr;
           g += cg;
@@ -226,18 +213,9 @@ export function buildGlobeSurface(
       const wet = count - land,
         light = land && relief ? shade(i, j) : 1,
         offset = (j * width + i) * 4;
-      pixels[offset] = Math.min(
-        255,
-        Math.round((r * light + wet * water.color[0]) / count),
-      );
-      pixels[offset + 1] = Math.min(
-        255,
-        Math.round((g * light + wet * water.color[1]) / count),
-      );
-      pixels[offset + 2] = Math.min(
-        255,
-        Math.round((b * light + wet * water.color[2]) / count),
-      );
+      pixels[offset] = Math.min(255, Math.round((r * light + wet * water.color[0]) / count));
+      pixels[offset + 1] = Math.min(255, Math.round((g * light + wet * water.color[1]) / count));
+      pixels[offset + 2] = Math.min(255, Math.round((b * light + wet * water.color[2]) / count));
       pixels[offset + 3] = 255;
     }
   return { width, height, pixels };
