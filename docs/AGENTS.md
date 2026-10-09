@@ -1,4 +1,5 @@
 # MAIN RULES
+TOKEN-LEAN START: read CLAUDE.md first, run tools/next_wp.sh to pick the WP, read only that Issue and the files it names. Do not read docs/README.md or docs/ROADMAP_ARCHIVE.md whole; grep headings and read sections with offset/limit.
 FOCUS ON ACTUALLY IMPROVING THE GAME. TAKE ACTION. All processes are methods and details to how you make improvements in game.
 If you're unsure on something then go find more reference, do research and fill in the gap.
 Keep instructions clear and explanations simple. Keep the GitHub repository clean and well organized. 
