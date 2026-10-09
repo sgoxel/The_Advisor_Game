@@ -1,7 +1,7 @@
 import { biomeAt, featuresFor, field, heightAt, type Tile } from "./world.ts";
 import { nearestPlace, roadAt, roads } from "./geography.ts";
-import { macroSampleAt } from "./macro-geography.ts";
-import { sourceToLonLat, wrapSourceX } from "./planet.ts";
+import { biomeSampleAtSource } from "./biome.ts";
+import { wrapSourceX } from "./planet.ts";
 type RGB = [number, number, number];
 type Point = [number, number, number];
 export type Geometry = {
@@ -17,18 +17,6 @@ export type TileGeometry = {
   detail: Geometry;
 };
 const color = (r: number, g: number, b: number): RGB => [r, g, b];
-const blendColor = (a: RGB, b: RGB, amount: number): RGB => {
-  const t = Math.max(0, Math.min(1, amount));
-  return color(
-    a[0] + (b[0] - a[0]) * t,
-    a[1] + (b[1] - a[1]) * t,
-    a[2] + (b[2] - a[2]) * t,
-  );
-};
-const smoothColorWeight = (value: number): number => {
-  const t = Math.max(0, Math.min(1, value));
-  return t * t * (3 - 2 * t);
-};
 class Builder {
   p: number[] = [];
   n: number[] = [];
@@ -147,55 +135,42 @@ class Builder {
     };
   }
 }
+
+/** One semantic material palette is used by Realm and every flat LOD. */
 export function terrainTint(x: number, z: number, scale = 32): RGB {
-  if (scale > 512) {
-    const macro = macroSampleAt(sourceToLonLat(x, z)),
-      f = field(x, z, 9000, 44),
-      land = color(106 + f * 24, 133 + f * 24, 83 + f * 20),
-      highland = color(126 + f * 20, 137 + f * 17, 114 + f * 14),
-      volcanic = color(102 + f * 12, 98 + f * 10, 87 + f * 8),
-      mountainWeight = smoothColorWeight((macro.mountainIntensity - 0.02) / 0.76);
-    if (macro.domain === "Ocean") return color(94, 137, 139);
-    if (macro.domain === "Lake") return color(75, 126, 145);
-    if (macro.volcanic)
-      return blendColor(land, volcanic, mountainWeight * 0.94);
-    return blendColor(land, highland, mountainWeight * 0.86);
+  if (scale <= 512) {
+    const s = nearestPlace(x, z),
+      dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,
+      dz = s ? Math.abs(z - s.z) : 1000,
+      urbanRoad =
+        s?.kind === "city" && (Math.abs(dx % 29) < 3 || Math.abs(dz % 29) < 3);
+    if (
+      (s &&
+        Math.hypot(dx, dz) < (s.kind === "city" ? 420 : 66) &&
+        (dx < 4 || dz < 4 || Math.hypot(dx, dz) < 11 || urbanRoad)) ||
+      (roadAt(x, z) && Math.abs(z - roadAt(x, z)!.z) < 5)
+    )
+      return color(170, 151, 113);
   }
-  const s = nearestPlace(x, z);
-  const dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,
-    dz = s ? Math.abs(z - s.z) : 1000;
-  const urbanRoad =
-    s?.kind === "city" && (Math.abs(dx % 29) < 3 || Math.abs(dz % 29) < 3);
-  if (
-    (s &&
-      Math.hypot(dx, dz) < (s.kind === "city" ? 420 : 66) &&
-      (dx < 4 || dz < 4 || Math.hypot(dx, dz) < 11 || urbanRoad)) ||
-    (roadAt(x, z) && Math.abs(z - roadAt(x, z)!.z) < 5)
-  )
-    return color(170, 151, 113);
-  const biome = biomeAt(x, z),
-    f = field(x, z, 28, 41),
-    macro = macroSampleAt(sourceToLonLat(x, z));
-  if (biome === "River" || biome === "Ocean") return color(94, 137, 139);
-  if (biome === "Lake") return color(75, 126, 145);
-  if (biome === "Sandy beach") return color(203, 190, 141);
-  if (biome === "Riverbank") return color(163, 159, 113);
-  const meadow = color(116 + f * 22, 140 + f * 24, 79 + f * 20),
-    woodland = color(72 + f * 19, 105 + f * 22, 69 + f * 15),
-    highland = color(129 + f * 25, 139 + f * 20, 116 + f * 15),
-    volcanic = color(96 + f * 19, 92 + f * 15, 82 + f * 14),
-    naturalBase = field(x, z, 90, 4) > 0.45 ? woodland : meadow,
-    mountainWeight = smoothColorWeight((macro.mountainIntensity - 0.02) / 0.76);
-  // Macro mountain material follows the same continuous seeded falloff as relief.
-  // This avoids a binary biome threshold stamping a pale polygon onto low ranges.
-  if (macro.volcanic && mountainWeight > 0)
-    return blendColor(naturalBase, volcanic, mountainWeight * 0.94);
-  if (macro.mountainIntensity > 0.02)
-    return blendColor(naturalBase, highland, mountainWeight * 0.86);
-  if (biome === "Highlands") return highland;
-  if (biome === "Woodland") return woodland;
-  return meadow;
+  const h = scale > 512 ? undefined : heightAt(x, z),
+    sample = biomeSampleAtSource(x, z, h === undefined ? {} : { elevationM: h }),
+    base = sample.material.color,
+    grain = field(x, z, scale > 512 ? 7600 : sample.material.rock ? 45 : 72, 44) - 0.5,
+    amount = scale > 512 ? 8 : sample.material.frozen ? 7 : sample.material.water ? 4 : 13;
+  return color(
+    Math.max(0, Math.min(255, base[0] + grain * amount)),
+    Math.max(0, Math.min(255, base[1] + grain * amount)),
+    Math.max(0, Math.min(255, base[2] + grain * amount)),
+  );
 }
+
+function waterTint(x: number, z: number): RGB {
+  const sample = biomeSampleAtSource(x, z);
+  if (sample.biome === "polar-sea-ice") return [...sample.material.color];
+  if (sample.macro.domain === "Lake") return [72, 126, 148];
+  return [70, 126, 132];
+}
+
 /** Worker-generated tile meshes. Skirts cover cracks between terrain LOD levels. */
 export function buildTile(t: Tile): TileGeometry {
   const terrain = new Builder(),
@@ -258,13 +233,13 @@ export function buildTile(t: Tile): TileGeometry {
           terrainTint(ax, az),
         );
     }
-  // The same water level is shared by every tile. Land hides the unused surface.
+  // Water uses the same climate authority, so polar sea ice remains frozen locally.
   terrain.quad(
     [t.minX, 0, t.minZ],
     [t.minX, 0, t.minZ + t.size],
     [t.minX + t.size, 0, t.minZ + t.size],
     [t.minX + t.size, 0, t.minZ],
-    color(70, 126, 132),
+    waterTint(t.minX + t.size / 2, t.minZ + t.size / 2),
   );
   if (t.size <= 512)
     for (const f of featuresFor(t)) {
@@ -334,9 +309,8 @@ export function buildTile(t: Tile): TileGeometry {
               color(62, 80, 87),
               4,
             );
-            if (t.size <= 64) {
+            if (t.size <= 64)
               detail.box(x + ox, y + 9, z + oz + 2.13, 0.6, 1.9, 0.08, timber);
-            }
           }
         if (t.size <= 64) {
           detail.box(x, y, z + 7.1, 2.8, 4.2, 0.2, timber);
@@ -354,38 +328,22 @@ export function buildTile(t: Tile): TileGeometry {
           detail.box(x + 1.3, y + 17, z, 2.5, 1.4, 0.07, color(171, 78, 49));
         }
       } else if (f.kind === "tree") {
-        const h = 7 + (v % 5),
-          r = 2.4 + (v % 9) / 10;
-        nature.box(x, y - 0.1, z, 0.7, h * 0.5, 0.7, timber);
-        nature.cone(
-          x,
-          y + 2,
-          z,
-          r,
-          h * 0.75,
-          color(36 + (v % 14), 75 + (v % 18), 53),
-          6,
-        );
-        nature.cone(
-          x,
-          y + h * 0.42,
-          z,
-          r * 0.78,
-          h * 0.6,
-          color(48 + (v % 14), 88 + (v % 18), 59),
-          6,
-        );
-        if (t.size <= 32)
-          detail.cone(
-            x,
-            y + h * 0.7,
-            z,
-            r * 0.45,
-            h * 0.35,
-            color(66, 104, 67),
-            6,
-          );
+        const sample = biomeSampleAtSource(x, z, { elevationM: y }),
+          family = sample.forestFamily,
+          baseH = family === "boreal" ? 10 : family === "warm-woodland" ? 6 : 8,
+          h = baseH + (v % 5),
+          r = family === "boreal" ? 2.0 + (v % 6) / 12 : family === "warm-woodland" ? 3.1 + (v % 8) / 10 : 2.7 + (v % 9) / 10,
+          trunk = family === "warm-woodland" ? color(91, 66, 44) : timber,
+          low = family === "boreal" ? color(37, 70, 57) : family === "warm-woodland" ? color(82, 99, 55) : color(48, 91, 55),
+          high = family === "boreal" ? color(48, 86, 66) : family === "warm-woodland" ? color(100, 113, 62) : color(65, 111, 63);
+        nature.box(x, y - 0.1, z, family === "warm-woodland" ? 0.9 : 0.7, h * 0.5, family === "warm-woodland" ? 0.9 : 0.7, trunk);
+        nature.cone(x, y + (family === "boreal" ? 1.2 : 2), z, r, h * (family === "boreal" ? 0.9 : 0.72), low, family === "warm-woodland" ? 8 : 6);
+        nature.cone(x, y + h * (family === "boreal" ? 0.42 : 0.38), z, r * (family === "boreal" ? 0.68 : 0.82), h * 0.58, high, family === "warm-woodland" ? 8 : 6);
+        if (t.size <= 32 && family !== "boreal")
+          detail.cone(x, y + h * 0.68, z, r * 0.48, h * 0.34, high, family === "warm-woodland" ? 8 : 6);
       } else if (f.kind === "rock") {
+        const sample = biomeSampleAtSource(x, z, { elevationM: y }),
+          base = sample.material.rock ? sample.material.color : [133, 143, 123] as const;
         nature.box(
           x,
           y - 0.2,
@@ -393,7 +351,7 @@ export function buildTile(t: Tile): TileGeometry {
           1.5 + (v % 3),
           1 + (v % 2),
           1.9,
-          color(133, 143, 123),
+          color(base[0], base[1], base[2]),
         );
       } else if (f.kind === "field") {
         nature.box(x, y + 0.03, z, 18, 0.15, 18, color(158, 132, 66));
