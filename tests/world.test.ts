@@ -266,10 +266,10 @@ test("prototype road records expose canonical distance and route-derived fantasy
       road.realWalkSeconds,
     );
     for (let step = 0; step <= 10; step++) {
-      const x = wrapSourceX(
-        road.fromX + ((road.toX - road.fromX) * step) / 10,
-      );
-      assert.ok(cellAt(x, road.z).walkable, `${road.code} blocked at ${x}`);
+      const t = step / 10,
+        x = wrapSourceX(road.fromX + (road.toX - road.fromX) * t),
+        z = road.fromZ + (road.toZ - road.fromZ) * t;
+      assert.ok(cellAt(x, z).walkable, `${road.code} blocked at ${x},${z}`);
     }
   }
 });
