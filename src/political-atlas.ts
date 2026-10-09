@@ -16,6 +16,7 @@ import { heightAt } from "./world.ts";
 const SVG_NS = "http://www.w3.org/2000/svg";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const $svg = (id: string) => document.getElementById(id) as unknown as SVGSVGElement;
+const ATLAS_UPDATE_INTERVAL_MS = 50;
 
 type AtlasState = {
   presentation: "flat" | "globe" | "transition";
@@ -286,15 +287,18 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
   }
 }
 
+function scheduleUpdate() {
+  window.setTimeout(update, ATLAS_UPDATE_INTERVAL_MS);
+}
+
 function update() {
   const advisor = (window as unknown as { advisorWorld?: AdvisorWorld }).advisorWorld;
   if (!advisor) {
-    requestAnimationFrame(update);
+    scheduleUpdate();
     return;
   }
   const state = advisor.state,
     scale = denominator(state.scaleLabel),
-    places = visiblePlaces(state),
     fingerprint = [
       state.presentation,
       scale,
@@ -307,12 +311,13 @@ function update() {
     ].join("/");
   if (fingerprint !== renderFingerprint) {
     renderFingerprint = fingerprint;
-    const frame = new LocalRenderFrame(state.view.x, state.view.z);
+    const places = visiblePlaces(state),
+      frame = new LocalRenderFrame(state.view.x, state.view.z);
     updateContext(state, places);
     updateBorders(state, frame, scale);
     updateLabels(state, frame, scale, places);
   }
-  requestAnimationFrame(update);
+  scheduleUpdate();
 }
 
 const countNode = $("region-counts");
@@ -333,4 +338,4 @@ Object.defineProperty(window, "politicalAtlas", {
     },
   },
 });
-requestAnimationFrame(update);
+update();
