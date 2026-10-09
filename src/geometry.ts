@@ -5,6 +5,7 @@ import { sourceToLonLat, wrapSourceX } from "./planet.ts";
 import {
   climateSampleAt,
   frozenLatitudeAt,
+  polarBoundaryAt,
   TERRAIN_PALETTE,
   type RGB,
 } from "./climate.ts";
@@ -36,6 +37,12 @@ const varyColor = (base: RGB, amount: number): [number, number, number] =>
     Math.max(0, Math.min(255, base[1] + amount)),
     Math.max(0, Math.min(255, base[2] + amount)),
   );
+const smoothstep = (edge0: number, edge1: number, value: number) => {
+  const t = Math.max(0, Math.min(1, (value - edge0) / Math.max(1e-9, edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+};
+const envelope = (value: number, enter0: number, enter1: number, exit0: number, exit1: number) =>
+  smoothstep(enter0, enter1, value) * (1 - smoothstep(exit0, exit1, value));
 class Builder {
   p: number[] = [];
   n: number[] = [];
@@ -205,20 +212,79 @@ export function terrainTint(
   )
     return color(170, 151, 113);
 
-  const base = TERRAIN_PALETTE[sample.terrainClass],
-    detailScale = scale > 512 ? 9000 : sample.terrainClass.includes("forest") ? 42 : 68,
-    variation = (field(x, z, detailScale, 44) - 0.5) * (scale > 512 ? 7 : 15),
-    protectedSurface = ["ocean", "lake", "sea-ice", "polar-ice", "snowy-mountain"].includes(
-      sample.terrainClass,
-    ),
-    tint = varyColor(base, variation * (protectedSurface ? 0.35 : 1));
+  const detailScale = scale > 512 ? 9000 : sample.forestFamily ? 42 : 68,
+    variation = (field(x, z, detailScale, 44) - 0.5) * (scale > 512 ? 6 : 12),
+    temperature = sample.temperatureC,
+    moisture = sample.moisture,
+    elevation = sample.elevationM,
+    land = !["ocean", "lake", "sea-ice"].includes(sample.terrainClass);
 
-  // Keep high relief readable without replacing the semantic biome palette.
-  if (macro.mountainIntensity > 0.04 && !protectedSurface) {
-    const rock = macro.volcanic ? TERRAIN_PALETTE.volcanic : TERRAIN_PALETTE.highland,
-      weight = Math.min(0.38, Math.max(0, macro.mountainIntensity - 0.04) * 0.42);
-    return blendColor(tint, rock, weight);
+  // Water and sea ice use the same canonical polar boundary, but blend through a
+  // narrow latitude band so a render quad never exposes an abrupt ice-palette step.
+  if (!land) {
+    const latitude01 = Math.abs(position.lat) / (Math.PI / 2),
+      polarDelta = latitude01 - polarBoundaryAt(position),
+      iceWeight = smoothstep(-0.018, 0.018, polarDelta),
+      waterBase = sample.terrainClass === "lake" ? TERRAIN_PALETTE.lake : TERRAIN_PALETTE.ocean,
+      base = blendColor(waterBase, TERRAIN_PALETTE["sea-ice"], iceWeight);
+    return varyColor(base, variation * 0.25);
   }
+
+  // Lowland ecotones are continuous functions of the canonical climate fields.
+  // The terrainClass/materialId remains discrete authority for logic/inspection;
+  // presentation only interpolates the same palette around those boundaries.
+  let base: [number, number, number] = [...TERRAIN_PALETTE.desert];
+  base = blendColor(base, TERRAIN_PALETTE["bare-earth"], smoothstep(0.18, 0.28, moisture));
+  base = blendColor(base, TERRAIN_PALETTE.dryland, smoothstep(0.25, 0.38, moisture));
+  base = blendColor(base, TERRAIN_PALETTE.grassland, smoothstep(0.34, 0.52, moisture));
+  base = blendColor(
+    base,
+    TERRAIN_PALETTE.meadow,
+    smoothstep(0.58, 0.72, moisture) * smoothstep(1, 7, temperature),
+  );
+
+  const lowRelief = 1 - smoothstep(0.2, 0.48, macro.mountainIntensity),
+    coniferWeight =
+      envelope(temperature, -10, -3, 7, 11) * smoothstep(0.35, 0.52, moisture) * lowRelief,
+    temperateWeight =
+      envelope(temperature, 6, 11, 20, 24) * smoothstep(0.48, 0.64, moisture) * lowRelief,
+    dryWoodWeight =
+      smoothstep(15, 20, temperature) *
+      smoothstep(0.3, 0.4, moisture) *
+      (1 - smoothstep(0.54, 0.64, moisture)) *
+      lowRelief;
+  base = blendColor(base, TERRAIN_PALETTE["conifer-forest"], coniferWeight * 0.9);
+  base = blendColor(base, TERRAIN_PALETTE["temperate-forest"], temperateWeight * 0.92);
+  base = blendColor(base, TERRAIN_PALETTE["dry-woodland"], dryWoodWeight * 0.84);
+
+  // Coast material is a genuinely narrow margin. Rugged coasts smoothly resolve
+  // toward rock so sandy color cannot become a broad painted inland band.
+  const coastDistance = Math.max(0, sample.coastDistanceM),
+    coastWeight = (1 - smoothstep(35, 190, coastDistance)) * (1 - smoothstep(0.5, 0.72, sample.ruggedness)),
+    cliffWeight = smoothstep(0.55, 0.79, sample.ruggedness);
+  base = blendColor(base, TERRAIN_PALETTE.beach, coastWeight * 0.92);
+  base = blendColor(base, TERRAIN_PALETTE.cliff, cliffWeight * 0.82);
+
+  const highlandWeight = Math.max(
+      smoothstep(130, 235, elevation),
+      smoothstep(0.13, 0.34, macro.mountainIntensity),
+    ),
+    mountainBase = macro.volcanic ? TERRAIN_PALETTE.volcanic : TERRAIN_PALETTE.highland;
+  base = blendColor(base, mountainBase, highlandWeight * (macro.volcanic ? 0.96 : 0.72));
+
+  const snowWeight =
+      (1 - smoothstep(5, 9, temperature)) * smoothstep(sample.snowLineM - 55, sample.snowLineM + 55, elevation),
+    latitude01 = Math.abs(position.lat) / (Math.PI / 2),
+    polarDelta = latitude01 - polarBoundaryAt(position),
+    polarWeight = smoothstep(-0.025, 0.02, polarDelta),
+    polarBase = temperature < -11 || elevation > Math.max(120, sample.snowLineM * 0.5)
+      ? TERRAIN_PALETTE["polar-ice"]
+      : TERRAIN_PALETTE.tundra;
+  base = blendColor(base, TERRAIN_PALETTE["snowy-mountain"], snowWeight);
+  base = blendColor(base, polarBase, polarWeight);
+
+  const protectedSurface = snowWeight > 0.65 || polarWeight > 0.65,
+    tint = varyColor(base, variation * (protectedSurface ? 0.3 : 1));
   return tint;
 }
 
