@@ -21,6 +21,7 @@ const required: BiomeId[] = [
   "snowy-mountain",
   "cliff-rock",
 ];
+const bytes = (values: readonly number[]) => [...new Uint8Array(values)];
 
 test("both poles are frozen by the same climate authority", () => {
   for (const lat of [Math.PI / 2, -Math.PI / 2]) {
@@ -79,7 +80,7 @@ test("Realm and flat material identity agree at matching absolute coordinates", 
       flat = biomeSampleAtSource(source.x, source.z);
     assert.equal(flat.zone, realm.zone, `${key} climate changed by presentation`);
     assert.equal(flat.biome, realm.biome, `${key} material changed by presentation`);
-    assert.deepEqual(globeSurfaceColor(source.x, source.z), terrainTint(source.x, source.z));
+    assert.deepEqual(globeSurfaceColor(source.x, source.z), bytes(terrainTint(source.x, source.z)));
   }
 });
 
