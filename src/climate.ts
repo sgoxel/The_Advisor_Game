@@ -103,6 +103,12 @@ function addressed(address: string) {
 
 const phase = (address: string) => addressed(address) * TAU;
 const PHASES = [phase("temperature"), phase("moisture-a"), phase("moisture-b"), phase("polar")];
+const REGIONAL_PHASES = [
+  phase("regional-a"),
+  phase("regional-b"),
+  phase("regional-c"),
+  phase("regional-d"),
+];
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const smooth01 = (value: number) => {
   const t = clamp01(value);
@@ -121,8 +127,23 @@ function seededWave(position: LonLat, layer: number) {
 }
 
 /**
- * Irregular, seed-addressed polar boundary. Two bounded long waves avoid a smooth
- * latitude blob while remaining cheap, continuous, non-mirrored and SEED-only.
+ * Mid-frequency spherical field used only to bend ecological thresholds and
+ * coastal suitability. Its bounded amplitude produces regional ecotones instead
+ * of locally straight bands without introducing high-frequency texture noise.
+ */
+function regionalWave(position: LonLat, layer: number) {
+  const lon = normalizeLongitude(position.lon),
+    lat = clampLatitude(position.lat),
+    p = REGIONAL_PHASES[layer % REGIONAL_PHASES.length],
+    a = Math.sin(lon * (19 + layer * 2.7) + lat * (11 + layer * 1.3) + p),
+    b = Math.cos(lon * (37 + layer * 3.1) - lat * (23 + layer * 1.7) - p * 0.71),
+    c = Math.sin(lon * (61 + layer * 4.3) + lat * (47 + layer * 2.1) + p * 0.43);
+  return clamp01((a * 0.5 + b * 0.3 + c * 0.2 + 1) * 0.5);
+}
+
+/**
+ * Irregular, seed-addressed polar boundary. Long waves define the cap while a
+ * small regional component breaks blob-like edges without creating noisy stripes.
  */
 export function polarBoundaryAt(position: LonLat) {
   const hemisphere = position.lat >= 0 ? 1 : -1,
@@ -133,8 +154,12 @@ export function polarBoundaryAt(position: LonLat) {
     secondary = seededWave(
       { lon: position.lon * 1.37 - hemisphere * 0.21, lat: hemisphere * 0.78 },
       1,
+    ),
+    regional = regionalWave(
+      { lon: position.lon + hemisphere * 0.11, lat: hemisphere * 0.82 },
+      3,
     );
-  return 0.735 + (primary - 0.5) * 0.075 + (secondary - 0.5) * 0.035;
+  return 0.735 + (primary - 0.5) * 0.075 + (secondary - 0.5) * 0.035 + (regional - 0.5) * 0.018;
 }
 
 export function frozenLatitudeAt(position: LonLat) {
@@ -175,7 +200,8 @@ function terrainFor(
   ruggedness: number,
   frozen: boolean,
 ): { terrainClass: TerrainClass; forestFamily: ForestFamily | null } {
-  const macro = macroSampleAt(position);
+  const macro = macroSampleAt(position),
+    regional = regionalWave(position, 0);
   if (!macro.land) {
     if (frozen) return { terrainClass: "sea-ice", forestFamily: null };
     return { terrainClass: macro.domain === "Lake" ? "lake" : "ocean", forestFamily: null };
@@ -194,17 +220,23 @@ function terrainFor(
     return { terrainClass: "snowy-mountain", forestFamily: null };
 
   const coastM = Math.max(0, macro.coastDistanceRad * CANONICAL_PLANET_RADIUS),
-    // Beaches are local margins, not kilometre-wide painted bands. SEED still varies
-    // their reach, while rugged/high coasts resolve to cliffs instead.
-    beachReachM = 300 + 700 * seededWave(position, 1);
-  if (coastM <= beachReachM) {
+    beachSuitability = regionalWave(position, 3),
+    beachReachM = 110 + 390 * beachSuitability;
+  if (coastM <= Math.max(55, beachReachM)) {
     if (ruggedness > 0.58 || elevationM > 105)
       return { terrainClass: "cliff", forestFamily: null };
-    return { terrainClass: "beach", forestFamily: null };
+    // Sand/shingle margins are narrow and patchy. At the waterline they remain
+    // readable where suitable; farther inland only strongly suitable coasts stay beach.
+    if (
+      (coastM <= 90 && beachSuitability > 0.22) ||
+      (coastM <= beachReachM && beachSuitability > 0.62)
+    )
+      return { terrainClass: "beach", forestFamily: null };
   }
   if (ruggedness > 0.73 && elevationM > 80)
     return { terrainClass: "cliff", forestFamily: null };
-  if (elevationM > 185 || macro.mountainIntensity > 0.27)
+  const highlandThreshold = 0.25 + (regional - 0.5) * 0.09;
+  if (elevationM > 185 || macro.mountainIntensity > highlandThreshold)
     return { terrainClass: "highland", forestFamily: null };
 
   if (moisture < 0.23 && temperatureC > 12)
@@ -230,43 +262,55 @@ function terrainFor(
 
 /**
  * Canonical seeded climate/material sample shared by Realm and every local LOD.
- * Elevation may be supplied by the local height authority; otherwise the macro
- * relief supplies a conservative Realm-scale sample.
+ * The optional second argument is accepted only because presentation callers may
+ * already have a local mesh height; semantic identity deliberately ignores it.
+ * Macro relief is the single canonical elevation input for this climate authority.
  */
-export function climateSampleAt(position: LonLat, elevationM?: number): ClimateSample {
+export function climateSampleAt(position: LonLat, _presentationElevationM?: number): ClimateSample {
   const canonical = {
       lon: normalizeLongitude(position.lon),
       lat: clampLatitude(position.lat),
     },
     macro = macroSampleAt(canonical),
-    elevation = Math.max(0, elevationM ?? macro.reliefM),
+    elevation = Math.max(0, macro.reliefM),
     latitude01 = Math.abs(canonical.lat) / (Math.PI / 2),
     continentality = clamp01(Math.max(0, macro.coastDistanceRad) / 0.12),
     thermalWave = seededWave(canonical, 0) - 0.5,
     moistureWave = seededWave(canonical, 1),
     rainWave = seededWave(canonical, 2),
+    regionalMoisture = regionalWave(canonical, 0) - 0.5,
+    regionalThermal = regionalWave(canonical, 1) - 0.5,
     baseTemperatureC =
       30.5 -
       45 * Math.pow(latitude01, 1.12) -
       elevation * 0.0061 +
-      thermalWave * 7.5 -
+      thermalWave * 7.5 +
+      regionalThermal * 3.2 -
       continentality * 2.2,
     // Dominant spines represent the world's highest compressed macro relief. Give
     // their upper canonical recipe a deterministic alpine microclimate so the
     // required snowy mountains exist without inventing a camera/LOD-only snow mask.
     temperatureC =
       macro.mountainKind === "dominant-spine" && elevation > 260
-        ? Math.min(baseTemperatureC, 3.5 + thermalWave * 5)
+        ? Math.min(baseTemperatureC, 3.5 + thermalWave * 5 + regionalThermal * 1.4)
         : baseTemperatureC,
     subtropicalDrying = Math.exp(-Math.pow((latitude01 - 0.31) / 0.14, 2)),
     coastHumidity = macro.land ? (1 - continentality) * 0.12 : 0.15,
     moisture = clamp01(
-      0.2 + moistureWave * 0.48 + rainWave * 0.18 + coastHumidity - subtropicalDrying * 0.27,
+      0.2 +
+        moistureWave * 0.48 +
+        rainWave * 0.18 +
+        regionalMoisture * 0.14 +
+        coastHumidity -
+        subtropicalDrying * 0.27,
     ),
     frozen = frozenLatitudeAt(canonical),
     baseSnowLineM = Math.max(
       95,
-      650 - latitude01 * 470 + (seededWave(canonical, 2) - 0.5) * 120,
+      650 -
+        latitude01 * 470 +
+        (seededWave(canonical, 2) - 0.5) * 120 +
+        (regionalWave(canonical, 2) - 0.5) * 85,
     ),
     snowLineM =
       macro.mountainKind === "dominant-spine" && elevation > 260
@@ -275,7 +319,8 @@ export function climateSampleAt(position: LonLat, elevationM?: number): ClimateS
     ruggedness = clamp01(
       macro.mountainIntensity * 0.78 +
         Math.min(1, elevation / 520) * 0.18 +
-        seededWave(canonical, 3) * 0.18,
+        seededWave(canonical, 3) * 0.13 +
+        regionalWave(canonical, 3) * 0.09,
     ),
     zone = classifyZone(temperatureC, moisture, elevation, frozen),
     classified = terrainFor(
