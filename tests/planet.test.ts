@@ -25,6 +25,15 @@ import {
   type CubeCell,
 } from "../src/planet.ts";
 import {
+  FASTEST_WALK_SPEED_MPS,
+  MIN_VILLAGE_FASTEST_DISTANCE_M,
+  MIN_VILLAGE_WALK_FANTASY_SECONDS,
+  fantasyTravelSeconds,
+  villagePairProvenByGeodesic,
+  walkingLowerBoundSeconds,
+  type WalkSurface,
+} from "../src/travel.ts";
+import {
   canonicalCellCenter,
   canonicalCellNeighbor,
   canonicalCellNeighbors,
@@ -218,4 +227,45 @@ test("active S002 authority is isolated from legacy planar world truth", () => {
   assert.doesNotMatch(indexSource, /CANONICAL CELL CODE|Five seed levels/);
   assert.match(indexSource, /CANONICAL PLANET CELL/);
   assert.match(indexSource, /canonical-inspector\.ts/);
+});
+
+test("village 60-minute minimum is proven by geodesic separation at the fastest walking speed", () => {
+  assert.equal(FASTEST_WALK_SPEED_MPS, 1, "good road is the fastest walk: 3.6 km per fantasy hour");
+  assert.equal(MIN_VILLAGE_FASTEST_DISTANCE_M, 3_600);
+  assert.equal(walkingLowerBoundSeconds(3_600), MIN_VILLAGE_WALK_FANTASY_SECONDS);
+
+  assert.equal(villagePairProvenByGeodesic(MIN_VILLAGE_FASTEST_DISTANCE_M + 50), true);
+  assert.equal(villagePairProvenByGeodesic(MIN_VILLAGE_FASTEST_DISTANCE_M - 50), false);
+  assert.equal(villagePairProvenByGeodesic(0), false);
+
+  // Terrain can only lengthen a walk: no surface may beat the fastest-walk bound.
+  const surfaces: WalkSurface[] = ["good-road", "open-ground", "difficult-terrain"];
+  for (const surface of surfaces) {
+    for (const distanceM of [0, 1_234, 3_600, 12_000, 250_000]) {
+      assert.ok(
+        fantasyTravelSeconds(distanceM, surface) >= walkingLowerBoundSeconds(distanceM),
+        `${surface} walk over ${distanceM} m must not beat the lower bound`,
+      );
+    }
+  }
+
+  assert.throws(() => walkingLowerBoundSeconds(Number.NaN), RangeError);
+  assert.throws(() => walkingLowerBoundSeconds(-1), RangeError);
+  // Deterministic: the same geodesic always gives the same decision.
+  assert.equal(villagePairProvenByGeodesic(4_321), villagePairProvenByGeodesic(4_321));
+});
+
+test("real canonical planet geodesics decide the village minimum for sample village pairs", () => {
+  const origin = { lon: 0, lat: 0 };
+  // Longitude/latitude are radians in planet.ts; walk along the equator by a surface distance.
+  const eastBy = (metres: number) => ({ lon: metres / CANONICAL_PLANET_RADIUS, lat: 0 });
+
+  const farPair = greatCircleDistance(origin, eastBy(10_000));
+  const closePair = greatCircleDistance(origin, eastBy(1_000));
+  const borderlinePair = greatCircleDistance(origin, eastBy(3_650));
+
+  assert.ok(Math.abs(farPair - 10_000) < 0.01, `expected ~10 km, got ${farPair}`);
+  assert.equal(villagePairProvenByGeodesic(farPair), true);
+  assert.equal(villagePairProvenByGeodesic(closePair), false, "1 km pairs need a routed check");
+  assert.equal(villagePairProvenByGeodesic(borderlinePair), true);
 });
