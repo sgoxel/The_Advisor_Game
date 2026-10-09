@@ -48,6 +48,7 @@ type LegacyCell = {
   biome: string;
   walkable: boolean;
   tile: string;
+  surface?: unknown;
 };
 
 type AdvisorWorld = {
@@ -125,6 +126,7 @@ function install(world: AdvisorWorld) {
       biome: terrainLabel(climate),
       sourceBiome: source.biome,
       walkable: source.walkable,
+      surface: source.surface,
       sourceDetail: {
         code: source.code,
         cellX: source.x,

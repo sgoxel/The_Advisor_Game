@@ -21,9 +21,11 @@
  * coarser cells instead of unbounded work.
  */
 import { macroSampleAt } from "./macro-geography.ts";
+import { reservedUseAt } from "./surface-compositor.ts";
 import {
   enuToPosition,
   greatCircleDistance,
+  lonLatToSource,
   positionToEnu,
   type CanonicalPosition,
   type LonLat,
@@ -86,11 +88,15 @@ export type RouteResult = {
 };
 
 export const macroTerrainSampler: TerrainSampler = (position) => {
-  const sample = macroSampleAt(position);
+  const sample = macroSampleAt(position),
+    source = lonLatToSource(position.lon, position.lat),
+    // Graded roadbeds and settlement pads from the shared surface compositor
+    // are prepared ground: their earthworks remove the highland penalty.
+    prepared = sample.land && reservedUseAt(source.x, source.z) !== "none";
   return {
     water: !sample.land,
     heightM: sample.reliefM,
-    highland: sample.mountainIntensity,
+    highland: prepared ? 0 : sample.mountainIntensity,
   };
 };
 

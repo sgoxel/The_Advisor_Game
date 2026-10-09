@@ -1,5 +1,5 @@
-import { biomeAt, featuresFor, field, heightAt, type Tile } from "./world.ts";
-import { nearestPlace, roadAt, roads } from "./geography.ts";
+import { biomeAt, featuresFor, field, heightAt, surfaceAt, type Tile } from "./world.ts";
+import { nearestPlace, roads } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { sourceToLonLat, wrapSourceX } from "./planet.ts";
 import {
@@ -198,6 +198,14 @@ export function terrainTint(
   if (legacy === "River") return color(76, 128, 148);
   if (legacy === "Riverbank") return color(151, 143, 99);
 
+  if (scale <= 512) {
+    // Earthwork materials come from the shared compositor, not a render-only overlay.
+    const material = surfaceAt(x, z).material;
+    if (material === "road-surface" || material === "bridge-deck") return color(170, 151, 113);
+    if (material === "dirt-foundation") return color(132, 108, 78);
+    if (material === "earthwork-cut") return color(124, 104, 82);
+    if (material === "earthwork-fill") return color(118, 110, 80);
+  }
   const s = scale <= 512 ? nearestPlace(x, z) : undefined,
     dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,
     dz = s ? Math.abs(z - s.z) : 1000,
@@ -207,8 +215,7 @@ export function terrainTint(
     scale <= 512 &&
     ((s &&
       Math.hypot(dx, dz) < (s.kind === "city" ? 420 : 66) &&
-      (dx < 4 || dz < 4 || Math.hypot(dx, dz) < 11 || urbanRoad)) ||
-      (roadAt(x, z) && Math.abs(z - roadAt(x, z)!.z) < 5))
+      (dx < 4 || dz < 4 || Math.hypot(dx, dz) < 11 || urbanRoad)))
   )
     return color(170, 151, 113);
 
@@ -522,20 +529,14 @@ export function buildTile(t: Tile): TileGeometry {
         x < Math.min(t.minX + t.size, road.maxX);
         x += 2
       ) {
-        if (heightAt(x, road.z) < 2.9) {
-          structures.box(x + 1, 2.8, road.z, 2, 0.2, 10, color(115, 88, 56));
+        const crossing = surfaceAt(x, road.z);
+        if (crossing.bridge) {
+          const deck = crossing.deckHeight - 0.2;
+          structures.box(x + 1, deck, road.z, 2, 0.2, 10, color(115, 88, 56));
           if (t.size <= 64)
             for (const oz of [-4.5, 4.5]) {
-              detail.box(
-                x + 1,
-                3.9,
-                road.z + oz,
-                2,
-                0.18,
-                0.18,
-                color(83, 65, 46),
-              );
-              detail.box(x, 3, road.z + oz, 0.2, 1.2, 0.2, color(83, 65, 46));
+              detail.box(x + 1, deck + 1.1, road.z + oz, 2, 0.18, 0.18, color(83, 65, 46));
+              detail.box(x, deck + 0.2, road.z + oz, 0.2, 1.2, 0.2, color(83, 65, 46));
             }
         }
       }

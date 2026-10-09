@@ -79,6 +79,10 @@ SCENARIOS: dict[str, str] = {
     # Real seeded pair whose highland makes the walk far slower than the straight line.
     "route-mountain": "eval:window.advisorRoutes.select('1/8/0/2','1/8/1/2');settle;shot:mountain",
     # Real seeded pair whose straight line crosses water: the route detours around it.
+    # WP-S002-004-012 compositor examples: deepest open-country road cut and the
+    # largest hillside village pad, each with the cell inspector at the canvas centre.
+    "earthwork-road": "eval:window.advisorWorld.surface.focusExample('road');settle;shot:road;tap;visible:#cell-panel;shot:inspect",
+    "earthwork-pad": "eval:window.advisorWorld.surface.focusExample('pad');settle;shot:pad;tap;visible:#cell-panel;shot:inspect",
     "route-water": (
         "eval:window.advisorRoutes.select('1/0/0/0','1/7/2/2');settle;"
         # No semicolons inside an eval step: wait until the handoff blend reaches its target.

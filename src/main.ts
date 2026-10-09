@@ -6,7 +6,9 @@ import {
   cellAt,
   cellSeed,
   heightAt,
+  naturalHeightAt,
   selectTiles,
+  surfaceAt,
   tileAt,
   type Tile,
   type View,
@@ -27,6 +29,11 @@ import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
 import { GlobeView } from "./globe-view.ts";
 import { updateRouteOverlay } from "./route-overlay.ts";
+import {
+  compositorDiagnostics,
+  earthworkExamples,
+  WORLD_PRIORITIES,
+} from "./surface-compositor.ts";
 import {
   PLANET_RADIUS,
   POLE_DISTANCE,
@@ -800,7 +807,17 @@ function inspectCell(screenX: number, screenY: number) {
     $("cell-height").title =
       `Canonical position: lon ${canonical.lon.toFixed(9)}, lat ${canonical.lat.toFixed(9)}, elevation ${cell.elevation.toFixed(2)} m`;
     $("cell-tile").textContent = `${cell.tile} · derived render tile`;
-    $("cell-walkable").textContent = cell.walkable ? "Yes" : "No";
+    $("cell-walkable").textContent = cell.walkable
+      ? `Yes · ${cell.surface.walk}`
+      : "No";
+    const earthwork = cell.surface,
+      top = earthwork.modifiers[earthwork.modifiers.length - 1];
+    $("cell-earthwork").textContent = top
+      ? `P${top.priority} ${earthwork.material} · ${earthwork.cutFill >= 0 ? "fill" : "cut"} ${Math.abs(earthwork.cutFill).toFixed(1)} m · natural ${earthwork.naturalElevation.toFixed(1)} m`
+      : `none · ${earthwork.material}`;
+    $("cell-earthwork").title = earthwork.modifiers
+      .map((modifier) => `P${modifier.priority} ${modifier.code}`)
+      .join("\n");
     $("copy-status").textContent = "";
     const patch = hierarchy.parent,
       district = patch.parent,
@@ -1475,6 +1492,22 @@ async function start() {
       cellAt,
       cellSeed,
       geography: { continents, countries, cities, villages, roads },
+      // WP-S002-004-012 shared surface compositor inspection (read-only).
+      surface: {
+        priorities: WORLD_PRIORITIES,
+        sample: surfaceAt,
+        diagnostics: compositorDiagnostics,
+        examples: () => earthworkExamples(naturalHeightAt),
+        focusExample(kind: "road" | "pad", halfHeight = 60) {
+          const example = earthworkExamples(naturalHeightAt)[kind];
+          if (!example) return undefined;
+          // Pads are crossed by their own road at the centre: inspect the
+          // hillside edge just inside the prepared perimeter instead.
+          const z = kind === "pad" ? example.z + 70 : example.z;
+          navigate(example.x, z, halfHeight);
+          return { ...example, focusX: example.x, focusZ: z };
+        },
+      },
       clock,
       planet: {
         radius: CANONICAL_PLANET_RADIUS,
