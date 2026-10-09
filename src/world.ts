@@ -8,7 +8,7 @@ import {
   wrapSourceX,
 } from "./planet.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
-import { nearestPlace, places, roadAt } from "./geography.ts";
+import { nearestPlace, places, roadAt, roadDistanceAt } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 export { WORLD_SEED } from "./config.ts";
 export const GENERATOR_VERSION = WORLD_FOUNDATION_VERSION;
@@ -224,7 +224,7 @@ export function heightAt(x: number, z: number): number {
   if (road)
     flatten = Math.min(
       flatten,
-      smooth(Math.min(1, Math.max(0, (Math.abs(z - road.z) - 5) / 7))),
+      smooth(Math.min(1, Math.max(0, (roadDistanceAt(x, z, road) - 5) / 7))),
     );
 
   const base =
@@ -351,7 +351,7 @@ export function cellAt(x: number, z: number): Cell {
   const px = cx * CELL_SIZE + 1,
     pz = cz * CELL_SIZE + 1;
   const road = roadAt(px, pz),
-    bridge = road && Math.abs(pz - road.z) <= 5 && heightAt(px, pz) < 2.9;
+    bridge = road && roadDistanceAt(px, pz, road) <= 5 && heightAt(px, pz) < 2.9;
   const elevation = bridge ? 3 : heightAt(px, pz),
     biome = bridge ? "Bridge" : biomeAt(px, pz);
   const slope = Math.max(
