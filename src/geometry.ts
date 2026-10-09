@@ -2,7 +2,12 @@ import { biomeAt, featuresFor, field, heightAt, type Tile } from "./world.ts";
 import { nearestPlace, roadAt, roads } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { sourceToLonLat, wrapSourceX } from "./planet.ts";
-type RGB = [number, number, number];
+import {
+  climateSampleAt,
+  frozenLatitudeAt,
+  TERRAIN_PALETTE,
+  type RGB,
+} from "./climate.ts";
 type Point = [number, number, number];
 export type Geometry = {
   positions: Float32Array;
@@ -16,8 +21,8 @@ export type TileGeometry = {
   nature: Geometry;
   detail: Geometry;
 };
-const color = (r: number, g: number, b: number): RGB => [r, g, b];
-const blendColor = (a: RGB, b: RGB, amount: number): RGB => {
+const color = (r: number, g: number, b: number): [number, number, number] => [r, g, b];
+const blendColor = (a: RGB, b: RGB, amount: number): [number, number, number] => {
   const t = Math.max(0, Math.min(1, amount));
   return color(
     a[0] + (b[0] - a[0]) * t,
@@ -25,10 +30,12 @@ const blendColor = (a: RGB, b: RGB, amount: number): RGB => {
     a[2] + (b[2] - a[2]) * t,
   );
 };
-const smoothColorWeight = (value: number): number => {
-  const t = Math.max(0, Math.min(1, value));
-  return t * t * (3 - 2 * t);
-};
+const varyColor = (base: RGB, amount: number): [number, number, number] =>
+  color(
+    Math.max(0, Math.min(255, base[0] + amount)),
+    Math.max(0, Math.min(255, base[1] + amount)),
+    Math.max(0, Math.min(255, base[2] + amount)),
+  );
 class Builder {
   p: number[] = [];
   n: number[] = [];
@@ -147,55 +154,51 @@ class Builder {
     };
   }
 }
-export function terrainTint(x: number, z: number, scale = 32): RGB {
-  if (scale > 512) {
-    const macro = macroSampleAt(sourceToLonLat(x, z)),
-      f = field(x, z, 9000, 44),
-      land = color(106 + f * 24, 133 + f * 24, 83 + f * 20),
-      highland = color(126 + f * 20, 137 + f * 17, 114 + f * 14),
-      volcanic = color(102 + f * 12, 98 + f * 10, 87 + f * 8),
-      mountainWeight = smoothColorWeight((macro.mountainIntensity - 0.02) / 0.76);
-    if (macro.domain === "Ocean") return color(94, 137, 139);
-    if (macro.domain === "Lake") return color(75, 126, 145);
-    if (macro.volcanic)
-      return blendColor(land, volcanic, mountainWeight * 0.94);
-    return blendColor(land, highland, mountainWeight * 0.86);
-  }
-  const s = nearestPlace(x, z);
-  const dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,
-    dz = s ? Math.abs(z - s.z) : 1000;
-  const urbanRoad =
-    s?.kind === "city" && (Math.abs(dx % 29) < 3 || Math.abs(dz % 29) < 3);
+
+/**
+ * Shared semantic material lookup. Realm and local LODs use the same climate
+ * identity and palette; only bounded seed-derived detail frequency changes.
+ */
+export function terrainTint(x: number, z: number, scale = 32): [number, number, number] {
+  const position = sourceToLonLat(x, z),
+    macro = macroSampleAt(position),
+    sample = climateSampleAt(position, macro.reliefM),
+    legacy = scale <= 512 ? biomeAt(x, z) : "";
+
+  if (legacy === "River") return color(76, 128, 148);
+  if (legacy === "Riverbank") return color(151, 143, 99);
+
+  const s = scale <= 512 ? nearestPlace(x, z) : undefined,
+    dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,
+    dz = s ? Math.abs(z - s.z) : 1000,
+    urbanRoad =
+      s?.kind === "city" && (Math.abs(dx % 29) < 3 || Math.abs(dz % 29) < 3);
   if (
-    (s &&
+    scale <= 512 &&
+    ((s &&
       Math.hypot(dx, dz) < (s.kind === "city" ? 420 : 66) &&
       (dx < 4 || dz < 4 || Math.hypot(dx, dz) < 11 || urbanRoad)) ||
-    (roadAt(x, z) && Math.abs(z - roadAt(x, z)!.z) < 5)
+      (roadAt(x, z) && Math.abs(z - roadAt(x, z)!.z) < 5))
   )
     return color(170, 151, 113);
-  const biome = biomeAt(x, z),
-    f = field(x, z, 28, 41),
-    macro = macroSampleAt(sourceToLonLat(x, z));
-  if (biome === "River" || biome === "Ocean") return color(94, 137, 139);
-  if (biome === "Lake") return color(75, 126, 145);
-  if (biome === "Sandy beach") return color(203, 190, 141);
-  if (biome === "Riverbank") return color(163, 159, 113);
-  const meadow = color(116 + f * 22, 140 + f * 24, 79 + f * 20),
-    woodland = color(72 + f * 19, 105 + f * 22, 69 + f * 15),
-    highland = color(129 + f * 25, 139 + f * 20, 116 + f * 15),
-    volcanic = color(96 + f * 19, 92 + f * 15, 82 + f * 14),
-    naturalBase = field(x, z, 90, 4) > 0.45 ? woodland : meadow,
-    mountainWeight = smoothColorWeight((macro.mountainIntensity - 0.02) / 0.76);
-  // Macro mountain material follows the same continuous seeded falloff as relief.
-  // This avoids a binary biome threshold stamping a pale polygon onto low ranges.
-  if (macro.volcanic && mountainWeight > 0)
-    return blendColor(naturalBase, volcanic, mountainWeight * 0.94);
-  if (macro.mountainIntensity > 0.02)
-    return blendColor(naturalBase, highland, mountainWeight * 0.86);
-  if (biome === "Highlands") return highland;
-  if (biome === "Woodland") return woodland;
-  return meadow;
+
+  const base = TERRAIN_PALETTE[sample.terrainClass],
+    detailScale = scale > 512 ? 9000 : sample.terrainClass.includes("forest") ? 42 : 68,
+    variation = (field(x, z, detailScale, 44) - 0.5) * (scale > 512 ? 7 : 15),
+    protectedSurface = ["ocean", "lake", "sea-ice", "polar-ice", "snowy-mountain"].includes(
+      sample.terrainClass,
+    ),
+    tint = varyColor(base, variation * (protectedSurface ? 0.35 : 1));
+
+  // Keep high relief readable without replacing the semantic biome palette.
+  if (macro.mountainIntensity > 0.04 && !protectedSurface) {
+    const rock = macro.volcanic ? TERRAIN_PALETTE.volcanic : TERRAIN_PALETTE.highland,
+      weight = Math.min(0.38, Math.max(0, macro.mountainIntensity - 0.04) * 0.42);
+    return blendColor(tint, rock, weight);
+  }
+  return tint;
 }
+
 /** Worker-generated tile meshes. Skirts cover cracks between terrain LOD levels. */
 export function buildTile(t: Tile): TileGeometry {
   const terrain = new Builder(),
@@ -258,13 +261,18 @@ export function buildTile(t: Tile): TileGeometry {
           terrainTint(ax, az),
         );
     }
-  // The same water level is shared by every tile. Land hides the unused surface.
+  // The water/ice plane is presentation-only and sits beneath land. Frozen
+  // latitudes use the same climate boundary as the globe rather than a second polar mask.
+  const centrePosition = sourceToLonLat(t.minX + t.size / 2, t.minZ + t.size / 2),
+    waterColor = frozenLatitudeAt(centrePosition)
+      ? TERRAIN_PALETTE["sea-ice"]
+      : TERRAIN_PALETTE.ocean;
   terrain.quad(
     [t.minX, 0, t.minZ],
     [t.minX, 0, t.minZ + t.size],
     [t.minX + t.size, 0, t.minZ + t.size],
     [t.minX + t.size, 0, t.minZ],
-    color(70, 126, 132),
+    waterColor,
   );
   if (t.size <= 512)
     for (const f of featuresFor(t)) {
@@ -334,9 +342,8 @@ export function buildTile(t: Tile): TileGeometry {
               color(62, 80, 87),
               4,
             );
-            if (t.size <= 64) {
+            if (t.size <= 64)
               detail.box(x + ox, y + 9, z + oz + 2.13, 0.6, 1.9, 0.08, timber);
-            }
           }
         if (t.size <= 64) {
           detail.box(x, y, z + 7.1, 2.8, 4.2, 0.2, timber);
@@ -354,37 +361,30 @@ export function buildTile(t: Tile): TileGeometry {
           detail.box(x + 1.3, y + 17, z, 2.5, 1.4, 0.07, color(171, 78, 49));
         }
       } else if (f.kind === "tree") {
+        const climate = climateSampleAt(sourceToLonLat(x, z), y),
+          family = climate.forestFamily;
+        if (!family) continue;
         const h = 7 + (v % 5),
           r = 2.4 + (v % 9) / 10;
-        nature.box(x, y - 0.1, z, 0.7, h * 0.5, 0.7, timber);
-        nature.cone(
-          x,
-          y + 2,
-          z,
-          r,
-          h * 0.75,
-          color(36 + (v % 14), 75 + (v % 18), 53),
-          6,
-        );
-        nature.cone(
-          x,
-          y + h * 0.42,
-          z,
-          r * 0.78,
-          h * 0.6,
-          color(48 + (v % 14), 88 + (v % 18), 59),
-          6,
-        );
-        if (t.size <= 32)
-          detail.cone(
-            x,
-            y + h * 0.7,
-            z,
-            r * 0.45,
-            h * 0.35,
-            color(66, 104, 67),
-            6,
-          );
+        if (family === "conifer-boreal") {
+          nature.box(x, y - 0.1, z, 0.62, h * 0.54, 0.62, timber);
+          nature.cone(x, y + 1.2, z, r, h * 0.78, color(39 + (v % 10), 76 + (v % 13), 58), 6);
+          nature.cone(x, y + h * 0.4, z, r * 0.76, h * 0.58, color(49 + (v % 9), 88 + (v % 12), 62), 6);
+          if (t.size <= 32)
+            detail.cone(x, y + h * 0.68, z, r * 0.42, h * 0.34, color(65, 103, 69), 6);
+        } else if (family === "temperate-deciduous-mixed") {
+          nature.box(x, y - 0.1, z, 0.78, h * 0.58, 0.78, timber);
+          nature.cone(x, y + h * 0.34, z, r * 1.2, h * 0.46, color(65 + (v % 15), 111 + (v % 17), 62), 8);
+          nature.cone(x - r * 0.28, y + h * 0.48, z, r * 0.78, h * 0.32, color(78 + (v % 13), 126 + (v % 15), 68), 7);
+          nature.cone(x + r * 0.3, y + h * 0.47, z + r * 0.08, r * 0.72, h * 0.3, color(71 + (v % 12), 119 + (v % 16), 64), 7);
+        } else {
+          // Warm/dry woodland is intentionally sparser and lower, with an open umbrella crown.
+          if (v % 3 !== 0) continue;
+          const shortH = h * 0.72;
+          nature.box(x, y - 0.1, z, 0.72, shortH * 0.62, 0.72, color(88, 67, 45));
+          nature.cone(x, y + shortH * 0.46, z, r * 1.15, shortH * 0.34, color(103 + (v % 12), 119 + (v % 12), 68), 7);
+          nature.cone(x + r * 0.36, y + shortH * 0.49, z - r * 0.14, r * 0.62, shortH * 0.25, color(118, 128, 72), 6);
+        }
       } else if (f.kind === "rock") {
         nature.box(
           x,
