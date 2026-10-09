@@ -198,9 +198,9 @@ Meaningful personal history should persist, including profession or residence ch
 
 # 🌍 Living World
 
-## Current Planet-First Rebuild Baseline
+## Current S002 World-Foundation Baseline
 
-The active game build is intentionally at **world-construction Stage 1**. It shows only the canonical fantasy planet sphere so the world scale and planet-space foundation can be established before local terrain, settlements, characters or simulation detail are reintroduced.
+The active development build is in **Stage S002 — Round, Natural World Foundation**. It renders the canonical fantasy planet as a Realm globe and uses the same spherical authority for closer flat/local views through the focus-preserving globe↔local handoff. The current build already includes canonical planet-space navigation, camera-relative local terrain patches and SEED-generated macro geography: exactly three irregular continents, multiple islands, seas/lakes and distinct major mountain/volcanic systems whose identities refine across LOD. Later S002 packages still own finer biome/material, hydrology/traversal, vegetation, political partition, settlement/building and living-resident completion; those requirements below must not be read as already complete unless their WP is marked completed in ROADMAP.
 
 The canonical fantasy planet uses **10% of Earth's linear scale**:
 - reference Earth mean radius: **6,371 km**;
@@ -234,7 +234,7 @@ Scale, ruler calculation and navigation sensitivity are presentation/control beh
 
 The atlas footer provides the ten scale anchors. Wheel/pinch and the zoom buttons interpolate between them; an approximate selected anchor is marked `≈`. Drag the surface to move the geographic focus, or focus the map and use WASD/arrow keys. Q/E and the rotation button turn the view; the compass arrow follows north and its button resets north. The centre crosshair and latitude/longitude identify the retained focus. The ruler measures surface distance across a short horizontal segment at that focus, with globe sphere intersections and canonical great-circle distance. Displaced landmark labels retain a leader to their world anchor. Realm view fits the globe into the available space; choosing a scale anchor instead sets its exact vertical footprint.
 
-The world is a **finite continuous sphere**, not an unbounded planar tile grid. No tile is authoritative world state. Future local terrain and LOD systems may use bounded render patches or caches, but those patches must sample planet-space world data and remain disposable presentation/performance structures rather than defining world truth.
+The world is a **finite continuous sphere**, not an unbounded planar tile grid. No tile is authoritative world state. Local terrain and LOD systems may use bounded render patches or caches, but those patches must sample planet-space world data and remain disposable presentation/performance structures rather than defining world truth.
 
 ### Canonical SEED Coordinate Fabric
 
@@ -246,7 +246,7 @@ The currently active gameplay-area center must be visibly identifiable on the sp
 
 Important landmark labels must appear at the scale tiers where they are intended to be discoverable. When text is displaced for decluttering, a small visible arrow/leader must point to the exact canonical landmark anchor. Landmark text may disappear only because its scale tier, hemisphere/occlusion, or viewport visibility makes it genuinely ineligible—not because an unrelated label consumed the shared placement budget.
 
-For Stage 1, protagonist, NPC, settlement, building and local-terrain systems are deliberately dormant. Later stages will add planetary geography first, then progressively finer detail while preserving the same canonical planet scale.
+The current S002 baseline has active globe/local terrain and macro-geography. Detailed biome/hydrology/vegetation/political/settlement/building/resident systems remain owned by their respective open S002 WPs; lightweight registries or transitional presentation already present in the atlas do not count as those packages being complete. All later detail must preserve the same canonical planet coordinates and SEED-derived macro identities.
 
 
 ## Diversity and a Lively Natural World
@@ -297,7 +297,7 @@ The world supports varied settlement archetypes rather than repeating one generi
 
 Settlement appearance, population, buildings, professions, roads, resources, defenses, prosperity, hazards and surrounding environment should reflect geography, history and campaign state.
 
-The overall world is continuous but finite because it is represented on the canonical spherical planet. Planet-space coordinates must map consistently to the sphere surface; longitude wraps naturally and no planar X/Y edge defines the world. When character simulation is reintroduced, actor positions must resolve to this same planet-space authority rather than an unbounded tile plane.
+The overall world is continuous but finite because it is represented on the canonical spherical planet. Planet-space coordinates must map consistently to the sphere surface; longitude wraps naturally and no planar X/Y edge defines the world. Actor positions and simulation state must resolve to this same planet-space authority rather than an unbounded tile plane.
 
 ## World Planning Order
 
@@ -373,7 +373,7 @@ Every inhabited village must start with the following minimum facilities:
 
 Within the village phase, design follows logical placement rules: suitable terrain and incoming routes → border and reachable gate openings → connected main streets and public center → service plots and residential plots → entrances and important objects → final priority-composed ground and vegetation. Seeded living-area pads and later road earthworks may prepare mountain/forest terrain. The center and market are accessible from the gates; inn and trade services face usable streets; farms have suitable land and access. Houses, services, fields, roads and the border must not overlap incorrectly or stand in water. The border encloses the inhabited core; connected farmland may sit outside it. Gate openings align with external routes and must not block the existing village travel-time rules.
 
-SEED codes decide the layout, house identities, service identities, gate count, initial guard assignments and initial home/work relationships. Villages must vary in shape, plots and orientation with terrain and routes rather than repeating a rigid grid. Cities scale housing and services to their resident population. Castles require a defined residential area for their inhabitants; a decorative keep without assigned homes does not satisfy the rule. The existing three continents, thirty countries, ninety cities and two hundred seventy villages remain the world counts; castle residences do not silently replace counted settlements.
+SEED codes decide the layout, house identities, service identities, gate count, initial guard assignments and initial home/work relationships. Villages must vary in shape, plots and orientation with terrain and routes rather than repeating a rigid grid. Cities scale housing and services to their resident population. Castles require a defined residential area for their inhabitants; a decorative keep without assigned homes does not satisfy the rule. The world foundation keeps **exactly 3 continents**. Country, city and village totals are deterministic lower bounds rather than fixed maxima: **countries ≥ 30, cities ≥ 90, villages ≥ 270**. The same Campaign SEED + generator version reproduces the same counts and identities; camera, LOD, device, loading order and runtime RNG never change them. Castle residences do not silently replace counted settlements.
 
 Service buildings must have assigned NPC operators, and gate guards must be actual residents rather than anonymous decoration. Daily travel, working, resting and guard shifts use SEED + Fantasy Game Time and follow walkable connections between home entrances, workplaces, public areas and guard posts. One or two guards remain assigned on duty per village gate; shift changes must not discard home ownership or duplicate NPCs. The assignment must remain true when its visual model is outside the rendered area.
 
