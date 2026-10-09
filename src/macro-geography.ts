@@ -98,13 +98,13 @@ const SLOT_ATTEMPTS = 128;
 const ISLAND_COUNT = 18;
 const LAKE_COUNT = 6;
 const MOUNTAIN_ARCHETYPES: readonly [MountainKind, number, number, number][] = [
-  ["long-chain", 0.7, 0.045, 220],
-  ["compact-massif", 0.18, 0.08, 260],
-  ["hooked-range", 0.58, 0.045, 300],
-  ["low-highlands", 0.42, 0.12, 75],
-  ["dominant-spine", 0.62, 0.04, 500],
-  ["volcanic-chain", 0.38, 0.035, 320],
-  ["volcano", 0.05, 0.035, 520],
+  ["long-chain", 0.7, 0.07, 250],
+  ["compact-massif", 0.18, 0.13, 340],
+  ["hooked-range", 0.58, 0.075, 340],
+  ["low-highlands", 0.42, 0.16, 95],
+  ["dominant-spine", 0.62, 0.065, 580],
+  ["volcanic-chain", 0.38, 0.055, 390],
+  ["volcano", 0.05, 0.055, 600],
 ];
 
 /** Stable addressed digest. It is a content lookup, never a mutable PRNG stream. */
@@ -252,13 +252,36 @@ function mountainAtUnit(plan: MacroPlan, point: Unit, continentId: number): Moun
         }
       }
     }
-    const widthVariation =
-        system.kind === "volcano"
+    const pathT =
+        system.localPath.length === 1
+          ? 0.5
+          : pathPosition / Math.max(1, system.localPath.length - 1),
+      endEnvelope =
+        system.localPath.length === 1
           ? 1
-          : 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(pathPosition * Math.PI * 3.7 + system.id * 2.1)),
+          : Math.pow(Math.max(0, Math.sin(Math.PI * pathT)), 0.55),
+      widthVariation =
+        system.kind === "volcano"
+          ? 0.9 +
+            0.1 *
+              Math.sin(
+                Math.atan2(
+                  local.north - system.localPath[0][1],
+                  local.east - system.localPath[0][0],
+                ) *
+                  3 +
+                  system.id,
+              )
+          : (0.7 +
+              0.3 *
+                (0.5 +
+                  0.5 *
+                    Math.sin(pathPosition * Math.PI * 3.7 + system.id * 2.1))) *
+            (0.58 + 0.42 * endEnvelope),
       raw = Math.max(0, 1 - distance / Math.max(width * widthVariation, 1e-7));
     if (raw <= 0) continue;
-    const intensity = smooth01(raw),
+    const longitudinal = system.localPath.length === 1 ? 1 : 0.1 + 0.9 * endEnvelope,
+      intensity = smooth01(raw) * longitudinal,
       ridgeVariation =
         0.7 + 0.3 * (0.5 + 0.5 * Math.cos(pathPosition * Math.PI * 5 + system.id * 1.7));
     let reliefM = system.reliefM * intensity * ridgeVariation;
@@ -268,11 +291,13 @@ function mountainAtUnit(plan: MacroPlan, point: Unit, continentId: number): Moun
           0,
           1 -
             Math.hypot(local.east - peak[0], local.north - peak[1]) /
-              Math.max(width * 1.5, 1e-7),
+              Math.max(width * 1.45, 1e-7),
         );
-      reliefM += system.reliefM * 0.7 * peakWeight * peakWeight;
+      reliefM += system.reliefM * 0.62 * peakWeight * peakWeight;
     } else if (system.kind === "volcano") {
-      reliefM = system.reliefM * raw ** 2.25;
+      const cone = raw ** 1.85,
+        crater = raw > 0.82 ? ((raw - 0.82) / 0.18) ** 2 : 0;
+      reliefM = system.reliefM * cone * (1 - crater * 0.24);
     }
     if (!best || reliefM > best.reliefM) best = { system, reliefM, intensity };
   }
@@ -430,12 +455,51 @@ export function createMacroPlan(
       length = Math.sin(continent.majorRadiusRad) * lengthFactor,
       width = Math.sin(continent.minorRadiusRad) * widthFactor;
     let points: [number, number][];
-    if (kind === "hooked-range") points = [[-length / 2, 0], [0, 0], [0, length / 2]];
+    if (kind === "hooked-range")
+      points = [
+        [-length / 2, -length * 0.06],
+        [-length * 0.24, -length * 0.02],
+        [0, length * 0.05],
+        [length * 0.12, length * 0.25],
+        [length * 0.16, length / 2],
+      ];
     else if (kind === "long-chain") {
       const curve = length * (0.08 + 0.12 * addressed(seed, version, `${base}/curve`));
-      points = [[-length / 2, -curve], [0, curve], [length / 2, 0]];
-    } else if (kind === "volcanic-chain")
-      points = [[-length / 2, 0], [0, length * 0.08], [length / 2, 0]];
+      points = [
+        [-length / 2, -curve * 0.7],
+        [-length * 0.25, curve * 0.35],
+        [0, curve],
+        [length * 0.25, -curve * 0.12],
+        [length / 2, 0],
+      ];
+    } else if (kind === "compact-massif")
+      points = [
+        [-length / 2, -length * 0.08],
+        [-length * 0.12, length * 0.16],
+        [length * 0.2, -length * 0.12],
+        [length / 2, length * 0.05],
+      ];
+    else if (kind === "low-highlands")
+      points = [
+        [-length / 2, -length * 0.08],
+        [-length * 0.16, length * 0.08],
+        [length * 0.18, length * 0.11],
+        [length / 2, 0],
+      ];
+    else if (kind === "dominant-spine")
+      points = [
+        [-length / 2, -length * 0.04],
+        [-length * 0.15, length * 0.06],
+        [length * 0.12, -length * 0.035],
+        [length / 2, length * 0.04],
+      ];
+    else if (kind === "volcanic-chain")
+      points = [
+        [-length / 2, 0],
+        [-length * 0.18, length * 0.07],
+        [length * 0.16, -length * 0.03],
+        [length / 2, length * 0.05],
+      ];
     else if (kind === "volcano") points = [[0, 0]];
     else points = [[-length / 2, 0], [length / 2, 0]];
 
