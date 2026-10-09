@@ -75,38 +75,76 @@ export const BIOME_MATERIALS: Readonly<Record<BiomeId, BiomeMaterial>> = {
   grassland: { id: "grassland", label: "Grassland / meadow", color: [113, 139, 79], vegetation: "grass", density: 0.32, water: false, frozen: false, rock: false },
 };
 
+type FieldChannel =
+  | "polar-edge"
+  | "temperature"
+  | "moisture"
+  | "aridity"
+  | "rain-shadow"
+  | "geology"
+  | "ground-patch"
+  | "coast";
+type UnitPoint = readonly [number, number, number];
+type FieldOctave = readonly [number, number, number, number, number, number];
+
+const FIELD_CHANNELS: readonly FieldChannel[] = [
+  "polar-edge",
+  "temperature",
+  "moisture",
+  "aridity",
+  "rain-shadow",
+  "geology",
+  "ground-patch",
+  "coast",
+];
+
 function digest(text: string): number {
   let value = 2166136261;
   for (let i = 0; i < text.length; i++) value = Math.imul(value ^ text.charCodeAt(i), 16777619);
   return value >>> 0;
 }
-function addressed(channel: string, index: number) {
+function addressed(channel: FieldChannel, index: number) {
   return digest(`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/CLIMATE/${channel}/${index}`) / 4294967296;
 }
-function sphericalField(position: LonLat, channel: string): number {
-  const p = lonLatToUnit(position.lon, position.lat);
-  let total = 0,
-    weight = 0;
-  for (let octave = 0; octave < 4; octave++) {
-    const ax = addressed(channel, octave * 4) * 2 - 1,
-      ay = addressed(channel, octave * 4 + 1) * 2 - 1,
-      az = addressed(channel, octave * 4 + 2) * 2 - 1,
-      phase = addressed(channel, octave * 4 + 3) * Math.PI * 2,
-      length = Math.hypot(ax, ay, az) || 1,
-      frequency = 1.7 * 2 ** octave,
-      amplitude = 0.56 ** octave;
-    total += Math.sin(((p[0] * ax + p[1] * ay + p[2] * az) / length) * frequency * Math.PI + phase) * amplitude;
-    weight += amplitude;
-  }
-  return Math.max(0, Math.min(1, 0.5 + total / (weight * 2)));
+
+/** Seed-derived coefficients are immutable world recipe data, not work to repeat per texel/cell. */
+const FIELD_OCTAVES = Object.fromEntries(
+  FIELD_CHANNELS.map((channel) => [
+    channel,
+    Array.from({ length: 4 }, (_, octave): FieldOctave => {
+      let ax = addressed(channel, octave * 4) * 2 - 1,
+        ay = addressed(channel, octave * 4 + 1) * 2 - 1,
+        az = addressed(channel, octave * 4 + 2) * 2 - 1;
+      const length = Math.hypot(ax, ay, az) || 1;
+      ax /= length;
+      ay /= length;
+      az /= length;
+      return [
+        ax,
+        ay,
+        az,
+        addressed(channel, octave * 4 + 3) * Math.PI * 2,
+        1.7 * 2 ** octave * Math.PI,
+        0.56 ** octave,
+      ];
+    }),
+  ]),
+) as Record<FieldChannel, FieldOctave[]>;
+const FIELD_WEIGHT = FIELD_OCTAVES["temperature"].reduce((sum, octave) => sum + octave[5], 0);
+
+function sphericalFieldUnit(p: UnitPoint, channel: FieldChannel): number {
+  let total = 0;
+  for (const [ax, ay, az, phase, frequency, amplitude] of FIELD_OCTAVES[channel])
+    total += Math.sin((p[0] * ax + p[1] * ay + p[2] * az) * frequency + phase) * amplitude;
+  return Math.max(0, Math.min(1, 0.5 + total / (FIELD_WEIGHT * 2)));
 }
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
-export function climateZoneAt(position: LonLat, elevationM = 0) {
-  const edgeNoise = sphericalField(position, "polar-edge") - 0.5,
+function climateZoneFromUnit(position: LonLat, elevationM: number, unit: UnitPoint) {
+  const edgeNoise = sphericalFieldUnit(unit, "polar-edge") - 0.5,
     polarEdge = 1.13 + edgeNoise * 0.18,
     absLat = Math.abs(position.lat),
-    thermalNoise = (sphericalField(position, "temperature") - 0.5) * 7,
+    thermalNoise = (sphericalFieldUnit(unit, "temperature") - 0.5) * 7,
     temperatureC = 29 - 48 * Math.pow(Math.sin(absLat), 1.22) - Math.max(0, elevationM) * 0.018 + thermalNoise;
   if (absLat >= polarEdge || temperatureC <= -9) return { zone: "Frozen" as const, temperatureC, polarEdge };
   if (temperatureC < 5) return { zone: "Cold" as const, temperatureC, polarEdge };
@@ -114,21 +152,26 @@ export function climateZoneAt(position: LonLat, elevationM = 0) {
   return { zone: "Temperate" as const, temperatureC, polarEdge };
 }
 
+export function climateZoneAt(position: LonLat, elevationM = 0) {
+  return climateZoneFromUnit(position, elevationM, lonLatToUnit(position.lon, position.lat));
+}
+
 export function biomeSampleAt(
   position: LonLat,
   context: { elevationM?: number; slopeM?: number; macro?: MacroSample } = {},
 ): BiomeSample {
-  const macro = context.macro ?? macroSampleAt(position),
+  const unit = lonLatToUnit(position.lon, position.lat),
+    macro = context.macro ?? macroSampleAt(position),
     elevationM = Math.max(0, context.elevationM ?? macro.reliefM),
     slopeM = Math.max(0, context.slopeM ?? 0),
-    climate = climateZoneAt(position, elevationM),
+    climate = climateZoneFromUnit(position, elevationM, unit),
     coastInfluence = Math.exp(-Math.max(0, macro.coastDistanceRad) / 0.09),
-    moistureNoise = sphericalField(position, "moisture"),
-    aridity = sphericalField(position, "aridity"),
-    rainShadow = macro.mountainIntensity * (0.08 + 0.12 * sphericalField(position, "rain-shadow")),
+    moistureNoise = sphericalFieldUnit(unit, "moisture"),
+    aridity = sphericalFieldUnit(unit, "aridity"),
+    rainShadow = macro.mountainIntensity * (0.08 + 0.12 * sphericalFieldUnit(unit, "rain-shadow")),
     moisture = clamp01(0.08 + moistureNoise * 0.64 + coastInfluence * 0.18 - rainShadow - (aridity - 0.5) * 0.2),
-    geology = sphericalField(position, "geology"),
-    patch = sphericalField(position, "ground-patch");
+    geology = sphericalFieldUnit(unit, "geology"),
+    patch = sphericalFieldUnit(unit, "ground-patch");
   let zone: ClimateZone = climate.zone,
     biome: BiomeId;
 
@@ -143,7 +186,7 @@ export function biomeSampleAt(
     biome = "volcanic-highland";
   } else if (slopeM > 3.4 || (macro.mountainIntensity > 0.72 && elevationM > 180)) {
     biome = "cliff-rock";
-  } else if (macro.coastDistanceRad >= 0 && macro.coastDistanceRad < 0.00024 + sphericalField(position, "coast") * 0.00012 && slopeM < 2.1) {
+  } else if (macro.coastDistanceRad >= 0 && macro.coastDistanceRad < 0.00024 + sphericalFieldUnit(unit, "coast") * 0.00012 && slopeM < 2.1) {
     biome = "beach";
   } else if (climate.temperatureC < 4.5) {
     biome = moisture > 0.44 ? "boreal-forest" : "tundra";
