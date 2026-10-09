@@ -1,0 +1,36 @@
+name: Validate globe-local orientation
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/render-frame.ts'
+      - 'src/main.ts'
+      - 'src/globe-view.ts'
+      - 'tests/*orientation*'
+      - 'tests/browser/orientation.spec.js'
+      - 'tests/webgpu/orientation.spec.js'
+      - '.github/workflows/orientation-validation.yml'
+permissions:
+  contents: read
+jobs:
+  orientation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: xvfb-run -a npx playwright test --config playwright.webgpu.config.js orientation.spec.js render-frame.spec.js
+      - run: xvfb-run -a npx playwright test --config playwright.fallback.config.js orientation.spec.js render-frame.spec.js
+      - run: xvfb-run -a npx playwright test --config playwright.navigation.config.js --grep 'pointer touch keyboard'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: orientation-evidence
+          path: test-results/

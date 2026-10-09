@@ -54,7 +54,7 @@ function surfacePositionFromEnu(
   return enuToPosition({ east, north, up }, origin);
 }
 
-/** Recompute normals after the source-plane south axis becomes canonical north. */
+/** Recompute normals in the right-handed render frame: east, up, south. */
 function recomputeNormals(geometry: Geometry) {
   const { positions, normals, indices } = geometry;
   normals.fill(0);
@@ -68,11 +68,9 @@ function recomputeNormals(geometry: Geometry) {
       vx = positions[ic] - positions[ia],
       vy = positions[ic + 1] - positions[ia + 1],
       vz = positions[ic + 2] - positions[ia + 2];
-    // Source +Z was south. The canonical local frame is +Z north, which is an
-    // orientation reversal, so negate the transformed triangle cross product.
-    let nx = -(uy * vz - uz * vy),
-      ny = -(uz * vx - ux * vz),
-      nz = -(ux * vy - uy * vx);
+    let nx = uy * vz - uz * vy,
+      ny = uz * vx - ux * vz,
+      nz = ux * vy - uy * vx;
     const length = Math.hypot(nx, ny, nz) || 1;
     nx /= length;
     ny /= length;
@@ -108,7 +106,7 @@ export function convertTileGeometryToEnu(
         position = sourcePosition(sourceX, sourceZ),
         enu = positionToEnu(position, origin),
         x = enu.east / CANONICAL_METRES_PER_SOURCE_UNIT,
-        z = enu.north / CANONICAL_METRES_PER_SOURCE_UNIT,
+        z = -enu.north / CANONICAL_METRES_PER_SOURCE_UNIT,
         fx = Math.fround(x),
         fz = Math.fround(z);
       maxHorizontalM = Math.max(maxHorizontalM, Math.hypot(enu.east, enu.north));
@@ -181,14 +179,14 @@ export class LocalRenderFrame {
     return {
       x: enu.east / CANONICAL_METRES_PER_SOURCE_UNIT,
       y,
-      z: enu.north / CANONICAL_METRES_PER_SOURCE_UNIT,
+      z: -enu.north / CANONICAL_METRES_PER_SOURCE_UNIT,
     };
   }
 
   renderToLonLat(x: number, z: number): LonLat {
     const position = surfacePositionFromEnu(
       x * CANONICAL_METRES_PER_SOURCE_UNIT,
-      z * CANONICAL_METRES_PER_SOURCE_UNIT,
+      -z * CANONICAL_METRES_PER_SOURCE_UNIT,
       this.origin,
     );
     return { lon: position.lon, lat: position.lat };
@@ -205,12 +203,12 @@ export class LocalRenderFrame {
       eastTip = surfacePositionFromEnu(1, 0, patchOrigin),
       tip = positionToEnu(eastTip, this.origin),
       dx = tip.east - centre.east,
-      dz = tip.north - centre.north,
+      dz = centre.north - tip.north,
       yawDegrees = (-Math.atan2(dz, dx) * 180) / Math.PI;
     this.stats.transformedPatches++;
     return {
       x: centre.east / CANONICAL_METRES_PER_SOURCE_UNIT,
-      z: centre.north / CANONICAL_METRES_PER_SOURCE_UNIT,
+      z: -centre.north / CANONICAL_METRES_PER_SOURCE_UNIT,
       yawDegrees,
     };
   }

@@ -162,7 +162,7 @@ The Stage S001 2 m square cell is not retained as a planet-wide planar authority
 Any closer flat/local view uses an east-north-up (ENU) tangent frame centered on the current authoritative focus coordinate:
 
 - +X = local east;
-- +Z = local north in game-plane conventions;
+- +Z = local south (negative ENU north), matching the globe and the right-handed PlayCanvas frame; ENU calculations themselves retain positive north;
 - +Y = local up/elevation.
 
 Local coordinates are derived from canonical planet coordinates. Moving/rebasing the tangent origin changes presentation coordinates only. Terrain, roads, actors, labels, collision and picking all resolve back to the same canonical world position.

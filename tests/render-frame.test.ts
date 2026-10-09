@@ -24,6 +24,41 @@ const close = (actual: number, expected: number, tolerance: number, message?: st
     message ?? `${actual} should be within ${tolerance} of ${expected}`,
   );
 
+test("local render axes agree with globe east/up/south orientation", () => {
+  for (const [lon, lat] of [[0, 0], [-1.05, -0.2], [3.13, 1.1]]) {
+    const source = lonLatToSource(lon, lat),
+      frame = new LocalRenderFrame(source.x, source.z),
+      north = lonLatToSource(lon, lat + 0.00001),
+      east = lonLatToSource(lon + 0.00001, lat);
+    assert.ok(frame.sourceToRender(north.x, north.z).z < 0, "north must be -Z, as on the globe");
+    assert.ok(frame.sourceToRender(east.x, east.z).x > 0, "east must be +X");
+    const restored = frame.renderToLonLat(0, -1);
+    assert.ok(restored.lat > lat, "screen-forward picking must resolve north");
+  }
+});
+
+test("worker mesh winding and rebased patch placement use the same south axis", () => {
+  const tile = tileAt(12, 2047, 2300),
+    x = tile.minX + tile.size / 2,
+    z = tile.minZ + tile.size / 2,
+    frame = new LocalRenderFrame(x + 40, z - 30),
+    data = buildTile(tile),
+    originalNormals = data.terrain.normals.slice();
+  convertTileGeometryToEnu(tile, data);
+  for (let i = 1; i < originalNormals.length; i += 3)
+    if (originalNormals[i] > 0.9) assert.ok(data.terrain.normals[i] > 0, "upward terrain faces must stay upward");
+  const transform = frame.patchTransform(tile),
+    centre = frame.sourceToRender(x, z),
+    patchFrame = new LocalRenderFrame(x, z),
+    point = patchFrame.sourceToRender(x + 0.1, z + 0.1),
+    expected = frame.sourceToRender(x + 0.1, z + 0.1),
+    angle = transform.yawDegrees * Math.PI / 180;
+  close(transform.x, centre.x, 1e-9);
+  close(transform.z, centre.z, 1e-9);
+  close(transform.x + point.x * Math.cos(angle) + point.z * Math.sin(angle), expected.x, 1e-5);
+  close(transform.z - point.x * Math.sin(angle) + point.z * Math.cos(angle), expected.z, 1e-5);
+});
+
 test("local render frame round-trips canonical surface points at far, wrap and high latitude", () => {
   const origins = [
     [0, 14],

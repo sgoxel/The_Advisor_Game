@@ -256,17 +256,7 @@ function panScreen(ax: number, ay: number, bx: number, by: number) {
       Math.abs(by - ay) < 0.001 && Math.abs(Math.sin(view.yaw)) < 1e-9;
     const next = parallel
       ? parallelDragFocus(focus, previous, current)
-      : projectionTransition > 0.5
-        ? draggedFocus(focus, previous, current)
-        : {
-            lon:
-              focus.lon +
-              Math.atan2(
-                Math.sin(previous.lon - current.lon),
-                Math.cos(previous.lon - current.lon),
-              ),
-            lat: focus.lat + previous.lat - current.lat,
-          };
+      : draggedFocus(focus, previous, current);
     const flat = lonLatToFlat(next.lon, next.lat);
     const latitude = focus.lat + previous.lat - current.lat;
     if (!parallel && Math.abs(latitude) > Math.PI / 2) {
