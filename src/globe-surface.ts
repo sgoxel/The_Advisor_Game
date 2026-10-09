@@ -29,8 +29,10 @@ type RGB = [number, number, number];
 
 /** Lit from the north-west, 45° above the horizon: [toward west, up, toward north]. */
 const LIGHT = [0.5, Math.SQRT1_2, 0.5];
-/** Vertical exaggeration: real slopes are far too gentle to read from orbit. */
-const EXAGGERATION = 3.5;
+/** Orbit presentation exaggeration only; canonical terrain heights remain unchanged. */
+const EXAGGERATION = 5.5;
+/** RGBA8 globe textures otherwise quantize genuine shallow terrain slopes to no visible change. */
+const MIN_VISIBLE_RELIEF = 0.008;
 const SHADE_MIN = 0.6,
   SHADE_MAX = 1.3;
 
@@ -182,14 +184,18 @@ export function buildGlobeSurface(
         south === north
           ? 0
           : ((elevation(i, south) - elevation(i, north)) * EXAGGERATION) /
-            (centreZ[south] - centreZ[north]);
-    const lit =
-      (LIGHT[0] * eastward + LIGHT[1] + LIGHT[2] * southward) /
-      Math.sqrt(1 + eastward * eastward + southward * southward);
-    return Math.max(
-      SHADE_MIN,
-      Math.min(SHADE_MAX, 1 + relief * (lit / LIGHT[1] - 1)),
-    );
+            (centreZ[south] - centreZ[north]),
+      lit =
+        (LIGHT[0] * eastward + LIGHT[1] + LIGHT[2] * southward) /
+        Math.sqrt(1 + eastward * eastward + southward * southward),
+      raw = lit / LIGHT[1] - 1,
+      slopeMagnitude = Math.abs(eastward) + Math.abs(southward),
+      signed = raw || LIGHT[0] * eastward + LIGHT[2] * southward || eastward - southward,
+      directional =
+        slopeMagnitude > 1e-7 && Math.abs(raw) < MIN_VISIBLE_RELIEF
+          ? Math.sign(signed || 1) * MIN_VISIBLE_RELIEF
+          : raw;
+    return Math.max(SHADE_MIN, Math.min(SHADE_MAX, 1 + relief * directional));
   };
   for (let j = from; j < to; j++)
     for (let i = 0; i < width; i++) {
