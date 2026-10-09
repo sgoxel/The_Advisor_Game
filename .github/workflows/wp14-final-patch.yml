@@ -13,6 +13,11 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
       - name: Apply continuous canonical material presentation
         run: |
           python - <<'PY'
