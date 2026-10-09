@@ -107,6 +107,9 @@ function checkLayout(place: Place, layout: SettlementLayout): void {
       assert.ok(!overlaps(polys[i], polys[j]), `${place.id}: ${buildings[i].code} overlaps ${buildings[j].code}`);
     for (const street of streets)
       for (let s = 0; s + 1 < street.points.length; s++) {
+        // Cheap reject: the footprint lies within half its diagonal of its centre.
+        const reach = Math.hypot(buildings[i].width, buildings[i].depth) / 2 + street.width;
+        if (distPointSeg({ x: buildings[i].x, z: buildings[i].z }, street.points[s], street.points[s + 1]) > reach) continue;
         const d = polySegDistance(polys[i], street.points[s], street.points[s + 1]);
         assert.ok(
           d >= street.width / 2,
@@ -185,7 +188,7 @@ function checkLayout(place: Place, layout: SettlementLayout): void {
     `${place.id}: home capacity ${homeCapacity} < ${residents.length} residents`,
   );
   assert.ok(
-    residents.length <= (city ? 520 : 40),
+    residents.length <= (city ? 980 : 40),
     `${place.id}: ${residents.length} residents exceed the seeded range`,
   );
   for (const b of buildings) {
@@ -268,4 +271,146 @@ test("street distance and building lookup", () => {
   const building = layout.buildings[0];
   assert.equal(buildingAt(building.x, building.z)?.code, building.code);
   assert.equal(buildingAt(village.x + 5000, village.z + 5000), undefined);
+});
+
+/** Distance along a street (arclength of the closest point) and which side of it a point lies on. */
+function alongAndSide(points: Point[], p: Point): { along: number; side: number; dist: number } {
+  let best = { along: 0, side: 1, dist: Infinity },
+    run = 0;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const a = points[i],
+      b = points[i + 1],
+      len = Math.hypot(b.x - a.x, b.z - a.z);
+    if (len === 0) continue;
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.z - a.z) * (b.z - a.z)) / (len * len))),
+      dist = distPointSeg(p, a, b);
+    if (dist < best.dist) best = { along: run + t * len, side: orient(a, b, p) >= 0 ? 1 : -1, dist };
+    run += len;
+  }
+  return best;
+}
+
+test("every city is dense, with uneven spacing along its streets", () => {
+  for (const city of cities) {
+    const layout = layoutOf(city);
+    assert.ok(layout.buildings.length >= 250, `${city.id}: only ${layout.buildings.length} buildings`);
+    // Homes along one side of one street, ordered by distance along it: gaps must not be uniform.
+    const groups = new Map<string, number[]>();
+    for (const b of layout.buildings) {
+      if (b.role !== "home") continue;
+      const street = layout.streets.find((st) => st.code === b.street)!,
+        { along, side } = alongAndSide(street.points, { x: b.x, z: b.z });
+      const key = `${b.street}/${side}`;
+      groups.set(key, [...(groups.get(key) ?? []), along]);
+    }
+    const spacings: number[] = [];
+    for (const list of groups.values()) {
+      list.sort((a, b) => a - b);
+      for (let i = 1; i < list.length; i++) spacings.push(list[i] - list[i - 1]);
+    }
+    assert.ok(spacings.length >= 100, `${city.id}: only ${spacings.length} spacings`);
+    const mean = spacings.reduce((a, b) => a + b, 0) / spacings.length,
+      sd = Math.sqrt(spacings.reduce((a, b) => a + (b - mean) ** 2, 0) / spacings.length);
+    assert.ok(sd / mean > 0.25, `${city.id}: spacing coefficient of variation ${(sd / mean).toFixed(2)} too uniform`);
+  }
+});
+
+test("city cores are covered by streets and denser than the edge", () => {
+  for (const city of cities) {
+    const layout = layoutOf(city);
+    let dry = 0,
+      far = 0;
+    for (let gx = -260; gx <= 260; gx += 20)
+      for (let gz = -260; gz <= 260; gz += 20) {
+        if (Math.hypot(gx, gz) > 260) continue;
+        const p = { x: city.x + gx, z: city.z + gz };
+        if (heightAt(p.x, p.z) <= 0.3 || !insidePolygon(p, layout.border.points)) continue;
+        dry++;
+        let best = Infinity;
+        for (const st of layout.streets)
+          for (let i = 0; i + 1 < st.points.length; i++) best = Math.min(best, distPointSeg(p, st.points[i], st.points[i + 1]));
+        // Spec: within ~45 of a street (the core is held tighter; allow slack for water-skipped lanes).
+        if (best > 50) far++;
+      }
+    assert.ok(far <= dry * 0.03, `${city.id}: ${far}/${dry} walled points are more than 50 from any street`);
+    const area = (r0: number, r1: number) => Math.PI * (r1 * r1 - r0 * r0),
+      count = (r0: number, r1: number) =>
+        layout.buildings.filter((b) => {
+          const d = Math.hypot(b.x - city.x, b.z - city.z);
+          return d >= r0 && d < r1;
+        }).length;
+    const core = count(0, 150) / area(0, 150),
+      edge = count(150, 400) / area(150, 400);
+    assert.ok(core > edge * 2, `${city.id}: core density ${core.toExponential(2)} not above edge ${edge.toExponential(2)}`);
+  }
+});
+
+test("city layouts avoid grid and row regularity", () => {
+  const busiest = cities.reduce((best, c) => (layoutOf(c).buildings.length > layoutOf(best).buildings.length ? c : best));
+  const buildings = layoutOf(busiest).buildings;
+  // Orientation modulo a quarter turn: a grid would collapse onto a couple of buckets.
+  const quarter = Math.PI / 2,
+    yaws = new Set(buildings.map((b) => Math.floor((((b.angle % quarter) + quarter) % quarter) / 0.04)));
+  assert.ok(yaws.size >= 20, `orientations collapse onto ${yaws.size} buckets`);
+  const offsets = new Set(buildings.map((b) => Math.round((((b.x % 29) + 29) % 29))));
+  assert.ok(offsets.size >= 20, `positions cluster on a lattice: ${offsets.size} distinct x mod 29 buckets`);
+  // Frontage varies from plot to plot.
+  const widths = new Set(buildings.filter((b) => b.role === "home").map((b) => b.width.toFixed(1)));
+  assert.ok(widths.size >= 15, `only ${widths.size} distinct home frontages`);
+});
+
+test("city spines and rings are not straight", () => {
+  for (const city of cities) {
+    const spine = layoutOf(city).streets[0];
+    const devs = spine.points.map((p) => Math.abs(p.z - city.z));
+    assert.ok(Math.max(...devs) >= 10, `${city.id}: spine deviates only ${Math.max(...devs).toFixed(1)} from z = place.z`);
+    // Ends sit on the external road axis.
+    assert.equal(spine.points[0].z, city.z);
+    assert.equal(spine.points[spine.points.length - 1].z, city.z);
+  }
+});
+
+test("borders hug the settlement and streets only cross them at gates", () => {
+  for (const place of [...villages, ...cities]) {
+    const layout = layoutOf(place),
+      city = place.kind === "city",
+      maxBuilding = Math.max(
+        ...layout.buildings.flatMap((b) => footprint(b).map((c) => Math.hypot(c.x - place.x, c.z - place.z))),
+      ),
+      mean = layout.border.points.reduce((s, q) => s + Math.hypot(q.x - place.x, q.z - place.z), 0) / layout.border.points.length;
+    assert.ok(
+      mean <= maxBuilding + (city ? 30 : 15),
+      `${place.id}: mean border radius ${mean.toFixed(1)} vs outermost building ${maxBuilding.toFixed(1)}`,
+    );
+    assert.ok(
+      layout.border.points.every((q) => Math.hypot(q.x - place.x, q.z - place.z) >= 28),
+      `${place.id}: border pinches below 28`,
+    );
+    // Streets reach the border only through a gate opening.
+    const poly = layout.border.points;
+    for (const street of layout.streets)
+      for (let i = 0; i + 1 < street.points.length; i++)
+        for (let k = 0; k < poly.length; k++) {
+          const a = street.points[i],
+            b = street.points[i + 1],
+            c = poly[k],
+            d = poly[(k + 1) % poly.length];
+          if (orient(c, d, a) * orient(c, d, b) <= 0 && orient(a, b, c) * orient(a, b, d) <= 0) {
+            // Crossing point of the two segments.
+            const t = orient(c, d, a) / (orient(c, d, a) - orient(c, d, b) || 1),
+              hit = { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
+            assert.ok(
+              layout.gates.some((g) => g.street === street.code && Math.hypot(g.x - hit.x, g.z - hit.z) <= g.openingWidth),
+              `${place.id}: ${street.code} cuts the border away from a gate`,
+            );
+          }
+        }
+    // Gate streets run out to the border along the external road line.
+    for (const gate of layout.gates) {
+      const street = layout.streets.find((st) => st.code === gate.street)!;
+      const end = Math.abs(gate.x - street.points[0].x) < Math.abs(gate.x - street.points[street.points.length - 1].x) ? street.points[0] : street.points[street.points.length - 1];
+      assert.equal(end.z, place.z, `${place.id}: ${gate.code} street end is off the road line`);
+      assert.ok(Math.hypot(end.x - place.x, end.z - place.z) >= Math.hypot(gate.x - place.x, gate.z - place.z), `${place.id}: gate beyond street end`);
+    }
+  }
 });

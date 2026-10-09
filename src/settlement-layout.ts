@@ -84,7 +84,7 @@ export type SettlementLayout = {
 const TAU = Math.PI * 2;
 /** heightAt at or below this is water for settlement purposes. */
 const DRY = 0.3;
-const BORDER_BINS = 28;
+const BORDER_BINS = 48;
 const BORDER_STEP = TAU / BORDER_BINS;
 /** Vertex radius = polygon radius / cos(half step), so chords never cut inside the target radius. */
 const BORDER_CHORD = Math.cos(Math.PI / BORDER_BINS);
@@ -93,7 +93,12 @@ const SPINE_SPACING = 18;
 const FIELD_ROAD_BAND = 9;
 
 const VILLAGE = { start: 64, cap: 76, fieldRadius: 150, residents: [18, 40] as const };
-const CITY = { start: 340, cap: 400, fieldRadius: 470, residents: [380, 520] as const };
+/** City homes hold 1-4 people, so ~740-980 residents is roughly 300-400 homes plus services. */
+const CITY = { start: 340, cap: 400, fieldRadius: 470, residents: [740, 980] as const };
+/** Border: minimum radius, and margin beyond the outermost built extent in a sector. */
+const BORDER_MIN = 28;
+const BORDER_MARGIN = 7;
+const BORDER_MARGIN_VAR = 3;
 
 /** Object-level exception used to grow the envelope and retry a whole layout. */
 class Shortfall extends Error {}
@@ -351,11 +356,16 @@ type Program = {
   district: "town" | "castle";
 };
 
-function roomProgram(role: BuildingRole, u: (k: number) => number): { rooms: Room[]; floors: number; capacity: number } {
+function roomProgram(
+  role: BuildingRole,
+  u: (k: number) => number,
+  city = false,
+): { rooms: Room[]; floors: number; capacity: number } {
   const room = (name: string, areaM2: number): Room => ({ name, areaM2 });
   switch (role) {
     case "home": {
-      const household = 2 + Math.floor(u(0) * 4),
+      // Villages: households of 2-5. Cities: 1-4, so a dense core still houses the whole population.
+      const household = city ? 1 + Math.floor(u(0) * 4) : 2 + Math.floor(u(0) * 4),
         extraBedrooms = Math.floor(Math.max(0, household - 2) / 2);
       const rooms = [room("bedroom", 9), room("latrine", 2), room("living room", 12)];
       for (let i = 0; i < extraBedrooms; i++) rooms.push(room("bedroom", 8));
@@ -407,7 +417,7 @@ type Anchor = {
   setback: number;
   noise: number;
 };
-type GateEnd = { side: 1 | -1; end: Point; street: number; open: boolean };
+type GateEnd = { side: 1 | -1; end: Point; street: number; open: boolean; target: Point };
 type Work = {
   place: Place;
   rand: Rand;
@@ -427,6 +437,13 @@ type Work = {
   anchorPasses: (Anchor[] | undefined)[];
   anchorSpacing: number;
   gateEnds: GateEnd[];
+  /** Arclengths that trimming must keep (junction with the parent street). */
+  keep: Map<number, number[]>;
+  /** Streets that are never trimmed (rings and their dry runs). */
+  fixed: Set<number>;
+  spineIndex: number;
+  /** Arclength span of the spine that carries buildings (the rest, past a gate, leaves the settlement). */
+  spineSpan: { lo: number; hi: number };
 };
 
 function addStreet(w: Work, points: Point[], width: number): number {
@@ -442,10 +459,12 @@ function addStreet(w: Work, points: Point[], width: number): number {
 
 function programFor(w: Work, role: BuildingRole, ordinal: number): Program {
   const u = (k: number) => w.rand(`program/${role}/${k}`, ordinal);
-  const { rooms, floors, capacity } = roomProgram(role, u);
+  const { rooms, floors, capacity } = roomProgram(role, u, w.city);
   const minArea = rooms.reduce((sum, r) => sum + r.areaM2, 0) * 1.3;
-  const area = minArea * (1 + 0.15 * u(2)),
-    aspect = lerpAspect(u(3)),
+  // Homes vary more in footprint and frontage/depth ratio than service buildings so neighbours differ.
+  const home = role === "home";
+  const area = minArea * (1 + (home ? 0.5 : 0.15) * u(2)),
+    aspect = home ? 0.6 + 1.0 * u(3) : lerpAspect(u(3)),
     width = Math.ceil(Math.sqrt(area * aspect) * 10) / 10,
     depth = Math.ceil((area / width) * 10) / 10;
   return { role, rooms, floors, capacity, width, depth, district: "town" };
@@ -592,25 +611,100 @@ function placeRole(
 }
 
 // ---------------------------------------------------------------------------
+// City home plots: frontage walked along every street with a density gradient.
+// ---------------------------------------------------------------------------
+
+type Plot = { prog: Program; an: Anchor; score: number };
+
+const smooth01 = (t: number) => {
+  const c = Math.max(0, Math.min(1, t));
+  return c * c * (3 - 2 * c);
+};
+
+/**
+ * Walk each street on both sides, cutting one plot per home program. Near the centre plots are
+ * tight (gap 0.5-2.5) and every plot is kept; toward the edge gaps loosen (4-15) and a rising
+ * share of plots is skipped. Frontage and depth come from each home's own program, so neighbours
+ * differ. Candidates are returned best-first (centre first, softened by seeded noise).
+ */
+function planHomePlots(w: Work): Plot[] {
+  const plots: Plot[] = [];
+  let ordinal = 0;
+  w.streets.forEach((street, si) => {
+    const pts = street.points;
+    for (const side of [1, -1] as const) {
+      let cursor = w.rand("plot/offset", si * 2 + (side > 0 ? 1 : 0)) * 6,
+        seg0 = 0;
+      for (let j = 0; j + 1 < pts.length; j++) {
+        const a = pts[j],
+          b = pts[j + 1],
+          len = Math.hypot(b.x - a.x, b.z - a.z);
+        if (len < 0.5) continue;
+        const dx = (b.x - a.x) / len,
+          dz = (b.z - a.z) / len,
+          seg1 = seg0 + len;
+        for (;;) {
+          const id = 100000 + ordinal,
+            prog = programFor(w, "home", id),
+            centre = cursor + prog.width / 2;
+          if (centre >= seg1) break;
+          ordinal++;
+          const p = { x: a.x + dx * (centre - seg0), z: a.z + dz * (centre - seg0) },
+            d = Math.hypot(p.x - w.cx, p.z - w.cz),
+            t = smooth01((d - 110) / 160),
+            gapLo = lerp(0.5, 4, t),
+            gapHi = lerp(2.5, 15, t),
+            gap = lerp(gapLo, gapHi, w.rand("plot/gap", id)),
+            skipped = w.rand("plot/skip", id) < 0.55 * t;
+          cursor += prog.width + gap;
+          if (skipped) continue;
+          plots.push({
+            prog,
+            an: {
+              id,
+              street: si,
+              a,
+              b,
+              p,
+              nx: -dz * side,
+              nz: dx * side,
+              yawJit: (w.rand("plot/yaw", id) - 0.5) * (0.1 + 0.2 * t),
+              setback: street.width / 2 + 1.1 + (0.8 + 2.5 * t) * w.rand("plot/setback", id),
+              noise: w.rand("plot/noise", id),
+            },
+            score: d + 45 * w.rand("plot/order", id),
+          });
+        }
+        seg0 = seg1;
+      }
+    }
+  });
+  return plots.sort((x, y) => x.score - y.score || x.an.id - y.an.id);
+}
+
+// ---------------------------------------------------------------------------
 // Streets: spine on the external road axis (z = place.z at both ends), archetype
 // geometry and seeded branching lanes.
 // ---------------------------------------------------------------------------
 
+/** True when every 6 unit sample along the polyline is dry. */
 function dryPolyline(points: Point[]): boolean {
   for (let i = 0; i + 1 < points.length; i++) {
     const a = points[i],
-      b = points[i + 1];
-    for (const p of [a, b, { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 }])
-      if (heightAt(p.x, p.z) <= DRY) return false;
+      b = points[i + 1],
+      steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 6));
+    for (let s = 0; s <= steps; s++)
+      if (heightAt(lerp(a.x, b.x, s / steps), lerp(a.z, b.z, s / steps)) <= DRY) return false;
   }
   return true;
 }
 
-/** Streets keep only their dry runs (8 unit sampling); a wet stretch splits the street. */
-function addDryRuns(w: Work, points: Point[], width: number): void {
+/** Streets keep only their dry runs (8 unit sampling); a wet stretch splits the street. Returns the new street indices. */
+function addDryRuns(w: Work, points: Point[], width: number): number[] {
+  const made: number[] = [];
   let run: Point[] = [];
   const flush = () => {
-    if (run.length >= 2) addStreet(w, run, width);
+    if (run.length >= 2) made.push(addStreet(w, run, width));
     run = [];
   };
   for (let i = 0; i + 1 < points.length; i++) {
@@ -624,22 +718,52 @@ function addDryRuns(w: Work, points: Point[], width: number): void {
     }
   }
   flush();
+  return made;
 }
 
-/** Smooth seeded spine: both ends exactly on z = place.z; interior offsets up to +-10. */
+/** Uniform Catmull-Rom between p1 and p2. */
+function catmull(p0: number, p1: number, p2: number, p3: number, t: number): number {
+  const t2 = t * t,
+    t3 = t2 * t;
+  return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+}
+
+/**
+ * Smooth seeded spine: both ends exactly on z = place.z. Interior offsets come from seeded control
+ * points every ~40 (village) or ~50 (city) units joined by a Catmull-Rom curve. The bend fades out
+ * toward the ends so the outer part, where the external road meets the spine, lies on z = place.z.
+ */
 function makeSpine(w: Work, west: number, east: number, bend: number): Point[] {
   const span = east - west,
-    n = Math.max(2, Math.ceil(span / SPINE_SPACING)),
-    a1 = w.rand("spine/amp", 0) * 2 - 1,
-    a2 = w.rand("spine/amp", 1) * 2 - 1,
+    step = w.city ? 14 : SPINE_SPACING,
+    n = Math.max(2, Math.ceil(span / step)),
+    ctrlCount = Math.max(3, Math.round(span / (w.city ? 50 : 40))),
+    ctrl: number[] = [];
+  let sign = w.rand("spine/flip", 999) < 0.5 ? -1 : 1;
+  for (let j = 0; j <= ctrlCount; j++) {
+    // Sweeps keep their side about half the time, so the spine snakes without sharp humps.
+    if (w.rand("spine/flip", j) < 0.55) sign = -sign;
+    ctrl.push(sign * (0.4 + 0.6 * w.rand("spine/amp", j)));
+  }
+  const inner = w.city ? 0.5 : 0.35,
+    outer = w.city ? 0.85 : 0.5,
     points: Point[] = [];
   for (let i = 0; i <= n; i++) {
     const t = i / n,
-      off =
-        i === 0 || i === n
-          ? 0
-          : (bend * (a1 * Math.sin(Math.PI * t) + 0.5 * a2 * Math.sin(2 * Math.PI * t))) / 1.5;
-    points.push({ x: w.cx + west + span * t, z: w.cz + off });
+      dx = west + span * t,
+      a = Math.abs(dx) / w.env;
+    let off = 0;
+    if (i > 0 && i < n && a < outer) {
+      const f = t * ctrlCount,
+        j = Math.min(ctrlCount - 1, Math.floor(f)),
+        c = (k: number) => ctrl[Math.max(0, Math.min(ctrlCount, k))],
+        curve = catmull(c(j - 1), c(j), c(j + 1), c(j + 2), f - j),
+        taper = a <= inner ? 1 : 0.5 + 0.5 * Math.cos((Math.PI * (a - inner)) / (outer - inner)),
+        u = Math.min(1, Math.abs(dx) / 90),
+        centre = 0.3 + 0.7 * u * u * (3 - 2 * u);
+      off = bend * curve * taper * centre;
+    }
+    points.push({ x: w.cx + dx, z: w.cz + off });
   }
   return points;
 }
@@ -662,8 +786,10 @@ function pointAtX(points: Point[], atX: number): { p: Point; dir: Point } {
 }
 
 function addLane(w: Work, k: number, width: number, minLen: number, maxLen: number): boolean {
-  const parent = w.streets[Math.floor(w.rand("lane/parent", k) * w.streets.length)].points,
-    { p, dir } = pointOnPolyline(parent, 0.15 + 0.7 * w.rand("lane/fraction", k)),
+  const parentIndex = Math.floor(w.rand("lane/parent", k) * w.streets.length),
+    parent = w.streets[parentIndex].points,
+    fraction = 0.15 + 0.7 * w.rand("lane/fraction", k),
+    { p, dir } = pointOnPolyline(parent, fraction),
     side = w.rand("lane/side", k) < 0.5 ? -1 : 1,
     theta = ((35 + 110 * w.rand("lane/angle", k)) * Math.PI * side) / 180,
     d1 = rotate(dir, theta),
@@ -682,23 +808,148 @@ function addLane(w: Work, k: number, width: number, minLen: number, maxLen: numb
   for (let i = 0; i + 1 < clipped.length; i++)
     for (const other of w.rectGrid.query(bbox([clipped[i], clipped[i + 1]], 14)))
       if (rectSegDistance(other.rect, clipped[i], clipped[i + 1]) < width / 2 + 0.5) return false;
-  addStreet(w, clipped, width);
+  w.keep.set(addStreet(w, clipped, width), [0]);
   return true;
+}
+
+/** Minimum distance between two non-intersecting segments. */
+function segSegDistance(a: Point, b: Point, c: Point, d: Point): number {
+  return Math.min(distPointSeg(a, c, d), distPointSeg(b, c, d), distPointSeg(c, a, b), distPointSeg(d, a, b));
+}
+
+/** Nearest point on any street within `limit`, with its segment. */
+function nearestStreetPoint(w: Work, p: Point, limit: number): { q: Point; seg: Seg; dist: number } | undefined {
+  for (let r = 24; r <= limit * 2; r *= 2) {
+    let best: { q: Point; seg: Seg; dist: number } | undefined;
+    for (const seg of w.segGrid.query({ minX: p.x - r, minZ: p.z - r, maxX: p.x + r, maxZ: p.z + r })) {
+      const q = closestOnSegment(p, seg.a, seg.b),
+        dist = Math.hypot(q.x - p.x, q.z - p.z);
+      if (!best || dist < best.dist) best = { q, seg, dist };
+    }
+    if (best && best.dist <= r) return best;
+  }
+  return undefined;
+}
+
+/**
+ * City lane network: lanes branch off the spine, rings and earlier lanes (so depth grows with need)
+ * until every dry point inside the core is near a street. The core (within 150 units) must be within
+ * 22 of a street, the rest up to 240 units within 44. Lanes leave their parent at 35-145 degrees,
+ * run 40-120 units, and bend once half the time.
+ */
+function growCityLanes(w: Work, width: number): void {
+  const reach = 240,
+    targets: { p: Point; th: number; score: number }[] = [];
+  let index = 0;
+  for (let gx = -reach; gx <= reach; gx += 16)
+    for (let gz = -reach; gz <= reach; gz += 16) {
+      const d = Math.hypot(gx, gz);
+      if (d > reach) continue;
+      const p = { x: w.cx + gx, z: w.cz + gz };
+      if (heightAt(p.x, p.z) <= DRY) continue;
+      const th = d <= 150 ? 22 : 22 + (22 * (d - 150)) / (reach - 150);
+      targets.push({ p, th, score: d + 35 * w.rand("lane/pick", index++) });
+    }
+  targets.sort((x, y) => x.score - y.score);
+  const near = (t: { p: Point; th: number }, segs: Seg[]) =>
+    segs.some((seg) => distPointSeg(t.p, seg.a, seg.b) <= t.th);
+  let uncovered = targets.filter((t) => !near(t, w.segGrid.query({ minX: t.p.x - t.th, minZ: t.p.z - t.th, maxX: t.p.x + t.th, maxZ: t.p.z + t.th })));
+  let laneId = 0;
+  for (let iter = 0; iter < 400 && uncovered.length; iter++) {
+    const target = uncovered[0];
+    uncovered = uncovered.slice(1);
+    const before = w.streets.length;
+    for (let attempt = 0; attempt < 3 && w.streets.length === before; attempt++) {
+      const k = laneId++,
+        hit = nearestStreetPoint(w, target.p, 160);
+      if (!hit) break;
+      const d0 = { x: hit.seg.b.x - hit.seg.a.x, z: hit.seg.b.z - hit.seg.a.z },
+        len0 = Math.hypot(d0.x, d0.z) || 1,
+        dir0 = { x: d0.x / len0, z: d0.z / len0 },
+        toward = Math.atan2(target.p.z - hit.q.z, target.p.x - hit.q.x),
+        ang0 = Math.atan2(dir0.z, dir0.x);
+      let theta = toward - ang0;
+      theta = Math.atan2(Math.sin(theta), Math.cos(theta));
+      const sign = theta === 0 ? (w.rand("lane/side", k) < 0.5 ? -1 : 1) : Math.sign(theta),
+        deg = Math.max(35, Math.min(145, Math.abs((theta * 180) / Math.PI) + (w.rand("lane/angle", k) - 0.5) * (attempt ? 50 : 24)));
+      const d1 = rotate(dir0, (sign * deg * Math.PI) / 180),
+        dt = hit.dist === 0 ? 0 : Math.hypot(target.p.x - hit.q.x, target.p.z - hit.q.z),
+        length = Math.max(40, Math.min(120, dt + 15 + 25 * w.rand("lane/length", k))),
+        bends = w.rand("lane/bend", k) < 0.5,
+        l1 = bends ? length * (0.55 + 0.2 * w.rand("lane/bend-at", k)) : length,
+        points: Point[] = [hit.q, { x: hit.q.x + d1.x * l1, z: hit.q.z + d1.z * l1 }];
+      if (bends) {
+        const bendSign = w.rand("lane/bend-sign", k) < 0.5 ? -1 : 1,
+          d2 = rotate(d1, (bendSign * (15 + 20 * w.rand("lane/bend-angle", k)) * Math.PI) / 180),
+          last = points[1],
+          rest = length - l1;
+        points.push({ x: last.x + d2.x * rest, z: last.z + d2.z * rest });
+      }
+      const clipped = clipToRadius(points, w.cx, w.cz, w.env - 1);
+      if (clipped.length < 2 || polylineLength(clipped) < 24 || !dryPolyline(clipped)) continue;
+      // Past the junction the lane must keep a distance from every other street (crossings are fine).
+      let ok = true;
+      const tail: Point[] = [pointOnPolyline(clipped, Math.min(0.9, 14 / polylineLength(clipped))).p, ...clipped.slice(1)];
+      for (let i = 0; ok && i + 1 < tail.length; i++) {
+        const a = tail[i],
+          b = tail[i + 1];
+        for (const seg of w.segGrid.query(bbox([a, b], 9))) {
+          if (segsIntersect(a, b, seg.a, seg.b)) continue;
+          if (segSegDistance(a, b, seg.a, seg.b) < 8) {
+            ok = false;
+            break;
+          }
+        }
+      }
+      if (!ok) continue;
+      w.keep.set(addStreet(w, clipped, width), [0]);
+    }
+    if (w.streets.length > before) {
+      const added = w.streets.slice(before).flatMap((st) => st.points.slice(0, -1).map((a, i) => ({ a, b: st.points[i + 1] })));
+      uncovered = uncovered.filter((t) => !added.some((seg) => distPointSeg(t.p, seg.a, seg.b) <= t.th));
+    }
+  }
+}
+
+/** Closed irregular ring: seeded radial and angular jitter on n control points, smoothed by Catmull-Rom. */
+function makeRing(w: Work, salt: string, n: number, radius: number, radialJitter: number, angularJitter: number): Point[] {
+  const ctrl: Point[] = [];
+  for (let k = 0; k < n; k++) {
+    const theta = (TAU * (k + (w.rand(`ring/${salt}/angle`, k) - 0.5) * angularJitter)) / n,
+      r = radius * (1 + radialJitter * (2 * w.rand(`ring/${salt}/radius`, k) - 1));
+    ctrl.push({ x: w.cx + r * Math.cos(theta), z: w.cz + r * Math.sin(theta) });
+  }
+  const out: Point[] = [];
+  for (let k = 0; k < n; k++) {
+    const p0 = ctrl[(k + n - 1) % n],
+      p1 = ctrl[k],
+      p2 = ctrl[(k + 1) % n],
+      p3 = ctrl[(k + 2) % n];
+    for (const t of [0, 0.5])
+      out.push({ x: catmull(p0.x, p1.x, p2.x, p3.x, t), z: catmull(p0.z, p1.z, p2.z, p3.z, t) });
+  }
+  out.push(out[0]);
+  return out;
 }
 
 function buildStreets(w: Work, gateEast: boolean, gateWest: boolean): void {
   const spineWidth = w.city ? 7 : 5,
     laneWidth = w.city ? 4.5 : 3.5,
-    bend = w.archetype === "green" ? 0 : w.archetype === "riverside" ? 14 : 10,
+    u = (k: number) => w.rand("archetype-shape", k),
+    bend = w.city ? 30 + 10 * u(11) : w.archetype === "green" ? 0 : w.archetype === "riverside" ? 14 : 10,
     east = gateEast ? w.env : w.env - 6,
     west = -(gateWest ? w.env : w.env - 6),
     spine = makeSpine(w, west, east, bend),
-    spineIndex = addStreet(w, spine, spineWidth);
+    spineIndex = addStreet(w, spine, spineWidth),
+    // Where the guard office wants to stand: just inside the border the settlement will grow to.
+    gateRadius = w.city ? 200 : 0.5 * w.env,
+    gateTarget = (side: 1 | -1) => pointAtX(spine, w.cx + side * gateRadius).p;
+  w.spineIndex = spineIndex;
   w.gateEnds = [];
-  if (gateWest) w.gateEnds.push({ side: -1, end: spine[0], street: spineIndex, open: true });
-  if (gateEast) w.gateEnds.push({ side: 1, end: spine[spine.length - 1], street: spineIndex, open: true });
+  if (gateWest) w.gateEnds.push({ side: -1, end: spine[0], street: spineIndex, open: true, target: gateTarget(-1) });
+  if (gateEast)
+    w.gateEnds.push({ side: 1, end: spine[spine.length - 1], street: spineIndex, open: true, target: gateTarget(1) });
 
-  const u = (k: number) => w.rand("archetype-shape", k);
   if (w.archetype === "riverside") {
     // Quay lane parallel to the river, on the dry side of the bank.
     const side = w.cx - riverX(w.cz) >= 0 ? 1 : -1,
@@ -720,7 +971,7 @@ function buildStreets(w: Work, gateEast: boolean, gateWest: boolean): void {
       ring.push({ x: w.cx + r * Math.cos(theta), z: w.cz + r * Math.sin(theta) });
     }
     w.ring = ring;
-    addStreet(w, [...ring, ring[0]], laneWidth);
+    w.fixed.add(addStreet(w, [...ring, ring[0]], laneWidth));
   }
   if (w.archetype === "crossroads") {
     // Second long street crossing the spine near the centre.
@@ -731,30 +982,19 @@ function buildStreets(w: Work, gateEast: boolean, gateWest: boolean): void {
       armA = clipToRadius([hub.p, { x: hub.p.x + cross.x * reach, z: hub.p.z + cross.z * reach }], w.cx, w.cz, w.env - 1),
       armB = clipToRadius([hub.p, { x: hub.p.x - cross.x * reach, z: hub.p.z - cross.z * reach }], w.cx, w.cz, w.env - 1);
     const points = [...armB.slice().reverse(), ...armA.slice(1)];
-    if (points.length >= 2 && dryPolyline(points)) addStreet(w, points, laneWidth);
+    if (points.length >= 2 && dryPolyline(points)) {
+      const index = addStreet(w, points, laneWidth);
+      w.keep.set(index, [polylineLength(armB.slice().reverse())]);
+    }
   }
   if (w.city) {
-    // Ring road around the core.
-    const n = 12 + Math.floor(u(5) * 3),
-      radius = 118 + 16 * u(6),
-      ring: Point[] = [];
-    for (let k = 0; k < n; k++) {
-      const theta = (TAU * k) / n + (u(40 + k) - 0.5) * 0.2;
-      ring.push({ x: w.cx + radius * Math.cos(theta), z: w.cz + radius * Math.sin(theta) });
-    }
-    addDryRuns(w, [...ring, ring[0]], laneWidth);
-    // Outer ring gives the outskirts frontage for the city's residential growth.
-    const outerN = 16 + Math.floor(u(9) * 5),
-      outerRadius = 250 + 20 * u(10),
-      outer: Point[] = [];
-    for (let k = 0; k < outerN; k++) {
-      const theta = (TAU * k) / outerN + (u(60 + k) - 0.5) * 0.15;
-      outer.push({ x: w.cx + outerRadius * Math.cos(theta), z: w.cz + outerRadius * Math.sin(theta) });
-    }
-    if (outerRadius < w.env - 1) addDryRuns(w, [...outer, outer[0]], laneWidth);
-    const lanes = 14 + Math.floor(u(7) * 9);
-    for (let k = 0, added = 0; added < lanes && k < lanes * 4; k++)
-      if (addLane(w, k, laneWidth, 40, 90)) added++;
+    // Inner ring road around the core and a middle ring, both irregular and smoothed.
+    const inner = makeRing(w, "inner", 12 + Math.floor(u(5) * 3), 105 + 22 * u(6), 0.16, 0.5);
+    for (const index of addDryRuns(w, inner, laneWidth)) w.fixed.add(index);
+    const middle = makeRing(w, "middle", 14 + Math.floor(u(9) * 3), 165 + 20 * u(10), 0.1, 0.45);
+    if (Math.max(...middle.map((p) => Math.hypot(p.x - w.cx, p.z - w.cz))) < w.env - 1)
+      for (const index of addDryRuns(w, middle, laneWidth)) w.fixed.add(index);
+    growCityLanes(w, laneWidth);
   } else {
     const lanes = 2 + Math.floor(u(8) * 3);
     for (let k = 0, added = 0; added < lanes && k < lanes * 4; k++)
@@ -770,39 +1010,142 @@ function binOf(angle: number): number {
   return Math.round(((angle % TAU) + TAU) % TAU / BORDER_STEP) % BORDER_BINS;
 }
 
+/** Arclength of the point on the polyline closest to p. */
+function arclengthOf(points: Point[], p: Point): number {
+  let best = Infinity,
+    at = 0,
+    run = 0;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const a = points[i],
+      b = points[i + 1],
+      len = Math.hypot(b.x - a.x, b.z - a.z),
+      q = closestOnSegment(p, a, b),
+      d = Math.hypot(q.x - p.x, q.z - p.z);
+    if (d < best) {
+      best = d;
+      at = run + Math.hypot(q.x - a.x, q.z - a.z);
+    }
+    run += len;
+  }
+  return at;
+}
+
+/** Sub-polyline between arclengths lo and hi. */
+function subPolyline(points: Point[], lo: number, hi: number): Point[] {
+  const out: Point[] = [];
+  let run = 0;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const a = points[i],
+      b = points[i + 1],
+      len = Math.hypot(b.x - a.x, b.z - a.z),
+      s0 = run,
+      s1 = run + len;
+    run = s1;
+    if (len === 0 || s1 <= lo || s0 >= hi) continue;
+    const t0 = Math.max(0, (lo - s0) / len),
+      t1 = Math.min(1, (hi - s0) / len);
+    if (out.length === 0) out.push({ x: lerp(a.x, b.x, t0), z: lerp(a.z, b.z, t0) });
+    out.push({ x: lerp(a.x, b.x, t1), z: lerp(a.z, b.z, t1) });
+  }
+  return out;
+}
+
 /**
- * Border polygon: per angular bin, the radius covers every building corner in the bin and its
- * neighbours plus a 6 unit margin, is smoothed with a seeded base, and never exceeds env - 4.
- * Vertices are scaled by 1 / cos(half step) so chords stay outside the target radius.
- * Non-gate directions get a radius that keeps the spine dead end inside.
+ * Dead-end tails past the last building are cut (6 units beyond its door), so streets never run
+ * out past the border that hugs the settlement. Rings are kept whole, a lane keeps its junction
+ * and the spine keeps its full length on gate sides, where it carries on to the external road.
+ */
+function trimStreets(w: Work, gateEast: boolean, gateWest: boolean): void {
+  const lo = new Map<number, number>(),
+    hi = new Map<number, number>(),
+    indexOf = new Map(w.streets.map((st, i) => [st.code, i] as const));
+  for (const { building } of w.placed) {
+    const si = indexOf.get(building.street);
+    if (si === undefined) continue;
+    const at = arclengthOf(w.streets[si].points, building.access);
+    lo.set(si, Math.min(lo.get(si) ?? Infinity, at));
+    hi.set(si, Math.max(hi.get(si) ?? -Infinity, at));
+  }
+  w.streets.forEach((street, si) => {
+    if (w.fixed.has(si)) return;
+    const total = polylineLength(street.points),
+      keeps = w.keep.get(si) ?? [];
+    // Cities keep longer tails so the lane network still serves the sparse edge.
+    const tail = w.city ? 16 : 6;
+    let from = Math.min(lo.get(si) ?? Infinity, ...keeps) - tail,
+      to = Math.max(hi.get(si) ?? -Infinity, ...keeps) + tail;
+    if (!Number.isFinite(from) || !Number.isFinite(to)) {
+      from = 0;
+      to = 8;
+    }
+    if (si === w.spineIndex) {
+      w.spineSpan = { lo: Math.max(0, from), hi: Math.min(total, to) };
+      if (gateWest) from = 0;
+      if (gateEast) to = total;
+    }
+    from = Math.max(0, from);
+    to = Math.min(total, Math.max(to, from + 8));
+    if (from <= 1e-9 && to >= total - 1e-9) return;
+    const cut = subPolyline(street.points, from, to);
+    if (cut.length >= 2) street.points = cut;
+  });
+  // A lane that serves no building is just a spur: drop it (codes of the others are unchanged).
+  w.streets = w.streets.filter((_, si) => si === w.spineIndex || w.fixed.has(si) || lo.has(si));
+}
+
+/**
+ * Border polygon hugging the settlement: per angular bin the radius is the farthest building
+ * corner or street sample in that bin and its neighbours plus a seeded 7-10 unit margin, lightly
+ * smoothed, never below 28, never inside the built extent. Vertices are scaled by 1 / cos(half
+ * step) so chords stay outside the target radius. Where the spine leaves through a gate only its
+ * built part counts; a village keeps its gate sectors beyond the point where the spine bend has
+ * faded out, so the gate sits on the straight external road line.
  */
 function buildBorder(w: Work, gateEast: boolean, gateWest: boolean): Point[] {
-  const cap = w.env - 4,
-    maxDist = new Array<number>(BORDER_BINS).fill(0);
-  for (const { rect } of w.placed)
-    for (const c of rect.corners) {
-      const dist = Math.hypot(c.x - w.cx, c.z - w.cz),
-        k = binOf(Math.atan2(c.z - w.cz, c.x - w.cx));
-      maxDist[k] = Math.max(maxDist[k], dist);
+  const need = new Array<number>(BORDER_BINS).fill(0),
+    add = (p: Point) => {
+      const k = binOf(Math.atan2(p.z - w.cz, p.x - w.cx));
+      need[k] = Math.max(need[k], Math.hypot(p.x - w.cx, p.z - w.cz));
+    };
+  for (const { rect } of w.placed) for (const c of rect.corners) add(c);
+  w.streets.forEach((street, si) => {
+    let run = 0;
+    for (let i = 0; i + 1 < street.points.length; i++) {
+      const a = street.points[i],
+        b = street.points[i + 1],
+        len = Math.hypot(b.x - a.x, b.z - a.z),
+        steps = Math.max(1, Math.ceil(len / 5));
+      for (let k = 0; k <= steps; k++) {
+        const at = run + (len * k) / steps;
+        // Past the built part of the spine on a gate side the road leaves the settlement.
+        if (si === w.spineIndex && ((gateEast && at > w.spineSpan.hi) || (gateWest && at < w.spineSpan.lo))) continue;
+        add({ x: lerp(a.x, b.x, k / steps), z: lerp(a.z, b.z, k / steps) });
+      }
+      run += len;
     }
-  const base = Array.from({ length: BORDER_BINS }, (_, k) => w.env * (0.8 + 0.2 * w.rand("border/base", k)));
+  });
+  const m = need.map((_, k) =>
+    Math.max(need[(k + BORDER_BINS - 1) % BORDER_BINS], need[k], need[(k + 1) % BORDER_BINS]),
+  );
+  const base = m.map((v, k) => (v > 0 ? v + BORDER_MARGIN + BORDER_MARGIN_VAR * w.rand("border/margin", k) : 0));
   const radius: number[] = [];
   for (let k = 0; k < BORDER_BINS; k++) {
     const prev = (k + BORDER_BINS - 1) % BORDER_BINS,
       next = (k + 1) % BORDER_BINS,
-      need = Math.max(maxDist[prev], maxDist[k], maxDist[next]),
       smooth = (base[prev] + 2 * base[k] + base[next]) / 4,
-      r = Math.min(cap, Math.max(need > 0 ? need + 6 : 0, smooth));
-    radius.push(r);
+      floor = BORDER_MIN + 3 * w.rand("border/min", k);
+    radius.push(Math.max(floor, smooth, m[k] > 0 ? m[k] + BORDER_MARGIN : 0));
   }
-  if (!gateEast) radius[0] = cap;
-  if (!gateWest) radius[BORDER_BINS / 2] = cap;
-  const points = radius.map((r, k) => {
+  if (!w.city) {
+    const gateMin = 0.5 * w.env + 2;
+    if (gateEast) radius[0] = Math.max(radius[0], gateMin);
+    if (gateWest) radius[BORDER_BINS / 2] = Math.max(radius[BORDER_BINS / 2], gateMin);
+  }
+  return radius.map((r, k) => {
     const v = r / BORDER_CHORD,
       theta = k * BORDER_STEP;
     return { x: w.cx + v * Math.cos(theta), z: w.cz + v * Math.sin(theta) };
   });
-  return points;
 }
 
 function gatesFromSpine(
@@ -977,6 +1320,10 @@ function buildLayout(place: Place, env: number, city: boolean, final: boolean): 
     anchorPasses: [],
     anchorSpacing: 0,
     gateEnds: [],
+    keep: new Map(),
+    fixed: new Set(),
+    spineIndex: 0,
+    spineSpan: { lo: 0, hi: Infinity },
   };
   buildStreets(w, gateEast, gateWest);
   const spacing = city ? 12 + 6 * rand("anchor/spacing") : 12 + 4 * rand("anchor/spacing");
@@ -986,7 +1333,7 @@ function buildLayout(place: Place, env: number, city: boolean, final: boolean): 
   let residentTotal = range[0] + Math.floor(rand("residents") * (range[1] - range[0] + 1));
 
   const centreDist = (p: Point) => Math.hypot(p.x - cx, p.z - cz),
-    gateDist = (p: Point, g: GateEnd) => Math.hypot(p.x - g.end.x, p.z - g.end.z),
+    gateDist = (p: Point, g: GateEnd) => Math.hypot(p.x - g.target.x, p.z - g.target.z),
     tryPut = (
       role: BuildingRole,
       score: (an: Anchor) => number,
@@ -1025,7 +1372,9 @@ function buildLayout(place: Place, env: number, city: boolean, final: boolean): 
       city ? gateDist(an.p, w.gateEnds[i]) : Math.min(...w.gateEnds.map((g) => gateDist(an.p, g))),
     ),
   );
-  const farmstead = put("farmstead", (an) => -centreDist(an.p));
+  // The farmstead stands toward the edge but not at the far envelope, so the border can hug the village.
+  const farmReach = city ? 190 : 0.55 * env,
+    farmstead = put("farmstead", (an) => Math.abs(centreDist(an.p) - farmReach) + 8 * an.noise);
   const barn = put("barn", (an) => Math.hypot(an.p.x - farmstead.x, an.p.z - farmstead.z));
   let keep: Building | undefined;
   if (city) keep = put("keep", (an) => centreDist(an.p));
@@ -1065,8 +1414,22 @@ function buildLayout(place: Place, env: number, city: boolean, final: boolean): 
   }
   let extraLanes = 0,
     laneProbe = 0;
+  // Cities fill plots walked along every street, centre first; anchors are the fallback.
+  const plots = city ? planHomePlots(w) : [];
+  let nextPlot = 0;
   while (homeCapacity < residentTotal) {
-    if (homes.length > 600) throw new Shortfall("home capacity");
+    if (homes.length > 900) throw new Shortfall("home capacity");
+    let placedPlot = false;
+    while (nextPlot < plots.length) {
+      const plot = plots[nextPlot++],
+        home = tryPlace(w, plot.prog, plot.an);
+      if (!home) continue;
+      homes.push(home);
+      homeCapacity += home.capacity;
+      placedPlot = true;
+      break;
+    }
+    if (placedPlot) continue;
     if (addHome((an) => centreDist(an.p) + 12 * an.noise)) continue;
     // Candidates ran out. Before the envelope is exhausted, grow it (retry the whole layout).
     if (!final) throw new Shortfall(`home after ${w.placed.length} buildings`);
@@ -1079,6 +1442,7 @@ function buildLayout(place: Place, env: number, city: boolean, final: boolean): 
   }
 
   // Border, gates and guard posts.
+  trimStreets(w, gateEast, gateWest);
   const border = buildBorder(w, gateEast, gateWest),
     gateData = gatesFromSpine(w, border);
   const postCounts = postBound.slice(0, gateData.length);
