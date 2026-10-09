@@ -35,7 +35,7 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 - WP-S002-004-006 — Vegetation/ground-detail presentation: natural deterministic scatter, reusable instancing, stable ownership and mobile budgets
 - WP-S002-004-007 — Political atlas UX/performance: full-continent country partition, scalable settlement counts, readable borders and bounded deterministic 1/1000 labels
 - WP-S002-004-008 — Travel routing UX: shortest legal paths, ≥60 fantasy-minute village separation, bounded search and truthful route/time UI
-- WP-S002-004-009 — Settlement/building UX: road-connected functional layouts, logical building scale, lazy usable interiors and mobile-safe rendering
+- WP-S002-004-009 — Settlement/building UX: terrain-shaped non-grid functional layouts, logical building scale, lazy usable interiors and mobile-safe rendering
 - WP-S002-004-010 — Continuous-zoom material/LOD continuity: stable semantic color, threshold blending, tile-patch regressions and wrap/pole ownership
 - WP-S002-004-011 — Living-resident scalability/UX: canonical home/work/gate identity, analytical schedules, spatial queries, pooled actors and inspection
 - WP-S002-004-012 — Unified terrain compositor: deterministic earthworks and one render/routing/collision/material authority
