@@ -488,7 +488,7 @@ export function featuresFor(tile: Tile): Feature[] {
         if (biome === "Woodland" && v % 4 !== 0)
           add("tree", x, z, v, `tree/${gx}/${gz}`);
         else if (
-          !["Settlement", "Ocean", "Lake", "River"].includes(biome) &&
+          !["Settlement", "Road", "Earthworks", "Ocean", "Lake", "River"].includes(biome) &&
           v % 31 === 0
         )
           add("rock", x, z, v, `rock/${gx}/${gz}`);
