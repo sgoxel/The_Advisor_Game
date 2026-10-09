@@ -169,6 +169,9 @@ function flatMaterial(name: string): pc.StandardMaterial {
 
 /** The Realm-scale globe: one textured sphere, one shading fan, two small textures. */
 export class GlobeView {
+  /** The opaque shared globe is a background while local terrain morphs above it. */
+  readonly surfaceLayer = new pc.Layer({ name: "Canonical globe background" });
+  private readonly app: pc.AppBase;
   /** Everything the globe draws hangs under this entity. Hidden until setVisible(true). */
   readonly root: pc.Entity;
   /** Camera clear colour to use while the globe is shown. */
@@ -192,6 +195,8 @@ export class GlobeView {
   private readonly shade: pc.Entity;
 
   constructor(app: pc.AppBase) {
+    this.app = app;
+    app.scene.layers.insertOpaque(this.surfaceLayer, 0);
     const device = (this.device = app.graphicsDevice);
     this.root = new pc.Entity("Globe");
     this.root.enabled = false;
@@ -208,6 +213,7 @@ export class GlobeView {
     const sphere = sphereMesh(device);
     this.sphere = new pc.Entity("Globe surface");
     this.sphere.addComponent("render", {
+      layers: [this.surfaceLayer.id],
       meshInstances: [new pc.MeshInstance(sphere, this.surfaceMaterial)],
       castShadows: false,
       receiveShadows: false,
@@ -374,6 +380,7 @@ export class GlobeView {
   }
 
   destroy() {
+    this.app.scene.layers.removeOpaque(this.surfaceLayer);
     this.root.destroy();
     this.surfaceMaterial.destroy();
     this.shadeMaterial.destroy();

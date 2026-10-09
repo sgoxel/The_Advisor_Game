@@ -1170,6 +1170,7 @@ async function start() {
   flatRoot = new pc.Entity("Flat world");
   app.root.addChild(flatRoot);
   globe = new GlobeView(app);
+  camera.camera!.layers = [globe.surfaceLayer.id, ...camera.camera!.layers];
   const sun = new pc.Entity("Late afternoon sun");
   sun.addComponent("light", {
     type: "directional",
