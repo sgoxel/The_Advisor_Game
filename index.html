@@ -10,6 +10,7 @@
     />
     <link rel="stylesheet" href="/src/canonical-inspector.css" />
     <link rel="stylesheet" href="/src/macro-geography.css" />
+    <link rel="stylesheet" href="/src/political-atlas.css" />
     <title>The Advisor · World Atlas</title>
   </head>
   <body>
@@ -33,9 +34,8 @@
     <aside class="panel region-panel">
       <div class="eyebrow">THE VERDANT MARCHES</div>
       <h2 id="place-name">Alderwick</h2>
-      <p class="region-counts">
-        3 continents · 30 countries<br />90 cities · 270 villages
-      </p>
+      <p class="region-counts" id="region-counts">Loading canonical registry…</p>
+      <p id="map-context" aria-live="polite">Resolving political region…</p>
       <div class="seed-block">
         <div class="divider"></div>
         <div class="seed-label">WORLD SEED <span>FIXED</span></div>
@@ -171,6 +171,9 @@
       <span id="backend">Connecting renderer</span><b>·</b
       ><span id="tile-status">Preparing terrain</span>
     </div>
+    <svg id="political-borders" aria-hidden="true"></svg>
+    <div id="political-labels" aria-hidden="true"></div>
+    <svg id="political-label-leaders" aria-hidden="true"></svg>
     <div id="map-labels" aria-hidden="true"></div>
     <svg id="label-leaders" aria-hidden="true"></svg>
     <svg id="route-overlay" aria-hidden="true"></svg>
@@ -189,5 +192,6 @@
     <script type="module" src="/src/main.ts"></script>
     <script type="module" src="/src/canonical-inspector.ts"></script>
     <script type="module" src="/src/travel-ui.ts"></script>
+    <script type="module" src="/src/political-atlas.ts"></script>
   </body>
 </html>
