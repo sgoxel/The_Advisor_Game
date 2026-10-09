@@ -18,15 +18,18 @@ export function localDetailWeight(halfHeight: number): number {
 /** Complementary pixel coverage avoids translucent overlapping skirts/duplicate props. */
 export function installLodCoverage(material: pc.StandardMaterial) {
   material.setParameter("lodCoverage", 1);
-  material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("litUserDeclarationPS", "uniform float lodCoverage;");
+  material.setParameter("flatCoverage", 1);
+  material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("litUserDeclarationPS", "uniform float lodCoverage; uniform float flatCoverage;");
   material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("litUserMainStartPS", `
     float pixelNoise = fract(52.9829189 * fract(dot(floor(gl_FragCoord.xy), vec2(0.06711056, 0.00583715))));
+    if (pixelNoise >= flatCoverage) discard;
     if ((lodCoverage >= 0.0 && pixelNoise >= lodCoverage) ||
         (lodCoverage < 0.0 && pixelNoise < -lodCoverage)) discard;
   `);
-  material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("litUserDeclarationPS", "uniform lodCoverage: f32;");
+  material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("litUserDeclarationPS", "uniform lodCoverage: f32; uniform flatCoverage: f32;");
   material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("litUserMainStartPS", `
     let pixelNoise = fract(52.9829189 * fract(dot(floor(input.position.xy), vec2f(0.06711056, 0.00583715))));
+    if (pixelNoise >= uniform.flatCoverage) { discard; }
     if ((uniform.lodCoverage >= 0.0 && pixelNoise >= uniform.lodCoverage) ||
         (uniform.lodCoverage < 0.0 && pixelNoise < -uniform.lodCoverage)) { discard; }
   `);

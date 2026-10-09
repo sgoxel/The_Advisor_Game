@@ -303,10 +303,9 @@ export class GlobeView {
 
   setBlend(alpha: number) {
     const value = Math.max(0, Math.min(1, alpha));
-    if (this.surfaceMaterial.opacity === value && this.shadeMaterial.opacity === value) return;
-    this.surfaceMaterial.opacity = value;
-    this.surfaceMaterial.blendType =
-      value < 0.999 ? pc.BLEND_NORMAL : pc.BLEND_NONE;
+    if (this.shadeMaterial.opacity === value) return;
+    this.surfaceMaterial.opacity = value > 0 ? 1 : 0;
+    this.surfaceMaterial.blendType = pc.BLEND_NONE;
     this.surfaceMaterial.depthWrite = value >= 0.999;
     this.surfaceMaterial.update();
     this.shade.enabled = value > 0.001;

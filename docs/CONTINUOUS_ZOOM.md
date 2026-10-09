@@ -40,6 +40,9 @@ active patch budget for each coverage set; the coarse safety root fits in the
 remaining slot. Retained tiles are protected from eviction until the blend ends.
 No replacement starts a second overlapping blend. Unchanged material shader
 settings are not rebuilt while zooming; only presentation uniforms change.
+The globe handoff also replaces flat pixels over the opaque globe rather than
+stacking translucent skirts. This prevents patch-edge brightness bands during
+the projection blend; the existing halo/backdrop still ease continuously.
 
 ## Regression evidence
 

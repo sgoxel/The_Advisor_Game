@@ -60,6 +60,7 @@ SCENARIOS: dict[str, str] = {
     "province": "zoom-out:3",
     "realm": "click:#overview",
     "zoom-country": (
+        "click:#overview;settle;"
         "eval:window.advisorWorld.navigation.setFocus(-69.7953*Math.PI/180,-10.3192*Math.PI/180);"
         "eval:window.advisorWorld.setHalfHeight(4168);settle;shot:before;"
         "eval:window.advisorWorld.setHalfHeight(4172.15134);settle;shot:middle;"

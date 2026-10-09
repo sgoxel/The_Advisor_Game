@@ -461,19 +461,9 @@ function applyPresentation() {
     camera.camera!.farClip = 600000;
   }
   for (const material of [worldMaterial, terrainMaterial]) if (material) {
-    const opacity = 1 - projectionTransition;
-    if (
-      Math.abs(opacity - material.opacity) > 0.004
-    ) {
-      material.opacity = opacity;
-      material.blendType =
-        opacity < 0.999 ? pc.BLEND_NORMAL : pc.BLEND_NONE;
-      // Keep the nearest flat surface in the depth buffer while it remains
-      // visible. Without this, overlapping tile skirts alpha-blend together
-      // during the handoff and expose rectangular tile seams.
-      material.depthWrite = opacity > 0.001;
-      material.update();
-    }
+    // Replace terrain pixels rather than stacking translucent skirts over the
+    // globe. One retained surface owns each pixel throughout the handoff.
+    material.setParameter("flatCoverage", 1 - projectionTransition);
   }
   const backdrop = globe.backdropColor,
     t = projectionTransition;
@@ -1556,7 +1546,9 @@ async function start() {
           readyGeometryBytes = uploads.reduce(
             (sum, upload) => sum + estimateGeometryBytes(upload.data),
             0,
-          );
+          ),
+          surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4,
+          surfaceGpuBytes = Math.ceil(surfaceBytes * 4 / 3);
         return {
           ready,
           error: errorText,
@@ -1625,8 +1617,9 @@ async function start() {
             cacheHits,
             cacheMisses,
             evictions,
-            cpuResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes,
-            gpuResourceBytesEstimated: cachedGeometryBytes,
+            cpuResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes + surfaceBytes,
+            gpuResourceBytesEstimated: cachedGeometryBytes + surfaceGpuBytes,
+            sharedSurfaceBytes: surfaceBytes,
             uploadsThisFrame,
             maxUploadsPerFrame,
             canonicalKeysUnique: new Set(activeKeys).size === activeKeys.length,
@@ -1638,8 +1631,8 @@ async function start() {
                 generationReady: inFlight + uploads.length,
                 activePatches: [...tileCache.values()].filter(record => record.entity.enabled).length,
                 cachedPatches: tileCache.size,
-                cpuBytes: cachedGeometryBytes + readyGeometryBytes,
-                gpuBytes: cachedGeometryBytes,
+                cpuBytes: cachedGeometryBytes + readyGeometryBytes + surfaceBytes,
+                gpuBytes: cachedGeometryBytes + surfaceGpuBytes,
               },
               streamingBudget,
             ),
