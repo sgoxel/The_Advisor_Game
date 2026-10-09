@@ -4,7 +4,6 @@ import { macroSampleAt } from "./macro-geography.ts";
 import { sourceToLonLat, wrapSourceX, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import {
   climateSampleAt,
-  frozenLatitudeAt,
   polarBoundaryAt,
   TERRAIN_PALETTE,
   type RGB,
@@ -357,8 +356,14 @@ export function buildTile(t: Tile): TileGeometry {
     }
   // The water/ice plane is presentation-only and sits beneath land. Sample the same
   // canonical polar boundary at each corner so a tile cannot expose a rectangular ice edge.
-  const waterTint = (x: number, z: number) =>
-    frozenLatitudeAt(sourceToLonLat(x, z)) ? TERRAIN_PALETTE["sea-ice"] : TERRAIN_PALETTE.ocean;
+  const waterTint = (x: number, z: number): RGB => {
+    // Visible water uses exactly the same composed color as the globe. Ground
+    // below land is occluded; retain a smooth canonical ice margin there too.
+    if (heightAt(x, z) <= 0) return terrainTint(x, z);
+    const position = sourceToLonLat(x, z);
+    return blendColor(TERRAIN_PALETTE.ocean, TERRAIN_PALETTE["sea-ice"],
+      smoothstep(-0.018, 0.018, Math.abs(position.lat)/(Math.PI/2)-polarBoundaryAt(position)));
+  };
   terrain.quadGradient(
     [t.minX, 0, t.minZ],
     [t.minX, 0, t.minZ + t.size],

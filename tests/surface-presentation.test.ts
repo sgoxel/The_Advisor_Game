@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { terrainTint, buildTile } from '../src/geometry.ts';
 import { globeSurfaceColor } from '../src/globe-surface.ts';
 import { localDetailWeight, LOD_BLEND_SECONDS } from '../src/surface-presentation.ts';
-import { tileAt, heightAt } from '../src/world.ts';
+import { tileAt, tileForPosition, heightAt } from '../src/world.ts';
 import { lonLatToFlat } from '../src/planet.ts';
+import { polarBoundaryAt } from '../src/climate.ts';
 
 test('all tile sizes share exact canonical material albedo, including roads and poles', () => {
   for (const [lon,lat] of [[0,0],[-1.05,-0.2],[Math.PI,0.3],[-Math.PI,0.3],[0.4,Math.PI/2],[0.4,-Math.PI/2],[0.9,0.7]]) {
@@ -33,4 +34,20 @@ test('terrain texture coordinates join exactly at tile and longitude boundaries'
   assert.deepEqual(edge(a,0.5),edge(b,0.5));
   assert.ok(Array.from(buildTile(tileAt(8,0,127)).terrain.uvs!).some((v,i)=>i%2===0&&v===0));
   assert.ok(Array.from(buildTile(tileAt(8,255,127)).terrain.uvs!).some((v,i)=>i%2===0&&v===1));
+});
+test('visible polar water plane shares the continuous globe ice margin', () => {
+  let point: {x:number,z:number}|undefined;
+  for(let lon=-Math.PI;lon<Math.PI;lon+=0.1){
+    const lat=polarBoundaryAt({lon,lat:1})*Math.PI/2;
+    const p=lonLatToFlat(lon,lat);
+    if(heightAt(p.x,p.z)<0){point=p;break;}
+  }
+  assert.ok(point,'fixture must cross open polar water');
+  const tile=tileForPosition(point.x,point.z,12), ground=buildTile(tile).terrain;
+  const originX=tile.minX+tile.size/2,originZ=tile.minZ+tile.size/2;
+  for(let v=ground.positions.length/3-6;v<ground.positions.length/3;v++){
+    const x=originX+ground.positions[v*3],z=originZ+ground.positions[v*3+2];
+    assert.equal(ground.positions[v*3+1],0);
+    assert.deepEqual([...ground.colors.subarray(v*4,v*4+3)],[...new Uint8Array(terrainTint(x,z))]);
+  }
 });
