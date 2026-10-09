@@ -140,6 +140,15 @@ const buckets = new Map<string, SurfaceModifier[]>();
 const stationCache = new Map<string, number>();
 const padHeightCache = new Map<string, number>();
 const STATION_CACHE_LIMIT = 60_000;
+let cachedSampler: NaturalSampler | undefined;
+/** Memoised values belong to one natural sampler; another sampler starts clean. */
+function useSampler(natural: NaturalSampler) {
+  if (natural !== cachedSampler) {
+    stationCache.clear();
+    padHeightCache.clear();
+    cachedSampler = natural;
+  }
+}
 
 export const compositorStats = {
   queries: 0,
@@ -322,6 +331,7 @@ export function roadProfileHeight(road: RoadModifier, distance: number, natural:
 /** Full composed surface sample: the single answer every consumer reads. */
 export function surfaceSampleAt(x: number, z: number, natural: NaturalSampler): SurfaceSample {
   compositorStats.queries++;
+  useSampler(natural);
   const naturalHeight = natural(x, z),
     water = naturalHeight < L.waterLevel,
     sample: SurfaceSample = {
@@ -410,6 +420,7 @@ export function surfaceSampleAt(x: number, z: number, natural: NaturalSampler): 
 
 /** Hot path for mesh vertices: final height without building contribution records. */
 export function surfaceHeightAt(x: number, z: number, natural: NaturalSampler): number {
+  useSampler(natural);
   const found = modifiersAt(x, z);
   const naturalHeight = natural(x, z);
   if (!found.length || naturalHeight < L.waterLevel) return naturalHeight;
@@ -456,6 +467,7 @@ export function clearSurfaceCaches() {
  * village pad with the largest hillside cut/fill. Bounded scan of plan data.
  */
 export function earthworkExamples(natural: NaturalSampler) {
+  useSampler(natural);
   let road: { code: string; x: number; z: number; cut: number } | undefined,
     pad: { code: string; placeId: string; x: number; z: number; cutFill: number } | undefined;
   for (const modifier of surfaceModifiers()) {

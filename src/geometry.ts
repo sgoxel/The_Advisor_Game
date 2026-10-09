@@ -190,6 +190,26 @@ export function terrainTint(
   scale = 32,
   elevationM?: number,
 ): [number, number, number] {
+  if (scale > 512) return naturalTint(x, z, scale, elevationM);
+  // Earthwork materials come from the shared compositor, not a render-only overlay.
+  const surface = surfaceAt(x, z);
+  if (surface.material === "road-surface" || surface.material === "bridge-deck")
+    return color(170, 151, 113);
+  if (surface.material === "dirt-foundation") return color(132, 108, 78);
+  const base = naturalTint(x, z, scale, elevationM);
+  if (surface.water || !surface.modifiers.length) return base;
+  // Exposed cut/fill slopes fade in with depth so pad/road edges never stair-step.
+  const exposed = smoothstep(0.3, 3, Math.abs(surface.cutFill));
+  return exposed > 0
+    ? blendColor(base, surface.cutFill < 0 ? [124, 104, 82] : [118, 110, 80], exposed * 0.85)
+    : base;
+}
+function naturalTint(
+  x: number,
+  z: number,
+  scale: number,
+  elevationM?: number,
+): [number, number, number] {
   const position = sourceToLonLat(x, z),
     macro = macroSampleAt(position),
     sample = climateSampleAt(position, elevationM ?? macro.reliefM),
@@ -198,14 +218,6 @@ export function terrainTint(
   if (legacy === "River") return color(76, 128, 148);
   if (legacy === "Riverbank") return color(151, 143, 99);
 
-  if (scale <= 512) {
-    // Earthwork materials come from the shared compositor, not a render-only overlay.
-    const material = surfaceAt(x, z).material;
-    if (material === "road-surface" || material === "bridge-deck") return color(170, 151, 113);
-    if (material === "dirt-foundation") return color(132, 108, 78);
-    if (material === "earthwork-cut") return color(124, 104, 82);
-    if (material === "earthwork-fill") return color(118, 110, 80);
-  }
   const s = scale <= 512 ? nearestPlace(x, z) : undefined,
     dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,
     dz = s ? Math.abs(z - s.z) : 1000,
