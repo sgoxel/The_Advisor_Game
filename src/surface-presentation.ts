@@ -1,5 +1,6 @@
 import * as pc from "playcanvas";
 import { PLANET_RADIUS } from "./planet.ts";
+import { LON_SEGMENTS, LAT_SEGMENTS } from "./globe-view.ts";
 
 /** Presentation only; never used to choose canonical terrain or feature identity. */
 export const LOD_BLEND_SECONDS = 0.24;
@@ -53,6 +54,8 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
   material.setParameter("surfaceProjectionWeight", 0);
   material.setParameter("surfaceOrigin", [0, 0]);
   material.setParameter("surfaceOffset", [0, 0, 0]);
+  material.setParameter("surfaceFocus", [0, 0]);
+  material.setParameter("surfaceTransition", 0);
   // Wide patches use one projection at shared canonical UV coordinates instead
   // of independently rotated tangent-plane approximations. Fine ENU meshes keep
   // their patch-relative Float32 precision; the transition is continuous.
@@ -60,6 +63,20 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
     uniform vec2 surfaceOrigin;
     uniform vec3 surfaceOffset;
     uniform float surfaceProjectionWeight;
+    uniform vec2 surfaceFocus;
+    uniform float surfaceTransition;
+    vec3 sphereVertex(vec2 uv) {
+      float lat = (0.5 - uv.y) * 3.141592653589793;
+      float lon = (uv.x - 0.5) * 6.283185307179586;
+      return vec3(cos(lat) * sin(lon), sin(lat), cos(lat) * cos(lon));
+    }
+    vec3 sphereSurface(vec2 uv) {
+      vec2 grid = uv * vec2(${LON_SEGMENTS}.0, ${LAT_SEGMENTS}.0), cell = floor(grid), f = fract(grid);
+      vec2 a = cell / vec2(${LON_SEGMENTS}.0, ${LAT_SEGMENTS}.0), step = vec2(1.0/${LON_SEGMENTS}.0, 1.0/${LAT_SEGMENTS}.0);
+      vec3 va = sphereVertex(a), vb = sphereVertex(a + vec2(step.x,0.0));
+      vec3 vc = sphereVertex(a + vec2(0.0,step.y)), vd = sphereVertex(a + step);
+      return f.x + f.y <= 1.0 ? va*(1.0-f.x-f.y)+vb*f.x+vc*f.y : vb*(1.0-f.y)+vc*(1.0-f.x)+vd*(f.x+f.y-1.0);
+    }
     vec4 getPosition() {
       dModelMatrix = getModelMatrix();
       vec3 old = (dModelMatrix * vec4(vertex_position.xyz, 1.0)).xyz;
@@ -69,6 +86,11 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
       vec3 exact = vec3(radius * cos(lat) * sin(delta), vertex_position.y,
         -radius * (cos(surfaceOrigin.y) * sin(lat) - sin(surfaceOrigin.y) * cos(lat) * cos(delta))) + surfaceOffset;
       dPositionW = mix(old, exact, surfaceProjectionWeight);
+      vec3 p = sphereSurface(vertex_texCoord0.xy) * radius;
+      vec3 east = vec3(cos(surfaceFocus.x),0.0,-sin(surfaceFocus.x));
+      vec3 up = vec3(cos(surfaceFocus.y)*sin(surfaceFocus.x),sin(surfaceFocus.y),cos(surfaceFocus.y)*cos(surfaceFocus.x));
+      vec3 south = vec3(sin(surfaceFocus.y)*sin(surfaceFocus.x),-cos(surfaceFocus.y),sin(surfaceFocus.y)*cos(surfaceFocus.x));
+      dPositionW = mix(dPositionW,vec3(dot(p,east),dot(p,up),dot(p,south)),surfaceTransition);
       return matrix_viewProjection * vec4(dPositionW, 1.0);
     }
     vec3 getWorldPosition() { return dPositionW; }
@@ -77,6 +99,21 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
     uniform surfaceOrigin: vec2f;
     uniform surfaceOffset: vec3f;
     uniform surfaceProjectionWeight: f32;
+    uniform surfaceFocus: vec2f;
+    uniform surfaceTransition: f32;
+    fn sphereVertex(uv: vec2f) -> vec3f {
+      let lat = (0.5 - uv.y) * 3.141592653589793;
+      let lon = (uv.x - 0.5) * 6.283185307179586;
+      return vec3f(cos(lat)*sin(lon),sin(lat),cos(lat)*cos(lon));
+    }
+    fn sphereSurface(uv: vec2f) -> vec3f {
+      let grid = uv * vec2f(${LON_SEGMENTS}.0,${LAT_SEGMENTS}.0); let cell = floor(grid); let f = fract(grid);
+      let a = cell/vec2f(${LON_SEGMENTS}.0,${LAT_SEGMENTS}.0); let step = vec2f(1.0/${LON_SEGMENTS}.0,1.0/${LAT_SEGMENTS}.0);
+      let va = sphereVertex(a); let vb = sphereVertex(a+vec2f(step.x,0.0));
+      let vc = sphereVertex(a+vec2f(0.0,step.y)); let vd = sphereVertex(a+step);
+      if (f.x+f.y <= 1.0) { return va*(1.0-f.x-f.y)+vb*f.x+vc*f.y; }
+      return vb*(1.0-f.y)+vc*(1.0-f.x)+vd*(f.x+f.y-1.0);
+    }
     fn getPosition() -> vec4f {
       dModelMatrix = getModelMatrix();
       let old = (dModelMatrix * vec4f(vertex_position.xyz, 1.0)).xyz;
@@ -86,6 +123,11 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
       let exact = vec3f(radius * cos(lat) * sin(delta), vertex_position.y,
         -radius * (cos(uniform.surfaceOrigin.y) * sin(lat) - sin(uniform.surfaceOrigin.y) * cos(lat) * cos(delta))) + uniform.surfaceOffset;
       dPositionW = mix(old, exact, uniform.surfaceProjectionWeight);
+      let p = sphereSurface(vertex_texCoord0.xy)*radius;
+      let east = vec3f(cos(uniform.surfaceFocus.x),0.0,-sin(uniform.surfaceFocus.x));
+      let up = vec3f(cos(uniform.surfaceFocus.y)*sin(uniform.surfaceFocus.x),sin(uniform.surfaceFocus.y),cos(uniform.surfaceFocus.y)*cos(uniform.surfaceFocus.x));
+      let south = vec3f(sin(uniform.surfaceFocus.y)*sin(uniform.surfaceFocus.x),-cos(uniform.surfaceFocus.y),sin(uniform.surfaceFocus.y)*cos(uniform.surfaceFocus.x));
+      dPositionW = mix(dPositionW,vec3f(dot(p,east),dot(p,up),dot(p,south)),uniform.surfaceTransition);
       return uniform.matrix_viewProjection * vec4f(dPositionW, 1.0);
     }
     fn getWorldPosition() -> vec3f { return dPositionW; }

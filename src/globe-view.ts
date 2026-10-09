@@ -3,8 +3,8 @@ import { PLANET_RADIUS, unitToLonLat, type Unit } from "./planet.ts";
 import { coordinateValue } from "./world.ts";
 
 /** Longitude / latitude segments of the sphere: 96 × 48 quads, 3.75° each. */
-const LON_SEGMENTS = 96;
-const LAT_SEGMENTS = 48;
+export const LON_SEGMENTS = 96;
+export const LAT_SEGMENTS = 48;
 /** The shading overlay is one radial fan; its texture runs centre → edge along U. */
 const SHADE_SEGMENTS = 128;
 const SHADE_TEXELS = 2048;

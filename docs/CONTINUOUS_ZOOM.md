@@ -40,9 +40,12 @@ active patch budget for each coverage set; the coarse safety root fits in the
 remaining slot. Retained tiles are protected from eviction until the blend ends.
 No replacement starts a second overlapping blend. Unchanged material shader
 settings are not rebuilt while zooming; only presentation uniforms change.
-The globe handoff also replaces flat pixels over the opaque globe rather than
-stacking translucent skirts. This prevents patch-edge brightness bands during
-the projection blend; the existing halo/backdrop still ease continuously.
+During globe handoff, the ground geometry continuously morphs from its flat
+projection to the globe's same faceted sphere, using the shared sphere segment
+counts, triangle interpolation and texture. Relief fades with that morph. The
+ground stays opaque, preventing translucent skirt bands and avoiding a noisy
+cross-fade between geographically misregistered surfaces. The existing
+halo/backdrop still ease continuously. Prop coverage fades separately.
 
 ## Regression evidence
 

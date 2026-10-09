@@ -463,7 +463,7 @@ function applyPresentation() {
   for (const material of [worldMaterial, terrainMaterial]) if (material) {
     // Replace terrain pixels rather than stacking translucent skirts over the
     // globe. One retained surface owns each pixel throughout the handoff.
-    material.setParameter("flatCoverage", 1 - projectionTransition);
+    material.setParameter("flatCoverage", material === terrainMaterial ? 1 : 1 - projectionTransition);
   }
   const backdrop = globe.backdropColor,
     t = projectionTransition;
@@ -471,6 +471,9 @@ function applyPresentation() {
   terrainMaterial?.setParameter("surfaceOrigin", [surfaceOrigin.lon, surfaceOrigin.lat]);
   terrainMaterial?.setParameter("surfaceOffset", [flatRoot.getLocalPosition().x, flatRoot.getLocalPosition().y, flatRoot.getLocalPosition().z]);
   terrainMaterial?.setParameter("surfaceProjectionWeight", 1 - localDetailWeight(view.halfHeight));
+  const surfaceFocus = flatToLonLat(view.x, view.z);
+  terrainMaterial?.setParameter("surfaceFocus", [surfaceFocus.lon, surfaceFocus.lat]);
+  terrainMaterial?.setParameter("surfaceTransition", projectionTransition);
   camera.camera!.clearColor.set(
     FLAT_BACKDROP.r + (backdrop.r - FLAT_BACKDROP.r) * t,
     FLAT_BACKDROP.g + (backdrop.g - FLAT_BACKDROP.g) * t,
