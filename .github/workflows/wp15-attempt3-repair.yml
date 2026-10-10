@@ -1,25 +1,41 @@
-name: WP15 attempt 3 corridor scan
+name: WP15 attempt 3 highland validation
 on:
   push:
     branches:
       - agent1/wp15-visual-attempt3
 permissions:
-  contents: read
+  contents: write
 concurrency:
-  group: wp15-attempt3-corridor-scan
+  group: wp15-attempt3-highland-validation
   cancel-in-progress: true
 jobs:
-  scan:
+  validate:
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           ref: agent1/wp15-visual-attempt3
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
+      - name: Apply highland traversal repair
+        run: python tools/wp15_highland_repair.py
       - run: npm ci
-      - name: Measure seeded neighbour highland spans
-        run: node --experimental-strip-types tools/wp15_route_scan.ts
+      - name: Terrain and hydrology regression
+        run: node --experimental-strip-types --test tests/hydrology.test.ts tests/terrain-refine.test.ts tests/surface-presentation.test.ts
+      - name: Real seeded candidate route proof
+        run: node --experimental-strip-types tools/wp15_route_candidates.ts
+      - name: Build
+        run: npm run build
+      - name: Commit tested highland authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "AGENT #1"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add src/hydrology.ts
+          git commit -m "WP-S002-004-005 make seeded highlands affect traversal"
+          git push origin HEAD:agent1/wp15-visual-attempt3
