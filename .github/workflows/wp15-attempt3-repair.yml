@@ -1,4 +1,4 @@
-name: WP15 attempt 3 route validation
+name: WP15 attempt 3 corridor scan
 on:
   push:
     branches:
@@ -6,12 +6,12 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: wp15-attempt3-route-validation
+  group: wp15-attempt3-corridor-scan
   cancel-in-progress: true
 jobs:
-  route:
+  scan:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,5 +21,5 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - name: Seeded terrain-influenced route invariant
-        run: node --experimental-strip-types --test --test-name-pattern="terrain can make a real seeded route longer" tests/routing.test.ts
+      - name: Measure seeded neighbour highland spans
+        run: node --experimental-strip-types tools/wp15_route_scan.ts
