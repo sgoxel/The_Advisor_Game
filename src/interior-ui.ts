@@ -1,4 +1,8 @@
 import { InteriorResidency, type InteriorBase } from "./building-interior.ts";
+import {
+  resolveInteriorEntry,
+  type InteriorEntryResolution,
+} from "./interior-entry.ts";
 import type { Building } from "./settlement-layout.ts";
 
 type BuildingSelectionDetail = { building?: Building };
@@ -11,7 +15,8 @@ let selected: Building | undefined,
   px = 0,
   pz = 0,
   lastAction = "",
-  reconstructed = false;
+  reconstructed = false,
+  lastResolution: InteriorEntryResolution | undefined;
 
 function scaled(base: InteriorBase, x: number, z: number) {
   const sx = 100 / Math.max(1, base.width),
@@ -111,8 +116,6 @@ function moveThrough(code: string) {
   if (!connection) return false;
   const target = active.base.rooms.find((room) => room.code === connection.target);
   if (!target) return false;
-  // Diagnostic/traversal action still follows a real canonical doorway: the connection can only
-  // exist when the two rooms share that door. Position at the target room centre after crossing.
   px = target.x;
   pz = target.z;
   lastAction = "Crossed doorway";
@@ -170,6 +173,12 @@ function renderInterior(base: InteriorBase) {
 
 function enterSelected() {
   if (!selected) return false;
+  const resolution = resolveInteriorEntry(selected, 0);
+  lastResolution = resolution;
+  if (!resolution.approved) {
+    lastAction = resolution.simulation.reason;
+    return false;
+  }
   const base = residency.enter(selected),
     prior = seenSignatures.get(selected.code);
   reconstructed = prior === base.signature;
@@ -177,7 +186,9 @@ function enterSelected() {
   active = { building: selected, base };
   px = base.entry.x;
   pz = Math.min(base.depth / 2 - 0.35, base.entry.z - 0.25);
-  lastAction = reconstructed ? "Reconstructed canonical interior" : "";
+  lastAction = reconstructed
+    ? "Character accepted · Simulation validated · reconstructed canonical interior"
+    : "Character accepted · Simulation validated";
   renderInterior(base);
   $("interior-title").textContent = `${selected.role.replace("-", " ")} interior`;
   $("interior-code").textContent = selected.code;
@@ -217,6 +228,7 @@ function stateSnapshot() {
     availableConnections: connections(),
     lastAction,
     reconstructed,
+    entryResolution: lastResolution ?? null,
     cache: residency.stats(),
   };
 }
@@ -246,9 +258,13 @@ function initialize() {
   window.addEventListener("advisor:building-selected", ((event: CustomEvent<BuildingSelectionDetail>) => {
     selected = event.detail.building;
     enter.hidden = !selected;
+    lastResolution = undefined;
     if (selected) {
-      enter.textContent = `Enter ${selected.role.replace("-", " ")}`;
-      enter.setAttribute("aria-label", `Enter selected ${selected.role.replace("-", " ")} building`);
+      enter.textContent = `Request entry: ${selected.role.replace("-", " ")}`;
+      enter.setAttribute(
+        "aria-label",
+        `Request Character entry into selected ${selected.role.replace("-", " ")} building`,
+      );
     }
   }) as EventListener);
 
