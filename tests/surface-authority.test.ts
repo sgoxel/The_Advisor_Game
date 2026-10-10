@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { roads } from "../src/geography.ts";
 import {
   drainageRecipeAt,
   hydrologyDiagnostics,
@@ -48,4 +49,24 @@ test("routing samples the same canonical water identity as the final surface", (
     });
   assert.equal(result.found, false);
   assert.equal(result.reason, "start-in-water");
+});
+
+test("seeded roads stay on dry final surface when no explicit bridge registry exists", () => {
+  let samples = 0;
+  for (const road of roads) {
+    const steps = Math.max(2, Math.ceil(road.presentationLengthSourceUnits / 4));
+    for (let step = 0; step <= steps; step++) {
+      const t = step / steps,
+        x = road.fromX + (road.toX - road.fromX) * t,
+        z = road.fromZ + (road.toZ - road.fromZ) * t,
+        sample = surfaceAt(x, z);
+      assert.equal(
+        sample.water,
+        "none",
+        `${road.code} crosses ${sample.water} at t=${t.toFixed(4)} without an explicit bridge fact`,
+      );
+      samples++;
+    }
+  }
+  assert.ok(samples > roads.length * 2, "road/water proof samples every seeded road corridor");
 });
