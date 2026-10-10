@@ -1,0 +1,21 @@
+name: WP19 AGENT1 preflight
+on:
+  push:
+    branches: [agent1/wp-s002-004-009-living-settlements]
+permissions:
+  contents: read
+concurrency:
+  group: wp19-agent1-preflight
+  cancel-in-progress: true
+jobs:
+  unit-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
