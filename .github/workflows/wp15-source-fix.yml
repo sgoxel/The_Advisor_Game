@@ -1,9 +1,9 @@
 name: WP15 legality correction
 
 on:
-  pull_request:
-    types:
-      - reopened
+  push:
+    branches:
+      - agent1/wp-s002-004-005-final
 
 permissions:
   contents: write
