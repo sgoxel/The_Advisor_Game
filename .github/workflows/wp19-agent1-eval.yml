@@ -14,6 +14,7 @@ defaults:
 jobs:
   unit-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,6 +28,7 @@ jobs:
   browser:
     needs: unit-build
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -51,10 +53,12 @@ jobs:
   capture:
     needs: unit-build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         renderer: [webgpu, webgl2]
+        profile: [desktop, phone, phone-landscape]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -75,10 +79,14 @@ jobs:
             sleep 1
           done
           TARGETS="$(node --experimental-strip-types tools/wp19_targets.ts)"
-          STEPS="eval:window.__wp19=${TARGETS};settle;eval:window.advisorWorld.navigation.setFocus(window.__wp19.villages[0].lon,window.__wp19.villages[0].lat);eval:window.advisorWorld.setHalfHeight(97);settle;shot:village-a;eval:window.advisorWorld.navigation.setFocus(window.__wp19.villages[1].lon,window.__wp19.villages[1].lat);settle;shot:village-b;eval:window.advisorWorld.navigation.setFocus(window.__wp19.villages[2].lon,window.__wp19.villages[2].lat);settle;shot:village-c;eval:window.advisorWorld.navigation.setFocus(window.__wp19.city.lon,window.__wp19.city.lat);eval:window.advisorWorld.setHalfHeight(760);settle;shot:city-province;eval:window.advisorWorld.setHalfHeight(55);settle;shot:city-street;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'inn');settle;shot:inn-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'market');settle;shot:market-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'blacksmith');settle;shot:blacksmith-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'farmstead');settle;shot:farmstead-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'barn');settle;shot:barn-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'butcher');settle;shot:butcher-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'guard-office');settle;shot:guard-office-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'home');settle;shot:home-exterior;eval:window.advisorSettlements.enter(window.__wp19.villages[0].inn);settle;shot:inn-interior;eval:window.advisorSettlements.exit();eval:window.advisorSettlements.enter(window.__wp19.villages[0].blacksmith);settle;shot:blacksmith-interior;eval:window.advisorSettlements.exit();eval:window.advisorSettlements.enter(window.__wp19.villages[0].home);settle;shot:home-interior;eval:window.advisorSettlements.exit()"
-          python tools/screenshot_tool.py http://127.0.0.1:4175/ --out test-results/wp19-${{ matrix.renderer }} --name wp19 --profile desktop,phone,phone-landscape --renderer ${{ matrix.renderer }} --timeout 360 --steps "$STEPS"
+          if [ "${{ matrix.profile }}" = "desktop" ]; then
+            STEPS="eval:window.__wp19=${TARGETS};eval:window.advisorWorld.navigation.setFocus(window.__wp19.villages[0].lon,window.__wp19.villages[0].lat);eval:window.advisorWorld.setHalfHeight(97);settle;shot:village-a;eval:window.advisorWorld.navigation.setFocus(window.__wp19.villages[1].lon,window.__wp19.villages[1].lat);settle;shot:village-b;eval:window.advisorWorld.navigation.setFocus(window.__wp19.villages[2].lon,window.__wp19.villages[2].lat);settle;shot:village-c;eval:window.advisorWorld.navigation.setFocus(window.__wp19.city.lon,window.__wp19.city.lat);eval:window.advisorWorld.setHalfHeight(760);settle;shot:city-province;eval:window.advisorWorld.setHalfHeight(55);settle;shot:city-street;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'inn');settle;shot:inn-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'market');settle;shot:market-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'blacksmith');settle;shot:blacksmith-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'farmstead');settle;shot:farmstead-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'barn');settle;shot:barn-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'butcher');settle;shot:butcher-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'guard-office');settle;shot:guard-office-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'home');settle;shot:home-exterior;eval:window.advisorSettlements.enter(window.__wp19.villages[0].inn);visible:#interior-experience;shot:inn-interior;eval:window.advisorSettlements.exit();eval:window.advisorSettlements.enter(window.__wp19.villages[0].blacksmith);visible:#interior-experience;shot:blacksmith-interior;eval:window.advisorSettlements.exit();eval:window.advisorSettlements.enter(window.__wp19.villages[0].home);visible:#interior-experience;shot:home-interior;eval:window.advisorSettlements.exit()"
+          else
+            STEPS="eval:window.__wp19=${TARGETS};eval:window.advisorWorld.navigation.setFocus(window.__wp19.villages[0].lon,window.__wp19.villages[0].lat);eval:window.advisorWorld.setHalfHeight(97);settle;shot:village;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'inn');settle;shot:inn-exterior;eval:window.advisorSettlements.enter(window.__wp19.villages[0].inn);visible:#interior-experience;shot:inn-interior;eval:window.advisorSettlements.exit();eval:window.advisorSettlements.enter(window.__wp19.villages[0].home);visible:#interior-experience;shot:home-interior;eval:window.advisorSettlements.exit()"
+          fi
+          python tools/screenshot_tool.py http://127.0.0.1:4175/ --out test-results/wp19-${{ matrix.renderer }}-${{ matrix.profile }} --name wp19 --profile ${{ matrix.profile }} --renderer ${{ matrix.renderer }} --timeout 90 --settle-timeout 45 --steps "$STEPS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: wp19-attempt1-${{ matrix.renderer }}-${{ github.sha }}
-          path: test-results/wp19-${{ matrix.renderer }}
+          name: wp19-attempt3-${{ matrix.renderer }}-${{ matrix.profile }}-${{ github.sha }}
+          path: test-results/wp19-${{ matrix.renderer }}-${{ matrix.profile }}
