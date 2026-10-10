@@ -11,6 +11,7 @@ export {
   drainageLakeRadiusAt,
   drainageRecipeAt,
   drainageRecipesNear,
+  drainageRiverWidthAt,
   freshwaterDistanceAt,
   hydrologyDiagnostics,
   naturalElevationAt,
