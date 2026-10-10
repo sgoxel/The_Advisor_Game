@@ -21,14 +21,14 @@ All S001 WPs are COMPLETED and REVIEWED (see docs/ROADMAP_ARCHIVE.md).
 Completed S002 WPs are listed in docs/ROADMAP_ARCHIVE.md; only open WPs stay below. A WP absent here and present there is COMPLETED.
 
 - WP-S002-004-005 — Natural terrain/hydrology/traversal authority: distributed freshwater, drainage-valid rivers/lakes, canonical walkability, surface-safe earthworks and bounded seam-safe generation
-- WP-S002-004-007 — Political atlas authority/readability: full-continent partition, SEED-variable ≥30/90/270 registries, terrain-valid settlement distribution, country borders and bounded 1/1000 labels
+- WP-S002-004-007 — Political atlas + settlement-siting completion: preserve full-continent partition/variable registries, canonical-hydrology/final-surface envelopes, connected access, borders and bounded 1/1000 labels
 - WP-S002-004-008 — Shortest-legal-walk routing/travel UX: all-pair ≥60-minute proof, final-surface routing, bounded search/cache and truthful route preview
-- WP-S002-004-009 — Functional settlement/building UX: terrain-shaped non-grid layouts, service/home capacity, entrance-connected access, demand-loaded usable interiors and mobile-safe rendering
+- WP-S002-004-009 — Living settlement/building UX: anti-stamped terrain-shaped layouts, structurally distinct services/homes, entrance-connected access, demand-loaded usable interiors and mobile-safe rendering
 - WP-S002-004-011 — Living-resident simulation UX/performance: persistent home/work identity, analytical absolute-time schedules, spatial indexing, bounded logical/visible populations and responsive inspection
 - WP-S002-004-012 — Unified final-surface authority: deterministic priority 0–9 earthworks and one render/routing/collision/material/vegetation truth
 - WP-S002-004-013 — Ruin/critical-place UX: 1/1000 discoverability, legal road access, stable canonical identity, bounded terrain preparation and lazy detail
 - WP-S002-004-014 — Global transport-network authority/UX: connected roads/bridges/harbors/ferries, terrain-aware profiles/junctions and bounded lazy generation
 - WP-S002-004-015 — Invisible-world continuity/performance: SEED-defined shared-boundary contracts, bounded on-demand queries, eviction-safe reconstruction and streaming-independent identity
-- WP-S002-005-001 — Performance/stability release gate: real-device budgets, complete telemetry, adaptive rendering, UI/simulation hot paths, bounded resources and renderer-loss recovery
-- WP-S002-005-002 — Responsive UI/UX/accessibility release gate: safe areas, ≥44px targets, deterministic decluttering, modal/focus/keyboard parity and seven-viewport readability
-- WP-S002-005-003 — README/runtime compatibility release gate: Advisor authority boundary, dynamic canonical counts/terminology, world-scale truth, backend parity and recovery
+- WP-S002-005-001 — Exact-main performance/stability release gate: complete percentile/UI telemetry, adaptive budgets, bounded resources, runtime renderer recovery and deploy-SHA browser/visual gating
+- WP-S002-005-002 — Responsive UI/UX/accessibility release gate: safe-area/mobile map visibility, ≥44px targets, accessible labels, modal/focus/keyboard parity and seven-viewport evidence
+- WP-S002-005-003 — README/runtime product-truth release gate: Advisor-safe atlas wording, canonical dynamic context/counts, world-scale truth, backend parity/recovery and exact-main conformance
