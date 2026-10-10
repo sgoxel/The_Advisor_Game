@@ -1,0 +1,40 @@
+name: WP15 natural repair v3
+on:
+  push:
+    branches:
+      - agent1/wp15-natural-repair-v3
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp15-natural-repair-v3
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Apply repair
+        run: python tools/wp15_natural_repair.py
+      - name: Install
+        run: npm ci
+      - name: Targeted regressions
+        run: node --experimental-strip-types --test tests/hydrology.test.ts tests/terrain-refine.test.ts tests/surface-presentation.test.ts
+      - name: Validate evidence targets
+        run: node --experimental-strip-types tools/wp15_targets.ts
+      - name: Build
+        run: npm run build
+      - name: Commit tested repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "AGENT #1"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git rm -f .github/workflows/wp15-natural-shape-repair.yml .github/workflows/wp15-natural-repair-v3.yml tools/wp15_natural_repair.py
+          git add src/hydrology.ts src/surface.ts src/terrain-refine.ts tests/hydrology.test.ts tools/wp15_targets.ts .github/workflows/wp15-visual-evidence.yml
+          git commit -m "WP-S002-004-005 naturalize canonical lakes and visual targets"
+          git push origin HEAD:agent1/wp15-natural-repair-v3
