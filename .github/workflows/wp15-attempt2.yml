@@ -1,0 +1,38 @@
+name: WP15 attempt 2 terrain shaping
+on:
+  push:
+    branches: [agent1/wp-s002-004-005-uv-final2]
+permissions:
+  contents: write
+concurrency:
+  group: wp15-attempt2
+  cancel-in-progress: true
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[wp15-attempt2]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s002-004-005-uv-final2
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: python tools/wp15_attempt2_repair.py
+      - run: npm ci
+      - name: Focused terrain regressions
+        run: node --experimental-strip-types --test tests/hydrology.test.ts tests/terrain-refine.test.ts tests/surface-presentation.test.ts
+      - name: Seeded difficult-route regression
+        run: |
+          node --experimental-strip-types --input-type=module -e "const m=await import('./src/village-routes.ts');const r=m.routeBetweenVillages('0/4/2/0','0/6/2/2');console.log(JSON.stringify({found:r.found,difficultM:r.surfaceM.difficult,ratio:r.fantasySeconds/r.straightLineFantasySeconds,expansions:r.expansions}));if(!r.found||r.surfaceM.difficult<=1000||r.fantasySeconds<=r.straightLineFantasySeconds*1.1)process.exit(1)"
+      - run: npm run build
+      - name: Commit validated attempt 2
+        run: |
+          git config user.name "AGENT #1"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add src/hydrology.ts src/terrain-refine.ts
+          git commit -m "WP-S002-004-005 refine natural terrain shaping [wp15-attempt2]"
+          git push origin HEAD:agent1/wp-s002-004-005-uv-final2
