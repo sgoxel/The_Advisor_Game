@@ -1,12 +1,15 @@
 /**
  * Protagonist-demand building interiors for WP-S002-004-009.
  *
- * Interior truth is derived only from the canonical building identity/program and SEED versions.
- * Looking at, focusing, or rendering a settlement never calls this module. A plan is realized only
- * through enter(), can be evicted after exit(), and reconstructs byte-for-byte equivalent logical
- * topology on re-entry. This module intentionally contains no renderer/camera/device inputs.
+ * Interior truth is derived only from the canonical building identity/program, settlement identity,
+ * local seeded climate and SEED versions. Looking at, focusing, or rendering a settlement never
+ * calls this module. A plan is realized only through enter(), can be evicted after exit(), and
+ * reconstructs byte-for-byte equivalent logical topology on re-entry. Renderer/camera/device state
+ * is intentionally absent from this authority.
  */
 import { BUILDING_INTERIOR_VERSION, SETTLEMENT_LAYOUT_VERSION, WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
+import { climateSampleAt } from "./climate.ts";
+import { sourceToLonLat } from "./planet.ts";
 import type { Building, BuildingRole, Point, Room } from "./settlement-layout.ts";
 
 export type InteriorDoor = {
@@ -50,6 +53,17 @@ export type InteriorRoom = Room & {
   depthM: number;
 };
 
+export type InteriorStyle = {
+  culture: "Marcher" | "Riverward" | "Highland" | "Woodland" | "Coastal";
+  environment: "cold" | "temperate" | "warm-dry" | "humid" | "forested";
+  construction: string;
+  heating: string;
+  furniture: string;
+  wall: string;
+  floor: string;
+  accent: string;
+};
+
 export type InteriorPlan = {
   code: string;
   building: string;
@@ -58,6 +72,7 @@ export type InteriorPlan = {
   footprint: { widthM: number; depthM: number };
   /** Exterior canonical threshold. This is not copied into a second world coordinate system. */
   exteriorEntrance: Point;
+  style: InteriorStyle;
   rooms: InteriorRoom[];
   doors: InteriorDoor[];
   anchors: InteriorAnchor[];
@@ -80,6 +95,65 @@ function unit(building: Building, purpose: string, index = 0) {
 }
 
 const round = (value: number) => Math.round(value * 1000) / 1000;
+
+function styleFor(building: Building): InteriorStyle {
+  const settlement = building.code.includes("/building/")
+      ? building.code.slice(0, building.code.lastIndexOf("/building/"))
+      : building.code,
+    cultureNames: InteriorStyle["culture"][] = ["Marcher", "Riverward", "Highland", "Woodland", "Coastal"],
+    culture = cultureNames[digest(`${WORLD_SEED}/${SETTLEMENT_LAYOUT_VERSION}/${settlement}/culture`) % cultureNames.length],
+    climate = climateSampleAt(sourceToLonLat(building.x, building.z), 0),
+    environment: InteriorStyle["environment"] = climate.forestFamily
+      ? "forested"
+      : climate.temperatureC < 4
+        ? "cold"
+        : climate.moisture > 0.68
+          ? "humid"
+          : climate.temperatureC > 19 && climate.moisture < 0.42
+            ? "warm-dry"
+            : "temperate",
+    palettes: Record<InteriorStyle["culture"], Pick<InteriorStyle, "wall" | "floor" | "accent">> = {
+      Marcher: { wall: "#c8b88c", floor: "#574937", accent: "#d5aa62" },
+      Riverward: { wall: "#b7c0a8", floor: "#48544d", accent: "#83b1a4" },
+      Highland: { wall: "#a7a69d", floor: "#494846", accent: "#c1a06e" },
+      Woodland: { wall: "#aeb78f", floor: "#3f4b39", accent: "#b9a763" },
+      Coastal: { wall: "#c8bea8", floor: "#48545a", accent: "#84aebe" },
+    },
+    palette = palettes[culture],
+    serviceStone = building.role === "blacksmith" || building.role === "guard-office" || building.role === "keep",
+    construction = serviceStone
+      ? environment === "warm-dry" ? "limewashed stone and timber" : "stone base with timber framing"
+      : building.role === "barn" || building.role === "farmstead"
+        ? "heavy local timber frame"
+        : environment === "cold"
+          ? "insulated timber frame with stone hearth wall"
+          : environment === "humid"
+            ? "raised timber frame with lime plaster"
+            : environment === "forested"
+              ? "oak frame with wattle-and-daub infill"
+              : environment === "warm-dry"
+                ? "lime plaster over stone-and-timber walls"
+                : "timber frame with plaster infill",
+    heating = building.role === "blacksmith"
+      ? "forge hearth"
+      : environment === "cold"
+        ? "enclosed masonry hearth"
+        : environment === "warm-dry"
+          ? "small vented cook hearth"
+          : "central hearth",
+    furniture = building.role === "market"
+      ? `${culture.toLowerCase()} trestles and lockable chests`
+      : building.role === "inn"
+        ? `${culture.toLowerCase()} benches, tables and guest bedsteads`
+        : building.role === "blacksmith"
+          ? `${culture.toLowerCase()} forge benches, racks and anvil blocks`
+          : building.role === "guard-office" || building.role === "keep"
+            ? `${culture.toLowerCase()} desks, weapon racks and storage chests`
+            : building.role === "barn" || building.role === "farmstead"
+              ? `${culture.toLowerCase()} bins, racks and work tables`
+              : `${culture.toLowerCase()} stools, table, chests and bedsteads`;
+  return { culture, environment, construction, heating, furniture, ...palette };
+}
 
 function anchorKind(role: BuildingRole, roomName: string, ordinal: number): InteriorAnchor["kind"] {
   const room = roomName.toLowerCase();
@@ -194,14 +268,16 @@ export function interiorPlanFor(building: Building): InteriorPlan {
       anchors.push({ code: `${connection.code}/TO`, room: to.code, kind: "stairs", x: to.x, z: to.z });
   }
 
-  const topology = {
+  const style = styleFor(building),
+    topology = {
       building: building.code,
       role: building.role,
       floors,
       footprint: [round(building.width), round(building.depth)],
-      rooms: rooms.map((r) => [r.code, r.name, r.areaM2, r.floor, r.x, r.z, r.widthM, r.depthM]),
-      doors: doors.map((d) => [d.code, d.kind, d.from, d.to, d.widthM]),
-      anchors: anchors.map((a) => [a.code, a.room, a.kind, a.x, a.z]),
+      style,
+      rooms: rooms.map((room) => [room.code, room.name, room.areaM2, room.floor, room.x, room.z, room.widthM, room.depthM]),
+      doors: doors.map((door) => [door.code, door.kind, door.from, door.to, door.widthM]),
+      anchors: anchors.map((anchor) => [anchor.code, anchor.room, anchor.kind, anchor.x, anchor.z]),
     },
     serialized = JSON.stringify(topology),
     signature = digest(serialized).toString(16).padStart(8, "0"),
@@ -214,6 +290,7 @@ export function interiorPlanFor(building: Building): InteriorPlan {
     floors,
     footprint: { widthM: building.width, depthM: building.depth },
     exteriorEntrance: { ...building.entrance },
+    style,
     rooms,
     doors,
     anchors,
@@ -283,13 +360,13 @@ export class ProtagonistInteriorCache {
   }
 
   stats(): InteriorResidencyStats {
-    let active = 0,
+    let activeCount = 0,
       bytes = 0;
     for (const entry of this.entries.values()) {
-      if (entry.active) active++;
+      if (entry.active) activeCount++;
       bytes += entry.plan.estimatedBytes;
     }
-    return { active, cached: this.entries.size, bytes, materializations: this.materializations, evictions: this.evictions };
+    return { active: activeCount, cached: this.entries.size, bytes, materializations: this.materializations, evictions: this.evictions };
   }
 
   private trim() {
