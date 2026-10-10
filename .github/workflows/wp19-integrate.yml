@@ -4,6 +4,7 @@ on:
     branches: [agent1/wp-s002-004-009-20261011]
     paths:
       - tools/wp19_integrate.py
+      - tools/wp19_main_integrate.py
       - .github/workflows/wp19-integrate.yml
 permissions:
   contents: write
@@ -20,8 +21,9 @@ jobs:
         with:
           python-version: '3.12'
       - run: python tools/wp19_integrate.py
+      - run: python tools/wp19_main_integrate.py
       - run: git diff --check
-      - name: Commit reconciled world authority
+      - name: Commit reconciled runtime authority
         run: |
           if git diff --quiet; then
             echo "No reconciliation changes required."
@@ -29,6 +31,6 @@ jobs:
           fi
           git config user.name "AGENT #1"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
-          git add src/world.ts
-          git commit -m "[wp19-integrated] reconcile settlement world authority"
+          git add src/world.ts src/main.ts
+          git commit -m "[wp19-integrated] reconcile settlement runtime authority"
           git push origin HEAD:agent1/wp-s002-004-009-20261011
