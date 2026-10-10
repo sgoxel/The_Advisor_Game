@@ -107,8 +107,8 @@ test("priority-9 preparation has bounded canonical-metre support and one render/
       78,
       target,
     ),
-    midpointX = site.x + wrapSourceX(site.access.x - site.x) * 0.5,
-    midpointZ = (site.z + site.access.z) * 0.5;
+    dx = wrapSourceX(site.access.x - site.x),
+    dz = site.access.z - site.z;
   assert.equal(centre.height, target);
   assert.equal(centre.cleared, true);
   assert.equal(centre.walkable, true);
@@ -118,11 +118,15 @@ test("priority-9 preparation has bounded canonical-metre support and one render/
   assert.equal(outside.influence, 0);
 
   // The branch is consumed by the same runtime authorities: heightAt grades the
-  // endpoint, terrainTint paints its actual centreline, and cellAt makes it walkable.
+  // endpoint, terrainTint paints the true angled centreline, and cellAt walks it.
   assert.equal(roadAt(site.x, site.z)?.code, site.access.branchCode);
   assert.ok(Math.abs(heightAt(site.x, site.z) - target) < 1e-6);
-  assert.equal(roadDistanceAt(midpointX, midpointZ, branch), 0);
-  assert.deepEqual(terrainTint(midpointX, midpointZ), [170, 151, 113]);
+  for (const t of [0.25, 0.5, 0.75]) {
+    const x = site.x + dx * t,
+      z = site.z + dz * t;
+    assert.ok(roadDistanceAt(x, z, branch) < 1e-6);
+    assert.deepEqual(terrainTint(x, z), [170, 151, 113], `road material missing at t=${t}`);
+  }
   assert.equal(cellAt(site.x, site.z).walkable, true);
 });
 
