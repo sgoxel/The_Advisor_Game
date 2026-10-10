@@ -24,7 +24,8 @@ jobs:
         run: |
           if grep -q 'roadAt, roadDistanceAt' src/world.ts \
             && grep -q 'if (tile.size <= 512)' src/world.ts \
-            && grep -q 'advisor:building-selected' src/main.ts; then
+            && grep -q 'advisor:building-selected' src/main.ts \
+            && grep -q 'renderField' src/settlement-render.ts; then
             echo 'ready=true' >> "$GITHUB_OUTPUT"
           else
             echo 'ready=false' >> "$GITHUB_OUTPUT"
@@ -58,6 +59,8 @@ jobs:
       - name: Capture fresh WP19 WebGPU/WebGL2 evidence
         if: steps.gate.outputs.ready == 'true'
         shell: bash
+        env:
+          SOURCE_SHA: ${{ github.sha }}
         run: |
           python -m pip install playwright==1.63.0 pillow
           npm run preview -- --port 4174 > /tmp/wp19-preview.log 2>&1 &
@@ -68,8 +71,8 @@ jobs:
             sleep 1
           done
 
-          EXTERIOR_STEPS='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>(window.__wp19p=g.villages[0],window.__wp19l=s.settlementLayout(window.__wp19p),window.advisorWorld.navigation.setFocus(window.__wp19p.canonicalPosition.lon,window.__wp19p.canonicalPosition.lat),window.advisorWorld.setHalfHeight(115)));settle;shot:village-a;eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>(window.__wp19q=g.villages.find(v=>s.settlementLayout(v).archetype!==window.__wp19l.archetype),window.advisorWorld.navigation.setFocus(window.__wp19q.canonicalPosition.lon,window.__wp19q.canonicalPosition.lat),window.advisorWorld.setHalfHeight(115)));settle;shot:village-b;eval:import("/src/geography.ts").then(g=>(window.__wp19c=g.cities[0],window.advisorWorld.navigation.setFocus(window.__wp19c.canonicalPosition.lon,window.__wp19c.canonicalPosition.lat),window.advisorWorld.setHalfHeight(280)));settle;shot:city-district'
-          INTERIOR_STEPS='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>(window.__wp19p=g.villages[0],window.__wp19l=s.settlementLayout(window.__wp19p),window.__wp19b=window.__wp19l.buildings.find(b=>b.role==="home"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__wp19b}}))));click:#enter-building;visible:#interior-panel;shot:home;click:#exit-interior;eval:(window.__wp19b=window.__wp19l.buildings.find(b=>b.role==="inn"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__wp19b}})));click:#enter-building;visible:#interior-panel;shot:inn;click:#exit-interior;eval:(window.__wp19b=window.__wp19l.buildings.find(b=>b.role==="blacksmith"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__wp19b}})));click:#enter-building;visible:#interior-panel;shot:blacksmith;click:#exit-interior;eval:(window.__wp19b=window.__wp19l.buildings.find(b=>b.role==="market"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__wp19b}})));click:#enter-building;visible:#interior-panel;shot:market'
+          EXTERIOR_STEPS='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>{const c=g.villages.slice(0,24).map(v=>({v,l:s.settlementLayout(v)})).sort((a,b)=>a.l.buildings.length-b.l.buildings.length);window.__wp19a=c[0];window.__wp19b=c.find(x=>x.l.archetype!==window.__wp19a.l.archetype&&x.l.buildings.length>=c[Math.floor(c.length*0.65)].l.buildings.length)||c[c.length-1];window.__wp19d=c.find(x=>x.l.archetype!==window.__wp19a.l.archetype&&x.l.archetype!==window.__wp19b.l.archetype)||c[Math.floor(c.length/2)];window.advisorWorld.navigation.setFocus(window.__wp19a.v.canonicalPosition.lon,window.__wp19a.v.canonicalPosition.lat);window.advisorWorld.setHalfHeight(115)});settle;shot:village-small;eval:(window.advisorWorld.navigation.setFocus(window.__wp19b.v.canonicalPosition.lon,window.__wp19b.v.canonicalPosition.lat),window.advisorWorld.setHalfHeight(125));settle;shot:village-large;eval:(window.advisorWorld.navigation.setFocus(window.__wp19d.v.canonicalPosition.lon,window.__wp19d.v.canonicalPosition.lat),window.advisorWorld.setHalfHeight(115));settle;shot:village-third;eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>(window.__wp19c=g.cities[0],window.__wp19cl=s.settlementLayout(window.__wp19c),window.advisorWorld.navigation.setFocus(window.__wp19c.canonicalPosition.lon,window.__wp19c.canonicalPosition.lat),window.advisorWorld.setHalfHeight(280)));settle;shot:city-district;eval:Promise.all([import("/src/planet.ts")]).then(([p])=>{window.__wp19svc=window.__wp19a.l.buildings.find(b=>b.role==="market");const ll=p.sourceToLonLat(window.__wp19svc.x,window.__wp19svc.z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(38)});settle;shot:market-exterior;eval:import("/src/planet.ts").then(p=>{window.__wp19svc=window.__wp19a.l.buildings.find(b=>b.role==="blacksmith");const ll=p.sourceToLonLat(window.__wp19svc.x,window.__wp19svc.z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(38)});settle;shot:blacksmith-exterior'
+          INTERIOR_STEPS='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>(window.__wp19p=g.villages[0],window.__wp19l=s.settlementLayout(window.__wp19p),window.__wp19b=window.__wp19l.buildings.find(b=>b.role==="home"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__wp19b}}))));click:#enter-building;visible:#interior-panel;eval:window.advisorInteriors.useAnchor();shot:home-use;click:#exit-interior;click:#enter-building;visible:#interior-panel;shot:home-reenter;click:#exit-interior;eval:(window.__wp19b=window.__wp19l.buildings.find(b=>b.role==="inn"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__wp19b}})));click:#enter-building;visible:#interior-panel;eval:window.advisorInteriors.useAnchor();shot:inn;click:#exit-interior;eval:(window.__wp19b=window.__wp19l.buildings.find(b=>b.role==="blacksmith"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__wp19b}})));click:#enter-building;visible:#interior-panel;eval:window.advisorInteriors.useAnchor();shot:blacksmith;click:#exit-interior;eval:(window.__wp19b=window.__wp19l.buildings.find(b=>b.role==="market"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__wp19b}})));click:#enter-building;visible:#interior-panel;eval:window.advisorInteriors.useAnchor();shot:market'
 
           for RENDERER in webgpu webgl2; do
             python tools/screenshot_tool.py http://127.0.0.1:4174/ \
@@ -78,17 +81,18 @@ jobs:
               --steps "$EXTERIOR_STEPS"
             python tools/screenshot_tool.py http://127.0.0.1:4174/ \
               --out "test-results/wp19-${RENDERER}-interior" --name interior \
-              --profile desktop,phone --renderer "$RENDERER" --timeout 300 \
+              --profile desktop,phone,phone-landscape --renderer "$RENDERER" --timeout 300 \
               --steps "$INTERIOR_STEPS"
           done
 
           python - <<'PY'
           from pathlib import Path
           from PIL import Image, ImageDraw, ImageFont
-          import math
+          import math, os
           files = sorted(Path('test-results').glob('wp19-*/*.png'))
           if not files:
               raise SystemExit('no WP19 screenshots were captured')
+          source = os.environ['SOURCE_SHA']
           page_w, page_h = 1600, 1120
           tile_w, tile_h = 780, 520
           pages = []
@@ -96,7 +100,7 @@ jobs:
           for page_index in range(math.ceil(len(files) / 4)):
               page = Image.new('RGB', (page_w, page_h), 'white')
               draw = ImageDraw.Draw(page)
-              draw.text((20, 12), f'WP-S002-004-009 fresh evidence · source {Path("/tmp/source-sha").read_text().strip()} · page {page_index+1}', fill='black', font=font)
+              draw.text((20, 12), f'WP-S002-004-009 fresh evidence · source {source} · page {page_index+1}', fill='black', font=font)
               for slot, file in enumerate(files[page_index*4:(page_index+1)*4]):
                   image = Image.open(file).convert('RGB')
                   image.thumbnail((tile_w, tile_h-36))
@@ -107,15 +111,10 @@ jobs:
               pages.append(page)
           out = Path('tmp/wp19-evidence')
           out.mkdir(parents=True, exist_ok=True)
-          pdf = out / f'evidence-{Path("/tmp/source-sha").read_text().strip()}.pdf'
+          pdf = out / f'evidence-{source}.pdf'
           pages[0].save(pdf, save_all=True, append_images=pages[1:], resolution=110)
           print(pdf)
           PY
-        env:
-          SOURCE_SHA: ${{ github.sha }}
-      - name: Record exact source SHA for contact sheet
-        if: steps.gate.outputs.ready == 'true'
-        run: echo "$GITHUB_SHA" > /tmp/source-sha
       - uses: actions/upload-artifact@v4
         if: steps.gate.outputs.ready == 'true'
         with:
@@ -125,7 +124,7 @@ jobs:
         if: steps.gate.outputs.ready == 'true'
         shell: bash
         run: |
-          # The PDF is temporary visual evidence. It is removed before merge after inspection.
+          # Temporary inspection evidence; removed before merge after screenshots are scored.
           git config user.name 'AGENT #1'
           git config user.email '163722426+sgoxel@users.noreply.github.com'
           git add tmp/wp19-evidence/*.pdf
