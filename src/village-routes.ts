@@ -143,6 +143,14 @@ function refineAgainstFinalTraversal(route: RouteResult): RouteResult | undefine
     }
     distanceM += lengthM;
   }
+  // Floating-point accumulation may undershoot the exact geodesic/fastest-speed
+  // lower bound by a few ulps on a pure-road route. That lower bound is a
+  // physical invariant, so clamp to it rather than reporting an impossible
+  // faster-than-geodesic walk.
+  fantasySeconds = Math.max(
+    fantasySeconds,
+    route.geodesicM / FASTEST_WALK_SPEED_MPS,
+  );
   return {
     ...route,
     distanceM,
