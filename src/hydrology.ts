@@ -221,7 +221,7 @@ function flowTarget(x: number, z: number, continentId: number) {
     fallbackZ = awayZ / awayLength,
     baseX = gradientLength > 0.015 ? -gx / gradientLength : fallbackX,
     baseZ = gradientLength > 0.015 ? -gz / gradientLength : fallbackZ,
-    turn = (sphericalNoise(sx, z, 83 + continentId) - 0.5) * 0.82;
+    turn = (sphericalNoise(sx, z, 83 + continentId) - 0.5) * 1.05;
   let dx = baseX - baseZ * turn,
     dz = baseZ + baseX * turn;
   const length = Math.hypot(dx, dz) || 1;
@@ -234,6 +234,22 @@ function blendDirection(previous: { x: number; z: number }, target: { x: number;
     z = previous.z * (1 - amount) + target.z * amount,
     length = Math.hypot(x, z) || 1;
   return { x: x / length, z: z / length };
+}
+function rotateDirection(direction: { x: number; z: number }, angle: number) {
+  const c = Math.cos(angle),
+    s = Math.sin(angle);
+  return {
+    x: direction.x * c - direction.z * s,
+    z: direction.x * s + direction.z * c,
+  };
+}
+function riverMeander(key: string, step: number) {
+  const phase = addressed(`${key}/meander-phase`) * Math.PI * 2,
+    amplitude = 0.105 + addressed(`${key}/meander-amplitude`) * 0.105;
+  return (
+    Math.sin(step * 0.39 + phase) * amplitude +
+    Math.sin(step * 0.17 + phase * 1.73) * amplitude * 0.48
+  );
 }
 function pointDistanceToSegment(px: number, pz: number, a: DrainagePoint, b: DrainagePoint) {
   const dx = wrapSourceX(b.x - a.x),
@@ -259,7 +275,8 @@ function extendToWater(
     previousBed = current.bed,
     direction = incoming;
   for (let extra = 0; extra < 24; extra++) {
-    direction = blendDirection(direction, flowTarget(current.x, current.z, continentId), 0.38);
+    direction = blendDirection(direction, flowTarget(current.x, current.z, continentId), 0.52);
+    direction = rotateDirection(direction, riverMeander(key, RIVER_STEPS + extra) * 0.42);
     const stride = 150 + addressed(`${key}/outlet/${extra}`) * 70,
       nx = wrapSourceX(current.x + direction.x * stride),
       nz = Math.max(
@@ -302,8 +319,9 @@ export function drainageRecipeAt(gx: number, gz: number): DrainageRecipe | null 
     points.push({ x, z, bed: previousBed });
 
     for (let step = 0; step < RIVER_STEPS; step++) {
-      direction = blendDirection(direction, flowTarget(x, z, macro.continentId), 0.34);
-      const stride = RIVER_STEP * (0.9 + addressed(`${key}/stride/${step}`) * 0.2),
+      direction = blendDirection(direction, flowTarget(x, z, macro.continentId), 0.4);
+      direction = rotateDirection(direction, riverMeander(key, step));
+      const stride = RIVER_STEP * (0.78 + addressed(`${key}/stride/${step}`) * 0.36),
         nx = wrapSourceX(x + direction.x * stride),
         nz = Math.max(
           -SOURCE_PRESENTATION_POLE_DISTANCE + 8,

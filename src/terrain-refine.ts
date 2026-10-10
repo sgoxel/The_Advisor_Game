@@ -18,7 +18,7 @@ import type { Tile } from "./world.ts";
 
 type RGB = [number, number, number];
 type Point = [number, number, number];
-type Vertex = { point: Point; tint: RGB };
+type Vertex = { point: Point; tint: RGB; normal?: Point };
 
 const WATER_SURFACE_Y = 0;
 const LAND_CLIP_Y = 0.035;
@@ -39,6 +39,14 @@ function blend(a: RGB, b: RGB, t: number): RGB {
     a[1] + (b[1] - a[1]) * amount,
     a[2] + (b[2] - a[2]) * amount,
   ];
+}
+function normalizePoint(point: Point): Point {
+  const length = Math.hypot(point[0], point[1], point[2]) || 1;
+  return [point[0] / length, point[1] / length, point[2] / length];
+}
+function reliefShade(normal: Point) {
+  const light = normal[0] * -0.34 + normal[1] * 0.88 + normal[2] * -0.32;
+  return Math.max(0.88, Math.min(1.06, 0.94 + light * 0.11));
 }
 
 /** Seam-safe presentation variation; unlike source-grid fields it cannot expose rectangular bands. */
@@ -87,6 +95,14 @@ function refinedTint(x: number, z: number, surface: SurfaceSample): RGB {
 }
 
 function interpolate(a: Vertex, b: Vertex, t: number): Vertex {
+  const normal =
+    a.normal && b.normal
+      ? normalizePoint([
+a.normal[0] + (b.normal[0] - a.normal[0]) * t,
+a.normal[1] + (b.normal[1] - a.normal[1]) * t,
+a.normal[2] + (b.normal[2] - a.normal[2]) * t,
+        ])
+      : undefined;
   return {
     point: [
       a.point[0] + (b.point[0] - a.point[0]) * t,
@@ -94,6 +110,7 @@ function interpolate(a: Vertex, b: Vertex, t: number): Vertex {
       a.point[2] + (b.point[2] - a.point[2]) * t,
     ],
     tint: blend(a.tint, b.tint, t),
+    normal,
   };
 }
 
@@ -132,21 +149,17 @@ function pushTriangle(
     vx = c.point[0] - a.point[0],
     vy = c.point[1] - a.point[1],
     vz = c.point[2] - a.point[2],
-    nx = uy * vz - uz * vy,
-    ny = uz * vx - ux * vz,
-    nz = ux * vy - uy * vx,
-    length = Math.hypot(nx, ny, nz) || 1,
-    unitX = nx / length,
-    unitY = ny / length,
-    unitZ = nz / length,
-    // Presentation-only flat relief shading. Flat surfaces keep their exact
-    // palette regardless of triangle winding; real slopes/cliffs gain readable form.
-    light = unitX * -0.38 + unitY * 0.86 + unitZ * -0.34,
-    shade = Math.abs(unitY) > 0.995 ? 1 : Math.max(0.84, Math.min(1.08, 0.93 + light * 0.14)),
+    faceNormal = normalizePoint([
+      uy * vz - uz * vy,
+      uz * vx - ux * vz,
+      ux * vy - uy * vx,
+    ]),
     start = positions.length / 3;
   for (const vertex of [a, b, c]) {
+    const normal = vertex.normal ?? faceNormal,
+      shade = reliefShade(normal);
     positions.push(...vertex.point);
-    normals.push(unitX, unitY, unitZ);
+    normals.push(...normal);
     colors.push(
       byte(vertex.tint[0] * shade),
       byte(vertex.tint[1] * shade),
@@ -364,7 +377,7 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
       sourceToLonLat(wrapSourceX(tile.minX + tile.size / 2), tile.minZ + tile.size / 2),
     ),
     rugged = center.reliefM >= 80 || center.mountainIntensity >= 0.06,
-    targetResolution = tile.size <= 128 ? 68 : tile.size <= 512 ? (rugged ? 52 : 40) : rugged ? 40 : 28,
+    targetResolution = tile.size <= 128 ? (rugged ? 80 : 72) : tile.size <= 512 ? (rugged ? 60 : 44) : rugged ? 44 : 30,
     resolution = Math.max(1, Math.min(targetResolution, Math.floor(tile.size / 2))),
     step = tile.size / resolution,
     grid: Vertex[][] = [];
@@ -378,9 +391,26 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
       row.push({ point: [x, surface.elevation, z], tint: refinedTint(x, z, surface) });
     }
     grid.push(row);
-  }
+}
 
-  const positions: number[] = [],
+// Share one smooth normal at every logical grid vertex. This removes the
+// checkerboard faceting caused by per-triangle normals while preserving the
+// canonical sampled elevations and all traversal/water authority.
+for (let iz = 0; iz <= resolution; iz++) {
+  for (let ix = 0; ix <= resolution; ix++) {
+    const left = grid[iz][Math.max(0, ix - 1)].point,
+      right = grid[iz][Math.min(resolution, ix + 1)].point,
+      up = grid[Math.max(0, iz - 1)][ix].point,
+      down = grid[Math.min(resolution, iz + 1)][ix].point,
+      dx = Math.max(1e-6, right[0] - left[0]),
+      dz = Math.max(1e-6, down[2] - up[2]),
+      slopeX = (right[1] - left[1]) / dx,
+      slopeZ = (down[1] - up[1]) / dz;
+    grid[iz][ix].normal = normalizePoint([-slopeX, 1, -slopeZ]);
+  }
+}
+
+const positions: number[] = [],
     normals: number[] = [],
     colors: number[] = [],
     indices: number[] = [];
@@ -398,7 +428,7 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
           quad[1],
           quad[2],
           quad[3],
-          (x + z) % 2 === 1,
+          Math.abs(quad[0].point[1] - quad[2].point[1]) > Math.abs(quad[1].point[1] - quad[3].point[1]),
         );
       else pushPolygon(positions, normals, colors, indices, polygon);
     }
