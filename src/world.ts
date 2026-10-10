@@ -8,8 +8,9 @@ import {
   wrapSourceX,
 } from "./planet.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
-import { nearestPlace, places, roadAt, roadDistanceAt } from "./geography.ts";
+import { nearestPlace, roadAt, roadDistanceAt } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
+import { settlementRenderFeaturesForBounds } from "./settlements.ts";
 export { WORLD_SEED } from "./config.ts";
 export const GENERATOR_VERSION = WORLD_FOUNDATION_VERSION;
 export const WORLD_SIZE = 262144;
@@ -32,6 +33,11 @@ export type Feature = {
   y: number;
   code: string;
   variant: number;
+  role?: string;
+  width?: number;
+  depth?: number;
+  height?: number;
+  heading?: number;
 };
 export type Cell = {
   code: string;
@@ -373,7 +379,7 @@ export function cellAt(x: number, z: number): Cell {
 /** Features are owned by their anchor tile; tile order/zoom never changes them. */
 export function featuresFor(tile: Tile): Feature[] {
   const features: Feature[] = [];
-  const add = (
+  const addNatural = (
     kind: Feature["kind"],
     x: number,
     z: number,
@@ -384,10 +390,10 @@ export function featuresFor(tile: Tile): Feature[] {
       x < tile.minX ||
       x >= tile.minX + tile.size ||
       z < tile.minZ ||
-      z >= tile.minZ + tile.size
+      z >= tile.minZ + tile.size ||
+      heightAt(x, z) < 0.2
     )
       return;
-    if (heightAt(x, z) < 0.2) return;
     features.push({
       kind,
       x,
@@ -397,57 +403,31 @@ export function featuresFor(tile: Tile): Feature[] {
       code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
     });
   };
-  for (const s of places) {
-    const extent = s.kind === "city" ? 440 : 80;
-    if (
-      s.x < tile.minX - extent ||
-      s.x > tile.minX + tile.size + extent ||
-      s.z < tile.minZ - extent ||
-      s.z > tile.minZ + tile.size + extent
-    )
-      continue;
-    const sx = Math.floor(s.x / 2),
-      sz = Math.floor(s.z / 2),
-      id = s.id;
-    add(
-      "keep",
-      s.x - 30,
-      s.z - 28,
-      coordinateValue(sx, sz, 11),
-      `${id}/${s.kind}/keep`,
-    );
-    add("well", s.x, s.z, 0, `${id}/${s.kind}/well`);
-    for (let i = 0; i < 18; i++) {
-      const v = coordinateValue(sx, sz, 20 + i);
-      const side = i % 2 === 0 ? -1 : 1;
-      const x = s.x + (i < 10 ? side * (15 + (v % 6)) : (i - 14) * 13);
-      const z =
-        s.z + (i < 10 ? (Math.floor(i / 2) - 2) * 14 : side * (42 + (v % 5)));
-      if (Math.hypot(x - (s.x - 30), z - (s.z - 28)) > 19)
-        add("house", x, z, v, `${id}/${s.kind}/house/${i}`);
-    }
-    for (let i = 0; i < 4; i++)
-      add(
-        "field",
-        s.x + (i % 2 === 0 ? -1 : 1) * (s.kind === "city" ? 350 : 65),
-        s.z + 16 + Math.floor(i / 2) * 24,
-        i,
-        `${id}/${s.kind}/field/${i}`,
-      );
-    if (s.kind === "city")
-      for (let i = 0; i < 400; i++) {
-        const gx = ((i % 20) - 9.5) * 29,
-          gz = (Math.floor(i / 20) - 9.5) * 29;
-        if (Math.abs(gx) > 40 || Math.abs(gz) > 55)
-          add(
-            "house",
-            s.x + gx,
-            s.z + gz,
-            coordinateValue(sx, sz, 80 + i),
-            `${id}/urban-house/${i}`,
-          );
-      }
+
+  // Canonical settlement records replace the old 18-house village stamp and
+  // 20×20 city lattice. Logical identity/dimensions are invariant; render LOD may
+  // still choose whether to instantiate the merged tile geometry later.
+  for (const feature of settlementRenderFeaturesForBounds(
+    tile.minX,
+    tile.minZ,
+    tile.size,
+  )) {
+    if (heightAt(feature.x, feature.z) < 0.2) continue;
+    features.push({
+      kind: feature.kind,
+      role: feature.role,
+      x: feature.x,
+      z: feature.z,
+      y: heightAt(feature.x, feature.z),
+      code: feature.code,
+      variant: feature.variant,
+      width: feature.width,
+      depth: feature.depth,
+      height: feature.height,
+      heading: feature.heading,
+    });
   }
+
   if (tile.size <= 256) {
     for (
       let gz = Math.floor(tile.minZ / 10) - 1;
@@ -459,17 +439,17 @@ export function featuresFor(tile: Tile): Feature[] {
         gx < (tile.minX + tile.size) / 10 + 1;
         gx++
       ) {
-        const v = coordinateValue(gx, gz, 30);
-        const x = gx * 10 + (v % 7) - 3,
-          z = gz * 10 + ((v >>> 5) % 7) - 3;
-        const biome = biomeAt(x, z);
+        const v = coordinateValue(gx, gz, 30),
+          x = gx * 10 + (v % 7) - 3,
+          z = gz * 10 + ((v >>> 5) % 7) - 3,
+          biome = biomeAt(x, z);
         if (biome === "Woodland" && v % 4 !== 0)
-          add("tree", x, z, v, `tree/${gx}/${gz}`);
+          addNatural("tree", x, z, v, `tree/${gx}/${gz}`);
         else if (
           !["Settlement", "Ocean", "Lake", "River"].includes(biome) &&
           v % 31 === 0
         )
-          add("rock", x, z, v, `rock/${gx}/${gz}`);
+          addNatural("rock", x, z, v, `rock/${gx}/${gz}`);
       }
     }
   }
