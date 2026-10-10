@@ -493,6 +493,14 @@ function corridor(from: Place, to: Place, country: Country): readonly CanonicalP
     )
       return [from.canonicalPosition, via.canonicalPosition, to.canonicalPosition];
 
+  const countryAnchor = country.canonicalPosition;
+  if (
+    sameOwnedDryLand(countryAnchor, country) &&
+    segmentLegal(from.canonicalPosition, countryAnchor, country, 18) &&
+    segmentLegal(countryAnchor, to.canonicalPosition, country, 18)
+  )
+    return [from.canonicalPosition, countryAnchor, to.canonicalPosition];
+
   return (
     layeredCorridor(from, to, country, distanceM, phase) ??
     coarseGridCorridor(from, to, country, distanceM, phase)
