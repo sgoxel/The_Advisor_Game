@@ -2,7 +2,9 @@ name: WP19 temporary performance diagnostic
 on:
   push:
     branches: [agent1/wp-s002-004-009-living-settlements]
-    paths: [.github/workflows/wp19-perf-diagnostic.yml]
+    paths:
+      - .github/workflows/wp19-perf-diagnostic.yml
+      - tools/wp19_perf.ts
 permissions:
   contents: read
 jobs:
