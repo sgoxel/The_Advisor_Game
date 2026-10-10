@@ -377,7 +377,7 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
       sourceToLonLat(wrapSourceX(tile.minX + tile.size / 2), tile.minZ + tile.size / 2),
     ),
     rugged = center.reliefM >= 80 || center.mountainIntensity >= 0.06,
-    targetResolution = tile.size <= 128 ? (rugged ? 80 : 72) : tile.size <= 512 ? (rugged ? 60 : 44) : rugged ? 44 : 30,
+    targetResolution = tile.size <= 128 ? 68 : tile.size <= 512 ? (rugged ? 52 : 40) : rugged ? 40 : 28,
     resolution = Math.max(1, Math.min(targetResolution, Math.floor(tile.size / 2))),
     step = tile.size / resolution,
     grid: Vertex[][] = [];
