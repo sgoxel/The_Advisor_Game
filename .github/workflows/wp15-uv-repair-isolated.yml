@@ -10,11 +10,11 @@ permissions:
 
 concurrency:
   group: wp15-refined-terrain-uv-isolated
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   repair:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     timeout-minutes: 20
     steps:
       - name: Checkout isolated WP branch
@@ -30,7 +30,7 @@ jobs:
       - name: Restore canonical UVs on refined terrain
         shell: bash
         run: |
-          python3 - <<'PY'
+          python - <<'PY'
           from pathlib import Path
           import re
 
