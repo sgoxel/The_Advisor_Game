@@ -64,6 +64,37 @@ test("interior base preserves every required functional room and connected circu
   }
 });
 
+test("every interior doorway lies on the exact shared wall", () => {
+  for (const building of sampleVillage().buildings.slice(0, 24)) {
+    const base = interiorBaseForBuilding(building),
+      byCode = new Map(base.rooms.map((room) => [room.code, room] as const));
+    for (const door of base.doors) {
+      const a = byCode.get(door.from),
+        b = byCode.get(door.to);
+      assert.ok(a && b);
+      const aLeft = a.x - a.width / 2,
+        aRight = a.x + a.width / 2,
+        bLeft = b.x - b.width / 2,
+        bRight = b.x + b.width / 2,
+        aTop = a.z - a.depth / 2,
+        aBottom = a.z + a.depth / 2,
+        bTop = b.z - b.depth / 2,
+        bBottom = b.z + b.depth / 2,
+        sharedVertical = Math.min(Math.abs(aRight - bLeft), Math.abs(bRight - aLeft)),
+        sharedHorizontal = Math.min(Math.abs(aBottom - bTop), Math.abs(bBottom - aTop));
+      if (sharedVertical < sharedHorizontal) {
+        const wallX = Math.abs(aRight - bLeft) < Math.abs(bRight - aLeft) ? aRight : aLeft;
+        assert.ok(Math.abs(door.x - wallX) < 1e-6, `${building.code}: door misses vertical shared wall`);
+        assert.ok(door.z >= Math.max(aTop, bTop) - 1e-6 && door.z <= Math.min(aBottom, bBottom) + 1e-6);
+      } else {
+        const wallZ = Math.abs(aBottom - bTop) < Math.abs(bBottom - aTop) ? aBottom : aTop;
+        assert.ok(Math.abs(door.z - wallZ) < 1e-6, `${building.code}: door misses horizontal shared wall`);
+        assert.ok(door.x >= Math.max(aLeft, bLeft) - 1e-6 && door.x <= Math.min(aRight, bRight) + 1e-6);
+      }
+    }
+  }
+});
+
 test("home exposes sleeping, sanitation and social destinations", () => {
   const home = sampleVillage().buildings.find((building) => building.role === "home");
   assert.ok(home);
