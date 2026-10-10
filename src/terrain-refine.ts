@@ -64,14 +64,24 @@ function refinedTint(x: number, z: number, surface: SurfaceSample): RGB {
   // Beds remain earthen; exact water is a separate geometry layer below.
   if (surface.water === "river") return [112, 122, 93];
   if (surface.water === "lake") return [105, 119, 99];
-  // WP15_ATTEMPT2_PRESENTATION: cliff remains canonical traversal truth, while
-  // presentation uses a slope-weighted rock blend instead of a binary dark mask.
+  // WP15_ATTEMPT3_PRESENTATION: cliff remains canonical traversal truth. Rock is
+  // a bounded overlay on the same seeded biome/highland colour, never a binary mask.
   if (surface.cliff) {
-    const detail = naturalDetail(x, z),
-      severity = smooth01((surface.slope - 0.72) / 1.1),
-      shoulder: RGB = [118 + detail * 8, 123 + detail * 7, 109 + detail * 6],
-      rock: RGB = [92 + detail * 5, 98 + detail * 5, 96 + detail * 4];
-    return blend(shoulder, rock, 0.28 + severity * 0.34);
+    const macro = macroSampleAt(sourceToLonLat(x, z)),
+      detail = naturalDetail(x, z),
+      meadow: RGB = [115 + detail * 25, 139 + detail * 26, 78 + detail * 20],
+      forestFactor = smooth01((naturalDetail(x + 37, z - 29) - 0.34) / 0.46),
+      woodland: RGB = [70 + detail * 20, 102 + detail * 23, 67 + detail * 16],
+      natural = blend(meadow, woodland, forestFactor),
+      mountain = smooth01((macro.mountainIntensity - 0.012) / 0.55),
+      highland: RGB = [122 + detail * 23, 132 + detail * 20, 108 + detail * 18],
+      volcanic: RGB = [91 + detail * 18, 89 + detail * 15, 80 + detail * 13],
+      base = macro.volcanic
+        ? blend(natural, volcanic, mountain * 0.96)
+        : blend(natural, highland, mountain * 0.9),
+      severity = smooth01((surface.slope - 0.65) / 1.4),
+      rock: RGB = [104 + detail * 8, 108 + detail * 8, 101 + detail * 7];
+    return blend(base, rock, 0.14 + severity * 0.22);
   }
   if (surface.riverBank) return [145, 143, 105];
 
@@ -410,11 +420,11 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
           : rugged
             ? 60
             : 32,
-    // One-metre sampling is reserved for close rugged/coastal silhouettes; wider
-    // tiles retain a two-metre-or-coarser cap to protect phone streaming budgets.
+    // Sub-metre sampling is reserved for close rugged/coastal silhouettes only;
+    // wider tiles retain a two-metre-or-coarser cap to protect phone streaming budgets.
     resolutionCap =
       tile.size <= 128 && (coastal || rugged)
-        ? Math.max(1, Math.floor(tile.size))
+        ? Math.max(1, Math.floor(tile.size * 1.5))
         : Math.max(1, Math.floor(tile.size / 2)),
     resolution = Math.max(1, Math.min(targetResolution, resolutionCap)),
     step = tile.size / resolution,

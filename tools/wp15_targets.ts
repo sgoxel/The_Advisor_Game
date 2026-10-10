@@ -32,7 +32,9 @@ if (!lakeRecipe?.lake) throw new Error("Visual evidence requires an actual seede
 const lakePoint = lakeRecipe.lake;
 
 let cliffPoint: DrainagePoint | undefined,
-  cliffScore = -Infinity;
+  cliffScore = -Infinity,
+  fallbackCliffPoint: DrainagePoint | undefined,
+  fallbackCliffScore = -Infinity;
 const cliffRadii = [0, 24, 48, 72, 96, 128, 160, 224, 320, 448, 640] as const;
 const cliffDirections = 16;
 for (const mountain of MACRO_PLAN.mountainSystems) {
@@ -54,7 +56,36 @@ for (const mountain of MACRO_PLAN.mountainSystems) {
             macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
             sample.freshwaterDistance,
           ),
-          score = sample.slope * 220 + Math.min(1200, clearance) * 0.08 + Math.min(260, sample.elevation) * 0.05;
+          baseScore = sample.slope * 180 + Math.min(1200, clearance) * 0.07 + Math.min(260, sample.elevation) * 0.05;
+        if (baseScore > fallbackCliffScore) {
+          fallbackCliffScore = baseScore;
+          fallbackCliffPoint = { x, z, bed: sample.elevation };
+        }
+
+        // Prefer a canonical cliff point whose Street framing contains both steep
+        // cliff ground and a nearby shoulder. Evidence selection never changes truth.
+        const localSamples = [];
+        for (const probeRadius of [72, 144]) {
+          for (let probe = 0; probe < 8; probe++) {
+            const probeAngle = (probe / 8) * Math.PI * 2,
+              px = x + Math.cos(probeAngle) * probeRadius,
+              pz = z + Math.sin(probeAngle) * probeRadius;
+            if (pz <= -SOURCE_PRESENTATION_POLE_DISTANCE || pz >= SOURCE_PRESENTATION_POLE_DISTANCE)
+              continue;
+            localSamples.push(surfaceAt(px, pz));
+          }
+        }
+        const dry = localSamples.filter((candidate) => candidate.water === "none"),
+          localSpan = dry.length
+            ? Math.max(...dry.map((candidate) => candidate.elevation)) - Math.min(...dry.map((candidate) => candidate.elevation))
+            : 0,
+          cliffNeighbours = dry.filter((candidate) => candidate.cliff).length,
+          shoulderNeighbours = dry.filter((candidate) => !candidate.cliff).length;
+        if (localSpan < 18 || cliffNeighbours < 2 || shoulderNeighbours < 2) continue;
+        const score =
+          baseScore +
+          Math.min(180, localSpan) * 4.2 +
+          Math.min(8, shoulderNeighbours) * 18;
         if (score > cliffScore) {
           cliffScore = score;
           cliffPoint = { x, z, bed: sample.elevation };
@@ -63,6 +94,7 @@ for (const mountain of MACRO_PLAN.mountainSystems) {
     }
   }
 }
+cliffPoint ??= fallbackCliffPoint;
 if (!cliffPoint) throw new Error("Visual evidence requires a real canonical cliff sample");
 
 // Evidence must show a settlement that has useful freshwater access without
