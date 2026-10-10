@@ -106,6 +106,7 @@ export function interiorPlanFor(building: Building): InteriorPlan {
     usableDepth = Math.max(2.4, building.depth - 0.6),
     floorArea = usableWidth * usableDepth,
     floors = Math.max(1, building.floors),
+    roomsPerFloor = Math.max(1, Math.ceil(building.rooms.length / floors)),
     rooms: InteriorRoom[] = [];
   let floor = 0,
     used = 0,
@@ -114,7 +115,11 @@ export function interiorPlanFor(building: Building): InteriorPlan {
   for (let i = 0; i < building.rooms.length; i++) {
     const source = building.rooms[i],
       required = Math.max(1.5, source.areaM2);
-    if (floor < floors - 1 && used > 0 && used + required > floorArea * 0.78) {
+    if (
+      floor < floors - 1 &&
+      used > 0 &&
+      (floorOrdinal >= roomsPerFloor || used + required > floorArea * 0.78)
+    ) {
       floor++;
       used = 0;
       floorOrdinal = 0;
@@ -179,8 +184,7 @@ export function interiorPlanFor(building: Building): InteriorPlan {
       });
     }
   }
-  for (let i = 0; i < doors.length; i++) {
-    const connection = doors[i];
+  for (const connection of doors) {
     if (connection.kind !== "stair") continue;
     const from = rooms.find((room) => room.code === connection.from),
       to = rooms.find((room) => room.code === connection.to);
@@ -228,10 +232,7 @@ export type InteriorResidencyStats = {
 
 type ResidentPlan = { plan: InteriorPlan; active: boolean; used: number };
 
-/**
- * Small protagonist-facing LRU. No settlement-load or camera-focus method exists by design.
- * Callers can only realize through enter(building), then exit/evict inactive plans.
- */
+/** Small protagonist-facing LRU. No settlement-load or camera-focus method exists by design. */
 export class ProtagonistInteriorCache {
   private readonly entries = new Map<string, ResidentPlan>();
   private serial = 0;
