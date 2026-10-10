@@ -1,0 +1,63 @@
+from pathlib import Path
+
+hydro_path = Path("src/hydrology.ts")
+hydro = hydro_path.read_text()
+replacements = {
+    "Math.sin(p.lon * 1489 + p.lat * 1777 + phase[0]) * 0.24,": "Math.sin(p.lon * 211 + p.lat * 263 + phase[0]) * 0.24,",
+    "Math.cos(p.lon * 2333 - p.lat * 1597 + phase[1]) * 0.2,": "Math.cos(p.lon * 307 - p.lat * 233 + phase[1]) * 0.2,",
+    "Math.sin(p.lon * 3761 + p.lat * 2903 + phase[2]) * 0.18,": "Math.sin(p.lon * 431 + p.lat * 359 + phase[2]) * 0.18,",
+    "Math.cos(p.lon * 5147 - p.lat * 4099 + phase[3]) * 0.15,": "Math.cos(p.lon * 601 - p.lat * 487 + phase[3]) * 0.15,",
+    "Math.sin(p.lon * 7481 + p.lat * 6211 + phase[4]) * 0.13,": "Math.sin(p.lon * 809 + p.lat * 653 + phase[4]) * 0.13,",
+    "Math.cos(p.lon * 10009 - p.lat * 8011 + phase[5]) * 0.1,": "Math.cos(p.lon * 1093 - p.lat * 877 + phase[5]) * 0.1,",
+    "localRelief = fine * Math.min(155, macro.reliefM * 0.3) * mountainWeight,": "localRelief = fine * Math.min(125, macro.reliefM * 0.24) * mountainWeight,",
+    "      0.1 * Math.sin(angle * 3 + lake.phase) +\n      0.06 * Math.sin(angle * 5 - lake.phase * 0.61) +\n      0.035 * Math.cos(angle * 7 + lake.phase * 1.37);": "      0.16 * Math.sin(angle * 2 + lake.phase) +\n      0.11 * Math.sin(angle * 3 - lake.phase * 0.61) +\n      0.065 * Math.cos(angle * 5 + lake.phase * 1.37) +\n      0.035 * Math.sin(angle * 7 - lake.phase * 0.29);",
+    "  return Math.max(lake.radius * 0.68, ellipse * irregular);": "  return Math.max(lake.radius * 0.58, ellipse * irregular);",
+    "                elongation: 0.05 + addressed(`${key}/lake-elongation`) * 0.13,": "                elongation: 0.12 + addressed(`${key}/lake-elongation`) * 0.28,",
+}
+for old, new in replacements.items():
+    if old not in hydro:
+        raise RuntimeError(f"missing hydrology marker: {old[:72]}")
+    hydro = hydro.replace(old, new, 1)
+hydro_path.write_text(hydro)
+
+terrain_path = Path("src/terrain-refine.ts")
+terrain = terrain_path.read_text()
+old = """  const center = macroSampleAt(
+      sourceToLonLat(wrapSourceX(tile.minX + tile.size / 2), tile.minZ + tile.size / 2),
+    ),
+    rugged = center.reliefM >= 80 || center.mountainIntensity >= 0.06,
+    targetResolution = tile.size <= 128 ? 68 : tile.size <= 512 ? (rugged ? 52 : 40) : rugged ? 40 : 28,
+    resolution = Math.max(1, Math.min(targetResolution, Math.floor(tile.size / 2))),
+    step = tile.size / resolution,
+    grid: Vertex[][] = [];"""
+new = """  const center = macroSampleAt(
+      sourceToLonLat(wrapSourceX(tile.minX + tile.size / 2), tile.minZ + tile.size / 2),
+    ),
+    edgeSamples = [
+      center,
+      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX), tile.minZ)),
+      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX + tile.size), tile.minZ)),
+      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX), tile.minZ + tile.size)),
+      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX + tile.size), tile.minZ + tile.size)),
+    ],
+    coastal = edgeSamples.some((sample) => sample.land) && edgeSamples.some((sample) => !sample.land),
+    rugged = center.reliefM >= 80 || center.mountainIntensity >= 0.06,
+    targetResolution = coastal
+      ? tile.size <= 512
+        ? 72
+        : 64
+      : tile.size <= 128
+        ? 68
+        : tile.size <= 512
+          ? rugged
+            ? 52
+            : 40
+          : rugged
+            ? 40
+            : 28,
+    resolution = Math.max(1, Math.min(targetResolution, Math.floor(tile.size / 2))),
+    step = tile.size / resolution,
+    grid: Vertex[][] = [];"""
+if old not in terrain:
+    raise RuntimeError("terrain resolution block missing")
+terrain_path.write_text(terrain.replace(old, new, 1))
