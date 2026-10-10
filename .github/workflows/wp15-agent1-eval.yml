@@ -3,7 +3,7 @@ on:
   push:
     branches: [agent1/wp-s002-004-005-uv-final2]
 permissions:
-  contents: write
+  contents: read
 concurrency:
   group: wp15-agent1-eval
   cancel-in-progress: true
@@ -11,28 +11,7 @@ defaults:
   run:
     shell: bash
 jobs:
-  repair-final:
-    if: github.event.head_commit.message == 'WP-S002-004-005 activate final repair runner'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: agent1/wp-s002-004-005-uv-final2
-          fetch-depth: 0
-      - name: Apply final runtime repair
-        run: python tools/wp15_attempt3_patch.py
-      - name: Commit runtime repair and restore evaluator
-        run: |
-          rm .github/workflows/wp15-agent1-attempt3.yml tools/wp15_attempt3_patch.py
-          git checkout HEAD^ -- .github/workflows/wp15-agent1-eval.yml
-          git diff --check
-          git config user.name "AGENT #1"
-          git config user.email "163722426+sgoxel@users.noreply.github.com"
-          git add src/hydrology.ts src/terrain-refine.ts .github/workflows/wp15-agent1-attempt3.yml .github/workflows/wp15-agent1-eval.yml tools/wp15_attempt3_patch.py
-          git commit -m "WP-S002-004-005 band-limit relief and refine shorelines [agent1-wp15-attempt3]"
-          git push origin HEAD:agent1/wp-s002-004-005-uv-final2
   unit-build:
-    if: github.event.head_commit.message != 'WP-S002-004-005 activate final repair runner'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
