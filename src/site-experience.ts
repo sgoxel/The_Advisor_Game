@@ -148,7 +148,7 @@ function render() {
     flat = state.presentation === "flat";
   if (!flat || !Number.isFinite(denominator) || denominator > 1000) {
     for (const marker of markerNodes.values()) marker.hidden = true;
-    (document.getElementById("critical-site-access") as SVGSVGElement).replaceChildren();
+    document.querySelector<SVGSVGElement>("#critical-site-access")!.replaceChildren();
     lastVisibleCodes = [];
     return requestAnimationFrame(render);
   }
@@ -159,7 +159,7 @@ function render() {
   if (fingerprint !== lastFingerprint) {
     lastFingerprint = fingerprint;
     const visibleSet = new Set(visible.map((site) => site.code)),
-      accessLayer = document.getElementById("critical-site-access") as SVGSVGElement;
+      accessLayer = document.querySelector<SVGSVGElement>("#critical-site-access")!;
     accessLayer.replaceChildren();
     for (const marker of markerNodes.values()) marker.hidden = !visibleSet.has(marker.dataset.code!);
     for (const site of visible) {
