@@ -20,7 +20,7 @@ All S001 WPs are COMPLETED and REVIEWED (see docs/ROADMAP_ARCHIVE.md).
 
 Completed S002 WPs are listed in docs/ROADMAP_ARCHIVE.md; only open WPs stay below. A WP absent here and present there is COMPLETED.
 
-- WP-S002-004-005 — Natural terrain/hydrology/traversal authority: distributed freshwater, drainage-valid rivers/lakes, canonical walkability, surface-safe earthworks and bounded seam-safe generation
+- WP-S002-004-005 — Natural terrain/hydrology/traversal authority: distributed freshwater, drainage-valid rivers/lakes, canonical walkability, surface-safe earthworks and bounded seam-safe generation — INCOMPLETE (final evaluation failed)
 - WP-S002-004-007 — Political atlas authority/readability: full-continent partition, SEED-variable ≥30/90/270 registries, terrain-valid settlement distribution, country borders and bounded 1/1000 labels
 - WP-S002-004-008 — Shortest-legal-walk routing/travel UX: all-pair ≥60-minute proof, final-surface routing, bounded search/cache and truthful route preview
 - WP-S002-004-009 — Functional settlement/building UX: terrain-shaped non-grid layouts, service/home capacity, entrance-connected access, demand-loaded usable interiors and mobile-safe rendering
