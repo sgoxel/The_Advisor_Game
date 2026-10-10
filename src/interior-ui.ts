@@ -29,10 +29,17 @@ let lastExitedSignature = "";
 let reconstructed = false;
 let down: { x: number; y: number; moved: boolean } | undefined;
 
-const roleLabel = (role: BuildingRole) =>
+const roleLabel = (role: string) =>
   role.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+const HTML_ESCAPE: Readonly<Record<string, string>> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
 const escapeHtml = (value: string) =>
-  value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
+  value.replace(/[&<>"']/g, (char) => HTML_ESCAPE[char] ?? char);
 
 const style = document.createElement("style");
 style.textContent = `
@@ -117,8 +124,8 @@ function renderAccess() {
   access.querySelector<HTMLButtonElement>("#building-dismiss")!.onclick = () => { selected = undefined; access.hidden = true; };
 }
 
-const anchorGlyph: Record<string, string> = {
-  entrance: "↥", bed: "▰", latrine: "◫", hearth: "◉", table: "◇", counter: "▤", forge: "♨", anvil: "◆", stall: "▥", storage: "▣", workbench: "▦", desk: "▧", rack: "▥", hay: "≋",
+const anchorGlyph: Readonly<Record<string, string>> = {
+  entrance: "↥", stairs: "↟", bed: "▰", latrine: "◫", hearth: "◉", table: "◇", counter: "▤", forge: "♨", anvil: "◆", stall: "▥", storage: "▣", workbench: "▦", desk: "▧", rack: "▥", hay: "≋",
 };
 
 function renderInterior() {
@@ -146,7 +153,7 @@ function renderInterior() {
     node.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") invoke(); });
   });
   const uses = shell.querySelector<HTMLElement>("#interior-uses")!;
-  uses.innerHTML = `<h3>Use</h3>${anchors.filter((anchor) => anchor.kind !== "entrance").map((anchor) => `<button type="button" data-use="${escapeHtml(anchor.code)}">${anchorGlyph[anchor.kind] ?? "•"} ${escapeHtml(roleLabel(anchor.kind as BuildingRole))}</button>`).join("") || "<p>No usable anchor on this floor.</p>"}`;
+  uses.innerHTML = `<h3>Use</h3>${anchors.filter((anchor) => anchor.kind !== "entrance").map((anchor) => `<button type="button" data-use="${escapeHtml(anchor.code)}">${anchorGlyph[anchor.kind] ?? "•"} ${escapeHtml(roleLabel(anchor.kind))}</button>`).join("") || "<p>No usable anchor on this floor.</p>"}`;
   uses.querySelectorAll<HTMLButtonElement>("[data-use]").forEach((button) => button.onclick = () => useAnchor(button.dataset.use!));
   shell.querySelector<HTMLElement>("#interior-action")!.textContent = lastAction;
   const stats = cache.stats();
