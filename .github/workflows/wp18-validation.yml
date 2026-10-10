@@ -17,8 +17,88 @@ jobs:
       - name: Routing authority acceptance tests
         run: node --experimental-strip-types --test tests/routing.test.ts tests/routing-final-surface.test.ts
       - run: npm run build
+      - name: Discover deterministic current-registry evidence routes
+        run: |
+          mkdir -p test-results
+          node --experimental-strip-types --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { roads, villages } from './src/geography.ts';
+          import { enuToPosition, greatCircleDistance, lonLatToFlat, positionToEnu } from './src/planet.ts';
+          import { neighbouringVillages, routeBetweenVillages, clearVillageRouteCache } from './src/village-routes.ts';
+          import { cellAt } from './src/world.ts';
+
+          const sampleLine = (a, b, count = 11) => {
+            const origin = { ...a, elevation: 0 };
+            const delta = positionToEnu({ ...b, elevation: 0 }, origin);
+            return Array.from({ length: count }, (_, i) => {
+              const t = (i + 1) / (count + 1);
+              return enuToPosition({ east: delta.east * t, north: delta.north * t, up: 0 }, origin);
+            });
+          };
+          const finalCell = (p) => {
+            const flat = lonLatToFlat(p.lon, p.lat);
+            return cellAt(flat.x, flat.z);
+          };
+          const pairKey = (a, b) => a < b ? `${a}|${b}` : `${b}|${a}`;
+          const byId = new Map(villages.map(v => [v.id, v]));
+
+          clearVillageRouteCache();
+          const seen = new Set();
+          const mountainCandidates = [];
+          for (const a of villages) {
+            for (const { place: b, geodesicM } of neighbouringVillages(a.id)) {
+              const key = pairKey(a.id, b.id);
+              if (seen.has(key)) continue;
+              seen.add(key);
+              const samples = sampleLine(a.canonicalPosition, b.canonicalPosition);
+              const difficultSamples = samples.filter(p => /highland|volcanic/i.test(finalCell(p).biome)).length;
+              if (difficultSamples) mountainCandidates.push({ a, b, geodesicM, difficultSamples });
+            }
+          }
+          mountainCandidates.sort((x, y) => y.difficultSamples - x.difficultSamples || x.geodesicM - y.geodesicM || x.a.id.localeCompare(y.a.id));
+          let mountain;
+          for (const candidate of mountainCandidates.slice(0, 80)) {
+            const route = routeBetweenVillages(candidate.a.id, candidate.b.id);
+            if (!route.found || route.surfaceM.difficult <= 0) continue;
+            const score = route.surfaceM.difficult / Math.max(1, route.distanceM);
+            if (!mountain || score > mountain.score || (score === mountain.score && candidate.a.id < mountain.from))
+              mountain = { from: candidate.a.id, to: candidate.b.id, score, route };
+          }
+
+          clearVillageRouteCache();
+          const waterCandidates = [];
+          for (let i = 0; i < villages.length; i++) {
+            for (let j = i + 1; j < villages.length; j++) {
+              const a = villages[i], b = villages[j], distanceM = greatCircleDistance(a.canonicalPosition, b.canonicalPosition);
+              if (distanceM > 120000) continue;
+              const waterSamples = sampleLine(a.canonicalPosition, b.canonicalPosition, 13)
+                .filter(p => /^(ocean|lake|river)$/i.test(finalCell(p).biome)).length;
+              if (waterSamples) waterCandidates.push({ a, b, distanceM, waterSamples });
+            }
+          }
+          waterCandidates.sort((x, y) => y.waterSamples - x.waterSamples || x.distanceM - y.distanceM || x.a.id.localeCompare(y.a.id));
+          let water;
+          for (const candidate of waterCandidates.slice(0, 100)) {
+            const route = routeBetweenVillages(candidate.a.id, candidate.b.id);
+            if (!route.found) continue;
+            const score = candidate.waterSamples * 10 + route.detourFactor;
+            if (!water || score > water.score || (score === water.score && candidate.a.id < water.from))
+              water = { from: candidate.a.id, to: candidate.b.id, score, route, waterSamples: candidate.waterSamples };
+          }
+
+          const road = roads.find(r => byId.has(r.from) && byId.has(r.to));
+          if (!road || !mountain || !water) throw new Error(`Unable to discover route evidence: road=${Boolean(road)} mountain=${Boolean(mountain)} water=${Boolean(water)}`);
+          const result = {
+            road: { from: road.from, to: road.to },
+            mountain: { from: mountain.from, to: mountain.to, difficultM: mountain.route.surfaceM.difficult, distanceM: mountain.route.distanceM, fantasySeconds: mountain.route.fantasySeconds },
+            water: { from: water.from, to: water.to, waterSamples: water.waterSamples, detourFactor: water.route.detourFactor, distanceM: water.route.distanceM, fantasySeconds: water.route.fantasySeconds },
+          };
+          fs.writeFileSync('test-results/route-examples.json', JSON.stringify(result, null, 2) + '\n');
+          fs.appendFileSync(process.env.GITHUB_ENV, `WP18_ROAD_FROM=${result.road.from}\nWP18_ROAD_TO=${result.road.to}\nWP18_MOUNTAIN_FROM=${result.mountain.from}\nWP18_MOUNTAIN_TO=${result.mountain.to}\nWP18_WATER_FROM=${result.water.from}\nWP18_WATER_TO=${result.water.to}\n`);
+          console.log(JSON.stringify(result, null, 2));
+          NODE
       - run: npx playwright install --with-deps chromium
-      - name: Capture road mountain and water route evidence on WebGL2 and WebGPU
+      - name: Capture current-registry road mountain and water route evidence on WebGL2 and WebGPU
         run: |
           python -m pip install playwright==1.63.0
           npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
@@ -28,9 +108,13 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
-          for scenario in route-road route-mountain route-water; do
-            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp18-${scenario}-webgl2" --scenario "$scenario" --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 360
-            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp18-${scenario}-webgpu" --scenario "$scenario" --profile desktop,phone,phone-landscape --renderer webgpu --timeout 360
+          ROAD_STEPS="eval:window.advisorRoutes.select('$WP18_ROAD_FROM','$WP18_ROAD_TO');settle;shot:road"
+          MOUNTAIN_STEPS="eval:window.advisorRoutes.select('$WP18_MOUNTAIN_FROM','$WP18_MOUNTAIN_TO');settle;shot:mountain"
+          WATER_STEPS="eval:window.advisorRoutes.select('$WP18_WATER_FROM','$WP18_WATER_TO');settle;eval:new Promise(done=>{const t=Date.now(),f=()=>(h=>(!window.advisorRoutes.framing&&!h.active&&Math.abs(h.projectionTransition-h.desiredTransition)<0.002)||Date.now()-t>60000?done():setTimeout(f,250))(window.advisorWorld.state.handoff),_=f()});settle;shot:water"
+          for renderer in webgl2 webgpu; do
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp18-route-road-$renderer" --name route-road --profile desktop,phone,phone-landscape --renderer "$renderer" --timeout 360 --steps "$ROAD_STEPS"
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp18-route-mountain-$renderer" --name route-mountain --profile desktop,phone,phone-landscape --renderer "$renderer" --timeout 360 --steps "$MOUNTAIN_STEPS"
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp18-route-water-$renderer" --name route-water --profile desktop,phone,phone-landscape --renderer "$renderer" --timeout 360 --steps "$WATER_STEPS"
           done
       - uses: actions/upload-artifact@v4
         if: always()
