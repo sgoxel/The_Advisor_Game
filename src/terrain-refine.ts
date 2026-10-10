@@ -7,6 +7,7 @@ import {
   wrapSourceX,
 } from "./planet.ts";
 import {
+  drainageLakeRadiusAt,
   drainageRecipesNear,
   surfaceAt,
   type DrainagePoint,
@@ -310,26 +311,28 @@ function pushLake(
   lake: NonNullable<DrainageRecipe["lake"]>,
 ) {
   const x = unwrapNear(lake.x, tile.minX + tile.size / 2),
-    radius = lake.radius;
+    maxRadius = lake.radius * 1.45;
   if (
-    x + radius < tile.minX ||
-    x - radius > tile.minX + tile.size ||
-    lake.z + radius < tile.minZ ||
-    lake.z - radius > tile.minZ + tile.size
+    x + maxRadius < tile.minX ||
+    x - maxRadius > tile.minX + tile.size ||
+    lake.z + maxRadius < tile.minZ ||
+    lake.z - maxRadius > tile.minZ + tile.size
   )
     return;
   const y = Math.max(0.08, lake.level + 0.14),
     center: Vertex = { point: [x, y, lake.z], tint: LAKE_WATER },
-    sides = 40;
+    sides = 64;
   for (let i = 0; i < sides; i++) {
     const a = (i / sides) * Math.PI * 2,
       b = ((i + 1) / sides) * Math.PI * 2,
+      radiusA = drainageLakeRadiusAt(lake, a),
+      radiusB = drainageLakeRadiusAt(lake, b),
       va: Vertex = {
-        point: [x + Math.cos(a) * radius, y, lake.z + Math.sin(a) * radius],
+        point: [x + Math.cos(a) * radiusA, y, lake.z + Math.sin(a) * radiusA],
         tint: LAKE_WATER,
       },
       vb: Vertex = {
-        point: [x + Math.cos(b) * radius, y, lake.z + Math.sin(b) * radius],
+        point: [x + Math.cos(b) * radiusB, y, lake.z + Math.sin(b) * radiusB],
         tint: LAKE_WATER,
       };
     pushTriangle(positions, normals, colors, indices, center, va, vb);

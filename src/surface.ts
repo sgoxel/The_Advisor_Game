@@ -8,6 +8,7 @@ import {
 } from "./hydrology.ts";
 
 export {
+  drainageLakeRadiusAt,
   drainageRecipeAt,
   drainageRecipesNear,
   freshwaterDistanceAt,
@@ -15,6 +16,7 @@ export {
   naturalElevationAt,
 } from "./hydrology.ts";
 export type {
+  DrainageLake,
   DrainagePoint,
   DrainageRecipe,
   SurfaceSample,
