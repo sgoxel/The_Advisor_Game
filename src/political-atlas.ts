@@ -1,16 +1,15 @@
 import {
-  cities,
   countries,
   countryAtPosition,
   nearbyPlaces,
   politicalBorderSegments,
   politicalRegistryCountsForSeed,
-  villages,
   type Place,
 } from "./geography.ts";
 import { WORLD_SEED } from "./config.ts";
 import { placeLabels, type Rect } from "./navigation.ts";
 import { politicalOverlayOpacity } from "./political-presentation.ts";
+import { RENDER_PLANET_RADIUS, sourceToLonLat } from "./planet.ts";
 import { LocalRenderFrame } from "./render-frame.ts";
 import { heightAt } from "./world.ts";
 
@@ -18,6 +17,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const $svg = (id: string) => document.getElementById(id) as unknown as SVGSVGElement;
 const ATLAS_UPDATE_INTERVAL_MS = 50;
+const SIN_60 = Math.sin(Math.PI / 3);
 
 type AtlasState = {
   presentation: "flat" | "globe" | "transition";
@@ -35,9 +35,9 @@ type LabelCandidate = {
   z: number;
   priority: number;
 };
+type ScreenPoint = { x: number; y: number };
 
 const counts = politicalRegistryCountsForSeed(WORLD_SEED);
-const countryByCode = new Map(countries.map((country) => [country.code, country]));
 const labelNodes = new Map<string, HTMLElement>();
 const labelSizes = new Map<string, { width: number; height: number }>();
 let borderKey = "";
@@ -57,28 +57,69 @@ function projectionTransition(state: AtlasState) {
   return state.presentation === "globe" ? 1 : 0;
 }
 
+function screenFromRelative(state: AtlasState, dx: number, dy: number, dz: number): ScreenPoint {
+  const sin = Math.sin(state.view.yaw),
+    cos = Math.cos(state.view.yaw),
+    right = dx * cos - dz * sin,
+    up = -dx * SIN_60 * sin + dy * 0.5 - dz * SIN_60 * cos,
+    halfHeight = state.view.halfHeight,
+    halfWidth = halfHeight * state.view.aspect;
+  return {
+    x: innerWidth / 2 + (right / halfWidth) * (innerWidth / 2),
+    y: innerHeight / 2 - (up / halfHeight) * (innerHeight / 2),
+  };
+}
+
+/**
+ * Match the renderer's own label handoff: project each canonical point in the
+ * local ENU frame and on the focused sphere, then blend the two screen positions
+ * by the same projectionTransition. Political truth never depends on the view.
+ */
 function project(
   frame: LocalRenderFrame,
   state: AtlasState,
   x: number,
   z: number,
   elevation = heightAt(x, z) + 2,
-) {
+): ScreenPoint | undefined {
   const focusHeight = Math.max(0, heightAt(state.view.x, state.view.z)),
     focus = frame.sourceToRender(state.view.x, state.view.z, focusHeight),
     point = frame.sourceToRender(x, z, Math.max(0, elevation)),
-    dx = point.x - focus.x,
-    dy = point.y - focus.y,
-    dz = point.z - focus.z,
-    sin = Math.sin(state.view.yaw),
-    cos = Math.cos(state.view.yaw),
-    right = dx * cos - dz * sin,
-    up = -dx * 0.8660254037844386 * sin + dy * 0.5 - dz * 0.8660254037844386 * cos,
-    halfHeight = state.view.halfHeight,
-    halfWidth = halfHeight * state.view.aspect;
+    flat = screenFromRelative(
+      state,
+      point.x - focus.x,
+      point.y - focus.y,
+      point.z - focus.z,
+    ),
+    transition = projectionTransition(state);
+  if (transition <= 0.001) return flat;
+
+  const canonical = sourceToLonLat(x, z),
+    centre = state.navigation.focus,
+    deltaLon = canonical.lon - centre.lon,
+    cosLat = Math.cos(canonical.lat),
+    sinLat = Math.sin(canonical.lat),
+    cosCentre = Math.cos(centre.lat),
+    sinCentre = Math.sin(centre.lat),
+    gx = cosLat * Math.sin(deltaLon),
+    gy = sinCentre * sinLat + cosCentre * cosLat * Math.cos(deltaLon),
+    gz = -cosCentre * sinLat + sinCentre * cosLat * Math.cos(deltaLon),
+    yawSin = Math.sin(state.view.yaw),
+    yawCos = Math.cos(state.view.yaw),
+    frontness = gx * yawSin * 0.5 + gy * SIN_60 + gz * yawCos * 0.5;
+
+  if (frontness < 0.08 && transition > 0.55) return undefined;
+  if (frontness <= 0) return flat;
+
+  const globe = screenFromRelative(
+    state,
+    gx * RENDER_PLANET_RADIUS,
+    (gy - 1) * RENDER_PLANET_RADIUS,
+    gz * RENDER_PLANET_RADIUS,
+  );
   return {
-    x: innerWidth / 2 + (right / halfWidth) * (innerWidth / 2),
-    y: innerHeight / 2 - (up / halfHeight) * (innerHeight / 2),
+    x: flat.x + (globe.x - flat.x) * transition,
+    y: flat.y + (globe.y - flat.y) * transition,
   };
 }
 
@@ -114,8 +155,13 @@ function obstacles(): Rect[] {
 }
 
 function updateContext(state: AtlasState, places: Place[]) {
-  const owner = countryAtPosition(state.navigation.focus),
-    context = $("map-context");
+  const context = $("map-context");
+  // Keep the established compact handoff/globe panel envelope. Local political
+  // context returns automatically when the view is fully flat again.
+  context.hidden = state.presentation !== "flat";
+  if (context.hidden) return;
+
+  const owner = countryAtPosition(state.navigation.focus);
   if (!owner) {
     context.textContent = "Open water · no political owner";
     return;
@@ -167,16 +213,13 @@ function updateBorders(state: AtlasState, frame: LocalRenderFrame, scale: number
       innerWidth < 700 ? 28 : 38,
       innerWidth < 700 ? 22 : 28,
     );
-    // A coarse marching window can legitimately contain no boundary. During a
-    // tiny zoom/handoff change, however, retaining the previous canonical world
-    // segments is safer than flashing the whole political layer off; segments
-    // that are no longer near the view are culled below in screen space.
     if (nextSegments.length || !borderSegments.length) borderSegments = nextSegments;
   }
   const commands: string[] = [];
   for (const segment of borderSegments) {
     const a = project(frame, state, segment.ax, segment.az, heightAt(segment.ax, segment.az) + 2.2),
       b = project(frame, state, segment.bx, segment.bz, heightAt(segment.bx, segment.bz) + 2.2);
+    if (!a || !b) continue;
     if (
       (a.x < -30 && b.x < -30) ||
       (a.x > innerWidth + 30 && b.x > innerWidth + 30) ||
@@ -246,6 +289,7 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
   ]) {
     const screen = project(frame, state, candidate.x, candidate.z),
       margin = candidate.kind === "country" ? 10 : 18;
+    if (!screen) continue;
     if (
       screen.x < margin ||
       screen.x > innerWidth - margin ||
