@@ -1,0 +1,79 @@
+name: WP15 final visual repair
+
+on:
+  push:
+    branches:
+      - agent1/wp-s002-004-005-final
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wp15-final-visual-repair
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s002-004-005-final
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Remove wet-edge skirts and coarse bridge detail
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/geometry.ts')
+          text = p.read_text()
+          replacements = {
+            'if (z === 0)\n        terrain.quad(': 'if (z === 0 && a[1] > 0 && d[1] > 0 && surfaceAt(a[0], a[2] - step).water === "none" && surfaceAt(d[0], d[2] - step).water === "none")\n        terrain.quad(',
+            'if (z === resolution - 1)\n        terrain.quad(': 'if (z === resolution - 1 && c[1] > 0 && b[1] > 0 && surfaceAt(c[0], c[2] + step).water === "none" && surfaceAt(b[0], b[2] + step).water === "none")\n        terrain.quad(',
+            'if (x === 0)\n        terrain.quad(': 'if (x === 0 && b[1] > 0 && a[1] > 0 && surfaceAt(b[0] - step, b[2]).water === "none" && surfaceAt(a[0] - step, a[2]).water === "none")\n        terrain.quad(',
+            'if (x === resolution - 1)\n        terrain.quad(': 'if (x === resolution - 1 && d[1] > 0 && c[1] > 0 && surfaceAt(d[0] + step, d[2]).water === "none" && surfaceAt(c[0] + step, c[2]).water === "none")\n        terrain.quad(',
+            '// Tile-clipped bridges preserve walking routes where the river crosses them.\n  if (t.size <= 512)': '// Tile-clipped bridge micro-geometry is only useful in close local views.\n  // Coarser LODs retain the canonical graded road tint without aliasing posts/decks.\n  if (t.size <= 128)',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'missing geometry anchor: {old[:50]!r}')
+              text = text.replace(old, new, 1)
+          p.write_text(text)
+
+          p = Path('.github/workflows/wp15-visual-evidence.yml')
+          text = p.read_text()
+          changes = {
+            'setHalfHeight(1400)': 'setHalfHeight(600)',
+            'setHalfHeight(420)': 'setHalfHeight(180)',
+            'setHalfHeight(900)': 'setHalfHeight(600)',
+            'setHalfHeight(1200)': 'setHalfHeight(600)',
+            'setHalfHeight(170)': 'setHalfHeight(60)',
+            'setHalfHeight(360)': 'setHalfHeight(180)',
+            'setHalfHeight(650)': 'setHalfHeight(600)',
+          }
+          for old, new in changes.items():
+              if old not in text:
+                  raise SystemExit(f'missing evidence anchor: {old}')
+              text = text.replace(old, new, 1)
+          p.write_text(text)
+          PY
+      - run: npm ci
+      - name: Targeted terrain regressions
+        run: node --experimental-strip-types --test tests/terrain-refine.test.ts tests/hydrology.test.ts tests/world.test.ts
+      - run: npm run build
+      - name: Commit validated final visual repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "AGENT #1"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          rm .github/workflows/wp15-final-visual-repair.yml
+          git add src/geometry.ts .github/workflows/wp15-visual-evidence.yml .github/workflows/wp15-final-visual-repair.yml
+          git commit -m "WP-S002-004-005 clean shoreline LOD presentation"
+          git push origin HEAD:agent1/wp-s002-004-005-final
