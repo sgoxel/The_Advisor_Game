@@ -23,6 +23,10 @@ const CORRIDOR_SAMPLES = 14;
 const GATE_BEARINGS = 24;
 const GATE_STEP_M = 5_000;
 const GATE_MAX_M = 180_000;
+const GRID_MAX_ALONG = 48;
+const GRID_MAX_LATERAL = 28;
+const GRID_MIN_STEP_M = 8_000;
+const GRID_MAX_STEP_M = 18_000;
 
 export type SettlementWaterContext = "freshwater-lake" | "coast" | "dryland-exception" | "inland";
 
@@ -228,8 +232,10 @@ function buildSitePlan(place: Place): PoliticalSettlementSitePlan | undefined {
       entranceBearingRad: entrance.bearing,
       entrance: entrance.candidate,
       maximumEnvelopeReliefSpreadM: reliefSpread,
-      // Surface preparation is deliberately bounded and cannot imply a cavern/tunnel.
-      maximumPreparedCutFillM: Math.min(place.kind === "city" ? 8 : 6, Math.max(1, reliefSpread * 0.35)),
+      maximumPreparedCutFillM: Math.min(
+        place.kind === "city" ? 8 : 6,
+        Math.max(1, reliefSpread * 0.35),
+      ),
       ...water,
     };
   }
@@ -306,6 +312,151 @@ function layeredCorridor(
   return best?.path;
 }
 
+/**
+ * Last-resort political access proof. It searches a deterministic, finite strip
+ * around the direct geodesic rather than guessing a handful of waypoints. Every
+ * node and every edge still uses the same dry-land, relief and country-ownership
+ * predicates, so the search can discover a winding legal corridor without ever
+ * weakening acceptance or becoming a second road authority.
+ */
+function coarseGridCorridor(
+  from: Place,
+  to: Place,
+  country: Country,
+  distanceM: number,
+  phase: number,
+): readonly CanonicalPosition[] | undefined {
+  const directBearing = initialBearing(from.canonicalPosition, to.canonicalPosition),
+    stepM = Math.min(
+      GRID_MAX_STEP_M,
+      Math.max(GRID_MIN_STEP_M, distanceM / GRID_MAX_ALONG),
+    ),
+    alongSteps = Math.min(GRID_MAX_ALONG, Math.max(2, Math.ceil(distanceM / stepM))),
+    lateralSpanM = Math.min(240_000, Math.max(72_000, distanceM * 0.8)),
+    lateralSteps = Math.min(GRID_MAX_LATERAL, Math.max(2, Math.ceil(lateralSpanM / stepM))),
+    width = lateralSteps * 2 + 1,
+    nodeCount = (alongSteps + 1) * width,
+    centreRow = lateralSteps,
+    startIndex = centreRow,
+    goalIndex = alongSteps * width + centreRow,
+    points = new Array<CanonicalPosition | undefined>(nodeCount),
+    legal = new Uint8Array(nodeCount),
+    distance = new Float64Array(nodeCount),
+    parent = new Int32Array(nodeCount),
+    visited = new Uint8Array(nodeCount);
+  distance.fill(Infinity);
+  parent.fill(-1);
+
+  const pointAt = (along: number, row: number) => {
+    const index = along * width + row,
+      existing = points[index];
+    if (existing) return existing;
+    let point: CanonicalPosition;
+    if (along === 0 && row === centreRow) point = from.canonicalPosition;
+    else if (along === alongSteps && row === centreRow) point = to.canonicalPosition;
+    else {
+      const centre = interpolate(
+          from.canonicalPosition,
+          to.canonicalPosition,
+          along / alongSteps,
+        ),
+        offsetM = (row - centreRow) * stepM,
+        side = offsetM < 0 ? -1 : 1,
+        jitter = (addressed(`${country.code}/GRID/${from.code}/${to.code}/${along}/${row}`) - 0.5) *
+          Math.min(stepM * 0.16, 1_800);
+      point = destination(
+        centre,
+        directBearing + side * Math.PI * 0.5 + phase * 0.015,
+        Math.max(0, Math.abs(offsetM) + jitter),
+      );
+    }
+    points[index] = point;
+    legal[index] = sameDryOwner(point, country, 220) ? 1 : 0;
+    return point;
+  };
+
+  for (let along = 0; along <= alongSteps; along++)
+    for (let row = 0; row < width; row++) pointAt(along, row);
+  legal[startIndex] = 1;
+  legal[goalIndex] = 1;
+  distance[startIndex] = 0;
+
+  const neighbourOffsets = [
+    [1, 0],
+    [1, -1],
+    [1, 1],
+    [0, -1],
+    [0, 1],
+    [-1, 0],
+    [-1, -1],
+    [-1, 1],
+  ] as const;
+
+  for (let expansion = 0; expansion < nodeCount; expansion++) {
+    let current = -1,
+      bestScore = Infinity;
+    for (let index = 0; index < nodeCount; index++) {
+      if (visited[index] || !legal[index] || !Number.isFinite(distance[index])) continue;
+      const along = Math.floor(index / width),
+        row = index % width,
+        point = points[index]!,
+        heuristic = greatCircleDistance(point, to.canonicalPosition),
+        centreBias = Math.abs(row - centreRow) * stepM * 0.0001,
+        score = distance[index] + heuristic + centreBias;
+      if (score < bestScore || (score === bestScore && index < current)) {
+        bestScore = score;
+        current = index;
+      }
+    }
+    if (current < 0) break;
+    if (current === goalIndex) break;
+    visited[current] = 1;
+    const currentAlong = Math.floor(current / width),
+      currentRow = current % width,
+      currentPoint = points[current]!;
+    for (const [da, dr] of neighbourOffsets) {
+      const along = currentAlong + da,
+        row = currentRow + dr;
+      if (along < 0 || along > alongSteps || row < 0 || row >= width) continue;
+      const next = along * width + row;
+      if (!legal[next] || visited[next]) continue;
+      const nextPoint = points[next]!;
+      if (!segmentLegal(currentPoint, nextPoint, country, 8)) continue;
+      const candidateDistance = distance[current] + greatCircleDistance(currentPoint, nextPoint);
+      if (
+        candidateDistance < distance[next] ||
+        (candidateDistance === distance[next] && current < parent[next])
+      ) {
+        distance[next] = candidateDistance;
+        parent[next] = current;
+      }
+    }
+  }
+
+  if (!Number.isFinite(distance[goalIndex])) return undefined;
+  const reversed: CanonicalPosition[] = [];
+  for (let cursor = goalIndex; cursor >= 0; cursor = parent[cursor]) {
+    reversed.push(points[cursor]!);
+    if (cursor === startIndex) break;
+  }
+  if (reversed[reversed.length - 1] !== from.canonicalPosition) return undefined;
+  const path = reversed.reverse();
+
+  const compressed: CanonicalPosition[] = [path[0]];
+  let anchor = 0;
+  while (anchor < path.length - 1) {
+    let next = path.length - 1;
+    while (
+      next > anchor + 1 &&
+      !segmentLegal(path[anchor], path[next], country, Math.max(8, (next - anchor) * 4))
+    )
+      next--;
+    compressed.push(path[next]);
+    anchor = next;
+  }
+  return compressed;
+}
+
 function corridor(from: Place, to: Place, country: Country): readonly CanonicalPosition[] | undefined {
   if (segmentLegal(from.canonicalPosition, to.canonicalPosition, country))
     return [from.canonicalPosition, to.canonicalPosition];
@@ -329,8 +480,6 @@ function corridor(from: Place, to: Place, country: Country): readonly CanonicalP
         return [from.canonicalPosition, waypoint, to.canonicalPosition];
     }
 
-  // A country's third city is a canonical, SEED-owned junction and can provide a
-  // bounded two-leg access reservation without inventing a second road authority.
   for (const via of cities
     .filter(
       (candidate) =>
@@ -346,10 +495,10 @@ function corridor(from: Place, to: Place, country: Country): readonly CanonicalP
     )
       return [from.canonicalPosition, via.canonicalPosition, to.canonicalPosition];
 
-  // Final bounded fallback: four deterministic cross-sections around the direct
-  // geodesic. Dynamic programming only joins adjacent layers, so work is finite;
-  // every accepted segment still passes the same dry-land/same-country authority.
-  return layeredCorridor(from, to, country, distanceM, phase);
+  return (
+    layeredCorridor(from, to, country, distanceM, phase) ??
+    coarseGridCorridor(from, to, country, distanceM, phase)
+  );
 }
 
 function link(from: Place, to: Place, country: Country): PoliticalAccessLink {
@@ -444,10 +593,6 @@ export const politicalSettlementAccessSummary = {
   ).length,
 } as const;
 
-/**
- * A compact immutable debug surface for tests/atlas inspection. It is derived only
- * from canonical SEED geography and never changes political ownership or routes.
- */
 export function politicalSettlementAccessFingerprint() {
   return [
     ...politicalSettlementSitePlans.map(
@@ -461,7 +606,8 @@ export function politicalSettlementAccessFingerprint() {
           .join(";")}`,
     ),
     ...politicalBorderGateways.map(
-      (candidate) => `${candidate.id}:${candidate.inside.lon.toFixed(6)},${candidate.inside.lat.toFixed(6)}`,
+      (candidate) =>
+        `${candidate.id}:${candidate.inside.lon.toFixed(6)},${candidate.inside.lat.toFixed(6)}`,
     ),
   ].join("|");
 }
