@@ -129,19 +129,21 @@ export function naturalElevationAt(x: number, z: number): number {
   const noise = terrainNoise(sx, z),
     broad = sphericalNoise(sx, z, 3),
     mountainWeight = smooth01(macro.mountainIntensity / 0.36),
-    ridgePhase = addressed(`RIDGE/${macro.continentId}`) * Math.PI * 2,
-    secondaryPhase = addressed(`RIDGE-SECONDARY/${macro.continentId}`) * Math.PI * 2,
-    tertiaryPhase = addressed(`RIDGE-TERTIARY/${macro.continentId}`) * Math.PI * 2,
-    // Three differently oriented smooth waves interfere into irregular crags.
-    // Unlike the old abs(sin()) ridge mask, this has no repeated narrow stripe crest.
-    ridgeTexture =
-      Math.sin(position.lon * 317 + position.lat * 211 + ridgePhase) * 0.44 +
-      Math.sin(position.lon * 197 - position.lat * 389 + secondaryPhase) * 0.34 +
-      Math.cos(position.lon * 461 + position.lat * 137 + tertiaryPhase) * 0.22,
-    ridgeDetail = ridgeTexture * Math.min(176, macro.reliefM * 0.38) * mountainWeight,
+    // Cross-warped spherical fields fork and bend ridges without introducing a
+    // source-grid axis, repeated stripe frequency, camera input or mutable RNG.
+    warpX = (sphericalNoise(sx, z, 13 + macro.continentId) - 0.5) * 480,
+    warpZ = (sphericalNoise(sx, z, 19 + macro.continentId) - 0.5) * 420,
+    ridgeA = sphericalNoise(sx + warpX, z + warpZ, 181 + macro.continentId * 7),
+    ridgeB = sphericalNoise(sx - warpZ * 0.57, z + warpX * 0.41, 263 + macro.continentId * 11),
+    ridgeC = sphericalNoise(sx + warpZ * 0.29, z - warpX * 0.69, 397 + macro.continentId * 13),
+    ridgeField = ridgeA * 0.5 + ridgeB * 0.32 + ridgeC * 0.18,
+    ridge = smooth01((ridgeField - 0.32) / 0.68),
+    ridgeDetail = (ridge - 0.32) * Math.min(132, macro.reliefM * 0.34) * mountainWeight,
     base = macro.domain === "Island" ? 3.5 + noise * 13 : 3.5 + broad * 8 + noise * 4.5,
-    macroRelief = macro.reliefM * (0.8 + 0.2 * noise) + ridgeDetail,
-    cap = macro.domain === "Island" ? 180 : 620,
+    macroRelief = macro.reliefM * (0.72 + 0.22 * noise) + ridgeDetail,
+    // Preserve materially tall systems while avoiding a single 600 m wall filling
+    // a Province view. Height remains canonical and shared by render/traversal.
+    cap = macro.domain === "Island" ? 180 : 470,
     terrain = Math.min(cap, Math.max(1.2, base + macroRelief)),
     coastSource = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS;
   return lerp(-2.8, terrain, smooth01((coastSource + 2) / 12));
@@ -516,7 +518,7 @@ export function surfaceAt(x: number, z: number): SurfaceSample {
         ? "blocked-water"
         : cliff
           ? "blocked-cliff"
-          : slope >= 0.42
+          : slope >= 0.28 || core.macro.reliefM >= 50 || core.macro.mountainIntensity >= 0.04
             ? "difficult"
             : "walkable";
   return {

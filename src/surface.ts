@@ -99,17 +99,18 @@ export function surfaceAt(x: number, z: number): SurfaceSample {
         : hydrologyElevationAt(x, z),
     slope = graded ? Math.min(natural.slope, 0.2) : natural.slope,
     cliff = natural.water === "none" && !graded && natural.cliff,
-    // A 25% natural grade is already materially difficult on foot and matches the
-    // route planner's difficult-slope authority. Local road/pad earthworks remain
-    // walkable because their composed grade is capped below this threshold.
+    // Natural difficult/highland truth survives composition. Only a real bounded
+    // road/pad grade may deliberately turn difficult natural ground into walkable ground.
     traversal: TraversalKind =
       natural.water !== "none"
         ? "blocked-water"
         : cliff
           ? "blocked-cliff"
-          : slope >= 0.25
-            ? "difficult"
-            : "walkable";
+          : graded
+            ? "walkable"
+            : natural.traversal === "difficult"
+              ? "difficult"
+              : "walkable";
   return {
     ...natural,
     elevation,

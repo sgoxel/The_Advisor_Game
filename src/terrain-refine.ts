@@ -142,7 +142,7 @@ function pushTriangle(
     // Presentation-only flat relief shading. Flat surfaces keep their exact
     // palette regardless of triangle winding; real slopes/cliffs gain readable form.
     light = unitX * -0.38 + unitY * 0.86 + unitZ * -0.34,
-    shade = Math.abs(unitY) > 0.995 ? 1 : Math.max(0.72, Math.min(1.08, 0.79 + light * 0.28)),
+    shade = Math.abs(unitY) > 0.995 ? 1 : Math.max(0.9, Math.min(1.045, 0.965 + light * 0.085)),
     start = positions.length / 3;
   for (const vertex of [a, b, c]) {
     positions.push(...vertex.point);
@@ -285,7 +285,7 @@ function pushWaterDisc(
     return;
   const y = Math.max(0.08, point.bed + 0.18),
     center: Vertex = { point: [x, y, point.z], tint },
-    sides = 16;
+    sides = 24;
   for (let i = 0; i < sides; i++) {
     const a = (i / sides) * Math.PI * 2,
       b = ((i + 1) / sides) * Math.PI * 2,
@@ -360,7 +360,11 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
   // Spend refinement only where the player can see the silhouette. Close tiles
   // receive enough samples to remove obvious river/cliff stair steps while wider
   // Province tiles stay bounded for phone and renderer parity.
-  const targetResolution = tile.size <= 128 ? 56 : tile.size <= 512 ? 40 : 28,
+  const center = macroSampleAt(
+      sourceToLonLat(wrapSourceX(tile.minX + tile.size / 2), tile.minZ + tile.size / 2),
+    ),
+    rugged = center.reliefM >= 80 || center.mountainIntensity >= 0.06,
+    targetResolution = tile.size <= 128 ? 68 : tile.size <= 512 ? (rugged ? 52 : 40) : rugged ? 40 : 28,
     resolution = Math.max(1, Math.min(targetResolution, Math.floor(tile.size / 2))),
     step = tile.size / resolution,
     grid: Vertex[][] = [];
