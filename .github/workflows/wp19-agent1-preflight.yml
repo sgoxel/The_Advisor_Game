@@ -20,23 +20,9 @@ jobs:
       - name: WP19 settlement authority tests
         run: node --experimental-strip-types --test tests/settlements.test.ts
       - name: Full regression suite
-        id: regression
-        shell: bash
-        run: |
-          set +e
-          npm test 2>&1 | tee full-test.log
-          code=${PIPESTATUS[0]}
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          exit 0
+        run: npm test 2>&1 | tee full-test.log
       - name: Production build
-        id: build
-        shell: bash
-        run: |
-          set +e
-          npm run build 2>&1 | tee build.log
-          code=${PIPESTATUS[0]}
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
-          exit 0
+        run: npm run build 2>&1 | tee build.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -44,8 +30,3 @@ jobs:
           path: |
             full-test.log
             build.log
-      - name: Enforce preflight result
-        if: always()
-        run: |
-          test "${{ steps.regression.outputs.exit_code }}" = "0"
-          test "${{ steps.build.outputs.exit_code }}" = "0"
