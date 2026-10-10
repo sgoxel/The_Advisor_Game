@@ -107,16 +107,11 @@ function checkLayout(place: Place, layout: SettlementLayout): void {
       assert.ok(!overlaps(polys[i], polys[j]), `${place.id}: ${buildings[i].code} overlaps ${buildings[j].code}`);
     for (const street of streets)
       for (let s = 0; s + 1 < street.points.length; s++) {
-        // Cheap reject: the footprint lies within half its diagonal of its centre.
         const reach = Math.hypot(buildings[i].width, buildings[i].depth) / 2 + street.width;
         if (distPointSeg({ x: buildings[i].x, z: buildings[i].z }, street.points[s], street.points[s + 1]) > reach) continue;
         const d = polySegDistance(polys[i], street.points[s], street.points[s + 1]);
-        assert.ok(
-          d >= street.width / 2,
-          `${place.id}: ${buildings[i].code} is ${d.toFixed(2)} from ${street.code}`,
-        );
+        assert.ok(d >= street.width / 2, `${place.id}: ${buildings[i].code} is ${d.toFixed(2)} from ${street.code}`);
       }
-    // Room minimums and the 1.3 walls/circulation rule.
     const roomArea = buildings[i].rooms.reduce((sum, r) => sum + r.areaM2, 0);
     assert.ok(
       buildings[i].width * buildings[i].depth >= roomArea * 1.3 - 1e-9,
@@ -127,16 +122,15 @@ function checkLayout(place: Place, layout: SettlementLayout): void {
       const names = buildings[i].rooms.map((r) => r.name);
       for (const required of ["bedroom", "latrine", "living room"])
         assert.ok(names.includes(required), `${place.id}: ${buildings[i].code} lacks ${required}`);
+      assert.equal(buildings[i].capacity, 1, `${place.id}: ${buildings[i].code} exposes shared home ownership capacity`);
     }
   }
 
-  // Required roles present.
   const roles = new Set(buildings.map((b) => b.role));
   for (const role of ["inn", "market", "blacksmith", "farmstead", "barn", "butcher", "guard-office"] as const)
     assert.ok(roles.has(role), `${place.id}: no ${role}`);
   if (city) assert.ok(roles.has("keep"), `${place.id}: no keep`);
 
-  // Gates and guard posts.
   assert.ok(gates.length >= 1 && gates.length <= 2, `${place.id}: ${gates.length} gates`);
   for (const gate of gates) {
     assert.ok(gate.guardPosts.length >= 1 && gate.guardPosts.length <= 2, `${place.id}: ${gate.code} posts`);
@@ -144,14 +138,22 @@ function checkLayout(place: Place, layout: SettlementLayout): void {
       assert.ok(insidePolygon({ x: post.x, z: post.z }, border.points), `${place.id}: ${post.code} outside border`);
   }
 
-  // Residents: professions match services, homes have room.
+  // One canonical owned home-building per resident. The lord alone owns the keep; every other
+  // resident owns a distinct ordinary home, even when that structure has spare family/guest space.
   const byCode = new Map(buildings.map((b) => [b.code, b]));
-  const load = new Map<string, number>();
+  const ownedHomes = new Set<string>();
   let lords = 0;
   for (const r of residents) {
     const home = byCode.get(r.home);
     assert.ok(home, `${place.id}: ${r.code} home missing`);
-    load.set(r.home, (load.get(r.home) ?? 0) + 1);
+    assert.ok(!ownedHomes.has(r.home), `${place.id}: ${r.home} is owned by more than one resident`);
+    ownedHomes.add(r.home);
+    if (r.profession === "lord") {
+      lords++;
+      assert.equal(home.role, "keep", `${place.id}: lord does not own the keep`);
+    } else {
+      assert.equal(home.role, "home", `${place.id}: ${r.code} owns ${home.role} instead of a home`);
+    }
     if (r.work) {
       const work = byCode.get(r.work);
       assert.ok(work, `${place.id}: ${r.code} work missing`);
@@ -166,40 +168,24 @@ function checkLayout(place: Place, layout: SettlementLayout): void {
       } as Record<string, string>;
       assert.equal(work.role, expected[r.profession], `${place.id}: ${r.code} profession/work mismatch`);
     }
-    if (r.profession === "lord") lords++;
   }
-  for (const [code, count] of load) assert.ok(count <= byCode.get(code)!.capacity, `${place.id}: ${code} overfull`);
-  const homeCapacity = buildings.filter((b) => b.role === "home").reduce((sum, b) => sum + b.capacity, 0);
-  assert.ok(homeCapacity >= residents.length - lords, `${place.id}: homes too small for residents`);
-  // Population is planned with the homes: every required worker (one per service building, one
-  // guard per guard post) plus at least one non-worker household, never more residents than beds.
+  assert.equal(ownedHomes.size, residents.length, `${place.id}: resident ownership codes are not one-to-one`);
+  const homeBuildings = buildings.filter((b) => b.role === "home");
+  assert.ok(homeBuildings.length >= residents.length - lords, `${place.id}: not enough distinct homes for residents`);
+
   const serviceCount = buildings.filter((b) =>
     ["inn", "market", "blacksmith", "butcher", "farmstead", "keep"].includes(b.role),
   ).length;
   const postCount = gates.reduce((sum, g) => sum + g.guardPosts.length, 0);
   const requiredWorkers = serviceCount + postCount;
   assert.equal(residents.filter((r) => r.work).length, requiredWorkers, `${place.id}: worker count`);
-  assert.ok(
-    residents.length >= requiredWorkers + 1,
-    `${place.id}: ${residents.length} residents < ${requiredWorkers} workers + 1`,
-  );
-  assert.ok(
-    homeCapacity >= residents.length - lords,
-    `${place.id}: home capacity ${homeCapacity} < ${residents.length} residents`,
-  );
-  assert.ok(
-    residents.length <= (city ? 980 : 40),
-    `${place.id}: ${residents.length} residents exceed the seeded range`,
-  );
+  assert.ok(residents.length >= requiredWorkers + 1, `${place.id}: ${residents.length} residents < ${requiredWorkers} workers + 1`);
+  assert.ok(residents.length <= (city ? 980 : 40), `${place.id}: ${residents.length} residents exceed the seeded range`);
   for (const b of buildings) {
     if (!["inn", "market", "blacksmith", "butcher", "farmstead", "guard-office", "keep"].includes(b.role)) continue;
-    assert.ok(
-      residents.some((r) => r.work === b.code),
-      `${place.id}: ${b.code} (${b.role}) has no worker`,
-    );
+    assert.ok(residents.some((r) => r.work === b.code), `${place.id}: ${b.code} (${b.role}) has no worker`);
   }
 
-  // Codes are unique.
   for (const list of [
     buildings.map((b) => b.code),
     streets.map((s) => s.code),
@@ -236,7 +222,6 @@ test("village layouts use many non-repeating angles and off-lattice positions", 
   const buildings = layoutOf(busiest).buildings;
   const angles = new Set(buildings.map((b) => b.angle.toFixed(2)));
   assert.ok(angles.size > buildings.length * 0.5, `angles repeat: ${angles.size}/${buildings.length}`);
-  // A fixed 29 unit lattice would collapse every x mod 29 onto a few buckets.
   const offsets = new Set(buildings.map((b) => Math.round((((b.x % 29) + 29) % 29))));
   assert.ok(
     offsets.size >= Math.min(buildings.length, 29) * 0.5,
@@ -273,7 +258,6 @@ test("street distance and building lookup", () => {
   assert.equal(buildingAt(village.x + 5000, village.z + 5000), undefined);
 });
 
-/** Distance along a street (arclength of the closest point) and which side of it a point lies on. */
 function alongAndSide(points: Point[], p: Point): { along: number; side: number; dist: number } {
   let best = { along: 0, side: 1, dist: Infinity },
     run = 0;
@@ -294,7 +278,6 @@ test("every city is dense, with uneven spacing along its streets", () => {
   for (const city of cities) {
     const layout = layoutOf(city);
     assert.ok(layout.buildings.length >= 250, `${city.id}: only ${layout.buildings.length} buildings`);
-    // Homes along one side of one street, ordered by distance along it: gaps must not be uniform.
     const groups = new Map<string, number[]>();
     for (const b of layout.buildings) {
       if (b.role !== "home") continue;
@@ -329,7 +312,6 @@ test("city cores are covered by streets and denser than the edge", () => {
         let best = Infinity;
         for (const st of layout.streets)
           for (let i = 0; i + 1 < st.points.length; i++) best = Math.min(best, distPointSeg(p, st.points[i], st.points[i + 1]));
-        // Spec: within ~45 of a street (the core is held tighter; allow slack for water-skipped lanes).
         if (best > 50) far++;
       }
     assert.ok(far <= dry * 0.03, `${city.id}: ${far}/${dry} walled points are more than 50 from any street`);
@@ -348,13 +330,11 @@ test("city cores are covered by streets and denser than the edge", () => {
 test("city layouts avoid grid and row regularity", () => {
   const busiest = cities.reduce((best, c) => (layoutOf(c).buildings.length > layoutOf(best).buildings.length ? c : best));
   const buildings = layoutOf(busiest).buildings;
-  // Orientation modulo a quarter turn: a grid would collapse onto a couple of buckets.
   const quarter = Math.PI / 2,
     yaws = new Set(buildings.map((b) => Math.floor((((b.angle % quarter) + quarter) % quarter) / 0.04)));
   assert.ok(yaws.size >= 20, `orientations collapse onto ${yaws.size} buckets`);
   const offsets = new Set(buildings.map((b) => Math.round((((b.x % 29) + 29) % 29))));
   assert.ok(offsets.size >= 20, `positions cluster on a lattice: ${offsets.size} distinct x mod 29 buckets`);
-  // Frontage varies from plot to plot.
   const widths = new Set(buildings.filter((b) => b.role === "home").map((b) => b.width.toFixed(1)));
   assert.ok(widths.size >= 15, `only ${widths.size} distinct home frontages`);
 });
@@ -364,7 +344,6 @@ test("city spines and rings are not straight", () => {
     const spine = layoutOf(city).streets[0];
     const devs = spine.points.map((p) => Math.abs(p.z - city.z));
     assert.ok(Math.max(...devs) >= 10, `${city.id}: spine deviates only ${Math.max(...devs).toFixed(1)} from z = place.z`);
-    // Ends sit on the external road axis.
     assert.equal(spine.points[0].z, city.z);
     assert.equal(spine.points[spine.points.length - 1].z, city.z);
   }
@@ -386,7 +365,6 @@ test("borders hug the settlement and streets only cross them at gates", () => {
       layout.border.points.every((q) => Math.hypot(q.x - place.x, q.z - place.z) >= 28),
       `${place.id}: border pinches below 28`,
     );
-    // Streets reach the border only through a gate opening.
     const poly = layout.border.points;
     for (const street of layout.streets)
       for (let i = 0; i + 1 < street.points.length; i++)
@@ -396,7 +374,6 @@ test("borders hug the settlement and streets only cross them at gates", () => {
             c = poly[k],
             d = poly[(k + 1) % poly.length];
           if (orient(c, d, a) * orient(c, d, b) <= 0 && orient(a, b, c) * orient(a, b, d) <= 0) {
-            // Crossing point of the two segments.
             const t = orient(c, d, a) / (orient(c, d, a) - orient(c, d, b) || 1),
               hit = { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
             assert.ok(
@@ -405,7 +382,6 @@ test("borders hug the settlement and streets only cross them at gates", () => {
             );
           }
         }
-    // Gate streets run out to the border along the external road line.
     for (const gate of layout.gates) {
       const street = layout.streets.find((st) => st.code === gate.street)!;
       const end = Math.abs(gate.x - street.points[0].x) < Math.abs(gate.x - street.points[street.points.length - 1].x) ? street.points[0] : street.points[street.points.length - 1];
