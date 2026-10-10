@@ -98,10 +98,11 @@ export function drainageLakeRadiusAt(lake: DrainageLake, angle: number) {
       Math.sqrt((c * c) / (major * major) + (s * s) / (minor * minor)),
     irregular =
       1 +
-      0.1 * Math.sin(angle * 3 + lake.phase) +
-      0.06 * Math.sin(angle * 5 - lake.phase * 0.61) +
-      0.035 * Math.cos(angle * 7 + lake.phase * 1.37);
-  return Math.max(lake.radius * 0.68, ellipse * irregular);
+      0.16 * Math.sin(angle * 2 + lake.phase) +
+      0.11 * Math.sin(angle * 3 - lake.phase * 0.61) +
+      0.065 * Math.cos(angle * 5 + lake.phase * 1.37) +
+      0.035 * Math.sin(angle * 7 - lake.phase * 0.29);
+  return Math.max(lake.radius * 0.58, ellipse * irregular);
 }
 const sphericalPhaseCache = new Map<number, number>();
 function sphericalPhase(layer: number) {
@@ -142,12 +143,12 @@ function fineReliefNoise(x: number, z: number, continentId: number) {
   const p = sourceToLonLat(wrapSourceX(x), z),
     phase = fineReliefPhases(continentId),
     terms = [
-      Math.sin(p.lon * 1489 + p.lat * 1777 + phase[0]) * 0.24,
-      Math.cos(p.lon * 2333 - p.lat * 1597 + phase[1]) * 0.2,
-      Math.sin(p.lon * 3761 + p.lat * 2903 + phase[2]) * 0.18,
-      Math.cos(p.lon * 5147 - p.lat * 4099 + phase[3]) * 0.15,
-      Math.sin(p.lon * 7481 + p.lat * 6211 + phase[4]) * 0.13,
-      Math.cos(p.lon * 10009 - p.lat * 8011 + phase[5]) * 0.1,
+      Math.sin(p.lon * 211 + p.lat * 263 + phase[0]) * 0.24,
+      Math.cos(p.lon * 307 - p.lat * 233 + phase[1]) * 0.2,
+      Math.sin(p.lon * 431 + p.lat * 359 + phase[2]) * 0.18,
+      Math.cos(p.lon * 601 - p.lat * 487 + phase[3]) * 0.15,
+      Math.sin(p.lon * 809 + p.lat * 653 + phase[4]) * 0.13,
+      Math.cos(p.lon * 1093 - p.lat * 877 + phase[5]) * 0.1,
     ];
   return terms.reduce((sum, value) => sum + value, 0);
 }
@@ -169,7 +170,7 @@ export function naturalElevationAt(x: number, z: number): number {
     fine = fineReliefNoise(sx, z, macro.continentId),
     // Macro authority decides where/which mountain exists; this continuous spectrum
     // breaks its wide footprint into local shoulders, gullies and ridges at Province scale.
-    localRelief = fine * Math.min(155, macro.reliefM * 0.3) * mountainWeight,
+    localRelief = fine * Math.min(125, macro.reliefM * 0.24) * mountainWeight,
     base = macro.domain === "Island" ? 3.5 + noise * 13 : 3.5 + broad * 8 + noise * 4.5,
     rawRelief = Math.max(0, macro.reliefM * (0.54 + 0.2 * noise) + localRelief),
     reliefLimit = macro.domain === "Island" ? 190 : 560,
@@ -395,7 +396,7 @@ export function drainageRecipeAt(gx: number, gz: number): DrainageRecipe | null 
                   naturalElevationAt(lakePoint.x, lakePoint.z) - 0.45,
                 ),
                 phase: addressed(`${key}/lake-phase`) * Math.PI * 2,
-                elongation: 0.05 + addressed(`${key}/lake-elongation`) * 0.13,
+                elongation: 0.12 + addressed(`${key}/lake-elongation`) * 0.28,
                 rotation: addressed(`${key}/lake-rotation`) * Math.PI * 2,
               }
             : null;
