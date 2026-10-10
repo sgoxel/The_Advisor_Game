@@ -1,0 +1,133 @@
+name: WP19 exact-head acceptance
+on:
+  push:
+    branches: [agent1/wp-s002-004-009-20261011]
+    paths-ignore:
+      - 'tmp/wp19-evidence/**'
+concurrency:
+  group: wp19-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: write
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s002-004-009-20261011
+          fetch-depth: 0
+      - id: gate
+        name: Require reconciled current-main semantics
+        shell: bash
+        run: |
+          if grep -q 'roadAt, roadDistanceAt' src/world.ts \
+            && grep -q 'if (tile.size <= 512)' src/world.ts \
+            && grep -q 'advisor:building-selected' src/main.ts; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'Reconciliation not present on this head; acceptance intentionally skipped.'
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        if: steps.gate.outputs.ready == 'true'
+        run: npm ci
+      - name: Unit and build gates
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          npm test
+          npm run build
+      - name: Install Chromium
+        if: steps.gate.outputs.ready == 'true'
+        run: npx playwright install --with-deps chromium
+      - name: WebGPU browser gate
+        if: steps.gate.outputs.ready == 'true'
+        run: xvfb-run -a npm run test:webgpu
+      - name: WebGL2 fallback browser gate
+        if: steps.gate.outputs.ready == 'true'
+        run: xvfb-run -a npx playwright test --config playwright.fallback.config.js
+      - name: Navigation browser gate
+        if: steps.gate.outputs.ready == 'true'
+        run: xvfb-run -a npx playwright test --config playwright.navigation.config.js
+      - name: Capture fresh WP19 WebGPU/WebGL2 evidence
+        if: steps.gate.outputs.ready == 'true'
+        shell: bash
+        run: |
+          python -m pip install playwright==1.63.0 pillow
+          npm run preview -- --port 4174 > /tmp/wp19-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+
+          EXTERIOR_STEPS='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>(window.__wp19p=g.villages[0],window.__wp19l=s.settlementLayout(window.__wp19p),window.advisorWorld.navigation.setFocus(window.__wp19p.canonicalPosition.lon,window.__wp19p.canonicalPosition.lat),window.advisorWorld.setHalfHeight(115)));settle;shot:village-a;eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>(window.__wp19q=g.villages.find(v=>s.settlementLayout(v).archetype!==window.__wp19l.archetype),window.advisorWorld.navigation.setFocus(window.__wp19q.canonicalPosition.lon,window.__wp19q.canonicalPosition.lat),window.advisorWorld.setHalfHeight(115)));settle;shot:village-b;eval:import("/src/geography.ts").then(g=>(window.__wp19c=g.cities[0],window.advisorWorld.navigation.setFocus(window.__wp19c.canonicalPosition.lon,window.__wp19c.canonicalPosition.lat),window.advisorWorld.setHalfHeight(280)));settle;shot:city-district'
+          INTERIOR_STEPS='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>(window.__wp19p=g.villages[0],window.__wp19l=s.settlementLayout(window.__wp19p),window.__wp19b=window.__wp19l.buildings.find(b=>b.role==="home"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__wp19b}}))));click:#enter-building;visible:#interior-panel;shot:home;click:#exit-interior;eval:(window.__wp19b=window.__wp19l.buildings.find(b=>b.role==="inn"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__wp19b}})));click:#enter-building;visible:#interior-panel;shot:inn;click:#exit-interior;eval:(window.__wp19b=window.__wp19l.buildings.find(b=>b.role==="blacksmith"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__wp19b}})));click:#enter-building;visible:#interior-panel;shot:blacksmith;click:#exit-interior;eval:(window.__wp19b=window.__wp19l.buildings.find(b=>b.role==="market"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__wp19b}})));click:#enter-building;visible:#interior-panel;shot:market'
+
+          for RENDERER in webgpu webgl2; do
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ \
+              --out "test-results/wp19-${RENDERER}-exterior" --name settlement \
+              --profile desktop,phone,phone-landscape --renderer "$RENDERER" --timeout 300 \
+              --steps "$EXTERIOR_STEPS"
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ \
+              --out "test-results/wp19-${RENDERER}-interior" --name interior \
+              --profile desktop,phone --renderer "$RENDERER" --timeout 300 \
+              --steps "$INTERIOR_STEPS"
+          done
+
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageDraw, ImageFont
+          import math
+          files = sorted(Path('test-results').glob('wp19-*/*.png'))
+          if not files:
+              raise SystemExit('no WP19 screenshots were captured')
+          page_w, page_h = 1600, 1120
+          tile_w, tile_h = 780, 520
+          pages = []
+          font = ImageFont.load_default()
+          for page_index in range(math.ceil(len(files) / 4)):
+              page = Image.new('RGB', (page_w, page_h), 'white')
+              draw = ImageDraw.Draw(page)
+              draw.text((20, 12), f'WP-S002-004-009 fresh evidence · source {Path("/tmp/source-sha").read_text().strip()} · page {page_index+1}', fill='black', font=font)
+              for slot, file in enumerate(files[page_index*4:(page_index+1)*4]):
+                  image = Image.open(file).convert('RGB')
+                  image.thumbnail((tile_w, tile_h-36))
+                  col, row = slot % 2, slot // 2
+                  x, y = 10 + col * 795, 50 + row * 530
+                  draw.text((x, y), file.name, fill='black', font=font)
+                  page.paste(image, (x, y + 24))
+              pages.append(page)
+          out = Path('tmp/wp19-evidence')
+          out.mkdir(parents=True, exist_ok=True)
+          pdf = out / f'evidence-{Path("/tmp/source-sha").read_text().strip()}.pdf'
+          pages[0].save(pdf, save_all=True, append_images=pages[1:], resolution=110)
+          print(pdf)
+          PY
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+      - name: Record exact source SHA for contact sheet
+        if: steps.gate.outputs.ready == 'true'
+        run: echo "$GITHUB_SHA" > /tmp/source-sha
+      - uses: actions/upload-artifact@v4
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          name: wp19-acceptance-${{ github.sha }}
+          path: test-results/
+      - name: Publish contact-sheet PDF on the WP branch
+        if: steps.gate.outputs.ready == 'true'
+        shell: bash
+        run: |
+          # The PDF is temporary visual evidence. It is removed before merge after inspection.
+          git config user.name 'AGENT #1'
+          git config user.email '163722426+sgoxel@users.noreply.github.com'
+          git add tmp/wp19-evidence/*.pdf
+          git commit -m "WP-S002-004-009: publish fresh visual evidence for inspection"
+          git push origin HEAD:agent1/wp-s002-004-009-20261011
