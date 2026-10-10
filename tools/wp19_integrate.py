@@ -1,8 +1,6 @@
 from pathlib import Path
 
 # Temporary branch-only exact reconciliation helper for WP-S002-004-009.
-# Re-triggered after the final interior/presentation regression additions so the patch
-# runs against the exact branch head that will enter acceptance.
 path = Path("src/world.ts")
 text = path.read_text()
 
@@ -38,8 +36,54 @@ for old, new in replacements:
         continue
     else:
         raise SystemExit(f"unexpected reconciliation counts old={old_count} new={new_count} for {old[:80]!r}")
-
 path.write_text(text)
+
+# Preserve canonical farm plots after the vegetation pipeline replaces generic nature geometry.
+render_path = Path("src/settlement-render.ts")
+render_text = render_path.read_text()
+field_function = '''function renderField(tile: Tile, feature: Feature, structures: Builder, detail: Builder) {
+  const { x, y, z } = localFeature(tile, feature),
+    angle = feature.angle ?? 0,
+    width = Math.max(8, feature.width ?? 18),
+    depth = Math.max(8, feature.depth ?? 14),
+    c = Math.cos(angle),
+    s = Math.sin(angle);
+  structures.box(x, y + 0.02, z, width, 0.12, depth, angle, [151, 128, 63]);
+  if (tile.size <= 64) {
+    const rows = Math.max(3, Math.min(10, Math.floor(width / 2)));
+    for (let row = 0; row < rows; row++) {
+      const offset = rows === 1 ? 0 : -width * 0.42 + (width * 0.84 * row) / (rows - 1),
+        px = x + c * offset,
+        pz = z - s * offset;
+      detail.box(px, y + 0.16, pz, 0.48, 0.32, depth * 0.88, angle, [181, 154, 78]);
+    }
+    for (const side of [-1, 1]) {
+      const localZ = side * depth / 2,
+        fx = x + s * localZ,
+        fz = z + c * localZ;
+      detail.box(fx, y + 0.48, fz, width, 0.9, 0.14, angle, timber);
+    }
+  }
+}
+
+'''
+marker = 'function renderBridges(tile: Tile, structures: Builder, detail: Builder) {'
+if field_function not in render_text:
+    if render_text.count(marker) != 1:
+        raise SystemExit('settlement render bridge marker missing')
+    render_text = render_text.replace(marker, field_function + marker, 1)
+old_loop = '''    if (feature.kind === "house" || feature.kind === "keep") renderBuilding(tile, feature, structures, detail);
+    else if (["street", "wall", "gate", "guard-post", "well"].includes(feature.kind))
+      renderLinearFeature(tile, feature, structures, detail);'''
+new_loop = '''    if (feature.kind === "house" || feature.kind === "keep") renderBuilding(tile, feature, structures, detail);
+    else if (feature.kind === "field") renderField(tile, feature, structures, detail);
+    else if (["street", "wall", "gate", "guard-post", "well"].includes(feature.kind))
+      renderLinearFeature(tile, feature, structures, detail);'''
+if old_loop in render_text:
+    render_text = render_text.replace(old_loop, new_loop, 1)
+elif new_loop not in render_text:
+    raise SystemExit('settlement render feature loop missing')
+render_path.write_text(render_text)
 
 # Keep the acceptance contact-sheet generator bound to the exact source SHA without relying on a
 # file created by a later workflow step. This is test infrastructure only.
