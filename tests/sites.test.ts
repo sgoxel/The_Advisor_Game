@@ -8,7 +8,7 @@ import {
   siteAcceptanceSummary,
   siteSurfaceSample,
 } from "../src/sites.ts";
-import { greatCircleDistance } from "../src/planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance } from "../src/planet.ts";
 
 test("critical-site registry scales with the actual country registry", () => {
   const summary = siteAcceptanceSummary();
@@ -26,7 +26,7 @@ test("every critical site is dry, same-country and joined to a real road", () =>
     assert.equal(macro.land, true, site.code);
     assert.notEqual(macro.domain, "Lake", site.code);
     assert.equal(owner?.code, site.countryCode, site.code);
-    assert.ok(site.access.lengthM >= 160 && site.access.lengthM <= 950, site.code);
+    assert.ok(site.access.lengthM >= 500 && site.access.lengthM <= 1800, site.code);
     assert.ok(roads.some((road) => road.code === site.access.roadCode), site.code);
     assert.ok(
       places.every((place) => greatCircleDistance(site.canonicalPosition, place.canonicalPosition) >= 650),
@@ -66,12 +66,25 @@ test("focused site queries are bounded and do not scan-materialize the planet", 
   }
 });
 
-test("priority-9 preparation has bounded support and one surface/walkability truth", () => {
+test("priority-9 preparation has bounded canonical-metre support and one surface/walkability truth", () => {
   const site = criticalSites[0],
     target = 42,
+    sourcePerMetre = 1 / CANONICAL_METRES_PER_SOURCE_UNIT,
     centre = siteSurfaceSample(site, site.x, site.z, 78, target),
-    edge = siteSurfaceSample(site, site.x + site.radiusM + site.falloffM * 0.5, site.z, 78, target),
-    outside = siteSurfaceSample(site, site.x + site.radiusM + site.falloffM + 2, site.z, 78, target);
+    edge = siteSurfaceSample(
+      site,
+      site.x + (site.radiusM + site.falloffM * 0.5) * sourcePerMetre,
+      site.z,
+      78,
+      target,
+    ),
+    outside = siteSurfaceSample(
+      site,
+      site.x + (site.radiusM + site.falloffM + 2) * sourcePerMetre,
+      site.z,
+      78,
+      target,
+    );
   assert.equal(centre.height, target);
   assert.equal(centre.cleared, true);
   assert.equal(centre.walkable, true);
