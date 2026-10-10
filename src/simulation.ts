@@ -6,11 +6,23 @@ import {
   sourceToLonLat,
   type CanonicalPosition,
 } from "./planet.ts";
-import { settlementLayout, type Point, type Street } from "./settlement-layout.ts";
+import {
+  settlementLayout,
+  type Point,
+  type Profession,
+  type SettlementLayout,
+  type Street,
+} from "./settlement-layout.ts";
 
 export type Resident = {
+  /** Same canonical resident code owned by SettlementLayout; simulation never invents a second roster. */
   code: string;
+  /** Canonical home building code from SettlementLayout. */
   home: string;
+  /** Owning inhabited place, used only to resolve the settlement on later ticks. */
+  settlement: string;
+  profession: Profession;
+  work?: string;
   index: number;
   variant: number;
   /** Canonical spherical simulation position. */
@@ -27,7 +39,6 @@ export type CountryState = {
   lastTick: number;
   tier: "live" | "interested" | "coarse";
 };
-const populationOf = (place: Place) => (place.kind === "city" ? 2400 : 80);
 
 export function summaryAt(code: string, tick: number): CountryState {
   const baseline = digest(code) % 5000;
@@ -60,11 +71,6 @@ function streetTableFor(streets: readonly Street[]) {
 }
 /** Golden-ratio fraction: consecutive resident indices land far apart on the cumulative length. */
 const GOLDEN_FRACTION = 0.6180339887498949;
-/**
- * Street for a resident, chosen with probability proportional to street length:
- * index * golden ratio (mod 1) picks a point on the cumulative length, so long streets
- * carry proportionally more walkers. Zero-length streets are never chosen.
- */
 function streetFor(
   streets: readonly Street[],
   index: number,
@@ -80,8 +86,24 @@ function streetFor(
     cumulative += lengths[i];
     if (target < cumulative) return { street: streets[i], length: lengths[i] };
   }
-  // Only reachable through floating-point rounding at the very end of the range.
-  return { street: streets[last], length: lengths[last] };
+  return last >= 0 ? { street: streets[last], length: lengths[last] } : undefined;
+}
+
+type ResidentRoute = { street?: Street; length: number; phase: number };
+const residentRoutes = new Map<string, ResidentRoute>();
+/** Route assignment is fixed by the canonical resident code and never depends on visit/update order. */
+function routeFor(layout: SettlementLayout, index: number, residentCode: string, variant: number): ResidentRoute {
+  let route = residentRoutes.get(residentCode);
+  if (!route) {
+    const picked = streetFor(layout.streets, index);
+    route = {
+      street: picked?.street,
+      length: picked?.length ?? 0,
+      phase: picked ? (variant / 2 ** 32) * picked.length : 0,
+    };
+    residentRoutes.set(residentCode, route);
+  }
+  return route;
 }
 
 /** Point after walking `distance` along a polyline; clamps at the final point. */
@@ -101,32 +123,28 @@ function pointAlong(points: readonly Point[], distance: number): Point {
 }
 
 /**
- * Residents walk the settlement's own street network from the seed-addressed
- * layout: each resident is assigned one street (weighted by length, see streetFor)
- * and walks back and forth along its centreline at the fantasy-time good-road speed. tick is
- * already fantasy seconds, so no presentation clock scale is applied. Trading
- * means near the settlement centre, Patrolling means near a gate, otherwise
- * Walking. Interiors and home/work routing are not simulated yet. Positions that
- * are not on land fall back to the settlement centre.
+ * A live Resident is the same person owned by SettlementLayout. Only their time-varying position/task
+ * is reconstructed here from SEED-derived layout truth plus fantasy tick. No synthetic population,
+ * duplicate home, or renderer-driven identity is created.
  */
 export function residentAt(
   place: Place,
   index: number,
   tick: number,
 ): Resident {
-  const code = `${place.code}/RESIDENT/${index}`,
+  const layout = settlementLayout(place),
+    resident = layout.residents[index];
+  if (!resident)
+    throw new RangeError(`Resident ${index} outside ${place.id} canonical roster (${layout.residents.length})`);
+  const code = resident.code,
     variant = digest(code),
-    layout = settlementLayout(place);
+    route = routeFor(layout, index, code, variant);
   let point: Point = layout.center;
-  const picked = streetFor(layout.streets, index);
-  if (picked) {
-    const total = picked.length;
-    // variant is a uint32 digest; its fraction sets the starting point along the street.
-    const cycle = 2 * total,
-      phase =
-        (tick * GOOD_ROAD_WALK_SPEED_MPS + (variant / 2 ** 32) * total) % cycle,
-      distance = phase <= total ? phase : cycle - phase;
-    point = pointAlong(picked.street.points, distance);
+  if (route.street && route.length > 0) {
+    const cycle = 2 * route.length,
+      phase = (tick * GOOD_ROAD_WALK_SPEED_MPS + route.phase) % cycle,
+      distance = phase <= route.length ? phase : cycle - phase;
+    point = pointAlong(route.street.points, distance);
   }
   const canonical = sourceToLonLat(point.x, point.z),
     presentation = lonLatToSource(canonical.lon, canonical.lat),
@@ -134,22 +152,40 @@ export function residentAt(
     surface = legal ? canonical : place.canonicalPosition,
     source = legal ? presentation : { x: place.x, z: place.z },
     elevation = heightAt(source.x, source.z);
-  const nearCentre =
-      Math.hypot(point.x - layout.center.x, point.z - layout.center.z) < 6,
-    nearGate = layout.gates.some(
-      (gate) => Math.hypot(point.x - gate.x, point.z - gate.z) < 10,
-    );
+  const nearCentre = Math.hypot(point.x - layout.center.x, point.z - layout.center.z) < 6,
+    nearGate = layout.gates.some((gate) => Math.hypot(point.x - gate.x, point.z - gate.z) < 10),
+    task = resident.profession === "guard"
+      ? "Patrolling"
+      : nearCentre
+        ? "Trading"
+        : nearGate
+          ? "Passing gate"
+          : resident.work
+            ? "Walking to work"
+            : "Walking";
   return {
     code,
-    home: place.id,
+    home: resident.home,
+    settlement: place.id,
+    profession: resident.profession,
+    ...(resident.work ? { work: resident.work } : {}),
     index,
     variant,
     position: { lon: surface.lon, lat: surface.lat, elevation },
     x: source.x,
     z: source.z,
-    task: nearCentre ? "Trading" : nearGate ? "Patrolling" : "Walking",
+    task,
   };
 }
+
+const placesById = new Map(places.map((place) => [place.id, place]));
+const placesByCountry = new Map<string, Place[]>();
+for (const country of countries)
+  placesByCountry.set(
+    country.code,
+    places.filter((place) => place.continent === country.continent && place.country === country.id),
+  );
+
 export class LazySimulation {
   tick = 0;
   activeCountry = "";
@@ -159,7 +195,7 @@ export class LazySimulation {
   setFocus(place: Place | undefined) {
     if (place)
       this.activeCountry = countries.find(
-        (c) => c.continent === place.continent && c.id === place.country,
+        (country) => country.continent === place.continent && country.id === place.country,
       )!.code;
   }
   setInterest(code: string) {
@@ -176,42 +212,27 @@ export class LazySimulation {
         interval = live ? 1 : interested ? 30 : 300;
       const previous = this.summaries.get(country.code);
       const tier = live ? "live" : interested ? "interested" : "coarse";
-      if (
-        !previous ||
-        live ||
-        previous.tier !== tier ||
-        tick - previous.lastTick >= interval
-      ) {
+      if (!previous || live || previous.tier !== tier || tick - previous.lastTick >= interval) {
         const state = summaryAt(country.code, tick);
         state.tier = tier;
         this.summaries.set(country.code, state);
       }
       if (live && !this.residents.has(country.code)) {
+        const countryPlaces = placesByCountry.get(country.code) ?? [];
         this.residents.set(
           country.code,
-          places
-            .filter(
-              (p) =>
-                p.continent === country.continent && p.country === country.id,
-            )
-            .flatMap((p) =>
-              Array.from({ length: populationOf(p) }, (_, i) =>
-                residentAt(p, i, tick),
-              ),
-            ),
+          countryPlaces.flatMap((place) => {
+            const count = settlementLayout(place).residents.length;
+            return Array.from({ length: count }, (_, index) => residentAt(place, index, tick));
+          }),
         );
       } else if (live) {
         const pool = this.residents.get(country.code)!;
-        const homes = new Map(
-          places
-            .filter(
-              (p) =>
-                p.continent === country.continent && p.country === country.id,
-            )
-            .map((p) => [p.id, p]),
-        );
-        for (let i = 0; i < pool.length; i++)
-          pool[i] = residentAt(homes.get(pool[i].home)!, pool[i].index, tick);
+        for (let i = 0; i < pool.length; i++) {
+          const place = placesById.get(pool[i].settlement);
+          if (!place) throw new Error(`Resident ${pool[i].code} references missing settlement ${pool[i].settlement}`);
+          pool[i] = residentAt(place, pool[i].index, tick);
+        }
       }
     }
     // Country detail is reconstructible: inactive pools don't remain allocated.
@@ -222,17 +243,15 @@ export class LazySimulation {
   focusedResidents(x: number, z: number, radius: number) {
     return [...this.residents.values()]
       .flat()
-      .filter((r) => Math.hypot(r.x - x, r.z - z) <= radius);
+      .filter((resident) => Math.hypot(resident.x - x, resident.z - z) <= radius);
   }
   get stats() {
     return {
       tick: this.tick,
       countries: this.summaries.size,
       liveCountries: this.residents.size,
-      residents: [...this.residents.values()].reduce((n, r) => n + r.length, 0),
-      coarseCountries: [...this.summaries.values()].filter(
-        (s) => s.tier === "coarse",
-      ).length,
+      residents: [...this.residents.values()].reduce((count, roster) => count + roster.length, 0),
+      coarseCountries: [...this.summaries.values()].filter((state) => state.tier === "coarse").length,
     };
   }
 }
