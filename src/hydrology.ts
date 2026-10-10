@@ -1,5 +1,4 @@
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
-import { nearestPlace, roadAt } from "./geography.ts";
 import { MACRO_PLAN, macroSampleAt } from "./macro-geography.ts";
 import {
   SOURCE_PRESENTATION_POLE_DISTANCE,
@@ -352,14 +351,6 @@ function preparedElevationAt(x: number, z: number): PreparedSurface {
     const influence = smooth01(1 - Math.max(0, hydro.distance) / 24);
     elevation = lerp(natural, Math.min(natural, hydro.bed), hydro.water === "river" ? 1 : influence);
   }
-  const place = nearestPlace(sx, z),
-    placeDistance = place ? Math.hypot(wrapSourceX(sx - place.x), z - place.z) : Infinity,
-    placeRadius = place?.kind === "city" ? 430 : 90,
-    placeBlend = place ? smooth01(Math.max(0, Math.min(1, (placeDistance - placeRadius) / 80))) : 1,
-    road = roadAt(sx, z),
-    roadBlend = road ? smooth01(Math.max(0, Math.min(1, (Math.abs(z - road.z) - 5) / 7))) : 1,
-    flatten = Math.min(placeBlend, roadBlend);
-  if (hydro.water === "none") elevation = lerp(3, elevation, flatten);
   return cachePrepared(key, { elevation, hydro, macro });
 }
 

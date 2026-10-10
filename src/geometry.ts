@@ -1,7 +1,8 @@
-import { featuresFor, field, heightAt, riverX, type Tile } from "./world.ts";
+import { featuresFor, field, heightAt, type Tile } from "./world.ts";
 import { nearestPlace, roadAt, roads } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { sourceToLonLat, wrapSourceX, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
+import { surfaceAt } from "./surface.ts";
 import {
   climateSampleAt,
   polarBoundaryAt,
@@ -195,11 +196,9 @@ export function terrainTint(
     elevation = elevationM ?? heightAt(x, z),
     sample = climateSampleAt(position, elevation);
 
-  // Current composed river surface; avoid constructing the unrelated five-level
-  // feature hierarchy for every surface texel. Same prototype river authority.
-  if (macro.domain === "Mainland" && elevation < 0.1) return color(76, 128, 148);
-  if (macro.domain === "Mainland" && Math.abs(wrapSourceX(x - riverX(z))) < 32)
-    return color(151, 143, 99);
+  const composedSurface = surfaceAt(x, z);
+  if (composedSurface.water === "river") return color(76, 128, 148);
+  if (composedSurface.riverBank) return color(151, 143, 99);
 
   const s = nearestPlace(x, z),
     dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,

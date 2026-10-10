@@ -1,5 +1,6 @@
 import { buildTile } from "./geometry.ts";
 import { convertTileGeometryToEnu } from "./render-frame.ts";
+import { refineTerrainGeometry } from "./terrain-refine.ts";
 import { buildVegetationGeometry } from "./vegetation-render.ts";
 import type { Tile } from "./world.ts";
 self.onmessage = (event: MessageEvent<Tile>) => {
@@ -7,6 +8,7 @@ self.onmessage = (event: MessageEvent<Tile>) => {
   try {
     const data = buildTile(tile),
       vegetation = buildVegetationGeometry(tile);
+    data.terrain = refineTerrainGeometry(tile, data.terrain);
     data.nature = vegetation.geometry;
     const precision = convertTileGeometryToEnu(tile, data);
     const transfer: Transferable[] = [];

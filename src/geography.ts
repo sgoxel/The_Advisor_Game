@@ -20,6 +20,7 @@ import {
   macroLakes,
 } from "./macro-geography.ts";
 import { travelMetrics } from "./travel.ts";
+import { surfaceAt as naturalSurfaceAt } from "./hydrology.ts";
 
 /** x/z are derived source/render coordinates; canonicalPosition is world truth. */
 export type Place = {
@@ -197,8 +198,8 @@ function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
   if (!macro.land || macro.reliefM > maxReliefM) return false;
   if (macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS < 42) return false;
   const { x, z } = lonLatToSource(position.lon, position.lat),
-    prototypeRiverX = 125 + 42 * Math.sin(z / 150) + 18 * Math.sin(z / 57);
-  return Math.abs(wrapSourceX(x - prototypeRiverX)) > 52;
+    surface = naturalSurfaceAt(x, z);
+  return surface.water === "none" && !surface.cliff;
 }
 
 /**
