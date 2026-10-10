@@ -13,6 +13,14 @@ import { WORLD_SEED } from "../src/config.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
 import { lonLatToSource } from "../src/planet.ts";
 import {
+  politicalAccessLinks,
+  politicalBorderGateways,
+  politicalSettlementAccessFingerprint,
+  politicalSettlementAccessSummary,
+  politicalSettlementSiteById,
+  politicalSettlementSitePlans,
+} from "../src/political-settlement-access.ts";
+import {
   POLITICAL_BORDER_MAX_SCALE_DENOMINATOR,
   POLITICAL_DETAIL_LABEL_MAX_SCALE_DENOMINATOR,
   politicalOverlayOpacity,
@@ -96,6 +104,58 @@ test("cities and villages stay inside their canonical political owner without ro
       `${city.id} still uses a fixed east-west village row`,
     );
   }
+});
+
+test("every accepted settlement reserves a complete dry owned envelope and legal entrance", () => {
+  assert.equal(politicalSettlementSitePlans.length, cities.length + villages.length);
+  assert.equal(politicalSettlementSiteById.size, cities.length + villages.length);
+  for (const place of [...cities, ...villages]) {
+    const plan = politicalSettlementSiteById.get(place.id);
+    assert.ok(plan, `missing site plan for ${place.code}`);
+    assert.equal(plan!.countryCode, countryAtPosition(place.canonicalPosition)?.code, place.code);
+    assert.equal(countryAtPosition(plan!.entrance)?.code, plan!.countryCode, `${place.code} entrance owner`);
+    assert.equal(macroSampleAt(plan!.entrance).land, true, `${place.code} entrance is wet`);
+    assert.ok(plan!.reservedAreaM2 >= (place.kind === "city" ? 180_000 : 60_000), place.code);
+    assert.ok(plan!.plotCapacity >= (place.kind === "city" ? 180 : 48), place.code);
+    assert.ok(plan!.maximumEnvelopeReliefSpreadM <= (place.kind === "city" ? 46 : 34), place.code);
+    assert.ok(plan!.maximumPreparedCutFillM <= (place.kind === "city" ? 8 : 6), place.code);
+    assert.ok(Number.isFinite(plan!.waterDistanceM), `${place.code} water context is unbounded`);
+  }
+});
+
+test("every political settlement reaches its country backbone and every country reserves a land border gateway", () => {
+  const expectedLinks = villages.length + cities.length - countries.length;
+  assert.equal(politicalAccessLinks.length, expectedLinks);
+  assert.equal(politicalSettlementAccessSummary.feasibleLinks, expectedLinks);
+  for (const link of politicalAccessLinks) {
+    assert.equal(link.feasible, true, link.id);
+    assert.ok(link.waypoints.length >= 2, link.id);
+    assert.ok(Number.isFinite(link.distanceM) && link.distanceM > 0, link.id);
+    for (const waypoint of link.waypoints) {
+      assert.equal(macroSampleAt(waypoint).land, true, `${link.id} crosses macro water`);
+      assert.equal(countryAtPosition(waypoint)?.code, link.countryCode, `${link.id} leaves its country`);
+    }
+  }
+
+  assert.equal(politicalBorderGateways.length, countries.length);
+  for (const gate of politicalBorderGateways) {
+    assert.equal(countryAtPosition(gate.inside)?.code, gate.countryCode, `${gate.id} inside owner`);
+    assert.equal(countryAtPosition(gate.outside)?.code, gate.neighbourCountryCode, `${gate.id} outside owner`);
+    assert.notEqual(gate.countryCode, gate.neighbourCountryCode, gate.id);
+    assert.equal(macroSampleAt(gate.inside).land, true, gate.id);
+    assert.equal(macroSampleAt(gate.outside).land, true, gate.id);
+  }
+});
+
+test("political settlement/access metadata is deterministic and lightweight", () => {
+  assert.equal(politicalSettlementAccessSummary.sites, cities.length + villages.length);
+  assert.equal(politicalSettlementAccessSummary.expectedSites, cities.length + villages.length);
+  assert.equal(politicalSettlementAccessSummary.countries, countries.length);
+  assert.equal(politicalSettlementAccessSummary.borderGateways, countries.length);
+  const a = politicalSettlementAccessFingerprint(),
+    b = politicalSettlementAccessFingerprint();
+  assert.equal(a, b);
+  assert.ok(a.length < 500_000, `political site/access fingerprint unexpectedly large: ${a.length}`);
 });
 
 test("shared country borders are deterministic bounded derivations of ownership", () => {
