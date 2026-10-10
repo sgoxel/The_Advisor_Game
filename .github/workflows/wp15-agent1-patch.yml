@@ -1,0 +1,58 @@
+name: WP15 AGENT1 corrective patch
+on:
+  push:
+    branches: ["agent1/wp-s002-004-005-uv-final2"]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'agent1: apply WP15 terrain correction') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s002-004-005-uv-final2
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply bounded terrain and hydrology correction
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:80]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          hydro = "src/hydrology.ts"
+          replace_once(hydro, "const RIVER_STEPS = 48;\nconst RIVER_STEP = 165;", "const RIVER_STEPS = 60;\nconst RIVER_STEP = 132;")
+          replace_once(hydro, "      0.1 * Math.sin(angle * 3 + lake.phase) +\n      0.06 * Math.sin(angle * 5 - lake.phase * 0.61) +\n      0.035 * Math.cos(angle * 7 + lake.phase * 1.37);\n  return Math.max(lake.radius * 0.68, ellipse * irregular);", "      0.13 * Math.sin(angle * 2 + lake.phase) +\n      0.075 * Math.sin(angle * 5 - lake.phase * 0.61) +\n      0.04 * Math.cos(angle * 7 + lake.phase * 1.37);\n  return Math.max(lake.radius * 0.62, ellipse * irregular);")
+          replace_once(hydro, '''function fineReliefNoise(x: number, z: number, continentId: number) {\n  const p = sourceToLonLat(wrapSourceX(x), z),\n    phase = fineReliefPhases(continentId),\n    terms = [\n      Math.sin(p.lon * 1489 + p.lat * 1777 + phase[0]) * 0.24,\n      Math.cos(p.lon * 2333 - p.lat * 1597 + phase[1]) * 0.2,\n      Math.sin(p.lon * 3761 + p.lat * 2903 + phase[2]) * 0.18,\n      Math.cos(p.lon * 5147 - p.lat * 4099 + phase[3]) * 0.15,\n      Math.sin(p.lon * 7481 + p.lat * 6211 + phase[4]) * 0.13,\n      Math.cos(p.lon * 10009 - p.lat * 8011 + phase[5]) * 0.1,\n    ];\n  return terms.reduce((sum, value) => sum + value, 0);\n}''', '''function fineReliefNoise(x: number, z: number, continentId: number) {\n  const p = sourceToLonLat(wrapSourceX(x), z),\n    phase = fineReliefPhases(continentId),\n    // Low-frequency domain warp prevents long parallel harmonic bands while retaining\n    // exact longitude wrapping and deterministic mountain identity.\n    warpLon =\n      Math.sin(p.lon * 61 + p.lat * 47 + phase[0]) * 0.0038 +\n      Math.cos(p.lon * 109 - p.lat * 71 + phase[1]) * 0.0022,\n    warpLat =\n      Math.cos(p.lon * 73 - p.lat * 53 + phase[2]) * 0.0035 +\n      Math.sin(p.lon * 127 + p.lat * 83 + phase[3]) * 0.002,\n    lon = p.lon + warpLon,\n    lat = p.lat + warpLat,\n    terms = [\n      Math.sin(lon * 227 + lat * 281 + phase[0]) * 0.28,\n      Math.cos(lon * 389 - lat * 313 + phase[1]) * 0.22,\n      Math.sin(lon * 653 + lat * 509 + phase[2]) * 0.18,\n      Math.cos(lon * 997 - lat * 761 + phase[3]) * 0.14,\n      Math.sin(lon * 1543 + lat * 1187 + phase[4]) * 0.11,\n      Math.cos(lon * 2381 - lat * 1801 + phase[5]) * 0.07,\n    ];\n  return terms.reduce((sum, value) => sum + value, 0);\n}''')
+          replace_once(hydro, "    localRelief = fine * Math.min(155, macro.reliefM * 0.3) * mountainWeight,", "    localRelief = fine * Math.min(138, macro.reliefM * 0.27) * mountainWeight,")
+          replace_once(hydro, "    amplitude = 0.105 + addressed(`${key}/meander-amplitude`) * 0.105;\n  return (\n    Math.sin(step * 0.39 + phase) * amplitude +\n    Math.sin(step * 0.17 + phase * 1.73) * amplitude * 0.48\n  );", "    amplitude = 0.13 + addressed(`${key}/meander-amplitude`) * 0.11;\n  return (\n    Math.sin(step * 0.34 + phase) * amplitude +\n    Math.sin(step * 0.145 + phase * 1.73) * amplitude * 0.52 +\n    Math.sin(step * 0.071 + phase * 0.61) * amplitude * 0.24\n  );")
+          replace_once(hydro, "                elongation: 0.05 + addressed(`${key}/lake-elongation`) * 0.13,", "                elongation: 0.08 + addressed(`${key}/lake-elongation`) * 0.2,")
+          replace_once(hydro, "  const cliff = water === \"none\" && slope >= 1.15,", "  const cliff = water === \"none\" && slope >= 0.95,")
+
+          terrain = "src/terrain-refine.ts"
+          replace_once(terrain, "  return Math.max(0.88, Math.min(1.06, 0.94 + light * 0.11));", "  return Math.max(0.8, Math.min(1.14, 0.91 + light * 0.2));")
+          replace_once(terrain, "    sides = 24;", "    sides = 32;")
+          replace_once(terrain, "    sides = 64;", "    sides = 72;")
+          replace_once(terrain, '''  const center = macroSampleAt(\n      sourceToLonLat(wrapSourceX(tile.minX + tile.size / 2), tile.minZ + tile.size / 2),\n    ),\n    rugged = center.reliefM >= 80 || center.mountainIntensity >= 0.06,\n    targetResolution = tile.size <= 128 ? 68 : tile.size <= 512 ? (rugged ? 52 : 40) : rugged ? 40 : 28,''', '''  const center = macroSampleAt(\n      sourceToLonLat(wrapSourceX(tile.minX + tile.size / 2), tile.minZ + tile.size / 2),\n    ),\n    edgeSamples = [\n      center,\n      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX), tile.minZ)),\n      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX + tile.size), tile.minZ)),\n      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX), tile.minZ + tile.size)),\n      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX + tile.size), tile.minZ + tile.size)),\n    ],\n    coastal = edgeSamples.some((sample) => sample.land) && edgeSamples.some((sample) => !sample.land),\n    rugged = edgeSamples.some((sample) => sample.reliefM >= 80 || sample.mountainIntensity >= 0.06),\n    targetResolution = coastal\n      ? tile.size <= 512\n        ? 88\n        : 72\n      : tile.size <= 128\n        ? 72\n        : tile.size <= 512\n          ? rugged\n            ? 64\n            : 44\n          : rugged\n            ? 52\n            : 32,''')
+          PY
+      - run: npm ci
+      - name: Focused deterministic regression gate
+        run: node --experimental-strip-types --test tests/hydrology.test.ts tests/surface-authority.test.ts tests/terrain-refine.test.ts tests/surface-presentation.test.ts
+      - run: npm run build
+      - name: Commit correction
+        run: |
+          git config user.name "AGENT #1"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add src/hydrology.ts src/terrain-refine.ts
+          git commit -m "agent1: apply WP15 terrain correction"
+          git push origin HEAD:agent1/wp-s002-004-005-uv-final2
