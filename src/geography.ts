@@ -1,7 +1,6 @@
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
   CANONICAL_PLANET_RADIUS,
-  SOURCE_PRESENTATION_RADIUS,
   SOURCE_PRESENTATION_WIDTH,
   greatCircleDistance,
   lonLatToSource,
@@ -129,6 +128,14 @@ function destination(origin: LonLat, bearing: number, distance: number): Canonic
     );
   return canonicalPosition(lon, lat);
 }
+function initialBearing(from: LonLat, to: LonLat) {
+  const deltaLon = normalizeLongitude(to.lon - from.lon);
+  return Math.atan2(
+    Math.sin(deltaLon) * Math.cos(to.lat),
+    Math.cos(from.lat) * Math.sin(to.lat) -
+      Math.sin(from.lat) * Math.cos(to.lat) * Math.cos(deltaLon),
+  );
+}
 const withPresentation = <T extends { canonicalPosition: CanonicalPosition }>(record: T) => {
   const { x, z } = lonLatToSource(
     record.canonicalPosition.lon,
@@ -186,19 +193,20 @@ function continentCandidate(
 }
 
 /**
- * Transitional settlement-site guard for the current local terrain prototype.
- * Political ownership still comes exclusively from countryAtPosition(). Until the
- * hydrology WP replaces the old source-domain river, placement simply rejects its
- * known wet corridor and a narrow coastal margin instead of filling water under a
- * city or village.
+ * Canonical settlement-site guard. This WP reserves land-connected settlements on
+ * the seeded mainland so every accepted city/village can reach its country backbone
+ * without inventing a ferry or filling water. Island transport remains transport-
+ * network scope. All wetness here comes from macro geography; no prototype river or
+ * source-presentation coordinate is allowed to decide settlement validity.
  */
 function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
   const macro = macroSampleAt(position);
-  if (!macro.land || macro.reliefM > maxReliefM) return false;
-  if (macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS < 42) return false;
-  const { x, z } = lonLatToSource(position.lon, position.lat),
-    prototypeRiverX = 125 + 42 * Math.sin(z / 150) + 18 * Math.sin(z / 57);
-  return Math.abs(wrapSourceX(x - prototypeRiverX)) > 52;
+  return (
+    macro.land &&
+    macro.domain === "Mainland" &&
+    macro.reliefM <= maxReliefM &&
+    macro.coastDistanceRad * CANONICAL_PLANET_RADIUS >= 3_000
+  );
 }
 
 /**
@@ -288,6 +296,87 @@ export function countryAtPosition(position: LonLat): Country | undefined {
   return winner;
 }
 
+/** A generated city must have a direct dry same-country reserve to its country backbone. */
+function cityBackboneConnectionFits(from: LonLat, to: LonLat, country: Country) {
+  const distanceRad = greatCircleDistance(from, to) / CANONICAL_PLANET_RADIUS,
+    bearing = initialBearing(from, to),
+    samples = 24;
+  for (let index = 0; index <= samples; index++) {
+    const point = destination(from, bearing, distanceRad * (index / samples)),
+      macro = macroSampleAt(point);
+    if (
+      !macro.land ||
+      macro.domain === "Lake" ||
+      macro.continentId !== country.continent ||
+      countryAtPosition(point)?.code !== country.code
+    )
+      return false;
+  }
+  return true;
+}
+
+/**
+ * Generation-time settlement acceptance. A canonical settlement anchor is only
+ * accepted when its minimum usable footprint and at least one approach beyond
+ * that footprint remain dry, low-relief and inside the same political owner.
+ * This prevents later building/road systems from repairing a fundamentally bad
+ * site with hidden land fill or border-crossing entrances.
+ */
+function settlementEnvelopeFits(
+  position: LonLat,
+  country: Country,
+  kind: Place["kind"],
+) {
+  const radiusM = kind === "city" ? 240 : 170,
+    reliefLimit = kind === "city" ? 46 : 34,
+    centreRelief = macroSampleAt(position).reliefM,
+    reliefs = [centreRelief];
+  for (let index = 0; index < 12; index++) {
+    const sample = destination(
+        position,
+        (index / 12) * TAU,
+        radiusM / CANONICAL_PLANET_RADIUS,
+      ),
+      owner = countryAtPosition(sample),
+      relief = macroSampleAt(sample).reliefM;
+    if (
+      owner?.code !== country.code ||
+      !locallyDrySettlementSite(sample, 180)
+    )
+      return false;
+    reliefs.push(relief);
+  }
+  if (Math.max(...reliefs) - Math.min(...reliefs) > reliefLimit) return false;
+
+  const start = TAU * addressed(
+      `${country.code}/${kind.toUpperCase()}/ENVELOPE/${position.lon.toFixed(8)}/${position.lat.toFixed(8)}`,
+    ),
+    approachDistanceM = radiusM + (kind === "city" ? 260 : 140);
+  for (let attempt = 0; attempt < 24; attempt++) {
+    const bearing = start + (attempt / 24) * TAU,
+      approach = destination(
+        position,
+        bearing,
+        approachDistanceM / CANONICAL_PLANET_RADIUS,
+      ),
+      midpoint = destination(
+        position,
+        bearing,
+        (approachDistanceM * 0.5) / CANONICAL_PLANET_RADIUS,
+      );
+    if (
+      countryAtPosition(approach)?.code === country.code &&
+      countryAtPosition(midpoint)?.code === country.code &&
+      locallyDrySettlementSite(approach, 180) &&
+      locallyDrySettlementSite(midpoint, 180) &&
+      Math.abs(macroSampleAt(approach).reliefM - centreRelief) <=
+        (kind === "city" ? 70 : 55)
+    )
+      return true;
+  }
+  return false;
+}
+
 function cityCandidate(country: Country, city: number, attempt: number) {
   const continent = continents[country.continent];
   return continentCandidate(continent, `CITY/${country.continent}/${country.id}/${city}`, attempt);
@@ -309,7 +398,11 @@ export const cities: Place[] = (() => {
           !owner ||
           owner.code !== country.code ||
           !locallyDrySettlementSite(candidate, 90) ||
-          allAccepted.some((other) => macroFeatureDistanceM(candidate, other) < 18_000)
+          !settlementEnvelopeFits(candidate, country, "city") ||
+          allAccepted.some((other) => macroFeatureDistanceM(candidate, other) < 18_000) ||
+          (city > 0 &&
+            localAccepted[0] &&
+            !cityBackboneConnectionFits(candidate, localAccepted[0], country))
         )
           continue;
         const separation = localAccepted.length
@@ -358,12 +451,19 @@ export const villages: Place[] = (() => {
           bearing = TAU * addressed(`${prefix}/bearing`),
           distanceM = 7_000 + 16_000 * addressed(`${prefix}/distance`),
           candidate = destination(city.canonicalPosition, bearing, distanceM / CANONICAL_PLANET_RADIUS),
-          owner = countryAtPosition(candidate);
+          owner = countryAtPosition(candidate),
+          country = countries.find(
+            (candidateCountry) =>
+              candidateCountry.continent === city.continent &&
+              candidateCountry.id === city.country,
+          );
         if (
           !owner ||
+          !country ||
           owner.continent !== city.continent ||
           owner.id !== city.country ||
           !locallyDrySettlementSite(candidate, 95) ||
+          !settlementEnvelopeFits(candidate, country, "village") ||
           accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000)
         )
           continue;
