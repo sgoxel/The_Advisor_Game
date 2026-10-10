@@ -1,0 +1,93 @@
+name: WP19 bounded settlement runtime optimization
+on:
+  push:
+    branches: [agent1/wp-s002-004-009-living-settlements]
+    paths: [.github/workflows/wp19-perf-fix.yml]
+permissions:
+  contents: write
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Apply deterministic boundedness fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected text not found in {path}: {old[:90]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace(
+              "src/world.ts",
+              "export function featuresFor(tile: Tile): Feature[] {",
+              "export function featuresFor(tile: Tile, includeSettlements = true): Feature[] {",
+          )
+          old = '''  // Canonical settlement records replace the old 18-house village stamp and\n  // 20×20 city lattice. Logical identity/dimensions are invariant; render LOD may\n  // still choose whether to instantiate the merged tile geometry later.\n  for (const feature of settlementRenderFeaturesForBounds(\n    tile.minX,\n    tile.minZ,\n    tile.size,\n  )) {\n    if (heightAt(feature.x, feature.z) < 0.2) continue;\n    features.push({\n      kind: feature.kind,\n      role: feature.role,\n      x: feature.x,\n      z: feature.z,\n      y: heightAt(feature.x, feature.z),\n      code: feature.code,\n      variant: feature.variant,\n      width: feature.width,\n      depth: feature.depth,\n      height: feature.height,\n      heading: feature.heading,\n    });\n  }\n'''
+          new = '''  // Canonical settlement records replace the old 18-house village stamp and\n  // 20×20 city lattice. Logical callers retain these features by default. The tile\n  // worker opts out because its dedicated merged settlement renderer immediately\n  // replaces the generic structures/detail meshes with the same canonical records.\n  if (includeSettlements)\n    for (const feature of settlementRenderFeaturesForBounds(\n      tile.minX,\n      tile.minZ,\n      tile.size,\n    )) {\n      if (heightAt(feature.x, feature.z) < 0.2) continue;\n      features.push({\n        kind: feature.kind,\n        role: feature.role,\n        x: feature.x,\n        z: feature.z,\n        y: heightAt(feature.x, feature.z),\n        code: feature.code,\n        variant: feature.variant,\n        width: feature.width,\n        depth: feature.depth,\n        height: feature.height,\n        heading: feature.heading,\n      });\n    }\n'''
+          replace("src/world.ts", old, new)
+          replace(
+              "src/geometry.ts",
+              "export function buildTile(t: Tile): TileGeometry {",
+              "export function buildTile(t: Tile, includeSettlementFeatures = true): TileGeometry {",
+          )
+          replace(
+              "src/geometry.ts",
+              "    for (const f of featuresFor(t)) {",
+              "    for (const f of featuresFor(t, includeSettlementFeatures)) {",
+          )
+          replace(
+              "src/tile-worker.ts",
+              "    const data = buildTile(tile),",
+              "    const data = buildTile(tile, false),",
+          )
+
+          replace(
+              "src/settlements.ts",
+              "const planCache = new Map<string, SettlementPlan>();",
+              "const planCache = new Map<string, SettlementPlan>();\nconst buildingByCode = new Map<string, SettlementBuilding>();\nconst placeByCode = new Map(places.map((place) => [place.code, place]));",
+          )
+          old = '''export function settlementPlan(placeId: string) {\n  let plan = planCache.get(placeId);\n  if (plan) return plan;\n  const place = places.find((candidate) => candidate.id === placeId);\n  if (!place) throw new RangeError(`Unknown settlement ${placeId}`);\n  plan = buildPlan(place);\n  planCache.set(placeId, plan);\n  return plan;\n}\nexport function settlementPlans() {\n'''
+          new = '''export function settlementPlan(placeId: string) {\n  let plan = planCache.get(placeId);\n  if (plan) return plan;\n  const place = places.find((candidate) => candidate.id === placeId);\n  if (!place) throw new RangeError(`Unknown settlement ${placeId}`);\n  plan = buildPlan(place);\n  planCache.set(placeId, plan);\n  for (const building of plan.buildings) buildingByCode.set(building.code, building);\n  return plan;\n}\nexport function settlementPlans() {\n'''
+          replace("src/settlements.ts", old, new)
+          old = '''export function settlementBuilding(code: string): SettlementBuilding | undefined {\n  for (const place of places) {\n    if (!code.startsWith(`${place.code}/BUILD/`)) continue;\n    return settlementPlan(place.id).buildings.find((building) => building.code === code);\n  }\n  return undefined;\n}\n'''
+          new = '''export function settlementBuilding(code: string): SettlementBuilding | undefined {\n  const cached = buildingByCode.get(code);\n  if (cached) return cached;\n  const marker = code.indexOf("/BUILD/");\n  if (marker < 1) return undefined;\n  const place = placeByCode.get(code.slice(0, marker));\n  if (!place) return undefined;\n  settlementPlan(place.id);\n  return buildingByCode.get(code);\n}\n'''
+          replace("src/settlements.ts", old, new)
+
+          replace(
+              "src/simulation.ts",
+              "  settlementResident,\n  type ResidentProfession,",
+              "  settlementResident,\n  type ResidentProfession,\n  type SettlementBuilding,",
+          )
+          replace(
+              "src/simulation.ts",
+              "const populationOf = (place: Place) => settlementPopulation(place.id);",
+              '''const populationOf = (place: Place) => settlementPopulation(place.id);\nconst fallbackWorkplaces = new Map<string, readonly SettlementBuilding[]>();\nfunction fallbackBuildings(placeId: string) {\n  let buildings = fallbackWorkplaces.get(placeId);\n  if (!buildings) {\n    buildings = settlementPlan(placeId).buildings.filter(\n      (building) =>\n        building.use !== "home" &&\n        building.use !== "guard-post" &&\n        building.use !== "well",\n    );\n    fallbackWorkplaces.set(placeId, buildings);\n  }\n  return buildings;\n}''',
+          )
+          old = '''    fallback = workplace\n      ? undefined\n      : settlementPlan(place.id).buildings.filter(\n          (building) =>\n            building.use !== "home" &&\n            building.use !== "guard-post" &&\n            building.use !== "well",\n        )[variant % 7],\n'''
+          new = '''    fallbackCandidates = workplace ? undefined : fallbackBuildings(place.id),\n    fallback = fallbackCandidates\n      ? fallbackCandidates[variant % fallbackCandidates.length]\n      : undefined,\n'''
+          replace("src/simulation.ts", old, new)
+          PY
+          git diff --check
+      - run: npm test
+      - run: npm run build
+      - name: Benchmark optimized paths
+        run: node --experimental-strip-types tools/wp19_perf.ts
+      - name: Commit verified optimization
+        shell: bash
+        run: |
+          git config user.name "AGENT #1"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/world.ts src/geometry.ts src/tile-worker.ts src/settlements.ts src/simulation.ts
+          git commit -m "WP-S002-004-009 bound settlement streaming and resident lookups"
+          git push origin HEAD:agent1/wp-s002-004-009-living-settlements
