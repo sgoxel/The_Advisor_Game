@@ -15,6 +15,12 @@ Source: `src/routing.ts` (pure planner), `src/village-routes.ts` (villages, cach
   length ≤ 120 m) covers it. Canonical blocked cliffs and sampled slopes above 0.7 are impassable
   off-road. Difficult final-surface terrain or slopes above 0.25 are slower. A road corridor is
   treated as graded cut/fill and is walked at good-road speed.
+- **Walking neighbours.** `neighbouringVillages()` sorts candidates by geodesic distance within the
+  60 km local-search envelope, but only returns candidates for which the bounded canonical route
+  planner proves a legal walking route. A visually nearby village across unbridged water or another
+  canonical blocker is therefore not advertised as a walking neighbour. Successful neighbour proofs
+  and route results are cached with bounded storage; cache eviction may change only recomputation,
+  never which route is legal.
 - **60-minute rule.** Every pair of distinct village centres needs >= 3,600 fantasy seconds on any
   walk. No walk is faster than 1 m/s, so a straight-line (geodesic) distance of >= 3,600 m is a
   complete lower-bound proof: no pathfinding is involved and nothing is computed during world
