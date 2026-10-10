@@ -2,12 +2,11 @@ import { countries, places, type Place } from "./geography.ts";
 import { GOOD_ROAD_WALK_SPEED_MPS } from "./travel.ts";
 import { digest, heightAt } from "./world.ts";
 import {
-  CANONICAL_PLANET_RADIUS,
-  clampLatitude,
   lonLatToSource,
-  normalizeLongitude,
+  sourceToLonLat,
   type CanonicalPosition,
 } from "./planet.ts";
+import { settlementLayout, type Point, type Street } from "./settlement-layout.ts";
 
 export type Resident = {
   code: string;
@@ -30,41 +29,6 @@ export type CountryState = {
 };
 const populationOf = (place: Place) => (place.kind === "city" ? 2400 : 80);
 
-/**
- * Cached tangent coefficients are presentation-independent acceleration data.
- * Current resident lanes are at most 261 m from their settlement centre, keeping
- * the local spherical tangent approximation well below one metre of position error
- * while avoiding full ECEF/ENU trigonometry for thousands of residents.
- */
-const tangentMetrics = new Map<
-  string,
-  { radiansPerEastM: number; radiansPerNorthM: number }
->();
-function metricsFor(place: Place) {
-  let result = tangentMetrics.get(place.code);
-  if (!result) {
-    const cosLat = Math.max(1e-9, Math.abs(Math.cos(place.canonicalPosition.lat)));
-    result = {
-      radiansPerEastM: 1 / (CANONICAL_PLANET_RADIUS * cosLat),
-      radiansPerNorthM: 1 / CANONICAL_PLANET_RADIUS,
-    };
-    tangentMetrics.set(place.code, result);
-  }
-  return result;
-}
-function canonicalOffset(place: Place, eastM: number, northM: number): CanonicalPosition {
-  const metrics = metricsFor(place);
-  return {
-    lon: normalizeLongitude(
-      place.canonicalPosition.lon + eastM * metrics.radiansPerEastM,
-    ),
-    lat: clampLatitude(
-      place.canonicalPosition.lat + northM * metrics.radiansPerNorthM,
-    ),
-    elevation: place.canonicalPosition.elevation,
-  };
-}
-
 export function summaryAt(code: string, tick: number): CountryState {
   const baseline = digest(code) % 5000;
   // Analytical catch-up is independent of update cadence and render interest.
@@ -76,6 +40,75 @@ export function summaryAt(code: string, tick: number): CountryState {
     tier: "coarse",
   };
 }
+/** Length of a street polyline in source units (about metres near a settlement). */
+function polylineLength(points: readonly Point[]) {
+  let total = 0;
+  for (let i = 0; i + 1 < points.length; i++)
+    total += Math.hypot(points[i + 1].x - points[i].x, points[i + 1].z - points[i].z);
+  return total;
+}
+/** Per-street lengths of a layout, cached because residents query it every tick. */
+const streetTables = new WeakMap<readonly Street[], { lengths: number[]; total: number }>();
+function streetTableFor(streets: readonly Street[]) {
+  let table = streetTables.get(streets);
+  if (!table) {
+    const lengths = streets.map((street) => polylineLength(street.points));
+    table = { lengths, total: lengths.reduce((sum, length) => sum + length, 0) };
+    streetTables.set(streets, table);
+  }
+  return table;
+}
+/** Golden-ratio fraction: consecutive resident indices land far apart on the cumulative length. */
+const GOLDEN_FRACTION = 0.6180339887498949;
+/**
+ * Street for a resident, chosen with probability proportional to street length:
+ * index * golden ratio (mod 1) picks a point on the cumulative length, so long streets
+ * carry proportionally more walkers. Zero-length streets are never chosen.
+ */
+function streetFor(
+  streets: readonly Street[],
+  index: number,
+): { street: Street; length: number } | undefined {
+  const { lengths, total } = streetTableFor(streets);
+  if (!(total > 0)) return undefined;
+  const target = ((index * GOLDEN_FRACTION) % 1) * total;
+  let cumulative = 0,
+    last = -1;
+  for (let i = 0; i < streets.length; i++) {
+    if (!(lengths[i] > 0)) continue;
+    last = i;
+    cumulative += lengths[i];
+    if (target < cumulative) return { street: streets[i], length: lengths[i] };
+  }
+  // Only reachable through floating-point rounding at the very end of the range.
+  return { street: streets[last], length: lengths[last] };
+}
+
+/** Point after walking `distance` along a polyline; clamps at the final point. */
+function pointAlong(points: readonly Point[], distance: number): Point {
+  let remaining = distance;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const a = points[i],
+      b = points[i + 1],
+      length = Math.hypot(b.x - a.x, b.z - a.z);
+    if (remaining <= length) {
+      const t = length > 0 ? remaining / length : 0;
+      return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
+    }
+    remaining -= length;
+  }
+  return points[points.length - 1];
+}
+
+/**
+ * Residents walk the settlement's own street network from the seed-addressed
+ * layout: each resident is assigned one street (weighted by length, see streetFor)
+ * and walks back and forth along its centreline at the fantasy-time good-road speed. tick is
+ * already fantasy seconds, so no presentation clock scale is applied. Trading
+ * means near the settlement centre, Patrolling means near a gate, otherwise
+ * Walking. Interiors and home/work routing are not simulated yet. Positions that
+ * are not on land fall back to the settlement centre.
+ */
 export function residentAt(
   place: Place,
   index: number,
@@ -83,45 +116,29 @@ export function residentAt(
 ): Resident {
   const code = `${place.code}/RESIDENT/${index}`,
     variant = digest(code),
-    span = place.kind === "city" ? 250 : 28;
-  // Four deterministic lanes in canonical physical metres. tick is already fantasy
-  // seconds, so movement consumes the fantasy-time road speed directly rather than
-  // dividing by the 24× presentation clock scale.
-  const radius = 12 + (variant % span),
-    speed = GOOD_ROAD_WALK_SPEED_MPS,
-    perimeter = radius * 8;
-  const distance =
-    (tick * speed + (variant % Math.ceil(perimeter))) % perimeter;
-  const side = Math.floor(distance / (radius * 2)),
-    along = distance % (radius * 2);
-  let east = 0,
-    north = 0;
-  if (side === 0) {
-    east = -radius + along;
-    north = radius;
-  } else if (side === 1) {
-    east = radius;
-    north = radius - along;
-  } else if (side === 2) {
-    east = radius - along;
-    north = -radius;
-  } else {
-    east = -radius;
-    north = -radius + along;
+    layout = settlementLayout(place);
+  let point: Point = layout.center;
+  const picked = streetFor(layout.streets, index);
+  if (picked) {
+    const total = picked.length;
+    // variant is a uint32 digest; its fraction sets the starting point along the street.
+    const cycle = 2 * total,
+      phase =
+        (tick * GOOD_ROAD_WALK_SPEED_MPS + (variant / 2 ** 32) * total) % cycle,
+      distance = phase <= total ? phase : cycle - phase;
+    point = pointAlong(picked.street.points, distance);
   }
-  // Keep/house interiors are not implemented yet: use the two central street axes.
-  const horizontal = index % 2 === 0,
-    offset = Math.abs(horizontal ? east : north),
-    candidate = canonicalOffset(
-      place,
-      horizontal ? east : 0,
-      horizontal ? 0 : north,
-    ),
-    presentation = lonLatToSource(candidate.lon, candidate.lat),
+  const canonical = sourceToLonLat(point.x, point.z),
+    presentation = lonLatToSource(canonical.lon, canonical.lat),
     legal = heightAt(presentation.x, presentation.z) > 0.1,
-    surface = legal ? candidate : place.canonicalPosition,
+    surface = legal ? canonical : place.canonicalPosition,
     source = legal ? presentation : { x: place.x, z: place.z },
     elevation = heightAt(source.x, source.z);
+  const nearCentre =
+      Math.hypot(point.x - layout.center.x, point.z - layout.center.z) < 6,
+    nearGate = layout.gates.some(
+      (gate) => Math.hypot(point.x - gate.x, point.z - gate.z) < 10,
+    );
   return {
     code,
     home: place.id,
@@ -130,7 +147,7 @@ export function residentAt(
     position: { lon: surface.lon, lat: surface.lat, elevation },
     x: source.x,
     z: source.z,
-    task: offset < 4 ? "Trading" : index % 3 === 0 ? "Patrolling" : "Walking",
+    task: nearCentre ? "Trading" : nearGate ? "Patrolling" : "Walking",
   };
 }
 export class LazySimulation {
