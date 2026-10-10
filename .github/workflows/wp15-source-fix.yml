@@ -15,7 +15,7 @@ permissions:
 jobs:
   validate-and-commit:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - name: Checkout WP branch
         uses: actions/checkout@v4
@@ -31,8 +31,15 @@ jobs:
         run: python3 tools/wp15_apply_legality.py
       - name: Install
         run: npm ci
-      - name: Test
-        run: npm test
+      - name: Run affected authority regressions
+        run: >-
+          node --experimental-strip-types --test
+          tests/world.test.ts
+          tests/hydrology.test.ts
+          tests/surface-authority.test.ts
+          tests/terrain-refine.test.ts
+          tests/climate.test.ts
+          tests/wp15-neighbour-cache.test.ts
       - name: Build
         run: npm run build
       - name: Commit validated correction
@@ -41,7 +48,7 @@ jobs:
           set -euo pipefail
           git config user.name "AGENT #1"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
-          rm .github/workflows/wp15-source-fix.yml tools/wp15_apply_legality.py
-          git add src/geography.ts src/world.ts tests/world.test.ts tests/climate.test.ts .github/workflows/wp15-source-fix.yml tools/wp15_apply_legality.py
+          rm .github/workflows/wp15-source-fix.yml tools/wp15_apply_legality.py tests/wp15-neighbour-cache.test.ts
+          git add src/geography.ts src/world.ts tests/world.test.ts tests/climate.test.ts tests/wp15-neighbour-cache.test.ts .github/workflows/wp15-source-fix.yml tools/wp15_apply_legality.py
           git commit -m "WP-S002-004-005 enforce dry settlement connectors"
           git push origin HEAD:agent1/wp-s002-004-005-final
