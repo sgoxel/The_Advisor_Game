@@ -25,160 +25,124 @@ jobs:
           fi
           python - <<'PY'
           from pathlib import Path
+          import re
 
           p = Path('src/terrain-refine.ts')
           text = p.read_text()
-          old = '''  // WP15_ATTEMPT2_PRESENTATION: cliff remains canonical traversal truth, while
-  // presentation uses a slope-weighted rock blend instead of a binary dark mask.
-  if (surface.cliff) {
-    const detail = naturalDetail(x, z),
-      severity = smooth01((surface.slope - 0.72) / 1.1),
-      shoulder: RGB = [118 + detail * 8, 123 + detail * 7, 109 + detail * 6],
-      rock: RGB = [92 + detail * 5, 98 + detail * 5, 96 + detail * 4];
-    return blend(shoulder, rock, 0.28 + severity * 0.34);
-  }'''
-          new = '''  // WP15_ATTEMPT3_PRESENTATION: cliff remains canonical traversal truth. Rock is
-  // a bounded overlay on the same seeded biome/highland colour, never a binary mask.
-  if (surface.cliff) {
-    const macro = macroSampleAt(sourceToLonLat(x, z)),
-      detail = naturalDetail(x, z),
-      meadow: RGB = [115 + detail * 25, 139 + detail * 26, 78 + detail * 20],
-      forestFactor = smooth01((naturalDetail(x + 37, z - 29) - 0.34) / 0.46),
-      woodland: RGB = [70 + detail * 20, 102 + detail * 23, 67 + detail * 16],
-      natural = blend(meadow, woodland, forestFactor),
-      mountain = smooth01((macro.mountainIntensity - 0.012) / 0.55),
-      highland: RGB = [122 + detail * 23, 132 + detail * 20, 108 + detail * 18],
-      volcanic: RGB = [91 + detail * 18, 89 + detail * 15, 80 + detail * 13],
-      base = macro.volcanic
-        ? blend(natural, volcanic, mountain * 0.96)
-        : blend(natural, highland, mountain * 0.9),
-      severity = smooth01((surface.slope - 0.65) / 1.4),
-      rock: RGB = [104 + detail * 8, 108 + detail * 8, 101 + detail * 7];
-    return blend(base, rock, 0.14 + severity * 0.22);
-  }'''
-          if text.count(old) != 1:
+          pattern = re.compile(r'  // WP15_ATTEMPT2_PRESENTATION: cliff remains canonical traversal truth, while\n  // presentation uses a slope-weighted rock blend instead of a binary dark mask\.\n  if \(surface\.cliff\) \{.*?\n  \}\n  if \(surface\.riverBank\)', re.S)
+          replacement = "\n".join([
+              '  // WP15_ATTEMPT3_PRESENTATION: cliff remains canonical traversal truth. Rock is',
+              '  // a bounded overlay on the same seeded biome/highland colour, never a binary mask.',
+              '  if (surface.cliff) {',
+              '    const macro = macroSampleAt(sourceToLonLat(x, z)),',
+              '      detail = naturalDetail(x, z),',
+              '      meadow: RGB = [115 + detail * 25, 139 + detail * 26, 78 + detail * 20],',
+              '      forestFactor = smooth01((naturalDetail(x + 37, z - 29) - 0.34) / 0.46),',
+              '      woodland: RGB = [70 + detail * 20, 102 + detail * 23, 67 + detail * 16],',
+              '      natural = blend(meadow, woodland, forestFactor),',
+              '      mountain = smooth01((macro.mountainIntensity - 0.012) / 0.55),',
+              '      highland: RGB = [122 + detail * 23, 132 + detail * 20, 108 + detail * 18],',
+              '      volcanic: RGB = [91 + detail * 18, 89 + detail * 15, 80 + detail * 13],',
+              '      base = macro.volcanic',
+              '        ? blend(natural, volcanic, mountain * 0.96)',
+              '        : blend(natural, highland, mountain * 0.9),',
+              '      severity = smooth01((surface.slope - 0.65) / 1.4),',
+              '      rock: RGB = [104 + detail * 8, 108 + detail * 8, 101 + detail * 7];',
+              '    return blend(base, rock, 0.14 + severity * 0.22);',
+              '  }',
+              '  if (surface.riverBank)',
+          ])
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
               raise SystemExit('attempt-2 cliff presentation anchor mismatch')
+          old = '    // One-metre sampling is reserved for close rugged/coastal silhouettes; wider\n    // tiles retain a two-metre-or-coarser cap to protect phone streaming budgets.\n'
+          new = '    // Sub-metre sampling is reserved for close rugged/coastal silhouettes only;\n    // wider tiles retain a two-metre-or-coarser cap to protect phone streaming budgets.\n'
+          if text.count(old) != 1:
+              raise SystemExit('attempt-2 resolution comment anchor mismatch')
           text = text.replace(old, new, 1)
-          old = '''    // One-metre sampling is reserved for close rugged/coastal silhouettes; wider
-    // tiles retain a two-metre-or-coarser cap to protect phone streaming budgets.
-    resolutionCap =
-      tile.size <= 128 && (coastal || rugged)
-        ? Math.max(1, Math.floor(tile.size))
-        : Math.max(1, Math.floor(tile.size / 2)),'''
-          new = '''    // Sub-metre sampling is reserved for close rugged/coastal silhouettes only;
-    // wider tiles retain a two-metre-or-coarser cap to protect phone streaming budgets.
-    resolutionCap =
-      tile.size <= 128 && (coastal || rugged)
-        ? Math.max(1, Math.floor(tile.size * 1.5))
-        : Math.max(1, Math.floor(tile.size / 2)),'''
+          old = '        ? Math.max(1, Math.floor(tile.size))\n        : Math.max(1, Math.floor(tile.size / 2)),'
+          new = '        ? Math.max(1, Math.floor(tile.size * 1.5))\n        : Math.max(1, Math.floor(tile.size / 2)),'
           if text.count(old) != 1:
               raise SystemExit('attempt-2 close-resolution anchor mismatch')
           p.write_text(text.replace(old, new, 1))
 
           p = Path('tools/wp15_targets.ts')
           text = p.read_text()
-          old = '''let cliffPoint: DrainagePoint | undefined,
-  cliffScore = -Infinity;
-const cliffRadii = [0, 24, 48, 72, 96, 128, 160, 224, 320, 448, 640] as const;
-const cliffDirections = 16;
-for (const mountain of MACRO_PLAN.mountainSystems) {
-  for (const anchor of mountain.path) {
-    const centre = lonLatToSource(anchor.lon, anchor.lat);
-    for (const radius of cliffRadii) {
-      const directions = radius === 0 ? 1 : cliffDirections;
-      for (let direction = 0; direction < directions; direction++) {
-        const angle = (direction / cliffDirections) * Math.PI * 2,
-          x = centre.x + Math.cos(angle) * radius,
-          z = centre.z + Math.sin(angle) * radius;
-        if (z <= -SOURCE_PRESENTATION_POLE_DISTANCE || z >= SOURCE_PRESENTATION_POLE_DISTANCE)
-          continue;
-        const sample = surfaceAt(x, z),
-          macro = macroSampleAt(sourceToLonLat(x, z));
-        if (!sample.cliff || sample.water !== "none" || !macro.land || sample.elevation < 28)
-          continue;
-        const clearance = Math.min(
-            macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
-            sample.freshwaterDistance,
-          ),
-          score = sample.slope * 220 + Math.min(1200, clearance) * 0.08 + Math.min(260, sample.elevation) * 0.05;
-        if (score > cliffScore) {
-          cliffScore = score;
-          cliffPoint = { x, z, bed: sample.elevation };
-        }
-      }
-    }
-  }
-}
-if (!cliffPoint) throw new Error("Visual evidence requires a real canonical cliff sample");'''
-          new = '''let cliffPoint: DrainagePoint | undefined,
-  cliffScore = -Infinity,
-  fallbackCliffPoint: DrainagePoint | undefined,
-  fallbackCliffScore = -Infinity;
-const cliffRadii = [0, 24, 48, 72, 96, 128, 160, 224, 320, 448, 640] as const;
-const cliffDirections = 16;
-for (const mountain of MACRO_PLAN.mountainSystems) {
-  for (const anchor of mountain.path) {
-    const centre = lonLatToSource(anchor.lon, anchor.lat);
-    for (const radius of cliffRadii) {
-      const directions = radius === 0 ? 1 : cliffDirections;
-      for (let direction = 0; direction < directions; direction++) {
-        const angle = (direction / cliffDirections) * Math.PI * 2,
-          x = centre.x + Math.cos(angle) * radius,
-          z = centre.z + Math.sin(angle) * radius;
-        if (z <= -SOURCE_PRESENTATION_POLE_DISTANCE || z >= SOURCE_PRESENTATION_POLE_DISTANCE)
-          continue;
-        const sample = surfaceAt(x, z),
-          macro = macroSampleAt(sourceToLonLat(x, z));
-        if (!sample.cliff || sample.water !== "none" || !macro.land || sample.elevation < 28)
-          continue;
-        const clearance = Math.min(
-            macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
-            sample.freshwaterDistance,
-          ),
-          baseScore = sample.slope * 180 + Math.min(1200, clearance) * 0.07 + Math.min(260, sample.elevation) * 0.05;
-        if (baseScore > fallbackCliffScore) {
-          fallbackCliffScore = baseScore;
-          fallbackCliffPoint = { x, z, bed: sample.elevation };
-        }
-
-        // Prefer a canonical cliff point whose Street framing contains both steep
-        // cliff ground and a nearby shoulder. This is evidence selection only: it
-        // never changes cliff identity, height, traversal, hydrology or rendering.
-        const localSamples = [];
-        for (const probeRadius of [72, 144]) {
-          for (let probe = 0; probe < 8; probe++) {
-            const probeAngle = (probe / 8) * Math.PI * 2,
-              px = x + Math.cos(probeAngle) * probeRadius,
-              pz = z + Math.sin(probeAngle) * probeRadius;
-            if (pz <= -SOURCE_PRESENTATION_POLE_DISTANCE || pz >= SOURCE_PRESENTATION_POLE_DISTANCE)
-              continue;
-            localSamples.push(surfaceAt(px, pz));
-          }
-        }
-        const dry = localSamples.filter((candidate) => candidate.water === "none"),
-          localSpan = dry.length
-            ? Math.max(...dry.map((candidate) => candidate.elevation)) - Math.min(...dry.map((candidate) => candidate.elevation))
-            : 0,
-          cliffNeighbours = dry.filter((candidate) => candidate.cliff).length,
-          shoulderNeighbours = dry.filter((candidate) => !candidate.cliff).length;
-        if (localSpan < 18 || cliffNeighbours < 2 || shoulderNeighbours < 2) continue;
-        const score =
-          baseScore +
-          Math.min(180, localSpan) * 4.2 +
-          Math.min(8, shoulderNeighbours) * 18;
-        if (score > cliffScore) {
-          cliffScore = score;
-          cliffPoint = { x, z, bed: sample.elevation };
-        }
-      }
-    }
-  }
-}
-cliffPoint ??= fallbackCliffPoint;
-if (!cliffPoint) throw new Error("Visual evidence requires a real canonical cliff sample");'''
-          if text.count(old) != 1:
+          start_marker = 'let cliffPoint: DrainagePoint | undefined,'
+          end_marker = 'if (!cliffPoint) throw new Error("Visual evidence requires a real canonical cliff sample");'
+          start = text.find(start_marker)
+          end = text.find(end_marker, start)
+          if start < 0 or end < 0:
               raise SystemExit('cliff evidence selector anchor mismatch')
-          p.write_text(text.replace(old, new, 1))
+          end += len(end_marker)
+          block = "\n".join([
+              'let cliffPoint: DrainagePoint | undefined,',
+              '  cliffScore = -Infinity,',
+              '  fallbackCliffPoint: DrainagePoint | undefined,',
+              '  fallbackCliffScore = -Infinity;',
+              'const cliffRadii = [0, 24, 48, 72, 96, 128, 160, 224, 320, 448, 640] as const;',
+              'const cliffDirections = 16;',
+              'for (const mountain of MACRO_PLAN.mountainSystems) {',
+              '  for (const anchor of mountain.path) {',
+              '    const centre = lonLatToSource(anchor.lon, anchor.lat);',
+              '    for (const radius of cliffRadii) {',
+              '      const directions = radius === 0 ? 1 : cliffDirections;',
+              '      for (let direction = 0; direction < directions; direction++) {',
+              '        const angle = (direction / cliffDirections) * Math.PI * 2,',
+              '          x = centre.x + Math.cos(angle) * radius,',
+              '          z = centre.z + Math.sin(angle) * radius;',
+              '        if (z <= -SOURCE_PRESENTATION_POLE_DISTANCE || z >= SOURCE_PRESENTATION_POLE_DISTANCE)',
+              '          continue;',
+              '        const sample = surfaceAt(x, z),',
+              '          macro = macroSampleAt(sourceToLonLat(x, z));',
+              '        if (!sample.cliff || sample.water !== "none" || !macro.land || sample.elevation < 28)',
+              '          continue;',
+              '        const clearance = Math.min(',
+              '            macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,',
+              '            sample.freshwaterDistance,',
+              '          ),',
+              '          baseScore = sample.slope * 180 + Math.min(1200, clearance) * 0.07 + Math.min(260, sample.elevation) * 0.05;',
+              '        if (baseScore > fallbackCliffScore) {',
+              '          fallbackCliffScore = baseScore;',
+              '          fallbackCliffPoint = { x, z, bed: sample.elevation };',
+              '        }',
+              '',
+              '        // Prefer a canonical cliff point whose Street framing contains both steep',
+              '        // cliff ground and a nearby shoulder. Evidence selection never changes truth.',
+              '        const localSamples = [];',
+              '        for (const probeRadius of [72, 144]) {',
+              '          for (let probe = 0; probe < 8; probe++) {',
+              '            const probeAngle = (probe / 8) * Math.PI * 2,',
+              '              px = x + Math.cos(probeAngle) * probeRadius,',
+              '              pz = z + Math.sin(probeAngle) * probeRadius;',
+              '            if (pz <= -SOURCE_PRESENTATION_POLE_DISTANCE || pz >= SOURCE_PRESENTATION_POLE_DISTANCE)',
+              '              continue;',
+              '            localSamples.push(surfaceAt(px, pz));',
+              '          }',
+              '        }',
+              '        const dry = localSamples.filter((candidate) => candidate.water === "none"),',
+              '          localSpan = dry.length',
+              '            ? Math.max(...dry.map((candidate) => candidate.elevation)) - Math.min(...dry.map((candidate) => candidate.elevation))',
+              '            : 0,',
+              '          cliffNeighbours = dry.filter((candidate) => candidate.cliff).length,',
+              '          shoulderNeighbours = dry.filter((candidate) => !candidate.cliff).length;',
+              '        if (localSpan < 18 || cliffNeighbours < 2 || shoulderNeighbours < 2) continue;',
+              '        const score =',
+              '          baseScore +',
+              '          Math.min(180, localSpan) * 4.2 +',
+              '          Math.min(8, shoulderNeighbours) * 18;',
+              '        if (score > cliffScore) {',
+              '          cliffScore = score;',
+              '          cliffPoint = { x, z, bed: sample.elevation };',
+              '        }',
+              '      }',
+              '    }',
+              '  }',
+              '}',
+              'cliffPoint ??= fallbackCliffPoint;',
+              'if (!cliffPoint) throw new Error("Visual evidence requires a real canonical cliff sample");',
+          ])
+          p.write_text(text[:start] + block + text[end:])
           PY
       - run: npm ci
       - name: Verify canonical evidence selector
