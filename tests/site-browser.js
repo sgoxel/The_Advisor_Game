@@ -45,10 +45,11 @@ for (const viewport of [
     await page.waitForFunction((code) => window.advisorSites.state.visibleCodes.includes(code), target.code, { timeout: 90000 });
     const after = await page.evaluate((code) => window.advisorSites.inspect(code).detail.signature, target.code);
     expect(after).toBe(before);
-    const state = await page.evaluate(() => window.advisorSites.state);
+    const state = await page.evaluate(() => ({ ...window.advisorSites.state, totalSites: window.advisorSites.sites.length }));
     expect(state.visibleCount).toBeLessThanOrEqual(viewport.name === "phone" ? 8 : 14);
-    expect(state.cachedDetails).toBeLessThanOrEqual(window.advisorSites?.sites?.length ?? 1000);
+    expect(state.cachedDetails).toBeLessThanOrEqual(state.totalSites);
     const box = await panel.boundingBox();
+    expect(box).not.toBeNull();
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
