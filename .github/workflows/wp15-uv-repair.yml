@@ -27,21 +27,22 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - name: Restore canonical UVs and bound screenshot sessions
+      - name: Restore canonical UVs on refined terrain
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import textwrap
+          import re
 
           p = Path('src/terrain-refine.ts')
           text = p.read_text()
-          anchor = '''  const originX = tile.minX + tile.size / 2,
-            originZ = tile.minZ + tile.size / 2;
-          '''
-          if anchor not in text:
+          match = re.search(
+              r'(?m)^  const originX = tile\.minX \+ tile\.size / 2,\n\s*originZ = tile\.minZ \+ tile\.size / 2;\n',
+              text,
+          )
+          if not match:
               raise SystemExit('terrain-refine origin anchor missing')
-          prefix = text[:text.index(anchor) + len(anchor)]
+          prefix = text[:match.end()]
           tail = '''  // The shared projection material requires canonical source-coordinate UVs.
           // Refinement creates new clipped/water vertices, so rebuild UV0 from the
           // still-absolute source positions before converting positions to tile-local.
@@ -80,65 +81,6 @@ jobs:
           if old not in text:
               raise SystemExit('terrain-refine test block missing')
           p.write_text(text.replace(old, new, 1))
-
-          visual = textwrap.dedent('''\
-          name: WP15 terrain hydrology visual evidence
-          on:
-            pull_request:
-              branches: [main]
-          concurrency:
-            group: wp15-visual-${{ github.event.pull_request.number }}
-            cancel-in-progress: true
-          permissions:
-            contents: read
-          jobs:
-            capture:
-              strategy:
-                fail-fast: false
-                matrix:
-                  renderer: [webgl2, webgpu]
-              runs-on: ubuntu-latest
-              steps:
-                - uses: actions/checkout@v4
-                - uses: actions/setup-node@v4
-                  with:
-                    node-version: 24
-                    cache: npm
-                - run: npm ci
-                - run: npm run build
-                - run: npx playwright install --with-deps chromium
-                - name: Capture WP-S002-004-005 terrain and hydrology evidence
-                  shell: bash
-                  run: |
-                    set -euo pipefail
-                    python -m pip install playwright==1.63.0
-                    npm run preview -- --port 4175 > /tmp/advisor-preview.log 2>&1 &
-                    PREVIEW_PID=$!
-                    trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
-                    for i in $(seq 1 30); do
-                      if curl -fsS http://127.0.0.1:4175/ >/dev/null; then break; fi
-                      sleep 1
-                    done
-                    TARGETS="$(node --experimental-strip-types tools/wp15_targets.ts)"
-                    OUT="test-results/wp15-terrain-${{ matrix.renderer }}"
-                    capture_group() {
-                      local group="$1"
-                      local steps="$2"
-                      python tools/screenshot_tool.py http://127.0.0.1:4175/ \\
-                        --out "$OUT/$group" --name terrain --profile desktop,phone \\
-                        --renderer ${{ matrix.renderer }} --timeout 180 --steps "$steps"
-                    }
-                    capture_group realm-river "eval:window.__wp15=${TARGETS};click:#overview;settle;shot:realm-coasts;eval:window.advisorWorld.setHalfHeight(1400);eval:window.advisorWorld.navigation.setFocus(window.__wp15.river.lon,window.__wp15.river.lat);settle;shot:river-province"
-                    capture_group river-lake "eval:window.__wp15=${TARGETS};eval:window.advisorWorld.navigation.setFocus(window.__wp15.river.lon,window.__wp15.river.lat);eval:window.advisorWorld.setHalfHeight(420);settle;shot:river-village;eval:window.advisorWorld.navigation.setFocus(window.__wp15.lake.lon,window.__wp15.lake.lat);eval:window.advisorWorld.setHalfHeight(900);settle;shot:lake-province"
-                    capture_group mountain-cliff "eval:window.__wp15=${TARGETS};eval:window.advisorWorld.navigation.setFocus(window.__wp15.mountain.lon,window.__wp15.mountain.lat);eval:window.advisorWorld.setHalfHeight(1200);settle;shot:mountain-range;eval:window.advisorWorld.navigation.setFocus(window.__wp15.cliff.lon,window.__wp15.cliff.lat);eval:window.advisorWorld.setHalfHeight(170);settle;shot:cliff-street"
-                    capture_group village-outlet "eval:window.__wp15=${TARGETS};eval:window.advisorWorld.navigation.setFocus(window.__wp15.village.lon,window.__wp15.village.lat);eval:window.advisorWorld.setHalfHeight(360);settle;shot:freshwater-village;eval:window.advisorWorld.navigation.setFocus(window.__wp15.outlet.lon,window.__wp15.outlet.lat);eval:window.advisorWorld.setHalfHeight(650);settle;shot:river-outlet"
-                - uses: actions/upload-artifact@v4
-                  if: always()
-                  with:
-                    name: wp15-terrain-hydrology-${{ matrix.renderer }}-${{ github.sha }}
-                    path: test-results/wp15-terrain-${{ matrix.renderer }}
-          ''')
-          Path('.github/workflows/wp15-visual-evidence.yml').write_text(visual)
           PY
       - name: Install
         run: npm ci
@@ -153,6 +95,6 @@ jobs:
           git config user.name "AGENT #1"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
           rm .github/workflows/wp15-uv-repair.yml
-          git add src/terrain-refine.ts tests/terrain-refine.test.ts .github/workflows/wp15-visual-evidence.yml .github/workflows/wp15-uv-repair.yml
+          git add src/terrain-refine.ts tests/terrain-refine.test.ts .github/workflows/wp15-uv-repair.yml
           git commit -m "WP-S002-004-005 preserve refined terrain projection UVs"
           git push origin HEAD:agent1/wp-s002-004-005-final
