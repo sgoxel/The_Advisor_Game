@@ -38,6 +38,6 @@ jobs:
         run: |
           git config user.name "AGENT #1"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
-          git add src/hydrology.ts tools/wp15_targets.ts .github/workflows/wp15-visual-evidence.yml
+          git add src/hydrology.ts tools/wp15_targets.ts
           git commit -m "WP-S002-004-005 finish natural relief evidence [wp15-a3]"
           git push origin HEAD:agent1/wp-s002-004-005-uv-final2
