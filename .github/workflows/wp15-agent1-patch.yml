@@ -1,4 +1,3 @@
-# exact-head evaluation trigger after canonical relief correction
 name: WP15 AGENT1 corrective patch
 on:
   push:
@@ -18,39 +17,125 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Apply bounded canonical relief correction
+      - name: Apply attempt 2 bounded presentation correction
         run: |
-          if grep -q 'Low-frequency domain warp prevents long parallel harmonic bands' src/hydrology.ts; then
-            echo 'Correction already applied.'
+          if grep -q 'WP15_ATTEMPT2_PRESENTATION' src/terrain-refine.ts; then
+            echo 'Attempt 2 correction already applied.'
             exit 0
           fi
           python - <<'PY'
           from pathlib import Path
-
-          def replace_once(path, old, new):
-              p = Path(path)
-              text = p.read_text()
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:80]!r}")
-              p.write_text(text.replace(old, new, 1))
-
-          hydro = "src/hydrology.ts"
-          replace_once(hydro, '''function fineReliefNoise(x: number, z: number, continentId: number) {\n  const p = sourceToLonLat(wrapSourceX(x), z),\n    phase = fineReliefPhases(continentId),\n    terms = [\n      Math.sin(p.lon * 1489 + p.lat * 1777 + phase[0]) * 0.24,\n      Math.cos(p.lon * 2333 - p.lat * 1597 + phase[1]) * 0.2,\n      Math.sin(p.lon * 3761 + p.lat * 2903 + phase[2]) * 0.18,\n      Math.cos(p.lon * 5147 - p.lat * 4099 + phase[3]) * 0.15,\n      Math.sin(p.lon * 7481 + p.lat * 6211 + phase[4]) * 0.13,\n      Math.cos(p.lon * 10009 - p.lat * 8011 + phase[5]) * 0.1,\n    ];\n  return terms.reduce((sum, value) => sum + value, 0);\n}''', '''function fineReliefNoise(x: number, z: number, continentId: number) {\n  const p = sourceToLonLat(wrapSourceX(x), z),\n    phase = fineReliefPhases(continentId),\n    // Low-frequency domain warp prevents long parallel harmonic bands while retaining\n    // exact longitude wrapping and deterministic mountain identity.\n    warpLon =\n      Math.sin(p.lon * 61 + p.lat * 47 + phase[0]) * 0.0038 +\n      Math.cos(p.lon * 109 - p.lat * 71 + phase[1]) * 0.0022,\n    warpLat =\n      Math.cos(p.lon * 73 - p.lat * 53 + phase[2]) * 0.0035 +\n      Math.sin(p.lon * 127 + p.lat * 83 + phase[3]) * 0.002,\n    lon = p.lon + warpLon,\n    lat = p.lat + warpLat,\n    terms = [\n      Math.sin(lon * 227 + lat * 281 + phase[0]) * 0.28,\n      Math.cos(lon * 389 - lat * 313 + phase[1]) * 0.22,\n      Math.sin(lon * 653 + lat * 509 + phase[2]) * 0.18,\n      Math.cos(lon * 997 - lat * 761 + phase[3]) * 0.14,\n      Math.sin(lon * 1543 + lat * 1187 + phase[4]) * 0.11,\n      Math.cos(lon * 2381 - lat * 1801 + phase[5]) * 0.07,\n    ];\n  return terms.reduce((sum, value) => sum + value, 0);\n}''')
-          replace_once(hydro, "    localRelief = fine * Math.min(155, macro.reliefM * 0.3) * mountainWeight,", "    localRelief = fine * Math.min(138, macro.reliefM * 0.27) * mountainWeight,")
-          replace_once(hydro, "  const cliff = water === \"none\" && slope >= 1.15,", "  const cliff = water === \"none\" && slope >= 0.95,")
-
-          terrain = "src/terrain-refine.ts"
-          replace_once(terrain, "  return Math.max(0.88, Math.min(1.06, 0.94 + light * 0.11));", "  return Math.max(0.8, Math.min(1.14, 0.91 + light * 0.2));")
-          replace_once(terrain, "    sides = 24;", "    sides = 32;")
-          replace_once(terrain, "    sides = 64;", "    sides = 72;")
-          replace_once(terrain, '''  const center = macroSampleAt(\n      sourceToLonLat(wrapSourceX(tile.minX + tile.size / 2), tile.minZ + tile.size / 2),\n    ),\n    rugged = center.reliefM >= 80 || center.mountainIntensity >= 0.06,\n    targetResolution = tile.size <= 128 ? 68 : tile.size <= 512 ? (rugged ? 52 : 40) : rugged ? 40 : 28,''', '''  const center = macroSampleAt(\n      sourceToLonLat(wrapSourceX(tile.minX + tile.size / 2), tile.minZ + tile.size / 2),\n    ),\n    edgeSamples = [\n      center,\n      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX), tile.minZ)),\n      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX + tile.size), tile.minZ)),\n      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX), tile.minZ + tile.size)),\n      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX + tile.size), tile.minZ + tile.size)),\n    ],\n    coastal = edgeSamples.some((sample) => sample.land) && edgeSamples.some((sample) => !sample.land),\n    rugged = edgeSamples.some((sample) => sample.reliefM >= 80 || sample.mountainIntensity >= 0.06),\n    targetResolution = coastal\n      ? tile.size <= 512\n        ? 88\n        : 72\n      : tile.size <= 128\n        ? 72\n        : tile.size <= 512\n          ? rugged\n            ? 64\n            : 44\n          : rugged\n            ? 52\n            : 32,''')
+          p = Path('src/terrain-refine.ts')
+          text = p.read_text()
+          old = '  if (surface.cliff) return [91, 98, 97];'
+          new = '''  // WP15_ATTEMPT2_PRESENTATION: cliff remains canonical traversal truth, while\n  // presentation uses a slope-weighted rock blend instead of a binary dark mask.\n  if (surface.cliff) {\n    const detail = naturalDetail(x, z),\n      severity = smooth01((surface.slope - 0.72) / 1.1),\n      shoulder: RGB = [118 + detail * 8, 123 + detail * 7, 109 + detail * 6],\n      rock: RGB = [92 + detail * 5, 98 + detail * 5, 96 + detail * 4];\n    return blend(shoulder, rock, 0.28 + severity * 0.34);\n  }'''
+          if text.count(old) != 1:
+              raise SystemExit('cliff tint anchor mismatch')
+          text = text.replace(old, new, 1)
+          old = '''    targetResolution = coastal\n      ? tile.size <= 512\n        ? 88\n        : 72\n      : tile.size <= 128\n        ? 72\n        : tile.size <= 512\n          ? rugged\n            ? 64\n            : 44\n          : rugged\n            ? 52\n            : 32,\n    resolution = Math.max(1, Math.min(targetResolution, Math.floor(tile.size / 2))),'''
+          new = '''    targetResolution = coastal\n      ? tile.size <= 128\n        ? 96\n        : tile.size <= 512\n          ? 128\n          : 112\n      : tile.size <= 128\n        ? rugged\n          ? 96\n          : 72\n        : tile.size <= 512\n          ? rugged\n            ? 72\n            : 44\n          : rugged\n            ? 60\n            : 32,\n    // One-metre sampling is reserved for close rugged/coastal silhouettes; wider\n    // tiles retain a two-metre-or-coarser cap to protect phone streaming budgets.\n    resolutionCap =\n      tile.size <= 128 && (coastal || rugged)\n        ? Math.max(1, Math.floor(tile.size))\n        : Math.max(1, Math.floor(tile.size / 2)),\n    resolution = Math.max(1, Math.min(targetResolution, resolutionCap)),'''
+          if text.count(old) != 1:
+              raise SystemExit('resolution anchor mismatch')
+          p.write_text(text.replace(old, new, 1))
           PY
       - run: npm ci
+      - name: Refresh zoom anchors from current deterministic climate truth
+        run: |
+          node --experimental-strip-types --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { climateSampleAt } from './src/climate.ts';
+          import { macroSampleAt } from './src/macro-geography.ts';
+          import { CANONICAL_PLANET_RADIUS } from './src/planet.ts';
+
+          const toRad = d => d * Math.PI / 180;
+          const targets = {
+            forest: 'terrain/conifer-forest',
+            coast: 'terrain/beach',
+            grassland: 'terrain/grassland',
+            desert: 'terrain/desert',
+            snow: 'terrain/snowy-mountain',
+          };
+          const previous = JSON.parse(fs.readFileSync('tests/zoom-fixtures.json','utf8'));
+          const result = {};
+          const stable = (lon,lat,id,delta=0.00004) => {
+            for (const dx of [-delta,0,delta]) for (const dy of [-delta,0,delta])
+              if (climateSampleAt({lon:lon+dx,lat:lat+dy}).materialId !== id) return false;
+            return true;
+          };
+          for (const [name,id] of Object.entries(targets)) {
+            const prior = previous[name];
+            if (prior && stable(prior.lon,prior.lat,id)) result[name] = prior;
+          }
+
+          const remaining = new Set(Object.keys(targets).filter(name => name !== 'coast' && !result[name]));
+          outer: for (let latDeg=-80; latDeg<=80; latDeg+=1) {
+            const lat = toRad(latDeg);
+            for (let lonDeg=-179; lonDeg<=179; lonDeg+=1) {
+              const lon = toRad(lonDeg), sample = climateSampleAt({lon,lat});
+              for (const name of [...remaining]) {
+                if (sample.materialId === targets[name] && stable(lon,lat,targets[name],0.00008)) {
+                  result[name] = {lon,lat,materialId:targets[name]};
+                  remaining.delete(name);
+                }
+              }
+              if (!remaining.size) break outer;
+            }
+          }
+          if (remaining.size) throw new Error(`Could not deterministically locate zoom anchors: ${[...remaining].join(', ')}`);
+
+          if (!result.coast) {
+            const step = 2;
+            let beach = null;
+            for (let latDeg=-76; latDeg<=76 && !beach; latDeg+=step) {
+              for (let lonDeg=-176; lonDeg<=176 && !beach; lonDeg+=step) {
+                const starts = [
+                  [{lon:toRad(lonDeg),lat:toRad(latDeg)},{lon:toRad(lonDeg+step),lat:toRad(latDeg)}],
+                  [{lon:toRad(lonDeg),lat:toRad(latDeg)},{lon:toRad(lonDeg),lat:toRad(latDeg+step)}],
+                ];
+                for (const [a0,b0] of starts) {
+                  const ma = macroSampleAt(a0), mb = macroSampleAt(b0);
+                  if (ma.land === mb.land) continue;
+                  const landBase = ma.land ? a0 : b0;
+                  let land = {...landBase}, water = {...(ma.land ? b0 : a0)};
+                  for (let i=0;i<28;i++) {
+                    const mid = {lon:(land.lon+water.lon)/2,lat:(land.lat+water.lat)/2};
+                    if (macroSampleAt(mid).land) land = mid; else water = mid;
+                  }
+                  const boundary = {lon:(land.lon+water.lon)/2,lat:(land.lat+water.lat)/2};
+                  let vx = landBase.lon-boundary.lon, vy = landBase.lat-boundary.lat;
+                  const length = Math.hypot(vx*Math.cos(boundary.lat),vy) || 1;
+                  vx /= length; vy /= length;
+                  for (const metres of [30,70,130,220,360]) {
+                    const d = metres / CANONICAL_PLANET_RADIUS;
+                    const candidate = {
+                      lon: boundary.lon + vx*d,
+                      lat: boundary.lat + vy*d,
+                    };
+                    if (stable(candidate.lon,candidate.lat,targets.coast,0.000003)) {
+                      beach = {lon:candidate.lon,lat:candidate.lat,materialId:targets.coast};
+                      break;
+                    }
+                  }
+                  if (beach) break;
+                }
+              }
+            }
+            if (!beach) throw new Error('Could not deterministically locate stable beach zoom anchor');
+            result.coast = beach;
+          }
+
+          const ordered = Object.fromEntries(Object.keys(targets).map(name => [name,result[name]]));
+          for (const [name,fixture] of Object.entries(ordered)) {
+            const actual = climateSampleAt({lon:fixture.lon,lat:fixture.lat}).materialId;
+            if (actual !== fixture.materialId) throw new Error(`${name}: ${actual} != ${fixture.materialId}`);
+          }
+          fs.writeFileSync('tests/zoom-fixtures.json', JSON.stringify(ordered,null,2)+'\n');
+          console.log(JSON.stringify(ordered,null,2));
+          NODE
       - name: Focused deterministic regression gate
-        run: node --experimental-strip-types --test tests/hydrology.test.ts tests/surface-authority.test.ts tests/terrain-refine.test.ts tests/surface-presentation.test.ts
+        run: node --experimental-strip-types --test tests/hydrology.test.ts tests/surface-authority.test.ts tests/terrain-refine.test.ts tests/surface-presentation.test.ts tests/climate.test.ts
       - run: npm run build
-      - name: Commit correction
+      - name: Commit attempt 2 correction
         run: |
           if git diff --quiet; then
             echo 'No source changes to commit.'
@@ -58,6 +143,6 @@ jobs:
           fi
           git config user.name "AGENT #1"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
-          git add src/hydrology.ts src/terrain-refine.ts
-          git commit -m "agent1: apply WP15 canonical relief correction"
+          git add src/terrain-refine.ts tests/zoom-fixtures.json
+          git commit -m "agent1: refine WP15 terrain silhouettes"
           git push origin HEAD:agent1/wp-s002-004-005-uv-final2
