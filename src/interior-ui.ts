@@ -24,6 +24,32 @@ function roomAt(base: InteriorBase, x: number, z: number) {
   );
 }
 
+function doorwayAllows(
+  base: InteriorBase,
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+) {
+  const from = roomAt(base, fromX, fromZ),
+    to = roomAt(base, toX, toZ);
+  if (!to) return false;
+  if (!from || from.code === to.code) return true;
+  const door = base.doors.find(
+    (candidate) =>
+      (candidate.from === from.code && candidate.to === to.code) ||
+      (candidate.from === to.code && candidate.to === from.code),
+  );
+  if (!door) return false;
+  const horizontalSeparation = Math.abs(from.x - to.x) > Math.abs(from.z - to.z),
+    clearance = door.width / 2 + 0.32;
+  // Rooms are deterministic stripes. Crossing a shared wall is only legal through the
+  // canonical door aperture on that wall; movement cannot phase through walls elsewhere.
+  return horizontalSeparation
+    ? Math.abs(toZ - door.z) <= clearance
+    : Math.abs(toX - door.x) <= clearance;
+}
+
 function updatePlayer() {
   if (!active) return;
   const player = $("interior-player"),
@@ -44,6 +70,7 @@ function move(dx: number, dz: number) {
     halfW = active.base.width / 2 - 0.35,
     halfD = active.base.depth / 2 - 0.35;
   if (nx < -halfW || nx > halfW || nz < -halfD || nz > halfD) return;
+  if (!doorwayAllows(active.base, px, pz, nx, nz)) return;
   px = nx;
   pz = nz;
   updatePlayer();
