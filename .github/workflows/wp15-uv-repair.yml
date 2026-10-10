@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   repair:
-    runs-on: windows-latest
+    runs-on: macos-latest
     timeout-minutes: 20
     steps:
       - name: Checkout WP branch
@@ -30,7 +30,7 @@ jobs:
       - name: Restore canonical UVs on refined terrain
         shell: bash
         run: |
-          python - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
           import re
 
