@@ -1,6 +1,8 @@
 from pathlib import Path
 
 # Temporary branch-only exact reconciliation helper for WP-S002-004-009.
+# Re-triggered after the final interior/presentation regression additions so the patch
+# runs against the exact branch head that will enter acceptance.
 path = Path("src/world.ts")
 text = path.read_text()
 
