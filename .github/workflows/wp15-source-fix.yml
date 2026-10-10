@@ -19,52 +19,57 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Apply authoritative placement legality
+      - name: Apply authoritative placement and road legality
         shell: bash
         run: |
           set -euo pipefail
           python3 <<'PY'
           from pathlib import Path
+          import textwrap
 
+          # Features may only materialize on the same final dry/non-cliff surface
+          # used by collision and traversal.
           p = Path('src/world.ts')
           text = p.read_text()
           old = '''    if (heightAt(x, z) < 0.2) return;
-              features.push({
-                kind,
-                x,
-                z,
-                y: heightAt(x, z),
-                variant,
-                code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
-              });'''
-          if old not in text:
-              old = '''    if (heightAt(x, z) < 0.2) return;
-              features.push({
-                kind,
-                x,
-                z,
-                y: heightAt(x, z),
-                variant,
-                code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
-              });'''.replace('              ', '')
+    features.push({
+      kind,
+      x,
+      z,
+      y: heightAt(x, z),
+      variant,
+      code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
+    });'''
           new = '''    const surface = surfaceAt(x, z);
-              if (surface.water !== "none" || surface.cliff || surface.elevation < 0.2) return;
-              features.push({
-                kind,
-                x,
-                z,
-                y: surface.elevation,
-                variant,
-                code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
-              });'''.replace('              ', '')
+    if (surface.water !== "none" || surface.cliff || surface.elevation < 0.2) return;
+    features.push({
+      kind,
+      x,
+      z,
+      y: surface.elevation,
+      variant,
+      code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
+    });'''
           assert old in text, 'world feature legality block not found'
           p.write_text(text.replace(old, new, 1))
 
+          # Settlement generation is allowed to read the natural hydrology authority
+          # (which is independent of geography) and must prove the whole seeded core,
+          # not just its centre point, is dry and non-cliff.
           p = Path('src/geography.ts')
           text = p.read_text()
           start = text.index('function locallyDrySettlementSite(')
+          comment_start = text.rfind('/**', 0, start)
+          if comment_start < 0:
+              comment_start = start
           end = text.index('/**\n * Country anchors', start)
-          new_guard = '''function locallyDrySettlementSite(
+          new_guard = textwrap.dedent('''
+          /**
+           * Canonical settlement-site guard against the natural hydrology authority.
+           * Political ownership remains independent; nine deterministic core probes
+           * prevent later settlement earthworks from hiding water or cliff hazards.
+           */
+          function locallyDrySettlementSite(
             position: LonLat,
             maxReliefM: number,
             coreRadius: number,
@@ -92,19 +97,77 @@ jobs:
             return true;
           }
 
-          '''
-          # Dedent the TypeScript block to column zero.
-          import textwrap
-          new_guard = textwrap.dedent(new_guard)
-          text = text[:start] + new_guard + text[end:]
+          ''').lstrip()
+          text = text[:comment_start] + new_guard + text[end:]
           text = text.replace('!locallyDrySettlementSite(candidate, 90)', '!locallyDrySettlementSite(candidate, 90, 80)', 1)
           text = text.replace('!locallyDrySettlementSite(candidate, 95)', '!locallyDrySettlementSite(candidate, 95, 72)', 1)
           p.write_text(text)
 
-          p = Path('tests/world.test.ts')
+          # The current seeded road registry has no explicit bridge records. Final
+          # road corridors therefore compose as dry graded cut/fill/culvert surface,
+          # while the underlying catchment identity remains in hydrology metadata.
+          p = Path('src/surface.ts')
           text = p.read_text()
-          assert 'assert.equal(WORLD_FOUNDATION_VERSION, "v4");' in text
-          p.write_text(text.replace('assert.equal(WORLD_FOUNDATION_VERSION, "v4");', 'assert.equal(WORLD_FOUNDATION_VERSION, "v5");', 1))
+          elevation_start = text.index('export function surfaceElevationAt(')
+          surface_start = text.index('/** One canonical final-surface query', elevation_start)
+          new_elevation = textwrap.dedent('''
+          export function surfaceElevationAt(x: number, z: number) {
+            const natural = hydrologySurfaceAt(x, z),
+              road = roadAt(x, z);
+            if (natural.water !== "none" && !road) return natural.elevation;
+            const earthwork = earthworkAt(x, z);
+            return lerp(earthwork.target, natural.elevation, earthwork.blend);
+          }
+
+          ''')
+          text = text[:elevation_start] + new_elevation + text[surface_start:]
+          surface_start = text.index('export function surfaceAt(')
+          surface_end = len(text)
+          new_surface = textwrap.dedent('''
+          export function surfaceAt(x: number, z: number): SurfaceSample {
+            const natural = hydrologySurfaceAt(x, z),
+              road = roadAt(x, z),
+              roadCorridor = Boolean(road),
+              earthwork = natural.water === "none" || roadCorridor ? earthworkAt(x, z) : null,
+              water = roadCorridor ? "none" : natural.water,
+              graded = Boolean(earthwork && earthwork.blend < 0.999 && water === "none"),
+              elevation =
+                water === "none" && earthwork
+                  ? lerp(earthwork.target, natural.elevation, earthwork.blend)
+                  : hydrologyElevationAt(x, z),
+              slope = graded ? Math.min(natural.slope, 0.2) : natural.slope,
+              cliff = water === "none" && !graded && natural.cliff,
+              traversal: TraversalKind =
+                water !== "none"
+                  ? "blocked-water"
+                  : cliff
+                    ? "blocked-cliff"
+                    : slope >= 0.42
+                      ? "difficult"
+                      : "walkable";
+            return {
+              ...natural,
+              elevation,
+              water,
+              slope,
+              cliff,
+              traversal,
+              walkable: traversal === "walkable" || traversal === "difficult",
+              riverBank: roadCorridor ? false : natural.riverBank,
+            };
+          }
+          ''')
+          text = text[:surface_start] + new_surface
+          p.write_text(text)
+
+          # Foundation v5 is intentional for the changed deterministic world authority;
+          # update stale version assertions, never the behavior assertions.
+          for filename in ['tests/world.test.ts', 'tests/climate.test.ts']:
+              p = Path(filename)
+              text = p.read_text()
+              text = text.replace('WORLD_FOUNDATION_VERSION, "v4"', 'WORLD_FOUNDATION_VERSION, "v5"')
+              text = text.replace('${WORLD_SEED}/v4/CLIMATE', '${WORLD_SEED}/v5/CLIMATE')
+              p.write_text(text)
           PY
       - run: npm ci
       - run: npm test
@@ -116,6 +179,6 @@ jobs:
           git config user.name "AGENT #1"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
           rm .github/workflows/wp15-source-fix.yml
-          git add src/world.ts src/geography.ts tests/world.test.ts .github/workflows/wp15-source-fix.yml
-          git commit -m "WP-S002-004-005 enforce settlement feature surface legality"
+          git add src/world.ts src/geography.ts src/surface.ts tests/world.test.ts tests/climate.test.ts .github/workflows/wp15-source-fix.yml
+          git commit -m "WP-S002-004-005 enforce final surface legality"
           git push origin HEAD:agent1/wp-s002-004-005-final
