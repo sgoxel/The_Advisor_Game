@@ -1,7 +1,6 @@
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
   CANONICAL_PLANET_RADIUS,
-  SOURCE_PRESENTATION_RADIUS,
   SOURCE_PRESENTATION_WIDTH,
   greatCircleDistance,
   lonLatToSource,
@@ -186,19 +185,20 @@ function continentCandidate(
 }
 
 /**
- * Transitional settlement-site guard for the current local terrain prototype.
- * Political ownership still comes exclusively from countryAtPosition(). Until the
- * hydrology WP replaces the old source-domain river, placement simply rejects its
- * known wet corridor and a narrow coastal margin instead of filling water under a
- * city or village.
+ * Canonical settlement-site guard. This WP reserves land-connected settlements on
+ * the seeded mainland so every accepted city/village can reach its country backbone
+ * without inventing a ferry or filling water. Island transport remains transport-
+ * network scope. All wetness here comes from macro geography; no prototype river or
+ * source-presentation coordinate is allowed to decide settlement validity.
  */
 function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
   const macro = macroSampleAt(position);
-  if (!macro.land || macro.reliefM > maxReliefM) return false;
-  if (macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS < 42) return false;
-  const { x, z } = lonLatToSource(position.lon, position.lat),
-    prototypeRiverX = 125 + 42 * Math.sin(z / 150) + 18 * Math.sin(z / 57);
-  return Math.abs(wrapSourceX(x - prototypeRiverX)) > 52;
+  return (
+    macro.land &&
+    macro.domain === "Mainland" &&
+    macro.reliefM <= maxReliefM &&
+    macro.coastDistanceRad * CANONICAL_PLANET_RADIUS >= 3_000
+  );
 }
 
 /**
