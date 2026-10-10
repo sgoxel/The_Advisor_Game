@@ -8,7 +8,7 @@ import {
   wrapSourceX,
 } from "./planet.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
-import { nearestPlace, places, roadAt, roadDistanceAt } from "./geography.ts";
+import { nearestPlace, places, roadAt } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { surfaceAt, surfaceElevationAt } from "./surface.ts";
 export { WORLD_SEED } from "./config.ts";
@@ -313,18 +313,14 @@ export function cellAt(x: number, z: number): Cell {
     cz = Math.floor(z / CELL_SIZE),
     px = cx * CELL_SIZE + 1,
     pz = cz * CELL_SIZE + 1,
-    surface = surfaceAt(px, pz),
-    road = roadAt(px, pz),
-    bridge = Boolean(road && roadDistanceAt(px, pz, road) <= 5 && surface.water !== "none"),
-    elevation = bridge ? Math.max(3, surface.elevation + 1.5) : surface.elevation,
-    biome = bridge ? "Bridge" : biomeAt(px, pz);
+    surface = surfaceAt(px, pz);
   return {
     code: cellSeed(cx, cz).code,
     x: cx,
     z: cz,
-    elevation,
-    biome,
-    walkable: bridge || surface.walkable,
+    elevation: surface.elevation,
+    biome: biomeAt(px, pz),
+    walkable: surface.walkable,
     tile: `${tile.level}/${tile.x}/${tile.z}`,
   };
 }
@@ -345,12 +341,25 @@ export function featuresFor(tile: Tile): Feature[] {
       z >= tile.minZ + tile.size
     )
       return;
-    if (heightAt(x, z) < 0.2) return;
+    const surface = surfaceAt(x, z),
+      clearance =
+        kind === "keep" ? 18 :
+        kind === "field" ? 14 :
+        kind === "house" ? 8 :
+        kind === "tree" ? 5 : 4,
+      macro = macroSampleAt(sourceToLonLat(x, z));
+    if (
+      surface.water !== "none" ||
+      surface.cliff ||
+      surface.elevation < 0.2 ||
+      surface.freshwaterDistance <= clearance ||
+      macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS <= clearance
+    ) return;
     features.push({
       kind,
       x,
       z,
-      y: heightAt(x, z),
+      y: surface.elevation,
       variant,
       code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
     });

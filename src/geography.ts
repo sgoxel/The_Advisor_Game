@@ -20,7 +20,7 @@ import {
   macroLakes,
 } from "./macro-geography.ts";
 import { travelMetrics } from "./travel.ts";
-import { surfaceAt as naturalSurfaceAt } from "./hydrology.ts";
+import { freshwaterDistanceAt, surfaceAt as naturalSurfaceAt } from "./hydrology.ts";
 
 /** x/z are derived source/render coordinates; canonicalPosition is world truth. */
 export type Place = {
@@ -186,20 +186,54 @@ function continentCandidate(
   );
 }
 
+
 /**
- * Transitional settlement-site guard for the current local terrain prototype.
- * Political ownership still comes exclusively from countryAtPosition(). Until the
- * hydrology WP replaces the old source-domain river, placement simply rejects its
- * known wet corridor and a narrow coastal margin instead of filling water under a
- * city or village.
+ * Settlement selection consumes canonical natural hydrology that already exists.
+ * Core clearance prevents a city/village footprint from claiming river/lake water.
  */
-function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
+function locallyDrySettlementSite(
+  position: LonLat,
+  maxReliefM: number,
+  coreRadius: number,
+) {
   const macro = macroSampleAt(position);
   if (!macro.land || macro.reliefM > maxReliefM) return false;
-  if (macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS < 42) return false;
+  if (macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS < Math.max(42, coreRadius)) return false;
   const { x, z } = lonLatToSource(position.lon, position.lat),
     surface = naturalSurfaceAt(x, z);
-  return surface.water === "none" && !surface.cliff;
+  return surface.water === "none" && !surface.cliff && surface.freshwaterDistance > coreRadius;
+}
+
+/**
+ * Ordinary settlement roads have no implicit bridge authority. Candidate villages
+ * are accepted only when the intended predecessor connector is provably dry.
+ *
+ * Distance-to-water is 1-Lipschitz: with <=64-unit sample gaps and >36 units of
+ * freshwater/coast clearance at every sample, every point between samples retains
+ * >4 units of dry clearance. This is a conservative bounded proof and avoids the
+ * old thousands-of-full-surface-samples-per-candidate hot path.
+ */
+function naturalConnectorLegal(from: LonLat, to: LonLat) {
+  const a = lonLatToSource(from.lon, from.lat),
+    b = lonLatToSource(to.lon, to.lat),
+    dx = wrapSourceX(b.x - a.x),
+    dz = b.z - a.z,
+    length = Math.hypot(dx, dz),
+    maxGap = 64,
+    requiredClearance = 36,
+    steps = Math.max(2, Math.ceil(length / maxGap));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps,
+      x = wrapSourceX(a.x + dx * t),
+      z = a.z + dz * t,
+      macro = macroSampleAt(sourceToLonLat(x, z));
+    if (
+      !macro.land ||
+      freshwaterDistanceAt(x, z) <= requiredClearance ||
+      macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS <= requiredClearance
+    ) return false;
+  }
+  return true;
 }
 
 /**
@@ -309,7 +343,7 @@ export const cities: Place[] = (() => {
         if (
           !owner ||
           owner.code !== country.code ||
-          !locallyDrySettlementSite(candidate, 90) ||
+          !locallyDrySettlementSite(candidate, 90, 80) ||
           allAccepted.some((other) => macroFeatureDistanceM(candidate, other) < 18_000)
         )
           continue;
@@ -354,18 +388,20 @@ export const villages: Place[] = (() => {
   for (const city of cities) {
     for (let v = 0; v < VILLAGE_SLOTS_PER_CITY; v++) {
       let position: CanonicalPosition | undefined;
-      for (let attempt = 0; attempt < 280; attempt++) {
+      for (let attempt = 0; attempt < 720; attempt++) {
         const prefix = `VILLAGE/${city.id}/${v}/${attempt}`,
           bearing = TAU * addressed(`${prefix}/bearing`),
           distanceM = 7_000 + 16_000 * addressed(`${prefix}/distance`),
           candidate = destination(city.canonicalPosition, bearing, distanceM / CANONICAL_PLANET_RADIUS),
-          owner = countryAtPosition(candidate);
+          owner = countryAtPosition(candidate),
+          predecessor = v > 0 ? result.find((place) => place.id === `${city.id}/${v - 1}`) : undefined;
         if (
           !owner ||
           owner.continent !== city.continent ||
           owner.id !== city.country ||
-          !locallyDrySettlementSite(candidate, 95) ||
-          accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000)
+          !locallyDrySettlementSite(candidate, 95, 72) ||
+          accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000) ||
+          (predecessor && !naturalConnectorLegal(predecessor.canonicalPosition, candidate))
         )
           continue;
         position = candidate;
