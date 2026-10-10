@@ -114,15 +114,15 @@ test("shared country borders are deterministic bounded derivations of ownership"
   assert.equal(new Set(keys).size, keys.length);
 });
 
-test("political overlays remain continuous through globe/local handoff", () => {
-  assert.equal(politicalOverlayOpacity("flat", 0, 1000, 2500), 1);
-  assert.equal(politicalOverlayOpacity("transition", 0.0109, 1000, 2500), 1);
-  assert.equal(politicalOverlayOpacity("transition", 0.12, 1000, 2500), 1);
-  const samples = [0.12, 0.25, 0.5, 0.75, 0.92].map((transition) =>
-    politicalOverlayOpacity("transition", transition, 1000, 2500),
-  );
-  for (let i = 1; i < samples.length; i++) assert.ok(samples[i] <= samples[i - 1]);
-  assert.equal(samples.at(-1), 0);
-  assert.equal(politicalOverlayOpacity("globe", 1, 1000, 2500), 0);
+test("political overlay visibility is scale-driven across flat/globe handoff", () => {
+  for (const presentation of ["flat", "transition", "globe"] as const)
+    for (const transition of [0, 0.01, 0.25, 0.5, 0.75, 0.99, 1])
+      assert.equal(
+        politicalOverlayOpacity(presentation, transition, 1000, 2500),
+        1,
+        `${presentation}/${transition}`,
+      );
   assert.equal(politicalOverlayOpacity("flat", 0, 5000, 2500), 0);
+  assert.equal(politicalOverlayOpacity("transition", 0.5, 5000, 2500), 0);
+  assert.equal(politicalOverlayOpacity("globe", 1, 5000, 2500), 0);
 });
