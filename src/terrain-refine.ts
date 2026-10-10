@@ -46,7 +46,7 @@ function normalizePoint(point: Point): Point {
 }
 function reliefShade(normal: Point) {
   const light = normal[0] * -0.34 + normal[1] * 0.88 + normal[2] * -0.32;
-  return Math.max(0.88, Math.min(1.06, 0.94 + light * 0.11));
+  return Math.max(0.8, Math.min(1.14, 0.91 + light * 0.2));
 }
 
 /** Seam-safe presentation variation; unlike source-grid fields it cannot expose rectangular bands. */
@@ -298,7 +298,7 @@ function pushWaterDisc(
     return;
   const y = Math.max(0.08, point.bed + 0.18),
     center: Vertex = { point: [x, y, point.z], tint },
-    sides = 24;
+    sides = 32;
   for (let i = 0; i < sides; i++) {
     const a = (i / sides) * Math.PI * 2,
       b = ((i + 1) / sides) * Math.PI * 2,
@@ -346,7 +346,7 @@ function pushLake(
     return;
   const y = Math.max(0.08, lake.level + 0.14),
     center: Vertex = { point: [x, y, lake.z], tint: LAKE_WATER },
-    sides = 64;
+    sides = 72;
   for (let i = 0; i < sides; i++) {
     const a = (i / sides) * Math.PI * 2,
       b = ((i + 1) / sides) * Math.PI * 2,
@@ -376,8 +376,28 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
   const center = macroSampleAt(
       sourceToLonLat(wrapSourceX(tile.minX + tile.size / 2), tile.minZ + tile.size / 2),
     ),
-    rugged = center.reliefM >= 80 || center.mountainIntensity >= 0.06,
-    targetResolution = tile.size <= 128 ? 68 : tile.size <= 512 ? (rugged ? 52 : 40) : rugged ? 40 : 28,
+    edgeSamples = [
+      center,
+      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX), tile.minZ)),
+      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX + tile.size), tile.minZ)),
+      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX), tile.minZ + tile.size)),
+      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX + tile.size), tile.minZ + tile.size)),
+    ],
+    coastal = edgeSamples.some((sample) => sample.land) && edgeSamples.some((sample) => !sample.land),
+    rugged = edgeSamples.some((sample) => sample.reliefM >= 80 || sample.mountainIntensity >= 0.06),
+    targetResolution = coastal
+      ? tile.size <= 512
+        ? 88
+        : 72
+      : tile.size <= 128
+        ? 72
+        : tile.size <= 512
+          ? rugged
+            ? 64
+            : 44
+          : rugged
+            ? 52
+            : 32,
     resolution = Math.max(1, Math.min(targetResolution, Math.floor(tile.size / 2))),
     step = tile.size / resolution,
     grid: Vertex[][] = [];

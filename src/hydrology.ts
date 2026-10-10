@@ -141,13 +141,23 @@ function fineReliefPhases(continentId: number) {
 function fineReliefNoise(x: number, z: number, continentId: number) {
   const p = sourceToLonLat(wrapSourceX(x), z),
     phase = fineReliefPhases(continentId),
+    // Low-frequency domain warp prevents long parallel harmonic bands while retaining
+    // exact longitude wrapping and deterministic mountain identity.
+    warpLon =
+      Math.sin(p.lon * 61 + p.lat * 47 + phase[0]) * 0.0038 +
+      Math.cos(p.lon * 109 - p.lat * 71 + phase[1]) * 0.0022,
+    warpLat =
+      Math.cos(p.lon * 73 - p.lat * 53 + phase[2]) * 0.0035 +
+      Math.sin(p.lon * 127 + p.lat * 83 + phase[3]) * 0.002,
+    lon = p.lon + warpLon,
+    lat = p.lat + warpLat,
     terms = [
-      Math.sin(p.lon * 1489 + p.lat * 1777 + phase[0]) * 0.24,
-      Math.cos(p.lon * 2333 - p.lat * 1597 + phase[1]) * 0.2,
-      Math.sin(p.lon * 3761 + p.lat * 2903 + phase[2]) * 0.18,
-      Math.cos(p.lon * 5147 - p.lat * 4099 + phase[3]) * 0.15,
-      Math.sin(p.lon * 7481 + p.lat * 6211 + phase[4]) * 0.13,
-      Math.cos(p.lon * 10009 - p.lat * 8011 + phase[5]) * 0.1,
+      Math.sin(lon * 227 + lat * 281 + phase[0]) * 0.28,
+      Math.cos(lon * 389 - lat * 313 + phase[1]) * 0.22,
+      Math.sin(lon * 653 + lat * 509 + phase[2]) * 0.18,
+      Math.cos(lon * 997 - lat * 761 + phase[3]) * 0.14,
+      Math.sin(lon * 1543 + lat * 1187 + phase[4]) * 0.11,
+      Math.cos(lon * 2381 - lat * 1801 + phase[5]) * 0.07,
     ];
   return terms.reduce((sum, value) => sum + value, 0);
 }
@@ -169,7 +179,7 @@ export function naturalElevationAt(x: number, z: number): number {
     fine = fineReliefNoise(sx, z, macro.continentId),
     // Macro authority decides where/which mountain exists; this continuous spectrum
     // breaks its wide footprint into local shoulders, gullies and ridges at Province scale.
-    localRelief = fine * Math.min(155, macro.reliefM * 0.3) * mountainWeight,
+    localRelief = fine * Math.min(138, macro.reliefM * 0.27) * mountainWeight,
     base = macro.domain === "Island" ? 3.5 + noise * 13 : 3.5 + broad * 8 + noise * 4.5,
     rawRelief = Math.max(0, macro.reliefM * (0.54 + 0.2 * noise) + localRelief),
     reliefLimit = macro.domain === "Island" ? 190 : 560,
@@ -567,7 +577,7 @@ export function surfaceAt(x: number, z: number): SurfaceSample {
         (step * 2);
     slope = Math.max(dx, dz);
   }
-  const cliff = water === "none" && slope >= 1.15,
+  const cliff = water === "none" && slope >= 0.95,
     traversal: TraversalKind =
       water !== "none"
         ? "blocked-water"
