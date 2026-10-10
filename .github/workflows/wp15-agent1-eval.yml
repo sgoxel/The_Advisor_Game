@@ -1,11 +1,11 @@
-name: WP15 AGENT1 attempt evaluation
+name: WP15 AGENT1 final isolated evaluation
 on:
   push:
-    branches: [agent1/wp-s002-004-005-uv-final2]
+    branches: [agent1/wp15-final-eval-20261010]
 permissions:
   contents: read
 concurrency:
-  group: wp15-agent1-eval
+  group: wp15-agent1-final-isolated-20261010
   cancel-in-progress: true
 defaults:
   run:
@@ -77,5 +77,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: wp15-agent1-attempt-${{ matrix.renderer }}-${{ github.sha }}
+          name: wp15-agent1-final-${{ matrix.renderer }}-${{ github.sha }}
           path: test-results/wp15-terrain-${{ matrix.renderer }}
