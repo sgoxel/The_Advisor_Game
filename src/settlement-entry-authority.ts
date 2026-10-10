@@ -181,8 +181,10 @@ function install(api: SettlementApi) {
   );
 
   const relabel = () => {
-    for (const button of document.querySelectorAll<HTMLButtonElement>(
-      ".enter-building",
+    // The project intentionally does not include DOM.Iterable; materialize the
+    // NodeList before iteration so this UI helper stays inside the existing TS lib contract.
+    for (const button of Array.from(
+      document.querySelectorAll<HTMLButtonElement>(".enter-building"),
     ))
       if (!button.disabled) button.textContent = "Advise entry";
   };
