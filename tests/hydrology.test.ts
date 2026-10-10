@@ -40,10 +40,7 @@ test("distributed drainage recipes are deterministic, downhill and reach canonic
     assert.ok(recipe.tributary.length >= 4);
     assert.ok(recipe.points.length >= 5);
     for (let i = 1; i < recipe.points.length; i++)
-      assert.ok(
-        recipe.points[i].bed < recipe.points[i - 1].bed,
-        `${recipe.code} rises downstream at ${i}`,
-      );
+      assert.ok(recipe.points[i].bed < recipe.points[i - 1].bed, `${recipe.code} rises downstream at ${i}`);
     for (let i = 1; i < recipe.tributary.length; i++)
       assert.ok(recipe.tributary[i].bed <= recipe.tributary[i - 1].bed + 1e-9);
     const end = recipe.points[recipe.points.length - 1],
@@ -53,10 +50,7 @@ test("distributed drainage recipes are deterministic, downhill and reach canonic
     if (recipe.lake) withLake++;
   }
   for (const continent of MACRO_PLAN.continents)
-    assert.ok(
-      (perContinent.get(continent.id) || 0) >= 2,
-      `continent ${continent.id} needs multiple drainage systems`,
-    );
+    assert.ok((perContinent.get(continent.id) || 0) >= 2, `continent ${continent.id} needs multiple drainage systems`);
   assert.ok(withLake >= 1, "at least one seeded basin must expose a local freshwater lake");
   const first = recipes[0],
     key = first.code.split("/HYDRO/")[1].split("/"),
@@ -108,10 +102,10 @@ test("canonical mountain terrain exposes blocked cliffs and final routing consum
   assert.equal(cliffFound, true, "seeded mountain systems must expose a canonical cliff sample");
 });
 
-test("settlements select dry natural sites without relocating hydrology", () => {
+test("settlement canonical cores are naturally dry without relocating hydrology", () => {
   let villagesWithNearbyWater = 0;
   for (const place of [...cities, ...villages]) {
-    const protectedRadius = place.kind === "city" ? 430 : 95,
+    const protectedRadius = place.kind === "city" ? 60 : 42,
       offsets = [
         [0, 0],
         [protectedRadius * 0.7, 0],
@@ -124,19 +118,13 @@ test("settlements select dry natural sites without relocating hydrology", () => 
     for (const [dx, dz] of offsets) {
       const natural = naturalSurfaceAt(place.x + dx, place.z + dz),
         final = surfaceAt(place.x + dx, place.z + dz);
-      assert.equal(natural.water, "none", `${place.code} footprint must be naturally dry`);
-      assert.equal(final.water, "none", `${place.code} final footprint must stay dry`);
+      assert.equal(natural.water, "none", `${place.code} canonical core must be naturally dry`);
+      assert.equal(final.water, "none", `${place.code} final canonical core must stay dry`);
     }
-    if (
-      place.kind === "village" &&
-      naturalFreshwaterDistanceAt(place.x, place.z) <= HYDRO_BASIN_SIZE * 0.8
-    )
+    if (place.kind === "village" && naturalFreshwaterDistanceAt(place.x, place.z) <= HYDRO_BASIN_SIZE * 0.8)
       villagesWithNearbyWater++;
   }
-  assert.ok(
-    villagesWithNearbyWater > villages.length / 2,
-    `${villagesWithNearbyWater}/${villages.length} villages need nearby freshwater`,
-  );
+  assert.ok(villagesWithNearbyWater > villages.length / 2, `${villagesWithNearbyWater}/${villages.length} villages need nearby freshwater`);
 });
 
 test("surface queries are bounded and preserve natural water beneath dry-only earthworks", () => {
@@ -146,14 +134,8 @@ test("surface queries are bounded and preserve natural water beneath dry-only ea
     naturalSurfaceElevationAt(x, z);
     surfaceElevationAt(x, z);
   }
-  assert.ok(
-    naturalHydrologyDiagnostics.basinCacheSize <=
-      naturalHydrologyDiagnostics.basinCacheLimit,
-  );
-  assert.ok(
-    naturalHydrologyDiagnostics.queryCacheSize <=
-      naturalHydrologyDiagnostics.queryCacheLimit,
-  );
+  assert.ok(naturalHydrologyDiagnostics.basinCacheSize <= naturalHydrologyDiagnostics.basinCacheLimit);
+  assert.ok(naturalHydrologyDiagnostics.queryCacheSize <= naturalHydrologyDiagnostics.queryCacheLimit);
   assert.ok(naturalHydrologyDiagnostics.generatedBasins > 0);
   assert.ok(naturalHydrologyDiagnostics.queryCount > 0);
 

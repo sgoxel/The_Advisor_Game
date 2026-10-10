@@ -67,6 +67,8 @@ const COUNTRY_NAMES = [
 ] as const;
 const CITY_SLOTS_PER_COUNTRY = 3;
 const VILLAGE_SLOTS_PER_CITY = 3;
+const CITY_NATURAL_DRY_CORE = 60;
+const VILLAGE_NATURAL_DRY_CORE = 42;
 const CULTURE_STEMS = [
   ["Alder", "Briar", "Oak", "Thorn", "Grey", "Mere", "Stone", "Willow", "Falcon", "Hearth", "Raven", "Ash"],
   ["Gold", "Rose", "Iron", "Sun", "Dawn", "High", "Red", "White", "Wind", "Crown", "Silver", "North"],
@@ -190,8 +192,10 @@ function continentCandidate(
 }
 
 /**
- * Settlement legality consumes the upstream natural surface. Hydrology is never
- * moved to fit a preferred settlement: the candidate is rejected instead.
+ * Settlement legality consumes upstream natural surface truth. Hydrology is never
+ * moved to fit a preferred settlement: a wet/unwalkable core is rejected instead.
+ * Later settlement layout work may route structures around natural water outside
+ * this protected core; feature spawning already refuses wet cells.
  */
 function locallyDrySettlementSite(
   position: LonLat,
@@ -204,16 +208,15 @@ function locallyDrySettlementSite(
     return false;
   const { x, z } = lonLatToSource(position.lon, position.lat),
     surface = naturalSurfaceAt(x, z),
-    freshwater = naturalFreshwaterDistanceAt(x, z);
+    freshwater = surface.freshwaterDistance;
   if (
     surface.water !== "none" ||
     !surface.walkable ||
     surface.cliff ||
     surface.elevation < 0.5 ||
-    freshwater <= clearanceSource + 28
+    freshwater <= clearanceSource + 18
   )
     return false;
-  // Bounded footprint probes prevent a macro lake/coast from clipping the plot.
   for (const [dx, dz] of [
     [clearanceSource, 0],
     [-clearanceSource, 0],
@@ -228,11 +231,6 @@ function locallyDrySettlementSite(
   return true;
 }
 
-/**
- * Country anchors are selected by deterministic farthest-candidate sampling over
- * each full seeded mainland footprint. They are not a centre cluster, ring, grid,
- * or mutable random stream.
- */
 function buildCountries(): Country[] {
   const result: Country[] = [],
     counts = politicalRegistryCountsForSeed(WORLD_SEED).perContinent;
@@ -292,7 +290,6 @@ function politicalWarp(position: LonLat, country: Country) {
   return 1 + wave * 0.045;
 }
 
-/** Complete deterministic political partition of canonical land. */
 export function countryAtPosition(position: LonLat): Country | undefined {
   const macro = macroSampleAt(position);
   if (!macro.land) return undefined;
@@ -331,7 +328,7 @@ export const cities: Place[] = (() => {
         if (
           !owner ||
           owner.code !== country.code ||
-          !locallyDrySettlementSite(candidate, 90, 430) ||
+          !locallyDrySettlementSite(candidate, 90, CITY_NATURAL_DRY_CORE) ||
           allAccepted.some((other) => macroFeatureDistanceM(candidate, other) < 18_000)
         )
           continue;
@@ -398,7 +395,7 @@ export const villages: Place[] = (() => {
           !owner ||
           owner.continent !== city.continent ||
           owner.id !== city.country ||
-          !locallyDrySettlementSite(candidate, 95, 95) ||
+          !locallyDrySettlementSite(candidate, 95, VILLAGE_NATURAL_DRY_CORE) ||
           accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000)
         )
           continue;
