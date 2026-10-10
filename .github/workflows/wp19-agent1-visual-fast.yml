@@ -1,0 +1,45 @@
+name: WP19 AGENT1 focused visual evidence
+on:
+  push:
+    branches: [agent1/wp-s002-004-009-living-settlements]
+    paths: [.github/workflows/wp19-agent1-visual-fast.yml]
+permissions:
+  contents: read
+concurrency:
+  group: wp19-agent1-focused-visual
+  cancel-in-progress: true
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        renderer: [webgpu, webgl2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: python -m pip install playwright==1.63.0
+      - name: Capture focused WP009 evidence
+        shell: bash
+        run: |
+          npm run preview -- --port 4176 > /tmp/advisor-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4176/ >/dev/null; then break; fi
+            sleep 1
+          done
+          TARGETS="$(node --experimental-strip-types tools/wp19_targets.ts)"
+          STEPS="eval:window.__wp19=${TARGETS};eval:window.advisorWorld.navigation.setFocus(window.__wp19.villages[0].lon,window.__wp19.villages[0].lat);eval:window.advisorWorld.setHalfHeight(97);settle;shot:village-small;eval:window.advisorWorld.navigation.setFocus(window.__wp19.villages[1].lon,window.__wp19.villages[1].lat);settle;shot:village-alt;eval:window.advisorWorld.navigation.setFocus(window.__wp19.city.lon,window.__wp19.city.lat);eval:window.advisorWorld.setHalfHeight(230);settle;shot:city;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'inn');settle;shot:inn-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'blacksmith');settle;shot:blacksmith-exterior;eval:window.advisorSettlements.focus(window.__wp19.villages[0].id,'home');settle;shot:home-exterior;eval:window.advisorSettlements.enter(window.__wp19.villages[0].inn);shot:inn-interior;eval:window.advisorSettlements.exit();eval:window.advisorSettlements.enter(window.__wp19.villages[0].blacksmith);shot:blacksmith-interior;eval:window.advisorSettlements.exit();eval:window.advisorSettlements.enter(window.__wp19.villages[0].home);shot:home-interior;eval:window.advisorSettlements.exit()"
+          python tools/screenshot_tool.py http://127.0.0.1:4176/ --out test-results/wp19-focused-${{ matrix.renderer }} --name wp19-focused --profile desktop,phone,phone-landscape --renderer ${{ matrix.renderer }} --timeout 180 --steps "$STEPS"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wp19-focused-${{ matrix.renderer }}-${{ github.sha }}
+          path: test-results/wp19-focused-${{ matrix.renderer }}
