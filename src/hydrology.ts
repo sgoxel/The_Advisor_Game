@@ -23,13 +23,22 @@ export type SurfaceSample = {
   catchmentCode: string | null;
 };
 export type DrainagePoint = { x: number; z: number; bed: number };
+export type DrainageLake = {
+  x: number;
+  z: number;
+  radius: number;
+  level: number;
+  phase: number;
+  elongation: number;
+  rotation: number;
+};
 export type DrainageRecipe = {
   code: string;
   continentId: number;
   points: DrainagePoint[];
   tributary: DrainagePoint[];
   width: number;
-  lake: { x: number; z: number; radius: number; level: number } | null;
+  lake: DrainageLake | null;
   outlet: "ocean" | "lake";
 };
 
@@ -76,6 +85,23 @@ function smooth01(value: number) {
 }
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
+}
+/** Canonical deterministic shoreline radius shared by hydrology queries and rendering. */
+export function drainageLakeRadiusAt(lake: DrainageLake, angle: number) {
+  const local = angle - lake.rotation,
+    c = Math.cos(local),
+    s = Math.sin(local),
+    major = 1 + lake.elongation,
+    minor = 1 - lake.elongation * 0.45,
+    ellipse =
+      lake.radius /
+      Math.sqrt((c * c) / (major * major) + (s * s) / (minor * minor)),
+    irregular =
+      1 +
+      0.1 * Math.sin(angle * 3 + lake.phase) +
+      0.06 * Math.sin(angle * 5 - lake.phase * 0.61) +
+      0.035 * Math.cos(angle * 7 + lake.phase * 1.37);
+  return Math.max(lake.radius * 0.68, ellipse * irregular);
 }
 function sphericalNoise(x: number, z: number, layer: number) {
   const p = sourceToLonLat(wrapSourceX(x), z),
@@ -307,6 +333,9 @@ export function drainageRecipeAt(gx: number, gz: number): DrainageRecipe | null 
                   lakePoint.bed + 0.35,
                   naturalElevationAt(lakePoint.x, lakePoint.z) - 0.45,
                 ),
+                phase: addressed(`${key}/lake-phase`) * Math.PI * 2,
+                elongation: 0.05 + addressed(`${key}/lake-elongation`) * 0.13,
+                rotation: addressed(`${key}/lake-rotation`) * Math.PI * 2,
               }
             : null;
       recipe = {
@@ -365,9 +394,10 @@ function nearestHydrology(x: number, z: number): HydroHit {
       if (headDistance > 13_500) continue;
 
       if (recipe.lake) {
-        const distance =
-          Math.hypot(wrapSourceX(canonicalX - recipe.lake.x), z - recipe.lake.z) -
-          recipe.lake.radius;
+        const lakeDx = wrapSourceX(canonicalX - recipe.lake.x),
+          lakeDz = z - recipe.lake.z,
+          shoreRadius = drainageLakeRadiusAt(recipe.lake, Math.atan2(lakeDz, lakeDx)),
+          distance = Math.hypot(lakeDx, lakeDz) - shoreRadius;
         if (distance < best.distance)
           best = {
             water: distance <= 0 ? "lake" : "none",

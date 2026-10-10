@@ -8,6 +8,7 @@ import {
   sourceToLonLat,
 } from "../src/planet.ts";
 import {
+  drainageLakeRadiusAt,
   drainageRecipeAt,
   freshwaterDistanceAt,
   hydrologyDiagnostics,
@@ -57,6 +58,21 @@ test("distributed drainage recipes are deterministic, downhill and reach real wa
     key = first.code.split("/HYDRO/")[1].split("/"),
     repeated = drainageRecipeAt(Number(key[0]), Number(key[1]));
   assert.deepEqual(repeated, first);
+});
+
+test("local freshwater lakes use deterministic non-circular canonical shorelines", () => {
+  const lake = generatedRecipes().find((recipe) => recipe.lake)?.lake;
+  assert.ok(lake, "expected a seeded local lake");
+  const radii = Array.from({ length: 32 }, (_, index) =>
+    drainageLakeRadiusAt(lake, (index / 32) * Math.PI * 2),
+  );
+  assert.ok(Math.max(...radii) - Math.min(...radii) > lake.radius * 0.12);
+  assert.deepEqual(
+    radii,
+    Array.from({ length: 32 }, (_, index) =>
+      drainageLakeRadiusAt(lake, (index / 32) * Math.PI * 2),
+    ),
+  );
 });
 
 test("surface identity is wrap-safe and water/cliffs share traversal truth", () => {

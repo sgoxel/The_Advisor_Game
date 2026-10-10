@@ -1,7 +1,8 @@
 import { villages } from "../src/geography.ts";
-import { MACRO_PLAN } from "../src/macro-geography.ts";
+import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
 import {
   SOURCE_PRESENTATION_POLE_DISTANCE,
+  SOURCE_PRESENTATION_RADIUS,
   sourceToLonLat,
   lonLatToSource,
 } from "../src/planet.ts";
@@ -30,10 +31,11 @@ const lakeRecipe = recipes.find((recipe) => recipe.lake);
 if (!lakeRecipe?.lake) throw new Error("Visual evidence requires an actual seeded freshwater lake");
 const lakePoint = lakeRecipe.lake;
 
-let cliffPoint: DrainagePoint | undefined;
+let cliffPoint: DrainagePoint | undefined,
+  cliffClearance = -Infinity;
 const cliffRadii = [0, 24, 48, 72, 96, 128, 160, 224, 320, 448, 640] as const;
 const cliffDirections = 16;
-outer: for (const mountain of MACRO_PLAN.mountainSystems) {
+for (const mountain of MACRO_PLAN.mountainSystems) {
   for (const anchor of mountain.path) {
     const centre = lonLatToSource(anchor.lon, anchor.lat);
     for (const radius of cliffRadii) {
@@ -44,10 +46,17 @@ outer: for (const mountain of MACRO_PLAN.mountainSystems) {
           z = centre.z + Math.sin(angle) * radius;
         if (z <= -SOURCE_PRESENTATION_POLE_DISTANCE || z >= SOURCE_PRESENTATION_POLE_DISTANCE)
           continue;
-        const sample = surfaceAt(x, z);
-        if (!sample.cliff) continue;
-        cliffPoint = { x, z, bed: sample.elevation };
-        break outer;
+        const sample = surfaceAt(x, z),
+          macro = macroSampleAt(sourceToLonLat(x, z));
+        if (!sample.cliff || sample.water !== "none" || !macro.land) continue;
+        const clearance = Math.min(
+          macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
+          sample.freshwaterDistance,
+        );
+        if (clearance > cliffClearance) {
+          cliffClearance = clearance;
+          cliffPoint = { x, z, bed: sample.elevation };
+        }
       }
     }
   }
@@ -63,10 +72,16 @@ const rankedVillages = [...villages]
 const village = rankedVillages[0]?.village;
 if (!village) throw new Error("Visual evidence requires a village with useful canonical freshwater access");
 
-const mountain = [...MACRO_PLAN.mountainSystems].sort(
-  (a, b) => b.reliefM - a.reliefM || (a.code < b.code ? -1 : 1),
-)[0];
+const mountain =
+  [...MACRO_PLAN.mountainSystems]
+    .filter((system) => system.path.length >= 4 && system.kind !== "volcano")
+    .sort(
+      (a, b) =>
+        b.reliefM * b.lengthRad - a.reliefM * a.lengthRad ||
+        (a.code < b.code ? -1 : 1),
+    )[0] ?? [...MACRO_PLAN.mountainSystems].sort((a, b) => b.reliefM - a.reliefM)[0];
 if (!mountain) throw new Error("Visual evidence requires a seeded mountain system");
+const mountainTarget = mountain.path[Math.floor(mountain.path.length / 2)] ?? mountain.center;
 
 const lonLat = (point: { x: number; z: number }) => sourceToLonLat(point.x, point.z);
 process.stdout.write(JSON.stringify({
@@ -74,6 +89,6 @@ process.stdout.write(JSON.stringify({
   lake: lonLat(lakePoint),
   cliff: lonLat(cliffPoint),
   village: village.canonicalPosition,
-  mountain: mountain.center,
+  mountain: mountainTarget,
   outlet: lonLat(riverRecipe.points[riverRecipe.points.length - 1]),
 }));
