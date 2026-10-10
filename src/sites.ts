@@ -9,6 +9,8 @@ import {
 } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import {
+  CANONICAL_METRES_PER_SOURCE_UNIT,
+  SOURCE_PRESENTATION_WIDTH,
   greatCircleDistance,
   lonLatToSource,
   sourceToLonLat,
@@ -47,7 +49,7 @@ export type CriticalSite = {
 const MAX_CANDIDATE_ATTEMPTS = 64;
 const ACCESS_SAMPLES = 12;
 const SITE_SLOTS_PER_COUNTRY = 2;
-const SITE_BUCKET_M = 4096;
+const SITE_BUCKET_SOURCE_UNITS = 512;
 
 function digest(text: string): number {
   let value = 2166136261;
@@ -58,11 +60,14 @@ function digest(text: string): number {
 function addressed(address: string) {
   return digest(`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/CRITICAL_SITE/${address}`) / 4294967296;
 }
+function sourceUnitsForMetres(metres: number) {
+  return metres / CANONICAL_METRES_PER_SOURCE_UNIT;
+}
 function canonical(position: ReturnType<typeof sourceToLonLat>, elevation = 0): CanonicalPosition {
   return { lon: position.lon, lat: position.lat, elevation };
 }
 function roadPoint(road: Road, t: number) {
-  const x = road.fromX + (road.toX - road.fromX) * t,
+  const x = road.fromX + wrapSourceX(road.toX - road.fromX) * t,
     z = road.fromZ + (road.toZ - road.fromZ) * t,
     position = sourceToLonLat(x, z),
     normalized = lonLatToSource(position.lon, position.lat);
@@ -125,9 +130,10 @@ function createSite(
       dz = road.toZ - road.fromZ,
       length = Math.max(1, Math.hypot(dx, dz)),
       side = addressed(`${code}/${attempt}/SIDE`) < 0.5 ? -1 : 1,
-      offset = 220 + addressed(`${code}/${attempt}/OFFSET`) * 520,
-      candidateX = access.x + (-dz / length) * offset * side,
-      candidateZ = access.z + (dx / length) * offset * side,
+      offsetM = 700 + addressed(`${code}/${attempt}/OFFSET`) * 800,
+      offsetSource = sourceUnitsForMetres(offsetM),
+      candidateX = access.x + (-dz / length) * offsetSource * side,
+      candidateZ = access.z + (dx / length) * offsetSource * side,
       candidateLonLat = sourceToLonLat(candidateX, candidateZ),
       normalized = lonLatToSource(candidateLonLat.lon, candidateLonLat.lat),
       position = canonical(candidateLonLat),
@@ -139,8 +145,8 @@ function createSite(
       macro.domain === "Lake" ||
       macro.reliefM > 190 ||
       owner?.code !== country.code ||
-      accessLengthM < 160 ||
-      accessLengthM > 950 ||
+      accessLengthM < 500 ||
+      accessLengthM > 1800 ||
       !farEnoughFromSettlements(position) ||
       accepted.some((other) => greatCircleDistance(position, other.canonicalPosition) < 900) ||
       !accessIsLegal(country, position, access.canonicalPosition)
@@ -184,23 +190,31 @@ export const criticalSites: readonly CriticalSite[] = (() => {
 })();
 
 const buckets = new Map<string, CriticalSite[]>();
-for (const site of criticalSites) {
-  const key = `${Math.floor(site.x / SITE_BUCKET_M)}/${Math.floor(site.z / SITE_BUCKET_M)}`,
+function addToBucket(site: CriticalSite, x: number) {
+  const key = `${Math.floor(x / SITE_BUCKET_SOURCE_UNITS)}/${Math.floor(site.z / SITE_BUCKET_SOURCE_UNITS)}`,
     bucket = buckets.get(key) ?? [];
-  bucket.push(site);
+  if (!bucket.includes(site)) bucket.push(site);
   buckets.set(key, bucket);
 }
+for (const site of criticalSites) {
+  addToBucket(site, site.x);
+  if (site.x < -SOURCE_PRESENTATION_WIDTH / 2 + SITE_BUCKET_SOURCE_UNITS)
+    addToBucket(site, site.x + SOURCE_PRESENTATION_WIDTH);
+  if (site.x > SOURCE_PRESENTATION_WIDTH / 2 - SITE_BUCKET_SOURCE_UNITS)
+    addToBucket(site, site.x - SOURCE_PRESENTATION_WIDTH);
+}
 
-/** Focus-bounded query: coarse metadata exists globally, detailed consumers only inspect nearby buckets. */
-export function nearbyCriticalSites(x: number, z: number, radiusM: number, limit = 24) {
-  const span = Math.ceil(radiusM / SITE_BUCKET_M) + 1,
-    bx = Math.floor(x / SITE_BUCKET_M),
-    bz = Math.floor(z / SITE_BUCKET_M),
+/** Focus-bounded query in transitional source coordinates; returned identities remain canonical. */
+export function nearbyCriticalSites(x: number, z: number, radiusSourceUnits: number, limit = 24) {
+  const span = Math.ceil(radiusSourceUnits / SITE_BUCKET_SOURCE_UNITS) + 1,
+    bx = Math.floor(x / SITE_BUCKET_SOURCE_UNITS),
+    bz = Math.floor(z / SITE_BUCKET_SOURCE_UNITS),
     found = new Map<string, CriticalSite>();
   for (let dz = -span; dz <= span; dz++)
     for (let dx = -span; dx <= span; dx++)
       for (const site of buckets.get(`${bx + dx}/${bz + dz}`) ?? []) {
-        if (Math.hypot(wrapSourceX(site.x - x), site.z - z) <= radiusM) found.set(site.code, site);
+        if (Math.hypot(wrapSourceX(site.x - x), site.z - z) <= radiusSourceUnits)
+          found.set(site.code, site);
       }
   return [...found.values()]
     .sort((a, b) =>
@@ -219,8 +233,9 @@ export type SiteSurfaceSample = {
 };
 
 /**
- * Priority-9 local preparation contract. The caller supplies the existing composed
- * height; the same bounded function is used for site presentation and site walkability.
+ * Priority-9 local preparation contract. Radius/falloff metadata is canonical metres;
+ * transitional source coordinates are converted at this boundary. Presentation and
+ * walkability consume the same bounded sample so they cannot disagree about ground.
  */
 export function siteSurfaceSample(
   site: CriticalSite,
@@ -229,14 +244,16 @@ export function siteSurfaceSample(
   baseHeight: number,
   targetHeight: number,
 ): SiteSurfaceSample {
-  const distance = Math.hypot(wrapSourceX(x - site.x), z - site.z),
-    support = site.radiusM + site.falloffM;
-  if (distance >= support)
+  const distanceSource = Math.hypot(wrapSourceX(x - site.x), z - site.z),
+    radiusSource = sourceUnitsForMetres(site.radiusM),
+    falloffSource = sourceUnitsForMetres(site.falloffM),
+    supportSource = radiusSource + falloffSource;
+  if (distanceSource >= supportSource)
     return { height: baseHeight, cleared: false, walkable: baseHeight > 0.1, influence: 0 };
   const influence =
-    distance <= site.radiusM
+    distanceSource <= radiusSource
       ? 1
-      : 1 - (distance - site.radiusM) / site.falloffM,
+      : 1 - (distanceSource - radiusSource) / falloffSource,
     smooth = influence * influence * (3 - 2 * influence),
     height = baseHeight + (targetHeight - baseHeight) * smooth;
   return { height, cleared: true, walkable: height > 0.1, influence: smooth };
