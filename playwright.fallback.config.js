@@ -3,8 +3,8 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests/browser",
   outputDir: "test-results/fallback-run",
-  testMatch: ["renderer.spec.js", "render-frame.spec.js", "routes.spec.js", "orientation.spec.js", "zoom.spec.js"],
-  timeout: 180000,
+  testMatch: ["renderer.spec.js", "render-frame.spec.js", "routes.spec.js", "orientation.spec.js", "zoom.spec.js", "wp19-interiors.spec.js"],
+  timeout: 240000,
   workers: 1,
   use: {
     baseURL: "http://127.0.0.1:4173",
