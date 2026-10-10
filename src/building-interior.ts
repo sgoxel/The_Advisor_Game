@@ -69,8 +69,6 @@ function interiorCode(building: Building): string {
 
 function canonicalRooms(building: Building): Room[] {
   if (building.rooms.length) return building.rooms.map((room) => ({ ...room }));
-  // Defensive fallback for a future archetype that forgot its program. This does not invent a
-  // camera/device-dependent room: the fallback is solely a function of the canonical role.
   return [{ name: `${building.role} space`, areaM2: Math.max(6, building.width * building.depth * 0.55) }];
 }
 
@@ -86,13 +84,7 @@ function anchorKind(name: string, role: BuildingRole): InteriorAnchorKind {
   return "social";
 }
 
-/**
- * Pure interior reconstruction. The immutable base depends only on the canonical building record.
- * Rooms are packed as deterministic stripes inside the usable footprint. The stripe axis and order
- * are seeded from the building code, giving stable variation without a mutable RNG stream. Every
- * room receives at least its program area because settlement footprints are already sized from the
- * sum of room areas with circulation/wall allowance.
- */
+/** Pure canonical interior reconstruction. No cache, camera, renderer or visit-order input. */
 export function interiorBaseForBuilding(building: Building): InteriorBase {
   const code = interiorCode(building),
     source = canonicalRooms(building),
@@ -100,7 +92,6 @@ export function interiorBaseForBuilding(building: Building): InteriorBase {
     usableDepth = Math.max(1.8, building.depth - WALL * 2),
     usableArea = usableWidth * usableDepth,
     requested = source.reduce((sum, room) => sum + Math.max(0.5, room.areaM2), 0),
-    // Preserve program ratios but reserve all available floor area for room/circulation stripes.
     weights = source.map((room) => Math.max(0.5, room.areaM2) / requested),
     splitX = (digest(`${code}/axis`) & 1) === 1,
     reverse = (digest(`${code}/order`) & 1) === 1,
@@ -134,14 +125,14 @@ export function interiorBaseForBuilding(building: Building): InteriorBase {
     cursor += span;
   }
 
-  // Doors form a single connected chain. With stripe packing each neighbour shares a complete wall,
-  // so the midpoint opening is always legal and all required rooms are reachable from the entry.
+  // Adjacent stripe rooms share one exact wall. Door coordinates are placed on that wall,
+  // not between the room centres (which is wrong when rooms have different spans).
   const doors: InteriorDoor[] = [];
   for (let i = 0; i + 1 < rooms.length; i++) {
     const a = rooms[i],
       b = rooms[i + 1],
-      x = splitX ? (a.x + b.x) / 2 : 0,
-      z = splitX ? 0 : (a.z + b.z) / 2;
+      x = splitX ? a.x + Math.sign(b.x - a.x) * a.width / 2 : 0,
+      z = splitX ? 0 : a.z + Math.sign(b.z - a.z) * a.depth / 2;
     doors.push({
       code: `${code}/door/${i}`,
       from: a.code,
@@ -152,8 +143,6 @@ export function interiorBaseForBuilding(building: Building): InteriorBase {
     });
   }
 
-  // Exterior entrance is on local +z. Choose the room touching that wall even when the stripe axis
-  // runs left-right, then expose an explicit entry anchor used by protagonist transitions.
   let entryRoom = rooms[0];
   for (const room of rooms)
     if (room.z + room.depth / 2 > entryRoom.z + entryRoom.depth / 2) entryRoom = room;
@@ -192,8 +181,6 @@ export function interiorBaseForBuilding(building: Building): InteriorBase {
   ].join("|");
   const signature = `${code}/SIG/${digest(signaturePayload).toString(16).padStart(8, "0")}`;
 
-  // The footprint contract should make this true. Throwing here turns a future undersized building
-  // into an explicit generation defect instead of silently deleting required functional space.
   if (usableArea + 1e-6 < requested)
     throw new Error(
       `building ${building.code} usable interior ${usableArea.toFixed(2)}m2 is below program ${requested.toFixed(2)}m2`,
@@ -220,11 +207,7 @@ export type InteriorResidencyStats = {
   activeBuildings: string[];
 };
 
-/**
- * Bounded protagonist-demand residency. Merely generating or viewing a settlement never touches
- * this class. `enter` materializes one canonical base; eviction drops the realized object entirely.
- * Re-entering reconstructs from the same immutable building record and therefore the same signature.
- */
+/** Bounded protagonist-demand residency. Settlement visibility alone never calls enter(). */
 export class InteriorResidency {
   private readonly active = new Map<string, { base: InteriorBase; stamp: number }>();
   private stamp = 0;
@@ -261,8 +244,7 @@ export class InteriorResidency {
   }
 
   exit(_buildingCode: string): void {
-    // Exit is intentionally not gameplay-state destruction. The immutable base may remain in the
-    // bounded working set until pressure evicts it; explicit `evict` proves reconstruction behavior.
+    // Exiting does not mutate canonical gameplay state. The base may remain until pressure evicts it.
   }
 
   evict(buildingCode: string): boolean {
