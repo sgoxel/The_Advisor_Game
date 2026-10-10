@@ -14,5 +14,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Diagnose political access feasibility
+        run: >-
+          node --experimental-strip-types --input-type=module -e
+          "const m=await import('./src/political-settlement-access.ts');
+          console.log('INFEASIBLE_ACCESS', JSON.stringify(m.politicalAccessLinks.filter(x=>!x.feasible).map(x=>({id:x.id,from:x.fromId,to:x.toId,country:x.countryCode}))));
+          console.log('GATEWAYS', m.politicalBorderGateways.length);"
       - run: node --experimental-strip-types --test tests/political-atlas.test.ts
       - run: npm run build
