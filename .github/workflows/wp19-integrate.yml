@@ -31,6 +31,6 @@ jobs:
           fi
           git config user.name "AGENT #1"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
-          git add src/world.ts src/main.ts
+          git add src/world.ts src/main.ts .github/workflows/wp19-acceptance.yml
           git commit -m "[wp19-integrated] reconcile settlement runtime authority"
           git push origin HEAD:agent1/wp-s002-004-009-20261011
