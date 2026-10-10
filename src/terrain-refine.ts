@@ -139,10 +139,10 @@ function pushTriangle(
     unitX = nx / length,
     unitY = ny / length,
     unitZ = nz / length,
-    // Presentation-only flat relief shading. Horizontal water/ground keeps its
-    // exact palette while real slopes and cliff faces gain readable low-poly form.
+    // Presentation-only flat relief shading. Flat surfaces keep their exact
+    // palette regardless of triangle winding; real slopes/cliffs gain readable form.
     light = unitX * -0.38 + unitY * 0.86 + unitZ * -0.34,
-    shade = unitY > 0.995 ? 1 : Math.max(0.72, Math.min(1.08, 0.79 + light * 0.28)),
+    shade = Math.abs(unitY) > 0.995 ? 1 : Math.max(0.72, Math.min(1.08, 0.79 + light * 0.28)),
     start = positions.length / 3;
   for (const vertex of [a, b, c]) {
     positions.push(...vertex.point);
