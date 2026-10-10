@@ -128,6 +128,14 @@ function destination(origin: LonLat, bearing: number, distance: number): Canonic
     );
   return canonicalPosition(lon, lat);
 }
+function initialBearing(from: LonLat, to: LonLat) {
+  const deltaLon = normalizeLongitude(to.lon - from.lon);
+  return Math.atan2(
+    Math.sin(deltaLon) * Math.cos(to.lat),
+    Math.cos(from.lat) * Math.sin(to.lat) -
+      Math.sin(from.lat) * Math.cos(to.lat) * Math.cos(deltaLon),
+  );
+}
 const withPresentation = <T extends { canonicalPosition: CanonicalPosition }>(record: T) => {
   const { x, z } = lonLatToSource(
     record.canonicalPosition.lon,
@@ -288,6 +296,25 @@ export function countryAtPosition(position: LonLat): Country | undefined {
   return winner;
 }
 
+/** A generated city must have a direct dry same-country reserve to its country backbone. */
+function cityBackboneConnectionFits(from: LonLat, to: LonLat, country: Country) {
+  const distanceRad = greatCircleDistance(from, to) / CANONICAL_PLANET_RADIUS,
+    bearing = initialBearing(from, to),
+    samples = 24;
+  for (let index = 0; index <= samples; index++) {
+    const point = destination(from, bearing, distanceRad * (index / samples)),
+      macro = macroSampleAt(point);
+    if (
+      !macro.land ||
+      macro.domain === "Lake" ||
+      macro.continentId !== country.continent ||
+      countryAtPosition(point)?.code !== country.code
+    )
+      return false;
+  }
+  return true;
+}
+
 /**
  * Generation-time settlement acceptance. A canonical settlement anchor is only
  * accepted when its minimum usable footprint and at least one approach beyond
@@ -372,7 +399,10 @@ export const cities: Place[] = (() => {
           owner.code !== country.code ||
           !locallyDrySettlementSite(candidate, 90) ||
           !settlementEnvelopeFits(candidate, country, "city") ||
-          allAccepted.some((other) => macroFeatureDistanceM(candidate, other) < 18_000)
+          allAccepted.some((other) => macroFeatureDistanceM(candidate, other) < 18_000) ||
+          (city > 0 &&
+            localAccepted[0] &&
+            !cityBackboneConnectionFits(candidate, localAccepted[0], country))
         )
           continue;
         const separation = localAccepted.length
