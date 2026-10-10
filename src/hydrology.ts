@@ -129,12 +129,16 @@ export function naturalElevationAt(x: number, z: number): number {
   const noise = terrainNoise(sx, z),
     broad = sphericalNoise(sx, z, 3),
     mountainWeight = smooth01(macro.mountainIntensity / 0.36),
-    ridgePhase = addressed(`RIDGE/${macro.continentId}`) * Math.PI * 2,
-    secondaryPhase = addressed(`RIDGE-SECONDARY/${macro.continentId}`) * Math.PI * 2,
-    ridgeWave = 1 - Math.abs(Math.sin(position.lon * 401 + position.lat * 277 + ridgePhase)),
-    secondary = 1 - Math.abs(Math.sin(position.lon * 233 - position.lat * 359 + secondaryPhase)),
-    ridge = smooth01((ridgeWave - 0.34) / 0.66) * 0.72 + smooth01((secondary - 0.55) / 0.45) * 0.28,
-    ridgeDetail = (ridge - 0.2) * Math.min(142, macro.reliefM * 0.38) * mountainWeight,
+    // Mountain micro-relief stays seed-addressed but is cross-warped so ridge lines
+    // fork and bend instead of collapsing into repeated parallel sine bands.
+    warpX = (sphericalNoise(sx, z, 13 + macro.continentId) - 0.5) * 480,
+    warpZ = (sphericalNoise(sx, z, 19 + macro.continentId) - 0.5) * 420,
+    ridgeA = sphericalNoise(sx + warpX, z + warpZ, 181 + macro.continentId * 7),
+    ridgeB = sphericalNoise(sx - warpZ * 0.57, z + warpX * 0.41, 263 + macro.continentId * 11),
+    ridgeC = sphericalNoise(sx + warpZ * 0.29, z - warpX * 0.69, 397 + macro.continentId * 13),
+    ridgeField = ridgeA * 0.5 + ridgeB * 0.32 + ridgeC * 0.18,
+    ridge = smooth01((ridgeField - 0.32) / 0.68),
+    ridgeDetail = (ridge - 0.32) * Math.min(145, macro.reliefM * 0.38) * mountainWeight,
     base = macro.domain === "Island" ? 3.5 + noise * 13 : 3.5 + broad * 8 + noise * 4.5,
     macroRelief = macro.reliefM * (0.76 + 0.24 * noise) + ridgeDetail,
     cap = macro.domain === "Island" ? 180 : 620,
@@ -512,7 +516,7 @@ export function surfaceAt(x: number, z: number): SurfaceSample {
         ? "blocked-water"
         : cliff
           ? "blocked-cliff"
-          : slope >= 0.42
+          : slope >= 0.28
             ? "difficult"
             : "walkable";
   return {
