@@ -294,3 +294,11 @@
   }
   .interior-panel { max-height: none; }
 }
+
+.settlement-authority-status {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  opacity: 0.82;
+}

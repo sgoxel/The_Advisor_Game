@@ -24,7 +24,7 @@ export function settlementBrowserTests(test, expect, webgl2) {
     expect(home).toBeTruthy();
 
     await page.goto("/");
-    await page.waitForFunction(() => window.advisorWorld?.state.ready && window.advisorSettlements);
+    await page.waitForFunction(() => window.advisorWorld?.state.ready && window.advisorSettlements?.state.authority?.installed);
     expect(await page.evaluate(() => window.advisorRenderer.backend)).toBe(webgl2 ? "webgl2" : "webgpu");
     await page.evaluate(
       ({ lon, lat }) => {
@@ -46,6 +46,10 @@ export function settlementBrowserTests(test, expect, webgl2) {
     await expect(page.locator("#interior-experience")).toBeVisible();
     await expect(page.locator("#interior-title")).toHaveText("Inn");
     await expect(page.locator(".interior-room")).toHaveCount(inn.rooms.length);
+    const authority = await page.evaluate(() => window.advisorSettlements.state.authority);
+    expect(authority.last.characterDecision).toBe("accepted");
+    expect(authority.last.simulation).toBe("validated");
+    expect(authority.last.worldAction).toBe("entered");
     let interiorState = await page.evaluate(() => window.advisorSettlements.state);
     expect(interiorState.interior.realized).toBe(1);
     expect(interiorState.activeInterior).toBe(inn.code);
@@ -96,7 +100,7 @@ export function settlementBrowserTests(test, expect, webgl2) {
     const { village, plan } = evidenceVillage(),
       market = plan.buildings.find((building) => building.use === "market");
     await page.goto("/");
-    await page.waitForFunction(() => window.advisorWorld?.state.ready && window.advisorSettlements);
+    await page.waitForFunction(() => window.advisorWorld?.state.ready && window.advisorSettlements?.state.authority?.installed);
     await page.evaluate(
       ({ lon, lat }) => {
         window.advisorWorld.navigation.setFocus(lon, lat);
