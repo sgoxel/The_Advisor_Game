@@ -1,6 +1,7 @@
 import { buildTile } from "./geometry.ts";
 import { convertTileGeometryToEnu } from "./render-frame.ts";
 import { buildSettlementGeometry } from "./settlement-render.ts";
+import { removeLegacySettlementGridTint } from "./settlement-terrain-presentation.ts";
 import { buildVegetationGeometry } from "./vegetation-render.ts";
 import type { Tile } from "./world.ts";
 
@@ -10,6 +11,7 @@ self.onmessage = (event: MessageEvent<Tile>) => {
     const data = buildTile(tile),
       vegetation = buildVegetationGeometry(tile),
       settlement = buildSettlementGeometry(tile);
+    removeLegacySettlementGridTint(tile, data.terrain);
     // Settlement topology/buildings stay one merged structure mesh plus one merged
     // detail mesh per tile. Logical building identities live in settlements.ts and
     // are not multiplied by renderer/device class.
