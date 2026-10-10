@@ -64,7 +64,15 @@ function refinedTint(x: number, z: number, surface: SurfaceSample): RGB {
   // Beds remain earthen; exact water is a separate geometry layer below.
   if (surface.water === "river") return [112, 122, 93];
   if (surface.water === "lake") return [105, 119, 99];
-  if (surface.cliff) return [91, 98, 97];
+  // WP15_ATTEMPT2_PRESENTATION: cliff remains canonical traversal truth, while
+  // presentation uses a slope-weighted rock blend instead of a binary dark mask.
+  if (surface.cliff) {
+    const detail = naturalDetail(x, z),
+      severity = smooth01((surface.slope - 0.72) / 1.1),
+      shoulder: RGB = [118 + detail * 8, 123 + detail * 7, 109 + detail * 6],
+      rock: RGB = [92 + detail * 5, 98 + detail * 5, 96 + detail * 4];
+    return blend(shoulder, rock, 0.28 + severity * 0.34);
+  }
   if (surface.riverBank) return [145, 143, 105];
 
   const macro = macroSampleAt(sourceToLonLat(x, z)),
@@ -386,19 +394,29 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
     coastal = edgeSamples.some((sample) => sample.land) && edgeSamples.some((sample) => !sample.land),
     rugged = edgeSamples.some((sample) => sample.reliefM >= 80 || sample.mountainIntensity >= 0.06),
     targetResolution = coastal
-      ? tile.size <= 512
-        ? 88
-        : 72
+      ? tile.size <= 128
+        ? 96
+        : tile.size <= 512
+          ? 128
+          : 112
       : tile.size <= 128
-        ? 72
+        ? rugged
+          ? 96
+          : 72
         : tile.size <= 512
           ? rugged
-            ? 64
+            ? 72
             : 44
           : rugged
-            ? 52
+            ? 60
             : 32,
-    resolution = Math.max(1, Math.min(targetResolution, Math.floor(tile.size / 2))),
+    // One-metre sampling is reserved for close rugged/coastal silhouettes; wider
+    // tiles retain a two-metre-or-coarser cap to protect phone streaming budgets.
+    resolutionCap =
+      tile.size <= 128 && (coastal || rugged)
+        ? Math.max(1, Math.floor(tile.size))
+        : Math.max(1, Math.floor(tile.size / 2)),
+    resolution = Math.max(1, Math.min(targetResolution, resolutionCap)),
     step = tile.size / resolution,
     grid: Vertex[][] = [];
 
