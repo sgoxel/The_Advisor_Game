@@ -32,7 +32,7 @@ if (!lakeRecipe?.lake) throw new Error("Visual evidence requires an actual seede
 const lakePoint = lakeRecipe.lake;
 
 let cliffPoint: DrainagePoint | undefined,
-  cliffClearance = -Infinity;
+  cliffScore = -Infinity;
 const cliffRadii = [0, 24, 48, 72, 96, 128, 160, 224, 320, 448, 640] as const;
 const cliffDirections = 16;
 for (const mountain of MACRO_PLAN.mountainSystems) {
@@ -48,13 +48,15 @@ for (const mountain of MACRO_PLAN.mountainSystems) {
           continue;
         const sample = surfaceAt(x, z),
           macro = macroSampleAt(sourceToLonLat(x, z));
-        if (!sample.cliff || sample.water !== "none" || !macro.land) continue;
+        if (!sample.cliff || sample.water !== "none" || !macro.land || sample.elevation < 28)
+          continue;
         const clearance = Math.min(
-          macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
-          sample.freshwaterDistance,
-        );
-        if (clearance > cliffClearance) {
-          cliffClearance = clearance;
+            macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
+            sample.freshwaterDistance,
+          ),
+          score = sample.slope * 220 + Math.min(1200, clearance) * 0.08 + Math.min(260, sample.elevation) * 0.05;
+        if (score > cliffScore) {
+          cliffScore = score;
           cliffPoint = { x, z, bed: sample.elevation };
         }
       }
@@ -72,16 +74,33 @@ const rankedVillages = [...villages]
 const village = rankedVillages[0]?.village;
 if (!village) throw new Error("Visual evidence requires a village with useful canonical freshwater access");
 
-const mountain =
-  [...MACRO_PLAN.mountainSystems]
-    .filter((system) => system.path.length >= 4 && system.kind !== "volcano")
-    .sort(
-      (a, b) =>
-        b.reliefM * b.lengthRad - a.reliefM * a.lengthRad ||
-        (a.code < b.code ? -1 : 1),
-    )[0] ?? [...MACRO_PLAN.mountainSystems].sort((a, b) => b.reliefM - a.reliefM)[0];
-if (!mountain) throw new Error("Visual evidence requires a seeded mountain system");
-const mountainTarget = mountain.path[Math.floor(mountain.path.length / 2)] ?? mountain.center;
+const mountainCandidates = MACRO_PLAN.mountainSystems
+  .filter(
+    (system) =>
+      system.path.length >= 4 &&
+      (system.kind === "long-chain" ||
+        system.kind === "hooked-range" ||
+        system.kind === "dominant-spine" ||
+        system.kind === "compact-massif"),
+  )
+  .flatMap((system) =>
+    system.path.map((anchor) => {
+      const macro = macroSampleAt(anchor),
+        coast = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
+        score =
+          system.reliefM * (0.7 + macro.mountainIntensity) +
+          Math.min(3000, Math.max(0, coast)) * 0.09 -
+          system.widthRad * 180;
+      return { anchor, macro, coast, score };
+    }),
+  )
+  .filter(
+    ({ macro, coast }) =>
+      macro.land && macro.mountainIntensity >= 0.045 && coast >= 900,
+  )
+  .sort((a, b) => b.score - a.score);
+const mountainTarget = mountainCandidates[0]?.anchor;
+if (!mountainTarget) throw new Error("Visual evidence requires an inland seeded mountain range segment");
 
 const lonLat = (point: { x: number; z: number }) => sourceToLonLat(point.x, point.z);
 process.stdout.write(JSON.stringify({
