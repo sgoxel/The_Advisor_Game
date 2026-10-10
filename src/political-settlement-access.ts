@@ -242,6 +242,70 @@ function segmentLegal(from: LonLat, to: LonLat, country: Country, samples = CORR
   return true;
 }
 
+function layeredCorridor(
+  from: Place,
+  to: Place,
+  country: Country,
+  distanceM: number,
+  phase: number,
+): readonly CanonicalPosition[] | undefined {
+  type State = { point: CanonicalPosition; costM: number; path: CanonicalPosition[] };
+  const fractions = [0.2, 0.4, 0.6, 0.8],
+    radii = [
+      Math.min(120_000, Math.max(5_000, distanceM * 0.08)),
+      Math.min(120_000, Math.max(10_000, distanceM * 0.16)),
+      Math.min(120_000, Math.max(18_000, distanceM * 0.28)),
+    ],
+    uniqueRadii = [...new Set(radii.map((value) => Math.round(value)))],
+    layers = fractions.map((fraction, layerIndex) => {
+      const anchor = interpolate(from.canonicalPosition, to.canonicalPosition, fraction),
+        candidates: CanonicalPosition[] = [];
+      if (sameDryOwner(anchor, country, 220)) candidates.push(anchor);
+      for (const radiusM of uniqueRadii)
+        for (let bearingIndex = 0; bearingIndex < 16; bearingIndex++) {
+          const candidate = destination(
+            anchor,
+            phase + layerIndex * 0.173 + (bearingIndex / 16) * TAU,
+            radiusM,
+          );
+          if (sameDryOwner(candidate, country, 220)) candidates.push(candidate);
+        }
+      return candidates;
+    });
+
+  let states: State[] = [
+    { point: from.canonicalPosition, costM: 0, path: [from.canonicalPosition] },
+  ];
+  for (const layer of layers) {
+    const next: State[] = [];
+    for (const candidate of layer) {
+      let best: State | undefined;
+      for (const state of states) {
+        if (!segmentLegal(state.point, candidate, country, 10)) continue;
+        const costM = state.costM + greatCircleDistance(state.point, candidate);
+        if (!best || costM < best.costM)
+          best = { point: candidate, costM, path: [...state.path, candidate] };
+      }
+      if (best) next.push(best);
+    }
+    if (!next.length) return undefined;
+    states = next;
+  }
+
+  let best: State | undefined;
+  for (const state of states) {
+    if (!segmentLegal(state.point, to.canonicalPosition, country, 10)) continue;
+    const costM = state.costM + greatCircleDistance(state.point, to.canonicalPosition);
+    if (!best || costM < best.costM)
+      best = {
+        point: to.canonicalPosition,
+        costM,
+        path: [...state.path, to.canonicalPosition],
+      };
+  }
+  return best?.path;
+}
+
 function corridor(from: Place, to: Place, country: Country): readonly CanonicalPosition[] | undefined {
   if (segmentLegal(from.canonicalPosition, to.canonicalPosition, country))
     return [from.canonicalPosition, to.canonicalPosition];
@@ -264,7 +328,28 @@ function corridor(from: Place, to: Place, country: Country): readonly CanonicalP
       )
         return [from.canonicalPosition, waypoint, to.canonicalPosition];
     }
-  return undefined;
+
+  // A country's third city is a canonical, SEED-owned junction and can provide a
+  // bounded two-leg access reservation without inventing a second road authority.
+  for (const via of cities
+    .filter(
+      (candidate) =>
+        candidate.continent === country.continent &&
+        candidate.country === country.id &&
+        candidate.id !== from.id &&
+        candidate.id !== to.id,
+    )
+    .sort((a, b) => a.id.localeCompare(b.id)))
+    if (
+      segmentLegal(from.canonicalPosition, via.canonicalPosition, country, 12) &&
+      segmentLegal(via.canonicalPosition, to.canonicalPosition, country, 12)
+    )
+      return [from.canonicalPosition, via.canonicalPosition, to.canonicalPosition];
+
+  // Final bounded fallback: four deterministic cross-sections around the direct
+  // geodesic. Dynamic programming only joins adjacent layers, so work is finite;
+  // every accepted segment still passes the same dry-land/same-country authority.
+  return layeredCorridor(from, to, country, distanceM, phase);
 }
 
 function link(from: Place, to: Place, country: Country): PoliticalAccessLink {
