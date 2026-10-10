@@ -22,13 +22,13 @@
   stroke-linejoin: round;
 }
 .political-border-underlay {
-  stroke: #102019d9;
-  stroke-width: 4.5px;
+  stroke: #102019c7;
+  stroke-width: 3.2px;
 }
 .political-border-line {
-  stroke: #e2ca8fe8;
-  stroke-width: 1.7px;
-  stroke-dasharray: 8 5;
+  stroke: #e2ca8fdb;
+  stroke-width: 1.2px;
+  stroke-dasharray: 6 5;
 }
 #political-labels {
   position: absolute;
@@ -95,9 +95,9 @@ body.political-detail-labels #label-leaders {
     padding: 3px 5px;
   }
   .political-border-underlay {
-    stroke-width: 4px;
+    stroke-width: 3px;
   }
   .political-border-line {
-    stroke-width: 1.5px;
+    stroke-width: 1.1px;
   }
 }
