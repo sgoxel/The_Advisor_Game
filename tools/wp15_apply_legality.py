@@ -6,6 +6,11 @@ import textwrap
 # and ordinary road connectors selected afterwards must remain dry.
 p = Path("src/geography.ts")
 text = p.read_text()
+text = text.replace(
+    'import { surfaceAt as naturalSurfaceAt } from "./hydrology.ts";',
+    'import { freshwaterDistanceAt, surfaceAt as naturalSurfaceAt } from "./hydrology.ts";',
+    1,
+)
 start = text.index("/**\n * Transitional settlement-site guard")
 end = text.index("/**\n * Country anchors", start)
 replacement = textwrap.dedent(r'''
@@ -28,8 +33,12 @@ function locallyDrySettlementSite(
 
 /**
  * Ordinary settlement roads have no implicit bridge authority. Candidate villages
- * are accepted only when the intended predecessor connector stays dry and off cliffs.
- * This follows natural hydrology; it never moves or reroutes the water.
+ * are accepted only when the intended predecessor connector is provably dry.
+ *
+ * Distance-to-water is 1-Lipschitz: with <=96-unit sample gaps and >60 units of
+ * freshwater/coast clearance at every sample, every point between samples retains
+ * >12 units of clearance. This is a conservative bounded proof and avoids the old
+ * thousands-of-full-surface-samples-per-candidate hot path.
  */
 function naturalConnectorLegal(from: LonLat, to: LonLat) {
   const a = lonLatToSource(from.lon, from.lat),
@@ -37,18 +46,18 @@ function naturalConnectorLegal(from: LonLat, to: LonLat) {
     dx = wrapSourceX(b.x - a.x),
     dz = b.z - a.z,
     length = Math.hypot(dx, dz),
-    steps = Math.max(2, Math.ceil(length / 8));
+    maxGap = 96,
+    requiredClearance = 60,
+    steps = Math.max(2, Math.ceil(length / maxGap));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps,
       x = wrapSourceX(a.x + dx * t),
       z = a.z + dz * t,
-      surface = naturalSurfaceAt(x, z),
       macro = macroSampleAt(sourceToLonLat(x, z));
     if (
-      surface.water !== "none" ||
-      surface.cliff ||
-      surface.freshwaterDistance <= 12 ||
-      macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS <= 12
+      !macro.land ||
+      freshwaterDistanceAt(x, z) <= requiredClearance ||
+      macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS <= requiredClearance
     ) return false;
   }
   return true;
