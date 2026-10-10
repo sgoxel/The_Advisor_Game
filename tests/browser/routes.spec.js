@@ -8,6 +8,19 @@ test("travel panel solves neighbouring routes and draws the selected route", asy
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.waitForFunction(() => window.advisorWorld?.state.ready);
+  await page.waitForFunction(() => window.advisorRoutingAcceptance?.summary);
+
+  const acceptance = await page.evaluate(() => window.advisorRoutingAcceptance.summary());
+  expect(acceptance.villageCount).toBeGreaterThanOrEqual(270);
+  expect(acceptance.totalPairs).toBe((acceptance.villageCount * (acceptance.villageCount - 1)) / 2);
+  expect(acceptance.lowerBoundProvenPairs + acceptance.routedPairs).toBe(acceptance.totalPairs);
+  expect(acceptance.minimumProvenOrObservedFantasySeconds).toBeGreaterThanOrEqual(3600);
+  expect(acceptance.invalidPairs).toBe(0);
+  expect(acceptance.unreachablePairs).toBe(0);
+  expect(acceptance.cache.size).toBeLessThanOrEqual(acceptance.cache.limit);
+  expect(acceptance.searchBounds.maxCells).toBeGreaterThan(0);
+  expect(acceptance.searchBounds.maxExpansions).toBeGreaterThan(0);
+
   await page.locator("#open-travel").click();
 
   const rows = page.locator("#route-list .route-row");
@@ -52,6 +65,9 @@ test("travel panel solves neighbouring routes and draws the selected route", asy
 
   const again = await page.evaluate((to) => window.advisorRoutes.route("0/0/0/0", to), data[0].to);
   expect(again.fantasySeconds).toBe(data[0].fantasySeconds);
+  const cache = await page.evaluate(() => window.advisorRoutingAcceptance.cache());
+  expect(cache.hits).toBeGreaterThan(0);
+  expect(cache.size).toBeLessThanOrEqual(cache.limit);
 
   await page.locator("#route-clear").click();
   await expect(overlay).not.toHaveClass(/visible/);
