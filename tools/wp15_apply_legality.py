@@ -35,10 +35,10 @@ function locallyDrySettlementSite(
  * Ordinary settlement roads have no implicit bridge authority. Candidate villages
  * are accepted only when the intended predecessor connector is provably dry.
  *
- * Distance-to-water is 1-Lipschitz: with <=96-unit sample gaps and >60 units of
+ * Distance-to-water is 1-Lipschitz: with <=64-unit sample gaps and >36 units of
  * freshwater/coast clearance at every sample, every point between samples retains
- * >12 units of clearance. This is a conservative bounded proof and avoids the old
- * thousands-of-full-surface-samples-per-candidate hot path.
+ * >4 units of dry clearance. This is a conservative bounded proof and avoids the
+ * old thousands-of-full-surface-samples-per-candidate hot path.
  */
 function naturalConnectorLegal(from: LonLat, to: LonLat) {
   const a = lonLatToSource(from.lon, from.lat),
@@ -46,8 +46,8 @@ function naturalConnectorLegal(from: LonLat, to: LonLat) {
     dx = wrapSourceX(b.x - a.x),
     dz = b.z - a.z,
     length = Math.hypot(dx, dz),
-    maxGap = 96,
-    requiredClearance = 60,
+    maxGap = 64,
+    requiredClearance = 36,
     steps = Math.max(2, Math.ceil(length / maxGap));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps,
@@ -67,6 +67,9 @@ function naturalConnectorLegal(from: LonLat, to: LonLat) {
 text = text[:start] + replacement + text[end:]
 text = text.replace("!locallyDrySettlementSite(candidate, 90)", "!locallyDrySettlementSite(candidate, 90, 80)", 1)
 text = text.replace("!locallyDrySettlementSite(candidate, 95)", "!locallyDrySettlementSite(candidate, 95, 72)", 1)
+# The extra candidates are still a finite SEED-addressed search. They only expand
+# the legal-placement search space; camera/LOD/device/order never affect selection.
+text = text.replace("for (let attempt = 0; attempt < 280; attempt++)", "for (let attempt = 0; attempt < 720; attempt++)", 1)
 old_owner = '''          candidate = destination(city.canonicalPosition, bearing, distanceM / CANONICAL_PLANET_RADIUS),
           owner = countryAtPosition(candidate);'''
 new_owner = '''          candidate = destination(city.canonicalPosition, bearing, distanceM / CANONICAL_PLANET_RADIUS),
@@ -77,8 +80,8 @@ text = text.replace(old_owner, new_owner, 1)
 old_condition = '''          !locallyDrySettlementSite(candidate, 95, 72) ||
           accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000)'''
 new_condition = '''          !locallyDrySettlementSite(candidate, 95, 72) ||
-          (predecessor && !naturalConnectorLegal(predecessor.canonicalPosition, candidate)) ||
-          accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000)'''
+          accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000) ||
+          (predecessor && !naturalConnectorLegal(predecessor.canonicalPosition, candidate))'''
 assert old_condition in text, "village legality condition not found"
 text = text.replace(old_condition, new_condition, 1)
 p.write_text(text)
