@@ -7,11 +7,14 @@ permissions:
 concurrency:
   group: wp15-attempt3-repair
   cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
 jobs:
   repair:
     if: ${{ !contains(github.event.head_commit.message, '[wp15-a3]') }}
-    runs-on: macos-latest
-    timeout-minutes: 15
+    runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,7 +24,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: python3 tools/wp15_attempt3_repair.py
+      - run: python tools/wp15_attempt3_repair.py
       - run: npm ci
       - name: Focused final terrain regressions
         run: node --experimental-strip-types --test tests/hydrology.test.ts tests/terrain-refine.test.ts tests/surface-presentation.test.ts tests/macro-geography.test.ts
