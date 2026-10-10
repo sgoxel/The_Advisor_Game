@@ -10,6 +10,7 @@ import {
   POLE_DISTANCE,
 } from "./planet.ts";
 import { CELL_SIZE, heightAt } from "./world.ts";
+import { naturalElevationAt } from "./surface.ts";
 
 /** Equirectangular RGBA8, row-major, row 0 at the north edge, alpha 255. */
 export type GlobeSurface = {
@@ -29,8 +30,13 @@ type RGB = [number, number, number];
 
 /** Lit from the north-west, 45° above the horizon: [toward west, up, toward north]. */
 const LIGHT = [0.5, Math.SQRT1_2, 0.5];
-/** Vertical exaggeration: real slopes are far too gentle to read from orbit. */
-const EXAGGERATION = 3.5;
+/**
+ * Presentation-only vertical exaggeration. The natural hydrology surface is much
+ * smoother at globe-texel spacing than the old local prototype, so orbit shading
+ * needs a stronger coefficient to keep real height differences readable after
+ * RGBA8 quantisation. It never changes canonical height, traversal or Simulation.
+ */
+const EXAGGERATION = 12;
 const SHADE_MIN = 0.6,
   SHADE_MAX = 1.3;
 
@@ -106,7 +112,7 @@ function openSeaHeight() {
     for (let rx = COL0; rx < COL0 + COLS; rx++) {
       const x = (rx + 0.5) * REGION,
         z = (rz + 0.5) * REGION;
-      if (openOcean(x, z)) return (seaHeight = heightAt(x, z));
+      if (openOcean(x, z)) return (seaHeight = naturalElevationAt(x, z));
     }
   return (seaHeight = -2.8);
 }
@@ -164,7 +170,7 @@ export function buildGlobeSurface(
     if (Number.isNaN(heights[index])) {
       const x = centreX[i],
         z = centreZ[j];
-      heights[index] = openOcean(x, z) ? oceanHeight : heightAt(x, z);
+      heights[index] = openOcean(x, z) ? oceanHeight : naturalElevationAt(x, z);
     }
     return heights[index];
   };
