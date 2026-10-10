@@ -10,6 +10,7 @@ import {
 } from "./geography.ts";
 import { WORLD_SEED } from "./config.ts";
 import { placeLabels, type Rect } from "./navigation.ts";
+import { politicalOverlayOpacity } from "./political-presentation.ts";
 import { LocalRenderFrame } from "./render-frame.ts";
 import { heightAt } from "./world.ts";
 
@@ -23,6 +24,7 @@ type AtlasState = {
   scaleLabel: string;
   navigation: { focus: { lon: number; lat: number } };
   view: { x: number; z: number; halfHeight: number; aspect: number; yaw: number };
+  handoff?: { projectionTransition: number };
 };
 type AdvisorWorld = { state: AtlasState };
 type LabelCandidate = {
@@ -44,8 +46,15 @@ let renderFingerprint = "";
 let politicalLabelState: { id: string; kind: string; x: number; y: number }[] = [];
 
 function denominator(scaleLabel: string) {
-  const value = Number(scaleLabel.replace("1/", ""));
+  const match = /1\/(\d+)/.exec(scaleLabel),
+    value = match ? Number(match[1]) : Number.NaN;
   return Number.isFinite(value) ? value : 10_000;
+}
+
+function projectionTransition(state: AtlasState) {
+  if (Number.isFinite(state.handoff?.projectionTransition))
+    return state.handoff!.projectionTransition;
+  return state.presentation === "globe" ? 1 : 0;
 }
 
 function project(
@@ -129,8 +138,15 @@ function updateContext(state: AtlasState, places: Place[]) {
 }
 
 function updateBorders(state: AtlasState, frame: LocalRenderFrame, scale: number) {
-  const svg = $svg("political-borders");
-  if (state.presentation !== "flat" || scale > 2500) {
+  const svg = $svg("political-borders"),
+    opacity = politicalOverlayOpacity(
+      state.presentation,
+      projectionTransition(state),
+      scale,
+      2500,
+    );
+  svg.style.opacity = opacity.toFixed(3);
+  if (opacity <= 0) {
     svg.replaceChildren();
     return;
   }
@@ -143,7 +159,7 @@ function updateBorders(state: AtlasState, frame: LocalRenderFrame, scale: number
     ].join("/");
   if (key !== borderKey) {
     borderKey = key;
-    borderSegments = politicalBorderSegments(
+    const nextSegments = politicalBorderSegments(
       Math.round(state.view.x / quantum) * quantum,
       Math.round(state.view.z / quantum) * quantum,
       state.view.halfHeight,
@@ -151,6 +167,11 @@ function updateBorders(state: AtlasState, frame: LocalRenderFrame, scale: number
       innerWidth < 700 ? 28 : 38,
       innerWidth < 700 ? 22 : 28,
     );
+    // A coarse marching window can legitimately contain no boundary. During a
+    // tiny zoom/handoff change, however, retaining the previous canonical world
+    // segments is safer than flashing the whole political layer off; segments
+    // that are no longer near the view are culled below in screen space.
+    if (nextSegments.length || !borderSegments.length) borderSegments = nextSegments;
   }
   const commands: string[] = [];
   for (const segment of borderSegments) {
@@ -199,8 +220,16 @@ function labelCandidateFromPlace(place: Place): LabelCandidate {
 function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number, places: Place[]) {
   const root = $("political-labels"),
     leaders = $svg("political-label-leaders"),
-    detailed = state.presentation === "flat" && scale <= 1000;
+    opacity = politicalOverlayOpacity(
+      state.presentation,
+      projectionTransition(state),
+      scale,
+      1000,
+    ),
+    detailed = opacity > 0;
   document.body.classList.toggle("political-detail-labels", detailed);
+  root.style.opacity = opacity.toFixed(3);
+  leaders.style.opacity = opacity.toFixed(3);
   if (!detailed) {
     root.replaceChildren();
     leaders.replaceChildren();
@@ -302,6 +331,7 @@ function update() {
     fingerprint = [
       state.presentation,
       scale,
+      Math.round(projectionTransition(state) * 1000),
       Math.round(state.view.x * 10),
       Math.round(state.view.z * 10),
       Math.round(state.view.halfHeight * 10),
