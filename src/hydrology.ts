@@ -115,6 +115,22 @@ function terrainNoise(x: number, z: number) {
   return sphericalNoise(x, z, 0) * 0.5 + sphericalNoise(x, z, 1) * 0.32 + sphericalNoise(x, z, 2) * 0.18;
 }
 
+/** Sub-kilometre spherical spectrum. Integer longitude frequencies make the wrap exact;
+ * mixed lon/lat directions and seed-addressed phases avoid an axis-aligned ridge lattice. */
+function fineReliefNoise(x: number, z: number, continentId: number) {
+  const p = sourceToLonLat(wrapSourceX(x), z),
+    phase = (slot: number) => addressed(`FINE-RELIEF/${continentId}/${slot}`) * Math.PI * 2,
+    terms = [
+      Math.sin(p.lon * 1489 + p.lat * 1777 + phase(0)) * 0.24,
+      Math.cos(p.lon * 2333 - p.lat * 1597 + phase(1)) * 0.2,
+      Math.sin(p.lon * 3761 + p.lat * 2903 + phase(2)) * 0.18,
+      Math.cos(p.lon * 5147 - p.lat * 4099 + phase(3)) * 0.15,
+      Math.sin(p.lon * 7481 + p.lat * 6211 + phase(4)) * 0.13,
+      Math.cos(p.lon * 10009 - p.lat * 8011 + phase(5)) * 0.1,
+    ];
+  return terms.reduce((sum, value) => sum + value, 0);
+}
+
 /**
  * Canonical natural terrain. All local detail is spherical/periodic, so no source-grid
  * cell structure can appear and the east/west wrap remains identical.
@@ -129,24 +145,24 @@ export function naturalElevationAt(x: number, z: number): number {
   const noise = terrainNoise(sx, z),
     broad = sphericalNoise(sx, z, 3),
     mountainWeight = smooth01(macro.mountainIntensity / 0.36),
-    // Cross-warped spherical fields fork and bend ridges without introducing a
-    // source-grid axis, repeated stripe frequency, camera input or mutable RNG.
-    warpX = (sphericalNoise(sx, z, 13 + macro.continentId) - 0.5) * 480,
-    warpZ = (sphericalNoise(sx, z, 19 + macro.continentId) - 0.5) * 420,
-    ridgeA = sphericalNoise(sx + warpX, z + warpZ, 181 + macro.continentId * 7),
-    ridgeB = sphericalNoise(sx - warpZ * 0.57, z + warpX * 0.41, 263 + macro.continentId * 11),
-    ridgeC = sphericalNoise(sx + warpZ * 0.29, z - warpX * 0.69, 397 + macro.continentId * 13),
-    ridgeField = ridgeA * 0.5 + ridgeB * 0.32 + ridgeC * 0.18,
-    ridge = smooth01((ridgeField - 0.32) / 0.68),
-    ridgeDetail = (ridge - 0.32) * Math.min(132, macro.reliefM * 0.34) * mountainWeight,
+    fine = fineReliefNoise(sx, z, macro.continentId),
+    // Macro authority decides where/which mountain exists; this continuous spectrum
+    // breaks its wide footprint into local shoulders, gullies and ridges at Province scale.
+    localRelief = fine * Math.min(155, macro.reliefM * 0.3) * mountainWeight,
     base = macro.domain === "Island" ? 3.5 + noise * 13 : 3.5 + broad * 8 + noise * 4.5,
-    macroRelief = macro.reliefM * (0.72 + 0.22 * noise) + ridgeDetail,
-    // Preserve materially tall systems while avoiding a single 600 m wall filling
-    // a Province view. Height remains canonical and shared by render/traversal.
-    cap = macro.domain === "Island" ? 180 : 470,
-    terrain = Math.min(cap, Math.max(1.2, base + macroRelief)),
-    coastSource = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS;
-  return lerp(-2.8, terrain, smooth01((coastSource + 2) / 12));
+    rawRelief = Math.max(0, macro.reliefM * (0.54 + 0.2 * noise) + localRelief),
+    reliefLimit = macro.domain === "Island" ? 190 : 560,
+    // Soft compression keeps every height gradient instead of clipping a broad high
+    // mountain interior to one flat ceiling.
+    compressedRelief = reliefLimit * Math.tanh(rawRelief / reliefLimit),
+    terrain = Math.max(1.2, base + compressedRelief),
+    coastSource = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
+    // High terrain approaches the sea over a proportionally wider exposed slope;
+    // the water boundary is unchanged, but ordinary mountain coasts no longer become
+    // a one-cell vertical extrusion. Truly steep samples can still classify as cliffs.
+    coastRise = 34 + Math.min(440, compressedRelief * 0.9),
+    coastWeight = smooth01((coastSource + 2) / (coastRise + 2));
+  return lerp(-2.8, terrain, coastWeight);
 }
 
 function canonicalBasinX(gx: number) {
