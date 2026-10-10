@@ -394,7 +394,7 @@ export function cellAt(x: number, z: number): Cell {
     elevation,
     biome,
     walkable:
-      Boolean(bridge) || (elevation > 0.1 && (street || slope < 2)),
+      Boolean(road) || Boolean(bridge) || (elevation > 0.1 && (street || slope < 2)),
     tile: `${tile.level}/${tile.x}/${tile.z}`,
     ...(building
       ? { structure: { role: building.role, code: building.code } }
