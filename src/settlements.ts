@@ -129,6 +129,8 @@ const TAU = Math.PI * 2;
 const RENDER_HORIZONTAL_EXAGGERATION = 1.2;
 const RENDER_VERTICAL_EXAGGERATION = 4.5;
 const planCache = new Map<string, SettlementPlan>();
+const buildingByCode = new Map<string, SettlementBuilding>();
+const placeByCode = new Map(places.map((place) => [place.code, place]));
 
 function digest(text: string) {
   let value = 2166136261;
@@ -636,6 +638,7 @@ export function settlementPlan(placeId: string) {
   if (!place) throw new RangeError(`Unknown settlement ${placeId}`);
   plan = buildPlan(place);
   planCache.set(placeId, plan);
+  for (const building of plan.buildings) buildingByCode.set(building.code, building);
   return plan;
 }
 export function settlementPlans() {
@@ -645,11 +648,14 @@ export function settlementPopulation(placeId: string) {
   return settlementPlan(placeId).population;
 }
 export function settlementBuilding(code: string): SettlementBuilding | undefined {
-  for (const place of places) {
-    if (!code.startsWith(`${place.code}/BUILD/`)) continue;
-    return settlementPlan(place.id).buildings.find((building) => building.code === code);
-  }
-  return undefined;
+  const cached = buildingByCode.get(code);
+  if (cached) return cached;
+  const marker = code.indexOf("/BUILD/");
+  if (marker < 1) return undefined;
+  const place = placeByCode.get(code.slice(0, marker));
+  if (!place) return undefined;
+  settlementPlan(place.id);
+  return buildingByCode.get(code);
 }
 export function settlementResident(placeId: string, index: number) {
   return settlementPlan(placeId).residents[index];

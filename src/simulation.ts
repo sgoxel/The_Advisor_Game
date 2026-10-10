@@ -5,6 +5,7 @@ import {
   settlementPopulation,
   settlementResident,
   type ResidentProfession,
+  type SettlementBuilding,
 } from "./settlements.ts";
 import { GOOD_ROAD_WALK_SPEED_MPS } from "./travel.ts";
 import { digest, heightAt } from "./world.ts";
@@ -35,6 +36,20 @@ export type CountryState = {
   tier: "live" | "interested" | "coarse";
 };
 const populationOf = (place: Place) => settlementPopulation(place.id);
+const fallbackWorkplaces = new Map<string, readonly SettlementBuilding[]>();
+function fallbackBuildings(placeId: string) {
+  let buildings = fallbackWorkplaces.get(placeId);
+  if (!buildings) {
+    buildings = settlementPlan(placeId).buildings.filter(
+      (building) =>
+        building.use !== "home" &&
+        building.use !== "guard-post" &&
+        building.use !== "well",
+    );
+    fallbackWorkplaces.set(placeId, buildings);
+  }
+  return buildings;
+}
 
 export function summaryAt(code: string, tick: number): CountryState {
   const baseline = digest(code) % 5000;
@@ -97,14 +112,10 @@ export function residentAt(place: Place, index: number, tick: number): Resident 
       ? settlementBuilding(assignment.workplaceCode)
       : undefined,
     variant = digest(assignment.code),
-    fallback = workplace
-      ? undefined
-      : settlementPlan(place.id).buildings.filter(
-          (building) =>
-            building.use !== "home" &&
-            building.use !== "guard-post" &&
-            building.use !== "well",
-        )[variant % 7],
+    fallbackCandidates = workplace ? undefined : fallbackBuildings(place.id),
+    fallback = fallbackCandidates
+      ? fallbackCandidates[variant % fallbackCandidates.length]
+      : undefined,
     origin = home.entrance,
     destination = fallback?.entrance ?? workplace?.entrance ?? home.entrance,
     travelSeconds =

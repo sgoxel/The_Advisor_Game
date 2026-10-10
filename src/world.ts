@@ -377,7 +377,7 @@ export function cellAt(x: number, z: number): Cell {
   };
 }
 /** Features are owned by their anchor tile; tile order/zoom never changes them. */
-export function featuresFor(tile: Tile): Feature[] {
+export function featuresFor(tile: Tile, includeSettlements = true): Feature[] {
   const features: Feature[] = [];
   const addNatural = (
     kind: Feature["kind"],
@@ -405,28 +405,30 @@ export function featuresFor(tile: Tile): Feature[] {
   };
 
   // Canonical settlement records replace the old 18-house village stamp and
-  // 20×20 city lattice. Logical identity/dimensions are invariant; render LOD may
-  // still choose whether to instantiate the merged tile geometry later.
-  for (const feature of settlementRenderFeaturesForBounds(
-    tile.minX,
-    tile.minZ,
-    tile.size,
-  )) {
-    if (heightAt(feature.x, feature.z) < 0.2) continue;
-    features.push({
-      kind: feature.kind,
-      role: feature.role,
-      x: feature.x,
-      z: feature.z,
-      y: heightAt(feature.x, feature.z),
-      code: feature.code,
-      variant: feature.variant,
-      width: feature.width,
-      depth: feature.depth,
-      height: feature.height,
-      heading: feature.heading,
-    });
-  }
+  // 20×20 city lattice. Logical callers retain these features by default. The tile
+  // worker opts out because its dedicated merged settlement renderer immediately
+  // replaces the generic structures/detail meshes with the same canonical records.
+  if (includeSettlements)
+    for (const feature of settlementRenderFeaturesForBounds(
+      tile.minX,
+      tile.minZ,
+      tile.size,
+    )) {
+      if (heightAt(feature.x, feature.z) < 0.2) continue;
+      features.push({
+        kind: feature.kind,
+        role: feature.role,
+        x: feature.x,
+        z: feature.z,
+        y: heightAt(feature.x, feature.z),
+        code: feature.code,
+        variant: feature.variant,
+        width: feature.width,
+        depth: feature.depth,
+        height: feature.height,
+        heading: feature.heading,
+      });
+    }
 
   if (tile.size <= 256) {
     for (

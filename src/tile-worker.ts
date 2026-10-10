@@ -8,7 +8,7 @@ import type { Tile } from "./world.ts";
 self.onmessage = (event: MessageEvent<Tile>) => {
   const tile = event.data;
   try {
-    const data = buildTile(tile),
+    const data = buildTile(tile, false),
       vegetation = buildVegetationGeometry(tile),
       settlement = buildSettlementGeometry(tile);
     removeLegacySettlementGridTint(tile, data.terrain);

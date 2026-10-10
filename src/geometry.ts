@@ -292,7 +292,7 @@ export function terrainTint(
 }
 
 /** Worker-generated tile meshes. Skirts cover cracks between terrain LOD levels. */
-export function buildTile(t: Tile): TileGeometry {
+export function buildTile(t: Tile, includeSettlementFeatures = true): TileGeometry {
   const terrain = new Builder(),
     structures = new Builder(),
     nature = new Builder(),
@@ -375,7 +375,7 @@ export function buildTile(t: Tile): TileGeometry {
     waterTint(t.minX + t.size, t.minZ),
   );
   if (t.size <= 512)
-    for (const f of featuresFor(t)) {
+    for (const f of featuresFor(t, includeSettlementFeatures)) {
       const { x, y, z, variant: v } = f;
       const stone = color(167, 165, 144),
         timber = color(75, 58, 43),
