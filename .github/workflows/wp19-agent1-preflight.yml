@@ -17,5 +17,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: WP19 settlement authority tests
+        run: node --experimental-strip-types --test tests/settlements.test.ts
       - run: npm test
       - run: npm run build
