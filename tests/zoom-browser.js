@@ -15,10 +15,12 @@ export function zoomTests(test, expect, webgl2) {
     expect(await page.evaluate(()=>window.advisorRenderer.backend)).toBe(webgl2?'webgl2':'webgpu');
     await page.locator('#overview').click();
     await page.waitForFunction(()=>window.advisorWorld.state.globe.complete,null,{timeout:240000});
-    // Stable ground gate excludes genuinely new trees/buildings and DOM labels.
+    // Stable-ground continuity is a terrain-only gate. Exclude every DOM/SVG
+    // presentation overlay plus genuinely new trees/buildings from these frames;
+    // political borders/labels have their own fresh WP visual evidence.
     await page.locator('#structures').uncheck();
     await page.locator('#nature').uncheck();
-    await page.addStyleTag({content: '.place-label, #place-labels, #route-overlay { visibility:hidden !important; }'});
+    await page.addStyleTag({content: '.place-label, #place-labels, #route-overlay, #political-borders, #political-labels, #political-label-leaders { visibility:hidden !important; }'});
     const backend=webgl2?'webgl2':'webgpu', out=`test-results/zoom-${backend}`;
     fs.mkdirSync(out,{recursive:true});
     const records=[];
