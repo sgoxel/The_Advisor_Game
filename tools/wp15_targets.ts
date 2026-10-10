@@ -1,6 +1,10 @@
 import { villages } from "../src/geography.ts";
 import { MACRO_PLAN } from "../src/macro-geography.ts";
-import { sourceToLonLat, lonLatToSource } from "../src/planet.ts";
+import {
+  SOURCE_PRESENTATION_POLE_DISTANCE,
+  sourceToLonLat,
+  lonLatToSource,
+} from "../src/planet.ts";
 import {
   drainageRecipeAt,
   freshwaterDistanceAt,
@@ -37,8 +41,10 @@ outer: for (const mountain of MACRO_PLAN.mountainSystems) {
       for (let direction = 0; direction < directions; direction++) {
         const angle = (direction / cliffDirections) * Math.PI * 2,
           x = centre.x + Math.cos(angle) * radius,
-          z = centre.z + Math.sin(angle) * radius,
-          sample = surfaceAt(x, z);
+          z = centre.z + Math.sin(angle) * radius;
+        if (z <= -SOURCE_PRESENTATION_POLE_DISTANCE || z >= SOURCE_PRESENTATION_POLE_DISTANCE)
+          continue;
+        const sample = surfaceAt(x, z);
         if (!sample.cliff) continue;
         cliffPoint = { x, z, bed: sample.elevation };
         break outer;
