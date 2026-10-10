@@ -1,5 +1,10 @@
 export type PoliticalPresentation = "flat" | "globe" | "transition";
 
+/** Country borders are a Country-and-closer aid; Realm views stay uncluttered. */
+export const POLITICAL_BORDER_MAX_SCALE_DENOMINATOR = 1000;
+/** City/village labels become eligible at 1/1000 and remain available inward. */
+export const POLITICAL_DETAIL_LABEL_MAX_SCALE_DENOMINATOR = 1000;
+
 /**
  * Presentation-only visibility gate for political overlays.
  *
