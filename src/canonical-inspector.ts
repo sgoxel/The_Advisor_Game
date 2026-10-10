@@ -204,7 +204,7 @@ function install(world: AdvisorWorld) {
           textureBytesEstimated =
             Math.max(0, Number(globe.textureWidth) || 0) *
               Math.max(0, Number(globe.textureHeight) || 0) *
-              4 +
+              4 * 4 / 3 +
             2048 * 4;
         return {
           ...state,
@@ -236,7 +236,7 @@ function install(world: AdvisorWorld) {
             preparationWaitMs: Number(handoff.preparationWaitMs) || 0,
             recurringGenerationPasses: globe.complete
               ? 0
-              : Math.max(0, 2 - (Number(globe.passes) || 0)),
+              : Math.max(0, 1 - (Number(globe.passes) || 0)),
           },
         };
       },

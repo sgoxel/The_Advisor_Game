@@ -3,8 +3,8 @@ import { PLANET_RADIUS, unitToLonLat, type Unit } from "./planet.ts";
 import { coordinateValue } from "./world.ts";
 
 /** Longitude / latitude segments of the sphere: 96 × 48 quads, 3.75° each. */
-const LON_SEGMENTS = 96;
-const LAT_SEGMENTS = 48;
+export const LON_SEGMENTS = 96;
+export const LAT_SEGMENTS = 48;
 /** The shading overlay is one radial fan; its texture runs centre → edge along U. */
 const SHADE_SEGMENTS = 128;
 const SHADE_TEXELS = 2048;
@@ -169,6 +169,9 @@ function flatMaterial(name: string): pc.StandardMaterial {
 
 /** The Realm-scale globe: one textured sphere, one shading fan, two small textures. */
 export class GlobeView {
+  /** The opaque shared globe is a background while local terrain morphs above it. */
+  readonly surfaceLayer = new pc.Layer({ name: "Canonical globe background" });
+  private readonly app: pc.AppBase;
   /** Everything the globe draws hangs under this entity. Hidden until setVisible(true). */
   readonly root: pc.Entity;
   /** Camera clear colour to use while the globe is shown. */
@@ -184,6 +187,7 @@ export class GlobeView {
   private readonly shadeMaterial: pc.StandardMaterial;
   private readonly shadeTexture: pc.Texture;
   private surfaceTexture: pc.Texture;
+  get surface(): pc.Texture { return this.surfaceTexture; }
   private readonly rotation = new pc.Quat();
   private readonly turn = new pc.Quat();
   private readonly point = new pc.Vec3();
@@ -191,6 +195,8 @@ export class GlobeView {
   private readonly shade: pc.Entity;
 
   constructor(app: pc.AppBase) {
+    this.app = app;
+    app.scene.layers.insertOpaque(this.surfaceLayer, 0);
     const device = (this.device = app.graphicsDevice);
     this.root = new pc.Entity("Globe");
     this.root.enabled = false;
@@ -207,6 +213,7 @@ export class GlobeView {
     const sphere = sphereMesh(device);
     this.sphere = new pc.Entity("Globe surface");
     this.sphere.addComponent("render", {
+      layers: [this.surfaceLayer.id],
       meshInstances: [new pc.MeshInstance(sphere, this.surfaceMaterial)],
       castShadows: false,
       receiveShadows: false,
@@ -302,9 +309,9 @@ export class GlobeView {
 
   setBlend(alpha: number) {
     const value = Math.max(0, Math.min(1, alpha));
-    this.surfaceMaterial.opacity = value;
-    this.surfaceMaterial.blendType =
-      value < 0.999 ? pc.BLEND_NORMAL : pc.BLEND_NONE;
+    if (this.shadeMaterial.opacity === value) return;
+    this.surfaceMaterial.opacity = value > 0 ? 1 : 0;
+    this.surfaceMaterial.blendType = pc.BLEND_NONE;
     this.surfaceMaterial.depthWrite = value >= 0.999;
     this.surfaceMaterial.update();
     this.shade.enabled = value > 0.001;
@@ -373,6 +380,7 @@ export class GlobeView {
   }
 
   destroy() {
+    this.app.scene.layers.removeOpaque(this.surfaceLayer);
     this.root.destroy();
     this.surfaceMaterial.destroy();
     this.shadeMaterial.destroy();

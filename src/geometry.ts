@@ -1,10 +1,9 @@
-import { biomeAt, featuresFor, field, heightAt, type Tile } from "./world.ts";
+import { featuresFor, field, heightAt, riverX, type Tile } from "./world.ts";
 import { nearestPlace, roadAt, roads } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
-import { sourceToLonLat, wrapSourceX } from "./planet.ts";
+import { sourceToLonLat, wrapSourceX, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import {
   climateSampleAt,
-  frozenLatitudeAt,
   polarBoundaryAt,
   TERRAIN_PALETTE,
   type RGB,
@@ -15,6 +14,7 @@ export type Geometry = {
   normals: Float32Array;
   colors: Uint8Array;
   indices: Uint32Array;
+  uvs?: Float32Array;
 };
 export type TileGeometry = {
   terrain: Geometry;
@@ -192,19 +192,21 @@ export function terrainTint(
 ): [number, number, number] {
   const position = sourceToLonLat(x, z),
     macro = macroSampleAt(position),
-    sample = climateSampleAt(position, elevationM ?? macro.reliefM),
-    legacy = scale <= 512 ? biomeAt(x, z) : "";
+    elevation = elevationM ?? heightAt(x, z),
+    sample = climateSampleAt(position, elevation);
 
-  if (legacy === "River") return color(76, 128, 148);
-  if (legacy === "Riverbank") return color(151, 143, 99);
+  // Current composed river surface; avoid constructing the unrelated five-level
+  // feature hierarchy for every surface texel. Same prototype river authority.
+  if (macro.domain === "Mainland" && elevation < 0.1) return color(76, 128, 148);
+  if (macro.domain === "Mainland" && Math.abs(wrapSourceX(x - riverX(z))) < 32)
+    return color(151, 143, 99);
 
-  const s = scale <= 512 ? nearestPlace(x, z) : undefined,
+  const s = nearestPlace(x, z),
     dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,
     dz = s ? Math.abs(z - s.z) : 1000,
     urbanRoad =
       s?.kind === "city" && (Math.abs(dx % 29) < 3 || Math.abs(dz % 29) < 3);
   if (
-    scale <= 512 &&
     ((s &&
       Math.hypot(dx, dz) < (s.kind === "city" ? 420 : 66) &&
       (dx < 4 || dz < 4 || Math.hypot(dx, dz) < 11 || urbanRoad)) ||
@@ -212,11 +214,12 @@ export function terrainTint(
   )
     return color(170, 151, 113);
 
-  const detailScale = scale > 512 ? 9000 : sample.forestFamily ? 42 : 68,
-    variation = (field(x, z, detailScale, 44) - 0.5) * (scale > 512 ? 6 : 12),
+  // Identical coordinate inputs give identical albedo at every mesh LOD.
+  // Filtering detail belongs to presentation, not a size-dependent palette.
+  const detailScale = sample.forestFamily ? 42 : 68,
+    variation = (field(x, z, detailScale, 44) - 0.5) * 6,
     temperature = sample.temperatureC,
     moisture = sample.moisture,
-    elevation = sample.elevationM,
     land = !["ocean", "lake", "sea-ice"].includes(sample.terrainClass);
 
   // Water and sea ice use the same canonical polar boundary, but blend through a
@@ -227,7 +230,7 @@ export function terrainTint(
       iceWeight = smoothstep(-0.018, 0.018, polarDelta),
       waterBase = sample.terrainClass === "lake" ? TERRAIN_PALETTE.lake : TERRAIN_PALETTE.ocean,
       base = blendColor(waterBase, TERRAIN_PALETTE["sea-ice"], iceWeight);
-    return varyColor(base, variation * 0.25);
+    return base;
   }
 
   // Lowland ecotones are continuous functions of the canonical climate fields.
@@ -353,8 +356,14 @@ export function buildTile(t: Tile): TileGeometry {
     }
   // The water/ice plane is presentation-only and sits beneath land. Sample the same
   // canonical polar boundary at each corner so a tile cannot expose a rectangular ice edge.
-  const waterTint = (x: number, z: number) =>
-    frozenLatitudeAt(sourceToLonLat(x, z)) ? TERRAIN_PALETTE["sea-ice"] : TERRAIN_PALETTE.ocean;
+  const waterTint = (x: number, z: number): RGB => {
+    // Visible water uses exactly the same composed color as the globe. Ground
+    // below land is occluded; retain a smooth canonical ice margin there too.
+    if (heightAt(x, z) <= 0) return terrainTint(x, z);
+    const position = sourceToLonLat(x, z);
+    return blendColor(TERRAIN_PALETTE.ocean, TERRAIN_PALETTE["sea-ice"],
+      smoothstep(-0.018, 0.018, Math.abs(position.lat)/(Math.PI/2)-polarBoundaryAt(position)));
+  };
   terrain.quadGradient(
     [t.minX, 0, t.minZ],
     [t.minX, 0, t.minZ + t.size],
@@ -543,10 +552,17 @@ export function buildTile(t: Tile): TileGeometry {
   // Preserve full precision until after the large source anchor is removed.
   const originX = t.minX + t.size / 2,
     originZ = t.minZ + t.size / 2;
+  // Source-coordinate UVs survive ENU conversion, rebasing and patch yaw.
+  // Keep seam endpoints 0/1 rather than wrapping within a triangle.
+  const uvs = new Float32Array((terrain.p.length / 3) * 2);
+  for (let i = 0, v = 0; i < terrain.p.length; i += 3, v += 2) {
+    uvs[v] = terrain.p[i] / SOURCE_PRESENTATION_WIDTH + 0.5;
+    uvs[v + 1] = Math.max(0, Math.min(1, 0.5 + terrain.p[i + 2] * 2 / SOURCE_PRESENTATION_WIDTH));
+  }
   for (const builder of [terrain, structures, nature, detail])
     builder.relativeTo(originX, originZ);
   return {
-    terrain: terrain.finish(),
+    terrain: { ...terrain.finish(), uvs },
     structures: structures.finish(),
     nature: nature.finish(),
     detail: detail.finish(),

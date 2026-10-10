@@ -22,6 +22,9 @@ import {
   roads,
 } from "./geography.ts";
 import type { Geometry, TileGeometry } from "./geometry.ts";
+import { terrainTint } from "./geometry.ts";
+import { climateSampleAt } from "./climate.ts";
+import { LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
 import { LazySimulation } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
@@ -74,13 +77,12 @@ import {
 /** WP-S002-003-003 runtime streaming budgets. */
 /** Canonical 1/2500 globe-dominant anchor, converted through the temporary S001 presentation adapter. */
 const GLOBE_FROM = HANDOFF_GLOBE_HALF_HEIGHT;
-/** Surface image passes: a quick preview, then the final image. */
+/** One shared final surface; preview replacement must not recolor a visible map. */
 const GLOBE_PASSES = [
-  { width: 512, samples: 1 },
-  { width: 1024, samples: 2 },
+  { width: 1024, samples: 1 },
 ];
-/** Hill-shading strength: enough for highlands to read without drowning the land. */
-const GLOBE_RELIEF = 0.6;
+/** Terrain color interpretation is identical in the globe and flat representations. */
+const GLOBE_RELIEF = SURFACE_PRESENTATION.relief;
 const FLAT_BACKDROP = new pc.Color(0.65, 0.71, 0.65);
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
@@ -120,10 +122,12 @@ let projectionTransition = 0,
   handoffWaitingForDestination = false,
   slowFrameCount = 0,
   droppedFrameCount = 0,
-  lastFlatOpacity = -1,
   detailedMaxHorizontalM = 0,
   detailedMaxFloat32ErrorM = 0;
 let worldMaterial: pc.StandardMaterial | undefined;
+let terrainMaterial: pc.StandardMaterial | undefined;
+let surfaceDetail = 1;
+let lodTransition: { oldKeys: string[]; newKeys: string[]; started: number } | undefined;
 type CachedTile = {
   tile: Tile;
   entity: pc.Entity;
@@ -383,6 +387,8 @@ function prepareGlobe() {
       return;
     }
     globe!.setSurface(event.data);
+    terrainMaterial!.emissiveMap = globe!.surface;
+    terrainMaterial!.update();
     globePass++;
     if (globePass < GLOBE_PASSES.length) request();
     else {
@@ -454,26 +460,20 @@ function applyPresentation() {
     camera.camera!.orthoHeight = view.halfHeight;
     camera.camera!.farClip = 600000;
   }
-  if (worldMaterial) {
-    const opacity = 1 - projectionTransition;
-    if (
-      Math.abs(opacity - lastFlatOpacity) > 0.004 ||
-      opacity === 0 ||
-      opacity === 1
-    ) {
-      lastFlatOpacity = opacity;
-      worldMaterial.opacity = opacity;
-      worldMaterial.blendType =
-        opacity < 0.999 ? pc.BLEND_NORMAL : pc.BLEND_NONE;
-      // Keep the nearest flat surface in the depth buffer while it remains
-      // visible. Without this, overlapping tile skirts alpha-blend together
-      // during the handoff and expose rectangular tile seams.
-      worldMaterial.depthWrite = opacity > 0.001;
-      worldMaterial.update();
-    }
+  for (const material of [worldMaterial, terrainMaterial]) if (material) {
+    // Replace terrain pixels rather than stacking translucent skirts over the
+    // globe. One retained surface owns each pixel throughout the handoff.
+    material.setParameter("flatCoverage", material === terrainMaterial ? 1 : 1 - projectionTransition);
   }
   const backdrop = globe.backdropColor,
     t = projectionTransition;
+  const surfaceOrigin = renderFrame.canonicalOrigin;
+  terrainMaterial?.setParameter("surfaceOrigin", [surfaceOrigin.lon, surfaceOrigin.lat]);
+  terrainMaterial?.setParameter("surfaceOffset", [flatRoot.getLocalPosition().x, flatRoot.getLocalPosition().y, flatRoot.getLocalPosition().z]);
+  terrainMaterial?.setParameter("surfaceProjectionWeight", 1 - localDetailWeight(view.halfHeight));
+  const surfaceFocus = flatToLonLat(view.x, view.z);
+  terrainMaterial?.setParameter("surfaceFocus", [surfaceFocus.lon, surfaceFocus.lat]);
+  terrainMaterial?.setParameter("surfaceTransition", projectionTransition);
   camera.camera!.clearColor.set(
     FLAT_BACKDROP.r + (backdrop.r - FLAT_BACKDROP.r) * t,
     FLAT_BACKDROP.g + (backdrop.g - FLAT_BACKDROP.g) * t,
@@ -490,6 +490,10 @@ function updateCamera() {
   applyPresentation();
 }
 function updateHandoff(dt: number) {
+  const desiredDetail = globeCoverageReady() ? localDetailWeight(view.halfHeight) : 1;
+  surfaceDetail += (desiredDetail - surfaceDetail) * (1 - Math.exp(-Math.max(0, dt) / 0.16));
+  if (Math.abs(surfaceDetail - desiredDetail) < 0.001) surfaceDetail = desiredDetail;
+  terrainMaterial?.setParameter("surfaceDetailWeight", surfaceDetail);
   desiredProjectionTransition = projectionTransitionForHalfHeight(
     view.halfHeight,
   );
@@ -568,7 +572,7 @@ function navigate(x: number, z: number, height = view.halfHeight) {
   view.z = boundedZ;
   rebaseRenderFrame();
   // Leaving Province level means the globe may be needed soon.
-  if (view.halfHeight >= 900) prepareGlobe();
+  if (view.halfHeight >= 230) prepareGlobe();
   updateCamera();
 }
 function uploadGeometry(
@@ -582,6 +586,7 @@ function uploadGeometry(
   mesh.setPositions(g.positions);
   mesh.setNormals(g.normals);
   mesh.setColors32(g.colors);
+  if (g.uvs) mesh.setUvs(0, g.uvs);
   mesh.setIndices(g.indices);
   mesh.update(pc.PRIMITIVE_TRIANGLES);
   const entity = new pc.Entity(name);
@@ -620,7 +625,8 @@ function request(tile: Tile) {
   worker.postMessage(tile);
 }
 function refreshSelection() {
-  wanted = selectTiles(view, 190, streamingBudget.activePatches);
+  // Reserve bounded capacity for old and incoming coverage during the 240 ms blend.
+  wanted = selectTiles(view, 190, Math.floor(streamingBudget.activePatches / 2));
   const nextWantedKeys = new Set(wanted.map((tile) => tile.key));
   for (const tile of wanted)
     if (!previousWantedKeys.has(tile.key)) {
@@ -668,7 +674,7 @@ function processStreaming(material: pc.StandardMaterial) {
     const entity = new pc.Entity(next.tile.key),
       meshes: pc.Mesh[] = [];
     for (const [name, g] of Object.entries(next.data)) {
-      const mesh = uploadGeometry(g, entity, name, material);
+      const mesh = uploadGeometry(g, entity, name, name === "terrain" ? terrainMaterial! : material);
       if (mesh) meshes.push(mesh);
     }
     entity.enabled = false;
@@ -701,11 +707,14 @@ function processStreaming(material: pc.StandardMaterial) {
     if (inFlight + uploads.length < streamingBudget.generationReady) request(root);
   } else {
     const complete = wanted.every((tile) => tileCache.has(tile.key));
-    if (complete) {
+    if (complete && !lodTransition) {
       const newKeys = wanted.map((t) => t.key),
         active = new Set(newKeys);
+      if (ready && (newKeys.length !== activeKeys.length || newKeys.some(key => !activeKeys.includes(key))))
+        lodTransition = { oldKeys: [...activeKeys], newKeys, started: performance.now() };
+      const retained = new Set(lodTransition?.oldKeys ?? []);
       for (const [key, record] of tileCache) {
-        record.entity.enabled = active.has(key);
+        record.entity.enabled = active.has(key) || retained.has(key);
         if (active.has(key)) record.used = revision;
       }
       activeKeys = newKeys;
@@ -713,7 +722,7 @@ function processStreaming(material: pc.StandardMaterial) {
         ready = true;
         $("loading").classList.add("done");
       }
-    } else {
+    } else if (!complete) {
       // Keep the previous coverage and coarse root until the replacement is complete.
       tileCache.get(root.key)!.entity.enabled = true;
       if (!ready && tileCache.size > 1) $("loading").classList.add("done");
@@ -729,6 +738,7 @@ function processStreaming(material: pc.StandardMaterial) {
     if (overCacheBudget()) {
       const protect = new Set([
         ...activeKeys,
+        ...(lodTransition?.oldKeys ?? []),
         ...wanted.map((t) => t.key),
         root.key,
       ]);
@@ -744,6 +754,22 @@ function processStreaming(material: pc.StandardMaterial) {
         evictions++;
       }
     }
+  }
+  if (lodTransition) {
+    const transition = lodTransition;
+    const progress = Math.min(1, (performance.now() - transition.started) / (LOD_BLEND_SECONDS * 1000));
+    const t = progress * progress * (3 - 2 * progress);
+    const incoming = new Set(transition.newKeys), outgoing = new Set(transition.oldKeys);
+    for (const key of new Set([...incoming, ...outgoing])) {
+      const record = tileCache.get(key);
+      if (!record) continue;
+      const common = incoming.has(key) && outgoing.has(key);
+      for (const child of record.entity.children as pc.Entity[])
+        for (const instance of child.render?.meshInstances ?? [])
+          instance.setParameter("lodCoverage", common ? 1 : incoming.has(key) ? t : -Math.max(1e-7, t));
+      if (progress === 1) record.entity.enabled = incoming.has(key);
+    }
+    if (progress === 1) lodTransition = undefined;
   }
   const poleFeedback =
     poleLimit && performance.now() < poleLimitUntil
@@ -1144,6 +1170,7 @@ async function start() {
   flatRoot = new pc.Entity("Flat world");
   app.root.addChild(flatRoot);
   globe = new GlobeView(app);
+  camera.camera!.layers = [globe.surfaceLayer.id, ...camera.camera!.layers];
   const sun = new pc.Entity("Late afternoon sun");
   sun.addComponent("light", {
     type: "directional",
@@ -1160,10 +1187,13 @@ async function start() {
   const material = (worldMaterial = new pc.StandardMaterial());
   material.diffuse = new pc.Color(1, 1, 1);
   material.diffuseVertexColor = true;
+  (material as pc.StandardMaterial & { vertexColorGamma: boolean }).vertexColorGamma = true;
   material.specular = new pc.Color(0.04, 0.04, 0.04);
   material.shininess = 4;
   material.cull = pc.CULLFACE_NONE;
+  installLodCoverage(material);
   material.update();
+  terrainMaterial = createTerrainMaterial(globe.surface);
   worker = new Worker(new URL("./tile-worker.ts", import.meta.url), {
     type: "module",
   });
@@ -1487,6 +1517,12 @@ async function start() {
         localHalfHeight: HANDOFF_LOCAL_HALF_HEIGHT,
         globeHalfHeight: HANDOFF_GLOBE_HALF_HEIGHT,
       },
+      surface: {
+        sample(lon: number, lat: number) {
+          const point = lonLatToFlat(lon, lat), elevation = heightAt(point.x, point.z);
+          return { ...climateSampleAt({lon, lat}, elevation), albedo: terrainTint(point.x, point.z, 32, elevation) };
+        },
+      },
       setHalfHeight(height: number) {
         navigate(view.x, view.z, height);
       },
@@ -1514,7 +1550,9 @@ async function start() {
           readyGeometryBytes = uploads.reduce(
             (sum, upload) => sum + estimateGeometryBytes(upload.data),
             0,
-          );
+          ),
+          surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4,
+          surfaceGpuBytes = Math.ceil(surfaceBytes * 4 / 3);
         return {
           ready,
           error: errorText,
@@ -1524,6 +1562,7 @@ async function start() {
               : projectionTransition >= 0.999
                 ? "globe"
                 : "transition",
+          surface: { ...SURFACE_PRESENTATION, detailWeight: surfaceDetail, lodBlending: Boolean(lodTransition), textureWidth: globe!.stats.textureWidth, activeTileSizes: [...new Set(activeKeys.map(key => tileCache.get(key)!.tile.size))] },
           scaleLabel: scaleLabelForHalfHeight(view.halfHeight),
           canonicalFootprintM: canonicalFootprintForHalfHeight(view.halfHeight),
           navigation: {
@@ -1573,7 +1612,7 @@ async function start() {
             backend: device.deviceType,
             deviceClass: streamingBudget.deviceClass,
             budget: { ...streamingBudget },
-            activePatches: activeKeys.length,
+            activePatches: [...tileCache.values()].filter(record => record.entity.enabled).length,
             preparedPatches: uploads.length,
             cachedPatches: tileCache.size,
             pendingGeneration: inFlight,
@@ -1582,8 +1621,9 @@ async function start() {
             cacheHits,
             cacheMisses,
             evictions,
-            cpuResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes,
-            gpuResourceBytesEstimated: cachedGeometryBytes,
+            cpuResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes + surfaceBytes,
+            gpuResourceBytesEstimated: cachedGeometryBytes + surfaceGpuBytes,
+            sharedSurfaceBytes: surfaceBytes,
             uploadsThisFrame,
             maxUploadsPerFrame,
             canonicalKeysUnique: new Set(activeKeys).size === activeKeys.length,
@@ -1593,10 +1633,10 @@ async function start() {
             withinBudget: withinStreamingBudget(
               {
                 generationReady: inFlight + uploads.length,
-                activePatches: activeKeys.length,
+                activePatches: [...tileCache.values()].filter(record => record.entity.enabled).length,
                 cachedPatches: tileCache.size,
-                cpuBytes: cachedGeometryBytes + readyGeometryBytes,
-                gpuBytes: cachedGeometryBytes,
+                cpuBytes: cachedGeometryBytes + readyGeometryBytes + surfaceBytes,
+                gpuBytes: cachedGeometryBytes + surfaceGpuBytes,
               },
               streamingBudget,
             ),
@@ -1611,6 +1651,8 @@ async function start() {
           ],
           simulation: simulation.stats,
           settled:
+            !lodTransition &&
+            Math.abs(surfaceDetail - (globeCoverageReady() ? localDetailWeight(view.halfHeight) : 1)) < 0.002 &&
             Math.abs(projectionTransition - desiredProjectionTransition) <=
               0.001 &&
             (desiredProjectionTransition <= 0.001 || globeCoverageReady()) &&

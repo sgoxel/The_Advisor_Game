@@ -1,0 +1,27 @@
+{
+  "forest": {
+    "lon": -1.0471975511965976,
+    "lat": -1.1344640137963142,
+    "materialId": "terrain/conifer-forest"
+  },
+  "coast": {
+    "lon": -0.5235987755982988,
+    "lat": -1.064650843716541,
+    "materialId": "terrain/beach"
+  },
+  "grassland": {
+    "lon": -1.53588974175501,
+    "lat": -0.8552113334772214,
+    "materialId": "terrain/grassland"
+  },
+  "desert": {
+    "lon": -1.3264502315156903,
+    "lat": -0.6108652381980153,
+    "materialId": "terrain/desert"
+  },
+  "snow": {
+    "lon": -0.9773843811168246,
+    "lat": -0.22689280275926285,
+    "materialId": "terrain/snowy-mountain"
+  }
+}

@@ -38,9 +38,11 @@ async function exercisePureZoomHandoff(page, backend, viewports = HANDOFF_VIEWPO
     const click = (id) => page.evaluate((buttonId) => document.getElementById(buttonId).click(), id);
     const wheel = (deltaY) =>
       page.evaluate((delta) => {
+        const before = window.advisorWorld.state.handoff.projectionTransition;
         document.getElementById("world").dispatchEvent(
           new WheelEvent("wheel", { deltaY: delta, bubbles: true, cancelable: true }),
         );
+        return before;
       }, deltaY);
 
     // Zoom buttons work in both directions without moving/turning focus.
@@ -123,12 +125,11 @@ async function exercisePureZoomHandoff(page, backend, viewports = HANDOFF_VIEWPO
 
     // Reverse while the blend is strictly between endpoints. If flat coverage is
     // still preparing, a pause is correct; it must not continue toward the globe.
-    const beforeReverse = await page.evaluate(
-      () => window.advisorWorld.state.handoff.projectionTransition,
-    );
+    // Sample and dispatch in one browser task: animation may advance between
+    // separate automation calls on a faster/native renderer.
+    const beforeReverse = await wheel(-420);
     expect(beforeReverse).toBeGreaterThan(0);
     expect(beforeReverse).toBeLessThan(1);
-    await wheel(-420);
     await page.waitForFunction(() => {
       const h = window.advisorWorld.state.handoff;
       return h.desiredTransition < h.projectionTransition || h.projectionTransition <= 0.01;
