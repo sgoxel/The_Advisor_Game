@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   repair:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 15
     steps:
       - name: Checkout WP branch
