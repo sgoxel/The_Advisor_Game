@@ -8,6 +8,7 @@ import {
   roadDistanceAt,
   roads,
 } from "../src/geography.ts";
+import { terrainTint } from "../src/geometry.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
 import {
   criticalSites,
@@ -21,7 +22,7 @@ import {
   greatCircleDistance,
   wrapSourceX,
 } from "../src/planet.ts";
-import { biomeAt, cellAt, heightAt } from "../src/world.ts";
+import { cellAt, heightAt } from "../src/world.ts";
 
 test("critical-site registry scales with the actual country registry", () => {
   const summary = siteAcceptanceSummary();
@@ -86,8 +87,9 @@ test("focused site queries are bounded and do not scan-materialize the planet", 
   }
 });
 
-test("priority-9 preparation has bounded canonical-metre support and one surface/walkability truth", () => {
+test("priority-9 preparation has bounded canonical-metre support and one render/walkability truth", () => {
   const site = criticalSites[0],
+    branch = siteAccessRoads.find((road) => road.code === site.access.branchCode)!,
     target = 3,
     sourcePerMetre = 1 / CANONICAL_METRES_PER_SOURCE_UNIT,
     centre = siteSurfaceSample(site, site.x, site.z, 78, target),
@@ -104,7 +106,9 @@ test("priority-9 preparation has bounded canonical-metre support and one surface
       site.z,
       78,
       target,
-    );
+    ),
+    midpointX = site.x + wrapSourceX(site.access.x - site.x) * 0.5,
+    midpointZ = (site.z + site.access.z) * 0.5;
   assert.equal(centre.height, target);
   assert.equal(centre.cleared, true);
   assert.equal(centre.walkable, true);
@@ -113,11 +117,12 @@ test("priority-9 preparation has bounded canonical-metre support and one surface
   assert.equal(outside.cleared, false);
   assert.equal(outside.influence, 0);
 
-  // The materialized branch is consumed by the existing shared road earthwork:
-  // terrain height/material and logical cell walkability all resolve the same site core.
+  // The branch is consumed by the same runtime authorities: heightAt grades the
+  // endpoint, terrainTint paints its actual centreline, and cellAt makes it walkable.
   assert.equal(roadAt(site.x, site.z)?.code, site.access.branchCode);
   assert.ok(Math.abs(heightAt(site.x, site.z) - target) < 1e-6);
-  assert.equal(biomeAt(site.x, site.z), "Road");
+  assert.equal(roadDistanceAt(midpointX, midpointZ, branch), 0);
+  assert.deepEqual(terrainTint(midpointX, midpointZ), [170, 151, 113]);
   assert.equal(cellAt(site.x, site.z).walkable, true);
 });
 
