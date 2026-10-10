@@ -3,13 +3,15 @@ name: WP15 final visual repair
 on:
   push:
     branches:
-      - agent1/wp-s002-004-005-final
+      - agent1/wp-s002-004-005-final-r2
+    paths:
+      - .github/workflows/wp15-final-visual-repair.yml
 
 permissions:
   contents: write
 
 concurrency:
-  group: wp15-final-visual-repair
+  group: wp15-final-visual-repair-r2
   cancel-in-progress: true
 
 jobs:
@@ -19,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent1/wp-s002-004-005-final
+          ref: agent1/wp-s002-004-005-final-r2
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -45,23 +47,6 @@ jobs:
                   raise SystemExit(f'missing geometry anchor: {old[:50]!r}')
               text = text.replace(old, new, 1)
           p.write_text(text)
-
-          p = Path('.github/workflows/wp15-visual-evidence.yml')
-          text = p.read_text()
-          changes = {
-            'setHalfHeight(1400)': 'setHalfHeight(600)',
-            'setHalfHeight(420)': 'setHalfHeight(180)',
-            'setHalfHeight(900)': 'setHalfHeight(600)',
-            'setHalfHeight(1200)': 'setHalfHeight(600)',
-            'setHalfHeight(170)': 'setHalfHeight(60)',
-            'setHalfHeight(360)': 'setHalfHeight(180)',
-            'setHalfHeight(650)': 'setHalfHeight(600)',
-          }
-          for old, new in changes.items():
-              if old not in text:
-                  raise SystemExit(f'missing evidence anchor: {old}')
-              text = text.replace(old, new, 1)
-          p.write_text(text)
           PY
       - run: npm ci
       - name: Targeted terrain regressions
@@ -73,7 +58,6 @@ jobs:
           set -euo pipefail
           git config user.name "AGENT #1"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
-          rm .github/workflows/wp15-final-visual-repair.yml
-          git add src/geometry.ts .github/workflows/wp15-visual-evidence.yml .github/workflows/wp15-final-visual-repair.yml
+          git add src/geometry.ts
           git commit -m "WP-S002-004-005 clean shoreline LOD presentation"
-          git push origin HEAD:agent1/wp-s002-004-005-final
+          git push origin HEAD:agent1/wp-s002-004-005-final-r2
