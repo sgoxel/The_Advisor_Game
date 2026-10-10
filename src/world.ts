@@ -10,6 +10,14 @@ import {
 import { streamingBudgetForViewport } from "./streaming.ts";
 import { nearestPlace, places, roadAt, roadDistanceAt } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
+import {
+  buildingAt,
+  settlementLayout,
+  streetDistanceAt,
+  type Border,
+  type Gate,
+  type Street,
+} from "./settlement-layout.ts";
 export { WORLD_SEED } from "./config.ts";
 export const GENERATOR_VERSION = WORLD_FOUNDATION_VERSION;
 export const WORLD_SIZE = 262144;
@@ -26,12 +34,29 @@ export type Tile = {
   minZ: number;
 };
 export type Feature = {
-  kind: "house" | "keep" | "tree" | "rock" | "field" | "well";
+  kind:
+    | "house"
+    | "keep"
+    | "tree"
+    | "rock"
+    | "field"
+    | "well"
+    | "wall"
+    | "gate"
+    | "guard-post"
+    | "street";
   x: number;
   z: number;
   y: number;
   code: string;
   variant: number;
+  /** Yaw: local +z (front) is (sin angle, cos angle). */
+  angle?: number;
+  width?: number;
+  depth?: number;
+  floors?: number;
+  role?: string;
+  length?: number;
 };
 export type Cell = {
   code: string;
@@ -41,6 +66,8 @@ export type Cell = {
   biome: string;
   walkable: boolean;
   tile: string;
+  /** Building footprint containing this cell, if any. */
+  structure?: { role: string; code: string };
 };
 export type ProvinceSeed = {
   code: string;
@@ -166,6 +193,7 @@ export function coordinateValue(x: number, z: number, layer: number): number {
   n = Math.imul(n ^ (n >>> 13), 1274126177);
   return (n ^ (n >>> 16)) >>> 0;
 }
+export const SEED_VALUE_ALIAS = SEED_VALUE;
 const smooth = (t: number) => t * t * (3 - 2 * t);
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 export function field(
@@ -358,6 +386,8 @@ export function cellAt(x: number, z: number): Cell {
     Math.abs(heightAt(px + 1, pz) - heightAt(px - 1, pz)),
     Math.abs(heightAt(px, pz + 1) - heightAt(px, pz - 1)),
   );
+  const street = streetDistanceAt(px, pz) < 2.5,
+    building = buildingAt(px, pz);
   return {
     code: cellSeed(cx, cz).code,
     x: cx,
@@ -365,11 +395,117 @@ export function cellAt(x: number, z: number): Cell {
     elevation,
     biome,
     // Seeded prototype roads are explicit legal good-road corridors. River cells
-    // on a road are already elevated as bridges above; bank cuts remain walkable.
-    walkable: Boolean(road) || (elevation > 0.1 && slope < 2),
+    // on a road are already elevated as bridges above; settlement streets share that legal surface.
+    walkable: Boolean(road) || (elevation > 0.1 && (street || slope < 2)),
     tile: `${tile.level}/${tile.x}/${tile.z}`,
+    ...(building
+      ? { structure: { role: building.role, code: building.code } }
+      : {}),
   };
 }
+/** Feature identity prefix; layout codes already carry seed and generator version. */
+const FEATURE_PREFIX = `${WORLD_SEED}/${GENERATOR_VERSION}/F/`;
+type FeatureDetail = Pick<
+  Feature,
+  "angle" | "width" | "depth" | "floors" | "role" | "length"
+>;
+
+/**
+ * Border polygon edges split at gate openings and into pieces of at most 16 m.
+ * Each piece is anchored at its midpoint; angle is the yaw whose local +z runs
+ * along the edge, so a wall's length is its local z extent.
+ */
+function borderPieces(border: Border, gates: readonly Gate[]) {
+  const pieces: { code: string; x: number; z: number; length: number; angle: number }[] = [];
+  const points = border.points;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i],
+      b = points[(i + 1) % points.length],
+      dx = b.x - a.x,
+      dz = b.z - a.z,
+      length = Math.hypot(dx, dz);
+    if (length < 1e-6) continue;
+    const ux = dx / length,
+      uz = dz / length,
+      angle = Math.atan2(ux, uz);
+    // Openings: the part of this edge within openingWidth/2 of a gate is left open.
+    const gaps: [number, number][] = [];
+    for (const gate of gates) {
+      const radius = gate.openingWidth / 2,
+        gx = gate.x - a.x,
+        gz = gate.z - a.z,
+        along = gx * ux + gz * uz,
+        across = Math.abs(gx * uz - gz * ux);
+      if (across < radius) {
+        const half = Math.sqrt(radius * radius - across * across);
+        gaps.push([along - half, along + half]);
+      }
+    }
+    gaps.sort((p, q) => p[0] - q[0]);
+    const spans: [number, number][] = [];
+    let cursor = 0;
+    for (const [start, end] of gaps) {
+      if (start > cursor) spans.push([cursor, Math.min(start, length)]);
+      cursor = Math.max(cursor, end);
+    }
+    if (cursor < length) spans.push([cursor, length]);
+    let piece = 0;
+    for (const [start, end] of spans) {
+      const span = end - start;
+      if (span < 0.5) continue;
+      const count = Math.ceil(span / 16),
+        step = span / count;
+      for (let j = 0; j < count; j++, piece++) {
+        const mid = start + step * (j + 0.5);
+        pieces.push({
+          code: `E${i}/${piece}`,
+          x: a.x + ux * mid,
+          z: a.z + uz * mid,
+          length: step,
+          angle,
+        });
+      }
+    }
+  }
+  return pieces;
+}
+
+/**
+ * Street centrelines split into pieces of at most 24 m, each anchored at its midpoint.
+ * angle follows the wall convention (local +z runs along the segment). length adds half
+ * a street width so neighbouring pieces overlap at joints instead of leaving gaps.
+ */
+function streetPieces(streets: readonly Street[]) {
+  const pieces: { code: string; x: number; z: number; length: number; angle: number; width: number }[] = [];
+  for (const street of streets) {
+    for (let i = 0; i + 1 < street.points.length; i++) {
+      const a = street.points[i],
+        b = street.points[i + 1],
+        dx = b.x - a.x,
+        dz = b.z - a.z,
+        span = Math.hypot(dx, dz);
+      if (span < 1e-6) continue;
+      const ux = dx / span,
+        uz = dz / span,
+        angle = Math.atan2(ux, uz),
+        count = Math.ceil(span / 24),
+        step = span / count;
+      for (let k = 0; k < count; k++) {
+        const mid = step * (k + 0.5);
+        pieces.push({
+          code: `${street.code}/seg/${i}/${k}`,
+          x: a.x + ux * mid,
+          z: a.z + uz * mid,
+          length: step + street.width * 0.5,
+          angle,
+          width: street.width,
+        });
+      }
+    }
+  }
+  return pieces;
+}
+
 /** Features are owned by their anchor tile; tile order/zoom never changes them. */
 export function featuresFor(tile: Tile): Feature[] {
   const features: Feature[] = [];
@@ -379,6 +515,7 @@ export function featuresFor(tile: Tile): Feature[] {
     z: number,
     variant: number,
     id: string,
+    detail: FeatureDetail = {},
   ) => {
     if (
       x < tile.minX ||
@@ -394,59 +531,74 @@ export function featuresFor(tile: Tile): Feature[] {
       z,
       y: heightAt(x, z),
       variant,
-      code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
+      code: `${FEATURE_PREFIX}${id}`,
+      ...detail,
     });
   };
   for (const s of places) {
-    const extent = s.kind === "city" ? 440 : 80;
+    const margin = s.kind === "city" ? 480 : 160;
     if (
-      s.x < tile.minX - extent ||
-      s.x > tile.minX + tile.size + extent ||
-      s.z < tile.minZ - extent ||
-      s.z > tile.minZ + tile.size + extent
+      s.x < tile.minX - margin ||
+      s.x > tile.minX + tile.size + margin ||
+      s.z < tile.minZ - margin ||
+      s.z > tile.minZ + tile.size + margin
     )
       continue;
-    const sx = Math.floor(s.x / 2),
-      sz = Math.floor(s.z / 2),
-      id = s.id;
-    add(
-      "keep",
-      s.x - 30,
-      s.z - 28,
-      coordinateValue(sx, sz, 11),
-      `${id}/${s.kind}/keep`,
-    );
-    add("well", s.x, s.z, 0, `${id}/${s.kind}/well`);
-    for (let i = 0; i < 18; i++) {
-      const v = coordinateValue(sx, sz, 20 + i);
-      const side = i % 2 === 0 ? -1 : 1;
-      const x = s.x + (i < 10 ? side * (15 + (v % 6)) : (i - 14) * 13);
-      const z =
-        s.z + (i < 10 ? (Math.floor(i / 2) - 2) * 14 : side * (42 + (v % 5)));
-      if (Math.hypot(x - (s.x - 30), z - (s.z - 28)) > 19)
-        add("house", x, z, v, `${id}/${s.kind}/house/${i}`);
-    }
-    for (let i = 0; i < 4; i++)
-      add(
-        "field",
-        s.x + (i % 2 === 0 ? -1 : 1) * (s.kind === "city" ? 350 : 65),
-        s.z + 16 + Math.floor(i / 2) * 24,
-        i,
-        `${id}/${s.kind}/field/${i}`,
+    const layout = settlementLayout(s);
+    // Layout codes are canonical identities; the owning render tile never enters them.
+    const emit = (
+      kind: Feature["kind"],
+      x: number,
+      z: number,
+      code: string,
+      detail?: FeatureDetail,
+    ) => add(kind, x, z, digest(`${FEATURE_PREFIX}${code}`), code, detail);
+    for (const building of layout.buildings)
+      emit(
+        building.role === "keep" ? "keep" : "house",
+        building.x,
+        building.z,
+        building.code,
+        {
+          angle: building.angle,
+          width: building.width,
+          depth: building.depth,
+          floors: building.floors,
+          role: building.role,
+        },
       );
-    if (s.kind === "city")
-      for (let i = 0; i < 400; i++) {
-        const gx = ((i % 20) - 9.5) * 29,
-          gz = (Math.floor(i / 20) - 9.5) * 29;
-        if (Math.abs(gx) > 40 || Math.abs(gz) > 55)
-          add(
-            "house",
-            s.x + gx,
-            s.z + gz,
-            coordinateValue(sx, sz, 80 + i),
-            `${id}/urban-house/${i}`,
-          );
-      }
+    emit("well", layout.well.x, layout.well.z, `${layout.code}/well`);
+    for (const field of layout.fields)
+      emit("field", field.x, field.z, field.code, {
+        angle: field.angle,
+        width: field.width,
+        depth: field.depth,
+      });
+    for (const piece of borderPieces(layout.border, layout.gates))
+      emit("wall", piece.x, piece.z, `${layout.border.code}/${piece.code}`, {
+        angle: piece.angle,
+        length: piece.length,
+        role: s.kind,
+      });
+    for (const piece of streetPieces(layout.streets))
+      emit("street", piece.x, piece.z, piece.code, {
+        angle: piece.angle,
+        length: piece.length,
+        width: piece.width,
+        role: s.kind,
+      });
+    for (const gate of layout.gates) {
+      emit("gate", gate.x, gate.z, gate.code, {
+        angle: gate.angle,
+        width: gate.openingWidth,
+        role: s.kind,
+      });
+      for (const post of gate.guardPosts)
+        emit("guard-post", post.x, post.z, post.code, {
+          angle: gate.angle,
+          role: s.kind,
+        });
+    }
   }
   if (tile.size <= 256) {
     for (
@@ -462,6 +614,8 @@ export function featuresFor(tile: Tile): Feature[] {
         const v = coordinateValue(gx, gz, 30);
         const x = gx * 10 + (v % 7) - 3,
           z = gz * 10 + ((v >>> 5) % 7) - 3;
+        // Vegetation and rocks keep clear of streets and building footprints.
+        if (streetDistanceAt(x, z) < 3 || buildingAt(x, z)) continue;
         const biome = biomeAt(x, z);
         if (biome === "Woodland" && v % 4 !== 0)
           add("tree", x, z, v, `tree/${gx}/${gz}`);
