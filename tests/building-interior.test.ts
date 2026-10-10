@@ -28,6 +28,7 @@ test("protagonist entry realizes only the entered building and re-entry is deter
   assert.equal(cache.stats().materializations, 1);
   assert.equal(first.exteriorEntrance.x, home.entrance.x);
   assert.equal(first.exteriorEntrance.z, home.entrance.z);
+  assert.equal(first.doors[0]?.kind, "door");
   assert.equal(first.doors[0]?.from, "EXTERIOR");
   assert.equal(first.doors[0]?.to, first.rooms[0]?.code);
   cache.exit(home.code);
@@ -65,6 +66,25 @@ test("required home rooms and service programs become connected usable interior 
     }
   }
   assert.ok(signatures.size >= 6, `service interiors insufficiently diverse: ${signatures.size}/${roles.length}`);
+});
+
+test("multi-floor interiors contain explicit deterministic stair circulation", () => {
+  const building = layout.buildings.find((candidate) => candidate.floors > 1 && candidate.rooms.length > 1);
+  assert.ok(building, "fixture settlement has no multi-floor building");
+  const first = interiorPlanFor(building),
+    second = interiorPlanFor(building),
+    usedFloors = new Set(first.rooms.map((room) => room.floor)),
+    stairs = first.doors.filter((door) => door.kind === "stair");
+  assert.ok(usedFloors.size >= 2, `${building.code}: upper floor never populated`);
+  assert.ok(stairs.length >= 1, `${building.code}: no explicit stair connection`);
+  assert.ok(first.anchors.some((anchor) => anchor.kind === "stairs"), `${building.code}: no usable stair anchor`);
+  for (const stair of stairs) {
+    const from = first.rooms.find((room) => room.code === stair.from),
+      to = first.rooms.find((room) => room.code === stair.to);
+    assert.ok(from && to, `${stair.code}: stair endpoint missing`);
+    assert.notEqual(from.floor, to.floor, `${stair.code}: stair does not change floor`);
+  }
+  assert.deepEqual(second, first, `${building.code}: stair topology changed on reconstruction`);
 });
 
 test("bounded cache never evicts an active protagonist interior and evicts inactive LRU entries", () => {
