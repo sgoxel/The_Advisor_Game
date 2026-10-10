@@ -70,7 +70,8 @@ export type PoliticalBorderGateway = {
 
 function digest(text: string) {
   let value = 2166136261;
-  for (let i = 0; i < text.length; i++) value = Math.imul(value ^ text.charCodeAt(i), 16777619);
+  for (let index = 0; index < text.length; index++)
+    value = Math.imul(value ^ text.charCodeAt(index), 16777619);
   return value >>> 0;
 }
 
@@ -117,16 +118,21 @@ function interpolate(from: LonLat, to: LonLat, t: number) {
   return destination(from, bearing, distanceM * Math.max(0, Math.min(1, t)));
 }
 
-function sameDryOwner(point: LonLat, country: Country, reliefCeiling = 180) {
+/** Hard access invariant: owned, continental dry land. Elevation is not itself an obstacle. */
+function sameOwnedDryLand(point: LonLat, country: Country) {
   const macro = macroSampleAt(point),
     owner = countryAtPosition(point);
   return (
     macro.land &&
     macro.domain !== "Lake" &&
     macro.continentId === country.continent &&
-    macro.reliefM <= reliefCeiling &&
     owner?.code === country.code
   );
+}
+
+/** Settlement envelopes also require modest relief so prepared ground stays bounded. */
+function sameDryOwner(point: LonLat, country: Country, reliefCeiling = 180) {
+  return sameOwnedDryLand(point, country) && macroSampleAt(point).reliefM <= reliefCeiling;
 }
 
 function ringSamples(centre: LonLat, radiusM: number) {
@@ -242,9 +248,13 @@ function buildSitePlan(place: Place): PoliticalSettlementSitePlan | undefined {
   return undefined;
 }
 
+/**
+ * Access links reserve topology, not final road profiles. High ground is legal here because
+ * the road authority can grade it; water and foreign ownership remain hard exclusions.
+ */
 function segmentLegal(from: LonLat, to: LonLat, country: Country, samples = CORRIDOR_SAMPLES) {
   for (let index = 0; index <= samples; index++)
-    if (!sameDryOwner(interpolate(from, to, index / samples), country, 220)) return false;
+    if (!sameOwnedDryLand(interpolate(from, to, index / samples), country)) return false;
   return true;
 }
 
@@ -266,7 +276,7 @@ function layeredCorridor(
     layers = fractions.map((fraction, layerIndex) => {
       const anchor = interpolate(from.canonicalPosition, to.canonicalPosition, fraction),
         candidates: CanonicalPosition[] = [];
-      if (sameDryOwner(anchor, country, 220)) candidates.push(anchor);
+      if (sameOwnedDryLand(anchor, country)) candidates.push(anchor);
       for (const radiusM of uniqueRadii)
         for (let bearingIndex = 0; bearingIndex < 16; bearingIndex++) {
           const candidate = destination(
@@ -274,7 +284,7 @@ function layeredCorridor(
             phase + layerIndex * 0.173 + (bearingIndex / 16) * TAU,
             radiusM,
           );
-          if (sameDryOwner(candidate, country, 220)) candidates.push(candidate);
+          if (sameOwnedDryLand(candidate, country)) candidates.push(candidate);
         }
       return candidates;
     });
@@ -313,11 +323,8 @@ function layeredCorridor(
 }
 
 /**
- * Last-resort political access proof. It searches a deterministic, finite strip
- * around the direct geodesic rather than guessing a handful of waypoints. Every
- * node and every edge still uses the same dry-land, relief and country-ownership
- * predicates, so the search can discover a winding legal corridor without ever
- * weakening acceptance or becoming a second road authority.
+ * Last-resort political access proof. It searches a deterministic finite strip around the
+ * direct geodesic. Every node and edge retains dry-land and country-ownership invariants.
  */
 function coarseGridCorridor(
   from: Place,
@@ -327,10 +334,7 @@ function coarseGridCorridor(
   phase: number,
 ): readonly CanonicalPosition[] | undefined {
   const directBearing = initialBearing(from.canonicalPosition, to.canonicalPosition),
-    stepM = Math.min(
-      GRID_MAX_STEP_M,
-      Math.max(GRID_MIN_STEP_M, distanceM / GRID_MAX_ALONG),
-    ),
+    stepM = Math.min(GRID_MAX_STEP_M, Math.max(GRID_MIN_STEP_M, distanceM / GRID_MAX_ALONG)),
     alongSteps = Math.min(GRID_MAX_ALONG, Math.max(2, Math.ceil(distanceM / stepM))),
     lateralSpanM = Math.min(240_000, Math.max(72_000, distanceM * 0.8)),
     lateralSteps = Math.min(GRID_MAX_LATERAL, Math.max(2, Math.ceil(lateralSpanM / stepM))),
@@ -355,14 +359,11 @@ function coarseGridCorridor(
     if (along === 0 && row === centreRow) point = from.canonicalPosition;
     else if (along === alongSteps && row === centreRow) point = to.canonicalPosition;
     else {
-      const centre = interpolate(
-          from.canonicalPosition,
-          to.canonicalPosition,
-          along / alongSteps,
-        ),
+      const centre = interpolate(from.canonicalPosition, to.canonicalPosition, along / alongSteps),
         offsetM = (row - centreRow) * stepM,
         side = offsetM < 0 ? -1 : 1,
-        jitter = (addressed(`${country.code}/GRID/${from.code}/${to.code}/${along}/${row}`) - 0.5) *
+        jitter =
+          (addressed(`${country.code}/GRID/${from.code}/${to.code}/${along}/${row}`) - 0.5) *
           Math.min(stepM * 0.16, 1_800);
       point = destination(
         centre,
@@ -371,7 +372,7 @@ function coarseGridCorridor(
       );
     }
     points[index] = point;
-    legal[index] = sameDryOwner(point, country, 220) ? 1 : 0;
+    legal[index] = sameOwnedDryLand(point, country) ? 1 : 0;
     return point;
   };
 
@@ -397,8 +398,7 @@ function coarseGridCorridor(
       bestScore = Infinity;
     for (let index = 0; index < nodeCount; index++) {
       if (visited[index] || !legal[index] || !Number.isFinite(distance[index])) continue;
-      const along = Math.floor(index / width),
-        row = index % width,
+      const row = index % width,
         point = points[index]!,
         heuristic = greatCircleDistance(point, to.canonicalPosition),
         centreBias = Math.abs(row - centreRow) * stepM * 0.0001,
@@ -408,8 +408,7 @@ function coarseGridCorridor(
         current = index;
       }
     }
-    if (current < 0) break;
-    if (current === goalIndex) break;
+    if (current < 0 || current === goalIndex) break;
     visited[current] = 1;
     const currentAlong = Math.floor(current / width),
       currentRow = current % width,
@@ -440,9 +439,8 @@ function coarseGridCorridor(
     if (cursor === startIndex) break;
   }
   if (reversed[reversed.length - 1] !== from.canonicalPosition) return undefined;
-  const path = reversed.reverse();
-
-  const compressed: CanonicalPosition[] = [path[0]];
+  const path = reversed.reverse(),
+    compressed: CanonicalPosition[] = [path[0]];
   let anchor = 0;
   while (anchor < path.length - 1) {
     let next = path.length - 1;
@@ -473,7 +471,7 @@ function corridor(from: Place, to: Place, country: Country): readonly CanonicalP
     for (let attempt = 0; attempt < 24; attempt++) {
       const waypoint = destination(midpoint, phase + (attempt / 24) * TAU, detourM);
       if (
-        sameDryOwner(waypoint, country, 220) &&
+        sameOwnedDryLand(waypoint, country) &&
         segmentLegal(from.canonicalPosition, waypoint, country, 10) &&
         segmentLegal(waypoint, to.canonicalPosition, country, 10)
       )
