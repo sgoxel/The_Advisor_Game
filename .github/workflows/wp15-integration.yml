@@ -1,0 +1,27 @@
+name: WP15 current-main integration
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  integrate:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Apply current-main hydrology integration once
+        run: |
+          if grep -q 'export function riverX' src/world.ts; then
+            python tools/wp15_integrate.py
+            git config user.name 'AGENT #1'
+            git config user.email '163722426+sgoxel@users.noreply.github.com'
+            git add src/hydrology.ts src/surface.ts src/geography.ts src/world.ts src/geometry.ts src/tile-worker.ts package.json
+            git commit -m 'WP-S002-004-005 integrate final surface authority'
+            git push origin HEAD:${{ github.head_ref }}
+          else
+            echo 'WP15 integration already applied on this head.'
+          fi
