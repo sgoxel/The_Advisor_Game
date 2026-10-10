@@ -1,33 +1,18 @@
 /**
  * Deterministic, bounded walking-route planner (WP-S002-004-008).
- *
- * The planner searches a local east-north tangent grid anchored at the start
- * point. Everything it reads comes from a pluggable TerrainSampler (default: the
- * seeded macro-geography authority) plus explicit road/bridge segments, so the
- * same seed + inputs always give the same route. There is no randomness,
- * wall-clock input or view/LOD dependence, and every tie is broken by cell
- * index.
- *
- * Surface rules:
- * - water is impassable unless a legal bridge (<= 120 m) covers the cell;
- * - slopes above CLIFF_SLOPE are impassable, steep or mountainous ground is
- *   "difficult" terrain, everything else is open ground;
- * - a road corridor is graded (cut and fill), so it ignores slope and highland
- *   penalties and is walked at good-road speed.
- *
- * The grid is an approximation: it uses 16 move directions, so a routed length
- * can exceed the true shortest length by roughly 3%.
- * Searches are bounded by cell and expansion caps; larger separations use
- * coarser cells instead of unbounded work.
+ * Default sampling consumes the composed world surface from WP-S002-004-005;
+ * custom samplers remain available for focused deterministic tests.
  */
 import { macroSampleAt } from "./macro-geography.ts";
 import {
   enuToPosition,
   greatCircleDistance,
+  lonLatToSource,
   positionToEnu,
   type CanonicalPosition,
   type LonLat,
 } from "./planet.ts";
+import { surfaceAt } from "./surface.ts";
 import {
   DIFFICULT_TERRAIN_WALK_SPEED_MPS,
   FASTEST_WALK_SPEED_MPS,
@@ -47,17 +32,16 @@ export const BRIDGE_MAX_LENGTH_M = 120;
 
 export type SurfaceSample = {
   water: boolean;
-  /** Ground height in metres; only differences between cells are used. */
   heightM: number;
-  /** 0..1 mountain/highland intensity; high values are difficult to cross. */
   highland: number;
+  /** Canonical non-water barrier, currently final-surface cliffs. */
+  blocked?: boolean;
 };
 export type TerrainSampler = (position: LonLat) => SurfaceSample;
 export type RoadSegment = {
   code?: string;
   from: LonLat;
   to: LonLat;
-  /** Water cells inside this corridor are crossable. Only honoured for <= 120 m spans. */
   bridge?: boolean;
 };
 export type RouteSurface = "road" | "bridge" | "open" | "difficult";
@@ -71,11 +55,9 @@ export type RouteResult = {
   found: boolean;
   reason?: string;
   geodesicM: number;
-  /** Routed path length in metres (grid-approximate). */
   distanceM: number;
   fantasySeconds: number;
   realSeconds: number;
-  /** geodesic / fastest walking speed: the best any walk could possibly do. */
   straightLineFantasySeconds: number;
   detourFactor: number;
   points: LonLat[];
@@ -85,12 +67,16 @@ export type RouteResult = {
   attempts: number;
 };
 
+/** Compatibility name retained; implementation now reads final composed surface truth. */
 export const macroTerrainSampler: TerrainSampler = (position) => {
-  const sample = macroSampleAt(position);
+  const source = lonLatToSource(position.lon, position.lat),
+    finalSurface = surfaceAt(source.x, source.z),
+    macro = macroSampleAt(position);
   return {
-    water: !sample.land,
-    heightM: sample.reliefM,
-    highland: sample.mountainIntensity,
+    water: finalSurface.water !== "none",
+    heightM: finalSurface.elevation,
+    highland: macro.mountainIntensity,
+    blocked: finalSurface.traversal === "blocked-cliff",
   };
 };
 
@@ -117,13 +103,13 @@ const KIND_NAMES: readonly RouteSurface[] = ["road", "bridge", "open", "difficul
 const FLAG_WATER = 1,
   FLAG_HIGHLAND = 2,
   FLAG_ROAD = 4,
-  FLAG_BRIDGE = 8;
+  FLAG_BRIDGE = 8,
+  FLAG_BLOCKED = 16;
 
 type Failure = { found: false; reason: string; expansions: number; cellSizeM: number };
 type Success = {
   found: true;
   cells: number[];
-  /** kinds[k] is the surface of the edge cells[k-1] -> cells[k]; kinds[0] is unused. */
   kinds: RouteSurface[];
   endRoad: boolean;
   expansions: number;
@@ -249,7 +235,6 @@ function searchOnce(
     total = width * height,
     grid: Grid = { cell, i0, j0, width, height };
 
-  // Roads are converted to the local frame once per attempt and pre-filtered by box.
   const localRoads: LocalRoad[] = [];
   const corridor = cell * 0.75;
   for (const road of roads) {
@@ -284,6 +269,7 @@ function searchOnce(
     let flag = 0;
     if (surface.water) flag |= FLAG_WATER;
     if (surface.highland >= HIGHLAND_DIFFICULT) flag |= FLAG_HIGHLAND;
+    if (surface.blocked) flag |= FLAG_BLOCKED;
     for (const road of localRoads)
       if (distanceToSegment(east, north, road.ax, road.ay, road.bx, road.by) <= corridor) {
         flag |= FLAG_ROAD;
@@ -294,7 +280,8 @@ function searchOnce(
     return idx;
   };
   const passable = (idx: number) =>
-    !(flags[idx] & FLAG_WATER) || !!(flags[idx] & FLAG_BRIDGE);
+    (!(flags[idx] & FLAG_WATER) || !!(flags[idx] & FLAG_BRIDGE)) &&
+    (!(flags[idx] & FLAG_BLOCKED) || !!(flags[idx] & FLAG_ROAD));
 
   const startI = 0,
     startJ = 0,
@@ -302,8 +289,8 @@ function searchOnce(
     endJ = Math.max(j0, Math.min(j0 + height - 1, Math.round(bNorth / cell)));
   const startIdx = sample(startI, startJ),
     endIdx = sample(endI, endJ);
-  if (!passable(startIdx)) return { found: false, reason: "start-in-water", expansions: 0, cellSizeM: cell };
-  if (!passable(endIdx)) return { found: false, reason: "destination-in-water", expansions: 0, cellSizeM: cell };
+  if (!passable(startIdx)) return { found: false, reason: "start-blocked", expansions: 0, cellSizeM: cell };
+  if (!passable(endIdx)) return { found: false, reason: "destination-blocked", expansions: 0, cellSizeM: cell };
 
   const fastest = FASTEST_WALK_SPEED_MPS;
   const g = new Float64Array(total).fill(Infinity),
@@ -312,7 +299,7 @@ function searchOnce(
     closed = new Uint8Array(total);
   const heap = new MinHeap();
   const heuristic = (i: number, j: number) =>
-    (Math.hypot((endI - i) * cell, (endJ - j) * cell)) / fastest;
+    Math.hypot((endI - i) * cell, (endJ - j) * cell) / fastest;
   g[startIdx] = 0;
   heap.push(heuristic(startI, startJ), startIdx);
 
@@ -350,7 +337,6 @@ function searchOnce(
       if (!inside(ni, nj)) continue;
       const next = sample(ni, nj);
       if (closed[next] || !passable(next)) continue;
-      // Intermediate cells: keeps diagonal/knight moves from cutting water corners.
       const between: number[] = [],
         crossed: { idx: number; i: number; j: number }[] = [];
       if (Math.abs(di) === 1 && Math.abs(dj) === 1) {
@@ -365,7 +351,6 @@ function searchOnce(
         if (!inside(ci, mj) || !inside(ni, mj)) continue;
         crossed.push({ idx: sample(ci, mj), i: ci, j: mj }, { idx: sample(ni, mj), i: ni, j: mj });
       }
-      // Knight moves pass over the cells they cross: those are walked, so they count too.
       for (const c of crossed) between.push(c.idx);
       if (!between.every(passable)) continue;
 
@@ -440,7 +425,6 @@ function simplify(points: { east: number; north: number }[], tolerance: number) 
   return points.filter((_, k) => keep[k]);
 }
 
-/** Shortest legal walking route between two canonical points. Deterministic and bounded. */
 export function planRoute(request: RouteRequest): RouteResult {
   const terrain = request.terrain ?? macroTerrainSampler,
     roads = request.roads ?? [],
@@ -497,7 +481,6 @@ export function planRoute(request: RouteRequest): RouteResult {
     distanceM += length;
     fantasySeconds += length / speedOf(kinds[k]);
   }
-  // Final hop from the last cell centre to the exact destination.
   const last = centres[centres.length - 1],
     tail = Math.hypot(b.east - last.east, b.north - last.north),
     tailKind: RouteSurface = outcome.endRoad ? "road" : "open";

@@ -19,6 +19,10 @@ import {
   macroIslands,
   macroLakes,
 } from "./macro-geography.ts";
+import {
+  naturalFreshwaterDistanceAt,
+  naturalSurfaceAt,
+} from "./natural-surface.ts";
 import { travelMetrics } from "./travel.ts";
 
 /** x/z are derived source/render coordinates; canonicalPosition is world truth. */
@@ -186,19 +190,42 @@ function continentCandidate(
 }
 
 /**
- * Transitional settlement-site guard for the current local terrain prototype.
- * Political ownership still comes exclusively from countryAtPosition(). Until the
- * hydrology WP replaces the old source-domain river, placement simply rejects its
- * known wet corridor and a narrow coastal margin instead of filling water under a
- * city or village.
+ * Settlement legality consumes the upstream natural surface. Hydrology is never
+ * moved to fit a preferred settlement: the candidate is rejected instead.
  */
-function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
+function locallyDrySettlementSite(
+  position: LonLat,
+  maxReliefM: number,
+  clearanceSource: number,
+) {
   const macro = macroSampleAt(position);
   if (!macro.land || macro.reliefM > maxReliefM) return false;
-  if (macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS < 42) return false;
+  if (macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS < clearanceSource + 42)
+    return false;
   const { x, z } = lonLatToSource(position.lon, position.lat),
-    prototypeRiverX = 125 + 42 * Math.sin(z / 150) + 18 * Math.sin(z / 57);
-  return Math.abs(wrapSourceX(x - prototypeRiverX)) > 52;
+    surface = naturalSurfaceAt(x, z),
+    freshwater = naturalFreshwaterDistanceAt(x, z);
+  if (
+    surface.water !== "none" ||
+    !surface.walkable ||
+    surface.cliff ||
+    surface.elevation < 0.5 ||
+    freshwater <= clearanceSource + 28
+  )
+    return false;
+  // Bounded footprint probes prevent a macro lake/coast from clipping the plot.
+  for (const [dx, dz] of [
+    [clearanceSource, 0],
+    [-clearanceSource, 0],
+    [0, clearanceSource],
+    [0, -clearanceSource],
+    [clearanceSource * 0.7, clearanceSource * 0.7],
+    [-clearanceSource * 0.7, clearanceSource * 0.7],
+    [clearanceSource * 0.7, -clearanceSource * 0.7],
+    [-clearanceSource * 0.7, -clearanceSource * 0.7],
+  ] as const)
+    if (naturalSurfaceAt(x + dx, z + dz).water !== "none") return false;
+  return true;
 }
 
 /**
@@ -265,11 +292,7 @@ function politicalWarp(position: LonLat, country: Country) {
   return 1 + wave * 0.045;
 }
 
-/**
- * Complete political partition. Every canonical land coordinate is owned by one
- * country in its macro continent. The wavy weighted Voronoi score is presentation-
- * independent and creates irregular shared borders without separate border truth.
- */
+/** Complete deterministic political partition of canonical land. */
 export function countryAtPosition(position: LonLat): Country | undefined {
   const macro = macroSampleAt(position);
   if (!macro.land) return undefined;
@@ -302,20 +325,27 @@ export const cities: Place[] = (() => {
     for (let city = 0; city < CITY_SLOTS_PER_COUNTRY; city++) {
       let best: CanonicalPosition | undefined,
         bestScore = -Infinity;
-      for (let attempt = 0; attempt < 220; attempt++) {
+      for (let attempt = 0; attempt < 260; attempt++) {
         const candidate = cityCandidate(country, city, attempt),
           owner = countryAtPosition(candidate);
         if (
           !owner ||
           owner.code !== country.code ||
-          !locallyDrySettlementSite(candidate, 90) ||
+          !locallyDrySettlementSite(candidate, 90, 430) ||
           allAccepted.some((other) => macroFeatureDistanceM(candidate, other) < 18_000)
         )
           continue;
         const separation = localAccepted.length
           ? Math.min(...localAccepted.map((other) => macroFeatureDistanceM(candidate, other)))
           : macroFeatureDistanceM(candidate, country.canonicalPosition),
-          score = separation * (0.9 + 0.2 * addressed(`CITY/${country.code}/${city}/${attempt}/rank`));
+          source = lonLatToSource(candidate.lon, candidate.lat),
+          freshwater = naturalFreshwaterDistanceAt(source.x, source.z),
+          freshwaterBonus = Number.isFinite(freshwater)
+            ? Math.max(0, 3_200 - freshwater) * 4
+            : 0,
+          score =
+            separation * (0.9 + 0.2 * addressed(`CITY/${country.code}/${city}/${attempt}/rank`)) +
+            freshwaterBonus;
         if (score > bestScore) {
           best = candidate;
           bestScore = score;
@@ -345,32 +375,48 @@ export const cities: Place[] = (() => {
   return result;
 })();
 
-/** Villages are irregular SEED-addressed radial candidates, never a fixed row. */
+/** Villages prefer nearby freshwater while retaining irregular deterministic siting. */
 export const villages: Place[] = (() => {
   const result: Place[] = [],
     accepted: CanonicalPosition[] = [],
     usedNames = new Set<string>(["alderwick"]);
   for (const city of cities) {
     for (let v = 0; v < VILLAGE_SLOTS_PER_CITY; v++) {
-      let position: CanonicalPosition | undefined;
-      for (let attempt = 0; attempt < 280; attempt++) {
+      let position: CanonicalPosition | undefined,
+        bestScore = Infinity;
+      for (let attempt = 0; attempt < 340; attempt++) {
         const prefix = `VILLAGE/${city.id}/${v}/${attempt}`,
           bearing = TAU * addressed(`${prefix}/bearing`),
           distanceM = 7_000 + 16_000 * addressed(`${prefix}/distance`),
-          candidate = destination(city.canonicalPosition, bearing, distanceM / CANONICAL_PLANET_RADIUS),
+          candidate = destination(
+            city.canonicalPosition,
+            bearing,
+            distanceM / CANONICAL_PLANET_RADIUS,
+          ),
           owner = countryAtPosition(candidate);
         if (
           !owner ||
           owner.continent !== city.continent ||
           owner.id !== city.country ||
-          !locallyDrySettlementSite(candidate, 95) ||
+          !locallyDrySettlementSite(candidate, 95, 95) ||
           accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000)
         )
           continue;
-        position = candidate;
-        break;
+        const source = lonLatToSource(candidate.lon, candidate.lat),
+          freshwater = naturalFreshwaterDistanceAt(source.x, source.z),
+          boundedFreshwater = Number.isFinite(freshwater) ? freshwater : 100_000,
+          distancePreference = Math.abs(distanceM - 13_000) / 120,
+          score =
+            boundedFreshwater +
+            distancePreference +
+            addressed(`${prefix}/rank`) * 45;
+        if (score < bestScore) {
+          bestScore = score;
+          position = candidate;
+        }
       }
-      if (!position) throw new Error(`Seeded geography could not place village ${city.id}/${v}`);
+      if (!position)
+        throw new Error(`Seeded geography could not place village ${city.id}/${v}`);
       accepted.push(position);
       const code = `${city.code}/VILLAGE/${v}`,
         name =
@@ -422,7 +468,6 @@ export const roads = cities.flatMap((city) =>
       maxX,
       minZ,
       maxZ,
-      /** Compatibility centreline coordinate retained for diagnostics only. */
       z: (fromZ + toZ) / 2,
       fromPosition,
       toPosition,
@@ -453,7 +498,6 @@ export function roadDistanceAt(x: number, z: number, road: Road) {
   return Math.hypot(px - qx, z - qz);
 }
 
-/** Canonical nearest-place lookup; independent of wrap and source-plane edges. */
 export function nearestPlaceAt(position: LonLat): Place | undefined {
   let result: Place | undefined,
     distance = Infinity;
@@ -467,16 +511,17 @@ export function nearestPlaceAt(position: LonLat): Place | undefined {
   return result;
 }
 
-/** The macro authority owns continent affiliation even for its islands and nearby sea. */
 export function continentAtPosition(position: LonLat) {
   return continents[macroSampleAt(position).continentId];
 }
 
-// Immutable source/render spatial buckets avoid scanning every settlement at every
-// terrain sample. Seam-shifted aliases are presentation acceleration only.
 const buckets = new Map<string, Place[]>();
 for (const place of places)
-  for (const x of [place.x - SOURCE_PRESENTATION_WIDTH, place.x, place.x + SOURCE_PRESENTATION_WIDTH]) {
+  for (const x of [
+    place.x - SOURCE_PRESENTATION_WIDTH,
+    place.x,
+    place.x + SOURCE_PRESENTATION_WIDTH,
+  ]) {
     const key = `${Math.floor(x / 2048)}/${Math.floor(place.z / 2048)}`,
       bucket = buckets.get(key) || [];
     bucket.push(place);
@@ -493,14 +538,14 @@ export function nearbyPlaces(x: number, z: number): readonly Place[] {
     const found = new Map<string, Place>();
     for (let dz = -1; dz <= 1; dz++)
       for (let dx = -1; dx <= 1; dx++)
-        for (const place of buckets.get(`${bx + dx}/${bz + dz}`) || []) found.set(place.id, place);
+        for (const place of buckets.get(`${bx + dx}/${bz + dz}`) || [])
+          found.set(place.id, place);
     result = [...found.values()];
     neighbourhoods.set(key, result);
   }
   return result;
 }
 
-/** Transitional source/render lookup used by local terrain generation. */
 export function nearestPlace(x: number, z: number): Place | undefined {
   let result: Place | undefined,
     distance = Infinity;
@@ -522,14 +567,13 @@ export function countryAt(x: number, z: number) {
   return countryAtPosition(sourceToLonLat(x, z));
 }
 
-/** Compatibility scalar for presentation callers: <1 means dry macro land and >1 means water. */
 export function continentalEnvelope(x: number, z: number) {
   const sample = macroSampleAt(sourceToLonLat(x, z));
-  if (sample.land) return Math.max(0.5, 1 - Math.max(0.02, sample.coastDistanceRad) * 5);
+  if (sample.land)
+    return Math.max(0.5, 1 - Math.max(0.02, sample.coastDistanceRad) * 5);
   return Math.min(1.5, 1 + Math.max(0.02, -sample.coastDistanceRad) * 5);
 }
 
-/** Transitional source/render road hit test; road identity is its seed code. */
 export function roadAt(x: number, z: number) {
   const localVillageIds = new Set(
     nearbyPlaces(x, z)
@@ -571,11 +615,6 @@ function borderCrossing(
   };
 }
 
-/**
- * Bounded local presentation of the canonical country classifier. Marching-cell
- * crossings are recomputed only when the view changes by the caller; they are not
- * separate political truth and never affect ownership.
- */
 export function politicalBorderSegments(
   centerX: number,
   centerZ: number,
@@ -625,14 +664,19 @@ export function politicalBorderSegments(
         for (let i = 1; i < points.length; i += 2) {
           const a = points[i - 1],
             b = points[i];
-          result.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, countries: [left, right] });
+          result.push({
+            ax: a.x,
+            az: a.z,
+            bx: b.x,
+            bz: b.z,
+            countries: [left, right],
+          });
         }
       }
     }
   return result;
 }
 
-/** Exposed diagnostics are immutable macro identities, not a second render dataset. */
 export const macroGeography = {
   planVersion: WORLD_FOUNDATION_VERSION,
   islands: macroIslands,
