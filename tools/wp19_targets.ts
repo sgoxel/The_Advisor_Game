@@ -27,19 +27,26 @@ const encode = (place: (typeof villages)[number]) => {
     inn: use("inn"),
     market: use("market"),
     blacksmith: use("blacksmith"),
+    farmstead: use("farmstead"),
+    barn: use("barn"),
+    butcher: use("butcher"),
+    guardOffice: use("guard-office"),
   };
 };
 
-const city = cities[0], cityPlan = settlementPlan(city.id);
-console.log(JSON.stringify({
-  villages: selectedVillages.map(encode),
-  city: {
-    id: city.id,
-    name: city.name,
-    lon: city.canonicalPosition.lon,
-    lat: city.canonicalPosition.lat,
-    archetype: cityPlan.archetype,
-    population: cityPlan.population,
-    inn: cityPlan.buildings.find((building) => building.use === "inn")?.code,
-  },
-}));
+const city = cities[0],
+  cityPlan = settlementPlan(city.id);
+console.log(
+  JSON.stringify({
+    villages: selectedVillages.map(encode),
+    city: {
+      id: city.id,
+      name: city.name,
+      lon: city.canonicalPosition.lon,
+      lat: city.canonicalPosition.lat,
+      archetype: cityPlan.archetype,
+      population: cityPlan.population,
+      inn: cityPlan.buildings.find((building) => building.use === "inn")?.code,
+    },
+  }),
+);
