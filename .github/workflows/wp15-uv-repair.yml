@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   repair:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 20
     steps:
       - name: Checkout WP branch
@@ -30,8 +30,9 @@ jobs:
       - name: Restore canonical UVs and bound screenshot sessions
         shell: bash
         run: |
-          python - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
+          import textwrap
 
           p = Path('src/terrain-refine.ts')
           text = p.read_text()
@@ -80,7 +81,8 @@ jobs:
               raise SystemExit('terrain-refine test block missing')
           p.write_text(text.replace(old, new, 1))
 
-          Path('.github/workflows/wp15-visual-evidence.yml').write_text('''name: WP15 terrain hydrology visual evidence
+          visual = textwrap.dedent('''\
+          name: WP15 terrain hydrology visual evidence
           on:
             pull_request:
               branches: [main]
@@ -122,8 +124,8 @@ jobs:
                     capture_group() {
                       local group="$1"
                       local steps="$2"
-                      python tools/screenshot_tool.py http://127.0.0.1:4175/ \
-                        --out "$OUT/$group" --name terrain --profile desktop,phone \
+                      python tools/screenshot_tool.py http://127.0.0.1:4175/ \\
+                        --out "$OUT/$group" --name terrain --profile desktop,phone \\
                         --renderer ${{ matrix.renderer }} --timeout 180 --steps "$steps"
                     }
                     capture_group realm-river "eval:window.__wp15=${TARGETS};click:#overview;settle;shot:realm-coasts;eval:window.advisorWorld.setHalfHeight(1400);eval:window.advisorWorld.navigation.setFocus(window.__wp15.river.lon,window.__wp15.river.lat);settle;shot:river-province"
@@ -135,7 +137,8 @@ jobs:
                   with:
                     name: wp15-terrain-hydrology-${{ matrix.renderer }}-${{ github.sha }}
                     path: test-results/wp15-terrain-${{ matrix.renderer }}
-          '''.replace('          ', ''))
+          ''')
+          Path('.github/workflows/wp15-visual-evidence.yml').write_text(visual)
           PY
       - name: Install
         run: npm ci
