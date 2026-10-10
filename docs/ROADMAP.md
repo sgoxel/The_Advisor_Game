@@ -22,6 +22,7 @@ Completed S002 WPs are listed in docs/ROADMAP_ARCHIVE.md; only open WPs stay bel
 
 - WP-S002-004-005 — Natural terrain/hydrology/traversal authority: irregular landforms, distributed freshwater, canonical walkability and bounded seam-safe queries
 - WP-S002-004-007 — Political atlas authority/UX: full-land country partition, SEED-variable ≥30/90/270 counts, readable borders/names and bounded 1/1000 labels
+- WP-S002-004-008 — Shortest-legal-route authority/UX: all-pair ≥60-minute proof on final terrain, bounded routing and truthful route preview
 - WP-S002-004-009 — Settlement/building world UX: terrain-shaped non-grid layouts, entrance-connected homes/services, usable lazy interiors and mobile-safe rendering
 - WP-S002-004-011 — Living-resident scalability/UX: persistent home/work identity, analytical schedules, spatial indexing, pooled actors and responsive inspection
 - WP-S002-004-012 — Unified world-surface compositor: deterministic priority 0–9 earthworks with shared render/routing/collision/material truth
