@@ -12,7 +12,11 @@ import {
 import { WORLD_SEED } from "../src/config.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
 import { lonLatToSource } from "../src/planet.ts";
-import { politicalOverlayOpacity } from "../src/political-presentation.ts";
+import {
+  POLITICAL_BORDER_MAX_SCALE_DENOMINATOR,
+  POLITICAL_DETAIL_LABEL_MAX_SCALE_DENOMINATOR,
+  politicalOverlayOpacity,
+} from "../src/political-presentation.ts";
 
 test("political registry uses seed-variable minimum counts rather than fixed maxima", () => {
   const counts = politicalRegistryCountsForSeed(WORLD_SEED);
@@ -114,15 +118,35 @@ test("shared country borders are deterministic bounded derivations of ownership"
   assert.equal(new Set(keys).size, keys.length);
 });
 
-test("political overlay visibility is scale-driven across flat/globe handoff", () => {
+test("political overlay visibility is Country-scale driven across flat/globe handoff", () => {
+  assert.equal(POLITICAL_BORDER_MAX_SCALE_DENOMINATOR, 1000);
+  assert.equal(POLITICAL_DETAIL_LABEL_MAX_SCALE_DENOMINATOR, 1000);
   for (const presentation of ["flat", "transition", "globe"] as const)
     for (const transition of [0, 0.01, 0.25, 0.5, 0.75, 0.99, 1])
       assert.equal(
-        politicalOverlayOpacity(presentation, transition, 1000, 2500),
+        politicalOverlayOpacity(
+          presentation,
+          transition,
+          1000,
+          POLITICAL_BORDER_MAX_SCALE_DENOMINATOR,
+        ),
         1,
         `${presentation}/${transition}`,
       );
-  assert.equal(politicalOverlayOpacity("flat", 0, 5000, 2500), 0);
-  assert.equal(politicalOverlayOpacity("transition", 0.5, 5000, 2500), 0);
-  assert.equal(politicalOverlayOpacity("globe", 1, 5000, 2500), 0);
+  assert.equal(
+    politicalOverlayOpacity("flat", 0, 2500, POLITICAL_BORDER_MAX_SCALE_DENOMINATOR),
+    0,
+  );
+  assert.equal(
+    politicalOverlayOpacity("globe", 1, 2500, POLITICAL_BORDER_MAX_SCALE_DENOMINATOR),
+    0,
+  );
+  assert.equal(
+    politicalOverlayOpacity("flat", 0, 1000, POLITICAL_DETAIL_LABEL_MAX_SCALE_DENOMINATOR),
+    1,
+  );
+  assert.equal(
+    politicalOverlayOpacity("flat", 0, 2500, POLITICAL_DETAIL_LABEL_MAX_SCALE_DENOMINATOR),
+    0,
+  );
 });
