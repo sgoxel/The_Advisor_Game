@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "test": "node --experimental-strip-types --test tests/world.test.ts tests/macro-geography.test.ts tests/climate.test.ts tests/vegetation.test.ts tests/vegetation-metrics.test.ts tests/vegetation-budgets.test.ts tests/vegetation-render.test.ts tests/renderer.test.ts tests/planet.test.ts tests/routing.test.ts tests/routing-final-surface.test.ts tests/globe.test.ts tests/handoff.test.ts tests/navigation.test.ts tests/render-frame.test.ts tests/streaming.test.ts tests/surface-presentation.test.ts tests/political-atlas.test.ts",
+    "test": "node --experimental-strip-types --test tests/world.test.ts tests/macro-geography.test.ts tests/climate.test.ts tests/vegetation.test.ts tests/vegetation-metrics.test.ts tests/vegetation-budgets.test.ts tests/vegetation-render.test.ts tests/renderer.test.ts tests/planet.test.ts tests/routing.test.ts tests/routing-final-surface.test.ts tests/globe.test.ts tests/handoff.test.ts tests/navigation.test.ts tests/render-frame.test.ts tests/streaming.test.ts tests/surface-presentation.test.ts tests/political-atlas.test.ts tests/settlement-layout.test.ts",
     "test:browser": "playwright test",
     "test:webgpu": "playwright test --config playwright.webgpu.config.js"
   },
