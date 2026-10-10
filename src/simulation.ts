@@ -9,7 +9,7 @@ import {
 import { GOOD_ROAD_WALK_SPEED_MPS } from "./travel.ts";
 import { digest, heightAt } from "./world.ts";
 import {
-  canonicalDistanceM,
+  greatCircleDistance,
   lonLatToSource,
   type CanonicalPosition,
 } from "./planet.ts";
@@ -22,9 +22,7 @@ export type Resident = {
   workplace?: string;
   index: number;
   variant: number;
-  /** Canonical spherical simulation position. */
   position: CanonicalPosition;
-  /** Transitional renderer/source coordinates; never stable world identity. */
   x: number;
   z: number;
   task: string;
@@ -40,7 +38,6 @@ const populationOf = (place: Place) => settlementPopulation(place.id);
 
 export function summaryAt(code: string, tick: number): CountryState {
   const baseline = digest(code) % 5000;
-  // Analytical catch-up is independent of update cadence and render interest.
   return {
     code,
     population: 7920,
@@ -81,8 +78,6 @@ function interpolatePosition(
   to: CanonicalPosition,
   amount: number,
 ): CanonicalPosition {
-  // Settlement journeys are bounded to a few hundred metres, so shortest-angle
-  // longitude interpolation is stable even near the antimeridian.
   let deltaLon = to.lon - from.lon;
   if (deltaLon > Math.PI) deltaLon -= Math.PI * 2;
   else if (deltaLon < -Math.PI) deltaLon += Math.PI * 2;
@@ -93,29 +88,15 @@ function interpolatePosition(
   };
 }
 
-/**
- * Resident identity, home and profession come from the settlement registry. This
- * routine only advances the resident along the deterministic home↔work journey;
- * it never invents a second building or settlement authority.
- */
-export function residentAt(
-  place: Place,
-  index: number,
-  tick: number,
-): Resident {
+/** Resident identity, home and profession come from the canonical settlement registry. */
+export function residentAt(place: Place, index: number, tick: number): Resident {
   const assignment = settlementResident(place.id, index),
-    home = settlementBuilding(assignment.homeCode)!;
+    home = settlementBuilding(assignment.homeCode);
   if (!home) throw new Error(`${assignment.code} has no canonical home`);
   const workplace = assignment.workplaceCode
       ? settlementBuilding(assignment.workplaceCode)
       : undefined,
     variant = digest(assignment.code),
-    destination = workplace?.entrance ?? home.entrance,
-    origin = home.entrance,
-    distanceM = Math.max(1, canonicalDistanceM(origin, destination)),
-    walkingSeconds = distanceM / GOOD_ROAD_WALK_SPEED_MPS,
-    // Residents without a dedicated workplace still leave home on a compact
-    // settlement walk, using a seeded service building as a stable destination.
     fallback = workplace
       ? undefined
       : settlementPlan(place.id).buildings.filter(
@@ -124,22 +105,24 @@ export function residentAt(
             building.use !== "guard-post" &&
             building.use !== "well",
         )[variant % 7],
-    actualDestination = fallback?.entrance ?? destination,
-    actualDistanceM = Math.max(1, canonicalDistanceM(origin, actualDestination)),
-    travelSeconds = actualDistanceM / GOOD_ROAD_WALK_SPEED_MPS,
+    origin = home.entrance,
+    destination = fallback?.entrance ?? workplace?.entrance ?? home.entrance,
+    travelSeconds =
+      Math.max(1, greatCircleDistance(origin, destination)) /
+      GOOD_ROAD_WALK_SPEED_MPS,
     dwellSeconds = 75 + (variant % 90),
     cycle = travelSeconds * 2 + dwellSeconds * 2,
     phase = tick % cycle;
   let position: CanonicalPosition,
     atWork = false;
   if (phase < travelSeconds) {
-    position = interpolatePosition(origin, actualDestination, phase / travelSeconds);
+    position = interpolatePosition(origin, destination, phase / travelSeconds);
   } else if (phase < travelSeconds + dwellSeconds) {
-    position = actualDestination;
+    position = destination;
     atWork = true;
   } else if (phase < travelSeconds * 2 + dwellSeconds) {
     const t = (phase - travelSeconds - dwellSeconds) / travelSeconds;
-    position = interpolatePosition(actualDestination, origin, t);
+    position = interpolatePosition(destination, origin, t);
   } else {
     position = origin;
   }
@@ -166,6 +149,7 @@ export class LazySimulation {
   interested = new Set<string>();
   summaries = new Map<string, CountryState>();
   residents = new Map<string, Resident[]>();
+
   setFocus(place: Place | undefined) {
     if (place)
       this.activeCountry = countries.find(
@@ -178,8 +162,7 @@ export class LazySimulation {
     this.interested.add(code);
   }
   advance(tick: number) {
-    if (tick < this.tick)
-      throw new RangeError("Simulation time must move forward");
+    if (tick < this.tick) throw new RangeError("Simulation time must move forward");
     this.tick = tick;
     for (const country of countries) {
       const live = country.code === this.activeCountry,
@@ -212,19 +195,17 @@ export class LazySimulation {
         );
       } else if (live) {
         const pool = this.residents.get(country.code)!,
-          homes = new Map(countryPlaces.map((place) => [place.id, place]));
+          owners = new Map(countryPlaces.map((place) => [place.id, place]));
         for (let i = 0; i < pool.length; i++) {
-          const place = homes.get(pool[i].placeId);
+          const place = owners.get(pool[i].placeId);
           if (!place) throw new Error(`${pool[i].code} lost settlement ownership`);
           pool[i] = residentAt(place, pool[i].index, tick);
         }
       }
     }
-    // Country detail is reconstructible: inactive pools don't remain allocated.
     for (const code of this.residents.keys())
       if (code !== this.activeCountry) this.residents.delete(code);
   }
-  /** Renderer-interest query in transitional source coordinates only. */
   focusedResidents(x: number, z: number, radius: number) {
     return [...this.residents.values()]
       .flat()
