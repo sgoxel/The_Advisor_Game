@@ -17,11 +17,14 @@ import {
   wrapSourceX,
   type CanonicalPosition,
 } from "./planet.ts";
+import { travelMetrics } from "./travel.ts";
+import { heightAt } from "./world.ts";
 
 export type CriticalSiteKind = "ruin" | "critical-place";
 
 export type SiteAccess = {
   roadCode: string;
+  branchCode: string;
   roadT: number;
   x: number;
   z: number;
@@ -50,6 +53,15 @@ const MAX_CANDIDATE_ATTEMPTS = 64;
 const ACCESS_SAMPLES = 12;
 const SITE_SLOTS_PER_COUNTRY = 2;
 const SITE_BUCKET_SOURCE_UNITS = 512;
+const SITE_ROAD_CORE_SOURCE_UNITS = 5;
+const SITE_ROAD_FALLOFF_SOURCE_UNITS = 7;
+const SITE_PREPARED_HEIGHT = 3;
+const SITE_PREP_RADIUS_M = Number(
+  (SITE_ROAD_CORE_SOURCE_UNITS * CANONICAL_METRES_PER_SOURCE_UNIT).toFixed(2),
+);
+const SITE_PREP_FALLOFF_M = Number(
+  (SITE_ROAD_FALLOFF_SOURCE_UNITS * CANONICAL_METRES_PER_SOURCE_UNIT).toFixed(2),
+);
 
 function digest(text: string): number {
   let value = 2166136261;
@@ -86,7 +98,8 @@ function accessIsLegal(country: Country, site: CanonicalPosition, access: Canoni
       !macro.land ||
       macro.domain === "Lake" ||
       countryAtPosition(point)?.code !== country.code ||
-      macro.reliefM > 220
+      macro.reliefM > 220 ||
+      heightAt(x, z) <= 0.1
     ) return false;
   }
   return true;
@@ -147,13 +160,13 @@ function createSite(
       owner?.code !== country.code ||
       accessLengthM < 500 ||
       accessLengthM > 1800 ||
+      heightAt(normalized.x, normalized.z) <= 0.1 ||
       !farEnoughFromSettlements(position) ||
       accepted.some((other) => greatCircleDistance(position, other.canonicalPosition) < 900) ||
       !accessIsLegal(country, position, access.canonicalPosition)
     ) continue;
 
-    const variant = digest(code),
-      radiusM = kind === "ruin" ? 42 + (variant % 17) : 26 + (variant % 13);
+    const variant = digest(code);
     return {
       code,
       name: siteName(country, kind, variant),
@@ -164,12 +177,13 @@ function createSite(
       x: normalized.x,
       z: normalized.z,
       canonicalPosition: position,
-      radiusM,
-      falloffM: 28,
+      radiusM: SITE_PREP_RADIUS_M,
+      falloffM: SITE_PREP_FALLOFF_M,
       archetype: archetypeFor(kind, variant),
       variant,
       access: {
         roadCode: road.code,
+        branchCode: `${code}/ACCESS`,
         roadT: t,
         x: access.x,
         z: access.z,
@@ -188,6 +202,49 @@ export const criticalSites: readonly CriticalSite[] = (() => {
       result.push(createSite(country, slot, result));
   return result;
 })();
+
+/**
+ * Priority-9 access intents materialize once, before discovery, as real good-road
+ * records consumed by the existing terrain/material/vegetation/walkability path.
+ * The compatibility endpoint id uses the nearer parent-road village only so the
+ * current bounded roadAt lookup can discover the branch; canonical geometry and
+ * identity are the SITE/ACCESS code plus its explicit site/junction positions.
+ */
+export const siteAccessRoads: readonly Road[] = criticalSites.map((site) => {
+  const parent = roads.find((road) => road.code === site.access.roadCode);
+  if (!parent) throw new Error(`Missing parent road for ${site.code}`);
+  const dx = wrapSourceX(site.access.x - site.x),
+    toX = site.x + dx,
+    fromZ = site.z,
+    toZ = site.access.z,
+    surfaceLengthM = site.access.lengthM,
+    travel = travelMetrics(surfaceLengthM, "good-road"),
+    junctionVillage = site.access.roadT <= 0.5 ? parent.from : parent.to;
+  return {
+    code: site.access.branchCode,
+    from: junctionVillage,
+    to: site.code,
+    fromX: site.x,
+    toX,
+    fromZ,
+    toZ,
+    minX: Math.min(site.x, toX),
+    maxX: Math.max(site.x, toX),
+    minZ: Math.min(fromZ, toZ),
+    maxZ: Math.max(fromZ, toZ),
+    z: (fromZ + toZ) / 2,
+    fromPosition: site.canonicalPosition,
+    toPosition: site.access.canonicalPosition,
+    presentationLengthSourceUnits: Math.hypot(dx, toZ - fromZ),
+    surfaceLengthM,
+    walkSurface: "good-road" as const,
+    walkSpeedMps: travel.speedMps,
+    fantasyWalkSeconds: travel.fantasySeconds,
+    realWalkSeconds: travel.realSeconds,
+  } as Road;
+});
+for (const branch of siteAccessRoads)
+  if (!roads.some((road) => road.code === branch.code)) roads.push(branch);
 
 const buckets = new Map<string, CriticalSite[]>();
 function addToBucket(site: CriticalSite, x: number) {
@@ -233,16 +290,17 @@ export type SiteSurfaceSample = {
 };
 
 /**
- * Priority-9 local preparation contract. Radius/falloff metadata is canonical metres;
- * transitional source coordinates are converted at this boundary. Presentation and
- * walkability consume the same bounded sample so they cannot disagree about ground.
+ * Priority-9 local preparation contract. Radius/falloff metadata is canonical metres
+ * and intentionally matches world.ts good-road earthwork widths (5 source-unit core
+ * plus 7 source-unit blend). The materialized SITE/ACCESS branch therefore makes the
+ * same seeded preparation visible to rendering, vegetation and cell walkability.
  */
 export function siteSurfaceSample(
   site: CriticalSite,
   x: number,
   z: number,
   baseHeight: number,
-  targetHeight: number,
+  targetHeight = SITE_PREPARED_HEIGHT,
 ): SiteSurfaceSample {
   const distanceSource = Math.hypot(wrapSourceX(x - site.x), z - site.z),
     radiusSource = sourceUnitsForMetres(site.radiusM),
@@ -265,6 +323,7 @@ export function siteAcceptanceSummary() {
     sites: criticalSites.length,
     ruins: criticalSites.filter((site) => site.kind === "ruin").length,
     criticalPlaces: criticalSites.filter((site) => site.kind === "critical-place").length,
+    accessBranches: siteAccessRoads.length,
     maxCandidateAttempts: MAX_CANDIDATE_ATTEMPTS,
     accessSamples: ACCESS_SAMPLES,
     coarseBuckets: buckets.size,
