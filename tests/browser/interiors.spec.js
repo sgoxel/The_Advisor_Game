@@ -1,5 +1,26 @@
 import { test, expect } from "@playwright/test";
 
+async function traverseAllRooms(page) {
+  let state = await page.evaluate(() => window.advisorInteriors.state);
+  const total = state.active.rooms.length,
+    visited = new Set([state.currentRoom]);
+  let usedStair = false;
+  for (let step = 0; step < total * 2 && visited.size < total; step++) {
+    const next = state.availableConnections.find(
+      (connection) => connection.target !== "EXTERIOR" && !visited.has(connection.target),
+    );
+    expect(next, `no unvisited room reachable from ${state.currentRoom}`).toBeTruthy();
+    usedStair ||= next.kind === "stair";
+    expect(await page.evaluate((code) => window.advisorInteriors.moveThrough(code), next.code)).toBe(true);
+    state = await page.evaluate(() => window.advisorInteriors.state);
+    visited.add(state.currentRoom);
+  }
+  expect(visited.size).toBe(total);
+  const floors = new Set(state.active.rooms.map((room) => room.floor));
+  if (floors.size > 1) expect(usedStair).toBe(true);
+  return { state, usedStair, visited: visited.size };
+}
+
 test("organic settlements and protagonist-demand interiors reconstruct after eviction", async ({ page }) => {
   test.setTimeout(600000);
   const errors = [];
@@ -29,8 +50,11 @@ test("organic settlements and protagonist-demand interiors reconstruct after evi
   const enteredHome = await page.evaluate(() => window.advisorInteriors.state);
   expect(enteredHome.active.role).toBe("home");
   expect(enteredHome.cache).toMatchObject({ active: 1, cached: 1, materializations: 1 });
-  const homeSignature = enteredHome.active.signature;
+  const homeSignature = enteredHome.active.signature,
+    homeStyle = enteredHome.active.style;
   await page.screenshot({ path: "test-results/wp-s002-004-009/home-interior-enter.png" });
+  const homeTraversal = await traverseAllRooms(page);
+  expect(homeTraversal.visited).toBe(enteredHome.active.rooms.length);
   expect(await page.evaluate(() => window.advisorInteriors.useAnchor())).toBe(true);
   expect((await page.evaluate(() => window.advisorInteriors.state)).lastAction).toMatch(/^Used /);
   await page.screenshot({ path: "test-results/wp-s002-004-009/home-interior-use.png" });
@@ -42,6 +66,7 @@ test("organic settlements and protagonist-demand interiors reconstruct after evi
   await page.locator("#building-enter").click();
   const reenteredHome = await page.evaluate(() => window.advisorInteriors.state);
   expect(reenteredHome.active.signature).toBe(homeSignature);
+  expect(reenteredHome.active.style).toEqual(homeStyle);
   expect(reenteredHome.reconstructed).toBe(true);
   await page.screenshot({ path: "test-results/wp-s002-004-009/home-interior-reenter.png" });
   await page.locator("#interior-exit").click();
@@ -53,8 +78,10 @@ test("organic settlements and protagonist-demand interiors reconstruct after evi
   const smith = await page.evaluate(() => window.advisorInteriors.state);
   expect(smith.active.role).toBe("blacksmith");
   expect(smith.active.signature).not.toBe(homeSignature);
-  await page.screenshot({ path: "test-results/wp-s002-004-009/blacksmith-interior.png" });
+  expect(smith.active.style.furniture).not.toBe(homeStyle.furniture);
+  await traverseAllRooms(page);
   expect(await page.evaluate(() => window.advisorInteriors.useAnchor())).toBe(true);
+  await page.screenshot({ path: "test-results/wp-s002-004-009/blacksmith-interior.png" });
   await page.locator("#interior-exit").click();
   expect((await page.evaluate(() => window.advisorInteriors.state)).cache.cached).toBe(0);
 
@@ -62,27 +89,44 @@ test("organic settlements and protagonist-demand interiors reconstruct after evi
   await page.evaluate(() => window.advisorWorld.setHalfHeight(170));
   await page.waitForFunction(() => window.advisorWorld.state.settled);
   await page.screenshot({ path: "test-results/wp-s002-004-009/city-organic-layout.png" });
+  await page.evaluate(() => window.advisorWorld.setHalfHeight(38));
+  await page.waitForFunction(() => window.advisorWorld.state.settled);
+  await page.screenshot({ path: "test-results/wp-s002-004-009/city-street-market.png" });
+  await page.locator("#building-enter").click();
+  const market = await page.evaluate(() => window.advisorInteriors.state);
+  expect(market.active.role).toBe("market");
+  expect(market.active.signature).not.toBe(homeSignature);
+  await traverseAllRooms(page);
+  expect(await page.evaluate(() => window.advisorInteriors.useAnchor())).toBe(true);
+  await page.screenshot({ path: "test-results/wp-s002-004-009/market-interior.png" });
+  await page.locator("#interior-exit").click();
 
   await page.setViewportSize({ width: 390, height: 844 });
-  expect(await page.evaluate(() => window.advisorInteriors.selectByRole("inn", 0, false))).toBe(true);
+  expect(await page.evaluate(() => window.advisorInteriors.selectByRole("inn", 1, false))).toBe(true);
   await page.locator("#building-enter").click();
   await expect(page.locator("#interior-shell")).toBeVisible();
+  const inn = await page.evaluate(() => window.advisorInteriors.state);
+  expect(inn.active.signature).not.toBe(homeSignature);
+  const innTraversal = await traverseAllRooms(page);
+  if (new Set(inn.active.rooms.map((room) => room.floor)).size > 1) expect(innTraversal.usedStair).toBe(true);
   let box = await page.locator("#interior-shell").boundingBox();
+  expect(box).not.toBeNull();
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(391);
   expect(box.y + box.height).toBeLessThanOrEqual(845);
-  await page.screenshot({ path: "test-results/wp-s002-004-009/phone-portrait-interior.png" });
+  await page.screenshot({ path: "test-results/wp-s002-004-009/phone-portrait-inn-interior.png" });
   await page.locator("#interior-exit").click();
 
   await page.setViewportSize({ width: 844, height: 390 });
   await page.locator("#building-enter").click();
   box = await page.locator("#interior-shell").boundingBox();
+  expect(box).not.toBeNull();
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(845);
   expect(box.y + box.height).toBeLessThanOrEqual(391);
-  await page.screenshot({ path: "test-results/wp-s002-004-009/phone-landscape-interior.png" });
+  await page.screenshot({ path: "test-results/wp-s002-004-009/phone-landscape-inn-interior.png" });
   await page.locator("#interior-exit").click();
 
   expect(errors).toEqual([]);
