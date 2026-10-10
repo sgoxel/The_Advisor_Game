@@ -134,10 +134,17 @@ test("every political settlement reaches its country backbone and every country 
       ...cities.filter((city) => city.city !== 0).map((city) => city.id),
     ]),
     actualFromIds = new Set(politicalAccessLinks.map((link) => link.fromId)),
-    missingAccess = [...expectedFromIds].filter((id) => !actualFromIds.has(id));
+    missingAccess = [...expectedFromIds].filter((id) => !actualFromIds.has(id)),
+    infeasibleAccess = politicalAccessLinks
+      .filter((link) => !link.feasible)
+      .map((link) => `${link.id}:${link.fromId}->${link.toId}`);
   assert.deepEqual(missingAccess, [], `missing political access links: ${missingAccess.join(", ")}`);
   assert.equal(politicalAccessLinks.length, expectedFromIds.size);
-  assert.equal(politicalSettlementAccessSummary.feasibleLinks, expectedFromIds.size);
+  assert.equal(
+    politicalSettlementAccessSummary.feasibleLinks,
+    expectedFromIds.size,
+    `infeasible political access links: ${infeasibleAccess.join(", ")}`,
+  );
   for (const link of politicalAccessLinks) {
     assert.equal(link.feasible, true, link.id);
     assert.ok(link.waypoints.length >= 2, link.id);
