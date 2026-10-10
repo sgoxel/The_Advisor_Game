@@ -376,28 +376,8 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
   const center = macroSampleAt(
       sourceToLonLat(wrapSourceX(tile.minX + tile.size / 2), tile.minZ + tile.size / 2),
     ),
-    edgeSamples = [
-      center,
-      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX), tile.minZ)),
-      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX + tile.size), tile.minZ)),
-      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX), tile.minZ + tile.size)),
-      macroSampleAt(sourceToLonLat(wrapSourceX(tile.minX + tile.size), tile.minZ + tile.size)),
-    ],
-    coastal = edgeSamples.some((sample) => sample.land) && edgeSamples.some((sample) => !sample.land),
     rugged = center.reliefM >= 80 || center.mountainIntensity >= 0.06,
-    targetResolution = coastal
-      ? tile.size <= 512
-        ? 72
-        : 64
-      : tile.size <= 128
-        ? 68
-        : tile.size <= 512
-          ? rugged
-            ? 52
-            : 40
-          : rugged
-            ? 40
-            : 28,
+    targetResolution = tile.size <= 128 ? 68 : tile.size <= 512 ? (rugged ? 52 : 40) : rugged ? 40 : 28,
     resolution = Math.max(1, Math.min(targetResolution, Math.floor(tile.size / 2))),
     step = tile.size / resolution,
     grid: Vertex[][] = [];
