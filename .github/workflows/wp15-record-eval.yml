@@ -1,0 +1,34 @@
+name: WP15 record evaluation
+on:
+  push:
+    branches:
+      - agent1/wp15-record-eval
+permissions:
+  contents: write
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s002-004-005-uv-final2
+          fetch-depth: 0
+      - name: Append changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker='2026-10-10 07:54 Europe/Istanbul — WP-S002-004-005, AGENT #1, phase 3 (MIXED)'
+          if ! grep -Fq "$marker" docs/changelog.txt; then
+            printf '%s\n' "$marker: Final third-attempt evidence at runtime head 383cdf3a7287558c9c804a693af681111c6cb83a was actually inspected on desktop and phone across WebGPU and WebGL2. VISUAL 4/10: mountain-range evidence is dominated by an oversized blown-out white terrain mass, Street cliff evidence remains a coarse stair-step diagonal terrace, and Province hydrology remains visually weak/blurred. Exact-head functional run 38025074754 finished 115 passed / 1 failed: routing lacks a real terrain-influenced neighbouring-route example, so build/browser stages were skipped. WP remains IN PROGRESS; no merge, deployment, completion mark or issue closure." >> docs/changelog.txt
+          fi
+      - name: Commit record
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "AGENT #1"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          if git diff --quiet -- docs/changelog.txt; then exit 0; fi
+          git add docs/changelog.txt
+          git commit -m "WP-S002-004-005 record failed final acceptance"
+          git push origin HEAD:agent1/wp-s002-004-005-uv-final2
