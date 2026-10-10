@@ -1,0 +1,66 @@
+name: WP19 optimized navigation settle smoke
+on:
+  push:
+    branches: [agent1/wp-s002-004-009-living-settlements]
+    paths: [.github/workflows/wp19-navigation-smoke.yml]
+permissions:
+  contents: read
+jobs:
+  settle-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Measure representative settled transitions
+        shell: bash
+        run: |
+          npm run preview -- --port 4177 > /tmp/advisor-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4177/ >/dev/null; then break; fi
+            sleep 1
+          done
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({
+            headless: true,
+            args: ['--use-angle=swiftshader','--enable-unsafe-swiftshader'],
+          });
+          const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+          await context.addInitScript(() => Object.defineProperty(navigator, 'gpu', { value: undefined, configurable: true }));
+          const page = await context.newPage();
+          page.on('pageerror', error => console.error('PAGEERROR', error.message));
+          page.on('console', msg => { if (msg.type() === 'error') console.error('CONSOLE', msg.text()); });
+          await page.goto('http://127.0.0.1:4177/', { waitUntil: 'load', timeout: 120000 });
+          const settle = async (label, halfHeight) => {
+            const start = Date.now();
+            await page.evaluate(value => window.advisorWorld.setHalfHeight(value), halfHeight);
+            await page.waitForFunction(() => window.advisorWorld?.state.ready && window.advisorWorld.state.settled, null, { timeout: 120000, polling: 250 });
+            const state = await page.evaluate(() => ({
+              backend: window.advisorRenderer.backend,
+              active: window.advisorWorld.state.active,
+              cached: window.advisorWorld.state.cached,
+              pending: window.advisorWorld.state.pending,
+              withinBudget: window.advisorWorld.state.performance.withinBudget,
+              presentation: window.advisorWorld.state.presentation,
+            }));
+            console.log(label, `${Date.now() - start}ms`, JSON.stringify(state));
+            if (state.backend !== 'webgl2') throw new Error(`expected webgl2, got ${state.backend}`);
+            if (!state.withinBudget) throw new Error(`${label} exceeded streaming budget`);
+          };
+          await page.waitForFunction(() => window.advisorWorld?.state.ready && window.advisorWorld.state.settled, null, { timeout: 120000 });
+          await settle('village-97m', 97);
+          await settle('province-760m', 760);
+          await settle('country-4168m', 4168);
+          await settle('realm-11000m', 11000);
+          await settle('return-local-97m', 97);
+          await browser.close();
+          NODE
