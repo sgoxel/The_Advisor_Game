@@ -8,7 +8,7 @@ import {
   wrapSourceX,
 } from "./planet.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
-import { nearestPlace, places, roadAt } from "./geography.ts";
+import { nearestPlace, places, roadAt, roadDistanceAt } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import {
   buildingAt,
@@ -251,7 +251,7 @@ export function heightAt(x: number, z: number): number {
   if (road)
     flatten = Math.min(
       flatten,
-      smooth(Math.min(1, Math.max(0, (Math.abs(z - road.z) - 5) / 7))),
+      smooth(Math.min(1, Math.max(0, (roadDistanceAt(x, z, road) - 5) / 7))),
     );
 
   const base =
@@ -378,7 +378,7 @@ export function cellAt(x: number, z: number): Cell {
   const px = cx * CELL_SIZE + 1,
     pz = cz * CELL_SIZE + 1;
   const road = roadAt(px, pz),
-    bridge = road && Math.abs(pz - road.z) <= 5 && heightAt(px, pz) < 2.9;
+    bridge = road && roadDistanceAt(px, pz, road) <= 5 && heightAt(px, pz) < 2.9;
   const elevation = bridge ? 3 : heightAt(px, pz),
     biome = bridge ? "Bridge" : biomeAt(px, pz);
   const slope = Math.max(
@@ -533,7 +533,10 @@ export function featuresFor(tile: Tile): Feature[] {
       ...detail,
     });
   };
-  for (const s of places) {
+  // Detailed settlement realization is a focused/local presentation concern.
+  // Coarse tiles retain canonical place metadata but never instantiate every city/village layout.
+  if (tile.size <= 512)
+    for (const s of places) {
     const margin = s.kind === "city" ? 480 : 160;
     if (
       s.x < tile.minX - margin ||
