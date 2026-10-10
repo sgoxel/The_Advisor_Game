@@ -1,0 +1,43 @@
+name: WP15 phase-cache performance repair
+on:
+  push:
+    branches: [agent1/wp-s002-004-005-uv-final2]
+permissions:
+  contents: write
+concurrency:
+  group: wp15-phase-cache
+  cancel-in-progress: true
+jobs:
+  repair:
+    if: ${{ !contains(github.event.head_commit.message, '[wp15-phase-cache]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s002-004-005-uv-final2
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: python tools/wp15_phase_cache_repair.py
+      - run: npm ci
+      - name: Full deterministic suite with CI performance guard
+        run: |
+          start=$(date +%s)
+          npm test
+          elapsed=$(($(date +%s)-start))
+          echo "npm_test_seconds=$elapsed"
+          test "$elapsed" -le 120
+      - run: npm run build
+      - name: Seeded difficult-route regression
+        run: |
+          node --experimental-strip-types --input-type=module -e "const m=await import('./src/village-routes.ts');const r=m.routeBetweenVillages('0/4/2/0','0/6/2/2');console.log(JSON.stringify({found:r.found,difficultM:r.surfaceM.difficult,ratio:r.fantasySeconds/r.straightLineFantasySeconds,expansions:r.expansions}));if(!r.found||r.surfaceM.difficult<=1000||r.fantasySeconds<=r.straightLineFantasySeconds*1.1)process.exit(1)"
+      - name: Commit validated output-preserving cache
+        run: |
+          git config user.name "AGENT #1"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add src/hydrology.ts
+          git commit -m "WP-S002-004-005 cache immutable terrain phases [wp15-phase-cache]"
+          git push origin HEAD:agent1/wp-s002-004-005-uv-final2
