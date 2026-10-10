@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="/src/canonical-inspector.css" />
     <link rel="stylesheet" href="/src/macro-geography.css" />
     <link rel="stylesheet" href="/src/political-atlas.css" />
+    <link rel="stylesheet" href="/src/interior-ui.css" />
     <title>The Advisor · World Atlas</title>
   </head>
   <body>
@@ -90,8 +91,35 @@
         <summary>Derived source-detail ancestry</summary>
         <ol id="seed-levels"></ol>
       </details>
+      <button id="enter-building" hidden>Enter building</button>
       <button id="copy-code">Copy planet ID</button
       ><span id="copy-status" role="status"></span>
+    </aside>
+    <aside class="panel interior-panel" id="interior-panel" hidden role="dialog" aria-modal="true" aria-labelledby="interior-title">
+      <div class="interior-head">
+        <div>
+          <div class="eyebrow">USABLE BUILDING INTERIOR · DEMAND LOADED</div>
+          <h2 id="interior-title">Building interior</h2>
+        </div>
+        <button id="exit-interior" aria-label="Exit building">×</button>
+      </div>
+      <div class="interior-meta">
+        <span id="interior-room-count"></span>
+        <code id="interior-code"></code>
+        <span id="interior-signature"></span>
+      </div>
+      <div class="interior-scene-wrap" aria-label="Interior floor and room view">
+        <div class="interior-scene" id="interior-scene"></div>
+      </div>
+      <div class="interior-controls">
+        <span class="interior-status" id="interior-status">Use arrows or WASD to move.</span>
+        <div class="interior-pad" aria-label="Interior movement controls">
+          <button class="north" id="interior-north" aria-label="Move north">↑</button>
+          <button class="west" id="interior-west" aria-label="Move west">←</button>
+          <button class="south" id="interior-south" aria-label="Move south">↓</button>
+          <button class="east" id="interior-east" aria-label="Move east">→</button>
+        </div>
+      </div>
     </aside>
     <aside class="panel travel-panel" id="travel-panel" hidden>
       <div class="eyebrow">
@@ -196,5 +224,6 @@
     <script type="module" src="/src/routing-diagnostics.ts"></script>
     <script type="module" src="/src/political-settlement-access.ts"></script>
     <script type="module" src="/src/political-atlas.ts"></script>
+    <script type="module" src="/src/interior-ui.ts"></script>
   </body>
 </html>
