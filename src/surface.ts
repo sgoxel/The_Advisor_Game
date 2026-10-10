@@ -1,4 +1,6 @@
 import { nearestPlace, roadAt, roadDistanceAt } from "./geography.ts";
+import { macroSampleAt } from "./macro-geography.ts";
+import { sourceToLonLat, wrapSourceX } from "./planet.ts";
 import {
   naturalHydrologyDiagnostics,
   naturalSurfaceAt,
@@ -7,7 +9,6 @@ import {
   type NaturalTraversalKind,
   type NaturalWaterKind,
 } from "./natural-surface.ts";
-import { wrapSourceX } from "./planet.ts";
 
 export type WaterKind = NaturalWaterKind;
 export type TraversalKind = NaturalTraversalKind;
@@ -58,12 +59,14 @@ export function surfaceAt(x: number, z: number): SurfaceSample {
     slope = Math.max(dx, dz),
     road = roadAt(sx, z),
     onRoad = Boolean(road && roadDistanceAt(sx, z, road) <= 12),
-    cliff = !onRoad && slope >= 1.15,
+    macro = macroSampleAt(sourceToLonLat(sx, z)),
+    mountainCliff = macro.mountainIntensity >= 0.52,
+    cliff = !onRoad && (slope >= 1.15 || mountainCliff),
     traversal: TraversalKind = cliff
       ? "blocked-cliff"
       : onRoad
         ? "walkable"
-        : slope >= 0.42
+        : slope >= 0.42 || macro.mountainIntensity >= 0.28
           ? "difficult"
           : "walkable";
   return {
