@@ -516,7 +516,7 @@ export function surfaceAt(x: number, z: number): SurfaceSample {
         ? "blocked-water"
         : cliff
           ? "blocked-cliff"
-          : slope >= 0.28
+          : slope >= 0.28 || core.macro.reliefM >= 50 || core.macro.mountainIntensity >= 0.04
             ? "difficult"
             : "walkable";
   return {
