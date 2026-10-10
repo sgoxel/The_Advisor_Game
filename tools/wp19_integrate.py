@@ -40,3 +40,12 @@ for old, new in replacements:
         raise SystemExit(f"unexpected reconciliation counts old={old_count} new={new_count} for {old[:80]!r}")
 
 path.write_text(text)
+
+# Keep the acceptance contact-sheet generator bound to the exact source SHA without relying on a
+# file created by a later workflow step. This is test infrastructure only.
+acceptance = Path(".github/workflows/wp19-acceptance.yml")
+accept_text = acceptance.read_text()
+if 'import math\n          files =' in accept_text:
+    accept_text = accept_text.replace('import math\n          files =', 'import math\n          import os\n          files =', 1)
+accept_text = accept_text.replace('Path("/tmp/source-sha").read_text().strip()', 'os.environ["SOURCE_SHA"]')
+acceptance.write_text(accept_text)
