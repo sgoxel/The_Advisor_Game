@@ -27,6 +27,14 @@ export type VillageRoute = RouteResult & { fromId: string; toId: string };
 
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
+function retainRoute(key: string) {
+  const route = routeCache.get(key);
+  if (!route) return;
+  routeCache.delete(key);
+  routeCache.set(key, route);
+  if (routeCache.size > ROUTE_CACHE_LIMIT) routeCache.delete(routeCache.keys().next().value!);
+}
+
 /** Shortest legal walk between two villages. Cached per pair; the cache never changes a result. */
 export function routeBetweenVillages(fromId: string, toId: string): VillageRoute {
   const from = villageById.get(fromId),
@@ -72,7 +80,10 @@ export function neighbouringVillages(
   if (!origin) return [];
   const cacheKey = `${id}/${limit}/${maxDistanceM}`,
     cached = neighbourCache.get(cacheKey);
-  if (cached) return [...cached];
+  if (cached) {
+    for (const entry of cached) retainRoute(pairKey(id, entry.place.id));
+    return [...cached];
+  }
 
   const candidates = villages
     .filter((village) => village.id !== id)
@@ -88,6 +99,12 @@ export function neighbouringVillages(
     result.push(entry);
     if (result.length >= limit) break;
   }
+
+  // Candidate probing can exceed the bounded route LRU. Refresh only the selected
+  // successful neighbour proofs so the returned list and the immediately queried
+  // route facts cannot disagree because an early success was evicted while later
+  // candidates were evaluated. This changes cache recency only, never route truth.
+  for (const entry of result) retainRoute(pairKey(id, entry.place.id));
   neighbourCache.set(cacheKey, result);
   return [...result];
 }
