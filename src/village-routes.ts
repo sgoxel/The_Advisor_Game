@@ -20,6 +20,7 @@ import { FASTEST_WALK_SPEED_MPS, villagePairProvenByGeodesic } from "./travel.ts
 export const NEIGHBOUR_LIMIT = 4;
 export const NEIGHBOUR_MAX_DISTANCE_M = 60_000;
 const ROUTE_CACHE_LIMIT = 256;
+const CORRIDOR_PROOF_CACHE_LIMIT = 2048;
 const NEIGHBOUR_PROOF_MAX_GAP_SOURCE = 32;
 const NEIGHBOUR_PROOF_CLEARANCE_SOURCE = 20;
 
@@ -32,6 +33,7 @@ export const roadSegments: readonly RoadSegment[] = roads.map((road) => ({
 const villageById = new Map(villages.map((village) => [village.id, village]));
 const routeCache = new Map<string, VillageRoute>();
 const neighbourCache = new Map<string, readonly { place: Place; geodesicM: number }[]>();
+const corridorProofCache = new Map<string, boolean>();
 const roadNeighbourIds = new Map<string, Set<string>>();
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 const directRoadByPair = new Map(roads.map((road) => [pairKey(road.from, road.to), road] as const));
@@ -108,8 +110,16 @@ export function routeBetweenVillages(fromId: string, toId: string): VillageRoute
 export const clearVillageRouteCache = () => {
   routeCache.clear();
   neighbourCache.clear();
+  corridorProofCache.clear();
 };
 export const villageRouteCacheSize = () => routeCache.size;
+
+function rememberCorridorProof(key: string, value: boolean) {
+  corridorProofCache.set(key, value);
+  if (corridorProofCache.size > CORRIDOR_PROOF_CACHE_LIMIT)
+    corridorProofCache.delete(corridorProofCache.keys().next().value!);
+  return value;
+}
 
 /**
  * Cheap deterministic proof used only to choose plausible walking neighbours.
@@ -121,8 +131,14 @@ export const villageRouteCacheSize = () => routeCache.size;
  * point between samples retains >4 source units of dry clearance. Natural cliff
  * samples are also rejected. This prevents neighbour discovery from launching
  * many synchronous A* searches merely to discover obvious river/strait blockers.
+ * The symmetric proof is cached with a fixed cap because A->B and B->A inspect
+ * the same canonical corridor; caching changes cost only, never the result.
  */
 function naturalWalkingCorridorProven(from: Place, to: Place) {
+  const key = pairKey(from.id, to.id),
+    cached = corridorProofCache.get(key);
+  if (cached !== undefined) return cached;
+
   const a = lonLatToSource(from.canonicalPosition.lon, from.canonicalPosition.lat),
     b = lonLatToSource(to.canonicalPosition.lon, to.canonicalPosition.lat),
     dx = wrapSourceX(b.x - a.x),
@@ -142,9 +158,9 @@ function naturalWalkingCorridorProven(from: Place, to: Place) {
       surface.freshwaterDistance <= NEIGHBOUR_PROOF_CLEARANCE_SOURCE ||
       macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS <= NEIGHBOUR_PROOF_CLEARANCE_SOURCE
     )
-      return false;
+      return rememberCorridorProof(key, false);
   }
-  return true;
+  return rememberCorridorProof(key, true);
 }
 
 /**

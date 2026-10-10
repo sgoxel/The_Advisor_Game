@@ -136,11 +136,23 @@ function pushTriangle(
     ny = uz * vx - ux * vz,
     nz = ux * vy - uy * vx,
     length = Math.hypot(nx, ny, nz) || 1,
+    unitX = nx / length,
+    unitY = ny / length,
+    unitZ = nz / length,
+    // Presentation-only flat relief shading. Horizontal water/ground keeps its
+    // exact palette while real slopes and cliff faces gain readable low-poly form.
+    light = unitX * -0.38 + unitY * 0.86 + unitZ * -0.34,
+    shade = unitY > 0.995 ? 1 : Math.max(0.72, Math.min(1.08, 0.79 + light * 0.28)),
     start = positions.length / 3;
   for (const vertex of [a, b, c]) {
     positions.push(...vertex.point);
-    normals.push(nx / length, ny / length, nz / length);
-    colors.push(byte(vertex.tint[0]), byte(vertex.tint[1]), byte(vertex.tint[2]), 255);
+    normals.push(unitX, unitY, unitZ);
+    colors.push(
+      byte(vertex.tint[0] * shade),
+      byte(vertex.tint[1] * shade),
+      byte(vertex.tint[2] * shade),
+      255,
+    );
   }
   indices.push(start, start + 1, start + 2);
 }
@@ -273,7 +285,7 @@ function pushWaterDisc(
     return;
   const y = Math.max(0.08, point.bed + 0.18),
     center: Vertex = { point: [x, y, point.z], tint },
-    sides = 12;
+    sides = 16;
   for (let i = 0; i < sides; i++) {
     const a = (i / sides) * Math.PI * 2,
       b = ((i + 1) / sides) * Math.PI * 2,
@@ -345,7 +357,10 @@ function pushLake(
  */
 export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry {
   if (tile.size > 1024 || tile.size < 2) return original;
-  const targetResolution = tile.size <= 128 ? 40 : tile.size <= 512 ? 32 : 24,
+  // Spend refinement only where the player can see the silhouette. Close tiles
+  // receive enough samples to remove obvious river/cliff stair steps while wider
+  // Province tiles stay bounded for phone and renderer parity.
+  const targetResolution = tile.size <= 128 ? 56 : tile.size <= 512 ? 40 : 28,
     resolution = Math.max(1, Math.min(targetResolution, Math.floor(tile.size / 2))),
     step = tile.size / resolution,
     grid: Vertex[][] = [];

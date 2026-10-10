@@ -12,7 +12,14 @@ export const SURFACE_PRESENTATION = Object.freeze({
   relief: 0,
 });
 export function localDetailWeight(halfHeight: number): number {
-  const t = Math.max(0, Math.min(1, (Math.log(halfHeight) - Math.log(70)) / Math.log(900 / 70)));
+  // Keep final-surface vertex detail dominant through Province scale. The old
+  // 70..900 fade handed most of a 1/250 view to the coarse atlas texture, making
+  // rivers/lakes/mountains read as blurred colour blobs even though refined tiles
+  // were already present. This remains a continuous presentation-only blend.
+  const t = Math.max(
+    0,
+    Math.min(1, (Math.log(halfHeight) - Math.log(220)) / Math.log(3200 / 220)),
+  );
   return 1 - t * t * (3 - 2 * t);
 }
 
