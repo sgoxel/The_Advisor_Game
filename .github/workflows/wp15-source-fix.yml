@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   validate-and-commit:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout WP branch
@@ -24,7 +24,7 @@ jobs:
           node-version: '24'
           cache: npm
       - name: Apply deterministic legality patch
-        run: python tools/wp15_apply_legality.py
+        run: python3 tools/wp15_apply_legality.py
       - name: Install
         run: npm ci
       - name: Test
