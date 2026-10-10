@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - agent1/wp-s002-004-005-final
+  pull_request:
+    types: [reopened]
 
 permissions:
   contents: write
@@ -14,6 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: agent1/wp-s002-004-005-final
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -27,8 +30,6 @@ jobs:
           from pathlib import Path
           import textwrap
 
-          # Features may only materialize on the same final dry/non-cliff surface
-          # used by collision and traversal.
           p = Path('src/world.ts')
           text = p.read_text()
           old = '''    if (heightAt(x, z) < 0.2) return;
@@ -53,9 +54,6 @@ jobs:
           assert old in text, 'world feature legality block not found'
           p.write_text(text.replace(old, new, 1))
 
-          # Settlement generation is allowed to read the natural hydrology authority
-          # (which is independent of geography) and must prove the whole seeded core,
-          # not just its centre point, is dry and non-cliff.
           p = Path('src/geography.ts')
           text = p.read_text()
           start = text.index('function locallyDrySettlementSite(')
@@ -103,13 +101,10 @@ jobs:
           text = text.replace('!locallyDrySettlementSite(candidate, 95)', '!locallyDrySettlementSite(candidate, 95, 72)', 1)
           p.write_text(text)
 
-          # The current seeded road registry has no explicit bridge records. Final
-          # road corridors therefore compose as dry graded cut/fill/culvert surface,
-          # while the underlying catchment identity remains in hydrology metadata.
           p = Path('src/surface.ts')
           text = p.read_text()
           elevation_start = text.index('export function surfaceElevationAt(')
-          surface_start = text.index('/** One canonical final-surface query', elevation_start)
+          surface_comment = text.index('/** One canonical final-surface query', elevation_start)
           new_elevation = textwrap.dedent('''
           export function surfaceElevationAt(x: number, z: number) {
             const natural = hydrologySurfaceAt(x, z),
@@ -120,9 +115,8 @@ jobs:
           }
 
           ''')
-          text = text[:elevation_start] + new_elevation + text[surface_start:]
+          text = text[:elevation_start] + new_elevation + text[surface_comment:]
           surface_start = text.index('export function surfaceAt(')
-          surface_end = len(text)
           new_surface = textwrap.dedent('''
           export function surfaceAt(x: number, z: number): SurfaceSample {
             const natural = hydrologySurfaceAt(x, z),
@@ -160,8 +154,6 @@ jobs:
           text = text[:surface_start] + new_surface
           p.write_text(text)
 
-          # Foundation v5 is intentional for the changed deterministic world authority;
-          # update stale version assertions, never the behavior assertions.
           for filename in ['tests/world.test.ts', 'tests/climate.test.ts']:
               p = Path(filename)
               text = p.read_text()
