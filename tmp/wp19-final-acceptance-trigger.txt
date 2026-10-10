@@ -1,0 +1,2 @@
+WP-S002-004-009 final exact-head acceptance trigger after settlement runtime reconciliation.
+Temporary branch-only marker; remove after acceptance evidence is inspected.
