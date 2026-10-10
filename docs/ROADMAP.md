@@ -20,15 +20,15 @@ All S001 WPs are COMPLETED and REVIEWED (see docs/ROADMAP_ARCHIVE.md).
 
 Completed S002 WPs are listed in docs/ROADMAP_ARCHIVE.md; only open WPs stay below. A WP absent here and present there is COMPLETED.
 
-- WP-S002-004-005 — Natural terrain/hydrology/traversal authority: irregular landforms, distributed freshwater, canonical walkability and bounded seam-safe queries
-- WP-S002-004-007 — Political atlas authority/UX: full-land country partition, SEED-variable ≥30/90/270 counts, readable borders/names and bounded 1/1000 labels
-- WP-S002-004-008 — Shortest-legal-route authority/UX: all-pair ≥60-minute proof on final terrain, bounded routing and truthful route preview
-- WP-S002-004-009 — Settlement/building world UX: terrain-shaped non-grid layouts, entrance-connected homes/services, usable lazy interiors and mobile-safe rendering
-- WP-S002-004-011 — Living-resident scalability/UX: persistent home/work identity, analytical schedules, spatial indexing, pooled actors and responsive inspection
-- WP-S002-004-012 — Unified world-surface compositor: deterministic priority 0–9 earthworks with shared render/routing/collision/material truth
+- WP-S002-004-005 — Natural terrain/hydrology/traversal authority: distributed freshwater, canonical walkability, final-surface queries and bounded seam-safe generation
+- WP-S002-004-007 — Political atlas authority/UX: full-land partition, SEED-variable ≥30/90/270 registries, terrain-valid settlement distribution, readable borders and bounded 1/1000 labels
+- WP-S002-004-008 — Shortest-legal-route authority/UX: all-pair ≥60-minute proof on final composed terrain, bounded routing and truthful route preview
+- WP-S002-004-009 — Settlement/building world UX: terrain-shaped non-grid layouts, functional archetypes, entrance-connected access, usable lazy interiors and mobile-safe rendering
+- WP-S002-004-011 — Living-resident scalability/UX: persistent home/work identity, analytical absolute-time schedules, spatial indexing, bounded logical/visible pools and responsive inspection
+- WP-S002-004-012 — Unified world-surface compositor: deterministic priority 0–9 earthworks with shared render/routing/collision/material/vegetation truth
 - WP-S002-004-013 — Ruin/critical-place discoverability UX: 1/1000 labels/leaders, legal access, stable canonical identity and bounded lazy detail
-- WP-S002-004-014 — Global transport-network authority/UX: connected roads/bridges/harbors/ferries, terrain-aware topology, shared boundaries and bounded generation
-- WP-S002-004-015 — Invisible-world continuity/performance: SEED-defined shared-boundary recipes, bounded queries and gameplay-focused lazy materialization
-- WP-S002-005-001 — S002 performance/adaptive-rendering release gate: real-device budgets, full telemetry, DOM hot-path control and renderer-loss recovery
-- WP-S002-005-002 — Responsive UI/accessibility release gate: safe areas, ≥44px targets, focus/keyboard parity, dense-label readability and seven-viewport evidence
-- WP-S002-005-003 — README/runtime semantics release gate: Advisor-vs-atlas wording, dynamic registry counts, canonical truth and Chrome/WebGPU→WebGL2 recovery
+- WP-S002-004-014 — Global transport-network authority/UX: connected roads/bridges/harbors/ferries, final-surface profiles, shared junctions and bounded generation
+- WP-S002-004-015 — Invisible-world continuity/performance: SEED-defined shared-boundary recipes, bounded regional queries, eviction-safe reconstruction and demand-driven materialization
+- WP-S002-005-001 — Performance/adaptive-rendering release gate: real-device budgets, analytical simulation updates, DOM hot-path control, exact-head validation and renderer recovery
+- WP-S002-005-002 — Responsive UI/accessibility release gate: safe areas, ≥44px targets, map-coverage density, focus/keyboard parity and seven-viewport readability
+- WP-S002-005-003 — README/runtime conformance release gate: Advisor-vs-atlas authority, dynamic registry truth, canonical terminology, exact-head compatibility and renderer recovery
