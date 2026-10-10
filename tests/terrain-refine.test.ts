@@ -14,6 +14,9 @@ test("local terrain refinement increases sampling without changing tile authorit
   assert.ok(refined.positions.length > base.positions.length);
   assert.equal(refined.positions.length, refined.normals.length);
   assert.equal((refined.positions.length / 3) * 4, refined.colors.length);
+  assert.ok(refined.uvs, "refined terrain keeps canonical projection UVs");
+  assert.equal((refined.positions.length / 3) * 2, refined.uvs.length);
+  assert.ok(Array.from(refined.uvs).every(Number.isFinite));
   assert.ok(refined.indices.length > 0);
 });
 
