@@ -1,13 +1,13 @@
-name: WP15 apply settlement surface legality
+name: WP15 settlement surface legality fix
+
 on:
   push:
-    branches: [agent1/wp-s002-004-005-final]
-    paths: [.github/workflows/wp15-source-fix.yml]
-concurrency:
-  group: wp15-source-fix
-  cancel-in-progress: true
+    branches:
+      - agent1/wp-s002-004-005-final
+
 permissions:
   contents: write
+
 jobs:
   apply:
     runs-on: ubuntu-latest
@@ -29,78 +29,74 @@ jobs:
           p = Path('src/world.ts')
           text = p.read_text()
           old = '''    if (heightAt(x, z) < 0.2) return;
-    features.push({
-      kind,
-      x,
-      z,
-      y: heightAt(x, z),
-      variant,
-      code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
-    });'''
+              features.push({
+                kind,
+                x,
+                z,
+                y: heightAt(x, z),
+                variant,
+                code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
+              });'''
+          if old not in text:
+              old = '''    if (heightAt(x, z) < 0.2) return;
+              features.push({
+                kind,
+                x,
+                z,
+                y: heightAt(x, z),
+                variant,
+                code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
+              });'''.replace('              ', '')
           new = '''    const surface = surfaceAt(x, z);
-    if (surface.water !== "none" || surface.cliff || surface.elevation < 0.2) return;
-    features.push({
-      kind,
-      x,
-      z,
-      y: surface.elevation,
-      variant,
-      code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
-    });'''
+              if (surface.water !== "none" || surface.cliff || surface.elevation < 0.2) return;
+              features.push({
+                kind,
+                x,
+                z,
+                y: surface.elevation,
+                variant,
+                code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
+              });'''.replace('              ', '')
           assert old in text, 'world feature legality block not found'
           p.write_text(text.replace(old, new, 1))
 
           p = Path('src/geography.ts')
           text = p.read_text()
-          old = '''/**
- * Transitional settlement-site guard for the current local terrain prototype.
- * Political ownership still comes exclusively from countryAtPosition(). Until the
- * hydrology WP replaces the old source-domain river, placement simply rejects its
- * known wet corridor and a narrow coastal margin instead of filling water under a
- * city or village.
- */
-function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
-  const macro = macroSampleAt(position);
-  if (!macro.land || macro.reliefM > maxReliefM) return false;
-  if (macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS < 42) return false;
-  const { x, z } = lonLatToSource(position.lon, position.lat),
-    surface = naturalSurfaceAt(x, z);
-  return surface.water === "none" && !surface.cliff;
-}'''
-          new = '''/**
- * Settlement candidates are chosen after canonical natural hydrology. The core
- * footprint samples the same river/lake/cliff authority used by traversal; no
- * prototype wet corridor or post-placement water rewrite is permitted.
- */
-function locallyDrySettlementSite(
-  position: LonLat,
-  maxReliefM: number,
-  coreRadius: number,
-) {
-  const macro = macroSampleAt(position);
-  if (!macro.land || macro.reliefM > maxReliefM) return false;
-  if (macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS < 42) return false;
-  const { x, z } = lonLatToSource(position.lon, position.lat),
-    diagonal = coreRadius * Math.SQRT1_2,
-    offsets = [
-      [0, 0],
-      [coreRadius, 0],
-      [-coreRadius, 0],
-      [0, coreRadius],
-      [0, -coreRadius],
-      [diagonal, diagonal],
-      [diagonal, -diagonal],
-      [-diagonal, diagonal],
-      [-diagonal, -diagonal],
-    ] as const;
-  for (const [dx, dz] of offsets) {
-    const surface = naturalSurfaceAt(x + dx, z + dz);
-    if (surface.water !== "none" || surface.cliff) return false;
-  }
-  return true;
-}'''
-          assert old in text, 'geography settlement guard not found'
-          text = text.replace(old, new, 1)
+          start = text.index('function locallyDrySettlementSite(')
+          end = text.index('/**\n * Country anchors', start)
+          new_guard = '''function locallyDrySettlementSite(
+            position: LonLat,
+            maxReliefM: number,
+            coreRadius: number,
+          ) {
+            const macro = macroSampleAt(position);
+            if (!macro.land || macro.reliefM > maxReliefM) return false;
+            if (macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS < 42) return false;
+            const { x, z } = lonLatToSource(position.lon, position.lat),
+              diagonal = coreRadius * Math.SQRT1_2,
+              offsets = [
+                [0, 0],
+                [coreRadius, 0],
+                [-coreRadius, 0],
+                [0, coreRadius],
+                [0, -coreRadius],
+                [diagonal, diagonal],
+                [diagonal, -diagonal],
+                [-diagonal, diagonal],
+                [-diagonal, -diagonal],
+              ] as const;
+            for (const [dx, dz] of offsets) {
+              const surface = naturalSurfaceAt(x + dx, z + dz);
+              if (surface.water !== "none" || surface.cliff) return false;
+            }
+            return true;
+          }
+
+          '''
+          # Dedent the TypeScript block to column zero.
+          import textwrap
+          new_guard = textwrap.dedent(new_guard)
+          text = text[:start] + new_guard + text[end:]
           text = text.replace('!locallyDrySettlementSite(candidate, 90)', '!locallyDrySettlementSite(candidate, 90, 80)', 1)
           text = text.replace('!locallyDrySettlementSite(candidate, 95)', '!locallyDrySettlementSite(candidate, 95, 72)', 1)
           p.write_text(text)
@@ -113,8 +109,10 @@ function locallyDrySettlementSite(
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - name: Commit validated source correction and remove helper
+      - name: Commit validated correction and remove helper
+        shell: bash
         run: |
+          set -euo pipefail
           git config user.name "AGENT #1"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
           rm .github/workflows/wp15-source-fix.yml
