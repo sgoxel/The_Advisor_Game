@@ -107,9 +107,14 @@ test("cities and villages stay inside their canonical political owner without ro
 });
 
 test("every accepted settlement reserves a complete dry owned envelope and legal entrance", () => {
-  assert.equal(politicalSettlementSitePlans.length, cities.length + villages.length);
-  assert.equal(politicalSettlementSiteById.size, cities.length + villages.length);
-  for (const place of [...cities, ...villages]) {
+  const allPlaces = [...cities, ...villages],
+    missingSites = allPlaces
+      .filter((place) => !politicalSettlementSiteById.has(place.id))
+      .map((place) => `${place.kind}:${place.code}`);
+  assert.deepEqual(missingSites, [], `invalid canonical settlement sites: ${missingSites.join(", ")}`);
+  assert.equal(politicalSettlementSitePlans.length, allPlaces.length);
+  assert.equal(politicalSettlementSiteById.size, allPlaces.length);
+  for (const place of allPlaces) {
     const plan = politicalSettlementSiteById.get(place.id);
     assert.ok(plan, `missing site plan for ${place.code}`);
     assert.equal(plan!.countryCode, countryAtPosition(place.canonicalPosition)?.code, place.code);
@@ -124,9 +129,15 @@ test("every accepted settlement reserves a complete dry owned envelope and legal
 });
 
 test("every political settlement reaches its country backbone and every country reserves a land border gateway", () => {
-  const expectedLinks = villages.length + cities.length - countries.length;
-  assert.equal(politicalAccessLinks.length, expectedLinks);
-  assert.equal(politicalSettlementAccessSummary.feasibleLinks, expectedLinks);
+  const expectedFromIds = new Set([
+      ...villages.map((village) => village.id),
+      ...cities.filter((city) => city.city !== 0).map((city) => city.id),
+    ]),
+    actualFromIds = new Set(politicalAccessLinks.map((link) => link.fromId)),
+    missingAccess = [...expectedFromIds].filter((id) => !actualFromIds.has(id));
+  assert.deepEqual(missingAccess, [], `missing political access links: ${missingAccess.join(", ")}`);
+  assert.equal(politicalAccessLinks.length, expectedFromIds.size);
+  assert.equal(politicalSettlementAccessSummary.feasibleLinks, expectedFromIds.size);
   for (const link of politicalAccessLinks) {
     assert.equal(link.feasible, true, link.id);
     assert.ok(link.waypoints.length >= 2, link.id);
@@ -137,6 +148,11 @@ test("every political settlement reaches its country backbone and every country 
     }
   }
 
+  const gatewayCountries = new Set(politicalBorderGateways.map((gate) => gate.countryCode)),
+    missingGateways = countries
+      .filter((country) => !gatewayCountries.has(country.code))
+      .map((country) => country.code);
+  assert.deepEqual(missingGateways, [], `countries without legal border gateways: ${missingGateways.join(", ")}`);
   assert.equal(politicalBorderGateways.length, countries.length);
   for (const gate of politicalBorderGateways) {
     assert.equal(countryAtPosition(gate.inside)?.code, gate.countryCode, `${gate.id} inside owner`);
