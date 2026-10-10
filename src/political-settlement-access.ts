@@ -336,7 +336,8 @@ for (const country of countries) {
   for (const village of villages.filter(
     (candidate) => candidate.continent === country.continent && candidate.country === country.id,
   )) {
-    const parent = countryCities.find((city) => city.city === village.city);
+    const parentId = village.id.slice(0, village.id.lastIndexOf("/")),
+      parent = countryCities.find((city) => city.id === parentId);
     if (parent) politicalAccessLinks.push(link(village, parent, country));
   }
   const reservedGateway = gateway(country, backbone);
