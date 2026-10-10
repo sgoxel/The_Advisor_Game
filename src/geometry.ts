@@ -320,7 +320,7 @@ export function buildTile(t: Tile): TileGeometry {
           terrainTint(c[0], c[2], t.size, c[1]),
           terrainTint(d[0], d[2], t.size, d[1]),
         );
-      if (z === 0)
+      if (z === 0 && a[1] > 0 && d[1] > 0 && surfaceAt(a[0], a[2] - step).water === "none" && surfaceAt(d[0], d[2] - step).water === "none")
         terrain.quad(
           a,
           d,
@@ -328,7 +328,7 @@ export function buildTile(t: Tile): TileGeometry {
           [a[0], a[1] - 12, a[2]],
           terrainTint(ax, az, t.size, a[1]),
         );
-      if (z === resolution - 1)
+      if (z === resolution - 1 && c[1] > 0 && b[1] > 0 && surfaceAt(c[0], c[2] + step).water === "none" && surfaceAt(b[0], b[2] + step).water === "none")
         terrain.quad(
           c,
           b,
@@ -336,7 +336,7 @@ export function buildTile(t: Tile): TileGeometry {
           [c[0], c[1] - 12, c[2]],
           terrainTint(ax, az, t.size, c[1]),
         );
-      if (x === 0)
+      if (x === 0 && b[1] > 0 && a[1] > 0 && surfaceAt(b[0] - step, b[2]).water === "none" && surfaceAt(a[0] - step, a[2]).water === "none")
         terrain.quad(
           b,
           a,
@@ -344,7 +344,7 @@ export function buildTile(t: Tile): TileGeometry {
           [b[0], b[1] - 12, b[2]],
           terrainTint(ax, az, t.size, b[1]),
         );
-      if (x === resolution - 1)
+      if (x === resolution - 1 && d[1] > 0 && c[1] > 0 && surfaceAt(d[0] + step, d[2]).water === "none" && surfaceAt(c[0] + step, c[2]).water === "none")
         terrain.quad(
           d,
           c,
@@ -521,8 +521,9 @@ export function buildTile(t: Tile): TileGeometry {
         detail.roof(x, y + 3, z, 3, 3, 1, color(116, 69, 47));
       }
     }
-  // Tile-clipped bridges preserve walking routes where the river crosses them.
-  if (t.size <= 512)
+  // Tile-clipped bridge micro-geometry is only useful in close local views.
+  // Coarser LODs retain the canonical graded road tint without aliasing posts/decks.
+  if (t.size <= 128)
     for (const road of roads) {
       if (road.z < t.minZ || road.z >= t.minZ + t.size) continue;
       for (
