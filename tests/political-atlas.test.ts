@@ -12,6 +12,7 @@ import {
 import { WORLD_SEED } from "../src/config.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
 import { lonLatToSource } from "../src/planet.ts";
+import { politicalOverlayOpacity } from "../src/political-presentation.ts";
 
 test("political registry uses seed-variable minimum counts rather than fixed maxima", () => {
   const counts = politicalRegistryCountsForSeed(WORLD_SEED);
@@ -111,4 +112,17 @@ test("shared country borders are deterministic bounded derivations of ownership"
     ].join("/");
   });
   assert.equal(new Set(keys).size, keys.length);
+});
+
+test("political overlays remain continuous through globe/local handoff", () => {
+  assert.equal(politicalOverlayOpacity("flat", 0, 1000, 2500), 1);
+  assert.equal(politicalOverlayOpacity("transition", 0.0109, 1000, 2500), 1);
+  assert.equal(politicalOverlayOpacity("transition", 0.12, 1000, 2500), 1);
+  const samples = [0.12, 0.25, 0.5, 0.75, 0.92].map((transition) =>
+    politicalOverlayOpacity("transition", transition, 1000, 2500),
+  );
+  for (let i = 1; i < samples.length; i++) assert.ok(samples[i] <= samples[i - 1]);
+  assert.equal(samples.at(-1), 0);
+  assert.equal(politicalOverlayOpacity("globe", 1, 1000, 2500), 0);
+  assert.equal(politicalOverlayOpacity("flat", 0, 5000, 2500), 0);
 });
