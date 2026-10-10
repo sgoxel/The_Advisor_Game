@@ -1,5 +1,5 @@
 import { featuresFor, field, heightAt, riverX, type Tile } from "./world.ts";
-import { nearestPlace, roadAt, roads } from "./geography.ts";
+import { nearestPlace, roadAt, roadDistanceAt, roads } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { sourceToLonLat, wrapSourceX, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import {
@@ -205,12 +205,13 @@ export function terrainTint(
     dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,
     dz = s ? Math.abs(z - s.z) : 1000,
     urbanRoad =
-      s?.kind === "city" && (Math.abs(dx % 29) < 3 || Math.abs(dz % 29) < 3);
+      s?.kind === "city" && (Math.abs(dx % 29) < 3 || Math.abs(dz % 29) < 3),
+    road = roadAt(x, z);
   if (
     ((s &&
       Math.hypot(dx, dz) < (s.kind === "city" ? 420 : 66) &&
       (dx < 4 || dz < 4 || Math.hypot(dx, dz) < 11 || urbanRoad)) ||
-      (roadAt(x, z) && Math.abs(z - roadAt(x, z)!.z) < 5))
+      (road && roadDistanceAt(x, z, road) < 5))
   )
     return color(170, 151, 113);
 
