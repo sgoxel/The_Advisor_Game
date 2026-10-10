@@ -4,7 +4,10 @@ Pairs retain focus and differ by 0.2% in scale. UI/props are excluded at capture
 the right-centre crop avoids the phone sidebar, compass and coordinate badge.
 An 8px box filter permits small geometry/detail motion. DeltaE76 is a perceptual
 Lab metric: mean <=2, p95 <=5 and no newly strengthened tile/block edge >3 Lab
-units. The historical green->pale-green replacement is tens of Lab units.
+units. Sparse moving vector contours are measured by crop area so a few dashed
+border/road pixels cannot dominate the ratio; unmatched contour area must stay
+below 0.5% of the crop. The historical green->pale-green replacement is tens of
+Lab units.
 """
 import json,sys
 from pathlib import Path
@@ -59,14 +62,17 @@ for file in sys.argv[1:]:
         d=np.linalg.norm(a-b,axis=2)
         ca,cb=contour(a),contour(b)
         near_a,near_b=expand(ca),expand(cb)
-        # Existing shore/relief contours are changing geometry, not stable
-        # ground. Mask only their pre-existing neighbourhood; new tile/block
-        # edges remain eligible for the color gate and the independent edge gate.
+        # Existing shore/relief/vector contours are changing geometry, not stable
+        # ground. Mask their pre-existing neighbourhood for the color gate. Measure
+        # unmatched contours against the full crop area instead of the (sometimes
+        # tiny) contour population, so sparse dashed borders cannot turn a handful
+        # of moved pixels into a large percentage. Broad/new seams still fail this
+        # area gate and the independent new-edge-contrast gate.
         stable=~near_a
         if stable.mean()<0.4: raise ValueError('Too little stable ground in fixture')
-        mismatch=max(float((cb&~near_a).sum()/max(1,cb.sum())),float((ca&~near_b).sum()/max(1,ca.sum())))
+        mismatch=max(float((cb&~near_a).mean()),float((ca&~near_b).mean()))
         result={'fixture':pair['fixture'],'height':pair['before']['height'],'meanDeltaE76':float(d[stable].mean()),'p95DeltaE76':float(np.percentile(d[stable],95)),'stableGroundFraction':float(stable.mean()),'contourMismatchFraction':mismatch,'newEdgeContrast':float(max(0,edges(b)-edges(a)))}
-        result['passed']=result['meanDeltaE76']<=2 and result['p95DeltaE76']<=5 and result['newEdgeContrast']<=3 and mismatch<=0.05
+        result['passed']=result['meanDeltaE76']<=2 and result['p95DeltaE76']<=5 and result['newEdgeContrast']<=3 and mismatch<=0.005
         results.append(result)
 Path('test-results/zoom-metrics.json').write_text(json.dumps(results,indent=2))
 failed=[r for r in results if not r['passed']]
