@@ -15,7 +15,7 @@ import {
   wrapSourceX,
 } from "./planet.ts";
 import { planRoute, type RoadSegment, type RouteResult } from "./routing.ts";
-import { villagePairProvenByGeodesic } from "./travel.ts";
+import { FASTEST_WALK_SPEED_MPS, villagePairProvenByGeodesic } from "./travel.ts";
 
 export const NEIGHBOUR_LIMIT = 4;
 export const NEIGHBOUR_MAX_DISTANCE_M = 60_000;
@@ -33,6 +33,8 @@ const villageById = new Map(villages.map((village) => [village.id, village]));
 const routeCache = new Map<string, VillageRoute>();
 const neighbourCache = new Map<string, readonly { place: Place; geodesicM: number }[]>();
 const roadNeighbourIds = new Map<string, Set<string>>();
+const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+const directRoadByPair = new Map(roads.map((road) => [pairKey(road.from, road.to), road] as const));
 for (const road of roads) {
   const from = roadNeighbourIds.get(road.from) || new Set<string>(),
     to = roadNeighbourIds.get(road.to) || new Set<string>();
@@ -44,7 +46,38 @@ for (const road of roads) {
 
 export type VillageRoute = RouteResult & { fromId: string; toId: string };
 
-const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+/**
+ * An ordinary seeded road directly joins its two village centres, is generated
+ * only after the whole connector is conservatively proven dry, is graded by the
+ * final surface authority, and uses the globally fastest walking surface. The
+ * direct geodesic road therefore reaches the absolute lower bound
+ * (geodesic / FASTEST_WALK_SPEED_MPS), so no A* path can legally improve it.
+ */
+function directRoadRoute(from: Place, to: Place, key: string): VillageRoute | undefined {
+  const road = directRoadByPair.get(key);
+  if (!road) return undefined;
+  const distanceM = road.surfaceLengthM,
+    fantasySeconds = road.fantasyWalkSeconds;
+  return {
+    found: true,
+    geodesicM: distanceM,
+    distanceM,
+    fantasySeconds,
+    realSeconds: road.realWalkSeconds,
+    straightLineFantasySeconds: distanceM / FASTEST_WALK_SPEED_MPS,
+    detourFactor: 1,
+    points: [
+      { lon: from.canonicalPosition.lon, lat: from.canonicalPosition.lat },
+      { lon: to.canonicalPosition.lon, lat: to.canonicalPosition.lat },
+    ],
+    surfaceM: { road: distanceM, bridge: 0, open: 0, difficult: 0 },
+    cellSizeM: 0,
+    expansions: 0,
+    attempts: 0,
+    fromId: from.id,
+    toId: to.id,
+  };
+}
 
 /** Shortest legal walk between two villages. Cached per pair; the cache never changes a result. */
 export function routeBetweenVillages(fromId: string, toId: string): VillageRoute {
@@ -55,13 +88,16 @@ export function routeBetweenVillages(fromId: string, toId: string): VillageRoute
     key = pairKey(fromId, toId);
   let cached = routeCache.get(key);
   if (!cached) {
-    const [a, b] = forward ? [from, to] : [to, from],
-      route = planRoute({
+    const [a, b] = forward ? [from, to] : [to, from];
+    cached = directRoadRoute(a, b, key);
+    if (!cached) {
+      const route = planRoute({
         from: a.canonicalPosition,
         to: b.canonicalPosition,
         roads: roadSegments,
       });
-    cached = { ...route, fromId: a.id, toId: b.id };
+      cached = { ...route, fromId: a.id, toId: b.id };
+    }
     routeCache.set(key, cached);
     if (routeCache.size > ROUTE_CACHE_LIMIT) routeCache.delete(routeCache.keys().next().value!);
   }
@@ -77,7 +113,8 @@ export const villageRouteCacheSize = () => routeCache.size;
 
 /**
  * Cheap deterministic proof used only to choose plausible walking neighbours.
- * It does not replace A*: actual route distance/cost still comes from planRoute().
+ * It does not replace A*: actual non-road route distance/cost still comes from
+ * planRoute(). Direct seeded roads use the exact lower-bound proof above.
  *
  * Samples are at most 32 source units apart and each sample stays >20 units from
  * freshwater and the coast. Distance-to-water/coast is 1-Lipschitz, so every
@@ -115,7 +152,7 @@ function naturalWalkingCorridorProven(from: Place, to: Place) {
  * neighbours are always eligible because settlement generation already proves
  * those ordinary road connectors dry and the final surface grades their cut/fill.
  * Other candidates must pass the bounded natural corridor proof above. A* stays
- * the authoritative route solver when the selected neighbour is actually used.
+ * the authoritative route solver for selected non-road neighbours.
  */
 export function neighbouringVillages(
   id: string,
