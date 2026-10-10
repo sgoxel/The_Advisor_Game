@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Temporary branch-only exact reconciliation helper for WP-S002-004-009.
 path = Path("src/world.ts")
 text = path.read_text()
 
