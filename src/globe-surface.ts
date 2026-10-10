@@ -29,8 +29,13 @@ type RGB = [number, number, number];
 
 /** Lit from the north-west, 45° above the horizon: [toward west, up, toward north]. */
 const LIGHT = [0.5, Math.SQRT1_2, 0.5];
-/** Vertical exaggeration: real slopes are far too gentle to read from orbit. */
-const EXAGGERATION = 3.5;
+/**
+ * Presentation-only vertical exaggeration. The natural hydrology surface is much
+ * smoother at globe-texel spacing than the old local prototype, so orbit shading
+ * needs a stronger coefficient to keep real height differences readable after
+ * RGBA8 quantisation. It never changes canonical height, traversal or Simulation.
+ */
+const EXAGGERATION = 12;
 const SHADE_MIN = 0.6,
   SHADE_MAX = 1.3;
 
