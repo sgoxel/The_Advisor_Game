@@ -1,15 +1,12 @@
 name: WP15 AGENT1 final visual repair
 on:
   push:
-    branches: [agent1/wp-s002-004-005-uv-final2]
+    branches:
+      - agent1/wp-s002-004-005-uv-final2
 permissions:
   contents: write
-concurrency:
-  group: wp15-agent1-attempt3-repair
-  cancel-in-progress: true
 jobs:
   repair:
-    if: ${{ !contains(github.event.head_commit.message, '[agent1-wp15-attempt3]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,8 +60,6 @@ jobs:
     coastal = edgeSamples.some((sample) => sample.land) && edgeSamples.some((sample) => !sample.land),
     rugged = center.reliefM >= 80 || center.mountainIntensity >= 0.06,
     // Spend extra vertices only on tiles that actually cross the macro shoreline.
-    // This removes the visible outlet staircase without restoring the global density
-    // increase that made attempt 1's captures regress.
     targetResolution = coastal
       ? tile.size <= 512
         ? 72
