@@ -360,16 +360,30 @@ def main(argv: list[str] | None = None) -> int:
                 if args.renderer == "webgl2":
                     context.add_init_script("Object.defineProperty(navigator, 'gpu', {value: undefined, configurable: true})")
                 for name, steps in args.jobs:
-                    session = Session(context.new_page(), args, name, profile, viewport, records)
-                    try:
-                        session.run(steps)
-                    except (CaptureError, PlaywrightError) as error:
-                        failures += 1
-                        reason = str(error).strip().splitlines()[0]
-                        print(f"FAILED {name}-{profile} after {session.shots} image(s): {reason}",
-                              file=sys.stderr)
-                    finally:
-                        session.page.close()
+                    for attempt in range(2):
+                        session = Session(context.new_page(), args, name, profile, viewport, records)
+                        try:
+                            session.run(steps)
+                            break
+                        except (CaptureError, PlaywrightError) as error:
+                            reason = str(error).strip().splitlines()[0]
+                            transient_timeout = (
+                                session.shots == 0
+                                and isinstance(error, PlaywrightError)
+                                and "Timeout" in str(error)
+                            )
+                            if transient_timeout and attempt == 0:
+                                print(
+                                    f"RETRY {name}-{profile} after zero-image transient timeout: {reason}",
+                                    file=sys.stderr,
+                                )
+                                continue
+                            failures += 1
+                            print(f"FAILED {name}-{profile} after {session.shots} image(s): {reason}",
+                                  file=sys.stderr)
+                            break
+                        finally:
+                            session.page.close()
                 context.close()
         finally:
             browser.close()
