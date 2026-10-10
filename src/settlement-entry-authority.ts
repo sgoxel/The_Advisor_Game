@@ -1,4 +1,5 @@
-import { settlementBuilding, settlementStreetAtSource, type BuildingUse } from "./settlements.ts";
+import { settlementEntranceAccess } from "./settlement-access.ts";
+import { settlementBuilding, type BuildingUse } from "./settlements.ts";
 import { cellAt } from "./world.ts";
 
 type EntryDecision = {
@@ -8,6 +9,7 @@ type EntryDecision = {
   simulation: "validated" | "rejected";
   worldAction: "entered" | "exited" | "none";
   reason: string;
+  accessLengthM?: number;
 };
 
 type SettlementApi = {
@@ -70,27 +72,32 @@ function evaluateEntry(buildingCode: string): EntryDecision {
     };
   }
 
-  // Current deterministic offline character policy: a concrete entry suggestion for a
-  // known, usable building is accepted for evaluation. The player never calls world
-  // mutation directly; Simulation still decides whether the proposed entrance is legal.
-  const characterDecision = "accepted" as const;
-  const connected = settlementStreetAtSource(building.entranceX, building.entranceZ);
-  let walkable = false;
+  // Advisor proposes a concrete action. Simulation validates the canonical portal
+  // against the plot-access record and the walkable internal-street endpoint before
+  // the world may materialize an interior. Render proximity alone is never enough.
+  const characterDecision = "accepted" as const,
+    access = settlementEntranceAccess(building);
+  let walkableStreetEndpoint = false;
   try {
-    walkable = cellAt(building.entranceX, building.entranceZ).walkable;
+    walkableStreetEndpoint = cellAt(access.street.x, access.street.z).walkable;
   } catch {
-    walkable = false;
+    walkableStreetEndpoint = false;
   }
-  if (!connected || !walkable) {
+  const connected =
+    Number.isFinite(access.lengthM) &&
+    access.lengthM >= 0 &&
+    access.sourcePoints.length >= 2;
+  if (!connected || !walkableStreetEndpoint) {
     return {
       action: "enter-building",
       buildingCode,
       characterDecision,
       simulation: "rejected",
       worldAction: "none",
+      accessLengthM: access.lengthM,
       reason: !connected
-        ? "Simulation rejected the entry: the canonical entrance is not connected to a settlement street."
-        : "Simulation rejected the entry: the canonical entrance is not currently walkable.",
+        ? "Simulation rejected the entry: no canonical entrance-to-street access path exists."
+        : "Simulation rejected the entry: the canonical street endpoint is not walkable.",
     };
   }
   return {
@@ -99,18 +106,23 @@ function evaluateEntry(buildingCode: string): EntryDecision {
     characterDecision,
     simulation: "validated",
     worldAction: "entered",
-    reason: "Advisor proposal accepted → Simulation validated canonical entrance → character entered.",
+    accessLengthM: access.lengthM,
+    reason: `Advisor proposal accepted → Simulation validated ${access.lengthM.toFixed(1)} m canonical access → character entered.`,
   };
 }
 
 function install(api: SettlementApi) {
   if (installed) return;
   installed = true;
-  const rawEnter = api.enter.bind(api), rawExit = api.exit.bind(api);
+  const rawEnter = api.enter.bind(api),
+    rawExit = api.exit.bind(api);
   const enter = (buildingCode: string) => {
     const decision = evaluateEntry(buildingCode);
     last = decision;
-    if (decision.characterDecision !== "accepted" || decision.simulation !== "validated") {
+    if (
+      decision.characterDecision !== "accepted" ||
+      decision.simulation !== "validated"
+    ) {
       rejected++;
       status(decision.reason);
       return undefined;
@@ -121,8 +133,8 @@ function install(api: SettlementApi) {
     return result;
   };
   const exit = () => {
-    const buildingCode = String(api.state.activeInterior ?? "");
-    const result = rawExit();
+    const buildingCode = String(api.state.activeInterior ?? ""),
+      result = rawExit();
     last = {
       action: "exit-building",
       buildingCode,
@@ -150,12 +162,15 @@ function install(api: SettlementApi) {
   });
   advisorWindow.advisorSettlements = proxy;
 
-  // The experience module originally owns the button handler. Capture the event first
-  // so the player-facing path cannot bypass the authority wrapper above.
+  // The player-facing control must enter through the same Advisor→Simulation gate;
+  // capture prevents the experience module's original handler from bypassing it.
   document.addEventListener(
     "click",
     (event) => {
-      const target = event.target instanceof Element ? event.target.closest<HTMLButtonElement>(".enter-building") : null;
+      const target =
+        event.target instanceof Element
+          ? event.target.closest<HTMLButtonElement>(".enter-building")
+          : null;
       if (!target || target.disabled) return;
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -166,10 +181,15 @@ function install(api: SettlementApi) {
   );
 
   const relabel = () => {
-    for (const button of document.querySelectorAll<HTMLButtonElement>(".enter-building"))
+    for (const button of document.querySelectorAll<HTMLButtonElement>(
+      ".enter-building",
+    ))
       if (!button.disabled) button.textContent = "Advise entry";
   };
-  new MutationObserver(relabel).observe(document.body, { childList: true, subtree: true });
+  new MutationObserver(relabel).observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
   relabel();
 }
 
