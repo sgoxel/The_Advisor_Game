@@ -1,35 +1,39 @@
-name: WP15 apply legality patch
+name: WP15 legality correction
 
 on:
-  push:
-    branches:
-      - agent1/wp-s002-004-005-final
-
-concurrency:
-  group: wp15-source-fix
-  cancel-in-progress: true
+  pull_request:
+    types:
+      - reopened
 
 permissions:
   contents: write
 
 jobs:
-  apply:
+  validate-and-commit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout WP branch
+        uses: actions/checkout@v4
         with:
           ref: agent1/wp-s002-004-005-final
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: '24'
           cache: npm
-      - run: python3 tools/wp15_apply_legality.py
-      - run: npm ci
-      - run: npm test
-      - run: npm run build
-      - name: Commit validated correction and clean helper files
+      - name: Apply deterministic legality patch
+        run: python3 tools/wp15_apply_legality.py
+      - name: Install
+        run: npm ci
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Commit validated correction
+        shell: bash
         run: |
+          set -euo pipefail
           git config user.name "AGENT #1"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
           rm .github/workflows/wp15-source-fix.yml tools/wp15_apply_legality.py
