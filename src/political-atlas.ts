@@ -8,7 +8,11 @@ import {
 } from "./geography.ts";
 import { WORLD_SEED } from "./config.ts";
 import { placeLabels, type Rect } from "./navigation.ts";
-import { politicalOverlayOpacity } from "./political-presentation.ts";
+import {
+  POLITICAL_BORDER_MAX_SCALE_DENOMINATOR,
+  POLITICAL_DETAIL_LABEL_MAX_SCALE_DENOMINATOR,
+  politicalOverlayOpacity,
+} from "./political-presentation.ts";
 import { RENDER_PLANET_RADIUS, sourceToLonLat } from "./planet.ts";
 import { LocalRenderFrame } from "./render-frame.ts";
 import { heightAt } from "./world.ts";
@@ -189,7 +193,7 @@ function updateBorders(state: AtlasState, frame: LocalRenderFrame, scale: number
       state.presentation,
       projectionTransition(state),
       scale,
-      2500,
+      POLITICAL_BORDER_MAX_SCALE_DENOMINATOR,
     );
   svg.style.opacity = opacity.toFixed(3);
   if (opacity <= 0) {
@@ -267,7 +271,7 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
       state.presentation,
       projectionTransition(state),
       scale,
-      1000,
+      POLITICAL_DETAIL_LABEL_MAX_SCALE_DENOMINATOR,
     ),
     detailed = opacity > 0;
   document.body.classList.toggle("political-detail-labels", detailed);
