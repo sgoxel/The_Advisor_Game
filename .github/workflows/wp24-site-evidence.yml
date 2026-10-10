@@ -27,8 +27,8 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
-          RUIN='eval:(s=>(window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat),window.advisorWorld.setHalfHeight(420)))(window.advisorSites.sites.find(s=>s.kind==="ruin"));settle;visible:.critical-site-marker.ruin;click:.critical-site-marker.ruin;visible:#critical-site-panel;shot:ruin-inspection'
-          CRITICAL='eval:(s=>(window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat),window.advisorWorld.setHalfHeight(420)))(window.advisorSites.sites.find(s=>s.kind==="critical-place"));settle;visible:.critical-site-marker.critical-place;click:.critical-site-marker.critical-place;visible:#critical-site-panel;shot:critical-inspection'
+          RUIN='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))(window.advisorSites.sites.find(s=>s.kind==="ruin"));select:#map-scale=1000;settle;visible:.critical-site-marker.ruin;shot:ruin-1000;select:#map-scale=100;settle;visible:.critical-site-marker.ruin;click:.critical-site-marker.ruin;visible:#critical-site-panel;shot:ruin-inspection'
+          CRITICAL='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))(window.advisorSites.sites.find(s=>s.kind==="critical-place"));select:#map-scale=1000;settle;visible:.critical-site-marker.critical-place;shot:critical-1000;select:#map-scale=100;settle;visible:.critical-site-marker.critical-place;click:.critical-site-marker.critical-place;visible:#critical-site-panel;shot:critical-inspection'
           for renderer in webgl2 webgpu; do
             python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp24-sites-$renderer --name sites --profile desktop,phone,phone-landscape --renderer $renderer --timeout 240 --steps "$RUIN"
             python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp24-critical-$renderer --name critical --profile desktop,phone,phone-landscape --renderer $renderer --timeout 240 --steps "$CRITICAL"
