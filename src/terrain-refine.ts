@@ -440,14 +440,26 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
 
   const originX = tile.minX + tile.size / 2,
     originZ = tile.minZ + tile.size / 2;
-  for (let i = 0; i < positions.length; i += 3) {
-    positions[i] -= originX;
-    positions[i + 2] -= originZ;
-  }
-  return {
-    positions: new Float32Array(positions),
-    normals: new Float32Array(normals),
-    colors: new Uint8Array(colors),
-    indices: new Uint32Array(indices),
-  };
+  // The shared projection material requires canonical source-coordinate UVs.
+// Refinement creates new clipped/water vertices, so rebuild UV0 from the
+// still-absolute source positions before converting positions to tile-local.
+const uvs = new Float32Array((positions.length / 3) * 2);
+for (let i = 0, v = 0; i < positions.length; i += 3, v += 2) {
+  uvs[v] = positions[i] / SOURCE_PRESENTATION_WIDTH + 0.5;
+  uvs[v + 1] = Math.max(
+    0,
+    Math.min(1, 0.5 + (positions[i + 2] * 2) / SOURCE_PRESENTATION_WIDTH),
+  );
+}
+for (let i = 0; i < positions.length; i += 3) {
+  positions[i] -= originX;
+  positions[i + 2] -= originZ;
+}
+return {
+  positions: new Float32Array(positions),
+  normals: new Float32Array(normals),
+  colors: new Uint8Array(colors),
+  indices: new Uint32Array(indices),
+  uvs,
+};
 }
