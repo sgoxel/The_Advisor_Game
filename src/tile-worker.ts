@@ -1,3 +1,7 @@
+// Register deterministic priority-9 SITE/ACCESS roads before any terrain or
+// vegetation geometry is sampled in this worker. Identity remains SEED-only;
+// worker load/order only materializes the already-defined canonical records.
+import "./sites.ts";
 import { buildTile } from "./geometry.ts";
 import { convertTileGeometryToEnu } from "./render-frame.ts";
 import { buildVegetationGeometry } from "./vegetation-render.ts";
