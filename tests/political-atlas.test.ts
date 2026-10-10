@@ -33,6 +33,24 @@ test("political registry uses seed-variable minimum counts rather than fixed max
   assert.equal(new Set(countries.map((country) => country.name)).size, countries.length);
 });
 
+test("canonical settlement names are unique cultural names without numeric template suffixes", () => {
+  assert.equal(new Set(cities.map((city) => city.name)).size, cities.length);
+  assert.equal(new Set(villages.map((village) => village.name)).size, villages.length);
+  assert.equal(villages[0].name, "Alderwick");
+  for (const place of [...cities, ...villages]) {
+    assert.doesNotMatch(place.name, /\d+\.\d+\.\d+/);
+    assert.doesNotMatch(place.name, /^(Citadel|Market|Harbour)$/);
+  }
+  const continentFamilies = continents.map((continent) =>
+    new Set(
+      [...cities, ...villages]
+        .filter((place) => place.continent === continent.id)
+        .map((place) => place.name.slice(0, 4)),
+    ),
+  );
+  assert.ok(continentFamilies.every((family) => family.size >= 6));
+});
+
 test("every sampled canonical land coordinate has exactly one country owner", () => {
   let landSamples = 0;
   for (let latDeg = -72; latDeg <= 72; latDeg += 6)
