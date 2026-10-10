@@ -81,7 +81,12 @@ test("every generated settlement has required services, homes, guarded gates and
 });
 
 test("settlement plans are deterministic, structurally diverse and not a shared grid stamp", () => {
-  const sample = places.slice(0, Math.min(30, places.length)),
+  // Deliberately sample both settlement classes. Registry order groups cities before
+  // villages, so places.slice(0, 30) would accidentally test only city archetypes.
+  const sample = [
+      ...places.filter((place) => place.kind === "city").slice(0, 10),
+      ...places.filter((place) => place.kind === "village").slice(0, 20),
+    ],
     fingerprints = sample.map((place) => settlementPlanFingerprint(settlementPlan(place.id))),
     repeated = sample.map((place) => settlementPlanFingerprint(settlementPlan(place.id)));
   assert.deepEqual(repeated, fingerprints);
