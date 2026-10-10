@@ -28,7 +28,7 @@ new = '''  const noise = terrainNoise(sx, z),
       Math.sin(position.lon * 317 + position.lat * 211 + ridgePhase) * 0.44 +
       Math.sin(position.lon * 197 - position.lat * 389 + secondaryPhase) * 0.34 +
       Math.cos(position.lon * 461 + position.lat * 137 + tertiaryPhase) * 0.22,
-    ridgeDetail = ridgeTexture * Math.min(108, macro.reliefM * 0.27) * mountainWeight,
+    ridgeDetail = ridgeTexture * Math.min(176, macro.reliefM * 0.38) * mountainWeight,
     base = macro.domain === "Island" ? 3.5 + noise * 13 : 3.5 + broad * 8 + noise * 4.5,
     macroRelief = macro.reliefM * (0.8 + 0.2 * noise) + ridgeDetail,
     cap = macro.domain === "Island" ? 180 : 620,
