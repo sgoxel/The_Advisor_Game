@@ -87,6 +87,25 @@ test("multi-floor interiors contain explicit deterministic stair circulation", (
   assert.deepEqual(second, first, `${building.code}: stair topology changed on reconstruction`);
 });
 
+test("seeded settlement context and local climate produce deterministic interior style diversity", () => {
+  const plans = villages.slice(0, 10).map((village) => {
+    const home = settlementLayout(village).buildings.find((building) => building.role === "home");
+    assert.ok(home, `${village.id}: no home`);
+    const first = interiorPlanFor(home),
+      second = interiorPlanFor(home);
+    assert.deepEqual(second.style, first.style, `${village.id}: style changed on reconstruction`);
+    assert.deepEqual(second, first, `${village.id}: plan changed on reconstruction`);
+    return first;
+  });
+  const cultures = new Set(plans.map((plan) => plan.style.culture)),
+    styleSignatures = new Set(plans.map((plan) => JSON.stringify(plan.style)));
+  assert.ok(cultures.size >= 2, `settlement culture diversity too low: ${cultures.size}`);
+  assert.ok(styleSignatures.size >= 2, `environment/style diversity too low: ${styleSignatures.size}`);
+
+  const serviceStyles = ["inn", "market", "blacksmith", "farmstead", "butcher", "guard-office"].map((role) => interiorPlanFor(byRole(role)).style.furniture);
+  assert.ok(new Set(serviceStyles).size >= 4, "functional furniture families collapsed into one template");
+});
+
 test("bounded cache never evicts an active protagonist interior and evicts inactive LRU entries", () => {
   const cache = new ProtagonistInteriorCache(2),
     home = byRole("home"),
