@@ -24,18 +24,26 @@ replace_once(
     '''  const noise = terrainNoise(sx, z),
     broad = sphericalNoise(sx, z, 3),
     mountainWeight = smooth01(macro.mountainIntensity / 0.36),
-    // Local mountain detail must not collapse into parallel sine bands. Seeded spherical
-    // layers are cross-warped in absolute coordinates so the macro range still owns the
-    // location/relief while local ridges fork, bend and vary without a visible stripe grid.
-    warpX = (sphericalNoise(sx, z, 11 + macro.continentId) - 0.5) * 420,
-    warpZ = (sphericalNoise(sx, z, 17 + macro.continentId) - 0.5) * 360,
-    ridgeA = sphericalNoise(sx + warpX, z + warpZ, 71 + macro.continentId * 3),
-    ridgeB = sphericalNoise(sx - warpZ * 0.55, z + warpX * 0.43, 97 + macro.continentId * 5),
-    ridgeC = sphericalNoise(sx + warpZ * 0.31, z - warpX * 0.67, 131 + macro.continentId * 7),
+    // Mountain micro-relief stays seed-addressed but is cross-warped so ridge lines
+    // fork and bend instead of collapsing into repeated parallel sine bands.
+    warpX = (sphericalNoise(sx, z, 13 + macro.continentId) - 0.5) * 480,
+    warpZ = (sphericalNoise(sx, z, 19 + macro.continentId) - 0.5) * 420,
+    ridgeA = sphericalNoise(sx + warpX, z + warpZ, 181 + macro.continentId * 7),
+    ridgeB = sphericalNoise(sx - warpZ * 0.57, z + warpX * 0.41, 263 + macro.continentId * 11),
+    ridgeC = sphericalNoise(sx + warpZ * 0.29, z - warpX * 0.69, 397 + macro.continentId * 13),
     ridgeField = ridgeA * 0.5 + ridgeB * 0.32 + ridgeC * 0.18,
-    ridge = smooth01((ridgeField - 0.34) / 0.66),
-    ridgeDetail = (ridge - 0.34) * Math.min(118, macro.reliefM * 0.32) * mountainWeight,
+    ridge = smooth01((ridgeField - 0.32) / 0.68),
+    ridgeDetail = (ridge - 0.32) * Math.min(145, macro.reliefM * 0.38) * mountainWeight,
     base = macro.domain === "Island" ? 3.5 + noise * 13 : 3.5 + broad * 8 + noise * 4.5,''',
+)
+
+# Rolling highlands should materially affect travel before they become blocked cliffs.
+replace_once(
+    "src/hydrology.ts",
+    '''          : slope >= 0.42
+            ? "difficult"''',
+    '''          : slope >= 0.28
+            ? "difficult"''',
 )
 
 replace_once(
