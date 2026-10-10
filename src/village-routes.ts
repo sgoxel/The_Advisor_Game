@@ -2,12 +2,12 @@
  * Village-level routing (WP-S002-004-008): neighbouring villages, cached
  * shortest legal routes and the all-pairs 60-fantasy-minute proof. The pure
  * planner lives in routing.ts; this module only binds it to the seeded
- * settlements and prototype roads.
+ * settlements and road presentation facts.
  */
 import { roads, villages, type Place } from "./geography.ts";
 import { greatCircleDistance } from "./planet.ts";
 import { planRoute, type RoadSegment, type RouteResult } from "./routing.ts";
-import { realSecondsForFantasy, villagePairProvenByGeodesic } from "./travel.ts";
+import { villagePairProvenByGeodesic } from "./travel.ts";
 
 export const NEIGHBOUR_LIMIT = 4;
 export const NEIGHBOUR_MAX_DISTANCE_M = 60_000;
@@ -26,34 +26,6 @@ export type VillageRoute = RouteResult & { fromId: string; toId: string };
 
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
-function directSeededRoad(from: Place, to: Place): RouteResult | undefined {
-  const road = roads.find(
-    (candidate) =>
-      (candidate.from === from.id && candidate.to === to.id) ||
-      (candidate.from === to.id && candidate.to === from.id),
-  );
-  if (!road) return undefined;
-  const distanceM = road.surfaceLengthM,
-    fantasySeconds = road.fantasyWalkSeconds;
-  return {
-    found: true,
-    geodesicM: distanceM,
-    distanceM,
-    fantasySeconds,
-    realSeconds: realSecondsForFantasy(fantasySeconds),
-    straightLineFantasySeconds: distanceM,
-    detourFactor: 1,
-    points: [
-      { lon: from.canonicalPosition.lon, lat: from.canonicalPosition.lat },
-      { lon: to.canonicalPosition.lon, lat: to.canonicalPosition.lat },
-    ],
-    surfaceM: { road: distanceM, bridge: 0, open: 0, difficult: 0 },
-    cellSizeM: 0,
-    expansions: 0,
-    attempts: 1,
-  };
-}
-
 /** Shortest legal walk between two villages. Cached per pair; the cache never changes a result. */
 export function routeBetweenVillages(fromId: string, toId: string): VillageRoute {
   const from = villageById.get(fromId),
@@ -64,12 +36,11 @@ export function routeBetweenVillages(fromId: string, toId: string): VillageRoute
   let cached = routeCache.get(key);
   if (!cached) {
     const [a, b] = forward ? [from, to] : [to, from],
-      route = directSeededRoad(a, b) ||
-        planRoute({
-          from: a.canonicalPosition,
-          to: b.canonicalPosition,
-          roads: roadSegments,
-        });
+      route = planRoute({
+        from: a.canonicalPosition,
+        to: b.canonicalPosition,
+        roads: roadSegments,
+      });
     cached = { ...route, fromId: a.id, toId: b.id };
     routeCache.set(key, cached);
     if (routeCache.size > ROUTE_CACHE_LIMIT) routeCache.delete(routeCache.keys().next().value!);
