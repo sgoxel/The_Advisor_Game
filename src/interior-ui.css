@@ -112,6 +112,11 @@
 .interior-pad .south { grid-column: 2; grid-row: 2; }
 .interior-pad .east { grid-column: 3; grid-row: 2; }
 .interior-status { color: #d5c7a8; font-size: 0.84rem; }
+#enter-building {
+  width: 100%;
+  min-height: 44px;
+  margin: 4px 0 8px;
+}
 #enter-building[hidden] { display: none; }
 @media (max-width: 600px) {
   .interior-panel { inset: max(58px, env(safe-area-inset-top)) 8px max(64px, env(safe-area-inset-bottom)) 8px; padding: 12px; }
