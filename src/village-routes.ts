@@ -5,13 +5,23 @@
  * settlements and road presentation facts.
  */
 import { roads, villages, type Place } from "./geography.ts";
-import { greatCircleDistance } from "./planet.ts";
+import { surfaceAt as naturalSurfaceAt } from "./hydrology.ts";
+import { macroSampleAt } from "./macro-geography.ts";
+import {
+  SOURCE_PRESENTATION_RADIUS,
+  greatCircleDistance,
+  lonLatToSource,
+  sourceToLonLat,
+  wrapSourceX,
+} from "./planet.ts";
 import { planRoute, type RoadSegment, type RouteResult } from "./routing.ts";
 import { villagePairProvenByGeodesic } from "./travel.ts";
 
 export const NEIGHBOUR_LIMIT = 4;
 export const NEIGHBOUR_MAX_DISTANCE_M = 60_000;
 const ROUTE_CACHE_LIMIT = 256;
+const NEIGHBOUR_PROOF_MAX_GAP_SOURCE = 32;
+const NEIGHBOUR_PROOF_CLEARANCE_SOURCE = 20;
 
 export const roadSegments: readonly RoadSegment[] = roads.map((road) => ({
   code: road.code,
@@ -22,18 +32,19 @@ export const roadSegments: readonly RoadSegment[] = roads.map((road) => ({
 const villageById = new Map(villages.map((village) => [village.id, village]));
 const routeCache = new Map<string, VillageRoute>();
 const neighbourCache = new Map<string, readonly { place: Place; geodesicM: number }[]>();
+const roadNeighbourIds = new Map<string, Set<string>>();
+for (const road of roads) {
+  const from = roadNeighbourIds.get(road.from) || new Set<string>(),
+    to = roadNeighbourIds.get(road.to) || new Set<string>();
+  from.add(road.to);
+  to.add(road.from);
+  roadNeighbourIds.set(road.from, from);
+  roadNeighbourIds.set(road.to, to);
+}
 
 export type VillageRoute = RouteResult & { fromId: string; toId: string };
 
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
-
-function retainRoute(key: string) {
-  const route = routeCache.get(key);
-  if (!route) return;
-  routeCache.delete(key);
-  routeCache.set(key, route);
-  if (routeCache.size > ROUTE_CACHE_LIMIT) routeCache.delete(routeCache.keys().next().value!);
-}
 
 /** Shortest legal walk between two villages. Cached per pair; the cache never changes a result. */
 export function routeBetweenVillages(fromId: string, toId: string): VillageRoute {
@@ -65,11 +76,46 @@ export const clearVillageRouteCache = () => {
 export const villageRouteCacheSize = () => routeCache.size;
 
 /**
- * Nearest walk-reachable villages by geodesic distance (stable tie-break on id).
- * Hydrology/cliffs are canonical blockers, so a visually nearby village across an
- * unbridged river, lake or strait is not advertised as a walking neighbour. The
- * bounded route proof is cached with the neighbour list and remains independent
- * of camera, LOD, device, timing and query order.
+ * Cheap deterministic proof used only to choose plausible walking neighbours.
+ * It does not replace A*: actual route distance/cost still comes from planRoute().
+ *
+ * Samples are at most 32 source units apart and each sample stays >20 units from
+ * freshwater and the coast. Distance-to-water/coast is 1-Lipschitz, so every
+ * point between samples retains >4 source units of dry clearance. Natural cliff
+ * samples are also rejected. This prevents neighbour discovery from launching
+ * many synchronous A* searches merely to discover obvious river/strait blockers.
+ */
+function naturalWalkingCorridorProven(from: Place, to: Place) {
+  const a = lonLatToSource(from.canonicalPosition.lon, from.canonicalPosition.lat),
+    b = lonLatToSource(to.canonicalPosition.lon, to.canonicalPosition.lat),
+    dx = wrapSourceX(b.x - a.x),
+    dz = b.z - a.z,
+    length = Math.hypot(dx, dz),
+    steps = Math.max(2, Math.ceil(length / NEIGHBOUR_PROOF_MAX_GAP_SOURCE));
+  for (let step = 0; step <= steps; step++) {
+    const t = step / steps,
+      x = wrapSourceX(a.x + dx * t),
+      z = a.z + dz * t,
+      macro = macroSampleAt(sourceToLonLat(x, z)),
+      surface = naturalSurfaceAt(x, z);
+    if (
+      !macro.land ||
+      surface.water !== "none" ||
+      surface.cliff ||
+      surface.freshwaterDistance <= NEIGHBOUR_PROOF_CLEARANCE_SOURCE ||
+      macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS <= NEIGHBOUR_PROOF_CLEARANCE_SOURCE
+    )
+      return false;
+  }
+  return true;
+}
+
+/**
+ * Nearest villages with a deterministic dry walking-corridor proof. Seeded road
+ * neighbours are always eligible because settlement generation already proves
+ * those ordinary road connectors dry and the final surface grades their cut/fill.
+ * Other candidates must pass the bounded natural corridor proof above. A* stays
+ * the authoritative route solver when the selected neighbour is actually used.
  */
 export function neighbouringVillages(
   id: string,
@@ -80,31 +126,27 @@ export function neighbouringVillages(
   if (!origin) return [];
   const cacheKey = `${id}/${limit}/${maxDistanceM}`,
     cached = neighbourCache.get(cacheKey);
-  if (cached) {
-    for (const entry of cached) retainRoute(pairKey(id, entry.place.id));
-    return [...cached];
-  }
+  if (cached) return [...cached];
 
-  const candidates = villages
-    .filter((village) => village.id !== id)
-    .map((place) => ({
-      place,
-      geodesicM: greatCircleDistance(origin.canonicalPosition, place.canonicalPosition),
-    }))
-    .filter((entry) => entry.geodesicM <= maxDistanceM)
-    .sort((x, y) => x.geodesicM - y.geodesicM || (x.place.id < y.place.id ? -1 : 1));
-  const result: { place: Place; geodesicM: number }[] = [];
+  const roadNeighbours = roadNeighbourIds.get(id),
+    candidates = villages
+      .filter((village) => village.id !== id)
+      .map((place) => ({
+        place,
+        geodesicM: greatCircleDistance(origin.canonicalPosition, place.canonicalPosition),
+      }))
+      .filter((entry) => entry.geodesicM <= maxDistanceM)
+      .sort((x, y) => x.geodesicM - y.geodesicM || (x.place.id < y.place.id ? -1 : 1)),
+    result: { place: Place; geodesicM: number }[] = [];
   for (const entry of candidates) {
-    if (!routeBetweenVillages(id, entry.place.id).found) continue;
+    if (
+      !roadNeighbours?.has(entry.place.id) &&
+      !naturalWalkingCorridorProven(origin, entry.place)
+    )
+      continue;
     result.push(entry);
     if (result.length >= limit) break;
   }
-
-  // Candidate probing can exceed the bounded route LRU. Refresh only the selected
-  // successful neighbour proofs so the returned list and the immediately queried
-  // route facts cannot disagree because an early success was evicted while later
-  // candidates were evaluated. This changes cache recency only, never route truth.
-  for (const entry of result) retainRoute(pairKey(id, entry.place.id));
   neighbourCache.set(cacheKey, result);
   return [...result];
 }
