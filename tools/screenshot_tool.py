@@ -40,6 +40,7 @@ import os
 import re
 import signal
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -194,9 +195,32 @@ class Session:
         page.on("pageerror", lambda error: self.page_errors.append(str(error)))
 
     def settle(self) -> None:
-        if self.page.wait_for_function(SETTLED_JS, polling=250).json_value() == "error":
+        started = time.monotonic()
+        print(f"settling {self.name}-{self.profile} (limit {self.args.settle_timeout:g}s)", flush=True)
+        try:
+            result = self.page.wait_for_function(
+                SETTLED_JS,
+                polling=250,
+                timeout=self.args.settle_timeout * 1000,
+            ).json_value()
+        except PlaywrightError as error:
+            try:
+                state = self.page.evaluate(STATE_JS)
+                detail = (
+                    f"backend={state.get('backend') or '?'} active={state.get('active')} "
+                    f"cached={state.get('cached')} pending={state.get('pending')} "
+                    f"presentation={state.get('presentation')}"
+                )
+            except PlaywrightError:
+                detail = "page state unavailable"
+            raise CaptureError(
+                f"settle timeout after {self.args.settle_timeout:g}s ({detail})"
+            ) from error
+        if result == "error":
             raise CaptureError(f"page reports an error: {self.page.evaluate(STATE_JS)['error']}")
         self.page.evaluate(TWO_FRAMES_JS)
+        elapsed = time.monotonic() - started
+        print(f"settled {self.name}-{self.profile} in {elapsed:.2f}s", flush=True)
 
     def locate(self, selector: str) -> Locator:
         locator = self.page.locator(selector).first
@@ -280,7 +304,7 @@ class Session:
         self.records.append(record)
         write_records(self.args.out, self.records)
         print(f"captured {path}  backend={state['backend'] or '?'} detail={state['detailName']}"
-              f" active={state['active']} pending={state['pending']}")
+              f" active={state['active']} pending={state['pending']}", flush=True)
         if fell_back:
             print(f"WARNING: {file}: WebGPU was requested but the page rendered with "
                   f"{state['backend'] or 'no backend'}: {state['fallbackReason']}", file=sys.stderr)
@@ -288,9 +312,11 @@ class Session:
             raise CaptureError(f"page reports an error: {state['error']}")
 
     def run(self, steps: list[str]) -> None:
+        print(f"loading {self.name}-{self.profile} {self.args.url}", flush=True)
         self.page.goto(self.args.url, wait_until="load")
         self.settle()
-        for step in steps:
+        for index, step in enumerate(steps, start=1):
+            print(f"step {index}/{len(steps)} {self.name}-{self.profile}: {step.partition(':')[0]}", flush=True)
             try:
                 self.step(*(part.strip() for part in step.partition(":")[::2]))
             except ValueError as error:
@@ -322,12 +348,16 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--width", type=int, help="viewport width override")
     parser.add_argument("--height", type=int, help="viewport height override")
     parser.add_argument("--renderer", choices=("webgl2", "webgpu"), default="webgl2")
-    parser.add_argument("--timeout", type=float, default=120, help="seconds per wait (default 120)")
+    parser.add_argument("--timeout", type=float, default=120, help="seconds for ordinary Playwright waits (default 120)")
+    parser.add_argument("--settle-timeout", type=float, help="seconds for each terrain settle wait (default: --timeout)")
     parser.add_argument("--allow-errors", action="store_true", help="report page errors as warnings")
     parser.add_argument("--chromium", default=os.environ.get("ADVISOR_CHROMIUM"),
                         help="Chromium executable (default: env ADVISOR_CHROMIUM)")
     parser.add_argument("--browser-channel", choices=("chrome", "msedge"), help="installed browser channel with its native adapter")
     args = parser.parse_args(argv)
+    args.settle_timeout = args.timeout if args.settle_timeout is None else args.settle_timeout
+    if args.settle_timeout <= 0 or args.timeout <= 0:
+        parser.error("timeouts must be greater than zero")
     args.profiles = [name.strip() for name in args.profile.split(",") if name.strip()]
     names = [name.strip() for name in args.scenario.split(",") if name.strip()]
     for name, known in [(n, PROFILES) for n in args.profiles] + [(n, SCENARIOS) for n in names]:
@@ -367,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
                         failures += 1
                         reason = str(error).strip().splitlines()[0]
                         print(f"FAILED {name}-{profile} after {session.shots} image(s): {reason}",
-                              file=sys.stderr)
+                              file=sys.stderr, flush=True)
                     finally:
                         session.page.close()
                 context.close()
