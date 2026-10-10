@@ -1,0 +1,22 @@
+name: WP19 optimized navigation diagnostic
+on:
+  push:
+    branches: [agent1/wp-s002-004-009-living-settlements]
+    paths: [.github/workflows/wp19-navigation-diagnostic.yml]
+permissions:
+  contents: read
+jobs:
+  navigation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Run existing navigation suite unchanged
+        run: xvfb-run -a npx playwright test --config playwright.navigation.config.js
