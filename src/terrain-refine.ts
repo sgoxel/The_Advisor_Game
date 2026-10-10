@@ -1,13 +1,19 @@
-import { terrainTint, type Geometry } from "./geometry.ts";
-import { biomeAt, field, type Tile } from "./world.ts";
+import type { Geometry } from "./geometry.ts";
+import { nearestPlace, roadAt, roadDistanceAt } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
-import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "./planet.ts";
+import {
+  SOURCE_PRESENTATION_WIDTH,
+  sourceToLonLat,
+  wrapSourceX,
+} from "./planet.ts";
 import {
   drainageRecipesNear,
   surfaceAt,
   type DrainagePoint,
+  type DrainageRecipe,
   type SurfaceSample,
 } from "./surface.ts";
+import type { Tile } from "./world.ts";
 
 type RGB = [number, number, number];
 type Point = [number, number, number];
@@ -17,17 +23,14 @@ const WATER_SURFACE_Y = 0;
 const LAND_CLIP_Y = 0.035;
 const RIVER_WATER: RGB = [58, 126, 148];
 const LAKE_WATER: RGB = [62, 122, 151];
+const OCEAN_WATER: RGB = [70, 126, 132];
 
-function clampByte(value: number) {
-  return Math.max(0, Math.min(255, Math.round(value)));
-}
-function clamp01(value: number) {
-  return Math.max(0, Math.min(1, value));
-}
-function smooth01(value: number) {
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+const smooth01 = (value: number) => {
   const t = clamp01(value);
   return t * t * (3 - 2 * t);
-}
+};
+const byte = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
 function blend(a: RGB, b: RGB, t: number): RGB {
   const amount = clamp01(t);
   return [
@@ -37,34 +40,49 @@ function blend(a: RGB, b: RGB, t: number): RGB {
   ];
 }
 
-/**
- * Preserve semantic water/cliff meaning before road/settlement presentation.
- * Natural ground cover blends continuously so bilinear source fields do not
- * become visible rectangular material blocks at Province/Village scales.
- */
-function refinedTint(x: number, z: number, scale: number, surface: SurfaceSample): RGB {
-  const biome = biomeAt(x, z);
-  if (surface.water === "ocean") return [79, 129, 145];
-  // River/lake water is drawn as explicit smooth canonical surface geometry.
-  // Keep the bed subdued so coarse terrain cells cannot look like painted water blocks.
+/** Seam-safe presentation variation; unlike source-grid fields it cannot expose rectangular bands. */
+function naturalDetail(x: number, z: number) {
+  const p = sourceToLonLat(wrapSourceX(x), z),
+    a = Math.sin(p.lon * 137 + p.lat * 91 + 0.73),
+    b = Math.cos(p.lon * 223 - p.lat * 157 - 1.17),
+    c = Math.sin(p.lon * 359 + p.lat * 211 + 2.03);
+  return clamp01((a * 0.46 + b * 0.34 + c * 0.2 + 1) * 0.5);
+}
+
+/** One already-sampled final surface drives local material presentation. */
+function refinedTint(x: number, z: number, surface: SurfaceSample): RGB {
+  if (surface.water === "ocean") return OCEAN_WATER;
+  // Beds remain earthen; exact water is a separate geometry layer below.
   if (surface.water === "river") return [112, 122, 93];
   if (surface.water === "lake") return [105, 119, 99];
-  if (surface.cliff || biome === "Cliff") return [99, 105, 101];
-  if (surface.riverBank || biome === "Riverbank") return [145, 143, 105];
-  if (["Road", "Settlement", "Sandy beach"].includes(biome)) return terrainTint(x, z, scale);
+  if (surface.cliff) return [91, 98, 97];
+  if (surface.riverBank) return [145, 143, 105];
 
-  const f = field(x, z, 28, 41),
-    cover = smooth01((field(x, z, 90, 4) - 0.28) / 0.44),
-    meadow: RGB = [116 + f * 22, 140 + f * 24, 79 + f * 20],
-    woodland: RGB = [72 + f * 19, 105 + f * 22, 69 + f * 15],
-    natural = blend(meadow, woodland, cover),
-    macro = macroSampleAt(sourceToLonLat(x, z)),
-    mountain = smooth01((macro.mountainIntensity - 0.015) / 0.64),
-    highland: RGB = [127 + f * 22, 137 + f * 18, 113 + f * 16],
-    volcanic: RGB = [94 + f * 17, 91 + f * 14, 82 + f * 12];
+  const macro = macroSampleAt(sourceToLonLat(x, z)),
+    detail = naturalDetail(x, z),
+    place = nearestPlace(x, z),
+    placeDistance = place
+      ? Math.hypot(wrapSourceX(x - place.x), z - place.z)
+      : Infinity,
+    road = roadAt(x, z),
+    onRoad = Boolean(road && roadDistanceAt(x, z, road) <= 6);
+  if (onRoad || (place && placeDistance <= (place.kind === "city" ? 18 : 12)))
+    return [170, 151, 113];
+
+  const coast = macro.coastDistanceRad * 41721,
+    beach = macro.land && coast < 18;
+  if (beach) return [191 + detail * 12, 177 + detail * 10, 126 + detail * 9];
+
+  const meadow: RGB = [115 + detail * 25, 139 + detail * 26, 78 + detail * 20],
+    forestFactor = smooth01((naturalDetail(x + 37, z - 29) - 0.34) / 0.46),
+    woodland: RGB = [70 + detail * 20, 102 + detail * 23, 67 + detail * 16],
+    natural = blend(meadow, woodland, forestFactor),
+    mountain = smooth01((macro.mountainIntensity - 0.012) / 0.55),
+    highland: RGB = [122 + detail * 23, 132 + detail * 20, 108 + detail * 18],
+    volcanic: RGB = [91 + detail * 18, 89 + detail * 15, 80 + detail * 13];
   return macro.volcanic
-    ? blend(natural, volcanic, mountain * 0.94)
-    : blend(natural, highland, mountain * 0.86);
+    ? blend(natural, volcanic, mountain * 0.96)
+    : blend(natural, highland, mountain * 0.9);
 }
 
 function interpolate(a: Vertex, b: Vertex, t: number): Vertex {
@@ -78,8 +96,7 @@ function interpolate(a: Vertex, b: Vertex, t: number): Vertex {
   };
 }
 
-/** Clip coast/ocean cells to the water plane instead of letting one dry corner
- * pull an entire coarse terrain triangle across open water. */
+/** Clip land exactly at the shared water plane instead of stretching coarse dry triangles over water. */
 function clipLandPolygon(vertices: Vertex[]): Vertex[] {
   const output: Vertex[] = [];
   for (let i = 0; i < vertices.length; i++) {
@@ -122,11 +139,10 @@ function pushTriangle(
   for (const vertex of [a, b, c]) {
     positions.push(...vertex.point);
     normals.push(nx / length, ny / length, nz / length);
-    colors.push(clampByte(vertex.tint[0]), clampByte(vertex.tint[1]), clampByte(vertex.tint[2]), 255);
+    colors.push(byte(vertex.tint[0]), byte(vertex.tint[1]), byte(vertex.tint[2]), 255);
   }
   indices.push(start, start + 1, start + 2);
 }
-
 function pushPolygon(
   positions: number[],
   normals: number[],
@@ -138,7 +154,6 @@ function pushPolygon(
   for (let i = 1; i < polygon.length - 1; i++)
     pushTriangle(positions, normals, colors, indices, polygon[0], polygon[i], polygon[i + 1]);
 }
-
 function pushQuad(
   positions: number[],
   normals: number[],
@@ -158,14 +173,12 @@ function pushQuad(
     pushTriangle(positions, normals, colors, indices, a, c, d);
   }
 }
-
 function unwrapNear(x: number, reference: number) {
   let result = x;
   while (result - reference > SOURCE_PRESENTATION_WIDTH / 2) result -= SOURCE_PRESENTATION_WIDTH;
   while (result - reference < -SOURCE_PRESENTATION_WIDTH / 2) result += SOURCE_PRESENTATION_WIDTH;
   return result;
 }
-
 function clipLineToRect(
   x0: number,
   z0: number,
@@ -195,59 +208,7 @@ function clipLineToRect(
   return { t0, t1 };
 }
 
-function clipPolygonAxis(
-  polygon: Vertex[],
-  inside: (vertex: Vertex) => boolean,
-  intersection: (a: Vertex, b: Vertex) => Vertex,
-) {
-  if (!polygon.length) return polygon;
-  const output: Vertex[] = [];
-  for (let i = 0; i < polygon.length; i++) {
-    const a = polygon[i],
-      b = polygon[(i + 1) % polygon.length],
-      ai = inside(a),
-      bi = inside(b);
-    if (ai) output.push(a);
-    if (ai !== bi) output.push(intersection(a, b));
-  }
-  return output;
-}
-
-function clipPolygonToRect(polygon: Vertex[], minX: number, minZ: number, maxX: number, maxZ: number) {
-  let out = polygon;
-  const clipX = (bound: number, keepGreater: boolean) => {
-    out = clipPolygonAxis(
-      out,
-      (v) => (keepGreater ? v.point[0] >= bound : v.point[0] <= bound),
-      (a, b) => {
-        const dx = b.point[0] - a.point[0],
-          t = Math.abs(dx) < 1e-9 ? 0 : (bound - a.point[0]) / dx,
-          hit = interpolate(a, b, clamp01(t));
-        hit.point[0] = bound;
-        return hit;
-      },
-    );
-  };
-  const clipZ = (bound: number, keepGreater: boolean) => {
-    out = clipPolygonAxis(
-      out,
-      (v) => (keepGreater ? v.point[2] >= bound : v.point[2] <= bound),
-      (a, b) => {
-        const dz = b.point[2] - a.point[2],
-          t = Math.abs(dz) < 1e-9 ? 0 : (bound - a.point[2]) / dz,
-          hit = interpolate(a, b, clamp01(t));
-        hit.point[2] = bound;
-        return hit;
-      },
-    );
-  };
-  clipX(minX, true);
-  clipX(maxX, false);
-  clipZ(minZ, true);
-  clipZ(maxZ, false);
-  return out;
-}
-
+/** Draw the exact semantic segment capsule: rectangle plus round endpoint/join discs. */
 function pushRiverSegment(
   positions: number[],
   normals: number[],
@@ -262,7 +223,16 @@ function pushRiverSegment(
   const centerX = tile.minX + tile.size / 2,
     ax = unwrapNear(a.x, centerX),
     bx = unwrapNear(b.x, ax),
-    clip = clipLineToRect(ax, a.z, bx, b.z, tile.minX - width, tile.minZ - width, tile.minX + tile.size + width, tile.minZ + tile.size + width);
+    clip = clipLineToRect(
+      ax,
+      a.z,
+      bx,
+      b.z,
+      tile.minX - width,
+      tile.minZ - width,
+      tile.minX + tile.size + width,
+      tile.minZ + tile.size + width,
+    );
   if (!clip) return;
   const dx = bx - ax,
     dz = b.z - a.z,
@@ -282,27 +252,108 @@ function pushRiverSegment(
     vd: Vertex = { point: [sx - nx, sy, sz - nz], tint };
   pushQuad(positions, normals, colors, indices, va, vb, vc, vd);
 }
+function pushWaterDisc(
+  positions: number[],
+  normals: number[],
+  colors: number[],
+  indices: number[],
+  tile: Tile,
+  point: DrainagePoint,
+  radius: number,
+  tint: RGB,
+) {
+  const x = unwrapNear(point.x, tile.minX + tile.size / 2);
+  if (
+    x + radius < tile.minX ||
+    x - radius > tile.minX + tile.size ||
+    point.z + radius < tile.minZ ||
+    point.z - radius > tile.minZ + tile.size
+  )
+    return;
+  const y = Math.max(0.08, point.bed + 0.18),
+    center: Vertex = { point: [x, y, point.z], tint },
+    sides = 12;
+  for (let i = 0; i < sides; i++) {
+    const a = (i / sides) * Math.PI * 2,
+      b = ((i + 1) / sides) * Math.PI * 2,
+      va: Vertex = {
+        point: [x + Math.cos(a) * radius, y, point.z + Math.sin(a) * radius],
+        tint,
+      },
+      vb: Vertex = {
+        point: [x + Math.cos(b) * radius, y, point.z + Math.sin(b) * radius],
+        tint,
+      };
+    pushTriangle(positions, normals, colors, indices, center, va, vb);
+  }
+}
+function pushRiverPath(
+  positions: number[],
+  normals: number[],
+  colors: number[],
+  indices: number[],
+  tile: Tile,
+  path: DrainagePoint[],
+  width: number,
+  tint: RGB,
+) {
+  for (let i = 0; i < path.length - 1; i++)
+    pushRiverSegment(positions, normals, colors, indices, tile, path[i], path[i + 1], width, tint);
+  for (const point of path) pushWaterDisc(positions, normals, colors, indices, tile, point, width, tint);
+}
+function pushLake(
+  positions: number[],
+  normals: number[],
+  colors: number[],
+  indices: number[],
+  tile: Tile,
+  lake: NonNullable<DrainageRecipe["lake"]>,
+) {
+  const x = unwrapNear(lake.x, tile.minX + tile.size / 2),
+    radius = lake.radius;
+  if (
+    x + radius < tile.minX ||
+    x - radius > tile.minX + tile.size ||
+    lake.z + radius < tile.minZ ||
+    lake.z - radius > tile.minZ + tile.size
+  )
+    return;
+  const y = Math.max(0.08, lake.level + 0.14),
+    center: Vertex = { point: [x, y, lake.z], tint: LAKE_WATER },
+    sides = 40;
+  for (let i = 0; i < sides; i++) {
+    const a = (i / sides) * Math.PI * 2,
+      b = ((i + 1) / sides) * Math.PI * 2,
+      va: Vertex = {
+        point: [x + Math.cos(a) * radius, y, lake.z + Math.sin(a) * radius],
+        tint: LAKE_WATER,
+      },
+      vb: Vertex = {
+        point: [x + Math.cos(b) * radius, y, lake.z + Math.sin(b) * radius],
+        tint: LAKE_WATER,
+      };
+    pushTriangle(positions, normals, colors, indices, center, va, vb);
+  }
+}
 
 /**
- * Local/Province terrain uses a denser, per-vertex-colored surface plus explicit
- * canonical water geometry. Canonical height/biome/walkability are unchanged;
- * this presentation removes coarse painted-water and tile-skirt artifacts.
+ * Bounded local refinement. One final-surface sample is made per grid vertex; river/lake
+ * presentation is the exact canonical segment-buffer authority rather than painted cells.
  */
 export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry {
   if (tile.size > 1024 || tile.size < 2) return original;
-
-  const targetResolution = tile.size <= 128 ? 56 : tile.size <= 512 ? 48 : 36,
+  const targetResolution = tile.size <= 128 ? 40 : tile.size <= 512 ? 32 : 24,
     resolution = Math.max(1, Math.min(targetResolution, Math.floor(tile.size / 2))),
     step = tile.size / resolution,
     grid: Vertex[][] = [];
 
-  for (let z = 0; z <= resolution; z++) {
+  for (let iz = 0; iz <= resolution; iz++) {
     const row: Vertex[] = [];
-    for (let x = 0; x <= resolution; x++) {
-      const px = tile.minX + x * step,
-        pz = tile.minZ + z * step,
-        surface = surfaceAt(px, pz);
-      row.push({ point: [px, surface.elevation, pz], tint: refinedTint(px, pz, tile.size, surface) });
+    for (let ix = 0; ix <= resolution; ix++) {
+      const x = tile.minX + ix * step,
+        z = tile.minZ + iz * step,
+        surface = surfaceAt(x, z);
+      row.push({ point: [x, surface.elevation, z], tint: refinedTint(x, z, surface) });
     }
     grid.push(row);
   }
@@ -311,23 +362,37 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
     normals: number[] = [],
     colors: number[] = [],
     indices: number[] = [];
-
   for (let z = 0; z < resolution; z++)
     for (let x = 0; x < resolution; x++) {
       const quad = [grid[z][x], grid[z + 1][x], grid[z + 1][x + 1], grid[z][x + 1]],
         polygon = clipLandPolygon(quad);
       if (polygon.length === 4 && polygon.every((v, i) => v === quad[i]))
-        pushQuad(positions, normals, colors, indices, quad[0], quad[1], quad[2], quad[3], (x + z) % 2 === 1);
+        pushQuad(
+          positions,
+          normals,
+          colors,
+          indices,
+          quad[0],
+          quad[1],
+          quad[2],
+          quad[3],
+          (x + z) % 2 === 1,
+        );
       else pushPolygon(positions, normals, colors, indices, polygon);
     }
 
-  // Shared boundary samples already match exactly. Keep only a very shallow,
-  // same-colour overlap for transient LOD T-junctions; it must never read as a cliff wall.
-  const skirtDepth = Math.min(1.2, Math.max(0.45, step * 0.055));
+  // A shallow matching-colour overlap hides transient LOD T-junctions without becoming a cliff wall.
+  const skirtDepth = Math.min(0.9, Math.max(0.35, step * 0.04));
   const skirt = (topA: Vertex, topB: Vertex) => {
     if (topA.point[1] <= LAND_CLIP_Y && topB.point[1] <= LAND_CLIP_Y) return;
-    const a: Vertex = { point: [topA.point[0], Math.max(LAND_CLIP_Y, topA.point[1]), topA.point[2]], tint: topA.tint },
-      b: Vertex = { point: [topB.point[0], Math.max(LAND_CLIP_Y, topB.point[1]), topB.point[2]], tint: topB.tint },
+    const a: Vertex = {
+        point: [topA.point[0], Math.max(LAND_CLIP_Y, topA.point[1]), topA.point[2]],
+        tint: topA.tint,
+      },
+      b: Vertex = {
+        point: [topB.point[0], Math.max(LAND_CLIP_Y, topB.point[1]), topB.point[2]],
+        tint: topB.tint,
+      },
       c: Vertex = { point: [b.point[0], b.point[1] - skirtDepth, b.point[2]], tint: b.tint },
       d: Vertex = { point: [a.point[0], a.point[1] - skirtDepth, a.point[2]], tint: a.tint };
     pushQuad(positions, normals, colors, indices, a, b, c, d);
@@ -339,38 +404,38 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
     skirt(grid[i][resolution], grid[i + 1][resolution]);
   }
 
-  const ocean: RGB = [70, 126, 132],
-    wa: Vertex = { point: [tile.minX, WATER_SURFACE_Y, tile.minZ], tint: ocean },
-    wb: Vertex = { point: [tile.minX, WATER_SURFACE_Y, tile.minZ + tile.size], tint: ocean },
-    wc: Vertex = { point: [tile.minX + tile.size, WATER_SURFACE_Y, tile.minZ + tile.size], tint: ocean },
-    wd: Vertex = { point: [tile.minX + tile.size, WATER_SURFACE_Y, tile.minZ], tint: ocean };
+  const wa: Vertex = { point: [tile.minX, WATER_SURFACE_Y, tile.minZ], tint: OCEAN_WATER },
+    wb: Vertex = {
+      point: [tile.minX, WATER_SURFACE_Y, tile.minZ + tile.size],
+      tint: OCEAN_WATER,
+    },
+    wc: Vertex = {
+      point: [tile.minX + tile.size, WATER_SURFACE_Y, tile.minZ + tile.size],
+      tint: OCEAN_WATER,
+    },
+    wd: Vertex = {
+      point: [tile.minX + tile.size, WATER_SURFACE_Y, tile.minZ],
+      tint: OCEAN_WATER,
+    };
   pushQuad(positions, normals, colors, indices, wa, wb, wc, wd);
 
-  const recipes = drainageRecipesNear(tile.minX + tile.size / 2, tile.minZ + tile.size / 2, 3);
-  for (const recipe of recipes) {
-    for (let i = 0; i < recipe.points.length - 1; i++)
-      pushRiverSegment(positions, normals, colors, indices, tile, recipe.points[i], recipe.points[i + 1], recipe.width, RIVER_WATER);
-    for (let i = 0; i < recipe.tributary.length - 1; i++)
-      pushRiverSegment(positions, normals, colors, indices, tile, recipe.tributary[i], recipe.tributary[i + 1], recipe.width * 0.62, RIVER_WATER);
-    if (recipe.lake) {
-      const centerX = unwrapNear(recipe.lake.x, tile.minX + tile.size / 2),
-        y = Math.max(0.08, recipe.lake.level + 0.14),
-        circle: Vertex[] = [];
-      for (let i = 0; i < 32; i++) {
-        const angle = -(i / 32) * Math.PI * 2;
-        circle.push({
-          point: [centerX + Math.cos(angle) * recipe.lake.radius, y, recipe.lake.z + Math.sin(angle) * recipe.lake.radius],
-          tint: LAKE_WATER,
-        });
-      }
-      pushPolygon(
-        positions,
-        normals,
-        colors,
-        indices,
-        clipPolygonToRect(circle, tile.minX, tile.minZ, tile.minX + tile.size, tile.minZ + tile.size),
-      );
-    }
+  for (const recipe of drainageRecipesNear(
+    tile.minX + tile.size / 2,
+    tile.minZ + tile.size / 2,
+    3,
+  )) {
+    pushRiverPath(positions, normals, colors, indices, tile, recipe.points, recipe.width, RIVER_WATER);
+    pushRiverPath(
+      positions,
+      normals,
+      colors,
+      indices,
+      tile,
+      recipe.tributary,
+      recipe.width * 0.62,
+      RIVER_WATER,
+    );
+    if (recipe.lake) pushLake(positions, normals, colors, indices, tile, recipe.lake);
   }
 
   const originX = tile.minX + tile.size / 2,
@@ -379,7 +444,6 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
     positions[i] -= originX;
     positions[i + 2] -= originZ;
   }
-
   return {
     positions: new Float32Array(positions),
     normals: new Float32Array(normals),
