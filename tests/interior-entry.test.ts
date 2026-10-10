@@ -49,7 +49,7 @@ test("Simulation rejects a disconnected forged access point", () => {
   const real = building(),
     forged: Building = {
       ...real,
-      access: { x: real.access.x + 30, z: real.access.z + 30 },
+      access: { x: real.access.x + 300, z: real.access.z + 300 },
     },
     request = { building: forged, fantasySecond: 0, intent: "enter-building" as const },
     character = characterDecideInteriorEntry(request),
