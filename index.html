@@ -16,7 +16,7 @@
   <body>
     <canvas
       id="world"
-      aria-label="Interactive 3D medieval world. Drag to travel, scroll to zoom, or use the map controls."
+      aria-label="Interactive 3D medieval world. Drag to pan, scroll to zoom, or use the map controls."
       tabindex="0"
     ></canvas>
     <header class="masthead">
@@ -42,7 +42,7 @@
         <code id="world-seed"></code>
       </div>
       <div class="region-actions">
-        <button id="home">⌂ Return to village</button
+        <button id="home">⌂ Focus home village</button
         ><button id="overview">↗ Realm view</button>
       </div>
       <button id="open-travel" class="travel-button">
@@ -98,7 +98,8 @@
         EXPLORE THE REALM
         <button id="close-travel" aria-label="Close travel menu">×</button>
       </div>
-      <h2>Choose a destination</h2>
+      <h2>Inspect a destination</h2>
+      <p class="hint">Map preview only · focusing or selecting a route does not move the protagonist.</p>
       <label for="continent-select">Continent</label
       ><select id="continent-select"></select>
       <label for="country-select">Country</label
@@ -108,8 +109,8 @@
       <label for="village-select">Village</label
       ><select id="village-select"></select>
       <div class="region-actions">
-        <button id="visit-city">Visit city</button
-        ><button id="visit-village">Visit village</button>
+        <button id="visit-city">Focus city</button
+        ><button id="visit-village">Focus village</button>
       </div>
       <section class="route-block" id="route-block" aria-label="Walking routes">
         <div class="eyebrow">
@@ -155,7 +156,7 @@
       </div>
       <div class="travel-hint">
         <span class="flat-only"
-          >Drag to travel <b>·</b> Scroll to explore <b>·</b> Q / E to
+          >Drag to pan <b>·</b> Scroll to explore <b>·</b> Q / E to
           rotate</span
         ><span class="globe-only"
           >Drag to turn the globe <b>·</b> Scroll to zoom <b>·</b> Q / E to
@@ -192,6 +193,7 @@
     <script type="module" src="/src/main.ts"></script>
     <script type="module" src="/src/canonical-inspector.ts"></script>
     <script type="module" src="/src/travel-ui.ts"></script>
+    <script type="module" src="/src/routing-diagnostics.ts"></script>
     <script type="module" src="/src/political-settlement-access.ts"></script>
     <script type="module" src="/src/political-atlas.ts"></script>
   </body>
