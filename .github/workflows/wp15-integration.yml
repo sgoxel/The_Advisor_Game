@@ -13,15 +13,15 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
-      - name: Apply current-main hydrology integration once
+      - name: Apply final-surface routing adapter once
         run: |
-          if grep -q 'export function riverX' src/world.ts; then
+          if grep -q 'macroTerrainSampler' src/routing.ts; then
             python tools/wp15_integrate.py
             git config user.name 'AGENT #1'
             git config user.email '163722426+sgoxel@users.noreply.github.com'
-            git add src/hydrology.ts src/surface.ts src/geography.ts src/world.ts src/geometry.ts src/tile-worker.ts package.json
-            git commit -m 'WP-S002-004-005 integrate final surface authority'
+            git add src/routing.ts src/geography.ts tests/routing.test.ts
+            git commit -m 'WP-S002-004-005 route on final surface authority'
             git push origin HEAD:${{ github.head_ref }}
           else
-            echo 'WP15 integration already applied on this head.'
+            echo 'WP15 final routing adapter already applied on this head.'
           fi
