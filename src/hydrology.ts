@@ -63,8 +63,8 @@ const BASIN_ROWS = (SOURCE_PRESENTATION_POLE_DISTANCE * 2) / BASIN_SIZE;
 // recipe churn during large corridor/terrain sweeps while remaining a small fixed cache.
 const CACHE_LIMIT = 256;
 const CORE_CACHE_LIMIT = 8192;
-const RIVER_STEPS = 48;
-const RIVER_STEP = 165;
+const RIVER_STEPS = 56;
+const RIVER_STEP = 145;
 const GRADIENT_STEP = 170;
 const SEARCH_RADIUS = 2;
 const basinCache = new Map<string, BasinEntry>();
@@ -100,10 +100,25 @@ export function drainageLakeRadiusAt(lake: DrainageLake, angle: number) {
       Math.sqrt((c * c) / (major * major) + (s * s) / (minor * minor)),
     irregular =
       1 +
-      0.1 * Math.sin(angle * 3 + lake.phase) +
-      0.06 * Math.sin(angle * 5 - lake.phase * 0.61) +
-      0.035 * Math.cos(angle * 7 + lake.phase * 1.37);
-  return Math.max(lake.radius * 0.68, ellipse * irregular);
+      0.13 * Math.sin(angle * 3 + lake.phase) +
+      0.075 * Math.sin(angle * 5 - lake.phase * 0.61) +
+      0.045 * Math.cos(angle * 7 + lake.phase * 1.37);
+  return Math.max(lake.radius * 0.64, ellipse * irregular);
+}
+
+/** Shared canonical river half-width for both traversal queries and rendering. */
+export function drainageRiverWidthAt(
+  recipe: DrainageRecipe,
+  segmentIndex: number,
+  tributary = false,
+) {
+  const path = tributary ? recipe.tributary : recipe.points,
+    t = path.length <= 2 ? 0 : Math.max(0, Math.min(1, segmentIndex / (path.length - 2))),
+    growth = tributary ? 0.78 + smooth01(t) * 0.24 : 0.68 + smooth01(t) * 0.5,
+    base = recipe.width * (tributary ? 0.62 : 1),
+    phase = addressed(`${recipe.code}/WIDTH-PHASE`) * Math.PI * 2,
+    variation = 1 + Math.sin((segmentIndex + 1) * 0.83 + phase) * 0.075;
+  return base * growth * variation;
 }
 const sphericalPhaseCache = new Map<number, number>();
 function sphericalPhase(layer: number) {
@@ -257,10 +272,10 @@ function rotateDirection(direction: { x: number; z: number }, angle: number) {
 }
 function riverMeander(key: string, step: number) {
   const phase = addressed(`${key}/meander-phase`) * Math.PI * 2,
-    amplitude = 0.105 + addressed(`${key}/meander-amplitude`) * 0.105;
+    amplitude = 0.145 + addressed(`${key}/meander-amplitude`) * 0.12;
   return (
-    Math.sin(step * 0.39 + phase) * amplitude +
-    Math.sin(step * 0.17 + phase * 1.73) * amplitude * 0.48
+    Math.sin(step * 0.31 + phase) * amplitude +
+    Math.sin(step * 0.13 + phase * 1.73) * amplitude * 0.52
   );
 }
 function pointDistanceToSegment(px: number, pz: number, a: DrainagePoint, b: DrainagePoint) {
@@ -407,7 +422,7 @@ export function drainageRecipeAt(gx: number, gz: number): DrainageRecipe | null 
                   naturalElevationAt(lakePoint.x, lakePoint.z) - 0.45,
                 ),
                 phase: addressed(`${key}/lake-phase`) * Math.PI * 2,
-                elongation: 0.05 + addressed(`${key}/lake-elongation`) * 0.13,
+                elongation: 0.11 + addressed(`${key}/lake-elongation`) * 0.17,
                 rotation: addressed(`${key}/lake-rotation`) * Math.PI * 2,
               }
             : null;
@@ -480,10 +495,10 @@ function nearestHydrology(x: number, z: number): HydroHit {
             code: recipe.code,
           };
       }
-      for (const path of [recipe.points, recipe.tributary]) {
+      for (const [pathIndex, path] of [recipe.points, recipe.tributary].entries()) {
         for (let i = 0; i < path.length - 1; i++) {
           const hit = pointDistanceToSegment(canonicalX, z, path[i], path[i + 1]),
-            width = path === recipe.points ? recipe.width : recipe.width * 0.62,
+            width = drainageRiverWidthAt(recipe, i, pathIndex === 1),
             distance = hit.distance - width,
             bed = lerp(path[i].bed, path[i + 1].bed, hit.t);
           if (distance < best.distance)

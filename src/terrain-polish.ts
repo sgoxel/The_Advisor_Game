@@ -38,9 +38,9 @@ function presentationNormal(nx: number, ny: number, nz: number, tileSize: number
     // not high-frequency normal stripes. Close views retain enough slope signal
     // for real cliff faces and shoulders to read clearly.
     slopeScale =
-      tileSize >= 256 ? 0.035 :
-      tileSize >= 128 ? 0.08 :
-      tileSize >= 64 ? 0.28 : 0.72;
+      tileSize >= 256 ? 0.16 :
+      tileSize >= 128 ? 0.24 :
+      tileSize >= 64 ? 0.45 : 0.78;
   return normalize([slopeX * slopeScale, 1, slopeZ * slopeScale]);
 }
 
@@ -55,24 +55,24 @@ function presentationColor(
     highland = clamp01((surface.elevation - 18) / 300),
     steep = clamp01((surface.slope - 0.24) / 1.25),
     close = tileSize <= 64,
-    highlandMaterial = blend(base, HIGHLAND, highland * (tileSize >= 128 ? 0.18 : 0.12)),
+    highlandMaterial = blend(base, HIGHLAND, highland * (tileSize >= 128 ? 0.08 : 0.07)),
     rockWeight = Math.min(
-      0.34,
-      steep * (close ? 0.16 : 0.055) +
-        highland * (close ? 0.07 : 0.04) +
-        (surface.cliff ? (close ? 0.08 : 0.018) : 0),
+      0.42,
+      steep * (close ? 0.25 : 0.12) +
+        highland * (close ? 0.06 : 0.035) +
+        (surface.cliff ? (close ? 0.12 : 0.04) : 0),
     ),
     material = blend(highlandMaterial, ROCK, rockWeight),
     light = normal[0] * -0.36 + normal[1] * 0.86 + normal[2] * -0.36,
     normalContrast =
-      tileSize <= 32 ? 0.78 :
-      tileSize <= 64 ? 0.64 :
-      tileSize <= 128 ? 0.17 : 0.055,
-    altitudeTone = highland * (tileSize >= 128 ? 0.18 : 0.12),
-    slopeTone = steep * (close ? -0.105 : -0.025),
+      tileSize <= 32 ? 0.86 :
+      tileSize <= 64 ? 0.76 :
+      tileSize <= 128 ? 0.46 : 0.22,
+    altitudeTone = highland * (tileSize >= 128 ? 0.075 : 0.06),
+    slopeTone = steep * (close ? -0.12 : -0.045),
     shade = Math.max(
       0.78,
-      Math.min(1.2, 0.94 + altitudeTone + slopeTone + (light - 0.86) * normalContrast),
+      Math.min(1.2, 0.985 + altitudeTone + slopeTone + (light - 0.86) * normalContrast),
     );
   return [material[0] * shade, material[1] * shade, material[2] * shade];
 }

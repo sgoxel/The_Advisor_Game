@@ -8,6 +8,7 @@ import {
 } from "./planet.ts";
 import {
   drainageLakeRadiusAt,
+  drainageRiverWidthAt,
   drainageRecipesNear,
   surfaceAt,
   type DrainagePoint,
@@ -151,7 +152,7 @@ function waterBoundary(a: Vertex, b: Vertex): Vertex {
   let low = 0,
     high = 1;
   const aWet = a.wet;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 8; i++) {
     const t = (low + high) / 2,
       x = a.point[0] + (b.point[0] - a.point[0]) * t,
       z = a.point[2] + (b.point[2] - a.point[2]) * t,
@@ -269,9 +270,10 @@ function pushRiverPath(
   colors: number[],
   indices: number[],
   tile: Tile,
-  path: DrainagePoint[],
-  width: number,
+  recipe: DrainageRecipe,
+  tributary = false,
 ) {
+  const path = tributary ? recipe.tributary : recipe.points;
   for (let i = 0; i < path.length - 1; i++)
     pushRiverSegment(
       positions,
@@ -281,7 +283,7 @@ function pushRiverPath(
       tile,
       path[i],
       path[i + 1],
-      width,
+      drainageRiverWidthAt(recipe, i, tributary),
     );
 }
 function pushLake(
@@ -303,7 +305,7 @@ function pushLake(
     return;
   const y = Math.max(0.08, lake.level + 0.14),
     center = waterVertex(x, y, lake.z, LAKE_WATER),
-    sides = 48;
+    sides = 72;
   for (let i = 0; i < sides; i++) {
     const a = (i / sides) * Math.PI * 2,
       b = ((i + 1) / sides) * Math.PI * 2,
@@ -360,11 +362,11 @@ function refinementResolution(tile: Tile) {
       (sample) => sample.reliefM >= 70 || sample.mountainIntensity >= 0.055,
     );
   let target: number;
-  if (tile.size <= 32) target = coastal || rugged ? 24 : 16;
-  else if (tile.size <= 64) target = coastal || rugged ? 32 : 24;
-  else if (tile.size <= 128) target = coastal || rugged ? 40 : 30;
-  else if (tile.size <= 256) target = coastal || rugged ? 48 : 36;
-  else target = coastal || rugged ? 40 : 28;
+  if (tile.size <= 32) target = coastal || rugged ? 32 : 18;
+  else if (tile.size <= 64) target = coastal || rugged ? 40 : 26;
+  else if (tile.size <= 128) target = coastal || rugged ? 48 : 32;
+  else if (tile.size <= 256) target = coastal || rugged ? 56 : 38;
+  else target = coastal || rugged ? 48 : 30;
   return Math.max(2, Math.min(target, Math.floor(tile.size * 1.5)));
 }
 
@@ -411,6 +413,31 @@ export function refineRuntimeTerrain(tile: Tile, original: Geometry): Geometry {
         slopeZ = (south.point[1] - north.point[1]) / dz;
       grid[iz][ix].normal = normalize([-slopeX, 1, -slopeZ]);
     }
+  }
+
+  // Smooth presentation normals over neighbouring final-height samples at Province/Village
+  // scales. Geometry and canonical slope/cliff truth are untouched; this removes coherent
+  // grid-frequency ribbing without flattening the actual mountain or cliff silhouette.
+  const smoothingPasses = tile.size >= 128 ? 2 : tile.size >= 64 ? 1 : 0;
+  for (let pass = 0; pass < smoothingPasses; pass++) {
+    const next = grid.map((row) => row.map((vertex) => vertex.normal));
+    for (let iz = 0; iz <= resolution; iz++)
+      for (let ix = 0; ix <= resolution; ix++) {
+        const centre = grid[iz][ix].normal,
+          neighbours = [
+            grid[iz][Math.max(0, ix - 1)].normal,
+            grid[iz][Math.min(resolution, ix + 1)].normal,
+            grid[Math.max(0, iz - 1)][ix].normal,
+            grid[Math.min(resolution, iz + 1)][ix].normal,
+          ];
+        next[iz][ix] = normalize([
+          centre[0] * 4 + neighbours.reduce((sum, n) => sum + n[0], 0),
+          centre[1] * 4 + neighbours.reduce((sum, n) => sum + n[1], 0),
+          centre[2] * 4 + neighbours.reduce((sum, n) => sum + n[2], 0),
+        ]);
+      }
+    for (let iz = 0; iz <= resolution; iz++)
+      for (let ix = 0; ix <= resolution; ix++) grid[iz][ix].normal = next[iz][ix];
   }
 
   const positions: number[] = [],
@@ -484,24 +511,8 @@ export function refineRuntimeTerrain(tile: Tile, original: Geometry): Geometry {
     tile.minZ + tile.size / 2,
     3,
   )) {
-    pushRiverPath(
-      positions,
-      normals,
-      colors,
-      indices,
-      tile,
-      recipe.points,
-      recipe.width,
-    );
-    pushRiverPath(
-      positions,
-      normals,
-      colors,
-      indices,
-      tile,
-      recipe.tributary,
-      recipe.width * 0.62,
-    );
+    pushRiverPath(positions, normals, colors, indices, tile, recipe, false);
+    pushRiverPath(positions, normals, colors, indices, tile, recipe, true);
     if (recipe.lake)
       pushLake(positions, normals, colors, indices, tile, recipe.lake);
   }
