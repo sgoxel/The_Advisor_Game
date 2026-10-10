@@ -3,6 +3,7 @@ import test from "node:test";
 import { places } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
 import { positionToEnu } from "../src/planet.ts";
+import { settlementEntranceAccess } from "../src/settlement-access.ts";
 import {
   settlementPlan,
   settlementPlanFingerprint,
@@ -34,7 +35,7 @@ function minimumSeparation(a: ReturnType<typeof settlementPlan>["buildings"][num
   return Math.max(2, (ar + br) * 0.54);
 }
 
-test("every generated settlement has required services, homes, guarded gates and dry non-overlapping building anchors", () => {
+test("every generated settlement has required services, homes, guarded gates and dry non-overlapping entrance-connected plots", () => {
   const plans = settlementPlans();
   assert.equal(plans.length, places.length);
   assert.ok(plans.length >= 360, `expected variable registry, got ${plans.length}`);
@@ -58,6 +59,16 @@ test("every generated settlement has required services, homes, guarded gates and
     for (const building of plan.buildings) {
       const macro = macroSampleAt(building.position);
       assert.ok(macro.land && macro.domain !== "Lake", `${building.code} on water`);
+      if (building.use !== "well") {
+        const entranceMacro = macroSampleAt(building.entrance),
+          access = settlementEntranceAccess(building, plan);
+        assert.ok(entranceMacro.land && entranceMacro.domain !== "Lake", `${building.code} entrance on water`);
+        assert.equal(access.buildingCode, building.code);
+        assert.ok(plan.streets.some((street) => street.code === access.streetCode), `${building.code} missing street endpoint`);
+        assert.ok(Number.isFinite(access.lengthM) && access.lengthM >= 0, `${building.code} invalid access length`);
+        assert.ok(access.lengthM <= plan.site.envelopeRadiusM * 2.2, `${building.code} access leaves settlement envelope`);
+        assert.deepEqual(access.sourcePoints[0], { x: building.entranceX, z: building.entranceZ });
+      }
       if (building.use === "barn") assert.ok(building.widthM * building.depthM >= 6);
       if (building.use === "home") {
         assert.ok(building.rooms.includes("living/common"));
@@ -81,8 +92,6 @@ test("every generated settlement has required services, homes, guarded gates and
 });
 
 test("settlement plans are deterministic, structurally diverse and not a shared grid stamp", () => {
-  // Deliberately sample both settlement classes. Registry order groups cities before
-  // villages, so places.slice(0, 30) would accidentally test only city archetypes.
   const sample = [
       ...places.filter((place) => place.kind === "city").slice(0, 10),
       ...places.filter((place) => place.kind === "village").slice(0, 20),
