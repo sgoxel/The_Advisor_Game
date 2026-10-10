@@ -20,9 +20,13 @@ jobs:
       - name: WP19 settlement authority tests
         run: node --experimental-strip-types --test tests/settlements.test.ts
       - name: Full regression suite
-        run: npm test 2>&1 | tee full-test.log
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee full-test.log
       - name: Production build
-        run: npm run build 2>&1 | tee build.log
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee build.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
