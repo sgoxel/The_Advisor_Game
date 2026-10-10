@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - agent1/wp15-natural-repair-v3
+    paths:
+      - .github/workflows/wp15-natural-repair-v3.yml
+      - tools/wp15_natural_repair.py
 permissions:
   contents: write
 jobs:
@@ -28,13 +31,13 @@ jobs:
         run: node --experimental-strip-types tools/wp15_targets.ts
       - name: Build
         run: npm run build
-      - name: Commit tested repair
+      - name: Commit tested source repair
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "AGENT #1"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
-          git rm -f .github/workflows/wp15-natural-shape-repair.yml .github/workflows/wp15-natural-repair-v3.yml tools/wp15_natural_repair.py
-          git add src/hydrology.ts src/surface.ts src/terrain-refine.ts tests/hydrology.test.ts tools/wp15_targets.ts .github/workflows/wp15-visual-evidence.yml
+          git checkout -- .github/workflows/wp15-visual-evidence.yml
+          git add src/hydrology.ts src/surface.ts src/terrain-refine.ts tests/hydrology.test.ts tools/wp15_targets.ts
           git commit -m "WP-S002-004-005 naturalize canonical lakes and visual targets"
           git push origin HEAD:agent1/wp15-natural-repair-v3
