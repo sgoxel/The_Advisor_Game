@@ -11,6 +11,7 @@ import type { Building, BuildingRole, Point, Room } from "./settlement-layout.ts
 
 export type InteriorDoor = {
   code: string;
+  kind: "door" | "stair";
   from: string;
   to: string;
   widthM: number;
@@ -33,6 +34,7 @@ export type InteriorAnchor = {
     | "desk"
     | "rack"
     | "hay"
+    | "stairs"
     | "entrance";
   x: number;
   z: number;
@@ -97,7 +99,7 @@ function anchorKind(role: BuildingRole, roomName: string, ordinal: number): Inte
  * Deterministically packs the canonical room program into floor-local strips. This is a logical
  * navigation/collision base, not final art. Each room receives at least the canonical required area,
  * the first room connects to the exterior threshold, and every later room is connected to the
- * preceding room so there are no unreachable mandatory spaces.
+ * preceding room so there are no unreachable mandatory spaces. Floor changes are explicit stairs.
  */
 export function interiorPlanFor(building: Building): InteriorPlan {
   const usableWidth = Math.max(2.4, building.width - 0.6),
@@ -141,14 +143,17 @@ export function interiorPlanFor(building: Building): InteriorPlan {
 
   const doors: InteriorDoor[] = [];
   if (rooms.length) {
-    doors.push({ code: `${building.code}/INTERIOR/DOOR/ENTRY`, from: "EXTERIOR", to: rooms[0].code, widthM: 1.1 });
-    for (let i = 1; i < rooms.length; i++)
+    doors.push({ code: `${building.code}/INTERIOR/DOOR/ENTRY`, kind: "door", from: "EXTERIOR", to: rooms[0].code, widthM: 1.1 });
+    for (let i = 1; i < rooms.length; i++) {
+      const floorChange = rooms[i - 1].floor !== rooms[i].floor;
       doors.push({
-        code: `${building.code}/INTERIOR/DOOR/${i}`,
+        code: `${building.code}/INTERIOR/${floorChange ? "STAIR" : "DOOR"}/${i}`,
+        kind: floorChange ? "stair" : "door",
         from: rooms[i - 1].code,
         to: rooms[i].code,
-        widthM: rooms[i - 1].floor === rooms[i].floor ? 0.9 : 1.0,
+        widthM: floorChange ? 1.0 : 0.9,
       });
+    }
   }
 
   const anchors: InteriorAnchor[] = [];
@@ -174,6 +179,16 @@ export function interiorPlanFor(building: Building): InteriorPlan {
       });
     }
   }
+  for (let i = 0; i < doors.length; i++) {
+    const connection = doors[i];
+    if (connection.kind !== "stair") continue;
+    const from = rooms.find((room) => room.code === connection.from),
+      to = rooms.find((room) => room.code === connection.to);
+    if (from)
+      anchors.push({ code: `${connection.code}/FROM`, room: from.code, kind: "stairs", x: from.x, z: from.z });
+    if (to)
+      anchors.push({ code: `${connection.code}/TO`, room: to.code, kind: "stairs", x: to.x, z: to.z });
+  }
 
   const topology = {
       building: building.code,
@@ -181,12 +196,12 @@ export function interiorPlanFor(building: Building): InteriorPlan {
       floors,
       footprint: [round(building.width), round(building.depth)],
       rooms: rooms.map((r) => [r.code, r.name, r.areaM2, r.floor, r.x, r.z, r.widthM, r.depthM]),
-      doors: doors.map((d) => [d.code, d.from, d.to, d.widthM]),
+      doors: doors.map((d) => [d.code, d.kind, d.from, d.to, d.widthM]),
       anchors: anchors.map((a) => [a.code, a.room, a.kind, a.x, a.z]),
     },
     serialized = JSON.stringify(topology),
     signature = digest(serialized).toString(16).padStart(8, "0"),
-    estimatedBytes = serialized.length * 2 + rooms.length * 96 + doors.length * 64 + anchors.length * 72;
+    estimatedBytes = serialized.length * 2 + rooms.length * 96 + doors.length * 72 + anchors.length * 72;
 
   return {
     code: `${building.code}/INTERIOR/${BUILDING_INTERIOR_VERSION}`,
