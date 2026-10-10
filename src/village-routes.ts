@@ -21,6 +21,7 @@ export const roadSegments: readonly RoadSegment[] = roads.map((road) => ({
 
 const villageById = new Map(villages.map((village) => [village.id, village]));
 const routeCache = new Map<string, VillageRoute>();
+const neighbourCache = new Map<string, readonly { place: Place; geodesicM: number }[]>();
 
 export type VillageRoute = RouteResult & { fromId: string; toId: string };
 
@@ -49,10 +50,19 @@ export function routeBetweenVillages(fromId: string, toId: string): VillageRoute
   return { ...cached, fromId, toId, points: [...cached.points].reverse() };
 }
 
-export const clearVillageRouteCache = () => routeCache.clear();
+export const clearVillageRouteCache = () => {
+  routeCache.clear();
+  neighbourCache.clear();
+};
 export const villageRouteCacheSize = () => routeCache.size;
 
-/** Nearest villages by geodesic distance (stable tie-break on id), excluding the village itself. */
+/**
+ * Nearest walk-reachable villages by geodesic distance (stable tie-break on id).
+ * Hydrology/cliffs are canonical blockers, so a visually nearby village across an
+ * unbridged river, lake or strait is not advertised as a walking neighbour. The
+ * bounded route proof is cached with the neighbour list and remains independent
+ * of camera, LOD, device, timing and query order.
+ */
 export function neighbouringVillages(
   id: string,
   limit = NEIGHBOUR_LIMIT,
@@ -60,15 +70,26 @@ export function neighbouringVillages(
 ): { place: Place; geodesicM: number }[] {
   const origin = villageById.get(id);
   if (!origin) return [];
-  return villages
+  const cacheKey = `${id}/${limit}/${maxDistanceM}`,
+    cached = neighbourCache.get(cacheKey);
+  if (cached) return [...cached];
+
+  const candidates = villages
     .filter((village) => village.id !== id)
     .map((place) => ({
       place,
       geodesicM: greatCircleDistance(origin.canonicalPosition, place.canonicalPosition),
     }))
     .filter((entry) => entry.geodesicM <= maxDistanceM)
-    .sort((x, y) => x.geodesicM - y.geodesicM || (x.place.id < y.place.id ? -1 : 1))
-    .slice(0, limit);
+    .sort((x, y) => x.geodesicM - y.geodesicM || (x.place.id < y.place.id ? -1 : 1));
+  const result: { place: Place; geodesicM: number }[] = [];
+  for (const entry of candidates) {
+    if (!routeBetweenVillages(id, entry.place.id).found) continue;
+    result.push(entry);
+    if (result.length >= limit) break;
+  }
+  neighbourCache.set(cacheKey, result);
+  return [...result];
 }
 
 export type MinimumWalkReport = {
