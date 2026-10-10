@@ -1,0 +1,25 @@
+name: WP-S002-004-007 completion changelog
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  append-and-clean:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Append deployment changelog and remove temporary workflow
+        run: |
+          set -euo pipefail
+          ENTRY="$(TZ=Europe/Istanbul date '+%Y-%m-%d %H:%M') Europe/Istanbul — WP-S002-004-007, AGENT #1, phase 3 deployment (MIXED): PR #68 merged as main 5dcf0956f8d65111b378a18ea166793e5b4dbe1c and GitHub Pages run 38061037931 successfully built, tested and deployed it. Accepted runtime remains the 109/109 unit, WebGPU/WebGL2/navigation and fresh VISUAL 8.5/10 political/Village evidence. Completion bookkeeping moves the WP from open ROADMAP to ROADMAP_ARCHIVE; Issue #17 will close only after this bookkeeping commit is also deployed."
+          grep -Fq "WP-S002-004-007, AGENT #1, phase 3 deployment" docs/changelog.txt || printf '%s\n' "$ENTRY" >> docs/changelog.txt
+          git rm .github/workflows/wp17-completion.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/changelog.txt
+          git commit -m "WP-S002-004-007 finalize completion bookkeeping"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
