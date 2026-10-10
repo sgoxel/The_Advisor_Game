@@ -1,0 +1,244 @@
+name: WP15 Agent1 apply canonical surface
+
+on:
+  push:
+    branches: [agent1/wp-s002-004-005-canonical-surface-20261010]
+    paths: [.github/workflows/wp15-agent1-apply.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Restore canonical surface and patch authorities
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 175941d00ce5bbf8c16bd7e0a6c4e92b9fb1a3ad:src/surface.ts > src/surface.ts
+          git show 175941d00ce5bbf8c16bd7e0a6c4e92b9fb1a3ad:tests/hydrology.test.ts > tests/hydrology.test.ts
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          # Remove the obsolete S001 sine-wave wet-corridor decision from settlement candidate generation.
+          p = Path('src/geography.ts')
+          text = p.read_text()
+          pattern = re.compile(r'/\*\*\n \* Transitional settlement-site guard.*?function locallyDrySettlementSite\(position: LonLat, maxReliefM: number\) \{.*?\n\}\n', re.S)
+          replacement = '''/**
+           * Seed-derived settlement candidate guard. Candidate selection only rejects
+           * canonical macro water/coasts and excessive relief. River/lake conflicts are
+           * resolved by the shared final-surface authority after the immutable place
+           * registry exists; no prototype river may influence settlement identity.
+           */
+          function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
+            const macro = macroSampleAt(position);
+            return Boolean(
+              macro.land &&
+              macro.reliefM <= maxReliefM &&
+              macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS >= 42
+            );
+          }
+          '''
+          text, count = pattern.subn(replacement, text, count=1)
+          assert count == 1, 'geography prototype settlement guard not found'
+          p.write_text(text)
+
+          # Port world authority onto the canonical surface without replacing unrelated current world code.
+          p = Path('src/world.ts')
+          text = p.read_text()
+          text = text.replace('import { nearestPlace, places, roadAt, roadDistanceAt } from "./geography.ts";', 'import { nearestPlace, places, roadAt } from "./geography.ts";')
+          anchor = 'import { macroSampleAt } from "./macro-geography.ts";\n'
+          assert anchor in text
+          text = text.replace(anchor, anchor + 'import { surfaceAt, surfaceElevationAt } from "./surface.ts";\n', 1)
+          text, count = re.subn(r'export function riverX\(z: number\): number \{\n  return 125 \+ 42 \* Math\.sin\(z / 150\) \+ 18 \* Math\.sin\(z / 57\);\n\}\n', '', text, count=1)
+          assert count == 1, 'world riverX prototype not found'
+          height_pattern = re.compile(r'/\*\* Global height:.*?export function biomeAt\(x: number, z: number\): string \{.*?\n\}\n\n/\*\*\n \* Transitional equirectangular', re.S)
+          authority = '''/** Global height comes from the shared deterministic terrain/hydrology authority. */
+          export function heightAt(x: number, z: number): number {
+            return surfaceElevationAt(x, z);
+          }
+          export function biomeAt(x: number, z: number): string {
+            const macro = macroSampleAt(sourceToLonLat(x, z)),
+              surface = surfaceAt(x, z),
+              hierarchy = cellSeed(Math.floor(x / 2), Math.floor(z / 2));
+            if (surface.water === "ocean") return "Ocean";
+            if (surface.water === "lake") return "Lake";
+            if (surface.water === "river") return "River";
+            if (surface.riverBank) return "Riverbank";
+            if (macro.domain === "Island") {
+              const coast = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS;
+              if (coast < hierarchy.parent.parent.beachWidth + 5 + hierarchy.surface * 0.15)
+                return "Sandy beach";
+              if (macro.volcanic && macro.mountainIntensity > 0.16) return "Volcanic highlands";
+              if (surface.cliff) return "Cliff";
+              if (macro.mountainIntensity > 0.12 || surface.elevation > 70) return "Highlands";
+              return "Island meadow";
+            }
+            const s = nearestPlace(x, z);
+            if (
+              s &&
+              Math.hypot(wrapSourceX(x - s.x), z - s.z) < (s.kind === "city" ? 420 : 84)
+            )
+              return "Settlement";
+            if (roadAt(x, z)) return "Road";
+            if (surface.cliff) return "Cliff";
+            if (macro.volcanic && macro.mountainIntensity > 0.16) return "Volcanic highlands";
+            if (macro.mountainIntensity > 0.1 || surface.elevation > 70) return "Highlands";
+            return field(x, z, 90, 4) > 0.45 ? "Woodland" : "Meadow";
+          }
+
+          /**
+           * Transitional equirectangular'''
+          text, count = height_pattern.subn(authority, text, count=1)
+          assert count == 1, 'world height/biome prototype block not found'
+          cell_pattern = re.compile(r'export function cellAt\(x: number, z: number\): Cell \{.*?\n\}\n/\*\* Features are owned', re.S)
+          cell = '''export function cellAt(x: number, z: number): Cell {
+            const tile = tileForPosition(x, z);
+            const cx = Math.floor(x / CELL_SIZE),
+              cz = Math.floor(z / CELL_SIZE);
+            const px = cx * CELL_SIZE + 1,
+              pz = cz * CELL_SIZE + 1,
+              surface = surfaceAt(px, pz),
+              road = roadAt(px, pz),
+              bridge = Boolean(road && surface.water !== "none"),
+              elevation = bridge ? Math.max(3, surface.elevation + 1.5) : surface.elevation,
+              biome = bridge ? "Bridge" : biomeAt(px, pz);
+            return {
+              code: cellSeed(cx, cz).code,
+              x: cx,
+              z: cz,
+              elevation,
+              biome,
+              // Canonical final-surface walkability; explicit roads are graded legal corridors.
+              walkable: Boolean(road) || bridge || surface.walkable,
+              tile: `${tile.level}/${tile.x}/${tile.z}`,
+            };
+          }
+          /** Features are owned'''
+          text, count = cell_pattern.subn(cell, text, count=1)
+          assert count == 1, 'world cellAt block not found'
+          p.write_text(text)
+
+          # Make the default route planner consume the same final surface as collision/world cells.
+          p = Path('src/routing.ts')
+          text = p.read_text()
+          text = text.replace('import { macroSampleAt } from "./macro-geography.ts";\n', 'import { surfaceAt } from "./surface.ts";\n')
+          text = text.replace('  enuToPosition,\n', '  enuToPosition,\n  lonLatToSource,\n', 1)
+          sampler_pattern = re.compile(r'export const macroTerrainSampler: TerrainSampler = \(position\) => \{.*?\n\};', re.S)
+          sampler = '''export const canonicalTerrainSampler: TerrainSampler = (position) => {
+            const source = lonLatToSource(position.lon, position.lat),
+              sample = surfaceAt(source.x, source.z);
+            return {
+              water: sample.water !== "none",
+              heightM: sample.elevation,
+              highland: sample.traversal === "blocked-cliff" ? 1 : sample.traversal === "difficult" ? 0.5 : 0,
+            };
+          };
+          /** Transitional export name retained for current callers; it now points to canonical final surface truth. */
+          export const macroTerrainSampler = canonicalTerrainSampler;'''
+          text, count = sampler_pattern.subn(sampler, text, count=1)
+          assert count == 1, 'routing macro sampler not found'
+          text = text.replace('const terrain = request.terrain ?? macroTerrainSampler,', 'const terrain = request.terrain ?? canonicalTerrainSampler,', 1)
+          text = text.replace('seeded macro-geography authority', 'shared canonical final-surface authority')
+          p.write_text(text)
+
+          # Correct old surface road grading and improve natural readability without changing seed ownership.
+          p = Path('src/surface.ts')
+          text = p.read_text()
+          text = text.replace('import { nearestPlace, roadAt } from "./geography.ts";', 'import { nearestPlace, roadAt, roadDistanceAt } from "./geography.ts";')
+          text = text.replace('const RIVER_STEPS = 22;\nconst RIVER_STEP = 360;', 'const RIVER_STEPS = 30;\nconst RIVER_STEP = 255;')
+          text = text.replace('turn = (localField(sx, z, 920, 83 + continentId) - 0.5) * 0.62;', 'turn = (sphericalNoise(sx, z, 83 + continentId) - 0.5) * 1.05;')
+          text = text.replace('tributarySteps = 8,', 'tributarySteps = 12,')
+          text = text.replace('* 360;', '* 520;')
+          text = text.replace('roadBlend = road ? smooth01(Math.max(0, Math.min(1, (Math.abs(z - road.z) - 5) / 7))) : 1,', 'roadBlend = road ? smooth01(Math.max(0, Math.min(1, (roadDistanceAt(sx, z, road) - 5) / 7))) : 1,')
+          natural_pattern = re.compile(r'export function naturalElevationAt\(x: number, z: number\): number \{.*?\n\}\n\nfunction canonicalBasinX', re.S)
+          natural = '''export function naturalElevationAt(x: number, z: number): number {
+            const sx = wrapSourceX(x),
+              position = sourceToLonLat(sx, z),
+              macro = macroSampleAt(position);
+            if (macro.domain === "Ocean") return -2.8;
+            if (macro.domain === "Lake") return -1.8;
+            const noise = terrainNoise(sx, z),
+              broad = sphericalNoise(sx, z, 3),
+              mountainWeight = smooth01(macro.mountainIntensity / 0.38),
+              ridgePhase = addressed(`RIDGE/${macro.continentId}`) * Math.PI * 2,
+              ridgeWave = 1 - Math.abs(Math.sin(position.lon * (10.5 + macro.continentId * 1.7) + position.lat * (17.5 - macro.continentId * 1.15) + ridgePhase)),
+              ridge = smooth01((ridgeWave - 0.34) / 0.66),
+              ridgeDetail = ridge * Math.min(138, macro.reliefM * 0.34) * mountainWeight,
+              base = macro.domain === "Island" ? 3.5 + noise * 13 : 3.5 + broad * 8 + noise * 4.5,
+              macroRelief = macro.reliefM * (0.76 + 0.24 * noise) + ridgeDetail,
+              cap = macro.domain === "Island" ? 180 : 620,
+              terrain = Math.min(cap, Math.max(1.2, base + macroRelief)),
+              coastSource = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS;
+            return lerp(-2.8, terrain, smooth01((coastSource + 2) / 12));
+          }
+
+          function canonicalBasinX'''
+          text, count = natural_pattern.subn(natural, text, count=1)
+          assert count == 1, 'surface naturalElevationAt block not found'
+          p.write_text(text)
+
+          Path('tests/hydrology-integration.test.ts').write_text(r'''import { test } from "node:test";
+          import assert from "node:assert/strict";
+          import fs from "node:fs";
+          import { drainageRecipeAt, hydrologyDiagnostics, surfaceAt } from "../src/surface.ts";
+          import { canonicalTerrainSampler, planRoute } from "../src/routing.ts";
+          import { sourceToLonLat, SOURCE_PRESENTATION_WIDTH } from "../src/planet.ts";
+          import { cellAt } from "../src/world.ts";
+
+          function firstRiverPoint() {
+            for (let z = 0; z < hydrologyDiagnostics.basinRows; z++)
+              for (let x = 0; x < hydrologyDiagnostics.basinColumns; x++) {
+                const recipe = drainageRecipeAt(x, z);
+                if (recipe && recipe.points.length > 4) return recipe.points[2];
+              }
+            throw new Error("no seeded river recipe");
+          }
+
+          test("prototype river authority is absent from world and settlement siting", () => {
+            const world = fs.readFileSync(new URL("../src/world.ts", import.meta.url), "utf8"),
+              geography = fs.readFileSync(new URL("../src/geography.ts", import.meta.url), "utf8");
+            assert.equal(world.includes("riverX("), false);
+            assert.equal(world.includes("S001 prototype"), false);
+            assert.equal(geography.includes("prototypeRiverX"), false);
+            assert.equal(geography.includes("old source-domain river"), false);
+          });
+
+          test("routing and world collision agree with canonical seeded river water", () => {
+            const point = firstRiverPoint(),
+              canonical = sourceToLonLat(point.x, point.z),
+              sample = surfaceAt(point.x, point.z),
+              routeSample = canonicalTerrainSampler(canonical);
+            assert.equal(sample.water, "river");
+            assert.equal(routeSample.water, true);
+            assert.equal(surfaceAt(point.x + SOURCE_PRESENTATION_WIDTH, point.z).catchmentCode, sample.catchmentCode);
+            const cell = cellAt(point.x, point.z);
+            if (cell.biome !== "Bridge") assert.equal(cell.walkable, false);
+            const target = sourceToLonLat(point.x + 600, point.z + 600),
+              route = planRoute({ from: canonical, to: target });
+            assert.equal(route.found, false);
+            assert.equal(route.reason, "start-in-water");
+          });
+          ''').replace(/^          /gm, ''))
+          PY
+      - name: Install and validate
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Commit correction
+        run: |
+          git config user.name "AGENT #1"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add src/geography.ts src/world.ts src/routing.ts src/surface.ts tests/hydrology.test.ts tests/hydrology-integration.test.ts
+          git commit -m "WP-S002-004-005 unify canonical hydrology and traversal authority"
+          git push origin HEAD:agent1/wp-s002-004-005-canonical-surface-20261010
