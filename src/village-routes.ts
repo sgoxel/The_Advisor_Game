@@ -10,7 +10,7 @@
  * search whose sampler is `cellAt()` itself. This keeps final legality truthful
  * without multiplying expensive world queries across every explored A* cell.
  */
-import { roads, villages, type Place } from "./geography.ts";
+import { roadAt, roads, villages, type Place } from "./geography.ts";
 import {
   enuToPosition,
   greatCircleDistance,
@@ -61,9 +61,12 @@ export type VillageRoute = RouteResult & { fromId: string; toId: string };
 
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
-function finalTraversalCell(position: LonLat) {
+function finalTraversalState(position: LonLat) {
   const flat = lonLatToFlat(position.lon, position.lat);
-  return cellAt(flat.x, flat.z);
+  return {
+    cell: cellAt(flat.x, flat.z),
+    road: roadAt(flat.x, flat.z),
+  };
 }
 
 /**
@@ -72,7 +75,7 @@ function finalTraversalCell(position: LonLat) {
  * water/bridge/road elevation, biome and collision walkability.
  */
 export const finalTraversalTerrainSampler: TerrainSampler = (position: LonLat) => {
-  const cell = finalTraversalCell(position),
+  const { cell } = finalTraversalState(position),
     biome = cell.biome.toLowerCase(),
     naturalWater = biome === "ocean" || biome === "lake" || biome === "river",
     difficult = biome.includes("highland") || biome.includes("volcanic");
@@ -85,10 +88,14 @@ export const finalTraversalTerrainSampler: TerrainSampler = (position: LonLat) =
   };
 };
 
-function surfaceForBiome(biome: string): RouteSurface {
+function surfaceForState(biome: string, onRoad: boolean): RouteSurface {
   const value = biome.toLowerCase();
   if (value === "bridge") return "bridge";
-  if (value === "road") return "road";
+  // Settlement presentation intentionally masks the underlying road biome near
+  // village endpoints. roadAt() is the same deterministic road-corridor query
+  // used by world composition, so it preserves road walking cost there without
+  // weakening cellAt() legality.
+  if (onRoad || value === "road") return "road";
   if (value.includes("highland") || value.includes("volcanic")) return "difficult";
   return "open";
 }
@@ -128,9 +135,9 @@ function refineAgainstFinalTraversal(route: RouteResult): RouteResult | undefine
           { east: delta.east * t, north: delta.north * t, up: 0 },
           a,
         ),
-        cell = finalTraversalCell(sample);
+        { cell, road } = finalTraversalState(sample);
       if (!cell.walkable) return undefined;
-      const surface = surfaceForBiome(cell.biome);
+      const surface = surfaceForState(cell.biome, Boolean(road));
       surfaceM[surface] += stepM;
       fantasySeconds += stepM / speedFor(surface);
     }
