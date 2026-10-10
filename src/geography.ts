@@ -61,8 +61,19 @@ const COUNTRY_NAMES = [
   "Mossward", "Silverfen", "Hearthmarch", "Pinewatch", "Crownhold", "Longmere",
   "Embervale", "Whitefen", "Kingsward", "Sablemarch", "Windreach", "Lakehold",
 ] as const;
-const CITY_NAMES = ["Citadel", "Market", "Harbour"] as const;
-const VILLAGE_NAMES = ["Briarford", "Oakmere", "Thornfield"] as const;
+const CITY_SLOTS_PER_COUNTRY = 3;
+const VILLAGE_SLOTS_PER_CITY = 3;
+const CULTURE_STEMS = [
+  ["Alder", "Briar", "Oak", "Thorn", "Grey", "Mere", "Stone", "Willow", "Falcon", "Hearth", "Raven", "Ash"],
+  ["Gold", "Rose", "Iron", "Sun", "Dawn", "High", "Red", "White", "Wind", "Crown", "Silver", "North"],
+  ["Moss", "Pine", "Ember", "Sable", "Lake", "Long", "East", "West", "Frost", "Wolf", "Star", "Black"],
+] as const;
+const CITY_ENDINGS = [
+  "haven", "gate", "hold", "watch", "reach", "bridge", "crest", "court", "spire", "ford", "mere", "cross",
+] as const;
+const VILLAGE_ENDINGS = [
+  "wick", "ford", "mere", "field", "brook", "stead", "hollow", "den", "wood", "well", "ham", "croft", "thorpe", "lea", "combe", "fold",
+] as const;
 const TAU = Math.PI * 2;
 
 function digest(text: string): number {
@@ -76,6 +87,26 @@ function addressedFor(seed: string, address: string) {
 }
 function addressed(address: string) {
   return addressedFor(WORLD_SEED, address);
+}
+function seededSettlementName(
+  kind: "city" | "village",
+  address: string,
+  continent: number,
+  used: Set<string>,
+) {
+  const stems = CULTURE_STEMS[continent % CULTURE_STEMS.length],
+    endings = kind === "city" ? CITY_ENDINGS : VILLAGE_ENDINGS,
+    reserved = new Set(COUNTRY_NAMES.map((name) => name.toLowerCase()));
+  for (let attempt = 0; attempt < 96; attempt++) {
+    const stem = stems[Math.floor(addressed(`${address}/NAME/${attempt}/STEM`) * stems.length)],
+      ending = endings[Math.floor(addressed(`${address}/NAME/${attempt}/ENDING`) * endings.length)],
+      name = `${stem}${ending}`,
+      key = name.toLowerCase();
+    if (used.has(key) || reserved.has(key)) continue;
+    used.add(key);
+    return name;
+  }
+  throw new Error(`Seeded geography could not create unique ${kind} name for ${address}`);
 }
 function canonicalPosition(lon: number, lat: number, elevation = 0): CanonicalPosition {
   return {
@@ -129,8 +160,8 @@ export function politicalRegistryCountsForSeed(seed: string) {
     continents: continents.length,
     perContinent,
     countries: countryCount,
-    cities: countryCount * CITY_NAMES.length,
-    villages: countryCount * CITY_NAMES.length * VILLAGE_NAMES.length,
+    cities: countryCount * CITY_SLOTS_PER_COUNTRY,
+    villages: countryCount * CITY_SLOTS_PER_COUNTRY * VILLAGE_SLOTS_PER_CITY,
   } as const;
 }
 
@@ -264,10 +295,11 @@ function cityCandidate(country: Country, city: number, attempt: number) {
 
 export const cities: Place[] = (() => {
   const result: Place[] = [],
-    allAccepted: CanonicalPosition[] = [];
+    allAccepted: CanonicalPosition[] = [],
+    usedNames = new Set<string>();
   for (const country of countries) {
     const localAccepted: CanonicalPosition[] = [];
-    for (let city = 0; city < CITY_NAMES.length; city++) {
+    for (let city = 0; city < CITY_SLOTS_PER_COUNTRY; city++) {
       let best: CanonicalPosition | undefined,
         bestScore = -Infinity;
       for (let attempt = 0; attempt < 220; attempt++) {
@@ -293,12 +325,14 @@ export const cities: Place[] = (() => {
         throw new Error(`Seeded geography could not place city ${country.continent}/${country.id}/${city}`);
       localAccepted.push(best);
       allAccepted.push(best);
-      const id = `${country.continent}/${country.id}/${city}`;
+      const id = `${country.continent}/${country.id}/${city}`,
+        code = `${country.code}/CITY/${city}`,
+        name = seededSettlementName("city", code, country.continent, usedNames);
       result.push(
         withPresentation({
           id,
-          code: `${country.code}/CITY/${city}`,
-          name: `${country.name} ${CITY_NAMES[city]}`,
+          code,
+          name,
           canonicalPosition: best,
           kind: "city" as const,
           continent: country.continent,
@@ -314,9 +348,10 @@ export const cities: Place[] = (() => {
 /** Villages are irregular SEED-addressed radial candidates, never a fixed row. */
 export const villages: Place[] = (() => {
   const result: Place[] = [],
-    accepted: CanonicalPosition[] = [];
+    accepted: CanonicalPosition[] = [],
+    usedNames = new Set<string>(["alderwick"]);
   for (const city of cities) {
-    for (let v = 0; v < VILLAGE_NAMES.length; v++) {
+    for (let v = 0; v < VILLAGE_SLOTS_PER_CITY; v++) {
       let position: CanonicalPosition | undefined;
       for (let attempt = 0; attempt < 280; attempt++) {
         const prefix = `VILLAGE/${city.id}/${v}/${attempt}`,
@@ -337,16 +372,18 @@ export const villages: Place[] = (() => {
       }
       if (!position) throw new Error(`Seeded geography could not place village ${city.id}/${v}`);
       accepted.push(position);
+      const code = `${city.code}/VILLAGE/${v}`,
+        name =
+          city.continent === 0 && city.country === 0 && city.city === 0 && v === 0
+            ? "Alderwick"
+            : seededSettlementName("village", code, city.continent, usedNames);
       result.push(
         withPresentation({
           ...city,
           id: `${city.id}/${v}`,
-          code: `${city.code}/VILLAGE/${v}`,
+          code,
           kind: "village" as const,
-          name:
-            city.continent === 0 && city.country === 0 && city.city === 0 && v === 0
-              ? "Alderwick"
-              : `${VILLAGE_NAMES[v]} ${city.continent + 1}.${city.country + 1}.${city.city + 1}`,
+          name,
           canonicalPosition: position,
         }),
       );
