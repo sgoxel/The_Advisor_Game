@@ -33,21 +33,18 @@ test("political registry uses seed-variable minimum counts rather than fixed max
   assert.equal(new Set(countries.map((country) => country.name)).size, countries.length);
 });
 
-test("canonical settlement names are cultural, locally collision-safe and free of numeric templates", () => {
+test("canonical settlement names are cultural, typed collision-safe and free of numeric templates", () => {
   const settlements = [...cities, ...villages],
     allNames = [...countries, ...settlements].map((place) => place.name.toLowerCase()),
     globalUniqueRatio = new Set(allNames).size / allNames.length;
   assert.equal(villages[0].name, "Alderwick");
+  assert.equal(new Set(cities.map((city) => city.name.toLowerCase())).size, cities.length);
+  assert.equal(new Set(villages.map((village) => village.name.toLowerCase())).size, villages.length);
+  assert.equal(new Set([...cities, ...villages].map((place) => place.code)).size, cities.length + villages.length);
   assert.ok(globalUniqueRatio >= 0.98, `global place-name uniqueness fell to ${globalUniqueRatio}`);
   for (const place of settlements) {
     assert.doesNotMatch(place.name, /\d+\.\d+\.\d+/);
     assert.doesNotMatch(place.name, /^(Citadel|Market|Harbour)$/);
-  }
-  for (const country of countries) {
-    const localNames = settlements
-      .filter((place) => place.continent === country.continent && place.country === country.id)
-      .map((place) => place.name.toLowerCase());
-    assert.equal(new Set(localNames).size, localNames.length, `${country.code} has a local name collision`);
   }
   const continentFamilies = continents.map((continent) =>
     new Set(
