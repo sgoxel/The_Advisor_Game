@@ -13,6 +13,30 @@ async function selectRole(page, role) {
   }, role);
 }
 
+async function selectRoleViaInspector(page, role) {
+  const code = await page.evaluate(async (wantedRole) => {
+    const geography = await import("/src/geography.ts"),
+      settlements = await import("/src/settlement-layout.ts"),
+      planet = await import("/src/planet.ts"),
+      village = geography.villages[0],
+      layout = settlements.settlementLayout(village),
+      building = layout.buildings.find((candidate) => candidate.role === wantedRole);
+    if (!building) return "";
+    const position = planet.sourceToLonLat(building.x, building.z),
+      panel = document.getElementById("cell-panel"),
+      height = document.getElementById("cell-height");
+    height.setAttribute(
+      "title",
+      `Canonical position: lon ${position.lon.toFixed(9)}, lat ${position.lat.toFixed(9)}, elevation 0 m`,
+    );
+    panel.hidden = false;
+    return building.code;
+  }, role);
+  if (!code) return false;
+  await page.waitForFunction((expected) => window.advisorInteriors.state.selected === expected, code);
+  return true;
+}
+
 async function traverseAllRooms(page) {
   let state = await page.evaluate(() => window.advisorInteriors.state),
     visited = new Set([state.currentRoom]);
@@ -38,13 +62,17 @@ test("WP19 protagonist-demand interiors use, evict and reconstruct canonically",
   expect(initial.cache.active).toBe(0);
   expect(initial.cache.materializations).toBe(0);
 
-  expect(await selectRole(page, "home")).toBe(true);
+  expect(await selectRoleViaInspector(page, "home")).toBe(true);
   let selected = await page.evaluate(() => window.advisorInteriors.state);
   expect(selected.active).toBeNull();
   expect(selected.cache.active).toBe(0);
+  await expect(page.locator("#enter-building")).toBeVisible();
   await page.locator("#enter-building").click();
   await expect(page.locator("#interior-panel")).toBeVisible();
   let entered = await page.evaluate(() => window.advisorInteriors.state);
+  expect(entered.entryResolution.approved).toBe(true);
+  expect(entered.entryResolution.character.accepted).toBe(true);
+  expect(entered.entryResolution.simulation.valid).toBe(true);
   expect(entered.active.role).toBe("home");
   expect(entered.cache.active).toBe(1);
   expect(entered.cache.materializations).toBe(1);
