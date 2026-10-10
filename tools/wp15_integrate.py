@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 
 def read(path: str) -> str:
@@ -17,136 +16,89 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-def replace_slice(text: str, start: str, end: str, new: str, label: str) -> str:
-    a = text.find(start)
-    b = text.find(end, a + len(start))
-    if a < 0 or b < 0:
-        raise RuntimeError(f"{label}: markers not found")
-    return text[:a] + new + text[b:]
-
-
-# Make the restored hydrology module pure: it may be queried by geography siting
-# without creating a geography <-> surface cycle. Settlement/road earthworks live
-# in src/surface.ts, which composes this natural authority afterwards.
-path = "src/hydrology.ts"
+# Final WP15 adapter: routing consumes the same composed terrain/traversal
+# authority used by world height/cells instead of the old macro-only sampler.
+path = "src/routing.ts"
 text = read(path)
 text = replace_once(
     text,
-    'import { nearestPlace, roadAt } from "./geography.ts";\n',
-    "",
-    "hydrology geography import",
+    "seeded macro-geography authority) plus explicit road/bridge segments",
+    "final composed surface authority) plus explicit road/bridge segments",
+    "routing header authority",
 )
-pattern = re.compile(
-    r'\n  const place = nearestPlace\(sx, z\),.*?\n  if \(hydro\.water === "none"\) elevation = lerp\(3, elevation, flatten\);',
-    re.S,
+text = replace_once(
+    text,
+    'import { macroSampleAt } from "./macro-geography.ts";\n',
+    'import { surfaceAt as finalSurfaceAt } from "./surface.ts";\n',
+    "routing surface import",
 )
-text, count = pattern.subn("", text, count=1)
-if count != 1:
-    raise RuntimeError(f"hydrology earthwork block: expected one match, found {count}")
+text = replace_once(
+    text,
+    "  greatCircleDistance,\n  positionToEnu,",
+    "  greatCircleDistance,\n  lonLatToSource,\n  positionToEnu,",
+    "routing source-coordinate import",
+)
+text = replace_once(
+    text,
+    '''export type SurfaceSample = {\n  water: boolean;\n  /** Ground height in metres; only differences between cells are used. */\n  heightM: number;\n  /** 0..1 mountain/highland intensity; high values are difficult to cross. */\n  highland: number;\n};''',
+    '''export type SurfaceSample = {\n  water: boolean;\n  /** Canonical cliff/obstacle from the final traversal authority. */\n  blocked?: boolean;\n  /** Ground height in metres; only differences between cells are used. */\n  heightM: number;\n  /** 0..1 terrain difficulty signal; high values are difficult to cross. */\n  highland: number;\n};''',
+    "routing surface sample type",
+)
+text = replace_once(
+    text,
+    '''export const macroTerrainSampler: TerrainSampler = (position) => {\n  const sample = macroSampleAt(position);\n  return {\n    water: !sample.land,\n    heightM: sample.reliefM,\n    highland: sample.mountainIntensity,\n  };\n};''',
+    '''export const finalTerrainSampler: TerrainSampler = (position) => {\n  const source = lonLatToSource(position.lon, position.lat),\n    sample = finalSurfaceAt(source.x, source.z);\n  return {\n    water: sample.water !== "none",\n    blocked: sample.traversal === "blocked-cliff",\n    heightM: sample.elevation,\n    highland: sample.traversal === "difficult" ? 1 : 0,\n  };\n};''',
+    "routing final terrain sampler",
+)
+text = replace_once(
+    text,
+    '''const FLAG_WATER = 1,\n  FLAG_HIGHLAND = 2,\n  FLAG_ROAD = 4,\n  FLAG_BRIDGE = 8;''',
+    '''const FLAG_WATER = 1,\n  FLAG_HIGHLAND = 2,\n  FLAG_ROAD = 4,\n  FLAG_BRIDGE = 8,\n  FLAG_BLOCKED = 16;''',
+    "routing blocked flag",
+)
+text = replace_once(
+    text,
+    '''    if (surface.water) flag |= FLAG_WATER;\n    if (surface.highland >= HIGHLAND_DIFFICULT) flag |= FLAG_HIGHLAND;''',
+    '''    if (surface.water) flag |= FLAG_WATER;\n    if (surface.blocked) flag |= FLAG_BLOCKED;\n    if (surface.highland >= HIGHLAND_DIFFICULT) flag |= FLAG_HIGHLAND;''',
+    "routing surface flags",
+)
+text = replace_once(
+    text,
+    '''  const passable = (idx: number) =>\n    !(flags[idx] & FLAG_WATER) || !!(flags[idx] & FLAG_BRIDGE);''',
+    '''  const passable = (idx: number) => {\n    const flag = flags[idx];\n    if (flag & FLAG_WATER) return !!(flag & FLAG_BRIDGE);\n    if (flag & FLAG_BLOCKED) return !!(flag & FLAG_ROAD);\n    return true;\n  };''',
+    "routing passability",
+)
+text = replace_once(
+    text,
+    "  const terrain = request.terrain ?? macroTerrainSampler,",
+    "  const terrain = request.terrain ?? finalTerrainSampler,",
+    "routing default sampler",
+)
 write(path, text)
 
-# Current geography keeps all recent political-authority work, but settlement
-# legality now consults the canonical natural hydrology instead of the old sine river.
+# Remove the stale transitional note now that settlement legality really queries
+# canonical hydrology rather than the deleted sine-river corridor.
 path = "src/geography.ts"
 text = read(path)
 text = replace_once(
     text,
-    'import { travelMetrics } from "./travel.ts";\n',
-    'import { travelMetrics } from "./travel.ts";\nimport { surfaceAt as naturalSurfaceAt } from "./hydrology.ts";\n',
-    "geography hydrology import",
-)
-new_guard = '''function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {\n  const macro = macroSampleAt(position);\n  if (!macro.land || macro.reliefM > maxReliefM) return false;\n  if (macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS < 42) return false;\n  const { x, z } = lonLatToSource(position.lon, position.lat),\n    surface = naturalSurfaceAt(x, z);\n  return surface.water === "none" && !surface.cliff;\n}\n\n'''
-text = replace_slice(
-    text,
-    "function locallyDrySettlementSite(",
-    "/**\n * Country anchors",
-    new_guard,
-    "geography dry settlement guard",
+    '''/**\n * Transitional settlement-site guard for the current local terrain prototype.\n * Political ownership still comes exclusively from countryAtPosition(). Until the\n * hydrology WP replaces the old source-domain river, placement simply rejects its\n * known wet corridor and a narrow coastal margin instead of filling water under a\n * city or village.\n */''',
+    '''/**\n * Settlement-site legality reads canonical macro land plus priority-0..4 natural\n * hydrology. Political ownership still comes exclusively from countryAtPosition();\n * siting cannot fill or relocate authoritative water to rescue a candidate.\n */''',
+    "geography settlement comment",
 )
 write(path, text)
 
-# Current world keeps recent road/political/runtime integrations and consumes the
-# final composed surface for height, biome and traversal. The prototype river is removed.
-path = "src/world.ts"
+# Keep the routing regression test aligned with the authority contract rather than
+# preserving the old macro-only sampler name.
+path = "tests/routing.test.ts"
 text = read(path)
+text = replace_once(text, "  macroTerrainSampler,", "  finalTerrainSampler,", "routing test import")
 text = replace_once(
     text,
-    'import { macroSampleAt } from "./macro-geography.ts";\n',
-    'import { macroSampleAt } from "./macro-geography.ts";\nimport { surfaceAt, surfaceElevationAt } from "./surface.ts";\n',
-    "world surface import",
-)
-text = replace_once(
-    text,
-    '''export function riverX(z: number): number {\n  return 125 + 42 * Math.sin(z / 150) + 18 * Math.sin(z / 57);\n}\n''',
-    "",
-    "prototype river function",
-)
-world_surface = '''/** Global height comes from the shared deterministic final-surface authority. */\nexport function heightAt(x: number, z: number): number {\n  return surfaceElevationAt(x, z);\n}\nexport function biomeAt(x: number, z: number): string {\n  const macro = macroSampleAt(sourceToLonLat(x, z)),\n    surface = surfaceAt(x, z),\n    hierarchy = cellSeed(Math.floor(x / 2), Math.floor(z / 2));\n  if (surface.water === "ocean") return "Ocean";\n  if (surface.water === "lake") return "Lake";\n  if (surface.water === "river") return "River";\n  if (surface.riverBank) return "Riverbank";\n  if (macro.domain === "Island") {\n    const coast = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS;\n    if (coast < hierarchy.parent.parent.beachWidth + 5 + hierarchy.surface * 0.15)\n      return "Sandy beach";\n    if (surface.cliff) return "Cliff";\n    if (macro.volcanic && macro.mountainIntensity > 0.16) return "Volcanic highlands";\n    if (macro.mountainIntensity > 0.12 || surface.elevation > 70) return "Highlands";\n    return "Island meadow";\n  }\n  const s = nearestPlace(x, z);\n  if (\n    s &&\n    Math.hypot(wrapSourceX(x - s.x), z - s.z) < (s.kind === "city" ? 420 : 84)\n  )\n    return "Settlement";\n  if (roadAt(x, z)) return "Road";\n  if (surface.cliff) return "Cliff";\n  if (macro.volcanic && macro.mountainIntensity > 0.16) return "Volcanic highlands";\n  if (macro.mountainIntensity > 0.1 || surface.elevation > 70) return "Highlands";\n  return field(x, z, 90, 4) > 0.45 ? "Woodland" : "Meadow";\n}\n\n'''
-text = replace_slice(
-    text,
-    "/** Global height:",
-    "/**\n * Transitional equirectangular",
-    world_surface,
-    "world height/biome authority",
-)
-cell = '''export function cellAt(x: number, z: number): Cell {\n  const tile = tileForPosition(x, z),\n    cx = Math.floor(x / CELL_SIZE),\n    cz = Math.floor(z / CELL_SIZE),\n    px = cx * CELL_SIZE + 1,\n    pz = cz * CELL_SIZE + 1,\n    surface = surfaceAt(px, pz),\n    road = roadAt(px, pz),\n    bridge = Boolean(road && roadDistanceAt(px, pz, road) <= 5 && surface.water !== "none"),\n    elevation = bridge ? Math.max(3, surface.elevation + 1.5) : surface.elevation,\n    biome = bridge ? "Bridge" : biomeAt(px, pz);\n  return {\n    code: cellSeed(cx, cz).code,\n    x: cx,\n    z: cz,\n    elevation,\n    biome,\n    walkable: bridge || surface.walkable,\n    tile: `${tile.level}/${tile.x}/${tile.z}`,\n  };\n}\n'''
-text = replace_slice(
-    text,
-    "export function cellAt(",
-    "/** Features are owned",
-    cell,
-    "world cell traversal",
+    'test("the real macro terrain sampler agrees with macro-geography water and relief", () => {\n  const sample = macroTerrainSampler(villages[0].canonicalPosition);',
+    'test("the default terrain sampler reads the final composed surface authority", () => {\n  const sample = finalTerrainSampler(villages[0].canonicalPosition);',
+    "routing test final sampler",
 )
 write(path, text)
 
-# Terrain tint no longer paints a second, sine-derived river. Coarse terrain and
-# refined local terrain both read the same surface classification.
-path = "src/geometry.ts"
-text = read(path)
-text = replace_once(
-    text,
-    'import { featuresFor, field, heightAt, riverX, type Tile } from "./world.ts";\n',
-    'import { featuresFor, field, heightAt, type Tile } from "./world.ts";\n',
-    "geometry world import",
-)
-text = replace_once(
-    text,
-    'import { sourceToLonLat, wrapSourceX, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";\n',
-    'import { sourceToLonLat, wrapSourceX, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";\nimport { surfaceAt } from "./surface.ts";\n',
-    "geometry surface import",
-)
-old = '''  // Current composed river surface; avoid constructing the unrelated five-level\n  // feature hierarchy for every surface texel. Same prototype river authority.\n  if (macro.domain === "Mainland" && elevation < 0.1) return color(76, 128, 148);\n  if (macro.domain === "Mainland" && Math.abs(wrapSourceX(x - riverX(z))) < 32)\n    return color(151, 143, 99);\n'''
-new = '''  const composedSurface = surfaceAt(x, z);\n  if (composedSurface.water === "river") return color(76, 128, 148);\n  if (composedSurface.riverBank) return color(151, 143, 99);\n'''
-text = replace_once(text, old, new, "geometry prototype river tint")
-write(path, text)
-
-# Refine the current worker terrain before applying the already-landed bounded
-# vegetation batch; do not restore the older per-feature nature path.
-path = "src/tile-worker.ts"
-text = read(path)
-text = replace_once(
-    text,
-    'import { convertTileGeometryToEnu } from "./render-frame.ts";\n',
-    'import { convertTileGeometryToEnu } from "./render-frame.ts";\nimport { refineTerrainGeometry } from "./terrain-refine.ts";\n',
-    "tile worker refine import",
-)
-text = replace_once(
-    text,
-    '''    const data = buildTile(tile),\n      vegetation = buildVegetationGeometry(tile);\n    data.nature = vegetation.geometry;\n''',
-    '''    const data = buildTile(tile),\n      vegetation = buildVegetationGeometry(tile);\n    data.terrain = refineTerrainGeometry(tile, data.terrain);\n    data.nature = vegetation.geometry;\n''',
-    "tile worker refine call",
-)
-write(path, text)
-
-# Keep every existing test routine and add the two WP15 suites.
-path = "package.json"
-text = read(path)
-text = replace_once(
-    text,
-    'tests/world.test.ts tests/macro-geography.test.ts',
-    'tests/world.test.ts tests/hydrology.test.ts tests/terrain-refine.test.ts tests/macro-geography.test.ts',
-    "package WP15 tests",
-)
-write(path, text)
-
-print("WP-S002-004-005 integration patch applied")
+print("WP-S002-004-005 final routing adapter applied")
