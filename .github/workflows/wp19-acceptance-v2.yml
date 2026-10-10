@@ -1,0 +1,108 @@
+name: WP19 exact-head acceptance v2
+on:
+  push:
+    branches: [agent1/wp-s002-004-009-20261011]
+    paths-ignore:
+      - 'tmp/wp19-evidence/**'
+concurrency:
+  group: wp19-acceptance-v2-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: write
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s002-004-009-20261011
+          fetch-depth: 0
+      - name: Verify branch-native integration gate
+        shell: bash
+        run: |
+          grep -q 'roadAt, roadDistanceAt' src/world.ts
+          grep -q 'if (tile.size <= 512)' src/world.ts
+          grep -q 'interior-selection' src/interior-ui.ts
+          grep -q 'buildSettlementFieldGeometry' src/tile-worker.ts
+          grep -q 'resolveInteriorEntry' src/interior-ui-core.ts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Unit and production-build gates
+        run: |
+          npm test
+          npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: WebGPU browser gate
+        run: xvfb-run -a npm run test:webgpu
+      - name: WebGL2 fallback browser gate
+        run: xvfb-run -a npx playwright test --config playwright.fallback.config.js
+      - name: Navigation browser gate
+        run: xvfb-run -a npx playwright test --config playwright.navigation.config.js
+      - name: Capture fresh WP19 MIXED evidence
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          python -m pip install playwright==1.63.0 pillow
+          npm run preview -- --port 4174 > /tmp/wp19-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+
+          EXTERIOR='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>{const c=g.villages.slice(0,24).map(v=>({v,l:s.settlementLayout(v)})).sort((a,b)=>a.l.buildings.length-b.l.buildings.length);window.__a=c[0];window.__b=c.find(x=>x.l.archetype!==window.__a.l.archetype&&x.l.buildings.length>=c[Math.floor(c.length*.65)].l.buildings.length)||c[c.length-1];window.__d=c.find(x=>x.l.archetype!==window.__a.l.archetype&&x.l.archetype!==window.__b.l.archetype)||c[Math.floor(c.length/2)];window.advisorWorld.navigation.setFocus(window.__a.v.canonicalPosition.lon,window.__a.v.canonicalPosition.lat);window.advisorWorld.setHalfHeight(115)});settle;shot:village-small;eval:(window.advisorWorld.navigation.setFocus(window.__b.v.canonicalPosition.lon,window.__b.v.canonicalPosition.lat),window.advisorWorld.setHalfHeight(125));settle;shot:village-large;eval:(window.advisorWorld.navigation.setFocus(window.__d.v.canonicalPosition.lon,window.__d.v.canonicalPosition.lat),window.advisorWorld.setHalfHeight(115));settle;shot:village-third;eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>(window.__c=g.cities[0],window.__cl=s.settlementLayout(window.__c),window.advisorWorld.navigation.setFocus(window.__c.canonicalPosition.lon,window.__c.canonicalPosition.lat),window.advisorWorld.setHalfHeight(280)));settle;shot:city-district;eval:import("/src/planet.ts").then(p=>{window.__svc=window.__a.l.buildings.find(b=>b.role==="market");const ll=p.sourceToLonLat(window.__svc.x,window.__svc.z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(38)});settle;shot:market-exterior;eval:import("/src/planet.ts").then(p=>{window.__svc=window.__a.l.buildings.find(b=>b.role==="blacksmith");const ll=p.sourceToLonLat(window.__svc.x,window.__svc.z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(38)});settle;shot:blacksmith-exterior'
+          PHONE_EXT='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>{const c=g.villages.slice(0,24).map(v=>({v,l:s.settlementLayout(v)})).sort((a,b)=>a.l.buildings.length-b.l.buildings.length);window.__b=c[c.length-1];window.advisorWorld.navigation.setFocus(window.__b.v.canonicalPosition.lon,window.__b.v.canonicalPosition.lat);window.advisorWorld.setHalfHeight(125)});settle;shot:village-phone;eval:import("/src/planet.ts").then(p=>{window.__svc=window.__b.l.buildings.find(b=>b.role==="market");const ll=p.sourceToLonLat(window.__svc.x,window.__svc.z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(38)});settle;shot:market-phone'
+          INTERIOR='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>(window.__l=s.settlementLayout(g.villages[0]),window.__ib=window.__l.buildings.find(b=>b.role==="home"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__ib}}))));click:#enter-building;visible:#interior-panel;eval:window.advisorInteriors.useAnchor();shot:home-use;click:#exit-interior;click:#enter-building;visible:#interior-panel;shot:home-reenter;click:#exit-interior;eval:(window.__ib=window.__l.buildings.find(b=>b.role==="inn"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__ib}})));click:#enter-building;visible:#interior-panel;eval:window.advisorInteriors.useAnchor();shot:inn;click:#exit-interior;eval:(window.__ib=window.__l.buildings.find(b=>b.role==="blacksmith"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__ib}})));click:#enter-building;visible:#interior-panel;eval:window.advisorInteriors.useAnchor();shot:blacksmith;click:#exit-interior;eval:(window.__ib=window.__l.buildings.find(b=>b.role==="market"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__ib}})));click:#enter-building;visible:#interior-panel;eval:window.advisorInteriors.useAnchor();shot:market'
+          PHONE_INT='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-layout.ts")]).then(([g,s])=>(window.__l=s.settlementLayout(g.villages[0]),window.__ib=window.__l.buildings.find(b=>b.role==="home"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__ib}}))));click:#enter-building;visible:#interior-panel;eval:window.advisorInteriors.useAnchor();shot:home-phone;click:#exit-interior;eval:(window.__ib=window.__l.buildings.find(b=>b.role==="blacksmith"),window.dispatchEvent(new CustomEvent("advisor:building-selected",{detail:{building:window.__ib}})));click:#enter-building;visible:#interior-panel;eval:window.advisorInteriors.useAnchor();shot:blacksmith-phone'
+
+          for R in webgpu webgl2; do
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp19-${R}-desktop-exterior" --name settlement --profile desktop --renderer "$R" --timeout 300 --steps "$EXTERIOR"
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp19-${R}-phone-exterior" --name settlement --profile phone,phone-landscape --renderer "$R" --timeout 300 --steps "$PHONE_EXT"
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp19-${R}-desktop-interior" --name interior --profile desktop --renderer "$R" --timeout 300 --steps "$INTERIOR"
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp19-${R}-phone-interior" --name interior --profile phone,phone-landscape --renderer "$R" --timeout 300 --steps "$PHONE_INT"
+          done
+
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageDraw, ImageFont
+          import math, os
+          files = sorted(Path('test-results').glob('wp19-*/*.png'))
+          if not files:
+              raise SystemExit('no WP19 screenshots captured')
+          source = os.environ['SOURCE_SHA']
+          W,H = 1600,1120
+          pages=[]; font=ImageFont.load_default()
+          for page_index in range(math.ceil(len(files)/4)):
+              page=Image.new('RGB',(W,H),'white'); draw=ImageDraw.Draw(page)
+              draw.text((20,12),f'WP-S002-004-009 fresh evidence · source {source} · page {page_index+1}',fill='black',font=font)
+              for slot,file in enumerate(files[page_index*4:(page_index+1)*4]):
+                  image=Image.open(file).convert('RGB'); image.thumbnail((780,480))
+                  col,row=slot%2,slot//2; x,y=10+col*795,50+row*530
+                  draw.text((x,y),str(file.relative_to('test-results')),fill='black',font=font)
+                  page.paste(image,(x,y+24))
+              pages.append(page)
+          out=Path('tmp/wp19-evidence'); out.mkdir(parents=True,exist_ok=True)
+          pdf=out/f'evidence-{source}.pdf'
+          pages[0].save(pdf,save_all=True,append_images=pages[1:],resolution=110)
+          print(pdf)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wp19-acceptance-v2-${{ github.sha }}
+          path: test-results/
+      - name: Publish contact sheet for actual visual inspection
+        shell: bash
+        run: |
+          git config user.name 'AGENT #1'
+          git config user.email '163722426+sgoxel@users.noreply.github.com'
+          git add tmp/wp19-evidence/*.pdf
+          git commit -m "WP-S002-004-009: publish fresh v2 visual evidence for inspection"
+          git push origin HEAD:agent1/wp-s002-004-009-20261011
