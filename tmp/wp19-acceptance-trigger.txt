@@ -1,0 +1,2 @@
+WP-S002-004-009 exact-head acceptance trigger after reconciliation.
+Temporary branch-only file; remove before merge.
