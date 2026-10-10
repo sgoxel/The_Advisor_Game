@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   validate-and-commit:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout WP branch
         uses: actions/checkout@v4
