@@ -440,6 +440,17 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
 
   const originX = tile.minX + tile.size / 2,
     originZ = tile.minZ + tile.size / 2;
+  // Refined terrain creates new clipped/water vertices, so rebuild the canonical
+  // source-coordinate UV0 required by the shared projection material while the
+  // positions are still absolute, before converting them to tile-local precision.
+  const uvs = new Float32Array((positions.length / 3) * 2);
+  for (let i = 0, v = 0; i < positions.length; i += 3, v += 2) {
+    uvs[v] = positions[i] / SOURCE_PRESENTATION_WIDTH + 0.5;
+    uvs[v + 1] = Math.max(
+      0,
+      Math.min(1, 0.5 + (positions[i + 2] * 2) / SOURCE_PRESENTATION_WIDTH),
+    );
+  }
   for (let i = 0; i < positions.length; i += 3) {
     positions[i] -= originX;
     positions[i + 2] -= originZ;
@@ -449,5 +460,6 @@ export function refineTerrainGeometry(tile: Tile, original: Geometry): Geometry 
     normals: new Float32Array(normals),
     colors: new Uint8Array(colors),
     indices: new Uint32Array(indices),
+    uvs,
   };
 }
