@@ -1,0 +1,43 @@
+name: WP24 critical-site evidence
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  site-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: python -m pip install playwright==1.63.0
+      - name: Capture critical-place evidence
+        run: |
+          npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          RUIN='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))(window.advisorSites.sites.find(s=>s.kind==="ruin"));select:#map-scale=1000;settle;visible:.critical-site-marker.ruin;shot:ruin-1000;select:#map-scale=100;settle;visible:.critical-site-marker.ruin;click:.critical-site-marker.ruin;visible:#critical-site-panel;shot:ruin-inspection'
+          CRITICAL='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))(window.advisorSites.sites.find(s=>s.kind==="critical-place"));select:#map-scale=1000;settle;visible:.critical-site-marker.critical-place;shot:critical-1000;select:#map-scale=100;settle;visible:.critical-site-marker.critical-place;click:.critical-site-marker.critical-place;visible:#critical-site-panel;shot:critical-inspection'
+          for renderer in webgl2 webgpu; do
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp24-sites-$renderer --name sites --profile desktop,phone,phone-landscape --renderer $renderer --timeout 240 --steps "$RUIN"
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp24-critical-$renderer --name critical --profile desktop,phone,phone-landscape --renderer $renderer --timeout 240 --steps "$CRITICAL"
+          done
+      - name: Record acceptance telemetry
+        run: |
+          node --experimental-strip-types -e 'import("./src/sites.ts").then(m=>console.log(JSON.stringify(m.siteAcceptanceSummary(),null,2)))' | tee test-results/wp24-site-summary.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wp24-site-evidence
+          path: test-results/
