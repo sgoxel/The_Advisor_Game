@@ -34,8 +34,8 @@ test("political registry uses seed-variable minimum counts rather than fixed max
 });
 
 test("canonical settlement names are unique cultural names without numeric template suffixes", () => {
-  assert.equal(new Set(cities.map((city) => city.name)).size, cities.length);
-  assert.equal(new Set(villages.map((village) => village.name)).size, villages.length);
+  const allNames = [...countries, ...cities, ...villages].map((place) => place.name.toLowerCase());
+  assert.equal(new Set(allNames).size, allNames.length);
   assert.equal(villages[0].name, "Alderwick");
   for (const place of [...cities, ...villages]) {
     assert.doesNotMatch(place.name, /\d+\.\d+\.\d+/);
