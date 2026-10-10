@@ -62,3 +62,38 @@ test("travel panel solves neighbouring routes and draws the selected route", asy
   expect(await page.evaluate(() => window.advisorRoutes.activeId())).toBeNull();
   expect(errors).toEqual([]);
 });
+
+test("phone route preview closes the covering panel and never labels map focus as travel", async ({ page }) => {
+  test.setTimeout(300000);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.waitForFunction(() => window.advisorWorld?.state.ready);
+
+  await expect(page.locator("#home")).toContainText("Focus home village");
+  await expect(page.locator(".travel-hint .flat-only")).toContainText("Drag to pan");
+  await page.locator("#open-travel").click();
+  await expect(page.locator("#visit-city")).toHaveText("Focus city");
+  await expect(page.locator("#visit-village")).toHaveText("Focus village");
+  await expect(page.locator("#travel-panel")).toContainText("does not move the protagonist");
+
+  const first = page.locator("#route-list .route-row").first();
+  await expect(first).toBeVisible();
+  await page.waitForFunction(
+    () => document.querySelector("#route-list .route-row")?.dataset.state === "ready",
+    null,
+    { timeout: 60000 },
+  );
+  await first.click();
+
+  // Route framing must expose the map on a phone instead of leaving the full-height panel over it.
+  await expect(page.locator("#travel-panel")).toBeHidden();
+  await expect(page.locator("#route-tag")).toBeVisible();
+  await page.waitForFunction(() => document.getElementById("route-overlay").classList.contains("visible"), null, {
+    timeout: 60000,
+  });
+  expect(await page.evaluate(() => document.body.classList.contains("travel-panel-open"))).toBe(false);
+  expect(await page.evaluate(() => window.advisorRoutes.activeId())).toBeTruthy();
+  expect(errors).toEqual([]);
+});
