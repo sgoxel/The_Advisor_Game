@@ -42,6 +42,9 @@ test("atlas selection/entry validation does not materialize an interior by itsel
     materializations: 0,
     evictions: 0,
     activeBuildings: [],
+    rooms: 0,
+    fixtures: 0,
+    estimatedBytes: 0,
   });
 });
 
