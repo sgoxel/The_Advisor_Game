@@ -1,39 +1,36 @@
 import { test, expect } from "@playwright/test";
+import { villages } from "../../src/geography.ts";
+import { sourceToLonLat } from "../../src/planet.ts";
+import { settlementLayout } from "../../src/settlement-layout.ts";
+
+function buildingForRole(role) {
+  const layout = settlementLayout(villages[0]);
+  return layout.buildings.find((candidate) => candidate.role === role);
+}
 
 async function selectRole(page, role) {
-  return page.evaluate(async (wantedRole) => {
-    const geography = await import("/src/geography.ts"),
-      settlements = await import("/src/settlement-layout.ts"),
-      village = geography.villages[0],
-      layout = settlements.settlementLayout(village),
-      building = layout.buildings.find((candidate) => candidate.role === wantedRole);
-    if (!building) return false;
-    window.dispatchEvent(new CustomEvent("advisor:building-selected", { detail: { building } }));
-    return true;
-  }, role);
+  const building = buildingForRole(role);
+  if (!building) return false;
+  await page.evaluate((selected) => {
+    window.dispatchEvent(new CustomEvent("advisor:building-selected", { detail: { building: selected } }));
+  }, building);
+  return true;
 }
 
 async function selectRoleViaInspector(page, role) {
-  const code = await page.evaluate(async (wantedRole) => {
-    const geography = await import("/src/geography.ts"),
-      settlements = await import("/src/settlement-layout.ts"),
-      planet = await import("/src/planet.ts"),
-      village = geography.villages[0],
-      layout = settlements.settlementLayout(village),
-      building = layout.buildings.find((candidate) => candidate.role === wantedRole);
-    if (!building) return "";
-    const position = planet.sourceToLonLat(building.x, building.z),
-      panel = document.getElementById("cell-panel"),
+  const building = buildingForRole(role);
+  if (!building) return false;
+  const position = sourceToLonLat(building.x, building.z);
+  await page.evaluate(({ lon, lat }) => {
+    const panel = document.getElementById("cell-panel"),
       height = document.getElementById("cell-height");
     height.setAttribute(
       "title",
-      `Canonical position: lon ${position.lon.toFixed(9)}, lat ${position.lat.toFixed(9)}, elevation 0 m`,
+      `Canonical position: lon ${lon.toFixed(9)}, lat ${lat.toFixed(9)}, elevation 0 m`,
     );
     panel.hidden = false;
-    return building.code;
-  }, role);
-  if (!code) return false;
-  await page.waitForFunction((expected) => window.advisorInteriors.state.selected === expected, code);
+  }, position);
+  await page.waitForFunction((expected) => window.advisorInteriors.state.selected === expected, building.code);
   return true;
 }
 
