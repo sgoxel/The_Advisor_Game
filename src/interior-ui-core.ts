@@ -134,6 +134,10 @@ function useAnchor() {
 function renderInterior(base: InteriorBase) {
   const scene = $("interior-scene");
   scene.replaceChildren();
+  scene.dataset.culture = base.style.culture;
+  scene.dataset.environment = base.style.environment;
+  scene.dataset.wallMaterial = base.style.wallMaterial;
+  scene.dataset.floorMaterial = base.style.floorMaterial;
   for (const room of base.rooms) {
     const node = document.createElement("div"),
       center = scaled(base, room.x, room.z);
@@ -153,6 +157,18 @@ function renderInterior(base: InteriorBase) {
     node.style.left = `${point.left}%`;
     node.style.top = `${point.top}%`;
     node.title = "Walkable doorway";
+    scene.append(node);
+  }
+  for (const fixture of base.fixtures) {
+    const node = document.createElement("div"),
+      point = scaled(base, fixture.x, fixture.z);
+    node.className = `interior-fixture fixture-${fixture.kind}`;
+    node.dataset.fixture = fixture.kind;
+    node.style.left = `${point.left}%`;
+    node.style.top = `${point.top}%`;
+    node.style.width = `${Math.max(2.5, (fixture.width / base.width) * 100)}%`;
+    node.style.height = `${Math.max(2.5, (fixture.depth / base.depth) * 100)}%`;
+    node.title = `${fixture.kind} · ${base.style.furnishingMaterial}`;
     scene.append(node);
   }
   for (const anchor of base.anchors.filter((item) => item.kind !== "entry")) {
@@ -190,10 +206,11 @@ function enterSelected() {
     ? "Character accepted · Simulation validated · reconstructed canonical interior"
     : "Character accepted · Simulation validated";
   renderInterior(base);
+  const stats = residency.stats();
   $("interior-title").textContent = `${selected.role.replace("-", " ")} interior`;
-  $("interior-code").textContent = selected.code;
+  $("interior-code").textContent = `${selected.code} · ${base.style.culture} · ${base.style.environment}`;
   $("interior-signature").textContent = base.signature;
-  $("interior-room-count").textContent = `${base.rooms.length} usable space${base.rooms.length === 1 ? "" : "s"}`;
+  $("interior-room-count").textContent = `${base.rooms.length} usable space${base.rooms.length === 1 ? "" : "s"} · ${base.fixtures.length} fixture${base.fixtures.length === 1 ? "" : "s"} · ${(stats.estimatedBytes / 1024).toFixed(1)} KiB active`;
   $("interior-panel").hidden = false;
   $("cell-panel").hidden = true;
   document.body.classList.add("interior-open");
