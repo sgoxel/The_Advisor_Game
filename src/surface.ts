@@ -1,6 +1,7 @@
 import { nearestPlace, roadAt, roadDistanceAt } from "./geography.ts";
 import { wrapSourceX } from "./planet.ts";
 import {
+  naturalElevationAt as naturalElevationBaseAt,
   surfaceAt as hydrologySurfaceAt,
   type SurfaceSample,
   type TraversalKind,
@@ -29,6 +30,27 @@ const smooth01 = (value: number) => {
   return t * t * (3 - 2 * t);
 };
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const STRUCTURAL_FILTER_STEP = 22;
+const FINAL_CLIFF_SLOPE = 1.45;
+
+/**
+ * The natural hydrology layer deliberately retains fine deterministic relief so
+ * drainage has local structure. The final surface filters only dry rugged ground at
+ * a fixed world-space scale before render/collision/routing consume it. This removes
+ * sub-cell harmonic ribbing without changing SEED identity, water ownership, river
+ * banks, settlement earthworks, or Realm/local query order.
+ */
+function structuralDryElevationAt(x: number, z: number, natural: SurfaceSample) {
+  if (natural.riverBank || natural.slope < 0.12) return natural.elevation;
+  const step = STRUCTURAL_FILTER_STEP,
+    centre = naturalElevationBaseAt(x, z),
+    nw = naturalElevationBaseAt(x - step, z - step),
+    ne = naturalElevationBaseAt(x + step, z - step),
+    sw = naturalElevationBaseAt(x - step, z + step),
+    se = naturalElevationBaseAt(x + step, z + step),
+    filtered = centre * 0.44 + (nw + ne + sw + se) * 0.14;
+  return lerp(natural.elevation, filtered, 0.68);
+}
 
 function roadGradeAt(
   x: number,
@@ -43,8 +65,16 @@ function roadGradeAt(
       lengthSq <= 1e-9
         ? 0
         : clamp01(((px - road.fromX) * vx + (z - road.fromZ) * vz) / lengthSq),
-    fromHeight = Math.max(1.2, hydrologySurfaceAt(road.fromX, road.fromZ).elevation),
-    toHeight = Math.max(1.2, hydrologySurfaceAt(road.toX, road.toZ).elevation);
+    fromNatural = hydrologySurfaceAt(road.fromX, road.fromZ),
+    toNatural = hydrologySurfaceAt(road.toX, road.toZ),
+    fromHeight = Math.max(
+      1.2,
+      structuralDryElevationAt(road.fromX, road.fromZ, fromNatural),
+    ),
+    toHeight = Math.max(
+      1.2,
+      structuralDryElevationAt(road.toX, road.toZ, toNatural),
+    );
   return lerp(fromHeight, toHeight, t);
 }
 
@@ -55,8 +85,9 @@ function earthworkAt(x: number, z: number) {
       : Infinity,
     placeRadius = place?.kind === "city" ? 430 : 90,
     placeBlend = place ? smooth01((placeDistance - placeRadius) / 80) : 1,
-    placeHeight = place
-      ? Math.max(1.2, hydrologySurfaceAt(place.x, place.z).elevation)
+    placeNatural = place ? hydrologySurfaceAt(place.x, place.z) : undefined,
+    placeHeight = place && placeNatural
+      ? Math.max(1.2, structuralDryElevationAt(place.x, place.z, placeNatural))
       : 0,
     road = roadAt(x, z),
     roadDistance = road ? roadDistanceAt(x, z, road) : Infinity,
@@ -69,6 +100,15 @@ function earthworkAt(x: number, z: number) {
   return { blend: 1, target: 0 } as const;
 }
 
+function composedDryElevationAt(x: number, z: number, natural: SurfaceSample) {
+  const earthwork = earthworkAt(x, z),
+    base = structuralDryElevationAt(x, z, natural);
+  return {
+    earthwork,
+    elevation: lerp(earthwork.target, base, earthwork.blend),
+  } as const;
+}
+
 /**
  * Final-surface composition never erases authoritative hydrology. Settlements and
  * ordinary roads must already occupy legal dry ground; explicit bridge/ford facts
@@ -77,8 +117,7 @@ function earthworkAt(x: number, z: number) {
 export function surfaceElevationAt(x: number, z: number) {
   const natural = hydrologySurfaceAt(x, z);
   if (natural.water !== "none") return natural.elevation;
-  const earthwork = earthworkAt(x, z);
-  return lerp(earthwork.target, natural.elevation, earthwork.blend);
+  return composedDryElevationAt(x, z, natural).elevation;
 }
 
 /** One canonical final-surface query for render height, collision and walkability. */
@@ -86,18 +125,18 @@ export function surfaceAt(x: number, z: number): SurfaceSample {
   const natural = hydrologySurfaceAt(x, z);
   if (natural.water !== "none") return natural;
 
-  const earthwork = earthworkAt(x, z),
-    graded = earthwork.blend < 0.999,
-    elevation = graded
-      ? lerp(earthwork.target, natural.elevation, earthwork.blend)
-      : natural.elevation,
+  const composed = composedDryElevationAt(x, z, natural),
+    graded = composed.earthwork.blend < 0.999,
+    elevation = composed.elevation,
     slope = graded ? Math.min(natural.slope, 0.2) : natural.slope,
-    cliff = !graded && natural.cliff,
+    // Very short wavelength spikes remain difficult terrain; only sustained strong
+    // canonical relief is an impassable cliff in the shared final-surface authority.
+    cliff = !graded && natural.slope >= FINAL_CLIFF_SLOPE,
     traversal: TraversalKind = cliff
       ? "blocked-cliff"
       : graded
         ? "walkable"
-        : natural.traversal === "difficult"
+        : natural.traversal === "difficult" || natural.traversal === "blocked-cliff"
           ? "difficult"
           : "walkable";
   return {
