@@ -272,6 +272,100 @@ function pointDistanceToSegment(px: number, pz: number, a: DrainagePoint, b: Dra
     t = length2 <= 1e-8 ? 0 : Math.max(0, Math.min(1, (qx * dx + qz * dz) / length2));
   return { distance: Math.hypot(qx - dx * t, qz - dz * t), t };
 }
+// WP15_ATTEMPT3_EXACT_PATH_PRUNING: bounds only prove a segment cannot
+// improve the current exact nearest result; they never classify terrain.
+type SegmentBounds = {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  a: DrainagePoint;
+  b: DrainagePoint;
+};
+type PathBounds = {
+  anchorX: number;
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  segments: SegmentBounds[];
+};
+type RecipeBounds = { main: PathBounds; tributary: PathBounds };
+const drainageBoundsCache = new WeakMap<DrainageRecipe, RecipeBounds>();
+const SEARCH_OFFSETS = Object.freeze(
+  Array.from({ length: (SEARCH_RADIUS * 2 + 1) ** 2 }, (_, index) => {
+    const span = SEARCH_RADIUS * 2 + 1,
+      dx = (index % span) - SEARCH_RADIUS,
+      dz = Math.floor(index / span) - SEARCH_RADIUS;
+    return { dx, dz };
+  }).sort(
+    (a, b) =>
+      a.dx * a.dx + a.dz * a.dz - (b.dx * b.dx + b.dz * b.dz) ||
+      Math.abs(a.dz) - Math.abs(b.dz) ||
+      Math.abs(a.dx) - Math.abs(b.dx) ||
+      a.dz - b.dz ||
+      a.dx - b.dx,
+  ),
+);
+
+function makePathBounds(anchorX: number, path: DrainagePoint[]): PathBounds {
+  if (path.length < 2)
+    return {
+      anchorX,
+      minX: Infinity,
+      maxX: -Infinity,
+      minZ: Infinity,
+      maxZ: -Infinity,
+      segments: [],
+    };
+  let minX = Infinity,
+    maxX = -Infinity,
+    minZ = Infinity,
+    maxZ = -Infinity;
+  const segments: SegmentBounds[] = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i],
+      b = path[i + 1],
+      ax = wrapSourceX(a.x - anchorX),
+      bx = ax + wrapSourceX(b.x - a.x),
+      segment = {
+        minX: Math.min(ax, bx),
+        maxX: Math.max(ax, bx),
+        minZ: Math.min(a.z, b.z),
+        maxZ: Math.max(a.z, b.z),
+        a,
+        b,
+      };
+    minX = Math.min(minX, segment.minX);
+    maxX = Math.max(maxX, segment.maxX);
+    minZ = Math.min(minZ, segment.minZ);
+    maxZ = Math.max(maxZ, segment.maxZ);
+    segments.push(segment);
+  }
+  return { anchorX, minX, maxX, minZ, maxZ, segments };
+}
+function boundsDistance(
+  x: number,
+  z: number,
+  bounds: Pick<PathBounds, 'anchorX' | 'minX' | 'maxX' | 'minZ' | 'maxZ'>,
+  width: number,
+) {
+  const qx = wrapSourceX(x - bounds.anchorX),
+    dx = qx < bounds.minX ? bounds.minX - qx : qx > bounds.maxX ? qx - bounds.maxX : 0,
+    dz = z < bounds.minZ ? bounds.minZ - z : z > bounds.maxZ ? z - bounds.maxZ : 0;
+  return Math.hypot(dx, dz) - width;
+}
+function recipeBounds(recipe: DrainageRecipe): RecipeBounds {
+  const cached = drainageBoundsCache.get(recipe);
+  if (cached) return cached;
+  const anchorX = recipe.points[0].x,
+    value = {
+      main: makePathBounds(anchorX, recipe.points),
+      tributary: makePathBounds(anchorX, recipe.tributary),
+    };
+  drainageBoundsCache.set(recipe, value);
+  return value;
+}
 function evictBasins() {
   if (basinCache.size <= CACHE_LIMIT) return;
   const oldest = [...basinCache.entries()].sort((a, b) => a[1].used - b[1].used);
@@ -456,48 +550,65 @@ function nearestHydrology(x: number, z: number): HydroHit {
     code: null,
   };
 
-  for (let dz = -SEARCH_RADIUS; dz <= SEARCH_RADIUS; dz++) {
-    for (let dx = -SEARCH_RADIUS; dx <= SEARCH_RADIUS; dx++) {
-      const recipe = drainageRecipeAt(gx + dx, gz + dz);
-      if (!recipe) continue;
-      const headDistance = Math.hypot(
-        wrapSourceX(canonicalX - recipe.points[0].x),
-        z - recipe.points[0].z,
-      );
-      if (headDistance > 13_500) continue;
+  for (const { dx, dz } of SEARCH_OFFSETS) {
+  const recipe = drainageRecipeAt(gx + dx, gz + dz);
+  if (!recipe) continue;
+  const headDistance = Math.hypot(
+    wrapSourceX(canonicalX - recipe.points[0].x),
+    z - recipe.points[0].z,
+  );
+  if (headDistance > 13_500) continue;
 
-      if (recipe.lake) {
-        const lakeDx = wrapSourceX(canonicalX - recipe.lake.x),
-          lakeDz = z - recipe.lake.z,
-          shoreRadius = drainageLakeRadiusAt(recipe.lake, Math.atan2(lakeDz, lakeDx)),
-          distance = Math.hypot(lakeDx, lakeDz) - shoreRadius;
-        if (distance < best.distance)
-          best = {
-            water: distance <= 0 ? "lake" : "none",
-            bank: distance > 0 && distance <= 24,
-            distance,
-            bed: recipe.lake.level,
-            code: recipe.code,
-          };
-      }
-      for (const path of [recipe.points, recipe.tributary]) {
-        for (let i = 0; i < path.length - 1; i++) {
-          const hit = pointDistanceToSegment(canonicalX, z, path[i], path[i + 1]),
-            width = path === recipe.points ? recipe.width : recipe.width * 0.62,
-            distance = hit.distance - width,
-            bed = lerp(path[i].bed, path[i + 1].bed, hit.t);
-          if (distance < best.distance)
-            best = {
-              water: distance <= 0 ? "river" : "none",
-              bank: distance > 0 && distance <= 18,
-              distance,
-              bed,
-              code: recipe.code,
-            };
-        }
-      }
+  if (recipe.lake) {
+    const lakeDx = wrapSourceX(canonicalX - recipe.lake.x),
+      lakeDz = z - recipe.lake.z,
+      shoreRadius = drainageLakeRadiusAt(recipe.lake, Math.atan2(lakeDz, lakeDx)),
+      distance = Math.hypot(lakeDx, lakeDz) - shoreRadius;
+    if (distance < best.distance)
+      best = {
+        water: distance <= 0 ? 'lake' : 'none',
+        bank: distance > 0 && distance <= 24,
+        distance,
+        bed: recipe.lake.level,
+        code: recipe.code,
+      };
+  }
+
+  const bounds = recipeBounds(recipe),
+    candidates = [
+      { bounds: bounds.main, width: recipe.width },
+      { bounds: bounds.tributary, width: recipe.width * 0.62 },
+    ];
+  for (const candidate of candidates) {
+    if (
+      candidate.bounds.segments.length === 0 ||
+      boundsDistance(canonicalX, z, candidate.bounds, candidate.width) >= best.distance
+    )
+      continue;
+    for (const segment of candidate.bounds.segments) {
+      if (
+        boundsDistance(
+          canonicalX,
+          z,
+          { anchorX: candidate.bounds.anchorX, ...segment },
+          candidate.width,
+        ) >= best.distance
+      )
+        continue;
+      const hit = pointDistanceToSegment(canonicalX, z, segment.a, segment.b),
+        distance = hit.distance - candidate.width,
+        bed = lerp(segment.a.bed, segment.b.bed, hit.t);
+      if (distance < best.distance)
+        best = {
+          water: distance <= 0 ? 'river' : 'none',
+          bank: distance > 0 && distance <= 18,
+          distance,
+          bed,
+          code: recipe.code,
+        };
     }
   }
+}
   return best;
 }
 
