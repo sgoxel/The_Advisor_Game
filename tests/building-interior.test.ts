@@ -61,6 +61,25 @@ test("interior base preserves every required functional room and connected circu
     assert.equal(graphReachable(base).size, base.rooms.length, `${role} rooms must all be reachable from entry`);
     assert.equal(base.doors.length, Math.max(0, base.rooms.length - 1));
     assert.ok(base.anchors.some((anchor) => anchor.kind === "entry"));
+    assert.equal(base.fixtures.length, base.rooms.length, `${role} needs one canonical major fixture per functional room`);
+    assert.ok(base.style.culture.length > 0 && base.style.environment.length > 0, `${role} needs canonical context`);
+    assert.ok(base.style.wallMaterial && base.style.floorMaterial && base.style.furnishingMaterial);
+  }
+});
+
+test("canonical fixtures stay inside their owning functional rooms", () => {
+  for (const building of sampleVillage().buildings.slice(0, 32)) {
+    const base = interiorBaseForBuilding(building),
+      rooms = new Map(base.rooms.map((room) => [room.code, room] as const));
+    for (const fixture of base.fixtures) {
+      const room = rooms.get(fixture.room);
+      assert.ok(room, `${fixture.code} must reference a canonical room`);
+      assert.ok(fixture.width > 0 && fixture.depth > 0);
+      assert.ok(fixture.x - fixture.width / 2 >= room.x - room.width / 2 - 1e-6);
+      assert.ok(fixture.x + fixture.width / 2 <= room.x + room.width / 2 + 1e-6);
+      assert.ok(fixture.z - fixture.depth / 2 >= room.z - room.depth / 2 - 1e-6);
+      assert.ok(fixture.z + fixture.depth / 2 <= room.z + room.depth / 2 + 1e-6);
+    }
   }
 });
 
@@ -95,17 +114,21 @@ test("every interior doorway lies on the exact shared wall", () => {
   }
 });
 
-test("home exposes sleeping, sanitation and social destinations", () => {
+test("home exposes sleeping, sanitation and social destinations with matching fixtures", () => {
   const home = sampleVillage().buildings.find((building) => building.role === "home");
   assert.ok(home);
   const base = interiorBaseForBuilding(home),
-    kinds = new Set(base.anchors.map((anchor) => anchor.kind));
+    kinds = new Set(base.anchors.map((anchor) => anchor.kind)),
+    fixtures = new Set(base.fixtures.map((fixture) => fixture.kind));
   assert.ok(kinds.has("sleep"));
   assert.ok(kinds.has("sanitation"));
   assert.ok(kinds.has("social"));
+  assert.ok(fixtures.has("bed"));
+  assert.ok(fixtures.has("latrine"));
+  assert.ok(fixtures.has("hearth"));
 });
 
-test("interiors materialize only on explicit entry and residency stays bounded", () => {
+test("interiors materialize only on explicit entry and residency stays bounded with byte telemetry", () => {
   const buildings = sampleVillage().buildings.filter((building) => building.role !== "keep").slice(0, 5);
   assert.ok(buildings.length >= 3);
   const residency = new InteriorResidency(2);
@@ -114,6 +137,9 @@ test("interiors materialize only on explicit entry and residency stays bounded",
     materializations: 0,
     evictions: 0,
     activeBuildings: [],
+    rooms: 0,
+    fixtures: 0,
+    estimatedBytes: 0,
   });
   for (const building of buildings) residency.enter(building);
   const stats = residency.stats();
@@ -121,21 +147,26 @@ test("interiors materialize only on explicit entry and residency stays bounded",
   assert.equal(stats.materializations, buildings.length);
   assert.equal(stats.evictions, buildings.length - 2);
   assert.deepEqual(stats.activeBuildings, buildings.slice(-2).map((building) => building.code));
+  assert.ok(stats.rooms > 0 && stats.fixtures > 0 && stats.estimatedBytes > 0);
+  assert.ok(stats.estimatedBytes < 128 * 1024, "bounded two-interior residency should stay lightweight");
 });
 
-test("evicting and re-entering reconstructs the identical canonical base", () => {
+test("evicting and re-entering reconstructs the identical canonical presentation base", () => {
   const building = sampleVillage().buildings.find((candidate) => candidate.role === "inn");
   assert.ok(building);
   const residency = new InteriorResidency(1),
     first = residency.enter(building);
   assert.equal(residency.evict(building.code), true);
   assert.equal(residency.has(building.code), false);
+  assert.equal(residency.stats().estimatedBytes, 0);
   const second = residency.enter(building);
   assert.notEqual(first, second, "eviction must drop the realized object rather than retain it");
   assert.equal(first.signature, second.signature);
   assert.deepEqual(first.rooms, second.rooms);
   assert.deepEqual(first.doors, second.doors);
   assert.deepEqual(first.anchors, second.anchors);
+  assert.deepEqual(first.fixtures, second.fixtures);
+  assert.deepEqual(first.style, second.style);
 });
 
 test("same-archetype buildings have deterministic structural variation", () => {
