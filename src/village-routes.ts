@@ -43,6 +43,7 @@ import { CELL_SIZE } from "./world.ts";
 export const NEIGHBOUR_LIMIT = 4;
 export const NEIGHBOUR_MAX_DISTANCE_M = 60_000;
 export const ROUTE_CACHE_LIMIT = 256;
+export const FINAL_TRAVERSAL_CACHE_LIMIT = 8_192;
 /** Final truth is checked at most this far apart along an accepted candidate. */
 export const FINAL_ROUTE_VALIDATION_STEP_M = 300;
 
@@ -54,6 +55,11 @@ export const roadSegments: readonly RoadSegment[] = roads.map((road) => ({
 
 const villageById = new Map(villages.map((village) => [village.id, village]));
 const routeCache = new Map<string, VillageRoute>();
+type FinalTraversalState = {
+  surface: ReturnType<typeof surfaceAt>;
+  road: ReturnType<typeof roadAt>;
+};
+const finalTraversalCache = new Map<string, FinalTraversalState>();
 let cacheHits = 0,
   cacheMisses = 0,
   cacheEvictions = 0;
@@ -66,16 +72,26 @@ const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
  * Runtime cells are 2x2 source units and sample their centres. Read the composed
  * final surface at that exact centre so routing gets the same elevation,
  * hydrology, grading and traversal truth as cellAt(), without asking biomeAt()
- * to perform a second full surface query.
+ * to perform a second full surface query. The result is pure SEED-owned state,
+ * so a bounded cell cache may reuse it without changing any decision.
  */
-function finalTraversalState(position: LonLat) {
+function finalTraversalState(position: LonLat): FinalTraversalState {
   const flat = lonLatToFlat(position.lon, position.lat),
     x = Math.floor(flat.x / CELL_SIZE) * CELL_SIZE + CELL_SIZE / 2,
-    z = Math.floor(flat.z / CELL_SIZE) * CELL_SIZE + CELL_SIZE / 2;
-  return {
+    z = Math.floor(flat.z / CELL_SIZE) * CELL_SIZE + CELL_SIZE / 2,
+    key = `${x}/${z}`,
+    cached = finalTraversalCache.get(key);
+  if (cached) return cached;
+  const value: FinalTraversalState = {
     surface: surfaceAt(x, z),
     road: roadAt(x, z),
   };
+  finalTraversalCache.set(key, value);
+  if (finalTraversalCache.size > FINAL_TRAVERSAL_CACHE_LIMIT) {
+    const first = finalTraversalCache.keys().next().value;
+    if (typeof first === "string") finalTraversalCache.delete(first);
+  }
+  return value;
 }
 
 /**
@@ -249,6 +265,7 @@ export function routeBetweenVillages(fromId: string, toId: string): VillageRoute
 
 export function clearVillageRouteCache() {
   routeCache.clear();
+  finalTraversalCache.clear();
   cacheHits = 0;
   cacheMisses = 0;
   cacheEvictions = 0;
