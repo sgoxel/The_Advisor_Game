@@ -5,10 +5,9 @@
  * The pure planner lives in routing.ts. This binder is the authority boundary
  * for player-facing village routes. Coarse A* proposes a bounded candidate;
  * that candidate is then validated and re-costed against the same canonical
- * final surface sampled at runtime cell centres. Only a candidate that is
- * illegal in final runtime truth falls back to an A* search whose sampler reads
- * that same final surface. This avoids recomputing world presentation metadata
- * while keeping routing legality identical to collision/traversal authority.
+ * final surface sampled at runtime cell centres. If authoritative drainage
+ * blocks that corridor, the river's own seeded catchment recipe supplies a
+ * bounded headwater detour before any local final-surface A* fallback.
  */
 import { roadAt, roads, villages, type Place } from "./geography.ts";
 import {
@@ -16,6 +15,8 @@ import {
   greatCircleDistance,
   lonLatToFlat,
   positionToEnu,
+  sourceToLonLat,
+  wrapSourceX,
   type CanonicalPosition,
   type LonLat,
 } from "./planet.ts";
@@ -29,7 +30,12 @@ import {
   type RouteSurface,
   type TerrainSampler,
 } from "./routing.ts";
-import { surfaceAt } from "./surface.ts";
+import {
+  drainageRecipesNear,
+  surfaceAt,
+  type DrainagePoint,
+  type DrainageRecipe,
+} from "./surface.ts";
 import {
   DIFFICULT_TERRAIN_WALK_SPEED_MPS,
   FASTEST_WALK_SPEED_MPS,
@@ -46,12 +52,8 @@ export const ROUTE_CACHE_LIMIT = 256;
 export const FINAL_TRAVERSAL_CACHE_LIMIT = 8_192;
 /** Final truth is checked at most this far apart along an accepted candidate. */
 export const FINAL_ROUTE_VALIDATION_STEP_M = 300;
-/**
- * Drainage recipes are basin-bounded but a nearby pair can sit on opposite banks
- * far downstream. The final-only repair may therefore inspect one extra watershed
- * span while routing.ts still enforces its fixed cell and expansion ceilings.
- */
-export const FINAL_HYDROLOGY_DETOUR_MARGIN_M = 80_000;
+/** A route may repair a small number of distinct seeded drainage barriers. */
+export const FINAL_DRAINAGE_REPAIR_LIMIT = 4;
 
 export const roadSegments: readonly RoadSegment[] = roads.map((road) => ({
   code: road.code,
@@ -64,6 +66,17 @@ const routeCache = new Map<string, VillageRoute>();
 type FinalTraversalState = {
   surface: ReturnType<typeof surfaceAt>;
   road: ReturnType<typeof roadAt>;
+};
+type BlockedRouteSample = {
+  segmentIndex: number;
+  position: LonLat;
+  surface: ReturnType<typeof surfaceAt>;
+};
+type DrainagePathHit = {
+  path: readonly DrainagePoint[];
+  width: number;
+  segmentIndex: number;
+  distance: number;
 };
 const finalTraversalCache = new Map<string, FinalTraversalState>();
 let cacheHits = 0,
@@ -134,8 +147,7 @@ function speedFor(surface: RouteSurface) {
 /**
  * Verify every accepted path interval against final runtime walkability and
  * derive the displayed distance/time from those same final cells. Returning
- * undefined means the coarse candidate crossed a runtime-blocked cell and must
- * be repaired by final-surface A*.
+ * undefined means the candidate crossed a runtime-blocked cell.
  */
 function refineAgainstFinalTraversal(route: RouteResult): RouteResult | undefined {
   if (!route.found || route.points.length < 2) return route;
@@ -182,6 +194,164 @@ function refineAgainstFinalTraversal(route: RouteResult): RouteResult | undefine
     detourFactor: distanceM / Math.max(1, route.geodesicM),
     surfaceM,
   };
+}
+
+/** Find the exact final-surface sample that caused the same validator to reject a route. */
+function firstBlockedFinalSample(route: RouteResult): BlockedRouteSample | undefined {
+  if (!route.found || route.points.length < 2) return undefined;
+  for (let k = 1; k < route.points.length; k++) {
+    const a: CanonicalPosition = { ...route.points[k - 1], elevation: 0 },
+      b: CanonicalPosition = { ...route.points[k], elevation: 0 },
+      delta = positionToEnu(b, a),
+      lengthM = greatCircleDistance(a, b),
+      steps = Math.max(1, Math.ceil(lengthM / FINAL_ROUTE_VALIDATION_STEP_M));
+    for (let step = 0; step < steps; step++) {
+      const t = (step + 0.5) / steps,
+        sample = enuToPosition(
+          { east: delta.east * t, north: delta.north * t, up: 0 },
+          a,
+        ),
+        { surface } = finalTraversalState(sample);
+      if (!surface.walkable)
+        return {
+          segmentIndex: k,
+          position: { lon: sample.lon, lat: sample.lat },
+          surface,
+        };
+    }
+  }
+  return undefined;
+}
+
+function sourceSegmentDistance(
+  x: number,
+  z: number,
+  a: DrainagePoint,
+  b: DrainagePoint,
+) {
+  const dx = wrapSourceX(b.x - a.x),
+    dz = b.z - a.z,
+    qx = wrapSourceX(x - a.x),
+    qz = z - a.z,
+    lengthSq = dx * dx + dz * dz,
+    t = lengthSq <= 1e-9 ? 0 : Math.max(0, Math.min(1, (qx * dx + qz * dz) / lengthSq));
+  return Math.hypot(qx - dx * t, qz - dz * t);
+}
+
+function nearestDrainagePath(
+  recipe: DrainageRecipe,
+  x: number,
+  z: number,
+): DrainagePathHit | undefined {
+  let best: DrainagePathHit | undefined;
+  const paths = [
+    { path: recipe.points, width: recipe.width },
+    { path: recipe.tributary, width: recipe.width * 0.62 },
+  ] as const;
+  for (const entry of paths)
+    for (let index = 0; index + 1 < entry.path.length; index++) {
+      const distance = sourceSegmentDistance(x, z, entry.path[index], entry.path[index + 1]);
+      if (!best || distance < best.distance)
+        best = { ...entry, segmentIndex: index, distance };
+    }
+  return best;
+}
+
+function sideOfSourceSegment(
+  point: { x: number; z: number },
+  a: DrainagePoint,
+  b: DrainagePoint,
+) {
+  const dx = wrapSourceX(b.x - a.x),
+    dz = b.z - a.z,
+    qx = wrapSourceX(point.x - a.x),
+    qz = point.z - a.z,
+    cross = dx * qz - dz * qx;
+  return cross < 0 ? -1 : 1;
+}
+
+/**
+ * Insert a deterministic dry arc upstream of the exact seeded river that blocked
+ * a candidate. This is a one-dimensional catchment repair, not a camera-derived
+ * or unbounded world search. Every inserted arc is revalidated against the same
+ * final traversal samples before it can be returned.
+ */
+function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
+  let candidate = route;
+  for (let repair = 0; repair < FINAL_DRAINAGE_REPAIR_LIMIT; repair++) {
+    const refined = refineAgainstFinalTraversal(candidate);
+    if (refined) return refined;
+    const blocked = firstBlockedFinalSample(candidate);
+    if (
+      !blocked ||
+      blocked.surface.water !== "river" ||
+      !blocked.surface.catchmentCode
+    )
+      return undefined;
+
+    const blockedSource = lonLatToFlat(blocked.position.lon, blocked.position.lat),
+      recipe = drainageRecipesNear(blockedSource.x, blockedSource.z, 2).find(
+        (item) => item.code === blocked.surface.catchmentCode,
+      );
+    if (!recipe) return undefined;
+    const hit = nearestDrainagePath(recipe, blockedSource.x, blockedSource.z);
+    if (!hit || hit.path.length < 2) return undefined;
+
+    const head = hit.path[0],
+      next = hit.path[1],
+      dx = wrapSourceX(next.x - head.x),
+      dz = next.z - head.z,
+      length = Math.hypot(dx, dz) || 1,
+      upstreamX = -dx / length,
+      upstreamZ = -dz / length,
+      perpX = -dz / length,
+      perpZ = dx / length,
+      segmentA = candidate.points[blocked.segmentIndex - 1],
+      segmentB = candidate.points[blocked.segmentIndex],
+      sourceA = lonLatToFlat(segmentA.lon, segmentA.lat),
+      sourceB = lonLatToFlat(segmentB.lon, segmentB.lat),
+      localA = hit.path[hit.segmentIndex],
+      localB = hit.path[hit.segmentIndex + 1];
+    let sideA = sideOfSourceSegment(sourceA, localA, localB),
+      sideB = sideOfSourceSegment(sourceB, localA, localB);
+    // A rejected segment that samples the river must emerge on the other side.
+    // Near a tangent/endpoint numerical tie, force a deterministic opposite side.
+    if (sideA === sideB) sideB = -sideA;
+
+    let inserted: LonLat[] | undefined;
+    for (const factor of [1, 1.7, 2.5] as const) {
+      const clearance = Math.max(96, recipe.width * 6) * factor,
+        lateral = clearance * 0.9,
+        waypointA = sourceToLonLat(
+          wrapSourceX(head.x + upstreamX * clearance + perpX * sideA * lateral),
+          head.z + upstreamZ * clearance + perpZ * sideA * lateral,
+        ),
+        waypointB = sourceToLonLat(
+          wrapSourceX(head.x + upstreamX * clearance + perpX * sideB * lateral),
+          head.z + upstreamZ * clearance + perpZ * sideB * lateral,
+        );
+      if (
+        finalTraversalState(waypointA).surface.walkable &&
+        finalTraversalState(waypointB).surface.walkable
+      ) {
+        inserted = [waypointA, waypointB];
+        break;
+      }
+    }
+    if (!inserted) return undefined;
+
+    candidate = {
+      ...candidate,
+      reason: undefined,
+      points: [
+        ...candidate.points.slice(0, blocked.segmentIndex),
+        ...inserted,
+        ...candidate.points.slice(blocked.segmentIndex),
+      ],
+      attempts: candidate.attempts + 1,
+    };
+  }
+  return refineAgainstFinalTraversal(candidate);
 }
 
 function directSeededRoad(from: Place, to: Place): RouteResult | undefined {
@@ -233,16 +403,18 @@ function computeRoute(from: Place, to: Place): RouteResult {
     refined = refineAgainstFinalTraversal(coarse);
   if (refined) return refined;
 
-  // Only a genuinely invalid coarse candidate pays for final-surface A*. The
-  // extra margin floor is final-only and still bounded by routing.ts cell and
-  // expansion caps; it allows a legal headwater detour instead of inventing a
-  // crossing through authoritative water.
+  // A long distributed river can separate nearby villages while its head lies
+  // far outside a rectangular local search margin. Repair that specific seeded
+  // catchment first; this is both faster and more authoritative than widening A*.
+  const drainageRepair = repairAroundDrainage(coarse);
+  if (drainageRepair) return drainageRepair;
+
+  // Non-drainage local blockers still use the original fixed bounded planner.
   const repaired = planRoute({
     from: from.canonicalPosition,
     to: to.canonicalPosition,
     roads: roadSegments,
     terrain: finalTraversalTerrainSampler,
-    searchMarginFloorM: FINAL_HYDROLOGY_DETOUR_MARGIN_M,
   });
   return refineAgainstFinalTraversal(repaired) ?? repaired;
 }

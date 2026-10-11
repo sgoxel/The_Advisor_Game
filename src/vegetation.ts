@@ -67,12 +67,13 @@ type Evaluated = Candidate & {
 
 type CachedEvaluator = (candidate: Candidate) => Evaluated | undefined;
 
-// Canonical source-space addresses still divide the wrapped circumference exactly.
-// A candidate may wander across a 2.25-bucket span so water/road/settlement masks do
-// not reveal a residual cardinal lattice. SCATTER_HALO=2 remains sufficient because
-// a three-bucket neighbour stays at least 12 source units away (> MAX_SEPARATION).
+// Canonical source-space addresses divide the wrapped circumference exactly, but
+// deterministic hash admission tears long row/column occupancy before hydrology,
+// road and settlement masks can reveal that address grid in the visible scatter.
+// Positions retain the proven two-bucket jitter span and halo from WP16.
 const SCATTER_SPACING = 16;
-const SCATTER_JITTER_SPAN = 2.25;
+const SCATTER_JITTER_SPAN = 2;
+const SCATTER_ADMISSION = 0.72;
 const SCATTER_HALO = 2;
 const WRAP_BUCKET_COUNT = WORLD_SIZE / SCATTER_SPACING;
 const HALF_WRAP_BUCKET_COUNT = WRAP_BUCKET_COUNT / 2;
@@ -149,6 +150,16 @@ function settlementClearance(x: number, z: number) {
 }
 
 function evaluate(candidate: Candidate): Evaluated | undefined {
+  // Independent deterministic Bernoulli admission prevents later exclusion masks
+  // from coherently revealing the one-address-per-bucket owner lattice. This uses
+  // only SEED-derived coordinateValue state and therefore cannot reroll with time,
+  // camera, tile order or renderer backend.
+  if (
+    unit(coordinateValue(candidate.addressGX, candidate.gz, 616)) >=
+    SCATTER_ADMISSION
+  )
+    return undefined;
+
   const { x, z, variant } = candidate,
     canonicalX = wrapSourceX(x),
     y = heightAt(canonicalX, z);
