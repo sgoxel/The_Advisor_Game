@@ -67,12 +67,12 @@ type Evaluated = Candidate & {
 
 type CachedEvaluator = (candidate: Candidate) => Evaluated | undefined;
 
-// Canonical source-space addresses still divide the wrapped circumference exactly,
-// but a candidate may wander across a two-bucket span. That preserves one stable
-// seed address per candidate while removing the residual stratified-grid signature
-// produced when every point is confined to its own 16-unit square.
+// Canonical source-space addresses still divide the wrapped circumference exactly.
+// A candidate may wander across a 2.25-bucket span so water/road/settlement masks do
+// not reveal a residual cardinal lattice. SCATTER_HALO=2 remains sufficient because
+// a three-bucket neighbour stays at least 12 source units away (> MAX_SEPARATION).
 const SCATTER_SPACING = 16;
-const SCATTER_JITTER_SPAN = 2;
+const SCATTER_JITTER_SPAN = 2.25;
 const SCATTER_HALO = 2;
 const WRAP_BUCKET_COUNT = WORLD_SIZE / SCATTER_SPACING;
 const HALF_WRAP_BUCKET_COUNT = WRAP_BUCKET_COUNT / 2;

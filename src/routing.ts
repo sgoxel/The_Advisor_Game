@@ -66,6 +66,8 @@ export type RouteRequest = {
   to: LonLat;
   roads?: readonly RoadSegment[];
   terrain?: TerrainSampler;
+  /** Optional bounded floor for the final search margin; ordinary callers leave it unset. */
+  searchMarginFloorM?: number;
 };
 export type RouteResult = {
   found: boolean;
@@ -454,11 +456,12 @@ export function planRoute(request: RouteRequest): RouteResult {
     return { ...result, found: true, reason: undefined, points: [request.from, request.to], detourFactor: 1 };
   }
 
-  const margins = [
-    Math.max(1_200, 0.4 * geodesicM),
-    Math.max(3_000, 1.2 * geodesicM),
-    Math.max(8_000, 3 * geodesicM),
-  ];
+  const searchMarginFloorM = Math.max(0, request.searchMarginFloorM ?? 0),
+    margins = [
+      Math.max(1_200, 0.4 * geodesicM),
+      Math.max(3_000, 1.2 * geodesicM),
+      Math.max(8_000, 3 * geodesicM, searchMarginFloorM),
+    ];
   let outcome: Failure | Success | undefined,
     attempts = 0,
     expansions = 0;

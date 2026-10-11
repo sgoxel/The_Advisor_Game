@@ -31,7 +31,6 @@ const smooth01 = (value: number) => {
 };
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const STRUCTURAL_FILTER_STEP = 22;
-const FINAL_CLIFF_SLOPE = 1.45;
 
 /**
  * The natural hydrology layer deliberately retains fine deterministic relief so
@@ -129,16 +128,10 @@ export function surfaceAt(x: number, z: number): SurfaceSample {
     graded = composed.earthwork.blend < 0.999,
     elevation = composed.elevation,
     slope = graded ? Math.min(natural.slope, 0.2) : natural.slope,
-    // Very short wavelength spikes remain difficult terrain; only sustained strong
-    // canonical relief is an impassable cliff in the shared final-surface authority.
-    cliff = !graded && natural.slope >= FINAL_CLIFF_SLOPE,
-    traversal: TraversalKind = cliff
-      ? "blocked-cliff"
-      : graded
-        ? "walkable"
-        : natural.traversal === "difficult" || natural.traversal === "blocked-cliff"
-          ? "difficult"
-          : "walkable";
+    // Filtering removes presentation-scale ribbing, but it must never erase the
+    // canonical hydrology authority's cliff/walkability classification.
+    cliff = !graded && natural.cliff,
+    traversal: TraversalKind = graded ? "walkable" : natural.traversal;
   return {
     ...natural,
     elevation,

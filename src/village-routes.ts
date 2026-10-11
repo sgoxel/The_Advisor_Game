@@ -46,6 +46,12 @@ export const ROUTE_CACHE_LIMIT = 256;
 export const FINAL_TRAVERSAL_CACHE_LIMIT = 8_192;
 /** Final truth is checked at most this far apart along an accepted candidate. */
 export const FINAL_ROUTE_VALIDATION_STEP_M = 300;
+/**
+ * Drainage recipes are basin-bounded but a nearby pair can sit on opposite banks
+ * far downstream. The final-only repair may therefore inspect one extra watershed
+ * span while routing.ts still enforces its fixed cell and expansion ceilings.
+ */
+export const FINAL_HYDROLOGY_DETOUR_MARGIN_M = 80_000;
 
 export const roadSegments: readonly RoadSegment[] = roads.map((road) => ({
   code: road.code,
@@ -227,14 +233,16 @@ function computeRoute(from: Place, to: Place): RouteResult {
     refined = refineAgainstFinalTraversal(coarse);
   if (refined) return refined;
 
-  // Only a genuinely invalid coarse candidate pays for final-surface A*. This
-  // remains bounded by routing.ts cell/expansion caps and uses exactly the same
-  // sampler as the validation pass.
+  // Only a genuinely invalid coarse candidate pays for final-surface A*. The
+  // extra margin floor is final-only and still bounded by routing.ts cell and
+  // expansion caps; it allows a legal headwater detour instead of inventing a
+  // crossing through authoritative water.
   const repaired = planRoute({
     from: from.canonicalPosition,
     to: to.canonicalPosition,
     roads: roadSegments,
     terrain: finalTraversalTerrainSampler,
+    searchMarginFloorM: FINAL_HYDROLOGY_DETOUR_MARGIN_M,
   });
   return refineAgainstFinalTraversal(repaired) ?? repaired;
 }
