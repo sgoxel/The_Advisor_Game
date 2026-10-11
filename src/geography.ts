@@ -15,6 +15,9 @@ const CULTURE_STEMS = [["Alder","Briar","Oak","Thorn","Grey","Mere","Stone","Wil
 const CITY_ENDINGS = ["haven","gate","hold","watch","reach","bridge","crest","court","spire","ford","mere","cross"] as const;
 const VILLAGE_ENDINGS = ["wick","ford","mere","field","brook","stead","hollow","den","wood","well","ham","croft","thorpe","lea","combe","fold"] as const;
 const TAU = Math.PI * 2;
+const CELL_SIZE_SOURCE = 2;
+const ROAD_BUCKET_SOURCE = 2048;
+const ROAD_HALF_WIDTH_SOURCE = 12;
 
 function digest(text:string){ let value=2166136261; for(let i=0;i<text.length;i++) value=Math.imul(value^text.charCodeAt(i),16777619); return value>>>0; }
 function addressedFor(seed:string,address:string){ return digest(`${seed}/${WORLD_FOUNDATION_VERSION}/${address}`)/4294967296; }
@@ -30,7 +33,18 @@ export function politicalRegistryCountsForSeed(seed:string){ const perContinent=
 function continentCandidate(continent:(typeof continents)[number],address:string,attempt:number):CanonicalPosition{ const radius=Math.sqrt(addressed(`${address}/${attempt}/radius`)), angle=TAU*addressed(`${address}/${attempt}/angle`), u=Math.cos(angle)*radius*continent.majorRadiusRad*1.12, v=Math.sin(angle)*radius*continent.minorRadiusRad*1.12, c=Math.cos(continent.orientationRad), s=Math.sin(continent.orientationRad), east=u*c-v*s, north=u*s+v*c, cosLat=Math.max(.25,Math.abs(Math.cos(continent.canonicalPosition.lat))); return canonicalPosition(continent.canonicalPosition.lon+east/cosLat,continent.canonicalPosition.lat+north); }
 function locallyDrySettlementSite(position:LonLat,maxReliefM:number){ const m=macroSampleAt(position); return m.land&&m.domain==="Mainland"&&m.reliefM<=maxReliefM&&m.coastDistanceRad*CANONICAL_PLANET_RADIUS>=3000; }
 function naturalSurfaceAtPosition(position:LonLat){ const s=lonLatToSource(position.lon,position.lat); return naturalSurfaceAt(s.x,s.z); }
-function hydrologySettlementFits(position:LonLat,kind:Place["kind"]){ const centre=naturalSurfaceAtPosition(position); if(centre.water!=="none"||centre.cliff) return false; const r=kind==="city"?60:45; for(let i=0;i<4;i++) if(naturalSurfaceAtPosition(destination(position,i/4*TAU,r/CANONICAL_PLANET_RADIUS)).water!=="none") return false; return true; }
+function hydrologySettlementFits(position:LonLat,kind:Place["kind"]){
+  const centre=naturalSurfaceAtPosition(position);
+  if(centre.water!=="none"||centre.cliff) return false;
+  const source=lonLatToSource(position.lon,position.lat),
+    cellX=Math.floor(source.x/CELL_SIZE_SOURCE)*CELL_SIZE_SOURCE+CELL_SIZE_SOURCE/2,
+    cellZ=Math.floor(source.z/CELL_SIZE_SOURCE)*CELL_SIZE_SOURCE+CELL_SIZE_SOURCE/2,
+    runtimeCellNatural=naturalSurfaceAt(cellX,cellZ);
+  if(runtimeCellNatural.water!=="none") return false;
+  const r=kind==="city"?60:45;
+  for(let i=0;i<8;i++) if(naturalSurfaceAtPosition(destination(position,i/8*TAU,r/CANONICAL_PLANET_RADIUS)).water!=="none") return false;
+  return true;
+}
 /** 33-point deterministic evidence probe; road earthworks may grade dry steep terrain but never erase water. */
 function hydrologyRoadCorridorFits(from:LonLat,to:LonLat){ const a=lonLatToSource(from.lon,from.lat), b=lonLatToSource(to.lon,to.lat), dx=wrapSourceX(b.x-a.x), dz=b.z-a.z; for(let i=0;i<=32;i++){ const t=i/32; if(naturalSurfaceAt(a.x+dx*t,a.z+dz*t).water!=="none") return false; } return true; }
 function freshwaterDistanceAtPosition(position:LonLat){ const s=lonLatToSource(position.lon,position.lat); return freshwaterDistanceAt(s.x,s.z); }
@@ -52,6 +66,22 @@ export const places=[...cities,...villages];
 export const roads=cities.flatMap(city=>[0,1].map(index=>{ const fromPlace=villages.find(p=>p.id===`${city.id}/${index}`)!,toPlace=villages.find(p=>p.id===`${city.id}/${index+1}`)!,fromPosition=fromPlace.canonicalPosition,toPosition=toPlace.canonicalPosition,dx=wrapSourceX(toPlace.x-fromPlace.x),toUnwrappedX=fromPlace.x+dx,fromZ=fromPlace.z,toZ=toPlace.z,minX=Math.min(fromPlace.x,toUnwrappedX),maxX=Math.max(fromPlace.x,toUnwrappedX),minZ=Math.min(fromZ,toZ),maxZ=Math.max(fromZ,toZ),surfaceLengthM=greatCircleDistance(fromPosition,toPosition),travel=travelMetrics(surfaceLengthM,"good-road"); return {code:`${city.code}/ROAD/${index}`,from:fromPlace.id,to:toPlace.id,fromX:fromPlace.x,toX:toUnwrappedX,fromZ,toZ,minX,maxX,minZ,maxZ,z:(fromZ+toZ)/2,fromPosition,toPosition,presentationLengthSourceUnits:Math.hypot(dx,toZ-fromZ),surfaceLengthM,walkSurface:"good-road" as const,walkSpeedMps:travel.speedMps,fantasyWalkSeconds:travel.fantasySeconds,realWalkSeconds:travel.realSeconds}; }));
 export type Road=(typeof roads)[number];
 export function roadDistanceAt(x:number,z:number,road:Road){ const px=road.fromX+wrapSourceX(x-road.fromX),vx=road.toX-road.fromX,vz=road.toZ-road.fromZ,lengthSq=vx*vx+vz*vz; if(!lengthSq) return Math.hypot(px-road.fromX,z-road.fromZ); const t=Math.max(0,Math.min(1,((px-road.fromX)*vx+(z-road.fromZ)*vz)/lengthSq)),qx=road.fromX+vx*t,qz=road.fromZ+vz*t; return Math.hypot(px-qx,z-qz); }
+
+/** Full-corridor spatial index: road truth must not disappear between distant endpoints. */
+const roadBuckets=new Map<string,Road[]>();
+function addRoadBucket(key:string,road:Road){ const bucket=roadBuckets.get(key)||[]; if(!bucket.some(candidate=>candidate.code===road.code)) bucket.push(road); roadBuckets.set(key,bucket); }
+for(const road of roads){
+  for(const shift of [-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH]){
+    const minX=road.minX+shift-ROAD_HALF_WIDTH_SOURCE,
+      maxX=road.maxX+shift+ROAD_HALF_WIDTH_SOURCE,
+      minZ=road.minZ-ROAD_HALF_WIDTH_SOURCE,
+      maxZ=road.maxZ+ROAD_HALF_WIDTH_SOURCE;
+    for(let bx=Math.floor(minX/ROAD_BUCKET_SOURCE);bx<=Math.floor(maxX/ROAD_BUCKET_SOURCE);bx++)
+      for(let bz=Math.floor(minZ/ROAD_BUCKET_SOURCE);bz<=Math.floor(maxZ/ROAD_BUCKET_SOURCE);bz++)
+        addRoadBucket(`${bx}/${bz}`,road);
+  }
+}
+
 export function nearestPlaceAt(position:LonLat):Place|undefined{ let result:Place|undefined,distance=Infinity; for(const place of places){ const candidate=greatCircleDistance(position,place.canonicalPosition); if(candidate<distance){distance=candidate;result=place;} } return result; }
 export function continentAtPosition(position:LonLat){ return continents[macroSampleAt(position).continentId]; }
 const buckets=new Map<string,Place[]>(); for(const place of places) for(const x of [place.x-SOURCE_PRESENTATION_WIDTH,place.x,place.x+SOURCE_PRESENTATION_WIDTH]){ const key=`${Math.floor(x/2048)}/${Math.floor(place.z/2048)}`,bucket=buckets.get(key)||[];bucket.push(place);buckets.set(key,bucket); }
@@ -61,7 +91,7 @@ export function nearestPlace(x:number,z:number):Place|undefined{ let result:Plac
 export function continentAt(x:number,z:number){ return continentAtPosition(sourceToLonLat(x,z)); }
 export function countryAt(x:number,z:number){ return countryAtPosition(sourceToLonLat(x,z)); }
 export function continentalEnvelope(x:number,z:number){ const s=macroSampleAt(sourceToLonLat(x,z)); return s.land?Math.max(.5,1-Math.max(.02,s.coastDistanceRad)*5):Math.min(1.5,1+Math.max(.02,-s.coastDistanceRad)*5); }
-export function roadAt(x:number,z:number){ const localVillageIds=new Set(nearbyPlaces(x,z).filter(p=>p.kind==="village").map(p=>p.id)); if(!localVillageIds.size) return undefined; return roads.find(r=>(localVillageIds.has(r.from)||localVillageIds.has(r.to))&&roadDistanceAt(x,z,r)<12); }
+export function roadAt(x:number,z:number){ const candidates=roadBuckets.get(`${Math.floor(x/ROAD_BUCKET_SOURCE)}/${Math.floor(z/ROAD_BUCKET_SOURCE)}`)||[]; return candidates.find(road=>roadDistanceAt(x,z,road)<ROAD_HALF_WIDTH_SOURCE); }
 function borderOwner(x:number,z:number){ return countryAt(x,z)?.code; }
 function borderCrossing(ax:number,az:number,bx:number,bz:number,ownerA:string,ownerB:string){ let lo=0,hi=1; for(let i=0;i<7;i++){ const t=(lo+hi)/2,owner=borderOwner(ax+(bx-ax)*t,az+(bz-az)*t); if(owner===ownerA) lo=t; else hi=t; } const t=(lo+hi)/2; return {x:ax+(bx-ax)*t,z:az+(bz-az)*t,pair:ownerA<ownerB?`${ownerA}|${ownerB}`:`${ownerB}|${ownerA}`}; }
 export function politicalBorderSegments(centerX:number,centerZ:number,halfHeight:number,aspect:number,columns=34,rows=24):PoliticalBorderSegment[]{ const halfWidth=halfHeight*aspect,minX=centerX-halfWidth*1.18,maxX=centerX+halfWidth*1.18,minZ=centerZ-halfHeight*1.18,maxZ=centerZ+halfHeight*1.18,dx=(maxX-minX)/columns,dz=(maxZ-minZ)/rows,owner=Array.from({length:rows+1},(_,rz)=>Array.from({length:columns+1},(_,rx)=>borderOwner(minX+rx*dx,minZ+rz*dz))),result:PoliticalBorderSegment[]=[]; for(let rz=0;rz<rows;rz++) for(let rx=0;rx<columns;rx++){ const x0=minX+rx*dx,x1=x0+dx,z0=minZ+rz*dz,z1=z0+dz,corners=[{x:x0,z:z0,owner:owner[rz][rx]},{x:x1,z:z0,owner:owner[rz][rx+1]},{x:x1,z:z1,owner:owner[rz+1][rx+1]},{x:x0,z:z1,owner:owner[rz+1][rx]}],groups=new Map<string,{x:number;z:number}[]>(); for(let edge=0;edge<4;edge++){ const a=corners[edge],b=corners[(edge+1)%4]; if(!a.owner||!b.owner||a.owner===b.owner) continue; const crossing=borderCrossing(a.x,a.z,b.x,b.z,a.owner,b.owner),list=groups.get(crossing.pair)||[];list.push(crossing);groups.set(crossing.pair,list); } for(const [pair,points] of groups){ if(points.length<2) continue; const [left,right]=pair.split("|"); for(let i=1;i<points.length;i+=2){ const a=points[i-1],b=points[i];result.push({ax:a.x,az:a.z,bx:b.x,bz:b.z,countries:[left,right]}); } } } return result; }
