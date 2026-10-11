@@ -18,6 +18,8 @@ const TAU = Math.PI * 2;
 const CELL_SIZE_SOURCE = 2;
 const ROAD_BUCKET_SOURCE = 2048;
 const ROAD_HALF_WIDTH_SOURCE = 12;
+const VILLAGE_FRESHWATER_CLEARANCE_SOURCE = 128;
+const VILLAGE_FRESHWATER_TARGET_SOURCE = 256;
 
 function digest(text:string){ let value=2166136261; for(let i=0;i<text.length;i++) value=Math.imul(value^text.charCodeAt(i),16777619); return value>>>0; }
 function addressedFor(seed:string,address:string){ return digest(`${seed}/${WORLD_FOUNDATION_VERSION}/${address}`)/4294967296; }
@@ -36,17 +38,14 @@ function naturalSurfaceAtPosition(position:LonLat){ const s=lonLatToSource(posit
 function hydrologySettlementFits(position:LonLat,kind:Place["kind"]){
   const centre=naturalSurfaceAtPosition(position);
   if(centre.water!=="none"||centre.cliff) return false;
-  const source=lonLatToSource(position.lon,position.lat),
-    cellX=Math.floor(source.x/CELL_SIZE_SOURCE)*CELL_SIZE_SOURCE+CELL_SIZE_SOURCE/2,
-    cellZ=Math.floor(source.z/CELL_SIZE_SOURCE)*CELL_SIZE_SOURCE+CELL_SIZE_SOURCE/2,
-    runtimeCellNatural=naturalSurfaceAt(cellX,cellZ);
-  if(runtimeCellNatural.water!=="none") return false;
+  const source=lonLatToSource(position.lon,position.lat), cellX=Math.floor(source.x/CELL_SIZE_SOURCE)*CELL_SIZE_SOURCE+CELL_SIZE_SOURCE/2, cellZ=Math.floor(source.z/CELL_SIZE_SOURCE)*CELL_SIZE_SOURCE+CELL_SIZE_SOURCE/2;
+  if(naturalSurfaceAt(cellX,cellZ).water!=="none") return false;
   const r=kind==="city"?60:45;
   for(let i=0;i<8;i++) if(naturalSurfaceAtPosition(destination(position,i/8*TAU,r/CANONICAL_PLANET_RADIUS)).water!=="none") return false;
   return true;
 }
-/** 33-point deterministic evidence probe; road earthworks may grade dry steep terrain but never erase water. */
-function hydrologyRoadCorridorFits(from:LonLat,to:LonLat){ const a=lonLatToSource(from.lon,from.lat), b=lonLatToSource(to.lon,to.lat), dx=wrapSourceX(b.x-a.x), dz=b.z-a.z; for(let i=0;i<=32;i++){ const t=i/32; if(naturalSurfaceAt(a.x+dx*t,a.z+dz*t).water!=="none") return false; } return true; }
+/** Match the existing prototype-road certification density: 65 deterministic water probes. */
+function hydrologyRoadCorridorFits(from:LonLat,to:LonLat){ const a=lonLatToSource(from.lon,from.lat), b=lonLatToSource(to.lon,to.lat), dx=wrapSourceX(b.x-a.x), dz=b.z-a.z; for(let i=0;i<=64;i++){ const t=i/64; if(naturalSurfaceAt(a.x+dx*t,a.z+dz*t).water!=="none") return false; } return true; }
 function freshwaterDistanceAtPosition(position:LonLat){ const s=lonLatToSource(position.lon,position.lat); return freshwaterDistanceAt(s.x,s.z); }
 
 function buildCountries():Country[]{ const result:Country[]=[], counts=politicalRegistryCountsForSeed(WORLD_SEED).perContinent; for(const continent of continents){ const accepted:CanonicalPosition[]=[]; for(let id=0;id<counts[continent.id];id++){ let best:CanonicalPosition|undefined,bestScore=-Infinity; for(let attempt=0;attempt<144;attempt++){ const candidate=continentCandidate(continent,`COUNTRY/${continent.id}/${id}`,attempt), m=macroSampleAt(candidate); if(!m.land||m.domain!=="Mainland"||m.continentId!==continent.id||m.reliefM>110) continue; const separation=accepted.length?Math.min(...accepted.map(o=>macroFeatureDistanceM(candidate,o))):80000+240000*addressed(`COUNTRY/${continent.id}/${id}/${attempt}/first`), coastBonus=Math.max(0,Math.min(90000,m.coastDistanceRad*CANONICAL_PLANET_RADIUS)), score=(separation+coastBonus*.18)*(.92+.16*addressed(`COUNTRY/${continent.id}/${id}/${attempt}/rank`)); if(score>bestScore){bestScore=score;best=candidate;} } if(!best) throw new Error(`Seeded geography could not place country ${continent.id}/${id}`); accepted.push(best); const globalNameIndex=continent.id*12+id; result.push(withPresentation({id,continent:continent.id,code:`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/CONT/${continent.id}/COUNTRY/${id}`,name:COUNTRY_NAMES[globalNameIndex%COUNTRY_NAMES.length],canonicalPosition:best})); } } return result; }
@@ -58,7 +57,7 @@ function settlementEnvelopeFits(position:LonLat,country:Country,kind:Place["kind
 function cityCandidate(country:Country,city:number,attempt:number){ return continentCandidate(continents[country.continent],`CITY/${country.continent}/${country.id}/${city}`,attempt); }
 export const cities:Place[]=(()=>{ const result:Place[]=[],allAccepted:CanonicalPosition[]=[],usedNames=new Set<string>(); for(const country of countries){ const localAccepted:CanonicalPosition[]=[]; for(let city=0;city<CITY_SLOTS_PER_COUNTRY;city++){ let best:CanonicalPosition|undefined,bestScore=-Infinity; for(let attempt=0;attempt<220;attempt++){ const candidate=cityCandidate(country,city,attempt),owner=countryAtPosition(candidate); if(!owner||owner.code!==country.code||!locallyDrySettlementSite(candidate,90)||!settlementEnvelopeFits(candidate,country,"city")||allAccepted.some(o=>macroFeatureDistanceM(candidate,o)<18000)||(city>0&&localAccepted[0]&&!cityBackboneConnectionFits(candidate,localAccepted[0],country))) continue; const separation=localAccepted.length?Math.min(...localAccepted.map(o=>macroFeatureDistanceM(candidate,o))):macroFeatureDistanceM(candidate,country.canonicalPosition), score=separation*(.9+.2*addressed(`CITY/${country.code}/${city}/${attempt}/rank`)); if(score>bestScore){best=candidate;bestScore=score;} } if(!best) throw new Error(`Seeded geography could not place city ${country.continent}/${country.id}/${city}`); localAccepted.push(best);allAccepted.push(best); const id=`${country.continent}/${country.id}/${city}`,code=`${country.code}/CITY/${city}`,name=seededSettlementName("city",code,country.continent,usedNames); result.push(withPresentation({id,code,name,canonicalPosition:best,kind:"city" as const,continent:country.continent,country:country.id,city})); } } return result; })();
 
-function villageCandidatePool(city:Place,slot:number,country:Country,accepted:readonly CanonicalPosition[]):VillageCandidate[]{ const candidates:VillageCandidate[]=[]; for(let attempt=0;attempt<260&&candidates.length<16;attempt++){ const prefix=`VILLAGE/${city.id}/${slot}/${attempt}`, bearing=TAU*addressed(`${prefix}/bearing`), distanceM=7000+16000*addressed(`${prefix}/distance`), candidate=destination(city.canonicalPosition,bearing,distanceM/CANONICAL_PLANET_RADIUS), owner=countryAtPosition(candidate); if(!owner||owner.continent!==city.continent||owner.id!==city.country||!locallyDrySettlementSite(candidate,95)||!settlementEnvelopeFits(candidate,country,"village")||accepted.some(o=>macroFeatureDistanceM(candidate,o)<6000)) continue; const freshwater=freshwaterDistanceAtPosition(candidate), score=(Number.isFinite(freshwater)?freshwater:1e12)+addressed(`${prefix}/freshwater-rank`)*32; candidates.push({position:candidate,score,attempt}); } candidates.sort((a,b)=>a.score-b.score||a.attempt-b.attempt); return candidates; }
+function villageCandidatePool(city:Place,slot:number,country:Country,accepted:readonly CanonicalPosition[]):VillageCandidate[]{ const candidates:VillageCandidate[]=[]; for(let attempt=0;attempt<320&&candidates.length<20;attempt++){ const prefix=`VILLAGE/${city.id}/${slot}/${attempt}`, bearing=TAU*addressed(`${prefix}/bearing`), distanceM=7000+16000*addressed(`${prefix}/distance`), candidate=destination(city.canonicalPosition,bearing,distanceM/CANONICAL_PLANET_RADIUS), owner=countryAtPosition(candidate); if(!owner||owner.continent!==city.continent||owner.id!==city.country||!locallyDrySettlementSite(candidate,95)||!settlementEnvelopeFits(candidate,country,"village")||accepted.some(o=>macroFeatureDistanceM(candidate,o)<6000)) continue; const freshwater=freshwaterDistanceAtPosition(candidate); if(Number.isFinite(freshwater)&&freshwater<VILLAGE_FRESHWATER_CLEARANCE_SOURCE) continue; const score=Number.isFinite(freshwater)?Math.abs(freshwater-VILLAGE_FRESHWATER_TARGET_SOURCE)+addressed(`${prefix}/freshwater-rank`)*32:1e12+addressed(`${prefix}/freshwater-rank`)*32; candidates.push({position:candidate,score,attempt}); } candidates.sort((a,b)=>a.score-b.score||a.attempt-b.attempt); return candidates; }
 function selectVillageChain(city:Place,country:Country,accepted:readonly CanonicalPosition[]){ const pools=[0,1,2].map(slot=>villageCandidatePool(city,slot,country,accepted)), cache=new Map<string,boolean>(); const roadOk=(a:VillageCandidate,b:VillageCandidate,key:string)=>{ let value=cache.get(key); if(value===undefined){ value=hydrologyRoadCorridorFits(a.position,b.position); cache.set(key,value); } return value; }; for(let i=0;i<pools[0].length;i++) for(let j=0;j<pools[1].length;j++){ const first=pools[0][i],second=pools[1][j]; if(macroFeatureDistanceM(first.position,second.position)<6000||!roadOk(first,second,`01/${i}/${j}`)) continue; for(let k=0;k<pools[2].length;k++){ const third=pools[2][k]; if(macroFeatureDistanceM(first.position,third.position)<6000||macroFeatureDistanceM(second.position,third.position)<6000) continue; if(!roadOk(second,third,`12/${j}/${k}`)) continue; return [first.position,second.position,third.position] as const; } } throw new Error(`Seeded geography could not place hydrology-legal village chain for ${city.id}`); }
 export const villages:Place[]=(()=>{ const result:Place[]=[],accepted:CanonicalPosition[]=[],usedNames=new Set<string>(["alderwick"]); for(const city of cities){ const country=countries.find(c=>c.continent===city.continent&&c.id===city.country); if(!country) throw new Error(`Missing country for villages of ${city.id}`); const chain=selectVillageChain(city,country,accepted); for(let v=0;v<VILLAGE_SLOTS_PER_CITY;v++){ const position=chain[v];accepted.push(position); const code=`${city.code}/VILLAGE/${v}`, name=city.continent===0&&city.country===0&&city.city===0&&v===0?"Alderwick":seededSettlementName("village",code,city.continent,usedNames); result.push(withPresentation({...city,id:`${city.id}/${v}`,code,kind:"village" as const,name,canonicalPosition:position})); } } return result; })();
 
@@ -67,20 +66,9 @@ export const roads=cities.flatMap(city=>[0,1].map(index=>{ const fromPlace=villa
 export type Road=(typeof roads)[number];
 export function roadDistanceAt(x:number,z:number,road:Road){ const px=road.fromX+wrapSourceX(x-road.fromX),vx=road.toX-road.fromX,vz=road.toZ-road.fromZ,lengthSq=vx*vx+vz*vz; if(!lengthSq) return Math.hypot(px-road.fromX,z-road.fromZ); const t=Math.max(0,Math.min(1,((px-road.fromX)*vx+(z-road.fromZ)*vz)/lengthSq)),qx=road.fromX+vx*t,qz=road.fromZ+vz*t; return Math.hypot(px-qx,z-qz); }
 
-/** Full-corridor spatial index: road truth must not disappear between distant endpoints. */
 const roadBuckets=new Map<string,Road[]>();
 function addRoadBucket(key:string,road:Road){ const bucket=roadBuckets.get(key)||[]; if(!bucket.some(candidate=>candidate.code===road.code)) bucket.push(road); roadBuckets.set(key,bucket); }
-for(const road of roads){
-  for(const shift of [-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH]){
-    const minX=road.minX+shift-ROAD_HALF_WIDTH_SOURCE,
-      maxX=road.maxX+shift+ROAD_HALF_WIDTH_SOURCE,
-      minZ=road.minZ-ROAD_HALF_WIDTH_SOURCE,
-      maxZ=road.maxZ+ROAD_HALF_WIDTH_SOURCE;
-    for(let bx=Math.floor(minX/ROAD_BUCKET_SOURCE);bx<=Math.floor(maxX/ROAD_BUCKET_SOURCE);bx++)
-      for(let bz=Math.floor(minZ/ROAD_BUCKET_SOURCE);bz<=Math.floor(maxZ/ROAD_BUCKET_SOURCE);bz++)
-        addRoadBucket(`${bx}/${bz}`,road);
-  }
-}
+for(const road of roads){ for(const shift of [-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH]){ const minX=road.minX+shift-ROAD_HALF_WIDTH_SOURCE,maxX=road.maxX+shift+ROAD_HALF_WIDTH_SOURCE,minZ=road.minZ-ROAD_HALF_WIDTH_SOURCE,maxZ=road.maxZ+ROAD_HALF_WIDTH_SOURCE; for(let bx=Math.floor(minX/ROAD_BUCKET_SOURCE);bx<=Math.floor(maxX/ROAD_BUCKET_SOURCE);bx++) for(let bz=Math.floor(minZ/ROAD_BUCKET_SOURCE);bz<=Math.floor(maxZ/ROAD_BUCKET_SOURCE);bz++) addRoadBucket(`${bx}/${bz}`,road); } }
 
 export function nearestPlaceAt(position:LonLat):Place|undefined{ let result:Place|undefined,distance=Infinity; for(const place of places){ const candidate=greatCircleDistance(position,place.canonicalPosition); if(candidate<distance){distance=candidate;result=place;} } return result; }
 export function continentAtPosition(position:LonLat){ return continents[macroSampleAt(position).continentId]; }
