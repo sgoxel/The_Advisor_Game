@@ -211,40 +211,36 @@ function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
   );
 }
 
-function hydrologyDryAt(position: LonLat, allowDifficult = true) {
-  const source = lonLatToSource(position.lon, position.lat),
-    surface = naturalSurfaceAt(source.x, source.z);
-  return (
-    surface.water === "none" &&
-    !surface.cliff &&
-    (allowDifficult || surface.traversal === "walkable")
-  );
+function naturalSurfaceAtPosition(position: LonLat) {
+  const source = lonLatToSource(position.lon, position.lat);
+  return naturalSurfaceAt(source.x, source.z);
 }
 
 /**
- * Final settlement acceptance samples the actual priority-3/4 natural surface.
- * Rivers/lakes are never moved to rescue a preferred plot; the candidate is simply
- * rejected and the next SEED-addressed candidate is tried.
+ * WP15 owns legal settlement anchors/core ground, not every future city plot.
+ * A city may contain a river that later settlement/transport packages bridge and
+ * route around; the public-centre/core reserve itself may not be water or a cliff.
  */
 function hydrologySettlementFits(position: LonLat, kind: Place["kind"]) {
-  if (!hydrologyDryAt(position)) return false;
-  const radiusM = kind === "city" ? 240 : 170;
-  for (const fraction of [0.5, 1] as const)
-    for (let index = 0; index < 12; index++) {
-      const sample = destination(
+  const centre = naturalSurfaceAtPosition(position);
+  if (centre.water !== "none" || centre.cliff) return false;
+  const coreRadiusM = kind === "city" ? 60 : 45;
+  for (let index = 0; index < 4; index++) {
+    const sample = destination(
         position,
-        (index / 12) * TAU,
-        (radiusM * fraction) / CANONICAL_PLANET_RADIUS,
-      );
-      if (!hydrologyDryAt(sample)) return false;
-    }
+        (index / 4) * TAU,
+        coreRadiusM / CANONICAL_PLANET_RADIUS,
+      ),
+      surface = naturalSurfaceAtPosition(sample);
+    if (surface.water !== "none") return false;
+  }
   return true;
 }
 
 /**
- * A prototype ordinary road has no bridge/ford record, so its entire deterministic
- * source-space corridor must remain dry. Sampling is bounded by corridor length and
- * the canonical river width scale, not viewport or device state.
+ * A prototype ordinary village road has no bridge/ford record, so its complete
+ * deterministic centreline must remain dry. This is intentionally stricter than
+ * the future transport network, which will own explicit crossings.
  */
 function hydrologyRoadCorridorFits(from: LonLat, to: LonLat) {
   const a = lonLatToSource(from.lon, from.lat),
@@ -353,7 +349,7 @@ export function countryAtPosition(position: LonLat): Country | undefined {
   return winner;
 }
 
-/** A generated city must have a direct dry same-country reserve to its country backbone. */
+/** A generated city keeps the existing macro same-country reserve to its backbone. */
 function cityBackboneConnectionFits(from: LonLat, to: LonLat, country: Country) {
   const distanceRad = greatCircleDistance(from, to) / CANONICAL_PLANET_RADIUS,
     bearing = initialBearing(from, to),
@@ -369,13 +365,13 @@ function cityBackboneConnectionFits(from: LonLat, to: LonLat, country: Country) 
     )
       return false;
   }
-  return hydrologyRoadCorridorFits(from, to);
+  return true;
 }
 
 /**
- * Generation-time settlement acceptance. A canonical settlement anchor is only
- * accepted when its minimum usable footprint and at least one approach beyond
- * that footprint remain dry, low-relief and inside the same political owner.
+ * Generation-time settlement acceptance. Macro/political envelope checks retain
+ * the existing contract; WP15 additionally requires legal dry core ground without
+ * pretending the entire future settlement layout has already been generated.
  */
 function settlementEnvelopeFits(
   position: LonLat,
