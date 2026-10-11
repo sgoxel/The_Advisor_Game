@@ -6,7 +6,19 @@ on:
       - agent1/wp-s002-004-005-current-main
 
 jobs:
-  unit-diagnostic:
+  downstream-diagnostic:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: world-terrain
+            files: tests/world.test.ts tests/terrain-runtime.test.ts tests/macro-geography.test.ts tests/climate.test.ts tests/planet.test.ts
+          - name: vegetation-render
+            files: tests/vegetation.test.ts tests/vegetation-metrics.test.ts tests/vegetation-budgets.test.ts tests/vegetation-render.test.ts tests/renderer.test.ts
+          - name: routing-navigation
+            files: tests/routing.test.ts tests/routing-final-surface.test.ts tests/handoff.test.ts tests/navigation.test.ts tests/political-atlas.test.ts
+          - name: presentation-streaming
+            files: tests/globe.test.ts tests/render-frame.test.ts tests/streaming.test.ts tests/surface-presentation.test.ts
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -16,18 +28,18 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Capture focused WP15 test output
+      - name: Capture downstream test output
         shell: bash
         run: |
           set +e
-          node --experimental-strip-types --test tests/hydrology.test.ts tests/surface-authority.test.ts > wp15-test.log 2>&1
+          node --experimental-strip-types --test ${{ matrix.files }} > wp15-test.log 2>&1
           code=$?
           echo "$code" > wp15-test-exit.txt
           tail -n 240 wp15-test.log
           exit 0
       - uses: actions/upload-artifact@v4
         with:
-          name: wp15-unit-diagnostic-${{ github.sha }}
+          name: wp15-${{ matrix.name }}-${{ github.sha }}
           path: |
             wp15-test.log
             wp15-test-exit.txt
