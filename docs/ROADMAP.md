@@ -20,13 +20,14 @@ All S001 WPs are COMPLETED and REVIEWED (see docs/ROADMAP_ARCHIVE.md).
 
 Completed S002 WPs are listed in docs/ROADMAP_ARCHIVE.md; only open WPs stay below. A WP absent here and present there is COMPLETED.
 
-- WP-S002-004-005 — Natural terrain/hydrology/traversal authority: distributed freshwater, drainage-valid rivers/lakes, canonical walkability, surface-safe earthworks and bounded seam-safe generation
-- WP-S002-004-009 — Living settlement/building UX: anti-stamped terrain-shaped layouts, structurally distinct services/homes, entrance-connected access, demand-loaded usable interiors and mobile-safe rendering
-- WP-S002-004-011 — Living-resident simulation UX/performance: persistent home/work identity, analytical absolute-time schedules, spatial indexing, bounded logical/visible populations and responsive inspection
-- WP-S002-004-012 — Unified final-surface authority: deterministic priority 0–9 earthworks and one render/routing/collision/material/vegetation truth
-- WP-S002-004-013 — Ruin/critical-place UX: 1/1000 discoverability, legal road access, stable canonical identity, bounded terrain preparation and lazy detail
-- WP-S002-004-014 — Global transport-network authority/UX: connected roads/bridges/harbors/ferries, terrain-aware profiles/junctions and bounded lazy generation
-- WP-S002-004-015 — Invisible-world continuity/performance: SEED-defined shared-boundary contracts, bounded on-demand queries, eviction-safe reconstruction and streaming-independent identity
-- WP-S002-005-001 — Exact-main performance/stability release gate: full percentile/UI-layout telemetry, allocation-bounded hot paths, adaptive DPR/render quality, reusable resources, renderer recovery and exact-SHA evidence
-- WP-S002-005-002 — Responsive UI/UX/accessibility release gate: cutout-safe viewport, computed ≥44px hitboxes for every control, panel/focus/Escape/keyboard-inspection parity, reduced motion and seven-viewport evidence
-- WP-S002-005-003 — README/runtime product-truth release gate: Advisor-safe map semantics, canonical dynamic context/counts, certified travel wording, current-baseline docs, backend/recovery parity and exact-main conformance
+- WP-S002-004-005 — Natural terrain/hydrology/traversal authority: drainage-valid freshwater, high-relief terrain readability, canonical walkability, surface-only earthworks and seam-safe bounded generation
+- WP-S002-004-009 — Living settlement/building UX/performance: terrain-shaped layouts, functionally distinct services/homes, entrance-connected access, demand-loaded usable interiors and reusable mobile-safe rendering
+- WP-S002-004-011 — Living-resident simulation UX/performance: persistent home/work/guard identity, analytical schedules, spatial indexing, bounded logical/visible populations and inspectable activity
+- WP-S002-004-012 — Unified final-surface authority: deterministic priority 0–9 composition, one render/routing/collision/material/vegetation/hydrology truth and final-route recertification
+- WP-S002-004-013 — Ruin/critical-place UX/performance: 1/1000 discoverability, legal network access, stable canonical identity, bounded site preparation and lazy detail
+- WP-S002-004-014 — Global transport-network authority/UX/performance: connected roads/bridges/harbors/ferries, terrain-valid profiles/junctions, route-truth recertification and bounded lazy generation
+- WP-S002-004-015 — Invisible-world continuity/performance: SEED-defined shared-boundary recipes, bounded on-demand queries, eviction-safe reconstruction, remote-route truth and streaming-independent identity
+- WP-S002-004-016 — Toon/cel-shaded world-presentation reference analysis: proven stylized 3D lighting/material/LOD/mobile patterns and S002 visual invariants
+- WP-S002-005-001 — Exact-main performance/stability release gate: complete frame/input/worker/UI telemetry, allocation-bounded Simulation/DOM hot paths, adaptive DPR/render quality, reusable resources and recovery
+- WP-S002-005-002 — Responsive UI/UX/accessibility release gate: cutout-safe seven-viewport layout, computed ≥44px targets, readable text/contrast, keyboard/Escape/focus parity and reduced motion
+- WP-S002-005-003 — README/runtime product-truth release gate: current S002 baseline, Advisor-safe semantics, canonical dynamic context/counts, final-route certification wording, backend/recovery parity and exact-main conformance
