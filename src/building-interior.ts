@@ -209,13 +209,15 @@ export type InteriorResidencyStats = {
 
 /** Bounded protagonist-demand residency. Settlement visibility alone never calls enter(). */
 export class InteriorResidency {
+  readonly maxActive: number;
   private readonly active = new Map<string, { base: InteriorBase; stamp: number }>();
   private stamp = 0;
   private materializations = 0;
   private evictions = 0;
 
-  constructor(readonly maxActive = 2) {
+  constructor(maxActive = 2) {
     if (!Number.isInteger(maxActive) || maxActive < 1) throw new RangeError("maxActive must be a positive integer");
+    this.maxActive = maxActive;
   }
 
   enter(building: Building): InteriorBase {
