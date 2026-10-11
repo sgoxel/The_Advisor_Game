@@ -18,6 +18,10 @@ import {
   macroIslands,
   macroLakes,
 } from "./macro-geography.ts";
+import {
+  freshwaterDistanceAt,
+  surfaceAt as naturalSurfaceAt,
+} from "./hydrology.ts";
 import { travelMetrics } from "./travel.ts";
 
 /** x/z are derived source/render coordinates; canonicalPosition is world truth. */
@@ -193,11 +197,9 @@ function continentCandidate(
 }
 
 /**
- * Canonical settlement-site guard. This WP reserves land-connected settlements on
- * the seeded mainland so every accepted city/village can reach its country backbone
- * without inventing a ferry or filling water. Island transport remains transport-
- * network scope. All wetness here comes from macro geography; no prototype river or
- * source-presentation coordinate is allowed to decide settlement validity.
+ * Canonical settlement-site guard. Macro geography is the first rejection layer;
+ * detailed freshwater authority is checked separately only after a candidate has
+ * passed the cheap political/topographic constraints.
  */
 function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
   const macro = macroSampleAt(position);
@@ -207,6 +209,61 @@ function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
     macro.reliefM <= maxReliefM &&
     macro.coastDistanceRad * CANONICAL_PLANET_RADIUS >= 3_000
   );
+}
+
+function hydrologyDryAt(position: LonLat, allowDifficult = true) {
+  const source = lonLatToSource(position.lon, position.lat),
+    surface = naturalSurfaceAt(source.x, source.z);
+  return (
+    surface.water === "none" &&
+    !surface.cliff &&
+    (allowDifficult || surface.traversal === "walkable")
+  );
+}
+
+/**
+ * Final settlement acceptance samples the actual priority-3/4 natural surface.
+ * Rivers/lakes are never moved to rescue a preferred plot; the candidate is simply
+ * rejected and the next SEED-addressed candidate is tried.
+ */
+function hydrologySettlementFits(position: LonLat, kind: Place["kind"]) {
+  if (!hydrologyDryAt(position)) return false;
+  const radiusM = kind === "city" ? 240 : 170;
+  for (const fraction of [0.5, 1] as const)
+    for (let index = 0; index < 12; index++) {
+      const sample = destination(
+        position,
+        (index / 12) * TAU,
+        (radiusM * fraction) / CANONICAL_PLANET_RADIUS,
+      );
+      if (!hydrologyDryAt(sample)) return false;
+    }
+  return true;
+}
+
+/**
+ * A prototype ordinary road has no bridge/ford record, so its entire deterministic
+ * source-space corridor must remain dry. Sampling is bounded by corridor length and
+ * the canonical river width scale, not viewport or device state.
+ */
+function hydrologyRoadCorridorFits(from: LonLat, to: LonLat) {
+  const a = lonLatToSource(from.lon, from.lat),
+    b = lonLatToSource(to.lon, to.lat),
+    dx = wrapSourceX(b.x - a.x),
+    dz = b.z - a.z,
+    length = Math.hypot(dx, dz),
+    steps = Math.max(2, Math.ceil(length / 6));
+  for (let index = 0; index <= steps; index++) {
+    const t = index / steps,
+      sample = naturalSurfaceAt(a.x + dx * t, a.z + dz * t);
+    if (sample.water !== "none" || sample.cliff) return false;
+  }
+  return true;
+}
+
+function freshwaterDistanceAtPosition(position: LonLat) {
+  const source = lonLatToSource(position.lon, position.lat);
+  return freshwaterDistanceAt(source.x, source.z);
 }
 
 /**
@@ -312,15 +369,13 @@ function cityBackboneConnectionFits(from: LonLat, to: LonLat, country: Country) 
     )
       return false;
   }
-  return true;
+  return hydrologyRoadCorridorFits(from, to);
 }
 
 /**
  * Generation-time settlement acceptance. A canonical settlement anchor is only
  * accepted when its minimum usable footprint and at least one approach beyond
  * that footprint remain dry, low-relief and inside the same political owner.
- * This prevents later building/road systems from repairing a fundamentally bad
- * site with hidden land fill or border-crossing entrances.
  */
 function settlementEnvelopeFits(
   position: LonLat,
@@ -372,7 +427,7 @@ function settlementEnvelopeFits(
       Math.abs(macroSampleAt(approach).reliefM - centreRelief) <=
         (kind === "city" ? 70 : 55)
     )
-      return true;
+      return hydrologySettlementFits(position, kind);
   }
   return false;
 }
@@ -444,8 +499,11 @@ export const villages: Place[] = (() => {
     accepted: CanonicalPosition[] = [],
     usedNames = new Set<string>(["alderwick"]);
   for (const city of cities) {
+    const localAccepted: CanonicalPosition[] = [];
     for (let v = 0; v < VILLAGE_SLOTS_PER_CITY; v++) {
-      let position: CanonicalPosition | undefined;
+      let position: CanonicalPosition | undefined,
+        bestScore = Infinity,
+        legalCandidates = 0;
       for (let attempt = 0; attempt < 280; attempt++) {
         const prefix = `VILLAGE/${city.id}/${v}/${attempt}`,
           bearing = TAU * addressed(`${prefix}/bearing`),
@@ -464,14 +522,28 @@ export const villages: Place[] = (() => {
           owner.id !== city.country ||
           !locallyDrySettlementSite(candidate, 95) ||
           !settlementEnvelopeFits(candidate, country, "village") ||
-          accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000)
+          accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000) ||
+          (v > 0 &&
+            localAccepted[v - 1] &&
+            !hydrologyRoadCorridorFits(localAccepted[v - 1], candidate))
         )
           continue;
-        position = candidate;
-        break;
+        legalCandidates++;
+        const freshwater = freshwaterDistanceAtPosition(candidate),
+          freshwaterRank = Number.isFinite(freshwater) ? freshwater : 1e12,
+          jitter = addressed(`${prefix}/freshwater-rank`) * 32,
+          score = freshwaterRank + jitter;
+        if (score < bestScore) {
+          bestScore = score;
+          position = candidate;
+        }
+        // A bounded choice set strongly prefers nearby water without scanning an
+        // unbounded candidate population or making water follow settlements.
+        if (legalCandidates >= 12) break;
       }
       if (!position) throw new Error(`Seeded geography could not place village ${city.id}/${v}`);
       accepted.push(position);
+      localAccepted.push(position);
       const code = `${city.code}/VILLAGE/${v}`,
         name =
           city.continent === 0 && city.country === 0 && city.city === 0 && v === 0
