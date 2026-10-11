@@ -4,11 +4,11 @@
  *
  * The pure planner lives in routing.ts. This binder is the authority boundary
  * for player-facing village routes. Coarse A* proposes a bounded candidate;
- * that candidate is then validated and re-costed against `cellAt()`, the same
- * runtime walkability/biome/elevation query used by collision and inspection.
- * Only a candidate that is illegal in final runtime truth falls back to an A*
- * search whose sampler is `cellAt()` itself. This keeps final legality truthful
- * without multiplying expensive world queries across every explored A* cell.
+ * that candidate is then validated and re-costed against the same canonical
+ * final surface sampled at runtime cell centres. Only a candidate that is
+ * illegal in final runtime truth falls back to an A* search whose sampler reads
+ * that same final surface. This avoids recomputing world presentation metadata
+ * while keeping routing legality identical to collision/traversal authority.
  */
 import { roadAt, roads, villages, type Place } from "./geography.ts";
 import {
@@ -29,6 +29,7 @@ import {
   type RouteSurface,
   type TerrainSampler,
 } from "./routing.ts";
+import { surfaceAt } from "./surface.ts";
 import {
   DIFFICULT_TERRAIN_WALK_SPEED_MPS,
   FASTEST_WALK_SPEED_MPS,
@@ -37,7 +38,7 @@ import {
   realSecondsForFantasy,
   villagePairProvenByGeodesic,
 } from "./travel.ts";
-import { cellAt } from "./world.ts";
+import { CELL_SIZE } from "./world.ts";
 
 export const NEIGHBOUR_LIMIT = 4;
 export const NEIGHBOUR_MAX_DISTANCE_M = 60_000;
@@ -61,42 +62,44 @@ export type VillageRoute = RouteResult & { fromId: string; toId: string };
 
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
+/**
+ * Runtime cells are 2x2 source units and sample their centres. Read the composed
+ * final surface at that exact centre so routing gets the same elevation,
+ * hydrology, grading and traversal truth as cellAt(), without asking biomeAt()
+ * to perform a second full surface query.
+ */
 function finalTraversalState(position: LonLat) {
-  const flat = lonLatToFlat(position.lon, position.lat);
+  const flat = lonLatToFlat(position.lon, position.lat),
+    x = Math.floor(flat.x / CELL_SIZE) * CELL_SIZE + CELL_SIZE / 2,
+    z = Math.floor(flat.z / CELL_SIZE) * CELL_SIZE + CELL_SIZE / 2;
   return {
-    cell: cellAt(flat.x, flat.z),
-    road: roadAt(flat.x, flat.z),
+    surface: surfaceAt(x, z),
+    road: roadAt(x, z),
   };
 }
 
 /**
- * Full final-cell sampler used only as the deterministic repair path when a
- * coarse candidate proves illegal. `cellAt()` already resolves current
- * water/bridge/road elevation, biome and collision walkability.
+ * Full final-surface sampler used only as the deterministic repair path when a
+ * coarse candidate proves illegal. Water/cliffs and difficult terrain come from
+ * the canonical final surface, not a second routing-specific classifier.
  */
 export const finalTraversalTerrainSampler: TerrainSampler = (position: LonLat) => {
-  const { cell } = finalTraversalState(position),
-    biome = cell.biome.toLowerCase(),
-    naturalWater = biome === "ocean" || biome === "lake" || biome === "river",
-    difficult = biome.includes("highland") || biome.includes("volcanic");
+  const { surface } = finalTraversalState(position);
   return {
-    // routing.ts uses `water` as its hard-block bit. Legal runtime road/bridge
-    // cells are walkable, while cliffs and actual water remain blocked.
-    water: naturalWater || !cell.walkable,
-    heightM: cell.elevation,
-    highland: difficult ? 1 : 0,
+    // routing.ts uses `water` as its hard-block bit. This intentionally includes
+    // cliffs/other non-walkable final cells as well as authoritative water.
+    water: surface.water !== "none" || !surface.walkable,
+    heightM: surface.elevation,
+    highland: surface.traversal === "difficult" ? 1 : 0,
   };
 };
 
-function surfaceForState(biome: string, onRoad: boolean): RouteSurface {
-  const value = biome.toLowerCase();
-  if (value === "bridge") return "bridge";
-  // Settlement presentation intentionally masks the underlying road biome near
-  // village endpoints. roadAt() is the same deterministic road-corridor query
-  // used by world composition, so it preserves road walking cost there without
-  // weakening cellAt() legality.
-  if (onRoad || value === "road") return "road";
-  if (value.includes("highland") || value.includes("volcanic")) return "difficult";
+function surfaceForState(traversal: string, onRoad: boolean): RouteSurface {
+  // Settlement presentation may mask an underlying road visually. roadAt() is
+  // the deterministic road-corridor query used by final surface composition, so
+  // it preserves road walking cost without weakening final-surface legality.
+  if (onRoad) return "road";
+  if (traversal === "difficult") return "difficult";
   return "open";
 }
 
@@ -110,7 +113,7 @@ function speedFor(surface: RouteSurface) {
  * Verify every accepted path interval against final runtime walkability and
  * derive the displayed distance/time from those same final cells. Returning
  * undefined means the coarse candidate crossed a runtime-blocked cell and must
- * be repaired by final-cell A*.
+ * be repaired by final-surface A*.
  */
 function refineAgainstFinalTraversal(route: RouteResult): RouteResult | undefined {
   if (!route.found || route.points.length < 2) return route;
@@ -135,11 +138,11 @@ function refineAgainstFinalTraversal(route: RouteResult): RouteResult | undefine
           { east: delta.east * t, north: delta.north * t, up: 0 },
           a,
         ),
-        { cell, road } = finalTraversalState(sample);
-      if (!cell.walkable) return undefined;
-      const surface = surfaceForState(cell.biome, Boolean(road));
-      surfaceM[surface] += stepM;
-      fantasySeconds += stepM / speedFor(surface);
+        { surface: finalSurface, road } = finalTraversalState(sample);
+      if (!finalSurface.walkable) return undefined;
+      const routeSurface = surfaceForState(finalSurface.traversal, Boolean(road));
+      surfaceM[routeSurface] += stepM;
+      fantasySeconds += stepM / speedFor(routeSurface);
     }
     distanceM += lengthM;
   }
@@ -180,8 +183,8 @@ function directSeededRoad(from: Place, to: Place): RouteResult | undefined {
       { lon: to.canonicalPosition.lon, lat: to.canonicalPosition.lat },
     ],
     surfaceM: { road: geodesicM, bridge: 0, open: 0, difficult: 0 },
-    // Non-zero documents that this fast candidate is final-cell sampled, not an
-    // unvalidated metadata shortcut.
+    // Non-zero documents that this fast candidate is final-surface sampled, not
+    // an unvalidated metadata shortcut.
     cellSizeM: FINAL_ROUTE_VALIDATION_STEP_M,
     expansions: 0,
     attempts: 1,
@@ -190,7 +193,7 @@ function directSeededRoad(from: Place, to: Place): RouteResult | undefined {
 
 function computeRoute(from: Place, to: Place): RouteResult {
   // A canonical seeded road is the cheapest candidate, but it is accepted only
-  // after final runtime cells prove it walkable and recost it.
+  // after final runtime surface samples prove it walkable and recost it.
   const direct = directSeededRoad(from, to);
   if (direct) {
     const refined = refineAgainstFinalTraversal(direct);
@@ -208,8 +211,8 @@ function computeRoute(from: Place, to: Place): RouteResult {
     refined = refineAgainstFinalTraversal(coarse);
   if (refined) return refined;
 
-  // Only a genuinely invalid coarse candidate pays for final-cell A*. This is
-  // still bounded by routing.ts cell/expansion caps and uses exactly the same
+  // Only a genuinely invalid coarse candidate pays for final-surface A*. This
+  // remains bounded by routing.ts cell/expansion caps and uses exactly the same
   // sampler as the validation pass.
   const repaired = planRoute({
     from: from.canonicalPosition,
