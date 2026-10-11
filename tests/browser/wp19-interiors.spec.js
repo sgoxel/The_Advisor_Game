@@ -8,13 +8,13 @@ function buildingForRole(role) {
   return layout.buildings.find((candidate) => candidate.role === role);
 }
 
-async function selectRole(page, role) {
+async function enterRole(page, role) {
   const building = buildingForRole(role);
   if (!building) return false;
-  await page.evaluate((selected) => {
+  return page.evaluate((selected) => {
     window.dispatchEvent(new CustomEvent("advisor:building-selected", { detail: { building: selected } }));
+    return window.advisorInteriors.enterSelected();
   }, building);
-  return true;
 }
 
 async function selectRoleViaInspector(page, role) {
@@ -58,6 +58,7 @@ test("WP19 protagonist-demand interiors use, evict and reconstruct canonically",
   expect(initial.active).toBeNull();
   expect(initial.cache.active).toBe(0);
   expect(initial.cache.materializations).toBe(0);
+  expect(initial.cache.estimatedBytes).toBe(0);
 
   expect(await selectRoleViaInspector(page, "home")).toBe(true);
   let selected = await page.evaluate(() => window.advisorInteriors.state);
@@ -71,9 +72,22 @@ test("WP19 protagonist-demand interiors use, evict and reconstruct canonically",
   expect(entered.entryResolution.character.accepted).toBe(true);
   expect(entered.entryResolution.simulation.valid).toBe(true);
   expect(entered.active.role).toBe("home");
+  expect(entered.active.fixtures.length).toBe(entered.active.rooms.length);
+  expect(entered.active.style.culture).toBeTruthy();
+  expect(entered.active.style.environment).toBe("domestic");
+  expect(entered.active.style.wallMaterial).toBeTruthy();
+  expect(entered.active.style.floorMaterial).toBeTruthy();
+  expect(entered.active.style.furnishingMaterial).toBeTruthy();
   expect(entered.cache.active).toBe(1);
   expect(entered.cache.materializations).toBe(1);
-  const signature = entered.active.signature;
+  expect(entered.cache.estimatedBytes).toBeGreaterThan(0);
+  expect(entered.cache.estimatedBytes).toBeLessThan(64 * 1024);
+  await expect(page.locator(".interior-fixture")).toHaveCount(entered.active.fixtures.length);
+  await expect(page.locator("#interior-code")).toContainText(entered.active.style.culture);
+  await expect(page.locator("#interior-code")).toContainText(entered.active.style.environment);
+  const signature = entered.active.signature,
+    homeFixtures = entered.active.fixtures,
+    homeStyle = entered.active.style;
   await traverseAllRooms(page);
   expect(await page.evaluate(() => window.advisorInteriors.useAnchor())).toBe(true);
   expect((await page.evaluate(() => window.advisorInteriors.state)).lastAction).toMatch(/^Used /);
@@ -83,18 +97,25 @@ test("WP19 protagonist-demand interiors use, evict and reconstruct canonically",
   expect(exited.active).toBeNull();
   expect(exited.cache.active).toBe(0);
   expect(exited.cache.evictions).toBe(1);
+  expect(exited.cache.estimatedBytes).toBe(0);
 
   await page.locator("#enter-building").click();
   entered = await page.evaluate(() => window.advisorInteriors.state);
   expect(entered.active.signature).toBe(signature);
+  expect(entered.active.fixtures).toEqual(homeFixtures);
+  expect(entered.active.style).toEqual(homeStyle);
   expect(entered.reconstructed).toBe(true);
   await page.locator("#exit-interior").click();
 
-  expect(await selectRole(page, "blacksmith")).toBe(true);
-  await page.locator("#enter-building").click();
+  expect(await enterRole(page, "blacksmith")).toBe(true);
+  await expect(page.locator("#interior-panel")).toBeVisible();
   const smith = await page.evaluate(() => window.advisorInteriors.state);
   expect(smith.active.role).toBe("blacksmith");
   expect(smith.active.signature).not.toBe(signature);
+  expect(smith.active.style.environment).toBe("craft");
+  expect(smith.active.fixtures.some((fixture) => fixture.kind === "forge")).toBe(true);
+  expect(smith.cache.estimatedBytes).toBeGreaterThan(0);
+  expect(smith.cache.estimatedBytes).toBeLessThan(64 * 1024);
   await traverseAllRooms(page);
   expect(await page.evaluate(() => window.advisorInteriors.useAnchor())).toBe(true);
 
@@ -117,5 +138,6 @@ test("WP19 protagonist-demand interiors use, evict and reconstruct canonically",
     }
   }
   await page.locator("#exit-interior").click();
+  expect((await page.evaluate(() => window.advisorInteriors.state)).cache.estimatedBytes).toBe(0);
   expect(errors).toEqual([]);
 });
