@@ -8,7 +8,7 @@ import {
   wrapSourceX,
 } from "./planet.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
-import { nearestPlace, places, roadAt, roadDistanceAt } from "./geography.ts";
+import { nearestPlace, places, roadDistanceAt, roads, type Road } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import {
   WORLD_BUILDING_PRIORITIES,
@@ -186,7 +186,7 @@ export function field(
   const gx = Math.floor(x / spacing),
     gz = Math.floor(z / spacing);
   const tx = smooth(x / spacing - gx),
-    tz = smooth(z / spacing - gz);
+    tz = smooth(x / spacing - gx);
   const at = (a: number, b: number) =>
     (coordinateValue(a, b, layer) % 10001) / 10000;
   return lerp(
@@ -322,9 +322,56 @@ function naturalSurfaceBaseAt(x: number, z: number): SurfaceBase {
   };
 }
 
-function surfaceModifiersAt(x: number, z: number, base: SurfaceBase): SurfaceModifier[] {
+const ROAD_SUPPORT_RADIUS = 12;
+const ROAD_BUCKET_SIZE = 2048;
+const surfaceRoadBuckets = new Map<string, Road[]>();
+const roadBucketKey = (bx: number, bz: number) => `${bx}/${bz}`;
+for (const road of roads) {
+  for (const shiftX of [-WORLD_SIZE, 0, WORLD_SIZE]) {
+    const minBX = Math.floor((road.minX + shiftX - ROAD_SUPPORT_RADIUS) / ROAD_BUCKET_SIZE),
+      maxBX = Math.floor((road.maxX + shiftX + ROAD_SUPPORT_RADIUS) / ROAD_BUCKET_SIZE),
+      minBZ = Math.floor((road.minZ - ROAD_SUPPORT_RADIUS) / ROAD_BUCKET_SIZE),
+      maxBZ = Math.floor((road.maxZ + ROAD_SUPPORT_RADIUS) / ROAD_BUCKET_SIZE);
+    for (let bz = minBZ; bz <= maxBZ; bz++)
+      for (let bx = minBX; bx <= maxBX; bx++) {
+        const key = roadBucketKey(bx, bz),
+          bucket = surfaceRoadBuckets.get(key) || [];
+        bucket.push(road);
+        surfaceRoadBuckets.set(key, bucket);
+      }
+  }
+}
+for (const bucket of surfaceRoadBuckets.values())
+  bucket.sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
+
+function surfaceRoadAt(x: number, z: number) {
+  const wrappedX = wrapSourceX(x),
+    bucket =
+      surfaceRoadBuckets.get(
+        roadBucketKey(
+          Math.floor(wrappedX / ROAD_BUCKET_SIZE),
+          Math.floor(z / ROAD_BUCKET_SIZE),
+        ),
+      ) || [];
+  let road: Road | undefined,
+    distance = ROAD_SUPPORT_RADIUS;
+  for (const candidate of bucket) {
+    const candidateDistance = roadDistanceAt(wrappedX, z, candidate);
+    if (
+      candidateDistance < distance ||
+      (candidateDistance === distance && (!road || candidate.code < road.code))
+    ) {
+      road = candidate;
+      distance = candidateDistance;
+    }
+  }
+  return { road, distance, candidateCount: bucket.length };
+}
+
+function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   const modifiers: SurfaceModifier[] = [],
-    place = nearestPlace(x, z);
+    place = nearestPlace(x, z),
+    roadMatch = surfaceRoadAt(x, z);
   if (place) {
     const distance = Math.hypot(wrapSourceX(x - place.x), z - place.z),
       radius = place.kind === "city" ? 430 : 90,
@@ -345,9 +392,9 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase): SurfaceMod
       });
   }
 
-  const road = roadAt(x, z);
+  const road = roadMatch.road;
   if (road) {
-    const distance = roadDistanceAt(x, z, road),
+    const distance = roadMatch.distance,
       weight = 1 - smooth(clamp01((distance - 5) / 7)),
       bridge = base.water.kind !== "none" && distance <= 5;
     if (weight > 0)
@@ -363,13 +410,21 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase): SurfaceMod
         deckHeight: bridge ? Math.max(3, base.water.level + 3) : undefined,
       });
   }
-  return modifiers;
+  return {
+    modifiers,
+    candidateCount: roadMatch.candidateCount + (place ? 1 : 0),
+  };
 }
 
 function composePointAt(x: number, z: number) {
   const base = naturalSurfaceBaseAt(x, z),
-    modifiers = surfaceModifiersAt(x, z, base);
-  return { base, modifiers, final: composeFinalSurface(base, modifiers) };
+    modifierQuery = surfaceModifiersAt(x, z, base);
+  return {
+    base,
+    modifiers: modifierQuery.modifiers,
+    candidateCount: modifierQuery.candidateCount,
+    final: composeFinalSurface(base, modifierQuery.modifiers),
+  };
 }
 
 const FINAL_SURFACE_CACHE_LIMIT = 4096;
@@ -395,8 +450,8 @@ export function finalSurfaceAt(x: number, z: number): FinalSurface {
   }
   finalSurfaceCacheMisses++;
   const point = composePointAt(x, z);
-  finalSurfaceModifierCandidates += point.modifiers.length;
-  finalSurfaceWorstCandidates = Math.max(finalSurfaceWorstCandidates, point.modifiers.length);
+  finalSurfaceModifierCandidates += point.candidateCount;
+  finalSurfaceWorstCandidates = Math.max(finalSurfaceWorstCandidates, point.candidateCount);
 
   const sx = composePointAt(x + 1, z).final.groundHeight - composePointAt(x - 1, z).final.groundHeight,
     sz = composePointAt(x, z + 1).final.groundHeight - composePointAt(x, z - 1).final.groundHeight,
