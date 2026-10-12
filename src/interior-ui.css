@@ -148,7 +148,6 @@
   .interior-scene, .interior-player { transition: none !important; }
 }
 
-
 /* WP19_ATTEMPT2_INTERIOR_DEPTH — visual depth for the already-canonical lazy interior. */
 .interior-scene-wrap {
   background:
@@ -225,4 +224,177 @@
   .interior-panel { grid-template-rows: auto auto minmax(220px, 1fr) auto; }
   .interior-meta { font-size: 0.76rem; line-height: 1.25; }
   .interior-scene-wrap { min-height: 250px; }
+}
+
+/* Attempt 2 continuation: explicit low-cost 3D room shells and reusable fixture masses. */
+.interior-room::before { display: none; }
+.interior-wall {
+  position: absolute;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,.14), transparent 22%),
+    linear-gradient(#c7b89a, #756a58);
+  border: 1px solid rgba(49, 40, 30, .68);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.12), 0 5px 9px rgba(0,0,0,.28);
+  transform-style: preserve-3d;
+  z-index: 6;
+}
+.interior-wall-north,
+.interior-wall-south {
+  left: -2px;
+  width: calc(100% + 4px);
+  height: 18px;
+}
+.interior-wall-north {
+  top: -2px;
+  transform-origin: 50% 0;
+  transform: rotateX(90deg);
+}
+.interior-wall-south {
+  bottom: -2px;
+  transform-origin: 50% 100%;
+  transform: rotateX(-90deg);
+}
+.interior-wall-east,
+.interior-wall-west {
+  top: -2px;
+  height: calc(100% + 4px);
+  width: 18px;
+}
+.interior-wall-east {
+  right: -2px;
+  transform-origin: 100% 50%;
+  transform: rotateY(90deg);
+}
+.interior-wall-west {
+  left: -2px;
+  transform-origin: 0 50%;
+  transform: rotateY(-90deg);
+}
+.interior-scene[data-environment="craft"] .interior-wall,
+.interior-scene[data-environment="guarded"] .interior-wall,
+.interior-scene[data-environment="fortified"] .interior-wall {
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 11px, rgba(0,0,0,.05) 11px 13px),
+    linear-gradient(#a09a89, #5f5d54);
+}
+.interior-door {
+  width: 20px;
+  height: 10px;
+  margin: -5px 0 0 -10px;
+  transform: translateZ(13px);
+  border: 2px solid #e0bd75;
+  border-bottom-width: 4px;
+  border-radius: 8px 8px 2px 2px;
+  background: rgba(24, 35, 29, .94);
+  box-shadow: 0 0 0 2px rgba(43,30,18,.78), 0 5px 10px rgba(0,0,0,.42);
+  z-index: 10;
+}
+.interior-door-z { transform: translateZ(13px) rotateZ(90deg); }
+.interior-fixture {
+  transform: translate(-50%, -50%) translateZ(13px);
+  min-width: 16px;
+  min-height: 12px;
+  border-radius: 3px;
+  box-shadow:
+    inset 0 3px 0 rgba(255,255,255,.16),
+    5px 8px 0 rgba(0,0,0,.42),
+    0 0 0 1px rgba(34,25,18,.78);
+}
+.interior-fixture::before,
+.interior-fixture::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+.interior-fixture::before {
+  left: 5%;
+  right: 5%;
+  top: -8px;
+  height: 8px;
+  background: inherit;
+  filter: brightness(1.16);
+  border: inherit;
+  transform-origin: bottom;
+  transform: rotateX(62deg);
+}
+.fixture-bed::after,
+.fixture-bunk::after {
+  right: 8%;
+  top: 12%;
+  width: 24%;
+  height: 58%;
+  border-radius: 45%;
+  background: #d9c39b;
+  box-shadow: 0 0 0 1px rgba(69,45,34,.5);
+}
+.fixture-table::before {
+  left: 12%;
+  right: 12%;
+  top: -7px;
+  height: 10px;
+  border-radius: 50%;
+}
+.fixture-latrine::before {
+  left: 18%;
+  right: 18%;
+  top: -7px;
+  height: 10px;
+  border-radius: 50%;
+  background: #a9a18e;
+  box-shadow: inset 0 0 0 3px #625f55;
+}
+.fixture-forge::after,
+.fixture-hearth::after {
+  left: 30%;
+  top: 20%;
+  width: 40%;
+  height: 40%;
+  border-radius: 50%;
+  background: #ffb15f;
+  box-shadow: 0 0 12px rgba(255,132,48,.92);
+}
+.fixture-rack::after {
+  inset: 10% 15%;
+  border-top: 3px solid #c49a62;
+  border-bottom: 3px solid #c49a62;
+}
+.fixture-counter::after,
+.fixture-workbench::after {
+  left: 12%;
+  right: 12%;
+  top: 24%;
+  border-top: 3px solid rgba(230,193,133,.62);
+}
+.interior-anchor {
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  transform: translateZ(28px);
+  box-shadow: 0 0 0 2px #203027, 0 0 9px rgba(214,190,120,.6);
+  z-index: 12;
+}
+.interior-player {
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  transform: translateZ(31px);
+  box-shadow: 0 0 0 4px rgba(46,84,64,.95), 0 7px 14px rgba(0,0,0,.48);
+  z-index: 14;
+}
+.interior-room::after {
+  transform: translate(-50%, -50%) translateZ(32px) rotateZ(35deg) rotateX(-58deg);
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: rgba(18,29,24,.62);
+  font-size: 10px;
+  letter-spacing: .015em;
+  z-index: 15;
+}
+@media (max-width: 600px) {
+  .interior-wall-north,
+  .interior-wall-south { height: 14px; }
+  .interior-wall-east,
+  .interior-wall-west { width: 14px; }
+  .interior-room::after { font-size: 9px; }
 }
