@@ -1,17 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { roads, villages } from "../src/geography.ts";
+import { SOURCE_PRESENTATION_WIDTH } from "../src/planet.ts";
 import {
   WORLD_BUILDING_PRIORITY,
   clearFinalSurfaceCache,
   composedSurfaceAt,
   finalSurfaceAt,
+  finalSurfaceEvidenceExamples,
   finalSurfaceStats,
   resetFinalSurfaceTelemetry,
 } from "../src/final-surface.ts";
 import { biomeAt, cellAt, heightAt } from "../src/world.ts";
 
+const ascii = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const fingerprint = (sample: ReturnType<typeof finalSurfaceAt>) => ({
+  x: sample.x,
+  z: sample.z,
+  naturalElevation: sample.naturalElevation,
   groundElevation: sample.groundElevation,
   surfaceElevation: sample.surfaceElevation,
   groundMaterial: sample.groundMaterial,
@@ -20,6 +26,7 @@ const fingerprint = (sample: ReturnType<typeof finalSurfaceAt>) => ({
   flow: sample.flow,
   vegetationExcluded: sample.vegetationExcluded,
   reservedUse: sample.reservedUse,
+  countryCode: sample.countryCode,
   slopeM: sample.slopeM,
   walkable: sample.walkable,
   contributions: sample.contributions,
@@ -40,7 +47,7 @@ test("world-building priorities are the exact canonical 0-9 contract", () => {
   });
 });
 
-test("reverse visits and cache resets preserve composed surface fingerprints", () => {
+test("reverse visits, wrap aliases, and cache resets preserve surface fingerprints", () => {
   const points = [
     { x: -1024, z: 512 },
     { x: 0, z: 0 },
@@ -58,13 +65,32 @@ test("reverse visits and cache resets preserve composed surface fingerprints", (
   assert.deepEqual(reverse, forward);
   for (const sample of forward) {
     const ordered = [...sample.contributions].sort(
-      (a, b) => a.priority - b.priority || a.id.localeCompare(b.id),
+      (a, b) => a.priority - b.priority || ascii(a.id, b.id),
     );
     assert.deepEqual(sample.contributions, ordered);
   }
+
+  const wrapProbe = fingerprint(finalSurfaceAt(1234.5, 1000.5)),
+    wrapAlias = fingerprint(
+      finalSurfaceAt(1234.5 + SOURCE_PRESENTATION_WIDTH, 1000.5),
+    );
+  assert.deepEqual(wrapAlias, wrapProbe);
 });
 
-test("road and settlement modifiers coherently alter channels inside bounded support", () => {
+test("country affiliation is composed without flattening political land", () => {
+  const sample = finalSurfaceAt(villages[0].x, villages[0].z);
+  assert.ok(sample.countryCode);
+  assert.ok(
+    sample.contributions.some(
+      (item) =>
+        item.priority === WORLD_BUILDING_PRIORITY.country &&
+        item.id === sample.countryCode &&
+        item.channels.includes("affiliation"),
+    ),
+  );
+});
+
+test("road cut/fill changes final channels within bounded support", () => {
   const road = roads[0],
     x = road.fromX + (road.toX - road.fromX) * 0.5,
     z = road.fromZ + (road.toZ - road.fromZ) * 0.5,
@@ -78,36 +104,56 @@ test("road and settlement modifiers coherently alter channels inside bounded sup
   assert.equal(roadSurface.walkable, true);
   assert.ok(roadSurface.reservedUse === "road" || roadSurface.reservedUse === "bridge");
   if (roadSurface.reservedUse === "bridge") {
-    assert.notEqual(roadSurface.water, "none");
+    assert.equal(roadSurface.water, "river");
     assert.equal(roadSurface.surfaceMaterial, "Bridge");
-    assert.ok(roadSurface.surfaceElevation > roadSurface.groundElevation);
+    assert.ok(roadSurface.surfaceElevation - roadSurface.groundElevation >= 1);
   } else {
     assert.equal(roadSurface.water, "none");
+    assert.equal(roadSurface.groundMaterial, "Dirt foundation");
     assert.equal(roadSurface.surfaceMaterial, "Road");
-    assert.ok(Math.abs(roadSurface.groundElevation - 3) < 1e-9);
+    const delta = roadSurface.groundElevation - roadSurface.naturalElevation;
+    assert.ok(delta <= 3.01, `road fill exceeded 3 m: ${delta}`);
+    assert.ok(delta >= -4.01, `road cut exceeded 4 m: ${delta}`);
   }
+});
 
-  const village = villages[0];
-  let terrace: ReturnType<typeof finalSurfaceAt> | undefined;
-  for (let radius = 18; radius <= 54 && !terrace; radius += 6)
-    for (let step = 0; step < 16 && !terrace; step++) {
+test("seeded hillside home pad prepares authoritative ground and excludes vegetation", () => {
+  const example = finalSurfaceEvidenceExamples().hillsideHome,
+    pad = finalSurfaceAt(example.x, example.z);
+  assert.equal(pad.water, "none");
+  assert.equal(pad.reservedUse, "building-pad");
+  assert.equal(pad.groundMaterial, "Prepared ground");
+  assert.equal(pad.surfaceMaterial, "Prepared ground");
+  assert.equal(pad.vegetationExcluded, true);
+  assert.equal(pad.walkable, true);
+  assert.ok(
+    pad.contributions.some(
+      (item) => item.id === example.code && item.channels.includes("elevation"),
+    ),
+  );
+  const delta = pad.groundElevation - pad.naturalElevation;
+  assert.ok(delta <= 3.01 && delta >= -3.01, `pad cut/fill exceeded 3 m: ${delta}`);
+
+  let outside: ReturnType<typeof finalSurfaceAt> | undefined;
+  for (let radius = 14; radius <= 30 && !outside; radius += 4)
+    for (let step = 0; step < 16 && !outside; step++) {
       const angle = (step / 16) * Math.PI * 2,
         sample = finalSurfaceAt(
-          village.x + Math.cos(angle) * radius,
-          village.z + Math.sin(angle) * radius,
+          example.x + Math.cos(angle) * radius,
+          example.z + Math.sin(angle) * radius,
         );
       if (
         sample.water === "none" &&
-        sample.contributions.some((item) => item.priority === WORLD_BUILDING_PRIORITY.village) &&
-        !sample.contributions.some((item) => item.priority === WORLD_BUILDING_PRIORITY.road)
+        !sample.contributions.some(
+          (item) =>
+            item.priority >= WORLD_BUILDING_PRIORITY.city &&
+            item.channels.includes("elevation"),
+        )
       )
-        terrace = sample;
+        outside = sample;
     }
-  assert.ok(terrace, "expected a non-road village terrace sample");
-  assert.equal(terrace!.reservedUse, "village");
-  assert.equal(terrace!.surfaceMaterial, "Settlement");
-  assert.equal(terrace!.vegetationExcluded, true);
-  assert.ok(terrace!.groundElevation <= terrace!.naturalElevation || Math.abs(terrace!.groundElevation - 3) < 1e-6);
+  assert.ok(outside, "expected an unmodified sample beyond the home-pad support");
+  assert.equal(outside!.groundElevation, outside!.naturalElevation);
 });
 
 test("legacy adapters and runtime cells consume the composed authority", () => {
@@ -134,10 +180,11 @@ test("final-surface caches are memoization only and remain bounded", () => {
   clearFinalSurfaceCache();
   resetFinalSurfaceTelemetry();
   const before = fingerprint(finalSurfaceAt(10, 10));
-  for (let i = 0; i < 22_000; i++) composedSurfaceAt(i * 0.5, 2000 + (i % 211) * 0.5);
+  for (let i = 0; i < 22_000; i++)
+    composedSurfaceAt(i * 0.5, 2000 + (i % 211) * 0.5);
   const stats = finalSurfaceStats();
   assert.ok(stats.cacheEntries <= stats.cacheLimit);
-  assert.ok(stats.maxCandidateModifiers <= 3);
+  assert.ok(stats.maxCandidateModifiers <= 4);
   clearFinalSurfaceCache();
   const after = fingerprint(finalSurfaceAt(10, 10));
   assert.deepEqual(after, before);
