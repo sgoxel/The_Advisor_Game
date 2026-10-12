@@ -33,6 +33,7 @@ export type SurfaceMaterial =
   | "Settlement"
   | "Road"
   | "Bridge";
+export type SurfaceTraversal = "blocked" | "bridge" | "road" | "difficult" | "open";
 
 export type SurfaceWater = {
   kind: "none" | "ocean" | "lake" | "river";
@@ -66,7 +67,11 @@ export type SurfaceModifier = {
 
 export type FinalSurface = SurfaceBase & {
   surfaceHeight: number;
+  /** Ground material remains inspectable even when a bridge deck is the top surface. */
+  groundMaterial: SurfaceMaterial;
   deckHeight: number | null;
+  deckMaterial: "Bridge" | null;
+  traversal: SurfaceTraversal;
   contributingModifierIds: readonly string[];
 };
 
@@ -87,7 +92,7 @@ export function composeFinalSurface(
   modifiers: readonly SurfaceModifier[],
 ): FinalSurface {
   let groundHeight = base.groundHeight,
-    material = base.material,
+    groundMaterial = base.material,
     walkable = base.walkable,
     vegetationDensityScale = clamp01(base.vegetationDensityScale),
     reservedUse = base.reservedUse,
@@ -107,7 +112,8 @@ export function composeFinalSurface(
     if (modifier.deckHeight !== undefined)
       deckHeight = deckHeight === null ? modifier.deckHeight : Math.max(deckHeight, modifier.deckHeight);
 
-    if (modifier.material && weight >= 0.5) material = modifier.material;
+    if (modifier.material && weight >= 0.5 && base.water.kind === "none")
+      groundMaterial = modifier.material;
     if (modifier.walkable !== undefined && weight >= 0.5) walkable = modifier.walkable;
     if (modifier.vegetationDensityScale !== undefined)
       vegetationDensityScale = Math.min(
@@ -121,17 +127,30 @@ export function composeFinalSurface(
   if (base.water.kind !== "none" && deckHeight === null) walkable = false;
   if (deckHeight !== null) {
     walkable = true;
-    material = "Bridge";
     vegetationDensityScale = 0;
   }
+
+  const material: SurfaceMaterial = deckHeight !== null ? "Bridge" : groundMaterial,
+    traversal: SurfaceTraversal = !walkable
+      ? "blocked"
+      : deckHeight !== null
+        ? "bridge"
+        : groundMaterial === "Road"
+          ? "road"
+          : groundMaterial === "Highlands" || groundMaterial === "Volcanic highlands"
+            ? "difficult"
+            : "open";
 
   return {
     groundHeight,
     surfaceHeight: deckHeight ?? groundHeight,
-    deckHeight,
     material,
+    groundMaterial,
+    deckHeight,
+    deckMaterial: deckHeight === null ? null : "Bridge",
     water: base.water,
     walkable,
+    traversal,
     vegetationDensityScale,
     reservedUse,
     contributingModifierIds,
