@@ -1,0 +1,53 @@
+name: WP15 apply final-traversal authority correction
+
+on:
+  pull_request:
+    paths:
+      - "src/village-routes.ts"
+      - "tests/wp15-head-connector-diagnostic.test.ts"
+      - ".github/workflows/wp15-apply-attempt.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'agent1/wp-s002-004-005-current-main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Apply bounded authority correction
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/village-routes.ts')
+          text = path.read_text()
+          old = '''    water: surface.water !== "none" || !surface.walkable,
+    heightM: surface.elevation,
+    highland: surface.traversal === "difficult" ? 1 : 0,'''
+          new = '''    water: surface.water !== "none" || !surface.walkable,
+    // Final surface already owns cliff/slope legality. A second height-delta cliff
+    // classifier inside routing.ts can disconnect cells that canonical traversal
+    // explicitly marked walkable, so repair search uses only final legality here.
+    heightM: 0,
+    highland: surface.traversal === "difficult" ? 1 : 0,'''
+          if old in text:
+              path.write_text(text.replace(old, new, 1))
+          elif new not in text:
+              raise SystemExit('expected final traversal sampler block not found')
+          PY
+      - name: Commit correction when needed
+        run: |
+          if git diff --quiet -- src/village-routes.ts; then
+            echo "Correction already applied"
+            exit 0
+          fi
+          git config user.name "AGENT #1"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add src/village-routes.ts
+          git commit -m "WP-S002-004-005: honor final traversal authority in repair search"
+          git push origin HEAD:${{ github.head_ref }}
