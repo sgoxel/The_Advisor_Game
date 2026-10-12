@@ -915,10 +915,11 @@ function growCityLanes(w: Work, width: number): void {
 function makeRing(w: Work, salt: string, n: number, radius: number, radialJitter: number, angularJitter: number): Point[] {
   // WP19_ATTEMPT2_ORGANIC_BELTS: city belts are seeded neighbourhood traces, not
   // concentric geometry. Each belt has its own offset centre and stronger irregularity.
-  const shift = salt === "middle" ? 0.2 : 0.12,
+  // WP19_ATTEMPT2_BORDER_TIGHTEN: keep asymmetric belts inside the inhabited envelope.
+  const shift = salt === "middle" ? 0.12 : 0.1,
     offsetX = (w.rand(`ring/${salt}/offset-x`) - 0.5) * radius * shift,
     offsetZ = (w.rand(`ring/${salt}/offset-z`) - 0.5) * radius * shift,
-    effectiveJitter = radialJitter + (salt === "middle" ? 0.12 : 0.08),
+    effectiveJitter = radialJitter,
     ctrl: Point[] = [];
   for (let k = 0; k < n; k++) {
     const theta = (TAU * (k + (w.rand(`ring/${salt}/angle`, k) - 0.5) * angularJitter * 1.35)) / n,
@@ -996,9 +997,9 @@ function buildStreets(w: Work, gateEast: boolean, gateWest: boolean): void {
   if (w.city) {
     // WP19_ATTEMPT2_CITY_DISTRICTS: fewer, rougher control points and independent
     // offset centres prevent the two urban belts from reading as stamped concentric rings.
-    const inner = makeRing(w, "inner", 9 + Math.floor(u(5) * 4), 100 + 30 * u(6), 0.24, 0.72);
+    const inner = makeRing(w, "inner", 9 + Math.floor(u(5) * 4), 98 + 24 * u(6), 0.22, 0.72);
     for (const index of addDryRuns(w, inner, laneWidth)) w.fixed.add(index);
-    const middle = makeRing(w, "middle", 10 + Math.floor(u(9) * 4), 158 + 34 * u(10), 0.24, 0.82);
+    const middle = makeRing(w, "middle", 10 + Math.floor(u(9) * 4), 145 + 18 * u(10), 0.18, 0.82);
     if (Math.max(...middle.map((p) => Math.hypot(p.x - w.cx, p.z - w.cz))) < w.env - 1)
       for (const index of addDryRuns(w, middle, laneWidth)) w.fixed.add(index);
     growCityLanes(w, laneWidth);
