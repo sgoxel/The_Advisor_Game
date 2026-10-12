@@ -131,6 +131,15 @@ function useAnchor() {
   return true;
 }
 
+function appendRoomWalls(node: HTMLElement) {
+  for (const side of ["north", "east", "south", "west"] as const) {
+    const wall = document.createElement("div");
+    wall.className = `interior-wall interior-wall-${side}`;
+    wall.setAttribute("aria-hidden", "true");
+    node.append(wall);
+  }
+}
+
 function renderInterior(base: InteriorBase) {
   const scene = $("interior-scene");
   scene.replaceChildren();
@@ -148,12 +157,16 @@ function renderInterior(base: InteriorBase) {
     node.style.width = `${(room.width / base.width) * 100}%`;
     node.style.height = `${(room.depth / base.depth) * 100}%`;
     node.style.transform = "translate(-50%, -50%)";
+    appendRoomWalls(node);
     scene.append(node);
   }
   for (const door of base.doors) {
     const node = document.createElement("div"),
-      point = scaled(base, door.x, door.z);
-    node.className = "interior-door";
+      point = scaled(base, door.x, door.z),
+      from = base.rooms.find((room) => room.code === door.from),
+      to = base.rooms.find((room) => room.code === door.to),
+      axis = from && to && Math.abs(from.x - to.x) > Math.abs(from.z - to.z) ? "z" : "x";
+    node.className = `interior-door interior-door-${axis}`;
     node.style.left = `${point.left}%`;
     node.style.top = `${point.top}%`;
     node.title = "Walkable doorway";
