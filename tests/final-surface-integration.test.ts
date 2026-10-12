@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { places, roads, villages } from "../src/geography.ts";
-import {
-  WORLD_BUILDING_PRIORITIES,
-} from "../src/final-surface.ts";
+import { WORLD_BUILDING_PRIORITIES } from "../src/final-surface.ts";
+import { wrapSourceX } from "../src/planet.ts";
 import {
   finalSurfaceAt,
   finalSurfaceDebugAt,
   finalSurfaceTelemetry,
   resetFinalSurfaceTelemetry,
+  riverX,
 } from "../src/world.ts";
 
 const EPS = 1e-9;
@@ -56,13 +56,28 @@ test("road cut/fill is bounded and priority-8 ownership is inspectable", () => {
 });
 
 test("bridge deck preserves authoritative water and ground as separate channels", () => {
-  let bridge:
-    | ReturnType<typeof finalSurfaceDebugAt>
-    | undefined;
+  let bridge: ReturnType<typeof finalSurfaceDebugAt> | undefined;
   outer: for (const road of roads) {
-    const length = Math.hypot(road.toX - road.fromX, road.toZ - road.fromZ),
-      samples = Math.max(8, Math.min(96, Math.ceil(length / 8)));
+    // The current transitional river is a seeded analytic channel. Use its cheap
+    // equation to identify only likely crossings, then invoke the expensive
+    // composed authority at the best few stations. This keeps the acceptance
+    // proof bounded without weakening bridge/water channel assertions.
+    let bestIndex = 0,
+      bestBank = Infinity;
+    const samples = 32;
     for (let index = 0; index <= samples; index++) {
+      const t = index / samples,
+        x = road.fromX + (road.toX - road.fromX) * t,
+        z = road.fromZ + (road.toZ - road.fromZ) * t,
+        bank = Math.abs(wrapSourceX(x - riverX(z)));
+      if (bank < bestBank) {
+        bestBank = bank;
+        bestIndex = index;
+      }
+    }
+    if (bestBank > 40) continue;
+    for (const index of [bestIndex - 1, bestIndex, bestIndex + 1]) {
+      if (index < 0 || index > samples) continue;
       const t = index / samples,
         debug = finalSurfaceDebugAt(
           road.fromX + (road.toX - road.fromX) * t,
