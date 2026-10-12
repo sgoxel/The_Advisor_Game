@@ -1,7 +1,7 @@
-import { featuresFor, field, heightAt, riverX, type Tile } from "./world.ts";
-import { nearestPlace, roadAt, roads } from "./geography.ts";
+import { featuresFor, field, finalSurfaceAt, heightAt, type Tile } from "./world.ts";
+import { roads } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
-import { sourceToLonLat, wrapSourceX, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
+import { sourceToLonLat, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import {
   climateSampleAt,
   polarBoundaryAt,
@@ -181,8 +181,8 @@ class Builder {
 }
 
 /**
- * Shared semantic material lookup. Realm and local LODs use the same climate
- * identity and palette; only bounded seed-derived detail frequency changes.
+ * Shared semantic material lookup. Realm and local LODs use the same final
+ * surface channels; only bounded seed-derived detail frequency changes.
  */
 export function terrainTint(
   x: number,
@@ -192,25 +192,17 @@ export function terrainTint(
 ): [number, number, number] {
   const position = sourceToLonLat(x, z),
     macro = macroSampleAt(position),
-    elevation = elevationM ?? heightAt(x, z),
+    surface = finalSurfaceAt(x, z),
+    elevation = elevationM ?? surface.groundHeight,
     sample = climateSampleAt(position, elevation);
 
-  // Current composed river surface; avoid constructing the unrelated five-level
-  // feature hierarchy for every surface texel. Same prototype river authority.
-  if (macro.domain === "Mainland" && elevation < 0.1) return color(76, 128, 148);
-  if (macro.domain === "Mainland" && Math.abs(wrapSourceX(x - riverX(z))) < 32)
-    return color(151, 143, 99);
-
-  const s = nearestPlace(x, z),
-    dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,
-    dz = s ? Math.abs(z - s.z) : 1000,
-    urbanRoad =
-      s?.kind === "city" && (Math.abs(dx % 29) < 3 || Math.abs(dz % 29) < 3);
+  // Hydrology and prepared ground come from the composed surface, never from a
+  // parallel river/road/settlement hit test in presentation code.
+  if (surface.water.kind === "river") return color(76, 128, 148);
+  if (surface.groundMaterial === "Riverbank") return color(151, 143, 99);
   if (
-    ((s &&
-      Math.hypot(dx, dz) < (s.kind === "city" ? 420 : 66) &&
-      (dx < 4 || dz < 4 || Math.hypot(dx, dz) < 11 || urbanRoad)) ||
-      (roadAt(x, z) && Math.abs(z - roadAt(x, z)!.z) < 5))
+    surface.water.kind === "none" &&
+    (surface.groundMaterial === "Road" || surface.groundMaterial === "Settlement")
   )
     return color(170, 151, 113);
 
@@ -357,9 +349,8 @@ export function buildTile(t: Tile): TileGeometry {
   // The water/ice plane is presentation-only and sits beneath land. Sample the same
   // canonical polar boundary at each corner so a tile cannot expose a rectangular ice edge.
   const waterTint = (x: number, z: number): RGB => {
-    // Visible water uses exactly the same composed color as the globe. Ground
-    // below land is occluded; retain a smooth canonical ice margin there too.
-    if (heightAt(x, z) <= 0) return terrainTint(x, z);
+    // Visible water follows the final hydrology channel even beneath bridge decks.
+    if (finalSurfaceAt(x, z).water.kind !== "none") return terrainTint(x, z);
     const position = sourceToLonLat(x, z);
     return blendColor(TERRAIN_PALETTE.ocean, TERRAIN_PALETTE["sea-ice"],
       smoothstep(-0.018, 0.018, Math.abs(position.lat)/(Math.PI/2)-polarBoundaryAt(position)));
@@ -522,30 +513,54 @@ export function buildTile(t: Tile): TileGeometry {
         detail.roof(x, y + 3, z, 3, 3, 1, color(116, 69, 47));
       }
     }
-  // Tile-clipped bridges preserve walking routes where the river crosses them.
+  // Bridge deck geometry is driven by the final deck channel. Ground/water stay
+  // untouched, so a crossing cannot be accidentally rendered as a filled river.
   if (t.size <= 512)
     for (const road of roads) {
-      if (road.z < t.minZ || road.z >= t.minZ + t.size) continue;
-      for (
-        let x = Math.max(t.minX, Math.ceil(road.minX / 2) * 2);
-        x < Math.min(t.minX + t.size, road.maxX);
-        x += 2
-      ) {
-        if (heightAt(x, road.z) < 2.9) {
-          structures.box(x + 1, 2.8, road.z, 2, 0.2, 10, color(115, 88, 56));
-          if (t.size <= 64)
-            for (const oz of [-4.5, 4.5]) {
-              detail.box(
-                x + 1,
-                3.9,
-                road.z + oz,
-                2,
-                0.18,
-                0.18,
-                color(83, 65, 46),
-              );
-              detail.box(x, 3, road.z + oz, 0.2, 1.2, 0.2, color(83, 65, 46));
-            }
+      const vx = road.toX - road.fromX,
+        vz = road.toZ - road.fromZ,
+        length = Math.hypot(vx, vz);
+      if (!length) continue;
+      const segmentCount = Math.max(1, Math.ceil(length / 2)),
+        nx = (-vz / length) * 5,
+        nz = (vx / length) * 5;
+      for (const shiftX of [-SOURCE_PRESENTATION_WIDTH, 0, SOURCE_PRESENTATION_WIDTH]) {
+        const minX = road.minX + shiftX,
+          maxX = road.maxX + shiftX;
+        if (
+          maxX < t.minX - 6 ||
+          minX > t.minX + t.size + 6 ||
+          road.maxZ < t.minZ - 6 ||
+          road.minZ > t.minZ + t.size + 6
+        )
+          continue;
+        for (let index = 0; index < segmentCount; index++) {
+          const t0 = index / segmentCount,
+            t1 = (index + 1) / segmentCount,
+            x0 = road.fromX + shiftX + vx * t0,
+            z0 = road.fromZ + vz * t0,
+            x1 = road.fromX + shiftX + vx * t1,
+            z1 = road.fromZ + vz * t1,
+            mx = (x0 + x1) / 2,
+            mz = (z0 + z1) / 2;
+          if (
+            mx < t.minX ||
+            mx >= t.minX + t.size ||
+            mz < t.minZ ||
+            mz >= t.minZ + t.size
+          )
+            continue;
+          const surface = finalSurfaceAt(mx, mz);
+          if (surface.deckHeight === null) continue;
+          const y = surface.deckHeight + 0.1,
+            deck = color(115, 88, 56);
+          structures.quad(
+            [x0 + nx, y, z0 + nz],
+            [x1 + nx, y, z1 + nz],
+            [x1 - nx, y, z1 - nz],
+            [x0 - nx, y, z0 - nz],
+            deck,
+          );
         }
       }
     }
