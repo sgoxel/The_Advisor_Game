@@ -42,7 +42,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Toon/cel-shaded world-presentation reference analysis: proven stylized 3D lighting/material/LOD/mobile patterns and cross-stage visual invariants
+- WP-S007-001-001 — World-presentation + semantic-zoom reference analysis: toon/cel style, icon/proxy LOD, decluttering, continuous transitions and mobile visual invariants
 
 ## STAGE S008 — Player Interface & Accessibility
 
@@ -52,5 +52,5 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 - WP-S009-001-001 — Performance observability + budget evidence: complete bounded telemetry, exact-SHA scenario matrix and honest PASS/FAIL/UNVERIFIED reporting
 - WP-S009-002-001 — Simulation + DOM hot-path performance: analytical resident updates, spatially bounded queries, invalidation-driven overlays and allocation regression limits
-- WP-S009-003-001 — Renderer/resource resilience: device-class DPR + adaptive render scale, quality hysteresis, reusable assets and canonical-safe WebGPU/WebGL2 recovery
+- WP-S009-003-001 — Renderer/resource resilience: semantic icon/proxy LOD, device-class DPR/render scale, quality hysteresis, reusable assets and canonical-safe WebGPU/WebGL2 recovery
 - WP-S009-004-001 — README/runtime semantic conformance: Advisor-vs-atlas authority, canonical dynamic geography/routes, staged baseline, renderer truth and evidence-backed claims
