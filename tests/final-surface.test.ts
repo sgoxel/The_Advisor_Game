@@ -51,12 +51,14 @@ test("road grading changes exposed-ground channels coherently", () => {
   assert.equal(result.groundHeight, 3);
   assert.equal(result.surfaceHeight, 3);
   assert.equal(result.material, "Road");
+  assert.equal(result.groundMaterial, "Road");
   assert.equal(result.walkable, true);
+  assert.equal(result.traversal, "road");
   assert.equal(result.vegetationDensityScale, 0);
   assert.equal(result.reservedUse, "road/1");
 });
 
-test("later earthwork cannot erase hydrology; legal crossing uses a deck", () => {
+test("later earthwork cannot erase hydrology; legal crossing uses a separate deck", () => {
   const river: SurfaceBase = {
     ...dry,
     groundHeight: -2.8,
@@ -76,9 +78,47 @@ test("later earthwork cannot erase hydrology; legal crossing uses a deck", () =>
     },
   ]);
   assert.equal(result.groundHeight, -2.8);
+  assert.equal(result.groundMaterial, "River");
   assert.equal(result.water.kind, "river");
   assert.equal(result.deckHeight, 3);
+  assert.equal(result.deckMaterial, "Bridge");
   assert.equal(result.surfaceHeight, 3);
   assert.equal(result.material, "Bridge");
   assert.equal(result.walkable, true);
+  assert.equal(result.traversal, "bridge");
+});
+
+test("vegetation exclusions union independently from earthwork falloff", () => {
+  const result = composeFinalSurface({ ...dry, walkable: true }, [
+    {
+      id: "road/shoulder",
+      priority: WORLD_BUILDING_PRIORITIES.road,
+      weight: 0.05,
+      vegetationDensityScale: 0,
+    },
+  ]);
+  assert.equal(result.vegetationDensityScale, 0);
+});
+
+test("priority-9 site reservation deterministically overrides lower owner reservations", () => {
+  const modifiers: SurfaceModifier[] = [
+    {
+      id: "road/1",
+      priority: WORLD_BUILDING_PRIORITIES.road,
+      material: "Road",
+      reservedUse: "road/1",
+      walkable: true,
+    },
+    {
+      id: "site/keep",
+      priority: WORLD_BUILDING_PRIORITIES.site,
+      material: "Settlement",
+      reservedUse: "site/keep",
+      walkable: true,
+    },
+  ];
+  const result = composeFinalSurface({ ...dry, walkable: true }, modifiers);
+  assert.equal(result.material, "Settlement");
+  assert.equal(result.reservedUse, "site/keep");
+  assert.deepEqual(result.contributingModifierIds, ["road/1", "site/keep"]);
 });
