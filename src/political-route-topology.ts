@@ -1,17 +1,36 @@
-import { cities, countries, villages, type Place } from "./geography.ts";
+import {
+  cities,
+  countries,
+  countryAtPosition,
+  villages,
+  type Country,
+  type Place,
+} from "./geography.ts";
+import { macroSampleAt } from "./macro-geography.ts";
 import {
   politicalAccessLinks,
   politicalBorderGateways,
   type PoliticalBorderGateway,
 } from "./political-settlement-access.ts";
-import type { LonLat } from "./planet.ts";
+import {
+  CANONICAL_PLANET_RADIUS,
+  greatCircleDistance,
+  normalizeLongitude,
+  type CanonicalPosition,
+  type LonLat,
+} from "./planet.ts";
 
 /**
- * Deterministic high-level walking topology built only from already accepted
- * political settlement access and dry border-gateway facts. This module does
- * not make any traversal decision itself; village-routes.ts must still certify
- * every returned leg against the canonical final surface.
+ * Deterministic high-level walking topology built only from accepted political
+ * settlement access plus canonical country ownership. This module never grants
+ * traversal: village-routes.ts still certifies every returned leg against the
+ * composed final water/cliff/walkability surface.
  */
+
+const TAU = Math.PI * 2;
+const DERIVED_GATE_BEARINGS = 72;
+const DERIVED_GATE_STEP_M = 5_000;
+const DERIVED_GATE_MAX_M = 180_000;
 
 const placeById = new Map([...cities, ...villages].map((place) => [place.id, place] as const));
 const accessByFromId = new Map(
@@ -22,6 +41,7 @@ const accessByFromId = new Map(
 const countryByPlaceKey = new Map(
   countries.map((country) => [`${country.continent}/${country.id}`, country] as const),
 );
+const countryByCode = new Map(countries.map((country) => [country.code, country] as const));
 const backboneByCountryCode = new Map(
   countries.map((country) => {
     const backbone = cities.find(
@@ -38,27 +58,166 @@ type GatewayStep = {
   toCountryCode: string;
 };
 
-const gatewayAdjacency = new Map<string, GatewayStep[]>();
-function addGatewayStep(step: GatewayStep) {
-  const bucket = gatewayAdjacency.get(step.fromCountryCode) ?? [];
-  bucket.push(step);
+const reservedGatewayAdjacency = new Map<string, GatewayStep[]>();
+const derivedGatewayCache = new Map<string, GatewayStep[]>();
+
+function addGatewayStep(adjacency: Map<string, GatewayStep[]>, step: GatewayStep) {
+  const bucket = adjacency.get(step.fromCountryCode) ?? [];
+  if (
+    !bucket.some(
+      (candidate) =>
+        candidate.toCountryCode === step.toCountryCode && candidate.gateway.id === step.gateway.id,
+    )
+  )
+    bucket.push(step);
   bucket.sort(
     (a, b) =>
       a.toCountryCode.localeCompare(b.toCountryCode) || a.gateway.id.localeCompare(b.gateway.id),
   );
-  gatewayAdjacency.set(step.fromCountryCode, bucket);
+  adjacency.set(step.fromCountryCode, bucket);
 }
 for (const gateway of politicalBorderGateways) {
-  addGatewayStep({
+  addGatewayStep(reservedGatewayAdjacency, {
     gateway,
     fromCountryCode: gateway.countryCode,
     toCountryCode: gateway.neighbourCountryCode,
   });
-  addGatewayStep({
+  addGatewayStep(reservedGatewayAdjacency, {
     gateway,
     fromCountryCode: gateway.neighbourCountryCode,
     toCountryCode: gateway.countryCode,
   });
+}
+
+function digest(text: string) {
+  let value = 2166136261;
+  for (let index = 0; index < text.length; index++)
+    value = Math.imul(value ^ text.charCodeAt(index), 16777619);
+  return value >>> 0;
+}
+
+function addressed(address: string) {
+  return digest(address) / 4294967296;
+}
+
+function position(lon: number, lat: number): CanonicalPosition {
+  return {
+    lon: normalizeLongitude(lon),
+    lat: Math.max(-Math.PI / 2, Math.min(Math.PI / 2, lat)),
+    elevation: 0,
+  };
+}
+
+function destination(origin: LonLat, bearing: number, distanceM: number): CanonicalPosition {
+  const angular = distanceM / CANONICAL_PLANET_RADIUS,
+    sinLat =
+      Math.sin(origin.lat) * Math.cos(angular) +
+      Math.cos(origin.lat) * Math.sin(angular) * Math.cos(bearing),
+    lat = Math.asin(Math.max(-1, Math.min(1, sinLat))),
+    lon = normalizeLongitude(
+      origin.lon +
+        Math.atan2(
+          Math.sin(bearing) * Math.sin(angular) * Math.cos(origin.lat),
+          Math.cos(angular) - Math.sin(origin.lat) * Math.sin(lat),
+        ),
+    );
+  return position(lon, lat);
+}
+
+function initialBearing(from: LonLat, to: LonLat) {
+  const deltaLon = normalizeLongitude(to.lon - from.lon);
+  return Math.atan2(
+    Math.sin(deltaLon) * Math.cos(to.lat),
+    Math.cos(from.lat) * Math.sin(to.lat) -
+      Math.sin(from.lat) * Math.cos(to.lat) * Math.cos(deltaLon),
+  );
+}
+
+function interpolate(from: LonLat, to: LonLat, t: number) {
+  return destination(from, initialBearing(from, to), greatCircleDistance(from, to) * t);
+}
+
+function sameOwnedDryLand(point: LonLat, country: Country) {
+  const macro = macroSampleAt(point),
+    owner = countryAtPosition(point);
+  return (
+    macro.land &&
+    macro.domain !== "Lake" &&
+    macro.continentId === country.continent &&
+    owner?.code === country.code
+  );
+}
+
+function ownedDrySegment(from: LonLat, to: LonLat, country: Country) {
+  for (let index = 0; index <= 18; index++)
+    if (!sameOwnedDryLand(interpolate(from, to, index / 18), country)) return false;
+  return true;
+}
+
+/**
+ * The single presentation gateway reserved for every country is not guaranteed
+ * to connect the whole political graph. For routing fallback only, discover all
+ * radially visible dry neighbour borders from that country's canonical backbone.
+ * The scan order is seed-addressed through country.code and fully bounded.
+ */
+function derivedGatewaySteps(countryCode: string): readonly GatewayStep[] {
+  const cached = derivedGatewayCache.get(countryCode);
+  if (cached) return cached;
+  const country = countryByCode.get(countryCode),
+    backbone = backboneByCountryCode.get(countryCode),
+    result: GatewayStep[] = [];
+  if (!country || !backbone) {
+    derivedGatewayCache.set(countryCode, result);
+    return result;
+  }
+  const phase = TAU * addressed(`${country.code}/ROUTE-GATE/PHASE`),
+    seenNeighbours = new Set<string>();
+  for (let bearingIndex = 0; bearingIndex < DERIVED_GATE_BEARINGS; bearingIndex++) {
+    const bearing = phase + (bearingIndex / DERIVED_GATE_BEARINGS) * TAU;
+    let previous = backbone.canonicalPosition;
+    for (
+      let distanceM = DERIVED_GATE_STEP_M;
+      distanceM <= DERIVED_GATE_MAX_M;
+      distanceM += DERIVED_GATE_STEP_M
+    ) {
+      const point = destination(backbone.canonicalPosition, bearing, distanceM),
+        macro = macroSampleAt(point),
+        owner = countryAtPosition(point);
+      if (!macro.land || macro.continentId !== country.continent || !owner) break;
+      if (owner.code === country.code) {
+        previous = point;
+        continue;
+      }
+      if (
+        seenNeighbours.has(owner.code) ||
+        !ownedDrySegment(backbone.canonicalPosition, previous, country)
+      )
+        break;
+      seenNeighbours.add(owner.code);
+      const gateway: PoliticalBorderGateway = {
+        id: `${country.code}/ROUTE-GATE/${owner.code}`,
+        countryCode: country.code,
+        neighbourCountryCode: owner.code,
+        fromCityId: backbone.id,
+        inside: previous,
+        outside: point,
+        bearingRad: bearing,
+        corridor: [backbone.canonicalPosition, previous],
+      };
+      result.push({
+        gateway,
+        fromCountryCode: country.code,
+        toCountryCode: owner.code,
+      });
+      break;
+    }
+  }
+  result.sort(
+    (a, b) =>
+      a.toCountryCode.localeCompare(b.toCountryCode) || a.gateway.id.localeCompare(b.gateway.id),
+  );
+  derivedGatewayCache.set(countryCode, result);
+  return result;
 }
 
 function samePoint(a: LonLat, b: LonLat) {
@@ -94,40 +253,66 @@ function settlementToBackbone(place: Place): LonLat[] | undefined {
   return current.kind === "city" && current.city === 0 ? points : undefined;
 }
 
-/** Stable BFS over the undirected graph of reserved canonical border gateways. */
-function gatewayPath(fromCountryCode: string, toCountryCode: string): GatewayStep[] | undefined {
-  if (fromCountryCode === toCountryCode) return [];
+function reconstructGatewayPath(
+  parent: ReadonlyMap<string, GatewayStep>,
+  fromCountryCode: string,
+  toCountryCode: string,
+) {
+  const reversed: GatewayStep[] = [];
+  let current = toCountryCode;
+  while (current !== fromCountryCode) {
+    const edge = parent.get(current);
+    if (!edge) return undefined;
+    reversed.push(edge);
+    current = edge.fromCountryCode;
+  }
+  return reversed.reverse();
+}
+
+function searchGatewayPath(
+  fromCountryCode: string,
+  toCountryCode: string,
+  includeDerived: boolean,
+): GatewayStep[] | undefined {
   const queue = [fromCountryCode],
     visited = new Set([fromCountryCode]),
     parent = new Map<string, GatewayStep>();
   for (let cursor = 0; cursor < queue.length; cursor++) {
-    const countryCode = queue[cursor];
-    for (const step of gatewayAdjacency.get(countryCode) ?? []) {
+    const countryCode = queue[cursor],
+      candidates = [
+        ...(reservedGatewayAdjacency.get(countryCode) ?? []),
+        ...(includeDerived ? derivedGatewaySteps(countryCode) : []),
+      ].sort(
+        (a, b) =>
+          a.toCountryCode.localeCompare(b.toCountryCode) ||
+          a.gateway.id.localeCompare(b.gateway.id),
+      );
+    for (const step of candidates) {
       if (visited.has(step.toCountryCode)) continue;
       visited.add(step.toCountryCode);
       parent.set(step.toCountryCode, step);
-      if (step.toCountryCode === toCountryCode) {
-        const reversed: GatewayStep[] = [];
-        let current = toCountryCode;
-        while (current !== fromCountryCode) {
-          const edge = parent.get(current);
-          if (!edge) return undefined;
-          reversed.push(edge);
-          current = edge.fromCountryCode;
-        }
-        return reversed.reverse();
-      }
+      if (step.toCountryCode === toCountryCode)
+        return reconstructGatewayPath(parent, fromCountryCode, toCountryCode);
       queue.push(step.toCountryCode);
     }
   }
   return undefined;
 }
 
+/** Prefer already reserved gateways; derive extra dry ownership crossings only if disconnected. */
+function gatewayPath(fromCountryCode: string, toCountryCode: string): GatewayStep[] | undefined {
+  if (fromCountryCode === toCountryCode) return [];
+  return (
+    searchGatewayPath(fromCountryCode, toCountryCode, false) ??
+    searchGatewayPath(fromCountryCode, toCountryCode, true)
+  );
+}
+
 /**
  * Return SEED-owned high-level waypoints from a settlement to another settlement.
- * Access links reach each country backbone; gateway edges cross only reserved dry
- * borders. Incoming gateway-to-backbone legs are left as geometric waypoints and
- * are later solved/certified by the bounded final-surface router.
+ * Access links reach each country backbone; gateway edges cross only canonical dry
+ * borders. Incoming gateway-to-backbone legs are geometric anchors only and are
+ * later solved/certified by the bounded final-surface router.
  */
 export function politicalRouteWaypoints(from: Place, to: Place): LonLat[] | undefined {
   if (from.continent !== to.continent) return undefined;
