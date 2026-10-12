@@ -33,7 +33,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Global transport-network authority/UX/performance: connected roads/bridges/harbors/ferries, terrain-valid profiles/junctions, route-truth recertification and bounded lazy generation
+- WP-S005-001-001 — Visible transport-network authority/UX/performance: same-country village/city/castle roads, neighboring-capital main roads, terrain-valid bridges/harbors/ferries, route-truth recertification and bounded lazy generation
 
 ## STAGE S006 — Living World & Usable Buildings
 
