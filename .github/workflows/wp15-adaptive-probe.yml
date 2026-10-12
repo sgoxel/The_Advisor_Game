@@ -19,4 +19,4 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: node --experimental-strip-types tools/wp15-sparse-gap-probe.ts
+      - run: node --experimental-strip-types tools/wp15-political-probe.ts
