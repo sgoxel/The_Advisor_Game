@@ -29,8 +29,13 @@ type RGB = [number, number, number];
 
 /** Lit from the north-west, 45° above the horizon: [toward west, up, toward north]. */
 const LIGHT = [0.5, Math.SQRT1_2, 0.5];
-/** Vertical exaggeration: real slopes are far too gentle to read from orbit. */
-const EXAGGERATION = 3.5;
+/**
+ * The final-surface authority preserves physical metre heights and intentionally
+ * smooths presentation-grid noise. Globe texels span many source cells, so a
+ * stronger presentation-only vertical exaggeration keeps those real gradients
+ * readable from orbit without changing any world fact or collision height.
+ */
+const EXAGGERATION = 12;
 const SHADE_MIN = 0.6,
   SHADE_MAX = 1.3;
 

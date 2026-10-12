@@ -8,8 +8,26 @@ import {
   wrapSourceX,
 } from "./planet.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
-import { nearestPlace, places, roadAt, roadDistanceAt } from "./geography.ts";
+import { places } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
+import {
+  WORLD_BUILDING_PRIORITY,
+  clearFinalSurfaceCache,
+  composedRiverX,
+  composedSurfaceAt,
+  finalSurfaceAt,
+  finalSurfaceStats,
+  resetFinalSurfaceTelemetry,
+  type FinalSurfaceSample,
+} from "./final-surface.ts";
+export {
+  WORLD_BUILDING_PRIORITY,
+  clearFinalSurfaceCache,
+  composedSurfaceAt,
+  finalSurfaceAt,
+  finalSurfaceStats,
+  resetFinalSurfaceTelemetry,
+} from "./final-surface.ts";
 export { WORLD_SEED } from "./config.ts";
 export const GENERATOR_VERSION = WORLD_FOUNDATION_VERSION;
 export const WORLD_SIZE = 262144;
@@ -41,6 +59,7 @@ export type Cell = {
   biome: string;
   walkable: boolean;
   tile: string;
+  finalSurface: FinalSurfaceSample;
 };
 export type ProvinceSeed = {
   code: string;
@@ -186,8 +205,9 @@ export function field(
     tz,
   );
 }
+/** Compatibility adapter for the priority-4 hydrology input. */
 export function riverX(z: number): number {
-  return 125 + 42 * Math.sin(z / 150) + 18 * Math.sin(z / 57);
+  return composedRiverX(z);
 }
 export function settlement(
   sx: number,
@@ -210,73 +230,13 @@ export function settlement(
           ][v % 6],
   };
 }
-/** Global height: one macro authority sampled identically by globe and every local LOD. */
+/** Ground elevation channel from the canonical final-surface compositor. */
 export function heightAt(x: number, z: number): number {
-  const macro = macroSampleAt(sourceToLonLat(x, z));
-  if (macro.domain === "Ocean") return -2.8;
-  if (macro.domain === "Lake") return -1.8;
-
-  const s = nearestPlace(x, z),
-    d = s ? Math.hypot(wrapSourceX(x - s.x), z - s.z) : 1000,
-    radius = s?.kind === "city" ? 430 : 90;
-  let flatten = smooth(Math.min(1, Math.max(0, (d - radius) / 80)));
-  const road = roadAt(x, z);
-  if (road)
-    flatten = Math.min(
-      flatten,
-      smooth(Math.min(1, Math.max(0, (roadDistanceAt(x, z, road) - 5) / 7))),
-    );
-
-  const base =
-      macro.domain === "Island"
-        ? 3 + field(x, z, 58, 2) * 12
-        : 3 + field(x, z, 160, 1) * 9 + field(x, z, 48, 2) * 2,
-    macroRelief = macro.reliefM * (0.88 + 0.12 * field(x, z, 110, 3)),
-    cap = macro.domain === "Island" ? 180 : 620,
-    terrain = Math.min(cap, lerp(3, base + macroRelief, flatten)),
-    coastSource = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
-    coastLand = lerp(
-      -2.8,
-      terrain,
-      smooth(Math.max(0, Math.min(1, (coastSource + 2) / 10))),
-    );
-  if (macro.domain === "Island") return coastLand;
-
-  // Hydrology remains the S001 prototype until WP-S002-004-005 replaces it.
-  const bank = Math.abs(wrapSourceX(x - riverX(z)));
-  return lerp(
-    -2.8,
-    coastLand,
-    smooth(Math.min(1, Math.max(0, (bank - 12) / 19))),
-  );
+  return composedSurfaceAt(x, z).groundElevation;
 }
+/** Player-visible semantic material from the same final-surface compositor. */
 export function biomeAt(x: number, z: number): string {
-  const macro = macroSampleAt(sourceToLonLat(x, z));
-  if (macro.domain === "Ocean") return "Ocean";
-  if (macro.domain === "Lake") return "Lake";
-  const h = heightAt(x, z),
-    hierarchy = cellSeed(Math.floor(x / 2), Math.floor(z / 2));
-  if (macro.domain === "Island") {
-    if (h < 0.1) return "Ocean";
-    const coast = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS;
-    if (coast < hierarchy.parent.parent.beachWidth + 5 + hierarchy.surface * 0.15)
-      return "Sandy beach";
-    if (macro.volcanic && macro.mountainIntensity > 0.16) return "Volcanic highlands";
-    if (macro.mountainIntensity > 0.12 || h > 70) return "Highlands";
-    return "Island meadow";
-  }
-  if (h < 0.1) return "River";
-  if (Math.abs(wrapSourceX(x - riverX(z))) < 32) return "Riverbank";
-  const s = nearestPlace(x, z);
-  if (
-    s &&
-    Math.hypot(wrapSourceX(x - s.x), z - s.z) < (s.kind === "city" ? 420 : 84)
-  )
-    return "Settlement";
-  if (roadAt(x, z)) return "Road";
-  if (macro.volcanic && macro.mountainIntensity > 0.16) return "Volcanic highlands";
-  if (macro.mountainIntensity > 0.1 || h > 70) return "Highlands";
-  return field(x, z, 90, 4) > 0.45 ? "Woodland" : "Meadow";
+  return composedSurfaceAt(x, z).surfaceMaterial;
 }
 
 /**
@@ -345,29 +305,21 @@ export function tileForPosition(x: number, z: number, level = MAX_LEVEL): Tile {
   );
 }
 export function cellAt(x: number, z: number): Cell {
-  const tile = tileForPosition(x, z);
-  const cx = Math.floor(x / CELL_SIZE),
-    cz = Math.floor(z / CELL_SIZE);
-  const px = cx * CELL_SIZE + 1,
-    pz = cz * CELL_SIZE + 1;
-  const road = roadAt(px, pz),
-    bridge = road && roadDistanceAt(px, pz, road) <= 5 && heightAt(px, pz) < 2.9;
-  const elevation = bridge ? 3 : heightAt(px, pz),
-    biome = bridge ? "Bridge" : biomeAt(px, pz);
-  const slope = Math.max(
-    Math.abs(heightAt(px + 1, pz) - heightAt(px - 1, pz)),
-    Math.abs(heightAt(px, pz + 1) - heightAt(px, pz - 1)),
-  );
+  const tile = tileForPosition(x, z),
+    cx = Math.floor(x / CELL_SIZE),
+    cz = Math.floor(z / CELL_SIZE),
+    px = cx * CELL_SIZE + 1,
+    pz = cz * CELL_SIZE + 1,
+    surface = finalSurfaceAt(px, pz);
   return {
     code: cellSeed(cx, cz).code,
     x: cx,
     z: cz,
-    elevation,
-    biome,
-    // Seeded prototype roads are explicit legal good-road corridors. River cells
-    // on a road are already elevated as bridges above; bank cuts remain walkable.
-    walkable: Boolean(road) || (elevation > 0.1 && slope < 2),
+    elevation: surface.surfaceElevation,
+    biome: surface.surfaceMaterial,
+    walkable: surface.walkable,
     tile: `${tile.level}/${tile.x}/${tile.z}`,
+    finalSurface: surface,
   };
 }
 /** Features are owned by their anchor tile; tile order/zoom never changes them. */
@@ -387,12 +339,14 @@ export function featuresFor(tile: Tile): Feature[] {
       z >= tile.minZ + tile.size
     )
       return;
-    if (heightAt(x, z) < 0.2) return;
+    const surface = composedSurfaceAt(x, z);
+    if (surface.groundElevation < 0.2) return;
+    if ((kind === "tree" || kind === "rock") && surface.vegetationExcluded) return;
     features.push({
       kind,
       x,
       z,
-      y: heightAt(x, z),
+      y: surface.groundElevation,
       variant,
       code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
     });
@@ -461,12 +415,14 @@ export function featuresFor(tile: Tile): Feature[] {
       ) {
         const v = coordinateValue(gx, gz, 30);
         const x = gx * 10 + (v % 7) - 3,
-          z = gz * 10 + ((v >>> 5) % 7) - 3;
-        const biome = biomeAt(x, z);
-        if (biome === "Woodland" && v % 4 !== 0)
+          z = gz * 10 + ((v >>> 5) % 7) - 3,
+          surface = composedSurfaceAt(x, z),
+          biome = surface.surfaceMaterial;
+        if (biome === "Woodland" && !surface.vegetationExcluded && v % 4 !== 0)
           add("tree", x, z, v, `tree/${gx}/${gz}`);
         else if (
-          !["Settlement", "Ocean", "Lake", "River"].includes(biome) &&
+          !surface.vegetationExcluded &&
+          !["Settlement", "Ocean", "Lake", "River", "Bridge", "Road"].includes(biome) &&
           v % 31 === 0
         )
           add("rock", x, z, v, `rock/${gx}/${gz}`);

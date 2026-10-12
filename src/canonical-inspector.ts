@@ -37,8 +37,27 @@ import {
   canonicalCellNeighbors,
   canonicalFoundationSample,
 } from "./spatial-authority.ts";
+import { finalSurfaceStats } from "./final-surface.ts";
 
 const CANONICAL_ID_LEVEL = 20;
+
+type InspectorFinalSurface = {
+  naturalElevation: number;
+  groundElevation: number;
+  surfaceElevation: number;
+  groundMaterial: string;
+  surfaceMaterial: string;
+  water: string;
+  vegetationExcluded: boolean;
+  reservedUse: string;
+  slopeM: number;
+  walkable: boolean;
+  contributions: readonly {
+    priority: number;
+    id: string;
+    channels: readonly string[];
+  }[];
+};
 
 type LegacyCell = {
   code: string;
@@ -48,6 +67,7 @@ type LegacyCell = {
   biome: string;
   walkable: boolean;
   tile: string;
+  finalSurface?: InspectorFinalSurface;
 };
 
 type AdvisorWorld = {
@@ -120,6 +140,7 @@ function install(world: AdvisorWorld) {
       foundation,
       macro,
       climate,
+      finalSurface: source.finalSurface,
       position: { ...position, elevation: source.elevation },
       elevation: source.elevation,
       biome: terrainLabel(climate),
@@ -154,6 +175,7 @@ function install(world: AdvisorWorld) {
     macroSampleAt,
     climateSampleAt,
     terrainLabel,
+    finalSurfaceStats,
     normalizeLongitude,
     wrapCanonicalX,
     lonLatToMeters,
@@ -182,7 +204,8 @@ function install(world: AdvisorWorld) {
   });
 
   // Realm diagnostics keep performance evidence next to the existing renderer
-  // telemetry. Climate sampling is pure/addressed and allocates no material assets.
+  // telemetry. Climate/final-surface sampling is pure/addressed; cache/timing
+  // counters are observation only and never decide world facts.
   const stateDescriptor = Object.getOwnPropertyDescriptor(world, "state"),
     planBytesEstimated = new TextEncoder().encode(JSON.stringify(MACRO_PLAN)).byteLength,
     sphereVertices = (96 + 1) * (48 + 1),
@@ -216,6 +239,7 @@ function install(world: AdvisorWorld) {
             mountainSystems: mountainSystems.length,
             recipeCpuBytesEstimated: planBytesEstimated,
           },
+          finalSurface: finalSurfaceStats(),
           climate: {
             authority: CLIMATE_AUTHORITY_CODE,
             materialPaletteEntries: 18,
@@ -262,7 +286,8 @@ function install(world: AdvisorWorld) {
       { position, canonical } = canonicalFromSourceCell(source),
       macro = macroSampleAt(position),
       climate = climateSampleAt(position, source.elevation),
-      landform = terrainLabel(climate);
+      landform = terrainLabel(climate),
+      finalSurface = source.finalSurface;
 
     coordinates.textContent = `${degrees(position.lat, "N", "S")} · ${degrees(position.lon, "E", "W")} · ${landform}`;
     code.textContent = canonical.id;
@@ -273,7 +298,7 @@ function install(world: AdvisorWorld) {
     if (levels) {
       for (const item of Array.from(levels.children)) {
         const level = (item as HTMLElement).dataset.level;
-        if (level === "planet-macro" || level === "planet-climate") continue;
+        if (level === "planet-macro" || level === "planet-climate" || level === "final-surface") continue;
         const first = item.firstChild;
         if (
           first?.nodeType === Node.TEXT_NODE &&
@@ -321,6 +346,32 @@ function install(world: AdvisorWorld) {
           Object.assign(document.createElement("code"), { textContent: climate.code }),
         );
         climateItem.dataset.fingerprint = `${climateLabel}|${climate.code}`;
+      }
+
+      let surfaceItem = levels.querySelector<HTMLElement>("[data-level='final-surface']");
+      if (!surfaceItem) {
+        surfaceItem = document.createElement("li");
+        surfaceItem.dataset.level = "final-surface";
+        climateItem.after(surfaceItem);
+      }
+      if (finalSurface) {
+        const use = finalSurface.reservedUse === "none" ? "natural" : finalSurface.reservedUse,
+          water = finalSurface.water === "none" ? "dry" : finalSurface.water,
+          state = finalSurface.walkable ? "walkable" : "blocked",
+          surfaceLabel = `Final surface · ${finalSurface.surfaceMaterial} · ground ${finalSurface.groundElevation.toFixed(2)} · surface ${finalSurface.surfaceElevation.toFixed(2)} · ${use} · ${water} · ${state}`,
+          surfaceCode = finalSurface.contributions
+            .map((item) => `${item.priority}:${item.id}`)
+            .join(" → ");
+        if (surfaceItem.dataset.fingerprint !== `${surfaceLabel}|${surfaceCode}`) {
+          surfaceItem.replaceChildren(
+            document.createTextNode(surfaceLabel),
+            Object.assign(document.createElement("code"), { textContent: surfaceCode }),
+          );
+          surfaceItem.dataset.fingerprint = `${surfaceLabel}|${surfaceCode}`;
+        }
+      } else {
+        surfaceItem.textContent = "Final surface · preparing";
+        delete surfaceItem.dataset.fingerprint;
       }
     }
   };
