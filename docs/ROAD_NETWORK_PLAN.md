@@ -1,49 +1,112 @@
-# Connected seeded roads — Stage S002 requirements
+# Connected seeded roads — Stage S005 requirements
 
-Status: planning requirements from the owner on 2026-10-07. No road-network implementation is claimed here. These rules refine [world-building priorities and earthworks](WORLD_BUILDING_PRIORITY.md) and [settlement access and housing](SETTLEMENT_PLAN.md).
+Status: owner planning requirements, updated 2026-10-12. No road-network implementation is claimed here. These rules refine [world-building priorities and earthworks](WORLD_BUILDING_PRIORITY.md), [settlement access and housing](SETTLEMENT_PLAN.md), and the canonical world rules in `docs/README.md`.
 
 ## Network ownership and required destinations
 
-One canonical SEED-owned road graph connects every village, capital/big city, ruin, critical structure and critical area entrance on a connected landmass. Countries participate through their capitals/regional routes and legal land-border connections, not an arbitrary road to the center of a country polygon. Connect through settlement gates and streets to services and home entrances. Every road bridge is part of that graph, with both bank approaches and its usable deck joined to real roads. A line drawn near a site or a decorative unconnected bridge is insufficient.
+One canonical Campaign-SEED-owned transport graph connects every village, city, Capital City, castle, ruin, critical structure and critical-area entrance. Countries participate through real settlement/capital routes and legal border crossings, not arbitrary links to polygon centers.
 
-Connectivity means a traversable path between required destinations; it does not require a separate direct road between every pair. Plan a regional/country backbone with appropriate branches, junctions and local access roads. Critical-site branches must attach to that backbone rather than form isolated networks. Retain world counts and minimum village walking time on legal walking routes. Sea-link travel duration is a separate transport cost and must not be misreported as walking time.
+Every village, city and castle in the same country must belong to the country's canonical road network. On the same connected landmass this connectivity must be represented by actual visible road geometry, not only an abstract graph edge. Country/Province views must reveal the important inter-settlement road structure; Village/Street views refine that same road identity and geometry rather than replacing it with unrelated local roads.
 
-The owner selected **roads on land, linked by ferries or ships** for separate continents/islands. The global transport graph must connect all required destinations through road-connected harbors/landings and seeded ferry/ship links. Land road edges and maritime transport edges remain explicitly different; do not draw asphalt across the ocean or invent enormous bridges. Each sea link has canonical endpoint ports, water-route identity, geometry and cost/settings derived from SEED. Harbors have legal road access and usable land/water transfer points; no disconnected dock node. Full vessel AI, fleet management and live timetables are separate gameplay work. The existing 120 m rural bridge limit remains in force for road bridges.
+Visible continuity is mandatory. Roads join settlement gates, city/castle entrances, streets, junctions, bridges and border crossings without unexplained gaps, floating or buried segments, screen-only intersections or graph-only connections. The path used by routing, NPCs and the player is the road/profile authority that is rendered.
+
+Connectivity does not require one direct road between every possible pair. Build a hierarchical network of main roads, regional roads, settlement branches and local streets. However, every required settlement endpoint must reach that network legally and visibly. Critical-site branches attach to the same backbone rather than forming isolated decorative networks.
+
+If same-country destinations occupy separate islands or disconnected landmasses, each land component must have visible road continuity from its settlements/castles to a legal harbor or landing. The gap is an explicitly typed ferry/ship edge. Never draw a fake road over open sea merely to satisfy graph connectivity.
+
+## Mandatory neighboring-country Capital City main roads
+
+Every country must have at least one canonical international **main-road** connection from its Capital City to the Capital City of a nearby land-neighbor country.
+
+- Prefer a country sharing a land border. Choose the nearby foreign capital and border crossing by deterministic SEED-owned geographic/route cost with stable tie-breaking.
+- The main road must be a real continuous route from the first capital's road network, through an explicit canonical border crossing, into the neighboring country's road network and to its Capital City.
+- A graph edge from country node to country node, a road that stops at the border, two roads that almost meet, or a decorative line on the atlas does not satisfy the rule.
+- More than one international capital road is allowed and expected where geography and the SEED justify it. The minimum is at least one per country.
+- International main roads must be visually distinguishable from ordinary settlement streets/access spurs through the canonical road-class contract such as width, surface treatment, shoulders and hierarchy, while remaining compatible with terrain and mobile rendering budgets.
+- Border crossings are world facts with stable canonical identity, road/junction coordinates, terrain profile and country-side ownership semantics. Changed LOD, renderer, visit order or streaming cannot move or replace them.
+
+If a country has no land-border neighbor because it is isolated on an island/landmass, preserve the no-fake-ocean-road rule. Its capital must connect by visible main road to a harbor; a canonical ferry/ship edge crosses the water; the receiving harbor connects by visible main road to a nearby foreign Capital City. Validation records this as an explicit maritime exception rather than silently treating the capitals as road-connected across water.
+
+The overall country adjacency/main-road design should avoid unnecessary isolated countries. Where the generated country partition allows legal land adjacency, use land capital links rather than routing ordinary neighboring-country traffic through maritime transport.
+
+## Maritime connectivity
+
+The owner selected **roads on land, linked by ferries or ships** for separate continents/islands. The global transport graph connects all required destinations through road-connected harbors/landings and seeded ferry/ship links. Land-road and maritime edges remain explicitly different.
+
+Each sea link has canonical endpoint ports, water-route identity, geometry and transport cost/settings derived from SEED. Harbors have legal road access and usable land/water transfer points. No disconnected dock node is acceptable. Full vessel AI, fleet management and live timetables remain separate gameplay work.
 
 ## Terrain-aligned route selection
 
-- **Rivers:** every road crossing a river requires a real seeded bridge with suitable dry/stable bank anchors, deck clearance, correct span and connected approaches. Prefer a valid narrow crossing when the direct one violates the practical bridge limit. Preserve river flow. Small culverts may support explicitly permitted drainage channels, but do not silently substitute them for the owner's required river bridge.
-- **Lakes:** route around the lake on usable shoreline/land, with legal clearance from water. Do not fill the lake, paint a dirt road over it or use a road bridge across it as the default shortcut.
-- **Hills:** allow bounded cut/fill to establish a smooth, near-flat usable roadbed and dirt foundation; join heights with usable grades rather than discontinuous flat steps.
-- **Mountains:** route around the summit using the lowest feasible pass, saddle or contour corridor within the route's relevant region. Consider elevation, ascent/descent, grade, length, substrate and earthwork cost. Do not interpret “lowest” as a planet-wide search for sea level or always excavate a direct trench through the highest peak. Modest cuts into a chosen slope/pass remain permitted; summit avoidance is the preferred alignment.
-- **Forests and other land types:** account for substrate/access cost, then clear the accepted corridor and shoulders without restoring trees during refinement. Keep natural surroundings outside the modifier support.
+- **Rivers:** every road crossing a river requires a real seeded bridge with suitable dry/stable bank anchors, deck clearance, correct span and connected approaches. Prefer a valid narrow crossing when the direct one violates the practical bridge limit. Preserve river flow. Small culverts may support explicitly permitted drainage channels, but do not silently substitute them for required river bridges.
+- **Lakes:** route around the lake on usable shoreline/land. Do not fill the lake, paint a road across it or use an invented long bridge as the default shortcut.
+- **Hills:** allow bounded cut/fill to establish a smooth usable roadbed and dirt/foundation layer; join heights with usable grades rather than discontinuous flat steps.
+- **Mountains:** route around summits using the lowest feasible pass, saddle or contour corridor inside the relevant route search. Consider elevation, ascent/descent, grade, length, substrate and earthwork cost. Modest cuts into accepted slopes/passes remain permitted; direct summit trenches are not the default.
+- **Forests and other land types:** account for substrate/access cost, then clear only the accepted corridor and shoulders. Refinement may not restore trees inside the authoritative road support.
+- **Borders:** choose physically legal border crossings. A capital main road may not jump an impassable cliff, river, lake or wall simply because the two countries touch in political topology.
 
-Canonical research contracts must fix physical road widths, longitudinal/cross grades, curvature, earthwork and bridge budgets, path-search bounds and SEED-defined costs. The route planner uses geographic facts and explicit stable tie-breaking, not a camera-dependent path search. Select a physically plausible low route while retaining practical length/access constraints; every walkable destination must have a valid route before its plan is accepted. If a required destination itself is high, use a legal graded/switchback approach for the necessary ascent; avoiding unnecessary summits must not omit that destination.
+Canonical contracts fix road-class widths, longitudinal/cross grades, curvature, earthwork and bridge budgets, search bounds and SEED-defined costs. The planner uses canonical geography and stable tie-breaking, never camera-dependent search or runtime RNG.
 
-## Geometry, junctions and definitive settings
+Every walkable required destination must have a valid route before its transport plan is accepted. High castles/sites may use legal graded or switchback approaches. Terrain difficulty can lengthen a route; it cannot justify silently omitting a required road endpoint.
 
-Each accepted road has a canonical SEED code, endpoints, parent network/region, ordered planet-space centerline, station heights/graded profile, width, surface/dirt materials, shoulder and falloff bounds, vegetation exclusions, crossings, junctions, walkability and cost. Bridge records include their own code, river/crossing reference, bank anchors, approach profiles and deck geometry. Features and positions retain the same definition under every render level.
+## Geometry, hierarchy, junctions and definitive settings
 
-Connected roads share a canonical junction coordinate and compatible elevation/profile. Snap and join them using the same authority; do not allow gaps, abrupt height steps, competing cut profiles, mismatched widths or duplicated intersection ownership at tile boundaries. A screen-space intersection does not create a graph connection when two decks are at different heights; any intended overpass needs explicit separate traversal connections.
+Each accepted road has a canonical SEED code, road class, endpoints, parent network/region, ordered planet-space centerline, station heights/graded profile, width, surface/foundation materials, shoulders/falloff, vegetation exclusions, crossings, junctions, walkability and cost. Bridge and border-crossing records have their own stable identities and geometry.
 
-Build final elevation/material/walkability from the shared modifiers. Road meshes must follow the graded terrain, and bridge decks use their explicit crossing geometry. The path followed by NPCs and players is the one displayed. Test connectivity on final composed terrain after cuts/fills, pads, bridge approaches and critical-site access, not on the initial unmodified hill/forest surface.
+Recommended hierarchy semantics are:
 
-Priority 9 sites may declare deterministic access-road intents to the priority 8 backbone. The completed plan resolves these intents into canonical road/spur records before any affected tile is materialized; road modifiers still compose at priority 8 and site preparation at priority 9. Do not create a new branch opportunistically when the player first discovers a ruin. Preserve existing home/service/gate reservations and choose legal alternatives on conflicts.
+- **Main road:** capital-to-capital, major city/castle or major regional backbone route; highest persistent visibility and strongest road form.
+- **Regional road:** connects cities, castles and groups of villages into the main backbone.
+- **Settlement/access road:** connects individual villages, services, gates, harbors, ruins and critical sites.
+- **Local street/path:** internal settlement circulation that joins the external road at explicit gates/entrances.
+
+Road hierarchy changes presentation detail and routing semantics but never identity. A main road visible in Country view resolves to the same canonical road in closer views.
+
+Connected roads share canonical junction coordinates and compatible profiles. Snap and join through the same authority; do not allow gaps, abrupt height steps, mismatched widths or duplicated intersection ownership at tile boundaries. A screen-space crossing does not create a graph connection when decks are separated vertically.
+
+Build final elevation/material/walkability from the shared final-surface authority. Road meshes follow graded terrain; bridge decks and border-crossing surfaces use their explicit geometry. Routing and collision consume the same result.
+
+Priority-9 sites may declare deterministic access-road intents to the priority-8 backbone. Resolve those intents into canonical road/spur records before affected tiles are materialized. Discovery may not opportunistically invent a new route.
 
 ## Determinism and lazy reconstruction
 
-Generate the foundation graph and route recipes from Campaign SEED and canonical geographic identities only. Fixed road settings do not depend on fantasy time, viewport, interest, tile size, LOD, hardware, frame timing, worker completion or visit order. Regional detailed paths may be computed/cached lazily, but their endpoints, crossing/route choices, heights and features must reproduce exactly from those same inputs. Tie-breaking and numerical quantization must be defined independently of device/locale and render-mesh resolution.
+Generate topology and route recipes from Campaign SEED, generator version and canonical geographic identities. Fixed roads, capital-link selection and border crossings do not depend on Fantasy Game Time, viewport, interest, tile size, LOD, device, renderer, frame timing, worker completion or visit order.
 
-Keep lightweight topology/required-node coverage available for validating connectivity without eagerly creating all road meshes or fine terrain. Query complete modifier support across neighboring regions/tiles, wrap boundaries and caches. Revisit an unchanged location after unloading or exploring elsewhere: same road code, alignment, grade, bank/deck heights, material, junctions, terrain and vegetation clearances. Legitimate later campaign road damage/construction requires separately persisted simulation events; streaming never invents a foundation change.
+Detailed regional road geometry may be computed/cached lazily, but road endpoints, classes, crossing choices, profiles and IDs reconstruct exactly. Keep lightweight topology and required-node coverage available for connectivity validation without eagerly materializing every road mesh.
 
-If a mandatory destination has no legal connector, deterministically try another route/crossing or an allowed site candidate within fixed budgets. If the constraints cannot be satisfied, report generation failure explicitly rather than accepting an orphan destination, invalid bridge or hidden blocked road.
+A remote road can exist canonically without being rendered. When it becomes visible, the generated mesh must match the already-defined route. Visibility is a scheduling/presentation input, never a road-selection input.
 
-## Acceptance evidence and work boundaries
+If a mandatory destination or capital link has no legal connector, deterministically try another route, crossing or legal candidate within fixed budgets. If constraints truly cannot be satisfied, report generation failure explicitly instead of accepting an orphan settlement, missing international link or invalid road.
 
-- Enumerate required destination nodes and verify traversable coverage of every country, settlement, ruin, critical structure/area and bridge in each land-connected network, and global graph reachability through road-connected harbors and legal ferry/ship links between landmasses.
-- Prove that each river crossing has a legal connected bridge, lake routes stay on land, hill sections have usable graded roadbeds, and representative mountain routes choose a low feasible pass around the summit.
-- Check endpoints, junction coordinates/profiles, bridge banks/decks, terrain support and final walkability for gaps, incompatible heights and collisions. Preserve home/service/gate access and village minimum walking times.
-- Compare canonical road/bridge settings, grades and features after direct regeneration, reversed region/tile visits, cache eviction and changed LOD/worker order. Do not compare only screenshots or approximate visual resemblance.
-- Inspect fresh overview and close images of a multi-settlement/critical-site network, river bridge approaches, lake detour, hill grading and mountain-pass route on both renderer paths. Record measured software budgets separately from physical device performance.
+## Acceptance evidence
 
-The dedicated reference/contract analysis remains WP-S002-004-001. WP-S002-004-014 owns required-node network topology, terrain-aware alignments, shared junctions and connected crossings. WP-S002-004-008 owns final village route costs/minimum time and travel presentation. WP-S002-004-012 owns reusable earthwork composition and profiles; WP-S002-004-013 owns critical-site reservations and access intents. Each package implements minimum missing contracts within its own scope and does not wait on another Issue.
+Functional acceptance must include:
+
+- Enumerate every generated country and every village, city and castle. Assert that each same-country endpoint belongs to the canonical road network and is reachable on legal final terrain.
+- Assert each required same-landmass connection can materialize continuous visible road geometry using the same canonical road records used by routing/collision.
+- Enumerate every country and assert at least one qualifying nearby foreign Capital City connection: a continuous border-crossing main road for land neighbors, or the explicit capital-road → harbor → ferry/ship → harbor → capital-road exception for isolated countries.
+- Verify international main roads cross an actual shared border through a canonical crossing and continue to both capitals; no abstract polygon-center or border-edge-only links.
+- Verify every river crossing has a legal connected bridge, lake routes remain on land, hills use graded roadbeds and representative mountain routes use feasible passes.
+- Verify endpoint, junction, bridge, harbor and border-crossing profiles for gaps, incompatible heights, collisions and false intersections.
+- Preserve settlement gates, homes/services, drainage and the world minimum village walking-time rules.
+- Compare canonical road identities, road classes, capital-neighbor selection, border crossings, geometry and route digests after reversed generation/visit order, cache eviction, changed LOD/worker order and WebGPU/WebGL2 presentation.
+
+Visual acceptance for this MIXED package must include fresh actually inspected screenshots showing:
+
+- a Country/Province view where roads are visibly readable between representative villages, cities and a castle in one country;
+- a closer view proving those roads actually enter the appropriate settlements/castle through legal gates/entrances;
+- a main road visibly crossing a country border and continuing between two Capital Cities;
+- representative bridge, lake-detour, hill-grade and mountain-pass sections;
+- road-linked harbors and a visibly distinct maritime link where required.
+
+A visual score may be assigned only from the actual screenshots and must meet the project threshold with no obvious broken roads, gaps, floating segments, unreadable network hierarchy or misleading fake connections.
+
+## Work ownership
+
+- **WP-S005-001-001** owns the required destination topology, visible same-country village/city/castle roads, international neighboring-capital main roads, terrain-aware route alignments, shared junctions, bridges, border crossings, harbors/ferries and connected road materialization.
+- **WP-S003-001-001** owns reusable final-surface composition and road/settlement modifier truth.
+- **WP-S004-001-001** owns settlement/building exteriors, gates, entrances and local settlement access geometry that must join the transport network.
+- **WP-S004-002-001** owns ruin/critical-site reservations and access intents.
+- **WP-S003-002-001** owns shared invisible-world continuity/query machinery used to reconstruct remote road facts consistently.
+- Final routing/travel semantic conformance is checked by **WP-S009-004-001** where README/runtime claims are audited.
+
+These ownership boundaries are not blocking dependencies. Each WP implements any minimum local adapter it needs and must not wait on another Issue to become claimable.
