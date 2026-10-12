@@ -380,7 +380,7 @@ function settlementTerraceHeight(place: Place) {
 }
 
 const roadProfileHeights = new Map<string, readonly [number, number]>();
-function roadProfileHeightAt(x: number, road: Road) {
+function roadProfileHeightAt(x: number, z: number, road: Road) {
   let profile = roadProfileHeights.get(road.code);
   if (!profile) {
     profile = [
@@ -395,7 +395,10 @@ function roadProfileHeightAt(x: number, road: Road) {
     lengthSq = vx * vx + vz * vz,
     t = lengthSq === 0
       ? 0
-      : Math.max(0, Math.min(1, ((px - road.fromX) * vx) / lengthSq));
+      : Math.max(
+          0,
+          Math.min(1, ((px - road.fromX) * vx + (z - road.fromZ) * vz) / lengthSq),
+        );
   return lerp(profile[0], profile[1], t);
 }
 
@@ -463,7 +466,7 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
     const distance = roadMatch.distance,
       weight = 1 - smooth(clamp01((distance - 5) / 7)),
       roadHeight = boundedEarthwork(
-        roadProfileHeightAt(x, road),
+        roadProfileHeightAt(x, z, road),
         base.groundHeight,
         4,
         3,
