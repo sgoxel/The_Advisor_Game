@@ -83,7 +83,8 @@ let coreQueries = 0,
   evictions = 0;
 
 function nowMs() {
-  return globalThis.performance?.now?.() ?? Date.now();
+  // Timing is telemetry only and never contributes to world state.
+  return globalThis.performance?.now?.() ?? 0;
 }
 
 function digest(text: string): number {
@@ -330,12 +331,16 @@ function composeUncached(x: number, z: number): ComposedSurface {
         surfaceMaterial = "Bridge";
         reservedUse = "bridge";
       } else if (water === "none") {
+        // The full graded support corridor is reserved by the road and therefore
+        // remains legally walkable. Only the <=5-unit core receives the road
+        // material; shoulders keep the underlying material while inheriting the
+        // priority-8 right-of-way and grading.
+        reservedUse = "road";
         groundElevation = lerp(groundElevation, 3, roadWeight);
         surfaceElevation = groundElevation;
         if (distance <= 5) {
           groundMaterial = "Road";
           surfaceMaterial = "Road";
-          reservedUse = "road";
         }
       }
       contributions.push(
