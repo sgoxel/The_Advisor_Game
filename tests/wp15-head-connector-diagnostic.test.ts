@@ -3,9 +3,13 @@ import test from "node:test";
 
 import { villages } from "../src/geography.ts";
 import {
+  enuToPosition,
+  greatCircleDistance,
   lonLatToFlat,
+  positionToEnu,
   sourceToLonLat,
   wrapSourceX,
+  type CanonicalPosition,
   type LonLat,
 } from "../src/planet.ts";
 import { macroTerrainSampler, planRoute } from "../src/routing.ts";
@@ -23,17 +27,21 @@ function finalSurface(position: LonLat) {
   return { x, z, sample: surfaceAt(x, z) };
 }
 
+function canonicalPoint(points: readonly LonLat[], index: number): CanonicalPosition {
+  return { ...points[index], elevation: 0 };
+}
+
 function firstBlocked(points: readonly LonLat[]) {
   for (let segment = 1; segment < points.length; segment++) {
-    const a = lonLatToFlat(points[segment - 1].lon, points[segment - 1].lat),
-      b = lonLatToFlat(points[segment].lon, points[segment].lat),
-      dx = wrapSourceX(b.x - a.x),
-      dz = b.z - a.z,
-      length = Math.hypot(dx, dz),
+    const a = canonicalPoint(points, segment - 1),
+      b = canonicalPoint(points, segment),
+      delta = positionToEnu(b, a),
+      length = greatCircleDistance(a, b),
       steps = Math.max(1, Math.ceil(length / STEP_M));
     for (let step = 0; step < steps; step++) {
       const t = (step + 0.5) / steps,
-        p = sourceToLonLat(wrapSourceX(a.x + dx * t), a.z + dz * t),
+        raw = enuToPosition({ east: delta.east * t, north: delta.north * t, up: 0 }, a),
+        p = { lon: raw.lon, lat: raw.lat },
         state = finalSurface(p);
       if (!state.sample.walkable)
         return { segment, step, steps, t, position: p, ...state };
@@ -43,24 +51,26 @@ function firstBlocked(points: readonly LonLat[]) {
 }
 
 function localDryApproaches(points: readonly LonLat[], blocked: NonNullable<ReturnType<typeof firstBlocked>>) {
-  const a = lonLatToFlat(points[blocked.segment - 1].lon, points[blocked.segment - 1].lat),
-    b = lonLatToFlat(points[blocked.segment].lon, points[blocked.segment].lat),
-    dx = wrapSourceX(b.x - a.x),
-    dz = b.z - a.z,
-    at = (step: number) => sourceToLonLat(
-      wrapSourceX(a.x + dx * ((step + 0.5) / blocked.steps)),
-      a.z + dz * ((step + 0.5) / blocked.steps),
-    );
+  const a = canonicalPoint(points, blocked.segment - 1),
+    b = canonicalPoint(points, blocked.segment),
+    delta = positionToEnu(b, a),
+    at = (step: number): LonLat => {
+      const t = (step + 0.5) / blocked.steps,
+        raw = enuToPosition({ east: delta.east * t, north: delta.north * t, up: 0 }, a);
+      return { lon: raw.lon, lat: raw.lat };
+    };
   let before: LonLat | undefined,
     after: LonLat | undefined;
   for (let step = blocked.step - 1; step >= 0; step--) {
     const p = at(step);
     if (finalSurface(p).sample.walkable) { before = p; break; }
   }
+  if (!before && finalSurface(a).sample.walkable) before = { lon: a.lon, lat: a.lat };
   for (let step = blocked.step + 1; step < blocked.steps; step++) {
     const p = at(step);
     if (finalSurface(p).sample.walkable) { after = p; break; }
   }
+  if (!after && finalSurface(b).sample.walkable) after = { lon: b.lon, lat: b.lat };
   return before && after ? [before, after] as const : undefined;
 }
 
