@@ -16,20 +16,41 @@ Apart from the Fundamental Planning Rules above, keep only Stage headings and WP
 
 All S001 WPs are COMPLETED and REVIEWED (see docs/ROADMAP_ARCHIVE.md).
 
-## STAGE S002 — Round, Natural World Foundation
+## STAGE S002 — Canonical Planet & Macro-World Foundation
 
-Completed S002 WPs are listed in docs/ROADMAP_ARCHIVE.md; only open WPs stay below. A WP absent here and present there is COMPLETED.
+Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuation work was resegmented into S003–S009 on 2026-10-12; S002 has no open WPs.
 
-- WP-S002-004-005 — Natural terrain/hydrology/traversal authority: drainage-valid freshwater, high-relief terrain readability, canonical walkability, surface-only earthworks and seam-safe bounded generation
-- WP-S002-004-009 — Living settlement/building UX/performance: terrain-shaped layouts, functionally distinct services/homes, entrance-connected access, demand-loaded usable interiors and reusable mobile-safe rendering
-- WP-S002-004-011 — Living-resident simulation UX/performance: persistent home/work/guard identity, analytical schedules, spatial indexing, bounded logical/visible populations and inspectable activity
-- WP-S002-004-012 — Unified final-surface authority: deterministic priority 0–9 composition, one render/routing/collision/material/vegetation/hydrology truth and final-route recertification
-- WP-S002-004-013 — Ruin/critical-place UX/performance: 1/1000 discoverability, legal network access, stable canonical identity, bounded site preparation and lazy detail
-- WP-S002-004-014 — Global transport-network authority/UX/performance: connected roads/bridges/harbors/ferries, terrain-valid profiles/junctions, route-truth recertification and bounded lazy generation
-- WP-S002-004-015 — Invisible-world continuity/performance: SEED-defined shared-boundary recipes, bounded on-demand queries, eviction-safe reconstruction, remote-route truth and streaming-independent identity
-- WP-S002-004-016 — Toon/cel-shaded world-presentation reference analysis: proven stylized 3D lighting/material/LOD/mobile patterns and S002 visual invariants
-- WP-S002-005-001 — Performance observability + budget evidence: complete bounded telemetry, exact-SHA scenario matrix and honest PASS/FAIL/UNVERIFIED reporting
-- WP-S002-005-002 — Responsive interaction + accessibility acceptance: cutout-safe seven-viewport layout, measured 44px targets, keyboard/touch/focus parity, readable declutter and reduced motion
-- WP-S002-005-003 — README/runtime semantic conformance: Advisor-vs-atlas authority, canonical dynamic geography/routes, current S002 baseline, renderer truth and evidence-backed claims
-- WP-S002-005-004 — Simulation + DOM hot-path performance: analytical resident updates, spatially bounded queries, invalidation-driven overlays and allocation regression limits
-- WP-S002-005-005 — Renderer/resource resilience: device-class DPR + adaptive render scale, quality hysteresis, reusable assets and canonical-safe WebGPU/WebGL2 recovery
+## STAGE S003 — Natural World & Surface Authority
+
+- WP-S003-001-001 — Unified final-surface authority: deterministic priority 0–9 composition and one render/collision/material/vegetation/hydrology/traversal truth
+- WP-S003-002-001 — Invisible-world continuity/performance: SEED-defined shared-boundary recipes, bounded on-demand queries, eviction-safe reconstruction, remote-route truth and streaming-independent identity
+- WP-S003-003-001 — Natural terrain/hydrology authority: drainage-valid freshwater, high-relief terrain readability, canonical natural walkability and seam-safe bounded generation
+
+## STAGE S004 — Settlements, Buildings & World Sites
+
+- WP-S004-001-001 — Settlement/building exterior UX/performance: terrain-shaped layouts, functional service/home capacity, entrance-connected access and reusable mobile-safe rendering
+- WP-S004-002-001 — Ruin/critical-place UX/performance: 1/1000 discoverability, legal network access, stable canonical identity, bounded site preparation and lazy detail
+
+## STAGE S005 — Transport & Traversal Network
+
+- WP-S005-001-001 — Global transport-network authority/UX/performance: connected roads/bridges/harbors/ferries, terrain-valid profiles/junctions, route-truth recertification and bounded lazy generation
+
+## STAGE S006 — Living World & Usable Buildings
+
+- WP-S006-001-001 — Living-resident simulation UX/performance: persistent home/work/guard identity, analytical schedules, spatial indexing, bounded logical/visible populations and inspectable activity
+- WP-S006-002-001 — Usable building-interior reference analysis: deterministic room programs, demand loading, traversal, cultural variation and mobile-safe reconstruction
+
+## STAGE S007 — World Visual Presentation
+
+- WP-S007-001-001 — Toon/cel-shaded world-presentation reference analysis: proven stylized 3D lighting/material/LOD/mobile patterns and cross-stage visual invariants
+
+## STAGE S008 — Player Interface & Accessibility
+
+- WP-S008-001-001 — Responsive interaction + accessibility acceptance: cutout-safe seven-viewport layout, measured 44px targets, keyboard/touch/focus parity, readable declutter and reduced motion
+
+## STAGE S009 — Performance, Stability & Product Conformance
+
+- WP-S009-001-001 — Performance observability + budget evidence: complete bounded telemetry, exact-SHA scenario matrix and honest PASS/FAIL/UNVERIFIED reporting
+- WP-S009-002-001 — Simulation + DOM hot-path performance: analytical resident updates, spatially bounded queries, invalidation-driven overlays and allocation regression limits
+- WP-S009-003-001 — Renderer/resource resilience: device-class DPR + adaptive render scale, quality hysteresis, reusable assets and canonical-safe WebGPU/WebGL2 recovery
+- WP-S009-004-001 — README/runtime semantic conformance: Advisor-vs-atlas authority, canonical dynamic geography/routes, staged baseline, renderer truth and evidence-backed claims
