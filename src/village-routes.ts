@@ -323,6 +323,46 @@ function projectedDrainageBankPoint(
   );
 }
 
+/**
+ * Route around the rounded start of a river instead of connecting its two head
+ * bank points directly through the channel. The cap is upstream of the first
+ * drainage segment and is derived only from that canonical segment and the
+ * deterministic clearance chosen for this repair.
+ */
+function drainageHeadCapPoints(
+  path: readonly DrainagePoint[],
+  sideA: number,
+  sideB: number,
+  clearance: number,
+): LonLat[] {
+  const head = path[0],
+    next = path[1],
+    dx = wrapSourceX(next.x - head.x),
+    dz = next.z - head.z,
+    length = Math.hypot(dx, dz) || 1,
+    tangentX = dx / length,
+    tangentZ = dz / length,
+    perpX = -tangentZ,
+    perpZ = tangentX,
+    upstream = clearance * 2.35,
+    shoulder = clearance * 1.12,
+    make = (side: number, upstreamFactor = 1) =>
+      sourceToLonLat(
+        wrapSourceX(
+          head.x - tangentX * upstream * upstreamFactor + perpX * side * shoulder,
+        ),
+        head.z - tangentZ * upstream * upstreamFactor + perpZ * side * shoulder,
+      );
+  return [
+    make(sideA, 0.76),
+    sourceToLonLat(
+      wrapSourceX(head.x - tangentX * upstream),
+      head.z - tangentZ * upstream,
+    ),
+    make(sideB, 0.76),
+  ];
+}
+
 /** Minimal route shell used only to run the canonical final validator on a segment. */
 function routeShell(points: LonLat[]): RouteResult {
   const geodesicM = greatCircleDistance(points[0], points[points.length - 1]);
@@ -391,6 +431,7 @@ function drainageBankDetour(
   ];
   for (let index = segmentIndex; index >= 0; index--)
     waypoints.push(drainageBankPoint(path, index, sideA, clearance));
+  waypoints.push(...drainageHeadCapPoints(path, sideA, sideB, clearance));
   waypoints.push(drainageBankPoint(path, 0, sideB, clearance));
   for (let index = 1; index <= segmentIndex; index++)
     waypoints.push(drainageBankPoint(path, index, sideB, clearance));
@@ -443,8 +484,10 @@ function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
     if (sideA === sideB) sideB = -sideA;
 
     let nextCandidate: RouteResult | undefined;
-    for (const factor of [1, 1.5, 2.1] as const) {
-      const clearance = Math.max(30, hit.width * 2.2) * factor,
+    const lakeClearance =
+      recipe.lake && hit.path === recipe.points ? recipe.lake.radius * 1.62 : 0;
+    for (const factor of [1, 1.35, 1.8] as const) {
+      const clearance = Math.max(30, hit.width * 2.2, lakeClearance) * factor,
         inserted = drainageBankDetour(
           hit.path,
           hit.segmentIndex,
