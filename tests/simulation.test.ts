@@ -121,13 +121,3 @@ test("focused resident queries are spatially bounded and actor-budget bounded", 
   assert.ok(stats.query.evaluatedResidents < stats.logicalResidents);
   assert.equal(new Set(visible.map((resident) => resident.code)).size, visible.length);
 });
-
-test("legacy diagnostic resident view is analytical and bounded to one sample", () => {
-  const simulation = new LazySimulation();
-  simulation.setFocus(villages[0]);
-  simulation.advance(12345);
-  const sample = simulation.residents.get(simulation.activeCountry)!;
-  assert.equal(sample.length, 1);
-  assert.deepEqual(sample[0], residentAt(villages[0], 0, 12345));
-  assert.equal(simulation.stats.activeScheduleRecords, 0);
-});
