@@ -131,7 +131,8 @@ export const finalTraversalTerrainSampler: TerrainSampler = (position: LonLat) =
     // routing.ts uses `water` as its hard-block bit. This intentionally includes
     // cliffs/other non-walkable final cells as well as authoritative water.
     water: surface.water !== "none" || !surface.walkable,
-    heightM: surface.elevation,
+    // Final surface already owns cliff/slope legality. Repair search must not add a second cliff classifier.
+    heightM: 0,
     highland: surface.traversal === "difficult" ? 1 : 0,
   };
 };
