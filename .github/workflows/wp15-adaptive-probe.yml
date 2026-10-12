@@ -19,4 +19,15 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: node --experimental-strip-types tools/wp15-political-probe.ts
+      - name: Export production repair for this diagnostic process only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/village-routes.ts')
+          s=p.read_text()
+          old='function repairViaPoliticalTopology(from: Place, to: Place): RouteResult | undefined {'
+          new='export function __wp15RepairViaPoliticalTopology(from: Place, to: Place): RouteResult | undefined {'
+          if old not in s: raise SystemExit('repair function marker missing')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - run: node --experimental-strip-types tools/wp15-actual-political-probe.ts
