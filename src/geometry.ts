@@ -1,7 +1,8 @@
-import { featuresFor, field, heightAt, riverX, type Tile } from "./world.ts";
-import { nearestPlace, roadAt, roads } from "./geography.ts";
+import { featuresFor, field, heightAt, type Tile } from "./world.ts";
+import { roads } from "./geography.ts";
+import { composedSurfaceAt } from "./final-surface.ts";
 import { macroSampleAt } from "./macro-geography.ts";
-import { sourceToLonLat, wrapSourceX, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
+import { sourceToLonLat, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import {
   climateSampleAt,
   polarBoundaryAt,
@@ -181,8 +182,9 @@ class Builder {
 }
 
 /**
- * Shared semantic material lookup. Realm and local LODs use the same climate
- * identity and palette; only bounded seed-derived detail frequency changes.
+ * Shared semantic material lookup. Natural climate color remains presentation,
+ * while every modifier override comes directly from the canonical final-surface
+ * material channel used by collision, vegetation and traversal.
  */
 export function terrainTint(
   x: number,
@@ -190,29 +192,26 @@ export function terrainTint(
   scale = 32,
   elevationM?: number,
 ): [number, number, number] {
-  const position = sourceToLonLat(x, z),
+  const surface = composedSurfaceAt(x, z),
+    position = sourceToLonLat(x, z),
     macro = macroSampleAt(position),
-    elevation = elevationM ?? heightAt(x, z),
+    elevation = elevationM ?? surface.groundElevation,
     sample = climateSampleAt(position, elevation);
 
-  // Current composed river surface; avoid constructing the unrelated five-level
-  // feature hierarchy for every surface texel. Same prototype river authority.
-  if (macro.domain === "Mainland" && elevation < 0.1) return color(76, 128, 148);
-  if (macro.domain === "Mainland" && Math.abs(wrapSourceX(x - riverX(z))) < 32)
-    return color(151, 143, 99);
-
-  const s = nearestPlace(x, z),
-    dx = s ? Math.abs(wrapSourceX(x - s.x)) : 1000,
-    dz = s ? Math.abs(z - s.z) : 1000,
-    urbanRoad =
-      s?.kind === "city" && (Math.abs(dx % 29) < 3 || Math.abs(dz % 29) < 3);
-  if (
-    ((s &&
-      Math.hypot(dx, dz) < (s.kind === "city" ? 420 : 66) &&
-      (dx < 4 || dz < 4 || Math.hypot(dx, dz) < 11 || urbanRoad)) ||
-      (roadAt(x, z) && Math.abs(z - roadAt(x, z)!.z) < 5))
-  )
-    return color(170, 151, 113);
+  switch (surface.surfaceMaterial) {
+    case "River":
+      return color(76, 128, 148);
+    case "Riverbank":
+      return color(151, 143, 99);
+    case "Road":
+      return color(170, 151, 113);
+    case "Road shoulder":
+      return color(156, 139, 104);
+    case "Prepared ground":
+      return color(164, 145, 110);
+    case "Bridge":
+      return color(115, 88, 56);
+  }
 
   // Identical coordinate inputs give identical albedo at every mesh LOD.
   // Filtering detail belongs to presentation, not a size-dependent palette.
@@ -522,31 +521,40 @@ export function buildTile(t: Tile): TileGeometry {
         detail.roof(x, y + 3, z, 3, 3, 1, color(116, 69, 47));
       }
     }
-  // Tile-clipped bridges preserve walking routes where the river crosses them.
+  // Bridge presentation is derived from the same final-surface deck channel as
+  // traversal. No renderer-only water test or fixed elevation may invent a deck.
   if (t.size <= 512)
     for (const road of roads) {
-      if (road.z < t.minZ || road.z >= t.minZ + t.size) continue;
-      for (
-        let x = Math.max(t.minX, Math.ceil(road.minX / 2) * 2);
-        x < Math.min(t.minX + t.size, road.maxX);
-        x += 2
-      ) {
-        if (heightAt(x, road.z) < 2.9) {
-          structures.box(x + 1, 2.8, road.z, 2, 0.2, 10, color(115, 88, 56));
-          if (t.size <= 64)
-            for (const oz of [-4.5, 4.5]) {
-              detail.box(
-                x + 1,
-                3.9,
-                road.z + oz,
-                2,
-                0.18,
-                0.18,
-                color(83, 65, 46),
-              );
-              detail.box(x, 3, road.z + oz, 0.2, 1.2, 0.2, color(83, 65, 46));
-            }
-        }
+      const dx = road.toX - road.fromX,
+        dz = road.toZ - road.fromZ,
+        length = Math.hypot(dx, dz) || 1,
+        steps = Math.max(1, Math.ceil(length / 2)),
+        nx = -dz / length,
+        nz = dx / length,
+        halfWidth = 5;
+      for (let index = 0; index < steps; index++) {
+        const aT = index / steps,
+          bT = (index + 1) / steps,
+          mT = (index + 0.5) / steps,
+          mx = road.fromX + dx * mT,
+          mz = road.fromZ + dz * mT;
+        if (mx < t.minX || mx >= t.minX + t.size || mz < t.minZ || mz >= t.minZ + t.size)
+          continue;
+        const surface = composedSurfaceAt(mx, mz);
+        if (surface.reservedUse !== "bridge") continue;
+        const ax = road.fromX + dx * aT,
+          az = road.fromZ + dz * aT,
+          bx = road.fromX + dx * bT,
+          bz = road.fromZ + dz * bT,
+          y = surface.surfaceElevation + 0.04,
+          tint = color(115, 88, 56);
+        structures.quad(
+          [ax + nx * halfWidth, y, az + nz * halfWidth],
+          [ax - nx * halfWidth, y, az - nz * halfWidth],
+          [bx - nx * halfWidth, y, bz - nz * halfWidth],
+          [bx + nx * halfWidth, y, bz + nz * halfWidth],
+          tint,
+        );
       }
     }
   // Preserve full precision until after the large source anchor is removed.
