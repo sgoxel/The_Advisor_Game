@@ -1,14 +1,12 @@
 import { climateSampleAt, type ForestFamily, type RGB } from "./climate.ts";
-import { nearestPlace, roadAt } from "./geography.ts";
 import { sourceToLonLat, wrapSourceX } from "./planet.ts";
 import {
   GENERATOR_VERSION,
   WORLD_SEED,
   WORLD_SIZE,
-  biomeAt,
   coordinateValue,
   field,
-  heightAt,
+  finalSurfaceAt,
   type Tile,
 } from "./world.ts";
 
@@ -92,7 +90,6 @@ const TREE_COLORS: Readonly<Record<ForestFamily, readonly [RGB, RGB]>> = {
     [124, 132, 76],
   ],
 };
-const WATER_BIOMES = new Set(["Ocean", "Lake", "River"]);
 const BARREN_TERRAIN = new Set([
   "ocean",
   "lake",
@@ -139,29 +136,21 @@ function candidateAt(gx: number, gz: number): Candidate {
   };
 }
 
-function settlementClearance(x: number, z: number) {
-  const place = nearestPlace(x, z);
-  if (!place) return 1;
-  const distance = Math.hypot(wrapSourceX(x - place.x), z - place.z),
-    protectedRadius = place.kind === "city" ? 445 : 96;
-  if (distance <= protectedRadius) return 0;
-  return smoothstep(protectedRadius, protectedRadius + 90, distance);
-}
-
 function evaluate(candidate: Candidate): Evaluated | undefined {
   const { x, z, variant } = candidate,
     canonicalX = wrapSourceX(x),
-    y = heightAt(canonicalX, z);
+    surface = finalSurfaceAt(canonicalX, z),
+    y = surface.groundHeight;
   if (
     y < 0.2 ||
-    WATER_BIOMES.has(biomeAt(canonicalX, z)) ||
-    roadAt(canonicalX, z)
+    surface.water.kind !== "none" ||
+    surface.vegetationDensityScale <= 0
   )
     return undefined;
 
-  const clearance = settlementClearance(canonicalX, z);
-  if (clearance <= 0) return undefined;
-
+  // Settlement pads, roadbeds and shoulders expose their canonical clearing
+  // strength through the final surface instead of being re-derived here.
+  const clearance = surface.vegetationDensityScale;
   const climate = climateSampleAt(sourceToLonLat(canonicalX, z), y);
   if (BARREN_TERRAIN.has(climate.terrainClass)) return undefined;
 
