@@ -28,6 +28,8 @@ Completed S002 WPs are listed in docs/ROADMAP_ARCHIVE.md; only open WPs stay bel
 - WP-S002-004-014 — Global transport-network authority/UX/performance: connected roads/bridges/harbors/ferries, terrain-valid profiles/junctions, route-truth recertification and bounded lazy generation
 - WP-S002-004-015 — Invisible-world continuity/performance: SEED-defined shared-boundary recipes, bounded on-demand queries, eviction-safe reconstruction, remote-route truth and streaming-independent identity
 - WP-S002-004-016 — Toon/cel-shaded world-presentation reference analysis: proven stylized 3D lighting/material/LOD/mobile patterns and S002 visual invariants
-- WP-S002-005-001 — Exact-main performance/stability release gate: complete frame/input/worker/UI telemetry, allocation-bounded Simulation/DOM hot paths, adaptive DPR/render quality, reusable resources and recovery
-- WP-S002-005-002 — Responsive UI/UX/accessibility release gate: cutout-safe seven-viewport layout, computed ≥44px targets, readable text/contrast, keyboard/Escape/focus parity and reduced motion
-- WP-S002-005-003 — README/runtime product-truth release gate: current S002 baseline, Advisor-safe semantics, canonical dynamic context/counts, final-route certification wording, backend/recovery parity and exact-main conformance
+- WP-S002-005-001 — Performance observability + budget evidence: complete bounded telemetry, exact-SHA scenario matrix and honest PASS/FAIL/UNVERIFIED reporting
+- WP-S002-005-002 — Responsive interaction + accessibility acceptance: cutout-safe seven-viewport layout, measured 44px targets, keyboard/touch/focus parity, readable declutter and reduced motion
+- WP-S002-005-003 — README/runtime semantic conformance: Advisor-vs-atlas authority, canonical dynamic geography/routes, current S002 baseline, renderer truth and evidence-backed claims
+- WP-S002-005-004 — Simulation + DOM hot-path performance: analytical resident updates, spatially bounded queries, invalidation-driven overlays and allocation regression limits
+- WP-S002-005-005 — Renderer/resource resilience: device-class DPR + adaptive render scale, quality hysteresis, reusable assets and canonical-safe WebGPU/WebGL2 recovery
