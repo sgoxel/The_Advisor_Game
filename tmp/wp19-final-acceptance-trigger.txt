@@ -1,2 +1,3 @@
-WP-S002-004-009 final exact-head acceptance trigger after settlement runtime reconciliation.
+WP-S002-004-009 Attempt 2 exact-head acceptance trigger after organic settlement/interior visual reconciliation.
+Runtime parent: 8e4317d7b9c5528fa85ccc43fe30865f35f58c35
 Temporary branch-only marker; remove after acceptance evidence is inspected.
