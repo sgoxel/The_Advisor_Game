@@ -10,6 +10,7 @@
  * bounded headwater detour before any local final-surface A* fallback.
  */
 import { roadAt, roads, villages, type Place } from "./geography.ts";
+import { politicalRouteWaypoints } from "./political-route-topology.ts";
 import {
   enuToPosition,
   greatCircleDistance,
@@ -54,6 +55,8 @@ export const FINAL_TRAVERSAL_CACHE_LIMIT = 8_192;
 export const FINAL_ROUTE_VALIDATION_STEP_M = 300;
 /** A route may repair a bounded number of distinct seeded drainage crossings. */
 export const FINAL_DRAINAGE_REPAIR_LIMIT = 8;
+/** Political fallback legs stay below the ordinary local planner's search envelope. */
+export const POLITICAL_TOPOLOGY_LEG_MAX_M = 60_000;
 
 export const roadSegments: readonly RoadSegment[] = roads.map((road) => ({
   code: road.code,
@@ -458,6 +461,46 @@ function stitchFinalWaypoints(waypoints: readonly LonLat[]): LonLat[] | undefine
   return result;
 }
 
+/** Keep every political topology leg within the ordinary bounded final planner. */
+function boundedTopologyWaypoints(waypoints: readonly LonLat[]): LonLat[] {
+  if (waypoints.length < 2) return [...waypoints];
+  const result: LonLat[] = [waypoints[0]];
+  for (let index = 1; index < waypoints.length; index++) {
+    const a: CanonicalPosition = { ...waypoints[index - 1], elevation: 0 },
+      b: CanonicalPosition = { ...waypoints[index], elevation: 0 },
+      lengthM = greatCircleDistance(a, b),
+      parts = Math.max(1, Math.ceil(lengthM / POLITICAL_TOPOLOGY_LEG_MAX_M)),
+      delta = positionToEnu(b, a);
+    for (let part = 1; part < parts; part++) {
+      const t = part / parts,
+        point = enuToPosition(
+          { east: delta.east * t, north: delta.north * t, up: 0 },
+          a,
+        );
+      result.push({ lon: point.lon, lat: point.lat });
+    }
+    result.push(waypoints[index]);
+  }
+  return result;
+}
+
+/**
+ * Use accepted SEED-owned settlement/backbone/gateway topology only as a set of
+ * high-level anchors. Every bounded leg is still solved and certified against
+ * the canonical final surface, so political metadata can never make water or a
+ * cliff walkable by declaration.
+ */
+function repairViaPoliticalTopology(from: Place, to: Place): RouteResult | undefined {
+  const topology = politicalRouteWaypoints(from, to);
+  if (!topology) return undefined;
+  const bounded = boundedTopologyWaypoints(topology),
+    stitched = stitchFinalWaypoints(bounded);
+  if (!stitched) return undefined;
+  const candidate = routeShell(stitched);
+  candidate.attempts += Math.max(1, bounded.length - 1);
+  return refineAgainstFinalTraversal(candidate);
+}
+
 /**
  * Build a certified route from local dry approach samples to the exact projected
  * river bank, trace the seeded bank to the head, pass around the head, then
@@ -642,6 +685,13 @@ function computeRoute(from: Place, to: Place): RouteResult {
         ]),
     drainageRepair = repairAroundDrainage(drainageCandidate);
   if (drainageRepair) return drainageRepair;
+
+  // If the local rectangle cannot represent a continental-scale detour, use the
+  // already accepted political access/backbone/gateway facts as high-level dry
+  // anchors. This never grants movement: every bounded leg is solved and checked
+  // against the same final traversal authority before acceptance.
+  const politicalRepair = repairViaPoliticalTopology(from, to);
+  if (politicalRepair) return politicalRepair;
 
   // Non-drainage local blockers still use the original fixed bounded planner.
   const repaired = planRoute({
