@@ -73,7 +73,7 @@ type CachedEvaluator = (candidate: Candidate) => Evaluated | undefined;
 // Positions retain the proven two-bucket jitter span and halo from WP16.
 const SCATTER_SPACING = 16;
 const SCATTER_JITTER_SPAN = 2;
-const SCATTER_ADMISSION = 0.72;
+const SCATTER_ADMISSION = 0.66;
 const SCATTER_HALO = 2;
 const WRAP_BUCKET_COUNT = WORLD_SIZE / SCATTER_SPACING;
 const HALF_WRAP_BUCKET_COUNT = WRAP_BUCKET_COUNT / 2;

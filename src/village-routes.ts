@@ -270,11 +270,86 @@ function sideOfSourceSegment(
   return cross < 0 ? -1 : 1;
 }
 
+/** Offset one canonical drainage point to a deterministic dry bank side. */
+function drainageBankPoint(
+  path: readonly DrainagePoint[],
+  index: number,
+  side: number,
+  clearance: number,
+): LonLat {
+  const point = path[index],
+    before = path[Math.max(0, index - 1)],
+    after = path[Math.min(path.length - 1, index + 1)];
+  let dx = wrapSourceX(after.x - before.x),
+    dz = after.z - before.z;
+  if (Math.hypot(dx, dz) < 1e-6) {
+    const neighbour = index + 1 < path.length ? path[index + 1] : path[index - 1];
+    dx = wrapSourceX(neighbour.x - point.x);
+    dz = neighbour.z - point.z;
+  }
+  const length = Math.hypot(dx, dz) || 1,
+    perpX = -dz / length,
+    perpZ = dx / length;
+  return sourceToLonLat(
+    wrapSourceX(point.x + perpX * side * clearance),
+    point.z + perpZ * side * clearance,
+  );
+}
+
+/** Pass beyond the seeded head rather than crossing the authoritative channel. */
+function drainageHeadCap(
+  path: readonly DrainagePoint[],
+  side: number,
+  clearance: number,
+): LonLat {
+  const head = path[0],
+    next = path[1],
+    dx = wrapSourceX(next.x - head.x),
+    dz = next.z - head.z,
+    length = Math.hypot(dx, dz) || 1,
+    upstreamX = -dx / length,
+    upstreamZ = -dz / length,
+    perpX = -dz / length,
+    perpZ = dx / length;
+  return sourceToLonLat(
+    wrapSourceX(
+      head.x + upstreamX * clearance * 1.25 + perpX * side * clearance,
+    ),
+    head.z + upstreamZ * clearance * 1.25 + perpZ * side * clearance,
+  );
+}
+
 /**
- * Insert a deterministic dry arc upstream of the exact seeded river that blocked
- * a candidate. This is a one-dimensional catchment repair, not a camera-derived
- * or unbounded world search. Every inserted arc is revalidated against the same
- * final traversal samples before it can be returned.
+ * Build a bounded polyline that follows the actual seeded bank to the head,
+ * passes around the dry upstream cap, and returns on the opposite bank. Unlike a
+ * straight two-waypoint shortcut, each leg tracks the meandering drainage path
+ * and therefore cannot silently recross the same river downstream.
+ */
+function drainageBankDetour(
+  path: readonly DrainagePoint[],
+  segmentIndex: number,
+  sideA: number,
+  sideB: number,
+  clearance: number,
+): LonLat[] {
+  const endIndex = Math.min(path.length - 1, segmentIndex + 1),
+    points: LonLat[] = [];
+  for (let index = endIndex; index >= 0; index--)
+    points.push(drainageBankPoint(path, index, sideA, clearance));
+  points.push(
+    drainageHeadCap(path, sideA, clearance),
+    drainageHeadCap(path, sideB, clearance),
+  );
+  for (let index = 0; index <= endIndex; index++)
+    points.push(drainageBankPoint(path, index, sideB, clearance));
+  return points;
+}
+
+/**
+ * Insert a deterministic dry bank route around the exact seeded river that
+ * blocked a candidate. This is a one-dimensional catchment repair, not a
+ * camera-derived or unbounded world search. Every trial is revalidated against
+ * the same final traversal samples before it can be accepted.
  */
 function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
   let candidate = route;
@@ -297,16 +372,7 @@ function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
     const hit = nearestDrainagePath(recipe, blockedSource.x, blockedSource.z);
     if (!hit || hit.path.length < 2) return undefined;
 
-    const head = hit.path[0],
-      next = hit.path[1],
-      dx = wrapSourceX(next.x - head.x),
-      dz = next.z - head.z,
-      length = Math.hypot(dx, dz) || 1,
-      upstreamX = -dx / length,
-      upstreamZ = -dz / length,
-      perpX = -dz / length,
-      perpZ = dx / length,
-      segmentA = candidate.points[blocked.segmentIndex - 1],
+    const segmentA = candidate.points[blocked.segmentIndex - 1],
       segmentB = candidate.points[blocked.segmentIndex],
       sourceA = lonLatToFlat(segmentA.lon, segmentA.lat),
       sourceB = lonLatToFlat(segmentB.lon, segmentB.lat),
@@ -318,38 +384,41 @@ function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
     // Near a tangent/endpoint numerical tie, force a deterministic opposite side.
     if (sideA === sideB) sideB = -sideA;
 
-    let inserted: LonLat[] | undefined;
-    for (const factor of [1, 1.7, 2.5] as const) {
-      const clearance = Math.max(96, recipe.width * 6) * factor,
-        lateral = clearance * 0.9,
-        waypointA = sourceToLonLat(
-          wrapSourceX(head.x + upstreamX * clearance + perpX * sideA * lateral),
-          head.z + upstreamZ * clearance + perpZ * sideA * lateral,
-        ),
-        waypointB = sourceToLonLat(
-          wrapSourceX(head.x + upstreamX * clearance + perpX * sideB * lateral),
-          head.z + upstreamZ * clearance + perpZ * sideB * lateral,
+    let nextCandidate: RouteResult | undefined;
+    for (const factor of [1, 1.55, 2.2] as const) {
+      const clearance = Math.max(42, hit.width * 3.2) * factor,
+        inserted = drainageBankDetour(
+          hit.path,
+          hit.segmentIndex,
+          sideA,
+          sideB,
+          clearance,
         );
+      if (inserted.some((point) => !finalTraversalState(point).surface.walkable))
+        continue;
+      const trial: RouteResult = {
+        ...candidate,
+        reason: undefined,
+        points: [
+          ...candidate.points.slice(0, blocked.segmentIndex),
+          ...inserted,
+          ...candidate.points.slice(blocked.segmentIndex),
+        ],
+        attempts: candidate.attempts + 1,
+      };
+      const accepted = refineAgainstFinalTraversal(trial);
+      if (accepted) return accepted;
+      const trialBlocked = firstBlockedFinalSample(trial);
       if (
-        finalTraversalState(waypointA).surface.walkable &&
-        finalTraversalState(waypointB).surface.walkable
+        trialBlocked?.surface.water === "river" &&
+        trialBlocked.surface.catchmentCode !== blocked.surface.catchmentCode
       ) {
-        inserted = [waypointA, waypointB];
+        nextCandidate = trial;
         break;
       }
     }
-    if (!inserted) return undefined;
-
-    candidate = {
-      ...candidate,
-      reason: undefined,
-      points: [
-        ...candidate.points.slice(0, blocked.segmentIndex),
-        ...inserted,
-        ...candidate.points.slice(blocked.segmentIndex),
-      ],
-      attempts: candidate.attempts + 1,
-    };
+    if (!nextCandidate) return undefined;
+    candidate = nextCandidate;
   }
   return refineAgainstFinalTraversal(candidate);
 }
