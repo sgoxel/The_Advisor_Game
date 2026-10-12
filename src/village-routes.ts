@@ -22,6 +22,7 @@ import {
   type LonLat,
 } from "./planet.ts";
 import {
+  ROUTE_CELL_MIN_M,
   ROUTE_MAX_CELLS,
   ROUTE_MAX_EXPANSIONS,
   macroTerrainSampler,
@@ -468,6 +469,131 @@ function stitchFinalWaypoints(waypoints: readonly LonLat[]): LonLat[] | undefine
   return result;
 }
 
+/**
+ * Last-resort local connectivity proof for a seeded drainage detour. The search
+ * envelope is the compact ENU bounds of the already-derived dry bank/head guide,
+ * not a symmetric whole-route margin. This preserves 40 m detail whenever the
+ * bounded envelope fits the normal route-cell budget, which is important for
+ * narrow dry components beside winding headwaters.
+ */
+function localFinalComponentConnector(
+  from: LonLat,
+  to: LonLat,
+  guide: readonly LonLat[],
+): LonLat[] | undefined {
+  const origin: CanonicalPosition = { ...from, elevation: 0 },
+    destination = positionToEnu({ ...to, elevation: 0 }, origin),
+    guideEnu = guide.map((point) => positionToEnu({ ...point, elevation: 0 }, origin)),
+    paddingM = 800,
+    minE = Math.min(0, destination.east, ...guideEnu.map((point) => point.east)) - paddingM,
+    maxE = Math.max(0, destination.east, ...guideEnu.map((point) => point.east)) + paddingM,
+    minN = Math.min(0, destination.north, ...guideEnu.map((point) => point.north)) - paddingM,
+    maxN = Math.max(0, destination.north, ...guideEnu.map((point) => point.north)) + paddingM;
+
+  let cell = Math.max(
+      ROUTE_CELL_MIN_M,
+      Math.ceil(Math.sqrt(((maxE - minE) * (maxN - minN)) / ROUTE_MAX_CELLS)),
+    ),
+    i0 = 0,
+    i1 = 0,
+    j0 = 0,
+    j1 = 0,
+    width = 0,
+    height = 0,
+    total = ROUTE_MAX_CELLS + 1;
+  while (total > ROUTE_MAX_CELLS) {
+    i0 = Math.floor(minE / cell);
+    i1 = Math.ceil(maxE / cell);
+    j0 = Math.floor(minN / cell);
+    j1 = Math.ceil(maxN / cell);
+    width = i1 - i0 + 1;
+    height = j1 - j0 + 1;
+    total = width * height;
+    if (total > ROUTE_MAX_CELLS) cell++;
+  }
+
+  const indexOf = (i: number, j: number) => (j - j0) * width + (i - i0),
+    inside = (i: number, j: number) => i >= i0 && i <= i1 && j >= j0 && j <= j1,
+    pointAt = (i: number, j: number): LonLat => {
+      const point = enuToPosition({ east: i * cell, north: j * cell, up: 0 }, origin);
+      return { lon: point.lon, lat: point.lat };
+    },
+    sampled = new Uint8Array(total),
+    passable = new Uint8Array(total),
+    isPassable = (i: number, j: number) => {
+      if (!inside(i, j)) return false;
+      const index = indexOf(i, j);
+      if (!sampled[index]) {
+        sampled[index] = 1;
+        passable[index] = finalTraversalState(pointAt(i, j)).surface.walkable ? 1 : 0;
+      }
+      return passable[index] === 1;
+    },
+    startI = 0,
+    startJ = 0,
+    endI = Math.max(i0, Math.min(i1, Math.round(destination.east / cell))),
+    endJ = Math.max(j0, Math.min(j1, Math.round(destination.north / cell)));
+  if (!isPassable(startI, startJ) || !isPassable(endI, endJ)) return undefined;
+
+  const parent = new Int32Array(total).fill(-1),
+    visited = new Uint8Array(total),
+    queue = new Int32Array(total),
+    start = indexOf(startI, startJ),
+    target = indexOf(endI, endJ),
+    moves = [
+      [1, 0],
+      [0, 1],
+      [-1, 0],
+      [0, -1],
+      [1, 1],
+      [-1, 1],
+      [-1, -1],
+      [1, -1],
+    ] as const;
+  let head = 0,
+    tail = 0,
+    expansions = 0;
+  queue[tail++] = start;
+  visited[start] = 1;
+  while (head < tail && expansions < Math.min(ROUTE_MAX_EXPANSIONS, total)) {
+    const current = queue[head++];
+    if (current === target) break;
+    expansions++;
+    const ci = (current % width) + i0,
+      cj = Math.floor(current / width) + j0;
+    for (const [di, dj] of moves) {
+      const ni = ci + di,
+        nj = cj + dj;
+      if (!inside(ni, nj) || !isPassable(ni, nj)) continue;
+      if (di !== 0 && dj !== 0 && (!isPassable(ci + di, cj) || !isPassable(ci, cj + dj)))
+        continue;
+      const next = indexOf(ni, nj);
+      if (visited[next]) continue;
+      visited[next] = 1;
+      parent[next] = current;
+      queue[tail++] = next;
+    }
+  }
+  if (!visited[target]) return undefined;
+
+  const cells: number[] = [];
+  for (let current = target; current !== -1; current = parent[current]) {
+    cells.push(current);
+    if (current === start) break;
+  }
+  if (cells[cells.length - 1] !== start) return undefined;
+  cells.reverse();
+  const points: LonLat[] = [{ lon: from.lon, lat: from.lat }];
+  for (let index = 1; index < cells.length; index++) {
+    const current = cells[index],
+      i = (current % width) + i0,
+      j = Math.floor(current / width) + j0;
+    points.push(pointAt(i, j));
+  }
+  points.push({ lon: to.lon, lat: to.lat });
+  const refined = refineAgainstFinalTraversal(routeShell(points));
+  return refined?.found ? refined.points : undefined;
+}
 /** Political legs get the same seeded drainage repair before bounded final A*. */
 function politicalFinalConnector(from: LonLat, to: LonLat): LonLat[] | undefined {
   const direct = routeShell([from, to]);
@@ -566,7 +692,7 @@ function drainageBankDetour(
     approachB,
   );
   if (waypoints.some((point) => !finalTraversalState(point).surface.walkable)) return undefined;
-  return stitchFinalWaypoints(waypoints);
+  return stitchFinalWaypoints(waypoints) ?? localFinalComponentConnector(approachA, approachB, waypoints);
 }
 
 /**
