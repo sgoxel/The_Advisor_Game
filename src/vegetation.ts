@@ -68,9 +68,8 @@ type Evaluated = Candidate & {
 type CachedEvaluator = (candidate: Candidate) => Evaluated | undefined;
 
 // Canonical source-space addresses still divide the wrapped circumference exactly,
-// but a candidate may wander across a two-bucket span. That preserves one stable
-// seed address per candidate while removing the residual stratified-grid signature
-// produced when every point is confined to its own 16-unit square.
+// but candidates are decorrelated from visible row/column phases. Identity remains
+// one stable seed address per bucket; only its deterministic physical offset changes.
 const SCATTER_SPACING = 16;
 const SCATTER_JITTER_SPAN = 2;
 const SCATTER_HALO = 2;
@@ -78,6 +77,7 @@ const WRAP_BUCKET_COUNT = WORLD_SIZE / SCATTER_SPACING;
 const HALF_WRAP_BUCKET_COUNT = WRAP_BUCKET_COUNT / 2;
 const MAX_RENDER_TILE = 256;
 const MAX_SEPARATION = 11.5;
+const MAX_DENSE_FOREST_OCCUPANCY = 0.84;
 const TREE_COLORS: Readonly<Record<ForestFamily, readonly [RGB, RGB]>> = {
   "conifer-boreal": [
     [43, 79, 58],
@@ -112,6 +112,7 @@ const smoothstep = (edge0: number, edge1: number, value: number) => {
 const unit = (value: number) => ((value >>> 0) + 0.5) / 4294967296;
 const scatterOffset = (value: number) =>
   unit(value) * SCATTER_JITTER_SPAN - (SCATTER_JITTER_SPAN - 1) / 2;
+const scatterPhase = (value: number) => unit(value) - 0.5;
 
 function wrapBucketX(gx: number) {
   return (
@@ -124,7 +125,12 @@ function wrapBucketX(gx: number) {
 function candidateAt(gx: number, gz: number): Candidate {
   const addressGX = wrapBucketX(gx),
     a = coordinateValue(addressGX, gz, 601),
-    b = coordinateValue(addressGX, gz, 602);
+    b = coordinateValue(addressGX, gz, 602),
+    // A row phase in X and column phase in Z break the residual 16-unit cardinal
+    // Fourier band without changing the canonical bucket/owner. Both phases are
+    // seed-addressed and periodic across the east/west wrap.
+    rowPhase = scatterPhase(coordinateValue(0, gz, 605)),
+    columnPhase = scatterPhase(coordinateValue(addressGX, 0, 606));
   return {
     gx,
     gz,
@@ -132,8 +138,8 @@ function candidateAt(gx: number, gz: number): Candidate {
     // gx stays in the caller's local periodic copy so seam-neighbour distances are
     // short. Only addressGX decides identity/hash, therefore ±WORLD_SIZE replays
     // the exact same canonical candidate without creating a second owner.
-    x: (gx + scatterOffset(a)) * SCATTER_SPACING,
-    z: (gz + scatterOffset(b)) * SCATTER_SPACING,
+    x: (gx + scatterOffset(a) + rowPhase) * SCATTER_SPACING,
+    z: (gz + scatterOffset(b) + columnPhase) * SCATTER_SPACING,
     priority: coordinateValue(addressGX, gz, 603),
     variant: coordinateValue(addressGX, gz, 604),
   };
@@ -177,7 +183,14 @@ function evaluate(candidate: Candidate): Evaluated | undefined {
     const familyFactor = forest === "warm-dry-woodland" ? 0.63 : 1,
       clearingFactor = 0.25 + 0.75 * smoothstep(0.2, 0.66, clearing),
       clusterFactor = 0.42 + 0.48 * core + 0.1 * grove;
-    treeDensity = clamp01(clusterFactor * clearingFactor * familyFactor * clearance);
+    // Near-complete occupation of the canonical address buckets can make their
+    // source frequency reappear after terrain/settlement rejection. A high cap
+    // keeps forests dense while retaining enough deterministic gaps to avoid a
+    // visible cardinal lattice.
+    treeDensity = Math.min(
+      MAX_DENSE_FOREST_OCCUPANCY,
+      clamp01(clusterFactor * clearingFactor * familyFactor * clearance),
+    );
   } else if (["meadow", "grassland", "dryland", "bare-earth", "highland"].includes(climate.terrainClass)) {
     const loneTree = 0.025 + 0.12 * climate.moisture * (0.45 + 0.55 * core);
     treeDensity = loneTree * clearance * (1 - smoothstep(0.5, 0.78, climate.ruggedness));

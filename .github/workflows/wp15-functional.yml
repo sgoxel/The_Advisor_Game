@@ -1,0 +1,44 @@
+name: WP15 exact-head functional gates
+on:
+  pull_request:
+    branches: [main]
+concurrency:
+  group: wp15-functional-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  unit-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+  browser:
+    needs: unit-build
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [webgpu, webgl2, navigation]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Run browser gate
+        run: |
+          case "${{ matrix.suite }}" in
+            webgpu) xvfb-run -a npm run test:webgpu ;;
+            webgl2) xvfb-run -a npx playwright test --config playwright.fallback.config.js ;;
+            navigation) xvfb-run -a npx playwright test --config playwright.navigation.config.js ;;
+          esac

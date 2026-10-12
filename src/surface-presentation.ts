@@ -12,7 +12,12 @@ export const SURFACE_PRESENTATION = Object.freeze({
   relief: 0,
 });
 export function localDetailWeight(halfHeight: number): number {
-  const t = Math.max(0, Math.min(1, (Math.log(halfHeight) - Math.log(70)) / Math.log(900 / 70)));
+  if (halfHeight <= 700) return 1;
+  if (halfHeight >= 900) return 0;
+  const t = Math.max(
+    0,
+    Math.min(1, (Math.log(halfHeight) - Math.log(700)) / Math.log(900 / 700)),
+  );
   return 1 - t * t * (3 - 2 * t);
 }
 
