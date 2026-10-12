@@ -66,6 +66,11 @@ export type RouteRequest = {
   to: LonLat;
   roads?: readonly RoadSegment[];
   terrain?: TerrainSampler;
+  /**
+   * The sampler already owns passability/difficulty. Keep its accepted grid path
+   * intact and do not derive a second cliff/difficulty decision from height deltas.
+   */
+  authoritativeTraversal?: boolean;
 };
 export type RouteResult = {
   found: boolean;
@@ -233,6 +238,7 @@ function searchOnce(
   marginM: number,
   roads: readonly RoadSegment[],
   terrain: TerrainSampler,
+  authoritativeTraversal: boolean,
 ): Failure | Success {
   const minE = Math.min(0, bEast) - marginM,
     maxE = Math.max(0, bEast) + marginM,
@@ -379,10 +385,10 @@ function searchOnce(
           Math.abs(heights[c.idx] - heights[current]) / (Math.hypot(c.i - ci, c.j - cj) * cell),
           Math.abs(heights[next] - heights[c.idx]) / (Math.hypot(ni - c.i, nj - c.j) * cell),
         );
-      if (!allRoad && slope > CLIFF_SLOPE) continue;
+      if (!authoritativeTraversal && !allRoad && slope > CLIFF_SLOPE) continue;
       const difficult =
         !allRoad &&
-        (slope > DIFFICULT_SLOPE ||
+        ((!authoritativeTraversal && slope > DIFFICULT_SLOPE) ||
           !!(flags[current] & FLAG_HIGHLAND) ||
           !!(flags[next] & FLAG_HIGHLAND) ||
           between.some((b) => !!(flags[b] & FLAG_HIGHLAND)));
@@ -444,6 +450,7 @@ function simplify(points: { east: number; north: number }[], tolerance: number) 
 export function planRoute(request: RouteRequest): RouteResult {
   const terrain = request.terrain ?? macroTerrainSampler,
     roads = request.roads ?? [],
+    authoritativeTraversal = request.authoritativeTraversal ?? false,
     geodesicM = greatCircleDistance(request.from, request.to);
   if (geodesicM > ROUTE_MAX_SEPARATION_M)
     return emptyRoute(geodesicM, "separation-exceeds-local-search", 0, 0, 0);
@@ -464,7 +471,7 @@ export function planRoute(request: RouteRequest): RouteResult {
     expansions = 0;
   for (const margin of margins) {
     attempts++;
-    outcome = searchOnce(origin, b.east, b.north, margin, roads, terrain);
+    outcome = searchOnce(origin, b.east, b.north, margin, roads, terrain, authoritativeTraversal);
     expansions += outcome.expansions;
     if (outcome.found || outcome.reason !== "no-legal-route") break;
   }
@@ -505,11 +512,11 @@ export function planRoute(request: RouteRequest): RouteResult {
   distanceM += tail;
   fantasySeconds += tail / speedOf(tailKind);
 
-  const simplified = simplify(pathPoints, grid.cell * 0.5),
-    points: LonLat[] = simplified.map((p, k) =>
+  const routedPoints = authoritativeTraversal ? pathPoints : simplify(pathPoints, grid.cell * 0.5),
+    points: LonLat[] = routedPoints.map((p, k) =>
       k === 0
         ? { lon: request.from.lon, lat: request.from.lat }
-        : k === simplified.length - 1
+        : k === routedPoints.length - 1
           ? { lon: request.to.lon, lat: request.to.lat }
           : (({ lon, lat }) => ({ lon, lat }))(
               enuToPosition({ east: p.east, north: p.north, up: 0 }, origin),
