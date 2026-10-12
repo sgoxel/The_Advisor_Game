@@ -20,12 +20,18 @@ test("resident foundations give every logical resident one stable distinct home"
     const first = residentFoundationAt(village, index);
     const replay = residentFoundationAt(village, index);
     assert.deepEqual(replay, first);
+    assert.equal(first.home, village.id);
     assert.equal(first.settlement, village.id);
-    assert.equal(first.homeEntrance, `${first.home}/ENTRANCE`);
-    assert.match(first.home, new RegExp(`${village.code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\/HOME\\/${index}$`));
+    assert.equal(first.homeEntrance, `${first.homeBuilding}/ENTRANCE`);
+    assert.match(
+      first.homeBuilding,
+      new RegExp(
+        `${village.code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\/HOME\\/${index}$`,
+      ),
+    );
     assert.ok(first.workplace.startsWith(village.code));
-    assert.ok(!homes.has(first.home), `duplicate home ${first.home}`);
-    homes.add(first.home);
+    assert.ok(!homes.has(first.homeBuilding), `duplicate home ${first.homeBuilding}`);
+    homes.add(first.homeBuilding);
   }
   assert.equal(homes.size, populationOf(village));
 });
@@ -114,4 +120,14 @@ test("focused resident queries are spatially bounded and actor-budget bounded", 
   assert.ok(stats.query.evaluatedResidents <= stats.query.candidateResidents);
   assert.ok(stats.query.evaluatedResidents < stats.logicalResidents);
   assert.equal(new Set(visible.map((resident) => resident.code)).size, visible.length);
+});
+
+test("legacy diagnostic resident view is analytical and bounded to one sample", () => {
+  const simulation = new LazySimulation();
+  simulation.setFocus(villages[0]);
+  simulation.advance(12345);
+  const sample = simulation.residents.get(simulation.activeCountry)!;
+  assert.equal(sample.length, 1);
+  assert.deepEqual(sample[0], residentAt(villages[0], 0, 12345));
+  assert.equal(simulation.stats.activeScheduleRecords, 0);
 });
