@@ -131,8 +131,9 @@ export const finalTraversalTerrainSampler: TerrainSampler = (position: LonLat) =
     // routing.ts uses `water` as its hard-block bit. This intentionally includes
     // cliffs/other non-walkable final cells as well as authoritative water.
     water: surface.water !== "none" || !surface.walkable,
-    // Final surface already owns cliff/slope legality. Repair search must not add a second cliff classifier.
-    heightM: 0,
+    // Keep canonical height available for diagnostics/cost reporting. Final repair
+    // explicitly tells routing.ts that passability is already owned by this surface.
+    heightM: surface.elevation,
     highland: surface.traversal === "difficult" ? 1 : 0,
   };
 };
@@ -445,7 +446,12 @@ function routeShell(points: LonLat[]): RouteResult {
 function localFinalConnector(from: LonLat, to: LonLat): LonLat[] | undefined {
   const direct = routeShell([from, to]);
   if (refineAgainstFinalTraversal(direct)) return [from, to];
-  const planned = planRoute({ from, to, terrain: finalTraversalTerrainSampler }),
+  const planned = planRoute({
+      from,
+      to,
+      terrain: finalTraversalTerrainSampler,
+      authoritativeTraversal: true,
+    }),
     refined = refineAgainstFinalTraversal(planned);
   return refined?.found ? refined.points : undefined;
 }
@@ -468,7 +474,12 @@ function politicalFinalConnector(from: LonLat, to: LonLat): LonLat[] | undefined
   if (refineAgainstFinalTraversal(direct)) return [from, to];
   const drainageRepair = repairAroundDrainage(direct);
   if (drainageRepair?.found) return drainageRepair.points;
-  const planned = planRoute({ from, to, terrain: finalTraversalTerrainSampler }),
+  const planned = planRoute({
+      from,
+      to,
+      terrain: finalTraversalTerrainSampler,
+      authoritativeTraversal: true,
+    }),
     refined = refineAgainstFinalTraversal(planned);
   return refined?.found ? refined.points : undefined;
 }
@@ -723,6 +734,7 @@ function computeRoute(from: Place, to: Place): RouteResult {
     to: to.canonicalPosition,
     roads: roadSegments,
     terrain: finalTraversalTerrainSampler,
+    authoritativeTraversal: true,
   });
   return refineAgainstFinalTraversal(repaired) ?? repaired;
 }
