@@ -296,34 +296,11 @@ function drainageBankPoint(
   );
 }
 
-/** Pass beyond the seeded head rather than crossing the authoritative channel. */
-function drainageHeadCap(
-  path: readonly DrainagePoint[],
-  side: number,
-  clearance: number,
-): LonLat {
-  const head = path[0],
-    next = path[1],
-    dx = wrapSourceX(next.x - head.x),
-    dz = next.z - head.z,
-    length = Math.hypot(dx, dz) || 1,
-    upstreamX = -dx / length,
-    upstreamZ = -dz / length,
-    perpX = -dz / length,
-    perpZ = dx / length;
-  return sourceToLonLat(
-    wrapSourceX(
-      head.x + upstreamX * clearance * 1.25 + perpX * side * clearance,
-    ),
-    head.z + upstreamZ * clearance * 1.25 + perpZ * side * clearance,
-  );
-}
-
 /**
- * Build a bounded polyline that follows the actual seeded bank to the head,
- * passes around the dry upstream cap, and returns on the opposite bank. Unlike a
- * straight two-waypoint shortcut, each leg tracks the meandering drainage path
- * and therefore cannot silently recross the same river downstream.
+ * Build a bounded polyline along each seeded bank, with only the short crossing
+ * around the river head delegated to the ordinary bounded final-surface planner.
+ * This keeps the expensive two-dimensional search local to the head instead of
+ * widening the full village-to-village search rectangle.
  */
 function drainageBankDetour(
   path: readonly DrainagePoint[],
@@ -331,25 +308,37 @@ function drainageBankDetour(
   sideA: number,
   sideB: number,
   clearance: number,
-): LonLat[] {
+): LonLat[] | undefined {
   const endIndex = Math.min(path.length - 1, segmentIndex + 1),
-    points: LonLat[] = [];
+    bankA: LonLat[] = [],
+    bankB: LonLat[] = [];
   for (let index = endIndex; index >= 0; index--)
-    points.push(drainageBankPoint(path, index, sideA, clearance));
-  points.push(
-    drainageHeadCap(path, sideA, clearance),
-    drainageHeadCap(path, sideB, clearance),
-  );
+    bankA.push(drainageBankPoint(path, index, sideA, clearance));
   for (let index = 0; index <= endIndex; index++)
-    points.push(drainageBankPoint(path, index, sideB, clearance));
-  return points;
+    bankB.push(drainageBankPoint(path, index, sideB, clearance));
+  const headA = bankA[bankA.length - 1],
+    headB = bankB[0];
+  if (
+    !headA ||
+    !headB ||
+    !finalTraversalState(headA).surface.walkable ||
+    !finalTraversalState(headB).surface.walkable
+  )
+    return undefined;
+  const headCrossing = planRoute({
+    from: headA,
+    to: headB,
+    terrain: finalTraversalTerrainSampler,
+  });
+  if (!headCrossing.found) return undefined;
+  return [...bankA, ...headCrossing.points.slice(1, -1), ...bankB];
 }
 
 /**
  * Insert a deterministic dry bank route around the exact seeded river that
- * blocked a candidate. This is a one-dimensional catchment repair, not a
- * camera-derived or unbounded world search. Every trial is revalidated against
- * the same final traversal samples before it can be accepted.
+ * blocked a candidate. This is a one-dimensional catchment repair plus a small
+ * bounded search around the seeded head, never a camera-derived or unbounded
+ * world search. Every trial is revalidated against final runtime traversal.
  */
 function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
   let candidate = route;
@@ -385,8 +374,8 @@ function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
     if (sideA === sideB) sideB = -sideA;
 
     let nextCandidate: RouteResult | undefined;
-    for (const factor of [1, 1.55, 2.2] as const) {
-      const clearance = Math.max(42, hit.width * 3.2) * factor,
+    for (const factor of [1, 1.5, 2.1] as const) {
+      const clearance = Math.max(30, hit.width * 2.2) * factor,
         inserted = drainageBankDetour(
           hit.path,
           hit.segmentIndex,
@@ -394,6 +383,7 @@ function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
           sideB,
           clearance,
         );
+      if (!inserted) continue;
       if (inserted.some((point) => !finalTraversalState(point).surface.walkable))
         continue;
       const trial: RouteResult = {
