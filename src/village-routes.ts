@@ -52,8 +52,8 @@ export const ROUTE_CACHE_LIMIT = 256;
 export const FINAL_TRAVERSAL_CACHE_LIMIT = 8_192;
 /** Final truth is checked at most this far apart along an accepted candidate. */
 export const FINAL_ROUTE_VALIDATION_STEP_M = 300;
-/** A route may repair a small number of distinct seeded drainage crossings. */
-export const FINAL_DRAINAGE_REPAIR_LIMIT = 4;
+/** A route may repair a bounded number of distinct seeded drainage crossings. */
+export const FINAL_DRAINAGE_REPAIR_LIMIT = 8;
 
 export const roadSegments: readonly RoadSegment[] = roads.map((road) => ({
   code: road.code,
@@ -69,6 +69,9 @@ type FinalTraversalState = {
 };
 type BlockedRouteSample = {
   segmentIndex: number;
+  stepIndex: number;
+  steps: number;
+  t: number;
   position: LonLat;
   surface: ReturnType<typeof surfaceAt>;
 };
@@ -216,12 +219,59 @@ function firstBlockedFinalSample(route: RouteResult): BlockedRouteSample | undef
       if (!surface.walkable)
         return {
           segmentIndex: k,
+          stepIndex: step,
+          steps,
+          t,
           position: { lon: sample.lon, lat: sample.lat },
           surface,
         };
     }
   }
   return undefined;
+}
+
+/**
+ * Return dry samples immediately before and after the blocked run on the same
+ * simplified segment. This keeps a drainage repair local to the actual crossing
+ * rather than reconnecting from endpoints that may be kilometres away or on the
+ * wrong side of another meander.
+ */
+function localDryApproaches(
+  route: RouteResult,
+  blocked: BlockedRouteSample,
+): readonly [LonLat, LonLat] | undefined {
+  const a: CanonicalPosition = { ...route.points[blocked.segmentIndex - 1], elevation: 0 },
+    b: CanonicalPosition = { ...route.points[blocked.segmentIndex], elevation: 0 },
+    delta = positionToEnu(b, a),
+    atStep = (step: number): LonLat => {
+      const t = (step + 0.5) / blocked.steps,
+        point = enuToPosition(
+          { east: delta.east * t, north: delta.north * t, up: 0 },
+          a,
+        );
+      return { lon: point.lon, lat: point.lat };
+    };
+  let before: LonLat | undefined,
+    after: LonLat | undefined;
+  for (let step = blocked.stepIndex - 1; step >= 0; step--) {
+    const point = atStep(step);
+    if (finalTraversalState(point).surface.walkable) {
+      before = point;
+      break;
+    }
+  }
+  if (!before && finalTraversalState(a).surface.walkable)
+    before = { lon: a.lon, lat: a.lat };
+  for (let step = blocked.stepIndex + 1; step < blocked.steps; step++) {
+    const point = atStep(step);
+    if (finalTraversalState(point).surface.walkable) {
+      after = point;
+      break;
+    }
+  }
+  if (!after && finalTraversalState(b).surface.walkable)
+    after = { lon: b.lon, lat: b.lat };
+  return before && after ? [before, after] : undefined;
 }
 
 function sourceSegmentProjection(
@@ -409,11 +459,10 @@ function stitchFinalWaypoints(waypoints: readonly LonLat[]): LonLat[] | undefine
 }
 
 /**
- * Build a certified route from the actual blocked segment endpoint to the exact
- * projected river bank, trace the seeded bank to the head, pass around the head,
- * then return along the opposite bank to the other segment endpoint. Using the
- * blocked projection matters: a downstream recipe vertex can lie beyond a
- * meander and make the splice re-cross the same river before repair even starts.
+ * Build a certified route from local dry approach samples to the exact projected
+ * river bank, trace the seeded bank to the head, pass around the head, then
+ * return along the opposite bank. Keeping the splice local prevents a repair
+ * connector from re-crossing the same meander before the detour even starts.
  */
 function drainageBankDetour(
   path: readonly DrainagePoint[],
@@ -422,11 +471,11 @@ function drainageBankDetour(
   sideA: number,
   sideB: number,
   clearance: number,
-  segmentA: LonLat,
-  segmentB: LonLat,
+  approachA: LonLat,
+  approachB: LonLat,
 ): LonLat[] | undefined {
   const waypoints: LonLat[] = [
-    segmentA,
+    approachA,
     projectedDrainageBankPoint(path, segmentIndex, t, sideA, clearance),
   ];
   for (let index = segmentIndex; index >= 0; index--)
@@ -437,17 +486,17 @@ function drainageBankDetour(
     waypoints.push(drainageBankPoint(path, index, sideB, clearance));
   waypoints.push(
     projectedDrainageBankPoint(path, segmentIndex, t, sideB, clearance),
-    segmentB,
+    approachB,
   );
   if (waypoints.some((point) => !finalTraversalState(point).surface.walkable)) return undefined;
   return stitchFinalWaypoints(waypoints);
 }
 
 /**
- * Insert deterministic certified bank routes around the exact seeded river
+ * Insert deterministic certified bank routes around the exact seeded drainage
  * crossings that block a candidate. The same catchment may legitimately be
- * crossed more than once by a meandering coarse corridor, so each remaining
- * blocked river sample is repaired in turn up to a fixed bound.
+ * crossed more than once by a meandering corridor, so each remaining blocked
+ * river/lake sample is repaired in turn up to a fixed bound.
  */
 function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
   if (!route.found || route.points.length < 2) return undefined;
@@ -458,12 +507,15 @@ function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
     const blocked = firstBlockedFinalSample(candidate);
     if (
       !blocked ||
-      blocked.surface.water !== "river" ||
+      (blocked.surface.water !== "river" && blocked.surface.water !== "lake") ||
       !blocked.surface.catchmentCode
     )
       return undefined;
 
-    const blockedSource = lonLatToFlat(blocked.position.lon, blocked.position.lat),
+    const approaches = localDryApproaches(candidate, blocked);
+    if (!approaches) return undefined;
+    const [approachA, approachB] = approaches,
+      blockedSource = lonLatToFlat(blocked.position.lon, blocked.position.lat),
       recipe = drainageRecipesNear(blockedSource.x, blockedSource.z, 2).find(
         (item) => item.code === blocked.surface.catchmentCode,
       );
@@ -471,21 +523,19 @@ function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
     const hit = nearestDrainagePath(recipe, blockedSource.x, blockedSource.z);
     if (!hit || hit.path.length < 2) return undefined;
 
-    const segmentA = candidate.points[blocked.segmentIndex - 1],
-      segmentB = candidate.points[blocked.segmentIndex],
-      sourceA = lonLatToFlat(segmentA.lon, segmentA.lat),
-      sourceB = lonLatToFlat(segmentB.lon, segmentB.lat),
+    const sourceA = lonLatToFlat(approachA.lon, approachA.lat),
+      sourceB = lonLatToFlat(approachB.lon, approachB.lat),
       localA = hit.path[hit.segmentIndex],
       localB = hit.path[hit.segmentIndex + 1];
     let sideA = sideOfSourceSegment(sourceA, localA, localB),
       sideB = sideOfSourceSegment(sourceB, localA, localB);
-    // A rejected segment that samples the river normally emerges on the other
+    // A rejected segment that samples drainage normally emerges on the other
     // side. Near a tangent/endpoint tie, force a deterministic opposite side.
     if (sideA === sideB) sideB = -sideA;
 
     let nextCandidate: RouteResult | undefined;
     const lakeClearance =
-      recipe.lake && hit.path === recipe.points ? recipe.lake.radius * 1.62 : 0;
+      blocked.surface.water === "lake" && recipe.lake ? recipe.lake.radius * 1.8 : 0;
     for (const factor of [1, 1.35, 1.8] as const) {
       const clearance = Math.max(30, hit.width * 2.2, lakeClearance) * factor,
         inserted = drainageBankDetour(
@@ -495,24 +545,28 @@ function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
           sideA,
           sideB,
           clearance,
-          segmentA,
-          segmentB,
+          approachA,
+          approachB,
         );
       if (!inserted) continue;
       const trial: RouteResult = {
         ...candidate,
         reason: undefined,
         points: [
-          ...candidate.points.slice(0, blocked.segmentIndex - 1),
+          ...candidate.points.slice(0, blocked.segmentIndex),
           ...inserted,
-          ...candidate.points.slice(blocked.segmentIndex + 1),
+          ...candidate.points.slice(blocked.segmentIndex),
         ],
         attempts: candidate.attempts + 1,
       };
       const accepted = refineAgainstFinalTraversal(trial);
       if (accepted) return accepted;
       const trialBlocked = firstBlockedFinalSample(trial);
-      if (trialBlocked?.surface.water === "river" && trialBlocked.surface.catchmentCode) {
+      if (
+        trialBlocked &&
+        (trialBlocked.surface.water === "river" || trialBlocked.surface.water === "lake") &&
+        trialBlocked.surface.catchmentCode
+      ) {
         nextCandidate = trial;
         break;
       }
