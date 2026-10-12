@@ -1,0 +1,145 @@
+name: WP15 route diagnostic
+
+on:
+  push:
+    branches:
+      - agent1/wp-s002-004-005-current-main
+    paths:
+      - ".github/workflows/wp15-route-diagnostic.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s002-004-005-current-main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Inject temporary in-run diagnostics
+        run: |
+          cat >> src/village-routes.ts <<'EOF'
+
+export function __wp15DebugPair(fromId: string, toId: string) {
+  const from = villageById.get(fromId)!;
+  const to = villageById.get(toId)!;
+  const direct = directSeededRoad(from, to);
+  const directRefined = direct ? refineAgainstFinalTraversal(direct) : undefined;
+  const coarse = planRoute({
+    from: from.canonicalPosition,
+    to: to.canonicalPosition,
+    roads: roadSegments,
+    terrain: macroTerrainSampler,
+  });
+  const coarseRefined = coarse.found ? refineAgainstFinalTraversal(coarse) : undefined;
+  const candidate = coarse.found
+    ? coarse
+    : routeShell([
+        { lon: from.canonicalPosition.lon, lat: from.canonicalPosition.lat },
+        { lon: to.canonicalPosition.lon, lat: to.canonicalPosition.lat },
+      ]);
+  const blocked = firstBlockedFinalSample(candidate);
+  const approaches = blocked ? localDryApproaches(candidate, blocked) : undefined;
+  let drainage: any = undefined;
+  if (blocked && approaches && blocked.surface.catchmentCode) {
+    const blockedSource = lonLatToFlat(blocked.position.lon, blocked.position.lat);
+    const recipe = drainageRecipesNear(blockedSource.x, blockedSource.z, 2).find(
+      (item) => item.code === blocked.surface.catchmentCode,
+    );
+    const hit = recipe ? nearestDrainagePath(recipe, blockedSource.x, blockedSource.z) : undefined;
+    if (recipe && hit) {
+      const [approachA, approachB] = approaches;
+      const sourceA = lonLatToFlat(approachA.lon, approachA.lat);
+      const sourceB = lonLatToFlat(approachB.lon, approachB.lat);
+      const localA = hit.path[hit.segmentIndex];
+      const localB = hit.path[hit.segmentIndex + 1];
+      let sideA = sideOfSourceSegment(sourceA, localA, localB);
+      let sideB = sideOfSourceSegment(sourceB, localA, localB);
+      if (sideA === sideB) sideB = -sideA;
+      const attempts = [] as any[];
+      const lakeClearance = blocked.surface.water === "lake" && recipe.lake ? recipe.lake.radius * 1.8 : 0;
+      for (const factor of [1, 1.35, 1.8] as const) {
+        const clearance = Math.max(30, hit.width * 2.2, lakeClearance) * factor;
+        const guide: LonLat[] = [
+          approachA,
+          projectedDrainageBankPoint(hit.path, hit.segmentIndex, hit.t, sideA, clearance),
+        ];
+        for (let index = hit.segmentIndex; index >= 0; index--)
+          guide.push(drainageBankPoint(hit.path, index, sideA, clearance));
+        guide.push(...drainageHeadCapPoints(hit.path, sideA, sideB, clearance));
+        guide.push(drainageBankPoint(hit.path, 0, sideB, clearance));
+        for (let index = 1; index <= hit.segmentIndex; index++)
+          guide.push(drainageBankPoint(hit.path, index, sideB, clearance));
+        guide.push(
+          projectedDrainageBankPoint(hit.path, hit.segmentIndex, hit.t, sideB, clearance),
+          approachB,
+        );
+        const badWaypoints = guide
+          .map((point, index) => ({ index, point, surface: finalTraversalState(point).surface }))
+          .filter((entry) => !entry.surface.walkable)
+          .map((entry) => ({ index: entry.index, point: entry.point, water: entry.surface.water, catchmentCode: entry.surface.catchmentCode }));
+        const stitched = badWaypoints.length ? undefined : stitchFinalWaypoints(guide);
+        const component = badWaypoints.length ? undefined : localFinalComponentConnector(approachA, approachB, guide);
+        const stitchedBlocked = stitched ? firstBlockedFinalSample(routeShell(stitched)) : undefined;
+        const componentBlocked = component ? firstBlockedFinalSample(routeShell(component)) : undefined;
+        attempts.push({
+          factor,
+          clearance,
+          guideCount: guide.length,
+          badWaypoints,
+          stitched: stitched ? { points: stitched.length, blocked: stitchedBlocked } : null,
+          component: component ? { points: component.length, blocked: componentBlocked } : null,
+          approachAState: finalTraversalState(approachA).surface,
+          approachBState: finalTraversalState(approachB).surface,
+        });
+      }
+      drainage = {
+        recipe: recipe.code,
+        water: blocked.surface.water,
+        hit: { segmentIndex: hit.segmentIndex, t: hit.t, width: hit.width, distance: hit.distance, pathLength: hit.path.length },
+        sideA,
+        sideB,
+        approaches,
+        attempts,
+      };
+    }
+  }
+  const drainageRepair = repairAroundDrainage(candidate);
+  const political = politicalRouteWaypoints(from, to);
+  const politicalRepair = repairViaPoliticalTopology(from, to);
+  const repaired = planRoute({
+    from: from.canonicalPosition,
+    to: to.canonicalPosition,
+    roads: roadSegments,
+    terrain: finalTraversalTerrainSampler,
+    authoritativeTraversal: true,
+  });
+  const repairedRefined = refineAgainstFinalTraversal(repaired);
+  return {
+    from: { id: from.id, country: from.country, continent: from.continent, position: from.canonicalPosition },
+    to: { id: to.id, country: to.country, continent: to.continent, position: to.canonicalPosition },
+    direct: direct ? { found: direct.found, refined: Boolean(directRefined) } : null,
+    coarse: { found: coarse.found, reason: coarse.reason, points: coarse.points.length, expansions: coarse.expansions, refined: Boolean(coarseRefined) },
+    firstBlocked: blocked ? { segmentIndex: blocked.segmentIndex, stepIndex: blocked.stepIndex, steps: blocked.steps, position: blocked.position, water: blocked.surface.water, catchmentCode: blocked.surface.catchmentCode, walkable: blocked.surface.walkable } : null,
+    drainage,
+    drainageRepair: drainageRepair ? { found: drainageRepair.found, reason: drainageRepair.reason, points: drainageRepair.points.length } : null,
+    political: political ? { points: political.length, first: political[0], last: political[political.length - 1] } : null,
+    politicalRepair: politicalRepair ? { found: politicalRepair.found, reason: politicalRepair.reason, points: politicalRepair.points.length } : null,
+    finalPlan: { found: repaired.found, reason: repaired.reason, points: repaired.points.length, expansions: repaired.expansions, refined: Boolean(repairedRefined) },
+    publicResult: routeBetweenVillages(fromId, toId),
+  };
+}
+EOF
+      - name: Trace exact pair
+        run: |
+          node --experimental-strip-types --input-type=module <<'EOF'
+          import { __wp15DebugPair } from './src/village-routes.ts';
+          console.log('WP15_DIAGNOSTIC=' + JSON.stringify(__wp15DebugPair('1/2/0/1', '1/5/1/0')));
+          EOF
