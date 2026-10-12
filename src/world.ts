@@ -186,7 +186,7 @@ export function field(
   const gx = Math.floor(x / spacing),
     gz = Math.floor(z / spacing);
   const tx = smooth(x / spacing - gx),
-    tz = smooth(x / spacing - gx);
+    tz = smooth(z / spacing - gz);
   const at = (a: number, b: number) =>
     (coordinateValue(a, b, layer) % 10001) / 10000;
   return lerp(
