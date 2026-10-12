@@ -52,7 +52,7 @@ export const ROUTE_CACHE_LIMIT = 256;
 export const FINAL_TRAVERSAL_CACHE_LIMIT = 8_192;
 /** Final truth is checked at most this far apart along an accepted candidate. */
 export const FINAL_ROUTE_VALIDATION_STEP_M = 300;
-/** A route may repair a small number of distinct seeded drainage barriers. */
+/** A route may repair a small number of distinct seeded drainage crossings. */
 export const FINAL_DRAINAGE_REPAIR_LIMIT = 4;
 
 export const roadSegments: readonly RoadSegment[] = roads.map((road) => ({
@@ -77,6 +77,7 @@ type DrainagePathHit = {
   width: number;
   segmentIndex: number;
   distance: number;
+  t: number;
 };
 const finalTraversalCache = new Map<string, FinalTraversalState>();
 let cacheHits = 0,
@@ -223,7 +224,7 @@ function firstBlockedFinalSample(route: RouteResult): BlockedRouteSample | undef
   return undefined;
 }
 
-function sourceSegmentDistance(
+function sourceSegmentProjection(
   x: number,
   z: number,
   a: DrainagePoint,
@@ -235,7 +236,10 @@ function sourceSegmentDistance(
     qz = z - a.z,
     lengthSq = dx * dx + dz * dz,
     t = lengthSq <= 1e-9 ? 0 : Math.max(0, Math.min(1, (qx * dx + qz * dz) / lengthSq));
-  return Math.hypot(qx - dx * t, qz - dz * t);
+  return {
+    distance: Math.hypot(qx - dx * t, qz - dz * t),
+    t,
+  };
 }
 
 function nearestDrainagePath(
@@ -250,9 +254,9 @@ function nearestDrainagePath(
   ] as const;
   for (const entry of paths)
     for (let index = 0; index + 1 < entry.path.length; index++) {
-      const distance = sourceSegmentDistance(x, z, entry.path[index], entry.path[index + 1]);
-      if (!best || distance < best.distance)
-        best = { ...entry, segmentIndex: index, distance };
+      const projection = sourceSegmentProjection(x, z, entry.path[index], entry.path[index + 1]);
+      if (!best || projection.distance < best.distance)
+        best = { ...entry, segmentIndex: index, ...projection };
     }
   return best;
 }
@@ -296,51 +300,116 @@ function drainageBankPoint(
   );
 }
 
+/** Offset the exact blocked projection on a drainage segment to one dry bank. */
+function projectedDrainageBankPoint(
+  path: readonly DrainagePoint[],
+  segmentIndex: number,
+  t: number,
+  side: number,
+  clearance: number,
+): LonLat {
+  const a = path[segmentIndex],
+    b = path[segmentIndex + 1],
+    dx = wrapSourceX(b.x - a.x),
+    dz = b.z - a.z,
+    length = Math.hypot(dx, dz) || 1,
+    baseX = wrapSourceX(a.x + dx * t),
+    baseZ = a.z + dz * t,
+    perpX = -dz / length,
+    perpZ = dx / length;
+  return sourceToLonLat(
+    wrapSourceX(baseX + perpX * side * clearance),
+    baseZ + perpZ * side * clearance,
+  );
+}
+
+/** Minimal route shell used only to run the canonical final validator on a segment. */
+function routeShell(points: LonLat[]): RouteResult {
+  const geodesicM = greatCircleDistance(points[0], points[points.length - 1]);
+  return {
+    found: true,
+    geodesicM,
+    distanceM: geodesicM,
+    fantasySeconds: geodesicM / OPEN_GROUND_WALK_SPEED_MPS,
+    realSeconds: realSecondsForFantasy(geodesicM / OPEN_GROUND_WALK_SPEED_MPS),
+    straightLineFantasySeconds: geodesicM / FASTEST_WALK_SPEED_MPS,
+    detourFactor: 1,
+    points,
+    surfaceM: { road: 0, bridge: 0, open: geodesicM, difficult: 0 },
+    cellSizeM: FINAL_ROUTE_VALIDATION_STEP_M,
+    expansions: 0,
+    attempts: 1,
+  };
+}
+
 /**
- * Build a bounded polyline along each seeded bank, with only the short crossing
- * around the river head delegated to the ordinary bounded final-surface planner.
- * This keeps the expensive two-dimensional search local to the head instead of
- * widening the full village-to-village search rectangle.
+ * Connect two nearby deterministic repair waypoints. A straight final-surface
+ * segment is preferred; only if that exact segment is blocked do we invoke the
+ * normal bounded final-surface planner. This keeps repair cost local and avoids
+ * the former 80 km whole-route search.
+ */
+function localFinalConnector(from: LonLat, to: LonLat): LonLat[] | undefined {
+  const direct = routeShell([from, to]);
+  if (refineAgainstFinalTraversal(direct)) return [from, to];
+  const planned = planRoute({ from, to, terrain: finalTraversalTerrainSampler }),
+    refined = refineAgainstFinalTraversal(planned);
+  return refined?.found ? refined.points : undefined;
+}
+
+/** Join deterministic repair waypoints while certifying every individual leg. */
+function stitchFinalWaypoints(waypoints: readonly LonLat[]): LonLat[] | undefined {
+  if (waypoints.length < 2) return undefined;
+  const result: LonLat[] = [waypoints[0]];
+  for (let index = 1; index < waypoints.length; index++) {
+    const connector = localFinalConnector(waypoints[index - 1], waypoints[index]);
+    if (!connector) return undefined;
+    result.push(...connector.slice(1));
+  }
+  return result;
+}
+
+/**
+ * Build a certified route from the actual blocked segment endpoint to the exact
+ * projected river bank, trace the seeded bank to the head, pass around the head,
+ * then return along the opposite bank to the other segment endpoint. Using the
+ * blocked projection matters: a downstream recipe vertex can lie beyond a
+ * meander and make the splice re-cross the same river before repair even starts.
  */
 function drainageBankDetour(
   path: readonly DrainagePoint[],
   segmentIndex: number,
+  t: number,
   sideA: number,
   sideB: number,
   clearance: number,
+  segmentA: LonLat,
+  segmentB: LonLat,
 ): LonLat[] | undefined {
-  const endIndex = Math.min(path.length - 1, segmentIndex + 1),
-    bankA: LonLat[] = [],
-    bankB: LonLat[] = [];
-  for (let index = endIndex; index >= 0; index--)
-    bankA.push(drainageBankPoint(path, index, sideA, clearance));
-  for (let index = 0; index <= endIndex; index++)
-    bankB.push(drainageBankPoint(path, index, sideB, clearance));
-  const headA = bankA[bankA.length - 1],
-    headB = bankB[0];
-  if (
-    !headA ||
-    !headB ||
-    !finalTraversalState(headA).surface.walkable ||
-    !finalTraversalState(headB).surface.walkable
-  )
-    return undefined;
-  const headCrossing = planRoute({
-    from: headA,
-    to: headB,
-    terrain: finalTraversalTerrainSampler,
-  });
-  if (!headCrossing.found) return undefined;
-  return [...bankA, ...headCrossing.points.slice(1, -1), ...bankB];
+  const waypoints: LonLat[] = [
+    segmentA,
+    projectedDrainageBankPoint(path, segmentIndex, t, sideA, clearance),
+  ];
+  for (let index = segmentIndex; index >= 0; index--)
+    waypoints.push(drainageBankPoint(path, index, sideA, clearance));
+  waypoints.push(drainageBankPoint(path, 0, sideB, clearance));
+  for (let index = 1; index <= segmentIndex; index++)
+    waypoints.push(drainageBankPoint(path, index, sideB, clearance));
+  waypoints.push(
+    projectedDrainageBankPoint(path, segmentIndex, t, sideB, clearance),
+    segmentB,
+  );
+  if (waypoints.some((point) => !finalTraversalState(point).surface.walkable)) return undefined;
+  return stitchFinalWaypoints(waypoints);
 }
 
 /**
- * Insert a deterministic dry bank route around the exact seeded river that
- * blocked a candidate. This is a one-dimensional catchment repair plus a small
- * bounded search around the seeded head, never a camera-derived or unbounded
- * world search. Every trial is revalidated against final runtime traversal.
+ * Insert deterministic certified bank routes around the exact seeded river
+ * crossings that block a candidate. The same catchment may legitimately be
+ * crossed more than once by a meandering coarse corridor, so each remaining
+ * blocked river sample is repaired in turn up to a fixed bound.
  */
 function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
+  if (!route.found || route.points.length < 2) return undefined;
   let candidate = route;
   for (let repair = 0; repair < FINAL_DRAINAGE_REPAIR_LIMIT; repair++) {
     const refined = refineAgainstFinalTraversal(candidate);
@@ -369,8 +438,8 @@ function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
       localB = hit.path[hit.segmentIndex + 1];
     let sideA = sideOfSourceSegment(sourceA, localA, localB),
       sideB = sideOfSourceSegment(sourceB, localA, localB);
-    // A rejected segment that samples the river must emerge on the other side.
-    // Near a tangent/endpoint numerical tie, force a deterministic opposite side.
+    // A rejected segment that samples the river normally emerges on the other
+    // side. Near a tangent/endpoint tie, force a deterministic opposite side.
     if (sideA === sideB) sideB = -sideA;
 
     let nextCandidate: RouteResult | undefined;
@@ -379,30 +448,28 @@ function repairAroundDrainage(route: RouteResult): RouteResult | undefined {
         inserted = drainageBankDetour(
           hit.path,
           hit.segmentIndex,
+          hit.t,
           sideA,
           sideB,
           clearance,
+          segmentA,
+          segmentB,
         );
       if (!inserted) continue;
-      if (inserted.some((point) => !finalTraversalState(point).surface.walkable))
-        continue;
       const trial: RouteResult = {
         ...candidate,
         reason: undefined,
         points: [
-          ...candidate.points.slice(0, blocked.segmentIndex),
+          ...candidate.points.slice(0, blocked.segmentIndex - 1),
           ...inserted,
-          ...candidate.points.slice(blocked.segmentIndex),
+          ...candidate.points.slice(blocked.segmentIndex + 1),
         ],
         attempts: candidate.attempts + 1,
       };
       const accepted = refineAgainstFinalTraversal(trial);
       if (accepted) return accepted;
       const trialBlocked = firstBlockedFinalSample(trial);
-      if (
-        trialBlocked?.surface.water === "river" &&
-        trialBlocked.surface.catchmentCode !== blocked.surface.catchmentCode
-      ) {
+      if (trialBlocked?.surface.water === "river" && trialBlocked.surface.catchmentCode) {
         nextCandidate = trial;
         break;
       }
