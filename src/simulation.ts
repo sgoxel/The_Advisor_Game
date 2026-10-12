@@ -1,5 +1,4 @@
 import { countries, places, type Place } from "./geography.ts";
-import { GOOD_ROAD_WALK_SPEED_MPS } from "./travel.ts";
 import { digest, heightAt } from "./world.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
@@ -27,8 +26,11 @@ export type ResidentRole =
 export type ResidentFoundation = {
   code: string;
   name: string;
-  settlement: string;
+  /** Settlement identity retained for deterministic lookup and legacy diagnostics. */
   home: string;
+  settlement: string;
+  /** Specific canonical logical building and entrance assigned to this resident. */
+  homeBuilding: string;
   homeEntrance: string;
   workplace: string;
   role: ResidentRole;
@@ -47,9 +49,8 @@ export type ResidentFoundation = {
 };
 
 export type Resident = ResidentFoundation & {
-  /** Canonical spherical simulation position. */
   position: CanonicalPosition;
-  /** Transitional renderer/source coordinates; never stable world identity. */
+  /** Transitional presentation coordinates only. */
   x: number;
   z: number;
   task: string;
@@ -150,12 +151,6 @@ const DEFAULT_VISIBLE_LIMIT = 128;
 export const populationOf = (place: Place) =>
   place.kind === "city" ? 2400 : 80;
 
-/**
- * Cached tangent coefficients are presentation-independent acceleration data.
- * Resident routes stay within a few hundred metres of their settlement centre,
- * keeping this local spherical tangent approximation well below one metre of
- * position error while avoiding repeated ECEF/ENU trigonometry.
- */
 const tangentMetrics = new Map<
   string,
   { radiansPerEastM: number; radiansPerNorthM: number }
@@ -188,12 +183,11 @@ function canonicalOffset(
     elevation: place.canonicalPosition.elevation,
   };
 }
-
 function seededOffset(
   code: string,
   minRadiusM: number,
   maxRadiusM: number,
-): { eastM: number; northM: number } {
+) {
   const angle = ((digest(`${code}/ANGLE`) % 65_536) / 65_536) * Math.PI * 2,
     radiusSpan = Math.max(1, Math.round(maxRadiusM - minRadiusM)),
     radius = minRadiusM + (digest(`${code}/RADIUS`) % radiusSpan);
@@ -206,11 +200,9 @@ function seededOffset(
 export function gateCountFor(place: Place) {
   return 1 + (digest(`${place.code}/GATE_COUNT`) % 2);
 }
-
 export function guardsPerGateFor(place: Place, gateIndex: number) {
   return 1 + (digest(`${place.code}/GATE/${gateIndex}/STAFF`) % 2);
 }
-
 function guardAssignmentFor(
   place: Place,
   residentIndex: number,
@@ -219,7 +211,7 @@ function guardAssignmentFor(
   const gateCount = gateCountFor(place);
   for (let gateIndex = 0; gateIndex < gateCount; gateIndex++) {
     const slots = guardsPerGateFor(place, gateIndex);
-    for (let slot = 0; slot < slots; slot++) {
+    for (let slot = 0; slot < slots; slot++)
       for (const shift of [0, 1] as const) {
         if (residentIndex === cursor)
           return {
@@ -230,11 +222,9 @@ function guardAssignmentFor(
           };
         cursor++;
       }
-    }
   }
   return undefined;
 }
-
 function residentRoleFor(place: Place, index: number): ResidentRole {
   if (index < SERVICE_ROLES.length) return SERVICE_ROLES[index];
   if (guardAssignmentFor(place, index)) return "guard";
@@ -242,7 +232,6 @@ function residentRoleFor(place: Place, index: number): ResidentRole {
     digest(`${place.code}/RESIDENT/${index}/ROLE`) % CITIZEN_ROLES.length
   ];
 }
-
 function workOffsetFor(
   place: Place,
   code: string,
@@ -261,8 +250,8 @@ function workOffsetFor(
       northM: Math.sin(angle) * radius,
     };
   }
-  const serviceRadius = role === "farmer" ? 62 : 22;
-  return seededOffset(`${code}/WORK/${ROLE_WORKPLACE[role]}`, 8, serviceRadius);
+  const radius = role === "farmer" ? 62 : 22;
+  return seededOffset(`${code}/WORK/${ROLE_WORKPLACE[role]}`, 8, radius);
 }
 
 export function residentFoundationAt(
@@ -275,18 +264,18 @@ export function residentFoundationAt(
     variant = digest(code),
     role = residentRoleFor(place, index),
     assignment = guardAssignmentFor(place, index),
-    home = `${place.code}/HOME/${index}`,
+    homeBuilding = `${place.code}/HOME/${index}`,
     first = GIVEN_NAMES[variant % GIVEN_NAMES.length],
-    family = FAMILY_NAMES[
-      digest(`${code}/FAMILY`) % FAMILY_NAMES.length
-    ];
+    family = FAMILY_NAMES[digest(`${code}/FAMILY`) % FAMILY_NAMES.length];
   return {
     code,
     name: `${first} ${family}`,
+    home: place.id,
     settlement: place.id,
-    home,
-    homeEntrance: `${home}/ENTRANCE`,
-    workplace: assignment?.gatePost ?? `${place.code}/SERVICE/${ROLE_WORKPLACE[role]}`,
+    homeBuilding,
+    homeEntrance: `${homeBuilding}/ENTRANCE`,
+    workplace:
+      assignment?.gatePost ?? `${place.code}/SERVICE/${ROLE_WORKPLACE[role]}`,
     role,
     gatePost: assignment?.gatePost,
     guardShift: assignment?.shift,
@@ -299,7 +288,7 @@ export function residentFoundationAt(
       clothing: digest(`${code}/CLOTHING`) % 9,
     },
     homeOffset: seededOffset(
-      `${home}/POSITION`,
+      `${homeBuilding}/POSITION`,
       10,
       place.kind === "city" ? 215 : 58,
     ),
@@ -310,13 +299,11 @@ export function residentFoundationAt(
 function daySecond(tick: number) {
   return ((tick % DAY_SECONDS) + DAY_SECONDS) % DAY_SECONDS;
 }
-
 function isGuardOnDuty(foundation: ResidentFoundation, tick: number) {
   if (foundation.role !== "guard") return false;
   const daytime = daySecond(tick) >= 6 * HOUR && daySecond(tick) < 18 * HOUR;
   return foundation.guardShift === (daytime ? 0 : 1);
 }
-
 export function guardCoverageAt(place: Place, tick: number) {
   const coverage = Array.from({ length: gateCountFor(place) }, (_, gateIndex) => ({
     gateIndex,
@@ -337,6 +324,7 @@ export function guardCoverageAt(place: Place, tick: number) {
   return coverage;
 }
 
+/** Commutes follow a stable home → settlement road hub → workplace route. */
 function routeOffset(
   from: { eastM: number; northM: number },
   to: { eastM: number; northM: number },
@@ -350,14 +338,12 @@ function routeOffset(
   const k = (t - 0.5) * 2;
   return { eastM: to.eastM * k, northM: to.northM * k };
 }
-
 function scheduleAt(foundation: ResidentFoundation, tick: number) {
   const second = daySecond(tick);
-  if (foundation.role === "guard") {
-    if (isGuardOnDuty(foundation, tick))
-      return { task: "Guard duty", offset: foundation.workOffset };
-    return { task: "Resting at home", offset: foundation.homeOffset };
-  }
+  if (foundation.role === "guard")
+    return isGuardOnDuty(foundation, tick)
+      ? { task: "Guard duty", offset: foundation.workOffset }
+      : { task: "Resting at home", offset: foundation.homeOffset };
   if (second < 6 * HOUR)
     return { task: "Resting at home", offset: foundation.homeOffset };
   if (second < 7 * HOUR)
@@ -398,7 +384,6 @@ function scheduleAt(foundation: ResidentFoundation, tick: number) {
     };
   return { task: "At home", offset: foundation.homeOffset };
 }
-
 function legalPosition(
   place: Place,
   eastM: number,
@@ -417,16 +402,8 @@ function legalPosition(
   };
 }
 
-/**
- * Resident state is analytical from immutable SEED-derived foundation + absolute
- * Fantasy Game Time. Calling this directly at a future tick is identical to
- * stepping through every intermediate tick.
- */
-export function residentAt(
-  place: Place,
-  index: number,
-  tick: number,
-): Resident {
+/** State is reconstructed only from immutable SEED foundation + absolute Fantasy Game Time. */
+export function residentAt(place: Place, index: number, tick: number): Resident {
   const foundation = residentFoundationAt(place, index),
     schedule = scheduleAt(foundation, tick),
     location = legalPosition(
@@ -434,13 +411,8 @@ export function residentAt(
       schedule.offset.eastM,
       schedule.offset.northM,
     );
-  return {
-    ...foundation,
-    ...location,
-    task: schedule.task,
-  };
+  return { ...foundation, ...location, task: schedule.task };
 }
-
 export function summaryAt(code: string, tick: number): CountryState {
   const baseline = digest(code) % 5000;
   return {
@@ -461,7 +433,6 @@ for (const country of countries)
         place.continent === country.continent && place.country === country.id,
     ),
   );
-
 function bucketX(x: number) {
   const wrapped = wrapSourceX(x),
     shifted = wrapped + SOURCE_PRESENTATION_WIDTH / 2,
@@ -471,17 +442,13 @@ function bucketX(x: number) {
 function bucketZ(z: number) {
   return Math.floor(z / PLACE_BUCKET_SOURCE);
 }
-function bucketKey(x: number, z: number) {
-  return `${bucketX(x)}/${bucketZ(z)}`;
-}
 const placeBuckets = new Map<string, Place[]>();
 for (const place of places) {
-  const key = bucketKey(place.x, place.z),
+  const key = `${bucketX(place.x)}/${bucketZ(place.z)}`,
     bucket = placeBuckets.get(key);
   if (bucket) bucket.push(place);
   else placeBuckets.set(key, [place]);
 }
-
 function nearbyPlaces(x: number, z: number, radius: number) {
   const countX = Math.ceil(SOURCE_PRESENTATION_WIDTH / PLACE_BUCKET_SOURCE),
     reach = radius + MAX_RESIDENT_ROAM_SOURCE,
@@ -493,17 +460,13 @@ function nearbyPlaces(x: number, z: number, radius: number) {
     for (let dx = -cellReach; dx <= cellReach; dx++) {
       const bx = ((centerX + dx) % countX + countX) % countX,
         bucket = placeBuckets.get(`${bx}/${centerZ + dz}`);
-      if (!bucket) continue;
-      for (const place of bucket) found.set(place.code, place);
+      if (bucket) for (const place of bucket) found.set(place.code, place);
     }
   return [...found.values()].sort((a, b) => a.code.localeCompare(b.code));
 }
-
 function sourceDistance(ax: number, az: number, bx: number, bz: number) {
-  const dx = wrapSourceX(ax - bx);
-  return Math.hypot(dx, az - bz);
+  return Math.hypot(wrapSourceX(ax - bx), az - bz);
 }
-
 function countryLogicalPopulation(code: string) {
   return (countryPlaces.get(code) ?? []).reduce(
     (total, place) => total + populationOf(place),
@@ -524,6 +487,112 @@ export class LazySimulation {
   };
   private residentEvaluationsSinceAdvance = 0;
   private reconstructionCount = 0;
+  private selectedResidentCode = "";
+  private inspector?: HTMLElement;
+
+  constructor() {
+    if (typeof document !== "undefined") this.installInspector();
+  }
+
+  private installInspector() {
+    if (document.getElementById("resident-inspector")) {
+      this.inspector = document.getElementById("resident-inspector") ?? undefined;
+      return;
+    }
+    const panel = document.getElementById("travel-panel");
+    if (!panel) return;
+    const section = document.createElement("section");
+    section.id = "resident-inspector";
+    section.className = "route-block resident-inspector";
+    section.setAttribute("aria-label", "Nearby resident inspector");
+    section.innerHTML = `
+      <div class="eyebrow">NEARBY RESIDENTS</div>
+      <label for="resident-select">Inhabitant</label>
+      <select id="resident-select" aria-label="Nearby inhabitant"></select>
+      <h3 id="resident-name">Zoom closer to inspect inhabitants</h3>
+      <code id="resident-code"></code>
+      <dl id="resident-details">
+        <dt>Role</dt><dd id="resident-role">—</dd>
+        <dt>Current task</dt><dd id="resident-task">—</dd>
+        <dt>House</dt><dd id="resident-home">—</dd>
+        <dt>Workplace / post</dt><dd id="resident-workplace">—</dd>
+      </dl>
+      <button id="resident-home-inspect" type="button" disabled>Inspect assigned house</button>
+      <p class="hint" id="resident-house-details" aria-live="polite"></p>
+      <p class="hint" id="resident-performance" aria-live="polite"></p>`;
+    const livingWorld = document.getElementById("simulation-status")?.previousElementSibling;
+    if (livingWorld) panel.insertBefore(section, livingWorld);
+    else panel.append(section);
+    const style = document.createElement("style");
+    style.textContent = `
+      .resident-inspector{margin-top:12px}.resident-inspector h3{margin:8px 0 4px;font-size:1rem}
+      .resident-inspector code{display:block;overflow-wrap:anywhere;font-size:.72rem;opacity:.8}
+      .resident-inspector dl{display:grid;grid-template-columns:minmax(88px,.75fr) minmax(0,1.25fr);gap:4px 10px;margin:8px 0}
+      .resident-inspector dt{opacity:.68}.resident-inspector dd{margin:0;overflow-wrap:anywhere}
+      .resident-inspector select{width:100%;min-height:34px}.resident-inspector button{width:100%;margin-top:6px}
+      @media(max-width:620px){.resident-inspector dl{grid-template-columns:1fr}.resident-inspector dt{margin-top:4px}}`;
+    document.head.append(style);
+    this.inspector = section;
+    const select = document.getElementById("resident-select") as HTMLSelectElement | null;
+    select?.addEventListener("change", () => {
+      this.selectedResidentCode = select.value;
+      const resident = this.residentByCode(select.value);
+      if (resident) this.renderInspectorResident(resident);
+    });
+    document.getElementById("resident-home-inspect")?.addEventListener("click", () => {
+      const resident = this.residentByCode(this.selectedResidentCode),
+        output = document.getElementById("resident-house-details");
+      if (resident && output)
+        output.textContent = `House object ${resident.homeBuilding} · entrance ${resident.homeEntrance} · settlement ${resident.settlement}`;
+    });
+  }
+
+  private renderInspectorResident(resident: Resident) {
+    const text = (id: string, value: string) => {
+      const node = document.getElementById(id);
+      if (node) node.textContent = value;
+    };
+    text("resident-name", resident.name);
+    text("resident-code", resident.code);
+    text("resident-role", resident.role.replaceAll("-", " "));
+    text("resident-task", resident.task);
+    text("resident-home", resident.homeBuilding);
+    text("resident-workplace", resident.workplace);
+    const button = document.getElementById("resident-home-inspect") as HTMLButtonElement | null;
+    if (button) button.disabled = false;
+  }
+
+  private updateInspector(visible: Resident[], query: QueryStats) {
+    if (typeof document === "undefined") return;
+    if (!this.inspector) this.installInspector();
+    const select = document.getElementById("resident-select") as HTMLSelectElement | null;
+    if (!select) return;
+    const sample = visible.slice(0, 16),
+      retained = sample.some((resident) => resident.code === this.selectedResidentCode)
+        ? this.selectedResidentCode
+        : sample[0]?.code ?? "";
+    select.replaceChildren(
+      ...sample.map((resident) => {
+        const option = document.createElement("option");
+        option.value = resident.code;
+        option.textContent = `${resident.name} · ${resident.role.replaceAll("-", " ")}`;
+        return option;
+      }),
+    );
+    this.selectedResidentCode = retained;
+    select.value = retained;
+    const resident = sample.find((entry) => entry.code === retained);
+    if (resident) this.renderInspectorResident(resident);
+    else {
+      const name = document.getElementById("resident-name");
+      if (name) name.textContent = "Zoom closer to inspect inhabitants";
+      const button = document.getElementById("resident-home-inspect") as HTMLButtonElement | null;
+      if (button) button.disabled = true;
+    }
+    const performance = document.getElementById("resident-performance");
+    if (performance)
+      performance.textContent = `${query.candidateResidents.toLocaleString()} spatial candidates · ${query.evaluatedResidents.toLocaleString()} evaluated · ${query.returnedResidents.toLocaleString()} visible from ${countryLogicalPopulation(this.activeCountry).toLocaleString()} logical residents`;
+  }
 
   setFocus(place: Place | undefined) {
     if (!place) return;
@@ -531,19 +600,15 @@ export class LazySimulation {
       (country) =>
         country.continent === place.continent && country.id === place.country,
     )!.code;
-    if (this.activeCountry && this.activeCountry !== next)
-      this.reconstructionCount++;
+    if (this.activeCountry && this.activeCountry !== next) this.reconstructionCount++;
     this.activeCountry = next;
   }
-
   setInterest(code: string) {
     this.interested.clear();
     this.interested.add(code);
   }
-
   advance(tick: number) {
-    if (tick < this.tick)
-      throw new RangeError("Simulation time must move forward");
+    if (tick < this.tick) throw new RangeError("Simulation time must move forward");
     this.tick = tick;
     this.residentEvaluationsSinceAdvance = 0;
     for (const country of countries) {
@@ -552,12 +617,7 @@ export class LazySimulation {
         interval = live ? 1 : interested ? 30 : 300,
         previous = this.summaries.get(country.code),
         tier = live ? "live" : interested ? "interested" : "coarse";
-      if (
-        !previous ||
-        live ||
-        previous.tier !== tier ||
-        tick - previous.lastTick >= interval
-      ) {
+      if (!previous || live || previous.tier !== tier || tick - previous.lastTick >= interval) {
         const state = summaryAt(country.code, tick);
         state.tier = tier;
         this.summaries.set(country.code, state);
@@ -565,11 +625,6 @@ export class LazySimulation {
     }
   }
 
-  /**
-   * Renderer-interest query. Work is bounded to spatially nearby settlements,
-   * and only analytical resident states that can contribute to the visible pool
-   * are materialized. Logical population identity itself remains complete.
-   */
   focusedResidents(
     x: number,
     z: number,
@@ -598,8 +653,7 @@ export class LazySimulation {
       const count = populationOf(place),
         start = digest(`${place.code}/VISIBLE_START`) % count;
       for (let offset = 0; offset < count; offset++) {
-        const index = (start + offset) % count,
-          resident = residentAt(place, index, this.tick);
+        const resident = residentAt(place, (start + offset) % count, this.tick);
         query.evaluatedResidents++;
         this.residentEvaluationsSinceAdvance++;
         if (sourceDistance(resident.x, resident.z, x, z) > radius) continue;
@@ -610,6 +664,7 @@ export class LazySimulation {
     }
     query.returnedResidents = visible.length;
     this.lastQuery = query;
+    this.updateInspector(visible, query);
     return visible;
   }
 
@@ -622,6 +677,19 @@ export class LazySimulation {
     if (!Number.isInteger(index) || index < 0 || index >= populationOf(place))
       return undefined;
     return residentAt(place, index, tick);
+  }
+
+  /**
+   * Deprecated read-only diagnostic façade for the S001 regression harness.
+   * It materializes one analytical sample only when explicitly read; advance()
+   * never stores or rebuilds resident arrays.
+   */
+  get residents() {
+    const result = new Map<string, Resident[]>();
+    if (!this.activeCountry) return result;
+    const place = countryPlaces.get(this.activeCountry)?.[0];
+    if (place) result.set(this.activeCountry, [residentAt(place, 0, this.tick)]);
+    return result;
   }
 
   get stats() {
