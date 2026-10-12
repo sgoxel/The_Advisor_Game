@@ -51,6 +51,14 @@ const backboneByCountryCode = new Map(
     return [country.code, backbone] as const;
   }),
 );
+const settlementsByCountryCode = new Map(
+  countries.map((country) => [
+    country.code,
+    [...cities, ...villages].filter(
+      (place) => place.continent === country.continent && place.country === country.id,
+    ),
+  ] as const),
+);
 
 type GatewayStep = {
   gateway: PoliticalBorderGateway;
@@ -60,6 +68,7 @@ type GatewayStep = {
 
 const reservedGatewayAdjacency = new Map<string, GatewayStep[]>();
 const derivedGatewayCache = new Map<string, GatewayStep[]>();
+const gatewayBackboneCache = new Map<string, readonly LonLat[] | null>();
 
 function addGatewayStep(adjacency: Map<string, GatewayStep[]>, step: GatewayStep) {
   const bucket = adjacency.get(step.fromCountryCode) ?? [];
@@ -253,6 +262,60 @@ function settlementToBackbone(place: Place): LonLat[] | undefined {
   return current.kind === "city" && current.city === 0 ? points : undefined;
 }
 
+function gatewayBackboneKey(countryCode: string, gatewayPoint: LonLat) {
+  return `${countryCode}/${gatewayPoint.lon.toPrecision(15)}/${gatewayPoint.lat.toPrecision(15)}`;
+}
+
+/**
+ * Connect a border sample to its owning country's accepted settlement topology.
+ * The result is macro dry/owned only; final water/cliff legality is still checked
+ * later by village-routes.ts. Failed probes are cached too so graph search can
+ * skip an unusable gateway rather than selecting it and abandoning the route.
+ */
+function gatewayToBackbone(countryCode: string, gatewayPoint: LonLat): readonly LonLat[] | undefined {
+  const key = gatewayBackboneKey(countryCode, gatewayPoint),
+    cached = gatewayBackboneCache.get(key);
+  if (cached !== undefined) return cached ?? undefined;
+  const country = countryByCode.get(countryCode),
+    backbone = backboneByCountryCode.get(countryCode);
+  if (!country || !backbone || !sameOwnedDryLand(gatewayPoint, country)) {
+    gatewayBackboneCache.set(key, null);
+    return undefined;
+  }
+  if (ownedDrySegment(gatewayPoint, backbone.canonicalPosition, country)) {
+    const direct = [
+      { lon: gatewayPoint.lon, lat: gatewayPoint.lat },
+      { lon: backbone.canonicalPosition.lon, lat: backbone.canonicalPosition.lat },
+    ] as const;
+    gatewayBackboneCache.set(key, direct);
+    return direct;
+  }
+
+  const candidates = [...(settlementsByCountryCode.get(countryCode) ?? [])].sort((a, b) => {
+    const distanceA = greatCircleDistance(gatewayPoint, a.canonicalPosition),
+      distanceB = greatCircleDistance(gatewayPoint, b.canonicalPosition);
+    return distanceA - distanceB || a.id.localeCompare(b.id);
+  });
+  for (const candidate of candidates) {
+    if (!ownedDrySegment(gatewayPoint, candidate.canonicalPosition, country)) continue;
+    const access = settlementToBackbone(candidate);
+    if (!access) continue;
+    const result: LonLat[] = [{ lon: gatewayPoint.lon, lat: gatewayPoint.lat }];
+    appendUnique(result, access);
+    gatewayBackboneCache.set(key, result);
+    return result;
+  }
+  gatewayBackboneCache.set(key, null);
+  return undefined;
+}
+
+function usableGatewayStep(step: GatewayStep) {
+  const { gateway } = step;
+  return step.fromCountryCode === gateway.countryCode
+    ? Boolean(gatewayToBackbone(step.toCountryCode, gateway.outside))
+    : Boolean(gatewayToBackbone(step.fromCountryCode, gateway.outside));
+}
+
 function reconstructGatewayPath(
   parent: ReadonlyMap<string, GatewayStep>,
   fromCountryCode: string,
@@ -282,11 +345,13 @@ function searchGatewayPath(
       candidates = [
         ...(reservedGatewayAdjacency.get(countryCode) ?? []),
         ...(includeDerived ? derivedGatewaySteps(countryCode) : []),
-      ].sort(
-        (a, b) =>
-          a.toCountryCode.localeCompare(b.toCountryCode) ||
-          a.gateway.id.localeCompare(b.gateway.id),
-      );
+      ]
+        .filter(usableGatewayStep)
+        .sort(
+          (a, b) =>
+            a.toCountryCode.localeCompare(b.toCountryCode) ||
+            a.gateway.id.localeCompare(b.gateway.id),
+        );
     for (const step of candidates) {
       if (visited.has(step.toCountryCode)) continue;
       visited.add(step.toCountryCode);
@@ -299,7 +364,7 @@ function searchGatewayPath(
   return undefined;
 }
 
-/** Prefer already reserved gateways; derive extra dry ownership crossings only if disconnected. */
+/** Prefer usable reserved gateways; derive extra dry ownership crossings only if disconnected. */
 function gatewayPath(fromCountryCode: string, toCountryCode: string): GatewayStep[] | undefined {
   if (fromCountryCode === toCountryCode) return [];
   return (
@@ -311,8 +376,8 @@ function gatewayPath(fromCountryCode: string, toCountryCode: string): GatewaySte
 /**
  * Return SEED-owned high-level waypoints from a settlement to another settlement.
  * Access links reach each country backbone; gateway edges cross only canonical dry
- * borders. Incoming gateway-to-backbone legs are geometric anchors only and are
- * later solved/certified by the bounded final-surface router.
+ * borders. Both sides of a selected gateway must already connect to accepted
+ * country access topology before the graph may use that edge.
  */
 export function politicalRouteWaypoints(from: Place, to: Place): LonLat[] | undefined {
   if (from.continent !== to.continent) return undefined;
@@ -328,14 +393,18 @@ export function politicalRouteWaypoints(from: Place, to: Place): LonLat[] | unde
     const gatewaySteps = gatewayPath(fromCountryCode, toCountryCode);
     if (!gatewaySteps) return undefined;
     for (const step of gatewaySteps) {
-      const gateway = step.gateway,
-        nextBackbone = backboneByCountryCode.get(step.toCountryCode);
-      if (!nextBackbone) return undefined;
+      const gateway = step.gateway;
       if (step.fromCountryCode === gateway.countryCode) {
         appendUnique(result, gateway.corridor);
-        appendUnique(result, [gateway.outside, nextBackbone.canonicalPosition]);
+        appendUnique(result, [gateway.outside]);
+        const nextAccess = gatewayToBackbone(step.toCountryCode, gateway.outside);
+        if (!nextAccess) return undefined;
+        appendUnique(result, nextAccess);
       } else {
-        appendUnique(result, [gateway.outside, gateway.inside]);
+        const sourceAccess = gatewayToBackbone(step.fromCountryCode, gateway.outside);
+        if (!sourceAccess) return undefined;
+        appendUnique(result, [...sourceAccess].reverse());
+        appendUnique(result, [gateway.inside]);
         appendUnique(result, [...gateway.corridor].reverse());
       }
     }
