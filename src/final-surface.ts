@@ -113,6 +113,17 @@ function digest(text: string): number {
 }
 const SEED_VALUE = digest(`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}`);
 
+/** Same addressed integer lookup used by world.ts feature placement. */
+function coordinateValue(x: number, z: number, layer: number): number {
+  let n =
+    SEED_VALUE ^
+    Math.imul(x, 374761393) ^
+    Math.imul(z, 668265263) ^
+    Math.imul(layer, 1274126177);
+  n = Math.imul(n ^ (n >>> 13), 1274126177);
+  return (n ^ (n >>> 16)) >>> 0;
+}
+
 function addressedUnit(address: string) {
   return digest(`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/FINAL/${address}`) / 4294967296;
 }
@@ -236,7 +247,7 @@ type PadHit = Readonly<PadDescriptor & { influence: number; core: boolean }>;
 function ringHousePad(place: Place, index: number): PadDescriptor {
   const sx = Math.floor(place.x / 2),
     sz = Math.floor(place.z / 2),
-    value = digest(`${SEED_VALUE}/${sx}/${sz}/${20 + index}`),
+    value = coordinateValue(sx, sz, 20 + index),
     side = index % 2 === 0 ? -1 : 1,
     x = place.x + (index < 10 ? side * (15 + (value % 6)) : (index - 14) * 13),
     z =
@@ -260,7 +271,7 @@ function urbanHousePad(place: Place, index: number): PadDescriptor {
     sz = Math.floor(place.z / 2),
     gx = ((index % 20) - 9.5) * 29,
     gz = (Math.floor(index / 20) - 9.5) * 29,
-    value = digest(`${SEED_VALUE}/${sx}/${sz}/${80 + index}`),
+    value = coordinateValue(sx, sz, 80 + index),
     width = 6 + (value % 3),
     depth = 7 + ((value >>> 4) % 3);
   return Object.freeze({
