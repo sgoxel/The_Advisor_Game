@@ -147,3 +147,82 @@
 @media (prefers-reduced-motion: reduce) {
   .interior-scene, .interior-player { transition: none !important; }
 }
+
+
+/* WP19_ATTEMPT2_INTERIOR_DEPTH — visual depth for the already-canonical lazy interior. */
+.interior-scene-wrap {
+  background:
+    radial-gradient(ellipse at 52% 25%, rgba(246, 218, 158, 0.16), transparent 42%),
+    linear-gradient(145deg, #26372f 0%, #15231d 48%, #0b1310 100%);
+}
+.interior-room {
+  border-width: 3px;
+  border-color: rgba(242, 224, 185, 0.92);
+  background:
+    repeating-linear-gradient(90deg, rgba(66, 49, 32, 0.18) 0 7px, rgba(226, 200, 150, 0.08) 7px 9px),
+    linear-gradient(135deg, rgba(176, 143, 94, 0.78), rgba(115, 92, 63, 0.76));
+  box-shadow:
+    inset 0 0 0 7px rgba(34, 28, 21, 0.34),
+    inset 0 0 24px rgba(255, 226, 172, 0.07),
+    8px 11px 0 rgba(4, 9, 7, 0.42),
+    0 0 0 1px rgba(36, 27, 18, 0.8);
+}
+.interior-room::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  pointer-events: none;
+  border-top: 7px solid rgba(213, 197, 163, 0.92);
+  border-left: 6px solid rgba(133, 119, 96, 0.94);
+  border-right: 3px solid rgba(69, 62, 51, 0.9);
+  box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.22);
+}
+.interior-scene[data-environment="craft"] .interior-room {
+  background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,.025) 0 8px, rgba(0,0,0,.07) 8px 10px),
+    linear-gradient(135deg, #746c5e, #4e4b43);
+}
+.interior-scene[data-environment="commercial"] .interior-room {
+  background:
+    repeating-linear-gradient(90deg, rgba(111,75,42,.2) 0 9px, rgba(236,207,154,.08) 9px 11px),
+    linear-gradient(135deg, #9a7b52, #66523b);
+}
+.interior-scene[data-environment="guarded"] .interior-room,
+.interior-scene[data-environment="fortified"] .interior-room {
+  background:
+    repeating-linear-gradient(0deg, rgba(230,230,216,.05) 0 10px, rgba(0,0,0,.06) 10px 12px),
+    linear-gradient(135deg, #777568, #56564f);
+}
+.interior-fixture {
+  border-width: 2px;
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,.12),
+    4px 7px 0 rgba(0,0,0,.38),
+    0 0 0 1px rgba(34,25,18,.75);
+}
+.fixture-bed,
+.fixture-bunk {
+  background: linear-gradient(90deg, #704737 0 20%, #9f7058 20% 82%, #d0b486 82%);
+}
+.fixture-counter,
+.fixture-workbench {
+  background: repeating-linear-gradient(90deg, #6b482b 0 8px, #80583a 8px 10px);
+}
+.fixture-rack { background: repeating-linear-gradient(0deg, #60442c 0 4px, #96734c 4px 6px); }
+.fixture-forge {
+  background: radial-gradient(circle at 55% 45%, #d68a43 0 18%, #8b4e2e 19% 42%, #47423d 43%);
+  box-shadow: 0 0 18px rgba(226, 137, 63, .42), 4px 7px 0 rgba(0,0,0,.4);
+}
+.fixture-hearth {
+  background: radial-gradient(circle, #c67d42 0 24%, #74452d 25% 55%, #50483e 56%);
+}
+.interior-door {
+  height: 8px;
+  background: linear-gradient(#efc878, #9e6c34);
+  box-shadow: 0 0 0 3px rgba(43, 30, 18, .82), 0 3px 7px rgba(0,0,0,.35);
+}
+@media (max-width: 600px) {
+  .interior-panel { grid-template-rows: auto auto minmax(220px, 1fr) auto; }
+  .interior-meta { font-size: 0.76rem; line-height: 1.25; }
+  .interior-scene-wrap { min-height: 250px; }
+}

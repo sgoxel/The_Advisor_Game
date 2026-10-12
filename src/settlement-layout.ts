@@ -913,11 +913,17 @@ function growCityLanes(w: Work, width: number): void {
 
 /** Closed irregular ring: seeded radial and angular jitter on n control points, smoothed by Catmull-Rom. */
 function makeRing(w: Work, salt: string, n: number, radius: number, radialJitter: number, angularJitter: number): Point[] {
-  const ctrl: Point[] = [];
+  // WP19_ATTEMPT2_ORGANIC_BELTS: city belts are seeded neighbourhood traces, not
+  // concentric geometry. Each belt has its own offset centre and stronger irregularity.
+  const shift = salt === "middle" ? 0.2 : 0.12,
+    offsetX = (w.rand(`ring/${salt}/offset-x`) - 0.5) * radius * shift,
+    offsetZ = (w.rand(`ring/${salt}/offset-z`) - 0.5) * radius * shift,
+    effectiveJitter = radialJitter + (salt === "middle" ? 0.12 : 0.08),
+    ctrl: Point[] = [];
   for (let k = 0; k < n; k++) {
-    const theta = (TAU * (k + (w.rand(`ring/${salt}/angle`, k) - 0.5) * angularJitter)) / n,
-      r = radius * (1 + radialJitter * (2 * w.rand(`ring/${salt}/radius`, k) - 1));
-    ctrl.push({ x: w.cx + r * Math.cos(theta), z: w.cz + r * Math.sin(theta) });
+    const theta = (TAU * (k + (w.rand(`ring/${salt}/angle`, k) - 0.5) * angularJitter * 1.35)) / n,
+      r = radius * (1 + effectiveJitter * (2 * w.rand(`ring/${salt}/radius`, k) - 1));
+    ctrl.push({ x: w.cx + offsetX + r * Math.cos(theta), z: w.cz + offsetZ + r * Math.sin(theta) });
   }
   const out: Point[] = [];
   for (let k = 0; k < n; k++) {
@@ -988,17 +994,29 @@ function buildStreets(w: Work, gateEast: boolean, gateWest: boolean): void {
     }
   }
   if (w.city) {
-    // Inner ring road around the core and a middle ring, both irregular and smoothed.
-    const inner = makeRing(w, "inner", 12 + Math.floor(u(5) * 3), 105 + 22 * u(6), 0.16, 0.5);
+    // WP19_ATTEMPT2_CITY_DISTRICTS: fewer, rougher control points and independent
+    // offset centres prevent the two urban belts from reading as stamped concentric rings.
+    const inner = makeRing(w, "inner", 9 + Math.floor(u(5) * 4), 100 + 30 * u(6), 0.24, 0.72);
     for (const index of addDryRuns(w, inner, laneWidth)) w.fixed.add(index);
-    const middle = makeRing(w, "middle", 14 + Math.floor(u(9) * 3), 165 + 20 * u(10), 0.1, 0.45);
+    const middle = makeRing(w, "middle", 10 + Math.floor(u(9) * 4), 158 + 34 * u(10), 0.24, 0.82);
     if (Math.max(...middle.map((p) => Math.hypot(p.x - w.cx, p.z - w.cz))) < w.env - 1)
       for (const index of addDryRuns(w, middle, laneWidth)) w.fixed.add(index);
     growCityLanes(w, laneWidth);
   } else {
-    const lanes = 2 + Math.floor(u(8) * 3);
-    for (let k = 0, added = 0; added < lanes && k < lanes * 4; k++)
-      if (addLane(w, k, laneWidth, 18, 34)) added++;
+    // WP19_ATTEMPT2_ARCHETYPE_LANES: each village family now has a materially different
+    // street density instead of every archetype receiving the same 2-4 branch recipe.
+    const lanes =
+      w.archetype === "roadside"
+        ? 1 + Math.floor(u(8) * 2)
+        : w.archetype === "green"
+          ? 1 + Math.floor(u(8) * 2)
+          : w.archetype === "crossroads"
+            ? 3 + Math.floor(u(8) * 2)
+            : 2 + Math.floor(u(8) * 2);
+    const minLane = w.archetype === "roadside" ? 16 : w.archetype === "crossroads" ? 22 : 18,
+      maxLane = w.archetype === "crossroads" ? 42 : w.archetype === "riverside" ? 38 : 34;
+    for (let k = 0, added = 0; added < lanes && k < lanes * 5; k++)
+      if (addLane(w, k, laneWidth, minLane, maxLane)) added++;
   }
 }
 

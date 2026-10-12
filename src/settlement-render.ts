@@ -12,6 +12,11 @@ const roofDark: RGB = [91, 66, 58];
 const plaster: RGB = [185, 170, 139];
 const marketCloth: RGB = [154, 89, 64];
 const forgeDark: RGB = [83, 82, 77];
+// WP19_ATTEMPT2_SERVICE_SILHOUETTES: small reusable palette for functional attachments.
+const straw: RGB = [174, 139, 76];
+const brick: RGB = [126, 72, 58];
+const awningGreen: RGB = [87, 112, 79];
+const slate: RGB = [77, 88, 96];
 
 class Builder {
   private readonly p: number[] = [];
@@ -161,23 +166,32 @@ function renderBuilding(tile: Tile, feature: Feature, structures: Builder, detai
     detail.box(doorX + c * 1.65, y + 2.1, doorZ - s * 1.65, 0.18, 2.4, 0.18, angle, timber);
     detail.box(doorX + c * 2.25, y + 3.55, doorZ - s * 2.25, 1.25, 0.85, 0.12, angle, [126, 91, 52]);
   } else if (feature.role === "market") {
-    // Open front canopy and stall counter occupy real exterior service space.
-    const canopyX = x + s * (depth / 2 + 2.2),
-      canopyZ = z + c * (depth / 2 + 2.2);
-    structures.box(canopyX, y + 2.6, canopyZ, Math.min(9, width * 0.9), 0.18, 3.8, angle, marketCloth);
-    detail.box(canopyX, y + 0.75, canopyZ, Math.min(8, width * 0.8), 1, 0.9, angle, timber);
-    for (const side of [-1, 1]) {
-      const px = canopyX + c * side * Math.min(3.2, width * 0.35),
-        pz = canopyZ - s * side * Math.min(3.2, width * 0.35);
-      detail.box(px, y, pz, 0.16, 2.7, 0.16, angle, timber);
-    }
+    // WP19_ATTEMPT2_MARKET_COURT: an open two-row trading court, not a house with a label.
+    const canopyX = x + s * (depth / 2 + 2.8),
+      canopyZ = z + c * (depth / 2 + 2.8),
+      span = Math.min(10.5, width * 0.95);
+    structures.box(canopyX, y + 2.75, canopyZ, span, 0.22, 3.8, angle, marketCloth);
+    structures.box(canopyX + s * 3.7, y + 2.45, canopyZ + c * 3.7, span * 0.72, 0.2, 2.8, angle, awningGreen);
+    for (const row of [0, 1])
+      for (const side of [-1, 0, 1]) {
+        const forward = row === 0 ? 0 : 3.7,
+          px = canopyX + s * forward + c * side * span * 0.3,
+          pz = canopyZ + c * forward - s * side * span * 0.3;
+        detail.box(px, y + 0.65, pz, Math.min(2.6, span * 0.27), 1.05, 0.9, angle, row ? straw : timber);
+        detail.box(px, y, pz, 0.14, 2.7, 0.14, angle, timber);
+      }
+    detail.box(canopyX - c * span * 0.44, y + 0.35, canopyZ + s * span * 0.44, 1.15, 0.75, 1.15, angle, [112, 82, 49]);
   } else if (feature.role === "blacksmith") {
     // Side forge shed and tall chimney communicate actual workshop use.
     const shedX = x - c * (width / 2 + 2),
       shedZ = z + s * (width / 2 + 2);
-    structures.box(shedX, y - 0.1, shedZ, 3.5, 2.8, depth * 0.72, angle, [126, 112, 88]);
-    detail.box(shedX - c * 0.8, y + 2.4, shedZ + s * 0.8, 1, 3.9, 1, angle, [82, 79, 73]);
-    detail.box(shedX + c * 0.8, y + 0.8, shedZ - s * 0.8, 1.5, 0.7, 1.2, angle, [67, 65, 62]);
+    // WP19_ATTEMPT2_SMITHY_YARD: taller brick stack, open forge pad and wood/coal bins.
+    structures.box(shedX, y - 0.1, shedZ, 4.4, 3.1, depth * 0.8, angle, [126, 112, 88]);
+    detail.box(shedX - c * 1.15, y + 2.4, shedZ + s * 1.15, 1.15, 5.8, 1.15, angle, brick);
+    detail.box(shedX + c * 1.0, y + 0.75, shedZ - s * 1.0, 1.8, 0.85, 1.35, angle, forgeDark);
+    detail.box(shedX + s * 3.1, y + 0.12, shedZ + c * 3.1, 5.8, 0.2, 4.3, angle, [92, 83, 69]);
+    for (const side of [-1, 1])
+      detail.box(shedX + c * side * 2.2 + s * 3.1, y + 0.45, shedZ - s * side * 2.2 + c * 3.1, 0.16, 1.15, 4.1, angle, timber);
   } else if (feature.role === "farmstead") {
     // L-shaped work wing and open yard edge distinguish a farm from ordinary housing.
     const wingX = x + c * (width / 2 + 2.2),
@@ -216,10 +230,23 @@ function renderBuilding(tile: Tile, feature: Feature, structures: Builder, detai
         structures.box(tx, y - 0.25, tz, 4.2, height + 3, 4.2, angle, [148, 148, 136]);
       }
   } else {
-    // Ordinary homes vary with their canonical width/depth/floors and retain a small entrance porch.
+    // WP19_ATTEMPT2_HOME_VARIANTS: ordinary homes retain their canonical footprint but gain
+    // seeded porch/chimney/lean-to silhouettes so a street no longer reads as cloned boxes.
     const porchX = x + s * (depth / 2 + 0.8),
-      porchZ = z + c * (depth / 2 + 0.8);
+      porchZ = z + c * (depth / 2 + 0.8),
+      variant = Math.abs(feature.variant) % 4;
     detail.box(porchX, y + 0.12, porchZ, Math.min(2.6, width * 0.35), 0.22, 1.5, angle, [116, 91, 62]);
+    if (variant !== 0) {
+      const chimneyX = x + c * width * (variant === 1 ? -0.28 : 0.28),
+        chimneyZ = z - s * width * (variant === 1 ? -0.28 : 0.28);
+      detail.box(chimneyX, y + height * 0.72, chimneyZ, 0.75, 2.8, 0.75, angle, variant === 3 ? brick : stone);
+    }
+    if (variant >= 2 && width > 6.5) {
+      const leanX = x - c * (width / 2 + 1.15),
+        leanZ = z + s * (width / 2 + 1.15);
+      structures.box(leanX, y - 0.1, leanZ, 2.3, 2.15, Math.max(3.4, depth * 0.55), angle, variant === 2 ? timber : wall);
+      structures.roof(leanX, y + 2.05, leanZ, 2.7, Math.max(3.8, depth * 0.6), 0.9, angle, variant === 2 ? straw : slate);
+    }
   }
 }
 
