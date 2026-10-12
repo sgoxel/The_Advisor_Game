@@ -19,5 +19,4 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: node --experimental-strip-types tools/wp15-adaptive-probe.ts
-      - run: node --experimental-strip-types tools/wp15-skip-wet-probe.ts
+      - run: node --experimental-strip-types tools/wp15-sparse-gap-probe.ts
