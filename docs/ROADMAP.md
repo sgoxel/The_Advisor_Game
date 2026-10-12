@@ -28,7 +28,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S004 — Settlements, Buildings & World Sites
 
-- WP-S004-001-001 — Settlement/building exterior UX/performance: terrain-shaped layouts, functional homes/services, enclosing fence/wood/stone walls with internal reserve space, entrance-connected access and reusable mobile-safe rendering
+- WP-S004-001-001 — Seeded village morphology/exterior UX: varied centers/main-residential-farm roads, road-safe plots, pavements/gardens/farms/roadside trees/services, enclosing walls and mobile-safe rendering
 - WP-S004-002-001 — Ruin/critical-place UX/performance: 1/1000 discoverability, legal network access, stable canonical identity, bounded site preparation and lazy detail
 
 ## STAGE S005 — Transport & Traversal Network
