@@ -8,10 +8,11 @@ import {
   wrapSourceX,
 } from "./planet.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
-import { nearestPlace, places, roadDistanceAt, roads, type Road } from "./geography.ts";
+import { nearestPlace, places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import {
   WORLD_BUILDING_PRIORITIES,
+  compareSurfaceModifiers,
   composeFinalSurface,
   type FinalSurface,
   type SurfaceBase,
@@ -368,14 +369,59 @@ function surfaceRoadAt(x: number, z: number) {
   return { road, distance, candidateCount: bucket.length };
 }
 
+const settlementTerraceHeights = new Map<string, number>();
+function settlementTerraceHeight(place: Place) {
+  let value = settlementTerraceHeights.get(place.code);
+  if (value === undefined) {
+    value = naturalSurfaceBaseAt(place.x, place.z).groundHeight;
+    settlementTerraceHeights.set(place.code, value);
+  }
+  return value;
+}
+
+const roadProfileHeights = new Map<string, readonly [number, number]>();
+function roadProfileHeightAt(x: number, road: Road) {
+  let profile = roadProfileHeights.get(road.code);
+  if (!profile) {
+    profile = [
+      naturalSurfaceBaseAt(road.fromX, road.fromZ).groundHeight,
+      naturalSurfaceBaseAt(road.toX, road.toZ).groundHeight,
+    ];
+    roadProfileHeights.set(road.code, profile);
+  }
+  const px = road.fromX + wrapSourceX(x - road.fromX),
+    vx = road.toX - road.fromX,
+    vz = road.toZ - road.fromZ,
+    lengthSq = vx * vx + vz * vz,
+    t = lengthSq === 0
+      ? 0
+      : Math.max(0, Math.min(1, ((px - road.fromX) * vx) / lengthSq));
+  return lerp(profile[0], profile[1], t);
+}
+
+const boundedEarthwork = (
+  desired: number,
+  existing: number,
+  maxCut: number,
+  maxFill: number,
+) => Math.max(existing - maxCut, Math.min(existing + maxFill, desired));
+
 function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   const modifiers: SurfaceModifier[] = [],
     place = nearestPlace(x, z),
     roadMatch = surfaceRoadAt(x, z);
   if (place) {
-    const distance = Math.hypot(wrapSourceX(x - place.x), z - place.z),
+    const dx = wrapSourceX(x - place.x),
+      dz = z - place.z,
+      distance = Math.hypot(dx, dz),
       radius = place.kind === "city" ? 430 : 90,
-      weight = 1 - smooth(clamp01((distance - radius) / 80));
+      weight = 1 - smooth(clamp01((distance - radius) / 80)),
+      terraceHeight = boundedEarthwork(
+        settlementTerraceHeight(place),
+        base.groundHeight,
+        3,
+        3,
+      );
     if (weight > 0)
       modifiers.push({
         id: `${place.code}/PAD`,
@@ -384,11 +430,31 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
             ? WORLD_BUILDING_PRIORITIES.city
             : WORLD_BUILDING_PRIORITIES.village,
         weight,
-        targetGroundHeight: 3,
+        targetGroundHeight: terraceHeight,
         material: "Settlement",
         walkable: true,
         vegetationDensityScale: 0,
         reservedUse: place.code,
+      });
+
+    // The existing seeded keep is the representative priority-9 critical site.
+    // It has its own small pad/reservation and therefore proves that sites can
+    // deterministically override city/village/road ownership without a second
+    // height/material authority.
+    const siteX = place.x - 30,
+      siteZ = place.z - 28,
+      siteDistance = Math.hypot(wrapSourceX(x - siteX), z - siteZ),
+      siteWeight = 1 - smooth(clamp01((siteDistance - 10) / 6));
+    if (siteWeight > 0)
+      modifiers.push({
+        id: `${place.code}/SITE/KEEP`,
+        priority: WORLD_BUILDING_PRIORITIES.site,
+        weight: siteWeight,
+        targetGroundHeight: terraceHeight,
+        material: "Settlement",
+        walkable: true,
+        vegetationDensityScale: 0,
+        reservedUse: `${place.code}/SITE/KEEP`,
       });
   }
 
@@ -396,23 +462,29 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   if (road) {
     const distance = roadMatch.distance,
       weight = 1 - smooth(clamp01((distance - 5) / 7)),
+      roadHeight = boundedEarthwork(
+        roadProfileHeightAt(x, road),
+        base.groundHeight,
+        4,
+        3,
+      ),
       bridge = base.water.kind !== "none" && distance <= 5;
     if (weight > 0)
       modifiers.push({
         id: road.code,
         priority: WORLD_BUILDING_PRIORITIES.road,
         weight,
-        targetGroundHeight: 3,
+        targetGroundHeight: roadHeight,
         material: "Road",
         walkable: true,
         vegetationDensityScale: 0,
         reservedUse: road.code,
-        deckHeight: bridge ? Math.max(3, base.water.level + 3) : undefined,
+        deckHeight: bridge ? Math.max(roadHeight, base.water.level + 3) : undefined,
       });
   }
   return {
     modifiers,
-    candidateCount: roadMatch.candidateCount + (place ? 1 : 0),
+    candidateCount: roadMatch.candidateCount + (place ? 2 : 0),
   };
 }
 
@@ -459,18 +531,31 @@ export function finalSurfaceAt(x: number, z: number): FinalSurface {
     prepared =
       point.final.material === "Road" ||
       point.final.material === "Bridge" ||
-      point.final.material === "Settlement";
-  const result: FinalSurface = {
-    ...point.final,
-    walkable:
+      point.final.material === "Settlement",
+    walkable =
       point.final.water.kind === "none"
         ? point.final.walkable && (prepared || slope < 2)
-        : point.final.deckHeight !== null && point.final.walkable,
+        : point.final.deckHeight !== null && point.final.walkable;
+  const result: FinalSurface = {
+    ...point.final,
+    walkable,
+    traversal: walkable ? point.final.traversal : "blocked",
   };
   finalSurfaceCache.set(key, result);
   if (finalSurfaceCache.size > FINAL_SURFACE_CACHE_LIMIT)
     finalSurfaceCache.delete(finalSurfaceCache.keys().next().value!);
   return result;
+}
+
+/** Inspector/debug view of the exact before/modifier/final data for one coordinate. */
+export function finalSurfaceDebugAt(x: number, z: number) {
+  const point = composePointAt(x, z);
+  return {
+    base: point.base,
+    modifiers: [...point.modifiers].sort(compareSurfaceModifiers),
+    final: finalSurfaceAt(x, z),
+    candidateCount: point.candidateCount,
+  };
 }
 
 export function finalSurfaceTelemetry() {
