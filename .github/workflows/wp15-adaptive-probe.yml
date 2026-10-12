@@ -1,0 +1,22 @@
+name: WP15 adaptive probe
+on:
+  push:
+    branches: [agent1/wp-s003-003-001-diagnostic2]
+    paths:
+      - ".github/workflows/wp15-adaptive-probe.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s003-003-001-diagnostic2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node --experimental-strip-types tools/wp15-adaptive-probe.ts
