@@ -10,6 +10,14 @@ import {
 import { streamingBudgetForViewport } from "./streaming.ts";
 import { nearestPlace, places, roadAt, roadDistanceAt } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
+import {
+  WORLD_BUILDING_PRIORITIES,
+  composeFinalSurface,
+  type FinalSurface,
+  type SurfaceBase,
+  type SurfaceMaterial,
+  type SurfaceModifier,
+} from "./final-surface.ts";
 export { WORLD_SEED } from "./config.ts";
 export const GENERATOR_VERSION = WORLD_FOUNDATION_VERSION;
 export const WORLD_SIZE = 262144;
@@ -168,6 +176,7 @@ export function coordinateValue(x: number, z: number, layer: number): number {
 }
 const smooth = (t: number) => t * t * (3 - 2 * t);
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 export function field(
   x: number,
   z: number,
@@ -210,22 +219,27 @@ export function settlement(
           ][v % 6],
   };
 }
-/** Global height: one macro authority sampled identically by globe and every local LOD. */
-export function heightAt(x: number, z: number): number {
-  const macro = macroSampleAt(sourceToLonLat(x, z));
-  if (macro.domain === "Ocean") return -2.8;
-  if (macro.domain === "Lake") return -1.8;
 
-  const s = nearestPlace(x, z),
-    d = s ? Math.hypot(wrapSourceX(x - s.x), z - s.z) : 1000,
-    radius = s?.kind === "city" ? 430 : 90;
-  let flatten = smooth(Math.min(1, Math.max(0, (d - radius) / 80)));
-  const road = roadAt(x, z);
-  if (road)
-    flatten = Math.min(
-      flatten,
-      smooth(Math.min(1, Math.max(0, (roadDistanceAt(x, z, road) - 5) / 7))),
-    );
+function naturalSurfaceBaseAt(x: number, z: number): SurfaceBase {
+  const macro = macroSampleAt(sourceToLonLat(x, z));
+  if (macro.domain === "Ocean")
+    return {
+      groundHeight: -2.8,
+      material: "Ocean",
+      water: { kind: "ocean", level: 0, flowX: 0, flowZ: 0 },
+      walkable: false,
+      vegetationDensityScale: 0,
+      reservedUse: null,
+    };
+  if (macro.domain === "Lake")
+    return {
+      groundHeight: -1.8,
+      material: "Lake",
+      water: { kind: "lake", level: 0, flowX: 0, flowZ: 0 },
+      walkable: false,
+      vegetationDensityScale: 0,
+      reservedUse: null,
+    };
 
   const base =
       macro.domain === "Island"
@@ -233,50 +247,203 @@ export function heightAt(x: number, z: number): number {
         : 3 + field(x, z, 160, 1) * 9 + field(x, z, 48, 2) * 2,
     macroRelief = macro.reliefM * (0.88 + 0.12 * field(x, z, 110, 3)),
     cap = macro.domain === "Island" ? 180 : 620,
-    terrain = Math.min(cap, lerp(3, base + macroRelief, flatten)),
+    terrain = Math.min(cap, base + macroRelief),
     coastSource = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
     coastLand = lerp(
       -2.8,
       terrain,
-      smooth(Math.max(0, Math.min(1, (coastSource + 2) / 10))),
+      smooth(clamp01((coastSource + 2) / 10)),
     );
-  if (macro.domain === "Island") return coastLand;
 
-  // Hydrology remains the S001 prototype until WP-S002-004-005 replaces it.
-  const bank = Math.abs(wrapSourceX(x - riverX(z)));
-  return lerp(
-    -2.8,
-    coastLand,
-    smooth(Math.min(1, Math.max(0, (bank - 12) / 19))),
-  );
+  if (macro.domain === "Island") {
+    const hierarchy = cellSeed(Math.floor(x / 2), Math.floor(z / 2));
+    if (coastLand < 0.1)
+      return {
+        groundHeight: coastLand,
+        material: "Ocean",
+        water: { kind: "ocean", level: 0, flowX: 0, flowZ: 0 },
+        walkable: false,
+        vegetationDensityScale: 0,
+        reservedUse: null,
+      };
+    let material: SurfaceMaterial = "Island meadow";
+    if (coastSource < hierarchy.parent.parent.beachWidth + 5 + hierarchy.surface * 0.15)
+      material = "Sandy beach";
+    else if (macro.volcanic && macro.mountainIntensity > 0.16)
+      material = "Volcanic highlands";
+    else if (macro.mountainIntensity > 0.12 || coastLand > 70)
+      material = "Highlands";
+    return {
+      groundHeight: coastLand,
+      material,
+      water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },
+      walkable: true,
+      vegetationDensityScale: 1,
+      reservedUse: null,
+    };
+  }
+
+  // Transitional seeded river remains priority-4 hydrology until S003-003-001
+  // replaces the generator. It is now represented as a channel rather than as a
+  // second hidden height/biome authority.
+  const bank = Math.abs(wrapSourceX(x - riverX(z))),
+    groundHeight = lerp(
+      -2.8,
+      coastLand,
+      smooth(clamp01((bank - 12) / 19)),
+    );
+  if (groundHeight < 0.1) {
+    const dx = riverX(z + 1) - riverX(z - 1),
+      length = Math.hypot(dx, 2) || 1;
+    return {
+      groundHeight,
+      material: "River",
+      water: { kind: "river", level: 0, flowX: dx / length, flowZ: 2 / length },
+      walkable: false,
+      vegetationDensityScale: 0,
+      reservedUse: null,
+    };
+  }
+
+  let material: SurfaceMaterial;
+  if (bank < 32) material = "Riverbank";
+  else if (macro.volcanic && macro.mountainIntensity > 0.16)
+    material = "Volcanic highlands";
+  else if (macro.mountainIntensity > 0.1 || groundHeight > 70)
+    material = "Highlands";
+  else material = field(x, z, 90, 4) > 0.45 ? "Woodland" : "Meadow";
+  return {
+    groundHeight,
+    material,
+    water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },
+    walkable: true,
+    vegetationDensityScale: 1,
+    reservedUse: null,
+  };
+}
+
+function surfaceModifiersAt(x: number, z: number, base: SurfaceBase): SurfaceModifier[] {
+  const modifiers: SurfaceModifier[] = [],
+    place = nearestPlace(x, z);
+  if (place) {
+    const distance = Math.hypot(wrapSourceX(x - place.x), z - place.z),
+      radius = place.kind === "city" ? 430 : 90,
+      weight = 1 - smooth(clamp01((distance - radius) / 80));
+    if (weight > 0)
+      modifiers.push({
+        id: `${place.code}/PAD`,
+        priority:
+          place.kind === "city"
+            ? WORLD_BUILDING_PRIORITIES.city
+            : WORLD_BUILDING_PRIORITIES.village,
+        weight,
+        targetGroundHeight: 3,
+        material: "Settlement",
+        walkable: true,
+        vegetationDensityScale: 0,
+        reservedUse: place.code,
+      });
+  }
+
+  const road = roadAt(x, z);
+  if (road) {
+    const distance = roadDistanceAt(x, z, road),
+      weight = 1 - smooth(clamp01((distance - 5) / 7)),
+      bridge = base.water.kind !== "none" && distance <= 5;
+    if (weight > 0)
+      modifiers.push({
+        id: road.code,
+        priority: WORLD_BUILDING_PRIORITIES.road,
+        weight,
+        targetGroundHeight: 3,
+        material: "Road",
+        walkable: true,
+        vegetationDensityScale: 0,
+        reservedUse: road.code,
+        deckHeight: bridge ? Math.max(3, base.water.level + 3) : undefined,
+      });
+  }
+  return modifiers;
+}
+
+function composePointAt(x: number, z: number) {
+  const base = naturalSurfaceBaseAt(x, z),
+    modifiers = surfaceModifiersAt(x, z, base);
+  return { base, modifiers, final: composeFinalSurface(base, modifiers) };
+}
+
+const FINAL_SURFACE_CACHE_LIMIT = 4096;
+const finalSurfaceCache = new Map<string, FinalSurface>();
+let finalSurfaceQueries = 0,
+  finalSurfaceCacheHits = 0,
+  finalSurfaceCacheMisses = 0,
+  finalSurfaceModifierCandidates = 0,
+  finalSurfaceWorstCandidates = 0;
+
+function surfaceCacheKey(x: number, z: number) {
+  return `${GENERATOR_VERSION}/${x}/${z}`;
+}
+
+/** One player-relevant final surface for render, collision, vegetation and routing. */
+export function finalSurfaceAt(x: number, z: number): FinalSurface {
+  finalSurfaceQueries++;
+  const key = surfaceCacheKey(x, z),
+    cached = finalSurfaceCache.get(key);
+  if (cached) {
+    finalSurfaceCacheHits++;
+    return cached;
+  }
+  finalSurfaceCacheMisses++;
+  const point = composePointAt(x, z);
+  finalSurfaceModifierCandidates += point.modifiers.length;
+  finalSurfaceWorstCandidates = Math.max(finalSurfaceWorstCandidates, point.modifiers.length);
+
+  const sx = composePointAt(x + 1, z).final.groundHeight - composePointAt(x - 1, z).final.groundHeight,
+    sz = composePointAt(x, z + 1).final.groundHeight - composePointAt(x, z - 1).final.groundHeight,
+    slope = Math.max(Math.abs(sx), Math.abs(sz)),
+    prepared =
+      point.final.material === "Road" ||
+      point.final.material === "Bridge" ||
+      point.final.material === "Settlement";
+  const result: FinalSurface = {
+    ...point.final,
+    walkable:
+      point.final.water.kind === "none"
+        ? point.final.walkable && (prepared || slope < 2)
+        : point.final.deckHeight !== null && point.final.walkable,
+  };
+  finalSurfaceCache.set(key, result);
+  if (finalSurfaceCache.size > FINAL_SURFACE_CACHE_LIMIT)
+    finalSurfaceCache.delete(finalSurfaceCache.keys().next().value!);
+  return result;
+}
+
+export function finalSurfaceTelemetry() {
+  return {
+    queries: finalSurfaceQueries,
+    cacheHits: finalSurfaceCacheHits,
+    cacheMisses: finalSurfaceCacheMisses,
+    cacheSize: finalSurfaceCache.size,
+    cacheLimit: FINAL_SURFACE_CACHE_LIMIT,
+    modifierCandidatesExamined: finalSurfaceModifierCandidates,
+    worstModifierCandidates: finalSurfaceWorstCandidates,
+  };
+}
+
+export function resetFinalSurfaceTelemetry() {
+  finalSurfaceQueries = 0;
+  finalSurfaceCacheHits = 0;
+  finalSurfaceCacheMisses = 0;
+  finalSurfaceModifierCandidates = 0;
+  finalSurfaceWorstCandidates = 0;
+}
+
+/** Ground mesh height. Explicit bridge decks are exposed by finalSurfaceAt/cellAt. */
+export function heightAt(x: number, z: number): number {
+  return finalSurfaceAt(x, z).groundHeight;
 }
 export function biomeAt(x: number, z: number): string {
-  const macro = macroSampleAt(sourceToLonLat(x, z));
-  if (macro.domain === "Ocean") return "Ocean";
-  if (macro.domain === "Lake") return "Lake";
-  const h = heightAt(x, z),
-    hierarchy = cellSeed(Math.floor(x / 2), Math.floor(z / 2));
-  if (macro.domain === "Island") {
-    if (h < 0.1) return "Ocean";
-    const coast = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS;
-    if (coast < hierarchy.parent.parent.beachWidth + 5 + hierarchy.surface * 0.15)
-      return "Sandy beach";
-    if (macro.volcanic && macro.mountainIntensity > 0.16) return "Volcanic highlands";
-    if (macro.mountainIntensity > 0.12 || h > 70) return "Highlands";
-    return "Island meadow";
-  }
-  if (h < 0.1) return "River";
-  if (Math.abs(wrapSourceX(x - riverX(z))) < 32) return "Riverbank";
-  const s = nearestPlace(x, z);
-  if (
-    s &&
-    Math.hypot(wrapSourceX(x - s.x), z - s.z) < (s.kind === "city" ? 420 : 84)
-  )
-    return "Settlement";
-  if (roadAt(x, z)) return "Road";
-  if (macro.volcanic && macro.mountainIntensity > 0.16) return "Volcanic highlands";
-  if (macro.mountainIntensity > 0.1 || h > 70) return "Highlands";
-  return field(x, z, 90, 4) > 0.45 ? "Woodland" : "Meadow";
+  return finalSurfaceAt(x, z).material;
 }
 
 /**
@@ -345,28 +512,19 @@ export function tileForPosition(x: number, z: number, level = MAX_LEVEL): Tile {
   );
 }
 export function cellAt(x: number, z: number): Cell {
-  const tile = tileForPosition(x, z);
-  const cx = Math.floor(x / CELL_SIZE),
-    cz = Math.floor(z / CELL_SIZE);
-  const px = cx * CELL_SIZE + 1,
-    pz = cz * CELL_SIZE + 1;
-  const road = roadAt(px, pz),
-    bridge = road && roadDistanceAt(px, pz, road) <= 5 && heightAt(px, pz) < 2.9;
-  const elevation = bridge ? 3 : heightAt(px, pz),
-    biome = bridge ? "Bridge" : biomeAt(px, pz);
-  const slope = Math.max(
-    Math.abs(heightAt(px + 1, pz) - heightAt(px - 1, pz)),
-    Math.abs(heightAt(px, pz + 1) - heightAt(px, pz - 1)),
-  );
+  const tile = tileForPosition(x, z),
+    cx = Math.floor(x / CELL_SIZE),
+    cz = Math.floor(z / CELL_SIZE),
+    px = cx * CELL_SIZE + 1,
+    pz = cz * CELL_SIZE + 1,
+    surface = finalSurfaceAt(px, pz);
   return {
     code: cellSeed(cx, cz).code,
     x: cx,
     z: cz,
-    elevation,
-    biome,
-    // Seeded prototype roads are explicit legal good-road corridors. River cells
-    // on a road are already elevated as bridges above; bank cuts remain walkable.
-    walkable: Boolean(road) || (elevation > 0.1 && slope < 2),
+    elevation: surface.surfaceHeight,
+    biome: surface.material,
+    walkable: surface.walkable,
     tile: `${tile.level}/${tile.x}/${tile.z}`,
   };
 }
@@ -387,12 +545,14 @@ export function featuresFor(tile: Tile): Feature[] {
       z >= tile.minZ + tile.size
     )
       return;
-    if (heightAt(x, z) < 0.2) return;
+    const surface = finalSurfaceAt(x, z);
+    if (surface.groundHeight < 0.2 || surface.water.kind !== "none") return;
+    if ((kind === "tree" || kind === "rock") && surface.vegetationDensityScale <= 0) return;
     features.push({
       kind,
       x,
       z,
-      y: heightAt(x, z),
+      y: surface.groundHeight,
       variant,
       code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
     });
@@ -466,7 +626,7 @@ export function featuresFor(tile: Tile): Feature[] {
         if (biome === "Woodland" && v % 4 !== 0)
           add("tree", x, z, v, `tree/${gx}/${gz}`);
         else if (
-          !["Settlement", "Ocean", "Lake", "River"].includes(biome) &&
+          !["Settlement", "Ocean", "Lake", "River", "Road", "Bridge"].includes(biome) &&
           v % 31 === 0
         )
           add("rock", x, z, v, `rock/${gx}/${gz}`);
