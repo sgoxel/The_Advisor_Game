@@ -667,6 +667,140 @@ function repairViaPoliticalTopology(from: Place, to: Place): RouteResult | undef
  * return along the opposite bank. Keeping the splice local prevents a repair
  * connector from re-crossing the same meander before the detour even starts.
  */
+const DRAINAGE_ADAPTIVE_CLEARANCE_FACTORS = [1, 1.35, 1.8, 2.4, 3.2, 4.2, 5.5, 7] as const;
+
+/** Append one point only when the entire connector from the prior point is final-surface legal. */
+function appendCertifiedDrainagePoint(result: LonLat[], candidate: LonLat): boolean {
+  if (!finalTraversalState(candidate).surface.walkable) return false;
+  const connector = localFinalConnector(result[result.length - 1], candidate);
+  if (!connector) return false;
+  result.push(...connector.slice(1));
+  return true;
+}
+
+/**
+ * Increase the offset monotonically along a bank until both the candidate point
+ * and the segment leading to it are certified by canonical final traversal.
+ * Returning the chosen factor index lets the next point start no closer to the
+ * channel, preventing a meander from folding a nominal bank line back through
+ * the same river.
+ */
+function appendAdaptiveDrainagePoint(
+  result: LonLat[],
+  makePoint: (clearance: number) => LonLat,
+  baseClearance: number,
+  floorFactorIndex: number,
+): number {
+  for (
+    let factorIndex = floorFactorIndex;
+    factorIndex < DRAINAGE_ADAPTIVE_CLEARANCE_FACTORS.length;
+    factorIndex++
+  ) {
+    const candidate = makePoint(
+      baseClearance * DRAINAGE_ADAPTIVE_CLEARANCE_FACTORS[factorIndex],
+    );
+    if (appendCertifiedDrainagePoint(result, candidate)) return factorIndex;
+  }
+  return -1;
+}
+
+/**
+ * Catchment-local fallback for a bank trace whose uniform offset folds through
+ * a river meander. It follows the same seeded drainage path but increases
+ * clearance only where final traversal proves it necessary. Every point and
+ * every connector segment is certified as it is appended; no global search
+ * envelope or passability rule is widened.
+ */
+function adaptiveDrainageBankDetour(
+  path: readonly DrainagePoint[],
+  segmentIndex: number,
+  t: number,
+  sideA: number,
+  sideB: number,
+  baseClearance: number,
+  approachA: LonLat,
+  approachB: LonLat,
+): LonLat[] | undefined {
+  const result: LonLat[] = [{ lon: approachA.lon, lat: approachA.lat }];
+  let factorIndex = appendAdaptiveDrainagePoint(
+    result,
+    (clearance) => projectedDrainageBankPoint(path, segmentIndex, t, sideA, clearance),
+    baseClearance,
+    0,
+  );
+  if (factorIndex < 0) return undefined;
+
+  for (let index = segmentIndex; index >= 0; index--) {
+    factorIndex = appendAdaptiveDrainagePoint(
+      result,
+      (clearance) => drainageBankPoint(path, index, sideA, clearance),
+      baseClearance,
+      factorIndex,
+    );
+    if (factorIndex < 0) return undefined;
+  }
+
+  // Cross the rounded head as one coherent seeded construction. If any point or
+  // segment fails, retry the complete cap farther upstream rather than retaining
+  // a partial cap assembled at inconsistent offsets.
+  let capAccepted = false;
+  for (
+    let capFactorIndex = factorIndex;
+    capFactorIndex < DRAINAGE_ADAPTIVE_CLEARANCE_FACTORS.length;
+    capFactorIndex++
+  ) {
+    const checkpoint = result.length,
+      clearance = baseClearance * DRAINAGE_ADAPTIVE_CLEARANCE_FACTORS[capFactorIndex],
+      capPoints = drainageHeadCapPoints(path, sideA, sideB, clearance);
+    let accepted = true;
+    for (const point of capPoints)
+      if (!appendCertifiedDrainagePoint(result, point)) {
+        accepted = false;
+        break;
+      }
+    if (accepted) {
+      factorIndex = capFactorIndex;
+      capAccepted = true;
+      break;
+    }
+    result.length = checkpoint;
+  }
+  if (!capAccepted) return undefined;
+
+  factorIndex = appendAdaptiveDrainagePoint(
+    result,
+    (clearance) => drainageBankPoint(path, 0, sideB, clearance),
+    baseClearance,
+    factorIndex,
+  );
+  if (factorIndex < 0) return undefined;
+  for (let index = 1; index <= segmentIndex; index++) {
+    factorIndex = appendAdaptiveDrainagePoint(
+      result,
+      (clearance) => drainageBankPoint(path, index, sideB, clearance),
+      baseClearance,
+      factorIndex,
+    );
+    if (factorIndex < 0) return undefined;
+  }
+  factorIndex = appendAdaptiveDrainagePoint(
+    result,
+    (clearance) => projectedDrainageBankPoint(path, segmentIndex, t, sideB',
+    baseClearance,
+    factorIndex,
+  );
+  if (factorIndex < 0 || !appendCertifiedDrainagePoint(result, approachB)) return undefined;
+
+  const refined = refineAgainstFinalTraversal(routeShell(result));
+  return refined?.found ? refined.points : undefined;
+}
+
+/**
+ * Build a certified route from local dry approach samples to the exact projected
+ * river bank, trace the seeded bank to the head, pass around the head, then
+ * return along the opposite bank. Prefer the compact uniform guide; if a meander
+ * makes any guide point/segment illegal, use the adaptive catchment-local trace.
+ */
 function drainageBankDetour(
   path: readonly DrainagePoint[],
   segmentIndex: number,
@@ -683,7 +817,7 @@ function drainageBankDetour(
   ];
   for (let index = segmentIndex; index >= 0; index--)
     waypoints.push(drainageBankPoint(path, index, sideA, clearance));
-  waypoints.push(...drainageHeadCapPoints(path, sideA, sideB, clearance));
+  waypoints.push(...drainageHeadCapPoints(path, sideA, sideB',
   waypoints.push(drainageBankPoint(path, 0, sideB, clearance));
   for (let index = 1; index <= segmentIndex; index++)
     waypoints.push(drainageBankPoint(path, index, sideB, clearance));
@@ -691,8 +825,21 @@ function drainageBankDetour(
     projectedDrainageBankPoint(path, segmentIndex, t, sideB, clearance),
     approachB,
   );
-  if (waypoints.some((point) => !finalTraversalState(point).surface.walkable)) return undefined;
-  return stitchFinalWaypoints(waypoints) ?? localFinalComponentConnector(approachA, approachB, waypoints);
+
+  if (!waypoints.some((point) => !finalTraversalState(point).surface.walkable)) {
+    const stitched = stitchFinalWaypoints(waypoints);
+    if (stitched) return stitched;
+  }
+  return adaptiveDrainageBankDetour(
+    path,
+    segmentIndex,
+    t,
+    sideA,
+    side B,
+    clearance,
+    approachA,
+    approachB,
+  );
 }
 
 /**
