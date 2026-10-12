@@ -1,0 +1,38 @@
+name: WP15 cleanup diagnostics
+
+on:
+  push:
+    branches:
+      - agent1/wp-s002-004-005-current-main
+    paths:
+      - ".github/workflows/wp15-cleanup-diagnostics.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s002-004-005-current-main
+          fetch-depth: 0
+      - name: Restore production tree and remove temporary diagnostics
+        run: |
+          git show af8bfa170c3f61ee40ccb189e8f3e10f6c3f4266:package.json > package.json
+          git rm -f \
+            .github/workflows/wp15-route-diagnostic.yml \
+            .github/workflows/wp15-debug-run.yml \
+            .github/workflows/wp15-adaptive-bank-patch.yml \
+            .github/workflows/wp15-fix-adaptive-syntax.yml \
+            .github/workflows/wp15-cleanup-diagnostics.yml \
+            tools/wp15-route-debug.ts
+      - name: Commit and push clean evaluation head
+        run: |
+          git config user.name "AGENT #1"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add package.json
+          git commit -m "WP-S003-003-001: clean routing diagnostics"
+          git push origin HEAD:agent1/wp-s002-004-005-current-main
