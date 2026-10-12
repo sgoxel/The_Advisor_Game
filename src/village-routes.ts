@@ -461,6 +461,28 @@ function stitchFinalWaypoints(waypoints: readonly LonLat[]): LonLat[] | undefine
   return result;
 }
 
+/** Political legs get the same seeded drainage repair before bounded final A*. */
+function politicalFinalConnector(from: LonLat, to: LonLat): LonLat[] | undefined {
+  const direct = routeShell([from, to]);
+  if (refineAgainstFinalTraversal(direct)) return [from, to];
+  const drainageRepair = repairAroundDrainage(direct);
+  if (drainageRepair?.found) return drainageRepair.points;
+  const planned = planRoute({ from, to, terrain: finalTraversalTerrainSampler }),
+    refined = refineAgainstFinalTraversal(planned);
+  return refined?.found ? refined.points : undefined;
+}
+
+function stitchPoliticalWaypoints(waypoints: readonly LonLat[]): LonLat[] | undefined {
+  if (waypoints.length < 2) return undefined;
+  const result: LonLat[] = [waypoints[0]];
+  for (let index = 1; index < waypoints.length; index++) {
+    const connector = politicalFinalConnector(waypoints[index - 1], waypoints[index]);
+    if (!connector) return undefined;
+    result.push(...connector.slice(1));
+  }
+  return result;
+}
+
 /** Keep every political topology leg within the ordinary bounded final planner. */
 function boundedTopologyWaypoints(waypoints: readonly LonLat[]): LonLat[] {
   if (waypoints.length < 2) return [...waypoints];
@@ -494,7 +516,7 @@ function repairViaPoliticalTopology(from: Place, to: Place): RouteResult | undef
   const topology = politicalRouteWaypoints(from, to);
   if (!topology) return undefined;
   const bounded = boundedTopologyWaypoints(topology),
-    stitched = stitchFinalWaypoints(bounded);
+    stitched = stitchPoliticalWaypoints(bounded);
   if (!stitched) return undefined;
   const candidate = routeShell(stitched);
   candidate.attempts += Math.max(1, bounded.length - 1);
@@ -686,12 +708,13 @@ function computeRoute(from: Place, to: Place): RouteResult {
     drainageRepair = repairAroundDrainage(drainageCandidate);
   if (drainageRepair) return drainageRepair;
 
-  // If the local rectangle cannot represent a continental-scale detour, use the
-  // already accepted political access/backbone/gateway facts as high-level dry
-  // anchors. This never grants movement: every bounded leg is solved and checked
-  // against the same final traversal authority before acceptance.
-  const politicalRepair = repairViaPoliticalTopology(from, to);
-  if (politicalRepair) return politicalRepair;
+  // Political topology is a last-resort cross-country fallback only when the
+  // ordinary macro planner could not produce any corridor. This avoids paying
+  // country-graph work for routes that already have a local deterministic shape.
+  if (!coarse.found && from.continent === to.continent && from.country !== to.country) {
+    const politicalRepair = repairViaPoliticalTopology(from, to);
+    if (politicalRepair) return politicalRepair;
+  }
 
   // Non-drainage local blockers still use the original fixed bounded planner.
   const repaired = planRoute({
