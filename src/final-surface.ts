@@ -57,6 +57,7 @@ export type SurfaceModifier = {
   targetGroundHeight?: number;
   material?: SurfaceMaterial;
   walkable?: boolean;
+  /** Compatibility mask: intersecting exclusions union by taking the minimum. */
   vegetationDensityScale?: number;
   reservedUse?: string | null;
   /** A deck is traversal/render surface above preserved water/ground. */
@@ -111,7 +112,7 @@ export function composeFinalSurface(
     if (modifier.vegetationDensityScale !== undefined)
       vegetationDensityScale = Math.min(
         vegetationDensityScale,
-        lerp(1, clamp01(modifier.vegetationDensityScale), weight),
+        clamp01(modifier.vegetationDensityScale),
       );
     if (modifier.reservedUse !== undefined && weight >= 0.5)
       reservedUse = modifier.reservedUse;
