@@ -1,0 +1,130 @@
+/* WP-S002-004-011 resident inspector presentation.
+   Canonical identifiers stay fully readable, while the menu remains contained
+   inside the safe viewport above the persistent navigation HUD. */
+#resident-inspector {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #d8b97925;
+}
+
+#resident-inspector h3 {
+  margin: 9px 0 3px;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+#resident-inspector #resident-code {
+  max-height: 3.2em;
+  overflow: auto;
+  padding-right: 4px;
+  font-size: 9px;
+  line-height: 1.45;
+  scrollbar-width: thin;
+}
+
+#resident-inspector dl {
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: start;
+  gap: 5px 10px;
+  margin: 10px 0;
+}
+
+#resident-inspector dt {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+#resident-inspector dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+#resident-home,
+#resident-workplace {
+  max-height: 3.05em;
+  overflow: auto;
+  padding-right: 3px;
+  color: #e0cfaa;
+  font-family: Consolas, monospace;
+  font-size: 9px !important;
+  line-height: 1.45 !important;
+  scrollbar-width: thin;
+}
+
+#resident-home-inspect {
+  min-height: 42px;
+}
+
+#resident-house-details,
+#resident-performance {
+  margin-top: 9px !important;
+  color: #9fb2a6 !important;
+  font-size: 9px !important;
+  line-height: 1.45 !important;
+  overflow-wrap: anywhere;
+}
+
+#resident-house-details {
+  max-height: 4.4em;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+#resident-performance {
+  padding-top: 8px;
+  border-top: 1px solid #d8b97918;
+}
+
+/* The travel menu can contain route results plus the living-world inspector.
+   Bound it on every viewport rather than letting later content disappear below
+   the bottom bar. */
+.travel-panel:has(#resident-inspector) {
+  max-height: calc(100dvh - 230px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+@media (min-width: 701px) {
+  .travel-panel:has(#resident-inspector) {
+    width: 320px;
+  }
+}
+
+@media (max-width: 700px) {
+  .travel-panel:has(#resident-inspector) {
+    top: calc(85px + env(safe-area-inset-top));
+    bottom: calc(86px + env(safe-area-inset-bottom));
+    max-height: none;
+    padding: 16px;
+  }
+
+  #resident-inspector dl {
+    grid-template-columns: 86px minmax(0, 1fr) !important;
+    gap: 4px 8px !important;
+  }
+
+  #resident-inspector h3 {
+    font-size: 16px;
+  }
+
+  #resident-inspector #resident-code {
+    max-height: 2.95em;
+  }
+
+  #resident-house-details {
+    max-height: 3em;
+  }
+}
+
+@media (max-height: 600px) {
+  .travel-panel:has(#resident-inspector) {
+    top: calc(64px + env(safe-area-inset-top));
+    bottom: calc(75px + env(safe-area-inset-bottom));
+    max-height: none;
+  }
+}
