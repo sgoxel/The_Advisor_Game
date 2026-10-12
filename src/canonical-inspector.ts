@@ -37,6 +37,13 @@ import {
   canonicalCellNeighbors,
   canonicalFoundationSample,
 } from "./spatial-authority.ts";
+import { WORLD_BUILDING_PRIORITIES } from "./final-surface.ts";
+import {
+  finalSurfaceAt,
+  finalSurfaceDebugAt,
+  finalSurfaceTelemetry,
+  resetFinalSurfaceTelemetry,
+} from "./world.ts";
 
 const CANONICAL_ID_LEVEL = 20;
 
@@ -54,6 +61,7 @@ type AdvisorWorld = {
   cellAt: (x: number, z: number) => LegacyCell;
   geography: Record<string, unknown>;
   planet: Record<string, unknown>;
+  surface?: Record<string, unknown>;
   navigation?: { setFocus: (lon: number, lat: number) => void };
   setHalfHeight?: (height: number) => void;
   readonly state?: Record<string, unknown>;
@@ -181,6 +189,18 @@ function install(world: AdvisorWorld) {
     climateSampleAt,
   });
 
+  // Preserve the existing climate/albedo helper while adding the exact composed
+  // channels needed by browser tests and the in-game inspector. These functions
+  // are read-only diagnostics over the same deterministic authority used by the
+  // runtime; they do not create a second world model.
+  world.surface = Object.assign(world.surface || {}, {
+    priorities: WORLD_BUILDING_PRIORITIES,
+    finalAtSource: finalSurfaceAt,
+    debugAtSource: finalSurfaceDebugAt,
+    telemetry: finalSurfaceTelemetry,
+    resetTelemetry: resetFinalSurfaceTelemetry,
+  });
+
   // Realm diagnostics keep performance evidence next to the existing renderer
   // telemetry. Climate sampling is pure/addressed and allocates no material assets.
   const stateDescriptor = Object.getOwnPropertyDescriptor(world, "state"),
@@ -221,6 +241,7 @@ function install(world: AdvisorWorld) {
             materialPaletteEntries: 18,
             recurringMaterialAllocations: 0,
           },
+          finalSurface: finalSurfaceTelemetry(),
           globe: {
             ...globe,
             drawCallsEstimated: 2,
@@ -259,10 +280,11 @@ function install(world: AdvisorWorld) {
     const cellX = Number(match[1]),
       cellZ = Number(match[2]),
       source = sourceCellAt(cellX * 2 + 1, cellZ * 2 + 1),
-      { position, canonical } = canonicalFromSourceCell(source),
+      { sourceX, sourceZ, position, canonical } = canonicalFromSourceCell(source),
       macro = macroSampleAt(position),
       climate = climateSampleAt(position, source.elevation),
-      landform = terrainLabel(climate);
+      landform = terrainLabel(climate),
+      finalDebug = finalSurfaceDebugAt(sourceX, sourceZ);
 
     coordinates.textContent = `${degrees(position.lat, "N", "S")} · ${degrees(position.lon, "E", "W")} · ${landform}`;
     code.textContent = canonical.id;
@@ -273,7 +295,13 @@ function install(world: AdvisorWorld) {
     if (levels) {
       for (const item of Array.from(levels.children)) {
         const level = (item as HTMLElement).dataset.level;
-        if (level === "planet-macro" || level === "planet-climate") continue;
+        if (
+          level === "planet-macro" ||
+          level === "planet-climate" ||
+          level === "planet-final-surface" ||
+          level === "planet-surface-composition"
+        )
+          continue;
         const first = item.firstChild;
         if (
           first?.nodeType === Node.TEXT_NODE &&
@@ -321,6 +349,43 @@ function install(world: AdvisorWorld) {
           Object.assign(document.createElement("code"), { textContent: climate.code }),
         );
         climateItem.dataset.fingerprint = `${climateLabel}|${climate.code}`;
+      }
+
+      let finalItem = levels.querySelector<HTMLElement>("[data-level='planet-final-surface']");
+      if (!finalItem) {
+        finalItem = document.createElement("li");
+        finalItem.dataset.level = "planet-final-surface";
+        climateItem.after(finalItem);
+      }
+      const finalLabel = `Final surface · ${finalDebug.final.material} · ${finalDebug.final.traversal} · ground ${finalDebug.final.groundHeight.toFixed(2)}m · top ${finalDebug.final.surfaceHeight.toFixed(2)}m · water ${finalDebug.final.water.kind} · vegetation ${Math.round(finalDebug.final.vegetationDensityScale * 100)}%`,
+        finalCode = finalDebug.final.reservedUse || "unreserved";
+      if (finalItem.dataset.fingerprint !== `${finalLabel}|${finalCode}`) {
+        finalItem.replaceChildren(
+          document.createTextNode(finalLabel),
+          Object.assign(document.createElement("code"), { textContent: finalCode }),
+        );
+        finalItem.dataset.fingerprint = `${finalLabel}|${finalCode}`;
+      }
+
+      let compositionItem = levels.querySelector<HTMLElement>("[data-level='planet-surface-composition']");
+      if (!compositionItem) {
+        compositionItem = document.createElement("li");
+        compositionItem.dataset.level = "planet-surface-composition";
+        finalItem.after(compositionItem);
+      }
+      const applied = finalDebug.modifiers.length
+          ? finalDebug.modifiers
+              .map((modifier) => `p${modifier.priority}:${modifier.id}`)
+              .join(" · ")
+          : "base-only",
+        compositionLabel = `Composition · ${finalDebug.base.material} ${finalDebug.base.groundHeight.toFixed(2)}m → ${finalDebug.final.groundMaterial} ${finalDebug.final.groundHeight.toFixed(2)}m`,
+        compositionCode = applied;
+      if (compositionItem.dataset.fingerprint !== `${compositionLabel}|${compositionCode}`) {
+        compositionItem.replaceChildren(
+          document.createTextNode(compositionLabel),
+          Object.assign(document.createElement("code"), { textContent: compositionCode }),
+        );
+        compositionItem.dataset.fingerprint = `${compositionLabel}|${compositionCode}`;
       }
     }
   };
