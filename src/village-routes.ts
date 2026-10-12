@@ -785,7 +785,7 @@ function adaptiveDrainageBankDetour(
   }
   factorIndex = appendAdaptiveDrainagePoint(
     result,
-    (clearance) => projectedDrainageBankPoint(path, segmentIndex, t, sideB',
+    (clearance) => projectedDrainageBankPoint(path, segmentIndex, t, sideB, clearance),
     baseClearance,
     factorIndex,
   );
@@ -817,7 +817,7 @@ function drainageBankDetour(
   ];
   for (let index = segmentIndex; index >= 0; index--)
     waypoints.push(drainageBankPoint(path, index, sideA, clearance));
-  waypoints.push(...drainageHeadCapPoints(path, sideA, sideB',
+  waypoints.push(...drainageHeadCapPoints(path, sideA, sideB, clearance));
   waypoints.push(drainageBankPoint(path, 0, sideB, clearance));
   for (let index = 1; index <= segmentIndex; index++)
     waypoints.push(drainageBankPoint(path, index, sideB, clearance));
@@ -835,7 +835,7 @@ function drainageBankDetour(
     segmentIndex,
     t,
     sideA,
-    side B,
+    sideB,
     clearance,
     approachA,
     approachB,
