@@ -616,20 +616,31 @@ function computeRoute(from: Place, to: Place): RouteResult {
   }
 
   // Otherwise use the existing deterministic bounded macro search to propose a
-  // corridor, then certify that corridor against final runtime truth.
+  // corridor, then certify that corridor against final runtime truth. A failed
+  // coarse search is not a refined route; it must continue into final repair.
   const coarse = planRoute({
-      from: from.canonicalPosition,
-      to: to.canonicalPosition,
-      roads: roadSegments,
-      terrain: macroTerrainSampler,
-    }),
-    refined = refineAgainstFinalTraversal(coarse);
-  if (refined) return refined;
+    from: from.canonicalPosition,
+    to: to.canonicalPosition,
+    roads: roadSegments,
+    terrain: macroTerrainSampler,
+  });
+  if (coarse.found) {
+    const refined = refineAgainstFinalTraversal(coarse);
+    if (refined) return refined;
+  }
 
   // A long distributed river can separate nearby villages while its head lies
-  // far outside a rectangular local search margin. Repair that specific seeded
-  // catchment first; this is both faster and more authoritative than widening A*.
-  const drainageRepair = repairAroundDrainage(coarse);
+  // far outside a rectangular local search margin. If the macro planner found a
+  // corridor, repair that exact corridor. If macro search itself was blocked,
+  // use the direct geodesic only as a diagnostic/repair candidate; it is never
+  // accepted unless every inserted point later passes final traversal truth.
+  const drainageCandidate = coarse.found
+      ? coarse
+      : routeShell([
+          { lon: from.canonicalPosition.lon, lat: from.canonicalPosition.lat },
+          { lon: to.canonicalPosition.lon, lat: to.canonicalPosition.lat },
+        ]),
+    drainageRepair = repairAroundDrainage(drainageCandidate);
   if (drainageRepair) return drainageRepair;
 
   // Non-drainage local blockers still use the original fixed bounded planner.
