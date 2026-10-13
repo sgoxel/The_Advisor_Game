@@ -55,7 +55,7 @@ type SegmentHit = { segment: Segment; distance: number; t: number } | null;
 const TAU = Math.PI * 2;
 const BUCKET_SIZE = 4096;
 const RIVER_SYSTEMS_PER_CONTINENT = 4;
-const MAX_MAIN_STEPS = 40;
+const MAX_MAIN_STEPS = 96;
 const SAMPLE_STEP_SOURCE = 12;
 const RIVER_BANK_SOURCE = 9;
 const segmentsByBucket = new Map<string, Segment[]>();
@@ -194,6 +194,12 @@ function traceRiver(continentId: number, slot: number): DrainageRecipe | null {
     }
   }
   if (points.length < 8) return null;
+  const terminal = points[points.length - 1],
+    terminalMacro = macroSampleAt(sourceToLonLat(terminal.x, terminal.z));
+  // Never label an inland endpoint as an outlet. A failed candidate contributes
+  // no river recipe; deterministic sibling slots still provide continent coverage.
+  if (terminalMacro.land) return null;
+  outlet = terminalMacro.domain === "Lake" ? "lake" : "ocean";
 
   // One bounded tributary joins the middle reach. It is generated from a side
   // source and converges to the main channel; no whole-world network is built.
