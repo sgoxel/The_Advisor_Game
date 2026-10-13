@@ -285,8 +285,6 @@ export function finalSurfaceEvidenceAnchors() {
 function naturalSurfaceBaseAt(x: number, z: number): SurfaceBase {
   const natural = naturalSurfaceAt(x, z),
     representativeCreek = representativeCreekAt(x, z);
-  // The S003-001 representative bridge remains a real shared-water crossing.
-  // All other natural priority-3/4 truth comes from the bounded hydrology service.
   if (representativeCreek.bank) {
     const wetGround = Math.min(natural.groundHeight, -1.2),
       creekGround = lerp(
@@ -303,32 +301,18 @@ function naturalSurfaceBaseAt(x: number, z: number): SurfaceBase {
       return {
         groundHeight: wetGround,
         material: "River",
-        water: {
-          kind: "river",
-          level: 0,
-          flowX: representativeCreek.flowX,
-          flowZ: representativeCreek.flowZ,
-        },
-        walkable: false,
-        vegetationDensityScale: 0,
-        reservedUse: null,
+        water: { kind: "river", level: 0, flowX: representativeCreek.flowX, flowZ: representativeCreek.flowZ },
+        walkable: false, vegetationDensityScale: 0, reservedUse: null,
       };
     return {
-      groundHeight: creekGround,
-      material: "Riverbank",
+      groundHeight: creekGround, material: "Riverbank",
       water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },
-      walkable: natural.walkable,
-      vegetationDensityScale: Math.min(natural.vegetationDensityScale, 0.35),
-      reservedUse: null,
+      walkable: natural.walkable, vegetationDensityScale: Math.min(natural.vegetationDensityScale, 0.35), reservedUse: null,
     };
   }
   return {
-    groundHeight: natural.groundHeight,
-    material: natural.material,
-    water: natural.water,
-    walkable: natural.walkable,
-    vegetationDensityScale: natural.vegetationDensityScale,
-    reservedUse: null,
+    groundHeight: natural.groundHeight, material: natural.material, water: natural.water,
+    walkable: natural.walkable, vegetationDensityScale: natural.vegetationDensityScale, reservedUse: null,
   };
 }
 
