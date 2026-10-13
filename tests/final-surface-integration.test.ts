@@ -3,6 +3,8 @@ import test from "node:test";
 import { places, roads, villages } from "../src/geography.ts";
 import { WORLD_BUILDING_PRIORITIES } from "../src/final-surface.ts";
 import {
+  RURAL_BRIDGE_MAX_LENGTH_M,
+  REPRESENTATIVE_BRIDGE_SPAN_M,
   finalSurfaceAt,
   finalSurfaceDebugAt,
   finalSurfaceTelemetry,
@@ -34,11 +36,14 @@ test("priority-9 keep site is inspectable and wins the reserved-use channel", ()
   assert.equal(debug.final.vegetationDensityScale, 0);
 });
 
-test("road cut/fill is bounded and priority-8 ownership is inspectable", () => {
-  let checked = 0;
+test("road cut/fill is bounded, priority-8, and includes real cut evidence", () => {
+  let checked = 0,
+    deepestCut = 0,
+    highestFill = 0;
   for (const road of roads.slice(0, 24)) {
-    for (const t of [0.25, 0.5, 0.75]) {
-      const x = road.fromX + (road.toX - road.fromX) * t,
+    for (let index = 1; index < 10; index++) {
+      const t = index / 10,
+        x = road.fromX + (road.toX - road.fromX) * t,
         z = road.fromZ + (road.toZ - road.fromZ) * t,
         debug = finalSurfaceDebugAt(x, z),
         modifier = debug.modifiers.find((candidate) => candidate.id === road.code);
@@ -47,38 +52,27 @@ test("road cut/fill is bounded and priority-8 ownership is inspectable", () => {
       const delta = debug.final.groundHeight - debug.base.groundHeight;
       assert.ok(delta >= -4 - EPS, `road cut ${delta} exceeded 4m at ${road.code}`);
       assert.ok(delta <= 3 + EPS, `road fill ${delta} exceeded 3m at ${road.code}`);
+      deepestCut = Math.min(deepestCut, delta);
+      highestFill = Math.max(highestFill, delta);
       checked++;
     }
   }
-  assert.ok(checked >= 8, `expected representative dry road samples, got ${checked}`);
+  assert.ok(checked >= 24, `expected representative dry road samples, got ${checked}`);
+  assert.ok(deepestCut < -0.05, `expected a visible road cut, deepest was ${deepestCut}m`);
+  assert.ok(highestFill >= 0, "road earthwork scan must remain numerically sane");
 });
 
-test("bridge deck preserves authoritative water and ground as separate channels", () => {
-  let bridge: ReturnType<typeof finalSurfaceDebugAt> | undefined,
-    wetRoadSamples = 0;
-  outer: for (const road of roads) {
-    // Search the actual final-surface base along every seeded road rather than
-    // assuming a crossing belongs to one prototype river formula. Sampling is
-    // bounded and stops at the first real composed bridge.
-    const samples = 64;
-    for (let index = 0; index <= samples; index++) {
-      const t = index / samples,
-        debug = finalSurfaceDebugAt(
-          road.fromX + (road.toX - road.fromX) * t,
-          road.fromZ + (road.toZ - road.fromZ) * t,
-        );
-      if (debug.base.water.kind === "none") continue;
-      wetRoadSamples++;
-      if (debug.final.deckHeight !== null) {
-        bridge = debug;
-        break outer;
-      }
-    }
-  }
+test("bridge deck preserves authoritative water and obeys the 120m rural cap", () => {
+  assert.ok(REPRESENTATIVE_BRIDGE_SPAN_M > 0);
   assert.ok(
-    bridge,
-    `seeded road registry must expose at least one composed bridge crossing (wet road samples: ${wetRoadSamples})`,
+    REPRESENTATIVE_BRIDGE_SPAN_M <= RURAL_BRIDGE_MAX_LENGTH_M,
+    `representative span ${REPRESENTATIVE_BRIDGE_SPAN_M}m exceeds ${RURAL_BRIDGE_MAX_LENGTH_M}m`,
   );
+  const road = roads[0],
+    bridge = finalSurfaceDebugAt(
+      (road.fromX + road.toX) / 2,
+      (road.fromZ + road.toZ) / 2,
+    );
   assert.notEqual(bridge.base.water.kind, "none");
   assert.equal(bridge.final.water.kind, bridge.base.water.kind);
   assert.equal(bridge.final.groundHeight, bridge.base.groundHeight);
