@@ -1,0 +1,23 @@
+name: Agent 1 source export
+
+on:
+  push:
+    branches:
+      - agent1/wp-s003-002-001
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent1-source-export
+          path: |
+            src/world.ts
+            tests/final-surface-integration.test.ts
+          if-no-files-found: error
+          retention-days: 1
