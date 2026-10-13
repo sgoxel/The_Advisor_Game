@@ -307,9 +307,9 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
   const sx = wrapSourceX(x),
     macro = macroSampleAt(sourceToLonLat(sx, z));
   if (macro.domain === "Ocean")
-    return Object.freeze({ groundHeight: -2.8, material: "Ocean", water: { kind: "ocean", level: 0, flowX: 0, flowZ: 0 }, walkable: false, vegetationDensityScale: 0, slope: 0, cliff: false, freshwaterDistanceSource: Infinity, catchmentCode: null });
+    return Object.freeze({ groundHeight: -2.8, material: "Ocean", water: { kind: "ocean", level: 0, flowX: 0, flowZ: 0 } as SurfaceWater, walkable: false, vegetationDensityScale: 0, slope: 0, cliff: false, freshwaterDistanceSource: Infinity, catchmentCode: null });
   if (macro.domain === "Lake")
-    return Object.freeze({ groundHeight: -1.8, material: "Lake", water: { kind: "lake", level: 0, flowX: 0, flowZ: 0 }, walkable: false, vegetationDensityScale: 0, slope: 0, cliff: false, freshwaterDistanceSource: 0, catchmentCode: macro.code });
+    return Object.freeze({ groundHeight: -1.8, material: "Lake", water: { kind: "lake", level: 0, flowX: 0, flowZ: 0 } as SurfaceWater, walkable: false, vegetationDensityScale: 0, slope: 0, cliff: false, freshwaterDistanceSource: 0, catchmentCode: macro.code });
 
   const terrain = naturalElevationAt(sx, z),
     hit = nearestRiver(sx, z),
@@ -322,7 +322,7 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
     return Object.freeze({
       groundHeight: Math.max(-0.5, bed),
       material: "River",
-      water: { kind: "river", level: Math.max(0, bed + 0.24), flowX: dx / length, flowZ: dz / length },
+      water: { kind: "river", level: Math.max(0, bed + 0.24), flowX: dx / length, flowZ: dz / length } as SurfaceWater,
       walkable: false,
       vegetationDensityScale: 0,
       slope: 0,
@@ -338,7 +338,7 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
     return Object.freeze({
       groundHeight: bankHeight,
       material: "Riverbank",
-      water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },
+      water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 } as SurfaceWater,
       walkable: true,
       vegetationDensityScale: lerp(0.28, 0.86, t),
       slope: 0,
@@ -357,7 +357,7 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
   return Object.freeze({
     groundHeight: terrain,
     material,
-    water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },
+    water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 } as SurfaceWater,
     walkable: !cliff,
     vegetationDensityScale: cliff ? 0.08 : highland ? 0.55 : 1,
     slope,
