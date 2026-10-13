@@ -1,0 +1,56 @@
+.continuity-key {
+  margin-left: auto;
+  font-size: 0.82rem;
+  opacity: 0.72;
+}
+
+.continuity-workset {
+  position: fixed;
+  right: 18px;
+  top: 92px;
+  z-index: 18;
+  width: min(410px, calc(100vw - 36px));
+  padding: 14px 16px;
+  border: 1px solid rgba(222, 199, 143, 0.42);
+  border-radius: 8px;
+  background: rgba(19, 29, 26, 0.93);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  color: #eee4cf;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
+.continuity-workset strong,
+.continuity-workset span {
+  display: block;
+}
+
+.continuity-workset strong {
+  margin: 4px 0 8px;
+  font: 600 0.78rem/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.continuity-workset span {
+  margin-top: 4px;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: rgba(238, 228, 207, 0.82);
+}
+
+@media (max-width: 700px) {
+  .continuity-workset {
+    top: auto;
+    right: 10px;
+    bottom: 116px;
+    left: 10px;
+    width: auto;
+    max-height: 42vh;
+    overflow: hidden;
+    padding: 11px 12px;
+  }
+
+  .continuity-workset span {
+    font-size: 0.68rem;
+  }
+}
