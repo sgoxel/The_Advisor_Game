@@ -83,6 +83,50 @@ export function compareSurfaceModifiers(a: SurfaceModifier, b: SurfaceModifier) 
 }
 
 /**
+ * A canonical modifier identity may be returned by more than one bounded query
+ * bucket (for example at a wrapped/support boundary), but it must never apply
+ * twice. Exact semantic duplicates collapse to one record. Conflicting records
+ * with the same canonical ID are an authority error and fail deterministically
+ * instead of making insertion/query order decide the world.
+ */
+function surfaceModifierSignature(modifier: SurfaceModifier) {
+  return JSON.stringify({
+    priority: modifier.priority,
+    weight: clamp01(modifier.weight ?? 1),
+    hasTargetGroundHeight: modifier.targetGroundHeight !== undefined,
+    targetGroundHeight: modifier.targetGroundHeight ?? null,
+    hasMaterial: modifier.material !== undefined,
+    material: modifier.material ?? null,
+    hasWalkable: modifier.walkable !== undefined,
+    walkable: modifier.walkable ?? null,
+    hasVegetationDensityScale: modifier.vegetationDensityScale !== undefined,
+    vegetationDensityScale:
+      modifier.vegetationDensityScale === undefined
+        ? null
+        : clamp01(modifier.vegetationDensityScale),
+    hasReservedUse: modifier.reservedUse !== undefined,
+    reservedUse: modifier.reservedUse ?? null,
+    hasDeckHeight: modifier.deckHeight !== undefined,
+    deckHeight: modifier.deckHeight ?? null,
+  });
+}
+
+function canonicalSurfaceModifiers(modifiers: readonly SurfaceModifier[]) {
+  const unique = new Map<string, { modifier: SurfaceModifier; signature: string }>();
+  for (const modifier of modifiers) {
+    const signature = surfaceModifierSignature(modifier),
+      existing = unique.get(modifier.id);
+    if (!existing) {
+      unique.set(modifier.id, { modifier, signature });
+      continue;
+    }
+    if (existing.signature !== signature)
+      throw new Error(`Conflicting canonical surface modifier identity: ${modifier.id}`);
+  }
+  return [...unique.values()].map(({ modifier }) => modifier).sort(compareSurfaceModifiers);
+}
+
+/**
  * Compose one canonical coordinate. Water is never erased by later earthworks;
  * a legal crossing uses an explicit deck channel instead. This prevents a road
  * or settlement pad from silently painting dry terrain over hydrology.
@@ -99,7 +143,7 @@ export function composeFinalSurface(
     deckHeight: number | null = null;
   const contributingModifierIds: string[] = [];
 
-  for (const modifier of [...modifiers].sort(compareSurfaceModifiers)) {
+  for (const modifier of canonicalSurfaceModifiers(modifiers)) {
     const weight = clamp01(modifier.weight ?? 1);
     if (weight <= 0) continue;
     contributingModifierIds.push(modifier.id);

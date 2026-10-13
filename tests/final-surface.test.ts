@@ -36,6 +36,40 @@ test("same-priority modifiers reduce by stable canonical id, not insertion order
   assert.deepEqual(composeFinalSurface(dry, [a, b]), composeFinalSurface(dry, [b, a]));
 });
 
+test("duplicate canonical modifier identity is idempotent", () => {
+  const road: SurfaceModifier = {
+    id: "road/wrap-boundary",
+    priority: WORLD_BUILDING_PRIORITIES.road,
+    weight: 0.75,
+    targetGroundHeight: 20,
+    material: "Road",
+    walkable: true,
+    vegetationDensityScale: 0,
+    reservedUse: "road/wrap-boundary",
+  };
+  const single = composeFinalSurface(dry, [road]),
+    duplicated = composeFinalSurface(dry, [road, { ...road }]);
+  assert.deepEqual(duplicated, single);
+  assert.deepEqual(duplicated.contributingModifierIds, [road.id]);
+});
+
+test("conflicting records cannot share one canonical modifier identity", () => {
+  const a: SurfaceModifier = {
+      id: "road/conflict",
+      priority: WORLD_BUILDING_PRIORITIES.road,
+      targetGroundHeight: 20,
+    },
+    b: SurfaceModifier = { ...a, targetGroundHeight: 21 };
+  assert.throws(
+    () => composeFinalSurface(dry, [a, b]),
+    /Conflicting canonical surface modifier identity: road\/conflict/,
+  );
+  assert.throws(
+    () => composeFinalSurface(dry, [b, a]),
+    /Conflicting canonical surface modifier identity: road\/conflict/,
+  );
+});
+
 test("road grading changes exposed-ground channels coherently", () => {
   const result = composeFinalSurface(dry, [
     {
