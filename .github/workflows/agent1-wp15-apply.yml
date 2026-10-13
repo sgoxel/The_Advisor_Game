@@ -1,12 +1,12 @@
 name: AGENT1 WP15 apply natural authority
 on:
-  push:
-    branches: [agent1/wp-s003-003-001-natural-authority]
-    paths: [.github/workflows/agent1-wp15-apply.yml]
+  pull_request:
+    branches: [main]
 permissions:
   contents: write
 jobs:
   apply:
+    if: github.event.pull_request.head.ref == 'agent1/wp-s003-003-001-natural-authority'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,11 +39,12 @@ jobs:
                       end=i+1
                       break
           if end is None: raise RuntimeError('naturalSurfaceBaseAt end not found')
-          replacement='''function naturalSurfaceBaseAt(x: number, z: number): SurfaceBase {\n  const natural = naturalSurfaceAt(x, z),\n    representativeCreek = representativeCreekAt(x, z);\n  // The S003-001 representative bridge remains a real shared-water crossing.\n  // All other natural priority-3/4 truth comes from the bounded hydrology service.\n  if (representativeCreek.bank) {\n    const wetGround = Math.min(natural.groundHeight, -1.2),\n      creekGround = lerp(\n        wetGround,\n        natural.groundHeight,\n        smooth(\n          clamp01(\n            (representativeCreek.absoluteAcross - REPRESENTATIVE_CREEK_HALF_WET_SOURCE) /\n              (REPRESENTATIVE_CREEK_HALF_BANK_SOURCE - REPRESENTATIVE_CREEK_HALF_WET_SOURCE),\n          ),\n        ),\n      );\n    if (representativeCreek.wet)\n      return {\n        groundHeight: wetGround,\n        material: "River",\n        water: {\n          kind: "river",\n          level: 0,\n          flowX: representativeCreek.flowX,\n          flowZ: representativeCreek.flowZ,\n        },\n        walkable: false,\n        vegetationDensityScale: 0,\n        reservedUse: null,\n      };\n    return {\n      groundHeight: creekGround,\n      material: "Riverbank",\n      water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },\n      walkable: natural.walkable,\n      vegetationDensityScale: Math.min(natural.vegetationDensityScale, 0.35),\n      reservedUse: null,\n    };\n  }\n  return {\n    groundHeight: natural.groundHeight,\n    material: natural.material,\n    water: natural.water,\n    walkable: natural.walkable,\n    vegetationDensityScale: natural.vegetationDensityScale,\n    reservedUse: null,\n  };\n}'''
+          replacement='''function naturalSurfaceBaseAt(x: number, z: number): SurfaceBase {\n  const natural = naturalSurfaceAt(x, z),\n    representativeCreek = representativeCreekAt(x, z);\n  if (representativeCreek.bank) {\n    const wetGround = Math.min(natural.groundHeight, -1.2),\n      creekGround = lerp(\n        wetGround,\n        natural.groundHeight,\n        smooth(\n          clamp01(\n            (representativeCreek.absoluteAcross - REPRESENTATIVE_CREEK_HALF_WET_SOURCE) /\n              (REPRESENTATIVE_CREEK_HALF_BANK_SOURCE - REPRESENTATIVE_CREEK_HALF_WET_SOURCE),\n          ),\n        ),\n      );\n    if (representativeCreek.wet)\n      return {\n        groundHeight: wetGround,\n        material: "River",\n        water: { kind: "river", level: 0, flowX: representativeCreek.flowX, flowZ: representativeCreek.flowZ },\n        walkable: false, vegetationDensityScale: 0, reservedUse: null,\n      };\n    return {\n      groundHeight: creekGround, material: "Riverbank",\n      water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },\n      walkable: natural.walkable, vegetationDensityScale: Math.min(natural.vegetationDensityScale, 0.35), reservedUse: null,\n    };\n  }\n  return {\n    groundHeight: natural.groundHeight, material: natural.material, water: natural.water,\n    walkable: natural.walkable, vegetationDensityScale: natural.vegetationDensityScale, reservedUse: null,\n  };\n}'''
           text=text[:start]+replacement+text[end:]
           if 'riverX(' in text: raise RuntimeError('legacy riverX authority remains')
           path.write_text(text)
           PY
+          if git diff --quiet; then exit 0; fi
           git config user.name "GPT-5.6 Sol (AGENT #1)"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
           git add src/world.ts
