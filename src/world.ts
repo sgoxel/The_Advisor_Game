@@ -11,6 +11,7 @@ import {
 import { streamingBudgetForViewport } from "./streaming.ts";
 import { nearestPlace, places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
+import { naturalSurfaceAt } from "./hydrology.ts";
 import {
   WORLD_BUILDING_PRIORITIES,
   compareSurfaceModifiers,
@@ -197,9 +198,6 @@ export function field(
     tz,
   );
 }
-export function riverX(z: number): number {
-  return 125 + 42 * Math.sin(z / 150) + 18 * Math.sin(z / 57);
-}
 export function settlement(
   sx: number,
   sz: number,
@@ -285,83 +283,25 @@ export function finalSurfaceEvidenceAnchors() {
 }
 
 function naturalSurfaceBaseAt(x: number, z: number): SurfaceBase {
-  const macro = macroSampleAt(sourceToLonLat(x, z));
-  if (macro.domain === "Ocean")
-    return {
-      groundHeight: -2.8,
-      material: "Ocean",
-      water: { kind: "ocean", level: 0, flowX: 0, flowZ: 0 },
-      walkable: false,
-      vegetationDensityScale: 0,
-      reservedUse: null,
-    };
-  if (macro.domain === "Lake")
-    return {
-      groundHeight: -1.8,
-      material: "Lake",
-      water: { kind: "lake", level: 0, flowX: 0, flowZ: 0 },
-      walkable: false,
-      vegetationDensityScale: 0,
-      reservedUse: null,
-    };
-
-  const base =
-      macro.domain === "Island"
-        ? 3 + field(x, z, 58, 2) * 12
-        : 3 + field(x, z, 160, 1) * 9 + field(x, z, 48, 2) * 2,
-    macroRelief = macro.reliefM * (0.88 + 0.12 * field(x, z, 110, 3)),
-    cap = macro.domain === "Island" ? 180 : 620,
-    terrain = Math.min(cap, base + macroRelief),
-    coastSource = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
-    coastLand = lerp(
-      -2.8,
-      terrain,
-      smooth(clamp01((coastSource + 2) / 10)),
-    );
-
-  if (macro.domain === "Island") {
-    const hierarchy = cellSeed(Math.floor(x / 2), Math.floor(z / 2));
-    if (coastLand < 0.1)
-      return {
-        groundHeight: coastLand,
-        material: "Ocean",
-        water: { kind: "ocean", level: 0, flowX: 0, flowZ: 0 },
-        walkable: false,
-        vegetationDensityScale: 0,
-        reservedUse: null,
-      };
-    let material: SurfaceMaterial = "Island meadow";
-    if (coastSource < hierarchy.parent.parent.beachWidth + 5 + hierarchy.surface * 0.15)
-      material = "Sandy beach";
-    else if (macro.volcanic && macro.mountainIntensity > 0.16)
-      material = "Volcanic highlands";
-    else if (macro.mountainIntensity > 0.12 || coastLand > 70)
-      material = "Highlands";
-    return {
-      groundHeight: coastLand,
-      material,
-      water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },
-      walkable: true,
-      vegetationDensityScale: 1,
-      reservedUse: null,
-    };
-  }
-
-  const representativeCreek = representativeCreekAt(x, z);
+  const natural = naturalSurfaceAt(x, z),
+    representativeCreek = representativeCreekAt(x, z);
+  // The S003-001 representative bridge remains a real shared-water crossing.
+  // All other natural priority-3/4 truth comes from the bounded hydrology service.
   if (representativeCreek.bank) {
-    const creekGround = lerp(
-      -1.2,
-      coastLand,
-      smooth(
-        clamp01(
-          (representativeCreek.absoluteAcross - REPRESENTATIVE_CREEK_HALF_WET_SOURCE) /
-            (REPRESENTATIVE_CREEK_HALF_BANK_SOURCE - REPRESENTATIVE_CREEK_HALF_WET_SOURCE),
+    const wetGround = Math.min(natural.groundHeight, -1.2),
+      creekGround = lerp(
+        wetGround,
+        natural.groundHeight,
+        smooth(
+          clamp01(
+            (representativeCreek.absoluteAcross - REPRESENTATIVE_CREEK_HALF_WET_SOURCE) /
+              (REPRESENTATIVE_CREEK_HALF_BANK_SOURCE - REPRESENTATIVE_CREEK_HALF_WET_SOURCE),
+          ),
         ),
-      ),
-    );
+      );
     if (representativeCreek.wet)
       return {
-        groundHeight: -1.2,
+        groundHeight: wetGround,
         material: "River",
         water: {
           kind: "river",
@@ -377,47 +317,17 @@ function naturalSurfaceBaseAt(x: number, z: number): SurfaceBase {
       groundHeight: creekGround,
       material: "Riverbank",
       water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },
-      walkable: true,
-      vegetationDensityScale: 0.35,
+      walkable: natural.walkable,
+      vegetationDensityScale: Math.min(natural.vegetationDensityScale, 0.35),
       reservedUse: null,
     };
   }
-
-  // Transitional seeded river remains priority-4 hydrology until S003-003-001
-  // replaces the generator. It is now represented as a channel rather than as a
-  // second hidden height/biome authority.
-  const bank = Math.abs(wrapSourceX(x - riverX(z))),
-    groundHeight = lerp(
-      -2.8,
-      coastLand,
-      smooth(clamp01((bank - 12) / 19)),
-    );
-  if (groundHeight < 0.1) {
-    const dx = riverX(z + 1) - riverX(z - 1),
-      length = Math.hypot(dx, 2) || 1;
-    return {
-      groundHeight,
-      material: "River",
-      water: { kind: "river", level: 0, flowX: dx / length, flowZ: 2 / length },
-      walkable: false,
-      vegetationDensityScale: 0,
-      reservedUse: null,
-    };
-  }
-
-  let material: SurfaceMaterial;
-  if (bank < 32) material = "Riverbank";
-  else if (macro.volcanic && macro.mountainIntensity > 0.16)
-    material = "Volcanic highlands";
-  else if (macro.mountainIntensity > 0.1 || groundHeight > 70)
-    material = "Highlands";
-  else material = field(x, z, 90, 4) > 0.45 ? "Woodland" : "Meadow";
   return {
-    groundHeight,
-    material,
-    water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },
-    walkable: true,
-    vegetationDensityScale: 1,
+    groundHeight: natural.groundHeight,
+    material: natural.material,
+    water: natural.water,
+    walkable: natural.walkable,
+    vegetationDensityScale: natural.vegetationDensityScale,
     reservedUse: null,
   };
 }
