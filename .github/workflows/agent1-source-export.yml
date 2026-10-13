@@ -17,7 +17,12 @@ jobs:
         with:
           name: agent1-source-export
           path: |
-            src/world.ts
-            tests/final-surface-integration.test.ts
+            src
+            tests
+            package.json
+            package-lock.json
+            tsconfig.json
+            vite.config.ts
+            playwright*.js
           if-no-files-found: error
           retention-days: 1
