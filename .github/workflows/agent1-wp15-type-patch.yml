@@ -1,12 +1,12 @@
 name: AGENT1 WP15 type patch
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches: [agent1/wp-s003-003-001-natural-authority]
+    paths: [.github/workflows/agent1-wp15-type-patch.yml]
 permissions:
   contents: write
 jobs:
   apply:
-    if: github.event.pull_request.head.ref == 'agent1/wp-s003-003-001-natural-authority'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
