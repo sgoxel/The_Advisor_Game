@@ -37,20 +37,20 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Living-resident simulation UX/performance: persistent home/work/guard identity, analytical schedules, spatial indexing, bounded logical/visible populations and inspectable activity
-- WP-S006-002-001 — Usable building-interior reference analysis: deterministic room programs, demand loading, traversal, cultural variation and mobile-safe reconstruction
+- WP-S006-001-001 — Analytical living-resident simulation + inspectable life UX: canonical homes/work/guards, purposeful schedules, spatial indexing, reusable actor pools and bounded city-scale cost
+- WP-S006-002-001 — Usable building-interior reference analysis: same-world entry/exit, deterministic room programs, persisted changes, demand loading, traversal/collision and mobile-safe reconstruction
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — World-presentation + semantic-zoom reference analysis: toon/cel style, icon/proxy LOD, decluttering, continuous transitions and mobile visual invariants
+- WP-S007-001-001 — World-presentation + semantic-zoom reference analysis: README visual direction, globe↔local continuity, toon/cel materials, proxy/icon LOD, decluttering and mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Responsive interaction + accessibility acceptance: cutout-safe seven-viewport layout, measured 44px targets, keyboard/touch/focus parity, readable declutter and reduced motion
+- WP-S008-001-001 — Responsive gameplay-shell + accessibility acceptance: cutout-safe seven-viewports, measured 44px targets, focus/Escape/return parity, canonical accessible labels and reduced motion
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Performance observability + budget evidence: complete bounded telemetry, exact-SHA scenario matrix and honest PASS/FAIL/UNVERIFIED reporting
-- WP-S009-002-001 — Simulation + DOM hot-path performance: analytical resident updates, spatially bounded queries, invalidation-driven overlays and allocation regression limits
-- WP-S009-003-001 — Renderer/resource resilience: semantic icon/proxy LOD, device-class DPR/render scale, quality hysteresis, reusable assets and canonical-safe WebGPU/WebGL2 recovery
-- WP-S009-004-001 — README/runtime semantic conformance: Advisor-vs-atlas authority, canonical dynamic geography/routes, staged baseline, renderer truth and evidence-backed claims
+- WP-S009-001-001 — Performance observability + exact-SHA budget evidence: CPU/input/worker/upload/UI/GPU/resource telemetry, seven-viewports and honest PASS/FAIL/UNVERIFIED
+- WP-S009-002-001 — Main-thread hot-path performance: eliminate full-country resident rebuilds/full-pool scans and per-frame DOM measurement with analytical state, spatial queries and invalidation
+- WP-S009-003-001 — Adaptive renderer/resource resilience: device-class DPR/render scale, quality hysteresis, reusable assets, continuous zoom quality and canonical-safe WebGPU/WebGL2 recovery
+- WP-S009-004-001 — README/runtime product conformance: current-stage baseline, Advisor-vs-atlas authority, truthful route/world claims, canonical dynamic geography and renderer evidence

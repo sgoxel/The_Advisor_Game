@@ -1,12 +1,13 @@
 import { buildTile } from "./geometry.ts";
 import { convertTileGeometryToEnu } from "./render-frame.ts";
+import { refineTileSurfacePresentation } from "./surface-refinement.ts";
 import { buildVegetationGeometry } from "./vegetation-render.ts";
 import type { Tile } from "./world.ts";
 import { continuityTelemetry } from "./continuity-runtime.ts";
 self.onmessage = (event: MessageEvent<Tile>) => {
   const tile = event.data;
   try {
-    const data = buildTile(tile),
+    const data = refineTileSurfacePresentation(tile, buildTile(tile)),
       vegetation = buildVegetationGeometry(tile);
     data.nature = vegetation.geometry;
     const precision = convertTileGeometryToEnu(tile, data);
