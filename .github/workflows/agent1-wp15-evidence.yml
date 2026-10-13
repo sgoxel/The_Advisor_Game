@@ -8,6 +8,8 @@ permissions:
 jobs:
   evidence:
     runs-on: ubuntu-latest
+    env:
+      EVIDENCE_REVISION: "2"
     steps:
       - uses: actions/checkout@v4
         with:
