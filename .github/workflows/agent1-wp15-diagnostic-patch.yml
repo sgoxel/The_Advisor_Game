@@ -1,0 +1,38 @@
+name: AGENT1 WP15 diagnostic patch
+on:
+  push:
+    branches: [agent1/wp-s003-003-001-natural-authority]
+    paths: [.github/workflows/agent1-wp15-diagnostic-patch.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s003-003-001-natural-authority
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Expose read-only hydrology diagnostics
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/main.ts')
+          s=p.read_text()
+          anchor='import { climateSampleAt } from "./climate.ts";'
+          if 'from "./hydrology.ts"' not in s:
+              s=s.replace(anchor, anchor+'\nimport { drainageRecipes, hydrologyTelemetry, naturalSurfaceAt } from "./hydrology.ts";', 1)
+          anchor2='      continuity: { inspect: inspectRegion, terrainQuery, telemetry: () => ({ ...continuityTelemetry(), worker: continuityWorkerState }), clearDetail: clearContinuityDetail, setOverlay: setContinuityOverlay },\n'
+          addition='      hydrology: { recipes: drainageRecipes, sampleSource: naturalSurfaceAt, telemetry: hydrologyTelemetry },\n'
+          if addition not in s:
+              if anchor2 not in s: raise RuntimeError('advisorWorld continuity anchor missing')
+              s=s.replace(anchor2, anchor2+addition, 1)
+          p.write_text(s)
+          PY
+          git config user.name "GPT-5.6 Sol (AGENT #1)"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add src/main.ts
+          git commit -m "WP-S003-003-001 expose hydrology diagnostics"
+          git push origin HEAD:agent1/wp-s003-003-001-natural-authority
