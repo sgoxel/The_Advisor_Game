@@ -11,7 +11,7 @@ import {
 import { streamingBudgetForViewport } from "./streaming.ts";
 import { nearestPlace, places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
-import { naturalSurfaceAt } from "./hydrology.ts";
+import { freshwaterCrossingSpanMAt, naturalSurfaceAt } from "./hydrology.ts";
 import {
   WORLD_BUILDING_PRIORITIES,
   compareSurfaceModifiers,
@@ -465,11 +465,12 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
         3,
       ),
       representativeCreek = representativeCreekAt(x, z),
+      naturalSpanM = freshwaterCrossingSpanMAt(x, z),
+      crossingSpanM = representativeCreek.wet ? REPRESENTATIVE_BRIDGE_SPAN_M : naturalSpanM,
       bridge =
-        road.code === REPRESENTATIVE_BRIDGE_ROAD.code &&
         base.water.kind === "river" &&
-        representativeCreek.wet &&
-        REPRESENTATIVE_BRIDGE_SPAN_M <= RURAL_BRIDGE_MAX_LENGTH_M &&
+        crossingSpanM > 0 &&
+        crossingSpanM <= RURAL_BRIDGE_MAX_LENGTH_M &&
         distance <= 5;
     if (weight > 0)
       modifiers.push({
