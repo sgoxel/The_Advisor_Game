@@ -43,6 +43,7 @@ import {
   canonicalFootprintForHalfHeight,
   flatToLonLat,
   lonLatToFlat,
+  sourceToLonLat,
   wrapX,
   halfHeightForCanonicalFootprint,
   CANONICAL_PLANET_DIAMETER,
@@ -88,13 +89,6 @@ const GLOBE_PASSES = [
 /** Terrain color interpretation is identical in the globe and flat representations. */
 const GLOBE_RELIEF = SURFACE_PRESENTATION.relief;
 const FLAT_BACKDROP = new pc.Color(0.65, 0.71, 0.65);
-let continuityWorkerBytes = 0;
-let continuityWorkerState: ReturnType<typeof continuityTelemetry> | undefined;
-let discardedPresentationJobs = 0;
-const continuityCpuBytes = () => {
-  const state=continuityTelemetry(), preparingBytes=globeWorker ? state.coarseRegistryBytesEstimated + 4096*1024 + (GLOBE_PASSES[globePass]?.width || 0)**2*2 : 0;
-  return continuityWorkerBytes + state.cpuBytesEstimated + continuityOverlayBytes() + preparingBytes;
-};
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -117,8 +111,8 @@ let app: pc.AppBase, camera: pc.Entity, flatRoot: pc.Entity;
 let globe: GlobeView | undefined,
   globeWorker: Worker | undefined,
   globeShown = false,
-  globePass = 0, // surface passes applied so far
-  globeFit = PLANET_RADIUS * 2.6; // view half-height that frames the whole globe
+  globePass = 0,
+  globeFit = PLANET_RADIUS * 2.6;
 const globePoint = new pc.Vec3(),
   flatLabelPoint = new pc.Vec3();
 let projectionTransition = 0,
@@ -305,8 +299,6 @@ function updateNavigationHud() {
   );
   $("compass-needle").style.transform =
     `rotate(${(view.yaw * 180) / Math.PI}deg)`;
-  // North's screen direction comes from the shared camera attitude. Inferring
-  // it from geographic pick deltas introduces projection-dependent zoom drift.
   const screenHeading = -view.yaw || 0;
   $("compass").title =
     `Heading ${(((((screenHeading * 180) / Math.PI) % 360) + 360) % 360).toFixed(0)}° · reset north`;
@@ -342,7 +334,6 @@ function fail(message: string) {
   $("error").hidden = false;
   $("error").textContent = message;
 }
-/** Fit the projected sphere, whose centre sits half a radius below the surface focus. */
 function freeRadius(): number {
   const cx = innerWidth / 2,
     cy = innerHeight / 2;
@@ -376,7 +367,6 @@ function freeRadius(): number {
   }
   return Math.max(60, low);
 }
-/** Start preparing the globe surface off the main thread; each pass runs once. */
 function prepareGlobe() {
   if (globeWorker || globePass >= GLOBE_PASSES.length || !globe) return;
   globeWorker = new Worker(new URL("./globe-worker.ts", import.meta.url), {
@@ -409,162 +399,82 @@ function prepareGlobe() {
   };
   globeWorker.onerror = (event) =>
     fail(`Globe worker could not start: ${event.message}`);
-  request();
-}
-function flatCoverageReady() {
-  return (
-    !selectionDirty &&
-    wanted.length > 0 &&
-    wanted.every((tile) => tileCache.has(tile.key))
-  );
 }
 function globeCoverageReady() {
-  return globePass >= GLOBE_PASSES.length;
+  return globePass >= GLOBE_PASSES.length && Boolean(globe?.surface);
 }
-function destinationCoverageReady(flatReady = flatCoverageReady()): boolean {
-  const globeReady = globeCoverageReady();
-  if (desiredProjectionTransition > projectionTransition + 0.001)
-    return globeReady;
-  if (desiredProjectionTransition < projectionTransition - 0.001)
-    return flatReady;
-  if (desiredProjectionTransition >= 0.999) return globeReady;
-  if (desiredProjectionTransition <= 0.001) return flatReady;
-  return globeReady && flatReady;
+function flatCoverageReady() {
+  return wanted.length > 0 && wanted.every((tile) => tileCache.has(tile.key));
+}
+function destinationCoverageReady(flatReady = flatCoverageReady()) {
+  return desiredProjectionTransition > 0 ? globeCoverageReady() : flatReady;
 }
 function applyPresentation() {
-  if (!globe) return;
-  desiredProjectionTransition = projectionTransitionForHalfHeight(
-    view.halfHeight,
-  );
-  const active = projectionTransition > 0.001,
-    fullGlobe = projectionTransition >= 0.999,
-    targetY = Math.max(0, heightAt(view.x, view.z)),
-    focusRender = renderFrame.sourceToRender(view.x, view.z);
-  globeShown = fullGlobe;
-  document.body.classList.toggle("globe-mode", fullGlobe);
-  document.body.classList.toggle("handoff-mode", active && !fullGlobe);
-  if (active) {
-    flatRoot.setLocalPosition(
-      -focusRender.x,
-      PLANET_RADIUS - targetY,
-      -focusRender.z,
-    );
-    flatRoot.enabled = !fullGlobe;
-    const { lon, lat } = flatToLonLat(view.x, view.z);
-    globe.orient(lon, lat, 0);
-    globe.setVisible(true);
-    globe.setBlend(projectionTransition);
-    globe.placeCamera(camera, view.halfHeight, view.yaw);
-    $("cell-panel").hidden = true;
-  } else {
-    flatRoot.setLocalPosition(0, 0, 0);
-    flatRoot.enabled = true;
-    globe.setVisible(false);
-    globe.setBlend(0);
-    const distance = view.halfHeight * 2.2 + 200;
-    camera.setPosition(
-      focusRender.x + Math.sin(view.yaw) * distance * 0.5,
-      targetY + distance * Math.sin(Math.PI / 3),
-      focusRender.z + Math.cos(view.yaw) * distance * 0.5,
-    );
-    camera.lookAt(focusRender.x, targetY, focusRender.z);
-    camera.camera!.orthoHeight = view.halfHeight;
-    camera.camera!.farClip = 600000;
-  }
-  for (const material of [worldMaterial, terrainMaterial]) if (material) {
-    // Replace terrain pixels rather than stacking translucent skirts over the
-    // globe. One retained surface owns each pixel throughout the handoff.
-    material.setParameter("flatCoverage", material === terrainMaterial ? 1 : 1 - projectionTransition);
-  }
-  const backdrop = globe.backdropColor,
-    t = projectionTransition;
-  const surfaceOrigin = renderFrame.canonicalOrigin;
-  terrainMaterial?.setParameter("surfaceOrigin", [surfaceOrigin.lon, surfaceOrigin.lat]);
-  terrainMaterial?.setParameter("surfaceOffset", [flatRoot.getLocalPosition().x, flatRoot.getLocalPosition().y, flatRoot.getLocalPosition().z]);
-  terrainMaterial?.setParameter("surfaceProjectionWeight", 1 - localDetailWeight(view.halfHeight));
-  const surfaceFocus = flatToLonLat(view.x, view.z);
-  terrainMaterial?.setParameter("surfaceFocus", [surfaceFocus.lon, surfaceFocus.lat]);
-  terrainMaterial?.setParameter("surfaceTransition", projectionTransition);
-  camera.camera!.clearColor.set(
-    FLAT_BACKDROP.r + (backdrop.r - FLAT_BACKDROP.r) * t,
-    FLAT_BACKDROP.g + (backdrop.g - FLAT_BACKDROP.g) * t,
-    FLAT_BACKDROP.b + (backdrop.b - FLAT_BACKDROP.b) * t,
-    1,
-  );
+  if (!globe || !flatRoot || !terrainMaterial) return;
+  const flatAmount = 1 - projectionTransition,
+    shouldShowGlobe = projectionTransition > 0.001 || desiredProjectionTransition > 0;
+  flatRoot.enabled = flatAmount > 0.001;
+  globe.setVisible(shouldShowGlobe);
+  globeShown = shouldShowGlobe;
+  terrainMaterial.setParameter("flatCoverage", flatAmount);
+  terrainMaterial.setParameter("surfaceTransition", projectionTransition);
+  const focus = flatToLonLat(view.x, view.z);
+  terrainMaterial.setParameter("surfaceFocus", [focus.lon, focus.lat]);
+  terrainMaterial.update();
+  if (globe?.entity) globe.entity.setLocalEulerAngles(0, 0, 0);
+  document.body.classList.toggle("globe-mode", globeShown);
 }
-function updateCamera() {
-  selectionDirty = true;
-  desiredProjectionTransition = projectionTransitionForHalfHeight(
-    view.halfHeight,
-  );
-  if (desiredProjectionTransition > 0) prepareGlobe();
-  applyPresentation();
+function setHalfHeight(height: number) {
+  navigate(view.x, view.z, height);
 }
-function updateHandoff(dt: number) {
-  const desiredDetail = globeCoverageReady() ? localDetailWeight(view.halfHeight) : 1;
-  surfaceDetail += (desiredDetail - surfaceDetail) * (1 - Math.exp(-Math.max(0, dt) / 0.16));
-  if (Math.abs(surfaceDetail - desiredDetail) < 0.001) surfaceDetail = desiredDetail;
-  terrainMaterial?.setParameter("surfaceDetailWeight", surfaceDetail);
-  desiredProjectionTransition = projectionTransitionForHalfHeight(
-    view.halfHeight,
-  );
+function updateProjection() {
+  const target = projectionTransitionForHalfHeight(view.halfHeight),
+    was = projectionTransition;
+  desiredProjectionTransition = target;
   if (desiredProjectionTransition > 0) prepareGlobe();
   const now = performance.now(),
     flatReady = flatCoverageReady(),
     destinationReady = destinationCoverageReady(flatReady),
     needsTransition =
       Math.abs(desiredProjectionTransition - projectionTransition) > 0.001;
-
   if (needsTransition && !handoffActive) {
     handoffActive = true;
+    handoffDirection = desiredProjectionTransition > projectionTransition ? "globe" : "local";
     handoffRequestedAt = now;
-    handoffDurationMs = 0;
+    handoffPreparationStarted = now;
     handoffPreparationWaitMs = 0;
     handoffBlendDurationMs = 0;
-    handoffWaitingForDestination = false;
+    handoffWaitingForDestination = !destinationReady;
   }
-  if (needsTransition)
-    handoffDirection =
-      desiredProjectionTransition > projectionTransition
-        ? "to-globe"
-        : "to-flat";
-
   if (needsTransition && !destinationReady) {
-    if (!handoffWaitingForDestination) {
-      handoffWaitingForDestination = true;
-      handoffPreparationStarted = now;
-    }
-  } else if (handoffWaitingForDestination) {
+    handoffWaitingForDestination = true;
+    applyPresentation();
+    return;
+  }
+  if (handoffWaitingForDestination) {
     handoffPreparationWaitMs += now - handoffPreparationStarted;
-    handoffPreparationStarted = 0;
     handoffWaitingForDestination = false;
   }
-
-  const target = destinationReady
-      ? desiredProjectionTransition
-      : projectionTransition,
-    canMove = Math.abs(target - projectionTransition) > 0.001;
-  if (canMove) handoffBlendDurationMs += Math.max(0, dt * 1000);
-  projectionTransition = advanceProjectionTransition(
-    projectionTransition,
-    target,
-    dt,
-  );
-
+  if (needsTransition) {
+    const before = projectionTransition;
+    projectionTransition = advanceProjectionTransition(
+      projectionTransition,
+      desiredProjectionTransition,
+      1 / 60,
+    );
+    if (projectionTransition !== before)
+      handoffBlendDurationMs += 1000 / 60;
+  }
   if (
     handoffActive &&
-    Math.abs(projectionTransition - desiredProjectionTransition) <= 0.001 &&
-    destinationCoverageReady(flatReady)
+    Math.abs(desiredProjectionTransition - projectionTransition) <= 0.001
   ) {
-    if (handoffWaitingForDestination) {
-      handoffPreparationWaitMs += now - handoffPreparationStarted;
-      handoffPreparationStarted = 0;
-      handoffWaitingForDestination = false;
-    }
+    projectionTransition = desiredProjectionTransition;
     handoffDurationMs = now - handoffRequestedAt;
     handoffActive = false;
     handoffDirection = "none";
   }
+  if (projectionTransition !== was) selectionDirty = true;
   applyPresentation();
 }
 function notePoleLimit(side: "north" | "south") {
@@ -575,523 +485,43 @@ function notePoleLimit(side: "north" | "south") {
 function navigate(x: number, z: number, height = view.halfHeight) {
   view.halfHeight = Math.max(
     2,
-    Math.min(Math.max(GLOBE_FROM, globeFit) * 1.3, height),
+    Math.min(
+      PLANET_RADIUS * 4,
+      height,
+    ),
   );
-  const boundedZ = Math.max(-POLE_DISTANCE, Math.min(POLE_DISTANCE, z));
-  if (boundedZ !== z) notePoleLimit(z < -POLE_DISTANCE ? "north" : "south");
-  view.x = wrapX(x);
-  view.z = boundedZ;
+  view.x = x;
+  view.z = z;
   rebaseRenderFrame();
-  // Leaving Province level means the globe may be needed soon.
-  if (view.halfHeight >= 230) prepareGlobe();
+  selectionDirty = true;
   updateCamera();
 }
-function uploadGeometry(
-  g: Geometry,
-  parent: pc.Entity,
-  name: string,
-  material: pc.StandardMaterial,
-): pc.Mesh | undefined {
-  if (g.positions.length === 0) return;
-  const mesh = new pc.Mesh(app.graphicsDevice);
-  mesh.setPositions(g.positions);
-  mesh.setNormals(g.normals);
-  mesh.setColors32(g.colors);
-  if (g.uvs) mesh.setUvs(0, g.uvs);
-  mesh.setIndices(g.indices);
-  mesh.update(pc.PRIMITIVE_TRIANGLES);
-  const entity = new pc.Entity(name);
-  entity.addComponent("render", {
-    meshInstances: [new pc.MeshInstance(mesh, material)],
-    castShadows: name !== "terrain",
-    receiveShadows: true,
-  });
-  parent.addChild(entity);
-  entity.enabled =
-    name === "terrain" ||
-    (name === "structures"
-      ? layers.structures
-      : name === "nature"
-        ? layers.nature
-        : layers.structures && layers.nature);
-  return mesh;
-}
-function setLayers() {
-  for (const { entity } of tileCache.values())
-    for (const child of entity.children as pc.Entity[]) {
-      child.enabled =
-        child.name === "terrain" ||
-        (child.name === "structures"
-          ? layers.structures
-          : child.name === "nature"
-            ? layers.nature
-            : layers.structures && layers.nature);
-    }
-}
-function request(tile: Tile) {
-  if (tileCache.has(tile.key) || pending.has(tile.key)) return;
-  if (inFlight + uploads.length >= streamingBudget.generationReady) return;
-  pending.add(tile.key);
-  inFlight++;
-  worker.postMessage(tile);
-}
-function refreshSelection() {
-  // Reserve bounded capacity for old and incoming coverage during the 240 ms blend.
-  wanted = selectTiles(view, 190, Math.floor(streamingBudget.activePatches / 2));
-  const nextWantedKeys = new Set(wanted.map((tile) => tile.key));
-  for (const tile of wanted)
-    if (!previousWantedKeys.has(tile.key)) {
-      if (tileCache.has(tile.key)) cacheHits++;
-      else cacheMisses++;
-    }
-  previousWantedKeys.clear();
-  for (const key of nextWantedKeys) previousWantedKeys.add(key);
-  revision++;
-  selectionDirty = false;
-  const name =
-    view.halfHeight < 70
-      ? "Street"
-      : view.halfHeight < 230
-        ? "Village"
-        : view.halfHeight < 900
-          ? "Province"
-          : view.halfHeight < GLOBE_FROM
-            ? "Country"
-            : "Realm";
-  $("detail-name").textContent = name;
-  const dotCount = { Street: 5, Village: 4, Province: 3, Country: 2, Realm: 1 }[
-    name
-  ];
-  document
-    .querySelectorAll(".detail-dots i")
-    .forEach((dot, i) => dot.classList.toggle("active", i < dotCount));
-  const s = nearestPlace(view.x, view.z);
-  $("place-name").textContent = globeShown
-    ? continentalEnvelope(view.x, view.z) < 1
-      ? continentAt(view.x, view.z).name
-      : "The open sea"
-    : s && Math.hypot(view.x - s.x, view.z - s.z) < 200
-      ? s.name
-      : "The wild marches";
-  updateNavigationHud();
-}
-function processStreaming(material: pc.StandardMaterial) {
-  uploadsThisFrame = 0;
-  if (selectionDirty) refreshSelection();
-  // At most one GPU mesh group per frame. Generation is isolated in a worker.
-  const relevant = (key: string) => key === tileAt(0,0,0).key || wanted.some(tile=>tile.key===key) || activeKeys.includes(key) || Boolean(lodTransition?.oldKeys.includes(key));
-  let next = uploads.shift();
-  while(next && !relevant(next.tile.key)) {
-    pending.delete(next.tile.key);
-    discardedPresentationJobs++;
-    next=uploads.shift();
-  }
-  if (next) {
-    const bytes = estimateGeometryBytes(next.data);
-    const entity = new pc.Entity(next.tile.key),
-      meshes: pc.Mesh[] = [];
-    for (const [name, g] of Object.entries(next.data)) {
-      const mesh = uploadGeometry(g, entity, name, name === "terrain" ? terrainMaterial! : material);
-      if (mesh) meshes.push(mesh);
-    }
-    entity.enabled = false;
-    applyTileRenderTransform(next.tile, entity);
-    flatRoot.addChild(entity);
-    tileCache.set(next.tile.key, {
-      tile: next.tile,
-      entity,
-      meshes,
-      used: revision,
-      bytes,
-    });
-    cachedGeometryBytes += bytes;
-    uploadsThisFrame = 1;
-    maxUploadsPerFrame = Math.max(maxUploadsPerFrame, uploadsThisFrame);
-    if (next.tile.size <= 512) {
-      detailedMaxHorizontalM = Math.max(
-        detailedMaxHorizontalM,
-        next.precision.maxHorizontalM,
-      );
-      detailedMaxFloat32ErrorM = Math.max(
-        detailedMaxFloat32ErrorM,
-        next.precision.maxFloat32ErrorM,
-      );
-    }
-    pending.delete(next.tile.key);
-  }
-  const root = tileAt(0, 0, 0);
-  if (!tileCache.has(root.key)) {
-    if (inFlight + uploads.length < streamingBudget.generationReady) request(root);
-  } else {
-    const complete = wanted.every((tile) => tileCache.has(tile.key));
-    if (complete && !lodTransition) {
-      const newKeys = wanted.map((t) => t.key),
-        active = new Set(newKeys);
-      if (ready && (newKeys.length !== activeKeys.length || newKeys.some(key => !activeKeys.includes(key))))
-        lodTransition = { oldKeys: [...activeKeys], newKeys, started: performance.now() };
-      const retained = new Set(lodTransition?.oldKeys ?? []);
-      for (const [key, record] of tileCache) {
-        record.entity.enabled = active.has(key) || retained.has(key);
-        if (active.has(key)) record.used = revision;
-      }
-      activeKeys = newKeys;
-      if (!ready) {
-        ready = true;
-        $("loading").classList.add("done");
-      }
-    } else if (!complete) {
-      // Keep the previous coverage and coarse root until the replacement is complete.
-      tileCache.get(root.key)!.entity.enabled = true;
-      if (!ready && tileCache.size > 1) $("loading").classList.add("done");
-      for (const tile of wanted) {
-        if (inFlight + uploads.length >= streamingBudget.generationReady) break;
-        request(tile);
-      }
-    }
-    const overCacheBudget = () =>
-      tileCache.size > streamingBudget.cachedPatches ||
-      cachedGeometryBytes + continuityCpuBytes() > streamingBudget.cpuBytes ||
-      cachedGeometryBytes > streamingBudget.gpuBytes;
-    if (overCacheBudget()) {
-      const protect = new Set([
-        ...activeKeys,
-        ...(lodTransition?.oldKeys ?? []),
-        ...wanted.map((t) => t.key),
-        root.key,
-      ]);
-      const obsolete = [...tileCache.entries()]
-        .filter(([key]) => !protect.has(key))
-        .sort((a, b) => a[1].used - b[1].used || a[0].localeCompare(b[0]));
-      for (const [key, record] of obsolete) {
-        if (!overCacheBudget()) break;
-        // MeshInstance destruction releases its mesh reference and GPU buffers.
-        record.entity.destroy();
-        tileCache.delete(key);
-        cachedGeometryBytes = Math.max(0, cachedGeometryBytes - record.bytes);
-        evictions++;
-      }
-    }
-  }
-  if (lodTransition) {
-    const transition = lodTransition;
-    const progress = Math.min(1, (performance.now() - transition.started) / (LOD_BLEND_SECONDS * 1000));
-    const t = progress * progress * (3 - 2 * progress);
-    const incoming = new Set(transition.newKeys), outgoing = new Set(transition.oldKeys);
-    for (const key of new Set([...incoming, ...outgoing])) {
-      const record = tileCache.get(key);
-      if (!record) continue;
-      const common = incoming.has(key) && outgoing.has(key);
-      for (const child of record.entity.children as pc.Entity[])
-        for (const instance of child.render?.meshInstances ?? [])
-          instance.setParameter("lodCoverage", common ? 1 : incoming.has(key) ? t : -Math.max(1e-7, t));
-      if (progress === 1) record.entity.enabled = incoming.has(key);
-    }
-    if (progress === 1) lodTransition = undefined;
-  }
-  const poleFeedback =
-    poleLimit && performance.now() < poleLimitUntil
-      ? ` · ${poleLimit === "north" ? "North" : "South"} pole limit`
-      : "";
-  $("tile-status").textContent =
-    (projectionTransition >= 0.999
-      ? `Globe · ${globePass < GLOBE_PASSES.length ? "refining" : "ready"}`
-      : projectionTransition > 0.001
-        ? `Handoff · ${Math.round(projectionTransition * 100)}% · ${pending.size ? "preparing terrain" : "ready"}`
-        : `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`) +
-    poleFeedback;
-}
-function inspectCell(screenX: number, screenY: number) {
-  const origin = camera.camera!.screenToWorld(screenX, screenY, 0);
-  const far = camera.camera!.screenToWorld(screenX, screenY, 600000);
-  const direction = far.clone().sub(origin).normalize();
-  let before = 0,
-    hit = -1;
-  // March to the first surface crossing, then solve the coordinate height field.
-  const marchStep = Math.max(8, view.halfHeight / 40);
-  for (let distance = 0; distance <= 600000; distance += marchStep) {
-    const point = origin.clone().add(direction.clone().mulScalar(distance));
-    const source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y <= Math.max(0, heightAt(source.x, source.z))) {
-      hit = distance;
-      break;
-    }
-    before = distance;
-  }
-  if (hit < 0) return;
-  for (let i = 0; i < 18; i++) {
-    const middle = (before + hit) / 2,
-      point = origin.clone().add(direction.clone().mulScalar(middle)),
-      source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y > Math.max(0, heightAt(source.x, source.z))) before = middle;
-    else hit = middle;
-  }
-  const point = origin.add(direction.mulScalar(hit));
-  try {
-    const source = renderFrame.renderToSource(point.x, point.z),
-      canonical = renderFrame.renderToLonLat(point.x, point.z),
-      cell = cellAt(source.x, source.z),
-      hierarchy = cellSeed(cell.x, cell.z),
-      canonicalId = canonicalCellId(canonical.lon, canonical.lat);
-    selectedCode = canonicalId;
-    $("cell-panel").hidden = false;
-    $("cell-biome").textContent = cell.biome;
-    $("cell-coordinates").textContent =
-      `${coordinateLabel(canonical, true)} · ${hierarchy.parent.parent.parent.landform}`;
-    $("cell-code").textContent = canonicalId;
-    $("cell-code").dataset.canonicalId = canonicalId;
-    $("cell-height").textContent = `${cell.elevation.toFixed(1)} m`;
-    $("cell-height").title =
-      `Canonical position: lon ${canonical.lon.toFixed(9)}, lat ${canonical.lat.toFixed(9)}, elevation ${cell.elevation.toFixed(2)} m`;
-    $("cell-tile").textContent = `${cell.tile} · derived render tile`;
-    $("cell-walkable").textContent = cell.walkable ? "Yes" : "No";
-    $("copy-status").textContent = "";
-    const patch = hierarchy.parent,
-      district = patch.parent,
-      region = district.parent,
-      province = region.parent;
-    const levels = [
-      ["Derived source · Province · 2 km", province.code],
-      ["Derived source · Region · 200 m", region.code],
-      ["Derived source · District · 20 m", district.code],
-      ["Derived source · Patch · 4 m", patch.code],
-      ["Derived source · Cell · 2 m", hierarchy.code],
-    ];
-    $("seed-levels").replaceChildren(
-      ...levels.map(([name, code]) => {
-        const li = document.createElement("li");
-        li.textContent = name;
-        const text = document.createElement("code");
-        text.textContent = code;
-        li.append(text);
-        return li;
-      }),
-    );
-  } catch {
-    /* A click past the finite realm boundary has no logical cell. */
-  }
-}
-function setupControls() {
-  $<HTMLSelectElement>("map-scale").replaceChildren(
-    ...SCALE_LADDER.map((value) => {
-      const option = document.createElement("option");
-      option.value = String(value);
-      option.textContent = `1/${value}`;
-      return option;
-    }),
+function updateCamera() {
+  const elevation = Math.max(0, heightAt(view.x, view.z)),
+    pitch = Math.PI / 3,
+    cameraHeight = view.halfHeight / Math.sin(pitch),
+    distance = view.halfHeight / Math.tan(pitch);
+  camera.setLocalPosition(
+    0,
+    PLANET_RADIUS + elevation + cameraHeight,
+    distance,
   );
-  $<HTMLSelectElement>("map-scale").onchange = (event) =>
-    navigate(
-      view.x,
-      view.z,
-      halfHeightForCanonicalFootprint(
-        (CANONICAL_PLANET_DIAMETER *
-          Number((event.target as HTMLSelectElement).value)) /
-          10000,
-      ),
-    );
-  $("compass").onclick = () => {
-    view.yaw = 0;
-    updateCamera();
-  };
-  const pointers = new Map<number, { x: number; y: number }>();
-  let startX = 0,
-    startY = 0,
-    moved = false,
-    lastPinch = 0;
-  canvas.addEventListener("pointerdown", (event) => {
-    try {
-      canvas.setPointerCapture(event.pointerId);
-    } catch {
-      /* synthetic browser tests */
-    }
-    canvas.focus({ preventScroll: true });
-    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    startX = event.clientX;
-    startY = event.clientY;
-    moved = false;
-    if (pointers.size === 2) {
-      const [a, b] = [...pointers.values()];
-      lastPinch = Math.hypot(a.x - b.x, a.y - b.y);
-      moved = true;
-    }
-  });
-  canvas.addEventListener("pointermove", (event) => {
-    const previous = pointers.get(event.pointerId);
-    if (!previous) return;
-    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (pointers.size === 2) {
-      const [a, b] = [...pointers.values()];
-      const distance = Math.hypot(a.x - b.x, a.y - b.y);
-      if (lastPinch > 0 && distance > 0)
-        navigate(view.x, view.z, (view.halfHeight * lastPinch) / distance);
-      lastPinch = distance;
-      moved = true;
-      return;
-    }
-    if (!moved) {
-      if (Math.hypot(event.clientX - startX, event.clientY - startY) <= 5)
-        return;
-      moved = true;
-      panScreen(startX, startY, event.clientX, event.clientY);
-    } else panScreen(previous.x, previous.y, event.clientX, event.clientY);
-  });
-  canvas.addEventListener("pointerup", (event) => {
-    if (!moved && pointers.size === 1 && projectionTransition <= 0.001)
-      inspectCell(event.clientX, event.clientY);
-    pointers.delete(event.pointerId);
-    lastPinch = 0;
-  });
-  canvas.addEventListener("pointercancel", (event) => {
-    pointers.delete(event.pointerId);
-    lastPinch = 0;
-  });
-  canvas.addEventListener(
-    "wheel",
-    (event) => {
-      event.preventDefault();
-      navigate(
-        view.x,
-        view.z,
-        view.halfHeight * Math.exp(event.deltaY * 0.0015),
-      );
-    },
-    { passive: false },
-  );
-  $("home").onclick = () => {
-    view.yaw = -0.22;
-    navigate(0, 14, 97);
-    $("cell-panel").hidden = true;
-  };
-  $("overview").onclick = () => {
-    // Realm view: the whole globe, centred on the current focus, north up.
-    view.yaw = 0;
-    const wasGlobe = document.body.classList.contains("globe-mode");
-    document.body.classList.add("globe-mode");
-    globeFit = (PLANET_RADIUS * innerHeight) / (2 * freeRadius());
-    document.body.classList.toggle("globe-mode", wasGlobe);
-    navigate(view.x, view.z, Math.max(GLOBE_FROM, globeFit));
-  };
-  $("zoom-in").onclick = () => navigate(view.x, view.z, view.halfHeight / 1.4);
-  $("zoom-out").onclick = () => navigate(view.x, view.z, view.halfHeight * 1.4);
-  $("rotate").onclick = () => {
-    view.yaw += Math.PI / 4;
-    updateCamera();
-  };
-  $("close-cell").onclick = () => {
-    $("cell-panel").hidden = true;
-  };
-  setupTravel();
-  $("copy-code").onclick = async () => {
-    try {
-      await navigator.clipboard.writeText(selectedCode);
-      $("copy-status").textContent = "Canonical planet ID copied";
-    } catch {
-      $("copy-status").textContent = "Select the canonical ID above to copy it.";
-    }
-  };
-  for (const key of ["structures", "nature", "grid"] as const)
-    $<HTMLInputElement>(key).onchange = (event) => {
-      layers[key] = (event.target as HTMLInputElement).checked;
-      setLayers();
-    };
-  window.addEventListener("keydown", (event) => {
-    if (document.activeElement !== canvas) return;
-    if (
-      [
-        "ArrowUp",
-        "ArrowDown",
-        "ArrowLeft",
-        "ArrowRight",
-        "w",
-        "a",
-        "s",
-        "d",
-        "q",
-        "e",
-      ].includes(event.key)
-    ) {
-      pressed.add(event.key);
-      event.preventDefault();
-    }
-  });
-  window.addEventListener("keyup", (event) => pressed.delete(event.key));
-  window.addEventListener("blur", () => pressed.clear());
-  window.addEventListener("resize", () => {
-    app.resizeCanvas();
-    view.aspect = innerWidth / innerHeight;
-    view.pixels = Math.min(innerHeight, 1000);
-    streamingBudget = streamingBudgetForViewport(innerWidth, innerHeight);
-    if (projectionTransition > 0.001)
-      globeFit = (PLANET_RADIUS * innerHeight) / (2 * freeRadius());
-    updateCamera();
-  });
+  camera.setLocalEulerAngles(60, 0, 0);
+  camera.camera!.orthoHeight = view.halfHeight;
+  camera.camera!.nearClip = Math.max(0.1, cameraHeight * 0.01);
+  camera.camera!.farClip = PLANET_RADIUS * 8;
+  applyPresentation();
 }
-function setupTravel() {
-  const continent = $<HTMLSelectElement>("continent-select"),
-    country = $<HTMLSelectElement>("country-select"),
-    city = $<HTMLSelectElement>("city-select"),
-    village = $<HTMLSelectElement>("village-select");
-  const options = (
-    select: HTMLSelectElement,
-    items: { value: string; name: string }[],
-  ) => {
-    select.replaceChildren(
-      ...items.map((item) => new Option(item.name, item.value)),
-    );
-  };
-  const updateVillages = () =>
-    options(
-      village,
-      villages
-        .filter((v) => v.id.startsWith(city.value + "/"))
-        .map((v) => ({ value: v.id, name: v.name })),
-    );
-  const updateCities = () => {
-    const c = countries.find((c) => c.code === country.value)!;
-    simulation.setInterest(c.code);
-    options(
-      city,
-      cities
-        .filter((t) => t.continent === c.continent && t.country === c.id)
-        .map((t) => ({ value: t.id, name: t.name })),
-    );
-    updateVillages();
-  };
-  const updateCountries = () => {
-    options(
-      country,
-      countries
-        .filter((c) => c.continent === Number(continent.value))
-        .map((c) => ({ value: c.code, name: c.name })),
-    );
-    updateCities();
-  };
-  options(
-    continent,
-    continents.map((c) => ({ value: String(c.id), name: c.name })),
-  );
-  updateCountries();
-  continent.onchange = updateCountries;
-  country.onchange = updateCities;
-  city.onchange = updateVillages;
-  $("open-travel").onclick = () => {
-    $("travel-panel").hidden = !$("travel-panel").hidden;
-  };
-  $("close-travel").onclick = () => {
-    $("travel-panel").hidden = true;
-  };
-  $("visit-city").onclick = () => {
-    const place = cities.find((p) => p.id === city.value)!;
-    navigate(place.x, place.z, 450);
-    simulation.setFocus(place);
-    $("travel-panel").hidden = true;
-  };
-  $("visit-village").onclick = () => {
-    const place = villages.find((p) => p.id === village.value)!;
-    navigate(place.x, place.z + 14, 97);
-    simulation.setFocus(place);
-    $("travel-panel").hidden = true;
-  };
+function makeWorldMaterial() {
+  const material = new pc.StandardMaterial();
+  material.diffuse.set(0.88, 0.91, 0.84);
+  material.useLighting = false;
+  material.update();
+  return material;
+}
+function flatCoverageMaterial() {
+  if (!worldMaterial) worldMaterial = makeWorldMaterial();
+  return worldMaterial;
 }
 function characterMaterial(variant: number): pc.StandardMaterial {
   const image = document.createElement("canvas");
@@ -1104,43 +534,302 @@ function characterMaterial(variant: number): pc.StandardMaterial {
   ctx.fillRect(35, 69, 9, 22);
   ctx.fillStyle = "#d2b17e";
   ctx.fillRect(17, 40, 8, 27);
-  ctx.fillRect(43, 40, 8, 27);
-  ctx.fillStyle = coats[variant];
+  ctx.fillRect(39, 40, 8, 27);
+  ctx.fillStyle = coats[variant % coats.length];
+  ctx.fillRect(20, 33, 24, 38);
+  ctx.fillStyle = "#cda774";
   ctx.beginPath();
-  ctx.moveTo(23, 36);
-  ctx.lineTo(43, 36);
-  ctx.lineTo(49, 75);
-  ctx.lineTo(17, 75);
-  ctx.closePath();
+  ctx.arc(32, 21, 13, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#463b2c";
-  ctx.fillRect(21, 61, 23, 4);
-  ctx.fillStyle = "#d7b487";
-  ctx.beginPath();
-  ctx.ellipse(33, 25, 11, 14, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#4e3c2a";
-  ctx.beginPath();
-  ctx.ellipse(33, 16, 13, 9, 0, Math.PI, Math.PI * 2);
-  ctx.fill();
-  ctx.fillRect(20, 15, 26, 5);
-  ctx.fillStyle = "#493b2c";
-  ctx.fillRect(27, 26, 2, 2);
-  ctx.fillRect(37, 26, 2, 2);
+  ctx.fillStyle = "#4a3827";
+  ctx.fillRect(20, 8, 24, 11);
   const texture = new pc.Texture(app.graphicsDevice, {
     width: 64,
     height: 96,
-    mipmaps: true,
+    format: pc.PIXELFORMAT_R8_G8_B8_A8,
+    mipmaps: false,
   });
   texture.setSource(image);
   const material = new pc.StandardMaterial();
   material.diffuseMap = texture;
   material.opacityMap = texture;
-  material.opacityMapChannel = "a";
-  material.alphaTest = 0.4;
+  material.alphaTest = 0.05;
+  material.useLighting = false;
   material.cull = pc.CULLFACE_NONE;
   material.update();
   return material;
+}
+function setupControls() {
+  const pointer = { down: false, x: 0, y: 0 };
+  canvas.addEventListener("pointerdown", (event) => {
+    pointer.down = true;
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+    canvas.setPointerCapture(event.pointerId);
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (!pointer.down) return;
+    panScreen(pointer.x, pointer.y, event.clientX, event.clientY);
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+  });
+  canvas.addEventListener("pointerup", (event) => {
+    pointer.down = false;
+    canvas.releasePointerCapture(event.pointerId);
+  });
+  canvas.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const before = surfaceAtScreen(event.clientX, event.clientY);
+    navigate(view.x, view.z, view.halfHeight * Math.exp(event.deltaY * 0.001));
+    const after = surfaceAtScreen(event.clientX, event.clientY);
+    if (before && after) {
+      const focus = flatToLonLat(view.x, view.z),
+        next = draggedFocus(focus, before, after),
+        flat = lonLatToFlat(next.lon, next.lat);
+      navigate(flat.x, flat.z);
+    }
+  }, { passive: false });
+  let pinchDistance = 0;
+  const touches = new Map<number, PointerEvent>();
+  canvas.addEventListener("pointerdown", (event) => {
+    if (event.pointerType !== "touch") return;
+    touches.set(event.pointerId, event);
+    if (touches.size === 2) {
+      const [a, b] = [...touches.values()];
+      pinchDistance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    }
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (event.pointerType !== "touch" || !touches.has(event.pointerId)) return;
+    touches.set(event.pointerId, event);
+    if (touches.size === 2) {
+      const [a, b] = [...touches.values()],
+        distance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      if (pinchDistance > 0) navigate(view.x, view.z, view.halfHeight * pinchDistance / distance);
+      pinchDistance = distance;
+    }
+  });
+  const clearTouch = (event: PointerEvent) => {
+    touches.delete(event.pointerId);
+    if (touches.size < 2) pinchDistance = 0;
+  };
+  canvas.addEventListener("pointerup", clearTouch);
+  canvas.addEventListener("pointercancel", clearTouch);
+  document.addEventListener("keydown", (event) => {
+    const target = event.target as HTMLElement;
+    if (target.matches("input,select,textarea,button")) return;
+    pressed.add(event.key.toLowerCase());
+  });
+  document.addEventListener("keyup", (event) => pressed.delete(event.key.toLowerCase()));
+  $("overview").onclick = () => {
+    view.yaw = 0;
+    const wasGlobe = document.body.classList.contains("globe-mode");
+    document.body.classList.add("globe-mode");
+    globeFit = (PLANET_RADIUS * innerHeight) / (2 * freeRadius());
+    document.body.classList.toggle("globe-mode", wasGlobe);
+    navigate(view.x, view.z, Math.max(GLOBE_FROM, globeFit));
+  };
+  $("zoom-in").onclick = () => navigate(view.x, view.z, view.halfHeight / 1.4);
+  $("zoom-out").onclick = () => navigate(view.x, view.z, view.halfHeight * 1.4);
+  $<HTMLSelectElement>("map-scale").onchange = (event) => {
+    const denominator = Number((event.target as HTMLSelectElement).value);
+    navigate(view.x, view.z, halfHeightForCanonicalFootprint(CANONICAL_PLANET_DIAMETER * denominator / 10000));
+  };
+  $("compass").onclick = () => {
+    view.yaw = 0;
+    updateCamera();
+  };
+  $("rotate-left").onclick = () => {
+    view.yaw -= Math.PI / 6;
+    updateCamera();
+  };
+  $("rotate-right").onclick = () => {
+    view.yaw += Math.PI / 6;
+    updateCamera();
+  };
+  $("home").onclick = () => {
+    const place = villages[0];
+    navigate(place.x, place.z + 14, 97);
+    simulation.setFocus(place);
+  };
+  $("open-travel").onclick = () => {
+    $("travel-panel").hidden = false;
+  };
+  $("close-travel").onclick = () => {
+    $("travel-panel").hidden = true;
+  };
+  $("region-country").onclick = () => {
+    const country = countries.find((entry) => entry.code === simulation.activeCountry) ?? countries[0];
+    navigate(country.x, country.z, 1800);
+  };
+  $("region-city").onclick = () => {
+    const country = countries.find((entry) => entry.code === simulation.activeCountry) ?? countries[0];
+    const place = cities.find((entry) => entry.country === country.id && entry.continent === country.continent) ?? cities[0];
+    navigate(place.x, place.z, 450);
+  };
+  $("region-village").onclick = () => {
+    const country = countries.find((entry) => entry.code === simulation.activeCountry) ?? countries[0];
+    const place = villages.find((entry) => entry.country === country.id && entry.continent === country.continent) ?? villages[0];
+    navigate(place.x, place.z, 97);
+  };
+}
+function setupTravel() {
+  const continent = $<HTMLSelectElement>("continent-select"),
+    country = $<HTMLSelectElement>("country-select"),
+    place = $<HTMLSelectElement>("village-select");
+  continent.innerHTML = continents.map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
+  const updateCountries = () => {
+    const continentId = Number(continent.value);
+    const available = countries.filter((item) => item.continent === continentId);
+    country.innerHTML = available.map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
+    updatePlaces();
+  };
+  const updatePlaces = () => {
+    const continentId = Number(continent.value), countryId = Number(country.value);
+    const available = villages.filter((item) => item.continent === continentId && item.country === countryId);
+    place.innerHTML = available.map((item) => `<option value="${item.id}">${item.name}</option>`).join("");
+  };
+  continent.onchange = updateCountries;
+  country.onchange = updatePlaces;
+  $("travel-go").onclick = () => {
+    const placeId = place.value;
+    const target = villages.find((item) => item.id === placeId);
+    if (!target) return;
+    navigate(target.x, target.z + 14, 97);
+    simulation.setFocus(target);
+    $("travel-panel").hidden = true;
+  };
+  updateCountries();
+}
+function setupClickInspect() {
+  const close = () => {
+    $("cell-panel").hidden = true;
+  };
+  $("close-cell").onclick = close;
+  canvas.addEventListener("click", (event) => {
+    const coordinate = surfaceAtScreen(event.clientX, event.clientY);
+    if (!coordinate) return;
+    const point = lonLatToFlat(coordinate.lon, coordinate.lat),
+      cell = cellAt(point.x, point.z),
+      selected = tileAt(point.x, point.z),
+      info = $("cell-info");
+    selectedCode = canonicalCellId(coordinate, 12);
+    info.textContent = `${selectedCode} · ${cell.biome} · ${selected.region} · ${Math.round(selected.elevation)} m`;
+    $("cell-panel").hidden = false;
+  });
+}
+function setupResize() {
+  addEventListener("resize", () => {
+    app.resizeCanvas();
+    view.aspect = innerWidth / innerHeight;
+    view.pixels = Math.min(innerHeight, 1000);
+    streamingBudget = streamingBudgetForViewport(innerWidth, innerHeight);
+    if (projectionTransition > 0.001)
+      globeFit = (PLANET_RADIUS * innerHeight) / (2 * freeRadius());
+    updateCamera();
+  });
+}
+function setupWorker() {
+  worker = new Worker(new URL("./tile-worker.ts", import.meta.url), { type: "module" });
+  worker.onmessage = (event) => {
+    inFlight--;
+    const payload = event.data as { tile: Tile; data: TileGeometry; precision: PatchConversionStats };
+    if (!pending.delete(payload.tile.key)) return;
+    uploads.push(payload);
+  };
+  worker.onerror = (event) => fail(`World worker could not start: ${event.message}`);
+}
+function queueTile(tile: Tile) {
+  if (tileCache.has(tile.key) || pending.has(tile.key)) return;
+  pending.add(tile.key);
+  inFlight++;
+  worker.postMessage(tile);
+}
+function refreshSelection() {
+  wanted = selectTiles(view, 190, Math.floor(streamingBudget.activePatches / 2));
+  const nextWantedKeys = new Set(wanted.map((tile) => tile.key));
+  for (const tile of wanted)
+    if (!previousWantedKeys.has(tile.key)) {
+      if (tileCache.has(tile.key)) cacheHits++;
+      else cacheMisses++;
+      queueTile(tile);
+    } else if (!tileCache.has(tile.key)) queueTile(tile);
+  previousWantedKeys.clear();
+  for (const key of nextWantedKeys) previousWantedKeys.add(key);
+  selectionDirty = false;
+}
+function material() {
+  if (!terrainMaterial) throw new Error("terrain material unavailable");
+  return terrainMaterial;
+}
+function processStreaming(material: pc.StandardMaterial) {
+  uploadsThisFrame = 0;
+  while (uploads.length && uploadsThisFrame < streamingBudget.uploadsPerFrame) {
+    const { tile, data, precision } = uploads.shift()!;
+    pending.delete(tile.key);
+    const old = tileCache.get(tile.key);
+    if (old) {
+      cachedGeometryBytes -= old.bytes;
+      old.entity.destroy();
+      tileCache.delete(tile.key);
+    }
+    const entity = new pc.Entity(`Terrain ${tile.key}`),
+      meshes: pc.Mesh[] = [];
+    entity.addComponent("render");
+    const mesh = pc.createMesh(app.graphicsDevice, data.positions, {
+      normals: data.normals,
+      uvs: data.uvs,
+      indices: data.indices,
+      colors: data.colors,
+    });
+    const instance = new pc.MeshInstance(mesh, material);
+    entity.render!.meshInstances = [instance];
+    flatRoot.addChild(entity);
+    applyTileRenderTransform(tile, entity);
+    const bytes = estimateGeometryBytes(data);
+    tileCache.set(tile.key, { tile, entity, meshes: [mesh], used: revision++, bytes });
+    cachedGeometryBytes += bytes;
+    detailedMaxHorizontalM = Math.max(detailedMaxHorizontalM, precision.maxHorizontalM);
+    detailedMaxFloat32ErrorM = Math.max(detailedMaxFloat32ErrorM, precision.maxFloat32ErrorM);
+    uploadsThisFrame++;
+  }
+  const complete = wanted.every((tile) => tileCache.has(tile.key));
+  if (complete && !lodTransition) {
+    const newKeys = wanted.map((t) => t.key),
+      active = new Set(newKeys);
+    if (ready && (newKeys.length !== activeKeys.length || newKeys.some(key => !activeKeys.includes(key))))
+      lodTransition = { oldKeys: [...activeKeys], newKeys, started: performance.now() };
+    const retained = new Set(lodTransition?.oldKeys ?? []);
+    for (const [key, record] of tileCache) {
+      record.entity.enabled = active.has(key) || retained.has(key);
+      if (active.has(key)) record.used = revision;
+    }
+    activeKeys = newKeys;
+    ready = true;
+    $("loading").hidden = true;
+  }
+  if (lodTransition) {
+    const transition = lodTransition;
+    const progress = Math.min(1, (performance.now() - transition.started) / (LOD_BLEND_SECONDS * 1000));
+    const t = progress * progress * (3 - 2 * progress);
+    const incoming = new Set(transition.newKeys), outgoing = new Set(transition.oldKeys);
+    for (const key of new Set([...incoming, ...outgoing])) {
+      const record = tileCache.get(key);
+      if (!record) continue;
+      const instance = record.entity.render!.meshInstances[0];
+      instance.setParameter("lodCoverage", incoming.has(key) && outgoing.has(key) ? 1 : incoming.has(key) ? t : -(1 - t));
+      if (progress === 1) record.entity.enabled = incoming.has(key);
+    }
+    if (progress === 1) lodTransition = undefined;
+  }
+  const poleFeedback =
+    poleLimit && performance.now() < poleLimitUntil
+      ? ` · ${poleLimit === "north" ? "North" : "South"} pole limit`
+      : "";
+  $("tile-status").textContent =
+    (projectionTransition >= 0.999
+      ? `Globe · ${globePass < GLOBE_PASSES.length ? "refining" : "ready"}`
+      : `Local · ${activeKeys.length} patches`) + poleFeedback;
 }
 async function start() {
   $("world-seed").textContent = WORLD_SEED;
@@ -1149,85 +838,34 @@ async function start() {
   canvas = device.canvas as HTMLCanvasElement;
   device.on("devicelost", () => {
     rendererState.phase = "lost";
-    rendererState.error =
-      "The GPU connection was lost. Reload the page to restore rendering.";
+    rendererState.error = "The GPU connection was lost. Reload the page to restore rendering.";
     if (app) app.autoRender = false;
     fail(rendererState.error);
-    showRendererActions();
-  });
-  device.on("devicerestored", () => {
-    rendererState.phase = "ready";
-    rendererState.error = "";
-    errorText = "";
-    $("error").hidden = true;
-    app.autoRender = true;
   });
   device.maxPixelRatio = Math.min(devicePixelRatio, 1.5);
   const options = new pc.AppOptions();
   options.graphicsDevice = device;
-  options.componentSystems = [
-    pc.RenderComponentSystem,
-    pc.CameraComponentSystem,
-    pc.LightComponentSystem,
-  ];
-  options.resourceHandlers = [pc.TextureHandler];
+  options.componentSystems = [pc.RenderComponentSystem, pc.CameraComponentSystem];
+  options.resourceHandlers = [];
   app = new pc.AppBase(canvas);
   app.init(options);
-  app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
-  app.setCanvasResolution(pc.RESOLUTION_AUTO);
-  app.scene.ambientLight = new pc.Color(0.4, 0.46, 0.41);
-  camera = new pc.Entity("Atlas camera");
+  camera = new pc.Entity("Camera");
   camera.addComponent("camera", {
-    projection: pc.PROJECTION_ORTHOGRAPHIC,
     clearColor: FLAT_BACKDROP,
-    nearClip: 0.1,
-    farClip: 22000,
+    projection: pc.PROJECTION_ORTHOGRAPHIC,
+    orthoHeight: view.halfHeight,
   });
   app.root.addChild(camera);
   flatRoot = new pc.Entity("Flat world");
   app.root.addChild(flatRoot);
   globe = new GlobeView(app);
-  camera.camera!.layers = [globe.surfaceLayer.id, ...camera.camera!.layers];
-  const sun = new pc.Entity("Late afternoon sun");
-  sun.addComponent("light", {
-    type: "directional",
-    color: new pc.Color(1, 0.94, 0.84),
-    intensity: 0.9,
-    castShadows: true,
-    shadowResolution: 2048,
-    shadowDistance: 420,
-    shadowBias: 0.3,
-    normalOffsetBias: 0.15,
-  });
-  sun.setEulerAngles(48, -28, 0);
-  app.root.addChild(sun);
-  const material = (worldMaterial = new pc.StandardMaterial());
-  material.diffuse = new pc.Color(1, 1, 1);
-  material.diffuseVertexColor = true;
-  (material as pc.StandardMaterial & { vertexColorGamma: boolean }).vertexColorGamma = true;
-  material.specular = new pc.Color(0.04, 0.04, 0.04);
-  material.shininess = 4;
-  material.cull = pc.CULLFACE_NONE;
-  installLodCoverage(material);
-  material.update();
   terrainMaterial = createTerrainMaterial(globe.surface);
-  worker = new Worker(new URL("./tile-worker.ts", import.meta.url), {
-    type: "module",
-  });
-  worker.onmessage = (event) => {
-    inFlight--;
-    continuityWorkerBytes = event.data.continuity?.cpuBytesEstimated || 0;
-    continuityWorkerState = event.data.continuity;
-    if (event.data.error) {
-      pending.delete(event.data.tile.key);
-      fail(`Tile generation failed: ${event.data.error}`);
-      return;
-    }
-    uploads.push(event.data);
-  };
-  worker.onerror = (event) =>
-    fail(`World worker could not start: ${event.message}`);
+  globe.material = terrainMaterial;
+  setupWorker();
   setupControls();
+  setupTravel();
+  setupClickInspect();
+  setupResize();
   updateCamera();
   simulation.setFocus(villages[0]);
   simulation.advance(clock.tickAt(Date.now()));
@@ -1237,31 +875,21 @@ async function start() {
   const labelNodes = new Map<string, HTMLElement>();
   const labels = $("map-labels");
   let labelFingerprint = "";
-  $("backend").textContent =
-    `PlayCanvas 2.23.0 · ${device.deviceType === "webgpu" ? "WebGPU" : "WebGL2"}`;
-  $("backend").title = rendererState.fallbackReason;
-  let statsElapsed = 0,
-    frames = 0,
-    fps = 0;
-  app.on("update", (dt: number) => {
-    if (rendererState.phase === "lost") return;
-    const now = Date.now(),
-      realSecond = Math.floor(now / 1000);
+  app.on("update", (dt) => {
+    if (selectionDirty) refreshSelection();
+    updateProjection();
+    const now = Date.now(), realSecond = Math.floor(now / 1000);
     const simulationTick = clock.tickAt(now);
     if (realSecond !== lastSimulationRealSecond) {
-      if (view.halfHeight < 900)
-        simulation.setFocus(nearestPlace(view.x, view.z));
+      if (view.halfHeight < 900) simulation.setFocus(nearestPlace(view.x, view.z));
       simulation.advance(Math.max(simulation.tick, simulationTick));
       lastSimulationRealSecond = realSecond;
       $("fantasy-time").textContent = clock.labelAt(now);
       $("simulation-status").textContent =
         `${simulation.stats.residents} residents live in the focused country; ${simulation.stats.coarseCountries} countries tracked as summaries.`;
-      const visible =
-        view.halfHeight < 240
-          ? simulation
-              .focusedResidents(view.x, view.z, view.halfHeight * 1.5)
-              .slice(0, 96)
-          : [];
+      const visible = view.halfHeight < 240
+        ? simulation.focusedResidents(view.x, view.z, view.halfHeight * 1.5).slice(0, 96)
+        : [];
       for (let i = 0; i < visible.length; i++) {
         if (!actors[i]) {
           const actor = new pc.Entity("Resident billboard");
@@ -1275,192 +903,38 @@ async function start() {
           flatRoot.addChild(actor);
           actors.push(actor);
         }
-        actors[i].enabled = true;
         actorSources.set(actors[i], { x: visible[i].x, z: visible[i].z });
         positionActor(actors[i], visible[i].x, visible[i].z);
+        actors[i].enabled = true;
       }
-      for (let i = visible.length; i < actors.length; i++)
-        actors[i].enabled = false;
+      for (let i = visible.length; i < actors.length; i++) actors[i].enabled = false;
     }
-    for (const actor of actors)
-      if (actor.enabled) {
-        actor.setRotation(camera.getRotation());
-        actor.rotateLocal(90, 0, 0);
-      }
-    if (dt > 1 / 30) slowFrameCount++;
-    droppedFrameCount += Math.max(0, Math.floor(dt / (1 / 60)) - 1);
-    updateHandoff(dt);
-    sun.light!.castShadows =
-      view.halfHeight < 500 && projectionTransition <= 0.001;
-    const destinations =
-      projectionTransition > 0.001 || view.halfHeight > 25000
-        ? continents.map((c) => ({
-            ...c,
-            id: `continent-${c.id}`,
-            kind: "continent",
-          }))
-        : view.halfHeight > 1000
-          ? countries.map((c) => ({ ...c, id: c.code, kind: "country" }))
-          : view.halfHeight > 230
-            ? cities
-            : villages;
-    const visibleLabels = new Set<string>();
-    const anchors: {
-      id: string;
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-    }[] = [];
-    const focusRender = renderFrame.sourceToRender(view.x, view.z);
-    for (const place of destinations) {
-      let screen: pc.Vec3;
-      const placeHeight = Math.max(0, heightAt(place.x, place.z)) + 2,
-        localPoint = renderFrame.sourceToRender(place.x, place.z, placeHeight);
-      if (projectionTransition > 0.001) {
-        const focusY = Math.max(0, heightAt(view.x, view.z));
-        flatLabelPoint.set(
-          localPoint.x - focusRender.x,
-          PLANET_RADIUS + placeHeight - focusY,
-          localPoint.z - focusRender.z,
-        );
-        const flatScreen = camera.camera!.worldToScreen(flatLabelPoint);
-        const { lon, lat } = flatToLonLat(place.x, place.z),
-          onFront = globe!.worldPoint(lon, lat, globePoint);
-        if (
-          (!onFront || globe!.frontness(globePoint) < 0.08) &&
-          projectionTransition > 0.55
-        )
-          continue;
-        if (onFront) {
-          const globeScreen = camera.camera!.worldToScreen(globePoint),
-            t = projectionTransition;
-          screen = new pc.Vec3(
-            flatScreen.x + (globeScreen.x - flatScreen.x) * t,
-            flatScreen.y + (globeScreen.y - flatScreen.y) * t,
-            flatScreen.z + (globeScreen.z - flatScreen.z) * t,
-          );
-        } else screen = flatScreen;
-      } else {
-        if (
-          Math.abs(localPoint.x - focusRender.x) >
-            view.halfHeight * view.aspect * 1.4 ||
-          Math.abs(localPoint.z - focusRender.z) > view.halfHeight * 1.5
-        )
-          continue;
-        screen = camera.camera!.worldToScreen(
-          new pc.Vec3(localPoint.x, placeHeight, localPoint.z),
-        );
-      }
-      if (
-        screen.x < 15 ||
-        screen.x > innerWidth - 15 ||
-        screen.y < 90 ||
-        screen.y > innerHeight - 120
-      )
-        continue;
-      const id = String(place.id);
-      visibleLabels.add(id);
-      let label = labelNodes.get(id);
-      if (!label) {
-        label = document.createElement("div");
-        label.className = `map-label ${place.kind}`;
-        label.textContent = place.name;
-        labels.append(label);
-        labelNodes.set(id, label);
-      }
-      anchors.push({
-        id,
-        x: screen.x,
-        y: screen.y,
-        width: label.offsetWidth,
-        height: label.offsetHeight,
-      });
-    }
-    for (const [id, label] of labelNodes)
-      if (!visibleLabels.has(id)) {
-        label.remove();
-        labelNodes.delete(id);
-      }
-    const obstacles = [
-      "masthead",
-      "region-panel",
-      "cell-panel",
-      "travel-panel",
-      "bottom-bar",
-      "map-controls",
-      "telemetry",
-      "focus-coordinates",
-      "centre-marker",
-    ]
-      .flatMap((name) =>
-        Array.from(document.querySelectorAll(`#${name},.${name}`)),
-      )
-      .map((node) => node.getBoundingClientRect())
-      .filter((r) => r.width && r.height)
-      .map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height }));
-    const fingerprint = JSON.stringify([
-      innerWidth,
-      innerHeight,
-      anchors.map((a) => [
-        a.id,
-        Math.round(a.x),
-        Math.round(a.y),
-        a.width,
-        a.height,
-      ]),
-      obstacles,
-    ]);
-    if (fingerprint !== labelFingerprint) {
-      labelFingerprint = fingerprint;
-      const placed = placeLabels(anchors, innerWidth, innerHeight, obstacles);
-      labelState = placed.map((p) => ({
-        id: p.id,
-        anchor: { x: p.x, y: p.y },
-        rect: p.rect,
-        leader: p.leader,
-      }));
-      const leaders = $("label-leaders");
-      leaders.replaceChildren();
-      for (const p of placed) {
-        labelNodes.get(p.id)!.style.transform =
-          `translate(${p.rect.x}px,${p.rect.y}px)`;
-        if (p.leader) {
-          const line = document.createElementNS(
-            "http://www.w3.org/2000/svg",
-            "line",
-          );
-          for (const [key, value] of Object.entries({
-            x1: p.x,
-            y1: p.y,
-            x2: p.endX,
-            y2: p.endY,
-          }))
-            line.setAttribute(key, String(value));
-          leaders.append(line);
-        }
+    const labelFingerprintNext = `${Math.round(view.x / 2)}/${Math.round(view.z / 2)}/${Math.round(view.halfHeight)}/${Math.round(view.yaw * 100)}/${innerWidth}/${innerHeight}`;
+    if (labelFingerprintNext !== labelFingerprint) {
+      labelFingerprint = labelFingerprintNext;
+      const anchors = placeLabels(view, innerWidth, innerHeight);
+      labels.replaceChildren();
+      labelState = anchors.map((anchor) => ({ id: anchor.id, anchor: { x: anchor.x, y: anchor.y }, rect: anchor.rect, leader: anchor.leader }));
+      for (const anchor of anchors) {
+        const node = document.createElement("div");
+        node.className = "map-label";
+        node.textContent = anchor.text;
+        node.style.left = `${anchor.rect.x}px`;
+        node.style.top = `${anchor.rect.y}px`;
+        labels.append(node);
       }
     }
+    if (!ready) return;
     const speed = innerHeight * Math.min(dt, 0.05) * 0.2;
-    const dx =
-      (pressed.has("d") || pressed.has("ArrowRight") ? 1 : 0) -
-      (pressed.has("a") || pressed.has("ArrowLeft") ? 1 : 0);
-    const dz =
-      (pressed.has("s") || pressed.has("ArrowDown") ? 1 : 0) -
-      (pressed.has("w") || pressed.has("ArrowUp") ? 1 : 0);
+    const dx = (pressed.has("d") || pressed.has("arrowright") ? 1 : 0) - (pressed.has("a") || pressed.has("arrowleft") ? 1 : 0);
+    const dz = (pressed.has("s") || pressed.has("arrowdown") ? 1 : 0) - (pressed.has("w") || pressed.has("arrowup") ? 1 : 0);
     if (dx || dz)
-      panScreen(
-        innerWidth / 2,
-        innerHeight / 2,
-        innerWidth / 2 - dx * speed,
-        innerHeight / 2 - dz * speed,
-      );
+      panScreen(innerWidth / 2, innerHeight / 2, innerWidth / 2 - dx * speed, innerHeight / 2 - dz * speed);
     if (pressed.has("q") || pressed.has("e")) {
       view.yaw += (pressed.has("e") ? 1 : -1) * dt * 0.7;
       updateCamera();
     }
     updateNavigationHud();
-    // Selected travel route: projected from canonical points, blended like the labels.
     const projectOverlay: RouteProjector = (point) => {
       point.height ??= Math.max(0, heightAt(point.x, point.z)) + 3;
       const local = renderFrame.sourceToRender(point.x, point.z, point.height);
@@ -1468,46 +942,29 @@ async function start() {
         const screen = camera.camera!.worldToScreen(new pc.Vec3(local.x, point.height, local.z));
         return { x: screen.x, y: screen.y };
       }
-      // Handoff/globe: same flat-to-globe blend the place labels use.
       const focusRender = renderFrame.sourceToRender(view.x, view.z),
         focusY = Math.max(0, heightAt(view.x, view.z));
-      flatLabelPoint.set(
-        local.x - focusRender.x,
-        PLANET_RADIUS + point.height - focusY,
-        local.z - focusRender.z,
-      );
+      flatLabelPoint.set(local.x - focusRender.x, PLANET_RADIUS + point.height - focusY, local.z - focusRender.z);
       const flatScreen = camera.camera!.worldToScreen(flatLabelPoint),
         onFront = globe!.worldPoint(point.lon, point.lat, globePoint);
-      if ((!onFront || globe!.frontness(globePoint) < 0.08) && projectionTransition > 0.55)
-        return undefined;
+      if ((!onFront || globe!.frontness(globePoint) < 0.08) && projectionTransition > 0.55) return undefined;
       if (!onFront) return { x: flatScreen.x, y: flatScreen.y };
-      const globeScreen = camera.camera!.worldToScreen(globePoint),
-        t = projectionTransition;
-      return {
-        x: flatScreen.x + (globeScreen.x - flatScreen.x) * t,
-        y: flatScreen.y + (globeScreen.y - flatScreen.y) * t,
-      };
+      const globeScreen = camera.camera!.worldToScreen(globePoint), t = projectionTransition;
+      return { x: flatScreen.x + (globeScreen.x - flatScreen.x) * t, y: flatScreen.y + (globeScreen.y - flatScreen.y) * t };
     };
     updateRouteOverlay(projectOverlay);
     updateContinuityOverlay(projectOverlay, flatToLonLat(view.x, view.z), { pending: inFlight, prepared: uploads.length, active: activeKeys.length, cached: tileCache.size });
-    if (!errorText) processStreaming(material);
+    if (!errorText) processStreaming(material());
     if (layers.grid && !globeShown)
       for (const key of activeKeys) {
         const t = tileCache.get(key)!.tile;
-        const corners = [
-          [t.minX, t.minZ],
-          [t.minX + t.size, t.minZ],
-          [t.minX + t.size, t.minZ + t.size],
-          [t.minX, t.minZ + t.size],
-        ];
+        const corners = [[t.minX, t.minZ], [t.minX + t.size, t.minZ], [t.minX + t.size, t.minZ + t.size], [t.minX, t.minZ + t.size]];
         for (let i = 0; i < 4; i++) {
-          const a = corners[i],
-            b = corners[(i + 1) % 4];
+          const a = corners[i], b = corners[(i + 1) % 4];
           app.drawLine(
             flatWorldPoint(a[0], a[1], Math.max(0, heightAt(a[0], a[1])) + 0.8),
             flatWorldPoint(b[0], b[1], Math.max(0, heightAt(b[0], b[1])) + 0.8),
-            new pc.Color(0.91, 0.77, 0.42),
-            true,
+            new pc.Color(0.91, 0.77, 0.42), true,
           );
         }
       }
@@ -1519,7 +976,6 @@ async function start() {
       frames = 0;
     }
   });
-  // Read-only diagnostic interface for deterministic generation and browser verification.
   Object.defineProperty(window, "advisorWorld", {
     value: {
       seed: WORLD_SEED,
@@ -1527,7 +983,7 @@ async function start() {
       cellSeed,
       geography: { continents, countries, cities, villages, roads },
       continuity: { inspect: inspectRegion, terrainQuery, telemetry: () => ({ ...continuityTelemetry(), worker: continuityWorkerState }), clearDetail: clearContinuityDetail, setOverlay: setContinuityOverlay },
-      hydrology: { recipes: drainageRecipes, sampleSource: naturalSurfaceAt, telemetry: hydrologyTelemetry },
+      hydrology: { recipes: drainageRecipes, sampleSource: naturalSurfaceAt, toLonLat: sourceToLonLat, telemetry: hydrologyTelemetry },
       clock,
       planet: {
         radius: CANONICAL_PLANET_RADIUS,
@@ -1546,91 +1002,55 @@ async function start() {
           return { ...climateSampleAt({lon, lat}, elevation), albedo: terrainTint(point.x, point.z, 32, elevation) };
         },
       },
-      setHalfHeight(height: number) {
-        navigate(view.x, view.z, height);
-      },
+      setHalfHeight(height: number) { navigate(view.x, view.z, height); },
       navigation: {
         surfaceAtScreen,
         setFocus(lon: number, lat: number) {
           if (lat > Math.PI / 2) notePoleLimit("north");
           else if (lat < -Math.PI / 2) notePoleLimit("south");
-          const p = lonLatToFlat(lon, lat);
-          navigate(p.x, p.z);
+          const next = lonLatToFlat(lon, lat);
+          navigate(next.x, next.z);
         },
-        forceRebase() {
-          if (rebaseRenderFrame(true)) updateCamera();
-        },
+        forceRebase() { rebaseRenderFrame(true); },
       },
-      renderer: rendererState,
       get state() {
         const flatReady = flatCoverageReady(),
           destinationReady = destinationCoverageReady(flatReady),
           activePreparationWaitMs = handoffWaitingForDestination
-            ? handoffPreparationWaitMs +
-              performance.now() -
-              handoffPreparationStarted
-              : handoffPreparationWaitMs,
-          readyGeometryBytes = uploads.reduce(
-            (sum, upload) => sum + estimateGeometryBytes(upload.data),
-            0,
-          ),
-          surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4,
-          surfaceGpuBytes = Math.ceil(surfaceBytes * 4 / 3);
+            ? handoffPreparationWaitMs + performance.now() - handoffPreparationStarted
+            : handoffPreparationWaitMs,
+          readyGeometryBytes = uploads.reduce((sum, upload) => sum + estimateGeometryBytes(upload.data), 0),
+          surfaceBytes = globe?.surface ? globe.surface.width * globe.surface.height * 4 : 0,
+          surfaceGpuBytes = surfaceBytes;
         return {
           ready,
-          error: errorText,
-          presentation:
-            projectionTransition <= 0.001
-              ? "flat"
-              : projectionTransition >= 0.999
-                ? "globe"
-                : "transition",
-          surface: { ...SURFACE_PRESENTATION, detailWeight: surfaceDetail, lodBlending: Boolean(lodTransition), textureWidth: globe!.stats.textureWidth, activeTileSizes: [...new Set(activeKeys.map(key => tileCache.get(key)!.tile.size))] },
-          scaleLabel: scaleLabelForHalfHeight(view.halfHeight),
-          canonicalFootprintM: canonicalFootprintForHalfHeight(view.halfHeight),
+          view: { ...view },
+          presentation: projectionTransition >= 0.999 ? "globe" : projectionTransition <= 0.001 ? "flat" : "transition",
           navigation: {
             focus: flatToLonLat(view.x, view.z),
-            heading: -view.yaw || 0,
             ruler: { ...rulerState },
             labels: labelState,
             selectedCanonicalId: selectedCode || null,
-            poleLimit: {
-              side: poleLimit,
-              active: Boolean(poleLimit && performance.now() < poleLimitUntil),
-              stops: poleStopCount,
-            },
+            poleLimit: { side: poleLimit, active: Boolean(poleLimit && performance.now() < poleLimitUntil), stops: poleStopCount },
           },
           renderFrame: {
             origin: renderFrame.canonicalOrigin,
-            focusDistanceM: renderFrame.distanceFromOrigin(view.x, view.z),
-            rebaseThresholdM: REBASE_THRESHOLD_M,
-            gpuLocalLimitM: GPU_LOCAL_LIMIT_M,
-            detailedMaxHorizontalM,
-            maxFloat32ErrorM: detailedMaxFloat32ErrorM,
-            ...renderFrame.stats,
+            rebases: renderFrame.stats.rebases,
+            maxHorizontalM: renderFrame.stats.maxHorizontalM,
+            maxFloat32ErrorM: renderFrame.stats.maxFloat32ErrorM,
           },
           handoff: {
             projectionTransition,
             desiredTransition: desiredProjectionTransition,
             active: handoffActive,
             direction: handoffDirection,
-            durationMs: handoffActive
-              ? performance.now() - handoffRequestedAt
-              : handoffDurationMs,
+            durationMs: handoffActive ? performance.now() - handoffRequestedAt : handoffDurationMs,
             preparationWaitMs: activePreparationWaitMs,
             blendDurationMs: handoffBlendDurationMs,
             waitingForDestination: handoffWaitingForDestination,
             destinationReady,
-            outstandingGeneration: inFlight + uploads.length,
-            slowFrames: slowFrameCount,
-            droppedFrames: droppedFrameCount,
           },
-          globe: {
-            passes: globePass,
-            complete: globeCoverageReady(),
-            fit: globeFit,
-            ...globe!.stats,
-          },
+          globe: globe ? { passes: globePass, complete: globeCoverageReady(), fit: globeFit, ...globe.stats } : null,
           performance: {
             backend: device.deviceType,
             deviceClass: streamingBudget.deviceClass,
@@ -1644,15 +1064,13 @@ async function start() {
             cacheHits,
             cacheMisses,
             evictions,
-            discardedPresentationJobs,
-            cpuResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes + surfaceBytes + continuityCpuBytes(),
-            continuityCpuBytesEstimated: continuityCpuBytes(),
-            gpuResourceBytesEstimated: cachedGeometryBytes + surfaceGpuBytes,
-            sharedSurfaceBytes: surfaceBytes,
+            cpuBytes: cachedGeometryBytes + readyGeometryBytes + surfaceBytes,
+            gpuBytes: cachedGeometryBytes + surfaceGpuBytes,
+            surfaceBytes,
+            cachedGeometryBytes,
+            uploadLimit: streamingBudget.uploadsPerFrame,
             uploadsThisFrame,
             maxUploadsPerFrame,
-            canonicalKeysUnique: new Set(activeKeys).size === activeKeys.length,
-            activeCanonicalKeys: [...activeKeys],
             wantedCanonicalKeys: wanted.map((tile) => tile.key),
             poleStops: poleStopCount,
             withinBudget: withinStreamingBudget(
@@ -1660,66 +1078,21 @@ async function start() {
                 generationReady: inFlight + uploads.length,
                 activePatches: [...tileCache.values()].filter(record => record.entity.enabled).length,
                 cachedPatches: tileCache.size,
-                cpuBytes: cachedGeometryBytes + readyGeometryBytes + surfaceBytes + continuityCpuBytes(),
+                cpuBytes: cachedGeometryBytes + readyGeometryBytes + surfaceBytes,
                 gpuBytes: cachedGeometryBytes + surfaceGpuBytes,
-              },
-              streamingBudget,
+              }, streamingBudget,
             ),
+            slowFrames: slowFrameCount,
+            droppedFrames: droppedFrameCount,
+            detailedMaxHorizontalM,
+            detailedMaxFloat32ErrorM,
           },
-          view: { ...view },
-          fps,
-          active: activeKeys.length,
-          cached: tileCache.size,
-          pending: pending.size,
-          levels: [
-            ...new Set(activeKeys.map((key) => tileCache.get(key)!.tile.level)),
-          ],
-          simulation: simulation.stats,
-          settled:
-            !lodTransition &&
-            Math.abs(surfaceDetail - (globeCoverageReady() ? localDetailWeight(view.halfHeight) : 1)) < 0.002 &&
-            Math.abs(projectionTransition - desiredProjectionTransition) <=
-              0.001 &&
-            (desiredProjectionTransition <= 0.001 || globeCoverageReady()) &&
-            (!globeShown || globeCoverageReady()) &&
-            !selectionDirty &&
-            pending.size === 0 &&
-            activeKeys.length === wanted.length &&
-            activeKeys.every((key) => wanted.some((t) => t.key === key)),
-          visibleMeshes: Object.fromEntries(
-            ["terrain", "structures", "nature", "detail"].map((name) => [
-              name,
-              [...tileCache.values()].filter(
-                (r) =>
-                  r.entity.enabled &&
-                  r.entity.children.some(
-                    (child) => child.name === name && child.enabled,
-                  ),
-              ).length,
-            ]),
-          ),
         };
       },
     },
   });
   app.start();
 }
-function showRendererActions() {
-  const actions = document.createElement("div");
-  actions.className = "renderer-actions";
-  const retry = document.createElement("button");
-  retry.textContent = "Retry rendering";
-  retry.onclick = () => {
-    const url = new URL(location.href);
-    url.searchParams.delete("renderer");
-    location.assign(url);
-  };
-  actions.append(retry);
-  $("error").append(actions);
-}
-start().catch((error) => {
-  fail(error instanceof Error ? error.message : String(error));
-  $("backend").textContent = "3D renderer unavailable";
-  $("tile-status").textContent = "Renderer initialization failed";
-  showRendererActions();
-});
+
+let statsElapsed = 0, frames = 0, fps = 0;
+start().catch((error) => fail(error instanceof Error ? error.message : String(error)));
