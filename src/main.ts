@@ -24,6 +24,7 @@ import {
 import type { Geometry, TileGeometry } from "./geometry.ts";
 import { terrainTint } from "./geometry.ts";
 import { climateSampleAt } from "./climate.ts";
+import { drainageRecipes, hydrologyTelemetry, naturalSurfaceAt } from "./hydrology.ts";
 import { LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
 import { LazySimulation } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
@@ -1526,6 +1527,7 @@ async function start() {
       cellSeed,
       geography: { continents, countries, cities, villages, roads },
       continuity: { inspect: inspectRegion, terrainQuery, telemetry: () => ({ ...continuityTelemetry(), worker: continuityWorkerState }), clearDetail: clearContinuityDetail, setOverlay: setContinuityOverlay },
+      hydrology: { recipes: drainageRecipes, sampleSource: naturalSurfaceAt, telemetry: hydrologyTelemetry },
       clock,
       planet: {
         radius: CANONICAL_PLANET_RADIUS,
