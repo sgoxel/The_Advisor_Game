@@ -1,5 +1,6 @@
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
+  CANONICAL_METRES_PER_SOURCE_UNIT,
   CANONICAL_PLANET_RADIUS,
   SOURCE_PRESENTATION_WIDTH,
   greatCircleDistance,
@@ -538,19 +539,36 @@ export const roads = cities.flatMap((city) =>
 
 export type Road = (typeof roads)[number];
 
+/**
+ * Canonical great-circle distance to a seeded road, returned in transitional
+ * source units only because local rendering still expresses corridor width in
+ * that unit. The source plane is not allowed to decide road membership.
+ */
 export function roadDistanceAt(x: number, z: number, road: Road) {
-  const px = road.fromX + wrapSourceX(x - road.fromX),
-    vx = road.toX - road.fromX,
-    vz = road.toZ - road.fromZ,
-    lengthSq = vx * vx + vz * vz;
-  if (!lengthSq) return Math.hypot(px - road.fromX, z - road.fromZ);
-  const t = Math.max(
-      0,
-      Math.min(1, ((px - road.fromX) * vx + (z - road.fromZ) * vz) / lengthSq),
-    ),
-    qx = road.fromX + vx * t,
-    qz = road.fromZ + vz * t;
-  return Math.hypot(px - qx, z - qz);
+  const point = sourceToLonLat(x, z),
+    from = road.fromPosition,
+    to = road.toPosition,
+    segmentM = road.surfaceLengthM;
+  if (!(segmentM > 0))
+    return greatCircleDistance(point, from) / CANONICAL_METRES_PER_SOURCE_UNIT;
+  const angular = greatCircleDistance(from, point) / CANONICAL_PLANET_RADIUS,
+    deltaBearing = initialBearing(from, point) - initialBearing(from, to),
+    crossTrackM =
+      Math.asin(
+        Math.max(-1, Math.min(1, Math.sin(angular) * Math.sin(deltaBearing))),
+      ) * CANONICAL_PLANET_RADIUS,
+    alongTrackM =
+      Math.atan2(
+        Math.sin(angular) * Math.cos(deltaBearing),
+        Math.cos(angular),
+      ) * CANONICAL_PLANET_RADIUS,
+    distanceM =
+      alongTrackM <= 0
+        ? greatCircleDistance(point, from)
+        : alongTrackM >= segmentM
+          ? greatCircleDistance(point, to)
+          : Math.abs(crossTrackM);
+  return distanceM / CANONICAL_METRES_PER_SOURCE_UNIT;
 }
 
 /** Canonical nearest-place lookup; independent of wrap and source-plane edges. */
