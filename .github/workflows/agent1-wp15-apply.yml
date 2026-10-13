@@ -1,0 +1,51 @@
+name: AGENT1 WP15 apply natural authority
+on:
+  push:
+    branches: [agent1/wp-s003-003-001-natural-authority]
+    paths: [.github/workflows/agent1-wp15-apply.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s003-003-001-natural-authority
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Integrate canonical natural surface
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          path=Path('src/world.ts')
+          text=path.read_text()
+          marker='import { macroSampleAt } from "./macro-geography.ts";'
+          insertion=marker+'\nimport { naturalSurfaceAt } from "./hydrology.ts";'
+          if 'from "./hydrology.ts"' not in text:
+              text=text.replace(marker,insertion,1)
+          text=re.sub(r'\nexport function riverX\(z: number\): number \{\n  return 125 \+ 42 \* Math\.sin\(z / 150\) \+ 18 \* Math\.sin\(z / 57\);\n\}\n','\n',text,count=1)
+          start=text.index('function naturalSurfaceBaseAt(x: number, z: number): SurfaceBase {')
+          brace=text.index('{',start)
+          depth=0
+          end=None
+          for i in range(brace,len(text)):
+              if text[i]=='{': depth+=1
+              elif text[i]=='}':
+                  depth-=1
+                  if depth==0:
+                      end=i+1
+                      break
+          if end is None: raise RuntimeError('naturalSurfaceBaseAt end not found')
+          replacement='''function naturalSurfaceBaseAt(x: number, z: number): SurfaceBase {\n  const natural = naturalSurfaceAt(x, z),\n    representativeCreek = representativeCreekAt(x, z);\n  // The S003-001 representative bridge remains a real shared-water crossing.\n  // All other natural priority-3/4 truth comes from the bounded hydrology service.\n  if (representativeCreek.bank) {\n    const wetGround = Math.min(natural.groundHeight, -1.2),\n      creekGround = lerp(\n        wetGround,\n        natural.groundHeight,\n        smooth(\n          clamp01(\n            (representativeCreek.absoluteAcross - REPRESENTATIVE_CREEK_HALF_WET_SOURCE) /\n              (REPRESENTATIVE_CREEK_HALF_BANK_SOURCE - REPRESENTATIVE_CREEK_HALF_WET_SOURCE),\n          ),\n        ),\n      );\n    if (representativeCreek.wet)\n      return {\n        groundHeight: wetGround,\n        material: "River",\n        water: {\n          kind: "river",\n          level: 0,\n          flowX: representativeCreek.flowX,\n          flowZ: representativeCreek.flowZ,\n        },\n        walkable: false,\n        vegetationDensityScale: 0,\n        reservedUse: null,\n      };\n    return {\n      groundHeight: creekGround,\n      material: "Riverbank",\n      water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },\n      walkable: natural.walkable,\n      vegetationDensityScale: Math.min(natural.vegetationDensityScale, 0.35),\n      reservedUse: null,\n    };\n  }\n  return {\n    groundHeight: natural.groundHeight,\n    material: natural.material,\n    water: natural.water,\n    walkable: natural.walkable,\n    vegetationDensityScale: natural.vegetationDensityScale,\n    reservedUse: null,\n  };\n}'''
+          text=text[:start]+replacement+text[end:]
+          if 'riverX(' in text: raise RuntimeError('legacy riverX authority remains')
+          path.write_text(text)
+          PY
+          git config user.name "GPT-5.6 Sol (AGENT #1)"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add src/world.ts
+          git commit -m "WP-S003-003-001 integrate bounded natural surface authority"
+          git push origin HEAD:agent1/wp-s003-003-001-natural-authority
