@@ -9,7 +9,7 @@ import {
 } from "../src/hydrology.ts";
 import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
 import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "../src/planet.ts";
-import { RURAL_BRIDGE_MAX_LENGTH_M } from "../src/travel.ts";
+import { RURAL_BRIDGE_MAX_LENGTH_M } from "../src/world.ts";
 
 test("each continent has multiple independent bounded drainage recipes", () => {
   assert.ok(drainageRecipes.length >= MACRO_PLAN.continents.length * 3);
