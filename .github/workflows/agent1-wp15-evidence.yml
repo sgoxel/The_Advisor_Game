@@ -1,0 +1,40 @@
+name: AGENT1 WP15 hydrology evidence
+on:
+  push:
+    branches: [agent1/wp-s003-003-001-natural-authority]
+    paths: [.github/workflows/agent1-wp15-evidence.yml]
+permissions:
+  contents: read
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s003-003-001-natural-authority
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: python -m pip install playwright==1.63.0
+      - name: Capture natural terrain and hydrology
+        run: |
+          npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          HYDRO_STEPS='eval:window.__r=window.advisorWorld.hydrology.recipes[0];eval:window.__p=window.__r.points[Math.floor(window.__r.points.length*0.55)];eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.planet.flatToLonLat(window.__p.x,window.__p.z).lon,window.advisorWorld.planet.flatToLonLat(window.__p.x,window.__p.z).lat);eval:window.advisorWorld.setHalfHeight(450);settle;shot:river-province;eval:window.advisorWorld.setHalfHeight(95);settle;shot:river-local;eval:window.__t=window.__r.tributary[Math.floor(window.__r.tributary.length*0.55)];eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.planet.flatToLonLat(window.__t.x,window.__t.z).lon,window.advisorWorld.planet.flatToLonLat(window.__t.x,window.__t.z).lat);eval:window.advisorWorld.setHalfHeight(230);settle;shot:tributary;eval:window.__lake=Array.from({length:88},(_,iz)=>Array.from({length:88},(_,ix)=>({x:-130000+ix*3000,z:-125000+iz*3000}))).flat().find(p=>window.advisorWorld.hydrology.sampleSource(p.x,p.z).water.kind==="lake");eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.planet.flatToLonLat(window.__lake.x,window.__lake.z).lon,window.advisorWorld.planet.flatToLonLat(window.__lake.x,window.__lake.z).lat);eval:window.advisorWorld.setHalfHeight(450);settle;shot:lake;eval:window.__cliff=Array.from({length:88},(_,iz)=>Array.from({length:88},(_,ix)=>({x:-130000+ix*3000,z:-125000+iz*3000}))).flat().find(p=>window.advisorWorld.hydrology.sampleSource(p.x,p.z).cliff);eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.planet.flatToLonLat(window.__cliff.x,window.__cliff.z).lon,window.advisorWorld.planet.flatToLonLat(window.__cliff.x,window.__cliff.z).lat);eval:window.advisorWorld.setHalfHeight(95);settle;shot:cliff;click:#overview;settle;shot:realm'
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp15-natural-webgl2 --name wp15-natural --steps "$HYDRO_STEPS" --profile desktop,phone --renderer webgl2 --timeout 360
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp15-natural-webgpu --name wp15-natural --steps "$HYDRO_STEPS" --profile desktop,phone --renderer webgpu --timeout 360
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wp15-natural-evidence
+          path: test-results/wp15-natural-*
