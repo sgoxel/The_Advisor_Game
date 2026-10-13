@@ -1,6 +1,7 @@
 /** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
+  CANONICAL_METRES_PER_SOURCE_UNIT,
   canonicalCellId,
   SOURCE_PRESENTATION_POLE_DISTANCE,
   SOURCE_PRESENTATION_RADIUS,
@@ -221,6 +222,68 @@ export function settlement(
   };
 }
 
+/**
+ * S003 composition needs one real graph-connected crossing before the dedicated
+ * hydrology/network WPs exist. Both the creek and the road endpoints are immutable
+ * SEED-derived inputs; no camera, query order or mutable RNG selects this site.
+ * The creek is deliberately narrower than the binding 120 m rural bridge cap.
+ */
+export const RURAL_BRIDGE_MAX_LENGTH_M = 120;
+const REPRESENTATIVE_BRIDGE_ROAD = roads[0];
+const REPRESENTATIVE_CREEK_HALF_WET_SOURCE = Math.min(
+  3,
+  (RURAL_BRIDGE_MAX_LENGTH_M / CANONICAL_METRES_PER_SOURCE_UNIT) * 0.425,
+);
+const REPRESENTATIVE_CREEK_HALF_BANK_SOURCE = REPRESENTATIVE_CREEK_HALF_WET_SOURCE + 2.5;
+const REPRESENTATIVE_CREEK_HALF_LENGTH_SOURCE = 90;
+export const REPRESENTATIVE_BRIDGE_SPAN_M =
+  REPRESENTATIVE_CREEK_HALF_WET_SOURCE * 2 * CANONICAL_METRES_PER_SOURCE_UNIT;
+
+function representativeCreekAt(x: number, z: number) {
+  const road = REPRESENTATIVE_BRIDGE_ROAD,
+    px = road.fromX + wrapSourceX(x - road.fromX),
+    mx = (road.fromX + road.toX) / 2,
+    mz = (road.fromZ + road.toZ) / 2,
+    vx = road.toX - road.fromX,
+    vz = road.toZ - road.fromZ,
+    length = Math.hypot(vx, vz) || 1,
+    ux = vx / length,
+    uz = vz / length,
+    dx = px - mx,
+    dz = z - mz,
+    acrossStream = dx * ux + dz * uz,
+    alongStream = dx * -uz + dz * ux,
+    absoluteAcross = Math.abs(acrossStream),
+    absoluteAlong = Math.abs(alongStream),
+    insideLength = absoluteAlong <= REPRESENTATIVE_CREEK_HALF_LENGTH_SOURCE;
+  return {
+    wet: insideLength && absoluteAcross <= REPRESENTATIVE_CREEK_HALF_WET_SOURCE,
+    bank:
+      insideLength && absoluteAcross <= REPRESENTATIVE_CREEK_HALF_BANK_SOURCE,
+    absoluteAcross,
+    flowX: -uz,
+    flowZ: ux,
+  };
+}
+
+export function finalSurfaceEvidenceAnchors() {
+  const road = REPRESENTATIVE_BRIDGE_ROAD,
+    village = places.find((place) => place.kind === "village")!,
+    bridge = {
+      x: (road.fromX + road.toX) / 2,
+      z: (road.fromZ + road.toZ) / 2,
+    };
+  return {
+    bridge,
+    road: { x: bridge.x + 40, z: bridge.z + 40 },
+    terrace: { x: village.x, z: village.z },
+    vegetationBoundary: { x: village.x + 102, z: village.z },
+    roadCode: road.code,
+    villageCode: village.code,
+    bridgeSpanM: REPRESENTATIVE_BRIDGE_SPAN_M,
+  } as const;
+}
+
 function naturalSurfaceBaseAt(x: number, z: number): SurfaceBase {
   const macro = macroSampleAt(sourceToLonLat(x, z));
   if (macro.domain === "Ocean")
@@ -280,6 +343,42 @@ function naturalSurfaceBaseAt(x: number, z: number): SurfaceBase {
       water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },
       walkable: true,
       vegetationDensityScale: 1,
+      reservedUse: null,
+    };
+  }
+
+  const representativeCreek = representativeCreekAt(x, z);
+  if (representativeCreek.bank) {
+    const creekGround = lerp(
+      -1.2,
+      coastLand,
+      smooth(
+        clamp01(
+          (representativeCreek.absoluteAcross - REPRESENTATIVE_CREEK_HALF_WET_SOURCE) /
+            (REPRESENTATIVE_CREEK_HALF_BANK_SOURCE - REPRESENTATIVE_CREEK_HALF_WET_SOURCE),
+        ),
+      ),
+    );
+    if (representativeCreek.wet)
+      return {
+        groundHeight: -1.2,
+        material: "River",
+        water: {
+          kind: "river",
+          level: 0,
+          flowX: representativeCreek.flowX,
+          flowZ: representativeCreek.flowZ,
+        },
+        walkable: false,
+        vegetationDensityScale: 0,
+        reservedUse: null,
+      };
+    return {
+      groundHeight: creekGround,
+      material: "Riverbank",
+      water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },
+      walkable: true,
+      vegetationDensityScale: 0.35,
       reservedUse: null,
     };
   }
@@ -471,7 +570,13 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
         4,
         3,
       ),
-      bridge = base.water.kind !== "none" && distance <= 5;
+      representativeCreek = representativeCreekAt(x, z),
+      bridge =
+        road.code === REPRESENTATIVE_BRIDGE_ROAD.code &&
+        base.water.kind === "river" &&
+        representativeCreek.wet &&
+        REPRESENTATIVE_BRIDGE_SPAN_M <= RURAL_BRIDGE_MAX_LENGTH_M &&
+        distance <= 5;
     if (weight > 0)
       modifiers.push({
         id: road.code,
