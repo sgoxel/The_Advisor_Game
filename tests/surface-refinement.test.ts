@@ -6,9 +6,9 @@ import {
   REFINED_BRIDGE_HALF_WIDTH_SOURCE,
   REFINED_BRIDGE_RGB,
   refineTileSurfacePresentation,
-  refinementResolutionForTileSize,
+  refinementResolutionForTile,
 } from "../src/surface-refinement.ts";
-import { tileForPosition } from "../src/world.ts";
+import { tileAt, tileForPosition } from "../src/world.ts";
 
 const hasVertexColor = (colors: Uint8Array, rgb: readonly number[]) => {
   for (let i = 0; i < colors.length; i += 4)
@@ -18,10 +18,10 @@ const hasVertexColor = (colors: Uint8Array, rgb: readonly number[]) => {
 };
 
 test("surface refinement remains bounded by tile size", () => {
-  assert.equal(refinementResolutionForTileSize(128, true, true), 0);
-  assert.equal(refinementResolutionForTileSize(64, true, false), 32);
-  assert.equal(refinementResolutionForTileSize(16, false, true), 16);
-  assert.equal(refinementResolutionForTileSize(16, false, false), 0);
+  assert.equal(refinementResolutionForTile(tileAt(11, 0, 0), true, true), 0);
+  assert.equal(refinementResolutionForTile(tileAt(12, 0, 0), true, false), 32);
+  assert.equal(refinementResolutionForTile(tileAt(14, 0, 0), false, true), 16);
+  assert.equal(refinementResolutionForTile(tileAt(14, 0, 0), false, false), 0);
 });
 
 test("representative crossing replaces the legacy slab with a narrow authoritative deck", () => {
