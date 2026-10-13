@@ -9,11 +9,9 @@ jobs:
   evidence:
     runs-on: ubuntu-latest
     env:
-      EVIDENCE_REVISION: "2"
+      EVIDENCE_REVISION: "3"
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: agent1/wp-s003-003-001-natural-authority
       - uses: actions/setup-node@v4
         with:
           node-version: 24
