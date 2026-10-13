@@ -1,0 +1,35 @@
+name: AGENT1 WP15 outlet patch
+on:
+  push:
+    branches: [agent1/wp-s003-003-001-natural-authority]
+    paths: [.github/workflows/agent1-wp15-outlet-patch.yml]
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s003-003-001-natural-authority
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require real drainage outlets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/hydrology.ts')
+          s=p.read_text()
+          s=s.replace('const MAX_MAIN_STEPS = 40;', 'const MAX_MAIN_STEPS = 96;', 1)
+          old='''  if (points.length < 8) return null;\n\n  // One bounded tributary joins the middle reach.'''
+          new='''  if (points.length < 8) return null;\n  const terminal = points[points.length - 1],\n    terminalMacro = macroSampleAt(sourceToLonLat(terminal.x, terminal.z));\n  // Never label an inland endpoint as an outlet. A failed candidate contributes\n  // no river recipe; deterministic sibling slots still provide continent coverage.\n  if (terminalMacro.land) return null;\n  outlet = terminalMacro.domain === "Lake" ? "lake" : "ocean";\n\n  // One bounded tributary joins the middle reach.'''
+          if old not in s: raise RuntimeError('trace terminal anchor missing')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+          git config user.name "GPT-5.6 Sol (AGENT #1)"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add src/hydrology.ts
+          git commit -m "WP-S003-003-001 require real lake or ocean outlets"
+          git push origin HEAD:agent1/wp-s003-003-001-natural-authority
