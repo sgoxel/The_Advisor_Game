@@ -1183,6 +1183,9 @@ body.globe-mode .travel-button {
 
 /* Information starts collapsed on every load and keeps one touch-sized restore control. */
 #region-panel #toggle-region-panel {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   grid-column: 1 / -1;
   min-height: 44px;
   width: 100%;
@@ -1196,6 +1199,14 @@ body.globe-mode .travel-button {
   max-height: none;
   padding: 6px;
   overflow: visible;
+}
+#region-panel:not(.minimized) {
+  max-height: calc(100dvh - 230px);
+  overflow-y: auto;
+}
+#region-panel:not(.minimized) #toggle-region-panel {
+  background: #26382f;
+  box-shadow: 0 -24px 0 24px #162521;
 }
 #region-panel.minimized > :not(#toggle-region-panel) {
   display: none !important;

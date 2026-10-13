@@ -14,6 +14,10 @@ export function continuityTests(backend) {
       const initialFocus=await page.evaluate(()=>window.advisorWorld.state.navigation.focus);
       await page.getByRole("button",{name:"Show map information",exact:true}).click();
       await expect(page.locator("#home")).toBeVisible();
+      const panelBox=await page.locator("#region-panel").boundingBox(),barBox=await page.locator(".bottom-bar").boundingBox();
+      expect(panelBox.y+panelBox.height).toBeLessThanOrEqual(barBox.y);
+      await page.locator("#grid").scrollIntoViewIfNeeded();
+      await expect(page.locator("#toggle-region-panel")).toBeInViewport();
       await page.getByRole("button",{name:"Minimize map information",exact:true}).click();
       expect(await page.evaluate(()=>window.advisorWorld.state.navigation.focus)).toEqual(initialFocus);
       expect(await page.evaluate(()=>window.advisorWorld.state.performance.backend)).toBe(backend);
@@ -50,6 +54,8 @@ export function continuityTests(backend) {
         while(Date.now()-start<60000){await page.evaluate(({lon,lat})=>window.advisorWorld.navigation.setFocus(lon,lat),{lon:target.lon+(i%2===0?.03:-.03),lat:target.lat+(i%3)*.01});await page.waitForTimeout(250);churn.push(await bounded());i++;}
         await page.waitForFunction(()=>window.advisorWorld.state.settled,null,{timeout:120000});
       }
+      // Separate finite background globe preparation from steady revisit residency.
+      await page.waitForFunction(()=>window.advisorWorld.state.globe.complete,null,{timeout:240000});
       const cycles=[];
       for(let i=0;i<10;i++){
         await go({lon:target.lon+.04,lat:target.lat+.02});await bounded();
@@ -57,6 +63,8 @@ export function continuityTests(backend) {
         const rebuilt=await page.evaluate(point=>{window.advisorWorld.continuity.clearDetail();return JSON.stringify(window.advisorWorld.continuity.inspect(point));},remote.point);
         expect(rebuilt).toBe(remote.digest);
       }
+      fs.mkdirSync("test-results",{recursive:true});
+      fs.writeFileSync(`test-results/wp49-${backend}-${viewport.name}-cycles.json`,JSON.stringify({remote,churn,cycles,errors},null,2));
       const warm=cycles.slice(5);expect(Math.max(...warm)/Math.min(...warm)).toBeLessThanOrEqual(1.05);
       await go(target,230);await bounded();
       await page.screenshot({path:`test-results/wp49-${backend}-${viewport.name}-revisit.png`});

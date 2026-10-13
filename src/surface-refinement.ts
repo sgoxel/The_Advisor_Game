@@ -1,6 +1,7 @@
 import type { Geometry, TileGeometry } from "./geometry.ts";
 import { terrainTint } from "./geometry.ts";
 import { roads, type Road } from "./geography.ts";
+import { roadFragmentsInBounds, clippedStationRange } from "./continuity-corridor.ts";
 import { SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import { finalSurfaceAt, type Tile } from "./world.ts";
 
@@ -194,7 +195,7 @@ export function stripLegacyBridgeDeck(geometry: Geometry): Geometry {
 
 function shiftedRoadsIntersecting(tile: Tile): { road: Road; shiftX: number }[] {
   const matches: { road: Road; shiftX: number }[] = [];
-  for (const road of roads)
+  for (const road of roadFragmentsInBounds(roads, tile.minX, tile.minZ, tile.size))
     for (const shiftX of [-SOURCE_PRESENTATION_WIDTH, 0, SOURCE_PRESENTATION_WIDTH]) {
       const margin = 14,
         minX = road.minX + shiftX,
@@ -284,7 +285,8 @@ function addRoadAndBridgeRibbons(
       roadNz = ux * ROAD_RIBBON_HALF_WIDTH_SOURCE,
       bridgeNx = -uz * REFINED_BRIDGE_HALF_WIDTH_SOURCE,
       bridgeNz = ux * REFINED_BRIDGE_HALF_WIDTH_SOURCE;
-    for (let index = 0; index < segmentCount; index++) {
+    const [first, last] = clippedStationRange(road.fromX + shiftX, road.fromZ, road.toX + shiftX, road.toZ, tile.minX, tile.minZ, tile.size, segmentCount);
+    for (let index = first; index < last; index++) {
       const t0 = index / segmentCount,
         t1 = (index + 1) / segmentCount,
         x0 = road.fromX + shiftX + vx * t0,
@@ -363,6 +365,8 @@ function addRoadAndBridgeRibbons(
  * geometry remain bounded by tile size and intersecting road support.
  */
 export function refineTileSurfacePresentation(tile: Tile, data: TileGeometry): TileGeometry {
+  // Coarse fallback/globe coverage must not materialize every fine road station.
+  if (tile.size > 64) return data;
   const matches = shiftedRoadsIntersecting(tile),
     waterBoundary = hasWaterBoundary(tile),
     resolution = refinementResolutionForTile(tile, matches.length > 0, waterBoundary);

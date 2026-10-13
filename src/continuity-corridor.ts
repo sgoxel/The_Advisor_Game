@@ -1,4 +1,4 @@
-import { WORLD_SEED, WORLD_FOUNDATION_VERSION } from "./config.ts";
+import { WORLD_SEED } from "./config.ts";
 import { macroLakes, macroSampleAt, type LakeRecipe } from "./macro-geography.ts";
 import { greatCircleDistance, lonLatToSource, sourceToLonLat, wrapSourceX, CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_RADIUS, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import { addressedSample, CONTINUITY_VERSION } from "./continuity.ts";

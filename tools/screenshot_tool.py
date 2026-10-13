@@ -85,6 +85,7 @@ SCENARIOS: dict[str, str] = {
     ),
     "information-panel": (
         "settle;shot:minimized;click:#toggle-region-panel;shot:expanded;"
+        "eval:document.getElementById('region-panel').scrollTop=document.getElementById('region-panel').scrollHeight;shot:controls;"
         "click:#toggle-region-panel;shot:restored"
     ),
     "zoom-country": (

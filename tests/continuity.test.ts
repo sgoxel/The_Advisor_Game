@@ -10,9 +10,29 @@ import { composeFinalSurface } from "../src/final-surface.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_RADIUS } from "../src/planet.ts";
 import { defineContinuityCorridor, clippedStationRange, CORRIDOR_LIMITS } from "../src/continuity-corridor.ts";
 import { canonicalCellNeighbor, canonicalCellCenter } from "../src/spatial-authority.ts";
+import { buildTile } from "../src/geometry.ts";
+import { refineTileSurfacePresentation, REFINED_ROAD_RGB } from "../src/surface-refinement.ts";
+import { tileAt, tileForPosition } from "../src/world.ts";
 
 const focus = sourceToLonLat((roads[0].fromX + roads[0].toX)/2, (roads[0].fromZ + roads[0].toZ)/2);
 const service = () => createContinuityService("fixture", roads, finalSurfaceAt);
+test("coarse coverage retains no fine ribbon work and local lake-detour strips follow composed truth", () => {
+  const root=tileAt(0,0,0),empty={positions:new Float32Array(),normals:new Float32Array(),colors:new Uint8Array(),indices:new Uint32Array()},
+    coarse={terrain:empty,structures:empty,nature:empty,detail:empty};
+  assert.equal(refineTileSurfacePresentation(root,coarse),coarse);
+  assert.equal(coarse.structures.positions.length,0);
+  const corridor=roads.find(road=>road.centerline)!;
+  assert.ok(corridor);
+  const station=corridor.centerline![16],tile=tileForPosition(station.x,station.z,14),result=refineTileSurfacePresentation(tile,buildTile(tile)),originX=tile.minX+tile.size/2,originZ=tile.minZ+tile.size/2;
+  let rendered=0;
+  for(let vertex=0;vertex<result.structures.positions.length/3;vertex++){
+    if(!REFINED_ROAD_RGB.every((value,i)=>result.structures.colors[vertex*4+i]===value))continue;
+    const p=vertex*3,surface=finalSurfaceAt(originX+result.structures.positions[p],originZ+result.structures.positions[p+2]);
+    assert.equal(surface.water.kind,"none");assert.ok(surface.walkable);rendered++;
+  }
+  assert.ok(rendered>0,"actual polyline detour must receive local prepared geometry");
+  assert.ok(result.structures.positions.length/3<4096,"local strips must remain bounded by clipped stations");
+});
 test("integer geometric boundaries have exactly two incident owners across six faces and corners", () => {
   const edges = new Map<string, number>();
   for (let face = 0; face < 6; face++) for (let u = 0; u < 8; u++) for (let v = 0; v < 8; v++) {

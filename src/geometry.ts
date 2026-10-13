@@ -1,6 +1,6 @@
 import { featuresFor, field, type Tile } from "./world.ts";
 import { continuitySurfaceAt as finalSurfaceAt, continuityHeightAt as heightAt, registerContinuityPatch } from "./continuity-runtime.ts";
-import { roads, roadDistanceAt } from "./geography.ts";
+import { roads } from "./geography.ts";
 import { roadFragmentsInBounds, clippedStationRange } from "./continuity-corridor.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { sourceToLonLat, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
@@ -292,11 +292,8 @@ export function buildTile(t: Tile): TileGeometry {
     structures = new Builder(),
     nature = new Builder(),
     detail = new Builder();
-  // Refine nearby road support at local detail, with a fixed 64x64 ceiling.
-  // This changes presentation sampling only; existing resource ceilings still apply.
-  const centerX=t.minX+t.size/2,centerZ=t.minZ+t.size/2,
-    roadDetail=t.size<=128&&roads.some(road=>roadDistanceAt(centerX,centerZ,road)<=12+t.size*Math.SQRT2/2);
-  const resolution = roadDetail ? Math.min(64,t.size/.25) : Math.min(16, t.size / 2),
+  // Prepared-surface refinement is owned by the common worker adapter.
+  const resolution = Math.min(16, t.size / 2),
     step = t.size / resolution;
   for (let z = 0; z < resolution; z++)
     for (let x = 0; x < resolution; x++) {
