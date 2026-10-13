@@ -19,6 +19,7 @@ import {
   macroLakes,
 } from "./macro-geography.ts";
 import { travelMetrics } from "./travel.ts";
+import { defineContinuityCorridor } from "./continuity-corridor.ts";
 
 /** x/z are derived source/render coordinates; canonicalPosition is world truth. */
 export type Place = {
@@ -532,13 +533,25 @@ export const roads = cities.flatMap((city) =>
       walkSpeedMps: travel.speedMps,
       fantasyWalkSeconds: travel.fantasySeconds,
       realWalkSeconds: travel.realSeconds,
+      centerline: undefined as readonly {x:number;z:number;position:LonLat}[] | undefined,
     };
   }),
 );
 
 export type Road = (typeof roads)[number];
+export const continuityCorridor = defineContinuityCorridor(villages,roads[0]);
+if (continuityCorridor.road) roads.push(continuityCorridor.road);
 
 export function roadDistanceAt(x: number, z: number, road: Road) {
+  if(road.centerline){
+    const px=road.fromX+wrapSourceX(x-road.fromX);let distance=Infinity;
+    for(let i=0;i<road.centerline.length-1;i++){
+      const a=road.centerline[i],b=road.centerline[i+1],vx=b.x-a.x,vz=b.z-a.z,length=vx*vx+vz*vz,
+        t=length===0?0:Math.max(0,Math.min(1,((px-a.x)*vx+(z-a.z)*vz)/length));
+      distance=Math.min(distance,Math.hypot(px-a.x-vx*t,z-a.z-vz*t));
+    }
+    return distance;
+  }
   const px = road.fromX + wrapSourceX(x - road.fromX),
     vx = road.toX - road.fromX,
     vz = road.toZ - road.fromZ,

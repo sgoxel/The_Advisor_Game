@@ -1,5 +1,7 @@
-import { featuresFor, field, finalSurfaceAt, heightAt, type Tile } from "./world.ts";
-import { roads } from "./geography.ts";
+import { featuresFor, field, type Tile } from "./world.ts";
+import { continuitySurfaceAt as finalSurfaceAt, continuityHeightAt as heightAt, registerContinuityPatch } from "./continuity-runtime.ts";
+import { roads, roadDistanceAt } from "./geography.ts";
+import { roadFragmentsInBounds, clippedStationRange } from "./continuity-corridor.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { sourceToLonLat, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import {
@@ -285,13 +287,16 @@ export function terrainTint(
 
 /** Worker-generated tile meshes. Skirts cover cracks between terrain LOD levels. */
 export function buildTile(t: Tile): TileGeometry {
+  registerContinuityPatch(t.minX + t.size / 2, t.minZ + t.size / 2);
   const terrain = new Builder(),
     structures = new Builder(),
     nature = new Builder(),
     detail = new Builder();
-  // Vertex tint interpolation fixes material blocks without increasing the existing
-  // tile triangle budget; performance remains bounded by the established mesh LOD.
-  const resolution = Math.min(16, t.size / 2),
+  // Refine nearby road support at local detail, with a fixed 64x64 ceiling.
+  // This changes presentation sampling only; existing resource ceilings still apply.
+  const centerX=t.minX+t.size/2,centerZ=t.minZ+t.size/2,
+    roadDetail=t.size<=128&&roads.some(road=>roadDistanceAt(centerX,centerZ,road)<=12+t.size*Math.SQRT2/2);
+  const resolution = roadDetail ? Math.min(64,t.size/.25) : Math.min(16, t.size / 2),
     step = t.size / resolution;
   for (let z = 0; z < resolution; z++)
     for (let x = 0; x < resolution; x++) {
@@ -516,7 +521,7 @@ export function buildTile(t: Tile): TileGeometry {
   // Bridge deck geometry is driven by the final deck channel. Ground/water stay
   // untouched, so a crossing cannot be accidentally rendered as a filled river.
   if (t.size <= 512)
-    for (const road of roads) {
+    for (const road of roadFragmentsInBounds(roads,t.minX,t.minZ,t.size)) {
       const vx = road.toX - road.fromX,
         vz = road.toZ - road.fromZ,
         length = Math.hypot(vx, vz);
@@ -534,7 +539,8 @@ export function buildTile(t: Tile): TileGeometry {
           road.minZ > t.minZ + t.size + 6
         )
           continue;
-        for (let index = 0; index < segmentCount; index++) {
+        const [begin,end]=clippedStationRange(road.fromX+shiftX,road.fromZ,road.toX+shiftX,road.toZ,t.minX,t.minZ,t.size,segmentCount);
+        for (let index = begin; index < end; index++) {
           const t0 = index / segmentCount,
             t1 = (index + 1) / segmentCount,
             x0 = road.fromX + shiftX + vx * t0,

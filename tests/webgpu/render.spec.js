@@ -1,3 +1,4 @@
+import { expandInformation } from "../information-panel.js";
 import { test, expect } from "@playwright/test";
 
 const HANDOFF_VIEWPORTS = [
@@ -227,6 +228,7 @@ test("the real WebGPU backend renders the seeded world", async ({ page }) => {
   console.log("WebGPU staging-buffer probe", mapping);
   expect(mapping.bytes).toBe(102400);
   await page.goto("/");
+  await expandInformation(page);
   await expectWebGpuReady(page);
   await page.screenshot({ path: "test-results/webgpu-village.png" });
   for (const scale of ["10", "10000"]) {
@@ -300,6 +302,7 @@ for (const viewport of HANDOFF_VIEWPORTS) {
     const errors = collectWebGpuErrors(page);
     await page.setViewportSize(viewport);
     await page.goto("/");
+    await expandInformation(page);
     await expectWebGpuReady(page);
     await exercisePureZoomHandoff(page, "webgpu", [viewport]);
     await expect(page.locator("#error")).toBeHidden();

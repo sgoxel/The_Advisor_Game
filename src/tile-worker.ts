@@ -2,6 +2,7 @@ import { buildTile } from "./geometry.ts";
 import { convertTileGeometryToEnu } from "./render-frame.ts";
 import { buildVegetationGeometry } from "./vegetation-render.ts";
 import type { Tile } from "./world.ts";
+import { continuityTelemetry } from "./continuity-runtime.ts";
 self.onmessage = (event: MessageEvent<Tile>) => {
   const tile = event.data;
   try {
@@ -20,7 +21,7 @@ self.onmessage = (event: MessageEvent<Tile>) => {
       if (g.uvs) transfer.push(g.uvs.buffer);
     }
     self.postMessage(
-      { tile, data, precision, vegetation: vegetation.telemetry },
+      { tile, data, precision, vegetation: vegetation.telemetry, continuity: continuityTelemetry() },
       { transfer },
     );
   } catch (error) {

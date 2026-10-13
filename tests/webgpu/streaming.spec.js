@@ -1,3 +1,4 @@
+import { expandInformation } from "../information-panel.js";
 import { test, expect } from "@playwright/test";
 
 const VIEWPORTS = [
@@ -87,6 +88,7 @@ for (const viewport of VIEWPORTS) {
     page.on("pageerror", (error) => errors.push(error.message));
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto("/");
+    await expandInformation(page);
     await page.waitForFunction(
       () =>
         window.advisorWorld?.renderer?.phase === "ready" &&

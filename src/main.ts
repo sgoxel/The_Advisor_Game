@@ -30,6 +30,9 @@ import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
 import { GlobeView } from "./globe-view.ts";
 import { updateRouteOverlay } from "./route-overlay.ts";
+import { inspectRegion, continuityTelemetry, terrainQuery, clearContinuityDetail } from "./continuity-runtime.ts";
+import { setContinuityOverlay, updateContinuityOverlay, continuityOverlayBytes } from "./continuity-overlay.ts";
+import type { RouteProjector } from "./route-overlay.ts";
 import {
   PLANET_RADIUS,
   POLE_DISTANCE,
@@ -84,6 +87,13 @@ const GLOBE_PASSES = [
 /** Terrain color interpretation is identical in the globe and flat representations. */
 const GLOBE_RELIEF = SURFACE_PRESENTATION.relief;
 const FLAT_BACKDROP = new pc.Color(0.65, 0.71, 0.65);
+let continuityWorkerBytes = 0;
+let continuityWorkerState: ReturnType<typeof continuityTelemetry> | undefined;
+let discardedPresentationJobs = 0;
+const continuityCpuBytes = () => {
+  const state=continuityTelemetry(), preparingBytes=globeWorker ? state.coarseRegistryBytesEstimated + 4096*1024 + (GLOBE_PASSES[globePass]?.width || 0)**2*2 : 0;
+  return continuityWorkerBytes + state.cpuBytesEstimated + continuityOverlayBytes() + preparingBytes;
+};
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -668,7 +678,13 @@ function processStreaming(material: pc.StandardMaterial) {
   uploadsThisFrame = 0;
   if (selectionDirty) refreshSelection();
   // At most one GPU mesh group per frame. Generation is isolated in a worker.
-  const next = uploads.shift();
+  const relevant = (key: string) => key === tileAt(0,0,0).key || wanted.some(tile=>tile.key===key) || activeKeys.includes(key) || Boolean(lodTransition?.oldKeys.includes(key));
+  let next = uploads.shift();
+  while(next && !relevant(next.tile.key)) {
+    pending.delete(next.tile.key);
+    discardedPresentationJobs++;
+    next=uploads.shift();
+  }
   if (next) {
     const bytes = estimateGeometryBytes(next.data);
     const entity = new pc.Entity(next.tile.key),
@@ -733,7 +749,7 @@ function processStreaming(material: pc.StandardMaterial) {
     }
     const overCacheBudget = () =>
       tileCache.size > streamingBudget.cachedPatches ||
-      cachedGeometryBytes > streamingBudget.cpuBytes ||
+      cachedGeometryBytes + continuityCpuBytes() > streamingBudget.cpuBytes ||
       cachedGeometryBytes > streamingBudget.gpuBytes;
     if (overCacheBudget()) {
       const protect = new Set([
@@ -1199,6 +1215,8 @@ async function start() {
   });
   worker.onmessage = (event) => {
     inFlight--;
+    continuityWorkerBytes = event.data.continuity?.cpuBytesEstimated || 0;
+    continuityWorkerState = event.data.continuity;
     if (event.data.error) {
       pending.delete(event.data.tile.key);
       fail(`Tile generation failed: ${event.data.error}`);
@@ -1442,7 +1460,7 @@ async function start() {
     }
     updateNavigationHud();
     // Selected travel route: projected from canonical points, blended like the labels.
-    updateRouteOverlay((point) => {
+    const projectOverlay: RouteProjector = (point) => {
       point.height ??= Math.max(0, heightAt(point.x, point.z)) + 3;
       const local = renderFrame.sourceToRender(point.x, point.z, point.height);
       if (projectionTransition <= 0.001) {
@@ -1468,7 +1486,9 @@ async function start() {
         x: flatScreen.x + (globeScreen.x - flatScreen.x) * t,
         y: flatScreen.y + (globeScreen.y - flatScreen.y) * t,
       };
-    });
+    };
+    updateRouteOverlay(projectOverlay);
+    updateContinuityOverlay(projectOverlay, flatToLonLat(view.x, view.z), { pending: inFlight, prepared: uploads.length, active: activeKeys.length, cached: tileCache.size });
     if (!errorText) processStreaming(material);
     if (layers.grid && !globeShown)
       for (const key of activeKeys) {
@@ -1505,6 +1525,7 @@ async function start() {
       cellAt,
       cellSeed,
       geography: { continents, countries, cities, villages, roads },
+      continuity: { inspect: inspectRegion, terrainQuery, telemetry: () => ({ ...continuityTelemetry(), worker: continuityWorkerState }), clearDetail: clearContinuityDetail, setOverlay: setContinuityOverlay },
       clock,
       planet: {
         radius: CANONICAL_PLANET_RADIUS,
@@ -1621,7 +1642,9 @@ async function start() {
             cacheHits,
             cacheMisses,
             evictions,
-            cpuResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes + surfaceBytes,
+            discardedPresentationJobs,
+            cpuResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes + surfaceBytes + continuityCpuBytes(),
+            continuityCpuBytesEstimated: continuityCpuBytes(),
             gpuResourceBytesEstimated: cachedGeometryBytes + surfaceGpuBytes,
             sharedSurfaceBytes: surfaceBytes,
             uploadsThisFrame,
@@ -1635,7 +1658,7 @@ async function start() {
                 generationReady: inFlight + uploads.length,
                 activePatches: [...tileCache.values()].filter(record => record.entity.enabled).length,
                 cachedPatches: tileCache.size,
-                cpuBytes: cachedGeometryBytes + readyGeometryBytes + surfaceBytes,
+                cpuBytes: cachedGeometryBytes + readyGeometryBytes + surfaceBytes + continuityCpuBytes(),
                 gpuBytes: cachedGeometryBytes + surfaceGpuBytes,
               },
               streamingBudget,

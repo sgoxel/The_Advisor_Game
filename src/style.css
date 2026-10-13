@@ -1180,3 +1180,34 @@ body.globe-mode .travel-button {
     overflow: auto;
   }
 }
+
+/* Information starts collapsed on every load and keeps one touch-sized restore control. */
+#region-panel #toggle-region-panel {
+  grid-column: 1 / -1;
+  min-height: 44px;
+  width: 100%;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+#region-panel.minimized {
+  display: block;
+  width: auto;
+  right: auto;
+  max-height: none;
+  padding: 6px;
+  overflow: visible;
+}
+#region-panel.minimized > :not(#toggle-region-panel) {
+  display: none !important;
+}
+#region-panel.minimized #toggle-region-panel {
+  width: auto;
+  min-width: 44px;
+  margin: 0;
+  padding: 8px 12px;
+}
+@media (orientation: portrait) and (min-width: 701px) {
+  body.globe-mode #region-panel:not(.minimized) .region-counts {
+    grid-row: 2 / 4;
+  }
+}

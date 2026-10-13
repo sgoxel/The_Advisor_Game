@@ -1,3 +1,4 @@
+import { expandInformation } from "../information-panel.js";
 import { test, expect } from "@playwright/test";
 for (const scenario of [
   "missing",
@@ -36,6 +37,7 @@ for (const scenario of [
       });
     }, scenario);
     await page.goto("/");
+    await expandInformation(page);
     await page.waitForFunction(() => window.advisorWorld?.state.settled);
     expect(await page.evaluate(() => window.advisorRenderer)).toMatchObject({
       requested: "webgpu",
@@ -84,6 +86,7 @@ test("the Realm globe renders through WebGL2 and returns to the flat village", a
     }),
   );
   await page.goto("/");
+  await expandInformation(page);
   await page.waitForFunction(() => window.advisorWorld?.state.ready);
   await page.locator("#overview").click();
   await page.waitForFunction(
@@ -98,9 +101,11 @@ test("the Realm globe renders through WebGL2 and returns to the flat village", a
   await expect(page.locator("#detail-name")).toHaveText("Realm");
   await expect(page.locator("#error")).toBeHidden();
   // The compact phone panel leaves the globe uncovered.
+  await page.getByRole("button", { name: "Minimize map information", exact: true }).click();
   const panel = await page.locator(".region-panel").boundingBox();
   expect(panel.y + panel.height).toBeLessThanOrEqual(200);
   await page.screenshot({ path: "test-results/fallback-globe-phone.png" });
+  await expandInformation(page);
   await page.locator("#home").click();
   await page.waitForFunction(
     () =>
@@ -123,6 +128,7 @@ test("both unavailable backends show an actionable failure", async ({
     };
   });
   await page.goto("/");
+  await expandInformation(page);
   await expect(page.locator("#error")).toContainText("WebGL2 unavailable");
   await expect(
     page.getByRole("button", { name: "Retry rendering" }),
@@ -143,6 +149,7 @@ test("WebGL2 fallback keeps the same focus through handoff controls on every tar
     }),
   );
   await page.goto("/");
+  await expandInformation(page);
   await page.waitForFunction(() => window.advisorWorld?.state.ready);
   expect(await page.evaluate(() => window.advisorRenderer.backend)).toBe("webgl2");
   const anchors = await page.evaluate(() => window.advisorWorld.handoff);

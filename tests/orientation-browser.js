@@ -1,3 +1,4 @@
+import { expandInformation } from "./information-panel.js";
 export function orientationTests(test, expect, webgl2) {
   for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
     test(`geographic orientation survives local/globe handoff ${viewport.width}`, async ({ page }) => {
@@ -5,6 +6,7 @@ export function orientationTests(test, expect, webgl2) {
       if (webgl2) await page.addInitScript(() => Object.defineProperty(navigator, "gpu", { value: undefined, configurable: true }));
       await page.setViewportSize(viewport);
       await page.goto("/");
+      await expandInformation(page);
       await page.waitForFunction(() => window.advisorWorld?.state.settled);
       expect(await page.evaluate(() => window.advisorRenderer.backend)).toBe(webgl2 ? "webgl2" : "webgpu");
       // Prepare the shared globe texture before exercising rapid local pans.

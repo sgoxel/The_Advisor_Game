@@ -15,6 +15,7 @@ import {
   greatCircleDistance,
   lonLatToFlat,
   positionToEnu,
+  sourceToLonLat,
   type CanonicalPosition,
   type LonLat,
 } from "./planet.ts";
@@ -44,11 +45,9 @@ export const ROUTE_CACHE_LIMIT = 256;
 /** Final truth is checked at most this far apart along an accepted candidate. */
 export const FINAL_ROUTE_VALIDATION_STEP_M = 300;
 
-export const roadSegments: readonly RoadSegment[] = roads.map((road) => ({
-  code: road.code,
-  from: road.fromPosition,
-  to: road.toPosition,
-}));
+export const roadSegments: readonly RoadSegment[] = roads.flatMap((road) => road.centerline
+  ? road.centerline.slice(0,-1).map((point,index)=>({code:`${road.code}/SEG/${index}`,from:sourceToLonLat(point.x,point.z),to:sourceToLonLat(road.centerline![index+1].x,road.centerline![index+1].z)}))
+  : [{code:road.code,from:road.fromPosition,to:road.toPosition}]);
 
 const villageById = new Map(villages.map((village) => [village.id, village]));
 const routeCache = new Map<string, VillageRoute>();

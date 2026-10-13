@@ -59,6 +59,34 @@ SCENARIOS: dict[str, str] = {
     # 97 m half-height x 1.4^3 = 266 m: the 230-900 m "Province" band in src/main.ts.
     "province": "zoom-out:3",
     "realm": "click:#overview",
+    "continuity": (
+        "click:#overview;settle;"
+        "eval:window.advisorContinuityRoad=window.advisorWorld.geography.roads[0];"
+        "eval:window.advisorContinuityPort=window.advisorWorld.continuity.inspect({lon:(window.advisorContinuityRoad.fromPosition.lon+window.advisorContinuityRoad.toPosition.lon)/2,lat:(window.advisorContinuityRoad.fromPosition.lat+window.advisorContinuityRoad.toPosition.lat)/2}).ports[0].position;"
+        "eval:window.advisorWorld.navigation.setFocus(window.advisorContinuityPort.lon,window.advisorContinuityPort.lat);"
+        "eval:window.advisorWorld.setHalfHeight(900);settle;shot:ordinary;"
+        "eval:window.advisorWorld.continuity.setOverlay(true);wait:200;shot:ports;"
+        "eval:window.advisorWorld.navigation.setFocus(window.advisorContinuityPort.lon+0.002,window.advisorContinuityPort.lat);settle;shot:neighbor;"
+        "eval:window.advisorWorld.continuity.setOverlay(false);"
+        "eval:window.advisorWorld.navigation.setFocus(2.1,0.3);settle;"
+        "eval:window.advisorWorld.navigation.setFocus(window.advisorContinuityPort.lon,window.advisorContinuityPort.lat);"
+        "eval:window.advisorWorld.setHalfHeight(230);settle;shot:revisit"
+    ),
+    "continuity-obstacle": (
+        "click:#overview;settle;"
+        "eval:window.advisorDetour=window.advisorWorld.geography.roads.find(r=>r.centerline);"
+        "eval:window.advisorDetourPoint=window.advisorDetour.centerline[16].position;"
+        "eval:window.advisorWorld.navigation.setFocus(window.advisorDetourPoint.lon,window.advisorDetourPoint.lat);"
+        "eval:window.advisorWorld.setHalfHeight(1800);settle;shot:shore;"
+        "eval:window.advisorWorld.setHalfHeight(450);settle;"
+        "eval:window.advisorWorld.continuity.setOverlay(true);wait:200;shot:joined;"
+        "eval:window.advisorWorld.continuity.setOverlay(false);"
+        "eval:window.advisorWorld.setHalfHeight(97);settle;shot:road"
+    ),
+    "information-panel": (
+        "settle;shot:minimized;click:#toggle-region-panel;shot:expanded;"
+        "click:#toggle-region-panel;shot:restored"
+    ),
     "zoom-country": (
         "click:#overview;settle;"
         "eval:window.advisorWorld.navigation.setFocus(-69.7953*Math.PI/180,-10.3192*Math.PI/180);"
@@ -129,6 +157,9 @@ STATE_JS = """() => {
     canonicalFootprintM: state.canonicalFootprintM ?? null,
     navigation: state.navigation ?? null,
     globe: state.globe ?? null, macroGeography: state.macroGeography ?? null,
+    performance: state.performance ?? null,
+    continuity: world && world.continuity ? world.continuity.telemetry() : null,
+    informationExpanded: document.getElementById('toggle-region-panel')?.getAttribute('aria-expanded') === 'true',
     detailName: detail ? detail.textContent.trim() : null,
     error: state.error || (box && !box.hidden ? box.textContent.trim() : ''),
   };
@@ -215,6 +246,12 @@ class Session:
 
     def step(self, name: str, arg: str) -> None:
         page = self.page
+        restore_minimized = False
+        if name in ("click", "check", "uncheck") and arg in ("#home", "#overview", "#open-travel", "#grid", "#nature", "#structures"):
+            toggle = page.locator("#toggle-region-panel")
+            if toggle.count() and toggle.get_attribute("aria-expanded") != "true":
+                toggle.click()
+                restore_minimized = True
         if name == "click":
             self.locate(arg).click()
         elif name in ("check", "uncheck"):
@@ -256,6 +293,8 @@ class Session:
             self.shot(arg)
         else:
             raise ValueError("unknown step name")
+        if restore_minimized:
+            page.locator("#toggle-region-panel").click()
 
     def shot(self, suffix: str = "") -> None:
         file = f"{self.name}-{self.profile}{'-' + suffix if suffix else ''}.png"

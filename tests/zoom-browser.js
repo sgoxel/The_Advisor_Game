@@ -1,3 +1,4 @@
+import { expandInformation } from "./information-panel.js";
 import fs from 'node:fs';
 import fixtures from './zoom-fixtures.json' with { type: 'json' };
 import { selectTiles } from '../src/world.ts';
@@ -11,6 +12,7 @@ export function zoomTests(test, expect, webgl2) {
     page.on('pageerror', e=>errors.push(e.message));
     page.on('console', m=>{if(m.type()==='error')errors.push(m.text());});
     await page.goto('/');
+    await expandInformation(page);
     await page.waitForFunction(()=>window.advisorWorld?.state.settled);
     expect(await page.evaluate(()=>window.advisorRenderer.backend)).toBe(webgl2?'webgl2':'webgpu');
     await page.locator('#overview').click();
@@ -18,6 +20,7 @@ export function zoomTests(test, expect, webgl2) {
     // Stable ground gate excludes genuinely new trees/buildings and DOM labels.
     await page.locator('#structures').uncheck();
     await page.locator('#nature').uncheck();
+    await page.getByRole('button',{name:'Minimize map information',exact:true}).click();
     await page.addStyleTag({content: '.place-label, #place-labels, #route-overlay { visibility:hidden !important; }'});
     const backend=webgl2?'webgl2':'webgpu', out=`test-results/zoom-${backend}`;
     fs.mkdirSync(out,{recursive:true});

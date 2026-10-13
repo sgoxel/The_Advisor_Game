@@ -1,3 +1,4 @@
+import { expandInformation } from "../information-panel.js";
 import { test, expect } from "@playwright/test";
 
 // WP-S002-004-008: the travel panel lists solved walking routes and draws the selected one.
@@ -7,6 +8,7 @@ test("travel panel solves neighbouring routes and draws the selected route", asy
   page.on("pageerror", (e) => errors.push(e.message));
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
+  await expandInformation(page);
   await page.waitForFunction(() => window.advisorWorld?.state.ready);
   await page.waitForFunction(() => window.advisorRoutingAcceptance?.summary);
 
@@ -82,6 +84,7 @@ test("phone route preview exposes the map and never labels map focus as travel",
   page.on("pageerror", (e) => errors.push(e.message));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await expandInformation(page);
   await page.waitForFunction(() => window.advisorWorld?.state.ready);
 
   await expect(page.locator("#home")).toContainText("Focus home village");

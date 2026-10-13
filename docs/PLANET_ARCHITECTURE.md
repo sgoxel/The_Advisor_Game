@@ -118,6 +118,8 @@ The legacy S001 runtime values `WORLD_SIZE = 262144 m` and the derived ~41.7 km 
 
 ## 3. World authority and coordinate fabric
 
+The implemented invisible-world adapter in [INVISIBLE_WORLD.md](INVISIBLE_WORLD.md) uses fixed level-7 cube regions and exact shared-edge/corner ownership independently of render patches. Port and resumable terrain queries consume the same final composed surface as traversal; their explicit finite limits and cache/resource accounting preserve the existing streaming ceilings. The green information panel starts minimized; its show/minimize control affects presentation only.
+
 ### 3.1 Authoritative position
 
 A fixed world position is defined by canonical spherical coordinates plus physical elevation:

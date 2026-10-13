@@ -188,6 +188,8 @@ Acceptance measurements: fixed 60-second sustained wrap/pole/zoom/focus churn fo
 
 ## 10. Execution and acceptance map
 
+WP-S003-002-001 implements the bounded terrain/road continuity foundation in [INVISIBLE_WORLD.md](INVISIBLE_WORLD.md): cube-sphere shared edges/corners, versioned SEED recipes, finite resumable final-surface queries and an actual connected lake detour consumed by ordinary streaming/travel. Mesh residency and overlay visibility cannot decide canonical facts. Other water, vegetation, building and resident consumers retain the ownership/event contracts described above.
+
 Each issue implements its own slice, tests missing adapters itself and remains independently solvable. These contract IDs are acceptance outputs of this analysis, not new issue dependencies.
 
 | Existing issue / WP-S002 | Required contracts and evidence |

@@ -245,7 +245,9 @@ test("canonical scale/travel foundation is versioned and all village pairs satis
 
 test("prototype road records expose canonical distance and route-derived fantasy time", () => {
   for (const road of roads) {
-    const expectedDistance = greatCircleDistance(road.fromPosition, road.toPosition);
+    const expectedDistance = road.centerline
+      ? road.centerline.slice(1).reduce((sum, point, index) => sum + greatCircleDistance(sourceToLonLat(road.centerline![index].x,road.centerline![index].z), sourceToLonLat(point.x,point.z)), 0)
+      : greatCircleDistance(road.fromPosition, road.toPosition);
     assert.ok(Math.abs(road.surfaceLengthM - expectedDistance) < 1e-7);
     assert.ok(road.presentationLengthSourceUnits > 0);
     assert.equal(road.walkSurface, "good-road");
@@ -266,9 +268,12 @@ test("prototype road records expose canonical distance and route-derived fantasy
       road.realWalkSeconds,
     );
     for (let step = 0; step <= 10; step++) {
-      const t = step / 10,
-        x = wrapSourceX(road.fromX + (road.toX - road.fromX) * t),
-        z = road.fromZ + (road.toZ - road.fromZ) * t;
+      const t = step / 10, station=road.centerline ? t*(road.centerline.length-1) : t,
+        index=road.centerline ? Math.min(road.centerline.length-2,Math.floor(station)) : 0,
+        from=road.centerline?.[index] || {x:road.fromX,z:road.fromZ},
+        to=road.centerline?.[index+1] || {x:road.toX,z:road.toZ}, localT=road.centerline ? station-index : t,
+        x = wrapSourceX(from.x+(to.x-from.x)*localT),
+        z = from.z+(to.z-from.z)*localT;
       assert.ok(cellAt(x, z).walkable, `${road.code} blocked at ${x},${z}`);
     }
   }
