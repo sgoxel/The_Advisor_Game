@@ -25,8 +25,9 @@ export function continuityTests(test, expect, forceWebGL2 = false) {
 
       const result = await page.evaluate(() => {
         const world = window.advisorWorld,
-          before = world.state.performance,
-          coldStart = performance.now(),
+          before = world.state.performance;
+        world.continuity.clearCache();
+        const coldStart = performance.now(),
           first = world.continuity.road(0),
           coldMs = performance.now() - coldStart,
           warmStart = performance.now(),

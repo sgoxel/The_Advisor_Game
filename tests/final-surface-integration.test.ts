@@ -7,6 +7,8 @@ import {
   REPRESENTATIVE_BRIDGE_SPAN_M,
   finalSurfaceAt,
   finalSurfaceDebugAt,
+  finalSurfaceEvidenceAnchors,
+  representativeContinuityRoadEvidence,
   finalSurfaceTelemetry,
   resetFinalSurfaceTelemetry,
 } from "../src/world.ts";
@@ -68,11 +70,8 @@ test("bridge deck preserves authoritative water and obeys the 120m rural cap", (
     REPRESENTATIVE_BRIDGE_SPAN_M <= RURAL_BRIDGE_MAX_LENGTH_M,
     `representative span ${REPRESENTATIVE_BRIDGE_SPAN_M}m exceeds ${RURAL_BRIDGE_MAX_LENGTH_M}m`,
   );
-  const road = roads[0],
-    bridge = finalSurfaceDebugAt(
-      (road.fromX + road.toX) / 2,
-      (road.fromZ + road.toZ) / 2,
-    );
+  const anchor = finalSurfaceEvidenceAnchors().bridge,
+    bridge = finalSurfaceDebugAt(anchor.x, anchor.z);
   assert.notEqual(bridge.base.water.kind, "none");
   assert.equal(bridge.final.water.kind, bridge.base.water.kind);
   assert.equal(bridge.final.groundHeight, bridge.base.groundHeight);
@@ -81,6 +80,22 @@ test("bridge deck preserves authoritative water and obeys the 120m rural cap", (
   assert.equal(bridge.final.deckMaterial, "Bridge");
   assert.equal(bridge.final.traversal, "bridge");
   assert.ok(bridge.final.deckHeight! >= bridge.base.water.level + 1);
+});
+
+test("representative continuity road drives the actual final-surface corridor", () => {
+  const evidence = representativeContinuityRoadEvidence();
+  assert.equal(evidence.roadCode, roads[0].code);
+  assert.ok(evidence.regions.length >= 2, "representative road must cross logical continuity regions");
+  assert.ok(evidence.ports.length >= 1, "representative road must expose at least one shared port");
+  assert.equal(evidence.points.length, evidence.sourcePoints.length);
+  for (const point of evidence.sourcePoints) {
+    const surface = finalSurfaceAt(point.x, point.z);
+    assert.ok(
+      surface.material === "Road" || surface.material === "Bridge" || surface.material === "Settlement",
+      `continuity point must lie on prepared runtime surface, got ${surface.material}`,
+    );
+    assert.equal(surface.walkable, true);
+  }
 });
 
 test("outside all modifier support, final ground/material/water channels are unchanged", () => {
