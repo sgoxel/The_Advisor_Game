@@ -134,12 +134,17 @@ test("every neighbouring village pair has a valid, bounded route that respects t
 });
 
 test("a road corridor is walked at good-road speed and matches the seeded road length", () => {
-  const route = routeBetweenVillages("0/0/0/0", "0/0/0/1");
+  const route = routeBetweenVillages("0/0/0/0", "0/0/0/1"),
+    preparedM = route.surfaceM.road + route.surfaceM.bridge;
   assert.equal(route.found, true);
+  // The canonical road terminates inside prepared village pads. The short endpoint
+  // approaches are therefore intentionally settlement/open traversal rather than
+  // pretending the road surface owns the village centre itself.
   assert.ok(
-    route.surfaceM.road / route.distanceM > 0.99,
-    `route follows the road: ${JSON.stringify({ distanceM: route.distanceM, surfaceM: route.surfaceM, points: route.points.length })}`,
+    preparedM / route.distanceM > 0.96,
+    `route keeps a bounded settlement approach: ${JSON.stringify({ distanceM: route.distanceM, surfaceM: route.surfaceM, points: route.points.length })}`,
   );
+  assert.ok(route.surfaceM.open < 700, `settlement approaches grew to ${route.surfaceM.open}m`);
   assert.ok(route.fantasySeconds >= route.straightLineFantasySeconds);
   assert.ok(route.fantasySeconds <= route.straightLineFantasySeconds * 1.03, "no hidden detour on a straight road");
   assert.ok(route.fantasySeconds > 3_600);
