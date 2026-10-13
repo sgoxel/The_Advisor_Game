@@ -4,7 +4,6 @@ import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
   SOURCE_PRESENTATION_POLE_DISTANCE,
   SOURCE_PRESENTATION_RADIUS,
-  SOURCE_PRESENTATION_WIDTH,
   lonLatToSource,
   sourceToLonLat,
   wrapSourceX,
@@ -58,6 +57,7 @@ const BUCKET_SIZE = 4096;
 const RIVER_SYSTEMS_PER_CONTINENT = 4;
 const MAX_MAIN_STEPS = 40;
 const SAMPLE_STEP_SOURCE = 12;
+const RIVER_BANK_SOURCE = 9;
 const segmentsByBucket = new Map<string, Segment[]>();
 let naturalQueries = 0;
 let segmentChecks = 0;
@@ -106,10 +106,13 @@ export function naturalElevationAt(x: number, z: number) {
     detail = sphericalDetail(sx, z, 2),
     shoulder = sphericalDetail(sx, z, 4),
     mountainWeight = smooth01(macro.mountainIntensity / 0.58),
-    base = macro.domain === "Island" ? 7 + broad * 4.5 : 9 + broad * 5.5,
-    coherentRelief = macro.reliefM * (0.76 + broad * 0.055),
-    localRelief = macro.reliefM * mountainWeight * (detail * 0.105 + shoulder * 0.055),
-    cap = macro.domain === "Island" ? 190 : 620,
+    // Land needs enough coherent vertical signal for the shared globe hillshade
+    // to remain readable. These are broad, low-frequency metres, not render-only
+    // exaggeration, and therefore remain identical in globe/local sampling.
+    base = macro.domain === "Island" ? 18 + broad * 18 + detail * 7 : 22 + broad * 24 + detail * 10,
+    coherentRelief = macro.reliefM * (0.78 + broad * 0.06),
+    localRelief = macro.reliefM * mountainWeight * (detail * 0.11 + shoulder * 0.06),
+    cap = macro.domain === "Island" ? 210 : 680,
     terrain = Math.max(1.2, Math.min(cap, base + coherentRelief + localRelief)),
     coastSource = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
     // A wide canonical toe gives coarse meshes a smooth shoreline silhouette;
@@ -158,12 +161,13 @@ function traceRiver(continentId: number, slot: number): DrainageRecipe | null {
   const candidates = mountainSystems.filter((system) => system.continent === continentId);
   if (!candidates.length) return null;
   const system = candidates[slot % candidates.length],
-    sourcePosition = system.path[Math.min(system.path.length - 1, Math.max(0, Math.floor(system.path.length * (0.32 + 0.11 * (slot % 3)))))],
+    sourcePosition = system.path[Math.min(system.path.length - 1, Math.max(0, Math.floor(system.path.length * (0.28 + 0.13 * (slot % 3)))))],
     source = lonLatToSource(sourcePosition.lon, sourcePosition.lat),
     code = `${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/DRAINAGE/${continentId}/${slot}`,
     points: DrainagePoint[] = [],
     sourceHeight = Math.max(24, naturalElevationAt(source.x, source.z)),
-    width = 7 + addressed(`${code}/width`) * 7;
+    // Full main-channel width stays within the 120 m rural bridge envelope.
+    width = 2.35 + addressed(`${code}/width`) * 1.35;
   let x = source.x,
     z = source.z,
     direction = coastwardDirection(x, z, continentId),
@@ -174,8 +178,8 @@ function traceRiver(continentId: number, slot: number): DrainageRecipe | null {
       bed = Math.max(0.18, sourceHeight * (1 - progress) * (1 - progress) * 0.72 + 0.18);
     points.push(Object.freeze({ x: wrapSourceX(x), z, bed }));
     const target = coastwardDirection(x, z, continentId),
-      phase = addressed(`${code}/meander-phase`) * TAU,
-      meander = Math.sin(index * 0.73 + phase) * 0.19 + Math.sin(index * 0.31 + phase * 1.7) * 0.08;
+      meanderPhase = addressed(`${code}/meander-phase-v2`) * TAU,
+      meander = Math.sin(index * 0.73 + meanderPhase) * 0.2 + Math.sin(index * 0.31 + meanderPhase * 1.7) * 0.085;
     direction = rotate(blendDirection(direction, target, 0.42), meander);
     const stride = 380 + addressed(`${code}/stride/${index}`) * 170,
       nx = wrapSourceX(x + direction.x * stride),
@@ -280,6 +284,13 @@ function nearestRiver(x: number, z: number): SegmentHit {
   return best;
 }
 
+/** Physical wet span for a natural river crossing at this coordinate. */
+export function freshwaterCrossingSpanMAt(x: number, z: number) {
+  const hit = nearestRiver(wrapSourceX(x), z);
+  if (!hit || hit.distance > hit.segment.width) return 0;
+  return hit.segment.width * 2 * CANONICAL_METRES_PER_SOURCE_UNIT;
+}
+
 function drySlopeAt(x: number, z: number, centre: number) {
   const macro = macroSampleAt(sourceToLonLat(x, z));
   if (macro.mountainIntensity < 0.34) return 0;
@@ -320,16 +331,16 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
       catchmentCode: hit.segment.code.split("/MAIN/")[0].split("/TRIBUTARY/")[0],
     });
   }
-  if (hit && riverDistance <= hit.segment.width + 18) {
-    const t = smooth01((riverDistance - hit.segment.width) / 18),
+  if (hit && riverDistance <= hit.segment.width + RIVER_BANK_SOURCE) {
+    const t = smooth01((riverDistance - hit.segment.width) / RIVER_BANK_SOURCE),
       bed = lerp(hit.segment.bedA, hit.segment.bedB, hit.t),
-      bankHeight = lerp(Math.min(terrain, bed + 0.65), terrain, t);
+      bankHeight = lerp(Math.min(terrain, bed + 0.75), terrain, t);
     return Object.freeze({
       groundHeight: bankHeight,
       material: "Riverbank",
       water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },
       walkable: true,
-      vegetationDensityScale: lerp(0.2, 0.8, t),
+      vegetationDensityScale: lerp(0.28, 0.86, t),
       slope: 0,
       cliff: false,
       freshwaterDistanceSource: riverDistance,
