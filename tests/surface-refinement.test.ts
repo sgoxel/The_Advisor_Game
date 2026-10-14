@@ -21,7 +21,9 @@ test("surface refinement remains bounded by tile size", () => {
   assert.equal(refinementResolutionForTile(tileAt(11, 0, 0), true, true), 64);
   assert.equal(refinementResolutionForTile(tileAt(10, 0, 0), false, true), 64);
   assert.equal(refinementResolutionForTile(tileAt(9, 0, 0), false, true), 64);
-  assert.equal(refinementResolutionForTile(tileAt(8, 0, 0), false, true), 0);
+  assert.equal(refinementResolutionForTile(tileAt(8, 0, 0), false, true), 64);
+  assert.equal(refinementResolutionForTile(tileAt(7, 0, 0), false, true), 64);
+  assert.equal(refinementResolutionForTile(tileAt(6, 0, 0), false, true), 0);
   assert.equal(refinementResolutionForTile(tileAt(12, 0, 0), true, false), 32);
   assert.equal(refinementResolutionForTile(tileAt(14, 0, 0), false, true), 16);
   assert.equal(refinementResolutionForTile(tileAt(14, 0, 0), false, false), 0);
