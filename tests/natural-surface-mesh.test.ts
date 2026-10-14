@@ -27,19 +27,37 @@ test("natural replacement is bounded and its visible vertices use composed water
       r.surfaceVertices <= r.geometry.positions.length / 3,
       "visible surface range must precede skirt-only vertices",
     );
+    assert.ok(
+      r.geometry.indices.length > r.geometry.positions.length / 3,
+      "adaptive triangles must reuse indexed vertices instead of duplicating every corner",
+    );
     const originX = tile.minX + tile.size / 2,
-      originZ = tile.minZ + tile.size / 2;
-    for (let v = 0; v < r.surfaceVertices; v += 61) {
+      originZ = tile.minZ + tile.size / 2,
+      surfaceKeys = new Set<string>();
+    for (let v = 0; v < r.surfaceVertices; v++) {
       const i = v * 3,
         x = r.geometry.positions[i] + originX,
+        y = r.geometry.positions[i + 1],
         z = r.geometry.positions[i + 2] + originZ,
-        s = finalSurfaceAt(x, z),
-        expected =
-          s.water.kind === "none" ? s.groundHeight : s.water.level + 0.0025;
+        key = `${x}/${z}/${y}`,
+        nx = r.geometry.normals[i],
+        ny = r.geometry.normals[i + 1],
+        nz = r.geometry.normals[i + 2];
+      assert.ok(!surfaceKeys.has(key), `${tile.key} duplicated visible vertex ${key}`);
+      surfaceKeys.add(key);
       assert.ok(
-        Math.abs(r.geometry.positions[i + 1] - expected) < 1e-3,
-        `${tile.key} conceals composed surface`,
+        Math.abs(Math.hypot(nx, ny, nz) - 1) < 1e-4,
+        `${tile.key} visible normal is not normalized`,
       );
+      if (v % 61 === 0) {
+        const s = finalSurfaceAt(x, z),
+          expected =
+            s.water.kind === "none" ? s.groundHeight : s.water.level + 0.0025;
+        assert.ok(
+          Math.abs(y - expected) < 1e-3,
+          `${tile.key} conceals composed surface`,
+        );
+      }
     }
   }
 });
@@ -58,4 +76,6 @@ test("natural replacement repeats independently and closes the east-west source 
   assert.equal(a.surfaceVertices, b.surfaceVertices);
   for (let i = 0; i < a.geometry.positions.length; i += 97)
     assert.ok(Math.abs(a.geometry.positions[i] - b.geometry.positions[i]) < 1e-5);
+  for (let i = 0; i < a.geometry.indices.length; i += 97)
+    assert.equal(a.geometry.indices[i], b.geometry.indices[i]);
 });
