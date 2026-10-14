@@ -26,6 +26,7 @@ const WATER_EPSILON = 0.065;
 const ROAD_EPSILON = 0.07;
 const BRIDGE_EPSILON = 0.1;
 const NATURAL_RIBBON_MAX_TILE = 512;
+const NATURAL_GROUND_MAX_TILE = 2048;
 const NATURAL_BOUNDARY_MIN_RESOLUTION = 16;
 const NATURAL_BOUNDARY_MAX_RESOLUTION = 64;
 const NATURAL_BOUNDARY_TARGET_STEP = 2;
@@ -33,6 +34,7 @@ const BANK_MASK_OVERDRAW_SOURCE = 0.5;
 
 type Point = [number, number, number];
 type RGB = readonly [number, number, number];
+type Offset2 = { x: number; z: number };
 type ExtraGeometry = {
   positions: number[];
   normals: number[];
@@ -196,7 +198,7 @@ function hasWaterBoundary(tile: Tile) {
 /** Mixed-water tiles use a bounded scale-coherent grid; dry road refinement stays fine-only. */
 export function refinementResolutionForTile(tile: Tile, hasRoad: boolean, waterBoundary: boolean) {
   if (waterBoundary) {
-    if (tile.size > NATURAL_RIBBON_MAX_TILE) return 0;
+    if (tile.size > NATURAL_GROUND_MAX_TILE) return 0;
     return Math.min(
       NATURAL_BOUNDARY_MAX_RESOLUTION,
       Math.max(NATURAL_BOUNDARY_MIN_RESOLUTION, Math.ceil(tile.size / NATURAL_BOUNDARY_TARGET_STEP)),
@@ -242,18 +244,50 @@ function shiftedSegmentStartX(tile: Tile, segment: DrainageSegment) {
 function surfacePoint(x: number, z: number, epsilon: number): Point {
   return [x, finalSurfaceAt(x, z).groundHeight + epsilon, z];
 }
+function segmentNormal(segment: DrainageSegment): Offset2 {
+  const vx = wrapSourceX(segment.bx - segment.ax),
+    vz = segment.bz - segment.az,
+    length = Math.hypot(vx, vz) || 1;
+  return { x: -vz / length, z: vx / length };
+}
+function joinedOffset(a: DrainageSegment, b?: DrainageSegment): Offset2 {
+  const normalA = segmentNormal(a);
+  if (!b) return normalA;
+  const normalB = segmentNormal(b),
+    sumX = normalA.x + normalB.x,
+    sumZ = normalA.z + normalB.z,
+    sumLength = Math.hypot(sumX, sumZ);
+  if (sumLength < 0.15) return normalA;
+  const unitX = sumX / sumLength,
+    unitZ = sumZ / sumLength,
+    alignment = Math.max(0.72, unitX * normalA.x + unitZ * normalA.z),
+    miter = Math.min(1.35, 1 / alignment);
+  return { x: unitX * miter, z: unitZ * miter };
+}
+function segmentNeighbourCode(segment: DrainageSegment, offset: number) {
+  const slash = segment.code.lastIndexOf("/"),
+    index = Number(segment.code.slice(slash + 1));
+  if (!Number.isInteger(index) || index + offset < 0) return null;
+  return `${segment.code.slice(0, slash)}/${index + offset}`;
+}
+function blendOffset(a: Offset2, b: Offset2, t: number): Offset2 {
+  return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
+}
 
-/** Smooth render strips from the same canonical drainage support and surface samples. */
+/** Smooth joined render strips from the same canonical drainage support and surface samples. */
 function addNaturalHydrologyRibbons(tile: Tile, extra: ExtraGeometry, segments: readonly DrainageSegment[]) {
-  const sampleStep = 2;
+  const sampleStep = 2,
+    byCode = new Map(segments.map((segment) => [segment.code, segment] as const));
   for (const segment of segments) {
     const ax = shiftedSegmentStartX(tile, segment),
       vx = wrapSourceX(segment.bx - segment.ax),
       vz = segment.bz - segment.az,
       length = Math.hypot(vx, vz);
     if (!length) continue;
-    const ux = vx / length, uz = vz / length,
-      nx = -uz, nz = ux,
+    const previousCode = segmentNeighbourCode(segment, -1),
+      nextCode = segmentNeighbourCode(segment, 1),
+      startOffset = joinedOffset(segment, previousCode ? byCode.get(previousCode) : undefined),
+      endOffset = joinedOffset(segment, nextCode ? byCode.get(nextCode) : undefined),
       count = Math.max(1, Math.ceil(length / sampleStep)),
       wetHalf = Math.max(0.2, segment.width * 0.96),
       bankInner = segment.width + 0.08,
@@ -266,15 +300,17 @@ function addNaturalHydrologyRibbons(tile: Tile, extra: ExtraGeometry, segments: 
       if (mx < tile.minX || mx >= tile.minX + tile.size || mz < tile.minZ || mz >= tile.minZ + tile.size) continue;
       const middle = finalSurfaceAt(mx, mz);
       if (middle.water.kind !== "river") continue;
+      const offset0 = blendOffset(startOffset, endOffset, t0),
+        offset1 = blendOffset(startOffset, endOffset, t1);
 
-      const leftOuter0 = surfacePoint(x0 + nx * bankOuter, z0 + nz * bankOuter, BANK_EPSILON),
-        leftOuter1 = surfacePoint(x1 + nx * bankOuter, z1 + nz * bankOuter, BANK_EPSILON),
-        leftInner1 = surfacePoint(x1 + nx * bankInner, z1 + nz * bankInner, BANK_EPSILON),
-        leftInner0 = surfacePoint(x0 + nx * bankInner, z0 + nz * bankInner, BANK_EPSILON),
-        rightInner0 = surfacePoint(x0 - nx * bankInner, z0 - nz * bankInner, BANK_EPSILON),
-        rightInner1 = surfacePoint(x1 - nx * bankInner, z1 - nz * bankInner, BANK_EPSILON),
-        rightOuter1 = surfacePoint(x1 - nx * bankOuter, z1 - nz * bankOuter, BANK_EPSILON),
-        rightOuter0 = surfacePoint(x0 - nx * bankOuter, z0 - nz * bankOuter, BANK_EPSILON);
+      const leftOuter0 = surfacePoint(x0 + offset0.x * bankOuter, z0 + offset0.z * bankOuter, BANK_EPSILON),
+        leftOuter1 = surfacePoint(x1 + offset1.x * bankOuter, z1 + offset1.z * bankOuter, BANK_EPSILON),
+        leftInner1 = surfacePoint(x1 + offset1.x * bankInner, z1 + offset1.z * bankInner, BANK_EPSILON),
+        leftInner0 = surfacePoint(x0 + offset0.x * bankInner, z0 + offset0.z * bankInner, BANK_EPSILON),
+        rightInner0 = surfacePoint(x0 - offset0.x * bankInner, z0 - offset0.z * bankInner, BANK_EPSILON),
+        rightInner1 = surfacePoint(x1 - offset1.x * bankInner, z1 - offset1.z * bankInner, BANK_EPSILON),
+        rightOuter1 = surfacePoint(x1 - offset1.x * bankOuter, z1 - offset1.z * bankOuter, BANK_EPSILON),
+        rightOuter0 = surfacePoint(x0 - offset0.x * bankOuter, z0 - offset0.z * bankOuter, BANK_EPSILON);
       pushQuad(
         extra, tile,
         leftOuter0, leftOuter1, leftInner1, leftInner0,
@@ -294,10 +330,10 @@ function addNaturalHydrologyRibbons(tile: Tile, extra: ExtraGeometry, segments: 
         waterTint0 = terrainTint(x0, z0), waterTint1 = terrainTint(x1, z1);
       pushQuad(
         extra, tile,
-        [x0 + nx * wetHalf, y0, z0 + nz * wetHalf],
-        [x1 + nx * wetHalf, y1, z1 + nz * wetHalf],
-        [x1 - nx * wetHalf, y1, z1 - nz * wetHalf],
-        [x0 - nx * wetHalf, y0, z0 - nz * wetHalf],
+        [x0 + offset0.x * wetHalf, y0, z0 + offset0.z * wetHalf],
+        [x1 + offset1.x * wetHalf, y1, z1 + offset1.z * wetHalf],
+        [x1 - offset1.x * wetHalf, y1, z1 - offset1.z * wetHalf],
+        [x0 - offset0.x * wetHalf, y0, z0 - offset0.z * wetHalf],
         waterTint0, waterTint1, waterTint1, waterTint0,
       );
     }
@@ -353,8 +389,10 @@ function addRoadAndBridgeRibbons(tile: Tile, extra: ExtraGeometry, matches: read
 }
 
 export function refineTileSurfacePresentation(tile: Tile, data: TileGeometry): TileGeometry {
-  if (tile.size > NATURAL_RIBBON_MAX_TILE) return data;
-  const hydrologySegments = drainageSegmentsInBounds(tile.minX, tile.minZ, tile.size),
+  if (tile.size > NATURAL_GROUND_MAX_TILE) return data;
+  const hydrologySegments = tile.size <= NATURAL_RIBBON_MAX_TILE
+      ? drainageSegmentsInBounds(tile.minX, tile.minZ, tile.size)
+      : Object.freeze([]) as readonly DrainageSegment[],
     waterBoundary = hasWaterBoundary(tile),
     hydrology = emptyExtra(true),
     ground = emptyExtra(true);
