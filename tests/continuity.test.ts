@@ -56,7 +56,6 @@ test("ten SEED macro plans reconstruct shared terrain/road profiles in shuffled,
         return composeFinalSurface({groundHeight:wet?-1.2:5+terrain.reliefM,material:wet?"Lake":"Meadow",water:{kind:wet?"lake":"none",level:wet?0:-Infinity,flowX:0,flowZ:0},walkable:!wet,vegetationDensityScale:1,reservedUse:null},roadDistanceAt(x,z,road)<5?[{id:road.code,priority:8,material:"Road",vegetationDensityScale:0}]:[]);
       }, region = logicalRegion(point,seed), cells = [region, canonicalCellNeighbor(region,1,0,seed), canonicalCellNeighbor(region,0,1,seed)],
       points = cells.map(cell => boundaryPoint(regionBoundaries(cell,seed)[0],.5));
-    // Production macro fields/composer with a SEED-specific proof topology, not ten aliases of one world.
     const a = createContinuityService(seed,[road],sample), expected = points.map(point => a.inspectRegion(point));
     assert.ok(expected.some(result=>result.ports.length));
     for (const order of [[2,0,1],[2,1,0],[0,1,2]]) for (const i of order) {
@@ -105,7 +104,6 @@ test("deterministic continuation quotas and cancellation cannot select a differe
     while(cursor.status!=="complete") cursor=job.advance(cursor,quota);
     assert.equal(cursor.values.length,81);
     assert.equal(a.continuityTelemetry().pendingQueries,0);
-    // Compare the same quantized positions (same recipe at every quota).
     const direct=advanceQuery(beginQuery("address",positions),p=> {const s=lonLatToSource(p.lon,p.lat);return finalSurfaceAt(s.x,s.z);},81);
     assert.deepEqual(cursor.values,direct.values);
   }
@@ -124,10 +122,14 @@ test("unrelated metadata grows only coarse scan cost, never local fine generatio
 });
 test("persisted revision survives detail eviction without changing semantic port identity", () => {
   const original=service().inspectRegion(focus), events=[{id:"closed-road",sequence:1,time:"0126-12-04 22:00:00",featureId:roads[0].code}],
+    affectedIds=original.ports.filter(port=>port.surface.contributingModifierIds.includes(events[0].featureId)).map(port=>port.id),
     sample=(x:number,z:number)=>{const value=finalSurfaceAt(x,z);return value.contributingModifierIds.includes(events[0].featureId)?{...value,walkable:false,traversal:"blocked" as const}:value;},
-    a=createContinuityService("fixture",roads,sample,"event-1"), changed=a.inspectRegion(focus);
-  assert.ok(changed.ports.every(port=>port.status==="blocked"));
+    a=createContinuityService("fixture",roads,sample,"event-1"), changed=a.inspectRegion(focus),
+    changedById=new Map(changed.ports.map(port=>[port.id,port]));
+  assert.ok(affectedIds.length>0,"fixture must contain at least one crossing affected by the persisted road revision");
+  assert.ok(affectedIds.every(id=>changedById.get(id)?.status==="blocked"));
   assert.deepEqual(changed.ports.map(p=>p.id),original.ports.map(p=>p.id));
+  for(const port of original.ports)if(!affectedIds.includes(port.id))assert.deepEqual(changedById.get(port.id),port);
   for(let i=0;i<10;i++){a.clearContinuityDetail();assert.deepEqual(a.inspectRegion(focus),changed);}
   const replay=createContinuityService("fixture",roads,sample,"event-1");
   assert.deepEqual(replay.inspectRegion(focus),changed);
