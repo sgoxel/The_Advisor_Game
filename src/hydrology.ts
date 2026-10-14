@@ -200,21 +200,63 @@ function clampZ(z: number) {
   );
 }
 
+const PROFILE_MAX_DROP_M = 2.4;
 function profileMainChannel(points: readonly DrainagePoint[]) {
+  const segmentCeilings = points.slice(0, -1).map((point, index) => {
+    const next = points[index + 1],
+      dx = wrapSourceX(next.x - point.x),
+      dz = next.z - point.z,
+      length = Math.hypot(dx, dz),
+      steps = Math.max(2, Math.ceil(length / SAMPLE_STEP_SOURCE));
+    let minimum = Infinity;
+    for (let sampleIndex = 0; sampleIndex <= steps; sampleIndex++) {
+      const t = sampleIndex / steps,
+        x = wrapSourceX(point.x + dx * t),
+        z = point.z + dz
+        * t,
+        macro = macroSampleAt(sourceToLonLat(x, z));
+      if (!macro.land) continue;
+      const progress = (index + t) / Math.max(1, points.length - 1),
+        terrain = naturalElevationAt(x, z),
+        incision = 0.55 + progress * 0.45;
+      minimum = Math.min(minimum, terrain - incision);
+    }
+    return minimum;
+  }),
+    ceilings = points.map((point, index) => {
+      const outlet =
+          index === points.length - 1 &&
+          !macroSampleAt(sourceToLonLat(point.x, point.z)).land,
+        progress = index / Math.max(1, points.length - 1),
+        terrain = outlet ? 0.05 : naturalElevationAt(point.x, point.z),
+        incision = 0.55 + progress * 0.45,
+        own = outlet ? 0.05 : terrain - incision;
+      return Math.min(
+        own,
+        index > 0 ? segmentCeilings[index - 1] : Infinity,
+        index < segmentCeilings.length ? segmentCeilings[index] : Infinity,
+      );
+    }),
+    beds = new Array<number>(points.length);
   let previous = Infinity;
-  return points.map((point, index) => {
-    const outlet =
-        index === points.length - 1 &&
-        !macroSampleAt(sourceToLonLat(point.x, point.z)).land,
-      progress = index / Math.max(1, points.length - 1),
-      terrain = outlet ? 0.05 : naturalElevationAt(point.x, point.z),
-      incision = 0.55 + progress * 0.45,
-      desired = outlet ? 0.05 : Math.max(0.12, terrain - incision),
-      ceiling = index === 0 ? Infinity : Math.max(0.055, previous - 0.015),
-      bed = Math.min(desired, ceiling);
+  for (let index = 0; index < points.length; index++) {
+    const bed = Math.min(
+      ceilings[index],
+      index === 0 ? Infinity : previous - 0.015,
+    );
+    beds[index] = bed;
     previous = bed;
-    return Object.freeze({ x: point.x, z: point.z, bed });
-  });
+  }
+  // Interior terrain support changes the canonical profile before interpolation.
+  // Spread large drops upstream deterministically so containment does not create
+  // serrated query-time clamps or visibly abrupt trench walls.
+  for (let index = beds.length - 2; index >= 0; index--)
+    beds[index] = Math.min(beds[index], beds[index + 1] + PROFILE_MAX_DROP_M);
+  for (let index = 1; index < beds.length; index++)
+    beds[index] = Math.min(beds[index], beds[index - 1] - 0.015);
+  return points.map((point, index) =>
+    Object.freeze({ x: point.x, z: point.z, bed: beds[index] }),
+  );
 }
 
 function traceRiver(continentId: number, slot: number): DrainageRecipe | null {

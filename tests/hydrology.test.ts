@@ -8,6 +8,7 @@ import {
   FRESHWATER_ACCESS_RADIUS_M,
   freshwaterCrossingSpanMAt,
   hydrologyTelemetry,
+  naturalElevationAt,
   naturalSurfaceAt,
 } from "../src/hydrology.ts";
 import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
@@ -102,4 +103,31 @@ test("crossing angle rejects parallel decks and increases oblique wet span",()=>
   assert.equal(freshwaterCrossingAt(x,z,dx,dz),null);
   const perpendicular=freshwaterCrossingAt(x,z,-dz,dx),oblique=freshwaterCrossingAt(x,z,dx-dz,dz+dx);
   assert.ok(perpendicular&&oblique&&oblique.spanM>perpendicular.spanM);
+});
+
+test("main-channel water remains incised below natural terrain support between stations", () => {
+  let samples = 0;
+  for (const recipe of drainageRecipes)
+    for (let index = 1; index < recipe.points.length; index++) {
+      const a = recipe.points[index - 1],
+        b = recipe.points[index],
+        dx = wrapSourceX(b.x - a.x),
+        dz = b.z - a.zj;
+      for (let sampleIndex = 1; sampleIndex <= 16; sampleIndex++) {
+        const t = sampleIndex / 16,
+          x = wrapSourceX(a.x + dx * t),
+          z = a.z + dz * t,
+          macro = macroSampleAt(sourceToLonLat(x, z));
+        if (!macro.land) continue;
+        const sample = naturalSurfaceAt(x, z);
+        assert.equal(sample.water.kind, "river", `${recipe.code} interior channel is dry`);
+        const naturalSupport = naturalElevationAt(x, z);
+        assert.ok(
+          sample.water.level <= naturalSupport + 1e-6,
+          `${recipe.code} water exceeds natural support by ${(sample.water.level - naturalSupport).toFixed(6)}m`,
+        );
+        samples++;
+      }
+    }
+  assert.ok(samples > 1000, `expected broad containment coverage, got ${samples}`);
 });
