@@ -63,14 +63,14 @@ SCENARIOS: dict[str, str] = {
         "eval:window.advisorWorld.setHalfHeight(450);settle;shot:tributary;"
         "eval:window.ll=window.advisorWorld.hydrology.mountains[0].path[Math.floor(window.advisorWorld.hydrology.mountains[0].path.length/2)];"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
-        "eval:window.advisorWorld.setHalfHeight(850);settle;shot:mountain;"
+        "eval:window.advisorWorld.setHalfHeight(850);settle;shot:mountain;eval:window.advisorWorld.setHalfHeight(5000);settle;shot:mountain-range;"
         "eval:window.ll=window.advisorWorld.hydrology.lakes[0].center;"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
         "eval:window.advisorWorld.setHalfHeight(900);settle;shot:lake;"
         "eval:window.a=window.advisorWorld.hydrology.anchors();"
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(window.a.bridge.x,window.a.bridge.z);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
-        "eval:window.advisorWorld.setHalfHeight(24);settle;shot:bank-bridge;"
+        "eval:window.advisorWorld.setHalfHeight(24);settle;shot:bank-bridge;eval:window.advisorWorld.setHalfHeight(95);settle;shot:bank-context;"
         "eval:window.advisorWorld.setHalfHeight(24000);settle;shot:realm-coast"
     ),
     "hydrology-context": (
@@ -445,6 +445,13 @@ def main(argv: list[str] | None = None) -> int:
                     except (CaptureError, PlaywrightError) as error:
                         failures += 1
                         reason = str(error).strip().splitlines()[0]
+                        try:
+                            failure_state = session.page.evaluate(STATE_JS)
+                        except PlaywrightError:
+                            failure_state = {}
+                        (args.out / f"{name}-{profile}-failure.json").write_text(
+                            json.dumps({"reason": reason, "shots": session.shots,
+                                        "state": failure_state}, indent=2), encoding="utf-8")
                         print(f"FAILED {name}-{profile} after {session.shots} image(s): {reason}",
                               file=sys.stderr)
                     finally:

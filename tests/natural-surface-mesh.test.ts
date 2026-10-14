@@ -91,3 +91,24 @@ test("dense real crossing outer coverage respects the unchanged mesh cap", () =>
     assert.ok(result.cpuScratchBytesEstimated<=32*1024*1024);
   }
 });
+
+
+test("shoreline skirts do not hang above the real crossing water", () => {
+  const p=finalSurfaceEvidenceAnchors().bridge;
+  const tile=tileForPosition(p.x,p.z,14);
+  const r=rebuildNaturalSurface(tile,buildTile(tile).terrain),g=r.geometry;
+  const ox=tile.minX+tile.size/2,oz=tile.minZ+tile.size/2;
+  let wetSkirts=0;
+  for(let i=0;i<g.indices.length;i+=3) {
+    const ids=[g.indices[i],g.indices[i+1],g.indices[i+2]];
+    if(ids.some(v=>v<r.surfaceVertices))continue;
+    const x=ids.reduce((sum,v)=>sum+g.positions[v*3],0)/3+ox;
+    const z=ids.reduce((sum,v)=>sum+g.positions[v*3+2],0)/3+oz;
+    const surface=finalSurfaceAt(x,z);
+    if(surface.water.kind==='none')continue;
+    const top=Math.max(...ids.map(v=>g.positions[v*3+1]));
+    assert.ok(top<=surface.water.level+.03,`skirt conceals water by ${top-surface.water.level}m at ${x},${z}`);
+    wetSkirts++;
+  }
+  assert.ok(wetSkirts>0);
+});

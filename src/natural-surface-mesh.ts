@@ -257,7 +257,7 @@ export function rebuildNaturalSurface(
   const surfaceVertices = positions.length / 3;
 
   const borderStep = segments.length
-    ? Math.max(2, tile.size / 128)
+    ? Math.max(tile.size / 128, Math.min(tile.size >= 256 ? 2 : tile.size >= 128 ? 1 : 0.5, tile.size / 32))
     : Math.max(4, tile.size / 128);
   for (let edge = 0; edge < 4; edge++)
     for (let offset = 0; offset < tile.size; offset += borderStep) {
@@ -270,11 +270,15 @@ export function rebuildNaturalSurface(
               : edge === 2
                 ? sample(tile.minX + tile.size - t, tile.minZ + tile.size)
                 : sample(tile.minX, tile.minZ + tile.size - t),
-        a = point(offset),
-        b = point(next),
-        c = { ...b, y: b.y - 12 },
-        d = { ...a, y: a.y - 12 };
-      quad(a, b, c, d, "skirt");
+        a = point(offset), b = point(next);
+      const skirt = (a: Sample,b: Sample) => quad(a,b,{...b,y:b.y-12},{...a,y:a.y-12},"skirt");
+      // A coarse dry-to-water chord can put the skirt's top above the real
+      // channel. Split it at the same exact shoreline used by the top surface.
+      if(wet(a)!==wet(b)) {
+        const boundary=cut(a,b);
+        skirt(a,wet(a)?boundary.wet:boundary.dry);
+        skirt(wet(b)?boundary.wet:boundary.dry,b);
+      } else skirt(a,b);
     }
 
   for (let index = 0; index < positions.length / 3; index++) {
