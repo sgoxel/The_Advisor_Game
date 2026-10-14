@@ -41,6 +41,7 @@ export function rebuildNaturalSurface(
   replaced: boolean;
   leaves: number;
   samples: number;
+  surfaceVertices: number;
   cpuScratchBytesEstimated: number;
 } {
   const unchanged = {
@@ -48,6 +49,7 @@ export function rebuildNaturalSurface(
     replaced: false,
     leaves: 0,
     samples: 0,
+    surfaceVertices: 0,
     cpuScratchBytesEstimated: 0,
   };
   if (tile.size > NATURAL_MESH_LIMITS.maximumTile) return unchanged;
@@ -176,8 +178,6 @@ export function rebuildNaturalSurface(
     if (++leaves > NATURAL_MESH_LIMITS.leaves)
       throw new RangeError("Natural mesh leaf cap exceeded");
 
-    // Keep the centre sample only where a narrow river or wet/dry transition needs
-    // it. Uniform dry/wet leaves need only two triangles and half the upload bytes.
     const centreNeeded = river || major || middle.wet !== a.wet;
     if (centreNeeded) {
       triangle(a, b, middle);
@@ -192,8 +192,11 @@ export function rebuildNaturalSurface(
     for (let x = 0; x < 16; x++)
       visit(tile.minX + x * base, tile.minZ + z * base, base);
 
-  // Skirts cover adaptive T-junctions. They do not need sub-source tessellation:
-  // long vertical quads follow the same two edge endpoints and cost far fewer bytes.
+  // Record the actual top-surface range before skirts append deliberately lowered
+  // edge vertices. Tests and telemetry can therefore validate visible canonical
+  // surface vertices without assuming one fixed triangle count per adaptive leaf.
+  const surfaceVertices = positions.length / 3;
+
   const borderStep = segments.length
     ? Math.max(2, tile.size / 128)
     : Math.max(4, tile.size / 128);
@@ -227,6 +230,7 @@ export function rebuildNaturalSurface(
     replaced: true,
     leaves,
     samples: cache.size,
+    surfaceVertices,
     cpuScratchBytesEstimated:
       (positions.length + normals.length + colors.length + indices.length + uvs.length) *
         8 +
