@@ -1,3 +1,4 @@
+import {rebuildNaturalSurface} from "../src/natural-surface-mesh.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { canonicalCell, sourceToLonLat, lonLatToSource, cubeFaceToUnit, unitToLonLat, type CubeFace } from "../src/planet.ts";
@@ -11,27 +12,34 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_RADIUS } from "..
 import { defineContinuityCorridor, clippedStationRange, CORRIDOR_LIMITS } from "../src/continuity-corridor.ts";
 import { canonicalCellNeighbor, canonicalCellCenter } from "../src/spatial-authority.ts";
 import { buildTile } from "../src/geometry.ts";
-import { refineTileSurfacePresentation, REFINED_ROAD_RGB } from "../src/surface-refinement.ts";
+import { refineTileSurfacePresentation } from "../src/surface-refinement.ts";
 import { tileAt, tileForPosition } from "../src/world.ts";
 
 const focus = sourceToLonLat((roads[0].fromX + roads[0].toX)/2, (roads[0].fromZ + roads[0].toZ)/2);
 const service = () => createContinuityService("fixture", roads, finalSurfaceAt);
-test("coarse coverage retains no fine ribbon work and local lake-detour strips follow composed truth", () => {
+test("coarse coverage retains no fine work and the local lake-detour ground follows composed truth", () => {
   const root=tileAt(0,0,0),empty={positions:new Float32Array(),normals:new Float32Array(),colors:new Uint8Array(),indices:new Uint32Array()},
     coarse={terrain:empty,structures:empty,nature:empty,detail:empty};
   assert.equal(refineTileSurfacePresentation(root,coarse),coarse);
   assert.equal(coarse.structures.positions.length,0);
   const corridor=roads.find(road=>road.centerline)!;
   assert.ok(corridor);
-  const station=corridor.centerline![16],tile=tileForPosition(station.x,station.z,14),result=refineTileSurfacePresentation(tile,buildTile(tile)),originX=tile.minX+tile.size/2,originZ=tile.minZ+tile.size/2;
+  const station=corridor.centerline![16],tile=tileForPosition(station.x,station.z,14),base=buildTile(tile),natural=rebuildNaturalSurface(tile,base.terrain);
+  base.terrain=natural.geometry;
+  const result=refineTileSurfacePresentation(tile,base,natural.replaced),originX=tile.minX+tile.size/2,originZ=tile.minZ+tile.size/2;
   let rendered=0;
-  for(let vertex=0;vertex<result.structures.positions.length/3;vertex++){
-    if(!REFINED_ROAD_RGB.every((value,i)=>result.structures.colors[vertex*4+i]===value))continue;
-    const p=vertex*3,surface=finalSurfaceAt(originX+result.structures.positions[p],originZ+result.structures.positions[p+2]);
-    assert.equal(surface.water.kind,"none");assert.ok(surface.walkable);rendered++;
+  for(let vertex=0;vertex<result.terrain.positions.length/3;vertex++) {
+    if(result.terrain.normals[vertex*3+1]<=0||![170,151,113].every((value,i)=>result.terrain.colors[vertex*4+i]===value))continue;
+    const p=vertex*3,x=originX+result.terrain.positions[p],z=originZ+result.terrain.positions[p+2];
+    const surface=finalSurfaceAt(x,z);
+    if(surface.groundMaterial!=="Road"||surface.reservedUse!==corridor.code||roadDistanceAt(x,z,corridor)>=5)continue;
+    assert.equal(surface.water.kind,"none");assert.ok(surface.walkable);
+    assert.ok(Math.abs(result.terrain.positions[p+1]-surface.groundHeight)<.026,"rendered detour must follow its actual prepared height");
+    assert.deepEqual(Array.from(result.terrain.colors.slice(vertex*4,vertex*4+3)),[170,151,113],"detour must be visible on the common ground");
+    rendered++;
   }
-  assert.ok(rendered>0,"actual polyline detour must receive local prepared geometry");
-  assert.ok(result.structures.positions.length/3<4096,"local strips must remain bounded by clipped stations");
+  assert.ok(rendered>0,"actual polyline detour must receive visible local prepared ground");
+  assert.ok(result.terrain.positions.length/3<4096,"local prepared ground must retain the fixed geometry bound");
 });
 test("integer geometric boundaries have exactly two incident owners across six faces and corners", () => {
   const edges = new Map<string, number>();
