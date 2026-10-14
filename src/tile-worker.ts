@@ -1,14 +1,18 @@
 import { buildTile } from "./geometry.ts";
 import { convertTileGeometryToEnu } from "./render-frame.ts";
 import { refineTileSurfacePresentation } from "./surface-refinement.ts";
+import { stripLegacyRiverBankMask } from "./hydrology-presentation-cleanup.ts";
 import { buildVegetationGeometry } from "./vegetation-render.ts";
 import type { Tile } from "./world.ts";
 import { continuityTelemetry } from "./continuity-runtime.ts";
 self.onmessage = (event: MessageEvent<Tile>) => {
   const tile = event.data;
   try {
-    const data = refineTileSurfacePresentation(tile, buildTile(tile)),
+    const base = buildTile(tile),
+      canonicalVertexCount = base.terrain.positions.length / 3,
+      data = refineTileSurfacePresentation(tile, base),
       vegetation = buildVegetationGeometry(tile);
+    data.terrain = stripLegacyRiverBankMask(tile, data.terrain, canonicalVertexCount);
     data.nature = vegetation.geometry;
     const precision = convertTileGeometryToEnu(tile, data);
     const transfer: Transferable[] = [];
