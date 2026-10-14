@@ -21,182 +21,115 @@ jobs:
 
           hydrology = Path('src/hydrology.ts')
           text = hydrology.read_text()
-          old = '''function profileMainChannel(points: readonly DrainagePoint[]) {
-            let previous = Infinity;
-            return points.map((point, index) => {
-              const outlet =
-                  index === points.length - 1 &&
-                  !macroSampleAt(sourceToLonLat(point.x, point.z)).land,
-                progress = index / Math.max(1, points.length - 1),
-                terrain = outlet ? 0.05 : naturalElevationAt(point.x, point.z),
-                incision = 0.55 + progress * 0.45,
-                desired = outlet ? 0.05 : Math.max(0.12, terrain - incision),
-                ceiling = index === 0 ? Infinity : Math.max(0.055, previous - 0.015),
-                bed = Math.min(desired, ceiling);
-              previous = bed;
-              return Object.freeze({ x: point.x, z: point.z, bed });
-            });
-          }
-          '''.replace('          ', '')
-          new = '''const PROFILE_MAX_DROP_M = 2.4;
-          function profileMainChannel(points: readonly DrainagePoint[]) {
-            const segmentCeilings = points.slice(0, -1).map((point, index) => {
-              const next = points[index + 1],
-                dx = wrapSourceX(next.x - point.x),
-                dz = next.z - point.z,
-                length = Math.hypot(dx, dz),
-                steps = Math.max(2, Math.ceil(length / SAMPLE_STEP_SOURCE));
-              let minimum = Infinity;
-              for (let sampleIndex = 0; sampleIndex <= steps; sampleIndex++) {
-                const t = sampleIndex / steps,
-                  x = wrapSourceX(point.x + dx * t),
-                  z = point.z + dz * t,
-                  macro = macroSampleAt(sourceToLonLat(x, z));
-                if (!macro.land) continue;
-                const progress = (index + t) / Math.max(1, points.length - 1),
-                  terrain = naturalElevationAt(x, z),
-                  incision = 0.55 + progress * 0.45;
-                minimum = Math.min(minimum, terrain - incision);
-              }
-              return minimum;
-            }),
-            ceilings = points.map((point, index) => {
-              const outlet =
-                  index === points.length - 1 &&
-                  !macroSampleAt(sourceToLonLat(point.x, point.z)).land,
-                progress = index / Math.max(1, points.length - 1),
-                terrain = outlet ? 0.05 : naturalElevationAt(point.x, point.z),
-                incision = 0.55 + progress * 0.45,
-                own = outlet ? 0.05 : terrain - incision;
-              return Math.min(
-                own,
-                index > 0 ? segmentCeilings[index - 1] : Infinity,
-                index < segmentCeilings.length ? segmentCeilings[index] : Infinity,
-              );
-            }),
-            beds = new Array<number>(points.length);
-            let previous = Infinity;
-            for (let index = 0; index < points.length; index++) {
-              const bed = Math.min(
-                ceilings[index],
-                index === 0 ? Infinity : previous - 0.015,
-              );
-              beds[index] = bed;
-              previous = bed;
-            }
-            // A low interior terrain support must lower the canonical profile before
-            // interpolation, never at query/render time. Spread large drops upstream
-            // deterministically so containment does not create serrated trench walls.
-            for (let index = beds.length - 2; index >= 0; index--)
-              beds[index] = Math.min(beds[index], beds[index + 1] + PROFILE_MAX_DROP_M);
-            for (let index = 1; index < beds.length; index++)
-              beds[index] = Math.min(beds[index], beds[index - 1] - 0.015);
-            return points.map((point, index) =>
-              Object.freeze({ x: point.x, z: point.z, bed: beds[index] }),
-            );
-          }
-          '''.replace('          ', '')
-          if old not in text:
-            raise SystemExit('profileMainChannel source contract changed; refusing blind patch')
-          hydrology.write_text(text.replace(old, new, 1))
+          start = text.index('function profileMainChannel(')
+          end = text.index('\n\nfunction traceRiver(', start)
+          replacement = r'''const PROFILE_MAX_DROP_M = 2.4;
+function profileMainChannel(points: readonly DrainagePoint[]) {
+  const segmentCeilings = points.slice(0, -1).map((point, index) => {
+    const next = points[index + 1],
+      dx = wrapSourceX(next.x - point.x),
+      dz = next.z - point.z,
+      length = Math.hypot(dx, dz),
+      steps = Math.max(2, Math.ceil(length / SAMPLE_STEP_SOURCE));
+    let minimum = Infinity;
+    for (let sampleIndex = 0; sampleIndex <= steps; sampleIndex++) {
+      const t = sampleIndex / steps,
+        x = wrapSourceX(point.x + dx * t),
+        z = point.z + dz * t,
+        macro = macroSampleAt(sourceToLonLat(x, z));
+      if (!macro.land) continue;
+      const progress = (index + t) / Math.max(1, points.length - 1),
+        terrain = naturalElevationAt(x, z),
+        incision = 0.55 + progress * 0.45;
+      minimum = Math.min(minimum, terrain - incision);
+    }
+    return minimum;
+  }),
+    ceilings = points.map((point, index) => {
+      const outlet =
+          index === points.length - 1 &&
+          !macroSampleAt(sourceToLonLat(point.x, point.z)).land,
+        progress = index / Math.max(1, points.length - 1),
+        terrain = outlet ? 0.05 : naturalElevationAt(point.x, point.z),
+        incision = 0.55 + progress * 0.45,
+        own = outlet ? 0.05 : terrain - incision;
+      return Math.min(
+        own,
+        index > 0 ? segmentCeilings[index - 1] : Infinity,
+        index < segmentCeilings.length ? segmentCeilings[index] : Infinity,
+      );
+    }),
+    beds = new Array<number>(points.length);
+  let previous = Infinity;
+  for (let index = 0; index < points.length; index++) {
+    const bed = Math.min(
+      ceilings[index],
+      index === 0 ? Infinity : previous - 0.015,
+    );
+    beds[index] = bed;
+    previous = bed;
+  }
+  // Interior terrain support changes the canonical profile before interpolation.
+  // Spread large drops upstream deterministically so containment does not create
+  // serrated query-time clamps or visibly abrupt trench walls.
+  for (let index = beds.length - 2; index >= 0; index--)
+    beds[index] = Math.min(beds[index], beds[index + 1] + PROFILE_MAX_DROP_M);
+  for (let index = 1; index < beds.length; index++)
+    beds[index] = Math.min(beds[index], beds[index - 1] - 0.015);
+  return points.map((point, index) =>
+    Object.freeze({ x: point.x, z: point.z, bed: beds[index] }),
+  );
+}'''
+          hydrology.write_text(text[:start] + replacement + text[end:])
 
           tests = Path('tests/hydrology.test.ts')
           test_text = tests.read_text()
-          old_import = '  hydrologyTelemetry,\n  naturalSurfaceAt,\n'
-          new_import = '  hydrologyTelemetry,\n  naturalElevationAt,\n  naturalSurfaceAt,\n'
-          if old_import not in test_text:
-            raise SystemExit('hydrology import contract changed; refusing blind patch')
-          test_text = test_text.replace(old_import, new_import, 1)
-          regression = '''
+          if '  naturalElevationAt,\n' not in test_text:
+            test_text = test_text.replace(
+              '  hydrologyTelemetry,\n  naturalSurfaceAt,\n',
+              '  hydrologyTelemetry,\n  naturalElevationAt,\n  naturalSurfaceAt,\n',
+              1,
+            )
+          marker = 'main-channel water remains incised below natural terrain support between stations'
+          if marker not in test_text:
+            test_text = test_text.rstrip() + r'''
 
-          test("main-channel water remains incised below natural terrain support between stations", () => {
-            let samples = 0;
-            for (const recipe of drainageRecipes)
-              for (let index = 1; index < recipe.points.length; index++) {
-                const a = recipe.points[index - 1],
-                  b = recipe.points[index],
-                  dx = wrapSourceX(b.x - a.x),
-                  dz = b.z - a.z;
-                for (let sampleIndex = 1; sampleIndex <= 16; sampleIndex++) {
-                  const t = sampleIndex / 16,
-                    x = wrapSourceX(a.x + dx * t),
-                    z = a.z + dz * t,
-                    macro = macroSampleAt(sourceToLonLat(x, z));
-                  if (!macro.land) continue;
-                  const sample = naturalSurfaceAt(x, z);
-                  assert.equal(sample.water.kind, "river", `${recipe.code} interior channel is dry`);
-                  const naturalSupport = naturalElevationAt(x, z);
-                  assert.ok(
-                    sample.water.level <= naturalSupport + 1e-6,
-                    `${recipe.code} water exceeds natural support by ${(sample.water.level - naturalSupport).toFixed(6)}m`,
-                  );
-                  samples++;
-                }
-              }
-            assert.ok(samples > 1000, `expected broad containment coverage, got ${samples}`);
-          });
-          '''.replace('          ', '')
-          if 'main-channel water remains incised below natural terrain support between stations' in test_text:
-            raise SystemExit('containment regression already present')
-          tests.write_text(test_text.rstrip() + regression + '\n')
 
-          workflow = '''name: AGENT1 WP15 hydrology evidence
-          on:
-            push:
-              branches: [agent1/wp-s003-003-001-natural-authority]
-              paths: [.github/workflows/agent1-wp15-evidence.yml]
-          permissions:
-            contents: read
-          jobs:
-            evidence:
-              runs-on: ubuntu-latest
-              timeout-minutes: 120
-              env:
-                EVIDENCE_REVISION: "17"
-              steps:
-                - uses: actions/checkout@v4
-                - uses: actions/setup-node@v4
-                  with:
-                    node-version: 24
-                    cache: npm
-                - run: npm ci
-                - run: npm test
-                - run: npm run build
-                - run: npx playwright install --with-deps chromium
-                - run: python -m pip install pillow numpy playwright==1.63.0
-                - name: WebGPU browser suite
-                  run: xvfb-run -a npx playwright test --config playwright.webgpu.config.js
-                - name: WebGL2 browser suite
-                  run: xvfb-run -a npx playwright test --config playwright.fallback.config.js
-                - name: Responsive navigation suite
-                  run: xvfb-run -a npx playwright test --config playwright.navigation.config.js
-                - name: Perceptual continuous-zoom gate
-                  run: |
-                    python tools/verify-zoom-images.py --self-test
-                    python tools/verify-zoom-images.py test-results/zoom-webgpu/pairs.json
-                    python tools/verify-zoom-images.py test-results/zoom-webgl2/pairs.json
-                - name: Capture natural terrain and hydrology
-                  run: |
-                    npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
-                    PREVIEW_PID=$!
-                    trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
-                    for i in $(seq 1 30); do
-                      if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
-                      sleep 1
-                    done
-                    HYDRO_STEPS='eval:window.__r=window.advisorWorld.hydrology.recipes[0];eval:window.__p=window.__r.points[Math.floor(window.__r.points.length*0.55)];eval:window.__ll=window.advisorWorld.hydrology.toLonLat(window.__p.x,window.__p.z);eval:window.advisorWorld.navigation.setFocus(window.__ll.lon,window.__ll.lat);eval:window.advisorWorld.setHalfHeight(450);settle;shot:river-province;eval:window.advisorWorld.setHalfHeight(95);settle;shot:river-local;eval:window.__t=window.__r.tributary[Math.floor(window.__r.tributary.length*0.55)];eval:window.__ll=window.advisorWorld.hydrology.toLonLat(window.__t.x,window.__t.z);eval:window.advisorWorld.navigation.setFocus(window.__ll.lon,window.__ll.lat);eval:window.advisorWorld.setHalfHeight(230);settle;shot:tributary;eval:window.__lake=Array.from({length:88},(_,iz)=>Array.from({length:88},(_,ix)=>({x:-130000+ix*3000,z:-125000+iz*3000}))).flat().find(p=>window.advisorWorld.hydrology.sampleSource(p.x,p.z).water.kind==="lake");eval:window.__ll=window.advisorWorld.hydrology.toLonLat(window.__lake.x,window.__lake.z);eval:window.advisorWorld.navigation.setFocus(window.__ll.lon,window.__ll.lat);eval:window.advisorWorld.setHalfHeight(1800);settle;shot:lake-shore-context;eval:window.__steep=window.__r.points[0];eval:window.__ll=window.advisorWorld.hydrology.toLonLat(window.__steep.x,window.__steep.z);eval:window.advisorWorld.navigation.setFocus(window.__ll.lon,window.__ll.lat);eval:window.advisorWorld.setHalfHeight(230);settle;shot:steep-river-source;click:#overview;settle;shot:realm'
-                    python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp15-natural-webgl2 --name wp15-natural --steps "$HYDRO_STEPS" --profile desktop,phone --renderer webgl2 --timeout 420
-                    python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp15-natural-webgpu --name wp15-natural --steps "$HYDRO_STEPS" --profile desktop,phone --renderer webgpu --timeout 420
-                - uses: actions/upload-artifact@v4
-                  if: always()
-                  with:
-                    name: wp15-current-run-attempt1-evidence
-                    path: test-results/
-          '''.replace('          ', '')
-          Path('.github/workflows/agent1-wp15-evidence.yml').write_text(workflow)
+test("main-channel water remains incised below natural terrain support between stations", () => {
+  let samples = 0;
+  for (const recipe of drainageRecipes)
+    for (let index = 1; index < recipe.points.length; index++) {
+      const a = recipe.points[index - 1],
+        b = recipe.points[index],
+        dx = wrapSourceX(b.x - a.x),
+        dz = b.z - a.z;
+      for (let sampleIndex = 1; sampleIndex <= 16; sampleIndex++) {
+        const t = sampleIndex / 16,
+          x = wrapSourceX(a.x + dx * t),
+          z = a.z + dz * t,
+          macro = macroSampleAt(sourceToLonLat(x, z));
+        if (!macro.land) continue;
+        const sample = naturalSurfaceAt(x, z);
+        assert.equal(sample.water.kind, "river", `${recipe.code} interior channel is dry`);
+        const naturalSupport = naturalElevationAt(x, z);
+        assert.ok(
+          sample.water.level <= naturalSupport + 1e-6,
+          `${recipe.code} water exceeds natural support by ${(sample.water.level - naturalSupport).toFixed(6)}m`,
+        );
+        samples++;
+      }
+    }
+  assert.ok(samples > 1000, `expected broad containment coverage, got ${samples}`);
+});
+''' + '\n'
+          tests.write_text(test_text)
           PY
+          git show d4f56f5c6291f295a96404d45bdf5292dc5fcc22:.github/workflows/agent1-wp15-evidence.yml > .github/workflows/agent1-wp15-evidence.yml
+          sed -i 's/EVIDENCE_REVISION: "16"/EVIDENCE_REVISION: "17"/' .github/workflows/agent1-wp15-evidence.yml
+          sed -i 's/name: wp15-attempt3-evidence/name: wp15-current-run-attempt1-evidence/' .github/workflows/agent1-wp15-evidence.yml
           git config user.name "AGENT #1"
           git config user.email "163722426+sgoxel@users.noreply.github.com"
           git add src/hydrology.ts tests/hydrology.test.ts .github/workflows/agent1-wp15-evidence.yml
+          git diff --cached --check
           git commit -m "Contain canonical river profiles between stations"
           git push origin HEAD:agent1/wp-s003-003-001-natural-authority
