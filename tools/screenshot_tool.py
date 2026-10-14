@@ -52,8 +52,51 @@ PROFILES: dict[str, tuple[int, int]] = {
     "phone-small": (360, 800), "tablet-portrait": (768, 1024),
 }
 
+# Verify the displayed point against the exact composed source queried through
+# its reported canonical coordinates. This detects nearby-cell snapping and
+# submerged-bed/deck confusion without redefining the world in the capture tool.
+POINT_INSPECTION = (
+    "tap:50%,50%;visible:#cell-panel;"
+    "eval:window.hit=document.getElementById('cell-height').title.match(/lon ([^,]+), lat ([^,]+), elevation ([^ ]+) m/);"
+    "eval:window.picked=window.advisorWorld.planet.lonLatToSource(+window.hit[1],+window.hit[2]);"
+    "eval:window.composed=window.advisorWorld.surface.finalAtSource(window.picked.x,window.picked.z);"
+    "eval:window.visibleElevation=window.composed.deckHeight??(window.composed.water.kind==='none'?window.composed.groundHeight:window.composed.water.level);"
+    "eval:Math.abs(parseFloat(document.getElementById('cell-height').textContent)-window.visibleElevation)<0.065||Promise.reject(new Error('Point elevation differs from visible final surface'));"
+    "eval:document.getElementById('cell-walkable').textContent===(window.composed.walkable?'Yes':'No')||Promise.reject(new Error('Point walkability differs from final surface'));"
+    "eval:document.getElementById('cell-biome').textContent===window.composed.material||Promise.reject(new Error('Point material differs from final surface'));"
+)
+
 # Named step presets. Add a line here to give a new scene a name.
 SCENARIOS: dict[str, str] = {
+    "hydrology-point-inspection": (
+        "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "eval:window.advisorWorld.setHalfHeight(24);settle;" + POINT_INSPECTION +
+        "eval:window.composed.walkable===false||Promise.reject(new Error('Cliff must remain blocked'));"
+        "shot:cliff;click:#close-cell;"
+        "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-24190.289130830573,28768.45437654417);"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "eval:window.advisorWorld.setHalfHeight(24);settle;" + POINT_INSPECTION +
+        "eval:window.composed.traversal==='difficult'||Promise.reject(new Error('Real slope must be difficult and walkable'));"
+        "shot:difficult-slope;click:#close-cell;"
+        "eval:window.a=window.advisorWorld.hydrology.anchors();"
+        "eval:window.ll=window.advisorWorld.hydrology.toLonLat(window.a.bridge.x,window.a.bridge.z);"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "eval:window.advisorWorld.setHalfHeight(24);settle;" + POINT_INSPECTION +
+        "eval:window.composed.material==='Bridge'||Promise.reject(new Error('Visible deck must be the legal bridge'));shot:bridge"
+    ),
+    # Canonical current-campaign fixtures: real dry bank cliff and walkable slope,
+    # selected from bounded drainage probes, rather than a decorative height wall.
+    "hydrology-steep": (
+        "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "eval:window.advisorWorld.setHalfHeight(24);settle;shot:cliff;"
+        "tap:50%,50%;visible:#cell-panel;shot:cliff-inspected;click:#close-cell;"
+        "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-24190.289130830573,28768.45437654417);"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "eval:window.advisorWorld.setHalfHeight(24);settle;shot:difficult-slope;"
+        "tap:50%,50%;visible:#cell-panel;shot:slope-inspected"
+    ),
     "hydrology": (
         "eval:window.r=window.advisorWorld.hydrology.recipes[0];"
         "eval:window.p=window.r.points[Math.floor(window.r.points.length*.55)];"
