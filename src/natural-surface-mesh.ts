@@ -29,9 +29,10 @@ type Sample = {
 
 /**
  * One bounded replacement surface. The old coarse ground cannot occlude canonical
- * water, but uniform leaves use two triangles instead of a centre fan. The centre
- * fan is retained only where water or a river actually crosses a leaf so narrow
- * channels keep their canonical identity without doubling every dry vertex.
+ * water, but adaptive triangles now share canonical vertices and accumulate smooth
+ * normals. This keeps river/coast refinement without multiplying upload memory for
+ * every triangle. Skirts use a separate vertex group so their vertical normals do
+ * not soften the visible top-surface edge.
  */
 export function rebuildNaturalSurface(
   tile: Tile,
@@ -63,7 +64,8 @@ export function rebuildNaturalSurface(
     normals: number[] = [],
     colors: number[] = [],
     indices: number[] = [],
-    uvs: number[] = [];
+    uvs: number[] = [],
+    vertexIndices = new Map<string, number>();
   let leaves = 0;
 
   const sample = (x: number, z: number) => {
@@ -103,30 +105,55 @@ export function rebuildNaturalSurface(
 
   const originX = tile.minX + tile.size / 2,
     originZ = tile.minZ + tile.size / 2;
-  const triangle = (a: Sample, b: Sample, c: Sample) => {
+  const vertex = (p: Sample, group: "surface" | "skirt") => {
+    const key = `${group}/${p.x}/${p.z}/${p.y}`,
+      cached = vertexIndices.get(key);
+    if (cached !== undefined) return cached;
+    const index = positions.length / 3;
+    vertexIndices.set(key, index);
+    positions.push(p.x - originX, p.y, p.z - originZ);
+    normals.push(0, 0, 0);
+    colors.push(...p.tint, 255);
+    uvs.push(
+      p.x / SOURCE_PRESENTATION_WIDTH + 0.5,
+      Math.max(0, Math.min(1, 0.5 + (2 * p.z) / SOURCE_PRESENTATION_WIDTH)),
+    );
+    return index;
+  };
+  const triangle = (
+    a: Sample,
+    b: Sample,
+    c: Sample,
+    group: "surface" | "skirt" = "surface",
+  ) => {
     const ux = b.x - a.x,
       uy = b.y - a.y,
       uz = b.z - a.z,
       vx = c.x - a.x,
       vy = c.y - a.y,
       vz = c.z - a.z,
-      n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx],
-      length = Math.hypot(...n) || 1,
-      start = positions.length / 3;
-    for (const p of [a, b, c]) {
-      positions.push(p.x - originX, p.y, p.z - originZ);
-      normals.push(...n.map((v) => v / length));
-      colors.push(...p.tint, 255);
-      uvs.push(
-        p.x / SOURCE_PRESENTATION_WIDTH + 0.5,
-        Math.max(0, Math.min(1, 0.5 + (2 * p.z) / SOURCE_PRESENTATION_WIDTH)),
-      );
+      nx = uy * vz - uz * vy,
+      ny = uz * vx - ux * vz,
+      nz = ux * vy - uy * vx,
+      ia = vertex(a, group),
+      ib = vertex(b, group),
+      ic = vertex(c, group);
+    for (const index of [ia, ib, ic]) {
+      normals[index * 3] += nx;
+      normals[index * 3 + 1] += ny;
+      normals[index * 3 + 2] += nz;
     }
-    indices.push(start, start + 1, start + 2);
+    indices.push(ia, ib, ic);
   };
-  const quad = (a: Sample, b: Sample, c: Sample, d: Sample) => {
-    triangle(a, b, c);
-    triangle(a, c, d);
+  const quad = (
+    a: Sample,
+    b: Sample,
+    c: Sample,
+    d: Sample,
+    group: "surface" | "skirt" = "surface",
+  ) => {
+    triangle(a, b, c, group);
+    triangle(a, c, d, group);
   };
 
   const nearRiver = (x: number, z: number, size: number) =>
@@ -192,9 +219,8 @@ export function rebuildNaturalSurface(
     for (let x = 0; x < 16; x++)
       visit(tile.minX + x * base, tile.minZ + z * base, base);
 
-  // Record the actual top-surface range before skirts append deliberately lowered
-  // edge vertices. Tests and telemetry can therefore validate visible canonical
-  // surface vertices without assuming one fixed triangle count per adaptive leaf.
+  // Surface vertices are uniquely indexed before skirts append their separately
+  // normalled edge vertices. Tests can validate canonical top heights directly.
   const surfaceVertices = positions.length / 3;
 
   const borderStep = segments.length
@@ -215,8 +241,18 @@ export function rebuildNaturalSurface(
         b = point(next),
         c = { ...b, y: b.y - 12 },
         d = { ...a, y: a.y - 12 };
-      quad(a, b, c, d);
+      quad(a, b, c, d, "skirt");
     }
+
+  for (let index = 0; index < positions.length / 3; index++) {
+    const x = normals[index * 3],
+      y = normals[index * 3 + 1],
+      z = normals[index * 3 + 2],
+      length = Math.hypot(x, y, z) || 1;
+    normals[index * 3] = x / length;
+    normals[index * 3 + 1] = y / length;
+    normals[index * 3 + 2] = z / length;
+  }
 
   const geometry = {
     positions: new Float32Array(positions),
@@ -234,6 +270,7 @@ export function rebuildNaturalSurface(
     cpuScratchBytesEstimated:
       (positions.length + normals.length + colors.length + indices.length + uvs.length) *
         8 +
-      cache.size * 192,
+      cache.size * 192 +
+      vertexIndices.size * 96,
   };
 }
