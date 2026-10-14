@@ -492,7 +492,7 @@ def main(argv: list[str] | None = None) -> int:
                             failure_state = session.page.evaluate(STATE_JS)
                         except PlaywrightError:
                             failure_state = {}
-                        (args.out / f"{name}-{profile}-failure.json").write_text(
+                        (Path(args.out) / f"{name}-{profile}-failure.json").write_text(
                             json.dumps({"reason": reason, "shots": session.shots,
                                         "state": failure_state}, indent=2), encoding="utf-8")
                         print(f"FAILED {name}-{profile} after {session.shots} image(s): {reason}",
