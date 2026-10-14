@@ -3,12 +3,16 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   drainageRecipes,
+  freshwaterAccessAt,
+  freshwaterCrossingAt,
+  FRESHWATER_ACCESS_RADIUS_M,
   freshwaterCrossingSpanMAt,
   hydrologyTelemetry,
   naturalSurfaceAt,
 } from "../src/hydrology.ts";
 import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
-import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "../src/planet.ts";
+import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
+import { villages } from "../src/geography.ts";
 import { RURAL_BRIDGE_MAX_LENGTH_M } from "../src/world.ts";
 
 test("each continent has multiple independent bounded drainage recipes", () => {
@@ -37,7 +41,7 @@ test("natural freshwater is one shared non-walkable surface and legal rural cros
   for (const recipe of drainageRecipes) {
     const a = recipe.points[Math.max(1, Math.floor(recipe.points.length / 2) - 1)];
     const b = recipe.points[Math.floor(recipe.points.length / 2)];
-    const x = a.x + (b.x - a.x) * 0.5;
+    const x = wrapSourceX(a.x + wrapSourceX(b.x - a.x) * 0.5);
     const z = a.z + (b.z - a.z) * 0.5;
     const sample = naturalSurfaceAt(x, z);
     assert.equal(sample.water.kind, "river", `${recipe.code} midpoint is not freshwater`);
@@ -71,4 +75,31 @@ test("natural authority repeats exactly across source wrap and stays query-bound
 test("natural terrain/hydrology source uses no runtime random or wall-clock authority", () => {
   const source = readFileSync(new URL("../src/hydrology.ts", import.meta.url), "utf8");
   assert.doesNotMatch(source, /Math\.random|crypto\.getRandomValues|Date\.now|performance\.now/);
+});
+
+
+test("freshwater predates settlements and reaches a strict majority of village cores",()=>{
+  const near=villages.filter(v=>freshwaterAccessAt(v.canonicalPosition).distanceM<=FRESHWATER_ACCESS_RADIUS_M);
+  assert.ok(near.length>villages.length/2,`${near.length}/${villages.length} within ${FRESHWATER_ACCESS_RADIUS_M}m`);
+  for(const v of villages){const s=naturalSurfaceAt(v.x,v.z);assert.equal(s.water.kind,'none',v.code);assert.ok(s.walkable,v.code);}
+});
+
+test("fine main and tributary samples remain downhill until their existing water outlet",()=>{
+  for(const recipe of drainageRecipes)for(const path of [recipe.points,recipe.tributary]){
+    let prior=Infinity,finished=false;
+    for(let i=1;i<path.length;i++)for(let j=1;j<=16;j++){
+      const a=path[i-1],b=path[i],t=j/16,x=wrapSourceX(a.x+wrapSourceX(b.x-a.x)*t),z=a.z+(b.z-a.z)*t,s=naturalSurfaceAt(x,z);
+      if(s.water.kind==='lake'||s.water.kind==='ocean'){finished=true;continue;}
+      assert.equal(finished,false,`${recipe.code} exits its outlet`);
+      assert.equal(s.water.kind,'river',`${recipe.code} has a dry discontinuity`);
+      assert.ok(s.groundHeight<=prior+1e-6,`${recipe.code} fine bed rises`);prior=s.groundHeight;
+    }
+  }
+});
+
+test("crossing angle rejects parallel decks and increases oblique wet span",()=>{
+  const a=drainageRecipes[0].points[4],b=drainageRecipes[0].points[5],dx=wrapSourceX(b.x-a.x),dz=b.z-a.z,x=wrapSourceX(a.x+dx*.5),z=a.z+dz*.5;
+  assert.equal(freshwaterCrossingAt(x,z,dx,dz),null);
+  const perpendicular=freshwaterCrossingAt(x,z,-dz,dx),oblique=freshwaterCrossingAt(x,z,dx-dz,dz+dx);
+  assert.ok(perpendicular&&oblique&&oblique.spanM>perpendicular.spanM);
 });

@@ -4,7 +4,7 @@ import { places, roads, villages } from "../src/geography.ts";
 import { WORLD_BUILDING_PRIORITIES } from "../src/final-surface.ts";
 import {
   RURAL_BRIDGE_MAX_LENGTH_M,
-  REPRESENTATIVE_BRIDGE_SPAN_M,
+  finalSurfaceEvidenceAnchors,
   finalSurfaceAt,
   finalSurfaceDebugAt,
   finalSurfaceTelemetry,
@@ -63,16 +63,9 @@ test("road cut/fill is bounded, priority-8, and includes real cut evidence", () 
 });
 
 test("bridge deck preserves authoritative water and obeys the 120m rural cap", () => {
-  assert.ok(REPRESENTATIVE_BRIDGE_SPAN_M > 0);
-  assert.ok(
-    REPRESENTATIVE_BRIDGE_SPAN_M <= RURAL_BRIDGE_MAX_LENGTH_M,
-    `representative span ${REPRESENTATIVE_BRIDGE_SPAN_M}m exceeds ${RURAL_BRIDGE_MAX_LENGTH_M}m`,
-  );
-  const road = roads[0],
-    bridge = finalSurfaceDebugAt(
-      (road.fromX + road.toX) / 2,
-      (road.fromZ + road.toZ) / 2,
-    );
+  const anchors=finalSurfaceEvidenceAnchors();
+  assert.ok(anchors.bridgeSpanM>0&&anchors.bridgeSpanM<=RURAL_BRIDGE_MAX_LENGTH_M);
+  const bridge=finalSurfaceDebugAt(anchors.bridge.x,anchors.bridge.z);
   assert.notEqual(bridge.base.water.kind, "none");
   assert.equal(bridge.final.water.kind, bridge.base.water.kind);
   assert.equal(bridge.final.groundHeight, bridge.base.groundHeight);

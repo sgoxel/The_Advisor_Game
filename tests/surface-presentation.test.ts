@@ -18,7 +18,8 @@ test('all tile sizes share exact canonical material albedo, including roads and 
 });
 test('continuous detail filtering has compatible endpoints and bounded transition', () => {
   assert.equal(localDetailWeight(70),1);
-  assert.equal(localDetailWeight(900),0);
+  assert.equal(localDetailWeight(900),1);
+  assert.equal(localDetailWeight(10420),0);
   for (const threshold of [70,230,512,900,4172])
     assert.ok(Math.abs(localDetailWeight(threshold*1.0001)-localDetailWeight(threshold*0.9999)) < 0.0002);
   let previous = 1;

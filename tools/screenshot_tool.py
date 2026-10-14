@@ -54,6 +54,25 @@ PROFILES: dict[str, tuple[int, int]] = {
 
 # Named step presets. Add a line here to give a new scene a name.
 SCENARIOS: dict[str, str] = {
+    "hydrology": (
+        "eval:window.r=window.advisorWorld.hydrology.recipes[0];"
+        "eval:window.p=window.r.points[Math.floor(window.r.points.length*.55)];"
+        "eval:window.ll=window.advisorWorld.hydrology.toLonLat(window.p.x,window.p.z);"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "eval:window.advisorWorld.setHalfHeight(95);settle;shot:river;"
+        "eval:window.advisorWorld.setHalfHeight(450);settle;shot:tributary;"
+        "eval:window.ll=window.advisorWorld.hydrology.mountains[0].path[Math.floor(window.advisorWorld.hydrology.mountains[0].path.length/2)];"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "eval:window.advisorWorld.setHalfHeight(850);settle;shot:mountain;"
+        "eval:window.ll=window.advisorWorld.hydrology.lakes[0].center;"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "eval:window.advisorWorld.setHalfHeight(900);settle;shot:lake;"
+        "eval:window.a=window.advisorWorld.hydrology.anchors();"
+        "eval:window.ll=window.advisorWorld.hydrology.toLonLat(window.a.bridge.x,window.a.bridge.z);"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "eval:window.advisorWorld.setHalfHeight(24);settle;shot:bank-bridge;"
+        "eval:window.advisorWorld.setHalfHeight(24000);settle;shot:realm-coast"
+    ),
     "village": "",
     "street": "zoom-in:2",
     # 97 m half-height x 1.4^3 = 266 m: the 230-900 m "Province" band in src/main.ts.

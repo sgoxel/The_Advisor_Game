@@ -1,5 +1,5 @@
 /** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
-import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
+import { WORLD_FOUNDATION_VERSION, WORLD_SEED, COARSE_GEOGRAPHY_VERSION } from "./config.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
   canonicalCellId,
@@ -11,7 +11,7 @@ import {
 import { streamingBudgetForViewport } from "./streaming.ts";
 import { nearestPlace, places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
-import { freshwaterCrossingSpanMAt, naturalSurfaceAt } from "./hydrology.ts";
+import { freshwaterCrossingAt, drainageCoarseSegments, naturalSurfaceAt } from "./hydrology.ts";
 import {
   WORLD_BUILDING_PRIORITIES,
   compareSurfaceModifiers,
@@ -94,6 +94,7 @@ export function digest(text: string): number {
   return value >>> 0;
 }
 export const SEED_VALUE = digest(`${WORLD_SEED}/${GENERATOR_VERSION}`);
+const COORDINATE_LAYOUT_SEED_VALUE = digest(`${WORLD_SEED}/${COARSE_GEOGRAPHY_VERSION}`);
 /** Five nested source-detail levels. Macro landform authority lives above them. */
 export function provinceSeed(cx: number, cz: number): ProvinceSeed {
   const x = Math.floor(cx / 1000),
@@ -170,7 +171,7 @@ export function islandCoast(x: number, z: number, _region?: RegionSeed) {
 }
 export function coordinateValue(x: number, z: number, layer: number): number {
   let n =
-    SEED_VALUE ^
+    COORDINATE_LAYOUT_SEED_VALUE ^
     Math.imul(x, 374761393) ^
     Math.imul(z, 668265263) ^
     Math.imul(layer, 1274126177);
@@ -220,100 +221,34 @@ export function settlement(
   };
 }
 
-/**
- * S003 composition needs one real graph-connected crossing before the dedicated
- * hydrology/network WPs exist. Both the creek and the road endpoints are immutable
- * SEED-derived inputs; no camera, query order or mutable RNG selects this site.
- * The creek is deliberately narrower than the binding 120 m rural bridge cap.
- */
+/** Explicit crossings use existing priority-4 water, never water invented for roads. */
 export const RURAL_BRIDGE_MAX_LENGTH_M = 120;
-const REPRESENTATIVE_BRIDGE_ROAD = roads[0];
-const REPRESENTATIVE_CREEK_HALF_WET_SOURCE = Math.min(
-  3,
-  (RURAL_BRIDGE_MAX_LENGTH_M / CANONICAL_METRES_PER_SOURCE_UNIT) * 0.425,
-);
-const REPRESENTATIVE_CREEK_HALF_BANK_SOURCE = REPRESENTATIVE_CREEK_HALF_WET_SOURCE + 2.5;
-const REPRESENTATIVE_CREEK_HALF_LENGTH_SOURCE = 90;
-export const REPRESENTATIVE_BRIDGE_SPAN_M =
-  REPRESENTATIVE_CREEK_HALF_WET_SOURCE * 2 * CANONICAL_METRES_PER_SOURCE_UNIT;
-
-function representativeCreekAt(x: number, z: number) {
-  const road = REPRESENTATIVE_BRIDGE_ROAD,
-    px = road.fromX + wrapSourceX(x - road.fromX),
-    mx = (road.fromX + road.toX) / 2,
-    mz = (road.fromZ + road.toZ) / 2,
-    vx = road.toX - road.fromX,
-    vz = road.toZ - road.fromZ,
-    length = Math.hypot(vx, vz) || 1,
-    ux = vx / length,
-    uz = vz / length,
-    dx = px - mx,
-    dz = z - mz,
-    acrossStream = dx * ux + dz * uz,
-    alongStream = dx * -uz + dz * ux,
-    absoluteAcross = Math.abs(acrossStream),
-    absoluteAlong = Math.abs(alongStream),
-    insideLength = absoluteAlong <= REPRESENTATIVE_CREEK_HALF_LENGTH_SOURCE;
-  return {
-    wet: insideLength && absoluteAcross <= REPRESENTATIVE_CREEK_HALF_WET_SOURCE,
-    bank:
-      insideLength && absoluteAcross <= REPRESENTATIVE_CREEK_HALF_BANK_SOURCE,
-    absoluteAcross,
-    flowX: -uz,
-    flowZ: ux,
-  };
-}
-
+let evidenceAnchors: {bridge:{x:number;z:number};road:{x:number;z:number};terrace:{x:number;z:number};vegetationBoundary:{x:number;z:number};roadCode:string;villageCode:string;bridgeSpanM:number}|undefined;
 export function finalSurfaceEvidenceAnchors() {
-  const road = REPRESENTATIVE_BRIDGE_ROAD,
-    village = places.find((place) => place.kind === "village")!,
-    bridge = {
-      x: (road.fromX + road.toX) / 2,
-      z: (road.fromZ + road.toZ) / 2,
-    };
-  return {
-    bridge,
-    road: { x: bridge.x + 40, z: bridge.z + 40 },
-    terrace: { x: village.x, z: village.z },
-    vegetationBoundary: { x: village.x + 102, z: village.z },
-    roadCode: road.code,
-    villageCode: village.code,
-    bridgeSpanM: REPRESENTATIVE_BRIDGE_SPAN_M,
-  } as const;
-}
-
-function naturalSurfaceBaseAt(x: number, z: number): SurfaceBase {
-  const natural = naturalSurfaceAt(x, z),
-    representativeCreek = representativeCreekAt(x, z);
-  if (representativeCreek.bank) {
-    const wetGround = Math.min(natural.groundHeight, -1.2),
-      creekGround = lerp(
-        wetGround,
-        natural.groundHeight,
-        smooth(
-          clamp01(
-            (representativeCreek.absoluteAcross - REPRESENTATIVE_CREEK_HALF_WET_SOURCE) /
-              (REPRESENTATIVE_CREEK_HALF_BANK_SOURCE - REPRESENTATIVE_CREEK_HALF_WET_SOURCE),
-          ),
-        ),
-      );
-    if (representativeCreek.wet)
-      return {
-        groundHeight: wetGround,
-        material: "River",
-        water: { kind: "river", level: 0, flowX: representativeCreek.flowX, flowZ: representativeCreek.flowZ },
-        walkable: false, vegetationDensityScale: 0, reservedUse: null,
-      };
-    return {
-      groundHeight: creekGround, material: "Riverbank",
-      water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 },
-      walkable: natural.walkable, vegetationDensityScale: Math.min(natural.vegetationDensityScale, 0.35), reservedUse: null,
-    };
+  if(evidenceAnchors)return evidenceAnchors;
+  const village=places.find(p=>p.kind==='village')!;
+  for(const road of roads){
+    const path=road.centerline || [{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}];
+    for(let i=1;i<path.length;i++){
+      const a=path[i-1],b=path[i],rx=wrapSourceX(b.x-a.x),rz=b.z-a.z;
+      for(const stream of drainageCoarseSegments){
+        const sx=wrapSourceX(stream.bx-stream.ax),sz=stream.bz-stream.az,qx=wrapSourceX(stream.ax-a.x),qz=stream.az-a.z,den=rx*sz-rz*sx;
+        if(Math.abs(den)<1e-9)continue;
+        const t=(qx*sz-qz*sx)/den,u=(qx*rz-qz*rx)/den;
+        if(t<0||t>1||u<0||u>1)continue;
+        const bridge={x:wrapSourceX(a.x+rx*t),z:a.z+rz*t},surface=finalSurfaceAt(bridge.x,bridge.z),crossing=freshwaterCrossingAt(bridge.x,bridge.z,rx,rz);
+        if(surface.water.kind!=='river'||surface.deckHeight===null||!crossing||crossing.spanM>RURAL_BRIDGE_MAX_LENGTH_M)continue;
+        const length=Math.hypot(rx,rz)||1;
+        evidenceAnchors={bridge,road:{x:bridge.x+rx/length*40,z:bridge.z+rz/length*40},terrace:{x:village.x,z:village.z},vegetationBoundary:{x:village.x+102,z:village.z},roadCode:road.code,villageCode:village.code,bridgeSpanM:crossing.spanM};
+        return evidenceAnchors;
+      }
+    }
   }
-  return {
-    groundHeight: natural.groundHeight, material: natural.material, water: natural.water,
-    walkable: natural.walkable, vegetationDensityScale: natural.vegetationDensityScale, reservedUse: null,
-  };
+  throw new Error('No legal existing natural river crossing available for evidence');
+}
+function naturalSurfaceBaseAt(x:number,z:number):SurfaceBase {
+  const natural=naturalSurfaceAt(x,z);
+  return {groundHeight:natural.groundHeight,material:natural.material,water:natural.water,walkable:natural.walkable,vegetationDensityScale:natural.vegetationDensityScale,reservedUse:null};
 }
 
 const ROAD_SUPPORT_RADIUS = 12;
@@ -372,6 +307,15 @@ function settlementTerraceHeight(place: Place) {
   return value;
 }
 
+function roadTangentAt(x:number,z:number,road:Road) {
+  const path=road.centerline || [{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}];
+  let best=Infinity,result={x:wrapSourceX(road.toX-road.fromX),z:road.toZ-road.fromZ};
+  for(let i=1;i<path.length;i++){
+    const a=path[i-1],b=path[i],dx=wrapSourceX(b.x-a.x),dz=b.z-a.z,qx=wrapSourceX(x-a.x),qz=z-a.z,t=Math.max(0,Math.min(1,(qx*dx+qz*dz)/(dx*dx+dz*dz||1))),distance=Math.hypot(qx-dx*t,qz-dz*t);
+    if(distance<best){best=distance;result={x:dx,z:dz};}
+  }
+  return result;
+}
 const roadProfileHeights = new Map<string, readonly [number, number]>();
 function roadProfileHeightAt(x: number, z: number, road: Road) {
   let profile = roadProfileHeights.get(road.code);
@@ -464,14 +408,10 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
         4,
         3,
       ),
-      representativeCreek = representativeCreekAt(x, z),
-      naturalSpanM = freshwaterCrossingSpanMAt(x, z),
-      crossingSpanM = representativeCreek.wet ? REPRESENTATIVE_BRIDGE_SPAN_M : naturalSpanM,
-      bridge =
-        base.water.kind === "river" &&
-        crossingSpanM > 0 &&
-        crossingSpanM <= RURAL_BRIDGE_MAX_LENGTH_M &&
-        distance <= 5;
+      tangent = roadTangentAt(x,z,road),
+      crossing = freshwaterCrossingAt(x,z,tangent.x,tangent.z),
+      bridge = Boolean(crossing && crossing.spanM<=RURAL_BRIDGE_MAX_LENGTH_M && distance<=5 && (base.water.kind==='river'||base.material==='Riverbank')),
+      deck = crossing ? Math.max(roadProfileHeightAt(x,z,road),crossing.waterLevel+3) : 0;
     if (weight > 0)
       modifiers.push({
         id: road.code,
@@ -482,7 +422,7 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
         walkable: true,
         vegetationDensityScale: 0,
         reservedUse: road.code,
-        deckHeight: bridge ? Math.max(roadHeight, base.water.level + 3) : undefined,
+        deckHeight: bridge && deck >= base.groundHeight ? deck : undefined,
       });
   }
   return {
@@ -530,19 +470,16 @@ export function finalSurfaceAt(x: number, z: number): FinalSurface {
 
   const sx = composePointAt(x + 1, z).final.groundHeight - composePointAt(x - 1, z).final.groundHeight,
     sz = composePointAt(x, z + 1).final.groundHeight - composePointAt(x, z - 1).final.groundHeight,
-    slope = Math.max(Math.abs(sx), Math.abs(sz)),
-    prepared =
-      point.final.material === "Road" ||
-      point.final.material === "Bridge" ||
-      point.final.material === "Settlement",
+    latitude=sourceToLonLat(x,z).lat,
+    slope = Math.hypot(sx/Math.max(.1,Math.abs(Math.cos(latitude))),sz)/(2*CANONICAL_METRES_PER_SOURCE_UNIT),
     walkable =
       point.final.water.kind === "none"
-        ? point.final.walkable && (prepared || slope < 2)
+        ? point.final.walkable && (point.final.deckHeight!==null || slope < .68) && (point.final.material!=="Road" || slope<=.08)
         : point.final.deckHeight !== null && point.final.walkable;
   const result: FinalSurface = {
     ...point.final,
     walkable,
-    traversal: walkable ? point.final.traversal : "blocked",
+    traversal: !walkable?"blocked":point.final.traversal==="open"&&slope>.15?"difficult":point.final.traversal,
   };
   finalSurfaceCache.set(key, result);
   if (finalSurfaceCache.size > FINAL_SURFACE_CACHE_LIMIT)
@@ -690,6 +627,14 @@ export function featuresFor(tile: Tile): Feature[] {
       return;
     const surface = finalSurfaceAt(x, z);
     if (surface.groundHeight < 0.2 || surface.water.kind !== "none") return;
+    if(kind==="house"||kind==="keep"||kind==="well"||kind==="field"){
+      const radius=kind==="keep"?15:kind==="field"?13:kind==="house"?7:2;
+      if(!surface.walkable||naturalSurfaceAt(x,z).freshwaterDistanceSource<=radius+4)return;
+      for(const [dx,dz] of [[-radius,-radius],[-radius,radius],[radius,radius],[radius,-radius],[0,-radius],[0,radius],[-radius,0],[radius,0]]){
+        const corner=finalSurfaceAt(x+dx,z+dz);
+        if(corner.water.kind!=="none"||!corner.walkable)return;
+      }
+    }
     if ((kind === "tree" || kind === "rock") && surface.vegetationDensityScale <= 0) return;
     features.push({
       kind,

@@ -1,5 +1,6 @@
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
-import { MACRO_PLAN, macroSampleAt, mountainSystems } from "./macro-geography.ts";
+import { MACRO_PLAN, macroSampleAt, mountainSystems, macroLakes } from "./macro-geography.ts";
+import { climateSampleAt } from "./climate.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
   SOURCE_PRESENTATION_POLE_DISTANCE,
@@ -7,6 +8,7 @@ import {
   lonLatToSource,
   sourceToLonLat,
   wrapSourceX,
+  normalizeLongitude, greatCircleDistance, CANONICAL_PLANET_RADIUS, type LonLat,
 } from "./planet.ts";
 import type { SurfaceMaterial, SurfaceWater } from "./final-surface.ts";
 
@@ -45,12 +47,19 @@ export type NaturalSurface = Readonly<{
 type SegmentHit = { segment: DrainageSegment; distance: number; t: number } | null;
 
 const TAU = Math.PI * 2;
-const BUCKET_SIZE = 4096;
-const RIVER_SYSTEMS_PER_CONTINENT = 4;
+function destination(origin:LonLat,bearing:number,distance:number):LonLat {
+  const lat=Math.asin(Math.max(-1,Math.min(1,Math.sin(origin.lat)*Math.cos(distance)+Math.cos(origin.lat)*Math.sin(distance)*Math.cos(bearing))));
+  return {lat,lon:normalizeLongitude(origin.lon+Math.atan2(Math.sin(bearing)*Math.sin(distance)*Math.cos(origin.lat),Math.cos(distance)-Math.sin(origin.lat)*Math.sin(lat)))};
+}
+const BUCKET_SIZE = 1024;
+const RIVER_SYSTEMS_PER_CONTINENT = 144;
+export const FRESHWATER_ACCESS_RADIUS_M = 4000;
+export const SETTLEMENT_WATER_RESERVE_SOURCE = 160;
 const MAX_MAIN_STEPS = 96;
 const SAMPLE_STEP_SOURCE = 12;
 export const RIVER_BANK_HALF_WIDTH_SOURCE = 4.5;
 const segmentsByBucket = new Map<string, DrainageSegment[]>();
+const coarseSegments:DrainageSegment[]=[];
 let naturalQueries = 0;
 let segmentChecks = 0;
 
@@ -95,7 +104,7 @@ export function naturalElevationAt(x: number, z: number) {
     base = macro.domain === "Island" ? 18 + broad * 18 + detail * 7 : 22 + broad * 24 + detail * 10,
     coherentRelief = macro.reliefM * (0.78 + broad * 0.06),
     localRelief = macro.reliefM * mountainWeight * (detail * 0.11 + shoulder * 0.06),
-    cap = macro.domain === "Island" ? 210 : 680,
+    cap = macro.domain === "Island" ? 180 : 620,
     terrain = Math.max(1.2, Math.min(cap, base + coherentRelief + localRelief)),
     coastSource = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
     coastWeight = smooth01(Math.max(0, Math.min(1, coastSource / 90)));
@@ -154,7 +163,18 @@ function traceRiver(continentId: number, slot: number): DrainageRecipe | null {
   const candidates = mountainSystems.filter((system) => system.continent === continentId);
   if (!candidates.length) return null;
   const system = candidates[slot % candidates.length],
-    sourcePosition = system.path[Math.min(system.path.length - 1, Math.max(0, Math.floor(system.path.length * (0.28 + 0.13 * (slot % 3)))))],
+    mountainSource = system.path[Math.min(system.path.length - 1, Math.max(0, Math.floor(system.path.length * (0.28 + 0.13 * (slot % 3)))))],
+    continent = MACRO_PLAN.continents[continentId],
+    sourcePosition = slot < 4 ? mountainSource : Array.from({length:8},(_,attempt)=>{
+      const key=`DRAINAGE/${continentId}/${slot}/SOURCE/${attempt}`,
+        east=(2*((slot%12+addressed(`${key}/east`))/12)-1)*continent.majorRadiusRad*.98,
+        north=(2*((Math.floor(slot/12)+addressed(`${key}/north`))/12)-1)*continent.minorRadiusRad*.98,
+        c=Math.cos(continent.orientationRad),s=Math.sin(continent.orientationRad),dx=east*c-north*s,dz=east*s+north*c;
+      return destination(continent.center,Math.atan2(dx,dz),Math.hypot(dx,dz));
+    }).find(p=>{const macro=macroSampleAt(p);return macro.land&&macro.continentId===continentId&&climateSampleAt(p).moisture>=.16;}),
+    _sourceRequired = sourcePosition;
+  if (!_sourceRequired) return null;
+  const
     source = lonLatToSource(sourcePosition.lon, sourcePosition.lat),
     code = `${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/DRAINAGE/${continentId}/${slot}`,
     rawPoints: DrainagePoint[] = [],
@@ -174,10 +194,15 @@ function traceRiver(continentId: number, slot: number): DrainageRecipe | null {
       nx = wrapSourceX(x + direction.x * stride),
       nz = clampZ(z + direction.z * stride),
       macro = macroSampleAt(sourceToLonLat(nx, nz));
-    x = nx;
-    z = nz;
-    if (!macro.land) {
-      outlet = macro.domain === "Lake" ? "lake" : "ocean";
+    let terminal: {x:number,z:number,domain:string}|undefined;
+    for(let sampleIndex=1;sampleIndex<=24;sampleIndex++){
+      const t=sampleIndex/24,px=wrapSourceX(x+wrapSourceX(nx-x)*t),pz=z+(nz-z)*t,sample=macroSampleAt(sourceToLonLat(px,pz));
+      if(!sample.land){terminal={x:px,z:pz,domain:sample.domain};break;}
+    }
+    x = terminal?.x ?? nx;
+    z = terminal?.z ?? nz;
+    if (terminal) {
+      outlet = terminal.domain === "Lake" ? "lake" : "ocean";
       rawPoints.push(Object.freeze({ x, z, bed: 0.05 }));
       break;
     }
@@ -230,13 +255,14 @@ function bucketKey(x: number, z: number) {
   return `${bucketCoordinate(wrapSourceX(x))}/${bucketCoordinate(z)}`;
 }
 function registerSegment(segment: DrainageSegment) {
+  coarseSegments.push(segment);
   const mx = wrapSourceX(segment.ax + wrapSourceX(segment.bx - segment.ax) * 0.5),
     mz = (segment.az + segment.bz) * 0.5,
     bx = bucketCoordinate(mx),
     bz = bucketCoordinate(mz);
   for (let dz = -1; dz <= 1; dz++)
     for (let dx = -1; dx <= 1; dx++) {
-      const key = `${bx + dx}/${bz + dz}`,
+      const key = bucketKey(mx+dx*BUCKET_SIZE,mz+dz*BUCKET_SIZE),
         bucket = segmentsByBucket.get(key);
       if (bucket) bucket.push(segment);
       else segmentsByBucket.set(key, [segment]);
@@ -257,6 +283,9 @@ for (const recipe of drainageRecipes) {
       }));
 }
 
+export const drainageCoarseSegments:readonly DrainageSegment[]=Object.freeze(coarseSegments);
+const hydrologyResourceSummary=Object.freeze({recipes:drainageRecipes.length,segments:coarseSegments.length,spatialBuckets:segmentsByBucket.size,
+  cpuBytesEstimated:coarseSegments.length*768+[...segmentsByBucket.values()].reduce((sum,value)=>sum+value.length*8,0)+segmentsByBucket.size*128+drainageRecipes.reduce((sum,r)=>sum+(r.points.length+r.tributary.length)*128,0)});
 function pointToSegment(x: number, z: number, segment: DrainageSegment) {
   const dx = wrapSourceX(segment.bx - segment.ax),
     dz = segment.bz - segment.az,
@@ -296,6 +325,39 @@ export function freshwaterCrossingSpanMAt(x: number, z: number) {
   return hit.segment.width * 2 * CANONICAL_METRES_PER_SOURCE_UNIT;
 }
 
+/** Angle-aware wet span; parallel roads never acquire a bridge deck. Bank support is bounded. */
+export function freshwaterCrossingAt(x:number,z:number,roadX:number,roadZ:number) {
+  const hit=nearestRiver(wrapSourceX(x),z);
+  if(!hit||hit.distance>hit.segment.width+RIVER_BANK_HALF_WIDTH_SOURCE)return null;
+  const dx=wrapSourceX(hit.segment.bx-hit.segment.ax),dz=hit.segment.bz-hit.segment.az,
+    sine=Math.abs(roadX*dz-roadZ*dx)/(Math.hypot(roadX,roadZ)*Math.hypot(dx,dz)||1);
+  if(sine<.1)return null;
+  const latitude=sourceToLonLat(x,z).lat,physicalRiverNormal=Math.hypot(dz*Math.cos(latitude),dx)/Math.hypot(dx,dz),
+    spanM=hit.segment.width*2*CANONICAL_METRES_PER_SOURCE_UNIT*physicalRiverNormal/sine;
+  return {spanM,waterLevel:Math.max(0,lerp(hit.segment.bedA,hit.segment.bedB,hit.t)+.24),code:hit.segment.code};
+}
+
+/** At most 25x25 coarse buckets; no fine terrain or neighboring meshes are generated. */
+export function freshwaterSegmentsAround(position:LonLat,maximumDistanceM=23000) {
+  if(maximumDistanceM<=0||maximumDistanceM>23000)throw new RangeError('Freshwater habitat query requires 0..23 km');
+  const p=lonLatToSource(position.lon,position.lat),radius=maximumDistanceM/(CANONICAL_METRES_PER_SOURCE_UNIT*Math.max(.15,Math.abs(Math.cos(position.lat)))),unique=new Map<string,DrainageSegment>();
+  const minX=bucketCoordinate(p.x-radius),maxX=bucketCoordinate(p.x+radius),minZ=bucketCoordinate(p.z-radius),maxZ=bucketCoordinate(p.z+radius);
+  if((maxX-minX+1)*(maxZ-minZ+1)>625)throw new RangeError('Freshwater coarse support exceeds 625 buckets');
+  for(let z=minZ;z<=maxZ;z++)for(let x=minX;x<=maxX;x++)for(const segment of segmentsByBucket.get(bucketKey((x+.5)*BUCKET_SIZE,(z+.5)*BUCKET_SIZE))||[]){
+    if(unique.has(segment.code))continue;
+    const hit=pointToSegment(p.x,p.z,segment),point=sourceToLonLat(segment.ax+wrapSourceX(segment.bx-segment.ax)*hit.t,segment.az+(segment.bz-segment.az)*hit.t);
+    if(greatCircleDistance(position,point)<=maximumDistanceM+FRESHWATER_ACCESS_RADIUS_M)unique.set(segment.code,segment);
+  }
+  return [...unique.values()].sort((a,b)=>a.code<b.code?-1:a.code>b.code?1:0);
+}
+export function freshwaterHabitatCandidate(segments:readonly DrainageSegment[],address:string):LonLat|undefined {
+  if(!segments.length)return undefined;
+  const segment=segments[Math.min(segments.length-1,Math.floor(addressed(`${address}/segment`)*segments.length))],t=addressed(`${address}/station`),
+    dx=wrapSourceX(segment.bx-segment.ax),dz=segment.bz-segment.az,length=Math.hypot(dx,dz)||1,
+    side=addressed(`${address}/side`)<.5?-1:1,offset=side*(SETTLEMENT_WATER_RESERVE_SOURCE+24+addressed(`${address}/offset`)*52);
+  return sourceToLonLat(segment.ax+dx*t-dz/length*offset,segment.az+dz*t+dx/length*offset);
+}
+
 function drySlopeAt(x: number, z: number, centre: number) {
   const macro = macroSampleAt(sourceToLonLat(x, z));
   if (macro.mountainIntensity < 0.34) return 0;
@@ -323,7 +385,7 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
     const dx = wrapSourceX(hit.segment.bx - hit.segment.ax),
       dz = hit.segment.bz - hit.segment.az,
       length = Math.hypot(dx, dz) || 1,
-      bed = Math.min(terrain - 0.35, lerp(hit.segment.bedA, hit.segment.bedB, hit.t));
+      bed = lerp(hit.segment.bedA, hit.segment.bedB, hit.t);
     return Object.freeze({
       groundHeight: Math.max(-0.5, bed),
       material: "River",
@@ -340,15 +402,17 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
     const t = smooth01((riverDistance - hit.segment.width) / RIVER_BANK_HALF_WIDTH_SOURCE),
       bed = lerp(hit.segment.bedA, hit.segment.bedB, hit.t),
       inner = Math.min(terrain, bed + 0.68),
-      bankHeight = lerp(inner, terrain, t);
+      bankHeight = lerp(inner, terrain, t),
+      slope = Math.abs(terrain-inner)*1.5/(RIVER_BANK_HALF_WIDTH_SOURCE*CANONICAL_METRES_PER_SOURCE_UNIT),
+      cliff = slope > .68;
     return Object.freeze({
       groundHeight: bankHeight,
       material: "Riverbank",
       water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 } as SurfaceWater,
-      walkable: true,
+      walkable: !cliff,
       vegetationDensityScale: lerp(0.34, 0.9, t),
-      slope: 0,
-      cliff: false,
+      slope,
+      cliff,
       freshwaterDistanceSource: riverDistance,
       catchmentCode: hit.segment.code.split("/MAIN/")[0].split("/TRIBUTARY/")[0],
     });
@@ -373,11 +437,29 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
   });
 }
 
+/** Bounded upper-bound distance to existing freshwater, never a settlement-created feature. */
+export function freshwaterAccessAt(position:LonLat) {
+  const source=lonLatToSource(position.lon,position.lat),macro=macroSampleAt(position),hit=nearestRiver(source.x,source.z),
+    riverDistance=macro.domain==='Lake'?0:hit?.distance??Infinity;
+  let distanceM=riverDistance*CANONICAL_METRES_PER_SOURCE_UNIT,code=macro.domain==='Lake'?macro.code:hit?.segment.code.split('/MAIN/')[0].split('/TRIBUTARY/')[0]??null;
+  for(const lake of macroLakes){
+    const centreDistance=greatCircleDistance(position,lake.center),envelope=lake.radiusRad*Math.max(1,lake.aspect)*1.8;
+    if(centreDistance>envelope*CANONICAL_PLANET_RADIUS+FRESHWATER_ACCESS_RADIUS_M)continue;
+    const delta=normalizeLongitude(position.lon-lake.center.lon),bearing=Math.atan2(Math.sin(delta)*Math.cos(position.lat),Math.cos(lake.center.lat)*Math.sin(position.lat)-Math.sin(lake.center.lat)*Math.cos(position.lat)*Math.cos(delta));
+    let low=0,high=envelope;
+    for(let i=0;i<28;i++){
+      const mid=(low+high)/2,p=destination(lake.center,bearing,mid),sample=macroSampleAt(p);
+      if(sample.domain==='Lake'&&sample.lakeId===lake.id)low=mid;else high=mid;
+    }
+    const candidate=greatCircleDistance(position,destination(lake.center,bearing,low));
+    if(candidate<distanceM){distanceM=candidate;code=lake.code;}
+  }
+  return {distanceM,sourceDistance:Math.min(riverDistance,distanceM/CANONICAL_METRES_PER_SOURCE_UNIT),code,nearby:distanceM<=FRESHWATER_ACCESS_RADIUS_M,arid:climateSampleAt(position).moisture<.2};
+}
+
 export function hydrologyTelemetry() {
   return Object.freeze({
-    recipes: drainageRecipes.length,
-    segments: [...segmentsByBucket.values()].reduce((sum, value) => sum + value.length, 0) / 9,
-    spatialBuckets: segmentsByBucket.size,
+    ...hydrologyResourceSummary,
     naturalQueries,
     segmentChecks,
   });

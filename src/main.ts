@@ -6,6 +6,7 @@ import {
   cellAt,
   cellSeed,
   heightAt,
+  finalSurfaceEvidenceAnchors,
   selectTiles,
   tileAt,
   type Tile,
@@ -23,6 +24,7 @@ import {
 } from "./geography.ts";
 import type { Geometry, TileGeometry } from "./geometry.ts";
 import { terrainTint } from "./geometry.ts";
+import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, naturalSurfaceAt } from "./hydrology.ts";
 import { LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
@@ -90,11 +92,12 @@ const GLOBE_PASSES = [
 const GLOBE_RELIEF = SURFACE_PRESENTATION.relief;
 const FLAT_BACKDROP = new pc.Color(0.65, 0.71, 0.65);
 let continuityWorkerBytes = 0;
+const NATURAL_WORKER_SCRATCH_RESERVE_BYTES=32*1024*1024;
 let continuityWorkerState: ReturnType<typeof continuityTelemetry> | undefined;
 let discardedPresentationJobs = 0;
 const continuityCpuBytes = () => {
-  const state=continuityTelemetry(), preparingBytes=globeWorker ? state.coarseRegistryBytesEstimated + 4096*1024 + (GLOBE_PASSES[globePass]?.width || 0)**2*2 : 0;
-  return continuityWorkerBytes + state.cpuBytesEstimated + continuityOverlayBytes() + preparingBytes;
+  const state=continuityTelemetry(), preparingBytes=globeWorker ? state.coarseRegistryBytesEstimated + state.hydrologyCpuBytesEstimated + 4096*1024 + (GLOBE_PASSES[globePass]?.width || 0)**2*2 : 0;
+  return continuityWorkerBytes + (inFlight ? NATURAL_WORKER_SCRATCH_RESERVE_BYTES : 0) + state.cpuBytesEstimated + continuityOverlayBytes() + preparingBytes;
 };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
@@ -1528,7 +1531,7 @@ async function start() {
       cellSeed,
       geography: { continents, countries, cities, villages, roads },
       continuity: { inspect: inspectRegion, terrainQuery, telemetry: () => ({ ...continuityTelemetry(), worker: continuityWorkerState }), clearDetail: clearContinuityDetail, setOverlay: setContinuityOverlay },
-      hydrology: { recipes: drainageRecipes, sampleSource: naturalSurfaceAt, toLonLat: sourceToLonLat, telemetry: hydrologyTelemetry },
+      hydrology: { lakes: macroLakes, mountains: mountainSystems, anchors: finalSurfaceEvidenceAnchors, recipes: drainageRecipes, sampleSource: naturalSurfaceAt, toLonLat: sourceToLonLat, telemetry: hydrologyTelemetry },
       clock,
       planet: {
         radius: CANONICAL_PLANET_RADIUS,

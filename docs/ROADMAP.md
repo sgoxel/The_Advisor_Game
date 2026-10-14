@@ -22,7 +22,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S003 — Natural World & Surface Authority
 
-- WP-S003-003-001 — Natural terrain/hydrology authority + visual readability: drainage-valid freshwater, smoother canonical banks/coasts/relief, canonical walkability and seam-safe bounded generation
+- WP-S003-003-001 — Natural terrain/hydrology authority + visual readability: drainage-valid freshwater, smoother canonical banks/coasts/relief, canonical walkability and seam-safe bounded generation — IN PROGRESS (Agent #2 evaluation: 7/10; route/deck acceptance failures; retained codex/natural-hydrology candidate)
 
 ## STAGE S004 — Settlements, Buildings & World Sites
 

@@ -1,18 +1,17 @@
 import { buildTile } from "./geometry.ts";
 import { convertTileGeometryToEnu } from "./render-frame.ts";
 import { refineTileSurfacePresentation } from "./surface-refinement.ts";
-import { stabilizeHydrologyPresentation } from "./hydrology-presentation-cleanup.ts";
+import { rebuildNaturalSurface } from "./natural-surface-mesh.ts";
 import { buildVegetationGeometry } from "./vegetation-render.ts";
 import type { Tile } from "./world.ts";
 import { continuityTelemetry } from "./continuity-runtime.ts";
 self.onmessage = (event: MessageEvent<Tile>) => {
   const tile = event.data;
   try {
-    const base = buildTile(tile),
-      canonicalVertexCount = base.terrain.positions.length / 3,
-      data = refineTileSurfacePresentation(tile, base),
+    const base = buildTile(tile),natural = rebuildNaturalSurface(tile,base.terrain);
+    base.terrain=natural.geometry;
+    const data = refineTileSurfacePresentation(tile, base,natural.replaced),
       vegetation = buildVegetationGeometry(tile);
-    data.terrain = stabilizeHydrologyPresentation(tile, data.terrain, canonicalVertexCount);
     data.nature = vegetation.geometry;
     const precision = convertTileGeometryToEnu(tile, data);
     const transfer: Transferable[] = [];
@@ -26,7 +25,7 @@ self.onmessage = (event: MessageEvent<Tile>) => {
       if (g.uvs) transfer.push(g.uvs.buffer);
     }
     self.postMessage(
-      { tile, data, precision, vegetation: vegetation.telemetry, continuity: continuityTelemetry() },
+      { tile, data, precision, vegetation: vegetation.telemetry, continuity: continuityTelemetry(), natural: {replaced:natural.replaced,leaves:natural.leaves,samples:natural.samples,cpuScratchBytesEstimated:natural.cpuScratchBytesEstimated} },
       { transfer },
     );
   } catch (error) {

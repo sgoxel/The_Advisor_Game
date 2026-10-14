@@ -1,4 +1,4 @@
-import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
+import { COARSE_GEOGRAPHY_VERSION as WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
   CANONICAL_PLANET_RADIUS,
   SOURCE_PRESENTATION_WIDTH,
@@ -20,6 +20,7 @@ import {
 } from "./macro-geography.ts";
 import { travelMetrics } from "./travel.ts";
 import { defineContinuityCorridor } from "./continuity-corridor.ts";
+import { freshwaterAccessAt, naturalSurfaceAt, SETTLEMENT_WATER_RESERVE_SOURCE, freshwaterSegmentsAround, freshwaterHabitatCandidate, drainageCoarseSegments } from "./hydrology.ts";
 
 /** x/z are derived source/render coordinates; canonicalPosition is world truth. */
 export type Place = {
@@ -202,11 +203,14 @@ function continentCandidate(
  */
 function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
   const macro = macroSampleAt(position);
+  const source=lonLatToSource(position.lon,position.lat),natural=naturalSurfaceAt(source.x,source.z);
   return (
     macro.land &&
     macro.domain === "Mainland" &&
     macro.reliefM <= maxReliefM &&
-    macro.coastDistanceRad * CANONICAL_PLANET_RADIUS >= 3_000
+    macro.coastDistanceRad * CANONICAL_PLANET_RADIUS >= 3_000 &&
+    natural.water.kind==='none' && natural.walkable &&
+    freshwaterAccessAt(position).sourceDistance>=SETTLEMENT_WATER_RESERVE_SOURCE
   );
 }
 
@@ -380,7 +384,60 @@ function settlementEnvelopeFits(
 
 function cityCandidate(country: Country, city: number, attempt: number) {
   const continent = continents[country.continent];
+  if(attempt%2===0){
+    const candidate=freshwaterHabitatCandidate(countryWaterSegments.get(country.code)||[],`CITY/${country.continent}/${country.id}/${city}/${attempt}`);
+    if(candidate)return {...candidate,elevation:0};
+  }
   return continentCandidate(continent, `CITY/${country.continent}/${country.id}/${city}`, attempt);
+}
+
+// A one-time coarse ownership index; hydrology was defined before these countries.
+const countryWaterSegments=new Map<string,typeof drainageCoarseSegments[number][]>();
+for(const segment of drainageCoarseSegments){
+  const midpoint=sourceToLonLat(segment.ax+wrapSourceX(segment.bx-segment.ax)/2,(segment.az+segment.bz)/2),owner=countryAtPosition(midpoint);
+  if(!owner)continue;
+  const list=countryWaterSegments.get(owner.code)||[];list.push(segment);countryWaterSegments.set(owner.code,list);
+}
+
+const plannedVillagePositions=new Map<string,CanonicalPosition[]>();
+const reservedVillagePositions:CanonicalPosition[]=[];
+function planVillagePositions(city:Pick<Place,"id"|"canonicalPosition"|"continent"|"country">,country:Country,reserved:readonly CanonicalPosition[]):CanonicalPosition[]|null {
+    const selected:CanonicalPosition[]=[],accepted=[...reserved];
+    const waterSegments=freshwaterSegmentsAround(city.canonicalPosition);
+    for (let v = 0; v < VILLAGE_SLOTS_PER_CITY; v++) {
+      let position: CanonicalPosition | undefined;
+      let dryException: CanonicalPosition | undefined;
+      let freshScore=-Infinity;
+      for (let attempt = 0; attempt < 280; attempt++) {
+        const prefix = `VILLAGE/${city.id}/${v}/${attempt}`,
+          bearing = TAU * addressed(`${prefix}/bearing`),
+          distanceM = 7_000 + 16_000 * addressed(`${prefix}/distance`),
+          waterCandidate=attempt%2===0 ? freshwaterHabitatCandidate(waterSegments,prefix) : undefined,
+          candidate = waterCandidate ? {...waterCandidate,elevation:0} : destination(city.canonicalPosition, bearing, distanceM / CANONICAL_PLANET_RADIUS),
+          owner = countryAtPosition(candidate);
+        if (
+          !owner ||
+          !country ||
+          macroFeatureDistanceM(candidate,city.canonicalPosition)<7000 || macroFeatureDistanceM(candidate,city.canonicalPosition)>23000 ||
+          owner.continent !== city.continent ||
+          owner.id !== city.country ||
+          accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000) ||
+          !locallyDrySettlementSite(candidate, 95)
+        )
+          continue;
+        const water=freshwaterAccessAt(candidate);
+        if(water.nearby){
+          const separation=accepted.length?Math.min(...accepted.map(other=>macroFeatureDistanceM(candidate,other))):macroFeatureDistanceM(candidate,city.canonicalPosition),
+            score=separation*(.9+.2*addressed(`${prefix}/rank`));
+          if(score>freshScore&&settlementEnvelopeFits(candidate,country,"village")){position=candidate;freshScore=score;}
+        }
+        if(water.arid&&!dryException&&settlementEnvelopeFits(candidate,country,"village"))dryException=candidate;
+      }
+      position ??= dryException;
+      if (!position) return null;
+      accepted.push(position);selected.push(position);
+    }
+    return selected;
 }
 
 export const cities: Place[] = (() => {
@@ -390,17 +447,16 @@ export const cities: Place[] = (() => {
   for (const country of countries) {
     const localAccepted: CanonicalPosition[] = [];
     for (let city = 0; city < CITY_SLOTS_PER_COUNTRY; city++) {
-      let best: CanonicalPosition | undefined,
-        bestScore = -Infinity;
+      let best:CanonicalPosition|undefined;
+      const candidates:{position:CanonicalPosition,score:number,attempt:number}[]=[];
       for (let attempt = 0; attempt < 220; attempt++) {
         const candidate = cityCandidate(country, city, attempt),
           owner = countryAtPosition(candidate);
         if (
           !owner ||
           owner.code !== country.code ||
-          !locallyDrySettlementSite(candidate, 90) ||
-          !settlementEnvelopeFits(candidate, country, "city") ||
           allAccepted.some((other) => macroFeatureDistanceM(candidate, other) < 18_000) ||
+          !locallyDrySettlementSite(candidate, 90) ||
           (city > 0 &&
             localAccepted[0] &&
             !cityBackboneConnectionFits(candidate, localAccepted[0], country))
@@ -409,11 +465,17 @@ export const cities: Place[] = (() => {
         const separation = localAccepted.length
           ? Math.min(...localAccepted.map((other) => macroFeatureDistanceM(candidate, other)))
           : macroFeatureDistanceM(candidate, country.canonicalPosition),
-          score = separation * (0.9 + 0.2 * addressed(`CITY/${country.code}/${city}/${attempt}/rank`));
-        if (score > bestScore) {
-          best = candidate;
-          bestScore = score;
-        }
+          score = separation * (0.9 + 0.2 * addressed(`CITY/${country.code}/${city}/${attempt}/rank`)) + (freshwaterAccessAt(candidate).nearby ? 1_000_000 : 0);
+        candidates.push({position:candidate,score,attempt});
+      }
+      const plannedId=`${country.continent}/${country.id}/${city}`;
+      let layoutTrials=0;
+      for(const candidate of candidates.sort((a,b)=>b.score-a.score||a.attempt-b.attempt)){
+        if(!settlementEnvelopeFits(candidate.position,country,"city"))continue;
+        if(layoutTrials++>=20)break;
+        const children=planVillagePositions({id:plannedId,canonicalPosition:candidate.position,continent:country.continent,country:country.id},country,reservedVillagePositions);
+        if(!children)continue;
+        best=candidate.position;plannedVillagePositions.set(plannedId,children);reservedVillagePositions.push(...children);break;
       }
       if (!best)
         throw new Error(`Seeded geography could not place city ${country.continent}/${country.id}/${city}`);
@@ -446,32 +508,7 @@ export const villages: Place[] = (() => {
     usedNames = new Set<string>(["alderwick"]);
   for (const city of cities) {
     for (let v = 0; v < VILLAGE_SLOTS_PER_CITY; v++) {
-      let position: CanonicalPosition | undefined;
-      for (let attempt = 0; attempt < 280; attempt++) {
-        const prefix = `VILLAGE/${city.id}/${v}/${attempt}`,
-          bearing = TAU * addressed(`${prefix}/bearing`),
-          distanceM = 7_000 + 16_000 * addressed(`${prefix}/distance`),
-          candidate = destination(city.canonicalPosition, bearing, distanceM / CANONICAL_PLANET_RADIUS),
-          owner = countryAtPosition(candidate),
-          country = countries.find(
-            (candidateCountry) =>
-              candidateCountry.continent === city.continent &&
-              candidateCountry.id === city.country,
-          );
-        if (
-          !owner ||
-          !country ||
-          owner.continent !== city.continent ||
-          owner.id !== city.country ||
-          !locallyDrySettlementSite(candidate, 95) ||
-          !settlementEnvelopeFits(candidate, country, "village") ||
-          accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000)
-        )
-          continue;
-        position = candidate;
-        break;
-      }
-      if (!position) throw new Error(`Seeded geography could not place village ${city.id}/${v}`);
+      const position=plannedVillagePositions.get(city.id)![v];
       accepted.push(position);
       const code = `${city.code}/VILLAGE/${v}`,
         name =

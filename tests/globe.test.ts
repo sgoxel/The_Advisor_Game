@@ -7,6 +7,7 @@ import { continents } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
 import {
   flatToLonLat,
+  PLANET_CIRCUMFERENCE,
   lonLatToFlat,
   sourceToLonLat,
 } from "../src/planet.ts";
@@ -96,7 +97,7 @@ test("unshaded globe samples preserve the flat renderer's semantic material fami
   for (let j = 0; j < height; j += 3)
     for (let i = j % 2; i < width; i += 5) {
       const { x, z } = texelFlat(i, j, width, height),
-        expected = flatTint(x, z),
+        expected = [...new Uint8Array(terrainTint(x,z,32,undefined,PLANET_CIRCUMFERENCE/width))],
         actual = pixel(surface, i, j),
         delta = Math.hypot(
           actual[0] - expected[0],
@@ -104,7 +105,7 @@ test("unshaded globe samples preserve the flat renderer's semantic material fami
           actual[2] - expected[2],
         );
       assert.ok(delta < 18, `globe/local material drift ${delta.toFixed(1)} at ${x},${z}`);
-      assert.deepEqual(globeSurfaceColor(x, z), pixel(surface, i, j));
+      assert.deepEqual(globeSurfaceColor(x, z,PLANET_CIRCUMFERENCE/width), pixel(surface, i, j));
       if (heightAt(x, z) <= 0.1) water++;
       else land++;
     }
