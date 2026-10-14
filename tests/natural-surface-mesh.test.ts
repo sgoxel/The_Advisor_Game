@@ -6,7 +6,7 @@ import {
 } from "../src/natural-surface-mesh.ts";
 import { buildTile } from "../src/geometry.ts";
 import { drainageRecipes } from "../src/hydrology.ts";
-import { tileForPosition, finalSurfaceAt } from "../src/world.ts";
+import { tileForPosition, finalSurfaceAt, finalSurfaceEvidenceAnchors } from "../src/world.ts";
 import { SOURCE_PRESENTATION_WIDTH } from "../src/planet.ts";
 
 test("natural replacement is bounded and its visible vertices use composed water/ground", () => {
@@ -78,4 +78,16 @@ test("natural replacement repeats independently and closes the east-west source 
     assert.ok(Math.abs(a.geometry.positions[i] - b.geometry.positions[i]) < 1e-5);
   for (let i = 0; i < a.geometry.indices.length; i += 97)
     assert.equal(a.geometry.indices[i], b.geometry.indices[i]);
+});
+
+test("dense real crossing outer coverage respects the unchanged mesh cap", () => {
+  const p=finalSurfaceEvidenceAnchors().bridge;
+  for(const level of [9,10]) {
+    const tile=tileForPosition(p.x,p.z,level);
+    const result=rebuildNaturalSurface(tile,buildTile(tile).terrain);
+    assert.ok(result.replaced);
+    assert.ok(result.leaves<=NATURAL_MESH_LIMITS.leaves);
+    assert.ok(result.samples<=NATURAL_MESH_LIMITS.samples);
+    assert.ok(result.cpuScratchBytesEstimated<=32*1024*1024);
+  }
 });

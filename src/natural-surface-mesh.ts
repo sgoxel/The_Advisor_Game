@@ -1,7 +1,7 @@
 import type { Geometry } from "./geometry.ts";
 import { terrainTint } from "./geometry.ts";
 import { finalSurfaceAt, type Tile } from "./world.ts";
-import { drainageSegmentsInBounds, naturalSurfaceAt } from "./hydrology.ts";
+import { drainageSegmentsInBounds, naturalSurfaceAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "./hydrology.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import {
   SOURCE_PRESENTATION_RADIUS,
@@ -201,7 +201,7 @@ export function rebuildNaturalSurface(
         );
       return (
         Math.hypot(qx - dx * t, qz - dz * t) <=
-        (size * Math.SQRT2) / 2 + s.width + 12
+        (size * Math.SQRT2) / 2 + s.width + RIVER_BANK_HALF_WIDTH_SOURCE
       );
     });
 
@@ -223,10 +223,10 @@ export function rebuildNaturalSurface(
           (s) => s.wet === "none" && Math.abs(s.shoreDistance) <= size * Math.SQRT2 + 8,
         ),
       target = river
-        ? Math.min(
+        ? Math.max(tile.size / 128, Math.min(
             tile.size >= 256 ? 2 : tile.size >= 128 ? 1 : 0.5,
             tile.size / 32,
-          )
+          ))
         : Math.max(2, tile.size / 128);
     if (size > target && (river || major || nearCoast)) {
       visit(x, z, half);

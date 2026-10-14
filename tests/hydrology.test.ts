@@ -12,7 +12,6 @@ import {
   FRESHWATER_ACCESS_RADIUS_M,
   freshwaterCrossingSpanMAt,
   hydrologyTelemetry,
-  naturalElevationAt,
   naturalSurfaceAt,
 } from "../src/hydrology.ts";
 import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
