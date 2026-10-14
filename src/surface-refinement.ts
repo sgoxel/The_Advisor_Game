@@ -11,18 +11,18 @@ import { SOURCE_PRESENTATION_WIDTH, wrapSourceX } from "./planet.ts";
 import { finalSurfaceAt, type Tile } from "./world.ts";
 
 /**
- * Presentation resampling for canonical prepared/water boundaries.
- * Every height/material/water value is read from finalSurfaceAt(); generated
- * meshes never become collision, routing or identity authority.
+ * Presentation-only refinement over canonical final-surface truth.
+ * Nothing in this module may decide water ownership, walkability, routing or identity.
  */
 const LEGACY_BRIDGE_RGB = [115, 88, 56] as const;
 export const REFINED_BRIDGE_RGB = [108, 79, 45] as const;
 export const REFINED_ROAD_RGB = [143, 122, 84] as const;
 export const REFINED_BRIDGE_HALF_WIDTH_SOURCE = 2.1;
 const ROAD_RIBBON_HALF_WIDTH_SOURCE = 2.35;
-const GROUND_EPSILON = 0.025;
-const BANK_EPSILON = 0.045;
-const WATER_EPSILON = 0.065;
+const GROUND_EPSILON = 0.035;
+const BOUNDARY_GROUND_EPSILON = 0.08;
+const WATER_EPSILON = 0.1;
+const BANK_EPSILON = 0.12;
 const ROAD_EPSILON = 0.07;
 const BRIDGE_EPSILON = 0.1;
 const NATURAL_RIBBON_MAX_TILE = 512;
@@ -30,11 +30,13 @@ const NATURAL_GROUND_MAX_TILE = 2048;
 const NATURAL_BOUNDARY_MIN_RESOLUTION = 16;
 const NATURAL_BOUNDARY_MAX_RESOLUTION = 64;
 const NATURAL_BOUNDARY_TARGET_STEP = 2;
+const MAJOR_BOUNDARY_PROBE_DIVISIONS = 8;
 const BANK_MASK_OVERDRAW_SOURCE = 0.5;
 
 type Point = [number, number, number];
 type RGB = readonly [number, number, number];
 type Offset2 = { x: number; z: number };
+type BoundarySample = { point: Point; tint: RGB; majorWet: boolean };
 type ExtraGeometry = {
   positions: number[];
   normals: number[];
@@ -57,11 +59,8 @@ function normalFor(a: Point, b: Point, c: Point): Point {
   return [nx, ny, nz];
 }
 function averagedQuadNormal(a: Point, b: Point, c: Point, d: Point): Point {
-  const first = normalFor(a, b, c),
-    second = normalFor(a, c, d);
-  let nx = first[0] + second[0],
-    ny = first[1] + second[1],
-    nz = first[2] + second[2];
+  const first = normalFor(a, b, c), second = normalFor(a, c, d);
+  let nx = first[0] + second[0], ny = first[1] + second[1], nz = first[2] + second[2];
   const length = Math.hypot(nx, ny, nz) || 1;
   nx /= length; ny /= length; nz /= length;
   return [nx, ny, nz];
@@ -124,7 +123,6 @@ function mergeGeometry(base: Geometry, extra: ExtraGeometry): Geometry {
   colors.set(base.colors); colors.set(extra.colors, base.colors.length);
   indices.set(base.indices);
   for (let i = 0; i < extra.indices.length; i++) indices[base.indices.length + i] = extra.indices[i] + vertexOffset;
-
   let uvs = base.uvs;
   if (base.uvs || extra.uvs) {
     const baseUvs = base.uvs || new Float32Array(vertexOffset * 2),
@@ -184,18 +182,25 @@ function shiftedRoadsIntersecting(tile: Tile): { road: Road; shiftX: number }[] 
     }
   return matches;
 }
-function hasWaterBoundary(tile: Tile) {
+function isMajorWater(kind: ReturnType<typeof finalSurfaceAt>["water"]["kind"]) {
+  return kind === "ocean" || kind === "lake";
+}
+function hasMajorWaterBoundary(tile: Tile) {
   let wet = false, dry = false;
-  for (let z = 0; z <= 4; z++)
-    for (let x = 0; x <= 4; x++) {
-      const surface = finalSurfaceAt(tile.minX + (tile.size * x) / 4, tile.minZ + (tile.size * z) / 4);
-      if (surface.water.kind === "none") dry = true; else wet = true;
+  for (let z = 0; z <= MAJOR_BOUNDARY_PROBE_DIVISIONS; z++)
+    for (let x = 0; x <= MAJOR_BOUNDARY_PROBE_DIVISIONS; x++) {
+      const surface = finalSurfaceAt(
+        tile.minX + (tile.size * x) / MAJOR_BOUNDARY_PROBE_DIVISIONS,
+        tile.minZ + (tile.size * z) / MAJOR_BOUNDARY_PROBE_DIVISIONS,
+      );
+      if (isMajorWater(surface.water.kind)) wet = true;
+      else dry = true;
       if (wet && dry) return true;
     }
   return false;
 }
 
-/** Mixed-water tiles use a bounded scale-coherent grid; dry road refinement stays fine-only. */
+/** Natural boundary work is capped by tile size; dry road work remains fine-only. */
 export function refinementResolutionForTile(tile: Tile, hasRoad: boolean, waterBoundary: boolean) {
   if (waterBoundary) {
     if (tile.size > NATURAL_GROUND_MAX_TILE) return 0;
@@ -208,25 +213,97 @@ export function refinementResolutionForTile(tile: Tile, hasRoad: boolean, waterB
   return Math.min(32, Math.max(8, Math.ceil(tile.size)));
 }
 
-function presentationPoint(x: number, z: number, waterBoundary: boolean): Point {
-  const surface = finalSurfaceAt(x, z);
-  if (waterBoundary && surface.water.kind !== "none" && surface.deckHeight === null)
-    return [x, surface.water.level + WATER_EPSILON, z];
-  return [x, surface.groundHeight + GROUND_EPSILON, z];
+function boundarySample(
+  x: number,
+  z: number,
+  cache: Map<string, BoundarySample>,
+): BoundarySample {
+  const key = `${x.toFixed(6)}/${z.toFixed(6)}`,
+    cached = cache.get(key);
+  if (cached) return cached;
+  const surface = finalSurfaceAt(x, z),
+    majorWet = isMajorWater(surface.water.kind),
+    point: Point = majorWet && surface.deckHeight === null
+      ? [x, surface.water.level + WATER_EPSILON, z]
+      : [x, surface.groundHeight + BOUNDARY_GROUND_EPSILON, z],
+    sample = { point, tint: terrainTint(x, z), majorWet } as BoundarySample;
+  cache.set(key, sample);
+  return sample;
 }
-function addGroundRefinement(tile: Tile, extra: ExtraGeometry, resolution: number, waterBoundary: boolean) {
+function pushBoundaryFan(
+  tile: Tile,
+  extra: ExtraGeometry,
+  samples: readonly [BoundarySample, BoundarySample, BoundarySample, BoundarySample, BoundarySample],
+) {
+  const [a, b, c, d, center] = samples;
+  pushTriangle(extra, tile, a.point, b.point, center.point, a.tint, b.tint, center.tint);
+  pushTriangle(extra, tile, b.point, c.point, center.point, b.tint, c.tint, center.tint);
+  pushTriangle(extra, tile, c.point, d.point, center.point, c.tint, d.tint, center.tint);
+  pushTriangle(extra, tile, d.point, a.point, center.point, d.tint, a.tint, center.tint);
+}
+function addAdaptiveBoundaryCell(
+  tile: Tile,
+  extra: ExtraGeometry,
+  cache: Map<string, BoundarySample>,
+  ax: number,
+  az: number,
+  size: number,
+  depth: number,
+) {
+  const half = size * 0.5,
+    a = boundarySample(ax, az, cache),
+    b = boundarySample(ax, az + size, cache),
+    c = boundarySample(ax + size, az + size, cache),
+    d = boundarySample(ax + size, az, cache),
+    center = boundarySample(ax + half, az + half, cache),
+    samples = [a, b, c, d, center] as const,
+    first = a.majorWet;
+  if (samples.every((sample) => sample.majorWet === first)) return;
+  if (depth > 0) {
+    addAdaptiveBoundaryCell(tile, extra, cache, ax, az, half, depth - 1);
+    addAdaptiveBoundaryCell(tile, extra, cache, ax, az + half, half, depth - 1);
+    addAdaptiveBoundaryCell(tile, extra, cache, ax + half, az + half, half, depth - 1);
+    addAdaptiveBoundaryCell(tile, extra, cache, ax + half, az, half, depth - 1);
+    return;
+  }
+  pushBoundaryFan(tile, extra, samples);
+}
+function addMajorBoundaryRefinement(tile: Tile, extra: ExtraGeometry, resolution: number) {
+  if (!resolution) return;
+  const step = tile.size / resolution,
+    depth = step > 8 ? 2 : step > 4 ? 1 : 0,
+    cache = new Map<string, BoundarySample>();
+  for (let z = 0; z < resolution; z++)
+    for (let x = 0; x < resolution; x++)
+      addAdaptiveBoundaryCell(
+        tile,
+        extra,
+        cache,
+        tile.minX + x * step,
+        tile.minZ + z * step,
+        step,
+        depth,
+      );
+}
+function addDryGroundRefinement(tile: Tile, extra: ExtraGeometry, resolution: number) {
   if (!resolution) return;
   const step = tile.size / resolution;
   for (let z = 0; z < resolution; z++)
     for (let x = 0; x < resolution; x++) {
       const ax = tile.minX + x * step, az = tile.minZ + z * step,
+        makePoint = (px: number, pz: number): Point => [
+          px,
+          finalSurfaceAt(px, pz).groundHeight + GROUND_EPSILON,
+          pz,
+        ],
         points: Point[] = [
-          presentationPoint(ax, az, waterBoundary),
-          presentationPoint(ax, az + step, waterBoundary),
-          presentationPoint(ax + step, az + step, waterBoundary),
-          presentationPoint(ax + step, az, waterBoundary),
+          makePoint(ax, az),
+          makePoint(ax, az + step),
+          makePoint(ax + step, az + step),
+          makePoint(ax + step, az),
         ];
-      if (!waterBoundary && Math.max(...points.map((point) => point[1])) <= 0.05) continue;
+      if (points.some((point) => finalSurfaceAt(point[0], point[2]).water.kind !== "none")) continue;
+      if (Math.max(...points.map((point) => point[1])) <= 0.05) continue;
       const tints = points.map((point) => terrainTint(point[0], point[2])) as RGB[];
       pushQuad(extra, tile, points[0], points[1], points[2], points[3], tints[0], tints[1], tints[2], tints[3]);
     }
@@ -245,8 +322,7 @@ function surfacePoint(x: number, z: number, epsilon: number): Point {
   return [x, finalSurfaceAt(x, z).groundHeight + epsilon, z];
 }
 function segmentNormal(segment: DrainageSegment): Offset2 {
-  const vx = wrapSourceX(segment.bx - segment.ax),
-    vz = segment.bz - segment.az,
+  const vx = wrapSourceX(segment.bx - segment.ax), vz = segment.bz - segment.az,
     length = Math.hypot(vx, vz) || 1;
   return { x: -vz / length, z: vx / length };
 }
@@ -254,19 +330,16 @@ function joinedOffset(a: DrainageSegment, b?: DrainageSegment): Offset2 {
   const normalA = segmentNormal(a);
   if (!b) return normalA;
   const normalB = segmentNormal(b),
-    sumX = normalA.x + normalB.x,
-    sumZ = normalA.z + normalB.z,
+    sumX = normalA.x + normalB.x, sumZ = normalA.z + normalB.z,
     sumLength = Math.hypot(sumX, sumZ);
   if (sumLength < 0.15) return normalA;
-  const unitX = sumX / sumLength,
-    unitZ = sumZ / sumLength,
+  const unitX = sumX / sumLength, unitZ = sumZ / sumLength,
     alignment = Math.max(0.72, unitX * normalA.x + unitZ * normalA.z),
     miter = Math.min(1.35, 1 / alignment);
   return { x: unitX * miter, z: unitZ * miter };
 }
 function segmentNeighbourCode(segment: DrainageSegment, offset: number) {
-  const slash = segment.code.lastIndexOf("/"),
-    index = Number(segment.code.slice(slash + 1));
+  const slash = segment.code.lastIndexOf("/"), index = Number(segment.code.slice(slash + 1));
   if (!Number.isInteger(index) || index + offset < 0) return null;
   return `${segment.code.slice(0, slash)}/${index + offset}`;
 }
@@ -274,18 +347,16 @@ function blendOffset(a: Offset2, b: Offset2, t: number): Offset2 {
   return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
 }
 
-/** Smooth joined render strips from the same canonical drainage support and surface samples. */
+/** Joined river strips mask coarse material teeth but retain canonical water/ground samples. */
 function addNaturalHydrologyRibbons(tile: Tile, extra: ExtraGeometry, segments: readonly DrainageSegment[]) {
   const sampleStep = 2,
     byCode = new Map(segments.map((segment) => [segment.code, segment] as const));
   for (const segment of segments) {
     const ax = shiftedSegmentStartX(tile, segment),
-      vx = wrapSourceX(segment.bx - segment.ax),
-      vz = segment.bz - segment.az,
+      vx = wrapSourceX(segment.bx - segment.ax), vz = segment.bz - segment.az,
       length = Math.hypot(vx, vz);
     if (!length) continue;
-    const previousCode = segmentNeighbourCode(segment, -1),
-      nextCode = segmentNeighbourCode(segment, 1),
+    const previousCode = segmentNeighbourCode(segment, -1), nextCode = segmentNeighbourCode(segment, 1),
       startOffset = joinedOffset(segment, previousCode ? byCode.get(previousCode) : undefined),
       endOffset = joinedOffset(segment, nextCode ? byCode.get(nextCode) : undefined),
       count = Math.max(1, Math.ceil(length / sampleStep)),
@@ -300,29 +371,20 @@ function addNaturalHydrologyRibbons(tile: Tile, extra: ExtraGeometry, segments: 
       if (mx < tile.minX || mx >= tile.minX + tile.size || mz < tile.minZ || mz >= tile.minZ + tile.size) continue;
       const middle = finalSurfaceAt(mx, mz);
       if (middle.water.kind !== "river") continue;
-      const offset0 = blendOffset(startOffset, endOffset, t0),
-        offset1 = blendOffset(startOffset, endOffset, t1);
-
-      const leftOuter0 = surfacePoint(x0 + offset0.x * bankOuter, z0 + offset0.z * bankOuter, BANK_EPSILON),
+      const offset0 = blendOffset(startOffset, endOffset, t0), offset1 = blendOffset(startOffset, endOffset, t1),
+        leftOuter0 = surfacePoint(x0 + offset0.x * bankOuter, z0 + offset0.z * bankOuter, BANK_EPSILON),
         leftOuter1 = surfacePoint(x1 + offset1.x * bankOuter, z1 + offset1.z * bankOuter, BANK_EPSILON),
         leftInner1 = surfacePoint(x1 + offset1.x * bankInner, z1 + offset1.z * bankInner, BANK_EPSILON),
         leftInner0 = surfacePoint(x0 + offset0.x * bankInner, z0 + offset0.z * bankInner, BANK_EPSILON),
         rightInner0 = surfacePoint(x0 - offset0.x * bankInner, z0 - offset0.z * bankInner, BANK_EPSILON),
         rightInner1 = surfacePoint(x1 - offset1.x * bankInner, z1 - offset1.z * bankInner, BANK_EPSILON),
         rightOuter1 = surfacePoint(x1 - offset1.x * bankOuter, z1 - offset1.z * bankOuter, BANK_EPSILON),
-        rightOuter0 = surfacePoint(x0 - offset0.x * bankOuter, z0 - offset0.z * bankOuter, BANK_EPSILON);
-      pushQuad(
-        extra, tile,
-        leftOuter0, leftOuter1, leftInner1, leftInner0,
-        terrainTint(leftOuter0[0], leftOuter0[2]), terrainTint(leftOuter1[0], leftOuter1[2]),
-        terrainTint(leftInner1[0], leftInner1[2]), terrainTint(leftInner0[0], leftInner0[2]),
-      );
-      pushQuad(
-        extra, tile,
-        rightInner0, rightInner1, rightOuter1, rightOuter0,
-        terrainTint(rightInner0[0], rightInner0[2]), terrainTint(rightInner1[0], rightInner1[2]),
-        terrainTint(rightOuter1[0], rightOuter1[2]), terrainTint(rightOuter0[0], rightOuter0[2]),
-      );
+        rightOuter0 = surfacePoint(x0 - offset0.x * bankOuter, z0 - offset0.z * bankOuter, BANK_EPSILON),
+        midOffset = blendOffset(startOffset, endOffset, (t0 + t1) * 0.5),
+        leftLandTint = terrainTint(mx + midOffset.x * (bankOuter + 1.5), mz + midOffset.z * (bankOuter + 1.5)),
+        rightLandTint = terrainTint(mx - midOffset.x * (bankOuter + 1.5), mz - midOffset.z * (bankOuter + 1.5));
+      pushQuad(extra, tile, leftOuter0, leftOuter1, leftInner1, leftInner0, leftLandTint);
+      pushQuad(extra, tile, rightInner0, rightInner1, rightOuter1, rightOuter0, rightLandTint);
 
       const startSurface = finalSurfaceAt(x0, z0), endSurface = finalSurfaceAt(x1, z1),
         y0 = (startSurface.water.kind === "river" ? startSurface.water.level : middle.water.level) + WATER_EPSILON,
@@ -347,11 +409,11 @@ function addRoadAndBridgeRibbons(tile: Tile, extra: ExtraGeometry, matches: read
     const ux = vx / length, uz = vz / length,
       segmentCount = Math.max(1, Math.ceil(length)),
       roadNx = -uz * ROAD_RIBBON_HALF_WIDTH_SOURCE, roadNz = ux * ROAD_RIBBON_HALF_WIDTH_SOURCE,
-      bridgeNx = -uz * REFINED_BRIDGE_HALF_WIDTH_SOURCE, bridgeNz = ux * REFINED_BRIDGE_HALF_WIDTH_SOURCE;
-    const [first, last] = clippedStationRange(
-      road.fromX + shiftX, road.fromZ, road.toX + shiftX, road.toZ,
-      tile.minX, tile.minZ, tile.size, segmentCount,
-    );
+      bridgeNx = -uz * REFINED_BRIDGE_HALF_WIDTH_SOURCE, bridgeNz = ux * REFINED_BRIDGE_HALF_WIDTH_SOURCE,
+      [first, last] = clippedStationRange(
+        road.fromX + shiftX, road.fromZ, road.toX + shiftX, road.toZ,
+        tile.minX, tile.minZ, tile.size, segmentCount,
+      );
     for (let index = first; index < last; index++) {
       const t0 = index / segmentCount, t1 = (index + 1) / segmentCount,
         x0 = road.fromX + shiftX + vx * t0, z0 = road.fromZ + vz * t0,
@@ -393,25 +455,25 @@ export function refineTileSurfacePresentation(tile: Tile, data: TileGeometry): T
   const hydrologySegments = tile.size <= NATURAL_RIBBON_MAX_TILE
       ? drainageSegmentsInBounds(tile.minX, tile.minZ, tile.size)
       : Object.freeze([]) as readonly DrainageSegment[],
-    waterBoundary = hasWaterBoundary(tile),
+    majorBoundary = hasMajorWaterBoundary(tile),
     hydrology = emptyExtra(true),
     ground = emptyExtra(true);
   addNaturalHydrologyRibbons(tile, hydrology, hydrologySegments);
 
   if (tile.size > 64) {
-    const resolution = refinementResolutionForTile(tile, false, waterBoundary);
-    addGroundRefinement(tile, ground, resolution, waterBoundary);
+    const resolution = refinementResolutionForTile(tile, false, majorBoundary);
+    addMajorBoundaryRefinement(tile, ground, resolution);
     if (!ground.positions.length && !hydrology.positions.length) return data;
     data.terrain = mergeGeometry(mergeGeometry(data.terrain, ground), hydrology);
     return data;
   }
 
   const matches = shiftedRoadsIntersecting(tile),
-    resolution = refinementResolutionForTile(tile, matches.length > 0, waterBoundary);
+    resolution = refinementResolutionForTile(tile, matches.length > 0, majorBoundary);
   if (!resolution && !matches.length && !hydrology.positions.length) return data;
-
   const prepared = emptyExtra(false);
-  addGroundRefinement(tile, ground, resolution, waterBoundary);
+  if (majorBoundary) addMajorBoundaryRefinement(tile, ground, resolution);
+  else addDryGroundRefinement(tile, ground, resolution);
   addRoadAndBridgeRibbons(tile, prepared, matches);
   data.terrain = mergeGeometry(mergeGeometry(data.terrain, ground), hydrology);
   data.structures = mergeGeometry(stripLegacyBridgeDeck(data.structures), prepared);
