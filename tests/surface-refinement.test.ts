@@ -8,11 +8,19 @@ import {
   refineTileSurfacePresentation,
   refinementResolutionForTile,
 } from "../src/surface-refinement.ts";
-import { tileAt, tileForPosition } from "../src/world.ts";
+import {
+  finalSurfaceEvidenceAnchors,
+  tileAt,
+  tileForPosition,
+} from "../src/world.ts";
 
 const hasVertexColor = (colors: Uint8Array, rgb: readonly number[]) => {
   for (let i = 0; i < colors.length; i += 4)
-    if (colors[i] === rgb[0] && colors[i + 1] === rgb[1] && colors[i + 2] === rgb[2])
+    if (
+      colors[i] === rgb[0] &&
+      colors[i + 1] === rgb[1] &&
+      colors[i + 2] === rgb[2]
+    )
       return true;
   return false;
 };
@@ -29,23 +37,39 @@ test("surface refinement remains bounded by tile size", () => {
   assert.equal(refinementResolutionForTile(tileAt(14, 0, 0), false, false), 0);
 });
 
-test("representative crossing replaces the legacy slab with a narrow authoritative deck", () => {
-  const road = roads[0];
-  assert.ok(road);
-  const x = (road.fromX + road.toX) / 2,
-    z = (road.fromZ + road.toZ) / 2,
+test("an actual natural-water road crossing refines to a narrow authoritative deck", () => {
+  const evidence = finalSurfaceEvidenceAnchors(),
+    road = roads.find((candidate) => candidate.code === evidence.roadCode);
+  assert.ok(road, `missing evidence road ${evidence.roadCode}`);
+  assert.ok(evidence.bridgeSpanM > 0 && evidence.bridgeSpanM <= 120);
+
+  const x = evidence.bridge.x,
+    z = evidence.bridge.z,
     tile = tileForPosition(x, z, 14),
     base = buildTile(tile),
     terrainVertices = base.terrain.positions.length,
     refined = refineTileSurfacePresentation(tile, base);
-  assert.ok(refined.terrain.positions.length > terrainVertices, "alias-prone bank must receive finer canonical samples");
+  assert.ok(
+    refined.terrain.positions.length > terrainVertices,
+    "natural bank must receive finer canonical samples",
+  );
   assert.ok(refined.terrain.uvs);
-  assert.equal(refined.terrain.uvs!.length, (refined.terrain.positions.length / 3) * 2);
-  assert.ok(hasVertexColor(refined.structures.colors, REFINED_BRIDGE_RGB), "refined deck must be rendered");
-  assert.equal(hasVertexColor(refined.structures.colors, [115, 88, 56]), false, "legacy wide slab must be removed");
+  assert.equal(
+    refined.terrain.uvs!.length,
+    (refined.terrain.positions.length / 3) * 2,
+  );
+  assert.ok(
+    hasVertexColor(refined.structures.colors, REFINED_BRIDGE_RGB),
+    "refined deck must be rendered at the actual natural crossing",
+  );
+  assert.equal(
+    hasVertexColor(refined.structures.colors, [115, 88, 56]),
+    false,
+    "legacy wide slab must be removed",
+  );
 
-  const vx = road.toX - road.fromX,
-    vz = road.toZ - road.fromZ,
+  const vx = road!.toX - road!.fromX,
+    vz = road!.toZ - road!.fromZ,
     length = Math.hypot(vx, vz),
     ux = vx / length,
     uz = vz / length,
