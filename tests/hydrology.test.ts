@@ -112,7 +112,7 @@ test("main-channel water remains incised below natural terrain support between s
       const a = recipe.points[index - 1],
         b = recipe.points[index],
         dx = wrapSourceX(b.x - a.x),
-        dz = b.z - a.zj;
+        dz = b.z - a.z;
       for (let sampleIndex = 1; sampleIndex <= 16; sampleIndex++) {
         const t = sampleIndex / 16,
           x = wrapSourceX(a.x + dx * t),
