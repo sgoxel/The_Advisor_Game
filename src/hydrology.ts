@@ -220,7 +220,7 @@ function profileMainChannel(points: readonly DrainagePoint[]) {
     support[i] = Math.min(support[i], floor);
   }
   let previous = Infinity;
-  return points.map((point, index) => {
+  const profiled = points.map((point, index) => {
     const outlet =
         index === points.length - 1 &&
         !macroSampleAt(sourceToLonLat(point.x, point.z)).land,
@@ -231,8 +231,12 @@ function profileMainChannel(points: readonly DrainagePoint[]) {
       ceiling = index === 0 ? Infinity : Math.max(-0.45, previous - 0.015),
       bed = Math.min(desired, ceiling);
     previous = bed;
-    return Object.freeze({ x: point.x, z: point.z, bed });
+    return { x: point.x, z: point.z, bed };
   });
+  // Spread steep drops upstream while retaining the contained monotone profile.
+  for (let i = profiled.length - 2; i >= 0; i--)
+    profiled[i].bed = Math.min(profiled[i].bed, profiled[i + 1].bed + 2.4);
+  return profiled.map(point => Object.freeze(point));
 }
 
 function traceRiver(continentId: number, slot: number): DrainageRecipe | null {
