@@ -22,7 +22,6 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S003 — Natural World & Surface Authority
 
-- WP-S003-001-001 — Unified final-surface authority: deterministic priority 0–9 composition and one render/collision/material/vegetation/hydrology/traversal truth
 - WP-S003-003-001 — Natural terrain/hydrology authority + visual readability: drainage-valid freshwater, smoother canonical banks/coasts/relief, canonical walkability and seam-safe bounded generation
 
 ## STAGE S004 — Settlements, Buildings & World Sites
