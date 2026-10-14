@@ -26,7 +26,10 @@ const WATER_EPSILON = 0.065;
 const ROAD_EPSILON = 0.07;
 const BRIDGE_EPSILON = 0.1;
 const NATURAL_RIBBON_MAX_TILE = 512;
-const BANK_MASK_OVERDRAW_SOURCE = 2.5;
+const NATURAL_BOUNDARY_MIN_RESOLUTION = 16;
+const NATURAL_BOUNDARY_MAX_RESOLUTION = 64;
+const NATURAL_BOUNDARY_TARGET_STEP = 2;
+const BANK_MASK_OVERDRAW_SOURCE = 0.5;
 
 type Point = [number, number, number];
 type RGB = readonly [number, number, number];
@@ -51,6 +54,16 @@ function normalFor(a: Point, b: Point, c: Point): Point {
   nx /= length; ny /= length; nz /= length;
   return [nx, ny, nz];
 }
+function averagedQuadNormal(a: Point, b: Point, c: Point, d: Point): Point {
+  const first = normalFor(a, b, c),
+    second = normalFor(a, c, d);
+  let nx = first[0] + second[0],
+    ny = first[1] + second[1],
+    nz = first[2] + second[2];
+  const length = Math.hypot(nx, ny, nz) || 1;
+  nx /= length; ny /= length; nz /= length;
+  return [nx, ny, nz];
+}
 function pushTriangle(
   extra: ExtraGeometry,
   tile: Tile,
@@ -60,10 +73,11 @@ function pushTriangle(
   tintA: RGB,
   tintB: RGB = tintA,
   tintC: RGB = tintA,
+  suppliedNormal?: Point,
 ) {
   const originX = tile.minX + tile.size / 2,
     originZ = tile.minZ + tile.size / 2,
-    n = normalFor(a, b, c),
+    n = suppliedNormal ?? normalFor(a, b, c),
     base = extra.positions.length / 3,
     points = [a, b, c] as const,
     tints = [tintA, tintB, tintC] as const;
@@ -92,8 +106,9 @@ function pushQuad(
   tintC: RGB = tintA,
   tintD: RGB = tintA,
 ) {
-  pushTriangle(extra, tile, a, b, c, tintA, tintB, tintC);
-  pushTriangle(extra, tile, a, c, d, tintA, tintC, tintD);
+  const normal = averagedQuadNormal(a, b, c, d);
+  pushTriangle(extra, tile, a, b, c, tintA, tintB, tintC, normal);
+  pushTriangle(extra, tile, a, c, d, tintA, tintC, tintD, normal);
 }
 function mergeGeometry(base: Geometry, extra: ExtraGeometry): Geometry {
   if (!extra.positions.length) return base;
@@ -178,12 +193,14 @@ function hasWaterBoundary(tile: Tile) {
   return false;
 }
 
-/** Mixed-water coarse tiles receive bounded local resampling; dry road refinement stays fine-only. */
+/** Mixed-water tiles use a bounded scale-coherent grid; dry road refinement stays fine-only. */
 export function refinementResolutionForTile(tile: Tile, hasRoad: boolean, waterBoundary: boolean) {
   if (waterBoundary) {
     if (tile.size > NATURAL_RIBBON_MAX_TILE) return 0;
-    if (tile.size <= 64) return Math.min(48, Math.max(8, Math.ceil(tile.size)));
-    return Math.min(32, Math.max(12, Math.ceil(tile.size / 16)));
+    return Math.min(
+      NATURAL_BOUNDARY_MAX_RESOLUTION,
+      Math.max(NATURAL_BOUNDARY_MIN_RESOLUTION, Math.ceil(tile.size / NATURAL_BOUNDARY_TARGET_STEP)),
+    );
   }
   if (tile.size > 64 || !hasRoad) return 0;
   return Math.min(32, Math.max(8, Math.ceil(tile.size)));
@@ -228,7 +245,7 @@ function surfacePoint(x: number, z: number, epsilon: number): Point {
 
 /** Smooth render strips from the same canonical drainage support and surface samples. */
 function addNaturalHydrologyRibbons(tile: Tile, extra: ExtraGeometry, segments: readonly DrainageSegment[]) {
-  const sampleStep = tile.size > 64 ? 4 : 2;
+  const sampleStep = 2;
   for (const segment of segments) {
     const ax = shiftedSegmentStartX(tile, segment),
       vx = wrapSourceX(segment.bx - segment.ax),
