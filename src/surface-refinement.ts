@@ -11,9 +11,9 @@ import { SOURCE_PRESENTATION_WIDTH, wrapSourceX } from "./planet.ts";
 import { finalSurfaceAt, type Tile } from "./world.ts";
 
 /**
- * Fine presentation refinement for player-relevant prepared/water boundaries.
- * Canonical truth always remains finalSurfaceAt(); this module only resamples
- * canonical roads, drainage support and water levels into bounded render meshes.
+ * Presentation resampling for canonical prepared/water boundaries.
+ * Every height/material/water value is read from finalSurfaceAt(); generated
+ * meshes never become collision, routing or identity authority.
  */
 const LEGACY_BRIDGE_RGB = [115, 88, 56] as const;
 export const REFINED_BRIDGE_RGB = [108, 79, 45] as const;
@@ -26,6 +26,7 @@ const WATER_EPSILON = 0.065;
 const ROAD_EPSILON = 0.07;
 const BRIDGE_EPSILON = 0.1;
 const NATURAL_RIBBON_MAX_TILE = 512;
+const BANK_MASK_OVERDRAW_SOURCE = 2.5;
 
 type Point = [number, number, number];
 type RGB = readonly [number, number, number];
@@ -176,24 +177,37 @@ function hasWaterBoundary(tile: Tile) {
     }
   return false;
 }
+
+/** Mixed-water coarse tiles receive bounded local resampling; dry road refinement stays fine-only. */
 export function refinementResolutionForTile(tile: Tile, hasRoad: boolean, waterBoundary: boolean) {
-  if (tile.size > 64 || (!hasRoad && !waterBoundary)) return 0;
-  const cap = waterBoundary ? 48 : 32;
-  return Math.min(cap, Math.max(8, Math.ceil(tile.size)));
+  if (waterBoundary) {
+    if (tile.size > NATURAL_RIBBON_MAX_TILE) return 0;
+    if (tile.size <= 64) return Math.min(48, Math.max(8, Math.ceil(tile.size)));
+    return Math.min(32, Math.max(12, Math.ceil(tile.size / 16)));
+  }
+  if (tile.size > 64 || !hasRoad) return 0;
+  return Math.min(32, Math.max(8, Math.ceil(tile.size)));
 }
-function addGroundRefinement(tile: Tile, extra: ExtraGeometry, resolution: number) {
+
+function presentationPoint(x: number, z: number, waterBoundary: boolean): Point {
+  const surface = finalSurfaceAt(x, z);
+  if (waterBoundary && surface.water.kind !== "none" && surface.deckHeight === null)
+    return [x, surface.water.level + WATER_EPSILON, z];
+  return [x, surface.groundHeight + GROUND_EPSILON, z];
+}
+function addGroundRefinement(tile: Tile, extra: ExtraGeometry, resolution: number, waterBoundary: boolean) {
   if (!resolution) return;
   const step = tile.size / resolution;
   for (let z = 0; z < resolution; z++)
     for (let x = 0; x < resolution; x++) {
       const ax = tile.minX + x * step, az = tile.minZ + z * step,
         points: Point[] = [
-          [ax, finalSurfaceAt(ax, az).groundHeight + GROUND_EPSILON, az],
-          [ax, finalSurfaceAt(ax, az + step).groundHeight + GROUND_EPSILON, az + step],
-          [ax + step, finalSurfaceAt(ax + step, az + step).groundHeight + GROUND_EPSILON, az + step],
-          [ax + step, finalSurfaceAt(ax + step, az).groundHeight + GROUND_EPSILON, az],
+          presentationPoint(ax, az, waterBoundary),
+          presentationPoint(ax, az + step, waterBoundary),
+          presentationPoint(ax + step, az + step, waterBoundary),
+          presentationPoint(ax + step, az, waterBoundary),
         ];
-      if (Math.max(...points.map((point) => point[1])) <= 0.05) continue;
+      if (!waterBoundary && Math.max(...points.map((point) => point[1])) <= 0.05) continue;
       const tints = points.map((point) => terrainTint(point[0], point[2])) as RGB[];
       pushQuad(extra, tile, points[0], points[1], points[2], points[3], tints[0], tints[1], tints[2], tints[3]);
     }
@@ -212,16 +226,8 @@ function surfacePoint(x: number, z: number, epsilon: number): Point {
   return [x, finalSurfaceAt(x, z).groundHeight + epsilon, z];
 }
 
-/**
- * Smooth canonical river/bank strips for coarse and fine local LODs. Segment
- * support and water levels come from hydrology/finalSurfaceAt; this mesh has no
- * authority of its own and is never used by traversal or collision.
- */
-function addNaturalHydrologyRibbons(
-  tile: Tile,
-  extra: ExtraGeometry,
-  segments: readonly DrainageSegment[],
-) {
+/** Smooth render strips from the same canonical drainage support and surface samples. */
+function addNaturalHydrologyRibbons(tile: Tile, extra: ExtraGeometry, segments: readonly DrainageSegment[]) {
   const sampleStep = tile.size > 64 ? 4 : 2;
   for (const segment of segments) {
     const ax = shiftedSegmentStartX(tile, segment),
@@ -234,7 +240,7 @@ function addNaturalHydrologyRibbons(
       count = Math.max(1, Math.ceil(length / sampleStep)),
       wetHalf = Math.max(0.2, segment.width * 0.96),
       bankInner = segment.width + 0.08,
-      bankOuter = segment.width + RIVER_BANK_HALF_WIDTH_SOURCE;
+      bankOuter = segment.width + RIVER_BANK_HALF_WIDTH_SOURCE + BANK_MASK_OVERDRAW_SOURCE;
     for (let index = 0; index < count; index++) {
       const t0 = index / count, t1 = (index + 1) / count,
         x0 = ax + vx * t0, z0 = segment.az + vz * t0,
@@ -332,22 +338,25 @@ function addRoadAndBridgeRibbons(tile: Tile, extra: ExtraGeometry, matches: read
 export function refineTileSurfacePresentation(tile: Tile, data: TileGeometry): TileGeometry {
   if (tile.size > NATURAL_RIBBON_MAX_TILE) return data;
   const hydrologySegments = drainageSegmentsInBounds(tile.minX, tile.minZ, tile.size),
-    hydrology = emptyExtra(true);
+    waterBoundary = hasWaterBoundary(tile),
+    hydrology = emptyExtra(true),
+    ground = emptyExtra(true);
   addNaturalHydrologyRibbons(tile, hydrology, hydrologySegments);
 
   if (tile.size > 64) {
-    if (!hydrology.positions.length) return data;
-    data.terrain = mergeGeometry(data.terrain, hydrology);
+    const resolution = refinementResolutionForTile(tile, false, waterBoundary);
+    addGroundRefinement(tile, ground, resolution, waterBoundary);
+    if (!ground.positions.length && !hydrology.positions.length) return data;
+    data.terrain = mergeGeometry(mergeGeometry(data.terrain, ground), hydrology);
     return data;
   }
 
   const matches = shiftedRoadsIntersecting(tile),
-    waterBoundary = hasWaterBoundary(tile),
     resolution = refinementResolutionForTile(tile, matches.length > 0, waterBoundary);
   if (!resolution && !matches.length && !hydrology.positions.length) return data;
 
-  const ground = emptyExtra(true), prepared = emptyExtra(false);
-  addGroundRefinement(tile, ground, resolution);
+  const prepared = emptyExtra(false);
+  addGroundRefinement(tile, ground, resolution, waterBoundary);
   addRoadAndBridgeRibbons(tile, prepared, matches);
   data.terrain = mergeGeometry(mergeGeometry(data.terrain, ground), hydrology);
   data.structures = mergeGeometry(stripLegacyBridgeDeck(data.structures), prepared);

@@ -18,7 +18,10 @@ const hasVertexColor = (colors: Uint8Array, rgb: readonly number[]) => {
 };
 
 test("surface refinement remains bounded by tile size", () => {
-  assert.equal(refinementResolutionForTile(tileAt(11, 0, 0), true, true), 0);
+  assert.equal(refinementResolutionForTile(tileAt(11, 0, 0), true, true), 12);
+  assert.equal(refinementResolutionForTile(tileAt(10, 0, 0), false, true), 16);
+  assert.equal(refinementResolutionForTile(tileAt(9, 0, 0), false, true), 32);
+  assert.equal(refinementResolutionForTile(tileAt(8, 0, 0), false, true), 0);
   assert.equal(refinementResolutionForTile(tileAt(12, 0, 0), true, false), 32);
   assert.equal(refinementResolutionForTile(tileAt(14, 0, 0), false, true), 16);
   assert.equal(refinementResolutionForTile(tileAt(14, 0, 0), false, false), 0);

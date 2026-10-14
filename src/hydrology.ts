@@ -135,6 +135,21 @@ function clampZ(z: number) {
   return Math.max(-SOURCE_PRESENTATION_POLE_DISTANCE + 8, Math.min(SOURCE_PRESENTATION_POLE_DISTANCE - 8, z));
 }
 
+function profileMainChannel(points: readonly DrainagePoint[]) {
+  let previous = Infinity;
+  return points.map((point, index) => {
+    const outlet = index === points.length - 1 && !macroSampleAt(sourceToLonLat(point.x, point.z)).land,
+      progress = index / Math.max(1, points.length - 1),
+      terrain = outlet ? 0.05 : naturalElevationAt(point.x, point.z),
+      incision = 0.55 + progress * 0.45,
+      desired = outlet ? 0.05 : Math.max(0.12, terrain - incision),
+      ceiling = index === 0 ? Infinity : Math.max(0.055, previous - 0.015),
+      bed = Math.min(desired, ceiling);
+    previous = bed;
+    return Object.freeze({ x: point.x, z: point.z, bed });
+  });
+}
+
 function traceRiver(continentId: number, slot: number): DrainageRecipe | null {
   const candidates = mountainSystems.filter((system) => system.continent === continentId);
   if (!candidates.length) return null;
@@ -142,8 +157,7 @@ function traceRiver(continentId: number, slot: number): DrainageRecipe | null {
     sourcePosition = system.path[Math.min(system.path.length - 1, Math.max(0, Math.floor(system.path.length * (0.28 + 0.13 * (slot % 3)))))],
     source = lonLatToSource(sourcePosition.lon, sourcePosition.lat),
     code = `${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/DRAINAGE/${continentId}/${slot}`,
-    points: DrainagePoint[] = [],
-    sourceHeight = Math.max(24, naturalElevationAt(source.x, source.z)),
+    rawPoints: DrainagePoint[] = [],
     width = 2.35 + addressed(`${code}/width`) * 1.35;
   let x = source.x,
     z = source.z,
@@ -151,9 +165,7 @@ function traceRiver(continentId: number, slot: number): DrainageRecipe | null {
     outlet: "ocean" | "lake" = "ocean";
 
   for (let index = 0; index < MAX_MAIN_STEPS; index++) {
-    const progress = index / Math.max(1, MAX_MAIN_STEPS - 1),
-      bed = Math.max(0.18, sourceHeight * (1 - progress) * (1 - progress) * 0.72 + 0.18);
-    points.push(Object.freeze({ x: wrapSourceX(x), z, bed }));
+    rawPoints.push(Object.freeze({ x: wrapSourceX(x), z, bed: 0 }));
     const target = coastwardDirection(x, z, continentId),
       meanderPhase = addressed(`${code}/meander-phase-v2`) * TAU,
       meander = Math.sin(index * 0.73 + meanderPhase) * 0.2 + Math.sin(index * 0.31 + meanderPhase * 1.7) * 0.085;
@@ -166,15 +178,16 @@ function traceRiver(continentId: number, slot: number): DrainageRecipe | null {
     z = nz;
     if (!macro.land) {
       outlet = macro.domain === "Lake" ? "lake" : "ocean";
-      points.push(Object.freeze({ x, z, bed: 0.05 }));
+      rawPoints.push(Object.freeze({ x, z, bed: 0.05 }));
       break;
     }
   }
-  if (points.length < 8) return null;
-  const terminal = points[points.length - 1],
+  if (rawPoints.length < 8) return null;
+  const terminal = rawPoints[rawPoints.length - 1],
     terminalMacro = macroSampleAt(sourceToLonLat(terminal.x, terminal.z));
   if (terminalMacro.land) return null;
   outlet = terminalMacro.domain === "Lake" ? "lake" : "ocean";
+  const points = profileMainChannel(rawPoints);
 
   const joinIndex = Math.min(points.length - 3, Math.max(4, Math.floor(points.length * 0.52))),
     join = points[joinIndex],
@@ -188,13 +201,14 @@ function traceRiver(continentId: number, slot: number): DrainageRecipe | null {
       x: wrapSourceX(join.x + (-dz / length) * offset * side),
       z: clampZ(join.z + (dx / length) * offset * side),
     },
+    tributaryStartBed = Math.max(join.bed + 1.6, naturalElevationAt(tributaryStart.x, tributaryStart.z) - 0.65),
     tributary: DrainagePoint[] = [];
   for (let i = 0; i <= 9; i++) {
     const t = i / 9,
       bow = Math.sin(Math.PI * t) * (addressed(`${code}/tributary-bow`) - 0.5) * 520,
       px = wrapSourceX(tributaryStart.x + wrapSourceX(join.x - tributaryStart.x) * t + (-dz / length) * bow),
       pz = clampZ(tributaryStart.z + (join.z - tributaryStart.z) * t + (dx / length) * bow),
-      bed = lerp(Math.max(join.bed + 4, naturalElevationAt(tributaryStart.x, tributaryStart.z) * 0.62), join.bed, t);
+      bed = lerp(tributaryStartBed, join.bed, t);
     if (macroSampleAt(sourceToLonLat(px, pz)).land || i === 9)
       tributary.push(Object.freeze({ x: px, z: pz, bed }));
   }
@@ -325,13 +339,14 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
   if (hit && riverDistance <= hit.segment.width + RIVER_BANK_HALF_WIDTH_SOURCE) {
     const t = smooth01((riverDistance - hit.segment.width) / RIVER_BANK_HALF_WIDTH_SOURCE),
       bed = lerp(hit.segment.bedA, hit.segment.bedB, hit.t),
-      bankHeight = lerp(Math.min(terrain, bed + 0.75), terrain, t);
+      inner = Math.min(terrain, bed + 0.68),
+      bankHeight = lerp(inner, terrain, t);
     return Object.freeze({
       groundHeight: bankHeight,
       material: "Riverbank",
       water: { kind: "none", level: -Infinity, flowX: 0, flowZ: 0 } as SurfaceWater,
       walkable: true,
-      vegetationDensityScale: lerp(0.28, 0.86, t),
+      vegetationDensityScale: lerp(0.34, 0.9, t),
       slope: 0,
       cliff: false,
       freshwaterDistanceSource: riverDistance,
