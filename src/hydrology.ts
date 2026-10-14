@@ -713,21 +713,23 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
       initialBankHeight = lerp(inner, terrain, t),
       initialSlope =
         (Math.abs(terrain - inner) * 1.5) /
-        (RIVER_BANK_HALF_WIDTH_SOURCE * CANONICAL_METRES_PER_SOURCE_UNIT),
-      initialCliff = initialSlope > 0.68;
-    let bankHeight=initialBankHeight,slope=initialSlope;
-    // Keep the dividing bank above every adjoining wet reach. This composes
-    // incisions only (height never exceeds natural terrain), rather than letting
-    // a deeper neighbour's bank cut a hole beneath an upper channel's water.
+        (RIVER_BANK_HALF_WIDTH_SOURCE * CANONICAL_METRES_PER_SOURCE_UNIT);
+    let bankHeight=initialBankHeight,bankFloor=inner,slope=initialSlope;
+    // Overlapping valleys compose by minimum incision, then retain the highest
+    // adjacent channel's inner-bank floor. Taking maximum blended slopes instead
+    // creates a high shelf across the other channel and conceals valid crossings.
     for(const segment of segmentsByBucket.get(bucketKey(sx,z))||[]){
       segmentChecks++;
       const candidate=pointToSegment(sx,z,segment);
       if(candidate.distance<=segment.width||candidate.distance>segment.width+RIVER_BANK_HALF_WIDTH_SOURCE)continue;
       const weight=smooth01((candidate.distance-segment.width)/RIVER_BANK_HALF_WIDTH_SOURCE),candidateBed=lerp(segment.bedA,segment.bedB,candidate.t),candidateInner=Math.min(terrain,candidateBed+.68);
-      bankHeight=Math.max(bankHeight,lerp(candidateInner,terrain,weight));
+      bankHeight=Math.min(bankHeight,lerp(candidateInner,terrain,weight));
+      bankFloor=Math.max(bankFloor,candidateInner);
       slope=Math.max(slope,Math.abs(terrain-candidateInner)*1.5/(RIVER_BANK_HALF_WIDTH_SOURCE*CANONICAL_METRES_PER_SOURCE_UNIT));
     }
-    const cliff=initialCliff||slope>.68;
+    bankHeight=Math.max(bankFloor,bankHeight);
+    slope=Math.min(slope,Math.abs(terrain-bankFloor)*1.5/(RIVER_BANK_HALF_WIDTH_SOURCE*CANONICAL_METRES_PER_SOURCE_UNIT));
+    const cliff=slope>.68;
     return Object.freeze({
       groundHeight: bankHeight,
       material: "Riverbank",

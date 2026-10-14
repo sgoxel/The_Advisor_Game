@@ -217,3 +217,15 @@ test("presentation-only rebases cannot mutate simulation positions or route cost
   );
   assert.equal(frame.stats.resourceRebuildsOnRebase, 0);
 });
+
+
+test("canonical terrain metres use the same display scale as horizontal distance", () => {
+  const tile=tileAt(14,1000,1000),data=buildTile(tile);
+  const before=Array.from(data.terrain.positions);
+  convertTileGeometryToEnu(tile,data);
+  for(let i=1;i<before.length;i+=3) {
+    assert.ok(Math.abs(data.terrain.positions[i]*CANONICAL_METRES_PER_SOURCE_UNIT-before[i])<1e-3);
+  }
+  const frame=new LocalRenderFrame(tile.minX,tile.minZ);
+  assert.ok(Math.abs(frame.sourceToRender(tile.minX,tile.minZ,20).y*CANONICAL_METRES_PER_SOURCE_UNIT-20)<1e-9);
+});

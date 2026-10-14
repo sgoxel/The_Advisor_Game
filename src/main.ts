@@ -1,3 +1,4 @@
+import {elevationToRenderY} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import "./style.css";
 import {
@@ -201,8 +202,8 @@ function applyTileRenderTransform(tile: Tile, entity: pc.Entity) {
 }
 
 function positionActor(actor: pc.Entity, x: number, z: number) {
-  const point = renderFrame.sourceToRender(x, z, heightAt(x, z) + 1.65);
-  actor.setLocalPosition(point.x, point.y, point.z);
+  const point = renderFrame.sourceToRender(x, z, heightAt(x, z));
+  actor.setLocalPosition(point.x, point.y + 1.65, point.z);
 }
 
 function refreshRenderFrameTransforms() {
@@ -226,10 +227,10 @@ function flatWorldPoint(x: number, z: number, y: number): pc.Vec3 {
   if (projectionTransition <= 0.001)
     return new pc.Vec3(point.x, point.y, point.z);
   const focus = renderFrame.sourceToRender(view.x, view.z),
-    focusY = Math.max(0, heightAt(view.x, view.z));
+    focusY = elevationToRenderY(Math.max(0, heightAt(view.x, view.z)));
   return new pc.Vec3(
     point.x - focus.x,
-    PLANET_RADIUS + y - focusY,
+    PLANET_RADIUS + point.y - focusY,
     point.z - focus.z,
   );
 }
@@ -252,7 +253,7 @@ function surfaceAtScreen(x: number, y: number): LonLat | undefined {
   const yPlane =
     projectionTransition > 0.001
       ? PLANET_RADIUS
-      : Math.max(0, heightAt(view.x, view.z));
+      : elevationToRenderY(Math.max(0, heightAt(view.x, view.z)));
   const distance = (yPlane - origin.y) / direction.y;
   if (!Number.isFinite(distance) || distance < 0) return undefined;
   const point = origin.add(direction.mulScalar(distance)),
@@ -442,7 +443,7 @@ function applyPresentation() {
   );
   const active = projectionTransition > 0.001,
     fullGlobe = projectionTransition >= 0.999,
-    targetY = Math.max(0, heightAt(view.x, view.z)),
+    targetY = elevationToRenderY(Math.max(0, heightAt(view.x, view.z))),
     focusRender = renderFrame.sourceToRender(view.x, view.z);
   globeShown = fullGlobe;
   document.body.classList.toggle("globe-mode", fullGlobe);
@@ -817,7 +818,7 @@ function inspectCell(screenX: number, screenY: number) {
   for (let distance = 0; distance <= 600000; distance += marchStep) {
     const point = origin.clone().add(direction.clone().mulScalar(distance));
     const source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y <= Math.max(0, heightAt(source.x, source.z))) {
+    if (point.y <= elevationToRenderY(Math.max(0, heightAt(source.x, source.z)))) {
       hit = distance;
       break;
     }
@@ -828,7 +829,7 @@ function inspectCell(screenX: number, screenY: number) {
     const middle = (before + hit) / 2,
       point = origin.clone().add(direction.clone().mulScalar(middle)),
       source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y > Math.max(0, heightAt(source.x, source.z))) before = middle;
+    if (point.y > elevationToRenderY(Math.max(0, heightAt(source.x, source.z)))) before = middle;
     else hit = middle;
   }
   const point = origin.add(direction.mulScalar(hit));
@@ -1324,10 +1325,10 @@ async function start() {
       const placeHeight = Math.max(0, heightAt(place.x, place.z)) + 2,
         localPoint = renderFrame.sourceToRender(place.x, place.z, placeHeight);
       if (projectionTransition > 0.001) {
-        const focusY = Math.max(0, heightAt(view.x, view.z));
+        const focusY = elevationToRenderY(Math.max(0, heightAt(view.x, view.z)));
         flatLabelPoint.set(
           localPoint.x - focusRender.x,
-          PLANET_RADIUS + placeHeight - focusY,
+          PLANET_RADIUS + localPoint.y - focusY,
           localPoint.z - focusRender.z,
         );
         const flatScreen = camera.camera!.worldToScreen(flatLabelPoint);
@@ -1355,7 +1356,7 @@ async function start() {
         )
           continue;
         screen = camera.camera!.worldToScreen(
-          new pc.Vec3(localPoint.x, placeHeight, localPoint.z),
+          new pc.Vec3(localPoint.x, localPoint.y, localPoint.z),
         );
       }
       if (
@@ -1471,15 +1472,15 @@ async function start() {
       point.height ??= Math.max(0, heightAt(point.x, point.z)) + 3;
       const local = renderFrame.sourceToRender(point.x, point.z, point.height);
       if (projectionTransition <= 0.001) {
-        const screen = camera.camera!.worldToScreen(new pc.Vec3(local.x, point.height, local.z));
+        const screen = camera.camera!.worldToScreen(new pc.Vec3(local.x, local.y, local.z));
         return { x: screen.x, y: screen.y };
       }
       // Handoff/globe: same flat-to-globe blend the place labels use.
       const focusRender = renderFrame.sourceToRender(view.x, view.z),
-        focusY = Math.max(0, heightAt(view.x, view.z));
+        focusY = elevationToRenderY(Math.max(0, heightAt(view.x, view.z)));
       flatLabelPoint.set(
         local.x - focusRender.x,
-        PLANET_RADIUS + point.height - focusY,
+        PLANET_RADIUS + local.y - focusY,
         local.z - focusRender.z,
       );
       const flatScreen = camera.camera!.worldToScreen(flatLabelPoint),

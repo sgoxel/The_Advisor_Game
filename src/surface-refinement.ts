@@ -1,3 +1,4 @@
+import {elevationToRenderY} from "./render-frame.ts";
 import type { Geometry, TileGeometry } from "./geometry.ts";
 import { terrainTint } from "./geometry.ts";
 import { roads, type Road } from "./geography.ts";
@@ -77,7 +78,7 @@ function pushTriangle(
     tints = [tintA, tintB, tintC] as const;
   for (let i = 0; i < 3; i++) {
     const point = points[i];
-    extra.positions.push(point[0] - originX, point[1], point[2] - originZ);
+    extra.positions.push(point[0] - originX, extra.uvs ? point[1] : elevationToRenderY(point[1]), point[2] - originZ);
     extra.normals.push(...n);
     extra.colors.push(tints[i][0], tints[i][1], tints[i][2], 255);
     if (extra.uvs)

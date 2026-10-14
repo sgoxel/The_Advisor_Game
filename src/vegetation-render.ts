@@ -1,3 +1,4 @@
+import {elevationToRenderY} from "./render-frame.ts";
 import type { ForestFamily, RGB } from "./climate.ts";
 import {
   vegetationForTile,
@@ -127,7 +128,7 @@ export function buildVegetationGeometry(tile: Tile): {
   for (const feature of features) {
     const x = feature.x - originX,
       z = feature.z - originZ,
-      y = feature.y,
+      y = elevationToRenderY(feature.y),
       size = feature.scale,
       angle = variantAngle(feature.variant),
       dx = Math.cos(angle),

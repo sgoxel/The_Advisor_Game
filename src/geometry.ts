@@ -1,3 +1,4 @@
+import {elevationToRenderY} from "./render-frame.ts";
 import { featuresFor, field, type Tile } from "./world.ts";
 import { continuitySurfaceAt as finalSurfaceAt, continuityHeightAt as heightAt, registerContinuityPatch } from "./continuity-runtime.ts";
 import { roads } from "./geography.ts";
@@ -394,7 +395,7 @@ export function buildTile(t: Tile): TileGeometry {
   );
   if (t.size <= 512)
     for (const f of featuresFor(t)) {
-      const { x, y, z, variant: v } = f;
+      const { x, z, variant: v } = f, y = elevationToRenderY(f.y);
       const stone = color(167, 165, 144),
         timber = color(75, 58, 43),
         plaster = color(210, 190, 145);
@@ -580,7 +581,7 @@ export function buildTile(t: Tile): TileGeometry {
             continue;
           const surface = finalSurfaceAt(mx, mz);
           if (surface.deckHeight === null) continue;
-          const y = surface.deckHeight + 0.1,
+          const y = elevationToRenderY(surface.deckHeight + 0.1),
             deck = color(115, 88, 56);
           structures.quad(
             [x0 + nx, y, z0 + nz],

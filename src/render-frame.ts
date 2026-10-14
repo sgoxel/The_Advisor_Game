@@ -12,6 +12,9 @@ import {
   type LonLat,
 } from "./planet.ts";
 
+/** Canonical elevation is metres; the renderer uses the same scale on all axes. */
+export const elevationToRenderY = (metres: number) => metres / CANONICAL_METRES_PER_SOURCE_UNIT;
+
 /** Detailed GPU coordinates must remain inside this canonical-metre envelope. */
 export const GPU_LOCAL_LIMIT_M = 8_192;
 /** Move the presentation origin before the focus drifts far enough to lose precision. */
@@ -85,9 +88,9 @@ function recomputeNormals(geometry: Geometry) {
 
 /**
  * Convert worker geometry from patch-relative S001 source offsets into
- * patch-relative canonical ENU coordinates. Y remains the current visual terrain
- * elevation until the dedicated scale/travel migration WP replaces that legacy
- * presentation value; horizontal identity and precision are canonical here.
+ * patch-relative canonical ENU coordinates. Terrain Y is canonical metres and
+ * is scaled with the horizontal axes. Prop builders already convert their ground
+ * anchors, retaining prototype model dimensions in presentation units.
  */
 export function convertTileGeometryToEnu(
   tile: Tile,
@@ -98,7 +101,7 @@ export function convertTileGeometryToEnu(
     origin = tilePatchOrigin(tile);
   let maxHorizontalM = 0,
     maxFloat32ErrorM = 0;
-  for (const geometry of Object.values(data)) {
+  for (const [kind, geometry] of Object.entries(data)) {
     const p = geometry.positions;
     for (let i = 0; i < p.length; i += 3) {
       const sourceX = originX + p[i],
@@ -116,6 +119,7 @@ export function convertTileGeometryToEnu(
         Math.abs(fz - z) * CANONICAL_METRES_PER_SOURCE_UNIT,
       );
       p[i] = fx;
+      if(kind === "terrain") p[i + 1] = Math.fround(elevationToRenderY(p[i + 1]));
       p[i + 2] = fz;
     }
     recomputeNormals(geometry);
@@ -178,7 +182,7 @@ export class LocalRenderFrame {
     const enu = positionToEnu(sourcePosition(sourceX, sourceZ), this.origin);
     return {
       x: enu.east / CANONICAL_METRES_PER_SOURCE_UNIT,
-      y,
+      y: elevationToRenderY(y),
       z: -enu.north / CANONICAL_METRES_PER_SOURCE_UNIT,
     };
   }

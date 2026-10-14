@@ -1,3 +1,5 @@
+import {CANONICAL_METRES_PER_SOURCE_UNIT} from "../src/planet.ts";
+import {convertTileGeometryToEnu} from "../src/render-frame.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildTile } from "../src/geometry.ts";
@@ -9,6 +11,7 @@ import {
   refinementResolutionForTile,
 } from "../src/surface-refinement.ts";
 import {
+  finalSurfaceAt,
   finalSurfaceEvidenceAnchors,
   tileAt,
   tileForPosition,
@@ -77,6 +80,7 @@ test("an actual natural-water road crossing refines to a narrow authoritative de
     originZ = tile.minZ + tile.size / 2;
   let maxAcross = 0,
     matched = 0;
+  const physicalDeckChecks: {vertex:number;metres:number}[]=[];
   for (let vertex = 0; vertex < refined.structures.positions.length / 3; vertex++) {
     const c = vertex * 4;
     if (
@@ -91,6 +95,8 @@ test("an actual natural-water road crossing refines to a narrow authoritative de
       dx = px - x,
       dz = pz - z,
       across = Math.abs(dx * -uz + dz * ux);
+    const expected=finalSurfaceAt(px,pz).deckHeight;
+    if(expected!==null)physicalDeckChecks.push({vertex,metres:expected+.1});
     maxAcross = Math.max(maxAcross, across);
     matched++;
   }
@@ -99,4 +105,9 @@ test("an actual natural-water road crossing refines to a narrow authoritative de
     maxAcross <= REFINED_BRIDGE_HALF_WIDTH_SOURCE + 0.05,
     `bridge half-width ${maxAcross} exceeded ${REFINED_BRIDGE_HALF_WIDTH_SOURCE}`,
   );
+  convertTileGeometryToEnu(tile,refined);
+  assert.ok(physicalDeckChecks.length>1);
+  for(const check of physicalDeckChecks) {
+    assert.ok(Math.abs(refined.structures.positions[check.vertex*3+1]*CANONICAL_METRES_PER_SOURCE_UNIT-check.metres)<.015,"rendered deck must agree with canonical metre height");
+  }
 });

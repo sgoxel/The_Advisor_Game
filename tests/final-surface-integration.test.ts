@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {naturalSurfaceAt} from "../src/hydrology.ts";
 import { places, roads, villages } from "../src/geography.ts";
 import { WORLD_BUILDING_PRIORITIES } from "../src/final-surface.ts";
 import {
@@ -118,4 +119,16 @@ test("a legal deck has one cross-road stage instead of separate side profiles", 
     assert.ok(side.deckHeight!==null,"crossing width must retain its explicit deck");
     assert.ok(Math.abs(side.deckHeight!-centre.deckHeight!)<1e-6,"deck stage must agree across its width");
   }
+});
+
+
+test("the real crossing bank overlap cannot create a shelf over its channel", () => {
+  const p=finalSurfaceEvidenceAnchors().bridge;
+  const channel=naturalSurfaceAt(p.x,p.z);
+  const bank=naturalSurfaceAt(p.x+3.75,p.z+6.75);
+  assert.equal(channel.water.kind,"river");
+  assert.equal(bank.material,"Riverbank");
+  assert.equal(bank.water.kind,"none");
+  assert.ok(bank.groundHeight>=channel.water.level);
+  assert.ok(bank.groundHeight<=channel.water.level+1,"overlapping banks conceal the real crossing");
 });
