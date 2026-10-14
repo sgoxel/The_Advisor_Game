@@ -12,6 +12,7 @@ import {
   FRESHWATER_ACCESS_RADIUS_M,
   freshwaterCrossingSpanMAt,
   hydrologyTelemetry,
+  naturalElevationAt,
   naturalSurfaceAt,
 } from "../src/hydrology.ts";
 import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
@@ -136,4 +137,31 @@ test('interior channels and their immediate dry banks contain the water surface'
   const width=recipe.width*(kind==='main'?1:.62);
   for(const n of [-width-.1,width+.1]){const bank=naturalSurfaceAt(x-dz/len*n,z+dx/len*n);if(bank.water.kind==='none')assert.ok(bank.groundHeight+1e-6>=s.water.level,`${recipe.code} floats above bank`);}
  }
+});
+
+test("main-channel water remains incised below natural terrain support between stations", () => {
+  let samples = 0;
+  for (const recipe of drainageRecipes)
+    for (let index = 1; index < recipe.points.length; index++) {
+      const a = recipe.points[index - 1],
+        b = recipe.points[index],
+        dx = wrapSourceX(b.x - a.x),
+        dz = b.z - a.z;
+      for (let sampleIndex = 1; sampleIndex <= 16; sampleIndex++) {
+        const t = sampleIndex / 16,
+          x = wrapSourceX(a.x + dx * t),
+          z = a.z + dz * t,
+          macro = macroSampleAt(sourceToLonLat(x, z));
+        if (!macro.land) continue;
+        const sample = naturalSurfaceAt(x, z);
+        assert.equal(sample.water.kind, "river", `${recipe.code} interior channel is dry`);
+        const naturalSupport = naturalElevationAt(x, z);
+        assert.ok(
+          sample.water.level <= naturalSupport + 1e-6,
+          `${recipe.code} water exceeds natural support by ${(sample.water.level - naturalSupport).toFixed(6)}m`,
+        );
+        samples++;
+      }
+    }
+  assert.ok(samples > 1000, `expected broad containment coverage, got ${samples}`);
 });
