@@ -228,10 +228,11 @@ function hasWaterBoundary(tile: Tile) {
   return false;
 }
 
-/** Fine tiles normally use a 2-source-unit grid. Refined authority samples use <=1. */
+/** Fine tiles normally use a 2-source-unit grid. Water edges get <=4/3-unit samples. */
 export function refinementResolutionForTile(tile: Tile, hasRoad: boolean, waterBoundary: boolean) {
   if (tile.size > 64 || (!hasRoad && !waterBoundary)) return 0;
-  return Math.min(32, Math.max(8, Math.ceil(tile.size)));
+  const cap = waterBoundary ? 48 : 32;
+  return Math.min(cap, Math.max(8, Math.ceil(tile.size)));
 }
 
 function addGroundRefinement(

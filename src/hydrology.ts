@@ -57,7 +57,10 @@ const BUCKET_SIZE = 4096;
 const RIVER_SYSTEMS_PER_CONTINENT = 4;
 const MAX_MAIN_STEPS = 96;
 const SAMPLE_STEP_SOURCE = 12;
-const RIVER_BANK_SOURCE = 9;
+// Keep the canonical riparian transition readable without turning a narrow
+// freshwater channel into a broad tan ribbon. This is still world truth: the
+// same bounded shoulder is consumed by rendering, vegetation and traversal.
+const RIVER_BANK_SOURCE = 4.5;
 const segmentsByBucket = new Map<string, Segment[]>();
 let naturalQueries = 0;
 let segmentChecks = 0;
@@ -115,9 +118,9 @@ export function naturalElevationAt(x: number, z: number) {
     cap = macro.domain === "Island" ? 210 : 680,
     terrain = Math.max(1.2, Math.min(cap, base + coherentRelief + localRelief)),
     coastSource = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
-    // A wide canonical toe gives coarse meshes a smooth shoreline silhouette;
-    // it is world truth, not a render-only edge treatment.
-    coastWeight = smooth01(Math.max(0, Math.min(1, coastSource / 150)));
+    // Keep a smooth canonical shoreline toe, but limit its support so the local
+    // silhouette stays registered with the shared globe surface through handoff.
+    coastWeight = smooth01(Math.max(0, Math.min(1, coastSource / 90)));
   return lerp(0.08, terrain, coastWeight);
 }
 
