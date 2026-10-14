@@ -288,6 +288,7 @@ export function terrainTint(
   if(surface.groundMaterial==='Riverbank'){
     const natural=naturalSurfaceAt(x,z),bankWeight=Math.max(0,Math.min(1,(.9-natural.vegetationDensityScale)/.56));
     result=blendColor(result,color(151,143,99),bankWeight*.75);
+    result=blendColor(result,TERRAIN_PALETTE.cliff,smoothstep(.25,.68,natural.slope)*.6);
   }
   if(surface.water.kind==='river'){
     // A sub-texel channel occupies a fraction of a coarse albedo texel; it must
@@ -299,7 +300,10 @@ export function terrainTint(
     // Fixed coordinate hill shading reads the same natural relief at every LOD.
     const h=12,east=(naturalElevationAt(x+h,z)-naturalElevationAt(x-h,z))/(2*h*CANONICAL_METRES_PER_SOURCE_UNIT*Math.max(.1,Math.cos(position.lat))),
       south=(naturalElevationAt(x,z+h)-naturalElevationAt(x,z-h))/(2*h*CANONICAL_METRES_PER_SOURCE_UNIT),
-      shade=Math.max(.72,Math.min(1.18,1+(east+south)*2));
+      // Fixed cartographic relief lighting: exaggeration improves top-down
+      // readability, while normalization avoids broad clipped light patches.
+      gx=east*120,gz=south*120,
+      shade=Math.max(.58,Math.min(1.25,(Math.SQRT1_2-(gx+gz)*.5)/(Math.SQRT1_2*Math.sqrt(1+gx*gx+gz*gz))));
     result=result.map(v=>Math.max(0,Math.min(255,v*shade))) as [number,number,number];
   }
   return result;

@@ -26,7 +26,7 @@ import type { Geometry, TileGeometry } from "./geometry.ts";
 import { terrainTint } from "./geometry.ts";
 import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
-import { drainageRecipes, hydrologyTelemetry, naturalSurfaceAt } from "./hydrology.ts";
+import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
 import { LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
 import { LazySimulation } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
@@ -752,10 +752,12 @@ function processStreaming(material: pc.StandardMaterial) {
         request(tile);
       }
     }
+    const surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4;
+    const readyBytes = () => uploads.reduce((sum, job) => sum + estimateGeometryBytes(job.data), 0);
     const overCacheBudget = () =>
       tileCache.size > streamingBudget.cachedPatches ||
-      cachedGeometryBytes + continuityCpuBytes() > streamingBudget.cpuBytes ||
-      cachedGeometryBytes > streamingBudget.gpuBytes;
+      cachedGeometryBytes + readyBytes() + surfaceBytes + continuityCpuBytes() > streamingBudget.cpuBytes ||
+      cachedGeometryBytes + Math.ceil(surfaceBytes * 4 / 3) > streamingBudget.gpuBytes;
     if (overCacheBudget()) {
       const protect = new Set([
         ...activeKeys,
@@ -1531,7 +1533,7 @@ async function start() {
       cellSeed,
       geography: { continents, countries, cities, villages, roads },
       continuity: { inspect: inspectRegion, terrainQuery, telemetry: () => ({ ...continuityTelemetry(), worker: continuityWorkerState }), clearDetail: clearContinuityDetail, setOverlay: setContinuityOverlay },
-      hydrology: { lakes: macroLakes, mountains: mountainSystems, anchors: finalSurfaceEvidenceAnchors, recipes: drainageRecipes, sampleSource: naturalSurfaceAt, toLonLat: sourceToLonLat, telemetry: hydrologyTelemetry },
+      hydrology: { topology: hydrologyTopology, access: freshwaterAccessAt, lakes: macroLakes, mountains: mountainSystems, anchors: finalSurfaceEvidenceAnchors, recipes: drainageRecipes, sampleSource: naturalSurfaceAt, toLonLat: sourceToLonLat, telemetry: hydrologyTelemetry },
       clock,
       planet: {
         radius: CANONICAL_PLANET_RADIUS,

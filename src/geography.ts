@@ -1,3 +1,4 @@
+import { climateSampleAt } from "./climate.ts";
 import { COARSE_GEOGRAPHY_VERSION as WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
   CANONICAL_PLANET_RADIUS,
@@ -431,8 +432,11 @@ function planVillagePositions(city:Pick<Place,"id"|"canonicalPosition"|"continen
             score=separation*(.9+.2*addressed(`${prefix}/rank`));
           if(score>freshScore&&settlementEnvelopeFits(candidate,country,"village")){position=candidate;freshScore=score;}
         }
-        if(water.arid&&!dryException&&settlementEnvelopeFits(candidate,country,"village"))dryException=candidate;
+        if(water.arid&&!water.nearby&&water.distanceM<=8000&&!dryException&&settlementEnvelopeFits(candidate,country,"village"))dryException=candidate;
       }
+      // Arid cities may retain one exposed dry-region village with an existing
+      // water source within 8 km. Ordinary sites still prefer the 4 km rule.
+      if(v===2&&climateSampleAt(city.canonicalPosition).moisture<.2&&dryException)position=dryException;
       position ??= dryException;
       if (!position) return null;
       accepted.push(position);selected.push(position);

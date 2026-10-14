@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   drainageRecipes,
+  drainageCoarseSegments,
+  drainageSegmentsInBounds,
+  hydrologyTopology,
+  naturalElevationAt,
   freshwaterAccessAt,
   freshwaterCrossingAt,
   FRESHWATER_ACCESS_RADIUS_M,
@@ -11,7 +15,7 @@ import {
   naturalSurfaceAt,
 } from "../src/hydrology.ts";
 import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
-import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { villages } from "../src/geography.ts";
 import { RURAL_BRIDGE_MAX_LENGTH_M } from "../src/world.ts";
 
@@ -97,9 +101,39 @@ test("fine main and tributary samples remain downhill until their existing water
   }
 });
 
-test("crossing angle rejects parallel decks and increases oblique wet span",()=>{
-  const a=drainageRecipes[0].points[4],b=drainageRecipes[0].points[5],dx=wrapSourceX(b.x-a.x),dz=b.z-a.z,x=wrapSourceX(a.x+dx*.5),z=a.z+dz*.5;
+test("crossing angle rejects parallel decks and measures physical oblique span",()=>{
+  const segment=drainageCoarseSegments.find(s=>{
+    const dx=wrapSourceX(s.bx-s.ax),dz=s.bz-s.az,len=Math.hypot(dx,dz),x=wrapSourceX(s.ax+dx*.5),z=(s.az+s.bz)*.5;
+    if(s.width>2.5||len<80||Math.cos(sourceToLonLat(x,z).lat)<.3)return false;
+    return drainageSegmentsInBounds(x-128,z-128,256).every(other=>{
+      if(other.code===s.code)return true;
+      const vx=wrapSourceX(other.bx-other.ax),vz=other.bz-other.az,qx=wrapSourceX(x-other.ax),qz=z-other.az,t=Math.max(0,Math.min(1,(qx*vx+qz*vz)/(vx*vx+vz*vz||1)));
+      return Math.hypot(qx-vx*t,qz-vz*t)>20;
+    });
+  });
+  assert.ok(segment,'a real isolated narrow reach is required');
+  const dx=wrapSourceX(segment.bx-segment.ax),dz=segment.bz-segment.az,x=wrapSourceX(segment.ax+dx*.5),z=(segment.az+segment.bz)*.5,c=Math.cos(sourceToLonLat(x,z).lat),
+    perpendicular=freshwaterCrossingAt(x,z,-dz/c,dx*c),oblique=freshwaterCrossingAt(x,z,(-dz+dx*c)/c,dx*c+dz),
+    expected=2*segment.width*CANONICAL_METRES_PER_SOURCE_UNIT*Math.hypot(dx,dz)/Math.hypot(dz/c,dx);
   assert.equal(freshwaterCrossingAt(x,z,dx,dz),null);
-  const perpendicular=freshwaterCrossingAt(x,z,-dz,dx),oblique=freshwaterCrossingAt(x,z,dx-dz,dz+dx);
-  assert.ok(perpendicular&&oblique&&oblique.spanM>perpendicular.spanM);
+  assert.ok(perpendicular&&oblique);
+  assert.ok(Math.abs(perpendicular.spanM-expected)<1e-5);
+  assert.ok(Math.abs(oblique.spanM-expected*Math.SQRT2)<1e-5);
+});
+
+test('basin junction flow is acyclic and every node reaches an authoritative outlet',()=>{
+  assert.ok(hydrologyTopology.junctions>0);
+  assert.equal(hydrologyTopology.cyclicNodes,0);
+  assert.equal(hydrologyTopology.unreachableOutlets,0);
+});
+
+test('interior channels and their immediate dry banks contain the water surface',()=>{
+ for(const recipe of drainageRecipes)for(const [kind,path]of [['main',recipe.points],['tributary',recipe.tributary]]as const)
+ for(let i=1;i<path.length;i++)for(let j=1;j<=8;j++){
+  const a=path[i-1],b=path[i],dx=wrapSourceX(b.x-a.x),dz=b.z-a.z,len=Math.hypot(dx,dz)||1,t=j/8,x=wrapSourceX(a.x+dx*t),z=a.z+dz*t,s=naturalSurfaceAt(x,z);
+  if(s.water.kind!=='river')continue;
+  assert.ok(s.water.level<=naturalElevationAt(x,z)+1e-6,`${recipe.code} floats above terrain`);
+  const width=recipe.width*(kind==='main'?1:.62);
+  for(const n of [-width-.1,width+.1]){const bank=naturalSurfaceAt(x-dz/len*n,z+dx/len*n);if(bank.water.kind==='none')assert.ok(bank.groundHeight+1e-6>=s.water.level,`${recipe.code} floats above bank`);}
+ }
 });

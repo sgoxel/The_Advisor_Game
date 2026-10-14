@@ -402,7 +402,7 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   if (road) {
     const distance = roadMatch.distance,
       weight = 1 - smooth(clamp01((distance - 5) / 7)),
-      roadHeight = boundedEarthwork(
+      initialRoadHeight = boundedEarthwork(
         roadProfileHeightAt(x, z, road),
         base.groundHeight,
         4,
@@ -410,8 +410,20 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
       ),
       tangent = roadTangentAt(x,z,road),
       crossing = freshwaterCrossingAt(x,z,tangent.x,tangent.z),
-      bridge = Boolean(crossing && crossing.spanM<=RURAL_BRIDGE_MAX_LENGTH_M && distance<=5 && (base.water.kind==='river'||base.material==='Riverbank')),
-      deck = crossing ? Math.max(roadProfileHeightAt(x,z,road),crossing.waterLevel+3) : 0;
+      pierM = crossing ? Math.min(5,(RURAL_BRIDGE_MAX_LENGTH_M-crossing.spanM)/2) : 0;
+    let roadHeight=initialRoadHeight,deckHeight:number|undefined;
+    if(crossing&&distance<=5){
+      const left=crossing.lo-pierM/crossing.metresPerUnit,right=crossing.hi+pierM/crossing.metresPerUnit,
+        support=(t:number)=>{const px=x+crossing.ux*t,pz=z+crossing.uz*t,surface=naturalSurfaceBaseAt(px,pz);return {surface,height:Math.max(crossing.waterLevel+1,boundedEarthwork(roadProfileHeightAt(px,pz,road),surface.groundHeight,4,3))};},
+        a=support(left),b=support(right),legal=a.surface.water.kind==='none'&&b.surface.water.kind==='none'&&a.height<=a.surface.groundHeight+3&&b.height<=b.surface.groundHeight+3&&Math.abs(b.height-a.height)/((right-left)*crossing.metresPerUnit)<=.08;
+      if(legal){
+        if(left<=0&&right>=0)deckHeight=lerp(a.height,b.height,-left/(right-left));
+        else if(base.water.kind==='none'){
+          const gapM=Math.max(left,-right)*crossing.metresPerUnit;
+          if(gapM<24){const supportHeight=left>0?a.height:b.height;roadHeight=boundedEarthwork(lerp(supportHeight,roadHeight,smooth(clamp01(gapM/24))),base.groundHeight,4,3);}
+        }
+      }
+    }
     if (weight > 0)
       modifiers.push({
         id: road.code,
@@ -422,7 +434,7 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
         walkable: true,
         vegetationDensityScale: 0,
         reservedUse: road.code,
-        deckHeight: bridge && deck >= base.groundHeight ? deck : undefined,
+        deckHeight: deckHeight !== undefined && deckHeight >= base.groundHeight ? deckHeight : undefined,
       });
   }
   return {
@@ -474,12 +486,12 @@ export function finalSurfaceAt(x: number, z: number): FinalSurface {
     slope = Math.hypot(sx/Math.max(.1,Math.abs(Math.cos(latitude))),sz)/(2*CANONICAL_METRES_PER_SOURCE_UNIT),
     walkable =
       point.final.water.kind === "none"
-        ? point.final.walkable && (point.final.deckHeight!==null || slope < .68) && (point.final.material!=="Road" || slope<=.08)
+        ? point.final.walkable && (point.final.deckHeight!==null || slope < .68)
         : point.final.deckHeight !== null && point.final.walkable;
   const result: FinalSurface = {
     ...point.final,
     walkable,
-    traversal: !walkable?"blocked":point.final.traversal==="open"&&slope>.15?"difficult":point.final.traversal,
+    traversal: !walkable?"blocked":(point.final.traversal==="open"&&slope>.15)||(point.final.traversal==="road"&&slope>.08)?"difficult":point.final.traversal,
   };
   finalSurfaceCache.set(key, result);
   if (finalSurfaceCache.size > FINAL_SURFACE_CACHE_LIMIT)
@@ -611,6 +623,19 @@ export function cellAt(x: number, z: number): Cell {
 /** Features are owned by their anchor tile; tile order/zoom never changes them. */
 export function featuresFor(tile: Tile): Feature[] {
   const features: Feature[] = [];
+  const plotAt=(kind:Feature["kind"],x:number,z:number)=>{
+    const surface=finalSurfaceAt(x,z);
+    if(surface.groundHeight<.2||surface.water.kind!=='none')return null;
+    if(kind==='house'||kind==='keep'||kind==='well'||kind==='field'){
+      const radius=kind==='keep'?15:kind==='field'?13:kind==='house'?7:2;
+      if(!surface.walkable||naturalSurfaceAt(x,z).freshwaterDistanceSource<=Math.SQRT2*radius+3.7||surfaceRoadAt(x,z).distance<=radius+5)return null;
+      for(const [dx,dz]of [[-radius,-radius],[-radius,radius],[radius,radius],[radius,-radius],[0,-radius],[0,radius],[-radius,0],[radius,0]]){
+        const corner=finalSurfaceAt(x+dx,z+dz);
+        if(corner.water.kind!=='none'||!corner.walkable||Math.abs(corner.groundHeight-surface.groundHeight)>(kind==='field'?.1:.25))return null;
+      }
+    }
+    return surface;
+  };
   const add = (
     kind: Feature["kind"],
     x: number,
@@ -625,16 +650,8 @@ export function featuresFor(tile: Tile): Feature[] {
       z >= tile.minZ + tile.size
     )
       return;
-    const surface = finalSurfaceAt(x, z);
-    if (surface.groundHeight < 0.2 || surface.water.kind !== "none") return;
-    if(kind==="house"||kind==="keep"||kind==="well"||kind==="field"){
-      const radius=kind==="keep"?15:kind==="field"?13:kind==="house"?7:2;
-      if(!surface.walkable||naturalSurfaceAt(x,z).freshwaterDistanceSource<=radius+4)return;
-      for(const [dx,dz] of [[-radius,-radius],[-radius,radius],[radius,radius],[radius,-radius],[0,-radius],[0,radius],[-radius,0],[radius,0]]){
-        const corner=finalSurfaceAt(x+dx,z+dz);
-        if(corner.water.kind!=="none"||!corner.walkable)return;
-      }
-    }
+    const surface=plotAt(kind,x,z);
+    if(!surface)return;
     if ((kind === "tree" || kind === "rock") && surface.vegetationDensityScale <= 0) return;
     features.push({
       kind,
@@ -664,7 +681,10 @@ export function featuresFor(tile: Tile): Feature[] {
       coordinateValue(sx, sz, 11),
       `${id}/${s.kind}/keep`,
     );
-    add("well", s.x, s.z, 0, `${id}/${s.kind}/well`);
+    // Select the well's legal canonical plot before applying anchor ownership.
+    // An off-tile first candidate must never make another tile invent a second well.
+    const wellOffsets=[[12,0],[0,12],[-12,0],[0,-12],[18,18],[-18,18],[-18,-18],[18,-18]],start=coordinateValue(sx,sz,12)%wellOffsets.length;
+    for(let i=0;i<wellOffsets.length;i++){const [dx,dz]=wellOffsets[(start+i)%wellOffsets.length],x=s.x+dx,z=s.z+dz;if(plotAt('well',x,z)){add('well',x,z,0,`${id}/${s.kind}/well`);break;}}
     for (let i = 0; i < 18; i++) {
       const v = coordinateValue(sx, sz, 20 + i);
       const side = i % 2 === 0 ? -1 : 1;

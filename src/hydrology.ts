@@ -1,3 +1,4 @@
+import { reconcileDrainageJunctions } from "./hydrology-junctions.ts";
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
   MACRO_PLAN,
@@ -39,6 +40,7 @@ export type DrainageSegment = Readonly<{
   width: number;
   bedA: number;
   bedB: number;
+  flowDirection: number;
 }>;
 export type NaturalSurface = Readonly<{
   groundHeight: number;
@@ -143,7 +145,9 @@ export function naturalElevationAt(x: number, z: number) {
     localRelief =
       macro.reliefM * mountainWeight * (detail * 0.11 + shoulder * 0.06),
     cap = macro.domain === "Island" ? 180 : 620,
-    terrain = Math.max(1.2, Math.min(cap, base + coherentRelief + localRelief)),
+    // A smooth bounded height map preserves ridge gradients at the parent cap;
+    // clipping the height created a broad, perfectly flat summit plateau.
+    terrain = Math.max(1.2, cap * Math.tanh((base + coherentRelief + localRelief) / cap)),
     coastSource = macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
     coastWeight = smooth01(Math.max(0, Math.min(1, coastSource / 90)));
   return lerp(0.08, terrain, coastWeight);
@@ -201,16 +205,30 @@ function clampZ(z: number) {
 }
 
 function profileMainChannel(points: readonly DrainagePoint[]) {
+  // Both ends of each interval stay below its interior terrain support. Taking
+  // min(terrain, bed) at query time instead would allow downstream bed rises.
+  const support = points.map(point => naturalElevationAt(point.x, point.z));
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1], b = points[i], dx = wrapSourceX(b.x - a.x);
+    let floor = Infinity;
+    for (let j = 0; j <= 16; j++) {
+      const t = j / 16, x = wrapSourceX(a.x + dx * t), z = a.z + (b.z - a.z) * t;
+      if (macroSampleAt(sourceToLonLat(x, z)).land)
+        floor = Math.min(floor, naturalElevationAt(x, z) - 0.8);
+    }
+    support[i - 1] = Math.min(support[i - 1], floor);
+    support[i] = Math.min(support[i], floor);
+  }
   let previous = Infinity;
   return points.map((point, index) => {
     const outlet =
         index === points.length - 1 &&
         !macroSampleAt(sourceToLonLat(point.x, point.z)).land,
       progress = index / Math.max(1, points.length - 1),
-      terrain = outlet ? 0.05 : naturalElevationAt(point.x, point.z),
+      terrain = outlet ? 0.05 : support[index],
       incision = 0.55 + progress * 0.45,
-      desired = outlet ? 0.05 : Math.max(0.12, terrain - incision),
-      ceiling = index === 0 ? Infinity : Math.max(0.055, previous - 0.015),
+      desired = outlet ? -0.45 : Math.max(-0.45, terrain - incision),
+      ceiling = index === 0 ? Infinity : Math.max(-0.45, previous - 0.015),
       bed = Math.min(desired, ceiling);
     previous = bed;
     return Object.freeze({ x: point.x, z: point.z, bed });
@@ -315,7 +333,7 @@ function traceRiver(continentId: number, slot: number): DrainageRecipe | null {
     terminalMacro = macroSampleAt(sourceToLonLat(terminal.x, terminal.z));
   if (terminalMacro.land) return null;
   outlet = terminalMacro.domain === "Lake" ? "lake" : "ocean";
-  const points = profileMainChannel(rawPoints);
+  let points = profileMainChannel(rawPoints);
 
   const joinIndex = Math.min(
       points.length - 3,
@@ -357,23 +375,39 @@ function traceRiver(continentId: number, slot: number): DrainageRecipe | null {
     if (macroSampleAt(sourceToLonLat(px, pz)).land || i === 9)
       tributary.push(Object.freeze({ x: px, z: pz, bed }));
   }
+  const tributaryProfile = profileMainChannel(tributary);
+  const joinBed = Math.min(join.bed, tributaryProfile.at(-1)!.bed);
+  let downstreamBed = joinBed;
+  points = points.map((point,index) => {
+    if (index < joinIndex) return point;
+    if (index > joinIndex) downstreamBed = Math.max(-0.45, Math.min(point.bed, downstreamBed - 0.015));
+    return Object.freeze({...point,bed:downstreamBed});
+  });
+  tributaryProfile[tributaryProfile.length-1] = Object.freeze({...tributaryProfile.at(-1)!,bed:joinBed});
   return Object.freeze({
     code,
     continentId,
     width,
     points: Object.freeze(points),
-    tributary: Object.freeze(tributary),
+    tributary: Object.freeze(tributaryProfile),
     outlet,
   });
 }
 
-export const drainageRecipes: readonly DrainageRecipe[] = Object.freeze(
+const reconciledDrainage = (() => {
+const rawDrainageRecipes: readonly DrainageRecipe[] = Object.freeze(
   MACRO_PLAN.continents.flatMap((_, continentId) =>
     Array.from({ length: RIVER_SYSTEMS_PER_CONTINENT }, (_, slot) =>
       traceRiver(continentId, slot),
     ).filter((recipe): recipe is DrainageRecipe => Boolean(recipe)),
   ),
 );
+
+  return reconcileDrainageJunctions(rawDrainageRecipes);
+})();
+
+export const drainageRecipes = reconciledDrainage.recipes;
+export const hydrologyTopology = reconciledDrainage.summary;
 
 function bucketCoordinate(value: number) {
   return Math.floor(value / BUCKET_SIZE);
@@ -411,12 +445,15 @@ for (const recipe of drainageRecipes) {
           width: kind === "MAIN" ? recipe.width : recipe.width * 0.62,
           bedA: path[i].bed,
           bedB: path[i + 1].bed,
+        flowDirection: reconciledDrainage.flowDirection.get(`${recipe.code}/${kind}/${i}`) ?? 1,
         }),
       );
 }
 
 export const drainageCoarseSegments: readonly DrainageSegment[] =
   Object.freeze(coarseSegments);
+// Flow is copied into immutable segment records; release construction-only keys.
+reconciledDrainage.flowDirection.clear();
 const hydrologyResourceSummary = Object.freeze({
   recipes: drainageRecipes.length,
   segments: coarseSegments.length,
@@ -445,12 +482,13 @@ function pointToSegment(x: number, z: number, segment: DrainageSegment) {
         : Math.max(0, Math.min(1, (qx * dx + qz * dz) / length2));
   return { distance: Math.hypot(qx - dx * t, qz - dz * t), t };
 }
-function nearestRiver(x: number, z: number): SegmentHit {
+function nearestRiver(x: number, z: number, wetOnly=false): SegmentHit {
   const candidates = segmentsByBucket.get(bucketKey(x, z)) ?? [];
   let best: SegmentHit = null;
   for (const segment of candidates) {
     segmentChecks++;
     const hit = pointToSegment(x, z, segment);
+    if(wetOnly&&hit.distance>segment.width)continue;
     if (!best || hit.distance < best.distance) best = { segment, ...hit };
   }
   return best;
@@ -476,44 +514,41 @@ export function drainageSegmentsInBounds(
 }
 
 export function freshwaterCrossingSpanMAt(x: number, z: number) {
-  const hit = nearestRiver(wrapSourceX(x), z);
-  if (!hit || hit.distance > hit.segment.width) return 0;
+  const hit = nearestRiver(wrapSourceX(x), z,true);
+  if (!hit) return 0;
   return hit.segment.width * 2 * CANONICAL_METRES_PER_SOURCE_UNIT;
 }
 
-/** Angle-aware wet span; parallel roads never acquire a bridge deck. Bank support is bounded. */
-export function freshwaterCrossingAt(
-  x: number,
-  z: number,
-  roadX: number,
-  roadZ: number,
-) {
-  const hit = nearestRiver(wrapSourceX(x), z);
-  if (!hit || hit.distance > hit.segment.width + RIVER_BANK_HALF_WIDTH_SOURCE)
-    return null;
-  const dx = wrapSourceX(hit.segment.bx - hit.segment.ax),
-    dz = hit.segment.bz - hit.segment.az,
-    sine =
-      Math.abs(roadX * dz - roadZ * dx) /
-      (Math.hypot(roadX, roadZ) * Math.hypot(dx, dz) || 1);
-  if (sine < 0.1) return null;
-  const latitude = sourceToLonLat(x, z).lat,
-    physicalRiverNormal =
-      Math.hypot(dz * Math.cos(latitude), dx) / Math.hypot(dx, dz),
-    spanM =
-      (hit.segment.width *
-        2 *
-        CANONICAL_METRES_PER_SOURCE_UNIT *
-        physicalRiverNormal) /
-      sine;
-  return {
-    spanM,
-    waterLevel: Math.max(
-      0,
-      lerp(hit.segment.bedA, hit.segment.bedB, hit.t) + 0.24,
-    ),
-    code: hit.segment.code,
-  };
+/** Exact line/capsule union span, including confluences, in canonical metres. */
+export function freshwaterCrossingAt(x:number,z:number,roadX:number,roadZ:number) {
+  const hit=nearestRiver(wrapSourceX(x),z);
+  if(!hit||hit.distance>hit.segment.width+RIVER_BANK_HALF_WIDTH_SOURCE)return null;
+  const roadLength=Math.hypot(roadX,roadZ);if(!roadLength)return null;
+  const ux=roadX/roadLength,uz=roadZ/roadLength,dx=wrapSourceX(hit.segment.bx-hit.segment.ax),dz=hit.segment.bz-hit.segment.az;
+  if(Math.abs(ux*dz-uz*dx)/(Math.hypot(dx,dz)||1)<.1)return null;
+  const metresPerUnit=CANONICAL_METRES_PER_SOURCE_UNIT*Math.hypot(ux*Math.cos(sourceToLonLat(x,z).lat),uz);
+  if(metresPerUnit<.1)return null;
+  type Interval={lo:number;hi:number;segment:DrainageSegment};
+  const intervals:Interval[]=[];
+  const range=(value:number,rate:number,low:number,high:number):[number,number]|null=>Math.abs(rate)<1e-12?(value>=low&&value<=high?[-Infinity,Infinity]:null):[Math.min((low-value)/rate,(high-value)/rate),Math.max((low-value)/rate,(high-value)/rate)];
+  for(const segment of segmentsByBucket.get(bucketKey(x,z))||[]){
+    const vx=wrapSourceX(segment.bx-segment.ax),vz=segment.bz-segment.az,length=Math.hypot(vx,vz);if(!length)continue;
+    const sx=vx/length,sz=vz/length,qx=wrapSourceX(x-segment.ax),qz=z-segment.az,parts:[number,number][]=[];
+    const across=range(qx*sz-qz*sx,ux*sz-uz*sx,-segment.width,segment.width),along=range(qx*sx+qz*sz,ux*sx+uz*sz,0,length);
+    if(across&&along){const lo=Math.max(across[0],along[0]),hi=Math.min(across[1],along[1]);if(lo<=hi)parts.push([lo,hi]);}
+    for(const [ex,ez]of [[-qx,-qz],[vx-qx,vz-qz]]){const centre=ex*ux+ez*uz,perp2=ex*ex+ez*ez-centre*centre;if(perp2<=segment.width*segment.width){const half=Math.sqrt(Math.max(0,segment.width*segment.width-perp2));parts.push([centre-half,centre+half]);}}
+    if(parts.length)intervals.push({lo:Math.min(...parts.map(p=>p[0])),hi:Math.max(...parts.map(p=>p[1])),segment});
+  }
+  const groups:{lo:number;hi:number;parts:Interval[]}[]=[];
+  for(const part of intervals.sort((a,b)=>a.lo-b.lo||a.hi-b.hi)){const last=groups.at(-1);if(last&&part.lo<=last.hi+1e-9){last.hi=Math.max(last.hi,part.hi);last.parts.push(part);}else groups.push({lo:part.lo,hi:part.hi,parts:[part]});}
+  const distance=(p:{lo:number;hi:number})=>Math.max(0,p.lo,-p.hi);
+  const group=groups.sort((a,b)=>distance(a)-distance(b)||a.lo-b.lo)[0];if(!group)return null;
+  const spanM=(group.hi-group.lo)*metresPerUnit;
+  if(spanM>120)return null;
+  for(const t of [group.lo-.01,group.hi+.01])if(naturalSurfaceAt(x+ux*t,z+uz*t).water.kind!=='none')return null;
+  let waterLevel=0;
+  for(const part of group.parts)for(const t of [part.lo,part.hi]){const segment=part.segment,at=pointToSegment(x+ux*t,z+uz*t,segment);waterLevel=Math.max(waterLevel,lerp(segment.bedA,segment.bedB,at.t)+.24);}
+  return Object.freeze({spanM,waterLevel,code:hit.segment.code,lo:group.lo,hi:group.hi,metresPerUnit,ux,uz});
 }
 
 /** At most 25x25 coarse buckets; no fine terrain or neighboring meshes are generated. */
@@ -636,7 +671,10 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
     });
 
   const terrain = naturalElevationAt(sx, z),
-    hit = nearestRiver(sx, z),
+    nearest = nearestRiver(sx, z),
+    // Wet footprints form a union; a narrow nearby tributary's dry bank may not
+    // erase water belonging to a wider channel.
+    hit = nearest && nearest.distance>nearest.segment.width && nearest.distance<=3.7 ? nearestRiver(sx,z,true) || nearest : nearest,
     riverDistance = hit?.distance ?? Infinity;
   if (hit && riverDistance <= hit.segment.width) {
     const dx = wrapSourceX(hit.segment.bx - hit.segment.ax),
@@ -649,8 +687,8 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
       water: {
         kind: "river",
         level: Math.max(0, bed + 0.24),
-        flowX: dx / length,
-        flowZ: dz / length,
+        flowX: dx / length * hit.segment.flowDirection,
+        flowZ: dz / length * hit.segment.flowDirection,
       } as SurfaceWater,
       walkable: false,
       vegetationDensityScale: 0,
@@ -668,11 +706,24 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
       ),
       bed = lerp(hit.segment.bedA, hit.segment.bedB, hit.t),
       inner = Math.min(terrain, bed + 0.68),
-      bankHeight = lerp(inner, terrain, t),
-      slope =
+      initialBankHeight = lerp(inner, terrain, t),
+      initialSlope =
         (Math.abs(terrain - inner) * 1.5) /
         (RIVER_BANK_HALF_WIDTH_SOURCE * CANONICAL_METRES_PER_SOURCE_UNIT),
-      cliff = slope > 0.68;
+      initialCliff = initialSlope > 0.68;
+    let bankHeight=initialBankHeight,slope=initialSlope;
+    // Keep the dividing bank above every adjoining wet reach. This composes
+    // incisions only (height never exceeds natural terrain), rather than letting
+    // a deeper neighbour's bank cut a hole beneath an upper channel's water.
+    for(const segment of segmentsByBucket.get(bucketKey(sx,z))||[]){
+      segmentChecks++;
+      const candidate=pointToSegment(sx,z,segment);
+      if(candidate.distance<=segment.width||candidate.distance>segment.width+RIVER_BANK_HALF_WIDTH_SOURCE)continue;
+      const weight=smooth01((candidate.distance-segment.width)/RIVER_BANK_HALF_WIDTH_SOURCE),candidateBed=lerp(segment.bedA,segment.bedB,candidate.t),candidateInner=Math.min(terrain,candidateBed+.68);
+      bankHeight=Math.max(bankHeight,lerp(candidateInner,terrain,weight));
+      slope=Math.max(slope,Math.abs(terrain-candidateInner)*1.5/(RIVER_BANK_HALF_WIDTH_SOURCE*CANONICAL_METRES_PER_SOURCE_UNIT));
+    }
+    const cliff=initialCliff||slope>.68;
     return Object.freeze({
       groundHeight: bankHeight,
       material: "Riverbank",
@@ -730,7 +781,7 @@ export function freshwaterAccessAt(position: LonLat) {
     macro = macroSampleAt(position),
     hit = nearestRiver(source.x, source.z),
     riverDistance = macro.domain === "Lake" ? 0 : (hit?.distance ?? Infinity);
-  let distanceM = riverDistance * CANONICAL_METRES_PER_SOURCE_UNIT,
+  let distanceM = hit ? greatCircleDistance(position,sourceToLonLat(hit.segment.ax+wrapSourceX(hit.segment.bx-hit.segment.ax)*hit.t,hit.segment.az+(hit.segment.bz-hit.segment.az)*hit.t)) : riverDistance * CANONICAL_METRES_PER_SOURCE_UNIT,
     code =
       macro.domain === "Lake"
         ? macro.code
