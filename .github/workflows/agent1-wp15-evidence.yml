@@ -9,7 +9,7 @@ jobs:
   evidence:
     runs-on: ubuntu-latest
     env:
-      EVIDENCE_REVISION: "12"
+      EVIDENCE_REVISION: "13"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
