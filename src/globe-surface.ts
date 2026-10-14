@@ -115,8 +115,8 @@ function openSeaHeight() {
 const bytes = ([r, g, b]: RGB): RGB => [r | 0, g | 0, b | 0];
 
 /** Unshaded surface colour at a flat position from the shared semantic material authority. */
-export function globeSurfaceColor(x: number, z: number): RGB {
-  return bytes(terrainTint(x, z, openOcean(x, z) ? 4096 : 32));
+export function globeSurfaceColor(x: number, z: number, featureFootprintSource=0): RGB {
+  return bytes(terrainTint(x, z, openOcean(x, z) ? 4096 : 32,undefined,featureFootprintSource));
 }
 
 export function buildGlobeSurface(
@@ -205,7 +205,7 @@ export function buildGlobeSurface(
         for (let sa = 0; sa < samples; sa++) {
           const x = xs[i * samples + sa],
             isOpenOcean = openOcean(x, z),
-            c = globeSurfaceColor(x, z),
+            c = globeSurfaceColor(x, z,PLANET_CIRCUMFERENCE/width/samples),
             wet = isOpenOcean || heightAt(x, z) <= 0.1;
           if (wet) {
             waterR += c[0];

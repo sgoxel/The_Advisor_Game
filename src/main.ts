@@ -1,3 +1,4 @@
+import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import "./style.css";
 import {
@@ -6,6 +7,8 @@ import {
   cellAt,
   cellSeed,
   heightAt,
+  finalSurfaceAt,
+  finalSurfaceEvidenceAnchors,
   selectTiles,
   tileAt,
   type Tile,
@@ -23,7 +26,9 @@ import {
 } from "./geography.ts";
 import type { Geometry, TileGeometry } from "./geometry.ts";
 import { terrainTint } from "./geometry.ts";
+import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
+import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
 import { LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
 import { LazySimulation } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
@@ -42,6 +47,7 @@ import {
   canonicalFootprintForHalfHeight,
   flatToLonLat,
   lonLatToFlat,
+  sourceToLonLat,
   wrapX,
   halfHeightForCanonicalFootprint,
   CANONICAL_PLANET_DIAMETER,
@@ -88,11 +94,12 @@ const GLOBE_PASSES = [
 const GLOBE_RELIEF = SURFACE_PRESENTATION.relief;
 const FLAT_BACKDROP = new pc.Color(0.65, 0.71, 0.65);
 let continuityWorkerBytes = 0;
+const NATURAL_WORKER_SCRATCH_RESERVE_BYTES=32*1024*1024;
 let continuityWorkerState: ReturnType<typeof continuityTelemetry> | undefined;
 let discardedPresentationJobs = 0;
 const continuityCpuBytes = () => {
-  const state=continuityTelemetry(), preparingBytes=globeWorker ? state.coarseRegistryBytesEstimated + 4096*1024 + (GLOBE_PASSES[globePass]?.width || 0)**2*2 : 0;
-  return continuityWorkerBytes + state.cpuBytesEstimated + continuityOverlayBytes() + preparingBytes;
+  const state=continuityTelemetry(), preparingBytes=globeWorker ? state.coarseRegistryBytesEstimated + state.hydrologyCpuBytesEstimated + 4096*1024 + (GLOBE_PASSES[globePass]?.width || 0)**2*2 : 0;
+  return continuityWorkerBytes + (inFlight ? NATURAL_WORKER_SCRATCH_RESERVE_BYTES : 0) + state.cpuBytesEstimated + continuityOverlayBytes() + preparingBytes;
 };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
@@ -196,8 +203,8 @@ function applyTileRenderTransform(tile: Tile, entity: pc.Entity) {
 }
 
 function positionActor(actor: pc.Entity, x: number, z: number) {
-  const point = renderFrame.sourceToRender(x, z, heightAt(x, z) + 1.65);
-  actor.setLocalPosition(point.x, point.y, point.z);
+  const point = renderFrame.sourceToRender(x, z, heightAt(x, z));
+  actor.setLocalPosition(point.x, point.y + 1.65, point.z);
 }
 
 function refreshRenderFrameTransforms() {
@@ -221,10 +228,10 @@ function flatWorldPoint(x: number, z: number, y: number): pc.Vec3 {
   if (projectionTransition <= 0.001)
     return new pc.Vec3(point.x, point.y, point.z);
   const focus = renderFrame.sourceToRender(view.x, view.z),
-    focusY = Math.max(0, heightAt(view.x, view.z));
+    focusY = elevationToRenderY(Math.max(0, heightAt(view.x, view.z)));
   return new pc.Vec3(
     point.x - focus.x,
-    PLANET_RADIUS + y - focusY,
+    PLANET_RADIUS + point.y - focusY,
     point.z - focus.z,
   );
 }
@@ -247,7 +254,7 @@ function surfaceAtScreen(x: number, y: number): LonLat | undefined {
   const yPlane =
     projectionTransition > 0.001
       ? PLANET_RADIUS
-      : Math.max(0, heightAt(view.x, view.z));
+      : elevationToRenderY(Math.max(0, heightAt(view.x, view.z)));
   const distance = (yPlane - origin.y) / direction.y;
   if (!Number.isFinite(distance) || distance < 0) return undefined;
   const point = origin.add(direction.mulScalar(distance)),
@@ -437,7 +444,7 @@ function applyPresentation() {
   );
   const active = projectionTransition > 0.001,
     fullGlobe = projectionTransition >= 0.999,
-    targetY = Math.max(0, heightAt(view.x, view.z)),
+    targetY = elevationToRenderY(Math.max(0, heightAt(view.x, view.z))),
     focusRender = renderFrame.sourceToRender(view.x, view.z);
   globeShown = fullGlobe;
   document.body.classList.toggle("globe-mode", fullGlobe);
@@ -468,7 +475,12 @@ function applyPresentation() {
     );
     camera.lookAt(focusRender.x, targetY, focusRender.z);
     camera.camera!.orthoHeight = view.halfHeight;
-    camera.camera!.farClip = 600000;
+    // Orthographic depth precision depends on the whole clip range. Keeping the
+    // realm-sized range at Street scale quantizes distinct seabed/water surfaces
+    // into the same depth on WebGL2. Bound it to the visible local footprint plus
+    // camera distance and generous terrain/model clearance; globe owns its lens.
+    camera.camera!.farClip = Math.max(512, distance +
+      2 * view.halfHeight * Math.hypot(1, camera.camera!.aspectRatio) + 128);
   }
   for (const material of [worldMaterial, terrainMaterial]) if (material) {
     // Replace terrain pixels rather than stacking translucent skirts over the
@@ -747,10 +759,12 @@ function processStreaming(material: pc.StandardMaterial) {
         request(tile);
       }
     }
+    const surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4;
+    const readyBytes = () => uploads.reduce((sum, job) => sum + estimateGeometryBytes(job.data), 0);
     const overCacheBudget = () =>
       tileCache.size > streamingBudget.cachedPatches ||
-      cachedGeometryBytes + continuityCpuBytes() > streamingBudget.cpuBytes ||
-      cachedGeometryBytes > streamingBudget.gpuBytes;
+      cachedGeometryBytes + readyBytes() + surfaceBytes + continuityCpuBytes() > streamingBudget.cpuBytes ||
+      cachedGeometryBytes + Math.ceil(surfaceBytes * 4 / 3) > streamingBudget.gpuBytes;
     if (overCacheBudget()) {
       const protect = new Set([
         ...activeKeys,
@@ -810,7 +824,7 @@ function inspectCell(screenX: number, screenY: number) {
   for (let distance = 0; distance <= 600000; distance += marchStep) {
     const point = origin.clone().add(direction.clone().mulScalar(distance));
     const source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y <= Math.max(0, heightAt(source.x, source.z))) {
+    if (point.y <= elevationToRenderY(visibleSurfaceElevation(finalSurfaceAt(source.x, source.z)))) {
       hit = distance;
       break;
     }
@@ -821,7 +835,7 @@ function inspectCell(screenX: number, screenY: number) {
     const middle = (before + hit) / 2,
       point = origin.clone().add(direction.clone().mulScalar(middle)),
       source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y > Math.max(0, heightAt(source.x, source.z))) before = middle;
+    if (point.y > elevationToRenderY(visibleSurfaceElevation(finalSurfaceAt(source.x, source.z)))) before = middle;
     else hit = middle;
   }
   const point = origin.add(direction.mulScalar(hit));
@@ -829,20 +843,22 @@ function inspectCell(screenX: number, screenY: number) {
     const source = renderFrame.renderToSource(point.x, point.z),
       canonical = renderFrame.renderToLonLat(point.x, point.z),
       cell = cellAt(source.x, source.z),
+      surface = finalSurfaceAt(source.x, source.z),
+      elevation = visibleSurfaceElevation(surface),
       hierarchy = cellSeed(cell.x, cell.z),
       canonicalId = canonicalCellId(canonical.lon, canonical.lat);
     selectedCode = canonicalId;
     $("cell-panel").hidden = false;
-    $("cell-biome").textContent = cell.biome;
+    $("cell-biome").textContent = surface.material;
     $("cell-coordinates").textContent =
       `${coordinateLabel(canonical, true)} · ${hierarchy.parent.parent.parent.landform}`;
     $("cell-code").textContent = canonicalId;
     $("cell-code").dataset.canonicalId = canonicalId;
-    $("cell-height").textContent = `${cell.elevation.toFixed(1)} m`;
+    $("cell-height").textContent = `${elevation.toFixed(1)} m`;
     $("cell-height").title =
-      `Canonical position: lon ${canonical.lon.toFixed(9)}, lat ${canonical.lat.toFixed(9)}, elevation ${cell.elevation.toFixed(2)} m`;
+      `Canonical position: lon ${canonical.lon.toFixed(9)}, lat ${canonical.lat.toFixed(9)}, elevation ${elevation.toFixed(2)} m`;
     $("cell-tile").textContent = `${cell.tile} · derived render tile`;
-    $("cell-walkable").textContent = cell.walkable ? "Yes" : "No";
+    $("cell-walkable").textContent = surface.walkable ? "Yes" : "No";
     $("copy-status").textContent = "";
     const patch = hierarchy.parent,
       district = patch.parent,
@@ -1317,10 +1333,10 @@ async function start() {
       const placeHeight = Math.max(0, heightAt(place.x, place.z)) + 2,
         localPoint = renderFrame.sourceToRender(place.x, place.z, placeHeight);
       if (projectionTransition > 0.001) {
-        const focusY = Math.max(0, heightAt(view.x, view.z));
+        const focusY = elevationToRenderY(Math.max(0, heightAt(view.x, view.z)));
         flatLabelPoint.set(
           localPoint.x - focusRender.x,
-          PLANET_RADIUS + placeHeight - focusY,
+          PLANET_RADIUS + localPoint.y - focusY,
           localPoint.z - focusRender.z,
         );
         const flatScreen = camera.camera!.worldToScreen(flatLabelPoint);
@@ -1348,7 +1364,7 @@ async function start() {
         )
           continue;
         screen = camera.camera!.worldToScreen(
-          new pc.Vec3(localPoint.x, placeHeight, localPoint.z),
+          new pc.Vec3(localPoint.x, localPoint.y, localPoint.z),
         );
       }
       if (
@@ -1464,15 +1480,15 @@ async function start() {
       point.height ??= Math.max(0, heightAt(point.x, point.z)) + 3;
       const local = renderFrame.sourceToRender(point.x, point.z, point.height);
       if (projectionTransition <= 0.001) {
-        const screen = camera.camera!.worldToScreen(new pc.Vec3(local.x, point.height, local.z));
+        const screen = camera.camera!.worldToScreen(new pc.Vec3(local.x, local.y, local.z));
         return { x: screen.x, y: screen.y };
       }
       // Handoff/globe: same flat-to-globe blend the place labels use.
       const focusRender = renderFrame.sourceToRender(view.x, view.z),
-        focusY = Math.max(0, heightAt(view.x, view.z));
+        focusY = elevationToRenderY(Math.max(0, heightAt(view.x, view.z)));
       flatLabelPoint.set(
         local.x - focusRender.x,
-        PLANET_RADIUS + point.height - focusY,
+        PLANET_RADIUS + local.y - focusY,
         local.z - focusRender.z,
       );
       const flatScreen = camera.camera!.worldToScreen(flatLabelPoint),
@@ -1526,6 +1542,7 @@ async function start() {
       cellSeed,
       geography: { continents, countries, cities, villages, roads },
       continuity: { inspect: inspectRegion, terrainQuery, telemetry: () => ({ ...continuityTelemetry(), worker: continuityWorkerState }), clearDetail: clearContinuityDetail, setOverlay: setContinuityOverlay },
+      hydrology: { topology: hydrologyTopology, access: freshwaterAccessAt, lakes: macroLakes, mountains: mountainSystems, anchors: finalSurfaceEvidenceAnchors, recipes: drainageRecipes, sampleSource: naturalSurfaceAt, toLonLat: sourceToLonLat, telemetry: hydrologyTelemetry },
       clock,
       planet: {
         radius: CANONICAL_PLANET_RADIUS,

@@ -4,6 +4,7 @@ import { finalSurfaceAt, finalSurfaceTelemetry } from "./world.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_RADIUS, lonLatToSource, sourceToLonLat, lonLatToUnit, type LonLat } from "./planet.ts";
 import { CONTINUITY_LIMITS, logicalRegion, regionBoundaries, boundaryPoint, recipeKey, boundaryIntersections, beginQuery, advanceQuery } from "./continuity.ts";
 import type { FinalSurface } from "./final-surface.ts";
+import { hydrologyTelemetry } from "./hydrology.ts";
 
 type Port = { id: string; edgeId: string; featureId: string; owner: string; position: LonLat; elevationM: number; widthM: number; shoulderSupportM: number; tangent: readonly [number, number]; grade: number; surface: FinalSurface; status: "legal" | "blocked"; crossing: "ground" | "bridge" };
 function surfaceSnapshot(surface:FinalSurface):FinalSurface { return Object.freeze({...surface,water:Object.freeze({...surface.water}),contributingModifierIds:Object.freeze([...surface.contributingModifierIds])}); }
@@ -102,5 +103,6 @@ export const { continuitySurfaceAt, registerContinuityPatch, continuityHeightAt,
 // Final-surface cache is shared with collision/traversal; reserve conservative object overhead.
 export function continuityTelemetry() {
   const state = runtime.continuityTelemetry(), sharedSurfaceCacheBytesEstimated = finalSurfaceTelemetry().cacheSize * 1024;
-  return { ...state, corridor: continuityCorridor.evidence, coarseRegistryBytesEstimated, sharedSurfaceCacheBytesEstimated, cpuBytesEstimated: state.cpuBytesEstimated + sharedSurfaceCacheBytesEstimated + coarseRegistryBytesEstimated };
+  const hydrologyCpuBytesEstimated=hydrologyTelemetry().cpuBytesEstimated;
+  return { ...state, corridor: continuityCorridor.evidence, coarseRegistryBytesEstimated, sharedSurfaceCacheBytesEstimated, hydrologyCpuBytesEstimated, cpuBytesEstimated: state.cpuBytesEstimated + sharedSurfaceCacheBytesEstimated + coarseRegistryBytesEstimated + hydrologyCpuBytesEstimated };
 }

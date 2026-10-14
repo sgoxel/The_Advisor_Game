@@ -69,7 +69,10 @@ for file in sys.argv[1:]:
         # of moved pixels into a large percentage. Broad/new seams still fail this
         # area gate and the independent new-edge-contrast gate.
         stable=~near_a
-        if stable.mean()<0.4: raise ValueError('Too little stable ground in fixture')
+        if stable.mean()<0.4:
+            raise ValueError(f"Too little stable ground in {file}: {pair['fixture']} "
+                             f"at height {pair['before']['height']} "
+                             f"({stable.mean():.3%}, {retained_image(pair['before'])})")
         mismatch=max(float((cb&~near_a).mean()),float((ca&~near_b).mean()))
         result={'fixture':pair['fixture'],'height':pair['before']['height'],'meanDeltaE76':float(d[stable].mean()),'p95DeltaE76':float(np.percentile(d[stable],95)),'stableGroundFraction':float(stable.mean()),'contourMismatchFraction':mismatch,'newEdgeContrast':float(max(0,edges(b)-edges(a)))}
         result['passed']=result['meanDeltaE76']<=2 and result['p95DeltaE76']<=5 and result['newEdgeContrast']<=3 and mismatch<=0.005

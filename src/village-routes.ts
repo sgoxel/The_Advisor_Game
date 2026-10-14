@@ -12,6 +12,7 @@
 import { roads, villages, type Place } from "./geography.ts";
 import {
   enuToPosition,
+  CANONICAL_METRES_PER_SOURCE_UNIT,
   greatCircleDistance,
   lonLatToFlat,
   positionToEnu,
@@ -163,6 +164,12 @@ function directSeededRoad(from: Place, to: Place): RouteResult | undefined {
   );
   if (!road) return undefined;
   const geodesicM = greatCircleDistance(from.canonicalPosition, to.canonicalPosition);
+  const forward=road.centerline ? road.centerline.map(p=>({lon:p.position.lon,lat:p.position.lat})) : Array.from({length:Math.max(2,Math.ceil(road.presentationLengthSourceUnits*CANONICAL_METRES_PER_SOURCE_UNIT/300)+1)},(_,i)=>{const count=Math.max(2,Math.ceil(road.presentationLengthSourceUnits*CANONICAL_METRES_PER_SOURCE_UNIT/300)+1),t=i/(count-1);return sourceToLonLat(road.fromX+(road.toX-road.fromX)*t,road.fromZ+(road.toZ-road.fromZ)*t);});
+  const points = road.from === from.id ? forward : forward.reverse();
+  // Preserve exact canonical registry endpoints, avoiding round-trip longitude
+  // rounding when the interior stations are derived in source coordinates.
+  points[0] = { lon: from.canonicalPosition.lon, lat: from.canonicalPosition.lat };
+  points[points.length - 1] = { lon: to.canonicalPosition.lon, lat: to.canonicalPosition.lat };
   return {
     found: true,
     geodesicM,
@@ -171,10 +178,7 @@ function directSeededRoad(from: Place, to: Place): RouteResult | undefined {
     realSeconds: realSecondsForFantasy(geodesicM / GOOD_ROAD_WALK_SPEED_MPS),
     straightLineFantasySeconds: geodesicM / FASTEST_WALK_SPEED_MPS,
     detourFactor: 1,
-    points: [
-      { lon: from.canonicalPosition.lon, lat: from.canonicalPosition.lat },
-      { lon: to.canonicalPosition.lon, lat: to.canonicalPosition.lat },
-    ],
+    points,
     surfaceM: { road: geodesicM, bridge: 0, open: 0, difficult: 0 },
     // Non-zero documents that this fast candidate is final-cell sampled, not an
     // unvalidated metadata shortcut.

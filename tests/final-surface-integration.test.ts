@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {naturalSurfaceAt} from "../src/hydrology.ts";
 import { places, roads, villages } from "../src/geography.ts";
 import { WORLD_BUILDING_PRIORITIES } from "../src/final-surface.ts";
 import {
   RURAL_BRIDGE_MAX_LENGTH_M,
-  REPRESENTATIVE_BRIDGE_SPAN_M,
+  finalSurfaceEvidenceAnchors,
   finalSurfaceAt,
   finalSurfaceDebugAt,
   finalSurfaceTelemetry,
@@ -63,16 +64,9 @@ test("road cut/fill is bounded, priority-8, and includes real cut evidence", () 
 });
 
 test("bridge deck preserves authoritative water and obeys the 120m rural cap", () => {
-  assert.ok(REPRESENTATIVE_BRIDGE_SPAN_M > 0);
-  assert.ok(
-    REPRESENTATIVE_BRIDGE_SPAN_M <= RURAL_BRIDGE_MAX_LENGTH_M,
-    `representative span ${REPRESENTATIVE_BRIDGE_SPAN_M}m exceeds ${RURAL_BRIDGE_MAX_LENGTH_M}m`,
-  );
-  const road = roads[0],
-    bridge = finalSurfaceDebugAt(
-      (road.fromX + road.toX) / 2,
-      (road.fromZ + road.toZ) / 2,
-    );
+  const anchors=finalSurfaceEvidenceAnchors();
+  assert.ok(anchors.bridgeSpanM>0&&anchors.bridgeSpanM<=RURAL_BRIDGE_MAX_LENGTH_M);
+  const bridge=finalSurfaceDebugAt(anchors.bridge.x,anchors.bridge.z);
   assert.notEqual(bridge.base.water.kind, "none");
   assert.equal(bridge.final.water.kind, bridge.base.water.kind);
   assert.equal(bridge.final.groundHeight, bridge.base.groundHeight);
@@ -113,4 +107,28 @@ test("final-surface memoization is bounded and exposes deterministic hit/miss te
   assert.equal(telemetry.cacheHits, 1);
   assert.ok(telemetry.cacheSize <= telemetry.cacheLimit);
   assert.ok(telemetry.worstModifierCandidates <= 128, `unbounded modifier candidates: ${telemetry.worstModifierCandidates}`);
+});
+
+test("a legal deck has one cross-road stage instead of separate side profiles", () => {
+  const anchors = finalSurfaceEvidenceAnchors();
+  const road = roads.find(r => r.code === anchors.roadCode)!;
+  const dx=road.toX-road.fromX,dz=road.toZ-road.fromZ,length=Math.hypot(dx,dz);
+  const centre=finalSurfaceAt(anchors.bridge.x,anchors.bridge.z);
+  for(const offset of [-1,1]) {
+    const side=finalSurfaceAt(anchors.bridge.x-dz/length*offset,anchors.bridge.z+dx/length*offset);
+    assert.ok(side.deckHeight!==null,"crossing width must retain its explicit deck");
+    assert.ok(Math.abs(side.deckHeight!-centre.deckHeight!)<1e-6,"deck stage must agree across its width");
+  }
+});
+
+
+test("the real crossing bank overlap cannot create a shelf over its channel", () => {
+  const p=finalSurfaceEvidenceAnchors().bridge;
+  const channel=naturalSurfaceAt(p.x,p.z);
+  const bank=naturalSurfaceAt(p.x+3.75,p.z+6.75);
+  assert.equal(channel.water.kind,"river");
+  assert.equal(bank.material,"Riverbank");
+  assert.equal(bank.water.kind,"none");
+  assert.ok(bank.groundHeight>=channel.water.level);
+  assert.ok(bank.groundHeight<=channel.water.level+1,"overlapping banks conceal the real crossing");
 });

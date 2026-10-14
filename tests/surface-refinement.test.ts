@@ -1,3 +1,5 @@
+import {CANONICAL_METRES_PER_SOURCE_UNIT} from "../src/planet.ts";
+import {convertTileGeometryToEnu} from "../src/render-frame.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildTile } from "../src/geometry.ts";
@@ -8,39 +10,69 @@ import {
   refineTileSurfacePresentation,
   refinementResolutionForTile,
 } from "../src/surface-refinement.ts";
-import { tileAt, tileForPosition } from "../src/world.ts";
+import {
+  finalSurfaceAt,
+  finalSurfaceEvidenceAnchors,
+  tileAt,
+  tileForPosition,
+} from "../src/world.ts";
 
 const hasVertexColor = (colors: Uint8Array, rgb: readonly number[]) => {
   for (let i = 0; i < colors.length; i += 4)
-    if (colors[i] === rgb[0] && colors[i + 1] === rgb[1] && colors[i + 2] === rgb[2])
+    if (
+      colors[i] === rgb[0] &&
+      colors[i + 1] === rgb[1] &&
+      colors[i + 2] === rgb[2]
+    )
       return true;
   return false;
 };
 
 test("surface refinement remains bounded by tile size", () => {
   assert.equal(refinementResolutionForTile(tileAt(11, 0, 0), true, true), 0);
+  assert.equal(refinementResolutionForTile(tileAt(10, 0, 0), false, true), 0);
+  assert.equal(refinementResolutionForTile(tileAt(9, 0, 0), false, true), 0);
+  assert.equal(refinementResolutionForTile(tileAt(8, 0, 0), false, true), 0);
+  assert.equal(refinementResolutionForTile(tileAt(7, 0, 0), false, true), 0);
+  assert.equal(refinementResolutionForTile(tileAt(6, 0, 0), false, true), 0);
   assert.equal(refinementResolutionForTile(tileAt(12, 0, 0), true, false), 32);
   assert.equal(refinementResolutionForTile(tileAt(14, 0, 0), false, true), 16);
   assert.equal(refinementResolutionForTile(tileAt(14, 0, 0), false, false), 0);
 });
 
-test("representative crossing replaces the legacy slab with a narrow authoritative deck", () => {
-  const road = roads[0];
-  assert.ok(road);
-  const x = (road.fromX + road.toX) / 2,
-    z = (road.fromZ + road.toZ) / 2,
+test("an actual natural-water road crossing refines to a narrow authoritative deck", () => {
+  const evidence = finalSurfaceEvidenceAnchors(),
+    road = roads.find((candidate) => candidate.code === evidence.roadCode);
+  assert.ok(road, `missing evidence road ${evidence.roadCode}`);
+  assert.ok(evidence.bridgeSpanM > 0 && evidence.bridgeSpanM <= 120);
+
+  const x = evidence.bridge.x,
+    z = evidence.bridge.z,
     tile = tileForPosition(x, z, 14),
     base = buildTile(tile),
     terrainVertices = base.terrain.positions.length,
     refined = refineTileSurfacePresentation(tile, base);
-  assert.ok(refined.terrain.positions.length > terrainVertices, "alias-prone bank must receive finer canonical samples");
+  assert.ok(
+    refined.terrain.positions.length > terrainVertices,
+    "natural bank must receive finer canonical samples",
+  );
   assert.ok(refined.terrain.uvs);
-  assert.equal(refined.terrain.uvs!.length, (refined.terrain.positions.length / 3) * 2);
-  assert.ok(hasVertexColor(refined.structures.colors, REFINED_BRIDGE_RGB), "refined deck must be rendered");
-  assert.equal(hasVertexColor(refined.structures.colors, [115, 88, 56]), false, "legacy wide slab must be removed");
+  assert.equal(
+    refined.terrain.uvs!.length,
+    (refined.terrain.positions.length / 3) * 2,
+  );
+  assert.ok(
+    hasVertexColor(refined.structures.colors, REFINED_BRIDGE_RGB),
+    "refined deck must be rendered at the actual natural crossing",
+  );
+  assert.equal(
+    hasVertexColor(refined.structures.colors, [115, 88, 56]),
+    false,
+    "legacy wide slab must be removed",
+  );
 
-  const vx = road.toX - road.fromX,
-    vz = road.toZ - road.fromZ,
+  const vx = road!.toX - road!.fromX,
+    vz = road!.toZ - road!.fromZ,
     length = Math.hypot(vx, vz),
     ux = vx / length,
     uz = vz / length,
@@ -48,6 +80,7 @@ test("representative crossing replaces the legacy slab with a narrow authoritati
     originZ = tile.minZ + tile.size / 2;
   let maxAcross = 0,
     matched = 0;
+  const physicalDeckChecks: {vertex:number;metres:number}[]=[];
   for (let vertex = 0; vertex < refined.structures.positions.length / 3; vertex++) {
     const c = vertex * 4;
     if (
@@ -62,6 +95,8 @@ test("representative crossing replaces the legacy slab with a narrow authoritati
       dx = px - x,
       dz = pz - z,
       across = Math.abs(dx * -uz + dz * ux);
+    const expected=finalSurfaceAt(px,pz).deckHeight;
+    if(expected!==null)physicalDeckChecks.push({vertex,metres:expected+.1});
     maxAcross = Math.max(maxAcross, across);
     matched++;
   }
@@ -70,4 +105,9 @@ test("representative crossing replaces the legacy slab with a narrow authoritati
     maxAcross <= REFINED_BRIDGE_HALF_WIDTH_SOURCE + 0.05,
     `bridge half-width ${maxAcross} exceeded ${REFINED_BRIDGE_HALF_WIDTH_SOURCE}`,
   );
+  convertTileGeometryToEnu(tile,refined);
+  assert.ok(physicalDeckChecks.length>1);
+  for(const check of physicalDeckChecks) {
+    assert.ok(Math.abs(refined.structures.positions[check.vertex*3+1]*CANONICAL_METRES_PER_SOURCE_UNIT-check.metres)<.015,"rendered deck must agree with canonical metre height");
+  }
 });

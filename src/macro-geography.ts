@@ -1,4 +1,4 @@
-import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
+import { COARSE_GEOGRAPHY_VERSION as WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
   CANONICAL_PLANET_RADIUS,
   clampLatitude,

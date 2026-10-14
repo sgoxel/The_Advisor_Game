@@ -1,9 +1,11 @@
+import {elevationToRenderY} from "./render-frame.ts";
 import { featuresFor, field, type Tile } from "./world.ts";
 import { continuitySurfaceAt as finalSurfaceAt, continuityHeightAt as heightAt, registerContinuityPatch } from "./continuity-runtime.ts";
 import { roads } from "./geography.ts";
 import { roadFragmentsInBounds, clippedStationRange } from "./continuity-corridor.ts";
+import { naturalElevationAt, naturalSurfaceAt, freshwaterCrossingSpanMAt } from "./hydrology.ts";
 import { macroSampleAt } from "./macro-geography.ts";
-import { sourceToLonLat, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
+import { sourceToLonLat, SOURCE_PRESENTATION_WIDTH, CANONICAL_METRES_PER_SOURCE_UNIT } from "./planet.ts";
 import {
   climateSampleAt,
   polarBoundaryAt,
@@ -191,6 +193,7 @@ export function terrainTint(
   z: number,
   scale = 32,
   elevationM?: number,
+  featureFootprintSource = 0,
 ): [number, number, number] {
   const position = sourceToLonLat(x, z),
     macro = macroSampleAt(position),
@@ -200,8 +203,8 @@ export function terrainTint(
 
   // Hydrology and prepared ground come from the composed surface, never from a
   // parallel river/road/settlement hit test in presentation code.
-  if (surface.water.kind === "river") return color(76, 128, 148);
-  if (surface.groundMaterial === "Riverbank") return color(151, 143, 99);
+  if (surface.water.kind === "river" && !featureFootprintSource) return color(76, 128, 148);
+
   if (
     surface.water.kind === "none" &&
     (surface.groundMaterial === "Road" || surface.groundMaterial === "Settlement")
@@ -282,7 +285,30 @@ export function terrainTint(
 
   const protectedSurface = snowWeight > 0.65 || polarWeight > 0.65,
     tint = varyColor(base, variation * (protectedSurface ? 0.3 : 1));
-  return tint;
+  let result=tint;
+  if(surface.groundMaterial==='Riverbank'){
+    const natural=naturalSurfaceAt(x,z),bankWeight=Math.max(0,Math.min(1,(.9-natural.vegetationDensityScale)/.56));
+    result=blendColor(result,color(151,143,99),bankWeight*.75);
+    result=blendColor(result,TERRAIN_PALETTE.cliff,smoothstep(.25,.68,natural.slope)*.6);
+  }
+  if(surface.water.kind==='river'){
+    // A sub-texel channel occupies a fraction of a coarse albedo texel; it must
+    // not become a full lake-sized blue dot. This filters presentation only.
+    const coverage=Math.min(1,freshwaterCrossingSpanMAt(x,z)/(CANONICAL_METRES_PER_SOURCE_UNIT*Math.max(1,featureFootprintSource)));
+    result=blendColor(result,color(76,128,148),coverage);
+  }
+  if(macro.mountainIntensity>.15&&surface.water.kind==='none'){
+    // Fixed coordinate hill shading reads the same natural relief at every LOD.
+    const h=12,east=(naturalElevationAt(x+h,z)-naturalElevationAt(x-h,z))/(2*h*CANONICAL_METRES_PER_SOURCE_UNIT*Math.max(.1,Math.cos(position.lat))),
+      south=(naturalElevationAt(x,z+h)-naturalElevationAt(x,z-h))/(2*h*CANONICAL_METRES_PER_SOURCE_UNIT),
+      // Fixed cartographic relief lighting: exaggeration improves top-down
+      // readability, while normalization avoids broad clipped light patches.
+      gx=east*40,gz=south*40,
+      shade=Math.max(.58,Math.min(1.25,(Math.SQRT1_2-(gx+gz)*.5)/(Math.SQRT1_2*Math.sqrt(1+gx*gx+gz*gz))));
+    const reliefWeight=smoothstep(.15,.4,macro.mountainIntensity);
+    result=result.map(v=>Math.max(0,Math.min(255,v*(1+(shade-1)*reliefWeight)))) as [number,number,number];
+  }
+  return result;
 }
 
 /** Worker-generated tile meshes. Skirts cover cracks between terrain LOD levels. */
@@ -369,7 +395,7 @@ export function buildTile(t: Tile): TileGeometry {
   );
   if (t.size <= 512)
     for (const f of featuresFor(t)) {
-      const { x, y, z, variant: v } = f;
+      const { x, z, variant: v } = f, y = elevationToRenderY(f.y);
       const stone = color(167, 165, 144),
         timber = color(75, 58, 43),
         plaster = color(210, 190, 145);
@@ -555,7 +581,7 @@ export function buildTile(t: Tile): TileGeometry {
             continue;
           const surface = finalSurfaceAt(mx, mz);
           if (surface.deckHeight === null) continue;
-          const y = surface.deckHeight + 0.1,
+          const y = elevationToRenderY(surface.deckHeight + 0.1),
             deck = color(115, 88, 56);
           structures.quad(
             [x0 + nx, y, z0 + nz],

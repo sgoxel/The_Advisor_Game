@@ -22,7 +22,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S003 — Natural World & Surface Authority
 
-- WP-S003-003-001 — README-compatible natural terrain/hydrology + player readability/performance: canonical drainage/walkability, smooth coasts/relief, bounded mobile generation and renderer parity
+- WP-S003-003-001 — README-compatible natural terrain/hydrology + player readability/performance: canonical drainage/walkability, smooth coasts/relief, bounded mobile generation and renderer parity — IN PROGRESS
 
 ## STAGE S004 — Settlements, Buildings & World Sites
 

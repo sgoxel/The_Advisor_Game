@@ -1,3 +1,4 @@
+import {rebuildNaturalSurface} from "../src/natural-surface-mesh.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { canonicalCell, sourceToLonLat, lonLatToSource, cubeFaceToUnit, unitToLonLat, type CubeFace } from "../src/planet.ts";
@@ -11,27 +12,34 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_RADIUS } from "..
 import { defineContinuityCorridor, clippedStationRange, CORRIDOR_LIMITS } from "../src/continuity-corridor.ts";
 import { canonicalCellNeighbor, canonicalCellCenter } from "../src/spatial-authority.ts";
 import { buildTile } from "../src/geometry.ts";
-import { refineTileSurfacePresentation, REFINED_ROAD_RGB } from "../src/surface-refinement.ts";
+import { refineTileSurfacePresentation } from "../src/surface-refinement.ts";
 import { tileAt, tileForPosition } from "../src/world.ts";
 
 const focus = sourceToLonLat((roads[0].fromX + roads[0].toX)/2, (roads[0].fromZ + roads[0].toZ)/2);
 const service = () => createContinuityService("fixture", roads, finalSurfaceAt);
-test("coarse coverage retains no fine ribbon work and local lake-detour strips follow composed truth", () => {
+test("coarse coverage retains no fine work and the local lake-detour ground follows composed truth", () => {
   const root=tileAt(0,0,0),empty={positions:new Float32Array(),normals:new Float32Array(),colors:new Uint8Array(),indices:new Uint32Array()},
     coarse={terrain:empty,structures:empty,nature:empty,detail:empty};
   assert.equal(refineTileSurfacePresentation(root,coarse),coarse);
   assert.equal(coarse.structures.positions.length,0);
   const corridor=roads.find(road=>road.centerline)!;
   assert.ok(corridor);
-  const station=corridor.centerline![16],tile=tileForPosition(station.x,station.z,14),result=refineTileSurfacePresentation(tile,buildTile(tile)),originX=tile.minX+tile.size/2,originZ=tile.minZ+tile.size/2;
+  const station=corridor.centerline![16],tile=tileForPosition(station.x,station.z,14),base=buildTile(tile),natural=rebuildNaturalSurface(tile,base.terrain);
+  base.terrain=natural.geometry;
+  const result=refineTileSurfacePresentation(tile,base,natural.replaced),originX=tile.minX+tile.size/2,originZ=tile.minZ+tile.size/2;
   let rendered=0;
-  for(let vertex=0;vertex<result.structures.positions.length/3;vertex++){
-    if(!REFINED_ROAD_RGB.every((value,i)=>result.structures.colors[vertex*4+i]===value))continue;
-    const p=vertex*3,surface=finalSurfaceAt(originX+result.structures.positions[p],originZ+result.structures.positions[p+2]);
-    assert.equal(surface.water.kind,"none");assert.ok(surface.walkable);rendered++;
+  for(let vertex=0;vertex<result.terrain.positions.length/3;vertex++) {
+    if(result.terrain.normals[vertex*3+1]<=0||![170,151,113].every((value,i)=>result.terrain.colors[vertex*4+i]===value))continue;
+    const p=vertex*3,x=originX+result.terrain.positions[p],z=originZ+result.terrain.positions[p+2];
+    const surface=finalSurfaceAt(x,z);
+    if(surface.groundMaterial!=="Road"||surface.reservedUse!==corridor.code||roadDistanceAt(x,z,corridor)>=5)continue;
+    assert.equal(surface.water.kind,"none");assert.ok(surface.walkable);
+    assert.ok(Math.abs(result.terrain.positions[p+1]-surface.groundHeight)<.026,"rendered detour must follow its actual prepared height");
+    assert.deepEqual(Array.from(result.terrain.colors.slice(vertex*4,vertex*4+3)),[170,151,113],"detour must be visible on the common ground");
+    rendered++;
   }
-  assert.ok(rendered>0,"actual polyline detour must receive local prepared geometry");
-  assert.ok(result.structures.positions.length/3<4096,"local strips must remain bounded by clipped stations");
+  assert.ok(rendered>0,"actual polyline detour must receive visible local prepared ground");
+  assert.ok(result.terrain.positions.length/3<4096,"local prepared ground must retain the fixed geometry bound");
 });
 test("integer geometric boundaries have exactly two incident owners across six faces and corners", () => {
   const edges = new Map<string, number>();
@@ -56,7 +64,6 @@ test("ten SEED macro plans reconstruct shared terrain/road profiles in shuffled,
         return composeFinalSurface({groundHeight:wet?-1.2:5+terrain.reliefM,material:wet?"Lake":"Meadow",water:{kind:wet?"lake":"none",level:wet?0:-Infinity,flowX:0,flowZ:0},walkable:!wet,vegetationDensityScale:1,reservedUse:null},roadDistanceAt(x,z,road)<5?[{id:road.code,priority:8,material:"Road",vegetationDensityScale:0}]:[]);
       }, region = logicalRegion(point,seed), cells = [region, canonicalCellNeighbor(region,1,0,seed), canonicalCellNeighbor(region,0,1,seed)],
       points = cells.map(cell => boundaryPoint(regionBoundaries(cell,seed)[0],.5));
-    // Production macro fields/composer with a SEED-specific proof topology, not ten aliases of one world.
     const a = createContinuityService(seed,[road],sample), expected = points.map(point => a.inspectRegion(point));
     assert.ok(expected.some(result=>result.ports.length));
     for (const order of [[2,0,1],[2,1,0],[0,1,2]]) for (const i of order) {
@@ -105,7 +112,6 @@ test("deterministic continuation quotas and cancellation cannot select a differe
     while(cursor.status!=="complete") cursor=job.advance(cursor,quota);
     assert.equal(cursor.values.length,81);
     assert.equal(a.continuityTelemetry().pendingQueries,0);
-    // Compare the same quantized positions (same recipe at every quota).
     const direct=advanceQuery(beginQuery("address",positions),p=> {const s=lonLatToSource(p.lon,p.lat);return finalSurfaceAt(s.x,s.z);},81);
     assert.deepEqual(cursor.values,direct.values);
   }
@@ -124,10 +130,14 @@ test("unrelated metadata grows only coarse scan cost, never local fine generatio
 });
 test("persisted revision survives detail eviction without changing semantic port identity", () => {
   const original=service().inspectRegion(focus), events=[{id:"closed-road",sequence:1,time:"0126-12-04 22:00:00",featureId:roads[0].code}],
+    affectedIds=original.ports.filter(port=>port.surface.contributingModifierIds.includes(events[0].featureId)).map(port=>port.id),
     sample=(x:number,z:number)=>{const value=finalSurfaceAt(x,z);return value.contributingModifierIds.includes(events[0].featureId)?{...value,walkable:false,traversal:"blocked" as const}:value;},
-    a=createContinuityService("fixture",roads,sample,"event-1"), changed=a.inspectRegion(focus);
-  assert.ok(changed.ports.every(port=>port.status==="blocked"));
+    a=createContinuityService("fixture",roads,sample,"event-1"), changed=a.inspectRegion(focus),
+    changedById=new Map(changed.ports.map(port=>[port.id,port]));
+  assert.ok(affectedIds.length>0,"fixture must contain at least one crossing affected by the persisted road revision");
+  assert.ok(affectedIds.every(id=>changedById.get(id)?.status==="blocked"));
   assert.deepEqual(changed.ports.map(p=>p.id),original.ports.map(p=>p.id));
+  for(const port of original.ports)if(!affectedIds.includes(port.id))assert.deepEqual(changedById.get(port.id),port);
   for(let i=0;i<10;i++){a.clearContinuityDetail();assert.deepEqual(a.inspectRegion(focus),changed);}
   const replay=createContinuityService("fixture",roads,sample,"event-1");
   assert.deepEqual(replay.inspectRegion(focus),changed);

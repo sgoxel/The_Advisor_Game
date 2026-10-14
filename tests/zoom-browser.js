@@ -21,13 +21,23 @@ export function zoomTests(test, expect, webgl2) {
     await page.locator('#structures').uncheck();
     await page.locator('#nature').uncheck();
     await page.getByRole('button',{name:'Minimize map information',exact:true}).click();
-    await page.addStyleTag({content: '.place-label, #place-labels, #route-overlay { visibility:hidden !important; }'});
+    await page.addStyleTag({content: '#map-labels, #political-labels, #route-overlay { visibility:hidden !important; }'});
+    expect(await page.evaluate(()=>['map-labels','political-labels'].every(id=>{
+      const layer=document.getElementById(id);
+      return layer && getComputedStyle(layer).visibility==='hidden';
+    }))).toBeTruthy();
     const backend=webgl2?'webgl2':'webgpu', out=`test-results/zoom-${backend}`;
     fs.mkdirSync(out,{recursive:true});
     const records=[];
     const capture=async(name,height)=>{
       await page.evaluate(h=>window.advisorWorld.setHalfHeight(h),height);
-      await page.waitForFunction(()=>window.advisorWorld.state.settled,null,{timeout:180000});
+      // `settled` becomes true at the end of the LOD blend; cache reclamation runs
+      // on the immediately following update. Require both conditions so the gate
+      // measures the stable view, while still failing if reclamation never succeeds.
+      await page.waitForFunction(()=>{
+        const state=window.advisorWorld.state;
+        return state.settled && state.performance.withinBudget;
+      },null,{timeout:180000});
       const state=await page.evaluate(()=>{
         const w=window.advisorWorld,s=w.state,f=s.navigation.focus;
         return {focus:f, sample:w.surface.sample(f.lon,f.lat), surface:s.surface, levels:s.levels, footprint:s.canonicalFootprintM, handoff:s.handoff, performance:s.performance};

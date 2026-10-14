@@ -1,4 +1,4 @@
-import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
+import { WORLD_FOUNDATION_VERSION, COARSE_GEOGRAPHY_VERSION, WORLD_SEED } from "./config.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import {
   CANONICAL_PLANET_RADIUS,
@@ -98,7 +98,7 @@ function digest(text: string): number {
 }
 
 function addressed(address: string) {
-  return digest(`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/CLIMATE/${address}`) / 4294967296;
+  return digest(`${WORLD_SEED}/${COARSE_GEOGRAPHY_VERSION}/CLIMATE/${address}`) / 4294967296;
 }
 
 const phase = (address: string) => addressed(address) * TAU;
