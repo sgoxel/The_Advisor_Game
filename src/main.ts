@@ -474,7 +474,12 @@ function applyPresentation() {
     );
     camera.lookAt(focusRender.x, targetY, focusRender.z);
     camera.camera!.orthoHeight = view.halfHeight;
-    camera.camera!.farClip = 600000;
+    // Orthographic depth precision depends on the whole clip range. Keeping the
+    // realm-sized range at Street scale quantizes distinct seabed/water surfaces
+    // into the same depth on WebGL2. Bound it to the visible local footprint plus
+    // camera distance and generous terrain/model clearance; globe owns its lens.
+    camera.camera!.farClip = Math.max(512, distance +
+      2 * view.halfHeight * Math.hypot(1, camera.camera!.aspectRatio) + 128);
   }
   for (const material of [worldMaterial, terrainMaterial]) if (material) {
     // Replace terrain pixels rather than stacking translucent skirts over the
