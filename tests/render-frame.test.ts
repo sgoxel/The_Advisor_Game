@@ -8,6 +8,7 @@ import {
   REBASE_THRESHOLD_M,
   LocalRenderFrame,
   convertTileGeometryToEnu,
+  visibleSurfaceElevation,
 } from "../src/render-frame.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
@@ -16,7 +17,8 @@ import {
   normalizeLongitude,
   sourceToLonLat,
 } from "../src/planet.ts";
-import { tileAt } from "../src/world.ts";
+import { tileAt, cellAt, finalSurfaceAt, finalSurfaceEvidenceAnchors } from "../src/world.ts";
+import { drainageRecipes } from "../src/hydrology.ts";
 
 const close = (actual: number, expected: number, tolerance: number, message?: string) =>
   assert.ok(
@@ -228,4 +230,18 @@ test("canonical terrain metres use the same display scale as horizontal distance
   }
   const frame=new LocalRenderFrame(tile.minX,tile.minZ);
   assert.ok(Math.abs(frame.sourceToRender(tile.minX,tile.minZ,20).y*CANONICAL_METRES_PER_SOURCE_UNIT-20)<1e-9);
+});
+
+test("visible point inspection follows exposed ground, water and legal decks without cell-centre snapping", () => {
+  const cliff={x:-26817.80086086045,z:27316.75066655874},
+    surface=finalSurfaceAt(cliff.x,cliff.z),cell=cellAt(cliff.x,cliff.z);
+  assert.ok(Math.abs(surface.groundHeight-cell.elevation)>5,"real steep-bank regression must expose the snap error");
+  assert.equal(visibleSurfaceElevation(surface),surface.groundHeight);
+  const anchor=finalSurfaceEvidenceAnchors().bridge,deck=finalSurfaceAt(anchor.x,anchor.z);
+  assert.ok(deck.deckHeight!==null);
+  assert.equal(visibleSurfaceElevation(deck),deck.deckHeight);
+  const outlet=drainageRecipes[0].points.at(-1)!,water=finalSurfaceAt(outlet.x,outlet.z);
+  assert.notEqual(water.water.kind,"none");
+  assert.equal(visibleSurfaceElevation(water),water.water.level);
+  assert.ok(visibleSurfaceElevation(water)>water.groundHeight,"clicks must hit the water, not the submerged bed");
 });

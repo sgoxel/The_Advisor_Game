@@ -1,5 +1,6 @@
 import type { Tile } from "./world.ts";
 import type { Geometry, TileGeometry } from "./geometry.ts";
+import type { FinalSurface } from "./final-surface.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
   CANONICAL_PLANET_RADIUS,
@@ -14,6 +15,11 @@ import {
 
 /** Canonical elevation is metres; the renderer uses the same scale on all axes. */
 export const elevationToRenderY = (metres: number) => metres / CANONICAL_METRES_PER_SOURCE_UNIT;
+
+/** The visible hit is a legal deck, water level, or exposed composed ground. */
+export const visibleSurfaceElevation = (surface: Pick<FinalSurface, "deckHeight" | "groundHeight" | "water">) =>
+  surface.deckHeight ?? (surface.water.kind === "none" ? surface.groundHeight :
+    surface.water.level ?? surface.groundHeight);
 
 /** Detailed GPU coordinates must remain inside this canonical-metre envelope. */
 export const GPU_LOCAL_LIMIT_M = 8_192;

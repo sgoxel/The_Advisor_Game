@@ -1,4 +1,4 @@
-import {elevationToRenderY} from "./render-frame.ts";
+import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import "./style.css";
 import {
@@ -7,6 +7,7 @@ import {
   cellAt,
   cellSeed,
   heightAt,
+  finalSurfaceAt,
   finalSurfaceEvidenceAnchors,
   selectTiles,
   tileAt,
@@ -823,7 +824,7 @@ function inspectCell(screenX: number, screenY: number) {
   for (let distance = 0; distance <= 600000; distance += marchStep) {
     const point = origin.clone().add(direction.clone().mulScalar(distance));
     const source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y <= elevationToRenderY(Math.max(0, heightAt(source.x, source.z)))) {
+    if (point.y <= elevationToRenderY(visibleSurfaceElevation(finalSurfaceAt(source.x, source.z)))) {
       hit = distance;
       break;
     }
@@ -834,7 +835,7 @@ function inspectCell(screenX: number, screenY: number) {
     const middle = (before + hit) / 2,
       point = origin.clone().add(direction.clone().mulScalar(middle)),
       source = renderFrame.renderToSource(point.x, point.z);
-    if (point.y > elevationToRenderY(Math.max(0, heightAt(source.x, source.z)))) before = middle;
+    if (point.y > elevationToRenderY(visibleSurfaceElevation(finalSurfaceAt(source.x, source.z)))) before = middle;
     else hit = middle;
   }
   const point = origin.add(direction.mulScalar(hit));
@@ -842,20 +843,22 @@ function inspectCell(screenX: number, screenY: number) {
     const source = renderFrame.renderToSource(point.x, point.z),
       canonical = renderFrame.renderToLonLat(point.x, point.z),
       cell = cellAt(source.x, source.z),
+      surface = finalSurfaceAt(source.x, source.z),
+      elevation = visibleSurfaceElevation(surface),
       hierarchy = cellSeed(cell.x, cell.z),
       canonicalId = canonicalCellId(canonical.lon, canonical.lat);
     selectedCode = canonicalId;
     $("cell-panel").hidden = false;
-    $("cell-biome").textContent = cell.biome;
+    $("cell-biome").textContent = surface.material;
     $("cell-coordinates").textContent =
       `${coordinateLabel(canonical, true)} · ${hierarchy.parent.parent.parent.landform}`;
     $("cell-code").textContent = canonicalId;
     $("cell-code").dataset.canonicalId = canonicalId;
-    $("cell-height").textContent = `${cell.elevation.toFixed(1)} m`;
+    $("cell-height").textContent = `${elevation.toFixed(1)} m`;
     $("cell-height").title =
-      `Canonical position: lon ${canonical.lon.toFixed(9)}, lat ${canonical.lat.toFixed(9)}, elevation ${cell.elevation.toFixed(2)} m`;
+      `Canonical position: lon ${canonical.lon.toFixed(9)}, lat ${canonical.lat.toFixed(9)}, elevation ${elevation.toFixed(2)} m`;
     $("cell-tile").textContent = `${cell.tile} · derived render tile`;
-    $("cell-walkable").textContent = cell.walkable ? "Yes" : "No";
+    $("cell-walkable").textContent = surface.walkable ? "Yes" : "No";
     $("copy-status").textContent = "";
     const patch = hierarchy.parent,
       district = patch.parent,
