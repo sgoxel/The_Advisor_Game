@@ -309,10 +309,10 @@ function settlementTerraceHeight(place: Place) {
 
 function roadTangentAt(x:number,z:number,road:Road) {
   const path=road.centerline || [{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}];
-  let best=Infinity,result={x:wrapSourceX(road.toX-road.fromX),z:road.toZ-road.fromZ};
+  let best=Infinity,result={x:wrapSourceX(road.toX-road.fromX),z:road.toZ-road.fromZ,cx:x,cz:z};
   for(let i=1;i<path.length;i++){
     const a=path[i-1],b=path[i],dx=wrapSourceX(b.x-a.x),dz=b.z-a.z,qx=wrapSourceX(x-a.x),qz=z-a.z,t=Math.max(0,Math.min(1,(qx*dx+qz*dz)/(dx*dx+dz*dz||1))),distance=Math.hypot(qx-dx*t,qz-dz*t);
-    if(distance<best){best=distance;result={x:dx,z:dz};}
+    if(distance<best){best=distance;result={x:dx,z:dz,cx:wrapSourceX(a.x+dx*t),cz:a.z+dz*t};}
   }
   return result;
 }
@@ -409,12 +409,12 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
         3,
       ),
       tangent = roadTangentAt(x,z,road),
-      crossing = freshwaterCrossingAt(x,z,tangent.x,tangent.z),
+      crossing = freshwaterCrossingAt(tangent.cx,tangent.cz,tangent.x,tangent.z),
       pierM = crossing ? Math.min(5,(RURAL_BRIDGE_MAX_LENGTH_M-crossing.spanM)/2) : 0;
     let roadHeight=initialRoadHeight,deckHeight:number|undefined;
     if(crossing&&distance<=5){
       const left=crossing.lo-pierM/crossing.metresPerUnit,right=crossing.hi+pierM/crossing.metresPerUnit,
-        support=(t:number)=>{const px=x+crossing.ux*t,pz=z+crossing.uz*t,surface=naturalSurfaceBaseAt(px,pz);return {surface,height:Math.max(crossing.waterLevel+1,boundedEarthwork(roadProfileHeightAt(px,pz,road),surface.groundHeight,4,3))};},
+        support=(t:number)=>{const px=tangent.cx+crossing.ux*t,pz=tangent.cz+crossing.uz*t,surface=naturalSurfaceBaseAt(px,pz);return {surface,height:Math.max(crossing.waterLevel+1,boundedEarthwork(roadProfileHeightAt(px,pz,road),surface.groundHeight,4,3))};},
         a=support(left),b=support(right),legal=a.surface.water.kind==='none'&&b.surface.water.kind==='none'&&a.height<=a.surface.groundHeight+3&&b.height<=b.surface.groundHeight+3&&Math.abs(b.height-a.height)/((right-left)*crossing.metresPerUnit)<=.08;
       if(legal){
         if(left<=0&&right>=0)deckHeight=lerp(a.height,b.height,-left/(right-left));

@@ -73,6 +73,26 @@ SCENARIOS: dict[str, str] = {
         "eval:window.advisorWorld.setHalfHeight(24);settle;shot:bank-bridge;"
         "eval:window.advisorWorld.setHalfHeight(24000);settle;shot:realm-coast"
     ),
+    "hydrology-context": (
+        "eval:window.r=window.advisorWorld.hydrology.recipes[0];"
+        "eval:window.p=window.r.tributary[Math.floor(window.r.tributary.length*.65)];"
+        "eval:window.ll=window.advisorWorld.hydrology.toLonLat(window.p.x,window.p.z);"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "eval:window.advisorWorld.setHalfHeight(1500);settle;shot:tributary-basin;"
+        "eval:window.v=window.advisorWorld.geography.villages.find(v=>window.advisorWorld.hydrology.access(v.canonicalPosition).nearby);"
+        "eval:window.advisorWorld.navigation.setFocus(window.v.canonicalPosition.lon,window.v.canonicalPosition.lat);"
+        "eval:window.advisorWorld.setHalfHeight(450);settle;shot:freshwater-village;"
+        "eval:window.v=window.advisorWorld.geography.villages.find(v=>(a=>a.arid&&!a.nearby)(window.advisorWorld.hydrology.access(v.canonicalPosition)));"
+        "eval:window.advisorWorld.navigation.setFocus(window.v.canonicalPosition.lon,window.v.canonicalPosition.lat);"
+        "eval:window.advisorWorld.setHalfHeight(95);settle;shot:dry-village;"
+        "eval:window.ll=window.advisorWorld.geography.continents[0].canonicalPosition;"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"
+        "eval:window.advisorWorld.setHalfHeight(24000);settle;shot:continent-0;"
+        "eval:window.ll=window.advisorWorld.geography.continents[1].canonicalPosition;"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);settle;shot:continent-1;"
+        "eval:window.ll=window.advisorWorld.geography.continents[2].canonicalPosition;"
+        "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);settle;shot:continent-2"
+    ),
     "village": "",
     "street": "zoom-in:2",
     # 97 m half-height x 1.4^3 = 266 m: the 230-900 m "Province" band in src/main.ts.

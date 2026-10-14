@@ -107,3 +107,15 @@ test("final-surface memoization is bounded and exposes deterministic hit/miss te
   assert.ok(telemetry.cacheSize <= telemetry.cacheLimit);
   assert.ok(telemetry.worstModifierCandidates <= 128, `unbounded modifier candidates: ${telemetry.worstModifierCandidates}`);
 });
+
+test("a legal deck has one cross-road stage instead of separate side profiles", () => {
+  const anchors = finalSurfaceEvidenceAnchors();
+  const road = roads.find(r => r.code === anchors.roadCode)!;
+  const dx=road.toX-road.fromX,dz=road.toZ-road.fromZ,length=Math.hypot(dx,dz);
+  const centre=finalSurfaceAt(anchors.bridge.x,anchors.bridge.z);
+  for(const offset of [-1,1]) {
+    const side=finalSurfaceAt(anchors.bridge.x-dz/length*offset,anchors.bridge.z+dx/length*offset);
+    assert.ok(side.deckHeight!==null,"crossing width must retain its explicit deck");
+    assert.ok(Math.abs(side.deckHeight!-centre.deckHeight!)<1e-6,"deck stage must agree across its width");
+  }
+});

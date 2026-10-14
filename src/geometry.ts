@@ -302,9 +302,10 @@ export function terrainTint(
       south=(naturalElevationAt(x,z+h)-naturalElevationAt(x,z-h))/(2*h*CANONICAL_METRES_PER_SOURCE_UNIT),
       // Fixed cartographic relief lighting: exaggeration improves top-down
       // readability, while normalization avoids broad clipped light patches.
-      gx=east*120,gz=south*120,
+      gx=east*40,gz=south*40,
       shade=Math.max(.58,Math.min(1.25,(Math.SQRT1_2-(gx+gz)*.5)/(Math.SQRT1_2*Math.sqrt(1+gx*gx+gz*gz))));
-    result=result.map(v=>Math.max(0,Math.min(255,v*shade))) as [number,number,number];
+    const reliefWeight=smoothstep(.15,.4,macro.mountainIntensity);
+    result=result.map(v=>Math.max(0,Math.min(255,v*(1+(shade-1)*reliefWeight)))) as [number,number,number];
   }
   return result;
 }

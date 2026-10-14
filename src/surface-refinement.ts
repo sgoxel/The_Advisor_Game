@@ -304,11 +304,13 @@ function addRoadAndBridgeRibbons(
         continue;
       const middle = finalSurfaceAt(mx, mz);
       if (middle.deckHeight !== null) {
-        const y = middle.deckHeight + BRIDGE_EPSILON,
-          a: Point = [x0 + bridgeNx, y, z0 + bridgeNz],
-          b: Point = [x1 + bridgeNx, y, z1 + bridgeNz],
-          c: Point = [x1 - bridgeNx, y, z1 - bridgeNz],
-          d: Point = [x0 - bridgeNx, y, z0 - bridgeNz];
+        const start = finalSurfaceAt(x0, z0), end = finalSurfaceAt(x1, z1),
+          y0 = (start.deckHeight ?? start.groundHeight) + BRIDGE_EPSILON,
+          y1 = (end.deckHeight ?? end.groundHeight) + BRIDGE_EPSILON,
+          a: Point = [x0 + bridgeNx, y0, z0 + bridgeNz],
+          b: Point = [x1 + bridgeNx, y1, z1 + bridgeNz],
+          c: Point = [x1 - bridgeNx, y1, z1 - bridgeNz],
+          d: Point = [x0 - bridgeNx, y0, z0 - bridgeNz];
         pushQuad(extra, tile, a, b, c, d, REFINED_BRIDGE_RGB);
         // Narrow edge strips make the crossing read as a bridge without adding
         // collision-only geometry or broadening its authoritative deck support.
@@ -317,19 +319,19 @@ function addRoadAndBridgeRibbons(
         pushQuad(
           extra,
           tile,
-          [x0 + bridgeNx, y + 0.06, z0 + bridgeNz],
-          [x1 + bridgeNx, y + 0.06, z1 + bridgeNz],
-          [x1 + bridgeNx - ux * rail, y + 0.06, z1 + bridgeNz - uz * rail],
-          [x0 + bridgeNx - ux * rail, y + 0.06, z0 + bridgeNz - uz * rail],
+          [x0 + bridgeNx, y0 + 0.06, z0 + bridgeNz],
+          [x1 + bridgeNx, y1 + 0.06, z1 + bridgeNz],
+          [x1 + bridgeNx + uz * rail, y1 + 0.06, z1 + bridgeNz - ux * rail],
+          [x0 + bridgeNx + uz * rail, y0 + 0.06, z0 + bridgeNz - ux * rail],
           edgeTint,
         );
         pushQuad(
           extra,
           tile,
-          [x0 - bridgeNx + ux * rail, y + 0.06, z0 - bridgeNz + uz * rail],
-          [x1 - bridgeNx + ux * rail, y + 0.06, z1 - bridgeNz + uz * rail],
-          [x1 - bridgeNx, y + 0.06, z1 - bridgeNz],
-          [x0 - bridgeNx, y + 0.06, z0 - bridgeNz],
+          [x0 - bridgeNx - uz * rail, y0 + 0.06, z0 - bridgeNz + ux * rail],
+          [x1 - bridgeNx - uz * rail, y1 + 0.06, z1 - bridgeNz + ux * rail],
+          [x1 - bridgeNx, y1 + 0.06, z1 - bridgeNz],
+          [x0 - bridgeNx, y0 + 0.06, z0 - bridgeNz],
           edgeTint,
         );
         continue;
