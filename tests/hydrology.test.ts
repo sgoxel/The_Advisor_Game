@@ -17,7 +17,7 @@ import {
 import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { villages } from "../src/geography.ts";
-import { RURAL_BRIDGE_MAX_LENGTH_M } from "../src/world.ts";
+import { RURAL_BRIDGE_MAX_LENGTH_M, finalSurfaceEvidenceAnchors } from "../src/world.ts";
 
 test("each continent has multiple independent bounded drainage recipes", () => {
   assert.ok(drainageRecipes.length >= MACRO_PLAN.continents.length * 3);
@@ -163,4 +163,26 @@ test("main-channel water remains incised below natural terrain support between s
       }
     }
   assert.ok(samples > 1000, `expected broad containment coverage, got ${samples}`);
+});
+
+test("overlapping different-width bank supports are complete and continuous", () => {
+  const p=finalSurfaceEvidenceAnchors().bridge;
+  const segments=drainageSegmentsInBounds(p.x-16,p.z-16,32);
+  let active=0,continuous=0;
+  for(let i=-32;i<=32;i++)for(let j=-32;j<=32;j++) {
+    const x=p.x+i/4,z=p.z+j/4,a=naturalSurfaceAt(x,z);
+    if(a.water.kind!=="none")continue;
+    const ownsBank=segments.some(segment=> {
+      const dx=wrapSourceX(segment.bx-segment.ax),dz=segment.bz-segment.az;
+      const qx=wrapSourceX(x-segment.ax),qz=z-segment.az;
+      const t=Math.max(0,Math.min(1,(qx*dx+qz*dz)/(dx*dx+dz*dz||1)));
+      return Math.hypot(qx-dx*t,qz-dz*t)<=segment.width+6;
+    });
+    if(ownsBank){assert.equal(a.material,"Riverbank","a narrow nearest reach erases a wider bank");active++;}
+    for(const b of [naturalSurfaceAt(x+1e-4,z),naturalSurfaceAt(x,z+1e-4)]) {
+      if(b.water.kind!=="none")continue;
+      assert.ok(Math.abs(a.groundHeight-b.groundHeight)<.1,"entering a bank support creates a terrain shelf");continuous++;
+    }
+  }
+  assert.ok(active>100&&continuous>100);
 });

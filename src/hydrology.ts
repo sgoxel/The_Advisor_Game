@@ -704,50 +704,39 @@ export function naturalSurfaceAt(x: number, z: number): NaturalSurface {
         .split("/TRIBUTARY/")[0],
     });
   }
-  if (hit && riverDistance <= hit.segment.width + RIVER_BANK_HALF_WIDTH_SOURCE) {
-    const t = smooth01(
-        (riverDistance - hit.segment.width) / RIVER_BANK_HALF_WIDTH_SOURCE,
-      ),
-      bed = lerp(hit.segment.bedA, hit.segment.bedB, hit.t),
-      inner = Math.min(terrain, bed + 0.68),
-      initialBankHeight = lerp(inner, terrain, t),
-      initialSlope =
-        (Math.abs(terrain - inner) * 1.5) /
-        (RIVER_BANK_HALF_WIDTH_SOURCE * CANONICAL_METRES_PER_SOURCE_UNIT);
-    let bankHeight=initialBankHeight,bankFloor=inner,slope=initialSlope;
-    // Overlapping valleys compose by minimum incision, then retain the highest
-    // adjacent channel's inner-bank floor. Taking maximum blended slopes instead
-    // creates a high shelf across the other channel and conceals valid crossings.
-    for(const segment of segmentsByBucket.get(bucketKey(sx,z))||[]){
+  // Bank influence is a union of wet footprints, not nearest centreline only.
+  // A narrow closer reach may end its bank while a wider reach still owns it.
+  if (nearest && nearest.distance <= 3.7 + RIVER_BANK_HALF_WIDTH_SOURCE) {
+    let bankHeight=terrain,bankFloor=0,slope=0;
+    let bankHit: SegmentHit | undefined = undefined;
+    let edgeDistance=Infinity;
+    for(const segment of segmentsByBucket.get(bucketKey(sx,z))||[]) {
       segmentChecks++;
-      const candidate=pointToSegment(sx,z,segment);
-      if(candidate.distance<=segment.width||candidate.distance>segment.width+RIVER_BANK_HALF_WIDTH_SOURCE)continue;
-      const weight=smooth01((candidate.distance-segment.width)/RIVER_BANK_HALF_WIDTH_SOURCE),candidateBed=lerp(segment.bedA,segment.bedB,candidate.t),candidateInner=Math.min(terrain,candidateBed+.68);
-      bankHeight=Math.min(bankHeight,lerp(candidateInner,terrain,weight));
-      bankFloor=Math.max(bankFloor,candidateInner);
-      slope=Math.max(slope,Math.abs(terrain-candidateInner)*1.5/(RIVER_BANK_HALF_WIDTH_SOURCE*CANONICAL_METRES_PER_SOURCE_UNIT));
+      const candidate=pointToSegment(sx,z,segment),edge=candidate.distance-segment.width;
+      if(edge<0||edge>RIVER_BANK_HALF_WIDTH_SOURCE)continue;
+      const bed=lerp(segment.bedA,segment.bedB,candidate.t),inner=Math.min(terrain,bed+.68),weight=smooth01(edge/RIVER_BANK_HALF_WIDTH_SOURCE);
+      bankHeight=Math.min(bankHeight,lerp(inner,terrain,weight));
+      // Preserve a dry inner bank around each water stage, then taper protection
+      // to zero at its outer support. No hard shelf appears when a reach enters.
+      const protection=1-smooth01(Math.max(0,edge-.25)/(RIVER_BANK_HALF_WIDTH_SOURCE-.25));
+      bankFloor=Math.max(bankFloor,inner*protection);
+      slope=Math.max(slope,Math.abs(terrain-inner)*1.5/(RIVER_BANK_HALF_WIDTH_SOURCE*CANONICAL_METRES_PER_SOURCE_UNIT));
+      if(edge<edgeDistance||(edge===edgeDistance&&bankHit&&segment.code<bankHit.segment.code)) {
+        edgeDistance=edge;bankHit={...candidate,segment};
+      }
     }
-    bankHeight=Math.max(bankFloor,bankHeight);
-    slope=Math.min(slope,Math.abs(terrain-bankFloor)*1.5/(RIVER_BANK_HALF_WIDTH_SOURCE*CANONICAL_METRES_PER_SOURCE_UNIT));
-    const cliff=slope>.68;
-    return Object.freeze({
-      groundHeight: bankHeight,
-      material: "Riverbank",
-      water: {
-        kind: "none",
-        level: -Infinity,
-        flowX: 0,
-        flowZ: 0,
-      } as SurfaceWater,
-      walkable: !cliff,
-      vegetationDensityScale: lerp(0.34, 0.9, t),
-      slope,
-      cliff,
-      freshwaterDistanceSource: riverDistance,
-      catchmentCode: hit.segment.code
-        .split("/MAIN/")[0]
-        .split("/TRIBUTARY/")[0],
-    });
+    if(bankHit) {
+      bankHeight=Math.max(bankFloor,bankHeight);
+      slope=Math.min(slope,Math.abs(terrain-bankFloor)*1.5/(RIVER_BANK_HALF_WIDTH_SOURCE*CANONICAL_METRES_PER_SOURCE_UNIT));
+      const cliff=slope>.68,t=smooth01(edgeDistance/RIVER_BANK_HALF_WIDTH_SOURCE);
+      return Object.freeze({
+        groundHeight:bankHeight,material:"Riverbank",
+        water:{kind:"none",level:-Infinity,flowX:0,flowZ:0} as SurfaceWater,
+        walkable:!cliff,vegetationDensityScale:lerp(.34,.9,t),slope,cliff,
+        freshwaterDistanceSource:nearest.distance,
+        catchmentCode:bankHit.segment.code.split("/MAIN/")[0].split("/TRIBUTARY/")[0],
+      });
+    }
   }
 
   const slope = drySlopeAt(sx, z, terrain),

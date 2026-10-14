@@ -17,9 +17,7 @@ const LEGACY_BRIDGE_RGB = [115, 88, 56] as const;
 export const REFINED_BRIDGE_RGB = [108, 79, 45] as const;
 export const REFINED_ROAD_RGB = [143, 122, 84] as const;
 export const REFINED_BRIDGE_HALF_WIDTH_SOURCE = 2.1;
-const ROAD_RIBBON_HALF_WIDTH_SOURCE = 2.35;
 const GROUND_EPSILON = 0.025;
-const ROAD_EPSILON = 0.07;
 const BRIDGE_EPSILON = 0.1;
 
 type Point = [number, number, number];
@@ -282,8 +280,6 @@ function addRoadAndBridgeRibbons(
     const ux = vx / length,
       uz = vz / length,
       segmentCount = Math.max(1, Math.ceil(length)),
-      roadNx = -uz * ROAD_RIBBON_HALF_WIDTH_SOURCE,
-      roadNz = ux * ROAD_RIBBON_HALF_WIDTH_SOURCE,
       bridgeNx = -uz * REFINED_BRIDGE_HALF_WIDTH_SOURCE,
       bridgeNz = ux * REFINED_BRIDGE_HALF_WIDTH_SOURCE;
     const [first, last] = clippedStationRange(road.fromX + shiftX, road.fromZ, road.toX + shiftX, road.toZ, tile.minX, tile.minZ, tile.size, segmentCount);
@@ -337,28 +333,11 @@ function addRoadAndBridgeRibbons(
         );
         continue;
       }
-      if (middle.water.kind !== "none" || middle.groundMaterial !== "Road") continue;
-      const corners: Point[] = [
-        [x0 + roadNx, finalSurfaceAt(x0 + roadNx, z0 + roadNz).groundHeight + ROAD_EPSILON, z0 + roadNz],
-        [x1 + roadNx, finalSurfaceAt(x1 + roadNx, z1 + roadNz).groundHeight + ROAD_EPSILON, z1 + roadNz],
-        [x1 - roadNx, finalSurfaceAt(x1 - roadNx, z1 - roadNz).groundHeight + ROAD_EPSILON, z1 - roadNz],
-        [x0 - roadNx, finalSurfaceAt(x0 - roadNx, z0 - roadNz).groundHeight + ROAD_EPSILON, z0 - roadNz],
-      ];
-      // Never paint a presentation road across water: legal crossings are the
-      // explicit deck branch above.
-      if (
-        corners.some((point) => finalSurfaceAt(point[0], point[2]).water.kind !== "none")
-      )
-        continue;
-      pushQuad(
-        extra,
-        tile,
-        corners[0],
-        corners[1],
-        corners[2],
-        corners[3],
-        REFINED_ROAD_RGB,
-      );
+      // Ordinary roads are already painted on the common authoritative ground.
+      // A second ribbon sampled independently can intersect its triangulated
+      // approximation and tear, or cover water between its corner probes.
+      // Only explicit decks require a separate exposed-surface mesh.
+
     }
   }
 }
