@@ -77,6 +77,27 @@ export type FinalSurface = SurfaceBase & {
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const SITE_PAD_ID = /\/SITE\/\d+\/PAD$/;
+
+/**
+ * Critical-site pads deliberately reuse the already-bounded road spatial query
+ * and earthwork profile. Their canonical `/SITE/n/PAD` identity upgrades only
+ * the pad footprint to priority 9; `/SITE/n/ACCESS` remains an ordinary road.
+ * This keeps one composed surface without adding a parallel site height system.
+ */
+function normalizeSurfaceModifier(modifier: SurfaceModifier): SurfaceModifier {
+  if (
+    modifier.priority !== WORLD_BUILDING_PRIORITIES.road ||
+    !SITE_PAD_ID.test(modifier.id)
+  )
+    return modifier;
+  return {
+    ...modifier,
+    priority: WORLD_BUILDING_PRIORITIES.site,
+    material: "Settlement",
+    reservedUse: modifier.id.slice(0, -4),
+  };
+}
 
 export function compareSurfaceModifiers(a: SurfaceModifier, b: SurfaceModifier) {
   return a.priority - b.priority || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -113,8 +134,9 @@ function surfaceModifierSignature(modifier: SurfaceModifier) {
 
 function canonicalSurfaceModifiers(modifiers: readonly SurfaceModifier[]) {
   const unique = new Map<string, { modifier: SurfaceModifier; signature: string }>();
-  for (const modifier of modifiers) {
-    const signature = surfaceModifierSignature(modifier),
+  for (const rawModifier of modifiers) {
+    const modifier = normalizeSurfaceModifier(rawModifier),
+      signature = surfaceModifierSignature(modifier),
       existing = unique.get(modifier.id);
     if (!existing) {
       unique.set(modifier.id, { modifier, signature });
