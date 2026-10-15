@@ -45,7 +45,7 @@ test("canonical transport topology covers every generated settlement with real s
   assert.equal(summary.villages, villages.length);
   assert.equal(summary.uncoveredNodeCodes.length, 0);
   assert.equal(summary.mandatoryNodes, cities.length + villages.length);
-  assert.ok(summary.junctions >= cities.length, "city approaches should create shared canonical junctions");
+  assert.ok(summary.junctions >= countries.length, "country-scale trunks should create real shared canonical junctions");
 
   const nodeBySource = new Map(transportNetwork.nodes.map((node) => [node.sourceId, node]));
   for (const country of countries) {
