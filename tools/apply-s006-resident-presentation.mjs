@@ -119,24 +119,26 @@ main = replaceOnce(
 main = replaceOnce(
   main,
   "      for (let i = visible.length; i < actors.length; i++)\n        actors[i].enabled = false;\n    }\n    for (const actor of actors)\n      if (actor.enabled) {\n        actor.setRotation(camera.getRotation());\n        actor.rotateLocal(90, 0, 0);\n      }",
-  `      for (let i = visible.length; i < actors.length; i++)
-        actors[i].enabled = false;
-      $("simulation-status").textContent =
-        \\`${"${simulation.stats.logicalResidents.toLocaleString()}"} logical residents · ${"${visible.length}"} visible actors · ${"${actors.length}"} pooled actors · ${"${simulation.stats.query.evaluatedResidents.toLocaleString()}"} spatial candidates evaluated.\\`;
-    }
-    const actorFacing = camera.getRotation();
-    if (
-      Math.abs(actorFacing.x - lastActorFacingX) > 1e-7 ||
-      Math.abs(actorFacing.y - lastActorFacingY) > 1e-7 ||
-      Math.abs(actorFacing.z - lastActorFacingZ) > 1e-7 ||
-      Math.abs(actorFacing.w - lastActorFacingW) > 1e-7
-    ) {
-      lastActorFacingX = actorFacing.x;
-      lastActorFacingY = actorFacing.y;
-      lastActorFacingZ = actorFacing.z;
-      lastActorFacingW = actorFacing.w;
-      for (const actor of actors) if (actor.enabled) orientActor(actor);
-    }`,
+  [
+    "      for (let i = visible.length; i < actors.length; i++)",
+    "        actors[i].enabled = false;",
+    "      $(\"simulation-status\").textContent =",
+    "        `${simulation.stats.logicalResidents.toLocaleString()} logical residents · ${visible.length} visible actors · ${actors.length} pooled actors · ${simulation.stats.query.evaluatedResidents.toLocaleString()} spatial candidates evaluated.`;",
+    "    }",
+    "    const actorFacing = camera.getRotation();",
+    "    if (",
+    "      Math.abs(actorFacing.x - lastActorFacingX) > 1e-7 ||",
+    "      Math.abs(actorFacing.y - lastActorFacingY) > 1e-7 ||",
+    "      Math.abs(actorFacing.z - lastActorFacingZ) > 1e-7 ||",
+    "      Math.abs(actorFacing.w - lastActorFacingW) > 1e-7",
+    "    ) {",
+    "      lastActorFacingX = actorFacing.x;",
+    "      lastActorFacingY = actorFacing.y;",
+    "      lastActorFacingZ = actorFacing.z;",
+    "      lastActorFacingW = actorFacing.w;",
+    "      for (const actor of actors) if (actor.enabled) orientActor(actor);",
+    "    }",
+  ].join("\n"),
   "camera-facing update gate",
 );
 main = replaceOnce(
