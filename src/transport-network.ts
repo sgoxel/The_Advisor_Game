@@ -365,12 +365,9 @@ function legalBridgeRouteCandidates(
   to: TransportNode,
   allowedCountries: readonly string[],
 ) {
-  const separationM = greatCircleDistance(from.position, to.position);
-  if (separationM > 120_000) return Object.freeze([]) as readonly LegalBridgeRouteCandidate[];
-
   // freshwaterSegmentsAround is intentionally capped at 23 km. Six fixed
-  // stations cover the entire <=120 km fallback corridor without introducing
-  // camera/runtime-dependent search state or an unbounded global river scan.
+  // stations keep candidate collection deterministic and finite for any corridor;
+  // routeCandidate remains the final exact legality gate for each proposed bridge.
   const corridorDx = wrapSourceX(to.x - from.x), corridorDz = to.z - from.z,
     origins = [0, 0.2, 0.4, 0.6, 0.8, 1].map((t) => sourceToLonLat(from.x + corridorDx * t, from.z + corridorDz * t)),
     segments = new Map<string, ReturnType<typeof freshwaterSegmentsAround>[number]>();
