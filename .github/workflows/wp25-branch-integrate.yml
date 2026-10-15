@@ -30,7 +30,7 @@ jobs:
           replace("src/transport-network.ts", 'function buildNetwork(): TransportNetwork {', 'export function buildTransportNetwork(): TransportNetwork {')
           replace("src/transport-network.ts", 'export const transportNetwork = buildNetwork();', 'export const transportNetwork = buildTransportNetwork();')
           replace("src/transport-network.ts", 'ferryCandidates.sort((a, b) => a.distanceM - b.distanceM || edgePairKey(a.code, a.code).localeCompare(edgePairKey(b.code, b.code)));', 'ferryCandidates.sort((a, b) => a.distanceM - b.distanceM || edgePairKey(a.a.code, a.b.code).localeCompare(edgePairKey(b.a.code, b.b.code)));')
-          replace("package.json", 'tests/routing-final-surface.test.ts tests/routing.test.ts', 'tests/routing-final-surface.test.ts tests/routing.test.ts tests/transport-network.test.ts')
+          replace("package.json", 'tests/routing.test.ts tests/routing-final-surface.test.ts', 'tests/routing.test.ts tests/routing-final-surface.test.ts tests/transport-network.test.ts')
           PY
           if git diff --quiet; then exit 0; fi
           git config user.name "AGENT #1"
