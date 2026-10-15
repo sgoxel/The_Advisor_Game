@@ -8,6 +8,7 @@ jobs:
   integrate:
     if: ${{ !contains(github.event.head_commit.message, 'integrate critical sites into final surface') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
