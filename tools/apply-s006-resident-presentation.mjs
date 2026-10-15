@@ -183,3 +183,5 @@ evidence = replaceOnce(
 );
 evidence = evidence.replace("shot:resident-second", "shot:resident-guard");
 fs.writeFileSync(evidencePath, evidence);
+
+// Source-only helper trigger; one-use files are removed via the repository connector after the source commit lands.
