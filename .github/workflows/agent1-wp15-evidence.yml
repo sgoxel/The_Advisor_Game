@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [agent1/wp-s004-001-001-20261015]
-    paths: [tools/agent1-wp-s004-patch-v2.mjs, tools/agent1-wp-s004-patch-v3.mjs, .github/workflows/agent1-wp15-evidence.yml]
+    paths: [.github/workflows/agent1-wp15-evidence.yml]
 permissions:
   contents: write
 jobs:
@@ -18,22 +18,30 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Apply deterministic settlement acceptance patches
+      - name: Apply settlement runtime integration
         run: |
-          node tools/agent1-wp-s004-patch-v2.mjs
-          node tools/agent1-wp-s004-patch-v3.mjs
+          if ! grep -q "function settlementStreetAt" src/world.ts; then
+            node tools/agent1-wp-s004-patch-v4.mjs
+          else
+            echo "Morphology runtime integration already present"
+          fi
+          if ! grep -q "nearbyPlaces, places" src/world.ts; then
+            node tools/agent1-wp-s004-patch-v5.mjs
+          else
+            echo "Bounded settlement runtime already present"
+          fi
       - run: npm ci
       - name: Targeted settlement and surface tests
         run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/world.test.ts tests/final-surface-integration.test.ts tests/political-atlas.test.ts
       - run: npm run build
-      - name: Commit validated settlement wiring
+      - name: Commit validated settlement runtime
         run: |
           git config user.name "AGENT #1"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/geography.ts src/world.ts src/geometry.ts tests/world.test.ts tests/final-surface-integration.test.ts
+          git add src/world.ts src/geometry.ts
           if git diff --cached --quiet; then
-            echo "Settlement patch already applied"
+            echo "Settlement runtime already committed"
           else
-            git commit -m "feat: complete deterministic settlement exteriors"
+            git commit -m "feat: integrate bounded settlement morphology runtime"
             git push origin HEAD:agent1/wp-s004-001-001-20261015
           fi
