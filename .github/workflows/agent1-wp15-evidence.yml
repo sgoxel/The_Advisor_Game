@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [agent1/wp-s004-001-001-20261015]
-    paths: [tools/agent1-wp-s004-patch-v2.mjs, .github/workflows/agent1-wp15-evidence.yml]
+    paths: [tools/agent1-wp-s004-patch-v2.mjs, tools/agent1-wp-s004-patch-v3.mjs, .github/workflows/agent1-wp15-evidence.yml]
 permissions:
   contents: write
 jobs:
@@ -18,8 +18,10 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Apply deterministic settlement acceptance patch
-        run: node tools/agent1-wp-s004-patch-v2.mjs
+      - name: Apply deterministic settlement acceptance patches
+        run: |
+          node tools/agent1-wp-s004-patch-v2.mjs
+          node tools/agent1-wp-s004-patch-v3.mjs
       - run: npm ci
       - name: Targeted settlement and surface tests
         run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/world.test.ts tests/final-surface-integration.test.ts tests/political-atlas.test.ts
