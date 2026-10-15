@@ -26,18 +26,23 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Apply morphology runtime integration once
+      - name: Apply settlement runtime integration once
         run: |
           if ! grep -q "function settlementStreetAt" src/world.ts; then
             node tools/agent1-wp-s004-patch-v4.mjs
           else
             echo "Morphology runtime integration already present"
           fi
+          if ! grep -q "nearbyPlaces, places" src/world.ts; then
+            node tools/agent1-wp-s004-patch-v5.mjs
+          else
+            echo "Bounded settlement runtime already present"
+          fi
       - run: npm ci
       - name: Targeted settlement and surface tests
         run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/world.test.ts tests/final-surface-integration.test.ts tests/political-atlas.test.ts
       - run: npm run build
-      - name: Commit validated morphology runtime
+      - name: Commit validated settlement runtime
         run: |
           git config user.name "AGENT #1"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -45,6 +50,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No source integration commit needed"
           else
-            git commit -m "feat: integrate settlement morphology with final surface"
+            git commit -m "feat: integrate bounded settlement morphology runtime"
             git push origin HEAD:agent1/wp-s004-001-001-20261015
           fi
