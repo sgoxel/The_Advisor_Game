@@ -21,7 +21,7 @@ import {
 } from "./macro-geography.ts";
 import { travelMetrics } from "./travel.ts";
 import { defineContinuityCorridor } from "./continuity-corridor.ts";
-import { freshwaterAccessAt, naturalSurfaceAt, SETTLEMENT_WATER_RESERVE_SOURCE, freshwaterSegmentsAround, freshwaterHabitatCandidate, drainageCoarseSegments } from "./hydrology.ts";
+import { freshwaterAccessAt, naturalSurfaceAt, SETTLEMENT_WATER_RESERVE_SOURCE, freshwaterHabitatCandidate, drainageCoarseSegments } from "./hydrology.ts";
 
 /** x/z are derived source/render coordinates; canonicalPosition is world truth. */
 export type Place = {
@@ -63,8 +63,10 @@ const COUNTRY_NAMES = [
   "Mossward", "Silverfen", "Hearthmarch", "Pinewatch", "Crownhold", "Longmere",
   "Embervale", "Whitefen", "Kingsward", "Sablemarch", "Windreach", "Lakehold",
 ] as const;
-const CITY_SLOTS_PER_COUNTRY = 3;
-const VILLAGE_SLOTS_PER_CITY = 3;
+const MIN_CITIES_PER_COUNTRY = 3;
+const MAX_CITIES_PER_COUNTRY = 4;
+const MIN_VILLAGES_PER_CITY = 3;
+const MAX_VILLAGES_PER_CITY = 4;
 const CULTURE_STEMS = [
   ["Alder", "Briar", "Oak", "Thorn", "Grey", "Mere", "Stone", "Willow", "Falcon", "Hearth", "Raven", "Ash"],
   ["Gold", "Rose", "Iron", "Sun", "Dawn", "High", "Red", "White", "Wind", "Crown", "Silver", "North"],
@@ -160,18 +162,13 @@ export const continents = MACRO_PLAN.continents.map((continent) =>
   }),
 );
 
-/** Seed-addressed counts are minima, not fixed maxima. */
-export function politicalRegistryCountsForSeed(seed: string) {
+function countryRegistryCountsForSeed(seed: string) {
   const perContinent = continents.map(
     (continent) => 10 + Math.floor(addressedFor(seed, `COUNTRY_COUNT/${continent.id}`) * 3),
   );
-  const countryCount = perContinent.reduce((sum, count) => sum + count, 0);
   return {
-    continents: continents.length,
     perContinent,
-    countries: countryCount,
-    cities: countryCount * CITY_SLOTS_PER_COUNTRY,
-    villages: countryCount * CITY_SLOTS_PER_COUNTRY * VILLAGE_SLOTS_PER_CITY,
+    countries: perContinent.reduce((sum, count) => sum + count, 0),
   } as const;
 }
 
@@ -204,14 +201,16 @@ function continentCandidate(
  */
 function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
   const macro = macroSampleAt(position);
-  const source=lonLatToSource(position.lon,position.lat),natural=naturalSurfaceAt(source.x,source.z);
+  const source = lonLatToSource(position.lon, position.lat),
+    natural = naturalSurfaceAt(source.x, source.z);
   return (
     macro.land &&
     macro.domain === "Mainland" &&
     macro.reliefM <= maxReliefM &&
     macro.coastDistanceRad * CANONICAL_PLANET_RADIUS >= 3_000 &&
-    natural.water.kind==='none' && natural.walkable &&
-    freshwaterAccessAt(position).sourceDistance>=SETTLEMENT_WATER_RESERVE_SOURCE
+    natural.water.kind === "none" &&
+    natural.walkable &&
+    freshwaterAccessAt(position).sourceDistance >= SETTLEMENT_WATER_RESERVE_SOURCE
   );
 }
 
@@ -222,7 +221,7 @@ function locallyDrySettlementSite(position: LonLat, maxReliefM: number) {
  */
 function buildCountries(): Country[] {
   const result: Country[] = [],
-    counts = politicalRegistryCountsForSeed(WORLD_SEED).perContinent;
+    counts = countryRegistryCountsForSeed(WORLD_SEED).perContinent;
   for (const continent of continents) {
     const accepted: CanonicalPosition[] = [];
     for (let id = 0; id < counts[continent.id]; id++) {
@@ -383,65 +382,192 @@ function settlementEnvelopeFits(
   return false;
 }
 
-function cityCandidate(country: Country, city: number, attempt: number) {
-  const continent = continents[country.continent];
-  if(attempt%2===0){
-    const candidate=freshwaterHabitatCandidate(countryWaterSegments.get(country.code)||[],`CITY/${country.continent}/${country.id}/${city}/${attempt}`);
-    if(candidate)return {...candidate,elevation:0};
+function countryCenteredCandidate(country: Country, address: string, attempt: number) {
+  const bearing = TAU * addressed(`${address}/${attempt}/bearing`),
+    distanceM = 6_000 + 92_000 * Math.sqrt(addressed(`${address}/${attempt}/distance`));
+  return destination(country.canonicalPosition, bearing, distanceM / CANONICAL_PLANET_RADIUS);
+}
+
+/**
+ * Coarse capacity is sampled from the country's own usable land. It is derived
+ * acceleration data used only to decide how many minimum-plus settlements the
+ * current SEED can support; it never depends on camera, visit order or renderer.
+ */
+const countryHabitatCapacity = new Map<string, number>();
+function habitatCapacityForCountry(country: Country) {
+  let cached = countryHabitatCapacity.get(country.code);
+  if (cached !== undefined) return cached;
+  let viable = 0,
+    fresh = 0,
+    arable = 0;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const candidate = countryCenteredCandidate(country, `${country.code}/CAPACITY`, attempt);
+    if (
+      countryAtPosition(candidate)?.code !== country.code ||
+      !locallyDrySettlementSite(candidate, 120)
+    )
+      continue;
+    viable++;
+    const water = freshwaterAccessAt(candidate),
+      climate = climateSampleAt(candidate);
+    if (water.nearby) fresh++;
+    if (climate.moisture >= 0.18 && climate.moisture <= 0.78) arable++;
   }
-  return continentCandidate(continent, `CITY/${country.continent}/${country.id}/${city}`, attempt);
+  cached = viable + fresh * 0.55 + arable * 0.3;
+  countryHabitatCapacity.set(country.code, cached);
+  return cached;
+}
+
+function cityTargetForCountry(country: Country) {
+  const capacity = habitatCapacityForCountry(country),
+    supportsExtra = capacity >= 11,
+    seededExtra = addressed(`${country.code}/CITY_TARGET`) >= 0.34;
+  return Math.min(
+    MAX_CITIES_PER_COUNTRY,
+    MIN_CITIES_PER_COUNTRY + (supportsExtra && seededExtra ? 1 : 0),
+  );
+}
+
+function villageTargetForSite(position: LonLat, country: Country, cityIndex: number) {
+  const water = freshwaterAccessAt(position),
+    climate = climateSampleAt(position),
+    countryCapacity = habitatCapacityForCountry(country),
+    supportsExtra = water.nearby || (climate.moisture >= 0.22 && countryCapacity >= 10),
+    seededExtra = addressed(`${country.code}/CITY/${cityIndex}/VILLAGE_TARGET`) >= 0.48;
+  return Math.min(
+    MAX_VILLAGES_PER_CITY,
+    MIN_VILLAGES_PER_CITY + (supportsExtra && seededExtra ? 1 : 0),
+  );
+}
+
+function interiorOwnershipScore(position: LonLat, country: Country) {
+  let owned = 0;
+  for (let index = 0; index < 8; index++) {
+    const sample = destination(
+      position,
+      (index / 8) * TAU,
+      12_000 / CANONICAL_PLANET_RADIUS,
+    );
+    if (countryAtPosition(sample)?.code === country.code) owned++;
+  }
+  return owned / 8;
+}
+
+function cityCandidate(country: Country, city: number, attempt: number) {
+  if (attempt % 3 === 0) {
+    const candidate = freshwaterHabitatCandidate(
+      countryWaterSegments.get(country.code) || [],
+      `CITY/${country.continent}/${country.id}/${city}/${attempt}`,
+    );
+    if (candidate) return { ...candidate, elevation: 0 };
+  }
+  if (attempt % 3 === 1)
+    return countryCenteredCandidate(
+      country,
+      `CITY/${country.continent}/${country.id}/${city}`,
+      attempt,
+    );
+  return continentCandidate(
+    continents[country.continent],
+    `CITY/${country.continent}/${country.id}/${city}`,
+    attempt,
+  );
 }
 
 // A one-time coarse ownership index; hydrology was defined before these countries.
-const countryWaterSegments=new Map<string,typeof drainageCoarseSegments[number][]>();
-for(const segment of drainageCoarseSegments){
-  const midpoint=sourceToLonLat(segment.ax+wrapSourceX(segment.bx-segment.ax)/2,(segment.az+segment.bz)/2),owner=countryAtPosition(midpoint);
-  if(!owner)continue;
-  const list=countryWaterSegments.get(owner.code)||[];list.push(segment);countryWaterSegments.set(owner.code,list);
+const countryWaterSegments = new Map<string, (typeof drainageCoarseSegments)[number][]>();
+for (const segment of drainageCoarseSegments) {
+  const midpoint = sourceToLonLat(
+      segment.ax + wrapSourceX(segment.bx - segment.ax) / 2,
+      (segment.az + segment.bz) / 2,
+    ),
+    owner = countryAtPosition(midpoint);
+  if (!owner) continue;
+  const list = countryWaterSegments.get(owner.code) || [];
+  list.push(segment);
+  countryWaterSegments.set(owner.code, list);
 }
 
-const plannedVillagePositions=new Map<string,CanonicalPosition[]>();
-const reservedVillagePositions:CanonicalPosition[]=[];
-function planVillagePositions(city:Pick<Place,"id"|"canonicalPosition"|"continent"|"country">,country:Country,reserved:readonly CanonicalPosition[]):CanonicalPosition[]|null {
-    const selected:CanonicalPosition[]=[],accepted=[...reserved];
-    const waterSegments=freshwaterSegmentsAround(city.canonicalPosition);
-    for (let v = 0; v < VILLAGE_SLOTS_PER_CITY; v++) {
-      let position: CanonicalPosition | undefined;
-      let dryException: CanonicalPosition | undefined;
-      let freshScore=-Infinity;
-      for (let attempt = 0; attempt < 280; attempt++) {
-        const prefix = `VILLAGE/${city.id}/${v}/${attempt}`,
-          bearing = TAU * addressed(`${prefix}/bearing`),
-          distanceM = 7_000 + 16_000 * addressed(`${prefix}/distance`),
-          waterCandidate=attempt%2===0 ? freshwaterHabitatCandidate(waterSegments,prefix) : undefined,
-          candidate = waterCandidate ? {...waterCandidate,elevation:0} : destination(city.canonicalPosition, bearing, distanceM / CANONICAL_PLANET_RADIUS),
-          owner = countryAtPosition(candidate);
-        if (
-          !owner ||
-          !country ||
-          macroFeatureDistanceM(candidate,city.canonicalPosition)<7000 || macroFeatureDistanceM(candidate,city.canonicalPosition)>23000 ||
-          owner.continent !== city.continent ||
-          owner.id !== city.country ||
-          accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000) ||
-          !locallyDrySettlementSite(candidate, 95)
-        )
-          continue;
-        const water=freshwaterAccessAt(candidate);
-        if(water.nearby){
-          const separation=accepted.length?Math.min(...accepted.map(other=>macroFeatureDistanceM(candidate,other))):macroFeatureDistanceM(candidate,city.canonicalPosition),
-            score=separation*(.9+.2*addressed(`${prefix}/rank`));
-          if(score>freshScore&&settlementEnvelopeFits(candidate,country,"village")){position=candidate;freshScore=score;}
-        }
-        if(water.arid&&!water.nearby&&water.distanceM<=8000&&!dryException&&settlementEnvelopeFits(candidate,country,"village"))dryException=candidate;
+const plannedVillagePositions = new Map<string, CanonicalPosition[]>();
+const reservedVillagePositions: CanonicalPosition[] = [];
+function planVillagePositions(
+  city: Pick<Place, "id" | "canonicalPosition" | "continent" | "country" | "city">,
+  country: Country,
+  reserved: readonly CanonicalPosition[],
+  targetCount: number,
+): CanonicalPosition[] | null {
+  const selected: CanonicalPosition[] = [],
+    accepted = [...reserved],
+    waterSegments = countryWaterSegments.get(country.code) || [];
+  for (let v = 0; v < targetCount; v++) {
+    let position: CanonicalPosition | undefined;
+    let dryException: CanonicalPosition | undefined;
+    let bestScore = -Infinity;
+    for (let attempt = 0; attempt < 360; attempt++) {
+      const prefix = `VILLAGE/${city.id}/${v}/${attempt}`,
+        bearing = TAU * addressed(`${prefix}/bearing`),
+        distanceM = 6_000 + 72_000 * Math.sqrt(addressed(`${prefix}/distance`)),
+        waterCandidate =
+          attempt % 3 !== 2 ? freshwaterHabitatCandidate(waterSegments, prefix) : undefined,
+        candidate = waterCandidate
+          ? { ...waterCandidate, elevation: 0 }
+          : destination(city.canonicalPosition, bearing, distanceM / CANONICAL_PLANET_RADIUS),
+        owner = countryAtPosition(candidate),
+        parentDistanceM = macroFeatureDistanceM(candidate, city.canonicalPosition);
+      if (
+        !owner ||
+        owner.code !== country.code ||
+        parentDistanceM < 6_000 ||
+        accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000) ||
+        !locallyDrySettlementSite(candidate, 95)
+      )
+        continue;
+      const water = freshwaterAccessAt(candidate),
+        climate = climateSampleAt(candidate),
+        separation = accepted.length
+          ? Math.min(...accepted.map((other) => macroFeatureDistanceM(candidate, other)))
+          : parentDistanceM,
+        habitatBonus =
+          (water.nearby ? 32_000 : 0) +
+          (climate.moisture >= 0.18 && climate.moisture <= 0.78 ? 8_000 : 0),
+        coverageBonus = Math.min(55_000, separation),
+        parentAffinity = Math.max(0, 28_000 - parentDistanceM) * 0.12,
+        score =
+          coverageBonus +
+          habitatBonus +
+          parentAffinity +
+          4_000 * addressed(`${prefix}/rank`);
+      if (
+        water.nearby &&
+        score > bestScore &&
+        settlementEnvelopeFits(candidate, country, "village")
+      ) {
+        position = candidate;
+        bestScore = score;
       }
-      // Arid cities may retain one exposed dry-region village with an existing
-      // water source within 8 km. Ordinary sites still prefer the 4 km rule.
-      if(v===2&&climateSampleAt(city.canonicalPosition).moisture<.2&&dryException)position=dryException;
-      position ??= dryException;
-      if (!position) return null;
-      accepted.push(position);selected.push(position);
+      if (
+        water.arid &&
+        !water.nearby &&
+        water.distanceM <= 8_000 &&
+        !dryException &&
+        settlementEnvelopeFits(candidate, country, "village")
+      )
+        dryException = candidate;
     }
-    return selected;
+    // Arid city regions may retain one exposed dry-region village with an
+    // existing water source within 8 km. Ordinary sites still prefer 4 km.
+    if (
+      v === targetCount - 1 &&
+      climateSampleAt(city.canonicalPosition).moisture < 0.2 &&
+      dryException
+    )
+      position = dryException;
+    position ??= dryException;
+    if (!position) return null;
+    accepted.push(position);
+    selected.push(position);
+  }
+  return selected;
 }
 
 export const cities: Place[] = (() => {
@@ -449,11 +575,12 @@ export const cities: Place[] = (() => {
     allAccepted: CanonicalPosition[] = [],
     usedNames = new Set<string>();
   for (const country of countries) {
-    const localAccepted: CanonicalPosition[] = [];
-    for (let city = 0; city < CITY_SLOTS_PER_COUNTRY; city++) {
-      let best:CanonicalPosition|undefined;
-      const candidates:{position:CanonicalPosition,score:number,attempt:number}[]=[];
-      for (let attempt = 0; attempt < 220; attempt++) {
+    const localAccepted: CanonicalPosition[] = [],
+      targetCities = cityTargetForCountry(country);
+    for (let city = 0; city < targetCities; city++) {
+      let best: CanonicalPosition | undefined;
+      const candidates: { position: CanonicalPosition; score: number; attempt: number }[] = [];
+      for (let attempt = 0; attempt < 280; attempt++) {
         const candidate = cityCandidate(country, city, attempt),
           owner = countryAtPosition(candidate);
         if (
@@ -467,19 +594,44 @@ export const cities: Place[] = (() => {
         )
           continue;
         const separation = localAccepted.length
-          ? Math.min(...localAccepted.map((other) => macroFeatureDistanceM(candidate, other)))
-          : macroFeatureDistanceM(candidate, country.canonicalPosition),
-          score = separation * (0.9 + 0.2 * addressed(`CITY/${country.code}/${city}/${attempt}/rank`)) + (freshwaterAccessAt(candidate).nearby ? 1_000_000 : 0);
-        candidates.push({position:candidate,score,attempt});
+            ? Math.min(...localAccepted.map((other) => macroFeatureDistanceM(candidate, other)))
+            : 26_000,
+          water = freshwaterAccessAt(candidate),
+          climate = climateSampleAt(candidate),
+          habitatBonus =
+            (water.nearby ? 36_000 : 0) +
+            (climate.moisture >= 0.18 && climate.moisture <= 0.78 ? 10_000 : 0),
+          interiorBonus = interiorOwnershipScore(candidate, country) * 30_000,
+          score =
+            Math.min(85_000, separation) +
+            habitatBonus +
+            interiorBonus +
+            5_000 * addressed(`CITY/${country.code}/${city}/${attempt}/rank`);
+        candidates.push({ position: candidate, score, attempt });
       }
-      const plannedId=`${country.continent}/${country.id}/${city}`;
-      let layoutTrials=0;
-      for(const candidate of candidates.sort((a,b)=>b.score-a.score||a.attempt-b.attempt)){
-        if(!settlementEnvelopeFits(candidate.position,country,"city"))continue;
-        if(layoutTrials++>=20)break;
-        const children=planVillagePositions({id:plannedId,canonicalPosition:candidate.position,continent:country.continent,country:country.id},country,reservedVillagePositions);
-        if(!children)continue;
-        best=candidate.position;plannedVillagePositions.set(plannedId,children);reservedVillagePositions.push(...children);break;
+      const plannedId = `${country.continent}/${country.id}/${city}`;
+      let layoutTrials = 0;
+      for (const candidate of candidates.sort((a, b) => b.score - a.score || a.attempt - b.attempt)) {
+        if (!settlementEnvelopeFits(candidate.position, country, "city")) continue;
+        if (layoutTrials++ >= 28) break;
+        const targetVillages = villageTargetForSite(candidate.position, country, city),
+          children = planVillagePositions(
+            {
+              id: plannedId,
+              canonicalPosition: candidate.position,
+              continent: country.continent,
+              country: country.id,
+              city,
+            },
+            country,
+            reservedVillagePositions,
+            targetVillages,
+          );
+        if (!children) continue;
+        best = candidate.position;
+        plannedVillagePositions.set(plannedId, children);
+        reservedVillagePositions.push(...children);
+        break;
       }
       if (!best)
         throw new Error(`Seeded geography could not place city ${country.continent}/${country.id}/${city}`);
@@ -505,14 +657,15 @@ export const cities: Place[] = (() => {
   return result;
 })();
 
-/** Villages are irregular SEED-addressed radial candidates, never a fixed row. */
+/** Villages use country-wide habitat/coverage candidates; parent city is identity, not a radius cap. */
 export const villages: Place[] = (() => {
   const result: Place[] = [],
     accepted: CanonicalPosition[] = [],
     usedNames = new Set<string>(["alderwick"]);
   for (const city of cities) {
-    for (let v = 0; v < VILLAGE_SLOTS_PER_CITY; v++) {
-      const position=plannedVillagePositions.get(city.id)![v];
+    const positions = plannedVillagePositions.get(city.id) || [];
+    for (let v = 0; v < positions.length; v++) {
+      const position = positions[v];
       accepted.push(position);
       const code = `${city.code}/VILLAGE/${v}`,
         name =
@@ -534,12 +687,52 @@ export const villages: Place[] = (() => {
   return result;
 })();
 
+/**
+ * Active-world counts are the authoritative generated registries. Alternate-seed
+ * values are deterministic coarse forecasts used only by tests/tools that compare
+ * seed variability without rebuilding the whole module graph.
+ */
+export function politicalRegistryCountsForSeed(seed: string) {
+  const { perContinent, countries: countryCount } = countryRegistryCountsForSeed(seed);
+  if (seed === WORLD_SEED)
+    return {
+      continents: continents.length,
+      perContinent,
+      countries: countryCount,
+      cities: cities.length,
+      villages: villages.length,
+    } as const;
+  let cityCount = 0,
+    villageCount = 0;
+  for (let continent = 0; continent < perContinent.length; continent++)
+    for (let country = 0; country < perContinent[continent]; country++) {
+      const extraCity =
+          addressedFor(seed, `FORECAST/${continent}/${country}/CITY_TARGET`) >= 0.58 ? 1 : 0,
+        targetCities = MIN_CITIES_PER_COUNTRY + extraCity;
+      cityCount += targetCities;
+      for (let city = 0; city < targetCities; city++)
+        villageCount +=
+          MIN_VILLAGES_PER_CITY +
+          (addressedFor(seed, `FORECAST/${continent}/${country}/${city}/VILLAGE_TARGET`) >=
+          0.62
+            ? 1
+            : 0);
+    }
+  return {
+    continents: continents.length,
+    perContinent,
+    countries: countryCount,
+    cities: cityCount,
+    villages: villageCount,
+  } as const;
+}
+
 export const places = [...cities, ...villages];
 
-export const roads = cities.flatMap((city) =>
-  [0, 1].map((index) => {
-    const fromPlace = villages.find((place) => place.id === `${city.id}/${index}`)!,
-      toPlace = villages.find((place) => place.id === `${city.id}/${index + 1}`)!,
+export const roads = cities.flatMap((city) => {
+  const children = villages.filter((place) => place.id.startsWith(`${city.id}/`));
+  return children.slice(0, -1).map((fromPlace, index) => {
+    const toPlace = children[index + 1],
       fromPosition = fromPlace.canonicalPosition,
       toPosition = toPlace.canonicalPosition,
       dx = wrapSourceX(toPlace.x - fromPlace.x),
@@ -574,22 +767,30 @@ export const roads = cities.flatMap((city) =>
       walkSpeedMps: travel.speedMps,
       fantasyWalkSeconds: travel.fantasySeconds,
       realWalkSeconds: travel.realSeconds,
-      centerline: undefined as readonly {x:number;z:number;position:LonLat}[] | undefined,
+      centerline: undefined as readonly { x: number; z: number; position: LonLat }[] | undefined,
     };
-  }),
-);
+  });
+});
 
 export type Road = (typeof roads)[number];
-export const continuityCorridor = defineContinuityCorridor(villages,roads[0]);
+export const continuityCorridor = defineContinuityCorridor(villages, roads[0]);
 if (continuityCorridor.road) roads.push(continuityCorridor.road);
 
 export function roadDistanceAt(x: number, z: number, road: Road) {
-  if(road.centerline){
-    const px=road.fromX+wrapSourceX(x-road.fromX);let distance=Infinity;
-    for(let i=0;i<road.centerline.length-1;i++){
-      const a=road.centerline[i],b=road.centerline[i+1],vx=b.x-a.x,vz=b.z-a.z,length=vx*vx+vz*vz,
-        t=length===0?0:Math.max(0,Math.min(1,((px-a.x)*vx+(z-a.z)*vz)/length));
-      distance=Math.min(distance,Math.hypot(px-a.x-vx*t,z-a.z-vz*t));
+  if (road.centerline) {
+    const px = road.fromX + wrapSourceX(x - road.fromX);
+    let distance = Infinity;
+    for (let i = 0; i < road.centerline.length - 1; i++) {
+      const a = road.centerline[i],
+        b = road.centerline[i + 1],
+        vx = b.x - a.x,
+        vz = b.z - a.z,
+        length = vx * vx + vz * vz,
+        t =
+          length === 0
+            ? 0
+            : Math.max(0, Math.min(1, ((px - a.x) * vx + (z - a.z) * vz) / length));
+      distance = Math.min(distance, Math.hypot(px - a.x - vx * t, z - a.z - vz * t));
     }
     return distance;
   }
@@ -630,7 +831,11 @@ export function continentAtPosition(position: LonLat) {
 // terrain sample. Seam-shifted aliases are presentation acceleration only.
 const buckets = new Map<string, Place[]>();
 for (const place of places)
-  for (const x of [place.x - SOURCE_PRESENTATION_WIDTH, place.x, place.x + SOURCE_PRESENTATION_WIDTH]) {
+  for (const x of [
+    place.x - SOURCE_PRESENTATION_WIDTH,
+    place.x,
+    place.x + SOURCE_PRESENTATION_WIDTH,
+  ]) {
     const key = `${Math.floor(x / 2048)}/${Math.floor(place.z / 2048)}`,
       bucket = buckets.get(key) || [];
     bucket.push(place);
@@ -647,7 +852,8 @@ export function nearbyPlaces(x: number, z: number): readonly Place[] {
     const found = new Map<string, Place>();
     for (let dz = -1; dz <= 1; dz++)
       for (let dx = -1; dx <= 1; dx++)
-        for (const place of buckets.get(`${bx + dx}/${bz + dz}`) || []) found.set(place.id, place);
+        for (const place of buckets.get(`${bx + dx}/${bz + dz}`) || [])
+          found.set(place.id, place);
     result = [...found.values()];
     neighbourhoods.set(key, result);
   }
@@ -779,7 +985,13 @@ export function politicalBorderSegments(
         for (let i = 1; i < points.length; i += 2) {
           const a = points[i - 1],
             b = points[i];
-          result.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, countries: [left, right] });
+          result.push({
+            ax: a.x,
+            az: a.z,
+            bx: b.x,
+            bz: b.z,
+            countries: [left, right],
+          });
         }
       }
     }
