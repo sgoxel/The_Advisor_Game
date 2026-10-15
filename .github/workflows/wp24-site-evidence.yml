@@ -14,11 +14,14 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm test
+      - name: Verify deterministic site authority
+        run: node --experimental-strip-types --test tests/sites.test.ts
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser
-      - run: npm run test:webgpu
+      - name: Verify site UX on WebGL2
+        run: xvfb-run -a npx playwright test tests/browser/site.spec.js --config playwright.config.js
+      - name: Verify site UX on WebGPU
+        run: xvfb-run -a npx playwright test tests/webgpu/site.spec.js --config playwright.webgpu.config.js
   evidence:
     needs: acceptance
     runs-on: ubuntu-latest
