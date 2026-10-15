@@ -18,7 +18,7 @@ test("critical-site registry scales with the actual country registry", () => {
   assert.equal(new Set(siteAccessRoads.map((road) => road.code)).size, siteAccessRoads.length);
 });
 
-test("every site is dry, same-country and joined to a materialized legal access branch", () => {
+test("every site is dry, same-country and joined to a dedicated legal access branch", () => {
   for (const site of criticalSites) {
     const macro = macroSampleAt(site.canonicalPosition), owner = countryAtPosition(site.canonicalPosition), branch = siteAccessRoads.find((road) => road.code === site.access.branchCode);
     assert.equal(macro.land, true, site.code);
@@ -27,7 +27,7 @@ test("every site is dry, same-country and joined to a materialized legal access 
     assert.ok(site.access.lengthM >= 650 && site.access.lengthM <= 2300, site.code);
     assert.ok(roads.some((road) => road.code === site.access.roadCode), site.code);
     assert.ok(branch, `${site.code} missing SITE/ACCESS branch`);
-    assert.ok(roads.includes(branch!), `${site.code} branch missing from shared road authority`);
+    assert.ok(!roads.includes(branch!), `${site.code} SITE/ACCESS branch must not pollute settlement-routing roads`);
     assert.ok(places.every((place) => greatCircleDistance(site.canonicalPosition, place.canonicalPosition) >= 900), `${site.code} overlaps settlement reserve`);
   }
 });
@@ -67,7 +67,7 @@ test("priority-9 site preparation is bounded and consumed by final-surface autho
   assert.equal(final.vegetationDensityScale, 0);
 });
 
-test("every SITE/ACCESS branch is contiguous, dry and walkable in final surface", () => {
+test("every SITE/ACCESS branch is indexed, contiguous, dry and walkable in final surface", () => {
   for (const site of criticalSites) {
     const branch = siteAccessRoads.find((road) => road.code === site.access.branchCode)!, dx = wrapSourceX(site.access.x - site.x), dz = site.access.z - site.z;
     for (let index = 0; index <= 12; index++) {
@@ -75,7 +75,8 @@ test("every SITE/ACCESS branch is contiguous, dry and walkable in final surface"
       assert.ok(roadDistanceAt(x, z, branch) < 1e-6, `${site.code} discontinuous at ${index}`);
       assert.equal(surface.water.kind, "none", `${site.code} access crosses water at ${index}`);
       assert.equal(surface.walkable, true, `${site.code} access not walkable at ${index}`);
-      if (index >= 2) assert.ok(surface.contributingModifierIds.includes(branch.code), `${site.code} branch not consumed at ${index}`);
+      if (index >= 2 && index < 12) assert.ok(surface.contributingModifierIds.includes(branch.code), `${site.code} branch not consumed at ${index}`);
+      if (index === 12) assert.ok(surface.contributingModifierIds.includes(branch.code) || surface.contributingModifierIds.includes(site.access.roadCode), `${site.code} access junction not consumed by road authority`);
     }
   }
 });
