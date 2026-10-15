@@ -2,6 +2,9 @@ name: Validate S006 living residents
 on:
   pull_request:
     branches: [main]
+concurrency:
+  group: s006-resident-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
