@@ -1,0 +1,61 @@
+name: AGENT1 WP-S004 continuation acceptance
+on:
+  push:
+    branches: [agent1/wp-s004-001-001-20261015]
+    paths:
+      - .github/workflows/agent1-wp-s004-continuation-acceptance.yml
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Functional gates
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Prepare isolated capture environment
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install playwright==1.63.0 pillow
+      - name: Capture exact-head WebGPU and WebGL2 evidence
+        shell: bash
+        run: |
+          npm run dev -- --port 4174 > wp-s004-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          STEPS='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-exterior.ts"),import("/src/world.ts"),import("/src/planet.ts")]).then(([g,s,w,p])=>{window.__wp={g,s,w,p};window.__focus=(q,h)=>{const ll=p.sourceToLonLat(q.x,q.z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(h)};window.__pick=a=>g.villages.find(v=>s.settlementExteriorFor(v).archetype===a)||g.villages[0];window.__service=n=>{const v=g.villages[0],plan=s.settlementExteriorFor(v),plot=plan.plots.find(q=>q.service===n);if(!plot)throw new Error("missing service "+n);for(const c of plot.candidates){const f=w.featuresFor(w.tileForPosition(c.x,c.z,15)).find(f=>f.service===n&&f.code.includes(v.id));if(f)return f}throw new Error("unresolved service "+n)}});eval:window.__focus(window.__pick("green"),135);settle;shot:village-green;eval:window.__focus(window.__pick("roadside"),135);settle;shot:village-roadside;eval:window.__focus(window.__pick("riverside"),140);settle;shot:village-riverside;eval:window.__focus(window.__pick("dispersed-farming"),155);settle;shot:village-farming;eval:window.__focus(window.__wp.g.cities[0],430);settle;shot:city;eval:window.__focus(window.__service("market"),48);settle;shot:market;eval:window.__focus(window.__service("blacksmith"),44);settle;shot:blacksmith'
+          PHONE='eval:import("/src/planet.ts").then(p=>{const v=window.advisorWorld.geography.villages[0];window.advisorWorld.navigation.setFocus(v.canonicalPosition.lon,v.canonicalPosition.lat);window.advisorWorld.setHalfHeight(135)});settle;shot:village-mobile'
+          for R in webgpu webgl2; do
+            .venv/bin/python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/${R}-desktop" --name wp-s004 --profile desktop --renderer "$R" --browser-channel chrome --timeout 300 --steps "$STEPS"
+            .venv/bin/python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/${R}-mobile" --name wp-s004 --profile phone,phone-landscape --renderer "$R" --browser-channel chrome --timeout 300 --steps "$PHONE"
+          done
+          .venv/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+          for path in Path('test-results').glob('webgpu-*/capture.json'):
+              rows=json.loads(path.read_text())
+              assert rows and all(r.get('backend')=='webgpu' and not r.get('webgpuFellBack') for r in rows), (path, rows)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wp-s004-continuation-${{ github.sha }}
+          path: |
+            test-results/
+            wp-s004-preview.log
