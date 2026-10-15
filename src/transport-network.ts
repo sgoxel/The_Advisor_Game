@@ -671,11 +671,47 @@ export function buildTransportNetwork(): TransportNetwork {
     }
   }
 
-  // One country backbone: every non-capital city joins its capital.
+  // Build each country's city backbone as a deterministic legal spanning tree.
+  // The capital is the root, but an unconnected city may join any already
+  // connected city. This preserves capital reachability without requiring an
+  // artificial direct capital corridor through terrain that has no legal route.
   for (const country of countries) {
-    const localCities = cities.filter((city) => city.continent === country.continent && city.country === country.id).sort((a, b) => a.city - b.city),
-      capital = nodeBySourceId.get(localCities[0].id)!;
-    for (const city of localCities.slice(1)) addRoad(state, nodeBySourceId.get(city.id)!, capital, "regional", `COUNTRY/${country.code}/CITY/${city.city}`);
+    const localCities = cities
+        .filter((city) => city.continent === country.continent && city.country === country.id)
+        .sort((a, b) => a.city - b.city || a.code.localeCompare(b.code)),
+      localNodes = localCities.map((city) => nodeBySourceId.get(city.id)!);
+    if (localNodes.length <= 1) continue;
+
+    const connected = new Set<string>([localNodes[0].code]),
+      unconnected = new Map(localNodes.slice(1).map((node) => [node.code, node]));
+    while (unconnected.size) {
+      const candidates = localNodes
+        .filter((node) => connected.has(node.code))
+        .flatMap((from) => [...unconnected.values()].map((to) => ({
+          from,
+          to,
+          distanceM: greatCircleDistance(from.position, to.position),
+          pair: edgePairKey(from.sourceId, to.sourceId),
+        })))
+        .sort((a, b) => a.distanceM - b.distanceM || a.pair.localeCompare(b.pair));
+      let linked = false;
+      for (const candidate of candidates) {
+        const pair = [candidate.from.sourceId, candidate.to.sourceId]
+          .sort()
+          .map((id) => id.replaceAll("/", "-"))
+          .join("--");
+        try {
+          addRoad(state, candidate.from, candidate.to, "regional", `COUNTRY/${country.code}/CITY-LINK/${pair}`);
+          connected.add(candidate.to.code);
+          unconnected.delete(candidate.to.code);
+          linked = true;
+          break;
+        } catch {
+          // Try the next shortest stable connected↔unconnected pair.
+        }
+      }
+      if (!linked) throw new Error(`No legal connected city backbone for ${country.code}`);
+    }
   }
 
   // Every country selects a real adjacent country by the political ownership
@@ -756,7 +792,6 @@ export function buildTransportNetwork(): TransportNetwork {
 }
 
 export const transportNetwork = buildTransportNetwork();
-
 function roadSurfaceRecord(edge: TransportRoadEdge): Road {
   const from = transportNetwork.nodes.find((node) => node.code === edge.from)!, to = transportNetwork.nodes.find((node) => node.code === edge.to)!,
     first = edge.centerline[0], last = edge.centerline[edge.centerline.length - 1], dx = wrapSourceX(last.x - first.x), toX = first.x + dx,
