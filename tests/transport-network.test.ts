@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+// S005 acceptance runs against the same installed road authority used by world/routing.
 import "../src/world.ts";
 import { cities, countries, roads, villages } from "../src/geography.ts";
 import { naturalSurfaceAt } from "../src/hydrology.ts";
