@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   acceptance:
-    runs-on: macos-15-intel
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +29,7 @@ jobs:
           python3 -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/python -m pip install playwright==1.63.0 pillow
+          .venv/bin/python -m playwright install --with-deps chromium
       - name: Capture exact-head WebGPU and WebGL2 evidence
         shell: bash
         run: |
@@ -42,8 +43,8 @@ jobs:
           STEPS='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-exterior.ts"),import("/src/world.ts"),import("/src/planet.ts")]).then(([g,s,w,p])=>{window.__wp={g,s,w,p};window.__focus=(q,h)=>{const ll=p.sourceToLonLat(q.x,q.z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(h)};window.__pick=a=>g.villages.find(v=>s.settlementExteriorFor(v).archetype===a)||g.villages[0];window.__service=n=>{const v=g.villages[0],plan=s.settlementExteriorFor(v),plot=plan.plots.find(q=>q.service===n);if(!plot)throw new Error("missing service "+n);for(const c of plot.candidates){const f=w.featuresFor(w.tileForPosition(c.x,c.z,15)).find(f=>f.service===n&&f.code.includes(v.id));if(f)return f}throw new Error("unresolved service "+n)}});eval:window.__focus(window.__pick("green"),135);settle;shot:village-green;eval:window.__focus(window.__pick("roadside"),135);settle;shot:village-roadside;eval:window.__focus(window.__pick("riverside"),140);settle;shot:village-riverside;eval:window.__focus(window.__pick("dispersed-farming"),155);settle;shot:village-farming;eval:window.__focus(window.__wp.g.cities[0],430);settle;shot:city;eval:window.__focus(window.__service("market"),48);settle;shot:market;eval:window.__focus(window.__service("blacksmith"),44);settle;shot:blacksmith'
           PHONE='eval:import("/src/planet.ts").then(p=>{const v=window.advisorWorld.geography.villages[0];window.advisorWorld.navigation.setFocus(v.canonicalPosition.lon,v.canonicalPosition.lat);window.advisorWorld.setHalfHeight(135)});settle;shot:village-mobile'
           for R in webgpu webgl2; do
-            .venv/bin/python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/${R}-desktop" --name wp-s004 --profile desktop --renderer "$R" --browser-channel chrome --timeout 300 --steps "$STEPS"
-            .venv/bin/python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/${R}-mobile" --name wp-s004 --profile phone,phone-landscape --renderer "$R" --browser-channel chrome --timeout 300 --steps "$PHONE"
+            .venv/bin/python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/${R}-desktop" --name wp-s004 --profile desktop --renderer "$R" --timeout 300 --steps "$STEPS"
+            .venv/bin/python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/${R}-mobile" --name wp-s004 --profile phone,phone-landscape --renderer "$R" --timeout 300 --steps "$PHONE"
           done
           .venv/bin/python - <<'PY'
           import json
