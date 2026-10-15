@@ -191,7 +191,6 @@ export const siteAccessRoads: readonly Road[] = criticalSites.map((site) => {
     ] as const,
   } as Road;
 });
-for (const branch of siteAccessRoads) if (!roads.some((road) => road.code === branch.code)) roads.push(branch);
 
 const buckets = new Map<string, CriticalSite[]>();
 function addToBucket(site: CriticalSite, x: number) {
