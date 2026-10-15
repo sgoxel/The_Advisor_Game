@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { cities, countries, villages } from "../src/geography.ts";
+import { finalSurfaceAt } from "../src/world.ts";
 import {
   LazySimulation,
+  RESIDENTIAL_CAPACITY,
   gateCountFor,
   guardCoverageAt,
   guardsPerGateFor,
@@ -13,27 +15,24 @@ import {
 
 const HOUR = 3600;
 
-test("resident foundations give every logical resident one stable distinct home", () => {
-  const village = villages[0];
-  const homes = new Set<string>();
+test("resident foundations are stable and respect bounded household capacity", () => {
+  const village = villages[0], homes = new Map<string, number>();
   for (let index = 0; index < populationOf(village); index++) {
-    const first = residentFoundationAt(village, index);
-    const replay = residentFoundationAt(village, index);
+    const first = residentFoundationAt(village, index),
+      replay = residentFoundationAt(village, index);
     assert.deepEqual(replay, first);
     assert.equal(first.home, village.id);
     assert.equal(first.settlement, village.id);
     assert.equal(first.homeEntrance, `${first.homeBuilding}/ENTRANCE`);
-    assert.match(
-      first.homeBuilding,
-      new RegExp(
-        `${village.code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\/HOME\\/${index}$`,
-      ),
-    );
     assert.ok(first.workplace.startsWith(village.code));
-    assert.ok(!homes.has(first.homeBuilding), `duplicate home ${first.homeBuilding}`);
-    homes.add(first.homeBuilding);
+    homes.set(first.homeBuilding, (homes.get(first.homeBuilding) ?? 0) + 1);
   }
-  assert.equal(homes.size, populationOf(village));
+  assert.ok(homes.size > 1);
+  assert.ok([...homes.values()].every((occupancy) => occupancy <= RESIDENTIAL_CAPACITY));
+  assert.equal(
+    homes.size,
+    Math.ceil(populationOf(village) / RESIDENTIAL_CAPACITY),
+  );
 });
 
 test("every village has required service staff and continuous seeded gate coverage", () => {
@@ -58,11 +57,7 @@ test("every village has required service staff and continuous seeded gate covera
       assert.equal(coverage.length, gateCountFor(village));
       for (const gate of coverage) {
         assert.equal(gate.required, guardsPerGateFor(village, gate.gateIndex));
-        assert.equal(
-          gate.onDuty,
-          gate.required,
-          `${village.code} gate ${gate.gateIndex} at ${tick}`,
-        );
+        assert.equal(gate.onDuty, gate.required, `${village.code} gate ${gate.gateIndex} at ${tick}`);
         assert.equal(new Set(gate.residentCodes).size, gate.onDuty);
       }
     }
@@ -70,10 +65,8 @@ test("every village has required service staff and continuous seeded gate covera
 });
 
 test("resident schedule state is analytical from absolute fantasy time", () => {
-  const village = villages[0];
-  const tick = 14 * HOUR + 1234;
-  const direct = residentAt(village, 3, tick);
-  const simulation = new LazySimulation();
+  const village = villages[0], tick = 14 * HOUR + 1234,
+    direct = residentAt(village, 3, tick), simulation = new LazySimulation();
   simulation.setFocus(village);
   simulation.advance(1);
   simulation.advance(8000);
@@ -82,14 +75,23 @@ test("resident schedule state is analytical from absolute fantasy time", () => {
   assert.deepEqual(caughtUp, direct);
   assert.equal(caughtUp?.role, "farmer");
   assert.equal(caughtUp?.task, "Working the farm");
+  assert.equal(caughtUp?.route, caughtUp?.workplace);
+});
+
+test("analytical resident positions stay on walkable final surface", () => {
+  const village = villages[0];
+  for (const tick of [2 * HOUR, 6.5 * HOUR, 11 * HOUR, 18.5 * HOUR, 22 * HOUR])
+    for (const index of [0, 3, 6, 12, 31, 57, 79]) {
+      const resident = residentAt(village, index, tick),
+        surface = finalSurfaceAt(resident.x, resident.z);
+      assert.ok(surface.walkable, `${resident.code} at ${tick} is not walkable`);
+    }
 });
 
 test("advance never rebuilds a focused country's resident objects", () => {
-  const city = cities[0];
-  const country = countries.find(
+  const city = cities[0], country = countries.find(
     (entry) => entry.continent === city.continent && entry.id === city.country,
-  )!;
-  const simulation = new LazySimulation();
+  )!, simulation = new LazySimulation();
   simulation.setFocus(city);
   for (const tick of [1, 2, 3, 60, 3600, 7200]) {
     simulation.advance(tick);
@@ -97,27 +99,44 @@ test("advance never rebuilds a focused country's resident objects", () => {
     assert.equal(simulation.stats.activeScheduleRecords, 0);
     assert.equal(simulation.stats.residentEvaluationsSinceAdvance, 0);
     assert.ok(simulation.stats.logicalResidents >= populationOf(city));
-    assert.equal(
-      simulation.summaries.get(country.code)?.tier,
-      "live",
-      "focused country summary remains live",
-    );
+    assert.equal(simulation.summaries.get(country.code)?.tier, "live");
   }
 });
 
-test("focused resident queries are spatially bounded and actor-budget bounded", () => {
-  const city = cities[0];
-  const simulation = new LazySimulation();
+test("focused resident queries use a lazy spatial index and bounded evaluation", () => {
+  const city = cities[0], simulation = new LazySimulation();
   simulation.setFocus(city);
   simulation.advance(9 * HOUR);
-  const visible = simulation.focusedResidents(city.x, city.z, 8, 96);
-  const stats = simulation.stats;
-  assert.ok(visible.length <= 96);
-  assert.equal(stats.query.returnedResidents, visible.length);
-  assert.ok(stats.query.settlements >= 1);
-  assert.ok(stats.query.candidateResidents >= populationOf(city));
-  assert.ok(stats.query.candidateResidents < stats.logicalResidents);
-  assert.ok(stats.query.evaluatedResidents <= stats.query.candidateResidents);
-  assert.ok(stats.query.evaluatedResidents < stats.logicalResidents);
-  assert.equal(new Set(visible.map((resident) => resident.code)).size, visible.length);
+  const first = simulation.focusedResidents(city.x, city.z, 2, 32),
+    firstStats = simulation.stats;
+  assert.ok(first.length <= 32);
+  assert.equal(firstStats.query.returnedResidents, first.length);
+  assert.ok(firstStats.query.settlements >= 1);
+  assert.ok(firstStats.query.candidateResidents > 0);
+  assert.ok(firstStats.query.candidateResidents < firstStats.logicalResidents);
+  assert.ok(firstStats.query.evaluatedResidents <= firstStats.query.candidateResidents);
+  assert.ok(firstStats.query.evaluatedResidents < firstStats.logicalResidents);
+  assert.equal(new Set(first.map((resident) => resident.code)).size, first.length);
+  const builds = firstStats.residentIndexBuilds;
+  simulation.focusedResidents(city.x + 0.5, city.z + 0.5, 2, 32);
+  assert.equal(simulation.stats.residentIndexBuilds, builds, "steady queries reuse spatial index");
+});
+
+test("unload and revisit reconstruct the same resident from seed and absolute time", () => {
+  const home = villages[0], other = villages.find(
+    (place) => place.continent !== home.continent || place.country !== home.country,
+  );
+  assert.ok(other, "test world needs a village in another country");
+  const tick = 10 * HOUR + 777, code = residentFoundationAt(home, 11).code,
+    direct = residentAt(home, 11, tick), simulation = new LazySimulation();
+  simulation.setFocus(home);
+  simulation.advance(tick);
+  simulation.focusedResidents(home.x, home.z, 4, 16);
+  assert.ok(simulation.stats.activeResidentIndexes > 0);
+  simulation.setFocus(other);
+  assert.equal(simulation.stats.activeResidentIndexes, 0, "country handoff releases resident indexes");
+  simulation.setFocus(home);
+  const replay = simulation.residentByCode(code, tick);
+  assert.deepEqual(replay, direct);
+  assert.ok(simulation.stats.reconstructionCount >= 2);
 });

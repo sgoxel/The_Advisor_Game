@@ -1,0 +1,36 @@
+name: Validate S006 living residents
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  resident-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: python -m pip install playwright==1.63.0
+      - name: Capture resident inspector evidence
+        run: |
+          npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          RESIDENT_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(97);wait:1500;settle;click:#open-travel;visible:#resident-inspector;visible:#resident-select;eval:document.getElementById("travel-panel").scrollTop=document.getElementById("resident-inspector").offsetTop-18;wait:150;shot:resident-primary;eval:(s=>{s.selectedIndex=Math.min(5,s.options.length-1);s.dispatchEvent(new Event("change"))})(document.getElementById("resident-select"));wait:100;shot:resident-second;click:#resident-home-inspect;wait:100;shot:resident-house'
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgl2 --name residents --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 240 --steps "$RESIDENT_STEPS"
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgpu --name residents --profile desktop,phone,phone-landscape --renderer webgpu --timeout 240 --steps "$RESIDENT_STEPS"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: s006-resident-evidence
+          path: test-results/

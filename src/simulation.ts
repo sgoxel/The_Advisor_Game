@@ -1,5 +1,5 @@
 import { countries, places, type Place } from "./geography.ts";
-import { digest, heightAt } from "./world.ts";
+import { digest, finalSurfaceAt, heightAt } from "./world.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
   CANONICAL_PLANET_RADIUS,
@@ -26,10 +26,8 @@ export type ResidentRole =
 export type ResidentFoundation = {
   code: string;
   name: string;
-  /** Settlement identity retained for deterministic lookup and legacy diagnostics. */
   home: string;
   settlement: string;
-  /** Specific canonical logical building and entrance assigned to this resident. */
   homeBuilding: string;
   homeEntrance: string;
   workplace: string;
@@ -50,10 +48,10 @@ export type ResidentFoundation = {
 
 export type Resident = ResidentFoundation & {
   position: CanonicalPosition;
-  /** Transitional presentation coordinates only. */
   x: number;
   z: number;
   task: string;
+  route: string;
 };
 
 export type CountryState = {
@@ -76,6 +74,11 @@ type QueryStats = {
   candidateResidents: number;
   evaluatedResidents: number;
   returnedResidents: number;
+};
+
+type ResidentSpatialIndex = {
+  buckets: Map<string, number[]>;
+  population: number;
 };
 
 const SERVICE_ROLES: readonly ResidentRole[] = [
@@ -143,10 +146,12 @@ const FAMILY_NAMES = [
 const DAY_SECONDS = 86_400;
 const HOUR = 3_600;
 const PLACE_BUCKET_SOURCE = 128;
+const RESIDENT_BUCKET_SOURCE = 4;
 const MAX_RESIDENT_ROAM_M = 320;
 const MAX_RESIDENT_ROAM_SOURCE =
   MAX_RESIDENT_ROAM_M / CANONICAL_METRES_PER_SOURCE_UNIT;
 const DEFAULT_VISIBLE_LIMIT = 128;
+export const RESIDENTIAL_CAPACITY = 8;
 
 export const populationOf = (place: Place) =>
   place.kind === "city" ? 2400 : 80;
@@ -183,11 +188,7 @@ function canonicalOffset(
     elevation: place.canonicalPosition.elevation,
   };
 }
-function seededOffset(
-  code: string,
-  minRadiusM: number,
-  maxRadiusM: number,
-) {
+function seededOffset(code: string, minRadiusM: number, maxRadiusM: number) {
   const angle = ((digest(`${code}/ANGLE`) % 65_536) / 65_536) * Math.PI * 2,
     radiusSpan = Math.max(1, Math.round(maxRadiusM - minRadiusM)),
     radius = minRadiusM + (digest(`${code}/RADIUS`) % radiusSpan);
@@ -234,7 +235,6 @@ function residentRoleFor(place: Place, index: number): ResidentRole {
 }
 function workOffsetFor(
   place: Place,
-  code: string,
   role: ResidentRole,
   assignment: GuardAssignment | undefined,
 ) {
@@ -250,8 +250,9 @@ function workOffsetFor(
       northM: Math.sin(angle) * radius,
     };
   }
-  const radius = role === "farmer" ? 62 : 22;
-  return seededOffset(`${code}/WORK/${ROLE_WORKPLACE[role]}`, 8, radius);
+  const workplaceCode = `${place.code}/SERVICE/${ROLE_WORKPLACE[role]}`,
+    radius = role === "farmer" ? (place.kind === "city" ? 195 : 62) : 28;
+  return seededOffset(`${workplaceCode}/POSITION`, 8, radius);
 }
 
 export function residentFoundationAt(
@@ -264,7 +265,8 @@ export function residentFoundationAt(
     variant = digest(code),
     role = residentRoleFor(place, index),
     assignment = guardAssignmentFor(place, index),
-    homeBuilding = `${place.code}/HOME/${index}`,
+    household = Math.floor(index / RESIDENTIAL_CAPACITY),
+    homeBuilding = `${place.code}/RESIDENCE/${household}`,
     first = GIVEN_NAMES[variant % GIVEN_NAMES.length],
     family = FAMILY_NAMES[digest(`${code}/FAMILY`) % FAMILY_NAMES.length];
   return {
@@ -292,7 +294,7 @@ export function residentFoundationAt(
       10,
       place.kind === "city" ? 215 : 58,
     ),
-    workOffset: workOffsetFor(place, code, role, assignment),
+    workOffset: workOffsetFor(place, role, assignment),
   };
 }
 
@@ -324,31 +326,44 @@ export function guardCoverageAt(place: Place, tick: number) {
   return coverage;
 }
 
-/** Commutes follow a stable home → settlement road hub → workplace route. */
+/** Deterministic local commute corridor between a resident's assigned endpoints. */
 function routeOffset(
   from: { eastM: number; northM: number },
   to: { eastM: number; northM: number },
   progress: number,
 ) {
   const t = Math.max(0, Math.min(1, progress));
-  if (t <= 0.5) {
-    const k = 1 - t * 2;
-    return { eastM: from.eastM * k, northM: from.northM * k };
-  }
-  const k = (t - 0.5) * 2;
-  return { eastM: to.eastM * k, northM: to.northM * k };
+  return {
+    eastM: from.eastM + (to.eastM - from.eastM) * t,
+    northM: from.northM + (to.northM - from.northM) * t,
+  };
 }
 function scheduleAt(foundation: ResidentFoundation, tick: number) {
-  const second = daySecond(tick);
+  const second = daySecond(tick),
+    workRoute = `${foundation.homeEntrance} → ${foundation.workplace}`,
+    homeRoute = `${foundation.workplace} → ${foundation.homeEntrance}`;
   if (foundation.role === "guard")
     return isGuardOnDuty(foundation, tick)
-      ? { task: "Guard duty", offset: foundation.workOffset }
-      : { task: "Resting at home", offset: foundation.homeOffset };
+      ? {
+          task: "Guard duty",
+          route: foundation.gatePost ?? foundation.workplace,
+          offset: foundation.workOffset,
+        }
+      : {
+          task: "Resting at home",
+          route: foundation.homeEntrance,
+          offset: foundation.homeOffset,
+        };
   if (second < 6 * HOUR)
-    return { task: "Resting at home", offset: foundation.homeOffset };
+    return {
+      task: "Resting at home",
+      route: foundation.homeEntrance,
+      offset: foundation.homeOffset,
+    };
   if (second < 7 * HOUR)
     return {
       task: "Walking to work",
+      route: workRoute,
       offset: routeOffset(
         foundation.homeOffset,
         foundation.workOffset,
@@ -371,34 +386,54 @@ function scheduleAt(foundation: ResidentFoundation, tick: number) {
                   : foundation.role === "guard-officer"
                     ? "Coordinating the watch"
                     : "Working",
+      route: foundation.workplace,
       offset: foundation.workOffset,
     };
   if (second < 19 * HOUR)
     return {
       task: "Walking home",
+      route: homeRoute,
       offset: routeOffset(
         foundation.workOffset,
         foundation.homeOffset,
         (second - 18 * HOUR) / HOUR,
       ),
     };
-  return { task: "At home", offset: foundation.homeOffset };
+  return {
+    task: "At home",
+    route: foundation.homeEntrance,
+    offset: foundation.homeOffset,
+  };
 }
 function legalPosition(
   place: Place,
   eastM: number,
   northM: number,
 ): { position: CanonicalPosition; x: number; z: number } {
-  const candidate = canonicalOffset(place, eastM, northM),
-    presentation = lonLatToSource(candidate.lon, candidate.lat),
-    legal = heightAt(presentation.x, presentation.z) > 0.1,
-    source = legal ? presentation : { x: place.x, z: place.z },
-    surface = legal ? candidate : place.canonicalPosition,
-    elevation = heightAt(source.x, source.z);
+  let scale = 1;
+  for (let attempt = 0; attempt < 7; attempt++) {
+    const candidate = canonicalOffset(place, eastM * scale, northM * scale),
+      presentation = lonLatToSource(candidate.lon, candidate.lat),
+      surface = finalSurfaceAt(presentation.x, presentation.z);
+    if (surface.walkable && heightAt(presentation.x, presentation.z) > 0.1) {
+      const elevation = heightAt(presentation.x, presentation.z);
+      return {
+        position: { lon: candidate.lon, lat: candidate.lat, elevation },
+        x: presentation.x,
+        z: presentation.z,
+      };
+    }
+    scale *= 0.68;
+  }
+  const elevation = heightAt(place.x, place.z);
   return {
-    position: { lon: surface.lon, lat: surface.lat, elevation },
-    x: source.x,
-    z: source.z,
+    position: {
+      lon: place.canonicalPosition.lon,
+      lat: place.canonicalPosition.lat,
+      elevation,
+    },
+    x: place.x,
+    z: place.z,
   };
 }
 
@@ -411,7 +446,12 @@ export function residentAt(place: Place, index: number, tick: number): Resident 
       schedule.offset.eastM,
       schedule.offset.northM,
     );
-  return { ...foundation, ...location, task: schedule.task };
+  return {
+    ...foundation,
+    ...location,
+    task: schedule.task,
+    route: schedule.route,
+  };
 }
 export function summaryAt(code: string, tick: number): CountryState {
   const baseline = digest(code) % 5000;
@@ -473,6 +513,42 @@ function countryLogicalPopulation(code: string) {
     0,
   );
 }
+function relativeSourceForOffset(
+  place: Place,
+  offset: { eastM: number; northM: number },
+) {
+  const canonical = canonicalOffset(place, offset.eastM, offset.northM),
+    source = lonLatToSource(canonical.lon, canonical.lat);
+  return {
+    x: wrapSourceX(source.x - place.x),
+    z: source.z - place.z,
+  };
+}
+function residentIndexFor(place: Place): ResidentSpatialIndex {
+  const buckets = new Map<string, number[]>(),
+    population = populationOf(place);
+  for (let index = 0; index < population; index++) {
+    const foundation = residentFoundationAt(place, index),
+      home = relativeSourceForOffset(place, foundation.homeOffset),
+      work = relativeSourceForOffset(place, foundation.workOffset),
+      minX = Math.min(home.x, work.x),
+      maxX = Math.max(home.x, work.x),
+      minZ = Math.min(home.z, work.z),
+      maxZ = Math.max(home.z, work.z),
+      bx0 = Math.floor(minX / RESIDENT_BUCKET_SOURCE),
+      bx1 = Math.floor(maxX / RESIDENT_BUCKET_SOURCE),
+      bz0 = Math.floor(minZ / RESIDENT_BUCKET_SOURCE),
+      bz1 = Math.floor(maxZ / RESIDENT_BUCKET_SOURCE);
+    for (let bz = bz0; bz <= bz1; bz++)
+      for (let bx = bx0; bx <= bx1; bx++) {
+        const key = `${bx}/${bz}`,
+          bucket = buckets.get(key);
+        if (bucket) bucket.push(index);
+        else buckets.set(key, [index]);
+      }
+  }
+  return { buckets, population };
+}
 
 export class LazySimulation {
   tick = 0;
@@ -487,6 +563,8 @@ export class LazySimulation {
   };
   private residentEvaluationsSinceAdvance = 0;
   private reconstructionCount = 0;
+  private residentIndexBuilds = 0;
+  private residentIndexes = new Map<string, ResidentSpatialIndex>();
   private selectedResidentCode = "";
   private inspector?: HTMLElement;
 
@@ -509,13 +587,18 @@ export class LazySimulation {
       <div class="eyebrow">NEARBY RESIDENTS</div>
       <label for="resident-select">Inhabitant</label>
       <select id="resident-select" aria-label="Nearby inhabitant"></select>
-      <h3 id="resident-name">Zoom closer to inspect inhabitants</h3>
-      <code id="resident-code"></code>
+      <div class="resident-identity">
+        <div id="resident-avatar" aria-hidden="true"><i></i></div>
+        <div><h3 id="resident-name">Zoom closer to inspect inhabitants</h3><code id="resident-code"></code></div>
+      </div>
       <dl id="resident-details">
         <dt>Role</dt><dd id="resident-role">—</dd>
         <dt>Current task</dt><dd id="resident-task">—</dd>
         <dt>House</dt><dd id="resident-home">—</dd>
         <dt>Workplace / post</dt><dd id="resident-workplace">—</dd>
+        <dt>Current route</dt><dd id="resident-route">—</dd>
+        <dt>Guard assignment</dt><dd id="resident-guard">—</dd>
+        <dt>Appearance seed</dt><dd id="resident-appearance">—</dd>
       </dl>
       <button id="resident-home-inspect" type="button" disabled>Inspect assigned house</button>
       <p class="hint" id="resident-house-details" aria-live="polite"></p>
@@ -523,15 +606,6 @@ export class LazySimulation {
     const livingWorld = document.getElementById("simulation-status")?.previousElementSibling;
     if (livingWorld) panel.insertBefore(section, livingWorld);
     else panel.append(section);
-    const style = document.createElement("style");
-    style.textContent = `
-      .resident-inspector{margin-top:12px}.resident-inspector h3{margin:8px 0 4px;font-size:1rem}
-      .resident-inspector code{display:block;overflow-wrap:anywhere;font-size:.72rem;opacity:.8}
-      .resident-inspector dl{display:grid;grid-template-columns:minmax(88px,.75fr) minmax(0,1.25fr);gap:4px 10px;margin:8px 0}
-      .resident-inspector dt{opacity:.68}.resident-inspector dd{margin:0;overflow-wrap:anywhere}
-      .resident-inspector select{width:100%;min-height:34px}.resident-inspector button{width:100%;margin-top:6px}
-      @media(max-width:620px){.resident-inspector dl{grid-template-columns:1fr}.resident-inspector dt{margin-top:4px}}`;
-    document.head.append(style);
     this.inspector = section;
     const select = document.getElementById("resident-select") as HTMLSelectElement | null;
     select?.addEventListener("change", () => {
@@ -543,7 +617,7 @@ export class LazySimulation {
       const resident = this.residentByCode(this.selectedResidentCode),
         output = document.getElementById("resident-house-details");
       if (resident && output)
-        output.textContent = `House object ${resident.homeBuilding} · entrance ${resident.homeEntrance} · settlement ${resident.settlement}`;
+        output.textContent = `House ${resident.homeBuilding} · entrance ${resident.homeEntrance} · household capacity ${RESIDENTIAL_CAPACITY} · settlement ${resident.settlement}`;
     });
   }
 
@@ -558,8 +632,56 @@ export class LazySimulation {
     text("resident-task", resident.task);
     text("resident-home", resident.homeBuilding);
     text("resident-workplace", resident.workplace);
+    text("resident-route", resident.route);
+    text(
+      "resident-guard",
+      resident.gatePost
+        ? `${resident.gatePost} · ${resident.guardShift === 0 ? "day" : "night"} shift`
+        : "Not assigned to the watch",
+    );
+    text(
+      "resident-appearance",
+      `silhouette ${resident.appearance.silhouette + 1} · hair ${resident.appearance.hair + 1} · clothing ${resident.appearance.clothing + 1}`,
+    );
+    const avatar = document.getElementById("resident-avatar");
+    if (avatar) {
+      avatar.dataset.silhouette = String(resident.appearance.silhouette);
+      avatar.dataset.hair = String(resident.appearance.hair);
+      avatar.dataset.clothing = String(resident.appearance.clothing);
+    }
     const button = document.getElementById("resident-home-inspect") as HTMLButtonElement | null;
     if (button) button.disabled = false;
+  }
+
+  private indexFor(place: Place) {
+    let index = this.residentIndexes.get(place.code);
+    if (!index) {
+      index = residentIndexFor(place);
+      this.residentIndexes.set(place.code, index);
+      this.residentIndexBuilds++;
+    }
+    return index;
+  }
+
+  private residentCandidates(place: Place, x: number, z: number, radius: number) {
+    const index = this.indexFor(place),
+      relativeX = wrapSourceX(x - place.x),
+      relativeZ = z - place.z,
+      bx0 = Math.floor((relativeX - radius) / RESIDENT_BUCKET_SOURCE),
+      bx1 = Math.floor((relativeX + radius) / RESIDENT_BUCKET_SOURCE),
+      bz0 = Math.floor((relativeZ - radius) / RESIDENT_BUCKET_SOURCE),
+      bz1 = Math.floor((relativeZ + radius) / RESIDENT_BUCKET_SOURCE),
+      found = new Set<number>();
+    for (let bz = bz0; bz <= bz1; bz++)
+      for (let bx = bx0; bx <= bx1; bx++)
+        for (const resident of index.buckets.get(`${bx}/${bz}`) ?? [])
+          found.add(resident);
+    const start = digest(`${place.code}/VISIBLE_START`) % index.population;
+    return [...found].sort(
+      (a, b) =>
+        ((a - start + index.population) % index.population) -
+        ((b - start + index.population) % index.population),
+    );
   }
 
   private updateInspector(visible: Resident[], query: QueryStats) {
@@ -591,7 +713,7 @@ export class LazySimulation {
     }
     const performance = document.getElementById("resident-performance");
     if (performance)
-      performance.textContent = `${query.candidateResidents.toLocaleString()} spatial candidates · ${query.evaluatedResidents.toLocaleString()} evaluated · ${query.returnedResidents.toLocaleString()} visible from ${countryLogicalPopulation(this.activeCountry).toLocaleString()} logical residents`;
+      performance.textContent = `${query.candidateResidents.toLocaleString()} spatial candidates · ${query.evaluatedResidents.toLocaleString()} evaluated · ${query.returnedResidents.toLocaleString()} visible from ${countryLogicalPopulation(this.activeCountry).toLocaleString()} logical residents · ${this.residentIndexes.size} active spatial indexes`;
   }
 
   setFocus(place: Place | undefined) {
@@ -600,7 +722,10 @@ export class LazySimulation {
       (country) =>
         country.continent === place.continent && country.id === place.country,
     )!.code;
-    if (this.activeCountry && this.activeCountry !== next) this.reconstructionCount++;
+    if (this.activeCountry && this.activeCountry !== next) {
+      this.reconstructionCount++;
+      this.residentIndexes.clear();
+    }
     this.activeCountry = next;
   }
   setInterest(code: string) {
@@ -632,28 +757,30 @@ export class LazySimulation {
     limit = DEFAULT_VISIBLE_LIMIT,
   ) {
     if (!(radius >= 0) || !(limit >= 0)) return [] as Resident[];
-    const candidates = nearbyPlaces(x, z, radius).filter((place) => {
+    const settlements = nearbyPlaces(x, z, radius).filter((place) => {
       const country = countries.find(
         (entry) =>
           entry.continent === place.continent && entry.id === place.country,
       );
       return country?.code === this.activeCountry;
     });
+    const candidateSets = settlements.map((place) => ({
+      place,
+      residents: this.residentCandidates(place, x, z, radius),
+    }));
     const query: QueryStats = {
-      settlements: candidates.length,
-      candidateResidents: candidates.reduce(
-        (total, place) => total + populationOf(place),
+      settlements: settlements.length,
+      candidateResidents: candidateSets.reduce(
+        (total, candidate) => total + candidate.residents.length,
         0,
       ),
       evaluatedResidents: 0,
       returnedResidents: 0,
     };
     const visible: Resident[] = [];
-    for (const place of candidates) {
-      const count = populationOf(place),
-        start = digest(`${place.code}/VISIBLE_START`) % count;
-      for (let offset = 0; offset < count; offset++) {
-        const resident = residentAt(place, (start + offset) % count, this.tick);
+    for (const candidate of candidateSets) {
+      for (const index of candidate.residents) {
+        const resident = residentAt(candidate.place, index, this.tick);
         query.evaluatedResidents++;
         this.residentEvaluationsSinceAdvance++;
         if (sourceDistance(resident.x, resident.z, x, z) > radius) continue;
@@ -679,11 +806,7 @@ export class LazySimulation {
     return residentAt(place, index, tick);
   }
 
-  /**
-   * Deprecated read-only diagnostic façade for the S001 regression harness.
-   * It materializes one analytical sample only when explicitly read; advance()
-   * never stores or rebuilds resident arrays.
-   */
+  /** Diagnostic compatibility façade. It materializes one analytical sample only on read. */
   get residents() {
     const result = new Map<string, Resident[]>();
     if (!this.activeCountry) return result;
@@ -705,6 +828,8 @@ export class LazySimulation {
       activeScheduleRecords: 0,
       residentEvaluationsSinceAdvance: this.residentEvaluationsSinceAdvance,
       reconstructionCount: this.reconstructionCount,
+      residentIndexBuilds: this.residentIndexBuilds,
+      activeResidentIndexes: this.residentIndexes.size,
       query: { ...this.lastQuery },
       coarseCountries: [...this.summaries.values()].filter(
         (state) => state.tier === "coarse",
