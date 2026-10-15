@@ -20,4 +20,8 @@ const boundedWorld = fs.readFileSync(worldPath, "utf8");
 if (!boundedWorld.includes("nearbyPlaces, places"))
   execFileSync(process.execPath, ["tools/agent1-wp-s004-patch-v5.mjs"], { stdio: "inherit" });
 
+const worldTest = fs.readFileSync("tests/world.test.ts", "utf8");
+if (!worldTest.includes("field-form base must survive"))
+  execFileSync(process.execPath, ["tools/agent1-wp-s004-patch-v7.mjs"], { stdio: "inherit" });
+
 console.log("AGENT #1 WP-S004 acceptance fixes and runtime integration applied");
