@@ -127,16 +127,11 @@ test("the real crossing bank overlap cannot create a shelf over its channel", ()
   const channel=naturalSurfaceAt(p.x,p.z);
   assert.equal(channel.water.kind,"river");
   let bank: ReturnType<typeof naturalSurfaceAt> | undefined;
-  for(const radius of [4,6,8,10,12]) {
-    for(let index=0;index<24;index++) {
-      const angle=index/24*Math.PI*2,
-        sample=naturalSurfaceAt(p.x+Math.cos(angle)*radius,p.z+Math.sin(angle)*radius);
-      if(sample.material==="Riverbank"&&sample.water.kind==="none") {
-        bank=sample;
-        break;
-      }
+  for(const radius of [2,3,4,5,6,8,10,12]) {
+    for(let index=0;index<48;index++) {
+      const angle=index/48*Math.PI*2, sample=naturalSurfaceAt(p.x+Math.cos(angle)*radius,p.z+Math.sin(angle)*radius);
+      if(sample.material==="Riverbank"&&sample.water.kind==="none"&&(!bank||sample.groundHeight<bank.groundHeight)) bank=sample;
     }
-    if(bank) break;
   }
   assert.ok(bank,"a legal natural river crossing must expose a nearby dry bank");
   assert.ok(bank.groundHeight>=channel.water.level);

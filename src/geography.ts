@@ -64,9 +64,7 @@ const COUNTRY_NAMES = [
   "Embervale", "Whitefen", "Kingsward", "Sablemarch", "Windreach", "Lakehold",
 ] as const;
 const MIN_CITIES_PER_COUNTRY = 3;
-const MAX_CITIES_PER_COUNTRY = 4;
 const MIN_VILLAGES_PER_CITY = 3;
-const MAX_VILLAGES_PER_CITY = 4;
 const CULTURE_STEMS = [
   ["Alder", "Briar", "Oak", "Thorn", "Grey", "Mere", "Stone", "Willow", "Falcon", "Hearth", "Raven", "Ash"],
   ["Gold", "Rose", "Iron", "Sun", "Dawn", "High", "Red", "White", "Wind", "Crown", "Silver", "North"],
@@ -100,17 +98,56 @@ function seededSettlementName(
 ) {
   const stems = CULTURE_STEMS[continent % CULTURE_STEMS.length],
     endings = kind === "city" ? CITY_ENDINGS : VILLAGE_ENDINGS,
-    reserved = new Set(COUNTRY_NAMES.map((name) => name.toLowerCase()));
-  for (let attempt = 0; attempt < 96; attempt++) {
-    const stem = stems[Math.floor(addressed(`${address}/NAME/${attempt}/STEM`) * stems.length)],
-      ending = endings[Math.floor(addressed(`${address}/NAME/${attempt}/ENDING`) * endings.length)],
-      name = `${stem}${ending}`,
-      key = name.toLowerCase();
-    if (used.has(key) || reserved.has(key)) continue;
-    used.add(key);
-    return name;
+    reserved = new Set(COUNTRY_NAMES.map((name) => name.toLowerCase())),
+    gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a),
+    coprimeStep = (addressKey: string, total: number) => {
+      let step = 1 + (digest(addressKey) % Math.max(1, total - 1));
+      while (gcd(step, total) !== 1) step = (step % (total - 1)) + 1;
+      return step;
+    },
+    accept = (name: string) => {
+      const key = name.toLowerCase();
+      if (used.has(key) || reserved.has(key)) return undefined;
+      used.add(key);
+      return name;
+    };
+
+  const simpleTotal = stems.length * endings.length,
+    simpleStart = digest(`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/${address}/NAME/SIMPLE/START`) % simpleTotal,
+    simpleStep = coprimeStep(
+      `${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/${address}/NAME/SIMPLE/STEP`,
+      simpleTotal,
+    );
+  for (let slot = 0; slot < simpleTotal; slot++) {
+    const index = (simpleStart + slot * simpleStep) % simpleTotal,
+      stem = stems[Math.floor(index / endings.length)],
+      ending = endings[index % endings.length],
+      name = accept(`${stem}${ending}`);
+    if (name) return name;
   }
-  throw new Error(`Seeded geography could not create unique ${kind} name for ${address}`);
+
+  // A dense viable region can legitimately need more names than the simple
+  // vocabulary contains. Probe every two-stem cultural compound in a seeded
+  // permutation rather than adding numeric suffixes or retrying collisions.
+  const compoundTotal = stems.length * (stems.length - 1) * endings.length,
+    compoundStart = digest(`${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/${address}/NAME/COMPOUND/START`) % compoundTotal,
+    compoundStep = coprimeStep(
+      `${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/${address}/NAME/COMPOUND/STEP`,
+      compoundTotal,
+    );
+  for (let slot = 0; slot < compoundTotal; slot++) {
+    const index = (compoundStart + slot * compoundStep) % compoundTotal,
+      endingIndex = index % endings.length,
+      pairIndex = Math.floor(index / endings.length),
+      primaryIndex = Math.floor(pairIndex / (stems.length - 1)),
+      secondarySlot = pairIndex % (stems.length - 1),
+      secondaryIndex = secondarySlot >= primaryIndex ? secondarySlot + 1 : secondarySlot,
+      name = accept(
+        `${stems[primaryIndex]}${stems[secondaryIndex].toLowerCase()}${endings[endingIndex]}`,
+      );
+    if (name) return name;
+  }
+  throw new Error(`Seeded geography exhausted cultural ${kind} names for ${address}`);
 }
 function canonicalPosition(lon: number, lat: number, elevation = 0): CanonicalPosition {
   return {
@@ -419,13 +456,11 @@ function habitatCapacityForCountry(country: Country) {
 }
 
 function cityTargetForCountry(country: Country) {
-  const capacity = habitatCapacityForCountry(country),
-    supportsExtra = capacity >= 11,
-    seededExtra = addressed(`${country.code}/CITY_TARGET`) >= 0.34;
-  return Math.min(
-    MAX_CITIES_PER_COUNTRY,
-    MIN_CITIES_PER_COUNTRY + (supportsExtra && seededExtra ? 1 : 0),
-  );
+  const capacity = habitatCapacityForCountry(country);
+  if (capacity < 11) return MIN_CITIES_PER_COUNTRY;
+  const densityBand = 18 + 12 * addressed(country.code + "/CITY_DENSITY_BAND"),
+    extra = 1 + Math.floor(Math.max(0, capacity - 11) / densityBand);
+  return MIN_CITIES_PER_COUNTRY + extra;
 }
 
 function villageTargetForSite(position: LonLat, country: Country, cityIndex: number) {
@@ -433,13 +468,14 @@ function villageTargetForSite(position: LonLat, country: Country, cityIndex: num
     climate = climateSampleAt(position),
     countryCapacity = habitatCapacityForCountry(country),
     supportsExtra = water.nearby || (climate.moisture >= 0.22 && countryCapacity >= 10),
-    seededExtra = addressed(`${country.code}/CITY/${cityIndex}/VILLAGE_TARGET`) >= 0.48;
-  return Math.min(
-    MAX_VILLAGES_PER_CITY,
-    MIN_VILLAGES_PER_CITY + (supportsExtra && seededExtra ? 1 : 0),
-  );
+    seededDensity = addressed(country.code + "/CITY/" + cityIndex + "/VILLAGE_DENSITY");
+  if (!supportsExtra || seededDensity < 0.36) return MIN_VILLAGES_PER_CITY;
+  const support = Math.max(0, countryCapacity - 10) + (water.nearby ? 12 : 0) +
+      (climate.moisture >= 0.18 && climate.moisture <= 0.78 ? 6 : 0),
+    densityBand = 26 + 18 * addressed(country.code + "/CITY/" + cityIndex + "/VILLAGE_DENSITY_BAND"),
+    extra = 1 + Math.floor(support / densityBand);
+  return MIN_VILLAGES_PER_CITY + extra;
 }
-
 function interiorOwnershipScore(position: LonLat, country: Country) {
   let owned = 0;
   for (let index = 0; index < 8; index++) {
@@ -505,13 +541,13 @@ function planVillagePositions(
     let bestScore = -Infinity;
     for (let attempt = 0; attempt < 360; attempt++) {
       const prefix = `VILLAGE/${city.id}/${v}/${attempt}`,
-        bearing = TAU * addressed(`${prefix}/bearing`),
-        distanceM = 6_000 + 72_000 * Math.sqrt(addressed(`${prefix}/distance`)),
         waterCandidate =
           attempt % 3 !== 2 ? freshwaterHabitatCandidate(waterSegments, prefix) : undefined,
         candidate = waterCandidate
           ? { ...waterCandidate, elevation: 0 }
-          : destination(city.canonicalPosition, bearing, distanceM / CANONICAL_PLANET_RADIUS),
+          : attempt % 2 === 0
+            ? countryCenteredCandidate(country, prefix, attempt)
+            : continentCandidate(continents[country.continent], prefix, attempt),
         owner = countryAtPosition(candidate),
         parentDistanceM = macroFeatureDistanceM(candidate, city.canonicalPosition);
       if (
@@ -520,8 +556,7 @@ function planVillagePositions(
         parentDistanceM < 6_000 ||
         !dryOwnedConnectionFits(candidate, city.canonicalPosition, country) ||
         (selected.length > 0 &&
-          (macroFeatureDistanceM(candidate, selected[selected.length - 1]) > 55_000 ||
-            !dryOwnedConnectionFits(candidate, selected[selected.length - 1], country))) ||
+          !dryOwnedConnectionFits(candidate, selected[selected.length - 1], country)) ||
         accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000) ||
         !locallyDrySettlementSite(candidate, 95)
       )

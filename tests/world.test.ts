@@ -181,6 +181,14 @@ test("Alderwick retains legal houses, keep, well and fields across tile ownershi
   assert.equal(new Set(features.map(f=>f.code)).size,features.length);
   assert.ok(features.filter(f=>f.kind==='house').length>=12,'starting village must not silently lose its housing');
   for(const kind of ['keep','well','field']) assert.ok(features.some(f=>f.kind===kind),`missing ${kind}`);
+  const exterior=[...tiles.values()].flatMap(featuresFor);
+  for(const service of ['market','inn','blacksmith','butcher','guard-office','farmstead'])
+    assert.ok(exterior.some(f=>f.kind==='service'&&f.service===service),'missing '+service);
+  const homes=exterior.filter(f=>f.kind==='house');
+  assert.ok(homes.every(f=>f.ownerId&&Number.isFinite(f.entranceX)&&Number.isFinite(f.entranceZ)),'homes need owner and road entrance');
+  assert.ok(exterior.some(f=>f.kind==='border'),'missing core border');
+  assert.ok(exterior.some(f=>f.kind==='gate'),'missing gate');
+  assert.ok(exterior.some(f=>f.kind==='guard-post'),'missing guard post');
   for(const f of features) {
     const radius=f.kind==='keep'?15:f.kind==='field'?13:f.kind==='house'?7:2;
     assert.ok(roads.every(r=>roadDistanceAt(f.x,f.z,r)>radius+5),`${f.kind} overlaps road clearance`);

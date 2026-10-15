@@ -10,6 +10,7 @@ import {
 } from "./planet.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
 import { nearestPlace, places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
+import { settlementExteriorFor, type SettlementPlotPlan, type SettlementService } from "./settlement-exterior.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { freshwaterCrossingAt, drainageCoarseSegments, naturalSurfaceAt } from "./hydrology.ts";
 import {
@@ -37,12 +38,19 @@ export type Tile = {
   minZ: number;
 };
 export type Feature = {
-  kind: "house" | "keep" | "tree" | "rock" | "field" | "well";
+  kind: "house" | "keep" | "tree" | "rock" | "field" | "well" | "service" | "street" | "border" | "gate" | "guard-post";
   x: number;
   z: number;
   y: number;
   code: string;
   variant: number;
+  service?: SettlementService;
+  ownerId?: string;
+  capacity?: number;
+  residents?: number;
+  label?: string;
+  entranceX?: number;
+  entranceZ?: number;
 };
 export type Cell = {
   code: string;
@@ -628,17 +636,20 @@ export function cellAt(x: number, z: number): Cell {
   };
 }
 /** Features are owned by their anchor tile; tile order/zoom never changes them. */
+const settlementPlotAnchors = new Map<string, { x: number; z: number } | null>();
+
+/** Tile-owned exterior features. Plan creation is deterministic and limited to nearby settlements. */
 export function featuresFor(tile: Tile): Feature[] {
   const features: Feature[] = [];
-  const plotAt=(kind:Feature["kind"],x:number,z:number)=>{
-    const surface=finalSurfaceAt(x,z);
-    if(surface.groundHeight<.2||surface.water.kind!=='none')return null;
-    if(kind==='house'||kind==='keep'||kind==='well'||kind==='field'){
-      const radius=kind==='keep'?15:kind==='field'?13:kind==='house'?7:2;
-      if(!surface.walkable||naturalSurfaceAt(x,z).freshwaterDistanceSource<=Math.SQRT2*radius+3.7||surfaceRoadAt(x,z,radius+5).distance<=radius+5)return null;
-      for(const [dx,dz]of [[-radius,-radius],[-radius,radius],[radius,radius],[radius,-radius],[0,-radius],[0,radius],[-radius,0],[radius,0]]){
-        const corner=finalSurfaceAt(x+dx,z+dz);
-        if(corner.water.kind!=='none'||!corner.walkable||Math.abs(corner.groundHeight-surface.groundHeight)>(kind==='field'?.1:.25))return null;
+  const plotAt = (kind: Feature["kind"], x: number, z: number) => {
+    const surface = finalSurfaceAt(x, z);
+    if (surface.groundHeight < .2 || surface.water.kind !== "none" || !surface.walkable) return null;
+    if (["house", "keep", "well", "field", "service"].includes(kind)) {
+      const radius = kind === "keep" ? 15 : kind === "field" ? 13 : kind === "house" ? 7 : kind === "service" ? 8 : 2;
+      if (naturalSurfaceAt(x, z).freshwaterDistanceSource <= Math.SQRT2 * radius + 3.7 || surfaceRoadAt(x, z, radius + 5).distance <= radius + 5) return null;
+      for (const [dx, dz] of [[-radius,-radius],[-radius,radius],[radius,radius],[radius,-radius],[0,-radius],[0,radius],[-radius,0],[radius,0]]) {
+        const corner = finalSurfaceAt(x + dx, z + dz);
+        if (corner.water.kind !== "none" || !corner.walkable || Math.abs(corner.groundHeight - surface.groundHeight) > (kind === "field" ? .1 : .25)) return null;
       }
     }
     return surface;
@@ -649,102 +660,73 @@ export function featuresFor(tile: Tile): Feature[] {
     z: number,
     variant: number,
     id: string,
+    metadata: Partial<Pick<Feature, "service" | "ownerId" | "capacity" | "residents" | "label" | "entranceX" | "entranceZ">> = {},
   ) => {
-    if (
-      x < tile.minX ||
-      x >= tile.minX + tile.size ||
-      z < tile.minZ ||
-      z >= tile.minZ + tile.size
-    )
-      return;
-    const surface=plotAt(kind,x,z);
-    if(!surface)return;
+    if (x < tile.minX || x >= tile.minX + tile.size || z < tile.minZ || z >= tile.minZ + tile.size) return;
+    const surface = plotAt(kind, x, z);
+    if (!surface) return;
     if ((kind === "tree" || kind === "rock") && surface.vegetationDensityScale <= 0) return;
-    features.push({
-      kind,
-      x,
-      z,
-      y: surface.groundHeight,
-      variant,
-      code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`,
-    });
+    features.push({ kind, x, z, y: surface.groundHeight, variant, code: WORLD_SEED + "/" + GENERATOR_VERSION + "/F/" + id, ...metadata });
   };
-  for (const s of places) {
-    const extent = s.kind === "city" ? 440 : 80;
-    if (
-      s.x < tile.minX - extent ||
-      s.x > tile.minX + tile.size + extent ||
-      s.z < tile.minZ - extent ||
-      s.z > tile.minZ + tile.size + extent
-    )
-      continue;
-    const sx = Math.floor(s.x / 2),
-      sz = Math.floor(s.z / 2),
-      id = s.id;
-    add(
-      "keep",
-      s.x - 30,
-      s.z - 28,
-      coordinateValue(sx, sz, 11),
-      `${id}/${s.kind}/keep`,
-    );
-    // Select the well's legal canonical plot before applying anchor ownership.
-    // An off-tile first candidate must never make another tile invent a second well.
-    const wellOffsets=[[12,0],[0,12],[-12,0],[0,-12],[18,18],[-18,18],[-18,-18],[18,-18]],start=coordinateValue(sx,sz,12)%wellOffsets.length;
-    for(let i=0;i<wellOffsets.length;i++){const [dx,dz]=wellOffsets[(start+i)%wellOffsets.length],x=s.x+dx,z=s.z+dz;if(plotAt('well',x,z)){add('well',x,z,0,`${id}/${s.kind}/well`);break;}}
-    for (let i = 0; i < 18; i++) {
-      const v = coordinateValue(sx, sz, 20 + i);
-      const side = i % 2 === 0 ? -1 : 1;
-      const x = s.x + (i < 10 ? side * (15 + (v % 6)) : (i - 14) * 13);
-      const z =
-        s.z + (i < 10 ? (Math.floor(i / 2) - 2) * 14 : side * (42 + (v % 5)));
-      if (Math.hypot(x - (s.x - 30), z - (s.z - 28)) > 19)
-        add("house", x, z, v, `${id}/${s.kind}/house/${i}`);
+  const nearestStreetPoint = (place: Place, x: number, z: number) => {
+    const plan = settlementExteriorFor(place);
+    let best = { x: place.x, z: place.z }, distance = Infinity;
+    for (const street of plan.streets) for (const point of street.points) {
+      const candidate = Math.hypot(wrapSourceX(x - point.x), z - point.z);
+      if (candidate < distance) { best = point; distance = candidate; }
     }
-    for (let i = 0; i < 4; i++)
-      add(
-        "field",
-        s.x + (i % 2 === 0 ? -1 : 1) * (s.kind === "city" ? 350 : 65),
-        s.z + 16 + Math.floor(i / 2) * 24,
-        i,
-        `${id}/${s.kind}/field/${i}`,
-      );
-    if (s.kind === "city")
-      for (let i = 0; i < 400; i++) {
-        const gx = ((i % 20) - 9.5) * 29,
-          gz = (Math.floor(i / 20) - 9.5) * 29;
-        if (Math.abs(gx) > 40 || Math.abs(gz) > 55)
-          add(
-            "house",
-            s.x + gx,
-            s.z + gz,
-            coordinateValue(sx, sz, 80 + i),
-            `${id}/urban-house/${i}`,
-          );
+    return best;
+  };
+  const acceptedPlot = (plot: SettlementPlotPlan, featureKind: Feature["kind"]) => {
+    if (settlementPlotAnchors.has(plot.id)) return settlementPlotAnchors.get(plot.id)!;
+    const chosen = plot.candidates.find((candidate) => Boolean(plotAt(featureKind, candidate.x, candidate.z))) || null;
+    settlementPlotAnchors.set(plot.id, chosen);
+    return chosen;
+  };
+
+  for (const place of places) {
+    const coarseExtent = place.kind === "city" ? 456 : 178,
+      tileCentreX = tile.minX + tile.size * .5,
+      tileCentreZ = tile.minZ + tile.size * .5;
+    if (Math.abs(wrapSourceX(place.x - tileCentreX)) > tile.size * .5 + coarseExtent || Math.abs(place.z - tileCentreZ) > tile.size * .5 + coarseExtent) continue;
+    const plan = settlementExteriorFor(place), sx = Math.floor(place.x / 2), sz = Math.floor(place.z / 2);
+    for (const street of plan.streets) for (let index = 0; index < street.points.length; index++) {
+      const point = street.points[index];
+      add("street", point.x, point.z, Math.max(9, Math.round(street.width + 5)), place.id + "/street/" + street.id + "/" + index);
+    }
+    for (let segment = 0; segment < plan.border.length; segment++) {
+      const a = plan.border[segment], b = plan.border[(segment + 1) % plan.border.length],
+        dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz), steps = Math.max(1, Math.ceil(length / 11));
+      for (let step = 0; step < steps; step++) {
+        const t = (step + .5) / steps, x = wrapSourceX(a.x + dx * t), z = a.z + dz * t;
+        if (plan.gates.some((gate) => Math.hypot(wrapSourceX(x - gate.x), z - gate.z) < 18)) continue;
+        add("border", x, z, place.kind === "city" ? 1 : 0, place.id + "/border/" + segment + "/" + step);
       }
+    }
+    for (const plot of plan.plots) {
+      const featureKind: Feature["kind"] = plot.kind === "service" ? "service" : plot.kind;
+      const point = acceptedPlot(plot, featureKind);
+      if (!point) continue;
+      const entrance = nearestStreetPoint(place, point.x, point.z);
+      add(featureKind, point.x, point.z, coordinateValue(sx, sz, 40 + (digest(plot.id) % 500)), place.id + "/" + plot.id, {
+        service: plot.service, ownerId: plot.ownerId, capacity: plot.capacity, residents: plot.residents, label: plot.service || plot.kind, entranceX: entrance.x, entranceZ: entrance.z,
+      });
+    }
+    for (const gate of plan.gates) {
+      add("gate", gate.x, gate.z, digest(gate.id), place.id + "/gate/" + gate.id, { label: place.name + " gate", entranceX: place.x, entranceZ: place.z });
+      for (let index = 0; index < gate.guardPosts.length; index++) {
+        const post = gate.guardPosts[index];
+        add("guard-post", post.x, post.z, digest(gate.id + "/" + index), place.id + "/guard-post/" + gate.id + "/" + index, { service: "guard-office", capacity: 4, residents: 2, label: "Guard post", entranceX: gate.x, entranceZ: gate.z });
+      }
+    }
   }
+
   if (tile.size <= 256) {
-    for (
-      let gz = Math.floor(tile.minZ / 10) - 1;
-      gz < (tile.minZ + tile.size) / 10 + 1;
-      gz++
-    ) {
-      for (
-        let gx = Math.floor(tile.minX / 10) - 1;
-        gx < (tile.minX + tile.size) / 10 + 1;
-        gx++
-      ) {
-        const v = coordinateValue(gx, gz, 30);
-        const x = gx * 10 + (v % 7) - 3,
-          z = gz * 10 + ((v >>> 5) % 7) - 3;
-        const biome = biomeAt(x, z);
-        if (biome === "Woodland" && v % 4 !== 0)
-          add("tree", x, z, v, `tree/${gx}/${gz}`);
-        else if (
-          !["Settlement", "Ocean", "Lake", "River", "Road", "Bridge"].includes(biome) &&
-          v % 31 === 0
-        )
-          add("rock", x, z, v, `rock/${gx}/${gz}`);
+    for (let gz = Math.floor(tile.minZ / 10) - 1; gz < (tile.minZ + tile.size) / 10 + 1; gz++) {
+      for (let gx = Math.floor(tile.minX / 10) - 1; gx < (tile.minX + tile.size) / 10 + 1; gx++) {
+        const v = coordinateValue(gx, gz, 30), x = gx * 10 + (v % 7) - 3, z = gz * 10 + ((v >>> 5) % 7) - 3, biome = biomeAt(x, z);
+        if (biome === "Woodland" && v % 4 !== 0) add("tree", x, z, v, "tree/" + gx + "/" + gz);
+        else if (!["Settlement", "Ocean", "Lake", "River", "Road", "Bridge"].includes(biome) && v % 31 === 0) add("rock", x, z, v, "rock/" + gx + "/" + gz);
       }
     }
   }

@@ -437,6 +437,29 @@ export function buildTile(t: Tile): TileGeometry {
             );
           detail.box(x + w / 3, y + h + 1, z - d / 4, 0.8, 1.8, 0.8, stone);
         }
+      } else if (f.kind === "service") {
+        const market = f.service === "market", smith = f.service === "blacksmith", inn = f.service === "inn";
+        const w = market ? 12 : inn ? 11 : 9, d = market ? 10 : inn ? 12 : 9, h = market ? 3.8 : inn ? 6.2 : 5.1;
+        structures.box(x, y - 0.25, z, w, h + 0.25, d, market ? color(188, 166, 116) : plaster);
+        structures.roof(x, y + h, z, w + 1.2, d + 1.2, market ? 2.1 : 2.8, smith ? color(66, 70, 70) : color(122 + (v % 18), 70, 50));
+        if (market && t.size <= 64) {
+          for (const ox of [-4, 0, 4]) detail.box(x + ox, y + .2, z + d / 2 + 1.5, 3, 1.4, 2.3, color(157, 112 + (v % 20), 63));
+        } else if (smith && t.size <= 64) {
+          detail.box(x + w / 2 + 1.1, y + .1, z, 1.8, 1.2, 1.8, color(82, 82, 76));
+          detail.box(x + w / 2 + 1.1, y + 1.3, z, .3, 2.3, .3, timber);
+        }
+      } else if (f.kind === "street") {
+        const size = Math.max(9, Math.min(12, v));
+        structures.box(x, y + .015, z, size, .08, size, color(118, 96, 64));
+      } else if (f.kind === "border") {
+        const cityWall = v === 1;
+        structures.box(x, y - .05, z, 11, cityWall ? 2.4 : 1.25, 11, cityWall ? stone : timber);
+      } else if (f.kind === "gate") {
+        for (const ox of [-4.5, 4.5]) structures.box(x + ox, y - .2, z, 1.5, 7.2, 1.5, stone);
+        structures.box(x, y + 5.7, z, 10.5, 1.3, 1.5, timber);
+      } else if (f.kind === "guard-post") {
+        structures.box(x, y - .2, z, 4.5, 6.2, 4.5, stone);
+        structures.roof(x, y + 6, z, 5.2, 5.2, 2.2, color(72, 80, 82));
       } else if (f.kind === "keep") {
         structures.box(x, y - 0.3, z, 15, 10.3, 14, stone);
         structures.roof(x, y + 10, z, 16, 15, 4, color(65, 81, 88));
