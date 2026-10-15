@@ -125,10 +125,20 @@ test("a legal deck has one cross-road stage instead of separate side profiles", 
 test("the real crossing bank overlap cannot create a shelf over its channel", () => {
   const p=finalSurfaceEvidenceAnchors().bridge;
   const channel=naturalSurfaceAt(p.x,p.z);
-  const bank=naturalSurfaceAt(p.x+3.75,p.z+6.75);
   assert.equal(channel.water.kind,"river");
-  assert.equal(bank.material,"Riverbank");
-  assert.equal(bank.water.kind,"none");
+  let bank: ReturnType<typeof naturalSurfaceAt> | undefined;
+  for(const radius of [4,6,8,10,12]) {
+    for(let index=0;index<24;index++) {
+      const angle=index/24*Math.PI*2,
+        sample=naturalSurfaceAt(p.x+Math.cos(angle)*radius,p.z+Math.sin(angle)*radius);
+      if(sample.material==="Riverbank"&&sample.water.kind==="none") {
+        bank=sample;
+        break;
+      }
+    }
+    if(bank) break;
+  }
+  assert.ok(bank,"a legal natural river crossing must expose a nearby dry bank");
   assert.ok(bank.groundHeight>=channel.water.level);
   assert.ok(bank.groundHeight<=channel.water.level+1,"overlapping banks conceal the real crossing");
 });

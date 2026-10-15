@@ -302,7 +302,7 @@ export function countryAtPosition(position: LonLat): Country | undefined {
 }
 
 /** A generated city must have a direct dry same-country reserve to its country backbone. */
-function cityBackboneConnectionFits(from: LonLat, to: LonLat, country: Country) {
+function dryOwnedConnectionFits(from: LonLat, to: LonLat, country: Country) {
   const distanceRad = greatCircleDistance(from, to) / CANONICAL_PLANET_RADIUS,
     bearing = initialBearing(from, to),
     samples = 24;
@@ -518,6 +518,10 @@ function planVillagePositions(
         !owner ||
         owner.code !== country.code ||
         parentDistanceM < 6_000 ||
+        !dryOwnedConnectionFits(candidate, city.canonicalPosition, country) ||
+        (selected.length > 0 &&
+          (macroFeatureDistanceM(candidate, selected[selected.length - 1]) > 55_000 ||
+            !dryOwnedConnectionFits(candidate, selected[selected.length - 1], country))) ||
         accepted.some((other) => macroFeatureDistanceM(candidate, other) < 6_000) ||
         !locallyDrySettlementSite(candidate, 95)
       )
@@ -570,10 +574,11 @@ function planVillagePositions(
   return selected;
 }
 
+const usedSettlementNames = new Set<string>(["alderwick"]);
+
 export const cities: Place[] = (() => {
   const result: Place[] = [],
-    allAccepted: CanonicalPosition[] = [],
-    usedNames = new Set<string>();
+    allAccepted: CanonicalPosition[] = [];
   for (const country of countries) {
     const localAccepted: CanonicalPosition[] = [],
       targetCities = cityTargetForCountry(country);
@@ -590,7 +595,7 @@ export const cities: Place[] = (() => {
           !locallyDrySettlementSite(candidate, 90) ||
           (city > 0 &&
             localAccepted[0] &&
-            !cityBackboneConnectionFits(candidate, localAccepted[0], country))
+            !dryOwnedConnectionFits(candidate, localAccepted[0], country))
         )
           continue;
         const separation = localAccepted.length
@@ -639,7 +644,7 @@ export const cities: Place[] = (() => {
       allAccepted.push(best);
       const id = `${country.continent}/${country.id}/${city}`,
         code = `${country.code}/CITY/${city}`,
-        name = seededSettlementName("city", code, country.continent, usedNames);
+        name = seededSettlementName("city", code, country.continent, usedSettlementNames);
       result.push(
         withPresentation({
           id,
@@ -659,19 +664,16 @@ export const cities: Place[] = (() => {
 
 /** Villages use country-wide habitat/coverage candidates; parent city is identity, not a radius cap. */
 export const villages: Place[] = (() => {
-  const result: Place[] = [],
-    accepted: CanonicalPosition[] = [],
-    usedNames = new Set<string>(["alderwick"]);
+  const result: Place[] = [];
   for (const city of cities) {
     const positions = plannedVillagePositions.get(city.id) || [];
     for (let v = 0; v < positions.length; v++) {
       const position = positions[v];
-      accepted.push(position);
       const code = `${city.code}/VILLAGE/${v}`,
         name =
           city.continent === 0 && city.country === 0 && city.city === 0 && v === 0
             ? "Alderwick"
-            : seededSettlementName("village", code, city.continent, usedNames);
+            : seededSettlementName("village", code, city.continent, usedSettlementNames);
       result.push(
         withPresentation({
           ...city,
