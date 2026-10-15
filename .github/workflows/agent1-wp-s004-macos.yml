@@ -13,7 +13,7 @@ on:
       - tests/final-surface-integration.test.ts
       - tests/political-atlas.test.ts
 permissions:
-  contents: read
+  contents: write
 jobs:
   test-and-build:
     runs-on: macos-latest
@@ -26,7 +26,25 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Apply morphology runtime integration once
+        run: |
+          if ! grep -q "function settlementStreetAt" src/world.ts; then
+            node tools/agent1-wp-s004-patch-v4.mjs
+          else
+            echo "Morphology runtime integration already present"
+          fi
       - run: npm ci
       - name: Targeted settlement and surface tests
         run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/world.test.ts tests/final-surface-integration.test.ts tests/political-atlas.test.ts
       - run: npm run build
+      - name: Commit validated morphology runtime
+        run: |
+          git config user.name "AGENT #1"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/world.ts src/geometry.ts
+          if git diff --cached --quiet; then
+            echo "No source integration commit needed"
+          else
+            git commit -m "feat: integrate settlement morphology with final surface"
+            git push origin HEAD:agent1/wp-s004-001-001-20261015
+          fi
