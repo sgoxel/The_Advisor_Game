@@ -2,10 +2,8 @@ name: WP25 route fallback patch
 
 on:
   push:
-    branches:
-      - agent1/wp-s005-001-001
-    paths:
-      - .github/workflows/wp25-route-fallback-patch.yml
+    branches: [agent1/wp-s005-001-001]
+    paths: [.github/workflows/wp25-route-fallback-patch.yml]
 
 permissions:
   contents: write
@@ -17,39 +15,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: agent1/wp-s005-001-001
-          fetch-depth: 1
-      - name: Apply bounded long-corridor freshwater search
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('src/transport-network.ts')
-          text = path.read_text()
-          old = '''  const separationM = greatCircleDistance(from.position, to.position);
-  if (separationM > 120_000) return Object.freeze([]) as readonly LegalBridgeRouteCandidate[];
-
-  // freshwaterSegmentsAround is intentionally capped at 23 km. Six fixed
-  // stations cover the entire <=120 km fallback corridor without introducing
-  // camera/runtime-dependent search state or an unbounded global river scan.
-  const corridorDx = wrapSourceX(to.x - from.x), corridorDz = to.z - from.z,
-    origins = [0, 0.2, 0.4, 0.6, 0.8, 1].map((t) => sourceToLonLat(from.x + corridorDx * t, from.z + corridorDz * t)),
-'''
-          new = '''  const separationM = greatCircleDistance(from.position, to.position);
-
-  // freshwaterSegmentsAround is intentionally capped at 23 km. Sample a fixed,
-  // separation-derived number of stations so long regional corridors receive
-  // the same bounded crossing search as local access roads. The cap keeps this
-  // construction work deterministic and finite for every seeded road.
-  const corridorDx = wrapSourceX(to.x - from.x), corridorDz = to.z - from.z,
-    originCount = Math.max(6, Math.min(32, Math.ceil(separationM / 36_000) + 1)),
-    origins = Array.from({ length: originCount }, (_, index) => {
-      const t = originCount === 1 ? 0 : index / (originCount - 1);
-      return sourceToLonLat(from.x + corridorDx * t, from.z + corridorDz * t);
-    }),
-'''
-          if old not in text:
-              raise SystemExit('expected bridge-corridor block not found')
-          path.write_text(text.replace(old, new, 1))
-          PY
+      - name: Extend existing bounded bridge search
+        run: python -c "from pathlib import Path; p=Path('src/transport-network.ts'); t=p.read_text(); old='  if (separationM > 120_000) return Object.freeze([]) as readonly LegalBridgeRouteCandidate[];\\n'; assert old in t; p.write_text(t.replace(old, '', 1))"
       - name: Commit patch and remove runner
         run: |
           git config user.name "github-actions[bot]"
