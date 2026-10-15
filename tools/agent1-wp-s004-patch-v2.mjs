@@ -10,6 +10,7 @@ if (!exterior.includes("/EXTERIOR/WATER-MORPH")) {
   exterior = fs.readFileSync(exteriorPath, "utf8");
 }
 if (!exterior.includes('/EXTERIOR/WATER-MORPH')) throw new Error("settlement archetype fix did not apply");
+execFileSync("git", ["add", exteriorPath], { stdio: "inherit" });
 
 const world = fs.readFileSync(worldPath, "utf8");
 if (!world.includes("function settlementStreetAt"))
