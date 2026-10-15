@@ -503,7 +503,7 @@ function networkDigest(state: MutableNetwork) {
   return digestNumber(pieces.join("\n")).toString(16).padStart(8, "0");
 }
 
-function buildNetwork(): TransportNetwork {
+export function buildTransportNetwork(): TransportNetwork {
   const state: MutableNetwork = { nodes: [], roadEdges: [], ferryEdges: [], bridges: [], borderCrossings: [], harbors: [] },
     capitalPlaceCodes = new Set(countries.map((country) => capitalFor(country).code));
   for (const city of cities) state.nodes.push(nodeForPlace(city, capitalPlaceCodes.has(city.code)));
@@ -544,7 +544,7 @@ function buildNetwork(): TransportNetwork {
   // Kruskal over geodesic ferry cost.  Ferry edges never enter geography roads.
   const ferryCandidates: { a: TransportHarbor; b: TransportHarbor; distanceM: number }[] = [];
   for (let i = 0; i < state.harbors.length; i++) for (let j = i + 1; j < state.harbors.length; j++) ferryCandidates.push({ a: state.harbors[i], b: state.harbors[j], distanceM: greatCircleDistance(state.harbors[i].position, state.harbors[j].position) });
-  ferryCandidates.sort((a, b) => a.distanceM - b.distanceM || edgePairKey(a.code, a.code).localeCompare(edgePairKey(b.code, b.code)));
+  ferryCandidates.sort((a, b) => a.distanceM - b.distanceM || edgePairKey(a.a.code, a.b.code).localeCompare(edgePairKey(b.a.code, b.b.code)));
   const parent = new Map(state.harbors.map((harbor) => [harbor.code, harbor.code]));
   const root = (code: string): string => { const p = parent.get(code)!; if (p === code) return code; const r = root(p); parent.set(code, r); return r; };
   for (const candidate of ferryCandidates) {
@@ -583,7 +583,7 @@ function buildNetwork(): TransportNetwork {
   });
 }
 
-export const transportNetwork = buildNetwork();
+export const transportNetwork = buildTransportNetwork();
 
 function roadSurfaceRecord(edge: TransportRoadEdge): Road {
   const from = transportNetwork.nodes.find((node) => node.code === edge.from)!, to = transportNetwork.nodes.find((node) => node.code === edge.to)!,
