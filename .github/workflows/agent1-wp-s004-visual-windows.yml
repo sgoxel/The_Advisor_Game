@@ -1,4 +1,4 @@
-name: AGENT1 WP-S004 visual evidence Windows
+name: AGENT1 WP-S004 visual evidence macOS Intel
 on:
   push:
     branches: [agent1/wp-s004-001-001-20261015]
@@ -8,16 +8,23 @@ permissions:
   contents: write
 jobs:
   evidence:
-    runs-on: windows-latest
+    runs-on: macos-15-intel
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent1/wp-s004-001-001-20261015
+          ref: ${{ github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
+      - name: Verify exact source
+        run: |
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          grep -q '/EXTERIOR/WATER-MORPH' src/settlement-exterior.ts
+          grep -q 'function settlementStreetAt' src/world.ts
+          grep -q 'boxYaw' src/geometry.ts
       - run: npm ci
       - run: npm run build
       - name: Capture current-source settlement evidence
@@ -25,7 +32,7 @@ jobs:
         env:
           SOURCE_SHA: ${{ github.sha }}
         run: |
-          python -m pip install playwright==1.63.0 pillow
+          python3 -m pip install playwright==1.63.0 pillow
           npm run dev -- --port 4174 > wp-s004-preview.log 2>&1 &
           PREVIEW_PID=$!
           trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
@@ -34,21 +41,21 @@ jobs:
             sleep 1
           done
 
-          DESKTOP='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-exterior.ts"),import("/src/world.ts"),import("/src/planet.ts")]).then(([g,s,w,p])=>{window.__sg={g,s,w,p};window.__samples={};for(const a of ["green","roadside","riverside","dispersed-farming"]){const v=g.villages.find(v=>s.settlementExteriorFor(v).archetype===a);if(!v)throw new Error("missing archetype "+a);window.__samples[a]={v,plan:s.settlementExteriorFor(v)}};const cv=g.cities.find(v=>["market-trade","fortified-frontier"].includes(s.settlementExteriorFor(v).archetype))||g.cities[0];window.__samples.city={v:cv,plan:s.settlementExteriorFor(cv)};const av=g.villages[0];window.__samples.alderwick={v:av,plan:s.settlementExteriorFor(av)};window.__service=(sample,name)=>{const plot=sample.plan.plots.find(q=>q.service===name);if(!plot)throw new Error("missing service plot "+name);for(const c of plot.candidates){const f=w.featuresFor(w.tileForPosition(c.x,c.z,15)).find(f=>f.service===name&&f.code.includes(sample.v.id));if(f)return f}throw new Error("unresolved service "+name)};window.__focus=(x,z,h)=>{const ll=p.sourceToLonLat(x,z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(h)}});eval:(x=>window.__focus(x.v.x,x.v.z,125))(window.__samples.green);settle;shot:village-green;eval:(x=>window.__focus(x.v.x,x.v.z,125))(window.__samples.roadside);settle;shot:village-roadside;eval:(x=>window.__focus(x.v.x,x.v.z,130))(window.__samples.riverside);settle;shot:village-riverside;eval:(x=>window.__focus(x.v.x,x.v.z,145))(window.__samples["dispersed-farming"]);settle;shot:village-farming;eval:(x=>window.__focus(x.v.x,x.v.z,430))(window.__samples.city);settle;shot:city-district;eval:(f=>window.__focus(f.x,f.z,46))(window.__service(window.__samples.alderwick,"market"));settle;shot:market-close;eval:(f=>window.__focus(f.x,f.z,42))(window.__service(window.__samples.alderwick,"blacksmith"));settle;shot:blacksmith-close;eval:(f=>window.__focus(f.x,f.z,52))(window.__service(window.__samples.alderwick,"farmstead"));settle;shot:farmstead-close'
-          PHONE='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-exterior.ts"),import("/src/world.ts"),import("/src/planet.ts")]).then(([g,s,w,p])=>{const av=g.villages[0];window.__m={v:av,plan:s.settlementExteriorFor(av)};const rv=g.villages.find(v=>s.settlementExteriorFor(v).archetype==="riverside");window.__r={v:rv,plan:s.settlementExteriorFor(rv)};window.__svc=name=>{const plot=window.__m.plan.plots.find(q=>q.service===name);for(const c of plot.candidates){const f=w.featuresFor(w.tileForPosition(c.x,c.z,15)).find(f=>f.service===name&&f.code.includes(window.__m.v.id));if(f)return f}throw new Error("unresolved "+name)};window.__focus=(x,z,h)=>{const ll=p.sourceToLonLat(x,z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(h)}});eval:window.__focus(window.__m.v.x,window.__m.v.z,130);settle;shot:village-mobile;eval:window.__focus(window.__r.v.x,window.__r.v.z,135);settle;shot:riverside-mobile;eval:(f=>window.__focus(f.x,f.z,45))(window.__svc("market"));settle;shot:market-mobile;eval:(f=>window.__focus(f.x,f.z,42))(window.__svc("blacksmith"));settle;shot:blacksmith-mobile'
+          DESKTOP='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-exterior.ts"),import("/src/world.ts"),import("/src/planet.ts")]).then(([g,s,w,p])=>{window.__samples={};for(const a of ["green","roadside","riverside","dispersed-farming"]){const v=g.villages.find(v=>s.settlementExteriorFor(v).archetype===a);if(!v)throw new Error("missing archetype "+a);window.__samples[a]={v,plan:s.settlementExteriorFor(v)}};const cv=g.cities.find(v=>["market-trade","fortified-frontier"].includes(s.settlementExteriorFor(v).archetype))||g.cities[0];window.__samples.city={v:cv,plan:s.settlementExteriorFor(cv)};const av=g.villages[0];window.__samples.alderwick={v:av,plan:s.settlementExteriorFor(av)};window.__service=(sample,name)=>{const plot=sample.plan.plots.find(q=>q.service===name);if(!plot)throw new Error("missing service plot "+name);for(const c of plot.candidates){const f=w.featuresFor(w.tileForPosition(c.x,c.z,15)).find(f=>f.service===name&&f.code.includes(sample.v.id));if(f)return f}throw new Error("unresolved service "+name)};window.__focus=(x,z,h)=>{const ll=p.sourceToLonLat(x,z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(h)}});eval:(x=>window.__focus(x.v.x,x.v.z,125))(window.__samples.green);settle;shot:village-green;eval:(x=>window.__focus(x.v.x,x.v.z,125))(window.__samples.roadside);settle;shot:village-roadside;eval:(x=>window.__focus(x.v.x,x.v.z,130))(window.__samples.riverside);settle;shot:village-riverside;eval:(x=>window.__focus(x.v.x,x.v.z,145))(window.__samples["dispersed-farming"]);settle;shot:village-farming;eval:(x=>window.__focus(x.v.x,x.v.z,430))(window.__samples.city);settle;shot:city-district;eval:(f=>window.__focus(f.x,f.z,46))(window.__service(window.__samples.alderwick,"market"));settle;shot:market-close;eval:(f=>window.__focus(f.x,f.z,42))(window.__service(window.__samples.alderwick,"blacksmith"));settle;shot:blacksmith-close;eval:(f=>window.__focus(f.x,f.z,52))(window.__service(window.__samples.alderwick,"farmstead"));settle;shot:farmstead-close'
+          PHONE='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-exterior.ts"),import("/src/world.ts"),import("/src/planet.ts")]).then(([g,s,w,p])=>{const av=g.villages[0];window.__m={v:av,plan:s.settlementExteriorFor(av)};const rv=g.villages.find(v=>s.settlementExteriorFor(v).archetype==="riverside");if(!rv)throw new Error("missing riverside");window.__r={v:rv,plan:s.settlementExteriorFor(rv)};window.__svc=name=>{const plot=window.__m.plan.plots.find(q=>q.service===name);for(const c of plot.candidates){const f=w.featuresFor(w.tileForPosition(c.x,c.z,15)).find(f=>f.service===name&&f.code.includes(window.__m.v.id));if(f)return f}throw new Error("unresolved "+name)};window.__focus=(x,z,h)=>{const ll=p.sourceToLonLat(x,z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(h)}});eval:window.__focus(window.__m.v.x,window.__m.v.z,130);settle;shot:village-mobile;eval:window.__focus(window.__r.v.x,window.__r.v.z,135);settle;shot:riverside-mobile;eval:(f=>window.__focus(f.x,f.z,45))(window.__svc("market"));settle;shot:market-mobile;eval:(f=>window.__focus(f.x,f.z,42))(window.__svc("blacksmith"));settle;shot:blacksmith-mobile'
 
           for R in webgpu webgl2; do
-            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp-s004-${R}-desktop" --name settlement --profile desktop --renderer "$R" --browser-channel chrome --timeout 300 --steps "$DESKTOP"
-            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp-s004-${R}-mobile" --name settlement --profile phone,phone-landscape --renderer "$R" --browser-channel chrome --timeout 300 --steps "$PHONE"
+            python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp-s004-${R}-desktop" --name settlement --profile desktop --renderer "$R" --browser-channel chrome --timeout 300 --steps "$DESKTOP"
+            python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp-s004-${R}-mobile" --name settlement --profile phone,phone-landscape --renderer "$R" --browser-channel chrome --timeout 300 --steps "$PHONE"
           done
-          python - <<'PY'
+          python3 - <<'PY'
           import json
           from pathlib import Path
           for path in Path('test-results').glob('wp-s004-webgpu-*/capture.json'):
               records=json.loads(path.read_text())
               assert records and all(r.get('backend')=='webgpu' and not r.get('webgpuFellBack') for r in records), (path, records)
           PY
-          python - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
           from PIL import Image, ImageDraw, ImageFont
           import math, os
@@ -57,7 +64,7 @@ jobs:
           if not files: raise SystemExit('no screenshots')
           for page_index in range(math.ceil(len(files)/4)):
               page=Image.new('RGB',(W,H),'white'); draw=ImageDraw.Draw(page)
-              draw.text((20,12),f'WP-S004-001-001 fresh evidence · source {source} · page {page_index+1}',fill='black',font=font)
+              draw.text((20,12),f'WP-S004-001-001 fresh evidence · exact SHA {source} · page {page_index+1}',fill='black',font=font)
               for slot,file in enumerate(files[page_index*4:(page_index+1)*4]):
                   image=Image.open(file).convert('RGB'); image.thumbnail((780,480))
                   col,row=slot%2,slot//2; x,y=10+col*795,50+row*530
@@ -76,5 +83,6 @@ jobs:
           git config user.name "AGENT #1"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add tmp/wp-s004-evidence/*.pdf
-          git commit -m "WP-S004-001-001: publish fresh Windows visual evidence"
+          git commit -m "WP-S004-001-001: publish fresh macOS visual evidence"
+          git pull --rebase origin agent1/wp-s004-001-001-20261015
           git push origin HEAD:agent1/wp-s004-001-001-20261015
