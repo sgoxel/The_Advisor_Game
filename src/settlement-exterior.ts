@@ -29,6 +29,7 @@ export type SettlementPlotPlan = {
   id: string;
   kind: SettlementPlotKind;
   service?: SettlementService;
+  ownerId?: string;
   capacity: number;
   residents: number;
   candidates: readonly SettlementPoint[];
@@ -51,6 +52,7 @@ export type SettlementExteriorPlan = {
   primaryAxis: SettlementPoint;
   entrance: SettlementPoint;
   streets: readonly SettlementStreetPlan[];
+  border: readonly SettlementPoint[];
   plots: readonly SettlementPlotPlan[];
   gates: readonly SettlementGatePlan[];
 };
@@ -195,11 +197,13 @@ function plot(
   residents: number,
   service?: SettlementService,
   spread?: number,
+  ownerId?: string,
 ): SettlementPlotPlan {
   return {
     id: `${place.code}/PLOT/${id}`,
     kind,
     service,
+    ownerId,
     capacity,
     residents,
     candidates: candidatesAround(place, axis, `${place.code}/PLOT/${id}`, along, lateral, spread),
@@ -268,6 +272,7 @@ function buildPlan(place: Place): SettlementExteriorPlan {
         residents,
         undefined,
         place.kind === "city" ? 10 : 8,
+        `${place.code}/HOUSEHOLD/${index}`,
       ),
     );
   }
@@ -297,6 +302,14 @@ function buildPlan(place: Place): SettlementExteriorPlan {
     gates.push({ id: `${place.code}/GATE/${index}`, x: gate.x, z: gate.z, bearingRad, guardPosts });
   }
 
+  const borderCount = place.kind === "city" ? 48 : 24,
+    border = Array.from({ length: borderCount }, (_, index) => {
+      const angle = (index / borderCount) * TAU,
+        irregularity = 0.9 + unit(`${place.code}/BORDER/${index}`) * 0.08,
+        distance = radius * irregularity;
+      return localPoint(place, axis, Math.cos(angle) * distance, Math.sin(angle) * distance);
+    });
+
   return {
     placeId: place.id,
     placeCode: place.code,
@@ -306,6 +319,7 @@ function buildPlan(place: Place): SettlementExteriorPlan {
     primaryAxis: axis,
     entrance,
     streets,
+    border,
     plots,
     gates,
   };
@@ -327,13 +341,15 @@ export function settlementExteriorSummary() {
   let cityGates = 0,
     villageGates = 0,
     plots = 0,
-    streets = 0;
+    streets = 0,
+    borderPoints = 0;
   for (const place of places) {
     const plan = settlementExteriorFor(place);
     plots += plan.plots.length;
     streets += plan.streets.length;
+    borderPoints += plan.border.length;
     if (place.kind === "city") cityGates += plan.gates.length;
     else villageGates += plan.gates.length;
   }
-  return { plans: places.length, plots, streets, cityGates, villageGates, cachedPlans: cache.size } as const;
+  return { plans: places.length, plots, streets, borderPoints, cityGates, villageGates, cachedPlans: cache.size } as const;
 }
