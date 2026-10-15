@@ -10,6 +10,7 @@ import {
 } from "./planet.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
 import { nearestPlace, places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
+import { nearbyCriticalSites, siteSurfaceSample } from "./sites.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { freshwaterCrossingAt, drainageCoarseSegments, naturalSurfaceAt } from "./hydrology.ts";
 import {
@@ -356,7 +357,22 @@ const boundedEarthwork = (
 function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   const modifiers: SurfaceModifier[] = [],
     place = nearestPlace(x, z),
-    roadMatch = surfaceRoadAt(x, z);
+    roadMatch = surfaceRoadAt(x, z),
+    nearbySites = nearbyCriticalSites(x, z, 20, 4);
+  for (const site of nearbySites) {
+    const prepared = siteSurfaceSample(site, x, z, base.groundHeight);
+    if (prepared.influence <= 0) continue;
+    modifiers.push({
+      id: `${site.code}/PREP`,
+      priority: WORLD_BUILDING_PRIORITIES.site,
+      weight: prepared.influence,
+      targetGroundHeight: prepared.height,
+      material: "Settlement",
+      walkable: prepared.walkable,
+      vegetationDensityScale: 0,
+      reservedUse: site.code,
+    });
+  }
   if (place) {
     const dx = wrapSourceX(x - place.x),
       dz = z - place.z,
@@ -446,7 +462,7 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   }
   return {
     modifiers,
-    candidateCount: roadMatch.candidateCount + (place ? 2 : 0),
+    candidateCount: roadMatch.candidateCount + (place ? 2 : 0) + nearbySites.length,
   };
 }
 
