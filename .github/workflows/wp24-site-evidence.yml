@@ -14,7 +14,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm test
+      - name: Validate critical-site and shared-surface contracts
+        run: node --experimental-strip-types --test tests/sites.test.ts tests/final-surface.test.ts tests/final-surface-integration.test.ts
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: python -m pip install playwright==1.63.0
