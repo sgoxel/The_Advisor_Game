@@ -4,6 +4,7 @@ on:
     branches: [agent1/wp-s004-001-001-20261015]
     paths:
       - .github/workflows/agent1-wp-s004-final-acceptance.yml
+  workflow_dispatch:
 concurrency:
   group: agent1-wp-s004-final-${{ github.ref }}
   cancel-in-progress: true
