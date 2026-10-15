@@ -10,6 +10,7 @@ import {
 import { countries, countryAtPosition, roadDistanceAt, roads } from "../src/geography.ts";
 import { naturalSurfaceAt } from "../src/hydrology.ts";
 import { WORLD_BUILDING_PRIORITIES, composeFinalSurface } from "../src/final-surface.ts";
+import { wrapSourceX } from "../src/planet.ts";
 
 const emptyBase = {
   groundHeight: 12,
@@ -57,9 +58,12 @@ test("every site has one real road branch and one bounded priority-9 pad identit
     assert.ok(branch);
     assert.ok(parent);
     assert.ok(pad);
-    assert.ok(site.access.lengthM >= 600 && site.access.lengthM <= 1800);
+    assert.ok(site.access.lengthM >= 850 && site.access.lengthM <= 1900);
+    assert.ok(site.access.branchLengthM >= 600);
     assert.ok(roadDistanceAt(site.access.x, site.access.z, parent!) < 1e-6);
-    assert.equal(branch!.surfaceLengthM, site.access.lengthM);
+    assert.equal(branch!.fromX, site.access.gatewayX);
+    assert.equal(branch!.fromZ, site.access.gatewayZ);
+    assert.equal(branch!.surfaceLengthM, site.access.branchLengthM);
     assert.equal(pad!.surfaceLengthM, 0);
   }
 
@@ -84,8 +88,8 @@ test("main-thread final surface consumes pre-registered site pads and access roa
   const { finalSurfaceAt } = await import("../src/world.ts"),
     site = criticalSites[0],
     centre = finalSurfaceAt(site.x, site.z),
-    mx = site.x + (site.access.x - site.x) * 0.5,
-    mz = site.z + (site.access.z - site.z) * 0.5,
+    mx = site.access.gatewayX + wrapSourceX(site.access.x - site.access.gatewayX) * 0.5,
+    mz = site.access.gatewayZ + (site.access.z - site.access.gatewayZ) * 0.5,
     access = finalSurfaceAt(mx, mz);
   assert.equal(centre.groundMaterial, "Settlement");
   assert.equal(centre.reservedUse, site.code);
@@ -98,15 +102,14 @@ test("main-thread final surface consumes pre-registered site pads and access roa
 test("site spatial queries are deterministic, distance ordered, and bounded", () => {
   const origin = criticalSites[0],
     a = nearbyCriticalSites(origin.x, origin.z, 5000, 12),
-    b = nearbyCriticalSites(origin.x, origin.z, 5000, 12);
+    b = nearbyCriticalSites(origin.x, origin.z, 5000, 12),
+    distance = (site: (typeof criticalSites)[number]) =>
+      Math.hypot(wrapSourceX(site.x - origin.x), site.z - origin.z);
   assert.deepEqual(a.map((site) => site.code), b.map((site) => site.code));
   assert.ok(a.length <= 12);
   assert.equal(a[0]?.code, origin.code);
-  for (let index = 1; index < a.length; index++) {
-    const previous = Math.hypot(a[index - 1].x - origin.x, a[index - 1].z - origin.z),
-      current = Math.hypot(a[index].x - origin.x, a[index].z - origin.z);
-    assert.ok(current + 1e-9 >= previous);
-  }
+  for (let index = 1; index < a.length; index++)
+    assert.ok(distance(a[index]) + 1e-9 >= distance(a[index - 1]));
 });
 
 test("critical-site scene meshes exist only on close terrain LODs", async () => {
