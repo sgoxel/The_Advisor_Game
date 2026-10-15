@@ -11,7 +11,7 @@ import {
 } from "../src/geography.ts";
 import { WORLD_SEED } from "../src/config.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
-import { lonLatToSource } from "../src/planet.ts";
+import { greatCircleDistance, lonLatToSource } from "../src/planet.ts";
 import {
   politicalAccessLinks,
   politicalBorderGateways,
@@ -26,7 +26,7 @@ import {
   politicalOverlayOpacity,
 } from "../src/political-presentation.ts";
 
-test("political registry uses seed-variable minimum counts rather than fixed maxima", () => {
+test("political registry uses seed-variable minimum counts rather than fixed quotas", () => {
   const counts = politicalRegistryCountsForSeed(WORLD_SEED);
   assert.equal(continents.length, 3);
   assert.equal(countries.length, counts.countries);
@@ -41,8 +41,15 @@ test("political registry uses seed-variable minimum counts rather than fixed max
     politicalRegistryCountsForSeed("ADVISOR-POLITICAL-B"),
     politicalRegistryCountsForSeed("ADVISOR-POLITICAL-C"),
   ];
-  assert.ok(variants.every((value) => value.countries >= 30));
-  assert.ok(variants.some((value) => value.countries !== counts.countries));
+  assert.ok(variants.every((value) => value.countries >= 30 && value.cities >= 90 && value.villages >= 270));
+  assert.ok(
+    variants.some(
+      (value) =>
+        value.countries !== counts.countries ||
+        value.cities !== counts.cities ||
+        value.villages !== counts.villages,
+    ),
+  );
   assert.equal(new Set(countries.map((country) => country.name)).size, countries.length);
 });
 
@@ -89,21 +96,44 @@ test("every sampled canonical land coordinate has exactly one country owner", ()
     assert.equal(countryAtPosition(country.canonicalPosition)?.code, country.code);
 });
 
-test("cities and villages stay inside their canonical political owner without row placement", () => {
+test("cities and villages use variable habitat/coverage placement inside canonical owners", () => {
   for (const place of [...cities, ...villages]) {
     const owner = countryAtPosition(place.canonicalPosition);
     assert.ok(owner, place.code);
     assert.equal(owner!.continent, place.continent, place.code);
     assert.equal(owner!.id, place.country, place.code);
   }
+
+  const cityCounts = countries.map(
+      (country) =>
+        cities.filter(
+          (city) => city.continent === country.continent && city.country === country.id,
+        ).length,
+    ),
+    villageCounts = cities.map(
+      (city) => villages.filter((village) => village.id.startsWith(`${city.id}/`)).length,
+    );
+  assert.ok(cityCounts.every((count) => count >= 3), `country city counts: ${cityCounts.join(",")}`);
+  assert.ok(cityCounts.some((count) => count > 3), "no viable country received an additional city");
+  assert.ok(villageCounts.every((count) => count >= 3), `city village counts: ${villageCounts.join(",")}`);
+  assert.ok(villageCounts.some((count) => count > 3), "no viable city received an additional village");
+
   for (const city of cities) {
     const children = villages.filter((village) => village.id.startsWith(`${city.id}/`));
-    assert.equal(children.length, 3);
     assert.ok(
       new Set(children.map((village) => village.canonicalPosition.lat.toFixed(8))).size > 1,
       `${city.id} still uses a fixed east-west village row`,
     );
   }
+  const parentDistances = villages.map((village) => {
+    const parent = cities.find((city) => city.id === village.id.split("/").slice(0, 3).join("/"));
+    assert.ok(parent, `missing parent for ${village.id}`);
+    return greatCircleDistance(village.canonicalPosition, parent!.canonicalPosition);
+  });
+  assert.ok(
+    parentDistances.some((distance) => distance > 23_000),
+    "village placement still behaves as if the old 23 km parent-radius ceiling were authoritative",
+  );
 });
 
 test("every accepted settlement reserves a complete dry owned envelope and legal entrance", () => {
