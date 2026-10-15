@@ -6,7 +6,7 @@ permissions:
   contents: write
 jobs:
   integrate:
-    runs-on: macos-15
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v4
         with:
