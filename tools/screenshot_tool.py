@@ -68,6 +68,15 @@ POINT_INSPECTION = (
 
 # Named step presets. Add a line here to give a new scene a name.
 SCENARIOS: dict[str, str] = {
+    "settlement-icons": (
+        "eval:window.advisorWorld.navigation.setFocus(-67.30178*Math.PI/180,-31.77696*Math.PI/180);"
+        "select:#map-scale=20;settle;shot:close;"
+        "select:#map-scale=50;settle;shot:village-icon;"
+        "select:#map-scale=100;settle;shot:farther;"
+        "select:#map-scale=20;settle;shot:restored;"
+        "eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.geography.cities[0].canonicalPosition.lon,window.advisorWorld.geography.cities[0].canonicalPosition.lat);"
+        "select:#map-scale=50;settle;shot:city-icon"
+    ),
     # Owner regression: inspect the ordinary starting village during movement,
     # including intermediate frames rather than only settled hydrology fixtures.
     "alderwick-pan-zoom": (

@@ -180,6 +180,7 @@ const uploads: {
 }[] = [];
 let worker: Worker;
 const layers = { structures: true, nature: true, grid: false };
+let settlementDetailVisible = Number(scaleLabelForHalfHeight(view.halfHeight).slice(2)) < 50;
 const pressed = new Set<string>();
 const simulation = new LazySimulation();
 const clock = new FantasyClock();
@@ -510,6 +511,12 @@ function applyPresentation() {
   );
 }
 function updateCamera() {
+  const showDetails = Number(scaleLabelForHalfHeight(view.halfHeight).slice(2)) < 50;
+  document.body.classList.toggle("settlement-overview", !showDetails);
+  if (showDetails !== settlementDetailVisible) {
+    settlementDetailVisible = showDetails;
+    setLayers();
+  }
   selectionDirty = true;
   desiredProjectionTransition = projectionTransitionForHalfHeight(
     view.halfHeight,
@@ -629,10 +636,10 @@ function uploadGeometry(
   entity.enabled =
     name === "terrain" ||
     (name === "structures"
-      ? layers.structures
+      ? layers.structures && settlementDetailVisible
       : name === "nature"
         ? layers.nature
-        : layers.structures && layers.nature);
+        : layers.structures && layers.nature && settlementDetailVisible);
   return mesh;
 }
 function setLayers() {
@@ -641,10 +648,10 @@ function setLayers() {
       child.enabled =
         child.name === "terrain" ||
         (child.name === "structures"
-          ? layers.structures
+          ? layers.structures && settlementDetailVisible
           : child.name === "nature"
             ? layers.nature
-            : layers.structures && layers.nature);
+            : layers.structures && layers.nature && settlementDetailVisible);
     }
 }
 function request(tile: Tile) {
@@ -1265,6 +1272,7 @@ async function start() {
   const characterMaterials = [0, 1, 2].map(characterMaterial);
   const actors: pc.Entity[] = [];
   let lastSimulationRealSecond = -1;
+  let lastResidentDetailVisible = settlementDetailVisible;
   const labelNodes = new Map<string, HTMLElement>();
   const labels = $("map-labels");
   let labelFingerprint = "";
@@ -1279,7 +1287,8 @@ async function start() {
     const now = Date.now(),
       realSecond = Math.floor(now / 1000);
     const simulationTick = clock.tickAt(now);
-    if (realSecond !== lastSimulationRealSecond) {
+    if (realSecond !== lastSimulationRealSecond || lastResidentDetailVisible !== settlementDetailVisible) {
+      lastResidentDetailVisible = settlementDetailVisible;
       if (view.halfHeight < 900)
         simulation.setFocus(nearestPlace(view.x, view.z));
       simulation.advance(Math.max(simulation.tick, simulationTick));
@@ -1288,7 +1297,7 @@ async function start() {
       $("simulation-status").textContent =
         `${simulation.stats.residents} residents live in the focused country; ${simulation.stats.coarseCountries} countries tracked as summaries.`;
       const visible =
-        view.halfHeight < 240
+        settlementDetailVisible && view.halfHeight < 240
           ? simulation
               .focusedResidents(view.x, view.z, view.halfHeight * 1.5)
               .slice(0, 96)
@@ -1717,6 +1726,8 @@ async function start() {
             pending.size === 0 &&
             activeKeys.length === wanted.length &&
             activeKeys.every((key) => wanted.some((t) => t.key === key)),
+          settlementPresentation: settlementDetailVisible ? "buildings" : "icons",
+          visibleResidents: actors.filter(actor => actor.enabled).length,
           visibleGeometryTriangles: Object.fromEntries(
             ["terrain", "structures", "nature", "detail"].map(name => [name,
               [...tileCache.values()].filter(record => record.entity.enabled).reduce((sum,record) =>

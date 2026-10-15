@@ -19,9 +19,10 @@ export function alderwickTests(backend) {
     });
     const settled=()=>page.waitForFunction(()=>window.advisorWorld.state.settled,null,{timeout:180000});
     await settled();
-    // Mesh groups count tiles, not houses: one tile can contain the whole village.
-    // The original broken scene had only a well; count actual submitted triangles.
-    expect(await page.evaluate(()=>window.advisorWorld.state.visibleGeometryTriangles.structures)).toBeGreaterThan(300);
+    // The owner requests an icon at this overview scale; Street must restore
+    // actual submitted property triangles below (mesh groups only count tiles).
+    expect(await page.evaluate(()=>window.advisorWorld.state.visibleGeometryTriangles.structures)).toBe(0);
+    await expect(page.locator('.political-label.village .place-symbol').first()).toBeVisible();
     const out=`test-results/alderwick-${backend}`;
     fs.mkdirSync(out,{recursive:true});
     const records=[];
@@ -47,6 +48,7 @@ export function alderwickTests(backend) {
     await capture('zoom-transient');
     await settled();
     await expect(page.locator('#detail-name')).toHaveText('Street');
+    expect(await page.evaluate(()=>window.advisorWorld.state.visibleGeometryTriangles.structures)).toBeGreaterThan(300);
     await capture('street');
     await page.mouse.wheel(0,900);
     await page.waitForTimeout(250);

@@ -1,3 +1,4 @@
+import { placeSymbol } from "./place-symbol.ts";
 import {
   countries,
   countryAtPosition,
@@ -47,6 +48,7 @@ const labelSizes = new Map<string, { width: number; height: number }>();
 let borderKey = "";
 let borderSegments: ReturnType<typeof politicalBorderSegments> = [];
 let renderFingerprint = "";
+let iconsShown = false;
 let politicalLabelState: { id: string; kind: string; x: number; y: number }[] = [];
 
 function denominator(scaleLabel: string) {
@@ -265,6 +267,10 @@ function labelCandidateFromPlace(place: Place): LabelCandidate {
 }
 
 function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number, places: Place[]) {
+  if (iconsShown !== (scale >= 50)) {
+    iconsShown = scale >= 50;
+    labelSizes.clear();
+  }
   const root = $("political-labels"),
     leaders = $svg("political-label-leaders"),
     opacity = politicalOverlayOpacity(
@@ -327,10 +333,26 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
       labelSizes.delete(id);
     }
   for (const item of chosen) {
-    if (labelNodes.has(item.id)) continue;
+    const existing = labelNodes.get(item.id);
+    if (existing) {
+      if (!labelSizes.has(item.id)) {
+        const rect = existing.getBoundingClientRect();
+        labelSizes.set(item.id, { width: rect.width, height: rect.height });
+      }
+      continue;
+    }
     const node = document.createElement("div");
     node.className = `political-label ${item.kind}`;
-    node.textContent = item.name;
+    node.setAttribute("aria-label", `${item.kind}: ${item.name}`);
+    if (item.kind !== "country") {
+      const symbol = document.createElement("span");
+      symbol.className = "place-symbol";
+      symbol.innerHTML = placeSymbol(item.kind);
+      const name = document.createElement("span");
+      name.className = "place-name";
+      name.textContent = item.name;
+      node.append(symbol, name);
+    } else node.textContent = item.name;
     root.append(node);
     labelNodes.set(item.id, node);
     const rect = node.getBoundingClientRect();
