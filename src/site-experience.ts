@@ -60,7 +60,7 @@ function render() {
       const point = project(site.x, site.z, view), accessPoint = project(site.access.x, site.access.z, view), marker = markerFor(site), mode = denominator >= 1000 ? "semantic" : view.halfHeight > 900 ? "proxy" : "detailed";
       marker.hidden = point.x < 12 || point.x > innerWidth - 12 || point.y < 82 || point.y > innerHeight - 104;
       marker.style.transform = `translate(${Math.round(point.x)}px,${Math.round(point.y)}px)`; marker.classList.toggle("semantic", mode === "semantic"); marker.classList.toggle("proxy", mode === "proxy"); marker.classList.toggle("detailed", mode === "detailed"); marker.dataset.mode = mode;
-      if (mode === "detailed") { const detail = detailFor(site); marker.style.setProperty("--site-variant", String(detail.stones)); }
+      if (mode === "detailed") { const stones = site.kind === "ruin" ? 4 + site.variant % 5 : 5 + site.variant % 7; marker.style.setProperty("--site-variant", String(stones)); }
       if (!marker.hidden && accessPoint.x > 0 && accessPoint.x < innerWidth && accessPoint.y > 0 && accessPoint.y < innerHeight) { const line = document.createElementNS("http://www.w3.org/2000/svg", "line"); line.setAttribute("x1", String(point.x)); line.setAttribute("y1", String(point.y)); line.setAttribute("x2", String(accessPoint.x)); line.setAttribute("y2", String(accessPoint.y)); line.classList.add(site.kind === "ruin" ? "ruin-access" : "critical-access"); accessLayer.append(line); }
     }
     lastVisibleCodes = visible.filter((site) => !markerNodes.get(site.code)?.hidden).map((site) => site.code);
