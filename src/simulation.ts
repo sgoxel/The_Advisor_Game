@@ -689,7 +689,7 @@ export class LazySimulation {
     if (!this.inspector) this.installInspector();
     const select = document.getElementById("resident-select") as HTMLSelectElement | null;
     if (!select) return;
-    const sample = visible.slice(0, 16),
+    const sample = [...visible].sort((a, b) => a.index - b.index).slice(0, 16),
       retained = sample.some((resident) => resident.code === this.selectedResidentCode)
         ? this.selectedResidentCode
         : sample[0]?.code ?? "";
