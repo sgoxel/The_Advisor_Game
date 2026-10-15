@@ -1,0 +1,31 @@
+name: Apply S006 resident presentation patch
+on:
+  push:
+    branches:
+      - agent1/wp-s006-001-001-20261015
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent1/wp-s006-001-001-20261015
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply final S006 actor-pool acceptance patch
+        run: node tools/apply-s006-resident-presentation.mjs
+      - name: Remove one-use patch machinery and push final head
+        run: |
+          rm tools/apply-s006-resident-presentation.mjs
+          rm .github/workflows/apply-s006-resident-presentation.yml
+          git config user.name "AGENT #1"
+          git config user.email "163722426+sgoxel@users.noreply.github.com"
+          git add src/main.ts src/simulation.ts .github/workflows/agent1-s006-resident-evidence.yml tools/apply-s006-resident-presentation.mjs .github/workflows/apply-s006-resident-presentation.yml
+          git diff --cached --check
+          git commit -m "feat: diversify bounded resident presentation"
+          git push origin HEAD:agent1/wp-s006-001-001-20261015
