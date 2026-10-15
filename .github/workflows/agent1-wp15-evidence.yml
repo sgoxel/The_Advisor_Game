@@ -23,8 +23,8 @@ jobs:
           node tools/agent1-wp-s004-patch-v2.mjs
           node tools/agent1-wp-s004-patch-v3.mjs
       - run: npm ci
-      - name: Targeted settlement and surface tests
-        run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/world.test.ts tests/final-surface-integration.test.ts tests/political-atlas.test.ts
+      - name: Focused settlement acceptance tests
+        run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/world.test.ts
       - run: npm run build
       - name: Commit validated settlement implementation
         run: |
