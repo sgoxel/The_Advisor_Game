@@ -30,6 +30,10 @@ export type SiteAccess = Readonly<{
   z: number;
   canonicalPosition: CanonicalPosition;
   lengthM: number;
+  gatewayX: number;
+  gatewayZ: number;
+  gatewayPosition: CanonicalPosition;
+  branchLengthM: number;
 }>;
 
 export type CriticalSite = Readonly<{
@@ -59,6 +63,7 @@ export const SITE_PAD_CORE_SOURCE_UNITS = 5;
 export const SITE_PAD_FALLOFF_SOURCE_UNITS = 7;
 export const SITE_PAD_SUPPORT_SOURCE_UNITS =
   SITE_PAD_CORE_SOURCE_UNITS + SITE_PAD_FALLOFF_SOURCE_UNITS;
+const SITE_ACCESS_GATEWAY_SOURCE_UNITS = SITE_PAD_SUPPORT_SOURCE_UNITS + 0.75;
 const MAX_SITE_CUT_M = 4;
 const MAX_SITE_FILL_M = 3;
 const MAX_ACCESS_GRADE = 0.08;
@@ -91,6 +96,20 @@ function roadPoint(road: Road, t: number) {
     position = sourceToLonLat(x, z),
     normalized = lonLatToSource(position.lon, position.lat);
   return { x: normalized.x, z: normalized.z, canonicalPosition: canonical(position) };
+}
+function gatewayFromSite(siteX: number, siteZ: number, accessX: number, accessZ: number) {
+  const dx = wrapSourceX(accessX - siteX),
+    dz = accessZ - siteZ,
+    length = Math.hypot(dx, dz) || 1,
+    x = siteX + (dx / length) * SITE_ACCESS_GATEWAY_SOURCE_UNITS,
+    z = siteZ + (dz / length) * SITE_ACCESS_GATEWAY_SOURCE_UNITS,
+    position = sourceToLonLat(x, z),
+    normalized = lonLatToSource(position.lon, position.lat);
+  return {
+    x: normalized.x,
+    z: normalized.z,
+    canonicalPosition: canonical(position),
+  };
 }
 function farEnoughFromSettlements(position: CanonicalPosition) {
   return places.every((place) => greatCircleDistance(position, place.canonicalPosition) >= 900);
@@ -204,7 +223,7 @@ function createSite(
       dz = road.toZ - road.fromZ,
       length = Math.max(1, Math.hypot(dx, dz)),
       side = addressed(`${code}/${attempt}/SIDE`) < 0.5 ? -1 : 1,
-      offsetM = 760 + addressed(`${code}/${attempt}/OFFSET`) * 840,
+      offsetM = 900 + addressed(`${code}/${attempt}/OFFSET`) * 900,
       offsetSource = sourceUnitsForMetres(offsetM),
       candidateX = access.x + (-dz / length) * offsetSource * side,
       candidateZ = access.z + (dx / length) * offsetSource * side,
@@ -213,14 +232,17 @@ function createSite(
       position = canonical(candidateLonLat),
       macro = macroSampleAt(position),
       owner = countryAtPosition(position),
-      accessLengthM = greatCircleDistance(position, access.canonicalPosition);
+      accessLengthM = greatCircleDistance(position, access.canonicalPosition),
+      gateway = gatewayFromSite(normalized.x, normalized.z, access.x, access.z),
+      branchLengthM = greatCircleDistance(gateway.canonicalPosition, access.canonicalPosition);
     if (
       !macro.land ||
       macro.domain === "Lake" ||
       macro.reliefM > 220 ||
       owner?.code !== country.code ||
-      accessLengthM < 600 ||
-      accessLengthM > 1800 ||
+      accessLengthM < 850 ||
+      accessLengthM > 1900 ||
+      branchLengthM < 600 ||
       !farEnoughFromSettlements(position) ||
       accepted.some((other) => greatCircleDistance(position, other.canonicalPosition) < 1100) ||
       !siteEnvelopeIsLegal(country, normalized.x, normalized.z) ||
@@ -247,12 +269,16 @@ function createSite(
       variant,
       access: Object.freeze({
         roadCode: road.code,
-        branchCode: `${code}/ACCESS`,
+        branchCode: `${code}/ROAD-ACCESS`,
         roadT: t,
         x: access.x,
         z: access.z,
         canonicalPosition: Object.freeze(access.canonicalPosition),
         lengthM: accessLengthM,
+        gatewayX: gateway.x,
+        gatewayZ: gateway.z,
+        gatewayPosition: Object.freeze(gateway.canonicalPosition),
+        branchLengthM,
       }),
     });
   }
@@ -268,7 +294,6 @@ export const criticalSites: readonly CriticalSite[] = Object.freeze((() => {
 })());
 
 function roadRecord(
-  site: CriticalSite,
   code: string,
   fromX: number,
   fromZ: number,
@@ -310,19 +335,18 @@ export const siteAccessRoads: readonly Road[] = Object.freeze(
   criticalSites.map((site) => {
     const parent = roads.find((road) => road.code === site.access.roadCode);
     if (!parent) throw new Error(`Missing parent road for ${site.code}`);
-    const toX = site.x + wrapSourceX(site.access.x - site.x);
+    const toX = site.access.gatewayX + wrapSourceX(site.access.x - site.access.gatewayX);
     return Object.freeze(
       roadRecord(
-        site,
         site.access.branchCode,
-        site.x,
-        site.z,
+        site.access.gatewayX,
+        site.access.gatewayZ,
         toX,
         site.access.z,
-        site.canonicalPosition,
+        site.access.gatewayPosition,
         site.access.canonicalPosition,
-        site.access.lengthM,
-        site.code,
+        site.access.branchLengthM,
+        `${site.code}/GATEWAY`,
         `${site.code}/JUNCTION`,
       ),
     );
@@ -333,13 +357,13 @@ export const siteAccessRoads: readonly Road[] = Object.freeze(
  * A zero-length road-shaped preparation record reuses the existing bounded road
  * spatial index and earthwork profile. final-surface.ts upgrades only `/SITE/n/PAD`
  * identities from road priority 8 to site priority 9 and changes their semantic
- * material/reservation. Access branches remain ordinary priority-8 good roads.
+ * material/reservation. The access branch begins just beyond the pad support so
+ * the shared nearest-road query cannot replace the priority-9 core with road.
  */
 export const sitePadRoads: readonly Road[] = Object.freeze(
   criticalSites.map((site) =>
     Object.freeze(
       roadRecord(
-        site,
         `${site.code}/PAD`,
         site.x,
         site.z,
