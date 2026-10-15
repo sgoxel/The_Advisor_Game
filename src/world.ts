@@ -10,7 +10,7 @@ import {
 } from "./planet.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
 import { nearestPlace, places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
-import { nearbyCriticalSites, siteSurfaceSample } from "./sites.ts";
+import { nearbyCriticalSites, siteAccessRoads, siteSurfaceSample } from "./sites.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { freshwaterCrossingAt, drainageCoarseSegments, naturalSurfaceAt } from "./hydrology.ts";
 import {
@@ -256,7 +256,7 @@ const ROAD_SUPPORT_RADIUS = 12;
 const ROAD_BUCKET_SIZE = 2048;
 const surfaceRoadBuckets = new Map<string, Road[]>();
 const roadBucketKey = (bx: number, bz: number) => `${bx}/${bz}`;
-for (const road of roads) {
+for (const road of [...roads, ...siteAccessRoads]) {
   for (const shiftX of [-WORLD_SIZE, 0, WORLD_SIZE]) {
     const minBX = Math.floor((road.minX + shiftX - ROAD_SUPPORT_RADIUS) / ROAD_BUCKET_SIZE),
       maxBX = Math.floor((road.maxX + shiftX + ROAD_SUPPORT_RADIUS) / ROAD_BUCKET_SIZE),
