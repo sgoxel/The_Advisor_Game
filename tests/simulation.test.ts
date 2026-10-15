@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { cities, countries, villages } from "../src/geography.ts";
+import { greatCircleDistance } from "../src/planet.ts";
 import { finalSurfaceAt } from "../src/world.ts";
 import {
   LazySimulation,
@@ -24,6 +25,7 @@ test("resident foundations are stable and respect bounded household capacity", (
     assert.equal(first.home, village.id);
     assert.equal(first.settlement, village.id);
     assert.equal(first.homeEntrance, `${first.homeBuilding}/ENTRANCE`);
+    assert.ok(first.homeBuilding.startsWith(`${village.code}/RESIDENCE/`));
     assert.ok(first.workplace.startsWith(village.code));
     homes.set(first.homeBuilding, (homes.get(first.homeBuilding) ?? 0) + 1);
   }
@@ -86,6 +88,26 @@ test("analytical resident positions stay on walkable final surface", () => {
         surface = finalSurfaceAt(resident.x, resident.z);
       assert.ok(surface.walkable, `${resident.code} at ${tick} is not walkable`);
     }
+});
+
+test("sampled commute states remain walkable and spatially continuous", () => {
+  const fixtures = [villages[0], villages[Math.min(7, villages.length - 1)], cities[0]];
+  for (const place of fixtures)
+    for (const index of [0, 3, 6, Math.min(17, populationOf(place) - 1)])
+      for (const start of [6 * HOUR, 18 * HOUR]) {
+        let previous = residentAt(place, index, start);
+        for (let offset = 5 * 60; offset <= HOUR; offset += 5 * 60) {
+          const current = residentAt(place, index, start + offset),
+            surface = finalSurfaceAt(current.x, current.z),
+            stepM = greatCircleDistance(previous.position, current.position);
+          assert.ok(surface.walkable, `${current.code} commute sample is not walkable`);
+          assert.ok(
+            stepM <= 60,
+            `${current.code} commute jumped ${stepM.toFixed(1)}m between five-minute samples`,
+          );
+          previous = current;
+        }
+      }
 });
 
 test("advance never rebuilds a focused country's resident objects", () => {
