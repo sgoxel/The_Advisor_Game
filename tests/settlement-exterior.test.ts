@@ -9,19 +9,23 @@ test("every generated settlement has deterministic non-grid exterior morphology 
   for (const place of places) {
     const plan = settlementExteriorFor(place),
       again = settlementExteriorFor(place),
-      services = new Set(plan.plots.flatMap((plot) => plot.service ? [plot.service] : []));
+      services = new Set(plan.plots.flatMap((plot) => plot.service ? [plot.service] : [])),
+      homes = plan.plots.filter((plot) => plot.kind === "house");
     assert.equal(plan, again, "lazy cache must preserve canonical plan identity");
     assert.deepEqual([...services].sort(), [...REQUIRED_SERVICES].sort(), `${place.code} missing service`);
-    assert.ok(plan.plots.filter((plot) => plot.kind === "house").length >= (place.kind === "city" ? 80 : 20));
+    assert.ok(homes.length >= (place.kind === "city" ? 80 : 20));
     assert.ok(plan.plots.filter((plot) => plot.kind === "field").length >= (place.kind === "city" ? 8 : 4));
     assert.equal(plan.plots.filter((plot) => plot.kind === "keep").length, 1);
     assert.equal(plan.plots.filter((plot) => plot.kind === "well").length, 1);
+    assert.ok(plan.border.length >= (place.kind === "city" ? 40 : 20));
     assert.ok(plan.gates.length >= 1 && plan.gates.length <= 2);
     for (const gate of plan.gates) assert.ok(gate.guardPosts.length >= 1 && gate.guardPosts.length <= 2);
-    for (const home of plan.plots.filter((plot) => plot.kind === "house")) {
+    for (const home of homes) {
+      assert.ok(home.ownerId?.startsWith(`${place.code}/HOUSEHOLD/`), `${home.id} missing canonical owner`);
       assert.ok(home.capacity >= home.residents);
       assert.ok(home.residents >= 2);
     }
+    assert.equal(new Set(homes.map((home) => home.ownerId)).size, homes.length);
     assert.ok(plan.streets.length >= 2);
     assert.ok(plan.streets.some((street) => {
       const a = street.points[0], b = street.points[street.points.length - 1];
@@ -36,5 +40,6 @@ test("settlement exterior summary is bounded to the canonical registry", () => {
   assert.equal(summary.plans, places.length);
   assert.ok(summary.plots < places.length * 140);
   assert.ok(summary.streets <= places.length * 4);
+  assert.ok(summary.borderPoints <= places.length * 48);
   assert.equal(summary.cachedPlans, places.length);
 });
