@@ -168,6 +168,29 @@ test("feature identity survives LOD changes and adjacent tile ownership is uniqu
   assert.ok(mesh.terrain.positions.every(Number.isFinite));
   assert.ok(mesh.terrain.positions.length > 0);
 });
+
+test("Alderwick retains legal houses, keep, well and fields across tile ownership", async () => {
+  const { villages, roads, roadDistanceAt } = await import('../src/geography.ts');
+  const { finalSurfaceAt, tileForPosition } = await import('../src/world.ts');
+  const place = villages[0], tiles = new Map();
+  for (let dz=-96;dz<=96;dz+=32) for(let dx=-96;dx<=96;dx+=32) {
+    const tile=tileForPosition(place.x+dx,place.z+dz,13);
+    tiles.set(tile.key,tile);
+  }
+  const features=[...tiles.values()].flatMap(featuresFor).filter(f=>['house','keep','well','field'].includes(f.kind));
+  assert.equal(new Set(features.map(f=>f.code)).size,features.length);
+  assert.ok(features.filter(f=>f.kind==='house').length>=12,'starting village must not silently lose its housing');
+  for(const kind of ['keep','well','field']) assert.ok(features.some(f=>f.kind===kind),`missing ${kind}`);
+  for(const f of features) {
+    const radius=f.kind==='keep'?15:f.kind==='field'?13:f.kind==='house'?7:2;
+    assert.ok(roads.every(r=>roadDistanceAt(f.x,f.z,r)>radius+5),`${f.kind} overlaps road clearance`);
+    for(const [dx,dz] of [[0,0],[-radius,-radius],[-radius,radius],[radius,-radius],[radius,radius]]) {
+      const surface=finalSurfaceAt(f.x+dx,f.z+dz);
+      assert.equal(surface.water.kind,'none');
+      assert.ok(surface.walkable);
+    }
+  }
+});
 test("application source contains no random-number API or clock-driven world generation", () => {
   for (const file of [
     "world.ts",

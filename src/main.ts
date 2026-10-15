@@ -143,6 +143,8 @@ let projectionTransition = 0,
   detailedMaxFloat32ErrorM = 0;
 let worldMaterial: pc.StandardMaterial | undefined;
 let terrainMaterial: pc.StandardMaterial | undefined;
+let coarseTerrainMaterial: pc.StandardMaterial | undefined;
+const coarseTerrainLayer = new pc.Layer({ name: "Coarse terrain background" });
 let surfaceDetail = 1;
 let lodTransition: { oldKeys: string[]; newKeys: string[]; started: number } | undefined;
 type CachedTile = {
@@ -204,7 +206,7 @@ function applyTileRenderTransform(tile: Tile, entity: pc.Entity) {
 
 function positionActor(actor: pc.Entity, x: number, z: number) {
   const point = renderFrame.sourceToRender(x, z, heightAt(x, z));
-  actor.setLocalPosition(point.x, point.y + 1.65, point.z);
+  actor.setLocalPosition(point.x, point.y + elevationToRenderY(0.9), point.z);
 }
 
 function refreshRenderFrameTransforms() {
@@ -406,6 +408,8 @@ function prepareGlobe() {
     globe!.setSurface(event.data);
     terrainMaterial!.emissiveMap = globe!.surface;
     terrainMaterial!.update();
+    coarseTerrainMaterial!.emissiveMap = globe!.surface;
+    coarseTerrainMaterial!.update();
     globePass++;
     if (globePass < GLOBE_PASSES.length) request();
     else {
@@ -482,20 +486,22 @@ function applyPresentation() {
     camera.camera!.farClip = Math.max(512, distance +
       2 * view.halfHeight * Math.hypot(1, camera.camera!.aspectRatio) + 128);
   }
-  for (const material of [worldMaterial, terrainMaterial]) if (material) {
+  for (const material of [worldMaterial, terrainMaterial, coarseTerrainMaterial]) if (material) {
     // Replace terrain pixels rather than stacking translucent skirts over the
     // globe. One retained surface owns each pixel throughout the handoff.
-    material.setParameter("flatCoverage", material === terrainMaterial ? 1 : 1 - projectionTransition);
+    material.setParameter("flatCoverage", material === worldMaterial ? 1 - projectionTransition : 1);
   }
   const backdrop = globe.backdropColor,
     t = projectionTransition;
   const surfaceOrigin = renderFrame.canonicalOrigin;
-  terrainMaterial?.setParameter("surfaceOrigin", [surfaceOrigin.lon, surfaceOrigin.lat]);
-  terrainMaterial?.setParameter("surfaceOffset", [flatRoot.getLocalPosition().x, flatRoot.getLocalPosition().y, flatRoot.getLocalPosition().z]);
-  terrainMaterial?.setParameter("surfaceProjectionWeight", 1 - localDetailWeight(view.halfHeight));
   const surfaceFocus = flatToLonLat(view.x, view.z);
-  terrainMaterial?.setParameter("surfaceFocus", [surfaceFocus.lon, surfaceFocus.lat]);
-  terrainMaterial?.setParameter("surfaceTransition", projectionTransition);
+  for (const material of [terrainMaterial, coarseTerrainMaterial]) {
+    material?.setParameter("surfaceOrigin", [surfaceOrigin.lon, surfaceOrigin.lat]);
+    material?.setParameter("surfaceOffset", [flatRoot.getLocalPosition().x, flatRoot.getLocalPosition().y, flatRoot.getLocalPosition().z]);
+    material?.setParameter("surfaceProjectionWeight", 1 - localDetailWeight(view.halfHeight));
+    material?.setParameter("surfaceFocus", [surfaceFocus.lon, surfaceFocus.lat]);
+    material?.setParameter("surfaceTransition", projectionTransition);
+  }
   camera.camera!.clearColor.set(
     FLAT_BACKDROP.r + (backdrop.r - FLAT_BACKDROP.r) * t,
     FLAT_BACKDROP.g + (backdrop.g - FLAT_BACKDROP.g) * t,
@@ -516,6 +522,7 @@ function updateHandoff(dt: number) {
   surfaceDetail += (desiredDetail - surfaceDetail) * (1 - Math.exp(-Math.max(0, dt) / 0.16));
   if (Math.abs(surfaceDetail - desiredDetail) < 0.001) surfaceDetail = desiredDetail;
   terrainMaterial?.setParameter("surfaceDetailWeight", surfaceDetail);
+  coarseTerrainMaterial?.setParameter("surfaceDetailWeight", surfaceDetail);
   desiredProjectionTransition = projectionTransitionForHalfHeight(
     view.halfHeight,
   );
@@ -614,6 +621,7 @@ function uploadGeometry(
   const entity = new pc.Entity(name);
   entity.addComponent("render", {
     meshInstances: [new pc.MeshInstance(mesh, material)],
+    layers: material === coarseTerrainMaterial ? [coarseTerrainLayer.id] : [pc.LAYERID_WORLD],
     castShadows: name !== "terrain",
     receiveShadows: true,
   });
@@ -702,7 +710,8 @@ function processStreaming(material: pc.StandardMaterial) {
     const entity = new pc.Entity(next.tile.key),
       meshes: pc.Mesh[] = [];
     for (const [name, g] of Object.entries(next.data)) {
-      const mesh = uploadGeometry(g, entity, name, name === "terrain" ? terrainMaterial! : material);
+      const mesh = uploadGeometry(g, entity, name, name === "terrain" ?
+        (next.tile.level === 0 ? coarseTerrainMaterial! : terrainMaterial!) : material);
       if (mesh) meshes.push(mesh);
     }
     entity.enabled = false;
@@ -1202,7 +1211,8 @@ async function start() {
   flatRoot = new pc.Entity("Flat world");
   app.root.addChild(flatRoot);
   globe = new GlobeView(app);
-  camera.camera!.layers = [globe.surfaceLayer.id, ...camera.camera!.layers];
+  app.scene.layers.insertOpaque(coarseTerrainLayer, 1);
+  camera.camera!.layers = [globe.surfaceLayer.id, coarseTerrainLayer.id, ...camera.camera!.layers];
   const sun = new pc.Entity("Late afternoon sun");
   sun.addComponent("light", {
     type: "directional",
@@ -1226,6 +1236,12 @@ async function start() {
   installLodCoverage(material);
   material.update();
   terrainMaterial = createTerrainMaterial(globe.surface);
+  coarseTerrainMaterial = createTerrainMaterial(globe.surface);
+  // The world-wide emergency mesh is coverage behind detailed patches. Its
+  // interpolated height must never occlude prepared ground while jobs run.
+  coarseTerrainMaterial.depthWrite = false;
+  coarseTerrainMaterial.depthTest = false;
+  coarseTerrainMaterial.update();
   worker = new Worker(new URL("./tile-worker.ts", import.meta.url), {
     type: "module",
   });
@@ -1286,7 +1302,7 @@ async function start() {
             receiveShadows: false,
             material: characterMaterials[visible[i].variant % 3],
           });
-          actor.setLocalScale(2.2, 1, 3.3);
+          actor.setLocalScale(elevationToRenderY(0.8), 1, elevationToRenderY(1.8));
           flatRoot.addChild(actor);
           actors.push(actor);
         }
@@ -1701,6 +1717,14 @@ async function start() {
             pending.size === 0 &&
             activeKeys.length === wanted.length &&
             activeKeys.every((key) => wanted.some((t) => t.key === key)),
+          visibleGeometryTriangles: Object.fromEntries(
+            ["terrain", "structures", "nature", "detail"].map(name => [name,
+              [...tileCache.values()].filter(record => record.entity.enabled).reduce((sum,record) =>
+                sum + (record.entity.children as pc.Entity[]).filter(child => child.name === name && child.enabled)
+                  .reduce((count,child) => count + (child.render?.meshInstances ?? []).reduce((n,instance) =>
+                    n + (instance.mesh?.primitive[0]?.count ?? 0) / 3,0),0),0),
+            ]),
+          ),
           visibleMeshes: Object.fromEntries(
             ["terrain", "structures", "nature", "detail"].map((name) => [
               name,

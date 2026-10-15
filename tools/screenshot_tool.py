@@ -68,6 +68,15 @@ POINT_INSPECTION = (
 
 # Named step presets. Add a line here to give a new scene a name.
 SCENARIOS: dict[str, str] = {
+    # Owner regression: inspect the ordinary starting village during movement,
+    # including intermediate frames rather than only settled hydrology fixtures.
+    "alderwick-pan-zoom": (
+        "eval:window.advisorWorld.navigation.setFocus(-67.30178*Math.PI/180,-31.77696*Math.PI/180);"
+        "eval:window.advisorWorld.setHalfHeight(160);settle;shot:village;"
+        "drag:45%,50%>60%,55%;wait:250;shot:pan-transient;settle;shot:pan-settled;"
+        "wheel:-900;wait:250;shot:zoom-transient;settle;shot:street;"
+        "wheel:900;wait:250;shot:return-transient;settle;shot:return-settled"
+    ),
     "hydrology-point-inspection": (
         "eval:window.ll=window.advisorWorld.hydrology.toLonLat(-26817.80086086045,27316.75066655874);"
         "eval:window.advisorWorld.navigation.setFocus(window.ll.lon,window.ll.lat);"

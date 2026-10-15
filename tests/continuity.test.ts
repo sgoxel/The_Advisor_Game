@@ -29,13 +29,13 @@ test("coarse coverage retains no fine work and the local lake-detour ground foll
   const result=refineTileSurfacePresentation(tile,base,natural.replaced),originX=tile.minX+tile.size/2,originZ=tile.minZ+tile.size/2;
   let rendered=0;
   for(let vertex=0;vertex<result.terrain.positions.length/3;vertex++) {
-    if(result.terrain.normals[vertex*3+1]<=0||![170,151,113].every((value,i)=>result.terrain.colors[vertex*4+i]===value))continue;
+    if(result.terrain.normals[vertex*3+1]<=0||![112,92,62].every((value,i)=>result.terrain.colors[vertex*4+i]===value))continue;
     const p=vertex*3,x=originX+result.terrain.positions[p],z=originZ+result.terrain.positions[p+2];
     const surface=finalSurfaceAt(x,z);
     if(surface.groundMaterial!=="Road"||surface.reservedUse!==corridor.code||roadDistanceAt(x,z,corridor)>=5)continue;
     assert.equal(surface.water.kind,"none");assert.ok(surface.walkable);
     assert.ok(Math.abs(result.terrain.positions[p+1]-surface.groundHeight)<.026,"rendered detour must follow its actual prepared height");
-    assert.deepEqual(Array.from(result.terrain.colors.slice(vertex*4,vertex*4+3)),[170,151,113],"detour must be visible on the common ground");
+    assert.deepEqual(Array.from(result.terrain.colors.slice(vertex*4,vertex*4+3)),[112,92,62],"detour must be visible on the common ground");
     rendered++;
   }
   assert.ok(rendered>0,"actual polyline detour must receive visible local prepared ground");

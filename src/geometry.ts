@@ -205,11 +205,8 @@ export function terrainTint(
   // parallel river/road/settlement hit test in presentation code.
   if (surface.water.kind === "river" && !featureFootprintSource) return color(76, 128, 148);
 
-  if (
-    surface.water.kind === "none" &&
-    (surface.groundMaterial === "Road" || surface.groundMaterial === "Settlement")
-  )
-    return color(170, 151, 113);
+  if (surface.water.kind === "none" && surface.groundMaterial === "Road")
+    return color(112, 92, 62);
 
   // Identical coordinate inputs give identical albedo at every mesh LOD.
   // Filtering detail belongs to presentation, not a size-dependent palette.
@@ -285,6 +282,8 @@ export function terrainTint(
 
   const protectedSurface = snowWeight > 0.65 || polarWeight > 0.65,
     tint = varyColor(base, variation * (protectedSurface ? 0.3 : 1));
+  // A village reservation clears vegetation but does not paint a bare dirt disc.
+  // Its soil retains the natural palette; actual streets are painted separately.
   let result=tint;
   if(surface.groundMaterial==='Riverbank'){
     const natural=naturalSurfaceAt(x,z),bankWeight=Math.max(0,Math.min(1,(.9-natural.vegetationDensityScale)/.56));
@@ -515,7 +514,9 @@ export function buildTile(t: Tile): TileGeometry {
           color(133, 143, 123),
         );
       } else if (f.kind === "field") {
-        nature.box(x, y + 0.03, z, 18, 0.15, 18, color(158, 132, 66));
+        // Agricultural plots are settlement geometry, not vegetation scatter.
+        // The worker replaces the nature group with bounded instanced vegetation.
+        structures.box(x, y + 0.03, z, 18, 0.15, 18, color(158, 132, 66));
         if (t.size <= 64)
           for (let row = 0; row < 8; row++)
             detail.box(

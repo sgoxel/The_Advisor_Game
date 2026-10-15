@@ -273,17 +273,22 @@ for (const road of roads) {
 for (const bucket of surfaceRoadBuckets.values())
   bucket.sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
 
-function surfaceRoadAt(x: number, z: number) {
+function surfaceRoadAt(x: number, z: number, clearance = ROAD_SUPPORT_RADIUS) {
   const wrappedX = wrapSourceX(x),
-    bucket =
-      surfaceRoadBuckets.get(
-        roadBucketKey(
-          Math.floor(wrappedX / ROAD_BUCKET_SIZE),
-          Math.floor(z / ROAD_BUCKET_SIZE),
-        ),
-      ) || [];
+    bx = Math.floor(wrappedX / ROAD_BUCKET_SIZE),
+    bz = Math.floor(z / ROAD_BUCKET_SIZE),
+    reach = clearance > ROAD_SUPPORT_RADIUS ? Math.ceil(clearance / ROAD_BUCKET_SIZE) : 0;
+  let bucket = surfaceRoadBuckets.get(roadBucketKey(bx, bz)) || [];
+  if (reach) {
+    const candidates = new Set<Road>();
+    for (let dz = -reach; dz <= reach; dz++)
+      for (let dx = -reach; dx <= reach; dx++)
+        for (const road of surfaceRoadBuckets.get(roadBucketKey(bx + dx, bz + dz)) || [])
+          candidates.add(road);
+    bucket = [...candidates];
+  }
   let road: Road | undefined,
-    distance = ROAD_SUPPORT_RADIUS;
+    distance = clearance;
   for (const candidate of bucket) {
     const candidateDistance = roadDistanceAt(wrappedX, z, candidate);
     if (
@@ -294,7 +299,9 @@ function surfaceRoadAt(x: number, z: number) {
       distance = candidateDistance;
     }
   }
-  return { road, distance, candidateCount: bucket.length };
+  // A search bound is not a measured distance to a road. Returning the bound
+  // here rejected every house/field whose clearance was >= that bound.
+  return { road, distance: road ? distance : Infinity, candidateCount: bucket.length };
 }
 
 const settlementTerraceHeights = new Map<string, number>();
@@ -628,7 +635,7 @@ export function featuresFor(tile: Tile): Feature[] {
     if(surface.groundHeight<.2||surface.water.kind!=='none')return null;
     if(kind==='house'||kind==='keep'||kind==='well'||kind==='field'){
       const radius=kind==='keep'?15:kind==='field'?13:kind==='house'?7:2;
-      if(!surface.walkable||naturalSurfaceAt(x,z).freshwaterDistanceSource<=Math.SQRT2*radius+3.7||surfaceRoadAt(x,z).distance<=radius+5)return null;
+      if(!surface.walkable||naturalSurfaceAt(x,z).freshwaterDistanceSource<=Math.SQRT2*radius+3.7||surfaceRoadAt(x,z,radius+5).distance<=radius+5)return null;
       for(const [dx,dz]of [[-radius,-radius],[-radius,radius],[radius,radius],[radius,-radius],[0,-radius],[0,radius],[-radius,0],[radius,0]]){
         const corner=finalSurfaceAt(x+dx,z+dz);
         if(corner.water.kind!=='none'||!corner.walkable||Math.abs(corner.groundHeight-surface.groundHeight)>(kind==='field'?.1:.25))return null;

@@ -3,6 +3,8 @@ import { terrainTint } from "./geometry.ts";
 import { finalSurfaceAt, type Tile } from "./world.ts";
 import { drainageSegmentsInBounds, naturalSurfaceAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "./hydrology.ts";
 import { macroSampleAt } from "./macro-geography.ts";
+import { places, roads, roadDistanceAt } from "./geography.ts";
+import { roadFragmentsInBounds } from "./continuity-corridor.ts";
 import {
   SOURCE_PRESENTATION_RADIUS,
   SOURCE_PRESENTATION_WIDTH,
@@ -25,6 +27,7 @@ type Sample = {
   tint: readonly number[];
   wet: string;
   shoreDistance: number;
+  material: string;
 };
 
 /**
@@ -59,6 +62,13 @@ export function rebuildNaturalSurface(
       tile.size <= 512
         ? drainageSegmentsInBounds(tile.minX, tile.minZ, tile.size)
         : [],
+    preparedRoads = tile.size <= 512 ? [...roadFragmentsInBounds(roads, tile.minX, tile.minZ, tile.size)]
+      .filter(r => r.maxZ >= tile.minZ - 12 && r.minZ <= tile.minZ + tile.size + 12 &&
+        [-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH].some(shift =>
+          r.maxX + shift >= tile.minX - 12 && r.minX + shift <= tile.minX + tile.size + 12)) : [],
+    preparedPlace = tile.size <= 512 && places.some(p =>
+      Math.hypot(wrapSourceX(p.x - tile.minX - tile.size / 2), p.z - tile.minZ - tile.size / 2) <
+        (p.kind === 'city' ? 510 : 170) + tile.size * Math.SQRT2 / 2),
     cache = new Map<string, Sample>(),
     positions: number[] = [],
     normals: number[] = [],
@@ -82,6 +92,7 @@ export function rebuildNaturalSurface(
         z,
         y: wet === "none" ? surface.groundHeight : surface.water.level + 0.0025,
         tint: terrainTint(x, z),
+        material: surface.groundMaterial,
         wet,
         shoreDistance: macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
       };
@@ -101,7 +112,7 @@ export function rebuildNaturalSurface(
       if (initialWet === undefined) initialWet = major;
       else if (major !== initialWet) majorBoundary = true;
     }
-  if (!segments.length && !majorBoundary) return unchanged;
+  if (!segments.length && !majorBoundary && !preparedRoads.length && !preparedPlace) return unchanged;
 
   const originX = tile.minX + tile.size / 2,
     originZ = tile.minZ + tile.size / 2;
@@ -222,13 +233,16 @@ export function rebuildNaturalSurface(
         [a, b, c, d, middle].some(
           (s) => s.wet === "none" && Math.abs(s.shoreDistance) <= size * Math.SQRT2 + 8,
         ),
+      road = preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r) < size * Math.SQRT2 / 2 + 12),
+      materialBoundary = [a,b,c,d].some(p => p.material !== middle.material),
+      prepared = road || (preparedPlace && materialBoundary),
       target = river
         ? Math.max(tile.size / 128, Math.min(
             tile.size >= 256 ? 2 : tile.size >= 128 ? 1 : 0.5,
             tile.size / 32,
           ))
-        : Math.max(2, tile.size / 128);
-    if (size > target && (river || major || nearCoast)) {
+        : prepared ? Math.max(0.5, tile.size / 64) : Math.max(2, tile.size / 128);
+    if (size > target && (river || major || nearCoast || prepared)) {
       visit(x, z, half);
       visit(x, z + half, half);
       visit(x + half, z + half, half);
@@ -238,7 +252,7 @@ export function rebuildNaturalSurface(
     if (++leaves > NATURAL_MESH_LIMITS.leaves)
       throw new RangeError("Natural mesh leaf cap exceeded");
 
-    const centreNeeded = river || major || middle.wet !== a.wet;
+    const centreNeeded = river || major || materialBoundary || middle.wet !== a.wet;
     if (centreNeeded) {
       triangle(a, b, middle);
       triangle(b, c, middle);

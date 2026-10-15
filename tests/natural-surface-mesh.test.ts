@@ -8,6 +8,27 @@ import { buildTile } from "../src/geometry.ts";
 import { drainageRecipes } from "../src/hydrology.ts";
 import { tileForPosition, finalSurfaceAt, finalSurfaceEvidenceAnchors } from "../src/world.ts";
 import { SOURCE_PRESENTATION_WIDTH } from "../src/planet.ts";
+import { villages } from "../src/geography.ts";
+
+test("starting-village streets survive inland replacement and remain distinct from the pad", () => {
+  const place= villages[0], tile=tileForPosition(place.x,place.z,10);
+  const result=rebuildNaturalSurface(tile,buildTile(tile).terrain);
+  assert.ok(result.replaced,'inland prepared surfaces need the same bounded refinement as natural shores');
+  let streetVertices=0, padVertices=0;
+  const ox=tile.minX+tile.size/2,oz=tile.minZ+tile.size/2;
+  for(let v=0;v<result.surfaceVertices;v++) {
+    const x=ox+result.geometry.positions[v*3],z=oz+result.geometry.positions[v*3+2];
+    const surface=finalSurfaceAt(x,z);
+    if(surface.groundMaterial==='Road') {
+      streetVertices++;
+      assert.deepEqual([...result.geometry.colors.subarray(v*4,v*4+3)],[112,92,62]);
+    }
+    if(surface.groundMaterial==='Settlement') padVertices++;
+  }
+  assert.ok(streetVertices>20,'narrow streets must survive the interior mesh');
+  assert.ok(padVertices>20,'the settlement must coexist with its streets');
+  assert.ok(result.leaves<=NATURAL_MESH_LIMITS.leaves);
+});
 
 test("natural replacement is bounded and its visible vertices use composed water/ground", () => {
   const p =
