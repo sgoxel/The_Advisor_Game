@@ -51,4 +51,4 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S009-001-001 — Exact-SHA performance observability + release evidence: CPU/input/worker/upload/DOM/GPU/resource telemetry, seven viewports, backend matrix and honest hardware status
 - WP-S009-002-001 — Main-thread hot-path performance: analytical resident updates/spatial queries + invalidation-driven DOM/label work with bounded allocations
 - WP-S009-003-001 — Adaptive renderer/resource resilience: device-class DPR/render scale, quality hysteresis, reusable assets, continuous-zoom parity and runtime WebGPU/WebGL2 recovery
-- WP-S009-004-001 — README/runtime product conformance: truthful current-stage baseline, Advisor-vs-atlas semantics, route/geography claims, legacy-scale cleanup and exact-release truth
+- WP-S009-004-001 — README/runtime product conformance: truthful current-stage baseline, Advisor-vs-atlas semantics, route/geography claims, legacy-scale cleanup and exact-release truth
