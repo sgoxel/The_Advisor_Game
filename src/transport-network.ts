@@ -10,7 +10,7 @@ import {
   type Place,
   type Road,
 } from "./geography.ts";
-import { freshwaterCrossingAt, freshwaterSegmentsAround, naturalSurfaceAt } from "./hydrology.ts";
+import { freshwaterCrossingAt, freshwaterCrossingSpanMAt, freshwaterSegmentsAround, naturalSurfaceAt } from "./hydrology.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
@@ -469,9 +469,15 @@ function buildRoute(
           natural = naturalSurfaceAt(source.x, source.z),
           macro = macroSampleAt(position),
           owner = countryAtPosition(position),
-          outsideOwner = !owner || !allowedCountries.includes(owner.code);
+          outsideOwner = !owner || !allowedCountries.includes(owner.code),
+          unbridgeableRiver = natural.water.kind === "river" &&
+            freshwaterCrossingSpanMAt(source.x, source.z) > TRANSPORT_LIMITS.ruralBridgeMaxM;
         return {
-          water: outsideOwner || natural.water.kind !== "none",
+          // The planner may propose a narrow-river corridor, but it grants no
+          // crossing authority. routeCandidate below still rejects every river
+          // unless the actual centreline has an exact legal crossing and records
+          // the bridge, while lake/ocean and political ownership stay impassable.
+          water: outsideOwner || natural.water.kind === "lake" || natural.water.kind === "ocean" || unbridgeableRiver,
           heightM: natural.groundHeight,
           highland: Math.max(macro.mountainIntensity, natural.cliff ? 1 : natural.slope),
         };
