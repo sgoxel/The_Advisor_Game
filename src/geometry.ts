@@ -111,6 +111,48 @@ class Builder {
     this.quad([b, y, c], [b, t, c], [b, t, e], [b, y, e], tint);
     this.quad([a, t, c], [a, t, e], [b, t, e], [b, t, c], tint);
   }
+  boxYaw(
+    x: number,
+    y: number,
+    z: number,
+    w: number,
+    h: number,
+    d: number,
+    yaw: number,
+    tint: RGB,
+  ) {
+    const c = Math.cos(yaw), s = Math.sin(yaw), t = y + h,
+      at = (lx: number, lz: number, yy: number): Point => [x + lx * c + lz * s, yy, z - lx * s + lz * c],
+      a = at(-w / 2, -d / 2, y), b = at(w / 2, -d / 2, y),
+      c0 = at(w / 2, d / 2, y), d0 = at(-w / 2, d / 2, y),
+      A = at(-w / 2, -d / 2, t), B = at(w / 2, -d / 2, t),
+      C = at(w / 2, d / 2, t), D = at(-w / 2, d / 2, t);
+    this.quad(a, A, B, b, tint);
+    this.quad(b, B, C, c0, tint);
+    this.quad(c0, C, D, d0, tint);
+    this.quad(d0, D, A, a, tint);
+    this.quad(A, D, C, B, tint);
+  }
+  roofYaw(
+    x: number,
+    y: number,
+    z: number,
+    w: number,
+    d: number,
+    h: number,
+    yaw: number,
+    tint: RGB,
+  ) {
+    const c = Math.cos(yaw), s = Math.sin(yaw),
+      at = (lx: number, lz: number, yy: number): Point => [x + lx * c + lz * s, yy, z - lx * s + lz * c],
+      l0 = at(-w / 2, -d / 2, y), l1 = at(-w / 2, d / 2, y),
+      r0 = at(w / 2, -d / 2, y), r1 = at(w / 2, d / 2, y),
+      p0 = at(0, -d / 2, y + h), p1 = at(0, d / 2, y + h);
+    this.quad(l0, p0, p1, l1, tint);
+    this.quad(r1, p1, p0, r0, tint);
+    this.triangle(l0, r0, p0, tint);
+    this.triangle(r1, l1, p1, tint);
+  }
   cone(
     x: number,
     y: number,
@@ -399,108 +441,72 @@ export function buildTile(t: Tile): TileGeometry {
         timber = color(75, 58, 43),
         plaster = color(210, 190, 145);
       if (f.kind === "house") {
-        const w = 6 + (v % 3),
-          d = 7 + ((v >>> 4) % 3),
-          h = 4.1 + (v % 2) * 1.2;
-        structures.box(x, y - 0.3, z, w, h + 0.3, d, plaster);
-        structures.roof(
-          x,
-          y + h,
-          z,
-          w + 1,
-          d + 1,
-          2.8,
-          color(113 + (v % 25), 65 + (v % 16), 48),
-        );
+        const yaw = f.yawRad || 0, w = f.footprintWidth || 6 + (v % 3), d = f.footprintDepth || 7 + ((v >>> 4) % 3),
+          h = 3.8 + (v % 3) * .85, wall = (v & 4) ? color(196, 177, 137) : plaster;
+        structures.boxYaw(x, y - .3, z, w, h + .3, d, yaw, wall);
+        structures.roofYaw(x, y + h, z, w + 1, d + 1, 2.3 + (v % 4) * .25, yaw, color(104 + (v % 31), 62 + (v % 17), 45));
         if (t.size <= 64) {
-          for (const offset of [-w / 2 + 0.15, 0, w / 2 - 0.15])
-            detail.box(
-              x + offset,
-              y,
-              z,
-              w === 0 ? 0.1 : 0.22,
-              h,
-              d + 0.06,
-              timber,
-            );
-          detail.box(x, y + h * 0.55, z, w + 0.06, 0.22, d + 0.1, timber);
-          detail.box(x, y, z + d / 2 + 0.07, 1.2, 2.3, 0.15, timber);
-          for (const offset of [-1.9, 1.9])
-            detail.box(
-              x + offset,
-              y + 2.4,
-              z + d / 2 + 0.1,
-              0.9,
-              1,
-              0.15,
-              color(54, 64, 53),
-            );
-          detail.box(x + w / 3, y + h + 1, z - d / 4, 0.8, 1.8, 0.8, stone);
+          const c = Math.cos(yaw), s = Math.sin(yaw), off = (lx: number, lz: number) => ({ x: x + lx * c + lz * s, z: z - lx * s + lz * c });
+          const door = off(0, d / 2 + .08), chimney = off(w * .3, -d * .22);
+          detail.boxYaw(door.x, y, door.z, 1.15, 2.2, .16, yaw, timber);
+          detail.boxYaw(chimney.x, y + h, chimney.z, .75, 1.7, .75, yaw, stone);
+          for (const lx of [-w * .3, w * .3]) { const q = off(lx, d / 2 + .1); detail.boxYaw(q.x, y + 2.1, q.z, .85, .9, .12, yaw, color(57, 70, 61)); }
         }
       } else if (f.kind === "service") {
-        const market = f.service === "market", smith = f.service === "blacksmith", inn = f.service === "inn";
-        const w = market ? 12 : inn ? 11 : 9, d = market ? 10 : inn ? 12 : 9, h = market ? 3.8 : inn ? 6.2 : 5.1;
-        structures.box(x, y - 0.25, z, w, h + 0.25, d, market ? color(188, 166, 116) : plaster);
-        structures.roof(x, y + h, z, w + 1.2, d + 1.2, market ? 2.1 : 2.8, smith ? color(66, 70, 70) : color(122 + (v % 18), 70, 50));
-        if (market && t.size <= 64) {
-          for (const ox of [-4, 0, 4]) detail.box(x + ox, y + .2, z + d / 2 + 1.5, 3, 1.4, 2.3, color(157, 112 + (v % 20), 63));
-        } else if (smith && t.size <= 64) {
-          detail.box(x + w / 2 + 1.1, y + .1, z, 1.8, 1.2, 1.8, color(82, 82, 76));
-          detail.box(x + w / 2 + 1.1, y + 1.3, z, .3, 2.3, .3, timber);
+        const yaw = f.yawRad || 0, market = f.service === "market", smith = f.service === "blacksmith", inn = f.service === "inn",
+          butcher = f.service === "butcher", guard = f.service === "guard-office", farm = f.service === "farmstead",
+          w = f.footprintWidth || (market ? 18 : inn ? 13 : smith ? 13 : farm ? 18 : 10),
+          d = f.footprintDepth || (market ? 13 : inn ? 16 : smith ? 12 : farm ? 15 : 11),
+          h = market ? 3.4 : inn ? 7.1 : smith ? 4.8 : guard ? 6.7 : farm ? 4.2 : 4.6,
+          wall = smith ? color(151, 144, 126) : guard ? stone : farm ? color(181, 158, 112) : plaster,
+          roof = smith ? color(58, 63, 64) : guard ? color(67, 76, 80) : farm ? color(105, 72, 47) : color(128 + (v % 15), 72, 50);
+        structures.boxYaw(x, y - .25, z, w, h + .25, d, yaw, wall);
+        structures.roofYaw(x, y + h, z, w + 1.2, d + 1.2, market ? 1.8 : 2.5, yaw, roof);
+        const c = Math.cos(yaw), s = Math.sin(yaw), off = (lx: number, lz: number) => ({ x: x + lx * c + lz * s, z: z - lx * s + lz * c });
+        if (market) {
+          for (const lx of [-5, 0, 5]) { const q = off(lx, d / 2 + 2.2); structures.boxYaw(q.x, y + .05, q.z, 3.6, 1.5, 2.8, yaw, color(169, 123 + (v % 18), 65)); }
+          const pole = off(0, d / 2 + 4); detail.boxYaw(pole.x, y, pole.z, .18, 5.5, .18, yaw, timber);
+        } else if (smith) {
+          const yard = off(w / 2 + 3.2, 0), anvil = off(w / 2 + 2.2, d * .18), chimney = off(-w * .3, -d * .28);
+          structures.boxYaw(yard.x, y + .02, yard.z, 5.4, .12, 6.4, yaw, color(103, 96, 79));
+          detail.boxYaw(anvil.x, y + .2, anvil.z, 1.7, 1.1, 1.1, yaw, color(69, 72, 69));
+          structures.boxYaw(chimney.x, y + h, chimney.z, 1.2, 3.8, 1.2, yaw, color(92, 91, 82));
+        } else if (inn) {
+          const wing = off(w * .42, -d * .2), sign = off(-w / 2 - .5, d * .28);
+          structures.boxYaw(wing.x, y, wing.z, w * .55, 4.4, d * .55, yaw, color(202, 182, 137));
+          detail.boxYaw(sign.x, y + 2.2, sign.z, .15, 3.5, .15, yaw, timber);
+          detail.boxYaw(sign.x, y + 4.5, sign.z, 2.4, 1.1, .15, yaw, color(91, 67, 42));
+        } else if (butcher) {
+          const awning = off(0, d / 2 + 1.15);
+          structures.boxYaw(awning.x, y + 2.7, awning.z, w * .8, .16, 2.2, yaw, color(152, 79, 63));
+          for (const lx of [-w * .32, w * .32]) { const q = off(lx, d / 2 + 1.5); detail.boxYaw(q.x, y, q.z, .14, 2.8, .14, yaw, timber); }
+        } else if (guard) {
+          const tower = off(0, -d * .18);
+          structures.boxYaw(tower.x, y + h * .45, tower.z, w * .62, 4.2, d * .62, yaw, stone);
+          structures.cone(tower.x, y + h + 4.2, tower.z, Math.max(w, d) * .42, 2.8, color(70, 78, 81), 4);
+        } else if (farm) {
+          const barn = off(w * .55, -d * .2), shed = off(-w * .58, d * .22);
+          structures.boxYaw(barn.x, y, barn.z, w * .72, 4.7, d * .82, yaw, color(132, 93, 58));
+          structures.roofYaw(barn.x, y + 4.7, barn.z, w * .78, d * .9, 2.2, yaw, color(93, 64, 43));
+          structures.boxYaw(shed.x, y, shed.z, w * .42, 2.9, d * .46, yaw, color(145, 113, 71));
         }
       } else if (f.kind === "street") {
-        const size = Math.max(9, Math.min(12, v));
-        structures.box(x, y + .015, z, size, .08, size, color(118, 96, 64));
+        structures.boxYaw(x, y + .01, z, f.footprintWidth || Math.max(4, v / 10), .07, f.length || f.footprintDepth || 8, f.yawRad || 0, color(118, 96, 64));
       } else if (f.kind === "border") {
         const cityWall = v === 1;
-        structures.box(x, y - .05, z, 11, cityWall ? 2.4 : 1.25, 11, cityWall ? stone : timber);
+        structures.boxYaw(x, y - .05, z, f.footprintWidth || (cityWall ? 1.6 : .9), cityWall ? 3.2 : 1.55, f.length || f.footprintDepth || 8, f.yawRad || 0, cityWall ? stone : timber);
       } else if (f.kind === "gate") {
-        for (const ox of [-4.5, 4.5]) structures.box(x + ox, y - .2, z, 1.5, 7.2, 1.5, stone);
-        structures.box(x, y + 5.7, z, 10.5, 1.3, 1.5, timber);
+        const yaw = f.yawRad || 0, c = Math.cos(yaw), s = Math.sin(yaw), off = (lx: number, lz: number) => ({ x: x + lx * c + lz * s, z: z - lx * s + lz * c });
+        for (const lx of [-4.5, 4.5]) { const q = off(lx, 0); structures.boxYaw(q.x, y - .2, q.z, 1.5, 7.2, 1.5, yaw, stone); }
+        structures.boxYaw(x, y + 5.7, z, 10.5, 1.3, 1.5, yaw, timber);
       } else if (f.kind === "guard-post") {
-        structures.box(x, y - .2, z, 4.5, 6.2, 4.5, stone);
-        structures.roof(x, y + 6, z, 5.2, 5.2, 2.2, color(72, 80, 82));
+        const yaw = f.yawRad || 0;
+        structures.boxYaw(x, y - .2, z, 4.5, 6.2, 4.5, yaw, stone);
+        structures.roofYaw(x, y + 6, z, 5.2, 5.2, 2.2, yaw, color(72, 80, 82));
       } else if (f.kind === "keep") {
-        structures.box(x, y - 0.3, z, 15, 10.3, 14, stone);
-        structures.roof(x, y + 10, z, 16, 15, 4, color(65, 81, 88));
-        for (const ox of [-9, 9])
-          for (const oz of [-8, 8]) {
-            structures.box(
-              x + ox,
-              y - 0.3,
-              z + oz,
-              4.2,
-              13.3,
-              4.2,
-              color(154, 154, 135),
-            );
-            structures.cone(
-              x + ox,
-              y + 13,
-              z + oz,
-              3.6,
-              5,
-              color(62, 80, 87),
-              4,
-            );
-            if (t.size <= 64)
-              detail.box(x + ox, y + 9, z + oz + 2.13, 0.6, 1.9, 0.08, timber);
-          }
-        if (t.size <= 64) {
-          detail.box(x, y, z + 7.1, 2.8, 4.2, 0.2, timber);
-          for (let i = -2; i <= 2; i++)
-            detail.box(
-              x + i * 2.5,
-              y + 7,
-              z + 7.1,
-              0.6,
-              1.8,
-              0.15,
-              color(53, 63, 56),
-            );
-          detail.box(x, y + 14, z, 0.12, 5, 0.12, timber);
-          detail.box(x + 1.3, y + 17, z, 2.5, 1.4, 0.07, color(171, 78, 49));
-        }
+        const yaw = f.yawRad || 0, w = f.footprintWidth || 15, d = f.footprintDepth || 14;
+        structures.boxYaw(x, y - .3, z, w, 10.3, d, yaw, stone);
+        structures.roofYaw(x, y + 10, z, w + 1, d + 1, 4, yaw, color(65, 81, 88));
       } else if (f.kind === "tree") {
         const climate = climateSampleAt(sourceToLonLat(x, z), y),
           family = climate.forestFamily;
@@ -537,26 +543,21 @@ export function buildTile(t: Tile): TileGeometry {
           color(133, 143, 123),
         );
       } else if (f.kind === "field") {
-        // Agricultural plots are settlement geometry, not vegetation scatter.
-        // The worker replaces the nature group with bounded instanced vegetation.
-        structures.box(x, y + 0.03, z, 18, 0.15, 18, color(158, 132, 66));
-        if (t.size <= 64)
-          for (let row = 0; row < 8; row++)
-            detail.box(
-              x - 7 + row * 2,
-              y + 0.2,
-              z,
-              0.65,
-              0.45,
-              16,
-              color(184, 158, 83),
-            );
-        if (t.size <= 32)
-          for (const oz of [-9, 9]) {
-            detail.box(x, y + 1, z + oz, 18, 0.18, 0.18, timber);
-            for (let i = -9; i <= 9; i += 3)
-              detail.box(x + i, y, z + oz, 0.16, 1.3, 0.16, timber);
+        const yaw = f.yawRad || 0, w = f.footprintWidth || 18, d = f.footprintDepth || 18, form = f.fieldForm || "strip",
+          base = form === "pasture" ? color(125, 143, 78) : form === "orchard" ? color(126, 137, 70) : form === "vegetable" ? color(137, 121, 65) : color(158, 132, 66);
+        structures.boxYaw(x, y + .03, z, w, .13, d, yaw, base);
+        if (t.size <= 64) {
+          const c = Math.cos(yaw), s = Math.sin(yaw), off = (lx: number, lz: number) => ({ x: x + lx * c + lz * s, z: z - lx * s + lz * c });
+          if (form === "orchard") {
+            for (let lx = -w * .32; lx <= w * .32; lx += Math.max(4, w / 4)) for (let lz = -d * .3; lz <= d * .3; lz += Math.max(4, d / 4)) { const q = off(lx, lz); detail.boxYaw(q.x, y + .08, q.z, .32, 1.6, .32, yaw, timber); detail.cone(q.x, y + 1.2, q.z, 1.2, 1.8, color(82, 120, 64), 6); }
+          } else if (form === "pasture" || form === "paddock") {
+            for (const lz of [-d / 2, d / 2]) { const q = off(0, lz); detail.boxYaw(q.x, y + .1, q.z, w, .18, .18, yaw, timber); }
+            for (const lx of [-w / 2, w / 2]) { const q = off(lx, 0); detail.boxYaw(q.x, y + .1, q.z, .18, .18, d, yaw, timber); }
+          } else {
+            const rows = Math.max(4, Math.min(10, Math.floor(w / 2.2)));
+            for (let row = 0; row < rows; row++) { const lx = -w * .42 + (row / Math.max(1, rows - 1)) * w * .84, q = off(lx, 0); detail.boxYaw(q.x, y + .16, q.z, .5, .38, d * .86, yaw, color(184, 158, 83)); }
           }
+        }
       } else if (f.kind === "well" && t.size <= 64) {
         structures.box(x, y, z, 2.3, 1, 2.3, stone);
         detail.box(x, y + 1.02, z, 1.4, 0.04, 1.4, color(39, 59, 56));
