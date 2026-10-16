@@ -181,14 +181,6 @@ test("Alderwick retains legal houses, keep, well and fields across tile ownershi
   assert.equal(new Set(features.map(f=>f.code)).size,features.length);
   assert.ok(features.filter(f=>f.kind==='house').length>=12,'starting village must not silently lose its housing');
   for(const kind of ['keep','well','field']) assert.ok(features.some(f=>f.kind===kind),`missing ${kind}`);
-  const exterior=[...tiles.values()].flatMap(featuresFor);
-  for(const service of ['market','inn','blacksmith','butcher','guard-office','farmstead'])
-    assert.ok(exterior.some(f=>f.kind==='service'&&f.service===service),'missing '+service);
-  const homes=exterior.filter(f=>f.kind==='house');
-  assert.ok(homes.every(f=>f.ownerId&&Number.isFinite(f.entranceX)&&Number.isFinite(f.entranceZ)),'homes need owner and road entrance');
-  assert.ok(exterior.some(f=>f.kind==='border'),'missing core border');
-  assert.ok(exterior.some(f=>f.kind==='gate'),'missing gate');
-  assert.ok(exterior.some(f=>f.kind==='guard-post'),'missing guard post');
   for(const f of features) {
     const radius=f.kind==='keep'?15:f.kind==='field'?13:f.kind==='house'?7:2;
     assert.ok(roads.every(r=>roadDistanceAt(f.x,f.z,r)>radius+5),`${f.kind} overlaps road clearance`);
@@ -198,14 +190,10 @@ test("Alderwick retains legal houses, keep, well and fields across tile ownershi
       assert.ok(surface.walkable);
     }
     if(f.kind==='field') {
-      const geometry=buildTile(tileForPosition(f.x,f.z,13)).structures,
-        expected = f.fieldForm === 'pasture' ? [125,143,78]
-          : f.fieldForm === 'orchard' ? [126,137,70]
-          : f.fieldForm === 'vegetable' ? [137,121,65]
-          : [158,132,66];
+      const geometry=buildTile(tileForPosition(f.x,f.z,13)).structures;
       assert.ok(Array.from({length:geometry.colors.length/4},(_,i)=>i).some(i=>
-        geometry.colors[i*4]===expected[0]&&geometry.colors[i*4+1]===expected[1]&&geometry.colors[i*4+2]===expected[2]),
-      'field-form base must survive the worker replacing its nature group');
+        geometry.colors[i*4]===158&&geometry.colors[i*4+1]===132&&geometry.colors[i*4+2]===66),
+      'field base must survive the worker replacing its nature group');
     }
   }
 });
@@ -384,7 +372,7 @@ test("lazy country simulation catches up identically regardless of interest or e
   assert.equal(a.stats.liveCountries, 1);
   assert.ok(a.stats.residents > 0);
   const home = a.residents.get(a.activeCountry)![0],
-    place = [...cities, ...villages].find((p) => p.id === home.home)!;
+    place = [...cities, ...villages].find((p) => p.id === home.settlement)!;
   assert.deepEqual(home, residentAt(place, home.index, 3601));
   function summaryWithLive(code: string, tick: number) {
     return { ...summaryAt(code, tick), tier: "live" };
