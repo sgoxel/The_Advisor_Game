@@ -17,12 +17,35 @@
   vector-effect: non-scaling-stroke;
   filter: drop-shadow(0 1px 1px rgba(245, 232, 193, 0.45));
 }
-#critical-site-access line.critical-access { stroke: rgba(133, 91, 37, 0.82); }
-#critical-site-access line.site-label-leader {
-  stroke: rgba(226, 202, 143, 0.72);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
+#critical-site-access line.critical-access { stroke: rgba(133, 91, 37, 0.9); }
+/* Solid road-coloured underlay so the dashed access reads as a path. */
+#critical-site-access line.access-casing {
+  stroke: rgba(108, 74, 34, 0.55);
+  stroke-width: 5.5;
+  stroke-dasharray: none;
+  stroke-linecap: round;
   filter: none;
+}
+/* Callout from a displaced marker to its true site: solid, light, haloed. */
+#critical-site-access line.site-label-leader-halo {
+  stroke: rgba(18, 12, 8, 0.82);
+  stroke-width: 4.5;
+  stroke-dasharray: none;
+  stroke-linecap: round;
+  filter: none;
+}
+#critical-site-access line.site-label-leader {
+  stroke: #f3e2ad;
+  stroke-width: 2;
+  stroke-dasharray: none;
+  stroke-linecap: round;
+  filter: none;
+}
+#critical-site-access circle.site-anchor {
+  fill: #f3e2ad;
+  stroke: rgba(18, 12, 8, 0.92);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
 }
 .critical-site-marker {
   position: absolute;
@@ -48,79 +71,88 @@
 }
 .critical-site-marker .site-glyph {
   position: absolute;
-  width: 30px;
-  height: 25px;
-  left: 7px;
-  top: 9px;
-  transform: rotateX(56deg) rotateZ(-8deg);
-  border: 1px solid rgba(36, 25, 16, 0.92);
-  background: rgba(61, 48, 34, 0.9);
-  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.42), inset 0 0 0 2px rgba(209, 189, 145, 0.15);
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  left: 6px;
+  top: 6px;
+  transform: rotateZ(-8deg);
+  border: 2px solid rgba(30, 20, 12, 0.96);
+  border-radius: 4px;
+  background: #ead9a6;
+  box-shadow: 0 0 0 2px rgba(18, 12, 8, 0.5), 0 4px 9px rgba(0, 0, 0, 0.55), inset 0 0 0 2px rgba(255, 244, 205, 0.55);
   transition: transform 140ms ease, filter 140ms ease;
 }
 .critical-site-marker.critical-place .site-glyph {
   border-radius: 50%;
-  background: rgba(85, 67, 41, 0.92);
+  background: #f1e2b4;
+  border-color: rgba(92, 52, 16, 0.98);
 }
 .critical-site-marker .site-glyph i,
 .critical-site-marker .site-glyph b {
   position: absolute;
   display: block;
-  background: #8b806f;
-  border: 1px solid #3b332b;
-  box-shadow: 0 2px 3px rgba(0,0,0,.35);
+  background: #5e4d38;
+  border: 1px solid #261c13;
 }
-.critical-site-marker .site-glyph i:nth-child(1) { width: 11px; height: 4px; left: 2px; top: 3px; }
-.critical-site-marker .site-glyph i:nth-child(2) { width: 4px; height: 14px; right: 4px; top: 4px; }
-.critical-site-marker .site-glyph i:nth-child(3) { width: 9px; height: 4px; left: 4px; bottom: 3px; }
-.critical-site-marker .site-glyph i:nth-child(4) { width: 4px; height: 9px; left: 5px; top: 8px; }
-.critical-site-marker .site-glyph b { width: 5px; height: 5px; left: 13px; top: 9px; border-radius: 50%; background: #c5ab72; }
+/* Ruin: broken wall segments. */
+.critical-site-marker .site-glyph i:nth-child(1) { width: 12px; height: 5px; left: 3px; top: 4px; }
+.critical-site-marker .site-glyph i:nth-child(2) { width: 5px; height: 15px; right: 4px; top: 4px; }
+.critical-site-marker .site-glyph i:nth-child(3) { width: 11px; height: 5px; left: 3px; bottom: 4px; }
+.critical-site-marker .site-glyph i:nth-child(4) { width: 5px; height: 6px; left: 4px; top: 11px; }
+.critical-site-marker .site-glyph b { width: 6px; height: 6px; left: 11px; top: 11px; border-radius: 50%; background: #b8862f; }
+/* Critical place: ringed crossroads with four ticks and a gold centre. */
 .critical-site-marker.critical-place .site-glyph i {
-  width: 4px !important;
-  height: 8px !important;
-  border-radius: 45% 45% 20% 20%;
-  transform-origin: 50% 10px;
+  border-radius: 2px;
+  background: #7a4a1a;
 }
-.critical-site-marker.critical-place .site-glyph i:nth-child(1) { left: 13px; top: 1px; transform: rotate(0deg) translateY(-3px); }
-.critical-site-marker.critical-place .site-glyph i:nth-child(2) { left: 22px; top: 9px; transform: rotate(90deg) translateY(-2px); }
-.critical-site-marker.critical-place .site-glyph i:nth-child(3) { left: 13px; top: 17px; transform: rotate(180deg) translateY(-2px); }
-.critical-site-marker.critical-place .site-glyph i:nth-child(4) { left: 4px; top: 9px; transform: rotate(270deg) translateY(-2px); }
+.critical-site-marker.critical-place .site-glyph i:nth-child(1) { width: 4px; height: 7px; left: 10px; right: auto; top: 1px; bottom: auto; }
+.critical-site-marker.critical-place .site-glyph i:nth-child(2) { width: 7px; height: 4px; left: auto; right: 1px; top: 10px; bottom: auto; }
+.critical-site-marker.critical-place .site-glyph i:nth-child(3) { width: 4px; height: 7px; left: 10px; right: auto; top: auto; bottom: 1px; }
+.critical-site-marker.critical-place .site-glyph i:nth-child(4) { width: 7px; height: 4px; left: 1px; right: auto; top: 10px; bottom: auto; }
+.critical-site-marker.critical-place .site-glyph b { width: 8px; height: 8px; left: 9px; top: 9px; background: #c0392b; border-color: #261c13; }
 .critical-site-marker .site-label {
   position: absolute;
   left: 46px;
   top: 10px;
-  white-space: nowrap;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 240px;
+  white-space: normal;
   padding: 4px 7px 5px;
   border: 1px solid rgba(205, 181, 124, 0.42);
   border-radius: 3px;
   background: rgba(24, 31, 27, 0.92);
   color: #f0e3bd;
-  font: 600 11px/1.1 Georgia, serif;
+  font: 600 11px/1.15 Georgia, serif;
   letter-spacing: .02em;
   text-shadow: 0 1px 1px #000;
   box-shadow: 0 2px 8px rgba(0,0,0,.28);
 }
 .critical-site-marker.detailed .site-glyph {
-  transform: rotateX(56deg) rotateZ(-8deg) scale(1.18);
+  transform: rotateZ(-8deg) scale(1.15);
   filter: brightness(1.08);
 }
 .critical-site-marker:hover .site-glyph,
 .critical-site-marker:focus-visible .site-glyph,
 .critical-site-marker[aria-pressed="true"] .site-glyph {
-  transform: rotateX(56deg) rotateZ(-8deg) scale(1.28);
+  transform: rotateZ(-8deg) scale(1.25);
   filter: brightness(1.25);
 }
 .critical-site-marker[aria-pressed="true"] .site-label {
   border-color: rgba(225, 190, 112, .95);
   background: rgba(38, 45, 37, .98);
 }
-.critical-site-panel {
+/* .panel.critical-site-panel outranks popup-panels.css `.panel:not(...)`
+   (loaded later) so the max-height below actually applies. `right` clears the
+   map-controls column (12px edge + 44px buttons + gap). */
+.panel.critical-site-panel {
   position: fixed;
   z-index: 30;
-  right: 18px;
+  right: 72px;
   top: 92px;
-  width: min(350px, calc(100vw - 36px));
-  max-height: calc(100vh - 190px);
+  width: min(350px, calc(100vw - 90px));
+  max-height: calc(100dvh - 190px);
   overflow: auto;
 }
 .critical-site-panel .eyebrow {
@@ -160,26 +192,40 @@
 @media (max-width: 620px) {
   .critical-site-marker .site-label {
     font-size: 10px;
-    max-width: 128px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.15;
+    max-width: 150px;
+    white-space: normal;
   }
-  .critical-site-panel {
+  .panel.critical-site-panel {
     left: 10px;
-    right: 10px;
+    right: 66px;
     top: auto;
-    bottom: 84px;
+    bottom: 90px;
     width: auto;
     max-height: min(42vh, 300px);
+    padding: 8px 12px 12px;
   }
-  .critical-site-panel dl { grid-template-columns: 92px 1fr; }
+  /* Compact sheet: name, type, canonical code and access fit the first view. */
+  .critical-site-panel h2 { font-size: 22px; line-height: 1.1; margin: 0 0 2px; }
+  .critical-site-panel .site-kind { margin: 0 0 6px; font-size: 11px; line-height: 1.3; }
+  .critical-site-panel .divider { margin: 6px 0; }
+  .critical-site-panel .seed-label { margin-bottom: 2px; }
+  .critical-site-panel code { margin: 2px 0 6px; line-height: 1.4; }
+  .critical-site-panel dl {
+    grid-template-columns: 82px 1fr;
+    gap: 3px 8px;
+    margin: 6px 0 8px;
+    line-height: 1.25;
+  }
+  .critical-site-panel .region-actions { margin-top: 6px; }
+  .panel.critical-site-panel .hint { margin-top: 8px; line-height: 1.4; }
 }
 @media (max-height: 500px) {
-  .critical-site-panel {
+  .panel.critical-site-panel {
     top: 68px;
     bottom: 62px;
     left: auto;
-    right: 10px;
+    right: 66px;
     width: min(330px, 44vw);
     max-height: none;
   }

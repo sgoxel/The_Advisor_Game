@@ -7,7 +7,8 @@ for (const viewport of [
   test(`critical sites are discoverable and inspectable on ${viewport.name}`, async ({ page }, testInfo) => {
     test.setTimeout(300000);
     const errors = [],
-      expectWebgl = /[\\/]browser[\\/]/.test(testInfo.file);
+      // The shared body is imported by both spec folders, so the config picks the backend.
+      expectWebgl = !/webgpu/.test(testInfo.config.configFile ?? "");
     page.on("pageerror", (error) => errors.push(error.message));
     if (expectWebgl)
       await page.addInitScript(() =>

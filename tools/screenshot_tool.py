@@ -104,6 +104,19 @@ SCENARIOS: dict[str, str] = {
         "eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.geography.cities[0].canonicalPosition.lon,window.advisorWorld.geography.cities[0].canonicalPosition.lat);"
         "select:#map-scale=50;settle;shot:city-icon"
     ),
+    # WP-S004-002-001: one ruin and one critical place, wide marker -> local mesh -> inspector.
+    "critical-sites": (
+        "eval:window.s=window.advisorSites.sites.find(s=>s.kind==='ruin');"
+        "eval:window.advisorWorld.navigation.setFocus(window.s.canonicalPosition.lon,window.s.canonicalPosition.lat);"
+        "select:#map-scale=1000;settle;shot:ruin-wide;select:#map-scale=20;settle;shot:ruin-local;"
+        "eval:document.querySelector('.critical-site-marker[data-code=\"'+window.s.code+'\"]').click();"
+        "visible:#critical-site-panel;shot:ruin-inspected;click:#close-critical-site;"
+        "eval:window.s=window.advisorSites.sites.find(s=>s.kind==='critical-place');"
+        "eval:window.advisorWorld.navigation.setFocus(window.s.canonicalPosition.lon,window.s.canonicalPosition.lat);"
+        "select:#map-scale=1000;settle;shot:place-wide;select:#map-scale=20;settle;shot:place-local;"
+        "eval:document.querySelector('.critical-site-marker[data-code=\"'+window.s.code+'\"]').click();"
+        "visible:#critical-site-panel;shot:place-inspected"
+    ),
     # Owner regression: inspect the ordinary starting village during movement,
     # including intermediate frames rather than only settled hydrology fixtures.
     "alderwick-pan-zoom": (

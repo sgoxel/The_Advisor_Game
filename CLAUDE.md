@@ -14,6 +14,7 @@ Full rules: `docs/AGENTS.md` (short). Product vision: `docs/README.md` (long, do
 - `npx tsc --noEmit` · `npm test` (node --test, ~90 tests, seconds) · `npm run build`
 - Browser: `npx playwright test --config playwright.fallback.config.js tests/browser/<spec>` (one spec, not the suite)
 - Screenshots: `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python3 tools/screenshot_tool.py --scenario <name> --profile desktop|phone --renderer webgl2` (120 s timeout, run in background). Steps: click, select, visible, eval (no `;` inside an eval), settle, shot, wait.
+- Python screenshot tool: `/usr/local/bin/python3` lacks playwright; install with `python3 -m pip install playwright==1.63.0` (plain `pip` targets another Python). Pass `--chromium /opt/pw-browsers/chromium-1194/chrome-linux/chrome`. Site evidence: `--scenario critical-sites`.
 - If Playwright cannot find Chromium use `executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'` in a throwaway config.
 
 ## Module map (src/)
