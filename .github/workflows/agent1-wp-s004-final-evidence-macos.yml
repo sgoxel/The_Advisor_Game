@@ -1,0 +1,57 @@
+name: AGENT1 WP-S004 exact candidate evidence macOS
+on:
+  push:
+    branches: [agent1/wp-s004-001-001-evidence-20261016]
+    paths: [.github/workflows/agent1-wp-s004-final-evidence-macos.yml]
+permissions:
+  contents: read
+jobs:
+  validate-and-capture-macos:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 2a2d3f725f5f5eabf224aa1fe831555d73979a2c
+          fetch-depth: 0
+      - name: Verify exact product candidate
+        run: test "$(git rev-parse HEAD)" = "2a2d3f725f5f5eabf224aa1fe831555d73979a2c"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: S004 focused deterministic acceptance
+        run: node --experimental-strip-types --test tests/political-atlas.test.ts tests/continuity.test.ts tests/settlement-exterior.test.ts tests/village-morphology-runtime.test.ts tests/wp-s004-world-integration.test.ts tests/final-surface-integration.test.ts
+      - run: npm run build
+      - name: Browser setup
+        run: |
+          npx playwright install chromium
+          python3 -m pip install playwright==1.63.0 pillow
+      - name: Relevant WebGPU semantic-zoom gate
+        run: npx playwright test --config playwright.webgpu.config.js settlement-icons.spec.js
+      - name: Relevant WebGL2 semantic-zoom gate
+        run: npx playwright test --config playwright.fallback.config.js settlement-icons.spec.js
+      - name: Capture fresh S004 settlement evidence
+        run: |
+          npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:4174/ >/dev/null
+          INIT='Promise.all([import("/src/geography.ts"),import("/src/settlement-exterior.ts"),import("/src/world.ts"),import("/src/planet.ts")]).then(([g,s,w,p])=>{window.__samples={};for(const a of ["green","riverside","dispersed-farming"]){const v=g.villages.find(v=>s.settlementExteriorFor(v).archetype===a);if(!v)throw new Error("missing archetype "+a);window.__samples[a]={v,plan:s.settlementExteriorFor(v)}};const cv=g.cities[0];window.__samples.city={v:cv,plan:s.settlementExteriorFor(cv)};window.__service=(sample,name)=>{const plot=sample.plan.plots.find(q=>q.service===name);if(!plot)throw new Error("missing "+name);for(const c of plot.candidates){const f=w.featuresFor(w.tileForPosition(c.x,c.z,15)).find(f=>f.service===name&&f.code.includes(sample.v.id));if(f)return f}throw new Error("unresolved "+name)};window.__focus=(x,z,h)=>{const ll=p.sourceToLonLat(x,z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(h)}})'
+          INIT_ESCAPED=$(printf '%s' "$INIT" | sed 's/;/\\;/g')
+          DESKTOP="eval:${INIT_ESCAPED};eval:(x=>window.__focus(x.v.x,x.v.z,125))(window.__samples.green);settle;shot:village-green;eval:(x=>window.__focus(x.v.x,x.v.z,130))(window.__samples.riverside);settle;shot:village-riverside;eval:(x=>window.__focus(x.v.x,x.v.z,145))(window.__samples[\"dispersed-farming\"]);settle;shot:village-farming;eval:(x=>window.__focus(x.v.x,x.v.z,430))(window.__samples.city);settle;shot:city-district;eval:(f=>window.__focus(f.x,f.z,46))(window.__service(window.__samples.green,\"market\"));settle;shot:market-close"
+          PHONE="eval:${INIT_ESCAPED};eval:(x=>window.__focus(x.v.x,x.v.z,130))(window.__samples.green);settle;shot:village-mobile;eval:(x=>window.__focus(x.v.x,x.v.z,135))(window.__samples.riverside);settle;shot:riverside-mobile"
+          for R in webgpu webgl2; do
+            python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp-s004-${R}-desktop" --name settlement --profile desktop --renderer "$R" --timeout 360 --steps "$DESKTOP"
+            python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp-s004-${R}-mobile" --name settlement --profile phone,phone-landscape --renderer "$R" --timeout 360 --steps "$PHONE"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wp-s004-exact-2a2d3f7-macos-evidence
+          path: test-results/
