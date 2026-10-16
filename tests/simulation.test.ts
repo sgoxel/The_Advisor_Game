@@ -16,25 +16,23 @@ import {
 
 const HOUR = 3600;
 
-test("resident foundations are stable and respect bounded household capacity", () => {
-  const village = villages[0], homes = new Map<string, number>();
+test("every resident foundation owns one stable canonical house and entrance", () => {
+  const village = villages[0], homes = new Set<string>();
+  assert.equal(RESIDENTIAL_CAPACITY, 1);
   for (let index = 0; index < populationOf(village); index++) {
     const first = residentFoundationAt(village, index),
       replay = residentFoundationAt(village, index);
     assert.deepEqual(replay, first);
-    assert.equal(first.home, village.id);
+    assert.equal(first.home, first.homeBuilding);
+    assert.equal(first.homeOwner, first.code);
     assert.equal(first.settlement, village.id);
     assert.equal(first.homeEntrance, `${first.homeBuilding}/ENTRANCE`);
-    assert.ok(first.homeBuilding.startsWith(`${village.code}/RESIDENCE/`));
+    assert.equal(first.homeBuilding, `${village.code}/RESIDENCE/${index}`);
     assert.ok(first.workplace.startsWith(village.code));
-    homes.set(first.homeBuilding, (homes.get(first.homeBuilding) ?? 0) + 1);
+    assert.ok(!homes.has(first.homeBuilding), `${first.homeBuilding} assigned twice`);
+    homes.add(first.homeBuilding);
   }
-  assert.ok(homes.size > 1);
-  assert.ok([...homes.values()].every((occupancy) => occupancy <= RESIDENTIAL_CAPACITY));
-  assert.equal(
-    homes.size,
-    Math.ceil(populationOf(village) / RESIDENTIAL_CAPACITY),
-  );
+  assert.equal(homes.size, populationOf(village));
 });
 
 test("every village has required service staff and continuous seeded gate coverage", () => {
