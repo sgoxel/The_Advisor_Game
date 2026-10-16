@@ -1,4 +1,5 @@
 name: AGENT1 WP-S005 ARM exact acceptance
+# AGENT #1 exact-head validation trigger: 2026-10-16T18:52:00+03:00
 on:
   push:
     branches: [agent1/wp-s005-001-001-current]
