@@ -1,4 +1,4 @@
-name: AGENT1 WP-S004 visual evidence Windows native Chrome
+name: AGENT1 WP-S004 visual evidence Linux WebGPU/WebGL2
 on:
   push:
     branches: [agent1/wp-s004-001-001-20261015]
@@ -8,7 +8,7 @@ permissions:
   contents: write
 jobs:
   evidence:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -33,9 +33,10 @@ jobs:
         env:
           SOURCE_SHA: ${{ github.sha }}
         run: |
-          python -m venv .venv-wp-s004
-          . .venv-wp-s004/Scripts/activate
+          python3 -m venv .venv-wp-s004
+          . .venv-wp-s004/bin/activate
           python -m pip install playwright==1.63.0 pillow
+          python -m playwright install --with-deps chromium
           npm run dev -- --port 4174 > wp-s004-preview.log 2>&1 &
           PREVIEW_PID=$!
           trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
@@ -49,8 +50,8 @@ jobs:
           PHONE='eval:Promise.all([import("/src/geography.ts"),import("/src/settlement-exterior.ts"),import("/src/world.ts"),import("/src/planet.ts")]).then(([g,s,w,p])=>{const av=g.villages[0];window.__m={v:av,plan:s.settlementExteriorFor(av)};const rv=g.villages.find(v=>s.settlementExteriorFor(v).archetype==="riverside");if(!rv)throw new Error("missing riverside");window.__r={v:rv,plan:s.settlementExteriorFor(rv)};window.__svc=name=>{const plot=window.__m.plan.plots.find(q=>q.service===name);for(const c of plot.candidates){const f=w.featuresFor(w.tileForPosition(c.x,c.z,15)).find(f=>f.service===name&&f.code.includes(window.__m.v.id));if(f)return f}throw new Error("unresolved "+name)};window.__focus=(x,z,h)=>{const ll=p.sourceToLonLat(x,z);window.advisorWorld.navigation.setFocus(ll.lon,ll.lat);window.advisorWorld.setHalfHeight(h)}});eval:window.__focus(window.__m.v.x,window.__m.v.z,130);settle;shot:village-mobile;eval:window.__focus(window.__r.v.x,window.__r.v.z,135);settle;shot:riverside-mobile;eval:(f=>window.__focus(f.x,f.z,45))(window.__svc("market"));settle;shot:market-mobile;eval:(f=>window.__focus(f.x,f.z,42))(window.__svc("blacksmith"));settle;shot:blacksmith-mobile'
 
           for R in webgpu webgl2; do
-            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp-s004-${R}-desktop" --name settlement --profile desktop --renderer "$R" --browser-channel chrome --timeout 300 --steps "$DESKTOP"
-            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp-s004-${R}-mobile" --name settlement --profile phone,phone-landscape --renderer "$R" --browser-channel chrome --timeout 300 --steps "$PHONE"
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp-s004-${R}-desktop" --name settlement --profile desktop --renderer "$R" --timeout 300 --steps "$DESKTOP"
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out "test-results/wp-s004-${R}-mobile" --name settlement --profile phone,phone-landscape --renderer "$R" --timeout 300 --steps "$PHONE"
           done
           python - <<'PY'
           import json
@@ -87,6 +88,6 @@ jobs:
           git config user.name "AGENT #1"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add tmp/wp-s004-evidence/*.pdf
-          git commit -m "WP-S004-001-001: publish fresh Windows visual evidence"
+          git commit -m "WP-S004-001-001: publish fresh Linux visual evidence"
           git pull --rebase origin agent1/wp-s004-001-001-20261015
           git push origin HEAD:agent1/wp-s004-001-001-20261015
