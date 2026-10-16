@@ -1,0 +1,27 @@
+name: AGENT1 S004 slim functional
+on:
+  push:
+    branches: [agent1/wp-s004-001-001-slim-validation-20261016]
+concurrency:
+  group: agent1-s004-slim-functional
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  functional:
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Core deterministic exterior tests
+        run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/wp-s004-world-integration.test.ts
+      - name: Runtime morphology acceptance
+        run: node --experimental-strip-types --test tests/village-morphology-runtime.test.ts
+      - run: npm run build
