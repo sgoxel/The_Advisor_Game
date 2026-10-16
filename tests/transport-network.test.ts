@@ -149,6 +149,17 @@ test("transport graph, routing connections, rendered geography roads and S003 co
   }
 });
 
+test("every continent is one legal land-road component before maritime transfer", () => {
+  const graph = adjacency();
+  for (const continent of [...new Set(countries.map((country) => country.continent))].sort((a, b) => a - b)) {
+    const nodes = transportNetwork.nodes.filter((node) => node.continent === continent),
+      start = nodes.find((node) => node.kind === "capital");
+    assert.ok(start, `continent ${continent} needs a capital`);
+    const seen = reachable(start!.code, graph);
+    for (const node of nodes) assert.ok(seen.has(node.code), `${node.code} must be land-reachable inside continent ${continent}`);
+  }
+});
+
 test("same seed rebuilds identical topology/profile digest and bounded focus queries stay capped", () => {
   const rebuilt = buildTransportNetwork();
   assert.equal(rebuilt.digest, transportNetwork.digest);
