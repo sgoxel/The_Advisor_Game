@@ -9,6 +9,7 @@ The owner requested publication of reviewed unfinished candidates and scrollbars
 | #98 and #97 | Use #98 site authority/inspection and #97 close-range ruin/standing-stone meshes. Select roads by canonical country ownership, validate clearance against all roads, preserve priority composition and account for new registry resources. |
 | #110 | Held: its household housing model groups multiple residents per house; README requires each NPC to own a distinct house. Its replacement settlement registry was not imported. |
 | #95 and #100 | Interior architecture is already represented by the fuller main document from 09a3998. This release does not implement enterable interiors. |
+| #52, palette step | Port its colder sea-ice, polar-ice, tundra and snowy-mountain colours. Ecotone/beach/thermal threshold changes remain pending because climate also feeds settlement placement. Preserve the current coarse seed recipe and canonical terrain classification. |
 
 Older overlapping foundation/evidence proposals (#28, #31, #35, #40, #42, #45, #47, #48, #52, #57, #64, #65, #67, #69, #76, #79, #80, #84, #85, #86, #93) were not blindly merged. Their branches remain intact. In particular #52 changes canonical climate and has no fresh acceptance in this release; evidence-only triggers and extra CI scaffolding were not imported. This is selective source integration, not a claim that every open PR or issue is complete.
 
@@ -25,3 +26,9 @@ Native Edge desktop WebGPU 1440x900 and emulated phone WebGL2 390x844: minimize/
 Raw captures and assertions: Temp/advisor-feature-integration-final-ui2; focused tests/build logs: Temp/advisor-feature-integration-*. Initial integration failures and stopped/partial captures are retained. The final site bucket optimization preserves canonical query results and changes no mesh/layout algorithm.
 
 Recorded 2026-10-16 23:26 +0300
+
+## Climate palette integration
+
+Only four RGB constants from #52 are integrated in this step. No climate field, terrain classification, settlement recipe, geometry or streaming algorithm changes. The remaining #52 proposal is not accepted or complete.
+
+All 24 focused climate/world/coverage-geometry checks and the production build passed. Four fresh native Edge images (desktop WebGPU and emulated phone WebGL2, alpine and southern frozen-coast views) were actually inspected: palette readability VISUAL 8/10, no missing terrain or major UI defects. Existing coarse edge steps/filtering and prototype art remain. Both requested backends rendered without page/console errors and passed resource budgets; this is not a physical-device or full-suite claim. Raw images/metadata: Temp/advisor-climate52-local; source asset hashes/build/test logs: Temp/advisor-climate52-accepted. Issues and source PRs remain open and unassigned.
