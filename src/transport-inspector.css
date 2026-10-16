@@ -1,0 +1,141 @@
+.transport-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 7;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.transport-overlay.visible { opacity: 1; }
+.transport-road {
+  fill: none;
+  stroke: rgba(72, 52, 31, .86);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 1px 1px rgba(238, 220, 173, .35));
+}
+.transport-road-main { stroke-width: 4.5; }
+.transport-road-regional { stroke-width: 3.4; }
+.transport-road-access { stroke-width: 2.25; }
+.transport-road-continuity { stroke-width: 3.4; stroke-dasharray: 7 4; }
+.transport-road.selected { stroke: rgba(224, 183, 91, .98); stroke-width: 6; }
+.transport-marker { vector-effect: non-scaling-stroke; }
+.transport-marker-bridge { fill: #d9b874; stroke: #48351f; stroke-width: 2; }
+.transport-marker-junction { fill: #f3e7c3; stroke: #42321f; stroke-width: 2; }
+.transport-marker-harbor { fill: #7fa9ad; stroke: #243c3d; stroke-width: 2; }
+.transport-marker.selected { stroke: #fff4c8; stroke-width: 3; }
+.transport-open-button {
+  width: 100%;
+  margin-top: .55rem;
+}
+.transport-panel {
+  position: fixed;
+  top: 5.9rem;
+  right: 1rem;
+  width: min(410px, calc(100vw - 2rem));
+  max-height: calc(100vh - 10.5rem);
+  overflow: auto;
+  z-index: 25;
+}
+.transport-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.transport-heading h2 { margin-top: .2rem; }
+#transport-close {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.35rem;
+}
+.transport-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .38rem;
+  margin: .75rem 0;
+}
+.transport-summary span {
+  padding: .45rem .55rem;
+  border: 1px solid rgba(217, 184, 116, .24);
+  border-radius: .35rem;
+  background: rgba(17, 27, 25, .42);
+  font-size: .82rem;
+}
+.transport-summary .transport-scale-state { grid-column: 1 / -1; }
+.transport-scale-state.visible { color: #d9b874; }
+.transport-scale-state.hidden { color: #b7b4a8; }
+.transport-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .5rem;
+}
+.transport-actions button { min-height: 44px; }
+#transport-selection h3 {
+  margin: .45rem 0 .75rem;
+  font-size: .88rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+#transport-selection dl,
+.transport-metrics dl {
+  display: grid;
+  grid-template-columns: minmax(105px, .7fr) minmax(0, 1.3fr);
+  gap: .38rem .65rem;
+  margin: .6rem 0 0;
+  font-size: .82rem;
+}
+#transport-selection dt,
+.transport-metrics dt { color: #b9b5a5; }
+#transport-selection dd,
+.transport-metrics dd { margin: 0; overflow-wrap: anywhere; }
+#transport-selection code,
+.transport-metrics code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: .76rem;
+}
+.transport-kind {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: .2rem .48rem;
+  border-radius: 999px;
+  font-size: .68rem;
+  letter-spacing: .07em;
+  font-weight: 700;
+}
+.transport-kind.walking { background: rgba(125, 96, 54, .35); color: #ead39d; }
+.transport-kind.transfer { background: rgba(71, 109, 106, .35); color: #b9d8d5; }
+.transport-kind.sea { background: rgba(49, 95, 115, .42); color: #c4e4ef; }
+.sea-label {
+  display: inline-block;
+  padding: .08rem .28rem;
+  border: 1px dashed rgba(154, 211, 226, .65);
+  border-radius: .2rem;
+  color: #bde3ec;
+  font-size: .68rem;
+  letter-spacing: .04em;
+}
+.transport-metrics { margin-top: .65rem; }
+@media (max-width: 700px) {
+  .transport-panel {
+    top: auto;
+    right: .6rem;
+    bottom: 5.4rem;
+    left: .6rem;
+    width: auto;
+    max-height: min(58vh, 520px);
+  }
+  .transport-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .transport-summary span { padding: .38rem; text-align: center; font-size: .72rem; }
+  .transport-summary .transport-scale-state { grid-column: 1 / -1; text-align: left; }
+  #transport-selection dl,
+  .transport-metrics dl { grid-template-columns: 92px minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .transport-overlay { transition: none; }
+}

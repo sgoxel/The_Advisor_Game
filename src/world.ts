@@ -1,4 +1,5 @@
 /** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
+import "./transport-network.ts";
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED, COARSE_GEOGRAPHY_VERSION } from "./config.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
