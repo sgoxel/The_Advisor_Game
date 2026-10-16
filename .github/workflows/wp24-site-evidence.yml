@@ -18,6 +18,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      - run: xvfb-run -a npx playwright test --config playwright.sites.config.js
       - run: python -m pip install playwright==1.63.0
       - name: Capture critical-place evidence
         run: |
