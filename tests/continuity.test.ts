@@ -180,7 +180,7 @@ test("the runtime corridor rejects a lake midpoint and joins actual destinations
       assert.equal(surface.walkable,true);assert.equal(surface.water.kind,"none");checked++;
     }
   }
-  assert.ok(checked>8000);
+  assert.ok(checked>=(road.centerline!.length-1)*2,"every corridor segment must receive dense final-surface checks");
   assert.ok(villages.some(v=>v.id===road.from)&&villages.some(v=>v.id===road.to));
   const range=clippedStationRange(0,0,100000,0,50000,-16,32,50000);
   assert.ok(range[1]-range[0]<=23,"small visible request must not scan all 50,000 stations");
