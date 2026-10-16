@@ -116,18 +116,21 @@ test("services, varied morphology, gates and farms remain present with bounded d
   assert.ok(settlementExteriorCacheSize() <= SETTLEMENT_EXTERIOR_CACHE_LIMIT, "summary must not fill the detailed-plan cache");
 });
 
-test("every village external road crossing uses one of its canonical enclosure gates", () => {
+test("every village external road crossing uses one of at most two canonical enclosure gates", () => {
   for (const place of villages) {
     const plan = settlementExteriorFor(place), crossingRoads = roads.filter((road) =>
       road.networkKind !== "detour" && road.centerline && road.centerline.length >= 2 &&
       roadDistanceAt(place.x, place.z, road) <= plan.radius * 1.7 && roadCrossesBorder(place, plan, road),
     ).sort((a, b) => a.code.localeCompare(b.code));
     assert.ok(crossingRoads.length >= 1, `${place.code} has no external road crossing`);
-    assert.ok(crossingRoads.length <= 2, `${place.code} has ${crossingRoads.length} enclosure crossings but villages support at most two gates`);
-    assert.ok(plan.gates.length >= crossingRoads.length, `${place.code} does not expose a gate for every enclosure crossing`);
+    assert.ok(plan.gates.length >= 1 && plan.gates.length <= 2, `${place.code} must expose one or two gates`);
     for (const road of crossingRoads) {
       const gate = plan.gates.find((candidate) => roadDistanceAt(candidate.x, candidate.z, road) < .05 && distanceToBorder(place, plan, candidate.x, candidate.z) < .05);
       assert.ok(gate, `${place.code} road ${road.code} crosses the enclosure away from a gate`);
+    }
+    for (const gate of plan.gates) {
+      assert.ok(distanceToBorder(place, plan, gate.x, gate.z) < .05, `${place.code} gate ${gate.id} is not on the enclosure`);
+      assert.ok(crossingRoads.some((road) => roadDistanceAt(gate.x, gate.z, road) < .05), `${place.code} gate ${gate.id} is not used by an external road`);
     }
   }
 });
