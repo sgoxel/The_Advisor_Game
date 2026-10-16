@@ -236,21 +236,25 @@ function terminalApproaches(place: Place, plan: SettlementExteriorPlan): Termina
       if (fallback) approaches.push({ road, ...fallback, snapBorder: true });
     }
   }
-  return approaches.sort((a, b) => a.road.code.localeCompare(b.road.code)).slice(0, 2);
+  const distinct: TerminalApproach[] = [];
+  for (const approach of approaches.sort((a, b) => a.road.code.localeCompare(b.road.code))) {
+    if (distinct.some((other) => Math.hypot(wrapSourceX(other.x - approach.x), other.z - approach.z) < .1)) continue;
+    distinct.push(approach);
+  }
+  return distinct.slice(0, 2);
 }
 function alignGatesToRoads(place: Place, plan: SettlementExteriorPlan): SettlementExteriorPlan {
   if (!plan.gates.length || !plan.streets.length) return plan;
   const approaches = terminalApproaches(place, plan), main = plan.streets[0];
   if (!approaches.length || main.points.length < 2) return plan;
-  const gateTemplates = plan.gates.map((gate) => ({ ...gate, guardPosts: gate.guardPosts.map((post) => ({ ...post })) })),
-    targetGateCount = Math.min(2, Math.max(gateTemplates.length, approaches.length));
+  const targetGateCount = Math.min(2, approaches.length),
+    gateTemplates = plan.gates.slice(0, targetGateCount).map((gate) => ({ ...gate, guardPosts: gate.guardPosts.map((post) => ({ ...post })) }));
   while (gateTemplates.length < targetGateCount) {
-    const template = gateTemplates[0];
+    const template = gateTemplates[0] || plan.gates[0];
     gateTemplates.push({ ...template, id: `${place.code}/GATE/${gateTemplates.length}`, guardPosts: template.guardPosts.map((post) => ({ ...post })) });
   }
   const gates = gateTemplates.map((gate, index) => {
     const approach = approaches[index];
-    if (!approach) return gate;
     const outward = normalize(wrapSourceX(approach.x - place.x), approach.z - place.z), normal = { x: -outward.z, z: outward.x },
       guardPosts = gate.guardPosts.map((_, guardIndex) => ({
         x: wrapSourceX(approach.x + normal.x * (guardIndex === 0 ? 9 : -9)), z: approach.z + normal.z * (guardIndex === 0 ? 9 : -9),
