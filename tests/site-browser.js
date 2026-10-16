@@ -1,9 +1,21 @@
 import { test, expect } from "@playwright/test";
 
-for (const viewport of [
+const representativeViewports = [
   { name: "desktop", width: 1440, height: 900 },
   { name: "phone", width: 390, height: 844 },
-]) {
+];
+
+const requiredViewports = [
+  { name: "phone-360", width: 360, height: 800 },
+  { name: "phone-390", width: 390, height: 844 },
+  { name: "phone-landscape", width: 844, height: 390 },
+  { name: "tablet-portrait", width: 768, height: 1024 },
+  { name: "tablet-landscape", width: 1024, height: 768 },
+  { name: "desktop-1280", width: 1280, height: 720 },
+  { name: "desktop-1440", width: 1440, height: 900 },
+];
+
+for (const viewport of representativeViewports) {
   test(`critical sites are discoverable and inspectable on ${viewport.name}`, async ({ page }) => {
     test.setTimeout(300000);
     const errors = [];
@@ -75,3 +87,53 @@ for (const viewport of [
     expect(errors).toEqual([]);
   });
 }
+
+test("critical-site controls remain touch-safe and in-bounds on all required viewports", async ({ page }) => {
+  test.setTimeout(300000);
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.waitForFunction(() => window.advisorWorld?.state.ready && window.advisorSites?.sites?.length > 0);
+  const target = await page.evaluate(() => {
+    const site = window.advisorSites.sites.find((item) => item.kind === "critical-place");
+    window.advisorWorld.navigation.setFocus(site.canonicalPosition.lon, site.canonicalPosition.lat);
+    return { code: site.code, name: site.name };
+  });
+  await page.selectOption("#map-scale", "100");
+  await page.waitForFunction((code) => window.advisorSites?.state.visibleCodes.includes(code), target.code, { timeout: 90000 });
+  await page.locator(`.critical-site-marker[data-code="${target.code}"]`).click();
+  const panel = page.locator("#critical-site-panel");
+  await expect(panel).toBeVisible();
+
+  for (const viewport of requiredViewports) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.waitForTimeout(120);
+    const geometry = await page.evaluate((code) => {
+      const marker = document.querySelector(`.critical-site-marker[data-code="${CSS.escape(code)}"]`),
+        panel = document.getElementById("critical-site-panel"),
+        close = document.getElementById("close-critical-site"),
+        markerBox = marker?.getBoundingClientRect(),
+        panelBox = panel?.getBoundingClientRect(),
+        closeBox = close?.getBoundingClientRect();
+      return {
+        marker: markerBox && { x: markerBox.x, y: markerBox.y, width: markerBox.width, height: markerBox.height },
+        panel: panelBox && { x: panelBox.x, y: panelBox.y, width: panelBox.width, height: panelBox.height },
+        close: closeBox && { width: closeBox.width, height: closeBox.height },
+        hidden: marker?.hidden ?? true,
+      };
+    }, target.code);
+    expect(geometry.hidden, viewport.name).toBe(false);
+    expect(geometry.marker, viewport.name).not.toBeNull();
+    expect(geometry.marker.width, viewport.name).toBeGreaterThanOrEqual(44);
+    expect(geometry.marker.height, viewport.name).toBeGreaterThanOrEqual(44);
+    expect(geometry.close.width, viewport.name).toBeGreaterThanOrEqual(44);
+    expect(geometry.close.height, viewport.name).toBeGreaterThanOrEqual(44);
+    expect(geometry.panel.x, viewport.name).toBeGreaterThanOrEqual(0);
+    expect(geometry.panel.y, viewport.name).toBeGreaterThanOrEqual(0);
+    expect(geometry.panel.x + geometry.panel.width, viewport.name).toBeLessThanOrEqual(viewport.width + 1);
+    expect(geometry.panel.y + geometry.panel.height, viewport.name).toBeLessThanOrEqual(viewport.height + 1);
+  }
+  await expect(panel).toContainText(target.name);
+  expect(errors).toEqual([]);
+});
