@@ -63,8 +63,16 @@ for (const viewport of representativeViewports) {
     await expect(panel).toBeVisible();
     await expect(panel).toContainText(target.name);
     await expect(panel).toContainText("legal road junction");
+    await expect(panel).toContainText("natural relief");
     await expect(panel.locator("#critical-site-code")).toContainText("/SITE/KEEP");
     const before = await page.evaluate((code) => window.advisorSites.inspect(code).detail.signature, target.code);
+    const churn = await page.evaluate(() => {
+      for (const site of window.advisorSites.sites) window.advisorSites.inspect(site.code);
+      return { ...window.advisorSites.state, totalSites: window.advisorSites.sites.length };
+    });
+    expect(churn.cachedDetails).toBeLessThanOrEqual(churn.detailCacheLimit);
+    expect(churn.detailCacheLimit).toBeLessThan(churn.totalSites);
+
     await page.evaluate(() => window.advisorWorld.navigation.setFocus(0, 0));
     await page.waitForTimeout(250);
     await page.evaluate((code) => {
@@ -77,7 +85,8 @@ for (const viewport of representativeViewports) {
     expect(after).toBe(before);
     const state = await page.evaluate(() => ({ ...window.advisorSites.state, totalSites: window.advisorSites.sites.length }));
     expect(state.visibleCount).toBeLessThanOrEqual(viewport.name === "phone" ? 8 : 14);
-    expect(state.cachedDetails).toBeLessThanOrEqual(state.totalSites);
+    expect(state.cachedDetails).toBeLessThanOrEqual(state.detailCacheLimit);
+    expect(state.detailCacheLimit).toBeLessThan(state.totalSites);
     const box = await panel.boundingBox();
     expect(box).not.toBeNull();
     expect(box.x).toBeGreaterThanOrEqual(0);
