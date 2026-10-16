@@ -28,7 +28,6 @@
   word-break: break-word;
   padding-bottom: 2px;
 }
-#resident-inspector select { width: 100%; min-height: 44px; }
 #resident-home-inspect { width: 100%; min-height: 44px; margin-top: 5px; }
 #resident-house-details, #resident-performance { margin-top: 9px !important; font-size: 11px !important; line-height: 1.4 !important; overflow-wrap: anywhere; }
 #resident-performance { padding-top: 8px; border-top: 1px solid #d8b97920; color: #a9bcb0 !important; }
