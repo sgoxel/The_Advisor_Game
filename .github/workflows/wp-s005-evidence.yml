@@ -46,8 +46,9 @@ jobs:
             sleep 1
           done
           TRANSPORT_STEPS='eval:window.advisorTransport.focusEvidence("bridge");settle;visible:#transport-panel;shot:river-bridge-1-100;eval:window.advisorTransport.focusEvidence("border-crossing");settle;shot:capital-border-crossing-1-100;eval:window.advisorTransport.focusEvidence("lake-detour");settle;shot:lake-detour-1-100;eval:window.advisorTransport.focusEvidence("mountain-pass");settle;shot:mountain-pass-1-100;eval:window.advisorTransport.focusEvidence("junction");settle;shot:shared-junction-1-100;eval:window.advisorTransport.focusEvidence("harbor");settle;shot:road-linked-harbor-1-100;eval:window.advisorTransport.focusEvidence("ferry");settle;shot:sea-link-semantics;eval:(s=>{s.value="250";s.dispatchEvent(new Event("change",{bubbles:true}))})(document.querySelector("#map-scale"));settle;shot:roads-hidden-1-250'
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s005-webgl2 --name transport --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 420 --steps "$TRANSPORT_STEPS"
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s005-webgpu --name transport --profile desktop,phone,phone-landscape --renderer webgpu --timeout 420 --steps "$TRANSPORT_STEPS"
+          PROFILES='desktop,laptop,tablet,phone,phone-landscape,phone-small,tablet-portrait'
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s005-webgl2 --name transport --profile "$PROFILES" --renderer webgl2 --timeout 720 --steps "$TRANSPORT_STEPS"
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s005-webgpu --name transport --profile "$PROFILES" --renderer webgpu --timeout 720 --steps "$TRANSPORT_STEPS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
