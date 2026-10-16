@@ -5,6 +5,9 @@ on:
     paths: [.github/workflows/agent1-wp-s004-final-evidence.yml]
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   validate-and-capture:
     runs-on: ubuntu-latest
