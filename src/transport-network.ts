@@ -772,7 +772,7 @@ export function buildTransportNetwork(): TransportNetwork {
   // Kruskal over geodesic ferry cost.  Ferry edges never enter geography roads.
   const ferryCandidates: { a: TransportHarbor; b: TransportHarbor; distanceM: number }[] = [];
   for (let i = 0; i < state.harbors.length; i++) for (let j = i + 1; j < state.harbors.length; j++) ferryCandidates.push({ a: state.harbors[i], b: state.harbors[j], distanceM: greatCircleDistance(state.harbors[i].position, state.harbors[j].position) });
-  ferryCandidates.sort((a, b) => a.distanceM - b.distanceM || edgePairKey(a.a.code, a.b.code).localeCompare(edgePairKey(a.a.code, a.b.code)));
+  ferryCandidates.sort((a, b) => a.distanceM - b.distanceM || edgePairKey(a.a.code, a.b.code).localeCompare(edgePairKey(b.a.code, b.b.code)));
   const parent = new Map(state.harbors.map((harbor) => [harbor.code, harbor.code]));
   const root = (code: string): string => { const p = parent.get(code)!; if (p === code) return code; const r = root(p); parent.set(code, r); return r; };
   for (const candidate of ferryCandidates) {
