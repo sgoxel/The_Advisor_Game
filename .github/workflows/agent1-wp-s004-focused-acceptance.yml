@@ -19,7 +19,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Typecheck current runtime plus exterior overlay
-        run: npm run test:static
+        run: npx tsc --noEmit
       - name: Run S004 deterministic exterior tests
         run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/village-morphology-runtime.test.ts tests/wp-s004-world-integration.test.ts
       - run: npm run build
