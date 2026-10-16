@@ -1,7 +1,9 @@
 import {elevationToRenderY} from "./render-frame.ts";
 import { featuresFor, field, type Tile } from "./world.ts";
 import { continuitySurfaceAt as finalSurfaceAt, continuityHeightAt as heightAt, registerContinuityPatch } from "./continuity-runtime.ts";
-import { roads } from "./geography.ts";
+import { roads as geographyRoads } from "./geography.ts";
+import { siteAccessRoads } from "./sites.ts";
+const roads = [...geographyRoads, ...siteAccessRoads];
 import { roadFragmentsInBounds, clippedStationRange } from "./continuity-corridor.ts";
 import { naturalElevationAt, naturalSurfaceAt, freshwaterCrossingSpanMAt } from "./hydrology.ts";
 import { macroSampleAt } from "./macro-geography.ts";

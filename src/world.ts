@@ -1,3 +1,5 @@
+import { transportResourceBytesEstimated } from "./transport-network.ts";
+import { nearbyCriticalSites, siteAccessRoads, siteSurfaceSample, siteRegistryBytesEstimated } from "./sites.ts";
 /** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED, COARSE_GEOGRAPHY_VERSION } from "./config.ts";
 import {
@@ -257,7 +259,7 @@ const ROAD_BUCKET_SIZE = 2048;
 const surfaceRoadBuckets = new Map<string, Road[]>();
 const roadBucketKey = (bx: number, bz: number) => `${canonicalRoadBucketX(bx,ROAD_BUCKET_SIZE,WORLD_SIZE)}/${bz}`;
 let surfaceRoadReferences=0;
-for (const road of roads) {
+for (const road of [...roads, ...siteAccessRoads]) {
     for(const [bx,bz] of canonicalRoadBucketCells(road,ROAD_BUCKET_SIZE,ROAD_SUPPORT_RADIUS,WORLD_SIZE)){
       const key=roadBucketKey(bx,bz),bucket=surfaceRoadBuckets.get(key)||[];
       bucket.push(road);surfaceRoadReferences++;
@@ -391,6 +393,20 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
       });
   }
 
+  const site = nearbyCriticalSites(x, z, 16, 1)[0],
+    siteSample = site ? siteSurfaceSample(site, x, z, base.groundHeight) : undefined;
+  if (site && siteSample && siteSample.influence > 0 && base.water.kind === "none")
+    modifiers.push({
+      id: `${site.code}/PAD`,
+      priority: WORLD_BUILDING_PRIORITIES.site,
+      weight: siteSample.influence,
+      targetGroundHeight: siteSample.height,
+      material: "Settlement",
+      walkable: siteSample.walkable,
+      vegetationDensityScale: 0,
+      reservedUse: site.code,
+    });
+
   const road = roadMatch.road;
   if (road) {
     const distance = roadMatch.distance,
@@ -432,7 +448,7 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   }
   return {
     modifiers,
-    candidateCount: roadMatch.candidateCount + (place ? 2 : 0),
+    candidateCount: roadMatch.candidateCount + (place ? 2 : 0) + (site ? 1 : 0),
   };
 }
 
@@ -516,6 +532,7 @@ export function finalSurfaceTelemetry() {
     roadIndexBuckets: surfaceRoadBuckets.size,
     roadIndexReferences: surfaceRoadReferences,
     roadIndexBytesEstimated: surfaceRoadIndexBytesEstimated,
+    featureRegistryBytesEstimated: siteRegistryBytesEstimated + transportResourceBytesEstimated(),
     modifierCandidatesExamined: finalSurfaceModifierCandidates,
     worstModifierCandidates: finalSurfaceWorstCandidates,
   };
@@ -651,7 +668,7 @@ export function featuresFor(tile: Tile): Feature[] {
       return;
     const surface=plotAt(kind,x,z);
     if(!surface)return;
-    if ((kind === "tree" || kind === "rock") && surface.vegetationDensityScale <= 0) return;
+    if ((kind === "tree" || kind === "rock") && surface.vegetationDensityScale <= 0 && !id.startsWith("site/")) return;
     features.push({
       kind,
       x,
@@ -715,6 +732,29 @@ export function featuresFor(tile: Tile): Feature[] {
           );
       }
   }
+  const siteRadius = Math.hypot(tile.size, tile.size) / 2 + 32,
+    localSites = nearbyCriticalSites(
+      tile.minX + tile.size / 2,
+      tile.minZ + tile.size / 2,
+      siteRadius,
+      24,
+    );
+  for (const site of localSites) {
+    const offsets = site.kind === "ruin"
+      ? [[-9, -7], [-9, 0], [-9, 7], [0, 7], [9, 7], [9, 0], [3, -5]]
+      : [[0, -10], [8, -5], [8, 5], [0, 10], [-8, 5], [-8, -5], [0, 0]];
+    for (let index = 0; index < offsets.length; index++) {
+      const [dx, dz] = offsets[index];
+      add(
+        "rock",
+        site.x + dx,
+        site.z + dz,
+        site.variant + index * 131,
+        `site/${site.code}/${site.kind}/stone/${index}`,
+      );
+    }
+  }
+
   if (tile.size <= 256) {
     for (
       let gz = Math.floor(tile.minZ / 10) - 1;

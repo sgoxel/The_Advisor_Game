@@ -18,6 +18,7 @@
 #resident-inspector dl { display: grid; grid-template-columns: 106px minmax(0,1fr); gap: 6px 10px; margin: 11px 0; }
 #resident-inspector dt { color: var(--muted); font-size: 12px; line-height: 1.35; }
 #resident-inspector dd { min-width: 0; margin: 0; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+#resident-inspector select { width: 100%; min-height: 44px; }
 #resident-home, #resident-workplace, #resident-route {
   color: #e0cfaa;
   font-family: Consolas, monospace;
@@ -27,7 +28,6 @@
   word-break: break-word;
   padding-bottom: 2px;
 }
-#resident-inspector select { width: 100%; min-height: 44px; }
 #resident-home-inspect { width: 100%; min-height: 44px; margin-top: 5px; }
 #resident-house-details, #resident-performance { margin-top: 9px !important; font-size: 11px !important; line-height: 1.4 !important; overflow-wrap: anywhere; }
 #resident-performance { padding-top: 8px; border-top: 1px solid #d8b97920; color: #a9bcb0 !important; }
@@ -64,23 +64,56 @@
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
-@media (min-width: 701px) { .travel-panel:has(#resident-inspector) { width: 340px; } }
+/* Keep the house result adjacent to the focused action. Browser focus scrolling
+   then reveals the canonical house summary instead of an unrelated lower row. */
+.travel-panel.house-focused #resident-inspector {
+  display: flex;
+  flex-direction: column;
+}
+.travel-panel.house-focused #resident-house-details { order: -2; }
+.travel-panel.house-focused #resident-home-inspect { order: -1; }
+.travel-panel.house-focused #resident-performance { order: 3; }
+@media (min-width: 701px) {
+  .travel-panel:has(#resident-inspector) { width: 340px; }
+  /* Mid-width layouts place the normal inspector over the viewport centre.
+     While the house action owns focus, yield the region panel and move the
+     inspector to the edge so the canonical entrance anchor stays visible. */
+  .travel-panel.house-focused {
+    left: 17px;
+    width: 300px;
+  }
+  body:has(.travel-panel.house-focused:not([hidden])) .region-panel {
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
 @media (max-width: 700px) {
+  body:has(.travel-panel:not([hidden]) #resident-inspector) .region-panel {
+    visibility: hidden;
+    pointer-events: none;
+  }
   .travel-panel:has(#resident-inspector) {
     top: auto;
     bottom: calc(82px + env(safe-area-inset-bottom));
     left: 17px;
     right: 17px;
     width: auto;
-    max-height: min(58dvh, 520px);
+    /* Keep the world focus point above the bottom sheet even before a house
+       action is activated. Resident details remain scrollable inside the sheet. */
+    max-height: min(38dvh, 380px);
     padding: 14px;
+  }
+  /* House focus is the viewport centre. Keep that canonical anchor visible after
+     inspection by temporarily folding the bottom sheet around the activated
+     action instead of leaving the target underneath a half-screen panel. */
+  .travel-panel.house-focused {
+    max-height: min(26dvh, 220px);
   }
   #resident-inspector dl { grid-template-columns: 96px minmax(0,1fr); }
   #resident-inspector h3 { font-size: 16px; }
 }
 @media (max-width: 360px) {
-  #resident-inspector dl { grid-template-columns: 1fr; gap: 2px; }
-  #resident-inspector dt { margin-top: 5px; }
+  #resident-inspector dl { grid-template-columns: 88px minmax(0,1fr); gap: 5px 8px; }
 }
 @media (max-height: 600px) {
   .travel-panel:has(#resident-inspector) {
@@ -89,4 +122,36 @@
     max-height: none;
     padding: 14px;
   }
+  .travel-panel.house-focused {
+    top: auto;
+    max-height: min(26dvh, 118px);
+  }
+}
+@media (min-width: 701px) and (max-height: 600px) {
+  /* Phone-landscape profiles are wider than the portrait breakpoint. Keep the
+     complete inspector in a narrow scrollable side rail so the map centre stays
+     visible without dropping canonical ID, route, or guard information. */
+  body:has(.travel-panel:not([hidden]) #resident-inspector) .region-panel {
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .travel-panel:has(#resident-inspector) {
+    left: 17px;
+    width: 300px;
+  }
+  .travel-panel.house-focused {
+    top: calc(60px + env(safe-area-inset-top));
+    max-height: none;
+  }
+  #resident-avatar { display: none; }
+  .resident-identity { display: block; margin-top: 7px; }
+  #resident-inspector h3 { margin-bottom: 2px; font-size: 15px; }
+  #resident-inspector code { font-size: 11px; line-height: 1.3; }
+  #resident-inspector dl {
+    grid-template-columns: 92px minmax(0,1fr);
+    gap: 4px 8px;
+    margin: 7px 0;
+  }
+  #resident-inspector dt,
+  #resident-inspector dd { font-size: 12px; line-height: 1.3; }
 }

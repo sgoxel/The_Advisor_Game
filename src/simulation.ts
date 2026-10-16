@@ -617,8 +617,23 @@ export class LazySimulation {
     document.getElementById("resident-home-inspect")?.addEventListener("click", () => {
       const resident = this.residentByCode(this.selectedResidentCode),
         output = document.getElementById("resident-house-details");
-      if (resident && output)
-        output.textContent = `House ${resident.homeBuilding} · entrance ${resident.homeEntrance} · owner ${resident.homeOwner} · capacity ${RESIDENTIAL_CAPACITY} · settlement ${resident.settlement}`;
+      if (!resident || !output) return;
+      document.getElementById("travel-panel")?.classList.add("house-focused");
+      const place = places.find((entry) => entry.id === resident.settlement),
+        home = place
+          ? legalPosition(place, resident.homeOffset.eastM, resident.homeOffset.northM)
+          : undefined;
+      output.textContent = `House ${resident.homeBuilding} · entrance ${resident.homeEntrance} · owner ${resident.homeOwner} · capacity ${RESIDENTIAL_CAPACITY} · settlement ${resident.settlement}${home ? " · world focus moved to entrance anchor" : ""}`;
+      if (home) {
+        const world = (
+          window as typeof window & {
+            advisorWorld?: {
+              navigation?: { setFocus?: (lon: number, lat: number) => void };
+            };
+          }
+        ).advisorWorld;
+        world?.navigation?.setFocus?.(home.position.lon, home.position.lat);
+      }
     });
   }
 

@@ -22,7 +22,10 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run test:release
+        if: github.event_name == 'push'
       - run: npm test
+        if: github.event_name != 'push'
       - run: npm run build
       - run: npx playwright install --with-deps chromium
         if: github.event_name != 'push'

@@ -435,7 +435,7 @@ class Session:
         else:
             raise ValueError("unknown step name")
         if restore_minimized:
-            page.locator("#toggle-region-panel").click()
+            page.locator("#toggle-region-panel").evaluate("button => button.click()")
 
     def shot(self, suffix: str = "") -> None:
         file = f"{self.name}-{self.profile}{'-' + suffix if suffix else ''}.png"

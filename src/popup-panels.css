@@ -1,0 +1,46 @@
+.panel:not(:where(#region-panel)),
+#region-panel:not(.minimized) {
+  max-height: calc(100dvh - 210px);
+  overflow-y: scroll !important;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #bba779 #20372e;
+  overscroll-behavior: contain;
+}
+.panel > .popup-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  margin-top: 0;
+  background: #162521;
+}
+.popup-caption { flex: 1; min-width: 0; }
+.panel .popup-heading button {
+  float: none;
+  flex: 0 0 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 2px;
+  margin: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+.panel.popup-minimized {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: 64px !important;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  overflow: hidden !important;
+  scrollbar-gutter: auto;
+}
+.panel.popup-minimized > :not(.popup-heading) { display: none !important; }
+.panel.popup-minimized .popup-caption h2 { display: none; }
+@media (max-width: 700px) {
+  .panel .popup-heading button { flex-basis: 40px; min-width: 40px; min-height: 40px; }
+}

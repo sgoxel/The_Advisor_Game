@@ -1,3 +1,4 @@
+import { transportNetwork } from "../src/transport-network.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -251,7 +252,11 @@ test("macro population uses variable productive-country density with bounded coa
 
 
 test("macro transport connects every generated settlement within its country with variable long links",()=>{
-  const places=[...cities,...villages,...roadJunctions],byId=new Map(places.map(p=>[p.id,p]));
+  const harbors = transportNetwork.nodes.filter(node => node.kind === "harbor").map(node => ({
+    id: node.sourceId, continent: node.continent,
+    country: countries.find(country => country.code === node.countryCode)!.id,
+  }));
+  const places=[...cities,...villages,...roadJunctions,...harbors],byId=new Map(places.map(p=>[p.id,p]));
   const graph=new Map(places.map(p=>[p.id,new Set<string>()]));
   for(const road of roads){
     const a=byId.get(road.from),b=byId.get(road.to);

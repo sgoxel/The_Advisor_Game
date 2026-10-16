@@ -9,6 +9,7 @@
  * candidate that is illegal in final runtime truth falls back to an A* search
  * whose sampler is final surface itself.
  */
+import "./transport-network.ts";
 import { roads, roadConnections, villages, type Place } from "./geography.ts";
 import {
   enuToPosition,

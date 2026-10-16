@@ -1,3 +1,4 @@
+import { appendCriticalSiteGeometry } from "./site-geometry.ts";
 import { buildTile } from "./geometry.ts";
 import { convertTileGeometryToEnu } from "./render-frame.ts";
 import { refineTileSurfacePresentation } from "./surface-refinement.ts";
@@ -18,6 +19,7 @@ self.onmessage = (event: MessageEvent<TileJob>) => {
     const groundDone=performance.now();
     let vegetation;
     if(job.kind==='detail'){vegetation=buildVegetationGeometry(tile);data.nature=vegetation.geometry;}
+    if(job.kind==='detail') appendCriticalSiteGeometry(tile,data);
     const precision = convertTileGeometryToEnu(tile, data), transfer: Transferable[] = [];
     for (const g of Object.values(data)) {
       transfer.push(g.positions.buffer,g.normals.buffer,g.colors.buffer,g.indices.buffer);

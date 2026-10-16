@@ -104,7 +104,7 @@ const coarseRegistryBytesEstimated = JSON.stringify({roads,places,roadJunctions,
 export const { continuitySurfaceAt, registerContinuityPatch, continuityHeightAt, inspectRegion, terrainQuery, clearContinuityDetail } = runtime;
 // Final-surface cache is shared with collision/traversal; reserve conservative object overhead.
 export function continuityTelemetry() {
-  const state = runtime.continuityTelemetry(), surface=finalSurfaceTelemetry(), sharedSurfaceCacheBytesEstimated = surface.cacheSize * 1024 + surface.roadProfileBytesEstimated;
+  const state = runtime.continuityTelemetry(), surface=finalSurfaceTelemetry(), sharedSurfaceCacheBytesEstimated = surface.cacheSize * 1024 + surface.roadProfileBytesEstimated + surface.featureRegistryBytesEstimated;
   const hydrologyCpuBytesEstimated=hydrologyTelemetry().cpuBytesEstimated;
   return { ...state, corridor: continuityCorridor.evidence, coarseRegistryBytesEstimated, sharedSurfaceCacheBytesEstimated, hydrologyCpuBytesEstimated, cpuBytesEstimated: state.cpuBytesEstimated + sharedSurfaceCacheBytesEstimated + coarseRegistryBytesEstimated + hydrologyCpuBytesEstimated };
 }
