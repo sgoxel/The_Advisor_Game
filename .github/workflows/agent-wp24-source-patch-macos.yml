@@ -1,0 +1,30 @@
+name: AGENT WP24 source patch macOS
+on:
+  push:
+    branches: [agent1/wp-s004-002-001-sites-20261016]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply source patch from canonical patch recipe
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+          recipe = Path('.github/workflows/agent-wp24-source-patch.yml').read_text()
+          marker = "          python - <<'PY'\n"
+          body = recipe.split(marker, 1)[1].split("\n          PY\n", 1)[0]
+          Path('/tmp/wp24_patch.py').write_text(dedent(body))
+          PY
+          python3 /tmp/wp24_patch.py
+          git config user.name "AGENT #1"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/world.ts src/geometry.ts
+          git commit -m "fix(s004): integrate reservation-aware site surfaces"
+          git push origin HEAD:${GITHUB_REF_NAME}
