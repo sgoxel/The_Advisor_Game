@@ -10,7 +10,7 @@ permissions:
   contents: write
 jobs:
   integrate:
-    runs-on: ubuntu-24.04-arm
+    runs-on: macos-latest
     timeout-minutes: 90
     defaults:
       run:
@@ -49,4 +49,4 @@ jobs:
           git commit -m "feat: complete deterministic village morphology roles"
           git push origin HEAD:agent1/wp-s004-001-001-20261015
 
-# AGENT #1 exact source integration trigger 2026-10-16T07:38+03:00
+# AGENT #1 exact source integration trigger 2026-10-16T07:46+03:00
