@@ -17,22 +17,24 @@ import {
 const HOUR = 3600;
 
 test("every resident foundation owns one stable canonical house and entrance", () => {
-  const village = villages[0], homes = new Set<string>();
   assert.equal(RESIDENTIAL_CAPACITY, 1);
-  for (let index = 0; index < populationOf(village); index++) {
-    const first = residentFoundationAt(village, index),
-      replay = residentFoundationAt(village, index);
-    assert.deepEqual(replay, first);
-    assert.equal(first.home, first.homeBuilding);
-    assert.equal(first.homeOwner, first.code);
-    assert.equal(first.settlement, village.id);
-    assert.equal(first.homeEntrance, `${first.homeBuilding}/ENTRANCE`);
-    assert.equal(first.homeBuilding, `${village.code}/RESIDENCE/${index}`);
-    assert.ok(first.workplace.startsWith(village.code));
-    assert.ok(!homes.has(first.homeBuilding), `${first.homeBuilding} assigned twice`);
-    homes.add(first.homeBuilding);
+  for (const place of [villages[0], cities[0]]) {
+    const homes = new Set<string>();
+    for (let index = 0; index < populationOf(place); index++) {
+      const first = residentFoundationAt(place, index),
+        replay = residentFoundationAt(place, index);
+      assert.deepEqual(replay, first);
+      assert.equal(first.home, first.homeBuilding);
+      assert.equal(first.homeOwner, first.code);
+      assert.equal(first.settlement, place.id);
+      assert.equal(first.homeEntrance, `${first.homeBuilding}/ENTRANCE`);
+      assert.equal(first.homeBuilding, `${place.code}/RESIDENCE/${index}`);
+      assert.ok(first.workplace.startsWith(place.code));
+      assert.ok(!homes.has(first.homeBuilding), `${first.homeBuilding} assigned twice`);
+      homes.add(first.homeBuilding);
+    }
+    assert.equal(homes.size, populationOf(place));
   }
-  assert.equal(homes.size, populationOf(village));
 });
 
 test("every village has required service staff and continuous seeded gate coverage", () => {
