@@ -372,7 +372,7 @@ test("lazy country simulation catches up identically regardless of interest or e
   assert.equal(a.stats.liveCountries, 1);
   assert.ok(a.stats.residents > 0);
   const home = a.residents.get(a.activeCountry)![0],
-    place = [...cities, ...villages].find((p) => p.id === home.home)!;
+    place = [...cities, ...villages].find((p) => p.id === home.settlement)!;
   assert.deepEqual(home, residentAt(place, home.index, 3601));
   function summaryWithLive(code: string, tick: number) {
     return { ...summaryAt(code, tick), tier: "live" };
