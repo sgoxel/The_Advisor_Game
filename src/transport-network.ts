@@ -5,17 +5,19 @@ import {
   countries,
   countryAtPosition,
   roadConnections as geographyRoadConnections,
+  roadJunctions,
+  roadNetworkTelemetry,
   roads as geographyRoads,
   villages,
   type Country,
   type Place,
   type Road,
 } from "./geography.ts";
-import { freshwaterCrossingAt, freshwaterCrossingSpanMAt, freshwaterSegmentsAround, naturalSurfaceAt } from "./hydrology.ts";
+import { freshwaterCrossingAt, freshwaterSegmentsAround } from "./hydrology.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import {
-  CANONICAL_METRES_PER_SOURCE_UNIT,
   CANONICAL_PLANET_RADIUS,
+  SOURCE_PRESENTATION_WIDTH,
   greatCircleDistance,
   lonLatToSource,
   normalizeLongitude,
@@ -24,37 +26,39 @@ import {
   type CanonicalPosition,
   type LonLat,
 } from "./planet.ts";
-import { politicalBorderGateways, type PoliticalBorderGateway } from "./political-settlement-access.ts";
+import { politicalBorderGateways } from "./political-settlement-access.ts";
+import { canonicalRoadBucketCells, canonicalRoadBucketX } from "./road-spatial-index.ts";
 import { travelMetrics } from "./travel.ts";
-import { planRoute } from "./routing.ts";
 
 /**
- * WP-S005-001-001 transport authority.
+ * WP-S005 transport extension authority.
  *
- * The topology below is deliberately created once from Campaign-SEED registries.
- * Camera, LOD, renderer, worker order and cache state never participate. The
- * exported geography `roads` array is replaced in place after geography has
- * finished constructing so older final-surface/routing consumers retain one
- * shared array identity while consuming this network instead of the prototype
- * village chains.
+ * Domestic topology is owned by geography's owner-approved macro road network.
+ * S005 deliberately extends that same graph instead of constructing a second
+ * planet-wide domestic network. Only international border links, road-linked
+ * harbors and maritime transfer edges are added here. Their stored polylines are
+ * coarse deterministic alignment recipes; final ground/profile/bridge geometry
+ * remains demand-driven through the existing final-surface authority.
  */
 
 export const TRANSPORT_LIMITS = Object.freeze({
-  routeCandidates: 9,
-  routeSampleSource: 12,
-  routeControlPoints: 5,
-  harborCountriesPerContinent: 6,
+  borderBearings: 72,
+  borderStepM: 5_000,
+  borderMaxM: 250_000,
+  ownedRouteDetours: 32,
+  ownedRouteSamples: 20,
   harborBearings: 32,
-  harborRadiiM: Object.freeze([8_000, 16_000, 28_000, 45_000, 70_000, 100_000]),
-  internationalCandidates: 12,
+  harborRadiiM: Object.freeze([5_000, 10_000, 20_000, 35_000, 55_000, 80_000]),
+  harborCityCandidates: 18,
   spatialBucketSource: 4096,
   queryRoadLimit: 160,
+  bridgeRoadsPerQuery: 12,
+  bridgeRoadCacheLimit: 96,
   ruralBridgeMaxM: 120,
 });
 
 export type TransportRoadClass = "main" | "regional" | "access" | "continuity";
-export type TransportNodeKind = "capital" | "city" | "village" | "harbor";
-export type TransportEdgeKind = "road" | "ferry";
+export type TransportNodeKind = "capital" | "city" | "village" | "junction" | "harbor";
 
 export type TransportNode = Readonly<{
   code: string;
@@ -89,6 +93,7 @@ export type TransportBorderCrossing = Readonly<{
 export type TransportHarbor = Readonly<{
   code: string;
   nodeCode: string;
+  sourceId: string;
   countryCode: string;
   continent: number;
   position: CanonicalPosition;
@@ -101,6 +106,7 @@ export type TransportCenterlinePoint = Readonly<{
   x: number;
   z: number;
   position: LonLat;
+  /** Macro relief only. Fine final-surface road profiles are materialized locally. */
   elevationM: number;
 }>;
 
@@ -149,361 +155,498 @@ export type TransportNetwork = Readonly<{
   digest: string;
 }>;
 
-type MutableNetwork = {
-  nodes: TransportNode[];
-  roadEdges: TransportRoadEdge[];
-  ferryEdges: TransportFerryEdge[];
-  bridges: TransportBridge[];
-  borderCrossings: TransportBorderCrossing[];
-  harbors: TransportHarbor[];
-};
+type BorderGateway = Readonly<{
+  id: string;
+  countryCode: string;
+  neighbourCountryCode: string;
+  inside: CanonicalPosition;
+  outside: CanonicalPosition;
+  corridor: readonly CanonicalPosition[];
+  distanceM: number;
+}>;
 
-type RouteBuild = {
-  points: TransportCenterlinePoint[];
-  bridges: TransportBridge[];
-  borderCrossing?: TransportBorderCrossing;
-  candidate: number;
-  cost: number;
-  maxReliefM: number;
-};
+type ExtensionBuild = Readonly<{
+  roads: readonly Road[];
+  borderCrossings: readonly TransportBorderCrossing[];
+  harbors: readonly TransportHarbor[];
+  harborNodes: readonly TransportNode[];
+  ferries: readonly TransportFerryEdge[];
+}>;
 
 const TAU = Math.PI * 2;
 const NETWORK_CODE = `${WORLD_SEED}/${WORLD_FOUNDATION_VERSION}/TRANSPORT`;
+const BASE_ROADS = Object.freeze([...geographyRoads]);
+const BASE_CONNECTION_COUNT = geographyRoadConnections.length;
+const countriesByCode = new Map(countries.map((country) => [country.code, country]));
+const places = [...cities, ...villages];
+const placesById = new Map(places.map((place) => [place.id, place]));
+const capitalsByCountry = new Map(
+  countries.map((country) => {
+    const capital = cities.find(
+      (city) => city.continent === country.continent && city.country === country.id && city.city === 0,
+    );
+    if (!capital) throw new Error(`Capital missing for ${country.code}`);
+    return [country.code, capital] as const;
+  }),
+);
 
 function digestNumber(text: string) {
   let value = 2166136261;
-  for (let i = 0; i < text.length; i++) value = Math.imul(value ^ text.charCodeAt(i), 16777619);
+  for (let index = 0; index < text.length; index++)
+    value = Math.imul(value ^ text.charCodeAt(index), 16777619);
   return value >>> 0;
 }
 
-function countryKey(continent: number, id: number) {
-  return `${continent}/${id}`;
+function addressed(address: string) {
+  return digestNumber(`${NETWORK_CODE}/${address}`) / 4294967296;
 }
 
-const countriesByKey = new Map(countries.map((country) => [countryKey(country.continent, country.id), country]));
-const countriesByCode = new Map(countries.map((country) => [country.code, country]));
-
-function countryForPlace(place: Place) {
-  const country = countriesByKey.get(countryKey(place.continent, place.country));
-  if (!country) throw new Error(`Transport country missing for ${place.code}`);
-  return country;
+function sanitize(value: string) {
+  return value.replaceAll("/", "-").replaceAll("|", "-");
 }
 
-function destination(origin: LonLat, bearing: number, distanceRad: number): CanonicalPosition {
-  const sinLat = Math.sin(origin.lat) * Math.cos(distanceRad) +
-      Math.cos(origin.lat) * Math.sin(distanceRad) * Math.cos(bearing),
+function destination(origin: LonLat, bearing: number, distanceM: number): CanonicalPosition {
+  const angular = distanceM / CANONICAL_PLANET_RADIUS,
+    sinLat =
+      Math.sin(origin.lat) * Math.cos(angular) +
+      Math.cos(origin.lat) * Math.sin(angular) * Math.cos(bearing),
     lat = Math.asin(Math.max(-1, Math.min(1, sinLat))),
     lon = normalizeLongitude(
-      origin.lon + Math.atan2(
-        Math.sin(bearing) * Math.sin(distanceRad) * Math.cos(origin.lat),
-        Math.cos(distanceRad) - Math.sin(origin.lat) * Math.sin(lat),
-      ),
+      origin.lon +
+        Math.atan2(
+          Math.sin(bearing) * Math.sin(angular) * Math.cos(origin.lat),
+          Math.cos(angular) - Math.sin(origin.lat) * Math.sin(lat),
+        ),
     );
   return { lon, lat, elevation: 0 };
 }
 
-function nodeForPlace(place: Place, capital: boolean): TransportNode {
-  const country = countryForPlace(place), source = lonLatToSource(place.canonicalPosition.lon, place.canonicalPosition.lat);
-  return Object.freeze({
-    code: `${NETWORK_CODE}/NODE/${place.code}`,
-    sourceId: place.id,
-    kind: place.kind === "village" ? "village" : capital ? "capital" : "city",
-    countryCode: country.code,
-    continent: place.continent,
-    position: Object.freeze({ ...place.canonicalPosition }),
-    x: source.x,
-    z: source.z,
+function bearing(from: LonLat, to: LonLat) {
+  const deltaLon = normalizeLongitude(to.lon - from.lon);
+  return Math.atan2(
+    Math.sin(deltaLon) * Math.cos(to.lat),
+    Math.cos(from.lat) * Math.sin(to.lat) -
+      Math.sin(from.lat) * Math.cos(to.lat) * Math.cos(deltaLon),
+  );
+}
+
+function interpolate(from: LonLat, to: LonLat, t: number) {
+  return destination(from, bearing(from, to), greatCircleDistance(from, to) * t);
+}
+
+function sameOwnedDryLand(position: LonLat, country: Country) {
+  const macro = macroSampleAt(position), owner = countryAtPosition(position);
+  return (
+    macro.land &&
+    macro.domain !== "Lake" &&
+    macro.domain !== "Ocean" &&
+    macro.continentId === country.continent &&
+    owner?.code === country.code
+  );
+}
+
+function segmentLegal(from: LonLat, to: LonLat, country: Country, samples = TRANSPORT_LIMITS.ownedRouteSamples) {
+  const distanceM = greatCircleDistance(from, to), azimuth = bearing(from, to), count = Math.max(4, samples);
+  for (let index = 0; index <= count; index++)
+    if (!sameOwnedDryLand(destination(from, azimuth, distanceM * index / count), country)) return false;
+  return true;
+}
+
+/** Bounded coarse alignment only; no final-surface profile or road mesh is built. */
+function ownedMacroPath(from: CanonicalPosition, to: CanonicalPosition, country: Country, address: string) {
+  if (segmentLegal(from, to, country)) return Object.freeze([from, to] as CanonicalPosition[]);
+  const distanceM = greatCircleDistance(from, to), midpoint = interpolate(from, to, 0.5), azimuth = bearing(from, to);
+  for (let attempt = 0; attempt < TRANSPORT_LIMITS.ownedRouteDetours; attempt++) {
+    const ring = Math.floor(attempt / 8), side = attempt % 8,
+      radiusM = Math.min(80_000, Math.max(4_000, distanceM * (0.08 + ring * 0.08))),
+      phase = TAU * addressed(`${address}/DETOUR/${ring}`),
+      waypoint = destination(midpoint, azimuth + Math.PI / 2 + phase + side / 8 * TAU, radiusM);
+    if (
+      sameOwnedDryLand(waypoint, country) &&
+      segmentLegal(from, waypoint, country, 12) &&
+      segmentLegal(waypoint, to, country, 12)
+    ) return Object.freeze([from, waypoint, to]);
+  }
+
+  const via = cities
+    .filter((city) => city.continent === country.continent && city.country === country.id)
+    .sort((a, b) =>
+      greatCircleDistance(from, a.canonicalPosition) + greatCircleDistance(a.canonicalPosition, to) -
+        greatCircleDistance(from, b.canonicalPosition) - greatCircleDistance(b.canonicalPosition, to) ||
+      a.id.localeCompare(b.id)
+    )
+    .find((city) =>
+      segmentLegal(from, city.canonicalPosition, country, 14) &&
+      segmentLegal(city.canonicalPosition, to, country, 14)
+    );
+  if (via) return Object.freeze([from, via.canonicalPosition, to]);
+
+  throw new Error(`No bounded owned macro alignment for ${address}`);
+}
+
+function sourcePolyline(positions: readonly CanonicalPosition[]) {
+  const first = lonLatToSource(positions[0].lon, positions[0].lat);
+  return positions.map((position) => {
+    const source = lonLatToSource(position.lon, position.lat);
+    return Object.freeze({ x: first.x + wrapSourceX(source.x - first.x), z: source.z, position: Object.freeze({ lon: position.lon, lat: position.lat }) });
   });
 }
 
-function transientNode(code: string, position: CanonicalPosition, countryCode: string, continent: number): TransportNode {
-  const source = lonLatToSource(position.lon, position.lat);
-  return Object.freeze({
-    code: `${NETWORK_CODE}/NODE/GATEWAY/${code}`,
-    sourceId: `gateway-${code}`,
-    kind: "city",
-    countryCode,
-    continent,
-    position: Object.freeze({ ...position }),
-    x: source.x,
-    z: source.z,
-  });
+function makeRoad(
+  code: string,
+  networkId: string,
+  fromId: string,
+  toId: string,
+  positions: readonly CanonicalPosition[],
+  networkKind: "trunk" | "link" | "detour" = "trunk",
+): Road {
+  const centerline = sourcePolyline(positions), xs = centerline.map((point) => point.x), zs = centerline.map((point) => point.z),
+    surfaceLengthM = centerline.slice(1).reduce((sum, point, index) => sum + greatCircleDistance(centerline[index].position, point.position), 0),
+    travel = travelMetrics(surfaceLengthM, "good-road"), first = centerline[0], last = centerline.at(-1)!;
+  return {
+    code,
+    networkId,
+    networkKind,
+    coarseFallback: false,
+    from: fromId,
+    to: toId,
+    fromX: first.x,
+    toX: last.x,
+    fromZ: first.z,
+    toZ: last.z,
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minZ: Math.min(...zs),
+    maxZ: Math.max(...zs),
+    z: (first.z + last.z) / 2,
+    fromPosition: positions[0],
+    toPosition: positions.at(-1)!,
+    presentationLengthSourceUnits: centerline.slice(1).reduce((sum, point, index) => sum + Math.hypot(point.x - centerline[index].x, point.z - centerline[index].z), 0),
+    surfaceLengthM,
+    walkSurface: "good-road",
+    walkSpeedMps: travel.speedMps,
+    fantasyWalkSeconds: travel.fantasySeconds,
+    realWalkSeconds: travel.realSeconds,
+    centerline,
+  };
 }
 
-function pathControls(from: TransportNode, to: TransportNode, candidate: number, address: string) {
-  const dx = wrapSourceX(to.x - from.x), dz = to.z - from.z, length = Math.hypot(dx, dz) || 1,
-    px = -dz / length, pz = dx / length,
-    signSeed = (digestNumber(`${address}/SIDE`) & 1) === 0 ? 1 : -1,
-    sign = candidate % 2 === 0 ? signSeed : -signSeed,
-    strengthBand = Math.floor((candidate + 1) / 2),
-    strength = candidate === 0 ? 0 : Math.min(0.3, 0.075 * strengthBand),
-    offset = Math.min(length * strength, 3200),
-    pattern = candidate <= 4 ? [0, 0.55, 1, 0, 0] : candidate <= 6 ? [0, 0.4, 0.8, 0.4, 0] : [0, 0.65, -0.35, 0.45, 0];
-  return pattern.map((factor, index) => {
-    const t = index / (pattern.length - 1), amount = factor * offset * sign;
-    return { x: from.x + dx * t + px * amount, z: from.z + dz * t + pz * amount };
-  });
+function existingGatewayCandidates(country: Country): BorderGateway[] {
+  const capital = capitalsByCountry.get(country.code)!;
+  return politicalBorderGateways
+    .filter((gateway) => gateway.countryCode === country.code)
+    .map((gateway) => Object.freeze({
+      id: `S004/${gateway.id}`,
+      countryCode: gateway.countryCode,
+      neighbourCountryCode: gateway.neighbourCountryCode,
+      inside: gateway.inside,
+      outside: gateway.outside,
+      corridor: Object.freeze([...gateway.corridor]),
+      distanceM: greatCircleDistance(capital.canonicalPosition, gateway.inside),
+    }));
 }
 
-function samplePolyline(controls: readonly { x: number; z: number }[], stepSource = TRANSPORT_LIMITS.routeSampleSource) {
-  const samples: { x: number; z: number; segment: number; t: number }[] = [];
-  for (let segment = 0; segment < controls.length - 1; segment++) {
-    const a = controls[segment], b = controls[segment + 1], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
-      length = Math.hypot(dx, dz), count = Math.max(1, Math.ceil(length / stepSource));
-    for (let index = segment === 0 ? 0 : 1; index <= count; index++) {
-      const t = index / count;
-      samples.push({ x: a.x + dx * t, z: a.z + dz * t, segment, t });
+/** Discover additional canonical owner-boundary crossings when S004's one reserved gate is insufficient for a continent spanning tree. */
+function discoveredGatewayCandidates(country: Country): BorderGateway[] {
+  const capital = capitalsByCountry.get(country.code)!, phase = TAU * addressed(`${country.code}/BORDER/PHASE`), found = new Map<string, BorderGateway>();
+  for (let bearingIndex = 0; bearingIndex < TRANSPORT_LIMITS.borderBearings; bearingIndex++) {
+    const azimuth = phase + bearingIndex / TRANSPORT_LIMITS.borderBearings * TAU;
+    let previous = capital.canonicalPosition;
+    for (let distanceM = TRANSPORT_LIMITS.borderStepM; distanceM <= TRANSPORT_LIMITS.borderMaxM; distanceM += TRANSPORT_LIMITS.borderStepM) {
+      const point = destination(capital.canonicalPosition, azimuth, distanceM), macro = macroSampleAt(point), owner = countryAtPosition(point);
+      if (!macro.land || macro.domain === "Lake" || macro.domain === "Ocean" || macro.continentId !== country.continent || !owner) break;
+      if (owner.code === country.code) {
+        previous = point;
+        continue;
+      }
+      if (owner.continent !== country.continent) break;
+      let lo = previous, hi = point;
+      for (let iteration = 0; iteration < 18; iteration++) {
+        const mid = interpolate(lo, hi, 0.5), midOwner = countryAtPosition(mid);
+        if (midOwner?.code === country.code) lo = mid;
+        else hi = mid;
+      }
+      const candidate: BorderGateway = Object.freeze({
+        id: `S005/${country.code}/${owner.code}/${bearingIndex}`,
+        countryCode: country.code,
+        neighbourCountryCode: owner.code,
+        inside: lo,
+        outside: hi,
+        corridor: Object.freeze([capital.canonicalPosition, lo]),
+        distanceM,
+      });
+      const current = found.get(owner.code);
+      if (!current || candidate.distanceM < current.distanceM || (candidate.distanceM === current.distanceM && candidate.id < current.id)) found.set(owner.code, candidate);
+      break;
     }
   }
-  return samples;
+  return [...found.values()].sort((a, b) => a.distanceM - b.distanceM || a.id.localeCompare(b.id));
 }
 
-function polylineLengthSource(points: readonly { x: number; z: number }[]) {
-  let total = 0;
-  for (let i = 1; i < points.length; i++) total += Math.hypot(wrapSourceX(points[i].x - points[i - 1].x), points[i].z - points[i - 1].z);
-  return total;
+function gatewayCandidates(country: Country) {
+  const merged = new Map<string, BorderGateway>();
+  for (const gateway of [...existingGatewayCandidates(country), ...discoveredGatewayCandidates(country)]) {
+    const key = gateway.neighbourCountryCode;
+    const current = merged.get(key);
+    if (!current || gateway.id.startsWith("S004/") || (!current.id.startsWith("S004/") && (gateway.distanceM < current.distanceM || (gateway.distanceM === current.distanceM && gateway.id < current.id)))) merged.set(key, gateway);
+  }
+  return [...merged.values()].sort((a, b) => a.distanceM - b.distanceM || a.neighbourCountryCode.localeCompare(b.neighbourCountryCode) || a.id.localeCompare(b.id));
 }
 
-function borderCrossingFor(
-  roadCode: string,
-  samples: readonly { x: number; z: number }[],
-  fromCountry: Country,
-  toCountry: Country,
-): TransportBorderCrossing | undefined {
-  let previous = countryAtPosition(sourceToLonLat(samples[0].x, samples[0].z));
-  for (let i = 1; i < samples.length; i++) {
-    const current = countryAtPosition(sourceToLonLat(samples[i].x, samples[i].z));
-    if (!previous || !current || previous.code === current.code) {
-      previous = current;
-      continue;
+function nearestTargetCity(gateway: BorderGateway, country: Country) {
+  return cities
+    .filter((city) => city.continent === country.continent && city.country === country.id)
+    .sort((a, b) => greatCircleDistance(gateway.outside, a.canonicalPosition) - greatCircleDistance(gateway.outside, b.canonicalPosition) || a.id.localeCompare(b.id));
+}
+
+function borderRoadFor(gateway: BorderGateway) {
+  const fromCountry = countriesByCode.get(gateway.countryCode), toCountry = countriesByCode.get(gateway.neighbourCountryCode), from = capitalsByCountry.get(gateway.countryCode);
+  if (!fromCountry || !toCountry || !from) return undefined;
+  for (const to of nearestTargetCity(gateway, toCountry)) {
+    try {
+      const approach = ownedMacroPath(gateway.outside, to.canonicalPosition, toCountry, `${gateway.id}/${to.code}`),
+        positions = [...gateway.corridor, gateway.outside, ...approach.slice(1)],
+        pair = [fromCountry.code, toCountry.code].sort(),
+        suffix = `${pair[0]}--${pair[1]}/${sanitize(gateway.id)}`,
+        code = `${NETWORK_CODE}/ROAD/MAIN/BORDER/${suffix}`,
+        networkId = `${NETWORK_CODE}/EDGE/BORDER/${suffix}`,
+        road = makeRoad(code, networkId, from.id, to.id, positions),
+        crossingPosition = interpolate(gateway.inside, gateway.outside, 0.5), crossingSource = lonLatToSource(crossingPosition.lon, crossingPosition.lat),
+        crossing: TransportBorderCrossing = Object.freeze({
+          code: `${code}/CROSSING`,
+          roadCode: code,
+          countries: Object.freeze(pair as [string, string]),
+          position: Object.freeze({ lon: crossingPosition.lon, lat: crossingPosition.lat }),
+          x: crossingSource.x,
+          z: crossingSource.z,
+        });
+      return { road, crossing, neighborCode: toCountry.code };
+    } catch {
+      // Try the next canonical city in this neighbouring country.
     }
-    if (!([previous.code, current.code].includes(fromCountry.code) && [previous.code, current.code].includes(toCountry.code))) return undefined;
-    let a = samples[i - 1], b = samples[i];
-    for (let iteration = 0; iteration < 24; iteration++) {
-      const mx = a.x + wrapSourceX(b.x - a.x) * 0.5, mz = (a.z + b.z) * 0.5,
-        owner = countryAtPosition(sourceToLonLat(mx, mz));
-      if (owner?.code === previous.code) a = { ...a, x: mx, z: mz };
-      else b = { ...b, x: mx, z: mz };
-    }
-    const x = a.x + wrapSourceX(b.x - a.x) * 0.5, z = (a.z + b.z) * 0.5,
-      position = sourceToLonLat(x, z);
-    return Object.freeze({
-      code: `${roadCode}/BORDER/${[fromCountry.code, toCountry.code].sort().join("--")}`,
-      roadCode,
-      countries: Object.freeze([fromCountry.code, toCountry.code].sort() as [string, string]),
-      position: Object.freeze(position),
-      x: wrapSourceX(x),
-      z,
-    });
   }
   return undefined;
 }
 
-function routeCandidate(
-  roadCode: string,
-  from: TransportNode,
-  to: TransportNode,
-  candidate: number,
-  allowedCountries: readonly string[],
-  requireBorder: boolean,
-  overrideControls?: readonly { x: number; z: number }[],
-): RouteBuild | undefined {
-  const controls = overrideControls ?? pathControls(from, to, candidate, roadCode), samples = samplePolyline(controls);
-  if (samples.length < 2) return undefined;
-  let cost = polylineLengthSource(controls) * CANONICAL_METRES_PER_SOURCE_UNIT,
-    maxReliefM = 0,
-    previousHeight: number | undefined,
-    previousPosition: LonLat | undefined;
-  const bridgesByDrainage = new Map<string, TransportBridge>();
-  for (let index = 0; index < samples.length; index++) {
-    const sample = samples[index], position = sourceToLonLat(sample.x, sample.z), macro = macroSampleAt(position), natural = naturalSurfaceAt(sample.x, sample.z), owner = countryAtPosition(position);
-    if (!macro.land || macro.domain === "Lake" || macro.domain === "Ocean" || natural.water.kind === "lake" || natural.water.kind === "ocean") return undefined;
-    if (!owner || !allowedCountries.includes(owner.code)) return undefined;
-    const relief = Math.max(0, macro.reliefM), terrainHeight = natural.groundHeight;
-    maxReliefM = Math.max(maxReliefM, relief);
-    cost += relief * 1.7 + (natural.cliff ? 80_000 : natural.slope * 15_000);
-    if (previousHeight !== undefined && previousPosition) {
-      const runM = Math.max(1, greatCircleDistance(previousPosition, position)), grade = Math.abs(terrainHeight - previousHeight) / runM;
-      cost += Math.max(0, grade - 0.06) * 180_000;
-    }
-    if (natural.water.kind === "river" || natural.material === "Riverbank") {
-      const segment = Math.min(controls.length - 2, sample.segment), a = controls[segment], b = controls[segment + 1],
-        crossing = freshwaterCrossingAt(sample.x, sample.z, wrapSourceX(b.x - a.x), b.z - a.z);
-      if (natural.water.kind === "river" && !crossing) return undefined;
-      if (crossing && !bridgesByDrainage.has(crossing.code)) {
-        if (crossing.spanM > TRANSPORT_LIMITS.ruralBridgeMaxM) return undefined;
-        bridgesByDrainage.set(crossing.code, Object.freeze({
-          code: `${roadCode}/BRIDGE/${bridgesByDrainage.size}`,
-          roadCode,
-          position: Object.freeze(position),
-          x: wrapSourceX(sample.x),
-          z: sample.z,
-          spanM: crossing.spanM,
-          drainageCode: crossing.code,
-        }));
-        cost += 4_000 + crossing.spanM * 45;
+function buildInternationalRoads() {
+  const roads: Road[] = [], crossings: TransportBorderCrossing[] = [];
+  for (const continent of [...new Set(countries.map((country) => country.continent))].sort((a, b) => a - b)) {
+    const local = countries.filter((country) => country.continent === continent).sort((a, b) => a.code.localeCompare(b.code));
+    if (local.length <= 1) continue;
+    const connected = new Set<string>([local[0].code]);
+    while (connected.size < local.length) {
+      const frontier = local
+        .filter((country) => connected.has(country.code))
+        .flatMap((country) => gatewayCandidates(country)
+          .filter((gateway) => !connected.has(gateway.neighbourCountryCode))
+          .map((gateway) => ({ country, gateway })))
+        .sort((a, b) => a.gateway.distanceM - b.gateway.distanceM || a.country.code.localeCompare(b.country.code) || a.gateway.neighbourCountryCode.localeCompare(b.gateway.neighbourCountryCode) || a.gateway.id.localeCompare(b.gateway.id));
+      let linked = false;
+      for (const candidate of frontier) {
+        const built = borderRoadFor(candidate.gateway);
+        if (!built) continue;
+        roads.push(built.road);
+        crossings.push(built.crossing);
+        connected.add(built.neighborCode);
+        linked = true;
+        break;
+      }
+      if (!linked) {
+        const missing = local.filter((country) => !connected.has(country.code)).map((country) => country.code).join(", ");
+        throw new Error(`No canonical international road frontier for continent ${continent}: ${missing}`);
       }
     }
-    previousHeight = terrainHeight;
-    previousPosition = position;
   }
+  return { roads, crossings };
+}
 
-  const fromCountry = countriesByCode.get(from.countryCode), toCountry = countriesByCode.get(to.countryCode);
-  let borderCrossing: TransportBorderCrossing | undefined;
-  if (requireBorder) {
-    if (!fromCountry || !toCountry || fromCountry.code === toCountry.code) return undefined;
-    borderCrossing = borderCrossingFor(roadCode, samples, fromCountry, toCountry);
-    if (!borderCrossing) return undefined;
+function harborSiteCandidates(continent: number) {
+  const candidateCities = cities
+    .filter((city) => city.continent === continent)
+    .map((city) => ({ city, coastM: Math.max(0, macroSampleAt(city.canonicalPosition).coastDistanceRad * CANONICAL_PLANET_RADIUS) }))
+    .sort((a, b) => a.coastM - b.coastM || a.city.id.localeCompare(b.city.id))
+    .slice(0, TRANSPORT_LIMITS.harborCityCandidates);
+  const result: { city: Place; country: Country; position: CanonicalPosition; score: number }[] = [];
+  for (const { city } of candidateCities) {
+    const country = countries.find((candidate) => candidate.continent === city.continent && candidate.id === city.country)!;
+    const phase = TAU * addressed(`${country.code}/${city.code}/HARBOR/PHASE`);
+    for (const radiusM of TRANSPORT_LIMITS.harborRadiiM)
+      for (let bearingIndex = 0; bearingIndex < TRANSPORT_LIMITS.harborBearings; bearingIndex++) {
+        const position = destination(city.canonicalPosition, phase + bearingIndex / TRANSPORT_LIMITS.harborBearings * TAU, radiusM),
+          macro = macroSampleAt(position), owner = countryAtPosition(position), coastM = macro.coastDistanceRad * CANONICAL_PLANET_RADIUS;
+        if (!owner || owner.code !== country.code || !macro.land || macro.domain !== "Mainland" || coastM < 250 || coastM > 5_000) continue;
+        result.push({ city, country, position, score: coastM + radiusM * 0.02 });
+      }
   }
+  return result.sort((a, b) => a.score - b.score || a.city.id.localeCompare(b.city.id));
+}
 
-  const points = controls.map(({ x, z }) => {
-    const position = sourceToLonLat(x, z), natural = naturalSurfaceAt(x, z);
-    return Object.freeze({ x: wrapSourceX(x), z, position: Object.freeze(position), elevationM: natural.groundHeight });
+function buildHarbors() {
+  const roads: Road[] = [], harbors: TransportHarbor[] = [], nodes: TransportNode[] = [];
+  for (const continent of [...new Set(countries.map((country) => country.continent))].sort((a, b) => a - b)) {
+    let created = false;
+    for (const candidate of harborSiteCandidates(continent)) {
+      try {
+        const positions = ownedMacroPath(candidate.city.canonicalPosition, candidate.position, candidate.country, `${candidate.country.code}/HARBOR/${continent}`),
+          sourceId = `${NETWORK_CODE}/HARBOR-NODE/${continent}`,
+          nodeCode = `${NETWORK_CODE}/NODE/HARBOR/${continent}`,
+          roadCode = `${NETWORK_CODE}/ROAD/MAIN/HARBOR/${continent}`,
+          road = makeRoad(roadCode, `${NETWORK_CODE}/EDGE/HARBOR/${continent}`, candidate.city.id, sourceId, positions),
+          source = lonLatToSource(candidate.position.lon, candidate.position.lat),
+          node: TransportNode = Object.freeze({ code: nodeCode, sourceId, kind: "harbor", countryCode: candidate.country.code, continent, position: Object.freeze({ ...candidate.position }), x: source.x, z: source.z }),
+          harbor: TransportHarbor = Object.freeze({ code: `${NETWORK_CODE}/HARBOR/${continent}`, nodeCode, sourceId, countryCode: candidate.country.code, continent, position: node.position, x: node.x, z: node.z, roadCode });
+        roads.push(road);
+        nodes.push(node);
+        harbors.push(harbor);
+        created = true;
+        break;
+      } catch {
+        // Try the next deterministic coast candidate.
+      }
+    }
+    if (!created) throw new Error(`No bounded road-linked harbor for continent ${continent}`);
+  }
+  return { roads, harbors, nodes };
+}
+
+function buildFerries(harbors: readonly TransportHarbor[]): TransportFerryEdge[] {
+  const candidates: { a: TransportHarbor; b: TransportHarbor; distanceM: number }[] = [];
+  for (let i = 0; i < harbors.length; i++)
+    for (let j = i + 1; j < harbors.length; j++)
+      candidates.push({ a: harbors[i], b: harbors[j], distanceM: greatCircleDistance(harbors[i].position, harbors[j].position) });
+  candidates.sort((a, b) => a.distanceM - b.distanceM || `${a.a.code}|${a.b.code}`.localeCompare(`${b.a.code}|${b.b.code}`));
+  const parent = new Map(harbors.map((harbor) => [harbor.code, harbor.code]));
+  const root = (code: string): string => {
+    const current = parent.get(code)!;
+    if (current === code) return code;
+    const result = root(current);
+    parent.set(code, result);
+    return result;
+  };
+  const result: TransportFerryEdge[] = [];
+  for (const candidate of candidates) {
+    const ar = root(candidate.a.code), br = root(candidate.b.code);
+    if (ar === br) continue;
+    parent.set(ar, br);
+    result.push(Object.freeze({
+      code: `${NETWORK_CODE}/FERRY/${candidate.a.continent}--${candidate.b.continent}`,
+      kind: "ferry",
+      from: candidate.a.nodeCode,
+      to: candidate.b.nodeCode,
+      fromHarborCode: candidate.a.code,
+      toHarborCode: candidate.b.code,
+      distanceM: candidate.distanceM,
+    }));
+    if (result.length === Math.max(0, harbors.length - 1)) break;
+  }
+  return result;
+}
+
+function buildExtensions(): ExtensionBuild {
+  const international = buildInternationalRoads(), harborBuild = buildHarbors(), ferries = buildFerries(harborBuild.harbors);
+  return Object.freeze({
+    roads: Object.freeze([...international.roads, ...harborBuild.roads]),
+    borderCrossings: Object.freeze(international.crossings),
+    harbors: Object.freeze(harborBuild.harbors),
+    harborNodes: Object.freeze(harborBuild.nodes),
+    ferries: Object.freeze(ferries),
   });
-  return { points, bridges: [...bridgesByDrainage.values()], borderCrossing, candidate, cost, maxReliefM };
 }
 
-type LegalBridgeRouteCandidate = Readonly<{
-  code: string;
-  controls: readonly { x: number; z: number }[];
-  detourM: number;
-}>;
+function settlementNode(place: Place): TransportNode {
+  const country = countries.find((candidate) => candidate.continent === place.continent && candidate.id === place.country)!;
+  return Object.freeze({
+    code: `${NETWORK_CODE}/NODE/PLACE/${place.id}`,
+    sourceId: place.id,
+    kind: place.kind === "village" ? "village" : place.city === 0 ? "capital" : "city",
+    countryCode: country.code,
+    continent: place.continent,
+    position: Object.freeze({ ...place.canonicalPosition }),
+    x: place.x,
+    z: place.z,
+  });
+}
 
-/**
- * Find bounded, exact freshwater crossings that can be used as deterministic
- * waypoints when the generic road curves cannot legally reach a nearby node.
- * This does not create bridge authority by itself: every returned control path
- * is revalidated by routeCandidate(), which is still the single legality gate.
- */
-function legalBridgeRouteCandidates(
-  roadCode: string,
-  from: TransportNode,
-  to: TransportNode,
-  allowedCountries: readonly string[],
+function junctionNode(junction: (typeof roadJunctions)[number]): TransportNode {
+  const country = countries.find((candidate) => candidate.continent === junction.continent && candidate.id === junction.country)!;
+  return Object.freeze({
+    code: `${NETWORK_CODE}/NODE/JUNCTION/${junction.id}`,
+    sourceId: junction.id,
+    kind: "junction",
+    countryCode: country.code,
+    continent: junction.continent,
+    position: Object.freeze({ ...junction.canonicalPosition }),
+    x: junction.x,
+    z: junction.z,
+  });
+}
+
+const bridgeCache = new Map<string, readonly TransportBridge[]>();
+let bridgeCacheHits = 0, bridgeCacheMisses = 0, bridgeCacheEvictions = 0, focusQueries = 0, focusReturnedRoads = 0;
+
+function currentBridges() {
+  return Object.freeze([...bridgeCache.values()].flat().sort((a, b) => a.code.localeCompare(b.code)));
+}
+
+function segmentIntersection(
+  a: { x: number; z: number }, b: { x: number; z: number },
+  c: { x: number; z: number }, d: { x: number; z: number },
 ) {
-  const corridorDx = wrapSourceX(to.x - from.x), corridorDz = to.z - from.z,
-    origins = [0, 0.2, 0.4, 0.6, 0.8, 1].map((t) => sourceToLonLat(from.x + corridorDx * t, from.z + corridorDz * t)),
-    segments = new Map<string, ReturnType<typeof freshwaterSegmentsAround>[number]>();
-  for (const origin of origins)
-    for (const segment of freshwaterSegmentsAround(origin, 23_000)) segments.set(segment.code, segment);
-
-  const candidates: LegalBridgeRouteCandidate[] = [];
-  const stations = [0.18, 0.34, 0.5, 0.66, 0.82] as const;
-  for (const segment of [...segments.values()].sort((a, b) => a.code.localeCompare(b.code))) {
-    const dx = wrapSourceX(segment.bx - segment.ax), dz = segment.bz - segment.az,
-      length = Math.hypot(dx, dz);
-    if (!length) continue;
-    const ux = -dz / length, uz = dx / length;
-    for (let stationIndex = 0; stationIndex < stations.length; stationIndex++) {
-      const t = stations[stationIndex], x = segment.ax + dx * t, z = segment.az + dz * t,
-        crossing = freshwaterCrossingAt(x, z, ux, uz);
-      if (!crossing || crossing.spanM > TRANSPORT_LIMITS.ruralBridgeMaxM) continue;
-
-      const a = { x: x + ux * (crossing.lo - 0.02), z: z + uz * (crossing.lo - 0.02) },
-        b = { x: x + ux * (crossing.hi + 0.02), z: z + uz * (crossing.hi + 0.02) },
-        centre = { x, z },
-        aPosition = sourceToLonLat(a.x, a.z), bPosition = sourceToLonLat(b.x, b.z),
-        centrePosition = sourceToLonLat(x, z),
-        aOwner = countryAtPosition(aPosition), bOwner = countryAtPosition(bPosition),
-        centreOwner = countryAtPosition(centrePosition),
-        aSurface = naturalSurfaceAt(a.x, a.z), bSurface = naturalSurfaceAt(b.x, b.z);
-      if (
-        !aOwner || !bOwner || !centreOwner ||
-        !allowedCountries.includes(aOwner.code) ||
-        !allowedCountries.includes(bOwner.code) ||
-        !allowedCountries.includes(centreOwner.code) ||
-        aSurface.water.kind !== "none" || bSurface.water.kind !== "none"
-      ) continue;
-
-      const aFirst = greatCircleDistance(from.position, aPosition) <= greatCircleDistance(from.position, bPosition),
-        near = aFirst ? a : b, far = aFirst ? b : a,
-        nearPosition = aFirst ? aPosition : bPosition, farPosition = aFirst ? bPosition : aPosition,
-        controls = Object.freeze([
-          { x: from.x, z: from.z },
-          near,
-          centre,
-          far,
-          { x: to.x, z: to.z },
-        ]),
-        detourM = greatCircleDistance(from.position, nearPosition) + crossing.spanM + greatCircleDistance(farPosition, to.position);
-      candidates.push(Object.freeze({
-        code: `${roadCode}/BRIDGE-WAYPOINT/${segment.code.replaceAll("/", "-")}/${stationIndex}`,
-        controls,
-        detourM,
-      }));
-    }
-  }
-
-  return Object.freeze(
-    candidates
-      .sort((a, b) => a.detourM - b.detourM || a.code.localeCompare(b.code))
-      .slice(0, 48),
-  );
+  const dx = b.x - a.x, dz = b.z - a.z, ex = d.x - c.x, ez = d.z - c.z,
+    det = dx * ez - dz * ex;
+  if (Math.abs(det) < 1e-9) return undefined;
+  const qx = c.x - a.x, qz = c.z - a.z, t = (qx * ez - qz * ex) / det, u = (qx * dz - qz * dx) / det;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return undefined;
+  return { x: a.x + dx * t, z: a.z + dz * t };
 }
 
-function buildRoute(
-  roadCode: string,
-  from: TransportNode,
-  to: TransportNode,
-  allowedCountries: readonly string[],
-  requireBorder = false,
-): RouteBuild {
-  let best: RouteBuild | undefined;
-  for (let candidate = 0; candidate < TRANSPORT_LIMITS.routeCandidates; candidate++) {
-    const route = routeCandidate(roadCode, from, to, candidate, allowedCountries, requireBorder);
-    if (!route) continue;
-    if (!best || route.cost < best.cost - 1e-7 || (Math.abs(route.cost - best.cost) <= 1e-7 && route.candidate < best.candidate)) best = route;
-  }
-  if (!best) {
-    const bridgeCandidates = legalBridgeRouteCandidates(roadCode, from, to, allowedCountries);
-    for (let index = 0; index < bridgeCandidates.length; index++) {
-      const route = routeCandidate(
-        roadCode,
-        from,
-        to,
-        TRANSPORT_LIMITS.routeCandidates + index,
-        allowedCountries,
-        requireBorder,
-        bridgeCandidates[index].controls,
-      );
-      if (!route) continue;
-      if (!best || route.cost < best.cost - 1e-7 || (Math.abs(route.cost - best.cost) <= 1e-7 && route.candidate < best.candidate)) best = route;
+function discoverBridges(edge: TransportRoadEdge) {
+  const bridges = new Map<string, TransportBridge>();
+  for (let index = 1; index < edge.centerline.length; index++) {
+    const a = edge.centerline[index - 1], b = edge.centerline[index], dx = b.x - a.x, dz = b.z - a.z,
+      segmentM = greatCircleDistance(a.position, b.position), nearby = new Map<string, ReturnType<typeof freshwaterSegmentsAround>[number]>();
+    for (const fraction of segmentM > 35_000 ? [0.25, 0.5, 0.75] : [0.5]) {
+      const position = interpolate(a.position, b.position, fraction), radiusM = Math.min(28_000, Math.max(8_000, segmentM * 0.55));
+      for (const river of freshwaterSegmentsAround(position, radiusM)) nearby.set(river.code, river);
+    }
+    for (const river of nearby.values()) {
+      const c = { x: a.x + wrapSourceX(river.ax - a.x), z: river.az },
+        d = { x: c.x + wrapSourceX(river.bx - river.ax), z: river.bz },
+        intersection = segmentIntersection(a, b, c, d);
+      if (!intersection) continue;
+      const crossing = freshwaterCrossingAt(intersection.x, intersection.z, dx, dz);
+      if (!crossing || crossing.spanM <= 0 || crossing.spanM > TRANSPORT_LIMITS.ruralBridgeMaxM || bridges.has(crossing.code)) continue;
+      const position = sourceToLonLat(intersection.x, intersection.z), bridge: TransportBridge = Object.freeze({
+        code: `${edge.code}/BRIDGE/${sanitize(crossing.code)}`,
+        roadCode: edge.code,
+        position: Object.freeze(position),
+        x: wrapSourceX(intersection.x),
+        z: intersection.z,
+        spanM: crossing.spanM,
+        drainageCode: crossing.code,
+      });
+      bridges.set(crossing.code, bridge);
     }
   }
-  if (!best && greatCircleDistance(from.position, to.position) <= 120_000) {
-    const planned = planRoute({
-      from: from.position,
-      to: to.position,
-      terrain(position) {
-        const source = lonLatToSource(position.lon, position.lat),
-          natural = naturalSurfaceAt(source.x, source.z),
-          macro = macroSampleAt(position),
-          owner = countryAtPosition(position),
-          outsideOwner = !owner || !allowedCountries.includes(owner.code),
-          unbridgeableRiver = natural.water.kind === "river" &&
-            freshwaterCrossingSpanMAt(source.x, source.z) > TRANSPORT_LIMITS.ruralBridgeMaxM;
-        return {
-          water: outsideOwner || natural.water.kind === "lake" || natural.water.kind === "ocean" || unbridgeableRiver,
-          heightM: natural.groundHeight,
-          highland: Math.max(macro.mountainIntensity, natural.cliff ? 1 : natural.slope),
-        };
-      },
-    });
-    if (planned.found && planned.points.length >= 2 && planned.points.length <= 96) {
-      const controls = planned.points.map((point) => lonLatToSource(point.lon, point.lat));
-      best = routeCandidate(
-        roadCode,
-        from,
-        to,
-        TRANSPORT_LIMITS.routeCandidates + 48,
-        allowedCountries,
-        requireBorder,
-        controls,
-      );
-    }
+  return Object.freeze([...bridges.values()].sort((a, b) => a.code.localeCompare(b.code)));
+}
+
+function touchBridgeCache(edge: TransportRoadEdge) {
+  const cached = bridgeCache.get(edge.code);
+  if (cached) {
+    bridgeCacheHits++;
+    bridgeCache.delete(edge.code);
+    bridgeCache.set(edge.code, cached);
+    return cached;
   }
-  if (!best) throw new Error(`No legal deterministic transport route for ${roadCode}`);
-  return best;
+  bridgeCacheMisses++;
+  const bridges = discoverBridges(edge);
+  bridgeCache.set(edge.code, bridges);
+  if (bridgeCache.size > TRANSPORT_LIMITS.bridgeRoadCacheLimit) {
+    bridgeCache.delete(bridgeCache.keys().next().value!);
+    bridgeCacheEvictions++;
+  }
+  return bridges;
 }
 
 function roadWidth(roadClass: TransportRoadClass) {
@@ -512,454 +655,207 @@ function roadWidth(roadClass: TransportRoadClass) {
   return 5;
 }
 
-function appendRoad(
-  state: MutableNetwork,
-  from: TransportNode,
-  to: TransportNode,
-  roadClass: TransportRoadClass,
-  code: string,
-  route: RouteBuild,
-  countryCodes: readonly string[],
-) {
-  const edge: TransportRoadEdge = Object.freeze({
-    code,
-    kind: "road",
+function wrapRoad(
+  road: Road,
+  nodeBySourceId: ReadonlyMap<string, TransportNode>,
+  borderByRoad: ReadonlyMap<string, TransportBorderCrossing>,
+): TransportRoadEdge {
+  const from = nodeBySourceId.get(road.from), to = nodeBySourceId.get(road.to);
+  if (!from || !to) throw new Error(`Transport endpoint missing for ${road.code}: ${road.from} -> ${road.to}`);
+  const roadClass: TransportRoadClass = road.code.startsWith(`${NETWORK_CODE}/ROAD/MAIN/`)
+    ? "main"
+    : road.networkKind === "detour" || road.code === continuityCorridor.road?.code
+      ? "continuity"
+      : road.networkKind === "trunk" ? "regional" : "access";
+  const raw = road.centerline ?? [
+    { x: road.fromX, z: road.fromZ, position: road.fromPosition },
+    { x: road.toX, z: road.toZ, position: road.toPosition },
+  ];
+  const centerline = Object.freeze(raw.map((point) => {
+    const macro = macroSampleAt(point.position);
+    return Object.freeze({ x: point.x, z: point.z, position: Object.freeze({ lon: point.position.lon, lat: point.position.lat }), elevationM: macro.reliefM });
+  }));
+  const relief = centerline.map((point) => point.elevationM), border = borderByRoad.get(road.code);
+  const edge = {
+    code: road.code,
+    kind: "road" as const,
     roadClass,
     from: from.code,
     to: to.code,
-    countryCodes: Object.freeze([...countryCodes]),
-    centerline: Object.freeze(route.points),
-    bridgeCodes: Object.freeze(route.bridges.map((bridge) => bridge.code)),
-    borderCrossingCode: route.borderCrossing?.code ?? null,
+    countryCodes: Object.freeze([...new Set([from.countryCode, to.countryCode])].sort()),
+    centerline,
+    get bridgeCodes() { return Object.freeze((bridgeCache.get(road.code) ?? []).map((bridge) => bridge.code)); },
+    borderCrossingCode: border?.code ?? null,
     widthM: roadWidth(roadClass),
-    routeCandidate: route.candidate,
-    terrainCost: route.cost,
-    maxNaturalReliefM: route.maxReliefM,
-  });
-  state.roadEdges.push(edge);
-  state.bridges.push(...route.bridges);
-  if (route.borderCrossing) state.borderCrossings.push(route.borderCrossing);
-  return edge;
+    routeCandidate: 0,
+    terrainCost: road.surfaceLengthM + relief.reduce((sum, value) => sum + value * 10, 0),
+    maxNaturalReliefM: Math.max(...relief),
+  };
+  return Object.freeze(edge);
 }
 
-function addRoad(
-  state: MutableNetwork,
-  from: TransportNode,
-  to: TransportNode,
-  roadClass: TransportRoadClass,
-  suffix: string,
-  requireBorder = false,
-  preparedRoute?: RouteBuild,
-) {
-  const countryCodes = from.countryCode === to.countryCode ? [from.countryCode] : [from.countryCode, to.countryCode].sort(),
-    code = `${NETWORK_CODE}/ROAD/${roadClass.toUpperCase()}/${suffix}`,
-    route = preparedRoute ?? buildRoute(code, from, to, countryCodes, requireBorder);
-  return appendRoad(state, from, to, roadClass, code, route, countryCodes);
-}
-
-function addContinuityRoad(state: MutableNetwork, nodeBySourceId: ReadonlyMap<string, TransportNode>) {
-  const road = continuityCorridor.road;
-  if (!road?.centerline) return;
-  const from = nodeBySourceId.get(road.from), to = nodeBySourceId.get(road.to);
-  if (!from || !to) throw new Error(`Continuity transport endpoints missing for ${road.code}`);
-  const countryCodes = [...new Set([from.countryCode, to.countryCode])].sort(),
-    controls = road.centerline.map((point) => ({ x: point.x, z: point.z })),
-    route = routeCandidate(road.code, from, to, 0, countryCodes, countryCodes.length > 1, controls);
-  if (!route) throw new Error(`S003 continuity corridor is not legal in S005 transport authority: ${road.code}`);
-  appendRoad(state, from, to, "continuity", road.code, route, countryCodes);
-}
-
-function routeThroughGateway(
-  roadCode: string,
-  from: TransportNode,
-  to: TransportNode,
-  gateway: PoliticalBorderGateway,
-  candidate: number,
-): RouteBuild | undefined {
-  const direct = gateway.countryCode === from.countryCode && gateway.neighbourCountryCode === to.countryCode,
-    reverse = gateway.neighbourCountryCode === from.countryCode && gateway.countryCode === to.countryCode;
-  if (!direct && !reverse) return undefined;
-  const fromPosition = direct ? gateway.inside : gateway.outside,
-    toPosition = direct ? gateway.outside : gateway.inside,
-    fromGate = transientNode(`${gateway.id}/FROM`, fromPosition, from.countryCode, from.continent),
-    toGate = transientNode(`${gateway.id}/TO`, toPosition, to.countryCode, to.continent),
-    allowedCountries = [from.countryCode, to.countryCode].sort();
-  try {
-    const fromApproach = buildRoute(`${roadCode}/GATEWAY/FROM`, from, fromGate, [from.countryCode]),
-      crossing = buildRoute(`${roadCode}/GATEWAY/CROSSING`, fromGate, toGate, allowedCountries, true),
-      toApproach = buildRoute(`${roadCode}/GATEWAY/TO`, toGate, to, [to.countryCode]),
-      controls = [
-        ...fromApproach.points.map((point) => ({ x: point.x, z: point.z })),
-        ...crossing.points.slice(1).map((point) => ({ x: point.x, z: point.z })),
-        ...toApproach.points.slice(1).map((point) => ({ x: point.x, z: point.z })),
-      ];
-    return routeCandidate(roadCode, from, to, candidate, allowedCountries, true, controls);
-  } catch {
-    return undefined;
-  }
-}
-
-function capitalFor(country: Country) {
-  const capital = cities.find((city) => city.continent === country.continent && city.country === country.id && city.city === 0);
-  if (!capital) throw new Error(`Capital missing for ${country.code}`);
-  return capital;
-}
-
-function gatewayCandidates(country: Country) {
-  const fromCapital = capitalFor(country);
-  return politicalBorderGateways
-    .filter((gateway) => gateway.countryCode === country.code || gateway.neighbourCountryCode === country.code)
-    .map((gateway) => {
-      const neighborCode = gateway.countryCode === country.code ? gateway.neighbourCountryCode : gateway.countryCode,
-        neighbor = countriesByCode.get(neighborCode);
-      return { gateway, neighbor, distanceM: neighbor ? greatCircleDistance(fromCapital.canonicalPosition, capitalFor(neighbor).canonicalPosition) : Infinity };
-    })
-    .filter((entry): entry is { gateway: PoliticalBorderGateway; neighbor: Country; distanceM: number } => Boolean(entry.neighbor) && entry.neighbor!.continent === country.continent)
-    .sort((a, b) => a.distanceM - b.distanceM || a.gateway.id.localeCompare(b.gateway.id));
-}
-
-function harborCandidates(continent: number) {
-  const orderedCountries = countries
-    .filter((country) => country.continent === continent)
-    .map((country) => ({ country, coastM: macroSampleAt(country.canonicalPosition).coastDistanceRad * CANONICAL_PLANET_RADIUS }))
-    .sort((a, b) => a.coastM - b.coastM || a.country.code.localeCompare(b.country.code))
-    .slice(0, TRANSPORT_LIMITS.harborCountriesPerContinent);
-  const candidates: { country: Country; position: CanonicalPosition; score: number }[] = [];
-  for (const { country } of orderedCountries) {
-    const start = (digestNumber(`${NETWORK_CODE}/HARBOR/${country.code}`) / 4294967296) * TAU;
-    for (const radiusM of TRANSPORT_LIMITS.harborRadiiM)
-      for (let bearingIndex = 0; bearingIndex < TRANSPORT_LIMITS.harborBearings; bearingIndex++) {
-        const bearing = start + bearingIndex / TRANSPORT_LIMITS.harborBearings * TAU,
-          position = destination(country.canonicalPosition, bearing, radiusM / CANONICAL_PLANET_RADIUS),
-          macro = macroSampleAt(position), owner = countryAtPosition(position), source = lonLatToSource(position.lon, position.lat), natural = naturalSurfaceAt(source.x, source.z),
-          coastM = macro.coastDistanceRad * CANONICAL_PLANET_RADIUS;
-        if (!owner || owner.code !== country.code || !macro.land || macro.domain !== "Mainland" || natural.water.kind !== "none" || coastM < 350 || coastM > 8_000) continue;
-        candidates.push({ country, position, score: coastM + radiusM * 0.025 });
-      }
-  }
-  return candidates.sort((a, b) => a.score - b.score || a.country.code.localeCompare(b.country.code));
-}
-
-function addHarbor(state: MutableNetwork, continent: number, capitalNodes: readonly TransportNode[]) {
-  for (const candidate of harborCandidates(continent)) {
-    const capital = capitalNodes.find((node) => node.countryCode === candidate.country.code)!;
-    if (!capital) continue;
-    const source = lonLatToSource(candidate.position.lon, candidate.position.lat), harborNode: TransportNode = Object.freeze({
-      code: `${NETWORK_CODE}/NODE/HARBOR/${continent}`,
-      sourceId: `harbor-${continent}`,
-      kind: "harbor",
-      countryCode: candidate.country.code,
-      continent,
-      position: Object.freeze({ ...candidate.position }),
-      x: source.x,
-      z: source.z,
-    });
-    try {
-      state.nodes.push(harborNode);
-      const road = addRoad(state, capital, harborNode, "main", `HARBOR/${continent}`), harbor: TransportHarbor = Object.freeze({
-        code: `${NETWORK_CODE}/HARBOR/${continent}`,
-        nodeCode: harborNode.code,
-        countryCode: candidate.country.code,
-        continent,
-        position: harborNode.position,
-        x: harborNode.x,
-        z: harborNode.z,
-        roadCode: road.code,
-      });
-      state.harbors.push(harbor);
-      return harbor;
-    } catch {
-      state.nodes.pop();
-    }
-  }
-  throw new Error(`No deterministic road-linked harbor for continent ${continent}`);
-}
-
-function edgePairKey(a: string, b: string) {
-  return a < b ? `${a}|${b}` : `${b}|${a}`;
-}
-
-function networkDigest(state: MutableNetwork) {
+function networkDigest(nodes: readonly TransportNode[], roads: readonly TransportRoadEdge[], ferries: readonly TransportFerryEdge[], crossings: readonly TransportBorderCrossing[], harbors: readonly TransportHarbor[]) {
   const pieces = [
-    ...state.nodes.map((node) => `N:${node.code}:${node.position.lon.toFixed(9)}:${node.position.lat.toFixed(9)}`),
-    ...state.roadEdges.map((edge) => `R:${edge.code}:${edge.from}:${edge.to}:${edge.routeCandidate}:${edge.centerline.map((point) => `${point.x.toFixed(4)},${point.z.toFixed(4)},${point.elevationM.toFixed(3)}`).join(";")}`),
-    ...state.ferryEdges.map((edge) => `F:${edge.code}:${edge.from}:${edge.to}:${edge.distanceM.toFixed(3)}`),
-    ...state.bridges.map((bridge) => `B:${bridge.code}:${bridge.x.toFixed(4)}:${bridge.z.toFixed(4)}:${bridge.spanM.toFixed(3)}`),
-    ...state.borderCrossings.map((crossing) => `X:${crossing.code}:${crossing.x.toFixed(4)}:${crossing.z.toFixed(4)}`),
+    ...nodes.map((node) => `N:${node.code}:${node.position.lon.toFixed(9)}:${node.position.lat.toFixed(9)}`),
+    ...roads.map((edge) => `R:${edge.code}:${edge.from}:${edge.to}:${edge.centerline.map((point) => `${point.x.toFixed(4)},${point.z.toFixed(4)}`).join(";")}`),
+    ...ferries.map((edge) => `F:${edge.code}:${edge.from}:${edge.to}:${edge.distanceM.toFixed(3)}`),
+    ...crossings.map((crossing) => `X:${crossing.code}:${crossing.x.toFixed(4)}:${crossing.z.toFixed(4)}`),
+    ...harbors.map((harbor) => `H:${harbor.code}:${harbor.x.toFixed(4)}:${harbor.z.toFixed(4)}`),
   ].sort();
   return digestNumber(pieces.join("\n")).toString(16).padStart(8, "0");
 }
 
-export function buildTransportNetwork(): TransportNetwork {
-  const state: MutableNetwork = { nodes: [], roadEdges: [], ferryEdges: [], bridges: [], borderCrossings: [], harbors: [] },
-    capitalPlaceCodes = new Set(countries.map((country) => capitalFor(country).code));
-  for (const city of cities) state.nodes.push(nodeForPlace(city, capitalPlaceCodes.has(city.code)));
-  for (const village of villages) state.nodes.push(nodeForPlace(village, false));
-  const nodeBySourceId = new Map(state.nodes.map((node) => [node.sourceId, node]));
-
-  // S003's selected lake detour is now a first-class edge of this same graph.
-  // Keeping the earlier canonical identity preserves cross-stage evidence while
-  // ensuring final-surface rendering and transport/traversal consume one record.
-  addContinuityRoad(state, nodeBySourceId);
-
-  // Build each city/village cluster as a deterministic rooted tree. A village
-  // first tries the city, then already-connected sibling villages by distance.
-  for (const city of cities) {
-    const cityNode = nodeBySourceId.get(city.id)!,
-      localVillages = villages.filter((village) => village.id.startsWith(`${city.id}/`)).sort((a, b) => a.id.localeCompare(b.id)),
-      connected: TransportNode[] = [cityNode];
-    for (const village of localVillages) {
-      const from = nodeBySourceId.get(village.id)!,
-        parents = [...connected].sort((a, b) => greatCircleDistance(from.position, a.position) - greatCircleDistance(from.position, b.position) || a.code.localeCompare(b.code));
-      let linked = false;
-      for (const parent of parents) {
-        try {
-          addRoad(state, from, parent, "access", `VILLAGE/${village.code}/TO/${parent.sourceId.replaceAll("/", "-")}`);
-          connected.push(from);
-          linked = true;
-          break;
-        } catch {
-          // Try the next already-connected canonical settlement; ordering is fixed.
-        }
-      }
-      if (!linked) throw new Error(`No legal settlement access route for ${village.code}`);
+function installExtensions(extensions: ExtensionBuild) {
+  const installedRoadCodes = new Set(geographyRoads.map((road) => road.code)), installedNetworkIds = new Set(geographyRoads.map((road) => road.networkId));
+  for (const road of extensions.roads) {
+    if (!installedRoadCodes.has(road.code)) geographyRoads.push(road);
+    if (!installedNetworkIds.has(road.networkId)) {
+      geographyRoadConnections.push({ from: road.from, to: road.to, legs: [{ edgeId: road.networkId, reverse: false }] });
+      installedNetworkIds.add(road.networkId);
     }
   }
+}
 
-  // Build each country's city backbone as a deterministic legal spanning tree.
-  // Prefer city-to-city trunks, but use already-connected canonical village
-  // approaches when exact hydrology makes a direct city trunk illegal.
-  for (const country of countries) {
-    const localCities = cities
-        .filter((city) => city.continent === country.continent && city.country === country.id)
-        .sort((a, b) => a.city - b.city || a.code.localeCompare(b.code)),
-      cityNode = (city: Place) => nodeBySourceId.get(city.id)!,
-      clusterNodes = (city: Place) => [
-        cityNode(city),
-        ...villages
-          .filter((village) => village.id.startsWith(`${city.id}/`))
-          .sort((a, b) => a.id.localeCompare(b.id))
-          .map((village) => nodeBySourceId.get(village.id)!),
-      ];
-    if (localCities.length <= 1) continue;
-
-    const connected = new Set<string>([cityNode(localCities[0]).code]),
-      unconnected = new Map(localCities.slice(1).map((city) => [cityNode(city).code, city]));
-    while (unconnected.size) {
-      const candidates = localCities
-        .filter((city) => connected.has(cityNode(city).code))
-        .flatMap((fromCity) => [...unconnected.values()].flatMap((toCity) =>
-          clusterNodes(fromCity).flatMap((from) => clusterNodes(toCity).map((to) => ({
-            fromCity,
-            toCity,
-            from,
-            to,
-            endpointRank: Number(from.kind === "village") + Number(to.kind === "village"),
-            distanceM: greatCircleDistance(from.position, to.position),
-            pair: edgePairKey(from.sourceId, to.sourceId),
-          }))),
-        ))
-        .sort((a, b) =>
-          a.endpointRank - b.endpointRank ||
-          a.distanceM - b.distanceM ||
-          a.pair.localeCompare(b.pair) ||
-          a.toCity.code.localeCompare(b.toCity.code)
-        );
-      let linked = false;
-      for (const candidate of candidates) {
-        const pair = [candidate.from.sourceId, candidate.to.sourceId]
-          .sort()
-          .map((id) => id.replaceAll("/", "-"))
-          .join("--");
-        try {
-          addRoad(state, candidate.from, candidate.to, "regional", `COUNTRY/${country.code}/CITY-LINK/${pair}`);
-          const targetCode = cityNode(candidate.toCity).code;
-          connected.add(targetCode);
-          unconnected.delete(targetCode);
-          linked = true;
-          break;
-        } catch {
-          // Try the next shortest stable connected-cluster↔unconnected-cluster pair.
-        }
-      }
-      if (!linked) throw new Error(`No legal connected city backbone for ${country.code}`);
-    }
-  }
-
-  // International main roads use S004's canonical dry-land political gateways.
-  // Build one deterministic spanning tree per continent rather than independent
-  // country pairs, so every domestic network reaches every other country on the
-  // same landmass and therefore reaches that continent's harbor/ferry transfer.
-  for (const continent of [...new Set(countries.map((country) => country.continent))].sort((a, b) => a - b)) {
-    const localCountries = countries
-      .filter((country) => country.continent === continent)
-      .sort((a, b) => a.code.localeCompare(b.code));
-    if (localCountries.length <= 1) continue;
-
-    const connected = new Set<string>([localCountries[0].code]);
-    while (connected.size < localCountries.length) {
-      const frontier = localCountries
-        .filter((country) => connected.has(country.code))
-        .flatMap((country) => gatewayCandidates(country)
-          .filter(({ neighbor }) => neighbor.continent === continent && !connected.has(neighbor.code))
-          .slice(0, TRANSPORT_LIMITS.internationalCandidates)
-          .map(({ gateway, neighbor, distanceM }) => ({ country, gateway, neighbor, distanceM })))
-        .sort((a, b) =>
-          a.distanceM - b.distanceM ||
-          a.country.code.localeCompare(b.country.code) ||
-          a.neighbor.code.localeCompare(b.neighbor.code) ||
-          a.gateway.id.localeCompare(b.gateway.id)
-        );
-
-      let linked = false;
-      for (let index = 0; index < frontier.length; index++) {
-        const { country, gateway, neighbor } = frontier[index],
-          from = state.nodes.find((node) => node.kind === "capital" && node.countryCode === country.code)!,
-          to = state.nodes.find((node) => node.kind === "capital" && node.countryCode === neighbor.code)!,
-          pair = [country.code, neighbor.code].sort(),
-          suffix = `CAPITAL/${pair[0]}--${pair[1]}`,
-          code = `${NETWORK_CODE}/ROAD/MAIN/${suffix}`,
-          route = routeThroughGateway(code, from, to, gateway, TRANSPORT_LIMITS.routeCandidates + 96 + index);
-        if (!route) continue;
-        addRoad(state, from, to, "main", suffix, true, route);
-        connected.add(neighbor.code);
-        linked = true;
-        break;
-      }
-
-      if (!linked) {
-        const missing = localCountries.filter((country) => !connected.has(country.code)).map((country) => country.code).join(", ");
-        throw new Error(`No legal connected international capital network for continent ${continent}; missing ${missing}`);
-      }
-    }
-  }
-
-  const capitalNodes = state.nodes.filter((node) => node.kind === "capital");
-  for (const continent of [...new Set(countries.map((country) => country.continent))].sort((a, b) => a - b)) addHarbor(state, continent, capitalNodes);
-
-  // The three continent harbors form a deterministic minimum spanning chain by
-  // Kruskal over geodesic ferry cost. Ferry edges never enter geography roads.
-  const ferryCandidates: { a: TransportHarbor; b: TransportHarbor; distanceM: number }[] = [];
-  for (let i = 0; i < state.harbors.length; i++) for (let j = i + 1; j < state.harbors.length; j++) ferryCandidates.push({ a: state.harbors[i], b: state.harbors[j], distanceM: greatCircleDistance(state.harbors[i].position, state.harbors[j].position) });
-  ferryCandidates.sort((a, b) => a.distanceM - b.distanceM || edgePairKey(a.a.code, a.b.code).localeCompare(edgePairKey(b.a.code, b.b.code)));
-  const parent = new Map(state.harbors.map((harbor) => [harbor.code, harbor.code]));
-  const root = (code: string): string => { const p = parent.get(code)!; if (p === code) return code; const r = root(p); parent.set(code, r); return r; };
-  for (const candidate of ferryCandidates) {
-    const ar = root(candidate.a.code), br = root(candidate.b.code);
-    if (ar === br) continue;
-    parent.set(ar, br);
-    const code = `${NETWORK_CODE}/FERRY/${candidate.a.continent}--${candidate.b.continent}`;
-    state.ferryEdges.push(Object.freeze({ code, kind: "ferry", from: candidate.a.nodeCode, to: candidate.b.nodeCode, fromHarborCode: candidate.a.code, toHarborCode: candidate.b.code, distanceM: candidate.distanceM }));
-    if (state.ferryEdges.length === Math.max(0, state.harbors.length - 1)) break;
-  }
+function createTransportNetwork(install: boolean): TransportNetwork {
+  const extensions = buildExtensions();
+  if (install) installExtensions(extensions);
+  const allRoads = [...BASE_ROADS, ...extensions.roads], nodes = [
+    ...places.map(settlementNode),
+    ...roadJunctions.map(junctionNode),
+    ...extensions.harborNodes,
+  ], nodeBySourceId = new Map(nodes.map((node) => [node.sourceId, node])),
+    borderByRoad = new Map(extensions.borderCrossings.map((crossing) => [crossing.roadCode, crossing])),
+    roadEdges = allRoads.map((road) => wrapRoad(road, nodeBySourceId, borderByRoad));
 
   const incident = new Map<string, string[]>();
-  for (const edge of [...state.roadEdges, ...state.ferryEdges]) for (const nodeCode of [edge.from, edge.to]) {
+  for (const edge of roadEdges) for (const nodeCode of [edge.from, edge.to]) {
     const list = incident.get(nodeCode) ?? [];
     list.push(edge.code);
     incident.set(nodeCode, list);
   }
-  const junctions = state.nodes.flatMap((node) => {
-    const edges = [...(incident.get(node.code) ?? [])].sort();
-    return edges.filter((code) => state.roadEdges.some((edge) => edge.code === code)).length >= 3
-      ? [Object.freeze({ code: `${NETWORK_CODE}/JUNCTION/${node.code}`, nodeCode: node.code, position: node.position, edgeCodes: Object.freeze(edges) })]
-      : [];
-  });
-
-  const digest = networkDigest(state);
+  const junctions = nodes
+    .filter((node) => node.kind === "junction")
+    .map((node) => Object.freeze({
+      code: `${NETWORK_CODE}/JUNCTION/${node.sourceId}`,
+      nodeCode: node.code,
+      position: node.position,
+      edgeCodes: Object.freeze([...(incident.get(node.code) ?? [])].sort()),
+    }))
+    .filter((junction) => junction.edgeCodes.length >= 3);
+  const digest = networkDigest(nodes, roadEdges, extensions.ferries, extensions.borderCrossings, extensions.harbors);
   return Object.freeze({
     code: NETWORK_CODE,
-    nodes: Object.freeze(state.nodes),
-    roadEdges: Object.freeze(state.roadEdges),
-    ferryEdges: Object.freeze(state.ferryEdges),
-    bridges: Object.freeze(state.bridges),
-    borderCrossings: Object.freeze(state.borderCrossings),
-    harbors: Object.freeze(state.harbors),
+    nodes: Object.freeze(nodes),
+    roadEdges: Object.freeze(roadEdges),
+    ferryEdges: extensions.ferries,
+    get bridges() { return currentBridges(); },
+    borderCrossings: extensions.borderCrossings,
+    harbors: extensions.harbors,
     junctions: Object.freeze(junctions),
     digest,
   });
 }
 
-export const transportNetwork = buildTransportNetwork();
-function roadSurfaceRecord(edge: TransportRoadEdge): Road {
-  const from = transportNetwork.nodes.find((node) => node.code === edge.from)!, to = transportNetwork.nodes.find((node) => node.code === edge.to)!,
-    first = edge.centerline[0], last = edge.centerline[edge.centerline.length - 1], dx = wrapSourceX(last.x - first.x), toX = first.x + dx,
-    xs = edge.centerline.map((point) => first.x + wrapSourceX(point.x - first.x)), zs = edge.centerline.map((point) => point.z),
-    surfaceLengthM = edge.centerline.slice(1).reduce((sum, point, index) => sum + greatCircleDistance(edge.centerline[index].position, point.position), 0),
-    travel = travelMetrics(surfaceLengthM, "good-road"), presentationLengthSourceUnits = polylineLengthSource(edge.centerline);
-  return {
-    code: edge.code,
-    networkId: edge.code,
-    networkKind: (edge.roadClass === "access" ? "link" : "trunk") as "trunk" | "link" | "detour",
-    coarseFallback: false,
-    from: from.sourceId,
-    to: to.sourceId,
-    fromX: first.x,
-    toX,
-    fromZ: first.z,
-    toZ: last.z,
-    minX: Math.min(...xs),
-    maxX: Math.max(...xs),
-    minZ: Math.min(...zs),
-    maxZ: Math.max(...zs),
-    z: (first.z + last.z) / 2,
-    fromPosition: from.position,
-    toPosition: to.position,
-    presentationLengthSourceUnits,
-    surfaceLengthM,
-    walkSurface: "good-road" as const,
-    walkSpeedMps: travel.speedMps,
-    fantasyWalkSeconds: travel.fantasySeconds,
-    realWalkSeconds: travel.realSeconds,
-    centerline: edge.centerline.map((point) => ({ x: point.x, z: point.z, position: point.position })),
-  };
+/** Pure deterministic rebuild for tests; the module-level instance alone installs extensions. */
+export function buildTransportNetwork() {
+  return createTransportNetwork(false);
 }
 
-export const transportSurfaceRoads: readonly Road[] = Object.freeze(transportNetwork.roadEdges.map(roadSurfaceRecord));
-
-// Final-surface and routing consumers use exactly the same road identities as the
-// canonical transport graph. No additional presentation-only road is appended.
-geographyRoads.splice(0, geographyRoads.length, ...(transportSurfaceRoads as Road[]));
-geographyRoadConnections.splice(
-  0,
-  geographyRoadConnections.length,
-  ...transportSurfaceRoads.map((road) => ({
-    from: road.from,
-    to: road.to,
-    legs: [{ edgeId: road.networkId, reverse: false }],
-  })),
-);
+export const transportNetwork = createTransportNetwork(true);
+export const transportSurfaceRoads: readonly Road[] = geographyRoads;
 
 const transportBuckets = new Map<string, TransportRoadEdge[]>();
-const bucketKey = (x: number, z: number) => `${Math.floor(wrapSourceX(x) / TRANSPORT_LIMITS.spatialBucketSource)}/${Math.floor(z / TRANSPORT_LIMITS.spatialBucketSource)}`;
+let transportBucketReferences = 0;
 for (const edge of transportNetwork.roadEdges) {
-  for (const point of edge.centerline) {
-    const key = bucketKey(point.x, point.z), bucket = transportBuckets.get(key) ?? [];
-    if (!bucket.some((candidate) => candidate.code === edge.code)) bucket.push(edge);
+  const road = {
+    fromX: edge.centerline[0].x,
+    fromZ: edge.centerline[0].z,
+    toX: edge.centerline.at(-1)!.x,
+    toZ: edge.centerline.at(-1)!.z,
+    centerline: edge.centerline,
+  };
+  for (const [bx, bz] of canonicalRoadBucketCells(road, TRANSPORT_LIMITS.spatialBucketSource, 24, SOURCE_PRESENTATION_WIDTH)) {
+    const key = `${bx}/${bz}`, bucket = transportBuckets.get(key) ?? [];
+    if (!bucket.some((candidate) => candidate.code === edge.code)) {
+      bucket.push(edge);
+      transportBucketReferences++;
+    }
     transportBuckets.set(key, bucket);
   }
 }
 for (const bucket of transportBuckets.values()) bucket.sort((a, b) => a.code.localeCompare(b.code));
 
-/** Focus-bounded presentation query; visibility never changes canonical topology. */
+function distanceToEdge(edge: TransportRoadEdge, x: number, z: number) {
+  let best = Infinity;
+  const px = edge.centerline[0].x + wrapSourceX(x - edge.centerline[0].x);
+  for (let index = 1; index < edge.centerline.length; index++) {
+    const a = edge.centerline[index - 1], b = edge.centerline[index], dx = b.x - a.x, dz = b.z - a.z,
+      length = dx * dx + dz * dz, t = length ? Math.max(0, Math.min(1, ((px - a.x) * dx + (z - a.z) * dz) / length)) : 0;
+    best = Math.min(best, Math.hypot(px - a.x - dx * t, z - a.z - dz * t));
+  }
+  return best;
+}
+
+/** Focus-bounded presentation query; no camera action changes canonical topology. */
 export function transportRoadsNear(x: number, z: number, radiusSource: number, limit = TRANSPORT_LIMITS.queryRoadLimit) {
   if (!Number.isFinite(radiusSource) || radiusSource <= 0 || radiusSource > 16_384) throw new RangeError("Transport road query radius outside bounded presentation support");
-  const reach = Math.ceil(radiusSource / TRANSPORT_LIMITS.spatialBucketSource), bx = Math.floor(wrapSourceX(x) / TRANSPORT_LIMITS.spatialBucketSource), bz = Math.floor(z / TRANSPORT_LIMITS.spatialBucketSource), found = new Map<string, TransportRoadEdge>();
+  const size = TRANSPORT_LIMITS.spatialBucketSource,
+    reach = Math.ceil(radiusSource / size),
+    bx = canonicalRoadBucketX(Math.floor(wrapSourceX(x) / size), size, SOURCE_PRESENTATION_WIDTH),
+    bz = Math.floor(z / size), found = new Map<string, TransportRoadEdge>();
   for (let dz = -reach; dz <= reach; dz++) for (let dx = -reach; dx <= reach; dx++) {
-    const bucket = transportBuckets.get(`${bx + dx}/${bz + dz}`) ?? [];
-    for (const edge of bucket) {
-      const nearest = Math.min(...edge.centerline.map((point) => Math.hypot(wrapSourceX(point.x - x), point.z - z)));
-      if (nearest <= radiusSource) found.set(edge.code, edge);
-    }
+    const qx = canonicalRoadBucketX(bx + dx, size, SOURCE_PRESENTATION_WIDTH);
+    for (const edge of transportBuckets.get(`${qx}/${bz + dz}`) ?? [])
+      if (distanceToEdge(edge, x, z) <= radiusSource) found.set(edge.code, edge);
   }
-  return Object.freeze([...found.values()].sort((a, b) => a.code.localeCompare(b.code)).slice(0, Math.max(1, Math.min(limit, TRANSPORT_LIMITS.queryRoadLimit))));
+  const result = [...found.values()]
+    .sort((a, b) => distanceToEdge(a, x, z) - distanceToEdge(b, x, z) || a.code.localeCompare(b.code))
+    .slice(0, Math.max(1, Math.min(limit, TRANSPORT_LIMITS.queryRoadLimit)));
+  focusQueries++;
+  focusReturnedRoads += result.length;
+  for (const edge of result.slice(0, TRANSPORT_LIMITS.bridgeRoadsPerQuery)) touchBridgeCache(edge);
+  return Object.freeze(result);
+}
+
+/** Explicit diagnostic request may scan topology, but ordinary pan/zoom never does. */
+export function ensureTransportBridgeEvidence() {
+  const existing = currentBridges()[0];
+  if (existing) return existing;
+  for (const edge of [...transportNetwork.roadEdges].sort((a, b) => a.code.localeCompare(b.code))) {
+    const bridge = touchBridgeCache(edge)[0];
+    if (bridge) return bridge;
+  }
+  return undefined;
+}
+
+export function transportGenerationTelemetry() {
+  return Object.freeze({
+    domesticAuthority: roadNetworkTelemetry.version,
+    baseRoads: BASE_ROADS.length,
+    extensionRoads: transportNetwork.roadEdges.length - BASE_ROADS.length,
+    topologyRoads: transportNetwork.roadEdges.length,
+    topologyNodes: transportNetwork.nodes.length,
+    roadBuckets: transportBuckets.size,
+    roadBucketReferences: transportBucketReferences,
+    bridgeCacheRoads: bridgeCache.size,
+    bridgeCacheLimit: TRANSPORT_LIMITS.bridgeRoadCacheLimit,
+    bridgeCacheHits,
+    bridgeCacheMisses,
+    bridgeCacheEvictions,
+    materializedBridges: currentBridges().length,
+    focusQueries,
+    focusReturnedRoads,
+    geographyRoads: geographyRoads.length,
+    geographyConnections: geographyRoadConnections.length,
+    baseConnections: BASE_CONNECTION_COUNT,
+  });
 }
 
 export function transportAcceptanceSummary() {
-  const roadDegree = new Map<string, number>();
-  for (const edge of transportNetwork.roadEdges) for (const nodeCode of [edge.from, edge.to]) roadDegree.set(nodeCode, (roadDegree.get(nodeCode) ?? 0) + 1);
   const mandatory = transportNetwork.nodes.filter((node) => node.kind === "capital" || node.kind === "city" || node.kind === "village"),
-    uncovered = mandatory.filter((node) => !roadDegree.get(node.code));
+    roadDegree = new Map<string, number>();
+  for (const edge of transportNetwork.roadEdges) for (const nodeCode of [edge.from, edge.to]) roadDegree.set(nodeCode, (roadDegree.get(nodeCode) ?? 0) + 1);
+  const uncovered = mandatory.filter((node) => !roadDegree.get(node.code));
   return Object.freeze({
     code: transportNetwork.code,
     digest: transportNetwork.digest,
@@ -971,12 +867,14 @@ export function transportAcceptanceSummary() {
     roads: transportNetwork.roadEdges.length,
     ferries: transportNetwork.ferryEdges.length,
     junctions: transportNetwork.junctions.length,
-    bridges: transportNetwork.bridges.length,
+    bridges: currentBridges().length,
     borderCrossings: transportNetwork.borderCrossings.length,
     harbors: transportNetwork.harbors.length,
     mainRoads: transportNetwork.roadEdges.filter((edge) => edge.roadClass === "main").length,
     regionalRoads: transportNetwork.roadEdges.filter((edge) => edge.roadClass === "regional").length,
     accessRoads: transportNetwork.roadEdges.filter((edge) => edge.roadClass === "access").length,
+    continuityRoads: transportNetwork.roadEdges.filter((edge) => edge.roadClass === "continuity").length,
+    domesticAuthority: roadNetworkTelemetry.version,
     limits: TRANSPORT_LIMITS,
   });
 }
