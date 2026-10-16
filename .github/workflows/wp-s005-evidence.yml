@@ -7,6 +7,7 @@ on:
       - src/transport-network.ts
       - src/transport-inspector.ts
       - src/transport-inspector.css
+      - src/transport-maritime-overlay.ts
       - src/world.ts
       - src/village-routes.ts
       - tests/transport-network.test.ts
