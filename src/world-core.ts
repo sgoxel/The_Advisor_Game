@@ -254,7 +254,13 @@ function naturalSurfaceBaseAt(x:number,z:number):SurfaceBase {
   return {groundHeight:natural.groundHeight,material:natural.material,water:natural.water,walkable:natural.walkable,vegetationDensityScale:natural.vegetationDensityScale,reservedUse:null};
 }
 
-const ROAD_SUPPORT_RADIUS = 12;
+// Road cross-sections are physical dimensions. Source units are presentation
+// coordinates (~15.27 canonical metres each) and must never be treated as metres.
+const ROAD_CARRIAGEWAY_HALF_WIDTH_M = 7;
+const ROAD_SHOULDER_HALF_WIDTH_M = 18;
+const ROAD_CARRIAGEWAY_RADIUS = ROAD_CARRIAGEWAY_HALF_WIDTH_M / CANONICAL_METRES_PER_SOURCE_UNIT;
+const ROAD_SUPPORT_RADIUS = ROAD_SHOULDER_HALF_WIDTH_M / CANONICAL_METRES_PER_SOURCE_UNIT;
+const ROAD_FEATHER_WIDTH = ROAD_SUPPORT_RADIUS - ROAD_CARRIAGEWAY_RADIUS;
 const ROAD_BUCKET_SIZE = 2048;
 const surfaceRoadBuckets = new Map<string, Road[]>();
 const roadBucketKey = (bx: number, bz: number) => `${canonicalRoadBucketX(bx,ROAD_BUCKET_SIZE,WORLD_SIZE)}/${bz}`;
@@ -410,7 +416,7 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   const road = roadMatch.road;
   if (road) {
     const distance = roadMatch.distance,
-      weight = 1 - smooth(clamp01((distance - 5) / 7)),
+      weight = 1 - smooth(clamp01((distance - ROAD_CARRIAGEWAY_RADIUS) / ROAD_FEATHER_WIDTH)),
       initialRoadHeight = boundedEarthwork(
         roadProfileHeightAt(x, z, road),
         base.groundHeight,
