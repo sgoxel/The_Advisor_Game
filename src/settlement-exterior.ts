@@ -359,7 +359,7 @@ function trimForeignRoadCrossings(place: Place, plan: SettlementExteriorPlan): S
 }
 function alignGatesToRoads(place: Place, suppliedPlan: SettlementExteriorPlan): SettlementExteriorPlan {
   if (!suppliedPlan.gates.length || !suppliedPlan.streets.length) return suppliedPlan;
-  const junctionTrimmed = trimInternalRoadJunctions(place, suppliedPlan), plan = trimForeignRoadCrossings(place, junctionTrimmed),
+  const foreignTrimmed = trimForeignRoadCrossings(place, suppliedPlan), plan = trimInternalRoadJunctions(place, foreignTrimmed),
     physicalApproaches = physicalGateApproaches(place, plan), approaches = physicalApproaches.length ? physicalApproaches : terminalApproaches(place, plan), main = plan.streets[0];
   if (!approaches.length || main.points.length < 2) return plan;
   const targetGateCount = Math.min(2, approaches.length),
