@@ -1,4 +1,4 @@
-import { places, roadConnections, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
+import { places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
 import { wrapSourceX } from "./planet.ts";
 import {
   settlementExteriorFor as coreSettlementExteriorFor,
@@ -272,10 +272,11 @@ function segmentCrossesBorder(place: Place, border: readonly SettlementPoint[], 
   for (let edge = 0; edge < border.length; edge++) {
     const c = border[edge], d = border[(edge + 1) % border.length],
       cx = wrapSourceX(c.x - place.x), cz = c.z - place.z,
-      dx = cx + wrapSourceX(d.x - c.x), dz = d.z - place.z;
-    if (segmentIntersection(ax, az, bx, bz, cx, cz, dx, dz)) return true;
+      dx = cx + wrapSourceX(d.x - c.x), dz = d.z - place.z,
+      hit = segmentIntersection(ax, az, bx, bz, cx, cz, dx, dz);
+    if (hit && hit.t > 1e-5 && hit.t < 1 - 1e-5) return true;
   }
-  return false;
+  return pointInsideBorder(place, border, a.x, a.z) || pointInsideBorder(place, border, b.x, b.z);
 }
 function clipBorderToVillageSide(place: Place, border: readonly SettlementPoint[], a: { x: number; z: number }, b: { x: number; z: number }) {
   const ax = wrapSourceX(a.x - place.x), az = a.z - place.z,
@@ -343,7 +344,7 @@ function trimInternalRoadJunctions(place: Place, plan: SettlementExteriorPlan): 
 }
 function trimForeignRoadCrossings(place: Place, plan: SettlementExteriorPlan): SettlementExteriorPlan {
   if (place.kind !== "village") return plan;
-  const localRoadIds = new Set(roadConnections.filter((connection) => connection.from === place.id || connection.to === place.id).flatMap((connection) => connection.legs.map((leg) => leg.edgeId))),
+  const localRoadIds = new Set(roads.filter((road) => road.from === place.id || road.to === place.id).map((road) => road.networkId)),
     foreignRoads = roads.filter((road) => road.networkKind !== "detour" && road.centerline && road.centerline.length >= 2 && !localRoadIds.has(road.networkId) && roadDistanceAt(place.x, place.z, road) <= plan.radius * 1.7)
       .sort((a, b) => a.code.localeCompare(b.code));
   let border = plan.border.map((point) => ({ ...point }));
