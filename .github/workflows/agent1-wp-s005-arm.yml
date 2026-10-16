@@ -1,18 +1,18 @@
-name: AGENT1 WP-S005 ARM exact acceptance
-# AGENT #1 exact-head validation trigger: 2026-10-16T18:52:00+03:00
+name: AGENT1 WP-S005 Linux exact acceptance
+# AGENT #1 exact-head validation trigger: 2026-10-16T18:58:00+03:00
 on:
   push:
     branches: [agent1/wp-s005-001-001-current]
     paths:
       - .github/workflows/agent1-wp-s005-arm.yml
 concurrency:
-  group: agent1-wp-s005-arm-${{ github.ref }}
+  group: agent1-wp-s005-linux-${{ github.ref }}
   cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   acceptance:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +29,7 @@ jobs:
           grep -q 'geographyRoadConnections.splice' src/transport-network.ts
           grep -q 'roadByNetworkId' tests/transport-network.test.ts
           grep -q 'transport-inspector.ts' index.html
+          grep -q 'one legal land-road component before maritime transfer' tests/transport-network.test.ts
       - run: npm ci
       - name: Targeted deterministic transport tests
         run: |
@@ -60,5 +61,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: wp-s005-arm-exact-head-${{ github.sha }}
+          name: wp-s005-linux-exact-head-${{ github.sha }}
           path: test-results/
