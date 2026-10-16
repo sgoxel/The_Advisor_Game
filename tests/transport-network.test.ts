@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 // S005 acceptance runs against the same installed road authority used by world/routing.
 import "../src/world.ts";
-import { cities, continuityCorridor, countries, roads, villages } from "../src/geography.ts";
+import { cities, continuityCorridor, countries, roadConnections, roads, villages } from "../src/geography.ts";
 import { naturalSurfaceAt } from "../src/hydrology.ts";
 import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { politicalBorderGateways } from "../src/political-settlement-access.ts";
@@ -119,11 +119,22 @@ test("roads avoid open water, river crossings are typed bridges and ferries alon
   }
 });
 
-test("transport graph, rendered geography roads and S003 continuity use exactly the same records", () => {
+test("transport graph, routing connections, rendered geography roads and S003 continuity use exactly the same records", () => {
   const installed = new Set(roads.map((road) => road.code));
   assert.deepEqual([...installed].sort(), transportNetwork.roadEdges.map((edge) => edge.code).sort());
   assert.deepEqual(transportSurfaceRoads.map((road) => road.code).sort(), [...installed].sort());
   assert.equal(new Set(transportSurfaceRoads.map((road) => road.code)).size, transportSurfaceRoads.length);
+  const roadByNetworkId = new Map(roads.map((road) => [road.networkId, road]));
+  assert.equal(roadByNetworkId.size, roads.length);
+  assert.equal(roadConnections.length, roads.length);
+  for (const connection of roadConnections) {
+    assert.equal(connection.legs.length, 1);
+    const leg = connection.legs[0], road = roadByNetworkId.get(leg.edgeId);
+    assert.ok(road, `${connection.from} -> ${connection.to} must reference an installed S005 road`);
+    assert.equal(leg.reverse, false);
+    assert.equal(connection.from, road!.from);
+    assert.equal(connection.to, road!.to);
+  }
   assert.ok(continuityCorridor.road, "S003 continuity evidence must remain available");
   assert.ok(transportNetwork.roadEdges.some((edge) => edge.roadClass === "continuity" && edge.code === continuityCorridor.road!.code));
   assert.ok(transportNetwork.roadEdges.some((edge) => edge.roadClass === "main"));
