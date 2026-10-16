@@ -1,4 +1,4 @@
-import { places, roads, type Place, type Road } from "./geography.ts";
+import { places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
 import { wrapSourceX } from "./planet.ts";
 import {
   settlementExteriorFor as coreSettlementExteriorFor,
@@ -243,9 +243,32 @@ function terminalApproaches(place: Place, plan: SettlementExteriorPlan): Termina
   }
   return distinct.slice(0, 2);
 }
+function physicalGateApproaches(place: Place, plan: SettlementExteriorPlan): TerminalApproach[] {
+  if (place.kind !== "village") return [];
+  const crossingRoads: Road[] = [], candidates: TerminalApproach[] = [];
+  for (const road of roads) {
+    if (road.networkKind === "detour" || !road.centerline || road.centerline.length < 2 || roadDistanceAt(place.x, place.z, road) > plan.radius * 1.7) continue;
+    const hits = [roadBorderIntersection(place, road, plan.border, road.from), roadBorderIntersection(place, road, plan.border, road.to)].filter((hit): hit is SettlementPoint => Boolean(hit));
+    if (!hits.length) continue;
+    crossingRoads.push(road);
+    for (const hit of hits) if (!candidates.some((candidate) => Math.hypot(wrapSourceX(candidate.x - hit.x), candidate.z - hit.z) < 1e-6)) candidates.push({ road, ...hit });
+  }
+  if (!crossingRoads.length) return [];
+  const coverage = candidates.map((candidate) => new Set(crossingRoads.filter((road) => roadDistanceAt(candidate.x, candidate.z, road) < .045).map((road) => road.code))),
+    coversAll = (indices: readonly number[]) => {
+      const covered = new Set<string>();
+      for (const index of indices) for (const code of coverage[index]) covered.add(code);
+      return covered.size === crossingRoads.length;
+    };
+  for (let index = 0; index < candidates.length; index++) if (coversAll([index])) return [candidates[index]];
+  for (let first = 0; first < candidates.length; first++) for (let second = first + 1; second < candidates.length; second++) {
+    if (coversAll([first, second])) return [candidates[first], candidates[second]];
+  }
+  return [];
+}
 function alignGatesToRoads(place: Place, plan: SettlementExteriorPlan): SettlementExteriorPlan {
   if (!plan.gates.length || !plan.streets.length) return plan;
-  const approaches = terminalApproaches(place, plan), main = plan.streets[0];
+  const physicalApproaches = physicalGateApproaches(place, plan), approaches = physicalApproaches.length ? physicalApproaches : terminalApproaches(place, plan), main = plan.streets[0];
   if (!approaches.length || main.points.length < 2) return plan;
   const targetGateCount = Math.min(2, approaches.length),
     gateTemplates = plan.gates.slice(0, targetGateCount).map((gate) => ({ ...gate, guardPosts: gate.guardPosts.map((post) => ({ ...post })) }));
