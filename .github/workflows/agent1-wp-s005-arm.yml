@@ -30,9 +30,10 @@ jobs:
           grep -q 'transport-inspector.ts' index.html
       - run: npm ci
       - name: Targeted deterministic transport tests
-        run: node --experimental-strip-types --test tests/transport-network.test.ts
-      - name: Full deterministic unit suite
-        run: npm test
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          node --experimental-strip-types --test tests/transport-network.test.ts 2>&1 | tee test-results/wp-s005-targeted.log
       - name: Production build
         run: npm run build
       - name: Install Chromium
@@ -41,7 +42,6 @@ jobs:
         run: python -m pip install playwright==1.63.0
       - name: Capture exact-head transport evidence
         run: |
-          mkdir -p test-results
           npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
           PREVIEW_PID=$!
           trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
@@ -52,6 +52,10 @@ jobs:
           TRANSPORT_STEPS='eval:window.advisorTransport.focusEvidence("bridge");settle;visible:#transport-panel;shot:river-bridge-1-100;eval:window.advisorTransport.focusEvidence("border-crossing");settle;shot:capital-border-crossing-1-100;eval:window.advisorTransport.focusEvidence("lake-detour");settle;shot:lake-detour-1-100;eval:window.advisorTransport.focusEvidence("mountain-pass");settle;shot:mountain-pass-1-100;eval:window.advisorTransport.focusEvidence("junction");settle;shot:shared-junction-1-100;eval:window.advisorTransport.focusEvidence("harbor");settle;shot:road-linked-harbor-1-100;eval:window.advisorTransport.focusEvidence("ferry");settle;shot:sea-link-semantics;eval:(s=>{s.value="250";s.dispatchEvent(new Event("change",{bubbles:true}))})(document.querySelector("#map-scale"));settle;shot:roads-hidden-1-250'
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s005-webgl2 --name transport --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 420 --steps "$TRANSPORT_STEPS"
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s005-webgpu --name transport --profile desktop,phone,phone-landscape --renderer webgpu --timeout 420 --steps "$TRANSPORT_STEPS"
+      - name: Full deterministic integration suite
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test-results/wp-s005-full-suite.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
