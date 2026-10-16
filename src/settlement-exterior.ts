@@ -50,44 +50,42 @@ export function canonicalSettlementPopulation(place: Place) {
   return place.kind === "city" ? 2400 : 80;
 }
 
-function pointOnStreet(street: SettlementStreetPlan, fraction: number) {
-  let total = 0;
-  for (let index = 1; index < street.points.length; index++)
-    total += Math.hypot(wrapSourceX(street.points[index].x - street.points[index - 1].x), street.points[index].z - street.points[index - 1].z);
-  let target = Math.max(0, Math.min(1, fraction)) * total;
-  for (let index = 1; index < street.points.length; index++) {
-    const a = street.points[index - 1], b = street.points[index], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
-      length = Math.hypot(dx, dz);
-    if (target <= length || index + 1 === street.points.length) {
-      const t = length ? Math.max(0, Math.min(1, target / length)) : 0, tangent = normalize(dx, dz);
-      return { point: { x: wrapSourceX(a.x + dx * t), z: a.z + dz * t }, tangent, normal: { x: -tangent.z, z: tangent.x } };
-    }
-    target -= length;
-  }
-  const a = street.points[0], b = street.points[Math.min(1, street.points.length - 1)], tangent = normalize(wrapSourceX(b.x - a.x), b.z - a.z);
-  return { point: a, tangent, normal: { x: -tangent.z, z: tangent.x } };
+function pointOnResidentialSpine(street: SettlementStreetPlan, fraction: number) {
+  const a = street.points[0], b = street.points[street.points.length - 1],
+    dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
+    t = Math.max(0, Math.min(1, fraction)), tangent = normalize(dx, dz);
+  return {
+    point: { x: wrapSourceX(a.x + dx * t), z: a.z + dz * t },
+    tangent,
+    normal: { x: -tangent.z, z: tangent.x },
+  };
 }
-function streetLength(street: SettlementStreetPlan) {
-  let total = 0;
-  for (let index = 1; index < street.points.length; index++) total += Math.hypot(wrapSourceX(street.points[index].x - street.points[index - 1].x), street.points[index].z - street.points[index - 1].z);
-  return total;
+function residentialSpineLength(street: SettlementStreetPlan) {
+  const a = street.points[0], b = street.points[street.points.length - 1];
+  return Math.hypot(wrapSourceX(b.x - a.x), b.z - a.z);
 }
-function offsetPoint(base: ReturnType<typeof pointOnStreet>, along: number, lateral: number): SettlementPoint {
+function offsetPoint(base: ReturnType<typeof pointOnResidentialSpine>, along: number, lateral: number): SettlementPoint {
   return { x: wrapSourceX(base.point.x + base.tangent.x * along + base.normal.x * lateral), z: base.point.z + base.tangent.z * along + base.normal.z * lateral };
 }
 
 /**
  * One canonical one-person residence per resident. All residences use one
- * deterministic non-self-intersecting residential spine and parallel bands.
- * This makes identity and non-overlap independent of camera, visit order, LOD,
- * cache state, or renderer backend; secondary streets remain public/service
+ * deterministic straight residential spine and parallel bands. The band count
+ * is derived from the spine length and worst-case home footprint so primary
+ * plots are disjoint by construction, independent of camera, visit order, LOD,
+ * cache state, or renderer backend. Secondary streets remain public/service
  * morphology rather than competing residential coordinate systems.
  */
 export function settlementHomeFor(place: Place, index: number, suppliedPlan?: SettlementExteriorPlan): SettlementPlotPlan {
   const population = canonicalSettlementPopulation(place);
   if (!Number.isInteger(index) || index < 0 || index >= population) throw new RangeError(`Invalid resident home index ${index} for ${place.code}`);
   const plan = suppliedPlan || settlementExteriorFor(place), street = plan.streets[0],
-    bandCount = place.kind === "city" ? 24 : 8,
+    spineLength = residentialSpineLength(street),
+    maximumHomeRadius = Math.hypot(.94, 1.06) * .5 + .1,
+    minimumAlongSpacing = maximumHomeRadius * 2 + .08,
+    maximumSlotsPerRibbon = Math.max(1, Math.floor(spineLength * .88 / minimumAlongSpacing)),
+    minimumRibbonCount = Math.ceil(population / maximumSlotsPerRibbon),
+    bandCount = Math.max(place.kind === "city" ? 24 : 8, Math.ceil(minimumRibbonCount / 2)),
     ribbonCount = bandCount * 2,
     ribbon = index % ribbonCount,
     ordinal = Math.floor(index / ribbonCount),
@@ -95,13 +93,13 @@ export function settlementHomeFor(place: Place, index: number, suppliedPlan?: Se
     side: -1 | 1 = (ribbon & 1) === 0 ? -1 : 1,
     band = Math.floor(ribbon / 2),
     fraction = .06 + ((ordinal + .5) / slotsPerRibbon) * .88,
-    base = pointOnStreet(street, fraction),
+    base = pointOnResidentialSpine(street, fraction),
     width = .68 + unit(`${place.code}/RESIDENCE/${index}/WIDTH`) * .26,
     depth = .78 + unit(`${place.code}/RESIDENCE/${index}/DEPTH`) * .28,
     setback = 1.65 + band * 2.2,
     lateral = side * (street.width * .5 + setback + depth * .5),
     yawRad = Math.atan2(-base.normal.x * side, -base.normal.z * side) + (unit(`${place.code}/RESIDENCE/${index}/YAW`) - .5) * .05,
-    spacing = Math.max(2.2, streetLength(street) * .88 / slotsPerRibbon),
+    spacing = Math.max(2.2, spineLength * .88 / slotsPerRibbon),
     shift = Math.min(.28, spacing * .08),
     candidates: SettlementPoint[] = [offsetPoint(base, 0, lateral)];
   for (const along of [-shift, shift, -shift * 2, shift * 2]) candidates.push(offsetPoint(base, along, lateral));
