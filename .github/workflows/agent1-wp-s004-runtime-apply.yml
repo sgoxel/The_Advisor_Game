@@ -29,22 +29,24 @@ jobs:
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           node tools/agent1-wp-s004-patch-v8.mjs
           node tools/agent1-wp-s004-patch-v9.mjs
+          node tools/agent1-wp-s004-patch-v10.mjs
           grep -q '"merchant"' src/settlement-exterior.ts
           grep -q '"headman"' src/settlement-exterior.ts
           grep -q '"garden"' src/settlement-exterior.ts
           grep -q '"roadside-tree"' src/world.ts
           grep -q '"path"' src/world.ts
+          grep -q '"pavement"' src/world.ts
       - run: npm ci
       - name: Validate completed settlement runtime
-        run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/world.test.ts tests/final-surface-integration.test.ts tests/political-atlas.test.ts
+        run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/world.test.ts tests/village-morphology-runtime.test.ts tests/final-surface-integration.test.ts tests/political-atlas.test.ts
       - name: Production build
         run: npm run build
       - name: Commit validated source integration
         run: |
           git config user.name "AGENT #1"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/settlement-exterior.ts src/world.ts src/geometry.ts tests/settlement-exterior.test.ts tests/world.test.ts
+          git add src/settlement-exterior.ts src/world.ts src/geometry.ts tests/settlement-exterior.test.ts tests/world.test.ts tests/village-morphology-runtime.test.ts
           git commit -m "feat: complete deterministic village morphology roles"
           git push origin HEAD:agent1/wp-s004-001-001-20261015
 
-# AGENT #1 exact source integration trigger 2026-10-16T05:51+03:00
+# AGENT #1 exact source integration trigger 2026-10-16T05:55+03:00
