@@ -1,4 +1,4 @@
-import { places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
+import { places, roadConnections, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
 import { wrapSourceX } from "./planet.ts";
 import {
   settlementExteriorFor as coreSettlementExteriorFor,
@@ -266,9 +266,62 @@ function physicalGateApproaches(place: Place, plan: SettlementExteriorPlan): Ter
   }
   return [];
 }
-function alignGatesToRoads(place: Place, plan: SettlementExteriorPlan): SettlementExteriorPlan {
-  if (!plan.gates.length || !plan.streets.length) return plan;
-  const physicalApproaches = physicalGateApproaches(place, plan), approaches = physicalApproaches.length ? physicalApproaches : terminalApproaches(place, plan), main = plan.streets[0];
+function segmentCrossesBorder(place: Place, border: readonly SettlementPoint[], a: { x: number; z: number }, b: { x: number; z: number }) {
+  const ax = wrapSourceX(a.x - place.x), az = a.z - place.z,
+    bx = ax + wrapSourceX(b.x - a.x), bz = b.z - place.z;
+  for (let edge = 0; edge < border.length; edge++) {
+    const c = border[edge], d = border[(edge + 1) % border.length],
+      cx = wrapSourceX(c.x - place.x), cz = c.z - place.z,
+      dx = cx + wrapSourceX(d.x - c.x), dz = d.z - place.z;
+    if (segmentIntersection(ax, az, bx, bz, cx, cz, dx, dz)) return true;
+  }
+  return false;
+}
+function clipBorderToVillageSide(place: Place, border: readonly SettlementPoint[], a: { x: number; z: number }, b: { x: number; z: number }) {
+  const ax = wrapSourceX(a.x - place.x), az = a.z - place.z,
+    bx = ax + wrapSourceX(b.x - a.x), bz = b.z - place.z,
+    vx = bx - ax, vz = bz - az, length = Math.hypot(vx, vz),
+    centreCross = vx * -az - vz * -ax;
+  if (length < 1e-9 || Math.abs(centreCross) < 1e-6) return border.map((point) => ({ ...point }));
+  const side = centreCross > 0 ? 1 : -1,
+    centreDistance = Math.abs(centreCross) / length,
+    clearance = Math.min(2.5, centreDistance * .25),
+    local = border.map((point) => ({ x: wrapSourceX(point.x - place.x), z: point.z - place.z })),
+    signedDistance = (point: SettlementPoint) => side * (vx * (point.z - az) - vz * (point.x - ax)) / length,
+    clipped: SettlementPoint[] = [];
+  for (let index = 0; index < local.length; index++) {
+    const previous = local[(index + local.length - 1) % local.length], current = local[index],
+      previousDistance = signedDistance(previous), currentDistance = signedDistance(current),
+      previousInside = previousDistance >= clearance, currentInside = currentDistance >= clearance;
+    if (previousInside !== currentInside) {
+      const denominator = currentDistance - previousDistance,
+        t = Math.abs(denominator) < 1e-9 ? 0 : (clearance - previousDistance) / denominator;
+      clipped.push({ x: previous.x + (current.x - previous.x) * t, z: previous.z + (current.z - previous.z) * t });
+    }
+    if (currentInside) clipped.push(current);
+  }
+  if (clipped.length < 3) return border.map((point) => ({ ...point }));
+  return clipped.map((point) => ({ x: wrapSourceX(place.x + point.x), z: place.z + point.z }));
+}
+function trimForeignRoadCrossings(place: Place, plan: SettlementExteriorPlan): SettlementExteriorPlan {
+  if (place.kind !== "village") return plan;
+  const localRoadIds = new Set(roadConnections.filter((connection) => connection.from === place.id || connection.to === place.id).flatMap((connection) => connection.legs.map((leg) => leg.edgeId))),
+    foreignRoads = roads.filter((road) => road.networkKind !== "detour" && road.centerline && road.centerline.length >= 2 && !localRoadIds.has(road.networkId) && roadDistanceAt(place.x, place.z, road) <= plan.radius * 1.7)
+      .sort((a, b) => a.code.localeCompare(b.code));
+  let border = plan.border.map((point) => ({ ...point }));
+  for (const road of foreignRoads) {
+    const points = road.centerline!;
+    for (let segment = 0; segment < points.length - 1; segment++) {
+      const a = points[segment], b = points[segment + 1];
+      if (!segmentCrossesBorder(place, border, a, b)) continue;
+      border = clipBorderToVillageSide(place, border, a, b);
+    }
+  }
+  return border.length === plan.border.length && border.every((point, index) => point.x === plan.border[index].x && point.z === plan.border[index].z) ? plan : { ...plan, border };
+}
+function alignGatesToRoads(place: Place, suppliedPlan: SettlementExteriorPlan): SettlementExteriorPlan {
+  if (!suppliedPlan.gates.length || !suppliedPlan.streets.length) return suppliedPlan;
+  const plan = trimForeignRoadCrossings(place, suppliedPlan), physicalApproaches = physicalGateApproaches(place, plan), approaches = physicalApproaches.length ? physicalApproaches : terminalApproaches(place, plan), main = plan.streets[0];
   if (!approaches.length || main.points.length < 2) return plan;
   const targetGateCount = Math.min(2, approaches.length),
     gateTemplates = plan.gates.slice(0, targetGateCount).map((gate) => ({ ...gate, guardPosts: gate.guardPosts.map((post) => ({ ...post })) }));
