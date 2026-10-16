@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   s004-acceptance:
-    runs-on: macos-14
+    runs-on: windows-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -21,19 +21,21 @@ jobs:
         run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/village-morphology-runtime.test.ts tests/wp-s004-world-integration.test.ts
       - run: npm run build
       - run: npx playwright install chromium
-      - run: python3 -m pip install playwright==1.63.0
+      - run: python -m pip install playwright==1.63.0
       - name: Capture settlement morphology evidence
+        shell: pwsh
         run: |
-          npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
-          PREVIEW_PID=$!
-          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
-            sleep 1
-          done
-          SETTLEMENT_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(64);wait:1200;settle;shot:village-a;eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[Math.min(23,window.advisorWorld.geography.villages.length-1)].canonicalPosition);wait:1200;settle;shot:village-b;eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.cities[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(150);wait:1400;settle;shot:city-a'
-          python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s004-settlements-webgl2 --name settlements --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 300 --steps "$SETTLEMENT_STEPS"
-          python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s004-settlements-webgpu --name settlements --profile desktop,phone,phone-landscape --renderer webgpu --timeout 300 --steps "$SETTLEMENT_STEPS"
+          $preview = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "npm run preview -- --port 4174 > preview.log 2>&1" -PassThru
+          try {
+            for ($i = 0; $i -lt 30; $i++) {
+              try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:4174/ | Out-Null; break } catch { Start-Sleep -Seconds 1 }
+            }
+            $steps = 'eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(64);wait:1200;settle;shot:village-a;eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[Math.min(23,window.advisorWorld.geography.villages.length-1)].canonicalPosition);wait:1200;settle;shot:village-b;eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.cities[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(150);wait:1400;settle;shot:city-a'
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s004-settlements-webgl2 --name settlements --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 300 --steps "$steps"
+            python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s004-settlements-webgpu --name settlements --profile desktop,phone,phone-landscape --renderer webgpu --timeout 300 --steps "$steps"
+          } finally {
+            Stop-Process -Id $preview.Id -Force -ErrorAction SilentlyContinue
+          }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
