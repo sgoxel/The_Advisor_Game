@@ -14,7 +14,6 @@ import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
   SOURCE_PRESENTATION_WIDTH,
   greatCircleDistance,
-  lonLatToSource,
   sourceToLonLat,
   wrapSourceX,
   type CanonicalPosition,
@@ -45,6 +44,8 @@ export type CriticalSite = {
   canonicalPosition: CanonicalPosition;
   radiusM: number;
   falloffM: number;
+  preparedGroundHeightM: number;
+  terrainReliefM: number;
   archetype: "fallen-keep" | "stone-circle" | "way-shrine" | "old-watch";
   variant: number;
   access: SiteAccess;
@@ -52,17 +53,24 @@ export type CriticalSite = {
 
 const SITE_SLOTS_PER_COUNTRY = 2;
 const SITE_BUCKET_SOURCE_UNITS = 512;
-// These exactly match the existing priority-9 keep pad in world.ts: a 10-source-unit
-// usable core and a 6-source-unit blend. This registry gives that existing final-
-// surface reservation a stable player-facing identity instead of inventing a second
-// terrain authority.
-const SITE_CORE_SOURCE_UNITS = 10;
-const SITE_FALLOFF_SOURCE_UNITS = 6;
+export const SITE_CORE_SOURCE_UNITS = 10;
+export const SITE_FALLOFF_SOURCE_UNITS = 6;
+export const SITE_SUPPORT_SOURCE_UNITS = SITE_CORE_SOURCE_UNITS + SITE_FALLOFF_SOURCE_UNITS;
+const ROAD_SUPPORT_SOURCE_UNITS = 12;
+const SITE_SEPARATION_SOURCE_UNITS = SITE_SUPPORT_SOURCE_UNITS * 2 + 24;
+const ACCESS_SAMPLES = 16;
+const ACCESS_MAX_GRADE = 0.14;
+const MAX_CORE_RELIEF_M = 2.5;
+const MAX_SUPPORT_RELIEF_M = 6;
+const CANDIDATE_RADII = [190, 220, 260, 310, 370, 440, 520, 620] as const;
+const CANDIDATE_DIRECTIONS = [
+  [1, 0], [3, 1], [1, 1], [1, 3], [0, 1], [-1, 3], [-1, 1], [-3, 1],
+  [-1, 0], [-3, -1], [-1, -1], [-1, -3], [0, -1], [1, -3], [1, -1], [3, -1],
+] as const;
 
 function digest(text: string): number {
   let value = 2166136261;
-  for (let i = 0; i < text.length; i++)
-    value = Math.imul(value ^ text.charCodeAt(i), 16777619);
+  for (let i = 0; i < text.length; i++) value = Math.imul(value ^ text.charCodeAt(i), 16777619);
   return value >>> 0;
 }
 function addressed(address: string) {
@@ -71,20 +79,24 @@ function addressed(address: string) {
 function canonical(position: ReturnType<typeof sourceToLonLat>): CanonicalPosition {
   return { lon: position.lon, lat: position.lat, elevation: 0 };
 }
+function sourceDistance(ax: number, az: number, bx: number, bz: number) {
+  return Math.hypot(wrapSourceX(ax - bx), az - bz);
+}
+function placeReservationRadius(place: Place) {
+  // These match the current final-surface settlement support: city 430+80,
+  // village 90+80. Priority 9 must live outside that earlier ownership.
+  return place.kind === "city" ? 510 : 170;
+}
 function countryPlaces(country: Country) {
   return places
-    .filter(
-      (place) =>
-        place.kind === "village" &&
-        place.continent === country.continent &&
-        place.country === country.id,
-    )
+    .filter((place) => place.kind === "village" && place.continent === country.continent && place.country === country.id)
     .sort((a, b) => a.code.localeCompare(b.code));
 }
-function hostFor(country: Country, slot: number, used: ReadonlySet<string>) {
+function hostOrder(country: Country, slot: number, used: ReadonlySet<string>) {
   const candidates = countryPlaces(country).filter((place) => !used.has(place.code));
-  if (!candidates.length) throw new Error(`No seeded village site foundation available for ${country.code}`);
-  return candidates[Math.floor(addressed(`${country.code}/HOST/${slot}`) * candidates.length)];
+  if (!candidates.length) throw new Error(`No seeded village available to address a critical site for ${country.code}`);
+  const start = Math.floor(addressed(`${country.code}/HOST/${slot}`) * candidates.length);
+  return candidates.map((_, index) => candidates[(start + index) % candidates.length]);
 }
 function siteName(country: Country, kind: CriticalSiteKind, variant: number) {
   const ruin = ["Oldwatch Ruin", "Fallen Keep", "Broken Tower", "Ashen Court"],
@@ -97,115 +109,160 @@ function archetypeFor(kind: CriticalSiteKind, variant: number): CriticalSite["ar
   return variant % 2 ? "stone-circle" : "way-shrine";
 }
 function roadsForCountry(country: Country) {
-  return roads.filter((road) => road.code.startsWith(`${country.code}/`));
+  return roads.filter((road) => road.code.startsWith(`${country.code}/`) && !road.code.endsWith("/ACCESS"));
 }
 function nearestPointOnRoad(x: number, z: number, road: Road) {
   const px = road.fromX + wrapSourceX(x - road.fromX),
-    path = road.centerline ?? [
-      { x: road.fromX, z: road.fromZ },
-      { x: road.toX, z: road.toZ },
-    ];
+    path = road.centerline ?? [{ x: road.fromX, z: road.fromZ }, { x: road.toX, z: road.toZ }];
   let best = { x: road.fromX, z: road.fromZ, distance: Infinity };
   for (let index = 1; index < path.length; index++) {
-    const a = path[index - 1],
-      b = path[index],
+    const a = path[index - 1], b = path[index],
       ax = road.fromX + wrapSourceX(a.x - road.fromX),
       bx = ax + wrapSourceX(b.x - a.x),
-      vx = bx - ax,
-      vz = b.z - a.z,
-      lengthSq = vx * vx + vz * vz,
+      vx = bx - ax, vz = b.z - a.z, lengthSq = vx * vx + vz * vz,
       t = lengthSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * vx + (z - a.z) * vz) / lengthSq)),
-      qx = ax + vx * t,
-      qz = a.z + vz * t,
-      distance = Math.hypot(px - qx, z - qz);
+      qx = ax + vx * t, qz = a.z + vz * t, distance = Math.hypot(px - qx, z - qz);
     if (distance < best.distance) best = { x: wrapSourceX(qx), z: qz, distance };
   }
   return best;
 }
-function accessFor(country: Country, siteX: number, siteZ: number) {
-  const localRoads = roadsForCountry(country);
-  if (!localRoads.length) throw new Error(`No legal road available for ${country.code}`);
-  let bestRoad = localRoads[0],
-    bestPoint = nearestPointOnRoad(siteX, siteZ, bestRoad),
-    bestDistance = roadDistanceAt(siteX, siteZ, bestRoad);
-  for (const road of localRoads.slice(1)) {
-    const distance = roadDistanceAt(siteX, siteZ, road);
-    if (distance < bestDistance || (distance === bestDistance && road.code < bestRoad.code)) {
-      bestRoad = road;
-      bestPoint = nearestPointOnRoad(siteX, siteZ, road);
-      bestDistance = distance;
-    }
+function reliefAt(x: number, z: number, radius: number) {
+  const heights = [naturalSurfaceAt(x, z).groundHeight];
+  for (const [vx, vz] of CANDIDATE_DIRECTIONS.filter((_, index) => index % 2 === 0)) {
+    const length = Math.hypot(vx, vz);
+    heights.push(naturalSurfaceAt(x + (vx / length) * radius, z + (vz / length) * radius).groundHeight);
   }
-  const position = canonical(sourceToLonLat(bestPoint.x, bestPoint.z));
-  return { road: bestRoad, point: bestPoint, position };
+  return Math.max(...heights) - Math.min(...heights);
 }
-function accessIsLegal(country: Country, site: CriticalSite, samples = 12) {
-  for (let index = 0; index <= samples; index++) {
-    const t = index / samples,
-      x = site.x + wrapSourceX(site.access.x - site.x) * t,
-      z = site.z + (site.access.z - site.z) * t,
-      surface = naturalSurfaceAt(x, z),
-      owner = countryAtPosition(sourceToLonLat(x, z));
+function footprintIsLegal(country: Country, x: number, z: number, accepted: readonly CriticalSite[]) {
+  const probes = [[0, 0], ...CANDIDATE_DIRECTIONS.filter((_, index) => index % 2 === 0).map(([vx, vz]) => {
+    const length = Math.hypot(vx, vz);
+    return [(vx / length) * SITE_SUPPORT_SOURCE_UNITS, (vz / length) * SITE_SUPPORT_SOURCE_UNITS] as const;
+  })];
+  for (const [dx, dz] of probes) {
+    const px = wrapSourceX(x + dx), pz = z + dz, surface = naturalSurfaceAt(px, pz), owner = countryAtPosition(sourceToLonLat(px, pz));
     if (surface.water.kind !== "none" || !surface.walkable || owner?.code !== country.code) return false;
+    if (surface.freshwaterDistanceSource <= 4) return false;
+  }
+  if (reliefAt(x, z, SITE_CORE_SOURCE_UNITS) > MAX_CORE_RELIEF_M) return false;
+  if (reliefAt(x, z, SITE_SUPPORT_SOURCE_UNITS) > MAX_SUPPORT_RELIEF_M) return false;
+  for (const place of places)
+    if (sourceDistance(x, z, place.x, place.z) < placeReservationRadius(place) + SITE_SUPPORT_SOURCE_UNITS + 8) return false;
+  for (const road of roads)
+    if (!road.code.endsWith("/ACCESS") && roadDistanceAt(x, z, road) < SITE_SUPPORT_SOURCE_UNITS + ROAD_SUPPORT_SOURCE_UNITS) return false;
+  for (const site of accepted)
+    if (sourceDistance(x, z, site.x, site.z) < SITE_SEPARATION_SOURCE_UNITS) return false;
+  return true;
+}
+function accessPathIsLegal(country: Country, x: number, z: number, point: { x: number; z: number }, accepted: readonly CriticalSite[]) {
+  const dx = wrapSourceX(point.x - x), dz = point.z - z,
+    segmentSource = Math.hypot(dx, dz) / ACCESS_SAMPLES,
+    segmentM = Math.max(1, segmentSource * CANONICAL_METRES_PER_SOURCE_UNIT);
+  let previousHeight = naturalSurfaceAt(x, z).groundHeight;
+  for (let index = 0; index <= ACCESS_SAMPLES; index++) {
+    const t = index / ACCESS_SAMPLES, px = wrapSourceX(x + dx * t), pz = z + dz * t,
+      surface = naturalSurfaceAt(px, pz), owner = countryAtPosition(sourceToLonLat(px, pz));
+    if (surface.water.kind !== "none" || !surface.walkable || owner?.code !== country.code) return false;
+    if (surface.freshwaterDistanceSource <= 3.7) return false;
+    for (const place of places)
+      if (sourceDistance(px, pz, place.x, place.z) < placeReservationRadius(place) + 8) return false;
+    for (const site of accepted)
+      if (sourceDistance(px, pz, site.x, site.z) < SITE_SUPPORT_SOURCE_UNITS + 8) return false;
+    if (index > 0 && Math.abs(surface.groundHeight - previousHeight) / segmentM > ACCESS_MAX_GRADE) return false;
+    previousHeight = surface.groundHeight;
   }
   return true;
+}
+function legalAccessFor(country: Country, x: number, z: number, accepted: readonly CriticalSite[]) {
+  const candidates = roadsForCountry(country)
+    .map((road) => ({ road, point: nearestPointOnRoad(x, z, road) }))
+    .sort((a, b) => a.point.distance - b.point.distance || a.road.code.localeCompare(b.road.code));
+  for (const candidate of candidates)
+    if (accessPathIsLegal(country, x, z, candidate.point, accepted)) return candidate;
+  return null;
+}
+function candidatePositions(host: Place, country: Country, slot: number) {
+  const directionStart = digest(`${country.code}/${host.code}/${slot}/DIRECTION`) % CANDIDATE_DIRECTIONS.length,
+    radiusStart = digest(`${country.code}/${host.code}/${slot}/RADIUS`) % CANDIDATE_RADII.length,
+    result: { x: number; z: number; order: number }[] = [];
+  let order = 0;
+  for (let radiusIndex = 0; radiusIndex < CANDIDATE_RADII.length; radiusIndex++) {
+    const radius = CANDIDATE_RADII[(radiusStart + radiusIndex) % CANDIDATE_RADII.length];
+    for (let directionIndex = 0; directionIndex < CANDIDATE_DIRECTIONS.length; directionIndex++) {
+      const [vx, vz] = CANDIDATE_DIRECTIONS[(directionStart + directionIndex) % CANDIDATE_DIRECTIONS.length], length = Math.hypot(vx, vz);
+      result.push({ x: wrapSourceX(host.x + (vx / length) * radius), z: host.z + (vz / length) * radius, order: order++ });
+    }
+  }
+  return result;
+}
+function planSite(country: Country, slot: number, usedHosts: ReadonlySet<string>, accepted: readonly CriticalSite[]) {
+  const kind: CriticalSiteKind = slot === 0 ? "ruin" : "critical-place";
+  for (const host of hostOrder(country, slot, usedHosts)) {
+    const legal: { x: number; z: number; order: number; access: NonNullable<ReturnType<typeof legalAccessFor>>; relief: number }[] = [];
+    for (const candidate of candidatePositions(host, country, slot)) {
+      if (!footprintIsLegal(country, candidate.x, candidate.z, accepted)) continue;
+      const access = legalAccessFor(country, candidate.x, candidate.z, accepted);
+      if (!access) continue;
+      legal.push({ ...candidate, access, relief: reliefAt(candidate.x, candidate.z, SITE_SUPPORT_SOURCE_UNITS) });
+      if (kind === "critical-place" && legal.length >= 1) break;
+      if (legal.length >= 12) break;
+    }
+    if (!legal.length) continue;
+    // Ruins deliberately choose the most terrain-challenging legal bounded pad
+    // from a small deterministic candidate set; critical places use first legal.
+    legal.sort((a, b) => kind === "ruin" ? b.relief - a.relief || a.order - b.order : a.order - b.order);
+    const chosen = legal[0], canonicalPosition = canonical(sourceToLonLat(chosen.x, chosen.z)),
+      code = `${host.code}/SITE/KEEP`, variant = digest(code), accessPosition = canonical(sourceToLonLat(chosen.access.point.x, chosen.access.point.z)),
+      lengthM = greatCircleDistance(canonicalPosition, accessPosition);
+    return {
+      code,
+      name: siteName(country, kind, variant),
+      kind,
+      countryCode: country.code,
+      countryName: country.name,
+      continent: country.continent,
+      hostPlaceCode: host.code,
+      x: chosen.x,
+      z: chosen.z,
+      canonicalPosition,
+      radiusM: Number((SITE_CORE_SOURCE_UNITS * CANONICAL_METRES_PER_SOURCE_UNIT).toFixed(2)),
+      falloffM: Number((SITE_FALLOFF_SOURCE_UNITS * CANONICAL_METRES_PER_SOURCE_UNIT).toFixed(2)),
+      preparedGroundHeightM: naturalSurfaceAt(chosen.x, chosen.z).groundHeight,
+      terrainReliefM: Number(chosen.relief.toFixed(3)),
+      archetype: archetypeFor(kind, variant),
+      variant,
+      access: {
+        roadCode: chosen.access.road.code,
+        branchCode: `${code}/ACCESS`,
+        x: chosen.access.point.x,
+        z: chosen.access.point.z,
+        canonicalPosition: accessPosition,
+        lengthM,
+      },
+    } satisfies CriticalSite;
+  }
+  throw new Error(`No legal priority-9 ${kind} candidate for ${country.code}`);
 }
 
 export const criticalSites: readonly CriticalSite[] = (() => {
   const result: CriticalSite[] = [];
   for (const country of countries) {
-    const used = new Set<string>();
+    const usedHosts = new Set<string>();
     for (let slot = 0; slot < SITE_SLOTS_PER_COUNTRY; slot++) {
-      const host = hostFor(country, slot, used);
-      used.add(host.code);
-      // world.ts already owns this exact priority-9 foundation for each seeded place.
-      const x = wrapSourceX(host.x - 30),
-        z = host.z - 28,
-        canonicalPosition = canonical(sourceToLonLat(x, z)),
-        code = `${host.code}/SITE/KEEP`,
-        kind: CriticalSiteKind = slot === 0 ? "ruin" : "critical-place",
-        variant = digest(code),
-        access = accessFor(country, x, z),
-        lengthM = greatCircleDistance(canonicalPosition, access.position),
-        site: CriticalSite = {
-          code,
-          name: siteName(country, kind, variant),
-          kind,
-          countryCode: country.code,
-          countryName: country.name,
-          continent: country.continent,
-          hostPlaceCode: host.code,
-          x,
-          z,
-          canonicalPosition,
-          radiusM: Number((SITE_CORE_SOURCE_UNITS * CANONICAL_METRES_PER_SOURCE_UNIT).toFixed(2)),
-          falloffM: Number((SITE_FALLOFF_SOURCE_UNITS * CANONICAL_METRES_PER_SOURCE_UNIT).toFixed(2)),
-          archetype: archetypeFor(kind, variant),
-          variant,
-          access: {
-            roadCode: access.road.code,
-            branchCode: `${code}/ACCESS`,
-            x: access.point.x,
-            z: access.point.z,
-            canonicalPosition: access.position,
-            lengthM,
-          },
-        };
-      if (!accessIsLegal(country, site)) throw new Error(`Illegal priority-9 site access ${code}`);
+      const site = planSite(country, slot, usedHosts, result);
+      usedHosts.add(site.hostPlaceCode);
       result.push(site);
     }
   }
   return result;
 })();
 
-/** Real access branches are registered before world.ts builds its final-surface road index. */
+/** Real access branches are registered before world.ts builds its immutable road index. */
 export const siteAccessRoads: readonly Road[] = criticalSites.map((site) => {
   const parent = roads.find((road) => road.code === site.access.roadCode);
   if (!parent) throw new Error(`Missing parent road for ${site.code}`);
-  const dx = wrapSourceX(site.access.x - site.x),
-    toX = site.x + dx,
-    surfaceLengthM = site.access.lengthM,
-    travel = travelMetrics(surfaceLengthM, "good-road"),
+  const dx = wrapSourceX(site.access.x - site.x), toX = site.x + dx,
+    surfaceLengthM = site.access.lengthM, travel = travelMetrics(surfaceLengthM, "good-road"),
     host = places.find((place) => place.code === site.hostPlaceCode) as Place | undefined;
   if (!host) throw new Error(`Missing host place for ${site.code}`);
   return {
@@ -244,30 +301,25 @@ function addToBucket(site: CriticalSite, x: number) {
 }
 for (const site of criticalSites) {
   addToBucket(site, site.x);
-  if (site.x < -SOURCE_PRESENTATION_WIDTH / 2 + SITE_BUCKET_SOURCE_UNITS)
-    addToBucket(site, site.x + SOURCE_PRESENTATION_WIDTH);
-  if (site.x > SOURCE_PRESENTATION_WIDTH / 2 - SITE_BUCKET_SOURCE_UNITS)
-    addToBucket(site, site.x - SOURCE_PRESENTATION_WIDTH);
+  if (site.x < -SOURCE_PRESENTATION_WIDTH / 2 + SITE_BUCKET_SOURCE_UNITS) addToBucket(site, site.x + SOURCE_PRESENTATION_WIDTH);
+  if (site.x > SOURCE_PRESENTATION_WIDTH / 2 - SITE_BUCKET_SOURCE_UNITS) addToBucket(site, site.x - SOURCE_PRESENTATION_WIDTH);
 }
 
 /** Focus-bounded query; renderer/cache state never creates site identity. */
 export function nearbyCriticalSites(x: number, z: number, radiusSourceUnits: number, limit = 24) {
-  const span = Math.ceil(radiusSourceUnits / SITE_BUCKET_SOURCE_UNITS) + 1,
-    bx = Math.floor(x / SITE_BUCKET_SOURCE_UNITS),
-    bz = Math.floor(z / SITE_BUCKET_SOURCE_UNITS),
-    found = new Map<string, CriticalSite>();
+  const span = Math.ceil(radiusSourceUnits / SITE_BUCKET_SOURCE_UNITS),
+    bx = Math.floor(x / SITE_BUCKET_SOURCE_UNITS), bz = Math.floor(z / SITE_BUCKET_SOURCE_UNITS), found = new Map<string, CriticalSite>();
   for (let dz = -span; dz <= span; dz++)
     for (let dx = -span; dx <= span; dx++)
       for (const site of buckets.get(`${bx + dx}/${bz + dz}`) ?? [])
-        if (Math.hypot(wrapSourceX(site.x - x), site.z - z) <= radiusSourceUnits) found.set(site.code, site);
+        if (sourceDistance(site.x, site.z, x, z) <= radiusSourceUnits) found.set(site.code, site);
   return [...found.values()]
-    .sort((a, b) =>
-      Math.hypot(wrapSourceX(a.x - x), a.z - z) - Math.hypot(wrapSourceX(b.x - x), b.z - z) || a.code.localeCompare(b.code),
-    )
+    .sort((a, b) => sourceDistance(a.x, a.z, x, z) - sourceDistance(b.x, b.z, x, z) || a.code.localeCompare(b.code))
     .slice(0, limit);
 }
 
 export function siteAcceptanceSummary() {
+  const hardest = [...criticalSites].sort((a, b) => b.terrainReliefM - a.terrainReliefM || a.code.localeCompare(b.code))[0];
   return {
     countries: countries.length,
     sites: criticalSites.length,
@@ -275,6 +327,7 @@ export function siteAcceptanceSummary() {
     criticalPlaces: criticalSites.filter((site) => site.kind === "critical-place").length,
     accessBranches: siteAccessRoads.length,
     coarseBuckets: buckets.size,
-    priority9Foundation: "existing-final-surface-keep-pad",
+    priority9Foundation: "reservation-aware-bounded-site-pad",
+    hardestSite: hardest ? { code: hardest.code, reliefM: hardest.terrainReliefM } : null,
   } as const;
 }
