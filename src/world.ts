@@ -102,7 +102,6 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
     if (x < tile.minX || x >= tile.minX + tile.size || z < tile.minZ || z >= tile.minZ + tile.size) return;
     const surface = finalSurfaceAt(x, z);
     if (surface.water.kind !== "none" || !surface.walkable) return;
-    if (kind === "roadside-tree" && surface.vegetationDensityScale <= 0) return;
     features.push({ kind, x, z, y: surface.groundHeight, variant, code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`, ...metadata } as MorphologyFeature);
   };
 
