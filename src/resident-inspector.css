@@ -64,7 +64,20 @@
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
-@media (min-width: 701px) { .travel-panel:has(#resident-inspector) { width: 340px; } }
+@media (min-width: 701px) {
+  .travel-panel:has(#resident-inspector) { width: 340px; }
+  /* Mid-width layouts place the normal inspector over the viewport centre.
+     While the house action owns focus, yield the region panel and move the
+     inspector to the edge so the canonical entrance anchor stays visible. */
+  .travel-panel:has(#resident-home-inspect:focus) {
+    left: 17px;
+    width: 300px;
+  }
+  body:has(#resident-home-inspect:focus) .region-panel {
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
 @media (max-width: 700px) {
   .travel-panel:has(#resident-inspector) {
     top: auto;
