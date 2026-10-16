@@ -52,6 +52,10 @@ let lastLocalRoads = 0;
 let lastOverlayRoads = 0;
 let lastOverlayBridges = 0;
 
+function compareCanonical(a: string, b: string) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 const overlay = document.createElementNS(SVG_NS, "svg");
 overlay.id = "transport-overlay";
 overlay.classList.add("transport-overlay");
@@ -393,7 +397,7 @@ function chooseNearestRoad() {
   const edge = [...query.edges].sort((a, b) => {
     const ad = Math.min(...a.centerline.map((point) => Math.hypot(wrapSourceX(point.x - runtime.state.view.x), point.z - runtime.state.view.z)));
     const bd = Math.min(...b.centerline.map((point) => Math.hypot(wrapSourceX(point.x - runtime.state.view.x), point.z - runtime.state.view.z)));
-    return ad - bd || a.code.localeCompare(b.code);
+    return ad - bd || compareCanonical(a.code, b.code);
   })[0];
   if (!edge) return;
   selection = { kind: "road", code: edge.code };
@@ -453,21 +457,21 @@ function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mo
   } else if (kind === "border-crossing") {
     const crossing = [...transportNetwork.borderCrossings]
       .filter((candidate) => transportNetwork.roadEdges.some((edge) => edge.code === candidate.roadCode && edge.roadClass === "main"))
-      .sort((a, b) => a.code.localeCompare(b.code))[0];
+      .sort((a, b) => compareCanonical(a.code, b.code))[0];
     if (crossing) selection = { kind: "border", code: crossing.code };
   } else if (kind === "lake-detour") {
     if (continuityCorridor.road) selection = { kind: "lake-detour", code: continuityCorridor.road.code };
   } else if (kind === "mountain-pass") {
-    const edge = [...transportNetwork.roadEdges].sort((a, b) => b.maxNaturalReliefM - a.maxNaturalReliefM || a.code.localeCompare(b.code))[0];
+    const edge = [...transportNetwork.roadEdges].sort((a, b) => b.maxNaturalReliefM - a.maxNaturalReliefM || compareCanonical(a.code, b.code))[0];
     if (edge) selection = { kind: "road", code: edge.code };
   } else if (kind === "junction") {
-    const junction = [...transportNetwork.junctions].sort((a, b) => b.edgeCodes.length - a.edgeCodes.length || a.code.localeCompare(b.code))[0];
+    const junction = [...transportNetwork.junctions].sort((a, b) => b.edgeCodes.length - a.edgeCodes.length || compareCanonical(a.code, b.code))[0];
     if (junction) selection = { kind: "junction", code: junction.code };
   } else if (kind === "harbor") {
-    const harbor = [...transportNetwork.harbors].sort((a, b) => a.code.localeCompare(b.code))[0];
+    const harbor = [...transportNetwork.harbors].sort((a, b) => compareCanonical(a.code, b.code))[0];
     if (harbor) selection = { kind: "harbor", code: harbor.code };
   } else {
-    const ferry = [...transportNetwork.ferryEdges].sort((a, b) => a.code.localeCompare(b.code))[0];
+    const ferry = [...transportNetwork.ferryEdges].sort((a, b) => compareCanonical(a.code, b.code))[0];
     if (ferry) selection = { kind: "ferry", code: ferry.code };
   }
   openPanel();
@@ -477,14 +481,14 @@ function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mo
 }
 
 function evidenceSummary() {
-  const bridge = transportNetwork.bridges.slice().sort((a, b) => a.code.localeCompare(b.code))[0],
+  const bridge = transportNetwork.bridges.slice().sort((a, b) => compareCanonical(a.code, b.code))[0],
     borderCrossing = [...transportNetwork.borderCrossings]
       .filter((candidate) => transportNetwork.roadEdges.some((edge) => edge.code === candidate.roadCode && edge.roadClass === "main"))
-      .sort((a, b) => a.code.localeCompare(b.code))[0],
-    junction = [...transportNetwork.junctions].sort((a, b) => b.edgeCodes.length - a.edgeCodes.length || a.code.localeCompare(b.code))[0],
-    mountainPass = [...transportNetwork.roadEdges].sort((a, b) => b.maxNaturalReliefM - a.maxNaturalReliefM || a.code.localeCompare(b.code))[0],
-    harbor = [...transportNetwork.harbors].sort((a, b) => a.code.localeCompare(b.code))[0],
-    ferry = [...transportNetwork.ferryEdges].sort((a, b) => a.code.localeCompare(b.code))[0];
+      .sort((a, b) => compareCanonical(a.code, b.code))[0],
+    junction = [...transportNetwork.junctions].sort((a, b) => b.edgeCodes.length - a.edgeCodes.length || compareCanonical(a.code, b.code))[0],
+    mountainPass = [...transportNetwork.roadEdges].sort((a, b) => b.maxNaturalReliefM - a.maxNaturalReliefM || compareCanonical(a.code, b.code))[0],
+    harbor = [...transportNetwork.harbors].sort((a, b) => compareCanonical(a.code, b.code))[0],
+    ferry = [...transportNetwork.ferryEdges].sort((a, b) => compareCanonical(a.code, b.code))[0];
   return Object.freeze({
     bridge: bridge?.code ?? null,
     borderCrossing: borderCrossing?.code ?? null,
