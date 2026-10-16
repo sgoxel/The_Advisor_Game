@@ -76,10 +76,10 @@ test("every generated village resolves required roles and legal building-road cl
           distance = segmentDistance(feature.x, feature.z, a.x, a.z, b.x, b.z);
         assert.ok(distance >= street.width * .5 + radius, `${feature.code} intrudes into ${street.id}`);
       }
-      assert.ok(roads.every((road) => roadDistanceAt(feature.x, feature.z, radius) > radius + 5), `${feature.code} intrudes into an external road reserve`);
+      assert.ok(roads.every((road) => roadDistanceAt(feature.x, feature.z, road) > radius + 5), `${feature.code} intrudes into an external road reserve`);
     }
   }
-  assert.equal(villages.length >= 270, true);
+  assert.ok(villages.length >= 270);
   assert.ok(gardens >= villages.length, "generated villages should retain household garden records");
   assert.ok(withPedestrianEdge >= Math.ceil(villages.length * 0.8), "pedestrian/public edges should survive terrain in representative villages");
   assert.ok(withRoadsideVegetation >= Math.ceil(villages.length * 0.45), "roadside vegetation should survive in representative villages");
