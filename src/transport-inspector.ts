@@ -1,7 +1,9 @@
 import "./transport-inspector.css";
 import { continuityCorridor } from "./geography.ts";
 import {
+  ensureTransportBridgeEvidence,
   transportAcceptanceSummary,
+  transportGenerationTelemetry,
   transportNetwork,
   transportRoadsNear,
   type TransportBorderCrossing,
@@ -241,9 +243,9 @@ function roadDetails(edge: TransportRoadEdge) {
     <dl>
       <dt>Endpoints</dt><dd>${codeText(edge.from)} → ${codeText(edge.to)}</dd>
       <dt>Countries</dt><dd>${edge.countryCodes.map(codeText).join(" · ")}</dd>
-      <dt>Coarse profile</dt><dd>${edge.centerline.length} stations · ${min.toFixed(1)}–${max.toFixed(1)} m</dd>
+      <dt>Macro alignment</dt><dd>${edge.centerline.length} stations · ${min.toFixed(1)}–${max.toFixed(1)} m relief</dd>
       <dt>Terrain score</dt><dd>${Math.round(edge.terrainCost).toLocaleString()}</dd>
-      <dt>Crossings</dt><dd>${edge.bridgeCodes.length} bridge${edge.bridgeCodes.length === 1 ? "" : "s"}${edge.borderCrossingCode ? " · 1 political border" : ""}</dd>
+      <dt>Crossings</dt><dd>${edge.bridgeCodes.length} materialized bridge${edge.bridgeCodes.length === 1 ? "" : "s"}${edge.borderCrossingCode ? " · 1 political border" : ""}</dd>
     </dl>`;
 }
 
@@ -268,7 +270,7 @@ function borderDetails(crossing: TransportBorderCrossing) {
     <dl>
       <dt>Main road</dt><dd>${codeText(crossing.roadCode)}</dd>
       <dt>Countries</dt><dd>${crossing.countries.map(codeText).join(" ↔ ")}</dd>
-      <dt>Capital endpoints</dt><dd>${codeText(edge.from)} → ${codeText(edge.to)}</dd>
+      <dt>Road endpoints</dt><dd>${codeText(edge.from)} → ${codeText(edge.to)}</dd>
       <dt>Traversal</dt><dd>Continuous land road · explicit canonical crossing</dd>
     </dl>`;
 }
@@ -354,7 +356,7 @@ function renderSummary(state?: AdvisorWorld["state"]) {
   panel.querySelector<HTMLElement>("#transport-summary")!.innerHTML = `
     <span><b>${summary.roads}</b> roads</span>
     <span><b>${summary.junctions}</b> junctions</span>
-    <span><b>${summary.bridges}</b> bridges</span>
+    <span><b>${summary.bridges}</b> local bridge records</span>
     <span><b>${summary.harbors}</b> harbors</span>
     <span><b>${summary.ferries}</b> sea links</span>
     <span class="transport-scale-state ${state && scaleDenominator(state.scaleLabel) <= ROAD_SCALE_LIMIT ? "visible" : "hidden"}">
@@ -363,12 +365,15 @@ function renderSummary(state?: AdvisorWorld["state"]) {
 }
 
 function renderMetrics() {
+  const generation = transportGenerationTelemetry();
   panel.querySelector<HTMLElement>("#transport-metrics")!.innerHTML = `
     <div class="eyebrow">BOUNDED INSPECTION</div>
     <dl>
       <dt>Topology digest</dt><dd><code>${transportNetwork.digest}</code></dd>
+      <dt>Domestic authority</dt><dd><code>${generation.domesticAuthority}</code> · ${generation.baseRoads} shared roads + ${generation.extensionRoads} S005 extensions</dd>
       <dt>Focus query</dt><dd>${lastQueryMs.toFixed(2)} ms · ${lastLocalRoads}/${QUERY_EDGE_LIMIT} records</dd>
       <dt>Query/cache</dt><dd>${queryCount} searches · ${queryCacheHits} reuses · ${queryCache.size}/${QUERY_CACHE_LIMIT} cached</dd>
+      <dt>Bridge detail</dt><dd>${generation.materializedBridges} records · ${generation.bridgeCacheRoads}/${generation.bridgeCacheLimit} road recipes cached · ${generation.bridgeCacheEvictions} evictions</dd>
       <dt>Visible overlay</dt><dd>${lastOverlayRoads} road paths · ${lastOverlayBridges} bridge markers</dd>
     </dl>`;
 }
@@ -443,7 +448,7 @@ function refreshOverlay(force = false) {
 
 function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mountain-pass" | "junction" | "harbor" | "ferry") {
   if (kind === "bridge") {
-    const bridge = [...transportNetwork.bridges].sort((a, b) => a.code.localeCompare(b.code))[0];
+    const bridge = ensureTransportBridgeEvidence();
     if (bridge) selection = { kind: "bridge", code: bridge.code };
   } else if (kind === "border-crossing") {
     const crossing = [...transportNetwork.borderCrossings]
@@ -472,7 +477,7 @@ function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mo
 }
 
 function evidenceSummary() {
-  const bridge = [...transportNetwork.bridges].sort((a, b) => a.code.localeCompare(b.code))[0],
+  const bridge = transportNetwork.bridges.slice().sort((a, b) => a.code.localeCompare(b.code))[0],
     borderCrossing = [...transportNetwork.borderCrossings]
       .filter((candidate) => transportNetwork.roadEdges.some((edge) => edge.code === candidate.roadCode && edge.roadClass === "main"))
       .sort((a, b) => a.code.localeCompare(b.code))[0],
@@ -495,6 +500,7 @@ function telemetry() {
   return Object.freeze({
     digest: transportNetwork.digest,
     topology: transportAcceptanceSummary(),
+    generation: transportGenerationTelemetry(),
     queryCount,
     queryCacheHits,
     queryCacheEntries: queryCache.size,
@@ -520,16 +526,17 @@ const actions = document.querySelector(".region-actions");
 if (actions?.parentElement) actions.parentElement.insertBefore(openButton, actions.nextSibling);
 else document.body.append(openButton);
 
+const advisorTransport = Object.freeze({
+  network: transportNetwork,
+  get evidence() { return evidenceSummary(); },
+  open: openPanel,
+  selectEvidence,
+  focusEvidence: selectEvidence,
+  telemetry,
+  refresh: () => refreshOverlay(true),
+});
 Object.defineProperty(window, "advisorTransport", {
-  value: Object.freeze({
-    network: transportNetwork,
-    evidence: evidenceSummary(),
-    open: openPanel,
-    selectEvidence,
-    focusEvidence: selectEvidence,
-    telemetry,
-    refresh: () => refreshOverlay(true),
-  }),
+  value: advisorTransport,
   configurable: true,
 });
 
@@ -540,7 +547,7 @@ function frame() {
 requestAnimationFrame(frame);
 
 for (const [name, code] of Object.entries(evidenceSummary()))
-  if (!code) console.warn(`Transport evidence target unavailable: ${name}`);
+  if (name !== "bridge" && !code) console.warn(`Transport evidence target unavailable: ${name}`);
 
 void greatCircleDistance;
 void sourceToLonLat;
