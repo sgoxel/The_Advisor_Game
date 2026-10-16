@@ -64,6 +64,15 @@
   overscroll-behavior: contain;
   scrollbar-width: thin;
 }
+/* Keep the house result adjacent to the focused action. Browser focus scrolling
+   then reveals the canonical house summary instead of an unrelated lower row. */
+.travel-panel:has(#resident-home-inspect:focus) #resident-inspector {
+  display: flex;
+  flex-direction: column;
+}
+.travel-panel:has(#resident-home-inspect:focus) #resident-house-details { order: 1; }
+.travel-panel:has(#resident-home-inspect:focus) #resident-home-inspect { order: 2; }
+.travel-panel:has(#resident-home-inspect:focus) #resident-performance { order: 3; }
 @media (min-width: 701px) {
   .travel-panel:has(#resident-inspector) { width: 340px; }
   /* Mid-width layouts place the normal inspector over the viewport centre.
