@@ -5,6 +5,7 @@ import {
   finalSurfaceAt,
   digest,
   WORLD_SEED,
+  WORLD_SIZE,
   GENERATOR_VERSION,
   type Feature as CoreFeature,
   type Tile,
@@ -27,6 +28,24 @@ type StreetHit = { id: string; width: number; distance: number; x: number; z: nu
 const resolvedPlots = new Map<string, Map<string, { x: number; z: number } | null>>();
 const morphologyPlanFor = (place: Place) => settlementExteriorFor(place) as unknown as MorphologyPlan;
 
+const ROAD_CLEARANCE_SUPPORT = 64;
+const ROAD_BUCKET_SIZE = 2048;
+const externalRoadBuckets = new Map<string, (typeof roads)[number][]>();
+const roadBucketKey = (bx: number, bz: number) => `${bx}/${bz}`;
+for (const road of roads) {
+  for (const shiftX of [-WORLD_SIZE, 0, WORLD_SIZE]) {
+    const minBX = Math.floor((road.minX + shiftX - ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE),
+      maxBX = Math.floor((road.maxX + shiftX + ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE),
+      minBZ = Math.floor((road.minZ - ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE),
+      maxBZ = Math.floor((road.maxZ + ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE);
+    for (let bz = minBZ; bz <= maxBZ; bz++) for (let bx = minBX; bx <= maxBX; bx++) {
+      const key = roadBucketKey(bx, bz), bucket = externalRoadBuckets.get(key) || [];
+      bucket.push(road);
+      externalRoadBuckets.set(key, bucket);
+    }
+  }
+}
+
 function closestPointOnSegment(x: number, z: number, ax: number, az: number, bx: number, bz: number) {
   const dx = wrapSourceX(bx - ax), dz = bz - az, qx = wrapSourceX(x - ax), qz = z - az,
     denominator = dx * dx + dz * dz || 1, t = Math.max(0, Math.min(1, (qx * dx + qz * dz) / denominator));
@@ -45,7 +64,13 @@ function settlementStreetAt(place: Place, x: number, z: number): StreetHit | und
 }
 
 function externalRoadClear(x: number, z: number, radius: number) {
-  return roads.every((road) => roadDistanceAt(x, z, road) > radius + 6);
+  const clearance = radius + 6, wrappedX = wrapSourceX(x), bx = Math.floor(wrappedX / ROAD_BUCKET_SIZE), bz = Math.floor(z / ROAD_BUCKET_SIZE),
+    reach = clearance > ROAD_CLEARANCE_SUPPORT ? Math.ceil(clearance / ROAD_BUCKET_SIZE) : 0;
+  if (!reach) return (externalRoadBuckets.get(roadBucketKey(bx, bz)) || []).every((road) => roadDistanceAt(wrappedX, z, road) > clearance);
+  const candidates = new Set<(typeof roads)[number]>();
+  for (let dz = -reach; dz <= reach; dz++) for (let dx = -reach; dx <= reach; dx++)
+    for (const road of externalRoadBuckets.get(roadBucketKey(bx + dx, bz + dz)) || []) candidates.add(road);
+  return [...candidates].every((road) => roadDistanceAt(wrappedX, z, road) > clearance);
 }
 function candidateLegal(place: Place, plan: MorphologyPlan, plot: MorphologyPlot, candidate: { x: number; z: number }) {
   const surface = finalSurfaceAt(candidate.x, candidate.z);
