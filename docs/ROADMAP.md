@@ -22,8 +22,6 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S003 — Natural World & Surface Authority
 
-
-
 ## STAGE S004 — Settlements, Buildings & World Sites
 
 - WP-S004-001-001 — Seeded settlement distribution + morphology + exterior UX/performance: viable-area density, variable city/village counts, varied roads/plots/services/homes/farms/gates and mobile-safe rendering
