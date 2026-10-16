@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   resident-evidence:
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,8 +20,8 @@ jobs:
       - name: Validate resident authority and performance contracts
         run: node --experimental-strip-types --test tests/simulation.test.ts
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
-      - run: python -m pip install playwright==1.63.0
+      - run: npx playwright install chromium
+      - run: python3 -m pip install playwright==1.63.0
       - name: Capture resident inspector evidence
         run: |
           npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
@@ -32,8 +32,8 @@ jobs:
             sleep 1
           done
           RESIDENT_STEPS='eval:(p=>window.advisorWorld.navigation.setFocus(p.lon,p.lat))(window.advisorWorld.geography.villages[0].canonicalPosition);eval:window.advisorWorld.setHalfHeight(48);wait:1500;settle;shot:resident-scene;eval:document.getElementById("travel-panel").hidden=false;visible:#travel-panel;visible:#resident-inspector;visible:#resident-select;eval:document.getElementById("travel-panel").scrollTop=document.getElementById("resident-inspector").offsetTop-18;wait:150;shot:resident-primary;eval:(s=>{s.selectedIndex=Math.min(6,s.options.length-1),s.dispatchEvent(new Event("change"))})(document.getElementById("resident-select"));wait:100;shot:resident-guard;click:#resident-home-inspect;wait:100;shot:resident-house'
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgl2 --name residents --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 240 --steps "$RESIDENT_STEPS"
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgpu --name residents --profile desktop,phone,phone-landscape --renderer webgpu --timeout 240 --steps "$RESIDENT_STEPS"
+          python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgl2 --name residents --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 240 --steps "$RESIDENT_STEPS"
+          python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/s006-residents-webgpu --name residents --profile desktop,phone,phone-landscape --renderer webgpu --timeout 240 --steps "$RESIDENT_STEPS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
