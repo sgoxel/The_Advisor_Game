@@ -1,3 +1,6 @@
+// Register SEED-owned critical-site access roads before geometry imports world.ts,
+// whose final-surface road index is immutable for the worker lifetime.
+import "./sites.ts";
 import { buildTile } from "./geometry.ts";
 import { convertTileGeometryToEnu } from "./render-frame.ts";
 import { refineTileSurfacePresentation } from "./surface-refinement.ts";
