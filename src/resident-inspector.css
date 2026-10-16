@@ -8,13 +8,12 @@
 #resident-inspector code {
   display: block;
   max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
   padding: 2px 0 4px;
   font-size: 11px;
   line-height: 1.35;
-  white-space: nowrap;
-  scrollbar-width: thin;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 #resident-inspector dl { display: grid; grid-template-columns: 106px minmax(0,1fr); gap: 6px 10px; margin: 11px 0; }
 #resident-inspector dt { color: var(--muted); font-size: 12px; line-height: 1.35; }
@@ -23,10 +22,9 @@
   color: #e0cfaa;
   font-family: Consolas, monospace;
   font-size: 11px !important;
-  white-space: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   padding-bottom: 2px;
 }
 #resident-inspector select { width: 100%; min-height: 44px; }
