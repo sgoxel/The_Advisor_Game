@@ -4,6 +4,7 @@ import {
   continuityCorridor,
   countries,
   countryAtPosition,
+  roadConnections as geographyRoadConnections,
   roads as geographyRoads,
   villages,
   type Country,
@@ -873,6 +874,9 @@ function roadSurfaceRecord(edge: TransportRoadEdge): Road {
     travel = travelMetrics(surfaceLengthM, "good-road"), presentationLengthSourceUnits = polylineLengthSource(edge.centerline);
   return {
     code: edge.code,
+    networkId: edge.code,
+    networkKind: (edge.roadClass === "access" ? "link" : "trunk") as "trunk" | "link" | "detour",
+    coarseFallback: false,
     from: from.sourceId,
     to: to.sourceId,
     fromX: first.x,
@@ -901,6 +905,15 @@ export const transportSurfaceRoads: readonly Road[] = Object.freeze(transportNet
 // Final-surface and routing consumers use exactly the same road identities as the
 // canonical transport graph. No additional presentation-only road is appended.
 geographyRoads.splice(0, geographyRoads.length, ...(transportSurfaceRoads as Road[]));
+geographyRoadConnections.splice(
+  0,
+  geographyRoadConnections.length,
+  ...transportSurfaceRoads.map((road) => ({
+    from: road.from,
+    to: road.to,
+    legs: [{ edgeId: road.networkId, reverse: false }],
+  })),
+);
 
 const transportBuckets = new Map<string, TransportRoadEdge[]>();
 const bucketKey = (x: number, z: number) => `${Math.floor(wrapSourceX(x) / TRANSPORT_LIMITS.spatialBucketSource)}/${Math.floor(z / TRANSPORT_LIMITS.spatialBucketSource)}`;
