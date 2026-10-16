@@ -31,6 +31,14 @@ type MorphologyExteriorPlan = Omit<CoreSettlementExteriorPlan, "plots"> & {
 
 const TAU = Math.PI * 2;
 const cache = new Map<string, CoreSettlementExteriorPlan>();
+const SERVICE_RESIDENT_INDEX: Readonly<Partial<Record<CoreSettlementService, number>>> = {
+  inn: 0,
+  market: 1,
+  blacksmith: 2,
+  farmstead: 3,
+  butcher: 4,
+  "guard-office": 5,
+};
 
 function digest(text: string) {
   let value = 2166136261;
@@ -41,6 +49,14 @@ function unit(address: string) { return digest(address) / 4294967296; }
 function normalize(x: number, z: number) {
   const length = Math.hypot(x, z) || 1;
   return { x: x / length, z: z / length };
+}
+function canonicalPopulationFor(place: Place) {
+  // This is the same canonical population authority used by simulation.ts. Keeping
+  // housing realization here avoids importing simulation -> world -> morphology.
+  return place.kind === "city" ? 2400 : 80;
+}
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value));
 }
 function pointOnStreet(street: SettlementStreetPlan, fraction: number) {
   let total = 0;
@@ -71,6 +87,59 @@ function candidateCloud(base: ReturnType<typeof pointOnStreet>, address: string,
     result.push(offsetPoint(base, along, side));
   }
   return result;
+}
+function demandAdjustedPlot(
+  place: Place,
+  plot: CoreSettlementPlotPlan,
+  homeIndex: number,
+  homeCount: number,
+): CoreSettlementPlotPlan {
+  const population = canonicalPopulationFor(place);
+  if (plot.kind === "house") {
+    const baseResidents = Math.floor(population / Math.max(1, homeCount)),
+      remainder = population % Math.max(1, homeCount),
+      residents = baseResidents + (homeIndex < remainder ? 1 : 0),
+      capacity = residents + Math.max(2, Math.ceil(residents * .12)),
+      demandScale = clamp(Math.sqrt(capacity / 6), .9, 2.2),
+      // Storeys absorb most city density; footprint still grows measurably with household demand.
+      footprintScale = 1 + (demandScale - 1) * .24,
+      width = plot.width * footprintScale,
+      depth = plot.depth * footprintScale;
+    return {
+      ...plot,
+      residents,
+      capacity,
+      width,
+      depth,
+      clearanceRadius: Math.hypot(width, depth) * .5 + 1.5,
+    };
+  }
+  if (plot.kind !== "service" || !plot.service) return plot;
+  const service = plot.service,
+    staffDivisor: Readonly<Record<CoreSettlementService, number>> = {
+      market: 650,
+      inn: 520,
+      blacksmith: 1200,
+      butcher: 1100,
+      "guard-office": 480,
+      farmstead: 430,
+    },
+    staff = Math.max(1, Math.ceil(population / staffDivisor[service])),
+    serviceDemand = Math.max(staff + 2, Math.round(plot.capacity * (.86 + .28 * unit(`${place.code}/${service}/DEMAND`)))),
+    baseCapacity = Math.max(1, plot.capacity),
+    footprintScale = clamp(Math.sqrt(serviceDemand / baseCapacity), .9, 1.16),
+    width = plot.width * footprintScale,
+    depth = plot.depth * footprintScale,
+    residentIndex = SERVICE_RESIDENT_INDEX[service];
+  return {
+    ...plot,
+    ownerId: residentIndex === undefined ? plot.ownerId : `${place.code}/RESIDENT/${residentIndex}`,
+    residents: staff,
+    capacity: serviceDemand,
+    width,
+    depth,
+    clearanceRadius: Math.hypot(width, depth) * .5 + 1.5,
+  };
 }
 function servicePlot(
   place: Place,
@@ -141,18 +210,28 @@ function gardenFor(place: Place, plan: CoreSettlementExteriorPlan, home: CoreSet
 export function settlementExteriorFor(place: Place): CoreSettlementExteriorPlan {
   const existing = cache.get(place.code);
   if (existing) return existing;
-  const core = coreSettlementExteriorFor(place), plots: MorphologyPlotPlan[] = [];
-  let rolesAdded = false;
-  for (const plot of core.plots) {
+  const core = coreSettlementExteriorFor(place), plots: MorphologyPlotPlan[] = [],
+    homeCount = core.plots.filter((plot) => plot.kind === "house").length,
+    population = canonicalPopulationFor(place);
+  let rolesAdded = false, homeIndex = 0;
+  for (const rawPlot of core.plots) {
+    const plot = demandAdjustedPlot(place, rawPlot, homeIndex, homeCount);
     plots.push(plot);
     if (!rolesAdded && plot.service === "farmstead") {
-      plots.push(servicePlot(place, core, "merchant", 0, place.kind === "city" ? .62 : .72, 1, 12, 11, place.kind === "city" ? 36 : 18, place.kind === "city" ? 5 : 3));
-      plots.push(servicePlot(place, core, "headman", Math.min(1, core.streets.length - 1), place.kind === "city" ? .24 : .28, -1, 16, 14, place.kind === "city" ? 20 : 12, place.kind === "city" ? 8 : 6));
+      const merchantResidents = Math.max(1, Math.ceil(population / 900)),
+        merchantCapacity = merchantResidents + Math.max(4, Math.ceil(population / 180)),
+        merchantScale = clamp(Math.sqrt(merchantCapacity / (place.kind === "city" ? 36 : 18)), .9, 1.18),
+        headmanResidents = Math.max(2, Math.ceil(population / 1200)),
+        headmanCapacity = headmanResidents + Math.max(4, Math.ceil(population / 300)),
+        headmanScale = clamp(Math.sqrt(headmanCapacity / (place.kind === "city" ? 20 : 12)), .9, 1.18);
+      plots.push(servicePlot(place, core, "merchant", 0, place.kind === "city" ? .62 : .72, 1, 12 * merchantScale, 11 * merchantScale, merchantCapacity, merchantResidents));
+      plots.push(servicePlot(place, core, "headman", Math.min(1, core.streets.length - 1), place.kind === "city" ? .24 : .28, -1, 16 * headmanScale, 14 * headmanScale, headmanCapacity, headmanResidents));
       rolesAdded = true;
     }
     if (plot.kind === "house") {
       const match = /HOUSE\/(\d+)$/.exec(plot.id), index = match ? Number(match[1]) : -1;
       if (index >= 0 && index % 5 === 0) plots.push(gardenFor(place, core, plot, index));
+      homeIndex++;
     }
   }
   const morphologyPlan: MorphologyExteriorPlan = { ...core, plots };
