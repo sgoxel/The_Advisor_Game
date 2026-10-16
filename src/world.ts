@@ -3,6 +3,7 @@ import {
   SITE_CORE_SOURCE_UNITS,
   SITE_FALLOFF_SOURCE_UNITS,
   SITE_SUPPORT_SOURCE_UNITS,
+  type CriticalSite,
 } from "./sites.ts";
 import * as core from "./world-core.ts";
 import { wrapSourceX } from "./planet.ts";
@@ -96,12 +97,19 @@ export function resetFinalSurfaceTelemetry() {
 function owns(tile: core.Tile, x: number, z: number) {
   return x >= tile.minX && x < tile.minX + tile.size && z >= tile.minZ && z < tile.minZ + tile.size;
 }
-function physicalSiteFeatures(tile: core.Tile): core.Feature[] {
-  if (tile.size > 128) return [];
+function sitesNearTile(tile: core.Tile): readonly CriticalSite[] {
+  if (tile.size > 256) return [];
   const centreX = tile.minX + tile.size / 2, centreZ = tile.minZ + tile.size / 2,
-    radius = Math.SQRT2 * tile.size / 2 + SITE_SUPPORT_SOURCE_UNITS,
-    features: core.Feature[] = [];
-  for (const site of nearbyCriticalSites(centreX, centreZ, radius, 64)) {
+    radius = Math.SQRT2 * tile.size / 2 + SITE_SUPPORT_SOURCE_UNITS;
+  return nearbyCriticalSites(centreX, centreZ, radius, 64);
+}
+function insideSiteReservation(x: number, z: number, sites: readonly CriticalSite[]) {
+  return sites.some((site) => Math.hypot(wrapSourceX(x - site.x), z - site.z) <= SITE_SUPPORT_SOURCE_UNITS);
+}
+function physicalSiteFeatures(tile: core.Tile, sites: readonly CriticalSite[]): core.Feature[] {
+  if (tile.size > 128) return [];
+  const features: core.Feature[] = [];
+  for (const site of sites) {
     const push = (kind: core.Feature["kind"], x: number, z: number, variant: number, suffix: string) => {
       if (!owns(tile, x, z)) return;
       const surface = finalSurfaceAt(x, z);
@@ -126,7 +134,11 @@ function physicalSiteFeatures(tile: core.Tile): core.Feature[] {
   return features;
 }
 
-/** Settlement keeps remain settlement geometry; only canonical site detail is added lazily. */
+/** Settlement keeps stay settlement geometry; lower-priority geometry cannot occupy a site reservation. */
 export function featuresFor(tile: core.Tile): core.Feature[] {
-  return [...core.featuresFor(tile), ...physicalSiteFeatures(tile)];
+  const sites = sitesNearTile(tile),
+    inherited = sites.length
+      ? core.featuresFor(tile).filter((feature) => !insideSiteReservation(feature.x, feature.z, sites))
+      : core.featuresFor(tile);
+  return [...inherited, ...physicalSiteFeatures(tile, sites)];
 }
