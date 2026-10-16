@@ -90,7 +90,7 @@ test("each continent is one land-road component before maritime transfer", () =>
   }
 });
 
-test("international roads cross canonical political ownership explicitly and never fake intercontinental land travel", () => {
+test("international main roads connect capitals through explicit canonical border crossings", () => {
   assert.equal(transportNetwork.borderCrossings.length, countries.length - new Set(countries.map((country) => country.continent)).size);
   for (const crossing of transportNetwork.borderCrossings) {
     const edge = transportNetwork.roadEdges.find((candidate) => candidate.code === crossing.roadCode);
@@ -98,11 +98,26 @@ test("international roads cross canonical political ownership explicitly and nev
     assert.equal(edge!.roadClass, "main");
     assert.equal(edge!.countryCodes.length, 2);
     assert.deepEqual([...edge!.countryCodes].sort(), [...crossing.countries].sort());
+    const from = transportNetwork.nodes.find((node) => node.code === edge!.from)!,
+      to = transportNetwork.nodes.find((node) => node.code === edge!.to)!;
+    assert.equal(from.kind, "capital", `${crossing.code} must start at a canonical capital`);
+    assert.equal(to.kind, "capital", `${crossing.code} must end at a canonical capital`);
+    assert.notEqual(from.countryCode, to.countryCode, `${crossing.code} must connect two countries`);
+    assert.deepEqual([from.countryCode, to.countryCode].sort(), [...crossing.countries].sort());
     const owner = countryAtPosition(crossing.position);
     assert.ok(owner && crossing.countries.includes(owner.code), `${crossing.code} must lie on one side of its canonical owner boundary`);
-    const endpointContinents = [edge!.from, edge!.to].map((code) => transportNetwork.nodes.find((node) => node.code === code)!.continent);
-    assert.equal(endpointContinents[0], endpointContinents[1]);
+    assert.equal(from.continent, to.continent, `${crossing.code} cannot be an intercontinental walking road`);
   }
+
+  for (const country of countries) {
+    const capital = transportNetwork.nodes.find((node) => node.countryCode === country.code && node.kind === "capital");
+    assert.ok(capital, `${country.code} needs a canonical capital node`);
+    const borderMainRoads = transportNetwork.roadEdges.filter(
+      (edge) => edge.borderCrossingCode && edge.roadClass === "main" && (edge.from === capital!.code || edge.to === capital!.code),
+    );
+    assert.ok(borderMainRoads.length >= 1, `${country.code} capital needs a direct international main-road link`);
+  }
+
   for (const edge of transportNetwork.roadEdges) {
     const from = transportNetwork.nodes.find((node) => node.code === edge.from)!, to = transportNetwork.nodes.find((node) => node.code === edge.to)!;
     assert.equal(from.continent, to.continent, `${edge.code} cannot be an intercontinental walking road`);
