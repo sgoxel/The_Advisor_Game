@@ -4,7 +4,7 @@ on:
     branches: [main]
 concurrency:
   group: s006-resident-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 permissions:
   contents: read
 jobs:
