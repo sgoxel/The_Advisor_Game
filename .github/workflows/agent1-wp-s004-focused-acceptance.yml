@@ -2,6 +2,9 @@ name: AGENT1 S004 focused acceptance
 on:
   push:
     branches: [agent1/wp-s004-001-001-integration-20261016]
+concurrency:
+  group: agent1-s004-focused-acceptance
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
