@@ -126,10 +126,7 @@ function physicalSiteFeatures(tile: core.Tile): core.Feature[] {
   return features;
 }
 
-/** Physical detail is local and lazy; broad zoom uses the semantic site layer. */
+/** Settlement keeps remain settlement geometry; only canonical site detail is added lazily. */
 export function featuresFor(tile: core.Tile): core.Feature[] {
-  const legacyFiltered = core.featuresFor(tile).filter((feature) =>
-    !(feature.kind === "keep" && (feature.code.includes("/city/keep") || feature.code.includes("/village/keep"))),
-  );
-  return [...legacyFiltered, ...physicalSiteFeatures(tile)];
+  return [...core.featuresFor(tile), ...physicalSiteFeatures(tile)];
 }
