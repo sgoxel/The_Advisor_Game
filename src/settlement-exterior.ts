@@ -307,7 +307,7 @@ function clipBorderBeforeJunction(place: Place, border: readonly SettlementPoint
   const jx = wrapSourceX(x - place.x), jz = z - place.z, distance = Math.hypot(jx, jz);
   if (distance < 1e-6) return border.map((point) => ({ ...point }));
   const ux = jx / distance, uz = jz / distance,
-    clearance = Math.min(3, distance * .12), cutoff = distance - clearance,
+    cutoff = distance,
     local = border.map((point) => ({ x: wrapSourceX(point.x - place.x), z: point.z - place.z })),
     projected = (point: SettlementPoint) => point.x * ux + point.z * uz,
     clipped: SettlementPoint[] = [];
