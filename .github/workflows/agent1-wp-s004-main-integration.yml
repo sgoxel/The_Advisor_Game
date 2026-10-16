@@ -1,0 +1,110 @@
+name: AGENT1 WP-S004 current-main integration
+on:
+  push:
+    branches: [agent1/wp-s004-001-001-main-integration]
+    paths: [.github/workflows/agent1-wp-s004-main-integration.yml]
+permissions:
+  contents: write
+jobs:
+  integrate-test-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Reconcile tested morphology onto current main authorities
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          OLD_BRANCH='agent1/wp-s004-001-001-20261015'
+          git fetch origin "$OLD_BRANCH:refs/remotes/origin/s004-source"
+
+          # Preserve the exact current-main world authority as the core, then layer S004 morphology.
+          cp src/world.ts src/world-core.ts
+          git show refs/remotes/origin/s004-source:src/settlement-exterior-core.ts > src/settlement-exterior-core.ts
+          git show refs/remotes/origin/s004-source:src/settlement-exterior.ts > src/settlement-exterior.ts
+          git show refs/remotes/origin/s004-source:src/world.ts > src/world.ts
+
+          # Preserve the richer tested S004 renderer while retaining current-main road LOD masking below.
+          git show refs/remotes/origin/s004-source:src/geometry-core.ts > src/geometry-core.ts
+          git show refs/remotes/origin/s004-source:src/geometry.ts > src/geometry.ts
+
+          # Durable S004 acceptance tests. Do not replace newer owner tests.
+          git show refs/remotes/origin/s004-source:tests/settlement-exterior.test.ts > tests/settlement-exterior.test.ts
+          git show refs/remotes/origin/s004-source:tests/village-morphology-runtime.test.ts > tests/village-morphology-runtime.test.ts
+          git show refs/remotes/origin/s004-source:tests/wp-s004-world-integration.test.ts > tests/wp-s004-world-integration.test.ts
+          git show refs/remotes/origin/s004-source:tests/settlement-icons.spec.js > tests/settlement-icons.spec.js
+          git show refs/remotes/origin/s004-source:tools/agent1-wp-s004-evidence.sh > /tmp/agent1-wp-s004-evidence.sh
+          chmod +x /tmp/agent1-wp-s004-evidence.sh
+
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          let world = fs.readFileSync('src/world-core.ts', 'utf8');
+          const featureStart = world.indexOf('export type Feature = {');
+          const cellStart = world.indexOf('export type Cell = {', featureStart);
+          if (featureStart < 0 || cellStart < 0) throw new Error('current-main Feature type anchor missing');
+          const featureType = `export type Feature = {\n  kind: "house" | "keep" | "tree" | "rock" | "field" | "well" | "service" | "street" | "border" | "gate" | "guard-post";\n  x: number;\n  z: number;\n  y: number;\n  code: string;\n  variant: number;\n  service?: "market" | "inn" | "blacksmith" | "butcher" | "guard-office" | "farmstead";\n  ownerId?: string;\n  capacity?: number;\n  residents?: number;\n  label?: string;\n  entranceX?: number;\n  entranceZ?: number;\n  yawRad?: number;\n  footprintWidth?: number;\n  footprintDepth?: number;\n  length?: number;\n  fieldForm?: "strip" | "paddock" | "orchard" | "vegetable" | "pasture";\n};\n`;
+          world = world.slice(0, featureStart) + featureType + world.slice(cellStart);
+          fs.writeFileSync('src/world-core.ts', world);
+
+          let geometry = fs.readFileSync('src/geometry-core.ts', 'utf8');
+          const signature = '  featureFootprintSource = 0,\n): [number, number, number] {';
+          if (!geometry.includes(signature)) throw new Error('terrainTint signature anchor missing');
+          geometry = geometry.replace(signature, '  featureFootprintSource = 0,\n  showRoads = true,\n): [number, number, number] {');
+          const roadTint = '  if (surface.water.kind === "none" && surface.groundMaterial === "Road")\n    return color(112, 92, 62);';
+          if (!geometry.includes(roadTint)) throw new Error('road tint anchor missing');
+          geometry = geometry.replace(roadTint, '  if (showRoads && surface.water.kind === "none" && surface.groundMaterial === "Road")\n    return color(112, 92, 62);');
+          const relativeAnchor = '  for (const builder of [terrain, structures, nature, detail])\n    builder.relativeTo(originX, originZ);';
+          if (!geometry.includes(relativeAnchor)) throw new Error('terrain alpha anchor missing');
+          const alphaMask = `  // Presentation-only road coverage mask retained from current main. RGB keeps natural soil.\n  for(let v=0;v<terrain.p.length/3;v++){\n    const c=v*4,x=terrain.p[v*3],z=terrain.p[v*3+2];\n    const road=terrain.c[c]===112&&terrain.c[c+1]===92&&terrain.c[c+2]===62&&finalSurfaceAt(x,z).groundMaterial==="Road";\n    if(road){const tint=terrainTint(x,z,32,undefined,0,false);terrain.c[c]=tint[0];terrain.c[c+1]=tint[1];terrain.c[c+2]=tint[2];}\n    terrain.c[c+3]=road?255:0;\n  }\n`;
+          geometry = geometry.replace(relativeAnchor, alphaMask + relativeAnchor);
+          fs.writeFileSync('src/geometry-core.ts', geometry);
+          NODE
+
+          # The new main geography is authoritative: never transplant the stale S004 geography/road recipe.
+          git diff --exit-code "${GITHUB_SHA}" -- src/geography.ts src/simulation.ts src/road-network.ts src/road-spatial-index.ts
+          grep -q 'macroPopulationSummary' src/geography.ts
+          grep -q 'export const populationOf' src/simulation.ts
+          grep -q 'settlementExteriorFor' src/world.ts
+          grep -q 'showRoads = true' src/geometry-core.ts
+      - run: npm ci
+      - name: Targeted S004 deterministic and legality gates
+        run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/village-morphology-runtime.test.ts tests/wp-s004-world-integration.test.ts
+      - name: Full test suite
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Create exact tested integration candidate
+        id: candidate
+        shell: bash
+        run: |
+          git config user.name "AGENT #1"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/world-core.ts src/world.ts src/settlement-exterior-core.ts src/settlement-exterior.ts src/geometry-core.ts src/geometry.ts tests/settlement-exterior.test.ts tests/village-morphology-runtime.test.ts tests/wp-s004-world-integration.test.ts tests/settlement-icons.spec.js
+          git commit -m "feat: integrate seeded settlement morphology with macro roads"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: WebGPU settlement semantic-zoom gate
+        run: xvfb-run -a npx playwright test --config playwright.webgpu.config.js settlement-icons.spec.js
+      - name: WebGL2 settlement semantic-zoom gate
+        run: xvfb-run -a npx playwright test --config playwright.fallback.config.js settlement-icons.spec.js
+      - name: Capture fresh S004 MIXED evidence from exact candidate
+        env:
+          SOURCE_SHA: ${{ steps.candidate.outputs.sha }}
+        run: bash /tmp/agent1-wp-s004-evidence.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wp-s004-current-main-${{ steps.candidate.outputs.sha }}
+          path: test-results/
+          if-no-files-found: error
+      - name: Push exact accepted candidate
+        run: git push origin HEAD:agent1/wp-s004-001-001-main-integration
