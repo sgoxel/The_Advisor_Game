@@ -9,3 +9,7 @@ Actual native desktop Chrome at an A55-reference resolution/touch configuration,
 ![Shared seeded Y at 1/100](chrome-y-100.png)
 
 ![Close properties restored](chrome-properties.png)
+
+Merged main resident integration: actual native Edge close-up, with canonical property inventory verified independently.
+
+![Merged close-up properties](merged-properties.png)

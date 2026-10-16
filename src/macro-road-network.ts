@@ -25,7 +25,7 @@ const angleDifference=(a:number,b:number)=>Math.abs(Math.atan2(Math.sin(a-b),Mat
  * Layered terrain search penalizes climb, high relief, obstacles and sharp turns. */
 export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly (readonly [RoadNode,RoadNode])[],ownerAt:(p:LonLat)=>string|undefined,seed:string,sample:typeof macroSampleAt=macroSampleAt,waterSegments:readonly CoarseWater[]=[]){
  let coarseSamples=0,maxStates=0,fallbacks=0,unbridgeableCrossings=0;
- 
+
  const waterBuckets=new Map<string,CoarseWater[]>(),waterSize=8192;
  for(const river of waterSegments)for(const shift of [-262144,0,262144])for(const [x,z] of roadBucketCells({fromX:river.ax,fromZ:river.az,toX:river.ax+wrapSourceX(river.bx-river.ax),toZ:river.bz},waterSize,river.width,shift)){
   const key=`${x}/${z}`,list=waterBuckets.get(key)||[];list.push(river);waterBuckets.set(key,list);

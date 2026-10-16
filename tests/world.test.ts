@@ -45,7 +45,7 @@ import {
   fantasyTravelSeconds,
   realSecondsForFantasy,
 } from "../src/travel.ts";
-import { LazySimulation, summaryAt, residentAt } from "../src/simulation.ts";
+import { LazySimulation, summaryAt, residentAt, populationOf } from "../src/simulation.ts";
 import { FantasyClock, TIME_SCALE } from "../src/clock.ts";
 
 test("reloading cells in reverse order preserves all canonical content", () => {
@@ -379,7 +379,7 @@ test("lazy country simulation catches up identically regardless of interest or e
   assert.equal(a.stats.liveCountries, 1);
   assert.ok(a.stats.residents > 0);
   const home = a.residents.get(a.activeCountry)![0],
-    place = [...cities, ...villages].find((p) => p.id === home.home)!;
+    place = [...cities, ...villages].find((p) => p.id === home.settlement)!;
   assert.deepEqual(home, residentAt(place, home.index, 3601));
   function summaryWithLive(code: string, tick: number) {
     return { ...summaryAt(code, tick), tier: "live" };
@@ -392,14 +392,14 @@ test("larger country populations remain analytical with a bounded focused reside
   for(const country of countries){
     const place=cities.find(c=>c.continent===country.continent&&c.country===country.id)!;
     sim.setFocus(place);sim.advance(sim.tick+1);
-    assert.ok(sim.stats.materializedResidents<=sim.stats.presentationLimit);
+    assert.equal(sim.stats.activeScheduleRecords,0);
     assert.equal(sim.residents.size,1);
     assert.equal(sim.stats.residents,summaryAt(country.code,sim.tick).population);
-    assert.ok(sim.stats.residents>=sim.stats.materializedResidents);
+    assert.ok(sim.stats.logicalResidents>0);
     // Off-screen residents retain exact SEED/time identities without resident records.
-    assert.ok(!sim.residents.get(sim.activeCountry)!.some(r=>r.index===2399));
-    const remote=residentAt(place,2399,sim.tick);
-    assert.equal(remote.home,place.id);
+    assert.ok(!sim.residents.get(sim.activeCountry)!.some(r=>r.index===populationOf(place)-1));
+    const remote=residentAt(place,populationOf(place)-1,sim.tick);
+    assert.equal(remote.settlement,place.id);
     assert.ok(Number.isFinite(remote.position.lon)&&Number.isFinite(remote.position.lat));
   }
 });

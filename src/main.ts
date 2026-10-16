@@ -1142,40 +1142,52 @@ function characterMaterial(variant: number): pc.StandardMaterial {
   image.width = 64;
   image.height = 96;
   const ctx = image.getContext("2d")!;
-  const coats = ["#785137", "#687b69", "#aa7950"];
+  const coats = ["#785137", "#687b69", "#aa7950", "#5d6f83", "#855d6d", "#8b7b4d", "#4f736f", "#76658d", "#8b5f46"],
+    hairs = ["#30241d", "#4e3525", "#745238", "#a77a4c", "#b8a17a", "#6f6b62", "#2d2a28", "#8a4f37"],
+    silhouette = variant % 5,
+    coat = coats[(variant * 5 + Math.floor(variant / 3)) % coats.length],
+    hair = hairs[(variant * 3 + Math.floor(variant / 5)) % hairs.length],
+    torsoHalf = 12 + (silhouette % 3) * 2,
+    shoulderY = 35 + (silhouette === 4 ? 2 : 0);
   ctx.fillStyle = "#3a382c";
-  ctx.fillRect(22, 69, 9, 22);
-  ctx.fillRect(35, 69, 9, 22);
+  ctx.fillRect(22 - (silhouette === 1 ? 2 : 0), 69, 9, 22);
+  ctx.fillRect(35 + (silhouette === 1 ? 2 : 0), 69, 9, 22);
   ctx.fillStyle = "#d2b17e";
-  ctx.fillRect(17, 40, 8, 27);
-  ctx.fillRect(43, 40, 8, 27);
-  ctx.fillStyle = coats[variant];
+  ctx.fillRect(16 - (silhouette === 3 ? 2 : 0), 40, 8, 27);
+  ctx.fillRect(44 + (silhouette === 3 ? 2 : 0), 40, 8, 27);
+  ctx.fillStyle = coat;
   ctx.beginPath();
-  ctx.moveTo(23, 36);
-  ctx.lineTo(43, 36);
-  ctx.lineTo(49, 75);
-  ctx.lineTo(17, 75);
+  ctx.moveTo(33 - torsoHalf, shoulderY);
+  ctx.lineTo(33 + torsoHalf, shoulderY);
+  ctx.lineTo(49 - (silhouette === 2 ? 3 : 0), 75);
+  ctx.lineTo(17 + (silhouette === 2 ? 3 : 0), 75);
   ctx.closePath();
   ctx.fill();
   ctx.fillStyle = "#463b2c";
-  ctx.fillRect(21, 61, 23, 4);
+  ctx.fillRect(20, 61 + (silhouette % 2), 26, 4);
   ctx.fillStyle = "#d7b487";
   ctx.beginPath();
-  ctx.ellipse(33, 25, 11, 14, 0, 0, Math.PI * 2);
+  ctx.ellipse(33, 25, silhouette === 2 ? 12 : 11, silhouette === 4 ? 15 : 14, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = "#4e3c2a";
-  ctx.beginPath();
-  ctx.ellipse(33, 16, 13, 9, 0, Math.PI, Math.PI * 2);
-  ctx.fill();
-  ctx.fillRect(20, 15, 26, 5);
+  ctx.fillStyle = hair;
+  if (variant % 4 === 0) {
+    ctx.fillRect(20, 13, 26, 8);
+    ctx.fillRect(20, 18, 5, 14);
+  } else if (variant % 4 === 1) {
+    ctx.beginPath(); ctx.ellipse(33, 16, 14, 9, 0, Math.PI, Math.PI * 2); ctx.fill();
+    ctx.fillRect(20, 15, 27, 4);
+  } else if (variant % 4 === 2) {
+    ctx.fillRect(24, 10, 18, 11);
+    ctx.fillRect(21, 17, 24, 4);
+  } else {
+    ctx.beginPath(); ctx.arc(33, 16, 13, Math.PI, Math.PI * 2); ctx.fill();
+    ctx.fillRect(42, 16, 5, 13);
+  }
   ctx.fillStyle = "#493b2c";
   ctx.fillRect(27, 26, 2, 2);
   ctx.fillRect(37, 26, 2, 2);
-  const texture = new pc.Texture(app.graphicsDevice, {
-    width: 64,
-    height: 96,
-    mipmaps: true,
-  });
+  if (variant % 6 === 0) ctx.fillRect(29, 34, 9, 3);
+  const texture = new pc.Texture(app.graphicsDevice, { width: 64, height: 96, mipmaps: true });
   texture.setSource(image);
   const material = new pc.StandardMaterial();
   material.diffuseMap = texture;
@@ -1185,6 +1197,9 @@ function characterMaterial(variant: number): pc.StandardMaterial {
   material.cull = pc.CULLFACE_NONE;
   material.update();
   return material;
+}
+function residentMaterialIndex(resident: { appearance: { silhouette: number; hair: number; clothing: number } }) {
+  return (resident.appearance.silhouette * 72 + resident.appearance.hair * 9 + resident.appearance.clothing) % 24;
 }
 async function start() {
   $("world-seed").textContent = WORLD_SEED;
@@ -1282,8 +1297,16 @@ async function start() {
   updateCamera();
   simulation.setFocus(villages[0]);
   simulation.advance(clock.tickAt(Date.now()));
-  const characterMaterials = [0, 1, 2].map(characterMaterial);
+  const characterMaterials = Array.from({ length: 24 }, (_, variant) => characterMaterial(variant));
   const actors: pc.Entity[] = [];
+  let lastActorFacingX = Number.NaN,
+    lastActorFacingY = Number.NaN,
+    lastActorFacingZ = Number.NaN,
+    lastActorFacingW = Number.NaN;
+  const orientActor = (actor: pc.Entity) => {
+    actor.setRotation(camera.getRotation());
+    actor.rotateLocal(90, 0, 0);
+  };
   let lastSimulationRealSecond = -1;
   let lastResidentDetailVisible = settlementDetailVisible;
   const labelNodes = new Map<string, HTMLElement>();
@@ -1312,8 +1335,7 @@ async function start() {
       const visible =
         settlementDetailVisible && view.halfHeight < 240
           ? simulation
-              .focusedResidents(view.x, view.z, view.halfHeight * 1.5)
-              .slice(0, 96)
+              .focusedResidents(view.x, view.z, view.halfHeight * 1.5, 96)
           : [];
       for (let i = 0; i < visible.length; i++) {
         if (!actors[i]) {
@@ -1322,24 +1344,38 @@ async function start() {
             type: "plane",
             castShadows: false,
             receiveShadows: false,
-            material: characterMaterials[visible[i].variant % 3],
+            material: characterMaterials[residentMaterialIndex(visible[i])],
           });
           actor.setLocalScale(elevationToRenderY(0.8), 1, elevationToRenderY(1.8));
           flatRoot.addChild(actor);
           actors.push(actor);
         }
+        const residentMaterial = characterMaterials[residentMaterialIndex(visible[i])];
+        for (const meshInstance of actors[i].render?.meshInstances ?? [])
+          if (meshInstance.material !== residentMaterial) meshInstance.material = residentMaterial;
         actors[i].enabled = true;
+        orientActor(actors[i]);
         actorSources.set(actors[i], { x: visible[i].x, z: visible[i].z });
         positionActor(actors[i], visible[i].x, visible[i].z);
       }
       for (let i = visible.length; i < actors.length; i++)
         actors[i].enabled = false;
+      $("simulation-status").textContent =
+        `${simulation.stats.logicalResidents.toLocaleString()} logical residents · ${visible.length} visible actors · ${actors.length} pooled actors · ${simulation.stats.query.evaluatedResidents.toLocaleString()} spatial candidates evaluated.`;
     }
-    for (const actor of actors)
-      if (actor.enabled) {
-        actor.setRotation(camera.getRotation());
-        actor.rotateLocal(90, 0, 0);
-      }
+    const actorFacing = camera.getRotation();
+    if (
+      Math.abs(actorFacing.x - lastActorFacingX) > 1e-7 ||
+      Math.abs(actorFacing.y - lastActorFacingY) > 1e-7 ||
+      Math.abs(actorFacing.z - lastActorFacingZ) > 1e-7 ||
+      Math.abs(actorFacing.w - lastActorFacingW) > 1e-7
+    ) {
+      lastActorFacingX = actorFacing.x;
+      lastActorFacingY = actorFacing.y;
+      lastActorFacingZ = actorFacing.z;
+      lastActorFacingW = actorFacing.w;
+      for (const actor of actors) if (actor.enabled) orientActor(actor);
+    }
     if (dt > 1 / 30) slowFrameCount++;
     droppedFrameCount += Math.max(0, Math.floor(dt / (1 / 60)) - 1);
     updateHandoff(dt);
@@ -1746,6 +1782,14 @@ async function start() {
           roadPresentation: roadVisibleAtScale(Number(scaleLabelForHalfHeight(view.halfHeight).slice(2))) ? "visible" : "hidden",
           settlementPresentation: settlementDetailVisible ? "buildings" : "icons",
           visibleResidents: actors.filter(actor => actor.enabled).length,
+          residentPresentation: {
+            logicalResidents: simulation.stats.logicalResidents,
+            pooledActors: actors.length,
+            visibleActors: actors.filter(actor => actor.enabled).length,
+            reusableMaterials: characterMaterials.length,
+            activeScheduleRecords: simulation.stats.activeScheduleRecords,
+            evaluatedCandidates: simulation.stats.query.evaluatedResidents,
+          },
           visibleGeometryTriangles: Object.fromEntries(
             ["terrain", "structures", "nature", "detail"].map(name => [name,
               [...tileCache.values()].filter(record => record.entity.enabled).reduce((sum,record) =>

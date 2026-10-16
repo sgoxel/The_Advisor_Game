@@ -34,12 +34,24 @@ export function macroPopulationTests(backend){
    await page.screenshot({path:`test-results/macro-continent-${continent}-${backend}-${profile}.png`});
    expect(result.length).toBeGreaterThan(10);expect(result.length).toBeLessThanOrEqual(profile==='phone'?60:160);
    expect(Math.max(...result)).toBeLessThan(.01);
-   const s=await page.evaluate(()=>window.advisorWorld.state);expect(s.performance.withinBudget).toBeTruthy();expect(s.simulation.materializedResidents).toBeLessThanOrEqual(96);expect(s.visibleResidents).toBe(0);expect(s.error).toBe('');
+   const s=await page.evaluate(()=>window.advisorWorld.state);expect(s.performance.withinBudget).toBeTruthy();expect(s.simulation.activeScheduleRecords).toBe(0);expect(s.visibleResidents).toBeLessThanOrEqual(96);expect(s.visibleResidents).toBe(0);expect(s.error).toBe('');
   }
   await page.locator('#map-scale').selectOption('1000');await page.waitForFunction(()=>window.advisorWorld.state.settled,null,{timeout:240000});
   await expect(page.locator('#settlement-overview')).toBeHidden();
   await page.screenshot({path:`test-results/macro-country-${backend}-${profile}.png`});
   await expandInformation(page);await page.locator('#home').click();await page.waitForFunction(()=>window.advisorWorld.state.settled,null,{timeout:240000});
-  const returned=await page.evaluate(()=>{const w=window.advisorWorld,v=w.geography.villages[0];return Math.hypot(w.state.view.x-v.x,w.state.view.z-v.z);});expect(returned).toBeLessThan(.01);expect(errors).toEqual([]);
+  const returned=await page.evaluate(()=>{const w=window.advisorWorld,v=w.geography.villages[0];return Math.hypot(w.state.view.x-v.x,w.state.view.z-v.z);});expect(returned).toBeLessThan(.01);
+  if(profile==='phone'){
+   await page.locator('#map-scale').selectOption('10');await page.waitForFunction(()=>window.advisorWorld.state.settled,null,{timeout:240000});
+   await page.evaluate(()=>{document.getElementById('travel-panel').hidden=false;});
+   await expect(page.locator('#resident-inspector')).toBeVisible();
+   await expect.poll(()=>page.locator('#resident-select option').count(),{timeout:10000}).toBeGreaterThan(0);
+   await expect(page.locator('#resident-code')).toContainText('/RESIDENT/');
+   await page.locator('#resident-home-inspect').click();
+   await expect(page.locator('#resident-house-details')).toContainText('owner');
+   await page.screenshot({path:`test-results/macro-resident-integration-${backend}-phone.png`});
+   expect(await page.evaluate(()=>window.advisorWorld.state.performance.withinBudget)).toBeTruthy();
+  }
+  expect(errors).toEqual([]);
  });
 }
