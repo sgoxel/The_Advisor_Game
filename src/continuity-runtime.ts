@@ -1,5 +1,5 @@
 import { WORLD_SEED } from "./config.ts";
-import { roads, places, continuityCorridor, type Road } from "./geography.ts";
+import { roads, places, roadJunctions, roadConnections, continuityCorridor, type Road } from "./geography.ts";
 import { finalSurfaceAt, finalSurfaceTelemetry } from "./world.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_RADIUS, lonLatToSource, sourceToLonLat, lonLatToUnit, type LonLat } from "./planet.ts";
 import { CONTINUITY_LIMITS, logicalRegion, regionBoundaries, boundaryPoint, recipeKey, boundaryIntersections, beginQuery, advanceQuery } from "./continuity.ts";
@@ -98,11 +98,13 @@ function continuityTelemetry() {
 return { continuitySurfaceAt, registerContinuityPatch, continuityHeightAt, inspectRegion, terrainQuery, clearContinuityDetail, continuityTelemetry };
 }
 const runtime = createContinuityService(WORLD_SEED, roads, finalSurfaceAt);
-const coarseRegistryBytesEstimated = JSON.stringify({roads,places}).length*2 + places.length*1024 + roads.reduce((sum,road)=>sum+3*(Math.ceil((road.maxX-road.minX)/2048)+2)*(Math.ceil((road.maxZ-road.minZ)/2048)+2)*256,0);
+// Measure the actual sparse index, reserving conservative JS key/array/reference
+// overhead instead of charging the empty rectangle of every long/curved road.
+const coarseRegistryBytesEstimated = JSON.stringify({roads,places,roadJunctions,roadConnections}).length*2 + (places.length+roadJunctions.length)*1024 + finalSurfaceTelemetry().roadIndexBytesEstimated;
 export const { continuitySurfaceAt, registerContinuityPatch, continuityHeightAt, inspectRegion, terrainQuery, clearContinuityDetail } = runtime;
 // Final-surface cache is shared with collision/traversal; reserve conservative object overhead.
 export function continuityTelemetry() {
-  const state = runtime.continuityTelemetry(), sharedSurfaceCacheBytesEstimated = finalSurfaceTelemetry().cacheSize * 1024;
+  const state = runtime.continuityTelemetry(), surface=finalSurfaceTelemetry(), sharedSurfaceCacheBytesEstimated = surface.cacheSize * 1024 + surface.roadProfileBytesEstimated;
   const hydrologyCpuBytesEstimated=hydrologyTelemetry().cpuBytesEstimated;
   return { ...state, corridor: continuityCorridor.evidence, coarseRegistryBytesEstimated, sharedSurfaceCacheBytesEstimated, hydrologyCpuBytesEstimated, cpuBytesEstimated: state.cpuBytesEstimated + sharedSurfaceCacheBytesEstimated + coarseRegistryBytesEstimated + hydrologyCpuBytesEstimated };
 }

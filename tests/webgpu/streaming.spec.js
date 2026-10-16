@@ -13,7 +13,9 @@ async function expectStreamingBudget(page) {
   expect(p.backend).toBe("webgpu");
   expect(p.generationReady).toBeLessThanOrEqual(p.budget.generationReady);
   expect(p.activePatches).toBeLessThanOrEqual(p.budget.activePatches);
-  expect(p.cachedPatches).toBeLessThanOrEqual(p.budget.cachedPatches);
+  expect(p.budget.cacheTrimStartBytes).toBe(256_000_000);
+  expect(p.budget.combinedBytes).toBe(1_000_000_000);
+  expect(p.cpuResourceBytesEstimated + p.gpuResourceBytesEstimated).toBeLessThanOrEqual(p.budget.combinedBytes);
   expect(p.cpuResourceBytesEstimated).toBeLessThanOrEqual(p.budget.cpuBytes);
   expect(p.gpuResourceBytesEstimated).toBeLessThanOrEqual(p.budget.gpuBytes);
   expect(p.maxUploadsPerFrame).toBeLessThanOrEqual(1);
@@ -63,7 +65,9 @@ async function navigateAndSettleWithinBudget(
     expect(p.backend).toBe("webgpu");
     expect(p.generationReady).toBeLessThanOrEqual(p.budget.generationReady);
     expect(p.activePatches).toBeLessThanOrEqual(p.budget.activePatches);
-    expect(p.cachedPatches).toBeLessThanOrEqual(p.budget.cachedPatches);
+    expect(p.budget.cacheTrimStartBytes).toBe(256_000_000);
+    expect(p.budget.combinedBytes).toBe(1_000_000_000);
+    expect(p.cpuResourceBytesEstimated + p.gpuResourceBytesEstimated).toBeLessThanOrEqual(p.budget.combinedBytes);
     expect(p.cpuResourceBytesEstimated).toBeLessThanOrEqual(p.budget.cpuBytes);
     expect(p.gpuResourceBytesEstimated).toBeLessThanOrEqual(p.budget.gpuBytes);
     expect(p.maxUploadsPerFrame).toBeLessThanOrEqual(1);

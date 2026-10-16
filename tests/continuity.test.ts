@@ -1,7 +1,7 @@
 import {rebuildNaturalSurface} from "../src/natural-surface-mesh.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { canonicalCell, sourceToLonLat, lonLatToSource, cubeFaceToUnit, unitToLonLat, type CubeFace } from "../src/planet.ts";
+import { greatCircleDistance, canonicalCell, sourceToLonLat, lonLatToSource, cubeFaceToUnit, unitToLonLat, type CubeFace } from "../src/planet.ts";
 import { logicalRegion, regionBoundaries, boundaryPoint, addressedSample, beginQuery, advanceQuery, recipeKey, CONTINUITY_LIMITS } from "../src/continuity.ts";
 import { createContinuityService } from "../src/continuity-runtime.ts";
 import { roads, villages, continuityCorridor, roadDistanceAt } from "../src/geography.ts";
@@ -22,20 +22,20 @@ test("coarse coverage retains no fine work and the local lake-detour ground foll
     coarse={terrain:empty,structures:empty,nature:empty,detail:empty};
   assert.equal(refineTileSurfacePresentation(root,coarse),coarse);
   assert.equal(coarse.structures.positions.length,0);
-  const corridor=roads.find(road=>road.centerline)!;
+  const corridor=continuityCorridor.road!;
   assert.ok(corridor);
   const station=corridor.centerline![16],tile=tileForPosition(station.x,station.z,14),base=buildTile(tile),natural=rebuildNaturalSurface(tile,base.terrain);
   base.terrain=natural.geometry;
   const result=refineTileSurfacePresentation(tile,base,natural.replaced),originX=tile.minX+tile.size/2,originZ=tile.minZ+tile.size/2;
   let rendered=0;
   for(let vertex=0;vertex<result.terrain.positions.length/3;vertex++) {
-    if(result.terrain.normals[vertex*3+1]<=0||![112,92,62].every((value,i)=>result.terrain.colors[vertex*4+i]===value))continue;
+    if(result.terrain.normals[vertex*3+1]<=0||result.terrain.colors[vertex*4+3]!==255)continue;
     const p=vertex*3,x=originX+result.terrain.positions[p],z=originZ+result.terrain.positions[p+2];
     const surface=finalSurfaceAt(x,z);
     if(surface.groundMaterial!=="Road"||surface.reservedUse!==corridor.code||roadDistanceAt(x,z,corridor)>=5)continue;
     assert.equal(surface.water.kind,"none");assert.ok(surface.walkable);
     assert.ok(Math.abs(result.terrain.positions[p+1]-surface.groundHeight)<.026,"rendered detour must follow its actual prepared height");
-    assert.deepEqual(Array.from(result.terrain.colors.slice(vertex*4,vertex*4+3)),[112,92,62],"detour must be visible on the common ground");
+    assert.equal(result.terrain.colors[vertex*4+3],255,"the composed detour must carry visible road coverage at close scale");
     rendered++;
   }
   assert.ok(rendered>0,"actual polyline detour must receive visible local prepared ground");
@@ -123,7 +123,7 @@ test("deterministic continuation quotas and cancellation cannot select a differe
   assert.equal(a.continuityTelemetry().pendingQueries,0);
 });
 test("unrelated metadata grows only coarse scan cost, never local fine generation", () => {
-  const far={...roads[0], code:"unrelated",fromX:0,toX:1,fromZ:0,toZ:0,minX:0,maxX:1,minZ:0,maxZ:0}, a=service(), b=createContinuityService("fixture",[...roads,...Array.from({length:2000},(_,i)=>({...far,code:`unrelated-${i}`}))],finalSurfaceAt);
+  const far={...roads[0],centerline:undefined, code:"unrelated",fromX:0,toX:1,fromZ:0,toZ:0,minX:0,maxX:1,minZ:0,maxZ:0}, a=service(), b=createContinuityService("fixture",[...roads,...Array.from({length:2000},(_,i)=>({...far,code:`unrelated-${i}`}))],finalSurfaceAt);
   assert.deepEqual(a.inspectRegion(focus),b.inspectRegion(focus));
   assert.equal(a.continuityTelemetry().portSamples,b.continuityTelemetry().portSamples);
   assert.ok(b.continuityTelemetry().coarseRoadChecks>a.continuityTelemetry().coarseRoadChecks);
@@ -152,7 +152,7 @@ test("cache churn stays inside fixed region/edge/port limits",()=>{
 });
 test("corner crossings have one immutable record across incident cube faces",()=>{
   const vertex=unitToLonLat(cubeFaceToUnit(0,-1,1)),a=lonLatToSource(vertex.lon-.001,vertex.lat-.001),b=lonLatToSource(vertex.lon+.001,vertex.lat+.001),
-    road={...roads[0],code:"corner/ROAD",fromX:a.x,fromZ:a.z,toX:b.x,toZ:b.z,minX:Math.min(a.x,b.x),maxX:Math.max(a.x,b.x),minZ:Math.min(a.z,b.z),maxZ:Math.max(a.z,b.z)},
+    road={...roads[0],centerline:undefined,code:"corner/ROAD",fromX:a.x,fromZ:a.z,toX:b.x,toZ:b.z,minX:Math.min(a.x,b.x),maxX:Math.max(a.x,b.x),minZ:Math.min(a.z,b.z),maxZ:Math.max(a.z,b.z)},
     sample=()=>composeFinalSurface({groundHeight:1,material:"Road",water:{kind:"none",level:-Infinity,flowX:0,flowZ:0},walkable:true,vegetationDensityScale:0,reservedUse:null},[]),
     s=createContinuityService("corner",[road],sample), records=[];
   for(const dx of [-1e-5,1e-5])for(const dy of [-1e-5,1e-5]){
@@ -180,7 +180,10 @@ test("the runtime corridor rejects a lake midpoint and joins actual destinations
       assert.equal(surface.walkable,true);assert.equal(surface.water.kind,"none");checked++;
     }
   }
-  assert.ok(checked>8000);
+  // Relocated destinations change the detour length. Certify the real detour
+  // and every two-source-unit station above, rather than an old station total.
+  assert.ok(road.surfaceLengthM>greatCircleDistance(road.fromPosition,road.toPosition));
+  assert.ok(checked>road.centerline!.length);
   assert.ok(villages.some(v=>v.id===road.from)&&villages.some(v=>v.id===road.to));
   const range=clippedStationRange(0,0,100000,0,50000,-16,32,50000);
   assert.ok(range[1]-range[0]<=23,"small visible request must not scan all 50,000 stations");

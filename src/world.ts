@@ -8,6 +8,7 @@ import {
   sourceToLonLat,
   wrapSourceX,
 } from "./planet.ts";
+import { canonicalRoadBucketCells, canonicalRoadBucketX } from "./road-spatial-index.ts";
 import { streamingBudgetForViewport } from "./streaming.ts";
 import { nearestPlace, places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
 import { macroSampleAt } from "./macro-geography.ts";
@@ -223,7 +224,7 @@ export function settlement(
 
 /** Explicit crossings use existing priority-4 water, never water invented for roads. */
 export const RURAL_BRIDGE_MAX_LENGTH_M = 120;
-let evidenceAnchors: {bridge:{x:number;z:number};road:{x:number;z:number};terrace:{x:number;z:number};vegetationBoundary:{x:number;z:number};roadCode:string;villageCode:string;bridgeSpanM:number}|undefined;
+let evidenceAnchors: {bridge:{x:number;z:number};bridgeTangent:{x:number;z:number};road:{x:number;z:number};terrace:{x:number;z:number};vegetationBoundary:{x:number;z:number};roadCode:string;villageCode:string;bridgeSpanM:number}|undefined;
 export function finalSurfaceEvidenceAnchors() {
   if(evidenceAnchors)return evidenceAnchors;
   const village=places.find(p=>p.kind==='village')!;
@@ -239,7 +240,7 @@ export function finalSurfaceEvidenceAnchors() {
         const bridge={x:wrapSourceX(a.x+rx*t),z:a.z+rz*t},surface=finalSurfaceAt(bridge.x,bridge.z),crossing=freshwaterCrossingAt(bridge.x,bridge.z,rx,rz);
         if(surface.water.kind!=='river'||surface.deckHeight===null||!crossing||crossing.spanM>RURAL_BRIDGE_MAX_LENGTH_M)continue;
         const length=Math.hypot(rx,rz)||1;
-        evidenceAnchors={bridge,road:{x:bridge.x+rx/length*40,z:bridge.z+rz/length*40},terrace:{x:village.x,z:village.z},vegetationBoundary:{x:village.x+102,z:village.z},roadCode:road.code,villageCode:village.code,bridgeSpanM:crossing.spanM};
+        evidenceAnchors={bridge,bridgeTangent:{x:rx/length,z:rz/length},road:{x:bridge.x+rx/length*40,z:bridge.z+rz/length*40},terrace:{x:village.x,z:village.z},vegetationBoundary:{x:village.x+102,z:village.z},roadCode:road.code,villageCode:village.code,bridgeSpanM:crossing.spanM};
         return evidenceAnchors;
       }
     }
@@ -254,22 +255,17 @@ function naturalSurfaceBaseAt(x:number,z:number):SurfaceBase {
 const ROAD_SUPPORT_RADIUS = 12;
 const ROAD_BUCKET_SIZE = 2048;
 const surfaceRoadBuckets = new Map<string, Road[]>();
-const roadBucketKey = (bx: number, bz: number) => `${bx}/${bz}`;
+const roadBucketKey = (bx: number, bz: number) => `${canonicalRoadBucketX(bx,ROAD_BUCKET_SIZE,WORLD_SIZE)}/${bz}`;
+let surfaceRoadReferences=0;
 for (const road of roads) {
-  for (const shiftX of [-WORLD_SIZE, 0, WORLD_SIZE]) {
-    const minBX = Math.floor((road.minX + shiftX - ROAD_SUPPORT_RADIUS) / ROAD_BUCKET_SIZE),
-      maxBX = Math.floor((road.maxX + shiftX + ROAD_SUPPORT_RADIUS) / ROAD_BUCKET_SIZE),
-      minBZ = Math.floor((road.minZ - ROAD_SUPPORT_RADIUS) / ROAD_BUCKET_SIZE),
-      maxBZ = Math.floor((road.maxZ + ROAD_SUPPORT_RADIUS) / ROAD_BUCKET_SIZE);
-    for (let bz = minBZ; bz <= maxBZ; bz++)
-      for (let bx = minBX; bx <= maxBX; bx++) {
-        const key = roadBucketKey(bx, bz),
-          bucket = surfaceRoadBuckets.get(key) || [];
-        bucket.push(road);
-        surfaceRoadBuckets.set(key, bucket);
-      }
-  }
+    for(const [bx,bz] of canonicalRoadBucketCells(road,ROAD_BUCKET_SIZE,ROAD_SUPPORT_RADIUS,WORLD_SIZE)){
+      const key=roadBucketKey(bx,bz),bucket=surfaceRoadBuckets.get(key)||[];
+      bucket.push(road);surfaceRoadReferences++;
+      surfaceRoadBuckets.set(key,bucket);
+    }
 }
+// Conservative allowance for each map key/bucket and each array reference.
+const surfaceRoadIndexBytesEstimated=(surfaceRoadBuckets.size+surfaceRoadReferences)*256;
 for (const bucket of surfaceRoadBuckets.values())
   bucket.sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
 
@@ -316,34 +312,24 @@ function settlementTerraceHeight(place: Place) {
 
 function roadTangentAt(x:number,z:number,road:Road) {
   const path=road.centerline || [{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}];
-  let best=Infinity,result={x:wrapSourceX(road.toX-road.fromX),z:road.toZ-road.fromZ,cx:x,cz:z};
+  let best=Infinity,result={x:wrapSourceX(road.toX-road.fromX),z:road.toZ-road.fromZ,cx:x,cz:z,segment:0,t:0};
   for(let i=1;i<path.length;i++){
     const a=path[i-1],b=path[i],dx=wrapSourceX(b.x-a.x),dz=b.z-a.z,qx=wrapSourceX(x-a.x),qz=z-a.z,t=Math.max(0,Math.min(1,(qx*dx+qz*dz)/(dx*dx+dz*dz||1))),distance=Math.hypot(qx-dx*t,qz-dz*t);
-    if(distance<best){best=distance;result={x:dx,z:dz,cx:wrapSourceX(a.x+dx*t),cz:a.z+dz*t};}
+    if(distance<best){best=distance;result={x:dx,z:dz,cx:wrapSourceX(a.x+dx*t),cz:a.z+dz*t,segment:i-1,t};}
   }
   return result;
 }
 const roadProfileHeights = new Map<string, readonly [number, number]>();
 function roadProfileHeightAt(x: number, z: number, road: Road) {
-  let profile = roadProfileHeights.get(road.code);
-  if (!profile) {
-    profile = [
-      naturalSurfaceBaseAt(road.fromX, road.fromZ).groundHeight,
-      naturalSurfaceBaseAt(road.toX, road.toZ).groundHeight,
-    ];
-    roadProfileHeights.set(road.code, profile);
+  const nearest=roadTangentAt(x,z,road),path=road.centerline||[{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}],
+    a=path[nearest.segment],b=path[nearest.segment+1],key=`${road.code}/PROFILE/${nearest.segment}`;
+  let profile=roadProfileHeights.get(key);
+  if(!profile){
+    profile=[naturalSurfaceBaseAt(a.x,a.z).groundHeight,naturalSurfaceBaseAt(b.x,b.z).groundHeight];
+    roadProfileHeights.set(key,profile);
+    if(roadProfileHeights.size>2048)roadProfileHeights.delete(roadProfileHeights.keys().next().value!);
   }
-  const px = road.fromX + wrapSourceX(x - road.fromX),
-    vx = road.toX - road.fromX,
-    vz = road.toZ - road.fromZ,
-    lengthSq = vx * vx + vz * vz,
-    t = lengthSq === 0
-      ? 0
-      : Math.max(
-          0,
-          Math.min(1, ((px - road.fromX) * vx + (z - road.fromZ) * vz) / lengthSq),
-        );
-  return lerp(profile[0], profile[1], t);
+  return lerp(profile[0],profile[1],nearest.t);
 }
 
 const boundedEarthwork = (
@@ -524,6 +510,12 @@ export function finalSurfaceTelemetry() {
     cacheMisses: finalSurfaceCacheMisses,
     cacheSize: finalSurfaceCache.size,
     cacheLimit: FINAL_SURFACE_CACHE_LIMIT,
+    roadProfileBytesEstimated: roadProfileHeights.size*1024,
+    roadProfileCacheSize: roadProfileHeights.size,
+    roadProfileCacheLimit: 2048,
+    roadIndexBuckets: surfaceRoadBuckets.size,
+    roadIndexReferences: surfaceRoadReferences,
+    roadIndexBytesEstimated: surfaceRoadIndexBytesEstimated,
     modifierCandidatesExamined: finalSurfaceModifierCandidates,
     worstModifierCandidates: finalSurfaceWorstCandidates,
   };

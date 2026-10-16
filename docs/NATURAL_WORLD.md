@@ -163,12 +163,13 @@ Every implementation first establishes its visible surface against these records
 
 ## 9. Lazy generation and device budgets
 
-The root planet limits remain ceilings. Additional limits below are starting acceptance settings derived for this game's scope; WP-S002-005-001 measures/tightens them on real devices without altering world authority. One coarse global registry and bounded basin/climate tables are permissible; fine samples/houses/residents/roads materialize by interest. For example six 256² cube-face coarse cells give 393,216 cells: 12 float32 scalar channels occupy 18 MiB before indices, within a reserved total ≤32 MiB. A 2 m whole-planet array is forbidden. Count structured-record overhead and both replacement/retained resource sets.
+The owner's 2026-10-15 memory policy supersedes the historical agent-authored 96/160/256 MiB per-pool and fixed cached-patch assumptions. Reusable terrain stays cached through 256,000,000 combined estimated CPU+GPU bytes; above that threshold unused entries may be trimmed, with one combined 1,000,000,000-byte ceiling for every viewport profile. These are app-owned estimates, not Chrome/Android RAM guarantees. Other limits below are starting acceptance settings derived for this game's scope; WP-S002-005-001 measures/tightens them on real devices without altering world authority. One coarse global registry and bounded basin/climate tables are permissible; fine samples/houses/residents/roads materialize by interest. For example six 256² cube-face coarse cells give 393,216 cells: 12 float32 scalar channels occupy 18 MiB before indices, within a reserved total ≤32 MiB. A 2 m whole-planet array is forbidden. Count structured-record overhead and both replacement/retained resource sets.
 
 | Total app-owned working metric | Phone | Tablet | Desktop |
 | --- | ---: | ---: | ---: |
-| Generation+ready jobs / active patches / prepared cached patches | 4 / 160 / 180 | 6 / 220 / 240 | 8 / 260 / 320 |
-| CPU geometry/recipe bytes / GPU geometry+texture bytes | 96 / 96 MiB | 160 / 160 MiB | 256 / 256 MiB |
+| Generation+ready jobs / active presentation patches | 4 / 89 | 6 / 119 | 8 / 159 |
+| Reusable terrain-cache trim threshold (combined CPU+GPU estimate) | 256 MB | 256 MB | 256 MB |
+| Combined app-owned CPU+GPU estimated ceiling | 1 GB | 1 GB | 1 GB |
 | Total draw calls including shadow/overlay passes | 160 | 220 | 300 |
 | Visible triangles / active entities | 200,000 / 400 | 350,000 / 600 | 600,000 / 900 |
 | Visible nature instances / resident billboards | 4,000 / 48 | 8,000 / 80 | 12,000 / 128 |

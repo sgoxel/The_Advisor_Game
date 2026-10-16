@@ -194,6 +194,7 @@ export function terrainTint(
   scale = 32,
   elevationM?: number,
   featureFootprintSource = 0,
+  showRoads = true,
 ): [number, number, number] {
   const position = sourceToLonLat(x, z),
     macro = macroSampleAt(position),
@@ -205,7 +206,7 @@ export function terrainTint(
   // parallel river/road/settlement hit test in presentation code.
   if (surface.water.kind === "river" && !featureFootprintSource) return color(76, 128, 148);
 
-  if (surface.water.kind === "none" && surface.groundMaterial === "Road")
+  if (showRoads && surface.water.kind === "none" && surface.groundMaterial === "Road")
     return color(112, 92, 62);
 
   // Identical coordinate inputs give identical albedo at every mesh LOD.
@@ -603,6 +604,14 @@ export function buildTile(t: Tile): TileGeometry {
   for (let i = 0, v = 0; i < terrain.p.length; i += 3, v += 2) {
     uvs[v] = terrain.p[i] / SOURCE_PRESENTATION_WIDTH + 0.5;
     uvs[v + 1] = Math.max(0, Math.min(1, 0.5 + terrain.p[i + 2] * 2 / SOURCE_PRESENTATION_WIDTH));
+  }
+  // Terrain alpha is a presentation-only road coverage mask. RGB retains
+  // natural soil so zoom can hide roads without new meshes or authority changes.
+  for(let v=0;v<terrain.p.length/3;v++){
+    const c=v*4,x=terrain.p[v*3],z=terrain.p[v*3+2];
+    const road=terrain.c[c]===112&&terrain.c[c+1]===92&&terrain.c[c+2]===62&&finalSurfaceAt(x,z).groundMaterial==="Road";
+    if(road){const tint=terrainTint(x,z,32,undefined,0,false);terrain.c[c]=tint[0];terrain.c[c+1]=tint[1];terrain.c[c+2]=tint[2];}
+    terrain.c[c+3]=road?255:0;
   }
   for (const builder of [terrain, structures, nature, detail])
     builder.relativeTo(originX, originZ);

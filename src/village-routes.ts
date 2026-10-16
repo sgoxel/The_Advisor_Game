@@ -9,7 +9,7 @@
  * candidate that is illegal in final runtime truth falls back to an A* search
  * whose sampler is final surface itself.
  */
-import { roads, villages, type Place } from "./geography.ts";
+import { roads, roadConnections, villages, type Place } from "./geography.ts";
 import {
   enuToPosition,
   CANONICAL_METRES_PER_SOURCE_UNIT,
@@ -50,6 +50,7 @@ export const roadSegments: readonly RoadSegment[] = roads.flatMap((road) => road
   ? road.centerline.slice(0,-1).map((point,index)=>({code:`${road.code}/SEG/${index}`,from:sourceToLonLat(point.x,point.z),to:sourceToLonLat(road.centerline![index+1].x,road.centerline![index+1].z)}))
   : [{code:road.code,from:road.fromPosition,to:road.toPosition}]);
 
+const physicalRoadById=new Map(roads.map(r=>[r.networkId,r]));
 const villageById = new Map(villages.map((village) => [village.id, village]));
 const routeCache = new Map<string, VillageRoute>();
 let cacheHits = 0,
@@ -157,15 +158,15 @@ function refineAgainstFinalTraversal(route: RouteResult): RouteResult | undefine
 }
 
 function directSeededRoad(from: Place, to: Place): RouteResult | undefined {
-  const road = roads.find(
-    (candidate) =>
-      (candidate.from === from.id && candidate.to === to.id) ||
-      (candidate.from === to.id && candidate.to === from.id),
-  );
-  if (!road) return undefined;
+  const connection=roadConnections.find(c=>(c.from===from.id&&c.to===to.id)||(c.from===to.id&&c.to===from.id));
+  const direct=roads.find(r=>r.networkKind==="detour"&&((r.from===from.id&&r.to===to.id)||(r.from===to.id&&r.to===from.id)));
+  if(!connection&&!direct)return undefined;
+  const legs=connection?connection.legs.map(leg=>({road:physicalRoadById.get(leg.edgeId)!,reverse:leg.reverse})):[{road:direct!,reverse:false}];
+  const canonical=legs.flatMap((leg,index)=>{const points=leg.road.centerline!.map(p=>({lon:p.position.lon,lat:p.position.lat}));if(leg.reverse)points.reverse();return index?points.slice(1):points;});
+  const forward=connection?connection.from===from.id:direct!.from===from.id;
+  if(!forward)canonical.reverse();
   const geodesicM = greatCircleDistance(from.canonicalPosition, to.canonicalPosition);
-  const forward=road.centerline ? road.centerline.map(p=>({lon:p.position.lon,lat:p.position.lat})) : Array.from({length:Math.max(2,Math.ceil(road.presentationLengthSourceUnits*CANONICAL_METRES_PER_SOURCE_UNIT/300)+1)},(_,i)=>{const count=Math.max(2,Math.ceil(road.presentationLengthSourceUnits*CANONICAL_METRES_PER_SOURCE_UNIT/300)+1),t=i/(count-1);return sourceToLonLat(road.fromX+(road.toX-road.fromX)*t,road.fromZ+(road.toZ-road.fromZ)*t);});
-  const points = road.from === from.id ? forward : forward.reverse();
+  const points=canonical;
   // Preserve exact canonical registry endpoints, avoiding round-trip longitude
   // rounding when the interior stations are derived in source coordinates.
   points[0] = { lon: from.canonicalPosition.lon, lat: from.canonicalPosition.lat };

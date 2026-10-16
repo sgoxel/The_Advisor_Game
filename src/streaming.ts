@@ -4,18 +4,20 @@ export type StreamingBudget = {
   deviceClass: StreamingDeviceClass;
   generationReady: number;
   activePatches: number;
-  cachedPatches: number;
+  cacheTrimStartBytes: number;
+  combinedBytes: number;
   cpuBytes: number;
   gpuBytes: number;
 };
 
-const MIB = 1024 * 1024;
+/** Owner policy, 2026-10-15: decimal MB/GB, combined CPU+GPU estimates.
+ * A55/Chrome reference; these are application policies, not browser RAM quotas. */
+export const STREAMING_MEMORY_POLICY=Object.freeze({cacheTrimStartBytes:256_000_000,combinedBytes:1_000_000_000});
 
 /**
- * Binding Stage S002 maximums from docs/PLANET_ARCHITECTURE.md, with a stricter
- * active-working-set policy. Two disjoint active sets plus the coarse root must
- * fit inside the cache so a wrap/pole jump can prepare its destination without
- * exceeding the cache envelope or deadlocking behind the previous coverage.
+ * Queue and active-render bounds vary with viewport; cache retention is byte-based.
+ * Old and incoming coverage stay protected while unused cache entries are trimmed
+ * only after the owner's 256 MB threshold. SEED/content never depends on this policy.
  */
 export const STREAMING_BUDGETS: Readonly<
   Record<StreamingDeviceClass, StreamingBudget>
@@ -24,25 +26,25 @@ export const STREAMING_BUDGETS: Readonly<
     deviceClass: "phone",
     generationReady: 4,
     activePatches: 89,
-    cachedPatches: 180,
-    cpuBytes: 96 * MIB,
-    gpuBytes: 96 * MIB,
+    ...STREAMING_MEMORY_POLICY,
+    cpuBytes: STREAMING_MEMORY_POLICY.combinedBytes,
+    gpuBytes: STREAMING_MEMORY_POLICY.combinedBytes,
   }),
   tablet: Object.freeze({
     deviceClass: "tablet",
     generationReady: 6,
     activePatches: 119,
-    cachedPatches: 240,
-    cpuBytes: 160 * MIB,
-    gpuBytes: 160 * MIB,
+    ...STREAMING_MEMORY_POLICY,
+    cpuBytes: STREAMING_MEMORY_POLICY.combinedBytes,
+    gpuBytes: STREAMING_MEMORY_POLICY.combinedBytes,
   }),
   desktop: Object.freeze({
     deviceClass: "desktop",
     generationReady: 8,
     activePatches: 159,
-    cachedPatches: 320,
-    cpuBytes: 256 * MIB,
-    gpuBytes: 256 * MIB,
+    ...STREAMING_MEMORY_POLICY,
+    cpuBytes: STREAMING_MEMORY_POLICY.combinedBytes,
+    gpuBytes: STREAMING_MEMORY_POLICY.combinedBytes,
   }),
 });
 
@@ -108,8 +110,13 @@ export function withinStreamingBudget(
   return (
     state.generationReady <= budget.generationReady &&
     state.activePatches <= budget.activePatches &&
-    state.cachedPatches <= budget.cachedPatches &&
     state.cpuBytes <= budget.cpuBytes &&
-    state.gpuBytes <= budget.gpuBytes
+    state.gpuBytes <= budget.gpuBytes &&
+    state.cpuBytes + state.gpuBytes <= budget.combinedBytes
   );
 }
+
+/** Reusable terrain remains cached below the soft threshold, irrespective of
+ * patch count. A single optional reservation represents upcoming transient work. */
+export function shouldTrimStreamingCache(cpuBytes:number,gpuBytes:number,budget:StreamingBudget){return cpuBytes+gpuBytes>budget.cacheTrimStartBytes;}
+export function streamingMemoryReservationFits(cpuBytes:number,gpuBytes:number,reservationBytes:number,budget:StreamingBudget){return cpuBytes+gpuBytes+reservationBytes<=budget.combinedBytes;}

@@ -110,6 +110,7 @@ function seededDifficultRoute() {
 
 function seededPreparedRoadRoute() {
   for (const road of roads) {
+    if(!villages.some(v=>v.id===road.from)||!villages.some(v=>v.id===road.to))continue;
     const route = routeBetweenVillages(road.from, road.to),
       preparedM = route.surfaceM.road + route.surfaceM.bridge;
     if (

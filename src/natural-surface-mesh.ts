@@ -91,7 +91,7 @@ export function rebuildNaturalSurface(
         x,
         z,
         y: wet === "none" ? surface.groundHeight : surface.water.level + 0.0025,
-        tint: terrainTint(x, z),
+        tint: terrainTint(x, z,32,undefined,0,false),
         material: surface.groundMaterial,
         wet,
         shoreDistance: macro.coastDistanceRad * SOURCE_PRESENTATION_RADIUS,
@@ -124,7 +124,7 @@ export function rebuildNaturalSurface(
     vertexIndices.set(key, index);
     positions.push(p.x - originX, p.y, p.z - originZ);
     normals.push(0, 0, 0);
-    colors.push(...p.tint, 255);
+    colors.push(...p.tint, p.material === "Road" && p.wet === "none" ? 255 : 0);
     uvs.push(
       p.x / SOURCE_PRESENTATION_WIDTH + 0.5,
       Math.max(0, Math.min(1, 0.5 + (2 * p.z) / SOURCE_PRESENTATION_WIDTH)),

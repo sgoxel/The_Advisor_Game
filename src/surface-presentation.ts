@@ -4,6 +4,8 @@ import { LON_SEGMENTS, LAT_SEGMENTS } from "./globe-view.ts";
 
 /** Presentation only; never used to choose canonical terrain or feature identity. */
 export const LOD_BLEND_SECONDS = 0.24;
+export const roadVisibleAtScale = (denominator:number) => denominator <= 100;
+export const roadRepresentationAtScale = (denominator:number):'ground'|'cartographic'|'hidden' => denominator<50?'ground':denominator<=100?'cartographic':'hidden';
 export const SURFACE_PRESENTATION = Object.freeze({
   vertexColorGamma: true,
   exposure: 1,
@@ -51,6 +53,7 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
   material.useTonemap = false;
   material.cull = pc.CULLFACE_NONE;
   material.setParameter("surfaceDetailWeight", 1);
+  material.setParameter("surfaceRoadVisibility", 1);
   material.setParameter("surfaceProjectionWeight", 0);
   material.setParameter("surfaceOrigin", [0, 0]);
   material.setParameter("surfaceOffset", [0, 0, 0]);
@@ -134,8 +137,9 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
   `);
   material.getShaderChunks(pc.SHADERLANGUAGE_GLSL).set("emissivePS", `
     uniform float surfaceDetailWeight;
+    uniform float surfaceRoadVisibility;
     void getEmission() {
-      dEmission = vVertexColor.rgb;
+      dEmission = mix(vVertexColor.rgb, pow(vec3(112.0,92.0,62.0)/255.0,vec3(2.2)), vVertexColor.a * surfaceRoadVisibility);
       #ifdef STD_EMISSIVE_TEXTURE
         vec3 coarse = {STD_EMISSIVE_TEXTURE_DECODE}(texture2DBias({STD_EMISSIVE_TEXTURE_NAME}, {STD_EMISSIVE_TEXTURE_UV}, {STD_TEXTURE_BIAS})).{STD_EMISSIVE_TEXTURE_CHANNEL};
         dEmission = mix(coarse, dEmission, surfaceDetailWeight);
@@ -144,8 +148,9 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
   `);
   material.getShaderChunks(pc.SHADERLANGUAGE_WGSL).set("emissivePS", `
     uniform surfaceDetailWeight: f32;
+    uniform surfaceRoadVisibility: f32;
     fn getEmission() {
-      dEmission = vVertexColor.rgb;
+      dEmission = mix(vVertexColor.rgb, pow(vec3f(112.0,92.0,62.0)/255.0,vec3f(2.2)), vVertexColor.a * uniform.surfaceRoadVisibility);
       #ifdef STD_EMISSIVE_TEXTURE
         let coarse = {STD_EMISSIVE_TEXTURE_DECODE}(textureSampleBias({STD_EMISSIVE_TEXTURE_NAME}, {STD_EMISSIVE_TEXTURE_NAME}Sampler, {STD_EMISSIVE_TEXTURE_UV}, {STD_TEXTURE_BIAS})).{STD_EMISSIVE_TEXTURE_CHANNEL};
         dEmission = mix(coarse, dEmission, uniform.surfaceDetailWeight);

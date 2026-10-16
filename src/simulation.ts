@@ -29,6 +29,8 @@ export type CountryState = {
   tier: "live" | "interested" | "coarse";
 };
 const populationOf = (place: Place) => (place.kind === "city" ? 2400 : 80);
+export const RESIDENT_PRESENTATION_LIMIT=96;
+const countryPopulation=new Map(countries.map(country=>[country.code,places.filter(p=>p.continent===country.continent&&p.country===country.id).reduce((sum,p)=>sum+populationOf(p),0)]));
 
 /**
  * Cached tangent coefficients are presentation-independent acceleration data.
@@ -70,7 +72,7 @@ export function summaryAt(code: string, tick: number): CountryState {
   // Analytical catch-up is independent of update cadence and render interest.
   return {
     code,
-    population: 7920,
+    population: countryPopulation.get(code) ?? 0,
     grain: baseline + Math.floor(tick / 60) * 12,
     lastTick: tick,
     tier: "coarse",
@@ -136,10 +138,12 @@ export function residentAt(
 export class LazySimulation {
   tick = 0;
   activeCountry = "";
+  private activePlace: Place | undefined;
   interested = new Set<string>();
   summaries = new Map<string, CountryState>();
   residents = new Map<string, Resident[]>();
   setFocus(place: Place | undefined) {
+    if (place) this.activePlace = place;
     if (place)
       this.activeCountry = countries.find(
         (c) => c.continent === place.continent && c.id === place.country,
@@ -169,33 +173,14 @@ export class LazySimulation {
         state.tier = tier;
         this.summaries.set(country.code, state);
       }
-      if (live && !this.residents.has(country.code)) {
-        this.residents.set(
-          country.code,
-          places
-            .filter(
-              (p) =>
-                p.continent === country.continent && p.country === country.id,
-            )
-            .flatMap((p) =>
-              Array.from({ length: populationOf(p) }, (_, i) =>
-                residentAt(p, i, tick),
-              ),
-            ),
-        );
-      } else if (live) {
-        const pool = this.residents.get(country.code)!;
-        const homes = new Map(
-          places
-            .filter(
-              (p) =>
-                p.continent === country.continent && p.country === country.id,
-            )
-            .map((p) => [p.id, p]),
-        );
-        for (let i = 0; i < pool.length; i++)
-          pool[i] = residentAt(homes.get(pool[i].home)!, pool[i].index, tick);
-      }
+    }
+    // The complete population remains SEED-addressable through residentAt().
+    // Only the focused settlement's bounded presentation records are resident;
+    // country size never expands thousands of off-screen analytical schedules.
+    if(this.activePlace){
+      const place=this.activePlace,count=Math.min(RESIDENT_PRESENTATION_LIMIT,populationOf(place)),pool=this.residents.get(this.activeCountry)||[];
+      for(let i=0;i<count;i++)pool[i]=residentAt(place,i,tick);
+      pool.length=count;this.residents.set(this.activeCountry,pool);
     }
     // Country detail is reconstructible: inactive pools don't remain allocated.
     for (const code of this.residents.keys())
@@ -212,7 +197,9 @@ export class LazySimulation {
       tick: this.tick,
       countries: this.summaries.size,
       liveCountries: this.residents.size,
-      residents: [...this.residents.values()].reduce((n, r) => n + r.length, 0),
+      residents: countryPopulation.get(this.activeCountry) ?? 0,
+      materializedResidents: [...this.residents.values()].reduce((n,r)=>n+r.length,0),
+      presentationLimit: RESIDENT_PRESENTATION_LIMIT,
       coarseCountries: [...this.summaries.values()].filter(
         (s) => s.tier === "coarse",
       ).length,

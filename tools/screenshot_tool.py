@@ -68,8 +68,26 @@ POINT_INSPECTION = (
 
 # Named step presets. Add a line here to give a new scene a name.
 SCENARIOS: dict[str, str] = {
+    "macro-roads": (
+        "eval:window.j=window.advisorWorld.geography.roadJunctions[0];"
+        "eval:window.advisorWorld.navigation.setFocus(window.j.canonicalPosition.lon,window.j.canonicalPosition.lat);"
+        "select:#map-scale=50;settle;shot:shared-y;select:#map-scale=100;settle;shot:y-100;select:#map-scale=250;settle;shot:y-hidden;"
+        "eval:window.r=window.advisorWorld.geography.roads.filter(r=>r.networkKind!=='detour'&&r.centerline.length>4).sort((a,b)=>b.centerline.length-a.centerline.length)[0];"
+        "eval:window.p=window.r.centerline[Math.floor(window.r.centerline.length/2)].position;"
+        "eval:window.advisorWorld.navigation.setFocus(window.p.lon,window.p.lat);select:#map-scale=100;settle;shot:terrain-bend"
+    ),
+    "macro-population": (
+        "eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.geography.continents[0].canonicalPosition.lon,window.advisorWorld.geography.continents[0].canonicalPosition.lat);"
+        "click:#overview;settle;shot:eldermere;"
+        "eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.geography.continents[1].canonicalPosition.lon,window.advisorWorld.geography.continents[1].canonicalPosition.lat);settle;shot:westreach;"
+        "eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.geography.continents[2].canonicalPosition.lon,window.advisorWorld.geography.continents[2].canonicalPosition.lat);settle;shot:dawnlands;"
+        "eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.geography.countries[0].canonicalPosition.lon,window.advisorWorld.geography.countries[0].canonicalPosition.lat);"
+        "select:#map-scale=1000;settle;shot:country-interior;"
+        "eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.geography.villages[0].canonicalPosition.lon,window.advisorWorld.geography.villages[0].canonicalPosition.lat);"
+        "select:#map-scale=50;settle;shot:village-symbol;select:#map-scale=100;settle;shot:road-100;select:#map-scale=250;settle;shot:road-250;select:#map-scale=10;settle;shot:village-close"
+    ),
     "settlement-icons": (
-        "eval:window.advisorWorld.navigation.setFocus(-67.30178*Math.PI/180,-31.77696*Math.PI/180);"
+        "eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.geography.villages[0].canonicalPosition.lon,window.advisorWorld.geography.villages[0].canonicalPosition.lat);"
         "select:#map-scale=20;settle;shot:close;"
         "select:#map-scale=50;settle;shot:village-icon;"
         "select:#map-scale=100;settle;shot:farther;"
@@ -80,7 +98,7 @@ SCENARIOS: dict[str, str] = {
     # Owner regression: inspect the ordinary starting village during movement,
     # including intermediate frames rather than only settled hydrology fixtures.
     "alderwick-pan-zoom": (
-        "eval:window.advisorWorld.navigation.setFocus(-67.30178*Math.PI/180,-31.77696*Math.PI/180);"
+        "eval:window.advisorWorld.navigation.setFocus(window.advisorWorld.geography.villages[0].canonicalPosition.lon,window.advisorWorld.geography.villages[0].canonicalPosition.lat);"
         "eval:window.advisorWorld.setHalfHeight(160);settle;shot:village;"
         "drag:45%,50%>60%,55%;wait:250;shot:pan-transient;settle;shot:pan-settled;"
         "wheel:-900;wait:250;shot:zoom-transient;settle;shot:street;"
@@ -174,7 +192,7 @@ SCENARIOS: dict[str, str] = {
     ),
     "continuity-obstacle": (
         "click:#overview;settle;"
-        "eval:window.advisorDetour=window.advisorWorld.geography.roads.find(r=>r.centerline);"
+        "eval:window.advisorDetour=window.advisorWorld.geography.roads.find(r=>r.networkKind==='detour');"
         "eval:window.advisorDetourPoint=window.advisorDetour.centerline[16].position;"
         "eval:window.advisorWorld.navigation.setFocus(window.advisorDetourPoint.lon,window.advisorDetourPoint.lat);"
         "eval:window.advisorWorld.setHalfHeight(1800);settle;shot:shore;"
@@ -250,11 +268,14 @@ STATE_JS = """() => {
   const renderer = (world && world.renderer) || {};
   const box = document.getElementById('error'), detail = document.getElementById('detail-name');
   return {
+    display: {devicePixelRatio,cssWidth:innerWidth,cssHeight:innerHeight,canvasWidth:document.getElementById('world')?.width,canvasHeight:document.getElementById('world')?.height},
     backend: renderer.backend || '', phase: renderer.phase || '',
     fallbackReason: renderer.fallbackReason || '', presentation: state.presentation ?? null,
     view: state.view ?? null, active: state.active ?? null,
     cached: state.cached ?? null, pending: state.pending ?? null,
     handoff: state.handoff ?? null, scaleLabel: state.scaleLabel ?? null,
+    roadPresentation: state.roadPresentation ?? null,
+    roadRepresentation: state.roadRepresentation ?? null,
     canonicalFootprintM: state.canonicalFootprintM ?? null,
     navigation: state.navigation ?? null,
     globe: state.globe ?? null, macroGeography: state.macroGeography ?? null,
@@ -411,6 +432,8 @@ class Session:
             "viewport": {"width": self.viewport[0], "height": self.viewport[1]},
             "url": self.page.url,
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "deviceScaleFactor": self.args.device_scale_factor, "mobileEmulation":self.args.touch,
+            "browserVersion":self.page.context.browser.version,
             "requestedRenderer": self.args.renderer, "webgpuFellBack": fell_back, **state,
             "browserChannel": self.args.browser_channel,
             "consoleErrors": list(self.console_errors), "pageErrors": list(self.page_errors),
@@ -461,6 +484,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--profile", default="desktop", help=f"comma-separated: {', '.join(PROFILES)}")
     parser.add_argument("--width", type=int, help="viewport width override")
     parser.add_argument("--height", type=int, help="viewport height override")
+    parser.add_argument("--touch", action="store_true", help="emulate mobile viewport/touch; does not emulate phone hardware")
+    parser.add_argument("--device-scale-factor", type=float, default=1, help="emulated display DPR, not device GPU/RAM emulation")
     parser.add_argument("--renderer", choices=("webgl2", "webgpu"), default="webgl2")
     parser.add_argument("--timeout", type=float, default=120, help="seconds per wait (default 120)")
     parser.add_argument("--allow-errors", action="store_true", help="report page errors as warnings")
@@ -495,7 +520,7 @@ def main(argv: list[str] | None = None) -> int:
             for profile in args.profiles:
                 viewport = (args.width or PROFILES[profile][0], args.height or PROFILES[profile][1])
                 context = browser.new_context(
-                    viewport={"width": viewport[0], "height": viewport[1]}, device_scale_factor=1)
+                    viewport={"width": viewport[0], "height": viewport[1]}, device_scale_factor=args.device_scale_factor, is_mobile=args.touch, has_touch=args.touch)
                 context.set_default_timeout(args.timeout * 1000)
                 if args.renderer == "webgl2":
                     context.add_init_script("Object.defineProperty(navigator, 'gpu', {value: undefined, configurable: true})")

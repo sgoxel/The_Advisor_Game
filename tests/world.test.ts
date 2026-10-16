@@ -22,6 +22,8 @@ import {
   cities,
   villages,
   roads,
+  roadJunctions,
+  roadNetworkTelemetry,
 } from "../src/geography.ts";
 import { MACRO_PLAN, macroSampleAt } from "../src/macro-geography.ts";
 import { WORLD_FOUNDATION_VERSION } from "../src/config.ts";
@@ -180,6 +182,10 @@ test("Alderwick retains legal houses, keep, well and fields across tile ownershi
   const features=[...tiles.values()].flatMap(featuresFor).filter(f=>['house','keep','well','field'].includes(f.kind));
   assert.equal(new Set(features.map(f=>f.code)).size,features.length);
   assert.ok(features.filter(f=>f.kind==='house').length>=12,'starting village must not silently lose its housing');
+  const fixture=JSON.parse(readFileSync(new URL('./fixtures/macro-home.json',import.meta.url),'utf8'));
+  assert.equal(WORLD_SEED,fixture.seed);assert.equal(roadNetworkTelemetry.version,fixture.roadVersion);assert.equal(place.id,fixture.placeId);
+  const inventory:Record<string,number>={};for(const f of features)inventory[f.kind]=(inventory[f.kind]||0)+1;
+  assert.deepEqual(inventory,fixture.inventory);assert.deepEqual(features.map(f=>f.code).sort(),fixture.featureCodes);
   for(const kind of ['keep','well','field']) assert.ok(features.some(f=>f.kind===kind),`missing ${kind}`);
   for(const f of features) {
     const radius=f.kind==='keep'?15:f.kind==='field'?13:f.kind==='house'?7:2;
@@ -273,7 +279,7 @@ test("canonical scale/travel foundation is versioned and all village pairs satis
   assert.ok(shortest >= MIN_VILLAGE_FASTEST_DISTANCE_M);
 });
 
-test("prototype road records expose canonical distance and route-derived fantasy time", () => {
+test("physical road edges expose canonical distance and route-derived fantasy time", () => {
   for (const road of roads) {
     const expectedDistance = road.centerline
       ? road.centerline.slice(1).reduce((sum, point, index) => sum + greatCircleDistance(sourceToLonLat(road.centerline![index].x,road.centerline![index].z), sourceToLonLat(point.x,point.z)), 0)
@@ -284,7 +290,8 @@ test("prototype road records expose canonical distance and route-derived fantasy
     assert.equal(road.walkSpeedMps, GOOD_ROAD_WALK_SPEED_MPS);
     assert.equal(road.fantasyWalkSeconds, road.surfaceLengthM);
     assert.equal(road.realWalkSeconds, road.fantasyWalkSeconds / TIME_SCALE);
-    assert.ok(road.fantasyWalkSeconds > MIN_VILLAGE_WALK_FANTASY_SECONDS);
+    // Physical shared trunks may be short; the village-pair minimum is proven above.
+    assert.ok(road.fantasyWalkSeconds > 0);
     assert.ok(
       fantasyTravelSeconds(road.surfaceLengthM, "open-ground") >
         road.fantasyWalkSeconds,
@@ -377,4 +384,41 @@ test("lazy country simulation catches up identically regardless of interest or e
   function summaryWithLive(code: string, tick: number) {
     return { ...summaryAt(code, tick), tier: "live" };
   }
+});
+
+
+test("larger country populations remain analytical with a bounded focused resident pool",()=>{
+  const sim=new LazySimulation();
+  for(const country of countries){
+    const place=cities.find(c=>c.continent===country.continent&&c.country===country.id)!;
+    sim.setFocus(place);sim.advance(sim.tick+1);
+    assert.ok(sim.stats.materializedResidents<=sim.stats.presentationLimit);
+    assert.equal(sim.residents.size,1);
+    assert.equal(sim.stats.residents,summaryAt(country.code,sim.tick).population);
+    assert.ok(sim.stats.residents>=sim.stats.materializedResidents);
+    // Off-screen residents retain exact SEED/time identities without resident records.
+    assert.ok(!sim.residents.get(sim.activeCountry)!.some(r=>r.index===2399));
+    const remote=residentAt(place,2399,sim.tick);
+    assert.equal(remote.home,place.id);
+    assert.ok(Number.isFinite(remote.position.lon)&&Number.isFinite(remote.position.lat));
+  }
+});
+
+test('every generated fork has three separated nonparallel physical approach segments',()=>{
+ const arms=new Map(roadJunctions.map(j=>[j.id,[] as {lon:number;lat:number}[]]));
+ for(const road of roads){
+  for(let i=1;i<road.centerline.length;i++)assert.ok(Math.abs(road.centerline[i].x-road.centerline[i-1].x)<SOURCE_PRESENTATION_WIDTH/2,road.code+' seam continuity');
+  arms.get(road.from)?.push(road.centerline[1].position);
+  arms.get(road.to)?.push(road.centerline.at(-2)!.position);
+ }
+ const azimuth=(p:{lon:number;lat:number},q:{lon:number;lat:number})=>Math.atan2(Math.sin(q.lon-p.lon)*Math.cos(q.lat),Math.cos(p.lat)*Math.sin(q.lat)-Math.sin(p.lat)*Math.cos(q.lat)*Math.cos(q.lon-p.lon));
+ for(const j of roadJunctions){
+  const rays=arms.get(j.id)!;assert.equal(rays.length,3,j.id);
+  for(let i=0;i<3;i++)for(let k=i+1;k<3;k++){
+   const d=azimuth(j.canonicalPosition,rays[i])-azimuth(j.canonicalPosition,rays[k]),angle=Math.abs(Math.atan2(Math.sin(d),Math.cos(d)))*180/Math.PI;
+   assert.ok(angle>=32,`${j.id}: actual first-segment angle ${angle}`);
+  }
+ }
+ for(let i=0;i<roadJunctions.length;i++)for(let k=i+1;k<roadJunctions.length;k++)assert.ok(greatCircleDistance(roadJunctions[i].canonicalPosition,roadJunctions[k].canonicalPosition)>=300);
+ assert.ok(roadNetworkTelemetry.maximumForkAttempts<=12);
 });

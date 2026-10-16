@@ -352,7 +352,7 @@ export class GlobeView {
     lens.farClip = Math.max(lens.farClip, PLANET_RADIUS * 6 + distance);
     this.viewAxis.copy(position).sub(target).normalize();
     // The radial halo is a camera-facing overlay centred on the projected sphere disc.
-    const centreToCamera = position.clone().normalize();
+    const centreToCamera = this.viewAxis.clone();
     this.shade.setPosition(centreToCamera.mulScalar(PLANET_RADIUS * 1.25));
     this.shade.setRotation(camera.getRotation());
     lens.onAppPrerender();

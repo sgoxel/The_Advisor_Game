@@ -21,8 +21,8 @@ export function zoomTests(test, expect, webgl2) {
     await page.locator('#structures').uncheck();
     await page.locator('#nature').uncheck();
     await page.getByRole('button',{name:'Minimize map information',exact:true}).click();
-    await page.addStyleTag({content: '#map-labels, #political-labels, #route-overlay { visibility:hidden !important; }'});
-    expect(await page.evaluate(()=>['map-labels','political-labels'].every(id=>{
+    await page.addStyleTag({content: '#map-labels, #political-labels, #settlement-overview, #cartographic-roads, #route-overlay { visibility:hidden !important; }'});
+    expect(await page.evaluate(()=>['map-labels','political-labels','settlement-overview','cartographic-roads'].every(id=>{
       const layer=document.getElementById(id);
       return layer && getComputedStyle(layer).visibility==='hidden';
     }))).toBeTruthy();

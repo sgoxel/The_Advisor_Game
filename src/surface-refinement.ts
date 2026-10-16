@@ -78,7 +78,9 @@ function pushTriangle(
     const point = points[i];
     extra.positions.push(point[0] - originX, extra.uvs ? point[1] : elevationToRenderY(point[1]), point[2] - originZ);
     extra.normals.push(...n);
-    extra.colors.push(tints[i][0], tints[i][1], tints[i][2], 255);
+    const road=Boolean(extra.uvs)&&tints[i][0]===112&&tints[i][1]===92&&tints[i][2]===62,
+      tint=road?terrainTint(point[0],point[2],32,undefined,0,false):tints[i];
+    extra.colors.push(tint[0],tint[1],tint[2],extra.uvs?(road?255:0):255);
     if (extra.uvs)
       extra.uvs.push(
         point[0] / SOURCE_PRESENTATION_WIDTH + 0.5,

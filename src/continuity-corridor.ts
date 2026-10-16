@@ -60,7 +60,7 @@ export function defineContinuityCorridor(villages: readonly Place[], template: R
         }
         if(!valid || lengthM>greatCircleDistance(from.canonicalPosition,to.canonicalPosition)*3)continue;
         const xs=centerline.map(p=>p.x), zs=centerline.map(p=>p.z),travel=travelMetrics(lengthM,"good-road"),
-          road: Road={...template,code:`${seed}/${CONTINUITY_VERSION}/ROAD/${lake.code}/DETOUR`,from:from.id,to:to.id,
+          road: Road={...template,networkKind:"detour",networkId:`${seed}/${lake.code}/DETOUR`,coarseFallback:false,code:`${seed}/${CONTINUITY_VERSION}/ROAD/${lake.code}/DETOUR`,from:from.id,to:to.id,
             fromX:from.x,fromZ:from.z,toX,toZ:to.z,fromPosition:from.canonicalPosition,toPosition:to.canonicalPosition,
             minX:Math.min(...xs),maxX:Math.max(...xs),minZ:Math.min(...zs),maxZ:Math.max(...zs),z:(from.z+to.z)/2,
             centerline:Object.freeze(centerline.map(point=>Object.freeze({...point,position:Object.freeze(sourceToLonLat(point.x,point.z))}))),presentationLengthSourceUnits:lengthM/CANONICAL_METRES_PER_SOURCE_UNIT,surfaceLengthM:lengthM,fantasyWalkSeconds:travel.fantasySeconds,realWalkSeconds:travel.realSeconds};

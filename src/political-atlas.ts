@@ -1,10 +1,15 @@
+import { segmentIntersectsBox } from "./road-spatial-index.ts";
+import { roadRepresentationAtScale } from "./surface-presentation.ts";
 import { placeSymbol } from "./place-symbol.ts";
 import {
   countries,
+  roads,
+  cities,
+  villages,
   countryAtPosition,
   nearbyPlaces,
   politicalBorderSegments,
-  politicalRegistryCountsForSeed,
+  politicalRegistryMinimumCountsForSeed,
   type Place,
 } from "./geography.ts";
 import { WORLD_SEED } from "./config.ts";
@@ -14,7 +19,7 @@ import {
   POLITICAL_DETAIL_LABEL_MAX_SCALE_DENOMINATOR,
   politicalOverlayOpacity,
 } from "./political-presentation.ts";
-import { RENDER_PLANET_RADIUS, sourceToLonLat } from "./planet.ts";
+import { RENDER_PLANET_RADIUS, SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "./planet.ts";
 import { LocalRenderFrame } from "./render-frame.ts";
 import { heightAt } from "./world.ts";
 
@@ -42,7 +47,7 @@ type LabelCandidate = {
 };
 type ScreenPoint = { x: number; y: number };
 
-const counts = politicalRegistryCountsForSeed(WORLD_SEED);
+const counts = { ...politicalRegistryMinimumCountsForSeed(WORLD_SEED), cities: cities.length, villages: villages.length };
 const labelNodes = new Map<string, HTMLElement>();
 const labelSizes = new Map<string, { width: number; height: number }>();
 let borderKey = "";
@@ -386,6 +391,58 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
   }
 }
 
+// Mid-scale cartography projects the same canonical road stations used by
+// terrain/traversal. Culling precedes fine height queries; no hidden scenery is built.
+const roadNodes=new Map<string,SVGPathElement>();
+let visibleRoadCount=0,visibleRoadPoints=0;
+function updateCartographicRoads(state:AtlasState,frame:LocalRenderFrame,scale:number){
+ const root=$svg('cartographic-roads');
+ if(roadRepresentationAtScale(scale)!=='cartographic'){root.style.display='none';visibleRoadCount=0;visibleRoadPoints=0;return;}
+ root.style.display='block';
+ const radius=Math.hypot(state.view.halfHeight*state.view.aspect,state.view.halfHeight)*2,
+  candidates=roads.flatMap(road=>[-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH].flatMap(shift=>
+   road.maxX+shift<state.view.x-radius||road.minX+shift>state.view.x+radius||road.maxZ<state.view.z-radius||road.minZ>state.view.z+radius?[]:[{road,shift,distance:Math.hypot((road.minX+road.maxX)/2+shift-state.view.x,(road.minZ+road.maxZ)/2-state.view.z)}]))
+  .sort((a,b)=>a.distance-b.distance||a.road.networkId.localeCompare(b.road.networkId)).slice(0,innerWidth<700?128:256),visible=new Set<string>();
+ visibleRoadPoints=0;
+ for(const {road,shift} of candidates){
+  const id=`${road.networkId}/${shift}`,path=road.centerline||[{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}],commands:string[]=[];
+  for(let i=1;i<path.length;i++){
+   const a=path[i-1],b=path[i];
+   if(!segmentIntersectsBox(a.x+shift,a.z,b.x+shift,b.z,state.view.x-radius,state.view.z-radius,state.view.x+radius,state.view.z+radius))continue;
+   const p=project(frame,state,a.x+shift,a.z),q=project(frame,state,b.x+shift,b.z);if(!p||!q)continue;
+   commands.push(`M${p.x.toFixed(2)},${p.y.toFixed(2)} L${q.x.toFixed(2)},${q.y.toFixed(2)}`);visibleRoadPoints+=2;
+  }
+  if(!commands.length)continue;
+  visible.add(id);let node=roadNodes.get(id);
+  if(!node){node=document.createElementNS(SVG_NS,'path');node.dataset.roadId=road.networkId;root.append(node);roadNodes.set(id,node);}
+  node.setAttribute('d',commands.join(' '));
+ }
+ for(const [id,node] of roadNodes)if(!visible.has(id)){node.remove();roadNodes.delete(id);}
+ visibleRoadCount=visible.size;
+}
+
+// Overview cities remain visible without instantiating settlements or full labels.
+const overviewNodes=new Map<string,SVGCircleElement>();
+let overviewCityCount=0;
+function updateSettlementOverview(state:AtlasState,frame:LocalRenderFrame,scale:number){
+  const root=$svg("settlement-overview");
+  if(scale<=POLITICAL_DETAIL_LABEL_MAX_SCALE_DENOMINATOR){root.style.display="none";overviewCityCount=0;return;}
+  root.style.display="block";
+  const candidates=cities.flatMap(city=>{
+    const point=project(frame,state,city.x,city.z,0);
+    return point&&point.x>=10&&point.x<=innerWidth-10&&point.y>=80&&point.y<=innerHeight-110?[{city,point,distance:Math.hypot(point.x-innerWidth/2,point.y-innerHeight/2)}]:[];
+  }).sort((a,b)=>(a.city.city===0?0:1)-(b.city.city===0?0:1)||a.distance-b.distance||a.city.id.localeCompare(b.city.id)).slice(0,innerWidth<700?60:160);
+  const visible=new Set(candidates.map(c=>c.city.id));
+  for(const [id,node] of overviewNodes)if(!visible.has(id)){node.remove();overviewNodes.delete(id);}
+  for(const {city,point} of candidates){
+    let node=overviewNodes.get(city.id);
+    if(!node){node=document.createElementNS(SVG_NS,"circle");const title=document.createElementNS(SVG_NS,"title");title.textContent=city.name;node.append(title);root.append(node);overviewNodes.set(city.id,node);}
+    node.setAttribute("cx",point.x.toFixed(1));node.setAttribute("cy",point.y.toFixed(1));
+    node.setAttribute("r",city.city===0?"4.5":"2.8");node.setAttribute("class",city.city===0?"capital":"city");
+  }
+  overviewCityCount=candidates.length;
+}
+
 function scheduleUpdate() {
   window.setTimeout(update, ATLAS_UPDATE_INTERVAL_MS);
 }
@@ -416,6 +473,8 @@ function update() {
     updateContext(state, places);
     updateBorders(state, frame, scale);
     updateLabels(state, frame, scale, places);
+    updateSettlementOverview(state, frame, scale);
+    updateCartographicRoads(state,frame,scale);
   }
   scheduleUpdate();
 }
@@ -433,6 +492,9 @@ Object.defineProperty(window, "politicalAtlas", {
       return {
         borderSegments: borderSegments.length,
         labels: politicalLabelState,
+        overviewCityCount,
+        visibleRoadCount,visibleRoadPoints,
+        presentationBytesEstimated:roadNodes.size*8192+overviewNodes.size*1024,
         borderKey,
       };
     },

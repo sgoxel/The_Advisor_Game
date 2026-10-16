@@ -346,9 +346,13 @@ Quality may step down only after sustained frame pressure; it must use hysteresi
 - main thread uploads at most **one patch/mesh group per rendered frame**;
 - generation queues, caches and active resources are bounded independently from world size.
 
-### 11.2 Initial acceptance budgets
+### 11.2 Owner working-set policy and rendering budgets
 
-These are product budgets, not claims about the current prototype. Software-rendered CI verifies counters/invariants; physical-device FPS claims require real hardware evidence in WP-S002-005-001.
+Owner clarification, 2026-10-15: Samsung Galaxy A55 running Chrome is the reference phone, using the 8 GB variant for planning. The memory figures below were agent-authored initial working-set assumptions, not owner requirements, Chrome limits or measured A55 capacity. They have been superseded by the owner's explicit policy: retain reusable terrain data until combined app-owned estimates exceed **256 MB (256,000,000 bytes)**; then trim unused entries, with one combined CPU+GPU ceiling of **1 GB (1,000,000,000 bytes)**. There is no independent 1 GB allowance for each pool, and no patch-count cache eviction below the soft threshold. Queue/active-render bounds remain finite. This is an application accounting/admission policy, not a browser/OS allocation guarantee; it must not constrain canonical settlement counts, geography or road quality. Actual A55 measurements must decide tuning; viewport emulation cannot validate its RAM, GPU speed or thermal behaviour.
+
+Samsung specifies 8/12 GB variants and a 1080 × 2340 panel: https://www.samsung.com/in/smartphones/galaxy-a/galaxy-a55-5g-awesome-iceblue-256gb-sm-a556elbgins/ . Google states that no fixed memory number fits every device and recommends testing the target device: https://developer.chrome.com/docs/devtools/memory-problems#memory_bloat_how_much_is_too_much . Heap-only readings do not cover total page resources: https://web.dev/articles/monitor-total-page-memory-usage .
+
+Software-rendered CI verifies counters/invariants; physical-device FPS and total-memory claims require actual hardware evidence. The table reflects the owner's current memory policy. The earlier 96/160/256 MiB per-pool assumptions are historical agent decisions, not device limits.
 
 | Metric | Phone baseline | Tablet baseline | Desktop baseline |
 | --- | ---: | ---: | ---: |
@@ -362,9 +366,9 @@ These are product budgets, not claims about the current prototype. Software-rend
 | Uploads per rendered frame | ≤1 | ≤1 | ≤1 |
 | Generation+ready queue | ≤4 | ≤6 | ≤8 |
 | Active render patches | ≤160 | ≤220 | ≤260 |
-| Cached prepared patches | ≤180 | ≤240 | ≤320 |
-| App-owned CPU/geometry cache estimate | ≤96 MiB | ≤160 MiB | ≤256 MiB |
-| App-owned GPU/texture estimate | ≤96 MiB | ≤160 MiB | ≤256 MiB |
+| Cached prepared patches | Byte-based retention | Byte-based retention | Byte-based retention |
+| Cache eviction begins, combined CPU+GPU estimate | >256 MB | >256 MB | >256 MB |
+| Combined app-owned CPU+GPU estimate ceiling | ≤1 GB | ≤1 GB | ≤1 GB |
 | Final globe surface texture | ≤1024×512 | ≤2048×1024 | ≤2048×1024 |
 
 Additional rules:
@@ -372,7 +376,7 @@ Additional rules:
 - no per-frame texture decoding/creation for unchanged assets;
 - no one-entity-per-logical-cell representation;
 - adaptive quality may reduce render resolution/shadows/visual density, never Simulation fidelity;
-- a transition may temporarily retain both globe/local resources, but the peak must remain inside the same device memory budget or deterministically defer lower-priority refinement.
+- a transition may temporarily retain both globe/local resources, but the peak should remain within the currently selected working-set policy or deterministically defer lower-priority refinement; policy estimates are not browser/OS allocation guarantees.
 
 ## 12. Telemetry schema
 

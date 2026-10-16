@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { terrainTint, buildTile } from '../src/geometry.ts';
 import { globeSurfaceColor } from '../src/globe-surface.ts';
-import { localDetailWeight, LOD_BLEND_SECONDS } from '../src/surface-presentation.ts';
+import { roadRepresentationAtScale, roadVisibleAtScale, localDetailWeight, LOD_BLEND_SECONDS } from '../src/surface-presentation.ts';
 import { tileAt, tileForPosition, heightAt } from '../src/world.ts';
 import { lonLatToFlat } from '../src/planet.ts';
 import { polarBoundaryAt } from '../src/climate.ts';
@@ -13,7 +13,7 @@ test('all tile sizes share exact canonical material albedo, including roads and 
     const expected = terrainTint(p.x,p.z,32,elevation);
     for (const size of [2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,262144])
       assert.deepEqual(terrainTint(p.x,p.z,size,elevation),expected);
-    assert.deepEqual(globeSurfaceColor(p.x,p.z), [...new Uint8Array(terrainTint(p.x,p.z))]);
+    assert.deepEqual(globeSurfaceColor(p.x,p.z), [...new Uint8Array(terrainTint(p.x,p.z,32,undefined,0,false))]);
   }
 });
 test('continuous detail filtering has compatible endpoints and bounded transition', () => {
@@ -51,4 +51,16 @@ test('visible polar water plane shares the continuous globe ice margin', () => {
     assert.equal(ground.positions[v*3+1],0);
     assert.deepEqual([...ground.colors.subarray(v*4,v*4+3)],[...new Uint8Array(terrainTint(x,z))]);
   }
+});
+
+
+test('road presentation ends beyond displayed 1/100 without changing authority',()=>{
+ for(const denominator of [10,20,50,100])assert.equal(roadVisibleAtScale(denominator),true);
+ for(const denominator of [200,500,1000,2500,10000])assert.equal(roadVisibleAtScale(denominator),false);
+});
+
+test('road representation uses canonical cartography at 1/50–1/100, close ground and no wider roads',()=>{
+ for(const d of [10,20,49])assert.equal(roadRepresentationAtScale(d),'ground');
+ for(const d of [50,100])assert.equal(roadRepresentationAtScale(d),'cartographic');
+ for(const d of [101,250,1000])assert.equal(roadRepresentationAtScale(d),'hidden');
 });

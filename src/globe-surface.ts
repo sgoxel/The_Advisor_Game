@@ -116,7 +116,7 @@ const bytes = ([r, g, b]: RGB): RGB => [r | 0, g | 0, b | 0];
 
 /** Unshaded surface colour at a flat position from the shared semantic material authority. */
 export function globeSurfaceColor(x: number, z: number, featureFootprintSource=0): RGB {
-  return bytes(terrainTint(x, z, openOcean(x, z) ? 4096 : 32,undefined,featureFootprintSource));
+  return bytes(terrainTint(x, z, openOcean(x, z) ? 4096 : 32,undefined,featureFootprintSource,false));
 }
 
 export function buildGlobeSurface(

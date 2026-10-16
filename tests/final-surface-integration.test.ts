@@ -112,7 +112,7 @@ test("final-surface memoization is bounded and exposes deterministic hit/miss te
 test("a legal deck has one cross-road stage instead of separate side profiles", () => {
   const anchors = finalSurfaceEvidenceAnchors();
   const road = roads.find(r => r.code === anchors.roadCode)!;
-  const dx=road.toX-road.fromX,dz=road.toZ-road.fromZ,length=Math.hypot(dx,dz);
+  const {x:dx,z:dz}=anchors.bridgeTangent,length=1;
   const centre=finalSurfaceAt(anchors.bridge.x,anchors.bridge.z);
   for(const offset of [-1,1]) {
     const side=finalSurfaceAt(anchors.bridge.x-dz/length*offset,anchors.bridge.z+dx/length*offset);
@@ -123,7 +123,9 @@ test("a legal deck has one cross-road stage instead of separate side profiles", 
 
 
 test("the real crossing bank overlap cannot create a shelf over its channel", () => {
-  const p=finalSurfaceEvidenceAnchors().bridge;
+  // Fixed natural-bank regression from the pre-macro-migration accepted bridge.
+  // Its drainage geometry is unchanged even when a new road becomes the first fixture.
+  const p={x:-48043.193970910186,z:9479.86581568643};
   const channel=naturalSurfaceAt(p.x,p.z);
   const bank=naturalSurfaceAt(p.x+3.75,p.z+6.75);
   assert.equal(channel.water.kind,"river");

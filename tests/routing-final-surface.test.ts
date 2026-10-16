@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { roads, villages } from "../src/geography.ts";
+import { roads, roadConnections, villages } from "../src/geography.ts";
 import { lonLatToFlat } from "../src/planet.ts";
 import { ROUTE_MAX_CELLS, ROUTE_MAX_EXPANSIONS } from "../src/routing.ts";
 import {
@@ -26,7 +26,7 @@ test("village routing consumes runtime cell traversal truth", () => {
 
 test("seeded road candidates are final-traversal validated instead of bypassing authority", () => {
   clearVillageRouteCache();
-  const road = roads[0];
+  const road = roadConnections.find(c=>villages.some(v=>v.id===c.from)&&villages.some(v=>v.id===c.to))!;
   assert.ok(road, "canonical registry should expose a seeded road fixture");
   const forward = routeBetweenVillages(road.from, road.to);
   assert.equal(forward.found, true, forward.reason);

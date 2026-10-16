@@ -1,0 +1,41 @@
+{
+  "seed": "ADVISOR-0126-ALDERWICK",
+  "roadVersion": "macro-roads-v2",
+  "placeId": "0/0/0/0",
+  "inventory": {
+    "house": 12,
+    "keep": 1,
+    "well": 1,
+    "field": 1
+  },
+  "featureCodes": [
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/field/3",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/house/1",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/house/10",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/house/11",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/house/13",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/house/14",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/house/15",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/house/16",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/house/17",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/house/2",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/house/3",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/house/8",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/house/9",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/keep",
+    "ADVISOR-0126-ALDERWICK/v5/F/0/0/0/0/village/well"
+  ],
+  "view": {
+    "x": -48952.123292586046,
+    "z": 11611.23866096352,
+    "halfHeight": 97,
+    "aspect": 1.8814306712395885,
+    "yaw": -0.22,
+    "pixels": 2041
+  },
+  "width": 3840,
+  "height": 2041,
+  "expectedActivePatches": 56,
+  "expectedStructureTriangles": 284,
+  "provenance": "Canonical featuresFor inventory and CPU-selected patch meshes; independently confirmed in fresh native Edge WebGPU 4K central/Street captures. Prototype layout intentionally depends on the versioned road recipe."
+}

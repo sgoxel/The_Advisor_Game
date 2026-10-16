@@ -15,11 +15,17 @@ export function settlementIconTests(backend) {
         await page.locator('#map-scale').selectOption(String(scale));
         await page.waitForFunction(()=>window.advisorWorld.state.settled,null,{timeout:240000});
       };
-      for (const scale of [20,50,100,20]) {
+      await setScale(20);
+      const nearTriangles=await page.evaluate(()=>window.advisorWorld.state.visibleGeometryTriangles.structures);
+      expect(nearTriangles).toBeGreaterThan(0);
+      for (const scale of [20,50,100,250,1000,20]) {
         await setScale(scale);
         const s=await page.evaluate(()=>window.advisorWorld.state);
         expect(s.scaleLabel).toBe(`1/${scale}`);
         expect(s.navigation.focus).toEqual(focus);
+        expect(s.roadPresentation).toBe(scale<=100?"visible":"hidden");
+        expect(s.roadRepresentation).toBe(scale<50?'ground':scale<=100?'cartographic':'hidden');
+        if(scale>=50&&scale<=100)await expect(page.locator('#cartographic-roads path').first()).toBeVisible();else await expect(page.locator('#cartographic-roads')).toBeHidden();
         expect(s.settlementPresentation).toBe(scale>=50?'icons':'buildings');
         if(scale>=50){
           expect(s.visibleGeometryTriangles.structures).toBe(0);
@@ -34,7 +40,7 @@ export function settlementIconTests(backend) {
           expect(layout.widthRatio).toBeGreaterThan(.9);
           expect(layout.widthRatio).toBeLessThan(1.1);
         }else{
-          expect(s.visibleGeometryTriangles.structures).toBeGreaterThan(300);
+          expect(s.visibleGeometryTriangles.structures).toBe(nearTriangles);
           await expect(page.locator('.political-label.village .place-symbol').first()).toBeHidden();
         }
         expect(s.performance.withinBudget).toBeTruthy();

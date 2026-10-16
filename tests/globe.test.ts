@@ -33,7 +33,7 @@ const pixel = (
 ) => [...s.pixels.subarray((j * s.width + i) * 4, (j * s.width + i) * 4 + 3)];
 /** The flat terrain mesh stores its tint through this same conversion. */
 const flatTint = (x: number, z: number, scale = 32) => [
-  ...new Uint8Array(terrainTint(x, z, scale)),
+  ...new Uint8Array(terrainTint(x, z, scale,undefined,0,false)),
 ];
 
 function findTemperateOcean() {
@@ -97,7 +97,7 @@ test("unshaded globe samples preserve the flat renderer's semantic material fami
   for (let j = 0; j < height; j += 3)
     for (let i = j % 2; i < width; i += 5) {
       const { x, z } = texelFlat(i, j, width, height),
-        expected = [...new Uint8Array(terrainTint(x,z,32,undefined,PLANET_CIRCUMFERENCE/width))],
+        expected = [...new Uint8Array(terrainTint(x,z,32,undefined,PLANET_CIRCUMFERENCE/width,false))],
         actual = pixel(surface, i, j),
         delta = Math.hypot(
           actual[0] - expected[0],

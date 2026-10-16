@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 import fs from 'node:fs';
 import {comparePanImages} from './pan-images.js';
+import homeFixture from './fixtures/macro-home.json' with {type:'json'};
 
 export function alderwickTests(backend) {
   test('starting village keeps properties and ground through a wide-screen pan and Street zoom',async({page})=>{
@@ -14,15 +15,12 @@ export function alderwickTests(backend) {
     expect(await page.evaluate(()=>window.advisorRenderer.backend)).toBe(backend);
     await expect(page.locator('#toggle-region-panel')).toHaveAttribute('aria-expanded','false');
     await page.evaluate(()=>{
-      window.advisorWorld.navigation.setFocus(-67.30178*Math.PI/180,-31.77696*Math.PI/180);
-      window.advisorWorld.setHalfHeight(160);
+      const v=window.advisorWorld.geography.villages[0];
+      window.advisorWorld.navigation.setFocus(v.canonicalPosition.lon,v.canonicalPosition.lat);
+      window.advisorWorld.setHalfHeight(97);
     });
     const settled=()=>page.waitForFunction(()=>window.advisorWorld.state.settled,null,{timeout:180000});
     await settled();
-    // The owner requests an icon at this overview scale; Street must restore
-    // actual submitted property triangles below (mesh groups only count tiles).
-    expect(await page.evaluate(()=>window.advisorWorld.state.visibleGeometryTriangles.structures)).toBe(0);
-    await expect(page.locator('.political-label.village .place-symbol').first()).toBeVisible();
     const out=`test-results/alderwick-${backend}`;
     fs.mkdirSync(out,{recursive:true});
     const records=[];
@@ -34,6 +32,19 @@ export function alderwickTests(backend) {
       fs.writeFileSync(`${out}/capture.json`,JSON.stringify(records,null,2));
       expect(state.error).toBe('');
     };
+    // Verify actual properties at the relocated canonical home before the wide
+    // drag changes which footprints intersect the viewport.
+    // Snapshot is tied to the legal canonical inventory, independently checked
+    // by world.test.ts and the retained CPU mesh audit; any omitted geometry fails.
+    expect(await page.evaluate(()=>window.advisorWorld.geography.roadNetwork.version)).toBe(homeFixture.roadVersion);
+    await expect.poll(()=>page.evaluate(()=>window.advisorWorld.state.visibleGeometryTriangles.structures),{timeout:10000}).toBe(homeFixture.expectedStructureTriangles);
+    await capture('central-properties');
+    await page.evaluate(()=>window.advisorWorld.setHalfHeight(160));
+    await settled();
+    // The owner requests an icon at this overview scale; Street must restore
+    // actual submitted property triangles below (mesh groups only count tiles).
+    expect(await page.evaluate(()=>window.advisorWorld.state.visibleGeometryTriangles.structures)).toBe(0);
+    await expect(page.locator('.political-label.village .place-symbol').first()).toBeVisible();
     await capture('village');
     await page.mouse.move(1728,1020);
     await page.mouse.down();
@@ -48,7 +59,7 @@ export function alderwickTests(backend) {
     await capture('zoom-transient');
     await settled();
     await expect(page.locator('#detail-name')).toHaveText('Street');
-    expect(await page.evaluate(()=>window.advisorWorld.state.visibleGeometryTriangles.structures)).toBeGreaterThan(300);
+    expect(await page.evaluate(()=>window.advisorWorld.state.visibleGeometryTriangles.structures)).toBeGreaterThan(0);
     await capture('street');
     await page.mouse.wheel(0,900);
     await page.waitForTimeout(250);

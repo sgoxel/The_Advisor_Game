@@ -4,9 +4,12 @@ import {
   cities,
   continents,
   countries,
+  roads,
+  roadJunctions, roadConnections, roadNetworkTelemetry,
+  macroPopulationSummary,
   countryAtPosition,
   politicalBorderSegments,
-  politicalRegistryCountsForSeed,
+  politicalRegistryMinimumCountsForSeed,
   villages,
 } from "../src/geography.ts";
 import { WORLD_SEED } from "../src/config.ts";
@@ -27,19 +30,19 @@ import {
 } from "../src/political-presentation.ts";
 
 test("political registry uses seed-variable minimum counts rather than fixed maxima", () => {
-  const counts = politicalRegistryCountsForSeed(WORLD_SEED);
+  const counts = politicalRegistryMinimumCountsForSeed(WORLD_SEED);
   assert.equal(continents.length, 3);
   assert.equal(countries.length, counts.countries);
-  assert.equal(cities.length, counts.cities);
-  assert.equal(villages.length, counts.villages);
+  assert.ok(cities.length >= counts.cities);
+  assert.ok(villages.length >= counts.villages);
   assert.ok(countries.length >= 30);
   assert.ok(cities.length >= 90);
   assert.ok(villages.length >= 270);
-  assert.deepEqual(counts, politicalRegistryCountsForSeed(WORLD_SEED));
+  assert.deepEqual(counts, politicalRegistryMinimumCountsForSeed(WORLD_SEED));
   const variants = [
-    politicalRegistryCountsForSeed("ADVISOR-POLITICAL-A"),
-    politicalRegistryCountsForSeed("ADVISOR-POLITICAL-B"),
-    politicalRegistryCountsForSeed("ADVISOR-POLITICAL-C"),
+    politicalRegistryMinimumCountsForSeed("ADVISOR-POLITICAL-A"),
+    politicalRegistryMinimumCountsForSeed("ADVISOR-POLITICAL-B"),
+    politicalRegistryMinimumCountsForSeed("ADVISOR-POLITICAL-C"),
   ];
   assert.ok(variants.every((value) => value.countries >= 30));
   assert.ok(variants.some((value) => value.countries !== counts.countries));
@@ -98,7 +101,8 @@ test("cities and villages stay inside their canonical political owner without ro
   }
   for (const city of cities) {
     const children = villages.filter((village) => village.id.startsWith(`${city.id}/`));
-    assert.equal(children.length, 3);
+    // Density and terrain decide association counts; three is not a quota.
+    if (children.length < 2) continue;
     assert.ok(
       new Set(children.map((village) => village.canonicalPosition.lat.toFixed(8))).size > 1,
       `${city.id} still uses a fixed east-west village row`,
@@ -232,4 +236,44 @@ test("political overlay visibility is Country-scale driven across flat/globe han
     politicalOverlayOpacity("flat", 0, 2500, POLITICAL_DETAIL_LABEL_MAX_SCALE_DENOMINATOR),
     0,
   );
+});
+
+
+test("macro population uses variable productive-country density with bounded coarse scratch",()=>{
+  assert.ok(cities.length>politicalRegistryMinimumCountsForSeed(WORLD_SEED).cities);
+  assert.ok(villages.length>politicalRegistryMinimumCountsForSeed(WORLD_SEED).villages);
+  assert.ok(new Set(macroPopulationSummary.countries.map(c=>c.cities)).size>1);
+  assert.ok(macroPopulationSummary.countries.some(c=>c.cities>3));
+  assert.ok(new Set(cities.map(c=>villages.filter(v=>v.id.startsWith(c.id+"/")).length)).size>1);
+  assert.ok(macroPopulationSummary.candidateCount<3*2048+countries.length*241);
+  for(const c of macroPopulationSummary.countries){assert.ok(c.cities>=3);assert.ok(c.villages>=9);assert.ok(c.productiveKm2<=c.areaKm2);}
+});
+
+
+test("macro transport connects every generated settlement within its country with variable long links",()=>{
+  const places=[...cities,...villages,...roadJunctions],byId=new Map(places.map(p=>[p.id,p]));
+  const graph=new Map(places.map(p=>[p.id,new Set<string>()]));
+  for(const road of roads){
+    const a=byId.get(road.from),b=byId.get(road.to);
+    assert.ok(a&&b,`${road.code} endpoints exist`);
+    if(a.continent!==b.continent||a.country!==b.country)continue;
+    graph.get(a.id)!.add(b.id);graph.get(b.id)!.add(a.id);
+  }
+  for(const country of countries){
+    const local=places.filter(p=>p.continent===country.continent&&p.country===country.id),seen=new Set<string>(),pending=[local[0].id];
+    while(pending.length){const id=pending.pop()!;if(seen.has(id))continue;seen.add(id);pending.push(...graph.get(id)!);}
+    assert.equal(seen.size,local.length,`${country.code} coarse backbone is connected`);
+  }
+  assert.ok(roads.some(r=>r.surfaceLengthM>100000),"coarse links are not capped at the old local parent radius");
+  assert.ok(new Set(roads.map(r=>Math.floor(r.surfaceLengthM/10000))).size>5);
+});
+
+
+test("generated roads use shared Y nodes and bounded terrain-selected physical polylines",()=>{
+ assert.ok(roadJunctions.length>0);assert.ok(roadNetworkTelemetry.bentEdges>0);assert.ok(roadNetworkTelemetry.maximumStations<=26);assert.ok(roadNetworkTelemetry.maxStates<=49);
+ const byNetworkId=new Map(roads.map(r=>[r.networkId,r]));
+ for(const c of roadConnections){let at=c.from;for(const leg of c.legs){const r=byNetworkId.get(leg.edgeId)!;assert.ok(r);assert.equal(leg.reverse?r.to:r.from,at);at=leg.reverse?r.from:r.to;}assert.equal(at,c.to);}
+ const uses=new Map<string,number>();for(const c of roadConnections)for(const leg of c.legs)uses.set(leg.edgeId,(uses.get(leg.edgeId)||0)+1);
+ assert.ok(roads.some(r=>r.networkKind==='trunk'&&(uses.get(r.networkId)||0)>=2));
+ for(const j of roadJunctions)assert.equal(roads.filter(r=>r.from===j.id||r.to===j.id).length,3);
 });

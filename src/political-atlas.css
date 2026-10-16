@@ -125,3 +125,11 @@ body.settlement-overview .place-symbol {
   color: #e6c985;
 }
 .place-symbol svg { width: 100%; height: 100%; }
+
+#settlement-overview { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:1; overflow:hidden; }
+#settlement-overview circle { fill:#f4e6ba; stroke:#213d30; stroke-width:1.3px; }
+#settlement-overview .capital { fill:#e7b65e; stroke-width:1.7px; }
+
+#cartographic-roads {position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none;z-index:1;}
+#cartographic-roads path {fill:none;stroke:#8a7048;stroke-width:3px;stroke-linecap:round;stroke-linejoin:round;}
+body:not([data-road-representation="cartographic"]) #cartographic-roads {display:none !important;}

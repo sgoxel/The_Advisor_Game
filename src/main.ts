@@ -23,13 +23,15 @@ import {
   cities,
   villages,
   roads,
+  macroPopulationSummary,
+  roadJunctions, roadConnections, roadNetworkTelemetry,
 } from "./geography.ts";
 import type { Geometry, TileGeometry } from "./geometry.ts";
 import { terrainTint } from "./geometry.ts";
 import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
-import { LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
+import { roadRepresentationAtScale, roadVisibleAtScale, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
 import { LazySimulation } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
@@ -80,6 +82,8 @@ import {
   estimateGeometryBytes,
   streamingBudgetForViewport,
   withinStreamingBudget,
+  shouldTrimStreamingCache,
+  streamingMemoryReservationFits,
   type StreamingBudget,
 } from "./streaming.ts";
 
@@ -99,15 +103,16 @@ let continuityWorkerState: ReturnType<typeof continuityTelemetry> | undefined;
 let discardedPresentationJobs = 0;
 const continuityCpuBytes = () => {
   const state=continuityTelemetry(), preparingBytes=globeWorker ? state.coarseRegistryBytesEstimated + state.hydrologyCpuBytesEstimated + 4096*1024 + (GLOBE_PASSES[globePass]?.width || 0)**2*2 : 0;
-  return continuityWorkerBytes + (inFlight ? NATURAL_WORKER_SCRATCH_RESERVE_BYTES : 0) + state.cpuBytesEstimated + continuityOverlayBytes() + preparingBytes;
+  const atlasBytes=(window as unknown as {politicalAtlas?:{state:{presentationBytesEstimated?:number}}}).politicalAtlas?.state.presentationBytesEstimated||0;
+  return atlasBytes + continuityWorkerBytes + (inFlight ? NATURAL_WORKER_SCRATCH_RESERVE_BYTES : 0) + state.cpuBytesEstimated + continuityOverlayBytes() + preparingBytes;
 };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 let canvas = $<HTMLCanvasElement>("world");
 const view: View = {
-  x: 0,
-  z: 14,
+  x: villages[0].x,
+  z: villages[0].z + 14,
   halfHeight: 97,
   aspect: innerWidth / innerHeight,
   yaw: -0.22,
@@ -511,6 +516,10 @@ function applyPresentation() {
   );
 }
 function updateCamera() {
+  const roadRepresentation=roadRepresentationAtScale(Number(scaleLabelForHalfHeight(view.halfHeight).slice(2))),showRoads=roadRepresentation==='ground';
+  document.body.dataset.roadRepresentation=roadRepresentation;
+  terrainMaterial?.setParameter("surfaceRoadVisibility",showRoads?1:0);
+  coarseTerrainMaterial?.setParameter("surfaceRoadVisibility",showRoads?1:0);
   const showDetails = Number(scaleLabelForHalfHeight(view.halfHeight).slice(2)) < 50;
   document.body.classList.toggle("settlement-overview", !showDetails);
   if (showDetails !== settlementDetailVisible) {
@@ -657,6 +666,11 @@ function setLayers() {
 function request(tile: Tile) {
   if (tileCache.has(tile.key) || pending.has(tile.key)) return;
   if (inFlight + uploads.length >= streamingBudget.generationReady) return;
+  const surfaceBytes=globe?globe.stats.textureWidth*globe.stats.textureHeight*4:0,
+    readyBytes=uploads.reduce((sum,job)=>sum+estimateGeometryBytes(job.data),0),
+    cpuBytes=cachedGeometryBytes+readyBytes+surfaceBytes+continuityCpuBytes(),
+    gpuBytes=cachedGeometryBytes+Math.ceil(surfaceBytes*4/3);
+  if(!streamingMemoryReservationFits(cpuBytes,gpuBytes,NATURAL_WORKER_SCRATCH_RESERVE_BYTES,streamingBudget))return;
   pending.add(tile.key);
   inFlight++;
   worker.postMessage(tile);
@@ -778,9 +792,8 @@ function processStreaming(material: pc.StandardMaterial) {
     const surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4;
     const readyBytes = () => uploads.reduce((sum, job) => sum + estimateGeometryBytes(job.data), 0);
     const overCacheBudget = () =>
-      tileCache.size > streamingBudget.cachedPatches ||
-      cachedGeometryBytes + readyBytes() + surfaceBytes + continuityCpuBytes() > streamingBudget.cpuBytes ||
-      cachedGeometryBytes + Math.ceil(surfaceBytes * 4 / 3) > streamingBudget.gpuBytes;
+      shouldTrimStreamingCache(cachedGeometryBytes + readyBytes() + surfaceBytes + continuityCpuBytes(),
+        cachedGeometryBytes + Math.ceil(surfaceBytes * 4 / 3),streamingBudget);
     if (overCacheBudget()) {
       const protect = new Set([
         ...activeKeys,
@@ -990,7 +1003,7 @@ function setupControls() {
   );
   $("home").onclick = () => {
     view.yaw = -0.22;
-    navigate(0, 14, 97);
+    navigate(villages[0].x, villages[0].z + 14, 97);
     $("cell-panel").hidden = true;
   };
   $("overview").onclick = () => {
@@ -1565,7 +1578,7 @@ async function start() {
       seed: WORLD_SEED,
       cellAt,
       cellSeed,
-      geography: { continents, countries, cities, villages, roads },
+      geography: { continents, countries, cities, villages, roads, roadJunctions, roadConnections, roadNetwork: roadNetworkTelemetry, population: macroPopulationSummary },
       continuity: { inspect: inspectRegion, terrainQuery, telemetry: () => ({ ...continuityTelemetry(), worker: continuityWorkerState }), clearDetail: clearContinuityDetail, setOverlay: setContinuityOverlay },
       hydrology: { topology: hydrologyTopology, access: freshwaterAccessAt, lakes: macroLakes, mountains: mountainSystems, anchors: finalSurfaceEvidenceAnchors, recipes: drainageRecipes, sampleSource: naturalSurfaceAt, toLonLat: sourceToLonLat, telemetry: hydrologyTelemetry },
       clock,
@@ -1686,6 +1699,9 @@ async function start() {
             evictions,
             discardedPresentationJobs,
             cpuResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes + surfaceBytes + continuityCpuBytes(),
+            combinedResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes + surfaceBytes + continuityCpuBytes() + cachedGeometryBytes + surfaceGpuBytes,
+            cacheTrimStartBytes: streamingBudget.cacheTrimStartBytes,
+            memoryCeilingBytes: streamingBudget.combinedBytes,
             continuityCpuBytesEstimated: continuityCpuBytes(),
             gpuResourceBytesEstimated: cachedGeometryBytes + surfaceGpuBytes,
             sharedSurfaceBytes: surfaceBytes,
@@ -1726,6 +1742,8 @@ async function start() {
             pending.size === 0 &&
             activeKeys.length === wanted.length &&
             activeKeys.every((key) => wanted.some((t) => t.key === key)),
+          roadRepresentation: roadRepresentationAtScale(Number(scaleLabelForHalfHeight(view.halfHeight).slice(2))),
+          roadPresentation: roadVisibleAtScale(Number(scaleLabelForHalfHeight(view.halfHeight).slice(2))) ? "visible" : "hidden",
           settlementPresentation: settlementDetailVisible ? "buildings" : "icons",
           visibleResidents: actors.filter(actor => actor.enabled).length,
           visibleGeometryTriangles: Object.fromEntries(

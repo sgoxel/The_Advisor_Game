@@ -71,8 +71,8 @@ test("an actual natural-water road crossing refines to a narrow authoritative de
     "legacy wide slab must be removed",
   );
 
-  const vx = road!.toX - road!.fromX,
-    vz = road!.toZ - road!.fromZ,
+  const vx = evidence.bridgeTangent.x,
+    vz = evidence.bridgeTangent.z,
     length = Math.hypot(vx, vz),
     ux = vx / length,
     uz = vz / length,

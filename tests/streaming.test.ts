@@ -15,6 +15,9 @@ import {
 } from "../src/planet.ts";
 import {
   STREAMING_BUDGETS,
+  STREAMING_MEMORY_POLICY,
+  shouldTrimStreamingCache,
+  streamingMemoryReservationFits,
   streamingBudgetForViewport,
   withinStreamingBudget,
 } from "../src/streaming.ts";
@@ -36,55 +39,22 @@ const sortedKeys = (
     .map((tile) => tile.key)
     .sort();
 
-test("Stage S002 streaming budgets stay within binding envelopes and reserve rollover headroom", () => {
-  assert.deepEqual(STREAMING_BUDGETS.phone, {
-    deviceClass: "phone",
-    generationReady: 4,
-    activePatches: 89,
-    cachedPatches: 180,
-    cpuBytes: 96 * 1024 * 1024,
-    gpuBytes: 96 * 1024 * 1024,
-  });
-  assert.deepEqual(STREAMING_BUDGETS.tablet, {
-    deviceClass: "tablet",
-    generationReady: 6,
-    activePatches: 119,
-    cachedPatches: 240,
-    cpuBytes: 160 * 1024 * 1024,
-    gpuBytes: 160 * 1024 * 1024,
-  });
-  assert.deepEqual(STREAMING_BUDGETS.desktop, {
-    deviceClass: "desktop",
-    generationReady: 8,
-    activePatches: 159,
-    cachedPatches: 320,
-    cpuBytes: 256 * 1024 * 1024,
-    gpuBytes: 256 * 1024 * 1024,
-  });
-  for (const budget of Object.values(STREAMING_BUDGETS))
-    assert.ok(
-      budget.activePatches * 2 + 1 <= budget.cachedPatches,
-      `${budget.deviceClass} must fit previous + destination active sets + root`,
-    );
-  assert.equal(streamingBudgetForViewport(390, 844).deviceClass, "phone");
-  assert.equal(streamingBudgetForViewport(844, 390).deviceClass, "phone");
-  assert.equal(streamingBudgetForViewport(768, 1024).deviceClass, "tablet");
-  assert.equal(streamingBudgetForViewport(1024, 768).deviceClass, "tablet");
-  assert.equal(streamingBudgetForViewport(1280, 720).deviceClass, "desktop");
-  assert.equal(streamingBudgetForViewport(1440, 900).deviceClass, "desktop");
-  assert.equal(
-    withinStreamingBudget(
-      {
-        generationReady: 4,
-        activePatches: 89,
-        cachedPatches: 180,
-        cpuBytes: 96 * 1024 * 1024,
-        gpuBytes: 96 * 1024 * 1024,
-      },
-      STREAMING_BUDGETS.phone,
-    ),
-    true,
-  );
+test("owner memory policy retains cache through 256 MB and enforces one combined 1 GB ceiling", () => {
+ assert.deepEqual(STREAMING_MEMORY_POLICY,{cacheTrimStartBytes:256_000_000,combinedBytes:1_000_000_000});
+ for(const budget of Object.values(STREAMING_BUDGETS)){
+  assert.equal(budget.combinedBytes,1_000_000_000);assert.equal(budget.cacheTrimStartBytes,256_000_000);
+  const state={generationReady:budget.generationReady,activePatches:budget.activePatches,cachedPatches:10_000,cpuBytes:200_000_000,gpuBytes:56_000_000};
+  assert.equal(shouldTrimStreamingCache(state.cpuBytes,state.gpuBytes,budget),false);
+  assert.equal(withinStreamingBudget(state,budget),true,"patch count alone cannot discard useful small cached data");
+  assert.equal(shouldTrimStreamingCache(200_000_001,56_000_000,budget),true);
+  assert.equal(withinStreamingBudget({...state,cpuBytes:600_000_000,gpuBytes:400_000_000},budget),true);
+  assert.equal(withinStreamingBudget({...state,cpuBytes:600_000_001,gpuBytes:400_000_000},budget),false,"CPU and GPU share one ceiling");
+  assert.equal(streamingMemoryReservationFits(600_000_000,350_000_000,50_000_000,budget),true);
+  assert.equal(streamingMemoryReservationFits(600_000_000,350_000_000,50_000_001,budget),false);
+  assert.equal(withinStreamingBudget({...state,generationReady:budget.generationReady+1},budget),false);
+  assert.equal(withinStreamingBudget({...state,activePatches:budget.activePatches+1},budget),false);
+ }
+ for(const [w,h,kind] of [[390,844,'phone'],[844,390,'phone'],[768,1024,'tablet'],[1280,720,'desktop']] as const)assert.equal(streamingBudgetForViewport(w,h).deviceClass,kind);
 });
 
 test("render patch cache keys are canonical global IDs rather than planar tile addresses", () => {

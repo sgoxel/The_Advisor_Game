@@ -1,0 +1,75 @@
+# Geography-led macro settlements and shared roads â€” owner issue #91
+
+Status: MIXED; final validation in progress, not deployed or completed. No roadmap WP was created for this owner follow-up.
+
+## Owner outcome and invariants
+
+Populate viable continent interiors naturally from the SEED. Country/city/village counts and separation are minimums, not fixed quotas or maximum road lengths. This change intentionally introduces settlement recipe `v2`; settlements relocate while the existing continent, country and natural drainage registries remain unchanged. There is no backward-compatibility migration requirement.
+
+Country ownership, complete dry settlement envelopes, local entrance/access checks, globally separated centres and the fastest-walking-speed minimum remain authoritative. Cities keep at least 18 km separation, villages at least 6 km, and villages at least 7 km from cities. Every country keeps at least three cities and nine villages; at least 30 countries, 90 cities and 270 villages remain. Terrain/routing truth never depends on viewport, memory policy, render backend or wall-clock performance. Simulation uses SEED + fantasy time. Macro queries do not prepare remote scenery.
+
+## Placement and coverage
+
+A finite coarse survey uses 2,048 candidates per continent plus up to 240 water-biased candidates and the anchor per country. Latitude weighting estimates productive area without a fine whole-world grid. Habitat combines freshwater, climate, relief and a gentle interior/coverage preference. Targets are productive kmÂ² / 3,500 for cities and / 650 for villages, subject to minimums and legal capacity; there is no city-count ceiling or maximum parent-road radius. Candidate scratch is released after construction.
+
+The first city favours a viable centre rather than the old farthest-from-anchor rule. Later cities extend coverage. Villages first give each city's hinterland an opportunity, then spread across suitable country land and associate with an accessible city. Three children per city and the old 7â€“23 km parent ring are removed. Names/IDs are deterministic and unique. This SEED uses 11,185 coarse candidates and produces 177 cities and 906 villages in 36 countries; country city counts range 3â€“9 and village counts 10â€“48 as actual outcomes, not quotas. All 906 village cores satisfy the freshwater rule; seeded viable dry-region exceptions remain supported.
+
+| Coarse canonical audit | Before | Final candidate |
+| --- | ---: | ---: |
+| Cities / villages | 108 / 324 | 177 / 906 |
+| Cities within 10 km of a foreign-country border | 42.59% | 1.69% |
+| Mainland nearest-city median / p90 | 48.59 / 86.48 km | 33.58 / 60.44 km |
+| Mainland nearest-village median / p90 | 37.74 / 74.74 km | 18.24 / 40.47 km |
+
+Border proximity uses 16 rays; coverage uses the same two-degree mainland sample in both versions. These are comparison metrics, not exact border distances or a requirement to fill mountains/deserts. Estimated mainland area is 1,121,073 kmÂ². `tools/macro-settlement-audit.ts` exports the registries/metrics and `tools/plot-macro-settlements.py` plots all three continents.
+
+References: [Red Blob Games town placement](https://www.redblobgames.com/x/2503-mapgen2-towns/), [Parish and MÃ¼ller (2001)](https://people.eecs.berkeley.edu/~sequin/CS285/PAPERS/Parish_Muller01.pdf), [Galin et al. (2010), Procedural Generation of Roads](https://perso.liris.cnrs.fr/egalin/Articles/2010-roads.pdf). These inform suitability, network sharing and slope/obstacle/curvature costs; this is not their full global optimizer or a tunnel/construction simulator.
+
+## Real shared topology and terrain routing
+
+The same 1,687 logical settlement connections reference physical edges instead of duplicating full routes. `macro-roads-v2` implements the owner's later fork-angle clarification: minimum 32Â°, preferred branch angle 45Â°â€“70Â°, hard rejection of near-parallel 20Â° approaches, approximately 300 m separation and at most twelve SEED-derived position candidates per approach pair. Angles are measured at actual first road segments, not bearings to remote destinations. Fixed numerical root solving is separate from candidate regeneration; no unseeded randomness is used.
+
+A logical connection has one deterministic shared-approach owner: the higher-degree hub, with a SEED tie-break for equal degree. This prevents deep approach trees at opposite endpoints from passing each other and folding their connecting road back. Nested degree-three Y junctions remain bounded to three levels and 32 merges per hub. Each merge saves geometric road length and keeps original hub access within 12% before terrain routing. Current/incoming coverage and traversal authority remain independent of road ownership.
+
+The current candidate has 607 junctions/shared trunks and 2,294 physical graph edges, plus the existing separate legal lake-detour recipe. All 607 measured fork angles are within 45Â°â€“70Â° (minimum 45.51Â°); the nearest pair of forks is 524.54 m apart. The same settlements/connections use 42,587.13 km of physical roads, versus 46,712.99 km in the earlier nested candidate and 47,041.27 km in the initial pairwise prototype. The example first capital has four exits instead of seven. Logical connection length median / p90 / maximum is 24.79 / 60.76 / 176.23 km; 920 exceed 23 km.
+
+Terrain routing preserves legal local approach rays before its bounded cost search can bend farther along a road. A finite layered corridor search penalizes slope, high relief, sharp turns and expensive river crossings. Wrong-country land, major water and coarse crossing spans above the existing 120 m bridge limit are rejected. Three bounded corridor attempts use at most 12 stages, seven lanes, 49 directional states and 26 physical stations, inside the existing 34-station recipe limit. Flat unobstructed ground may stay straight. The candidate has 986 bent edges and no unverified straight fallback. An impossible corridor fails explicitly. All newly added approach points use the same unwrapped source-coordinate frame as their road.
+
+Coarse connectivity is distinct from legal fine traversal. Existing composed ground/water/deck authority, bounded earthwork, final-cell validation/recosting and on-demand route repair remain decisive. No river is filled for a road. Segment height profiles follow actual polyline legs and use a reconstructible 2,048-entry cache with explicit accounting. Physical trunks may be shorter than a village journey; all village-pair minimum-time proofs still apply.
+
+## Map presentation
+
+At displayed 1/50â€“1/100, thin bounded SVG cartography projects the same canonical road stations. It replaces oversized coarse terrain paint, preserving real bends/shared endpoints and readable crossings. Whole-road and segment culling precede height/projection queries; at most 128 phone / 256 wider-screen paths are submitted. Close views retain ground/deck geometry. Above 1/100, both base road cartography and road paint are hidden, including the shared far/globe albedo. Selected journey overlays remain navigation UI. Presentation changes do not alter prepared heights, materials or walkability.
+
+Buildings/details/residents retain the owner's 1/50 gate. Country/closer views keep the large symbols above names. Wider overviews use bounded canonical city dots, with gold capitals (maximum 160 desktop / 60 phone), not eager settlement meshes. Home follows the new seeded village; the information panel starts minimized. The globe halo follows the camera view axis, matching the projected sphere centre.
+
+The stable-ground zoom gate hides and asserts actual DOM annotation layers, including road cartography, like map labels/selected journey UI. It does not hide ground pixels or weaken perceptual thresholds. Separate unmasked owner pan/scroll comparisons retain houses, fields, trees, roads and residents.
+
+## Owner memory policy and A55 reference
+
+The owner selected Samsung Galaxy A55 / Chrome, using the official 8 GB variant and 1080 Ã— 2340 display for planning. The previous 96 MiB assumption was agent-authored, not an owner requirement or Chrome capacity. The owner then explicitly set:
+
+- Retain valid reusable terrain cache through 256 MB (256,000,000 combined estimated CPU+GPU bytes).
+- Above that threshold, trim unused entries by recency, protecting active/incoming coverage.
+- Use one combined 1 GB (1,000,000,000-byte) maximum; CPU and GPU do not each receive 1 GB.
+- Fixed cached-patch counts no longer trigger eviction or acceptance failure. Job/active-render bounds remain finite.
+
+Upcoming worker work reserves headroom. Application-owned buffer lengths and conservative registry/index/cache/overlay estimates are accounted separately from browser/driver overhead. A web app cannot impose a Chrome/Android physical-RAM cap. A55 resolution/touch emulation on desktop Chrome is not physical-device performance or thermal evidence. Actual A55 measurements must guide later tuning; more available memory does not change canonical content. The prior, pre-fork-clarification Edge macro checks measured cold navigation-to-settled at 111,555 / 104,701 ms for WebGPU desktop / phone viewport (concurrent unit load), and 165,931 / 104,255 ms for WebGL2 desktop / phone viewport. These are not first-paint or frame-rate measurements; startup/preparation cost remains significant on this host and still needs profiling on the physical target.
+
+Canonical-range segment indexing removes unreachable off-world wrap buckets, preserving seam and wide-clearance support with the same 256-byte-per-entry allowance. This reduces retained allocations without removing roads or settlements. Globe/local preparation and worker copies remain charged. Focused simulation keeps analytical country populations and at most 96 materialized residents, rather than allocating every logical resident. Population/art remain prototype values, not a complete demographic/crowd model.
+
+Sources: [Samsung specifications](https://www.samsung.com/in/smartphones/galaxy-a/galaxy-a55-5g-awesome-iceblue-256gb-sm-a556elbgins/), [Chrome memory guidance](https://developer.chrome.com/docs/devtools/memory-problems#memory_bloat_how_much_is_too_much), [Google page-memory measurement guidance](https://web.dev/articles/monitor-total-page-memory-usage).
+
+## Evaluation â€” owner fork follow-up still in progress
+
+The pre-clarification candidate passed 177 units/build, all 26 native Edge WebGPU/WebGL2 cases, all 262 unchanged-limit zoom comparisons (worst mean DeltaE76 0.6340673922417394), and 131 matching canonical sample/focus fingerprints. Four additional native streaming cases passed after replacing stale cached-patch-quota assertions with the owner's byte policy. Six ten-revisit fixtures had 0% warm CPU-estimate drift at the original 5% limit. The retained palette/block negative control still rejects 34.9555 DeltaE76. Those records are retained prior-scope evidence, not acceptance of the later fork-angle requirement.
+
+The owner's newer comment exposed 648 forks below 32Â° in that prior graph. An initial angle repair still had 282 invalid physical forks because opposite endpoint trees changed one another's approach direction. Deterministic single-ended sharing fixes that interaction. A separate seam regression demonstrated three wrapped-coordinate jumps introduced by the new stubs; normalizing all points into one road frame fixes them. The failing fixture and audit records are retained. No CI was cancelled; one superseded local full-unit run was stopped to repair the proven seam defect.
+
+The revised production build and all 181 unit tests passed, including every actual neighbouring-village route and all eight focused graph/terrain/river/barrier/nested-fork/angle/foldback/seam fixtures. The fresh final-registry audit confirms zero invalid forks and zero wrapped-coordinate jumps. All 20 native Edge cases passed (nine WebGPU / eleven WebGL2). All 262 original-limit zoom comparisons passed, worst mean DeltaE76 0.6340673922417394; all 131 canonical before/after sample/focus pairs match backends. All six ten-revisit fixtures had zero warm CPU-estimate drift. Desktop churn had 212 GPU / 223 GL samples, max eight jobs, peak combined estimate 157,504,107 / 159,753,587 bytes. Both 4K owner replays passed six unmasked comparisons (worst mean RGB 0.299385, changed area 0.176636%). All twelve native Chrome 155.0.8059.40 A55-reference screenshots completed with no errors and passed captured resource limits, peak combined estimate 142,614,363 bytes. Requested viewport 360×780/DPR3 resolved to actual CSS 369×800, canvas 553×1200 with the app pixel-ratio cap. This is desktop Chrome resolution/touch evidence, not physical A55 hardware evidence. All 16 owner frames, 20 macro views, 26 representative zoom frames, the tablet revisit and 12 Chrome frames were actually inspected: frozen-candidate VISUAL 8/10. Minor filtering/road aliasing and prototype art remain. Main gained an independent resident-system change overnight; integration and affected validation are required before publication. No public deployment acceptance yet.
+
+Earlier visual reviews are retained: the first pairwise road view was 7/10 for parallel spokes; the second still had oversized coarse paint; the third used thin cartography. Prior desktop/phone continent, country, Y, owner-pan, orientation and representative zoom images were actually inspected, but do not substitute for the new fork geometry. Prototype art/dimensions, simplified resident motion and minor aliasing/filtering remain. No physical A55 speed, complete Linux acceptance or final settlement/crowd simulation is claimed.
+
+Raw failures/evidence remain outside the workspace: `advisor-macro-carto-final-candidate` contains the prior frozen source, assets, completed 26-case and four-streaming logs, images, pairs and metrics; `advisor-macro-owner-fork-*` retains the later audits, negative controls and final candidate. Earlier density/road reviews, old-location fixture failures, the former 96 MiB estimate failure and locally superseded batches remain in their original Temp directories.
+
+The relocated canonical home has 12 legal houses, one keep, one well and one field. An independently recorded CPU inventory and selected-patch mesh audit gives exactly 284 structure triangles at the fixed 3840 Ã— 2041 central view; actual WebGPU rendering matches. The old greater-than-300 assertion was tied to the prior location and failed despite complete geometry. It is replaced with the exact inventory-backed snapshot, independently enforced in 15 passing world tests. The owner replay now records the central properties before panning; icon-scale round trips must restore the exact close-view geometry baseline. Failed old-fixture output and investigation screenshots are retained. Ground-comparison thresholds remain unchanged.

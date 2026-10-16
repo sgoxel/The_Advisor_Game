@@ -21,7 +21,7 @@ test("starting-village streets survive inland replacement and remain distinct fr
     const surface=finalSurfaceAt(x,z);
     if(surface.groundMaterial==='Road') {
       streetVertices++;
-      assert.deepEqual([...result.geometry.colors.subarray(v*4,v*4+3)],[112,92,62]);
+      assert.equal(result.geometry.colors[v*4+3],255,"road coverage is encoded independently from natural soil RGB");
     }
     if(surface.groundMaterial==='Settlement') padVertices++;
   }

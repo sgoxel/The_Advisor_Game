@@ -3,7 +3,7 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests/browser",
   outputDir: "test-results/fallback-run",
-  testMatch: ["renderer.spec.js", "render-frame.spec.js", "routes.spec.js", "orientation.spec.js", "zoom.spec.js", "continuity.spec.js", "alderwick.spec.js", "settlement-icons.spec.js"],
+  testMatch: ["macro-population.spec.js", "renderer.spec.js", "render-frame.spec.js", "routes.spec.js", "orientation.spec.js", "zoom.spec.js", "continuity.spec.js", "alderwick.spec.js", "settlement-icons.spec.js"],
   timeout: 180000,
   workers: 1,
   use: {
