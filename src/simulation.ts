@@ -30,6 +30,7 @@ export type ResidentFoundation = {
   settlement: string;
   homeBuilding: string;
   homeEntrance: string;
+  homeOwner: string;
   workplace: string;
   role: ResidentRole;
   gatePost?: string;
@@ -151,7 +152,7 @@ const MAX_RESIDENT_ROAM_M = 320;
 const MAX_RESIDENT_ROAM_SOURCE =
   MAX_RESIDENT_ROAM_M / CANONICAL_METRES_PER_SOURCE_UNIT;
 const DEFAULT_VISIBLE_LIMIT = 128;
-export const RESIDENTIAL_CAPACITY = 8;
+export const RESIDENTIAL_CAPACITY = 1;
 
 export const populationOf = (place: Place) =>
   place.kind === "city" ? 2400 : 80;
@@ -265,17 +266,17 @@ export function residentFoundationAt(
     variant = digest(code),
     role = residentRoleFor(place, index),
     assignment = guardAssignmentFor(place, index),
-    household = Math.floor(index / RESIDENTIAL_CAPACITY),
-    homeBuilding = `${place.code}/RESIDENCE/${household}`,
+    homeBuilding = `${place.code}/RESIDENCE/${index}`,
     first = GIVEN_NAMES[variant % GIVEN_NAMES.length],
     family = FAMILY_NAMES[digest(`${code}/FAMILY`) % FAMILY_NAMES.length];
   return {
     code,
     name: `${first} ${family}`,
-    home: place.id,
+    home: homeBuilding,
     settlement: place.id,
     homeBuilding,
     homeEntrance: `${homeBuilding}/ENTRANCE`,
+    homeOwner: code,
     workplace:
       assignment?.gatePost ?? `${place.code}/SERVICE/${ROLE_WORKPLACE[role]}`,
     role,
@@ -617,7 +618,7 @@ export class LazySimulation {
       const resident = this.residentByCode(this.selectedResidentCode),
         output = document.getElementById("resident-house-details");
       if (resident && output)
-        output.textContent = `House ${resident.homeBuilding} · entrance ${resident.homeEntrance} · household capacity ${RESIDENTIAL_CAPACITY} · settlement ${resident.settlement}`;
+        output.textContent = `House ${resident.homeBuilding} · entrance ${resident.homeEntrance} · owner ${resident.homeOwner} · capacity ${RESIDENTIAL_CAPACITY} · settlement ${resident.settlement}`;
     });
   }
 
