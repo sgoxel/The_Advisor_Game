@@ -20,11 +20,13 @@ export type SettlementPlotPlan = Omit<CorePlotPlan, "kind" | "service"> & {
   service?: SettlementService;
 };
 export type SettlementExteriorPlan = Omit<CoreExteriorPlan, "plots"> & {
+  /** Static/public plots only. Resident homes are generated analytically on demand. */
   plots: readonly SettlementPlotPlan[];
+  residentHomeCount: number;
 };
 
-const TAU = Math.PI * 2;
 const PHI = 0.6180339887498949;
+export const SETTLEMENT_EXTERIOR_CACHE_LIMIT = 12;
 const cache = new Map<string, SettlementExteriorPlan>();
 const SERVICE_OWNER: Readonly<Partial<Record<CoreService, number>>> = {
   inn: 0,
@@ -66,32 +68,42 @@ function pointOnStreet(street: SettlementStreetPlan, fraction: number) {
   const a = street.points[0], b = street.points[Math.min(1, street.points.length - 1)], tangent = normalize(wrapSourceX(b.x - a.x), b.z - a.z);
   return { point: a, tangent, normal: { x: -tangent.z, z: tangent.x } };
 }
+function streetLength(street: SettlementStreetPlan) {
+  let total = 0;
+  for (let index = 1; index < street.points.length; index++) total += Math.hypot(wrapSourceX(street.points[index].x - street.points[index - 1].x), street.points[index].z - street.points[index - 1].z);
+  return total;
+}
 function offsetPoint(base: ReturnType<typeof pointOnStreet>, along: number, lateral: number): SettlementPoint {
   return { x: wrapSourceX(base.point.x + base.tangent.x * along + base.normal.x * lateral), z: base.point.z + base.tangent.z * along + base.normal.z * lateral };
 }
 
 /**
- * Canonical one-person residence. Identity mirrors simulation.ts exactly; the
- * candidate cloud is presentation/placement acceleration only and never changes ownership.
+ * One canonical one-person residence per resident. The index is decomposed into
+ * deterministic street/side/band/slot ribbons so home identity and position do
+ * not depend on camera, visit order, LOD, cache state, or renderer backend.
  */
-function homePlot(place: Place, plan: CoreExteriorPlan, index: number): SettlementPlotPlan {
-  const streetIndex = (index + digest(`${place.code}/RESIDENCE/${index}/STREET`)) % plan.streets.length,
-    street = plan.streets[streetIndex],
-    slot = Math.floor(index / Math.max(1, plan.streets.length)),
-    side: -1 | 1 = (digest(`${place.code}/RESIDENCE/${index}/SIDE`) & 1) === 0 ? -1 : 1,
-    bandCount = place.kind === "city" ? 8 : 4,
-    band = Math.floor(slot / 32) % bandCount,
-    fraction = .035 + (((index * PHI) + unit(`${place.code}/RESIDENCE/${index}/FRACTION`)) % 1) * .93,
+export function settlementHomeFor(place: Place, index: number, suppliedPlan?: SettlementExteriorPlan): SettlementPlotPlan {
+  const population = canonicalSettlementPopulation(place);
+  if (!Number.isInteger(index) || index < 0 || index >= population) throw new RangeError(`Invalid resident home index ${index} for ${place.code}`);
+  const plan = suppliedPlan || settlementExteriorFor(place), streetCount = Math.max(1, plan.streets.length),
+    bandCount = place.kind === "city" ? 10 : 4, ribbonCount = streetCount * 2 * bandCount,
+    ribbon = index % ribbonCount, ordinal = Math.floor(index / ribbonCount), slotsPerRibbon = Math.ceil(population / ribbonCount),
+    streetIndex = ribbon % streetCount, street = plan.streets[streetIndex],
+    side: -1 | 1 = (Math.floor(ribbon / streetCount) & 1) === 0 ? -1 : 1,
+    band = Math.floor(ribbon / (streetCount * 2)),
+    baseFraction = (ordinal + .5) / slotsPerRibbon,
+    jitter = (unit(`${place.code}/RESIDENCE/${index}/FRACTION`) - .5) * .16 / slotsPerRibbon,
+    fraction = .06 + Math.max(.01, Math.min(.99, baseFraction + jitter)) * .88,
     base = pointOnStreet(street, fraction),
     width = .68 + unit(`${place.code}/RESIDENCE/${index}/WIDTH`) * .34,
     depth = .78 + unit(`${place.code}/RESIDENCE/${index}/DEPTH`) * .38,
-    setback = 1.25 + band * 1.55 + (slot % 4) * .11,
+    setback = 1.55 + band * 2.35 + (unit(`${place.code}/RESIDENCE/${index}/SETBACK`) - .5) * .12,
     lateral = side * (street.width * .5 + setback + depth * .5),
-    yawRad = Math.atan2(-base.normal.x * side, -base.normal.z * side) + (unit(`${place.code}/RESIDENCE/${index}/YAW`) - .5) * .08,
-    primary = offsetPoint(base, 0, lateral),
-    candidates: SettlementPoint[] = [primary];
-  for (const along of [-1.35, 1.35, -2.7, 2.7]) candidates.push(offsetPoint(base, along, lateral));
-  for (const outward of [1.1, 2.2]) candidates.push(offsetPoint(base, 0, lateral + side * outward));
+    yawRad = Math.atan2(-base.normal.x * side, -base.normal.z * side) + (unit(`${place.code}/RESIDENCE/${index}/YAW`) - .5) * .07,
+    spacing = Math.max(1.8, streetLength(street) * .88 / slotsPerRibbon),
+    shift = Math.min(1.7, spacing * .16),
+    candidates: SettlementPoint[] = [offsetPoint(base, 0, lateral)];
+  for (const along of [-shift, shift, -shift * 2, shift * 2, -shift * 3, shift * 3]) candidates.push(offsetPoint(base, along, lateral));
   return {
     id: `${place.code}/RESIDENCE/${index}`,
     kind: "house",
@@ -101,51 +113,30 @@ function homePlot(place: Place, plan: CoreExteriorPlan, index: number): Settleme
     width,
     depth,
     yawRad,
-    clearanceRadius: Math.hypot(width, depth) * .5 + .16,
+    clearanceRadius: Math.hypot(width, depth) * .5 + .12,
     candidates,
   };
 }
 
 function servicePlot(place: Place, plot: CorePlotPlan): SettlementPlotPlan {
   if (plot.kind !== "service" || !plot.service) return plot;
-  const ownerIndex = SERVICE_OWNER[plot.service],
-    population = canonicalSettlementPopulation(place),
+  const ownerIndex = SERVICE_OWNER[plot.service], population = canonicalSettlementPopulation(place),
     staff = Math.max(1, Math.min(12, Math.ceil(population / (plot.service === "farmstead" ? 700 : 1100))));
-  return {
-    ...plot,
-    ownerId: ownerIndex === undefined ? plot.ownerId : `${place.code}/RESIDENT/${ownerIndex}`,
-    residents: staff,
-    capacity: Math.max(plot.capacity, staff),
-  };
+  return { ...plot, ownerId: ownerIndex === undefined ? plot.ownerId : `${place.code}/RESIDENT/${ownerIndex}`, residents: staff, capacity: Math.max(plot.capacity, staff) };
 }
-
 function gardenFor(place: Place, home: SettlementPlotPlan, index: number): SettlementPlotPlan {
-  const width = 1.4 + unit(`${place.code}/GARDEN/${index}/WIDTH`) * .7,
-    depth = 1.6 + unit(`${place.code}/GARDEN/${index}/DEPTH`) * .8,
+  const width = 1.4 + unit(`${place.code}/GARDEN/${index}/WIDTH`) * .7, depth = 1.6 + unit(`${place.code}/GARDEN/${index}/DEPTH`) * .8,
     candidates = home.candidates.map((candidate) => ({
       x: wrapSourceX(candidate.x + Math.cos(home.yawRad) * (home.width * .5 + width * .5 + .45)),
       z: candidate.z - Math.sin(home.yawRad) * (home.width * .5 + width * .5 + .45),
     }));
-  return {
-    id: `${place.code}/GARDEN/${index}`,
-    kind: "garden",
-    ownerId: home.ownerId,
-    capacity: 0,
-    residents: 0,
-    width,
-    depth,
-    yawRad: home.yawRad,
-    clearanceRadius: Math.hypot(width, depth) * .5 + .12,
-    candidates,
-  };
+  return { id: `${place.code}/GARDEN/${index}`, kind: "garden", ownerId: home.ownerId, capacity: 0, residents: 0, width, depth, yawRad: home.yawRad, clearanceRadius: Math.hypot(width, depth) * .5 + .12, candidates };
 }
-
 function terminalApproach(place: Place): { road: Road; x: number; z: number } | undefined {
   const candidates = roads.filter((road) => road.networkKind !== "detour" && (road.from === place.id || road.to === place.id) && road.centerline && road.centerline.length >= 2)
     .sort((a, b) => a.code.localeCompare(b.code));
   for (const road of candidates) {
-    const points = road.centerline!;
-    const next = road.from === place.id ? points[1] : points[points.length - 2];
+    const points = road.centerline!, next = road.from === place.id ? points[1] : points[points.length - 2];
     if (Math.hypot(wrapSourceX(next.x - place.x), next.z - place.z) > .001) return { road, x: next.x, z: next.z };
   }
   return undefined;
@@ -154,19 +145,14 @@ function alignPrimaryGateToRoad(place: Place, plan: SettlementExteriorPlan): Set
   if (!plan.gates.length || !plan.streets.length) return plan;
   const approach = terminalApproach(place), main = plan.streets[0];
   if (!approach || main.points.length < 2) return plan;
-  const outward = normalize(wrapSourceX(approach.x - place.x), approach.z - place.z), gatePoint = {
-      x: wrapSourceX(place.x + outward.x * plan.radius), z: place.z + outward.z * plan.radius,
-    },
+  const outward = normalize(wrapSourceX(approach.x - place.x), approach.z - place.z), gatePoint = { x: wrapSourceX(place.x + outward.x * plan.radius), z: place.z + outward.z * plan.radius },
     start = main.points[0], end = main.points[main.points.length - 1],
     useStart = Math.hypot(wrapSourceX(start.x - gatePoint.x), start.z - gatePoint.z) <= Math.hypot(wrapSourceX(end.x - gatePoint.x), end.z - gatePoint.z),
     mainPoints = main.points.map((point) => ({ ...point }));
   if (useStart) mainPoints[0] = gatePoint; else mainPoints[mainPoints.length - 1] = gatePoint;
-  const normal = { x: -outward.z, z: outward.x }, primary = plan.gates[0],
-    guardPosts = primary.guardPosts.map((_, index) => ({
+  const normal = { x: -outward.z, z: outward.x }, primary = plan.gates[0], guardPosts = primary.guardPosts.map((_, index) => ({
       x: wrapSourceX(gatePoint.x + normal.x * (index === 0 ? 9 : -9)), z: gatePoint.z + normal.z * (index === 0 ? 9 : -9),
-    })),
-    primaryGate = { ...primary, x: gatePoint.x, z: gatePoint.z, bearingRad: Math.atan2(outward.z, outward.x), guardPosts },
-    border = plan.border.map((point) => ({ ...point }));
+    })), primaryGate = { ...primary, x: gatePoint.x, z: gatePoint.z, bearingRad: Math.atan2(outward.z, outward.x), guardPosts }, border = plan.border.map((point) => ({ ...point }));
   let nearest = 0, nearestDistance = Infinity;
   for (let index = 0; index < border.length; index++) {
     const distance = Math.hypot(wrapSourceX(border[index].x - gatePoint.x), border[index].z - gatePoint.z);
@@ -175,35 +161,32 @@ function alignPrimaryGateToRoad(place: Place, plan: SettlementExteriorPlan): Set
   border[nearest] = gatePoint;
   return { ...plan, entrance: gatePoint, streets: [{ ...main, points: mainPoints }, ...plan.streets.slice(1)], gates: [primaryGate, ...plan.gates.slice(1)], border };
 }
+function remember(plan: SettlementExteriorPlan) {
+  cache.delete(plan.placeCode);
+  cache.set(plan.placeCode, plan);
+  while (cache.size > SETTLEMENT_EXTERIOR_CACHE_LIMIT) cache.delete(cache.keys().next().value!);
+  return plan;
+}
 
 export function settlementExteriorFor(place: Place): SettlementExteriorPlan {
   const existing = cache.get(place.code);
-  if (existing) return existing;
+  if (existing) return remember(existing);
   const core = coreSettlementExteriorFor(place), plots: SettlementPlotPlan[] = [];
   for (const plot of core.plots) if (plot.kind !== "house") plots.push(servicePlot(place, plot));
-  const population = canonicalSettlementPopulation(place), gardenStride = place.kind === "city" ? 48 : 8;
-  for (let index = 0; index < population; index++) {
-    const home = homePlot(place, core, index);
-    plots.push(home);
-    if (index % gardenStride === 0) plots.push(gardenFor(place, home, index));
-  }
-  const plan = alignPrimaryGateToRoad(place, { ...core, plots });
-  cache.set(place.code, plan);
-  return plan;
+  const residentHomeCount = canonicalSettlementPopulation(place), gardenStride = place.kind === "city" ? 48 : 8;
+  for (let index = 0; index < residentHomeCount; index += gardenStride) plots.push(gardenFor(place, settlementHomeFor(place, index, { ...core, plots: [], residentHomeCount }), index));
+  return remember(alignPrimaryGateToRoad(place, { ...core, plots, residentHomeCount }));
 }
 export function settlementExteriorCacheSize() { return cache.size; }
 
-/** Diagnostics count canonical homes analytically; they do not eagerly materialize every detailed residence. */
+/** Diagnostics count canonical homes analytically; they never materialize all homes. */
 export function settlementExteriorSummary() {
   let cityGates = 0, villageGates = 0, plots = 0, streets = 0, borderPoints = 0;
   const archetypes: Partial<Record<SettlementArchetype, number>> = {};
   for (const place of places) {
-    const core = coreSettlementExteriorFor(place), population = canonicalSettlementPopulation(place),
-      nonHomes = core.plots.filter((plot) => plot.kind !== "house").length,
+    const core = coreSettlementExteriorFor(place), population = canonicalSettlementPopulation(place), nonHomes = core.plots.filter((plot) => plot.kind !== "house").length,
       gardens = Math.ceil(population / (place.kind === "city" ? 48 : 8));
-    plots += nonHomes + population + gardens;
-    streets += core.streets.length;
-    borderPoints += core.border.length;
+    plots += nonHomes + population + gardens; streets += core.streets.length; borderPoints += core.border.length;
     archetypes[core.archetype] = (archetypes[core.archetype] || 0) + 1;
     if (place.kind === "city") cityGates += core.gates.length; else villageGates += core.gates.length;
   }

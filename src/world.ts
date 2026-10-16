@@ -11,11 +11,11 @@ import {
   type Tile,
 } from "./world-core.ts";
 import { nearbyPlaces, roadDistanceAt, roads, type Place } from "./geography.ts";
-import { settlementExteriorFor, type SettlementExteriorPlan, type SettlementPlotPlan } from "./settlement-exterior.ts";
+import { settlementExteriorFor, settlementHomeFor, type SettlementExteriorPlan, type SettlementPlotPlan } from "./settlement-exterior.ts";
 import { naturalSurfaceAt } from "./hydrology.ts";
 import { wrapSourceX } from "./planet.ts";
 
-type MorphologyKind = CoreFeature["kind"] | "service" | "street" | "border" | "gate" | "guard-post" | "garden" | "path" | "pavement" | "roadside-tree";
+type MorphologyKind = CoreFeature["kind"] | "residence" | "service" | "street" | "border" | "gate" | "guard-post" | "garden" | "path" | "pavement" | "roadside-tree";
 type MorphologyFeature = {
   kind: MorphologyKind;
   x: number;
@@ -38,19 +38,20 @@ type MorphologyFeature = {
 };
 type StreetHit = { id: string; width: number; distance: number; x: number; z: number };
 type Resolved = { x: number; z: number } | null;
+type Occupant = { x: number; z: number; radius: number };
+type ResolvedSettlement = { staticAnchors: Map<string, Resolved>; staticOccupants: Occupant[]; homes: Map<string, Resolved> };
 
-const resolvedPlots = new Map<string, Map<string, Resolved>>();
+export const SETTLEMENT_PRESENTATION_CACHE_LIMIT = 12;
+const MAX_CACHED_HOME_ANCHORS = 512;
+const resolvedSettlements = new Map<string, ResolvedSettlement>();
 const ROAD_BUCKET_SIZE = 2048;
 const ROAD_CLEARANCE_SUPPORT = 64;
-const OCCUPANCY_BUCKET_SIZE = 4;
 const externalRoadBuckets = new Map<string, (typeof roads)[number][]>();
 const roadBucketKey = (bx: number, bz: number) => `${bx}/${bz}`;
 for (const road of roads) {
   for (const shiftX of [-WORLD_SIZE, 0, WORLD_SIZE]) {
-    const minBX = Math.floor((road.minX + shiftX - ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE),
-      maxBX = Math.floor((road.maxX + shiftX + ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE),
-      minBZ = Math.floor((road.minZ - ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE),
-      maxBZ = Math.floor((road.maxZ + ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE);
+    const minBX = Math.floor((road.minX + shiftX - ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE), maxBX = Math.floor((road.maxX + shiftX + ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE),
+      minBZ = Math.floor((road.minZ - ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE), maxBZ = Math.floor((road.maxZ + ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE);
     for (let bz = minBZ; bz <= maxBZ; bz++) for (let bx = minBX; bx <= maxBX; bx++) {
       const key = roadBucketKey(bx, bz), bucket = externalRoadBuckets.get(key) || [];
       bucket.push(road); externalRoadBuckets.set(key, bucket);
@@ -71,12 +72,12 @@ function settlementStreetAt(plan: SettlementExteriorPlan, x: number, z: number):
   }
   return best;
 }
-function externalRoadClear(place: Place, x: number, z: number, radius: number) {
+function externalRoadClear(x: number, z: number, radius: number) {
   const wrappedX = wrapSourceX(x), bx = Math.floor(wrappedX / ROAD_BUCKET_SIZE), bz = Math.floor(z / ROAD_BUCKET_SIZE),
     reach = Math.max(0, Math.ceil(radius / ROAD_BUCKET_SIZE)), candidates = new Set<(typeof roads)[number]>();
   for (let dz = -reach; dz <= reach; dz++) for (let dx = -reach; dx <= reach; dx++)
     for (const road of externalRoadBuckets.get(roadBucketKey(bx + dx, bz + dz)) || []) candidates.add(road);
-  return [...candidates].every((road) => road.from === place.id || road.to === place.id || roadDistanceAt(wrappedX, z, road) > radius);
+  return [...candidates].every((road) => roadDistanceAt(wrappedX, z, road) > radius);
 }
 function borderClearance(place: Place, plan: SettlementExteriorPlan, x: number, z: number) {
   const qx = wrapSourceX(x - place.x), qz = z - place.z, polygon = plan.border.map((point) => ({ x: wrapSourceX(point.x - place.x), z: point.z - place.z }));
@@ -95,14 +96,14 @@ function borderClearance(place: Place, plan: SettlementExteriorPlan, x: number, 
 function candidateLegal(place: Place, plan: SettlementExteriorPlan, plot: SettlementPlotPlan, candidate: { x: number; z: number }) {
   const surface = finalSurfaceAt(candidate.x, candidate.z);
   if (surface.groundHeight < .2 || surface.water.kind !== "none" || !surface.walkable) return false;
-  const radius = plot.clearanceRadius, roadReserve = plot.kind === "house" ? radius + .65 : radius + 4;
-  if (!externalRoadClear(place, candidate.x, candidate.z, roadReserve)) return false;
+  const radius = plot.clearanceRadius, roadReserve = plot.kind === "house" ? radius + .55 : radius + 3;
+  if (!externalRoadClear(candidate.x, candidate.z, roadReserve)) return false;
   const street = settlementStreetAt(plan, candidate.x, candidate.z);
-  if (street && street.distance < street.width * .5 + radius * .8) return false;
+  if (street && street.distance < street.width * .5 + radius * .78) return false;
   if (plot.kind !== "field" && plan.gates.some((gate) => Math.hypot(wrapSourceX(candidate.x - gate.x), candidate.z - gate.z) < radius + 7)) return false;
-  if (plot.kind !== "field" && borderClearance(place, plan, candidate.x, candidate.z) < radius + .3) return false;
-  const sampleRadius = plot.kind === "house" ? Math.max(.3, Math.min(.7, radius * .7)) : plot.kind === "field" ? 9 : Math.min(6, Math.max(1.5, radius * .55)),
-    samples = plot.kind === "house" ? [[0,0],[-sampleRadius,-sampleRadius],[sampleRadius,sampleRadius]] : [[0,0],[-sampleRadius,-sampleRadius],[-sampleRadius,sampleRadius],[sampleRadius,-sampleRadius],[sampleRadius,sampleRadius]];
+  if (plot.kind !== "field" && borderClearance(place, plan, candidate.x, candidate.z) < radius + .25) return false;
+  const sampleRadius = plot.kind === "house" ? Math.max(.24, Math.min(.58, radius * .62)) : plot.kind === "field" ? 9 : Math.min(6, Math.max(1.5, radius * .55)),
+    samples = plot.kind === "house" ? [[0, 0], [-sampleRadius, -sampleRadius], [sampleRadius, sampleRadius]] : [[0,0],[-sampleRadius,-sampleRadius],[-sampleRadius,sampleRadius],[sampleRadius,-sampleRadius],[sampleRadius,sampleRadius]];
   for (const [dx, dz] of samples) {
     const point = finalSurfaceAt(candidate.x + dx, candidate.z + dz);
     if (point.water.kind !== "none" || !point.walkable || Math.abs(point.groundHeight - surface.groundHeight) > (plot.kind === "field" ? .1 : .28)) return false;
@@ -113,34 +114,47 @@ function candidateLegal(place: Place, plan: SettlementExteriorPlan, plot: Settle
   }
   return true;
 }
-function resolvePlan(place: Place) {
-  let result = resolvedPlots.get(place.code);
-  if (result) return result;
-  const plan = settlementExteriorFor(place), buckets = new Map<string, { x: number; z: number; radius: number }[]>();
-  let maximumRadius = 0;
-  const keyFor = (x: number, z: number) => `${Math.floor(wrapSourceX(x) / OCCUPANCY_BUCKET_SIZE)}/${Math.floor(z / OCCUPANCY_BUCKET_SIZE)}`;
-  const overlaps = (x: number, z: number, radius: number) => {
-    const bx = Math.floor(wrapSourceX(x) / OCCUPANCY_BUCKET_SIZE), bz = Math.floor(z / OCCUPANCY_BUCKET_SIZE), reach = Math.ceil((radius + maximumRadius) / OCCUPANCY_BUCKET_SIZE);
-    for (let dz = -reach; dz <= reach; dz++) for (let dx = -reach; dx <= reach; dx++)
-      for (const other of buckets.get(`${bx + dx}/${bz + dz}`) || [])
-        if (Math.hypot(wrapSourceX(x - other.x), z - other.z) < radius + other.radius) return true;
-    return false;
-  };
-  const occupy = (x: number, z: number, radius: number) => {
-    const key = keyFor(x, z), bucket = buckets.get(key) || [];
-    bucket.push({ x, z, radius }); buckets.set(key, bucket); maximumRadius = Math.max(maximumRadius, radius);
-  };
-  result = new Map();
+function overlaps(occupants: readonly Occupant[], x: number, z: number, radius: number) {
+  return occupants.some((other) => Math.hypot(wrapSourceX(x - other.x), z - other.z) < radius + other.radius);
+}
+function rememberResolution(placeCode: string, resolution: ResolvedSettlement) {
+  resolvedSettlements.delete(placeCode);
+  resolvedSettlements.set(placeCode, resolution);
+  while (resolvedSettlements.size > SETTLEMENT_PRESENTATION_CACHE_LIMIT) resolvedSettlements.delete(resolvedSettlements.keys().next().value!);
+  return resolution;
+}
+function resolveStaticPlan(place: Place, plan: SettlementExteriorPlan) {
+  const cached = resolvedSettlements.get(place.code);
+  if (cached) return rememberResolution(place.code, cached);
+  const staticAnchors = new Map<string, Resolved>(), staticOccupants: Occupant[] = [];
   for (const plot of plan.plots) {
     let chosen: Resolved = null;
     for (const candidate of plot.candidates) {
-      if (!candidateLegal(place, plan, plot, candidate) || overlaps(candidate.x, candidate.z, plot.clearanceRadius)) continue;
-      chosen = candidate; occupy(candidate.x, candidate.z, plot.clearanceRadius); break;
+      if (!candidateLegal(place, plan, plot, candidate) || overlaps(staticOccupants, candidate.x, candidate.z, plot.clearanceRadius)) continue;
+      chosen = candidate; staticOccupants.push({ x: candidate.x, z: candidate.z, radius: plot.clearanceRadius }); break;
     }
-    result.set(plot.id, chosen);
+    staticAnchors.set(plot.id, chosen);
   }
-  resolvedPlots.set(place.code, result);
-  return result;
+  return rememberResolution(place.code, { staticAnchors, staticOccupants, homes: new Map() });
+}
+function resolveHome(place: Place, plan: SettlementExteriorPlan, plot: SettlementPlotPlan, resolution: ResolvedSettlement) {
+  if (resolution.homes.has(plot.id)) {
+    const value = resolution.homes.get(plot.id)!;
+    resolution.homes.delete(plot.id); resolution.homes.set(plot.id, value);
+    return value;
+  }
+  let chosen: Resolved = null;
+  for (const candidate of plot.candidates) {
+    if (candidateLegal(place, plan, plot, candidate) && !overlaps(resolution.staticOccupants, candidate.x, candidate.z, plot.clearanceRadius)) { chosen = candidate; break; }
+  }
+  resolution.homes.set(plot.id, chosen);
+  while (resolution.homes.size > MAX_CACHED_HOME_ANCHORS) resolution.homes.delete(resolution.homes.keys().next().value!);
+  return chosen;
+}
+export function settlementPresentationCacheState() {
+  let homeAnchors = 0;
+  for (const resolution of resolvedSettlements.values()) homeAnchors += resolution.homes.size;
+  return { settlements: resolvedSettlements.size, homeAnchors, maxSettlements: SETTLEMENT_PRESENTATION_CACHE_LIMIT, maxHomeAnchorsPerSettlement: MAX_CACHED_HOME_ANCHORS } as const;
 }
 function enclosureStyleFor(place: Place, plan: SettlementExteriorPlan) {
   if (place.kind === "city") return { variant: 1, width: 1.6, label: "Stone city wall" };
@@ -148,28 +162,38 @@ function enclosureStyleFor(place: Place, plan: SettlementExteriorPlan) {
   if (plan.archetype === "roadside" || plan.archetype === "fortified-frontier") return { variant: 3, width: 1, label: "Palisade enclosure" };
   return { variant: 4, width: 1.3, label: "Stone and timber enclosure" };
 }
-function presentPlot(place: Place, plot: SettlementPlotPlan, tileSize: number) {
-  if (plot.kind !== "house") return true;
-  const index = Number(plot.id.slice(plot.id.lastIndexOf("/") + 1));
-  const stride = place.kind === "city" ? (tileSize <= 32 ? 6 : tileSize <= 64 ? 10 : 24) : (tileSize <= 32 ? 2 : tileSize <= 64 ? 3 : 6);
-  return Number.isInteger(index) && index % stride === 0;
+function homeStride(place: Place, tileSize: number) {
+  return place.kind === "city" ? (tileSize <= 32 ? 6 : tileSize <= 64 ? 10 : 24) : (tileSize <= 32 ? 2 : tileSize <= 64 ? 3 : 6);
+}
+function nearTile(tile: Tile, point: { x: number; z: number }, padding = 5) {
+  return point.x >= tile.minX - padding && point.x < tile.minX + tile.size + padding && point.z >= tile.minZ - padding && point.z < tile.minZ + tile.size + padding;
 }
 
-/** S004 morphology overlay. Canonical homes remain complete; visible meshes are a bounded semantic view. */
+/** S004 morphology overlay. Canonical homes are analytical; only visible home plots are resolved. */
 export function featuresFor(tile: Tile): MorphologyFeature[] {
   const tileCentreX = tile.minX + tile.size * .5, tileCentreZ = tile.minZ + tile.size * .5, localPlaces = nearbyPlaces(tileCentreX, tileCentreZ),
-    markers = localPlaces.map((place) => `/F/${place.id}/`),
-    features = coreFeaturesFor(tile).filter((feature) => !markers.some((marker) => feature.code.includes(marker))) as MorphologyFeature[];
+    markers = localPlaces.map((place) => `/F/${place.id}/`), features = coreFeaturesFor(tile).filter((feature) => !markers.some((marker) => feature.code.includes(marker))) as MorphologyFeature[];
   const add = (kind: MorphologyKind, x: number, z: number, variant: number, id: string, metadata: Partial<MorphologyFeature> = {}) => {
     if (x < tile.minX || x >= tile.minX + tile.size || z < tile.minZ || z >= tile.minZ + tile.size) return;
     const surface = finalSurfaceAt(x, z);
     if (surface.water.kind !== "none" || !surface.walkable) return;
     features.push({ kind, x, z, y: surface.groundHeight, variant, code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`, ...metadata });
   };
+  const emitPlot = (place: Place, plan: SettlementExteriorPlan, plot: SettlementPlotPlan, point: { x: number; z: number }) => {
+    const kind: MorphologyKind = plot.kind === "house" ? "residence" : plot.kind === "service" ? "service" : plot.kind,
+      street = settlementStreetAt(plan, point.x, point.z), dx = street ? wrapSourceX(street.x - point.x) : 0, dz = street ? street.z - point.z : 0,
+      distance = Math.hypot(dx, dz), edgeOffset = Math.min(distance * .45, Math.max(.25, Math.min(plot.width, plot.depth) * .42)),
+      door = street && distance > 0 ? { x: wrapSourceX(point.x + dx / distance * edgeOffset), z: point.z + dz / distance * edgeOffset } : point;
+    add(kind, point.x, point.z, digest(`${plot.id}/FEATURE`), `${place.id}/${plot.id}`, { service: plot.service, ownerId: plot.ownerId, capacity: plot.capacity, residents: plot.residents, label: plot.service || plot.kind, entranceX: door.x, entranceZ: door.z, yawRad: plot.yawRad, footprintWidth: plot.width, footprintDepth: plot.depth, fieldForm: plot.fieldForm });
+    if ((kind === "residence" || kind === "service" || kind === "keep") && street && distance > edgeOffset + .28) {
+      const pathDx = wrapSourceX(street.x - door.x), pathDz = street.z - door.z, pathLength = Math.hypot(pathDx, pathDz);
+      add("path", wrapSourceX(door.x + pathDx * .5), door.z + pathDz * .5, digest(`${plot.id}/PATH`), `${place.id}/path/${plot.id}`, { ownerId: plot.ownerId, label: "Access path", yawRad: Math.atan2(pathDx, pathDz), footprintWidth: .42, footprintDepth: pathLength, length: pathLength });
+    }
+  };
   for (const place of localPlaces) {
     const extent = place.kind === "city" ? 456 : 178;
     if (Math.abs(wrapSourceX(place.x - tileCentreX)) > tile.size * .5 + extent || Math.abs(place.z - tileCentreZ) > tile.size * .5 + extent) continue;
-    const plan = settlementExteriorFor(place), anchors = resolvePlan(place), enclosure = enclosureStyleFor(place, plan);
+    const plan = settlementExteriorFor(place), resolution = resolveStaticPlan(place, plan), enclosure = enclosureStyleFor(place, plan);
     for (const street of plan.streets) for (let index = 1; index < street.points.length; index++) {
       const a = street.points[index - 1], b = street.points[index], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz);
       if (length) add("street", wrapSourceX(a.x + dx * .5), a.z + dz * .5, Math.round(street.width * 10), `${place.id}/street/${index}/${street.id}`, { yawRad: Math.atan2(dx, dz), footprintWidth: street.width, footprintDepth: length, length, label: "Street" });
@@ -182,18 +206,15 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
       }
     }
     for (const plot of plan.plots) {
-      if (!presentPlot(place, plot, tile.size)) continue;
-      const point = anchors.get(plot.id);
-      if (!point) continue;
-      const kind: MorphologyKind = plot.kind === "service" ? "service" : plot.kind, street = settlementStreetAt(plan, point.x, point.z),
-        dx = street ? wrapSourceX(street.x - point.x) : 0, dz = street ? street.z - point.z : 0, distance = Math.hypot(dx, dz),
-        edgeOffset = Math.min(distance * .45, Math.max(.35, Math.min(plot.width, plot.depth) * .42)),
-        door = street && distance > 0 ? { x: wrapSourceX(point.x + dx / distance * edgeOffset), z: point.z + dz / distance * edgeOffset } : point;
-      add(kind, point.x, point.z, digest(`${plot.id}/FEATURE`), `${place.id}/${plot.id}`, { service: plot.service, ownerId: plot.ownerId, capacity: plot.capacity, residents: plot.residents, label: plot.service || plot.kind, entranceX: door.x, entranceZ: door.z, yawRad: plot.yawRad, footprintWidth: plot.width, footprintDepth: plot.depth, fieldForm: plot.fieldForm });
-      if ((kind === "house" || kind === "service" || kind === "keep") && street && distance > edgeOffset + .35) {
-        const pathDx = wrapSourceX(street.x - door.x), pathDz = street.z - door.z, pathLength = Math.hypot(pathDx, pathDz);
-        add("path", wrapSourceX(door.x + pathDx * .5), door.z + pathDz * .5, digest(`${plot.id}/PATH`), `${place.id}/path/${plot.id}`, { ownerId: plot.ownerId, label: "Access path", yawRad: Math.atan2(pathDx, pathDz), footprintWidth: .7, footprintDepth: pathLength, length: pathLength });
-      }
+      const point = resolution.staticAnchors.get(plot.id);
+      if (point) emitPlot(place, plan, plot, point);
+    }
+    const stride = homeStride(place, tile.size);
+    for (let index = 0; index < plan.residentHomeCount; index += stride) {
+      const plot = settlementHomeFor(place, index, plan), primary = plot.candidates[0];
+      if (!nearTile(tile, primary, 8)) continue;
+      const point = resolveHome(place, plan, plot, resolution);
+      if (point) emitPlot(place, plan, plot, point);
     }
     for (const gate of plan.gates) {
       const gateYaw = Math.PI / 2 - gate.bearingRad;
