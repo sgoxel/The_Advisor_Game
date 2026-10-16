@@ -1,0 +1,61 @@
+name: AGENT1 WP-S004 current-main integration
+on:
+  push:
+    branches: [agent1/wp-s004-001-001-current-main-20261016]
+permissions:
+  contents: write
+jobs:
+  integrate:
+    if: ${{ !contains(github.event.head_commit.message, '[wp-s004-applied]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Layer exterior morphology onto current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=defc5855a856cb7816d45b30f6d5929a3c8c53d5
+          cp src/world.ts src/world-core.ts
+          cp src/geometry.ts src/geometry-core.ts
+          git show "$BASE:src/world.ts" > src/world.ts
+          git show "$BASE:src/geometry.ts" > src/geometry.ts
+          git show "$BASE:src/settlement-exterior-core.ts" > src/settlement-exterior-core.ts
+          git show "$BASE:src/settlement-exterior.ts" > src/settlement-exterior.ts
+          git show "$BASE:tests/settlement-exterior.test.ts" > tests/settlement-exterior.test.ts
+          git show "$BASE:tests/village-morphology-runtime.test.ts" > tests/village-morphology-runtime.test.ts
+          git show "$BASE:tests/wp-s004-world-integration.test.ts" > tests/wp-s004-world-integration.test.ts
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/world-core.ts')
+          s=p.read_text()
+          old='''export type Feature = {\n  kind: "house" | "keep" | "tree" | "rock" | "field" | "well";\n  x: number;\n  z: number;\n  y: number;\n  code: string;\n  variant: number;\n};'''
+          new='''export type Feature = {\n  kind: "house" | "keep" | "tree" | "rock" | "field" | "well" | "service" | "street" | "border" | "gate" | "guard-post";\n  x: number;\n  z: number;\n  y: number;\n  code: string;\n  variant: number;\n  service?: "market" | "inn" | "blacksmith" | "butcher" | "guard-office" | "farmstead" | "merchant" | "headman";\n  ownerId?: string;\n  capacity?: number;\n  residents?: number;\n  label?: string;\n  entranceX?: number;\n  entranceZ?: number;\n  yawRad?: number;\n  footprintWidth?: number;\n  footprintDepth?: number;\n  length?: number;\n  fieldForm?: "strip" | "paddock" | "orchard" | "vegetable" | "pasture";\n};'''
+          if old not in s:
+              raise SystemExit('Feature type anchor changed')
+          p.write_text(s.replace(old,new,1))
+
+          p=Path('src/geometry.ts')
+          s=p.read_text()
+          anchor='''    if (feature.kind === "garden") {'''
+          replacement='''    if (feature.kind === "street") {\n      structures.boxYaw(x, y + .025, z, width, .10, feature.length || depth || 3, yaw, color(116, 96, 68));\n    } else if (feature.kind === "border") {\n      structures.boxYaw(x, y, z, width || 1.2, feature.variant ? 2.5 : 1.4, feature.length || depth || 4, yaw, feature.variant ? color(137, 137, 126) : color(105, 82, 54));\n    } else if (feature.kind === "gate") {\n      const gateW=Math.max(8,width), postH=feature.variant%2?5.8:4.8;\n      for (const side of [-1,1]) {\n        const gx=x+Math.cos(yaw)*gateW*.46*side, gz=z-Math.sin(yaw)*gateW*.46*side;\n        structures.boxYaw(gx,y,gz,2.1,postH,2.1,yaw,color(139,136,120));\n      }\n      detail.boxYaw(x,y+postH-.35,z,gateW,1.0,1.3,yaw,color(82,61,42));\n    } else if (feature.kind === "guard-post") {\n      structures.boxYaw(x,y,z,width,4.2,depth,yaw,color(151,145,124));\n      structures.cone(x,y+4.1,z,Math.max(width,depth)*.7,2.2,color(82,71,62),4);\n    } else if (feature.kind === "service" && feature.service !== "merchant" && feature.service !== "headman") {\n      const h=4.8+((variant>>>2)%3)*.7, wall=feature.service==="blacksmith"?color(126,118,103):feature.service==="market"?color(184,163,118):color(194,177,139);\n      structures.boxYaw(x,y-.15,z,width,h+.15,depth,yaw,wall);\n      const roofRadius=Math.max(width,depth)*.68;\n      structures.cone(x,y+h,z,roofRadius,2.8,feature.service==="guard-office"?color(82,87,88):color(119,72,49),4);\n      if (feature.service === "blacksmith") detail.boxYaw(x+Math.cos(yaw)*width*.38,y,z-Math.sin(yaw)*width*.38,1.2,3.2,1.2,yaw,color(83,78,70));\n      if (feature.service === "market") detail.boxYaw(x,y+.08,z+Math.cos(yaw)*depth*.54,width*.72,.18,2.0,yaw,color(155,111,62));\n    } else if (feature.kind === "garden") {'''
+          if anchor not in s:
+              raise SystemExit('Geometry overlay anchor changed')
+          p.write_text(s.replace(anchor,replacement,1))
+          PY
+          git config user.name "AGENT #1"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/world.ts src/world-core.ts src/geometry.ts src/geometry-core.ts src/settlement-exterior.ts src/settlement-exterior-core.ts tests/settlement-exterior.test.ts tests/village-morphology-runtime.test.ts tests/wp-s004-world-integration.test.ts
+          git commit -m "WP-S004-001-001: integrate deterministic exterior morphology [wp-s004-applied]"
+          git push origin HEAD:agent1/wp-s004-001-001-current-main-20261016
+      - name: Functional acceptance
+        run: |
+          npm ci
+          npm test
+          npm run build
