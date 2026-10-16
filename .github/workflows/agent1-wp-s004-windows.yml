@@ -30,3 +30,5 @@ jobs:
         run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/world.test.ts tests/final-surface-integration.test.ts tests/political-atlas.test.ts tests/continuity.test.ts
       - name: Production build
         run: npm run build
+
+# AGENT #1 exact-source continuation trigger
