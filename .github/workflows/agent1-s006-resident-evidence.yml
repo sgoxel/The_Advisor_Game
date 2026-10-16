@@ -3,13 +3,13 @@ on:
   pull_request:
     branches: [main]
 concurrency:
-  group: s006-resident-${{ github.sha }}
-  cancel-in-progress: false
+  group: s006-resident-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   resident-evidence:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,6 +17,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Validate complete deterministic test suite
+        run: npm test
       - name: Validate resident authority and performance contracts
         run: node --experimental-strip-types --test tests/simulation.test.ts
       - run: npm run build
