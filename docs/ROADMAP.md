@@ -38,15 +38,15 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Medieval-fantasy presentation architecture: semantic zoom, toon/material system, readable 2D actors/labels, globe↔local continuity and mobile rendering budgets
+- WP-S007-001-001 — Medieval-fantasy presentation architecture + implementation slicing: toon lighting/materials, unified semantic zoom, readable 2D actors/labels, font-stable layout, globe↔local continuity and mobile/WebGPU/WebGL2 budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Responsive accessible gameplay shell: viewport-fit safe areas, measured 44px targets, readable typography, map-safe panels, keyboard/focus lifecycle, reduced motion and debug separation
+- WP-S008-001-001 — Responsive accessible gameplay shell: viewport-fit safe areas, ≥44px controls, readable typography, map-safe panels, keyboard/Escape/focus lifecycle, reduced motion, accessible map semantics and debug separation
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance telemetry + release gates: p95 frame/input/worker/upload metrics, app-wide resource accounting, seven viewports and backend acceptance
-- WP-S009-002-001 — Main-thread/UI hot-path optimization: invalidation-driven labels/overlays/inspectors, bounded picking, cached layout metrics and pooled DOM/resources
-- WP-S009-003-001 — Adaptive renderer + runtime recovery: device-class DPR/render-scale/shadows, current shared resource policy, asset reuse, semantic continuity and WebGPU→WebGL2 recovery
-- WP-S009-004-001 — README/runtime/release conformance: current-stage truth, Advisor-vs-atlas semantics, canonical dynamic copy, legacy-authority cleanup and evidence-backed compatibility claims
+- WP-S009-001-001 — Exact-SHA performance observability + deploy gates: frame/input/coverage/worker/upload p95, first-visible-response latency, app-wide resource accounting, seven viewports and WebGPU/WebGL2 acceptance
+- WP-S009-002-001 — Main-thread/UI latency optimization: invalidation-driven labels/overlays/inspectors, font/layout caching, bounded canonical picking, pooled DOM/resources and stable-frame zero-churn
+- WP-S009-003-001 — Adaptive mobile renderer + live backend recovery: device-class DPR/render-scale/shadows, sustained-pressure hysteresis, shared resource policy, asset reuse, semantic continuity and WebGPU→WebGL2 recovery
+- WP-S009-004-001 — README/runtime/release truth: current-stage status, Advisor-vs-atlas semantics, canonical dynamic copy/counts, legacy-authority cleanup and exact-SHA compatibility claims
