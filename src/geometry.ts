@@ -121,6 +121,74 @@ function buildTerrainOnly(tile: Tile): TileGeometry {
   return { terrain: { ...terrain.finish(), uvs }, structures: empty(), nature: empty(), detail: empty() };
 }
 
+function offsetLocal(x: number, z: number, yaw: number, lx: number, lz: number) {
+  const cos = Math.cos(yaw), sin = Math.sin(yaw);
+  return { x: x + lx * cos + lz * sin, z: z - lx * sin + lz * cos };
+}
+
+function addServiceGeometry(structures: Builder, detail: Builder, service: string | undefined, x: number, y: number, z: number, width: number, depth: number, yaw: number) {
+  const timber = color(82, 60, 40), plaster = color(201, 183, 143), stone = color(154, 153, 136), roof = color(103, 67, 49), dark = color(75, 72, 64);
+  if (service === "market" || service === "merchant") {
+    structures.boxYaw(x, y + .02, z, width, .16, depth, yaw, color(154, 132, 83));
+    const canopy = offsetLocal(x, z, yaw, 0, depth * .12);
+    structures.boxYaw(canopy.x, y + 3.25, canopy.z, width * .76, .22, depth * .62, yaw, color(169, 113, 62));
+    for (const lx of [-width * .31, width * .31]) for (const lz of [-depth * .2, depth * .32]) {
+      const post = offsetLocal(x, z, yaw, lx, lz);
+      detail.boxYaw(post.x, y, post.z, .28, 3.3, .28, yaw, timber);
+    }
+    return;
+  }
+  if (service === "guard-office") {
+    structures.boxYaw(x, y - .08, z, width, 4.9, depth, yaw, stone);
+    structures.boxYaw(x, y + 4.7, z, width * .82, .65, depth * .82, yaw, dark);
+    const tower = offsetLocal(x, z, yaw, width * .34, -depth * .28);
+    structures.boxYaw(tower.x, y - .08, tower.z, width * .34, 6.8, depth * .36, yaw, color(143, 143, 129));
+    detail.cone(tower.x, y + 6.65, tower.z, Math.max(1.7, width * .22), 2.2, roof, 4);
+    return;
+  }
+  if (service === "farmstead") {
+    structures.boxYaw(x, y - .05, z, width, 4.8, depth, yaw, color(137, 105, 70));
+    structures.boxYaw(x, y + 4.55, z, width * 1.04, .72, depth * 1.04, yaw, roof);
+    const loft = offsetLocal(x, z, yaw, 0, depth * .505);
+    detail.boxYaw(loft.x, y + 2.05, loft.z, width * .32, 2.5, .18, yaw, dark);
+    return;
+  }
+  if (service === "blacksmith") {
+    structures.boxYaw(x, y - .05, z, width, 4.3, depth, yaw, color(174, 158, 124));
+    structures.boxYaw(x, y + 4.05, z, width * 1.03, .64, depth * 1.03, yaw, dark);
+    const chimney = offsetLocal(x, z, yaw, width * .3, -depth * .22);
+    structures.boxYaw(chimney.x, y + 3.2, chimney.z, 1.35, 4.1, 1.35, yaw, color(114, 111, 101));
+    const forge = offsetLocal(x, z, yaw, -width * .28, depth * .42);
+    detail.boxYaw(forge.x, y + .05, forge.z, width * .28, 1.15, depth * .18, yaw, color(96, 79, 59));
+    return;
+  }
+  if (service === "butcher") {
+    structures.boxYaw(x, y - .05, z, width, 4.15, depth, yaw, plaster);
+    structures.boxYaw(x, y + 3.95, z, width * 1.04, .55, depth * 1.04, yaw, roof);
+    const awning = offsetLocal(x, z, yaw, 0, depth * .56);
+    detail.boxYaw(awning.x, y + 2.45, awning.z, width * .72, .16, 2.2, yaw, color(153, 83, 59));
+    return;
+  }
+  if (service === "inn") {
+    structures.boxYaw(x, y - .06, z, width, 5.7, depth, yaw, plaster);
+    structures.boxYaw(x, y + 5.35, z, width * 1.05, .75, depth * 1.05, yaw, roof);
+    const chimney = offsetLocal(x, z, yaw, width * .3, -depth * .28), sign = offsetLocal(x, z, yaw, -width * .48, depth * .24);
+    structures.boxYaw(chimney.x, y + 4.4, chimney.z, 1.1, 3.1, 1.1, yaw, stone);
+    detail.boxYaw(sign.x, y + 2.9, sign.z, .22, 2.2, .22, yaw, timber);
+    detail.boxYaw(sign.x, y + 4.35, sign.z, 1.8, 1.1, .18, yaw, color(129, 86, 52));
+    return;
+  }
+  if (service === "headman") {
+    structures.boxYaw(x, y - .06, z, width, 5.8, depth, yaw, stone);
+    structures.boxYaw(x, y + 5.45, z, width * 1.06, .72, depth * 1.06, yaw, roof);
+    const wing = offsetLocal(x, z, yaw, width * .4, -depth * .08);
+    structures.boxYaw(wing.x, y - .04, wing.z, width * .42, 4.6, depth * .68, yaw, plaster);
+    return;
+  }
+  structures.boxYaw(x, y - .05, z, width, 4.6, depth, yaw, plaster);
+  structures.boxYaw(x, y + 4.3, z, width * 1.04, .62, depth * 1.04, yaw, roof);
+}
+
 /** S004 detail overlay: semantic settlement identity is owned by world.ts; geometry only visualizes it. */
 export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): TileGeometry {
   if (options.terrainOnly) return buildTerrainOnly(tile);
@@ -129,9 +197,26 @@ export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): 
   if (tile.size <= 512) for (const feature of featuresFor(tile) as any[]) {
     const x = feature.x - originX, z = feature.z - originZ, y = elevationToRenderY(feature.y), yaw = feature.yawRad || 0,
       width = feature.footprintWidth || 8, depth = feature.footprintDepth || 8, variant = feature.variant || 0;
-    if (feature.kind === "border" && variant >= 2) {
+    if (feature.kind === "street") {
+      structures.boxYaw(x, y + .018, z, Math.max(2.8, width), .075, feature.length || depth || 4, yaw, color(119, 99, 68));
+    } else if (feature.kind === "service") {
+      addServiceGeometry(structures, detail, feature.service, x, y, z, width, depth, yaw);
+    } else if (feature.kind === "gate") {
+      const postSpan = Math.max(5.8, width * .72), left = offsetLocal(x, z, yaw, -postSpan * .5, 0), right = offsetLocal(x, z, yaw, postSpan * .5, 0), timber = color(85, 61, 40), stone = color(145, 144, 128);
+      structures.boxYaw(left.x, y - .06, left.z, 1.8, 5.4, 1.8, yaw, stone);
+      structures.boxYaw(right.x, y - .06, right.z, 1.8, 5.4, 1.8, yaw, stone);
+      structures.boxYaw(x, y + 4.45, z, postSpan + 1.8, .7, 1.65, yaw, timber);
+      if (tile.size <= 64) {
+        detail.cone(left.x, y + 5.25, left.z, 1.55, 2.1, color(99, 66, 48), 4);
+        detail.cone(right.x, y + 5.25, right.z, 1.55, 2.1, color(99, 66, 48), 4);
+      }
+    } else if (feature.kind === "guard-post") {
+      structures.boxYaw(x, y - .05, z, width, 3.8, depth, yaw, color(143, 142, 126));
+      structures.boxYaw(x, y + 3.55, z, width * 1.05, .55, depth * 1.05, yaw, color(91, 65, 47));
+      if (tile.size <= 64) detail.cone(x, y + 3.95, z, Math.max(width, depth) * .72, 2.15, color(104, 70, 50), 4);
+    } else if (feature.kind === "border" && variant >= 2) {
       const length = feature.length || depth || 4,
-        cos = Math.cos(yaw), sin = Math.sin(yaw), at = (lx: number, lz: number) => ({ x: x + lx * cos + lz * sin, z: z - lx * sin + lz * cos });
+        at = (lx: number, lz: number) => offsetLocal(x, z, yaw, lx, lz);
       if (variant === 2) {
         structures.boxYaw(x, y - .02, z, Math.max(1.35, width), 1.65, length, yaw, color(76, 104, 59));
         if (tile.size <= 64) for (const lz of [-length * .34, 0, length * .34]) {
@@ -155,9 +240,8 @@ export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): 
     } else if (feature.kind === "garden") {
       structures.boxYaw(x, y + .02, z, width, .08, depth, yaw, color(117, 132, 71));
       if (tile.size <= 64) {
-        const cos = Math.cos(yaw), sin = Math.sin(yaw), at = (lx: number, lz: number) => ({ x: x + lx * cos + lz * sin, z: z - lx * sin + lz * cos });
-        for (const lx of [-width * .28, 0, width * .28]) { const row = at(lx, 0); detail.boxYaw(row.x, y + .12, row.z, .42, .3, depth * .72, yaw, color(151, 126, 62)); }
-        for (const lz of [-depth / 2, depth / 2]) { const fence = at(0, lz); detail.boxYaw(fence.x, y + .1, fence.z, width, .18, .16, yaw, color(92, 68, 45)); }
+        for (const lx of [-width * .28, 0, width * .28]) { const row = offsetLocal(x, z, yaw, lx, 0); detail.boxYaw(row.x, y + .12, row.z, .42, .3, depth * .72, yaw, color(151, 126, 62)); }
+        for (const lz of [-depth / 2, depth / 2]) { const fence = offsetLocal(x, z, yaw, 0, lz); detail.boxYaw(fence.x, y + .1, fence.z, width, .18, .16, yaw, color(92, 68, 45)); }
       }
     } else if (feature.kind === "path") {
       structures.boxYaw(x, y + .015, z, width || 1.25, .06, feature.length || depth || 3, yaw, color(137, 116, 79));
@@ -168,18 +252,6 @@ export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): 
       nature.boxYaw(x, y - .1, z, .62, h * .58, .62, 0, color(82, 62, 42));
       nature.cone(x, y + h * .3, z, radius, h * .52, color(72 + (variant % 14), 111 + (variant % 17), 63), 7);
       if (tile.size <= 32) nature.cone(x + radius * .28, y + h * .46, z - radius * .08, radius * .65, h * .3, color(84, 126, 69), 6);
-    } else if (feature.kind === "service" && feature.service === "merchant") {
-      const cos = Math.cos(yaw), sin = Math.sin(yaw), at = (lx: number, lz: number) => ({ x: x + lx * cos + lz * sin, z: z - lx * sin + lz * cos }),
-        awning = at(0, depth / 2 + 1.25), crateA = at(-width * .3, depth / 2 + 2), crateB = at(width * .26, depth / 2 + 2.25);
-      structures.boxYaw(awning.x, y + 3.05, awning.z, width * .82, .18, 2.35, yaw, color(170, 118, 66));
-      detail.boxYaw(crateA.x, y + .04, crateA.z, 1.5, 1, 1.4, yaw, color(115, 83, 49));
-      detail.boxYaw(crateB.x, y + .04, crateB.z, 1.25, .85, 1.2, yaw, color(129, 93, 52));
-    } else if (feature.kind === "service" && feature.service === "headman") {
-      const cos = Math.cos(yaw), sin = Math.sin(yaw), at = (lx: number, lz: number) => ({ x: x + lx * cos + lz * sin, z: z - lx * sin + lz * cos }),
-        wing = at(width * .42, -depth * .08), porch = at(0, depth / 2 + 1.05);
-      structures.boxYaw(wing.x, y, wing.z, width * .45, 5.1, depth * .68, yaw, color(167, 165, 144));
-      structures.boxYaw(porch.x, y + .04, porch.z, width * .5, .18, 2.15, yaw, color(151, 132, 95));
-      for (const lx of [-width * .2, width * .2]) { const post = at(lx, depth / 2 + 1.4); detail.boxYaw(post.x, y, post.z, .24, 3.1, .24, yaw, color(75, 58, 43)); }
     }
   }
   return {
