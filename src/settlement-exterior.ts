@@ -25,7 +25,6 @@ export type SettlementExteriorPlan = Omit<CoreExteriorPlan, "plots"> & {
   residentHomeCount: number;
 };
 
-const PHI = 0.6180339887498949;
 export const SETTLEMENT_EXTERIOR_CACHE_LIMIT = 12;
 const cache = new Map<string, SettlementExteriorPlan>();
 const SERVICE_OWNER: Readonly<Partial<Record<CoreService, number>>> = {
@@ -78,32 +77,34 @@ function offsetPoint(base: ReturnType<typeof pointOnStreet>, along: number, late
 }
 
 /**
- * One canonical one-person residence per resident. The index is decomposed into
- * deterministic street/side/band/slot ribbons so home identity and position do
- * not depend on camera, visit order, LOD, cache state, or renderer backend.
+ * One canonical one-person residence per resident. All residences use one
+ * deterministic non-self-intersecting residential spine and parallel bands.
+ * This makes identity and non-overlap independent of camera, visit order, LOD,
+ * cache state, or renderer backend; secondary streets remain public/service
+ * morphology rather than competing residential coordinate systems.
  */
 export function settlementHomeFor(place: Place, index: number, suppliedPlan?: SettlementExteriorPlan): SettlementPlotPlan {
   const population = canonicalSettlementPopulation(place);
   if (!Number.isInteger(index) || index < 0 || index >= population) throw new RangeError(`Invalid resident home index ${index} for ${place.code}`);
-  const plan = suppliedPlan || settlementExteriorFor(place), streetCount = Math.max(1, plan.streets.length),
-    bandCount = place.kind === "city" ? 10 : 4, ribbonCount = streetCount * 2 * bandCount,
-    ribbon = index % ribbonCount, ordinal = Math.floor(index / ribbonCount), slotsPerRibbon = Math.ceil(population / ribbonCount),
-    streetIndex = ribbon % streetCount, street = plan.streets[streetIndex],
-    side: -1 | 1 = (Math.floor(ribbon / streetCount) & 1) === 0 ? -1 : 1,
-    band = Math.floor(ribbon / (streetCount * 2)),
-    baseFraction = (ordinal + .5) / slotsPerRibbon,
-    jitter = (unit(`${place.code}/RESIDENCE/${index}/FRACTION`) - .5) * .16 / slotsPerRibbon,
-    fraction = .06 + Math.max(.01, Math.min(.99, baseFraction + jitter)) * .88,
+  const plan = suppliedPlan || settlementExteriorFor(place), street = plan.streets[0],
+    bandCount = place.kind === "city" ? 24 : 8,
+    ribbonCount = bandCount * 2,
+    ribbon = index % ribbonCount,
+    ordinal = Math.floor(index / ribbonCount),
+    slotsPerRibbon = Math.ceil(population / ribbonCount),
+    side: -1 | 1 = (ribbon & 1) === 0 ? -1 : 1,
+    band = Math.floor(ribbon / 2),
+    fraction = .06 + ((ordinal + .5) / slotsPerRibbon) * .88,
     base = pointOnStreet(street, fraction),
-    width = .68 + unit(`${place.code}/RESIDENCE/${index}/WIDTH`) * .34,
-    depth = .78 + unit(`${place.code}/RESIDENCE/${index}/DEPTH`) * .38,
-    setback = 1.55 + band * 2.35 + (unit(`${place.code}/RESIDENCE/${index}/SETBACK`) - .5) * .12,
+    width = .68 + unit(`${place.code}/RESIDENCE/${index}/WIDTH`) * .26,
+    depth = .78 + unit(`${place.code}/RESIDENCE/${index}/DEPTH`) * .28,
+    setback = 1.65 + band * 2.2,
     lateral = side * (street.width * .5 + setback + depth * .5),
-    yawRad = Math.atan2(-base.normal.x * side, -base.normal.z * side) + (unit(`${place.code}/RESIDENCE/${index}/YAW`) - .5) * .07,
-    spacing = Math.max(1.8, streetLength(street) * .88 / slotsPerRibbon),
-    shift = Math.min(1.7, spacing * .16),
+    yawRad = Math.atan2(-base.normal.x * side, -base.normal.z * side) + (unit(`${place.code}/RESIDENCE/${index}/YAW`) - .5) * .05,
+    spacing = Math.max(2.2, streetLength(street) * .88 / slotsPerRibbon),
+    shift = Math.min(.28, spacing * .08),
     candidates: SettlementPoint[] = [offsetPoint(base, 0, lateral)];
-  for (const along of [-shift, shift, -shift * 2, shift * 2, -shift * 3, shift * 3]) candidates.push(offsetPoint(base, along, lateral));
+  for (const along of [-shift, shift, -shift * 2, shift * 2]) candidates.push(offsetPoint(base, along, lateral));
   return {
     id: `${place.code}/RESIDENCE/${index}`,
     kind: "house",
@@ -113,7 +114,7 @@ export function settlementHomeFor(place: Place, index: number, suppliedPlan?: Se
     width,
     depth,
     yawRad,
-    clearanceRadius: Math.hypot(width, depth) * .5 + .12,
+    clearanceRadius: Math.hypot(width, depth) * .5 + .1,
     candidates,
   };
 }
