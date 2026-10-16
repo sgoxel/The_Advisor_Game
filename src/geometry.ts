@@ -82,11 +82,16 @@ function mergeGeometry(a: Geometry, b: Geometry): Geometry {
 
 /** S004 detail overlay. World identity stays deterministic; this layer only visualizes semantic exterior features. */
 export function buildTile(tile: Tile): TileGeometry {
-  const result = coreBuildTile(tile), structures = new Builder(), nature = new Builder(), detail = new Builder();
+  const result = coreBuildTile(tile),
+    structures = new Builder(),
+    nature = new Builder(),
+    detail = new Builder(),
+    originX = tile.minX + tile.size / 2,
+    originZ = tile.minZ + tile.size / 2;
 
   if (tile.size <= 512) for (const feature of featuresFor(tile) as any[]) {
-    const x = feature.x,
-      z = feature.z,
+    const x = feature.x - originX,
+      z = feature.z - originZ,
       y = elevationToRenderY(feature.y),
       yaw = feature.yawRad || 0,
       width = Math.max(.2, feature.footprintWidth || 8),
