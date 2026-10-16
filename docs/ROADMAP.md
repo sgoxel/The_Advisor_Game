@@ -22,8 +22,6 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S003 — Natural World & Surface Authority
 
-
-
 ## STAGE S004 — Settlements, Buildings & World Sites
 
 - WP-S004-001-001 — Seeded settlement distribution + morphology + exterior UX/performance: viable-area density, variable city/village counts, varied roads/plots/services/homes/farms/gates and mobile-safe rendering
@@ -40,15 +38,15 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — World-presentation + semantic-zoom architecture analysis: unified scale-tier matrix, README medieval-fantasy/toon system, readable 2D actors/labels, handoff continuity and mobile budgets
+- WP-S007-001-001 — Medieval-fantasy presentation architecture: semantic zoom, toon/material system, readable 2D actors/labels, globe↔local continuity and mobile rendering budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Responsive/mobile accessibility shell: viewport-fit safe areas, map/task-safe layout, measured 44px targets, readable typography, keyboard/focus lifecycle, canonical map semantics, reduced motion and debug separation
+- WP-S008-001-001 — Responsive accessible gameplay shell: viewport-fit safe areas, measured 44px targets, readable typography, map-safe panels, keyboard/focus lifecycle, reduced motion and debug separation
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-main-SHA performance observability + release gates: required p95 telemetry schema, push-time browser/backend acceptance, seven viewports and physical-device truth
-- WP-S009-002-001 — Remaining main-thread/UI hot-path performance: invalidation-only DOM/labels/inspectors, cached layout metrics, pooled overlays/actors and bounded frame allocations
-- WP-S009-003-001 — Adaptive renderer + runtime recovery: device-class DPR/render-scale/shadow hysteresis, documented resource budgets, pooled assets, semantic-zoom continuity and WebGPU→WebGL2 loss recovery
-- WP-S009-004-001 — README/runtime/release conformance: stale stage truth, Advisor-vs-atlas semantics, dynamic geography/status copy, legacy-authority removal and evidence-backed compatibility claims
+- WP-S009-001-001 — Exact-SHA performance telemetry + release gates: p95 frame/input/worker/upload metrics, app-wide resource accounting, seven viewports and backend acceptance
+- WP-S009-002-001 — Main-thread/UI hot-path optimization: invalidation-driven labels/overlays/inspectors, bounded picking, cached layout metrics and pooled DOM/resources
+- WP-S009-003-001 — Adaptive renderer + runtime recovery: device-class DPR/render-scale/shadows, current shared resource policy, asset reuse, semantic continuity and WebGPU→WebGL2 recovery
+- WP-S009-004-001 — README/runtime/release conformance: current-stage truth, Advisor-vs-atlas semantics, canonical dynamic copy, legacy-authority cleanup and evidence-backed compatibility claims
