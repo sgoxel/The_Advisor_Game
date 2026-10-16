@@ -21,12 +21,35 @@ function distanceToBorder(place: (typeof places)[number], plan: ReturnType<typeo
   for (let index = 0; index < plan.border.length; index++) {
     const a = plan.border[index], b = plan.border[(index + 1) % plan.border.length],
       ax = wrapSourceX(a.x - place.x), az = a.z - place.z,
-      bx = wrapSourceX(b.x - place.x), bz = b.z - place.z,
+      bx = ax + wrapSourceX(b.x - a.x), bz = b.z - place.z,
       dx = bx - ax, dz = bz - az, denominator = dx * dx + dz * dz || 1,
       t = Math.max(0, Math.min(1, ((qx - ax) * dx + (qz - az) * dz) / denominator));
     distance = Math.min(distance, Math.hypot(qx - (ax + dx * t), qz - (az + dz * t)));
   }
   return distance;
+}
+function roadCrossesBorder(place: (typeof places)[number], plan: ReturnType<typeof settlementExteriorFor>, road: (typeof roads)[number]) {
+  const points = road.centerline;
+  if (!points || points.length < 2) return false;
+  for (let segment = 0; segment < points.length - 1; segment++) {
+    const a = points[segment], b = points[segment + 1],
+      ax = wrapSourceX(a.x - place.x), az = a.z - place.z,
+      bx = ax + wrapSourceX(b.x - a.x), bz = b.z - place.z,
+      rx = bx - ax, rz = bz - az;
+    for (let edge = 0; edge < plan.border.length; edge++) {
+      const c = plan.border[edge], d = plan.border[(edge + 1) % plan.border.length],
+        cx = wrapSourceX(c.x - place.x), cz = c.z - place.z,
+        dx = cx + wrapSourceX(d.x - c.x), dz = d.z - place.z,
+        sx = dx - cx, sz = dz - cz,
+        denominator = rx * sz - rz * sx;
+      if (Math.abs(denominator) < 1e-9) continue;
+      const qx = cx - ax, qz = cz - az,
+        t = (qx * sz - qz * sx) / denominator,
+        u = (qx * rz - qz * rx) / denominator;
+      if (t >= -1e-6 && t <= 1 + 1e-6 && u >= -1e-6 && u <= 1 + 1e-6) return true;
+    }
+  }
+  return false;
 }
 
 test("macro settlement density remains the current area-driven authority", () => {
@@ -93,16 +116,18 @@ test("services, varied morphology, gates and farms remain present with bounded d
   assert.ok(settlementExteriorCacheSize() <= SETTLEMENT_EXTERIOR_CACHE_LIMIT, "summary must not fill the detailed-plan cache");
 });
 
-test("village external roads cross the enclosure only at canonical gates", () => {
-  for (const place of samples.filter((entry) => entry.kind === "village")) {
-    const incident = roads.filter((road) => road.networkKind !== "detour" && (road.from === place.id || road.to === place.id) && road.centerline && road.centerline.length >= 2)
-      .sort((a, b) => a.code.localeCompare(b.code)), plan = settlementExteriorFor(place);
-    assert.ok(incident.length <= 2, `${place.code} has ${incident.length} external approaches but villages support at most two gates`);
-    assert.ok(plan.gates.length >= incident.length, `${place.code} does not expose a gate for every external approach`);
-    for (const road of incident) {
-      const gate = plan.gates.find((candidate) => roadDistanceAt(candidate.x, candidate.z, road) < .05);
-      assert.ok(gate, `${place.code} road ${road.code} does not meet a gate`);
-      assert.ok(distanceToBorder(place, plan, gate.x, gate.z) < .05, `${place.code} gate ${gate.id} is not on the enclosure`);
+test("every village external road crossing uses one of its canonical enclosure gates", () => {
+  for (const place of villages) {
+    const plan = settlementExteriorFor(place), crossingRoads = roads.filter((road) =>
+      road.networkKind !== "detour" && road.centerline && road.centerline.length >= 2 &&
+      roadDistanceAt(place.x, place.z, road) <= plan.radius * 1.7 && roadCrossesBorder(place, plan, road),
+    ).sort((a, b) => a.code.localeCompare(b.code));
+    assert.ok(crossingRoads.length >= 1, `${place.code} has no external road crossing`);
+    assert.ok(crossingRoads.length <= 2, `${place.code} has ${crossingRoads.length} enclosure crossings but villages support at most two gates`);
+    assert.ok(plan.gates.length >= crossingRoads.length, `${place.code} does not expose a gate for every enclosure crossing`);
+    for (const road of crossingRoads) {
+      const gate = plan.gates.find((candidate) => roadDistanceAt(candidate.x, candidate.z, road) < .05 && distanceToBorder(place, plan, candidate.x, candidate.z) < .05);
+      assert.ok(gate, `${place.code} road ${road.code} crosses the enclosure away from a gate`);
     }
   }
 });
