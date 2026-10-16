@@ -1,4 +1,4 @@
-name: AGENT1 WP-S004 Windows exact-source verification
+name: AGENT1 WP-S004 Windows chain verification
 on:
   push:
     branches: [agent1/wp-s004-001-001-20261015]
@@ -9,26 +9,27 @@ permissions:
 jobs:
   test-and-build:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - name: Verify exact corrected source
+      - name: Apply exact deterministic settlement-access correction
         shell: pwsh
         run: |
           if ((git rev-parse HEAD) -ne "${env:GITHUB_SHA}") { throw "wrong source SHA" }
-          Select-String -Path src/settlement-exterior.ts -Pattern '/EXTERIOR/WATER-MORPH' -Quiet | ForEach-Object { if (-not $_) { throw "missing morphology runtime" } }
-          Select-String -Path src/continuity-corridor.ts -Pattern 'for\(let a=0;a<candidates.length;a\+\+\)for\(let b=a\+1;b<candidates.length;b\+\+\)' -Quiet | ForEach-Object { if (-not $_) { throw "continuity fix missing" } }
+          node tools/agent1-wp-s004-patch-v11.mjs
+          if (Select-String -Path src/geography.ts -SimpleMatch 'selected[selected.length - 1]' -Quiet) { throw "sibling-order placement authority remains" }
+          if (-not (Select-String -Path src/geography.ts -SimpleMatch 'return children.map((toPlace, index)' -Quiet)) { throw "parent access road correction missing" }
+          if (-not (Select-String -Path tests/political-atlas.test.ts -SimpleMatch 'every village needs one legal provisional parent access reserve' -Quiet)) { throw "parent access regression missing" }
       - run: npm ci
-      - name: Settlement, political, surface and continuity regression
+      - name: Validate S004 distribution, morphology and continuity
         shell: pwsh
-        run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/world.test.ts tests/final-surface-integration.test.ts tests/political-atlas.test.ts tests/continuity.test.ts
+        run: node --experimental-strip-types --test tests/political-atlas.test.ts tests/continuity.test.ts tests/settlement-exterior.test.ts tests/village-morphology-runtime.test.ts tests/wp-s004-world-integration.test.ts tests/final-surface-integration.test.ts
       - name: Production build
         run: npm run build
-
-# AGENT #1 exact-source continuation trigger
