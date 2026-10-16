@@ -7,6 +7,7 @@ permissions:
   contents: write
 jobs:
   prepare-candidate:
+    # This run starts after the exact-acceptance workflow is registered on the branch.
     runs-on: ubuntu-slim
     timeout-minutes: 15
     steps:
