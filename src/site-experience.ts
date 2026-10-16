@@ -13,21 +13,26 @@ type SiteDetail = { signature: string; stones: number; walls: number; props: num
 
 const markerNodes = new Map<string, HTMLButtonElement>();
 const detailCache = new Map<string, SiteDetail>();
+const DETAIL_CACHE_LIMIT = 24;
 let selectedCode: string | null = null;
 let lastFingerprint = "";
 let lastVisibleCodes: string[] = [];
 
 function detailFor(site: CriticalSite): SiteDetail {
   let detail = detailCache.get(site.code);
-  if (!detail) {
-    detail = {
-      signature: `${site.code}/${site.archetype}/${site.variant % 97}/${site.radiusM}`,
-      stones: site.kind === "ruin" ? 4 + (site.variant % 5) : 5 + (site.variant % 7),
-      walls: site.kind === "ruin" ? 3 + (site.variant % 4) : 0,
-      props: 2 + (site.variant % 4),
-    };
+  if (detail) {
+    detailCache.delete(site.code);
     detailCache.set(site.code, detail);
+    return detail;
   }
+  detail = {
+    signature: `${site.code}/${site.archetype}/${site.variant % 97}/${site.radiusM}`,
+    stones: site.kind === "ruin" ? 4 + (site.variant % 5) : 5 + (site.variant % 7),
+    walls: site.kind === "ruin" ? 3 + (site.variant % 4) : 0,
+    props: 2 + (site.variant % 4),
+  };
+  detailCache.set(site.code, detail);
+  if (detailCache.size > DETAIL_CACHE_LIMIT) detailCache.delete(detailCache.keys().next().value!);
   return detail;
 }
 
@@ -95,8 +100,8 @@ function selectSite(code: string | null) {
   (document.getElementById("critical-site-archetype") as HTMLElement).textContent = site.archetype.replaceAll("-", " ");
   (document.getElementById("critical-site-road") as HTMLElement).textContent = site.access.roadCode;
   (document.getElementById("critical-site-distance") as HTMLElement).textContent = `${Math.round(site.access.lengthM)} m to legal road junction`;
-  (document.getElementById("critical-site-ground") as HTMLElement).textContent = `${site.radiusM} m priority-9 core + ${site.falloffM} m blend`;
-  (document.getElementById("critical-site-residency") as HTMLElement).textContent = `${detail.signature} · focused only`;
+  (document.getElementById("critical-site-ground") as HTMLElement).textContent = `${site.radiusM} m priority-9 core + ${site.falloffM} m blend · ${site.terrainReliefM} m natural relief`;
+  (document.getElementById("critical-site-residency") as HTMLElement).textContent = `${detail.signature} · bounded lazy cache`;
   for (const [id, marker] of markerNodes) marker.setAttribute("aria-pressed", id === code ? "true" : "false");
 }
 
@@ -194,6 +199,7 @@ Object.defineProperty(window, "advisorSites", {
         visibleCount: lastVisibleCodes.length,
         detailedCount: lastVisibleCodes.filter((code) => detailCache.has(code)).length,
         cachedDetails: detailCache.size,
+        detailCacheLimit: DETAIL_CACHE_LIMIT,
       };
     },
   },
