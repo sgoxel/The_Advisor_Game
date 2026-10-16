@@ -123,13 +123,17 @@ test("every site has a dry, same-country, grade-bounded road branch consumed by 
   }
 });
 
-test("physical site geometry is local/lazy while broad views stay semantic", () => {
+test("physical site geometry is local/lazy and displaces inherited lower-priority geometry", () => {
   for (const site of criticalSites.slice(0, Math.min(16, criticalSites.length))) {
     const localTile = tileForPosition(site.x, site.z, 11), coarseTile = tileForPosition(site.x, site.z, 8),
       local = featuresFor(localTile), coarse = featuresFor(coarseTile);
     assert.equal(localTile.size, 128);
     assert.ok(local.some((feature) => feature.code.includes(site.code)), `${site.code} missing local geometry`);
     assert.ok(!coarse.some((feature) => feature.code.includes(site.code)), `${site.code} eagerly emitted at coarse zoom`);
+    for (const feature of local) {
+      if (sourceDistance(feature.x, feature.z, site.x, site.z) > SITE_SUPPORT_SOURCE_UNITS) continue;
+      assert.ok(feature.code.includes(site.code), `${site.code} shares its reservation with inherited feature ${feature.code}`);
+    }
   }
 });
 
