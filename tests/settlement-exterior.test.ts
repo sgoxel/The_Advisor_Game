@@ -8,7 +8,7 @@ import {
   type SettlementArchetype,
 } from "../src/settlement-exterior.ts";
 
-const REQUIRED_SERVICES = ["market", "inn", "blacksmith", "butcher", "guard-office", "farmstead"] as const;
+const REQUIRED_SERVICES = ["market", "inn", "blacksmith", "butcher", "guard-office", "farmstead", "merchant", "headman"] as const;
 
 function topologySignature(placeCode: string) {
   const place = places.find((candidate) => candidate.code === placeCode)!;
@@ -32,10 +32,13 @@ test("every generated settlement has deterministic terrain/access-shaped exterio
     const plan = settlementExteriorFor(place),
       again = settlementExteriorFor(place),
       services = new Set(plan.plots.flatMap((plot) => plot.service ? [plot.service] : [])),
-      homes = plan.plots.filter((plot) => plot.kind === "house");
+      homes = plan.plots.filter((plot) => plot.kind === "house"),
+      gardens = plan.plots.filter((plot) => plot.kind === "garden");
     assert.equal(plan, again, "lazy cache must preserve canonical plan identity");
     assert.deepEqual([...services].sort(), [...REQUIRED_SERVICES].sort(), `${place.code} missing service`);
     assert.ok(homes.length >= (place.kind === "city" ? 80 : 20));
+    assert.ok(gardens.length >= Math.floor(homes.length / 6), `${place.code} lacks household gardens/yards`);
+    assert.ok(gardens.every((garden) => garden.ownerId?.startsWith(`${place.code}/HOUSEHOLD/`)));
     assert.ok(plan.plots.filter((plot) => plot.kind === "field").length >= (place.kind === "city" ? 8 : 4));
     assert.equal(plan.plots.filter((plot) => plot.kind === "keep").length, 1);
     assert.equal(plan.plots.filter((plot) => plot.kind === "well").length, 1);
@@ -71,8 +74,7 @@ test("villages materially vary topology, frontage programs, agriculture and peri
     const plan = settlementExteriorFor(village);
     archetypes.add(plan.archetype);
     signatures.add(topologySignature(village.code));
-    for (const field of plan.plots.filter((plot) => plot.kind === "field"))
-      if (field.fieldForm) fieldForms.add(field.fieldForm);
+    for (const field of plan.plots.filter((plot) => plot.kind === "field")) if (field.fieldForm) fieldForms.add(field.fieldForm);
   }
   assert.ok(archetypes.size >= 5, `expected at least five village archetypes, got ${[...archetypes].join(", ")}`);
   assert.ok(signatures.size >= Math.min(48, villages.length), "village topology still repeats as a small stamped set");
@@ -82,7 +84,7 @@ test("villages materially vary topology, frontage programs, agriculture and peri
 test("settlement exterior summary remains bounded to the canonical registry", () => {
   const summary = settlementExteriorSummary();
   assert.equal(summary.plans, places.length);
-  assert.ok(summary.plots < places.length * 160);
+  assert.ok(summary.plots < places.length * 200);
   assert.ok(summary.streets <= places.length * 5);
   assert.ok(summary.borderPoints <= places.length * 48);
   assert.ok(Object.keys(summary.archetypes).length >= 5);
