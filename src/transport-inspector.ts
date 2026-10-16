@@ -4,6 +4,7 @@ import {
   transportAcceptanceSummary,
   transportNetwork,
   transportRoadsNear,
+  type TransportBorderCrossing,
   type TransportBridge,
   type TransportFerryEdge,
   type TransportHarbor,
@@ -24,6 +25,7 @@ type AdvisorWorld = {
 type Selection =
   | { kind: "road"; code: string }
   | { kind: "bridge"; code: string }
+  | { kind: "border"; code: string }
   | { kind: "junction"; code: string }
   | { kind: "harbor"; code: string }
   | { kind: "ferry"; code: string }
@@ -103,6 +105,10 @@ function selectedRoadCodes() {
     const bridge = transportNetwork.bridges.find((candidate) => candidate.code === selection!.code);
     return new Set(bridge ? [bridge.roadCode] : []);
   }
+  if (selection.kind === "border") {
+    const crossing = transportNetwork.borderCrossings.find((candidate) => candidate.code === selection!.code);
+    return new Set(crossing ? [crossing.roadCode] : []);
+  }
   if (selection.kind === "junction") {
     const junction = transportNetwork.junctions.find((candidate) => candidate.code === selection!.code);
     return new Set(junction?.edgeCodes ?? []);
@@ -167,7 +173,7 @@ function appendRoad(edge: TransportRoadEdge, state: AdvisorWorld["state"], selec
   return true;
 }
 
-function appendMarker(kind: "bridge" | "junction" | "harbor", x: number, z: number, state: AdvisorWorld["state"], code: string, active: boolean) {
+function appendMarker(kind: "bridge" | "border" | "junction" | "harbor", x: number, z: number, state: AdvisorWorld["state"], code: string, active: boolean) {
   const point = projectSource(x, z, state);
   if (!inViewport(point, 24)) return false;
   const marker = document.createElementNS(SVG_NS, kind === "harbor" ? "rect" : "circle");
@@ -180,7 +186,7 @@ function appendMarker(kind: "bridge" | "junction" | "harbor", x: number, z: numb
   } else {
     marker.setAttribute("cx", String(point.x));
     marker.setAttribute("cy", String(point.y));
-    marker.setAttribute("r", kind === "junction" ? "4" : "3.5");
+    marker.setAttribute("r", kind === "junction" ? "4" : kind === "border" ? "4.5" : "3.5");
   }
   marker.classList.add("transport-marker", `transport-marker-${kind}`);
   if (active) marker.classList.add("selected");
@@ -196,6 +202,7 @@ function selectedEntityPosition() {
     return edge?.centerline[Math.floor(edge.centerline.length / 2)]?.position;
   }
   if (selection.kind === "bridge") return transportNetwork.bridges.find((candidate) => candidate.code === selection!.code)?.position;
+  if (selection.kind === "border") return transportNetwork.borderCrossings.find((candidate) => candidate.code === selection!.code)?.position;
   if (selection.kind === "junction") return transportNetwork.junctions.find((candidate) => candidate.code === selection!.code)?.position;
   if (selection.kind === "harbor") return transportNetwork.harbors.find((candidate) => candidate.code === selection!.code)?.position;
   if (selection.kind === "ferry") {
@@ -250,6 +257,19 @@ function bridgeDetails(bridge: TransportBridge) {
       <dt>Natural drainage</dt><dd>${codeText(bridge.drainageCode)}</dd>
       <dt>Span</dt><dd>${bridge.spanM.toFixed(1)} m</dd>
       <dt>Connection</dt><dd>${codeText(edge.from)} → ${codeText(edge.to)}</dd>
+    </dl>`;
+}
+
+function borderDetails(crossing: TransportBorderCrossing) {
+  const edge = transportNetwork.roadEdges.find((candidate) => candidate.code === crossing.roadCode)!;
+  return `
+    <div class="transport-kind walking">WALKING · POLITICAL BORDER CROSSING</div>
+    <h3>${codeText(crossing.code)}</h3>
+    <dl>
+      <dt>Main road</dt><dd>${codeText(crossing.roadCode)}</dd>
+      <dt>Countries</dt><dd>${crossing.countries.map(codeText).join(" ↔ ")}</dd>
+      <dt>Capital endpoints</dt><dd>${codeText(edge.from)} → ${codeText(edge.to)}</dd>
+      <dt>Traversal</dt><dd>Continuous land road · explicit canonical crossing</dd>
     </dl>`;
 }
 
@@ -314,6 +334,9 @@ function renderSelection() {
   } else if (selection.kind === "bridge") {
     const bridge = transportNetwork.bridges.find((candidate) => candidate.code === selection!.code);
     target.innerHTML = bridge ? bridgeDetails(bridge) : `<p>Bridge not found.</p>`;
+  } else if (selection.kind === "border") {
+    const crossing = transportNetwork.borderCrossings.find((candidate) => candidate.code === selection!.code);
+    target.innerHTML = crossing ? borderDetails(crossing) : `<p>Border crossing not found.</p>`;
   } else if (selection.kind === "junction") {
     const junction = transportNetwork.junctions.find((candidate) => candidate.code === selection!.code);
     target.innerHTML = junction ? junctionDetails(junction) : `<p>Junction not found.</p>`;
@@ -403,6 +426,8 @@ function refreshOverlay(force = false) {
     const localCodes = new Set(query.edges.map((edge) => edge.code));
     for (const bridge of transportNetwork.bridges)
       if (localCodes.has(bridge.roadCode) && appendMarker("bridge", bridge.x, bridge.z, state, bridge.code, selection?.kind === "bridge" && selection.code === bridge.code)) lastOverlayBridges++;
+    for (const crossing of transportNetwork.borderCrossings)
+      if (localCodes.has(crossing.roadCode)) appendMarker("border", crossing.x, crossing.z, state, crossing.code, selection?.kind === "border" && selection.code === crossing.code);
     for (const junction of transportNetwork.junctions) {
       const node = transportNetwork.nodes.find((candidate) => candidate.code === junction.nodeCode);
       if (node && junction.edgeCodes.some((code) => localCodes.has(code))) appendMarker("junction", node.x, node.z, state, junction.code, selection?.kind === "junction" && selection.code === junction.code);
@@ -416,10 +441,15 @@ function refreshOverlay(force = false) {
   }
 }
 
-function selectEvidence(kind: "bridge" | "lake-detour" | "mountain-pass" | "junction" | "harbor" | "ferry") {
+function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mountain-pass" | "junction" | "harbor" | "ferry") {
   if (kind === "bridge") {
     const bridge = [...transportNetwork.bridges].sort((a, b) => a.code.localeCompare(b.code))[0];
     if (bridge) selection = { kind: "bridge", code: bridge.code };
+  } else if (kind === "border-crossing") {
+    const crossing = [...transportNetwork.borderCrossings]
+      .filter((candidate) => transportNetwork.roadEdges.some((edge) => edge.code === candidate.roadCode && edge.roadClass === "main"))
+      .sort((a, b) => a.code.localeCompare(b.code))[0];
+    if (crossing) selection = { kind: "border", code: crossing.code };
   } else if (kind === "lake-detour") {
     if (continuityCorridor.road) selection = { kind: "lake-detour", code: continuityCorridor.road.code };
   } else if (kind === "mountain-pass") {
@@ -443,12 +473,16 @@ function selectEvidence(kind: "bridge" | "lake-detour" | "mountain-pass" | "junc
 
 function evidenceSummary() {
   const bridge = [...transportNetwork.bridges].sort((a, b) => a.code.localeCompare(b.code))[0],
+    borderCrossing = [...transportNetwork.borderCrossings]
+      .filter((candidate) => transportNetwork.roadEdges.some((edge) => edge.code === candidate.roadCode && edge.roadClass === "main"))
+      .sort((a, b) => a.code.localeCompare(b.code))[0],
     junction = [...transportNetwork.junctions].sort((a, b) => b.edgeCodes.length - a.edgeCodes.length || a.code.localeCompare(b.code))[0],
     mountainPass = [...transportNetwork.roadEdges].sort((a, b) => b.maxNaturalReliefM - a.maxNaturalReliefM || a.code.localeCompare(b.code))[0],
     harbor = [...transportNetwork.harbors].sort((a, b) => a.code.localeCompare(b.code))[0],
     ferry = [...transportNetwork.ferryEdges].sort((a, b) => a.code.localeCompare(b.code))[0];
   return Object.freeze({
     bridge: bridge?.code ?? null,
+    borderCrossing: borderCrossing?.code ?? null,
     lakeDetour: continuityCorridor.road?.code ?? null,
     mountainPass: mountainPass?.code ?? null,
     junction: junction?.code ?? null,
@@ -505,10 +539,8 @@ function frame() {
 }
 requestAnimationFrame(frame);
 
-// Keep the API honest: the deterministic evidence anchors must refer to the same
-// canonical graph that the inspector renders.
 for (const [name, code] of Object.entries(evidenceSummary()))
   if (!code) console.warn(`Transport evidence target unavailable: ${name}`);
 
-void greatCircleDistance; // retained as an explicit transport-inspection dependency for build-time API parity.
+void greatCircleDistance;
 void sourceToLonLat;
