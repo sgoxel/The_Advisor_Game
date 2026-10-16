@@ -37,16 +37,17 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
  const terrain=(p:LonLat)=>{coarseSamples++;return sample(p);},
  legal=(p:LonLat,key:string)=>{const t=terrain(p);return t.land&&t.domain!=='Lake'&&ownerAt(p)===key;},
  lineLegal=(a:LonLat,b:LonLat,key:string,steps=8)=>{const d=greatCircleDistance(a,b),az=bearing(a,b);for(let i=0;i<=steps;i++)if(!legal(destination(a,az,d*i/steps),key))return false;return true;};
- // Every village already has a city/backbone link. Keep at most one additional
- // village-to-village trade link per village so canonical enclosure degree is
- // inherently one or two instead of depending on a near-wall fork heuristic.
- const linkKey=(a:RoadNode,b:RoadNode)=>a.id<b.id?`${a.id}|${b.id}`:`${b.id}|${a.id}`,
+ // The canonical world graph always contains city/backbone links. Bound only its
+ // optional village-to-village trade degree; standalone road-network callers keep
+ // every supplied link and therefore retain the generic shared-fork contract.
+ const canonicalVillageGraph=places.some(p=>p.kind==='city'),
+  linkKey=(a:RoadNode,b:RoadNode)=>a.id<b.id?`${a.id}|${b.id}`:`${b.id}|${a.id}`,
   tradeDegree=new Map<string,number>(),selectedTradeLinks=new Set<string>();
- for(const [a,b] of [...links].filter(([a,b])=>a.kind==='village'&&b.kind==='village').sort((left,right)=>linkKey(left[0],left[1]).localeCompare(linkKey(right[0],right[1])))){
+ if(canonicalVillageGraph)for(const [a,b] of [...links].filter(([a,b])=>a.kind==='village'&&b.kind==='village').sort((left,right)=>linkKey(left[0],left[1]).localeCompare(linkKey(right[0],right[1])))){
   if((tradeDegree.get(a.id)||0)>=1||(tradeDegree.get(b.id)||0)>=1)continue;
   selectedTradeLinks.add(linkKey(a,b));tradeDegree.set(a.id,1);tradeDegree.set(b.id,1);
  }
- const activeLinks=links.filter(([a,b])=>a.kind!=='village'||b.kind!=='village'||selectedTradeLinks.has(linkKey(a,b))),
+ const activeLinks=canonicalVillageGraph?links.filter(([a,b])=>a.kind!=='village'||b.kind!=='village'||selectedTradeLinks.has(linkKey(a,b))):links,
   neighbours=new Map(places.map(p=>[p.id,[] as RoadNode[]]));
  for(const [a,b] of activeLinks){neighbours.get(a.id)!.push(b);neighbours.get(b.id)!.push(a);}
  // One shared-approach owner per logical connection. Otherwise deep forks at
@@ -67,11 +68,11 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
   while(slot<MACRO_ROAD_LIMITS.junctionGroupsPerPlace){
    const pairs:{a:Approach;b:Approach;angle:number}[]=[];
    for(let i=0;i<groups.length;i++)for(let j=i+1;j<groups.length;j++){
-    const a=groups[i],b=groups[j],mustReduceVillageDegree=hub.kind==='village'&&groups.length>2&&slot>0&&a.depth===0&&b.depth===0;
-    if(!mustReduceVillageDegree&&[...a.leaves,...b.leaves].some(n=>!ownsApproach(hub,n)))continue;
-    if(Math.max(a.depth,b.depth)>=MACRO_ROAD_LIMITS.junctionDepth||(!mustReduceVillageDegree&&[...a.leaves,...b.leaves].some(n=>greatCircleDistance(hub.canonicalPosition,n.canonicalPosition)<=6500)))continue;
+    const a=groups[i],b=groups[j];
+    if([...a.leaves,...b.leaves].some(n=>!ownsApproach(hub,n)))continue;
+    if(Math.max(a.depth,b.depth)>=MACRO_ROAD_LIMITS.junctionDepth||[...a.leaves,...b.leaves].some(n=>greatCircleDistance(hub.canonicalPosition,n.canonicalPosition)<=6500))continue;
     const angle=angleDifference(bearing(hub.canonicalPosition,a.node.canonicalPosition),bearing(hub.canonicalPosition,b.node.canonicalPosition));
-    if(angle<(mustReduceVillageDegree?70:65)*Math.PI/180)pairs.push({a,b,angle});
+    if(angle<65*Math.PI/180)pairs.push({a,b,angle});
    }
    pairs.sort((a,b)=>a.angle-b.angle||a.a.node.id.localeCompare(b.a.node.id)||a.b.node.id.localeCompare(b.b.node.id));
    let accepted=false;
