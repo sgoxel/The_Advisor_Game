@@ -57,7 +57,7 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
   while(slot<MACRO_ROAD_LIMITS.junctionGroupsPerPlace){
    const pairs:{a:Approach;b:Approach;angle:number}[]=[];
    for(let i=0;i<groups.length;i++)for(let j=i+1;j<groups.length;j++){
-    const a=groups[i],b=groups[j],mustReduceVillageDegree=hub.kind==='village'&&groups.length>2;
+    const a=groups[i],b=groups[j],mustReduceVillageDegree=hub.kind==='village'&&groups.length>2&&slot>0&&a.depth===0&&b.depth===0;
     if(!mustReduceVillageDegree&&[...a.leaves,...b.leaves].some(n=>!ownsApproach(hub,n)))continue;
     if(Math.max(a.depth,b.depth)>=MACRO_ROAD_LIMITS.junctionDepth||(!mustReduceVillageDegree&&[...a.leaves,...b.leaves].some(n=>greatCircleDistance(hub.canonicalPosition,n.canonicalPosition)<=6500)))continue;
     const angle=angleDifference(bearing(hub.canonicalPosition,a.node.canonicalPosition),bearing(hub.canonicalPosition,b.node.canonicalPosition));
