@@ -1,0 +1,64 @@
+name: Validate S004 settlement exteriors
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/world.ts"
+      - "src/world-core.ts"
+      - "src/geometry.ts"
+      - "src/geometry-core.ts"
+      - "src/settlement-exterior.ts"
+      - "src/settlement-exterior-core.ts"
+      - "tests/settlement-exterior.test.ts"
+      - ".github/workflows/s004-settlement-evidence.yml"
+permissions:
+  contents: read
+jobs:
+  evidence:
+    strategy:
+      fail-fast: false
+      matrix:
+        renderer: [webgpu, webgl2]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Run S004 and world regressions
+        run: >-
+          node --experimental-strip-types --test
+          tests/settlement-exterior.test.ts
+          tests/political-atlas.test.ts
+          tests/macro-road-network.test.ts
+          tests/streaming-coverage-geometry.test.ts
+          tests/sites.test.ts
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: python -m pip install playwright==1.63.0
+      - name: Capture exact-head settlement evidence
+        env:
+          RENDERER: ${{ matrix.renderer }}
+        run: |
+          npm run preview -- --port 4174 > /tmp/advisor-s004-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          STEPS='eval:window.__v=window.advisorWorld.geography.villages[0];eval:window.advisorWorld.navigation.setFocus(window.__v.canonicalPosition.lon,window.__v.canonicalPosition.lat);eval:window.advisorWorld.setHalfHeight(115);settle;shot:village;eval:window.__v=window.advisorWorld.geography.villages[Math.floor(window.advisorWorld.geography.villages.length/2)];eval:window.advisorWorld.navigation.setFocus(window.__v.canonicalPosition.lon,window.__v.canonicalPosition.lat);eval:window.advisorWorld.setHalfHeight(115);settle;shot:village-alt;eval:window.__c=window.advisorWorld.geography.cities[0];eval:window.advisorWorld.navigation.setFocus(window.__c.canonicalPosition.lon,window.__c.canonicalPosition.lat);eval:window.advisorWorld.setHalfHeight(260);settle;shot:city;eval:window.advisorWorld.setHalfHeight(48);settle;shot:city-close'
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ \
+            --out "test-results/s004-${RENDERER}" \
+            --name settlement-exterior \
+            --profile desktop,phone,phone-landscape \
+            --renderer "$RENDERER" \
+            --timeout 300 \
+            --steps "$STEPS"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: s004-settlement-${{ matrix.renderer }}-${{ github.event.pull_request.head.sha }}
+          path: test-results/s004-${{ matrix.renderer }}/
