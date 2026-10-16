@@ -5,6 +5,9 @@ on:
     paths: [.github/workflows/agent1-wp-s004-final-evidence-arm.yml]
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   exact-arm-validation:
     runs-on: ubuntu-24.04-arm
