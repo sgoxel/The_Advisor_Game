@@ -23,6 +23,7 @@ import {
   type CanonicalPosition,
   type LonLat,
 } from "./planet.ts";
+import { politicalBorderGateways } from "./political-settlement-access.ts";
 import { travelMetrics } from "./travel.ts";
 import { planRoute } from "./routing.ts";
 
@@ -457,6 +458,34 @@ function buildRoute(
       if (!best || route.cost < best.cost - 1e-7 || (Math.abs(route.cost - best.cost) <= 1e-7 && route.candidate < best.candidate)) best = route;
     }
   }
+  if (!best && requireBorder) {
+    const gatewayCandidates = politicalBorderGateways
+      .filter((gateway) =>
+        (gateway.countryCode === from.countryCode && gateway.neighbourCountryCode === to.countryCode) ||
+        (gateway.countryCode === to.countryCode && gateway.neighbourCountryCode === from.countryCode)
+      )
+      .sort((a, b) => a.id.localeCompare(b.id));
+    for (let index = 0; index < gatewayCandidates.length; index++) {
+      const gateway = gatewayCandidates[index],
+        forward = gateway.countryCode === from.countryCode,
+        inside = lonLatToSource(gateway.inside.lon, gateway.inside.lat),
+        outside = lonLatToSource(gateway.outside.lon, gateway.outside.lat),
+        controls = forward
+          ? [{ x: from.x, z: from.z }, inside, outside, { x: to.x, z: to.z }]
+          : [{ x: from.x, z: from.z }, outside, inside, { x: to.x, z: to.z }],
+        route = routeCandidate(
+          roadCode,
+          from,
+          to,
+          TRANSPORT_LIMITS.routeCandidates + 64 + index,
+          allowedCountries,
+          true,
+          controls,
+        );
+      if (!route) continue;
+      if (!best || route.cost < best.cost - 1e-7 || (Math.abs(route.cost - best.cost) <= 1e-7 && route.candidate < best.candidate)) best = route;
+    }
+  }
   if (!best && greatCircleDistance(from.position, to.position) <= 120_000) {
     const planned = planRoute({
       from: from.position,
@@ -552,17 +581,23 @@ function politicalSequence(from: TransportNode, to: TransportNode) {
 }
 
 function neighboringCapitals(stateNodes: readonly TransportNode[], country: Country) {
-  const from = stateNodes.find((node) => node.kind === "capital" && node.countryCode === country.code)!;
+  const from = stateNodes.find((node) => node.kind === "capital" && node.countryCode === country.code)!,
+    gatewayNeighbors = new Set(
+      politicalBorderGateways
+        .filter((gateway) => gateway.countryCode === country.code)
+        .map((gateway) => gateway.neighbourCountryCode),
+    );
   return countries
     .filter((candidate) => candidate.continent === country.continent && candidate.code !== country.code)
     .map((candidate) => ({ candidate, distance: greatCircleDistance(from.position, capitalFor(candidate).canonicalPosition) }))
     .sort((a, b) => a.distance - b.distance || a.candidate.code.localeCompare(b.candidate.code))
-    .slice(0, TRANSPORT_LIMITS.internationalCandidates)
     .filter(({ candidate }) => {
+      if (gatewayNeighbors.has(candidate.code)) return true;
       const to = stateNodes.find((node) => node.kind === "capital" && node.countryCode === candidate.code)!;
       const sequence = politicalSequence(from, to);
       return sequence.length === 2 && sequence[0] === country.code && sequence[1] === candidate.code;
     })
+    .slice(0, TRANSPORT_LIMITS.internationalCandidates)
     .map(({ candidate }) => candidate);
 }
 
@@ -735,8 +770,9 @@ export function buildTransportNetwork(): TransportNetwork {
   }
 
   // Every country selects a real adjacent country by the political ownership
-  // sequence of the direct capital corridor.  Pair de-duplication preserves at
-  // least one international main-road incident on every selecting country.
+  // sequence of the direct capital corridor or a reserved canonical border
+  // gateway. Pair de-duplication preserves at least one international main-road
+  // incident on every selecting country.
   const internationalPairs = new Set<string>(), internationalCountries = new Set<string>();
   for (const country of countries) {
     if (internationalCountries.has(country.code)) continue;
