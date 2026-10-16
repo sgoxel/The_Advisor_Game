@@ -18,6 +18,7 @@
 #resident-inspector dl { display: grid; grid-template-columns: 106px minmax(0,1fr); gap: 6px 10px; margin: 11px 0; }
 #resident-inspector dt { color: var(--muted); font-size: 12px; line-height: 1.35; }
 #resident-inspector dd { min-width: 0; margin: 0; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+#resident-inspector select { width: 100%; min-height: 44px; }
 #resident-home, #resident-workplace, #resident-route {
   color: #e0cfaa;
   font-family: Consolas, monospace;
@@ -75,6 +76,12 @@
     max-height: min(58dvh, 520px);
     padding: 14px;
   }
+  /* House focus is the viewport centre. Keep that canonical anchor visible after
+     inspection by temporarily folding the bottom sheet around the activated
+     action instead of leaving the target underneath a half-screen panel. */
+  .travel-panel:has(#resident-home-inspect:focus) {
+    max-height: min(26dvh, 220px);
+  }
   #resident-inspector dl { grid-template-columns: 96px minmax(0,1fr); }
   #resident-inspector h3 { font-size: 16px; }
 }
@@ -88,5 +95,9 @@
     bottom: calc(70px + env(safe-area-inset-bottom));
     max-height: none;
     padding: 14px;
+  }
+  .travel-panel:has(#resident-home-inspect:focus) {
+    top: auto;
+    max-height: min(26dvh, 118px);
   }
 }
