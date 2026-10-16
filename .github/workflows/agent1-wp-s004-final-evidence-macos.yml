@@ -12,10 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 7b7c10488c7e93c7ccabb785cf59690de4ed74d3
+          ref: 15201814e8e59d4a0249357062af8f8775277ac3
           fetch-depth: 0
       - name: Verify exact product candidate
-        run: test "$(git rev-parse HEAD)" = "7b7c10488c7e93c7ccabb785cf59690de4ed74d3"
+        run: test "$(git rev-parse HEAD)" = "15201814e8e59d4a0249357062af8f8775277ac3"
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -53,5 +53,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: wp-s004-exact-7b7c104-macos-evidence
+          name: wp-s004-exact-1520181-macos-evidence
           path: test-results/
