@@ -312,36 +312,60 @@ export function terrainTint(
 }
 
 /** Worker-generated tile meshes. Skirts cover cracks between terrain LOD levels. */
-export function buildTile(t: Tile): TileGeometry {
-  registerContinuityPatch(t.minX + t.size / 2, t.minZ + t.size / 2);
+export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGeometry {
+  if (!options.terrainOnly) registerContinuityPatch(t.minX + t.size / 2, t.minZ + t.size / 2);
   const terrain = new Builder(),
     structures = new Builder(),
     nature = new Builder(),
     detail = new Builder();
   // Prepared-surface refinement is owned by the common worker adapter.
-  const resolution = Math.min(16, t.size / 2),
+  const resolution = Math.min(options.terrainOnly ? 8 : 16, t.size / 2),
     step = t.size / resolution;
+  const coveragePoints = new Map<string,Point>(), coverageTints = new Map<string,RGB>();
+  const point = (px:number,pz:number):Point => {
+    if(!options.terrainOnly)return [px,heightAt(px,pz),pz];
+    const key=`${px}/${pz}`;let p=coveragePoints.get(key);
+    if(!p){const surface=finalSurfaceAt(px,pz);p=[px,surface.water.kind==='none'?surface.groundHeight:surface.water.level,pz];coveragePoints.set(key,p);}return p;
+  };
+  const tintAt = (p:Point):RGB => {
+    if(!options.terrainOnly)return terrainTint(p[0],p[2],t.size,p[1]);
+    const key=`${p[0]}/${p[2]}`;let tint=coverageTints.get(key);
+    if(!tint){tint=terrainTint(p[0],p[2],t.size,p[1],step,false);coverageTints.set(key,tint);}return tint;
+  };
+  // Refine only sharp material boundaries. Four bounded subdivision levels keep
+  // thin shore margins from being stretched across an entire coarse quad.
+  // This is presentation sampling; the detailed builder and authority stay unchanged.
+  const coverageQuad = (x:number,z:number,size:number,depth=0):void => {
+    const a=point(x,z),b=point(x,z+size),c=point(x+size,z+size),d=point(x+size,z);
+    const colours=[tintAt(a),tintAt(b),tintAt(c),tintAt(d)];
+    const range=Math.max(...[0,1,2].map(k=>Math.max(...colours.map(v=>v[k]))-Math.min(...colours.map(v=>v[k]))));
+    if(depth<4 && range>10){
+      const half=size/2;
+      coverageQuad(x,z,half,depth+1);coverageQuad(x+half,z,half,depth+1);
+      coverageQuad(x,z+half,half,depth+1);coverageQuad(x+half,z+half,half,depth+1);
+    }else terrain.quadGradient(a,b,c,d,colours[0],colours[1],colours[2],colours[3]);
+  };
   for (let z = 0; z < resolution; z++)
     for (let x = 0; x < resolution; x++) {
       const ax = t.minX + x * step,
         az = t.minZ + z * step;
-      const point = (px: number, pz: number): Point => [px, heightAt(px, pz), pz];
+      if(options.terrainOnly){coverageQuad(ax,az,step);continue;}
       const a = point(ax, az),
         b = point(ax, az + step),
         c = point(ax + step, az + step),
         d = point(ax + step, az);
-      if (Math.max(a[1], b[1], c[1], d[1]) > 0)
+      if (options.terrainOnly || Math.max(a[1], b[1], c[1], d[1]) > 0)
         terrain.quadGradient(
           a,
           b,
           c,
           d,
-          terrainTint(a[0], a[2], t.size, a[1]),
-          terrainTint(b[0], b[2], t.size, b[1]),
-          terrainTint(c[0], c[2], t.size, c[1]),
-          terrainTint(d[0], d[2], t.size, d[1]),
+          tintAt(a),
+          tintAt(b),
+          tintAt(c),
+          tintAt(d),
         );
-      if (z === 0)
+      if (z === 0 && !options.terrainOnly)
         terrain.quad(
           a,
           d,
@@ -349,7 +373,7 @@ export function buildTile(t: Tile): TileGeometry {
           [a[0], a[1] - 12, a[2]],
           terrainTint(ax, az, t.size, a[1]),
         );
-      if (z === resolution - 1)
+      if (z === resolution - 1 && !options.terrainOnly)
         terrain.quad(
           c,
           b,
@@ -357,7 +381,7 @@ export function buildTile(t: Tile): TileGeometry {
           [c[0], c[1] - 12, c[2]],
           terrainTint(ax, az, t.size, c[1]),
         );
-      if (x === 0)
+      if (x === 0 && !options.terrainOnly)
         terrain.quad(
           b,
           a,
@@ -365,7 +389,7 @@ export function buildTile(t: Tile): TileGeometry {
           [b[0], b[1] - 12, b[2]],
           terrainTint(ax, az, t.size, b[1]),
         );
-      if (x === resolution - 1)
+      if (x === resolution - 1 && !options.terrainOnly)
         terrain.quad(
           d,
           c,
@@ -383,7 +407,7 @@ export function buildTile(t: Tile): TileGeometry {
     return blendColor(TERRAIN_PALETTE.ocean, TERRAIN_PALETTE["sea-ice"],
       smoothstep(-0.018, 0.018, Math.abs(position.lat)/(Math.PI/2)-polarBoundaryAt(position)));
   };
-  terrain.quadGradient(
+  if (!options.terrainOnly) terrain.quadGradient(
     [t.minX, 0, t.minZ],
     [t.minX, 0, t.minZ + t.size],
     [t.minX + t.size, 0, t.minZ + t.size],
@@ -393,7 +417,7 @@ export function buildTile(t: Tile): TileGeometry {
     waterTint(t.minX + t.size, t.minZ + t.size),
     waterTint(t.minX + t.size, t.minZ),
   );
-  if (t.size <= 512)
+  if (t.size <= 512 && !options.terrainOnly)
     for (const f of featuresFor(t)) {
       const { x, z, variant: v } = f, y = elevationToRenderY(f.y);
       const stone = color(167, 165, 144),
@@ -545,7 +569,7 @@ export function buildTile(t: Tile): TileGeometry {
     }
   // Bridge deck geometry is driven by the final deck channel. Ground/water stay
   // untouched, so a crossing cannot be accidentally rendered as a filled river.
-  if (t.size <= 512)
+  if (t.size <= 512 && !options.terrainOnly)
     for (const road of roadFragmentsInBounds(roads,t.minX,t.minZ,t.size)) {
       const vx = road.toX - road.fromX,
         vz = road.toZ - road.fromZ,
@@ -609,7 +633,7 @@ export function buildTile(t: Tile): TileGeometry {
   // natural soil so zoom can hide roads without new meshes or authority changes.
   for(let v=0;v<terrain.p.length/3;v++){
     const c=v*4,x=terrain.p[v*3],z=terrain.p[v*3+2];
-    const road=terrain.c[c]===112&&terrain.c[c+1]===92&&terrain.c[c+2]===62&&finalSurfaceAt(x,z).groundMaterial==="Road";
+    const road=!options.terrainOnly && terrain.c[c]===112&&terrain.c[c+1]===92&&terrain.c[c+2]===62&&finalSurfaceAt(x,z).groundMaterial==="Road";
     if(road){const tint=terrainTint(x,z,32,undefined,0,false);terrain.c[c]=tint[0];terrain.c[c+1]=tint[1];terrain.c[c+2]=tint[2];}
     terrain.c[c+3]=road?255:0;
   }

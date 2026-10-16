@@ -1,3 +1,4 @@
+import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import "./style.css";
@@ -149,10 +150,13 @@ let projectionTransition = 0,
 let worldMaterial: pc.StandardMaterial | undefined;
 let terrainMaterial: pc.StandardMaterial | undefined;
 let coarseTerrainMaterial: pc.StandardMaterial | undefined;
-const coarseTerrainLayer = new pc.Layer({ name: "Coarse terrain background" });
+let coarseTerrainLayer: pc.Layer, coverageTerrainLayer: pc.Layer;
+let coverageTiles: Tile[] = [], coverageComplete = false, coverageStartedAt = 0, coverageDurationMs = 0;
+let workerStartedAt = 0, workerStartupMs = 0, lastGenerationTiming: Record<string,number> = {};
 let surfaceDetail = 1;
 let lodTransition: { oldKeys: string[]; newKeys: string[]; started: number } | undefined;
 type CachedTile = {
+  kind: TileJobKind;
   tile: Tile;
   entity: pc.Entity;
   meshes: pc.Mesh[];
@@ -179,6 +183,8 @@ let poleLimit: "north" | "south" | null = null,
 const previousWantedKeys = new Set<string>();
 const pending = new Set<string>();
 const uploads: {
+  kind: TileJobKind;
+  jobKey: string;
   tile: Tile;
   data: TileGeometry;
   precision: PatchConversionStats;
@@ -431,7 +437,7 @@ function flatCoverageReady() {
   return (
     !selectionDirty &&
     wanted.length > 0 &&
-    wanted.every((tile) => tileCache.has(tile.key))
+    (wanted.every((tile) => tileCache.has(tile.key)) || coverageComplete)
   );
 }
 function globeCoverageReady() {
@@ -625,6 +631,7 @@ function uploadGeometry(
   parent: pc.Entity,
   name: string,
   material: pc.StandardMaterial,
+  coverage = false,
 ): pc.Mesh | undefined {
   if (g.positions.length === 0) return;
   const mesh = new pc.Mesh(app.graphicsDevice);
@@ -637,7 +644,7 @@ function uploadGeometry(
   const entity = new pc.Entity(name);
   entity.addComponent("render", {
     meshInstances: [new pc.MeshInstance(mesh, material)],
-    layers: material === coarseTerrainMaterial ? [coarseTerrainLayer.id] : [pc.LAYERID_WORLD],
+    layers: coverage ? [coverageTerrainLayer.id] : material === coarseTerrainMaterial ? [coarseTerrainLayer.id] : [pc.LAYERID_WORLD],
     castShadows: name !== "terrain",
     receiveShadows: true,
   });
@@ -663,21 +670,25 @@ function setLayers() {
             : layers.structures && layers.nature && settlementDetailVisible);
     }
 }
-function request(tile: Tile) {
-  if (tileCache.has(tile.key) || pending.has(tile.key)) return;
-  if (inFlight + uploads.length >= streamingBudget.generationReady) return;
+function request(tile: Tile, kind: TileJobKind = "detail") {
+  const job = {tile,kind}, key = tileJobKey(job);
+  if (tileCache.has(key) || pending.has(key)) return;
+  // A single worker can execute one job; do not feed it an obsolete FIFO queue.
+  if (inFlight > 0 || inFlight + uploads.length >= streamingBudget.generationReady) return;
   const surfaceBytes=globe?globe.stats.textureWidth*globe.stats.textureHeight*4:0,
     readyBytes=uploads.reduce((sum,job)=>sum+estimateGeometryBytes(job.data),0),
     cpuBytes=cachedGeometryBytes+readyBytes+surfaceBytes+continuityCpuBytes(),
     gpuBytes=cachedGeometryBytes+Math.ceil(surfaceBytes*4/3);
   if(!streamingMemoryReservationFits(cpuBytes,gpuBytes,NATURAL_WORKER_SCRATCH_RESERVE_BYTES,streamingBudget))return;
-  pending.add(tile.key);
+  pending.add(key);
   inFlight++;
-  worker.postMessage(tile);
+  worker.postMessage(job);
 }
 function refreshSelection() {
   // Reserve bounded capacity for old and incoming coverage during the 240 ms blend.
   wanted = selectTiles(view, 190, Math.floor(streamingBudget.activePatches / 2));
+  coverageTiles = selectTiles(view, Math.max(512,view.pixels*.75), 16);
+  coverageComplete = false; coverageStartedAt = performance.now(); coverageDurationMs = 0;
   const nextWantedKeys = new Set(wanted.map((tile) => tile.key));
   for (const tile of wanted)
     if (!previousWantedKeys.has(tile.key)) {
@@ -719,10 +730,10 @@ function processStreaming(material: pc.StandardMaterial) {
   uploadsThisFrame = 0;
   if (selectionDirty) refreshSelection();
   // At most one GPU mesh group per frame. Generation is isolated in a worker.
-  const relevant = (key: string) => key === tileAt(0,0,0).key || wanted.some(tile=>tile.key===key) || activeKeys.includes(key) || Boolean(lodTransition?.oldKeys.includes(key));
+  const relevant = (key: string) => key === tileAt(0,0,0).key || coverageTiles.some(tile=>coverageKey(tile)===key) || wanted.some(tile=>tile.key===key) || activeKeys.includes(key) || Boolean(lodTransition?.oldKeys.includes(key));
   let next = uploads.shift();
-  while(next && !relevant(next.tile.key)) {
-    pending.delete(next.tile.key);
+  while(next && !relevant(next.jobKey)) {
+    pending.delete(next.jobKey);
     discardedPresentationJobs++;
     next=uploads.shift();
   }
@@ -732,13 +743,14 @@ function processStreaming(material: pc.StandardMaterial) {
       meshes: pc.Mesh[] = [];
     for (const [name, g] of Object.entries(next.data)) {
       const mesh = uploadGeometry(g, entity, name, name === "terrain" ?
-        (next.tile.level === 0 ? coarseTerrainMaterial! : terrainMaterial!) : material);
+        (next.kind === "coverage" || next.tile.level === 0 ? coarseTerrainMaterial! : terrainMaterial!) : material, next.kind === "coverage");
       if (mesh) meshes.push(mesh);
     }
     entity.enabled = false;
     applyTileRenderTransform(next.tile, entity);
     flatRoot.addChild(entity);
-    tileCache.set(next.tile.key, {
+    tileCache.set(next.jobKey, {
+      kind: next.kind,
       tile: next.tile,
       entity,
       meshes,
@@ -748,7 +760,7 @@ function processStreaming(material: pc.StandardMaterial) {
     cachedGeometryBytes += bytes;
     uploadsThisFrame = 1;
     maxUploadsPerFrame = Math.max(maxUploadsPerFrame, uploadsThisFrame);
-    if (next.tile.size <= 512) {
+    if (next.kind === "detail" && next.tile.size <= 512) {
       detailedMaxHorizontalM = Math.max(
         detailedMaxHorizontalM,
         next.precision.maxHorizontalM,
@@ -758,37 +770,37 @@ function processStreaming(material: pc.StandardMaterial) {
         next.precision.maxFloat32ErrorM,
       );
     }
-    pending.delete(next.tile.key);
+    pending.delete(next.jobKey);
   }
-  const root = tileAt(0, 0, 0);
-  if (!tileCache.has(root.key)) {
-    if (inFlight + uploads.length < streamingBudget.generationReady) request(root);
-  } else {
-    const complete = wanted.every((tile) => tileCache.has(tile.key));
-    if (complete && !lodTransition) {
-      const newKeys = wanted.map((t) => t.key),
-        active = new Set(newKeys);
-      if (ready && (newKeys.length !== activeKeys.length || newKeys.some(key => !activeKeys.includes(key))))
-        lodTransition = { oldKeys: [...activeKeys], newKeys, started: performance.now() };
-      const retained = new Set(lodTransition?.oldKeys ?? []);
-      for (const [key, record] of tileCache) {
-        record.entity.enabled = active.has(key) || retained.has(key);
-        if (active.has(key)) record.used = revision;
-      }
-      activeKeys = newKeys;
-      if (!ready) {
-        ready = true;
-        $("loading").classList.add("done");
-      }
-    } else if (!complete) {
-      // Keep the previous coverage and coarse root until the replacement is complete.
-      tileCache.get(root.key)!.entity.enabled = true;
-      if (!ready && tileCache.size > 1) $("loading").classList.add("done");
-      for (const tile of wanted) {
-        if (inFlight + uploads.length >= streamingBudget.generationReady) break;
-        request(tile);
-      }
+  const root = tileAt(0,0,0), cachedKeys = tileCache;
+  const complete = wanted.length>0 && wanted.every(tile=>cachedKeys.has(tile.key));
+  const coarseKeys = coverageTiles.map(coverageKey);
+  const coarseReady = coarseKeys.length>0 && coarseKeys.every(key=>cachedKeys.has(key));
+  const fineUnion = new Set([...activeKeys,...(lodTransition?.oldKeys||[])]);
+  const backgroundKeys = visibleCoverageKeys(coarseKeys,cachedKeys,fineUnion.size,streamingBudget.activePatches);
+  coverageComplete = complete || (coarseReady && backgroundKeys.length===coarseKeys.length);
+  if (coverageComplete && coverageDurationMs===0) coverageDurationMs=performance.now()-coverageStartedAt;
+  if (!lodTransition) {
+    const nextKeys = progressiveDetailKeys(wanted.map(tile=>tile.key),cachedKeys,activeKeys,coverageComplete);
+    if(nextKeys.length!==activeKeys.length || nextKeys.some(key=>!activeKeys.includes(key))){
+      if(ready)lodTransition={oldKeys:[...activeKeys],newKeys:nextKeys,started:performance.now()};
+      activeKeys=nextKeys;
     }
+  }
+  const enabledFine = new Set([...activeKeys,...(lodTransition?.oldKeys||[])]);
+  const background = new Set(visibleCoverageKeys(coarseKeys,cachedKeys,enabledFine.size,streamingBudget.activePatches));
+  for(const [key,record] of tileCache){
+    if(record.kind==='coverage')record.entity.enabled=(!complete || Boolean(lodTransition)) && background.has(key);
+    else if(key===root.key)record.entity.enabled=!complete;
+    else record.entity.enabled=enabledFine.has(key);
+    if(record.entity.enabled)record.used=revision;
+  }
+  if(coverageComplete && !ready){ready=true;$("loading").classList.add("done");}
+  if(inFlight===0 && inFlight+uploads.length<streamingBudget.generationReady){
+    const job=nextStreamingJob(root,wanted,coverageTiles,cachedKeys);
+    if(job)request(job.tile,job.kind);
+  }
+  {
     const surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4;
     const readyBytes = () => uploads.reduce((sum, job) => sum + estimateGeometryBytes(job.data), 0);
     const overCacheBudget = () =>
@@ -799,6 +811,7 @@ function processStreaming(material: pc.StandardMaterial) {
         ...activeKeys,
         ...(lodTransition?.oldKeys ?? []),
         ...wanted.map((t) => t.key),
+        ...coverageTiles.map(coverageKey),
         root.key,
       ]);
       const obsolete = [...tileCache.entries()]
@@ -1246,8 +1259,12 @@ async function start() {
   flatRoot = new pc.Entity("Flat world");
   app.root.addChild(flatRoot);
   globe = new GlobeView(app);
+  // Allocate after the engine reserves World/Depth/Skybox/UI layer IDs.
+  coarseTerrainLayer = new pc.Layer({name:"Coarse terrain background"});
+  coverageTerrainLayer = new pc.Layer({name:"Current view terrain coverage"});
   app.scene.layers.insertOpaque(coarseTerrainLayer, 1);
-  camera.camera!.layers = [globe.surfaceLayer.id, coarseTerrainLayer.id, ...camera.camera!.layers];
+  app.scene.layers.insertOpaque(coverageTerrainLayer, 2);
+  camera.camera!.layers = [globe.surfaceLayer.id, coarseTerrainLayer.id, coverageTerrainLayer.id, ...camera.camera!.layers];
   const sun = new pc.Entity("Late afternoon sun");
   sun.addComponent("light", {
     type: "directional",
@@ -1277,15 +1294,18 @@ async function start() {
   coarseTerrainMaterial.depthWrite = false;
   coarseTerrainMaterial.depthTest = false;
   coarseTerrainMaterial.update();
+  workerStartedAt=performance.now();
   worker = new Worker(new URL("./tile-worker.ts", import.meta.url), {
     type: "module",
   });
   worker.onmessage = (event) => {
+    if(event.data.ready){workerStartupMs=performance.now()-workerStartedAt;return;}
     inFlight--;
+    lastGenerationTiming=event.data.timing||{};
     continuityWorkerBytes = event.data.continuity?.cpuBytesEstimated || 0;
     continuityWorkerState = event.data.continuity;
     if (event.data.error) {
-      pending.delete(event.data.tile.key);
+      pending.delete(event.data.jobKey);
       fail(`Tile generation failed: ${event.data.error}`);
       return;
     }
@@ -1766,6 +1786,7 @@ async function start() {
           levels: [
             ...new Set(activeKeys.map((key) => tileCache.get(key)!.tile.level)),
           ],
+          coverage: {layerDebug:{previewLayerId:coverageTerrainLayer.id,rootLayerId:coarseTerrainLayer.id,valid:app.scene.layers.getLayerById(coverageTerrainLayer.id)===coverageTerrainLayer && coverageTerrainLayer.id!==pc.LAYERID_DEPTH && coverageTerrainLayer.id!==pc.LAYERID_WORLD,meshes:coverageTerrainLayer.meshInstances.length,culled:coverageTerrainLayer.getCulledInstances(camera.camera!.camera).opaque.length},canonicalKeys:coverageTiles.map(t=>t.key),visibleCanonicalKeys:coverageTiles.filter(t=>tileCache.get(coverageKey(t))?.entity.enabled).map(t=>t.key),complete:!selectionDirty && coverageComplete, durationMs:coverageDurationMs, prepared:coverageTiles.filter(t=>tileCache.has(coverageKey(t))).length, wanted:coverageTiles.length, workerStartupMs, lastGenerationTiming},
           simulation: simulation.stats,
           settled:
             !lodTransition &&

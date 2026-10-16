@@ -1,0 +1,252 @@
+{
+  "finalAsset": "index-BduXcm9x.js",
+  "finalZoomAndReversal": [
+    {
+      "backend": "webgl2",
+      "profile": "desktop",
+      "phase": "zoom-out",
+      "coldMs": 99602,
+      "firstCoherentMs": 425.3999999910593,
+      "settledMs": 52293.69999998808,
+      "samples": 2910,
+      "errors": [],
+      "budgetsPass": true,
+      "maxJobs": 1,
+      "maxCpuBytes": 139966948,
+      "maxGpuBytes": 19235735,
+      "transientComparisons": [
+        {
+          "time": "250ms",
+          "meanRgbDifference": 1.6317766698320693,
+          "broadChangedFraction": 0.019017094017094015,
+          "passed": true
+        },
+        {
+          "time": "1000ms",
+          "meanRgbDifference": 1.611953941120505,
+          "broadChangedFraction": 0.017523741690408358,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "backend": "webgl2",
+      "profile": "desktop",
+      "phase": "reversal",
+      "coldMs": 99602,
+      "firstCoherentMs": 147.70000000298023,
+      "settledMs": 389.6000000089407,
+      "samples": 71,
+      "errors": [],
+      "budgetsPass": true,
+      "maxJobs": 1,
+      "maxCpuBytes": 140330444,
+      "maxGpuBytes": 19252535,
+      "transientComparisons": [
+        {
+          "time": "250ms",
+          "meanRgbDifference": 0,
+          "broadChangedFraction": 0,
+          "passed": true
+        },
+        {
+          "time": "1000ms",
+          "meanRgbDifference": 0,
+          "broadChangedFraction": 0,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "backend": "webgl2",
+      "profile": "phone",
+      "phase": "zoom-out",
+      "coldMs": 84728,
+      "firstCoherentMs": 302.09999999403954,
+      "settledMs": 10954.90000000596,
+      "samples": 604,
+      "errors": [],
+      "budgetsPass": true,
+      "maxJobs": 1,
+      "maxCpuBytes": 126211204,
+      "maxGpuBytes": 5454047,
+      "transientComparisons": [
+        {
+          "time": "250ms",
+          "meanRgbDifference": 1.1641127949594856,
+          "broadChangedFraction": 0.009862690369593316,
+          "passed": true
+        },
+        {
+          "time": "1000ms",
+          "meanRgbDifference": 1.2091833230302682,
+          "broadChangedFraction": 0.0093194462656651,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "backend": "webgl2",
+      "profile": "phone",
+      "phase": "reversal",
+      "coldMs": 84728,
+      "firstCoherentMs": 140.59999999403954,
+      "settledMs": 387,
+      "samples": 65,
+      "errors": [],
+      "budgetsPass": true,
+      "maxJobs": 1,
+      "maxCpuBytes": 126439668,
+      "maxGpuBytes": 5548127,
+      "transientComparisons": [
+        {
+          "time": "250ms",
+          "meanRgbDifference": 0.007864551136753906,
+          "broadChangedFraction": 8.429649888541295e-05,
+          "passed": true
+        },
+        {
+          "time": "1000ms",
+          "meanRgbDifference": 0,
+          "broadChangedFraction": 0,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "backend": "webgpu",
+      "profile": "desktop",
+      "phase": "zoom-out",
+      "coldMs": 100030,
+      "firstCoherentMs": 445.8999999910593,
+      "settledMs": 52348.69999998808,
+      "samples": 3139,
+      "errors": [],
+      "budgetsPass": true,
+      "maxJobs": 1,
+      "maxCpuBytes": 139966948,
+      "maxGpuBytes": 19235735,
+      "transientComparisons": [
+        {
+          "time": "250ms",
+          "meanRgbDifference": 1.6331623931622392,
+          "broadChangedFraction": 0.018779677113010446,
+          "passed": true
+        },
+        {
+          "time": "1000ms",
+          "meanRgbDifference": 1.6123163975940766,
+          "broadChangedFraction": 0.017260208926875593,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "backend": "webgpu",
+      "profile": "desktop",
+      "phase": "reversal",
+      "coldMs": 100030,
+      "firstCoherentMs": 115.20000000298023,
+      "settledMs": 363.6000000089407,
+      "samples": 77,
+      "errors": [],
+      "budgetsPass": true,
+      "maxJobs": 1,
+      "maxCpuBytes": 140330444,
+      "maxGpuBytes": 19252535,
+      "transientComparisons": [
+        {
+          "time": "250ms",
+          "meanRgbDifference": 0,
+          "broadChangedFraction": 0,
+          "passed": true
+        },
+        {
+          "time": "1000ms",
+          "meanRgbDifference": 0,
+          "broadChangedFraction": 0,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "backend": "webgpu",
+      "profile": "phone",
+      "phase": "zoom-out",
+      "coldMs": 85191,
+      "firstCoherentMs": 338.80000001192093,
+      "settledMs": 11031.60000000894,
+      "samples": 607,
+      "errors": [],
+      "budgetsPass": true,
+      "maxJobs": 1,
+      "maxCpuBytes": 126211204,
+      "maxGpuBytes": 5454047,
+      "transientComparisons": [
+        {
+          "time": "250ms",
+          "meanRgbDifference": 1.165193038982239,
+          "broadChangedFraction": 0.009937620590824795,
+          "passed": true
+        },
+        {
+          "time": "1000ms",
+          "meanRgbDifference": 1.2101261949807633,
+          "broadChangedFraction": 0.009403742764550513,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "backend": "webgpu",
+      "profile": "phone",
+      "phase": "reversal",
+      "coldMs": 85191,
+      "firstCoherentMs": 117.70000000298023,
+      "settledMs": 356.29999999701977,
+      "samples": 65,
+      "errors": [],
+      "budgetsPass": true,
+      "maxJobs": 1,
+      "maxCpuBytes": 126353172,
+      "maxGpuBytes": 5470847,
+      "transientComparisons": [
+        {
+          "time": "250ms",
+          "meanRgbDifference": 0,
+          "broadChangedFraction": 0,
+          "passed": true
+        },
+        {
+          "time": "1000ms",
+          "meanRgbDifference": 0,
+          "broadChangedFraction": 0,
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "baselineEvidence": "C:/Users/serha/AppData/Local/Temp/advisor-zoom105-baseline2",
+  "priorPanScope": "Candidate2 desktop WebGPU only: 407.3ms coherent vs 38688.3ms baseline; not rerun after adaptive preview sampling.",
+  "finalCoastalComparisons": [
+    {
+      "backend": "webgpu",
+      "profile": "desktop",
+      "meanRgbDifference": 0.6205104463437796,
+      "broadChangedFraction": 0.006350902184235518,
+      "passed": true
+    },
+    {
+      "backend": "webgl2",
+      "profile": "phone",
+      "meanRgbDifference": 0.7571511529887792,
+      "broadChangedFraction": 0.010424667028829403,
+      "passed": true
+    }
+  ],
+  "visualReview": {
+    "score": 8,
+    "framesInspected": 8,
+    "scope": "Four representative benchmark frames plus four final first-coverage/settled coastal frames; actual native Edge dual backends, desktop and emulated phone."
+  }
+}

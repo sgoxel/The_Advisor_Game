@@ -24,6 +24,7 @@ Steps, separated by ';' (write '\\;' for a semicolon inside eval):
     tap[:x,y]              click the canvas; fails if a panel covers that point
     key:<Key>[@ms]         focus the canvas and hold the key (default 250 ms)
     settle                 wait for ready and settled terrain, then two frames
+    coverage               wait for current-view terrain submitted to a valid layer
     wait:<ms>  eval:<javascript>
     shot[:<suffix>]        capture now; put 'settle' first for a stable image
 Coordinates are viewport pixels or percentages ("50%,40%"). Without x,y, tap and
@@ -68,6 +69,14 @@ POINT_INSPECTION = (
 
 # Named step presets. Add a line here to give a new scene a name.
 SCENARIOS: dict[str, str] = {
+    "streaming-coverage": (
+        "eval:window.advisorWorld.navigation.setFocus(-0.5235987755982988,-1.064650843716541);"
+        "select:#map-scale=250;coverage;shot:coast-preview;settle;shot:coast-final;"
+        "eval:window.advisorWorld.navigation.setFocus(0.8,Math.PI/2);"
+        "coverage;shot:pole-preview;settle;shot:pole-final;"
+        "eval:window.advisorWorld.navigation.setFocus(Math.PI-0.00001,0.4);"
+        "coverage;shot:wrap-preview;settle;shot:wrap-final"
+    ),
     "macro-roads": (
         "eval:window.j=window.advisorWorld.geography.roadJunctions[0];"
         "eval:window.advisorWorld.navigation.setFocus(window.j.canonicalPosition.lon,window.j.canonicalPosition.lat);"
@@ -279,7 +288,7 @@ STATE_JS = """() => {
     canonicalFootprintM: state.canonicalFootprintM ?? null,
     navigation: state.navigation ?? null,
     globe: state.globe ?? null, macroGeography: state.macroGeography ?? null,
-    performance: state.performance ?? null,
+    performance: state.performance ?? null, coverage: state.coverage ?? null,
     continuity: world && world.continuity ? world.continuity.telemetry() : null,
     informationExpanded: document.getElementById('toggle-region-panel')?.getAttribute('aria-expanded') === 'true',
     detailName: detail ? detail.textContent.trim() : null,
@@ -407,6 +416,16 @@ class Session:
             page.keyboard.press(key.strip(), delay=float(hold or 250))
         elif name == "settle":
             self.settle()
+        elif name == "coverage":
+            page.wait_for_function("""() => {
+              const s=window.advisorWorld?.state,c=s?.coverage,p=s?.performance;
+              if(!c?.complete || !c.layerDebug?.valid)return false;
+              const active=new Set(p.activeCanonicalKeys);
+              if(p.wantedCanonicalKeys.length && p.wantedCanonicalKeys.every(k=>active.has(k)))return true;
+              const visible=new Set(c.visibleCanonicalKeys);
+              return c.layerDebug.culled>0 && c.canonicalKeys.length && c.canonicalKeys.every(k=>visible.has(k));
+            }""")
+            page.evaluate(TWO_FRAMES_JS)
         elif name == "wait":
             page.wait_for_timeout(float(arg))
         elif name == "eval":
