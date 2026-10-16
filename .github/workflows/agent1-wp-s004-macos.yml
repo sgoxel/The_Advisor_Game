@@ -39,6 +39,8 @@ jobs:
           git add src/geography.ts tests/political-atlas.test.ts
           git commit -m "fix: remove village sibling-chain authority"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Install Chromium
+        run: npx playwright install chromium
       - name: Relevant WebGPU semantic-zoom gate
         run: npx playwright test --config playwright.webgpu.config.js settlement-icons.spec.js
       - name: Relevant WebGL2 semantic-zoom gate
