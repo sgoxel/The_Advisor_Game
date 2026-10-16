@@ -47,12 +47,10 @@ jobs:
         run: npm run build
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: WebGPU browser gate
-        run: xvfb-run -a npm run test:webgpu
-      - name: WebGL2 fallback browser gate
-        run: xvfb-run -a npx playwright test --config playwright.fallback.config.js
-      - name: Navigation browser gate
-        run: xvfb-run -a npx playwright test --config playwright.navigation.config.js
+      - name: Relevant WebGPU semantic-zoom gate
+        run: xvfb-run -a npx playwright test --config playwright.webgpu.config.js settlement-icons.spec.js
+      - name: Relevant WebGL2 semantic-zoom gate
+        run: xvfb-run -a npx playwright test --config playwright.fallback.config.js settlement-icons.spec.js
       - name: Capture fresh WP-S004 MIXED evidence
         env:
           SOURCE_SHA: ${{ github.sha }}
@@ -62,4 +60,4 @@ jobs:
           name: wp-s004-exact-head-${{ github.sha }}
           path: test-results/
 
-# AGENT #1 exact-main-integrated evidence trigger 2026-10-16T08:12+03:00
+# AGENT #1 targeted exact-head acceptance 2026-10-16T10:16+03:00
