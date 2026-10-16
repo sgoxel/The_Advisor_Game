@@ -12,6 +12,7 @@ import {
   villages,
 } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
+import { sourceToLonLat } from "../src/planet.ts";
 import {
   TRANSPORT_LIMITS,
   buildTransportNetwork,
@@ -118,10 +119,7 @@ test("coarse stored alignment remains dry land while final profiles and bridges 
       const a = edge.centerline[segment - 1], b = edge.centerline[segment];
       for (let step = 0; step <= 4; step++) {
         const t = step / 4,
-          position = t === 0 ? a.position : t === 1 ? b.position : {
-            lon: a.position.lon + (b.position.lon - a.position.lon) * t,
-            lat: a.position.lat + (b.position.lat - a.position.lat) * t,
-          },
+          position = sourceToLonLat(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t),
           macro = macroSampleAt(position);
         assert.equal(macro.land, true, `${edge.code} coarse alignment enters ocean`);
         assert.notEqual(macro.domain, "Lake", `${edge.code} coarse alignment enters a lake`);
