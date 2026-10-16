@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { villages } from "../src/geography.ts";
 import { buildTile } from "../src/geometry.ts";
+import { settlementExteriorFor } from "../src/settlement-exterior.ts";
 import { featuresFor, tileForPosition } from "../src/world.ts";
 
 const fieldTint = (form?: string) => form === "pasture" ? [125, 143, 78]
@@ -10,8 +11,13 @@ const fieldTint = (form?: string) => form === "pasture" ? [125, 143, 78]
   : [158, 132, 66];
 
 test("resolved settlement field form remains visible in generated structure geometry", () => {
-  const place = villages[0], tile = tileForPosition(place.x, place.z, 8),
-    field = featuresFor(tile).find((feature) => feature.code.includes(`/F/${place.id}/`) && feature.kind === "field");
+  const place = villages[0], plan = settlementExteriorFor(place), tiles = new Map<string, ReturnType<typeof tileForPosition>>();
+  for (const candidate of [{ x: place.x, z: place.z }, ...plan.plots.filter((plot) => plot.kind === "field").flatMap((plot) => plot.candidates)]) {
+    const tile = tileForPosition(candidate.x, candidate.z, 8);
+    tiles.set(tile.key, tile);
+  }
+  const field = [...tiles.values()].flatMap(featuresFor)
+    .find((feature) => feature.code.includes(`/F/${place.id}/`) && feature.kind === "field");
   assert.ok(field, "starting village must resolve a field");
   const geometry = buildTile(tileForPosition(field.x, field.z, 13)).structures,
     expected = fieldTint(field.fieldForm);
