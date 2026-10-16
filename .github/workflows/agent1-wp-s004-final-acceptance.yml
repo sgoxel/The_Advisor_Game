@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent1/wp-s004-001-001-20261015
+          ref: ${{ github.sha }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -28,6 +28,7 @@ jobs:
           cache: npm
       - name: Verify exact settlement integration
         run: |
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           grep -q '/EXTERIOR/WATER-MORPH' src/settlement-exterior.ts
           grep -q 'function settlementStreetAt' src/world.ts
           grep -q 'nearbyPlaces, places' src/world.ts
@@ -51,7 +52,10 @@ jobs:
         env:
           SOURCE_SHA: ${{ github.sha }}
         run: |
+          python3 -m venv .venv-wp-s004
+          . .venv-wp-s004/bin/activate
           python -m pip install playwright==1.63.0 pillow
+          python -m playwright install chromium
           npm run dev -- --port 4174 > /tmp/wp-s004-preview.log 2>&1 &
           PREVIEW_PID=$!
           trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
