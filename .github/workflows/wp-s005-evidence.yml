@@ -11,6 +11,7 @@ on:
       - src/village-routes.ts
       - tests/transport-network.test.ts
       - index.html
+      - package.json
       - .github/workflows/wp-s005-evidence.yml
 
 permissions:
@@ -27,7 +28,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm test
+      - name: Run deterministic transport tests
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          npm test 2>&1 | tee test-results/wp-s005-test.log
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: python -m pip install playwright==1.63.0
