@@ -94,7 +94,13 @@ export function buildTile(tile: Tile): TileGeometry {
       length = Math.max(.2, feature.length || depth),
       variant = feature.variant || 0;
 
-    if (feature.kind === "street") {
+    if (feature.kind === "field" && feature.fieldForm) {
+      const tint = feature.fieldForm === "pasture" ? color(125, 143, 78)
+        : feature.fieldForm === "orchard" ? color(126, 137, 70)
+        : feature.fieldForm === "vegetable" ? color(137, 121, 65)
+        : color(158, 132, 66);
+      structures.boxYaw(x, y + .015, z, width, .08, depth, yaw, tint);
+    } else if (feature.kind === "street") {
       structures.boxYaw(x, y + .01, z, width, .07, length, yaw, color(119, 99, 70));
     } else if (feature.kind === "border") {
       const stoneWall = variant > 0;
