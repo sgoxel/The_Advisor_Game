@@ -13,22 +13,30 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: agent1/wp-s004-001-001-20261015
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - name: Apply deterministic morphology and bounded-runtime patches
+      - name: Apply deterministic village morphology completion
         run: |
-          if ! grep -q "function settlementStreetAt" src/world.ts; then node tools/agent1-wp-s004-patch-v4.mjs; fi
-          if ! grep -q "nearbyPlaces, places" src/world.ts; then node tools/agent1-wp-s004-patch-v5.mjs; fi
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          node tools/agent1-wp-s004-patch-v8.mjs
+          node tools/agent1-wp-s004-patch-v9.mjs
+          grep -q '"merchant"' src/settlement-exterior.ts
+          grep -q '"headman"' src/settlement-exterior.ts
+          grep -q '"garden"' src/settlement-exterior.ts
+          grep -q '"roadside-tree"' src/world.ts
+          grep -q '"path"' src/world.ts
       - run: npm ci
-      - name: Validate settlement runtime
+      - name: Validate completed settlement runtime
         run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/world.test.ts tests/final-surface-integration.test.ts tests/political-atlas.test.ts
-      - run: npm run build
+      - name: Production build
+        run: npm run build
       - name: Commit validated source integration
         run: |
           git config user.name "AGENT #1"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/world.ts src/geometry.ts
-          git commit -m "feat: integrate bounded settlement morphology runtime"
+          git add src/settlement-exterior.ts src/world.ts src/geometry.ts tests/settlement-exterior.test.ts tests/world.test.ts
+          git commit -m "feat: complete deterministic village morphology roles"
           git push origin HEAD:agent1/wp-s004-001-001-20261015
