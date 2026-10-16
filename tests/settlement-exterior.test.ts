@@ -126,7 +126,8 @@ test("every village external road crossing uses one of at most two canonical enc
     assert.ok(plan.gates.length >= 1 && plan.gates.length <= 2, `${place.code} must expose one or two gates`);
     for (const road of crossingRoads) {
       const gate = plan.gates.find((candidate) => roadDistanceAt(candidate.x, candidate.z, road) < .05 && distanceToBorder(place, plan, candidate.x, candidate.z) < .05);
-      assert.ok(gate, `${place.code} road ${road.code} crosses the enclosure away from a gate`);
+      const topology = `crossings=${crossingRoads.map((candidate) => `${candidate.from}->${candidate.to}`).join(",")} gates=${plan.gates.map((candidate) => `${candidate.x.toFixed(3)}/${candidate.z.toFixed(3)}`).join(",")}`;
+      assert.ok(gate, `${place.code} road ${road.code} crosses the enclosure away from a gate; ${topology}`);
     }
     for (const gate of plan.gates) {
       assert.ok(distanceToBorder(place, plan, gate.x, gate.z) < .05, `${place.code} gate ${gate.id} is not on the enclosure`);
