@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cities, countries, macroPopulationSummary, places, villages } from "../src/geography.ts";
+import { cities, countries, macroPopulationSummary, places, roadDistanceAt, roads, villages } from "../src/geography.ts";
 import { wrapSourceX } from "../src/planet.ts";
 import { residentFoundationAt } from "../src/simulation.ts";
 import {
@@ -14,6 +14,20 @@ import {
 import { featuresFor, settlementPresentationCacheState, tileForPosition } from "../src/world.ts";
 
 const samples = [cities[0], cities[Math.floor(cities.length / 2)], villages[0], villages[Math.floor(villages.length / 3)], villages[Math.floor(villages.length * 2 / 3)]].filter(Boolean);
+
+function distanceToBorder(place: (typeof places)[number], plan: ReturnType<typeof settlementExteriorFor>, x: number, z: number) {
+  const qx = wrapSourceX(x - place.x), qz = z - place.z;
+  let distance = Infinity;
+  for (let index = 0; index < plan.border.length; index++) {
+    const a = plan.border[index], b = plan.border[(index + 1) % plan.border.length],
+      ax = wrapSourceX(a.x - place.x), az = a.z - place.z,
+      bx = wrapSourceX(b.x - place.x), bz = b.z - place.z,
+      dx = bx - ax, dz = bz - az, denominator = dx * dx + dz * dz || 1,
+      t = Math.max(0, Math.min(1, ((qx - ax) * dx + (qz - az) * dz) / denominator));
+    distance = Math.min(distance, Math.hypot(qx - (ax + dx * t), qz - (az + dz * t)));
+  }
+  return distance;
+}
 
 test("macro settlement density remains the current area-driven authority", () => {
   assert.equal(new Set(countries.map((country) => country.continent)).size, 3);
@@ -77,6 +91,20 @@ test("services, varied morphology, gates and farms remain present with bounded d
   assert.equal(summary.plans, places.length);
   assert.ok(summary.plots > cities.length * 2400 + villages.length * 80, "summary must count canonical homes plus public/service plots");
   assert.ok(settlementExteriorCacheSize() <= SETTLEMENT_EXTERIOR_CACHE_LIMIT, "summary must not fill the detailed-plan cache");
+});
+
+test("village external roads cross the enclosure only at canonical gates", () => {
+  for (const place of samples.filter((entry) => entry.kind === "village")) {
+    const incident = roads.filter((road) => road.networkKind !== "detour" && (road.from === place.id || road.to === place.id) && road.centerline && road.centerline.length >= 2)
+      .sort((a, b) => a.code.localeCompare(b.code)), plan = settlementExteriorFor(place);
+    assert.ok(incident.length <= 2, `${place.code} has ${incident.length} external approaches but villages support at most two gates`);
+    assert.ok(plan.gates.length >= incident.length, `${place.code} does not expose a gate for every external approach`);
+    for (const road of incident) {
+      const gate = plan.gates.find((candidate) => roadDistanceAt(candidate.x, candidate.z, road) < .05);
+      assert.ok(gate, `${place.code} road ${road.code} does not meet a gate`);
+      assert.ok(distanceToBorder(place, plan, gate.x, gate.z) < .05, `${place.code} gate ${gate.id} is not on the enclosure`);
+    }
+  }
 });
 
 test("focused settlement presentation is bounded while retaining canonical owner metadata", () => {

@@ -131,34 +131,78 @@ function gardenFor(place: Place, home: SettlementPlotPlan, index: number): Settl
     }));
   return { id: `${place.code}/GARDEN/${index}`, kind: "garden", ownerId: home.ownerId, capacity: 0, residents: 0, width, depth, yawRad: home.yawRad, clearanceRadius: Math.hypot(width, depth) * .5 + .12, candidates };
 }
-function terminalApproach(place: Place): { road: Road; x: number; z: number } | undefined {
-  const candidates = roads.filter((road) => road.networkKind !== "detour" && (road.from === place.id || road.to === place.id) && road.centerline && road.centerline.length >= 2)
-    .sort((a, b) => a.code.localeCompare(b.code));
-  for (const road of candidates) {
-    const points = road.centerline!, next = road.from === place.id ? points[1] : points[points.length - 2];
-    if (Math.hypot(wrapSourceX(next.x - place.x), next.z - place.z) > .001) return { road, x: next.x, z: next.z };
+
+type TerminalApproach = { road: Road; x: number; z: number };
+function segmentIntersection(
+  ax: number, az: number, bx: number, bz: number,
+  cx: number, cz: number, dx: number, dz: number,
+): { t: number; u: number } | undefined {
+  const rx = bx - ax, rz = bz - az, sx = dx - cx, sz = dz - cz,
+    denominator = rx * sz - rz * sx;
+  if (Math.abs(denominator) < 1e-9) return undefined;
+  const qx = cx - ax, qz = cz - az,
+    t = (qx * sz - qz * sx) / denominator,
+    u = (qx * rz - qz * rx) / denominator;
+  if (t < -1e-6 || t > 1 + 1e-6 || u < -1e-6 || u > 1 + 1e-6) return undefined;
+  return { t, u };
+}
+function roadBorderIntersection(place: Place, road: Road, border: readonly SettlementPoint[]): SettlementPoint | undefined {
+  const source = road.centerline;
+  if (!source || source.length < 2) return undefined;
+  const points = road.from === place.id ? source : [...source].reverse();
+  for (let segment = 0; segment < points.length - 1; segment++) {
+    const a = points[segment], b = points[segment + 1],
+      ax = wrapSourceX(a.x - place.x), az = a.z - place.z,
+      bx = wrapSourceX(b.x - place.x), bz = b.z - place.z;
+    for (let edge = 0; edge < border.length; edge++) {
+      const c = border[edge], d = border[(edge + 1) % border.length],
+        cx = wrapSourceX(c.x - place.x), cz = c.z - place.z,
+        dx = wrapSourceX(d.x - place.x), dz = d.z - place.z,
+        hit = segmentIntersection(ax, az, bx, bz, cx, cz, dx, dz);
+      if (!hit) continue;
+      return { x: wrapSourceX(place.x + ax + (bx - ax) * hit.t), z: place.z + az + (bz - az) * hit.t };
+    }
   }
   return undefined;
 }
-function alignPrimaryGateToRoad(place: Place, plan: SettlementExteriorPlan): SettlementExteriorPlan {
-  if (!plan.gates.length || !plan.streets.length) return plan;
-  const approach = terminalApproach(place), main = plan.streets[0];
-  if (!approach || main.points.length < 2) return plan;
-  const outward = normalize(wrapSourceX(approach.x - place.x), approach.z - place.z), gatePoint = { x: wrapSourceX(place.x + outward.x * plan.radius), z: place.z + outward.z * plan.radius },
-    start = main.points[0], end = main.points[main.points.length - 1],
-    useStart = Math.hypot(wrapSourceX(start.x - gatePoint.x), start.z - gatePoint.z) <= Math.hypot(wrapSourceX(end.x - gatePoint.x), end.z - gatePoint.z),
-    mainPoints = main.points.map((point) => ({ ...point }));
-  if (useStart) mainPoints[0] = gatePoint; else mainPoints[mainPoints.length - 1] = gatePoint;
-  const normal = { x: -outward.z, z: outward.x }, primary = plan.gates[0], guardPosts = primary.guardPosts.map((_, index) => ({
-      x: wrapSourceX(gatePoint.x + normal.x * (index === 0 ? 9 : -9)), z: gatePoint.z + normal.z * (index === 0 ? 9 : -9),
-    })), primaryGate = { ...primary, x: gatePoint.x, z: gatePoint.z, bearingRad: Math.atan2(outward.z, outward.x), guardPosts }, border = plan.border.map((point) => ({ ...point }));
-  let nearest = 0, nearestDistance = Infinity;
-  for (let index = 0; index < border.length; index++) {
-    const distance = Math.hypot(wrapSourceX(border[index].x - gatePoint.x), border[index].z - gatePoint.z);
-    if (distance < nearestDistance) { nearest = index; nearestDistance = distance; }
+function terminalApproaches(place: Place, plan: SettlementExteriorPlan): TerminalApproach[] {
+  const candidates = roads.filter((road) => road.networkKind !== "detour" && (road.from === place.id || road.to === place.id) && road.centerline && road.centerline.length >= 2)
+    .sort((a, b) => a.code.localeCompare(b.code)), approaches: TerminalApproach[] = [];
+  for (const road of candidates) {
+    const hit = roadBorderIntersection(place, road, plan.border);
+    if (hit) {
+      approaches.push({ road, ...hit });
+      continue;
+    }
+    const points = road.centerline!, next = road.from === place.id ? points[1] : points[points.length - 2],
+      outward = normalize(wrapSourceX(next.x - place.x), next.z - place.z);
+    if (Math.hypot(outward.x, outward.z) > .001) approaches.push({ road, x: wrapSourceX(place.x + outward.x * plan.radius), z: place.z + outward.z * plan.radius });
   }
-  border[nearest] = gatePoint;
-  return { ...plan, entrance: gatePoint, streets: [{ ...main, points: mainPoints }, ...plan.streets.slice(1)], gates: [primaryGate, ...plan.gates.slice(1)], border };
+  return approaches.slice(0, 2);
+}
+function alignGatesToRoads(place: Place, plan: SettlementExteriorPlan): SettlementExteriorPlan {
+  if (!plan.gates.length || !plan.streets.length) return plan;
+  const approaches = terminalApproaches(place, plan), main = plan.streets[0];
+  if (!approaches.length || main.points.length < 2) return plan;
+  const gateTemplates = plan.gates.map((gate) => ({ ...gate, guardPosts: gate.guardPosts.map((post) => ({ ...post })) })),
+    targetGateCount = Math.min(2, Math.max(gateTemplates.length, approaches.length));
+  while (gateTemplates.length < targetGateCount) {
+    const template = gateTemplates[0];
+    gateTemplates.push({ ...template, id: `${place.code}/GATE/${gateTemplates.length}`, guardPosts: template.guardPosts.map((post) => ({ ...post })) });
+  }
+  const gates = gateTemplates.map((gate, index) => {
+    const approach = approaches[index];
+    if (!approach) return gate;
+    const outward = normalize(wrapSourceX(approach.x - place.x), approach.z - place.z), normal = { x: -outward.z, z: outward.x },
+      guardPosts = gate.guardPosts.map((_, guardIndex) => ({
+        x: wrapSourceX(approach.x + normal.x * (guardIndex === 0 ? 9 : -9)), z: approach.z + normal.z * (guardIndex === 0 ? 9 : -9),
+      }));
+    return { ...gate, x: approach.x, z: approach.z, bearingRad: Math.atan2(outward.z, outward.x), guardPosts };
+  }), primary = gates[0], mainPoints = main.points.map((point) => ({ ...point })),
+    start = mainPoints[0], end = mainPoints[mainPoints.length - 1],
+    useStart = Math.hypot(wrapSourceX(start.x - primary.x), start.z - primary.z) <= Math.hypot(wrapSourceX(end.x - primary.x), end.z - primary.z);
+  if (useStart) mainPoints[0] = { x: primary.x, z: primary.z }; else mainPoints[mainPoints.length - 1] = { x: primary.x, z: primary.z };
+  return { ...plan, entrance: { x: primary.x, z: primary.z }, streets: [{ ...main, points: mainPoints }, ...plan.streets.slice(1)], gates };
 }
 function remember(plan: SettlementExteriorPlan) {
   cache.delete(plan.placeCode);
@@ -174,7 +218,7 @@ export function settlementExteriorFor(place: Place): SettlementExteriorPlan {
   for (const plot of core.plots) if (plot.kind !== "house") plots.push(servicePlot(place, plot));
   const residentHomeCount = canonicalSettlementPopulation(place), gardenStride = place.kind === "city" ? 48 : 8;
   for (let index = 0; index < residentHomeCount; index += gardenStride) plots.push(gardenFor(place, settlementHomeFor(place, index, { ...core, plots: [], residentHomeCount }), index));
-  return remember(alignPrimaryGateToRoad(place, { ...core, plots, residentHomeCount }));
+  return remember(alignGatesToRoads(place, { ...core, plots, residentHomeCount }));
 }
 export function settlementExteriorCacheSize() { return cache.size; }
 
