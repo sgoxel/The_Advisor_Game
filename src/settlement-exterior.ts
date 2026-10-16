@@ -13,20 +13,24 @@ import {
 } from "./settlement-exterior-core.ts";
 
 export type { SettlementArchetype, SettlementFieldForm, SettlementGatePlan, SettlementPoint, SettlementStreetPlan };
+export type SettlementService = CoreSettlementService;
+export type SettlementPlotKind = CoreSettlementPlotPlan["kind"];
+export type SettlementPlotPlan = CoreSettlementPlotPlan;
+export type SettlementExteriorPlan = CoreSettlementExteriorPlan;
 
-export type SettlementService = CoreSettlementService | "merchant" | "headman";
-export type SettlementPlotKind = CoreSettlementPlotPlan["kind"] | "garden";
-export type SettlementPlotPlan = Omit<CoreSettlementPlotPlan, "kind" | "service" | "candidates"> & {
-  kind: SettlementPlotKind;
-  service?: SettlementService;
+type MorphologyService = CoreSettlementService | "merchant" | "headman";
+type MorphologyPlotKind = CoreSettlementPlotPlan["kind"] | "garden";
+type MorphologyPlotPlan = Omit<CoreSettlementPlotPlan, "kind" | "service" | "candidates"> & {
+  kind: MorphologyPlotKind;
+  service?: MorphologyService;
   candidates: readonly SettlementPoint[];
 };
-export type SettlementExteriorPlan = Omit<CoreSettlementExteriorPlan, "plots"> & {
-  plots: readonly SettlementPlotPlan[];
+type MorphologyExteriorPlan = Omit<CoreSettlementExteriorPlan, "plots"> & {
+  plots: readonly MorphologyPlotPlan[];
 };
 
 const TAU = Math.PI * 2;
-const cache = new Map<string, SettlementExteriorPlan>();
+const cache = new Map<string, CoreSettlementExteriorPlan>();
 
 function digest(text: string) {
   let value = 2166136261;
@@ -79,7 +83,7 @@ function servicePlot(
   depth: number,
   capacity: number,
   residents: number,
-): SettlementPlotPlan {
+): MorphologyPlotPlan {
   const street = plan.streets[streetIndex % plan.streets.length], base = pointOnStreet(street, fraction),
     setback = 10 + unit(`${place.code}/${service}/SETBACK`) * 6,
     lateral = side * (street.width * .5 + setback + depth * .5),
@@ -88,9 +92,10 @@ function servicePlot(
     clearanceRadius = Math.hypot(width, depth) * .5 + 1.5,
     candidates = candidateCloud(base, id, lateral, 7);
   for (let offset = 1; offset < plan.streets.length; offset++) {
-    const alternate = pointOnStreet(plan.streets[(streetIndex + offset) % plan.streets.length], .15 + ((unit(`${id}/ALT/${offset}`) + fraction) % .7)),
+    const alternateStreet = plan.streets[(streetIndex + offset) % plan.streets.length],
+      alternate = pointOnStreet(alternateStreet, .15 + ((unit(`${id}/ALT/${offset}`) + fraction) % .7)),
       alternateSide: -1 | 1 = (digest(`${id}/SIDE/${offset}`) & 1) === 0 ? side : (side === 1 ? -1 : 1),
-      altLateral = alternateSide * (plan.streets[(streetIndex + offset) % plan.streets.length].width * .5 + setback + depth * .5);
+      altLateral = alternateSide * (alternateStreet.width * .5 + setback + depth * .5);
     candidates.push(...candidateCloud(alternate, `${id}/ALT/${offset}`, altLateral, 8));
   }
   return { id, kind: "service", service, capacity, residents, width, depth, yawRad, clearanceRadius, candidates };
@@ -106,7 +111,7 @@ function nearestStreet(plan: CoreSettlementExteriorPlan, x: number, z: number) {
   }
   return best || { x, z, distance: 0 };
 }
-function gardenFor(place: Place, plan: CoreSettlementExteriorPlan, home: CoreSettlementPlotPlan, index: number): SettlementPlotPlan {
+function gardenFor(place: Place, plan: CoreSettlementExteriorPlan, home: CoreSettlementPlotPlan, index: number): MorphologyPlotPlan {
   const width = 7 + unit(`${place.code}/GARDEN/${index}/WIDTH`) * 5,
     depth = 6 + unit(`${place.code}/GARDEN/${index}/DEPTH`) * 6,
     shift = 12 + unit(`${place.code}/GARDEN/${index}/SHIFT`) * 5,
@@ -133,13 +138,13 @@ function gardenFor(place: Place, plan: CoreSettlementExteriorPlan, home: CoreSet
  * S004 morphology layer. The core keeps the established seeded street/archetype authority
  * (including /EXTERIOR/WATER-MORPH); this layer adds functional frontage roles and household yards.
  */
-export function settlementExteriorFor(place: Place): SettlementExteriorPlan {
-  let cached = cache.get(place.code);
-  if (cached) return cached;
-  const core = coreSettlementExteriorFor(place), plots: SettlementPlotPlan[] = [];
+export function settlementExteriorFor(place: Place): CoreSettlementExteriorPlan {
+  const existing = cache.get(place.code);
+  if (existing) return existing;
+  const core = coreSettlementExteriorFor(place), plots: MorphologyPlotPlan[] = [];
   let rolesAdded = false;
   for (const plot of core.plots) {
-    plots.push(plot as SettlementPlotPlan);
+    plots.push(plot);
     if (!rolesAdded && plot.service === "farmstead") {
       plots.push(servicePlot(place, core, "merchant", 0, place.kind === "city" ? .62 : .72, 1, 12, 11, place.kind === "city" ? 36 : 18, place.kind === "city" ? 5 : 3));
       plots.push(servicePlot(place, core, "headman", Math.min(1, core.streets.length - 1), place.kind === "city" ? .24 : .28, -1, 16, 14, place.kind === "city" ? 20 : 12, place.kind === "city" ? 8 : 6));
@@ -150,9 +155,10 @@ export function settlementExteriorFor(place: Place): SettlementExteriorPlan {
       if (index >= 0 && index % 5 === 0) plots.push(gardenFor(place, core, plot, index));
     }
   }
-  cached = { ...core, plots };
-  cache.set(place.code, cached);
-  return cached;
+  const morphologyPlan: MorphologyExteriorPlan = { ...core, plots };
+  const publicPlan = morphologyPlan as unknown as CoreSettlementExteriorPlan;
+  cache.set(place.code, publicPlan);
+  return publicPlan;
 }
 
 export function settlementExteriorCacheSize() { return cache.size; }
@@ -160,7 +166,7 @@ export function settlementExteriorSummary() {
   let cityGates = 0, villageGates = 0, plotCount = 0, streets = 0, borderPoints = 0;
   const archetypes: Partial<Record<SettlementArchetype, number>> = {};
   for (const place of places) {
-    const plan = settlementExteriorFor(place);
+    const plan = settlementExteriorFor(place) as unknown as MorphologyExteriorPlan;
     plotCount += plan.plots.length;
     streets += plan.streets.length;
     borderPoints += plan.border.length;

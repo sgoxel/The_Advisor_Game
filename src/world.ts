@@ -14,11 +14,18 @@ import { settlementExteriorFor, type SettlementExteriorPlan, type SettlementPlot
 import { naturalSurfaceAt } from "./hydrology.ts";
 import { wrapSourceX } from "./planet.ts";
 
+type MorphologyService = NonNullable<SettlementPlotPlan["service"]> | "merchant" | "headman";
+type MorphologyPlot = Omit<SettlementPlotPlan, "kind" | "service"> & {
+  kind: SettlementPlotPlan["kind"] | "garden";
+  service?: MorphologyService;
+};
+type MorphologyPlan = Omit<SettlementExteriorPlan, "plots"> & { plots: readonly MorphologyPlot[] };
 type MorphologyKind = CoreFeature["kind"] | "garden" | "path" | "pavement" | "roadside-tree";
-type MorphologyFeature = Omit<CoreFeature, "kind"> & { kind: MorphologyKind };
+type MorphologyFeature = Omit<CoreFeature, "kind" | "service"> & { kind: MorphologyKind; service?: MorphologyService };
 
 type StreetHit = { id: string; width: number; distance: number; x: number; z: number };
 const resolvedPlots = new Map<string, Map<string, { x: number; z: number } | null>>();
+const morphologyPlanFor = (place: Place) => settlementExteriorFor(place) as unknown as MorphologyPlan;
 
 function closestPointOnSegment(x: number, z: number, ax: number, az: number, bx: number, bz: number) {
   const dx = wrapSourceX(bx - ax), dz = bz - az, qx = wrapSourceX(x - ax), qz = z - az,
@@ -27,7 +34,7 @@ function closestPointOnSegment(x: number, z: number, ax: number, az: number, bx:
 }
 
 function settlementStreetAt(place: Place, x: number, z: number): StreetHit | undefined {
-  const plan = settlementExteriorFor(place);
+  const plan = morphologyPlanFor(place);
   let best: StreetHit | undefined;
   for (const street of plan.streets) for (let index = 1; index < street.points.length; index++) {
     const a = street.points[index - 1], b = street.points[index], point = closestPointOnSegment(x, z, a.x, a.z, b.x, b.z);
@@ -40,7 +47,7 @@ function settlementStreetAt(place: Place, x: number, z: number): StreetHit | und
 function externalRoadClear(x: number, z: number, radius: number) {
   return roads.every((road) => roadDistanceAt(x, z, road) > radius + 6);
 }
-function candidateLegal(place: Place, plan: SettlementExteriorPlan, plot: SettlementPlotPlan, candidate: { x: number; z: number }) {
+function candidateLegal(place: Place, plan: MorphologyPlan, plot: MorphologyPlot, candidate: { x: number; z: number }) {
   const surface = finalSurfaceAt(candidate.x, candidate.z);
   if (surface.groundHeight < .2 || surface.water.kind !== "none" || !surface.walkable) return false;
   const radius = plot.clearanceRadius;
@@ -64,7 +71,7 @@ function candidateLegal(place: Place, plan: SettlementExteriorPlan, plot: Settle
   }
   return true;
 }
-function expandedCandidates(place: Place, plot: SettlementPlotPlan) {
+function expandedCandidates(place: Place, plot: MorphologyPlot) {
   const expanded: { x: number; z: number }[] = [];
   for (const candidate of plot.candidates) {
     expanded.push(candidate);
@@ -78,7 +85,7 @@ function expandedCandidates(place: Place, plot: SettlementPlotPlan) {
 function resolvedFor(place: Place) {
   let result = resolvedPlots.get(place.code);
   if (result) return result;
-  const plan = settlementExteriorFor(place), occupied: { x: number; z: number; radius: number }[] = [];
+  const plan = morphologyPlanFor(place), occupied: { x: number; z: number; radius: number }[] = [];
   result = new Map();
   for (const plot of plan.plots) {
     const chosen = expandedCandidates(place, plot).find((candidate) =>
@@ -98,11 +105,11 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
   const tileCentreX = tile.minX + tile.size * .5, tileCentreZ = tile.minZ + tile.size * .5,
     localPlaces = nearbyPlaces(tileCentreX, tileCentreZ), markers = localPlaces.map(settlementMarker),
     features = coreFeaturesFor(tile).filter((feature) => !markers.some((marker) => feature.code.includes(marker))) as MorphologyFeature[];
-  const add = (kind: MorphologyKind, x: number, z: number, variant: number, id: string, metadata: Record<string, unknown> = {}) => {
+  const add = (kind: MorphologyKind, x: number, z: number, variant: number, id: string, metadata: Partial<MorphologyFeature> = {}) => {
     if (x < tile.minX || x >= tile.minX + tile.size || z < tile.minZ || z >= tile.minZ + tile.size) return;
     const surface = finalSurfaceAt(x, z);
     if (surface.water.kind !== "none" || !surface.walkable) return;
-    features.push({ kind, x, z, y: surface.groundHeight, variant, code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`, ...metadata } as MorphologyFeature);
+    features.push({ kind, x, z, y: surface.groundHeight, variant, code: `${WORLD_SEED}/${GENERATOR_VERSION}/F/${id}`, ...metadata });
   };
 
   // `places` remains the immutable coarse registry; nearbyPlaces is only the bounded acceleration path.
@@ -110,7 +117,7 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
   for (const place of localPlaces) {
     const coarseExtent = place.kind === "city" ? 456 : 178;
     if (Math.abs(wrapSourceX(place.x - tileCentreX)) > tile.size * .5 + coarseExtent || Math.abs(place.z - tileCentreZ) > tile.size * .5 + coarseExtent) continue;
-    const plan = settlementExteriorFor(place), anchors = resolvedFor(place);
+    const plan = morphologyPlanFor(place), anchors = resolvedFor(place);
     for (const street of plan.streets) for (let index = 1; index < street.points.length; index++) {
       const a = street.points[index - 1], b = street.points[index], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz);
       if (!length) continue;
