@@ -1,0 +1,29 @@
+name: AGENT1 WP-S004 exact candidate ARM validation
+on:
+  push:
+    branches: [agent1/wp-s004-001-001-evidence-20261016]
+    paths: [.github/workflows/agent1-wp-s004-final-evidence-arm.yml]
+permissions:
+  contents: read
+jobs:
+  exact-arm-validation:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 2a2d3f725f5f5eabf224aa1fe831555d73979a2c
+          fetch-depth: 0
+      - name: Verify exact product candidate
+        run: test "$(git rev-parse HEAD)" = "2a2d3f725f5f5eabf224aa1fe831555d73979a2c"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Full unit regression
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Focused S004 deterministic acceptance
+        run: node --experimental-strip-types --test tests/political-atlas.test.ts tests/continuity.test.ts tests/settlement-exterior.test.ts tests/village-morphology-runtime.test.ts tests/wp-s004-world-integration.test.ts tests/final-surface-integration.test.ts
