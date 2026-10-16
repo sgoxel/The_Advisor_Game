@@ -5,32 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#162521" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23162521'/%3E%3Ctext x='16' y='25' text-anchor='middle' font-size='27' fill='%23d9b874'%3E%E2%99%9C%3C/text%3E%3C/svg%3E" />
-    <meta
-      name="description"
-      content="Explore a deterministic medieval world, from an entire realm to local terrain detail."
-    />
+    <meta name="description" content="Explore a deterministic medieval world, from an entire realm to local terrain detail." />
     <link rel="stylesheet" href="/src/canonical-inspector.css" />
     <link rel="stylesheet" href="/src/macro-geography.css" />
     <link rel="stylesheet" href="/src/political-atlas.css" />
     <title>The Advisor · World Atlas</title>
   </head>
   <body>
-    <canvas
-      id="world"
-      aria-label="Interactive 3D medieval world. Drag to pan, scroll to zoom, or use the map controls."
-      tabindex="0"
-    ></canvas>
+    <canvas id="world" aria-label="Interactive 3D medieval world. Drag to pan, scroll to zoom, or use the map controls." tabindex="0"></canvas>
     <header class="masthead">
       <div class="crest" aria-hidden="true">♜</div>
-      <div>
-        <div class="eyebrow">THE ADVISOR</div>
-        <h1>Atlas of the realm</h1>
-      </div>
+      <div><div class="eyebrow">THE ADVISOR</div><h1>Atlas of the realm</h1></div>
       <span class="live"><i></i> WORLD EXPLORER</span>
-      <div class="world-clock">
-        <span class="eyebrow">FANTASY TIME · 24×</span
-        ><time id="fantasy-time">07.10.0126</time>
-      </div>
+      <div class="world-clock"><span class="eyebrow">FANTASY TIME · 24×</span><time id="fantasy-time">07.10.0126</time></div>
     </header>
     <aside class="panel region-panel minimized" id="region-panel" aria-label="Map information">
       <button id="toggle-region-panel" type="button" aria-controls="region-panel" aria-expanded="false" aria-label="Show map information">Show information</button>
@@ -38,160 +25,56 @@
       <h2 id="place-name">Alderwick</h2>
       <p class="region-counts" id="region-counts">Loading canonical registry…</p>
       <p id="map-context" aria-live="polite">Resolving political region…</p>
-      <div class="seed-block">
-        <div class="divider"></div>
-        <div class="seed-label">WORLD SEED <span>FIXED</span></div>
-        <code id="world-seed"></code>
-      </div>
-      <div class="region-actions">
-        <button id="home">⌂ Focus home village</button
-        ><button id="overview">↗ Realm view</button>
-      </div>
-      <button id="open-travel" class="travel-button">
-        Explore a country or settlement →
-      </button>
+      <div class="seed-block"><div class="divider"></div><div class="seed-label">WORLD SEED <span>FIXED</span></div><code id="world-seed"></code></div>
+      <div class="region-actions"><button id="home">⌂ Focus home village</button><button id="overview">↗ Realm view</button></div>
+      <button id="open-travel" class="travel-button">Explore a country or settlement →</button>
       <div class="layer-controls flat-only">
-        <div class="divider"></div>
-        <div class="eyebrow">MAP LAYERS</div>
-        <label
-          ><input type="checkbox" id="structures" checked /> Settlements &amp;
-          keeps <span class="swatch stone"></span
-        ></label>
-        <label
-          ><input type="checkbox" id="nature" checked /> Woodland &amp; small
-          details <span class="swatch forest"></span
-        ></label>
-        <label
-          ><input type="checkbox" id="grid" /> Tile boundaries
-          <span class="swatch gold"></span
-        ></label>
+        <div class="divider"></div><div class="eyebrow">MAP LAYERS</div>
+        <label><input type="checkbox" id="structures" checked /> Settlements &amp; keeps <span class="swatch stone"></span></label>
+        <label><input type="checkbox" id="nature" checked /> Woodland &amp; small details <span class="swatch forest"></span></label>
+        <label><input type="checkbox" id="grid" /> Tile boundaries <span class="swatch gold"></span></label>
         <p class="hint">Select the landscape to inspect a canonical planet point.</p>
       </div>
     </aside>
     <aside class="panel cell-panel" id="cell-panel" hidden>
-      <div class="eyebrow">
-        SELECTED PLANET POINT
-        <button id="close-cell" aria-label="Close cell inspector">×</button>
-      </div>
-      <h2 id="cell-biome">Meadow</h2>
-      <div class="cell-coordinates" id="cell-coordinates"></div>
-      <div class="divider"></div>
-      <div class="seed-label">CANONICAL PLANET CELL</div>
-      <code id="cell-code"></code>
-      <dl>
-        <dt>Identity grid</dt>
-        <dd>Cube-sphere · L20</dd>
-        <dt>Elevation</dt>
-        <dd id="cell-height"></dd>
-        <dt>Render tile</dt>
-        <dd id="cell-tile"></dd>
-        <dt>Walkable terrain</dt>
-        <dd id="cell-walkable"></dd>
-      </dl>
-      <details>
-        <summary>Derived source-detail ancestry</summary>
-        <ol id="seed-levels"></ol>
-      </details>
-      <button id="copy-code">Copy planet ID</button
-      ><span id="copy-status" role="status"></span>
+      <div class="eyebrow">SELECTED PLANET POINT <button id="close-cell" aria-label="Close cell inspector">×</button></div>
+      <h2 id="cell-biome">Meadow</h2><div class="cell-coordinates" id="cell-coordinates"></div><div class="divider"></div>
+      <div class="seed-label">CANONICAL PLANET CELL</div><code id="cell-code"></code>
+      <dl><dt>Identity grid</dt><dd>Cube-sphere · L20</dd><dt>Elevation</dt><dd id="cell-height"></dd><dt>Render tile</dt><dd id="cell-tile"></dd><dt>Walkable terrain</dt><dd id="cell-walkable"></dd></dl>
+      <details><summary>Derived source-detail ancestry</summary><ol id="seed-levels"></ol></details>
+      <button id="copy-code">Copy planet ID</button><span id="copy-status" role="status"></span>
     </aside>
     <aside class="panel travel-panel" id="travel-panel" hidden>
-      <div class="eyebrow">
-        EXPLORE THE REALM
-        <button id="close-travel" aria-label="Close travel menu">×</button>
-      </div>
-      <h2>Inspect a destination</h2>
-      <p class="hint">Map preview only · focusing or selecting a route does not move the protagonist.</p>
-      <label for="continent-select">Continent</label
-      ><select id="continent-select"></select>
-      <label for="country-select">Country</label
-      ><select id="country-select"></select>
-      <label for="city-select">City</label
-      ><select id="city-select"></select>
-      <label for="village-select">Village</label
-      ><select id="village-select"></select>
-      <div class="region-actions">
-        <button id="visit-city">Focus city</button
-        ><button id="visit-village">Focus village</button>
-      </div>
+      <div class="eyebrow">EXPLORE THE REALM <button id="close-travel" aria-label="Close travel menu">×</button></div>
+      <h2>Inspect a destination</h2><p class="hint">Map preview only · focusing or selecting a route does not move the protagonist.</p>
+      <label for="continent-select">Continent</label><select id="continent-select"></select>
+      <label for="country-select">Country</label><select id="country-select"></select>
+      <label for="city-select">City</label><select id="city-select"></select>
+      <label for="village-select">Village</label><select id="village-select"></select>
+      <div class="region-actions"><button id="visit-city">Focus city</button><button id="visit-village">Focus village</button></div>
       <section class="route-block" id="route-block" aria-label="Walking routes">
-        <div class="eyebrow">
-          <span>WALKING ROUTES</span>
-          <button id="route-clear" type="button" hidden>Clear route</button>
-        </div>
-        <p class="hint route-detail" id="route-detail" aria-live="polite"></p>
-        <ul class="route-list" id="route-list"></ul>
+        <div class="eyebrow"><span>WALKING ROUTES</span><button id="route-clear" type="button" hidden>Clear route</button></div>
+        <p class="hint route-detail" id="route-detail" aria-live="polite"></p><ul class="route-list" id="route-list"></ul>
       </section>
-      <p class="hint" id="travel-summary" aria-live="polite">
-        Calculating canonical route distance and fantasy travel time…
-      </p>
-      <div class="divider"></div>
-      <div class="eyebrow">LIVING WORLD</div>
-      <p id="simulation-status">
-        Focused country: live · distant countries: coarse
-      </p>
+      <p class="hint" id="travel-summary" aria-live="polite">Calculating canonical route distance and fantasy travel time…</p>
+      <div class="divider"></div><div class="eyebrow">LIVING WORLD</div><p id="simulation-status">Focused country: live · distant countries: coarse</p>
     </aside>
     <nav class="map-controls" aria-label="Map navigation">
-      <button
-        id="compass"
-        class="compass"
-        aria-label="Reset north"
-        title="Reset north"
-      >
-        <span id="compass-needle">↑</span><span>N</span>
-      </button>
-      <button id="zoom-in" aria-label="Zoom in">+</button
-      ><button id="zoom-out" aria-label="Zoom out">−</button>
-      <button id="rotate" aria-label="Rotate view clockwise">↻</button>
+      <button id="compass" class="compass" aria-label="Reset north" title="Reset north"><span id="compass-needle">↑</span><span>N</span></button>
+      <button id="zoom-in" aria-label="Zoom in">+</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="rotate" aria-label="Rotate view clockwise">↻</button>
     </nav>
     <footer class="bottom-bar">
-      <label class="scale-choice" for="map-scale"
-        ><span id="scale-caption">Scale</span
-        ><select id="map-scale" aria-label="Map scale"></select
-      ></label>
-      <div class="detail">
-        <span class="eyebrow">VIEW DETAIL</span
-        ><strong id="detail-name">Village</strong>
-        <div class="detail-dots" aria-hidden="true">
-          <i></i><i></i><i></i><i></i><i></i>
-        </div>
-      </div>
-      <div class="travel-hint">
-        <span class="flat-only"
-          >Drag to pan <b>·</b> Scroll to explore <b>·</b> Q / E to
-          rotate</span
-        ><span class="globe-only"
-          >Drag to turn the globe <b>·</b> Scroll to zoom <b>·</b> Q / E to
-          rotate</span
-        >
-      </div>
-      <div class="scale">
-        <div id="scale-line"></div>
-        <span id="scale-text">50 m</span>
-      </div>
+      <label class="scale-choice" for="map-scale"><span id="scale-caption">Scale</span><select id="map-scale" aria-label="Map scale"></select></label>
+      <div class="detail"><span class="eyebrow">VIEW DETAIL</span><strong id="detail-name">Village</strong><div class="detail-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="travel-hint"><span class="flat-only">Drag to pan <b>·</b> Scroll to explore <b>·</b> Q / E to rotate</span><span class="globe-only">Drag to turn the globe <b>·</b> Scroll to zoom <b>·</b> Q / E to rotate</span></div>
+      <div class="scale"><div id="scale-line"></div><span id="scale-text">50 m</span></div>
     </footer>
-    <div class="telemetry">
-      <span id="backend">Connecting renderer</span><b>·</b
-      ><span id="tile-status">Preparing terrain</span>
-    </div>
-    <svg id="political-borders" aria-hidden="true"></svg>
-    <div id="political-labels" aria-hidden="true"></div>
-    <svg id="political-label-leaders" aria-hidden="true"></svg>
-    <div id="map-labels" aria-hidden="true"></div>
-    <svg id="label-leaders" aria-hidden="true"></svg>
-    <svg id="route-overlay" aria-hidden="true"></svg>
-    <div id="route-tag" aria-hidden="true" hidden></div>
-    <div id="centre-marker" aria-label="Map focus"><span>+</span></div>
-    <output
-      id="focus-coordinates"
-      aria-label="Focus latitude and longitude"
-    ></output>
-    <div id="loading" role="status">
-      <div class="loading-mark">♜</div>
-      <h2>Unfolding the realm</h2>
-      <p>Reading the land from its seed…</p>
-    </div>
-    <div id="error" role="alert" hidden></div>
+    <div class="telemetry"><span id="backend">Connecting renderer</span><b>·</b><span id="tile-status">Preparing terrain</span></div>
+    <svg id="political-borders" aria-hidden="true"></svg><div id="political-labels" aria-hidden="true"></div><svg id="political-label-leaders" aria-hidden="true"></svg>
+    <div id="map-labels" aria-hidden="true"></div><svg id="label-leaders" aria-hidden="true"></svg><svg id="route-overlay" aria-hidden="true"></svg><div id="route-tag" aria-hidden="true" hidden></div>
+    <div id="centre-marker" aria-label="Map focus"><span>+</span></div><output id="focus-coordinates" aria-label="Focus latitude and longitude"></output>
+    <div id="loading" role="status"><div class="loading-mark">♜</div><h2>Unfolding the realm</h2><p>Reading the land from its seed…</p></div><div id="error" role="alert" hidden></div>
+    <script type="module" src="/src/sites.ts"></script>
     <script type="module" src="/src/main.ts"></script>
     <script type="module" src="/src/information-panel.ts"></script>
     <script type="module" src="/src/canonical-inspector.ts"></script>
@@ -199,5 +82,6 @@
     <script type="module" src="/src/routing-diagnostics.ts"></script>
     <script type="module" src="/src/political-settlement-access.ts"></script>
     <script type="module" src="/src/political-atlas.ts"></script>
+    <script type="module" src="/src/site-experience.ts"></script>
   </body>
 </html>
