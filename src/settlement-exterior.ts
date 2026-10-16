@@ -133,6 +133,20 @@ function gardenFor(place: Place, home: SettlementPlotPlan, index: number): Settl
 }
 
 type TerminalApproach = { road: Road; x: number; z: number; snapBorder?: boolean };
+const roadEdgesByNode = new Map<string, Road[]>();
+for (const road of roads) if (road.networkKind !== "detour" && road.centerline && road.centerline.length >= 2) {
+  for (const nodeId of [road.from, road.to]) {
+    const connected = roadEdgesByNode.get(nodeId) || [];
+    connected.push(road);
+    roadEdgesByNode.set(nodeId, connected);
+  }
+}
+for (const connected of roadEdgesByNode.values()) connected.sort((a, b) => a.code.localeCompare(b.code));
+
+function orientedRoadPoints(road: Road, entryNodeId: string) {
+  const source = road.centerline!;
+  return road.from === entryNodeId ? source : [...source].reverse();
+}
 function segmentIntersection(
   ax: number, az: number, bx: number, bz: number,
   cx: number, cz: number, dx: number, dz: number,
@@ -146,10 +160,10 @@ function segmentIntersection(
   if (t < -1e-6 || t > 1 + 1e-6 || u < -1e-6 || u > 1 + 1e-6) return undefined;
   return { t, u };
 }
-function roadBorderIntersection(place: Place, road: Road, border: readonly SettlementPoint[]): SettlementPoint | undefined {
+function roadBorderIntersection(place: Place, road: Road, border: readonly SettlementPoint[], entryNodeId: string): SettlementPoint | undefined {
   const source = road.centerline;
   if (!source || source.length < 2) return undefined;
-  const points = road.from === place.id ? source : [...source].reverse();
+  const points = orientedRoadPoints(road, entryNodeId);
   for (let segment = 0; segment < points.length - 1; segment++) {
     const a = points[segment], b = points[segment + 1],
       ax = wrapSourceX(a.x - place.x), az = a.z - place.z,
@@ -165,10 +179,10 @@ function roadBorderIntersection(place: Place, road: Road, border: readonly Settl
   }
   return undefined;
 }
-function roadPointAtRadius(place: Place, road: Road, radius: number): SettlementPoint | undefined {
+function roadPointAtRadius(place: Place, road: Road, radius: number, entryNodeId: string): SettlementPoint | undefined {
   const source = road.centerline;
   if (!source || source.length < 2) return undefined;
-  const points = road.from === place.id ? source : [...source].reverse(), radiusSquared = radius * radius;
+  const points = orientedRoadPoints(road, entryNodeId), radiusSquared = radius * radius;
   for (let segment = 0; segment < points.length - 1; segment++) {
     const a = points[segment], b = points[segment + 1],
       ax = wrapSourceX(a.x - place.x), az = a.z - place.z,
@@ -187,19 +201,42 @@ function roadPointAtRadius(place: Place, road: Road, radius: number): Settlement
   }
   return undefined;
 }
-function terminalApproaches(place: Place, plan: SettlementExteriorPlan): TerminalApproach[] {
-  const candidates = roads.filter((road) => road.networkKind !== "detour" && (road.from === place.id || road.to === place.id) && road.centerline && road.centerline.length >= 2)
-    .sort((a, b) => a.code.localeCompare(b.code)), approaches: TerminalApproach[] = [];
-  for (const road of candidates) {
-    const hit = roadBorderIntersection(place, road, plan.border);
-    if (hit) {
-      approaches.push({ road, ...hit });
-      continue;
-    }
-    const fallback = roadPointAtRadius(place, road, plan.radius);
-    if (fallback) approaches.push({ road, ...fallback, snapBorder: true });
+function pointInsideBorder(place: Place, border: readonly SettlementPoint[], x: number, z: number) {
+  const px = wrapSourceX(x - place.x), pz = z - place.z;
+  let inside = false;
+  for (let index = 0, previous = border.length - 1; index < border.length; previous = index++) {
+    const a = border[index], b = border[previous],
+      ax = wrapSourceX(a.x - place.x), az = a.z - place.z,
+      bx = wrapSourceX(b.x - place.x), bz = b.z - place.z;
+    if ((az > pz) !== (bz > pz) && px < ((bx - ax) * (pz - az)) / (bz - az) + ax) inside = !inside;
   }
-  return approaches.slice(0, 2);
+  return inside;
+}
+function terminalApproaches(place: Place, plan: SettlementExteriorPlan): TerminalApproach[] {
+  const queue = [place.id], visitedNodes = new Set(queue), visitedRoads = new Set<string>(), approaches: TerminalApproach[] = [];
+  while (queue.length) {
+    const nodeId = queue.shift()!;
+    for (const road of roadEdgesByNode.get(nodeId) || []) {
+      if (visitedRoads.has(road.code)) continue;
+      visitedRoads.add(road.code);
+      const hit = roadBorderIntersection(place, road, plan.border, nodeId);
+      if (hit) {
+        approaches.push({ road, ...hit });
+        continue;
+      }
+      const points = orientedRoadPoints(road, nodeId), exit = points[points.length - 1], otherNodeId = road.from === nodeId ? road.to : road.from;
+      if (pointInsideBorder(place, plan.border, exit.x, exit.z)) {
+        if (!visitedNodes.has(otherNodeId)) {
+          visitedNodes.add(otherNodeId);
+          queue.push(otherNodeId);
+        }
+        continue;
+      }
+      const fallback = roadPointAtRadius(place, road, plan.radius, nodeId);
+      if (fallback) approaches.push({ road, ...fallback, snapBorder: true });
+    }
+  }
+  return approaches.sort((a, b) => a.road.code.localeCompare(b.road.code)).slice(0, 2);
 }
 function alignGatesToRoads(place: Place, plan: SettlementExteriorPlan): SettlementExteriorPlan {
   if (!plan.gates.length || !plan.streets.length) return plan;
