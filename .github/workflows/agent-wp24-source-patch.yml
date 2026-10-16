@@ -1,0 +1,93 @@
+name: AGENT WP24 source patch
+on:
+  push:
+    branches: [agent1/wp-s004-002-001-sites-20261016]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch final-surface and local geometry
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text, old, new, label):
+              if text.count(old) != 1:
+                  raise SystemExit(f"{label}: expected one match, found {text.count(old)}")
+              return text.replace(old, new, 1)
+
+          world = Path('src/world.ts')
+          text = world.read_text()
+          text = replace_once(
+              text,
+              'import { freshwaterCrossingAt, drainageCoarseSegments, naturalSurfaceAt } from "./hydrology.ts";\n',
+              'import { freshwaterCrossingAt, drainageCoarseSegments, naturalSurfaceAt } from "./hydrology.ts";\nimport { criticalSites, nearbyCriticalSites, SITE_CORE_SOURCE_UNITS, SITE_FALLOFF_SOURCE_UNITS, SITE_SUPPORT_SOURCE_UNITS } from "./sites.ts";\n',
+              'site import',
+          )
+          text = replace_once(
+              text,
+              '  kind: "house" | "keep" | "tree" | "rock" | "field" | "well";\n',
+              '  kind: "house" | "keep" | "tree" | "rock" | "field" | "well" | "ruin" | "critical-place";\n',
+              'feature kinds',
+          )
+          text = replace_once(
+              text,
+              '  const modifiers: SurfaceModifier[] = [],\n    place = nearestPlace(x, z),\n    roadMatch = surfaceRoadAt(x, z);\n',
+              '  const modifiers: SurfaceModifier[] = [],\n    place = nearestPlace(x, z),\n    roadMatch = surfaceRoadAt(x, z),\n    siteMatches = nearbyCriticalSites(x, z, SITE_SUPPORT_SOURCE_UNITS, 4);\n',
+              'surface query',
+          )
+          old_site = '''\n    // The existing seeded keep is the representative priority-9 critical site.\n    // It has its own small pad/reservation and therefore proves that sites can\n    // deterministically override city/village/road ownership without a second\n    // height/material authority.\n    const siteX = place.x - 30,\n      siteZ = place.z - 28,\n      siteDistance = Math.hypot(wrapSourceX(x - siteX), z - siteZ),\n      siteWeight = 1 - smooth(clamp01((siteDistance - 10) / 6));\n    if (siteWeight > 0)\n      modifiers.push({\n        id: `${place.code}/SITE/KEEP`,\n        priority: WORLD_BUILDING_PRIORITIES.site,\n        weight: siteWeight,\n        targetGroundHeight: terraceHeight,\n        material: "Settlement",\n        walkable: true,\n        vegetationDensityScale: 0,\n        reservedUse: `${place.code}/SITE/KEEP`,\n      });\n'''
+          text = replace_once(text, old_site, '\n', 'legacy fixed site pad')
+          text = replace_once(
+              text,
+              '  const road = roadMatch.road;\n',
+              '''  for (const site of siteMatches) {\n    const distance = Math.hypot(wrapSourceX(x - site.x), z - site.z),\n      weight = 1 - smooth(clamp01((distance - SITE_CORE_SOURCE_UNITS) / SITE_FALLOFF_SOURCE_UNITS));\n    if (weight > 0)\n      modifiers.push({\n        id: site.code,\n        priority: WORLD_BUILDING_PRIORITIES.site,\n        weight,\n        targetGroundHeight: boundedEarthwork(site.preparedGroundHeightM, base.groundHeight, 3, 3),\n        material: "Settlement",\n        walkable: true,\n        vegetationDensityScale: 0,\n        reservedUse: site.code,\n      });\n  }\n\n  const road = roadMatch.road;\n''',
+              'reservation-aware site modifier',
+          )
+          text = replace_once(
+              text,
+              '    candidateCount: roadMatch.candidateCount + (place ? 2 : 0),\n',
+              '    candidateCount: roadMatch.candidateCount + (place ? 1 : 0) + siteMatches.length,\n',
+              'candidate telemetry',
+          )
+          text = replace_once(
+              text,
+              '    variant: number,\n    id: string,\n  ) => {\n',
+              '    variant: number,\n    id: string,\n    requiredReservation?: string,\n  ) => {\n',
+              'feature add signature',
+          )
+          text = replace_once(
+              text,
+              '    const surface=plotAt(kind,x,z);\n    if(!surface)return;\n',
+              '    const surface=plotAt(kind,x,z);\n    if(!surface||requiredReservation && surface.reservedUse!==requiredReservation)return;\n',
+              'feature reservation check',
+          )
+          text = replace_once(
+              text,
+              '  for (const s of places) {\n',
+              '''  if (tile.size <= 128) {\n    const centreX = tile.minX + tile.size / 2,\n      centreZ = tile.minZ + tile.size / 2,\n      radius = Math.SQRT2 * tile.size / 2 + SITE_SUPPORT_SOURCE_UNITS;\n    for (const site of nearbyCriticalSites(centreX, centreZ, radius, 64))\n      add(site.kind, site.x, site.z, site.variant, site.code, site.code);\n  }\n  for (const s of places) {\n''',
+              'local site features',
+          )
+          world.write_text(text)
+
+          geometry = Path('src/geometry.ts')
+          text = geometry.read_text()
+          text = replace_once(
+              text,
+              '      } else if (f.kind === "tree") {\n',
+              '''      } else if (f.kind === "ruin") {\n        const ruinStone = color(132, 132, 118);\n        structures.box(x - 2.8, y - 0.25, z, 3.4, 5.2, 7.2, ruinStone);\n        structures.box(x + 2.5, y - 0.25, z - 1.1, 2.6, 3.1, 5.2, color(146, 143, 126));\n        structures.box(x + 0.1, y - 0.15, z + 3.2, 7.2, 2.1, 1.1, ruinStone);\n        if (t.size <= 64) {\n          detail.box(x - 2.8, y + 4.8, z - 2.7, 3.4, 0.7, 1.3, ruinStone);\n          detail.box(x + 2.7, y + 2.8, z + 1.3, 2.2, 0.9, 1.1, color(118, 116, 104));\n          detail.box(x, y + 0.1, z + 3.8, 1.8, 2.4, 0.35, timber);\n        }\n      } else if (f.kind === "critical-place") {\n        const shrineStone = color(174, 169, 143);\n        for (let i = 0; i < 8; i++) {\n          const angle = i * Math.PI / 4, ox = Math.cos(angle) * 5.2, oz = Math.sin(angle) * 5.2;\n          structures.box(x + ox, y - 0.15, z + oz, 1.05, 3.1 + (i % 2) * 0.8, 1.05, shrineStone);\n        }\n        structures.box(x, y - 0.08, z, 3.2, 0.75, 3.2, color(126, 120, 105));\n        if (t.size <= 64) {\n          detail.box(x, y + 0.68, z, 1.5, 0.22, 1.5, color(194, 184, 148));\n          detail.box(x, y + 0.78, z, 0.18, 2.2, 0.18, timber);\n        }\n      } else if (f.kind === "tree") {\n''',
+              'site geometry',
+          )
+          geometry.write_text(text)
+          PY
+          git config user.name "AGENT #1"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/world.ts src/geometry.ts
+          git commit -m "fix(s004): integrate reservation-aware site surfaces"
+          git push origin HEAD:${GITHUB_REF_NAME}
