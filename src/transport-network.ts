@@ -205,6 +205,10 @@ function sanitize(value: string) {
   return value.replaceAll("/", "-").replaceAll("|", "-");
 }
 
+function compareCanonical(a: string, b: string) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function destination(origin: LonLat, bearing: number, distanceM: number): CanonicalPosition {
   const angular = distanceM / CANONICAL_PLANET_RADIUS,
     sinLat =
@@ -273,7 +277,7 @@ function ownedMacroPath(from: CanonicalPosition, to: CanonicalPosition, country:
     .sort((a, b) =>
       greatCircleDistance(from, a.canonicalPosition) + greatCircleDistance(a.canonicalPosition, to) -
         greatCircleDistance(from, b.canonicalPosition) - greatCircleDistance(b.canonicalPosition, to) ||
-      a.id.localeCompare(b.id)
+      compareCanonical(a.id, b.id)
     )
     .find((city) =>
       segmentLegal(from, city.canonicalPosition, country, 14) &&
@@ -380,7 +384,7 @@ function discoveredGatewayCandidates(country: Country): BorderGateway[] {
       break;
     }
   }
-  return [...found.values()].sort((a, b) => a.distanceM - b.distanceM || a.id.localeCompare(b.id));
+  return [...found.values()].sort((a, b) => a.distanceM - b.distanceM || compareCanonical(a.id, b.id));
 }
 
 function gatewayCandidates(country: Country) {
@@ -390,48 +394,40 @@ function gatewayCandidates(country: Country) {
     const current = merged.get(key);
     if (!current || gateway.id.startsWith("S004/") || (!current.id.startsWith("S004/") && (gateway.distanceM < current.distanceM || (gateway.distanceM === current.distanceM && gateway.id < current.id)))) merged.set(key, gateway);
   }
-  return [...merged.values()].sort((a, b) => a.distanceM - b.distanceM || a.neighbourCountryCode.localeCompare(b.neighbourCountryCode) || a.id.localeCompare(b.id));
-}
-
-function nearestTargetCity(gateway: BorderGateway, country: Country) {
-  return cities
-    .filter((city) => city.continent === country.continent && city.country === country.id)
-    .sort((a, b) => greatCircleDistance(gateway.outside, a.canonicalPosition) - greatCircleDistance(gateway.outside, b.canonicalPosition) || a.id.localeCompare(b.id));
+  return [...merged.values()].sort((a, b) => a.distanceM - b.distanceM || compareCanonical(a.neighbourCountryCode, b.neighbourCountryCode) || compareCanonical(a.id, b.id));
 }
 
 function borderRoadFor(gateway: BorderGateway) {
-  const fromCountry = countriesByCode.get(gateway.countryCode), toCountry = countriesByCode.get(gateway.neighbourCountryCode), from = capitalsByCountry.get(gateway.countryCode);
-  if (!fromCountry || !toCountry || !from) return undefined;
-  for (const to of nearestTargetCity(gateway, toCountry)) {
-    try {
-      const approach = ownedMacroPath(gateway.outside, to.canonicalPosition, toCountry, `${gateway.id}/${to.code}`),
-        positions = [...gateway.corridor, gateway.outside, ...approach.slice(1)],
-        pair = [fromCountry.code, toCountry.code].sort(),
-        suffix = `${pair[0]}--${pair[1]}/${sanitize(gateway.id)}`,
-        code = `${NETWORK_CODE}/ROAD/MAIN/BORDER/${suffix}`,
-        networkId = `${NETWORK_CODE}/EDGE/BORDER/${suffix}`,
-        road = makeRoad(code, networkId, from.id, to.id, positions),
-        crossingPosition = interpolate(gateway.inside, gateway.outside, 0.5), crossingSource = lonLatToSource(crossingPosition.lon, crossingPosition.lat),
-        crossing: TransportBorderCrossing = Object.freeze({
-          code: `${code}/CROSSING`,
-          roadCode: code,
-          countries: Object.freeze(pair as [string, string]),
-          position: Object.freeze({ lon: crossingPosition.lon, lat: crossingPosition.lat }),
-          x: crossingSource.x,
-          z: crossingSource.z,
-        });
-      return { road, crossing, neighborCode: toCountry.code };
-    } catch {
-      // Try the next canonical city in this neighbouring country.
-    }
+  const fromCountry = countriesByCode.get(gateway.countryCode), toCountry = countriesByCode.get(gateway.neighbourCountryCode),
+    from = capitalsByCountry.get(gateway.countryCode), to = capitalsByCountry.get(gateway.neighbourCountryCode);
+  if (!fromCountry || !toCountry || !from || !to) return undefined;
+  try {
+    const approach = ownedMacroPath(gateway.outside, to.canonicalPosition, toCountry, `${gateway.id}/${to.code}`),
+      positions = [...gateway.corridor, gateway.outside, ...approach.slice(1)],
+      pair = [fromCountry.code, toCountry.code].sort(compareCanonical),
+      suffix = `${pair[0]}--${pair[1]}/${sanitize(gateway.id)}`,
+      code = `${NETWORK_CODE}/ROAD/MAIN/BORDER/${suffix}`,
+      networkId = `${NETWORK_CODE}/EDGE/BORDER/${suffix}`,
+      road = makeRoad(code, networkId, from.id, to.id, positions),
+      crossingPosition = interpolate(gateway.inside, gateway.outside, 0.5), crossingSource = lonLatToSource(crossingPosition.lon, crossingPosition.lat),
+      crossing: TransportBorderCrossing = Object.freeze({
+        code: `${code}/CROSSING`,
+        roadCode: code,
+        countries: Object.freeze(pair as [string, string]),
+        position: Object.freeze({ lon: crossingPosition.lon, lat: crossingPosition.lat }),
+        x: crossingSource.x,
+        z: crossingSource.z,
+      });
+    return { road, crossing, neighborCode: toCountry.code };
+  } catch {
+    return undefined;
   }
-  return undefined;
 }
 
 function buildInternationalRoads() {
   const roads: Road[] = [], crossings: TransportBorderCrossing[] = [];
   for (const continent of [...new Set(countries.map((country) => country.continent))].sort((a, b) => a - b)) {
-    const local = countries.filter((country) => country.continent === continent).sort((a, b) => a.code.localeCompare(b.code));
+    const local = countries.filter((country) => country.continent === continent).sort((a, b) => compareCanonical(a.code, b.code));
     if (local.length <= 1) continue;
     const connected = new Set<string>([local[0].code]);
     while (connected.size < local.length) {
@@ -440,7 +436,7 @@ function buildInternationalRoads() {
         .flatMap((country) => gatewayCandidates(country)
           .filter((gateway) => !connected.has(gateway.neighbourCountryCode))
           .map((gateway) => ({ country, gateway })))
-        .sort((a, b) => a.gateway.distanceM - b.gateway.distanceM || a.country.code.localeCompare(b.country.code) || a.gateway.neighbourCountryCode.localeCompare(b.gateway.neighbourCountryCode) || a.gateway.id.localeCompare(b.gateway.id));
+        .sort((a, b) => a.gateway.distanceM - b.gateway.distanceM || compareCanonical(a.country.code, b.country.code) || compareCanonical(a.gateway.neighbourCountryCode, b.gateway.neighbourCountryCode) || compareCanonical(a.gateway.id, b.gateway.id));
       let linked = false;
       for (const candidate of frontier) {
         const built = borderRoadFor(candidate.gateway);
@@ -464,7 +460,7 @@ function harborSiteCandidates(continent: number) {
   const candidateCities = cities
     .filter((city) => city.continent === continent)
     .map((city) => ({ city, coastM: Math.max(0, macroSampleAt(city.canonicalPosition).coastDistanceRad * CANONICAL_PLANET_RADIUS) }))
-    .sort((a, b) => a.coastM - b.coastM || a.city.id.localeCompare(b.city.id))
+    .sort((a, b) => a.coastM - b.coastM || compareCanonical(a.city.id, b.city.id))
     .slice(0, TRANSPORT_LIMITS.harborCityCandidates);
   const result: { city: Place; country: Country; position: CanonicalPosition; score: number }[] = [];
   for (const { city } of candidateCities) {
@@ -478,7 +474,7 @@ function harborSiteCandidates(continent: number) {
         result.push({ city, country, position, score: coastM + radiusM * 0.02 });
       }
   }
-  return result.sort((a, b) => a.score - b.score || a.city.id.localeCompare(b.city.id));
+  return result.sort((a, b) => a.score - b.score || compareCanonical(a.city.id, b.city.id));
 }
 
 function buildHarbors() {
@@ -514,7 +510,7 @@ function buildFerries(harbors: readonly TransportHarbor[]): TransportFerryEdge[]
   for (let i = 0; i < harbors.length; i++)
     for (let j = i + 1; j < harbors.length; j++)
       candidates.push({ a: harbors[i], b: harbors[j], distanceM: greatCircleDistance(harbors[i].position, harbors[j].position) });
-  candidates.sort((a, b) => a.distanceM - b.distanceM || `${a.a.code}|${a.b.code}`.localeCompare(`${b.a.code}|${b.b.code}`));
+  candidates.sort((a, b) => a.distanceM - b.distanceM || compareCanonical(`${a.a.code}|${a.b.code}`, `${b.a.code}|${b.b.code}`));
   const parent = new Map(harbors.map((harbor) => [harbor.code, harbor.code]));
   const root = (code: string): string => {
     const current = parent.get(code)!;
@@ -585,7 +581,7 @@ const bridgeCache = new Map<string, readonly TransportBridge[]>();
 let bridgeCacheHits = 0, bridgeCacheMisses = 0, bridgeCacheEvictions = 0, focusQueries = 0, focusReturnedRoads = 0;
 
 function currentBridges() {
-  return Object.freeze([...bridgeCache.values()].flat().sort((a, b) => a.code.localeCompare(b.code)));
+  return Object.freeze([...bridgeCache.values()].flat().sort((a, b) => compareCanonical(a.code, b.code)));
 }
 
 function segmentIntersection(
@@ -628,7 +624,7 @@ function discoverBridges(edge: TransportRoadEdge) {
       bridges.set(crossing.code, bridge);
     }
   }
-  return Object.freeze([...bridges.values()].sort((a, b) => a.code.localeCompare(b.code)));
+  return Object.freeze([...bridges.values()].sort((a, b) => compareCanonical(a.code, b.code)));
 }
 
 function touchBridgeCache(edge: TransportRoadEdge) {
@@ -682,7 +678,7 @@ function wrapRoad(
     roadClass,
     from: from.code,
     to: to.code,
-    countryCodes: Object.freeze([...new Set([from.countryCode, to.countryCode])].sort()),
+    countryCodes: Object.freeze([...new Set([from.countryCode, to.countryCode])].sort(compareCanonical)),
     centerline,
     get bridgeCodes() { return Object.freeze((bridgeCache.get(road.code) ?? []).map((bridge) => bridge.code)); },
     borderCrossingCode: border?.code ?? null,
@@ -701,7 +697,7 @@ function networkDigest(nodes: readonly TransportNode[], roads: readonly Transpor
     ...ferries.map((edge) => `F:${edge.code}:${edge.from}:${edge.to}:${edge.distanceM.toFixed(3)}`),
     ...crossings.map((crossing) => `X:${crossing.code}:${crossing.x.toFixed(4)}:${crossing.z.toFixed(4)}`),
     ...harbors.map((harbor) => `H:${harbor.code}:${harbor.x.toFixed(4)}:${harbor.z.toFixed(4)}`),
-  ].sort();
+  ].sort(compareCanonical);
   return digestNumber(pieces.join("\n")).toString(16).padStart(8, "0");
 }
 
@@ -739,7 +735,7 @@ function createTransportNetwork(install: boolean): TransportNetwork {
       code: `${NETWORK_CODE}/JUNCTION/${node.sourceId}`,
       nodeCode: node.code,
       position: node.position,
-      edgeCodes: Object.freeze([...(incident.get(node.code) ?? [])].sort()),
+      edgeCodes: Object.freeze([...(incident.get(node.code) ?? [])].sort(compareCanonical)),
     }))
     .filter((junction) => junction.edgeCodes.length >= 3);
   const digest = networkDigest(nodes, roadEdges, extensions.ferries, extensions.borderCrossings, extensions.harbors);
@@ -783,7 +779,7 @@ for (const edge of transportNetwork.roadEdges) {
     transportBuckets.set(key, bucket);
   }
 }
-for (const bucket of transportBuckets.values()) bucket.sort((a, b) => a.code.localeCompare(b.code));
+for (const bucket of transportBuckets.values()) bucket.sort((a, b) => compareCanonical(a.code, b.code));
 
 function distanceToEdge(edge: TransportRoadEdge, x: number, z: number) {
   let best = Infinity;
@@ -809,7 +805,7 @@ export function transportRoadsNear(x: number, z: number, radiusSource: number, l
       if (distanceToEdge(edge, x, z) <= radiusSource) found.set(edge.code, edge);
   }
   const result = [...found.values()]
-    .sort((a, b) => distanceToEdge(a, x, z) - distanceToEdge(b, x, z) || a.code.localeCompare(b.code))
+    .sort((a, b) => distanceToEdge(a, x, z) - distanceToEdge(b, x, z) || compareCanonical(a.code, b.code))
     .slice(0, Math.max(1, Math.min(limit, TRANSPORT_LIMITS.queryRoadLimit)));
   focusQueries++;
   focusReturnedRoads += result.length;
@@ -821,7 +817,7 @@ export function transportRoadsNear(x: number, z: number, radiusSource: number, l
 export function ensureTransportBridgeEvidence() {
   const existing = currentBridges()[0];
   if (existing) return existing;
-  for (const edge of [...transportNetwork.roadEdges].sort((a, b) => a.code.localeCompare(b.code))) {
+  for (const edge of [...transportNetwork.roadEdges].sort((a, b) => compareCanonical(a.code, b.code))) {
     const bridge = touchBridgeCache(edge)[0];
     if (bridge) return bridge;
   }
