@@ -787,36 +787,51 @@ export function buildTransportNetwork(): TransportNetwork {
   }
 
   // International main roads use S004's canonical dry-land political gateways.
-  // Each candidate is routed and revalidated as three exact pieces: home-capital
-  // approach, explicit border crossing, and foreign-capital approach. The final
-  // combined centreline is then revalidated under one road identity.
-  const internationalPairs = new Set<string>(), internationalCountries = new Set<string>();
-  for (const country of countries) {
-    if (internationalCountries.has(country.code)) continue;
-    const from = state.nodes.find((node) => node.kind === "capital" && node.countryCode === country.code)!;
-    let linked = false;
-    const candidates = gatewayCandidates(country).slice(0, TRANSPORT_LIMITS.internationalCandidates);
-    for (let index = 0; index < candidates.length; index++) {
-      const { gateway, neighbor } = candidates[index], pair = edgePairKey(country.code, neighbor.code);
-      if (internationalPairs.has(pair)) {
-        internationalCountries.add(country.code);
-        internationalCountries.add(neighbor.code);
+  // Build one deterministic spanning tree per continent rather than independent
+  // country pairs, so every domestic network reaches every other country on the
+  // same landmass and therefore reaches that continent's harbor/ferry transfer.
+  for (const continent of [...new Set(countries.map((country) => country.continent))].sort((a, b) => a - b)) {
+    const localCountries = countries
+      .filter((country) => country.continent === continent)
+      .sort((a, b) => a.code.localeCompare(b.code));
+    if (localCountries.length <= 1) continue;
+
+    const connected = new Set<string>([localCountries[0].code]);
+    while (connected.size < localCountries.length) {
+      const frontier = localCountries
+        .filter((country) => connected.has(country.code))
+        .flatMap((country) => gatewayCandidates(country)
+          .filter(({ neighbor }) => neighbor.continent === continent && !connected.has(neighbor.code))
+          .slice(0, TRANSPORT_LIMITS.internationalCandidates)
+          .map(({ gateway, neighbor, distanceM }) => ({ country, gateway, neighbor, distanceM })))
+        .sort((a, b) =>
+          a.distanceM - b.distanceM ||
+          a.country.code.localeCompare(b.country.code) ||
+          a.neighbor.code.localeCompare(b.neighbor.code) ||
+          a.gateway.id.localeCompare(b.gateway.id)
+        );
+
+      let linked = false;
+      for (let index = 0; index < frontier.length; index++) {
+        const { country, gateway, neighbor } = frontier[index],
+          from = state.nodes.find((node) => node.kind === "capital" && node.countryCode === country.code)!,
+          to = state.nodes.find((node) => node.kind === "capital" && node.countryCode === neighbor.code)!,
+          pair = [country.code, neighbor.code].sort(),
+          suffix = `CAPITAL/${pair[0]}--${pair[1]}`,
+          code = `${NETWORK_CODE}/ROAD/MAIN/${suffix}`,
+          route = routeThroughGateway(code, from, to, gateway, TRANSPORT_LIMITS.routeCandidates + 96 + index);
+        if (!route) continue;
+        addRoad(state, from, to, "main", suffix, true, route);
+        connected.add(neighbor.code);
         linked = true;
         break;
       }
-      const to = state.nodes.find((node) => node.kind === "capital" && node.countryCode === neighbor.code)!;
-      const suffix = `CAPITAL/${country.code}--${neighbor.code}`,
-        code = `${NETWORK_CODE}/ROAD/MAIN/${suffix}`,
-        route = routeThroughGateway(code, from, to, gateway, TRANSPORT_LIMITS.routeCandidates + 96 + index);
-      if (!route) continue;
-      addRoad(state, from, to, "main", suffix, true, route);
-      internationalPairs.add(pair);
-      internationalCountries.add(country.code);
-      internationalCountries.add(neighbor.code);
-      linked = true;
-      break;
+
+      if (!linked) {
+        const missing = localCountries.filter((country) => !connected.has(country.code)).map((country) => country.code).join(", ");
+        throw new Error(`No legal connected international capital network for continent ${continent}; missing ${missing}`);
+      }
     }
-    if (!linked) throw new Error(`No legal international capital route for ${country.code}`);
   }
 
   const capitalNodes = state.nodes.filter((node) => node.kind === "capital");
