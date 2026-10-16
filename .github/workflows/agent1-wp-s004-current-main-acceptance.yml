@@ -1,0 +1,68 @@
+name: AGENT1 WP-S004 exact current-main acceptance
+on:
+  push:
+    branches: [agent1/wp-s004-001-001-main-integration]
+    paths:
+      - src/world-core.ts
+      - src/world.ts
+      - src/settlement-exterior-core.ts
+      - src/settlement-exterior.ts
+      - src/geometry-core.ts
+      - src/geometry.ts
+      - tests/settlement-exterior.test.ts
+      - tests/village-morphology-runtime.test.ts
+      - tests/wp-s004-world-integration.test.ts
+      - tests/settlement-icons.spec.js
+concurrency:
+  group: agent1-wp-s004-current-main-acceptance
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  accept:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Verify protected current-main authorities remain unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code a077b4f701fec4aa480a9a3ee0648606a99b240e -- src/geography.ts src/simulation.ts src/road-network.ts src/road-spatial-index.ts
+          grep -q 'macroPopulationSummary' src/geography.ts
+          grep -q 'export const populationOf' src/simulation.ts
+          grep -q 'settlementExteriorFor' src/world.ts
+          grep -q 'showRoads = true' src/geometry-core.ts
+      - run: npm ci
+      - name: S004 deterministic morphology and runtime legality
+        run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/village-morphology-runtime.test.ts tests/wp-s004-world-integration.test.ts
+      - name: Full repository tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: WebGPU settlement semantic-zoom gate
+        run: xvfb-run -a npx playwright test --config playwright.webgpu.config.js settlement-icons.spec.js
+      - name: WebGL2 settlement semantic-zoom gate
+        run: xvfb-run -a npx playwright test --config playwright.fallback.config.js settlement-icons.spec.js
+      - name: Capture fresh S004 MIXED evidence
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          git show origin/agent1/wp-s004-001-001-20261015:tools/agent1-wp-s004-evidence.sh > /tmp/agent1-wp-s004-evidence.sh
+          chmod +x /tmp/agent1-wp-s004-evidence.sh
+          bash /tmp/agent1-wp-s004-evidence.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wp-s004-current-main-${{ github.sha }}
+          path: test-results/
+          if-no-files-found: error
