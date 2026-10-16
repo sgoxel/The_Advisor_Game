@@ -36,6 +36,35 @@ jobs:
             python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp24-sites-$renderer --name sites --profile desktop,phone,phone-landscape --renderer $renderer --timeout 240 --steps "$RUIN"
             python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp24-critical-$renderer --name critical --profile desktop,phone,phone-landscape --renderer $renderer --timeout 240 --steps "$CRITICAL"
           done
+      - name: Require real WebGL2 and WebGPU captures
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          capture_files = sorted(Path("test-results").glob("wp24-*/capture.json"))
+          if len(capture_files) != 4:
+              raise SystemExit(f"expected four renderer/site capture manifests, got {len(capture_files)}")
+          total = 0
+          profiles = {"desktop", "phone", "phone-landscape"}
+          for path in capture_files:
+              expected = "webgpu" if path.parent.name.endswith("-webgpu") else "webgl2"
+              records = json.loads(path.read_text(encoding="utf-8"))
+              if {record["profile"] for record in records} != profiles:
+                  raise SystemExit(f"{path}: missing required profiles")
+              for record in records:
+                  total += 1
+                  if record.get("requestedRenderer") != expected or record.get("backend") != expected:
+                      raise SystemExit(f"{record.get('file')}: requested {expected}, rendered {record.get('backend')}")
+                  if record.get("webgpuFellBack"):
+                      raise SystemExit(f"{record.get('file')}: WebGPU fell back")
+                  if record.get("consoleErrors") or record.get("pageErrors") or record.get("error"):
+                      raise SystemExit(f"{record.get('file')}: browser errors present")
+          if total < 24:
+              raise SystemExit(f"expected at least 24 fresh screenshots, got {total}")
+          print(f"verified {total} screenshots across true WebGL2/WebGPU backends")
+          PY
       - name: Record acceptance telemetry
         shell: bash
         run: |
