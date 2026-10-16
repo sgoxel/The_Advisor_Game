@@ -3,11 +3,14 @@ on:
   push:
     branches: [agent1/wp-s004-001-001-20261015]
     paths: [.github/workflows/agent1-wp-s004-runtime-apply.yml]
+concurrency:
+  group: agent1-wp-s004-runtime-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: write
 jobs:
   integrate:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
