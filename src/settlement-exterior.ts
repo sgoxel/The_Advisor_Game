@@ -303,6 +303,44 @@ function clipBorderToVillageSide(place: Place, border: readonly SettlementPoint[
   if (clipped.length < 3) return border.map((point) => ({ ...point }));
   return clipped.map((point) => ({ x: wrapSourceX(place.x + point.x), z: place.z + point.z }));
 }
+function clipBorderBeforeJunction(place: Place, border: readonly SettlementPoint[], x: number, z: number) {
+  const jx = wrapSourceX(x - place.x), jz = z - place.z, distance = Math.hypot(jx, jz);
+  if (distance < 1e-6) return border.map((point) => ({ ...point }));
+  const ux = jx / distance, uz = jz / distance,
+    clearance = Math.min(3, distance * .12), cutoff = distance - clearance,
+    local = border.map((point) => ({ x: wrapSourceX(point.x - place.x), z: point.z - place.z })),
+    projected = (point: SettlementPoint) => point.x * ux + point.z * uz,
+    clipped: SettlementPoint[] = [];
+  for (let index = 0; index < local.length; index++) {
+    const previous = local[(index + local.length - 1) % local.length], current = local[index],
+      previousProjection = projected(previous), currentProjection = projected(current),
+      previousInside = previousProjection <= cutoff, currentInside = currentProjection <= cutoff;
+    if (previousInside !== currentInside) {
+      const denominator = currentProjection - previousProjection,
+        t = Math.abs(denominator) < 1e-9 ? 0 : (cutoff - previousProjection) / denominator;
+      clipped.push({ x: previous.x + (current.x - previous.x) * t, z: previous.z + (current.z - previous.z) * t });
+    }
+    if (currentInside) clipped.push(current);
+  }
+  if (clipped.length < 3) return border.map((point) => ({ ...point }));
+  return clipped.map((point) => ({ x: wrapSourceX(place.x + point.x), z: place.z + point.z }));
+}
+function trimInternalRoadJunctions(place: Place, plan: SettlementExteriorPlan): SettlementExteriorPlan {
+  if (place.kind !== "village") return plan;
+  const junctions = new Map<string, SettlementPoint>();
+  for (const road of roads) {
+    if (road.networkKind === "detour" || roadDistanceAt(place.x, place.z, road) > plan.radius * 1.7) continue;
+    if (road.from.startsWith("J/")) junctions.set(road.from, { x: road.fromX, z: road.fromZ });
+    if (road.to.startsWith("J/")) junctions.set(road.to, { x: road.toX, z: road.toZ });
+  }
+  const ordered = [...junctions.entries()].sort((left, right) => {
+    const a = Math.hypot(wrapSourceX(left[1].x - place.x), left[1].z - place.z), b = Math.hypot(wrapSourceX(right[1].x - place.x), right[1].z - place.z);
+    return a - b || left[0].localeCompare(right[0]);
+  });
+  let border = plan.border.map((point) => ({ ...point }));
+  for (const [, junction] of ordered) if (pointInsideBorder(place, border, junction.x, junction.z)) border = clipBorderBeforeJunction(place, border, junction.x, junction.z);
+  return border.length === plan.border.length && border.every((point, index) => point.x === plan.border[index].x && point.z === plan.border[index].z) ? plan : { ...plan, border };
+}
 function trimForeignRoadCrossings(place: Place, plan: SettlementExteriorPlan): SettlementExteriorPlan {
   if (place.kind !== "village") return plan;
   const localRoadIds = new Set(roadConnections.filter((connection) => connection.from === place.id || connection.to === place.id).flatMap((connection) => connection.legs.map((leg) => leg.edgeId))),
@@ -321,7 +359,8 @@ function trimForeignRoadCrossings(place: Place, plan: SettlementExteriorPlan): S
 }
 function alignGatesToRoads(place: Place, suppliedPlan: SettlementExteriorPlan): SettlementExteriorPlan {
   if (!suppliedPlan.gates.length || !suppliedPlan.streets.length) return suppliedPlan;
-  const plan = trimForeignRoadCrossings(place, suppliedPlan), physicalApproaches = physicalGateApproaches(place, plan), approaches = physicalApproaches.length ? physicalApproaches : terminalApproaches(place, plan), main = plan.streets[0];
+  const junctionTrimmed = trimInternalRoadJunctions(place, suppliedPlan), plan = trimForeignRoadCrossings(place, junctionTrimmed),
+    physicalApproaches = physicalGateApproaches(place, plan), approaches = physicalApproaches.length ? physicalApproaches : terminalApproaches(place, plan), main = plan.streets[0];
   if (!approaches.length || main.points.length < 2) return plan;
   const targetGateCount = Math.min(2, approaches.length),
     gateTemplates = plan.gates.slice(0, targetGateCount).map((gate) => ({ ...gate, guardPosts: gate.guardPosts.map((post) => ({ ...post })) }));
