@@ -115,7 +115,7 @@ export function provinceSeed(cx: number, cz: number): ProvinceSeed {
 let lastRegion: RegionSeed | undefined;
 export function regionSeed(cx: number, cz: number): RegionSeed {
   const x = Math.floor(cx / 100),
-    z = Math.floor(cx / 100);
+    z = Math.floor(cz / 100);
   if (lastRegion && lastRegion.x === x && lastRegion.z === z) return lastRegion;
   const parent = provinceSeed(cx, cz),
     code = `${parent.code}/L2/${x - parent.x * 10}/${z - parent.z * 10}`,
