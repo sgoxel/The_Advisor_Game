@@ -2,9 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 // S005 acceptance runs against the same installed road authority used by world/routing.
 import "../src/world.ts";
-import { cities, countries, roads, villages } from "../src/geography.ts";
+import { cities, continuityCorridor, countries, roads, villages } from "../src/geography.ts";
 import { naturalSurfaceAt } from "../src/hydrology.ts";
 import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
+import { politicalBorderGateways } from "../src/political-settlement-access.ts";
 import {
   TRANSPORT_LIMITS,
   buildTransportNetwork,
@@ -68,7 +69,7 @@ test("canonical transport topology covers every generated settlement with real s
   }
 });
 
-test("every country capital has a same-continent international main-road and explicit border crossing", () => {
+test("every country capital has a same-continent gateway-routed international main road and explicit border crossing", () => {
   const capitalByCountry = new Map(transportNetwork.nodes.filter((node) => node.kind === "capital").map((node) => [node.countryCode, node]));
   for (const country of countries) {
     const capital = capitalByCountry.get(country.code)!;
@@ -79,7 +80,13 @@ test("every country capital has a same-continent international main-road and exp
       const otherCode = edge.countryCodes.find((code) => code !== country.code)!;
       const other = countries.find((candidate) => candidate.code === otherCode)!;
       assert.equal(other.continent, country.continent);
-      assert.ok(edge.borderCrossingCode && transportNetwork.borderCrossings.some((crossing) => crossing.code === edge.borderCrossingCode));
+      const crossing = transportNetwork.borderCrossings.find((candidate) => candidate.code === edge.borderCrossingCode);
+      assert.ok(crossing, edge.code);
+      const pair = crossing!.countries.join("|");
+      assert.ok(
+        politicalBorderGateways.some((gateway) => [gateway.countryCode, gateway.neighbourCountryCode].sort().join("|") === pair),
+        `${edge.code} must use a canonical S004 gateway pair`,
+      );
     }
   }
 });
@@ -112,14 +119,18 @@ test("roads avoid open water, river crossings are typed bridges and ferries alon
   }
 });
 
-test("transport road records are the final shared geography roads with deterministic lengths and hierarchy", () => {
+test("transport graph, rendered geography roads and S003 continuity use exactly the same records", () => {
   const installed = new Set(roads.map((road) => road.code));
-  for (const road of transportSurfaceRoads) assert.ok(installed.has(road.code));
+  assert.deepEqual([...installed].sort(), transportNetwork.roadEdges.map((edge) => edge.code).sort());
+  assert.deepEqual(transportSurfaceRoads.map((road) => road.code).sort(), [...installed].sort());
   assert.equal(new Set(transportSurfaceRoads.map((road) => road.code)).size, transportSurfaceRoads.length);
+  assert.ok(continuityCorridor.road, "S003 continuity evidence must remain available");
+  assert.ok(transportNetwork.roadEdges.some((edge) => edge.roadClass === "continuity" && edge.code === continuityCorridor.road!.code));
   assert.ok(transportNetwork.roadEdges.some((edge) => edge.roadClass === "main"));
   assert.ok(transportNetwork.roadEdges.some((edge) => edge.roadClass === "regional"));
   assert.ok(transportNetwork.roadEdges.some((edge) => edge.roadClass === "access"));
   for (const road of transportSurfaceRoads) {
+    assert.ok(installed.has(road.code));
     assert.ok(road.centerline && road.centerline.length >= 2);
     const length = road.centerline.slice(1).reduce((sum, point, index) => sum + greatCircleDistance(sourceToLonLat(road.centerline![index].x, road.centerline![index].z), sourceToLonLat(point.x, point.z)), 0);
     assert.ok(Math.abs(length - road.surfaceLengthM) < 1e-6);
