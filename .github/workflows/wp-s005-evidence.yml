@@ -11,6 +11,7 @@ on:
       - src/world.ts
       - src/village-routes.ts
       - tests/transport-network.test.ts
+      - tests/transport-routing-parity.test.ts
       - index.html
       - package.json
       - .github/workflows/wp-s005-evidence.yml
