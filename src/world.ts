@@ -1,4 +1,5 @@
 /** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
+import "./transport-network.ts";
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED, COARSE_GEOGRAPHY_VERSION } from "./config.ts";
 import {
   CANONICAL_METRES_PER_SOURCE_UNIT,
@@ -114,7 +115,7 @@ export function provinceSeed(cx: number, cz: number): ProvinceSeed {
 let lastRegion: RegionSeed | undefined;
 export function regionSeed(cx: number, cz: number): RegionSeed {
   const x = Math.floor(cx / 100),
-    z = Math.floor(cz / 100);
+    z = Math.floor(cx / 100);
   if (lastRegion && lastRegion.x === x && lastRegion.z === z) return lastRegion;
   const parent = provinceSeed(cx, cz),
     code = `${parent.code}/L2/${x - parent.x * 10}/${z - parent.z * 10}`,
