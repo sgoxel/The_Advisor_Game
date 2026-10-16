@@ -672,28 +672,47 @@ export function buildTransportNetwork(): TransportNetwork {
   }
 
   // Build each country's city backbone as a deterministic legal spanning tree.
-  // The capital is the root, but an unconnected city may join any already
-  // connected city. This preserves capital reachability without requiring an
-  // artificial direct capital corridor through terrain that has no legal route.
+  // The capital is the root. Prefer city-to-city trunks, but if fine hydrology
+  // makes every such corridor illegal, use the already-connected canonical
+  // village approaches belonging to those city clusters. This keeps the graph
+  // visible and physically legal without moving settlements or weakening water,
+  // slope or political-owner checks.
   for (const country of countries) {
     const localCities = cities
         .filter((city) => city.continent === country.continent && city.country === country.id)
         .sort((a, b) => a.city - b.city || a.code.localeCompare(b.code)),
-      localNodes = localCities.map((city) => nodeBySourceId.get(city.id)!);
-    if (localNodes.length <= 1) continue;
+      cityNode = (city: Place) => nodeBySourceId.get(city.id)!,
+      clusterNodes = (city: Place) => [
+        cityNode(city),
+        ...villages
+          .filter((village) => village.id.startsWith(`${city.id}/`))
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .map((village) => nodeBySourceId.get(village.id)!),
+      ];
+    if (localCities.length <= 1) continue;
 
-    const connected = new Set<string>([localNodes[0].code]),
-      unconnected = new Map(localNodes.slice(1).map((node) => [node.code, node]));
+    const connected = new Set<string>([cityNode(localCities[0]).code]),
+      unconnected = new Map(localCities.slice(1).map((city) => [cityNode(city).code, city]));
     while (unconnected.size) {
-      const candidates = localNodes
-        .filter((node) => connected.has(node.code))
-        .flatMap((from) => [...unconnected.values()].map((to) => ({
-          from,
-          to,
-          distanceM: greatCircleDistance(from.position, to.position),
-          pair: edgePairKey(from.sourceId, to.sourceId),
-        })))
-        .sort((a, b) => a.distanceM - b.distanceM || a.pair.localeCompare(b.pair));
+      const candidates = localCities
+        .filter((city) => connected.has(cityNode(city).code))
+        .flatMap((fromCity) => [...unconnected.values()].flatMap((toCity) =>
+          clusterNodes(fromCity).flatMap((from) => clusterNodes(toCity).map((to) => ({
+            fromCity,
+            toCity,
+            from,
+            to,
+            endpointRank: Number(from.kind === "village") + Number(to.kind === "village"),
+            distanceM: greatCircleDistance(from.position, to.position),
+            pair: edgePairKey(from.sourceId, to.sourceId),
+          }))),
+        ))
+        .sort((a, b) =>
+          a.endpointRank - b.endpointRank ||
+          a.distanceM - b.distanceM ||
+          a.pair.localeCompare(b.pair) ||
+          a.toCity.code.localeCompare(b.toCity.code)
+        );
       let linked = false;
       for (const candidate of candidates) {
         const pair = [candidate.from.sourceId, candidate.to.sourceId]
@@ -702,12 +721,13 @@ export function buildTransportNetwork(): TransportNetwork {
           .join("--");
         try {
           addRoad(state, candidate.from, candidate.to, "regional", `COUNTRY/${country.code}/CITY-LINK/${pair}`);
-          connected.add(candidate.to.code);
-          unconnected.delete(candidate.to.code);
+          const targetCode = cityNode(candidate.toCity).code;
+          connected.add(targetCode);
+          unconnected.delete(targetCode);
           linked = true;
           break;
         } catch {
-          // Try the next shortest stable connected↔unconnected pair.
+          // Try the next shortest stable connected-cluster↔unconnected-cluster pair.
         }
       }
       if (!linked) throw new Error(`No legal connected city backbone for ${country.code}`);
@@ -752,7 +772,7 @@ export function buildTransportNetwork(): TransportNetwork {
   // Kruskal over geodesic ferry cost.  Ferry edges never enter geography roads.
   const ferryCandidates: { a: TransportHarbor; b: TransportHarbor; distanceM: number }[] = [];
   for (let i = 0; i < state.harbors.length; i++) for (let j = i + 1; j < state.harbors.length; j++) ferryCandidates.push({ a: state.harbors[i], b: state.harbors[j], distanceM: greatCircleDistance(state.harbors[i].position, state.harbors[j].position) });
-  ferryCandidates.sort((a, b) => a.distanceM - b.distanceM || edgePairKey(a.a.code, a.b.code).localeCompare(edgePairKey(b.a.code, b.b.code)));
+  ferryCandidates.sort((a, b) => a.distanceM - b.distanceM || edgePairKey(a.a.code, a.b.code).localeCompare(edgePairKey(a.a.code, a.b.code)));
   const parent = new Map(state.harbors.map((harbor) => [harbor.code, harbor.code]));
   const root = (code: string): string => { const p = parent.get(code)!; if (p === code) return code; const r = root(p); parent.set(code, r); return r; };
   for (const candidate of ferryCandidates) {
