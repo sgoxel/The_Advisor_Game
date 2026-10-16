@@ -4,12 +4,6 @@ on:
     branches: [agent1/wp-s004-001-001-20261015]
     paths:
       - .github/workflows/agent1-wp-s004-macos.yml
-      - tools/agent1-wp-s004-patch-v2.mjs
-      - tools/agent1-wp-s004-patch-v3.mjs
-      - tools/agent1-wp-s004-patch-v4.mjs
-      - tools/agent1-wp-s004-patch-v5.mjs
-      - tools/agent1-wp-s004-patch-v6.mjs
-      - tools/agent1-wp-s004-patch-v7.mjs
       - src/geography.ts
       - src/settlement-exterior.ts
       - src/world.ts
@@ -19,7 +13,7 @@ on:
       - tests/final-surface-integration.test.ts
       - tests/political-atlas.test.ts
 permissions:
-  contents: write
+  contents: read
 jobs:
   test-and-build:
     runs-on: macos-latest
@@ -27,15 +21,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent1/wp-s004-001-001-20261015
+          ref: ${{ github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - name: Apply complete deterministic settlement patch chain
-        run: |
-          node tools/agent1-wp-s004-patch-v2.mjs
-          node tools/agent1-wp-s004-patch-v3.mjs
+      - name: Verify exact source
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
       - run: npm ci
       - name: Focused settlement morphology tests
         run: node --experimental-strip-types --test tests/settlement-exterior.test.ts tests/world.test.ts
@@ -43,14 +36,3 @@ jobs:
         run: node --experimental-strip-types --test tests/final-surface-integration.test.ts tests/political-atlas.test.ts
       - name: Production build
         run: npm run build
-      - name: Commit validated settlement implementation
-        run: |
-          git config user.name "AGENT #1"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/geography.ts src/settlement-exterior.ts src/world.ts src/geometry.ts tests/world.test.ts
-          if git diff --cached --quiet; then
-            echo "Settlement implementation already committed"
-          else
-            git commit -m "feat: finalize deterministic settlement morphology runtime"
-            git push origin HEAD:agent1/wp-s004-001-001-20261015
-          fi
