@@ -24,7 +24,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S004 — Settlements, Buildings & World Sites
 
-- WP-S004-001-001 — Deterministic settlement distribution & morphology: viable-area density, readable functional villages/cities, legal access and bounded mobile rendering — COMPLETED
+- WP-S004-001-001 — Deterministic settlement distribution & morphology: viable-area density, readable functional villages/cities, legal access and bounded mobile rendering — COMPLETED and REVIEWED at 2026-10-17
 - WP-S004-002-001 — Canonical ruins & critical sites: 1/1000 discoverability, legal access, responsive inspection and lazy mobile-safe detail
 
 ## STAGE S005 — Transport & Traversal Network
