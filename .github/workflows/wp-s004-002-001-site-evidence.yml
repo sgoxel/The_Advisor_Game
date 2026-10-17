@@ -14,7 +14,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm test
+      - run: npm run test:release
       - name: Verify canonical site-access road metadata and bounded terrain profiles
         run: |
           node --experimental-strip-types -e 'import("./src/sites.ts").then(({siteAccessRoads,siteAcceptanceSummary})=>{const max=siteAcceptanceSummary().accessProfileSegmentMaxM;if(max!==75)throw new Error(`Unexpected site access profile segment target ${max}`);for(const road of siteAccessRoads){if(road.networkId!==road.code||road.networkKind!=="link"||road.coarseFallback!==false)throw new Error(`Invalid site access metadata ${road.code}`);const expected=Math.max(1,Math.ceil(road.surfaceLengthM/max))+1;if(road.centerline?.length!==expected)throw new Error(`Unbounded site access profile ${road.code}: ${road.centerline?.length} != ${expected}`)}})'
