@@ -3,6 +3,7 @@ import { test, expect } from "@playwright/test";
 for (const viewport of [
   { name: "desktop", width: 1440, height: 900 },
   { name: "phone", width: 390, height: 844 },
+  { name: "phone-landscape", width: 844, height: 390 },
 ]) {
   test(`critical sites are discoverable and inspectable on ${viewport.name}`, async ({ page }, testInfo) => {
     test.setTimeout(300000);
