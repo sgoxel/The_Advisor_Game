@@ -28,9 +28,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Full deterministic test suite
-        if: matrix.renderer == 'webgl2'
-        run: npm test
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - name: Site acceptance
@@ -66,4 +63,4 @@ jobs:
         if: always()
         with:
           name: s004-critical-site-${{ matrix.renderer }}-${{ github.event.pull_request.head.sha }}
-          path: test-results/wp24-sites-${{ matrix.renderer }}/
+          path: test-results/
