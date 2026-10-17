@@ -37,8 +37,19 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
  const terrain=(p:LonLat)=>{coarseSamples++;return sample(p);},
  legal=(p:LonLat,key:string)=>{const t=terrain(p);return t.land&&t.domain!=='Lake'&&ownerAt(p)===key;},
  lineLegal=(a:LonLat,b:LonLat,key:string,steps=8)=>{const d=greatCircleDistance(a,b),az=bearing(a,b);for(let i=0;i<=steps;i++)if(!legal(destination(a,az,d*i/steps),key))return false;return true;};
- const neighbours=new Map(places.map(p=>[p.id,[] as RoadNode[]]));
- for(const [a,b] of links){neighbours.get(a.id)!.push(b);neighbours.get(b.id)!.push(a);}
+ // The canonical world graph always contains city/backbone links. Bound only its
+ // optional village-to-village trade degree; standalone road-network callers keep
+ // every supplied link and therefore retain the generic shared-fork contract.
+ const canonicalVillageGraph=places.some(p=>p.kind==='city'),
+  linkKey=(a:RoadNode,b:RoadNode)=>a.id<b.id?`${a.id}|${b.id}`:`${b.id}|${a.id}`,
+  tradeDegree=new Map<string,number>(),selectedTradeLinks=new Set<string>();
+ if(canonicalVillageGraph)for(const [a,b] of [...links].filter(([a,b])=>a.kind==='village'&&b.kind==='village').sort((left,right)=>linkKey(left[0],left[1]).localeCompare(linkKey(right[0],right[1])))){
+  if((tradeDegree.get(a.id)||0)>=1||(tradeDegree.get(b.id)||0)>=1)continue;
+  selectedTradeLinks.add(linkKey(a,b));tradeDegree.set(a.id,1);tradeDegree.set(b.id,1);
+ }
+ const activeLinks=canonicalVillageGraph?links.filter(([a,b])=>a.kind!=='village'||b.kind!=='village'||selectedTradeLinks.has(linkKey(a,b))):links,
+  neighbours=new Map(places.map(p=>[p.id,[] as RoadNode[]]));
+ for(const [a,b] of activeLinks){neighbours.get(a.id)!.push(b);neighbours.get(b.id)!.push(a);}
  // One shared-approach owner per logical connection. Otherwise deep forks at
  // both ends can pass each other and create a folded-back central road. Higher
  // degree hubs share first; SEED breaks equal-degree ties, independent of order.
@@ -196,7 +207,7 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
   return {edgeId:id,reverse:!forward};
  }
  const connections:MacroRoadConnection[]=[];
- for(const [from,to] of links){
+ for(const [from,to] of activeLinks){
   const a=approaches.get(approachKey(from,to))??[from],b=approaches.get(approachKey(to,from))??[to],legs=[] as MacroRoadConnection['legs'];
   for(let i=1;i<a.length;i++)legs.push(edge(a[i-1],a[i],'trunk'));
   legs.push(edge(a.at(-1)!,b.at(-1)!,'link'));

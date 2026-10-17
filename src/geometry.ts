@@ -1,54 +1,20 @@
-import {elevationToRenderY} from "./render-frame.ts";
-import { featuresFor, field, type Tile } from "./world.ts";
-import { continuitySurfaceAt as finalSurfaceAt, continuityHeightAt as heightAt, registerContinuityPatch } from "./continuity-runtime.ts";
-import { roads as geographyRoads } from "./geography.ts";
-import { siteAccessRoads } from "./sites.ts";
-const roads = [...geographyRoads, ...siteAccessRoads];
-import { roadFragmentsInBounds, clippedStationRange } from "./continuity-corridor.ts";
-import { naturalElevationAt, naturalSurfaceAt, freshwaterCrossingSpanMAt } from "./hydrology.ts";
-import { macroSampleAt } from "./macro-geography.ts";
-import { sourceToLonLat, SOURCE_PRESENTATION_WIDTH, CANONICAL_METRES_PER_SOURCE_UNIT } from "./planet.ts";
+export * from "./geometry-core.ts";
+
 import {
-  climateSampleAt,
-  polarBoundaryAt,
-  TERRAIN_PALETTE,
-  type RGB,
-} from "./climate.ts";
+  buildTile as coreBuildTile,
+  terrainTint as coreTerrainTint,
+  type Geometry,
+  type TileGeometry,
+} from "./geometry-core.ts";
+import { featuresFor, type Tile } from "./world.ts";
+import { elevationToRenderY } from "./render-frame.ts";
+import { continuitySurfaceAt as finalSurfaceAt } from "./continuity-runtime.ts";
+import { SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
+
 type Point = [number, number, number];
-export type Geometry = {
-  positions: Float32Array;
-  normals: Float32Array;
-  colors: Uint8Array;
-  indices: Uint32Array;
-  uvs?: Float32Array;
-};
-export type TileGeometry = {
-  terrain: Geometry;
-  structures: Geometry;
-  nature: Geometry;
-  detail: Geometry;
-};
-const color = (r: number, g: number, b: number): [number, number, number] => [r, g, b];
-const blendColor = (a: RGB, b: RGB, amount: number): [number, number, number] => {
-  const t = Math.max(0, Math.min(1, amount));
-  return color(
-    a[0] + (b[0] - a[0]) * t,
-    a[1] + (b[1] - a[1]) * t,
-    a[2] + (b[2] - a[2]) * t,
-  );
-};
-const varyColor = (base: RGB, amount: number): [number, number, number] =>
-  color(
-    Math.max(0, Math.min(255, base[0] + amount)),
-    Math.max(0, Math.min(255, base[1] + amount)),
-    Math.max(0, Math.min(255, base[2] + amount)),
-  );
-const smoothstep = (edge0: number, edge1: number, value: number) => {
-  const t = Math.max(0, Math.min(1, (value - edge0) / Math.max(1e-9, edge1 - edge0)));
-  return t * t * (3 - 2 * t);
-};
-const envelope = (value: number, enter0: number, enter1: number, exit0: number, exit1: number) =>
-  smoothstep(enter0, enter1, value) * (1 - smoothstep(exit0, exit1, value));
+type RGB = readonly [number, number, number];
+const color = (r: number, g: number, b: number): RGB => [r, g, b];
+
 class Builder {
   p: number[] = [];
   n: number[] = [];
@@ -58,593 +24,251 @@ class Builder {
     this.triangleGradient(a, b, c, tint, tint, tint);
   }
   triangleGradient(a: Point, b: Point, c: Point, tintA: RGB, tintB: RGB, tintC: RGB) {
-    const u = b.map((v, i) => v - a[i]),
-      v = c.map((v, i) => v - a[i]);
-    const normal = [
-      u[1] * v[2] - u[2] * v[1],
-      u[2] * v[0] - u[0] * v[2],
-      u[0] * v[1] - u[1] * v[0],
-    ];
-    const length = Math.hypot(...normal) || 1;
-    const start = this.p.length / 3,
-      points = [a, b, c],
-      tints = [tintA, tintB, tintC];
+    const u = b.map((value, index) => value - a[index]), v = c.map((value, index) => value - a[index]),
+      normal = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], length = Math.hypot(...normal) || 1,
+      start = this.p.length / 3, points = [a, b, c], tints = [tintA, tintB, tintC];
     for (let index = 0; index < points.length; index++) {
       this.p.push(...points[index]);
-      this.n.push(...normal.map((n) => n / length));
+      this.n.push(...normal.map((value) => value / length));
       this.c.push(...tints[index], 255);
     }
     this.i.push(start, start + 1, start + 2);
   }
-  quad(a: Point, b: Point, c: Point, d: Point, tint: RGB) {
-    this.triangle(a, b, c, tint);
-    this.triangle(a, c, d, tint);
-  }
-  quadGradient(
-    a: Point,
-    b: Point,
-    c: Point,
-    d: Point,
-    tintA: RGB,
-    tintB: RGB,
-    tintC: RGB,
-    tintD: RGB,
-  ) {
+  quad(a: Point, b: Point, c: Point, d: Point, tint: RGB) { this.triangle(a, b, c, tint); this.triangle(a, c, d, tint); }
+  quadGradient(a: Point, b: Point, c: Point, d: Point, tintA: RGB, tintB: RGB, tintC: RGB, tintD: RGB) {
     this.triangleGradient(a, b, c, tintA, tintB, tintC);
     this.triangleGradient(a, c, d, tintA, tintC, tintD);
   }
-  box(
-    x: number,
-    y: number,
-    z: number,
-    w: number,
-    h: number,
-    d: number,
-    tint: RGB,
-  ) {
-    const a = x - w / 2,
-      b = x + w / 2,
-      c = z - d / 2,
-      e = z + d / 2,
-      t = y + h;
-    this.quad([a, y, c], [a, t, c], [b, t, c], [b, y, c], tint);
-    this.quad([b, y, e], [b, t, e], [a, t, e], [a, y, e], tint);
-    this.quad([a, y, e], [a, t, e], [a, t, c], [a, y, c], tint);
-    this.quad([b, y, c], [b, t, c], [b, t, e], [b, y, e], tint);
-    this.quad([a, t, c], [a, t, e], [b, t, e], [b, t, c], tint);
+  boxYaw(x: number, y: number, z: number, w: number, h: number, d: number, yaw: number, tint: RGB) {
+    const cos = Math.cos(yaw), sin = Math.sin(yaw), top = y + h,
+      at = (lx: number, lz: number, yy: number): Point => [x + lx * cos + lz * sin, yy, z - lx * sin + lz * cos],
+      a = at(-w / 2, -d / 2, y), b = at(w / 2, -d / 2, y), c = at(w / 2, d / 2, y), d0 = at(-w / 2, d / 2, y),
+      A = at(-w / 2, -d / 2, top), B = at(w / 2, -d / 2, top), C = at(w / 2, d / 2, top), D = at(-w / 2, d / 2, top);
+    this.quad(a, A, B, b, tint); this.quad(b, B, C, c, tint); this.quad(c, C, D, d0, tint); this.quad(d0, D, A, a, tint); this.quad(A, D, C, B, tint);
   }
-  cone(
-    x: number,
-    y: number,
-    z: number,
-    radius: number,
-    h: number,
-    tint: RGB,
-    sides = 6,
-  ) {
-    for (let i = 0; i < sides; i++) {
-      const a = (i * Math.PI * 2) / sides,
-        b = ((i + 1) * Math.PI * 2) / sides;
-      this.triangle(
-        [x + Math.cos(b) * radius, y, z + Math.sin(b) * radius],
-        [x, y + h, z],
-        [x + Math.cos(a) * radius, y, z + Math.sin(a) * radius],
-        tint,
-      );
+  cone(x: number, y: number, z: number, radius: number, h: number, tint: RGB, sides = 6) {
+    for (let index = 0; index < sides; index++) {
+      const a = index * Math.PI * 2 / sides, b = (index + 1) * Math.PI * 2 / sides;
+      this.triangle([x + Math.cos(b) * radius, y, z + Math.sin(b) * radius], [x, y + h, z], [x + Math.cos(a) * radius, y, z + Math.sin(a) * radius], tint);
     }
   }
-  roof(
-    x: number,
-    y: number,
-    z: number,
-    w: number,
-    d: number,
-    h: number,
-    tint: RGB,
-  ) {
-    this.quad(
-      [x - w / 2, y, z - d / 2],
-      [x, y + h, z - d / 2],
-      [x, y + h, z + d / 2],
-      [x - w / 2, y, z + d / 2],
-      tint,
-    );
-    this.quad(
-      [x + w / 2, y, z + d / 2],
-      [x, y + h, z + d / 2],
-      [x, y + h, z - d / 2],
-      [x + w / 2, y, z - d / 2],
-      tint,
-    );
-    this.triangle(
-      [x - w / 2, y, z - d / 2],
-      [x + w / 2, y, z - d / 2],
-      [x, y + h, z - d / 2],
-      tint,
-    );
-    this.triangle(
-      [x + w / 2, y, z + d / 2],
-      [x - w / 2, y, z + d / 2],
-      [x, y + h, z + d / 2],
-      tint,
-    );
-  }
-  /** Keep large source coordinates out of Float32 before the worker converts to ENU. */
   relativeTo(x: number, z: number) {
-    for (let i = 0; i < this.p.length; i += 3) {
-      this.p[i] -= x;
-      this.p[i + 2] -= z;
+    for (let index = 0; index < this.p.length; index += 3) {
+      this.p[index] -= x;
+      this.p[index + 2] -= z;
     }
   }
-  finish(): Geometry {
-    return {
-      positions: new Float32Array(this.p),
-      normals: new Float32Array(this.n),
-      colors: new Uint8Array(this.c),
-      indices: new Uint32Array(this.i),
-    };
-  }
+  finish(): Geometry { return { positions: new Float32Array(this.p), normals: new Float32Array(this.n), colors: new Uint8Array(this.c), indices: new Uint32Array(this.i) }; }
+}
+function mergeGeometry(a: Geometry, b: Geometry): Geometry {
+  if (!b.positions.length) return a;
+  const positions = new Float32Array(a.positions.length + b.positions.length), normals = new Float32Array(a.normals.length + b.normals.length),
+    colors = new Uint8Array(a.colors.length + b.colors.length), indices = new Uint32Array(a.indices.length + b.indices.length), offset = a.positions.length / 3;
+  positions.set(a.positions); positions.set(b.positions, a.positions.length);
+  normals.set(a.normals); normals.set(b.normals, a.normals.length);
+  colors.set(a.colors); colors.set(b.colors, a.colors.length);
+  indices.set(a.indices); for (let index = 0; index < b.indices.length; index++) indices[a.indices.length + index] = b.indices[index] + offset;
+  return { ...a, positions, normals, colors, indices };
 }
 
 /**
- * Shared semantic material lookup. Realm and local LODs use the same final
- * surface channels; only bounded seed-derived detail frequency changes.
+ * Current-view coverage adapter from main. Preview meshes intentionally omit
+ * roads/properties/S004 overlays while sampling the same authoritative surface.
  */
-export function terrainTint(
-  x: number,
-  z: number,
-  scale = 32,
-  elevationM?: number,
-  featureFootprintSource = 0,
-  showRoads = true,
-): [number, number, number] {
-  const position = sourceToLonLat(x, z),
-    macro = macroSampleAt(position),
-    surface = finalSurfaceAt(x, z),
-    elevation = elevationM ?? surface.groundHeight,
-    sample = climateSampleAt(position, elevation);
+function buildTerrainOnly(tile: Tile): TileGeometry {
+  const terrain = new Builder(), resolution = Math.min(8, tile.size / 2), step = tile.size / resolution,
+    coveragePoints = new Map<string, Point>(), coverageTints = new Map<string, RGB>();
+  const point = (px: number, pz: number): Point => {
+    const key = `${px}/${pz}`;
+    let value = coveragePoints.get(key);
+    if (!value) {
+      const surface = finalSurfaceAt(px, pz);
+      value = [px, surface.water.kind === "none" ? surface.groundHeight : surface.water.level, pz];
+      coveragePoints.set(key, value);
+    }
+    return value;
+  };
+  const tintAt = (value: Point): RGB => {
+    const key = `${value[0]}/${value[2]}`;
+    let tint = coverageTints.get(key);
+    if (!tint) {
+      tint = coreTerrainTint(value[0], value[2], tile.size, value[1], step, false);
+      coverageTints.set(key, tint);
+    }
+    return tint;
+  };
+  const coverageQuad = (x: number, z: number, size: number, depth = 0): void => {
+    const a = point(x, z), b = point(x, z + size), c = point(x + size, z + size), d = point(x + size, z),
+      colours = [tintAt(a), tintAt(b), tintAt(c), tintAt(d)],
+      range = Math.max(...[0, 1, 2].map((channel) => Math.max(...colours.map((value) => value[channel])) - Math.min(...colours.map((value) => value[channel]))));
+    if (depth < 4 && range > 10) {
+      const half = size / 2;
+      coverageQuad(x, z, half, depth + 1); coverageQuad(x + half, z, half, depth + 1);
+      coverageQuad(x, z + half, half, depth + 1); coverageQuad(x + half, z + half, half, depth + 1);
+    } else terrain.quadGradient(a, b, c, d, colours[0], colours[1], colours[2], colours[3]);
+  };
+  for (let z = 0; z < resolution; z++) for (let x = 0; x < resolution; x++)
+    coverageQuad(tile.minX + x * step, tile.minZ + z * step, step);
 
-  // Hydrology and prepared ground come from the composed surface, never from a
-  // parallel river/road/settlement hit test in presentation code.
-  if (surface.water.kind === "river" && !featureFootprintSource) return color(76, 128, 148);
-
-  if (showRoads && surface.water.kind === "none" && surface.groundMaterial === "Road")
-    return color(112, 92, 62);
-
-  // Identical coordinate inputs give identical albedo at every mesh LOD.
-  // Filtering detail belongs to presentation, not a size-dependent palette.
-  const detailScale = sample.forestFamily ? 42 : 68,
-    variation = (field(x, z, detailScale, 44) - 0.5) * 6,
-    temperature = sample.temperatureC,
-    moisture = sample.moisture,
-    land = !["ocean", "lake", "sea-ice"].includes(sample.terrainClass);
-
-  // Water and sea ice use the same canonical polar boundary, but blend through a
-  // narrow latitude band so a render quad never exposes an abrupt ice-palette step.
-  if (!land) {
-    const latitude01 = Math.abs(position.lat) / (Math.PI / 2),
-      polarDelta = latitude01 - polarBoundaryAt(position),
-      iceWeight = smoothstep(-0.018, 0.018, polarDelta),
-      waterBase = sample.terrainClass === "lake" ? TERRAIN_PALETTE.lake : TERRAIN_PALETTE.ocean,
-      base = blendColor(waterBase, TERRAIN_PALETTE["sea-ice"], iceWeight);
-    return base;
+  const uvs = new Float32Array((terrain.p.length / 3) * 2);
+  for (let index = 0, uv = 0; index < terrain.p.length; index += 3, uv += 2) {
+    uvs[uv] = terrain.p[index] / SOURCE_PRESENTATION_WIDTH + 0.5;
+    uvs[uv + 1] = Math.max(0, Math.min(1, 0.5 + terrain.p[index + 2] * 2 / SOURCE_PRESENTATION_WIDTH));
   }
-
-  // Lowland ecotones are continuous functions of the canonical climate fields.
-  // The terrainClass/materialId remains discrete authority for logic/inspection;
-  // presentation only interpolates the same palette around those boundaries.
-  let base: [number, number, number] = [...TERRAIN_PALETTE.desert];
-  base = blendColor(base, TERRAIN_PALETTE["bare-earth"], smoothstep(0.18, 0.28, moisture));
-  base = blendColor(base, TERRAIN_PALETTE.dryland, smoothstep(0.25, 0.38, moisture));
-  base = blendColor(base, TERRAIN_PALETTE.grassland, smoothstep(0.34, 0.52, moisture));
-  base = blendColor(
-    base,
-    TERRAIN_PALETTE.meadow,
-    smoothstep(0.58, 0.72, moisture) * smoothstep(1, 7, temperature),
-  );
-
-  const lowRelief = 1 - smoothstep(0.2, 0.48, macro.mountainIntensity),
-    coniferWeight =
-      envelope(temperature, -10, -3, 7, 11) * smoothstep(0.35, 0.52, moisture) * lowRelief,
-    temperateWeight =
-      envelope(temperature, 6, 11, 20, 24) * smoothstep(0.48, 0.64, moisture) * lowRelief,
-    dryWoodWeight =
-      smoothstep(15, 20, temperature) *
-      smoothstep(0.3, 0.4, moisture) *
-      (1 - smoothstep(0.54, 0.64, moisture)) *
-      lowRelief;
-  base = blendColor(base, TERRAIN_PALETTE["conifer-forest"], coniferWeight * 0.9);
-  base = blendColor(base, TERRAIN_PALETTE["temperate-forest"], temperateWeight * 0.92);
-  base = blendColor(base, TERRAIN_PALETTE["dry-woodland"], dryWoodWeight * 0.84);
-
-  // Coast material is a genuinely narrow margin. Rugged coasts smoothly resolve
-  // toward rock so sandy color cannot become a broad painted inland band.
-  const coastDistance = Math.max(0, sample.coastDistanceM),
-    coastWeight = (1 - smoothstep(35, 190, coastDistance)) * (1 - smoothstep(0.5, 0.72, sample.ruggedness)),
-    cliffWeight = smoothstep(0.55, 0.79, sample.ruggedness);
-  base = blendColor(base, TERRAIN_PALETTE.beach, coastWeight * 0.92);
-  base = blendColor(base, TERRAIN_PALETTE.cliff, cliffWeight * 0.82);
-
-  const highlandWeight = Math.max(
-      smoothstep(130, 235, elevation),
-      smoothstep(0.13, 0.34, macro.mountainIntensity),
-    ),
-    mountainBase = macro.volcanic ? TERRAIN_PALETTE.volcanic : TERRAIN_PALETTE.highland;
-  base = blendColor(base, mountainBase, highlandWeight * (macro.volcanic ? 0.96 : 0.72));
-
-  const snowWeight =
-      (1 - smoothstep(5, 9, temperature)) * smoothstep(sample.snowLineM - 55, sample.snowLineM + 55, elevation),
-    latitude01 = Math.abs(position.lat) / (Math.PI / 2),
-    polarDelta = latitude01 - polarBoundaryAt(position),
-    polarWeight = smoothstep(-0.025, 0.02, polarDelta),
-    polarBase = temperature < -11 || elevation > Math.max(120, sample.snowLineM * 0.5)
-      ? TERRAIN_PALETTE["polar-ice"]
-      : TERRAIN_PALETTE.tundra;
-  base = blendColor(base, TERRAIN_PALETTE["snowy-mountain"], snowWeight);
-  base = blendColor(base, polarBase, polarWeight);
-
-  const protectedSurface = snowWeight > 0.65 || polarWeight > 0.65,
-    tint = varyColor(base, variation * (protectedSurface ? 0.3 : 1));
-  // A village reservation clears vegetation but does not paint a bare dirt disc.
-  // Its soil retains the natural palette; actual streets are painted separately.
-  let result=tint;
-  if(surface.groundMaterial==='Riverbank'){
-    const natural=naturalSurfaceAt(x,z),bankWeight=Math.max(0,Math.min(1,(.9-natural.vegetationDensityScale)/.56));
-    result=blendColor(result,color(151,143,99),bankWeight*.75);
-    result=blendColor(result,TERRAIN_PALETTE.cliff,smoothstep(.25,.68,natural.slope)*.6);
-  }
-  if(surface.water.kind==='river'){
-    // A sub-texel channel occupies a fraction of a coarse albedo texel; it must
-    // not become a full lake-sized blue dot. This filters presentation only.
-    const coverage=Math.min(1,freshwaterCrossingSpanMAt(x,z)/(CANONICAL_METRES_PER_SOURCE_UNIT*Math.max(1,featureFootprintSource)));
-    result=blendColor(result,color(76,128,148),coverage);
-  }
-  if(macro.mountainIntensity>.15&&surface.water.kind==='none'){
-    // Fixed coordinate hill shading reads the same natural relief at every LOD.
-    const h=12,east=(naturalElevationAt(x+h,z)-naturalElevationAt(x-h,z))/(2*h*CANONICAL_METRES_PER_SOURCE_UNIT*Math.max(.1,Math.cos(position.lat))),
-      south=(naturalElevationAt(x,z+h)-naturalElevationAt(x,z-h))/(2*h*CANONICAL_METRES_PER_SOURCE_UNIT),
-      // Fixed cartographic relief lighting: exaggeration improves top-down
-      // readability, while normalization avoids broad clipped light patches.
-      gx=east*40,gz=south*40,
-      shade=Math.max(.58,Math.min(1.25,(Math.SQRT1_2-(gx+gz)*.5)/(Math.SQRT1_2*Math.sqrt(1+gx*gx+gz*gz))));
-    const reliefWeight=smoothstep(.15,.4,macro.mountainIntensity);
-    result=result.map(v=>Math.max(0,Math.min(255,v*(1+(shade-1)*reliefWeight)))) as [number,number,number];
-  }
-  return result;
+  for (let index = 3; index < terrain.c.length; index += 4) terrain.c[index] = 0;
+  terrain.relativeTo(tile.minX + tile.size / 2, tile.minZ + tile.size / 2);
+  const empty = (): Geometry => ({ positions: new Float32Array(), normals: new Float32Array(), colors: new Uint8Array(), indices: new Uint32Array() });
+  return { terrain: { ...terrain.finish(), uvs }, structures: empty(), nature: empty(), detail: empty() };
 }
 
-/** Worker-generated tile meshes. Skirts cover cracks between terrain LOD levels. */
-export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGeometry {
-  if (!options.terrainOnly) registerContinuityPatch(t.minX + t.size / 2, t.minZ + t.size / 2);
-  const terrain = new Builder(),
-    structures = new Builder(),
-    nature = new Builder(),
-    detail = new Builder();
-  // Prepared-surface refinement is owned by the common worker adapter.
-  const resolution = Math.min(options.terrainOnly ? 8 : 16, t.size / 2),
-    step = t.size / resolution;
-  const coveragePoints = new Map<string,Point>(), coverageTints = new Map<string,RGB>();
-  const point = (px:number,pz:number):Point => {
-    if(!options.terrainOnly)return [px,heightAt(px,pz),pz];
-    const key=`${px}/${pz}`;let p=coveragePoints.get(key);
-    if(!p){const surface=finalSurfaceAt(px,pz);p=[px,surface.water.kind==='none'?surface.groundHeight:surface.water.level,pz];coveragePoints.set(key,p);}return p;
-  };
-  const tintAt = (p:Point):RGB => {
-    if(!options.terrainOnly)return terrainTint(p[0],p[2],t.size,p[1]);
-    const key=`${p[0]}/${p[2]}`;let tint=coverageTints.get(key);
-    if(!tint){tint=terrainTint(p[0],p[2],t.size,p[1],step,false);coverageTints.set(key,tint);}return tint;
-  };
-  // Refine only sharp material boundaries. Four bounded subdivision levels keep
-  // thin shore margins from being stretched across an entire coarse quad.
-  // This is presentation sampling; the detailed builder and authority stay unchanged.
-  const coverageQuad = (x:number,z:number,size:number,depth=0):void => {
-    const a=point(x,z),b=point(x,z+size),c=point(x+size,z+size),d=point(x+size,z);
-    const colours=[tintAt(a),tintAt(b),tintAt(c),tintAt(d)];
-    const range=Math.max(...[0,1,2].map(k=>Math.max(...colours.map(v=>v[k]))-Math.min(...colours.map(v=>v[k]))));
-    if(depth<4 && range>10){
-      const half=size/2;
-      coverageQuad(x,z,half,depth+1);coverageQuad(x+half,z,half,depth+1);
-      coverageQuad(x,z+half,half,depth+1);coverageQuad(x+half,z+half,half,depth+1);
-    }else terrain.quadGradient(a,b,c,d,colours[0],colours[1],colours[2],colours[3]);
-  };
-  for (let z = 0; z < resolution; z++)
-    for (let x = 0; x < resolution; x++) {
-      const ax = t.minX + x * step,
-        az = t.minZ + z * step;
-      if(options.terrainOnly){coverageQuad(ax,az,step);continue;}
-      const a = point(ax, az),
-        b = point(ax, az + step),
-        c = point(ax + step, az + step),
-        d = point(ax + step, az);
-      if (options.terrainOnly || Math.max(a[1], b[1], c[1], d[1]) > 0)
-        terrain.quadGradient(
-          a,
-          b,
-          c,
-          d,
-          tintAt(a),
-          tintAt(b),
-          tintAt(c),
-          tintAt(d),
-        );
-      if (z === 0 && !options.terrainOnly)
-        terrain.quad(
-          a,
-          d,
-          [d[0], d[1] - 12, d[2]],
-          [a[0], a[1] - 12, a[2]],
-          terrainTint(ax, az, t.size, a[1]),
-        );
-      if (z === resolution - 1 && !options.terrainOnly)
-        terrain.quad(
-          c,
-          b,
-          [b[0], b[1] - 12, b[2]],
-          [c[0], c[1] - 12, c[2]],
-          terrainTint(ax, az, t.size, c[1]),
-        );
-      if (x === 0 && !options.terrainOnly)
-        terrain.quad(
-          b,
-          a,
-          [a[0], a[1] - 12, a[2]],
-          [b[0], b[1] - 12, b[2]],
-          terrainTint(ax, az, t.size, b[1]),
-        );
-      if (x === resolution - 1 && !options.terrainOnly)
-        terrain.quad(
-          d,
-          c,
-          [c[0], c[1] - 12, c[2]],
-          [d[0], d[1] - 12, d[2]],
-          terrainTint(ax, az, t.size, d[1]),
-        );
+function offsetLocal(x: number, z: number, yaw: number, lx: number, lz: number) {
+  const cos = Math.cos(yaw), sin = Math.sin(yaw);
+  return { x: x + lx * cos + lz * sin, z: z - lx * sin + lz * cos };
+}
+
+function addServiceGeometry(structures: Builder, detail: Builder, service: string | undefined, x: number, y: number, z: number, width: number, depth: number, yaw: number) {
+  const timber = color(82, 60, 40), plaster = color(201, 183, 143), stone = color(154, 153, 136), roof = color(103, 67, 49), dark = color(75, 72, 64);
+  if (service === "market" || service === "merchant") {
+    structures.boxYaw(x, y + .02, z, width, .16, depth, yaw, color(154, 132, 83));
+    const canopy = offsetLocal(x, z, yaw, 0, depth * .12);
+    structures.boxYaw(canopy.x, y + 3.25, canopy.z, width * .76, .22, depth * .62, yaw, color(169, 113, 62));
+    for (const lx of [-width * .31, width * .31]) for (const lz of [-depth * .2, depth * .32]) {
+      const post = offsetLocal(x, z, yaw, lx, lz);
+      detail.boxYaw(post.x, y, post.z, .28, 3.3, .28, yaw, timber);
     }
-  // The water/ice plane is presentation-only and sits beneath land. Sample the same
-  // canonical polar boundary at each corner so a tile cannot expose a rectangular ice edge.
-  const waterTint = (x: number, z: number): RGB => {
-    // Visible water follows the final hydrology channel even beneath bridge decks.
-    if (finalSurfaceAt(x, z).water.kind !== "none") return terrainTint(x, z);
-    const position = sourceToLonLat(x, z);
-    return blendColor(TERRAIN_PALETTE.ocean, TERRAIN_PALETTE["sea-ice"],
-      smoothstep(-0.018, 0.018, Math.abs(position.lat)/(Math.PI/2)-polarBoundaryAt(position)));
-  };
-  if (!options.terrainOnly) terrain.quadGradient(
-    [t.minX, 0, t.minZ],
-    [t.minX, 0, t.minZ + t.size],
-    [t.minX + t.size, 0, t.minZ + t.size],
-    [t.minX + t.size, 0, t.minZ],
-    waterTint(t.minX, t.minZ),
-    waterTint(t.minX, t.minZ + t.size),
-    waterTint(t.minX + t.size, t.minZ + t.size),
-    waterTint(t.minX + t.size, t.minZ),
-  );
-  if (t.size <= 512 && !options.terrainOnly)
-    for (const f of featuresFor(t)) {
-      const { x, z, variant: v } = f, y = elevationToRenderY(f.y);
-      const stone = color(167, 165, 144),
-        timber = color(75, 58, 43),
-        plaster = color(210, 190, 145);
-      if (f.kind === "house") {
-        const w = 6 + (v % 3),
-          d = 7 + ((v >>> 4) % 3),
-          h = 4.1 + (v % 2) * 1.2;
-        structures.box(x, y - 0.3, z, w, h + 0.3, d, plaster);
-        structures.roof(
-          x,
-          y + h,
-          z,
-          w + 1,
-          d + 1,
-          2.8,
-          color(113 + (v % 25), 65 + (v % 16), 48),
-        );
-        if (t.size <= 64) {
-          for (const offset of [-w / 2 + 0.15, 0, w / 2 - 0.15])
-            detail.box(
-              x + offset,
-              y,
-              z,
-              w === 0 ? 0.1 : 0.22,
-              h,
-              d + 0.06,
-              timber,
-            );
-          detail.box(x, y + h * 0.55, z, w + 0.06, 0.22, d + 0.1, timber);
-          detail.box(x, y, z + d / 2 + 0.07, 1.2, 2.3, 0.15, timber);
-          for (const offset of [-1.9, 1.9])
-            detail.box(
-              x + offset,
-              y + 2.4,
-              z + d / 2 + 0.1,
-              0.9,
-              1,
-              0.15,
-              color(54, 64, 53),
-            );
-          detail.box(x + w / 3, y + h + 1, z - d / 4, 0.8, 1.8, 0.8, stone);
-        }
-      } else if (f.kind === "keep") {
-        structures.box(x, y - 0.3, z, 15, 10.3, 14, stone);
-        structures.roof(x, y + 10, z, 16, 15, 4, color(65, 81, 88));
-        for (const ox of [-9, 9])
-          for (const oz of [-8, 8]) {
-            structures.box(
-              x + ox,
-              y - 0.3,
-              z + oz,
-              4.2,
-              13.3,
-              4.2,
-              color(154, 154, 135),
-            );
-            structures.cone(
-              x + ox,
-              y + 13,
-              z + oz,
-              3.6,
-              5,
-              color(62, 80, 87),
-              4,
-            );
-            if (t.size <= 64)
-              detail.box(x + ox, y + 9, z + oz + 2.13, 0.6, 1.9, 0.08, timber);
-          }
-        if (t.size <= 64) {
-          detail.box(x, y, z + 7.1, 2.8, 4.2, 0.2, timber);
-          for (let i = -2; i <= 2; i++)
-            detail.box(
-              x + i * 2.5,
-              y + 7,
-              z + 7.1,
-              0.6,
-              1.8,
-              0.15,
-              color(53, 63, 56),
-            );
-          detail.box(x, y + 14, z, 0.12, 5, 0.12, timber);
-          detail.box(x + 1.3, y + 17, z, 2.5, 1.4, 0.07, color(171, 78, 49));
-        }
-      } else if (f.kind === "tree") {
-        const climate = climateSampleAt(sourceToLonLat(x, z), y),
-          family = climate.forestFamily;
-        if (!family) continue;
-        const h = 7 + (v % 5),
-          r = 2.4 + (v % 9) / 10;
-        if (family === "conifer-boreal") {
-          nature.box(x, y - 0.1, z, 0.62, h * 0.54, 0.62, timber);
-          nature.cone(x, y + 1.2, z, r, h * 0.78, color(39 + (v % 10), 76 + (v % 13), 58), 6);
-          nature.cone(x, y + h * 0.4, z, r * 0.76, h * 0.58, color(49 + (v % 9), 88 + (v % 12), 62), 6);
-          if (t.size <= 32)
-            detail.cone(x, y + h * 0.68, z, r * 0.42, h * 0.34, color(65, 103, 69), 6);
-        } else if (family === "temperate-deciduous-mixed") {
-          nature.box(x, y - 0.1, z, 0.78, h * 0.58, 0.78, timber);
-          nature.cone(x, y + h * 0.34, z, r * 1.2, h * 0.46, color(65 + (v % 15), 111 + (v % 17), 62), 8);
-          nature.cone(x - r * 0.28, y + h * 0.48, z, r * 0.78, h * 0.32, color(78 + (v % 13), 126 + (v % 15), 68), 7);
-          nature.cone(x + r * 0.3, y + h * 0.47, z + r * 0.08, r * 0.72, h * 0.3, color(71 + (v % 12), 119 + (v % 16), 64), 7);
-        } else {
-          // Warm/dry woodland is intentionally sparser and lower, with an open umbrella crown.
-          if (v % 3 !== 0) continue;
-          const shortH = h * 0.72;
-          nature.box(x, y - 0.1, z, 0.72, shortH * 0.62, 0.72, color(88, 67, 45));
-          nature.cone(x, y + shortH * 0.46, z, r * 1.15, shortH * 0.34, color(103 + (v % 12), 119 + (v % 12), 68), 7);
-          nature.cone(x + r * 0.36, y + shortH * 0.49, z - r * 0.14, r * 0.62, shortH * 0.25, color(118, 128, 72), 6);
-        }
-      } else if (f.kind === "rock") {
-        nature.box(
-          x,
-          y - 0.2,
-          z,
-          1.5 + (v % 3),
-          1 + (v % 2),
-          1.9,
-          color(133, 143, 123),
-        );
-      } else if (f.kind === "field") {
-        // Agricultural plots are settlement geometry, not vegetation scatter.
-        // The worker replaces the nature group with bounded instanced vegetation.
-        structures.box(x, y + 0.03, z, 18, 0.15, 18, color(158, 132, 66));
-        if (t.size <= 64)
-          for (let row = 0; row < 8; row++)
-            detail.box(
-              x - 7 + row * 2,
-              y + 0.2,
-              z,
-              0.65,
-              0.45,
-              16,
-              color(184, 158, 83),
-            );
-        if (t.size <= 32)
-          for (const oz of [-9, 9]) {
-            detail.box(x, y + 1, z + oz, 18, 0.18, 0.18, timber);
-            for (let i = -9; i <= 9; i += 3)
-              detail.box(x + i, y, z + oz, 0.16, 1.3, 0.16, timber);
-          }
-      } else if (f.kind === "well" && t.size <= 64) {
-        structures.box(x, y, z, 2.3, 1, 2.3, stone);
-        detail.box(x, y + 1.02, z, 1.4, 0.04, 1.4, color(39, 59, 56));
-        for (const ox of [-1.2, 1.2])
-          detail.box(x + ox, y, z, 0.18, 3, 0.18, timber);
-        detail.roof(x, y + 3, z, 3, 3, 1, color(116, 69, 47));
+    return;
+  }
+  if (service === "guard-office") {
+    structures.boxYaw(x, y - .08, z, width, 4.9, depth, yaw, stone);
+    structures.boxYaw(x, y + 4.7, z, width * .82, .65, depth * .82, yaw, dark);
+    const tower = offsetLocal(x, z, yaw, width * .34, -depth * .28);
+    structures.boxYaw(tower.x, y - .08, tower.z, width * .34, 6.8, depth * .36, yaw, color(143, 143, 129));
+    detail.cone(tower.x, y + 6.65, tower.z, Math.max(1.7, width * .22), 2.2, roof, 4);
+    return;
+  }
+  if (service === "farmstead") {
+    structures.boxYaw(x, y - .05, z, width, 4.8, depth, yaw, color(137, 105, 70));
+    structures.boxYaw(x, y + 4.55, z, width * 1.04, .72, depth * 1.04, yaw, roof);
+    const loft = offsetLocal(x, z, yaw, 0, depth * .505);
+    detail.boxYaw(loft.x, y + 2.05, loft.z, width * .32, 2.5, .18, yaw, dark);
+    return;
+  }
+  if (service === "blacksmith") {
+    structures.boxYaw(x, y - .05, z, width, 4.3, depth, yaw, color(174, 158, 124));
+    structures.boxYaw(x, y + 4.05, z, width * 1.03, .64, depth * 1.03, yaw, dark);
+    const chimney = offsetLocal(x, z, yaw, width * .3, -depth * .22);
+    structures.boxYaw(chimney.x, y + 3.2, chimney.z, 1.35, 4.1, 1.35, yaw, color(114, 111, 101));
+    const forge = offsetLocal(x, z, yaw, -width * .28, depth * .42);
+    detail.boxYaw(forge.x, y + .05, forge.z, width * .28, 1.15, depth * .18, yaw, color(96, 79, 59));
+    return;
+  }
+  if (service === "butcher") {
+    structures.boxYaw(x, y - .05, z, width, 4.15, depth, yaw, plaster);
+    structures.boxYaw(x, y + 3.95, z, width * 1.04, .55, depth * 1.04, yaw, roof);
+    const awning = offsetLocal(x, z, yaw, 0, depth * .56);
+    detail.boxYaw(awning.x, y + 2.45, awning.z, width * .72, .16, 2.2, yaw, color(153, 83, 59));
+    return;
+  }
+  if (service === "inn") {
+    structures.boxYaw(x, y - .06, z, width, 5.7, depth, yaw, plaster);
+    structures.boxYaw(x, y + 5.35, z, width * 1.05, .75, depth * 1.05, yaw, roof);
+    const chimney = offsetLocal(x, z, yaw, width * .3, -depth * .28), sign = offsetLocal(x, z, yaw, -width * .48, depth * .24);
+    structures.boxYaw(chimney.x, y + 4.4, chimney.z, 1.1, 3.1, 1.1, yaw, stone);
+    detail.boxYaw(sign.x, y + 2.9, sign.z, .22, 2.2, .22, yaw, timber);
+    detail.boxYaw(sign.x, y + 4.35, sign.z, 1.8, 1.1, .18, yaw, color(129, 86, 52));
+    return;
+  }
+  if (service === "headman") {
+    structures.boxYaw(x, y - .06, z, width, 5.8, depth, yaw, stone);
+    structures.boxYaw(x, y + 5.45, z, width * 1.06, .72, depth * 1.06, yaw, roof);
+    const wing = offsetLocal(x, z, yaw, width * .4, -depth * .08);
+    structures.boxYaw(wing.x, y - .04, wing.z, width * .42, 4.6, depth * .68, yaw, plaster);
+    return;
+  }
+  structures.boxYaw(x, y - .05, z, width, 4.6, depth, yaw, plaster);
+  structures.boxYaw(x, y + 4.3, z, width * 1.04, .62, depth * 1.04, yaw, roof);
+}
+
+/** S004 detail overlay: semantic settlement identity is owned by world.ts; geometry only visualizes it. */
+export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): TileGeometry {
+  if (options.terrainOnly) return buildTerrainOnly(tile);
+  const result = coreBuildTile(tile), structures = new Builder(), nature = new Builder(), detail = new Builder(),
+    originX = tile.minX + tile.size / 2, originZ = tile.minZ + tile.size / 2;
+  if (tile.size <= 512) for (const feature of featuresFor(tile) as any[]) {
+    const x = feature.x - originX, z = feature.z - originZ, y = elevationToRenderY(feature.y), yaw = feature.yawRad || 0,
+      width = feature.footprintWidth || 8, depth = feature.footprintDepth || 8, variant = feature.variant || 0;
+    if (feature.kind === "residence") {
+      const wall = [color(185, 174, 145), color(167, 160, 139), color(196, 181, 149)][variant % 3], roof = [color(104, 65, 46), color(88, 67, 51), color(117, 73, 49)][(variant >>> 2) % 3],
+        urban = Boolean(feature.urban), bodyHeight = urban ? 4.1 + (variant % 4) * .34 : 2.8 + (variant % 4) * .28,
+        roofHeight = urban ? .56 : .42, roofOverhang = urban ? .42 : .28;
+      structures.boxYaw(x, y - .05, z, width, bodyHeight, depth, yaw, wall);
+      structures.boxYaw(x, y + bodyHeight - .06, z, width + roofOverhang, roofHeight, depth + roofOverhang, yaw, roof);
+      if (tile.size <= 32) {
+        const front = offsetLocal(x, z, yaw, 0, depth * .5 + .03), chimney = offsetLocal(x, z, yaw, width * .26, -depth * .18);
+        detail.boxYaw(front.x, y + .03, front.z, Math.max(.45, width * .2), bodyHeight * .62, .09, yaw, color(78, 56, 40));
+        detail.boxYaw(chimney.x, y + bodyHeight, chimney.z, .34, urban ? 1.05 : .78, .34, yaw, color(108, 102, 91));
       }
-    }
-  // Bridge deck geometry is driven by the final deck channel. Ground/water stay
-  // untouched, so a crossing cannot be accidentally rendered as a filled river.
-  if (t.size <= 512 && !options.terrainOnly)
-    for (const road of roadFragmentsInBounds(roads,t.minX,t.minZ,t.size)) {
-      const vx = road.toX - road.fromX,
-        vz = road.toZ - road.fromZ,
-        length = Math.hypot(vx, vz);
-      if (!length) continue;
-      const segmentCount = Math.max(1, Math.ceil(length / 2)),
-        nx = (-vz / length) * 5,
-        nz = (vx / length) * 5;
-      for (const shiftX of [-SOURCE_PRESENTATION_WIDTH, 0, SOURCE_PRESENTATION_WIDTH]) {
-        const minX = road.minX + shiftX,
-          maxX = road.maxX + shiftX;
-        if (
-          maxX < t.minX - 6 ||
-          minX > t.minX + t.size + 6 ||
-          road.maxZ < t.minZ - 6 ||
-          road.minZ > t.minZ + t.size + 6
-        )
-          continue;
-        const [begin,end]=clippedStationRange(road.fromX+shiftX,road.fromZ,road.toX+shiftX,road.toZ,t.minX,t.minZ,t.size,segmentCount);
-        for (let index = begin; index < end; index++) {
-          const t0 = index / segmentCount,
-            t1 = (index + 1) / segmentCount,
-            x0 = road.fromX + shiftX + vx * t0,
-            z0 = road.fromZ + vz * t0,
-            x1 = road.fromX + shiftX + vx * t1,
-            z1 = road.fromZ + vz * t1,
-            mx = (x0 + x1) / 2,
-            mz = (z0 + z1) / 2;
-          if (
-            mx < t.minX ||
-            mx >= t.minX + t.size ||
-            mz < t.minZ ||
-            mz >= t.minZ + t.size
-          )
-            continue;
-          const surface = finalSurfaceAt(mx, mz);
-          if (surface.deckHeight === null) continue;
-          const y = elevationToRenderY(surface.deckHeight + 0.1),
-            deck = color(115, 88, 56);
-          structures.quad(
-            [x0 + nx, y, z0 + nz],
-            [x1 + nx, y, z1 + nz],
-            [x1 - nx, y, z1 - nz],
-            [x0 - nx, y, z0 - nz],
-            deck,
-          );
+    } else if (feature.kind === "street") {
+      structures.boxYaw(x, y + .018, z, Math.max(2.8, width), .075, feature.length || depth || 4, yaw, color(119, 99, 68));
+    } else if (feature.kind === "service") {
+      addServiceGeometry(structures, detail, feature.service, x, y, z, width, depth, yaw);
+    } else if (feature.kind === "gate") {
+      const postSpan = Math.max(5.8, width * .72), left = offsetLocal(x, z, yaw, -postSpan * .5, 0), right = offsetLocal(x, z, yaw, postSpan * .5, 0), timber = color(85, 61, 40), stone = color(145, 144, 128);
+      structures.boxYaw(left.x, y - .06, left.z, 1.8, 5.4, 1.8, yaw, stone);
+      structures.boxYaw(right.x, y - .06, right.z, 1.8, 5.4, 1.8, yaw, stone);
+      structures.boxYaw(x, y + 4.45, z, postSpan + 1.8, .7, 1.65, yaw, timber);
+      if (tile.size <= 64) {
+        detail.cone(left.x, y + 5.25, left.z, 1.55, 2.1, color(99, 66, 48), 4);
+        detail.cone(right.x, y + 5.25, right.z, 1.55, 2.1, color(99, 66, 48), 4);
+      }
+    } else if (feature.kind === "guard-post") {
+      structures.boxYaw(x, y - .05, z, width, 3.8, depth, yaw, color(143, 142, 126));
+      structures.boxYaw(x, y + 3.55, z, width * 1.05, .55, depth * 1.05, yaw, color(91, 65, 47));
+      if (tile.size <= 64) detail.cone(x, y + 3.95, z, Math.max(width, depth) * .72, 2.15, color(104, 70, 50), 4);
+    } else if (feature.kind === "border" && variant >= 2) {
+      const length = feature.length || depth || 4,
+        at = (lx: number, lz: number) => offsetLocal(x, z, yaw, lx, lz);
+      if (variant === 2) {
+        structures.boxYaw(x, y - .02, z, Math.max(1.35, width), 1.65, length, yaw, color(76, 104, 59));
+        if (tile.size <= 64) for (const lz of [-length * .34, 0, length * .34]) {
+          const shrub = at(0, lz);
+          detail.cone(shrub.x, y + .7, shrub.z, 1.15, 1.45, color(83, 116, 64), 7);
+        }
+      } else if (variant === 3) {
+        structures.boxYaw(x, y - .05, z, Math.max(.9, width), 2.75, length, yaw, color(91, 66, 43));
+        if (tile.size <= 64) for (const lz of [-length * .45, 0, length * .45]) {
+          const post = at(0, lz);
+          detail.boxYaw(post.x, y - .08, post.z, 1.25, 3.35, 1.25, yaw, color(73, 52, 35));
+        }
+      } else {
+        structures.boxYaw(x, y - .06, z, Math.max(1.2, width), 2.05, length, yaw, color(151, 150, 132));
+        structures.boxYaw(x, y + 1.82, z, Math.max(.82, width * .72), .3, length, yaw, color(112, 105, 89));
+        if (tile.size <= 64) for (const lz of [-length * .42, length * .42]) {
+          const brace = at(0, lz);
+          detail.boxYaw(brace.x, y + .05, brace.z, Math.max(1.35, width), 2.25, .52, yaw, color(82, 61, 43));
         }
       }
+    } else if (feature.kind === "garden") {
+      structures.boxYaw(x, y + .02, z, width, .08, depth, yaw, color(117, 132, 71));
+      if (tile.size <= 64) {
+        for (const lx of [-width * .28, 0, width * .28]) { const row = offsetLocal(x, z, yaw, lx, 0); detail.boxYaw(row.x, y + .12, row.z, .42, .3, depth * .72, yaw, color(151, 126, 62)); }
+        for (const lz of [-depth / 2, depth / 2]) { const fence = offsetLocal(x, z, yaw, 0, lz); detail.boxYaw(fence.x, y + .1, fence.z, width, .18, .16, yaw, color(92, 68, 45)); }
+      }
+    } else if (feature.kind === "path") {
+      structures.boxYaw(x, y + .015, z, width || 1.25, .06, feature.length || depth || 3, yaw, color(137, 116, 79));
+    } else if (feature.kind === "pavement") {
+      structures.boxYaw(x, y + .018, z, width || 1.5, .075, feature.length || depth || 3, yaw, color(154, 141, 111));
+    } else if (feature.kind === "roadside-tree") {
+      const h = 6.2 + (variant % 5) * .65, radius = 2 + ((variant >>> 3) % 6) * .18;
+      nature.boxYaw(x, y - .1, z, .62, h * .58, .62, 0, color(82, 62, 42));
+      nature.cone(x, y + h * .3, z, radius, h * .52, color(72 + (variant % 14), 111 + (variant % 17), 63), 7);
+      if (tile.size <= 32) nature.cone(x + radius * .28, y + h * .46, z - radius * .08, radius * .65, h * .3, color(84, 126, 69), 6);
     }
-  // Preserve full precision until after the large source anchor is removed.
-  const originX = t.minX + t.size / 2,
-    originZ = t.minZ + t.size / 2;
-  // Source-coordinate UVs survive ENU conversion, rebasing and patch yaw.
-  // Keep seam endpoints 0/1 rather than wrapping within a triangle.
-  const uvs = new Float32Array((terrain.p.length / 3) * 2);
-  for (let i = 0, v = 0; i < terrain.p.length; i += 3, v += 2) {
-    uvs[v] = terrain.p[i] / SOURCE_PRESENTATION_WIDTH + 0.5;
-    uvs[v + 1] = Math.max(0, Math.min(1, 0.5 + terrain.p[i + 2] * 2 / SOURCE_PRESENTATION_WIDTH));
   }
-  // Terrain alpha is a presentation-only road coverage mask. RGB retains
-  // natural soil so zoom can hide roads without new meshes or authority changes.
-  for(let v=0;v<terrain.p.length/3;v++){
-    const c=v*4,x=terrain.p[v*3],z=terrain.p[v*3+2];
-    const road=!options.terrainOnly && terrain.c[c]===112&&terrain.c[c+1]===92&&terrain.c[c+2]===62&&finalSurfaceAt(x,z).groundMaterial==="Road";
-    if(road){const tint=terrainTint(x,z,32,undefined,0,false);terrain.c[c]=tint[0];terrain.c[c+1]=tint[1];terrain.c[c+2]=tint[2];}
-    terrain.c[c+3]=road?255:0;
-  }
-  for (const builder of [terrain, structures, nature, detail])
-    builder.relativeTo(originX, originZ);
   return {
-    terrain: { ...terrain.finish(), uvs },
-    structures: structures.finish(),
-    nature: nature.finish(),
-    detail: detail.finish(),
+    terrain: result.terrain,
+    structures: mergeGeometry(result.structures, structures.finish()),
+    nature: mergeGeometry(result.nature, nature.finish()),
+    detail: mergeGeometry(result.detail, detail.finish()),
   };
 }

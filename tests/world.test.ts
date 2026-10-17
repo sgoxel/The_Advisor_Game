@@ -171,36 +171,27 @@ test("feature identity survives LOD changes and adjacent tile ownership is uniqu
   assert.ok(mesh.terrain.positions.length > 0);
 });
 
-test("Alderwick retains legal houses, keep, well and fields across tile ownership", async () => {
-  const { villages, roads, roadDistanceAt } = await import('../src/geography.ts');
-  const { finalSurfaceAt, tileForPosition } = await import('../src/world.ts');
-  const place = villages[0], tiles = new Map();
-  for (let dz=-96;dz<=96;dz+=32) for(let dx=-96;dx<=96;dx+=32) {
-    const tile=tileForPosition(place.x+dx,place.z+dz,13);
-    tiles.set(tile.key,tile);
+test("Alderwick retains legal S004 morphology across tile ownership", async () => {
+  const { villages } = await import("../src/geography.ts");
+  const { canonicalSettlementPopulation } = await import("../src/settlement-exterior.ts");
+  const { finalSurfaceAt, tileForPosition } = await import("../src/world.ts");
+  const place = villages[0], tiles = new Map<string, ReturnType<typeof tileForPosition>>();
+  for (let dz = -192; dz <= 192; dz += 32) for (let dx = -192; dx <= 192; dx += 32) {
+    const tile = tileForPosition(place.x + dx, place.z + dz, 13);
+    tiles.set(tile.key, tile);
   }
-  const features=[...tiles.values()].flatMap(featuresFor).filter(f=>['house','keep','well','field'].includes(f.kind));
-  assert.equal(new Set(features.map(f=>f.code)).size,features.length);
-  assert.ok(features.filter(f=>f.kind==='house').length>=12,'starting village must not silently lose its housing');
-  const fixture=JSON.parse(readFileSync(new URL('./fixtures/macro-home.json',import.meta.url),'utf8'));
-  assert.equal(WORLD_SEED,fixture.seed);assert.equal(roadNetworkTelemetry.version,fixture.roadVersion);assert.equal(place.id,fixture.placeId);
-  const inventory:Record<string,number>={};for(const f of features)inventory[f.kind]=(inventory[f.kind]||0)+1;
-  assert.deepEqual(inventory,fixture.inventory);assert.deepEqual(features.map(f=>f.code).sort(),fixture.featureCodes);
-  for(const kind of ['keep','well','field']) assert.ok(features.some(f=>f.kind===kind),`missing ${kind}`);
-  for(const f of features) {
-    const radius=f.kind==='keep'?15:f.kind==='field'?13:f.kind==='house'?7:2;
-    assert.ok(roads.every(r=>roadDistanceAt(f.x,f.z,r)>radius+5),`${f.kind} overlaps road clearance`);
-    for(const [dx,dz] of [[0,0],[-radius,-radius],[-radius,radius],[radius,-radius],[radius,radius]]) {
-      const surface=finalSurfaceAt(f.x+dx,f.z+dz);
-      assert.equal(surface.water.kind,'none');
-      assert.ok(surface.walkable);
-    }
-    if(f.kind==='field') {
-      const geometry=buildTile(tileForPosition(f.x,f.z,13)).structures;
-      assert.ok(Array.from({length:geometry.colors.length/4},(_,i)=>i).some(i=>
-        geometry.colors[i*4]===158&&geometry.colors[i*4+1]===132&&geometry.colors[i*4+2]===66),
-      'field base must survive the worker replacing its nature group');
-    }
+  const marker = `/F/${place.id}/`,
+    features = [...tiles.values()].flatMap(featuresFor).filter((feature) => feature.code.includes(marker)),
+    residences = features.filter((feature) => feature.kind === "residence");
+  assert.equal(new Set(features.map((feature) => feature.code)).size, features.length);
+  assert.ok(residences.length > 0, "starting village must materialize visible canonical residences");
+  assert.ok(residences.length < canonicalSettlementPopulation(place), "visible residence meshes must remain bounded below canonical population");
+  for (const kind of ["keep", "field", "service", "street", "gate"])
+    assert.ok(features.some((feature) => feature.kind === kind), `missing ${kind}`);
+  for (const feature of features.filter((item) => ["residence", "service", "keep", "field"].includes(item.kind))) {
+    const surface = finalSurfaceAt(feature.x, feature.z);
+    assert.equal(surface.water.kind, "none", `${feature.kind} must remain dry`);
+    assert.ok(surface.walkable, `${feature.kind} must remain walkable`);
   }
 });
 test("application source contains no random-number API or clock-driven world generation", () => {

@@ -3,7 +3,7 @@ import type { Geometry, TileGeometry } from "./geometry.ts";
 import { terrainTint } from "./geometry.ts";
 import { roads, type Road } from "./geography.ts";
 import { roadFragmentsInBounds, clippedStationRange } from "./continuity-corridor.ts";
-import { SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import { finalSurfaceAt, type Tile } from "./world.ts";
 
 /**
@@ -16,7 +16,7 @@ import { finalSurfaceAt, type Tile } from "./world.ts";
 const LEGACY_BRIDGE_RGB = [115, 88, 56] as const;
 export const REFINED_BRIDGE_RGB = [108, 79, 45] as const;
 export const REFINED_ROAD_RGB = [143, 122, 84] as const;
-export const REFINED_BRIDGE_HALF_WIDTH_SOURCE = 2.1;
+export const REFINED_BRIDGE_HALF_WIDTH_SOURCE = 7 / CANONICAL_METRES_PER_SOURCE_UNIT;
 const GROUND_EPSILON = 0.025;
 const BRIDGE_EPSILON = 0.1;
 
