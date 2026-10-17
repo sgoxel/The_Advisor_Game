@@ -7,7 +7,7 @@ for (const viewport of [
   test(`critical sites are discoverable and inspectable on ${viewport.name}`, async ({ page }, testInfo) => {
     test.setTimeout(300000);
     const errors = [],
-      expectWebgl = /[\\/]browser[\\/]/.test(testInfo.file);
+      expectWebgl = !/webgpu/i.test(testInfo.config.configFile ?? "");
     page.on("pageerror", (error) => errors.push(error.message));
     if (expectWebgl)
       await page.addInitScript(() =>
@@ -51,6 +51,7 @@ for (const viewport of [
     const marker = page.locator(`.critical-site-marker[data-code="${target.code}"]`);
     await expect(marker).toBeVisible();
     await expect(marker).toContainText(target.name);
+    await page.waitForTimeout(180);
     const discovery = await page.evaluate(
       (code) => {
         const state = window.advisorSites.state,
@@ -87,8 +88,8 @@ for (const viewport of [
     expect(discovery.scale).toBe("1/1000");
     expect(discovery.presentation).toBe("flat");
     expect(discovery.visible).toBe(true);
-    expect(discovery.visibleCount).toBeLessThanOrEqual(viewport.name === "phone" ? 8 : 14);
-    expect(discovery.declutterSystem).toBe("navigation.placeLabels");
+    expect(discovery.visibleCount).toBeLessThanOrEqual(viewport.name === "phone" ? 6 : 12);
+    expect(discovery.declutterSystem).toBe("critical-sites.nearest-free");
     expect(discovery.detailCacheLimit).toBe(48);
     expect(discovery.overlapsPoliticalLabel).toBe(false);
     expect(discovery.accessLines).toBeGreaterThan(0);
@@ -153,7 +154,7 @@ for (const viewport of [
       ...window.advisorSites.state,
       totalSites: window.advisorSites.sites.length,
     }));
-    expect(state.visibleCount).toBeLessThanOrEqual(viewport.name === "phone" ? 8 : 14);
+    expect(state.visibleCount).toBeLessThanOrEqual(viewport.name === "phone" ? 6 : 12);
     expect(state.cachedDetails).toBeLessThanOrEqual(state.detailCacheLimit);
     expect(state.detailCacheLimit).toBeLessThan(state.totalSites);
     const box = await panel.boundingBox();
@@ -162,6 +163,13 @@ for (const viewport of [
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
     expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
+    if (viewport.name === "phone") {
+      const layout = await panel.evaluate((node) => ({
+        clientHeight: node.clientHeight,
+        scrollHeight: node.scrollHeight,
+      }));
+      expect(layout.scrollHeight).toBeLessThanOrEqual(layout.clientHeight + 1);
+    }
     expect(errors).toEqual([]);
   });
 }

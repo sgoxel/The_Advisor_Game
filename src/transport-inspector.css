@@ -4,7 +4,9 @@
   width: 100vw;
   height: 100vh;
   pointer-events: none;
-  z-index: 7;
+  /* Map layer: above the canvas and other z-index:1 map SVGs (it is appended last), but below
+     map labels and all HUD chrome (masthead, panels, bottom bar, controls, chips: z-index >= 2). */
+  z-index: 1;
   opacity: 0;
   transition: opacity 120ms ease;
 }

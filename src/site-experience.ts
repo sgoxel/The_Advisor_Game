@@ -5,14 +5,13 @@ import {
   siteAcceptanceSummary,
   type CriticalSite,
 } from "./sites.ts";
-import { placeLabels, type Rect } from "./navigation.ts";
+import { overlaps, type Rect } from "./navigation.ts";
 import { wrapSourceX } from "./planet.ts";
 
 declare global {
   interface Window {
     advisorWorld?: any;
     advisorSites?: any;
-    politicalAtlas?: any;
   }
 }
 
@@ -31,13 +30,27 @@ type PlacementSite = {
   placementId: string;
 };
 
+type SitePlacement = {
+  entry: PlacementSite;
+  rect: Rect;
+  shift: number;
+};
+
 const DETAIL_CACHE_LIMIT = 48;
+const MOBILE_SITE_LIMIT = 6;
+const DESKTOP_SITE_LIMIT = 12;
+const SVG_NS = "http://www.w3.org/2000/svg";
 const markerNodes = new Map<string, HTMLButtonElement>();
 const detailCache = new Map<string, SiteDetail>();
 let selectedCode: string | null = null;
 let lastFingerprint = "";
+let lastObstacleFingerprint = "";
 let lastVisibleCodes: string[] = [];
 let lastPoliticalObstacleCount = 0;
+let lastObstacles: Rect[] = [];
+let obstacleProbeFrame = 0;
+let framePending = false;
+let politicalObserver: MutationObserver | null = null;
 
 function detailFor(site: CriticalSite): SiteDetail {
   let detail = detailCache.get(site.code);
@@ -64,48 +77,61 @@ function detailFor(site: CriticalSite): SiteDetail {
 
 function ensureUi() {
   if (document.getElementById("critical-site-layer")) return;
+
+  const access = document.createElementNS(SVG_NS, "svg");
+  access.id = "critical-site-access";
+  access.setAttribute("aria-hidden", "true");
+  document.body.append(access);
+
   const layer = document.createElement("div");
   layer.id = "critical-site-layer";
   layer.setAttribute("aria-label", "Discoverable ruins and critical places");
   document.body.append(layer);
-
-  const access = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  access.id = "critical-site-access";
-  access.setAttribute("aria-hidden", "true");
-  document.body.append(access);
 
   const panel = document.createElement("aside");
   panel.id = "critical-site-panel";
   panel.className = "panel critical-site-panel";
   panel.hidden = true;
   panel.innerHTML = `
-    <div class="eyebrow">IMPORTANT PLACE <button id="close-critical-site" aria-label="Close important-place inspector">×</button></div>
+    <div class="eyebrow"><span id="critical-site-eyebrow">IMPORTANT PLACE</span><button id="close-critical-site" aria-label="Close important-place inspector">×</button></div>
     <h2 id="critical-site-name"></h2>
     <p id="critical-site-kind" class="site-kind"></p>
     <div class="divider"></div>
     <div class="seed-label">CANONICAL SITE</div>
     <code id="critical-site-code"></code>
     <dl>
-      <dt>Country</dt><dd id="critical-site-country"></dd>
-      <dt>Archetype</dt><dd id="critical-site-archetype"></dd>
       <dt>Road access</dt><dd id="critical-site-road"></dd>
       <dt>Access walk</dt><dd id="critical-site-distance"></dd>
+      <dt>Country</dt><dd id="critical-site-country"></dd>
+      <dt>Archetype</dt><dd id="critical-site-archetype"></dd>
       <dt>Prepared ground</dt><dd id="critical-site-ground"></dd>
       <dt>Structures</dt><dd id="critical-site-residency"></dd>
     </dl>
     <div class="region-actions"><button id="focus-critical-site">Focus site</button></div>
     <p class="hint">Inspection reveals existing SEED-defined data; it never creates or rerolls this place.</p>`;
   document.body.append(panel);
+
   panel.querySelector<HTMLButtonElement>("#close-critical-site")!.onclick = () => selectSite(null);
   panel.querySelector<HTMLButtonElement>("#focus-critical-site")!.onclick = () => {
     const site = criticalSites.find((item) => item.code === selectedCode);
     if (!site || !window.advisorWorld) return;
-    window.advisorWorld.navigation.setFocus(
-      site.canonicalPosition.lon,
-      site.canonicalPosition.lat,
-    );
+    window.advisorWorld.navigation.setFocus(site.canonicalPosition.lon, site.canonicalPosition.lat);
     window.advisorWorld.setHalfHeight(420);
   };
+
+  const politicalRoot = document.getElementById("political-labels");
+  if (politicalRoot && !politicalObserver) {
+    politicalObserver = new MutationObserver(() => {
+      lastObstacleFingerprint = "";
+      render();
+    });
+    politicalObserver.observe(politicalRoot, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["style", "class"],
+    });
+  }
 }
 
 function selectSite(code: string | null) {
@@ -120,8 +146,10 @@ function selectSite(code: string | null) {
   }
   const site = criticalSites.find((item) => item.code === code);
   if (!site) return;
-  const detail = detailFor(site);
+  detailFor(site);
   panel.hidden = false;
+  (document.getElementById("critical-site-eyebrow") as HTMLElement).textContent =
+    site.kind === "ruin" ? "RUIN" : "IMPORTANT PLACE";
   (document.getElementById("critical-site-name") as HTMLElement).textContent = site.name;
   (document.getElementById("critical-site-kind") as HTMLElement).textContent =
     site.kind === "ruin" ? "Historic ruin" : "Important place";
@@ -129,14 +157,15 @@ function selectSite(code: string | null) {
   (document.getElementById("critical-site-country") as HTMLElement).textContent = site.countryName;
   (document.getElementById("critical-site-archetype") as HTMLElement).textContent =
     site.archetype.replaceAll("-", " ");
-  (document.getElementById("critical-site-road") as HTMLElement).textContent =
-    site.access.roadCode;
+  (document.getElementById("critical-site-road") as HTMLElement).textContent = site.access.roadCode;
   (document.getElementById("critical-site-distance") as HTMLElement).textContent =
     `${Math.round(site.access.lengthM)} m to legal road junction`;
   (document.getElementById("critical-site-ground") as HTMLElement).textContent =
     `${Math.round(site.radiusM)} m usable core + ${Math.round(site.falloffM)} m blend`;
   (document.getElementById("critical-site-residency") as HTMLElement).textContent =
-    site.kind === "ruin" ? "Broken stone walls and a ruined tower" : "Standing stones around a central altar";
+    site.kind === "ruin"
+      ? "Broken stone walls and a ruined tower"
+      : "Standing stones around a central altar";
   for (const [id, marker] of markerNodes)
     marker.setAttribute("aria-pressed", id === code ? "true" : "false");
 }
@@ -164,31 +193,38 @@ function markerFor(site: CriticalSite) {
   marker.dataset.code = site.code;
   marker.setAttribute("aria-label", `${site.name}. Inspect important place.`);
   marker.setAttribute("aria-pressed", "false");
-  marker.innerHTML = `
-    <span class="site-glyph" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></span>
-    <span class="site-label">${site.name}</span>`;
+  const glyph = document.createElement("span"),
+    label = document.createElement("span");
+  glyph.className = "site-glyph";
+  glyph.setAttribute("aria-hidden", "true");
+  glyph.innerHTML = "<i></i><i></i><i></i><i></i><b></b>";
+  label.className = "site-label";
+  label.textContent = site.name;
+  marker.append(glyph, label);
   marker.onclick = () => selectSite(site.code);
   document.getElementById("critical-site-layer")!.append(marker);
   markerNodes.set(site.code, marker);
   return marker;
 }
 
+const obstacleSelectors = [
+  "#masthead",
+  "#region-panel",
+  "#cell-panel",
+  "#travel-panel",
+  "#critical-site-panel:not([hidden])",
+  "#bottom-bar",
+  "#map-controls",
+  "#telemetry",
+  "#focus-coordinates",
+  "#centre-marker",
+  "#political-labels .political-label",
+];
+
 function labelObstacles(): Rect[] {
-  const selectors = [
-    "#masthead",
-    "#region-panel",
-    "#cell-panel",
-    "#travel-panel",
-    "#critical-site-panel:not([hidden])",
-    "#bottom-bar",
-    "#map-controls",
-    "#telemetry",
-    "#focus-coordinates",
-    "#centre-marker",
-    "#political-labels .political-label",
-  ];
-  const rects = selectors
-    .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+  const nodes = obstacleSelectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)));
+  lastPoliticalObstacleCount = document.querySelectorAll("#political-labels .political-label").length;
+  return nodes
     .filter((node) => {
       const style = getComputedStyle(node);
       return style.display !== "none" && style.visibility !== "hidden";
@@ -196,13 +232,17 @@ function labelObstacles(): Rect[] {
     .map((node) => node.getBoundingClientRect())
     .filter((rect) => rect.width > 0 && rect.height > 0)
     .map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }));
-  lastPoliticalObstacleCount = document.querySelectorAll("#political-labels .political-label").length;
-  return rects;
+}
+
+function obstacleFingerprint(obstacles: Rect[]) {
+  return obstacles
+    .map((rect) => `${Math.round(rect.x)}/${Math.round(rect.y)}/${Math.round(rect.width)}/${Math.round(rect.height)}`)
+    .join("|");
 }
 
 function labelWidth(site: CriticalSite) {
-  const textWidth = 70 + site.name.length * (innerWidth < 620 ? 5.4 : 6.2);
-  return Math.min(innerWidth < 620 ? 176 : 236, Math.max(118, textWidth));
+  const textWidth = 24 + site.name.length * (innerWidth < 620 ? 4.7 : 6.0);
+  return Math.min(innerWidth < 620 ? 108 : 220, Math.max(70, textWidth));
 }
 
 function appendLine(
@@ -213,7 +253,7 @@ function appendLine(
   x2: number,
   y2: number,
 ) {
-  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  const line = document.createElementNS(SVG_NS, "line");
   line.setAttribute("x1", String(x1));
   line.setAttribute("y1", String(y1));
   line.setAttribute("x2", String(x2));
@@ -222,27 +262,154 @@ function appendLine(
   layer.append(line);
 }
 
+function appendAnchor(layer: SVGSVGElement, x: number, y: number) {
+  const dot = document.createElementNS(SVG_NS, "circle");
+  dot.setAttribute("cx", String(x));
+  dot.setAttribute("cy", String(y));
+  dot.setAttribute("r", "3");
+  dot.setAttribute("class", "site-anchor");
+  layer.append(dot);
+}
+
+const RING_STEP = 12;
+const RING_MAX = 300;
+const RING_DIRECTIONS = 16;
+const RING_ORDER = [12, 4, 0, 8, 14, 10, 2, 6, 13, 11, 5, 3, 15, 9, 1, 7];
+
+function placeSites(
+  entries: { entry: PlacementSite; width: number; height: number }[],
+  obstacles: Rect[],
+): SitePlacement[] {
+  const occupied = [...obstacles];
+  return [...entries]
+    .sort((a, b) =>
+      a.entry.placementId < b.entry.placementId ? -1 : a.entry.placementId > b.entry.placementId ? 1 : 0,
+    )
+    .map(({ entry, width, height }) => {
+      const w = Math.min(width, innerWidth - 16),
+        h = Math.min(height, innerHeight - 16),
+        preferredX = entry.point.x + (entry.detailed ? -42 : 0),
+        preferredY = entry.point.y + (entry.detailed ? -34 : 0),
+        at = (cx: number, cy: number): Rect => ({
+          x: Math.max(8, Math.min(innerWidth - w - 8, cx - 22)),
+          y: Math.max(8, Math.min(innerHeight - h - 8, cy - 22)),
+          width: w,
+          height: h,
+        }),
+        free = (rect: Rect) => !occupied.some((other) => overlaps(rect, other, 5));
+      let rect: Rect | null = null;
+      for (let radius = 0; radius <= RING_MAX && !rect; radius += RING_STEP) {
+        const count = radius === 0 ? 1 : RING_DIRECTIONS;
+        for (let index = 0; index < count; index++) {
+          const angle = (RING_ORDER[index] / RING_DIRECTIONS) * Math.PI * 2,
+            candidate = at(
+              preferredX + Math.cos(angle) * radius,
+              preferredY + Math.sin(angle) * radius,
+            );
+          if (free(candidate)) {
+            rect = candidate;
+            break;
+          }
+        }
+      }
+      if (!rect) {
+        let nearest: Rect | null = null,
+          nearestDistance = Infinity;
+        for (let y = 8; y <= innerHeight - h - 8; y += 10)
+          for (let x = 8; x <= innerWidth - w - 8; x += 12) {
+            const candidate = { x, y, width: w, height: h },
+              distance = Math.hypot(x + 22 - preferredX, y + 22 - preferredY);
+            if (distance < nearestDistance && free(candidate)) {
+              nearest = candidate;
+              nearestDistance = distance;
+            }
+          }
+        rect = nearest ?? at(preferredX, preferredY);
+      }
+      occupied.push(rect);
+      return {
+        entry,
+        rect,
+        shift: Math.hypot(rect.x + 22 - entry.point.x, rect.y + 22 - entry.point.y),
+      };
+    });
+}
+
+function pointInside(rect: Rect, x: number, y: number, gap = 4) {
+  return (
+    x >= rect.x - gap &&
+    x <= rect.x + rect.width + gap &&
+    y >= rect.y - gap &&
+    y <= rect.y + rect.height + gap
+  );
+}
+
+function leaderClear(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  obstacles: Rect[],
+) {
+  for (let index = 2; index <= 10; index++) {
+    const t = index / 12,
+      x = x1 + (x2 - x1) * t,
+      y = y1 + (y2 - y1) * t;
+    if (obstacles.some((rect) => pointInside(rect, x, y))) return false;
+  }
+  return true;
+}
+
+function scheduleRender() {
+  if (framePending) return;
+  framePending = true;
+  requestAnimationFrame(() => {
+    framePending = false;
+    render();
+  });
+}
+
 function render() {
   ensureUi();
   const world = window.advisorWorld;
-  if (!world?.state?.ready) return requestAnimationFrame(render);
+  if (!world?.state?.ready) return scheduleRender();
   const state = world.state,
     view = state.view,
     denominator = Number(String(state.scaleLabel).replace("1/", "")),
     flat = state.presentation === "flat";
+
   if (!flat || !Number.isFinite(denominator) || denominator > 1000) {
     for (const marker of markerNodes.values()) marker.hidden = true;
     document.querySelector<SVGSVGElement>("#critical-site-access")!.replaceChildren();
     lastVisibleCodes = [];
-    return requestAnimationFrame(render);
+    return scheduleRender();
   }
 
+  if (obstacleProbeFrame++ % 6 === 0 || !lastObstacleFingerprint) {
+    lastObstacles = labelObstacles();
+    lastObstacleFingerprint = obstacleFingerprint(lastObstacles);
+  }
+  const obstacles = lastObstacles;
+
   const radius = Math.hypot(view.halfHeight * view.aspect, view.halfHeight) * 1.35,
-    visible = nearbyCriticalSites(view.x, view.z, radius, innerWidth < 600 ? 8 : 14),
-    politicalFingerprint = (window.politicalAtlas?.state?.labels ?? [])
-      .map((label: any) => `${label.id}/${Math.round(label.x)}/${Math.round(label.y)}`)
-      .join("|"),
-    fingerprint = `${Math.round(view.x)}/${Math.round(view.z)}/${Math.round(view.halfHeight)}/${Math.round(view.yaw * 1000)}/${innerWidth}/${innerHeight}/${visible.map((s) => s.code).join("|")}/${politicalFingerprint}`;
+    visible = nearbyCriticalSites(
+      view.x,
+      view.z,
+      radius,
+      innerWidth < 600 ? MOBILE_SITE_LIMIT : DESKTOP_SITE_LIMIT,
+    ),
+    fingerprint = [
+      Math.round(view.x),
+      Math.round(view.z),
+      Math.round(view.halfHeight),
+      Math.round(view.yaw * 1000),
+      innerWidth,
+      innerHeight,
+      selectedCode ?? "",
+      visible.map((site) => site.code).join("|"),
+      lastObstacleFingerprint,
+    ].join("/");
+
   if (fingerprint !== lastFingerprint) {
     lastFingerprint = fingerprint;
     const visibleSet = new Set(visible.map((site) => site.code)),
@@ -251,8 +418,9 @@ function render() {
     for (const marker of markerNodes.values()) marker.hidden = !visibleSet.has(marker.dataset.code!);
 
     const eligible: PlacementSite[] = [];
-    for (const site of visible) {
-      const point = project(site.x, site.z, view),
+    for (let index = 0; index < visible.length; index++) {
+      const site = visible[index],
+        point = project(site.x, site.z, view),
         accessPoint = project(site.access.x, site.access.z, view),
         marker = markerFor(site),
         detailed =
@@ -266,68 +434,81 @@ function render() {
       const inView =
         point.x >= 22 &&
         point.x <= innerWidth - 22 &&
-        point.y >= 82 &&
-        point.y <= innerHeight - 105;
+        point.y >= 72 &&
+        point.y <= innerHeight - 92;
       marker.hidden = !inView;
       if (!inView) continue;
-      const rank = selectedCode === site.code ? 0 : site.kind === "critical-place" ? 1 : 2;
+      const selectedRank = selectedCode === site.code ? 0 : 1;
       eligible.push({
         site,
         point,
         accessPoint,
         detailed,
-        placementId: `${rank}/${site.code}`,
+        placementId: `${selectedRank}/${String(index).padStart(2, "0")}/${site.code}`,
       });
     }
 
-    const byPlacementId = new Map(eligible.map((entry) => [entry.placementId, entry])),
-      placements = placeLabels(
-        eligible.map((entry) => ({
-          id: entry.placementId,
-          x: entry.point.x,
-          y: entry.point.y,
-          width: 46 + labelWidth(entry.site),
-          height: 44,
-        })),
-        innerWidth,
-        innerHeight,
-        labelObstacles(),
-      );
+    const sized = eligible.map((entry) => {
+      const marker = markerNodes.get(entry.site.code)!;
+      marker.hidden = false;
+      const label = marker.querySelector<HTMLElement>(".site-label"),
+        labelW = label?.offsetWidth || labelWidth(entry.site),
+        labelH = label?.offsetHeight || 22;
+      return { entry, width: 46 + labelW, height: Math.max(44, 10 + labelH) };
+    });
+    const placements = placeSites(sized, obstacles),
+      allPlacementRects = placements.map((placement) => placement.rect);
 
     lastVisibleCodes = [];
     for (const placement of placements) {
-      const entry = byPlacementId.get(placement.id)!;
-      const marker = markerNodes.get(entry.site.code)!;
+      const entry = placement.entry,
+        marker = markerNodes.get(entry.site.code)!,
+        cx = placement.rect.x + 22,
+        cy = placement.rect.y + 22;
       marker.hidden = false;
-      marker.style.transform = `translate(${Math.round(placement.rect.x + 22)}px,${Math.round(placement.rect.y + 22)}px)`;
+      marker.style.transform = `translate(${Math.round(cx)}px,${Math.round(cy)}px)`;
       lastVisibleCodes.push(entry.site.code);
-      if (placement.leader)
-        appendLine(
-          accessLayer,
-          "site-label-leader",
-          entry.point.x,
-          entry.point.y,
-          placement.endX,
-          placement.endY,
-        );
-      if (
-        entry.accessPoint.x > 0 &&
-        entry.accessPoint.x < innerWidth &&
-        entry.accessPoint.y > 0 &&
-        entry.accessPoint.y < innerHeight
-      )
-        appendLine(
-          accessLayer,
-          entry.site.kind === "ruin" ? "ruin-access" : "critical-access",
-          entry.point.x,
-          entry.point.y,
-          entry.accessPoint.x,
-          entry.accessPoint.y,
-        );
+
+      const accessClass = entry.site.kind === "ruin" ? "ruin-access" : "critical-access";
+      appendLine(
+        accessLayer,
+        accessClass,
+        entry.point.x,
+        entry.point.y,
+        entry.accessPoint.x,
+        entry.accessPoint.y,
+      );
+
+      if (placement.shift > 24) {
+        const ux = (entry.point.x - cx) / placement.shift,
+          uy = (entry.point.y - cy) / placement.shift,
+          startX = cx + ux * 16,
+          startY = cy + uy * 16,
+          otherRects = allPlacementRects.filter((rect) => rect !== placement.rect),
+          lineObstacles = [...obstacles, ...otherRects];
+        if (leaderClear(startX, startY, entry.point.x, entry.point.y, lineObstacles)) {
+          appendLine(
+            accessLayer,
+            "site-label-leader-halo",
+            startX,
+            startY,
+            entry.point.x,
+            entry.point.y,
+          );
+          appendLine(
+            accessLayer,
+            "site-label-leader",
+            startX,
+            startY,
+            entry.point.x,
+            entry.point.y,
+          );
+          if (!entry.detailed) appendAnchor(accessLayer, entry.point.x, entry.point.y);
+        }
+      }
     }
-    if (selectedCode && !criticalSites.some((site) => site.code === selectedCode)) selectSite(null);
   }
-  requestAnimationFrame(render);
+  scheduleRender();
 }
 
 Object.defineProperty(window, "advisorSites", {
@@ -349,7 +530,7 @@ Object.defineProperty(window, "advisorSites", {
         detailedCount: lastVisibleCodes.filter((code) => detailCache.has(code)).length,
         cachedDetails: detailCache.size,
         detailCacheLimit: DETAIL_CACHE_LIMIT,
-        declutterSystem: "navigation.placeLabels",
+        declutterSystem: "critical-sites.nearest-free",
         politicalObstacleCount: lastPoliticalObstacleCount,
       };
     },
@@ -358,4 +539,4 @@ Object.defineProperty(window, "advisorSites", {
   writable: false,
 });
 
-requestAnimationFrame(render);
+scheduleRender();
