@@ -181,7 +181,7 @@ function roadBorderIntersection(place: Place, road: Road, border: readonly Settl
     for (let edge = 0; edge < border.length; edge++) {
       const c = border[edge], d = border[(edge + 1) % border.length],
         cx = wrapSourceX(c.x - place.x), cz = c.z - place.z,
-        dx = cx + wrapSourceX(d.x - c.x), dz = d.z - c.z,
+        dx = cx + wrapSourceX(d.x - c.x), dz = d.z - place.z,
         hit = segmentIntersection(ax, az, bx, bz, cx, cz, dx, dz);
       if (!hit) continue;
       return { x: wrapSourceX(place.x + ax + (bx - ax) * hit.t), z: place.z + az + (bz - az) * hit.t };
