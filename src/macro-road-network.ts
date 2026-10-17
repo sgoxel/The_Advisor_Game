@@ -5,6 +5,8 @@ import {CANONICAL_PLANET_RADIUS, CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDi
 export const MACRO_ROAD_VERSION='macro-roads-v2';
 export const MACRO_ROAD_LIMITS=Object.freeze({stages:12,lanes:7,maximumStations:26,junctionGroupsPerPlace:32,junctionDepth:3,corridorAttempts:3});
 export const ROAD_FORK_POLICY=Object.freeze({minimumAngleDegrees:32,preferredMinimumDegrees:45,preferredMaximumDegrees:70,hardNearParallelDegrees:20,separationM:300,maximumRegenerationAttempts:12});
+/** Outside the largest village enclosure (112 source units, about 1.7 km): fork junctions never sit inside a settlement wall. */
+export const SETTLEMENT_ROAD_CLEARANCE_M=2200;
 export type RoadNode={id:string;code:string;canonicalPosition:CanonicalPosition;x:number;z:number;continent:number;country:number;kind:'city'|'village'|'junction'};
 export type RoadPoint={x:number;z:number;position:LonLat};
 export type MacroRoadConnection={from:string;to:string;legs:{edgeId:string;reverse:boolean}[]};
@@ -49,6 +51,26 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
  let maximumJunctionDepth=0,maximumForkAttempts=0,rejectedForkCandidates=0;
  const minimumArmAngle=(p:LonLat,ends:readonly LonLat[])=>Math.min(...ends.flatMap((a,i)=>ends.slice(i+1).map(b=>angleDifference(bearing(p,a),bearing(p,b))*180/Math.PI)));
  const forkChildren=new Map<string,[RoadNode,RoadNode]>();
+ const stub=(node:RoadNode,target:RoadNode):RoadNode=>{if(node.kind!=='junction')return node;const p=destination(node.canonicalPosition,bearing(node.canonicalPosition,target.canonicalPosition),Math.min(ROAD_FORK_POLICY.separationM,greatCircleDistance(node.canonicalPosition,target.canonicalPosition)*.25)),q=lonLatToSource(p.lon,p.lat);return {...node,id:node.id+'/approach',canonicalPosition:p,x:q.x,z:q.z,kind:'village'};};
+ const clearance=(n:RoadNode)=>n.kind==='village'?SETTLEMENT_ROAD_CLEARANCE_M:ROAD_FORK_POLICY.separationM;
+ const register=(hub:RoadNode,group:Approach,path:RoadNode[])=>{
+  if(!group.children){approaches.set(approachKey(hub,group.node),path);return;}
+  const next=[...path,group.node];for(const child of group.children)register(hub,child,next);
+ };
+ // The physical first hop of a group leaving a hub: a leaf's arm ends at the other side's fork, if any.
+ const firstHop=(hub:RoadNode,g:Approach)=>g.children?g.node:(approaches.get(approachKey(g.node,hub))?.at(-1)??g.node);
+ // When a hop is another place's fork, that fork's physical arm now ends at the new
+ // junction instead of this village: its three arms must stay separated.
+ const otherEndOk=(hub:RoadNode,p:CanonicalPosition,t:RoadNode)=>{
+  const kids=t.kind==='junction'?forkChildren.get(t.id):undefined;if(!kids||!kids.some(k=>k.id===hub.id))return true;
+  let owner:RoadNode[]|undefined,parent:RoadNode|undefined;for(const path of approaches.values()){const i=path.indexOf(t);if(i>0){owner=path;parent=path[i-1];break;}}
+  if(!owner||!parent)return true;
+  return minimumArmAngle(t.canonicalPosition,[parent.canonicalPosition,...kids.map(k=>k.id===hub.id?p:(k.kind==='junction'?k:approaches.get(approachKey(k,owner![0]))?.at(-1)??k).canonicalPosition)])>=ROAD_FORK_POLICY.minimumAngleDegrees&&validStub(t.canonicalPosition,p,ownerKey(t));
+ };
+ // The exact corridor search that edge() will run must succeed for a new arm.
+ const routable=(x:RoadNode,y:RoadNode)=>{const forward=x.id<y.id,a=forward?x:y,b=forward?y:x;try{routeTerrain(stub(a,b),stub(b,a),`${a.id}~${b.id}`);return true;}catch(error){if(error instanceof RangeError)return false;throw error;}};
+ const probeNode=(hub:RoadNode,slot:number,p:CanonicalPosition):RoadNode=>({continent:hub.continent,country:hub.country,id:`J/${hub.id}/${slot}`,code:'probe',kind:'junction',canonicalPosition:p,...lonLatToSource(p.lon,p.lat)});
+ const crowdedVillages:{hub:RoadNode;groups:Approach[];slot:number}[]=[];
  const validStub=(p:LonLat,target:LonLat,key:string)=>{const length=greatCircleDistance(p,target),end=destination(p,bearing(p,target),Math.min(ROAD_FORK_POLICY.separationM,length*.25));return lineLegal(p,end,key,4)&&!inWater(end,2);};
  for(const hub of [...places].sort((a,b)=>a.id.localeCompare(b.id))){
   let groups:Approach[]=[...new Map(neighbours.get(hub.id)!.map(n=>[n.id,n])).values()].sort((a,b)=>a.id.localeCompare(b.id))
@@ -66,11 +88,11 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
    pairs.sort((a,b)=>a.angle-b.angle||a.a.node.id.localeCompare(b.a.node.id)||a.b.node.id.localeCompare(b.b.node.id));
    let accepted=false;
    for(const pair of pairs){
-    const a=pair.a.node,b=pair.b.node,azA=bearing(hub.canonicalPosition,a.canonicalPosition),azB=bearing(hub.canonicalPosition,b.canonicalPosition),
+    const a=pair.a.node,b=pair.b.node,ea=firstHop(hub,pair.a),eb=firstHop(hub,pair.b),azA=bearing(hub.canonicalPosition,a.canonicalPosition),azB=bearing(hub.canonicalPosition,b.canonicalPosition),
      az=Math.atan2(Math.sin(azA)+Math.sin(azB),Math.cos(azA)+Math.cos(azB)),
      da=greatCircleDistance(hub.canonicalPosition,a.canonicalPosition),db=greatCircleDistance(hub.canonicalPosition,b.canonicalPosition),
-     radius=Math.min(da,db)-ROAD_FORK_POLICY.separationM,key=ownerKey(hub);
-    if(radius<ROAD_FORK_POLICY.separationM*2)continue;
+     radius=Math.min(da-clearance(a),db-clearance(b)),key=ownerKey(hub);
+    if(radius<clearance(hub)+ROAD_FORK_POLICY.separationM)continue;
     let chosen:CanonicalPosition|undefined,best=Infinity;
     for(let attempt=0;attempt<ROAD_FORK_POLICY.maximumRegenerationAttempts;attempt++){
      maximumForkAttempts=Math.max(maximumForkAttempts,attempt+1);
@@ -79,15 +101,15 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
       target=ROAD_FORK_POLICY.preferredMinimumDegrees+(ROAD_FORK_POLICY.preferredMaximumDegrees-ROAD_FORK_POLICY.preferredMinimumDegrees)*digest(token+'/angle'),
       pointAt=(r:number)=>destination(hub.canonicalPosition,az+offset,r),
       branchAngle=(p:LonLat)=>angleDifference(bearing(p,a.canonicalPosition),bearing(p,b.canonicalPosition))*180/Math.PI;
-     let low:number=ROAD_FORK_POLICY.separationM,high=radius;
+     let low:number=clearance(hub),high=radius;
      if(branchAngle(pointAt(high))<target){rejectedForkCandidates++;continue;}
      // Fixed numerical root solve is separate from the twelve recipe candidates.
      for(let step=0;step<16;step++){const mid=(low+high)/2;if(branchAngle(pointAt(mid))<target)low=mid;else high=mid;}
      const p=pointAt(high),t=terrain(p),hp=greatCircleDistance(hub.canonicalPosition,p),pa=greatCircleDistance(p,a.canonicalPosition),pb=greatCircleDistance(p,b.canonicalPosition),angle=branchAngle(p);
-     if(angle<ROAD_FORK_POLICY.preferredMinimumDegrees||angle>ROAD_FORK_POLICY.preferredMaximumDegrees||minimumArmAngle(p,[hub.canonicalPosition,a.canonicalPosition,b.canonicalPosition])<ROAD_FORK_POLICY.minimumAngleDegrees){rejectedForkCandidates++;continue;}
-     if(!t.land||t.domain==='Lake'||t.reliefM>140||ownerAt(p)!==key||inWater(p,20)||Math.min(pa,pb)<ROAD_FORK_POLICY.separationM)continue;
+     if(angle<ROAD_FORK_POLICY.preferredMinimumDegrees||angle>ROAD_FORK_POLICY.preferredMaximumDegrees||minimumArmAngle(p,[hub.canonicalPosition,ea.canonicalPosition,eb.canonicalPosition])<ROAD_FORK_POLICY.minimumAngleDegrees){rejectedForkCandidates++;continue;}
+     if(!t.land||t.domain==='Lake'||t.reliefM>140||ownerAt(p)!==key||inWater(p,20)||pa<clearance(a)||pb<clearance(b))continue;
      if(junctions.some(j=>greatCircleDistance(p,j.canonicalPosition)<ROAD_FORK_POLICY.separationM))continue;
-     if(![hub,a,b].every(n=>validStub(p,n.canonicalPosition,key)))continue;
+     if(![hub,ea,eb].every(n=>validStub(p,n.canonicalPosition,key))||!otherEndOk(hub,p,ea)||!otherEndOk(hub,p,eb))continue;
      // A new parent may move an older fork's trunk direction; recheck that fork.
      if([a,b].some(child=>{const ends=forkChildren.get(child.id);return ends&&(minimumArmAngle(child.canonicalPosition,[p,...ends.map(n=>n.canonicalPosition)])<ROAD_FORK_POLICY.minimumAngleDegrees||!validStub(child.canonicalPosition,p,key));}))continue;
      // Each merge must save physical road length, while every original approach
@@ -95,7 +117,8 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
      if(hp+pa+pb>(da+db)*.99)continue;
      if(pair.a.leaves.some(n=>hp+pa+pair.a.distance.get(n.id)!>greatCircleDistance(hub.canonicalPosition,n.canonicalPosition)*1.12)||
         pair.b.leaves.some(n=>hp+pb+pair.b.distance.get(n.id)!>greatCircleDistance(hub.canonicalPosition,n.canonicalPosition)*1.12))continue;
-     if(!lineLegal(hub.canonicalPosition,p,key)||!lineLegal(p,a.canonicalPosition,key)||!lineLegal(p,b.canonicalPosition,key))continue;
+     if(!lineLegal(hub.canonicalPosition,p,key)||!lineLegal(p,ea.canonicalPosition,key)||!lineLegal(p,eb.canonicalPosition,key))continue;
+     if((ea!==a||eb!==b)&&![hub,ea,eb].every(n=>routable(probeNode(hub,slot,p),n)))continue;
      const cost=t.reliefM*8+Math.abs(offset)*500+Math.abs(angle-57.5)*8+(hp+pa+pb)*.002+digest(token+'/cost');
      if(cost<best){best=cost;chosen=p;}
     }
@@ -108,11 +131,48 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
    }
    if(!accepted)break;
   }
-  const register=(group:Approach,path:RoadNode[])=>{
-   if(!group.children){approaches.set(approachKey(hub,group.node),path);return;}
-   const next=[...path,group.node];for(const child of group.children)register(child,next);
-  };
-  for(const group of groups)register(group,[hub]);
+  for(const group of groups)register(hub,group,[hub]);
+  if(hub.kind==='village'&&groups.length>2)crowdedVillages.push({hub,groups,slot});
+ }
+ // Forced village degree pass. Villages have at most two enclosure gates, so
+ // every village keeps at most two physical road arms. Runs after every approach
+ // is known, merging the angularly closest pair beyond the village clearance.
+ for(const entry of crowdedVillages){
+  const {hub}=entry,key=ownerKey(hub);let {groups,slot}=entry;
+  while(groups.length>2&&slot<MACRO_ROAD_LIMITS.junctionGroupsPerPlace){
+   const pairs:{a:Approach;b:Approach;ha:RoadNode;hb:RoadNode;angle:number}[]=[];
+   for(let i=0;i<groups.length;i++)for(let j=i+1;j<groups.length;j++){
+    const ha=firstHop(hub,groups[i]),hb=firstHop(hub,groups[j]);
+    pairs.push({a:groups[i],b:groups[j],ha,hb,angle:angleDifference(bearing(hub.canonicalPosition,ha.canonicalPosition),bearing(hub.canonicalPosition,hb.canonicalPosition))});
+   }
+   pairs.sort((x,y)=>x.angle-y.angle||x.a.node.id.localeCompare(y.a.node.id)||x.b.node.id.localeCompare(y.b.node.id));
+   let accepted=false;
+   for(const pair of pairs){
+    const {ha,hb}=pair,azA=bearing(hub.canonicalPosition,ha.canonicalPosition),azB=bearing(hub.canonicalPosition,hb.canonicalPosition),
+     az=Math.atan2(Math.sin(azA)+Math.sin(azB),Math.cos(azA)+Math.cos(azB));
+    let chosen:CanonicalPosition|undefined;
+    search:for(const distanceM of [2200,2800,3500])for(const offset of [0,.15,-.15]){
+     const p=destination(hub.canonicalPosition,az+offset,distanceM),t=terrain(p);
+     if(!t.land||t.domain==='Lake'||ownerAt(p)!==key||inWater(p,20))continue;
+     if(greatCircleDistance(p,ha.canonicalPosition)<clearance(ha)||greatCircleDistance(p,hb.canonicalPosition)<clearance(hb))continue;
+     if(junctions.some(j=>greatCircleDistance(p,j.canonicalPosition)<ROAD_FORK_POLICY.separationM))continue;
+     if(minimumArmAngle(p,[hub.canonicalPosition,ha.canonicalPosition,hb.canonicalPosition])<ROAD_FORK_POLICY.minimumAngleDegrees)continue;
+     if(![hub,ha,hb].every(n=>validStub(p,n.canonicalPosition,key)))continue;
+     if(!otherEndOk(hub,p,ha)||!otherEndOk(hub,p,hb))continue;
+     if(![hub,ha,hb].every(n=>routable(probeNode(hub,slot,p),n)))continue;
+     if(!lineLegal(hub.canonicalPosition,p,key)||!lineLegal(p,ha.canonicalPosition,key)||!lineLegal(p,hb.canonicalPosition,key))continue;
+     chosen=p;break search;
+    }
+    if(!chosen)continue;
+    const source=lonLatToSource(chosen.lon,chosen.lat),node:RoadNode={continent:hub.continent,country:hub.country,id:`J/${hub.id}/${slot}`,code:`${seed}/${MACRO_ROAD_VERSION}/J/${hub.id}/${slot}`,kind:'junction',canonicalPosition:chosen,x:source.x,z:source.z},distance=new Map<string,number>();
+    for(const child of [pair.a,pair.b]){const d=greatCircleDistance(chosen,child.node.canonicalPosition);for(const leaf of child.leaves)distance.set(leaf.id,d+child.distance.get(leaf.id)!);}
+    const depth=Math.max(pair.a.depth,pair.b.depth)+1,group:Approach={node,leaves:[...pair.a.leaves,...pair.b.leaves],depth,distance,children:[pair.a,pair.b]};
+    forkChildren.set(node.id,[pair.a.node,pair.b.node]);junctions.push(node);groups=groups.filter(g=>g!==pair.a&&g!==pair.b);groups.push(group);groups.sort((x,y)=>x.node.id.localeCompare(y.node.id));
+    maximumJunctionDepth=Math.max(maximumJunctionDepth,depth);slot++;accepted=true;break;
+   }
+   if(!accepted)break;
+  }
+  for(const group of groups)register(hub,group,[hub]);
  }
  function routeTerrain(from:RoadNode,to:RoadNode,id:string,attempt=0):{points:RoadPoint[];fallback:boolean}{
   const a=from.canonicalPosition,b=to.canonicalPosition,length=greatCircleDistance(a,b),az=bearing(a,b),stages=Math.max(4,Math.min(MACRO_ROAD_LIMITS.stages,Math.ceil(length/4000)+attempt*2)),
@@ -184,8 +244,7 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
  function edge(from:RoadNode,to:RoadNode,kind:MacroRoadEdge['kind']){
   const forward=from.id<to.id,a=forward?from:to,b=forward?to:from,id=`${a.id}~${b.id}`;
   if(!edges.has(id)){
-   const stub=(node:RoadNode,target:RoadNode):RoadNode=>{if(node.kind!=='junction')return node;const p=destination(node.canonicalPosition,bearing(node.canonicalPosition,target.canonicalPosition),Math.min(ROAD_FORK_POLICY.separationM,greatCircleDistance(node.canonicalPosition,target.canonicalPosition)*.25)),q=lonLatToSource(p.lon,p.lat);return {...node,id:node.id+'/approach',canonicalPosition:p,x:q.x,z:q.z,kind:'village'};},
-    start=stub(a,b),finish=stub(b,a),result=routeTerrain(start,finish,id),points=[...result.points];
+   const start=stub(a,b),finish=stub(b,a),result=routeTerrain(start,finish,id),points=[...result.points];
    // Preserve legal local approach rays so terrain search cannot collapse a fork
    // back into two near-parallel first segments after choosing valid topology.
    if(start!==a)points.unshift({x:a.x,z:a.z,position:{lon:a.canonicalPosition.lon,lat:a.canonicalPosition.lat}});
