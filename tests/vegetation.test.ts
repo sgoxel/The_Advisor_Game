@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cities, roadAt, nearestPlace } from "../src/geography.ts";
+import { cities, nearestPlace } from "../src/geography.ts";
 import { wrapSourceX } from "../src/planet.ts";
 import { buildVegetationGeometry } from "../src/vegetation-render.ts";
 import {
   vegetationForTile,
   type VegetationFeature,
 } from "../src/vegetation.ts";
-import { biomeAt, WORLD_SIZE, type Tile } from "../src/world.ts";
+import { biomeAt, finalSurfaceAt, WORLD_SIZE, type Tile } from "../src/world.ts";
 
 const SCATTER_SPACING = 16;
 
@@ -128,8 +128,9 @@ test("vegetation respects water, road and settlement exclusion authority", () =>
   const features = allProbeFeatures();
   assert.ok(features.length > 0);
   for (const feature of features) {
+    const surface = finalSurfaceAt(feature.x, feature.z);
     assert.ok(!["Ocean", "Lake", "River", "Road", "Settlement"].includes(biomeAt(feature.x, feature.z)));
-    assert.equal(roadAt(feature.x, feature.z), undefined);
+    assert.ok(surface.vegetationDensityScale > 0, `${feature.code} must survive canonical final-surface vegetation exclusion`);
     const place = nearestPlace(feature.x, feature.z);
     if (!place) continue;
     const distance = Math.hypot(wrapSourceX(feature.x - place.x), feature.z - place.z),
