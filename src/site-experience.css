@@ -155,6 +155,40 @@
   max-height: calc(100dvh - 190px);
   overflow: auto;
 }
+/* Scroll cue: a fade pinned to the bottom edge while more rows lie below. It is the
+   panel's last child with a negative margin, so layout size is unchanged. A scroll-driven
+   animation hides it at the end; with no overflow the timeline is inactive and the base
+   opacity 0 keeps it hidden. pointer-events: none keeps the rows clickable. */
+@supports (animation-timeline: scroll()) {
+  .panel.critical-site-panel { scroll-timeline: --critical-site-scroll y; }
+  .panel.critical-site-panel::after {
+    content: "more ▾";
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    box-sizing: border-box;
+    height: 28px;
+    margin: -28px 0 0;
+    padding-bottom: 3px;
+    /* #162521 is the panel tone used by .panel > .popup-heading in popup-panels.css. */
+    background: linear-gradient(rgba(22, 37, 33, 0), #162521 72%);
+    color: #f0e3bd;
+    font: 600 11px/1 Georgia, serif;
+    letter-spacing: .04em;
+    text-shadow: 0 1px 1px #000;
+    opacity: 0;
+    pointer-events: none;
+    animation: critical-site-cue linear;
+    animation-timeline: --critical-site-scroll;
+  }
+  .panel.critical-site-panel.popup-minimized::after { display: none; }
+  @keyframes critical-site-cue {
+    0%, 85% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+}
 .critical-site-panel .eyebrow {
   display: flex;
   align-items: center;
