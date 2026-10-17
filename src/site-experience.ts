@@ -5,7 +5,7 @@ import {
   siteAcceptanceSummary,
   type CriticalSite,
 } from "./sites.ts";
-import { placeLabels, type Rect } from "./navigation.ts";
+import { overlaps, type Rect } from "./navigation.ts";
 import { wrapSourceX } from "./planet.ts";
 
 declare global {
@@ -72,24 +72,24 @@ function ensureUi() {
   const access = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   access.id = "critical-site-access";
   access.setAttribute("aria-hidden", "true");
-  document.body.append(access);
+  document.body.insertBefore(access, layer);
 
   const panel = document.createElement("aside");
   panel.id = "critical-site-panel";
   panel.className = "panel critical-site-panel";
   panel.hidden = true;
   panel.innerHTML = `
-    <div class="eyebrow">IMPORTANT PLACE <button id="close-critical-site" aria-label="Close important-place inspector">×</button></div>
+    <div class="eyebrow"><span id="critical-site-eyebrow">IMPORTANT PLACE</span> <button id="close-critical-site" aria-label="Close important-place inspector">×</button></div>
     <h2 id="critical-site-name"></h2>
     <p id="critical-site-kind" class="site-kind"></p>
     <div class="divider"></div>
     <div class="seed-label">CANONICAL SITE</div>
     <code id="critical-site-code"></code>
     <dl>
-      <dt>Country</dt><dd id="critical-site-country"></dd>
-      <dt>Archetype</dt><dd id="critical-site-archetype"></dd>
       <dt>Road access</dt><dd id="critical-site-road"></dd>
       <dt>Access walk</dt><dd id="critical-site-distance"></dd>
+      <dt>Country</dt><dd id="critical-site-country"></dd>
+      <dt>Archetype</dt><dd id="critical-site-archetype"></dd>
       <dt>Prepared ground</dt><dd id="critical-site-ground"></dd>
       <dt>Structures</dt><dd id="critical-site-residency"></dd>
     </dl>
@@ -122,6 +122,8 @@ function selectSite(code: string | null) {
   if (!site) return;
   const detail = detailFor(site);
   panel.hidden = false;
+  (document.getElementById("critical-site-eyebrow") as HTMLElement).textContent =
+    site.kind === "ruin" ? "RUIN" : "IMPORTANT PLACE";
   (document.getElementById("critical-site-name") as HTMLElement).textContent = site.name;
   (document.getElementById("critical-site-kind") as HTMLElement).textContent =
     site.kind === "ruin" ? "Historic ruin" : "Important place";
@@ -196,14 +198,30 @@ function labelObstacles(): Rect[] {
     .map((node) => node.getBoundingClientRect())
     .filter((rect) => rect.width > 0 && rect.height > 0)
     .map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }));
-  lastPoliticalObstacleCount = document.querySelectorAll("#political-labels .political-label").length;
+  lastPoliticalObstacleCount = Array.from(
+    document.querySelectorAll("#political-labels .political-label"),
+  ).filter((node) => {
+    const rect = node.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }).length;
   return rects;
 }
 
-function labelWidth(site: CriticalSite) {
-  const textWidth = 70 + site.name.length * (innerWidth < 620 ? 5.4 : 6.2);
-  return Math.min(innerWidth < 620 ? 176 : 236, Math.max(118, textWidth));
+function obstacleFingerprint(rects: Rect[]) {
+  return rects
+    .map(
+      (rect) =>
+        `${Math.round(rect.x)}/${Math.round(rect.y)}/${Math.round(rect.width)}/${Math.round(rect.height)}`,
+    )
+    .join("|");
 }
+
+function labelWidth(site: CriticalSite) {
+  const textWidth = 28 + site.name.length * (innerWidth < 620 ? 5.4 : 6.2);
+  return Math.min(innerWidth < 620 ? 150 : 240, Math.max(72, textWidth));
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 function appendLine(
   layer: SVGSVGElement,
@@ -213,13 +231,147 @@ function appendLine(
   x2: number,
   y2: number,
 ) {
-  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  const line = document.createElementNS(SVG_NS, "line");
   line.setAttribute("x1", String(x1));
   line.setAttribute("y1", String(y1));
   line.setAttribute("x2", String(x2));
   line.setAttribute("y2", String(y2));
   line.setAttribute("class", className);
   layer.append(line);
+}
+
+function appendAnchor(layer: SVGSVGElement, x: number, y: number) {
+  const dot = document.createElementNS(SVG_NS, "circle");
+  dot.setAttribute("cx", String(x));
+  dot.setAttribute("cy", String(y));
+  dot.setAttribute("r", "4.5");
+  dot.setAttribute("class", "site-anchor");
+  layer.append(dot);
+}
+
+type SitePlacement = {
+  entry: PlacementSite;
+  rect: Rect;
+  shift: number;
+};
+
+const RING_STEP = 16;
+const RING_MAX = 480;
+const RING_DIRECTIONS = 16;
+const RING_ORDER = [12, 4, 0, 8, 14, 10, 2, 6, 13, 11, 5, 3, 15, 9, 1, 7];
+
+function pointInsideRect(x: number, y: number, rect: Rect, padding = 0) {
+  return (
+    x >= rect.x - padding &&
+    x <= rect.x + rect.width + padding &&
+    y >= rect.y - padding &&
+    y <= rect.y + rect.height + padding
+  );
+}
+
+function segmentIntersectsRect(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  rect: Rect,
+  padding = 4,
+) {
+  const left = rect.x - padding,
+    right = rect.x + rect.width + padding,
+    top = rect.y - padding,
+    bottom = rect.y + rect.height + padding,
+    dx = x2 - x1,
+    dy = y2 - y1;
+  let t0 = 0,
+    t1 = 1;
+  const clip = (p: number, q: number) => {
+    if (Math.abs(p) < 1e-7) return q >= 0;
+    const t = q / p;
+    if (p < 0) {
+      if (t > t1) return false;
+      if (t > t0) t0 = t;
+    } else {
+      if (t < t0) return false;
+      if (t < t1) t1 = t;
+    }
+    return true;
+  };
+  return (
+    clip(-dx, x1 - left) &&
+    clip(dx, right - x1) &&
+    clip(-dy, y1 - top) &&
+    clip(dy, bottom - y1)
+  );
+}
+
+function placeSites(
+  entries: { entry: PlacementSite; width: number; height: number }[],
+  obstacles: Rect[],
+): SitePlacement[] {
+  const occupied = [...obstacles];
+  return [...entries]
+    .sort((a, b) =>
+      a.entry.placementId < b.entry.placementId
+        ? -1
+        : a.entry.placementId > b.entry.placementId
+          ? 1
+          : 0,
+    )
+    .map(({ entry, width, height }) => {
+      const w = Math.min(width, innerWidth - 16),
+        h = height,
+        px = entry.point.x,
+        py = entry.point.y,
+        minimumShift = entry.detailed ? 64 : 0,
+        at = (cx: number, cy: number): Rect => ({
+          x: Math.max(8, Math.min(innerWidth - w - 8, cx - 22)),
+          y: Math.max(8, Math.min(innerHeight - h - 8, cy - 22)),
+          width: w,
+          height: h,
+        }),
+        free = (candidate: Rect) => {
+          if (occupied.some((obstacle) => overlaps(candidate, obstacle, 5))) return false;
+          const cx = candidate.x + 22,
+            cy = candidate.y + 22,
+            shift = Math.hypot(cx - px, cy - py);
+          if (shift < minimumShift) return false;
+          if (shift <= 18) return true;
+          return obstacles.every(
+            (obstacle) =>
+              pointInsideRect(px, py, obstacle, 2) ||
+              !segmentIntersectsRect(cx, cy, px, py, obstacle, 4),
+          );
+        };
+      let rect: Rect | null = null;
+      for (let radius = minimumShift; radius <= RING_MAX && !rect; radius += RING_STEP) {
+        const count = radius === 0 ? 1 : RING_DIRECTIONS;
+        for (let i = 0; i < count; i++) {
+          const angle = (RING_ORDER[i] / RING_DIRECTIONS) * Math.PI * 2,
+            candidate = at(px + Math.cos(angle) * radius, py + Math.sin(angle) * radius);
+          if (free(candidate)) {
+            rect = candidate;
+            break;
+          }
+        }
+      }
+      if (!rect) {
+        let best: Rect | null = null,
+          bestDistance = Infinity;
+        for (let y = 8; y <= innerHeight - h - 8; y += 12)
+          for (let x = 8; x <= innerWidth - w - 8; x += 24) {
+            const candidate = { x, y, width: w, height: h },
+              distance = Math.hypot(x + 22 - px, y + 22 - py);
+            if (distance < bestDistance && free(candidate)) {
+              best = candidate;
+              bestDistance = distance;
+            }
+          }
+        rect = best ?? at(px, py);
+      }
+      occupied.push(rect);
+      return { entry, rect, shift: Math.hypot(rect.x + 22 - px, rect.y + 22 - py) };
+    });
 }
 
 function render() {
@@ -239,10 +391,9 @@ function render() {
 
   const radius = Math.hypot(view.halfHeight * view.aspect, view.halfHeight) * 1.35,
     visible = nearbyCriticalSites(view.x, view.z, radius, innerWidth < 600 ? 8 : 14),
-    politicalFingerprint = (window.politicalAtlas?.state?.labels ?? [])
-      .map((label: any) => `${label.id}/${Math.round(label.x)}/${Math.round(label.y)}`)
-      .join("|"),
-    fingerprint = `${Math.round(view.x)}/${Math.round(view.z)}/${Math.round(view.halfHeight)}/${Math.round(view.yaw * 1000)}/${innerWidth}/${innerHeight}/${visible.map((s) => s.code).join("|")}/${politicalFingerprint}`;
+    obstacles = labelObstacles(),
+    liveObstacleFingerprint = obstacleFingerprint(obstacles),
+    fingerprint = `${Math.round(view.x)}/${Math.round(view.z)}/${Math.round(view.halfHeight)}/${Math.round(view.yaw * 1000)}/${innerWidth}/${innerHeight}/${visible.map((site) => site.code).join("|")}/${liveObstacleFingerprint}`;
   if (fingerprint !== lastFingerprint) {
     lastFingerprint = fingerprint;
     const visibleSet = new Set(visible.map((site) => site.code)),
@@ -280,50 +431,65 @@ function render() {
       });
     }
 
-    const byPlacementId = new Map(eligible.map((entry) => [entry.placementId, entry])),
-      placements = placeLabels(
-        eligible.map((entry) => ({
-          id: entry.placementId,
-          x: entry.point.x,
-          y: entry.point.y,
-          width: 46 + labelWidth(entry.site),
-          height: 44,
-        })),
-        innerWidth,
-        innerHeight,
-        labelObstacles(),
-      );
+    const sized = eligible.map((entry) => {
+      const marker = markerNodes.get(entry.site.code)!;
+      marker.hidden = false;
+      const label = marker.querySelector<HTMLElement>(".site-label"),
+        labelW = label?.offsetWidth || labelWidth(entry.site),
+        labelH = label?.offsetHeight || 22;
+      return { entry, width: 46 + labelW, height: Math.max(44, 10 + labelH) };
+    });
+    const placements = placeSites(sized, obstacles);
 
     lastVisibleCodes = [];
     for (const placement of placements) {
-      const entry = byPlacementId.get(placement.id)!;
-      const marker = markerNodes.get(entry.site.code)!;
+      const entry = placement.entry,
+        marker = markerNodes.get(entry.site.code)!,
+        cx = placement.rect.x + 22,
+        cy = placement.rect.y + 22;
       marker.hidden = false;
-      marker.style.transform = `translate(${Math.round(placement.rect.x + 22)}px,${Math.round(placement.rect.y + 22)}px)`;
+      marker.style.transform = `translate(${Math.round(cx)}px,${Math.round(cy)}px)`;
       lastVisibleCodes.push(entry.site.code);
-      if (placement.leader)
+      const accessClass = entry.site.kind === "ruin" ? "ruin-access" : "critical-access";
+      appendLine(
+        accessLayer,
+        "access-casing",
+        entry.point.x,
+        entry.point.y,
+        entry.accessPoint.x,
+        entry.accessPoint.y,
+      );
+      appendLine(
+        accessLayer,
+        accessClass,
+        entry.point.x,
+        entry.point.y,
+        entry.accessPoint.x,
+        entry.accessPoint.y,
+      );
+      if (placement.shift > 18) {
+        const ux = (entry.point.x - cx) / placement.shift,
+          uy = (entry.point.y - cy) / placement.shift,
+          startX = cx + ux * 17,
+          startY = cy + uy * 17;
+        appendLine(
+          accessLayer,
+          "site-label-leader-halo",
+          startX,
+          startY,
+          entry.point.x,
+          entry.point.y,
+        );
         appendLine(
           accessLayer,
           "site-label-leader",
+          startX,
+          startY,
           entry.point.x,
           entry.point.y,
-          placement.endX,
-          placement.endY,
         );
-      if (
-        entry.accessPoint.x > 0 &&
-        entry.accessPoint.x < innerWidth &&
-        entry.accessPoint.y > 0 &&
-        entry.accessPoint.y < innerHeight
-      )
-        appendLine(
-          accessLayer,
-          entry.site.kind === "ruin" ? "ruin-access" : "critical-access",
-          entry.point.x,
-          entry.point.y,
-          entry.accessPoint.x,
-          entry.accessPoint.y,
-        );
+        appendAnchor(accessLayer, entry.point.x, entry.point.y);
+      }
     }
     if (selectedCode && !criticalSites.some((site) => site.code === selectedCode)) selectSite(null);
   }
@@ -349,7 +515,7 @@ Object.defineProperty(window, "advisorSites", {
         detailedCount: lastVisibleCodes.filter((code) => detailCache.has(code)).length,
         cachedDetails: detailCache.size,
         detailCacheLimit: DETAIL_CACHE_LIMIT,
-        declutterSystem: "navigation.placeLabels",
+        declutterSystem: "site.nearest-free-live-obstacles-v2",
         politicalObstacleCount: lastPoliticalObstacleCount,
       };
     },
