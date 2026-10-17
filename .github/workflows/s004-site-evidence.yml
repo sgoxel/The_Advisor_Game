@@ -1,0 +1,49 @@
+name: S004 critical-site evidence
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/site-experience.ts"
+      - "src/site-experience.css"
+      - "src/transport-inspector.css"
+      - "tests/site-browser.js"
+      - "playwright.fallback.config.js"
+      - ".github/workflows/s004-site-evidence.yml"
+permissions:
+  contents: read
+jobs:
+  site-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: WebGL2 site acceptance
+        run: xvfb-run -a npx playwright test --config playwright.fallback.config.js tests/browser/site.spec.js
+      - name: WebGPU site acceptance
+        run: xvfb-run -a npx playwright test --config playwright.webgpu.config.js tests/webgpu/site.spec.js
+      - name: Capture fresh site evidence
+        run: |
+          python -m pip install playwright==1.63.0
+          npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          SITE_STEPS='eval:window.s=window.advisorSites.sites.find(s=>s.kind==="ruin");eval:window.advisorWorld.navigation.setFocus(window.s.canonicalPosition.lon,window.s.canonicalPosition.lat);select:#map-scale=1000;settle;shot:ruin-wide;select:#map-scale=20;settle;shot:ruin-local;eval:window.advisorSites.select(window.s.code);visible:#critical-site-panel;shot:ruin-inspected;eval:window.advisorSites.select(null);eval:window.s=window.advisorSites.sites.find(s=>s.kind==="critical-place");eval:window.advisorWorld.navigation.setFocus(window.s.canonicalPosition.lon,window.s.canonicalPosition.lat);select:#map-scale=1000;settle;shot:place-wide;select:#map-scale=20;settle;shot:place-local;eval:window.advisorSites.select(window.s.code);visible:#critical-site-panel;shot:place-inspected'
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp24-sites-webgl2 --name critical-sites --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 300 --steps "$SITE_STEPS"
+          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp24-sites-webgpu --name critical-sites --profile desktop,phone,phone-landscape --renderer webgpu --timeout 300 --steps "$SITE_STEPS"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: s004-critical-site-evidence
+          path: test-results/
