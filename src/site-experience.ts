@@ -47,7 +47,6 @@ let lastFingerprint = "";
 let lastObstacleFingerprint = "";
 let lastVisibleCodes: string[] = [];
 let lastPoliticalObstacleCount = 0;
-let obstacleProbeFrame = 0;
 
 function detailFor(site: CriticalSite): SiteDetail {
   let detail = detailCache.get(site.code);
@@ -217,8 +216,8 @@ function labelObstacles(): Rect[] {
     .map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }));
 }
 
-function obstacleFingerprint() {
-  return labelObstacles()
+function obstacleFingerprint(obstacles: Rect[]) {
+  return obstacles
     .map((rect) => `${Math.round(rect.x)}/${Math.round(rect.y)}/${Math.round(rect.width)}/${Math.round(rect.height)}`)
     .join("|");
 }
@@ -359,8 +358,8 @@ function render() {
     return requestAnimationFrame(render);
   }
 
-  if (obstacleProbeFrame++ % 6 === 0 || !lastObstacleFingerprint)
-    lastObstacleFingerprint = obstacleFingerprint();
+  const obstacles = labelObstacles();
+  lastObstacleFingerprint = obstacleFingerprint(obstacles);
 
   const radius = Math.hypot(view.halfHeight * view.aspect, view.halfHeight) * 1.35,
     visible = nearbyCriticalSites(
@@ -427,8 +426,7 @@ function render() {
         labelH = label?.offsetHeight || 22;
       return { entry, width: 46 + labelW, height: Math.max(44, 10 + labelH) };
     });
-    const obstacles = labelObstacles(),
-      placements = placeSites(sized, obstacles),
+    const placements = placeSites(sized, obstacles),
       allPlacementRects = placements.map((placement) => placement.rect);
 
     lastVisibleCodes = [];
