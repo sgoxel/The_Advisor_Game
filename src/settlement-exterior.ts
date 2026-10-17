@@ -51,43 +51,35 @@ export function canonicalSettlementPopulation(place: Place) {
 }
 
 function residentialSpineLength(street: SettlementStreetPlan) {
-  let total = 0;
-  for (let index = 1; index < street.points.length; index++) {
-    const a = street.points[index - 1], b = street.points[index];
-    total += Math.hypot(wrapSourceX(b.x - a.x), b.z - a.z);
-  }
-  return total;
+  const a = street.points[0], b = street.points[street.points.length - 1];
+  return Math.hypot(wrapSourceX(b.x - a.x), b.z - a.z);
 }
 function pointOnResidentialSpine(street: SettlementStreetPlan, fraction: number) {
-  const total = residentialSpineLength(street), targetFraction = Math.max(0, Math.min(1, fraction));
-  let remaining = total * targetFraction;
-  for (let index = 1; index < street.points.length; index++) {
-    const a = street.points[index - 1], b = street.points[index],
-      dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz);
-    if (remaining <= length || index + 1 === street.points.length) {
-      const t = length > 0 ? Math.max(0, Math.min(1, remaining / length)) : 0,
-        tangent = normalize(dx, dz);
-      return {
-        point: { x: wrapSourceX(a.x + dx * t), z: a.z + dz * t },
-        tangent,
-        normal: { x: -tangent.z, z: tangent.x },
-      };
-    }
-    remaining -= length;
-  }
-  const a = street.points[0], b = street.points[Math.min(1, street.points.length - 1)], tangent = normalize(wrapSourceX(b.x - a.x), b.z - a.z);
-  return { point: a, tangent, normal: { x: -tangent.z, z: tangent.x } };
+  const a = street.points[0], b = street.points[street.points.length - 1],
+    dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz) || 1,
+    axis = { x: dx / length, z: dz / length }, normal = { x: -axis.z, z: axis.x },
+    t = Math.max(0, Math.min(1, fraction)), reference = street.points[Math.floor((street.points.length - 1) * .5)],
+    referenceX = wrapSourceX(reference.x - a.x), referenceZ = reference.z - a.z,
+    measuredBend = referenceX * normal.x + referenceZ * normal.z,
+    bend = Math.max(-12, Math.min(12, measuredBend)), wave = Math.sin(Math.PI * t) * bend,
+    slope = (Math.PI * bend / length) * Math.cos(Math.PI * t), tangent = normalize(axis.x + normal.x * slope, axis.z + normal.z * slope);
+  return {
+    point: { x: wrapSourceX(a.x + axis.x * length * t + normal.x * wave), z: a.z + axis.z * length * t + normal.z * wave },
+    tangent,
+    normal: { x: -tangent.z, z: tangent.x },
+  };
 }
 function offsetPoint(base: ReturnType<typeof pointOnResidentialSpine>, along: number, lateral: number): SettlementPoint {
   return { x: wrapSourceX(base.point.x + base.tangent.x * along + base.normal.x * lateral), z: base.point.z + base.tangent.z * along + base.normal.z * lateral };
 }
 
 /**
- * One canonical one-person residence per resident. Residences follow the
- * canonical first street by arc length, then occupy deterministic staggered
- * ribbons. City footprints and band spacing are large enough to read as a
- * district at settlement scale while remaining disjoint by construction.
- * Camera, visit order, LOD, cache state and renderer backend never contribute.
+ * One canonical one-person residence per resident. Residences advance
+ * monotonically along the canonical first-street chord, with a bounded smooth
+ * bend derived from that street and deterministic staggered ribbons. City
+ * footprints remain readable at settlement scale while primary spacing stays
+ * disjoint by construction. Camera, visit order, LOD, cache state and renderer
+ * backend never contribute.
  */
 export function settlementHomeFor(place: Place, index: number, suppliedPlan?: SettlementExteriorPlan): SettlementPlotPlan {
   const population = canonicalSettlementPopulation(place);
@@ -189,7 +181,7 @@ function roadBorderIntersection(place: Place, road: Road, border: readonly Settl
     for (let edge = 0; edge < border.length; edge++) {
       const c = border[edge], d = border[(edge + 1) % border.length],
         cx = wrapSourceX(c.x - place.x), cz = c.z - place.z,
-        dx = cx + wrapSourceX(d.x - c.x), dz = d.z - place.z,
+        dx = cx + wrapSourceX(d.x - c.x), dz = d.z - c.z,
         hit = segmentIntersection(ax, az, bx, bz, cx, cz, dx, dz);
       if (!hit) continue;
       return { x: wrapSourceX(place.x + ax + (bx - ax) * hit.t), z: place.z + az + (bz - az) * hit.t };
