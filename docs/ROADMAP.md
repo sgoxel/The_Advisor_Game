@@ -24,29 +24,29 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S004 — Settlements, Buildings & World Sites
 
-- WP-S004-001-001 — Seeded settlement distribution + morphology + exterior UX/performance: viable-area density, variable city/village counts, varied roads/plots/services/homes/farms/gates and mobile-safe rendering
-- WP-S004-002-001 — Ruin/critical-place integration + UX/performance: 1/1000 discoverability, legal access, stable canonical identity, bounded terrain preparation, semantic-zoom symbols and lazy detail
+- WP-S004-001-001 — Deterministic settlement distribution & morphology: viable-area density, readable functional villages/cities, legal access and bounded mobile rendering
+- WP-S004-002-001 — Canonical ruins & critical sites: 1/1000 discoverability, legal access, responsive inspection and lazy mobile-safe detail
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Terrain-aware shared transport authority + graph/render parity: 1/100 roads, real junctions/trunks, required-node connectivity, bridges/harbors/ferries and bounded lazy generation
+- WP-S005-001-001 — Canonical transport network: terrain-aware shared topology, graph/render parity, truthful route UX and bounded mobile rendering
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Living-resident authority + inspectable life performance: stable home/work/guard identity, analytical schedules, no full-pool rebuild/scan, spatial queries and reusable actor pools
-- WP-S006-002-001 — Usable building-interior architecture analysis + implementation plan: same-world portals, deterministic persisted reconstruction, demand loading, reusable kits and mobile-safe bounds
+- WP-S006-001-001 — Scalable living residents: canonical home/work/guard identity, deterministic schedules/routes, bounded spatial queries and reusable actors
+- WP-S006-002-001 — Usable-interior architecture analysis: same-world portals, deterministic persisted reconstruction, demand loading, responsive UX and implementation slices
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Medieval-fantasy presentation architecture + implementation slicing: toon lighting/materials, unified semantic zoom, readable 2D actors/labels, font-stable layout, globe↔local continuity and mobile/WebGPU/WebGL2 budgets
+- WP-S007-001-001 — Medieval-fantasy presentation architecture analysis: toon 3D materials, semantic zoom, readable actors/labels, mobile/backend budgets and implementation slices
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Responsive accessible gameplay shell: viewport-fit safe areas, ≥44px controls, readable typography, map-safe panels, keyboard/Escape/focus lifecycle, reduced motion, accessible map semantics and debug separation
+- WP-S008-001-001 — Responsive & accessible gameplay shell: safe-area layout, 44px touch targets, readable UI, keyboard/focus semantics and map-safe panels
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance observability + deploy gates: frame/input/coverage/worker/upload p95, first-visible-response latency, app-wide resource accounting, seven viewports and WebGPU/WebGL2 acceptance
-- WP-S009-002-001 — Main-thread/UI latency optimization: invalidation-driven labels/overlays/inspectors, font/layout caching, bounded canonical picking, pooled DOM/resources and stable-frame zero-churn
-- WP-S009-003-001 — Adaptive mobile renderer + live backend recovery: device-class DPR/render-scale/shadows, sustained-pressure hysteresis, shared resource policy, asset reuse, semantic continuity and WebGPU→WebGL2 recovery
-- WP-S009-004-001 — README/runtime/release truth: current-stage status, Advisor-vs-atlas semantics, canonical dynamic copy/counts, legacy-authority cleanup and exact-SHA compatibility claims
+- WP-S009-001-001 — Exact-SHA performance & release gates: p95 frame/input/streaming metrics, first-visible/final-detail latency, resources and dual-backend viewport acceptance
+- WP-S009-002-001 — Main-thread/UI latency: invalidation-driven layout/labels/inspectors, bounded canonical picking, pooled DOM/resources and stable-frame zero-churn
+- WP-S009-003-001 — Adaptive mobile renderer & live recovery: device-class DPR/render scale, hysteresis, resource reuse and WebGPU→WebGL2 state-preserving recovery
+- WP-S009-004-001 — README/runtime/release conformance: truthful stage/Atlas semantics, dynamic canonical copy, legacy cleanup and evidence-backed compatibility claims
