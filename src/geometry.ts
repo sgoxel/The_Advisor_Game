@@ -198,13 +198,15 @@ export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): 
     const x = feature.x - originX, z = feature.z - originZ, y = elevationToRenderY(feature.y), yaw = feature.yawRad || 0,
       width = feature.footprintWidth || 8, depth = feature.footprintDepth || 8, variant = feature.variant || 0;
     if (feature.kind === "residence") {
-      const wall = [color(185, 174, 145), color(167, 160, 139), color(196, 181, 149)][variant % 3], roof = [color(104, 65, 46), color(88, 67, 51), color(117, 73, 49)][(variant >>> 2) % 3], bodyHeight = .38 + (variant % 4) * .025;
-      structures.boxYaw(x, y - .015, z, width, bodyHeight, depth, yaw, wall);
-      structures.boxYaw(x, y + bodyHeight - .02, z, width + .13, .11, depth + .13, yaw, roof);
+      const wall = [color(185, 174, 145), color(167, 160, 139), color(196, 181, 149)][variant % 3], roof = [color(104, 65, 46), color(88, 67, 51), color(117, 73, 49)][(variant >>> 2) % 3],
+        urban = Boolean(feature.urban), bodyHeight = urban ? 4.1 + (variant % 4) * .34 : 2.8 + (variant % 4) * .28,
+        roofHeight = urban ? .56 : .42, roofOverhang = urban ? .42 : .28;
+      structures.boxYaw(x, y - .05, z, width, bodyHeight, depth, yaw, wall);
+      structures.boxYaw(x, y + bodyHeight - .06, z, width + roofOverhang, roofHeight, depth + roofOverhang, yaw, roof);
       if (tile.size <= 32) {
-        const front = offsetLocal(x, z, yaw, 0, depth * .5 + .02), chimney = offsetLocal(x, z, yaw, width * .26, -depth * .18);
-        detail.boxYaw(front.x, y + .015, front.z, Math.max(.11, width * .2), bodyHeight * .62, .035, yaw, color(78, 56, 40));
-        detail.boxYaw(chimney.x, y + bodyHeight, chimney.z, .09, .2, .09, yaw, color(108, 102, 91));
+        const front = offsetLocal(x, z, yaw, 0, depth * .5 + .03), chimney = offsetLocal(x, z, yaw, width * .26, -depth * .18);
+        detail.boxYaw(front.x, y + .03, front.z, Math.max(.45, width * .2), bodyHeight * .62, .09, yaw, color(78, 56, 40));
+        detail.boxYaw(chimney.x, y + bodyHeight, chimney.z, .34, urban ? 1.05 : .78, .34, yaw, color(108, 102, 91));
       }
     } else if (feature.kind === "street") {
       structures.boxYaw(x, y + .018, z, Math.max(2.8, width), .075, feature.length || depth || 4, yaw, color(119, 99, 68));
