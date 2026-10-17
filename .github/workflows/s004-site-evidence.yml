@@ -13,6 +13,9 @@ on:
       - ".github/workflows/s004-site-evidence.yml"
 permissions:
   contents: read
+concurrency:
+  group: s004-critical-site-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 jobs:
   site-evidence:
     strategy:
