@@ -32,10 +32,10 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
-          RUIN='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))(window.advisorSites.sites.find(s=>s.kind==="ruin"));select:#map-scale=1000;settle;visible:.critical-site-marker.ruin:not([hidden]);shot:ruin-1000;select:#map-scale=100;settle;visible:.critical-site-marker.ruin:not([hidden]);click:.critical-site-marker.ruin:not([hidden]);visible:#critical-site-panel;shot:ruin-inspection'
-          CRITICAL='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))([...window.advisorSites.sites].filter(s=>s.kind==="critical-place").sort((a,b)=>b.preparedHeightM-a.preparedHeightM||(a.code<b.code?-1:a.code>b.code?1:0))[0]);select:#map-scale=1000;settle;visible:.critical-site-marker.critical-place:not([hidden]);shot:critical-1000;select:#map-scale=100;settle;visible:.critical-site-marker.critical-place:not([hidden]);click:.critical-site-marker.critical-place:not([hidden]);visible:#critical-site-panel;shot:critical-inspection'
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s004-sites-webgl2 --name sites --profile desktop,laptop,tablet,phone,phone-landscape,phone-small,tablet-portrait --renderer webgl2 --timeout 240 --steps "$RUIN"
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s004-critical-webgl2 --name critical --profile desktop,laptop,tablet,phone,phone-landscape,phone-small,tablet-portrait --renderer webgl2 --timeout 240 --steps "$CRITICAL"
+          RUIN='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))(window.advisorSites.sites.find(s=>s.kind==="ruin"));select:#map-scale=1000;settle;visible:.critical-site-marker.ruin:not([hidden]);shot:ruin-1000;select:#map-scale=20;settle;visible:.critical-site-marker.ruin:not([hidden]);shot:ruin-local;click:.critical-site-marker.ruin:not([hidden]);visible:#critical-site-panel;shot:ruin-inspection'
+          CRITICAL='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))([...window.advisorSites.sites].filter(s=>s.kind==="critical-place").sort((a,b)=>b.preparedHeightM-a.preparedHeightM||(a.code<b.code?-1:a.code>b.code?1:0))[0]);select:#map-scale=1000;settle;visible:.critical-site-marker.critical-place:not([hidden]);shot:critical-1000;select:#map-scale=20;settle;visible:.critical-site-marker.critical-place:not([hidden]);shot:critical-local;click:.critical-site-marker.critical-place:not([hidden]);visible:#critical-site-panel;shot:critical-inspection'
+          python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s004-sites-webgl2 --name sites --profile desktop,laptop,tablet,phone,phone-landscape,phone-small,tablet-portrait --renderer webgl2 --timeout 240 --steps "$RUIN"
+          python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s004-critical-webgl2 --name critical --profile desktop,laptop,tablet,phone,phone-landscape,phone-small,tablet-portrait --renderer webgl2 --timeout 240 --steps "$CRITICAL"
       - name: Record acceptance telemetry
         run: |
           mkdir -p test-results
@@ -57,7 +57,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - run: python -m pip install playwright==1.63.0
+      - run: python3 -m pip install playwright==1.63.0
       - name: Verify site interaction on WebGPU
         run: npx playwright test site.spec.js --config playwright.webgpu.config.js
       - name: Capture WebGPU critical-place evidence
@@ -69,10 +69,10 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
-          RUIN='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))(window.advisorSites.sites.find(s=>s.kind==="ruin"));select:#map-scale=1000;settle;visible:.critical-site-marker.ruin:not([hidden]);shot:ruin-1000;select:#map-scale=100;settle;visible:.critical-site-marker.ruin:not([hidden]);click:.critical-site-marker.ruin:not([hidden]);visible:#critical-site-panel;shot:ruin-inspection'
-          CRITICAL='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))([...window.advisorSites.sites].filter(s=>s.kind==="critical-place").sort((a,b)=>b.preparedHeightM-a.preparedHeightM||(a.code<b.code?-1:a.code>b.code?1:0))[0]);select:#map-scale=1000;settle;visible:.critical-site-marker.critical-place:not([hidden]);shot:critical-1000;select:#map-scale=100;settle;visible:.critical-site-marker.critical-place:not([hidden]);click:.critical-site-marker.critical-place:not([hidden]);visible:#critical-site-panel;shot:critical-inspection'
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s004-sites-webgpu --name sites --profile desktop,laptop,tablet,phone,phone-landscape,phone-small,tablet-portrait --renderer webgpu --timeout 240 --steps "$RUIN"
-          python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s004-critical-webgpu --name critical --profile desktop,laptop,tablet,phone,phone-landscape,phone-small,tablet-portrait --renderer webgpu --timeout 240 --steps "$CRITICAL"
+          RUIN='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))(window.advisorSites.sites.find(s=>s.kind==="ruin"));select:#map-scale=1000;settle;visible:.critical-site-marker.ruin:not([hidden]);shot:ruin-1000;select:#map-scale=20;settle;visible:.critical-site-marker.ruin:not([hidden]);shot:ruin-local;click:.critical-site-marker.ruin:not([hidden]);visible:#critical-site-panel;shot:ruin-inspection'
+          CRITICAL='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))([...window.advisorSites.sites].filter(s=>s.kind==="critical-place").sort((a,b)=>b.preparedHeightM-a.preparedHeightM||(a.code<b.code?-1:a.code>b.code?1:0))[0]);select:#map-scale=1000;settle;visible:.critical-site-marker.critical-place:not([hidden]);shot:critical-1000;select:#map-scale=20;settle;visible:.critical-site-marker.critical-place:not([hidden]);shot:critical-local;click:.critical-site-marker.critical-place:not([hidden]);visible:#critical-site-panel;shot:critical-inspection'
+          python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s004-sites-webgpu --name sites --profile desktop,laptop,tablet,phone,phone-landscape,phone-small,tablet-portrait --renderer webgpu --timeout 240 --steps "$RUIN"
+          python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s004-critical-webgpu --name critical --profile desktop,laptop,tablet,phone,phone-landscape,phone-small,tablet-portrait --renderer webgpu --timeout 240 --steps "$CRITICAL"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
