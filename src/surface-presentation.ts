@@ -139,7 +139,8 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
     uniform float surfaceDetailWeight;
     uniform float surfaceRoadVisibility;
     void getEmission() {
-      dEmission = mix(vVertexColor.rgb, pow(vec3(112.0,92.0,62.0)/255.0,vec3(2.2)), vVertexColor.a * surfaceRoadVisibility);
+      // Lighter packed-earth road tone keeps access branches distinct from terrain shadows at close scale.
+      dEmission = mix(vVertexColor.rgb, pow(vec3(150.0,124.0,86.0)/255.0,vec3(2.2)), vVertexColor.a * surfaceRoadVisibility);
       #ifdef STD_EMISSIVE_TEXTURE
         vec3 coarse = {STD_EMISSIVE_TEXTURE_DECODE}(texture2DBias({STD_EMISSIVE_TEXTURE_NAME}, {STD_EMISSIVE_TEXTURE_UV}, {STD_TEXTURE_BIAS})).{STD_EMISSIVE_TEXTURE_CHANNEL};
         dEmission = mix(coarse, dEmission, surfaceDetailWeight);
@@ -150,7 +151,8 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
     uniform surfaceDetailWeight: f32;
     uniform surfaceRoadVisibility: f32;
     fn getEmission() {
-      dEmission = mix(vVertexColor.rgb, pow(vec3f(112.0,92.0,62.0)/255.0,vec3f(2.2)), vVertexColor.a * uniform.surfaceRoadVisibility);
+      // Lighter packed-earth road tone keeps access branches distinct from terrain shadows at close scale.
+      dEmission = mix(vVertexColor.rgb, pow(vec3f(150.0,124.0,86.0)/255.0,vec3f(2.2)), vVertexColor.a * uniform.surfaceRoadVisibility);
       #ifdef STD_EMISSIVE_TEXTURE
         let coarse = {STD_EMISSIVE_TEXTURE_DECODE}(textureSampleBias({STD_EMISSIVE_TEXTURE_NAME}, {STD_EMISSIVE_TEXTURE_NAME}Sampler, {STD_EMISSIVE_TEXTURE_UV}, {STD_TEXTURE_BIAS})).{STD_EMISSIVE_TEXTURE_CHANNEL};
         dEmission = mix(coarse, dEmission, uniform.surfaceDetailWeight);
