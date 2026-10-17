@@ -20,7 +20,10 @@ jobs:
           node --experimental-strip-types -e 'import("./src/sites.ts").then(({siteAccessRoads,siteAcceptanceSummary})=>{const max=siteAcceptanceSummary().accessProfileSegmentMaxM;if(max!==75)throw new Error(`Unexpected site access profile segment target ${max}`);for(const road of siteAccessRoads){if(road.networkId!==road.code||road.networkKind!=="link"||road.coarseFallback!==false)throw new Error(`Invalid site access metadata ${road.code}`);const expected=Math.max(1,Math.ceil(road.surfaceLengthM/max))+1;if(road.centerline?.length!==expected)throw new Error(`Unbounded site access profile ${road.code}: ${road.centerline?.length} != ${expected}`)}})'
       - run: npm run build
       - run: npx playwright install chromium
-      - run: python3 -m pip install playwright==1.63.0
+      - name: Install Python screenshot harness
+        run: |
+          python3 -m venv .venv-evidence
+          .venv-evidence/bin/python -m pip install playwright==1.63.0
       - name: Verify site interaction on WebGL2
         run: npx playwright test site.spec.js --config playwright.fallback.config.js
       - name: Capture WebGL2 critical-place evidence
@@ -34,8 +37,8 @@ jobs:
           done
           RUIN='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))(window.advisorSites.sites.find(s=>s.kind==="ruin"));select:#map-scale=1000;settle;visible:.critical-site-marker.ruin:not([hidden]);shot:ruin-1000;select:#map-scale=20;settle;visible:.critical-site-marker.ruin:not([hidden]);shot:ruin-local;click:.critical-site-marker.ruin:not([hidden]);visible:#critical-site-panel;shot:ruin-inspection'
           CRITICAL='eval:(s=>window.advisorWorld.navigation.setFocus(s.canonicalPosition.lon,s.canonicalPosition.lat))([...window.advisorSites.sites].filter(s=>s.kind==="critical-place").sort((a,b)=>b.preparedHeightM-a.preparedHeightM||(a.code<b.code?-1:a.code>b.code?1:0))[0]);select:#map-scale=1000;settle;visible:.critical-site-marker.critical-place:not([hidden]);shot:critical-1000;select:#map-scale=20;settle;visible:.critical-site-marker.critical-place:not([hidden]);shot:critical-local;click:.critical-site-marker.critical-place:not([hidden]);visible:#critical-site-panel;shot:critical-inspection'
-          python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s004-sites-webgl2 --name sites --profile desktop,laptop,tablet,phone,phone-landscape,phone-small,tablet-portrait --renderer webgl2 --timeout 240 --steps "$RUIN"
-          python3 tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s004-critical-webgl2 --name critical --profile desktop,laptop,tablet,phone,phone-landscape,phone-small,tablet-portrait --renderer webgl2 --timeout 240 --steps "$CRITICAL"
+          .venv-evidence/bin/python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s004-sites-webgl2 --name sites --profile desktop,laptop,tablet,phone,phone-landscape,phone-small,tablet-portrait --renderer webgl2 --timeout 240 --steps "$RUIN"
+          .venv-evidence/bin/python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp-s004-critical-webgl2 --name critical --profile desktop,laptop,tablet,phone,phone-landscape,phone-small,tablet-portrait --renderer webgl2 --timeout 240 --steps "$CRITICAL"
       - name: Record acceptance telemetry
         run: |
           mkdir -p test-results
