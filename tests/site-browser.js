@@ -118,9 +118,15 @@ for (const viewport of [
 
     await page.selectOption("#map-scale", "20");
     await page.waitForFunction(
-      (code) =>
-        window.advisorWorld?.state.scaleLabel === "1/20" &&
-        window.advisorSites?.state.visibleCodes.includes(code),
+      (code) => {
+        const siteMarker = document.querySelector(`.critical-site-marker[data-code="${CSS.escape(code)}"]`);
+        return (
+          window.advisorWorld?.state.scaleLabel === "1/20" &&
+          window.advisorSites?.state.visibleCodes.includes(code) &&
+          siteMarker?.classList.contains("detailed") &&
+          document.querySelectorAll("#critical-site-access circle.site-anchor").length > 0
+        );
+      },
       target.code,
       { timeout: 90000 },
     );
