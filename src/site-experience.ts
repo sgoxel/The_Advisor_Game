@@ -47,6 +47,10 @@ let lastFingerprint = "";
 let lastObstacleFingerprint = "";
 let lastVisibleCodes: string[] = [];
 let lastPoliticalObstacleCount = 0;
+let lastObstacles: Rect[] = [];
+let obstacleProbeFrame = 0;
+let framePending = false;
+let politicalObserver: MutationObserver | null = null;
 
 function detailFor(site: CriticalSite): SiteDetail {
   let detail = detailCache.get(site.code);
@@ -114,6 +118,20 @@ function ensureUi() {
     window.advisorWorld.navigation.setFocus(site.canonicalPosition.lon, site.canonicalPosition.lat);
     window.advisorWorld.setHalfHeight(420);
   };
+
+  const politicalRoot = document.getElementById("political-labels");
+  if (politicalRoot && !politicalObserver) {
+    politicalObserver = new MutationObserver(() => {
+      lastObstacleFingerprint = "";
+      render();
+    });
+    politicalObserver.observe(politicalRoot, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["style", "class"],
+    });
+  }
 }
 
 function selectSite(code: string | null) {
@@ -342,10 +360,19 @@ function leaderClear(
   return true;
 }
 
+function scheduleRender() {
+  if (framePending) return;
+  framePending = true;
+  requestAnimationFrame(() => {
+    framePending = false;
+    render();
+  });
+}
+
 function render() {
   ensureUi();
   const world = window.advisorWorld;
-  if (!world?.state?.ready) return requestAnimationFrame(render);
+  if (!world?.state?.ready) return scheduleRender();
   const state = world.state,
     view = state.view,
     denominator = Number(String(state.scaleLabel).replace("1/", "")),
@@ -355,11 +382,14 @@ function render() {
     for (const marker of markerNodes.values()) marker.hidden = true;
     document.querySelector<SVGSVGElement>("#critical-site-access")!.replaceChildren();
     lastVisibleCodes = [];
-    return requestAnimationFrame(render);
+    return scheduleRender();
   }
 
-  const obstacles = labelObstacles();
-  lastObstacleFingerprint = obstacleFingerprint(obstacles);
+  if (obstacleProbeFrame++ % 6 === 0 || !lastObstacleFingerprint) {
+    lastObstacles = labelObstacles();
+    lastObstacleFingerprint = obstacleFingerprint(lastObstacles);
+  }
+  const obstacles = lastObstacles;
 
   const radius = Math.hypot(view.halfHeight * view.aspect, view.halfHeight) * 1.35,
     visible = nearbyCriticalSites(
@@ -478,7 +508,7 @@ function render() {
       }
     }
   }
-  requestAnimationFrame(render);
+  scheduleRender();
 }
 
 Object.defineProperty(window, "advisorSites", {
@@ -509,4 +539,4 @@ Object.defineProperty(window, "advisorSites", {
   writable: false,
 });
 
-requestAnimationFrame(render);
+scheduleRender();
