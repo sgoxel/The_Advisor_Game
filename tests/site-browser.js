@@ -7,7 +7,7 @@ for (const viewport of [
   test(`critical sites are discoverable and inspectable on ${viewport.name}`, async ({ page }, testInfo) => {
     test.setTimeout(300000);
     const errors = [],
-      expectWebgl = /[\\/]browser[\\/]/.test(testInfo.file);
+      expectWebgl = !/webgpu/.test(String(testInfo.config.configFile ?? ""));
     page.on("pageerror", (error) => errors.push(error.message));
     if (expectWebgl)
       await page.addInitScript(() =>
@@ -51,6 +51,29 @@ for (const viewport of [
     const marker = page.locator(`.critical-site-marker[data-code="${target.code}"]`);
     await expect(marker).toBeVisible();
     await expect(marker).toContainText(target.name);
+    await page.waitForFunction(
+      (code) => {
+        const marker = document.querySelector(`.critical-site-marker[data-code="${CSS.escape(code)}"]`),
+          label = marker?.querySelector(".site-label"),
+          glyph = marker?.querySelector(".site-glyph"),
+          rects = [label, glyph].filter(Boolean).map((node) => node.getBoundingClientRect());
+        if (!rects.length) return false;
+        const siteRect = {
+          x: Math.min(...rects.map((rect) => rect.x)),
+          y: Math.min(...rects.map((rect) => rect.y)),
+          right: Math.max(...rects.map((rect) => rect.right)),
+          bottom: Math.max(...rects.map((rect) => rect.bottom)),
+        };
+        return ![...document.querySelectorAll("#political-labels .political-label")].some((node) => {
+          const rect = node.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0 &&
+            siteRect.x < rect.right + 4 && siteRect.right + 4 > rect.x &&
+            siteRect.y < rect.bottom + 4 && siteRect.bottom + 4 > rect.y;
+        });
+      },
+      target.code,
+      { timeout: 90000 },
+    );
     const discovery = await page.evaluate(
       (code) => {
         const state = window.advisorSites.state,
@@ -88,10 +111,34 @@ for (const viewport of [
     expect(discovery.presentation).toBe("flat");
     expect(discovery.visible).toBe(true);
     expect(discovery.visibleCount).toBeLessThanOrEqual(viewport.name === "phone" ? 8 : 14);
-    expect(discovery.declutterSystem).toBe("navigation.placeLabels");
+    expect(discovery.declutterSystem).toBe("site.nearest-free-live-obstacles-v2");
     expect(discovery.detailCacheLimit).toBe(48);
     expect(discovery.overlapsPoliticalLabel).toBe(false);
     expect(discovery.accessLines).toBeGreaterThan(0);
+
+    await page.selectOption("#map-scale", "20");
+    await page.waitForFunction(
+      (code) =>
+        window.advisorWorld?.state.scaleLabel === "1/20" &&
+        window.advisorSites?.state.visibleCodes.includes(code),
+      target.code,
+      { timeout: 90000 },
+    );
+    const localMarker = await page.evaluate((code) => {
+      const marker = document.querySelector(`.critical-site-marker[data-code="${CSS.escape(code)}"]`),
+        glyph = marker?.querySelector(".site-glyph"),
+        rect = glyph?.getBoundingClientRect();
+      return {
+        detailed: Boolean(marker?.classList.contains("detailed")),
+        displacement: rect
+          ? Math.hypot(rect.x + rect.width / 2 - innerWidth / 2, rect.y + rect.height / 2 - innerHeight / 2)
+          : 0,
+        anchors: document.querySelectorAll("#critical-site-access circle.site-anchor").length,
+      };
+    }, target.code);
+    expect(localMarker.detailed).toBe(true);
+    expect(localMarker.displacement).toBeGreaterThanOrEqual(48);
+    expect(localMarker.anchors).toBeGreaterThan(0);
 
     await page.selectOption("#map-scale", "100");
     await page.waitForFunction(
