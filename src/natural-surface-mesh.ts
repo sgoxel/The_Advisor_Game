@@ -4,6 +4,7 @@ import { finalSurfaceAt, type Tile } from "./world.ts";
 import { drainageSegmentsInBounds, naturalSurfaceAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "./hydrology.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { places, roads, roadDistanceAt } from "./geography.ts";
+import { siteAccessRoads } from "./sites.ts";
 import { roadFragmentsInBounds } from "./continuity-corridor.ts";
 import {
   SOURCE_PRESENTATION_RADIUS,
@@ -62,7 +63,7 @@ export function rebuildNaturalSurface(
       tile.size <= 512
         ? drainageSegmentsInBounds(tile.minX, tile.minZ, tile.size)
         : [],
-    preparedRoads = tile.size <= 512 ? [...roadFragmentsInBounds(roads, tile.minX, tile.minZ, tile.size)]
+    preparedRoads = tile.size <= 512 ? [...roadFragmentsInBounds([...roads, ...siteAccessRoads], tile.minX, tile.minZ, tile.size)]
       .filter(r => r.maxZ >= tile.minZ - 12 && r.minZ <= tile.minZ + tile.size + 12 &&
         [-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH].some(shift =>
           r.maxX + shift >= tile.minX - 12 && r.minX + shift <= tile.minX + tile.size + 12)) : [],
