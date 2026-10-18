@@ -51,6 +51,10 @@ for (const viewport of [
     const marker = page.locator(`.critical-site-marker[data-code="${target.code}"]`);
     await expect(marker).toBeVisible();
     await expect(marker).toContainText(target.name);
+    // Browser backends have different worker/render readiness times. Assert
+    // collision against the fully presented world, not the loading overlay.
+    await page.waitForFunction(() => window.advisorWorld?.state.settled, null, { timeout: 120000 });
+    await page.waitForFunction(() => document.fonts?.status === "loaded", null, { timeout: 30000 });
     await page.waitForTimeout(180);
     const discovery = await page.evaluate(
       (code) => {
@@ -65,12 +69,15 @@ for (const viewport of [
             right: Math.max(...rects.map((rect) => rect.right)),
             bottom: Math.max(...rects.map((rect) => rect.bottom)),
           } : null,
-          overlaps = siteRect ? [...document.querySelectorAll("#political-labels .political-label")].some((node) => {
+          overlappingLabels = siteRect ? [...document.querySelectorAll("#political-labels .political-label")].filter((node) => {
             const rect = node.getBoundingClientRect();
             return rect.width > 0 && rect.height > 0 &&
               siteRect.x < rect.right + 4 && siteRect.right + 4 > rect.x &&
               siteRect.y < rect.bottom + 4 && siteRect.bottom + 4 > rect.y;
-          }) : true;
+          }).map(node => {
+            const rect = node.getBoundingClientRect();
+            return { name: node.textContent, x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+          }) : [];
         return {
           scale: window.advisorWorld.state.scaleLabel,
           presentation: window.advisorWorld.state.presentation,
@@ -79,7 +86,8 @@ for (const viewport of [
           declutterSystem: state.declutterSystem,
           detailCacheLimit: state.detailCacheLimit,
           politicalObstacleCount: state.politicalObstacleCount,
-          overlapsPoliticalLabel: overlaps,
+          overlapsPoliticalLabel: overlappingLabels.length > 0,
+          overlapDetail: { siteRect, overlappingLabels },
           accessLines: document.querySelectorAll("#critical-site-access line.ruin-access").length,
         };
       },
@@ -91,9 +99,8 @@ for (const viewport of [
     expect(discovery.visibleCount).toBeLessThanOrEqual(viewport.name === "phone" ? 6 : 12);
     expect(discovery.declutterSystem).toBe("critical-sites.nearest-free");
     expect(discovery.detailCacheLimit).toBe(48);
-    expect(discovery.overlapsPoliticalLabel).toBe(false);
+    expect(discovery.overlapsPoliticalLabel, JSON.stringify(discovery.overlapDetail)).toBe(false);
     expect(discovery.accessLines).toBeGreaterThan(0);
-    await page.waitForFunction(() => window.advisorWorld.state.settled, null, { timeout: 120000 });
     await page.waitForTimeout(150);
     const idleBefore = await page.evaluate(() => ({
       placement: window.advisorSites.state.placementPassCount,
