@@ -228,6 +228,12 @@
 }
 
 @media (max-height: 500px) {
+  .critical-site-marker .site-label {
+    max-width: 108px;
+    padding: 3px 5px 4px;
+    font-size: 9.5px;
+    line-height: 1.12;
+  }
   .panel.critical-site-panel {
     top: 60px;
     bottom: 58px;
