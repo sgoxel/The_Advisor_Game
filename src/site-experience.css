@@ -158,8 +158,11 @@
   justify-content: space-between;
   gap: 10px;
 }
-.critical-site-panel .eyebrow button {
+.panel.critical-site-panel .popup-heading button,
+.panel.critical-site-panel .eyebrow button {
   flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
   min-width: 44px;
   min-height: 44px;
   padding: 0;
