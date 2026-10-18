@@ -281,7 +281,7 @@ function placeSites(
     .sort((a, b) =>
       a.entry.placementId < b.entry.placementId ? -1 : a.entry.placementId > b.entry.placementId ? 1 : 0,
     )
-    .map(({ entry, width, height }) => {
+    .flatMap(({ entry, width, height }) => {
       const w = Math.min(width, innerWidth - 16),
         h = Math.min(height, innerHeight - 16),
         preferredX = entry.point.x + (entry.detailed ? -42 : 0),
@@ -320,24 +320,18 @@ function placeSites(
               nearestDistance = distance;
             }
           }
-        rect = nearest ?? at(preferredX, preferredY);
+        rect = nearest;
       }
+      // Never replace a failed free-slot search with an overlapping marker.
+      // Higher-priority nearby sites have already reserved their own space.
+      if (!rect) return [];
       occupied.push(rect);
-      return {
+      return [{
         entry,
         rect,
         shift: Math.hypot(rect.x + 22 - entry.point.x, rect.y + 22 - entry.point.y),
-      };
+      }];
     });
-}
-
-function pointInside(rect: Rect, x: number, y: number, gap = 4) {
-  return (
-    x >= rect.x - gap &&
-    x <= rect.x + rect.width + gap &&
-    y >= rect.y - gap &&
-    y <= rect.y + rect.height + gap
-  );
 }
 
 function leaderClear(
@@ -347,13 +341,25 @@ function leaderClear(
   y2: number,
   obstacles: Rect[],
 ) {
-  for (let index = 2; index <= 10; index++) {
-    const t = index / 12,
-      x = x1 + (x2 - x1) * t,
-      y = y1 + (y2 - y1) * t;
-    if (obstacles.some((rect) => pointInside(rect, x, y))) return false;
-  }
-  return true;
+  // Exact segment/rectangle clipping, including narrow obstacles and endpoints.
+  const dx = x2 - x1, dy = y2 - y1;
+  return !obstacles.some((rect) => {
+    const gap = 4,
+      left = rect.x - gap,
+      right = rect.x + rect.width + gap,
+      top = rect.y - gap,
+      bottom = rect.y + rect.height + gap;
+    let start = 0, end = 1;
+    const clip = (p: number, q: number) => {
+      if (p === 0) return q >= 0;
+      const t = q / p;
+      if (p < 0) start = Math.max(start, t);
+      else end = Math.min(end, t);
+      return start <= end;
+    };
+    return clip(-dx, x1 - left) && clip(dx, right - x1) &&
+      clip(-dy, y1 - top) && clip(dy, bottom - y1);
+  });
 }
 
 function scheduleRender() {
@@ -450,7 +456,11 @@ function render() {
       return { entry, width: 46 + labelW, height: Math.max(44, 10 + labelH) };
     });
     const placements = placeSites(sized, obstacles),
-      allPlacementRects = placements.map((placement) => placement.rect);
+      allPlacementRects = placements.map((placement) => placement.rect),
+      placedCodes = new Set(placements.map(p => p.entry.site.code));
+    for (const entry of eligible)
+      if (!placedCodes.has(entry.site.code))
+        markerNodes.get(entry.site.code)!.hidden = true;
 
     lastVisibleCodes = [];
     for (const placement of placements) {
