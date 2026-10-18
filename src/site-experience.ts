@@ -12,6 +12,7 @@ declare global {
   interface Window {
     advisorWorld?: any;
     advisorSites?: any;
+    politicalAtlas?: { state: { labelLayoutRevision?: number } };
   }
 }
 
