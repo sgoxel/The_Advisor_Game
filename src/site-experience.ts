@@ -133,18 +133,12 @@ function ensureUi() {
     changes.observe(node, { attributes: true, attributeFilter: ["class", "hidden"] });
     sizes.observe(node);
   }
-  // Political labels can reflow after the atlas viewport changes. Observing
-  // their actual DOM mutations closes the independent update-loop ordering gap.
-  // Stable political frames produce no mutation and no new placement pass.
-  const politicalRoot = document.getElementById("political-labels");
-  if (politicalRoot) {
-    changes.observe(politicalRoot, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["class", "style", "hidden"],
-    });
-  }
+  // React synchronously to the political renderer's final label transforms.
+  // Its explicit revision event fires only for material placement changes.
+  window.addEventListener("advisor-political-label-layout", () => {
+    uiLayoutRevision++;
+    render();
+  });
 }
 
 function selectSite(code: string | null) {
