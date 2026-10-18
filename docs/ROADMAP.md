@@ -25,28 +25,28 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S004 — Settlements, Buildings & World Sites
 
 - WP-S004-001-001 — Deterministic settlement distribution & morphology: viable-area density, readable functional villages/cities, legal access and bounded mobile rendering — COMPLETED and REVIEWED at 2026-10-17
-- WP-S004-002-001 — Ruins & critical sites: collision-safe 1/1000 discovery, accessible map-safe inspection and WebGPU/WebGL2 parity
+- WP-S004-002-001 — Critical sites: collision-free 1/1000 labels, legal access, 44px inspection and dual-backend parity
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Canonical transport: terrain-aware shared junctions, legal crossings, graph/mesh parity and readable route UX
+- WP-S005-001-001 — Connected transport: terrain-aware shared junctions, legal crossings, graph/mesh parity and route UX
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Living residents: deterministic home/work/guard routes, scalable schedules, bounded queries and reusable 2D actors
-- WP-S006-002-001 — Usable-interior architecture: SEED-owned portals/rooms, persisted state, lazy loading and accessible entry UX
+- WP-S006-001-001 — Living residents: legal home/work/guard schedules, bounded Simulation and reusable 2D actors
+- WP-S006-002-001 — Interior research & contracts: SEED rooms/portals, persisted changes, lazy loading and entry UX
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Stylized world presentation research: toon materials, semantic zoom, readable 2D actors/labels and mobile-safe implementation slices
+- WP-S007-001-001 — World visual research: coherent medieval 3D materials, semantic zoom, 2D actors and mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas UI: safe-area layouts, 44px touch targets, readable text, keyboard focus and map-safe panels
+- WP-S008-001-001 — Accessible atlas UX: seven viewports, 44px controls, keyboard focus and map-safe panels
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance gates: p95 frame/input/worker/upload, first-terrain vs full-detail latency and dual-backend evidence
-- WP-S009-002-001 — Main-thread UI efficiency: revision-based labels/overlays/inspectors, cached diagnostics, bounded picking and DOM reuse
-- WP-S009-003-001 — Adaptive rendering & recovery: phone/tablet DPR budgets, hysteresis, pooled resources and state-safe WebGPU/WebGL2 fallback
-- WP-S009-004-001 — README/runtime compatibility: truthful stage, canonical map/travel copy, Advisor-vs-atlas actions and verified release claims
+- WP-S009-001-001 — Exact-SHA performance gates: cold start, first terrain vs full detail, p95 input/frame and dual backends
+- WP-S009-002-001 — UI hot-path efficiency: revision-driven labels, overlays, inspectors, picking and DOM reuse
+- WP-S009-003-001 — Adaptive rendering & GPU recovery: mobile DPR, stable quality tiers and state-safe fallback
+- WP-S009-004-001 — README/gameplay conformance: truthful stage, Advisor-vs-atlas UX and verified release claims
