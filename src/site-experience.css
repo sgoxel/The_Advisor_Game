@@ -119,7 +119,16 @@
   text-shadow: 0 1px 1px #000;
   box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
 }
-.critical-site-marker.detailed .site-glyph { opacity: .78; filter: brightness(1.08); }
+.critical-site-marker.detailed .site-glyph {
+  opacity: .24;
+  filter: none;
+  transform: rotateX(56deg) rotateZ(-8deg) scale(.52);
+}
+.critical-site-marker.detailed:is(:hover, :focus-visible, [aria-pressed="true"]) .site-glyph {
+  opacity: .46;
+  transform: rotateX(56deg) rotateZ(-8deg) scale(.65);
+  filter: none;
+}
 .critical-site-marker:hover .site-glyph,
 .critical-site-marker:focus-visible .site-glyph,
 .critical-site-marker[aria-pressed="true"] .site-glyph {
@@ -211,7 +220,7 @@
     line-height: 1.2;
   }
   .critical-site-panel .region-actions { margin-top: 4px; }
-  .critical-site-panel #focus-critical-site { min-height: 40px; padding: 6px 8px; }
+  .critical-site-panel #focus-critical-site { min-height: 44px; padding: 6px 8px; }
   .critical-site-panel .hint { display: none; }
 }
 
