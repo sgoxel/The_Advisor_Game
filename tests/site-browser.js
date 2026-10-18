@@ -292,6 +292,7 @@ for (const viewport of [
           }, site.code);
           expect(geometry.rendered, `${kind}/${profile.name}`).toBe(true);
           expect(geometry.conflicts, `${kind}/${profile.name}: ${JSON.stringify(geometry)}`).toEqual([]);
+          expect(geometry.leaderCrossings, `${kind}/${profile.name}: ${JSON.stringify(geometry)}`).toEqual([]);
           const targetMarker = page.locator(`.critical-site-marker[data-code="${site.code}"]`);
           await targetMarker.click();
           await expect(panel).toBeVisible();
