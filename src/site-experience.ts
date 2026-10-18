@@ -44,13 +44,12 @@ const markerNodes = new Map<string, HTMLButtonElement>();
 const detailCache = new Map<string, SiteDetail>();
 let selectedCode: string | null = null;
 let lastFingerprint = "";
-let lastObstacleFingerprint = "";
 let lastVisibleCodes: string[] = [];
 let lastPoliticalObstacleCount = 0;
-let lastObstacles: Rect[] = [];
-let obstacleProbeFrame = 0;
 let framePending = false;
-let politicalObserver: MutationObserver | null = null;
+let uiLayoutRevision = 0;
+let placementPassCount = 0;
+let obstacleMeasureCount = 0;
 
 function detailFor(site: CriticalSite): SiteDetail {
   let detail = detailCache.get(site.code);
@@ -119,18 +118,19 @@ function ensureUi() {
     window.advisorWorld.setHalfHeight(420);
   };
 
-  const politicalRoot = document.getElementById("political-labels");
-  if (politicalRoot && !politicalObserver) {
-    politicalObserver = new MutationObserver(() => {
-      lastObstacleFingerprint = "";
-      render();
-    });
-    politicalObserver.observe(politicalRoot, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["style", "class"],
-    });
+  // Panel and HUD geometry invalidates site placement only when materially changed.
+  // Political labels have their own post-layout revision, read in render().
+  const tracked = ["#region-panel", "#cell-panel", "#travel-panel",
+    "#critical-site-panel", ".masthead", ".bottom-bar", ".map-controls",
+    ".telemetry", "#focus-coordinates", "#centre-marker"]
+    .map(selector => document.querySelector<HTMLElement>(selector))
+    .filter((node): node is HTMLElement => Boolean(node));
+  const changed = () => { uiLayoutRevision++; };
+  const changes = new MutationObserver(changed);
+  const sizes = new ResizeObserver(changed);
+  for (const node of tracked) {
+    changes.observe(node, { attributes: true, attributeFilter: ["class", "hidden"] });
+    sizes.observe(node);
   }
 }
 
@@ -208,20 +208,21 @@ function markerFor(site: CriticalSite) {
 }
 
 const obstacleSelectors = [
-  "#masthead",
+  ".masthead",
   "#region-panel",
   "#cell-panel",
   "#travel-panel",
   "#critical-site-panel:not([hidden])",
-  "#bottom-bar",
-  "#map-controls",
-  "#telemetry",
+  ".bottom-bar",
+  ".map-controls",
+  ".telemetry",
   "#focus-coordinates",
   "#centre-marker",
   "#political-labels .political-label",
 ];
 
 function labelObstacles(): Rect[] {
+  obstacleMeasureCount++;
   const nodes = obstacleSelectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)));
   lastPoliticalObstacleCount = document.querySelectorAll("#political-labels .political-label").length;
   return nodes
@@ -232,12 +233,6 @@ function labelObstacles(): Rect[] {
     .map((node) => node.getBoundingClientRect())
     .filter((rect) => rect.width > 0 && rect.height > 0)
     .map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }));
-}
-
-function obstacleFingerprint(obstacles: Rect[]) {
-  return obstacles
-    .map((rect) => `${Math.round(rect.x)}/${Math.round(rect.y)}/${Math.round(rect.width)}/${Math.round(rect.height)}`)
-    .join("|");
 }
 
 function labelWidth(site: CriticalSite) {
@@ -385,12 +380,6 @@ function render() {
     return scheduleRender();
   }
 
-  if (obstacleProbeFrame++ % 6 === 0 || !lastObstacleFingerprint) {
-    lastObstacles = labelObstacles();
-    lastObstacleFingerprint = obstacleFingerprint(lastObstacles);
-  }
-  const obstacles = lastObstacles;
-
   const radius = Math.hypot(view.halfHeight * view.aspect, view.halfHeight) * 1.35,
     visible = nearbyCriticalSites(
       view.x,
@@ -407,11 +396,14 @@ function render() {
       innerHeight,
       selectedCode ?? "",
       visible.map((site) => site.code).join("|"),
-      lastObstacleFingerprint,
+      window.politicalAtlas?.state?.labelLayoutRevision ?? 0,
+      uiLayoutRevision,
     ].join("/");
 
   if (fingerprint !== lastFingerprint) {
     lastFingerprint = fingerprint;
+    placementPassCount++;
+    const obstacles = labelObstacles();
     const visibleSet = new Set(visible.map((site) => site.code)),
       accessLayer = document.querySelector<SVGSVGElement>("#critical-site-access")!;
     accessLayer.replaceChildren();
@@ -532,6 +524,9 @@ Object.defineProperty(window, "advisorSites", {
         detailCacheLimit: DETAIL_CACHE_LIMIT,
         declutterSystem: "critical-sites.nearest-free",
         politicalObstacleCount: lastPoliticalObstacleCount,
+        placementPassCount,
+        obstacleMeasureCount,
+        uiLayoutRevision,
       };
     },
   },
