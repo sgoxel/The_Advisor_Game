@@ -93,6 +93,23 @@ for (const viewport of [
     expect(discovery.detailCacheLimit).toBe(48);
     expect(discovery.overlapsPoliticalLabel).toBe(false);
     expect(discovery.accessLines).toBeGreaterThan(0);
+    await page.waitForFunction(() => window.advisorWorld.state.settled, null, { timeout: 120000 });
+    await page.waitForTimeout(150);
+    const idleBefore = await page.evaluate(() => ({
+      placement: window.advisorSites.state.placementPassCount,
+      measured: window.advisorSites.state.obstacleMeasureCount,
+      revision: window.politicalAtlas.state.labelLayoutRevision,
+    }));
+    await page.waitForTimeout(160);
+    const idleAfter = await page.evaluate(() => ({
+      placement: window.advisorSites.state.placementPassCount,
+      measured: window.advisorSites.state.obstacleMeasureCount,
+      revision: window.politicalAtlas.state.labelLayoutRevision,
+    }));
+    if (idleBefore.revision === idleAfter.revision) {
+      expect(idleAfter.placement).toBe(idleBefore.placement);
+      expect(idleAfter.measured).toBe(idleBefore.measured);
+    }
 
     await page.selectOption("#map-scale", "100");
     await page.waitForFunction(
@@ -125,6 +142,16 @@ for (const viewport of [
     expect(await viewSnapshot()).toEqual(beforeInspect);
     await expect(panel).toContainText(target.name);
     await expect(panel).toContainText("legal road junction");
+    const touchRects = await panel.locator("#close-critical-site, #focus-critical-site").evaluateAll(nodes =>
+      nodes.map(node => {
+        const rect = node.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      }));
+    expect(touchRects).toHaveLength(2);
+    for (const rect of touchRects) {
+      expect(rect.width).toBeGreaterThanOrEqual(44);
+      expect(rect.height).toBeGreaterThanOrEqual(44);
+    }
     await expect(panel.locator("#critical-site-code")).toContainText("/SITE/");
     const before = await page.evaluate(
       (code) => window.advisorSites.inspect(code).detail.signature,
