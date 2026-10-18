@@ -248,14 +248,47 @@ for (const viewport of [
                 right: Math.max(...boxes.map(r => r.right)),
                 bottom: Math.max(...boxes.map(r => r.bottom)),
               } : null,
-              conflicts = occupied ? [...document.querySelectorAll("#political-labels .political-label")]
-                .filter(n => {
-                  const r = n.getBoundingClientRect();
-                  return r.width > 0 && r.height > 0 &&
-                    occupied.x < r.right + 4 && occupied.right + 4 > r.x &&
-                    occupied.y < r.bottom + 4 && occupied.bottom + 4 > r.y;
-                }).map(n => n.textContent) : ["missing marker"];
-            return { conflicts, rendered: !!marker && !marker.hidden, occupied };
+              obstacleSelectors = [
+                ".masthead", "#region-panel", "#cell-panel", "#travel-panel",
+                "#critical-site-panel:not([hidden])", ".bottom-bar", ".map-controls",
+                ".telemetry", "#focus-coordinates", "#centre-marker",
+                "#political-labels .political-label",
+              ],
+              obstacles = obstacleSelectors.flatMap(selector =>
+                [...document.querySelectorAll(selector)])
+                  .filter(n => {
+                    const style = getComputedStyle(n);
+                    return style.display !== "none" && style.visibility !== "hidden";
+                  })
+                  .map(n => ({ node: n, rect: n.getBoundingClientRect() }))
+                  .filter(({ rect }) => rect.width > 0 && rect.height > 0)),
+              intersects = (r, padding = 4) =>
+                occupied.x < r.right + padding && occupied.right + padding > r.x &&
+                occupied.y < r.bottom + padding && occupied.bottom + padding > r.y,
+              conflicts = occupied ? obstacles.filter(({ rect }) => intersects(rect))
+                .map(({ node }) => node.textContent?.trim().slice(0, 48) || node.id || node.className) : ["missing marker"],
+              // Independently check the actual SVG geometry, not just the leader endpoints.
+              leaderCrossings = [...document.querySelectorAll("#critical-site-access line.site-label-leader")]
+                .flatMap(line => {
+                  const x1 = Number(line.getAttribute("x1")), y1 = Number(line.getAttribute("y1")),
+                    dx = Number(line.getAttribute("x2")) - x1,
+                    dy = Number(line.getAttribute("y2")) - y1;
+                  return obstacles.filter(({ rect }) => {
+                    const gap = 4, left = rect.x - gap, top = rect.y - gap,
+                      right = rect.right + gap, bottom = rect.bottom + gap;
+                    let start = 0, end = 1;
+                    const clip = (p, q) => {
+                      if (p === 0) return q >= 0;
+                      const t = q / p;
+                      if (p < 0) start = Math.max(start, t);
+                      else end = Math.min(end, t);
+                      return start <= end;
+                    };
+                    return clip(-dx, x1 - left) && clip(dx, right - x1) &&
+                      clip(-dy, y1 - top) && clip(dy, bottom - y1);
+                  }).map(({ node }) => node.textContent?.trim().slice(0, 48) || node.id || node.className);
+                });
+            return { conflicts, leaderCrossings, rendered: !!marker && !marker.hidden, occupied };
           }, site.code);
           expect(geometry.rendered, `${kind}/${profile.name}`).toBe(true);
           expect(geometry.conflicts, `${kind}/${profile.name}: ${JSON.stringify(geometry)}`).toEqual([]);
