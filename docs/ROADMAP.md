@@ -25,28 +25,28 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S004 — Settlements, Buildings & World Sites
 
 - WP-S004-001-001 — Deterministic settlement distribution & morphology: viable-area density, readable functional villages/cities, legal access and bounded mobile rendering — COMPLETED and REVIEWED at 2026-10-17
-- WP-S004-002-001 — Canonical ruins & critical sites: collision-free 1/1000 discovery, legal access, semantic-zoom readability, map-safe inspection and dual-backend parity
+- WP-S004-002-001 — Ruins & critical sites: collision-safe 1/1000 discovery, accessible map-safe inspection and WebGPU/WebGL2 parity
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Canonical transport network: terrain-aware shared topology, graph/render parity, truthful route UX and bounded mobile rendering
+- WP-S005-001-001 — Canonical transport: terrain-aware shared junctions, legal crossings, graph/mesh parity and readable route UX
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Scalable living residents: canonical home/work/guard identity, deterministic schedules/routes, bounded spatial queries and reusable actors
-- WP-S006-002-001 — Usable-interior architecture analysis: same-world portals, deterministic persisted reconstruction, demand loading, responsive UX and implementation slices
+- WP-S006-001-001 — Living residents: deterministic home/work/guard routes, scalable schedules, bounded queries and reusable 2D actors
+- WP-S006-002-001 — Usable-interior architecture: SEED-owned portals/rooms, persisted state, lazy loading and accessible entry UX
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Medieval-fantasy presentation architecture analysis: toon 3D materials, semantic zoom, readable actors/labels, mobile/backend budgets and implementation slices
+- WP-S007-001-001 — Stylized world presentation research: toon materials, semantic zoom, readable 2D actors/labels and mobile-safe implementation slices
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Responsive & accessible gameplay shell: safe-area layout, 44px touch targets, readable UI, keyboard/focus semantics and map-safe panels
+- WP-S008-001-001 — Accessible atlas UI: safe-area layouts, 44px touch targets, readable text, keyboard focus and map-safe panels
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance & release gates: p95 frame/input/streaming metrics, first-visible/final-detail latency, resources and dual-backend viewport acceptance
-- WP-S009-002-001 — Main-thread/UI latency: invalidation-driven layout/labels/inspectors, bounded canonical picking, pooled DOM/resources and stable-frame zero-churn
-- WP-S009-003-001 — Adaptive mobile renderer & live recovery: device-class DPR/render scale, hysteresis, resource reuse and WebGPU→WebGL2 state-preserving recovery
-- WP-S009-004-001 — README/runtime/release conformance: truthful stage/Atlas semantics, dynamic canonical copy, legacy cleanup and evidence-backed compatibility claims
+- WP-S009-001-001 — Exact-SHA performance gates: p95 frame/input/worker/upload, first-terrain vs full-detail latency and dual-backend evidence
+- WP-S009-002-001 — Main-thread UI efficiency: revision-based labels/overlays/inspectors, cached diagnostics, bounded picking and DOM reuse
+- WP-S009-003-001 — Adaptive rendering & recovery: phone/tablet DPR budgets, hysteresis, pooled resources and state-safe WebGPU/WebGL2 fallback
+- WP-S009-004-001 — README/runtime compatibility: truthful stage, canonical map/travel copy, Advisor-vs-atlas actions and verified release claims
