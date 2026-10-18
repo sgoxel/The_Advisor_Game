@@ -55,6 +55,13 @@ let borderSegments: ReturnType<typeof politicalBorderSegments> = [];
 let renderFingerprint = "";
 let iconsShown = false;
 let politicalLabelState: { id: string; kind: string; x: number; y: number }[] = [];
+let labelLayoutRevision = 0;
+let labelLayoutSignature = "";
+function publishLabelLayout(signature: string) {
+  if (signature === labelLayoutSignature) return;
+  labelLayoutSignature = signature;
+  labelLayoutRevision++;
+}
 
 function denominator(scaleLabel: string) {
   const match = /1\/(\d+)/.exec(scaleLabel),
@@ -294,6 +301,7 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
     labelNodes.clear();
     labelSizes.clear();
     politicalLabelState = [];
+    publishLabelLayout("");
     return;
   }
 
@@ -389,6 +397,11 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
     line.setAttribute("y2", String(placement.endY));
     leaders.append(line);
   }
+  // Publish only material layout changes after the final label transforms.
+  publishLabelLayout(placed.map(p =>
+    [p.id, Math.round(p.rect.x * 2) / 2, Math.round(p.rect.y * 2) / 2,
+      Math.round(p.rect.width), Math.round(p.rect.height)].join(":")
+  ).join("|"));
 }
 
 // Mid-scale cartography projects the same canonical road stations used by
@@ -492,6 +505,7 @@ Object.defineProperty(window, "politicalAtlas", {
       return {
         borderSegments: borderSegments.length,
         labels: politicalLabelState,
+        labelLayoutRevision,
         overviewCityCount,
         visibleRoadCount,visibleRoadPoints,
         presentationBytesEstimated:roadNodes.size*8192+overviewNodes.size*1024,
