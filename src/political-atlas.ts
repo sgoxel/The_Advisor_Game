@@ -82,6 +82,8 @@ function publishLabelLayout(signature: string) {
   if (signature === labelLayoutSignature) return;
   labelLayoutSignature = signature;
   labelLayoutRevision++;
+  // Site callouts must see the final political-label rectangles before paint.
+  window.dispatchEvent(new Event("advisor-political-label-layout"));
 }
 
 function denominator(scaleLabel: string) {
