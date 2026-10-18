@@ -49,6 +49,7 @@ type ScreenPoint = { x: number; y: number };
 
 const counts = { ...politicalRegistryMinimumCountsForSeed(WORLD_SEED), cities: cities.length, villages: villages.length };
 const labelNodes = new Map<string, HTMLElement>();
+const labelIdByNode = new WeakMap<HTMLElement, string>();
 const labelSizes = new Map<string, { width: number; height: number }>();
 let borderKey = "";
 let borderSegments: ReturnType<typeof politicalBorderSegments> = [];
@@ -57,6 +58,26 @@ let iconsShown = false;
 let politicalLabelState: { id: string; kind: string; x: number; y: number }[] = [];
 let labelLayoutRevision = 0;
 let labelLayoutSignature = "";
+// A late font swap changes label bounds without moving its canonical anchor.
+const labelSizeObserver = new ResizeObserver((entries) => {
+  let changed = false;
+  for (const entry of entries) {
+    const node = entry.target as HTMLElement;
+    const id = labelIdByNode.get(node);
+    if (!id) continue;
+    const measured = node.getBoundingClientRect();
+    const cached = labelSizes.get(id);
+    if (cached && Math.abs(cached.width - measured.width) < 0.5 &&
+        Math.abs(cached.height - measured.height) < 0.5) continue;
+    labelSizes.set(id, { width: measured.width, height: measured.height });
+    changed = true;
+  }
+  if (changed) renderFingerprint = "";
+});
+document.fonts?.addEventListener("loadingdone", () => {
+  labelSizes.clear();
+  renderFingerprint = "";
+});
 function publishLabelLayout(signature: string) {
   if (signature === labelLayoutSignature) return;
   labelLayoutSignature = signature;
@@ -298,6 +319,7 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
   if (!detailed) {
     root.replaceChildren();
     leaders.replaceChildren();
+    for (const node of labelNodes.values()) labelSizeObserver.unobserve(node);
     labelNodes.clear();
     labelSizes.clear();
     politicalLabelState = [];
@@ -341,6 +363,7 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
   const visible = new Set(chosen.map((item) => item.id));
   for (const [id, node] of labelNodes)
     if (!visible.has(id)) {
+      labelSizeObserver.unobserve(node);
       node.remove();
       labelNodes.delete(id);
       labelSizes.delete(id);
@@ -368,6 +391,8 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
     } else node.textContent = item.name;
     root.append(node);
     labelNodes.set(item.id, node);
+    labelIdByNode.set(node, item.id);
+    labelSizeObserver.observe(node);
     const rect = node.getBoundingClientRect();
     labelSizes.set(item.id, { width: rect.width, height: rect.height });
   }
