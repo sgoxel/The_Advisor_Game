@@ -5,7 +5,7 @@ for (const viewport of [
   { name: "phone", width: 390, height: 844 },
 ]) {
   test(`critical sites are discoverable and inspectable on ${viewport.name}`, async ({ page }, testInfo) => {
-    test.setTimeout(300000);
+    test.setTimeout(viewport.name === "desktop" ? 1500000 : 300000);
     const errors = [],
       expectWebgl = !/webgpu/i.test(testInfo.config.configFile ?? "");
     page.on("pageerror", (error) => errors.push(error.message));
@@ -203,6 +203,87 @@ for (const viewport of [
         scrollHeight: node.scrollHeight,
       }));
       expect(layout.scrollHeight).toBeLessThanOrEqual(layout.clientHeight + 1);
+    }
+    if (viewport.name === "desktop") {
+      // Verify the same canonical ruin and critical place on all seven layouts
+      // without restarting the expensive seeded world for each resize.
+      const profiles = [
+        { name: "desktop", width: 1440, height: 900 },
+        { name: "laptop", width: 1280, height: 720 },
+        { name: "tablet", width: 1024, height: 768 },
+        { name: "phone", width: 390, height: 844 },
+        { name: "phone-landscape", width: 844, height: 390 },
+        { name: "phone-small", width: 360, height: 800 },
+        { name: "tablet-portrait", width: 768, height: 1024 },
+      ];
+      await panel.locator("#close-critical-site").click();
+      for (const kind of ["ruin", "critical-place"]) {
+        const site = await page.evaluate((targetKind) => {
+          const item = window.advisorSites.sites.find(s => s.kind === targetKind);
+          window.advisorWorld.navigation.setFocus(item.canonicalPosition.lon, item.canonicalPosition.lat);
+          return { code: item.code, name: item.name, kind: item.kind };
+        }, kind);
+        await page.selectOption("#map-scale", "1000");
+        await page.waitForFunction((code) =>
+          window.advisorWorld.state.scaleLabel === "1/1000" &&
+          window.advisorWorld.state.settled &&
+          window.advisorSites.state.visibleCodes.includes(code),
+          site.code, { timeout: 120000 });
+
+        for (const profile of profiles) {
+          await page.setViewportSize({ width: profile.width, height: profile.height });
+          await page.waitForFunction((code) =>
+            window.advisorWorld.state.settled &&
+            window.advisorSites.state.visibleCodes.includes(code),
+            site.code, { timeout: 120000 });
+          await page.waitForTimeout(180);
+          const geometry = await page.evaluate(code => {
+            const marker = document.querySelector(`.critical-site-marker[data-code="${CSS.escape(code)}"]`),
+              label = marker?.querySelector(".site-label"),
+              glyph = marker?.querySelector(".site-glyph"),
+              boxes = [label, glyph].filter(Boolean).map(n => n.getBoundingClientRect()),
+              occupied = boxes.length ? {
+                x: Math.min(...boxes.map(r => r.x)),
+                y: Math.min(...boxes.map(r => r.y)),
+                right: Math.max(...boxes.map(r => r.right)),
+                bottom: Math.max(...boxes.map(r => r.bottom)),
+              } : null,
+              conflicts = occupied ? [...document.querySelectorAll("#political-labels .political-label")]
+                .filter(n => {
+                  const r = n.getBoundingClientRect();
+                  return r.width > 0 && r.height > 0 &&
+                    occupied.x < r.right + 4 && occupied.right + 4 > r.x &&
+                    occupied.y < r.bottom + 4 && occupied.bottom + 4 > r.y;
+                }).map(n => n.textContent) : ["missing marker"];
+            return { conflicts, rendered: !!marker && !marker.hidden, occupied };
+          }, site.code);
+          expect(geometry.rendered, `${kind}/${profile.name}`).toBe(true);
+          expect(geometry.conflicts, `${kind}/${profile.name}: ${JSON.stringify(geometry)}`).toEqual([]);
+          const targetMarker = page.locator(`.critical-site-marker[data-code="${site.code}"]`);
+          await targetMarker.click();
+          await expect(panel).toBeVisible();
+          await expect(panel).toContainText(site.name);
+          const dimensions = await panel.evaluate(node => {
+            const b = node.getBoundingClientRect();
+            return {
+              panel: { x: b.x, y: b.y, right: b.right, bottom: b.bottom },
+              controls: [...node.querySelectorAll("#close-critical-site, #focus-critical-site")]
+                .map(el => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; }),
+            };
+          });
+          expect(dimensions.panel.x, profile.name).toBeGreaterThanOrEqual(0);
+          expect(dimensions.panel.y, profile.name).toBeGreaterThanOrEqual(0);
+          expect(dimensions.panel.right, profile.name).toBeLessThanOrEqual(profile.width + 1);
+          expect(dimensions.panel.bottom, profile.name).toBeLessThanOrEqual(profile.height + 1);
+          expect(dimensions.controls).toHaveLength(2);
+          for (const control of dimensions.controls) {
+            expect(control.width, profile.name).toBeGreaterThanOrEqual(44);
+            expect(control.height, profile.name).toBeGreaterThanOrEqual(44);
+          }
+          await panel.locator("#close-critical-site").click();
+          await expect(panel).toBeHidden();
+        }
+      }
     }
     expect(errors).toEqual([]);
   });
