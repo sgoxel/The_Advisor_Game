@@ -263,8 +263,11 @@ for (const viewport of [
 
         for (const profile of profiles) {
           await page.setViewportSize({ width: profile.width, height: profile.height });
+          // Resizing can queue unrelated fine-detail tiles indefinitely on
+          // software renderers. Site/label acceptance requires coherent
+          // current-view coverage, not global final-detail idleness.
           await page.waitForFunction((code) =>
-            window.advisorWorld.state.settled &&
+            window.advisorWorld.state.coverage.complete &&
             window.advisorSites.state.visibleCodes.includes(code),
             site.code, { timeout: 120000 }).catch(async (error) => {
               const diagnostic = await page.evaluate((code) => {
@@ -278,6 +281,8 @@ for (const viewport of [
                   scale: world.scaleLabel,
                   presentation: world.presentation,
                   settled: world.settled,
+                  coverage: world.coverage,
+                  pending: world.pending,
                   view: { x: view.x, z: view.z, halfHeight: view.halfHeight, aspect: view.aspect },
                   target: { code, x: target?.x, z: target?.z },
                   marker: marker ? {
