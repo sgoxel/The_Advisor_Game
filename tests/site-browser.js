@@ -166,6 +166,12 @@ for (const viewport of [
     expect(await viewSnapshot()).toEqual(beforeInspect);
     await expect(panel).toContainText(target.name);
     await expect(panel).toContainText("legal road junction");
+    // Invalid canonical keys must not leave the UI and selected identity split.
+    await page.evaluate(() => window.advisorSites.select("NOT/A/CANONICAL/SITE"));
+    expect(await page.evaluate(() => window.advisorSites.state.selectedCode)).toBe(target.code);
+    await expect(panel.locator("#critical-site-code")).toHaveText(target.code);
+    await expect(panel).toBeVisible();
+    expect(await viewSnapshot()).toEqual(beforeInspect);
     const touchRects = await panel.locator("#close-critical-site, #focus-critical-site").evaluateAll(nodes =>
       nodes.map(node => {
         const rect = node.getBoundingClientRect();

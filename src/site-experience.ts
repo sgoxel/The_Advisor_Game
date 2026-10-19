@@ -174,8 +174,11 @@ function updateSiteScrollCue() {
 }
 
 function selectSite(code: string | null) {
+  const nextSite = code ? criticalSites.find(site => site.code === code) : null;
+  // An unknown code cannot supersede a valid inspection or its canonical focus.
+  if (code && !nextSite) return;
   selectedCode = code;
-  selectedSite = code ? criticalSites.find(site => site.code === code) ?? null : null;
+  selectedSite = nextSite ?? null;
   lastFingerprint = "";
   const panel = document.getElementById("critical-site-panel") as HTMLElement | null;
   if (!panel) return;
