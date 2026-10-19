@@ -350,7 +350,16 @@ for (const viewport of [
                   const x1 = Number(line.getAttribute("x1")), y1 = Number(line.getAttribute("y1")),
                     dx = Number(line.getAttribute("x2")) - x1,
                     dy = Number(line.getAttribute("y2")) - y1;
-                  return obstacles.filter(({ node, rect }) => {
+                  // Access hints must not pass underneath a different site's
+                  // visible glyph or callout, even when the HUD is clear.
+                  const otherSiteBoxes = line.matches(".ruin-access, .critical-access")
+                    ? [...document.querySelectorAll(".critical-site-marker:not([hidden])")]
+                      .filter(marker => marker.dataset.code !== line.dataset.siteCode)
+                      .flatMap(marker => [...marker.querySelectorAll(".site-glyph, .site-label")]
+                        .filter(node => getComputedStyle(node).display !== "none")
+                        .map(node => ({ node, rect: node.getBoundingClientRect() })))
+                    : [];
+                  return [...obstacles, ...otherSiteBoxes].filter(({ node, rect }) => {
                     // A focused site's anchored leader may terminate inside its
                     // own crosshair. Unrelated leader/callout crossings still fail.
                     if (node.id === "centre-marker" &&
