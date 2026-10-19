@@ -79,3 +79,20 @@ jobs:
         with:
           name: wp-s004-002-001-site-evidence-webgpu
           path: test-results/
+
+  parity-evidence:
+    needs: [webgl2-evidence, webgpu-evidence]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download WebGL2 runtime site evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: wp-s004-002-001-site-evidence-webgl2
+          path: parity/webgl2
+      - name: Download WebGPU runtime site evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: wp-s004-002-001-site-evidence-webgpu
+          path: parity/webgpu
+      - name: Compare browser runtime site authority
+        run: diff -u parity/webgl2/wp-s004-site-parity.json parity/webgpu/wp-s004-site-parity.json

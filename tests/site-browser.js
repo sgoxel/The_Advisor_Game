@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { mkdir, writeFile } from "node:fs/promises";
 
 for (const viewport of [
   { name: "desktop", width: 1440, height: 900 },
@@ -382,3 +383,41 @@ for (const viewport of [
     expect(errors).toEqual([]);
   });
 }
+
+// The two renderer jobs must independently expose identical authoritative site data.
+// The resulting artifacts are compared byte-for-byte by the dedicated evidence workflow.
+test("WebGPU and WebGL2 expose identical canonical site authority", async ({ page }, testInfo) => {
+  test.setTimeout(180000);
+  if (!/webgpu/i.test(testInfo.config.configFile ?? ""))
+    await page.addInitScript(() =>
+      Object.defineProperty(navigator, "gpu", { value: undefined, configurable: true }),
+    );
+  await page.goto("/");
+  await page.waitForFunction(
+    () => window.advisorWorld?.state.ready && window.advisorSites?.sites?.length > 0,
+    null,
+    { timeout: 150000 },
+  );
+  const payload = await page.evaluate(() => ({
+    summary: window.advisorSites.summary,
+    sites: window.advisorSites.sites.map((site) => ({
+      code: site.code,
+      kind: site.kind,
+      countryCode: site.countryCode,
+      continent: site.continent,
+      canonicalPosition: site.canonicalPosition,
+      sourcePosition: [site.x, site.z],
+      archetype: site.archetype,
+      variant: site.variant,
+      radiusM: site.radiusM,
+      falloffM: site.falloffM,
+      preparedHeightM: site.preparedHeightM,
+      access: site.access,
+    })).sort((a, b) => a.code < b.code ? -1 : a.code > b.code ? 1 : 0),
+  }));
+  await mkdir("test-results", { recursive: true });
+  await writeFile("test-results/wp-s004-site-parity.json",
+    JSON.stringify(payload, null, 2) + "\\n");
+  expect(payload.sites.length).toBeGreaterThan(0);
+  expect(payload.sites.every(site => site.access.branchCode && site.access.roadCode)).toBe(true);
+});
