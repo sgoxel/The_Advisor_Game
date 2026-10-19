@@ -225,7 +225,8 @@
     top: auto;
     bottom: 88px;
     width: auto;
-    max-height: min(52dvh, 360px);
+    /* Leave the centered 44px focused-site glyph above the phone sheet. */
+    max-height: min(52dvh, 360px, calc(50dvh - 116px));
     padding: 7px 10px 9px;
   }
   .critical-site-panel .eyebrow { min-height: 38px; }
