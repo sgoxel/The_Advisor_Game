@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { appendCriticalSiteGeometry } from "../src/site-geometry.ts";
+import type { Geometry, TileGeometry } from "../src/geometry.ts";
 import {
   countries,
   countryAtPosition,
@@ -293,4 +295,39 @@ test("site focus queries match canonical distance truth across bucket edges and 
         .slice(0, 24).map(value => value.code);
       assert.deepEqual(nearbyCriticalSites(x, site.z, radius).map(value => value.code), expected);
     }
+});
+
+test("focused ruin and shrine meshes have deterministic visible silhouettes within a bounded detail budget", () => {
+  const empty = (): Geometry => ({
+    positions: new Float32Array(0),
+    normals: new Float32Array(0),
+    colors: new Uint8Array(0),
+    indices: new Uint32Array(0),
+  });
+  for (const kind of ["ruin", "critical-place"] as const) {
+    const site = criticalSites.find(value => value.kind === kind)!,
+      tile = {
+        level: 10, x: 0, z: 0, key: `site-geometry/${site.code}`,
+        size: 128, minX: site.x - 64, minZ: site.z - 64,
+      };
+    const build = () => {
+      const data: TileGeometry = {
+        terrain: empty(), structures: empty(), nature: empty(), detail: empty(),
+      };
+      const summary = appendCriticalSiteGeometry(tile, data);
+      return { summary, positions: data.structures.positions, colors: data.structures.colors,
+        triangles: data.structures.indices.length / 3 };
+    };
+    const first = build(), again = build();
+    assert.ok(first.summary.codes.includes(site.code), `${kind} mesh missing`);
+    assert.ok(first.triangles > 0 && first.triangles < 600, `${kind} exceeds close-detail budget`);
+    const y = [...first.positions].filter((_, index) => index % 3 === 1);
+    assert.ok(Math.max(...y) - Math.min(...y) > 5, `${kind} silhouette is too flat`);
+    assert.ok([...first.colors].some((value, index) => index % 4 === 0 && value >= 170),
+      `${kind} lacks readable contrasting stone`);
+    assert.deepEqual(first.summary.codes, again.summary.codes);
+    assert.deepEqual(first.positions, again.positions);
+    assert.deepEqual(first.colors, again.colors);
+    assert.equal(first.triangles, again.triangles);
+  }
 });
