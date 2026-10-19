@@ -183,6 +183,7 @@ function selectSite(code: string | null) {
   lastFingerprint = "";
   const panel = document.getElementById("critical-site-panel") as HTMLElement | null;
   if (!panel) return;
+  document.getElementById("critical-site-layer")?.classList.toggle("inspecting", Boolean(code));
   if (!code) {
     panel.hidden = true;
     for (const marker of markerNodes.values()) marker.setAttribute("aria-pressed", "false");
@@ -342,7 +343,7 @@ function candidateLeader(entry: PlacementSite, rect: Rect): SiteLeader | null {
 }
 
 function placeSites(
-  entries: { entry: PlacementSite; width: number; height: number }[],
+  entries: { entry: PlacementSite; width: number; height: number; inspecting: boolean }[],
   obstacles: SiteObstacle[],
 ): SitePlacement[] {
   const occupied = [...obstacles],
@@ -351,11 +352,11 @@ function placeSites(
     .sort((a, b) =>
       a.entry.placementId < b.entry.placementId ? -1 : a.entry.placementId > b.entry.placementId ? 1 : 0,
     )
-    .flatMap(({ entry, width, height }) => {
+    .flatMap(({ entry, width, height, inspecting }) => {
       const w = Math.min(width, innerWidth - 16),
         h = Math.min(height, innerHeight - 16),
-        preferredX = entry.point.x + (entry.detailed ? -42 : 0),
-        preferredY = entry.point.y + (entry.detailed ? -34 : 0),
+        preferredX = entry.point.x + (inspecting ? 0 : entry.detailed ? -42 : 0),
+        preferredY = entry.point.y + (inspecting ? 0 : entry.detailed ? -34 : 0),
         at = (cx: number, cy: number): Rect => ({
           x: Math.max(8, Math.min(innerWidth - w - 8, cx - 22)),
           y: Math.max(8, Math.min(innerHeight - h - 8, cy - 22)),
@@ -363,7 +364,14 @@ function placeSites(
           height: h,
         }),
         free = (rect: Rect) => {
-          if (occupied.some((other) => overlaps(rect, other, 5))) return false;
+          // The selected 44px inspection glyph owns its canonical focus anchor.
+          // It may cover that one non-interactive crosshair, never a panel,
+          // political card, or another site's reserved label/leader.
+          if (occupied.some((other) =>
+            !(inspecting && other.focusCrosshair &&
+              entry.point.x >= other.x && entry.point.x <= other.x + other.width &&
+              entry.point.y >= other.y && entry.point.y <= other.y + other.height) &&
+            overlaps(rect, other, 5))) return false;
           const leader = candidateLeader(entry, rect);
           // A site anchor can legitimately sit beneath the focus crosshair.
           // Only its own anchored leader may enter that crosshair; all other
@@ -555,7 +563,7 @@ function render() {
       const label = marker.querySelector<HTMLElement>(".site-label"),
         labelW = label?.offsetWidth || labelWidth(entry.site),
         labelH = label?.offsetHeight || 22;
-      return { entry, width: inspecting ? 44 : 46 + labelW,
+      return { entry, inspecting, width: inspecting ? 44 : 46 + labelW,
         height: inspecting ? 44 : Math.max(44, 10 + labelH) };
     });
     const placements = placeSites(sized, obstacles),
