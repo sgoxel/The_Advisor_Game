@@ -212,6 +212,14 @@
 }
 .panel.critical-site-panel .site-scroll-cue[hidden] { display: none; }
 
+/* Keep the focused site's 44px glyph clear of the inspector on portrait tablets.
+   Preserve the right-side navigation controls and a scrollable site panel. */
+@media (min-width: 621px) and (max-width: 900px) and (orientation: portrait) {
+  .panel.critical-site-panel {
+    width: min(320px, calc(50vw - 104px));
+  }
+}
+
 @media (max-width: 620px) {
   .critical-site-marker .site-label {
     max-width: 108px;
