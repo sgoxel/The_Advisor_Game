@@ -105,17 +105,25 @@ for (const viewport of [
     const idleBefore = await page.evaluate(() => ({
       placement: window.advisorSites.state.placementPassCount,
       measured: window.advisorSites.state.obstacleMeasureCount,
+      nearbyQueries: window.advisorSites.state.nearbyQueryCount,
+      view: [window.advisorWorld.state.view.x, window.advisorWorld.state.view.z,
+        window.advisorWorld.state.view.halfHeight, window.advisorWorld.state.view.aspect],
       revision: window.politicalAtlas.state.labelLayoutRevision,
     }));
     await page.waitForTimeout(160);
     const idleAfter = await page.evaluate(() => ({
       placement: window.advisorSites.state.placementPassCount,
       measured: window.advisorSites.state.obstacleMeasureCount,
+      nearbyQueries: window.advisorSites.state.nearbyQueryCount,
+      view: [window.advisorWorld.state.view.x, window.advisorWorld.state.view.z,
+        window.advisorWorld.state.view.halfHeight, window.advisorWorld.state.view.aspect],
       revision: window.politicalAtlas.state.labelLayoutRevision,
     }));
-    if (idleBefore.revision === idleAfter.revision) {
+    if (idleBefore.revision === idleAfter.revision &&
+        JSON.stringify(idleBefore.view) === JSON.stringify(idleAfter.view)) {
       expect(idleAfter.placement).toBe(idleBefore.placement);
       expect(idleAfter.measured).toBe(idleBefore.measured);
+      expect(idleAfter.nearbyQueries).toBe(idleBefore.nearbyQueries);
     }
 
     await page.selectOption("#map-scale", "100");
