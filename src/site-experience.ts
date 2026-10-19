@@ -438,9 +438,16 @@ function render() {
     flat = state.presentation === "flat";
 
   if (!flat || !Number.isFinite(denominator) || denominator > 1000) {
-    for (const marker of markerNodes.values()) marker.hidden = true;
-    document.querySelector<SVGSVGElement>("#critical-site-access")!.replaceChildren();
-    lastVisibleCodes = [];
+    // Transition out once; subsequent unchanged wide-view frames must not
+    // rewrite every marker and SVG child list.
+    if (lastFingerprint || lastVisibleCodes.length) {
+      for (const marker of markerNodes.values())
+        if (!marker.hidden) marker.hidden = true;
+      const access = document.querySelector<SVGSVGElement>("#critical-site-access")!;
+      if (access.childElementCount) access.replaceChildren();
+      lastVisibleCodes = [];
+      lastFingerprint = "";
+    }
     return scheduleRender();
   }
 

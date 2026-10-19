@@ -388,6 +388,30 @@ for (const viewport of [
         }
       }
     }
+    // Returning to Realm zoom clears site presentation once, not every frame.
+    await page.selectOption("#map-scale", "10000");
+    await page.waitForFunction(() =>
+      window.advisorWorld?.state.scaleLabel === "1/10000" &&
+      window.advisorWorld.state.presentation !== "flat" &&
+      [...document.querySelectorAll(".critical-site-marker")].every(node => node.hidden) &&
+      document.querySelector("#critical-site-access")?.childElementCount === 0,
+      null, { timeout: 120000 });
+    const idleWideWrites = await page.evaluate(async () => {
+      const access = document.querySelector("#critical-site-access");
+      const observer = new MutationObserver(() => {});
+      observer.observe(access, { childList: true });
+      for (const marker of document.querySelectorAll(".critical-site-marker"))
+        observer.observe(marker, { attributes: true, attributeFilter: ["hidden"] });
+      await new Promise(resolve => {
+        let frames = 0;
+        const next = () => ++frames >= 8 ? resolve() : requestAnimationFrame(next);
+        requestAnimationFrame(next);
+      });
+      const mutations = observer.takeRecords().length;
+      observer.disconnect();
+      return mutations;
+    });
+    expect(idleWideWrites, "wide-view site layer has repeated hidden/SVG mutations").toBe(0);
     expect(errors).toEqual([]);
   });
 }
