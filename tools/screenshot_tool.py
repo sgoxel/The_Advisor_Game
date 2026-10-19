@@ -270,7 +270,7 @@ SETTLED_JS = """() => {
   if (!world || (loading && !loading.hidden && getComputedStyle(loading).opacity !== '0')) return false;
   return world.state.ready && world.state.settled;
 }"""
-TWO_FRAMES_JS = "() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))"
+TWO_FRAMES_JS = "() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => done(true))))"
 # The keys below are written to capture.json unchanged.
 STATE_JS = """() => {
   const world = window.advisorWorld, state = world ? world.state : {};
@@ -358,7 +358,8 @@ class Session:
     def settle(self) -> None:
         if self.page.wait_for_function(SETTLED_JS, polling=250).json_value() == "error":
             raise CaptureError(f"page reports an error: {self.page.evaluate(STATE_JS)['error']}")
-        self.page.evaluate(TWO_FRAMES_JS)
+        # A stalled renderer must fail the evidence capture rather than hold CI forever.
+        self.page.wait_for_function(TWO_FRAMES_JS, timeout=15000)
 
     def locate(self, selector: str) -> Locator:
         locator = self.page.locator(selector).first
@@ -425,7 +426,7 @@ class Session:
               const visible=new Set(c.visibleCanonicalKeys);
               return c.layerDebug.culled>0 && c.canonicalKeys.length && c.canonicalKeys.every(k=>visible.has(k));
             }""")
-            page.evaluate(TWO_FRAMES_JS)
+            page.wait_for_function(TWO_FRAMES_JS, timeout=15000)
         elif name == "wait":
             page.wait_for_timeout(float(arg))
         elif name == "eval":
