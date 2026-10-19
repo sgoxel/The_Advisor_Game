@@ -95,4 +95,7 @@ jobs:
           name: wp-s004-002-001-site-evidence-webgpu
           path: parity/webgpu
       - name: Compare browser runtime site authority
-        run: diff -u parity/webgl2/wp-s004-site-parity.json parity/webgpu/wp-s004-site-parity.json
+        run: |
+          python3 -m json.tool parity/webgl2/wp-s004-site-parity.json > /dev/null
+          python3 -m json.tool parity/webgpu/wp-s004-site-parity.json > /dev/null
+          diff -u parity/webgl2/wp-s004-site-parity.json parity/webgpu/wp-s004-site-parity.json

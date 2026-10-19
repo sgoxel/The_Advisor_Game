@@ -425,7 +425,7 @@ test("WebGPU and WebGL2 expose identical canonical site authority", async ({ pag
   }));
   await mkdir("test-results", { recursive: true });
   await writeFile("test-results/wp-s004-site-parity.json",
-    JSON.stringify(payload, null, 2) + "\\n");
+    JSON.stringify(payload, null, 2) + "\n");
   expect(payload.sites.length).toBeGreaterThan(0);
   expect(payload.sites.every(site => site.access.branchCode && site.access.roadCode)).toBe(true);
 });
