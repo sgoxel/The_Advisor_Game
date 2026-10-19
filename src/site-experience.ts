@@ -476,10 +476,11 @@ function render() {
     queried = sitesInView(view.x, view.z, radius, limit),
     // Selection has first placement priority. Preserve it within the existing
     // bounded discovery budget even when nearer unselected sites fill the query.
-    visible = selectedSite &&
-      Math.hypot(wrapSourceX(selectedSite.x - view.x), selectedSite.z - view.z) <= radius &&
-      !queried.some(site => site.code === selectedSite.code)
-        ? [...queried.slice(0, limit - 1), selectedSite]
+    selectedInView = selectedSite,
+    visible = selectedInView &&
+      Math.hypot(wrapSourceX(selectedInView.x - view.x), selectedInView.z - view.z) <= radius &&
+      !queried.some(site => site.code === selectedInView.code)
+        ? [...queried.slice(0, limit - 1), selectedInView]
         : queried,
     fingerprint = [
       Math.round(view.x),
