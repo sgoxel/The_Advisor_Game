@@ -90,6 +90,13 @@ for (const viewport of [
           overlapsPoliticalLabel: overlappingLabels.length > 0,
           overlapDetail: { siteRect, overlappingLabels },
           accessLines: document.querySelectorAll("#critical-site-access line.ruin-access").length,
+          // Every cartographic guide must terminate at a visible real junction.
+          offscreenAccessJunctions: [...document.querySelectorAll(
+            "#critical-site-access line.ruin-access, #critical-site-access line.critical-access",
+          )].filter(line => {
+            const x = Number(line.getAttribute("x2")), y = Number(line.getAttribute("y2"));
+            return !(x > 0 && x < innerWidth && y > 0 && y < innerHeight);
+          }).length,
         };
       },
       target.code,
@@ -102,6 +109,7 @@ for (const viewport of [
     expect(discovery.detailCacheLimit).toBe(48);
     expect(discovery.overlapsPoliticalLabel, JSON.stringify(discovery.overlapDetail)).toBe(false);
     expect(discovery.accessLines).toBeGreaterThan(0);
+    expect(discovery.offscreenAccessJunctions).toBe(0);
     await page.waitForTimeout(150);
     const idleBefore = await page.evaluate(() => ({
       placement: window.advisorSites.state.placementPassCount,
