@@ -266,7 +266,45 @@ for (const viewport of [
           await page.waitForFunction((code) =>
             window.advisorWorld.state.settled &&
             window.advisorSites.state.visibleCodes.includes(code),
-            site.code, { timeout: 120000 });
+            site.code, { timeout: 120000 }).catch(async (error) => {
+              const diagnostic = await page.evaluate((code) => {
+                const world = window.advisorWorld.state,
+                  ui = window.advisorSites.state,
+                  marker = document.querySelector(`.critical-site-marker[data-code="${CSS.escape(code)}"]`),
+                  target = window.advisorSites.sites.find(s => s.code === code),
+                  view = world.view;
+                return {
+                  viewport: [innerWidth, innerHeight],
+                  scale: world.scaleLabel,
+                  presentation: world.presentation,
+                  settled: world.settled,
+                  view: { x: view.x, z: view.z, halfHeight: view.halfHeight, aspect: view.aspect },
+                  target: { code, x: target?.x, z: target?.z },
+                  marker: marker ? {
+                    hidden: marker.hidden, display: getComputedStyle(marker).display,
+                    rect: marker.getBoundingClientRect().toJSON(),
+                  } : null,
+                  visibleCodes: ui.visibleCodes,
+                  visibleMarkers: document.querySelectorAll(".critical-site-marker:not([hidden])").length,
+                  placementPassCount: ui.placementPassCount,
+                  obstacleMeasureCount: ui.obstacleMeasureCount,
+                  politicalObstacleCount: ui.politicalObstacleCount,
+                  obstacles: [...document.querySelectorAll(
+                    ".masthead, #region-panel, #cell-panel, #travel-panel, #critical-site-panel:not([hidden]), " +
+                    ".bottom-bar, .map-controls, .telemetry, #focus-coordinates, #centre-marker, " +
+                    "#political-labels .political-label",
+                  )].filter(node => getComputedStyle(node).display !== "none" &&
+                      getComputedStyle(node).visibility !== "hidden")
+                    .map(node => ({
+                      name: node.id || node.className, rect: node.getBoundingClientRect().toJSON(),
+                    })).slice(0, 30),
+                };
+              }, site.code);
+              await page.screenshot({
+                path: testInfo.outputPath(`site-${kind}-${profile.name}-diagnostic.png`),
+              }).catch(() => {});
+              throw new Error(`Site viewport ${kind}/${profile.name}: ${JSON.stringify(diagnostic)}\n${error}`);
+            });
           await page.waitForTimeout(180);
           const geometry = await page.evaluate(code => {
             const marker = document.querySelector(`.critical-site-marker[data-code="${CSS.escape(code)}"]`),
