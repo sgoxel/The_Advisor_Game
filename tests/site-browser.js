@@ -284,8 +284,11 @@ for (const viewport of [
                 occupied.y < r.bottom + padding && occupied.bottom + padding > r.y,
               conflicts = occupied ? obstacles.filter(({ rect }) => intersects(rect))
                 .map(({ node }) => node.textContent?.trim().slice(0, 48) || node.id || node.className) : ["missing marker"],
-              // Independently check the actual SVG geometry, not just the leader endpoints.
-              leaderCrossings = [...document.querySelectorAll("#critical-site-access line.site-label-leader")]
+              // Independently clip actual leader and cartographic access segments
+              // against the same visible HUD/political obstacles.
+              leaderCrossings = [...document.querySelectorAll(
+                "#critical-site-access line.site-label-leader, #critical-site-access line.ruin-access, #critical-site-access line.critical-access",
+              )]
                 .flatMap(line => {
                   const x1 = Number(line.getAttribute("x1")), y1 = Number(line.getAttribute("y1")),
                     dx = Number(line.getAttribute("x2")) - x1,

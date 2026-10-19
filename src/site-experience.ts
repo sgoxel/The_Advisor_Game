@@ -546,7 +546,9 @@ function render() {
       const junctionVisible =
         entry.accessPoint.x > 0 && entry.accessPoint.x < innerWidth &&
         entry.accessPoint.y > 0 && entry.accessPoint.y < innerHeight;
-      if (!entry.detailed && junctionVisible) {
+      if (!entry.detailed && junctionVisible &&
+          leaderClear(entry.point.x, entry.point.y,
+            entry.accessPoint.x, entry.accessPoint.y, obstacles)) {
         const accessClass = entry.site.kind === "ruin" ? "ruin-access" : "critical-access";
         appendLine(
           accessLayer,
