@@ -25,28 +25,28 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S004 — Settlements, Buildings & World Sites
 
 - WP-S004-001-001 — Deterministic settlement distribution & morphology: viable-area density, readable functional villages/cities, legal access and bounded mobile rendering — COMPLETED and REVIEWED at 2026-10-17
-- WP-S004-002-001 — Critical sites: collision-free 1/1000 labels, legal access, 44px inspection and dual-backend parity
+- WP-S004-002-001 — Critical-site UX: collision-safe labels/leaders, truthful access, 44px inspection and backend parity
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Connected transport: terrain-aware shared junctions, legal crossings, graph/mesh parity and route UX
+- WP-S005-001-001 — Canonical transport UX: terrain-cost routes, shared junctions, legal crossings and graph/visual parity
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Living residents: legal home/work/guard schedules, bounded Simulation and reusable 2D actors
-- WP-S006-002-001 — Interior research & contracts: SEED rooms/portals, persisted changes, lazy loading and entry UX
+- WP-S006-001-001 — Living residents: walkable home/work/guard routes, deterministic schedules and bounded 2D actors
+- WP-S006-002-001 — Interior architecture research: SEED portals/rooms, persisted changes, first-usable entry and lazy loading
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — World visual research: coherent medieval 3D materials, semantic zoom, 2D actors and mobile budgets
+- WP-S007-001-001 — Toon-world visual research: materials, semantic zoom, readable labels/2D actors and mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas UX: seven viewports, 44px controls, keyboard focus and map-safe panels
+- WP-S008-001-001 — Accessible atlas UX: seven viewports, safe areas, 44px targets, legible panels and keyboard focus
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance gates: cold start, first terrain vs full detail, p95 input/frame and dual backends
-- WP-S009-002-001 — UI hot-path efficiency: revision-driven labels, overlays, inspectors, picking and DOM reuse
-- WP-S009-003-001 — Adaptive rendering & GPU recovery: mobile DPR, stable quality tiers and state-safe fallback
-- WP-S009-004-001 — README/gameplay conformance: truthful stage, Advisor-vs-atlas UX and verified release claims
+- WP-S009-001-001 — Exact-SHA performance gates: coherent terrain latency, p95 frame/input/worker/upload and dual backends
+- WP-S009-002-001 — Stable-frame UI performance: revision-cached labels/overlays/diagnostics and bounded picking
+- WP-S009-003-001 — Adaptive mobile rendering: DPR/quality hysteresis, shared resource accounting and GPU recovery
+- WP-S009-004-001 — README compliance: truthful stage/HUD, Advisor-vs-atlas semantics and verified release claims
