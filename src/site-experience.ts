@@ -344,6 +344,25 @@ function candidateLeader(entry: PlacementSite, rect: Rect): SiteLeader | null {
   return { x1: cx + ux * 16, y1: cy + uy * 16, x2: entry.point.x, y2: entry.point.y };
 }
 
+// Displaced label leaders must not cross one another even if both endpoints
+// clear all reserved rectangles. Deterministic geometry, never screen randomness.
+function leadersCross(a: SiteLeader, b: SiteLeader): boolean {
+  const ax = a.x2 - a.x1, ay = a.y2 - a.y1,
+    bx = b.x2 - b.x1, by = b.y2 - b.y1,
+    qx = b.x1 - a.x1, qy = b.y1 - a.y1,
+    det = ax * by - ay * bx;
+  if (Math.abs(det) <= 1e-9) {
+    if (Math.abs(qx * ay - qy * ax) > 1e-9) return false;
+    return Math.max(Math.min(a.x1, a.x2), Math.min(b.x1, b.x2)) <=
+      Math.min(Math.max(a.x1, a.x2), Math.max(b.x1, b.x2)) &&
+      Math.max(Math.min(a.y1, a.y2), Math.min(b.y1, b.y2)) <=
+      Math.min(Math.max(a.y1, a.y2), Math.max(b.y1, b.y2));
+  }
+  const t = (qx * by - qy * bx) / det,
+    u = (qx * ay - qy * ax) / det;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
+
 function placeSites(
   entries: { entry: PlacementSite; width: number; height: number; inspecting: boolean }[],
   obstacles: SiteObstacle[],
@@ -381,7 +400,8 @@ function placeSites(
           const leaderObstacles = occupied.filter((other) => !other.focusCrosshair ||
             entry.point.x < other.x || entry.point.x > other.x + other.width ||
             entry.point.y < other.y || entry.point.y > other.y + other.height);
-          return (!leader || leaderClear(leader.x1, leader.y1, leader.x2, leader.y2, leaderObstacles)) &&
+          return (!leader || (leaderClear(leader.x1, leader.y1, leader.x2, leader.y2, leaderObstacles) &&
+              reservedLeaders.every(line => !leadersCross(leader, line)))) &&
             reservedLeaders.every(line => leaderClear(line.x1, line.y1, line.x2, line.y2, [rect]));
         };
       let rect: Rect | null = null;
