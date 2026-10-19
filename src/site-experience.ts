@@ -51,6 +51,22 @@ let framePending = false;
 let uiLayoutRevision = 0;
 let placementPassCount = 0;
 let obstacleMeasureCount = 0;
+let nearbyQueryCount = 0;
+// Reuse only the exact current-view SEED query. Camera/zoom/viewport changes
+// recompute normally; the one-entry cache never affects site ownership or order.
+let nearbyViewCache: {
+  x: number; z: number; radius: number; limit: number; sites: CriticalSite[];
+} | null = null;
+
+function sitesInView(x: number, z: number, radius: number, limit: number) {
+  const cached = nearbyViewCache;
+  if (cached && cached.x === x && cached.z === z &&
+      cached.radius === radius && cached.limit === limit) return cached.sites;
+  const sites = nearbyCriticalSites(x, z, radius, limit);
+  nearbyViewCache = { x, z, radius, limit, sites };
+  nearbyQueryCount++;
+  return sites;
+}
 
 function detailFor(site: CriticalSite): SiteDetail {
   let detail = detailCache.get(site.code);
@@ -394,7 +410,7 @@ function render() {
   }
 
   const radius = Math.hypot(view.halfHeight * view.aspect, view.halfHeight) * 1.35,
-    visible = nearbyCriticalSites(
+    visible = sitesInView(
       view.x,
       view.z,
       radius,
@@ -543,6 +559,7 @@ Object.defineProperty(window, "advisorSites", {
         politicalObstacleCount: lastPoliticalObstacleCount,
         placementPassCount,
         obstacleMeasureCount,
+        nearbyQueryCount,
         uiLayoutRevision,
       };
     },
