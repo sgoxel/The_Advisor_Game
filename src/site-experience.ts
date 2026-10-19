@@ -528,15 +528,13 @@ function render() {
       marker.style.transform = `translate(${Math.round(cx)}px,${Math.round(cy)}px)`;
       lastVisibleCodes.push(entry.site.code);
 
-      // This is a cartographic hint, not physical road geometry. Only draw it
-      // when its junction endpoint is on-screen and its segment clears panels
-      // and labels; otherwise keep the canonical road without a false line.
+      // This is a cartographic hint, not physical road geometry. Do not draw
+      // a clipped line toward an off-screen junction: that would falsely read
+      // as a disconnected physical road. Detailed scale uses the actual mesh.
       const junctionVisible =
         entry.accessPoint.x > 0 && entry.accessPoint.x < innerWidth &&
         entry.accessPoint.y > 0 && entry.accessPoint.y < innerHeight;
-      if (!entry.detailed && junctionVisible &&
-          leaderClear(entry.point.x, entry.point.y,
-            entry.accessPoint.x, entry.accessPoint.y, obstacles)) {
+      if (!entry.detailed && junctionVisible) {
         const accessClass = entry.site.kind === "ruin" ? "ruin-access" : "critical-access";
         appendLine(
           accessLayer,
