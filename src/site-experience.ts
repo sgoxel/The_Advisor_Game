@@ -452,12 +452,16 @@ function render() {
   }
 
   const radius = Math.hypot(view.halfHeight * view.aspect, view.halfHeight) * 1.35,
-    visible = sitesInView(
-      view.x,
-      view.z,
-      radius,
-      innerWidth < 600 ? MOBILE_SITE_LIMIT : DESKTOP_SITE_LIMIT,
-    ),
+    limit = innerWidth < 600 ? MOBILE_SITE_LIMIT : DESKTOP_SITE_LIMIT,
+    queried = sitesInView(view.x, view.z, radius, limit),
+    selectedSite = selectedCode ? criticalSites.find(site => site.code === selectedCode) : null,
+    // Selection has first placement priority. Preserve it within the existing
+    // bounded discovery budget even when nearer unselected sites fill the query.
+    visible = selectedSite &&
+      Math.hypot(wrapSourceX(selectedSite.x - view.x), selectedSite.z - view.z) <= radius &&
+      !queried.some(site => site.code === selectedSite.code)
+        ? [...queried.slice(0, limit - 1), selectedSite]
+        : queried,
     fingerprint = [
       Math.round(view.x),
       Math.round(view.z),
