@@ -44,6 +44,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const markerNodes = new Map<string, HTMLButtonElement>();
 const detailCache = new Map<string, SiteDetail>();
 let selectedCode: string | null = null;
+let selectedSite: CriticalSite | null = null;
 let lastFingerprint = "";
 let lastVisibleCodes: string[] = [];
 let lastPoliticalObstacleCount = 0;
@@ -174,6 +175,7 @@ function updateSiteScrollCue() {
 
 function selectSite(code: string | null) {
   selectedCode = code;
+  selectedSite = code ? criticalSites.find(site => site.code === code) ?? null : null;
   lastFingerprint = "";
   const panel = document.getElementById("critical-site-panel") as HTMLElement | null;
   if (!panel) return;
@@ -182,7 +184,7 @@ function selectSite(code: string | null) {
     for (const marker of markerNodes.values()) marker.setAttribute("aria-pressed", "false");
     return;
   }
-  const site = criticalSites.find((item) => item.code === code);
+  const site = selectedSite;
   if (!site) return;
   detailFor(site);
   panel.hidden = false;
@@ -454,7 +456,6 @@ function render() {
   const radius = Math.hypot(view.halfHeight * view.aspect, view.halfHeight) * 1.35,
     limit = innerWidth < 600 ? MOBILE_SITE_LIMIT : DESKTOP_SITE_LIMIT,
     queried = sitesInView(view.x, view.z, radius, limit),
-    selectedSite = selectedCode ? criticalSites.find(site => site.code === selectedCode) : null,
     // Selection has first placement priority. Preserve it within the existing
     // bounded discovery budget even when nearer unselected sites fill the query.
     visible = selectedSite &&
