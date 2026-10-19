@@ -511,15 +511,19 @@ function render() {
       marker.style.transform = `translate(${Math.round(cx)}px,${Math.round(cy)}px)`;
       lastVisibleCodes.push(entry.site.code);
 
-      const accessClass = entry.site.kind === "ruin" ? "ruin-access" : "critical-access";
-      appendLine(
-        accessLayer,
-        accessClass,
-        entry.point.x,
-        entry.point.y,
-        entry.accessPoint.x,
-        entry.accessPoint.y,
-      );
+      // At detailed zoom the physical SITE/ACCESS road is already present:
+      // omit the cartographic dashed aid rather than painting over its mesh.
+      if (!entry.detailed) {
+        const accessClass = entry.site.kind === "ruin" ? "ruin-access" : "critical-access";
+        appendLine(
+          accessLayer,
+          accessClass,
+          entry.point.x,
+          entry.point.y,
+          entry.accessPoint.x,
+          entry.accessPoint.y,
+        );
+      }
 
       if (placement.shift > 24) {
         const ux = (entry.point.x - cx) / placement.shift,
