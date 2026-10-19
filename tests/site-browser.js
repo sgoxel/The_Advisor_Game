@@ -215,11 +215,17 @@ for (const viewport of [
     expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
     expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
     if (viewport.name === "phone") {
-      const layout = await panel.evaluate((node) => ({
-        clientHeight: node.clientHeight,
-        scrollHeight: node.scrollHeight,
+      const layout = await panel.evaluate(node => ({
+        overflow: node.scrollHeight - node.clientHeight,
+        overflowY: getComputedStyle(node).overflowY,
       }));
-      expect(layout.scrollHeight).toBeLessThanOrEqual(layout.clientHeight + 1);
+      // A short inspector may scroll; requiring no overflow contradicts its
+      // visible scroll cue and hides real reachability defects.
+      if (layout.overflow > 1) {
+        expect(["auto", "scroll"]).toContain(layout.overflowY);
+        await panel.locator("#focus-critical-site").scrollIntoViewIfNeeded();
+        await expect(panel.locator("#focus-critical-site")).toBeInViewport();
+      }
     }
     if (viewport.name === "desktop") {
       // Verify the same canonical ruin and critical place on all seven layouts
