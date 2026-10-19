@@ -299,7 +299,11 @@ for (const viewport of [
                   const x1 = Number(line.getAttribute("x1")), y1 = Number(line.getAttribute("y1")),
                     dx = Number(line.getAttribute("x2")) - x1,
                     dy = Number(line.getAttribute("y2")) - y1;
-                  return obstacles.filter(({ rect }) => {
+                  return obstacles.filter(({ node, rect }) => {
+                    // The guide's site endpoint legitimately sits under the
+                    // focus crosshair; all other obstacles still require clearance.
+                    if (node.id === "centre-marker" && !line.classList.contains("site-label-leader"))
+                      return false;
                     const gap = 4, left = rect.x - gap, top = rect.y - gap,
                       right = rect.right + gap, bottom = rect.bottom + gap;
                     let start = 0, end = 1;

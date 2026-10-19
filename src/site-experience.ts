@@ -263,7 +263,8 @@ const obstacleSelectors = [
   "#political-labels .political-label",
 ];
 
-function labelObstacles(): Rect[] {
+type SiteObstacle = Rect & { focusCrosshair: boolean };
+function labelObstacles(): SiteObstacle[] {
   obstacleMeasureCount++;
   const nodes = obstacleSelectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)));
   lastPoliticalObstacleCount = document.querySelectorAll("#political-labels .political-label").length;
@@ -272,9 +273,12 @@ function labelObstacles(): Rect[] {
       const style = getComputedStyle(node);
       return style.display !== "none" && style.visibility !== "hidden";
     })
-    .map((node) => node.getBoundingClientRect())
-    .filter((rect) => rect.width > 0 && rect.height > 0)
-    .map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }));
+    .map((node) => ({ node, rect: node.getBoundingClientRect() }))
+    .filter(({ rect }) => rect.width > 0 && rect.height > 0)
+    .map(({ node, rect }) => ({
+      x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+      focusCrosshair: node.id === "centre-marker",
+    }));
 }
 
 function labelWidth(site: CriticalSite) {
@@ -480,6 +484,9 @@ function render() {
     lastFingerprint = fingerprint;
     placementPassCount++;
     const obstacles = labelObstacles();
+    // A guide starts at the canonical site anchor, which may sit exactly
+    // beneath the focus crosshair; unrelated HUD/political cards still occlude.
+    const guideObstacles = obstacles.filter(rect => !rect.focusCrosshair);
     const visibleSet = new Set(visible.map((site) => site.code)),
       accessLayer = document.querySelector<SVGSVGElement>("#critical-site-access")!;
     accessLayer.replaceChildren();
@@ -548,7 +555,7 @@ function render() {
         entry.accessPoint.y > 0 && entry.accessPoint.y < innerHeight;
       if (!entry.detailed && junctionVisible &&
           leaderClear(entry.point.x, entry.point.y,
-            entry.accessPoint.x, entry.accessPoint.y, obstacles)) {
+            entry.accessPoint.x, entry.accessPoint.y, guideObstacles)) {
         const accessClass = entry.site.kind === "ruin" ? "ruin-access" : "critical-access";
         appendLine(
           accessLayer,
