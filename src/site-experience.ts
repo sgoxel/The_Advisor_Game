@@ -528,9 +528,15 @@ function render() {
       marker.style.transform = `translate(${Math.round(cx)}px,${Math.round(cy)}px)`;
       lastVisibleCodes.push(entry.site.code);
 
-      // At detailed zoom the physical SITE/ACCESS road is already present:
-      // omit the cartographic dashed aid rather than painting over its mesh.
-      if (!entry.detailed) {
+      // This is a cartographic hint, not physical road geometry. Only draw it
+      // when its junction endpoint is on-screen and its segment clears panels
+      // and labels; otherwise keep the canonical road without a false line.
+      const junctionVisible =
+        entry.accessPoint.x > 0 && entry.accessPoint.x < innerWidth &&
+        entry.accessPoint.y > 0 && entry.accessPoint.y < innerHeight;
+      if (!entry.detailed && junctionVisible &&
+          leaderClear(entry.point.x, entry.point.y,
+            entry.accessPoint.x, entry.accessPoint.y, obstacles)) {
         const accessClass = entry.site.kind === "ruin" ? "ruin-access" : "critical-access";
         appendLine(
           accessLayer,
