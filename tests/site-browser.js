@@ -395,12 +395,39 @@ for (const viewport of [
               leaderLinked = [...document.querySelectorAll("#critical-site-access line.site-label-leader")]
                 .some(line => Math.hypot(Number(line.getAttribute("x2")) - pointX,
                   Number(line.getAttribute("y2")) - pointY) < 1);
-            return { conflicts, leaderCrossings, displacement, leaderLinked,
+            // Independently verify that displaced leaders do not cross
+            // each other while clearing all HUD/political rectangles.
+            const siteLeaders = [...document.querySelectorAll("#critical-site-access line.site-label-leader")]
+              .map(line => Object.fromEntries(["x1", "y1", "x2", "y2"]
+                .map(key => [key, Number(line.getAttribute(key))]))),
+              crossedLeaderPairs = [];
+            for (let i = 0; i < siteLeaders.length; i++) {
+              const a = siteLeaders[i], ax = a.x2 - a.x1, ay = a.y2 - a.y1;
+              for (let j = i + 1; j < siteLeaders.length; j++) {
+                const b = siteLeaders[j], bx = b.x2 - b.x1, by = b.y2 - b.y1,
+                  qx = b.x1 - a.x1, qy = b.y1 - a.y1,
+                  det = ax * by - ay * bx;
+                const intersects = Math.abs(det) <= 1e-9
+                  ? Math.abs(qx * ay - qy * ax) <= 1e-9 &&
+                    Math.max(Math.min(a.x1, a.x2), Math.min(b.x1, b.x2)) <=
+                      Math.min(Math.max(a.x1, a.x2), Math.max(b.x1, b.x2)) &&
+                    Math.max(Math.min(a.y1, a.y2), Math.min(b.y1, b.y2)) <=
+                      Math.min(Math.max(a.y1, a.y2), Math.max(b.y1, b.y2))
+                  : (() => {
+                    const t = (qx * by - qy * bx) / det,
+                      u = (qx * ay - qy * ax) / det;
+                    return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+                  })();
+                if (intersects) crossedLeaderPairs.push(`${i}/${j}`);
+              }
+            }
+            return { conflicts, leaderCrossings, crossedLeaderPairs, displacement, leaderLinked,
               rendered: !!marker && !marker.hidden, occupied };
           }, site.code);
           expect(geometry.rendered, `${kind}/${profile.name}`).toBe(true);
           expect(geometry.conflicts, `${kind}/${profile.name}: ${JSON.stringify(geometry)}`).toEqual([]);
           expect(geometry.leaderCrossings, `${kind}/${profile.name}: ${JSON.stringify(geometry)}`).toEqual([]);
+          expect(geometry.crossedLeaderPairs, `${kind}/${profile.name}: crossed leaders`).toEqual([]);
           if (geometry.displacement > 25)
             expect(geometry.leaderLinked,
               `${kind}/${profile.name}: displaced site lost canonical leader`).toBe(true);
