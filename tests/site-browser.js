@@ -314,6 +314,23 @@ for (const viewport of [
             expect(control.width, profile.name).toBeGreaterThanOrEqual(44);
             expect(control.height, profile.name).toBeGreaterThanOrEqual(44);
           }
+          // The final inspector action must be reachable even when the panel scrolls.
+          await panel.locator("#focus-critical-site").scrollIntoViewIfNeeded();
+          await expect(panel.locator("#focus-critical-site")).toBeInViewport();
+          const context = await page.evaluate(code => {
+            const marker = document.querySelector(`.critical-site-marker[data-code="${CSS.escape(code)}"]`);
+            const glyph = marker?.querySelector(".site-glyph"),
+              panelRect = document.querySelector("#critical-site-panel").getBoundingClientRect(),
+              glyphRect = glyph?.getBoundingClientRect();
+            return {
+              visible: !!glyphRect && glyphRect.width > 0 && glyphRect.height > 0,
+              covered: !!glyphRect && glyphRect.left < panelRect.right &&
+                glyphRect.right > panelRect.left &&
+                glyphRect.top < panelRect.bottom && glyphRect.bottom > panelRect.top,
+            };
+          }, site.code);
+          expect(context.visible, `${kind}/${profile.name}`).toBe(true);
+          expect(context.covered, `${kind}/${profile.name}: selected site under inspector`).toBe(false);
           await panel.locator("#close-critical-site").click();
           await expect(panel).toBeHidden();
         }
