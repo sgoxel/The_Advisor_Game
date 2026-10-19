@@ -308,9 +308,14 @@ for (const viewport of [
                     dx = Number(line.getAttribute("x2")) - x1,
                     dy = Number(line.getAttribute("y2")) - y1;
                   return obstacles.filter(({ node, rect }) => {
-                    // The guide's site endpoint legitimately sits under the
-                    // focus crosshair; all other obstacles still require clearance.
-                    if (node.id === "centre-marker" && !line.classList.contains("site-label-leader"))
+                    // A focused site's anchored leader may terminate inside its
+                    // own crosshair. Unrelated leader/callout crossings still fail.
+                    if (node.id === "centre-marker" &&
+                        (!line.classList.contains("site-label-leader") ||
+                         (Number(line.getAttribute("x2")) >= rect.left &&
+                          Number(line.getAttribute("x2")) <= rect.right &&
+                          Number(line.getAttribute("y2")) >= rect.top &&
+                          Number(line.getAttribute("y2")) <= rect.bottom)))
                       return false;
                     const gap = 4, left = rect.x - gap, top = rect.y - gap,
                       right = rect.right + gap, bottom = rect.bottom + gap;

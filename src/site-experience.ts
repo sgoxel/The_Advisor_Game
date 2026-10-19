@@ -343,7 +343,7 @@ function candidateLeader(entry: PlacementSite, rect: Rect): SiteLeader | null {
 
 function placeSites(
   entries: { entry: PlacementSite; width: number; height: number }[],
-  obstacles: Rect[],
+  obstacles: SiteObstacle[],
 ): SitePlacement[] {
   const occupied = [...obstacles],
     reservedLeaders: SiteLeader[] = [];
@@ -365,7 +365,13 @@ function placeSites(
         free = (rect: Rect) => {
           if (occupied.some((other) => overlaps(rect, other, 5))) return false;
           const leader = candidateLeader(entry, rect);
-          return (!leader || leaderClear(leader.x1, leader.y1, leader.x2, leader.y2, occupied)) &&
+          // A site anchor can legitimately sit beneath the focus crosshair.
+          // Only its own anchored leader may enter that crosshair; all other
+          // site labels, HUD/political obstacles, and occupied slots still count.
+          const leaderObstacles = occupied.filter((other) => !other.focusCrosshair ||
+            entry.point.x < other.x || entry.point.x > other.x + other.width ||
+            entry.point.y < other.y || entry.point.y > other.y + other.height);
+          return (!leader || leaderClear(leader.x1, leader.y1, leader.x2, leader.y2, leaderObstacles)) &&
             reservedLeaders.every(line => leaderClear(line.x1, line.y1, line.x2, line.y2, [rect]));
         };
       let rect: Rect | null = null;
@@ -400,7 +406,7 @@ function placeSites(
       // Never replace a failed free-slot search with an overlapping marker.
       // Higher-priority nearby sites have already reserved their own space.
       if (!rect) return [];
-      occupied.push(rect);
+      occupied.push({ ...rect, focusCrosshair: false });
       const leader = candidateLeader(entry, rect);
       if (leader) reservedLeaders.push(leader);
       return [{
