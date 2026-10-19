@@ -296,11 +296,27 @@ for (const viewport of [
                       clip(-dy, y1 - top) && clip(dy, bottom - y1);
                   }).map(({ node }) => node.textContent?.trim().slice(0, 48) || node.id || node.className);
                 });
-            return { conflicts, leaderCrossings, rendered: !!marker && !marker.hidden, occupied };
+            const target = window.advisorSites.sites.find(s => s.code === code),
+              view = window.advisorWorld.state.view,
+              wrap = dx => ((dx + 131072) % 262144 + 262144) % 262144 - 131072,
+              dx = wrap(target.x - view.x), dz = target.z - view.z,
+              c = Math.cos(view.yaw), sin = Math.sin(view.yaw),
+              pointX = innerWidth / 2 + ((dx * c - dz * sin) / (view.halfHeight * view.aspect)) * innerWidth / 2,
+              pointY = innerHeight / 2 + ((dx * sin + dz * c) * 0.8660254 / view.halfHeight) * innerHeight / 2,
+              markerBox = marker.getBoundingClientRect(),
+              displacement = Math.hypot(markerBox.x + 22 - pointX, markerBox.y + 22 - pointY),
+              leaderLinked = [...document.querySelectorAll("#critical-site-access line.site-label-leader")]
+                .some(line => Math.hypot(Number(line.getAttribute("x2")) - pointX,
+                  Number(line.getAttribute("y2")) - pointY) < 1);
+            return { conflicts, leaderCrossings, displacement, leaderLinked,
+              rendered: !!marker && !marker.hidden, occupied };
           }, site.code);
           expect(geometry.rendered, `${kind}/${profile.name}`).toBe(true);
           expect(geometry.conflicts, `${kind}/${profile.name}: ${JSON.stringify(geometry)}`).toEqual([]);
           expect(geometry.leaderCrossings, `${kind}/${profile.name}: ${JSON.stringify(geometry)}`).toEqual([]);
+          if (geometry.displacement > 25)
+            expect(geometry.leaderLinked,
+              `${kind}/${profile.name}: displaced site lost canonical leader`).toBe(true);
           const targetMarker = page.locator(`.critical-site-marker[data-code="${site.code}"]`);
           await targetMarker.click();
           await expect(panel).toBeVisible();
