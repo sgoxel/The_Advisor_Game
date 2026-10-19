@@ -311,11 +311,22 @@ const RING_MAX = 300;
 const RING_DIRECTIONS = 16;
 const RING_ORDER = [12, 4, 0, 8, 14, 10, 2, 6, 13, 11, 5, 3, 15, 9, 1, 7];
 
+type SiteLeader = { x1: number; y1: number; x2: number; y2: number };
+function candidateLeader(entry: PlacementSite, rect: Rect): SiteLeader | null {
+  const cx = rect.x + 22, cy = rect.y + 22,
+    shift = Math.hypot(cx - entry.point.x, cy - entry.point.y);
+  if (shift <= 24) return null;
+  const ux = (entry.point.x - cx) / shift,
+    uy = (entry.point.y - cy) / shift;
+  return { x1: cx + ux * 16, y1: cy + uy * 16, x2: entry.point.x, y2: entry.point.y };
+}
+
 function placeSites(
   entries: { entry: PlacementSite; width: number; height: number }[],
   obstacles: Rect[],
 ): SitePlacement[] {
-  const occupied = [...obstacles];
+  const occupied = [...obstacles],
+    reservedLeaders: SiteLeader[] = [];
   return [...entries]
     .sort((a, b) =>
       a.entry.placementId < b.entry.placementId ? -1 : a.entry.placementId > b.entry.placementId ? 1 : 0,
@@ -331,7 +342,12 @@ function placeSites(
           width: w,
           height: h,
         }),
-        free = (rect: Rect) => !occupied.some((other) => overlaps(rect, other, 5));
+        free = (rect: Rect) => {
+          if (occupied.some((other) => overlaps(rect, other, 5))) return false;
+          const leader = candidateLeader(entry, rect);
+          return (!leader || leaderClear(leader.x1, leader.y1, leader.x2, leader.y2, occupied)) &&
+            reservedLeaders.every(line => leaderClear(line.x1, line.y1, line.x2, line.y2, [rect]));
+        };
       let rect: Rect | null = null;
       for (let radius = 0; radius <= RING_MAX && !rect; radius += RING_STEP) {
         const count = radius === 0 ? 1 : RING_DIRECTIONS;
@@ -365,6 +381,8 @@ function placeSites(
       // Higher-priority nearby sites have already reserved their own space.
       if (!rect) return [];
       occupied.push(rect);
+      const leader = candidateLeader(entry, rect);
+      if (leader) reservedLeaders.push(leader);
       return [{
         entry,
         rect,
@@ -495,7 +513,6 @@ function render() {
       return { entry, width: 46 + labelW, height: Math.max(44, 10 + labelH) };
     });
     const placements = placeSites(sized, obstacles),
-      allPlacementRects = placements.map((placement) => placement.rect),
       placedCodes = new Set(placements.map(p => p.entry.site.code));
     for (const entry of eligible)
       if (!placedCodes.has(entry.site.code))
@@ -525,32 +542,15 @@ function render() {
         );
       }
 
-      if (placement.shift > 24) {
-        const ux = (entry.point.x - cx) / placement.shift,
-          uy = (entry.point.y - cy) / placement.shift,
-          startX = cx + ux * 16,
-          startY = cy + uy * 16,
-          otherRects = allPlacementRects.filter((rect) => rect !== placement.rect),
-          lineObstacles = [...obstacles, ...otherRects];
-        if (leaderClear(startX, startY, entry.point.x, entry.point.y, lineObstacles)) {
-          appendLine(
-            accessLayer,
-            "site-label-leader-halo",
-            startX,
-            startY,
-            entry.point.x,
-            entry.point.y,
-          );
-          appendLine(
-            accessLayer,
-            "site-label-leader",
-            startX,
-            startY,
-            entry.point.x,
-            entry.point.y,
-          );
-          if (!entry.detailed) appendAnchor(accessLayer, entry.point.x, entry.point.y);
-        }
+      const leader = candidateLeader(entry, placement.rect);
+      // Each accepted displacement has already reserved an unobstructed
+      // segment, including against every other accepted site rectangle.
+      if (leader) {
+        appendLine(accessLayer, "site-label-leader-halo",
+          leader.x1, leader.y1, leader.x2, leader.y2);
+        appendLine(accessLayer, "site-label-leader",
+          leader.x1, leader.y1, leader.x2, leader.y2);
+        if (!entry.detailed) appendAnchor(accessLayer, entry.point.x, entry.point.y);
       }
     }
   }
