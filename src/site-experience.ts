@@ -124,7 +124,8 @@ function ensureUi() {
       <dt>Structures</dt><dd id="critical-site-residency"></dd>
     </dl>
     <div class="region-actions"><button id="focus-critical-site">Focus site</button></div>
-    <p class="hint">Inspection reveals existing SEED-defined data; it never creates or rerolls this place.</p>`;
+    <p class="hint">Inspection reveals existing SEED-defined data; it never creates or rerolls this place.</p>
+    <p id="critical-site-scroll-cue" class="site-scroll-cue" aria-hidden="true" hidden>Scroll for more details ↓</p>`;
   document.body.append(panel);
 
   panel.querySelector<HTMLButtonElement>("#close-critical-site")!.onclick = () => selectSite(null);
@@ -144,17 +145,31 @@ function ensureUi() {
     .filter((node): node is HTMLElement => Boolean(node));
   const changed = () => { uiLayoutRevision++; };
   const changes = new MutationObserver(changed);
-  const sizes = new ResizeObserver(changed);
+  const sizes = new ResizeObserver((entries) => {
+    changed();
+    if (entries.some(entry => entry.target === panel)) updateSiteScrollCue();
+  });
   for (const node of tracked) {
     changes.observe(node, { attributes: true, attributeFilter: ["class", "hidden"] });
     sizes.observe(node);
   }
+  panel.addEventListener("scroll", updateSiteScrollCue, { passive: true });
   // React synchronously to the political renderer's final label transforms.
   // Its explicit revision event fires only for material placement changes.
   window.addEventListener("advisor-political-label-layout", () => {
     uiLayoutRevision++;
     render();
   });
+}
+
+function updateSiteScrollCue() {
+  const panel = document.getElementById("critical-site-panel");
+  const cue = document.getElementById("critical-site-scroll-cue");
+  if (!panel || !cue || panel.hidden) return;
+  const cueHeight = cue.hidden ? 0 : cue.getBoundingClientRect().height;
+  const overflow = panel.scrollHeight - cueHeight - panel.clientHeight;
+  const remaining = panel.scrollHeight - panel.clientHeight - panel.scrollTop;
+  cue.hidden = overflow <= 8 || remaining <= cueHeight + 8;
 }
 
 function selectSite(code: string | null) {
@@ -171,6 +186,7 @@ function selectSite(code: string | null) {
   if (!site) return;
   detailFor(site);
   panel.hidden = false;
+  panel.scrollTop = 0;
   (document.getElementById("critical-site-eyebrow") as HTMLElement).textContent =
     site.kind === "ruin" ? "RUIN" : "IMPORTANT PLACE";
   (document.getElementById("critical-site-name") as HTMLElement).textContent = site.name;
@@ -191,6 +207,7 @@ function selectSite(code: string | null) {
       : "Standing stones around a central altar";
   for (const [id, marker] of markerNodes)
     marker.setAttribute("aria-pressed", id === code ? "true" : "false");
+  requestAnimationFrame(updateSiteScrollCue);
 }
 
 function project(x: number, z: number, view: any) {
