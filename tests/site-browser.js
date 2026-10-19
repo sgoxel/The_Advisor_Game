@@ -398,7 +398,8 @@ for (const viewport of [
       null, { timeout: 120000 });
     const idleWideWrites = await page.evaluate(async () => {
       const access = document.querySelector("#critical-site-access");
-      const observer = new MutationObserver(() => {});
+      let mutationCount = 0;
+      const observer = new MutationObserver(records => { mutationCount += records.length; });
       observer.observe(access, { childList: true });
       for (const marker of document.querySelectorAll(".critical-site-marker"))
         observer.observe(marker, { attributes: true, attributeFilter: ["hidden"] });
@@ -407,7 +408,7 @@ for (const viewport of [
         const next = () => ++frames >= 8 ? resolve() : requestAnimationFrame(next);
         requestAnimationFrame(next);
       });
-      const mutations = observer.takeRecords().length;
+      const mutations = mutationCount + observer.takeRecords().length;
       observer.disconnect();
       return mutations;
     });
