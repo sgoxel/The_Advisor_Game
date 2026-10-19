@@ -13,6 +13,7 @@ import {
   type Place,
 } from "./geography.ts";
 import { WORLD_SEED } from "./config.ts";
+import { nearbyCriticalSites } from "./sites.ts";
 import { placeLabels, type Rect } from "./navigation.ts";
 import {
   POLITICAL_BORDER_MAX_SCALE_DENOMINATOR,
@@ -306,6 +307,23 @@ function labelCandidateFromPlace(place: Place): LabelCandidate {
   };
 }
 
+// Important sites receive a small view-only clear lane before settlement label
+// placement. Political labels retain their canonical anchors; only their
+// cartographic cards move. An absent focused site reserves no screen space.
+function focusedSiteLabelClearance(state: AtlasState, scale: number): Rect[] {
+  if (state.presentation !== "flat" || scale < 500 || scale > 1000 || innerWidth < 700)
+    return [];
+  const focused = nearbyCriticalSites(state.view.x, state.view.z, 32, 1)[0];
+  if (!focused || Math.hypot(focused.x - state.view.x, focused.z - state.view.z) > 16)
+    return [];
+  const width = 248, height = 188;
+  return [{
+    x: Math.max(8, Math.min(innerWidth - width - 8, innerWidth / 2 - 36)),
+    y: Math.max(82, Math.min(innerHeight - height - 106, innerHeight / 2 - 84)),
+    width, height,
+  }];
+}
+
 function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number, places: Place[]) {
   if (iconsShown !== (scale >= 50)) {
     iconsShown = scale >= 50;
@@ -413,7 +431,9 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
       height: size.height,
     };
   });
-  const placed = placeLabels(anchors, innerWidth, innerHeight, obstacles());
+  const placed = placeLabels(anchors, innerWidth, innerHeight, [
+    ...obstacles(), ...focusedSiteLabelClearance(state, scale),
+  ]);
   leaders.replaceChildren();
   politicalLabelState = [];
   for (const placement of placed) {
