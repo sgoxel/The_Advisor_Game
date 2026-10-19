@@ -322,6 +322,25 @@ for (const viewport of [
             expect(control.width, profile.name).toBeGreaterThanOrEqual(44);
             expect(control.height, profile.name).toBeGreaterThanOrEqual(44);
           }
+          // A clipped compact inspector must advertise additional content.
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+          const scrollCue = await panel.evaluate(node => {
+            const cue = node.querySelector("#critical-site-scroll-cue"),
+              rect = cue.getBoundingClientRect(),
+              panelRect = node.getBoundingClientRect(),
+              cueHeight = cue.hidden ? 0 : rect.height;
+            return {
+              overflow: node.scrollHeight - cueHeight - node.clientHeight,
+              remaining: node.scrollHeight - node.clientHeight - node.scrollTop,
+              rendered: !cue.hidden && getComputedStyle(cue).display !== "none",
+              insidePanel: rect.top >= panelRect.top && rect.bottom <= panelRect.bottom + 1,
+              height: cueHeight,
+            };
+          });
+          if (scrollCue.overflow > 8 && scrollCue.remaining > scrollCue.height + 8) {
+            expect(scrollCue.rendered, `${kind}/${profile.name}: missing scroll affordance`).toBe(true);
+            expect(scrollCue.insidePanel, `${kind}/${profile.name}: clipped scroll affordance`).toBe(true);
+          }
           // The final inspector action must be reachable even when the panel scrolls.
           await panel.locator("#focus-critical-site").scrollIntoViewIfNeeded();
           await expect(panel.locator("#focus-critical-site")).toBeInViewport();
