@@ -78,6 +78,11 @@ document.fonts?.addEventListener("loadingdone", () => {
   labelSizes.clear();
   renderFingerprint = "";
 });
+// Presentation tie-breaks must not depend on browser/OS locale.
+function compareIds(a: string, b: string) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function publishLabelLayout(signature: string) {
   if (signature === labelLayoutSignature) return;
   labelLayoutSignature = signature;
@@ -352,7 +357,7 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
     });
   }
   projected.sort(
-    (a, b) => b.priority - a.priority || a.distance - b.distance || a.id.localeCompare(b.id),
+    (a, b) => b.priority - a.priority || a.distance - b.distance || compareIds(a.id, b.id),
   );
   const caps = innerWidth < 700
       ? { country: 2, city: 4, village: 5 }
@@ -360,7 +365,7 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
     chosen: typeof projected = [];
   for (const kind of ["country", "city", "village"] as const)
     chosen.push(...projected.filter((item) => item.kind === kind).slice(0, caps[kind]));
-  chosen.sort((a, b) => b.priority - a.priority || a.distance - b.distance || a.id.localeCompare(b.id));
+  chosen.sort((a, b) => b.priority - a.priority || a.distance - b.distance || compareIds(a.id, b.id));
 
   const visible = new Set(chosen.map((item) => item.id));
   for (const [id, node] of labelNodes)
@@ -442,7 +447,7 @@ function updateCartographicRoads(state:AtlasState,frame:LocalRenderFrame,scale:n
  const radius=Math.hypot(state.view.halfHeight*state.view.aspect,state.view.halfHeight)*2,
   candidates=roads.flatMap(road=>[-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH].flatMap(shift=>
    road.maxX+shift<state.view.x-radius||road.minX+shift>state.view.x+radius||road.maxZ<state.view.z-radius||road.minZ>state.view.z+radius?[]:[{road,shift,distance:Math.hypot((road.minX+road.maxX)/2+shift-state.view.x,(road.minZ+road.maxZ)/2-state.view.z)}]))
-  .sort((a,b)=>a.distance-b.distance||a.road.networkId.localeCompare(b.road.networkId)).slice(0,innerWidth<700?128:256),visible=new Set<string>();
+  .sort((a,b)=>a.distance-b.distance||compareIds(a.road.networkId, b.road.networkId)).slice(0,innerWidth<700?128:256),visible=new Set<string>();
  visibleRoadPoints=0;
  for(const {road,shift} of candidates){
   const id=`${road.networkId}/${shift}`,path=road.centerline||[{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}],commands:string[]=[];
@@ -471,7 +476,7 @@ function updateSettlementOverview(state:AtlasState,frame:LocalRenderFrame,scale:
   const candidates=cities.flatMap(city=>{
     const point=project(frame,state,city.x,city.z,0);
     return point&&point.x>=10&&point.x<=innerWidth-10&&point.y>=80&&point.y<=innerHeight-110?[{city,point,distance:Math.hypot(point.x-innerWidth/2,point.y-innerHeight/2)}]:[];
-  }).sort((a,b)=>(a.city.city===0?0:1)-(b.city.city===0?0:1)||a.distance-b.distance||a.city.id.localeCompare(b.city.id)).slice(0,innerWidth<700?60:160);
+  }).sort((a,b)=>(a.city.city===0?0:1)-(b.city.city===0?0:1)||a.distance-b.distance||compareIds(a.city.id, b.city.id)).slice(0,innerWidth<700?60:160);
   const visible=new Set(candidates.map(c=>c.city.id));
   for(const [id,node] of overviewNodes)if(!visible.has(id)){node.remove();overviewNodes.delete(id);}
   for(const {city,point} of candidates){
