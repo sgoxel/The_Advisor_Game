@@ -192,6 +192,23 @@
 .critical-site-panel dt { opacity: .62; }
 .critical-site-panel dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
 .critical-site-panel #focus-critical-site { min-height: 44px; }
+.panel.critical-site-panel .site-scroll-cue {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  width: max-content;
+  max-width: 100%;
+  margin: 8px auto 0;
+  padding: 5px 11px;
+  border: 1px solid rgba(222, 189, 120, .75);
+  border-radius: 18px;
+  background: rgba(22, 37, 32, .96);
+  color: #f2e2bd;
+  font: 600 11px/1.35 Georgia, serif;
+  text-align: center;
+  pointer-events: none;
+}
+.panel.critical-site-panel .site-scroll-cue[hidden] { display: none; }
 
 @media (max-width: 620px) {
   .critical-site-marker .site-label {
