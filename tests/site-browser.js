@@ -286,7 +286,7 @@ for (const viewport of [
                 "#political-labels .political-label",
               ],
               obstacles = obstacleSelectors.flatMap(selector =>
-                [...document.querySelectorAll(selector)])
+                [...document.querySelectorAll(selector)]
                   .filter(n => {
                     const style = getComputedStyle(n);
                     return style.display !== "none" && style.visibility !== "hidden";
