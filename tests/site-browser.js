@@ -214,6 +214,8 @@ for (const viewport of [
     expect(state.visibleCount).toBeLessThanOrEqual(viewport.name === "phone" ? 6 : 12);
     expect(state.cachedDetails).toBeLessThanOrEqual(state.detailCacheLimit);
     expect(state.detailCacheLimit).toBeLessThan(state.totalSites);
+    expect(state.cachedMarkers).toBeLessThanOrEqual(state.markerNodeLimit);
+    expect(state.markerNodeLimit).toBeLessThan(state.totalSites);
     const box = await panel.boundingBox();
     expect(box).not.toBeNull();
     expect(box.x).toBeGreaterThanOrEqual(0);

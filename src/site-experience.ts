@@ -38,6 +38,7 @@ type SitePlacement = {
 };
 
 const DETAIL_CACHE_LIMIT = 48;
+const MARKER_NODE_LIMIT = 48;
 const MOBILE_SITE_LIMIT = 6;
 const DESKTOP_SITE_LIMIT = 12;
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -250,6 +251,16 @@ function markerFor(site: CriticalSite) {
   document.getElementById("critical-site-layer")!.append(marker);
   markerNodes.set(site.code, marker);
   return marker;
+}
+
+// Keep only bounded, reusable DOM markers across atlas navigation.
+function pruneMarkerNodes(visible: Set<string>) {
+  for (const [code, node] of markerNodes) {
+    if (markerNodes.size <= MARKER_NODE_LIMIT) break;
+    if (code === selectedCode || visible.has(code)) continue;
+    node.remove();
+    markerNodes.delete(code);
+  }
 }
 
 const obstacleSelectors = [
@@ -581,6 +592,7 @@ function render() {
         if (!entry.detailed) appendAnchor(accessLayer, entry.point.x, entry.point.y);
       }
     }
+    pruneMarkerNodes(visibleSet);
   }
   scheduleRender();
 }
@@ -604,6 +616,8 @@ Object.defineProperty(window, "advisorSites", {
         detailedCount: lastVisibleCodes.filter((code) => detailCache.has(code)).length,
         cachedDetails: detailCache.size,
         detailCacheLimit: DETAIL_CACHE_LIMIT,
+        cachedMarkers: markerNodes.size,
+        markerNodeLimit: MARKER_NODE_LIMIT,
         declutterSystem: "critical-sites.nearest-free",
         politicalObstacleCount: lastPoliticalObstacleCount,
         placementPassCount,
