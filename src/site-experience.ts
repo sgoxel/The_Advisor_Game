@@ -308,8 +308,10 @@ function appendLine(
   y1: number,
   x2: number,
   y2: number,
+  siteCode?: string,
 ) {
   const line = document.createElementNS(SVG_NS, "line");
+  if (siteCode) line.dataset.siteCode = siteCode;
   line.setAttribute("x1", String(x1));
   line.setAttribute("y1", String(y1));
   line.setAttribute("x2", String(x2));
@@ -605,6 +607,7 @@ function render() {
           entry.point.y,
           entry.accessPoint.x,
           entry.accessPoint.y,
+          entry.site.code,
         );
       }
 
