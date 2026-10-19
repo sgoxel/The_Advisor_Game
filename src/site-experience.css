@@ -140,6 +140,8 @@
   border-color: rgba(225, 190, 112, .98);
   background: rgba(36, 44, 36, .99);
 }
+/* The inspector supplies the name; retain only the anchored map glyph. */
+.critical-site-marker.inspecting .site-label { display: none; }
 .panel.critical-site-panel {
   position: fixed;
   z-index: 30;

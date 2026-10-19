@@ -544,13 +544,19 @@ function render() {
       });
     }
 
+    const inspectorOpen = !document.getElementById("critical-site-panel")!.hidden;
     const sized = eligible.map((entry) => {
       const marker = markerNodes.get(entry.site.code)!;
+      // The open inspector already names the selected site. Its map context
+      // remains an operable glyph without reserving a duplicate large label.
+      const inspecting = inspectorOpen && entry.site.code === selectedCode;
+      marker.classList.toggle("inspecting", inspecting);
       marker.hidden = false;
       const label = marker.querySelector<HTMLElement>(".site-label"),
         labelW = label?.offsetWidth || labelWidth(entry.site),
         labelH = label?.offsetHeight || 22;
-      return { entry, width: 46 + labelW, height: Math.max(44, 10 + labelH) };
+      return { entry, width: inspecting ? 44 : 46 + labelW,
+        height: inspecting ? 44 : Math.max(44, 10 + labelH) };
     });
     const placements = placeSites(sized, obstacles),
       placedCodes = new Set(placements.map(p => p.entry.site.code));
