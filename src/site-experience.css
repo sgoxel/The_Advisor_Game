@@ -10,6 +10,8 @@
   height: 100%;
   overflow: hidden;
 }
+/* During inspection, the canonical site glyph replaces the non-interactive focus crosshair. */
+#critical-site-layer.inspecting { z-index: 5; }
 #critical-site-access line {
   stroke: rgba(79, 57, 31, .82);
   stroke-width: 2;
