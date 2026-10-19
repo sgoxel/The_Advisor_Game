@@ -108,14 +108,17 @@ export function appendCriticalSiteGeometry(tile: Tile, data: TileGeometry) {
       localZ = site.z - originZ,
       y = elevationToRenderY(heightAt(site.x, site.z)),
       variant = site.variant,
-      stone: Tint = [137 + (variant % 12), 133 + (variant % 10), 116 + (variant % 9)],
-      darkStone: Tint = [103, 101, 92],
-      accent: Tint = [173, 145, 88];
+      // Cool, high-value stone contrasts against the warm earth/road material
+      // at close zoom; colour never selects the SEED-owned site archetype.
+      stone: Tint = [171 + (variant % 12), 184 + (variant % 10), 181 + (variant % 9)],
+      darkStone: Tint = [77, 87, 87],
+      accent: Tint = [221, 191, 115];
     codes.push(site.code);
 
     if (site.kind === "ruin") {
-      const towerHeight = 4.8 + (variant % 4) * 0.6;
+      const towerHeight = 7.2 + (variant % 4) * 0.7;
       structures.box(localX - 3.4, y - 0.2, localZ - 2.8, 4.4, towerHeight, 4.2, stone);
+      structures.box(localX - 3.4, y + towerHeight - 0.75, localZ - 2.8, 4.8, 0.6, 4.5, darkStone);
       structures.box(localX + 2.8, y - 0.15, localZ + 3.2, 8.6, 2.4 + (variant % 2), 1.15, stone);
       structures.box(localX + 5.7, y - 0.15, localZ - 0.6, 1.15, 3.2, 6.8, darkStone);
       structures.box(localX - 0.2, y - 0.1, localZ + 5.4, 5.2, 1.55, 1.0, darkStone);
@@ -128,13 +131,21 @@ export function appendCriticalSiteGeometry(tile: Tile, data: TileGeometry) {
           localX + Math.cos(angle) * radius,
           y - 0.15,
           localZ + Math.sin(angle) * radius,
-          1.15,
-          3.6 + ((variant >>> (index % 12)) & 1) * 1.1,
-          1.15,
+          1.4,
+          5.2 + ((variant >>> (index % 12)) & 1) * 1.3,
+          1.4,
           stone,
+        );
+        structures.box(
+          localX + Math.cos(angle) * radius,
+          y + 5.05 + ((variant >>> (index % 12)) & 1) * 1.3,
+          localZ + Math.sin(angle) * radius,
+          1.7, 0.65, 1.7, accent,
         );
       }
       structures.box(localX, y - 0.08, localZ, 3.1, 1.1, 2.6, accent);
+      structures.box(localX, y + 1.0, localZ, 1.3, 2.6, 1.3, darkStone);
+      structures.box(localX, y + 3.6, localZ, 1.5, 0.55, 1.5, accent);
     }
 
     if (tile.size <= 32) {
