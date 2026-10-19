@@ -311,15 +311,18 @@ function labelCandidateFromPlace(place: Place): LabelCandidate {
 // placement. Political labels retain their canonical anchors; only their
 // cartographic cards move. An absent focused site reserves no screen space.
 function focusedSiteLabelClearance(state: AtlasState, scale: number): Rect[] {
-  if (state.presentation !== "flat" || scale < 500 || scale > 1000 || innerWidth < 700)
+  if (state.presentation !== "flat" || scale < 500 || scale > 1000)
     return [];
   const focused = nearbyCriticalSites(state.view.x, state.view.z, 32, 1)[0];
   if (!focused || Math.hypot(focused.x - state.view.x, focused.z - state.view.z) > 16)
     return [];
-  const width = 248, height = 188;
+  const compact = innerHeight < 620,
+    width = compact ? Math.min(228, innerWidth - 32) : Math.min(248, innerWidth - 32),
+    height = compact ? 136 : 188;
   return [{
-    x: Math.max(8, Math.min(innerWidth - width - 8, innerWidth / 2 - 36)),
-    y: Math.max(82, Math.min(innerHeight - height - 106, innerHeight / 2 - 84)),
+    x: Math.max(8, Math.min(innerWidth - width - 8, innerWidth / 2 - 34)),
+    y: Math.max(82, Math.min(innerHeight - height - (compact ? 70 : 106),
+      innerHeight / 2 - (compact ? 77 : 84))),
     width, height,
   }];
 }
@@ -377,9 +380,14 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
   projected.sort(
     (a, b) => b.priority - a.priority || a.distance - b.distance || compareIds(a.id, b.id),
   );
-  const caps = innerWidth < 700
-      ? { country: 2, city: 4, village: 5 }
-      : { country: 4, city: 8, village: 12 },
+  // Short landscape screens cannot fit desktop-density 90px village cards.
+  // Keep canonical places available through inspection while retaining a
+  // small, deterministic set of important cartographic labels.
+  const caps = innerHeight < 620
+      ? { country: 1, city: 2, village: 3 }
+      : innerWidth < 700
+        ? { country: 2, city: 4, village: 5 }
+        : { country: 4, city: 8, village: 12 },
     chosen: typeof projected = [];
   for (const kind of ["country", "city", "village"] as const)
     chosen.push(...projected.filter((item) => item.kind === kind).slice(0, caps[kind]));
