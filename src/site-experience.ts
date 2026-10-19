@@ -588,9 +588,15 @@ function render() {
       const junctionVisible =
         entry.accessPoint.x > 0 && entry.accessPoint.x < innerWidth &&
         entry.accessPoint.y > 0 && entry.accessPoint.y < innerHeight;
+      // A cartographic access guide must not cut through another site's
+      // reserved callout. The current site's own marker encloses its anchor.
+      const guideClearance = placements
+        .filter(other => other.entry.site.code !== entry.site.code)
+        .map(other => other.rect);
       if (!entry.detailed && junctionVisible &&
           leaderClear(entry.point.x, entry.point.y,
-            entry.accessPoint.x, entry.accessPoint.y, guideObstacles)) {
+            entry.accessPoint.x, entry.accessPoint.y,
+            [...guideObstacles, ...guideClearance])) {
         const accessClass = entry.site.kind === "ruin" ? "ruin-access" : "critical-access";
         appendLine(
           accessLayer,
