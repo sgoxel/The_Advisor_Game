@@ -25,6 +25,7 @@ import {
   transportNetwork,
   transportPolylineDistance,
   transportRoadsNear,
+  transportSegmentIntersection,
   transportSurfaceRoads,
 } from "../src/transport-network.ts";
 
@@ -60,6 +61,23 @@ test("S005 source-polyline distance uses the shortest wrapped segment at the lon
   assert.ok(Math.abs(transportPolylineDistance(seamRoad, -half + 3, 107) - 7) < 1e-6);
   assert.ok(Math.abs(transportPolylineDistance(seamRoad, half - 3, 107) - 7) < 1e-6);
   assert.ok(Math.abs(transportPolylineDistance([...seamRoad].reverse(), -half + 3, 107) - 7) < 1e-6);
+});
+
+test("S005 bridge intersections use the local wrapped road segment at both seam aliases", () => {
+  const half = SOURCE_PRESENTATION_WIDTH / 2;
+  const east = { x: half - 8, z: 100 }, west = { x: -half + 8, z: 100 },
+    riverEast = [{ x: half, z: 90 }, { x: half, z: 110 }] as const,
+    riverWest = [{ x: -half, z: 90 }, { x: -half, z: 110 }] as const,
+    falseMidworld = [{ x: 0, z: 90 }, { x: 0, z: 110 }] as const;
+  assert.deepEqual(transportSegmentIntersection(east, west, ...riverEast), { x: half, z: 100 });
+  assert.deepEqual(transportSegmentIntersection(west, east, ...riverWest), { x: -half, z: 100 });
+  assert.equal(transportSegmentIntersection(east, west, ...falseMidworld), undefined,
+    "short seam route must never intersect a phantom river at the world centre");
+  assert.equal(transportSegmentIntersection(west, east, ...falseMidworld), undefined);
+  assert.deepEqual(
+    transportSegmentIntersection({ x: 5, z: 0 }, { x: 15, z: 0 }, { x: 10, z: -5 }, { x: 10, z: 5 }),
+    { x: 10, z: 0 }, "ordinary river crossing must preserve its previous local geometry",
+  );
 });
 
 test("S005 shared physical-road distance and transport lookup agree at the longitude seam", () => {

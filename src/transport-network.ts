@@ -589,11 +589,14 @@ function currentBridges() {
   return bridgeSnapshot ??= Object.freeze([...bridgeCache.values()].flat().sort((a, b) => compareCanonical(a.code, b.code)));
 }
 
-function segmentIntersection(
+/** Local physical road/river intersection, including roads crossing the ±180° source seam.
+ * River endpoints are already shifted into the road's local source-coordinate copy.
+ */
+export function transportSegmentIntersection(
   a: { x: number; z: number }, b: { x: number; z: number },
   c: { x: number; z: number }, d: { x: number; z: number },
 ) {
-  const dx = b.x - a.x, dz = b.z - a.z, ex = d.x - c.x, ez = d.z - c.z,
+  const dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, ex = d.x - c.x, ez = d.z - c.z,
     det = dx * ez - dz * ex;
   if (Math.abs(det) < 1e-9) return undefined;
   const qx = c.x - a.x, qz = c.z - a.z, t = (qx * ez - qz * ex) / det, u = (qx * dz - qz * dx) / det;
@@ -604,7 +607,7 @@ function segmentIntersection(
 function discoverBridges(edge: TransportRoadEdge) {
   const bridges = new Map<string, TransportBridge>();
   for (let index = 1; index < edge.centerline.length; index++) {
-    const a = edge.centerline[index - 1], b = edge.centerline[index], dx = b.x - a.x, dz = b.z - a.z,
+    const a = edge.centerline[index - 1], b = edge.centerline[index], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
       segmentM = greatCircleDistance(a.position, b.position), nearby = new Map<string, ReturnType<typeof freshwaterSegmentsAround>[number]>();
     for (const fraction of segmentM > 35_000 ? [0.25, 0.5, 0.75] : [0.5]) {
       const position = interpolate(a.position, b.position, fraction), radiusM = Math.min(23_000, Math.max(8_000, segmentM * 0.55));
@@ -613,7 +616,7 @@ function discoverBridges(edge: TransportRoadEdge) {
     for (const river of nearby.values()) {
       const c = { x: a.x + wrapSourceX(river.ax - a.x), z: river.az },
         d = { x: c.x + wrapSourceX(river.bx - river.ax), z: river.bz },
-        intersection = segmentIntersection(a, b, c, d);
+        intersection = transportSegmentIntersection(a, b, c, d);
       if (!intersection) continue;
       const crossing = freshwaterCrossingAt(intersection.x, intersection.z, dx, dz);
       if (!crossing || crossing.spanM <= 0 || crossing.spanM > TRANSPORT_LIMITS.ruralBridgeMaxM || bridges.has(crossing.code)) continue;
