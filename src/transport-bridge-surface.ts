@@ -47,6 +47,10 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     wetStations: 0,
     deckStationsWalkable: false,
     bankStationsWalkable: false,
+    approachStations: 0,
+    approachStationsWalkable: false,
+    approachMaxSampledGrade: null as number | null,
+    approachGradeWithinLimit: false,
   });
 
   const sample = (t: number) => finalSurfaceAt(
@@ -55,8 +59,17 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
   );
   const wet = [0.1, 0.3, 0.5, 0.7, 0.9].map(fraction =>
     sample(crossing.lo + (crossing.hi - crossing.lo) * fraction));
-  const bankOffset = 2 / crossing.metresPerUnit,
-    banks = [sample(crossing.lo - bankOffset), sample(crossing.hi + bankOffset)];
+  // Probe only the selected bridge: fixed ten dry approach stations on the
+  // source-owned road tangent, not atlas-wide routes or a full continuity proof.
+  const offsetsM = [2, 6, 10, 14, 18];
+  const approaches = [
+    offsetsM.map(metres => sample(crossing.lo - metres / crossing.metresPerUnit)),
+    offsetsM.map(metres => sample(crossing.hi + metres / crossing.metresPerUnit)),
+  ];
+  const banks = [approaches[0][0], approaches[1][0]];
+  const approachGrades = approaches.flatMap(side => side.slice(1).map((surface, i) =>
+    Math.abs(surface.groundHeight - side[i].groundHeight) / (offsetsM[i + 1] - offsetsM[i])));
+  const approachMaxSampledGrade = Math.max(...approachGrades);
   return Object.freeze({
     matchingCrossing: true,
     wetStations: wet.length,
@@ -67,5 +80,10 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
       surface.traversal === "bridge"),
     bankStationsWalkable: banks.every(surface =>
       surface.water.kind === "none" && surface.walkable),
+    approachStations: approaches.reduce((count, side) => count + side.length, 0),
+    approachStationsWalkable: approaches.every(side => side.every(surface =>
+      surface.water.kind === "none" && surface.walkable)),
+    approachMaxSampledGrade,
+    approachGradeWithinLimit: approachMaxSampledGrade <= .08,
   });
 }
