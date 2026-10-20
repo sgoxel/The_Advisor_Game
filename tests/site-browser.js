@@ -297,7 +297,7 @@ for (const viewport of [
                   obstacles: [...document.querySelectorAll(
                     ".masthead, #region-panel, #cell-panel, #travel-panel, #critical-site-panel:not([hidden]), " +
                     ".bottom-bar, .map-controls, .telemetry, #focus-coordinates, #centre-marker, " +
-                    "#political-labels .political-label",
+                    "#political-labels .political-label, #map-labels .map-label",
                   )].filter(node => getComputedStyle(node).display !== "none" &&
                       getComputedStyle(node).visibility !== "hidden")
                     .map(node => ({
@@ -326,7 +326,7 @@ for (const viewport of [
                 ".masthead", "#region-panel", "#cell-panel", "#travel-panel",
                 "#critical-site-panel:not([hidden])", ".bottom-bar", ".map-controls",
                 ".telemetry", "#focus-coordinates", "#centre-marker",
-                "#political-labels .political-label",
+                "#political-labels .political-label", "#map-labels .map-label",
               ],
               obstacles = obstacleSelectors.flatMap(selector =>
                 [...document.querySelectorAll(selector)]
