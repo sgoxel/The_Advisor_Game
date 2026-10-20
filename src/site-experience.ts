@@ -533,10 +533,13 @@ function render() {
         ? [...queried.slice(0, limit - 1), selectedInView]
         : queried,
     fingerprint = [
-      Math.round(view.x),
-      Math.round(view.z),
-      Math.round(view.halfHeight),
-      Math.round(view.yaw * 1000),
+      // Sub-source-unit camera moves shift markers by several CSS pixels at
+      // close zoom. Use exact view values so anchors track the terrain;
+      // unchanged frames still reuse the same placement fingerprint.
+      view.x,
+      view.z,
+      view.halfHeight,
+      view.yaw,
       innerWidth,
       innerHeight,
       selectedCode ?? "",
