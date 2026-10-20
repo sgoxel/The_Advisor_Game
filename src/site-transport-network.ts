@@ -134,15 +134,17 @@ export function siteTransportRoadsNear(x: number, z: number, radiusSource: numbe
     compareCode(a.code, b.code)).slice(0, boundedLimit));
 }
 
+// The topology never changes after SEED construction. Cache static totals once;
+// bridge counts still come from the live, demand-built base registry on inspection.
+const siteTopologyTotals = Object.freeze({
+  digest: siteTransportNetwork.digest,
+  roads: siteTransportNetwork.roadEdges.length,
+  junctions: siteTransportNetwork.junctions.length,
+  accessRoads: siteTransportNetwork.roadEdges.filter(edge => edge.roadClass === "access").length,
+  siteNodes: criticalSites.length,
+  siteAccessBranches: siteAccessRoads.length,
+});
+
 export function siteTransportAcceptanceSummary() {
-  const base = baseAcceptanceSummary();
-  return Object.freeze({
-    ...base,
-    digest: siteTransportNetwork.digest,
-    roads: siteTransportNetwork.roadEdges.length,
-    junctions: siteTransportNetwork.junctions.length,
-    accessRoads: siteTransportNetwork.roadEdges.filter(edge => edge.roadClass === "access").length,
-    siteNodes: criticalSites.length,
-    siteAccessBranches: siteAccessRoads.length,
-  });
+  return Object.freeze({ ...baseAcceptanceSummary(), ...siteTopologyTotals });
 }
