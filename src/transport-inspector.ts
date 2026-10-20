@@ -15,7 +15,7 @@ import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
-import { createTransportWalkingIndex, transportWalkingRoute } from "./transport-walking-route.ts";
+import { createTransportWalkingIndex, transportWalkingRouteToNearest } from "./transport-walking-route.ts";
 
 type AdvisorWorld = {
   state: {
@@ -63,7 +63,7 @@ let lastRoadInspectionMs: number | null = null;
 let lastRoadInspectionStatus = "not requested";
 let lastSiteRouteMs: number | null = null;
 let lastSiteRouteStatus = "not requested";
-let siteRoute: ReturnType<typeof transportWalkingRoute> = null;
+let siteRoute: ReturnType<typeof transportWalkingRouteToNearest> = null;
 
 function compareCanonical(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -91,7 +91,7 @@ panel.innerHTML = `
   <div class="transport-summary" id="transport-summary"></div>
   <div class="transport-actions">
     <button type="button" id="transport-nearest">Inspect nearest road</button>
-    <button type="button" id="transport-site-route">Preview road to nearest site</button>
+    <button type="button" id="transport-site-route">Preview shortest road to reachable site</button>
     <button type="button" id="transport-focus">Focus selection</button>
   </div>
   <div class="divider"></div>
@@ -392,7 +392,7 @@ function renderSiteRoute() {
   target.innerHTML = `<div class="eyebrow">CANONICAL WALKING GRAPH PREVIEW · NOT TRAVEL</div>
     <dl>
       <dt>From road endpoint</dt><dd>${codeText(siteRoute.from)}</dd>
-      <dt>Critical site</dt><dd>${codeText(siteRoute.to)}</dd>
+      <dt>Nearest reachable site by road</dt><dd>${codeText(siteRoute.to)}</dd>
       <dt>Measured graph distance</dt><dd>${(siteRoute.distanceM / 1000).toFixed(2)} km</dd>
       <dt>Estimated good-road time</dt><dd>${(siteRoute.fantasyWalkSeconds / 3600).toFixed(2)} fantasy hours</dd>
       <dt>Canonical walking edges</dt><dd>${siteRoute.edgeCodes.length} · no ferry segments</dd>
@@ -416,19 +416,14 @@ function chooseNearestSiteRoute() {
           return da - db || compareCanonical(a.code, b.code);
         });
       const from = endpoints[0];
-      const site = from && transportNetwork.nodes.filter(node =>
+      const sites = from ? transportNetwork.nodes.filter(node =>
         node.kind === "site" && node.countryCode === from.countryCode &&
-        node.continent === from.continent)
-        .sort((a, b) => {
-          const da = Math.hypot(wrapSourceX(a.x - runtime.state.view.x), a.z - runtime.state.view.z),
-            db = Math.hypot(wrapSourceX(b.x - runtime.state.view.x), b.z - runtime.state.view.z);
-          return da - db || compareCanonical(a.code, b.code);
-        })[0];
-      if (!from || !site) lastSiteRouteStatus = "no same-country critical site endpoint";
+        node.continent === from.continent).map(node => node.code) : [];
+      if (!from || !sites.length) lastSiteRouteStatus = "no same-country critical site endpoint";
       else {
         walkingIndex ??= createTransportWalkingIndex(transportNetwork);
-        siteRoute = transportWalkingRoute(walkingIndex, from.code, site.code);
-        lastSiteRouteStatus = siteRoute ? "canonical walking graph facts ready" : "walking graph disconnected";
+        siteRoute = transportWalkingRouteToNearest(walkingIndex, from.code, sites);
+        lastSiteRouteStatus = siteRoute ? "shortest reachable canonical walking route ready" : "no reachable same-country site by walking road";
       }
     }
   }
