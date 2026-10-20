@@ -159,6 +159,7 @@ test("international main roads connect capitals through explicit canonical borde
 
 test("coarse stored alignment remains dry land while final profiles and bridges stay demand-driven", () => {
   const before = transportGenerationTelemetry();
+  const beforeSummary = transportAcceptanceSummary();
   assert.equal(before.bridgeCacheRoads, 0);
   assert.equal(before.materializedBridges, 0);
 
@@ -181,8 +182,11 @@ test("coarse stored alignment remains dry land while final profiles and bridges 
   assert.ok(bridge!.spanM > 0 && bridge!.spanM <= TRANSPORT_LIMITS.ruralBridgeMaxM);
   assert.ok(transportNetwork.roadEdges.some((edge) => edge.code === bridge!.roadCode && edge.bridgeCodes.includes(bridge!.code)));
   const after = transportGenerationTelemetry();
+  const afterSummary = transportAcceptanceSummary();
   assert.ok(after.bridgeCacheRoads > 0 && after.bridgeCacheRoads <= after.bridgeCacheLimit);
   assert.ok(after.materializedBridges > 0);
+  assert.equal(afterSummary.bridges, after.materializedBridges, "live bridge count must not be cached");
+  assert.equal(afterSummary.roads, beforeSummary.roads, "static topology coverage must remain unchanged");
 });
 
 test("road-linked harbors and ferries are explicit separate traversal semantics", () => {
