@@ -6,7 +6,7 @@ Status: **binding reference architecture for WP-S006-002-001**. This document de
 
 ## 1. Current-source audit
 
-The current `main` tree has settlement, resident, traversal, streaming and canonical-world systems, but no `docs/INTERIOR_ARCHITECTURE.md`, no interior runtime module and no interior test suite. Existing contracts already establish the inputs an interior system must consume rather than duplicate:
+The 2026-10-16 source baseline had settlement, resident, traversal, streaming and canonical-world systems but no interior runtime module or interior test suite. This architecture document is now committed; it must not be confused with implemented enterable interiors. Existing contracts already establish the inputs an interior system must consume rather than duplicate:
 
 - `SETTLEMENT_PLAN.md` gives every building a canonical settlement/building identity, footprint and legal entrance, and keeps homes logically present even when no mesh is loaded.
 - `LIVING_WORLD_PLAN.md` keeps NPC identity/home/work/activity authoritative across LOD and cache eviction and requires off-screen life to use analytical/interest-based simulation rather than camera-created residents.
@@ -255,6 +255,18 @@ The camera may ease through a doorway/cutaway, but the protagonist position must
 
 On exit, resolve the exact same portal and place the character on its legal exterior threshold/approach, preserving heading where collision permits. Never choose a different door because it is closer to a camera or already cached.
 
+### 7.4 First authoritative response versus first usable entry
+
+A selected map marker/door may immediately open a **read-only inspection** of already-authorized facts; it cannot claim that the protagonist approached, entered or exited. The earliest action result is **Character decision + Simulation validation**, not a render/asset-loading callback. Track the stages separately:
+
+1. **Intent acknowledged:** the Advisor request/selection is accepted by the UI, with stable `buildingId/portalId`; movement status remains **not started**.
+2. **Authority pending:** if character choice, canonical portal state or Simulation validation is unresolved, show a visible, accessible pending message and retain the current legal position. Never infer approval from a prepared mesh.
+3. **First authoritative response:** show a typed accepted/denied result with the currently validated portal/route and denial reason when applicable. Report a separately measured intent-to-authority latency. Accepted intent is **permission to prepare/cross when still legal**, not evidence of completed travel.
+4. **First usable interior:** after the current authorization and portal/collision/nav/coarse room/required anchors agree, the ordinary crossing can be committed. Show the first usable interaction and measure its latency separately from the first authoritative response. If the door or route changed while preparing, revalidate before crossing rather than using stale approval.
+5. **Settled presentation:** meshes, furnishings, materials and optional neighboring room clusters may finish later. Record their completion separately; no decorative resource is required to truthfully report the earlier authoritative decision.
+
+On exit, use the identical stages in reverse: inspection/request, authority pending or denied, validated threshold crossing, first usable exterior focus, and optional exterior visual settling. In all pending/failure cases, retry/cancel applies to the request or rebuildable preparation only and cannot synthesize a Character decision, change Simulation state or warp position. Expose the current authoritative state and recovery path through keyboard/screen-reader status as well as visible text.
+
 ## 8. Persisted authoritative-change layering
 
 An interior is reconstructed as:
@@ -399,7 +411,15 @@ When indoors, presentation may hide/fade/cut away roof and camera-facing exterio
 - the transition from exterior roof to interior cutaway should be progressive enough to preserve building identity;
 - provide a user-facing visibility override if automatic cutaway creates accessibility/readability problems.
 
-### 11.4 Lighting
+### 11.4 2D-in-3D residents, doorway sightlines and focus return
+
+Use the same canonical room/portal and resident anchors for sprite depth, collision context and interaction picks. A resident drawn as 2D artwork in 3D space must be placed and depth-tested in the building frame; billboard orientation may face the viewer but may not move the resident's authoritative feet, room or occupancy. Roof/camera-facing-wall cutaway must reveal the current protagonist, relevant NPC, selected door and required station without displaying an unreachable character as though visible through a closed opaque door.
+
+For portrait and landscape, compute a map-safe composition around the actual selected canonical door/actor/anchor bounds: preserve a visible doorway path and required control hit targets outside safe areas and persistent panels; permit focus/camera offset without changing world positions. Use portal-aware visibility and explicit wall/roof cutaway, not unconditional always-on-top sprites or disabling structural depth/collision. Compare WebGPU and WebGL2 for identical anchor IDs, occlusion semantics, sprite grounding and readable interaction focus; renderer-specific alpha/depth behavior may require presentation adjustments but must not alter authority.
+
+On exit, restore the last stable exterior focus (building/door/selected actor ID, canonical coordinate, camera heading and accessible keyboard target), recalculating only the presentation framing for the active viewport. If the previous target was removed by Simulation, fall back deterministically to the same portal threshold with a truthful status. Test door sightline, actor visibility, selectable anchor and focus return at both landscape and portrait orientations.
+
+### 11.5 Lighting
 
 Prefer shared/baked-looking or inexpensive local lighting solutions; dynamic shadow-casting lights must be tightly bounded, especially omni lights. Device/backend quality may reduce shadow resolution/count and decorative lights only. It may not change room topology, portal state or interactive anchors.
 
@@ -441,7 +461,7 @@ An **Enter** affordance is an advice/action intent, not an immediate teleport co
 
 Inside, selecting an object/NPC resolves a real canonical fixture/resident anchor. Focus/highlight persists by stable ID through room refinement or reload. UI cannot create ownership, inventory, occupants or unlocked doors.
 
-Touch controls intended as actions should normally retain the existing >=44 x 44 CSS px target convention and safe-area handling. Keyboard/controller focus should remain visible. Transition and error status should be exposed with appropriate live-region semantics without repeatedly stealing focus.
+Touch controls intended as actions should normally retain the existing >=44 x 44 CSS px target convention and safe-area handling. Keyboard/controller focus should remain visible. Transition and error status should be exposed with appropriate live-region semantics without repeatedly stealing focus. Record a stable return-focus target before entering: on successful exit restore the exterior doorway/building selection and keyboard focus, or choose the same portal's threshold if that target is no longer valid. Loading, denied-entry and renderer-recovery states must preserve a reachable Cancel/Back control without covering the doorway in either orientation.
 
 ## 14. Failure modes and required behavior
 
@@ -527,41 +547,49 @@ Run both real WebGPU and forced WebGL2 fallback where available. At minimum insp
 - 1366 x 768 desktop;
 - 1920 x 1080 desktop.
 
-Future fresh screenshots must cover exterior -> threshold -> interior, cutaway/readability, selected interaction anchor and return to exterior. MIXED implementation WPs must achieve the repository's >=8/10 visual requirement with no major clipping, camera discontinuity, unreadable controls, wall/roof occlusion of the selected target or broken-looking geometry.
+Future fresh screenshots must cover exterior -> threshold -> interior, cutaway/readability of grounded 2D-in-3D residents, selected interaction anchor and return to exterior. Keep standard evidence screenshots to 1920 x 1080 landscape and 1080 x 1920 portrait; use the other listed viewport sizes for focused responsive/layout checks rather than a seven-device screenshot matrix. MIXED implementation WPs must achieve the repository's >=8/10 visual requirement with no major clipping, camera discontinuity, unreadable controls, wall/roof occlusion of the selected target or broken-looking geometry.
 
 ### 16.4 Performance/resource evidence
 
-For desktop/tablet/physical phone, report cold and warm entry-critical p50/p95, maximum main-thread slice, eviction time, steady-state resource contribution, combined app resource total, draw calls/mesh instances, active room clusters and reconstruction latency. Do not infer phone performance from a desktop emulated viewport.
+For desktop/tablet/physical phone, report p50/p95 **intent-to-first-authoritative-response**, **response-to-first-usable-interaction** and **first-usable-to-settled-presentation** separately, plus cold and warm entry-critical preparation, maximum main-thread slice, eviction time, steady-state resource contribution, combined app resource total, draw calls/mesh instances, active room clusters and reconstruction latency. Do not infer phone performance from a desktop emulated viewport.
 
 ## 17. Minimum recommended implementation work packages
 
-Do **not** add these to `ROADMAP.md` from this analysis WP. They are recommendations for the next appropriate planning step after the current Stage rules permit it. Each package is intended to be executable from this architecture contract and current `main`; it may not wait for another open issue to finish.
+These are **research recommendations only**. Do not add WPs to ROADMAP or implement them in WP-S006-002-001. Each candidate is independently solvable from this architecture and the then-current `main`: an implementer must include the smallest missing scaffolding it needs inside its own scope, never wait for another candidate. Actual WPs should be split/reduced further if a one-pass bounded acceptance is not feasible.
 
-### Recommended WP A — Ordinary + service usable-interior vertical slice
+### Candidate A — Canonical portal and home first-use vertical slice
 
-**Candidate title:** `Usable home/service interiors: deterministic room programs, same-world entry/exit, persisted deltas, demand materialization, navigation/collision, reusable kits and responsive interaction`
+**Objective:** make one deterministic ordinary-home doorway usable without teleportation, with Character decision -> Simulation-validated threshold crossing and truthful first authoritative response.
 
-One-pass scope:
-- implement deterministic foundations and stable IDs for home, inn, blacksmith, butcher, farm/barn and guard space;
-- implement same-world portal validation/crossing, persisted-delta reconstruction, analytical off-screen occupancy and bounded demand loading;
-- provide reusable low-poly/material kit, portal-aware room visibility, cutaway, collision/nav and responsive inspection/interaction;
-- prove all six fixture types on WebGPU/WebGL2 and required viewports with functional/resource/visual evidence.
+**Scope and authority:** implement a seeded home room/entrance foundation, one actual exterior/interior portal and local-to-canonical coordinate mapping, room/door collision and nav continuity, bounded entry-critical realization, minimal coarse reusable visual kit and persistent building/portal IDs. Demonstrate inside/exit, denied/changed-door recovery, first authoritative response distinct from first usable and settled detail, no atlas selection as movement. Reuse the existing Simulation/campaign store; persist only essential changes this fixture permits.
 
-This package owns its complete vertical slice and must implement any missing shared interior interfaces it needs rather than waiting on another WP.
+**Acceptance:** deterministic home IDs and legal crossing headlessly; first authoritative response/pending/denied timing; first usable exit/entry and resource accounting; portrait/landscape keyboard/touch and inspected WebGPU/WebGL2 screenshots with grounded resident/door and reversible cutaway. Off-screen occupancy realizes no interior.
 
-### Recommended WP B — Large city/castle interior cluster streaming vertical slice
+### Candidate B — Service-room geometry and reusable kit vertical slice
 
-**Candidate title:** `Large city/castle usable interiors: deterministic multi-room/floor clusters, portal streaming, bounded navigation/visibility, persisted reconstruction and mobile-safe transition UX`
+**Objective:** produce playable functional rooms and safe public/service anchor access for inn, blacksmith, butcher, farm/barn and guard-space archetypes.
 
-One-pass scope:
-- implement a large city/castle building fixture using the same identity/delta/portal invariants;
-- stream internal room/floor clusters while preserving one canonical building topology;
-- bound nav/collision/visibility/resource work by active clusters and reuse common kits;
-- prove repeated entry, internal traversal, exit, eviction and reordered visits under WebGPU/WebGL2 with shared app accounting and required viewport evidence.
+**Scope and authority:** implement deterministic semantic room programs, finite geometry validation, stable fixture/door IDs, canonical exterior footprint/portal agreement, required hazard separation, collision/nav and reusable clustered low-poly kit. Supply any minimal portal/crossing/runtime integration needed for self-contained fixture entry; do not depend on Candidate A.
 
-This package must be independently executable from this document/current main and may not make completion contingent on another open WP.
+**Acceptance:** all five archetypes have reachable mandatory anchors and no wall/hazard shortcut; stable fingerprints and bounded generated/visible resources across visit order/cache/backend; legal entry/exit, responsive first-use status and actual WebGPU/WebGL2 portrait/landscape visual checks, including occlusion and cutaway.
 
-Two vertical slices are the minimum recommendation: one covers every required ordinary/service archetype; the other isolates the qualitatively different large-building cluster-streaming problem so neither issue becomes an unbounded all-interiors package.
+### Candidate C — Interior persisted-delta/reconstruction vertical slice
+
+**Objective:** prove that a canonical interior's mutable door, fixture, ownership and damage/repair facts survive eviction, reload and Fantasy-Time catch-up.
+
+**Scope and authority:** implement stable versioned interior records, ordered persisted Simulation-authorized delta application, conflict/integrity diagnostics and the smallest enterable home fixture/portal needed to exercise the full path. Cache eviction removes only disposable residency; no new independent save authority, detached scene or separate interior clock. The slice includes its own necessary minimum foundation/inspection UI, independent of A/B.
+
+**Acceptance:** repeated move/open/damage/ownership change -> evict -> rebuild -> reload restores one authoritative revision with identical fingerprint; direct vs stepwise time catch-up is equivalent where inputs match; no off-screen interior realization; first-response/pending/recovery states, shared resource measures and minimal inspected dual-backend/portrait-landscape proof.
+
+### Candidate D — Responsive entry/exit, occlusion and resource-recovery vertical slice
+
+**Objective:** establish usable Advisor inspection, doorway focus, grounded 2D-in-3D actor visibility and resilient first-use transition on a seeded home or service fixture.
+
+**Scope and authority:** independently implement the minimal canonical door/home portal and Simulation handshake necessary to exercise UI; split first authoritative response, first usable collision/nav/interaction and settled refinement; provide truthful pending/denied/retry/cancel, focus restore, responsive cutaway, portal-aware sprite depth, backend parity and incremental asset/renderer recovery. Do not turn UI inspection into protagonist travel.
+
+**Acceptance:** keyboard/screen reader, portrait/landscape, WebGPU/WebGL2 and measured first-response/first-use/settled timings; correct roof/door/resident sightlines and focus return; no false entry under delayed assets, lost graphics resources or denial; shared CPU+GPU/resource bounds and fresh inspected screenshots >=8/10. Emulated mobile viewports verify layout, not physical-device GPU, memory or thermal performance.
+
+The candidates describe **separable ownership/acceptance problems**, not a mandated implementation order. If planned together, combine overlapping scaffolding rather than creating duplicated runtime authorities; if planned separately, each retains its own complete executable vertical slice.
 
 ## 18. Architecture decision summary
 
