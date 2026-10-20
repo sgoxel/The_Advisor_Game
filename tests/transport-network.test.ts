@@ -18,6 +18,8 @@ import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { transportRoadArcStations, transportRoadBankApproaches } from "../src/transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
+import { siteTransportNetwork } from "../src/site-transport-network.ts";
+import { createTransportWalkingIndex, transportWalkingRoute } from "../src/transport-walking-route.ts";
 import {
   TRANSPORT_LIMITS,
   buildTransportNetwork,
@@ -54,6 +56,29 @@ function reachable(start: string, graph: Map<string, string[]>) {
       }
   return seen;
 }
+
+test("S005 walking preview reuses actual site branches, stays deterministic, excludes ferries", () => {
+  const graph = createTransportWalkingIndex(siteTransportNetwork);
+  const siteBranches = siteTransportNetwork.roadEdges.filter(edge => edge.from.includes("/NODE/SITE/"));
+  assert.ok(siteBranches.length > 0, "canonical critical-site access branches must be present");
+  const sampled = siteBranches.filter((edge, index) => index === 0 ||
+    index === Math.floor(siteBranches.length / 2) || index === siteBranches.length - 1);
+  for (const branch of sampled) {
+    const route = transportWalkingRoute(graph, branch.to, branch.from);
+    assert.ok(route, `missing walking preview for ${branch.code}`);
+    assert.deepEqual(route!.edgeCodes, [branch.code], "site's sole canonical access is its existing edge");
+    assert.equal(route!.distanceM, branch.surfaceLengthM);
+    assert.equal(route!.fantasyWalkSeconds, branch.fantasyWalkSeconds);
+    assert.deepEqual(transportWalkingRoute(graph, branch.to, branch.from), route,
+      "visit order and query repetition must not change graph route facts");
+    assert.ok(route!.exploredNodes <= graph.nodeCount);
+  }
+  const ferry = siteTransportNetwork.ferryEdges[0];
+  assert.ok(ferry, "representative maritime transfer is required");
+  assert.equal(transportWalkingRoute(graph, ferry.from, ferry.to), null,
+    "a ferry must never become an imaginary intercontinental walking connection");
+  assert.equal(transportWalkingRoute(graph, "absent-node", sampled[0].from), null);
+});
 
 test("S005 source-polyline distance uses the shortest wrapped segment at the longitude seam", () => {
   const half = SOURCE_PRESENTATION_WIDTH / 2;
