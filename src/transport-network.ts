@@ -121,6 +121,10 @@ export type TransportRoadEdge = Readonly<{
   bridgeCodes: readonly string[];
   borderCrossingCode: string | null;
   widthM: number;
+  /** Canonical walking road-segment length; this is not an executed trip. */
+  surfaceLengthM: number;
+  /** Canonical good-road estimate in Fantasy Game Time seconds. */
+  fantasyWalkSeconds: number;
   routeCandidate: number;
   terrainCost: number;
   maxNaturalReliefM: number;
@@ -683,6 +687,8 @@ function wrapRoad(
     get bridgeCodes() { return Object.freeze((bridgeCache.get(road.code) ?? []).map((bridge) => bridge.code)); },
     borderCrossingCode: border?.code ?? null,
     widthM: roadWidth(roadClass),
+    surfaceLengthM: road.surfaceLengthM,
+    fantasyWalkSeconds: road.fantasyWalkSeconds,
     routeCandidate: 0,
     terrainCost: road.surfaceLengthM + relief.reduce((sum, value) => sum + value * 10, 0),
     maxNaturalReliefM: Math.max(...relief),
