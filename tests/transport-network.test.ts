@@ -14,6 +14,7 @@ import {
 import { macroSampleAt } from "../src/macro-geography.ts";
 import { sourceToLonLat } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
+import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import {
   TRANSPORT_LIMITS,
   buildTransportNetwork,
@@ -48,6 +49,27 @@ function reachable(start: string, graph: Map<string, string[]>) {
       }
   return seen;
 }
+
+test("S005 nearby junction index preserves canonical full-scan identity, order and no duplicates", () => {
+  const lookup = createTransportJunctionLookup(transportNetwork.junctions);
+  const edges = transportNetwork.roadEdges;
+  for (const subset of [
+    [],
+    edges.slice(0, 1),
+    edges.slice(0, 32),
+    edges.slice(Math.max(0, edges.length - 32)),
+    edges.filter((_edge, index) => index % 11 === 0),
+    edges,
+  ]) {
+    const selected = new Set(subset.map((edge) => edge.code));
+    const expected = transportNetwork.junctions.filter((junction) =>
+      junction.edgeCodes.some((code) => selected.has(code)),
+    );
+    const actual = lookup(selected);
+    assert.deepEqual(actual.map((junction) => junction.code), expected.map((junction) => junction.code));
+    assert.equal(new Set(actual.map((junction) => junction.code)).size, actual.length);
+  }
+});
 
 test("S005 viewport clipping retains real road segments crossing the screen", () => {
   const crosses = (points: { x: number; y: number }[], margin = 0) => polylineTouchesViewport(points, 300, 200, margin);
