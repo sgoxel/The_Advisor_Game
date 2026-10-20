@@ -10,6 +10,8 @@ import {
   roads,
 } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
+import { transportNetwork } from "../src/transport-network.ts";
+import { composeSiteTransportNetwork, siteTransportAcceptanceSummary, siteTransportNetwork, siteTransportRoadsNear } from "../src/site-transport-network.ts";
 import { naturalSurfaceAt } from "../src/hydrology.ts";
 import {
   criticalSites,
@@ -50,6 +52,44 @@ function segmentDistanceM(
     t = denominator > 0 ? Math.max(0, Math.min(1, (qx * dx + qz * dz) / denominator)) : 0;
   return Math.hypot(qx - dx * t, qz - dz * t) * CANONICAL_METRES_PER_SOURCE_UNIT;
 }
+
+test("S005 site-access branches join the same canonical source road graph as physical rendering", () => {
+  const network = siteTransportNetwork,
+    summary = siteTransportAcceptanceSummary(),
+    nodes = new Map(network.nodes.map(node => [node.sourceId, node])),
+    edges = new Map(network.roadEdges.map(edge => [edge.code, edge])),
+    physical = new Map(siteAccessRoads.map(road => [road.code, road]));
+  assert.equal(summary.siteNodes, criticalSites.length);
+  assert.equal(summary.siteAccessBranches, siteAccessRoads.length);
+  assert.equal(network.nodes.length, transportNetwork.nodes.length + criticalSites.length);
+  assert.equal(network.roadEdges.length, transportNetwork.roadEdges.length + siteAccessRoads.length);
+  assert.equal(nodes.size, network.nodes.length, "no duplicate graph identities");
+  assert.equal(edges.size, network.roadEdges.length, "no duplicate physical graph edges");
+  for (const site of criticalSites) {
+    const node = nodes.get(site.code),
+      edge = edges.get(site.access.branchCode),
+      parent = edges.get(site.access.roadCode),
+      road = physical.get(site.access.branchCode),
+      junction = nodes.get(road!.to);
+    assert.equal(node?.kind, "site", site.code);
+    assert.ok(edge && parent && road && junction, `${site.code} needs physical and graph path`);
+    assert.equal(edge.from, node!.code, site.code);
+    assert.equal(edge.to, junction!.code, site.code);
+    assert.ok(parent.from === edge.to || parent.to === edge.to,
+      `${site.code} must join an existing parent edge at its actual node`);
+    assert.equal(edge.surfaceLengthM, road.surfaceLengthM, site.code);
+    assert.equal(edge.fantasyWalkSeconds, road.fantasyWalkSeconds, site.code);
+    assert.equal(edge.centerline[0].position.lon, node!.position.lon, site.code);
+    assert.equal(edge.centerline.at(-1)!.position.lon, junction!.position.lon, site.code);
+    const local = siteTransportRoadsNear(site.x, site.z, 128, 160);
+    assert.ok(local.some(candidate => candidate.code === road.code),
+      `${site.code} physically near access must be included in bounded inspection`);
+  }
+  const rebuilt = composeSiteTransportNetwork(
+    transportNetwork, [...criticalSites].reverse(), [...siteAccessRoads].reverse());
+  assert.equal(rebuilt.digest, network.digest, "canonical site graph cannot depend on registry visitation order");
+  assert.deepEqual(rebuilt.roadEdges.map(edge => edge.code), network.roadEdges.map(edge => edge.code));
+});
 
 test("critical-site registry scales with the actual country registry", () => {
   const summary = siteAcceptanceSummary();
