@@ -141,7 +141,7 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
     void getEmission() {
       // Vertex coverage is interpolated across terrain triangles. Gate it near
       // the carriageway rather than tinting broad triangular fringes.
-      float roadEdge = clamp(fwidth(vVertexColor.a), 0.02, 0.08);
+      float roadEdge = 0.06;
       float roadMask = smoothstep(0.5 - roadEdge, 0.5 + roadEdge, vVertexColor.a);
       dEmission = mix(vVertexColor.rgb, pow(vec3(112.0,92.0,62.0)/255.0,vec3(2.2)), roadMask * surfaceRoadVisibility);
       #ifdef STD_EMISSIVE_TEXTURE
@@ -154,7 +154,7 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
     uniform surfaceDetailWeight: f32;
     uniform surfaceRoadVisibility: f32;
     fn getEmission() {
-      let roadEdge = clamp(fwidth(vVertexColor.a), 0.02, 0.08);
+      let roadEdge = 0.06;
       let roadMask = smoothstep(0.5 - roadEdge, 0.5 + roadEdge, vVertexColor.a);
       dEmission = mix(vVertexColor.rgb, pow(vec3f(112.0,92.0,62.0)/255.0,vec3f(2.2)), roadMask * uniform.surfaceRoadVisibility);
       #ifdef STD_EMISSIVE_TEXTURE
