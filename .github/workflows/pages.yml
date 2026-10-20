@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   cancel-obsolete-runs:
-    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'maintenance: stop obsolete CI runs')
+    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'maintenance')
     runs-on: ubuntu-latest
     timeout-minutes: 7
     permissions:
