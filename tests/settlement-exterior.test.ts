@@ -10,6 +10,7 @@ import {
   settlementExteriorFor,
   settlementExteriorSummary,
   settlementHomeFor,
+  visibleSettlementStreetSegments,
 } from "../src/settlement-exterior.ts";
 import { featuresFor, settlementPresentationCacheState, tileForPosition } from "../src/world.ts";
 
@@ -133,6 +134,33 @@ test("every village external road crossing uses one of at most two canonical enc
       assert.ok(crossingRoads.some((road) => roadDistanceAt(gate.x, gate.z, road) < .05), `${place.code} gate ${gate.id} is not used by an external road`);
     }
   }
+});
+
+test("village presentation streets end at the enclosure instead of drawing false exterior junctions", () => {
+  let clipped = 0;
+  for (const place of villages) {
+    const plan = settlementExteriorFor(place);
+    for (const street of plan.streets) for (let index = 1; index < street.points.length; index++) {
+      const a = street.points[index - 1], b = street.points[index],
+        segments = visibleSettlementStreetSegments(place, plan, a, b);
+      for (const [from, to] of segments) {
+        const midpoint = { x: wrapSourceX(from.x + wrapSourceX(to.x - from.x) / 2), z: (from.z + to.z) / 2 };
+        // Independent point-in-polygon check, using the same canonical border.
+        let inside = false;
+        for (let edge = 0, prev = plan.border.length - 1; edge < plan.border.length; prev = edge++) {
+          const p = plan.border[edge], q = plan.border[prev],
+            px = wrapSourceX(p.x - place.x), qx = wrapSourceX(q.x - place.x),
+            x = wrapSourceX(midpoint.x - place.x), z = midpoint.z - place.z, pz = p.z - place.z, qz = q.z - place.z;
+          if ((pz > z) !== (qz > z) && x < (qx - px) * (z - pz) / (qz - pz) + px) inside = !inside;
+        }
+        assert.ok(inside, `${place.code}/${street.id} draws a street outside its enclosure`);
+      }
+      if (segments.length === 0 || segments.some(([from, to]) =>
+        Math.hypot(wrapSourceX(from.x - a.x), from.z - a.z) > 1e-5 ||
+        Math.hypot(wrapSourceX(to.x - b.x), to.z - b.z) > 1e-5)) clipped++;
+    }
+  }
+  assert.ok(clipped > 0, "at least one exterior synthetic street must be clipped");
 });
 
 test("focused settlement presentation is bounded while retaining canonical owner metadata", () => {
