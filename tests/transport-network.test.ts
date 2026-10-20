@@ -173,6 +173,15 @@ test("render roads, route connection legs and transport graph share physical edg
   const roadCodes = new Set(roads.map((road) => road.code)), transportCodes = new Set(transportNetwork.roadEdges.map((edge) => edge.code));
   assert.equal(roadCodes.size, roads.length);
   assert.deepEqual([...transportCodes].sort(), [...roadCodes].sort());
+  // Inspector facts must use the same SEED-owned road lengths and fantasy travel estimates.
+  const roadByCode = new Map(roads.map((road) => [road.code, road]));
+  for (const edge of transportNetwork.roadEdges) {
+    const road = roadByCode.get(edge.code)!;
+    assert.ok(road, edge.code);
+    assert.equal(edge.surfaceLengthM, road.surfaceLengthM, edge.code);
+    assert.equal(edge.fantasyWalkSeconds, road.fantasyWalkSeconds, edge.code);
+    assert.ok(edge.surfaceLengthM > 0 && edge.fantasyWalkSeconds > 0, edge.code);
+  }
   const physicalRoadIds = new Set(roads.map((road) => road.networkId));
   for (const connection of roadConnections) {
     assert.ok(connection.legs.length > 0, `${connection.from} -> ${connection.to} needs physical road legs`);
