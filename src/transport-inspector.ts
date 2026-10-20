@@ -15,7 +15,7 @@ import {
 } from "./transport-network.ts";
 import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
-import { transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
+import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
 
 type AdvisorWorld = {
@@ -262,6 +262,7 @@ function bridgeDetails(bridge: TransportBridge) {
   // Selection-only final-surface query: a recorded river intersection does not
   // by itself establish a constructed, walkable deck in Simulation.
   const surface = transportBridgeSurfaceAt(bridge.x, bridge.z);
+  const span = transportBridgeSpanAt(bridge, edge);
   return `
     <div class="transport-kind ${surface.centerDeckWalkable ? "walking" : "transfer"}">${surface.centerDeckWalkable ? "WALKING DECK AT CROSSING" : "RIVER CROSSING · DECK NOT VALIDATED"}</div>
     <h3>${codeText(bridge.code)}</h3>
@@ -271,7 +272,9 @@ function bridgeDetails(bridge: TransportBridge) {
       <dt>Span</dt><dd>${bridge.spanM.toFixed(1)} m</dd>
       <dt>Connection</dt><dd>${codeText(edge.from)} → ${codeText(edge.to)}</dd>
       <dt>Final-surface deck at crossing</dt><dd>${surface.centerDeckWalkable ? "Walkable bridge surface" : "Not certified — route legality pending"}</dd>
-      <dt>Approach traversal</dt><dd>Not yet certified across the full bridge span · map preview only</dd>
+      <dt>Sampled river span</dt><dd>${span.matchingCrossing ? span.deckStationsWalkable ? `${span.wetStations} wet deck stations walkable` : "Missing walkable deck at one or more wet stations" : "Cannot match recorded crossing to final river span"}</dd>
+      <dt>Sampled bank approaches</dt><dd>${span.matchingCrossing ? span.bankStationsWalkable ? "Both nearby dry-bank samples walkable" : "One or both nearby bank samples not walkable" : "Not validated"}</dd>
+      <dt>Traversal scope</dt><dd>Selected crossing samples only · continuous full-route access not certified · map preview, not travel</dd>
     </dl>`;
 }
 
