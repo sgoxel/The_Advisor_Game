@@ -10,8 +10,11 @@ export function* roadFragmentsInBounds(roads: readonly Road[], minX: number, min
   for (const road of roads) {
     if(!road.centerline){yield road;continue;}
     for(let i=0;i<road.centerline.length-1;i++) {
-      const a=road.centerline[i],b=road.centerline[i+1];
-      const fragment={...road,fromX:a.x,fromZ:a.z,toX:b.x,toZ:b.z,minX:Math.min(a.x,b.x),maxX:Math.max(a.x,b.x),minZ:Math.min(a.z,b.z),maxZ:Math.max(a.z,b.z)};
+      const a=road.centerline[i],b=road.centerline[i+1],
+        // Renderer clipping must follow the same short canonical seam segment
+        // as roadDistanceAt, transport buckets and legal bridge discovery.
+        toX=a.x+wrapSourceX(b.x-a.x);
+      const fragment={...road,fromX:a.x,fromZ:a.z,toX,toZ:b.z,minX:Math.min(a.x,toX),maxX:Math.max(a.x,toX),minZ:Math.min(a.z,b.z),maxZ:Math.max(a.z,b.z)};
       if(fragment.maxZ<minZ-6||fragment.minZ>minZ+size+6)continue;
       if([-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH].some(shift=>fragment.maxX+shift>=minX-6&&fragment.minX+shift<=minX+size+6))yield fragment;
     }
