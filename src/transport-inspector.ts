@@ -23,7 +23,10 @@ type AdvisorWorld = {
     scaleLabel: string;
     view: { x: number; z: number; halfHeight: number; aspect: number; yaw: number };
   };
-  navigation: { setFocus(lon: number, lat: number): void };
+  navigation: {
+    setFocus(lon: number, lat: number): void;
+    projectGround(x: number, z: number): { x: number; y: number };
+  };
 };
 
 type Selection =
@@ -132,16 +135,8 @@ function selectedRoadCodes() {
   return new Set<string>();
 }
 
-function projectSource(x: number, z: number, state: AdvisorWorld["state"]) {
-  const { view } = state;
-  const scale = innerHeight / Math.max(1, view.halfHeight * 2);
-  const dx = wrapSourceX(x - view.x), dz = z - view.z, yaw = view.yaw || 0;
-  const right = dx * Math.cos(yaw) - dz * Math.sin(yaw);
-  const depth = dx * Math.sin(yaw) + dz * Math.cos(yaw);
-  return {
-    x: innerWidth / 2 + right * scale,
-    y: innerHeight / 2 + depth * Math.cos(Math.PI / 6) * scale,
-  };
+function projectSource(x: number, z: number) {
+  return world()!.navigation.projectGround(x, z);
 }
 
 function inViewport(point: { x: number; y: number }, margin = 40) {
@@ -168,7 +163,7 @@ function roadQuery(state: AdvisorWorld["state"]): CachedQuery {
 }
 
 function pathFor(edge: TransportRoadEdge, state: AdvisorWorld["state"]) {
-  const points = edge.centerline.map((point) => projectSource(point.x, point.z, state));
+  const points = edge.centerline.map((point) => projectSource(point.x, point.z));
   if (!polylineTouchesViewport(points, innerWidth, innerHeight)) return undefined;
   return `M ${points.map((point) => `${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" L ")}`;
 }
@@ -186,7 +181,7 @@ function appendRoad(edge: TransportRoadEdge, state: AdvisorWorld["state"], selec
 }
 
 function appendMarker(kind: "bridge" | "border" | "junction" | "harbor", x: number, z: number, state: AdvisorWorld["state"], code: string, active: boolean) {
-  const point = projectSource(x, z, state);
+  const point = projectSource(x, z);
   if (!inViewport(point, 24)) return false;
   const marker = document.createElementNS(SVG_NS, kind === "harbor" ? "rect" : "circle");
   if (kind === "harbor") {
@@ -426,7 +421,7 @@ function chooseNearestRoad() {
 
 function appendLakeDetour(state: AdvisorWorld["state"]) {
   if (selection?.kind !== "lake-detour" || !continuityCorridor.road?.centerline) return false;
-  const points = continuityCorridor.road.centerline.map((point) => projectSource(point.x, point.z, state));
+  const points = continuityCorridor.road.centerline.map((point) => projectSource(point.x, point.z));
   const path = document.createElementNS(SVG_NS, "path");
   path.setAttribute("d", `M ${points.map((point) => `${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" L ")}`);
   path.classList.add("transport-road", "transport-road-continuity", "selected");
