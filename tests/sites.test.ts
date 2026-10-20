@@ -11,7 +11,7 @@ import {
 } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
 import { transportNetwork } from "../src/transport-network.ts";
-import { composeSiteTransportNetwork, siteTransportAcceptanceSummary, siteTransportNetwork, siteTransportRoadsNear } from "../src/site-transport-network.ts";
+import { composeSiteTransportNetwork, siteTransportAcceptanceSummary, siteTransportNetwork, siteAccessRoadsNear } from "../src/site-transport-network.ts";
 import { naturalSurfaceAt } from "../src/hydrology.ts";
 import {
   criticalSites,
@@ -81,7 +81,7 @@ test("S005 site-access branches join the same canonical source road graph as phy
     assert.equal(edge.fantasyWalkSeconds, road.fantasyWalkSeconds, site.code);
     assert.equal(edge.centerline[0].position.lon, node!.position.lon, site.code);
     assert.equal(edge.centerline.at(-1)!.position.lon, junction!.position.lon, site.code);
-    const local = siteTransportRoadsNear(site.x, site.z, 128, 160);
+    const local = siteAccessRoadsNear(site.x, site.z, 128, 160);
     assert.ok(local.some(candidate => candidate.code === road.code),
       `${site.code} physically near access must be included in bounded inspection`);
   }
