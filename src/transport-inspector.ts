@@ -15,6 +15,7 @@ import {
 } from "./transport-network.ts";
 import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
+import { transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
 
 type AdvisorWorld = {
@@ -258,14 +259,19 @@ function roadDetails(edge: TransportRoadEdge) {
 
 function bridgeDetails(bridge: TransportBridge) {
   const edge = transportNetwork.roadEdges.find((candidate) => candidate.code === bridge.roadCode)!;
+  // Selection-only final-surface query: a recorded river intersection does not
+  // by itself establish a constructed, walkable deck in Simulation.
+  const surface = transportBridgeSurfaceAt(bridge.x, bridge.z);
   return `
-    <div class="transport-kind walking">WALKING · RIVER BRIDGE</div>
+    <div class="transport-kind ${surface.centerDeckWalkable ? "walking" : "transfer"}">${surface.centerDeckWalkable ? "WALKING DECK AT CROSSING" : "RIVER CROSSING · DECK NOT VALIDATED"}</div>
     <h3>${codeText(bridge.code)}</h3>
     <dl>
       <dt>Road</dt><dd>${codeText(bridge.roadCode)}</dd>
       <dt>Natural drainage</dt><dd>${codeText(bridge.drainageCode)}</dd>
       <dt>Span</dt><dd>${bridge.spanM.toFixed(1)} m</dd>
       <dt>Connection</dt><dd>${codeText(edge.from)} → ${codeText(edge.to)}</dd>
+      <dt>Final-surface deck at crossing</dt><dd>${surface.centerDeckWalkable ? "Walkable bridge surface" : "Not certified — route legality pending"}</dd>
+      <dt>Approach traversal</dt><dd>Not yet certified across the full bridge span · map preview only</dd>
     </dl>`;
 }
 
