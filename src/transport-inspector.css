@@ -77,6 +77,9 @@
   gap: .5rem;
 }
 .transport-actions button { min-height: 44px; }
+#transport-site-route { grid-column: 1 / -1; }
+#transport-site-answer:not(:empty) { margin-top: .75rem; padding-top: .75rem; border-top: 1px solid rgba(217, 184, 116, .24); }
+#transport-site-answer .eyebrow { line-height: 1.35; }
 #transport-selection h3 {
   margin: .45rem 0 .75rem;
   font-size: .88rem;
@@ -84,6 +87,7 @@
   overflow-wrap: anywhere;
 }
 #transport-selection dl,
+#transport-site-answer dl,
 .transport-metrics dl {
   display: grid;
   grid-template-columns: minmax(105px, .7fr) minmax(0, 1.3fr);
@@ -92,10 +96,13 @@
   font-size: .82rem;
 }
 #transport-selection dt,
+#transport-site-answer dt,
 .transport-metrics dt { color: #b9b5a5; }
 #transport-selection dd,
+#transport-site-answer dd,
 .transport-metrics dd { margin: 0; overflow-wrap: anywhere; }
 #transport-selection code,
+#transport-site-answer code,
 .transport-metrics code {
   white-space: normal;
   overflow-wrap: anywhere;
@@ -142,6 +149,7 @@
   .transport-summary span { padding: .38rem; text-align: center; font-size: .72rem; }
   .transport-summary .transport-scale-state { grid-column: 1 / -1; text-align: left; }
   #transport-selection dl,
+  #transport-site-answer dl,
   .transport-metrics dl { grid-template-columns: 92px minmax(0, 1fr); }
 }
 /* Landscape phones need a usable inspector without covering the centered selection.
