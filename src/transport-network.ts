@@ -582,10 +582,11 @@ function junctionNode(junction: (typeof roadJunctions)[number]): TransportNode {
 }
 
 const bridgeCache = new Map<string, readonly TransportBridge[]>();
+let bridgeSnapshot: readonly TransportBridge[] | undefined;
 let bridgeCacheHits = 0, bridgeCacheMisses = 0, bridgeCacheEvictions = 0, focusQueries = 0, focusReturnedRoads = 0;
 
 function currentBridges() {
-  return Object.freeze([...bridgeCache.values()].flat().sort((a, b) => compareCanonical(a.code, b.code)));
+  return bridgeSnapshot ??= Object.freeze([...bridgeCache.values()].flat().sort((a, b) => compareCanonical(a.code, b.code)));
 }
 
 function segmentIntersection(
@@ -646,6 +647,7 @@ function touchBridgeCache(edge: TransportRoadEdge) {
     bridgeCache.delete(bridgeCache.keys().next().value!);
     bridgeCacheEvictions++;
   }
+  bridgeSnapshot = undefined; // Lazy bridge discoveries/evictions change contents; cache hits only reorder LRU.
   return bridges;
 }
 
