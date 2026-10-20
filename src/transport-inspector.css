@@ -124,14 +124,19 @@
   letter-spacing: .04em;
 }
 .transport-metrics { margin-top: .65rem; }
-@media (max-width: 700px) {
+@media (max-width: 850px) {
+  /* Reserve the map centre for the selected road, junction or crossing. */
   .transport-panel {
     top: auto;
-    right: .6rem;
     bottom: 5.4rem;
+    max-height: min(36vh, calc(50vh - 5.4rem - 28px));
+  }
+}
+@media (max-width: 700px) {
+  .transport-panel {
+    right: .6rem;
     left: .6rem;
     width: auto;
-    max-height: min(58vh, 520px);
   }
   .transport-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .transport-summary span { padding: .38rem; text-align: center; font-size: .72rem; }
