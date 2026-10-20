@@ -13,6 +13,7 @@ import {
   type Place,
 } from "./geography.ts";
 import { WORLD_SEED } from "./config.ts";
+import { nearbyCriticalSites } from "./sites.ts";
 import { placeLabels, type Rect } from "./navigation.ts";
 import {
   POLITICAL_BORDER_MAX_SCALE_DENOMINATOR,
@@ -49,12 +50,47 @@ type ScreenPoint = { x: number; y: number };
 
 const counts = { ...politicalRegistryMinimumCountsForSeed(WORLD_SEED), cities: cities.length, villages: villages.length };
 const labelNodes = new Map<string, HTMLElement>();
+const labelIdByNode = new WeakMap<HTMLElement, string>();
 const labelSizes = new Map<string, { width: number; height: number }>();
 let borderKey = "";
 let borderSegments: ReturnType<typeof politicalBorderSegments> = [];
 let renderFingerprint = "";
 let iconsShown = false;
 let politicalLabelState: { id: string; kind: string; x: number; y: number }[] = [];
+let labelLayoutRevision = 0;
+let labelLayoutSignature = "";
+// A late font swap changes label bounds without moving its canonical anchor.
+const labelSizeObserver = new ResizeObserver((entries) => {
+  let changed = false;
+  for (const entry of entries) {
+    const node = entry.target as HTMLElement;
+    const id = labelIdByNode.get(node);
+    if (!id) continue;
+    const measured = node.getBoundingClientRect();
+    const cached = labelSizes.get(id);
+    if (cached && Math.abs(cached.width - measured.width) < 0.5 &&
+        Math.abs(cached.height - measured.height) < 0.5) continue;
+    labelSizes.set(id, { width: measured.width, height: measured.height });
+    changed = true;
+  }
+  if (changed) renderFingerprint = "";
+});
+document.fonts?.addEventListener("loadingdone", () => {
+  labelSizes.clear();
+  renderFingerprint = "";
+});
+// Presentation tie-breaks must not depend on browser/OS locale.
+function compareIds(a: string, b: string) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function publishLabelLayout(signature: string) {
+  if (signature === labelLayoutSignature) return;
+  labelLayoutSignature = signature;
+  labelLayoutRevision++;
+  // Site callouts must see the final political-label rectangles before paint.
+  window.dispatchEvent(new Event("advisor-political-label-layout"));
+}
 
 function denominator(scaleLabel: string) {
   const match = /1\/(\d+)/.exec(scaleLabel),
@@ -271,6 +307,26 @@ function labelCandidateFromPlace(place: Place): LabelCandidate {
   };
 }
 
+// Important sites receive a small view-only clear lane before settlement label
+// placement. Political labels retain their canonical anchors; only their
+// cartographic cards move. An absent focused site reserves no screen space.
+function focusedSiteLabelClearance(state: AtlasState, scale: number): Rect[] {
+  if (state.presentation !== "flat" || scale < 500 || scale > 1000)
+    return [];
+  const focused = nearbyCriticalSites(state.view.x, state.view.z, 32, 1)[0];
+  if (!focused || Math.hypot(focused.x - state.view.x, focused.z - state.view.z) > 16)
+    return [];
+  const compact = innerHeight < 620,
+    width = compact ? Math.min(228, innerWidth - 32) : Math.min(248, innerWidth - 32),
+    height = compact ? 136 : 188;
+  return [{
+    x: Math.max(8, Math.min(innerWidth - width - 8, innerWidth / 2 - 34)),
+    y: Math.max(82, Math.min(innerHeight - height - (compact ? 70 : 106),
+      innerHeight / 2 - (compact ? 77 : 84))),
+    width, height,
+  }];
+}
+
 function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number, places: Place[]) {
   if (iconsShown !== (scale >= 50)) {
     iconsShown = scale >= 50;
@@ -291,9 +347,11 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
   if (!detailed) {
     root.replaceChildren();
     leaders.replaceChildren();
+    for (const node of labelNodes.values()) labelSizeObserver.unobserve(node);
     labelNodes.clear();
     labelSizes.clear();
     politicalLabelState = [];
+    publishLabelLayout("");
     return;
   }
 
@@ -320,19 +378,25 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
     });
   }
   projected.sort(
-    (a, b) => b.priority - a.priority || a.distance - b.distance || a.id.localeCompare(b.id),
+    (a, b) => b.priority - a.priority || a.distance - b.distance || compareIds(a.id, b.id),
   );
-  const caps = innerWidth < 700
-      ? { country: 2, city: 4, village: 5 }
-      : { country: 4, city: 8, village: 12 },
+  // Short landscape screens cannot fit desktop-density 90px village cards.
+  // Keep canonical places available through inspection while retaining a
+  // small, deterministic set of important cartographic labels.
+  const caps = innerHeight < 620
+      ? { country: 1, city: 2, village: 3 }
+      : innerWidth < 700
+        ? { country: 2, city: 4, village: 5 }
+        : { country: 4, city: 8, village: 12 },
     chosen: typeof projected = [];
   for (const kind of ["country", "city", "village"] as const)
     chosen.push(...projected.filter((item) => item.kind === kind).slice(0, caps[kind]));
-  chosen.sort((a, b) => b.priority - a.priority || a.distance - b.distance || a.id.localeCompare(b.id));
+  chosen.sort((a, b) => b.priority - a.priority || a.distance - b.distance || compareIds(a.id, b.id));
 
   const visible = new Set(chosen.map((item) => item.id));
   for (const [id, node] of labelNodes)
     if (!visible.has(id)) {
+      labelSizeObserver.unobserve(node);
       node.remove();
       labelNodes.delete(id);
       labelSizes.delete(id);
@@ -360,6 +424,8 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
     } else node.textContent = item.name;
     root.append(node);
     labelNodes.set(item.id, node);
+    labelIdByNode.set(node, item.id);
+    labelSizeObserver.observe(node);
     const rect = node.getBoundingClientRect();
     labelSizes.set(item.id, { width: rect.width, height: rect.height });
   }
@@ -373,7 +439,9 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
       height: size.height,
     };
   });
-  const placed = placeLabels(anchors, innerWidth, innerHeight, obstacles());
+  const placed = placeLabels(anchors, innerWidth, innerHeight, [
+    ...obstacles(), ...focusedSiteLabelClearance(state, scale),
+  ]);
   leaders.replaceChildren();
   politicalLabelState = [];
   for (const placement of placed) {
@@ -389,6 +457,11 @@ function updateLabels(state: AtlasState, frame: LocalRenderFrame, scale: number,
     line.setAttribute("y2", String(placement.endY));
     leaders.append(line);
   }
+  // Publish only material layout changes after the final label transforms.
+  publishLabelLayout(placed.map(p =>
+    [p.id, Math.round(p.rect.x * 2) / 2, Math.round(p.rect.y * 2) / 2,
+      Math.round(p.rect.width), Math.round(p.rect.height)].join(":")
+  ).join("|"));
 }
 
 // Mid-scale cartography projects the same canonical road stations used by
@@ -402,7 +475,7 @@ function updateCartographicRoads(state:AtlasState,frame:LocalRenderFrame,scale:n
  const radius=Math.hypot(state.view.halfHeight*state.view.aspect,state.view.halfHeight)*2,
   candidates=roads.flatMap(road=>[-SOURCE_PRESENTATION_WIDTH,0,SOURCE_PRESENTATION_WIDTH].flatMap(shift=>
    road.maxX+shift<state.view.x-radius||road.minX+shift>state.view.x+radius||road.maxZ<state.view.z-radius||road.minZ>state.view.z+radius?[]:[{road,shift,distance:Math.hypot((road.minX+road.maxX)/2+shift-state.view.x,(road.minZ+road.maxZ)/2-state.view.z)}]))
-  .sort((a,b)=>a.distance-b.distance||a.road.networkId.localeCompare(b.road.networkId)).slice(0,innerWidth<700?128:256),visible=new Set<string>();
+  .sort((a,b)=>a.distance-b.distance||compareIds(a.road.networkId, b.road.networkId)).slice(0,innerWidth<700?128:256),visible=new Set<string>();
  visibleRoadPoints=0;
  for(const {road,shift} of candidates){
   const id=`${road.networkId}/${shift}`,path=road.centerline||[{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}],commands:string[]=[];
@@ -431,7 +504,7 @@ function updateSettlementOverview(state:AtlasState,frame:LocalRenderFrame,scale:
   const candidates=cities.flatMap(city=>{
     const point=project(frame,state,city.x,city.z,0);
     return point&&point.x>=10&&point.x<=innerWidth-10&&point.y>=80&&point.y<=innerHeight-110?[{city,point,distance:Math.hypot(point.x-innerWidth/2,point.y-innerHeight/2)}]:[];
-  }).sort((a,b)=>(a.city.city===0?0:1)-(b.city.city===0?0:1)||a.distance-b.distance||a.city.id.localeCompare(b.city.id)).slice(0,innerWidth<700?60:160);
+  }).sort((a,b)=>(a.city.city===0?0:1)-(b.city.city===0?0:1)||a.distance-b.distance||compareIds(a.city.id, b.city.id)).slice(0,innerWidth<700?60:160);
   const visible=new Set(candidates.map(c=>c.city.id));
   for(const [id,node] of overviewNodes)if(!visible.has(id)){node.remove();overviewNodes.delete(id);}
   for(const {city,point} of candidates){
@@ -492,6 +565,7 @@ Object.defineProperty(window, "politicalAtlas", {
       return {
         borderSegments: borderSegments.length,
         labels: politicalLabelState,
+        labelLayoutRevision,
         overviewCityCount,
         visibleRoadCount,visibleRoadPoints,
         presentationBytesEstimated:roadNodes.size*8192+overviewNodes.size*1024,

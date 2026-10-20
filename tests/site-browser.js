@@ -1,13 +1,14 @@
 import { test, expect } from "@playwright/test";
+import { mkdir, writeFile } from "node:fs/promises";
 
 for (const viewport of [
   { name: "desktop", width: 1440, height: 900 },
   { name: "phone", width: 390, height: 844 },
 ]) {
   test(`critical sites are discoverable and inspectable on ${viewport.name}`, async ({ page }, testInfo) => {
-    test.setTimeout(300000);
+    test.setTimeout(viewport.name === "desktop" ? 1500000 : 300000);
     const errors = [],
-      expectWebgl = /[\\/]browser[\\/]/.test(testInfo.file);
+      expectWebgl = !/webgpu/i.test(testInfo.config.configFile ?? "");
     page.on("pageerror", (error) => errors.push(error.message));
     if (expectWebgl)
       await page.addInitScript(() =>
@@ -51,6 +52,11 @@ for (const viewport of [
     const marker = page.locator(`.critical-site-marker[data-code="${target.code}"]`);
     await expect(marker).toBeVisible();
     await expect(marker).toContainText(target.name);
+    // Browser backends have different worker/render readiness times. Assert
+    // collision against the fully presented world, not the loading overlay.
+    await page.waitForFunction(() => window.advisorWorld?.state.settled, null, { timeout: 120000 });
+    await page.waitForFunction(() => document.fonts?.status === "loaded", null, { timeout: 30000 });
+    await page.waitForTimeout(180);
     const discovery = await page.evaluate(
       (code) => {
         const state = window.advisorSites.state,
@@ -64,12 +70,15 @@ for (const viewport of [
             right: Math.max(...rects.map((rect) => rect.right)),
             bottom: Math.max(...rects.map((rect) => rect.bottom)),
           } : null,
-          overlaps = siteRect ? [...document.querySelectorAll("#political-labels .political-label")].some((node) => {
+          overlappingLabels = siteRect ? [...document.querySelectorAll("#political-labels .political-label")].filter((node) => {
             const rect = node.getBoundingClientRect();
             return rect.width > 0 && rect.height > 0 &&
               siteRect.x < rect.right + 4 && siteRect.right + 4 > rect.x &&
               siteRect.y < rect.bottom + 4 && siteRect.bottom + 4 > rect.y;
-          }) : true;
+          }).map(node => {
+            const rect = node.getBoundingClientRect();
+            return { name: node.textContent, x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+          }) : [];
         return {
           scale: window.advisorWorld.state.scaleLabel,
           presentation: window.advisorWorld.state.presentation,
@@ -78,8 +87,16 @@ for (const viewport of [
           declutterSystem: state.declutterSystem,
           detailCacheLimit: state.detailCacheLimit,
           politicalObstacleCount: state.politicalObstacleCount,
-          overlapsPoliticalLabel: overlaps,
+          overlapsPoliticalLabel: overlappingLabels.length > 0,
+          overlapDetail: { siteRect, overlappingLabels },
           accessLines: document.querySelectorAll("#critical-site-access line.ruin-access").length,
+          // Every cartographic guide must terminate at a visible real junction.
+          offscreenAccessJunctions: [...document.querySelectorAll(
+            "#critical-site-access line.ruin-access, #critical-site-access line.critical-access",
+          )].filter(line => {
+            const x = Number(line.getAttribute("x2")), y = Number(line.getAttribute("y2"));
+            return !(x > 0 && x < innerWidth && y > 0 && y < innerHeight);
+          }).length,
         };
       },
       target.code,
@@ -87,11 +104,36 @@ for (const viewport of [
     expect(discovery.scale).toBe("1/1000");
     expect(discovery.presentation).toBe("flat");
     expect(discovery.visible).toBe(true);
-    expect(discovery.visibleCount).toBeLessThanOrEqual(viewport.name === "phone" ? 8 : 14);
-    expect(discovery.declutterSystem).toBe("navigation.placeLabels");
+    expect(discovery.visibleCount).toBeLessThanOrEqual(Math.min(viewport.width, viewport.height) < 600 ? 6 : 12);
+    expect(discovery.declutterSystem).toBe("critical-sites.nearest-free");
     expect(discovery.detailCacheLimit).toBe(48);
-    expect(discovery.overlapsPoliticalLabel).toBe(false);
+    expect(discovery.overlapsPoliticalLabel, JSON.stringify(discovery.overlapDetail)).toBe(false);
     expect(discovery.accessLines).toBeGreaterThan(0);
+    expect(discovery.offscreenAccessJunctions).toBe(0);
+    await page.waitForTimeout(150);
+    const idleBefore = await page.evaluate(() => ({
+      placement: window.advisorSites.state.placementPassCount,
+      measured: window.advisorSites.state.obstacleMeasureCount,
+      nearbyQueries: window.advisorSites.state.nearbyQueryCount,
+      view: [window.advisorWorld.state.view.x, window.advisorWorld.state.view.z,
+        window.advisorWorld.state.view.halfHeight, window.advisorWorld.state.view.aspect],
+      revision: window.politicalAtlas.state.labelLayoutRevision,
+    }));
+    await page.waitForTimeout(160);
+    const idleAfter = await page.evaluate(() => ({
+      placement: window.advisorSites.state.placementPassCount,
+      measured: window.advisorSites.state.obstacleMeasureCount,
+      nearbyQueries: window.advisorSites.state.nearbyQueryCount,
+      view: [window.advisorWorld.state.view.x, window.advisorWorld.state.view.z,
+        window.advisorWorld.state.view.halfHeight, window.advisorWorld.state.view.aspect],
+      revision: window.politicalAtlas.state.labelLayoutRevision,
+    }));
+    if (idleBefore.revision === idleAfter.revision &&
+        JSON.stringify(idleBefore.view) === JSON.stringify(idleAfter.view)) {
+      expect(idleAfter.placement).toBe(idleBefore.placement);
+      expect(idleAfter.measured).toBe(idleBefore.measured);
+      expect(idleAfter.nearbyQueries).toBe(idleBefore.nearbyQueries);
+    }
 
     await page.selectOption("#map-scale", "100");
     await page.waitForFunction(
@@ -124,6 +166,22 @@ for (const viewport of [
     expect(await viewSnapshot()).toEqual(beforeInspect);
     await expect(panel).toContainText(target.name);
     await expect(panel).toContainText("legal road junction");
+    // Invalid canonical keys must not leave the UI and selected identity split.
+    await page.evaluate(() => window.advisorSites.select("NOT/A/CANONICAL/SITE"));
+    expect(await page.evaluate(() => window.advisorSites.state.selectedCode)).toBe(target.code);
+    await expect(panel.locator("#critical-site-code")).toHaveText(target.code);
+    await expect(panel).toBeVisible();
+    expect(await viewSnapshot()).toEqual(beforeInspect);
+    const touchRects = await panel.locator("#close-critical-site, #focus-critical-site").evaluateAll(nodes =>
+      nodes.map(node => {
+        const rect = node.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      }));
+    expect(touchRects).toHaveLength(2);
+    for (const rect of touchRects) {
+      expect(rect.width).toBeGreaterThanOrEqual(44);
+      expect(rect.height).toBeGreaterThanOrEqual(44);
+    }
     await expect(panel.locator("#critical-site-code")).toContainText("/SITE/");
     const before = await page.evaluate(
       (code) => window.advisorSites.inspect(code).detail.signature,
@@ -153,15 +211,354 @@ for (const viewport of [
       ...window.advisorSites.state,
       totalSites: window.advisorSites.sites.length,
     }));
-    expect(state.visibleCount).toBeLessThanOrEqual(viewport.name === "phone" ? 8 : 14);
+    expect(state.visibleCount).toBeLessThanOrEqual(Math.min(viewport.width, viewport.height) < 600 ? 6 : 12);
     expect(state.cachedDetails).toBeLessThanOrEqual(state.detailCacheLimit);
     expect(state.detailCacheLimit).toBeLessThan(state.totalSites);
+    expect(state.cachedMarkers).toBeLessThanOrEqual(state.markerNodeLimit);
+    expect(state.markerNodeLimit).toBeLessThan(state.totalSites);
     const box = await panel.boundingBox();
     expect(box).not.toBeNull();
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
     expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
+    if (viewport.name === "phone") {
+      const layout = await panel.evaluate(node => ({
+        overflow: node.scrollHeight - node.clientHeight,
+        overflowY: getComputedStyle(node).overflowY,
+      }));
+      // A short inspector may scroll; requiring no overflow contradicts its
+      // visible scroll cue and hides real reachability defects.
+      if (layout.overflow > 1) {
+        expect(["auto", "scroll"]).toContain(layout.overflowY);
+        await panel.locator("#focus-critical-site").scrollIntoViewIfNeeded();
+        await expect(panel.locator("#focus-critical-site")).toBeInViewport();
+      }
+    }
+    if (viewport.name === "desktop") {
+      // Verify the same canonical ruin and critical place on all seven layouts
+      // without restarting the expensive seeded world for each resize.
+      const profiles = [
+        { name: "desktop", width: 1440, height: 900 },
+        { name: "laptop", width: 1280, height: 720 },
+        { name: "tablet", width: 1024, height: 768 },
+        { name: "phone", width: 390, height: 844 },
+        { name: "phone-landscape", width: 844, height: 390 },
+        { name: "phone-small", width: 360, height: 800 },
+        { name: "tablet-portrait", width: 768, height: 1024 },
+      ];
+      await panel.locator("#close-critical-site").click();
+      for (const kind of ["ruin", "critical-place"]) {
+        const site = await page.evaluate((targetKind) => {
+          const item = window.advisorSites.sites.find(s => s.kind === targetKind);
+          window.advisorWorld.navigation.setFocus(item.canonicalPosition.lon, item.canonicalPosition.lat);
+          return { code: item.code, name: item.name, kind: item.kind };
+        }, kind);
+        await page.selectOption("#map-scale", "1000");
+        await page.waitForFunction((code) =>
+          window.advisorWorld.state.scaleLabel === "1/1000" &&
+          window.advisorWorld.state.settled &&
+          window.advisorSites.state.visibleCodes.includes(code),
+          site.code, { timeout: 120000 });
+
+        for (const profile of profiles) {
+          await page.setViewportSize({ width: profile.width, height: profile.height });
+          // Resizing can queue unrelated fine-detail tiles indefinitely on
+          // software renderers. Site/label acceptance requires coherent
+          // current-view coverage, not global final-detail idleness.
+          await page.waitForFunction((code) =>
+            window.advisorWorld.state.coverage.complete &&
+            window.advisorSites.state.visibleCodes.includes(code),
+            site.code, { timeout: 120000 }).catch(async (error) => {
+              const diagnostic = await page.evaluate((code) => {
+                const world = window.advisorWorld.state,
+                  ui = window.advisorSites.state,
+                  marker = document.querySelector(`.critical-site-marker[data-code="${CSS.escape(code)}"]`),
+                  target = window.advisorSites.sites.find(s => s.code === code),
+                  view = world.view;
+                return {
+                  viewport: [innerWidth, innerHeight],
+                  scale: world.scaleLabel,
+                  presentation: world.presentation,
+                  settled: world.settled,
+                  coverage: world.coverage,
+                  pending: world.pending,
+                  view: { x: view.x, z: view.z, halfHeight: view.halfHeight, aspect: view.aspect },
+                  target: { code, x: target?.x, z: target?.z },
+                  marker: marker ? {
+                    hidden: marker.hidden, display: getComputedStyle(marker).display,
+                    rect: marker.getBoundingClientRect().toJSON(),
+                  } : null,
+                  visibleCodes: ui.visibleCodes,
+                  visibleMarkers: document.querySelectorAll(".critical-site-marker:not([hidden])").length,
+                  placementPassCount: ui.placementPassCount,
+                  obstacleMeasureCount: ui.obstacleMeasureCount,
+                  politicalObstacleCount: ui.politicalObstacleCount,
+                  obstacles: [...document.querySelectorAll(
+                    ".masthead, #region-panel, #cell-panel, #travel-panel, #transport-panel, #critical-site-panel:not([hidden]), " +
+                    ".bottom-bar, .map-controls, .telemetry, #focus-coordinates, #centre-marker, " +
+                    "#political-labels .political-label, #map-labels .map-label",
+                  )].filter(node => getComputedStyle(node).display !== "none" &&
+                      getComputedStyle(node).visibility !== "hidden")
+                    .map(node => ({
+                      name: node.id || node.className, rect: node.getBoundingClientRect().toJSON(),
+                    })).slice(0, 30),
+                };
+              }, site.code);
+              await page.screenshot({
+                path: testInfo.outputPath(`site-${kind}-${profile.name}-diagnostic.png`),
+              }).catch(() => {});
+              throw new Error(`Site viewport ${kind}/${profile.name}: ${JSON.stringify(diagnostic)}\n${error}`);
+            });
+          await page.waitForTimeout(180);
+          expect(await page.evaluate(() => window.advisorSites.state.visibleCount),
+            `${kind}/${profile.name}: compact site budget`)
+            .toBeLessThanOrEqual(Math.min(profile.width, profile.height) < 600 ? 6 : 12);
+          const geometry = await page.evaluate(code => {
+            const marker = document.querySelector(`.critical-site-marker[data-code="${CSS.escape(code)}"]`),
+              label = marker?.querySelector(".site-label"),
+              glyph = marker?.querySelector(".site-glyph"),
+              boxes = [label, glyph].filter(Boolean).map(n => n.getBoundingClientRect()),
+              occupied = boxes.length ? {
+                x: Math.min(...boxes.map(r => r.x)),
+                y: Math.min(...boxes.map(r => r.y)),
+                right: Math.max(...boxes.map(r => r.right)),
+                bottom: Math.max(...boxes.map(r => r.bottom)),
+              } : null,
+              obstacleSelectors = [
+                ".masthead", "#region-panel", "#cell-panel", "#travel-panel",
+                "#transport-panel", "#critical-site-panel:not([hidden])", ".bottom-bar", ".map-controls",
+                ".telemetry", "#focus-coordinates", "#centre-marker",
+                "#political-labels .political-label", "#map-labels .map-label",
+              ],
+              obstacles = obstacleSelectors.flatMap(selector =>
+                [...document.querySelectorAll(selector)]
+                  .filter(n => {
+                    const style = getComputedStyle(n);
+                    return style.display !== "none" && style.visibility !== "hidden";
+                  })
+                  .map(n => ({ node: n, rect: n.getBoundingClientRect() }))
+                  .filter(({ rect }) => rect.width > 0 && rect.height > 0)),
+              intersects = (r, padding = 4) =>
+                occupied.x < r.right + padding && occupied.right + padding > r.x &&
+                occupied.y < r.bottom + padding && occupied.bottom + padding > r.y,
+              conflicts = occupied ? obstacles.filter(({ rect }) => intersects(rect))
+                .map(({ node }) => node.textContent?.trim().slice(0, 48) || node.id || node.className) : ["missing marker"],
+              // Independently clip actual leader and cartographic access segments
+              // against the same visible HUD/political obstacles.
+              leaderCrossings = [...document.querySelectorAll(
+                "#critical-site-access line.site-label-leader, #critical-site-access line.ruin-access, #critical-site-access line.critical-access",
+              )]
+                .flatMap(line => {
+                  const x1 = Number(line.getAttribute("x1")), y1 = Number(line.getAttribute("y1")),
+                    dx = Number(line.getAttribute("x2")) - x1,
+                    dy = Number(line.getAttribute("y2")) - y1;
+                  // Access hints must not pass underneath a different site's
+                  // visible glyph or callout, even when the HUD is clear.
+                  const otherSiteBoxes = line.matches(".ruin-access, .critical-access")
+                    ? [...document.querySelectorAll(".critical-site-marker:not([hidden])")]
+                      .filter(marker => marker.dataset.code !== line.dataset.siteCode)
+                      .flatMap(marker => [...marker.querySelectorAll(".site-glyph, .site-label")]
+                        .filter(node => getComputedStyle(node).display !== "none")
+                        .map(node => ({ node, rect: node.getBoundingClientRect() })))
+                    : [];
+                  return [...obstacles, ...otherSiteBoxes].filter(({ node, rect }) => {
+                    // A focused site's anchored leader may terminate inside its
+                    // own crosshair. Unrelated leader/callout crossings still fail.
+                    if (node.id === "centre-marker" &&
+                        (!line.classList.contains("site-label-leader") ||
+                         (Number(line.getAttribute("x2")) >= rect.left &&
+                          Number(line.getAttribute("x2")) <= rect.right &&
+                          Number(line.getAttribute("y2")) >= rect.top &&
+                          Number(line.getAttribute("y2")) <= rect.bottom)))
+                      return false;
+                    const gap = 4, left = rect.x - gap, top = rect.y - gap,
+                      right = rect.right + gap, bottom = rect.bottom + gap;
+                    let start = 0, end = 1;
+                    const clip = (p, q) => {
+                      if (p === 0) return q >= 0;
+                      const t = q / p;
+                      if (p < 0) start = Math.max(start, t);
+                      else end = Math.min(end, t);
+                      return start <= end;
+                    };
+                    return clip(-dx, x1 - left) && clip(dx, right - x1) &&
+                      clip(-dy, y1 - top) && clip(dy, bottom - y1);
+                  }).map(({ node }) => node.textContent?.trim().slice(0, 48) || node.id || node.className);
+                });
+            const target = window.advisorSites.sites.find(s => s.code === code),
+              view = window.advisorWorld.state.view,
+              wrap = dx => ((dx + 131072) % 262144 + 262144) % 262144 - 131072,
+              dx = wrap(target.x - view.x), dz = target.z - view.z,
+              c = Math.cos(view.yaw), sin = Math.sin(view.yaw),
+              pointX = innerWidth / 2 + ((dx * c - dz * sin) / (view.halfHeight * view.aspect)) * innerWidth / 2,
+              pointY = innerHeight / 2 + ((dx * sin + dz * c) * 0.8660254 / view.halfHeight) * innerHeight / 2,
+              markerBox = marker.getBoundingClientRect(),
+              displacement = Math.hypot(markerBox.x + 22 - pointX, markerBox.y + 22 - pointY),
+              leaderLinked = [...document.querySelectorAll("#critical-site-access line.site-label-leader")]
+                .some(line => Math.hypot(Number(line.getAttribute("x2")) - pointX,
+                  Number(line.getAttribute("y2")) - pointY) < 1);
+            // Independently verify that displaced leaders do not cross
+            // each other while clearing all HUD/political rectangles.
+            const siteLeaders = [...document.querySelectorAll("#critical-site-access line.site-label-leader")]
+              .map(line => Object.fromEntries(["x1", "y1", "x2", "y2"]
+                .map(key => [key, Number(line.getAttribute(key))]))),
+              crossedLeaderPairs = [];
+            for (let i = 0; i < siteLeaders.length; i++) {
+              const a = siteLeaders[i], ax = a.x2 - a.x1, ay = a.y2 - a.y1;
+              for (let j = i + 1; j < siteLeaders.length; j++) {
+                const b = siteLeaders[j], bx = b.x2 - b.x1, by = b.y2 - b.y1,
+                  qx = b.x1 - a.x1, qy = b.y1 - a.y1,
+                  det = ax * by - ay * bx;
+                const intersects = Math.abs(det) <= 1e-9
+                  ? Math.abs(qx * ay - qy * ax) <= 1e-9 &&
+                    Math.max(Math.min(a.x1, a.x2), Math.min(b.x1, b.x2)) <=
+                      Math.min(Math.max(a.x1, a.x2), Math.max(b.x1, b.x2)) &&
+                    Math.max(Math.min(a.y1, a.y2), Math.min(b.y1, b.y2)) <=
+                      Math.min(Math.max(a.y1, a.y2), Math.max(b.y1, b.y2))
+                  : (() => {
+                    const t = (qx * by - qy * bx) / det,
+                      u = (qx * ay - qy * ax) / det;
+                    return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+                  })();
+                if (intersects) crossedLeaderPairs.push(`${i}/${j}`);
+              }
+            }
+            return { conflicts, leaderCrossings, crossedLeaderPairs, displacement, leaderLinked,
+              rendered: !!marker && !marker.hidden, occupied };
+          }, site.code);
+          expect(geometry.rendered, `${kind}/${profile.name}`).toBe(true);
+          expect(geometry.conflicts, `${kind}/${profile.name}: ${JSON.stringify(geometry)}`).toEqual([]);
+          expect(geometry.leaderCrossings, `${kind}/${profile.name}: ${JSON.stringify(geometry)}`).toEqual([]);
+          expect(geometry.crossedLeaderPairs, `${kind}/${profile.name}: crossed leaders`).toEqual([]);
+          if (geometry.displacement > 25)
+            expect(geometry.leaderLinked,
+              `${kind}/${profile.name}: displaced site lost canonical leader`).toBe(true);
+          const targetMarker = page.locator(`.critical-site-marker[data-code="${site.code}"]`);
+          await targetMarker.click();
+          await expect(panel).toBeVisible();
+          await expect(panel).toContainText(site.name);
+          const dimensions = await panel.evaluate(node => {
+            const b = node.getBoundingClientRect();
+            return {
+              panel: { x: b.x, y: b.y, right: b.right, bottom: b.bottom },
+              controls: [...node.querySelectorAll("#close-critical-site, #focus-critical-site")]
+                .map(el => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height }; }),
+            };
+          });
+          expect(dimensions.panel.x, profile.name).toBeGreaterThanOrEqual(0);
+          expect(dimensions.panel.y, profile.name).toBeGreaterThanOrEqual(0);
+          expect(dimensions.panel.right, profile.name).toBeLessThanOrEqual(profile.width + 1);
+          expect(dimensions.panel.bottom, profile.name).toBeLessThanOrEqual(profile.height + 1);
+          expect(dimensions.controls).toHaveLength(2);
+          for (const control of dimensions.controls) {
+            expect(control.width, profile.name).toBeGreaterThanOrEqual(44);
+            expect(control.height, profile.name).toBeGreaterThanOrEqual(44);
+          }
+          // A clipped compact inspector must advertise additional content.
+          await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+          const scrollCue = await panel.evaluate(node => {
+            const cue = node.querySelector("#critical-site-scroll-cue"),
+              rect = cue.getBoundingClientRect(),
+              panelRect = node.getBoundingClientRect(),
+              cueHeight = cue.hidden ? 0 : rect.height;
+            return {
+              overflow: node.scrollHeight - cueHeight - node.clientHeight,
+              remaining: node.scrollHeight - node.clientHeight - node.scrollTop,
+              rendered: !cue.hidden && getComputedStyle(cue).display !== "none",
+              insidePanel: rect.top >= panelRect.top && rect.bottom <= panelRect.bottom + 1,
+              height: cueHeight,
+            };
+          });
+          if (scrollCue.overflow > 8 && scrollCue.remaining > scrollCue.height + 8) {
+            expect(scrollCue.rendered, `${kind}/${profile.name}: missing scroll affordance`).toBe(true);
+            expect(scrollCue.insidePanel, `${kind}/${profile.name}: clipped scroll affordance`).toBe(true);
+          }
+          // The final inspector action must be reachable even when the panel scrolls.
+          await panel.locator("#focus-critical-site").scrollIntoViewIfNeeded();
+          await expect(panel.locator("#focus-critical-site")).toBeInViewport();
+          const context = await page.evaluate(code => {
+            const marker = document.querySelector(`.critical-site-marker[data-code="${CSS.escape(code)}"]`);
+            const glyph = marker?.querySelector(".site-glyph"),
+              panelRect = document.querySelector("#critical-site-panel").getBoundingClientRect(),
+              glyphRect = glyph?.getBoundingClientRect();
+            return {
+              visible: !!glyphRect && glyphRect.width > 0 && glyphRect.height > 0,
+              covered: !!glyphRect && glyphRect.left < panelRect.right &&
+                glyphRect.right > panelRect.left &&
+                glyphRect.top < panelRect.bottom && glyphRect.bottom > panelRect.top,
+            };
+          }, site.code);
+          expect(context.visible, `${kind}/${profile.name}`).toBe(true);
+          expect(context.covered, `${kind}/${profile.name}: selected site under inspector`).toBe(false);
+          await panel.locator("#close-critical-site").click();
+          await expect(panel).toBeHidden();
+        }
+      }
+    }
+    // Returning to Realm zoom clears site presentation once, not every frame.
+    await page.selectOption("#map-scale", "10000");
+    await page.waitForFunction(() =>
+      window.advisorWorld?.state.scaleLabel === "1/10000" &&
+      window.advisorWorld.state.presentation !== "flat" &&
+      [...document.querySelectorAll(".critical-site-marker")].every(node => node.hidden) &&
+      document.querySelector("#critical-site-access")?.childElementCount === 0,
+      null, { timeout: 120000 });
+    const idleWideWrites = await page.evaluate(async () => {
+      const access = document.querySelector("#critical-site-access");
+      let mutationCount = 0;
+      const observer = new MutationObserver(records => { mutationCount += records.length; });
+      observer.observe(access, { childList: true });
+      for (const marker of document.querySelectorAll(".critical-site-marker"))
+        observer.observe(marker, { attributes: true, attributeFilter: ["hidden"] });
+      await new Promise(resolve => {
+        let frames = 0;
+        const next = () => ++frames >= 8 ? resolve() : requestAnimationFrame(next);
+        requestAnimationFrame(next);
+      });
+      const mutations = mutationCount + observer.takeRecords().length;
+      observer.disconnect();
+      return mutations;
+    });
+    expect(idleWideWrites, "wide-view site layer has repeated hidden/SVG mutations").toBe(0);
     expect(errors).toEqual([]);
   });
 }
+
+// The two renderer jobs must independently expose identical authoritative site data.
+// The resulting artifacts are compared byte-for-byte by the dedicated evidence workflow.
+test("WebGPU and WebGL2 expose identical canonical site authority", async ({ page }, testInfo) => {
+  test.setTimeout(180000);
+  if (!/webgpu/i.test(testInfo.config.configFile ?? ""))
+    await page.addInitScript(() =>
+      Object.defineProperty(navigator, "gpu", { value: undefined, configurable: true }),
+    );
+  await page.goto("/");
+  await page.waitForFunction(
+    () => window.advisorWorld?.state.ready && window.advisorSites?.sites?.length > 0,
+    null,
+    { timeout: 150000 },
+  );
+  const payload = await page.evaluate(() => ({
+    summary: window.advisorSites.summary,
+    sites: window.advisorSites.sites.map((site) => ({
+      code: site.code,
+      kind: site.kind,
+      countryCode: site.countryCode,
+      continent: site.continent,
+      canonicalPosition: site.canonicalPosition,
+      sourcePosition: [site.x, site.z],
+      archetype: site.archetype,
+      variant: site.variant,
+      radiusM: site.radiusM,
+      falloffM: site.falloffM,
+      preparedHeightM: site.preparedHeightM,
+      access: site.access,
+    })).sort((a, b) => a.code < b.code ? -1 : a.code > b.code ? 1 : 0),
+  }));
+  await mkdir("test-results", { recursive: true });
+  await writeFile("test-results/wp-s004-site-parity.json",
+    JSON.stringify(payload, null, 2) + "\n");
+  expect(payload.sites.length).toBeGreaterThan(0);
+  expect(payload.sites.every(site => site.access.branchCode && site.access.roadCode)).toBe(true);
+});

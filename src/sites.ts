@@ -55,6 +55,7 @@ export type CriticalSite = {
 
 const MAX_CANDIDATE_ATTEMPTS = 96;
 const ACCESS_SAMPLES = 16;
+const ACCESS_PROFILE_SEGMENT_MAX_M = 75;
 const SITE_SLOTS_PER_COUNTRY = 2;
 const SITE_BUCKET_SOURCE_UNITS = 512;
 const SITE_CORE_SOURCE_UNITS = 6;
@@ -342,10 +343,26 @@ export const siteAccessRoads: readonly Road[] = criticalSites.map((site) => {
     fromZ = site.z,
     toZ = site.access.z,
     surfaceLengthM = site.access.lengthM,
+    profileSegmentCount = Math.max(1, Math.ceil(surfaceLengthM / ACCESS_PROFILE_SEGMENT_MAX_M)),
     travel = travelMetrics(surfaceLengthM, "good-road"),
     to = site.access.roadT === 0 ? parent.from : parent.to,
     fromPosition = site.canonicalPosition,
-    toPosition = site.access.canonicalPosition;
+    toPosition = site.access.canonicalPosition,
+    centerline = Array.from({ length: profileSegmentCount + 1 }, (_, index) => {
+      const t = index / profileSegmentCount,
+        x = site.x + dx * t,
+        z = fromZ + (toZ - fromZ) * t;
+      return {
+        x,
+        z,
+        position:
+          index === 0
+            ? fromPosition
+            : index === profileSegmentCount
+              ? toPosition
+              : canonical(sourceToLonLat(x, z)),
+      };
+    });
   return {
     code: site.access.branchCode,
     networkId: site.access.branchCode,
@@ -370,10 +387,7 @@ export const siteAccessRoads: readonly Road[] = criticalSites.map((site) => {
     walkSpeedMps: travel.speedMps,
     fantasyWalkSeconds: travel.fantasySeconds,
     realWalkSeconds: travel.realSeconds,
-    centerline: [
-      { x: site.x, z: site.z, position: fromPosition },
-      { x: toX, z: toZ, position: toPosition },
-    ],
+    centerline,
   } as Road;
 });
 
@@ -465,6 +479,7 @@ export function siteAcceptanceSummary() {
     accessBranches: siteAccessRoads.length,
     maxCandidateAttempts: MAX_CANDIDATE_ATTEMPTS,
     accessSamples: ACCESS_SAMPLES,
+    accessProfileSegmentMaxM: ACCESS_PROFILE_SEGMENT_MAX_M,
     supportRingSamples: SITE_SUPPORT_RING_SAMPLES,
     coarseBuckets: buckets.size,
     maxCutM: SITE_PREP_MAX_CUT_M,
