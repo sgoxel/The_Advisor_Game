@@ -141,7 +141,7 @@ test("every village external road crossing uses one of at most two canonical enc
       } else if (!attached) {
         // Close secondary gates must not collapse the canonical residential
         // spine to fabricate an apparent gate-to-gate street connection.
-        assert.ok(distance(plan.gates[0], gate) < Math.max(24, distance(...endpoints) * .95),
+        assert.ok(distance(plan.gates[0], gate) < Math.max(24, distance(endpoints[0], endpoints[1]) * .95),
           `${place.code} omitted a spatially valid secondary street connection`);
       }
     }
