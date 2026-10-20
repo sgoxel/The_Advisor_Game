@@ -29,25 +29,25 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Legal transport UX: shared 3D junctions, truthful routes & bounded performance
+- WP-S005-001-001 — Canonical transport: legal 3D junctions, graph/visual parity & responsive routes
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Living residents: legal walking commutes, Fantasy-Time schedules & usable inspection
-- WP-S006-002-001 — Interior research: same-world doors, persisted state & responsive entry UX
+- WP-S006-001-001 — Living residents: legal commutes, Fantasy-Time autonomy & bounded inspection
+- WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Toon-world research: readable 3D materials, semantic zoom & mobile budgets
+- WP-S007-001-001 — Medieval-fantasy visual research: lit 3D, semantic zoom & mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas UX: readable text, map-safe panels & 44px touch/keyboard tasks
+- WP-S008-001-001 — Accessible atlas: map-safe panels, readable text & verified touch/keyboard flow
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance proof: startup, interaction p95 & CPU/GPU evidence
-- WP-S009-002-001 — Responsive inspection: bounded canonical picking & revision-cached idle UI
-- WP-S009-003-001 — Adaptive graphics: mobile DPR/shadows, bounded memory & GPU recovery
-- WP-S009-004-001 — README/runtime conformance: honest Advisor scope, atlas UX & device claims
-- WP-S009-005-001 — Progressive zoom-out UX: fast coherent terrain, stale-job retirement & truthful detail
+- WP-S009-001-001 — Exact-SHA performance: first usable interaction, p95 latency & CPU/GPU proof
+- WP-S009-002-001 — Responsive atlas: bounded picking, revision-cached labels & stable-frame UI
+- WP-S009-003-001 — Adaptive WebGPU/WebGL2: device DPR, shadow/memory budgets & GPU recovery
+- WP-S009-004-001 — README/runtime conformance: truthful Advisor scope, campaign time & device claims
+- WP-S009-005-001 — Progressive zoom UX: coherent terrain, first usable selection & settled detail
