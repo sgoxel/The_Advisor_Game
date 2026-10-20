@@ -1,6 +1,6 @@
 import type { Geometry } from "./geometry.ts";
 import { terrainTint } from "./geometry.ts";
-import { finalSurfaceAt, type Tile } from "./world.ts";
+import { finalSurfaceAt, finalSurfaceGroundMaterialAt, type Tile } from "./world.ts";
 import { drainageSegmentsInBounds, naturalSurfaceAt, RIVER_BANK_HALF_WIDTH_SOURCE } from "./hydrology.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import { places, roads, roadDistanceAt } from "./geography.ts";
@@ -176,9 +176,55 @@ export function rebuildNaturalSurface(
     cuts.set(key, result);
     return result;
   };
+  const roadCuts = new Map<string, { road: Sample; ground: Sample }>();
+  const onRoad = (p: Sample) => p.wet === "none" && p.material === "Road";
+  const roadCut = (a: Sample, b: Sample) => {
+    const key = [`${a.x}/${a.z}`, `${b.x}/${b.z}`].sort().join("|");
+    const cached = roadCuts.get(key);
+    if (cached) return cached;
+    if (roadCuts.size >= 8192)
+      throw new RangeError("Natural road material cut cap exceeded");
+    // Locate the canonical road/material boundary instead of interpolating a
+    // binary vertex tint over the full adaptive triangle (a jagged shoulder).
+    const wasRoad = onRoad(a);
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 5; i++) {
+      const t = (lo + hi) / 2;
+      const x = a.x + (b.x - a.x) * t;
+      const z = a.z + (b.z - a.z) * t;
+      const midRoad = finalSurfaceGroundMaterialAt(x, z) === "Road";
+      if (midRoad === wasRoad) lo = t;
+      else hi = t;
+    }
+    const before = sample(a.x + (b.x - a.x) * lo, a.z + (b.z - a.z) * lo);
+    const after = sample(a.x + (b.x - a.x) * hi, a.z + (b.z - a.z) * hi);
+    const result = onRoad(before)
+      ? { road: before, ground: after }
+      : { road: after, ground: before };
+    roadCuts.set(key, result);
+    return result;
+  };
+  const roadTriangle = (a: Sample, b: Sample, c: Sample) => {
+    const corners = [a, b, c];
+    if (corners.some(wet) || corners.every(p => onRoad(p) === onRoad(a)))
+      return emitTriangle(a, b, c);
+    // Separate road and soil triangles at the same canonical boundary.
+    // No triangle may blend road alpha over an unrelated shoulder.
+    for (const road of [false, true]) {
+      const polygon: Sample[] = [];
+      for (let i = 0; i < 3; i++) {
+        const p = corners[i], q = corners[(i + 1) % 3];
+        if (onRoad(p) === road) polygon.push(p);
+        if (onRoad(p) !== onRoad(q))
+          polygon.push(road ? roadCut(p, q).road : roadCut(p, q).ground);
+      }
+      for (let i = 1; i < polygon.length - 1; i++)
+        emitTriangle(polygon[0], polygon[i], polygon[i + 1]);
+    }
+  };
   const triangle = (a: Sample, b: Sample, c: Sample, group: "surface" | "skirt"="surface") => {
     if(group==="skirt")return emitTriangle(a,b,c,group);
-    if (wet(a) === wet(b) && wet(b) === wet(c)) return emitTriangle(a,b,c);
+    if (wet(a) === wet(b) && wet(b) === wet(c)) return roadTriangle(a,b,c);
     const corners = [a,b,c];
     for (const water of [false,true]) {
       const polygon: Sample[] = [];
@@ -187,7 +233,7 @@ export function rebuildNaturalSurface(
         if (wet(p) === water) polygon.push(p);
         if (wet(p) !== wet(q)) polygon.push(water ? cut(p,q).wet : cut(p,q).dry);
       }
-      for (let i=1;i<polygon.length-1;i++) emitTriangle(polygon[0],polygon[i],polygon[i+1]);
+      for (let i=1;i<polygon.length-1;i++) roadTriangle(polygon[0],polygon[i],polygon[i+1]);
     }
   };
   const quad = (
@@ -323,6 +369,6 @@ export function rebuildNaturalSurface(
       (positions.length + normals.length + colors.length + indices.length + uvs.length) *
         8 +
       cache.size * 192 +
-      vertexIndices.size * 96 + cuts.size * 256,
+      vertexIndices.size * 96 + (cuts.size + roadCuts.size) * 256,
   };
 }

@@ -514,6 +514,12 @@ export function finalSurfaceAt(x: number, z: number): FinalSurface {
   return result;
 }
 
+/** Material-only canonical query for bounded presentation-boundary refinement.
+ * Unlike finalSurfaceAt this avoids five slope probes for each edge search. */
+export function finalSurfaceGroundMaterialAt(x: number, z: number) {
+  return composePointAt(x, z).final.groundMaterial;
+}
+
 /** Inspector/debug view of the exact before/modifier/final data for one coordinate. */
 export function finalSurfaceDebugAt(x: number, z: number) {
   const point = composePointAt(x, z);

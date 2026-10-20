@@ -25,6 +25,13 @@ test("starting-village streets survive inland replacement and remain distinct fr
     }
     if(surface.groundMaterial==='Settlement') padVertices++;
   }
+  for (let i = 0; i < result.geometry.indices.length; i += 3) {
+    const corners = Array.from(result.geometry.indices.slice(i, i + 3));
+    if (corners.some(v => v >= result.surfaceVertices)) continue;
+    const alphas = corners.map(v => result.geometry.colors[v * 4 + 3]);
+    assert.ok(alphas.every(alpha => alpha === alphas[0]),
+      "road tint must meet canonical material edges, not spread across soil triangles");
+  }
   assert.ok(streetVertices>20,'narrow streets must survive the interior mesh');
   assert.ok(padVertices>20,'the settlement must coexist with its streets');
   assert.ok(result.leaves<=NATURAL_MESH_LIMITS.leaves);
