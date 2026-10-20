@@ -155,6 +155,11 @@ function ensureUi() {
     changes.observe(node, { attributes: true, attributeFilter: ["class", "hidden"] });
     sizes.observe(node);
   }
+  // Main-atlas labels are independently positioned; relayout only when they change.
+  const mapLabels = document.getElementById("map-labels");
+  if (mapLabels) changes.observe(mapLabels, {
+    childList: true, subtree: true, attributes: true, attributeFilter: ["style"],
+  });
   panel.addEventListener("scroll", updateSiteScrollCue, { passive: true });
   // React synchronously to the political renderer's final label transforms.
   // Its explicit revision event fires only for material placement changes.
@@ -276,6 +281,7 @@ const obstacleSelectors = [
   "#focus-coordinates",
   "#centre-marker",
   "#political-labels .political-label",
+  "#map-labels .map-label",
 ];
 
 type SiteObstacle = Rect & { focusCrosshair: boolean };
