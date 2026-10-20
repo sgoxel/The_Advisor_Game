@@ -25,28 +25,28 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S004 — Settlements, Buildings & World Sites
 
 - WP-S004-001-001 — Deterministic settlement distribution & morphology: viable-area density, readable functional villages/cities, legal access and bounded mobile rendering — COMPLETED and REVIEWED at 2026-10-17
-- WP-S004-002-001 — Critical-site presentation & access UX: safe labels/leaders, visible 3D sites, clean road joins & renderer parity
+- WP-S004-002-001 — Critical-site UI/UX: collision-safe labels, visible 3D sites, clean access & dual-renderer parity
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Terrain-aware transport & route UX: real junctions/bridges/ferries, graph–mesh parity & responsiveness
+- WP-S005-001-001 — Transport UX: legal roads/junctions/bridges/ferries, graph–mesh truth & responsive route inspection
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Resident life & inspection UX: legal home/work/guard routes, Fantasy Time schedules & pooled actors
-- WP-S006-002-001 — Usable-interior architecture research: same-world portals, persistence, first-use UX & lazy budgets
+- WP-S006-001-001 — Resident UX/performance: legal commutes, Fantasy Time schedules, bounded actors & inspection
+- WP-S006-002-001 — Interior architecture research: same-world portals, persistence, first-use UX & mobile budgets
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Toon 3D & semantic-zoom architecture research: readable roles/labels, stable transitions & mobile budgets
+- WP-S007-001-001 — Toon 3D/semantic-zoom research: coherent visuals, readable landmarks & mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Seven-viewport accessible atlas UX: 44px touch, safe map context & keyboard/screen-reader parity
+- WP-S008-001-001 — Seven-viewport accessible UI/UX: 44px controls, map-safe panels & keyboard/screen-reader parity
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Cold-to-useful performance & exact-SHA release: first interaction, p95/p99 & dual-renderer parity
-- WP-S009-002-001 — Idle-frame UI performance & exact picking: revision-cached labels/telemetry & responsive inspection
-- WP-S009-003-001 — Adaptive mobile rendering & recovery UX: DPR/shadow tiers, shared resources & WebGPU/WebGL2
-- WP-S009-004-001 — README/runtime conformance: Atlas vs Advisor, campaign/save truth, routes & compatibility claims
+- WP-S009-001-001 — First-use performance & exact-SHA release: latency p95/p99, resource accounting & dual-renderer gates
+- WP-S009-002-001 — Idle-frame UI/picking performance: revision-cached overlays, minimal layout churn & exact selection
+- WP-S009-003-001 — Adaptive mobile graphics & recovery: DPR/shadow tiers, shared resources & WebGPU/WebGL2 parity
+- WP-S009-004-001 — README/runtime compatibility: Atlas vs Advisor, campaign-time/save truth & evidence-backed claims
