@@ -812,15 +812,23 @@ export function transportRoadsNear(x: number, z: number, radiusSource: number, l
   const size = TRANSPORT_LIMITS.spatialBucketSource,
     reach = Math.ceil(radiusSource / size),
     bx = canonicalRoadBucketX(Math.floor(wrapSourceX(x) / size), size, SOURCE_PRESENTATION_WIDTH),
-    bz = Math.floor(z / size), found = new Map<string, TransportRoadEdge>();
+    bz = Math.floor(z / size), seen = new Set<string>(),
+    found: { edge: TransportRoadEdge; distance: number }[] = [];
   for (let dz = -reach; dz <= reach; dz++) for (let dx = -reach; dx <= reach; dx++) {
     const qx = canonicalRoadBucketX(bx + dx, size, SOURCE_PRESENTATION_WIDTH);
-    for (const edge of transportBuckets.get(`${qx}/${bz + dz}`) ?? [])
-      if (distanceToEdge(edge, x, z) <= radiusSource) found.set(edge.code, edge);
+    for (const edge of transportBuckets.get(`${qx}/${bz + dz}`) ?? []) {
+      if (seen.has(edge.code)) continue;
+      seen.add(edge.code);
+      const distance = distanceToEdge(edge, x, z);
+      if (distance <= radiusSource) found.push({ edge, distance });
+    }
   }
-  const result = [...found.values()]
-    .sort((a, b) => distanceToEdge(a, x, z) - distanceToEdge(b, x, z) || compareCanonical(a.code, b.code))
-    .slice(0, Math.max(1, Math.min(limit, TRANSPORT_LIMITS.queryRoadLimit)));
+  // Each candidate's canonical polyline is measured once, including across overlapping buckets.
+  // Preserve exact distance ranking and deterministic code-point tie breaking.
+  const result = found
+    .sort((a, b) => a.distance - b.distance || compareCanonical(a.edge.code, b.edge.code))
+    .slice(0, Math.max(1, Math.min(limit, TRANSPORT_LIMITS.queryRoadLimit)))
+    .map(({ edge }) => edge);
   focusQueries++;
   focusReturnedRoads += result.length;
   for (const edge of result.slice(0, TRANSPORT_LIMITS.bridgeRoadsPerQuery)) touchBridgeCache(edge);
