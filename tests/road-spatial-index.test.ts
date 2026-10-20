@@ -36,3 +36,20 @@ test('canonical buckets drop unreachable wrap copies while retaining seam and wi
  const straight={fromX:0,fromZ:0,toX:20000,toZ:20000};
  assert.equal(canonicalRoadBucketCells(straight,size,12,width).length,roadBucketCells(straight,size,12).length);
 });
+
+test('canonical road buckets follow the shortest seam crossing rather than a false world-spanning chord',()=>{
+ const width=262144,size=2048,half=width/2,wrap=(x:number)=>((x+half)%width+width)%width-half;
+ const a={x:half-9000,z:0},b={x:-half+9000,z:0};
+ for(const points of [[a,b],[b,a]]){
+  const road={fromX:points[0].x,fromZ:0,toX:points[1].x,toZ:0,centerline:points},
+    cells=canonicalRoadBucketCells(road,size,12,width),
+    indexed=new Set(cells.map(([x,z])=>`${x}/${z}`));
+  assert.ok(cells.length<24,`seam crossing indexed ${cells.length} cells instead of local support`);
+  assert.ok(!indexed.has('0/0'),'the opposite-seam road must not index the world centre');
+  for(let station=0;station<=100;station++){
+   const x=wrap(points[0].x+(points[0]===a?1:-1)*18000*station/100),
+     bx=canonicalRoadBucketX(Math.floor(x/size),size,width);
+   assert.ok(indexed.has(`${bx}/0`),`physical station ${station} missing near seam`);
+  }
+ }
+});

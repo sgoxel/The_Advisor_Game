@@ -31,8 +31,18 @@ export function roadBucketCells(road:RoadPath,size:number,support:number,shiftX=
 /** Queries normalize longitude first. Store only canonical buckets, including
  * shifted support at either seam, rather than two unreachable world copies. */
 export function canonicalRoadBucketCells(road:RoadPath,size:number,support:number,width:number):[number,number][]{
+ // The physical/source lookup uses shortest wrapped segments. Index those same
+ // segments, not a false world-spanning chord between opposite seam aliases.
+ const source=road.centerline??[{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}];
+ const points:{x:number;z:number}[]=[];
+ for(let i=0;i<source.length;i++){
+  const previous=source[i-1],point=source[i],
+    delta=previous?((point.x-previous.x+width/2)%width+width)%width-width/2:0;
+  points.push({x:previous?points[i-1].x+delta:point.x,z:point.z});
+ }
+ const unwrapped:RoadPath={fromX:points[0]?.x??road.fromX,fromZ:road.fromZ,toX:points.at(-1)?.x??road.toX,toZ:road.toZ,centerline:points};
  const min=-width/2/size,max=width/2/size,seen=new Set<string>(),cells:[number,number][]=[];
- for(const shift of [-width,0,width])for(const [x,z] of roadBucketCells(road,size,support,shift)){
+ for(const shift of [-width,0,width])for(const [x,z] of roadBucketCells(unwrapped,size,support,shift)){
   const key=`${x}/${z}`;if(x<min||x>=max||seen.has(key))continue;
   seen.add(key);cells.push([x,z]);
  }
