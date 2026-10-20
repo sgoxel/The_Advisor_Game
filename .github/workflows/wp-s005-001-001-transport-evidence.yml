@@ -1,4 +1,5 @@
 name: S005 transport visual evidence
+# AGENT #1 current-main non-runtime evidence trigger: 2ffb308949d1ee139cd8946feea425f60dc836c0
 on:
   workflow_dispatch:
   push:
