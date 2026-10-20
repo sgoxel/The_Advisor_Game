@@ -70,7 +70,8 @@ test("S005 selected crossing samples the real bent road arc without inventing a 
   const stations = transportRoadArcStations(elbow, 8, 0, -30, 30, 6);
   assert.equal(stations.length, 7);
   assert.ok(stations[0].x < 8 && Math.abs(stations[0].z) < 1e-6);
-  assert.deepEqual(stations[3], { x: 8, z: 0 });
+  assert.ok(Math.abs(stations[3].x - 8) < 1e-6 && Math.abs(stations[3].z) < 1e-6,
+    "the canonical road elbow stays within tight wrapped-coordinate tolerance");
   assert.ok(Math.abs(stations[6].x - 8) < 1e-6 && stations[6].z > 0,
     "dry-bank approach follows the bent recorded road rather than the initial tangent");
   assert.equal(transportRoadArcStations(elbow, 8, 0, -30, 400, 6).length, 0,
