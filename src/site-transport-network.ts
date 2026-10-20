@@ -40,15 +40,17 @@ export function composeSiteTransportNetwork(
     }));
   const nodes = Object.freeze([...base.nodes, ...siteNodes]),
     nodeBySourceId = new Map(nodes.map(node => [node.sourceId, node])),
-    baseRoadCodes = new Set(base.roadEdges.map(edge => edge.code));
+    // A single canonical index avoids a full node/edge scan for every site branch at startup.
+    baseNodeBySourceId = new Map(base.nodes.map(node => [node.sourceId, node])),
+    siteByCode = new Map(sites.map(site => [site.code, site])),
+    baseRoadByCode = new Map(base.roadEdges.map(edge => [edge.code, edge]));
   if (nodeBySourceId.size !== nodes.length) throw new Error("Duplicate canonical transport node source");
   const additions = [...branches].sort((a, b) => compareCode(a.code, b.code)).map(road => {
-    if (baseRoadCodes.has(road.code)) throw new Error(`Duplicate canonical access road ${road.code}`);
-    const source = sites.find(site => site.code === road.from);
-    if (!source || road.code !== source.access.branchCode || road.to !==
-      (base.nodes.find(node => node.sourceId === road.to)?.sourceId))
+    if (baseRoadByCode.has(road.code)) throw new Error(`Duplicate canonical access road ${road.code}`);
+    const source = siteByCode.get(road.from);
+    if (!source || road.code !== source.access.branchCode || !baseNodeBySourceId.has(road.to))
       throw new Error(`Unowned site access branch ${road.code}`);
-    const parent = base.roadEdges.find(edge => edge.code === source.access.roadCode);
+    const parent = baseRoadByCode.get(source.access.roadCode);
     const terminal = nodeBySourceId.get(road.to);
     if (!parent || !terminal || ![parent.from, parent.to].includes(terminal.code))
       throw new Error(`Disconnected canonical site junction ${road.code}`);
