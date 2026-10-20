@@ -12,7 +12,7 @@ import {
   villages,
 } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
-import { sourceToLonLat } from "../src/planet.ts";
+import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import {
@@ -22,6 +22,7 @@ import {
   transportAcceptanceSummary,
   transportGenerationTelemetry,
   transportNetwork,
+  transportPolylineDistance,
   transportRoadsNear,
   transportSurfaceRoads,
 } from "../src/transport-network.ts";
@@ -49,6 +50,16 @@ function reachable(start: string, graph: Map<string, string[]>) {
       }
   return seen;
 }
+
+test("S005 source-polyline distance uses the shortest wrapped segment at the longitude seam", () => {
+  const half = SOURCE_PRESENTATION_WIDTH / 2;
+  const seamRoad = [{ x: half - 8, z: 100 }, { x: -half + 8, z: 100 }];
+  assert.ok(Math.abs(transportPolylineDistance(seamRoad, -half + 3, 100)) < 1e-6);
+  assert.ok(Math.abs(transportPolylineDistance(seamRoad, half - 3, 100)) < 1e-6);
+  assert.ok(Math.abs(transportPolylineDistance(seamRoad, -half + 3, 107) - 7) < 1e-6);
+  assert.ok(Math.abs(transportPolylineDistance(seamRoad, half - 3, 107) - 7) < 1e-6);
+  assert.ok(Math.abs(transportPolylineDistance([...seamRoad].reverse(), -half + 3, 107) - 7) < 1e-6);
+});
 
 test("S005 nearby junction index preserves canonical full-scan identity, order and no duplicates", () => {
   const lookup = createTransportJunctionLookup(transportNetwork.junctions);
