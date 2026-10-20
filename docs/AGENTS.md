@@ -126,6 +126,15 @@ If a required texture does not exist, AI may create a clean high-detail SVG and 
 
 If a required 3D object does not exist, AI may create a simple low-poly static mesh. Prefer PlayCanvas-ready .glb, low polygons, few materials, simple collision, reuse, and instancing/batching. Avoid unnecessary detail, especially on mobile/tablet.
 
+# TESTING POLICY — FOCUSED, FINITE, RELEASE-FIRST
+
+- Automatic PR checks: one bounded canonical release-invariant test in WP validation and one build in Pages. The main push repeats the release-invariant test, builds and deploys. Never repeat the exhaustive suite in multiple automatic workflows.
+- Keep unit and browser suites, screenshot scenarios, workflow definitions and artifact capture routines available through manual workflow dispatch. Run broader diagnostics only for relevant changed behavior, concrete regressions, or the ACTIVE WP's unproven criteria.
+- Trigger costly WP-specific screenshot evidence on relevant source/workflow changes or manually, not every unrelated PR. Standard visual capture is Full HD landscape (1920×1080) and portrait (1080×1920); use both WebGPU and WebGL2 when renderer parity is in scope.
+- Give running jobs finite time limits. A timeout or test failure is evidence to investigate, not permission to invent a pass, abandon the ACTIVE WP, or silently suppress canonical/SEED failures.
+- Reuse valid evidence. Never rerun identical checks without a meaningful change or unanswered acceptance criterion. Publish fixes promptly with the fast release checks and verify the deployed main commit; remaining diagnostic work can continue without holding up an unrelated release.
+- For VISUAL/MIXED WPs, still inspect real fresh screenshots and honor the existing 8/10 acceptance gate before marking the WP COMPLETED. Deployment is not completion.
+
 # EVALUATION
 
 Classify the WP as VISUAL, FUNCTIONAL, or MIXED.
