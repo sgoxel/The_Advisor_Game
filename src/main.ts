@@ -132,7 +132,8 @@ let globe: GlobeView | undefined,
   globePass = 0, // surface passes applied so far
   globeFit = PLANET_RADIUS * 2.6; // view half-height that frames the whole globe
 const globePoint = new pc.Vec3(),
-  flatLabelPoint = new pc.Vec3();
+  flatLabelPoint = new pc.Vec3(),
+  transportGroundPoint = new pc.Vec3();
 let projectionTransition = 0,
   desiredProjectionTransition = 0,
   handoffActive = false,
@@ -248,6 +249,15 @@ function flatWorldPoint(x: number, z: number, y: number): pc.Vec3 {
     PLANET_RADIUS + point.y - focusY,
     point.z - focus.z,
   );
+}
+
+/** S005 road inspector uses the same camera and final-surface elevation as world meshes. */
+function projectTransportGround(x: number, z: number) {
+  const surface = finalSurfaceAt(x, z),
+    point = renderFrame.sourceToRender(x, z, Math.max(0, surface.surfaceHeight) + 0.5);
+  transportGroundPoint.set(point.x, point.y, point.z);
+  const screen = camera.camera!.worldToScreen(transportGroundPoint);
+  return { x: screen.x, y: screen.y };
 }
 
 function surfaceAtScreen(x: number, y: number): LonLat | undefined {
@@ -1660,6 +1670,7 @@ async function start() {
       },
       navigation: {
         surfaceAtScreen,
+        projectGround: projectTransportGround,
         setFocus(lon: number, lat: number) {
           if (lat > Math.PI / 2) notePoleLimit("north");
           else if (lat < -Math.PI / 2) notePoleLimit("south");
