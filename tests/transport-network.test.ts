@@ -16,7 +16,7 @@ import { macroSampleAt } from "../src/macro-geography.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
-import { transportRoadArcStations } from "../src/transport-bridge-surface.ts";
+import { transportRoadArcStations, transportRoadBankApproaches } from "../src/transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import {
   TRANSPORT_LIMITS,
@@ -86,6 +86,23 @@ test("S005 selected crossing samples the real bent road arc without inventing a 
   assert.ok(Math.abs(Math.abs(wrapped[3].x) - half) < 1e-5,
     "the graph road's short seam crossing remains the sampled physical path");
   assert.ok(wrapped.every(point => Math.abs(point.z - 100) < 1e-6));
+});
+
+test("S005 both bridge bank checks follow the actual road bend and never extrapolate missing road", () => {
+  const elbow = [{ x: 0, z: 0 }, { x: 8, z: 0 }, { x: 8, z: 8 }];
+  const metresPerUnit = 2 * Math.PI * 637100 / 262144;
+  const crossing = { lo: -0.1, hi: 0.1, metresPerUnit };
+  const banks = transportRoadBankApproaches(elbow, 8, 0, crossing);
+  assert.equal(banks.left.length, 5);
+  assert.equal(banks.right.length, 5);
+  assert.ok(banks.left.every(point => point.x < 8 && Math.abs(point.z) < 1e-6),
+    "incoming bank stations must stay on the horizontal source-owned road");
+  assert.ok(banks.right.every(point => Math.abs(point.x - 8) < 1e-6 && point.z > 0),
+    "outgoing bank stations must turn with the vertical source-owned road");
+  const shortRoad = [{ x: 7.5, z: 0 }, { x: 8, z: 0 }, { x: 8, z: 0.5 }];
+  const missing = transportRoadBankApproaches(shortRoad, 8, 0, crossing);
+  assert.equal(missing.left.length, 0);
+  assert.equal(missing.right.length, 0);
 });
 
 test("S005 physical road and bridge fragments clip against the same short seam arc as graph lookup", () => {
