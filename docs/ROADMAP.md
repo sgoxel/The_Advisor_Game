@@ -25,29 +25,29 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S004 — Settlements, Buildings & World Sites
 
 - WP-S004-001-001 — Deterministic settlement distribution & morphology: viable-area density, readable functional villages/cities, legal access and bounded mobile rendering — COMPLETED and REVIEWED at 2026-10-17
-- WP-S004-002-001 — Critical sites: legible 3D access, collision-safe callouts & WebGPU/WebGL2 parity
+- WP-S004-002-001 — Critical-site UX: readable 3D access, collision-safe labels & dual-backend parity
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Legal transport: shared junctions, truthful route UX & bounded 3D rendering
+- WP-S005-001-001 — Legal transport UX: shared 3D junctions, truthful routes & bounded performance
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Living residents: legal commutes, Fantasy-Time schedules & usable inspection
-- WP-S006-002-001 — Usable-interior research: same-world portals, persisted state & responsive entry UX
+- WP-S006-001-001 — Living residents: legal walking commutes, Fantasy-Time schedules & usable inspection
+- WP-S006-002-001 — Interior research: same-world doors, persisted state & responsive entry UX
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Toon-world research: coherent 3D materials, semantic zoom & mobile budgets
+- WP-S007-001-001 — Toon-world research: readable 3D materials, semantic zoom & mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas UX: map-safe panels, 44px touch & complete keyboard tasks
+- WP-S008-001-001 — Accessible atlas UX: readable text, map-safe panels & 44px touch/keyboard tasks
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA release performance: first-use UX, p95 latency & backend proof
-- WP-S009-002-001 — Low-latency canonical picking & idle UI: bounded hits and revision-cached overlays
-- WP-S009-003-001 — Adaptive graphics: mobile DPR/shadows, shared memory & renderer recovery
-- WP-S009-004-001 — README/runtime conformance: truthful Advisor UI, world state & compatibility claims
-- WP-S009-005-001 — Progressive zoom-out: coherent terrain, stale-job retirement & bounded resources
+- WP-S009-001-001 — Exact-SHA performance proof: startup, interaction p95 & CPU/GPU evidence
+- WP-S009-002-001 — Responsive inspection: bounded canonical picking & revision-cached idle UI
+- WP-S009-003-001 — Adaptive graphics: mobile DPR/shadows, bounded memory & GPU recovery
+- WP-S009-004-001 — README/runtime conformance: honest Advisor scope, atlas UX & device claims
+- WP-S009-005-001 — Progressive zoom-out UX: fast coherent terrain, stale-job retirement & truthful detail
