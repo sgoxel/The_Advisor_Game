@@ -113,7 +113,7 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
     "off-road tangent samples can never certify a physical road approach");
   assert.ok(observed.approachMaxSampledGrade !== null &&
     Number.isFinite(observed.approachMaxSampledGrade) && observed.approachMaxSampledGrade >= 0);
-  assert.equal(observed.approachGradeWithinLimit, observed.approachMaxSampledGrade! <= .08);
+  assert.equal(observed.approachGradeWithinLimit, observed.approachStationsOnRoad && observed.approachMaxSampledGrade! <= .08);
   assert.deepEqual(transportBridgeSpanAt(bridge, edge!), observed, "sampled verdict must be deterministic");
 
   // A short graph segment can point across the same river without covering the
