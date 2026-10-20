@@ -246,6 +246,8 @@ function roadDetails(edge: TransportRoadEdge) {
     <h3>${codeText(edge.code)}</h3>
     <dl>
       <dt>Endpoints</dt><dd>${codeText(edge.from)} → ${codeText(edge.to)}</dd>
+      <dt>Road-segment distance</dt><dd>${(edge.surfaceLengthM / 1000).toFixed(2)} km</dd>
+      <dt>Estimated segment walking time</dt><dd>${(edge.fantasyWalkSeconds / 3600).toFixed(1)} fantasy hours · preview, not travel</dd>
       <dt>Countries</dt><dd>${edge.countryCodes.map(codeText).join(" · ")}</dd>
       <dt>Macro alignment</dt><dd>${edge.centerline.length} stations · ${min.toFixed(1)}–${max.toFixed(1)} m relief</dd>
       <dt>Terrain score</dt><dd>${Math.round(edge.terrainCost).toLocaleString()}</dd>
@@ -394,11 +396,8 @@ function chooseNearestRoad() {
   const runtime = world();
   if (!runtime) return;
   const query = roadQuery(runtime.state);
-  const edge = [...query.edges].sort((a, b) => {
-    const ad = Math.min(...a.centerline.map((point) => Math.hypot(wrapSourceX(point.x - runtime.state.view.x), point.z - runtime.state.view.z)));
-    const bd = Math.min(...b.centerline.map((point) => Math.hypot(wrapSourceX(point.x - runtime.state.view.x), point.z - runtime.state.view.z)));
-    return ad - bd || compareCanonical(a.code, b.code);
-  })[0];
+  // transportRoadsNear already ranks by closest canonical road segment, not vertex.
+  const edge = query.edges[0];
   if (!edge) return;
   selection = { kind: "road", code: edge.code };
   renderSelection();
