@@ -132,6 +132,9 @@ test("every village external road crossing uses one of at most two canonical enc
     for (const gate of plan.gates) {
       assert.ok(distanceToBorder(place, plan, gate.x, gate.z) < .05, `${place.code} gate ${gate.id} is not on the enclosure`);
       assert.ok(crossingRoads.some((road) => roadDistanceAt(gate.x, gate.z, road) < .05), `${place.code} gate ${gate.id} is not used by an external road`);
+      const main = plan.streets[0], endpoints = [main.points[0], main.points[main.points.length - 1]];
+      assert.ok(endpoints.some((point) => Math.hypot(wrapSourceX(point.x - gate.x), point.z - gate.z) < 1e-6),
+        `${place.code} gate ${gate.id} has no actual interior street endpoint`);
     }
   }
 });
