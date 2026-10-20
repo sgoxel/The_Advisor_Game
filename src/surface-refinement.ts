@@ -2,6 +2,7 @@ import {elevationToRenderY} from "./render-frame.ts";
 import type { Geometry, TileGeometry } from "./geometry.ts";
 import { terrainTint } from "./geometry.ts";
 import { roads, type Road } from "./geography.ts";
+import { siteAccessRoads } from "./sites.ts";
 import { roadFragmentsInBounds, clippedStationRange } from "./continuity-corridor.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
 import { finalSurfaceAt, type Tile } from "./world.ts";
@@ -194,9 +195,13 @@ export function stripLegacyBridgeDeck(geometry: Geometry): Geometry {
   };
 }
 
+// Refine the same physical road sources as final-surface and coarse tile rendering.
+// Compose once rather than allocating a combined registry on every fine tile.
+const refinementRoads: readonly Road[] = Object.freeze([...roads, ...siteAccessRoads]);
+
 function shiftedRoadsIntersecting(tile: Tile): { road: Road; shiftX: number }[] {
   const matches: { road: Road; shiftX: number }[] = [];
-  for (const road of roadFragmentsInBounds(roads, tile.minX, tile.minZ, tile.size))
+  for (const road of roadFragmentsInBounds(refinementRoads, tile.minX, tile.minZ, tile.size))
     for (const shiftX of [-SOURCE_PRESENTATION_WIDTH, 0, SOURCE_PRESENTATION_WIDTH]) {
       const margin = 14,
         minX = road.minX + shiftX,

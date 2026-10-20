@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildTile } from "../src/geometry.ts";
 import { roads } from "../src/geography.ts";
+import { siteAccessRoads } from "../src/sites.ts";
 import {
   REFINED_BRIDGE_HALF_WIDTH_SOURCE,
   REFINED_BRIDGE_RGB,
@@ -38,6 +39,22 @@ test("surface refinement remains bounded by tile size", () => {
   assert.equal(refinementResolutionForTile(tileAt(12, 0, 0), true, false), 32);
   assert.equal(refinementResolutionForTile(tileAt(14, 0, 0), false, true), 16);
   assert.equal(refinementResolutionForTile(tileAt(14, 0, 0), false, false), 0);
+});
+
+test("S005 critical-site access uses fine ground refinement from its physical road", () => {
+  const branch = siteAccessRoads[0];
+  assert.ok(branch.centerline && branch.centerline.length > 2);
+  const station = branch.centerline[Math.floor(branch.centerline.length / 2)];
+  assert.equal(finalSurfaceAt(station.x, station.z).water.kind, "none",
+    "canonical site access midpoint must stay on dry land");
+  const tile = tileForPosition(station.x, station.z, 15),
+    base = buildTile(tile),
+    before = base.terrain.positions.length,
+    refined = refineTileSurfacePresentation(tile, base);
+  assert.ok(refined.terrain.positions.length > before,
+    "critical-site access branch must enable close-range terrain refinement");
+  assert.equal(refined.terrain.uvs?.length, refined.terrain.positions.length / 3 * 2,
+    "refined access terrain must retain canonical projection UVs");
 });
 
 test("an actual natural-water road crossing refines to a narrow authoritative deck", () => {
