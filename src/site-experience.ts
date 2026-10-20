@@ -141,7 +141,7 @@ function ensureUi() {
   // Panel and HUD geometry invalidates site placement only when materially changed.
   // Political labels have their own post-layout revision, read in render().
   const tracked = ["#region-panel", "#cell-panel", "#travel-panel",
-    "#critical-site-panel", ".masthead", ".bottom-bar", ".map-controls",
+    "#transport-panel", "#critical-site-panel", ".masthead", ".bottom-bar", ".map-controls",
     ".telemetry", "#focus-coordinates", "#centre-marker"]
     .map(selector => document.querySelector<HTMLElement>(selector))
     .filter((node): node is HTMLElement => Boolean(node));
@@ -274,6 +274,7 @@ const obstacleSelectors = [
   "#region-panel",
   "#cell-panel",
   "#travel-panel",
+  "#transport-panel",
   "#critical-site-panel:not([hidden])",
   ".bottom-bar",
   ".map-controls",
