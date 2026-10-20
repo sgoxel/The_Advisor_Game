@@ -16,6 +16,7 @@ import { macroSampleAt } from "../src/macro-geography.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
+import { transportRoadArcStations } from "../src/transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import {
   TRANSPORT_LIMITS,
@@ -62,6 +63,29 @@ test("S005 source-polyline distance uses the shortest wrapped segment at the lon
   assert.ok(Math.abs(transportPolylineDistance(seamRoad, -half + 3, 107) - 7) < 1e-6);
   assert.ok(Math.abs(transportPolylineDistance(seamRoad, half - 3, 107) - 7) < 1e-6);
   assert.ok(Math.abs(transportPolylineDistance([...seamRoad].reverse(), -half + 3, 107) - 7) < 1e-6);
+});
+
+test("S005 selected crossing samples the real bent road arc without inventing a tangent shortcut", () => {
+  const elbow = [{ x: 0, z: 0 }, { x: 8, z: 0 }, { x: 8, z: 8 }];
+  const stations = transportRoadArcStations(elbow, 8, 0, -30, 30, 6);
+  assert.equal(stations.length, 7);
+  assert.ok(stations[0].x < 8 && Math.abs(stations[0].z) < 1e-6);
+  assert.ok(Math.abs(stations[3].x - 8) < 1e-6 && Math.abs(stations[3].z) < 1e-6,
+    "the canonical road elbow stays within tight wrapped-coordinate tolerance");
+  assert.ok(Math.abs(stations[6].x - 8) < 1e-6 && stations[6].z > 0,
+    "dry-bank approach follows the bent recorded road rather than the initial tangent");
+  assert.equal(transportRoadArcStations(elbow, 8, 0, -30, 400, 6).length, 0,
+    "inspector cannot extend a canonical road beyond its recorded end");
+  assert.equal(transportRoadArcStations(elbow, 8, 0, -30, 30, 49).length, 0,
+    "selected crossing sampling must retain a strict 49-station maximum");
+
+  const half = SOURCE_PRESENTATION_WIDTH / 2;
+  const seam = [{ x: half - 8, z: 100 }, { x: -half + 8, z: 100 }];
+  const wrapped = transportRoadArcStations(seam, -half, 100, -30, 30, 6);
+  assert.equal(wrapped.length, 7);
+  assert.ok(Math.abs(Math.abs(wrapped[3].x) - half) < 1e-5,
+    "the graph road's short seam crossing remains the sampled physical path");
+  assert.ok(wrapped.every(point => Math.abs(point.z - 100) < 1e-6));
 });
 
 test("S005 physical road and bridge fragments clip against the same short seam arc as graph lookup", () => {
