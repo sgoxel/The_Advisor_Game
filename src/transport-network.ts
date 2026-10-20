@@ -797,13 +797,16 @@ export function transportResourceBytesEstimated() {
     + [...bridgeCache.values()].reduce((sum, bridges) => sum + bridges.length * 1024, 0);
 }
 
-function distanceToEdge(edge: TransportRoadEdge, x: number, z: number) {
+/** Exact wrapped distance to canonical source polyline, including the ±180° seam. */
+export function transportPolylineDistance(points: readonly { x: number; z: number }[], x: number, z: number) {
   let best = Infinity;
-  const px = edge.centerline[0].x + wrapSourceX(x - edge.centerline[0].x);
-  for (let index = 1; index < edge.centerline.length; index++) {
-    const a = edge.centerline[index - 1], b = edge.centerline[index], dx = b.x - a.x, dz = b.z - a.z,
-      length = dx * dx + dz * dz, t = length ? Math.max(0, Math.min(1, ((px - a.x) * dx + (z - a.z) * dz) / length)) : 0;
-    best = Math.min(best, Math.hypot(px - a.x - dx * t, z - a.z - dz * t));
+  for (let index = 1; index < points.length; index++) {
+    const a = points[index - 1], b = points[index],
+      dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
+      qx = wrapSourceX(x - a.x), qz = z - a.z,
+      length = dx * dx + dz * dz,
+      t = length ? Math.max(0, Math.min(1, (qx * dx + qz * dz) / length)) : 0;
+    best = Math.min(best, Math.hypot(qx - dx * t, qz - dz * t));
   }
   return best;
 }
@@ -821,7 +824,7 @@ export function transportRoadsNear(x: number, z: number, radiusSource: number, l
     for (const edge of transportBuckets.get(`${qx}/${bz + dz}`) ?? []) {
       if (seen.has(edge.code)) continue;
       seen.add(edge.code);
-      const distance = distanceToEdge(edge, x, z);
+      const distance = transportPolylineDistance(edge.centerline, x, z);
       if (distance <= radiusSource) found.push({ edge, distance });
     }
   }
