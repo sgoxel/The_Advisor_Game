@@ -276,7 +276,7 @@ function bridgeDetails(bridge: TransportBridge) {
       <dt>Sampled bank approaches</dt><dd>${span.matchingCrossing ? span.bankStationsWalkable ? "Both nearby dry-bank samples walkable" : "One or both nearby bank samples not walkable" : "Not validated"}</dd>
       <dt>Approach road alignment</dt><dd>${span.matchingCrossing ? span.approachStationsOnRoad ? "All sampled stations within 2 m of the canonical road" : "Some tangent samples leave the canonical road — not certified" : "Not validated"}</dd>
       <dt>Approach continuity probe</dt><dd>${span.matchingCrossing ? `${span.approachStations} stations (2–18 m each bank): ${span.approachStationsWalkable ? "on-road and walkable" : "off-road, obstructed or wet"}` : "Not validated"}</dd>
-      <dt>Sampled approach grade</dt><dd>${span.matchingCrossing && span.approachMaxSampledGrade !== null ? `${(span.approachMaxSampledGrade * 100).toFixed(1)}% maximum · ${span.approachGradeWithinLimit ? "within 8% sample limit" : "exceeds 8% sample limit"}` : "Not validated"}</dd>
+      <dt>Sampled approach grade</dt><dd>${span.matchingCrossing && span.approachMaxSampledGrade !== null ? `${(span.approachMaxSampledGrade * 100).toFixed(1)}% sampled maximum · ${!span.approachStationsOnRoad ? "off-road samples, grade not certified" : span.approachGradeWithinLimit ? "within 8% sample limit" : "exceeds 8% sample limit"}` : "Not validated"}</dd>
       <dt>Traversal scope</dt><dd>Selected crossing samples only · continuous full-route access not certified · map preview, not travel</dd>
     </dl>`;
 }
