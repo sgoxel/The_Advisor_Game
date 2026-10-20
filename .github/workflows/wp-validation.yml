@@ -2,11 +2,13 @@ name: Validate work package
 on:
   pull_request:
     branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -14,13 +16,22 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: timeout 12m npm run test:release
+        if: github.event_name == 'pull_request'
       - run: npm test
+        if: github.event_name == 'workflow_dispatch'
       - run: npm run build
+        if: github.event_name == 'workflow_dispatch'
       - run: npx playwright install --with-deps chromium
+        if: github.event_name == 'workflow_dispatch'
       - run: xvfb-run -a npm run test:webgpu
+        if: github.event_name == 'workflow_dispatch'
       - run: xvfb-run -a npx playwright test --config playwright.fallback.config.js
+        if: github.event_name == 'workflow_dispatch'
       - run: xvfb-run -a npx playwright test --config playwright.navigation.config.js
+        if: github.event_name == 'workflow_dispatch'
       - name: Capture canonical inspector and WP evidence
+        if: github.event_name == 'workflow_dispatch'
         run: |
           python -m pip install playwright==1.63.0
           npm run preview -- --port 4174 > /tmp/advisor-preview.log 2>&1 &
@@ -51,7 +62,7 @@ jobs:
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp17-political-webgl2 --name political --profile desktop,phone,phone-landscape --renderer webgl2 --timeout 300 --steps "$POLITICAL_STEPS"
           python tools/screenshot_tool.py http://127.0.0.1:4174/ --out test-results/wp17-political-webgpu --name political --profile desktop,phone,phone-landscape --renderer webgpu --timeout 300 --steps "$POLITICAL_STEPS"
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: github.event_name == 'workflow_dispatch' && always()
         with:
           name: wp-validation-evidence
           path: test-results/
