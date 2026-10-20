@@ -55,6 +55,8 @@ let lastQueryMs = 0;
 let lastLocalRoads = 0;
 let lastOverlayRoads = 0;
 let lastOverlayBridges = 0;
+let lastRoadInspectionMs: number | null = null;
+let lastRoadInspectionStatus = "not requested";
 
 function compareCanonical(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -382,6 +384,7 @@ function renderMetrics() {
       <dt>Topology digest</dt><dd><code>${transportNetwork.digest}</code></dd>
       <dt>Domestic authority</dt><dd><code>${generation.domesticAuthority}</code> · ${generation.baseRoads} shared roads + ${generation.extensionRoads} S005 extensions</dd>
       <dt>Focus query</dt><dd>${lastQueryMs.toFixed(2)} ms · ${lastLocalRoads}/${QUERY_EDGE_LIMIT} records</dd>
+      <dt>First road answer</dt><dd>${lastRoadInspectionStatus}${lastRoadInspectionMs === null ? "" : ` · ${lastRoadInspectionMs.toFixed(2)} ms`}</dd>
       <dt>Query/cache</dt><dd>${queryCount} searches · ${queryCacheHits} reuses · ${queryCache.size}/${QUERY_CACHE_LIMIT} cached</dd>
       <dt>Bridge detail</dt><dd>${generation.materializedBridges} records · ${generation.bridgeCacheRoads}/${generation.bridgeCacheLimit} road recipes cached · ${generation.bridgeCacheEvictions} evictions</dd>
       <dt>Visible overlay</dt><dd>${lastOverlayRoads} road paths · ${lastOverlayBridges} bridge markers</dd>
@@ -397,14 +400,27 @@ function openPanel() {
 }
 
 function chooseNearestRoad() {
+  const started = performance.now();
   const runtime = world();
-  if (!runtime) return;
-  const query = roadQuery(runtime.state);
-  // transportRoadsNear already ranks by closest canonical road segment, not vertex.
-  const edge = query.edges[0];
-  if (!edge) return;
-  selection = { kind: "road", code: edge.code };
-  renderSelection();
+  if (!runtime) {
+    selection = undefined;
+    lastRoadInspectionStatus = "world authority pending";
+    panel.querySelector<HTMLElement>("#transport-selection")!.textContent = "World authority is still preparing. No road has been selected.";
+  } else {
+    const query = roadQuery(runtime.state);
+    // transportRoadsNear ranks by canonical segment distance, not screen vertices.
+    const edge = query.edges[0];
+    selection = edge ? { kind: "road", code: edge.code } : undefined;
+    if (edge) {
+      renderSelection(); // Source distance/time facts are usable before optional mesh refinement.
+      lastRoadInspectionStatus = "canonical segment facts ready";
+    } else {
+      panel.querySelector<HTMLElement>("#transport-selection")!.textContent = "No canonical walking road was found near this focus. Pan to a road-connected area and retry.";
+      lastRoadInspectionStatus = "no nearby canonical road";
+    }
+  }
+  lastRoadInspectionMs = performance.now() - started;
+  renderMetrics();
   lastFingerprint = "";
 }
 
@@ -513,6 +529,8 @@ function telemetry() {
     queryCacheEntries: queryCache.size,
     queryCacheLimit: QUERY_CACHE_LIMIT,
     lastQueryMs,
+    firstRoadInspectionMs: lastRoadInspectionMs,
+    firstRoadInspectionStatus: lastRoadInspectionStatus,
     localRoads: lastLocalRoads,
     overlayRoads: lastOverlayRoads,
     overlayBridgeMarkers: lastOverlayBridges,
