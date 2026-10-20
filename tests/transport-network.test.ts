@@ -13,6 +13,7 @@ import {
   villages,
 } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
+import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
@@ -61,6 +62,32 @@ test("S005 source-polyline distance uses the shortest wrapped segment at the lon
   assert.ok(Math.abs(transportPolylineDistance(seamRoad, -half + 3, 107) - 7) < 1e-6);
   assert.ok(Math.abs(transportPolylineDistance(seamRoad, half - 3, 107) - 7) < 1e-6);
   assert.ok(Math.abs(transportPolylineDistance([...seamRoad].reverse(), -half + 3, 107) - 7) < 1e-6);
+});
+
+test("S005 physical road and bridge fragments clip against the same short seam arc as graph lookup", () => {
+  const half = SOURCE_PRESENTATION_WIDTH / 2;
+  const east = { x: half - 8, z: 100, position: sourceToLonLat(half - 8, 100) };
+  const west = { x: -half + 8, z: 100, position: sourceToLonLat(-half + 8, 100) };
+  for (const [a, b] of [[east, west], [west, east]]) {
+    const road = { ...roads[0], fromX: a.x, fromZ: a.z, toX: b.x, toZ: b.z, centerline: [a, b] };
+    for (const tileX of [half - 12, -half - 12]) {
+      const fragments = [...roadFragmentsInBounds([road], tileX, 88, 24)];
+      assert.equal(fragments.length, 1, "both physical seam tile aliases must get the actual road fragment");
+      assert.ok(Math.abs(Math.abs(fragments[0].toX - fragments[0].fromX) - 16) < 1e-6,
+        "renderer must use the short 16-unit segment, not the long world-spanning chord");
+      assert.ok(transportPolylineDistance([a, b], tileX + 12, 100) < 16,
+        "canonical route proximity must refer to the same local seam arc");
+    }
+    assert.equal([...roadFragmentsInBounds([road], -12, 88, 24)].length, 0,
+      "physical presentation must not invent a road in the middle of the world");
+  }
+  const localStart = { x: 50, z: 100, position: sourceToLonLat(50, 100) };
+  const localEnd = { x: 70, z: 100, position: sourceToLonLat(70, 100) };
+  const localRoad = { ...roads[0], centerline: [localStart, localEnd] };
+  const localFragments = [...roadFragmentsInBounds([localRoad], 48, 88, 24)];
+  assert.equal(localFragments.length, 1);
+  assert.equal(localFragments[0].toX - localFragments[0].fromX, 20,
+    "ordinary non-seam geometry must remain unchanged");
 });
 
 test("S005 bridge intersections use the local wrapped road segment at both seam aliases", () => {
