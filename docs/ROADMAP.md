@@ -25,29 +25,29 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S004 — Settlements, Buildings & World Sites
 
 - WP-S004-001-001 — Deterministic settlement distribution & morphology: viable-area density, readable functional villages/cities, legal access and bounded mobile rendering — COMPLETED and REVIEWED at 2026-10-17
-- WP-S004-002-001 — Critical-site visual UX: clean road/access edges, collision-safe labels, readable 3D & renderer parity
+- WP-S004-002-001 — Critical sites: legible 3D access, collision-safe callouts & WebGPU/WebGL2 parity
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Canonical transport & first-usable route UX: legal junctions/crossings, graph–mesh parity & bounded inspection
+- WP-S005-001-001 — Legal transport: shared junctions, truthful route UX & bounded 3D rendering
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Deterministic residents & first-usable inspection: legal commutes, Fantasy-Time schedules & bounded actors
-- WP-S006-002-001 — Same-world interior architecture research: deterministic portals/persistence, entry UX & mobile budgets
+- WP-S006-001-001 — Living residents: legal commutes, Fantasy-Time schedules & usable inspection
+- WP-S006-002-001 — Usable-interior research: same-world portals, persisted state & responsive entry UX
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Visual-system research: toon materials, semantic zoom, readable labels & reusable mobile assets
+- WP-S007-001-001 — Toon-world research: coherent 3D materials, semantic zoom & mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Responsive accessible atlas: safe-area panels, 44px controls, readable UI & keyboard inspection
+- WP-S008-001-001 — Accessible atlas UX: visible map targets, 44px touch controls & keyboard parity
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — First-usable scene & release evidence: latency, resources and exact-SHA backend proof
-- WP-S009-002-001 — Bounded canonical picking & idle UI: accurate selection, revision-cached overlays & minimal layout churn
-- WP-S009-003-001 — Adaptive mobile graphics & recovery: DPR/shadows, combined resource policy & backend parity
-- WP-S009-004-001 — README/runtime truth: Advisor–atlas boundaries, canonical state, saves & verified compatibility
-- WP-S009-005-001 — Rapid zoom-out coverage: progressive terrain readiness, stale-job control & bounded streaming
+- WP-S009-001-001 — Performance release proof: first-use latency, resource budgets & exact-SHA backend checks
+- WP-S009-002-001 — Low-latency canonical picking & idle UI: bounded hits and revision-cached overlays
+- WP-S009-003-001 — Adaptive graphics: mobile DPR/shadows, shared memory & renderer recovery
+- WP-S009-004-001 — README/runtime conformance: truthful Advisor UI, world state & compatibility claims
+- WP-S009-005-001 — Progressive zoom-out: coherent terrain, stale-job retirement & bounded resources
