@@ -19,9 +19,10 @@ import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { transportRoadArcStations, transportRoadBankApproaches } from "../src/transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
-import { createTransportWalkingIndex, transportWalkingRoute } from "../src/transport-walking-route.ts";
+import { createTransportWalkingIndex, transportWalkingRoute, transportWalkingRouteToNearest } from "../src/transport-walking-route.ts";
 import {
   TRANSPORT_LIMITS,
+  type TransportNetwork,
   buildTransportNetwork,
   ensureTransportBridgeEvidence,
   transportAcceptanceSummary,
@@ -78,6 +79,29 @@ test("S005 walking preview reuses actual site branches, stays deterministic, exc
   assert.equal(transportWalkingRoute(graph, ferry.from, ferry.to), null,
     "a ferry must never become an imaginary intercontinental walking connection");
   assert.equal(transportWalkingRoute(graph, "absent-node", sampled[0].from), null);
+});
+
+test("S005 site preview picks shortest reachable road path rather than nearer disconnected or longer site", () => {
+  const network = {
+    nodes: ["start", "junction", "near-but-disconnected", "far-by-map", "long-by-road"]
+      .map(code => ({ code })),
+    roadEdges: [
+      { code: "a", from: "start", to: "junction", surfaceLengthM: 1, fantasyWalkSeconds: 10 },
+      { code: "b", from: "junction", to: "far-by-map", surfaceLengthM: 2, fantasyWalkSeconds: 20 },
+      { code: "c", from: "start", to: "long-by-road", surfaceLengthM: 30, fantasyWalkSeconds: 300 },
+    ],
+  } as unknown as TransportNetwork;
+  const index = createTransportWalkingIndex(network);
+  const sites = ["near-but-disconnected", "long-by-road", "far-by-map"];
+  const route = transportWalkingRouteToNearest(index, "start", sites);
+  assert.ok(route);
+  assert.equal(route!.to, "far-by-map");
+  assert.deepEqual(route!.edgeCodes, ["a", "b"]);
+  assert.equal(route!.distanceM, 3);
+  assert.equal(route!.fantasyWalkSeconds, 30);
+  assert.deepEqual(transportWalkingRouteToNearest(index, "start", [...sites].reverse()), route);
+  assert.equal(transportWalkingRouteToNearest(index, "start", ["near-but-disconnected"]), null);
+  assert.equal(transportWalkingRoute(index, "start", "near-but-disconnected"), null);
 });
 
 test("S005 source-polyline distance uses the shortest wrapped segment at the longitude seam", () => {
