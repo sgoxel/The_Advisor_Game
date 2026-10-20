@@ -29,24 +29,24 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Transport integrity & UX: terrain-aware Y-junctions, bridges & graph–mesh parity
+- WP-S005-001-001 — Terrain-aware transport UX: legal Y-junctions, bridges, ferries & graph–mesh parity
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Living-resident UX: legal commutes, SEED-time schedules & bounded 2D actors
-- WP-S006-002-001 — Interior UX research: canonical entry portals, SEED rooms & persisted changes
+- WP-S006-001-001 — Living-resident UX: graph-legal commutes, fantasy-time routines & bounded 2D actors
+- WP-S006-002-001 — Interior architecture research: canonical entry portals, SEED rooms & persisted state
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Toon-world UX research: semantic zoom, readable 3D assets & mobile budgets
+- WP-S007-001-001 — Toon/semantic-zoom UX research: coherent 3D art, readable icons & mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Responsive UI/accessibility: safe areas, 44px targets, seven viewports & keyboard focus
+- WP-S008-001-001 — Mobile UI/UX & accessibility: safe-area panels, 44px targets & keyboard inspection
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA release/performance gates: first-useful latency, p95 & dual backends
-- WP-S009-002-001 — Stable-frame UI performance: cached layout, revision-based overlays & bounded picking
-- WP-S009-003-001 — Mobile GPU stability: adaptive DPR/shadows, shared resource limits & recovery
-- WP-S009-004-001 — README/runtime conformance: stage truth, Advisor authority & verified releases
+- WP-S009-001-001 — Exact-SHA performance/release gates: cold/usable/detail latency, p95/p99 & dual backends
+- WP-S009-002-001 — Stable-frame UI performance: revision-driven overlays, cached labels & bounded picking
+- WP-S009-003-001 — Mobile GPU compatibility: adaptive DPR/shadows, shared resource limits & loss recovery
+- WP-S009-004-001 — README/runtime conformance: truthful stage, route/Advisor UX & verified releases
