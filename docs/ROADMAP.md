@@ -25,28 +25,28 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S004 — Settlements, Buildings & World Sites
 
 - WP-S004-001-001 — Deterministic settlement distribution & morphology: viable-area density, readable functional villages/cities, legal access and bounded mobile rendering — COMPLETED and REVIEWED at 2026-10-17
-- WP-S004-002-001 — Critical-site UX: collision-safe labels, visible 3D sites & truthful access
+- WP-S004-002-001 — Critical-site UI/UX: collision-safe callouts, visible 3D sites & legal access
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Transport UX: legal network, shared Y junctions & graph–mesh parity
+- WP-S005-001-001 — Transport integrity & UX: terrain-aware Y-junctions, bridges & graph–mesh parity
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Resident UX: legal commutes, deterministic schedules & bounded 2D actors
-- WP-S006-002-001 — Interior UX research: canonical entries, SEED rooms & persistent state
+- WP-S006-001-001 — Living-resident UX: legal commutes, SEED-time schedules & bounded 2D actors
+- WP-S006-002-001 — Interior UX research: canonical entry portals, SEED rooms & persisted changes
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Stylized 3D UX research: semantic zoom, readable assets & mobile budgets
+- WP-S007-001-001 — Toon-world UX research: semantic zoom, readable 3D assets & mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Responsive atlas UX: seven viewports, 44px controls & keyboard access
+- WP-S008-001-001 — Responsive UI/accessibility: safe areas, 44px targets, seven viewports & keyboard focus
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance gates: first-useful scene, p95 & WebGPU/WebGL2
-- WP-S009-002-001 — Stable-frame UI: revision-cached labels, overlays & bounded picking
-- WP-S009-003-001 — Mobile rendering: adaptive DPR, shared resources & GPU recovery
-- WP-S009-004-001 — README conformance: stage truth, Advisor boundaries & verified releases
+- WP-S009-001-001 — Exact-SHA release/performance gates: first-useful latency, p95 & dual backends
+- WP-S009-002-001 — Stable-frame UI performance: cached layout, revision-based overlays & bounded picking
+- WP-S009-003-001 — Mobile GPU stability: adaptive DPR/shadows, shared resource limits & recovery
+- WP-S009-004-001 — README/runtime conformance: stage truth, Advisor authority & verified releases
