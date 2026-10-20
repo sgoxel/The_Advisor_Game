@@ -2,10 +2,7 @@ import "./transport-inspector.css";
 import { continuityCorridor } from "./geography.ts";
 import {
   ensureTransportBridgeEvidence,
-  transportAcceptanceSummary,
   transportGenerationTelemetry,
-  transportNetwork,
-  transportRoadsNear,
   type TransportBorderCrossing,
   type TransportBridge,
   type TransportFerryEdge,
@@ -13,6 +10,7 @@ import {
   type TransportJunction,
   type TransportRoadEdge,
 } from "./transport-network.ts";
+import { siteTransportAcceptanceSummary as transportAcceptanceSummary, siteTransportNetwork as transportNetwork, siteTransportRoadsNear as transportRoadsNear } from "./site-transport-network.ts";
 import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
@@ -377,6 +375,7 @@ function renderSummary(state?: AdvisorWorld["state"]) {
   panel.querySelector<HTMLElement>("#transport-summary")!.innerHTML = `
     <span><b>${summary.roads}</b> roads</span>
     <span><b>${summary.junctions}</b> junctions</span>
+    <span><b>${summary.siteAccessBranches}</b> critical-site links</span>
     <span><b>${summary.bridges}</b> local bridge records</span>
     <span><b>${summary.harbors}</b> harbors</span>
     <span><b>${summary.ferries}</b> sea links</span>
@@ -391,7 +390,7 @@ function renderMetrics() {
     <div class="eyebrow">BOUNDED INSPECTION</div>
     <dl>
       <dt>Topology digest</dt><dd><code>${transportNetwork.digest}</code></dd>
-      <dt>Domestic authority</dt><dd><code>${generation.domesticAuthority}</code> · ${generation.baseRoads} shared roads + ${generation.extensionRoads} S005 extensions</dd>
+      <dt>Domestic authority</dt><dd><code>${generation.domesticAuthority}</code> · ${generation.baseRoads} shared roads + ${generation.extensionRoads} S005 extensions + ${transportAcceptanceSummary().siteAccessBranches} canonical site branches</dd>
       <dt>Focus query</dt><dd>${lastQueryMs.toFixed(2)} ms · ${lastLocalRoads}/${QUERY_EDGE_LIMIT} records</dd>
       <dt>First road answer</dt><dd>${lastRoadInspectionStatus}${lastRoadInspectionMs === null ? "" : ` · ${lastRoadInspectionMs.toFixed(2)} ms`}</dd>
       <dt>Query/cache</dt><dd>${queryCount} searches · ${queryCacheHits} reuses · ${queryCache.size}/${QUERY_CACHE_LIMIT} cached</dd>

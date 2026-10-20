@@ -58,7 +58,7 @@ export const TRANSPORT_LIMITS = Object.freeze({
 });
 
 export type TransportRoadClass = "main" | "regional" | "access" | "continuity";
-export type TransportNodeKind = "capital" | "city" | "village" | "junction" | "harbor";
+export type TransportNodeKind = "capital" | "city" | "village" | "junction" | "harbor" | "site";
 
 export type TransportNode = Readonly<{
   code: string;
@@ -660,7 +660,7 @@ function roadWidth(roadClass: TransportRoadClass) {
   return 5;
 }
 
-function wrapRoad(
+export function wrapRoad(
   road: Road,
   nodeBySourceId: ReadonlyMap<string, TransportNode>,
   borderByRoad: ReadonlyMap<string, TransportBorderCrossing>,
@@ -701,7 +701,7 @@ function wrapRoad(
   return Object.freeze(edge);
 }
 
-function networkDigest(nodes: readonly TransportNode[], roads: readonly TransportRoadEdge[], ferries: readonly TransportFerryEdge[], crossings: readonly TransportBorderCrossing[], harbors: readonly TransportHarbor[]) {
+export function networkDigest(nodes: readonly TransportNode[], roads: readonly TransportRoadEdge[], ferries: readonly TransportFerryEdge[], crossings: readonly TransportBorderCrossing[], harbors: readonly TransportHarbor[]) {
   const pieces = [
     ...nodes.map((node) => `N:${node.code}:${node.position.lon.toFixed(9)}:${node.position.lat.toFixed(9)}`),
     ...roads.map((edge) => `R:${edge.code}:${edge.from}:${edge.to}:${edge.centerline.map((point) => `${point.x.toFixed(4)},${point.z.toFixed(4)}`).join(";")}`),
