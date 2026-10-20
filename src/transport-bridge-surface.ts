@@ -38,8 +38,7 @@ export function transportRoadArcStations(
     const a = points[index - 1], b = points[index], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
       squared = dx * dx + dz * dz;
     if (squared < 1e-12) continue;
-    const sourceLength = Math.sqrt(squared),
-      lat = sourceToLonLat(a.x, a.z).lat,
+    const lat = sourceToLonLat(a.x, a.z).lat,
       lengthM = CANONICAL_METRES_PER_SOURCE_UNIT * Math.hypot(dx * Math.cos(lat), dz),
       qx = wrapSourceX(x - a.x), qz = z - a.z,
       fraction = Math.max(0, Math.min(1, (qx * dx + qz * dz) / squared)),
@@ -59,6 +58,19 @@ export function transportRoadArcStations(
     samples.push({ x: wrapSourceX(segment.a.x + segment.dx * fraction), z: segment.a.z + segment.dz * fraction });
   }
   return samples;
+}
+
+/** Both dry-bank approach probes follow the immutable road, not a projected tangent. */
+export function transportRoadBankApproaches(
+  points: readonly { x: number; z: number }[], x: number, z: number,
+  crossing: Readonly<{ lo: number; hi: number; metresPerUnit: number }>,
+) {
+  const leftM = crossing.lo * crossing.metresPerUnit,
+    rightM = crossing.hi * crossing.metresPerUnit;
+  return Object.freeze({
+    left: transportRoadArcStations(points, x, z, leftM - 18, leftM - 2, 4).slice().reverse(),
+    right: transportRoadArcStations(points, x, z, rightM + 2, rightM + 18, 4),
+  });
 }
 
 /**
@@ -105,38 +117,19 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
   );
   const wet = [0.1, 0.3, 0.5, 0.7, 0.9].map(fraction =>
     sample(crossing.lo + (crossing.hi - crossing.lo) * fraction));
-  // Probe only the selected bridge: fixed ten dry approach stations on the
-  // source-owned road tangent, not atlas-wide routes or a full continuity proof.
-  const offsetsM = [2, 6, 10, 14, 18];
-  const approaches = [
-    offsetsM.map(metres => sample(crossing.lo - metres / crossing.metresPerUnit)),
-    offsetsM.map(metres => sample(crossing.hi + metres / crossing.metresPerUnit)),
-  ];
-  // Sampling along the crossing tangent does not prove the physical road extends
-  // along that tangent. Reject off-centerline stations rather than certifying
-  // walkable terrain that the recorded graph edge never reaches.
-  const onRoad = (t: number) => {
-    const x = wrapSourceX(bridge.x + crossing.ux * t), z = bridge.z + crossing.uz * t;
-    const closest = edge.centerline.slice(1).reduce((best, point, index) => {
-      const previous = edge.centerline[index],
-        dx = wrapSourceX(point.x - previous.x), dz = point.z - previous.z,
-        qx = wrapSourceX(x - previous.x), qz = z - previous.z,
-        lengthSquared = dx * dx + dz * dz,
-        fraction = lengthSquared ? Math.max(0, Math.min(1, (qx * dx + qz * dz) / lengthSquared)) : 0;
-      return Math.min(best, Math.hypot(qx - dx * fraction, qz - dz * fraction));
-    }, Infinity);
-    return closest <= 2 / CANONICAL_METRES_PER_SOURCE_UNIT;
-  };
-  const approachStationsOnRoad = [
-    ...offsetsM.map(metres => crossing.lo - metres / crossing.metresPerUnit),
-    ...offsetsM.map(metres => crossing.hi + metres / crossing.metresPerUnit),
-  ].every(onRoad);
-  const banks = [approaches[0][0], approaches[1][0]];
-  const approachGrades = approaches.flatMap(side => side.slice(1).map((surface, i) =>
-    Math.abs(surface.groundHeight - side[i].groundHeight) / (offsetsM[i + 1] - offsetsM[i])));
-  const approachMaxSampledGrade = Math.max(...approachGrades);
+  // Fixed 2–18 m bank probes now trace the same SEED-owned road curve
+  // as the route samples. Missing road endpoints cannot be extrapolated.
+  const bankPoints = transportRoadBankApproaches(edge.centerline, bridge.x, bridge.z, crossing),
+    approachStationsOnRoad = bankPoints.left.length === 5 && bankPoints.right.length === 5,
+    approaches = [bankPoints.left, bankPoints.right].map(side =>
+      side.map(point => finalSurfaceAt(point.x, point.z))),
+    banks = [approaches[0][0], approaches[1][0]],
+    offsetsM = [2, 6, 10, 14, 18],
+    approachGrades = approachStationsOnRoad ? approaches.flatMap(side => side.slice(1).map((surface, i) =>
+      Math.abs(surface.groundHeight - side[i].groundHeight) / (offsetsM[i + 1] - offsetsM[i]))) : [],
+    approachMaxSampledGrade = approachStationsOnRoad ? Math.max(...approachGrades) : null;
   // Sample the actual graph-owned centerline, not the projected straight
-  // water-crossing tangent. The budget stays <=49 final-surface queries, and
+  // water-crossing tangent. The route probe stays <=49 stations, and
   // missing physical bank-to-road coverage is reported as not certified.
   const sampledMetres = (crossing.hi - crossing.lo) * crossing.metresPerUnit + 36,
     segmentCount = Math.max(2, Math.min(48, Math.ceil(sampledMetres / 4))),
@@ -164,14 +157,14 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
       surface.deckHeight !== null &&
       surface.walkable &&
       surface.traversal === "bridge"),
-    bankStationsWalkable: banks.every(surface =>
+    bankStationsWalkable: approachStationsOnRoad && banks.every(surface =>
       surface.water.kind === "none" && surface.walkable),
     approachStations: approaches.reduce((count, side) => count + side.length, 0),
     approachStationsOnRoad,
     approachStationsWalkable: approachStationsOnRoad && approaches.every(side => side.every(surface =>
       surface.water.kind === "none" && surface.walkable)),
     approachMaxSampledGrade,
-    approachGradeWithinLimit: approachStationsOnRoad && approachMaxSampledGrade <= .08,
+    approachGradeWithinLimit: approachStationsOnRoad && approachMaxSampledGrade !== null && approachMaxSampledGrade <= .08,
     routeStations: routeStations.length,
     routeStationsOnRoad,
     routeStationsWalkable,
