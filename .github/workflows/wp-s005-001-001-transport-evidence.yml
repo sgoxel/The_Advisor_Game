@@ -29,9 +29,10 @@ jobs:
           mkdir -p test-results
           node --experimental-strip-types --input-type=module -e '
             import { writeFileSync } from "node:fs";
-            import { transportNetwork, transportAcceptanceSummary } from "./src/transport-network.ts";
+            import { siteTransportNetwork as transportNetwork, siteTransportAcceptanceSummary as transportAcceptanceSummary } from "./src/site-transport-network.ts";
             const summary = transportAcceptanceSummary();
-            if (summary.uncoveredNodeCodes.length || !summary.junctions || !summary.harbors || !summary.ferries)
+            if (summary.uncoveredNodeCodes.length || !summary.junctions || !summary.harbors || !summary.ferries ||
+                !summary.siteNodes || summary.siteAccessBranches !== summary.siteNodes)
               throw new Error("Missing canonical transport endpoint or transfer evidence");
             writeFileSync("test-results/transport-authority.json", JSON.stringify({
               digest: transportNetwork.digest,
@@ -39,6 +40,8 @@ jobs:
               junctions: summary.junctions,
               harbors: summary.harbors,
               ferries: summary.ferries,
+              criticalSiteNodes: summary.siteNodes,
+              criticalSiteBranches: summary.siteAccessBranches,
               crossingCodes: transportNetwork.borderCrossings.map(c => c.code),
               ferryCodes: transportNetwork.ferryEdges.map(e => e.code),
             }, null, 2));
@@ -54,7 +57,7 @@ jobs:
           # Focused branch pushes capture only the previously failing visual targets;
           # workflow_dispatch retains the complete optional diagnostic scene set.
           if [ "${{ github.event_name }}" = "push" ]; then
-            STEPS='eval:window.advisorTransport.selectEvidence("junction");select:#map-scale=100;settle;shot:junction-100;select:#map-scale=20;settle;shot:junction-local;eval:window.advisorTransport.selectEvidence("bridge");select:#map-scale=20;settle;shot:bridge-local;eval:window.advisorTransport.selectEvidence("mountain-pass");select:#map-scale=100;settle;shot:graded-road;eval:document.querySelector("#transport-nearest").click();eval:window.advisorTransport.telemetry().firstRoadInspectionStatus==="canonical segment facts ready"||Promise.reject(new Error("Canonical first-road inspection not ready"));shot:first-road-answer'
+            STEPS='eval:window.advisorTransport.selectEvidence("junction");select:#map-scale=100;settle;shot:junction-100;select:#map-scale=20;settle;shot:junction-local;eval:window.advisorTransport.selectEvidence("bridge");select:#map-scale=20;settle;shot:bridge-local;eval:window.advisorTransport.selectEvidence("mountain-pass");select:#map-scale=100;settle;shot:graded-road;eval:document.querySelector("#transport-nearest").click();eval:window.advisorTransport.telemetry().firstRoadInspectionStatus==="canonical segment facts ready"||Promise.reject(new Error("Canonical first-road inspection not ready"));eval:Number.isFinite(window.advisorTransport.telemetry().firstRoadInspectionMs)||Promise.reject(new Error("First authoritative road inspection timing missing"));shot:first-road-answer'
           fi
           xvfb-run -a python3 tools/screenshot_tool.py http://127.0.0.1:4174/ \
             --out test-results/s005-${{ matrix.backend }} --name s005 \
