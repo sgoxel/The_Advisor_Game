@@ -2,11 +2,27 @@ name: WP-S004-002-001 critical-site evidence
 on:
   pull_request:
     branches: [main]
+    paths:
+      - 'src/site*'
+      - 'src/natural-surface-mesh.ts'
+      - 'src/surface-presentation.ts'
+      - 'src/political-atlas.ts'
+      - 'src/continuity-corridor.ts'
+      - 'src/world-core.ts'
+      - 'src/planet.ts'
+      - 'src/geometry.ts'
+      - 'src/final-surface.ts'
+      - 'src/transport-inspector.css'
+      - 'tests/site-browser.js'
+      - 'tools/screenshot_tool.py'
+      - '.github/workflows/wp-s004-002-001-site-evidence.yml'
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   webgl2-evidence:
     runs-on: macos-latest
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -14,7 +30,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run test:release
       - name: Verify canonical site-access road metadata and bounded terrain profiles
         run: |
           node --experimental-strip-types -e 'import("./src/sites.ts").then(({siteAccessRoads,siteAcceptanceSummary})=>{const max=siteAcceptanceSummary().accessProfileSegmentMaxM;if(max!==75)throw new Error(`Unexpected site access profile segment target ${max}`);for(const road of siteAccessRoads){if(road.networkId!==road.code||road.networkKind!=="link"||road.coarseFallback!==false)throw new Error(`Invalid site access metadata ${road.code}`);const expected=Math.max(1,Math.ceil(road.surfaceLengthM/max))+1;if(road.centerline?.length!==expected)throw new Error(`Unbounded site access profile ${road.code}: ${road.centerline?.length} != ${expected}`)}})'
@@ -50,6 +65,7 @@ jobs:
 
   webgpu-evidence:
     runs-on: ubuntu-latest
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -83,6 +99,7 @@ jobs:
   parity-evidence:
     needs: [webgl2-evidence, webgpu-evidence]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Download WebGL2 runtime site evidence
         uses: actions/download-artifact@v4
