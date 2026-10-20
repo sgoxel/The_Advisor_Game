@@ -13,6 +13,7 @@ import {
 } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
 import { sourceToLonLat } from "../src/planet.ts";
+import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import {
   TRANSPORT_LIMITS,
   buildTransportNetwork,
@@ -47,6 +48,16 @@ function reachable(start: string, graph: Map<string, string[]>) {
       }
   return seen;
 }
+
+test("S005 viewport clipping retains real road segments crossing the screen", () => {
+  const crosses = (points: { x: number; y: number }[], margin = 0) => polylineTouchesViewport(points, 300, 200, margin);
+  assert.equal(crosses([{ x: -200, y: 100 }, { x: 400, y: 100 }]), true, "horizontal segment with off-screen stations");
+  assert.equal(crosses([{ x: 100, y: -40 }, { x: 100, y: 240 }]), true, "vertical segment with off-screen stations");
+  assert.equal(crosses([{ x: -100, y: 20 }, { x: 20, y: -100 }]), false, "overlapping bounding boxes must not imply visible road");
+  assert.equal(crosses([{ x: 301, y: 100 }]), false, "off-screen point only");
+  assert.equal(crosses([{ x: 0, y: 0 }]), true, "on-screen road station");
+  assert.equal(crosses([{ x: -100, y: 100 }, { x: -20, y: 100 }], 40), true, "existing marker margin preserved");
+});
 
 test("S005 extends the existing shared macro-road authority instead of replacing it", () => {
   const summary = transportAcceptanceSummary(), telemetry = transportGenerationTelemetry();
