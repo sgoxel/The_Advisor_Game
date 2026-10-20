@@ -384,8 +384,13 @@ function placeSites(
     .flatMap(({ entry, width, height, inspecting }) => {
       const w = Math.min(width, innerWidth - 16),
         h = Math.min(height, innerHeight - 16),
-        preferredX = entry.point.x + (inspecting ? 0 : entry.detailed ? -42 : 0),
+        // Local 3D structures own their screen footprint; keep the opaque
+        // discovery callout to one side, with the leader retaining its anchor.
+        preferredX = entry.point.x - (inspecting ? 0 : entry.detailed ? width + 36 : 0),
         preferredY = entry.point.y + (inspecting ? 0 : entry.detailed ? -34 : 0),
+        siteMeshClearance: Rect | null = entry.detailed && !inspecting
+          ? { x: entry.point.x - 50, y: entry.point.y - 50, width: 100, height: 100 }
+          : null,
         at = (cx: number, cy: number): Rect => ({
           x: Math.max(8, Math.min(innerWidth - w - 8, cx - 22)),
           y: Math.max(8, Math.min(innerHeight - h - 8, cy - 22)),
@@ -393,6 +398,7 @@ function placeSites(
           height: h,
         }),
         free = (rect: Rect) => {
+          if (siteMeshClearance && overlaps(rect, siteMeshClearance)) return false;
           // The selected 44px inspection glyph owns its canonical focus anchor.
           // It may cover that one non-interactive crosshair, never a panel,
           // political card, or another site's reserved label/leader.
