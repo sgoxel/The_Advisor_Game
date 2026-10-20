@@ -28,8 +28,8 @@ const earlier = (a: HeapEntry, b: HeapEntry) => a.lengthM < b.lengthM ||
   (a.lengthM === b.lengthM && a.code < b.code);
 
 /** Bounded by canonical graph size; no recursive search, viewport or LOD inputs. */
-export function transportWalkingRoute(index: Index, from: string, to: string) {
-  if (!index.adjacency.has(from) || !index.adjacency.has(to)) return null;
+function searchWalkingRoute(index: Index, from: string, destinations: ReadonlySet<string>) {
+  if (!index.adjacency.has(from) || !destinations.size) return null;
   const heap: HeapEntry[] = [], distances = new Map([[from, 0]]),
     parent = new Map<string, { previous: string; edge: TransportRoadEdge }>(),
     settled = new Set<string>();
@@ -64,9 +64,9 @@ export function transportWalkingRoute(index: Index, from: string, to: string) {
     const current = pop();
     if (settled.has(current.code) || current.lengthM !== distances.get(current.code)) continue;
     settled.add(current.code);
-    if (current.code === to) {
+    if (destinations.has(current.code)) {
       const edges: TransportRoadEdge[] = [];
-      for (let cursor = to; cursor !== from;) {
+      for (let cursor = current.code; cursor !== from;) {
         const previous = parent.get(cursor);
         if (!previous) throw new Error("Incomplete canonical walking predecessor chain");
         edges.push(previous.edge);
@@ -74,7 +74,7 @@ export function transportWalkingRoute(index: Index, from: string, to: string) {
       }
       edges.reverse();
       return Object.freeze({
-        from, to,
+        from, to: current.code,
         edgeCodes: Object.freeze(edges.map(edge => edge.code)),
         distanceM: edges.reduce((sum, edge) => sum + edge.surfaceLengthM, 0),
         fantasyWalkSeconds: edges.reduce((sum, edge) => sum + edge.fantasyWalkSeconds, 0),
@@ -93,4 +93,14 @@ export function transportWalkingRoute(index: Index, from: string, to: string) {
     }
   }
   return null; // Explicitly disconnected walking graph; never use maritime shortcuts.
+}
+
+/** One graph search picks the shortest reachable destination, not the closest unverified straight-line target. */
+export function transportWalkingRouteToNearest(index: Index, from: string, siteCodes: readonly string[]) {
+  return searchWalkingRoute(index, from, new Set(siteCodes.filter(code => index.adjacency.has(code))));
+}
+
+/** A specific requested endpoint retains the same deterministic route semantics. */
+export function transportWalkingRoute(index: Index, from: string, to: string) {
+  return searchWalkingRoute(index, from, new Set([to].filter(code => index.adjacency.has(code))));
 }
