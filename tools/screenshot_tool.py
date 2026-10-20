@@ -51,6 +51,7 @@ PROFILES: dict[str, tuple[int, int]] = {
     "desktop": (1440, 900), "laptop": (1280, 720), "tablet": (1024, 768),
     "phone": (390, 844), "phone-landscape": (844, 390),
     "phone-small": (360, 800), "tablet-portrait": (768, 1024),
+    "fullhd-landscape": (1920, 1080), "fullhd-portrait": (1080, 1920),
 }
 
 # Verify the displayed point against the exact composed source queried through
