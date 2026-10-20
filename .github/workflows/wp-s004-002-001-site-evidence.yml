@@ -96,6 +96,39 @@ jobs:
           path: parity/webgpu
       - name: Compare browser runtime site authority
         run: |
-          python3 -m json.tool parity/webgl2/wp-s004-site-parity.json > /dev/null
-          python3 -m json.tool parity/webgpu/wp-s004-site-parity.json > /dev/null
-          diff -u parity/webgl2/wp-s004-site-parity.json parity/webgpu/wp-s004-site-parity.json
+          python3 - <<'PY'
+          import json
+          import math
+          from pathlib import Path
+
+          webgl = json.loads(Path("parity/webgl2/wp-s004-site-parity.json").read_text())
+          webgpu = json.loads(Path("parity/webgpu/wp-s004-site-parity.json").read_text())
+          height_differences = []
+
+          def compare(left, right, path="$"):
+              if type(left) is not type(right):
+                  raise AssertionError(f"{path}: type mismatch {type(left).__name__} != {type(right).__name__}")
+              if isinstance(left, dict):
+                  if left.keys() != right.keys():
+                      raise AssertionError(f"{path}: different canonical fields")
+                  for key in left:
+                      compare(left[key], right[key], f"{path}.{key}")
+              elif isinstance(left, list):
+                  if len(left) != len(right):
+                      raise AssertionError(f"{path}: different canonical array lengths")
+                  for index, (a, b) in enumerate(zip(left, right)):
+                      compare(a, b, f"{path}[{index}]")
+              elif path.startswith("$.sites[") and path.endswith("].preparedHeightM"):
+                  # Height is a continuous result recomputed across OS/browser
+                  # maths libraries; all identity, position and topology stays exact.
+                  if not math.isfinite(left) or not math.isfinite(right) or abs(left - right) > 1e-9:
+                      raise AssertionError(f"{path}: prepared height differs beyond 1 nanometre")
+                  if left != right:
+                      height_differences.append(abs(left - right))
+              elif left != right:
+                  raise AssertionError(f"{path}: canonical mismatch {left!r} != {right!r}")
+
+          compare(webgl, webgpu)
+          print(f"Canonical parity PASS; {len(height_differences)} height roundoff differences; "
+                f"maximum absolute delta {max(height_differences, default=0):.3g} m")
+          PY
