@@ -222,6 +222,33 @@ function pointInsideBorder(place: Place, border: readonly SettlementPoint[], x: 
   }
   return inside;
 }
+/** Presentation only: village lanes stop at the real enclosure, never create exterior graph links. */
+export function visibleSettlementStreetSegments(
+  place: Place, plan: SettlementExteriorPlan, a: SettlementPoint, b: SettlementPoint,
+): readonly (readonly [SettlementPoint, SettlementPoint])[] {
+  if (place.kind !== "village") return [[a, b]];
+  const ax = wrapSourceX(a.x - place.x), az = a.z - place.z,
+    dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
+    cuts = [0, 1];
+  for (let edge = 0; edge < plan.border.length; edge++) {
+    const c = plan.border[edge], d = plan.border[(edge + 1) % plan.border.length],
+      cx = wrapSourceX(c.x - place.x), cz = c.z - place.z,
+      ex = wrapSourceX(d.x - c.x), ez = d.z - c.z,
+      hit = segmentIntersection(ax, az, ax + dx, az + dz, cx, cz, cx + ex, cz + ez);
+    if (hit) cuts.push(Math.max(0, Math.min(1, hit.t)));
+  }
+  cuts.sort((a, b) => a - b);
+  const unique = cuts.filter((t, index) => index === 0 || t - cuts[index - 1] > 1e-7),
+    at = (t: number): SettlementPoint => ({ x: wrapSourceX(a.x + dx * t), z: a.z + dz * t }),
+    visible: [SettlementPoint, SettlementPoint][] = [];
+  for (let index = 1; index < unique.length; index++) {
+    const from = unique[index - 1], to = unique[index];
+    if (to - from < 1e-7 || !pointInsideBorder(place, plan.border, at((from + to) / 2).x, a.z + dz * (from + to) / 2)) continue;
+    visible.push([at(from), at(to)]);
+  }
+  return visible;
+}
+
 function terminalApproaches(place: Place, plan: SettlementExteriorPlan): TerminalApproach[] {
   const queue = [place.id], visitedNodes = new Set(queue), visitedRoads = new Set<string>(), approaches: TerminalApproach[] = [];
   while (queue.length) {
