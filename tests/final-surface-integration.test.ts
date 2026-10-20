@@ -3,6 +3,7 @@ import test from "node:test";
 import {naturalSurfaceAt} from "../src/hydrology.ts";
 import { places, roads, villages } from "../src/geography.ts";
 import { WORLD_BUILDING_PRIORITIES } from "../src/final-surface.ts";
+import { transportBridgeSurfaceAt } from "../src/transport-bridge-surface.ts";
 import {
   RURAL_BRIDGE_MAX_LENGTH_M,
   finalSurfaceEvidenceAnchors,
@@ -75,6 +76,18 @@ test("bridge deck preserves authoritative water and obeys the 120m rural cap", (
   assert.equal(bridge.final.deckMaterial, "Bridge");
   assert.equal(bridge.final.traversal, "bridge");
   assert.ok(bridge.final.deckHeight! >= bridge.base.water.level + 1);
+});
+
+test("S005 bridge inspector distinguishes final-surface deck truth from a crossing record", () => {
+  const anchor = finalSurfaceEvidenceAnchors().bridge;
+  const valid = transportBridgeSurfaceAt(anchor.x, anchor.z);
+  assert.equal(valid.centerDeckWalkable, true, "legal observed bridge must have a walkable final-surface deck");
+  assert.ok(valid.deckHeight !== null);
+  assert.equal(valid.traversal, "bridge");
+
+  const village = villages[0];
+  const dry = transportBridgeSurfaceAt(village.x, village.z);
+  assert.equal(dry.centerDeckWalkable, false, "an ordinary dry world point must not be labeled a walkable bridge");
 });
 
 test("outside all modifier support, final ground/material/water channels are unchanged", () => {
