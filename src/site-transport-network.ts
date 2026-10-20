@@ -100,14 +100,16 @@ for (const road of siteAccessRoads) {
 }
 
 /** Same bounded physical-road lookup, now including authoritative site branches. */
-export function siteTransportRoadsNear(x: number, z: number, radiusSource: number, limit: number = TRANSPORT_LIMITS.queryRoadLimit) {
+/** Read-only site-only spatial lookup; never warms the transport bridge cache. */
+export function siteAccessRoadsNear(x: number, z: number, radiusSource: number, limit: number = TRANSPORT_LIMITS.queryRoadLimit) {
+  if (!Number.isFinite(radiusSource) || radiusSource <= 0 || radiusSource > 16_384)
+    throw new RangeError("Site access road radius outside bounded support");
   const boundedLimit = Math.max(1, Math.min(limit, TRANSPORT_LIMITS.queryRoadLimit)),
-    base = baseRoadsNear(x, z, radiusSource, boundedLimit),
     bx = canonicalRoadBucketX(Math.floor(wrapSourceX(x) / bucketSize), bucketSize, SOURCE_PRESENTATION_WIDTH),
     bz = Math.floor(z / bucketSize),
     reach = Math.ceil(radiusSource / bucketSize),
     seen = new Set<string>(),
-    nearby = [...base];
+    nearby: TransportRoadEdge[] = [];
   for (let dz = -reach; dz <= reach; dz++) for (let dx = -reach; dx <= reach; dx++) {
     const key = `${canonicalRoadBucketX(bx + dx, bucketSize, SOURCE_PRESENTATION_WIDTH)}/${bz + dz}`;
     for (const edge of siteBuckets.get(key) ?? []) {
@@ -116,6 +118,17 @@ export function siteTransportRoadsNear(x: number, z: number, radiusSource: numbe
       if (transportPolylineDistance(edge.centerline, x, z) <= radiusSource) nearby.push(edge);
     }
   }
+  return Object.freeze(nearby.sort((a, b) =>
+    transportPolylineDistance(a.centerline, x, z) - transportPolylineDistance(b.centerline, x, z) ||
+    compareCode(a.code, b.code)).slice(0, boundedLimit));
+}
+
+/** Shared canonical road choice, including both existing roads and true site access. */
+export function siteTransportRoadsNear(x: number, z: number, radiusSource: number, limit: number = TRANSPORT_LIMITS.queryRoadLimit) {
+  const boundedLimit = Math.max(1, Math.min(limit, TRANSPORT_LIMITS.queryRoadLimit)),
+    base = baseRoadsNear(x, z, radiusSource, boundedLimit),
+    access = siteAccessRoadsNear(x, z, radiusSource, boundedLimit),
+    nearby = [...base, ...access];
   return Object.freeze(nearby.sort((a, b) =>
     transportPolylineDistance(a.centerline, x, z) - transportPolylineDistance(b.centerline, x, z) ||
     compareCode(a.code, b.code)).slice(0, boundedLimit));
