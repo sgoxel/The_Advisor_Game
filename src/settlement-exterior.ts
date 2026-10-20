@@ -429,18 +429,19 @@ function alignGatesToRoads(place: Place, suppliedPlan: SettlementExteriorPlan): 
   const primary = gates[0], mainPoints = main.points.map((point) => ({ ...point })),
     start = mainPoints[0], end = mainPoints[mainPoints.length - 1],
     distance = (a: SettlementPoint, b: SettlementPoint) => Math.hypot(wrapSourceX(a.x - b.x), a.z - b.z);
-  if (gates.length === 2) {
-    // Both gates sit on real physical roads. Attach the existing main street to
-    // both without changing gate positions, SEED topology or exterior road truth.
-    // Stable minimum-total-displacement assignment keeps the interior street
-    // anchored at its nearest ends instead of leaving gate 2 disconnected.
+  const primaryAtStart = distance(start, primary) <= distance(end, primary),
+    primaryOnlySpan = distance(primary, primaryAtStart ? end : start);
+  if (gates.length === 2 && distance(gates[0], gates[1]) >= Math.max(24, primaryOnlySpan * .95)) {
+    // Nearby gates can collapse the residential street's chord and overlap
+    // canonical homes. Snap both only when they span a genuinely long
+    // interior approach; otherwise retain the proven primary-gate layout.
     const direct = distance(start, gates[0]) + distance(end, gates[1]),
       reverse = distance(start, gates[1]) + distance(end, gates[0]),
       startGate = direct <= reverse ? gates[0] : gates[1],
       endGate = direct <= reverse ? gates[1] : gates[0];
     mainPoints[0] = { x: startGate.x, z: startGate.z };
     mainPoints[mainPoints.length - 1] = { x: endGate.x, z: endGate.z };
-  } else if (distance(start, primary) <= distance(end, primary)) {
+  } else if (primaryAtStart) {
     mainPoints[0] = { x: primary.x, z: primary.z };
   } else {
     mainPoints[mainPoints.length - 1] = { x: primary.x, z: primary.z };

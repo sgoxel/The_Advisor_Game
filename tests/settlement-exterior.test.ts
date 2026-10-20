@@ -132,9 +132,18 @@ test("every village external road crossing uses one of at most two canonical enc
     for (const gate of plan.gates) {
       assert.ok(distanceToBorder(place, plan, gate.x, gate.z) < .05, `${place.code} gate ${gate.id} is not on the enclosure`);
       assert.ok(crossingRoads.some((road) => roadDistanceAt(gate.x, gate.z, road) < .05), `${place.code} gate ${gate.id} is not used by an external road`);
-      const main = plan.streets[0], endpoints = [main.points[0], main.points[main.points.length - 1]];
-      assert.ok(endpoints.some((point) => Math.hypot(wrapSourceX(point.x - gate.x), point.z - gate.z) < 1e-6),
-        `${place.code} gate ${gate.id} has no actual interior street endpoint`);
+      const main = plan.streets[0], endpoints = [main.points[0], main.points[main.points.length - 1]],
+        distance = (point: { x: number; z: number }, other: { x: number; z: number }) =>
+          Math.hypot(wrapSourceX(point.x - other.x), point.z - other.z);
+      const attached = endpoints.some((point) => distance(point, gate) < 1e-6);
+      if (gate.id === plan.gates[0].id) {
+        assert.ok(attached, `${place.code} primary gate has no interior street endpoint`);
+      } else if (!attached) {
+        // Close secondary gates must not collapse the canonical residential
+        // spine to fabricate an apparent gate-to-gate street connection.
+        assert.ok(distance(plan.gates[0], gate) < Math.max(24, distance(...endpoints) * .95),
+          `${place.code} omitted a spatially valid secondary street connection`);
+      }
     }
   }
 });
