@@ -6,7 +6,7 @@ import { WORLD_BUILDING_PRIORITIES } from "../src/final-surface.ts";
 import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "../src/transport-bridge-surface.ts";
 import { freshwaterCrossingAt } from "../src/hydrology.ts";
 import { transportNetwork } from "../src/transport-network.ts";
-import { sourceToLonLat } from "../src/planet.ts";
+import { sourceToLonLat, CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
 import {
   RURAL_BRIDGE_MAX_LENGTH_M,
   finalSurfaceEvidenceAnchors,
@@ -108,10 +108,28 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(observed.matchingCrossing, true);
   assert.equal(observed.wetStations, 5, "the selected bridge, not the full atlas, gets bounded wet-span sampling");
   assert.equal(observed.approachStations, 10, "probe only two bounded five-station bank approaches");
+  assert.equal(typeof observed.approachStationsOnRoad, "boolean");
+  if (!observed.approachStationsOnRoad) assert.equal(observed.approachStationsWalkable, false,
+    "off-road tangent samples can never certify a physical road approach");
   assert.ok(observed.approachMaxSampledGrade !== null &&
     Number.isFinite(observed.approachMaxSampledGrade) && observed.approachMaxSampledGrade >= 0);
   assert.equal(observed.approachGradeWithinLimit, observed.approachMaxSampledGrade! <= .08);
   assert.deepEqual(transportBridgeSpanAt(bridge, edge!), observed, "sampled verdict must be deterministic");
+
+  // A short graph segment can point across the same river without covering the
+  // tangent extrapolation 18 m beyond both banks. Never certify those off-road samples.
+  const tangent = evidence.bridgeTangent, magnitude = Math.hypot(tangent.x, tangent.z),
+    halfUnit = .5 / CANONICAL_METRES_PER_SOURCE_UNIT,
+    shortStations = [-1, 1].map(sign => {
+      const x = point.x + sign * tangent.x / magnitude * halfUnit,
+        z = point.z + sign * tangent.z / magnitude * halfUnit;
+      return { ...edge!.centerline[0], x, z, position: sourceToLonLat(x, z) };
+    }),
+    shortEdge = { ...edge!, centerline: shortStations };
+  const shortSpan = transportBridgeSpanAt(bridge, shortEdge);
+  assert.equal(shortSpan.matchingCrossing, true, "matched river record alone cannot prove road extent");
+  assert.equal(shortSpan.approachStationsOnRoad, false, "road must extend to the sampled bank stations");
+  assert.equal(shortSpan.approachStationsWalkable, false, "walkable off-road ground is not a road approach");
 
   const falseSpan = transportBridgeSpanAt({ ...bridge, spanM: bridge.spanM + 500 }, edge!);
   assert.equal(falseSpan.matchingCrossing, false, "a wrong graph span must never be certified by a nearby deck");
@@ -119,6 +137,7 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(falseSpan.deckStationsWalkable, false);
   assert.equal(falseSpan.bankStationsWalkable, false);
   assert.equal(falseSpan.approachStations, 0);
+  assert.equal(falseSpan.approachStationsOnRoad, false);
   assert.equal(falseSpan.approachMaxSampledGrade, null);
   assert.equal(falseSpan.approachStationsWalkable, false);
   assert.equal(falseSpan.approachGradeWithinLimit, false);
