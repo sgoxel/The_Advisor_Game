@@ -15,7 +15,7 @@ import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
-import { createTransportWalkingIndex, transportWalkingRouteToNearest, type transportWalkingRoute } from "./transport-walking-route.ts";
+import { createTransportWalkingIndex, transportWalkingRouteToNearest } from "./transport-walking-route.ts";
 
 type AdvisorWorld = {
   state: {
@@ -63,7 +63,7 @@ let lastRoadInspectionMs: number | null = null;
 let lastRoadInspectionStatus = "not requested";
 let lastSiteRouteMs: number | null = null;
 let lastSiteRouteStatus = "not requested";
-let siteRoute: ReturnType<typeof transportWalkingRoute> = null;
+let siteRoute: ReturnType<typeof transportWalkingRouteToNearest> = null;
 
 function compareCanonical(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
