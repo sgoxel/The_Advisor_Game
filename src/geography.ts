@@ -553,28 +553,26 @@ export type Road = (typeof roads)[number];
 export const continuityCorridor = defineContinuityCorridor(villages,roads[0]);
 if (continuityCorridor.road) roads.push(continuityCorridor.road);
 
+/** Shortest seam-wrapped source distance to the exact physical road polyline.
+ * Matches the S005 transport lookup; never treats a longitude seam as a world-spanning chord.
+ */
+function wrappedRoadSegmentDistance(x: number, z: number, ax: number, az: number, bx: number, bz: number) {
+  const dx = wrapSourceX(bx - ax), dz = bz - az,
+    qx = wrapSourceX(x - ax), qz = z - az,
+    length = dx * dx + dz * dz,
+    t = length ? Math.max(0, Math.min(1, (qx * dx + qz * dz) / length)) : 0;
+  return Math.hypot(qx - dx * t, qz - dz * t);
+}
 export function roadDistanceAt(x: number, z: number, road: Road) {
-  if(road.centerline){
-    const px=road.fromX+wrapSourceX(x-road.fromX);let distance=Infinity;
-    for(let i=0;i<road.centerline.length-1;i++){
-      const a=road.centerline[i],b=road.centerline[i+1],vx=b.x-a.x,vz=b.z-a.z,length=vx*vx+vz*vz,
-        t=length===0?0:Math.max(0,Math.min(1,((px-a.x)*vx+(z-a.z)*vz)/length));
-      distance=Math.min(distance,Math.hypot(px-a.x-vx*t,z-a.z-vz*t));
+  if (road.centerline && road.centerline.length > 1) {
+    let distance = Infinity;
+    for (let index = 1; index < road.centerline.length; index++) {
+      const a = road.centerline[index - 1], b = road.centerline[index];
+      distance = Math.min(distance, wrappedRoadSegmentDistance(x, z, a.x, a.z, b.x, b.z));
     }
     return distance;
   }
-  const px = road.fromX + wrapSourceX(x - road.fromX),
-    vx = road.toX - road.fromX,
-    vz = road.toZ - road.fromZ,
-    lengthSq = vx * vx + vz * vz;
-  if (!lengthSq) return Math.hypot(px - road.fromX, z - road.fromZ);
-  const t = Math.max(
-      0,
-      Math.min(1, ((px - road.fromX) * vx + (z - road.fromZ) * vz) / lengthSq),
-    ),
-    qx = road.fromX + vx * t,
-    qz = road.fromZ + vz * t;
-  return Math.hypot(px - qx, z - qz);
+  return wrappedRoadSegmentDistance(x, z, road.fromX, road.fromZ, road.toX, road.toZ);
 }
 
 /** Canonical nearest-place lookup; independent of wrap and source-plane edges. */

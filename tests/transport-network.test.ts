@@ -8,6 +8,7 @@ import {
   roadConnections,
   roadJunctions,
   roadNetworkTelemetry,
+  roadDistanceAt,
   roads,
   villages,
 } from "../src/geography.ts";
@@ -59,6 +60,23 @@ test("S005 source-polyline distance uses the shortest wrapped segment at the lon
   assert.ok(Math.abs(transportPolylineDistance(seamRoad, -half + 3, 107) - 7) < 1e-6);
   assert.ok(Math.abs(transportPolylineDistance(seamRoad, half - 3, 107) - 7) < 1e-6);
   assert.ok(Math.abs(transportPolylineDistance([...seamRoad].reverse(), -half + 3, 107) - 7) < 1e-6);
+});
+
+test("S005 shared physical-road distance and transport lookup agree at the longitude seam", () => {
+  const half = SOURCE_PRESENTATION_WIDTH / 2;
+  const a = { x: half - 8, z: 100, position: sourceToLonLat(half - 8, 100) };
+  const b = { x: -half + 8, z: 100, position: sourceToLonLat(-half + 8, 100) };
+  const road = { ...roads[0], fromX: a.x, fromZ: a.z, toX: b.x, toZ: b.z, centerline: [a, b] };
+  const reversed = { ...road, fromX: b.x, toX: a.x, centerline: [b, a] };
+  const fallback = { ...road, centerline: undefined };
+  for (const candidate of [road, reversed, fallback]) {
+    for (const x of [half - 3, -half + 3]) {
+      assert.ok(Math.abs(roadDistanceAt(x, 100, candidate)) < 1e-6, "seam-aligned station must be on the physical road");
+      assert.ok(Math.abs(roadDistanceAt(x, 107, candidate) - 7) < 1e-6, "offset from seam-aligned road must be measured locally");
+      assert.ok(Math.abs(roadDistanceAt(x, 107, candidate) - transportPolylineDistance([a, b], x, 107)) < 1e-6, "physical and inspector road distances must match");
+    }
+    assert.ok(roadDistanceAt(0, 100, candidate) > 1000, "seam crossing must never become a world-spanning shortcut");
+  }
 });
 
 test("S005 nearby junction index preserves canonical full-scan identity, order and no duplicates", () => {
