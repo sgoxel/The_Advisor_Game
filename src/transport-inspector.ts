@@ -261,8 +261,13 @@ function bridgeDetails(bridge: TransportBridge) {
   // by itself establish a constructed, walkable deck in Simulation.
   const surface = transportBridgeSurfaceAt(bridge.x, bridge.z);
   const span = transportBridgeSpanAt(bridge, edge);
+  // A walkable centre point cannot certify both dry banks, road alignment or safe grade.
+  // Keep this verdict explicitly sample-limited: whole-route traversal is not proven.
+  const sampledCrossingPass = surface.centerDeckWalkable && span.matchingCrossing &&
+    span.deckStationsWalkable && span.bankStationsWalkable && span.approachStationsWalkable &&
+    span.routeStationsWalkable && span.routeGradeWithinLimit;
   return `
-    <div class="transport-kind ${surface.centerDeckWalkable ? "walking" : "transfer"}">${surface.centerDeckWalkable ? "WALKING DECK AT CROSSING" : "RIVER CROSSING · DECK NOT VALIDATED"}</div>
+    <div class="transport-kind ${sampledCrossingPass ? "walking" : "transfer"}">${sampledCrossingPass ? "SAMPLED CROSSING · WALKABLE & GRADE PASS" : "CROSSING ACCESS · NOT CERTIFIED"}</div>
     <h3>${codeText(bridge.code)}</h3>
     <dl>
       <dt>Road</dt><dd>${codeText(bridge.roadCode)}</dd>
