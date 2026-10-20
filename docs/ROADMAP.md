@@ -29,25 +29,25 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Legal transport: shared roads/bridges/site access, 3D parity & responsive route proof
+- WP-S005-001-001 — Legal transport parity: connected roads/bridges/sites, 3D junctions & first route answer
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Autonomous residents: legal home–work/guard paths, Fantasy-Time schedules & usable inspection
+- WP-S006-001-001 — Resident traversal: legal home/gate/work/guard paths, Fantasy-Time shifts & fast inspection
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Medieval-fantasy visual research: toon-lit 3D, semantic zoom & mobile/backend parity
+- WP-S007-001-001 — 3D visual reference architecture: toon shading, semantic zoom & mobile/backend parity
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas UX: safe-area panels, 44px touch targets & keyboard-readable inspection
+- WP-S008-001-001 — Mobile-accessible atlas: safe areas, 44px controls, readable panels & keyboard tasks
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance proof: first-use latency, p95 frame/input times & phone budgets
-- WP-S009-002-001 — Low-latency atlas: bounded canonical picking, revision-cached layout & idle-frame reuse
-- WP-S009-003-001 — Adaptive WebGPU/WebGL2: phone DPR, shadow tiers, shared memory & GPU-loss recovery
-- WP-S009-004-001 — README/runtime truth: atlas-vs-Advisor scope, campaign time, stage & device claims
-- WP-S009-005-001 — Progressive zoom UX: coherent first terrain, authoritative selection & preserved final detail
+- WP-S009-001-001 — Exact-SHA performance/release evidence: cold-to-useful latency, p95 budgets & backend proof
+- WP-S009-002-001 — Low-latency atlas input/idle: bounded picking, revision-cached UI & zero redundant frames
+- WP-S009-003-001 — Adaptive WebGPU/WebGL2: device DPR/shadows, shared resources & loss recovery
+- WP-S009-004-001 — README/runtime truth: atlas vs Advisor, campaign-time gaps & certified claims
+- WP-S009-005-001 — Progressive zoom UX: coherent first terrain, usable selection & retained final 3D
