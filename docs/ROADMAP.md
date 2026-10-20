@@ -25,28 +25,28 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S004 — Settlements, Buildings & World Sites
 
 - WP-S004-001-001 — Deterministic settlement distribution & morphology: viable-area density, readable functional villages/cities, legal access and bounded mobile rendering — COMPLETED and REVIEWED at 2026-10-17
-- WP-S004-002-001 — Critical-site UI & access: collision-safe labels/leaders, visible 3D sites & clean road joins
+- WP-S004-002-001 — Critical-site presentation & access UX: safe labels/leaders, visible 3D sites, clean road joins & renderer parity
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Transport UX & truth: traversable junctions/bridges/ferries, graph–mesh parity & responsive routes
+- WP-S005-001-001 — Terrain-aware transport & route UX: real junctions/bridges/ferries, graph–mesh parity & responsiveness
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Resident life UX: legal home/work/guard paths, deterministic schedules, accessible inspection & pooled sprites
-- WP-S006-002-001 — Usable-interior architecture research: SEED portals/rooms, persistent deltas, lazy loading & first-use UX
+- WP-S006-001-001 — Resident life & inspection UX: legal home/work/guard routes, Fantasy Time schedules & pooled actors
+- WP-S006-002-001 — Usable-interior architecture research: same-world portals, persistence, first-use UX & lazy budgets
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Toon 3D & semantic-zoom research: readable materials, role icons, stable labels & mobile budgets
+- WP-S007-001-001 — Toon 3D & semantic-zoom architecture research: readable roles/labels, stable transitions & mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible seven-viewport atlas UX: 44px controls, safe areas, unobstructed map & keyboard support
+- WP-S008-001-001 — Seven-viewport accessible atlas UX: 44px touch, safe map context & keyboard/screen-reader parity
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Cold-to-interactive performance & exact-SHA release: coherent terrain, usable targets, p95/p99 & renderer parity
-- WP-S009-002-001 — Revision-driven UI & picking: idle-frame stability, cached telemetry & responsive exact inspection
-- WP-S009-003-001 — Adaptive mobile rendering & recovery: DPR/shadow tiers, shared resource budget & WebGPU/WebGL2
-- WP-S009-004-001 — README/runtime conformance: Atlas vs Advisor, campaign clock, truthful routes & release evidence
+- WP-S009-001-001 — Cold-to-useful performance & exact-SHA release: first interaction, p95/p99 & dual-renderer parity
+- WP-S009-002-001 — Idle-frame UI performance & exact picking: revision-cached labels/telemetry & responsive inspection
+- WP-S009-003-001 — Adaptive mobile rendering & recovery UX: DPR/shadow tiers, shared resources & WebGPU/WebGL2
+- WP-S009-004-001 — README/runtime conformance: Atlas vs Advisor, campaign/save truth, routes & compatibility claims
