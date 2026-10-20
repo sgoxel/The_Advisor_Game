@@ -100,7 +100,7 @@ for (const road of siteAccessRoads) {
 }
 
 /** Same bounded physical-road lookup, now including authoritative site branches. */
-export function siteTransportRoadsNear(x: number, z: number, radiusSource: number, limit = TRANSPORT_LIMITS.queryRoadLimit) {
+export function siteTransportRoadsNear(x: number, z: number, radiusSource: number, limit: number = TRANSPORT_LIMITS.queryRoadLimit) {
   const boundedLimit = Math.max(1, Math.min(limit, TRANSPORT_LIMITS.queryRoadLimit)),
     base = baseRoadsNear(x, z, radiusSource, boundedLimit),
     bx = canonicalRoadBucketX(Math.floor(wrapSourceX(x) / bucketSize), bucketSize, SOURCE_PRESENTATION_WIDTH),
