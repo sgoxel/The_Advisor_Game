@@ -107,6 +107,10 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   const observed = transportBridgeSpanAt(bridge, edge!);
   assert.equal(observed.matchingCrossing, true);
   assert.equal(observed.wetStations, 5, "the selected bridge, not the full atlas, gets bounded wet-span sampling");
+  assert.equal(observed.approachStations, 10, "probe only two bounded five-station bank approaches");
+  assert.ok(observed.approachMaxSampledGrade !== null &&
+    Number.isFinite(observed.approachMaxSampledGrade) && observed.approachMaxSampledGrade >= 0);
+  assert.equal(observed.approachGradeWithinLimit, observed.approachMaxSampledGrade! <= .08);
   assert.deepEqual(transportBridgeSpanAt(bridge, edge!), observed, "sampled verdict must be deterministic");
 
   const falseSpan = transportBridgeSpanAt({ ...bridge, spanM: bridge.spanM + 500 }, edge!);
@@ -114,6 +118,10 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(falseSpan.wetStations, 0);
   assert.equal(falseSpan.deckStationsWalkable, false);
   assert.equal(falseSpan.bankStationsWalkable, false);
+  assert.equal(falseSpan.approachStations, 0);
+  assert.equal(falseSpan.approachMaxSampledGrade, null);
+  assert.equal(falseSpan.approachStationsWalkable, false);
+  assert.equal(falseSpan.approachGradeWithinLimit, false);
 });
 
 test("outside all modifier support, final ground/material/water channels are unchanged", () => {
