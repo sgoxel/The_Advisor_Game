@@ -1,15 +1,6 @@
 name: S005 transport visual evidence
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'src/transport-network.ts'
-      - 'src/transport-inspector.ts'
-      - 'src/transport-inspector.css'
-      - 'src/transport-viewport.ts'
-      - 'tests/transport-network.test.ts'
-      - '.github/workflows/wp-s005-001-001-transport-evidence.yml'
 permissions:
   contents: read
 jobs:

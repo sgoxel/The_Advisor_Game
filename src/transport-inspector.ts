@@ -15,6 +15,7 @@ import {
 } from "./transport-network.ts";
 import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
+import { createTransportJunctionLookup } from "./transport-junction-index.ts";
 
 type AdvisorWorld = {
   state: {
@@ -44,6 +45,8 @@ const ROAD_SCALE_LIMIT = 100;
 const QUERY_CACHE_LIMIT = 12;
 const QUERY_EDGE_LIMIT = 96;
 const queryCache = new Map<string, CachedQuery>();
+const junctionsForRoadCodes = createTransportJunctionLookup(transportNetwork.junctions);
+const transportNodesByCode = new Map(transportNetwork.nodes.map((node) => [node.code, node]));
 let queryCount = 0;
 let queryCacheHits = 0;
 let selection: Selection | undefined;
@@ -437,9 +440,9 @@ function refreshOverlay(force = false) {
       if (localCodes.has(bridge.roadCode) && appendMarker("bridge", bridge.x, bridge.z, state, bridge.code, selection?.kind === "bridge" && selection.code === bridge.code)) lastOverlayBridges++;
     for (const crossing of transportNetwork.borderCrossings)
       if (localCodes.has(crossing.roadCode)) appendMarker("border", crossing.x, crossing.z, state, crossing.code, selection?.kind === "border" && selection.code === crossing.code);
-    for (const junction of transportNetwork.junctions) {
-      const node = transportNetwork.nodes.find((candidate) => candidate.code === junction.nodeCode);
-      if (node && junction.edgeCodes.some((code) => localCodes.has(code))) appendMarker("junction", node.x, node.z, state, junction.code, selection?.kind === "junction" && selection.code === junction.code);
+    for (const junction of junctionsForRoadCodes(localCodes)) {
+      const node = transportNodesByCode.get(junction.nodeCode);
+      if (node) appendMarker("junction", node.x, node.z, state, junction.code, selection?.kind === "junction" && selection.code === junction.code);
     }
     for (const harbor of transportNetwork.harbors)
       if (localCodes.has(harbor.roadCode)) appendMarker("harbor", harbor.x, harbor.z, state, harbor.code, selection?.kind === "harbor" && selection.code === harbor.code);
