@@ -139,10 +139,9 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
     uniform float surfaceDetailWeight;
     uniform float surfaceRoadVisibility;
     void getEmission() {
-      // Vertex coverage is interpolated across terrain triangles. Gate it near
-      // the carriageway rather than tinting broad triangular fringes.
-      float roadEdge = 0.06;
-      float roadMask = smoothstep(0.5 - roadEdge, 0.5 + roadEdge, vVertexColor.a);
+      // Vertex coverage interpolates between road and off-road samples.
+      // Tighten the road-tint footprint to avoid broad jagged terrain fringes.
+      float roadMask = smoothstep(0.68, 0.84, vVertexColor.a);
       dEmission = mix(vVertexColor.rgb, pow(vec3(112.0,92.0,62.0)/255.0,vec3(2.2)), roadMask * surfaceRoadVisibility);
       #ifdef STD_EMISSIVE_TEXTURE
         vec3 coarse = {STD_EMISSIVE_TEXTURE_DECODE}(texture2DBias({STD_EMISSIVE_TEXTURE_NAME}, {STD_EMISSIVE_TEXTURE_UV}, {STD_TEXTURE_BIAS})).{STD_EMISSIVE_TEXTURE_CHANNEL};
@@ -154,8 +153,7 @@ export function createTerrainMaterial(surface: pc.Texture): pc.StandardMaterial 
     uniform surfaceDetailWeight: f32;
     uniform surfaceRoadVisibility: f32;
     fn getEmission() {
-      let roadEdge = 0.06;
-      let roadMask = smoothstep(0.5 - roadEdge, 0.5 + roadEdge, vVertexColor.a);
+      let roadMask = smoothstep(0.68, 0.84, vVertexColor.a);
       dEmission = mix(vVertexColor.rgb, pow(vec3f(112.0,92.0,62.0)/255.0,vec3f(2.2)), roadMask * uniform.surfaceRoadVisibility);
       #ifdef STD_EMISSIVE_TEXTURE
         let coarse = {STD_EMISSIVE_TEXTURE_DECODE}(textureSampleBias({STD_EMISSIVE_TEXTURE_NAME}, {STD_EMISSIVE_TEXTURE_NAME}Sampler, {STD_EMISSIVE_TEXTURE_UV}, {STD_TEXTURE_BIAS})).{STD_EMISSIVE_TEXTURE_CHANNEL};
