@@ -104,7 +104,7 @@ for (const viewport of [
     expect(discovery.scale).toBe("1/1000");
     expect(discovery.presentation).toBe("flat");
     expect(discovery.visible).toBe(true);
-    expect(discovery.visibleCount).toBeLessThanOrEqual(viewport.name === "phone" ? 6 : 12);
+    expect(discovery.visibleCount).toBeLessThanOrEqual(Math.min(viewport.width, viewport.height) < 600 ? 6 : 12);
     expect(discovery.declutterSystem).toBe("critical-sites.nearest-free");
     expect(discovery.detailCacheLimit).toBe(48);
     expect(discovery.overlapsPoliticalLabel, JSON.stringify(discovery.overlapDetail)).toBe(false);
@@ -211,7 +211,7 @@ for (const viewport of [
       ...window.advisorSites.state,
       totalSites: window.advisorSites.sites.length,
     }));
-    expect(state.visibleCount).toBeLessThanOrEqual(viewport.name === "phone" ? 6 : 12);
+    expect(state.visibleCount).toBeLessThanOrEqual(Math.min(viewport.width, viewport.height) < 600 ? 6 : 12);
     expect(state.cachedDetails).toBeLessThanOrEqual(state.detailCacheLimit);
     expect(state.detailCacheLimit).toBeLessThan(state.totalSites);
     expect(state.cachedMarkers).toBeLessThanOrEqual(state.markerNodeLimit);
@@ -295,7 +295,7 @@ for (const viewport of [
                   obstacleMeasureCount: ui.obstacleMeasureCount,
                   politicalObstacleCount: ui.politicalObstacleCount,
                   obstacles: [...document.querySelectorAll(
-                    ".masthead, #region-panel, #cell-panel, #travel-panel, #critical-site-panel:not([hidden]), " +
+                    ".masthead, #region-panel, #cell-panel, #travel-panel, #transport-panel, #critical-site-panel:not([hidden]), " +
                     ".bottom-bar, .map-controls, .telemetry, #focus-coordinates, #centre-marker, " +
                     "#political-labels .political-label, #map-labels .map-label",
                   )].filter(node => getComputedStyle(node).display !== "none" &&
@@ -311,6 +311,9 @@ for (const viewport of [
               throw new Error(`Site viewport ${kind}/${profile.name}: ${JSON.stringify(diagnostic)}\n${error}`);
             });
           await page.waitForTimeout(180);
+          expect(await page.evaluate(() => window.advisorSites.state.visibleCount),
+            `${kind}/${profile.name}: compact site budget`)
+            .toBeLessThanOrEqual(Math.min(profile.width, profile.height) < 600 ? 6 : 12);
           const geometry = await page.evaluate(code => {
             const marker = document.querySelector(`.critical-site-marker[data-code="${CSS.escape(code)}"]`),
               label = marker?.querySelector(".site-label"),
@@ -324,7 +327,7 @@ for (const viewport of [
               } : null,
               obstacleSelectors = [
                 ".masthead", "#region-panel", "#cell-panel", "#travel-panel",
-                "#critical-site-panel:not([hidden])", ".bottom-bar", ".map-controls",
+                "#transport-panel", "#critical-site-panel:not([hidden])", ".bottom-bar", ".map-controls",
                 ".telemetry", "#focus-coordinates", "#centre-marker",
                 "#political-labels .political-label", "#map-labels .map-label",
               ],
