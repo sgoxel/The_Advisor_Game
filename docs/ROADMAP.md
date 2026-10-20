@@ -29,25 +29,25 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Canonical transport: legal 3D junctions, graph/visual parity & responsive routes
+- WP-S005-001-001 — Legal transport: shared roads/bridges/site access, 3D parity & responsive route proof
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Living residents: legal commutes, Fantasy-Time autonomy & bounded inspection
+- WP-S006-001-001 — Autonomous residents: legal home–work/guard paths, Fantasy-Time schedules & usable inspection
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Medieval-fantasy visual research: lit 3D, semantic zoom & mobile budgets
+- WP-S007-001-001 — Medieval-fantasy visual research: toon-lit 3D, semantic zoom & mobile/backend parity
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas: map-safe panels, readable text & verified touch/keyboard flow
+- WP-S008-001-001 — Accessible atlas UX: safe-area panels, 44px touch targets & keyboard-readable inspection
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance: first usable interaction, p95 latency & CPU/GPU proof
-- WP-S009-002-001 — Responsive atlas: bounded picking, revision-cached labels & stable-frame UI
-- WP-S009-003-001 — Adaptive WebGPU/WebGL2: device DPR, shadow/memory budgets & GPU recovery
-- WP-S009-004-001 — README/runtime conformance: truthful Advisor scope, campaign time & device claims
-- WP-S009-005-001 — Progressive zoom UX: coherent terrain, first usable selection & settled detail
+- WP-S009-001-001 — Exact-SHA performance proof: first-use latency, p95 frame/input times & phone budgets
+- WP-S009-002-001 — Low-latency atlas: bounded canonical picking, revision-cached layout & idle-frame reuse
+- WP-S009-003-001 — Adaptive WebGPU/WebGL2: phone DPR, shadow tiers, shared memory & GPU-loss recovery
+- WP-S009-004-001 — README/runtime truth: atlas-vs-Advisor scope, campaign time, stage & device claims
+- WP-S009-005-001 — Progressive zoom UX: coherent first terrain, authoritative selection & preserved final detail
