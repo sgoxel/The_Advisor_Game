@@ -11,7 +11,7 @@ import {
   type Tile,
 } from "./world-core.ts";
 import { nearbyPlaces, roadDistanceAt, roads, type Place } from "./geography.ts";
-import { settlementExteriorFor, settlementHomeFor, type SettlementExteriorPlan, type SettlementPlotPlan } from "./settlement-exterior.ts";
+import { settlementExteriorFor, settlementHomeFor, visibleSettlementStreetSegments, type SettlementExteriorPlan, type SettlementPlotPlan } from "./settlement-exterior.ts";
 import { naturalSurfaceAt } from "./hydrology.ts";
 import { wrapSourceX } from "./planet.ts";
 
@@ -234,8 +234,11 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
     if (Math.abs(wrapSourceX(place.x - tileCentreX)) > tile.size * .5 + extent || Math.abs(place.z - tileCentreZ) > tile.size * .5 + extent) continue;
     const plan = settlementExteriorFor(place), resolution = resolveStaticPlan(place, plan), enclosure = enclosureStyleFor(place, plan);
     for (const street of plan.streets) for (let index = 1; index < street.points.length; index++) {
-      const a = street.points[index - 1], b = street.points[index], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz);
-      if (length) add("street", wrapSourceX(a.x + dx * .5), a.z + dz * .5, Math.round(street.width * 10), `${place.id}/street/${index}/${street.id}`, { yawRad: Math.atan2(dx, dz), footprintWidth: street.width, footprintDepth: length, length, label: "Street" });
+      const segments = visibleSettlementStreetSegments(place, plan, street.points[index - 1], street.points[index]);
+      for (let part = 0; part < segments.length; part++) {
+        const [a, b] = segments[part], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz);
+        if (length) add("street", wrapSourceX(a.x + dx * .5), a.z + dz * .5, Math.round(street.width * 10), `${place.id}/street/${index}/${street.id}${segments.length > 1 ? `/part/${part}` : ""}`, { yawRad: Math.atan2(dx, dz), footprintWidth: street.width, footprintDepth: length, length, label: "Street" });
+      }
     }
     for (let segment = 0; segment < plan.border.length; segment++) {
       const a = plan.border[segment], b = plan.border[(segment + 1) % plan.border.length], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz), pieces = Math.max(1, Math.ceil(length / 10));
