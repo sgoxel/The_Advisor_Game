@@ -304,8 +304,9 @@ function labelObstacles(): SiteObstacle[] {
 }
 
 function labelWidth(site: CriticalSite) {
-  const textWidth = 24 + site.name.length * (innerWidth < 620 ? 4.7 : 6.0);
-  return Math.min(innerWidth < 620 ? 108 : 220, Math.max(70, textWidth));
+  const compact = Math.min(innerWidth, innerHeight) < 620;
+  const textWidth = 24 + site.name.length * (compact ? 4.7 : 6.0);
+  return Math.min(compact ? 108 : 220, Math.max(70, textWidth));
 }
 
 function appendLine(
@@ -515,7 +516,7 @@ function render() {
   }
 
   const radius = Math.hypot(view.halfHeight * view.aspect, view.halfHeight) * 1.35,
-    limit = innerWidth < 600 ? MOBILE_SITE_LIMIT : DESKTOP_SITE_LIMIT,
+    limit = Math.min(innerWidth, innerHeight) < 600 ? MOBILE_SITE_LIMIT : DESKTOP_SITE_LIMIT,
     queried = sitesInView(view.x, view.z, radius, limit),
     // Selection has first placement priority. Preserve it within the existing
     // bounded discovery budget even when nearer unselected sites fill the query.
