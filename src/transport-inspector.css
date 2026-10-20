@@ -144,6 +144,18 @@
   #transport-selection dl,
   .transport-metrics dl { grid-template-columns: 92px minmax(0, 1fr); }
 }
+/* Landscape phones need a usable inspector without covering the centered selection.
+   Keep the right-hand panel entirely to the right of the geographic focus. */
+@media (max-width: 850px) and (orientation: landscape) {
+  .transport-panel {
+    top: 5.9rem;
+    right: .6rem;
+    bottom: auto;
+    left: auto;
+    width: min(360px, calc(50vw - 2.75rem));
+    max-height: calc(100vh - 10.5rem);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .transport-overlay { transition: none; }
 }
