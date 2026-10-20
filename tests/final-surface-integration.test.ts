@@ -108,6 +108,14 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(observed.matchingCrossing, true);
   assert.equal(observed.wetStations, 5, "the selected bridge, not the full atlas, gets bounded wet-span sampling");
   assert.equal(observed.approachStations, 10, "probe only two bounded five-station bank approaches");
+  assert.ok(observed.routeStations > 10 && observed.routeStations <= 49,
+    "selected-bridge road/deck/bank sampling must be dense but strictly bounded");
+  assert.equal(typeof observed.routeStationsOnRoad, "boolean");
+  if (!observed.routeStationsOnRoad) assert.equal(observed.routeStationsWalkable, false,
+    "off-road bridge stations cannot prove connected walkability");
+  assert.equal(observed.routeGradeWithinLimit,
+    observed.routeStationsWalkable && observed.routeMaxSampledGrade! <= .08);
+  assert.ok(observed.routeMaxSampledGrade !== null && Number.isFinite(observed.routeMaxSampledGrade));
   assert.equal(typeof observed.approachStationsOnRoad, "boolean");
   if (!observed.approachStationsOnRoad) assert.equal(observed.approachStationsWalkable, false,
     "off-road tangent samples can never certify a physical road approach");
@@ -130,6 +138,9 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(shortSpan.matchingCrossing, true, "matched river record alone cannot prove road extent");
   assert.equal(shortSpan.approachStationsOnRoad, false, "road must extend to the sampled bank stations");
   assert.equal(shortSpan.approachStationsWalkable, false, "walkable off-road ground is not a road approach");
+  assert.equal(shortSpan.routeStationsOnRoad, false, "a short road cannot cover the recorded whole crossing");
+  assert.equal(shortSpan.routeStationsWalkable, false, "missing source-owned road prevents sampled route certification");
+  assert.equal(shortSpan.routeGradeWithinLimit, false, "off-road stations cannot certify grade");
 
   const falseSpan = transportBridgeSpanAt({ ...bridge, spanM: bridge.spanM + 500 }, edge!);
   assert.equal(falseSpan.matchingCrossing, false, "a wrong graph span must never be certified by a nearby deck");
@@ -138,6 +149,11 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(falseSpan.bankStationsWalkable, false);
   assert.equal(falseSpan.approachStations, 0);
   assert.equal(falseSpan.approachStationsOnRoad, false);
+  assert.equal(falseSpan.routeStations, 0);
+  assert.equal(falseSpan.routeStationsOnRoad, false);
+  assert.equal(falseSpan.routeStationsWalkable, false);
+  assert.equal(falseSpan.routeMaxSampledGrade, null);
+  assert.equal(falseSpan.routeGradeWithinLimit, false);
   assert.equal(falseSpan.approachMaxSampledGrade, null);
   assert.equal(falseSpan.approachStationsWalkable, false);
   assert.equal(falseSpan.approachGradeWithinLimit, false);
