@@ -3,7 +3,10 @@ import test from "node:test";
 import {naturalSurfaceAt} from "../src/hydrology.ts";
 import { places, roads, villages } from "../src/geography.ts";
 import { WORLD_BUILDING_PRIORITIES } from "../src/final-surface.ts";
-import { transportBridgeSurfaceAt } from "../src/transport-bridge-surface.ts";
+import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "../src/transport-bridge-surface.ts";
+import { freshwaterCrossingAt } from "../src/hydrology.ts";
+import { transportNetwork } from "../src/transport-network.ts";
+import { sourceToLonLat } from "../src/planet.ts";
 import {
   RURAL_BRIDGE_MAX_LENGTH_M,
   finalSurfaceEvidenceAnchors,
@@ -88,6 +91,29 @@ test("S005 bridge inspector distinguishes final-surface deck truth from a crossi
   const village = villages[0];
   const dry = transportBridgeSurfaceAt(village.x, village.z);
   assert.equal(dry.centerDeckWalkable, false, "an ordinary dry world point must not be labeled a walkable bridge");
+});
+
+test("S005 on-demand bridge span probe matches source crossing and rejects false bridge identities", () => {
+  const evidence = finalSurfaceEvidenceAnchors(), point = evidence.bridge,
+    crossing = freshwaterCrossingAt(point.x, point.z, evidence.bridgeTangent.x, evidence.bridgeTangent.z),
+    edge = transportNetwork.roadEdges.find(candidate => candidate.code === evidence.roadCode);
+  assert.ok(crossing, "known legal bridge must have a source-owned natural crossing");
+  assert.ok(edge, "known legal physical bridge must retain its graph edge");
+  const bridge = {
+    code: `${edge!.code}/BRIDGE/TEST`, roadCode: edge!.code,
+    position: sourceToLonLat(point.x, point.z),
+    x: point.x, z: point.z, spanM: crossing!.spanM, drainageCode: crossing!.code,
+  };
+  const observed = transportBridgeSpanAt(bridge, edge!);
+  assert.equal(observed.matchingCrossing, true);
+  assert.equal(observed.wetStations, 5, "the selected bridge, not the full atlas, gets bounded wet-span sampling");
+  assert.deepEqual(transportBridgeSpanAt(bridge, edge!), observed, "sampled verdict must be deterministic");
+
+  const falseSpan = transportBridgeSpanAt({ ...bridge, spanM: bridge.spanM + 500 }, edge!);
+  assert.equal(falseSpan.matchingCrossing, false, "a wrong graph span must never be certified by a nearby deck");
+  assert.equal(falseSpan.wetStations, 0);
+  assert.equal(falseSpan.deckStationsWalkable, false);
+  assert.equal(falseSpan.bankStationsWalkable, false);
 });
 
 test("outside all modifier support, final ground/material/water channels are unchanged", () => {
