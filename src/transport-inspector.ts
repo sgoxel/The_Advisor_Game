@@ -14,6 +14,7 @@ import {
   type TransportRoadEdge,
 } from "./transport-network.ts";
 import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
+import { polylineTouchesViewport } from "./transport-viewport.ts";
 
 type AdvisorWorld = {
   state: {
@@ -163,7 +164,7 @@ function roadQuery(state: AdvisorWorld["state"]): CachedQuery {
 
 function pathFor(edge: TransportRoadEdge, state: AdvisorWorld["state"]) {
   const points = edge.centerline.map((point) => projectSource(point.x, point.z, state));
-  if (!points.some((point) => inViewport(point))) return undefined;
+  if (!polylineTouchesViewport(points, innerWidth, innerHeight)) return undefined;
   return `M ${points.map((point) => `${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" L ")}`;
 }
 
