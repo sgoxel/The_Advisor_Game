@@ -1,5 +1,5 @@
 import { freshwaterCrossingAt } from "./hydrology.ts";
-import { wrapSourceX } from "./planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, wrapSourceX } from "./planet.ts";
 import { finalSurfaceAt } from "./world-core.ts";
 import type { TransportBridge, TransportRoadEdge } from "./transport-network.ts";
 
@@ -48,6 +48,7 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     deckStationsWalkable: false,
     bankStationsWalkable: false,
     approachStations: 0,
+    approachStationsOnRoad: false,
     approachStationsWalkable: false,
     approachMaxSampledGrade: null as number | null,
     approachGradeWithinLimit: false,
@@ -66,6 +67,25 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     offsetsM.map(metres => sample(crossing.lo - metres / crossing.metresPerUnit)),
     offsetsM.map(metres => sample(crossing.hi + metres / crossing.metresPerUnit)),
   ];
+  // Sampling along the crossing tangent does not prove the physical road extends
+  // along that tangent. Reject off-centerline stations rather than certifying
+  // walkable terrain that the recorded graph edge never reaches.
+  const onRoad = (t: number) => {
+    const x = wrapSourceX(bridge.x + crossing.ux * t), z = bridge.z + crossing.uz * t;
+    const closest = edge.centerline.slice(1).reduce((best, point, index) => {
+      const previous = edge.centerline[index],
+        dx = wrapSourceX(point.x - previous.x), dz = point.z - previous.z,
+        qx = wrapSourceX(x - previous.x), qz = z - previous.z,
+        lengthSquared = dx * dx + dz * dz,
+        fraction = lengthSquared ? Math.max(0, Math.min(1, (qx * dx + qz * dz) / lengthSquared)) : 0;
+      return Math.min(best, Math.hypot(qx - dx * fraction, qz - dz * fraction));
+    }, Infinity);
+    return closest <= 2 / CANONICAL_METRES_PER_SOURCE_UNIT;
+  };
+  const approachStationsOnRoad = [
+    ...offsetsM.map(metres => crossing.lo - metres / crossing.metresPerUnit),
+    ...offsetsM.map(metres => crossing.hi + metres / crossing.metresPerUnit),
+  ].every(onRoad);
   const banks = [approaches[0][0], approaches[1][0]];
   const approachGrades = approaches.flatMap(side => side.slice(1).map((surface, i) =>
     Math.abs(surface.groundHeight - side[i].groundHeight) / (offsetsM[i + 1] - offsetsM[i])));
@@ -81,9 +101,10 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     bankStationsWalkable: banks.every(surface =>
       surface.water.kind === "none" && surface.walkable),
     approachStations: approaches.reduce((count, side) => count + side.length, 0),
-    approachStationsWalkable: approaches.every(side => side.every(surface =>
+    approachStationsOnRoad,
+    approachStationsWalkable: approachStationsOnRoad && approaches.every(side => side.every(surface =>
       surface.water.kind === "none" && surface.walkable)),
     approachMaxSampledGrade,
-    approachGradeWithinLimit: approachMaxSampledGrade <= .08,
+    approachGradeWithinLimit: approachStationsOnRoad && approachMaxSampledGrade <= .08,
   });
 }
