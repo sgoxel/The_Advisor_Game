@@ -111,18 +111,19 @@ export function siteAccessRoadsNear(x: number, z: number, radiusSource: number, 
     bz = Math.floor(z / bucketSize),
     reach = Math.ceil(radiusSource / bucketSize),
     seen = new Set<string>(),
-    nearby: TransportRoadEdge[] = [];
+    nearby: { edge: TransportRoadEdge; distance: number }[] = [];
   for (let dz = -reach; dz <= reach; dz++) for (let dx = -reach; dx <= reach; dx++) {
     const key = `${canonicalRoadBucketX(bx + dx, bucketSize, SOURCE_PRESENTATION_WIDTH)}/${bz + dz}`;
     for (const edge of siteBuckets.get(key) ?? []) {
       if (seen.has(edge.code)) continue;
       seen.add(edge.code);
-      if (transportPolylineDistance(edge.centerline, x, z) <= radiusSource) nearby.push(edge);
+      const distance = transportPolylineDistance(edge.centerline, x, z);
+      if (distance <= radiusSource) nearby.push({ edge, distance });
     }
   }
   return Object.freeze(nearby.sort((a, b) =>
-    transportPolylineDistance(a.centerline, x, z) - transportPolylineDistance(b.centerline, x, z) ||
-    compareCode(a.code, b.code)).slice(0, boundedLimit));
+    a.distance - b.distance || compareCode(a.edge.code, b.edge.code))
+    .slice(0, boundedLimit).map(({ edge }) => edge));
 }
 
 /** Shared canonical road choice, including both existing roads and true site access. */
@@ -130,10 +131,12 @@ export function siteTransportRoadsNear(x: number, z: number, radiusSource: numbe
   const boundedLimit = Math.max(1, Math.min(limit, TRANSPORT_LIMITS.queryRoadLimit)),
     base = baseRoadsNear(x, z, radiusSource, boundedLimit),
     access = siteAccessRoadsNear(x, z, radiusSource, boundedLimit),
-    nearby = [...base, ...access];
+    nearby = [...base, ...access].map(edge => ({
+      edge, distance: transportPolylineDistance(edge.centerline, x, z),
+    }));
   return Object.freeze(nearby.sort((a, b) =>
-    transportPolylineDistance(a.centerline, x, z) - transportPolylineDistance(b.centerline, x, z) ||
-    compareCode(a.code, b.code)).slice(0, boundedLimit));
+    a.distance - b.distance || compareCode(a.edge.code, b.edge.code))
+    .slice(0, boundedLimit).map(({ edge }) => edge));
 }
 
 // The topology never changes after SEED construction. Cache static totals once;
