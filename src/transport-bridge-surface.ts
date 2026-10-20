@@ -105,6 +105,6 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     approachStationsWalkable: approachStationsOnRoad && approaches.every(side => side.every(surface =>
       surface.water.kind === "none" && surface.walkable)),
     approachMaxSampledGrade,
-    approachGradeWithinLimit: approachMaxSampledGrade <= .08,
+    approachGradeWithinLimit: approachStationsOnRoad && approachMaxSampledGrade <= .08,
   });
 }
