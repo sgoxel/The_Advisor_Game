@@ -50,3 +50,4 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 - WP-S009-002-001 — Bounded canonical picking & idle UI: accurate selection, revision-cached overlays & minimal layout churn
 - WP-S009-003-001 — Adaptive mobile graphics & recovery: DPR/shadows, combined resource policy & backend parity
 - WP-S009-004-001 — README/runtime truth: Advisor–atlas boundaries, canonical state, saves & verified compatibility
+- WP-S009-005-001 — Rapid zoom-out coverage: progressive terrain readiness, stale-job control & bounded streaming
