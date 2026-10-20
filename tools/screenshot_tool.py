@@ -276,6 +276,7 @@ TWO_FRAMES_JS = "() => new Promise(done => requestAnimationFrame(() => requestAn
 STATE_JS = """() => {
   const world = window.advisorWorld, state = world ? world.state : {};
   const renderer = (world && world.renderer) || {};
+  const transport = window.advisorTransport ? window.advisorTransport.telemetry() : null;
   const box = document.getElementById('error'), detail = document.getElementById('detail-name');
   return {
     display: {devicePixelRatio,cssWidth:innerWidth,cssHeight:innerHeight,canvasWidth:document.getElementById('world')?.width,canvasHeight:document.getElementById('world')?.height},
@@ -291,6 +292,11 @@ STATE_JS = """() => {
     globe: state.globe ?? null, macroGeography: state.macroGeography ?? null,
     performance: state.performance ?? null, coverage: state.coverage ?? null,
     continuity: world && world.continuity ? world.continuity.telemetry() : null,
+    transportInspection: transport ? {
+      digest: transport.digest, selected: transport.selection,
+      firstRoadInspectionMs: transport.firstRoadInspectionMs,
+      firstRoadInspectionStatus: transport.firstRoadInspectionStatus,
+    } : null,
     informationExpanded: document.getElementById('toggle-region-panel')?.getAttribute('aria-expanded') === 'true',
     detailName: detail ? detail.textContent.trim() : null,
     error: state.error || (box && !box.hidden ? box.textContent.trim() : ''),
