@@ -871,7 +871,8 @@ export function transportGenerationTelemetry() {
   });
 }
 
-export function transportAcceptanceSummary() {
+/** Immutable network coverage is calculated once, not at map/UI render cadence. */
+function staticAcceptanceSummary() {
   const mandatory = transportNetwork.nodes.filter((node) => node.kind === "capital" || node.kind === "city" || node.kind === "village"),
     roadDegree = new Map<string, number>();
   for (const edge of transportNetwork.roadEdges) for (const nodeCode of [edge.from, edge.to]) roadDegree.set(nodeCode, (roadDegree.get(nodeCode) ?? 0) + 1);
@@ -887,7 +888,6 @@ export function transportAcceptanceSummary() {
     roads: transportNetwork.roadEdges.length,
     ferries: transportNetwork.ferryEdges.length,
     junctions: transportNetwork.junctions.length,
-    bridges: currentBridges().length,
     borderCrossings: transportNetwork.borderCrossings.length,
     harbors: transportNetwork.harbors.length,
     mainRoads: transportNetwork.roadEdges.filter((edge) => edge.roadClass === "main").length,
@@ -897,4 +897,12 @@ export function transportAcceptanceSummary() {
     domesticAuthority: roadNetworkTelemetry.version,
     limits: TRANSPORT_LIMITS,
   });
+}
+
+let cachedStaticAcceptance: ReturnType<typeof staticAcceptanceSummary> | undefined;
+
+/** Only lazy bridge materialization varies with focus/cache residency. */
+export function transportAcceptanceSummary() {
+  cachedStaticAcceptance ??= staticAcceptanceSummary();
+  return Object.freeze({ ...cachedStaticAcceptance, bridges: currentBridges().length });
 }
