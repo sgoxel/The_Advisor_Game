@@ -25,7 +25,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S004 — Settlements, Buildings & World Sites
 
 - WP-S004-001-001 — Deterministic settlement distribution & morphology: viable-area density, readable functional villages/cities, legal access and bounded mobile rendering — COMPLETED and REVIEWED at 2026-10-17
-- WP-S004-002-001 — Critical-site discovery & inspection: collision-free labels, readable 3D/access, bounded UI & renderer parity
+- WP-S004-002-001 — Critical-site visual UX: clean road/access edges, collision-safe labels, readable 3D & renderer parity
 
 ## STAGE S005 — Transport & Traversal Network
 
@@ -38,15 +38,15 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Stylized 3D/semantic-zoom research: truthful role cues, readable landmarks & reusable mobile assets
+- WP-S007-001-001 — Visual-system research: toon materials, semantic zoom, readable labels & reusable mobile assets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Map-safe accessible UI: seven viewports, 44px targets, truthful inspection & keyboard/screen-reader parity
+- WP-S008-001-001 — Responsive accessible atlas: safe-area panels, 44px controls, readable UI & keyboard inspection
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — First-use latency & exact-SHA release gates: coherent/usable/settled timings, resources & backend evidence
+- WP-S009-001-001 — First-usable scene & release evidence: latency, resources and exact-SHA backend proof
 - WP-S009-002-001 — Bounded canonical picking & idle UI: accurate selection, revision-cached overlays & minimal layout churn
-- WP-S009-003-001 — Adaptive mobile rendering & recovery: DPR/shadow tiers, combined resource limits & backend parity
-- WP-S009-004-001 — README/runtime conformance: Atlas vs Advisor boundaries, campaign/save truth & verified claims
+- WP-S009-003-001 — Adaptive mobile graphics & recovery: DPR/shadows, combined resource policy & backend parity
+- WP-S009-004-001 — README/runtime truth: Advisor–atlas boundaries, canonical state, saves & verified compatibility
