@@ -25,28 +25,28 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 ## STAGE S004 — Settlements, Buildings & World Sites
 
 - WP-S004-001-001 — Deterministic settlement distribution & morphology: viable-area density, readable functional villages/cities, legal access and bounded mobile rendering — COMPLETED and REVIEWED at 2026-10-17
-- WP-S004-002-001 — Critical-site UI/UX: collision-safe callouts, visible 3D sites & legal access
+- WP-S004-002-001 — Critical-site UX/performance: collision-safe labels/leaders, visible 3D sites & truthful access
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Terrain-aware transport UX: legal graph–mesh Y-junctions, graded roads, bridges & ferries
+- WP-S005-001-001 — Canonical transport UX: legal Y-junctions, graded roads, bridges/ferries & graph–mesh parity
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Living-resident UX: legal home/work/gate commutes, deterministic schedules & bounded 2D actors
-- WP-S006-002-001 — Same-world interior architecture research: SEED rooms, legal portals & persisted changes
+- WP-S006-001-001 — Living-resident UX: legal home/work/gate commutes, deterministic schedules & pooled 2D sprites
+- WP-S006-002-001 — Same-world interior architecture research: SEED rooms/portals, persisted changes & lazy loading
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Toon 3D/semantic-zoom research: lit terrain, readable labels & mobile-safe assets
+- WP-S007-001-001 — Toon 3D/semantic-zoom research: readable terrain/sites/labels & mobile-safe presentation
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Mobile UI/UX accessibility: 44px controls, map-safe panels, keyboard & screen-reader access
+- WP-S008-001-001 — Seven-viewport mobile/accessibility UX: safe areas, 44px targets, readable panels & keyboard/screen readers
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance/release evidence: cold/coverage/detail latency, p95/p99 & backend parity
-- WP-S009-002-001 — Stable-frame UI latency: revision-keyed DOM/overlays, cached labels & bounded exact picking
-- WP-S009-003-001 — Mobile GPU resilience: adaptive DPR/shadows, shared budgets & in-session loss recovery
-- WP-S009-004-001 — README/runtime truth: current-stage accuracy, honest Advisor/route UX & verified releases
+- WP-S009-001-001 — Exact-SHA performance/release gates: cold/coverage/detail latency, p95/p99 & backend parity
+- WP-S009-002-001 — Stable-frame UI/input latency: revision-owned overlays, cached labels/layout & bounded exact picking
+- WP-S009-003-001 — Mobile GPU resilience: adaptive DPR/shadows, shared CPU+GPU budgets & in-session recovery
+- WP-S009-004-001 — README/runtime conformance: truthful Atlas/Advisor UX, campaign-time claims, route facts & release evidence
