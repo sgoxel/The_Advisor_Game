@@ -1,0 +1,68 @@
+name: S005 transport visual evidence
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/transport-network.ts'
+      - 'src/transport-inspector.ts'
+      - 'src/transport-inspector.css'
+      - 'src/transport-viewport.ts'
+      - 'tests/transport-network.test.ts'
+      - '.github/workflows/wp-s005-001-001-transport-evidence.yml'
+permissions:
+  contents: read
+jobs:
+  transport-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [webgpu, webgl2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: python3 -m pip install playwright==1.63.0
+      - name: Capture canonical junction, bridge, grade, harbor and ferry
+        run: |
+          mkdir -p test-results
+          node --experimental-strip-types --input-type=module -e '
+            import { writeFileSync } from "node:fs";
+            import { transportNetwork, transportAcceptanceSummary } from "./src/transport-network.ts";
+            const summary = transportAcceptanceSummary();
+            if (summary.uncoveredNodeCodes.length || !summary.junctions || !summary.harbors || !summary.ferries)
+              throw new Error("Missing canonical transport endpoint or transfer evidence");
+            writeFileSync("test-results/transport-authority.json", JSON.stringify({
+              digest: transportNetwork.digest,
+              roads: summary.roads,
+              junctions: summary.junctions,
+              harbors: summary.harbors,
+              ferries: summary.ferries,
+              crossingCodes: transportNetwork.borderCrossings.map(c => c.code),
+              ferryCodes: transportNetwork.ferryEdges.map(e => e.code),
+            }, null, 2));
+          '
+          npm run preview -- --port 4174 > /tmp/advisor-s005-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill $PREVIEW_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
+            sleep 1
+          done
+          STEPS='eval:window.advisorTransport.selectEvidence("junction");select:#map-scale=100;settle;shot:junction-100;select:#map-scale=20;settle;shot:junction-local;eval:window.advisorTransport.selectEvidence("bridge");select:#map-scale=100;settle;shot:bridge-100;select:#map-scale=20;settle;shot:bridge-local;eval:window.advisorTransport.selectEvidence("mountain-pass");select:#map-scale=100;settle;shot:graded-road;eval:window.advisorTransport.selectEvidence("harbor");select:#map-scale=100;settle;shot:harbor;eval:window.advisorTransport.selectEvidence("ferry");settle;shot:ferry-inspector;eval:window.advisorTransport.network.digest===window.advisorTransport.telemetry().digest||Promise.reject(new Error("Transport digest mismatch"));eval:window.advisorTransport.telemetry().localRoads<=96||Promise.reject(new Error("Unbounded transport focus query"))'
+          xvfb-run -a python3 tools/screenshot_tool.py http://127.0.0.1:4174/ \
+            --out test-results/s005-${{ matrix.backend }} --name s005 \
+            --profile fullhd-landscape,fullhd-portrait \
+            --renderer ${{ matrix.backend }} --timeout 240 --steps "$STEPS"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: s005-transport-${{ matrix.backend }}
+          path: test-results/
