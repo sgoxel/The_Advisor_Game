@@ -13,29 +13,6 @@ concurrency:
   group: github-pages-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  cancel-obsolete-runs:
-    if: github.event_name == 'push' && startsWith(github.event.head_commit.message, 'maintenance')
-    runs-on: ubuntu-latest
-    timeout-minutes: 7
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      - name: Cancel superseded pull-request checks
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          for id in 39417757616 39424936876 39424936696 39424936604 39433457843 39433457587 39433457236; do
-            state="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${id}" --jq '.status')"
-            if [[ "$state" == "in_progress" || "$state" == "queued" || "$state" == "waiting" || "$state" == "requested" ]]; then
-              echo "Canceling obsolete run $id ($state)"
-              gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${id}/cancel" --silent
-            else
-              echo "Skipping run $id ($state)"
-            fi
-          done
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
