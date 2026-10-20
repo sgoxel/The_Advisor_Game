@@ -42,11 +42,11 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas UX: visible map targets, 44px touch controls & keyboard parity
+- WP-S008-001-001 — Accessible atlas UX: map-safe panels, 44px touch & complete keyboard tasks
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Performance release proof: first-use latency, resource budgets & exact-SHA backend checks
+- WP-S009-001-001 — Exact-SHA release performance: first-use UX, p95 latency & backend proof
 - WP-S009-002-001 — Low-latency canonical picking & idle UI: bounded hits and revision-cached overlays
 - WP-S009-003-001 — Adaptive graphics: mobile DPR/shadows, shared memory & renderer recovery
 - WP-S009-004-001 — README/runtime conformance: truthful Advisor UI, world state & compatibility claims
