@@ -23,8 +23,8 @@ export function transportBridgeSurfaceAt(x: number, z: number) {
 
 /**
  * Inspect one selected graph crossing, not every crossing during pan/zoom.
- * Five wet-span stations and two dry-bank stations report sampled physical truth;
- * they do not certify every intervening point or executed protagonist travel.
+ * Bounded wet, bank, and road-aligned crossing samples report physical truth;
+ * samples never certify unsampled continuity or executed protagonist travel.
  */
 export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRoadEdge) {
   let nearest = Infinity, direction: {x: number; z: number} | undefined;
@@ -52,6 +52,11 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     approachStationsWalkable: false,
     approachMaxSampledGrade: null as number | null,
     approachGradeWithinLimit: false,
+    routeStations: 0,
+    routeStationsOnRoad: false,
+    routeStationsWalkable: false,
+    routeMaxSampledGrade: null as number | null,
+    routeGradeWithinLimit: false,
   });
 
   const sample = (t: number) => finalSurfaceAt(
@@ -90,6 +95,29 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
   const approachGrades = approaches.flatMap(side => side.slice(1).map((surface, i) =>
     Math.abs(surface.groundHeight - side[i].groundHeight) / (offsetsM[i + 1] - offsetsM[i])));
   const approachMaxSampledGrade = Math.max(...approachGrades);
+  // Full bridge-centreline *sampling*, including both 18 m approaches.
+  // The number of final-surface queries is capped, independent of the road's
+  // length or camera state. This is not continuous geometric route proof.
+  const sampledMetres = (crossing.hi - crossing.lo) * crossing.metresPerUnit + 36,
+    segmentCount = Math.max(2, Math.min(48, Math.ceil(sampledMetres / 4))),
+    start = crossing.lo - 18 / crossing.metresPerUnit,
+    end = crossing.hi + 18 / crossing.metresPerUnit,
+    routeStations = Array.from({ length: segmentCount + 1 }, (_, index) => {
+      const t = start + (end - start) * index / segmentCount;
+      return { surface: sample(t), onRoad: onRoad(t) };
+    }),
+    routeStationsOnRoad = routeStations.every(station => station.onRoad),
+    routeStationsWalkable = routeStationsOnRoad && routeStations.every(({ surface }) =>
+      surface.walkable &&
+      (surface.water.kind === "none" ||
+        (surface.water.kind === "river" && surface.deckHeight !== null && surface.traversal === "bridge"))),
+    routeGradeStepM = sampledMetres / segmentCount,
+    routeMaxSampledGrade = Math.max(...routeStations.slice(1).map(({ surface }, index) => {
+      const previous = routeStations[index].surface;
+      return Math.abs((surface.deckHeight ?? surface.groundHeight) -
+        (previous.deckHeight ?? previous.groundHeight)) / routeGradeStepM;
+    }));
+
   return Object.freeze({
     matchingCrossing: true,
     wetStations: wet.length,
@@ -106,5 +134,10 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
       surface.water.kind === "none" && surface.walkable)),
     approachMaxSampledGrade,
     approachGradeWithinLimit: approachStationsOnRoad && approachMaxSampledGrade <= .08,
+    routeStations: routeStations.length,
+    routeStationsOnRoad,
+    routeStationsWalkable,
+    routeMaxSampledGrade,
+    routeGradeWithinLimit: routeStationsWalkable && routeMaxSampledGrade <= .08,
   });
 }
