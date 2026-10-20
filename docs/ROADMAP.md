@@ -29,24 +29,24 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Canonical transport UX: legal Y-junctions, graded roads, bridges/ferries & graph–mesh parity
+- WP-S005-001-001 — Transport truth & UX: shared Y-junctions, terrain-aware roads, bridges/ferries & graph–mesh parity
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Living-resident UX: legal home/work/gate commutes, deterministic schedules & pooled 2D sprites
-- WP-S006-002-001 — Same-world interior architecture research: SEED rooms/portals, persisted changes & lazy loading
+- WP-S006-001-001 — Resident life UX: legal home/work/gate paths, deterministic schedules & pooled 2D sprites
+- WP-S006-002-001 — Usable-interior architecture research only: SEED rooms/portals, persistent changes & lazy loading
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Toon 3D/semantic-zoom research: readable terrain/sites/labels & mobile-safe presentation
+- WP-S007-001-001 — Toon 3D & semantic-zoom research: readable world art, symbols/labels & mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Seven-viewport mobile/accessibility UX: safe areas, 44px targets, readable panels & keyboard/screen readers
+- WP-S008-001-001 — Seven-viewport accessible UI: safe areas, 44px touch targets, readable panels & keyboard focus
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance/release gates: cold/coverage/detail latency, p95/p99 & backend parity
-- WP-S009-002-001 — Stable-frame UI/input latency: revision-owned overlays, cached labels/layout & bounded exact picking
-- WP-S009-003-001 — Mobile GPU resilience: adaptive DPR/shadows, shared CPU+GPU budgets & in-session recovery
-- WP-S009-004-001 — README/runtime conformance: truthful Atlas/Advisor UX, campaign-time claims, route facts & release evidence
+- WP-S009-001-001 — First-use performance & exact-SHA release gates: cold/preview/detail latency, p95/p99 & renderer parity
+- WP-S009-002-001 — Low-latency UI & picking: revision-owned overlays, cached layout & bounded exact inspection
+- WP-S009-003-001 — Adaptive mobile GPU & recovery: DPR/shadow tiers, shared resource budget & WebGPU/WebGL2 resilience
+- WP-S009-004-001 — README/runtime truth: Atlas vs Advisor gameplay, fantasy clock, routes & release claims
