@@ -15,6 +15,7 @@ import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
+import { createTransportWalkingIndex, transportWalkingRoute } from "./transport-walking-route.ts";
 
 type AdvisorWorld = {
   state: {
@@ -49,6 +50,7 @@ const QUERY_EDGE_LIMIT = 96;
 const queryCache = new Map<string, CachedQuery>();
 const junctionsForRoadCodes = createTransportJunctionLookup(transportNetwork.junctions);
 const transportNodesByCode = new Map(transportNetwork.nodes.map((node) => [node.code, node]));
+let walkingIndex: ReturnType<typeof createTransportWalkingIndex> | undefined;
 let queryCount = 0;
 let queryCacheHits = 0;
 let selection: Selection | undefined;
@@ -59,6 +61,9 @@ let lastOverlayRoads = 0;
 let lastOverlayBridges = 0;
 let lastRoadInspectionMs: number | null = null;
 let lastRoadInspectionStatus = "not requested";
+let lastSiteRouteMs: number | null = null;
+let lastSiteRouteStatus = "not requested";
+let siteRoute: ReturnType<typeof transportWalkingRoute> = null;
 
 function compareCanonical(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -86,10 +91,12 @@ panel.innerHTML = `
   <div class="transport-summary" id="transport-summary"></div>
   <div class="transport-actions">
     <button type="button" id="transport-nearest">Inspect nearest road</button>
+    <button type="button" id="transport-site-route">Preview road to nearest site</button>
     <button type="button" id="transport-focus">Focus selection</button>
   </div>
   <div class="divider"></div>
   <section id="transport-selection" aria-live="polite"></section>
+  <section id="transport-site-answer" aria-live="polite"></section>
   <div class="divider"></div>
   <div class="transport-metrics" id="transport-metrics"></div>
 `;
@@ -375,6 +382,61 @@ function renderSelection() {
   } else target.innerHTML = lakeDetourDetails();
 }
 
+function renderSiteRoute() {
+  const target = panel.querySelector<HTMLElement>("#transport-site-answer")!;
+  if (!siteRoute) {
+    target.textContent = lastSiteRouteStatus === "not requested" ? "" :
+      `Walking graph preview: ${lastSiteRouteStatus}. No physical traversal certified.`;
+    return;
+  }
+  target.innerHTML = `<div class="eyebrow">CANONICAL WALKING GRAPH PREVIEW · NOT TRAVEL</div>
+    <dl>
+      <dt>From road endpoint</dt><dd>${codeText(siteRoute.from)}</dd>
+      <dt>Critical site</dt><dd>${codeText(siteRoute.to)}</dd>
+      <dt>Measured graph distance</dt><dd>${(siteRoute.distanceM / 1000).toFixed(2)} km</dd>
+      <dt>Estimated good-road time</dt><dd>${(siteRoute.fantasyWalkSeconds / 3600).toFixed(2)} fantasy hours</dd>
+      <dt>Canonical walking edges</dt><dd>${siteRoute.edgeCodes.length} · no ferry segments</dd>
+      <dt>Evidence limit</dt><dd>Graph route only · individual physical road grades and bank-to-bank crossings not fully certified · character has not moved</dd>
+    </dl>`;
+}
+
+function chooseNearestSiteRoute() {
+  const started = performance.now(), runtime = world();
+  siteRoute = null;
+  if (!runtime) lastSiteRouteStatus = "world authority pending";
+  else {
+    const edge = roadQuery(runtime.state).edges[0];
+    if (!edge) lastSiteRouteStatus = "no canonical road near map focus";
+    else {
+      const endpoints = [edge.from, edge.to].map(code => transportNodesByCode.get(code)!)
+        .filter(node => node.kind !== "site")
+        .sort((a, b) => {
+          const da = Math.hypot(wrapSourceX(a.x - runtime.state.view.x), a.z - runtime.state.view.z),
+            db = Math.hypot(wrapSourceX(b.x - runtime.state.view.x), b.z - runtime.state.view.z);
+          return da - db || compareCanonical(a.code, b.code);
+        });
+      const from = endpoints[0];
+      const site = from && transportNetwork.nodes.filter(node =>
+        node.kind === "site" && node.countryCode === from.countryCode &&
+        node.continent === from.continent)
+        .sort((a, b) => {
+          const da = Math.hypot(wrapSourceX(a.x - runtime.state.view.x), a.z - runtime.state.view.z),
+            db = Math.hypot(wrapSourceX(b.x - runtime.state.view.x), b.z - runtime.state.view.z);
+          return da - db || compareCanonical(a.code, b.code);
+        })[0];
+      if (!from || !site) lastSiteRouteStatus = "no same-country critical site endpoint";
+      else {
+        walkingIndex ??= createTransportWalkingIndex(transportNetwork);
+        siteRoute = transportWalkingRoute(walkingIndex, from.code, site.code);
+        lastSiteRouteStatus = siteRoute ? "canonical walking graph facts ready" : "walking graph disconnected";
+      }
+    }
+  }
+  lastSiteRouteMs = performance.now() - started;
+  renderSiteRoute();
+  renderMetrics();
+}
+
 function renderSummary(state?: AdvisorWorld["state"]) {
   const summary = transportAcceptanceSummary();
   panel.querySelector<HTMLElement>("#transport-summary")!.innerHTML = `
@@ -398,6 +460,7 @@ function renderMetrics() {
       <dt>Domestic authority</dt><dd><code>${generation.domesticAuthority}</code> · ${generation.baseRoads} shared roads + ${generation.extensionRoads} S005 extensions + ${transportAcceptanceSummary().siteAccessBranches} canonical site branches</dd>
       <dt>Focus query</dt><dd>${lastQueryMs.toFixed(2)} ms · ${lastLocalRoads}/${QUERY_EDGE_LIMIT} records</dd>
       <dt>First road answer</dt><dd>${lastRoadInspectionStatus}${lastRoadInspectionMs === null ? "" : ` · ${lastRoadInspectionMs.toFixed(2)} ms`}</dd>
+      <dt>Walking graph answer</dt><dd>${lastSiteRouteStatus}${lastSiteRouteMs === null ? "" : ` · ${lastSiteRouteMs.toFixed(2)} ms`}</dd>
       <dt>Query/cache</dt><dd>${queryCount} searches · ${queryCacheHits} reuses · ${queryCache.size}/${QUERY_CACHE_LIMIT} cached</dd>
       <dt>Bridge detail</dt><dd>${generation.materializedBridges} records · ${generation.bridgeCacheRoads}/${generation.bridgeCacheLimit} road recipes cached · ${generation.bridgeCacheEvictions} evictions</dd>
       <dt>Visible overlay</dt><dd>${lastOverlayRoads} road paths · ${lastOverlayBridges} bridge markers</dd>
@@ -408,11 +471,16 @@ function openPanel() {
   panel.hidden = false;
   openButton.setAttribute("aria-expanded", "true");
   renderSelection();
+  renderSiteRoute();
   renderSummary(world()?.state);
   renderMetrics();
 }
 
 function chooseNearestRoad() {
+  siteRoute = null;
+  lastSiteRouteStatus = "not requested";
+  lastSiteRouteMs = null;
+  renderSiteRoute();
   const started = performance.now();
   const runtime = world();
   if (!runtime) {
@@ -506,6 +574,9 @@ function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mo
     const ferry = [...transportNetwork.ferryEdges].sort((a, b) => compareCanonical(a.code, b.code))[0];
     if (ferry) selection = { kind: "ferry", code: ferry.code };
   }
+  siteRoute = null;
+  lastSiteRouteStatus = "not requested";
+  lastSiteRouteMs = null;
   openPanel();
   focusSelection();
   refreshOverlay(true);
@@ -544,6 +615,9 @@ function telemetry() {
     lastQueryMs,
     firstRoadInspectionMs: lastRoadInspectionMs,
     firstRoadInspectionStatus: lastRoadInspectionStatus,
+    firstSiteRouteMs: lastSiteRouteMs,
+    firstSiteRouteStatus: lastSiteRouteStatus,
+    siteRouteEdges: siteRoute?.edgeCodes.length ?? 0,
     localRoads: lastLocalRoads,
     overlayRoads: lastOverlayRoads,
     overlayBridgeMarkers: lastOverlayBridges,
@@ -557,6 +631,7 @@ panel.querySelector<HTMLButtonElement>("#transport-close")!.onclick = () => {
   openButton.setAttribute("aria-expanded", "false");
 };
 panel.querySelector<HTMLButtonElement>("#transport-nearest")!.onclick = chooseNearestRoad;
+panel.querySelector<HTMLButtonElement>("#transport-site-route")!.onclick = chooseNearestSiteRoute;
 panel.querySelector<HTMLButtonElement>("#transport-focus")!.onclick = focusSelection;
 openButton.onclick = openPanel;
 
