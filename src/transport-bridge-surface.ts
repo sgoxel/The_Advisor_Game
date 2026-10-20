@@ -1,5 +1,5 @@
 import { freshwaterCrossingAt } from "./hydrology.ts";
-import { CANONICAL_METRES_PER_SOURCE_UNIT, wrapSourceX } from "./planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { finalSurfaceAt } from "./world-core.ts";
 import type { TransportBridge, TransportRoadEdge } from "./transport-network.ts";
 
@@ -19,6 +19,46 @@ export function transportBridgeSurfaceAt(x: number, z: number) {
     waterKind: surface.water.kind,
     traversal: surface.traversal,
   });
+}
+
+/**
+ * Sample the source-owned physical road in canonical metres from a bridge
+ * anchor. Never extend beyond its recorded endpoints or invent a tangent
+ * shortcut when the centerline bends. Focus-only, bounded by stationCount.
+ */
+export function transportRoadArcStations(
+  points: readonly { x: number; z: number }[], x: number, z: number,
+  fromMetres: number, toMetres: number, stationCount: number,
+): readonly { x: number; z: number }[] {
+  if (points.length < 2 || !Number.isInteger(stationCount) || stationCount < 1 || stationCount > 48 ||
+    !Number.isFinite(fromMetres) || !Number.isFinite(toMetres) || fromMetres >= toMetres) return [];
+  const segments: { a: { x: number; z: number }; dx: number; dz: number; start: number; lengthM: number }[] = [];
+  let total = 0, best = Infinity, anchor = -1;
+  for (let index = 1; index < points.length; index++) {
+    const a = points[index - 1], b = points[index], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
+      squared = dx * dx + dz * dz;
+    if (squared < 1e-12) continue;
+    const sourceLength = Math.sqrt(squared),
+      lat = sourceToLonLat(a.x, a.z).lat,
+      lengthM = CANONICAL_METRES_PER_SOURCE_UNIT * Math.hypot(dx * Math.cos(lat), dz),
+      qx = wrapSourceX(x - a.x), qz = z - a.z,
+      fraction = Math.max(0, Math.min(1, (qx * dx + qz * dz) / squared)),
+      distance = Math.hypot(qx - dx * fraction, qz - dz * fraction);
+    if (distance < best) { best = distance; anchor = total + fraction * lengthM; }
+    segments.push({ a, dx, dz, start: total, lengthM });
+    total += lengthM;
+  }
+  const start = anchor + fromMetres, finish = anchor + toMetres;
+  if (best > 2 / CANONICAL_METRES_PER_SOURCE_UNIT || start < -1e-6 || finish > total + 1e-6) return [];
+  const samples: { x: number; z: number }[] = [];
+  for (let index = 0, cursor = 0; index <= stationCount; index++) {
+    const at = Math.max(0, Math.min(total, start + (finish - start) * index / stationCount));
+    while (cursor < segments.length - 1 && at > segments[cursor].start + segments[cursor].lengthM) cursor++;
+    const segment = segments[cursor],
+      fraction = Math.max(0, Math.min(1, (at - segment.start) / segment.lengthM));
+    samples.push({ x: wrapSourceX(segment.a.x + segment.dx * fraction), z: segment.a.z + segment.dz * fraction });
+  }
+  return samples;
 }
 
 /**
@@ -95,28 +135,26 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
   const approachGrades = approaches.flatMap(side => side.slice(1).map((surface, i) =>
     Math.abs(surface.groundHeight - side[i].groundHeight) / (offsetsM[i + 1] - offsetsM[i])));
   const approachMaxSampledGrade = Math.max(...approachGrades);
-  // Full bridge-centreline *sampling*, including both 18 m approaches.
-  // The number of final-surface queries is capped, independent of the road's
-  // length or camera state. This is not continuous geometric route proof.
+  // Sample the actual graph-owned centerline, not the projected straight
+  // water-crossing tangent. The budget stays <=49 final-surface queries, and
+  // missing physical bank-to-road coverage is reported as not certified.
   const sampledMetres = (crossing.hi - crossing.lo) * crossing.metresPerUnit + 36,
     segmentCount = Math.max(2, Math.min(48, Math.ceil(sampledMetres / 4))),
-    start = crossing.lo - 18 / crossing.metresPerUnit,
-    end = crossing.hi + 18 / crossing.metresPerUnit,
-    routeStations = Array.from({ length: segmentCount + 1 }, (_, index) => {
-      const t = start + (end - start) * index / segmentCount;
-      return { surface: sample(t), onRoad: onRoad(t) };
-    }),
-    routeStationsOnRoad = routeStations.every(station => station.onRoad),
+    roadStations = transportRoadArcStations(edge.centerline, bridge.x, bridge.z,
+      crossing.lo * crossing.metresPerUnit - 18,
+      crossing.hi * crossing.metresPerUnit + 18, segmentCount),
+    routeStationsOnRoad = roadStations.length === segmentCount + 1,
+    routeStations = roadStations.map(point => ({ surface: finalSurfaceAt(point.x, point.z) })),
     routeStationsWalkable = routeStationsOnRoad && routeStations.every(({ surface }) =>
       surface.walkable &&
       (surface.water.kind === "none" ||
         (surface.water.kind === "river" && surface.deckHeight !== null && surface.traversal === "bridge"))),
     routeGradeStepM = sampledMetres / segmentCount,
-    routeMaxSampledGrade = Math.max(...routeStations.slice(1).map(({ surface }, index) => {
+    routeMaxSampledGrade = routeStationsOnRoad ? Math.max(...routeStations.slice(1).map(({ surface }, index) => {
       const previous = routeStations[index].surface;
       return Math.abs((surface.deckHeight ?? surface.groundHeight) -
         (previous.deckHeight ?? previous.groundHeight)) / routeGradeStepM;
-    }));
+    })) : null;
 
   return Object.freeze({
     matchingCrossing: true,
@@ -138,6 +176,6 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     routeStationsOnRoad,
     routeStationsWalkable,
     routeMaxSampledGrade,
-    routeGradeWithinLimit: routeStationsWalkable && routeMaxSampledGrade <= .08,
+    routeGradeWithinLimit: routeStationsWalkable && routeMaxSampledGrade !== null && routeMaxSampledGrade <= .08,
   });
 }
