@@ -14,6 +14,7 @@ import { nearbyPlaces, roadDistanceAt, roads, type Place } from "./geography.ts"
 import { settlementExteriorFor, settlementHomeFor, visibleSettlementStreetSegments, type SettlementExteriorPlan, type SettlementPlotPlan } from "./settlement-exterior.ts";
 import { naturalSurfaceAt } from "./hydrology.ts";
 import { wrapSourceX } from "./planet.ts";
+import { canonicalRoadBucketCells, canonicalRoadBucketX } from "./road-spatial-index.ts";
 
 type MorphologyKind = CoreFeature["kind"] | "residence" | "service" | "street" | "border" | "gate" | "guard-post" | "garden" | "path" | "pavement" | "roadside-tree";
 type MorphologyFeature = {
@@ -50,13 +51,11 @@ const ROAD_CLEARANCE_SUPPORT = 64;
 const externalRoadBuckets = new Map<string, (typeof roads)[number][]>();
 const roadBucketKey = (bx: number, bz: number) => `${bx}/${bz}`;
 for (const road of roads) {
-  for (const shiftX of [-WORLD_SIZE, 0, WORLD_SIZE]) {
-    const minBX = Math.floor((road.minX + shiftX - ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE), maxBX = Math.floor((road.maxX + shiftX + ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE),
-      minBZ = Math.floor((road.minZ - ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE), maxBZ = Math.floor((road.maxZ + ROAD_CLEARANCE_SUPPORT) / ROAD_BUCKET_SIZE);
-    for (let bz = minBZ; bz <= maxBZ; bz++) for (let bx = minBX; bx <= maxBX; bx++) {
-      const key = roadBucketKey(bx, bz), bucket = externalRoadBuckets.get(key) || [];
-      bucket.push(road); externalRoadBuckets.set(key, bucket);
-    }
+  // Settlement clearance uses the same canonical, shortest-seam path as transport queries.
+  // Index actual supported segments, never the empty middle of a long bounding rectangle.
+  for (const [bx, bz] of canonicalRoadBucketCells(road, ROAD_BUCKET_SIZE, ROAD_CLEARANCE_SUPPORT, WORLD_SIZE)) {
+    const key = roadBucketKey(bx, bz), bucket = externalRoadBuckets.get(key) || [];
+    bucket.push(road); externalRoadBuckets.set(key, bucket);
   }
 }
 
@@ -77,7 +76,7 @@ function externalRoadClear(x: number, z: number, radius: number) {
   const wrappedX = wrapSourceX(x), bx = Math.floor(wrappedX / ROAD_BUCKET_SIZE), bz = Math.floor(z / ROAD_BUCKET_SIZE),
     reach = Math.max(0, Math.ceil(radius / ROAD_BUCKET_SIZE)), candidates = new Set<(typeof roads)[number]>();
   for (let dz = -reach; dz <= reach; dz++) for (let dx = -reach; dx <= reach; dx++)
-    for (const road of externalRoadBuckets.get(roadBucketKey(bx + dx, bz + dz)) || []) candidates.add(road);
+    for (const road of externalRoadBuckets.get(roadBucketKey(canonicalRoadBucketX(bx + dx, ROAD_BUCKET_SIZE, WORLD_SIZE), bz + dz)) || []) candidates.add(road);
   return [...candidates].every((road) => roadDistanceAt(wrappedX, z, road) > radius);
 }
 function borderClearance(place: Place, plan: SettlementExteriorPlan, x: number, z: number) {
