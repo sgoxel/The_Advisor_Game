@@ -141,7 +141,11 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 2 ?
     { ...s, water: { ...s.water, kind: "river" } } as FinalSurface : s)).sampledPass, false);
   assert.equal(siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 2 ?
-    { ...s, contributingModifierIds: [] } : s)).sampledPass, false);
+    { ...s, contributingModifierIds: [] } : s)).sampledPass, false,
+    "the canonical site branch must own sampled road interior");
+  assert.equal(siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 4 ?
+    { ...s, contributingModifierIds: ["PARENT/ROAD"] } : s)).sampledPass, true,
+    "the physical junction can legitimately be owned by the adjoining parent road");
   assert.equal(siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 4 ?
     { ...s, surfaceHeight: 30 } : s)).gradeWithinLimit, false);
   assert.equal(siteAccessRoadStations({ ...edge, roadClass: "main" }).length, 0);
