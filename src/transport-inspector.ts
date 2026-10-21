@@ -2,6 +2,7 @@ import "./transport-inspector.css";
 import { continuityCorridor } from "./geography.ts";
 import {
   ensureTransportBridgeEvidence,
+  transportBridgeByCode,
   transportGenerationTelemetry,
   type TransportBorderCrossing,
   type TransportBridge,
@@ -131,7 +132,7 @@ function selectedRoadCodes() {
   if (!selection) return new Set<string>();
   if (selection.kind === "road") return new Set([selection.code]);
   if (selection.kind === "bridge") {
-    const bridge = transportNetwork.bridges.find((candidate) => candidate.code === selection!.code);
+    const bridge = transportBridgeByCode(selection.code);
     return new Set(bridge ? [bridge.roadCode] : []);
   }
   if (selection.kind === "border") {
@@ -222,7 +223,7 @@ function selectedEntityPosition() {
     const edge = transportNetwork.roadEdges.find((candidate) => candidate.code === selection!.code);
     return edge?.centerline[Math.floor(edge.centerline.length / 2)]?.position;
   }
-  if (selection.kind === "bridge") return transportNetwork.bridges.find((candidate) => candidate.code === selection!.code)?.position;
+  if (selection.kind === "bridge") return transportBridgeByCode(selection.code)?.position;
   if (selection.kind === "border") return transportNetwork.borderCrossings.find((candidate) => candidate.code === selection!.code)?.position;
   if (selection.kind === "junction") return transportNetwork.junctions.find((candidate) => candidate.code === selection!.code)?.position;
   if (selection.kind === "harbor") return transportNetwork.harbors.find((candidate) => candidate.code === selection!.code)?.position;
@@ -372,7 +373,7 @@ function renderSelection() {
     const edge = transportNetwork.roadEdges.find((candidate) => candidate.code === selection!.code);
     target.innerHTML = edge ? roadDetails(edge) : `<p>Road not found.</p>`;
   } else if (selection.kind === "bridge") {
-    const bridge = transportNetwork.bridges.find((candidate) => candidate.code === selection!.code);
+    const bridge = transportBridgeByCode(selection.code);
     target.innerHTML = bridge ? bridgeDetails(bridge) : `<p>Bridge not found.</p>`;
   } else if (selection.kind === "border") {
     const crossing = transportNetwork.borderCrossings.find((candidate) => candidate.code === selection!.code);

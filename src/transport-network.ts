@@ -843,6 +843,20 @@ export function transportRoadsNear(x: number, z: number, radiusSource: number, l
   return Object.freeze(result);
 }
 
+/**
+ * Resolve a selected canonical bridge after LRU eviction. Only explicit bridge
+ * inspection can regenerate its single owning road's lazy recipe; unrelated
+ * map movement never scans all roads or pins unbounded bridge records.
+ */
+export function transportBridgeByCode(code: string): TransportBridge | undefined {
+  const cached = currentBridges().find(bridge => bridge.code === code);
+  if (cached) return cached;
+  const marker = "/BRIDGE/", at = code.lastIndexOf(marker);
+  if (at <= 0) return undefined;
+  const owner = transportNetwork.roadEdges.find(edge => edge.code === code.slice(0, at));
+  return owner ? touchBridgeCache(owner).find(bridge => bridge.code === code) : undefined;
+}
+
 /** Explicit diagnostic request may scan topology, but ordinary pan/zoom never does. */
 export function ensureTransportBridgeEvidence() {
   const existing = currentBridges()[0];

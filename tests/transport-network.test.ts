@@ -29,6 +29,7 @@ import {
   type TransportNode,
   buildTransportNetwork,
   ensureTransportBridgeEvidence,
+  transportBridgeByCode,
   transportAcceptanceSummary,
   transportGenerationTelemetry,
   transportNetwork,
@@ -539,6 +540,12 @@ test("coarse stored alignment remains dry land while final profiles and bridges 
   assert.ok(bridge, "explicit diagnostic demand should materialize a legal natural-river bridge record");
   assert.ok(bridge!.spanM > 0 && bridge!.spanM <= TRANSPORT_LIMITS.ruralBridgeMaxM);
   assert.ok(transportNetwork.roadEdges.some((edge) => edge.code === bridge!.roadCode && edge.bridgeCodes.includes(bridge!.code)));
+  assert.deepEqual(transportBridgeByCode(bridge!.code), bridge,
+    "inspector must resolve the exact canonical selected bridge while cached");
+  assert.equal(transportBridgeByCode(bridge!.roadCode + "/BRIDGE/NOT-A-REAL-CROSSING"), undefined,
+    "invalid crossing must not acquire a fabricated bridge identity");
+  assert.equal(transportBridgeByCode("INVALID/BRIDGE/UNKNOWN"), undefined,
+    "absent graph owner cannot invent a selected bridge");
   const after = transportGenerationTelemetry();
   const afterSummary = transportAcceptanceSummary();
   assert.ok(after.bridgeCacheRoads > 0 && after.bridgeCacheRoads <= after.bridgeCacheLimit);
