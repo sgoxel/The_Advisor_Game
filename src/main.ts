@@ -119,6 +119,8 @@ const view: View = {
   yaw: -0.22,
   pixels: innerHeight,
 };
+// Presentation-only inspection angle; changing it never changes the canonical view or SEED.
+let bridgeInspectionAngle = false;
 const renderFrame = new LocalRenderFrame(view.x, view.z);
 let ready = false,
   selectedCode = "",
@@ -494,10 +496,12 @@ function applyPresentation() {
     globe.setVisible(false);
     globe.setBlend(0);
     const distance = view.halfHeight * 2.2 + 200;
+    const elevationAngle = bridgeInspectionAngle ? Math.PI / 6 : Math.PI / 3;
+    const horizontal = distance * Math.cos(elevationAngle);
     camera.setPosition(
-      focusRender.x + Math.sin(view.yaw) * distance * 0.5,
-      targetY + distance * Math.sin(Math.PI / 3),
-      focusRender.z + Math.cos(view.yaw) * distance * 0.5,
+      focusRender.x + Math.sin(view.yaw) * horizontal,
+      targetY + distance * Math.sin(elevationAngle),
+      focusRender.z + Math.cos(view.yaw) * horizontal,
     );
     camera.lookAt(focusRender.x, targetY, focusRender.z);
     camera.camera!.orthoHeight = view.halfHeight;
@@ -1667,6 +1671,10 @@ async function start() {
       },
       setHalfHeight(height: number) {
         navigate(view.x, view.z, height);
+      },
+      setBridgeInspectionAngle(enabled: boolean) {
+        bridgeInspectionAngle = enabled;
+        updateCamera();
       },
       navigation: {
         surfaceAtScreen,
