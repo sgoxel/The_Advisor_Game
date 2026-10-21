@@ -229,6 +229,31 @@ test("S005 selected crossing samples the real bent road arc without inventing a 
   assert.ok(wrapped.every(point => Math.abs(point.z - 100) < 1e-6));
 });
 
+test("S005 bridge road-arc anchor uses canonical metre proximity at high latitude and longitude seam", () => {
+  const highLatitudeZ = -SOURCE_PRESENTATION_WIDTH * (80 / 360),
+    meridian = [{ x: 100, z: highLatitudeZ - 10 }, { x: 100, z: highLatitudeZ + 10 }],
+    nearPhysicalRoad = transportRoadArcStations(meridian, 100.4, highLatitudeZ, -20, 20, 4);
+  assert.equal(nearPhysicalRoad.length, 5,
+    "0.4 source units east at 80° latitude is about 1.1 m, within the canonical 2 m anchor tolerance");
+  assert.ok(nearPhysicalRoad.every(point => Math.abs(point.x - 100) < 1e-6),
+    "sampling stays on the recorded road, not on the nearby query point");
+  assert.deepEqual(transportRoadArcStations(meridian, 100.4, highLatitudeZ, -20, 20, 4), nearPhysicalRoad);
+  assert.equal(transportRoadArcStations(meridian, 101, highLatitudeZ, -20, 20, 4).length, 0,
+    "about 2.7 m lateral separation at 80° must fail the same physical tolerance");
+  const equatorRoad = [{ x: 100, z: -10 }, { x: 100, z: 10 }];
+  assert.equal(transportRoadArcStations(equatorRoad, 100.4, 0, -20, 20, 4).length, 0,
+    "0.4 source units near the equator is over 6 m, and must not be treated as 1 m");
+
+  const seamX = SOURCE_PRESENTATION_WIDTH / 2,
+    seamRoad = [{ x: seamX - .1, z: highLatitudeZ - 10 },
+      { x: seamX - .1, z: highLatitudeZ + 10 }],
+    seamSamples = transportRoadArcStations(seamRoad, -seamX + .3, highLatitudeZ, -20, 20, 4);
+  assert.equal(seamSamples.length, 5,
+    "latitude scaling must not break physical anchor proximity across the longitude seam");
+  assert.ok(seamSamples.every(point => Math.abs(point.x - (seamX - .1)) < 1e-5),
+    "selected road remains the same canonical wrapped centerline");
+});
+
 test("S005 both bridge bank checks follow the actual road bend and never extrapolate missing road", () => {
   const elbow = [{ x: 0, z: 0 }, { x: 8, z: 0 }, { x: 8, z: 8 }];
   const metresPerUnit = 2 * Math.PI * 637100 / 262144;
