@@ -293,6 +293,12 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.ok(observed.approachMaxSampledGrade !== null &&
     Number.isFinite(observed.approachMaxSampledGrade) && observed.approachMaxSampledGrade >= 0);
   assert.equal(observed.approachGradeWithinLimit, observed.approachStationsOnRoad && observed.approachMaxSampledGrade! <= .08);
+  // A real selected bridge previously showed ~26% grade at the dry banks.
+  // Certify actual final-surface station heights, never just the deck centre.
+  assert.ok(observed.approachGradeWithinLimit,
+    `real bridge bank grade ${(observed.approachMaxSampledGrade! * 100).toFixed(2)}% exceeds 8%`);
+  assert.ok(observed.routeGradeWithinLimit,
+    `real bridge route grade ${(observed.routeMaxSampledGrade! * 100).toFixed(2)}% exceeds 8%`);
   assert.deepEqual(transportBridgeSpanAt(bridge, edge!), observed, "sampled verdict must be deterministic");
 
   // A short graph segment can point across the same river without covering the
