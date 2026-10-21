@@ -13,8 +13,14 @@ export const SITE_ACCESS_STATION_LIMIT = 49;
 export function siteAccessRoadStations(edge: TransportRoadEdge) {
   const points = edge.centerline;
   if (edge.roadClass !== "access" || !edge.from.includes("/NODE/SITE/") ||
-      points.length < 2 || points.length * 2 - 1 > SITE_ACCESS_STATION_LIMIT)
+      !Array.isArray(points) || points.length < 2 ||
+      points.length * 2 - 1 > SITE_ACCESS_STATION_LIMIT)
     return Object.freeze([] as { x: number; z: number }[]);
+  // Canonical conversion throws on invalid coordinates: fail closed before
+  // wrapping or measuring any station from a malformed access profile.
+  for (const point of points)
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.z))
+      return Object.freeze([] as { x: number; z: number }[]);
   const stations: { x: number; z: number }[] = [
     { x: wrapSourceX(points[0].x), z: points[0].z },
   ];
