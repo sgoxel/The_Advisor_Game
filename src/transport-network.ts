@@ -800,6 +800,23 @@ export function transportResourceBytesEstimated() {
     + [...bridgeCache.values()].reduce((sum, bridges) => sum + bridges.length * 1024, 0);
 }
 
+/** Physical proximity for rank-only inspection at latitude. Radius/viewport
+ * membership remains in source-space so no additional distant roads are loaded.
+ * This mirrors the canonical local east/north metric without mutating SEED. */
+export function transportPolylinePhysicalDistance(points: readonly { x: number; z: number }[], x: number, z: number) {
+  let best = Infinity;
+  for (let index = 1; index < points.length; index++) {
+    const a = points[index - 1], b = points[index],
+      eastScale = Math.cos(sourceToLonLat(a.x, a.z).lat),
+      dx = wrapSourceX(b.x - a.x) * eastScale, dz = b.z - a.z,
+      qx = wrapSourceX(x - a.x) * eastScale, qz = z - a.z,
+      length = dx * dx + dz * dz,
+      t = length ? Math.max(0, Math.min(1, (qx * dx + qz * dz) / length)) : 0;
+    best = Math.min(best, Math.hypot(qx - dx * t, qz - dz * t));
+  }
+  return best;
+}
+
 /** Exact wrapped distance to canonical source polyline, including the ±180° seam. */
 export function transportPolylineDistance(points: readonly { x: number; z: number }[], x: number, z: number) {
   let best = Infinity;
@@ -828,7 +845,7 @@ export function transportRoadsNear(x: number, z: number, radiusSource: number, l
       if (seen.has(edge.code)) continue;
       seen.add(edge.code);
       const distance = transportPolylineDistance(edge.centerline, x, z);
-      if (distance <= radiusSource) found.push({ edge, distance });
+      if (distance <= radiusSource) found.push({ edge, distance: transportPolylinePhysicalDistance(edge.centerline, x, z) });
     }
   }
   // Each candidate's canonical polyline is measured once, including across overlapping buckets.
