@@ -82,14 +82,16 @@ test("bridge deck preserves authoritative water and obeys the 120m rural cap", (
 });
 
 test("S005 bridge inspector distinguishes final-surface deck truth from a crossing record", () => {
-  const anchor = finalSurfaceEvidenceAnchors().bridge;
-  const valid = transportBridgeSurfaceAt(anchor.x, anchor.z);
+  const evidence = finalSurfaceEvidenceAnchors(), anchor = evidence.bridge;
+  const valid = transportBridgeSurfaceAt(anchor.x, anchor.z, evidence.roadCode);
   assert.equal(valid.centerDeckWalkable, true, "legal observed bridge must have a walkable final-surface deck");
   assert.ok(valid.deckHeight !== null);
   assert.equal(valid.traversal, "bridge");
+  assert.equal(transportBridgeSurfaceAt(anchor.x, anchor.z, `${evidence.roadCode}/UNRELATED`).centerDeckWalkable, false,
+    "a real nearby bridge cannot certify a different selected road's deck");
 
   const village = villages[0];
-  const dry = transportBridgeSurfaceAt(village.x, village.z);
+  const dry = transportBridgeSurfaceAt(village.x, village.z, evidence.roadCode);
   assert.equal(dry.centerDeckWalkable, false, "an ordinary dry world point must not be labeled a walkable bridge");
 });
 
@@ -130,6 +132,8 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(unownedSpan.matchingCrossing, true, "identical geometry still intersects the recorded river");
   assert.equal(unownedSpan.routeStationsSurfaceOwned, false,
     "a different graph road ID cannot claim the actual walkable road surface");
+  assert.equal(unownedSpan.deckStationsWalkable, false,
+    "another road's wet bridge stations cannot certify the selected graph edge");
   assert.equal(unownedSpan.routeStationsWalkable, false);
   assert.equal(unownedSpan.routeGradeWithinLimit, false);
   assert.equal(observed.routeGradeWithinLimit,

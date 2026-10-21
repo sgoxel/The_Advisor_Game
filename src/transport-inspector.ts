@@ -274,7 +274,7 @@ function bridgeDetails(bridge: TransportBridge) {
   const edge = transportNetwork.roadEdges.find((candidate) => candidate.code === bridge.roadCode)!;
   // Selection-only final-surface query: a recorded river intersection does not
   // by itself establish a constructed, walkable deck in Simulation.
-  const surface = transportBridgeSurfaceAt(bridge.x, bridge.z);
+  const surface = transportBridgeSurfaceAt(bridge.x, bridge.z, edge.code);
   const span = transportBridgeSpanAt(bridge, edge);
   // A walkable centre point cannot certify both dry banks, road alignment or safe grade.
   // Keep this verdict explicitly sample-limited: whole-route traversal is not proven.
@@ -289,8 +289,8 @@ function bridgeDetails(bridge: TransportBridge) {
       <dt>Natural drainage</dt><dd>${codeText(bridge.drainageCode)}</dd>
       <dt>Span</dt><dd>${bridge.spanM.toFixed(1)} m</dd>
       <dt>Connection</dt><dd>${codeText(edge.from)} → ${codeText(edge.to)}</dd>
-      <dt>Final-surface deck at crossing</dt><dd>${surface.centerDeckWalkable ? "Walkable bridge surface" : "Not certified — route legality pending"}</dd>
-      <dt>Sampled river span</dt><dd>${span.matchingCrossing ? span.deckStationsWalkable ? `${span.wetStations} wet deck stations walkable` : "Missing walkable deck at one or more wet stations" : "Cannot match recorded crossing to final river span"}</dd>
+      <dt>Final-surface deck at crossing</dt><dd>${surface.centerDeckWalkable ? "Selected-road-owned walkable bridge surface" : "Selected road deck not certified"}</dd>
+      <dt>Sampled river span</dt><dd>${span.matchingCrossing ? span.deckStationsWalkable ? `${span.wetStations} selected-road wet deck stations walkable` : "Missing selected-road-owned walkable deck at one or more wet stations" : "Cannot match recorded crossing to final river span"}</dd>
       <dt>Sampled bank approaches</dt><dd>${span.matchingCrossing ? span.bankStationsWalkable ? "Both nearby dry-bank samples walkable" : "One or both nearby bank samples not walkable" : "Not validated"}</dd>
       <dt>Approach road alignment</dt><dd>${span.matchingCrossing ? span.approachStationsOnRoad ? "All sampled stations within 2 m of the canonical road" : "One or both recorded road bank approaches are too short — not certified" : "Not validated"}</dd>
       <dt>Approach continuity probe</dt><dd>${span.matchingCrossing ? `${span.approachStations} stations (2–18 m each bank): ${span.approachStationsWalkable ? "on-road and walkable" : "off-road, obstructed or wet"}` : "Not validated"}</dd>
