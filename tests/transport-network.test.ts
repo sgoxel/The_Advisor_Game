@@ -20,6 +20,8 @@ import { transportRoadArcStations, transportRoadBankApproaches } from "../src/tr
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { createTransportWalkingIndex, transportWalkingRoute, transportWalkingRouteToNearest } from "../src/transport-walking-route.ts";
+import { SITE_ACCESS_STATION_LIMIT, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
+import type { FinalSurface } from "../src/final-surface.ts";
 import {
   TRANSPORT_LIMITS,
   type TransportNetwork,
@@ -102,6 +104,51 @@ test("S005 site preview picks shortest reachable road path rather than nearer di
   assert.deepEqual(transportWalkingRouteToNearest(index, "start", [...sites].reverse()), route);
   assert.equal(transportWalkingRouteToNearest(index, "start", ["near-but-disconnected"]), null);
   assert.equal(transportWalkingRoute(index, "start", "near-but-disconnected"), null);
+});
+
+test("S005 selected site access probe stays bounded and reports sampled physical facts without inventing traversal", () => {
+  const accessBranches = siteTransportNetwork.roadEdges.filter(edge =>
+    edge.roadClass === "access" && edge.from.includes("/NODE/SITE/"));
+  assert.ok(accessBranches.length > 0);
+  for (const edge of accessBranches) {
+    const stations = siteAccessRoadStations(edge);
+    assert.equal(stations.length, edge.centerline.length * 2 - 1, edge.code);
+    assert.ok(stations.length <= SITE_ACCESS_STATION_LIMIT, edge.code);
+    assert.deepEqual(siteAccessRoadStations(edge), stations);
+  }
+
+  const edge = {
+    code: "S005/SITE/ACCESS", from: "S005/NODE/SITE/EXAMPLE", roadClass: "access",
+    centerline: [{ x: 0, z: 0 }, { x: 1, z: 0 }, { x: 2, z: 0 }],
+  } as unknown as TransportRoadEdge;
+  const stations = siteAccessRoadStations(edge);
+  assert.equal(stations.length, 5);
+  const surfaces = stations.map((_, i) => ({
+    surfaceHeight: i * 0.1,
+    water: { kind: "none" },
+    walkable: true,
+    contributingModifierIds: [edge.code],
+  } as unknown as FinalSurface));
+  const good = siteAccessSampleVerdict(edge, surfaces);
+  assert.equal(good.sampledPass, true);
+  assert.equal(good.stationCount, 5);
+  assert.equal(good.expectedStations, 5);
+  assert.equal(good.onRecordedRoad, true);
+  assert.ok(good.maximumGrade !== null && good.maximumGrade < .08);
+  assert.deepEqual(siteAccessSampleVerdict(edge, surfaces), good);
+  assert.equal(siteAccessSampleVerdict(edge, surfaces.slice(1)).sampledPass, false,
+    "missing selected final-surface station must never produce a pass");
+  assert.equal(siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 2 ?
+    { ...s, water: { ...s.water, kind: "river" } } as FinalSurface : s)).sampledPass, false);
+  assert.equal(siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 2 ?
+    { ...s, contributingModifierIds: [] } : s)).sampledPass, false);
+  assert.equal(siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 4 ?
+    { ...s, surfaceHeight: 30 } : s)).gradeWithinLimit, false);
+  assert.equal(siteAccessRoadStations({ ...edge, roadClass: "main" }).length, 0);
+  assert.equal(siteAccessRoadStations({
+    ...edge,
+    centerline: Array.from({ length: SITE_ACCESS_STATION_LIMIT }, (_, x) => ({ x, z: 0 })),
+  }).length, 0, "never silently truncate a source branch to meet the budget");
 });
 
 test("S005 source-polyline distance uses the shortest wrapped segment at the longitude seam", () => {
