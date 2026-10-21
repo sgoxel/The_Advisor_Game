@@ -69,3 +69,5 @@ jobs:
         with:
           name: s005-transport-${{ matrix.backend }}
           path: test-results/
+
+# Branch-only AGENT #1 visual proof: main 23e5ad831ec5259ce6cb2d7f94aa9eb90ead4f76; no runtime change.
