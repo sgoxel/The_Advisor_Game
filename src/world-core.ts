@@ -445,7 +445,9 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
         if(left<=0&&right>=0)deckHeight=lerp(a.height,b.height,-left/(right-left));
         else if(base.water.kind==='none'){
           const gapM=Math.max(left,-right)*crossing.metresPerUnit;
-          if(gapM<24){const supportHeight=left>0?a.height:b.height;roadHeight=boundedEarthwork(lerp(supportHeight,roadHeight,smooth(clamp01(gapM/24))),base.groundHeight,4,3);}
+          // A 24 m smoothstep can exceed an 8% walkable approach grade even with a legal deck.
+          // Use a longer linear, cut/fill-bounded roadbed transition on the SAME canonical route.
+          if(gapM<64){const supportHeight=left>0?a.height:b.height;roadHeight=boundedEarthwork(lerp(supportHeight,roadHeight,clamp01(gapM/64)),base.groundHeight,4,3);}
         }
       }
     }
