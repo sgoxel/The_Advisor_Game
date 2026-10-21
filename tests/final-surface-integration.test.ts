@@ -23,6 +23,25 @@ import { roadTangentAt } from "../src/world-core.ts";
 
 const EPS = 1e-9;
 
+test("S005 road support and physical bank lookup agree at latitude and wrap", () => {
+  const northSouth = (latitude: number, x = 0) => {
+    const z = lonLatToSource(0, latitude).z;
+    return {
+      fromX: x, fromZ: z - 10, toX: x, toZ: z + 10,
+      centerline: [{ x, z: z - 10 }, { x, z: z + 10 }],
+    } as unknown as (typeof roads)[number];
+  };
+  const equator = northSouth(0), highLatitude = northSouth(Math.PI / 3);
+  assert.ok(Math.abs(roadDistanceAt(3, equator.fromZ + 10, equator) - 3) < 1e-8);
+  assert.ok(Math.abs(roadDistanceAt(3, highLatitude.fromZ + 10, highLatitude) - 1.5) < 1e-8,
+    "road carriageway/shoulder distances must use the same physical east scale as the bridge inspector");
+  assert.ok(Math.abs(roadDistanceAt(3, highLatitude.fromZ + 10, highLatitude) -
+    roadDistanceAt(3, highLatitude.fromZ + 10, highLatitude)) < EPS);
+  const seam = northSouth(Math.PI / 3, 131071.5);
+  assert.ok(Math.abs(roadDistanceAt(-131070.5, seam.fromZ + 10, seam) - 1) < 1e-8,
+    "a seam-wrapped two-source-unit east offset is one physical source unit at 60 degrees");
+});
+
 test("S005 final road profile uses latitude-correct physical nearest segment", () => {
   const mockRoadAt = (latitude: number) => {
     const z = lonLatToSource(0, latitude).z;
