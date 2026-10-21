@@ -333,24 +333,41 @@ function addRoadAndBridgeRibbons(
         pushQuad(prepared, tile, a, b, c, d, REFINED_BRIDGE_RGB);
         // Narrow edge strips make the crossing read as a bridge without adding
         // collision-only geometry or broadening its authoritative deck support.
-        const rail = 0.16,
+        const rail = 0.7 / CANONICAL_METRES_PER_SOURCE_UNIT,
+          railHeightM = 1.15,
           edgeTint: RGB = [73, 54, 35];
         pushQuad(
           prepared,
           tile,
-          [x0 + bridgeNx, y0 + 0.06, z0 + bridgeNz],
-          [x1 + bridgeNx, y1 + 0.06, z1 + bridgeNz],
-          [x1 + bridgeNx + uz * rail, y1 + 0.06, z1 + bridgeNz - ux * rail],
-          [x0 + bridgeNx + uz * rail, y0 + 0.06, z0 + bridgeNz - ux * rail],
+          [x0 + bridgeNx, y0 + railHeightM, z0 + bridgeNz],
+          [x1 + bridgeNx, y1 + railHeightM, z1 + bridgeNz],
+          [x1 + bridgeNx + uz * rail, y1 + railHeightM, z1 + bridgeNz - ux * rail],
+          [x0 + bridgeNx + uz * rail, y0 + railHeightM, z0 + bridgeNz - ux * rail],
           edgeTint,
         );
         pushQuad(
           prepared,
           tile,
-          [x0 - bridgeNx - uz * rail, y0 + 0.06, z0 - bridgeNz + ux * rail],
-          [x1 - bridgeNx - uz * rail, y1 + 0.06, z1 - bridgeNz + ux * rail],
-          [x1 - bridgeNx, y1 + 0.06, z1 - bridgeNz],
-          [x0 - bridgeNx, y0 + 0.06, z0 - bridgeNz],
+          [x0 - bridgeNx - uz * rail, y0 + railHeightM, z0 - bridgeNz + ux * rail],
+          [x1 - bridgeNx - uz * rail, y1 + railHeightM, z1 - bridgeNz + ux * rail],
+          [x1 - bridgeNx, y1 + railHeightM, z1 - bridgeNz],
+          [x0 - bridgeNx, y0 + railHeightM, z0 - bridgeNz],
+          edgeTint,
+        );
+        // Physical guardrail faces are visual only: deck width, grade,
+        // water and walking authority still come from finalSurfaceAt.
+        pushQuad(prepared, tile,
+          [x0 + bridgeNx, y0, z0 + bridgeNz],
+          [x1 + bridgeNx, y1, z1 + bridgeNz],
+          [x1 + bridgeNx, y1 + railHeightM, z1 + bridgeNz],
+          [x0 + bridgeNx, y0 + railHeightM, z0 + bridgeNz],
+          edgeTint,
+        );
+        pushQuad(prepared, tile,
+          [x0 - bridgeNx, y0 + railHeightM, z0 - bridgeNz],
+          [x1 - bridgeNx, y1 + railHeightM, z1 - bridgeNz],
+          [x1 - bridgeNx, y1, z1 - bridgeNz],
+          [x0 - bridgeNx, y0, z0 - bridgeNz],
           edgeTint,
         );
         continue;
