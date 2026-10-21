@@ -4,7 +4,7 @@ import {naturalSurfaceAt} from "../src/hydrology.ts";
 import { places, roads, villages, roadDistanceAt } from "../src/geography.ts";
 import { WORLD_BUILDING_PRIORITIES } from "../src/final-surface.ts";
 import { buildTile } from "../src/geometry.ts";
-import { REFINED_BRIDGE_HALF_WIDTH_SOURCE } from "../src/surface-refinement.ts";
+import { REFINED_BRIDGE_HALF_WIDTH_SOURCE, selectedRoadBridgeDeck } from "../src/surface-refinement.ts";
 import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "../src/transport-bridge-surface.ts";
 import { freshwaterCrossingAt } from "../src/hydrology.ts";
 import { transportNetwork } from "../src/transport-network.ts";
@@ -115,6 +115,19 @@ test("S005 coarse bridge matches source-owned seven-metre deck and graded endpoi
     sampledDeckVertices++;
   }
   assert.ok(sampledDeckVertices >= 6, "the true coarse crossing must remain visibly bridged");
+});
+
+test("S005 refined bridge refuses another road's legal deck", () => {
+  const evidence = finalSurfaceEvidenceAnchors();
+  const deck = finalSurfaceAt(evidence.bridge.x, evidence.bridge.z);
+  assert.ok(selectedRoadBridgeDeck(deck, evidence.roadCode),
+    "the known legal bridge must remain visible in refined geometry");
+  assert.equal(selectedRoadBridgeDeck(deck, `${evidence.roadCode}/UNRELATED`), false,
+    "a nearby road must not paint the existing legal deck as its own bridge");
+  assert.equal(selectedRoadBridgeDeck(finalSurfaceAt(villages[0].x, villages[0].z), evidence.roadCode), false,
+    "dry ground may not produce an unrelated bridge ribbon");
+  assert.equal(selectedRoadBridgeDeck({ ...deck, walkable: false }, evidence.roadCode), false,
+    "an unwalkable deck cannot be displayed as an open crossing");
 });
 
 test("S005 bridge inspector distinguishes final-surface deck truth from a crossing record", () => {
