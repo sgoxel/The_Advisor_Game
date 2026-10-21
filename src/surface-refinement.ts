@@ -277,6 +277,15 @@ function addGroundRefinement(
     }
 }
 
+/** Presentation-only guard: the selected road must own its legal bridge deck. */
+export function selectedRoadBridgeDeck(
+  surface: Pick<ReturnType<typeof finalSurfaceAt>, "deckHeight" | "walkable" | "traversal" | "contributingModifierIds">,
+  roadCode: string,
+) {
+  return surface.deckHeight !== null && surface.walkable &&
+    surface.traversal === "bridge" && surface.contributingModifierIds.includes(roadCode);
+}
+
 function addRoadAndBridgeRibbons(
   tile: Tile,
   ground: ExtraGeometry,
@@ -311,7 +320,9 @@ function addRoadAndBridgeRibbons(
       )
         continue;
       const middle = finalSurfaceAt(mx, mz);
-      if (middle.deckHeight !== null) {
+      // A nearby crossing belonging to another road is not this segment's
+      // physical bridge. Refined decks and coarse decks use the same owner.
+      if (selectedRoadBridgeDeck(middle, road.code)) {
         const start = finalSurfaceAt(x0, z0), end = finalSurfaceAt(x1, z1),
           y0 = (start.deckHeight ?? start.groundHeight) + BRIDGE_EPSILON,
           y1 = (end.deckHeight ?? end.groundHeight) + BRIDGE_EPSILON,
