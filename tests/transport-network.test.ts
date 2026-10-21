@@ -161,6 +161,16 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 4 ?
     { ...s, surfaceHeight: 30 } : s)).gradeWithinLimit, false);
   assert.equal(siteAccessRoadStations({ ...edge, roadClass: "main" }).length, 0);
+  const sparse = { ...edge, centerline: [
+    { x: 0, z: 0 }, { x: 1, z: 0 }, { x: 7, z: 0 },
+  ] };
+  assert.equal(siteAccessRoadStations(sparse).length, 0,
+    "a >75 m unexamined centerline interval cannot certify a physical site access branch");
+  assert.equal(siteAccessSampleVerdict(sparse, connectedSurfaces, junctionRoadCodes).sampledPass, false,
+    "passing stations from a different profile cannot certify a sparse unsafe gap");
+  assert.ok(siteAccessRoadStations({
+    ...edge, centerline: [{ x: 0, z: 0 }, { x: 4, z: 0 }],
+  }).length > 0, "short bounded intervals remain inspectable");
   assert.equal(siteAccessRoadStations({
     ...edge,
     centerline: Array.from({ length: SITE_ACCESS_STATION_LIMIT }, (_, x) => ({ x, z: 0 })),
