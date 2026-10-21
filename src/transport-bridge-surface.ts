@@ -225,3 +225,14 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     routeGradeWithinLimit: routeStationsWalkable && routeMaxSampledGrade !== null && routeMaxSampledGrade <= .08,
   });
 }
+
+/** A selected crossing passes only if BOTH bank and whole-span grade checks pass. */
+export function sampledBridgeCrossingPass(
+  centerDeckWalkable: boolean,
+  span: ReturnType<typeof transportBridgeSpanAt>,
+): boolean {
+  return centerDeckWalkable && span.matchingCrossing &&
+    span.deckStationsWalkable && span.bankStationsWalkable &&
+    span.approachStationsWalkable && span.approachGradeWithinLimit &&
+    span.routeStationsWalkable && span.routeGradeWithinLimit;
+}
