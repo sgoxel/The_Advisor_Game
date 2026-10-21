@@ -129,19 +129,26 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     walkable: true,
     contributingModifierIds: [edge.code],
   } as unknown as FinalSurface));
-  const good = siteAccessSampleVerdict(edge, surfaces);
+  const junctionRoadCodes = new Set([edge.code, "PARENT/ROAD"]),
+    connectedSurfaces = surfaces.map((surface, i) => i === 4 ?
+      { ...surface, contributingModifierIds: [edge.code, "PARENT/ROAD"] } : surface);
+  assert.equal(siteAccessSampleVerdict(edge, surfaces, junctionRoadCodes).sampledPass, false,
+    "a site branch alone at the terminal cannot certify its parent road connection");
+  assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces).sampledPass, false,
+    "missing recorded incident-road evidence must not default to a pass");
+  const good = siteAccessSampleVerdict(edge, connectedSurfaces, junctionRoadCodes);
   assert.equal(good.sampledPass, true);
   assert.equal(good.stationCount, 5);
   assert.equal(good.expectedStations, 5);
   assert.equal(good.onRecordedRoad, true);
   assert.ok(good.maximumGrade !== null && good.maximumGrade < .08);
-  assert.deepEqual(siteAccessSampleVerdict(edge, surfaces), good);
-  assert.equal(siteAccessSampleVerdict(edge, surfaces.slice(1)).sampledPass, false,
+  assert.deepEqual(siteAccessSampleVerdict(edge, connectedSurfaces, junctionRoadCodes), good);
+  assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces.slice(1), junctionRoadCodes).sampledPass, false,
     "missing selected final-surface station must never produce a pass");
-  assert.equal(siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 2 ?
-    { ...s, water: { ...s.water, kind: "river" } } as FinalSurface : s)).sampledPass, false);
-  assert.equal(siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 2 ?
-    { ...s, contributingModifierIds: [] } : s)).sampledPass, false,
+  assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces.map((s, i) => i === 2 ?
+    { ...s, water: { ...s.water, kind: "river" } } as FinalSurface : s), junctionRoadCodes).sampledPass, false);
+  assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces.map((s, i) => i === 2 ?
+    { ...s, contributingModifierIds: [] } : s), junctionRoadCodes).sampledPass, false,
     "the canonical site branch must own sampled road interior");
   const parentAtJunction = surfaces.map((s, i) => i === 4 ?
     { ...s, contributingModifierIds: ["PARENT/ROAD"] } : s);
