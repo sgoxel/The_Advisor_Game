@@ -29,25 +29,25 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Legal transport UX: continuous roads, bridges, site access & truthful route preview
+- WP-S005-001-001 — Continuous transport: canonical road/bridge joins, legal routes & truthful UX
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Legal resident commutes: Fantasy-Time schedules, bounded actors & usable inspection
+- WP-S006-001-001 — Legal resident movement: Fantasy-Time commutes, bounded actors & inspectable lives
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — 3D visual research: lit fantasy scenery, semantic zoom & backend/mobile budgets
+- WP-S007-001-001 — 3D visual reference design: toon shading, semantic zoom & mobile/backend budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas UX: mobile-safe map, 44px touch targets & keyboard inspection
+- WP-S008-001-001 — Accessible atlas workflow: safe-area UI, 44px touch & keyboard inspection
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance proof: first useful interaction, p95 budgets & backend evidence
-- WP-S009-002-001 — Responsive atlas input: bounded picking, stable-frame UI & exact selection
-- WP-S009-003-001 — Adaptive WebGPU/WebGL2: mobile DPR, shadows, shared memory & recovery
-- WP-S009-004-001 — README conformance: immutable rules, truthful atlas/Advisor UX & release claims
-- WP-S009-005-001 — Progressive zoom readiness: coherent terrain, valid selection & final 3D detail
+- WP-S009-001-001 — Performance proof: exact-SHA first response, p95 budgets & bounded resources
+- WP-S009-002-001 — Responsive atlas input: bounded surface picking, idle UI reuse & exact selection
+- WP-S009-003-001 — WebGPU/WebGL2 compatibility: adaptive DPR, shared memory & recovery
+- WP-S009-004-001 — README conformance: Simulation truth, Advisor-vs-atlas UX & release evidence
+- WP-S009-005-001 — Seamless zoom LOD: coherent terrain, valid first-use & complete 3D detail
