@@ -79,7 +79,22 @@
   gap: .5rem;
 }
 .transport-actions button { min-height: 44px; }
-#transport-site-route, #transport-site-access, #transport-bridge-closeup { grid-column: 1 / -1; }
+#transport-site-route, #transport-site-access, #transport-bridge-closeup, #transport-bridge-clearview { grid-column: 1 / -1; }
+.transport-resume {
+  position: fixed;
+  top: 6rem;
+  right: 1rem;
+  z-index: 26;
+  min-height: 44px;
+  padding: .6rem .9rem;
+  max-width: min(280px, calc(100vw - 2rem));
+  border-radius: .4rem;
+  border: 1px solid #d9b874;
+  background: #26342e;
+  color: #f3e7c3;
+  cursor: pointer;
+}
+.transport-resume[hidden] { display: none; }
 #transport-site-answer:not(:empty), #transport-site-surface:not(:empty) { margin-top: .75rem; padding-top: .75rem; border-top: 1px solid rgba(217, 184, 116, .24); }
 #transport-site-answer .eyebrow, #transport-site-surface .eyebrow { line-height: 1.35; }
 #transport-selection h3 {
