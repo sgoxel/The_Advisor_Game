@@ -60,6 +60,21 @@ export function transportRoadArcStations(
   return samples;
 }
 
+/**
+ * Five wet-deck stations at the same 10/30/50/70/90% offsets used by the
+ * inspector, but measured along the actual source-owned road arc. A missing
+ * recorded span yields no samples; no straight-water tangent can certify a
+ * different physical path.
+ */
+export function transportRoadWetStations(
+  points: readonly { x: number; z: number }[], x: number, z: number,
+  crossing: Readonly<{ lo: number; hi: number; metresPerUnit: number }>,
+) {
+  const start = crossing.lo * crossing.metresPerUnit,
+    span = (crossing.hi - crossing.lo) * crossing.metresPerUnit;
+  return transportRoadArcStations(points, x, z, start + span * .1, start + span * .9, 4);
+}
+
 /** Both dry-bank approach probes follow the immutable road, not a projected tangent. */
 export function transportRoadBankApproaches(
   points: readonly { x: number; z: number }[], x: number, z: number,
@@ -111,12 +126,10 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     routeGradeWithinLimit: false,
   });
 
-  const sample = (t: number) => finalSurfaceAt(
-    wrapSourceX(bridge.x + crossing.ux * t),
-    bridge.z + crossing.uz * t,
-  );
-  const wet = [0.1, 0.3, 0.5, 0.7, 0.9].map(fraction =>
-    sample(crossing.lo + (crossing.hi - crossing.lo) * fraction));
+  // Wet-deck evidence must follow the same bent, wrap-safe canonical road
+  // as the bank and full-crossing probes, not a potentially false tangent.
+  const wet = transportRoadWetStations(edge.centerline, bridge.x, bridge.z, crossing)
+    .map(point => finalSurfaceAt(point.x, point.z));
   // Fixed 2–18 m bank probes now trace the same SEED-owned road curve
   // as the route samples. Missing road endpoints cannot be extrapolated.
   const bankPoints = transportRoadBankApproaches(edge.centerline, bridge.x, bridge.z, crossing),
@@ -152,7 +165,7 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
   return Object.freeze({
     matchingCrossing: true,
     wetStations: wet.length,
-    deckStationsWalkable: wet.every(surface =>
+    deckStationsWalkable: wet.length === 5 && wet.every(surface =>
       surface.water.kind === "river" &&
       surface.deckHeight !== null &&
       surface.walkable &&
