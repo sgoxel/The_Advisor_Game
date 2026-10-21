@@ -195,52 +195,6 @@ test("S005 walking preview reuses actual site branches, stays deterministic, exc
   assert.equal(transportWalkingRoute(graph, "absent-node", sampled[0].from), null);
 });
 
-test("S005 bridge-linked Y to critical-site chain uses one canonical walking graph", () => {
-  const network = siteTransportNetwork, index = createTransportWalkingIndex(network),
-    nodeByCode = new Map(network.nodes.map(node => [node.code, node])),
-    edgeByCode = new Map(network.roadEdges.map(edge => [edge.code, edge])),
-    bridge = ensureTransportBridgeEvidence();
-  assert.ok(bridge, "the deterministic river crossing must have a real road owner");
-  const crossing = edgeByCode.get(bridge!.roadCode);
-  assert.ok(crossing && crossing.bridgeCodes.includes(bridge!.code),
-    "the selected crossing must remain on its actual graph edge");
-  const bank = nodeByCode.get(crossing!.from);
-  assert.ok(bank, "crossing approach must be a canonical walking node");
-  const y = network.junctions.map(junction => nodeByCode.get(junction.nodeCode))
-    .find(node => node?.continent === bank!.continent);
-  const site = network.nodes.find(node =>
-    node.kind === "site" && node.countryCode === bank!.countryCode);
-  assert.ok(y && site, "the bridge continent must have a real Y and road-linked site");
-  const approach = transportWalkingRoute(index, y!.code, crossing!.from),
-    continuation = transportWalkingRoute(index, crossing!.to, site!.code);
-  assert.ok(approach && continuation, "Y and critical site must be connected to the chosen bridge banks");
-  const chain = [...approach!.edgeCodes, crossing!.code, ...continuation!.edgeCodes];
-  let at = y!.code;
-  for (const code of chain) {
-    const edge = edgeByCode.get(code);
-    assert.ok(edge, `walking chain invented a road: ${code}`);
-    assert.ok(edge!.from === at || edge!.to === at,
-      `walking chain disconnected before ${code}`);
-    at = edge!.from === at ? edge!.to : edge!.from;
-  }
-  assert.equal(at, site!.code, "chain must terminate at the actual SEED-owned site");
-  assert.ok(chain.includes(crossing!.code), "the bridge crossing is a required physical graph leg");
-  assert.ok(chain.includes(network.roadEdges.find(edge =>
-    edge.roadClass === "access" && edge.from === site!.code)!.code),
-  "critical-site entry must traverse its own recorded access branch");
-  const distance = approach!.distanceM + crossing!.surfaceLengthM + continuation!.distanceM,
-    fantasySeconds = approach!.fantasyWalkSeconds + crossing!.fantasyWalkSeconds +
-      continuation!.fantasyWalkSeconds;
-  assert.ok(distance > crossing!.surfaceLengthM && fantasySeconds > crossing!.fantasyWalkSeconds);
-  assert.ok(approach!.exploredNodes <= index.nodeCount && continuation!.exploredNodes <= index.nodeCount,
-    "canonical road queries must stay graph-bounded");
-  assert.deepEqual(transportWalkingRoute(index, y!.code, crossing!.from), approach);
-  assert.deepEqual(transportWalkingRoute(index, crossing!.to, site!.code), continuation,
-    "repeat queries cannot change seeded road identities or good-road estimates");
-  // Graph connectivity only: sampled bank grade, bridge deck and uninterrupted
-  // final-surface travel remain separate required acceptance evidence.
-});
-
 test("S005 site preview picks shortest reachable road path rather than nearer disconnected or longer site", () => {
   const network = {
     nodes: ["start", "junction", "near-but-disconnected", "far-by-map", "long-by-road"]
@@ -657,6 +611,52 @@ test("coarse stored alignment remains dry land while final profiles and bridges 
   assert.ok(after.materializedBridges > 0);
   assert.equal(afterSummary.bridges, after.materializedBridges, "live bridge count must not be cached");
   assert.equal(afterSummary.roads, beforeSummary.roads, "static topology coverage must remain unchanged");
+});
+
+test("S005 bridge-linked Y to critical-site chain uses one canonical walking graph", () => {
+  const network = siteTransportNetwork, index = createTransportWalkingIndex(network),
+    nodeByCode = new Map(network.nodes.map(node => [node.code, node])),
+    edgeByCode = new Map(network.roadEdges.map(edge => [edge.code, edge])),
+    bridge = ensureTransportBridgeEvidence();
+  assert.ok(bridge, "the deterministic river crossing must have a real road owner");
+  const crossing = edgeByCode.get(bridge!.roadCode);
+  assert.ok(crossing && crossing.bridgeCodes.includes(bridge!.code),
+    "the selected crossing must remain on its actual graph edge");
+  const bank = nodeByCode.get(crossing!.from);
+  assert.ok(bank, "crossing approach must be a canonical walking node");
+  const y = network.junctions.map(junction => nodeByCode.get(junction.nodeCode))
+    .find(node => node?.continent === bank!.continent);
+  const site = network.nodes.find(node =>
+    node.kind === "site" && node.countryCode === bank!.countryCode);
+  assert.ok(y && site, "the bridge continent must have a real Y and road-linked site");
+  const approach = transportWalkingRoute(index, y!.code, crossing!.from),
+    continuation = transportWalkingRoute(index, crossing!.to, site!.code);
+  assert.ok(approach && continuation, "Y and critical site must be connected to the chosen bridge banks");
+  const chain = [...approach!.edgeCodes, crossing!.code, ...continuation!.edgeCodes];
+  let at = y!.code;
+  for (const code of chain) {
+    const edge = edgeByCode.get(code);
+    assert.ok(edge, `walking chain invented a road: ${code}`);
+    assert.ok(edge!.from === at || edge!.to === at,
+      `walking chain disconnected before ${code}`);
+    at = edge!.from === at ? edge!.to : edge!.from;
+  }
+  assert.equal(at, site!.code, "chain must terminate at the actual SEED-owned site");
+  assert.ok(chain.includes(crossing!.code), "the bridge crossing is a required physical graph leg");
+  assert.ok(chain.includes(network.roadEdges.find(edge =>
+    edge.roadClass === "access" && edge.from === site!.code)!.code),
+  "critical-site entry must traverse its own recorded access branch");
+  const distance = approach!.distanceM + crossing!.surfaceLengthM + continuation!.distanceM,
+    fantasySeconds = approach!.fantasyWalkSeconds + crossing!.fantasyWalkSeconds +
+      continuation!.fantasyWalkSeconds;
+  assert.ok(distance > crossing!.surfaceLengthM && fantasySeconds > crossing!.fantasyWalkSeconds);
+  assert.ok(approach!.exploredNodes <= index.nodeCount && continuation!.exploredNodes <= index.nodeCount,
+    "canonical road queries must stay graph-bounded");
+  assert.deepEqual(transportWalkingRoute(index, y!.code, crossing!.from), approach);
+  assert.deepEqual(transportWalkingRoute(index, crossing!.to, site!.code), continuation,
+    "repeat queries cannot change seeded road identities or good-road estimates");
+  // Graph connectivity only: sampled bank grade, bridge deck and uninterrupted
+  // final-surface travel remain separate required acceptance evidence.
 });
 
 test("road-linked harbors and ferries are explicit separate traversal semantics", () => {
