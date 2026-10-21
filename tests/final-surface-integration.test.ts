@@ -32,12 +32,17 @@ test("S005 road support and physical bank lookup agree at latitude and wrap", ()
     } as unknown as (typeof roads)[number];
   };
   const equator = northSouth(0), highLatitude = northSouth(Math.PI / 3);
-  assert.ok(Math.abs(roadDistanceAt(3, equator.fromZ + 10, equator) - 3) < 1e-8);
-  assert.ok(Math.abs(roadDistanceAt(3, highLatitude.fromZ + 10, highLatitude) - 1.5) < 1e-8,
+  const expectedPhysicalEast = (road: (typeof roads)[number], offset: number) =>
+    offset * Math.cos(sourceToLonLat(road.fromX, road.fromZ).lat);
+  assert.ok(Math.abs(roadDistanceAt(3, equator.fromZ + 10, equator) -
+    expectedPhysicalEast(equator, 3)) < 1e-8);
+  assert.ok(Math.abs(roadDistanceAt(3, highLatitude.fromZ + 10, highLatitude) -
+    expectedPhysicalEast(highLatitude, 3)) < 1e-8,
     "road carriageway/shoulder distances must use the same physical east scale as the bridge inspector");
   const seam = northSouth(Math.PI / 3, 131071.5);
-  assert.ok(Math.abs(roadDistanceAt(-131070.5, seam.fromZ + 10, seam) - 1) < 1e-8,
-    "a seam-wrapped two-source-unit east offset is one physical source unit at 60 degrees");
+  assert.ok(Math.abs(roadDistanceAt(-131070.5, seam.fromZ + 10, seam) -
+    expectedPhysicalEast(seam, 2)) < 1e-8,
+    "a seam-wrapped two-source-unit east offset must obey physical latitude scaling");
 });
 
 test("S005 final road profile uses latitude-correct physical nearest segment", () => {
