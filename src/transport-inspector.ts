@@ -21,6 +21,7 @@ import { siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdi
 import { finalSurfaceAt } from "./world-core.ts";
 
 type AdvisorWorld = {
+  setHalfHeight(height: number): void;
   state: {
     presentation: string;
     scaleLabel: string;
@@ -101,6 +102,7 @@ panel.innerHTML = `
     <button type="button" id="transport-site-route">Preview shortest road to reachable site</button>
     <button type="button" id="transport-site-access" disabled>Probe selected site's physical approach</button>
     <button type="button" id="transport-focus">Focus selection</button>
+    <button type="button" id="transport-bridge-closeup" hidden>Inspect bridge in 3D</button>
   </div>
   <div class="divider"></div>
   <section id="transport-selection" aria-live="polite"></section>
@@ -366,6 +368,7 @@ function lakeDetourDetails() {
 
 function renderSelection() {
   const target = panel.querySelector<HTMLElement>("#transport-selection")!;
+  panel.querySelector<HTMLButtonElement>("#transport-bridge-closeup")!.hidden = selection?.kind !== "bridge";
   if (!selection) {
     target.innerHTML = `<p class="hint">Select a nearby road, or use an evidence target from the diagnostic interface.</p>`;
     return;
@@ -727,6 +730,16 @@ panel.querySelector<HTMLButtonElement>("#transport-nearest")!.onclick = chooseNe
 panel.querySelector<HTMLButtonElement>("#transport-site-route")!.onclick = chooseNearestSiteRoute;
 panel.querySelector<HTMLButtonElement>("#transport-site-access")!.onclick = probeSiteAccess;
 panel.querySelector<HTMLButtonElement>("#transport-focus")!.onclick = focusSelection;
+panel.querySelector<HTMLButtonElement>("#transport-bridge-closeup")!.onclick = () => {
+  if (selection?.kind !== "bridge") return;
+  const bridge = transportBridgeByCode(selection.code), runtime = world();
+  if (!bridge || !runtime) return;
+  // Real 3D bridge rail height is ~1 m; a 1/20 atlas image covers kilometres.
+  // An explicit close-up is a camera-only inspection, never traversed movement.
+  runtime.navigation.setFocus(bridge.position.lon, bridge.position.lat);
+  runtime.setHalfHeight(24);
+  refreshOverlay(true);
+};
 openButton.onclick = openPanel;
 
 const actions = document.querySelector(".region-actions");
