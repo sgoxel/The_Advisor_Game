@@ -129,3 +129,13 @@ export function nearestWalkingRoadEndpoint(
   }
   return best;
 }
+
+/** Overlay only: project/highlight at most the already focus-bounded road query. */
+export function visibleWalkingPreviewEdgeCodes(
+  route: { readonly edgeCodes: readonly string[] } | null,
+  nearby: readonly Pick<TransportRoadEdge, "code">[],
+): ReadonlySet<string> {
+  const wanted = new Set(route?.edgeCodes ?? []), visible = new Set<string>();
+  for (const edge of nearby) if (wanted.has(edge.code)) visible.add(edge.code);
+  return visible;
+}
