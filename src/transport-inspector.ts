@@ -104,6 +104,7 @@ panel.innerHTML = `
     <button type="button" id="transport-site-access" disabled>Probe selected site's physical approach</button>
     <button type="button" id="transport-focus">Focus selection</button>
     <button type="button" id="transport-bridge-closeup" hidden>Inspect bridge from low 3D angle</button>
+    <button type="button" id="transport-bridge-clearview" hidden>View bridge without inspector</button>
   </div>
   <div class="divider"></div>
   <section id="transport-selection" aria-live="polite"></section>
@@ -113,6 +114,15 @@ panel.innerHTML = `
   <div class="transport-metrics" id="transport-metrics"></div>
 `;
 document.body.append(panel);
+
+const resumeButton = document.createElement("button");
+resumeButton.id = "transport-resume";
+resumeButton.type = "button";
+resumeButton.className = "transport-resume";
+resumeButton.textContent = "Return to transport inspector";
+resumeButton.setAttribute("aria-controls", "transport-panel");
+resumeButton.hidden = true;
+document.body.append(resumeButton);
 
 const openButton = document.createElement("button");
 openButton.id = "open-transport";
@@ -370,6 +380,7 @@ function lakeDetourDetails() {
 function renderSelection() {
   const target = panel.querySelector<HTMLElement>("#transport-selection")!;
   panel.querySelector<HTMLButtonElement>("#transport-bridge-closeup")!.hidden = selection?.kind !== "bridge";
+  panel.querySelector<HTMLButtonElement>("#transport-bridge-clearview")!.hidden = selection?.kind !== "bridge";
   if (!selection) {
     target.innerHTML = `<p class="hint">Select a nearby road, or use an evidence target from the diagnostic interface.</p>`;
     return;
@@ -555,6 +566,8 @@ function renderMetrics() {
 
 function openPanel() {
   panel.hidden = false;
+  resumeButton.hidden = true;
+  overlay.style.display = "";
   openButton.setAttribute("aria-expanded", "true");
   renderSelection();
   renderSiteRoute();
@@ -726,23 +739,39 @@ function telemetry() {
 panel.querySelector<HTMLButtonElement>("#transport-close")!.onclick = () => {
   world()?.setBridgeInspectionAngle(false);
   panel.hidden = true;
+  resumeButton.hidden = true;
+  overlay.style.display = "";
   openButton.setAttribute("aria-expanded", "false");
 };
 panel.querySelector<HTMLButtonElement>("#transport-nearest")!.onclick = chooseNearestRoad;
 panel.querySelector<HTMLButtonElement>("#transport-site-route")!.onclick = chooseNearestSiteRoute;
 panel.querySelector<HTMLButtonElement>("#transport-site-access")!.onclick = probeSiteAccess;
 panel.querySelector<HTMLButtonElement>("#transport-focus")!.onclick = focusSelection;
-panel.querySelector<HTMLButtonElement>("#transport-bridge-closeup")!.onclick = () => {
-  if (selection?.kind !== "bridge") return;
+function inspectBridgeIn3D() {
+  if (selection?.kind !== "bridge") return false;
   const bridge = transportBridgeByCode(selection.code), runtime = world();
-  if (!bridge || !runtime) return;
-  // Present the existing 3D deck and rails obliquely at a readable scale.
-  // This changes only the camera for inspection; no simulated movement occurs.
+  if (!bridge || !runtime) return false;
+  // Only the camera changes: bridge ownership and Simulation remain canonical.
   runtime.navigation.setFocus(bridge.position.lon, bridge.position.lat);
   runtime.setHalfHeight(24);
   runtime.setBridgeInspectionAngle(true);
   refreshOverlay(true);
+  return true;
+}
+panel.querySelector<HTMLButtonElement>("#transport-bridge-closeup")!.onclick = () => {
+  inspectBridgeIn3D();
 };
+panel.querySelector<HTMLButtonElement>("#transport-bridge-clearview")!.onclick = () => {
+  if (!inspectBridgeIn3D()) return;
+  // Reveal the actual rendered deck and rails without hiding the return path.
+  // Graph inspection facts remain unchanged and return on the same selection.
+  panel.hidden = true;
+  overlay.style.display = "none";
+  openButton.setAttribute("aria-expanded", "false");
+  resumeButton.hidden = false;
+  resumeButton.focus();
+};
+resumeButton.onclick = openPanel;
 openButton.onclick = openPanel;
 
 const actions = document.querySelector(".region-actions");
