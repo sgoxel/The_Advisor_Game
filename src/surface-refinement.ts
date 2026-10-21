@@ -18,6 +18,9 @@ const LEGACY_BRIDGE_RGB = [115, 88, 56] as const;
 export const REFINED_BRIDGE_RGB = [108, 79, 45] as const;
 export const REFINED_ROAD_RGB = [143, 122, 84] as const;
 export const REFINED_BRIDGE_HALF_WIDTH_SOURCE = 7 / CANONICAL_METRES_PER_SOURCE_UNIT;
+export const REFINED_ROAD_HALF_WIDTH_SOURCE = 3 / CANONICAL_METRES_PER_SOURCE_UNIT;
+// The canonical terrain shader hides road coverage outside ground-view scales.
+const ROAD_COVERAGE_RGB: RGB = [112, 92, 62];
 const GROUND_EPSILON = 0.025;
 const BRIDGE_EPSILON = 0.1;
 
@@ -79,7 +82,7 @@ function pushTriangle(
     const point = points[i];
     extra.positions.push(point[0] - originX, extra.uvs ? point[1] : elevationToRenderY(point[1]), point[2] - originZ);
     extra.normals.push(...n);
-    const road=Boolean(extra.uvs)&&tints[i][0]===112&&tints[i][1]===92&&tints[i][2]===62,
+    const road=Boolean(extra.uvs)&&tints[i][0]===ROAD_COVERAGE_RGB[0]&&tints[i][1]===ROAD_COVERAGE_RGB[1]&&tints[i][2]===ROAD_COVERAGE_RGB[2],
       tint=road?terrainTint(point[0],point[2],32,undefined,0,false):tints[i];
     extra.colors.push(tint[0],tint[1],tint[2],extra.uvs?(road?255:0):255);
     if (extra.uvs)
@@ -276,7 +279,8 @@ function addGroundRefinement(
 
 function addRoadAndBridgeRibbons(
   tile: Tile,
-  extra: ExtraGeometry,
+  ground: ExtraGeometry,
+  prepared: ExtraGeometry,
   matches: readonly { road: Road; shiftX: number }[],
 ) {
   for (const { road, shiftX } of matches) {
@@ -315,13 +319,13 @@ function addRoadAndBridgeRibbons(
           b: Point = [x1 + bridgeNx, y1, z1 + bridgeNz],
           c: Point = [x1 - bridgeNx, y1, z1 - bridgeNz],
           d: Point = [x0 - bridgeNx, y0, z0 - bridgeNz];
-        pushQuad(extra, tile, a, b, c, d, REFINED_BRIDGE_RGB);
+        pushQuad(prepared, tile, a, b, c, d, REFINED_BRIDGE_RGB);
         // Narrow edge strips make the crossing read as a bridge without adding
         // collision-only geometry or broadening its authoritative deck support.
         const rail = 0.16,
           edgeTint: RGB = [73, 54, 35];
         pushQuad(
-          extra,
+          prepared,
           tile,
           [x0 + bridgeNx, y0 + 0.06, z0 + bridgeNz],
           [x1 + bridgeNx, y1 + 0.06, z1 + bridgeNz],
@@ -330,7 +334,7 @@ function addRoadAndBridgeRibbons(
           edgeTint,
         );
         pushQuad(
-          extra,
+          prepared,
           tile,
           [x0 - bridgeNx - uz * rail, y0 + 0.06, z0 - bridgeNz + ux * rail],
           [x1 - bridgeNx - uz * rail, y1 + 0.06, z1 - bridgeNz + ux * rail],
@@ -340,10 +344,28 @@ function addRoadAndBridgeRibbons(
         );
         continue;
       }
-      // Ordinary roads are already painted on the common authoritative ground.
-      // A second ribbon sampled independently can intersect its triangulated
-      // approximation and tear, or cover water between its corner probes.
-      // Only explicit decks require a separate exposed-surface mesh.
+      // A narrow presentation-only road strip follows the same physical
+      // centerline as the inspector. Never cover water, extrapolate missing
+      // roads or paint an unowned connection as a traversable junction.
+      // Terrain shader coverage hides the strip at cartographic/hidden scales.
+      const start = finalSurfaceAt(x0, z0), end = finalSurfaceAt(x1, z1),
+        valid = [start, middle, end].every(surface =>
+          surface.water.kind === "none" &&
+          surface.deckHeight === null &&
+          surface.walkable &&
+          surface.groundMaterial === "Road" &&
+          surface.contributingModifierIds.includes(road.code));
+      if (!valid) continue;
+      const roadNx = -uz * REFINED_ROAD_HALF_WIDTH_SOURCE,
+        roadNz = ux * REFINED_ROAD_HALF_WIDTH_SOURCE,
+        y0 = start.groundHeight + GROUND_EPSILON + 0.06,
+        y1 = end.groundHeight + GROUND_EPSILON + 0.06;
+      pushQuad(ground, tile,
+        [x0 + roadNx, y0, z0 + roadNz],
+        [x1 + roadNx, y1, z1 + roadNz],
+        [x1 - roadNx, y1, z1 - roadNz],
+        [x0 - roadNx, y0, z0 - roadNz],
+        ROAD_COVERAGE_RGB);
 
     }
   }
@@ -364,7 +386,7 @@ export function refineTileSurfacePresentation(tile: Tile, data: TileGeometry, pr
   const ground = emptyExtra(true),
     prepared = emptyExtra(false);
   if (!preserveGround) addGroundRefinement(tile, ground, resolution);
-  addRoadAndBridgeRibbons(tile, prepared, matches);
+  addRoadAndBridgeRibbons(tile, ground, prepared, matches);
   data.terrain = mergeGeometry(data.terrain, ground);
   data.structures = mergeGeometry(stripLegacyBridgeDeck(data.structures), prepared);
   return data;
