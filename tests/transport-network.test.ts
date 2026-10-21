@@ -20,7 +20,7 @@ import { transportBankApproachGrade, transportRoadArcStations, transportRoadBank
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
-import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, transportWalkingRoute, transportWalkingRouteToNearest } from "../src/transport-walking-route.ts";
+import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, transportWalkingRoute, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import {
@@ -62,6 +62,17 @@ function reachable(start: string, graph: Map<string, string[]>) {
       }
   return seen;
 }
+
+test("S005 route preview projects only real nearby walking edge identities", () => {
+  const nearby = [{ code: "EDGE/B" }, { code: "EDGE/D" }, { code: "EDGE/A" }];
+  assert.deepEqual([...visibleWalkingPreviewEdgeCodes(
+    { edgeCodes: ["EDGE/A", "FERRY/X", "EDGE/B", "EDGE/B", "EDGE/C"] }, nearby,
+  )], ["EDGE/B", "EDGE/A"], "highlight only in-view canonical roads in their stable draw order");
+  assert.equal(visibleWalkingPreviewEdgeCodes(null, nearby).size, 0,
+    "cleared preview must not keep stale road highlights");
+  assert.equal(visibleWalkingPreviewEdgeCodes({ edgeCodes: ["EDGE/C"] }, nearby).size, 0,
+    "offscreen path segments must not force additional geometry");
+});
 
 test("S005 site preview chooses nearest physical graph endpoint at high latitude and seam", () => {
   const base = siteTransportNetwork.nodes.find(node => node.kind !== "site")!;
