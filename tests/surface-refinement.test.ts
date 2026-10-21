@@ -1,13 +1,14 @@
-import {CANONICAL_METRES_PER_SOURCE_UNIT} from "../src/planet.ts";
+import {CANONICAL_METRES_PER_SOURCE_UNIT, wrapSourceX} from "../src/planet.ts";
 import {convertTileGeometryToEnu} from "../src/render-frame.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildTile } from "../src/geometry.ts";
-import { roads } from "../src/geography.ts";
+import { roads, roadDistanceAt } from "../src/geography.ts";
 import { siteAccessRoads } from "../src/sites.ts";
 import {
   REFINED_BRIDGE_HALF_WIDTH_SOURCE,
   REFINED_BRIDGE_RGB,
+  REFINED_ROAD_HALF_WIDTH_SOURCE,
   refineTileSurfacePresentation,
   refinementResolutionForTile,
 } from "../src/surface-refinement.ts";
@@ -55,6 +56,48 @@ test("S005 critical-site access uses fine ground refinement from its physical ro
     "critical-site access branch must enable close-range terrain refinement");
   assert.equal(refined.terrain.uvs?.length, refined.terrain.positions.length / 3 * 2,
     "refined access terrain must retain canonical projection UVs");
+});
+
+test("S005 close dry-road coverage follows the same canonical centerline as inspection", () => {
+  const road = siteAccessRoads[0];
+  assert.ok(road.centerline && road.centerline.length > 2);
+  let middle: { x: number; z: number } | undefined;
+  for (let i = 1; i < road.centerline.length; i++) {
+    const a = road.centerline[i - 1], b = road.centerline[i],
+      x = wrapSourceX(a.x + wrapSourceX(b.x - a.x) / 2),
+      z = (a.z + b.z) / 2,
+      surface = finalSurfaceAt(x, z);
+    if (surface.water.kind === "none" && surface.walkable &&
+        surface.groundMaterial === "Road" && surface.contributingModifierIds.includes(road.code)) {
+      middle = { x, z };
+      break;
+    }
+  }
+  assert.ok(middle, "a real site access edge must retain dry canonical road support");
+  const tile = tileForPosition(middle.x, middle.z, 15),
+    base = buildTile(tile),
+    originalVertices = base.terrain.positions.length / 3,
+    refined = refineTileSurfacePresentation(tile, base, true);
+  let added = 0;
+  const ox = tile.minX + tile.size / 2, oz = tile.minZ + tile.size / 2;
+  for (let vertex = originalVertices; vertex < refined.terrain.positions.length / 3; vertex++) {
+    const p = vertex * 3, x = ox + refined.terrain.positions[p],
+      z = oz + refined.terrain.positions[p + 2],
+      surface = finalSurfaceAt(x, z);
+    assert.equal(refined.terrain.colors[vertex * 4 + 3], 255,
+      "only road-coverage triangles may be appended in preserve-ground mode");
+    assert.equal(surface.water.kind, "none", "ground road coverage must never cover real water");
+    assert.ok(surface.walkable, "ground road coverage must never invent blocked traversal");
+    // Other canonically connected roads can share this tile; select only the
+    // known site branch when certifying exact recorded-centerline alignment.
+    if (roadDistanceAt(x, z, road) > REFINED_ROAD_HALF_WIDTH_SOURCE + 0.05) continue;
+    assert.ok(surface.contributingModifierIds.includes(road.code),
+      "site road strip must never invent an unowned physical connection");
+    added++;
+  }
+  assert.ok(added >= 6, "close road must expose a visible bounded canonical strip");
+  assert.equal(refined.terrain.uvs?.length, refined.terrain.positions.length / 3 * 2,
+    "road coverage retains the same projection UVs as the final ground");
 });
 
 test("an actual natural-water road crossing refines to a narrow authoritative deck", () => {
