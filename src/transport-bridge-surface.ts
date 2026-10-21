@@ -5,16 +5,17 @@ import type { TransportBridge, TransportRoadEdge } from "./transport-network.ts"
 
 /**
  * Focus-only proof of the actual final-surface deck at a listed river crossing.
- * A coarse transport crossing record alone never certifies legal bridge traversal.
+ * A coarse crossing or unrelated nearby bridge never certifies this selected road's legal deck.
  */
-export function transportBridgeSurfaceAt(x: number, z: number) {
+export function transportBridgeSurfaceAt(x: number, z: number, roadCode: string) {
   const surface = finalSurfaceAt(x, z);
   return Object.freeze({
     centerDeckWalkable:
       surface.water.kind === "river" &&
       surface.deckHeight !== null &&
       surface.walkable &&
-      surface.traversal === "bridge",
+      surface.traversal === "bridge" &&
+      surface.contributingModifierIds.includes(roadCode),
     deckHeight: surface.deckHeight,
     waterKind: surface.water.kind,
     traversal: surface.traversal,
@@ -177,7 +178,8 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
       surface.water.kind === "river" &&
       surface.deckHeight !== null &&
       surface.walkable &&
-      surface.traversal === "bridge"),
+      surface.traversal === "bridge" &&
+      surface.contributingModifierIds.includes(edge.code)),
     bankStationsWalkable: approachStationsOnRoad && banks.every(surface =>
       surface.water.kind === "none" && surface.walkable),
     approachStations: approaches.reduce((count, side) => count + side.length, 0),
