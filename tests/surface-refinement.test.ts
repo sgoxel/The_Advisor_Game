@@ -149,6 +149,27 @@ test("an actual natural-water road crossing refines to a narrow authoritative de
   assert.ok([...railColumns.values()].some(({ low, high }) => high - low >= 1.1),
     "canonical bridge must visibly have >=1.1 m upright guardrail faces");
 
+  // River-side rails need front-facing triangles, not only inward-facing
+  // walls that get culled outside the road. Both sides must remain visible
+  // without changing the traversed deck or its canonical dimensions.
+  const tangent = evidence.bridgeTangent,
+    tangentLength = Math.hypot(tangent.x, tangent.z),
+    outerNormalX = -tangent.z / tangentLength,
+    outerNormalZ = tangent.x / tangentLength;
+  let outerLeft = 0, outerRight = 0;
+  for (let vertex = 0; vertex < refined.structures.positions.length / 3; vertex++) {
+    const c = vertex * 4;
+    if (refined.structures.colors[c] !== 103 || refined.structures.colors[c + 1] !== 80 ||
+        refined.structures.colors[c + 2] !== 54) continue;
+    const p = vertex * 3,
+      normalDot = refined.structures.normals[p] * outerNormalX +
+        refined.structures.normals[p + 2] * outerNormalZ;
+    if (normalDot > 0.7) outerLeft++;
+    if (normalDot < -0.7) outerRight++;
+  }
+  assert.ok(outerLeft > 0 && outerRight > 0,
+    "both river-facing guardrail sides must have outward-pointing visible normals");
+
 
   const vx = evidence.bridgeTangent.x,
     vz = evidence.bridgeTangent.z,

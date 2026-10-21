@@ -370,6 +370,24 @@ function addRoadAndBridgeRibbons(
           [x0 - bridgeNx, y0, z0 - bridgeNz],
           edgeTint,
         );
+        // The original faces point inward toward the road. Also draw the
+        // outward-facing sides so a river-side inspection never sees a
+        // back-face-culled rail. No new deck/collision/walkability authority.
+        const outerTint: RGB = [103, 80, 54];
+        pushQuad(prepared, tile,
+          [x0 + bridgeNx, y0 + railHeightM, z0 + bridgeNz],
+          [x1 + bridgeNx, y1 + railHeightM, z1 + bridgeNz],
+          [x1 + bridgeNx, y1, z1 + bridgeNz],
+          [x0 + bridgeNx, y0, z0 + bridgeNz],
+          outerTint,
+        );
+        pushQuad(prepared, tile,
+          [x0 - bridgeNx, y0, z0 - bridgeNz],
+          [x1 - bridgeNx, y1, z1 - bridgeNz],
+          [x1 - bridgeNx, y1 + railHeightM, z1 - bridgeNz],
+          [x0 - bridgeNx, y0 + railHeightM, z0 - bridgeNz],
+          outerTint,
+        );
         continue;
       }
       // A narrow presentation-only road strip follows the same physical
