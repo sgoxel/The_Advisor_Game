@@ -131,6 +131,25 @@ test("an actual natural-water road crossing refines to a narrow authoritative de
     "legacy wide slab must be removed",
   );
 
+  // Upright guardrails add real height, not a 6 cm floating line.
+  const railColumns = new Map<string, { low: number; high: number }>();
+  for (let vertex = 0; vertex < refined.structures.positions.length / 3; vertex++) {
+    const c = vertex * 4;
+    if (refined.structures.colors[c] !== 73 || refined.structures.colors[c + 1] !== 54 ||
+        refined.structures.colors[c + 2] !== 35) continue;
+    const p = vertex * 3,
+      key = `${refined.structures.positions[p].toFixed(4)}/${refined.structures.positions[p + 2].toFixed(4)}`,
+      y = refined.structures.positions[p + 1],
+      column = railColumns.get(key);
+    if (column) {
+      column.low = Math.min(column.low, y);
+      column.high = Math.max(column.high, y);
+    } else railColumns.set(key, { low: y, high: y });
+  }
+  assert.ok([...railColumns.values()].some(({ low, high }) => high - low >= 1.1),
+    "canonical bridge must visibly have >=1.1 m upright guardrail faces");
+
+
   const vx = evidence.bridgeTangent.x,
     vz = evidence.bridgeTangent.z,
     length = Math.hypot(vx, vz),
