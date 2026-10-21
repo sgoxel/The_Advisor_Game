@@ -33,18 +33,18 @@ export function siteAccessRoadStations(edge: TransportRoadEdge) {
 /** Assessment only: sampled stations never prove unsampled continuity or actor movement. */
 export function siteAccessSampleVerdict(
   edge: TransportRoadEdge, surfaces: readonly FinalSurface[],
-  junctionRoadCodes: ReadonlySet<string> = new Set([edge.code]),
+  junctionRoadCodes: ReadonlySet<string> = new Set(),
 ) {
   const stations = siteAccessRoadStations(edge), full = stations.length > 0 &&
     stations.length === surfaces.length,
     dry = full && surfaces.every(surface => surface.water.kind === "none"),
     walkable = full && surfaces.every(surface => surface.walkable),
-    // The shared final-surface resolver may choose the parent road at the
-    // exact shared graph junction. Require this branch at every interior
-    // sample; the terminal must join one actual incident road, not arbitrary dry ground.
+    // The shared surface can resolve both access and parent modifiers at the
+    // shared junction. Interior samples need this access edge; the terminal
+    // needs a distinct incident road, not only this edge or arbitrary ground.
     onRecordedRoad = full && surfaces.every((surface, index) =>
       index === surfaces.length - 1
-        ? surface.contributingModifierIds.some(code => junctionRoadCodes.has(code))
+        ? surface.contributingModifierIds.some(code => code !== edge.code && junctionRoadCodes.has(code))
         : surface.contributingModifierIds.includes(edge.code));
   let maximumGrade: number | null = null;
   if (full) {
