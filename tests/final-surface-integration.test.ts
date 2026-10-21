@@ -8,7 +8,7 @@ import { REFINED_BRIDGE_HALF_WIDTH_SOURCE, selectedRoadBridgeDeck } from "../src
 import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "../src/transport-bridge-surface.ts";
 import { freshwaterCrossingAt } from "../src/hydrology.ts";
 import { transportNetwork } from "../src/transport-network.ts";
-import { sourceToLonLat, CANONICAL_METRES_PER_SOURCE_UNIT, wrapSourceX } from "../src/planet.ts";
+import { sourceToLonLat, lonLatToSource, CANONICAL_METRES_PER_SOURCE_UNIT, wrapSourceX } from "../src/planet.ts";
 import {
   RURAL_BRIDGE_MAX_LENGTH_M,
   finalSurfaceEvidenceAnchors,
@@ -19,7 +19,27 @@ import {
   resetFinalSurfaceTelemetry,
 } from "../src/world.ts";
 
+import { roadTangentAt } from "../src/world-core.ts";
+
 const EPS = 1e-9;
+
+test("S005 final road profile uses latitude-correct physical nearest segment", () => {
+  const mockRoadAt = (latitude: number) => {
+    const z = lonLatToSource({ lon: 0, lat: latitude }).z;
+    return {
+      fromX: 0, fromZ: z + 1, toX: 10, toZ: z + 11,
+      centerline: [{ x: 0, z: z + 1 }, { x: 10, z: z + 1 }, { x: 10, z: z + 11 }],
+    } as unknown as (typeof roads)[number];
+  };
+  const equator = mockRoadAt(0),
+    polar = mockRoadAt(Math.PI / 3);
+  assert.equal(roadTangentAt(5, equator.fromZ + 4, equator).segment, 0,
+    "at the equator the four-source-unit north gap is the nearest segment");
+  assert.equal(roadTangentAt(5, polar.fromZ + 4, polar).segment, 1,
+    "at sixty degrees the east gap is physically shorter than the north gap");
+  assert.deepEqual(roadTangentAt(5, polar.fromZ + 4, polar),
+    roadTangentAt(5, polar.fromZ + 4, polar), "road-profile selection must be stable");
+});
 
 test("settlement terraces use one bounded priority-7 final-surface modifier", () => {
   const village = villages[0];
