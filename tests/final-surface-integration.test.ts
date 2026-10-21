@@ -5,7 +5,7 @@ import { places, roads, villages, roadDistanceAt } from "../src/geography.ts";
 import { WORLD_BUILDING_PRIORITIES, composeFinalSurface } from "../src/final-surface.ts";
 import { buildTile } from "../src/geometry.ts";
 import { REFINED_BRIDGE_HALF_WIDTH_SOURCE, selectedRoadBridgeDeck } from "../src/surface-refinement.ts";
-import { transportBridgeSpanAt, transportBridgeSurfaceAt, transportRoadArcStations } from "../src/transport-bridge-surface.ts";
+import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt, transportRoadArcStations } from "../src/transport-bridge-surface.ts";
 import { freshwaterCrossingAt } from "../src/hydrology.ts";
 import { transportNetwork } from "../src/transport-network.ts";
 import { sourceToLonLat, lonLatToSource, greatCircleDistance, CANONICAL_METRES_PER_SOURCE_UNIT, wrapSourceX } from "../src/planet.ts";
@@ -226,6 +226,20 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   };
   const observed = transportBridgeSpanAt(bridge, edge!);
   assert.equal(observed.matchingCrossing, true);
+
+  const otherwisePass = {
+    ...observed, matchingCrossing: true, deckStationsWalkable: true,
+    bankStationsWalkable: true, approachStationsWalkable: true,
+    approachGradeWithinLimit: true, routeStationsWalkable: true,
+    routeGradeWithinLimit: true,
+  };
+  assert.equal(sampledBridgeCrossingPass(true, otherwisePass), true,
+    "a genuinely passing selected-road sample remains a grade-pass");
+  assert.equal(sampledBridgeCrossingPass(true, { ...otherwisePass, approachGradeWithinLimit: false }), false,
+    "a steep dry-bank approach must prevent the prominent grade-pass badge");
+  assert.equal(sampledBridgeCrossingPass(false, otherwisePass), false,
+    "a missing source-owned wet deck must never certify a crossing");
+
   const displacedBridge = {
     ...bridge,
     x: bridge.x - evidence.bridgeTangent.z * 0.5,
