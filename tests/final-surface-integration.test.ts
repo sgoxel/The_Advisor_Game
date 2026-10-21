@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {naturalSurfaceAt} from "../src/hydrology.ts";
 import { places, roads, villages, roadDistanceAt } from "../src/geography.ts";
-import { WORLD_BUILDING_PRIORITIES } from "../src/final-surface.ts";
+import { WORLD_BUILDING_PRIORITIES, composeFinalSurface } from "../src/final-surface.ts";
 import { buildTile } from "../src/geometry.ts";
 import { REFINED_BRIDGE_HALF_WIDTH_SOURCE, selectedRoadBridgeDeck } from "../src/surface-refinement.ts";
 import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "../src/transport-bridge-surface.ts";
@@ -80,6 +80,7 @@ test("bridge deck preserves authoritative water and obeys the 120m rural cap", (
   assert.equal(bridge.final.groundMaterial, bridge.base.material);
   assert.equal(bridge.final.material, "Bridge");
   assert.equal(bridge.final.deckMaterial, "Bridge");
+  assert.ok(bridge.final.deckOwnerIds.length > 0, "a physical deck must have a canonical owner");
   assert.equal(bridge.final.traversal, "bridge");
   assert.ok(bridge.final.deckHeight! >= bridge.base.water.level + 1);
 });
@@ -115,6 +116,32 @@ test("S005 coarse bridge matches source-owned seven-metre deck and graded endpoi
     sampledDeckVertices++;
   }
   assert.ok(sampledDeckVertices >= 6, "the true coarse crossing must remain visibly bridged");
+});
+
+test("S005 bridge owner is its actual top deck, not any overlapping road", () => {
+  const base = {
+    groundHeight: 0, material: "River" as const,
+    water: { kind: "river" as const, level: 0, flowX: 0, flowZ: 0 },
+    walkable: false, vegetationDensityScale: 1, reservedUse: null,
+  };
+  const deck = composeFinalSurface(base, [
+    { id: "ROAD-A", priority: WORLD_BUILDING_PRIORITIES.road, walkable: true },
+    { id: "ROAD-B", priority: WORLD_BUILDING_PRIORITIES.road, deckHeight: 2, walkable: true },
+  ]);
+  assert.deepEqual(deck.contributingModifierIds, ["ROAD-A", "ROAD-B"]);
+  assert.deepEqual(deck.deckOwnerIds, ["ROAD-B"]);
+  assert.equal(selectedRoadBridgeDeck(deck, "ROAD-A"), false);
+  assert.equal(selectedRoadBridgeDeck(deck, "ROAD-B"), true);
+  const higher = composeFinalSurface(base, [
+    { id: "ROAD-A", priority: WORLD_BUILDING_PRIORITIES.road, deckHeight: 1.5 },
+    { id: "ROAD-B", priority: WORLD_BUILDING_PRIORITIES.road, deckHeight: 2 },
+  ]);
+  assert.deepEqual(higher.deckOwnerIds, ["ROAD-B"], "a lower deck cannot claim the traversed surface");
+  const shared = composeFinalSurface(base, [
+    { id: "ROAD-A", priority: WORLD_BUILDING_PRIORITIES.road, deckHeight: 2 },
+    { id: "ROAD-B", priority: WORLD_BUILDING_PRIORITIES.road, deckHeight: 2 },
+  ]);
+  assert.deepEqual(shared.deckOwnerIds, ["ROAD-A", "ROAD-B"]);
 });
 
 test("S005 refined bridge refuses another road's legal deck", () => {
