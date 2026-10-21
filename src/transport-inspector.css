@@ -24,6 +24,8 @@
 .transport-road-access { stroke-width: 2.25; }
 .transport-road-continuity { stroke-width: 3.4; stroke-dasharray: 7 4; }
 .transport-road.selected { stroke: rgba(224, 183, 91, .98); stroke-width: 6; }
+/* Canonical walking preview is distinct from the selected road and is not travel. */
+.transport-road.route-preview { stroke: #81d8d0; stroke-width: 5; stroke-dasharray: 6 4; filter: none; }
 .transport-marker { vector-effect: non-scaling-stroke; }
 .transport-marker-bridge { fill: #d9b874; stroke: #48351f; stroke-width: 2; }
 .transport-marker-border { fill: #f3d86a; stroke: #692f2f; stroke-width: 2.5; }
