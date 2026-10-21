@@ -358,14 +358,22 @@ function addRoadAndBridgeRibbons(
       if (!valid) continue;
       const roadNx = -uz * REFINED_ROAD_HALF_WIDTH_SOURCE,
         roadNz = ux * REFINED_ROAD_HALF_WIDTH_SOURCE,
-        y0 = start.groundHeight + GROUND_EPSILON + 0.06,
-        y1 = end.groundHeight + GROUND_EPSILON + 0.06;
-      pushQuad(ground, tile,
-        [x0 + roadNx, y0, z0 + roadNz],
-        [x1 + roadNx, y1, z1 + roadNz],
-        [x1 - roadNx, y1, z1 - roadNz],
-        [x0 - roadNx, y0, z0 - roadNz],
-        ROAD_COVERAGE_RGB);
+        corners = [
+          { x: x0 + roadNx, z: z0 + roadNz },
+          { x: x1 + roadNx, z: z1 + roadNz },
+          { x: x1 - roadNx, z: z1 - roadNz },
+          { x: x0 - roadNx, z: z0 - roadNz },
+        ],
+        edges = corners.map(point => finalSurfaceAt(point.x, point.z));
+      // Side vertices must use their own actual composed ground heights. An
+      // elevated flat ribbon would violate final-surface truth at a graded road.
+      if (!edges.every(surface =>
+        surface.water.kind === "none" && surface.deckHeight === null &&
+        surface.walkable && surface.groundMaterial === "Road" &&
+        surface.contributingModifierIds.includes(road.code))) continue;
+      const point = (index: number): Point =>
+        [corners[index].x, edges[index].groundHeight + GROUND_EPSILON, corners[index].z];
+      pushQuad(ground, tile, point(0), point(1), point(2), point(3), ROAD_COVERAGE_RGB);
 
     }
   }
