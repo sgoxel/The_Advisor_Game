@@ -1,5 +1,5 @@
 import { freshwaterCrossingAt } from "./hydrology.ts";
-import { CANONICAL_METRES_PER_SOURCE_UNIT, sourceToLonLat, wrapSourceX } from "./planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { finalSurfaceAt } from "./world-core.ts";
 import type { TransportBridge, TransportRoadEdge } from "./transport-network.ts";
 
@@ -187,11 +187,17 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
       surface.walkable &&
       (surface.water.kind === "none" ||
         (surface.water.kind === "river" && surface.deckHeight !== null && surface.traversal === "bridge"))),
-    routeGradeStepM = sampledMetres / segmentCount,
-    routeMaxSampledGrade = routeStationsOnRoad ? Math.max(...routeStations.slice(1).map(({ surface }, index) => {
-      const previous = routeStations[index].surface;
-      return Math.abs((surface.deckHeight ?? surface.groundHeight) -
-        (previous.deckHeight ?? previous.groundHeight)) / routeGradeStepM;
+    // The canonical road may bend and traverse different latitudes. Grade
+    // must use each actual geodesic station separation, not nominal span / N.
+    routeMaxSampledGrade = routeStationsOnRoad ? Math.max(...roadStations.slice(1).map((point, index) => {
+      const previous = roadStations[index],
+        stepM = greatCircleDistance(
+          sourceToLonLat(previous.x, previous.z),
+          sourceToLonLat(point.x, point.z),
+        ),
+        rise = Math.abs(routeStations[index + 1].surface.surfaceHeight -
+          routeStations[index].surface.surfaceHeight);
+      return Number.isFinite(stepM) && stepM > 0 && Number.isFinite(rise) ? rise / stepM : Infinity;
     })) : null;
 
   return Object.freeze({
@@ -218,4 +224,15 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     routeMaxSampledGrade,
     routeGradeWithinLimit: routeStationsWalkable && routeMaxSampledGrade !== null && routeMaxSampledGrade <= .08,
   });
+}
+
+/** A selected crossing passes only if BOTH bank and whole-span grade checks pass. */
+export function sampledBridgeCrossingPass(
+  centerDeckWalkable: boolean,
+  span: ReturnType<typeof transportBridgeSpanAt>,
+): boolean {
+  return centerDeckWalkable && span.matchingCrossing &&
+    span.deckStationsWalkable && span.bankStationsWalkable &&
+    span.approachStationsWalkable && span.approachGradeWithinLimit &&
+    span.routeStationsWalkable && span.routeGradeWithinLimit;
 }

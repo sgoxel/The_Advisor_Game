@@ -5,10 +5,10 @@ import { places, roads, villages, roadDistanceAt } from "../src/geography.ts";
 import { WORLD_BUILDING_PRIORITIES, composeFinalSurface } from "../src/final-surface.ts";
 import { buildTile } from "../src/geometry.ts";
 import { REFINED_BRIDGE_HALF_WIDTH_SOURCE, selectedRoadBridgeDeck } from "../src/surface-refinement.ts";
-import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "../src/transport-bridge-surface.ts";
+import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt, transportRoadArcStations } from "../src/transport-bridge-surface.ts";
 import { freshwaterCrossingAt } from "../src/hydrology.ts";
 import { transportNetwork } from "../src/transport-network.ts";
-import { sourceToLonLat, lonLatToSource, CANONICAL_METRES_PER_SOURCE_UNIT, wrapSourceX } from "../src/planet.ts";
+import { sourceToLonLat, lonLatToSource, greatCircleDistance, CANONICAL_METRES_PER_SOURCE_UNIT, wrapSourceX } from "../src/planet.ts";
 import {
   RURAL_BRIDGE_MAX_LENGTH_M,
   finalSurfaceEvidenceAnchors,
@@ -226,6 +226,20 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   };
   const observed = transportBridgeSpanAt(bridge, edge!);
   assert.equal(observed.matchingCrossing, true);
+
+  const otherwisePass = {
+    ...observed, matchingCrossing: true, deckStationsWalkable: true,
+    bankStationsWalkable: true, approachStationsWalkable: true,
+    approachGradeWithinLimit: true, routeStationsWalkable: true,
+    routeGradeWithinLimit: true,
+  };
+  assert.equal(sampledBridgeCrossingPass(true, otherwisePass), true,
+    "a genuinely passing selected-road sample remains a grade-pass");
+  assert.equal(sampledBridgeCrossingPass(true, { ...otherwisePass, approachGradeWithinLimit: false }), false,
+    "a steep dry-bank approach must prevent the prominent grade-pass badge");
+  assert.equal(sampledBridgeCrossingPass(false, otherwisePass), false,
+    "a missing source-owned wet deck must never certify a crossing");
+
   const displacedBridge = {
     ...bridge,
     x: bridge.x - evidence.bridgeTangent.z * 0.5,
@@ -257,6 +271,22 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(observed.routeGradeWithinLimit,
     observed.routeStationsWalkable && observed.routeMaxSampledGrade! <= .08);
   assert.ok(observed.routeMaxSampledGrade !== null && Number.isFinite(observed.routeMaxSampledGrade));
+  // Each physical grade interval is the actual spherical distance along the
+  // selected curved road, not the nominal crossing length divided evenly.
+  const measuredStations = transportRoadArcStations(edge!.centerline, bridge.x, bridge.z,
+    crossing!.lo * crossing!.metresPerUnit - 18,
+    crossing!.hi * crossing!.metresPerUnit + 18, observed.routeStations - 1);
+  assert.equal(measuredStations.length, observed.routeStations);
+  const measuredGrade = Math.max(...measuredStations.slice(1).map((current, index) => {
+    const previous = measuredStations[index],
+      separation = greatCircleDistance(sourceToLonLat(previous.x, previous.z), sourceToLonLat(current.x, current.z)),
+      rise = Math.abs(finalSurfaceAt(current.x, current.z).surfaceHeight -
+        finalSurfaceAt(previous.x, previous.z).surfaceHeight);
+    return separation > 0 ? rise / separation : Infinity;
+  }));
+  assert.ok(Math.abs(observed.routeMaxSampledGrade! - measuredGrade) < 1e-9,
+    "sampled bridge grade must use each actual canonical geodesic station distance");
+
   assert.equal(typeof observed.approachStationsOnRoad, "boolean");
   if (!observed.approachStationsOnRoad) assert.equal(observed.approachStationsWalkable, false,
     "off-road tangent samples can never certify a physical road approach");

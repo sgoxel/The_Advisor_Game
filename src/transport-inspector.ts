@@ -13,7 +13,7 @@ import {
 import { siteTransportAcceptanceSummary as transportAcceptanceSummary, siteTransportNetwork as transportNetwork, siteTransportRoadsNear as transportRoadsNear } from "./site-transport-network.ts";
 import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
-import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
+import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
 import { createTransportWalkingIndex, transportWalkingRouteToNearest } from "./transport-walking-route.ts";
 import { siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
@@ -278,9 +278,7 @@ function bridgeDetails(bridge: TransportBridge) {
   const span = transportBridgeSpanAt(bridge, edge);
   // A walkable centre point cannot certify both dry banks, road alignment or safe grade.
   // Keep this verdict explicitly sample-limited: whole-route traversal is not proven.
-  const sampledCrossingPass = surface.centerDeckWalkable && span.matchingCrossing &&
-    span.deckStationsWalkable && span.bankStationsWalkable && span.approachStationsWalkable &&
-    span.routeStationsWalkable && span.routeGradeWithinLimit;
+  const sampledCrossingPass = sampledBridgeCrossingPass(surface.centerDeckWalkable, span);
   return `
     <div class="transport-kind ${sampledCrossingPass ? "walking" : "transfer"}">${sampledCrossingPass ? "SAMPLED CROSSING · WALKABLE & GRADE PASS" : "CROSSING ACCESS · NOT CERTIFIED"}</div>
     <h3>${codeText(bridge.code)}</h3>
