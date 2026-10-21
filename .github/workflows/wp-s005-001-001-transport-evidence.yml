@@ -53,7 +53,7 @@ jobs:
             if curl -fsS http://127.0.0.1:4174/ >/dev/null; then break; fi
             sleep 1
           done
-          STEPS='eval:window.advisorTransport.selectEvidence("junction");select:#map-scale=100;settle;shot:junction-100;select:#map-scale=20;settle;shot:junction-local;eval:window.advisorTransport.selectEvidence("bridge");select:#map-scale=100;settle;shot:bridge-100;select:#map-scale=20;settle;shot:bridge-local;eval:window.advisorTransport.selectEvidence("mountain-pass");select:#map-scale=100;coverage;shot:graded-road;eval:window.advisorTransport.selectEvidence("harbor");select:#map-scale=100;settle;shot:harbor;eval:window.advisorTransport.selectEvidence("ferry");settle;shot:ferry-inspector;eval:window.advisorTransport.network.digest===window.advisorTransport.telemetry().digest||Promise.reject(new Error("Transport digest mismatch"));eval:window.advisorTransport.telemetry().localRoads<=96||Promise.reject(new Error("Unbounded transport focus query"))'
+          STEPS='eval:window.advisorTransport.selectEvidence("junction");select:#map-scale=100;settle;shot:junction-100;select:#map-scale=20;settle;shot:junction-local;eval:window.advisorTransport.selectEvidence("bridge");select:#map-scale=100;settle;shot:bridge-100;select:#map-scale=20;settle;shot:bridge-local;eval:document.querySelector(".transport-overlay").style.visibility="hidden";shot:bridge-physical;eval:document.querySelector(".transport-overlay").style.visibility="visible";eval:window.advisorTransport.selectEvidence("mountain-pass");select:#map-scale=100;coverage;shot:graded-road;eval:window.advisorTransport.selectEvidence("harbor");select:#map-scale=100;settle;shot:harbor;eval:window.advisorTransport.selectEvidence("ferry");settle;shot:ferry-inspector;eval:window.advisorTransport.network.digest===window.advisorTransport.telemetry().digest||Promise.reject(new Error("Transport digest mismatch"));eval:window.advisorTransport.telemetry().localRoads<=96||Promise.reject(new Error("Unbounded transport focus query"))'
           # Graded-road shots need complete visible coverage, not unrelated background-generation idle.
           # Focused branch pushes capture only the previously failing visual targets;
           # workflow_dispatch retains the complete optional diagnostic scene set.
@@ -69,3 +69,5 @@ jobs:
         with:
           name: s005-transport-${{ matrix.backend }}
           path: test-results/
+
+# AGENT #1 source-identical branch evidence for deployed main 780a873fa9e255109556d8d7d87b5cee76a7990a.
