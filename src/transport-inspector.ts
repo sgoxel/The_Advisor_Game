@@ -12,7 +12,7 @@ import {
   type TransportRoadEdge,
 } from "./transport-network.ts";
 import { siteTransportAcceptanceSummary as transportAcceptanceSummary, siteTransportNetwork as transportNetwork, siteTransportRoadsNear as transportRoadsNear } from "./site-transport-network.ts";
-import { sourceToLonLat } from "./planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, sourceToLonLat } from "./planet.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
@@ -753,7 +753,14 @@ function inspectBridgeIn3D() {
   if (!bridge || !runtime) return false;
   // Only the camera changes: bridge ownership and Simulation remain canonical.
   runtime.navigation.setFocus(bridge.position.lon, bridge.position.lat);
-  runtime.setHalfHeight(24);
+  // The atlas half-height is in source units, not metres. Fixed 24 meant
+  // ~733m tall even at a 118m crossing and hid 1.15m guardrail faces.
+  // Fit this actual SEED-owned river span plus both 18m bank approaches
+  // and 36m visual clearance; only presentation scale changes.
+  const spanWithBanksM = bridge.spanM + 2 * 18 + 36;
+  const detailHalfHeight = Math.max(2, Math.min(24,
+    spanWithBanksM / (2 * CANONICAL_METRES_PER_SOURCE_UNIT)));
+  runtime.setHalfHeight(detailHalfHeight);
   runtime.setBridgeInspectionAngle(true);
   refreshOverlay(true);
   return true;
