@@ -106,6 +106,15 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   };
   const observed = transportBridgeSpanAt(bridge, edge!);
   assert.equal(observed.matchingCrossing, true);
+  const displacedBridge = {
+    ...bridge,
+    x: bridge.x - evidence.bridgeTangent.z * 0.5,
+    z: bridge.z + evidence.bridgeTangent.x * 0.5,
+  };
+  const offRoad = transportBridgeSpanAt(displacedBridge, edge!);
+  assert.equal(offRoad.matchingCrossing, false,
+    "a bridge more than 2 m off its recorded road cannot pass the physical anchor match");
+  assert.equal(offRoad.wetStations, 0, "off-road evidence must not sample an unrelated river deck");
   assert.equal(observed.wetStations, 5, "the selected bridge, not the full atlas, gets bounded wet-span sampling");
   assert.equal(observed.approachStations, 10, "probe only two bounded five-station bank approaches");
   assert.ok(observed.routeStations > 10 && observed.routeStations <= 49,
