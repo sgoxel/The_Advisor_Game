@@ -29,7 +29,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Continuous transport: canonical road/bridge joins, legal routes & truthful UX
+- WP-S005-001-001 — Legal transport continuity: shared road/bridge/site joins & truthful route UX
 
 ## STAGE S006 — Living World & Usable Buildings
 
@@ -38,7 +38,7 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — 3D visual reference design: toon shading, semantic zoom & mobile/backend budgets
+- WP-S007-001-001 — 3D visual reference research: stylized rendering, semantic zoom & mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
@@ -46,8 +46,8 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Performance proof: exact-SHA first response, p95 budgets & bounded resources
+- WP-S009-001-001 — Performance evidence: first usable interaction, p95 latency & app-wide budgets
 - WP-S009-002-001 — Responsive atlas input: bounded surface picking, idle UI reuse & exact selection
-- WP-S009-003-001 — WebGPU/WebGL2 compatibility: adaptive DPR, shared memory & recovery
-- WP-S009-004-001 — README conformance: Simulation truth, Advisor-vs-atlas UX & release evidence
+- WP-S009-003-001 — WebGPU/WebGL2 resilience: adaptive DPR, app-wide resources & recovery
+- WP-S009-004-001 — README conformance: Advisor autonomy, Fantasy-Time truth & honest release claims
 - WP-S009-005-001 — Seamless zoom LOD: coherent terrain, valid first-use & complete 3D detail
