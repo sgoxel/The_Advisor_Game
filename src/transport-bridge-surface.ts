@@ -79,6 +79,25 @@ export function transportRoadWetStations(
   return transportRoadArcStations(points, x, z, start + span * .1, start + span * .9, 4);
 }
 
+/**
+ * Sample actual traversed elevation, including the physical bridge deck over
+ * dry-bank piers. Bare ground below a deck is not the walking grade.
+ * Probe only the existing two five-station banks at 4m intervals.
+ */
+export function transportBankApproachGrade(
+  sides: readonly (readonly { surfaceHeight: number }[])[],
+): number | null {
+  if (sides.length !== 2 || sides.some(side => side.length !== 5)) return null;
+  let maximum = 0;
+  for (const side of sides)
+    for (let i = 1; i < side.length; i++) {
+      const rise = Math.abs(side[i].surfaceHeight - side[i - 1].surfaceHeight);
+      if (!Number.isFinite(rise)) return null;
+      maximum = Math.max(maximum, rise / 4);
+    }
+  return maximum;
+}
+
 /** Both dry-bank approach probes follow the immutable road, not a projected tangent. */
 export function transportRoadBankApproaches(
   points: readonly { x: number; z: number }[], x: number, z: number,
@@ -148,10 +167,7 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     approaches = [bankPoints.left, bankPoints.right].map(side =>
       side.map(point => finalSurfaceAt(point.x, point.z))),
     banks = [approaches[0][0], approaches[1][0]],
-    offsetsM = [2, 6, 10, 14, 18],
-    approachGrades = approachStationsOnRoad ? approaches.flatMap(side => side.slice(1).map((surface, i) =>
-      Math.abs(surface.groundHeight - side[i].groundHeight) / (offsetsM[i + 1] - offsetsM[i]))) : [],
-    approachMaxSampledGrade = approachStationsOnRoad ? Math.max(...approachGrades) : null;
+    approachMaxSampledGrade = approachStationsOnRoad ? transportBankApproachGrade(approaches) : null;
   // Sample the actual graph-owned centerline, not the projected straight
   // water-crossing tangent. The route probe stays <=49 stations, and
   // missing physical bank-to-road coverage is reported as not certified.
