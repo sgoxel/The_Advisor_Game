@@ -1,4 +1,5 @@
-import type { TransportNetwork, TransportRoadEdge } from "./transport-network.ts";
+import { greatCircleDistance, type LonLat } from "./planet.ts";
+import type { TransportNetwork, TransportNode, TransportRoadEdge } from "./transport-network.ts";
 
 /**
  * Read-only shortest walking preview over the already-constructed SEED-owned
@@ -103,4 +104,28 @@ export function transportWalkingRouteToNearest(index: Index, from: string, siteC
 /** A specific requested endpoint retains the same deterministic route semantics. */
 export function transportWalkingRoute(index: Index, from: string, to: string) {
   return searchWalkingRoute(index, from, new Set([to].filter(code => index.adjacency.has(code))));
+}
+
+/**
+ * Source X/Z is a flat projection, not a physical distance at high latitudes.
+ * Choose the real geodesically closest legal graph endpoint for a map preview.
+ * This selects an inspection origin only; it never moves the character.
+ */
+export function nearestWalkingRoadEndpoint(
+  edge: Pick<TransportRoadEdge, "from" | "to">,
+  nodes: ReadonlyMap<string, TransportNode>,
+  focus: LonLat,
+): TransportNode | undefined {
+  let best: TransportNode | undefined;
+  let bestDistance = Infinity;
+  for (const code of [edge.from, edge.to]) {
+    const node = nodes.get(code);
+    if (!node || node.kind === "site") continue;
+    const distance = greatCircleDistance(focus, node.position);
+    if (distance < bestDistance || (distance === bestDistance && (!best || node.code < best.code))) {
+      best = node;
+      bestDistance = distance;
+    }
+  }
+  return best;
 }

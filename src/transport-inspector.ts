@@ -11,11 +11,11 @@ import {
   type TransportRoadEdge,
 } from "./transport-network.ts";
 import { siteTransportAcceptanceSummary as transportAcceptanceSummary, siteTransportNetwork as transportNetwork, siteTransportRoadsNear as transportRoadsNear } from "./site-transport-network.ts";
-import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
+import { sourceToLonLat } from "./planet.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
-import { createTransportWalkingIndex, transportWalkingRouteToNearest } from "./transport-walking-route.ts";
+import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, transportWalkingRouteToNearest } from "./transport-walking-route.ts";
 import { siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
 import { finalSurfaceAt } from "./world-core.ts";
 
@@ -487,14 +487,10 @@ function chooseNearestSiteRoute() {
     const edge = roadQuery(runtime.state).edges[0];
     if (!edge) lastSiteRouteStatus = "no canonical road near map focus";
     else {
-      const endpoints = [edge.from, edge.to].map(code => transportNodesByCode.get(code)!)
-        .filter(node => node.kind !== "site")
-        .sort((a, b) => {
-          const da = Math.hypot(wrapSourceX(a.x - runtime.state.view.x), a.z - runtime.state.view.z),
-            db = Math.hypot(wrapSourceX(b.x - runtime.state.view.x), b.z - runtime.state.view.z);
-          return da - db || compareCanonical(a.code, b.code);
-        });
-      const from = endpoints[0];
+      // Physical planet distance, not latitude-distorted flat map X/Z.
+      const from = nearestWalkingRoadEndpoint(
+        edge, transportNodesByCode, sourceToLonLat(runtime.state.view.x, runtime.state.view.z),
+      );
       const sites = from ? transportNetwork.nodes.filter(node =>
         node.kind === "site" && node.countryCode === from.countryCode &&
         node.continent === from.continent).map(node => node.code) : [];
@@ -745,5 +741,3 @@ requestAnimationFrame(frame);
 for (const [name, code] of Object.entries(evidenceSummary()))
   if (name !== "bridge" && !code) console.warn(`Transport evidence target unavailable: ${name}`);
 
-void greatCircleDistance;
-void sourceToLonLat;

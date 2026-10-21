@@ -20,12 +20,13 @@ import { transportBankApproachGrade, transportRoadArcStations, transportRoadBank
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
-import { createTransportWalkingIndex, transportWalkingRoute, transportWalkingRouteToNearest } from "../src/transport-walking-route.ts";
+import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, transportWalkingRoute, transportWalkingRouteToNearest } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import {
   TRANSPORT_LIMITS,
   type TransportNetwork,
+  type TransportNode,
   buildTransportNetwork,
   ensureTransportBridgeEvidence,
   transportAcceptanceSummary,
@@ -60,6 +61,39 @@ function reachable(start: string, graph: Map<string, string[]>) {
       }
   return seen;
 }
+
+test("S005 site preview chooses nearest physical graph endpoint at high latitude and seam", () => {
+  const base = siteTransportNetwork.nodes.find(node => node.kind !== "site")!;
+  const deg = Math.PI / 180;
+  const node = (code: string, longitude: number, latitude: number, kind: TransportNode["kind"] = "village"): TransportNode =>
+    ({ ...base, code, kind, position: { lon: longitude * deg, lat: latitude * deg, elevation: 0 } });
+  const nodes = new Map<string, TransportNode>([
+    ["E", node("E", 6, 80)],
+    ["N", node("N", 0, 78)],
+  ]);
+  const edge = { from: "E", to: "N" };
+  assert.equal(nearestWalkingRoadEndpoint(edge, nodes, { lon: 0, lat: 80 * deg })?.code, "E",
+    "six degrees east at 80°N is physically closer than two degrees south");
+  assert.equal(nearestWalkingRoadEndpoint(edge, nodes, { lon: 0, lat: 0 })?.code, "N",
+    "equatorial control must not prefer latitude-scaled longitude blindly");
+  const seam = new Map<string, TransportNode>([
+    ["WEST", node("WEST", -179.8, 0)],
+    ["EAST", node("EAST", 179.0, 0)],
+  ]);
+  assert.equal(nearestWalkingRoadEndpoint({ from: "WEST", to: "EAST" }, seam,
+    { lon: 179.9 * deg, lat: 0 })?.code, "WEST", "seam crossing uses shortest planet arc");
+  const tied = new Map<string, TransportNode>([
+    ["N", node("N", 0, 0)],
+    ["E", node("E", 0, 0)],
+    ["SITE", node("SITE", 0, 0, "site")],
+  ]);
+  assert.equal(nearestWalkingRoadEndpoint({ from: "N", to: "E" }, tied,
+    { lon: 0, lat: 0 })?.code, "E", "equal physical distances use stable canonical code");
+  assert.equal(nearestWalkingRoadEndpoint({ from: "SITE", to: "N" }, tied,
+    { lon: 0, lat: 0 })?.code, "N", "the map preview must not originate at a site endpoint");
+  assert.equal(nearestWalkingRoadEndpoint({ from: "SITE", to: "MISSING" }, tied,
+    { lon: 0, lat: 0 }), undefined, "no legal endpoint means no invented route");
+});
 
 test("S005 bank approach uses the traversed bridge-deck surface height", () => {
   const bank = (heights: readonly number[], groundAtNearBank: number) =>
