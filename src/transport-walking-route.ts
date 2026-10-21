@@ -150,7 +150,7 @@ export function selectedWalkingPreviewOrigin(
     const nodeCode = selection.kind === "junction"
       ? network.junctions.find(item => item.code === selection.code)?.nodeCode
       : network.harbors.find(item => item.code === selection.code)?.nodeCode;
-    const node = nodeCode && nodes.get(nodeCode);
+    const node = nodeCode ? nodes.get(nodeCode) : undefined;
     return node?.kind === selection.kind ? node : undefined;
   }
   const roadCode = selection.kind === "road" || selection.kind === "lake-detour" ? selection.code
