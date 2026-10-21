@@ -266,7 +266,12 @@ const surfaceRoadBuckets = new Map<string, Road[]>();
 const roadBucketKey = (bx: number, bz: number) => `${canonicalRoadBucketX(bx,ROAD_BUCKET_SIZE,WORLD_SIZE)}/${bz}`;
 let surfaceRoadReferences=0;
 for (const road of [...roads, ...siteAccessRoads]) {
-    for(const [bx,bz] of canonicalRoadBucketCells(road,ROAD_BUCKET_SIZE,ROAD_SUPPORT_RADIUS,WORLD_SIZE)){
+    // Physical width spans more source-X units towards the poles. The spatial
+    // index must conservatively include that support, not silently drop roads
+    // near a bucket boundary when their metre-based footprint reaches across.
+    const path = road.centerline || [{ x: road.fromX, z: road.fromZ }, { x: road.toX, z: road.toZ }],
+      latitudeScale = Math.max(0.01, Math.min(...path.map(point => Math.abs(Math.cos(sourceToLonLat(point.x, point.z).lat)))));
+    for(const [bx,bz] of canonicalRoadBucketCells(road,ROAD_BUCKET_SIZE,ROAD_SUPPORT_RADIUS/latitudeScale,WORLD_SIZE)){
       const key=roadBucketKey(bx,bz),bucket=surfaceRoadBuckets.get(key)||[];
       bucket.push(road);surfaceRoadReferences++;
       surfaceRoadBuckets.set(key,bucket);

@@ -23,6 +23,28 @@ import { roadTangentAt } from "../src/world-core.ts";
 
 const EPS = 1e-9;
 
+test("S005 road support and physical bank lookup agree at latitude and wrap", () => {
+  const northSouth = (latitude: number, x = 0) => {
+    const z = lonLatToSource(0, latitude).z;
+    return {
+      fromX: x, fromZ: z - 10, toX: x, toZ: z + 10,
+      centerline: [{ x, z: z - 10 }, { x, z: z + 10 }],
+    } as unknown as (typeof roads)[number];
+  };
+  const equator = northSouth(0), highLatitude = northSouth(Math.PI / 3);
+  const expectedPhysicalEast = (road: (typeof roads)[number], offset: number) =>
+    offset * Math.cos(sourceToLonLat(road.fromX, road.fromZ).lat);
+  assert.ok(Math.abs(roadDistanceAt(3, equator.fromZ + 10, equator) -
+    expectedPhysicalEast(equator, 3)) < 1e-8);
+  assert.ok(Math.abs(roadDistanceAt(3, highLatitude.fromZ + 10, highLatitude) -
+    expectedPhysicalEast(highLatitude, 3)) < 1e-8,
+    "road carriageway/shoulder distances must use the same physical east scale as the bridge inspector");
+  const seam = northSouth(Math.PI / 3, 131071.5);
+  assert.ok(Math.abs(roadDistanceAt(-131070.5, seam.fromZ + 10, seam) -
+    expectedPhysicalEast(seam, 2)) < 1e-8,
+    "a seam-wrapped two-source-unit east offset must obey physical latitude scaling");
+});
+
 test("S005 final road profile uses latitude-correct physical nearest segment", () => {
   const mockRoadAt = (latitude: number) => {
     const z = lonLatToSource(0, latitude).z;

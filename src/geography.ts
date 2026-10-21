@@ -557,8 +557,11 @@ if (continuityCorridor.road) roads.push(continuityCorridor.road);
  * Matches the S005 transport lookup; never treats a longitude seam as a world-spanning chord.
  */
 function wrappedRoadSegmentDistance(x: number, z: number, ax: number, az: number, bx: number, bz: number) {
-  const dx = wrapSourceX(bx - ax), dz = bz - az,
-    qx = wrapSourceX(x - ax), qz = z - az,
+  // Preserve the same physical east/north metric as roadTangentAt and S005
+  // bridge station sampling; raw map X would narrow high-latitude road support.
+  const latitudeScale = Math.cos(sourceToLonLat(ax, az).lat),
+    dx = wrapSourceX(bx - ax) * latitudeScale, dz = bz - az,
+    qx = wrapSourceX(x - ax) * latitudeScale, qz = z - az,
     length = dx * dx + dz * dz,
     t = length ? Math.max(0, Math.min(1, (qx * dx + qz * dz) / length)) : 0;
   return Math.hypot(qx - dx * t, qz - dz * t);
