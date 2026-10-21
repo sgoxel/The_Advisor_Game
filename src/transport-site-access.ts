@@ -1,7 +1,7 @@
 import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import type { FinalSurface } from "./final-surface.ts";
 import type { TransportRoadEdge } from "./transport-network.ts";
-import { ACCESS_PROFILE_SEGMENT_MAX_M } from "./sites.ts";
+import { ACCESS_PROFILE_SEGMENT_MAX_M, criticalSites } from "./sites.ts";
 
 /**
  * On-demand physical evidence for a real critical-site access branch, not a
@@ -9,6 +9,17 @@ import { ACCESS_PROFILE_SEGMENT_MAX_M } from "./sites.ts";
  * both ends and its midpoint. Never truncate a longer branch into a false pass.
  */
 export const SITE_ACCESS_STATION_LIMIT = 49;
+
+// The owning SEED site names exactly one parent road, not just any incident
+// modifier at a shared node. Do not certify an unrelated crossing as its join.
+const siteParents = new Map(criticalSites.map(site => [site.access.branchCode, {
+  siteCode: site.code, parentCode: site.access.roadCode,
+}]));
+export function siteAccessParentRoadCode(edge: TransportRoadEdge): string | undefined {
+  const site = siteParents.get(edge.code);
+  return site && edge.roadClass === "access" &&
+    edge.from.endsWith(`/NODE/SITE/${site.siteCode}`) ? site.parentCode : undefined;
+}
 
 export function siteAccessRoadStations(edge: TransportRoadEdge) {
   const points = edge.centerline;
