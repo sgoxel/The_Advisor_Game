@@ -19,8 +19,9 @@ import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
+import { criticalSites } from "../src/sites.ts";
 import { createTransportWalkingIndex, transportWalkingRoute, transportWalkingRouteToNearest } from "../src/transport-walking-route.ts";
-import { SITE_ACCESS_STATION_LIMIT, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
+import { SITE_ACCESS_STATION_LIMIT, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import {
   TRANSPORT_LIMITS,
@@ -111,6 +112,14 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     edge.roadClass === "access" && edge.from.includes("/NODE/SITE/"));
   assert.ok(accessBranches.length > 0);
   for (const edge of accessBranches) {
+    const site = criticalSites.find(site => site.access.branchCode === edge.code);
+    assert.ok(site, `missing SEED owner for ${edge.code}`);
+    assert.equal(siteAccessParentRoadCode(edge), site.access.roadCode,
+      "site branch must name its SEED-assigned parent rather than an arbitrary incident road");
+    assert.equal(siteAccessParentRoadCode({ ...edge, from: "S005/NODE/SITE/WRONG" }), undefined,
+      "misowned site branch must never certify a different site's road");
+    assert.equal(siteAccessParentRoadCode({ ...edge, roadClass: "main" }), undefined,
+      "non-access edge must not claim a critical-site parent");
     const stations = siteAccessRoadStations(edge);
     assert.equal(stations.length, edge.centerline.length * 2 - 1, edge.code);
     assert.ok(stations.length <= SITE_ACCESS_STATION_LIMIT, edge.code);

@@ -16,7 +16,7 @@ import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
 import { createTransportWalkingIndex, transportWalkingRouteToNearest } from "./transport-walking-route.ts";
-import { siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
+import { siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
 import { finalSurfaceAt } from "./world-core.ts";
 
 type AdvisorWorld = {
@@ -466,7 +466,9 @@ function probeSiteAccess() {
     }
     if (surfaces.length < stations.length) requestAnimationFrame(step);
     else {
+      const parentCode = siteAccessParentRoadCode(branch);
       const junctionRoadCodes = new Set((walkingIndex?.adjacency.get(branch.to) ?? [])
+        .filter(step => step.edge.code === parentCode && step.edge.roadClass !== "access")
         .map(step => step.edge.code));
       siteProbe = siteAccessSampleVerdict(branch, surfaces, junctionRoadCodes);
       siteProbeStatus = siteProbe.sampledPass ? "sampled physical approach pass" : "sampled physical approach not certified";
