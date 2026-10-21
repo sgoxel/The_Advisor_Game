@@ -279,11 +279,11 @@ function addGroundRefinement(
 
 /** Presentation-only guard: the selected road must own its legal bridge deck. */
 export function selectedRoadBridgeDeck(
-  surface: Pick<ReturnType<typeof finalSurfaceAt>, "deckHeight" | "walkable" | "traversal" | "contributingModifierIds">,
+  surface: Pick<ReturnType<typeof finalSurfaceAt>, "deckHeight" | "walkable" | "traversal" | "deckOwnerIds">,
   roadCode: string,
 ) {
   return surface.deckHeight !== null && surface.walkable &&
-    surface.traversal === "bridge" && surface.contributingModifierIds.includes(roadCode);
+    surface.traversal === "bridge" && surface.deckOwnerIds.includes(roadCode);
 }
 
 function addRoadAndBridgeRibbons(
