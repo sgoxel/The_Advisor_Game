@@ -24,7 +24,8 @@ export function transportBridgeSurfaceAt(x: number, z: number, roadCode: string)
 
 /**
  * Sample the source-owned physical road in canonical metres from a bridge
- * anchor. Never extend beyond its recorded endpoints or invent a tangent
+ * anchor. Latitude-scaled east/north proximity must match physical arc length.
+ * Never extend beyond its recorded endpoints or invent a tangent
  * shortcut when the centerline bends. Focus-only, bounded by stationCount.
  */
 export function transportRoadArcStations(
@@ -34,22 +35,24 @@ export function transportRoadArcStations(
   if (points.length < 2 || !Number.isInteger(stationCount) || stationCount < 1 || stationCount > 48 ||
     !Number.isFinite(fromMetres) || !Number.isFinite(toMetres) || fromMetres >= toMetres) return [];
   const segments: { a: { x: number; z: number }; dx: number; dz: number; start: number; lengthM: number }[] = [];
-  let total = 0, best = Infinity, anchor = -1;
+  let total = 0, bestMetres = Infinity, anchor = -1;
   for (let index = 1; index < points.length; index++) {
     const a = points[index - 1], b = points[index], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
-      squared = dx * dx + dz * dz;
+      latitudeScale = Math.cos(sourceToLonLat(a.x, a.z).lat),
+      east = dx * latitudeScale, north = dz,
+      queryEast = wrapSourceX(x - a.x) * latitudeScale, queryNorth = z - a.z,
+      squared = east * east + north * north;
     if (squared < 1e-12) continue;
-    const lat = sourceToLonLat(a.x, a.z).lat,
-      lengthM = CANONICAL_METRES_PER_SOURCE_UNIT * Math.hypot(dx * Math.cos(lat), dz),
-      qx = wrapSourceX(x - a.x), qz = z - a.z,
-      fraction = Math.max(0, Math.min(1, (qx * dx + qz * dz) / squared)),
-      distance = Math.hypot(qx - dx * fraction, qz - dz * fraction);
-    if (distance < best) { best = distance; anchor = total + fraction * lengthM; }
+    const lengthM = CANONICAL_METRES_PER_SOURCE_UNIT * Math.sqrt(squared),
+      fraction = Math.max(0, Math.min(1, (queryEast * east + queryNorth * north) / squared)),
+      distanceM = CANONICAL_METRES_PER_SOURCE_UNIT *
+        Math.hypot(queryEast - east * fraction, queryNorth - north * fraction);
+    if (distanceM < bestMetres) { bestMetres = distanceM; anchor = total + fraction * lengthM; }
     segments.push({ a, dx, dz, start: total, lengthM });
     total += lengthM;
   }
   const start = anchor + fromMetres, finish = anchor + toMetres;
-  if (best > 2 / CANONICAL_METRES_PER_SOURCE_UNIT || start < -1e-6 || finish > total + 1e-6) return [];
+  if (bestMetres > 2 || start < -1e-6 || finish > total + 1e-6) return [];
   const samples: { x: number; z: number }[] = [];
   for (let index = 0, cursor = 0; index <= stationCount; index++) {
     const at = Math.max(0, Math.min(total, start + (finish - start) * index / stationCount));
@@ -95,21 +98,24 @@ export function transportRoadBankApproaches(
  * samples never certify unsampled continuity or executed protagonist travel.
  */
 export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRoadEdge) {
-  let nearest = Infinity, direction: {x: number; z: number} | undefined;
+  let nearestMetres = Infinity, direction: {x: number; z: number} | undefined;
   for (let index = 1; index < edge.centerline.length; index++) {
     const a = edge.centerline[index - 1], b = edge.centerline[index],
       dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
-      qx = wrapSourceX(bridge.x - a.x), qz = bridge.z - a.z,
-      length2 = dx * dx + dz * dz;
-    if (!length2) continue;
-    const t = Math.max(0, Math.min(1, (qx * dx + qz * dz) / length2)),
-      distance = Math.hypot(qx - dx * t, qz - dz * t);
-    if (distance < nearest) { nearest = distance; direction = {x: dx, z: dz}; }
+      latitudeScale = Math.cos(sourceToLonLat(a.x, a.z).lat),
+      east = dx * latitudeScale, north = dz,
+      queryEast = wrapSourceX(bridge.x - a.x) * latitudeScale, queryNorth = bridge.z - a.z,
+      length2 = east * east + north * north;
+    if (length2 < 1e-12) continue;
+    const t = Math.max(0, Math.min(1, (queryEast * east + queryNorth * north) / length2)),
+      distanceM = CANONICAL_METRES_PER_SOURCE_UNIT *
+        Math.hypot(queryEast - east * t, queryNorth - north * t);
+    if (distanceM < nearestMetres) { nearestMetres = distanceM; direction = {x: dx, z: dz}; }
   }
   // A bridge anchor must lie on the same physical road as the bounded
   // arc samples (2 canonical metres), not merely within one source unit
   // (~15 m). Otherwise a nearby unrelated crossing can look graph-matched.
-  const crossing = direction && nearest <= 2 / CANONICAL_METRES_PER_SOURCE_UNIT
+  const crossing = direction && nearestMetres <= 2
     ? freshwaterCrossingAt(bridge.x, bridge.z, direction.x, direction.z) : null;
   const matchingCrossing = !!crossing && crossing.code === bridge.drainageCode
     && Math.abs(crossing.spanM - bridge.spanM) <= Math.max(1, bridge.spanM * .01);
