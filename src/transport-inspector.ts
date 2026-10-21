@@ -22,6 +22,7 @@ import { finalSurfaceAt } from "./world-core.ts";
 
 type AdvisorWorld = {
   setHalfHeight(height: number): void;
+  setBridgeInspectionAngle(enabled: boolean): void;
   state: {
     presentation: string;
     scaleLabel: string;
@@ -102,7 +103,7 @@ panel.innerHTML = `
     <button type="button" id="transport-site-route">Preview shortest road to reachable site</button>
     <button type="button" id="transport-site-access" disabled>Probe selected site's physical approach</button>
     <button type="button" id="transport-focus">Focus selection</button>
-    <button type="button" id="transport-bridge-closeup" hidden>Inspect bridge in 3D</button>
+    <button type="button" id="transport-bridge-closeup" hidden>Inspect bridge from low 3D angle</button>
   </div>
   <div class="divider"></div>
   <section id="transport-selection" aria-live="polite"></section>
@@ -723,6 +724,7 @@ function telemetry() {
 }
 
 panel.querySelector<HTMLButtonElement>("#transport-close")!.onclick = () => {
+  world()?.setBridgeInspectionAngle(false);
   panel.hidden = true;
   openButton.setAttribute("aria-expanded", "false");
 };
@@ -734,10 +736,11 @@ panel.querySelector<HTMLButtonElement>("#transport-bridge-closeup")!.onclick = (
   if (selection?.kind !== "bridge") return;
   const bridge = transportBridgeByCode(selection.code), runtime = world();
   if (!bridge || !runtime) return;
-  // Real 3D bridge rail height is ~1 m; a 1/20 atlas image covers kilometres.
-  // An explicit close-up is a camera-only inspection, never traversed movement.
+  // Present the existing 3D deck and rails obliquely at a readable scale.
+  // This changes only the camera for inspection; no simulated movement occurs.
   runtime.navigation.setFocus(bridge.position.lon, bridge.position.lat);
   runtime.setHalfHeight(24);
+  runtime.setBridgeInspectionAngle(true);
   refreshOverlay(true);
 };
 openButton.onclick = openPanel;
