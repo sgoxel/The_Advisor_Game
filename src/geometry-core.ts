@@ -578,8 +578,11 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
         length = Math.hypot(vx, vz);
       if (!length) continue;
       const segmentCount = Math.max(1, Math.ceil(length / 2)),
-        nx = (-vz / length) * 5,
-        nz = (vx / length) * 5;
+        // Seven canonical metres, not the historical 5-source-unit (~76 m)
+        // ribbon that could visually bridge terrain outside physical support.
+        halfWidth = 7 / CANONICAL_METRES_PER_SOURCE_UNIT,
+        nx = (-vz / length) * halfWidth,
+        nz = (vx / length) * halfWidth;
       for (const shiftX of [-SOURCE_PRESENTATION_WIDTH, 0, SOURCE_PRESENTATION_WIDTH]) {
         const minX = road.minX + shiftX,
           maxX = road.maxX + shiftX;
@@ -608,14 +611,20 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
           )
             continue;
           const surface = finalSurfaceAt(mx, mz);
-          if (surface.deckHeight === null) continue;
-          const y = elevationToRenderY(surface.deckHeight + 0.1),
+          // An unrelated adjacent road's legal deck must not paint a false
+          // crossing for this segment. Only the source-owned road can draw it.
+          if (surface.deckHeight === null || !surface.contributingModifierIds.includes(road.code)) continue;
+          const start = finalSurfaceAt(x0, z0), end = finalSurfaceAt(x1, z1),
+            y0 = elevationToRenderY((start.deckHeight ?? start.groundHeight) + 0.1),
+            y1 = elevationToRenderY((end.deckHeight ?? end.groundHeight) + 0.1),
             deck = color(115, 88, 56);
+          // Honour the real bank-to-bank gradient rather than lifting both
+          // ends to the same midpoint elevation before fine refinement loads.
           structures.quad(
-            [x0 + nx, y, z0 + nz],
-            [x1 + nx, y, z1 + nz],
-            [x1 - nx, y, z1 - nz],
-            [x0 - nx, y, z0 - nz],
+            [x0 + nx, y0, z0 + nz],
+            [x1 + nx, y1, z1 + nz],
+            [x1 - nx, y1, z1 - nz],
+            [x0 - nx, y0, z0 - nz],
             deck,
           );
         }
