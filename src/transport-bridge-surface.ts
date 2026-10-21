@@ -124,6 +124,7 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     approachGradeWithinLimit: false,
     routeStations: 0,
     routeStationsOnRoad: false,
+    routeStationsSurfaceOwned: false,
     routeStationsWalkable: false,
     routeMaxSampledGrade: null as number | null,
     routeGradeWithinLimit: false,
@@ -154,7 +155,11 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
       crossing.hi * crossing.metresPerUnit + 18, segmentCount),
     routeStationsOnRoad = roadStations.length === segmentCount + 1,
     routeStations = roadStations.map(point => ({ surface: finalSurfaceAt(point.x, point.z) })),
-    routeStationsWalkable = routeStationsOnRoad && routeStations.every(({ surface }) =>
+    // Coordinate agreement is not enough: a walkable field/another road
+    // must never certify the graph-selected road's physical crossing.
+    routeStationsSurfaceOwned = routeStationsOnRoad && routeStations.every(({ surface }) =>
+      surface.contributingModifierIds.includes(edge.code)),
+    routeStationsWalkable = routeStationsSurfaceOwned && routeStations.every(({ surface }) =>
       surface.walkable &&
       (surface.water.kind === "none" ||
         (surface.water.kind === "river" && surface.deckHeight !== null && surface.traversal === "bridge"))),
@@ -183,6 +188,7 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     approachGradeWithinLimit: approachStationsOnRoad && approachMaxSampledGrade !== null && approachMaxSampledGrade <= .08,
     routeStations: routeStations.length,
     routeStationsOnRoad,
+    routeStationsSurfaceOwned,
     routeStationsWalkable,
     routeMaxSampledGrade,
     routeGradeWithinLimit: routeStationsWalkable && routeMaxSampledGrade !== null && routeMaxSampledGrade <= .08,
