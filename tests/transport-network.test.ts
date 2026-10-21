@@ -16,7 +16,7 @@ import { macroSampleAt } from "../src/macro-geography.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
-import { transportRoadArcStations, transportRoadBankApproaches } from "../src/transport-bridge-surface.ts";
+import { transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { createTransportWalkingIndex, transportWalkingRoute, transportWalkingRouteToNearest } from "../src/transport-walking-route.ts";
@@ -215,6 +215,32 @@ test("S005 both bridge bank checks follow the actual road bend and never extrapo
   const missing = transportRoadBankApproaches(shortRoad, 8, 0, crossing);
   assert.equal(missing.left.length, 0);
   assert.equal(missing.right.length, 0);
+});
+
+test("S005 selected river deck follows the recorded bent road rather than a straight crossing tangent", () => {
+  const elbow = [{ x: 0, z: 0 }, { x: 8, z: 0 }, { x: 8, z: 8 }],
+    metresPerUnit = 2 * Math.PI * 637100 / 262144,
+    crossing = { lo: -0.1, hi: 0.1, metresPerUnit };
+  const wet = transportRoadWetStations(elbow, 8, 0, crossing);
+  assert.equal(wet.length, 5);
+  assert.ok(wet[0].x < 8 && Math.abs(wet[0].z) < 1e-6,
+    "incoming wet stations must remain on the canonical horizontal road");
+  assert.ok(Math.abs(wet[2].x - 8) < 1e-6 && Math.abs(wet[2].z) < 1e-6);
+  assert.ok(Math.abs(wet[4].x - 8) < 1e-6 && wet[4].z > 0,
+    "outgoing wet stations must turn with the actual canonical road");
+  assert.deepEqual(transportRoadWetStations(elbow, 8, 0, crossing), wet,
+    "identical SEED-owned road input produces identical wet evidence");
+  assert.equal(transportRoadWetStations(
+    [{ x: 7.98, z: 0 }, { x: 8, z: 0 }, { x: 8, z: 0.02 }],
+    8, 0, crossing).length, 0,
+    "incomplete wet span cannot be falsely certified via invented road extensions");
+  const half = SOURCE_PRESENTATION_WIDTH / 2;
+  const seam = transportRoadWetStations(
+    [{ x: half - 8, z: 100 }, { x: -half + 8, z: 100 }],
+    -half, 100, crossing);
+  assert.equal(seam.length, 5);
+  assert.ok(seam.every(point => Math.abs(point.z - 100) < 1e-6),
+    "wet crossing samples retain the source-owned wrap-safe road");
 });
 
 test("S005 physical road and bridge fragments clip against the same short seam arc as graph lookup", () => {
