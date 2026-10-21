@@ -20,7 +20,7 @@ import { transportBankApproachGrade, transportRoadArcStations, transportRoadBank
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
-import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, transportWalkingRoute, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
+import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, transportWalkingRoute, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import {
@@ -62,6 +62,54 @@ function reachable(start: string, graph: Map<string, string[]>) {
       }
   return seen;
 }
+
+test("S005 preview starts at selected canonical Y/harbor rather than unrelated map road", () => {
+  const network = siteTransportNetwork,
+    nodes = new Map(network.nodes.map(node => [node.code, node])),
+    junction = network.junctions[0], harbor = network.harbors[0],
+    unrelated = network.roadEdges.find(edge =>
+      ![junction.nodeCode, harbor.nodeCode].includes(edge.from) &&
+      ![junction.nodeCode, harbor.nodeCode].includes(edge.to))!;
+  assert.ok(junction && harbor && unrelated);
+  const focus = unrelated.centerline[0].position;
+  assert.equal(selectedWalkingPreviewOrigin(
+    { kind: "junction", code: junction.code }, focus, network, nodes, unrelated,
+  )?.code, junction.nodeCode, "selected Y must win even if map focus is near another road");
+  assert.equal(selectedWalkingPreviewOrigin(
+    { kind: "harbor", code: harbor.code }, focus, network, nodes, unrelated,
+  )?.code, harbor.nodeCode, "selected harbor is a real walkable on-road terminal");
+  assert.equal(selectedWalkingPreviewOrigin(
+    { kind: "ferry", code: network.ferryEdges[0].code }, focus, network, nodes, unrelated,
+  ), undefined, "ferry-only selection must not silently start a land route");
+  assert.equal(selectedWalkingPreviewOrigin(
+    { kind: "junction", code: "MISSING" }, focus, network, nodes, unrelated,
+  ), undefined, "invalid selection must never fall back to an unrelated road");
+
+  const road = network.roadEdges.find(edge => edge.from !== harbor.nodeCode && edge.to !== harbor.nodeCode)!;
+  assert.ok(road);
+  const atRoad = selectedWalkingPreviewOrigin(
+    { kind: "road", code: road.code }, road.centerline[0].position, network, nodes, unrelated,
+  );
+  assert.equal(atRoad?.code, road.from, "selected road takes its own physically nearest endpoint");
+  const crossing = network.borderCrossings.find(item => network.roadEdges.some(edge => edge.code === item.roadCode));
+  assert.ok(crossing);
+  const parentRoad = network.roadEdges.find(edge => edge.code === crossing!.roadCode)!;
+  assert.equal(selectedWalkingPreviewOrigin(
+    { kind: "border", code: crossing!.code }, parentRoad.centerline[0].position,
+    network, nodes, unrelated,
+  )?.code, parentRoad.from, "selected border crossing must remain attached to its owning road");
+  assert.equal(selectedWalkingPreviewOrigin(
+    { kind: "bridge", code: "SELECTED/BRIDGE/1" }, parentRoad.centerline[0].position,
+    network, nodes, unrelated, parentRoad.code,
+  )?.code, parentRoad.from, "selected bridge uses the resolved owner, not the focus road");
+  assert.equal(selectedWalkingPreviewOrigin(
+    { kind: "bridge", code: "SELECTED/BRIDGE/1" }, focus, network, nodes, unrelated,
+  ), undefined, "missing physical bridge owner fails closed");
+  assert.equal(selectedWalkingPreviewOrigin(
+    undefined, focus, network, nodes, unrelated,
+  )?.code, nearestWalkingRoadEndpoint(unrelated, nodes, focus)?.code,
+  "unselected preview preserves the nearest-road fallback");
+});
 
 test("S005 route preview projects only real nearby walking edge identities", () => {
   const nearby = [{ code: "EDGE/B" }, { code: "EDGE/D" }, { code: "EDGE/A" }];
