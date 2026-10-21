@@ -318,11 +318,16 @@ function settlementTerraceHeight(place: Place) {
   return value;
 }
 
-function roadTangentAt(x:number,z:number,road:Road) {
+/** The final road profile must select the same physical segment as S005 crossing inspection. */
+export function roadTangentAt(x:number,z:number,road:Road) {
   const path=road.centerline || [{x:road.fromX,z:road.fromZ},{x:road.toX,z:road.toZ}];
   let best=Infinity,result={x:wrapSourceX(road.toX-road.fromX),z:road.toZ-road.fromZ,cx:x,cz:z,segment:0,t:0};
   for(let i=1;i<path.length;i++){
-    const a=path[i-1],b=path[i],dx=wrapSourceX(b.x-a.x),dz=b.z-a.z,qx=wrapSourceX(x-a.x),qz=z-a.z,t=Math.max(0,Math.min(1,(qx*dx+qz*dz)/(dx*dx+dz*dz||1))),distance=Math.hypot(qx-dx*t,qz-dz*t);
+    const a=path[i-1],b=path[i],dx=wrapSourceX(b.x-a.x),dz=b.z-a.z,
+      qx=wrapSourceX(x-a.x),qz=z-a.z,latitudeScale=Math.cos(sourceToLonLat(a.x,a.z).lat),
+      east=dx*latitudeScale,queryEast=qx*latitudeScale,
+      t=Math.max(0,Math.min(1,(queryEast*east+qz*dz)/(east*east+dz*dz||1))),
+      distance=Math.hypot(queryEast-east*t,qz-dz*t);
     if(distance<best){best=distance;result={x:dx,z:dz,cx:wrapSourceX(a.x+dx*t),cz:a.z+dz*t,segment:i-1,t};}
   }
   return result;
