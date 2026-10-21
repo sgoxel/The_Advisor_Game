@@ -120,8 +120,18 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.ok(observed.routeStations > 10 && observed.routeStations <= 49,
     "selected-bridge road/deck/bank sampling must be dense but strictly bounded");
   assert.equal(typeof observed.routeStationsOnRoad, "boolean");
+  assert.equal(typeof observed.routeStationsSurfaceOwned, "boolean");
+  if (!observed.routeStationsSurfaceOwned) assert.equal(observed.routeStationsWalkable, false,
+    "samples without the actual selected road modifier cannot certify traversal");
   if (!observed.routeStationsOnRoad) assert.equal(observed.routeStationsWalkable, false,
     "off-road bridge stations cannot prove connected walkability");
+  const unownedEdge = { ...edge!, code: `${edge!.code}/UNRECORDED` };
+  const unownedSpan = transportBridgeSpanAt({ ...bridge, roadCode: unownedEdge.code }, unownedEdge);
+  assert.equal(unownedSpan.matchingCrossing, true, "identical geometry still intersects the recorded river");
+  assert.equal(unownedSpan.routeStationsSurfaceOwned, false,
+    "a different graph road ID cannot claim the actual walkable road surface");
+  assert.equal(unownedSpan.routeStationsWalkable, false);
+  assert.equal(unownedSpan.routeGradeWithinLimit, false);
   assert.equal(observed.routeGradeWithinLimit,
     observed.routeStationsWalkable && observed.routeMaxSampledGrade! <= .08);
   assert.ok(observed.routeMaxSampledGrade !== null && Number.isFinite(observed.routeMaxSampledGrade));
@@ -148,6 +158,7 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(shortSpan.approachStationsOnRoad, false, "road must extend to the sampled bank stations");
   assert.equal(shortSpan.approachStationsWalkable, false, "walkable off-road ground is not a road approach");
   assert.equal(shortSpan.routeStationsOnRoad, false, "a short road cannot cover the recorded whole crossing");
+  assert.equal(shortSpan.routeStationsSurfaceOwned, false);
   assert.equal(shortSpan.routeStationsWalkable, false, "missing source-owned road prevents sampled route certification");
   assert.equal(shortSpan.routeGradeWithinLimit, false, "off-road stations cannot certify grade");
 
@@ -160,6 +171,7 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(falseSpan.approachStationsOnRoad, false);
   assert.equal(falseSpan.routeStations, 0);
   assert.equal(falseSpan.routeStationsOnRoad, false);
+  assert.equal(falseSpan.routeStationsSurfaceOwned, false);
   assert.equal(falseSpan.routeStationsWalkable, false);
   assert.equal(falseSpan.routeMaxSampledGrade, null);
   assert.equal(falseSpan.routeGradeWithinLimit, false);
