@@ -16,7 +16,7 @@ import { sourceToLonLat } from "./planet.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
-import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, transportWalkingRouteToNearest } from "./transport-walking-route.ts";
+import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
 import { siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
 import { finalSurfaceAt } from "./world-core.ts";
 
@@ -183,13 +183,14 @@ function pathFor(edge: TransportRoadEdge, state: AdvisorWorld["state"]) {
   return `M ${points.map((point) => `${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" L ")}`;
 }
 
-function appendRoad(edge: TransportRoadEdge, state: AdvisorWorld["state"], selected: ReadonlySet<string>) {
+function appendRoad(edge: TransportRoadEdge, state: AdvisorWorld["state"], selected: ReadonlySet<string>, preview = false) {
   const d = pathFor(edge, state);
   if (!d) return false;
   const path = document.createElementNS(SVG_NS, "path");
   path.setAttribute("d", d);
   path.classList.add("transport-road", `transport-road-${edge.roadClass}`);
   if (selected.has(edge.code)) path.classList.add("selected");
+  if (preview) path.classList.add("route-preview");
   path.dataset.transportCode = edge.code;
   overlay.append(path);
   return true;
@@ -404,6 +405,7 @@ function renderSiteRoute() {
       <dt>Measured graph distance</dt><dd>${(siteRoute.distanceM / 1000).toFixed(2)} km</dd>
       <dt>Estimated good-road time</dt><dd>${(siteRoute.fantasyWalkSeconds / 3600).toFixed(2)} fantasy hours</dd>
       <dt>Canonical walking edges</dt><dd>${siteRoute.edgeCodes.length} · no ferry segments</dd>
+      <dt>Map preview</dt><dd>Visible route segments highlighted in teal at 1/100 and closer · distant segments appear as you pan · no guaranteed physical passage</dd>
       <dt>Evidence limit</dt><dd>Graph route only · individual physical road grades and bank-to-bank crossings not fully certified · character has not moved</dd>
     </dl>`;
 }
@@ -507,6 +509,9 @@ function chooseNearestSiteRoute() {
   resetSiteAccessProbe();
   renderSiteRoute();
   renderMetrics();
+  // Route state is independent of map navigation; repaint the local overlay now.
+  lastFingerprint = "";
+  refreshOverlay(true);
 }
 
 function renderSummary(state?: AdvisorWorld["state"]) {
@@ -603,9 +608,14 @@ function refreshOverlay(force = false) {
   lastOverlayRoads = 0;
   lastOverlayBridges = 0;
   if (roadsVisible) {
-    const query = roadQuery(state), selected = selectedRoadCodes();
+    const query = roadQuery(state), selected = selectedRoadCodes(),
+      preview = visibleWalkingPreviewEdgeCodes(siteRoute, query.edges);
     lastLocalRoads = query.edges.length;
-    for (const edge of query.edges) if (appendRoad(edge, state, selected)) lastOverlayRoads++;
+    // Graph preview draws last so the real path cannot disappear below other road strokes.
+    for (const edge of query.edges)
+      if (!preview.has(edge.code) && appendRoad(edge, state, selected)) lastOverlayRoads++;
+    for (const edge of query.edges)
+      if (preview.has(edge.code) && appendRoad(edge, state, selected, true)) lastOverlayRoads++;
     appendLakeDetour(state);
     const localCodes = new Set(query.edges.map((edge) => edge.code));
     for (const bridge of transportNetwork.bridges)
