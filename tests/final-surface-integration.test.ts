@@ -1,18 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {naturalSurfaceAt} from "../src/hydrology.ts";
-import { places, roads, villages } from "../src/geography.ts";
+import { places, roads, villages, roadDistanceAt } from "../src/geography.ts";
 import { WORLD_BUILDING_PRIORITIES } from "../src/final-surface.ts";
+import { buildTile } from "../src/geometry.ts";
+import { REFINED_BRIDGE_HALF_WIDTH_SOURCE } from "../src/surface-refinement.ts";
 import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "../src/transport-bridge-surface.ts";
 import { freshwaterCrossingAt } from "../src/hydrology.ts";
 import { transportNetwork } from "../src/transport-network.ts";
-import { sourceToLonLat, CANONICAL_METRES_PER_SOURCE_UNIT } from "../src/planet.ts";
+import { sourceToLonLat, CANONICAL_METRES_PER_SOURCE_UNIT, wrapSourceX } from "../src/planet.ts";
 import {
   RURAL_BRIDGE_MAX_LENGTH_M,
   finalSurfaceEvidenceAnchors,
   finalSurfaceAt,
   finalSurfaceDebugAt,
   finalSurfaceTelemetry,
+  tileForPosition,
   resetFinalSurfaceTelemetry,
 } from "../src/world.ts";
 
@@ -79,6 +82,39 @@ test("bridge deck preserves authoritative water and obeys the 120m rural cap", (
   assert.equal(bridge.final.deckMaterial, "Bridge");
   assert.equal(bridge.final.traversal, "bridge");
   assert.ok(bridge.final.deckHeight! >= bridge.base.water.level + 1);
+});
+
+test("S005 coarse bridge matches source-owned seven-metre deck and graded endpoint heights", () => {
+  const evidence = finalSurfaceEvidenceAnchors(),
+    road = roads.find(candidate => candidate.code === evidence.roadCode);
+  assert.ok(road, "the known real bridge retains its canonical road owner");
+  const tile = tileForPosition(evidence.bridge.x, evidence.bridge.z, 14),
+    geometry = buildTile(tile).structures,
+    originX = tile.minX + tile.size / 2,
+    originZ = tile.minZ + tile.size / 2;
+  let sampledDeckVertices = 0;
+  for (let vertex = 0; vertex < geometry.positions.length / 3; vertex++) {
+    const c = vertex * 4;
+    // The coarse bridge material is replaced by refinement only after streaming.
+    if (geometry.colors[c] !== 115 || geometry.colors[c + 1] !== 88 ||
+        geometry.colors[c + 2] !== 56) continue;
+    const p = vertex * 3,
+      x = originX + geometry.positions[p],
+      z = originZ + geometry.positions[p + 2];
+    if (Math.hypot(wrapSourceX(x - evidence.bridge.x), z - evidence.bridge.z) > 6) continue;
+    const sourceDistance = roadDistanceAt(x, z, road!),
+      surface = finalSurfaceAt(x, z),
+      emittedMetres = geometry.positions[p + 1] * CANONICAL_METRES_PER_SOURCE_UNIT,
+      expectedMetres = (surface.deckHeight ?? surface.groundHeight) + 0.1;
+    assert.ok(sourceDistance <= REFINED_BRIDGE_HALF_WIDTH_SOURCE + 0.07,
+      "coarse bridge must not paint the old multi-source-unit wide ribbon");
+    assert.ok(surface.contributingModifierIds.includes(road!.code),
+      "coarse bridge geometry must belong to the selected canonical road");
+    assert.ok(Math.abs(emittedMetres - expectedMetres) < 0.18,
+      "coarse deck endpoints must follow the final-surface heights, not a flat midpoint");
+    sampledDeckVertices++;
+  }
+  assert.ok(sampledDeckVertices >= 6, "the true coarse crossing must remain visibly bridged");
 });
 
 test("S005 bridge inspector distinguishes final-surface deck truth from a crossing record", () => {
