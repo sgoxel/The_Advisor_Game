@@ -38,8 +38,11 @@ export function siteAccessSampleVerdict(
     stations.length === surfaces.length,
     dry = full && surfaces.every(surface => surface.water.kind === "none"),
     walkable = full && surfaces.every(surface => surface.walkable),
-    onRecordedRoad = full && surfaces.every(surface =>
-      surface.contributingModifierIds.includes(edge.code));
+    // The shared final-surface resolver may choose the parent road at the
+    // exact shared graph junction. Require this branch at every interior
+    // sample; the terminal joins the parent's separately dry/walkable surface.
+    onRecordedRoad = full && surfaces.every((surface, index) =>
+      index === surfaces.length - 1 || surface.contributingModifierIds.includes(edge.code));
   let maximumGrade: number | null = null;
   if (full) {
     maximumGrade = 0;
