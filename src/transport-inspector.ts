@@ -465,7 +465,9 @@ function probeSiteAccess() {
     }
     if (surfaces.length < stations.length) requestAnimationFrame(step);
     else {
-      siteProbe = siteAccessSampleVerdict(branch, surfaces);
+      const junctionRoadCodes = new Set((walkingIndex?.adjacency.get(branch.to) ?? [])
+        .map(step => step.edge.code));
+      siteProbe = siteAccessSampleVerdict(branch, surfaces, junctionRoadCodes);
       siteProbeStatus = siteProbe.sampledPass ? "sampled physical approach pass" : "sampled physical approach not certified";
       siteProbeMs = performance.now() - started;
       panel.querySelector<HTMLButtonElement>("#transport-site-access")!.disabled = false;
