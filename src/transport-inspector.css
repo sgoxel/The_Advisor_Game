@@ -79,7 +79,7 @@
   gap: .5rem;
 }
 .transport-actions button { min-height: 44px; }
-#transport-site-route, #transport-site-access { grid-column: 1 / -1; }
+#transport-site-route, #transport-site-access, #transport-bridge-closeup { grid-column: 1 / -1; }
 #transport-site-answer:not(:empty), #transport-site-surface:not(:empty) { margin-top: .75rem; padding-top: .75rem; border-top: 1px solid rgba(217, 184, 116, .24); }
 #transport-site-answer .eyebrow, #transport-site-surface .eyebrow { line-height: 1.35; }
 #transport-selection h3 {
