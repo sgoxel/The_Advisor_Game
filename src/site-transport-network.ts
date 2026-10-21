@@ -8,6 +8,7 @@ import {
   transportAcceptanceSummary as baseAcceptanceSummary,
   transportNetwork as baseNetwork,
   transportPolylineDistance,
+  transportPolylinePhysicalDistance,
   transportRoadsNear as baseRoadsNear,
   wrapRoad,
   type TransportNetwork,
@@ -118,7 +119,7 @@ export function siteAccessRoadsNear(x: number, z: number, radiusSource: number, 
       if (seen.has(edge.code)) continue;
       seen.add(edge.code);
       const distance = transportPolylineDistance(edge.centerline, x, z);
-      if (distance <= radiusSource) nearby.push({ edge, distance });
+      if (distance <= radiusSource) nearby.push({ edge, distance: transportPolylinePhysicalDistance(edge.centerline, x, z) });
     }
   }
   return Object.freeze(nearby.sort((a, b) =>
@@ -132,7 +133,7 @@ export function siteTransportRoadsNear(x: number, z: number, radiusSource: numbe
     base = baseRoadsNear(x, z, radiusSource, boundedLimit),
     access = siteAccessRoadsNear(x, z, radiusSource, boundedLimit),
     nearby = [...base, ...access].map(edge => ({
-      edge, distance: transportPolylineDistance(edge.centerline, x, z),
+      edge, distance: transportPolylinePhysicalDistance(edge.centerline, x, z),
     }));
   return Object.freeze(nearby.sort((a, b) =>
     a.distance - b.distance || compareCode(a.edge.code, b.edge.code))
