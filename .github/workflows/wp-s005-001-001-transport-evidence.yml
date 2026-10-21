@@ -69,3 +69,5 @@ jobs:
         with:
           name: s005-transport-${{ matrix.backend }}
           path: test-results/
+
+# AGENT #1 S005 visual-only evidence: current main 6fbb366, raised rails and geodesic preview origin. Do not merge.
