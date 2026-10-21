@@ -16,7 +16,7 @@ import { macroSampleAt } from "../src/macro-geography.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
-import { transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
+import { transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
@@ -60,6 +60,23 @@ function reachable(start: string, graph: Map<string, string[]>) {
       }
   return seen;
 }
+
+test("S005 bank approach uses the traversed bridge-deck surface height", () => {
+  const bank = (heights: readonly number[], groundAtNearBank: number) =>
+    heights.map((surfaceHeight, index) => ({
+      surfaceHeight,
+      groundHeight: index === 0 ? groundAtNearBank : surfaceHeight,
+    }));
+  const left = bank([10, 10.2, 10.4, 10.6, 10.8], 4),
+    right = bank([10.8, 10.6, 10.4, 10.2, 10], 3),
+    measured = transportBankApproachGrade([left, right]);
+  assert.ok(measured !== null && Math.abs(measured - .05) < 1e-9,
+    "a dry-bank bridge deck grades from its walkable top, never bare earth underneath");
+  assert.ok(transportBankApproachGrade([left, bank([10.8, 10.6, 10.4, 9.4, 9.2], 3)])! > .08,
+    "steep actual deck-to-ground transitions must still fail the eight-percent limit");
+  assert.equal(transportBankApproachGrade([left, right.slice(1)]), null,
+    "missing road stations cannot certify a bank");
+});
 
 test("S005 walking preview reuses actual site branches, stays deterministic, excludes ferries", () => {
   const graph = createTransportWalkingIndex(siteTransportNetwork);
