@@ -100,6 +100,40 @@ test("S005 close dry-road coverage follows the same canonical centerline as insp
     "road coverage retains the same projection UVs as the final ground");
 });
 
+test("S005 coarse bridge uses source-owned seven-metre deck with actual end heights", () => {
+  const evidence = finalSurfaceEvidenceAnchors(),
+    road = roads.find(candidate => candidate.code === evidence.roadCode);
+  assert.ok(road, "the known real bridge retains its canonical road owner");
+  const tile = tileForPosition(evidence.bridge.x, evidence.bridge.z, 14),
+    geometry = buildTile(tile).structures,
+    originX = tile.minX + tile.size / 2,
+    originZ = tile.minZ + tile.size / 2;
+  let sampledDeckVertices = 0;
+  for (let vertex = 0; vertex < geometry.positions.length / 3; vertex++) {
+    const c = vertex * 4;
+    // The coarse bridge material is replaced by the refined deck material
+    // only after streaming; both must represent the same physical crossing.
+    if (geometry.colors[c] !== 115 || geometry.colors[c + 1] !== 88 ||
+        geometry.colors[c + 2] !== 56) continue;
+    const p = vertex * 3,
+      x = originX + geometry.positions[p],
+      z = originZ + geometry.positions[p + 2];
+    if (Math.hypot(wrapSourceX(x - evidence.bridge.x), z - evidence.bridge.z) > 6) continue;
+    const sourceDistance = roadDistanceAt(x, z, road!),
+      surface = finalSurfaceAt(x, z),
+      emittedMetres = geometry.positions[p + 1] * CANONICAL_METRES_PER_SOURCE_UNIT,
+      expectedMetres = (surface.deckHeight ?? surface.groundHeight) + 0.1;
+    assert.ok(sourceDistance <= REFINED_BRIDGE_HALF_WIDTH_SOURCE + 0.07,
+      "coarse bridge must not paint the old multi-source-unit wide ribbon");
+    assert.ok(surface.contributingModifierIds.includes(road!.code),
+      "coarse bridge surface must belong to the selected canonical road");
+    assert.ok(Math.abs(emittedMetres - expectedMetres) < 0.18,
+      "coarse deck ends must follow the actual final-surface heights, not a flat midpoint");
+    sampledDeckVertices++;
+  }
+  assert.ok(sampledDeckVertices >= 6, "the true coarse crossing must remain visibly bridged");
+});
+
 test("an actual natural-water road crossing refines to a narrow authoritative deck", () => {
   const evidence = finalSurfaceEvidenceAnchors(),
     road = roads.find((candidate) => candidate.code === evidence.roadCode);
