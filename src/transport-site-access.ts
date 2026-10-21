@@ -1,6 +1,7 @@
 import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import type { FinalSurface } from "./final-surface.ts";
 import type { TransportRoadEdge } from "./transport-network.ts";
+import { ACCESS_PROFILE_SEGMENT_MAX_M } from "./sites.ts";
 
 /**
  * On-demand physical evidence for a real critical-site access branch, not a
@@ -20,7 +21,11 @@ export function siteAccessRoadStations(edge: TransportRoadEdge) {
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1], b = points[i],
       dx = wrapSourceX(b.x - a.x), dz = b.z - a.z;
-    if (!Number.isFinite(dx) || !Number.isFinite(dz) || Math.hypot(dx, dz) < 1e-9)
+    // The SEED owner specifies <=75 m spans. A short array with a long
+    // interval must not pass by checking only its ends and midpoint.
+    const spanM = greatCircleDistance(sourceToLonLat(a.x, a.z), sourceToLonLat(b.x, b.z));
+    if (!Number.isFinite(dx) || !Number.isFinite(dz) || !Number.isFinite(spanM) ||
+        spanM <= 0 || spanM > ACCESS_PROFILE_SEGMENT_MAX_M + 0.01)
       return Object.freeze([] as { x: number; z: number }[]);
     stations.push(
       { x: wrapSourceX(a.x + dx * 0.5), z: a.z + dz * 0.5 },
