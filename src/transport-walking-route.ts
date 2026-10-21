@@ -130,6 +130,36 @@ export function nearestWalkingRoadEndpoint(
   return best;
 }
 
+/**
+ * Land route previews must originate at the actual selected graph node/road.
+ * A selected ferry is not an implicit walking leg. No selection falls back to
+ * the geographically nearest local road; an invalid selection fails closed.
+ * This chooses graph facts only and does not move an actor.
+ */
+export function selectedWalkingPreviewOrigin(
+  selection: { kind: string; code: string } | undefined,
+  focus: LonLat,
+  network: Pick<TransportNetwork, "junctions" | "harbors" | "borderCrossings" | "roadEdges">,
+  nodes: ReadonlyMap<string, TransportNode>,
+  fallbackRoad?: TransportRoadEdge,
+  bridgeRoadCode?: string,
+): TransportNode | undefined {
+  if (!selection) return fallbackRoad && nearestWalkingRoadEndpoint(fallbackRoad, nodes, focus);
+  if (selection.kind === "ferry") return undefined;
+  if (selection.kind === "junction" || selection.kind === "harbor") {
+    const nodeCode = selection.kind === "junction"
+      ? network.junctions.find(item => item.code === selection.code)?.nodeCode
+      : network.harbors.find(item => item.code === selection.code)?.nodeCode;
+    const node = nodeCode ? nodes.get(nodeCode) : undefined;
+    return node?.kind === selection.kind ? node : undefined;
+  }
+  const roadCode = selection.kind === "road" || selection.kind === "lake-detour" ? selection.code
+    : selection.kind === "border" ? network.borderCrossings.find(item => item.code === selection.code)?.roadCode
+    : selection.kind === "bridge" ? bridgeRoadCode : undefined;
+  const road = roadCode && network.roadEdges.find(edge => edge.code === roadCode);
+  return road ? nearestWalkingRoadEndpoint(road, nodes, focus) : undefined;
+}
+
 /** Overlay only: project/highlight at most the already focus-bounded road query. */
 export function visibleWalkingPreviewEdgeCodes(
   route: { readonly edgeCodes: readonly string[] } | null,
