@@ -29,25 +29,25 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Legal transport end-to-end: shared Y junctions, bank-safe bridges & truthful route previews
+- WP-S005-001-001 — Canonical transport UX: true Y-junctions, grade-safe bridges & truthful route previews
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Legal resident journeys: Fantasy-Time schedules, walkable commutes & inspectable lives
+- WP-S006-001-001 — Resident-life UX: legal home–work–gate routes, Fantasy-Time & reusable 2D actors
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — 3D visual architecture research: PlayCanvas toon lighting, semantic zoom & mobile readability
+- WP-S007-001-001 — README visual research: toon-lit PlayCanvas 3D, semantic icons & mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas tasks: safe-area/44px touch, legible panels & keyboard inspection
+- WP-S008-001-001 — Accessible atlas UX: safe-area panels, ≥44px touch & keyboard inspection
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Measure first-usable performance: p95 input/worker/frame & exact-SHA resource budgets
-- WP-S009-002-001 — Eliminate atlas input stalls: bounded exact picking & idle-frame overlay reuse
-- WP-S009-003-001 — WebGPU/WebGL2 resilience: adaptive mobile DPR, combined resources & recovery
-- WP-S009-004-001 — README/runtime conformance: Advisor autonomy, Fantasy-Time truth & honest release claims
-- WP-S009-005-001 — Seamless zoom readiness: nonblank LOD, truthful first-use & complete 3D detail
+- WP-S009-001-001 — Exact-release performance proof: first valid use, p95 latency & CPU/GPU budgets
+- WP-S009-002-001 — Responsive atlas input: bounded canonical picking & cached label/overlay revisions
+- WP-S009-003-001 — WebGPU/WebGL2 mobile compatibility: adaptive DPR/shadows, shared memory & recovery
+- WP-S009-004-001 — README conformance: honest atlas vs Advisor actions, Fantasy-Time & release claims
+- WP-S009-005-001 — Seamless canonical zoom: nonblank terrain, truthful first use & complete 3D detail
