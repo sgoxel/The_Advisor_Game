@@ -70,6 +70,8 @@ export type FinalSurface = SurfaceBase & {
   /** Ground material remains inspectable even when a bridge deck is the top surface. */
   groundMaterial: SurfaceMaterial;
   deckHeight: number | null;
+  /** Only canonical modifiers providing the highest actual traversed deck. */
+  deckOwnerIds: readonly string[];
   deckMaterial: "Bridge" | null;
   traversal: SurfaceTraversal;
   contributingModifierIds: readonly string[];
@@ -140,7 +142,8 @@ export function composeFinalSurface(
     walkable = base.walkable,
     vegetationDensityScale = clamp01(base.vegetationDensityScale),
     reservedUse = base.reservedUse,
-    deckHeight: number | null = null;
+    deckHeight: number | null = null,
+    deckOwnerIds: string[] = [];
   const contributingModifierIds: string[] = [];
 
   for (const modifier of canonicalSurfaceModifiers(modifiers)) {
@@ -153,8 +156,12 @@ export function composeFinalSurface(
     if (modifier.targetGroundHeight !== undefined && base.water.kind === "none")
       groundHeight = lerp(groundHeight, modifier.targetGroundHeight, weight);
 
-    if (modifier.deckHeight !== undefined)
-      deckHeight = deckHeight === null ? modifier.deckHeight : Math.max(deckHeight, modifier.deckHeight);
+    if (modifier.deckHeight !== undefined) {
+      if (deckHeight === null || modifier.deckHeight > deckHeight) {
+        deckHeight = modifier.deckHeight;
+        deckOwnerIds = [modifier.id];
+      } else if (modifier.deckHeight === deckHeight) deckOwnerIds.push(modifier.id);
+    }
 
     if (modifier.material && weight >= 0.5 && base.water.kind === "none")
       groundMaterial = modifier.material;
@@ -191,6 +198,7 @@ export function composeFinalSurface(
     material,
     groundMaterial,
     deckHeight,
+    deckOwnerIds: Object.freeze(deckOwnerIds),
     deckMaterial: deckHeight === null ? null : "Bridge",
     water: base.water,
     walkable,

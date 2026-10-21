@@ -15,7 +15,7 @@ export function transportBridgeSurfaceAt(x: number, z: number, roadCode: string)
       surface.deckHeight !== null &&
       surface.walkable &&
       surface.traversal === "bridge" &&
-      surface.contributingModifierIds.includes(roadCode),
+      surface.deckOwnerIds.includes(roadCode),
     deckHeight: surface.deckHeight,
     waterKind: surface.water.kind,
     traversal: surface.traversal,
@@ -181,7 +181,8 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     // Coordinate agreement is not enough: a walkable field/another road
     // must never certify the graph-selected road's physical crossing.
     routeStationsSurfaceOwned = routeStationsOnRoad && routeStations.every(({ surface }) =>
-      surface.contributingModifierIds.includes(edge.code)),
+      surface.contributingModifierIds.includes(edge.code) &&
+      (surface.water.kind !== "river" || surface.deckOwnerIds.includes(edge.code))),
     routeStationsWalkable = routeStationsSurfaceOwned && routeStations.every(({ surface }) =>
       surface.walkable &&
       (surface.water.kind === "none" ||
@@ -201,7 +202,7 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
       surface.deckHeight !== null &&
       surface.walkable &&
       surface.traversal === "bridge" &&
-      surface.contributingModifierIds.includes(edge.code)),
+      surface.deckOwnerIds.includes(edge.code)),
     bankStationsWalkable: approachStationsOnRoad && banks.every(surface =>
       surface.water.kind === "none" && surface.walkable),
     approachStations: approaches.reduce((count, side) => count + side.length, 0),
