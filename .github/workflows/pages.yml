@@ -23,8 +23,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run test:release
-        if: github.event_name == 'push'
+      - run: timeout 12m npm run test:release
+        if: github.event_name != 'workflow_dispatch'
       - run: npm test
         if: github.event_name == 'workflow_dispatch'
       - run: npm run build
