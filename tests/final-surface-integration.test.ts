@@ -25,7 +25,7 @@ const EPS = 1e-9;
 
 test("S005 final road profile uses latitude-correct physical nearest segment", () => {
   const mockRoadAt = (latitude: number) => {
-    const z = lonLatToSource({ lon: 0, lat: latitude }).z;
+    const z = lonLatToSource(0, latitude).z;
     return {
       fromX: 0, fromZ: z + 1, toX: 10, toZ: z + 11,
       centerline: [{ x: 0, z: z + 1 }, { x: 10, z: z + 1 }, { x: 10, z: z + 11 }],
