@@ -16,7 +16,7 @@ import { sourceToLonLat } from "./planet.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
-import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
+import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
 import { siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
 import { finalSurfaceAt } from "./world-core.ts";
 
@@ -487,22 +487,26 @@ function chooseNearestSiteRoute() {
   siteRoute = null;
   if (!runtime) lastSiteRouteStatus = "world authority pending";
   else {
-    const edge = roadQuery(runtime.state).edges[0];
-    if (!edge) lastSiteRouteStatus = "no canonical road near map focus";
+    // A chosen Y/harbor is an exact graph node, and a chosen road/crossing
+    // starts from its own endpoint. Only no-selection uses the nearest road.
+    const fallback = selection ? undefined : roadQuery(runtime.state).edges[0];
+    const from = selectedWalkingPreviewOrigin(
+      selection, sourceToLonLat(runtime.state.view.x, runtime.state.view.z),
+      transportNetwork, transportNodesByCode, fallback,
+      selection?.kind === "bridge" ? transportBridgeByCode(selection.code)?.roadCode : undefined,
+    );
+    const sites = from ? transportNetwork.nodes.filter(node =>
+      node.kind === "site" && node.countryCode === from.countryCode &&
+      node.continent === from.continent).map(node => node.code) : [];
+    if (!from) lastSiteRouteStatus = selection?.kind === "ferry"
+      ? "selected ferry is maritime, not a walking origin; select a harbor or road"
+      : selection ? "selected item has no canonical walking origin"
+      : "no canonical road near map focus";
+    else if (!sites.length) lastSiteRouteStatus = "no same-country critical site endpoint";
     else {
-      // Physical planet distance, not latitude-distorted flat map X/Z.
-      const from = nearestWalkingRoadEndpoint(
-        edge, transportNodesByCode, sourceToLonLat(runtime.state.view.x, runtime.state.view.z),
-      );
-      const sites = from ? transportNetwork.nodes.filter(node =>
-        node.kind === "site" && node.countryCode === from.countryCode &&
-        node.continent === from.continent).map(node => node.code) : [];
-      if (!from || !sites.length) lastSiteRouteStatus = "no same-country critical site endpoint";
-      else {
-        walkingIndex ??= createTransportWalkingIndex(transportNetwork);
-        siteRoute = transportWalkingRouteToNearest(walkingIndex, from.code, sites);
-        lastSiteRouteStatus = siteRoute ? "shortest reachable canonical walking route ready" : "no reachable same-country site by walking road";
-      }
+      walkingIndex ??= createTransportWalkingIndex(transportNetwork);
+      siteRoute = transportWalkingRouteToNearest(walkingIndex, from.code, sites);
+      lastSiteRouteStatus = siteRoute ? "shortest reachable canonical walking route ready" : "no reachable same-country site by walking road";
     }
   }
   lastSiteRouteMs = performance.now() - started;
