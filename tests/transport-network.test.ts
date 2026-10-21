@@ -119,7 +119,7 @@ test("S005 selected site access probe stays bounded and reports sampled physical
 
   const edge = {
     code: "S005/SITE/ACCESS", from: "S005/NODE/SITE/EXAMPLE", roadClass: "access",
-    centerline: [{ x: 0, z: 0 }, { x: 1, z: 0 }, { x: 2, z: 0 }],
+    centerline: [{ x: 0, z: 0 }, { x: 0.25, z: 0 }, { x: 0.5, z: 0 }],
   } as unknown as TransportRoadEdge;
   const stations = siteAccessRoadStations(edge);
   assert.equal(stations.length, 5);
@@ -161,6 +161,26 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 4 ?
     { ...s, surfaceHeight: 30 } : s)).gradeWithinLimit, false);
   assert.equal(siteAccessRoadStations({ ...edge, roadClass: "main" }).length, 0);
+  const sparse = { ...edge, centerline: [
+    { x: 0, z: 0 }, { x: 0.25, z: 0 }, { x: 7, z: 0 },
+  ] };
+  assert.equal(siteAccessRoadStations(sparse).length, 0,
+    "a >75 m unexamined centerline interval cannot certify a physical site access branch");
+  assert.equal(siteAccessSampleVerdict(sparse, connectedSurfaces, junctionRoadCodes).sampledPass, false,
+    "passing stations from a different profile cannot certify a sparse unsafe gap");
+  for (const invalid of [
+    { ...edge, centerline: [{ x: NaN, z: 0 }, { x: 0.25, z: 0 }] },
+    { ...edge, centerline: [{ x: 0, z: 0 }, { x: Infinity, z: 0 }] },
+  ]) {
+    assert.equal(siteAccessRoadStations(invalid).length, 0,
+      "nonfinite access profile coordinates must fail closed without throwing");
+    assert.equal(siteAccessSampleVerdict(invalid, connectedSurfaces, junctionRoadCodes).sampledPass, false);
+  }
+  assert.equal(siteAccessRoadStations({ ...edge, centerline: undefined } as unknown as TransportRoadEdge).length, 0,
+    "missing access centerline must fail closed without throwing");
+  assert.ok(siteAccessRoadStations({
+    ...edge, centerline: [{ x: 0, z: 0 }, { x: 0.4, z: 0 }],
+  }).length > 0, "short bounded intervals remain inspectable");
   assert.equal(siteAccessRoadStations({
     ...edge,
     centerline: Array.from({ length: SITE_ACCESS_STATION_LIMIT }, (_, x) => ({ x, z: 0 })),
