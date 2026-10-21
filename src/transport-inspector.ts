@@ -16,6 +16,8 @@ import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
 import { createTransportWalkingIndex, transportWalkingRouteToNearest } from "./transport-walking-route.ts";
+import { siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
+import { finalSurfaceAt } from "./world-core.ts";
 
 type AdvisorWorld = {
   state: {
@@ -64,6 +66,10 @@ let lastRoadInspectionStatus = "not requested";
 let lastSiteRouteMs: number | null = null;
 let lastSiteRouteStatus = "not requested";
 let siteRoute: ReturnType<typeof transportWalkingRouteToNearest> = null;
+let siteProbe: ReturnType<typeof siteAccessSampleVerdict> | null = null;
+let siteProbeStatus = "not requested";
+let siteProbeMs: number | null = null;
+let siteProbeRevision = 0;
 
 function compareCanonical(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -92,11 +98,13 @@ panel.innerHTML = `
   <div class="transport-actions">
     <button type="button" id="transport-nearest">Inspect nearest road</button>
     <button type="button" id="transport-site-route">Preview shortest road to reachable site</button>
+    <button type="button" id="transport-site-access" disabled>Probe selected site's physical approach</button>
     <button type="button" id="transport-focus">Focus selection</button>
   </div>
   <div class="divider"></div>
   <section id="transport-selection" aria-live="polite"></section>
   <section id="transport-site-answer" aria-live="polite"></section>
+  <section id="transport-site-surface" aria-live="polite"></section>
   <div class="divider"></div>
   <div class="transport-metrics" id="transport-metrics"></div>
 `;
@@ -400,6 +408,74 @@ function renderSiteRoute() {
     </dl>`;
 }
 
+function renderSiteAccessProbe() {
+  const target = panel.querySelector<HTMLElement>("#transport-site-surface")!;
+  if (!siteProbe) {
+    target.textContent = siteProbeStatus === "not requested" ? "" :
+      `Physical site approach: ${siteProbeStatus}. No whole-route traversal certified.`;
+    return;
+  }
+  const grade = siteProbe.maximumGrade === null ? "not measured" :
+    Number.isFinite(siteProbe.maximumGrade) ? `${(siteProbe.maximumGrade * 100).toFixed(1)}%` : "invalid";
+  target.innerHTML = `<div class="eyebrow">FINAL-SURFACE SITE APPROACH · SAMPLED ${siteProbe.sampledPass ? "PASS" : "NOT CERTIFIED"}</div>
+    <dl>
+      <dt>Recorded road</dt><dd>${siteProbe.onRecordedRoad ? "All sampled stations on the canonical access branch" : "Missing canonical access branch at sampled stations"}</dd>
+      <dt>Samples</dt><dd>${siteProbe.stationCount}/${siteProbe.expectedStations} · each profile span's ends and midpoint</dd>
+      <dt>Ground passage</dt><dd>${siteProbe.dry && siteProbe.walkable ? "Sampled stations dry and walkable" : "One or more samples wet, blocked or missing"}</dd>
+      <dt>Sampled max grade</dt><dd>${grade} · ${siteProbe.gradeWithinLimit ? "within 8%" : "not within 8% limit"}</dd>
+      <dt>Evidence boundary</dt><dd>Selected site's own access branch only · unsampled gaps, rest of graph route and character movement not certified</dd>
+    </dl>`;
+}
+
+function resetSiteAccessProbe() {
+  siteProbeRevision++;
+  siteProbe = null;
+  siteProbeStatus = "not requested";
+  siteProbeMs = null;
+  panel.querySelector<HTMLButtonElement>("#transport-site-access")!.disabled = !siteRoute;
+  renderSiteAccessProbe();
+}
+
+function probeSiteAccess() {
+  const route = siteRoute, branch = route && transportNetwork.roadEdges.find(edge =>
+    edge.roadClass === "access" && edge.from === route.to);
+  if (!branch) {
+    siteProbeStatus = "no canonical terminal site branch";
+    renderSiteAccessProbe();
+    return;
+  }
+  const stations = siteAccessRoadStations(branch);
+  if (!stations.length) {
+    siteProbeStatus = "physical access recipe exceeds bounded profile or is invalid";
+    renderSiteAccessProbe();
+    return;
+  }
+  const revision = ++siteProbeRevision, started = performance.now(),
+    surfaces: ReturnType<typeof finalSurfaceAt>[] = [];
+  siteProbe = null;
+  siteProbeStatus = "checking final surface in bounded frame batches";
+  panel.querySelector<HTMLButtonElement>("#transport-site-access")!.disabled = true;
+  renderSiteAccessProbe();
+  const step = () => {
+    if (revision !== siteProbeRevision) return;
+    const limit = Math.min(stations.length, surfaces.length + 4);
+    while (surfaces.length < limit) {
+      const point = stations[surfaces.length];
+      surfaces.push(finalSurfaceAt(point.x, point.z));
+    }
+    if (surfaces.length < stations.length) requestAnimationFrame(step);
+    else {
+      siteProbe = siteAccessSampleVerdict(branch, surfaces);
+      siteProbeStatus = siteProbe.sampledPass ? "sampled physical approach pass" : "sampled physical approach not certified";
+      siteProbeMs = performance.now() - started;
+      panel.querySelector<HTMLButtonElement>("#transport-site-access")!.disabled = false;
+      renderSiteAccessProbe();
+      renderMetrics();
+    }
+  };
+  requestAnimationFrame(step);
+}
+
 function chooseNearestSiteRoute() {
   const started = performance.now(), runtime = world();
   siteRoute = null;
@@ -428,6 +504,7 @@ function chooseNearestSiteRoute() {
     }
   }
   lastSiteRouteMs = performance.now() - started;
+  resetSiteAccessProbe();
   renderSiteRoute();
   renderMetrics();
 }
@@ -456,6 +533,7 @@ function renderMetrics() {
       <dt>Focus query</dt><dd>${lastQueryMs.toFixed(2)} ms · ${lastLocalRoads}/${QUERY_EDGE_LIMIT} records</dd>
       <dt>First road answer</dt><dd>${lastRoadInspectionStatus}${lastRoadInspectionMs === null ? "" : ` · ${lastRoadInspectionMs.toFixed(2)} ms`}</dd>
       <dt>Walking graph answer</dt><dd>${lastSiteRouteStatus}${lastSiteRouteMs === null ? "" : ` · ${lastSiteRouteMs.toFixed(2)} ms`}</dd>
+      <dt>Physical site approach</dt><dd>${siteProbeStatus}${siteProbeMs === null ? "" : ` · ${siteProbeMs.toFixed(2)} ms`}</dd>
       <dt>Query/cache</dt><dd>${queryCount} searches · ${queryCacheHits} reuses · ${queryCache.size}/${QUERY_CACHE_LIMIT} cached</dd>
       <dt>Bridge detail</dt><dd>${generation.materializedBridges} records · ${generation.bridgeCacheRoads}/${generation.bridgeCacheLimit} road recipes cached · ${generation.bridgeCacheEvictions} evictions</dd>
       <dt>Visible overlay</dt><dd>${lastOverlayRoads} road paths · ${lastOverlayBridges} bridge markers</dd>
@@ -467,6 +545,7 @@ function openPanel() {
   openButton.setAttribute("aria-expanded", "true");
   renderSelection();
   renderSiteRoute();
+  renderSiteAccessProbe();
   renderSummary(world()?.state);
   renderMetrics();
 }
@@ -475,6 +554,7 @@ function chooseNearestRoad() {
   siteRoute = null;
   lastSiteRouteStatus = "not requested";
   lastSiteRouteMs = null;
+  resetSiteAccessProbe();
   renderSiteRoute();
   const started = performance.now();
   const runtime = world();
@@ -572,6 +652,7 @@ function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mo
   siteRoute = null;
   lastSiteRouteStatus = "not requested";
   lastSiteRouteMs = null;
+  resetSiteAccessProbe();
   openPanel();
   focusSelection();
   refreshOverlay(true);
@@ -612,6 +693,9 @@ function telemetry() {
     firstRoadInspectionStatus: lastRoadInspectionStatus,
     firstSiteRouteMs: lastSiteRouteMs,
     firstSiteRouteStatus: lastSiteRouteStatus,
+    siteAccessProbeStatus: siteProbeStatus,
+    siteAccessProbeStations: siteProbe?.stationCount ?? 0,
+    siteAccessProbeMs: siteProbeMs,
     siteRouteEdges: siteRoute?.edgeCodes.length ?? 0,
     localRoads: lastLocalRoads,
     overlayRoads: lastOverlayRoads,
@@ -627,6 +711,7 @@ panel.querySelector<HTMLButtonElement>("#transport-close")!.onclick = () => {
 };
 panel.querySelector<HTMLButtonElement>("#transport-nearest")!.onclick = chooseNearestRoad;
 panel.querySelector<HTMLButtonElement>("#transport-site-route")!.onclick = chooseNearestSiteRoute;
+panel.querySelector<HTMLButtonElement>("#transport-site-access")!.onclick = probeSiteAccess;
 panel.querySelector<HTMLButtonElement>("#transport-focus")!.onclick = focusSelection;
 openButton.onclick = openPanel;
 
