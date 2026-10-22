@@ -19,7 +19,7 @@ import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfac
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
 import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
 import { siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
-import { finalSurfaceAt } from "./world-core.ts";
+import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "./world-core.ts";
 
 type AdvisorWorld = {
   setHalfHeight(height: number): void;
@@ -99,6 +99,7 @@ let corridorProbeStatus = "not requested";
 let corridorProbeStations = 0;
 let corridorProbePlannedStations = 0;
 let corridorProbeFirstUnsafeRoad: string | null = null;
+let corridorProbeFirstUnsafeLocalGrade: number | null = null;
 let corridorProbeMaximumGrade: number | null = null;
 const corridorEdges = new Map(transportNetwork.roadEdges.map(edge => [edge.code, edge]));
 
@@ -498,8 +499,10 @@ function renderCorridorProbe() {
   const route = siteRoute ? `${siteRoute.from} → ${siteRoute.to} (${siteRoute.edgeCodes.length} canonical roads)` : "no selected walking route";
   const progress = corridorProbePlannedStations
     ? `${corridorProbeStations}/${corridorProbePlannedStations} validated stations` : "no station evidence";
+  const localGrade = corridorProbeFirstUnsafeLocalGrade === null ? "" :
+    ` · first unsafe canonical local slope ${Number.isFinite(corridorProbeFirstUnsafeLocalGrade) ? `${(corridorProbeFirstUnsafeLocalGrade * 100).toFixed(1)}%` : "invalid"}`;
   target.textContent = corridorProbeStatus === "not requested" ? "" :
-    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${(corridorProbeMaximumGrade * 100).toFixed(1)}%`}. Map preview only; no uninterrupted passage or character travel certified.`;
+    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${localGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${(corridorProbeMaximumGrade * 100).toFixed(1)}%`}. Map preview only; no uninterrupted passage or character travel certified.`;
 }
 
 function resetCorridorProbe() {
@@ -508,6 +511,7 @@ function resetCorridorProbe() {
   corridorProbeStations = 0;
   corridorProbePlannedStations = 0;
   corridorProbeFirstUnsafeRoad = null;
+  corridorProbeFirstUnsafeLocalGrade = null;
   corridorProbeMaximumGrade = null;
   panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = !siteRoute;
   renderCorridorProbe();
@@ -520,6 +524,7 @@ function probeRouteCorridor() {
   corridorProbeStations = 0;
   corridorProbePlannedStations = plan.status === "ready" ? plan.stations.length : 0;
   corridorProbeFirstUnsafeRoad = null;
+  corridorProbeFirstUnsafeLocalGrade = null;
   corridorProbeMaximumGrade = null;
   if (plan.status !== "ready") {
     corridorProbeStatus = plan.status === "over-budget" ? "route exceeds bounded 4096-station probe; not certified" : "invalid source-owned physical path; not certified";
@@ -546,6 +551,9 @@ function probeRouteCorridor() {
       const failure = sampledCorridorStationFailure(station, surface);
       if (failure !== null) {
         corridorProbeFirstUnsafeRoad = station.edgeCode;
+        // Only a failing on-demand station incurs this extra canonical gradient.
+        if (failure === "unsafe local road slope")
+          corridorProbeFirstUnsafeLocalGrade = finalSurfaceLocalSlopeAt(station.x, station.z);
         corridorProbeStatus = `station ${index + 1}: ${failure}; not certified`;
         break;
       }
@@ -901,6 +909,7 @@ function telemetry() {
     corridorProbeStations,
     corridorProbePlannedStations,
     corridorProbeFirstUnsafeRoad,
+    corridorProbeFirstUnsafeLocalGrade,
     corridorProbeMaximumGrade,
     siteRouteEdges: siteRoute?.edgeCodes.length ?? 0,
     bridgeDetailCacheEntries: bridgeDetailCache.size,
