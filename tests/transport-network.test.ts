@@ -400,6 +400,32 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   assert.equal(planTransportRouteCorridor({ from: "A", to: "C", edgeCodes: [a.code, gap.code] },
     new Map([a, gap].map(edge => [edge.code, edge])), nodes).status, "invalid",
   "matching graph nodes cannot hide separated physical source geometry");
+  // Diagonal roads must obey Euclidean source-space spacing, not just an
+  // axis-aligned bound that leaves >1-unit gaps between surface samples.
+  const diagonal = { ...makeEdge("diagonal", "A", "D", 0, 3),
+    centerline: [{ x: 0, z: 0 }, { x: 3, z: 4 }],
+  } as TransportRoadEdge;
+  const diagonalPlan = planTransportRouteCorridor(
+    { from: "A", to: "D", edgeCodes: [diagonal.code] },
+    new Map([[diagonal.code, diagonal]]),
+    new Map([["A", { x: 0, z: 0 }], ["D", { x: 3, z: 4 }]]),
+  );
+  assert.equal(diagonalPlan.status, "ready");
+  assert.equal(diagonalPlan.stations.length, 6,
+    "a 3/4/5 diagonal needs five <=1 source-unit steps, not four axis-only steps");
+  for (let index = 1; index < diagonalPlan.stations.length; index++) {
+    const previous = diagonalPlan.stations[index - 1], current = diagonalPlan.stations[index];
+    assert.ok(Math.hypot(current.x - previous.x, current.z - previous.z) <= 1 + 1e-7,
+      "successive on-demand stations may never exceed one source unit");
+  }
+  const oversizedDiagonal = { ...makeEdge("large-diagonal", "A", "D", 0, 2900),
+    centerline: [{ x: 0, z: 0 }, { x: 2900, z: 2900 }],
+  } as TransportRoadEdge;
+  assert.equal(planTransportRouteCorridor(
+    { from: "A", to: "D", edgeCodes: [oversizedDiagonal.code] },
+    new Map([[oversizedDiagonal.code, oversizedDiagonal]]),
+    new Map([["A", { x: 0, z: 0 }], ["D", { x: 2900, z: 2900 }]]),
+  ).status, "over-budget", "diagonal distance must count toward the same 4096-station cap");
   const huge = makeEdge("huge", "A", "C", 0, ROUTE_CORRIDOR_STATION_LIMIT + 1);
   const over = planTransportRouteCorridor(
     { from: "A", to: "C", edgeCodes: [huge.code] }, new Map([[huge.code, huge]]),
