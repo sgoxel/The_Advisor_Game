@@ -619,11 +619,11 @@ function chooseNearestSiteRoute() {
     // A chosen Y/harbor is an exact graph node, and a chosen road/crossing
     // starts from its own endpoint. Only no-selection uses the nearest road.
     const fallback = selection ? undefined : roadQuery(runtime.state).edges[0];
-    const selectedBridgeRoadCode = selection?.kind === "bridge"
-      ? transportBridgeByCode(selection.code)?.roadCode : undefined;
+    const selectedBridge = selection?.kind === "bridge"
+      ? transportBridgeByCode(selection.code) : undefined;
     const from = selectedWalkingPreviewOrigin(
       selection, sourceToLonLat(runtime.state.view.x, runtime.state.view.z),
-      transportNetwork, transportNodesByCode, fallback, selectedBridgeRoadCode,
+      transportNetwork, transportNodesByCode, fallback, selectedBridge,
     );
     const sites = from ? siteTargetsFor(from.continent, from.countryCode) : [];
     if (!from) lastSiteRouteStatus = selection?.kind === "ferry"
@@ -633,8 +633,8 @@ function chooseNearestSiteRoute() {
     else if (!sites.length) lastSiteRouteStatus = "no same-country critical site endpoint";
     else {
       walkingIndex ??= createTransportWalkingIndex(transportNetwork);
-      const selectedBridgeRoad = selectedBridgeRoadCode
-        ? transportNetwork.roadEdges.find(edge => edge.code === selectedBridgeRoadCode)
+      const selectedBridgeRoad = selectedBridge
+        ? transportNetwork.roadEdges.find(edge => edge.code === selectedBridge.roadCode)
         : undefined;
       siteRoute = selection?.kind === "bridge"
         ? selectedBridgeRoad
