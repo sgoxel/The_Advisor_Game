@@ -41,6 +41,7 @@ const earlier = (a: HeapEntry, b: HeapEntry) => a.lengthM < b.lengthM ||
 function searchWalkingRoute(index: Index, from: string, destinations: ReadonlySet<string>, excludedEdgeCode?: string) {
   if (!index.adjacency.has(from) || !destinations.size) return null;
   const heap: HeapEntry[] = [], distances = new Map([[from, 0]]),
+    travelSeconds = new Map([[from, 0]]),
     parent = new Map<string, { previous: string; edge: TransportRoadEdge }>(),
     settled = new Set<string>();
   const push = (entry: HeapEntry) => {
@@ -86,17 +87,21 @@ function searchWalkingRoute(index: Index, from: string, destinations: ReadonlySe
       return Object.freeze({
         from, to: current.code,
         edgeCodes: Object.freeze(edges.map(edge => edge.code)),
-        distanceM: edges.reduce((sum, edge) => sum + edge.surfaceLengthM, 0),
-        fantasyWalkSeconds: edges.reduce((sum, edge) => sum + edge.fantasyWalkSeconds, 0),
+        distanceM: current.lengthM,
+        fantasyWalkSeconds: travelSeconds.get(current.code)!,
         exploredNodes: settled.size,
       });
     }
     for (const step of index.adjacency.get(current.code)!) {
       if (step.edge.code === excludedEdgeCode || settled.has(step.node)) continue;
       const candidate = current.lengthM + step.edge.surfaceLengthM,
+        duration = travelSeconds.get(current.code)! + step.edge.fantasyWalkSeconds,
         previous = distances.get(step.node);
+      // Finite per-edge facts must not accumulate into infinite route claims.
+      if (!Number.isFinite(candidate) || !Number.isFinite(duration)) continue;
       if (previous === undefined || candidate < previous) {
         distances.set(step.node, candidate);
+        travelSeconds.set(step.node, duration);
         parent.set(step.node, { previous: current.code, edge: step.edge });
         push({ code: step.node, lengthM: candidate });
       }
@@ -134,12 +139,15 @@ export function transportWalkingRouteThroughEdge(
   const destinations = new Set(siteCodes.filter(code => index.adjacency.has(code)));
   const continuation = searchWalkingRoute(index, otherBank, destinations, required.code);
   if (!continuation) return null;
-  const edge = owned.edge;
+  const edge = owned.edge,
+    distanceM = edge.surfaceLengthM + continuation.distanceM,
+    fantasyWalkSeconds = edge.fantasyWalkSeconds + continuation.fantasyWalkSeconds;
+  if (!Number.isFinite(distanceM) || !Number.isFinite(fantasyWalkSeconds)) return null;
   return Object.freeze({
     from, to: continuation.to,
     edgeCodes: Object.freeze([edge.code, ...continuation.edgeCodes]),
-    distanceM: edge.surfaceLengthM + continuation.distanceM,
-    fantasyWalkSeconds: edge.fantasyWalkSeconds + continuation.fantasyWalkSeconds,
+    distanceM,
+    fantasyWalkSeconds,
     exploredNodes: continuation.exploredNodes,
   });
 }

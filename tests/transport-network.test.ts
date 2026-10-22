@@ -203,6 +203,35 @@ test("S005 bank approach measures true geodesic grade on the traversed bridge-de
     "a zero-distance physical step cannot certify a bank");
 });
 
+test("S005 route previews fail closed when finite edge costs overflow their accumulated path", () => {
+  const network = (firstDistance: number, secondDistance: number, firstTime: number, secondTime: number) =>
+    ({
+      nodes: ["start", "bank", "site"].map(code => ({ code })),
+      roadEdges: [
+        { code: "selected-bridge-road", from: "start", to: "bank",
+          surfaceLengthM: firstDistance, fantasyWalkSeconds: firstTime },
+        { code: "site-road", from: "bank", to: "site",
+          surfaceLengthM: secondDistance, fantasyWalkSeconds: secondTime },
+      ],
+    }) as unknown as TransportNetwork;
+  for (const unsafe of [network(1e308, 1e308, 1, 1), network(1, 1, 1e308, 1e308)]) {
+    const graph = createTransportWalkingIndex(unsafe);
+    assert.equal(transportWalkingRoute(graph, "start", "site"), null,
+      "overflow cannot become a numeric walking distance or Fantasy-Time");
+    assert.equal(transportWalkingRouteToNearest(graph, "start", ["site"]), null,
+      "first-route preview must never report infinite canonical facts");
+    assert.equal(transportWalkingRouteThroughEdge(graph, "start", unsafe.roadEdges[0], ["site"]), null,
+      "a selected bridge cannot combine finite legs into an infinite route");
+  }
+  const valid = network(12, 18, 40, 60);
+  const graph = createTransportWalkingIndex(valid);
+  assert.deepEqual(transportWalkingRoute(graph, "start", "site"), {
+    from: "start", to: "site", edgeCodes: ["selected-bridge-road", "site-road"],
+    distanceM: 30, fantasyWalkSeconds: 100, exploredNodes: 3,
+  }, "ordinary seeded graph answers remain unchanged");
+  assert.equal(transportWalkingRouteThroughEdge(graph, "start", valid.roadEdges[0], ["site"])?.distanceM, 30);
+});
+
 test("S005 walking preview reuses actual site branches, stays deterministic, excludes ferries", () => {
   const graph = createTransportWalkingIndex(siteTransportNetwork);
   const siteBranches = siteTransportNetwork.roadEdges.filter(edge => edge.from.includes("/NODE/SITE/"));
