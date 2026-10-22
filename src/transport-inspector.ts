@@ -639,9 +639,11 @@ function chooseNearestSiteRoute() {
   refreshOverlay(true);
 }
 
+let lastSummaryMarkup = "";
+let lastMetricsMarkup = "";
 function renderSummary(state?: AdvisorWorld["state"]) {
   const summary = transportAcceptanceSummary();
-  panel.querySelector<HTMLElement>("#transport-summary")!.innerHTML = `
+  const markup = `
     <span><b>${summary.roads}</b> roads</span>
     <span><b>${summary.junctions}</b> junctions</span>
     <span><b>${summary.siteAccessBranches}</b> critical-site links</span>
@@ -651,11 +653,15 @@ function renderSummary(state?: AdvisorWorld["state"]) {
     <span class="transport-scale-state ${state && scaleDenominator(state.scaleLabel) <= ROAD_SCALE_LIMIT ? "visible" : "hidden"}">
       Road layer ${state ? (scaleDenominator(state.scaleLabel) <= ROAD_SCALE_LIMIT ? "visible" : "hidden beyond 1/100") : "waiting"}
     </span>`;
+  if (markup !== lastSummaryMarkup) {
+    panel.querySelector<HTMLElement>("#transport-summary")!.innerHTML = markup;
+    lastSummaryMarkup = markup;
+  }
 }
 
 function renderMetrics() {
   const generation = transportGenerationTelemetry();
-  panel.querySelector<HTMLElement>("#transport-metrics")!.innerHTML = `
+  const markup = `
     <div class="eyebrow">BOUNDED INSPECTION</div>
     <dl>
       <dt>Topology digest</dt><dd><code>${transportNetwork.digest}</code></dd>
@@ -668,6 +674,10 @@ function renderMetrics() {
       <dt>Bridge detail</dt><dd>${generation.materializedBridges} records · ${generation.bridgeCacheRoads}/${generation.bridgeCacheLimit} road recipes cached · ${generation.bridgeCacheEvictions} evictions</dd>
       <dt>Visible overlay</dt><dd>${lastOverlayRoads} road paths · ${lastOverlayBridges} bridge markers</dd>
     </dl>`;
+  if (markup !== lastMetricsMarkup) {
+    panel.querySelector<HTMLElement>("#transport-metrics")!.innerHTML = markup;
+    lastMetricsMarkup = markup;
+  }
 }
 
 function openPanel() {
