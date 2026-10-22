@@ -21,7 +21,7 @@ import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
-import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
+import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
 import { finalSurfaceAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
@@ -902,6 +902,30 @@ test("S005 bridge road-arc anchor uses canonical metre proximity at high latitud
     "latitude scaling must not break physical anchor proximity across the longitude seam");
   assert.ok(seamSamples.every(point => Math.abs(point.x - (seamX - .1)) < 1e-5),
     "selected road remains the same canonical wrapped centerline");
+});
+
+test("S005 first unsafe bridge interval identifies exact grade station without claiming continuous travel", () => {
+  const positions = [{ x: 0, z: 0 }, { x: 1, z: 0 }, { x: 2, z: 0 }];
+  const safe = transportRoadIntervalGradeEvidence(positions, [0, 0, 0.2]);
+  assert.equal(safe.firstUnsafeStation, null);
+  assert.equal(safe.firstUnsafeGrade, null);
+  assert.ok(safe.maximum !== null && safe.maximum < 0.08);
+  const unsafe = transportRoadIntervalGradeEvidence(positions, [0, 0, 3]);
+  assert.equal(unsafe.firstUnsafeStation, 3,
+    "the first violation is the second segment's arriving station, not an arbitrary maximum");
+  assert.ok(unsafe.firstUnsafeGrade !== null && unsafe.firstUnsafeGrade > 0.08);
+  assert.equal(unsafe.firstUnsafeGrade, unsafe.maximum,
+    "exposed first failing grade is measured using existing canonical stations");
+  assert.equal(transportRoadIntervalGradeEvidence(positions, [0, 3, 6]).firstUnsafeStation, 2,
+    "the earliest violating interval wins even when later sampled spans are also steep");
+  const degenerate = transportRoadIntervalGradeEvidence([positions[0], positions[0]], [0, 0]);
+  assert.equal(degenerate.maximum, Infinity);
+  assert.equal(degenerate.firstUnsafeStation, 2,
+    "zero-distance and otherwise nonfinite sample intervals must fail closed");
+  assert.equal(transportRoadIntervalGradeEvidence(positions, [0, 3]).maximum, null,
+    "missing profile stations cannot manufacture grade proof");
+  assert.deepEqual(transportRoadIntervalGradeEvidence(positions, [0, 0, 3]), unsafe,
+    "repeated static grade evidence is deterministic and independent of map/renderer");
 });
 
 test("S005 selected bridge deck requires both recorded owner and contributing modifier", () => {
