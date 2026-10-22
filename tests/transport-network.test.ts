@@ -381,6 +381,24 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   ], "shared Y must not duplicate a terminal station and falsely create a zero-grade interval");
   assert.equal(result.stations[3].joinedEdgeCode, b.code,
     "the shared physical graph point records both incident roads without duplicate sampling");
+  // Duplicate consecutive source vertices are zero travel, not zero-distance
+  // grade samples. Preserve the exact road ownership, stations and Y join.
+  const repeatedA = { ...a, centerline: [
+    { x: 0, z: 0 }, { x: 0, z: 0 }, { x: 3, z: 0 }, { x: 3, z: 0 },
+  ] } as TransportRoadEdge;
+  const repeatedB = { ...b, centerline: [
+    { x: 3, z: 0 }, { x: 3, z: 0 }, { x: 5, z: 0 }, { x: 5, z: 0 },
+  ] } as TransportRoadEdge;
+  const repeatedRoads = new Map([repeatedA, repeatedB].map(edge => [edge.code, edge]));
+  assert.deepEqual(planTransportRouteCorridor(
+    { from: "A", to: "C", edgeCodes: [a.code, b.code] }, repeatedRoads, nodes,
+  ), result, "redundant source points cannot create false infinite grade at the junction");
+  const collapsed = { ...a, centerline: [{ x: 0, z: 0 }, { x: 0, z: 0 }] } as TransportRoadEdge;
+  assert.equal(planTransportRouteCorridor(
+    { from: "A", to: "B", edgeCodes: [collapsed.code] },
+    new Map([[collapsed.code, collapsed]]),
+    new Map([["A", { x: 0, z: 0 }], ["B", { x: 0, z: 0 }]]),
+  ).status, "invalid", "an entirely stationary source road must not certify physical passage");
   for (const [i, station] of result.stations.entries())
     assert.ok(Math.abs(station.x - i) < 1e-6, "source-coordinate wrap roundoff never alters the real station");
   const reverse = planTransportRouteCorridor(

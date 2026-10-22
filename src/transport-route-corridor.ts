@@ -57,8 +57,15 @@ export function planTransportRouteCorridor(
     // endpoint entry is invalid, not permission to skip ownership validation.
     if (incidentRoads && (!incidentRoads.has(at) || !incidentRoads.has(forward ? edge.to : edge.from)))
       return Object.freeze({ status: "invalid", stations: EMPTY });
-    const points = forward ? edge.centerline : [...edge.centerline].reverse(),
-      start = nodes.get(at), endCode = forward ? edge.to : edge.from,
+    const sourcePoints = forward ? edge.centerline : [...edge.centerline].reverse();
+    // Redundant consecutive source vertices are not physical travel intervals.
+    // Keep checking every original waypoint; a wholly collapsed edge is invalid.
+    if (sourcePoints.some(point => !point || !Number.isFinite(point.x) || !Number.isFinite(point.z)))
+      return Object.freeze({ status: "invalid", stations: EMPTY });
+    const points = sourcePoints.filter((point, i) => i === 0 ||
+      wrapSourceX(point.x - sourcePoints[i - 1].x) !== 0 || point.z !== sourcePoints[i - 1].z);
+    if (points.length < 2) return Object.freeze({ status: "invalid", stations: EMPTY });
+    const start = nodes.get(at), endCode = forward ? edge.to : edge.from,
       end = nodes.get(endCode);
     // Graph incidence alone cannot certify a detached single-road polyline.
     // Check canonical node positions even for routes with only one edge.
