@@ -27,7 +27,7 @@ import { createTransportJunctionLookup } from "../src/transport-junction-index.t
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
 import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
-import { SITE_ACCESS_STATION_LIMIT, siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
+import { SITE_ACCESS_STATION_LIMIT, roadEndpointMeetsTerminal, siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
 import { planTransportRouteCorridor, ROUTE_CORRIDOR_STATION_LIMIT, sampledCorridorStationFailure, sampledCorridorStationPass } from "../src/transport-route-corridor.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import {
@@ -914,6 +914,26 @@ test("S005 shared physical-road distance and transport lookup agree at the longi
   }
 });
 
+test("S005 site terminal ownership requires a real registered road endpoint", () => {
+  const road = { ...roads[0], fromX: -10, fromZ: 0, toX: 10, toZ: 0, centerline: [
+    { x: -10, z: 0, position: sourceToLonLat(-10, 0) },
+    { x: 10, z: 0, position: sourceToLonLat(10, 0) },
+  ] };
+  assert.ok(roadDistanceAt(0, 0, road) < 1e-6,
+    "a polyline may cross a coordinate without making it a true graph endpoint");
+  assert.equal(roadEndpointMeetsTerminal(road, { x: 0, z: 0 }), false,
+    "an interior intersection is not a legally joined site-road terminal");
+  for (const x of [-10, 10]) assert.equal(roadEndpointMeetsTerminal(road, { x, z: 0 }), true);
+  assert.equal(roadEndpointMeetsTerminal(road, { x: -10, z: 0.01 }), false,
+    "a physically detached endpoint cannot borrow a nearby road");
+  const half = SOURCE_PRESENTATION_WIDTH / 2,
+    seam = { fromX: half - 0.25, fromZ: 2, toX: half - 2, toZ: 4 };
+  assert.equal(roadEndpointMeetsTerminal(seam, { x: -half - 0.25, z: 2 }), true,
+    "the same canonical endpoint remains joined across the longitude seam");
+  assert.equal(roadEndpointMeetsTerminal(seam, { x: -half + 0.25, z: 2 }), false,
+    "the seam cannot fabricate a displaced terminal");
+});
+
 test("S005 nearby junction index preserves canonical full-scan identity, order and no duplicates", () => {
   const lookup = createTransportJunctionLookup(transportNetwork.junctions);
   const edges = transportNetwork.roadEdges;
@@ -1170,11 +1190,18 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
     siteVerdict = siteAccessSampleVerdict(access!, surfaces, incidentRoadCodes);
   assert.ok(incidentRoadCodes.has(parentCode!),
     "the access branch's named parent must be incident to its actual graph junction");
+  const physicalTerminal = stations.at(-1)!,
+    parentRoad = roads.find(road => road.code === parentCode);
+  assert.ok(parentRoad && roadEndpointMeetsTerminal(parentRoad, physicalTerminal),
+    "the named parent must physically end at the registered site-branch junction");
   const terminalWinner = surfaces.at(-1)?.contributingModifierIds.find(code => code !== access!.code);
   assert.ok(terminalWinner && incidentRoadCodes.has(terminalWinner),
     "the final-surface junction winner must be an actual incident SEED graph road");
   assert.ok(edgeByCode.has(terminalWinner),
     "the sampled owner is a real canonical road, not a detached surface modifier");
+  const winnerRoad = roads.find(road => road.code === terminalWinner);
+  assert.ok(winnerRoad && roadEndpointMeetsTerminal(winnerRoad, physicalTerminal),
+    "a different winning incident road must terminate at this exact SEED junction");
   assert.ok(stations.length > 0 && stations.length <= SITE_ACCESS_STATION_LIMIT,
     "selected critical-site station profile stays bounded");
   assert.ok(siteVerdict.sampledPass,
