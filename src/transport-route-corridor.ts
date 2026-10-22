@@ -53,8 +53,10 @@ export function planTransportRouteCorridor(
         const last = stations.length - 1;
         if (Math.hypot(wrapSourceX(stations[last].x - a.x), stations[last].z - a.z) > 1e-4)
           return Object.freeze({ status: "invalid", stations: EMPTY });
-        // Sample a shared graph point once but require BOTH incident road owners.
-        // Duplicating it would create a zero-distance interval in the grade probe.
+        // The final-surface composer contributes one winning road modifier at a
+        // coordinate, even where two canonical road centerlines meet. Check
+        // either incident owner here; the next station tests the outgoing road.
+        // Sampling the junction twice would invent a zero-distance grade span.
         stations[last] = Object.freeze({ ...stations[last], joinedEdgeCode: code });
       }
       const additional = steps + (stations.length ? 0 : 1);
@@ -77,13 +79,16 @@ export function sampledCorridorStationPass(
   station: CorridorStation,
   surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds">,
 ) {
-  const ownedByBoth = (ids: readonly string[]) =>
-    ids.includes(station.edgeCode) && (!station.joinedEdgeCode || ids.includes(station.joinedEdgeCode));
-  if (!surface.walkable || !ownedByBoth(surface.contributingModifierIds)) return false;
-  // Final-surface traversal uses the highest deck even over otherwise dry ground.
-  // A road beneath somebody else's overpass is not a valid top-surface route.
+  const incident = (id: string) => id === station.edgeCode || id === station.joinedEdgeCode,
+    contributed = (id: string) => surface.contributingModifierIds.includes(id);
+  if (!surface.walkable || !surface.contributingModifierIds.some(incident)) return false;
+  // A junction may have only ONE SEED-selected road modifier at this exact
+  // coordinate. An adjoining road is sampled separately on the next step.
+  // A deck must still belong to that SAME contributing incident road,
+  // never to an unrelated overpass hiding a lower selected road.
   if (surface.deckHeight !== null)
     return (surface.water.kind === "none" || surface.water.kind === "river") &&
-      surface.traversal === "bridge" && ownedByBoth(surface.deckOwnerIds);
+      surface.traversal === "bridge" &&
+      surface.deckOwnerIds.some(id => incident(id) && contributed(id));
   return surface.water.kind === "none" && surface.traversal !== "bridge";
 }
