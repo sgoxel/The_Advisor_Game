@@ -92,5 +92,8 @@ export function sampledCorridorStationPass(
     return (surface.water.kind === "none" || surface.water.kind === "river") &&
       surface.traversal === "bridge" &&
       surface.deckOwnerIds.some(id => incident(id) && contributed(id));
-  return surface.water.kind === "none" && surface.traversal !== "bridge";
+  // "difficult" includes road slopes above the canonical 8% threshold.
+  // A walkable endpoint alone must not certify the selected legal-grade road.
+  return surface.water.kind === "none" &&
+    (surface.traversal === "road" || surface.traversal === "open");
 }
