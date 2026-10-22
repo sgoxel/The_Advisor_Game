@@ -18,7 +18,7 @@ import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
 import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
-import { siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
+import { siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
 import { finalSurfaceAt } from "./world-core.ts";
 
 type AdvisorWorld = {
@@ -550,10 +550,9 @@ function resetSiteAccessProbe() {
 }
 
 function probeSiteAccess() {
-  const route = siteRoute, branch = route && transportNetwork.roadEdges.find(edge =>
-    edge.roadClass === "access" && edge.from === route.to);
+  const route = siteRoute, branch = route && siteAccessBranchOnRoute(route, transportNetwork.roadEdges);
   if (!branch) {
-    siteProbeStatus = "no canonical terminal site branch";
+    siteProbeStatus = "selected route does not end on its canonical site-access branch";
     renderSiteAccessProbe();
     return;
   }

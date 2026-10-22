@@ -16,6 +16,15 @@ export const SITE_ACCESS_STATION_LIMIT = 49;
 const siteParents = new Map(criticalSites.map(site => [site.access.branchCode, {
   siteCode: site.code, parentCode: site.access.roadCode,
 }]));
+/** The physical site probe must inspect the route's actual final access edge. */
+export function siteAccessBranchOnRoute<T extends Pick<TransportRoadEdge, "code" | "from" | "roadClass">>(
+  route: Readonly<{ to: string; edgeCodes: readonly string[] }>, edges: readonly T[],
+): T | undefined {
+  const lastCode = route.edgeCodes.at(-1);
+  return lastCode ? edges.find(edge =>
+    edge.code === lastCode && edge.roadClass === "access" && edge.from === route.to) : undefined;
+}
+
 export function siteAccessParentRoadCode(edge: TransportRoadEdge): string | undefined {
   const site = siteParents.get(edge.code);
   return site && edge.roadClass === "access" &&
