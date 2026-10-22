@@ -100,6 +100,8 @@ let corridorProbeMs: number | null = null;
 let corridorProbeStations = 0;
 let corridorProbePlannedStations = 0;
 let corridorProbeFirstUnsafeRoad: string | null = null;
+let corridorProbeFirstUnsafeStation: number | null = null;
+let corridorProbeFirstUnsafeSource: Readonly<{ x: number; z: number }> | null = null;
 let corridorProbeFirstUnsafeLocalGrade: number | null = null;
 let corridorProbeMaximumGrade: number | null = null;
 const corridorEdges = new Map(transportNetwork.roadEdges.map(edge => [edge.code, edge]));
@@ -500,6 +502,8 @@ function renderCorridorProbe() {
   const route = siteRoute ? `${siteRoute.from} → ${siteRoute.to} (${siteRoute.edgeCodes.length} canonical roads)` : "no selected walking route";
   const progress = corridorProbePlannedStations
     ? `${corridorProbeStations}/${corridorProbePlannedStations} validated stations` : "no station evidence";
+  const source = corridorProbeFirstUnsafeSource
+    ? ` · unsafe source x ${corridorProbeFirstUnsafeSource.x.toFixed(5)}, z ${corridorProbeFirstUnsafeSource.z.toFixed(5)}` : "";
   const localGrade = corridorProbeFirstUnsafeLocalGrade === null ? "" :
     ` · first unsafe canonical local slope ${Number.isFinite(corridorProbeFirstUnsafeLocalGrade) ? `${(corridorProbeFirstUnsafeLocalGrade * 100).toFixed(1)}%` : "invalid"}`;
   if (corridorProbeStatus === "not requested") {
@@ -510,7 +514,7 @@ function renderCorridorProbe() {
     return;
   }
   target.textContent =
-    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${localGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${(corridorProbeMaximumGrade * 100).toFixed(1)}%`}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms elapsed`}. Map preview only; no uninterrupted passage or character travel certified.`;
+    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${source}${localGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${(corridorProbeMaximumGrade * 100).toFixed(1)}%`}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms elapsed`}. Map preview only; no uninterrupted passage or character travel certified.`;
 }
 
 function resetCorridorProbe() {
@@ -520,6 +524,8 @@ function resetCorridorProbe() {
   corridorProbeStations = 0;
   corridorProbePlannedStations = 0;
   corridorProbeFirstUnsafeRoad = null;
+  corridorProbeFirstUnsafeStation = null;
+  corridorProbeFirstUnsafeSource = null;
   corridorProbeFirstUnsafeLocalGrade = null;
   corridorProbeMaximumGrade = null;
   panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = !siteRoute;
@@ -535,6 +541,8 @@ function probeRouteCorridor() {
   corridorProbeStations = 0;
   corridorProbePlannedStations = plan.status === "ready" ? plan.stations.length : 0;
   corridorProbeFirstUnsafeRoad = null;
+  corridorProbeFirstUnsafeStation = null;
+  corridorProbeFirstUnsafeSource = null;
   corridorProbeFirstUnsafeLocalGrade = null;
   corridorProbeMaximumGrade = null;
   if (plan.status !== "ready") {
@@ -564,6 +572,8 @@ function probeRouteCorridor() {
       const failure = sampledCorridorStationFailure(station, surface);
       if (failure !== null) {
         corridorProbeFirstUnsafeRoad = station.edgeCode;
+        corridorProbeFirstUnsafeStation = index + 1;
+        corridorProbeFirstUnsafeSource = Object.freeze({ x: station.x, z: station.z });
         // Only a failing on-demand station incurs this extra canonical gradient.
         if (failure === "unsafe local road slope")
           corridorProbeFirstUnsafeLocalGrade = finalSurfaceLocalSlopeAt(station.x, station.z);
@@ -577,6 +587,8 @@ function probeRouteCorridor() {
         corridorProbeMaximumGrade = Math.max(corridorProbeMaximumGrade ?? 0, grade);
         if (!Number.isFinite(grade) || grade > .08) {
           corridorProbeFirstUnsafeRoad = station.edgeCode;
+          corridorProbeFirstUnsafeStation = index + 1;
+          corridorProbeFirstUnsafeSource = Object.freeze({ x: station.x, z: station.z });
           corridorProbeStatus = `sampled grade exceeds 8% at station ${index + 1}; not certified`;
           break;
         }
@@ -932,6 +944,8 @@ function telemetry() {
     corridorProbeStations,
     corridorProbePlannedStations,
     corridorProbeFirstUnsafeRoad,
+    corridorProbeFirstUnsafeStation,
+    corridorProbeFirstUnsafeSource,
     corridorProbeFirstUnsafeLocalGrade,
     corridorProbeMaximumGrade,
     siteRouteEdges: siteRoute?.edgeCodes.length ?? 0,
