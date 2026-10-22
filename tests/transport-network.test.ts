@@ -461,6 +461,20 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     "unrelated terminal contributor must not be mislabeled final-surface ownership proof");
   assert.equal(geometryOnly.sampledPass, true,
     "legacy sampled grade and geometry verdict stays distinct from surface-owner certification");
+  const tip = actual.centerline.at(-1)!,
+    detachedTip = { ...tip, x: tip.x + 0.012, z: tip.z + 0.019 },
+    detachedBranch = { ...actual, centerline: [...actual.centerline.slice(0, -1), detachedTip] },
+    parentRoad = roads.find(road => road.code === parentCode)!;
+  assert.ok(roadDistanceAt(detachedTip.x, detachedTip.z, parentRoad) > 1e-6,
+    "corrupt terminal must miss the SEED-named parent, not merely its modifier");
+  assert.equal(siteAccessRoadStations(detachedBranch).length, realStations.length,
+    "moved endpoint remains within the finite probe so only junction truth changes");
+  const falseIncident = siteAccessSampleVerdict(detachedBranch, unrelatedTerminal,
+    new Set([parentCode, "UNRELATED/CROSSING"]));
+  assert.equal(falseIncident.onRecordedRoad, false,
+    "another incident road cannot certify a site branch detached from its named parent");
+  assert.equal(falseIncident.sampledPass, false,
+    "detached physical terminal must fail closed despite otherwise walkable samples");
   const parentWinner = siteAccessSampleVerdict(actual, realSurfaces.map((surface, index) =>
     index === realSurfaces.length - 1
       ? { ...surface, contributingModifierIds: [parentCode] } : surface), realParents);
