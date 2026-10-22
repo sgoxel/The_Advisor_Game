@@ -1352,8 +1352,10 @@ async function start() {
     lastActorFacingZ = Number.NaN,
     lastActorFacingW = Number.NaN;
   const orientActor = (actor: pc.Entity) => {
-    actor.setRotation(camera.getRotation());
-    actor.rotateLocal(90, 0, 0);
+    // Cylindrical billboard: face the camera in heading while remaining upright
+    // in world space. Following camera pitch changes an NPC's physical height.
+    const forward = camera.forward;
+    actor.setEulerAngles(90, Math.atan2(-forward.x, -forward.z) * 180 / Math.PI, 0);
     const source = actorSources.get(actor);
     if (source) positionActor(actor, source.x, source.z);
   };
@@ -1853,6 +1855,7 @@ async function start() {
             visibleActors: actors.filter(actor => actor.enabled).length,
             reusableMaterials: characterMaterials.length,
             physicalHeightsM: actors.filter(actor => actor.enabled).map(actor => actor.getLocalScale().z * CANONICAL_METRES_PER_SOURCE_UNIT),
+            worldHeightsM: actors.filter(actor => actor.enabled).map(actor => Math.abs(actor.getRotation().transformVector(new pc.Vec3(0, 0, actor.getLocalScale().z)).y) * CANONICAL_METRES_PER_SOURCE_UNIT),
             activeScheduleRecords: simulation.stats.activeScheduleRecords,
             evaluatedCandidates: simulation.stats.query.evaluatedResidents,
           },
