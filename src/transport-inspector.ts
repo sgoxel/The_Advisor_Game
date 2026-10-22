@@ -500,6 +500,14 @@ function probeRouteCorridor() {
     renderCorridorProbe();
     return;
   }
+  // Optional diagnostics share the main thread. Retire an unfinished site
+  // probe before scheduling this corridor, retaining any completed evidence.
+  if (siteProbeStatus === "checking final surface in bounded frame batches") {
+    siteProbeRevision++;
+    siteProbeStatus = "interrupted by walking-route probe; restart on demand";
+    panel.querySelector<HTMLButtonElement>("#transport-site-access")!.disabled = false;
+    renderSiteAccessProbe();
+  }
   corridorProbeStatus = "checking final surface in bounded frame batches";
   panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = true;
   renderCorridorProbe();
@@ -561,6 +569,14 @@ function probeSiteAccess() {
     siteProbeStatus = "physical access recipe exceeds bounded profile or is invalid";
     renderSiteAccessProbe();
     return;
+  }
+  // A selected site probe has priority over a still-running full corridor;
+  // a stale frame returns by revision without doing further surface queries.
+  if (corridorProbeStatus === "checking final surface in bounded frame batches") {
+    corridorProbeRevision++;
+    corridorProbeStatus = "interrupted by site-approach probe; restart on demand";
+    panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = false;
+    renderCorridorProbe();
   }
   const revision = ++siteProbeRevision, started = performance.now(),
     surfaces: ReturnType<typeof finalSurfaceAt>[] = [];
