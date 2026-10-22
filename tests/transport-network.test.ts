@@ -21,7 +21,7 @@ import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
-import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
+import { sampledBridgeCrossingPass, sampledBridgeDryBankPass, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
 import { finalSurfaceAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
@@ -173,6 +173,31 @@ test("S005 site preview chooses nearest physical graph endpoint at high latitude
     { lon: 0, lat: 0 })?.code, "N", "the map preview must not originate at a site endpoint");
   assert.equal(nearestWalkingRoadEndpoint({ from: "SITE", to: "MISSING" }, tied,
     { lon: 0, lat: 0 }), undefined, "no legal endpoint means no invented route");
+});
+
+test("S005 bridge banks reject unrelated dry roads and locally difficult slopes", () => {
+  const point = { x: 42, z: -7 }, roadCode = "SEED/SELECTED/ROAD",
+    dry = {
+      walkable: true, water: { kind: "none" },
+      traversal: "road", deckHeight: null,
+      deckOwnerIds: [], contributingModifierIds: [roadCode],
+    } as unknown as FinalSurface;
+  assert.equal(sampledBridgeDryBankPass(point, roadCode, dry), true);
+  assert.equal(sampledBridgeDryBankPass(point, roadCode, {
+    ...dry, traversal: "difficult",
+  }), false, "walkable dry bank with excessive local road grade is not legal");
+  assert.equal(sampledBridgeDryBankPass(point, roadCode, {
+    ...dry, contributingModifierIds: ["UNRELATED/CROSSING"],
+  }), false, "nearby unrelated dry pavement cannot certify the selected bridge road");
+  assert.equal(sampledBridgeDryBankPass(point, roadCode, {
+    ...dry, traversal: "bridge", deckHeight: 6, deckOwnerIds: [roadCode],
+  }), true, "a canonical source-owned dry-bank bridge pier is a legal top deck");
+  assert.equal(sampledBridgeDryBankPass(point, roadCode, {
+    ...dry, traversal: "bridge", deckHeight: 6, deckOwnerIds: ["UNRELATED/OVERPASS"],
+  }), false, "an unrelated upper deck cannot certify the selected bank");
+  assert.equal(sampledBridgeDryBankPass(point, roadCode, {
+    ...dry, water: { ...dry.water, kind: "river" },
+  }), false, "dry-bank evidence cannot be satisfied by wet river pavement");
 });
 
 test("S005 bank approach uses the traversed bridge-deck surface height", () => {
