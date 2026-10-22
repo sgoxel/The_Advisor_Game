@@ -1014,6 +1014,24 @@ test("S005 selected bridge deck requires both recorded owner and contributing mo
     "invalid final-surface bridge deck", "reject invalid selected-bridge height explicitly");
 });
 
+test("S005 selected route rejects non-finite top-surface height at the first station", () => {
+  const edgeCode = "SELECTED/ROAD", station = { x: 0, z: 0, edgeCode };
+  const valid = {
+    surfaceHeight: 12, water: { kind: "none" }, walkable: true, traversal: "road",
+    deckHeight: null, deckOwnerIds: [], contributingModifierIds: [edgeCode],
+  } as FinalSurface;
+  assert.equal(sampledCorridorStationFailure(station, valid), null);
+  assert.equal(sampledCorridorStationPass(station, valid), true);
+  for (const malformed of [NaN, Infinity, -Infinity]) {
+    const surface = { ...valid, surfaceHeight: malformed } as FinalSurface;
+    assert.equal(sampledCorridorStationFailure(station, surface), "invalid final-surface height",
+      "do not defer a malformed first sample to a misleading next-interval grade");
+    assert.equal(sampledCorridorStationPass(station, surface), false);
+    assert.equal(sampledBridgeTopFailure(edgeCode, surface), "invalid final-surface height",
+      "bridge and walking-route inspectors must explain identical malformed top surfaces");
+  }
+});
+
 test("S005 selected bridge and walking route give the same first unsafe final-surface reason", () => {
   const edgeCode = "SELECTED/ROAD";
   const surface = {
