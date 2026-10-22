@@ -129,6 +129,7 @@ export function siteAccessSampleVerdict(
     expectedStations: stations.length,
     onRecordedRoad, dry, walkable, topSurfaceOwned, terminalGeometryOnly,
     maximumGrade, gradeWithinLimit,
-    sampledPass: full && onRecordedRoad && dry && walkable && topSurfaceOwned && gradeWithinLimit,
+    // Exact SEED geometry cannot certify a terminal whose actual top road is unrelated.
+    sampledPass: full && onRecordedRoad && terminalSurfaceOwned && dry && walkable && topSurfaceOwned && gradeWithinLimit,
   });
 }
