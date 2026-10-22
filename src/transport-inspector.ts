@@ -56,6 +56,24 @@ const QUERY_EDGE_LIMIT = 96;
 const queryCache = new Map<string, CachedQuery>();
 const junctionsForRoadCodes = createTransportJunctionLookup(transportNetwork.junctions);
 const transportNodesByCode = new Map(transportNetwork.nodes.map((node) => [node.code, node]));
+// Cache stable SEED-owned critical-site targets only when a route is requested.
+// Country and continent must both match; route choice remains graph-owned.
+let siteTargetsByContinent: Map<number, Map<string, string[]>> | undefined;
+function siteTargetsFor(continent: number, countryCode: string): readonly string[] {
+  if (!siteTargetsByContinent) {
+    const index = new Map<number, Map<string, string[]>>();
+    for (const node of transportNetwork.nodes) {
+      if (node.kind !== "site") continue;
+      let countries = index.get(node.continent);
+      if (!countries) { countries = new Map(); index.set(node.continent, countries); }
+      let targets = countries.get(node.countryCode);
+      if (!targets) { targets = []; countries.set(node.countryCode, targets); }
+      targets.push(node.code);
+    }
+    siteTargetsByContinent = index;
+  }
+  return siteTargetsByContinent.get(continent)?.get(countryCode) ?? [];
+}
 let walkingIndex: ReturnType<typeof createTransportWalkingIndex> | undefined;
 let queryCount = 0;
 let queryCacheHits = 0;
@@ -591,9 +609,7 @@ function chooseNearestSiteRoute() {
       selection, sourceToLonLat(runtime.state.view.x, runtime.state.view.z),
       transportNetwork, transportNodesByCode, fallback, selectedBridgeRoadCode,
     );
-    const sites = from ? transportNetwork.nodes.filter(node =>
-      node.kind === "site" && node.countryCode === from.countryCode &&
-      node.continent === from.continent).map(node => node.code) : [];
+    const sites = from ? siteTargetsFor(from.continent, from.countryCode) : [];
     if (!from) lastSiteRouteStatus = selection?.kind === "ferry"
       ? "selected ferry is maritime, not a walking origin; select a harbor or road"
       : selection ? "selected item has no canonical walking origin"
