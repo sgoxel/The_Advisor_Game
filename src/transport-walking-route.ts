@@ -121,6 +121,21 @@ export function transportWalkingRoute(index: Index, from: string, to: string) {
 }
 
 /**
+ * A selected bridge preview continues from the far canonical bank. A bridge
+ * crossing a country border must search that bank's sites, not silently
+ * require a route back into the starting country.
+ */
+export function selectedBridgePreviewDestinationBank(
+  from: Pick<TransportNode, "code">,
+  edge: Pick<TransportRoadEdge, "from" | "to">,
+  nodes: ReadonlyMap<string, TransportNode>,
+): TransportNode | undefined {
+  const farCode = edge.from === from.code ? edge.to
+    : edge.to === from.code ? edge.from : undefined;
+  return farCode ? nodes.get(farCode) : undefined;
+}
+
+/**
  * Bridge-selected previews must actually include their chosen graph road.
  * Traverse that exact SEED edge once from the selected bank, then search the
  * remainder without retracing it. If no such walking path exists, fail closed.
