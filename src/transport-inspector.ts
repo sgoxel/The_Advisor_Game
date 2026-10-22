@@ -443,9 +443,12 @@ function renderSiteAccessProbe() {
   }
   const grade = siteProbe.maximumGrade === null ? "not measured" :
     Number.isFinite(siteProbe.maximumGrade) ? `${(siteProbe.maximumGrade * 100).toFixed(1)}%` : "invalid";
-  target.innerHTML = `<div class="eyebrow">FINAL-SURFACE SITE APPROACH · SAMPLED ${siteProbe.sampledPass ? "PASS" : "NOT CERTIFIED"}</div>
+  target.innerHTML = `<div class="eyebrow">FINAL-SURFACE SITE APPROACH · ${siteProbe.sampledPass
+    ? siteProbe.terminalGeometryOnly ? "SAMPLED PROFILE OK · TERMINAL OWNER UNVERIFIED" : "SAMPLED PASS"
+    : "NOT CERTIFIED"}</div>
     <dl>
-      <dt>Recorded road</dt><dd>${siteProbe.onRecordedRoad ? "All sampled stations on the canonical access branch" : "Missing canonical access branch at sampled stations"}</dd>
+      <dt>Recorded road</dt><dd>${siteProbe.onRecordedRoad ? "Source-owned branch and/or exact parent junction geometry" : "Missing canonical branch/junction evidence"}</dd>
+      <dt>Terminal surface evidence</dt><dd>${siteProbe.terminalGeometryOnly ? "SEED parent geometry joins; incident final-surface road owner unverified" : "No geometry-only terminal fallback"}</dd>
       <dt>Samples</dt><dd>${siteProbe.stationCount}/${siteProbe.expectedStations} · each profile span's ends and midpoint</dd>
       <dt>Ground passage</dt><dd>${siteProbe.dry && siteProbe.walkable ? "Sampled stations dry and walkable" : "One or more samples wet, blocked or missing"}</dd>
       <dt>Top bridge ownership</dt><dd>${siteProbe.topSurfaceOwned ? "No unrelated top deck at sampled stations" : "Top deck or traversal mismatch; not certified"}</dd>
@@ -562,7 +565,9 @@ function probeSiteAccess() {
         .filter(step => step.edge.code === parentCode && step.edge.roadClass !== "access")
         .map(step => step.edge.code));
       siteProbe = siteAccessSampleVerdict(branch, surfaces, junctionRoadCodes);
-      siteProbeStatus = siteProbe.sampledPass ? "sampled physical approach pass" : "sampled physical approach not certified";
+      siteProbeStatus = !siteProbe.sampledPass ? "sampled physical approach not certified"
+        : siteProbe.terminalGeometryOnly ? "sampled profile pass; terminal surface road owner unverified"
+        : "sampled physical approach pass";
       siteProbeMs = performance.now() - started;
       panel.querySelector<HTMLButtonElement>("#transport-site-access")!.disabled = false;
       renderSiteAccessProbe();
