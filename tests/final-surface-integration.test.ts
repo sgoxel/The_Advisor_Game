@@ -257,6 +257,10 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(typeof observed.routeStationsSurfaceOwned, "boolean");
   assert.equal(typeof observed.routeStationsTopLegal, "boolean");
   assert.equal(typeof observed.approachStationsTopLegal, "boolean");
+  assert.equal(observed.routeFirstUnsafeCause === null, observed.routeFirstUnsafeStation === null,
+    "selected bridge explains exactly the first unsafe route station, if any");
+  assert.equal(observed.approachFirstUnsafeCause === null, observed.approachFirstUnsafeBank === null,
+    "selected bridge explains exactly the first unsafe bank station, if any");
   assert.ok(observed.routeStationsTopLegal || observed.routeFirstUnsafeStation !== null || !observed.routeStationsOnRoad,
     "locally invalid top-road samples must expose a bounded first failing station");
   assert.ok(observed.approachStationsTopLegal || observed.approachFirstUnsafeBank !== null || !observed.approachStationsOnRoad,
@@ -270,6 +274,8 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(unownedSpan.matchingCrossing, true, "identical geometry still intersects the recorded river");
   assert.equal(unownedSpan.routeStationsSurfaceOwned, false,
     "a different graph road ID cannot claim the actual walkable road surface");
+  assert.equal(unownedSpan.routeFirstUnsafeCause, "selected road modifier absent",
+    "on-demand bridge evidence must name missing selected-road ownership, not mislabel it as grade");
   assert.equal(unownedSpan.deckStationsWalkable, false,
     "another road's wet bridge stations cannot certify the selected graph edge");
   assert.equal(unownedSpan.routeStationsWalkable, false);
