@@ -18,7 +18,7 @@ import {
 } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
-import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
@@ -175,21 +175,32 @@ test("S005 site preview chooses nearest physical graph endpoint at high latitude
     { lon: 0, lat: 0 }), undefined, "no legal endpoint means no invented route");
 });
 
-test("S005 bank approach uses the traversed bridge-deck surface height", () => {
+test("S005 bank approach measures true geodesic grade on the traversed bridge-deck surface", () => {
   const bank = (heights: readonly number[], groundAtNearBank: number) =>
     heights.map((surfaceHeight, index) => ({
       surfaceHeight,
       groundHeight: index === 0 ? groundAtNearBank : surfaceHeight,
     }));
-  const left = bank([10, 10.2, 10.4, 10.6, 10.8], 4),
+  const positions = (metres: readonly number[]) =>
+    metres.map(metres => ({ x: 0, z: metres / CANONICAL_METRES_PER_SOURCE_UNIT }));
+  const actualStations = [positions([0, 4, 8, 12, 16]), positions([40, 44, 48, 52, 56])],
+    left = bank([10, 10.2, 10.4, 10.6, 10.8], 4),
     right = bank([10.8, 10.6, 10.4, 10.2, 10], 3),
-    measured = transportBankApproachGrade([left, right]);
-  assert.ok(measured !== null && Math.abs(measured - .05) < 1e-9,
-    "a dry-bank bridge deck grades from its walkable top, never bare earth underneath");
-  assert.ok(transportBankApproachGrade([left, bank([10.8, 10.6, 10.4, 9.4, 9.2], 3)])! > .08,
+    measured = transportBankApproachGrade([left, right], actualStations);
+  assert.ok(measured !== null && Math.abs(measured - .05) < 1e-8,
+    "a dry-bank bridge deck grades from its walkable top over measured 4m, never bare earth underneath");
+  assert.ok(transportBankApproachGrade([left, bank([10.8, 10.6, 10.4, 9.4, 9.2], 3)], actualStations)! > .08,
     "steep actual deck-to-ground transitions must still fail the eight-percent limit");
-  assert.equal(transportBankApproachGrade([left, right.slice(1)]), null,
-    "missing road stations cannot certify a bank");
+  const shorterBank = bank([10, 10.27, 10.54, 10.81, 11.08], 4),
+    shorterStations = [positions([0, 3, 6, 9, 12]), actualStations[1]];
+  assert.ok(transportBankApproachGrade([shorterBank, right], shorterStations)! > .08,
+    "a physical 3m step rising 0.27m is 9%, not a falsely accepted nominal-4m 6.75%");
+  assert.equal(transportBankApproachGrade([left, right.slice(1)], actualStations), null,
+    "missing road surface stations cannot certify a bank");
+  assert.equal(transportBankApproachGrade([left, right], [actualStations[0].slice(1), actualStations[1]]), null,
+    "missing physical positions cannot certify a bank");
+  assert.equal(transportBankApproachGrade([left, right], [actualStations[0].map(p => actualStations[0][0]), actualStations[1]]), null,
+    "a zero-distance physical step cannot certify a bank");
 });
 
 test("S005 walking preview reuses actual site branches, stays deterministic, excludes ferries", () => {
