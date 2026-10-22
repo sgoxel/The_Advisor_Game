@@ -53,6 +53,8 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const ROAD_SCALE_LIMIT = 100;
 const QUERY_CACHE_LIMIT = 12;
 const QUERY_EDGE_LIMIT = 96;
+const BRIDGE_DETAIL_CACHE_LIMIT = 12;
+const bridgeDetailCache = new Map<string, string>();
 const queryCache = new Map<string, CachedQuery>();
 const junctionsForRoadCodes = createTransportJunctionLookup(transportNetwork.junctions);
 const transportNodesByCode = new Map(transportNetwork.nodes.map((node) => [node.code, node]));
@@ -312,6 +314,10 @@ function roadDetails(edge: TransportRoadEdge) {
 }
 
 function bridgeDetails(bridge: TransportBridge) {
+  // Campaign-SEED bridge geometry and final-surface queries are camera/LOD
+  // independent. Reopening an unchanged bridge must not resample ~70 points.
+  const cached = bridgeDetailCache.get(bridge.code);
+  if (cached !== undefined) return cached;
   const edge = transportNetwork.roadEdges.find((candidate) => candidate.code === bridge.roadCode)!;
   // Selection-only final-surface query: a recorded river intersection does not
   // by itself establish a constructed, walkable deck in Simulation.
@@ -321,7 +327,7 @@ function bridgeDetails(bridge: TransportBridge) {
   // Keep this verdict explicitly sample-limited: whole-route traversal is not proven.
   const sampledCrossingPass = sampledBridgeCrossingPass(surface.centerDeckWalkable, span) &&
     span.routeStationsTopLegal && span.approachStationsTopLegal;
-  return `
+  const details = `
     <div class="transport-kind ${sampledCrossingPass ? "walking" : "transfer"}">${sampledCrossingPass ? "SAMPLED CROSSING · WALKABLE & GRADE PASS" : "CROSSING ACCESS · NOT CERTIFIED"}</div>
     <h3>${codeText(bridge.code)}</h3>
     <dl>
@@ -341,6 +347,10 @@ function bridgeDetails(bridge: TransportBridge) {
       <dt>Local final-surface legality</dt><dd>${span.matchingCrossing ? `${span.routeStationsTopLegal ? "Selected road owns legal top surface at all route stations" : `Route station ${span.routeFirstUnsafeStation ?? "unknown"}: ${span.routeFirstUnsafeCause ?? "alignment unverified"}`} · ${span.approachStationsTopLegal ? "both banks legally owned" : `${span.approachFirstUnsafeBank ?? "bank alignment"}: ${span.approachFirstUnsafeCause ?? "not certified"}`}` : "Not validated"}</dd>
       <dt>Traversal scope</dt><dd>Bounded selected-crossing samples only · continuous full-route access not certified · map preview, not travel</dd>
     </dl>`;
+  bridgeDetailCache.set(bridge.code, details);
+  if (bridgeDetailCache.size > BRIDGE_DETAIL_CACHE_LIMIT)
+    bridgeDetailCache.delete(bridgeDetailCache.keys().next().value!);
+  return details;
 }
 
 function borderDetails(crossing: TransportBorderCrossing) {
@@ -871,6 +881,8 @@ function telemetry() {
     corridorProbeStations,
     corridorProbeMaximumGrade,
     siteRouteEdges: siteRoute?.edgeCodes.length ?? 0,
+    bridgeDetailCacheEntries: bridgeDetailCache.size,
+    bridgeDetailCacheLimit: BRIDGE_DETAIL_CACHE_LIMIT,
     localRoads: lastLocalRoads,
     overlayRoads: lastOverlayRoads,
     overlayBridgeMarkers: lastOverlayBridges,
