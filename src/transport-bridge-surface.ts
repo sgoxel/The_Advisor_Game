@@ -101,18 +101,28 @@ export function transportRoadWetStations(
 /**
  * Sample actual traversed elevation, including the physical bridge deck over
  * dry-bank piers. Bare ground below a deck is not the walking grade.
- * Probe only the existing two five-station banks at 4m intervals.
+ * Probe only the existing two five-station banks. Measure the true
+ * spherical separation: arc interpolation and pole/seam rounding must never
+ * turn a <4 m physical step into a falsely legal nominal-4 m grade.
  */
 export function transportBankApproachGrade(
   sides: readonly (readonly { surfaceHeight: number }[])[],
+  stations: readonly (readonly { x: number; z: number }[])[],
 ): number | null {
-  if (sides.length !== 2 || sides.some(side => side.length !== 5)) return null;
+  if (sides.length !== 2 || sides.some(side => side.length !== 5) ||
+      stations.length !== 2 || stations.some(side => side.length !== 5)) return null;
   let maximum = 0;
-  for (const side of sides)
-    for (let i = 1; i < side.length; i++) {
-      const rise = Math.abs(side[i].surfaceHeight - side[i - 1].surfaceHeight);
-      if (!Number.isFinite(rise)) return null;
-      maximum = Math.max(maximum, rise / 4);
+  for (let sideIndex = 0; sideIndex < 2; sideIndex++)
+    for (let i = 1; i < 5; i++) {
+      const previous = stations[sideIndex][i - 1], current = stations[sideIndex][i],
+        heightA = sides[sideIndex][i - 1].surfaceHeight,
+        heightB = sides[sideIndex][i].surfaceHeight;
+      if (![previous.x, previous.z, current.x, current.z, heightA, heightB].every(Number.isFinite))
+        return null;
+      const metres = greatCircleDistance(
+        sourceToLonLat(previous.x, previous.z), sourceToLonLat(current.x, current.z));
+      if (!Number.isFinite(metres) || metres <= 0) return null;
+      maximum = Math.max(maximum, Math.abs(heightB - heightA) / metres);
     }
   return maximum;
 }
@@ -194,7 +204,8 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     approaches = [bankPoints.left, bankPoints.right].map(side =>
       side.map(point => finalSurfaceAt(point.x, point.z))),
     banks = [approaches[0][0], approaches[1][0]],
-    approachMaxSampledGrade = approachStationsOnRoad ? transportBankApproachGrade(approaches) : null;
+    approachMaxSampledGrade = approachStationsOnRoad ? transportBankApproachGrade(
+      approaches, [bankPoints.left, bankPoints.right]) : null;
   // Sample the actual graph-owned centerline, not the projected straight
   // water-crossing tangent. The route probe stays <=49 stations, and
   // missing physical bank-to-road coverage is reported as not certified.
