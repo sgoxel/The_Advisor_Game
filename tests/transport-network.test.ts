@@ -437,6 +437,60 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     { from: "A", to: "C", edgeCodes: [a.code, b.code] }, registry, nodes,
     new Map([["B", [{ edge: a }, { edge: otherIncident }]]]),
   ).status, "invalid", "missing selected outgoing graph incidence cannot certify a Y");
+  // Start and destination nodes are canonical shared terminals too. Their
+  // final-surface winner may be another legitimately incident edge, but never
+  // a road merely crossing nearby or detached from the SEED endpoint.
+  const originRoad = makeEdge("road/origin", "A", "E", 0, -2),
+    destinationRoad = makeEdge("road/destination", "C", "F", 5, 7),
+    detachedOrigin = makeEdge("road/detached-origin", "A", "E", .5, -2),
+    crossOrigin = makeEdge("road/cross-origin", "X", "Y", 0, 8),
+    terminalRegistry = new Map([a, b, otherIncident, originRoad,
+      destinationRoad, detachedOrigin, crossOrigin].map(edge => [edge.code, edge])),
+    terminalIncidence = new Map([
+      ["A", [a, originRoad, detachedOrigin, crossOrigin].map(edge => ({ edge }))],
+      ["B", [a, b, otherIncident].map(edge => ({ edge }))],
+      ["C", [b, destinationRoad].map(edge => ({ edge }))],
+    ]),
+    terminalPlan = planTransportRouteCorridor(
+      { from: "A", to: "C", edgeCodes: [a.code, b.code] },
+      terminalRegistry, nodes, terminalIncidence,
+    );
+  assert.equal(terminalPlan.status, "ready");
+  assert.equal(terminalPlan.stations.length, result.stations.length,
+    "source-owned start/destination checks reuse the same bounded station positions");
+  assert.deepEqual(terminalPlan.stations[0].junctionOwnerCodes, [a.code, originRoad.code],
+    "start owners require registered graph incidence and exact canonical endpoint geometry");
+  assert.deepEqual(terminalPlan.stations.at(-1)?.junctionOwnerCodes, [b.code, destinationRoad.code],
+    "destination owners require the identical physical endpoint proof");
+  assert.equal(sampledCorridorStationPass(terminalPlan.stations[0], {
+    ...dry, contributingModifierIds: [originRoad.code],
+  }), true, "a legal road sharing the start node may own its top surface");
+  assert.equal(sampledCorridorStationPass(terminalPlan.stations.at(-1)!, {
+    ...dry, contributingModifierIds: [destinationRoad.code],
+  }), true, "a legal road sharing the destination node may own its top surface");
+  assert.equal(sampledCorridorStationPass(terminalPlan.stations[1], {
+    ...dry, contributingModifierIds: [originRoad.code],
+  }), false, "origin owner cannot mask an invalid next station on the selected road");
+  assert.equal(sampledCorridorStationPass(terminalPlan.stations.at(-2)!, {
+    ...dry, contributingModifierIds: [destinationRoad.code],
+  }), false, "destination owner cannot mask an invalid penultimate road station");
+  for (const code of [detachedOrigin.code, crossOrigin.code, "unknown-road"]) {
+    assert.equal(sampledCorridorStationPass(terminalPlan.stations[0], {
+      ...dry, contributingModifierIds: [code],
+    }), false, "detached, crossing or unregistered origins never become walking-road joins");
+  }
+  assert.equal(planTransportRouteCorridor(
+    { from: "A", to: "C", edgeCodes: [a.code, b.code] }, terminalRegistry, nodes,
+    new Map([...terminalIncidence, ["A", [{ edge: originRoad }]]]),
+  ).status, "invalid", "a missing selected start-road incidence is not a legal origin");
+  assert.equal(planTransportRouteCorridor(
+    { from: "A", to: "C", edgeCodes: [a.code, b.code] }, terminalRegistry, nodes,
+    new Map([...terminalIncidence, ["C", [{ edge: destinationRoad }]]]),
+  ).status, "invalid", "a missing selected destination-road incidence is not a legal endpoint");
+  assert.equal(sampledCorridorStationPass(terminalPlan.stations.at(-1)!, {
+    ...dry, traversal: "bridge", deckHeight: 4, deckOwnerIds: ["unrelated-overpass"],
+    contributingModifierIds: [destinationRoad.code],
+  }), false, "the endpoint cannot borrow a foreign high deck even at an actual node");
   const sourceFailureCases = [
     [dry, null],
     [{ ...dry, walkable: false }, "blocked final surface"],
