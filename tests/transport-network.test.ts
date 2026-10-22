@@ -277,9 +277,16 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
       ["A", { x: 0, z: 0 }], ["B", { x: 3, z: 0 }], ["C", { x: 5, z: 0 }],
     ]);
   const result = planTransportRouteCorridor(
-    { from: "A", edgeCodes: [a.code, b.code] }, roads, nodes,
+    { from: "A", to: "C", edgeCodes: [a.code, b.code] }, roads, nodes,
   );
   assert.equal(result.status, "ready");
+  assert.equal(planTransportRouteCorridor(
+    { from: "A", to: "B", edgeCodes: [a.code, b.code] }, roads, nodes,
+  ).status, "invalid", "a connected route ending at C cannot certify requested site B");
+  assert.equal(planTransportRouteCorridor(
+    { from: "A", to: "C", edgeCodes: [a.code] }, roads, nodes,
+  ).status, "invalid", "a physically valid partial route cannot claim it reaches site C");
+
   assert.deepEqual(result.stations.map(station => station.edgeCode), [
     "road/a", "road/a", "road/a", "road/a", "road/b", "road/b",
   ], "shared Y must not duplicate a terminal station and falsely create a zero-grade interval");
@@ -288,7 +295,7 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   for (const [i, station] of result.stations.entries())
     assert.ok(Math.abs(station.x - i) < 1e-6, "source-coordinate wrap roundoff never alters the real station");
   const reverse = planTransportRouteCorridor(
-    { from: "C", edgeCodes: [b.code, a.code] }, roads, nodes,
+    { from: "C", to: "A", edgeCodes: [b.code, a.code] }, roads, nodes,
   );
   assert.equal(reverse.status, "ready");
   assert.equal(reverse.stations.length, 6);
@@ -297,36 +304,36 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   for (const [i, station] of reverse.stations.entries())
     assert.ok(Math.abs(station.x - (5 - i)) < 1e-6,
       "walking direction must reflect the actual source-owned graph sequence");
-  assert.equal(planTransportRouteCorridor({ from: "A", edgeCodes: [b.code] }, roads, nodes).status, "invalid",
+  assert.equal(planTransportRouteCorridor({ from: "A", to: "C", edgeCodes: [b.code] }, roads, nodes).status, "invalid",
     "disconnected abstract codes never construct physical corridor samples");
-  assert.equal(planTransportRouteCorridor({ from: "A", edgeCodes: ["fabricated"] }, roads, nodes).status, "invalid");
+  assert.equal(planTransportRouteCorridor({ from: "A", to: "C", edgeCodes: ["fabricated"] }, roads, nodes).status, "invalid");
   const gap = makeEdge("gap", "B", "C", 4, 5);
-  assert.equal(planTransportRouteCorridor({ from: "A", edgeCodes: [a.code, gap.code] },
+  assert.equal(planTransportRouteCorridor({ from: "A", to: "C", edgeCodes: [a.code, gap.code] },
     new Map([a, gap].map(edge => [edge.code, edge])), nodes).status, "invalid",
   "matching graph nodes cannot hide separated physical source geometry");
   const huge = makeEdge("huge", "A", "C", 0, ROUTE_CORRIDOR_STATION_LIMIT + 1);
   const over = planTransportRouteCorridor(
-    { from: "A", edgeCodes: [huge.code] }, new Map([[huge.code, huge]]),
+    { from: "A", to: "C", edgeCodes: [huge.code] }, new Map([[huge.code, huge]]),
     new Map([["A", { x: 0, z: 0 }], ["C", { x: ROUTE_CORRIDOR_STATION_LIMIT + 1, z: 0 }]]));
   assert.equal(over.status, "over-budget");
   assert.equal(over.stations.length, 0,
     "oversized diagnostic must reject the route without truncating it into a false positive");
-  assert.deepEqual(planTransportRouteCorridor({ from: "A", edgeCodes: [a.code, b.code] }, roads, nodes), result);
+  assert.deepEqual(planTransportRouteCorridor({ from: "A", to: "C", edgeCodes: [a.code, b.code] }, roads, nodes), result);
   const detached = makeEdge("detached", "A", "B", 20, 23),
     short = makeEdge("short", "A", "B", 0, 2);
   assert.equal(planTransportRouteCorridor(
-    { from: "A", edgeCodes: [detached.code] },
+    { from: "A", to: "B", edgeCodes: [detached.code] },
     new Map([[detached.code, detached]]), nodes,
   ).status, "invalid", "a lone graph-connected but displaced road must not pass physical inspection");
   assert.equal(planTransportRouteCorridor(
-    { from: "A", edgeCodes: [short.code] },
+    { from: "A", to: "B", edgeCodes: [short.code] },
     new Map([[short.code, short]]), nodes,
   ).status, "invalid", "physical route must meet its canonical terminal node, not stop short");
   assert.equal(planTransportRouteCorridor(
-    { from: "A", edgeCodes: [a.code] }, roads, new Map([["A", { x: 0, z: 0 }]]),
+    { from: "A", to: "B", edgeCodes: [a.code] }, roads, new Map([["A", { x: 0, z: 0 }]]),
   ).status, "invalid", "missing authoritative destination node fails closed");
   assert.equal(planTransportRouteCorridor(
-    { from: "B", edgeCodes: [a.code] }, roads, nodes,
+    { from: "B", to: "A", edgeCodes: [a.code] }, roads, nodes,
   ).status, "ready", "reverse graph ownership must use the correct oriented endpoint positions");
 
   const station = result.stations[0], dry = {
