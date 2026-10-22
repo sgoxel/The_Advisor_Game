@@ -277,16 +277,19 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     { from: "A", edgeCodes: [a.code, b.code] }, roads,
   );
   assert.equal(result.status, "ready");
-  assert.deepEqual(result.stations.map(station => [station.x, station.edgeCode]), [
-    [0, "road/a"], [1, "road/a"], [2, "road/a"], [3, "road/a"],
-    [4, "road/b"], [5, "road/b"],
+  assert.deepEqual(result.stations.map(station => station.edgeCode), [
+    "road/a", "road/a", "road/a", "road/a", "road/b", "road/b",
   ], "shared Y must not duplicate a terminal station and falsely create a zero-grade interval");
+  for (const [i, station] of result.stations.entries())
+    assert.ok(Math.abs(station.x - i) < 1e-6, "source-coordinate wrap roundoff never alters the real station");
   const reverse = planTransportRouteCorridor(
     { from: "C", edgeCodes: [b.code, a.code] }, roads,
   );
   assert.equal(reverse.status, "ready");
-  assert.deepEqual(reverse.stations.map(station => station.x), [5, 4, 3, 2, 1, 0],
-    "walking direction must reflect the actual source-owned graph sequence");
+  assert.equal(reverse.stations.length, 6);
+  for (const [i, station] of reverse.stations.entries())
+    assert.ok(Math.abs(station.x - (5 - i)) < 1e-6,
+      "walking direction must reflect the actual source-owned graph sequence");
   assert.equal(planTransportRouteCorridor({ from: "A", edgeCodes: [b.code] }, roads).status, "invalid",
     "disconnected abstract codes never construct physical corridor samples");
   assert.equal(planTransportRouteCorridor({ from: "A", edgeCodes: ["fabricated"] }, roads).status, "invalid");
