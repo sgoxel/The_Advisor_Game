@@ -175,10 +175,10 @@ export function siteAccessSampleVerdict(
       else if (!surface.walkable) cause = "blocked site-access surface";
       else if (!recorded) cause = terminal ? "site branch misses its registered parent junction" : "site branch road modifier absent";
       else if (terminal && parentCode && !terminalSurfaceOwned) cause = "terminal has no registered top road owner";
-      else if (!deckLegal) cause = "unrelated or invalid top bridge deck";
       else if (surface.traversal === "difficult") cause = "unsafe local site-access slope";
       else if (surface.deckHeight === null && surface.traversal !== "road" && surface.traversal !== "open")
         cause = "non-road site-access traversal";
+      else if (!deckLegal) cause = "unrelated or invalid top bridge deck";
       else if (index > 0) {
         const length = greatCircleDistance(
           sourceToLonLat(stations[index - 1].x, stations[index - 1].z),
