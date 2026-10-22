@@ -16,7 +16,7 @@ import { CANONICAL_METRES_PER_SOURCE_UNIT, sourceToLonLat } from "./planet.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
-import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
+import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
 import { siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
 import { finalSurfaceAt } from "./world-core.ts";
 
@@ -416,7 +416,8 @@ function renderSiteRoute() {
   target.innerHTML = `<div class="eyebrow">CANONICAL WALKING GRAPH PREVIEW · NOT TRAVEL</div>
     <dl>
       <dt>From road endpoint</dt><dd>${codeText(siteRoute.from)}</dd>
-      <dt>Nearest reachable site by road</dt><dd>${codeText(siteRoute.to)}</dd>
+      <dt>Reachable site by graph</dt><dd>${codeText(siteRoute.to)}</dd>
+      <dt>Selected crossing constraint</dt><dd>${selection?.kind === "bridge" ? "Route starts by traversing the chosen bridge-owned road; no ferry or edge retracing" : "Unconstrained shortest road route"}</dd>
       <dt>Measured graph distance</dt><dd>${(siteRoute.distanceM / 1000).toFixed(2)} km</dd>
       <dt>Estimated good-road time</dt><dd>${(siteRoute.fantasyWalkSeconds / 3600).toFixed(2)} fantasy hours</dd>
       <dt>Canonical walking edges</dt><dd>${siteRoute.edgeCodes.length} · no ferry segments</dd>
@@ -505,10 +506,11 @@ function chooseNearestSiteRoute() {
     // A chosen Y/harbor is an exact graph node, and a chosen road/crossing
     // starts from its own endpoint. Only no-selection uses the nearest road.
     const fallback = selection ? undefined : roadQuery(runtime.state).edges[0];
+    const selectedBridgeRoadCode = selection?.kind === "bridge"
+      ? transportBridgeByCode(selection.code)?.roadCode : undefined;
     const from = selectedWalkingPreviewOrigin(
       selection, sourceToLonLat(runtime.state.view.x, runtime.state.view.z),
-      transportNetwork, transportNodesByCode, fallback,
-      selection?.kind === "bridge" ? transportBridgeByCode(selection.code)?.roadCode : undefined,
+      transportNetwork, transportNodesByCode, fallback, selectedBridgeRoadCode,
     );
     const sites = from ? transportNetwork.nodes.filter(node =>
       node.kind === "site" && node.countryCode === from.countryCode &&
@@ -520,8 +522,17 @@ function chooseNearestSiteRoute() {
     else if (!sites.length) lastSiteRouteStatus = "no same-country critical site endpoint";
     else {
       walkingIndex ??= createTransportWalkingIndex(transportNetwork);
-      siteRoute = transportWalkingRouteToNearest(walkingIndex, from.code, sites);
-      lastSiteRouteStatus = siteRoute ? "shortest reachable canonical walking route ready" : "no reachable same-country site by walking road";
+      const selectedBridgeRoad = selectedBridgeRoadCode
+        ? transportNetwork.roadEdges.find(edge => edge.code === selectedBridgeRoadCode)
+        : undefined;
+      siteRoute = selection?.kind === "bridge"
+        ? selectedBridgeRoad
+          ? transportWalkingRouteThroughEdge(walkingIndex, from.code, selectedBridgeRoad, sites)
+          : null
+        : transportWalkingRouteToNearest(walkingIndex, from.code, sites);
+      lastSiteRouteStatus = siteRoute ? "canonical walking graph preview ready"
+        : selection?.kind === "bridge" ? "no walking route to a site through the selected bridge without retracing its road"
+        : "no reachable same-country site by walking road";
     }
   }
   lastSiteRouteMs = performance.now() - started;
