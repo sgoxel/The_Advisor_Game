@@ -127,19 +127,22 @@ export function sampledCorridorStationFailure(
   const incident = (id: string) => id === station.edgeCode || id === station.joinedEdgeCode ||
       !!station.junctionOwnerCodes?.includes(id),
     contributed = (id: string) => surface.contributingModifierIds.includes(id);
+  // Diagnose physically unsupported water before the generic unwalkable
+  // fallback. This changes the explanation, never the sampled PASS predicate.
+  if (surface.deckHeight === null && surface.water.kind !== "none")
+    return "water without owned bridge deck";
+  if (surface.deckHeight !== null && surface.water.kind !== "none" && surface.water.kind !== "river")
+    return "unsupported water under bridge deck";
   if (!surface.walkable) return "blocked final surface";
   if (!surface.contributingModifierIds.some(incident)) return "selected road modifier absent";
   // A real shared Y has one winning final-surface modifier; it may be either
   // selected incident road. The next separate station checks the outgoing road.
   if (surface.deckHeight !== null) {
-    if (surface.water.kind !== "none" && surface.water.kind !== "river")
-      return "unsupported water under bridge deck";
     if (surface.traversal !== "bridge") return "inconsistent top-deck traversal";
     if (!surface.deckOwnerIds.some(id => incident(id) && contributed(id)))
       return "unrelated higher bridge deck";
     return null;
   }
-  if (surface.water.kind !== "none") return "water without owned bridge deck";
   if (surface.traversal === "difficult") return "unsafe local road slope";
   if (surface.traversal !== "road" && surface.traversal !== "open")
     return "non-road traversal";
