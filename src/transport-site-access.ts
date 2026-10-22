@@ -150,12 +150,53 @@ export function siteAccessSampleVerdict(
   // its endpoints stay walkable; never report that approach as legal-grade.
   const gradeWithinLimit = maximumGrade !== null && maximumGrade <= 0.08 &&
     surfaces.every(surface => surface.traversal !== "difficult");
+  const sampledPass = full && onRecordedRoad && (!parentCode || terminalSurfaceOwned) &&
+    dry && walkable && topSurfaceOwned && gradeWithinLimit;
+  // On-demand diagnostic only. Reuse already sampled <=49 stations; identify
+  // the FIRST failed physical gate without another final-surface query.
+  let firstUnsafeStation: number | null = null;
+  let firstUnsafeCause: string | null = full ? null : "incomplete or invalid access profile";
+  if (full && !sampledPass) {
+    for (let index = 0; index < stations.length; index++) {
+      const surface = surfaces[index], terminal = index === stations.length - 1;
+      const recorded = terminal
+        ? parentCode ? exactParentJoin : surface.contributingModifierIds.some(code =>
+            code !== edge.code && junctionRoadCodes.has(code))
+        : surface.contributingModifierIds.includes(edge.code);
+      const deckLegal = surface.deckHeight == null
+        ? surface.traversal !== "bridge"
+        : Number.isFinite(surface.deckHeight) && surface.surfaceHeight === surface.deckHeight &&
+          surface.traversal === "bridge" && surface.deckOwnerIds.some(id =>
+            (id === edge.code || (terminal && exactParentJoin && id === terminalIncidentRoad)) &&
+            surface.contributingModifierIds.includes(id));
+      let cause: string | null = null;
+      if (surface.water.kind !== "none") cause = "wet site-access surface";
+      else if (!surface.walkable) cause = "blocked site-access surface";
+      else if (!recorded) cause = terminal ? "site branch misses its registered parent junction" : "site branch road modifier absent";
+      else if (terminal && parentCode && !terminalSurfaceOwned) cause = "terminal has no registered top road owner";
+      else if (!deckLegal) cause = "unrelated or invalid top bridge deck";
+      else if (surface.traversal === "difficult") cause = "unsafe local site-access slope";
+      else if (index > 0) {
+        const length = greatCircleDistance(
+          sourceToLonLat(stations[index - 1].x, stations[index - 1].z),
+          sourceToLonLat(stations[index].x, stations[index].z));
+        const grade = length > 0
+          ? Math.abs(surface.surfaceHeight - surfaces[index - 1].surfaceHeight) / length : Infinity;
+        if (!Number.isFinite(grade) || grade > .08) cause = "sampled site-access grade exceeds 8%";
+      }
+      if (cause !== null) {
+        firstUnsafeStation = index + 1;
+        firstUnsafeCause = cause;
+        break;
+      }
+    }
+    firstUnsafeCause ??= "sampled site-access authority not certified";
+  }
   return Object.freeze({
     stationCount: surfaces.length,
     expectedStations: stations.length,
     onRecordedRoad, dry, walkable, topSurfaceOwned, terminalGeometryOnly,
-    maximumGrade, gradeWithinLimit,
-    sampledPass: full && onRecordedRoad && (!parentCode || terminalSurfaceOwned) &&
-      dry && walkable && topSurfaceOwned && gradeWithinLimit,
+    maximumGrade, gradeWithinLimit, firstUnsafeStation, firstUnsafeCause,
+    sampledPass,
   });
 }
