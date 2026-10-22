@@ -444,6 +444,7 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     surfaceHeight: i * 0.1,
     water: { kind: "none" },
     walkable: true,
+    traversal: "road",
     contributingModifierIds: [edge.code],
   } as unknown as FinalSurface));
   const junctionRoadCodes = new Set([edge.code, "PARENT/ROAD"]),
@@ -459,6 +460,16 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(good.expectedStations, 5);
   assert.equal(good.onRecordedRoad, true);
   assert.ok(good.maximumGrade !== null && good.maximumGrade < .08);
+  const steep = siteAccessSampleVerdict(edge, connectedSurfaces.map((surface, i) => i === 2 ?
+    { ...surface, traversal: "difficult" } : surface), junctionRoadCodes);
+  assert.equal(steep.sampledPass, false,
+    "a steep local road surface cannot pass on averaged grade and walkability alone");
+  assert.equal(steep.gradeWithinLimit, false);
+  assert.ok(steep.maximumGrade !== null && steep.maximumGrade < .08,
+    "the local slope rejection is independent of a low sampled span average");
+  assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces.map((surface, i) => i === 2 ?
+    { ...surface, traversal: "open" } : surface), junctionRoadCodes).sampledPass, true,
+    "a dry walkable site-pad transition remains legal when local slope is safe");
   assert.deepEqual(siteAccessSampleVerdict(edge, connectedSurfaces, junctionRoadCodes), good);
   assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces.slice(1), junctionRoadCodes).sampledPass, false,
     "missing selected final-surface station must never produce a pass");
