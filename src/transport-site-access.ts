@@ -73,12 +73,15 @@ export function siteAccessSampleVerdict(
     exactParentJoin = full && !!parentCode && !!parentRoad &&
       junctionRoadCodes.has(parentCode) && !!terminal &&
       roadDistanceAt(terminal.x, terminal.z, parentRoad) <= 1e-6,
+    // The SEED graph can prove a join whose final-surface road winner is
+    // different at that exact coordinate. Keep geometry evidence distinct
+    // from a confirmed incident final-surface contributor.
+    terminalSurfaceOwned = full && surfaces[surfaces.length - 1].contributingModifierIds.some(code =>
+      code === edge.code || (code === parentCode && junctionRoadCodes.has(code))),
+    terminalGeometryOnly = exactParentJoin && !terminalSurfaceOwned,
     onRecordedRoad = full && surfaces.every((surface, index) =>
       index === surfaces.length - 1
-        // Geometry alone is not top-surface ownership: an unrelated road may
-        // cover the exact recorded parent join. Require a real incident owner.
-        ? (exactParentJoin && surface.contributingModifierIds.includes(edge.code)) ||
-          surface.contributingModifierIds.some(code =>
+        ? exactParentJoin || surface.contributingModifierIds.some(code =>
             code !== edge.code && junctionRoadCodes.has(code))
         : surface.contributingModifierIds.includes(edge.code));
   let maximumGrade: number | null = null;
@@ -113,7 +116,7 @@ export function siteAccessSampleVerdict(
   return Object.freeze({
     stationCount: surfaces.length,
     expectedStations: stations.length,
-    onRecordedRoad, dry, walkable, topSurfaceOwned,
+    onRecordedRoad, dry, walkable, topSurfaceOwned, terminalGeometryOnly,
     maximumGrade, gradeWithinLimit,
     sampledPass: full && onRecordedRoad && dry && walkable && topSurfaceOwned && gradeWithinLimit,
   });
