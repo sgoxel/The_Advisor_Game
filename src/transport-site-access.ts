@@ -141,7 +141,7 @@ export function siteAccessSampleVerdict(
   const topSurfaceOwned = full && surfaces.every((surface, index) =>
     surface.deckHeight == null
       ? surface.traversal !== "bridge"
-      : surface.traversal === "bridge" && surface.deckOwnerIds.some(id =>
+      : Number.isFinite(surface.deckHeight) && surface.traversal === "bridge" && surface.deckOwnerIds.some(id =>
           (id === edge.code || (index === surfaces.length - 1 && exactParentJoin && id === terminalIncidentRoad)) &&
           surface.contributingModifierIds.includes(id)));
   // Average span grades can hide a steep local surface between checkpoints.
