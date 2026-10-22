@@ -491,6 +491,15 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     ...dry, traversal: "bridge", deckHeight: 4, deckOwnerIds: ["unrelated-overpass"],
     contributingModifierIds: [destinationRoad.code],
   }), false, "the endpoint cannot borrow a foreign high deck even at an actual node");
+  for (const absent of ["A", "B", "C"]) {
+    const incomplete = new Map(terminalIncidence);
+    incomplete.delete(absent);
+    assert.equal(planTransportRouteCorridor(
+      { from: "A", to: "C", edgeCodes: [a.code, b.code] },
+      terminalRegistry, nodes, incomplete,
+    ).status, "invalid",
+    `a supplied walking index missing canonical node ${absent} cannot skip ownership checks`);
+  }
   const sourceFailureCases = [
     [dry, null],
     [{ ...dry, walkable: false }, "blocked final surface"],
@@ -1100,6 +1109,26 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
     edge.roadClass === "access" && edge.from === site!.code);
   assert.ok(access && chain.includes(access.code),
     "critical-site entry must traverse its own recorded access branch");
+  // Exercise the SAME real Y -> selected river crossing -> SEED site chain in
+  // the player-facing physical corridor planner. A too-long route is honestly
+  // reported as over budget, never as partially proven physical passage.
+  const physicalPlan = planTransportRouteCorridor(
+    { from: y!.code, to: site!.code, edgeCodes: chain },
+    edgeByCode, nodeByCode, index.adjacency,
+  );
+  assert.notEqual(physicalPlan.status, "invalid",
+    "the chosen actual Y/bridge/site graph path must have complete physical road-to-node continuity");
+  if (physicalPlan.status === "ready") {
+    assert.ok(physicalPlan.stations.length > 0 &&
+      physicalPlan.stations.length <= ROUTE_CORRIDOR_STATION_LIMIT,
+    "real source-owned route probes must never exceed the fixed station budget");
+    assert.equal(physicalPlan.stations[0].edgeCode, chain[0]);
+    assert.equal(physicalPlan.stations.at(-1)?.edgeCode, chain.at(-1));
+  } else {
+    assert.equal(physicalPlan.status, "over-budget");
+    assert.equal(physicalPlan.stations.length, 0,
+      "an oversized actual route must refuse sampling rather than silently truncate");
+  }
   // Test both endpoint physical probes in the SAME graph chain: a legal bridge
   // alone does not certify a disconnected site, and a site alone does not
   // certify an impossible river crossing. These are bounded sampled checks,
