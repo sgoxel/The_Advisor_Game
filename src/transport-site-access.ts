@@ -1,4 +1,5 @@
 import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
+import { roadDistanceAt, roads } from "./geography.ts";
 import type { FinalSurface } from "./final-surface.ts";
 import type { TransportRoadEdge } from "./transport-network.ts";
 import { ACCESS_PROFILE_SEGMENT_MAX_M, criticalSites } from "./sites.ts";
@@ -61,12 +62,21 @@ export function siteAccessSampleVerdict(
     stations.length === surfaces.length,
     dry = full && surfaces.every(surface => surface.water.kind === "none"),
     walkable = full && surfaces.every(surface => surface.walkable),
-    // The shared surface can resolve both access and parent modifiers at the
-    // shared junction. Interior samples need this access edge; the terminal
-    // needs a distinct incident road, not only this edge or arbitrary ground.
+    parentCode = siteAccessParentRoadCode(edge),
+    parentRoad = parentCode && roads.find(road => road.code === parentCode),
+    terminal = stations[stations.length - 1],
+    // Final surface resolves overlapping roads to ONE deterministic road
+    // modifier. A true junction may therefore show another incident road,
+    // never both parent and branch IDs. Prove the exact SEED parent geometry
+    // meets the source-owned branch endpoint instead of requiring two surface
+    // modifiers at the same point. Synthetic/unowned endpoints still fail.
+    exactParentJoin = full && !!parentCode && !!parentRoad &&
+      junctionRoadCodes.has(parentCode) && !!terminal &&
+      roadDistanceAt(terminal.x, terminal.z, parentRoad) <= 1e-6,
     onRecordedRoad = full && surfaces.every((surface, index) =>
       index === surfaces.length - 1
-        ? surface.contributingModifierIds.some(code => code !== edge.code && junctionRoadCodes.has(code))
+        ? exactParentJoin || surface.contributingModifierIds.some(code =>
+            code !== edge.code && junctionRoadCodes.has(code))
         : surface.contributingModifierIds.includes(edge.code));
   let maximumGrade: number | null = null;
   if (full) {
