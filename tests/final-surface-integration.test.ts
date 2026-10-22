@@ -231,12 +231,17 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
     ...observed, matchingCrossing: true, deckStationsWalkable: true,
     bankStationsWalkable: true, approachStationsWalkable: true,
     approachGradeWithinLimit: true, routeStationsWalkable: true,
-    routeGradeWithinLimit: true,
+    routeGradeWithinLimit: true, routeStationsTopLegal: true,
+    approachStationsTopLegal: true,
   };
   assert.equal(sampledBridgeCrossingPass(true, otherwisePass), true,
     "a genuinely passing selected-road sample remains a grade-pass");
   assert.equal(sampledBridgeCrossingPass(true, { ...otherwisePass, approachGradeWithinLimit: false }), false,
     "a steep dry-bank approach must prevent the prominent grade-pass badge");
+  assert.equal(sampledBridgeCrossingPass(true, { ...otherwisePass, routeStationsTopLegal: false }), false,
+    "a walkable dry road under an unrelated higher deck cannot certify full bridge passage");
+  assert.equal(sampledBridgeCrossingPass(true, { ...otherwisePass, approachStationsTopLegal: false }), false,
+    "an unrelated top deck on either dry bank cannot certify crossing access");
   assert.equal(sampledBridgeCrossingPass(false, otherwisePass), false,
     "a missing source-owned wet deck must never certify a crossing");
 
