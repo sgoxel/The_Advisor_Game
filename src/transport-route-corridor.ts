@@ -69,7 +69,8 @@ export function planTransportRouteCorridor(
       if (!a || !b || ![a.x, a.z, b.x, b.z].every(Number.isFinite))
         return Object.freeze({ status: "invalid", stations: EMPTY });
       const dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
-        steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dz)) - 1e-8));
+        // Keep actual source-space station spacing <=1 even on diagonal roads.
+        steps = Math.max(1, Math.ceil(Math.hypot(dx, dz)));
       if (stations.length && i === 1) {
         const last = stations.length - 1;
         if (Math.hypot(wrapSourceX(stations[last].x - a.x), stations[last].z - a.z) > 1e-4)
