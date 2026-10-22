@@ -92,6 +92,7 @@ let lastSiteRouteStatus = "not requested";
 let siteRoute: ReturnType<typeof transportWalkingRouteToNearest> = null;
 // A route requested before the world runtime exists is retried exactly once on readiness.
 let pendingSiteRouteOnWorld = false;
+let siteRouteRequestedAt: number | null = null;
 let siteProbe: ReturnType<typeof siteAccessSampleVerdict> | null = null;
 let siteProbeStatus = "not requested";
 let siteProbeMs: number | null = null;
@@ -692,7 +693,7 @@ function probeSiteAccess() {
 }
 
 function chooseNearestSiteRoute() {
-  const started = performance.now(), runtime = world();
+  const started = siteRouteRequestedAt ?? performance.now(), runtime = world();
   siteRoute = null;
   pendingSiteRouteOnWorld = !runtime;
   if (!runtime) lastSiteRouteStatus = "world authority pending";
@@ -735,7 +736,10 @@ function chooseNearestSiteRoute() {
         : "no reachable same-country site by walking road";
     }
   }
-  lastSiteRouteMs = performance.now() - started;
+  // Before readiness the player is still waiting; only resolved graph facts
+  // have a click-to-answer duration (including the one-shot readiness wait).
+  lastSiteRouteMs = runtime ? performance.now() - started : null;
+  if (runtime) siteRouteRequestedAt = null;
   resetSiteAccessProbe();
   renderSiteRoute();
   renderMetrics();
@@ -800,6 +804,7 @@ function openPanel() {
 
 function chooseNearestRoad() {
   pendingSiteRouteOnWorld = false;
+  siteRouteRequestedAt = null;
   siteRoute = null;
   lastSiteRouteStatus = "not requested";
   lastSiteRouteMs = null;
@@ -884,6 +889,7 @@ function refreshOverlay(force = false) {
 function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mountain-pass" | "junction" | "harbor" | "ferry") {
   // A missing diagnostic target must not silently retain the previous one.
   pendingSiteRouteOnWorld = false;
+  siteRouteRequestedAt = null;
   selection = undefined;
   if (kind === "bridge") {
     const bridge = ensureTransportBridgeEvidence();
@@ -979,6 +985,7 @@ function telemetry() {
 
 panel.querySelector<HTMLButtonElement>("#transport-close")!.onclick = () => {
   pendingSiteRouteOnWorld = false;
+  siteRouteRequestedAt = null;
   // Hidden diagnostics must not keep sampling final surfaces on a phone.
   resetSiteAccessProbe();
   world()?.setBridgeInspectionAngle(false);
@@ -988,7 +995,10 @@ panel.querySelector<HTMLButtonElement>("#transport-close")!.onclick = () => {
   openButton.setAttribute("aria-expanded", "false");
 };
 panel.querySelector<HTMLButtonElement>("#transport-nearest")!.onclick = chooseNearestRoad;
-panel.querySelector<HTMLButtonElement>("#transport-site-route")!.onclick = chooseNearestSiteRoute;
+panel.querySelector<HTMLButtonElement>("#transport-site-route")!.onclick = () => {
+  siteRouteRequestedAt = performance.now();
+  chooseNearestSiteRoute();
+};
 panel.querySelector<HTMLButtonElement>("#transport-site-access")!.onclick = probeSiteAccess;
 panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.onclick = probeRouteCorridor;
 panel.querySelector<HTMLButtonElement>("#transport-focus")!.onclick = focusSelection;
@@ -1015,7 +1025,9 @@ panel.querySelector<HTMLButtonElement>("#transport-bridge-closeup")!.onclick = (
 };
 panel.querySelector<HTMLButtonElement>("#transport-bridge-clearview")!.onclick = () => {
   if (!inspectBridgeIn3D()) return;
-  // Suspend unrelated route probes while the map-only bridge view is active.
+  // Suspend unrelated route probes and deferred requests in map-only view.
+  pendingSiteRouteOnWorld = false;
+  siteRouteRequestedAt = null;
   resetSiteAccessProbe();
   // Reveal the actual rendered deck and rails without hiding the return path.
   // Graph inspection facts remain unchanged and return on the same selection.
