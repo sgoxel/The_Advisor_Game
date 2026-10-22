@@ -470,7 +470,7 @@ function resetCorridorProbe() {
 
 function probeRouteCorridor() {
   if (!siteRoute) return;
-  const plan = planTransportRouteCorridor(siteRoute, corridorEdges), revision = ++corridorProbeRevision;
+  const plan = planTransportRouteCorridor(siteRoute, corridorEdges, transportNodesByCode), revision = ++corridorProbeRevision;
   corridorProbeStations = 0;
   corridorProbeMaximumGrade = null;
   if (plan.status !== "ready") {
