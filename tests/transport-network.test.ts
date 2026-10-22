@@ -812,6 +812,15 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     "site access cannot be certified by a road hidden under an unrelated top deck");
   assert.equal(siteAccessSampleVerdict(edge, deckSample(edge.code), junctionRoadCodes).sampledPass, true,
     "the site branch's own bridge deck is legal when sampled grade remains safe");
+  for (const mismatched of [0.05, -0.05]) {
+    const invalidTop = deckSample(edge.code).map((surface, index) => index === 2
+      ? { ...surface, deckHeight: surface.surfaceHeight + mismatched } : surface);
+    const verdict = siteAccessSampleVerdict(edge, invalidTop, junctionRoadCodes);
+    assert.equal(verdict.topSurfaceOwned, false,
+      "a finite but contradictory final bridge top is not selected-road-owned passage");
+    assert.equal(verdict.sampledPass, false,
+      "sampled safe grades alone cannot certify an inconsistent top and deck");
+  }
   for (const invalidHeight of [NaN, Infinity, -Infinity]) {
     const malformed = connectedSurfaces.map((surface, index) => index === 2
       ? { ...surface, traversal: "bridge", deckHeight: invalidHeight, deckOwnerIds: [edge.code] }
@@ -1014,6 +1023,8 @@ test("S005 selected bridge deck requires both recorded owner and contributing mo
     { ...owned, surfaceHeight: NaN },
     { ...owned, surfaceHeight: Infinity },
     { ...owned, surfaceHeight: -Infinity },
+    { ...owned, surfaceHeight: 13 }, // finite deck, contradictory walkable top
+    { ...owned, deckHeight: 11 }, // finite top, contradictory deck
     { ...owned, water: { kind: "lake" } },
   ] as FinalSurface[]) {
     assert.equal(selectedRoadBridgeDeckWalkable(invalid, edgeCode), false,
@@ -1021,6 +1032,12 @@ test("S005 selected bridge deck requires both recorded owner and contributing mo
     assert.equal(sampledCorridorStationPass(station, invalid), false,
       "bridge-specific deck checks must agree with selected-route source ownership");
   }
+  assert.equal(sampledCorridorStationFailure(station, { ...owned, surfaceHeight: 13 }),
+    "bridge deck disagrees with final-surface top",
+    "first unsafe selected route must name the mismatched physical bridge top");
+  assert.equal(sampledBridgeTopFailure(edgeCode, { ...owned, surfaceHeight: 13 }),
+    "bridge deck disagrees with final-surface top",
+    "bridge and route diagnostics must report the same authoritative top-height contradiction");
   assert.equal(selectedRoadBridgeDeckWalkable(owned, otherCode), false,
     "an unrelated road code cannot claim the same selected deck");
   assert.equal(sampledCorridorStationFailure(station, { ...owned, deckHeight: NaN }),
