@@ -4,6 +4,24 @@ import { finalSurfaceAt } from "./world-core.ts";
 import { sampledCorridorStationPass } from "./transport-route-corridor.ts";
 import type { TransportBridge, TransportRoadEdge } from "./transport-network.ts";
 
+/** First unsafe reason from the selected road's actual top final surface; no extra queries. */
+function sampledBridgeTopFailure(
+  edgeCode: string, surface: ReturnType<typeof finalSurfaceAt>,
+): string {
+  if (!surface.walkable) return "blocked final surface";
+  if (!surface.contributingModifierIds.includes(edgeCode)) return "selected road modifier absent";
+  if (surface.deckHeight !== null) {
+    if (!surface.deckOwnerIds.includes(edgeCode)) return "unrelated higher bridge deck";
+    if (surface.traversal !== "bridge") return "inconsistent top-deck traversal";
+    if (surface.water.kind !== "none" && surface.water.kind !== "river") return "unsupported water under deck";
+  } else {
+    if (surface.water.kind !== "none") return "water without owned deck";
+    if (surface.traversal === "difficult") return "unsafe local road slope";
+    if (surface.traversal !== "road" && surface.traversal !== "open") return "non-road traversal";
+  }
+  return "physical traversal not certified";
+}
+
 /**
  * Focus-only proof of the actual final-surface deck at a listed river crossing.
  * A coarse crossing or unrelated nearby bridge never certifies this selected road's legal deck.
@@ -155,8 +173,10 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     routeStationsWalkable: false,
     routeStationsTopLegal: false,
     routeFirstUnsafeStation: null as number | null,
+    routeFirstUnsafeCause: null as string | null,
     approachStationsTopLegal: false,
     approachFirstUnsafeBank: null as string | null,
+    approachFirstUnsafeCause: null as string | null,
     routeMaxSampledGrade: null as number | null,
     routeGradeWithinLimit: false,
   });
@@ -238,9 +258,15 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     routeStationsWalkable,
     routeStationsTopLegal,
     routeFirstUnsafeStation: routeFirstUnsafeIndex < 0 ? null : routeFirstUnsafeIndex + 1,
+    routeFirstUnsafeCause: routeFirstUnsafeIndex < 0 ? null :
+      sampledBridgeTopFailure(edge.code, routeStations[routeFirstUnsafeIndex].surface),
     approachStationsTopLegal,
     approachFirstUnsafeBank: approachUnsafe[0] >= 0 ? `left station ${approachUnsafe[0] + 1}` :
       approachUnsafe[1] >= 0 ? `right station ${approachUnsafe[1] + 1}` : null,
+    approachFirstUnsafeCause: approachUnsafe[0] >= 0 ? (approaches[0][approachUnsafe[0]].water.kind !== "none"
+      ? "wet bank" : sampledBridgeTopFailure(edge.code, approaches[0][approachUnsafe[0]])) :
+      approachUnsafe[1] >= 0 ? (approaches[1][approachUnsafe[1]].water.kind !== "none"
+        ? "wet bank" : sampledBridgeTopFailure(edge.code, approaches[1][approachUnsafe[1]])) : null,
     routeMaxSampledGrade,
     routeGradeWithinLimit: routeStationsWalkable && routeMaxSampledGrade !== null && routeMaxSampledGrade <= .08,
   });
