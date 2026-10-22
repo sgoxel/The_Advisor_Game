@@ -238,6 +238,23 @@ test("S005 site preview picks shortest reachable road path rather than nearer di
   assert.equal(transportWalkingRoute(index, "start", "near-but-disconnected"), null);
 });
 
+test("S005 walking previews reject ambiguous duplicate physical road identity", () => {
+  const duplicated = {
+    nodes: ["A", "B", "C"].map(code => ({ code })),
+    roadEdges: [
+      { code: "SEED/DUPLICATE", from: "A", to: "B", surfaceLengthM: 12, fantasyWalkSeconds: 25 },
+      { code: "SEED/DUPLICATE", from: "B", to: "C", surfaceLengthM: 14, fantasyWalkSeconds: 30 },
+    ],
+  } as unknown as TransportNetwork;
+  assert.throws(() => createTransportWalkingIndex(duplicated),
+    /Duplicate canonical walking edge SEED\/DUPLICATE/,
+    "duplicate canonical codes cannot resolve two different physical road centerlines");
+  assert.ok(createTransportWalkingIndex({
+    ...duplicated, roadEdges: duplicated.roadEdges.map((edge, index) =>
+      ({ ...edge, code: `SEED/EDGE/${index}` })),
+  } as TransportNetwork), "uniquely owned roads remain valid preview input");
+});
+
 test("S005 bridge-selected site preview must traverse its actual road rather than the nearer bypass", () => {
   const network = {
     nodes: ["bank-a", "bank-b", "near-site", "far-site", "bypass"].map(code => ({ code })),
