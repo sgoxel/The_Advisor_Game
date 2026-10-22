@@ -16,14 +16,22 @@ export function nextStreamingJob(root: Tile, wanted: Tile[], coverage: Tile[], c
   if (fine) return {tile:fine,kind:'detail'};
 }
 
-/** Clear foreign old detail onto a complete terrain backdrop before adding new
- * detail. This keeps transient residency bounded and avoids a stale square. */
-export function progressiveDetailKeys(wanted: string[], cached: Pick<ReadonlySet<string>,'has'>, active: string[], covered: boolean): string[] {
-  if (wanted.every(key=>cached.has(key))) return wanted;
-  if (!covered) return active;
-  const target = new Set(wanted);
-  if (active.some(key=>!target.has(key))) return [];
-  return wanted.filter(key=>cached.has(key));
+/** Keep existing world geometry until a complete overlapping LOD replacement
+ * is ready. Disjoint new regions may arrive progressively without clearing the
+ * already visible buildings/roads or drawing overlapping parent/child meshes. */
+export function progressiveDetailKeys(
+ wanted: string[], cached: Pick<ReadonlySet<string>,'has'>, active: string[], covered: boolean,
+ overlaps: (a:string,b:string)=>boolean = ()=>true, limit=Infinity,
+): string[] {
+ if(wanted.every(key=>cached.has(key)))return wanted;
+ if(!covered)return active;
+ const retained=active.filter(key=>wanted.some(target=>overlaps(key,target))),
+  available=wanted.filter(key=>cached.has(key)),
+  replacements=available.filter(key=>!retained.some(old=>overlaps(old,key)&&wanted.some(target=>overlaps(old,target)&&!cached.has(target)))),
+  next=[...new Set([...retained.filter(old=>!replacements.some(key=>overlaps(old,key))),...replacements])];
+ // Preserve the render headroom for outgoing/incoming LOD sets and terrain.
+ // A complete cached destination can always replace the old set immediately.
+ return next.length<=limit?next:retained;
 }
 
 export function visibleCoverageKeys(keys: string[], cached: Pick<ReadonlySet<string>,'has'>, fineCount: number, activeLimit: number): string[] {

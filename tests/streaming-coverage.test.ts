@@ -15,9 +15,9 @@ test('selection reversal never dispatches the abandoned queue',()=>{
   const cached=new Set(['root',coverageKey(coarse[0])]);
   assert.equal(nextStreamingJob(root,[tile('new-view')],coarse,cached)?.tile.key,'new-view');
 });
-test('retain previous detail until every background terrain patch is ready',()=>{
+test('terrain readiness never clears still-visible detail while replacement LOD is incomplete',()=>{
   assert.deepEqual(progressiveDetailKeys(['a','b'],new Set(['a']),['old'],false),['old']);
-  assert.deepEqual(progressiveDetailKeys(['a','b'],new Set(['a']),['old'],true),[]);
+  assert.deepEqual(progressiveDetailKeys(['a','b'],new Set(['a']),['old'],true),['old']);
 });
 test('ready current patches appear without waiting for a slow sibling',()=>{
   assert.deepEqual(progressiveDetailKeys(['a','b'],new Set(['a']),[],true),['a']);
@@ -33,4 +33,18 @@ test('terrain background fits alongside both fading detail sets and the root',()
   assert.deepEqual(visibleCoverageKeys(keys,cached,87,89),['p0']);
   assert.deepEqual(visibleCoverageKeys(keys,cached,89,89),[]);
   assert.deepEqual(visibleCoverageKeys(keys,cached,44,89),keys);
+});
+
+
+test('refinement swaps all children of an old patch together; disjoint new areas arrive independently',()=>{
+ const hit=(a:string,b:string)=>a===b || (a==='parent'&&['a','b'].includes(b)) || (b==='parent'&&['a','b'].includes(a));
+ assert.deepEqual(progressiveDetailKeys(['a','b','new'],new Set(['a','new']),['parent'],true,hit),['parent','new']);
+ assert.deepEqual(progressiveDetailKeys(['a','b','new'],new Set(['a','b','new']),['parent'],true,hit),['a','b','new']);
+ assert.deepEqual(progressiveDetailKeys(['parent','new'],new Set(['parent']),['a','b'],true,hit),['parent']);
+});
+
+test('panning drops only old patches outside the new footprint; retained LOD stays bounded',()=>{
+ const hit=(a:string,b:string)=>a===b || (a==='old'&&b==='a');
+ assert.deepEqual(progressiveDetailKeys(['a','b'],new Set(['b']),['old','outside'],true,hit),['old','b']);
+ assert.deepEqual(progressiveDetailKeys(['a','b'],new Set(['b']),['old'],true,hit,1),['old']);
 });

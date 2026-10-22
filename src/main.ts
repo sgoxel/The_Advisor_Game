@@ -169,6 +169,7 @@ type CachedTile = {
   meshes: pc.Mesh[];
   used: number;
   bytes: number;
+  serial: number;
 };
 const tileCache = new Map<string, CachedTile>();
 let revision = 0,
@@ -178,6 +179,7 @@ let revision = 0,
   cacheMisses = 0,
   evictions = 0,
   cachedGeometryBytes = 0,
+  meshGroupUploads = 0, detailGenerationJobs = 0, coverageGenerationJobs = 0,
   uploadsThisFrame = 0,
   maxUploadsPerFrame = 0,
   poleStopCount = 0;
@@ -701,6 +703,7 @@ function request(tile: Tile, kind: TileJobKind = "detail") {
   if(!streamingMemoryReservationFits(cpuBytes,gpuBytes,NATURAL_WORKER_SCRATCH_RESERVE_BYTES,streamingBudget))return;
   pending.add(key);
   inFlight++;
+  if(kind === "detail")detailGenerationJobs++;else coverageGenerationJobs++;
   worker.postMessage(job);
 }
 function refreshSelection() {
@@ -751,7 +754,7 @@ function processStreaming(material: pc.StandardMaterial) {
   // At most one GPU mesh group per frame. Generation is isolated in a worker.
   const relevant = (key: string) => key === tileAt(0,0,0).key || coverageTiles.some(tile=>coverageKey(tile)===key) || wanted.some(tile=>tile.key===key) || activeKeys.includes(key) || Boolean(lodTransition?.oldKeys.includes(key));
   let next = uploads.shift();
-  while(next && !relevant(next.jobKey)) {
+  while(next && next.kind === "coverage" && !relevant(next.jobKey)) {
     pending.delete(next.jobKey);
     discardedPresentationJobs++;
     next=uploads.shift();
@@ -775,6 +778,7 @@ function processStreaming(material: pc.StandardMaterial) {
       meshes,
       used: revision,
       bytes,
+      serial: ++meshGroupUploads,
     });
     cachedGeometryBytes += bytes;
     uploadsThisFrame = 1;
@@ -800,7 +804,15 @@ function processStreaming(material: pc.StandardMaterial) {
   coverageComplete = complete || (coarseReady && backgroundKeys.length===coarseKeys.length);
   if (coverageComplete && coverageDurationMs===0) coverageDurationMs=performance.now()-coverageStartedAt;
   if (!lodTransition) {
-    const nextKeys = progressiveDetailKeys(wanted.map(tile=>tile.key),cachedKeys,activeKeys,coverageComplete);
+    const bounds = new Map(wanted.map(tile=>[tile.key,tile]));
+    for(const key of activeKeys){const record=tileCache.get(key);if(record)bounds.set(key,record.tile);}
+    const overlaps = (a:string,b:string) => {
+      const p=bounds.get(a),q=bounds.get(b);
+      if(!p||!q)return true;
+      return Math.abs(wrapX((p.minX+p.size/2)-(q.minX+q.size/2)))<(p.size+q.size)/2-1e-7 &&
+        Math.abs((p.minZ+p.size/2)-(q.minZ+q.size/2))<(p.size+q.size)/2-1e-7;
+    };
+    const nextKeys = progressiveDetailKeys(wanted.map(tile=>tile.key),cachedKeys,activeKeys,coverageComplete,overlaps,Math.floor(streamingBudget.activePatches/2));
     if(nextKeys.length!==activeKeys.length || nextKeys.some(key=>!activeKeys.includes(key))){
       if(ready)lodTransition={oldKeys:[...activeKeys],newKeys:nextKeys,started:performance.now()};
       activeKeys=nextKeys;
@@ -1800,6 +1812,8 @@ async function start() {
             cacheMisses,
             evictions,
             discardedPresentationJobs,
+            detailGenerationJobs, coverageGenerationJobs, meshGroupUploads,
+            activeDetailInstances: activeKeys.map(key=>({key,serial:tileCache.get(key)?.serial})) ,
             cpuResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes + surfaceBytes + continuityCpuBytes(),
             combinedResourceBytesEstimated: cachedGeometryBytes + readyGeometryBytes + surfaceBytes + continuityCpuBytes() + cachedGeometryBytes + surfaceGpuBytes,
             cacheTrimStartBytes: streamingBudget.cacheTrimStartBytes,

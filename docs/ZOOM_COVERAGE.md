@@ -14,10 +14,17 @@ mesh generation remains unchanged.
 
 One job is posted to the worker at a time. Each completion chooses from the
 current view: emergency root, missing preview, then missing fine detail. An
-executing job cannot be interrupted; obsolete queued work is avoided and obsolete
-completed presentation results are discarded. Previous detail remains until
-coverage exists, then current fine patches replace it progressively. Full warm
-fine coverage skips preview generation.
+executing job cannot be interrupted; obsolete queued work is avoided. As of the
+October 22 owner follow-up, completed detail is retained in the byte-budgeted
+cache even after a zoom reversal; obsolete preview-only work may be discarded.
+Existing overlapping roads/buildings remain visible until their replacement
+LOD region is ready. A parent swaps only when all required children in its
+visible region are ready, while disjoint new regions may appear progressively.
+Old detail outside the requested footprint is disabled. Full warm fine coverage
+reuses the same GPU mesh groups and skips both detail and preview generation.
+Camera projection changes apparent size; object dimensions and SEED data do not
+change with zoom. The existing far-view icon/detail gates still select the
+appropriate presentation without deleting cached meshes.
 
 Background layers are allocated after PlayCanvas reserved layer initialization,
 and draw before fine terrain without depth writes. Preview, fading and fine
@@ -27,7 +34,7 @@ ONE 1,000,000,000-byte combined ceiling remain unchanged. These estimates are
 not physical browser RAM measurements. SEED/geography, simulation, authority,
 road/icon zoom gates and initially minimized information panel are preserved.
 
-## Final measured result
+## October 16 coverage measurements (historical)
 
 Native Windows Edge 155.0.4283.45 / Node 24.12.0. Single sequential run per
 configuration, desktop1440x900 and phone390x844 viewport; no physical A55 claim.
@@ -98,3 +105,26 @@ valid independent layer. Screenshot step `coverage` waits for this first usable
 view; `settle` waits for final detail. Neither substitutes for actual image review.
 
 Normal main deployment and actual live verification remain required before closure.
+
+
+## October 22 LOD reuse follow-up
+
+Focused streaming/coverage checks and the production build pass. Native Edge
+checks sample the first 10-to-5 zoom transition for disappearing property groups,
+then warm both levels and repeat the round trip. Generation counters, upload
+counters and retained mesh-group serials must remain identical during the warm
+round trip. The decimal 256 MB reuse threshold and combined 1 GB ceiling still
+permit ordinary eviction above the retention threshold; uncached locations and
+previously unseen LOD representations still need their first generation.
+Earlier October 16 timing/large-suite evidence above is historical, not rerun
+acceptance for this change.
+
+Native desktop WebGPU and phone WebGL2 both passed the reuse assertions, with
+zero captured errors/resource failures. All four frames were actually inspected:
+scoped VISUAL 8/10 for stable LOD/property presentation; prototype art, sparse
+surroundings and minor aliasing remain. The independent a27b9ee finite-bridge
+diagnostic guards were integrated afterward; source review confirms no geometry
+or streaming changes, and the merged production build passed.
+The subsequent 6b2b939 far-bank inspector routing fix is also preserved; it
+changes selected bridge previews, with no geometry/streaming changes. The final
+merged production build passed.
