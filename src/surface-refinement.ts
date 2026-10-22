@@ -300,6 +300,57 @@ export function selectedRoadBridgeDeck(
     surface.traversal === "bridge" && surface.deckOwnerIds.includes(roadCode);
 }
 
+/**
+ * The ordinary narrow ribbon can disappear for a whole station when one
+ * shoreline endpoint is wet. Fill only the source-owned DRY carriageway on
+ * that station, up to the exact legal bank. Never bridge an unsampled channel
+ * or claim walking authority from presentation geometry.
+ */
+function addOwnedDryBridgeLanding(
+  tile: Tile, ground: ExtraGeometry, roadCode: string,
+  x0: number, z0: number, x1: number, z1: number,
+  nx: number, nz: number,
+) {
+  const section = (t: number) => {
+    const x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t,
+      left = { x: x + nx, z: z + nz }, right = { x: x - nx, z: z - nz },
+      surfaces = [finalSurfaceAt(x, z), finalSurfaceAt(left.x, left.z), finalSurfaceAt(right.x, right.z)];
+    if (!surfaces.every(s => s.water.kind === "none" && s.deckHeight === null &&
+      s.walkable && s.groundMaterial === "Road" &&
+      s.contributingModifierIds.includes(roadCode))) return null;
+    return {
+      left: [left.x, surfaces[1].groundHeight + GROUND_EPSILON, left.z] as Point,
+      right: [right.x, surfaces[2].groundHeight + GROUND_EPSILON, right.z] as Point,
+    };
+  };
+  const emit = (a: NonNullable<ReturnType<typeof section>>, b: NonNullable<ReturnType<typeof section>>) =>
+    pushQuad(ground, tile, a.left, b.left, b.right, a.right, ROAD_COVERAGE_RGB);
+  // At most eight finite quarter-road sections and six boundary bisections;
+  // a centre sample guards each drawn piece against hidden river incisions.
+  const divisions = 8;
+  let previous = section(0);
+  for (let i = 1; i <= divisions; i++) {
+    const before = (i - 1) / divisions, after = i / divisions,
+      next = section(after);
+    if (previous && next) {
+      if (section((before + after) / 2)) emit(previous, next);
+    } else if (previous !== next) {
+      let lo = before, hi = after;
+      for (let j = 0; j < 6; j++) {
+        const middle = (lo + hi) / 2;
+        if (Boolean(section(middle)) === Boolean(previous)) lo = middle;
+        else hi = middle;
+      }
+      const transition = section(previous ? lo : hi);
+      if (transition) {
+        if (previous && lo > before && section((before + lo) / 2)) emit(previous, transition);
+        if (next && after > hi && section((hi + after) / 2)) emit(transition, next);
+      }
+    }
+    previous = next;
+  }
+}
+
 function addRoadAndBridgeRibbons(
   tile: Tile,
   ground: ExtraGeometry,
@@ -334,6 +385,19 @@ function addRoadAndBridgeRibbons(
       )
         continue;
       const middle = finalSurfaceAt(mx, mz);
+      // The deck-midpoint test can span a mixed wet/dry bank station. The
+      // original narrow road ribbon rejects that entire station on one wet
+      // corner, leaving an abrupt pale wedge next to an otherwise legal deck.
+      // Its bank apron uses only 7 m canonical dry carriageway and shares
+      // final-surface ownership; no underwater or unowned connecting surface.
+      const stationStart = finalSurfaceAt(x0, z0),
+        stationEnd = finalSurfaceAt(x1, z1);
+      if ([stationStart, middle, stationEnd].some(s =>
+        s.water.kind === "river" || selectedRoadBridgeDeck(s, road.code))) {
+        addOwnedDryBridgeLanding(tile, ground, road.code, x0, z0, x1, z1,
+          -uz * REFINED_BRIDGE_HALF_WIDTH_SOURCE,
+          ux * REFINED_BRIDGE_HALF_WIDTH_SOURCE);
+      }
       // A nearby crossing belonging to another road is not this segment's
       // physical bridge. Refined decks and coarse decks use the same owner.
       if (selectedRoadBridgeDeck(middle, road.code)) {
