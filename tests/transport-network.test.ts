@@ -352,6 +352,10 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     deckHeight: null, deckOwnerIds: [], contributingModifierIds: [a.code],
   } as unknown as FinalSurface;
   assert.equal(sampledCorridorStationPass(station, dry), true);
+  assert.equal(sampledCorridorStationPass(station, { ...dry, traversal: "difficult" }), false,
+    "canonical road grade above 8% cannot be reported as a legal sampled crossing");
+  assert.equal(sampledCorridorStationPass(station, { ...dry, traversal: "open" }), true,
+    "walkable site/settlement transition with the selected road modifier remains legal");
   assert.equal(sampledCorridorStationPass(station, {
     ...dry, deckHeight: 7, traversal: "bridge", deckOwnerIds: ["unrelated-overpass"],
   }), false, "unrelated upper bridge deck must never certify a road below a dry overpass");
