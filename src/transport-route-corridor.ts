@@ -37,7 +37,7 @@ export function planTransportRouteCorridor(
       if (![a.x, a.z, b.x, b.z].every(Number.isFinite))
         return Object.freeze({ status: "invalid", stations: EMPTY });
       const dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
-        steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dz))));
+        steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dz)) - 1e-8));
       if (stations.length && i === 1 && Math.hypot(
         wrapSourceX(stations[stations.length - 1].x - a.x),
         stations[stations.length - 1].z - a.z,
