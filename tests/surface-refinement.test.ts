@@ -176,6 +176,16 @@ test("an actual natural-water road crossing refines to a narrow authoritative de
     "bridge rail must render physical timber upright sides");
   assert.ok(hasVertexColor(refined.structures.colors, [218, 180, 116]),
     "bridge rail uprights need visible upper caps");
+  const upwardCapNormals = new Set<string>();
+  for (let vertex = 0; vertex < refined.structures.positions.length / 3; vertex++) {
+    const c = vertex * 4, p = vertex * 3;
+    if (refined.structures.colors[c] !== 218 || refined.structures.colors[c + 1] !== 180 ||
+        refined.structures.colors[c + 2] !== 116) continue;
+    assert.ok(refined.structures.normals[p + 1] > 0.99,
+      "each timber cap must actually face upward on WebGPU and WebGL2");
+    upwardCapNormals.add(refined.structures.positions[p + 2] > 0 ? "+" : "-");
+  }
+  assert.ok(upwardCapNormals.size > 0);
   const postColumns = new Map<string, { low: number; high: number }>();
   for (let vertex = 0; vertex < refined.structures.positions.length / 3; vertex++) {
     const colorIndex = vertex * 4;
