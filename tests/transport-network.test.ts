@@ -875,7 +875,7 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(siteAccessSampleVerdict(edge, parentAtJunction,
     new Set([edge.code, "UNRELATED/ROAD"])).sampledPass, false,
     "unrelated dry road is not a legal physical junction with the site branch");
-  const unsafeGrade = siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 4 ?
+  const unsafeGrade = siteAccessSampleVerdict(edge, connectedSurfaces.map((s, i) => i === 4 ?
     { ...s, surfaceHeight: 30 } : s), junctionRoadCodes);
   assert.equal(unsafeGrade.gradeWithinLimit, false);
   assert.deepEqual([unsafeGrade.firstUnsafeStation, unsafeGrade.firstUnsafeCause],
