@@ -17,7 +17,7 @@ import { planTransportRouteCorridor, sampledCorridorStationFailure } from "./tra
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
-import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
+import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, transportWalkingRouteThroughEdgeFromEitherBank, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
 import { siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "./world-core.ts";
 
@@ -708,19 +708,29 @@ function chooseNearestSiteRoute() {
       ? "selected ferry is maritime, not a walking origin; select a harbor or road"
       : selection ? "selected item has no canonical walking origin"
       : "no canonical road near map focus";
-    else if (!sites.length) lastSiteRouteStatus = "no same-country critical site endpoint";
+    else if (!sites.length && selection?.kind !== "bridge")
+      lastSiteRouteStatus = "no same-country critical site endpoint";
     else {
       walkingIndex ??= createTransportWalkingIndex(transportNetwork);
       const selectedBridgeRoad = selectedBridge
         ? transportNetwork.roadEdges.find(edge => edge.code === selectedBridge.roadCode)
         : undefined;
+      // Bridge inspection starts from neither bank as an actor. Check both
+      // real endpoints with their own canonical country/site targets; the
+      // shortest physically required-edge graph preview wins deterministically.
+      const sitesByBank = new Map<string, readonly string[]>();
+      if (selectedBridgeRoad)
+        for (const code of [selectedBridgeRoad.from, selectedBridgeRoad.to]) {
+          const bank = transportNodesByCode.get(code);
+          if (bank) sitesByBank.set(code, siteTargetsFor(bank.continent, bank.countryCode));
+        }
       siteRoute = selection?.kind === "bridge"
         ? selectedBridgeRoad
-          ? transportWalkingRouteThroughEdge(walkingIndex, from.code, selectedBridgeRoad, sites)
+          ? transportWalkingRouteThroughEdgeFromEitherBank(walkingIndex, selectedBridgeRoad, sitesByBank)
           : null
         : transportWalkingRouteToNearest(walkingIndex, from.code, sites);
       lastSiteRouteStatus = siteRoute ? "canonical walking graph preview ready"
-        : selection?.kind === "bridge" ? "no walking route to a site through the selected bridge without retracing its road"
+        : selection?.kind === "bridge" ? "no walking route to a same-country site through either bridge bank without retracing its road"
         : "no reachable same-country site by walking road";
     }
   }
