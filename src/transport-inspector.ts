@@ -90,6 +90,8 @@ let lastRoadInspectionStatus = "not requested";
 let lastSiteRouteMs: number | null = null;
 let lastSiteRouteStatus = "not requested";
 let siteRoute: ReturnType<typeof transportWalkingRouteToNearest> = null;
+// A route requested before the world runtime exists is retried exactly once on readiness.
+let pendingSiteRouteOnWorld = false;
 let siteProbe: ReturnType<typeof siteAccessSampleVerdict> | null = null;
 let siteProbeStatus = "not requested";
 let siteProbeMs: number | null = null;
@@ -692,6 +694,7 @@ function probeSiteAccess() {
 function chooseNearestSiteRoute() {
   const started = performance.now(), runtime = world();
   siteRoute = null;
+  pendingSiteRouteOnWorld = !runtime;
   if (!runtime) lastSiteRouteStatus = "world authority pending";
   else {
     // A chosen Y/harbor is an exact graph node, and a chosen road/crossing
@@ -796,6 +799,7 @@ function openPanel() {
 }
 
 function chooseNearestRoad() {
+  pendingSiteRouteOnWorld = false;
   siteRoute = null;
   lastSiteRouteStatus = "not requested";
   lastSiteRouteMs = null;
@@ -879,6 +883,7 @@ function refreshOverlay(force = false) {
 
 function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mountain-pass" | "junction" | "harbor" | "ferry") {
   // A missing diagnostic target must not silently retain the previous one.
+  pendingSiteRouteOnWorld = false;
   selection = undefined;
   if (kind === "bridge") {
     const bridge = ensureTransportBridgeEvidence();
@@ -973,6 +978,7 @@ function telemetry() {
 }
 
 panel.querySelector<HTMLButtonElement>("#transport-close")!.onclick = () => {
+  pendingSiteRouteOnWorld = false;
   // Hidden diagnostics must not keep sampling final surfaces on a phone.
   resetSiteAccessProbe();
   world()?.setBridgeInspectionAngle(false);
@@ -1041,6 +1047,12 @@ Object.defineProperty(window, "advisorTransport", {
 });
 
 function frame() {
+  // No polling/search on settled frames: only a prior explicit pending click
+  // authorizes one resolution after the authoritative world becomes available.
+  if (pendingSiteRouteOnWorld && !panel.hidden && world()) {
+    pendingSiteRouteOnWorld = false;
+    chooseNearestSiteRoute();
+  }
   refreshOverlay();
   requestAnimationFrame(frame);
 }
