@@ -826,3 +826,27 @@ test("S005 actual natural riverbank mesh is bounded and repeatable at selected r
   assert.deepEqual(a.geometry.positions, b.geometry.positions,
     "same SEED bridge bank must regenerate identical presentation geometry");
 });
+
+
+test("S005 bridge-bank approach ribbon never paints unowned water and stays deterministic", () => {
+  const bridge = finalSurfaceEvidenceAnchors().bridge,
+    tile = tileForPosition(bridge.x, bridge.z, 12),
+    firstBase = buildTile(tile),
+    baseVertices = firstBase.terrain.positions.length / 3,
+    first = refineTileSurfacePresentation(tile, firstBase, true).terrain,
+    second = refineTileSurfacePresentation(tile, buildTile(tile), true).terrain;
+  const added = first.positions.length / 3 - baseVertices;
+  assert.ok(added > 0 && added < 12000, "selected bank adds bounded physical-road geometry");
+  assert.deepEqual(first.positions, second.positions,
+    "same SEED road landing regenerates precisely the same visible geometry");
+  assert.deepEqual(first.colors, second.colors);
+  for (let i = baseVertices; i < first.positions.length / 3; i++) {
+    if (first.colors[i * 4 + 3] !== 255) continue;
+    const x = first.positions[i * 3] + tile.minX + tile.size / 2,
+      z = first.positions[i * 3 + 2] + tile.minZ + tile.size / 2,
+      surface = finalSurfaceAt(x, z);
+    assert.ok(surface.water.kind === "none" && surface.walkable &&
+      surface.groundMaterial === "Road" && surface.contributingModifierIds.length > 0,
+    "bank apron ground vertex must be dry and canonical road-owned");
+  }
+});
