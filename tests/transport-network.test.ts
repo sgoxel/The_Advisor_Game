@@ -796,8 +796,7 @@ test("S005 selected bridge diagnostics fail closed for malformed source road way
   const bridge = { x: edge.centerline[0].x, z: edge.centerline[0].z,
     roadCode: edge.code, drainageCode: "INVALID/CROSSING", spanM: 10
   } as Parameters<typeof transportBridgeSpanAt>[0];
-  const invalidRoad = { ...edge, centerline: [edge.centerline[0], null, ...edge.centerline.slice(1)] }
-    as unknown as typeof edge;
+  const invalidRoad = { ...edge, centerline: [edge.centerline[0], null, ...edge.centerline.slice(1)] } as unknown as typeof edge;
   assert.equal(transportBridgeSpanAt(bridge, invalidRoad).matchingCrossing, false,
     "malformed selected physical bridge must fail closed without sampling water or throwing");
 });
