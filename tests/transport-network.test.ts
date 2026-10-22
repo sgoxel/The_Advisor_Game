@@ -238,6 +238,25 @@ test("S005 site preview picks shortest reachable road path rather than nearer di
   assert.equal(transportWalkingRoute(index, "start", "near-but-disconnected"), null);
 });
 
+test("S005 walking previews reject duplicated canonical node identity", () => {
+  const duplicated = {
+    nodes: [
+      { code: "A", x: 0, z: 0 },
+      { code: "B", x: 1, z: 0 },
+      { code: "B", x: 99, z: 0 },
+    ],
+    roadEdges: [{ code: "SEED/ROAD", from: "A", to: "B", surfaceLengthM: 10, fantasyWalkSeconds: 20 }],
+  } as unknown as TransportNetwork;
+  assert.throws(() => createTransportWalkingIndex(duplicated),
+    /Duplicate canonical walking node B/,
+    "distinct physical graph positions cannot silently share a walking identity");
+  const unique = { ...duplicated, nodes: duplicated.nodes.map((node, index) =>
+    index === 2 ? { ...node, code: "C" } : node) } as TransportNetwork;
+  const index = createTransportWalkingIndex(unique);
+  assert.equal(index.nodeCount, 3);
+  assert.ok(transportWalkingRoute(index, "A", "B"), "unique nodes preserve legal routes");
+});
+
 test("S005 walking previews reject ambiguous duplicate physical road identity", () => {
   const duplicated = {
     nodes: ["A", "B", "C"].map(code => ({ code })),
