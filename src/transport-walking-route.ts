@@ -153,6 +153,30 @@ export function transportWalkingRouteThroughEdge(
 }
 
 /**
+ * An inspected bridge has no chosen walking-side actor. Its closest bank by
+ * map distance need not reach any same-country site after crossing the bridge.
+ * Try both registered endpoints, each with its own country-owned site list,
+ * and choose the shortest deterministic bridge-constrained graph preview.
+ * This is read-only advice/map metadata, never actual character movement.
+ */
+export function transportWalkingRouteThroughEdgeFromEitherBank(
+  index: Index,
+  required: Pick<TransportRoadEdge, "code" | "from" | "to">,
+  siteCodesByBank: ReadonlyMap<string, readonly string[]>,
+) {
+  if (required.from === required.to) return null;
+  const routes = [required.from, required.to].flatMap(from => {
+    const route = transportWalkingRouteThroughEdge(index, from, required, siteCodesByBank.get(from) ?? []);
+    return route ? [route] : [];
+  });
+  routes.sort((a, b) => a.distanceM - b.distanceM ||
+    a.fantasyWalkSeconds - b.fantasyWalkSeconds ||
+    (a.from < b.from ? -1 : a.from > b.from ? 1 : 0) ||
+    (a.to < b.to ? -1 : a.to > b.to ? 1 : 0));
+  return routes[0] ?? null;
+}
+
+/**
  * Source X/Z is a flat projection, not a physical distance at high latitudes.
  * Choose the real geodesically closest legal graph endpoint for a map preview.
  * This selects an inspection origin only; it never moves the character.
