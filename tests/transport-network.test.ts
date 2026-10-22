@@ -16,6 +16,7 @@ import { macroSampleAt } from "../src/macro-geography.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
+import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
 import { finalSurfaceAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
@@ -679,6 +680,42 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
     "repeat queries cannot change seeded road identities or good-road estimates");
   // Graph connectivity only: sampled bank grade, bridge deck and uninterrupted
   // final-surface travel remain separate required acceptance evidence.
+});
+
+test("S005 1/20–1/250 view queries never change selected bridge, Y and site route identity", () => {
+  const network = siteTransportNetwork, bridge = ensureTransportBridgeEvidence();
+  assert.ok(bridge, "seed must expose the selected physical river crossing");
+  const owner = network.roadEdges.find(edge => edge.code === bridge!.roadCode);
+  assert.ok(owner, "selected crossing must keep its canonical owning graph edge");
+  const nodes = new Map(network.nodes.map(node => [node.code, node])),
+    selectedY = network.junctions.find(junction =>
+      nodes.get(junction.nodeCode)?.continent === nodes.get(owner!.from)?.continent),
+    site = network.nodes.find(node =>
+      node.kind === "site" && node.countryCode === nodes.get(owner!.from)?.countryCode);
+  assert.ok(selectedY && site, "seed-owned shared junction and site must exist on the bridge continent");
+  const index = createTransportWalkingIndex(network),
+    route = transportWalkingRoute(index, selectedY!.nodeCode, site!.code),
+    identity = { digest: network.digest, bridge: bridge!.code,
+      road: owner!.code, y: selectedY!.code, site: site!.code, route };
+  assert.ok(route?.edgeCodes.length, "selected Y must connect to its critical site through walking roads");
+  for (const [denominator, radius, representation] of [
+    [20, 128, "ground"], [50, 512, "cartographic"],
+    [100, 2048, "cartographic"], [250, 4096, "hidden"],
+  ] as const) {
+    assert.equal(roadRepresentationAtScale(denominator), representation);
+    assert.equal(roadVisibleAtScale(denominator), denominator <= 100);
+    const nearby = transportRoadsNear(bridge!.x, bridge!.z, radius, 96);
+    assert.ok(nearby.length <= 96, "focus query must remain bounded at every zoom");
+    const resolved = transportBridgeByCode(identity.bridge);
+    assert.deepEqual(resolved, bridge,
+      "lazy bridge recovery must retain identical SEED crossing after focus/LOD changes");
+    assert.equal(network.digest, identity.digest);
+    assert.equal(network.roadEdges.find(edge => edge.code === identity.road), owner);
+    assert.equal(network.junctions.find(junction => junction.code === identity.y), selectedY);
+    assert.deepEqual(transportWalkingRoute(index, selectedY!.nodeCode, site!.code), identity.route,
+      "zoom or hidden presentation must not recalculate or disconnect a canonical walking route");
+  }
+  // This tests transport identity and route parity, not the visual pixels at each zoom.
 });
 
 test("road-linked harbors and ferries are explicit separate traversal semantics", () => {
