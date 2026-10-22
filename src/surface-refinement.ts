@@ -247,34 +247,48 @@ function addGroundRefinement(
   tile: Tile,
   extra: ExtraGeometry,
   resolution: number,
+  refineRoadBank: boolean,
 ) {
   if (!resolution) return;
   const step = tile.size / resolution;
-  for (let z = 0; z < resolution; z++)
-    for (let x = 0; x < resolution; x++) {
-      const ax = tile.minX + x * step,
-        az = tile.minZ + z * step,
-        points: Point[] = [
-          [ax, finalSurfaceAt(ax, az).groundHeight + GROUND_EPSILON, az],
-          [ax, finalSurfaceAt(ax, az + step).groundHeight + GROUND_EPSILON, az + step],
-          [ax + step, finalSurfaceAt(ax + step, az + step).groundHeight + GROUND_EPSILON, az + step],
-          [ax + step, finalSurfaceAt(ax + step, az).groundHeight + GROUND_EPSILON, az],
-        ];
-      if (Math.max(...points.map((point) => point[1])) <= 0.05) continue;
-      const tints = points.map((point) => terrainTint(point[0], point[2])) as RGB[];
-      pushQuad(
-        extra,
-        tile,
-        points[0],
-        points[1],
-        points[2],
-        points[3],
-        tints[0],
-        tints[1],
-        tints[2],
-        tints[3],
-      );
+  const emit = (ax: number, az: number, size: number, depth: number): void => {
+    const samples = [
+      finalSurfaceAt(ax, az),
+      finalSurfaceAt(ax, az + size),
+      finalSurfaceAt(ax + size, az + size),
+      finalSurfaceAt(ax + size, az),
+    ];
+    // Only road-adjacent shore cells need finer triangles at a bridge landing.
+    // The previous full-size wet/dry quad could stretch a dry triangular
+    // bank across the river. Bound subdivision to two additional levels;
+    // each vertex still samples exactly the same final SEED surface.
+    if (refineRoadBank && depth < 2) {
+      const centre = finalSurfaceAt(ax + size / 2, az + size / 2).water.kind,
+        wet = samples.map(surface => surface.water.kind !== "none");
+      if (wet.some(value => value !== wet[0]) ||
+          wet.some(value => value !== (centre !== "none"))) {
+        const half = size / 2;
+        emit(ax, az, half, depth + 1);
+        emit(ax + half, az, half, depth + 1);
+        emit(ax, az + half, half, depth + 1);
+        emit(ax + half, az + half, half, depth + 1);
+        return;
+      }
     }
+    const points: Point[] = [
+      [ax, samples[0].groundHeight + GROUND_EPSILON, az],
+      [ax, samples[1].groundHeight + GROUND_EPSILON, az + size],
+      [ax + size, samples[2].groundHeight + GROUND_EPSILON, az + size],
+      [ax + size, samples[3].groundHeight + GROUND_EPSILON, az],
+    ];
+    if (Math.max(...points.map(point => point[1])) <= 0.05) return;
+    const tints = points.map(point => terrainTint(point[0], point[2])) as RGB[];
+    pushQuad(extra, tile, points[0], points[1], points[2], points[3],
+      tints[0], tints[1], tints[2], tints[3]);
+  };
+  for (let z = 0; z < resolution; z++)
+    for (let x = 0; x < resolution; x++)
+      emit(tile.minX + x * step, tile.minZ + z * step, step, 0);
 }
 
 /** Presentation-only guard: the selected road must own its legal bridge deck. */
@@ -472,7 +486,7 @@ export function refineTileSurfacePresentation(tile: Tile, data: TileGeometry, pr
 
   const ground = emptyExtra(true),
     prepared = emptyExtra(false);
-  if (!preserveGround) addGroundRefinement(tile, ground, resolution);
+  if (!preserveGround) addGroundRefinement(tile, ground, resolution, matches.length > 0 && waterBoundary);
   addRoadAndBridgeRibbons(tile, ground, prepared, matches);
   data.terrain = mergeGeometry(data.terrain, ground);
   data.structures = mergeGeometry(stripLegacyBridgeDeck(data.structures), prepared);
