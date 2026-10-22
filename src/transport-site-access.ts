@@ -93,7 +93,11 @@ export function siteAccessSampleVerdict(
       maximumGrade = Math.max(maximumGrade, grade);
     }
   }
-  const gradeWithinLimit = maximumGrade !== null && maximumGrade <= 0.08;
+  // Average span grades can hide a steep local surface between checkpoints.
+  // finalSurfaceAt classifies an >8% road slope as "difficult" even when
+  // its endpoints stay walkable; never report that approach as legal-grade.
+  const gradeWithinLimit = maximumGrade !== null && maximumGrade <= 0.08 &&
+    surfaces.every(surface => surface.traversal !== "difficult");
   return Object.freeze({
     stationCount: surfaces.length,
     expectedStations: stations.length,
