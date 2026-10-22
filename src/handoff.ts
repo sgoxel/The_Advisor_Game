@@ -7,7 +7,7 @@ export const HANDOFF_LOCAL_FOOTPRINT = 127_420;
 export const HANDOFF_GLOBE_FOOTPRINT = 318_550;
 export const HANDOFF_LOCAL_HALF_HEIGHT = halfHeightForCanonicalFootprint(HANDOFF_LOCAL_FOOTPRINT);
 export const HANDOFF_GLOBE_HALF_HEIGHT = halfHeightForCanonicalFootprint(HANDOFF_GLOBE_FOOTPRINT);
-export const SCALE_LADDER = [10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 10000] as const;
+export const SCALE_LADDER = [1, 2, 5, 10, 20, 50, 100, 250, 500, 1000, 2500, 5000, 10000] as const;
 
 /**
  * The local mesh is authoritative at the inner anchor, but it becomes a coarse,
@@ -40,7 +40,7 @@ export function advanceProjectionTransition(current: number, target: number, dt:
 export function scaleLabelForHalfHeight(halfHeight: number): string {
   const footprint = canonicalFootprintForHalfHeight(halfHeight);
   const diameter = 1_274_200;
-  const denominator = Math.max(10, Math.min(10000, (footprint / diameter) * 10000));
+  const denominator = Math.max(1, Math.min(10000, (footprint / diameter) * 10000));
   let best: number = SCALE_LADDER[0];
   for (const candidate of SCALE_LADDER)
     if (Math.abs(Math.log(candidate / denominator)) < Math.abs(Math.log(best / denominator))) best = candidate;

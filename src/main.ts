@@ -1,6 +1,7 @@
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
+import { residentDimensionsFor } from "./physical-scale.ts";
 import "./style.css";
 import {
   WORLD_SEED,
@@ -11,6 +12,8 @@ import {
   finalSurfaceAt,
   finalSurfaceEvidenceAnchors,
   selectTiles,
+  featuresFor,
+  tileForPosition,
   tileAt,
   type Tile,
   type View,
@@ -54,6 +57,7 @@ import {
   wrapX,
   halfHeightForCanonicalFootprint,
   CANONICAL_PLANET_DIAMETER,
+  CANONICAL_METRES_PER_SOURCE_UNIT,
   type LonLat,
 } from "./planet.ts";
 import {
@@ -221,7 +225,8 @@ function applyTileRenderTransform(tile: Tile, entity: pc.Entity) {
 
 function positionActor(actor: pc.Entity, x: number, z: number) {
   const point = renderFrame.sourceToRender(x, z, heightAt(x, z));
-  actor.setLocalPosition(point.x, point.y + elevationToRenderY(0.9), point.z);
+  const footOffset = actor.getRotation().transformVector(new pc.Vec3(0, 0, actor.getLocalScale().z * .5));
+  actor.setLocalPosition(point.x - footOffset.x, point.y - footOffset.y, point.z - footOffset.z);
 }
 
 function refreshRenderFrameTransforms() {
@@ -1215,7 +1220,16 @@ function characterMaterial(variant: number): pc.StandardMaterial {
   ctx.fillRect(37, 26, 2, 2);
   if (variant % 6 === 0) ctx.fillRect(29, 34, 9, 3);
   const texture = new pc.Texture(app.graphicsDevice, { width: 64, height: 96, mipmaps: true });
-  texture.setSource(image);
+  // Crop transparent padding so the actor's declared height is its visible
+  // head-to-foot height, rather than the height of an empty padded canvas.
+  const pixels = ctx.getImageData(0, 0, 64, 96).data;
+  let left = 64, top = 96, right = 0, bottom = 0;
+  for (let y = 0; y < 96; y++) for (let x = 0; x < 64; x++) if (pixels[(y * 64 + x) * 4 + 3]) {
+    left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
+  }
+  const cropped = document.createElement("canvas"); cropped.width = 64; cropped.height = 96;
+  cropped.getContext("2d")!.drawImage(image, left, top, right - left + 1, bottom - top + 1, 0, 0, 64, 96);
+  texture.setSource(cropped);
   const material = new pc.StandardMaterial();
   material.diffuseMap = texture;
   material.opacityMap = texture;
@@ -1340,6 +1354,8 @@ async function start() {
   const orientActor = (actor: pc.Entity) => {
     actor.setRotation(camera.getRotation());
     actor.rotateLocal(90, 0, 0);
+    const source = actorSources.get(actor);
+    if (source) positionActor(actor, source.x, source.z);
   };
   let lastSimulationRealSecond = -1;
   let lastResidentDetailVisible = settlementDetailVisible;
@@ -1380,11 +1396,12 @@ async function start() {
             receiveShadows: false,
             material: characterMaterials[residentMaterialIndex(visible[i])],
           });
-          actor.setLocalScale(elevationToRenderY(0.8), 1, elevationToRenderY(1.8));
           flatRoot.addChild(actor);
           actors.push(actor);
         }
         const residentMaterial = characterMaterials[residentMaterialIndex(visible[i])];
+        const dimensions = residentDimensionsFor(visible[i].appearance.silhouette);
+        actors[i].setLocalScale(elevationToRenderY(dimensions.widthM), 1, elevationToRenderY(dimensions.heightM));
         for (const meshInstance of actors[i].render?.meshInstances ?? [])
           if (meshInstance.material !== residentMaterial) meshInstance.material = residentMaterial;
         actors[i].enabled = true;
@@ -1648,6 +1665,14 @@ async function start() {
       seed: WORLD_SEED,
       cellAt,
       cellSeed,
+      buildingEvidenceAtSource(x: number, z: number) {
+        return featuresFor(tileForPosition(x, z, 9)).filter(feature => feature.widthM !== undefined).map(feature => ({
+          code: feature.code, kind: feature.kind, x: feature.x, z: feature.z,
+          widthM: feature.widthM, depthM: feature.depthM, house: feature.house,
+          footprintAreaM2: feature.widthM! * feature.depthM!,
+          storeys: feature.house?.storeys ?? (feature.kind === "keep" ? 3 : feature.service === "inn" ? 2 : 1),
+        }));
+      },
       geography: { continents, countries, cities, villages, roads, roadJunctions, roadConnections, roadNetwork: roadNetworkTelemetry, population: macroPopulationSummary },
       continuity: { inspect: inspectRegion, terrainQuery, telemetry: () => ({ ...continuityTelemetry(), worker: continuityWorkerState }), clearDetail: clearContinuityDetail, setOverlay: setContinuityOverlay },
       hydrology: { topology: hydrologyTopology, access: freshwaterAccessAt, lakes: macroLakes, mountains: mountainSystems, anchors: finalSurfaceEvidenceAnchors, recipes: drainageRecipes, sampleSource: naturalSurfaceAt, toLonLat: sourceToLonLat, telemetry: hydrologyTelemetry },
@@ -1827,6 +1852,7 @@ async function start() {
             pooledActors: actors.length,
             visibleActors: actors.filter(actor => actor.enabled).length,
             reusableMaterials: characterMaterials.length,
+            physicalHeightsM: actors.filter(actor => actor.enabled).map(actor => actor.getLocalScale().z * CANONICAL_METRES_PER_SOURCE_UNIT),
             activeScheduleRecords: simulation.stats.activeScheduleRecords,
             evaluatedCandidates: simulation.stats.query.evaluatedResidents,
           },

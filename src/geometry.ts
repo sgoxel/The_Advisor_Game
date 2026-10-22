@@ -10,12 +10,18 @@ import { featuresFor, type Tile } from "./world.ts";
 import { elevationToRenderY } from "./render-frame.ts";
 import { continuitySurfaceAt as finalSurfaceAt } from "./continuity-runtime.ts";
 import { SOURCE_PRESENTATION_WIDTH } from "./planet.ts";
+import { metresToSource, sourceUnitsPerMetreAt } from "./physical-scale.ts";
 
 type Point = [number, number, number];
 type RGB = readonly [number, number, number];
 const color = (r: number, g: number, b: number): RGB => [r, g, b];
 
 class Builder {
+  origin = { x: 0, y: 0, z: 0, sx: 1, sy: 1, sz: 1 };
+  placeAt(x: number, y: number, z: number, sourceZ: number, physical: boolean) {
+    const scale = sourceUnitsPerMetreAt(sourceZ);
+    this.origin = { x, y, z, sx: physical ? scale.x : 1, sy: metresToSource(1), sz: physical ? scale.z : 1 };
+  }
   p: number[] = [];
   n: number[] = [];
   c: number[] = [];
@@ -24,6 +30,8 @@ class Builder {
     this.triangleGradient(a, b, c, tint, tint, tint);
   }
   triangleGradient(a: Point, b: Point, c: Point, tintA: RGB, tintB: RGB, tintC: RGB) {
+    const o = this.origin, transform = (p: Point): Point => [o.x + p[0] * o.sx, o.y + p[1] * o.sy, o.z + p[2] * o.sz];
+    [a, b, c] = [transform(a), transform(b), transform(c)];
     const u = b.map((value, index) => value - a[index]), v = c.map((value, index) => value - a[index]),
       normal = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], length = Math.hypot(...normal) || 1,
       start = this.p.length / 3, points = [a, b, c], tints = [tintA, tintB, tintC];
@@ -195,21 +203,32 @@ export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): 
   const result = coreBuildTile(tile), structures = new Builder(), nature = new Builder(), detail = new Builder(),
     originX = tile.minX + tile.size / 2, originZ = tile.minZ + tile.size / 2;
   if (tile.size <= 512) for (const feature of featuresFor(tile) as any[]) {
-    const x = feature.x - originX, z = feature.z - originZ, y = elevationToRenderY(feature.y), yaw = feature.yawRad || 0,
-      width = feature.footprintWidth || 8, depth = feature.footprintDepth || 8, variant = feature.variant || 0;
+    const physical = feature.widthM !== undefined || feature.kind === "roadside-tree";
+    for (const builder of [structures, nature, detail]) builder.placeAt(feature.x - originX, elevationToRenderY(feature.y), feature.z - originZ, feature.z, physical);
+    const x = 0, z = 0, y = 0, yaw = feature.yawRad || 0,
+      width = feature.widthM ?? feature.footprintWidth ?? 8, depth = feature.depthM ?? feature.footprintDepth ?? 8, variant = feature.variant || 0;
     if (feature.kind === "residence") {
       const wall = [color(185, 174, 145), color(167, 160, 139), color(196, 181, 149)][variant % 3], roof = [color(104, 65, 46), color(88, 67, 51), color(117, 73, 49)][(variant >>> 2) % 3],
-        urban = Boolean(feature.urban), bodyHeight = urban ? 4.1 + (variant % 4) * .34 : 2.8 + (variant % 4) * .28,
-        roofHeight = urban ? .56 : .42, roofOverhang = urban ? .42 : .28;
+        urban = Boolean(feature.urban), bodyHeight = feature.house?.wallHeightM ?? 2.8,
+        roofHeight = .55, roofOverhang = .4;
       structures.boxYaw(x, y - .05, z, width, bodyHeight, depth, yaw, wall);
       structures.boxYaw(x, y + bodyHeight - .06, z, width + roofOverhang, roofHeight, depth + roofOverhang, yaw, roof);
       if (tile.size <= 32) {
         const front = offsetLocal(x, z, yaw, 0, depth * .5 + .03), chimney = offsetLocal(x, z, yaw, width * .26, -depth * .18);
-        detail.boxYaw(front.x, y + .03, front.z, Math.max(.45, width * .2), bodyHeight * .62, .09, yaw, color(78, 56, 40));
+        detail.boxYaw(front.x, y + .03, front.z, .9, 2.05, .09, yaw, color(78, 56, 40));
         detail.boxYaw(chimney.x, y + bodyHeight, chimney.z, .34, urban ? 1.05 : .78, .34, yaw, color(108, 102, 91));
       }
+    } else if (feature.kind === "keep") {
+      structures.boxYaw(x, -.1, z, width, 10, depth, yaw, color(154, 153, 136));
+      structures.boxYaw(x, 9.8, z, width + .6, .7, depth + .6, yaw, color(85, 75, 64));
+      for (const side of [-1, 1]) { const tower = offsetLocal(x, z, yaw, side * (width * .5 - 1.6), depth * .5 - 1.6); structures.boxYaw(tower.x, -.1, tower.z, 3.2, 13, 3.2, yaw, color(143, 143, 129)); }
+    } else if (feature.kind === "well") {
+      structures.boxYaw(x, 0, z, 2.3, 1, 2.3, yaw, color(154, 153, 136));
+      detail.boxYaw(x, 1.02, z, 1.4, .04, 1.4, yaw, color(39, 59, 56));
+      for (const side of [-1, 1]) { const post = offsetLocal(x, z, yaw, side * 1.2, 0); detail.boxYaw(post.x, 0, post.z, .18, 3, .18, yaw, color(82, 60, 40)); }
+      structures.boxYaw(x, 3, z, 3, .25, 3, yaw, color(116, 69, 47));
     } else if (feature.kind === "street") {
-      structures.boxYaw(x, y + .018, z, Math.max(2.8, width), .075, feature.length || depth || 4, yaw, color(119, 99, 68));
+      structures.boxYaw(x, y + .018, z, Math.max(metresToSource(2.8), width), .075, feature.length || depth || 4, yaw, color(119, 99, 68));
     } else if (feature.kind === "service") {
       addServiceGeometry(structures, detail, feature.service, x, y, z, width, depth, yaw);
     } else if (feature.kind === "gate") {
@@ -229,23 +248,23 @@ export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): 
       const length = feature.length || depth || 4,
         at = (lx: number, lz: number) => offsetLocal(x, z, yaw, lx, lz);
       if (variant === 2) {
-        structures.boxYaw(x, y - .02, z, Math.max(1.35, width), 1.65, length, yaw, color(76, 104, 59));
+        structures.boxYaw(x, y - .02, z, Math.max(metresToSource(1.35), width), 1.65, length, yaw, color(76, 104, 59));
         if (tile.size <= 64) for (const lz of [-length * .34, 0, length * .34]) {
           const shrub = at(0, lz);
-          detail.cone(shrub.x, y + .7, shrub.z, 1.15, 1.45, color(83, 116, 64), 7);
+          detail.cone(shrub.x, y + .7, shrub.z, metresToSource(1.15), 1.45, color(83, 116, 64), 7);
         }
       } else if (variant === 3) {
-        structures.boxYaw(x, y - .05, z, Math.max(.9, width), 2.75, length, yaw, color(91, 66, 43));
+        structures.boxYaw(x, y - .05, z, Math.max(metresToSource(.9), width), 2.75, length, yaw, color(91, 66, 43));
         if (tile.size <= 64) for (const lz of [-length * .45, 0, length * .45]) {
           const post = at(0, lz);
-          detail.boxYaw(post.x, y - .08, post.z, 1.25, 3.35, 1.25, yaw, color(73, 52, 35));
+          detail.boxYaw(post.x, y - .08, post.z, metresToSource(1.25), 3.35, metresToSource(1.25), yaw, color(73, 52, 35));
         }
       } else {
-        structures.boxYaw(x, y - .06, z, Math.max(1.2, width), 2.05, length, yaw, color(151, 150, 132));
-        structures.boxYaw(x, y + 1.82, z, Math.max(.82, width * .72), .3, length, yaw, color(112, 105, 89));
+        structures.boxYaw(x, y - .06, z, Math.max(metresToSource(1.2), width), 2.05, length, yaw, color(151, 150, 132));
+        structures.boxYaw(x, y + 1.82, z, Math.max(metresToSource(.82), width * .72), .3, length, yaw, color(112, 105, 89));
         if (tile.size <= 64) for (const lz of [-length * .42, length * .42]) {
           const brace = at(0, lz);
-          detail.boxYaw(brace.x, y + .05, brace.z, Math.max(1.35, width), 2.25, .52, yaw, color(82, 61, 43));
+          detail.boxYaw(brace.x, y + .05, brace.z, Math.max(metresToSource(1.35), width), 2.25, metresToSource(.52), yaw, color(82, 61, 43));
         }
       }
     } else if (feature.kind === "garden") {

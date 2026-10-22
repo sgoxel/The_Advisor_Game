@@ -1,4 +1,5 @@
 import {elevationToRenderY} from "./render-frame.ts";
+import { metresToSource, sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import { featuresFor, field, type Tile } from "./world.ts";
 import { continuitySurfaceAt as finalSurfaceAt, continuityHeightAt as heightAt, registerContinuityPatch } from "./continuity-runtime.ts";
 import { roads as geographyRoads } from "./geography.ts";
@@ -50,6 +51,12 @@ const smoothstep = (edge0: number, edge1: number, value: number) => {
 const envelope = (value: number, enter0: number, enter1: number, exit0: number, exit1: number) =>
   smoothstep(enter0, enter1, value) * (1 - smoothstep(exit0, exit1, value));
 class Builder {
+  origin = { x: 0, y: 0, z: 0, sx: 1, sy: 1, sz: 1 };
+  placeAt(x: number, y: number, z: number, sourceZ: number, physical: boolean) {
+    const scale = sourceUnitsPerMetreAt(sourceZ);
+    this.origin = { x, y, z, sx: physical ? scale.x : 1, sy: metresToSource(1), sz: physical ? scale.z : 1 };
+  }
+  resetOrigin() { this.origin = { x: 0, y: 0, z: 0, sx: 1, sy: 1, sz: 1 }; }
   p: number[] = [];
   n: number[] = [];
   c: number[] = [];
@@ -58,6 +65,8 @@ class Builder {
     this.triangleGradient(a, b, c, tint, tint, tint);
   }
   triangleGradient(a: Point, b: Point, c: Point, tintA: RGB, tintB: RGB, tintC: RGB) {
+    const o = this.origin, transform = (p: Point): Point => [o.x + p[0] * o.sx, o.y + p[1] * o.sy, o.z + p[2] * o.sz];
+    [a, b, c] = [transform(a), transform(b), transform(c)];
     const u = b.map((v, i) => v - a[i]),
       v = c.map((v, i) => v - a[i]);
     const normal = [
@@ -420,8 +429,9 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
     waterTint(t.minX + t.size, t.minZ),
   );
   if (t.size <= 512 && !options.terrainOnly)
-    for (const f of featuresFor(t)) {
-      const { x, z, variant: v } = f, y = elevationToRenderY(f.y);
+    for (const f of featuresFor(t).filter(feature => feature.kind !== "keep" && feature.kind !== "well")) {
+      for (const builder of [structures, nature, detail]) builder.placeAt(f.x, elevationToRenderY(f.y), f.z, f.z, f.kind !== "field");
+      const x = 0, z = 0, y = 0, v = f.variant;
       const stone = color(167, 165, 144),
         timber = color(75, 58, 43),
         plaster = color(210, 190, 145);
@@ -506,7 +516,7 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
           detail.box(x + 1.3, y + 17, z, 2.5, 1.4, 0.07, color(171, 78, 49));
         }
       } else if (f.kind === "tree") {
-        const climate = climateSampleAt(sourceToLonLat(x, z), y),
+        const climate = climateSampleAt(sourceToLonLat(f.x, f.z), f.y),
           family = climate.forestFamily;
         if (!family) continue;
         const h = 7 + (v % 5),
@@ -569,6 +579,7 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
         detail.roof(x, y + 3, z, 3, 3, 1, color(116, 69, 47));
       }
     }
+  for (const builder of [structures, nature, detail]) builder.resetOrigin();
   // Bridge deck geometry is driven by the final deck channel. Ground/water stay
   // untouched, so a crossing cannot be accidentally rendered as a filled river.
   if (t.size <= 512 && !options.terrainOnly)

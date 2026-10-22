@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { cities, villages, type Place } from "../src/geography.ts";
-import { wrapSourceX } from "../src/planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { featuresFor, tileForPosition } from "../src/world.ts";
 
 const reported = cities.reduce((a, b) => {
@@ -23,15 +23,16 @@ function buildings(place: Place, level: number, radius: number) {
 // Independent separating-axis check of the rendered roof rectangles, including
 // yaw and overhang; canonical home-centre spacing alone cannot prove this.
 function roofIntersects(a: ReturnType<typeof buildings>[number], b: typeof a) {
-  const axes = (f: typeof a) => [[Math.cos(f.yawRad || 0), -Math.sin(f.yawRad || 0)], [Math.sin(f.yawRad || 0), Math.cos(f.yawRad || 0)]];
+  const axes = (f: typeof a) => { const sx = 1 / (CANONICAL_METRES_PER_SOURCE_UNIT * Math.cos(sourceToLonLat(f.x, f.z).lat)), sz = 1 / CANONICAL_METRES_PER_SOURCE_UNIT; return [[Math.cos(f.yawRad || 0) * sx, -Math.sin(f.yawRad || 0) * sz], [Math.sin(f.yawRad || 0) * sx, Math.cos(f.yawRad || 0) * sz]]; };
   const aa = axes(a), bb = axes(b), dx = wrapSourceX(b.x - a.x), dz = b.z - a.z;
   const halves = (f: typeof a) => {
-    const overhang = f.kind === "residence" ? (f.urban ? .42 : .28) : 0;
+    const overhang = f.kind === "residence" ? .4 : f.kind === "keep" ? .6 : 0;
     const scale = f.kind === "service" ? 1.06 : 1;
-    return [((f.footprintWidth || 15) * scale + overhang) / 2, ((f.footprintDepth || 14) * scale + overhang) / 2];
+    return [((f.widthM || 15) * scale + overhang) / 2, ((f.depthM || 14) * scale + overhang) / 2];
   };
   const ah = halves(a), bh = halves(b);
-  return [...aa, ...bb].every(([x, z]) => {
+  return [...aa, ...bb].every(([edgeX, edgeZ]) => {
+    const x = -edgeZ, z = edgeX;
     const support = (basis: number[][], half: number[]) => half.reduce((sum, h, i) => sum + h * Math.abs(basis[i][0] * x + basis[i][1] * z), 0);
     return Math.abs(dx * x + dz * z) < support(aa, ah) + support(bb, bh) - 1e-6;
   });

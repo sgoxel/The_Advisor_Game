@@ -594,3 +594,8 @@ The candidates describe **separable ownership/acceptance problems**, not a manda
 ## 18. Architecture decision summary
 
 Future interiors are **deterministic detail of canonical buildings**, not separate worlds. A semantic room graph is generated from the Campaign SEED and stable building identity, embedded and validated inside the exterior envelope, then layered with persisted campaign deltas. One portal identity connects exterior and interior coordinates. Character movement crosses it only after Character decision and Simulation validation. Off-screen occupants remain analytical. At runtime only the occupied interior plus one imminent candidate can be realized, and large buildings stream room clusters. Meshes/materials are reusable and room-bounded for culling; collision/nav come from the same accepted structure. Every byte participates in the existing shared application resource policy. Eviction may remove presentation, never history.
+
+
+## Owner clarification: exterior sizing before entry (2026-10-22)
+
+Exterior generation stores only physical width/depth, storeys and expected room count. Do not generate rooms, room dimensions, partitions or interior meshes merely to size a building; defer that work until the protagonist enters the building/area. The entry-time generator must fit the already-established physical exterior. Runtime dimensions live in `src/physical-scale.ts`: the smallest shack has 6 m2 usable allowance plus 0.2 m outer walls (2.4 x 3.4 m exterior); normal homes reserve 48-80 m2 footprints for approximately three rooms; larger homes use additional floors. These are scalar area budgets, not precomputed interiors. Building geometry and adult NPC silhouettes share physical metres; NPC heights are 1.6-1.9 m.

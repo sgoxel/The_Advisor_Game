@@ -1,5 +1,6 @@
 import { places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
 import { wrapSourceX } from "./planet.ts";
+import { houseDimensionsFor, metresToSource, physicalFootprintRadius, type HouseDimensions } from "./physical-scale.ts";
 import {
   settlementExteriorFor as coreSettlementExteriorFor,
   type SettlementArchetype,
@@ -18,6 +19,9 @@ export type SettlementPlotKind = CorePlotPlan["kind"] | "garden";
 export type SettlementPlotPlan = Omit<CorePlotPlan, "kind" | "service"> & {
   kind: SettlementPlotKind;
   service?: SettlementService;
+  widthM?: number;
+  depthM?: number;
+  house?: HouseDimensions;
 };
 export type SettlementExteriorPlan = Omit<CoreExteriorPlan, "plots"> & {
   /** Static/public plots only. Resident homes are generated analytically on demand. */
@@ -102,8 +106,9 @@ export function settlementHomeFor(place: Place, index: number, suppliedPlan?: Se
     ribbonPhase = city ? (unit(`${place.code}/RESIDENCE/RIBBON/${ribbon}/PHASE`) - .5) * .28 : 0,
     fraction = .06 + ((ordinal + .5 + ribbonPhase) / slotsPerRibbon) * .88,
     base = pointOnResidentialSpine(street, fraction),
-    width = city ? 1.45 + unit(`${place.code}/RESIDENCE/${index}/WIDTH`) * .6 : .68 + unit(`${place.code}/RESIDENCE/${index}/WIDTH`) * .26,
-    depth = city ? 1.62 + unit(`${place.code}/RESIDENCE/${index}/DEPTH`) * .66 : .78 + unit(`${place.code}/RESIDENCE/${index}/DEPTH`) * .28,
+    house = houseDimensionsFor(`${place.code}/RESIDENCE/${index}`, city),
+    width = metresToSource(house.widthM),
+    depth = metresToSource(house.depthM),
     setback = city ? 2.75 + band * 4.15 : 1.65 + band * 2.2,
     lateralJitter = city ? (unit(`${place.code}/RESIDENCE/${index}/LATERAL`) - .5) * .42 : 0,
     lateral = side * (street.width * .5 + setback + depth * .5) + lateralJitter,
@@ -121,8 +126,11 @@ export function settlementHomeFor(place: Place, index: number, suppliedPlan?: Se
     residents: 1,
     width,
     depth,
+    widthM: house.widthM,
+    depthM: house.depthM,
+    house,
     yawRad,
-    clearanceRadius: Math.hypot(width, depth) * .5 + (city ? .16 : .1),
+    clearanceRadius: physicalFootprintRadius(house.widthM + .5, house.depthM + .5, place.z),
     candidates,
   };
 }
@@ -459,10 +467,18 @@ export function settlementExteriorFor(place: Place): SettlementExteriorPlan {
   const existing = cache.get(place.code);
   if (existing) return remember(existing);
   const core = coreSettlementExteriorFor(place), plots: SettlementPlotPlan[] = [];
-  for (const plot of core.plots) if (plot.kind !== "house") plots.push(servicePlot(place, plot));
+  for (const plot of core.plots) if (plot.kind !== "house") {
+    const owned = servicePlot(place, plot);
+    plots.push(["service", "keep", "well"].includes(plot.kind) ? {
+      ...owned, widthM: plot.width, depthM: plot.depth,
+      width: metresToSource(plot.width), depth: metresToSource(plot.depth),
+      clearanceRadius: physicalFootprintRadius(plot.width * 1.08, plot.depth * 1.08, place.z, 1.5),
+    } : owned);
+  }
   const residentHomeCount = canonicalSettlementPopulation(place), gardenStride = place.kind === "city" ? 48 : 8;
   for (let index = 0; index < residentHomeCount; index += gardenStride) plots.push(gardenFor(place, settlementHomeFor(place, index, { ...core, plots: [], residentHomeCount }), index));
-  return remember(alignGatesToRoads(place, { ...core, plots, residentHomeCount }));
+  const aligned = alignGatesToRoads(place, { ...core, plots, residentHomeCount });
+  return remember({ ...aligned, streets: aligned.streets.map(street => ({ ...street, width: metresToSource(street.width) })) });
 }
 export function settlementExteriorCacheSize() { return cache.size; }
 
