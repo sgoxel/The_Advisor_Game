@@ -459,6 +459,20 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(good.stationCount, 5);
   assert.equal(good.expectedStations, 5);
   assert.equal(good.onRecordedRoad, true);
+  assert.equal(good.topSurfaceOwned, true);
+  const deckSample = (owner: string) => connectedSurfaces.map((surface, index) => index === 2 ?
+    { ...surface, traversal: "bridge", deckHeight: surface.surfaceHeight, deckOwnerIds: [owner] } : surface);
+  const wrongTop = siteAccessSampleVerdict(edge, deckSample("UNRELATED/OVERPASS"), junctionRoadCodes);
+  assert.equal(wrongTop.onRecordedRoad, true,
+    "the chosen road may contribute below a higher unrelated bridge");
+  assert.equal(wrongTop.topSurfaceOwned, false);
+  assert.equal(wrongTop.sampledPass, false,
+    "site access cannot be certified by a road hidden under an unrelated top deck");
+  assert.equal(siteAccessSampleVerdict(edge, deckSample(edge.code), junctionRoadCodes).sampledPass, true,
+    "the site branch's own bridge deck is legal when sampled grade remains safe");
+  assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces.map((surface, index) => index === 2 ?
+    { ...surface, traversal: "bridge" } : surface), junctionRoadCodes).sampledPass, false,
+    "a bridge classification without a physical top deck is not a valid sample");
   assert.ok(good.maximumGrade !== null && good.maximumGrade < .08);
   const steep = siteAccessSampleVerdict(edge, connectedSurfaces.map((surface, i) => i === 2 ?
     { ...surface, traversal: "difficult" } : surface), junctionRoadCodes);

@@ -93,6 +93,15 @@ export function siteAccessSampleVerdict(
       maximumGrade = Math.max(maximumGrade, grade);
     }
   }
+  // The highest traversed bridge deck must belong to this access branch,
+  // or to its proven parent exactly at their shared terminal node. Merely
+  // contributing a road modifier below an unrelated overpass is not passage.
+  const topSurfaceOwned = full && surfaces.every((surface, index) =>
+    surface.deckHeight == null
+      ? surface.traversal !== "bridge"
+      : surface.traversal === "bridge" && surface.deckOwnerIds.some(id =>
+          (id === edge.code || (index === surfaces.length - 1 && exactParentJoin && id === parentCode)) &&
+          surface.contributingModifierIds.includes(id)));
   // Average span grades can hide a steep local surface between checkpoints.
   // finalSurfaceAt classifies an >8% road slope as "difficult" even when
   // its endpoints stay walkable; never report that approach as legal-grade.
@@ -101,8 +110,8 @@ export function siteAccessSampleVerdict(
   return Object.freeze({
     stationCount: surfaces.length,
     expectedStations: stations.length,
-    onRecordedRoad, dry, walkable,
+    onRecordedRoad, dry, walkable, topSurfaceOwned,
     maximumGrade, gradeWithinLimit,
-    sampledPass: full && onRecordedRoad && dry && walkable && gradeWithinLimit,
+    sampledPass: full && onRecordedRoad && dry && walkable && topSurfaceOwned && gradeWithinLimit,
   });
 }
