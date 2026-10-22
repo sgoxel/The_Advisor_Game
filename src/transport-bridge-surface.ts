@@ -41,12 +41,18 @@ export function transportRoadArcStations(
   points: readonly { x: number; z: number }[], x: number, z: number,
   fromMetres: number, toMetres: number, stationCount: number,
 ): readonly { x: number; z: number }[] {
-  if (points.length < 2 || !Number.isInteger(stationCount) || stationCount < 1 || stationCount > 48 ||
+  if (!Array.isArray(points) || points.length < 2 ||
+    !Number.isFinite(x) || !Number.isFinite(z) ||
+    !Number.isInteger(stationCount) || stationCount < 1 || stationCount > 48 ||
     !Number.isFinite(fromMetres) || !Number.isFinite(toMetres) || fromMetres >= toMetres) return [];
   const segments: { a: { x: number; z: number }; dx: number; dz: number; start: number; lengthM: number }[] = [];
   let total = 0, bestMetres = Infinity, anchor = -1;
   for (let index = 1; index < points.length; index++) {
-    const a = points[index - 1], b = points[index], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
+    const a = points[index - 1], b = points[index];
+    // A broken downstream span invalidates the entire physical crossing,
+    // even when an earlier valid segment happens to contain the anchor.
+    if (!a || !b || ![a.x, a.z, b.x, b.z].every(Number.isFinite)) return [];
+    const dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
       latitudeScale = Math.cos(sourceToLonLat(a.x, a.z).lat),
       east = dx * latitudeScale, north = dz,
       queryEast = wrapSourceX(x - a.x) * latitudeScale, queryNorth = z - a.z,
@@ -138,8 +144,12 @@ export function transportRoadBankApproaches(
 export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRoadEdge) {
   let nearestMetres = Infinity, direction: {x: number; z: number} | undefined;
   for (let index = 1; index < edge.centerline.length; index++) {
-    const a = edge.centerline[index - 1], b = edge.centerline[index],
-      dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
+    const a = edge.centerline[index - 1], b = edge.centerline[index];
+    if (!a || !b || ![bridge.x, bridge.z, a.x, a.z, b.x, b.z].every(Number.isFinite)) {
+      direction = undefined;
+      break; // Invalid physical source segment cannot identify an owned crossing.
+    }
+    const dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
       latitudeScale = Math.cos(sourceToLonLat(a.x, a.z).lat),
       east = dx * latitudeScale, north = dz,
       queryEast = wrapSourceX(bridge.x - a.x) * latitudeScale, queryNorth = bridge.z - a.z,
