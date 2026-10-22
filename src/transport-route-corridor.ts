@@ -143,6 +143,11 @@ export function sampledCorridorStationFailure(
   // A non-finite deck elevation is never a valid physical walking surface.
   if (surface.deckHeight !== null && !Number.isFinite(surface.deckHeight))
     return "invalid final-surface bridge deck";
+  // The compositor exposes the actual top of every bridge as its deck height.
+  // Contradictory top elevations cannot describe one walkable final surface.
+  if (surface.deckHeight !== null && surface.surfaceHeight !== undefined &&
+      surface.surfaceHeight !== surface.deckHeight)
+    return "bridge deck disagrees with final-surface top";
   if (surface.deckHeight === null && surface.water.kind !== "none")
     return "water without owned bridge deck";
   if (surface.deckHeight !== null && surface.water.kind !== "none" && surface.water.kind !== "river")

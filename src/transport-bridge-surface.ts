@@ -24,7 +24,7 @@ export function selectedRoadBridgeDeckWalkable(
 ): boolean {
   return Number.isFinite(surface.surfaceHeight) && surface.water.kind === "river" &&
     surface.deckHeight !== null && Number.isFinite(surface.deckHeight) &&
-    surface.walkable &&
+    surface.surfaceHeight === surface.deckHeight && surface.walkable &&
     surface.traversal === "bridge" &&
     surface.deckOwnerIds.includes(roadCode) &&
     surface.contributingModifierIds.includes(roadCode);
