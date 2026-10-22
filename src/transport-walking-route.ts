@@ -8,8 +8,13 @@ import type { TransportBridge, TransportNetwork, TransportNode, TransportRoadEdg
  */
 export function createTransportWalkingIndex(network: TransportNetwork) {
   type Step = { node: string; edge: TransportRoadEdge };
-  const adjacency = new Map<string, Step[]>(network.nodes.map(node => [node.code, []]));
+  const adjacency = new Map<string, Step[]>(network.nodes.map(node => [node.code, []])),
+    edgeCodes = new Set<string>();
   for (const edge of network.roadEdges) {
+    // Route previews and physical corridor recipes both resolve edges by code.
+    // Duplicate identities would silently select unrelated geometry.
+    if (edgeCodes.has(edge.code)) throw new Error(`Duplicate canonical walking edge ${edge.code}`);
+    edgeCodes.add(edge.code);
     if (!adjacency.has(edge.from) || !adjacency.has(edge.to) ||
         !Number.isFinite(edge.surfaceLengthM) || edge.surfaceLengthM <= 0 ||
         !Number.isFinite(edge.fantasyWalkSeconds) || edge.fantasyWalkSeconds <= 0)
