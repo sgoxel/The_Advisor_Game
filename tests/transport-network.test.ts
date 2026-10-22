@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import { buildTile } from "../src/geometry.ts";
+import { rebuildNaturalSurface, NATURAL_MESH_LIMITS } from "../src/natural-surface-mesh.ts";
 import { finalSurfaceEvidenceAnchors, tileForPosition } from "../src/world.ts";
 import { refineTileSurfacePresentation, refinementResolutionForTile } from "../src/surface-refinement.ts";
 import assert from "node:assert/strict";
@@ -807,4 +808,21 @@ test("S005 road-adjacent bridge-bank tessellation stays bounded and deterministi
   const second = refineTileSurfacePresentation(tile, buildTile(tile));
   assert.deepEqual(refined.terrain.positions, second.terrain.positions,
     "the same canonical bank must reproduce identical vertices after regeneration");
+});
+
+test("S005 actual natural riverbank mesh is bounded and repeatable at selected road bridge", () => {
+  const p = finalSurfaceEvidenceAnchors().bridge,
+    tile = tileForPosition(p.x, p.z, 12),
+    base = buildTile(tile).terrain,
+    a = rebuildNaturalSurface(tile, base),
+    b = rebuildNaturalSurface(tile, base);
+  assert.ok(a.replaced && b.replaced,
+    "the bridge bank uses the natural replacement mesh, not the skipped coarse-ground refinement");
+  assert.ok(a.leaves > 0 && a.leaves <= NATURAL_MESH_LIMITS.leaves);
+  assert.ok(a.samples <= NATURAL_MESH_LIMITS.samples);
+  assert.ok(a.cpuScratchBytesEstimated <= 32 * 1024 * 1024);
+  assert.equal(a.leaves, b.leaves);
+  assert.equal(a.samples, b.samples);
+  assert.deepEqual(a.geometry.positions, b.geometry.positions,
+    "same SEED bridge bank must regenerate identical presentation geometry");
 });
