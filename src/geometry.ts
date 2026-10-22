@@ -273,6 +273,20 @@ export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): 
         for (const lx of [-width * .28, 0, width * .28]) { const row = offsetLocal(x, z, yaw, lx, 0); detail.boxYaw(row.x, y + .12, row.z, .42, .3, depth * .72, yaw, color(151, 126, 62)); }
         for (const lz of [-depth / 2, depth / 2]) { const fence = offsetLocal(x, z, yaw, 0, lz); detail.boxYaw(fence.x, y + .1, fence.z, width, .18, .16, yaw, color(92, 68, 45)); }
       }
+    } else if (feature.kind === "field") {
+      // Farmland in physical metres: a tilled plot, crop rows along its depth, a low rail fence.
+      const form = feature.fieldForm, soil = form === "pasture" ? color(118, 140, 74) : form === "orchard" ? color(104, 126, 66) : color(158, 132, 66),
+        crop = form === "vegetable" ? color(96, 132, 64) : form === "strip" ? color(196, 168, 88) : color(184, 158, 83);
+      structures.boxYaw(x, y + .03, z, width, .12, depth, yaw, soil);
+      if (tile.size <= 64 && form !== "pasture") {
+        const rows = Math.max(2, Math.min(14, Math.floor(width / (form === "orchard" ? 5 : 2.4))));
+        for (let row = 0; row < rows; row++) {
+          const lx = -width * .5 + (row + .5) * width / rows, at = offsetLocal(x, z, yaw, lx, 0);
+          if (form === "orchard") for (let k = -1; k <= 1; k++) { const tree = offsetLocal(at.x, at.z, yaw, 0, k * depth * .3); nature.cone(tree.x, y + .8, tree.z, 1.3, 2.4, color(79, 118, 62), 6); }
+          else detail.boxYaw(at.x, y + .12, at.z, Math.min(.9, width / rows * .45), .3, depth * .92, yaw, crop);
+        }
+      }
+      if (tile.size <= 32) for (const lz of [-depth * .5, depth * .5]) { const rail = offsetLocal(x, z, yaw, 0, lz); detail.boxYaw(rail.x, y + .9, rail.z, width, .12, .12, yaw, color(92, 68, 45)); }
     } else if (feature.kind === "path") {
       structures.boxYaw(x, y + .015, z, width || 1.25, .06, feature.length || depth || 3, yaw, color(137, 116, 79));
     } else if (feature.kind === "pavement") {

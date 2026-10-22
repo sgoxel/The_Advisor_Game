@@ -430,7 +430,8 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
     waterTint(t.minX + t.size, t.minZ),
   );
   if (t.size <= 512 && !options.terrainOnly)
-    for (const f of featuresFor(t).filter(feature => feature.kind !== "keep" && feature.kind !== "well")) {
+    // Settlement plots with physical metre sizes (widthM) are drawn by geometry.ts; never as legacy 18-unit fields.
+    for (const f of featuresFor(t).filter(feature => feature.kind !== "keep" && feature.kind !== "well" && !(feature.kind === "field" && (feature as { widthM?: number }).widthM !== undefined))) {
       for (const builder of [structures, nature, detail]) builder.placeAt(f.x, elevationToRenderY(f.y), f.z, f.z, f.kind !== "field");
       const x = 0, z = 0, y = 0, v = f.variant;
       const stone = color(167, 165, 144),
