@@ -812,6 +812,16 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     "site access cannot be certified by a road hidden under an unrelated top deck");
   assert.equal(siteAccessSampleVerdict(edge, deckSample(edge.code), junctionRoadCodes).sampledPass, true,
     "the site branch's own bridge deck is legal when sampled grade remains safe");
+  for (const invalidHeight of [NaN, Infinity, -Infinity]) {
+    const malformed = connectedSurfaces.map((surface, index) => index === 2
+      ? { ...surface, traversal: "bridge", deckHeight: invalidHeight, deckOwnerIds: [edge.code] }
+      : surface);
+    const verdict = siteAccessSampleVerdict(edge, malformed, junctionRoadCodes);
+    assert.equal(verdict.topSurfaceOwned, false,
+      "a nonfinite bridge elevation cannot establish physical site-deck ownership");
+    assert.equal(verdict.sampledPass, false,
+      "a nonfinite owned deck must not certify the selected site approach");
+  }
   assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces.map((surface, index) => index === 2 ?
     { ...surface, traversal: "bridge" } : surface), junctionRoadCodes).sampledPass, false,
     "a bridge classification without a physical top deck is not a valid sample");
