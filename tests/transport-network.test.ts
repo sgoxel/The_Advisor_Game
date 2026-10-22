@@ -789,12 +789,16 @@ test("S005 selected bridge diagnostics fail closed for malformed source road way
   }
   assert.deepEqual(transportRoadArcStations(good, NaN, 0, -20, 20, 4), [],
     "non-finite bridge anchor never generates candidate crossing stations");
-  const bridge = siteTransportNetwork.bridges[0];
-  assert.ok(bridge, "registered canonical crossing required");
-  const edge = siteTransportNetwork.roadEdges.find(road => road.code === bridge.roadCode);
-  assert.ok(edge, "bridge must name a canonical road");
-  const invalidRoad = { ...edge!, centerline: [edge!.centerline[0], null, ...edge!.centerline.slice(1)] } as unknown as typeof edge;
-  assert.equal(transportBridgeSpanAt(bridge, invalidRoad!).matchingCrossing, false,
+  // A synthetic invalid inspection target avoids materializing lazy SEED
+  // bridges ahead of the separate demand-only cache regression below.
+  const edge = siteTransportNetwork.roadEdges[0];
+  assert.ok(edge && edge.centerline.length >= 2, "canonical road fixture required");
+  const bridge = { x: edge.centerline[0].x, z: edge.centerline[0].z,
+    roadCode: edge.code, drainageCode: "INVALID/CROSSING", spanM: 10
+  } as Parameters<typeof transportBridgeSpanAt>[0];
+  const invalidRoad = { ...edge, centerline: [edge.centerline[0], null, ...edge.centerline.slice(1)] }
+    as unknown as typeof edge;
+  assert.equal(transportBridgeSpanAt(bridge, invalidRoad).matchingCrossing, false,
     "malformed selected physical bridge must fail closed without sampling water or throwing");
 });
 
