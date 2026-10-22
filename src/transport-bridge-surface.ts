@@ -1,6 +1,7 @@
 import { freshwaterCrossingAt } from "./hydrology.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { finalSurfaceAt } from "./world-core.ts";
+import { sampledCorridorStationPass } from "./transport-route-corridor.ts";
 import type { TransportBridge, TransportRoadEdge } from "./transport-network.ts";
 
 /**
@@ -152,6 +153,10 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     routeStationsOnRoad: false,
     routeStationsSurfaceOwned: false,
     routeStationsWalkable: false,
+    routeStationsTopLegal: false,
+    routeFirstUnsafeStation: null as number | null,
+    approachStationsTopLegal: false,
+    approachFirstUnsafeBank: null as string | null,
     routeMaxSampledGrade: null as number | null,
     routeGradeWithinLimit: false,
   });
@@ -177,7 +182,17 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
       crossing.lo * crossing.metresPerUnit - 18,
       crossing.hi * crossing.metresPerUnit + 18, segmentCount),
     routeStationsOnRoad = roadStations.length === segmentCount + 1,
-    routeStations = roadStations.map(point => ({ surface: finalSurfaceAt(point.x, point.z) })),
+    routeStations = roadStations.map(point => ({ point, surface: finalSurfaceAt(point.x, point.z) })),
+    // Existing walkability / average grade alone cannot certify a locally
+    // difficult slope or an unrelated top bridge hiding this selected road.
+    routeFirstUnsafeIndex = routeStations.findIndex(({ point, surface }) =>
+      !sampledCorridorStationPass({ ...point, edgeCode: edge.code }, surface)),
+    routeStationsTopLegal = routeStationsOnRoad && routeFirstUnsafeIndex < 0,
+    approachUnsafe = approaches.map((side, sideIndex) => side.findIndex((surface, index) =>
+      surface.water.kind !== "none" || !sampledCorridorStationPass({
+        ...bankPoints[sideIndex === 0 ? "left" : "right"][index], edgeCode: edge.code,
+      }, surface))),
+    approachStationsTopLegal = approachStationsOnRoad && approachUnsafe.every(index => index < 0),
     // Coordinate agreement is not enough: a walkable field/another road
     // must never certify the graph-selected road's physical crossing.
     routeStationsSurfaceOwned = routeStationsOnRoad && routeStations.every(({ surface }) =>
@@ -221,6 +236,11 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     routeStationsOnRoad,
     routeStationsSurfaceOwned,
     routeStationsWalkable,
+    routeStationsTopLegal,
+    routeFirstUnsafeStation: routeFirstUnsafeIndex < 0 ? null : routeFirstUnsafeIndex + 1,
+    approachStationsTopLegal,
+    approachFirstUnsafeBank: approachUnsafe[0] >= 0 ? `left station ${approachUnsafe[0] + 1}` :
+      approachUnsafe[1] >= 0 ? `right station ${approachUnsafe[1] + 1}` : null,
     routeMaxSampledGrade,
     routeGradeWithinLimit: routeStationsWalkable && routeMaxSampledGrade !== null && routeMaxSampledGrade <= .08,
   });
