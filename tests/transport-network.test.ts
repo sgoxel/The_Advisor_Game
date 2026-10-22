@@ -461,7 +461,7 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(good.onRecordedRoad, true);
   assert.equal(good.topSurfaceOwned, true);
   const deckSample = (owner: string) => connectedSurfaces.map((surface, index) => index === 2 ?
-    { ...surface, traversal: "bridge", deckHeight: 5, deckOwnerIds: [owner] } : surface);
+    { ...surface, traversal: "bridge", deckHeight: surface.surfaceHeight, deckOwnerIds: [owner] } : surface);
   const wrongTop = siteAccessSampleVerdict(edge, deckSample("UNRELATED/OVERPASS"), junctionRoadCodes);
   assert.equal(wrongTop.onRecordedRoad, true,
     "the chosen road may contribute below a higher unrelated bridge");
