@@ -44,6 +44,21 @@ type Selection =
   | { kind: "ferry"; code: string }
   | { kind: "lake-detour"; code: string };
 
+// Record the exact resolution-scale context, not a later camera state.
+type FirstAnswerContext = Readonly<{
+  scaleLabel: string;
+  presentation: string;
+  viewportWidth: number;
+  viewportHeight: number;
+}>;
+function firstAnswerContext(state: AdvisorWorld["state"]): FirstAnswerContext {
+  return Object.freeze({ scaleLabel: state.scaleLabel, presentation: state.presentation,
+    viewportWidth: innerWidth, viewportHeight: innerHeight });
+}
+function firstAnswerContextText(context: FirstAnswerContext | null) {
+  return context ? ` · ${context.scaleLabel} ${context.presentation} ${context.viewportWidth}×${context.viewportHeight}` : "";
+}
+
 type CachedQuery = Readonly<{
   edges: readonly TransportRoadEdge[];
   queryMs: number;
@@ -87,11 +102,13 @@ let lastOverlayRoads = 0;
 let lastOverlayBridges = 0;
 let lastRoadInspectionMs: number | null = null;
 let lastRoadInspectionStatus = "not requested";
+let lastRoadAnswerContext: FirstAnswerContext | null = null;
 // A nearest-road click before runtime readiness gets one retry, not an idle search.
 let pendingNearestRoadOnWorld = false;
 let roadRequestedAt: number | null = null;
 let lastSiteRouteMs: number | null = null;
 let lastSiteRouteStatus = "not requested";
+let lastSiteRouteAnswerContext: FirstAnswerContext | null = null;
 let siteRoute: ReturnType<typeof transportWalkingRouteToNearest> = null;
 // A route requested before the world runtime exists is retried exactly once on readiness.
 let pendingSiteRouteOnWorld = false;
@@ -745,6 +762,7 @@ function chooseNearestSiteRoute() {
   // Before readiness the player is still waiting; only resolved graph facts
   // have a click-to-answer duration (including the one-shot readiness wait).
   lastSiteRouteMs = runtime ? performance.now() - started : null;
+  lastSiteRouteAnswerContext = runtime ? firstAnswerContext(runtime.state) : null;
   if (runtime) siteRouteRequestedAt = null;
   resetSiteAccessProbe();
   renderSiteRoute();
@@ -782,8 +800,8 @@ function renderMetrics() {
       <dt>Topology digest</dt><dd><code>${transportNetwork.digest}</code></dd>
       <dt>Domestic authority</dt><dd><code>${generation.domesticAuthority}</code> · ${generation.baseRoads} shared roads + ${generation.extensionRoads} S005 extensions + ${transportAcceptanceSummary().siteAccessBranches} canonical site branches</dd>
       <dt>Focus query</dt><dd>${lastQueryMs.toFixed(2)} ms · ${lastLocalRoads}/${QUERY_EDGE_LIMIT} records</dd>
-      <dt>First road answer</dt><dd>${lastRoadInspectionStatus}${lastRoadInspectionMs === null ? "" : ` · ${lastRoadInspectionMs.toFixed(2)} ms`}</dd>
-      <dt>Walking graph answer</dt><dd>${lastSiteRouteStatus}${lastSiteRouteMs === null ? "" : ` · ${lastSiteRouteMs.toFixed(2)} ms`}</dd>
+      <dt>First road answer</dt><dd>${lastRoadInspectionStatus}${lastRoadInspectionMs === null ? "" : ` · ${lastRoadInspectionMs.toFixed(2)} ms`}${firstAnswerContextText(lastRoadAnswerContext)}</dd>
+      <dt>Walking graph answer</dt><dd>${lastSiteRouteStatus}${lastSiteRouteMs === null ? "" : ` · ${lastSiteRouteMs.toFixed(2)} ms`}${firstAnswerContextText(lastSiteRouteAnswerContext)}</dd>
       <dt>Physical site approach</dt><dd>${siteProbeStatus}${siteProbeMs === null ? "" : ` · ${siteProbeMs.toFixed(2)} ms`}</dd>
       <dt>Selected-route surface diagnostic</dt><dd>${corridorProbeStatus}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms`}</dd>
       <dt>Query/cache</dt><dd>${queryCount} searches · ${queryCacheHits} reuses · ${queryCache.size}/${QUERY_CACHE_LIMIT} cached</dd>
@@ -816,6 +834,7 @@ function chooseNearestRoad() {
   siteRoute = null;
   lastSiteRouteStatus = "not requested";
   lastSiteRouteMs = null;
+  lastSiteRouteAnswerContext = null;
   resetSiteAccessProbe();
   renderSiteRoute();
   if (!runtime) {
@@ -839,6 +858,7 @@ function chooseNearestRoad() {
   }
   // Include the actual user-observed readiness wait in first-answer time.
   lastRoadInspectionMs = runtime ? performance.now() - started : null;
+  lastRoadAnswerContext = runtime ? firstAnswerContext(runtime.state) : null;
   if (runtime) roadRequestedAt = null;
   renderMetrics();
   lastFingerprint = "";
@@ -928,6 +948,7 @@ function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mo
   siteRoute = null;
   lastSiteRouteStatus = "not requested";
   lastSiteRouteMs = null;
+  lastSiteRouteAnswerContext = null;
   resetSiteAccessProbe();
   openPanel();
   if (!selection)
@@ -969,8 +990,10 @@ function telemetry() {
     lastQueryMs,
     firstRoadInspectionMs: lastRoadInspectionMs,
     firstRoadInspectionStatus: lastRoadInspectionStatus,
+    firstRoadInspectionContext: lastRoadAnswerContext,
     firstSiteRouteMs: lastSiteRouteMs,
     firstSiteRouteStatus: lastSiteRouteStatus,
+    firstSiteRouteContext: lastSiteRouteAnswerContext,
     siteAccessProbeStatus: siteProbeStatus,
     siteAccessProbeStations: siteProbe?.stationCount ?? 0,
     siteAccessProbeMs: siteProbeMs,
