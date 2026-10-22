@@ -765,6 +765,8 @@ function refreshOverlay(force = false) {
 }
 
 function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mountain-pass" | "junction" | "harbor" | "ferry") {
+  // A missing diagnostic target must not silently retain the previous one.
+  selection = undefined;
   if (kind === "bridge") {
     const bridge = ensureTransportBridgeEvidence();
     if (bridge) selection = { kind: "bridge", code: bridge.code };
@@ -793,6 +795,8 @@ function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mo
   lastSiteRouteMs = null;
   resetSiteAccessProbe();
   openPanel();
+  if (!selection)
+    panel.querySelector<HTMLElement>("#transport-selection")!.textContent = `Canonical ${kind.replace("-", " ")} evidence unavailable. No location selected.`;
   focusSelection();
   refreshOverlay(true);
   return selection;
