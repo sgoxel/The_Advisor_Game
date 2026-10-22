@@ -448,13 +448,20 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     "a real geometrically joined site branch remains legal when its road owns the terminal");
   const unrelatedTerminal = realSurfaces.map((surface, index) => index === realSurfaces.length - 1
     ? { ...surface, contributingModifierIds: ["UNRELATED/CROSSING"] } : surface);
-  assert.equal(siteAccessSampleVerdict(actual, unrelatedTerminal, realParents).onRecordedRoad, false,
-    "parent geometry cannot certify an unrelated road at the physical terminal");
-  assert.equal(siteAccessSampleVerdict(actual, unrelatedTerminal, realParents).sampledPass, false);
-  assert.equal(siteAccessSampleVerdict(actual, realSurfaces.map((surface, index) =>
+  const geometryOnly = siteAccessSampleVerdict(actual, unrelatedTerminal, realParents);
+  assert.equal(geometryOnly.onRecordedRoad, true,
+    "actual SEED parent geometry remains a real graph connection");
+  assert.equal(geometryOnly.terminalGeometryOnly, true,
+    "unrelated terminal contributor must not be mislabeled final-surface ownership proof");
+  assert.equal(geometryOnly.sampledPass, true,
+    "legacy sampled grade and geometry verdict stays distinct from surface-owner certification");
+  const parentWinner = siteAccessSampleVerdict(actual, realSurfaces.map((surface, index) =>
     index === realSurfaces.length - 1
-      ? { ...surface, contributingModifierIds: [parentCode] } : surface), realParents).sampledPass, true,
+      ? { ...surface, contributingModifierIds: [parentCode] } : surface), realParents);
+  assert.equal(parentWinner.sampledPass, true,
     "the actual parent road may own the shared terminal without the branch modifier");
+  assert.equal(parentWinner.terminalGeometryOnly, false,
+    "an incident parent modifier removes the geometry-only evidence caveat");
 
   const edge = {
     code: "S005/SITE/ACCESS", from: "S005/NODE/SITE/EXAMPLE", roadClass: "access",
@@ -482,6 +489,7 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(good.expectedStations, 5);
   assert.equal(good.onRecordedRoad, true);
   assert.equal(good.topSurfaceOwned, true);
+  assert.equal(good.terminalGeometryOnly, false);
   const deckSample = (owner: string) => connectedSurfaces.map((surface, index) => index === 2 ?
     { ...surface, traversal: "bridge", deckHeight: surface.surfaceHeight, deckOwnerIds: [owner] } : surface);
   const wrongTop = siteAccessSampleVerdict(edge, deckSample("UNRELATED/OVERPASS"), junctionRoadCodes);
