@@ -272,7 +272,7 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
   });
 }
 
-/** A selected crossing passes only if BOTH bank and whole-span grade checks pass. */
+/** Sampled crossing PASS requires legal upper surfaces on both banks and the whole deck. */
 export function sampledBridgeCrossingPass(
   centerDeckWalkable: boolean,
   span: ReturnType<typeof transportBridgeSpanAt>,
@@ -280,5 +280,6 @@ export function sampledBridgeCrossingPass(
   return centerDeckWalkable && span.matchingCrossing &&
     span.deckStationsWalkable && span.bankStationsWalkable &&
     span.approachStationsWalkable && span.approachGradeWithinLimit &&
-    span.routeStationsWalkable && span.routeGradeWithinLimit;
+    span.routeStationsWalkable && span.routeGradeWithinLimit &&
+    span.routeStationsTopLegal && span.approachStationsTopLegal;
 }
