@@ -29,25 +29,25 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Legal transport continuity: gate→Y→bridge→site/harbor & truthful first-route UX
+- WP-S005-001-001 — Legal gate→shared Y→bridge→dry banks→site/harbor passage & truthful first-route UX
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Legal resident door→work/guard commutes, Fantasy-Time schedules & first-use inspection
+- WP-S006-001-001 — Source-legal resident door→work/guard routes, Fantasy-Time & first-use inspection
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Visual reference research: toon 3D, 2D billboards, semantic zoom & mobile costs
+- WP-S007-001-001 — 3D/2D visual reference research: toon materials, GLB reuse, semantic zoom & mobile budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas UI/UX: ≥44px touch, notch-safe panels & keyboard route tasks
+- WP-S008-001-001 — Accessible mobile atlas: ≥44px touch, safe-area/readable panels & keyboard route tasks
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA first-use latency, frame/input p95 & combined CPU+GPU budget proof
-- WP-S009-002-001 — Bounded canonical picking & change-driven UI: hit parity, zero idle layout churn
-- WP-S009-003-001 — WebGPU/WebGL2 mobile compatibility: adaptive DPR/shadows, memory & GPU recovery
-- WP-S009-004-001 — README-to-runtime truth: atlas vs Advisor, campaign clock & honest release claims
-- WP-S009-005-001 — Pure-zoom UX/performance: coherent terrain, first valid selection & final 3D detail
+- WP-S009-001-001 — Exact-SHA startup→first-inspection→settled latency, p95 & combined memory proof
+- WP-S009-002-001 — Bounded canonical picking & revision-driven UI: hit parity, zero idle layout churn
+- WP-S009-003-001 — Adaptive WebGPU/WebGL2 quality: mobile DPR/shadows, combined memory & GPU recovery
+- WP-S009-004-001 — README runtime truth: atlas vs Advisor loop, campaign clock/persistence & release claims
+- WP-S009-005-001 — Pure-zoom readiness: coherent coverage, first valid selection & final 3D detail
