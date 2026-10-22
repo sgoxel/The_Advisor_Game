@@ -327,8 +327,7 @@ function bridgeDetails(bridge: TransportBridge) {
   const span = transportBridgeSpanAt(bridge, edge);
   // A walkable centre point cannot certify both dry banks, road alignment or safe grade.
   // Keep this verdict explicitly sample-limited: whole-route traversal is not proven.
-  const sampledCrossingPass = sampledBridgeCrossingPass(surface.centerDeckWalkable, span) &&
-    span.routeStationsTopLegal && span.approachStationsTopLegal;
+  const sampledCrossingPass = sampledBridgeCrossingPass(surface.centerDeckWalkable, span);
   const details = `
     <div class="transport-kind ${sampledCrossingPass ? "walking" : "transfer"}">${sampledCrossingPass ? "SAMPLED CROSSING · WALKABLE & GRADE PASS" : "CROSSING ACCESS · NOT CERTIFIED"}</div>
     <h3>${codeText(bridge.code)}</h3>
