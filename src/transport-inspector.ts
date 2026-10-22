@@ -607,9 +607,13 @@ function probeSiteAccess() {
     if (surfaces.length < stations.length) requestAnimationFrame(step);
     else {
       const parentCode = siteAccessParentRoadCode(branch);
+      // Include all graph-incident land roads. Final-surface picks one winner
+      // at the shared node; the physical verdict independently verifies its
+      // exact terminal geometry and still requires the named parent join.
       const junctionRoadCodes = new Set((walkingIndex?.adjacency.get(branch.to) ?? [])
-        .filter(step => step.edge.code === parentCode && step.edge.roadClass !== "access")
+        .filter(step => step.edge.roadClass !== "access")
         .map(step => step.edge.code));
+      if (parentCode && !junctionRoadCodes.has(parentCode)) junctionRoadCodes.clear();
       siteProbe = siteAccessSampleVerdict(branch, surfaces, junctionRoadCodes);
       siteProbeStatus = !siteProbe.sampledPass ? "sampled physical approach not certified"
         : siteProbe.terminalGeometryOnly ? "sampled profile pass; terminal surface road owner unverified"
