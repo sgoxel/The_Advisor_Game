@@ -23,11 +23,11 @@ type Plan = Readonly<
 const EMPTY = Object.freeze([] as CorridorStation[]);
 
 export function planTransportRouteCorridor(
-  route: Readonly<{ from: string; edgeCodes: readonly string[] }>,
+  route: Readonly<{ from: string; to: string; edgeCodes: readonly string[] }>,
   roads: ReadonlyMap<string, Edge>,
   nodes: ReadonlyMap<string, Node>,
 ): Plan {
-  if (!route.from || !route.edgeCodes.length) return Object.freeze({ status: "invalid", stations: EMPTY });
+  if (!route.from || !route.to || !route.edgeCodes.length) return Object.freeze({ status: "invalid", stations: EMPTY });
   const stations: CorridorStation[] = [];
   let at = route.from;
   for (const code of route.edgeCodes) {
@@ -71,6 +71,8 @@ export function planTransportRouteCorridor(
     }
     at = endCode;
   }
+  // Graph incidence and valid mesh endpoints do not prove the path reaches the requested site.
+  if (at !== route.to) return Object.freeze({ status: "invalid", stations: EMPTY });
   return Object.freeze({ status: "ready", stations: Object.freeze(stations) });
 }
 
