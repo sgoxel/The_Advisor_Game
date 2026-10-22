@@ -676,6 +676,7 @@ function chooseNearestRoad() {
   const runtime = world();
   if (!runtime) {
     selection = undefined;
+    renderSelection(); // Clear bridge-only actions from the previous selection.
     lastRoadInspectionStatus = "world authority pending";
     panel.querySelector<HTMLElement>("#transport-selection")!.textContent = "World authority is still preparing. No road has been selected.";
   } else {
@@ -687,6 +688,7 @@ function chooseNearestRoad() {
       renderSelection(); // Source distance/time facts are usable before optional mesh refinement.
       lastRoadInspectionStatus = "canonical segment facts ready";
     } else {
+      renderSelection(); // No road: hide controls tied to a now-cleared bridge.
       panel.querySelector<HTMLElement>("#transport-selection")!.textContent = "No canonical walking road was found near this focus. Pan to a road-connected area and retry.";
       lastRoadInspectionStatus = "no nearby canonical road";
     }
