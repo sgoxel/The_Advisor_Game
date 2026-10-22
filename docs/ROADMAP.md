@@ -42,11 +42,11 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas task UX: 44px touch, safe areas and keyboard routes
+- WP-S008-001-001 — Accessible atlas task UX: 44px touch, safe areas and keyboard route previews
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance proof: first useful action, p95 timings and CPU+GPU budget
+- WP-S009-001-001 — Exact-SHA performance proof: first useful inspection, p95 timings and CPU+GPU budget
 - WP-S009-002-001 — Responsive canonical inspection: bounded picking and idle-safe UI layouts
 - WP-S009-003-001 — Mobile renderer compatibility: adaptive quality, memory and GPU recovery
 - WP-S009-004-001 — README capability conformance: atlas vs Advisor, campaign clock and release truth
