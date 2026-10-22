@@ -667,7 +667,7 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
   assert.ok(stations.length > 0 && stations.length <= SITE_ACCESS_STATION_LIMIT,
     "selected critical-site station profile stays bounded");
   assert.ok(siteVerdict.sampledPass,
-    "selected site access must remain dry, walkable, source-owned and grade-safe at every sampled station");
+    `selected site access ${access!.code} (parent ${parentCode}) must remain dry, walkable, source-owned and grade-safe at every sampled station: ${JSON.stringify(siteVerdict)}`);
   const distance = approach!.distanceM + crossing!.surfaceLengthM + continuation!.distanceM,
     fantasySeconds = approach!.fantasyWalkSeconds + crossing!.fantasyWalkSeconds +
       continuation!.fantasyWalkSeconds;
