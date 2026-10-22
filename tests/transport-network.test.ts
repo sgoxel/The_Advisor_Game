@@ -508,8 +508,8 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     "actual SEED parent geometry remains a real graph connection");
   assert.equal(geometryOnly.terminalGeometryOnly, true,
     "unrelated terminal contributor must not be mislabeled final-surface ownership proof");
-  assert.equal(geometryOnly.sampledPass, true,
-    "legacy sampled grade and geometry verdict stays distinct from surface-owner certification");
+  assert.equal(geometryOnly.sampledPass, false,
+    "geometric SEED join alone cannot certify unrelated top final-surface ownership");
   const tip = actual.centerline.at(-1)!,
     detachedTip = { ...tip, x: tip.x + 0.012, z: tip.z + 0.019 },
     detachedBranch = { ...actual, centerline: [...actual.centerline.slice(0, -1), detachedTip] },
