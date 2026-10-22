@@ -774,6 +774,30 @@ test("S005 source-polyline distance uses the shortest wrapped segment at the lon
   assert.ok(Math.abs(transportPolylineDistance([...seamRoad].reverse(), -half + 3, 107) - 7) < 1e-6);
 });
 
+test("S005 selected bridge diagnostics fail closed for malformed source road waypoints", () => {
+  const good = [{ x: 0, z: 0 }, { x: 8, z: 0 }, { x: 16, z: 0 }];
+  assert.equal(transportRoadArcStations(good, 8, 0, -20, 20, 4).length, 5,
+    "valid canonical road remains sampleable");
+  for (const corrupt of [
+    [...good.slice(0, 2), { x: NaN, z: 0 }],
+    [good[0], null, good[2]],
+    [{ x: Infinity, z: 0 }, ...good.slice(1)],
+  ]) {
+    const bad = corrupt as { x: number; z: number }[];
+    assert.deepEqual(transportRoadArcStations(bad, 8, 0, -20, 20, 4), [],
+      "one invalid source segment must invalidate the whole bridge road arc");
+  }
+  assert.deepEqual(transportRoadArcStations(good, NaN, 0, -20, 20, 4), [],
+    "non-finite bridge anchor never generates candidate crossing stations");
+  const bridge = siteTransportNetwork.bridges[0];
+  assert.ok(bridge, "registered canonical crossing required");
+  const edge = siteTransportNetwork.roadEdges.find(road => road.code === bridge.roadCode);
+  assert.ok(edge, "bridge must name a canonical road");
+  const invalidRoad = { ...edge!, centerline: [edge!.centerline[0], null, ...edge!.centerline.slice(1)] } as unknown as typeof edge;
+  assert.equal(transportBridgeSpanAt(bridge, invalidRoad!).matchingCrossing, false,
+    "malformed selected physical bridge must fail closed without sampling water or throwing");
+});
+
 test("S005 selected crossing samples the real bent road arc without inventing a tangent shortcut", () => {
   const elbow = [{ x: 0, z: 0 }, { x: 8, z: 0 }, { x: 8, z: 8 }];
   const stations = transportRoadArcStations(elbow, 8, 0, -30, 30, 6);
