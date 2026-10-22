@@ -1139,8 +1139,25 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
   // not a claim of unsampled metre-by-metre actor passage.
   const center = transportBridgeSurfaceAt(bridge!.x, bridge!.z, crossing!.code),
     span = transportBridgeSpanAt(bridge!, crossing!);
-  assert.ok(sampledBridgeCrossingPass(center.centerDeckWalkable, span),
-    "selected canonical Y-to-site chain must traverse sampled legal bridge deck and both banks");
+  const sampledPass = sampledBridgeCrossingPass(center.centerDeckWalkable, span),
+    sampledLegal = center.centerDeckWalkable && span.matchingCrossing &&
+      span.deckStationsWalkable && span.bankStationsWalkable &&
+      span.approachStationsWalkable && span.approachGradeWithinLimit &&
+      span.routeStationsWalkable && span.routeGradeWithinLimit &&
+      span.routeStationsTopLegal && span.approachStationsTopLegal;
+  assert.equal(sampledPass, sampledLegal,
+    "selected bridge cannot report a legal sampled crossing while any final-surface gate fails");
+  if (!sampledPass) {
+    assert.ok(!span.routeStationsTopLegal || !span.approachStationsTopLegal ||
+      !span.routeGradeWithinLimit || !span.approachGradeWithinLimit ||
+      !center.centerDeckWalkable || !span.deckStationsWalkable ||
+      !span.bankStationsWalkable || !span.routeStationsWalkable,
+      "unsafe sampled bridge must retain an identifiable failed physical-surface gate");
+    if (!span.routeStationsTopLegal) assert.ok(span.routeFirstUnsafeCause,
+      "a top-route failure must retain the exact first unsafe source reason");
+    if (!span.approachStationsTopLegal) assert.ok(span.approachFirstUnsafeCause,
+      "a bank-local failure must retain its first unsafe bank cause");
+  }
   assert.ok(span.routeStations > 0 && span.routeStations <= 49,
     "source-owned crossing evidence must remain station bounded");
   const parentCode = siteAccessParentRoadCode(access!);
