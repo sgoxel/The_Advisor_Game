@@ -96,6 +96,7 @@ let siteProbeMs: number | null = null;
 let siteProbeRevision = 0;
 let corridorProbeRevision = 0;
 let corridorProbeStatus = "not requested";
+let corridorProbeMs: number | null = null;
 let corridorProbeStations = 0;
 let corridorProbePlannedStations = 0;
 let corridorProbeFirstUnsafeRoad: string | null = null;
@@ -502,12 +503,13 @@ function renderCorridorProbe() {
   const localGrade = corridorProbeFirstUnsafeLocalGrade === null ? "" :
     ` · first unsafe canonical local slope ${Number.isFinite(corridorProbeFirstUnsafeLocalGrade) ? `${(corridorProbeFirstUnsafeLocalGrade * 100).toFixed(1)}%` : "invalid"}`;
   target.textContent = corridorProbeStatus === "not requested" ? "" :
-    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${localGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${(corridorProbeMaximumGrade * 100).toFixed(1)}%`}. Map preview only; no uninterrupted passage or character travel certified.`;
+    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${localGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${(corridorProbeMaximumGrade * 100).toFixed(1)}%`}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms elapsed`}. Map preview only; no uninterrupted passage or character travel certified.`;
 }
 
 function resetCorridorProbe() {
   corridorProbeRevision++;
   corridorProbeStatus = "not requested";
+  corridorProbeMs = null;
   corridorProbeStations = 0;
   corridorProbePlannedStations = 0;
   corridorProbeFirstUnsafeRoad = null;
@@ -519,8 +521,10 @@ function resetCorridorProbe() {
 
 function probeRouteCorridor() {
   if (!siteRoute) return;
+  const started = performance.now();
   const plan = planTransportRouteCorridor(siteRoute, corridorEdges, transportNodesByCode, walkingIndex?.adjacency),
     revision = ++corridorProbeRevision;
+  corridorProbeMs = null;
   corridorProbeStations = 0;
   corridorProbePlannedStations = plan.status === "ready" ? plan.stations.length : 0;
   corridorProbeFirstUnsafeRoad = null;
@@ -528,7 +532,9 @@ function probeRouteCorridor() {
   corridorProbeMaximumGrade = null;
   if (plan.status !== "ready") {
     corridorProbeStatus = plan.status === "over-budget" ? "route exceeds bounded 4096-station probe; not certified" : "invalid source-owned physical path; not certified";
+    corridorProbeMs = performance.now() - started;
     renderCorridorProbe();
+    renderMetrics();
     return;
   }
   // Optional diagnostics share the main thread. Retire an unfinished site
@@ -572,13 +578,17 @@ function probeRouteCorridor() {
       corridorProbeStations++;
     }
     if (corridorProbeStatus !== "checking final surface in bounded frame batches") {
+      corridorProbeMs = performance.now() - started;
       panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = false;
       renderCorridorProbe();
+      renderMetrics();
     } else if (corridorProbeStations < plan.stations.length) requestAnimationFrame(step);
     else {
       corridorProbeStatus = "sampled centerline passes at every planned station; between-station and actor passage not certified";
+      corridorProbeMs = performance.now() - started;
       panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = false;
       renderCorridorProbe();
+      renderMetrics();
     }
   };
   requestAnimationFrame(step);
@@ -726,6 +736,7 @@ function renderMetrics() {
       <dt>First road answer</dt><dd>${lastRoadInspectionStatus}${lastRoadInspectionMs === null ? "" : ` · ${lastRoadInspectionMs.toFixed(2)} ms`}</dd>
       <dt>Walking graph answer</dt><dd>${lastSiteRouteStatus}${lastSiteRouteMs === null ? "" : ` · ${lastSiteRouteMs.toFixed(2)} ms`}</dd>
       <dt>Physical site approach</dt><dd>${siteProbeStatus}${siteProbeMs === null ? "" : ` · ${siteProbeMs.toFixed(2)} ms`}</dd>
+      <dt>Selected-route surface diagnostic</dt><dd>${corridorProbeStatus}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms`}</dd>
       <dt>Query/cache</dt><dd>${queryCount} searches · ${queryCacheHits} reuses · ${queryCache.size}/${QUERY_CACHE_LIMIT} cached</dd>
       <dt>Bridge detail</dt><dd>${generation.materializedBridges} records · ${generation.bridgeCacheRoads}/${generation.bridgeCacheLimit} road recipes cached · ${generation.bridgeCacheEvictions} evictions</dd>
       <dt>Visible overlay</dt><dd>${lastOverlayRoads} road paths · ${lastOverlayBridges} bridge markers</dd>
@@ -906,6 +917,7 @@ function telemetry() {
     siteAccessProbeStations: siteProbe?.stationCount ?? 0,
     siteAccessProbeMs: siteProbeMs,
     corridorProbeStatus,
+    corridorProbeMs,
     corridorProbeStations,
     corridorProbePlannedStations,
     corridorProbeFirstUnsafeRoad,
