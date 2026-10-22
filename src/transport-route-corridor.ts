@@ -129,13 +129,17 @@ export function planTransportRouteCorridor(
 /** One read-only reason for the selected station's actual upper final surface. */
 export function sampledCorridorStationFailure(
   station: CorridorStation,
-  surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds">,
+  surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds"> & Partial<Pick<FinalSurface, "surfaceHeight">>,
 ): string | null {
   const incident = (id: string) => id === station.edgeCode || id === station.joinedEdgeCode ||
       !!station.junctionOwnerCodes?.includes(id),
     contributed = (id: string) => surface.contributingModifierIds.includes(id);
   // Diagnose physically unsupported water before the generic unwalkable
   // fallback. This changes the explanation, never the sampled PASS predicate.
+  // All runtime samples include top-surface height. Reject a malformed first
+  // station here, not as a misleading bad interval at the next station.
+  if (surface.surfaceHeight !== undefined && !Number.isFinite(surface.surfaceHeight))
+    return "invalid final-surface height";
   // A non-finite deck elevation is never a valid physical walking surface.
   if (surface.deckHeight !== null && !Number.isFinite(surface.deckHeight))
     return "invalid final-surface bridge deck";
@@ -162,7 +166,7 @@ export function sampledCorridorStationFailure(
 /** A sampled PASS and its first-failure reason always use identical criteria. */
 export function sampledCorridorStationPass(
   station: CorridorStation,
-  surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds">,
+  surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds"> & Partial<Pick<FinalSurface, "surfaceHeight">>,
 ) {
   return sampledCorridorStationFailure(station, surface) === null;
 }
