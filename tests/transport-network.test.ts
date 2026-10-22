@@ -1,4 +1,7 @@
 import { test } from "node:test";
+import { buildTile } from "../src/geometry.ts";
+import { finalSurfaceEvidenceAnchors, tileForPosition } from "../src/world.ts";
+import { refineTileSurfacePresentation, refinementResolutionForTile } from "../src/surface-refinement.ts";
 import assert from "node:assert/strict";
 import {
   cities,
@@ -786,4 +789,22 @@ test("same seed rebuilds identical topology while focus queries and bridge cache
   assert.ok(telemetry.bridgeCacheRoads <= telemetry.bridgeCacheLimit);
   assert.ok(telemetry.focusQueries >= 2);
   assert.ok(telemetry.extensionRoads <= countries.length + 3);
+});
+test("S005 road-adjacent bridge-bank tessellation stays bounded and deterministic", () => {
+  const bridge = finalSurfaceEvidenceAnchors().bridge;
+  const tile = tileForPosition(bridge.x, bridge.z, 14);
+  const base = buildTile(tile);
+  const originalVertices = base.terrain.positions.length / 3;
+  const refined = refineTileSurfacePresentation(tile, base);
+  const resolution = refinementResolutionForTile(tile, true, true);
+  const addedVertices = refined.terrain.positions.length / 3 - originalVertices;
+  // Two refinement levels add at most 16 child quads per original
+  // shoreline cell. No planet-sized expansion, new SEED or surface truth.
+  assert.ok(addedVertices >= 0 && addedVertices <= resolution ** 2 * 16 * 6,
+    "bridge-bank refinement must stay inside finite local geometry bounds");
+  assert.equal(refined.terrain.uvs?.length, refined.terrain.positions.length / 3 * 2,
+    "additional triangles must retain the same canonical projection UVs");
+  const second = refineTileSurfacePresentation(tile, buildTile(tile));
+  assert.deepEqual(refined.terrain.positions, second.terrain.positions,
+    "the same canonical bank must reproduce identical vertices after regeneration");
 });
