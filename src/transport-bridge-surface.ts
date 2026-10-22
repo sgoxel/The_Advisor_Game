@@ -13,18 +13,31 @@ export function sampledBridgeTopFailure(
 }
 
 /**
+ * A deck-owner label alone cannot certify that the chosen SEED road
+ * physically contributes to the final surface. Use the same two ownership
+ * facts as the selected whole-route station verifier.
+ */
+export function selectedRoadBridgeDeckWalkable(
+  surface: Pick<ReturnType<typeof finalSurfaceAt>,
+    "water" | "deckHeight" | "walkable" | "traversal" | "deckOwnerIds" | "contributingModifierIds">,
+  roadCode: string,
+): boolean {
+  return surface.water.kind === "river" &&
+    surface.deckHeight !== null &&
+    surface.walkable &&
+    surface.traversal === "bridge" &&
+    surface.deckOwnerIds.includes(roadCode) &&
+    surface.contributingModifierIds.includes(roadCode);
+}
+
+/**
  * Focus-only proof of the actual final-surface deck at a listed river crossing.
  * A coarse crossing or unrelated nearby bridge never certifies this selected road's legal deck.
  */
 export function transportBridgeSurfaceAt(x: number, z: number, roadCode: string) {
   const surface = finalSurfaceAt(x, z);
   return Object.freeze({
-    centerDeckWalkable:
-      surface.water.kind === "river" &&
-      surface.deckHeight !== null &&
-      surface.walkable &&
-      surface.traversal === "bridge" &&
-      surface.deckOwnerIds.includes(roadCode),
+    centerDeckWalkable: selectedRoadBridgeDeckWalkable(surface, roadCode),
     deckHeight: surface.deckHeight,
     waterKind: surface.water.kind,
     traversal: surface.traversal,
@@ -257,11 +270,7 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     matchingCrossing: true,
     wetStations: wet.length,
     deckStationsWalkable: wet.length === 5 && wet.every(surface =>
-      surface.water.kind === "river" &&
-      surface.deckHeight !== null &&
-      surface.walkable &&
-      surface.traversal === "bridge" &&
-      surface.deckOwnerIds.includes(edge.code)),
+      selectedRoadBridgeDeckWalkable(surface, edge.code)),
     bankStationsWalkable: approachStationsOnRoad && banks.every(surface =>
       surface.water.kind === "none" && surface.walkable),
     approachStations: approaches.reduce((count, side) => count + side.length, 0),
