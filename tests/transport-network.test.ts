@@ -17,6 +17,7 @@ import {
   villages,
 } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
+import { settlementExteriorFor } from "../src/settlement-exterior.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
@@ -1447,6 +1448,28 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
   const site = network.nodes.find(node =>
     node.kind === "site" && node.countryCode === bank!.countryCode);
   assert.ok(y && site, "the bridge continent must have a real Y and road-linked site");
+  // Extend this SAME canonical Y -> bridge -> site witness backwards to one
+  // real settlement gate. The gate is an exterior feature, not an invented
+  // graph node: its registered incoming road must physically pass through it,
+  // and that selected road must have a land-only continuation to the Y.
+  const villageNode = network.nodes.find(node => node.kind === "village" &&
+    node.continent === bank!.continent && node.countryCode === bank!.countryCode);
+  const village = villages.find(place => place.id === villageNode?.sourceId);
+  assert.ok(villageNode && village, "selected bridge bank must have a real source-owned settlement");
+  const gatePlan = settlementExteriorFor(village!);
+  const gateWitness = gatePlan.gates.flatMap(gate => roads
+    .filter(road => (road.from === village!.id || road.to === village!.id) &&
+      edgeByCode.has(road.code) && roadDistanceAt(gate.x, gate.z, road) <= 1e-4)
+    .map(road => ({ gate, road, edge: edgeByCode.get(road.code)! })))
+    .find(item => transportWalkingRouteThroughEdge(index, villageNode!.code,
+      item.edge, [y!.code]) !== null);
+  assert.ok(gateWitness, "a visible village gate must lie on a real incident walking road reaching the selected Y");
+  const gateSurface = finalSurfaceAt(gateWitness!.gate.x, gateWitness!.gate.z);
+  assert.equal(gateSurface.water.kind, "none", "actual settlement entry gate cannot land in exposed water");
+  assert.equal(gateSurface.walkable, true, "actual settlement gate must have a walkable final surface");
+  assert.notEqual(gateSurface.traversal, "blocked", "actual gate is not a blocked Simulation surface");
+  // A single sampled gate is a physical start witness, not an uninterrupted
+  // route pass or a claim that the protagonist was moved.
   const approach = transportWalkingRoute(index, y!.code, crossing!.from),
     continuation = transportWalkingRoute(index, crossing!.to, site!.code);
   assert.ok(approach && continuation, "Y and critical site must be connected to the chosen bridge banks");
