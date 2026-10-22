@@ -344,24 +344,25 @@ function bridgeDetails(bridge: TransportBridge) {
 function borderDetails(crossing: TransportBorderCrossing) {
   const edge = transportNetwork.roadEdges.find((candidate) => candidate.code === crossing.roadCode)!;
   return `
-    <div class="transport-kind walking">WALKING · POLITICAL BORDER CROSSING</div>
+    <div class="transport-kind walking">GRAPH CONNECTION · POLITICAL BORDER</div>
     <h3>${codeText(crossing.code)}</h3>
     <dl>
       <dt>Main road</dt><dd>${codeText(crossing.roadCode)}</dd>
       <dt>Countries</dt><dd>${crossing.countries.map(codeText).join(" ↔ ")}</dd>
       <dt>Road endpoints</dt><dd>${codeText(edge.from)} → ${codeText(edge.to)}</dd>
-      <dt>Traversal</dt><dd>Continuous land road · explicit canonical crossing</dd>
+      <dt>Graph crossing</dt><dd>Recorded land-road connection · uninterrupted final-surface passage not certified · preview, not travel</dd>
     </dl>`;
 }
 
 function junctionDetails(junction: TransportJunction) {
   return `
-    <div class="transport-kind walking">WALKING · SHARED JUNCTION</div>
+    <div class="transport-kind walking">GRAPH CONNECTION · SHARED JUNCTION</div>
     <h3>${codeText(junction.code)}</h3>
     <dl>
       <dt>Canonical node</dt><dd>${codeText(junction.nodeCode)}</dd>
       <dt>Connected roads</dt><dd>${junction.edgeCodes.length}</dd>
-      <dt>Traversable edges</dt><dd>${junction.edgeCodes.map(codeText).join("<br>")}</dd>
+      <dt>Graph-connected roads</dt><dd>${junction.edgeCodes.map(codeText).join("<br>")}</dd>
+      <dt>Physical traversal</dt><dd>Shared SEED node · continuous final-surface passage requires separate validation · preview, not travel</dd>
     </dl>`;
 }
 
