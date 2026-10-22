@@ -11,8 +11,8 @@ import type { TransportNode, TransportRoadEdge } from "./transport-network.ts";
 export const ROUTE_CORRIDOR_STATION_LIMIT = 4096;
 type Edge = Pick<TransportRoadEdge, "code" | "from" | "to" | "centerline">;
 type Node = Pick<TransportNode, "x" | "z">;
-const physicalMatch = (a: { x: number; z: number }, b: Node) =>
-  [a.x, a.z, b.x, b.z].every(Number.isFinite) &&
+const physicalMatch = (a: { x: number; z: number } | null | undefined, b: Node) =>
+  !!a && [a.x, a.z, b.x, b.z].every(Number.isFinite) &&
   Math.hypot(wrapSourceX(a.x - b.x), a.z - b.z) <= 1e-4;
 export type CorridorStation = Readonly<{ x: number; z: number; edgeCode: string; joinedEdgeCode?: string }>;
 type Plan = Readonly<
@@ -45,7 +45,7 @@ export function planTransportRouteCorridor(
       return Object.freeze({ status: "invalid", stations: EMPTY });
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1], b = points[i];
-      if (![a.x, a.z, b.x, b.z].every(Number.isFinite))
+      if (!a || !b || ![a.x, a.z, b.x, b.z].every(Number.isFinite))
         return Object.freeze({ status: "invalid", stations: EMPTY });
       const dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
         steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dz)) - 1e-8));
