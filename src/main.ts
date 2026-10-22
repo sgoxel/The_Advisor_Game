@@ -159,6 +159,19 @@ let terrainMaterial: pc.StandardMaterial | undefined;
 let coarseTerrainMaterial: pc.StandardMaterial | undefined;
 let coarseTerrainLayer: pc.Layer, coverageTerrainLayer: pc.Layer;
 let coverageTiles: Tile[] = [], coverageComplete = false, coverageStartedAt = 0, coverageDurationMs = 0;
+let loadPercent = 0;
+const LOAD_MESSAGES = ["Reading the land from its seed…", "Raising mountains…", "Filling the rivers…", "Paving the roads…", "Building the villages…", "Polishing the castle…", "Waking the advisors…"];
+/** Monotonic, honest progress: worker start is 15 %, the rest is the share of terrain tiles prepared. */
+function setLoadingProgress(percent: number) {
+  const next = Math.max(loadPercent, Math.min(100, Math.round(percent)));
+  if (next === loadPercent && next !== 0) return;
+  loadPercent = next;
+  const bar = $("loading-bar");
+  $("loading-fill").style.width = `${next}%`;
+  $("loading-percent").textContent = `${next}%`;
+  bar.setAttribute("aria-valuenow", String(next));
+  $("loading-text").textContent = LOAD_MESSAGES[Math.min(LOAD_MESSAGES.length - 1, Math.floor(next / (100 / LOAD_MESSAGES.length)))];
+}
 let workerStartedAt = 0, workerStartupMs = 0, lastGenerationTiming: Record<string,number> = {};
 let surfaceDetail = 1;
 let lodTransition: { oldKeys: string[]; newKeys: string[]; started: number } | undefined;
@@ -803,6 +816,10 @@ function processStreaming(material: pc.StandardMaterial) {
   const backgroundKeys = visibleCoverageKeys(coarseKeys,cachedKeys,fineUnion.size,streamingBudget.activePatches);
   coverageComplete = complete || (coarseReady && backgroundKeys.length===coarseKeys.length);
   if (coverageComplete && coverageDurationMs===0) coverageDurationMs=performance.now()-coverageStartedAt;
+  if (!ready) {
+    const share = (keys: readonly string[]) => keys.length ? keys.filter(key=>cachedKeys.has(key)).length / keys.length : 0;
+    setLoadingProgress(coverageComplete ? 99 : 15 + 83 * Math.max(share(coarseKeys), share(wanted.map(tile=>tile.key))));
+  }
   if (!lodTransition) {
     const bounds = new Map(wanted.map(tile=>[tile.key,tile]));
     for(const key of activeKeys){const record=tileCache.get(key);if(record)bounds.set(key,record.tile);}
@@ -826,7 +843,7 @@ function processStreaming(material: pc.StandardMaterial) {
     else record.entity.enabled=enabledFine.has(key);
     if(record.entity.enabled)record.used=revision;
   }
-  if(coverageComplete && !ready){ready=true;$("loading").classList.add("done");}
+  if(coverageComplete && !ready){ready=true;setLoadingProgress(100);setTimeout(()=>$("loading").classList.add("done"),350);}
   if(inFlight===0 && inFlight+uploads.length<streamingBudget.generationReady){
     const job=nextStreamingJob(root,wanted,coverageTiles,cachedKeys);
     if(job)request(job.tile,job.kind);
@@ -1339,7 +1356,7 @@ async function start() {
     type: "module",
   });
   worker.onmessage = (event) => {
-    if(event.data.ready){workerStartupMs=performance.now()-workerStartedAt;return;}
+    if(event.data.ready){workerStartupMs=performance.now()-workerStartedAt;setLoadingProgress(15);return;}
     inFlight--;
     lastGenerationTiming=event.data.timing||{};
     continuityWorkerBytes = event.data.continuity?.cpuBytesEstimated || 0;

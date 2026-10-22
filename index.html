@@ -189,10 +189,19 @@
       id="focus-coordinates"
       aria-label="Focus latitude and longitude"
     ></output>
-    <div id="loading" role="status">
-      <div class="loading-mark">♜</div>
+    <div id="loading" role="status" aria-live="polite">
+      <div class="load-confetti" aria-hidden="true">
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      </div>
+      <div class="load-icons" aria-hidden="true">
+        <span>♜</span><span>♛</span><span>⚔</span><span>♞</span><span>♚</span>
+      </div>
       <h2>Unfolding the realm</h2>
-      <p>Reading the land from its seed…</p>
+      <p id="loading-text">Reading the land from its seed…</p>
+      <div class="load-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="loading-bar">
+        <div class="load-fill" id="loading-fill"></div>
+      </div>
+      <div class="load-percent" id="loading-percent">0%</div>
     </div>
     <div id="error" role="alert" hidden></div>
     <script type="module" src="/src/transport-network.ts"></script>
