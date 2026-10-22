@@ -1,6 +1,6 @@
 import { freshwaterCrossingAt } from "./hydrology.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
-import { finalSurfaceAt } from "./world-core.ts";
+import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "./world-core.ts";
 import { sampledCorridorStationPass } from "./transport-route-corridor.ts";
 import type { TransportBridge, TransportRoadEdge } from "./transport-network.ts";
 
@@ -177,6 +177,8 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     approachStationsTopLegal: false,
     approachFirstUnsafeBank: null as string | null,
     approachFirstUnsafeCause: null as string | null,
+    routeFirstUnsafeLocalGrade: null as number | null,
+    approachFirstUnsafeLocalGrade: null as number | null,
     routeMaxSampledGrade: null as number | null,
     routeGradeWithinLimit: false,
   });
@@ -213,6 +215,11 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
         ...bankPoints[sideIndex === 0 ? "left" : "right"][index], edgeCode: edge.code,
       }, surface))),
     approachStationsTopLegal = approachStationsOnRoad && approachUnsafe.every(index => index < 0),
+    firstUnsafeBankIndex = approachUnsafe[0] >= 0 ? 0 : approachUnsafe[1] >= 0 ? 1 : -1,
+    firstUnsafeBankStation = firstUnsafeBankIndex < 0 ? null :
+      bankPoints[firstUnsafeBankIndex === 0 ? "left" : "right"][approachUnsafe[firstUnsafeBankIndex]],
+    firstUnsafeBankSurface = firstUnsafeBankIndex < 0 ? null :
+      approaches[firstUnsafeBankIndex][approachUnsafe[firstUnsafeBankIndex]],
     // Coordinate agreement is not enough: a walkable field/another road
     // must never certify the graph-selected road's physical crossing.
     routeStationsSurfaceOwned = routeStationsOnRoad && routeStations.every(({ surface }) =>
@@ -260,6 +267,12 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     routeFirstUnsafeStation: routeFirstUnsafeIndex < 0 ? null : routeFirstUnsafeIndex + 1,
     routeFirstUnsafeCause: routeFirstUnsafeIndex < 0 ? null :
       sampledBridgeTopFailure(edge.code, routeStations[routeFirstUnsafeIndex].surface),
+    // Only on a detected difficult station: measure the SAME four-point local
+    // canonical gradient used by finalSurfaceAt. Sampled interval grade is different.
+    routeFirstUnsafeLocalGrade: routeFirstUnsafeIndex >= 0 &&
+      routeStations[routeFirstUnsafeIndex].surface.traversal === "difficult"
+      ? finalSurfaceLocalSlopeAt(routeStations[routeFirstUnsafeIndex].point.x,
+        routeStations[routeFirstUnsafeIndex].point.z) : null,
     approachStationsTopLegal,
     approachFirstUnsafeBank: approachUnsafe[0] >= 0 ? `left station ${approachUnsafe[0] + 1}` :
       approachUnsafe[1] >= 0 ? `right station ${approachUnsafe[1] + 1}` : null,
@@ -267,6 +280,9 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
       ? "wet bank" : sampledBridgeTopFailure(edge.code, approaches[0][approachUnsafe[0]])) :
       approachUnsafe[1] >= 0 ? (approaches[1][approachUnsafe[1]].water.kind !== "none"
         ? "wet bank" : sampledBridgeTopFailure(edge.code, approaches[1][approachUnsafe[1]])) : null,
+    approachFirstUnsafeLocalGrade: firstUnsafeBankStation && firstUnsafeBankSurface?.water.kind === "none" &&
+      firstUnsafeBankSurface.traversal === "difficult"
+      ? finalSurfaceLocalSlopeAt(firstUnsafeBankStation.x, firstUnsafeBankStation.z) : null,
     routeMaxSampledGrade,
     routeGradeWithinLimit: routeStationsWalkable && routeMaxSampledGrade !== null && routeMaxSampledGrade <= .08,
   });

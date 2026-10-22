@@ -347,6 +347,10 @@ function bridgeDetails(bridge: TransportBridge) {
       <dt>Sampled crossing route</dt><dd>${span.matchingCrossing ? `${span.routeStations} bounded stations spanning both 18 m approaches · ${span.routeStationsOnRoad ? "on canonical road" : "road alignment fails"} · ${span.routeStationsWalkable ? "walkable at all stations" : "physical road ownership or walkability not certified"}` : "Not validated"}</dd>
       <dt>Sampled crossing grade</dt><dd>${span.matchingCrossing && span.routeMaxSampledGrade !== null ? `${(span.routeMaxSampledGrade * 100).toFixed(1)}% maximum · ${span.routeGradeWithinLimit ? "sampled route passes 8% interval limit" : "not certified (alignment, walking or interval grade)"}` : "Not validated"}</dd>
       <dt>Local final-surface legality</dt><dd>${span.matchingCrossing ? `${span.routeStationsTopLegal ? "Selected road owns legal top surface at all route stations" : `Route station ${span.routeFirstUnsafeStation ?? "unknown"}: ${span.routeFirstUnsafeCause ?? "alignment unverified"}`} · ${span.approachStationsTopLegal ? "both banks legally owned" : `${span.approachFirstUnsafeBank ?? "bank alignment"}: ${span.approachFirstUnsafeCause ?? "not certified"}`}` : "Not validated"}</dd>
+      <dt>First unsafe local grade</dt><dd>${span.matchingCrossing ? [
+        span.routeFirstUnsafeLocalGrade === null ? "" : `route station ${span.routeFirstUnsafeStation}: ${(span.routeFirstUnsafeLocalGrade * 100).toFixed(1)}% canonical local ground slope`,
+        span.approachFirstUnsafeLocalGrade === null ? "" : `${span.approachFirstUnsafeBank}: ${(span.approachFirstUnsafeLocalGrade * 100).toFixed(1)}% canonical local ground slope`,
+      ].filter(Boolean).join(" · ") || "No local difficult-slope failure measured" : "Not validated"} · distinct from sampled span averages</dd>
       <dt>Traversal scope</dt><dd>Bounded selected-crossing samples only · continuous full-route access not certified · map preview, not travel</dd>
     </dl>`;
   bridgeDetailCache.set(bridge.code, details);
