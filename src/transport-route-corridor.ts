@@ -76,24 +76,36 @@ export function planTransportRouteCorridor(
   return Object.freeze({ status: "ready", stations: Object.freeze(stations) });
 }
 
-/** Each station must belong to its chosen road or its actual river deck. */
+/** One read-only reason for the selected station's actual upper final surface. */
+export function sampledCorridorStationFailure(
+  station: CorridorStation,
+  surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds">,
+): string | null {
+  const incident = (id: string) => id === station.edgeCode || id === station.joinedEdgeCode,
+    contributed = (id: string) => surface.contributingModifierIds.includes(id);
+  if (!surface.walkable) return "blocked final surface";
+  if (!surface.contributingModifierIds.some(incident)) return "selected road modifier absent";
+  // A real shared Y has one winning final-surface modifier; it may be either
+  // selected incident road. The next separate station checks the outgoing road.
+  if (surface.deckHeight !== null) {
+    if (surface.water.kind !== "none" && surface.water.kind !== "river")
+      return "unsupported water under bridge deck";
+    if (surface.traversal !== "bridge") return "inconsistent top-deck traversal";
+    if (!surface.deckOwnerIds.some(id => incident(id) && contributed(id)))
+      return "unrelated higher bridge deck";
+    return null;
+  }
+  if (surface.water.kind !== "none") return "water without owned bridge deck";
+  if (surface.traversal === "difficult") return "unsafe local road slope";
+  if (surface.traversal !== "road" && surface.traversal !== "open")
+    return "non-road traversal";
+  return null;
+}
+
+/** A sampled PASS and its first-failure reason always use identical criteria. */
 export function sampledCorridorStationPass(
   station: CorridorStation,
   surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds">,
 ) {
-  const incident = (id: string) => id === station.edgeCode || id === station.joinedEdgeCode,
-    contributed = (id: string) => surface.contributingModifierIds.includes(id);
-  if (!surface.walkable || !surface.contributingModifierIds.some(incident)) return false;
-  // A junction may have only ONE SEED-selected road modifier at this exact
-  // coordinate. An adjoining road is sampled separately on the next step.
-  // A deck must still belong to that SAME contributing incident road,
-  // never to an unrelated overpass hiding a lower selected road.
-  if (surface.deckHeight !== null)
-    return (surface.water.kind === "none" || surface.water.kind === "river") &&
-      surface.traversal === "bridge" &&
-      surface.deckOwnerIds.some(id => incident(id) && contributed(id));
-  // "difficult" includes road slopes above the canonical 8% threshold.
-  // A walkable endpoint alone must not certify the selected legal-grade road.
-  return surface.water.kind === "none" &&
-    (surface.traversal === "road" || surface.traversal === "open");
+  return sampledCorridorStationFailure(station, surface) === null;
 }

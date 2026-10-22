@@ -28,7 +28,7 @@ import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
 import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
-import { planTransportRouteCorridor, ROUTE_CORRIDOR_STATION_LIMIT, sampledCorridorStationPass } from "../src/transport-route-corridor.ts";
+import { planTransportRouteCorridor, ROUTE_CORRIDOR_STATION_LIMIT, sampledCorridorStationFailure, sampledCorridorStationPass } from "../src/transport-route-corridor.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import {
   TRANSPORT_LIMITS,
@@ -401,6 +401,28 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     deckHeight: null, deckOwnerIds: [], contributingModifierIds: [a.code],
   } as unknown as FinalSurface;
   assert.equal(sampledCorridorStationPass(station, dry), true);
+  const sourceFailureCases = [
+    [dry, null],
+    [{ ...dry, walkable: false }, "blocked final surface"],
+    [{ ...dry, contributingModifierIds: ["unrelated"] }, "selected road modifier absent"],
+    [{ ...dry, water: { ...dry.water, kind: "river" } }, "water without owned bridge deck"],
+    [{ ...dry, traversal: "difficult" }, "unsafe local road slope"],
+    [{ ...dry, traversal: "blocked" }, "non-road traversal"],
+    [{ ...dry, deckHeight: 4, traversal: "bridge", deckOwnerIds: [a.code] }, null],
+    [{ ...dry, deckHeight: 4, traversal: "bridge", deckOwnerIds: ["unrelated"] }, "unrelated higher bridge deck"],
+    [{ ...dry, deckHeight: 4, traversal: "road", deckOwnerIds: [a.code] }, "inconsistent top-deck traversal"],
+    [{ ...dry, deckHeight: 4, traversal: "bridge", deckOwnerIds: [a.code],
+      water: { ...dry.water, kind: "lake" } }, "unsupported water under bridge deck"],
+  ] as const;
+  for (const [surface, reason] of sourceFailureCases) {
+    assert.equal(sampledCorridorStationFailure(station, surface as FinalSurface), reason,
+      "first-failure reason must identify the actual final-surface rejection");
+    assert.equal(sampledCorridorStationPass(station, surface as FinalSurface), reason === null,
+      "existing sampled verdict must agree exactly with the reported failure");
+  }
+  assert.equal(sampledCorridorStationFailure(result.stations[3], { ...dry,
+    contributingModifierIds: [b.code],
+  }), null, "the outgoing actual Y modifier is legal at its single shared graph station");
   assert.equal(sampledCorridorStationPass(station, { ...dry, traversal: "difficult" }), false,
     "canonical road grade above 8% cannot be reported as a legal sampled crossing");
   assert.equal(sampledCorridorStationPass(station, { ...dry, traversal: "open" }), true,

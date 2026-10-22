@@ -13,7 +13,7 @@ import {
 } from "./transport-network.ts";
 import { siteTransportAcceptanceSummary as transportAcceptanceSummary, siteTransportNetwork as transportNetwork, siteTransportRoadsNear as transportRoadsNear } from "./site-transport-network.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat } from "./planet.ts";
-import { planTransportRouteCorridor, sampledCorridorStationPass } from "./transport-route-corridor.ts";
+import { planTransportRouteCorridor, sampledCorridorStationFailure } from "./transport-route-corridor.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
@@ -530,8 +530,9 @@ function probeRouteCorridor() {
     for (let i = 0; i < 8 && corridorProbeStations < plan.stations.length; i++) {
       const index = corridorProbeStations, station = plan.stations[index],
         surface = finalSurfaceAt(station.x, station.z);
-      if (!sampledCorridorStationPass(station, surface)) {
-        corridorProbeStatus = `road ownership, water or walkability fails at station ${index + 1}; not certified`;
+      const failure = sampledCorridorStationFailure(station, surface);
+      if (failure !== null) {
+        corridorProbeStatus = `station ${index + 1}: ${failure}; not certified`;
         break;
       }
       if (previousHeight !== null) {
