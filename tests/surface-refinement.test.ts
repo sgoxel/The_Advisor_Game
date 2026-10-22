@@ -146,7 +146,9 @@ test("an actual natural-water road crossing refines to a narrow authoritative de
       column.high = Math.max(column.high, y);
     } else railColumns.set(key, { low: y, high: y });
   }
-  assert.ok([...railColumns.values()].some(({ low, high }) => high - low >= 1.1),
+  // Geometry positions use render units; the 1.1 m rail requirement is physical.
+  assert.ok([...railColumns.values()].some(({ low, high }) =>
+    (high - low) * CANONICAL_METRES_PER_SOURCE_UNIT >= 1.1),
     "canonical bridge must visibly have >=1.1 m upright guardrail faces");
 
   // River-side rails need front-facing triangles, not only inward-facing
