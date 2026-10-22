@@ -18,7 +18,7 @@ import {
 } from "../src/geography.ts";
 import { macroSampleAt } from "../src/macro-geography.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
-import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "../src/planet.ts";
+import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
@@ -639,13 +639,33 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
     continuation = transportWalkingRoute(index, crossing!.to, site!.code);
   assert.ok(approach && continuation, "Y and critical site must be connected to the chosen bridge banks");
   const chain = [...approach!.edgeCodes, crossing!.code, ...continuation!.edgeCodes];
+  // Graph incidence alone can hide a disconnected rendering polyline.
+  // Check that every oriented source-owned centerline meets its graph nodes
+  // and that consecutive real geometry ends meet at the same SEED position.
+  // This is a geometric join proof, not a full unsampled traversal verdict.
   let at = y!.code;
+  let previousPhysicalEnd: { x: number; z: number } | undefined;
+  const samePhysicalPoint = (a: { x: number; z: number }, b: { x: number; z: number }) =>
+    Math.hypot(wrapSourceX(a.x - b.x), a.z - b.z) <= 1e-4;
   for (const code of chain) {
     const edge = edgeByCode.get(code);
     assert.ok(edge, `walking chain invented a road: ${code}`);
     assert.ok(edge!.from === at || edge!.to === at,
       `walking chain disconnected before ${code}`);
-    at = edge!.from === at ? edge!.to : edge!.from;
+    assert.ok(edge!.centerline.length >= 2, `graph road has no physical polyline: ${code}`);
+    const forward = edge!.from === at,
+      from = nodeByCode.get(at),
+      to = nodeByCode.get(forward ? edge!.to : edge!.from),
+      start = edge!.centerline[forward ? 0 : edge!.centerline.length - 1],
+      end = edge!.centerline[forward ? edge!.centerline.length - 1 : 0];
+    assert.ok(from && to, `missing physical graph node for ${code}`);
+    assert.ok(samePhysicalPoint(start, from!), `road ${code} does not start at its actual graph node`);
+    assert.ok(samePhysicalPoint(end, to!), `road ${code} does not reach its actual graph node`);
+    if (previousPhysicalEnd)
+      assert.ok(samePhysicalPoint(previousPhysicalEnd, start),
+        `canonical Y-to-site road geometry has a false junction before ${code}`);
+    previousPhysicalEnd = end;
+    at = to!.code;
   }
   assert.equal(at, site!.code, "chain must terminate at the actual SEED-owned site");
   assert.ok(chain.includes(crossing!.code), "the bridge crossing is a required physical graph leg");
