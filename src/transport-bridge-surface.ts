@@ -60,6 +60,10 @@ export function transportRoadArcStations(
     !Number.isFinite(fromMetres) || !Number.isFinite(toMetres) || fromMetres >= toMetres) return [];
   const segments: { a: { x: number; z: number }; dx: number; dz: number; start: number; lengthM: number }[] = [];
   let total = 0, bestMetres = Infinity, anchor = -1;
+  // Two distant positions along a self-crossing/hairpin can be equally close
+  // to one bridge coordinate. Do not silently certify the wrong river span.
+  // Four metres is twice the existing two-metre road-anchor tolerance.
+  let firstNearbyArc: number | undefined;
   for (let index = 1; index < points.length; index++) {
     const a = points[index - 1], b = points[index];
     // A broken downstream span invalidates the entire physical crossing,
@@ -75,7 +79,12 @@ export function transportRoadArcStations(
       fraction = Math.max(0, Math.min(1, (queryEast * east + queryNorth * north) / squared)),
       distanceM = CANONICAL_METRES_PER_SOURCE_UNIT *
         Math.hypot(queryEast - east * fraction, queryNorth - north * fraction);
-    if (distanceM < bestMetres) { bestMetres = distanceM; anchor = total + fraction * lengthM; }
+    const arc = total + fraction * lengthM;
+    if (distanceM <= 2) {
+      if (firstNearbyArc !== undefined && Math.abs(arc - firstNearbyArc) > 4) return [];
+      firstNearbyArc ??= arc;
+    }
+    if (distanceM < bestMetres) { bestMetres = distanceM; anchor = arc; }
     segments.push({ a, dx, dz, start: total, lengthM });
     total += lengthM;
   }
