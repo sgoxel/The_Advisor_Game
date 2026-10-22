@@ -607,9 +607,13 @@ function probeSiteAccess() {
     if (surfaces.length < stations.length) requestAnimationFrame(step);
     else {
       const parentCode = siteAccessParentRoadCode(branch);
+      // An ordinary macro link may also have roadClass "access". Include
+      // every canonical incident edge; the verifier accepts an alternate
+      // top-surface owner only if it resolves to a registered physical road
+      // whose centerline actually reaches this exact SEED junction.
       const junctionRoadCodes = new Set((walkingIndex?.adjacency.get(branch.to) ?? [])
-        .filter(step => step.edge.code === parentCode && step.edge.roadClass !== "access")
         .map(step => step.edge.code));
+      if (parentCode && !junctionRoadCodes.has(parentCode)) junctionRoadCodes.clear();
       siteProbe = siteAccessSampleVerdict(branch, surfaces, junctionRoadCodes);
       siteProbeStatus = !siteProbe.sampledPass ? "sampled physical approach not certified"
         : siteProbe.terminalGeometryOnly ? "sampled profile pass; terminal surface road owner unverified"
