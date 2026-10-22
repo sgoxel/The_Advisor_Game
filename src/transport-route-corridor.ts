@@ -136,6 +136,9 @@ export function sampledCorridorStationFailure(
     contributed = (id: string) => surface.contributingModifierIds.includes(id);
   // Diagnose physically unsupported water before the generic unwalkable
   // fallback. This changes the explanation, never the sampled PASS predicate.
+  // A non-finite deck elevation is never a valid physical walking surface.
+  if (surface.deckHeight !== null && !Number.isFinite(surface.deckHeight))
+    return "invalid final-surface bridge deck";
   if (surface.deckHeight === null && surface.water.kind !== "none")
     return "water without owned bridge deck";
   if (surface.deckHeight !== null && surface.water.kind !== "none" && surface.water.kind !== "river")

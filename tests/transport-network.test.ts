@@ -964,6 +964,9 @@ test("S005 selected bridge deck requires both recorded owner and contributing mo
     { ...owned, walkable: false },
     { ...owned, traversal: "road" },
     { ...owned, deckHeight: null },
+    { ...owned, deckHeight: NaN },
+    { ...owned, deckHeight: Infinity },
+    { ...owned, deckHeight: -Infinity },
     { ...owned, water: { kind: "lake" } },
   ] as FinalSurface[]) {
     assert.equal(selectedRoadBridgeDeckWalkable(invalid, edgeCode), false,
@@ -973,6 +976,8 @@ test("S005 selected bridge deck requires both recorded owner and contributing mo
   }
   assert.equal(selectedRoadBridgeDeckWalkable(owned, otherCode), false,
     "an unrelated road code cannot claim the same selected deck");
+  assert.equal(sampledCorridorStationFailure(station, { ...owned, deckHeight: NaN }),
+    "invalid final-surface bridge deck", "reject invalid selected-bridge height explicitly");
 });
 
 test("S005 selected bridge and walking route give the same first unsafe final-surface reason", () => {
