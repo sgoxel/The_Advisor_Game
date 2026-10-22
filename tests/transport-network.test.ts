@@ -1107,6 +1107,26 @@ test("S005 both bridge bank checks follow the actual road bend and never extrapo
   assert.equal(missing.right.length, 0);
 });
 
+test("S005 selected bridge arcs refuse self-crossing and distant hairpin ambiguity", () => {
+  // The same source coordinate appears at two nonadjacent arc distances;
+  // inspecting either branch as the unique bridge would be false evidence.
+  const crossed = [
+    { x: -8, z: -8 }, { x: 8, z: 8 },
+    { x: -8, z: 8 }, { x: 8, z: -8 },
+  ];
+  const metresPerUnit = CANONICAL_METRES_PER_SOURCE_UNIT;
+  const crossing = { lo: -0.1, hi: 0.1, metresPerUnit };
+  assert.deepEqual(transportRoadArcStations(crossed, 0, 0, -8, 8, 4), [],
+    "two physically intersecting but distant canonical road arcs cannot share a chosen bridge anchor");
+  assert.deepEqual(transportRoadWetStations(crossed, 0, 0, crossing), [],
+    "ambiguous wet-deck probes must fail closed instead of selecting an arbitrary road branch");
+  assert.deepEqual(transportRoadBankApproaches(crossed, 0, 0, crossing), { left: [], right: [] },
+    "both bank approaches also require a unique source-owned arc");
+  const elbow = [{ x: 0, z: 0 }, { x: 8, z: 0 }, { x: 8, z: 8 }];
+  assert.equal(transportRoadArcStations(elbow, 8, 0, -8, 8, 4).length, 5,
+    "two segments meeting at the same recorded vertex remain one unambiguous road arc");
+});
+
 test("S005 selected river deck follows the recorded bent road rather than a straight crossing tangent", () => {
   const elbow = [{ x: 0, z: 0 }, { x: 8, z: 0 }, { x: 8, z: 8 }],
     metresPerUnit = 2 * Math.PI * 637100 / 262144,
