@@ -80,8 +80,10 @@ export function sampledCorridorStationPass(
   const ownedByBoth = (ids: readonly string[]) =>
     ids.includes(station.edgeCode) && (!station.joinedEdgeCode || ids.includes(station.joinedEdgeCode));
   if (!surface.walkable || !ownedByBoth(surface.contributingModifierIds)) return false;
-  if (surface.water.kind === "none") return true;
-  return surface.water.kind === "river" &&
-    surface.traversal === "bridge" && surface.deckHeight !== null &&
-    ownedByBoth(surface.deckOwnerIds);
+  // Final-surface traversal uses the highest deck even over otherwise dry ground.
+  // A road beneath somebody else's overpass is not a valid top-surface route.
+  if (surface.deckHeight !== null)
+    return (surface.water.kind === "none" || surface.water.kind === "river") &&
+      surface.traversal === "bridge" && ownedByBoth(surface.deckOwnerIds);
+  return surface.water.kind === "none" && surface.traversal !== "bridge";
 }

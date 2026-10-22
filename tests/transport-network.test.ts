@@ -334,6 +334,18 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     deckHeight: null, deckOwnerIds: [], contributingModifierIds: [a.code],
   } as unknown as FinalSurface;
   assert.equal(sampledCorridorStationPass(station, dry), true);
+  assert.equal(sampledCorridorStationPass(station, {
+    ...dry, deckHeight: 7, traversal: "bridge", deckOwnerIds: ["unrelated-overpass"],
+  }), false, "unrelated upper bridge deck must never certify a road below a dry overpass");
+  assert.equal(sampledCorridorStationPass(station, {
+    ...dry, deckHeight: 7, traversal: "bridge", deckOwnerIds: [a.code],
+  }), true, "the selected road's own dry bridge deck remains valid");
+  assert.equal(sampledCorridorStationPass(station, {
+    ...dry, deckHeight: 7, traversal: "road", deckOwnerIds: [a.code],
+  }), false, "inconsistent top-deck traversal cannot certify passage");
+  assert.equal(sampledCorridorStationPass(station, {
+    ...dry, traversal: "bridge",
+  }), false, "a bridge traversal without an actual top deck is not certified");
   const junction = result.stations[3];
   assert.equal(sampledCorridorStationPass(junction, dry), false,
     "an incoming dry road alone must not certify a shared Y transition");
@@ -348,6 +360,14 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     water: { ...dry.water, kind: "river" }, traversal: "bridge",
     deckHeight: 4, deckOwnerIds: [a.code],
   }), false, "wet joined road passage also needs both canonical deck owners");
+  assert.equal(sampledCorridorStationPass(junction, {
+    ...dry, contributingModifierIds: [a.code, b.code],
+    traversal: "bridge", deckHeight: 4, deckOwnerIds: [a.code],
+  }), false, "a dry shared junction under a one-sided overpass remains physically disconnected");
+  assert.equal(sampledCorridorStationPass(junction, {
+    ...dry, contributingModifierIds: [a.code, b.code],
+    traversal: "bridge", deckHeight: 4, deckOwnerIds: [a.code, b.code],
+  }), true, "a source-owned dry junction deck must recognize both incident roads");
   assert.equal(sampledCorridorStationPass(station, {
     ...dry, contributingModifierIds: ["unrelated-road"],
   }), false, "dry unrelated roads cannot certify selected source ownership");
