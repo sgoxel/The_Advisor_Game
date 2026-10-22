@@ -16,6 +16,7 @@ export const SITE_ACCESS_STATION_LIMIT = 49;
 const siteParents = new Map(criticalSites.map(site => [site.access.branchCode, {
   siteCode: site.code, parentCode: site.access.roadCode,
 }]));
+const roadsByCode = new Map(roads.map(road => [road.code, road]));
 /** The physical site probe must inspect the route's actual final access edge. */
 export function siteAccessBranchOnRoute<T extends Pick<TransportRoadEdge, "code" | "from" | "roadClass">>(
   route: Readonly<{ to: string; edgeCodes: readonly string[] }>, edges: readonly T[],
@@ -85,8 +86,21 @@ export function siteAccessSampleVerdict(
     // The SEED graph can prove a join whose final-surface road winner is
     // different at that exact coordinate. Keep geometry evidence distinct
     // from a confirmed incident final-surface contributor.
-    terminalSurfaceOwned = full && surfaces[surfaces.length - 1].contributingModifierIds.some(code =>
-      code === edge.code || (code === parentCode && junctionRoadCodes.has(code))),
+    // Final-surface chooses one winner at a shared graph node: it may be an
+    // incident Y road other than the site's named parent. Accept that winner
+    // only when it is an actual registered incident road meeting the *same*
+    // exact terminal, while still requiring the selected SEED parent join.
+    terminalIncidentRoad = full && exactParentJoin && terminal
+      ? surfaces[surfaces.length - 1].contributingModifierIds.find(code => {
+          const incident = roadsByCode.get(code);
+          return incident && junctionRoadCodes.has(code) &&
+            roadDistanceAt(terminal.x, terminal.z, incident) <= 1e-6;
+        })
+      : undefined,
+    terminalSurfaceOwned = full && (
+      surfaces[surfaces.length - 1].contributingModifierIds.includes(edge.code) ||
+      (!!exactParentJoin && !!terminalIncidentRoad)
+    ),
     terminalGeometryOnly = exactParentJoin && !terminalSurfaceOwned,
     onRecordedRoad = full && surfaces.every((surface, index) =>
       index === surfaces.length - 1
@@ -117,7 +131,7 @@ export function siteAccessSampleVerdict(
     surface.deckHeight == null
       ? surface.traversal !== "bridge"
       : surface.traversal === "bridge" && surface.deckOwnerIds.some(id =>
-          (id === edge.code || (index === surfaces.length - 1 && exactParentJoin && id === parentCode)) &&
+          (id === edge.code || (index === surfaces.length - 1 && exactParentJoin && id === terminalIncidentRoad)) &&
           surface.contributingModifierIds.includes(id)));
   // Average span grades can hide a steep local surface between checkpoints.
   // finalSurfaceAt classifies an >8% road slope as "difficult" even when
@@ -129,6 +143,7 @@ export function siteAccessSampleVerdict(
     expectedStations: stations.length,
     onRecordedRoad, dry, walkable, topSurfaceOwned, terminalGeometryOnly,
     maximumGrade, gradeWithinLimit,
-    sampledPass: full && onRecordedRoad && dry && walkable && topSurfaceOwned && gradeWithinLimit,
+    sampledPass: full && onRecordedRoad && (!parentCode || terminalSurfaceOwned) &&
+      dry && walkable && topSurfaceOwned && gradeWithinLimit,
   });
 }
