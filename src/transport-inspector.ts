@@ -87,6 +87,9 @@ let lastOverlayRoads = 0;
 let lastOverlayBridges = 0;
 let lastRoadInspectionMs: number | null = null;
 let lastRoadInspectionStatus = "not requested";
+// A nearest-road click before runtime readiness gets one retry, not an idle search.
+let pendingNearestRoadOnWorld = false;
+let roadRequestedAt: number | null = null;
 let lastSiteRouteMs: number | null = null;
 let lastSiteRouteStatus = "not requested";
 let siteRoute: ReturnType<typeof transportWalkingRouteToNearest> = null;
@@ -693,6 +696,9 @@ function probeSiteAccess() {
 }
 
 function chooseNearestSiteRoute() {
+  // A newer route request supersedes a pending first-road selection.
+  pendingNearestRoadOnWorld = false;
+  roadRequestedAt = null;
   const started = siteRouteRequestedAt ?? performance.now(), runtime = world();
   siteRoute = null;
   pendingSiteRouteOnWorld = !runtime;
@@ -805,13 +811,13 @@ function openPanel() {
 function chooseNearestRoad() {
   pendingSiteRouteOnWorld = false;
   siteRouteRequestedAt = null;
+  const started = roadRequestedAt ?? performance.now(), runtime = world();
+  pendingNearestRoadOnWorld = !runtime;
   siteRoute = null;
   lastSiteRouteStatus = "not requested";
   lastSiteRouteMs = null;
   resetSiteAccessProbe();
   renderSiteRoute();
-  const started = performance.now();
-  const runtime = world();
   if (!runtime) {
     selection = undefined;
     renderSelection(); // Clear bridge-only actions from the previous selection.
@@ -831,7 +837,9 @@ function chooseNearestRoad() {
       lastRoadInspectionStatus = "no nearby canonical road";
     }
   }
-  lastRoadInspectionMs = performance.now() - started;
+  // Include the actual user-observed readiness wait in first-answer time.
+  lastRoadInspectionMs = runtime ? performance.now() - started : null;
+  if (runtime) roadRequestedAt = null;
   renderMetrics();
   lastFingerprint = "";
 }
@@ -887,6 +895,9 @@ function refreshOverlay(force = false) {
 }
 
 function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mountain-pass" | "junction" | "harbor" | "ferry") {
+  // An explicit new selection cancels an older deferred first-road request.
+  pendingNearestRoadOnWorld = false;
+  roadRequestedAt = null;
   // A missing diagnostic target must not silently retain the previous one.
   pendingSiteRouteOnWorld = false;
   siteRouteRequestedAt = null;
@@ -984,6 +995,8 @@ function telemetry() {
 }
 
 panel.querySelector<HTMLButtonElement>("#transport-close")!.onclick = () => {
+  pendingNearestRoadOnWorld = false;
+  roadRequestedAt = null;
   pendingSiteRouteOnWorld = false;
   siteRouteRequestedAt = null;
   // Hidden diagnostics must not keep sampling final surfaces on a phone.
@@ -994,7 +1007,10 @@ panel.querySelector<HTMLButtonElement>("#transport-close")!.onclick = () => {
   overlay.style.display = "";
   openButton.setAttribute("aria-expanded", "false");
 };
-panel.querySelector<HTMLButtonElement>("#transport-nearest")!.onclick = chooseNearestRoad;
+panel.querySelector<HTMLButtonElement>("#transport-nearest")!.onclick = () => {
+  roadRequestedAt = performance.now();
+  chooseNearestRoad();
+};
 panel.querySelector<HTMLButtonElement>("#transport-site-route")!.onclick = () => {
   siteRouteRequestedAt = performance.now();
   chooseNearestSiteRoute();
@@ -1026,6 +1042,8 @@ panel.querySelector<HTMLButtonElement>("#transport-bridge-closeup")!.onclick = (
 panel.querySelector<HTMLButtonElement>("#transport-bridge-clearview")!.onclick = () => {
   if (!inspectBridgeIn3D()) return;
   // Suspend unrelated route probes and deferred requests in map-only view.
+  pendingNearestRoadOnWorld = false;
+  roadRequestedAt = null;
   pendingSiteRouteOnWorld = false;
   siteRouteRequestedAt = null;
   resetSiteAccessProbe();
@@ -1064,6 +1082,10 @@ function frame() {
   if (pendingSiteRouteOnWorld && !panel.hidden && world()) {
     pendingSiteRouteOnWorld = false;
     chooseNearestSiteRoute();
+  }
+  if (pendingNearestRoadOnWorld && !panel.hidden && world()) {
+    pendingNearestRoadOnWorld = false;
+    chooseNearestRoad();
   }
   refreshOverlay();
   requestAnimationFrame(frame);
