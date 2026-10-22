@@ -1168,6 +1168,11 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
   // alone does not certify a disconnected site, and a site alone does not
   // certify an impossible river crossing. These are bounded sampled checks,
   // not a claim of unsampled metre-by-metre actor passage.
+  const wrongOwner = transportBridgeSpanAt({ ...bridge!, roadCode: `${crossing!.code}/FOREIGN` }, crossing!);
+  assert.equal(wrongOwner.matchingCrossing, false,
+    "a matching water span must not certify a bridge assigned to another SEED road");
+  assert.equal(sampledBridgeCrossingPass(true, wrongOwner), false,
+    "bridge ownership mismatch must fail closed before sampling a foreign road");
   const center = transportBridgeSurfaceAt(bridge!.x, bridge!.z, crossing!.code),
     span = transportBridgeSpanAt(bridge!, crossing!);
   const sampledPass = sampledBridgeCrossingPass(center.centerDeckWalkable, span),

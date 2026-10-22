@@ -163,7 +163,7 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
   // A bridge anchor must lie on the same physical road as the bounded
   // arc samples (2 canonical metres), not merely within one source unit
   // (~15 m). Otherwise a nearby unrelated crossing can look graph-matched.
-  const crossing = direction && nearestMetres <= 2
+  const crossing = direction && nearestMetres <= 2 && bridge.roadCode === edge.code
     ? freshwaterCrossingAt(bridge.x, bridge.z, direction.x, direction.z) : null;
   const matchingCrossing = !!crossing && crossing.code === bridge.drainageCode
     && Math.abs(crossing.spanM - bridge.spanM) <= Math.max(1, bridge.spanM * .01);
