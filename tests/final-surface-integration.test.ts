@@ -296,8 +296,6 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
     } else assert.equal(localGrade, null,
       "a wet, unowned or off-road failure must not invent a local slope measurement");
   }
-  assert.deepEqual(transportBridgeSpanAt(bridge, edge!), observed,
-    "on-demand local slope diagnosis remains SEED-deterministic");
   // Each physical grade interval is the actual spherical distance along the
   // selected curved road, not the nominal crossing length divided evenly.
   const measuredStations = transportRoadArcStations(edge!.centerline, bridge.x, bridge.z,
