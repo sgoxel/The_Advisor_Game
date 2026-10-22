@@ -753,6 +753,9 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     "unrelated terminal contributor must not be mislabeled final-surface ownership proof");
   assert.equal(geometryOnly.sampledPass, false,
     "an unrelated surface winner cannot certify source-owned site access, even with exact parent geometry");
+  assert.deepEqual([geometryOnly.firstUnsafeStation, geometryOnly.firstUnsafeCause],
+    [realStations.length, "terminal has no registered top road owner"],
+    "exact parent geometry alone must identify the first unowned final-surface terminal");
   const tip = actual.centerline.at(-1)!,
     detachedTip = { ...tip, x: tip.x + 0.012, z: tip.z + 0.019 },
     detachedBranch = { ...actual, centerline: [...actual.centerline.slice(0, -1), detachedTip] },
@@ -767,6 +770,8 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     "another incident road cannot certify a site branch detached from its named parent");
   assert.equal(falseIncident.sampledPass, false,
     "detached physical terminal must fail closed despite otherwise walkable samples");
+  assert.deepEqual([falseIncident.firstUnsafeStation, falseIncident.firstUnsafeCause],
+    [realStations.length, "site branch misses its registered parent junction"]);
   const parentWinner = siteAccessSampleVerdict(actual, realSurfaces.map((surface, index) =>
     index === realSurfaces.length - 1
       ? { ...surface, contributingModifierIds: [parentCode] } : surface), realParents);
@@ -797,6 +802,8 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     "missing recorded incident-road evidence must not default to a pass");
   const good = siteAccessSampleVerdict(edge, connectedSurfaces, junctionRoadCodes);
   assert.equal(good.sampledPass, true);
+  assert.equal(good.firstUnsafeStation, null);
+  assert.equal(good.firstUnsafeCause, null);
   assert.equal(good.stationCount, 5);
   assert.equal(good.expectedStations, 5);
   assert.equal(good.onRecordedRoad, true);
@@ -810,6 +817,8 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(wrongTop.topSurfaceOwned, false);
   assert.equal(wrongTop.sampledPass, false,
     "site access cannot be certified by a road hidden under an unrelated top deck");
+  assert.deepEqual([wrongTop.firstUnsafeStation, wrongTop.firstUnsafeCause],
+    [3, "unrelated or invalid top bridge deck"]);
   assert.equal(siteAccessSampleVerdict(edge, deckSample(edge.code), junctionRoadCodes).sampledPass, true,
     "the site branch's own bridge deck is legal when sampled grade remains safe");
   for (const mismatched of [0.05, -0.05]) {
@@ -840,14 +849,19 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(steep.sampledPass, false,
     "a steep local road surface cannot pass on averaged grade and walkability alone");
   assert.equal(steep.gradeWithinLimit, false);
+  assert.deepEqual([steep.firstUnsafeStation, steep.firstUnsafeCause],
+    [3, "unsafe local site-access slope"]);
   assert.ok(steep.maximumGrade !== null && steep.maximumGrade < .08,
     "the local slope rejection is independent of a low sampled span average");
   assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces.map((surface, i) => i === 2 ?
     { ...surface, traversal: "open" } : surface), junctionRoadCodes).sampledPass, true,
     "a dry walkable site-pad transition remains legal when local slope is safe");
   assert.deepEqual(siteAccessSampleVerdict(edge, connectedSurfaces, junctionRoadCodes), good);
-  assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces.slice(1), junctionRoadCodes).sampledPass, false,
+  const incomplete = siteAccessSampleVerdict(edge, connectedSurfaces.slice(1), junctionRoadCodes);
+  assert.equal(incomplete.sampledPass, false,
     "missing selected final-surface station must never produce a pass");
+  assert.deepEqual([incomplete.firstUnsafeStation, incomplete.firstUnsafeCause],
+    [null, "incomplete or invalid access profile"]);
   assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces.map((s, i) => i === 2 ?
     { ...s, water: { ...s.water, kind: "river" } } as FinalSurface : s), junctionRoadCodes).sampledPass, false);
   assert.equal(siteAccessSampleVerdict(edge, connectedSurfaces.map((s, i) => i === 2 ?
@@ -861,8 +875,11 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(siteAccessSampleVerdict(edge, parentAtJunction,
     new Set([edge.code, "UNRELATED/ROAD"])).sampledPass, false,
     "unrelated dry road is not a legal physical junction with the site branch");
-  assert.equal(siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 4 ?
-    { ...s, surfaceHeight: 30 } : s)).gradeWithinLimit, false);
+  const unsafeGrade = siteAccessSampleVerdict(edge, surfaces.map((s, i) => i === 4 ?
+    { ...s, surfaceHeight: 30 } : s), junctionRoadCodes);
+  assert.equal(unsafeGrade.gradeWithinLimit, false);
+  assert.deepEqual([unsafeGrade.firstUnsafeStation, unsafeGrade.firstUnsafeCause],
+    [5, "sampled site-access grade exceeds 8%"]);
   assert.equal(siteAccessRoadStations({ ...edge, roadClass: "main" }).length, 0);
   const sparse = { ...edge, centerline: [
     { x: 0, z: 0 }, { x: 0.25, z: 0 }, { x: 7, z: 0 },
