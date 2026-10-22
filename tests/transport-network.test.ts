@@ -409,8 +409,12 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     unrelatedCrossing = makeEdge("road/unrelated", "X", "Y", 3, 8),
     registry = new Map([a, b, otherIncident, detachedIncident, unrelatedCrossing]
       .map(edge => [edge.code, edge])),
-    physicalY = new Map([["B", [a, b, otherIncident, detachedIncident, unrelatedCrossing]
-      .map(edge => ({ edge }))]]),
+    physicalY = new Map([
+      ["A", [{ edge: a }]],
+      ["B", [a, b, otherIncident, detachedIncident, unrelatedCrossing]
+        .map(edge => ({ edge }))],
+      ["C", [{ edge: b }]],
+    ]),
     withOwner = planTransportRouteCorridor(
       { from: "A", to: "C", edgeCodes: [a.code, b.code] },
       registry, nodes, physicalY,
