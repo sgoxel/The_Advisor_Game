@@ -401,6 +401,42 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     deckHeight: null, deckOwnerIds: [], contributingModifierIds: [a.code],
   } as unknown as FinalSurface;
   assert.equal(sampledCorridorStationPass(station, dry), true);
+  // Actual final-surface owner at a Y may be a THIRD physically incident
+  // road even though the selected route follows only a -> b. Only source
+  // registry + graph incidence + exact physical terminal may authorize it.
+  const otherIncident = makeEdge("road/c", "B", "D", 3, 6),
+    detachedIncident = makeEdge("road/detached", "B", "D", 4, 6),
+    unrelatedCrossing = makeEdge("road/unrelated", "X", "Y", 3, 8),
+    registry = new Map([a, b, otherIncident, detachedIncident, unrelatedCrossing]
+      .map(edge => [edge.code, edge])),
+    physicalY = new Map([["B", [a, b, otherIncident, detachedIncident, unrelatedCrossing]
+      .map(edge => ({ edge }))]]),
+    withOwner = planTransportRouteCorridor(
+      { from: "A", to: "C", edgeCodes: [a.code, b.code] },
+      registry, nodes, physicalY,
+    );
+  assert.equal(withOwner.status, "ready");
+  const joined = withOwner.stations[3];
+  assert.deepEqual(joined.junctionOwnerCodes, [a.code, b.code, otherIncident.code],
+    "shared Y owner candidates require registered source edge, graph incidence and exact endpoint");
+  assert.equal(sampledCorridorStationPass(joined, {
+    ...dry, contributingModifierIds: [otherIncident.code],
+  }), true, "an actual third graph-incident Y winner may own the single sampled junction");
+  assert.equal(sampledCorridorStationPass(result.stations[3], {
+    ...dry, contributingModifierIds: [otherIncident.code],
+  }), false, "the legacy two-route-edge verdict cannot infer an unregistered junction");
+  for (const code of [detachedIncident.code, unrelatedCrossing.code, "missing-modifier"]) {
+    assert.equal(sampledCorridorStationPass(joined, {
+      ...dry, contributingModifierIds: [code],
+    }), false, "overlap, detached road endpoint or unknown owner never implies a joined route");
+  }
+  assert.equal(sampledCorridorStationPass(withOwner.stations[4], {
+    ...dry, contributingModifierIds: [otherIncident.code],
+  }), false, "the next station must still belong to the selected outgoing road");
+  assert.equal(planTransportRouteCorridor(
+    { from: "A", to: "C", edgeCodes: [a.code, b.code] }, registry, nodes,
+    new Map([["B", [{ edge: a }, { edge: otherIncident }]]]),
+  ).status, "invalid", "missing selected outgoing graph incidence cannot certify a Y");
   const sourceFailureCases = [
     [dry, null],
     [{ ...dry, walkable: false }, "blocked final surface"],

@@ -14,7 +14,7 @@ type Node = Pick<TransportNode, "x" | "z">;
 const physicalMatch = (a: { x: number; z: number } | null | undefined, b: Node) =>
   !!a && [a.x, a.z, b.x, b.z].every(Number.isFinite) &&
   Math.hypot(wrapSourceX(a.x - b.x), a.z - b.z) <= 1e-4;
-export type CorridorStation = Readonly<{ x: number; z: number; edgeCode: string; joinedEdgeCode?: string }>;
+export type CorridorStation = Readonly<{ x: number; z: number; edgeCode: string; joinedEdgeCode?: string; junctionOwnerCodes?: readonly string[] }>;
 type Plan = Readonly<
   | { status: "invalid"; stations: readonly CorridorStation[] }
   | { status: "over-budget"; stations: readonly CorridorStation[] }
@@ -26,6 +26,8 @@ export function planTransportRouteCorridor(
   route: Readonly<{ from: string; to: string; edgeCodes: readonly string[] }>,
   roads: ReadonlyMap<string, Edge>,
   nodes: ReadonlyMap<string, Node>,
+  // Already-built canonical walking adjacency; never infer joins from map overlap.
+  incidentRoads?: ReadonlyMap<string, readonly { edge: Edge }[]>,
 ): Plan {
   if (!route.from || !route.to || !route.edgeCodes.length) return Object.freeze({ status: "invalid", stations: EMPTY });
   const stations: CorridorStation[] = [];
@@ -53,11 +55,29 @@ export function planTransportRouteCorridor(
         const last = stations.length - 1;
         if (Math.hypot(wrapSourceX(stations[last].x - a.x), stations[last].z - a.z) > 1e-4)
           return Object.freeze({ status: "invalid", stations: EMPTY });
-        // The final-surface composer contributes one winning road modifier at a
-        // coordinate, even where two canonical road centerlines meet. Check
-        // either incident owner here; the next station tests the outgoing road.
-        // Sampling the junction twice would invent a zero-distance grade span.
-        stations[last] = Object.freeze({ ...stations[last], joinedEdgeCode: code });
+        // The composer selects ONE winning road at a Y. It may be a third
+        // physically joined graph-incident road, not either selected route leg.
+        // Reuse the existing walking index and prove each registered road's
+        // actual endpoint meets this exact canonical node. Mere overlap is not
+        // a connection. The next station still tests the outgoing route edge.
+        const ownerCodes = incidentRoads?.get(at)?.flatMap(step => {
+          const registered = roads.get(step.edge.code);
+          if (!registered || registered.from !== step.edge.from ||
+              registered.to !== step.edge.to || !registered.centerline?.length)
+            return [];
+          const endpoint = registered.from === at ? registered.centerline[0] :
+            registered.to === at ? registered.centerline[registered.centerline.length - 1] : null;
+          return physicalMatch(endpoint, start) ? [registered.code] : [];
+        });
+        const joinedOwners = ownerCodes && Object.freeze([...new Set(ownerCodes)].sort());
+        if (joinedOwners && (!joinedOwners.includes(stations[last].edgeCode) ||
+            !joinedOwners.includes(code)))
+          return Object.freeze({ status: "invalid", stations: EMPTY });
+        // Never sample a zero-distance span at a shared graph node.
+        stations[last] = Object.freeze({
+          ...stations[last], joinedEdgeCode: code,
+          ...(joinedOwners ? { junctionOwnerCodes: joinedOwners } : {}),
+        });
       }
       const additional = steps + (stations.length ? 0 : 1);
       if (!Number.isSafeInteger(steps) || stations.length + additional > ROUTE_CORRIDOR_STATION_LIMIT)
@@ -81,7 +101,8 @@ export function sampledCorridorStationFailure(
   station: CorridorStation,
   surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds">,
 ): string | null {
-  const incident = (id: string) => id === station.edgeCode || id === station.joinedEdgeCode,
+  const incident = (id: string) => id === station.edgeCode || id === station.joinedEdgeCode ||
+      (station.joinedEdgeCode !== undefined && !!station.junctionOwnerCodes?.includes(id)),
     contributed = (id: string) => surface.contributingModifierIds.includes(id);
   if (!surface.walkable) return "blocked final surface";
   if (!surface.contributingModifierIds.some(incident)) return "selected road modifier absent";
