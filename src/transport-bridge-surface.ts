@@ -1,6 +1,7 @@
 import { freshwaterCrossingAt } from "./hydrology.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { finalSurfaceAt } from "./world-core.ts";
+import { sampledCorridorStationPass } from "./transport-route-corridor.ts";
 import type { TransportBridge, TransportRoadEdge } from "./transport-network.ts";
 
 /**
@@ -111,6 +112,15 @@ export function transportRoadBankApproaches(
   });
 }
 
+/** A physical dry-bank sample must use the selected road's top walkable surface. */
+export function sampledBridgeDryBankPass(
+  point: { x: number; z: number }, roadCode: string,
+  surface: ReturnType<typeof finalSurfaceAt>,
+) {
+  return surface.water.kind === "none" &&
+    sampledCorridorStationPass({ ...point, edgeCode: roadCode }, surface);
+}
+
 /**
  * Inspect one selected graph crossing, not every crossing during pan/zoom.
  * Bounded wet, bank, and road-aligned crossing samples report physical truth;
@@ -177,16 +187,14 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
       crossing.lo * crossing.metresPerUnit - 18,
       crossing.hi * crossing.metresPerUnit + 18, segmentCount),
     routeStationsOnRoad = roadStations.length === segmentCount + 1,
-    routeStations = roadStations.map(point => ({ surface: finalSurfaceAt(point.x, point.z) })),
+    routeStations = roadStations.map(point => ({ point, surface: finalSurfaceAt(point.x, point.z) })),
     // Coordinate agreement is not enough: a walkable field/another road
     // must never certify the graph-selected road's physical crossing.
     routeStationsSurfaceOwned = routeStationsOnRoad && routeStations.every(({ surface }) =>
       surface.contributingModifierIds.includes(edge.code) &&
       (surface.water.kind !== "river" || surface.deckOwnerIds.includes(edge.code))),
-    routeStationsWalkable = routeStationsSurfaceOwned && routeStations.every(({ surface }) =>
-      surface.walkable &&
-      (surface.water.kind === "none" ||
-        (surface.water.kind === "river" && surface.deckHeight !== null && surface.traversal === "bridge"))),
+    routeStationsWalkable = routeStationsSurfaceOwned && routeStations.every(({ point, surface }) =>
+      sampledCorridorStationPass({ ...point, edgeCode: edge.code }, surface)),
     // The canonical road may bend and traverse different latitudes. Grade
     // must use each actual geodesic station separation, not nominal span / N.
     routeMaxSampledGrade = routeStationsOnRoad ? Math.max(...roadStations.slice(1).map((point, index) => {
@@ -209,12 +217,14 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
       surface.walkable &&
       surface.traversal === "bridge" &&
       surface.deckOwnerIds.includes(edge.code)),
-    bankStationsWalkable: approachStationsOnRoad && banks.every(surface =>
-      surface.water.kind === "none" && surface.walkable),
+    bankStationsWalkable: approachStationsOnRoad &&
+      sampledBridgeDryBankPass(bankPoints.left[0], edge.code, banks[0]) &&
+      sampledBridgeDryBankPass(bankPoints.right[0], edge.code, banks[1]),
     approachStations: approaches.reduce((count, side) => count + side.length, 0),
     approachStationsOnRoad,
-    approachStationsWalkable: approachStationsOnRoad && approaches.every(side => side.every(surface =>
-      surface.water.kind === "none" && surface.walkable)),
+    approachStationsWalkable: approachStationsOnRoad && approaches.every((side, index) =>
+      side.every((surface, station) => sampledBridgeDryBankPass(
+        index === 0 ? bankPoints.left[station] : bankPoints.right[station], edge.code, surface))),
     approachMaxSampledGrade,
     approachGradeWithinLimit: approachStationsOnRoad && approachMaxSampledGrade !== null && approachMaxSampledGrade <= .08,
     routeStations: routeStations.length,
