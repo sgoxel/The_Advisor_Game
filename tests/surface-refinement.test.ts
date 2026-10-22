@@ -135,8 +135,8 @@ test("an actual natural-water road crossing refines to a narrow authoritative de
   const railColumns = new Map<string, { low: number; high: number }>();
   for (let vertex = 0; vertex < refined.structures.positions.length / 3; vertex++) {
     const c = vertex * 4;
-    if (refined.structures.colors[c] !== 73 || refined.structures.colors[c + 1] !== 54 ||
-        refined.structures.colors[c + 2] !== 35) continue;
+    if (refined.structures.colors[c] !== 181 || refined.structures.colors[c + 1] !== 143 ||
+        refined.structures.colors[c + 2] !== 92) continue;
     const p = vertex * 3,
       key = `${refined.structures.positions[p].toFixed(4)}/${refined.structures.positions[p + 2].toFixed(4)}`,
       y = refined.structures.positions[p + 1],
@@ -159,8 +159,8 @@ test("an actual natural-water road crossing refines to a narrow authoritative de
   let outerLeft = 0, outerRight = 0;
   for (let vertex = 0; vertex < refined.structures.positions.length / 3; vertex++) {
     const c = vertex * 4;
-    if (refined.structures.colors[c] !== 103 || refined.structures.colors[c + 1] !== 80 ||
-        refined.structures.colors[c + 2] !== 54) continue;
+    if (refined.structures.colors[c] !== 153 || refined.structures.colors[c + 1] !== 112 ||
+        refined.structures.colors[c + 2] !== 65) continue;
     const p = vertex * 3,
       normalDot = refined.structures.normals[p] * outerNormalX +
         refined.structures.normals[p + 2] * outerNormalZ;
