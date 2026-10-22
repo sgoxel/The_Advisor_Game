@@ -29,25 +29,25 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Legal transport parity & fast route UX: Y-junctions, bridge/site access, verified travel
+- WP-S005-001-001 — Legal transport & truthful route UX: continuous junction/bridge/site access
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Autonomous resident movement & inspection: lawful SEED routes, schedules, 2D sprites
+- WP-S006-001-001 — Lawful resident commutes & inspection: SEED routes, schedules and 2D actors
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Visual reference architecture: toon-lit 3D, semantic zoom, readable art & mobile costs
+- WP-S007-001-001 — 3D visual reference architecture: toon lighting, semantic icons and mobile costs
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible atlas UX: ≥44px touch, safe-area text & keyboard place-to-route flow
+- WP-S008-001-001 — Accessible atlas task UX: 44px touch, safe areas and keyboard routes
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA performance proof: first useful interaction, p95 latency & combined CPU/GPU memory
-- WP-S009-002-001 — Responsive atlas inspection: bounded canonical picking & revision-driven idle-safe UI
-- WP-S009-003-001 — Mobile rendering compatibility: adaptive DPR/shadows, shared memory & GPU-loss recovery
-- WP-S009-004-001 — README capability conformance: atlas vs Advisor, campaign-time gap & release truth
-- WP-S009-005-001 — Pure-zoom continuity & speed: valid first interaction, no stale terrain, complete 3D detail
+- WP-S009-001-001 — Exact-SHA performance proof: first useful action, p95 timings and CPU+GPU budget
+- WP-S009-002-001 — Responsive canonical inspection: bounded picking and idle-safe UI layouts
+- WP-S009-003-001 — Mobile renderer compatibility: adaptive quality, memory and GPU recovery
+- WP-S009-004-001 — README capability conformance: atlas vs Advisor, campaign clock and release truth
+- WP-S009-005-001 — Pure-zoom readiness: coherent terrain, valid selection and settled 3D detail
