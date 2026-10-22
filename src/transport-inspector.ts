@@ -519,6 +519,9 @@ function renderSiteAccessProbe() {
       <dt>Ground passage</dt><dd>${siteProbe.dry && siteProbe.walkable ? "Sampled stations dry and walkable" : "One or more samples wet, blocked or missing"}</dd>
       <dt>Top bridge ownership</dt><dd>${siteProbe.topSurfaceOwned ? "No unrelated top deck at sampled stations" : "Top deck or traversal mismatch; not certified"}</dd>
       <dt>Sampled span max grade</dt><dd>${grade} · ${siteProbe.gradeWithinLimit ? "spans and local road slopes within limit" : "span or local surface grade not certified"}</dd>
+      <dt>First unsafe station</dt><dd>${siteProbe.firstUnsafeCause
+        ? `${siteProbe.firstUnsafeStation === null ? "Profile" : `Station ${siteProbe.firstUnsafeStation}`}: ${siteProbe.firstUnsafeCause}`
+        : "No failed sampled gate; gaps between samples remain unverified"}</dd>
       <dt>Evidence boundary</dt><dd>Selected site's own access branch only · unsampled gaps, rest of graph route and character movement not certified</dd>
     </dl>`;
 }
