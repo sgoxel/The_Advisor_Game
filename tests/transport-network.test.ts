@@ -319,6 +319,17 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   assert.equal(over.stations.length, 0,
     "oversized diagnostic must reject the route without truncating it into a false positive");
   assert.deepEqual(planTransportRouteCorridor({ from: "A", to: "C", edgeCodes: [a.code, b.code] }, roads, nodes), result);
+  for (const centerline of [
+    [null, { x: 3, z: 0 }],
+    [{ x: 0, z: 0 }, null],
+    [{ x: 0, z: 0 }, null, { x: 3, z: 0 }],
+  ]) {
+    const malformed = { ...a, centerline } as unknown as TransportRoadEdge;
+    assert.equal(planTransportRouteCorridor(
+      { from: "A", to: "B", edgeCodes: [a.code] },
+      new Map([[a.code, malformed]]), nodes,
+    ).status, "invalid", "corrupt source waypoints must fail closed without throwing");
+  }
   const detached = makeEdge("detached", "A", "B", 20, 23),
     short = makeEdge("short", "A", "B", 0, 2);
   assert.equal(planTransportRouteCorridor(
