@@ -21,7 +21,7 @@ import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
-import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
+import { sampledBridgeCrossingPass, sampledBridgeTopFailure, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
 import { finalSurfaceAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
@@ -820,6 +820,31 @@ test("S005 bridge road-arc anchor uses canonical metre proximity at high latitud
     "latitude scaling must not break physical anchor proximity across the longitude seam");
   assert.ok(seamSamples.every(point => Math.abs(point.x - (seamX - .1)) < 1e-5),
     "selected road remains the same canonical wrapped centerline");
+});
+
+test("S005 selected bridge and walking route give the same first unsafe final-surface reason", () => {
+  const edgeCode = "SELECTED/ROAD";
+  const surface = {
+    walkable: true,
+    contributingModifierIds: [edgeCode],
+    deckOwnerIds: ["UNRELATED/OVERPASS"],
+    deckHeight: 10,
+    traversal: "bridge",
+    water: { kind: "lake" },
+  } as unknown as FinalSurface;
+  for (const unsafe of [
+    surface,
+    { ...surface, water: { kind: "river" } },
+    { ...surface, deckOwnerIds: [edgeCode], traversal: "road" },
+    { ...surface, deckHeight: null, deckOwnerIds: [], water: { kind: "none" }, traversal: "difficult" },
+  ]) {
+    const reason = sampledCorridorStationFailure({ x: 0, z: 0, edgeCode }, unsafe as FinalSurface);
+    assert.ok(reason, "fixture must be unsafe for both selected probes");
+    assert.equal(sampledBridgeTopFailure(edgeCode, unsafe as FinalSurface), reason,
+      "first unsafe cause may not depend on whether the player opened bridge or full-route inspector");
+  }
+  assert.equal(sampledBridgeTopFailure(edgeCode, surface), "unsupported water under bridge deck",
+    "unsupported water must not be hidden by a competing overpass diagnosis");
 });
 
 test("S005 both bridge bank checks follow the actual road bend and never extrapolate missing road", () => {

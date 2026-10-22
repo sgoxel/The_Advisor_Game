@@ -1,25 +1,15 @@
 import { freshwaterCrossingAt } from "./hydrology.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "./world-core.ts";
-import { sampledCorridorStationPass } from "./transport-route-corridor.ts";
+import { sampledCorridorStationFailure, sampledCorridorStationPass } from "./transport-route-corridor.ts";
 import type { TransportBridge, TransportRoadEdge } from "./transport-network.ts";
 
-/** First unsafe reason from the selected road's actual top final surface; no extra queries. */
-function sampledBridgeTopFailure(
+/** Bridge and route probes must name the SAME first unsafe canonical surface reason. */
+export function sampledBridgeTopFailure(
   edgeCode: string, surface: ReturnType<typeof finalSurfaceAt>,
 ): string {
-  if (!surface.walkable) return "blocked final surface";
-  if (!surface.contributingModifierIds.includes(edgeCode)) return "selected road modifier absent";
-  if (surface.deckHeight !== null) {
-    if (!surface.deckOwnerIds.includes(edgeCode)) return "unrelated higher bridge deck";
-    if (surface.traversal !== "bridge") return "inconsistent top-deck traversal";
-    if (surface.water.kind !== "none" && surface.water.kind !== "river") return "unsupported water under deck";
-  } else {
-    if (surface.water.kind !== "none") return "water without owned deck";
-    if (surface.traversal === "difficult") return "unsafe local road slope";
-    if (surface.traversal !== "road" && surface.traversal !== "open") return "non-road traversal";
-  }
-  return "physical traversal not certified";
+  return sampledCorridorStationFailure({ x: 0, z: 0, edgeCode }, surface) ??
+    "physical traversal not certified";
 }
 
 /**
