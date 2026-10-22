@@ -508,8 +508,8 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     "actual SEED parent geometry remains a real graph connection");
   assert.equal(geometryOnly.terminalGeometryOnly, true,
     "unrelated terminal contributor must not be mislabeled final-surface ownership proof");
-  assert.equal(geometryOnly.sampledPass, true,
-    "legacy sampled grade and geometry verdict stays distinct from surface-owner certification");
+  assert.equal(geometryOnly.sampledPass, false,
+    "an unrelated surface winner cannot certify source-owned site access, even with exact parent geometry");
   const tip = actual.centerline.at(-1)!,
     detachedTip = { ...tip, x: tip.x + 0.012, z: tip.z + 0.019 },
     detachedBranch = { ...actual, centerline: [...actual.centerline.slice(0, -1), detachedTip] },
@@ -1003,11 +1003,17 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
     "site branch must name its actual incident parent road");
   const stations = siteAccessRoadStations(access!),
     surfaces = stations.map(point => finalSurfaceAt(point.x, point.z)),
-    siteVerdict = siteAccessSampleVerdict(access!, surfaces, new Set([parentCode!]));
+    incidentRoadCodes = new Set((index.adjacency.get(access!.to) ?? [])
+      .filter(step => step.edge.roadClass !== "access").map(step => step.edge.code)),
+    siteVerdict = siteAccessSampleVerdict(access!, surfaces, incidentRoadCodes);
+  assert.ok(incidentRoadCodes.has(parentCode!),
+    "the access branch's named parent must be incident to its actual graph junction");
   assert.ok(stations.length > 0 && stations.length <= SITE_ACCESS_STATION_LIMIT,
     "selected critical-site station profile stays bounded");
   assert.ok(siteVerdict.sampledPass,
-    `selected site access ${access!.code} (parent ${parentCode}) must remain dry, walkable, source-owned and grade-safe at every sampled station: ${JSON.stringify(siteVerdict)}`);
+    `selected site access ${access!.code} (parent ${parentCode}) must remain dry, walkable, source-owned and grade-safe at every sampled station: ${JSON.stringify(siteVerdict)}; terminal contributors: ${JSON.stringify(surfaces.at(-1)?.contributingModifierIds)}`);
+  assert.equal(siteVerdict.terminalGeometryOnly, false,
+    "a sampled site PASS must have an actual joined-road surface winner, not geometric overlap alone");
   const distance = approach!.distanceM + crossing!.surfaceLengthM + continuation!.distanceM,
     fantasySeconds = approach!.fantasyWalkSeconds + crossing!.fantasyWalkSeconds +
       continuation!.fantasyWalkSeconds;
