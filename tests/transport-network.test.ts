@@ -809,6 +809,25 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(good.onRecordedRoad, true);
   assert.equal(good.topSurfaceOwned, true);
   assert.equal(good.terminalGeometryOnly, false);
+  // Contradictory world evidence must never let a site approach claim legal
+  // passage: the route inspector already rejects blocked non-road traversal.
+  const blockedTraversal = siteAccessSampleVerdict(edge,
+    connectedSurfaces.map((surface, i) => i === 0
+      ? { ...surface, traversal: "blocked" as const } : surface), junctionRoadCodes);
+  assert.equal(blockedTraversal.walkable, true,
+    "fixture isolates a contradictory traversal label from the walkable flag");
+  assert.equal(blockedTraversal.topSurfaceOwned, false);
+  assert.equal(blockedTraversal.sampledPass, false);
+  assert.deepEqual([blockedTraversal.firstUnsafeStation, blockedTraversal.firstUnsafeCause],
+    [1, "non-road site-access traversal"],
+    "the first blocked label is not a legal road or open final surface");
+  const invalidFirstHeight = siteAccessSampleVerdict(edge,
+    connectedSurfaces.map((surface, i) => i === 0
+      ? { ...surface, surfaceHeight: NaN } : surface), junctionRoadCodes);
+  assert.equal(invalidFirstHeight.sampledPass, false);
+  assert.deepEqual([invalidFirstHeight.firstUnsafeStation, invalidFirstHeight.firstUnsafeCause],
+    [1, "invalid final-surface height"],
+    "a malformed first top cannot be reported only as a later bad interval");
   const deckSample = (owner: string) => connectedSurfaces.map((surface, index) => index === 2 ?
     { ...surface, traversal: "bridge", deckHeight: surface.surfaceHeight, deckOwnerIds: [owner] } : surface);
   const wrongTop = siteAccessSampleVerdict(edge, deckSample("UNRELATED/OVERPASS"), junctionRoadCodes);

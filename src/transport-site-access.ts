@@ -140,7 +140,7 @@ export function siteAccessSampleVerdict(
   // contributing a road modifier below an unrelated overpass is not passage.
   const topSurfaceOwned = full && surfaces.every((surface, index) =>
     surface.deckHeight == null
-      ? surface.traversal !== "bridge"
+      ? surface.traversal === "road" || surface.traversal === "open"
       : Number.isFinite(surface.deckHeight) && surface.surfaceHeight === surface.deckHeight &&
         surface.traversal === "bridge" && surface.deckOwnerIds.some(id =>
           (id === edge.code || (index === surfaces.length - 1 && exactParentJoin && id === terminalIncidentRoad)) &&
@@ -164,18 +164,21 @@ export function siteAccessSampleVerdict(
             code !== edge.code && junctionRoadCodes.has(code))
         : surface.contributingModifierIds.includes(edge.code);
       const deckLegal = surface.deckHeight == null
-        ? surface.traversal !== "bridge"
+        ? surface.traversal === "road" || surface.traversal === "open"
         : Number.isFinite(surface.deckHeight) && surface.surfaceHeight === surface.deckHeight &&
           surface.traversal === "bridge" && surface.deckOwnerIds.some(id =>
             (id === edge.code || (terminal && exactParentJoin && id === terminalIncidentRoad)) &&
             surface.contributingModifierIds.includes(id));
       let cause: string | null = null;
-      if (surface.water.kind !== "none") cause = "wet site-access surface";
+      if (!Number.isFinite(surface.surfaceHeight)) cause = "invalid final-surface height";
+      else if (surface.water.kind !== "none") cause = "wet site-access surface";
       else if (!surface.walkable) cause = "blocked site-access surface";
       else if (!recorded) cause = terminal ? "site branch misses its registered parent junction" : "site branch road modifier absent";
       else if (terminal && parentCode && !terminalSurfaceOwned) cause = "terminal has no registered top road owner";
-      else if (!deckLegal) cause = "unrelated or invalid top bridge deck";
       else if (surface.traversal === "difficult") cause = "unsafe local site-access slope";
+      else if (surface.deckHeight == null && surface.traversal !== "road" && surface.traversal !== "open")
+        cause = "non-road site-access traversal";
+      else if (!deckLegal) cause = "unrelated or invalid top bridge deck";
       else if (index > 0) {
         const length = greatCircleDistance(
           sourceToLonLat(stations[index - 1].x, stations[index - 1].z),
