@@ -448,7 +448,7 @@ function renderSiteAccessProbe() {
       <dt>Recorded road</dt><dd>${siteProbe.onRecordedRoad ? "All sampled stations on the canonical access branch" : "Missing canonical access branch at sampled stations"}</dd>
       <dt>Samples</dt><dd>${siteProbe.stationCount}/${siteProbe.expectedStations} · each profile span's ends and midpoint</dd>
       <dt>Ground passage</dt><dd>${siteProbe.dry && siteProbe.walkable ? "Sampled stations dry and walkable" : "One or more samples wet, blocked or missing"}</dd>
-      <dt>Sampled max grade</dt><dd>${grade} · ${siteProbe.gradeWithinLimit ? "within 8%" : "not within 8% limit"}</dd>
+      <dt>Sampled span max grade</dt><dd>${grade} · ${siteProbe.gradeWithinLimit ? "spans and local road slopes within limit" : "span or local surface grade not certified"}</dd>
       <dt>Evidence boundary</dt><dd>Selected site's own access branch only · unsampled gaps, rest of graph route and character movement not certified</dd>
     </dl>`;
 }
