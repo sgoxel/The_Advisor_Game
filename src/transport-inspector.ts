@@ -12,7 +12,8 @@ import {
   type TransportRoadEdge,
 } from "./transport-network.ts";
 import { siteTransportAcceptanceSummary as transportAcceptanceSummary, siteTransportNetwork as transportNetwork, siteTransportRoadsNear as transportRoadsNear } from "./site-transport-network.ts";
-import { CANONICAL_METRES_PER_SOURCE_UNIT, sourceToLonLat } from "./planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat } from "./planet.ts";
+import { planTransportRouteCorridor, sampledCorridorStationPass } from "./transport-route-corridor.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
@@ -73,6 +74,11 @@ let siteProbe: ReturnType<typeof siteAccessSampleVerdict> | null = null;
 let siteProbeStatus = "not requested";
 let siteProbeMs: number | null = null;
 let siteProbeRevision = 0;
+let corridorProbeRevision = 0;
+let corridorProbeStatus = "not requested";
+let corridorProbeStations = 0;
+let corridorProbeMaximumGrade: number | null = null;
+const corridorEdges = new Map(transportNetwork.roadEdges.map(edge => [edge.code, edge]));
 
 function compareCanonical(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
@@ -102,6 +108,7 @@ panel.innerHTML = `
     <button type="button" id="transport-nearest">Inspect nearest road</button>
     <button type="button" id="transport-site-route">Preview shortest road to reachable site</button>
     <button type="button" id="transport-site-access" disabled>Probe selected site's physical approach</button>
+    <button type="button" id="transport-route-corridor" disabled>Probe walking route surface</button>
     <button type="button" id="transport-focus">Focus selection</button>
     <button type="button" id="transport-bridge-closeup" hidden>Inspect bridge from low 3D angle</button>
     <button type="button" id="transport-bridge-clearview" hidden>View bridge without inspector</button>
@@ -110,6 +117,7 @@ panel.innerHTML = `
   <section id="transport-selection" aria-live="polite"></section>
   <section id="transport-site-answer" aria-live="polite"></section>
   <section id="transport-site-surface" aria-live="polite"></section>
+  <section id="transport-corridor-result" aria-live="polite"></section>
   <div class="divider"></div>
   <div class="transport-metrics" id="transport-metrics"></div>
 `;
@@ -445,7 +453,72 @@ function renderSiteAccessProbe() {
     </dl>`;
 }
 
+function renderCorridorProbe() {
+  const target = panel.querySelector<HTMLElement>("#transport-corridor-result")!;
+  target.textContent = corridorProbeStatus === "not requested" ? "" :
+    `Selected-route final-surface diagnostic: ${corridorProbeStatus}. ${corridorProbeStations} sampled stations${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${(corridorProbeMaximumGrade * 100).toFixed(1)}%`}. Map preview only; no uninterrupted passage or character travel certified.`;
+}
+
+function resetCorridorProbe() {
+  corridorProbeRevision++;
+  corridorProbeStatus = "not requested";
+  corridorProbeStations = 0;
+  corridorProbeMaximumGrade = null;
+  panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = !siteRoute;
+  renderCorridorProbe();
+}
+
+function probeRouteCorridor() {
+  if (!siteRoute) return;
+  const plan = planTransportRouteCorridor(siteRoute, corridorEdges), revision = ++corridorProbeRevision;
+  corridorProbeStations = 0;
+  corridorProbeMaximumGrade = null;
+  if (plan.status !== "ready") {
+    corridorProbeStatus = plan.status === "over-budget" ? "route exceeds bounded 4096-station probe; not certified" : "invalid source-owned physical path; not certified";
+    renderCorridorProbe();
+    return;
+  }
+  corridorProbeStatus = "checking final surface in bounded frame batches";
+  panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = true;
+  renderCorridorProbe();
+  let previousHeight: number | null = null;
+  const step = () => {
+    if (revision !== corridorProbeRevision) return;
+    for (let i = 0; i < 8 && corridorProbeStations < plan.stations.length; i++) {
+      const index = corridorProbeStations, station = plan.stations[index],
+        surface = finalSurfaceAt(station.x, station.z);
+      if (!sampledCorridorStationPass(station, surface)) {
+        corridorProbeStatus = `road ownership, water or walkability fails at station ${index + 1}; not certified`;
+        break;
+      }
+      if (previousHeight !== null) {
+        const previous = plan.stations[index - 1],
+          metres = greatCircleDistance(sourceToLonLat(previous.x, previous.z), sourceToLonLat(station.x, station.z)),
+          grade = metres > 0 ? Math.abs(surface.surfaceHeight - previousHeight) / metres : Infinity;
+        corridorProbeMaximumGrade = Math.max(corridorProbeMaximumGrade ?? 0, grade);
+        if (!Number.isFinite(grade) || grade > .08) {
+          corridorProbeStatus = `sampled grade exceeds 8% at station ${index + 1}; not certified`;
+          break;
+        }
+      }
+      previousHeight = surface.surfaceHeight;
+      corridorProbeStations++;
+    }
+    if (corridorProbeStatus !== "checking final surface in bounded frame batches") {
+      panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = false;
+      renderCorridorProbe();
+    } else if (corridorProbeStations < plan.stations.length) requestAnimationFrame(step);
+    else {
+      corridorProbeStatus = "sampled centerline passes at every planned station; between-station and actor passage not certified";
+      panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = false;
+      renderCorridorProbe();
+    }
+  };
+  requestAnimationFrame(step);
+}
+
 function resetSiteAccessProbe() {
+  resetCorridorProbe();
   siteProbeRevision++;
   siteProbe = null;
   siteProbeStatus = "not requested";
@@ -738,6 +811,9 @@ function telemetry() {
     siteAccessProbeStatus: siteProbeStatus,
     siteAccessProbeStations: siteProbe?.stationCount ?? 0,
     siteAccessProbeMs: siteProbeMs,
+    corridorProbeStatus,
+    corridorProbeStations,
+    corridorProbeMaximumGrade,
     siteRouteEdges: siteRoute?.edgeCodes.length ?? 0,
     localRoads: lastLocalRoads,
     overlayRoads: lastOverlayRoads,
@@ -757,6 +833,7 @@ panel.querySelector<HTMLButtonElement>("#transport-close")!.onclick = () => {
 panel.querySelector<HTMLButtonElement>("#transport-nearest")!.onclick = chooseNearestRoad;
 panel.querySelector<HTMLButtonElement>("#transport-site-route")!.onclick = chooseNearestSiteRoute;
 panel.querySelector<HTMLButtonElement>("#transport-site-access")!.onclick = probeSiteAccess;
+panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.onclick = probeRouteCorridor;
 panel.querySelector<HTMLButtonElement>("#transport-focus")!.onclick = focusSelection;
 function inspectBridgeIn3D() {
   if (selection?.kind !== "bridge") return false;
