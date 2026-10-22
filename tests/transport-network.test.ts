@@ -1004,10 +1004,15 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
   const stations = siteAccessRoadStations(access!),
     surfaces = stations.map(point => finalSurfaceAt(point.x, point.z)),
     incidentRoadCodes = new Set((index.adjacency.get(access!.to) ?? [])
-      .filter(step => step.edge.roadClass !== "access").map(step => step.edge.code)),
+      .map(step => step.edge.code)),
     siteVerdict = siteAccessSampleVerdict(access!, surfaces, incidentRoadCodes);
   assert.ok(incidentRoadCodes.has(parentCode!),
     "the access branch's named parent must be incident to its actual graph junction");
+  const terminalWinner = surfaces.at(-1)?.contributingModifierIds.find(code => code !== access!.code);
+  assert.ok(terminalWinner && incidentRoadCodes.has(terminalWinner),
+    "the final-surface junction winner must be an actual incident SEED graph road");
+  assert.ok(edgeByCode.has(terminalWinner),
+    "the sampled owner is a real canonical road, not a detached surface modifier");
   assert.ok(stations.length > 0 && stations.length <= SITE_ACCESS_STATION_LIMIT,
     "selected critical-site station profile stays bounded");
   assert.ok(siteVerdict.sampledPass,
