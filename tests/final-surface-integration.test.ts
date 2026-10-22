@@ -255,6 +255,12 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
     "selected-bridge road/deck/bank sampling must be dense but strictly bounded");
   assert.equal(typeof observed.routeStationsOnRoad, "boolean");
   assert.equal(typeof observed.routeStationsSurfaceOwned, "boolean");
+  assert.equal(typeof observed.routeStationsTopLegal, "boolean");
+  assert.equal(typeof observed.approachStationsTopLegal, "boolean");
+  assert.ok(observed.routeStationsTopLegal || observed.routeFirstUnsafeStation !== null || !observed.routeStationsOnRoad,
+    "locally invalid top-road samples must expose a bounded first failing station");
+  assert.ok(observed.approachStationsTopLegal || observed.approachFirstUnsafeBank !== null || !observed.approachStationsOnRoad,
+    "uncertified dry-bank top surfaces must identify their failing approach");
   if (!observed.routeStationsSurfaceOwned) assert.equal(observed.routeStationsWalkable, false,
     "samples without the actual selected road modifier cannot certify traversal");
   if (!observed.routeStationsOnRoad) assert.equal(observed.routeStationsWalkable, false,
@@ -316,6 +322,8 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(shortSpan.approachStationsOnRoad, false, "road must extend to the sampled bank stations");
   assert.equal(shortSpan.approachStationsWalkable, false, "walkable off-road ground is not a road approach");
   assert.equal(shortSpan.routeStationsOnRoad, false, "a short road cannot cover the recorded whole crossing");
+  assert.equal(shortSpan.routeStationsTopLegal, false, "missing physical road extent is not a legal top-surface crossing");
+  assert.equal(shortSpan.approachStationsTopLegal, false, "missing bank road extent cannot be certified");
   assert.equal(shortSpan.routeStationsSurfaceOwned, false);
   assert.equal(shortSpan.routeStationsWalkable, false, "missing source-owned road prevents sampled route certification");
   assert.equal(shortSpan.routeGradeWithinLimit, false, "off-road stations cannot certify grade");

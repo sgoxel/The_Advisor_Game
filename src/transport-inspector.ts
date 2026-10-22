@@ -319,7 +319,8 @@ function bridgeDetails(bridge: TransportBridge) {
   const span = transportBridgeSpanAt(bridge, edge);
   // A walkable centre point cannot certify both dry banks, road alignment or safe grade.
   // Keep this verdict explicitly sample-limited: whole-route traversal is not proven.
-  const sampledCrossingPass = sampledBridgeCrossingPass(surface.centerDeckWalkable, span);
+  const sampledCrossingPass = sampledBridgeCrossingPass(surface.centerDeckWalkable, span) &&
+    span.routeStationsTopLegal && span.approachStationsTopLegal;
   return `
     <div class="transport-kind ${sampledCrossingPass ? "walking" : "transfer"}">${sampledCrossingPass ? "SAMPLED CROSSING · WALKABLE & GRADE PASS" : "CROSSING ACCESS · NOT CERTIFIED"}</div>
     <h3>${codeText(bridge.code)}</h3>
@@ -336,7 +337,8 @@ function bridgeDetails(bridge: TransportBridge) {
       <dt>Sampled approach grade</dt><dd>${span.matchingCrossing && span.approachMaxSampledGrade !== null ? `${(span.approachMaxSampledGrade * 100).toFixed(1)}% sampled maximum · ${!span.approachStationsOnRoad ? "off-road samples, grade not certified" : span.approachGradeWithinLimit ? "within 8% sample limit" : "exceeds 8% sample limit"}` : "Not validated"}</dd>
       <dt>Final-surface road ownership</dt><dd>${span.matchingCrossing ? span.routeStationsSurfaceOwned ? "Selected canonical road contributes at every sampled station" : "Selected road modifier absent at one or more stations — not certified" : "Not validated"}</dd>
       <dt>Sampled crossing route</dt><dd>${span.matchingCrossing ? `${span.routeStations} bounded stations spanning both 18 m approaches · ${span.routeStationsOnRoad ? "on canonical road" : "road alignment fails"} · ${span.routeStationsWalkable ? "walkable at all stations" : "physical road ownership or walkability not certified"}` : "Not validated"}</dd>
-      <dt>Sampled crossing grade</dt><dd>${span.matchingCrossing && span.routeMaxSampledGrade !== null ? `${(span.routeMaxSampledGrade * 100).toFixed(1)}% maximum · ${span.routeGradeWithinLimit ? "sampled route passes 8% limit" : "not certified (alignment, walking or grade)"}` : "Not validated"}</dd>
+      <dt>Sampled crossing grade</dt><dd>${span.matchingCrossing && span.routeMaxSampledGrade !== null ? `${(span.routeMaxSampledGrade * 100).toFixed(1)}% maximum · ${span.routeGradeWithinLimit ? "sampled route passes 8% interval limit" : "not certified (alignment, walking or interval grade)"}` : "Not validated"}</dd>
+      <dt>Local final-surface legality</dt><dd>${span.matchingCrossing ? `${span.routeStationsTopLegal ? "Selected road owns legal top surface at all route stations" : `Route station ${span.routeFirstUnsafeStation ?? "unknown"} has unsafe local traversal/top ownership`} · ${span.approachStationsTopLegal ? "both banks legally owned" : `${span.approachFirstUnsafeBank ?? "bank alignment"} not certified`}` : "Not validated"}</dd>
       <dt>Traversal scope</dt><dd>Bounded selected-crossing samples only · continuous full-route access not certified · map preview, not travel</dd>
     </dl>`;
 }
