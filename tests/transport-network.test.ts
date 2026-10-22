@@ -21,7 +21,7 @@ import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, SOURCE_PRESENTATION_WIDTH, sourceToLonLat, wrapSourceX } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
 import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-presentation.ts";
-import { sampledBridgeCrossingPass, sampledBridgeTopFailure, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
+import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
 import { finalSurfaceAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
@@ -902,6 +902,35 @@ test("S005 bridge road-arc anchor uses canonical metre proximity at high latitud
     "latitude scaling must not break physical anchor proximity across the longitude seam");
   assert.ok(seamSamples.every(point => Math.abs(point.x - (seamX - .1)) < 1e-5),
     "selected road remains the same canonical wrapped centerline");
+});
+
+test("S005 selected bridge deck requires both recorded owner and contributing modifier", () => {
+  const edgeCode = "SEED/SELECTED/ROAD", otherCode = "SEED/FOREIGN/ROAD",
+    owned = {
+      water: { kind: "river" }, walkable: true, traversal: "bridge",
+      deckHeight: 12, deckOwnerIds: [edgeCode],
+      contributingModifierIds: [edgeCode],
+    } as FinalSurface,
+    station = { x: 0, z: 0, edgeCode };
+  assert.equal(selectedRoadBridgeDeckWalkable(owned, edgeCode), true);
+  assert.equal(sampledCorridorStationPass(station, owned), true,
+    "valid selected final-surface ownership agrees with the full-route diagnostic");
+  for (const invalid of [
+    { ...owned, contributingModifierIds: [otherCode] },
+    { ...owned, contributingModifierIds: [] },
+    { ...owned, deckOwnerIds: [otherCode] },
+    { ...owned, walkable: false },
+    { ...owned, traversal: "road" },
+    { ...owned, deckHeight: null },
+    { ...owned, water: { kind: "lake" } },
+  ] as FinalSurface[]) {
+    assert.equal(selectedRoadBridgeDeckWalkable(invalid, edgeCode), false,
+      "a selected bridge center/wet station cannot borrow an unrelated or incomplete deck");
+    assert.equal(sampledCorridorStationPass(station, invalid), false,
+      "bridge-specific deck checks must agree with selected-route source ownership");
+  }
+  assert.equal(selectedRoadBridgeDeckWalkable(owned, otherCode), false,
+    "an unrelated road code cannot claim the same selected deck");
 });
 
 test("S005 selected bridge and walking route give the same first unsafe final-surface reason", () => {
