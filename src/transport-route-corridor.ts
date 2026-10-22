@@ -53,6 +53,10 @@ export function planTransportRouteCorridor(
       return Object.freeze({ status: "invalid", stations: EMPTY });
     const forward = edge.from === at;
     if (!forward && edge.to !== at) return Object.freeze({ status: "invalid", stations: EMPTY });
+    // When the caller provides an authoritative walking index, a missing
+    // endpoint entry is invalid, not permission to skip ownership validation.
+    if (incidentRoads && (!incidentRoads.has(at) || !incidentRoads.has(forward ? edge.to : edge.from)))
+      return Object.freeze({ status: "invalid", stations: EMPTY });
     const points = forward ? edge.centerline : [...edge.centerline].reverse(),
       start = nodes.get(at), endCode = forward ? edge.to : edge.from,
       end = nodes.get(endCode);
