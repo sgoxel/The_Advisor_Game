@@ -331,11 +331,12 @@ function addRoadAndBridgeRibbons(
           c: Point = [x1 - bridgeNx, y1, z1 - bridgeNz],
           d: Point = [x0 - bridgeNx, y0, z0 - bridgeNz];
         pushQuad(prepared, tile, a, b, c, d, REFINED_BRIDGE_RGB);
+        // Contrasting timber rail surfaces stay legible against the deck in 3D.
         // Narrow edge strips make the crossing read as a bridge without adding
         // collision-only geometry or broadening its authoritative deck support.
         const rail = 0.7 / CANONICAL_METRES_PER_SOURCE_UNIT,
           railHeightM = 1.15,
-          edgeTint: RGB = [73, 54, 35];
+          edgeTint: RGB = [181, 143, 92];
         pushQuad(
           prepared,
           tile,
@@ -373,7 +374,7 @@ function addRoadAndBridgeRibbons(
         // The original faces point inward toward the road. Also draw the
         // outward-facing sides so a river-side inspection never sees a
         // back-face-culled rail. No new deck/collision/walkability authority.
-        const outerTint: RGB = [103, 80, 54];
+        const outerTint: RGB = [153, 112, 65];
         pushQuad(prepared, tile,
           [x0 + bridgeNx, y0 + railHeightM, z0 + bridgeNz],
           [x1 + bridgeNx, y1 + railHeightM, z1 + bridgeNz],
