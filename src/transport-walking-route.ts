@@ -1,5 +1,5 @@
 import { greatCircleDistance, type LonLat } from "./planet.ts";
-import type { TransportNetwork, TransportNode, TransportRoadEdge } from "./transport-network.ts";
+import type { TransportBridge, TransportNetwork, TransportNode, TransportRoadEdge } from "./transport-network.ts";
 
 /**
  * Read-only shortest walking preview over the already-constructed SEED-owned
@@ -171,7 +171,7 @@ export function selectedWalkingPreviewOrigin(
   network: Pick<TransportNetwork, "junctions" | "harbors" | "borderCrossings" | "roadEdges">,
   nodes: ReadonlyMap<string, TransportNode>,
   fallbackRoad?: TransportRoadEdge,
-  bridgeRoadCode?: string,
+  selectedBridge?: Pick<TransportBridge, "code" | "roadCode" | "position">,
 ): TransportNode | undefined {
   if (!selection) return fallbackRoad && nearestWalkingRoadEndpoint(fallbackRoad, nodes, focus);
   if (selection.kind === "ferry") return undefined;
@@ -182,11 +182,17 @@ export function selectedWalkingPreviewOrigin(
     const node = nodeCode ? nodes.get(nodeCode) : undefined;
     return node?.kind === selection.kind ? node : undefined;
   }
+  const border = selection.kind === "border"
+    ? network.borderCrossings.find(item => item.code === selection.code) : undefined;
+  const bridge = selection.kind === "bridge" && selectedBridge?.code === selection.code
+    ? selectedBridge : undefined;
   const roadCode = selection.kind === "road" || selection.kind === "lake-detour" ? selection.code
-    : selection.kind === "border" ? network.borderCrossings.find(item => item.code === selection.code)?.roadCode
-    : selection.kind === "bridge" ? bridgeRoadCode : undefined;
+    : selection.kind === "border" ? border?.roadCode
+    : selection.kind === "bridge" ? bridge?.roadCode : undefined;
   const road = roadCode && network.roadEdges.find(edge => edge.code === roadCode);
-  return road ? nearestWalkingRoadEndpoint(road, nodes, focus) : undefined;
+  // A selected SEED crossing keeps its physical bank even after camera pan.
+  // Ordinary selected roads still use focus to choose their nearest endpoint.
+  return road ? nearestWalkingRoadEndpoint(road, nodes, border?.position ?? bridge?.position ?? focus) : undefined;
 }
 
 /** Overlay only: project/highlight at most the already focus-bounded road query. */
