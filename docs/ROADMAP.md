@@ -29,25 +29,25 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — SEED-legal gate→Y→bridge→both banks→site traversal & truthful route UX
+- WP-S005-001-001 — Continuous SEED-legal gate→Y→bridge→site passage, final-surface proof & truthful route UX
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — Legal resident home→work/guard travel, Fantasy-Time & first-use inspection
+- WP-S006-001-001 — Legal resident home↔work/guard movement, Fantasy-Time & responsive inspection
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Research PlayCanvas toon/GLB/2D sprites, semantic zoom & mobile visual budgets
+- WP-S007-001-001 — Research toon/GLB/2D art, semantic zoom & mobile visual-performance budgets
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Accessible mobile atlas: 44px touch, safe-area UI & keyboard inspect/route UX
+- WP-S008-001-001 — Mobile-first atlas UX: legible UI, 44px touch, safe areas & keyboard inspection
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA readiness & performance proof: first answer, settled detail, p95 & CPU+GPU
-- WP-S009-002-001 — Bounded canonical picking & revision-driven UI with zero idle layout work
-- WP-S009-003-001 — Adaptive WebGPU/WebGL2 quality, mobile resources & device-loss recovery
-- WP-S009-004-001 — README conformance: atlas versus Advisor, campaign gaps & truthful release UX
-- WP-S009-005-001 — Pure-zoom coherence: fast terrain, first selection & complete 3D detail
+- WP-S009-001-001 — Exact-SHA startup/first-answer/detail benchmarks, frame p95 & CPU+GPU proof
+- WP-S009-002-001 — Fast canonical picking, input p95 & zero redundant idle UI layout
+- WP-S009-003-001 — Adaptive mobile DPR/shadows, WebGPU/WebGL2 parity & GPU-loss recovery
+- WP-S009-004-001 — README conformance ledger: atlas vs Advisor game, campaign gaps & truthful UX
+- WP-S009-005-001 — Pure-zoom continuity: no blank coverage, fast first selection & retained 3D detail
