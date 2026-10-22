@@ -10,7 +10,7 @@ import type { TransportRoadEdge } from "./transport-network.ts";
  */
 export const ROUTE_CORRIDOR_STATION_LIMIT = 4096;
 type Edge = Pick<TransportRoadEdge, "code" | "from" | "to" | "centerline">;
-export type CorridorStation = Readonly<{ x: number; z: number; edgeCode: string }>;
+export type CorridorStation = Readonly<{ x: number; z: number; edgeCode: string; joinedEdgeCode?: string }>;
 type Plan = Readonly<
   | { status: "invalid"; stations: readonly CorridorStation[] }
   | { status: "over-budget"; stations: readonly CorridorStation[] }
@@ -38,10 +38,14 @@ export function planTransportRouteCorridor(
         return Object.freeze({ status: "invalid", stations: EMPTY });
       const dx = wrapSourceX(b.x - a.x), dz = b.z - a.z,
         steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dz)) - 1e-8));
-      if (stations.length && i === 1 && Math.hypot(
-        wrapSourceX(stations[stations.length - 1].x - a.x),
-        stations[stations.length - 1].z - a.z,
-      ) > 1e-4) return Object.freeze({ status: "invalid", stations: EMPTY });
+      if (stations.length && i === 1) {
+        const last = stations.length - 1;
+        if (Math.hypot(wrapSourceX(stations[last].x - a.x), stations[last].z - a.z) > 1e-4)
+          return Object.freeze({ status: "invalid", stations: EMPTY });
+        // Sample a shared graph point once but require BOTH incident road owners.
+        // Duplicating it would create a zero-distance interval in the grade probe.
+        stations[last] = Object.freeze({ ...stations[last], joinedEdgeCode: code });
+      }
       const additional = steps + (stations.length ? 0 : 1);
       if (!Number.isSafeInteger(steps) || stations.length + additional > ROUTE_CORRIDOR_STATION_LIMIT)
         return Object.freeze({ status: "over-budget", stations: EMPTY });
@@ -62,9 +66,11 @@ export function sampledCorridorStationPass(
   station: CorridorStation,
   surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds">,
 ) {
-  if (!surface.walkable || !surface.contributingModifierIds.includes(station.edgeCode)) return false;
+  const ownedByBoth = (ids: readonly string[]) =>
+    ids.includes(station.edgeCode) && (!station.joinedEdgeCode || ids.includes(station.joinedEdgeCode));
+  if (!surface.walkable || !ownedByBoth(surface.contributingModifierIds)) return false;
   if (surface.water.kind === "none") return true;
   return surface.water.kind === "river" &&
     surface.traversal === "bridge" && surface.deckHeight !== null &&
-    surface.deckOwnerIds.includes(station.edgeCode);
+    ownedByBoth(surface.deckOwnerIds);
 }
