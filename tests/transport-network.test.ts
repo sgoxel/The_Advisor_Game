@@ -27,7 +27,7 @@ import { createTransportJunctionLookup } from "../src/transport-junction-index.t
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
 import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
-import { SITE_ACCESS_STATION_LIMIT, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
+import { SITE_ACCESS_STATION_LIMIT, siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
 import { planTransportRouteCorridor, ROUTE_CORRIDOR_STATION_LIMIT, sampledCorridorStationPass } from "../src/transport-route-corridor.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import {
@@ -424,6 +424,12 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     assert.ok(site, `missing SEED owner for ${edge.code}`);
     assert.equal(siteAccessParentRoadCode(edge), site.access.roadCode,
       "site branch must name its SEED-assigned parent rather than an arbitrary incident road");
+    assert.equal(siteAccessBranchOnRoute({ to: edge.from, edgeCodes: [edge.code] }, accessBranches)?.code,
+      edge.code, "the selected route's own final branch must be probed");
+    assert.equal(siteAccessBranchOnRoute({ to: edge.from, edgeCodes: ["not-selected-edge"] }, accessBranches),
+      undefined, "an unrelated access branch must never certify a selected route");
+    assert.equal(siteAccessBranchOnRoute({ to: edge.to, edgeCodes: [edge.code] }, accessBranches),
+      undefined, "the sampled branch must end at the selected site node");
     assert.equal(siteAccessParentRoadCode({ ...edge, from: "S005/NODE/SITE/WRONG" }), undefined,
       "misowned site branch must never certify a different site's road");
     assert.equal(siteAccessParentRoadCode({ ...edge, roadClass: "main" }), undefined,
