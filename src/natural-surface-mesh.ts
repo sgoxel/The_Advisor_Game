@@ -281,9 +281,14 @@ export function rebuildNaturalSurface(
           (s) => s.wet === "none" && Math.abs(s.shoreDistance) <= size * Math.SQRT2 + 8,
         ),
       road = preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r) < size * Math.SQRT2 / 2 + 12),
+      // The worker uses this mesh instead of the coarse ground refinement at
+      // real river crossings. Tighten only road-adjacent mixed wet/dry landing
+      // cells, not entire river strips or unrelated tiles.
+      bridgeBank = river && [a, b, c, d].some(p => wet(p) !== wet(middle)) &&
+        preparedRoads.some(r => roadDistanceAt(middle.x, middle.z, r) <= size * Math.SQRT2 / 2 + 2),
       materialBoundary = [a,b,c,d].some(p => p.material !== middle.material),
       prepared = road || (preparedPlace && materialBoundary),
-      target = river
+      target = bridgeBank ? Math.max(0.25, tile.size / 256) : river
         ? Math.max(tile.size / 128, Math.min(
             tile.size >= 256 ? 2 : tile.size >= 128 ? 1 : 0.5,
             tile.size / 32,
