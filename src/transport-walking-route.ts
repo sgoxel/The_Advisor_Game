@@ -29,7 +29,7 @@ const earlier = (a: HeapEntry, b: HeapEntry) => a.lengthM < b.lengthM ||
   (a.lengthM === b.lengthM && a.code < b.code);
 
 /** Bounded by canonical graph size; no recursive search, viewport or LOD inputs. */
-function searchWalkingRoute(index: Index, from: string, destinations: ReadonlySet<string>) {
+function searchWalkingRoute(index: Index, from: string, destinations: ReadonlySet<string>, excludedEdgeCode?: string) {
   if (!index.adjacency.has(from) || !destinations.size) return null;
   const heap: HeapEntry[] = [], distances = new Map([[from, 0]]),
     parent = new Map<string, { previous: string; edge: TransportRoadEdge }>(),
@@ -83,7 +83,7 @@ function searchWalkingRoute(index: Index, from: string, destinations: ReadonlySe
       });
     }
     for (const step of index.adjacency.get(current.code)!) {
-      if (settled.has(step.node)) continue;
+      if (step.edge.code === excludedEdgeCode || settled.has(step.node)) continue;
       const candidate = current.lengthM + step.edge.surfaceLengthM,
         previous = distances.get(step.node);
       if (previous === undefined || candidate < previous) {
@@ -104,6 +104,35 @@ export function transportWalkingRouteToNearest(index: Index, from: string, siteC
 /** A specific requested endpoint retains the same deterministic route semantics. */
 export function transportWalkingRoute(index: Index, from: string, to: string) {
   return searchWalkingRoute(index, from, new Set([to].filter(code => index.adjacency.has(code))));
+}
+
+/**
+ * Bridge-selected previews must actually include their chosen graph road.
+ * Traverse that exact SEED edge once from the selected bank, then search the
+ * remainder without retracing it. If no such walking path exists, fail closed.
+ * This is still graph metadata, never proof of final-surface passage.
+ */
+export function transportWalkingRouteThroughEdge(
+  index: Index, from: string, required: Pick<TransportRoadEdge, "code" | "from" | "to">,
+  siteCodes: readonly string[],
+) {
+  if (from !== required.from && from !== required.to) return null;
+  const otherBank = from === required.from ? required.to : required.from,
+    owned = index.adjacency.get(from)?.find(step =>
+      step.edge.code === required.code && step.node === otherBank &&
+      step.edge.from === required.from && step.edge.to === required.to);
+  if (!owned) return null;
+  const destinations = new Set(siteCodes.filter(code => index.adjacency.has(code)));
+  const continuation = searchWalkingRoute(index, otherBank, destinations, required.code);
+  if (!continuation) return null;
+  const edge = owned.edge;
+  return Object.freeze({
+    from, to: continuation.to,
+    edgeCodes: Object.freeze([edge.code, ...continuation.edgeCodes]),
+    distanceM: edge.surfaceLengthM + continuation.distanceM,
+    fantasyWalkSeconds: edge.fantasyWalkSeconds + continuation.fantasyWalkSeconds,
+    exploredNodes: continuation.exploredNodes,
+  });
 }
 
 /**
