@@ -231,7 +231,8 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
     ...observed, matchingCrossing: true, deckStationsWalkable: true,
     bankStationsWalkable: true, approachStationsWalkable: true,
     approachGradeWithinLimit: true, routeStationsWalkable: true,
-    routeGradeWithinLimit: true,
+    routeGradeWithinLimit: true, routeStationsTopLegal: true,
+    approachStationsTopLegal: true,
   };
   assert.equal(sampledBridgeCrossingPass(true, otherwisePass), true,
     "a genuinely passing selected-road sample remains a grade-pass");
@@ -239,6 +240,10 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
     "a steep dry-bank approach must prevent the prominent grade-pass badge");
   assert.equal(sampledBridgeCrossingPass(false, otherwisePass), false,
     "a missing source-owned wet deck must never certify a crossing");
+  assert.equal(sampledBridgeCrossingPass(true, { ...otherwisePass, routeStationsTopLegal: false }), false,
+    "a locally unsafe selected-road surface cannot pass despite legal span-average grades");
+  assert.equal(sampledBridgeCrossingPass(true, { ...otherwisePass, approachStationsTopLegal: false }), false,
+    "an unsafe dry-bank local top surface must fail despite a walkable centre deck");
 
   const displacedBridge = {
     ...bridge,

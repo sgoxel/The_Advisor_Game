@@ -296,5 +296,6 @@ export function sampledBridgeCrossingPass(
   return centerDeckWalkable && span.matchingCrossing &&
     span.deckStationsWalkable && span.bankStationsWalkable &&
     span.approachStationsWalkable && span.approachGradeWithinLimit &&
-    span.routeStationsWalkable && span.routeGradeWithinLimit;
+    span.routeStationsWalkable && span.routeGradeWithinLimit &&
+    span.routeStationsTopLegal && span.approachStationsTopLegal;
 }
