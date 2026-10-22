@@ -1,15 +1,30 @@
 name: Validate S006 living residents
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - 'src/clock.ts'
+      - 'src/main.ts'
+      - 'src/political-settlement-access.ts'
+      - 'src/resident-inspector.*'
+      - 'src/settlement-exterior*.ts'
+      - 'src/simulation.ts'
+      - 'src/transport-walking-route.ts'
+      - 'tests/simulation.test.ts'
+      - 'tools/screenshot_tool.py'
+      - '.github/workflows/agent1-s006-resident-evidence.yml'
 concurrency:
-  group: s006-resident-${{ github.sha }}
-  cancel-in-progress: false
+  group: s006-resident-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   resident-evidence:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
