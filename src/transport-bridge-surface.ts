@@ -136,6 +136,35 @@ export function transportBankApproachGrade(
   return maximum;
 }
 
+/**
+ * Pure evidence from already sampled canonical road positions and top-surface
+ * heights. Identify the FIRST sampled interval violating 8% without confusing
+ * interval rise/run with the separate local final-surface slope.
+ */
+export function transportRoadIntervalGradeEvidence(
+  points: readonly { x: number; z: number }[], heights: readonly number[],
+) {
+  if (points.length < 2 || points.length !== heights.length)
+    return Object.freeze({ maximum: null as number | null,
+      firstUnsafeStation: null as number | null, firstUnsafeGrade: null as number | null });
+  let maximum = 0, firstUnsafeStation: number | null = null, firstUnsafeGrade: number | null = null;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1], b = points[i],
+      valid = a && b && [a.x, a.z, b.x, b.z].every(Number.isFinite),
+      metres = valid ? greatCircleDistance(
+        sourceToLonLat(a.x, a.z), sourceToLonLat(b.x, b.z)) : NaN,
+      rise = Math.abs(heights[i] - heights[i - 1]),
+      grade = Number.isFinite(metres) && metres > 0 && Number.isFinite(rise)
+        ? rise / metres : Infinity;
+    maximum = Math.max(maximum, grade);
+    if (firstUnsafeStation === null && grade > .08) {
+      firstUnsafeStation = i + 1;
+      firstUnsafeGrade = grade;
+    }
+  }
+  return Object.freeze({ maximum, firstUnsafeStation, firstUnsafeGrade });
+}
+
 /** Both dry-bank approach probes follow the immutable road, not a projected tangent. */
 export function transportRoadBankApproaches(
   points: readonly { x: number; z: number }[], x: number, z: number,
@@ -197,6 +226,8 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     routeStationsTopLegal: false,
     routeFirstUnsafeStation: null as number | null,
     routeFirstUnsafeCause: null as string | null,
+    routeFirstUnsafeIntervalStation: null as number | null,
+    routeFirstUnsafeIntervalGrade: null as number | null,
     approachStationsTopLegal: false,
     approachFirstUnsafeBank: null as string | null,
     approachFirstUnsafeCause: null as string | null,
@@ -253,18 +284,14 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
       surface.walkable &&
       (surface.water.kind === "none" ||
         (surface.water.kind === "river" && surface.deckHeight !== null && surface.traversal === "bridge"))),
-    // The canonical road may bend and traverse different latitudes. Grade
-    // must use each actual geodesic station separation, not nominal span / N.
-    routeMaxSampledGrade = routeStationsOnRoad ? Math.max(...roadStations.slice(1).map((point, index) => {
-      const previous = roadStations[index],
-        stepM = greatCircleDistance(
-          sourceToLonLat(previous.x, previous.z),
-          sourceToLonLat(point.x, point.z),
-        ),
-        rise = Math.abs(routeStations[index + 1].surface.surfaceHeight -
-          routeStations[index].surface.surfaceHeight);
-      return Number.isFinite(stepM) && stepM > 0 && Number.isFinite(rise) ? rise / stepM : Infinity;
-    })) : null;
+    // Actual spherical station separation, never the nominal water-span step.
+    // Reuse these grades to expose the first bad interval without extra samples.
+    routeGrades = routeStationsOnRoad
+      ? transportRoadIntervalGradeEvidence(roadStations,
+          routeStations.map(({ surface }) => surface.surfaceHeight))
+      : Object.freeze({ maximum: null as number | null,
+          firstUnsafeStation: null as number | null, firstUnsafeGrade: null as number | null }),
+    routeMaxSampledGrade = routeGrades.maximum;
 
   return Object.freeze({
     matchingCrossing: true,
@@ -287,6 +314,8 @@ export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRo
     routeFirstUnsafeStation: routeFirstUnsafeIndex < 0 ? null : routeFirstUnsafeIndex + 1,
     routeFirstUnsafeCause: routeFirstUnsafeIndex < 0 ? null :
       sampledBridgeTopFailure(edge.code, routeStations[routeFirstUnsafeIndex].surface),
+    routeFirstUnsafeIntervalStation: routeGrades.firstUnsafeStation,
+    routeFirstUnsafeIntervalGrade: routeGrades.firstUnsafeGrade,
     // Only on a detected difficult station: measure the SAME four-point local
     // canonical gradient used by finalSurfaceAt. Sampled interval grade is different.
     routeFirstUnsafeLocalGrade: routeFirstUnsafeIndex >= 0 &&
