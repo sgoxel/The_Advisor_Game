@@ -170,6 +170,40 @@ test("an actual natural-water road crossing refines to a narrow authoritative de
   assert.ok(outerLeft > 0 && outerRight > 0,
     "both river-facing guardrail sides must have outward-pointing visible normals");
 
+  // Readable upright posts must be actual bounded 3D timber attached to
+  // the selected source-owned bridge; a bright flat stripe is insufficient.
+  assert.ok(hasVertexColor(refined.structures.colors, [147, 106, 61]),
+    "bridge rail must render physical timber upright sides");
+  assert.ok(hasVertexColor(refined.structures.colors, [218, 180, 116]),
+    "bridge rail uprights need visible upper caps");
+  const upwardCapNormals = new Set<string>();
+  for (let vertex = 0; vertex < refined.structures.positions.length / 3; vertex++) {
+    const c = vertex * 4, p = vertex * 3;
+    if (refined.structures.colors[c] !== 218 || refined.structures.colors[c + 1] !== 180 ||
+        refined.structures.colors[c + 2] !== 116) continue;
+    assert.ok(refined.structures.normals[p + 1] > 0.99,
+      "each timber cap must actually face upward on WebGPU and WebGL2");
+    upwardCapNormals.add(refined.structures.positions[p + 2] > 0 ? "+" : "-");
+  }
+  assert.ok(upwardCapNormals.size > 0);
+  const postColumns = new Map<string, { low: number; high: number }>();
+  for (let vertex = 0; vertex < refined.structures.positions.length / 3; vertex++) {
+    const colorIndex = vertex * 4;
+    if (refined.structures.colors[colorIndex] !== 147 ||
+        refined.structures.colors[colorIndex + 1] !== 106 ||
+        refined.structures.colors[colorIndex + 2] !== 61) continue;
+    const p = vertex * 3,
+      key = `${refined.structures.positions[p].toFixed(4)}/${refined.structures.positions[p + 2].toFixed(4)}`,
+      y = refined.structures.positions[p + 1],
+      column = postColumns.get(key);
+    if (column) { column.low = Math.min(column.low, y); column.high = Math.max(column.high, y); }
+    else postColumns.set(key, { low: y, high: y });
+  }
+  assert.ok([...postColumns.values()].some(({ low, high }) =>
+    (high - low) * CANONICAL_METRES_PER_SOURCE_UNIT >= 1.64),
+  "at least one physical post must rise 1.65m in the 3D render frame");
+  assert.ok(postColumns.size <= 256,
+    "only a finite local segment set receives paired timber uprights");
 
   const vx = evidence.bridgeTangent.x,
     vz = evidence.bridgeTangent.z,

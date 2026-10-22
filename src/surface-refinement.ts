@@ -389,6 +389,38 @@ function addRoadAndBridgeRibbons(
           [x0 - bridgeNx, y0 + railHeightM, z0 - bridgeNz],
           outerTint,
         );
+        // Two bounded timber uprights per already-owned deck segment make
+        // the 1.15m rails readable from the real 3D inspection camera.
+        // No extra deck, crossing, collision, route or mutable identity.
+        const postHalf = 0.55 / CANONICAL_METRES_PER_SOURCE_UNIT,
+          postDepth = 0.75 / CANONICAL_METRES_PER_SOURCE_UNIT,
+          postHeightM = 1.65,
+          postSide: RGB = [147, 106, 61],
+          postCap: RGB = [218, 180, 116],
+          baseY = (y0 + y1) / 2;
+        for (const side of [-1, 1]) {
+          const point = (along: number, outward: number, height: number): Point => [
+            mx + ux * along + side * (bridgeNx - uz * outward),
+            baseY + height,
+            mz + uz * along + side * (bridgeNz + ux * outward),
+          ];
+          const i0 = point(-postHalf, 0, 0), i1 = point(postHalf, 0, 0),
+            o0 = point(-postHalf, postDepth, 0), o1 = point(postHalf, postDepth, 0),
+            I0 = point(-postHalf, 0, postHeightM), I1 = point(postHalf, 0, postHeightM),
+            O0 = point(-postHalf, postDepth, postHeightM),
+            O1 = point(postHalf, postDepth, postHeightM);
+          pushQuad(prepared, tile, i0, i1, I1, I0, postSide);
+          pushQuad(prepared, tile, o0, O0, O1, o1, postSide);
+          // Both river-facing orientations must remain visible under
+          // back-face culling and WebGPU/WebGL2 lighting parity.
+          pushQuad(prepared, tile, o1, O1, O0, o0, postSide);
+          pushQuad(prepared, tile, i0, I0, O0, o0, postSide);
+          pushQuad(prepared, tile, i1, o1, O1, I1, postSide);
+          // Reverse the cap winding on the + bank-facing side so BOTH
+          // tops face upward under back-face culling.
+          if (side > 0) pushQuad(prepared, tile, O0, O1, I1, I0, postCap);
+          else pushQuad(prepared, tile, I0, I1, O1, O0, postCap);
+        }
         continue;
       }
       // A narrow presentation-only road strip follows the same physical
