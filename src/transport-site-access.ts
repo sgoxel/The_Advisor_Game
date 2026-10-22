@@ -1,5 +1,5 @@
 import { greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
-import { roadDistanceAt, roads } from "./geography.ts";
+import { roads, type Road } from "./geography.ts";
 import type { FinalSurface } from "./final-surface.ts";
 import type { TransportRoadEdge } from "./transport-network.ts";
 import { ACCESS_PROFILE_SEGMENT_MAX_M, criticalSites } from "./sites.ts";
@@ -17,6 +17,17 @@ const siteParents = new Map(criticalSites.map(site => [site.access.branchCode, {
   siteCode: site.code, parentCode: site.access.roadCode,
 }]));
 const roadsByCode = new Map(roads.map(road => [road.code, road]));
+
+/** A registered road meets a graph junction at a real endpoint, not a crossing along its middle. */
+export function roadEndpointMeetsTerminal(
+  road: Pick<Road, "fromX" | "fromZ" | "toX" | "toZ">,
+  terminal: Readonly<{ x: number; z: number }>,
+) {
+  if (![road.fromX, road.fromZ, road.toX, road.toZ, terminal.x, terminal.z].every(Number.isFinite))
+    return false;
+  return Math.hypot(wrapSourceX(road.fromX - terminal.x), road.fromZ - terminal.z) <= 1e-4 ||
+    Math.hypot(wrapSourceX(road.toX - terminal.x), road.toZ - terminal.z) <= 1e-4;
+}
 /** The physical site probe must inspect the route's actual final access edge. */
 export function siteAccessBranchOnRoute<T extends Pick<TransportRoadEdge, "code" | "from" | "roadClass">>(
   route: Readonly<{ to: string; edgeCodes: readonly string[] }>, edges: readonly T[],
@@ -82,7 +93,7 @@ export function siteAccessSampleVerdict(
     // modifiers at the same point. Synthetic/unowned endpoints still fail.
     exactParentJoin = full && !!parentCode && !!parentRoad &&
       junctionRoadCodes.has(parentCode) && !!terminal &&
-      roadDistanceAt(terminal.x, terminal.z, parentRoad) <= 1e-6,
+      roadEndpointMeetsTerminal(parentRoad, terminal),
     // The SEED graph can prove a join whose final-surface road winner is
     // different at that exact coordinate. Keep geometry evidence distinct
     // from a confirmed incident final-surface contributor.
@@ -94,7 +105,7 @@ export function siteAccessSampleVerdict(
       ? surfaces[surfaces.length - 1].contributingModifierIds.find(code => {
           const incident = roadsByCode.get(code);
           return incident && junctionRoadCodes.has(code) &&
-            roadDistanceAt(terminal.x, terminal.z, incident) <= 1e-6;
+            roadEndpointMeetsTerminal(incident, terminal);
         })
       : undefined,
     terminalSurfaceOwned = full && (
