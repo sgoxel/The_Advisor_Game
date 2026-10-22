@@ -589,8 +589,12 @@ function probeRouteCorridor() {
       panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = false;
       renderCorridorProbe();
       renderMetrics();
-    } else if (corridorProbeStations < plan.stations.length) requestAnimationFrame(step);
-    else {
+    } else if (corridorProbeStations < plan.stations.length) {
+      // Optional long probes must show progress without rewriting the panel every frame.
+      // Eight stations per frame: one status refresh per 64 verified stations at most.
+      if (corridorProbeStations > 0 && corridorProbeStations % 64 === 0) renderCorridorProbe();
+      requestAnimationFrame(step);
+    } else {
       corridorProbeStatus = "sampled centerline passes at every planned station; between-station and actor passage not certified";
       corridorProbeMs = performance.now() - started;
       panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = false;
