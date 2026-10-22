@@ -97,6 +97,8 @@ let siteProbeRevision = 0;
 let corridorProbeRevision = 0;
 let corridorProbeStatus = "not requested";
 let corridorProbeStations = 0;
+let corridorProbePlannedStations = 0;
+let corridorProbeFirstUnsafeRoad: string | null = null;
 let corridorProbeMaximumGrade: number | null = null;
 const corridorEdges = new Map(transportNetwork.roadEdges.map(edge => [edge.code, edge]));
 
@@ -490,14 +492,19 @@ function renderSiteAccessProbe() {
 
 function renderCorridorProbe() {
   const target = panel.querySelector<HTMLElement>("#transport-corridor-result")!;
+  const route = siteRoute ? `${siteRoute.from} → ${siteRoute.to} (${siteRoute.edgeCodes.length} canonical roads)` : "no selected walking route";
+  const progress = corridorProbePlannedStations
+    ? `${corridorProbeStations}/${corridorProbePlannedStations} validated stations` : "no station evidence";
   target.textContent = corridorProbeStatus === "not requested" ? "" :
-    `Selected-route final-surface diagnostic: ${corridorProbeStatus}. ${corridorProbeStations} sampled stations${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${(corridorProbeMaximumGrade * 100).toFixed(1)}%`}. Map preview only; no uninterrupted passage or character travel certified.`;
+    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${(corridorProbeMaximumGrade * 100).toFixed(1)}%`}. Map preview only; no uninterrupted passage or character travel certified.`;
 }
 
 function resetCorridorProbe() {
   corridorProbeRevision++;
   corridorProbeStatus = "not requested";
   corridorProbeStations = 0;
+  corridorProbePlannedStations = 0;
+  corridorProbeFirstUnsafeRoad = null;
   corridorProbeMaximumGrade = null;
   panel.querySelector<HTMLButtonElement>("#transport-route-corridor")!.disabled = !siteRoute;
   renderCorridorProbe();
@@ -508,6 +515,8 @@ function probeRouteCorridor() {
   const plan = planTransportRouteCorridor(siteRoute, corridorEdges, transportNodesByCode, walkingIndex?.adjacency),
     revision = ++corridorProbeRevision;
   corridorProbeStations = 0;
+  corridorProbePlannedStations = plan.status === "ready" ? plan.stations.length : 0;
+  corridorProbeFirstUnsafeRoad = null;
   corridorProbeMaximumGrade = null;
   if (plan.status !== "ready") {
     corridorProbeStatus = plan.status === "over-budget" ? "route exceeds bounded 4096-station probe; not certified" : "invalid source-owned physical path; not certified";
@@ -533,6 +542,7 @@ function probeRouteCorridor() {
         surface = finalSurfaceAt(station.x, station.z);
       const failure = sampledCorridorStationFailure(station, surface);
       if (failure !== null) {
+        corridorProbeFirstUnsafeRoad = station.edgeCode;
         corridorProbeStatus = `station ${index + 1}: ${failure}; not certified`;
         break;
       }
@@ -542,6 +552,7 @@ function probeRouteCorridor() {
           grade = metres > 0 ? Math.abs(surface.surfaceHeight - previousHeight) / metres : Infinity;
         corridorProbeMaximumGrade = Math.max(corridorProbeMaximumGrade ?? 0, grade);
         if (!Number.isFinite(grade) || grade > .08) {
+          corridorProbeFirstUnsafeRoad = station.edgeCode;
           corridorProbeStatus = `sampled grade exceeds 8% at station ${index + 1}; not certified`;
           break;
         }
@@ -885,6 +896,8 @@ function telemetry() {
     siteAccessProbeMs: siteProbeMs,
     corridorProbeStatus,
     corridorProbeStations,
+    corridorProbePlannedStations,
+    corridorProbeFirstUnsafeRoad,
     corridorProbeMaximumGrade,
     siteRouteEdges: siteRoute?.edgeCodes.length ?? 0,
     bridgeDetailCacheEntries: bridgeDetailCache.size,
