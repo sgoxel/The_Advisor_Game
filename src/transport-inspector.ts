@@ -830,6 +830,8 @@ function telemetry() {
 }
 
 panel.querySelector<HTMLButtonElement>("#transport-close")!.onclick = () => {
+  // Hidden diagnostics must not keep sampling final surfaces on a phone.
+  resetSiteAccessProbe();
   world()?.setBridgeInspectionAngle(false);
   panel.hidden = true;
   resumeButton.hidden = true;
@@ -864,6 +866,8 @@ panel.querySelector<HTMLButtonElement>("#transport-bridge-closeup")!.onclick = (
 };
 panel.querySelector<HTMLButtonElement>("#transport-bridge-clearview")!.onclick = () => {
   if (!inspectBridgeIn3D()) return;
+  // Suspend unrelated route probes while the map-only bridge view is active.
+  resetSiteAccessProbe();
   // Reveal the actual rendered deck and rails without hiding the return path.
   // Graph inspection facts remain unchanged and return on the same selection.
   panel.hidden = true;
