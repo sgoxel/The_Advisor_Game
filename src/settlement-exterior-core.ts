@@ -1,7 +1,15 @@
-import { places, roads, roadDistanceAt, type Place, type Road } from "./geography.ts";
+import { roads, roadDistanceAt, type Place, type Road } from "./geography.ts";
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
 import { lonLatToSource, wrapSourceX } from "./planet.ts";
+import { metresToSource, sourceUnitsPerMetreAt } from "./physical-scale.ts";
 
+/**
+ * Settlement layout, authored entirely in METRES in a local frame (origin = the
+ * place, `a` along the primary road axis, `l` to its left). Only the final
+ * conversion step maps local metres to source/render units, so streets, lots,
+ * houses, castles, gates and clearances all share one physical scale.
+ * Everything is derived from the SEED through the place code.
+ */
 export type SettlementService =
   | "market"
   | "inn"
@@ -24,12 +32,14 @@ export type SettlementFieldForm = "strip" | "paddock" | "orchard" | "vegetable" 
 
 export type SettlementPoint = { x: number; z: number };
 
+/** `width` is metres in the core plan (the exterior module converts it to source units). */
 export type SettlementStreetPlan = {
   id: string;
   width: number;
   points: readonly SettlementPoint[];
 };
 
+/** `width`/`depth` are metres and `clearanceRadius` is metres in the core plan; candidates are source points. */
 export type SettlementPlotPlan = {
   id: string;
   kind: SettlementPlotKind;
@@ -53,6 +63,7 @@ export type SettlementGatePlan = {
   guardPosts: readonly SettlementPoint[];
 };
 
+/** `radius` is source units (the physical radius in metres is `radiusM`). */
 export type SettlementExteriorPlan = {
   placeId: string;
   placeCode: string;
@@ -60,6 +71,7 @@ export type SettlementExteriorPlan = {
   kind: Place["kind"];
   archetype: SettlementArchetype;
   radius: number;
+  radiusM: number;
   primaryAxis: SettlementPoint;
   centre: SettlementPoint;
   entrance: SettlementPoint;
@@ -69,30 +81,76 @@ export type SettlementExteriorPlan = {
   gates: readonly SettlementGatePlan[];
 };
 
+/** One frontage lot: a street-facing building slot with a fixed setback. */
+export type SettlementLot = {
+  x: number;
+  z: number;
+  yawRad: number;
+  /** Source displacement per metre along the street. */
+  along: SettlementPoint;
+  /** Source displacement per metre away from the street (towards the rear). */
+  out: SettlementPoint;
+  setbackM: number;
+  nominalDepthM: number;
+  street: number;
+  side: -1 | 1;
+};
+
+export const SETTLEMENT_POPULATION = { city: 2400, village: 80 } as const;
+/** Smallest centre-to-centre distance between two lots: two clearance circles of the largest house. */
+export const MINIMUM_LOT_SPACING_M = 10.9;
+
 const TAU = Math.PI * 2;
 const PHI = 0.6180339887498949;
+const U = metresToSource(1);
 
 function digest(text: string) {
   let value = 2166136261;
-  for (let index = 0; index < text.length; index++)
-    value = Math.imul(value ^ text.charCodeAt(index), 16777619);
+  for (let index = 0; index < text.length; index++) value = Math.imul(value ^ text.charCodeAt(index), 16777619);
   return value >>> 0;
 }
-
 function unit(address: string) {
   return digest(address) / 4294967296;
 }
-
 function normalize(x: number, z: number) {
   const length = Math.hypot(x, z) || 1;
   return { x: x / length, z: z / length };
 }
-
-function rotatedAxis(axis: SettlementPoint, angle: number) {
-  const c = Math.cos(angle),
-    s = Math.sin(angle);
-  return normalize(axis.x * c - axis.z * s, axis.x * s + axis.z * c);
+function gcd(a: number, b: number): number {
+  return b ? gcd(b, a % b) : a;
 }
+
+type LP = { a: number; l: number };
+type Frame = { place: Place; axis: SettlementPoint; kx: number };
+type LocalStreet = { id: string; width: number; pts: LP[]; cum: number[]; length: number };
+type StaticDisk = { a: number; l: number; r: number };
+type Layout = {
+  frame: Frame;
+  archetype: SettlementArchetype;
+  radiusM: number;
+  border: LP[];
+  streets: LocalStreet[];
+  statics: StaticDisk[];
+  stretch: number;
+  lateralScale: number;
+  lots?: SettlementLot[];
+  lotGrid?: Map<number, number[]>;
+  lotOrder?: { offset: number; step: number; inverse: number };
+  grid?: Map<number, number[]>;
+};
+
+const toSource = (f: Frame, a: number, l: number): SettlementPoint => ({
+  x: wrapSourceX(f.place.x + (f.axis.x * a - f.axis.z * l) * U * f.kx),
+  z: f.place.z + (f.axis.z * a + f.axis.x * l) * U,
+});
+const vecSource = (f: Frame, a: number, l: number): SettlementPoint => ({
+  x: (f.axis.x * a - f.axis.z * l) * U * f.kx,
+  z: (f.axis.z * a + f.axis.x * l) * U,
+});
+const yawOf = (f: Frame, a: number, l: number) => {
+  const v = vecSource(f, a, l);
+  return Math.atan2(v.x, v.z);
+};
 
 function closestRoad(place: Place) {
   let chosen: Road | undefined,
@@ -132,193 +190,94 @@ function tangentAt(place: Place, road: Road) {
   return normalize(tangent.x, tangent.z);
 }
 
-function primaryAxis(place: Place) {
+/** Unit axis in METRE space (source x is stretched by 1/cos(latitude)). */
+function primaryAxis(place: Place, kx: number) {
   const road = closestRoad(place);
-  if (road) return tangentAt(place, road);
+  if (road) {
+    const t = tangentAt(place, road);
+    return normalize(t.x / kx, t.z);
+  }
   const angle = TAU * unit(`${place.code}/EXTERIOR/AXIS`);
   return { x: Math.cos(angle), z: Math.sin(angle) };
 }
 
-function localPoint(place: Place, axis: SettlementPoint, along: number, lateral: number): SettlementPoint {
-  const side = { x: -axis.z, z: axis.x };
-  return {
-    x: wrapSourceX(place.x + axis.x * along + side.x * lateral),
-    z: place.z + axis.z * along + side.z * lateral,
-  };
+function makeLocal(id: string, width: number, pts: LP[]): LocalStreet {
+  const cum = [0];
+  for (let index = 1; index < pts.length; index++) cum.push(cum[index - 1] + Math.hypot(pts[index].a - pts[index - 1].a, pts[index].l - pts[index - 1].l));
+  return { id, width, pts, cum, length: cum[cum.length - 1] };
 }
 
-function streetFromControls(
-  place: Place,
-  axis: SettlementPoint,
-  id: string,
-  width: number,
-  controls: readonly (readonly [number, number])[],
-): SettlementStreetPlan {
-  const points: SettlementPoint[] = [];
+function sampleStreet(street: LocalStreet, distance: number) {
+  const s = Math.max(0, Math.min(street.length, distance));
+  let index = 1;
+  while (index < street.pts.length - 1 && street.cum[index] < s) index++;
+  const a = street.pts[index - 1],
+    b = street.pts[index],
+    span = street.cum[index] - street.cum[index - 1] || 1,
+    t = Math.max(0, Math.min(1, (s - street.cum[index - 1]) / span)),
+    tangent = normalize(b.a - a.a, b.l - a.l);
+  return { a: a.a + (b.a - a.a) * t, l: a.l + (b.l - a.l) * t, ta: tangent.x, tl: tangent.z, na: -tangent.z, nl: tangent.x };
+}
+
+/** Polyline through control points; each span gets a deterministic sideways bend of a few metres. */
+function polylineFromControls(place: Place, id: string, controls: readonly (readonly [number, number])[], step: number): LP[] {
+  const pts: LP[] = [];
   for (let controlIndex = 1; controlIndex < controls.length; controlIndex++) {
     const a = controls[controlIndex - 1],
       b = controls[controlIndex],
-      dx = b[0] - a[0],
-      dz = b[1] - a[1],
-      length = Math.hypot(dx, dz) || 1,
-      steps = Math.max(2, Math.ceil(length / 8)),
+      da = b[0] - a[0],
+      dl = b[1] - a[1],
+      length = Math.hypot(da, dl) || 1,
+      steps = Math.max(2, Math.ceil(length / step)),
       bendSign = (digest(`${place.code}/STREET/${id}/BEND/${controlIndex}`) & 1) === 0 ? -1 : 1,
-      bend = bendSign * (1.8 + unit(`${place.code}/STREET/${id}/BEND-MAG/${controlIndex}`) * 2.4),
-      normalAlong = -dz / length,
-      normalLateral = dx / length;
-    for (let step = controlIndex === 1 ? 0 : 1; step <= steps; step++) {
-      const t = step / steps,
-        curve = Math.sin(Math.PI * t) * bend,
-        along = a[0] + dx * t + normalAlong * curve,
-        lateral = a[1] + dz * t + normalLateral * curve;
-      points.push(localPoint(place, axis, along, lateral));
+      bend = bendSign * Math.min(7, (1.5 + unit(`${place.code}/STREET/${id}/BEND-MAG/${controlIndex}`) * 3.5) * Math.min(1, length / 90)),
+      na = -dl / length,
+      nl = da / length;
+    for (let s = controlIndex === 1 ? 0 : 1; s <= steps; s++) {
+      const t = s / steps,
+        curve = Math.sin(Math.PI * t) * bend;
+      pts.push({ a: a[0] + da * t + na * curve, l: a[1] + dl * t + nl * curve });
     }
   }
-  return { id: `${place.code}/STREET/${id}`, width, points };
+  return pts;
 }
 
-function irregularLoop(
-  place: Place,
-  axis: SettlementPoint,
-  id: string,
-  width: number,
-  radiusAlong: number,
-  radiusLateral: number,
-  count = 9,
-  centreAlong = 0,
-  centreLateral = 0,
-) {
+function loopControls(place: Place, id: string, radiusA: number, radiusL: number, count: number, centreA: number, centreL: number) {
   const controls: [number, number][] = [];
   for (let index = 0; index < count; index++) {
     const angle = (index / count) * TAU + (unit(`${place.code}/${id}/ANGLE/${index}`) - 0.5) * 0.18,
-      radial = 0.82 + unit(`${place.code}/${id}/RADIUS/${index}`) * 0.3;
-    controls.push([
-      centreAlong + Math.cos(angle) * radiusAlong * radial,
-      centreLateral + Math.sin(angle) * radiusLateral * radial,
-    ]);
+      radial = 0.86 + unit(`${place.code}/${id}/RADIUS/${index}`) * 0.24;
+    controls.push([centreA + Math.cos(angle) * radiusA * radial, centreL + Math.sin(angle) * radiusL * radial]);
   }
   controls.push(controls[0]);
-  return streetFromControls(place, axis, id, width, controls);
+  return controls;
 }
 
-function pointOnStreet(street: SettlementStreetPlan, fraction: number) {
-  const points = street.points;
-  let total = 0;
-  for (let index = 1; index < points.length; index++)
-    total += Math.hypot(wrapSourceX(points[index].x - points[index - 1].x), points[index].z - points[index - 1].z);
-  let target = Math.max(0, Math.min(1, fraction)) * total;
-  for (let index = 1; index < points.length; index++) {
-    const a = points[index - 1],
-      b = points[index],
-      dx = wrapSourceX(b.x - a.x),
-      dz = b.z - a.z,
-      length = Math.hypot(dx, dz);
-    if (target <= length || index + 1 === points.length) {
-      const t = length ? Math.max(0, Math.min(1, target / length)) : 0,
-        tangent = normalize(dx, dz);
-      return {
-        point: { x: wrapSourceX(a.x + dx * t), z: a.z + dz * t },
-        tangent,
-        normal: { x: -tangent.z, z: tangent.x },
-      };
-    }
-    target -= length;
+/** Farthest distance from the origin to the border along a local direction. */
+function rayExtent(border: readonly LP[], angle: number) {
+  const da = Math.cos(angle), dl = Math.sin(angle);
+  let best = 0;
+  for (let index = 0; index < border.length; index++) {
+    const p = border[index], q = border[(index + 1) % border.length],
+      ea = q.a - p.a, el = q.l - p.l, denominator = da * el - dl * ea;
+    if (Math.abs(denominator) < 1e-9) continue;
+    const t = (p.a * el - p.l * ea) / denominator,
+      u = (p.a * dl - p.l * da) / denominator;
+    if (t > 0 && u >= -1e-9 && u <= 1 + 1e-9) best = Math.max(best, t);
   }
-  const a = points[0],
-    b = points[Math.min(1, points.length - 1)],
-    tangent = normalize(wrapSourceX(b.x - a.x), b.z - a.z);
-  return { point: a, tangent, normal: { x: -tangent.z, z: tangent.x } };
+  return best;
 }
 
-function offsetPoint(base: ReturnType<typeof pointOnStreet>, along: number, lateral: number) {
-  return {
-    x: wrapSourceX(base.point.x + base.tangent.x * along + base.normal.x * lateral),
-    z: base.point.z + base.tangent.z * along + base.normal.z * lateral,
-  };
-}
-
-function candidateCloud(
-  base: ReturnType<typeof pointOnStreet>,
-  address: string,
-  lateral: number,
-  spread = 6,
-) {
-  const result: SettlementPoint[] = [],
-    sign = lateral < 0 ? -1 : 1;
-  result.push(offsetPoint(base, 0, lateral));
-  for (let ring = 1; ring <= 4; ring++) {
-    for (let index = 0; index < 6; index++) {
-      const phase = TAU * unit(`${address}/CANDIDATE/${ring}/${index}`),
-        along = Math.cos(phase) * spread * ring,
-        side = lateral + sign * Math.abs(Math.sin(phase)) * spread * ring * 0.65;
-      result.push(offsetPoint(base, along, side));
-    }
+function insideBorder(border: readonly LP[], a: number, l: number, margin: number) {
+  let inside = false, distance = Infinity;
+  for (let index = 0; index < border.length; index++) {
+    const p = border[index], q = border[(index + 1) % border.length],
+      ea = q.a - p.a, el = q.l - p.l, denominator = ea * ea + el * el || 1,
+      t = Math.max(0, Math.min(1, ((a - p.a) * ea + (l - p.l) * el) / denominator));
+    distance = Math.min(distance, Math.hypot(a - (p.a + ea * t), l - (p.l + el * t)));
+    if ((p.l > l) !== (q.l > l) && a < p.a + (l - p.l) * ea / (q.l - p.l)) inside = !inside;
   }
-  return result;
-}
-
-function footprintFor(
-  place: Place,
-  id: string,
-  kind: SettlementPlotKind,
-  service?: SettlementService,
-  fieldForm?: SettlementFieldForm,
-) {
-  const u = unit(`${place.code}/PLOT/${id}/FOOTPRINT`);
-  if (kind === "keep") return { width: place.kind === "city" ? 20 : 16, depth: place.kind === "city" ? 18 : 15 };
-  if (kind === "well") return { width: 3, depth: 3 };
-  if (kind === "field") {
-    if (fieldForm === "strip") return { width: 12 + u * 8, depth: 24 + u * 12 };
-    if (fieldForm === "orchard") return { width: 22 + u * 8, depth: 20 + u * 7 };
-    if (fieldForm === "pasture") return { width: 28 + u * 10, depth: 22 + u * 12 };
-    return { width: 18 + u * 8, depth: 16 + u * 8 };
-  }
-  if (kind === "house") return { width: 5.8 + u * 4.5, depth: 6.5 + unit(`${place.code}/PLOT/${id}/DEPTH`) * 5 };
-  switch (service) {
-    case "market": return { width: 18, depth: 13 };
-    case "inn": return { width: 13, depth: 16 };
-    case "blacksmith": return { width: 13, depth: 12 };
-    case "butcher": return { width: 10, depth: 11 };
-    case "guard-office": return { width: 9, depth: 10 };
-    case "farmstead": return { width: 18, depth: 15 };
-    default: return { width: 9, depth: 9 };
-  }
-}
-
-function plotOnStreet(
-  place: Place,
-  street: SettlementStreetPlan,
-  id: string,
-  kind: SettlementPlotKind,
-  fraction: number,
-  side: -1 | 1,
-  setback: number,
-  capacity: number,
-  residents: number,
-  service?: SettlementService,
-  ownerId?: string,
-  fieldForm?: SettlementFieldForm,
-): SettlementPlotPlan {
-  const base = pointOnStreet(street, fraction),
-    footprint = footprintFor(place, id, kind, service, fieldForm),
-    lateral = side * (street.width * 0.5 + setback + footprint.depth * 0.5),
-    yawRad = Math.atan2(-base.normal.x * side, -base.normal.z * side) +
-      (unit(`${place.code}/PLOT/${id}/YAW`) - 0.5) * (kind === "field" ? 0.24 : 0.12),
-    clearanceRadius = Math.hypot(footprint.width, footprint.depth) * 0.5 + (kind === "field" ? 2 : 1.5);
-  return {
-    id: `${place.code}/PLOT/${id}`,
-    kind,
-    service,
-    fieldForm,
-    ownerId,
-    capacity,
-    residents,
-    width: footprint.width,
-    depth: footprint.depth,
-    yawRad,
-    clearanceRadius,
-    candidates: candidateCloud(base, `${place.code}/PLOT/${id}`, lateral, kind === "field" ? 11 : kind === "service" ? 6 : 5),
-  };
+  return inside && distance >= margin;
 }
 
 function archetypeFor(place: Place): SettlementArchetype {
@@ -343,77 +302,182 @@ function archetypeFor(place: Place): SettlementArchetype {
   ][value % 6] as SettlementArchetype;
 }
 
-function villageStreets(place: Place, axis: SettlementPoint, archetype: SettlementArchetype, radius: number) {
-  const w = 4.2,
-    j = (salt: string, amount: number) => (unit(`${place.code}/STREET/${salt}`) - 0.5) * amount,
-    streets: SettlementStreetPlan[] = [];
+/**
+ * Village streets (metres). The main street runs gate to gate along the road
+ * axis; lanes branch off it. Old authoring values were relative to an 85-unit
+ * radius, `K` maps them to real metres (a village is about 400 m across).
+ */
+const VILLAGE_K = 2.4;
+function villageStreets(place: Place, archetype: SettlementArchetype, e0: number, e1: number, radius: number) {
+  const K = VILLAGE_K,
+    j = (salt: string, amount: number) => (unit(`${place.code}/STREET/${salt}`) - 0.5) * amount * K,
+    c = (a: number, l: number): [number, number] => [a * K, l * K],
+    list: { id: string; width: number; controls?: [number, number][]; loop?: [number, number, number, number, number] }[] = [];
   if (archetype === "roadside") {
-    streets.push(streetFromControls(place, axis, "MAIN", 5.4, [[-radius, j("A", 8)], [-radius * .35, j("B", 16)], [radius * .28, j("C", 14)], [radius, j("D", 9)]]));
-    streets.push(streetFromControls(place, axis, "LANE-A", w, [[-20, 4], [-3, 30 + j("E", 10)], [8, 49 + j("F", 9)]]));
+    list.push({ id: "MAIN", width: 5.4, controls: [[-e0, j("A", 8)], [-e0 * .35, j("B", 16)], [e1 * .28, j("C", 14)], [e1, j("D", 9)]] });
+    list.push({ id: "LANE-A", width: 4.2, controls: [c(-20, 4), c(-3, 30 + j("E", 10) / K), c(8, 49 + j("F", 9) / K)] });
   } else if (archetype === "green") {
-    streets.push(streetFromControls(place, axis, "APPROACH", 5.2, [[-radius, -5], [-32, -8], [-15, -2], [8, 0]]));
-    streets.push(irregularLoop(place, axis, "COMMON-RING", w, 29, 23, 9, 8, 1));
-    streets.push(streetFromControls(place, axis, "BACK-LANE", 3.8, [[18, 18], [42, 28 + j("G", 6)], [radius * .72, 22 + j("H", 8)]]));
+    list.push({ id: "APPROACH", width: 5.2, controls: [[-e0, -5 * K], c(-32, -8), c(-15, -2), c(8, 0)] });
+    list.push({ id: "COMMON-RING", width: 4.2, loop: [29 * K, 23 * K, 9, 8 * K, K] });
+    list.push({ id: "BACK-LANE", width: 3.8, controls: [c(18, 18), c(42, 28 + j("G", 6) / K), [radius * .72, (22 + j("H", 8) / K) * K]] });
   } else if (archetype === "crossroads") {
-    streets.push(streetFromControls(place, axis, "MAIN", 5.4, [[-radius, -7], [-20, j("I", 8)], [radius, 9 + j("J", 6)]]));
-    streets.push(streetFromControls(place, axis, "CROSS", 4.5, [[-11, -radius * .72], [-4, -19], [7, 12], [18, radius * .68]]));
-    streets.push(streetFromControls(place, axis, "CROOKED-LANE", 3.6, [[14, 3], [35, -19], [55, -28 + j("K", 9)]]));
+    list.push({ id: "MAIN", width: 5.4, controls: [[-e0, -7 * K], c(-20, j("I", 8) / K), [e1, (9 + j("J", 6) / K) * K]] });
+    list.push({ id: "CROSS", width: 4.5, controls: [[-11 * K, -radius * .72], c(-4, -19), c(7, 12), [18 * K, radius * .68]] });
+    list.push({ id: "CROOKED-LANE", width: 3.6, controls: [c(14, 3), c(35, -19), c(55, -28 + j("K", 9) / K)] });
   } else if (archetype === "riverside") {
-    streets.push(streetFromControls(place, axis, "BANK-ROAD", 5, [[-radius, -18], [-35, -12 + j("L", 7)], [18, -8], [radius, -15 + j("M", 7)]]));
-    streets.push(streetFromControls(place, axis, "HIGH-STREET", 4.4, [[-radius * .72, 25], [-22, 20], [30, 28 + j("N", 7)], [radius * .62, 36]]));
-    streets.push(streetFromControls(place, axis, "WATER-LANE", 3.6, [[-17, -11], [-5, 7], [2, 23]]));
+    list.push({ id: "BANK-ROAD", width: 5, controls: [[-e0, -18 * K], c(-35, -12 + j("L", 7) / K), c(18, -8), [e1, (-15 + j("M", 7) / K) * K]] });
+    list.push({ id: "HIGH-STREET", width: 4.4, controls: [[-radius * .72, 25 * K], c(-22, 20), c(30, 28 + j("N", 7) / K), [radius * .62, 36 * K]] });
+    list.push({ id: "WATER-LANE", width: 3.6, controls: [c(-17, -11), c(-5, 7), c(2, 23)] });
   } else if (archetype === "hillside") {
-    streets.push(streetFromControls(place, axis, "LOW-CONTOUR", 4.8, [[-radius * .84, -27], [-30, -18], [20, -24 + j("O", 8)], [radius * .74, -12]]));
-    streets.push(streetFromControls(place, axis, "HIGH-CONTOUR", 4.2, [[-radius * .62, 29], [-10, 23 + j("P", 8)], [radius * .63, 33]]));
-    streets.push(streetFromControls(place, axis, "SWITCHBACK", 3.7, [[-28, -19], [-7, 3], [-23, 22], [1, 30]]));
+    list.push({ id: "LOW-CONTOUR", width: 4.8, controls: [[-e0 * .84, -27 * K], c(-30, -18), c(20, -24 + j("O", 8) / K), [e1 * .74, -12 * K]] });
+    list.push({ id: "HIGH-CONTOUR", width: 4.2, controls: [[-radius * .62, 29 * K], c(-10, 23 + j("P", 8) / K), [radius * .63, 33 * K]] });
+    list.push({ id: "SWITCHBACK", width: 3.7, controls: [c(-28, -19), c(-7, 3), c(-23, 22), c(1, 30)] });
   } else if (archetype === "dispersed-farming") {
-    streets.push(streetFromControls(place, axis, "FARM-ROAD", 5, [[-radius, 5], [-35, -6], [14, 6 + j("Q", 10)], [radius, -8]]));
-    streets.push(streetFromControls(place, axis, "NORTH-TRACK", 3.5, [[-34, 0], [-48, 29], [-58, 58]]));
-    streets.push(streetFromControls(place, axis, "SOUTH-TRACK", 3.5, [[26, 1], [42, -30], [51, -58]]));
+    list.push({ id: "FARM-ROAD", width: 5, controls: [[-e0, 5 * K], c(-35, -6), c(14, 6 + j("Q", 10) / K), [e1, -8 * K]] });
+    list.push({ id: "NORTH-TRACK", width: 3.5, controls: [c(-34, 0), c(-48, 29), c(-58, 58)] });
+    list.push({ id: "SOUTH-TRACK", width: 3.5, controls: [c(26, 1), c(42, -30), c(51, -58)] });
   } else if (archetype === "fortified-frontier") {
-    streets.push(streetFromControls(place, axis, "GATE-ROAD", 5.5, [[-radius, 0], [-28, -5], [8, 3], [radius, 0]]));
-    streets.push(irregularLoop(place, axis, "INNER-LANE", 4, 40, 30, 8, 2, 0));
-    streets.push(streetFromControls(place, axis, "WATCH-LANE", 3.6, [[-5, -29], [20, -42], [43, -31]]));
+    list.push({ id: "GATE-ROAD", width: 5.5, controls: [[-e0, 0], c(-28, -5), c(8, 3), [e1, 0]] });
+    list.push({ id: "INNER-LANE", width: 4, loop: [40 * K, 30 * K, 8, 2 * K, 0] });
+    list.push({ id: "WATCH-LANE", width: 3.6, controls: [c(-5, -29), c(20, -42), c(43, -31)] });
   } else {
-    streets.push(streetFromControls(place, axis, "MARKET-STREET", 6.3, [[-radius, -3], [-26, 1], [18, -2], [radius, 7]]));
-    streets.push(streetFromControls(place, axis, "MERCHANT-LANE", 4.2, [[-18, 2], [-8, 28], [10, 48]]));
-    streets.push(streetFromControls(place, axis, "CRAFT-LANE", 3.9, [[26, 0], [35, -25], [55, -36]]));
+    list.push({ id: "MARKET-STREET", width: 6.3, controls: [[-e0, -3 * K], c(-26, 1), c(18, -2), [e1, 7 * K]] });
+    list.push({ id: "MERCHANT-LANE", width: 4.2, controls: [c(-18, 2), c(-8, 28), c(10, 48)] });
+    list.push({ id: "CRAFT-LANE", width: 3.9, controls: [c(26, 0), c(35, -25), c(55, -36)] });
+  }
+  // Every village also has two back lanes parallel to its main street, tied to it by short links,
+  // so households stand on real frontage instead of being strung along one road.
+  const lane = (side: number) => {
+    const off = side * (44 + (unit(`${place.code}/STREET/BACK/${side}`) - .5) * 14);
+    return [[-e0 * .5, off * .55], [-e0 * .45, off], [-e0 * .1, off * 1.04], [e1 * .3, off * .98], [e1 * .52, off], [e1 * .55, off * .55]] as [number, number][];
+  };
+  list.push({ id: "BACK-LANE-N", width: 3.8, controls: lane(1) });
+  list.push({ id: "BACK-LANE-S", width: 3.8, controls: lane(-1) });
+  const outer = (side: number) => {
+    const off = side * (84 + (unit(`${place.code}/STREET/OUTER/${side}`) - .5) * 12);
+    return [[-e0 * .3, off * .5], [-e0 * .25, off], [0, off * 1.03], [e1 * .3, off], [e1 * .33, off * .5]] as [number, number][];
+  };
+  list.push({ id: "OUTER-LANE-N", width: 3.6, controls: outer(1) });
+  list.push({ id: "OUTER-LANE-S", width: 3.6, controls: outer(-1) });
+  list.push({ id: "LINK-W", width: 3.6, controls: [[-e0 * .5, 44], [-e0 * .5, 0], [-e0 * .5, -44]] });
+  list.push({ id: "LINK-MID", width: 3.6, controls: [[e1 * .15, 46], [e1 * .15, 0], [e1 * .15, -46]] });
+  list.push({ id: "LINK-E", width: 3.6, controls: [[e1 * .55, 44], [e1 * .55, 0], [e1 * .55, -44]] });
+  return list.map((entry) => {
+    const controls = entry.controls || loopControls(place, entry.id, entry.loop![0], entry.loop![1], entry.loop![2], entry.loop![3], entry.loop![4]);
+    return makeLocal(`${place.code}/STREET/${entry.id}`, entry.width, polylineFromControls(place, entry.id, controls, 12));
+  });
+}
+
+/**
+ * City streets (metres): a market spine gate to gate, radial streets, and
+ * concentric ring streets spaced for two rows of houses. Rings are slightly
+ * distorted, radials bend, so no street is a ruler line.
+ */
+function cityStreets(place: Place, border: LP[], e0: number, e1: number, stretch: number, lateralScale: number) {
+  const j = (salt: string, amount: number) => (unit(`${place.code}/CITY-STREET/${salt}`) - 0.5) * amount,
+    streets: LocalStreet[] = [];
+  streets.push(makeLocal(`${place.code}/STREET/MARKET-SPINE`, 8, polylineFromControls(place, "MARKET-SPINE", [[-e0, 0], [-e0 * .5, j("S1", 36)], [0, j("S2", 10)], [e1 * .5, j("S3", 36)], [e1, 0]], 12)));
+  const edge = (angle: number) => rayExtent(border, angle), radialCount = 8;
+  for (let k = 1; k < radialCount; k++) {
+    if (k === radialCount / 2) continue;
+    const angle = (k / radialCount) * TAU + j(`R-ANGLE/${k}`, .26), start = 60, end = edge(angle) - 16,
+      bend = (digest(`${place.code}/CITY-RADIAL/${k}`) & 1 ? 1 : -1) * (4 + unit(`${place.code}/CITY-RADIAL/${k}/BEND`) * 7),
+      pts: LP[] = [], steps = Math.max(2, Math.ceil((end - start) / 20));
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps, r = start + (end - start) * t, side = Math.sin(Math.PI * t) * bend;
+      pts.push({ a: Math.cos(angle) * r - Math.sin(angle) * side, l: Math.sin(angle) * r + Math.cos(angle) * side });
+    }
+    streets.push(makeLocal(`${place.code}/STREET/RADIAL-${k}`, 6, pts));
+  }
+  let r = 66 + unit(`${place.code}/CITY-RING/FIRST`) * 6, ring = 0;
+  const outermost = Math.min(edge(0), edge(Math.PI), edge(Math.PI / 2), edge(Math.PI * 1.5) - 22) * .93;
+  while (r <= outermost) {
+    const phase1 = TAU * unit(`${place.code}/CITY-RING/${ring}/P1`), phase2 = TAU * unit(`${place.code}/CITY-RING/${ring}/P2`),
+      count = Math.max(24, Math.ceil(TAU * r / 16)), pts: LP[] = [];
+    for (let index = 0; index <= count; index++) {
+      const angle = (index % count) / count * TAU,
+        radius = r * (1 + Math.sin(angle * 2 + phase1) * .045 + Math.sin(angle * 3 + phase2) * .028);
+      pts.push({ a: Math.cos(angle) * radius * stretch, l: Math.sin(angle) * radius * lateralScale });
+    }
+    streets.push(makeLocal(`${place.code}/STREET/RING-${ring}`, 5.5, pts));
+    r += 33.5 + unit(`${place.code}/CITY-RING/${ring}/GAP`) * 2.5;
+    ring++;
   }
   return streets;
 }
 
-function cityStreets(place: Place, axis: SettlementPoint, archetype: SettlementArchetype, radius: number) {
-  const j = (salt: string, amount: number) => (unit(`${place.code}/CITY-STREET/${salt}`) - 0.5) * amount,
-    streets: SettlementStreetPlan[] = [];
-  if (archetype === "riverside") {
-    streets.push(streetFromControls(place, axis, "QUAY", 7, [[-radius, -55], [-140, -38], [35, -48 + j("A", 18)], [radius, -64]]));
-    streets.push(streetFromControls(place, axis, "HIGH-STREET", 8, [[-radius, 35], [-120, 18], [70, 34], [radius, 52 + j("B", 16)]]));
-    streets.push(streetFromControls(place, axis, "BRIDGE-LANE", 5, [[-90, -45], [-72, -2], [-54, 34]]));
-    streets.push(streetFromControls(place, axis, "WAREHOUSE-LANE", 5, [[82, -50], [103, -7], [128, 42]]));
-  } else if (archetype === "hillside") {
-    streets.push(streetFromControls(place, axis, "LOW-CONTOUR", 7, [[-radius, -90], [-135, -58], [80, -72], [radius, -38]]));
-    streets.push(streetFromControls(place, axis, "MID-CONTOUR", 6, [[-radius * .82, 4], [-80, 22], [95, 5 + j("C", 20)], [radius * .76, 31]]));
-    streets.push(streetFromControls(place, axis, "HIGH-CONTOUR", 5, [[-radius * .58, 104], [-20, 91], [radius * .55, 120]]));
-    streets.push(streetFromControls(place, axis, "SWITCHBACK", 5, [[-175, -55], [-115, 4], [-162, 66], [-93, 106]]));
-    streets.push(streetFromControls(place, axis, "SWITCHBACK-2", 5, [[105, -68], [152, -13], [104, 46], [151, 98]]));
-  } else if (archetype === "fortified-frontier") {
-    streets.push(streetFromControls(place, axis, "GATE-AXIS", 8, [[-radius, 0], [-120, -12], [85, 8], [radius, 0]]));
-    streets.push(irregularLoop(place, axis, "WARD-LANE", 6, 145, 112, 11, 8, -9));
-    streets.push(streetFromControls(place, axis, "BARRACK-LANE", 5, [[-92, -85], [-24, -118], [55, -92]]));
-    streets.push(streetFromControls(place, axis, "MARKET-LANE", 6, [[-45, 20], [-18, 78], [48, 101]]));
-  } else {
-    streets.push(streetFromControls(place, axis, "MARKET-SPINE", 8, [[-radius, -19], [-160, -8], [-25, 6], [125, -4], [radius, 22]]));
-    streets.push(streetFromControls(place, axis, "NORTH-ARC", 6, [[-245, 72], [-112, 128], [25, 111 + j("D", 18)], [224, 70]]));
-    streets.push(streetFromControls(place, axis, "SOUTH-ARC", 6, [[-214, -78], [-73, -122], [82, -106 + j("E", 19)], [244, -58]]));
-    streets.push(streetFromControls(place, axis, "MERCHANT-CUT", 5, [[-120, -100], [-78, -34], [-54, 31], [-6, 101]]));
-    streets.push(streetFromControls(place, axis, "CRAFT-CUT", 5, [[83, -109], [105, -42], [88, 24], [138, 83]]));
+function footprintFor(
+  place: Place,
+  id: string,
+  kind: SettlementPlotKind,
+  service?: SettlementService,
+  fieldForm?: SettlementFieldForm,
+) {
+  const u = unit(`${place.code}/PLOT/${id}/FOOTPRINT`), city = place.kind === "city";
+  if (kind === "keep") return city ? { width: 34, depth: 28 } : { width: 15, depth: 13 };
+  if (kind === "well") return { width: 3, depth: 3 };
+  if (kind === "field") {
+    if (fieldForm === "strip") return { width: 12 + u * 8, depth: 24 + u * 12 };
+    if (fieldForm === "orchard") return { width: 22 + u * 8, depth: 20 + u * 7 };
+    if (fieldForm === "pasture") return { width: 28 + u * 10, depth: 22 + u * 12 };
+    return { width: 18 + u * 8, depth: 16 + u * 8 };
   }
-  return streets;
+  if (kind === "house") return { width: 6 + u * 2, depth: 8 + unit(`${place.code}/PLOT/${id}/DEPTH`) * 2 };
+  switch (service) {
+    case "market": return city ? { width: 28, depth: 20 } : { width: 18, depth: 13 };
+    case "inn": return city ? { width: 17, depth: 19 } : { width: 13, depth: 16 };
+    case "blacksmith": return { width: 13, depth: 12 };
+    case "butcher": return { width: 10, depth: 11 };
+    case "guard-office": return { width: 9, depth: 10 };
+    case "farmstead": return { width: 18, depth: 15 };
+    default: return { width: 9, depth: 9 };
+  }
+}
+
+function cloud(layout: Layout, address: string, a: number, l: number, ta: number, tl: number, side: number, spread: number) {
+  const result: SettlementPoint[] = [], na = -tl, nl = ta;
+  result.push(toSource(layout.frame, a, l));
+  for (let ring = 1; ring <= 4; ring++) for (let index = 0; index < 6; index++) {
+    const phase = TAU * unit(`${address}/CANDIDATE/${ring}/${index}`),
+      along = Math.cos(phase) * spread * ring,
+      out = side * Math.abs(Math.sin(phase)) * spread * ring * 0.65;
+    result.push(toSource(layout.frame, a + ta * along + na * out, l + tl * along + nl * out));
+  }
+  return result;
+}
+
+function plotOnStreet(
+  layout: Layout,
+  place: Place,
+  streetIndex: number,
+  id: string,
+  kind: SettlementPlotKind,
+  fraction: number,
+  side: -1 | 1,
+  setback: number,
+  capacity: number,
+  residents: number,
+  service?: SettlementService,
+  fieldForm?: SettlementFieldForm,
+): SettlementPlotPlan {
+  const street = layout.streets[streetIndex % layout.streets.length],
+    base = sampleStreet(street, fraction * street.length),
+    footprint = footprintFor(place, id, kind, service, fieldForm),
+    lateral = side * (street.width * .5 + setback + footprint.depth * .5),
+    a = base.a + base.na * lateral, l = base.l + base.nl * lateral,
+    yawRad = yawOf(layout.frame, -base.na * side, -base.nl * side) + (unit(`${place.code}/PLOT/${id}/YAW`) - .5) * .12,
+    clearanceRadius = Math.hypot(footprint.width, footprint.depth) * .5 + 1.5;
+  layout.statics.push({ a, l, r: clearanceRadius });
+  return {
+    id: `${place.code}/PLOT/${id}`, kind, service, fieldForm, capacity, residents,
+    width: footprint.width, depth: footprint.depth, yawRad, clearanceRadius,
+    candidates: cloud(layout, `${place.code}/PLOT/${id}`, a, l, base.ta, base.tl, side, kind === "service" ? 6 : 5),
+  };
 }
 
 function servicePlot(
+  layout: Layout,
   place: Place,
-  streets: readonly SettlementStreetPlan[],
   service: SettlementService,
   streetIndex: number,
   fraction: number,
@@ -421,132 +485,107 @@ function servicePlot(
   capacity: number,
   residents: number,
 ) {
-  const setback = 8 + unit(`${place.code}/${service}/SETBACK`) * 5,
-    base = plotOnStreet(
-      place,
-      streets[streetIndex % streets.length],
-      service.toUpperCase(),
-      "service",
-      fraction,
-      side,
-      setback,
-      capacity,
-      residents,
-      service,
-    ),
-    candidates = [...base.candidates],
-    fractions = [0.18, 0.34, 0.5, 0.66, 0.82] as const;
-  for (let offset = 0; offset < streets.length; offset++) {
-    const street = streets[(streetIndex + offset) % streets.length];
+  const setback = 5 + unit(`${place.code}/${service}/SETBACK`) * 5,
+    base = plotOnStreet(layout, place, streetIndex, service.toUpperCase(), "service", fraction, side, setback, capacity, residents, service),
+    candidates = [...base.candidates], fractions = [0.18, 0.34, 0.5, 0.66, 0.82] as const,
+    reach = Math.min(layout.streets.length, 6);
+  for (let offset = 0; offset < reach; offset++) {
+    const street = layout.streets[(streetIndex + offset) % layout.streets.length];
     for (let fractionIndex = 0; fractionIndex < fractions.length; fractionIndex++) {
-      const sample = pointOnStreet(street, fractions[fractionIndex]),
-        alternateSide: -1 | 1 = ((digest(`${place.code}/${service}/ALT/${offset}/${fractionIndex}`) & 1) === 0) ? side : (side === 1 ? -1 : 1),
-        lateral = alternateSide * (street.width * 0.5 + setback + base.depth * 0.5);
-      candidates.push(offsetPoint(sample, 0, lateral));
-      candidates.push(offsetPoint(sample, 4.5, lateral + alternateSide * 3.5));
-      candidates.push(offsetPoint(sample, -4.5, lateral + alternateSide * 3.5));
+      const sample = sampleStreet(street, fractions[fractionIndex] * street.length),
+        alternate: -1 | 1 = (digest(`${place.code}/${service}/ALT/${offset}/${fractionIndex}`) & 1) === 0 ? side : (side === 1 ? -1 : 1),
+        lateral = alternate * (street.width * .5 + setback + base.depth * .5);
+      for (const along of [0, 4.5, -4.5]) {
+        const extra = along === 0 ? 0 : alternate * 3.5;
+        candidates.push(toSource(layout.frame, sample.a + sample.ta * along + sample.na * (lateral + extra), sample.l + sample.tl * along + sample.nl * (lateral + extra)));
+      }
     }
   }
   return { ...base, candidates };
 }
 
-function buildPlan(place: Place): SettlementExteriorPlan {
-  const axis = primaryAxis(place),
+const layouts = new Map<string, Layout>();
+const plans = new Map<string, SettlementExteriorPlan>();
+
+function buildPlan(place: Place, radiusBoostM: number): SettlementExteriorPlan {
+  const city = place.kind === "city",
+    kx = sourceUnitsPerMetreAt(place.z).x / U,
+    axis = primaryAxis(place, kx),
+    frame: Frame = { place, axis, kx },
     site = politicalSettlementSiteById.get(place.id),
     archetype = archetypeFor(place),
     entranceSource = site ? lonLatToSource(site.entrance.lon, site.entrance.lat) : undefined,
-    radius = place.kind === "city"
-      ? 350 + Math.round(unit(`${place.code}/RADIUS`) * 55)
-      : archetype === "dispersed-farming"
-        ? 112
-        : archetype === "fortified-frontier"
-          ? 90
-          : 78 + Math.round(unit(`${place.code}/RADIUS`) * 16),
-    streets = place.kind === "city"
-      ? cityStreets(place, axis, archetype, radius)
-      : villageStreets(place, axis, archetype, radius),
-    main = streets[0],
-    mainStart = main.points[0],
-    mainEnd = main.points[main.points.length - 1],
-    entrance = entranceSource
-      ? { x: entranceSource.x, z: entranceSource.z }
-      : unit(`${place.code}/ENTRANCE/END`) < 0.5 ? mainStart : mainEnd,
-    centreSample = pointOnStreet(main, archetype === "roadside" ? 0.46 : 0.52),
-    centre = centreSample.point,
+    radiusM = city
+      ? 640 + Math.round(unit(`${place.code}/RADIUS`) * 50) + radiusBoostM
+      : archetype === "dispersed-farming" ? 270 : archetype === "fortified-frontier" ? 205 : 185 + Math.round(unit(`${place.code}/RADIUS`) * 40),
+    borderCount = city ? 40 : archetype === "fortified-frontier" ? 20 : 28,
+    phaseA = TAU * unit(`${place.code}/BORDER/PHASE-A`),
+    phaseB = TAU * unit(`${place.code}/BORDER/PHASE-B`),
+    stretch = city ? 1 : archetype === "roadside" ? 1.22 : archetype === "dispersed-farming" ? 1.12 : 1,
+    lateralScale = city ? 1 : archetype === "roadside" ? .78 : archetype === "hillside" ? .82 : 1,
+    border: LP[] = Array.from({ length: borderCount }, (_, index) => {
+      const angle = (index / borderCount) * TAU,
+        harmonic = 1 + Math.sin(angle * 2 + phaseA) * (city ? .05 : .08) + Math.sin(angle * 3 + phaseB) * (city ? .03 : .05),
+        seeded = .975 + unit(`${place.code}/BORDER/${index}`) * .05,
+        distance = radiusM * harmonic * seeded;
+      return { a: Math.cos(angle) * distance * stretch, l: Math.sin(angle) * distance * lateralScale };
+    }),
+    e0 = rayExtent(border, Math.PI), e1 = rayExtent(border, 0),
+    streets = city ? cityStreets(place, border, e0, e1, stretch, lateralScale) : villageStreets(place, archetype, e0, e1, radiusM),
+    layout: Layout = { frame, archetype, radiusM, border, streets, statics: [], stretch, lateralScale },
     plots: SettlementPlotPlan[] = [];
+  layouts.set(place.code, layout);
+  const mainStreet = streets[0],
+    mainPoints = mainStreet.pts.map((p) => toSource(frame, p.a, p.l)),
+    mainStart = mainPoints[0], mainEnd = mainPoints[mainPoints.length - 1],
+    entrance = entranceSource ? { x: entranceSource.x, z: entranceSource.z } : unit(`${place.code}/ENTRANCE/END`) < 0.5 ? mainStart : mainEnd;
 
-  plots.push(plotOnStreet(place, main, "KEEP", "keep", archetype === "fortified-frontier" ? 0.43 : 0.35, -1, 8, place.kind === "city" ? 36 : 18, place.kind === "city" ? 12 : 7));
-  plots.push(plotOnStreet(place, main, "WELL", "well", archetype === "green" ? 0.54 : 0.5, 1, 2.5, 12, 0));
+  plots.push(plotOnStreet(layout, place, 0, "KEEP", "keep", archetype === "fortified-frontier" ? 0.43 : 0.35, -1, 6, city ? 36 : 18, city ? 12 : 7));
+  plots.push(plotOnStreet(layout, place, 0, "WELL", "well", archetype === "green" ? 0.54 : 0.5, 1, 2.5, 12, 0));
+  plots.push(servicePlot(layout, place, "market", 0, city ? .52 : .56, -1, city ? 120 : 48, 0));
+  plots.push(servicePlot(layout, place, "inn", Math.min(1, streets.length - 1), .38, 1, city ? 54 : 24, city ? 8 : 4));
+  plots.push(servicePlot(layout, place, "blacksmith", Math.min(2, streets.length - 1), .68, -1, 10, 3));
+  plots.push(servicePlot(layout, place, "butcher", Math.min(1, streets.length - 1), .63, -1, 12, 4));
+  plots.push(servicePlot(layout, place, "guard-office", 0, .12, 1, 18, 6));
+  plots.push(servicePlot(layout, place, "farmstead", streets.length - 1, .82, 1, 14, 6));
 
-  plots.push(servicePlot(place, streets, "market", 0, place.kind === "city" ? .52 : .56, -1, place.kind === "city" ? 120 : 48, 0));
-  plots.push(servicePlot(place, streets, "inn", Math.min(1, streets.length - 1), .38, 1, place.kind === "city" ? 54 : 24, place.kind === "city" ? 8 : 4));
-  plots.push(servicePlot(place, streets, "blacksmith", Math.min(2, streets.length - 1), .68, -1, 10, 3));
-  plots.push(servicePlot(place, streets, "butcher", Math.min(1, streets.length - 1), .63, -1, 12, 4));
-  plots.push(servicePlot(place, streets, "guard-office", 0, .12, 1, 18, 6));
-  plots.push(servicePlot(place, streets, "farmstead", streets.length - 1, .82, 1, 14, 6));
-
-  const houseCount = place.kind === "city"
-      ? 108 + (digest(`${place.code}/HOUSE_COUNT`) % 28)
-      : archetype === "dispersed-farming"
-        ? 20 + (digest(`${place.code}/HOUSE_COUNT`) % 8)
-        : 28 + (digest(`${place.code}/HOUSE_COUNT`) % 14),
-    houseStreetStart = archetype === "green" && streets.length > 1 ? 1 : 0;
-  for (let index = 0; index < houseCount; index++) {
-    const address = `${place.code}/HOUSE/${index}`,
-      streetIndex = houseStreetStart + (digest(`${address}/STREET`) % Math.max(1, streets.length - houseStreetStart)),
-      street = streets[streetIndex],
-      fraction = 0.07 + (((index * PHI + unit(`${address}/FRACTION`)) % 1) * 0.86),
-      side: -1 | 1 = (digest(`${address}/SIDE`) & 1) === 0 ? -1 : 1,
-      residents = 2 + (digest(`${address}/RESIDENTS`) % 5),
-      setbackBase = archetype === "dispersed-farming" ? 10 : place.kind === "city" ? 3 : 5,
-      setback = setbackBase + unit(`${address}/SETBACK`) * (archetype === "dispersed-farming" ? 15 : 8);
-    plots.push(plotOnStreet(place, street, `HOUSE/${index}`, "house", fraction, side, setback, residents + 2, residents, undefined, `${place.code}/HOUSEHOLD/${index}`));
-  }
-
+  // Farmland lies outside the enclosure, one plot per bearing, never across the wall.
   const forms: SettlementFieldForm[] = ["strip", "paddock", "orchard", "vegetable", "pasture"],
-    fieldCount = place.kind === "city" ? 11 + (digest(`${place.code}/FIELD_COUNT`) % 6) : 5 + (digest(`${place.code}/FIELD_COUNT`) % 5);
+    fieldCount = city ? 11 + (digest(`${place.code}/FIELD_COUNT`) % 6) : 5 + (digest(`${place.code}/FIELD_COUNT`) % 5);
   for (let index = 0; index < fieldCount; index++) {
-    const street = streets[(index * 3 + digest(`${place.code}/FIELD/${index}/STREET`)) % streets.length],
-      side: -1 | 1 = (digest(`${place.code}/FIELD/${index}/SIDE`) & 1) === 0 ? -1 : 1,
-      form = forms[digest(`${place.code}/FIELD/${index}/FORM`) % forms.length],
-      fraction = 0.08 + ((index * 0.271 + unit(`${place.code}/FIELD/${index}/FRACTION`)) % 1) * .84,
-      setback = place.kind === "city" ? 48 + (index % 4) * 13 : archetype === "dispersed-farming" ? 28 + (index % 3) * 13 : 20 + (index % 3) * 9;
-    plots.push(plotOnStreet(place, street, `FIELD/${index}`, "field", fraction, side, setback, 0, 0, undefined, undefined, form));
+    const id = `FIELD/${index}`, form = forms[digest(`${place.code}/FIELD/${index}/FORM`) % forms.length],
+      footprint = footprintFor(place, id, "field", undefined, form),
+      angle = TAU * unit(`${place.code}/FIELD/${index}/ANGLE`) + index * 2.399963,
+      reach = rayExtent(border, angle) + 22 + footprint.depth * .5 + (index % 3) * 26,
+      a = Math.cos(angle) * reach, l = Math.sin(angle) * reach,
+      ta = -Math.sin(angle), tl = Math.cos(angle);
+    plots.push({
+      id: `${place.code}/PLOT/${id}`, kind: "field", fieldForm: form, capacity: 0, residents: 0,
+      width: footprint.width, depth: footprint.depth,
+      yawRad: yawOf(frame, -Math.cos(angle), -Math.sin(angle)) + (unit(`${place.code}/PLOT/${id}/YAW`) - .5) * .3,
+      clearanceRadius: Math.hypot(footprint.width, footprint.depth) * .5 + 2,
+      candidates: cloud(layout, `${place.code}/PLOT/${id}`, a, l, ta, tl, 1, 11),
+    });
   }
 
-  const gateCount = place.kind === "city" || archetype === "fortified-frontier" ? 2 : 1 + (digest(`${place.code}/GATE_COUNT`) & 1),
+  const gateCount = city || archetype === "fortified-frontier" ? 2 : 1 + (digest(`${place.code}/GATE_COUNT`) & 1),
     gates: SettlementGatePlan[] = [];
   for (let index = 0; index < gateCount; index++) {
     const endPoint = index === 0 ? mainEnd : mainStart,
-      before = index === 0 ? main.points[main.points.length - 2] : main.points[1],
+      before = index === 0 ? mainPoints[mainPoints.length - 2] : mainPoints[1],
       tangent = normalize(wrapSourceX(endPoint.x - before.x), endPoint.z - before.z),
       directed = index === 0 ? tangent : { x: -tangent.x, z: -tangent.z },
       gate = index === 0 && entranceSource ? entrance : endPoint,
       bearingRad = Math.atan2(directed.z, directed.x),
       normal = { x: -directed.z, z: directed.x },
       guardCount = 1 + (digest(`${place.code}/GATE/${index}/GUARDS`) & 1),
+      post = metresToSource(city ? 10 : 8),
       guardPosts = Array.from({ length: guardCount }, (_, guardIndex) => {
-        const direction = guardIndex === 0 ? 1 : -1,
-          distance = place.kind === "city" ? 12 : 9;
-        return { x: wrapSourceX(gate.x + normal.x * distance * direction), z: gate.z + normal.z * distance * direction };
+        const direction = guardIndex === 0 ? 1 : -1;
+        return { x: wrapSourceX(gate.x + normal.x * post * direction), z: gate.z + normal.z * post * direction };
       });
     gates.push({ id: `${place.code}/GATE/${index}`, x: gate.x, z: gate.z, bearingRad, guardPosts });
   }
-
-  const borderCount = place.kind === "city" ? 40 : archetype === "fortified-frontier" ? 20 : 28,
-    phaseA = TAU * unit(`${place.code}/BORDER/PHASE-A`),
-    phaseB = TAU * unit(`${place.code}/BORDER/PHASE-B`),
-    stretch = archetype === "roadside" ? 1.22 : archetype === "dispersed-farming" ? 1.12 : 1,
-    lateralScale = archetype === "roadside" ? .78 : archetype === "hillside" ? .82 : 1,
-    border = Array.from({ length: borderCount }, (_, index) => {
-      const angle = (index / borderCount) * TAU,
-        harmonic = 1 + Math.sin(angle * 2 + phaseA) * .08 + Math.sin(angle * 3 + phaseB) * .05,
-        seeded = .94 + unit(`${place.code}/BORDER/${index}`) * .12,
-        distance = radius * harmonic * seeded,
-        along = Math.cos(angle) * distance * stretch,
-        lateral = Math.sin(angle) * distance * lateralScale;
-      return localPoint(place, axis, along, lateral);
-    });
 
   return {
     placeId: place.id,
@@ -554,49 +593,194 @@ function buildPlan(place: Place): SettlementExteriorPlan {
     name: place.name,
     kind: place.kind,
     archetype,
-    radius,
+    radius: metresToSource(radiusM),
+    radiusM,
     primaryAxis: axis,
-    centre,
+    centre: toSource(frame, 0, 0),
     entrance,
-    streets,
-    border,
+    streets: streets.map((street) => ({ id: street.id, width: street.width, points: street.pts.map((p) => toSource(frame, p.a, p.l)) })),
+    border: border.map((p) => toSource(frame, p.a, p.l)),
     plots,
     gates,
   };
 }
 
-const cache = new Map<string, SettlementExteriorPlan>();
-
-/** Lazy deterministic exterior record. Camera/visit order never contributes. */
+/**
+ * Lazy deterministic exterior record. Camera/visit order never contributes.
+ * A city that cannot seat every canonical household on its frontage lots grows
+ * in fixed 30 m steps until it can (a function of the seed-keyed layout only).
+ */
 export function settlementExteriorFor(place: Place) {
-  let plan = cache.get(place.code);
+  let plan = plans.get(place.code);
   if (!plan) {
-    plan = buildPlan(place);
-    cache.set(place.code, plan);
+    const wanted = Math.ceil(SETTLEMENT_POPULATION[place.kind] * 1.03);
+    for (let boost = 0; boost <= 10; boost++) {
+      plan = buildPlan(place, place.kind === "city" ? boost * 30 : 0);
+      const layout = layouts.get(place.code)!;
+      layout.lots = computeLots(layout, place, wanted);
+      if (layout.lots.length >= wanted || place.kind !== "city") break;
+    }
+    plans.set(place.code, plan!);
+    while (plans.size > 24) {
+      const oldest = plans.keys().next().value!;
+      plans.delete(oldest);
+      layouts.delete(oldest);
+    }
   }
-  return plan;
+  return plan!;
 }
 
-export function settlementExteriorCacheSize() {
-  return cache.size;
+/** Frontage lots. A bounded segment grid keeps generation linear; rejection keeps lots off streets, walls, gates and public buildings. */
+function tryLots(layout: Layout, place: Place, pitch: number): SettlementLot[] {
+  const city = place.kind === "city", frame = layout.frame, nominalDepth = city ? 9.5 : 9,
+    jitter = city ? 0 : Math.min(1.2, Math.max(0, (pitch - MINIMUM_LOT_SPACING_M - .6) / 2)),
+    cell = 32, key = (x: number, y: number) => (Math.floor(x / cell) + 512) * 4096 + Math.floor(y / cell) + 512,
+    segments = new Map<number, { a0: number; l0: number; a1: number; l1: number; half: number }[]>();
+  for (const street of layout.streets) for (let index = 1; index < street.pts.length; index++) {
+    const p = street.pts[index - 1], q = street.pts[index], seg = { a0: p.a, l0: p.l, a1: q.a, l1: q.l, half: street.width * .5 },
+      steps = Math.max(1, Math.ceil(Math.hypot(q.a - p.a, q.l - p.l) / (cell * .5))), seen = new Set<number>();
+    for (let s = 0; s <= steps; s++) {
+      const k = key(p.a + (q.a - p.a) * s / steps, p.l + (q.l - p.l) * s / steps);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const bucket = segments.get(k) || [];
+      bucket.push(seg);
+      segments.set(k, bucket);
+    }
+  }
+  const nearStreet = (a: number, l: number) => {
+    const cx = Math.floor(a / cell), cy = Math.floor(l / cell);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const seg of segments.get((cx + dx + 512) * 4096 + cy + dy + 512) || []) {
+      const ea = seg.a1 - seg.a0, el = seg.l1 - seg.l0, d2 = ea * ea + el * el || 1,
+        t = Math.max(0, Math.min(1, ((a - seg.a0) * ea + (l - seg.l0) * el) / d2));
+      if (Math.hypot(a - (seg.a0 + ea * t), l - (seg.l0 + el * t)) < seg.half + 5.6) return true;
+    }
+    return false;
+  };
+  const placed = new Map<number, { a: number; l: number }[]>(), lotCell = 16,
+    lotKey = (x: number, y: number) => (Math.floor(x / lotCell) + 1024) * 4096 + Math.floor(y / lotCell) + 1024,
+    crowded = (a: number, l: number) => {
+      const cx = Math.floor(a / lotCell), cy = Math.floor(l / lotCell);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const other of placed.get((cx + dx + 1024) * 4096 + cy + dy + 1024) || [])
+        if (Math.hypot(a - other.a, l - other.l) < MINIMUM_LOT_SPACING_M) return true;
+      return false;
+    },
+    gateZone = city ? 46 : 30, main = layout.streets[0],
+    ends = [main.pts[0], main.pts[main.pts.length - 1]],
+    lots: SettlementLot[] = [];
+  for (let streetIndex = 0; streetIndex < layout.streets.length; streetIndex++) {
+    const street = layout.streets[streetIndex];
+    for (const side of [-1, 1] as const) {
+      const margin = city ? 7 : 9;
+      for (let s = margin, slot = 0; s <= street.length - margin; slot++) {
+        const here = sampleStreet(street, s), ahead = sampleStreet(street, Math.min(street.length, s + 3)),
+          curvature = (here.ta * ahead.tl - here.tl * ahead.ta) / 3,
+          // Offset-curve speed: inner sides of bends are shorter, so step further along the street to keep the frontage pitch.
+          speed = Math.max(.55, 1 - side * curvature * (street.width * .5 + (city ? 2.8 : 5) + (city ? 4.75 : 4.5))),
+          step = pitch / speed, currentS = s;
+        s += step;
+        const block = Math.floor(currentS / (pitch * 4)),
+          salt = `${place.code}/LOT/${streetIndex}/${side}`,
+          setbackBase = city ? 2.2 + (digest(`${salt}/${block}`) % 13) / 10
+            : layout.archetype === "dispersed-farming" ? 10 + (digest(`${salt}/${block}`) % 180) / 10
+              : 3.5 + (digest(`${salt}/${block}`) % 46) / 10,
+          setback = setbackBase + (city ? 0 : (unit(`${salt}/${slot}/SB`) - .5) * 1.2),
+          along = Math.max(0, Math.min(street.length, currentS + (city ? 0 : (unit(`${salt}/${slot}/ALONG`) - .5) * 2 * jitter))),
+          base = sampleStreet(street, along),
+          offset = street.width * .5 + setback + nominalDepth * .5,
+          a = base.a + base.na * side * offset, l = base.l + base.nl * side * offset;
+        if (!insideBorder(layout.border, a, l, 10)) continue;
+        if (ends.some((end) => Math.hypot(a - end.a, l - end.l) < gateZone)) continue;
+        if (nearStreet(a, l)) continue;
+        if (layout.statics.some((disk) => Math.hypot(a - disk.a, l - disk.l) < disk.r + 5.4)) continue;
+        if (crowded(a, l)) continue;
+        const k = lotKey(a, l), bucket = placed.get(k) || [];
+        bucket.push({ a, l });
+        placed.set(k, bucket);
+        const point = toSource(frame, a, l), jitterYaw = city ? 0 : (unit(`${salt}/${slot}/YAW`) - .5) * .1;
+        lots.push({
+          x: point.x, z: point.z,
+          yawRad: yawOf(frame, -base.na * side, -base.nl * side) + jitterYaw,
+          along: vecSource(frame, base.ta, base.tl),
+          out: vecSource(frame, base.na * side, base.nl * side),
+          setbackM: setback, nominalDepthM: nominalDepth, street: streetIndex, side,
+        });
+      }
+    }
+  }
+  return lots;
 }
 
-/** Diagnostics deliberately materialize every plan; ordinary rendering uses settlementExteriorFor lazily. */
-export function settlementExteriorSummary() {
-  let cityGates = 0,
-    villageGates = 0,
-    plots = 0,
-    streets = 0,
-    borderPoints = 0;
-  const archetypes: Partial<Record<SettlementArchetype, number>> = {};
-  for (const place of places) {
-    const plan = settlementExteriorFor(place);
-    plots += plan.plots.length;
-    streets += plan.streets.length;
-    borderPoints += plan.border.length;
-    archetypes[plan.archetype] = (archetypes[plan.archetype] || 0) + 1;
-    if (place.kind === "city") cityGates += plan.gates.length;
-    else villageGates += plan.gates.length;
+function computeLots(layout: Layout, place: Place, wanted: number) {
+  const floor = 11;
+  let pitch = place.kind === "city" ? 13 : layout.archetype === "dispersed-farming" ? 34 : 24,
+    lots = tryLots(layout, place, pitch);
+  for (let attempt = 0; attempt < 24 && lots.length < wanted && pitch > floor; attempt++) {
+    pitch = Math.max(floor, pitch * .94);
+    lots = tryLots(layout, place, pitch);
   }
-  return { plans: places.length, plots, streets, borderPoints, cityGates, villageGates, archetypes, cachedPlans: cache.size } as const;
+  return lots;
+}
+function lotsFor(place: Place): readonly SettlementLot[] {
+  settlementExteriorFor(place);
+  return layouts.get(place.code)!.lots!;
+}
+
+/** Number of frontage lots a settlement offers (always at least the canonical population). */
+export function settlementLotCount(place: Place) {
+  return lotsFor(place).length;
+}
+
+function lotOrder(place: Place, layout: Layout, count: number) {
+  if (layout.lotOrder) return layout.lotOrder;
+  let step = Math.max(1, Math.floor(count * (1 - PHI))) | 1;
+  while (gcd(step, count) !== 1) step += 2;
+  // modular inverse of step (extended Euclid) lets a lot find its resident without walking every home
+  let [r0, r1, t0, t1] = [count, step % count, 0, 1];
+  while (r1) { const q = Math.floor(r0 / r1); [r0, r1] = [r1, r0 - q * r1]; [t0, t1] = [t1, t0 - q * t1]; }
+  return (layout.lotOrder = { offset: digest(`${place.code}/LOT-ORDER`) % count, step, inverse: ((t0 % count) + count) % count });
+}
+
+/** The lot of resident home `index`: a seed-keyed coprime walk over every lot of the settlement. */
+export function settlementLotFor(place: Place, index: number): SettlementLot {
+  const lots = lotsFor(place), count = lots.length;
+  if (!count) throw new RangeError(`${place.code} has no frontage lots`);
+  const order = lotOrder(place, layouts.get(place.code)!, count);
+  return lots[(order.offset + (index % count) * order.step) % count];
+}
+
+const LOT_CELL = metresToSource(64);
+/**
+ * Lots whose centre lies in a source-space rectangle, with the resident home
+ * each seats (undefined = vacant lot). Only lots in the rectangle are touched,
+ * so callers resolve just the visible area; the answer never depends on what
+ * was asked before.
+ */
+export function settlementLotsInRect(place: Place, minX: number, minZ: number, maxX: number, maxZ: number) {
+  const lots = lotsFor(place), layout = layouts.get(place.code)!, count = lots.length, order = lotOrder(place, layout, count),
+    population = SETTLEMENT_POPULATION[place.kind], found: { lot: SettlementLot; index: number | undefined }[] = [];
+  if (!layout.lotGrid) {
+    layout.lotGrid = new Map();
+    lots.forEach((lot, i) => {
+      const k = Math.floor(wrapSourceX(lot.x - place.x) / LOT_CELL) * 100003 + Math.floor((lot.z - place.z) / LOT_CELL);
+      const bucket = layout.lotGrid!.get(k) || [];
+      bucket.push(i);
+      layout.lotGrid!.set(k, bucket);
+    });
+  }
+  const rx0 = wrapSourceX(minX - place.x), rx1 = rx0 + (maxX - minX), rz0 = minZ - place.z, rz1 = maxZ - place.z;
+  for (let cx = Math.floor(rx0 / LOT_CELL); cx <= Math.floor(rx1 / LOT_CELL); cx++) for (let cz = Math.floor(rz0 / LOT_CELL); cz <= Math.floor(rz1 / LOT_CELL); cz++)
+    for (const i of layout.lotGrid.get(cx * 100003 + cz) || []) {
+      const lot = lots[i];
+      const dx = wrapSourceX(lot.x - minX), dz = lot.z - minZ;
+      if (dx < 0 || dx >= maxX - minX || dz < 0 || dz >= maxZ - minZ) continue;
+      const index = ((i - order.offset) % count + count) % count * order.inverse % count;
+      found.push({ lot, index: index < population ? index : undefined });
+    }
+  return found;
+}
+
+/** Resident home indices seated on lots inside a source rectangle (ascending). Only that area is touched. */
+export function settlementHomeIndicesNear(place: Place, minX: number, maxX: number, minZ: number, maxZ: number) {
+  return settlementLotsInRect(place, minX, minZ, maxX, maxZ).flatMap((entry) => entry.index === undefined ? [] : [entry.index]).sort((a, b) => a - b);
 }

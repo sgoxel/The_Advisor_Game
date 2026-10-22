@@ -2,7 +2,9 @@ import { places, roadDistanceAt, roads, type Place, type Road } from "./geograph
 import { wrapSourceX } from "./planet.ts";
 import { houseDimensionsFor, metresToSource, physicalFootprintRadius, type HouseDimensions } from "./physical-scale.ts";
 import {
+  SETTLEMENT_POPULATION,
   settlementExteriorFor as coreSettlementExteriorFor,
+  settlementLotFor,
   type SettlementArchetype,
   type SettlementExteriorPlan as CoreExteriorPlan,
   type SettlementFieldForm,
@@ -51,87 +53,46 @@ function normalize(x: number, z: number) {
   return { x: x / length, z: z / length };
 }
 export function canonicalSettlementPopulation(place: Place) {
-  return place.kind === "city" ? 2400 : 80;
-}
-
-function residentialSpineLength(street: SettlementStreetPlan) {
-  const a = street.points[0], b = street.points[street.points.length - 1];
-  return Math.hypot(wrapSourceX(b.x - a.x), b.z - a.z);
-}
-function pointOnResidentialSpine(street: SettlementStreetPlan, fraction: number) {
-  const a = street.points[0], b = street.points[street.points.length - 1],
-    dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz) || 1,
-    axis = { x: dx / length, z: dz / length }, normal = { x: -axis.z, z: axis.x },
-    t = Math.max(0, Math.min(1, fraction)), reference = street.points[Math.floor((street.points.length - 1) * .5)],
-    referenceX = wrapSourceX(reference.x - a.x), referenceZ = reference.z - a.z,
-    measuredBend = referenceX * normal.x + referenceZ * normal.z,
-    bend = Math.max(-12, Math.min(12, measuredBend)), wave = Math.sin(Math.PI * t) * bend,
-    slope = (Math.PI * bend / length) * Math.cos(Math.PI * t), tangent = normalize(axis.x + normal.x * slope, axis.z + normal.z * slope);
-  return {
-    point: { x: wrapSourceX(a.x + axis.x * length * t + normal.x * wave), z: a.z + axis.z * length * t + normal.z * wave },
-    tangent,
-    normal: { x: -tangent.z, z: tangent.x },
-  };
-}
-function offsetPoint(base: ReturnType<typeof pointOnResidentialSpine>, along: number, lateral: number): SettlementPoint {
-  return { x: wrapSourceX(base.point.x + base.tangent.x * along + base.normal.x * lateral), z: base.point.z + base.tangent.z * along + base.normal.z * lateral };
+  return SETTLEMENT_POPULATION[place.kind];
 }
 
 /**
- * One canonical one-person residence per resident. Residences advance
- * monotonically along the canonical first-street chord, with a bounded smooth
- * bend derived from that street and deterministic staggered ribbons. City
- * footprints remain readable at settlement scale while primary spacing stays
- * disjoint by construction. Camera, visit order, LOD, cache state and renderer
- * backend never contribute.
+ * One canonical one-person residence per resident, on its own frontage lot.
+ * Lots are generated in metres along every street of the settlement (see
+ * settlement-exterior-core.ts), each with a setback from the street edge, so
+ * houses form continuous street fronts that face the road. A resident's lot is
+ * a seed-keyed walk over all lots; camera, visit order, LOD, cache state and
+ * renderer backend never contribute.
  */
+export function homeClearanceRadius(widthM: number, depthM: number) {
+  return metresToSource(Math.max(widthM, depthM) * .5 + .35);
+}
 export function settlementHomeFor(place: Place, index: number, suppliedPlan?: SettlementExteriorPlan): SettlementPlotPlan {
   const population = canonicalSettlementPopulation(place);
   if (!Number.isInteger(index) || index < 0 || index >= population) throw new RangeError(`Invalid resident home index ${index} for ${place.code}`);
-  const plan = suppliedPlan || settlementExteriorFor(place), street = plan.streets[0], city = place.kind === "city",
-    spineLength = residentialSpineLength(street),
-    maximumWidth = city ? 2.05 : .94,
-    maximumDepth = city ? 2.28 : 1.06,
-    maximumHomeRadius = Math.hypot(maximumWidth, maximumDepth) * .5 + (city ? .16 : .1),
-    minimumAlongSpacing = maximumHomeRadius * 2 + (city ? .5 : .08),
-    maximumSlotsPerRibbon = Math.max(1, Math.floor(spineLength * .88 / minimumAlongSpacing)),
-    minimumRibbonCount = Math.ceil(population / maximumSlotsPerRibbon),
-    bandCount = Math.max(city ? 24 : 8, Math.ceil(minimumRibbonCount / 2)),
-    ribbonCount = bandCount * 2,
-    ribbon = index % ribbonCount,
-    ordinal = Math.floor(index / ribbonCount),
-    slotsPerRibbon = Math.ceil(population / ribbonCount),
-    side: -1 | 1 = (ribbon & 1) === 0 ? -1 : 1,
-    band = Math.floor(ribbon / 2),
-    ribbonPhase = city ? (unit(`${place.code}/RESIDENCE/RIBBON/${ribbon}/PHASE`) - .5) * .28 : 0,
-    fraction = .06 + ((ordinal + .5 + ribbonPhase) / slotsPerRibbon) * .88,
-    base = pointOnResidentialSpine(street, fraction),
+  void suppliedPlan;
+  const city = place.kind === "city", lot = settlementLotFor(place, index),
     house = houseDimensionsFor(`${place.code}/RESIDENCE/${index}`, city),
-    width = metresToSource(house.widthM),
-    depth = metresToSource(house.depthM),
-    setback = city ? 2.75 + band * 4.15 : 1.65 + band * 2.2,
-    lateralJitter = city ? (unit(`${place.code}/RESIDENCE/${index}/LATERAL`) - .5) * .42 : 0,
-    lateral = side * (street.width * .5 + setback + depth * .5) + lateralJitter,
-    yawRad = Math.atan2(-base.normal.x * side, -base.normal.z * side) + (unit(`${place.code}/RESIDENCE/${index}/YAW`) - .5) * (city ? .13 : .05),
-    spacing = Math.max(city ? 4.4 : 2.2, spineLength * .88 / slotsPerRibbon),
-    alongJitter = city ? (unit(`${place.code}/RESIDENCE/${index}/ALONG`) - .5) * Math.min(1.4, spacing * .16) : 0,
-    shift = Math.min(city ? 1.05 : .28, spacing * .08),
-    candidates: SettlementPoint[] = [offsetPoint(base, alongJitter, lateral)];
-  for (const along of [-shift, shift, -shift * 2, shift * 2]) candidates.push(offsetPoint(base, alongJitter + along, lateral));
+    shift = (house.depthM - lot.nominalDepthM) * .5,
+    yawRad = lot.yawRad + (unit(`${place.code}/RESIDENCE/${index}/YAW`) - .5) * (city ? .06 : .1),
+    at = (along: number): SettlementPoint => ({
+      x: wrapSourceX(lot.x + lot.out.x * shift + lot.along.x * along),
+      z: lot.z + lot.out.z * shift + lot.along.z * along,
+    });
   return {
     id: `${place.code}/RESIDENCE/${index}`,
     kind: "house",
     ownerId: `${place.code}/RESIDENT/${index}`,
     capacity: 1,
     residents: 1,
-    width,
-    depth,
+    width: metresToSource(house.widthM),
+    depth: metresToSource(house.depthM),
     widthM: house.widthM,
     depthM: house.depthM,
     house,
     yawRad,
-    clearanceRadius: physicalFootprintRadius(house.widthM + .5, house.depthM + .5, place.z),
-    candidates,
+    clearanceRadius: homeClearanceRadius(house.widthM, house.depthM),
+    candidates: [at(0), at(-.6), at(.6), at(-1.2), at(1.2)],
   };
 }
 
@@ -141,13 +102,17 @@ function servicePlot(place: Place, plot: CorePlotPlan): SettlementPlotPlan {
     staff = Math.max(1, Math.min(12, Math.ceil(population / (plot.service === "farmstead" ? 700 : 1100))));
   return { ...plot, ownerId: ownerIndex === undefined ? plot.ownerId : `${place.code}/RESIDENT/${ownerIndex}`, residents: staff, capacity: Math.max(plot.capacity, staff) };
 }
-function gardenFor(place: Place, home: SettlementPlotPlan, index: number): SettlementPlotPlan {
-  const width = 1.4 + unit(`${place.code}/GARDEN/${index}/WIDTH`) * .7, depth = 1.6 + unit(`${place.code}/GARDEN/${index}/DEPTH`) * .8,
-    candidates = home.candidates.map((candidate) => ({
-      x: wrapSourceX(candidate.x + Math.cos(home.yawRad) * (home.width * .5 + width * .5 + .45)),
-      z: candidate.z - Math.sin(home.yawRad) * (home.width * .5 + width * .5 + .45),
-    }));
-  return { id: `${place.code}/GARDEN/${index}`, kind: "garden", ownerId: home.ownerId, capacity: 0, residents: 0, width, depth, yawRad: home.yawRad, clearanceRadius: Math.hypot(width, depth) * .5 + .12, candidates };
+/** A small rear garden behind the house, inside its own frontage lot. */
+function gardenFor(place: Place, index: number): SettlementPlotPlan {
+  const lot = settlementLotFor(place, index), home = settlementHomeFor(place, index),
+    widthM = 3 + unit(`${place.code}/GARDEN/${index}/WIDTH`) * 1.2, depthM = 3 + unit(`${place.code}/GARDEN/${index}/DEPTH`) * 1.2,
+    behind = (home.depthM || 8) * .5 + depthM * .5 + .4;
+  return {
+    id: `${place.code}/GARDEN/${index}`, kind: "garden", ownerId: home.ownerId, capacity: 0, residents: 0,
+    width: metresToSource(widthM), depth: metresToSource(depthM), widthM, depthM, yawRad: home.yawRad,
+    clearanceRadius: metresToSource(Math.hypot(widthM, depthM) * .5 + .1),
+    candidates: home.candidates.map((candidate) => ({ x: wrapSourceX(candidate.x + lot.out.x * behind), z: candidate.z + lot.out.z * behind })),
+  };
 }
 
 type TerminalApproach = { road: Road; x: number; z: number; snapBorder?: boolean };
@@ -418,7 +383,7 @@ function alignGatesToRoads(place: Place, suppliedPlan: SettlementExteriorPlan): 
     const approach = approaches[index];
     const outward = normalize(wrapSourceX(approach.x - place.x), approach.z - place.z), normal = { x: -outward.z, z: outward.x },
       guardPosts = gate.guardPosts.map((_, guardIndex) => ({
-        x: wrapSourceX(approach.x + normal.x * (guardIndex === 0 ? 9 : -9)), z: approach.z + normal.z * (guardIndex === 0 ? 9 : -9),
+        x: wrapSourceX(approach.x + normal.x * metresToSource(guardIndex === 0 ? 9 : -9)), z: approach.z + normal.z * metresToSource(guardIndex === 0 ? 9 : -9),
       }));
     return { ...gate, x: approach.x, z: approach.z, bearingRad: Math.atan2(outward.z, outward.x), guardPosts };
   }), border = plan.border.map((point) => ({ ...point })), usedBorderVertices = new Set<number>();
@@ -469,14 +434,14 @@ export function settlementExteriorFor(place: Place): SettlementExteriorPlan {
   const core = coreSettlementExteriorFor(place), plots: SettlementPlotPlan[] = [];
   for (const plot of core.plots) if (plot.kind !== "house") {
     const owned = servicePlot(place, plot);
-    plots.push(["service", "keep", "well"].includes(plot.kind) ? {
+    plots.push({
       ...owned, widthM: plot.width, depthM: plot.depth,
       width: metresToSource(plot.width), depth: metresToSource(plot.depth),
-      clearanceRadius: physicalFootprintRadius(plot.width * 1.08, plot.depth * 1.08, place.z, 1.5),
-    } : owned);
+      clearanceRadius: plot.kind === "field" ? metresToSource(plot.clearanceRadius) : physicalFootprintRadius(plot.width * 1.08, plot.depth * 1.08, place.z, 1.5),
+    });
   }
   const residentHomeCount = canonicalSettlementPopulation(place), gardenStride = place.kind === "city" ? 48 : 8;
-  for (let index = 0; index < residentHomeCount; index += gardenStride) plots.push(gardenFor(place, settlementHomeFor(place, index, { ...core, plots: [], residentHomeCount }), index));
+  for (let index = 0; index < residentHomeCount; index += gardenStride) plots.push(gardenFor(place, index));
   const aligned = alignGatesToRoads(place, { ...core, plots, residentHomeCount });
   return remember({ ...aligned, streets: aligned.streets.map(street => ({ ...street, width: metresToSource(street.width) })) });
 }

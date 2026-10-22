@@ -41,7 +41,9 @@ test("resident silhouettes have adult human dimensions in physical metres", () =
 
 test("actual rendered house walls match their physical foundation after ENU conversion", () => {
   for (const place of [villages[0], cities[0]]) {
-    const neighbourhood = featuresFor(tileForPosition(place.x, place.z, 9)), home = neighbourhood.find(f => f.kind === "residence");
+    const neighbourhood = featuresFor(tileForPosition(place.x, place.z, 9)),
+      // Streets are now lined with houses: pick one whose finest tile holds exactly that one house.
+      home = neighbourhood.filter(f => f.kind === "residence").find(f => featuresFor(tileForPosition(f.x, f.z, 17)).filter(g => g.kind === "residence").length === 1);
     assert.ok(home?.house, "fixture needs a real residence");
     const tile = tileForPosition(home.x, home.z, 17), geometry = buildTile(tile);
     assert.equal(featuresFor(tile).filter(f => f.kind === "residence").length, 1, "measure one owned house");

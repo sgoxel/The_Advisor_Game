@@ -11,6 +11,7 @@ import {
   type Tile,
 } from "./world-core.ts";
 import { nearbyPlaces, roadDistanceAt, roads, type Place } from "./geography.ts";
+import { settlementHomeIndicesNear } from "./settlement-exterior-core.ts";
 import { settlementExteriorFor, settlementHomeFor, visibleSettlementStreetSegments, type SettlementExteriorPlan, type SettlementPlotPlan } from "./settlement-exterior.ts";
 import { naturalSurfaceAt } from "./hydrology.ts";
 import { wrapSourceX } from "./planet.ts";
@@ -48,7 +49,7 @@ type Occupant = { x: number; z: number; radius: number };
 type ResolvedSettlement = { staticAnchors: Map<string, Resolved>; staticOccupants: Occupant[]; homes: Map<string, Resolved>; homePlots?: Map<number, SettlementPlotPlan> };
 
 export const SETTLEMENT_PRESENTATION_CACHE_LIMIT = 12;
-const MAX_CACHED_HOME_ANCHORS = 512;
+const MAX_CACHED_HOME_ANCHORS = 2560;
 const resolvedSettlements = new Map<string, ResolvedSettlement>();
 const ROAD_BUCKET_SIZE = 2048;
 const ROAD_CLEARANCE_SUPPORT = 64;
@@ -100,13 +101,13 @@ function borderClearance(place: Place, plan: SettlementExteriorPlan, x: number, 
 function candidateLegal(place: Place, plan: SettlementExteriorPlan, plot: SettlementPlotPlan, candidate: { x: number; z: number }) {
   const surface = finalSurfaceAt(candidate.x, candidate.z);
   if (surface.groundHeight < .2 || surface.water.kind !== "none" || !surface.walkable) return false;
-  const radius = plot.clearanceRadius, roadReserve = plot.kind === "house" ? radius + .55 : radius + 3;
+  const radius = plot.clearanceRadius, roadReserve = radius + metresToSource(plot.kind === "house" ? 2 : 6);
   if (!externalRoadClear(candidate.x, candidate.z, roadReserve)) return false;
   const street = settlementStreetAt(plan, candidate.x, candidate.z);
   if (street && street.distance < street.width * .5 + radius * .78) return false;
-  if (plot.kind !== "field" && plan.gates.some((gate) => Math.hypot(wrapSourceX(candidate.x - gate.x), candidate.z - gate.z) < radius + 7)) return false;
-  if (plot.kind !== "field" && borderClearance(place, plan, candidate.x, candidate.z) < radius + .25) return false;
-  const sampleRadius = plot.kind === "house" ? Math.max(.24, Math.min(.58, radius * .62)) : plot.kind === "field" ? 9 : Math.min(6, Math.max(1.5, radius * .55)),
+  if (plot.kind !== "field" && plan.gates.some((gate) => Math.hypot(wrapSourceX(candidate.x - gate.x), candidate.z - gate.z) < radius + metresToSource(12))) return false;
+  if (plot.kind !== "field" && borderClearance(place, plan, candidate.x, candidate.z) < radius + metresToSource(3)) return false;
+  const sampleRadius = plot.kind === "house" ? Math.max(.24, Math.min(.58, radius * .62)) : plot.kind === "field" ? metresToSource(14) : Math.min(metresToSource(20), Math.max(metresToSource(4), radius * .55)),
     samples = plot.kind === "house" ? [[0, 0], [-sampleRadius, -sampleRadius], [sampleRadius, sampleRadius]] : [[0,0],[-sampleRadius,-sampleRadius],[-sampleRadius,sampleRadius],[sampleRadius,-sampleRadius],[sampleRadius,sampleRadius]];
   for (const [dx, dz] of samples) {
     const point = finalSurfaceAt(candidate.x + dx, candidate.z + dz);
@@ -141,29 +142,21 @@ function resolveStaticPlan(place: Place, plan: SettlementExteriorPlan) {
   }
   return rememberResolution(place.code, { staticAnchors, staticOccupants, homes: new Map() });
 }
-function resolveHomes(place: Place, plan: SettlementExteriorPlan, resolution: ResolvedSettlement) {
-  if (resolution.homePlots) return;
-  const plots = new Map<number, SettlementPlotPlan>(), occupants = [...resolution.staticOccupants],
-    strides = HOME_STRIDES[place.kind], lots = place.kind === "city" ? cityFrontageLots(plan) : [];
-  // Resolve the bounded union of all displayed LOD subsets, in resident order.
-  // Never let tile visitation, current zoom, or an evicted anchor decide which
-  // home wins a plot. Logical resident/home records remain unchanged.
-  for (let index = 0; index < plan.residentHomeCount; index++) {
-    if (!strides.some(stride => index % stride === 0)) continue;
-    const canonical = settlementHomeFor(place, index, plan),
-      home = place.kind === "city" ? cityPresentationHome(place, plan, canonical, index, plots.size, lots) : canonical,
-      plot = { ...home, clearanceRadius: physicalFootprintRadius(home.widthM! + .5, home.depthM! + .5, place.z, .5) };
-    let chosen: Resolved = null;
-    for (const candidate of plot.candidates) {
-      if (overlaps(occupants, candidate.x, candidate.z, plot.clearanceRadius) || !candidateLegal(place, plan, plot, candidate)) continue;
-      chosen = candidate;
-      occupants.push({ ...candidate, radius: plot.clearanceRadius });
-      break;
-    }
-    plots.set(index, plot);
-    resolution.homes.set(plot.id, chosen);
+/** Resolve ONE home on demand. Lots never overlap each other, so only static plots and terrain decide. */
+function resolveHome(place: Place, plan: SettlementExteriorPlan, resolution: ResolvedSettlement, index: number) {
+  const plots = resolution.homePlots || (resolution.homePlots = new Map<number, SettlementPlotPlan>());
+  let plot = plots.get(index);
+  if (plot) return plot;
+  plot = settlementHomeFor(place, index, plan);
+  let chosen: Resolved = null;
+  for (const candidate of plot.candidates) {
+    if (overlaps(resolution.staticOccupants, candidate.x, candidate.z, plot.clearanceRadius) || !candidateLegal(place, plan, plot, candidate)) continue;
+    chosen = candidate;
+    break;
   }
-  resolution.homePlots = plots;
+  plots.set(index, plot);
+  resolution.homes.set(plot.id, chosen);
+  return plot;
 }
 export function settlementPresentationCacheState() {
   let homeAnchors = 0;
@@ -176,60 +169,9 @@ function enclosureStyleFor(place: Place, plan: SettlementExteriorPlan) {
   if (plan.archetype === "roadside" || plan.archetype === "fortified-frontier") return { variant: 3, width: 1, label: "Palisade enclosure" };
   return { variant: 4, width: 1.3, label: "Stone and timber enclosure" };
 }
-const HOME_STRIDES = { city: [12, 18, 36], village: [2, 3, 6] } as const;
+const HOME_STRIDES = { city: [1, 2, 4], village: [1, 1, 2] } as const;
 function homeStride(place: Place, tileSize: number) {
   return HOME_STRIDES[place.kind][tileSize <= 32 ? 0 : tileSize <= 64 ? 1 : 2];
-}
-function streetPointAtFraction(street: SettlementExteriorPlan["streets"][number], fraction: number) {
-  let total = 0;
-  for (let index = 1; index < street.points.length; index++) total += Math.hypot(wrapSourceX(street.points[index].x - street.points[index - 1].x), street.points[index].z - street.points[index - 1].z);
-  let target = Math.max(0, Math.min(1, fraction)) * total;
-  for (let index = 1; index < street.points.length; index++) {
-    const a = street.points[index - 1], b = street.points[index], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz);
-    if (target <= length || index + 1 === street.points.length) {
-      const t = length ? Math.max(0, Math.min(1, target / length)) : 0, tangentLength = length || 1,
-        tangent = { x: dx / tangentLength, z: dz / tangentLength };
-      return { point: { x: wrapSourceX(a.x + dx * t), z: a.z + dz * t }, tangent, normal: { x: -tangent.z, z: tangent.x } };
-    }
-    target -= length;
-  }
-  const a = street.points[0], b = street.points[Math.min(1, street.points.length - 1)], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz) || 1,
-    tangent = { x: dx / length, z: dz / length };
-  return { point: a, tangent, normal: { x: -tangent.z, z: tangent.x } };
-}
-function cityFrontageLots(plan: SettlementExteriorPlan) {
-  const lots: { street: SettlementExteriorPlan["streets"][number]; fraction: number; side: -1 | 1; block: number }[] = [];
-  for (const street of plan.streets) {
-    let length = 0;
-    for (let i = 1; i < street.points.length; i++) length += Math.hypot(wrapSourceX(street.points[i].x - street.points[i - 1].x), street.points[i].z - street.points[i - 1].z);
-    const count = Math.max(1, Math.floor(length * .86 / 13));
-    for (let slot = 0; slot < count; slot++) for (const side of [-1, 1] as const)
-      lots.push({ street, fraction: .07 + (slot + .5) / count * .86, side, block: Math.floor(slot / 4) });
-  }
-  return lots;
-}
-function cityPresentationHome(place: Place, plan: SettlementExteriorPlan, canonical: SettlementPlotPlan, index: number, ordinal: number, lots: ReturnType<typeof cityFrontageLots>): SettlementPlotPlan {
-  // A seed-rotated, coprime walk distributes distinct lots across all streets.
-  // Nearby lots share a setback rhythm; small variation follows the curved
-  // frontage instead of creating random clumps or a world-aligned grid.
-  let step = 17;
-  const gcd = (a: number, b: number): number => b ? gcd(b, a % b) : a;
-  while (gcd(step, lots.length) !== 1) step += 2;
-  const lot = lots[(digest(`${place.code}/CITY-FRONTAGE`) + ordinal * step) % lots.length],
-    { street, side } = lot,
-    fraction = lot.fraction,
-    base = streetPointAtFraction(street, fraction),
-    width = canonical.width,
-    depth = canonical.depth,
-    setback = metresToSource(2 + (digest(`${street.id}/FRONTAGE/${side}/${lot.block}`) % 17) / 10 + (digest(`${canonical.id}/SETBACK`) % 5) / 10),
-    lateral = side * (street.width * .5 + depth * .5 + setback),
-    yawRad = Math.atan2(-base.normal.x * side, -base.normal.z * side) + ((digest(`${place.code}/CITY-PRESENTATION/${index}/YAW`) % 1001) / 1000 - .5) * .1,
-    offset = (along: number, extraLateral = 0) => ({
-      x: wrapSourceX(base.point.x + base.tangent.x * along + base.normal.x * (lateral + side * extraLateral)),
-      z: base.point.z + base.tangent.z * along + base.normal.z * (lateral + side * extraLateral),
-    }),
-    candidates = [offset(0), offset(1.2), offset(-1.2), offset(.6, 2.2), offset(-.6, 4.4)];
-  return { ...canonical, width, depth, yawRad, candidates };
 }
 function nearTile(tile: Tile, point: { x: number; z: number }, padding = 5) {
   return point.x >= tile.minX - padding && point.x < tile.minX + tile.size + padding && point.z >= tile.minZ - padding && point.z < tile.minZ + tile.size + padding;
@@ -248,17 +190,20 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
   const emitPlot = (place: Place, plan: SettlementExteriorPlan, plot: SettlementPlotPlan, point: { x: number; z: number }) => {
     const kind: MorphologyKind = plot.kind === "house" ? "residence" : plot.kind === "service" ? "service" : plot.kind,
       street = settlementStreetAt(plan, point.x, point.z), dx = street ? wrapSourceX(street.x - point.x) : 0, dz = street ? street.z - point.z : 0,
-      distance = Math.hypot(dx, dz), edgeOffset = Math.min(distance * .45, Math.max(.25, Math.min(plot.width, plot.depth) * .42)),
+      distance = Math.hypot(dx, dz),
+      // The door sits on the front wall (half the depth towards the street), never inside the footprint.
+      edgeOffset = Math.min(distance * .9, plot.kind === "field" ? Math.max(metresToSource(2), Math.min(plot.width, plot.depth) * .42) : plot.depth * .5),
       door = street && distance > 0 ? { x: wrapSourceX(point.x + dx / distance * edgeOffset), z: point.z + dz / distance * edgeOffset } : point;
     add(kind, point.x, point.z, digest(`${plot.id}/FEATURE`), `${place.id}/${plot.id}`, { service: plot.service, ownerId: plot.ownerId, capacity: plot.capacity, residents: plot.residents, label: plot.service || plot.house?.houseType || plot.kind, entranceX: door.x, entranceZ: door.z, yawRad: plot.yawRad, footprintWidth: plot.width, footprintDepth: plot.depth, widthM: plot.widthM, depthM: plot.depthM, house: plot.house, fieldForm: plot.fieldForm, urban: place.kind === "city" && kind === "residence" });
-    const cityHomePath = kind === "residence" && place.kind === "city";
-    if ((kind === "residence" || kind === "service" || kind === "keep") && street && distance > edgeOffset + .28 && (!cityHomePath || distance <= 18)) {
-      const pathDx = wrapSourceX(street.x - door.x), pathDz = street.z - door.z, pathLength = Math.hypot(pathDx, pathDz);
-      add("path", wrapSourceX(door.x + pathDx * .5), door.z + pathDz * .5, digest(`${plot.id}/PATH`), `${place.id}/path/${plot.id}`, { ownerId: plot.ownerId, label: "Access path", yawRad: Math.atan2(pathDx, pathDz), footprintWidth: metresToSource(1.2), footprintDepth: pathLength, length: pathLength });
+    // A short walkway from the door to the street edge (never across the road itself).
+    const pathLength = street ? distance - edgeOffset - street.width * .5 : 0;
+    if ((kind === "residence" || kind === "service" || kind === "keep") && street && pathLength > metresToSource(1.2) && pathLength < metresToSource(40)) {
+      const ux = dx / distance, uz = dz / distance;
+      add("path", wrapSourceX(door.x + ux * pathLength * .5), door.z + uz * pathLength * .5, digest(`${plot.id}/PATH`), `${place.id}/path/${plot.id}`, { ownerId: plot.ownerId, label: "Access path", yawRad: Math.atan2(ux, uz), footprintWidth: metresToSource(1.2), footprintDepth: pathLength, length: pathLength });
     }
   };
   for (const place of localPlaces) {
-    const extent = place.kind === "city" ? 456 : 178;
+    const extent = place.kind === "city" ? 76 : 36;
     if (Math.abs(wrapSourceX(place.x - tileCentreX)) > tile.size * .5 + extent || Math.abs(place.z - tileCentreZ) > tile.size * .5 + extent) continue;
     const plan = settlementExteriorFor(place), resolution = resolveStaticPlan(place, plan), enclosure = enclosureStyleFor(place, plan);
     for (const street of plan.streets) for (let index = 1; index < street.points.length; index++) {
@@ -269,23 +214,21 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
       }
     }
     for (let segment = 0; segment < plan.border.length; segment++) {
-      const a = plan.border[segment], b = plan.border[(segment + 1) % plan.border.length], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz), pieces = Math.max(1, Math.ceil(length / 10));
+      const a = plan.border[segment], b = plan.border[(segment + 1) % plan.border.length], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz), pieces = Math.max(1, Math.ceil(length / metresToSource(10)));
       for (let piece = 0; piece < pieces; piece++) {
         const t = (piece + .5) / pieces, x = wrapSourceX(a.x + dx * t), z = a.z + dz * t, pieceLength = length / pieces;
-        if (!plan.gates.some((gate) => Math.hypot(wrapSourceX(x - gate.x), z - gate.z) < 13)) add("border", x, z, enclosure.variant, `${place.id}/border/${segment}/${piece}`, { yawRad: Math.atan2(dx, dz), footprintWidth: metresToSource(enclosure.width), footprintDepth: pieceLength + .4, length: pieceLength + .4, label: enclosure.label });
+        if (!plan.gates.some((gate) => Math.hypot(wrapSourceX(x - gate.x), z - gate.z) < metresToSource(9))) add("border", x, z, enclosure.variant, `${place.id}/border/${segment}/${piece}`, { yawRad: Math.atan2(dx, dz), footprintWidth: metresToSource(enclosure.width), footprintDepth: pieceLength + metresToSource(.4), length: pieceLength + metresToSource(.4), label: enclosure.label });
       }
     }
     for (const plot of plan.plots) {
       const point = resolution.staticAnchors.get(plot.id);
       if (point) emitPlot(place, plan, plot, point);
     }
-    resolveHomes(place, plan, resolution);
-    const stride = homeStride(place, tile.size);
-    for (let index = 0; index < plan.residentHomeCount; index += stride) {
-      const plot = resolution.homePlots!.get(index)!, primary = plot.candidates[0];
-      if (!nearTile(tile, primary, 12)) continue;
-      const point = resolution.homes.get(plot.id);
-      if (point) emitPlot(place, plan, plot, point);
+    const stride = homeStride(place, tile.size), pad = metresToSource(20);
+    for (const index of settlementHomeIndicesNear(place, tile.minX - pad, tile.minX + tile.size + pad, tile.minZ - pad, tile.minZ + tile.size + pad)) {
+      if (index % stride !== 0) continue;
+      const plot = resolveHome(place, plan, resolution, index), point = resolution.homes.get(plot.id);
+      if (point && nearTile(tile, plot.candidates[0], 12)) emitPlot(place, plan, plot, point);
     }
     for (const gate of plan.gates) {
       const gateYaw = Math.PI / 2 - gate.bearingRad;
@@ -299,8 +242,8 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
     for (let index = 2; index < mainStreet.points.length - 1; index += 4) {
       const value = digest(`${place.code}/ROADSIDE-TREE/${index}`), anchor = mainStreet.points[index], previous = mainStreet.points[index - 1], next = mainStreet.points[index + 1],
         dx = wrapSourceX(next.x - previous.x), dz = next.z - previous.z, length = Math.hypot(dx, dz) || 1, side = (value & 1) === 0 ? -1 : 1,
-        offset = mainStreet.width * .5 + 5 + ((value >>> 3) % 4), x = wrapSourceX(anchor.x - dz / length * offset * side), z = anchor.z + dx / length * offset * side;
-      if (plan.gates.some((gate) => Math.hypot(wrapSourceX(x - gate.x), z - gate.z) < 18) || naturalSurfaceAt(x, z).freshwaterDistanceSource < 2) continue;
+        offset = mainStreet.width * .5 + metresToSource(4 + ((value >>> 3) % 4)), x = wrapSourceX(anchor.x - dz / length * offset * side), z = anchor.z + dx / length * offset * side;
+      if (plan.gates.some((gate) => Math.hypot(wrapSourceX(x - gate.x), z - gate.z) < metresToSource(20)) || naturalSurfaceAt(x, z).freshwaterDistanceSource < metresToSource(6)) continue;
       add("roadside-tree", x, z, value, `${place.id}/roadside-tree/${index}`, { label: "Roadside tree" });
     }
   }
