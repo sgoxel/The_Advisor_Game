@@ -927,6 +927,26 @@ test("S005 selected bridge and walking route give the same first unsafe final-su
   }
   assert.equal(sampledBridgeTopFailure(edgeCode, surface), "unsupported water under bridge deck",
     "unsupported water must not be hidden by a competing overpass diagnosis");
+  // Unwalkable wet surfaces are common at a missing or disconnected deck;
+  // reporting only 'blocked final surface' conceals the real crossing defect.
+  const exposedRiver = { ...surface, walkable: false, water: { kind: "river" },
+    deckHeight: null, deckOwnerIds: [], traversal: "blocked" } as unknown as FinalSurface;
+  assert.equal(sampledCorridorStationFailure({ x: 0, z: 0, edgeCode }, exposedRiver),
+    "water without owned bridge deck");
+  assert.equal(sampledBridgeTopFailure(edgeCode, exposedRiver),
+    "water without owned bridge deck",
+    "bridge and selected-route diagnostics share the same specific wet failure");
+  assert.equal(sampledCorridorStationPass({ x: 0, z: 0, edgeCode }, exposedRiver), false,
+    "explaining missing deck water cannot accidentally certify wet walking");
+  const unsupportedLake = { ...surface, walkable: false } as FinalSurface;
+  assert.equal(sampledBridgeTopFailure(edgeCode, unsupportedLake), "unsupported water under bridge deck",
+    "a blocked lake under an overpass must still identify unsupported water");
+  const dryBlocked = { ...exposedRiver, water: { kind: "none" } } as FinalSurface;
+  assert.equal(sampledBridgeTopFailure(edgeCode, dryBlocked), "blocked final surface",
+    "a dry obstruction keeps its existing first-unsafe classification");
+  assert.equal(sampledCorridorStationFailure({ x: 0, z: 0, edgeCode },
+    { ...dryBlocked, walkable: true, traversal: "road", contributingModifierIds: [] }),
+    "selected road modifier absent", "missing-road ownership remains a separate failure");
 });
 
 test("S005 both bridge bank checks follow the actual road bend and never extrapolate missing road", () => {
