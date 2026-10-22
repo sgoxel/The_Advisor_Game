@@ -283,6 +283,21 @@ test("S005 on-demand bridge span probe matches source crossing and rejects false
   assert.equal(observed.routeGradeWithinLimit,
     observed.routeStationsWalkable && observed.routeMaxSampledGrade! <= .08);
   assert.ok(observed.routeMaxSampledGrade !== null && Number.isFinite(observed.routeMaxSampledGrade));
+  // Final-surface road difficulty uses a separate local four-neighbour grade,
+  // never the bridge's averaged 4 m interval grade. Only measure it on demand
+  // when an actual difficult station fails; do not promote interval PASS.
+  for (const [cause, localGrade] of [
+    [observed.routeFirstUnsafeCause, observed.routeFirstUnsafeLocalGrade],
+    [observed.approachFirstUnsafeCause, observed.approachFirstUnsafeLocalGrade],
+  ] as const) {
+    if (cause === "unsafe local road slope") {
+      assert.ok(localGrade !== null && Number.isFinite(localGrade) && localGrade > .08,
+        "a difficult canonical road station reports its exact unsafe local slope");
+    } else assert.equal(localGrade, null,
+      "a wet, unowned or off-road failure must not invent a local slope measurement");
+  }
+  assert.deepEqual(transportBridgeSpanAt(bridge, edge!), observed,
+    "on-demand local slope diagnosis remains SEED-deterministic");
   // Each physical grade interval is the actual spherical distance along the
   // selected curved road, not the nominal crossing length divided evenly.
   const measuredStations = transportRoadArcStations(edge!.centerline, bridge.x, bridge.z,
