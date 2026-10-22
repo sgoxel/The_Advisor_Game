@@ -19,10 +19,10 @@ export function sampledBridgeTopFailure(
  */
 export function selectedRoadBridgeDeckWalkable(
   surface: Pick<ReturnType<typeof finalSurfaceAt>,
-    "water" | "deckHeight" | "walkable" | "traversal" | "deckOwnerIds" | "contributingModifierIds">,
+    "surfaceHeight" | "water" | "deckHeight" | "walkable" | "traversal" | "deckOwnerIds" | "contributingModifierIds">,
   roadCode: string,
 ): boolean {
-  return surface.water.kind === "river" &&
+  return Number.isFinite(surface.surfaceHeight) && surface.water.kind === "river" &&
     surface.deckHeight !== null && Number.isFinite(surface.deckHeight) &&
     surface.walkable &&
     surface.traversal === "bridge" &&
