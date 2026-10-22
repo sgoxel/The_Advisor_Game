@@ -434,6 +434,28 @@ test("S005 selected site access probe stays bounded and reports sampled physical
     assert.deepEqual(siteAccessRoadStations(edge), stations);
   }
 
+  // Use a real SEED parent/branch join: geometry can be exact while the
+  // final surface reports only an unrelated crossing as the top road.
+  const actual = accessBranches[0], realStations = siteAccessRoadStations(actual),
+    parentCode = siteAccessParentRoadCode(actual)!,
+    realSurfaces = realStations.map(() => ({
+      surfaceHeight: 0, water: { kind: "none" }, walkable: true,
+      traversal: "road", deckHeight: null, deckOwnerIds: [],
+      contributingModifierIds: [actual.code],
+    } as unknown as FinalSurface)),
+    realParents = new Set([parentCode]);
+  assert.equal(siteAccessSampleVerdict(actual, realSurfaces, realParents).sampledPass, true,
+    "a real geometrically joined site branch remains legal when its road owns the terminal");
+  const unrelatedTerminal = realSurfaces.map((surface, index) => index === realSurfaces.length - 1
+    ? { ...surface, contributingModifierIds: ["UNRELATED/CROSSING"] } : surface);
+  assert.equal(siteAccessSampleVerdict(actual, unrelatedTerminal, realParents).onRecordedRoad, false,
+    "parent geometry cannot certify an unrelated road at the physical terminal");
+  assert.equal(siteAccessSampleVerdict(actual, unrelatedTerminal, realParents).sampledPass, false);
+  assert.equal(siteAccessSampleVerdict(actual, realSurfaces.map((surface, index) =>
+    index === realSurfaces.length - 1
+      ? { ...surface, contributingModifierIds: [parentCode] } : surface), realParents).sampledPass, true,
+    "the actual parent road may own the shared terminal without the branch modifier");
+
   const edge = {
     code: "S005/SITE/ACCESS", from: "S005/NODE/SITE/EXAMPLE", roadClass: "access",
     centerline: [{ x: 0, z: 0 }, { x: 0.25, z: 0 }, { x: 0.5, z: 0 }],
