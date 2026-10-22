@@ -26,7 +26,7 @@ import { finalSurfaceAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
-import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, transportWalkingRoute, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
+import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import {
@@ -222,6 +222,45 @@ test("S005 site preview picks shortest reachable road path rather than nearer di
   assert.deepEqual(transportWalkingRouteToNearest(index, "start", [...sites].reverse()), route);
   assert.equal(transportWalkingRouteToNearest(index, "start", ["near-but-disconnected"]), null);
   assert.equal(transportWalkingRoute(index, "start", "near-but-disconnected"), null);
+});
+
+test("S005 bridge-selected site preview must traverse its actual road rather than the nearer bypass", () => {
+  const network = {
+    nodes: ["bank-a", "bank-b", "near-site", "far-site", "bypass"].map(code => ({ code })),
+    roadEdges: [
+      { code: "bridge-road", from: "bank-a", to: "bank-b", surfaceLengthM: 10, fantasyWalkSeconds: 100 },
+      { code: "near", from: "bank-a", to: "near-site", surfaceLengthM: 1, fantasyWalkSeconds: 10 },
+      { code: "far", from: "bank-b", to: "far-site", surfaceLengthM: 2, fantasyWalkSeconds: 20 },
+      { code: "detour-a", from: "bank-b", to: "bypass", surfaceLengthM: 10, fantasyWalkSeconds: 100 },
+      { code: "detour-b", from: "bypass", to: "bank-a", surfaceLengthM: 10, fantasyWalkSeconds: 100 },
+    ],
+  } as unknown as TransportNetwork;
+  const index = createTransportWalkingIndex(network);
+  const selected = network.roadEdges[0];
+  const sites = ["near-site", "far-site"];
+  assert.deepEqual(transportWalkingRouteToNearest(index, "bank-a", sites)?.edgeCodes, ["near"],
+    "ordinary shortest path should be allowed to bypass a bridge");
+  const through = transportWalkingRouteThroughEdge(index, "bank-a", selected, sites);
+  assert.ok(through, "selected bridge must have a route continuing from the other bank");
+  assert.deepEqual(through!.edgeCodes, ["bridge-road", "far"]);
+  assert.equal(through!.to, "far-site");
+  assert.equal(through!.distanceM, 12);
+  assert.equal(through!.fantasyWalkSeconds, 120);
+  assert.ok(through!.exploredNodes <= index.nodeCount);
+  assert.deepEqual(transportWalkingRouteThroughEdge(index, "bank-a", selected, [...sites].reverse()), through,
+    "changing destination input order never changes the canonical route");
+  assert.deepEqual(transportWalkingRouteThroughEdge(index, "bank-b", selected, sites)?.edgeCodes,
+    ["bridge-road", "near"], "reverse-bank selection must also traverse the chosen bridge road once");
+  assert.equal(transportWalkingRouteThroughEdge(index, "absent", selected, sites), null);
+  assert.equal(transportWalkingRouteThroughEdge(index, "bank-a",
+    { ...selected, code: "not-a-real-bridge-road" }, sites), null,
+  "invented owner must fail closed rather than accepting a nearby graph edge");
+
+  const disconnected = createTransportWalkingIndex({
+    ...network, roadEdges: network.roadEdges.slice(0, 2),
+  } as TransportNetwork);
+  assert.equal(transportWalkingRouteThroughEdge(disconnected, "bank-a", selected, ["near-site"]), null,
+    "do not silently retrace the selected bridge if the far bank has no other walking way to a site");
 });
 
 test("S005 selected site access probe stays bounded and reports sampled physical facts without inventing traversal", () => {
