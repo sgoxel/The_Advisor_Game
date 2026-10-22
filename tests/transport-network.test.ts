@@ -16,7 +16,8 @@ import { macroSampleAt } from "../src/macro-geography.ts";
 import { roadFragmentsInBounds } from "../src/continuity-corridor.ts";
 import { SOURCE_PRESENTATION_WIDTH, sourceToLonLat } from "../src/planet.ts";
 import { polylineTouchesViewport } from "../src/transport-viewport.ts";
-import { transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
+import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
+import { finalSurfaceAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
@@ -643,9 +644,30 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
   }
   assert.equal(at, site!.code, "chain must terminate at the actual SEED-owned site");
   assert.ok(chain.includes(crossing!.code), "the bridge crossing is a required physical graph leg");
-  assert.ok(chain.includes(network.roadEdges.find(edge =>
-    edge.roadClass === "access" && edge.from === site!.code)!.code),
-  "critical-site entry must traverse its own recorded access branch");
+  const access = network.roadEdges.find(edge =>
+    edge.roadClass === "access" && edge.from === site!.code);
+  assert.ok(access && chain.includes(access.code),
+    "critical-site entry must traverse its own recorded access branch");
+  // Test both endpoint physical probes in the SAME graph chain: a legal bridge
+  // alone does not certify a disconnected site, and a site alone does not
+  // certify an impossible river crossing. These are bounded sampled checks,
+  // not a claim of unsampled metre-by-metre actor passage.
+  const center = transportBridgeSurfaceAt(bridge!.x, bridge!.z, crossing!.code),
+    span = transportBridgeSpanAt(bridge!, crossing!);
+  assert.ok(sampledBridgeCrossingPass(center.centerDeckWalkable, span),
+    "selected canonical Y-to-site chain must traverse sampled legal bridge deck and both banks");
+  assert.ok(span.routeStations > 0 && span.routeStations <= 49,
+    "source-owned crossing evidence must remain station bounded");
+  const parentCode = siteAccessParentRoadCode(access!);
+  assert.ok(parentCode && edgeByCode.has(parentCode),
+    "site branch must name its actual incident parent road");
+  const stations = siteAccessRoadStations(access!),
+    surfaces = stations.map(point => finalSurfaceAt(point.x, point.z)),
+    siteVerdict = siteAccessSampleVerdict(access!, surfaces, new Set([parentCode!]));
+  assert.ok(stations.length > 0 && stations.length <= SITE_ACCESS_STATION_LIMIT,
+    "selected critical-site station profile stays bounded");
+  assert.ok(siteVerdict.sampledPass,
+    `selected site access ${access!.code} (parent ${parentCode}) must remain dry, walkable, source-owned and grade-safe at every sampled station: ${JSON.stringify(siteVerdict)}`);
   const distance = approach!.distanceM + crossing!.surfaceLengthM + continuation!.distanceM,
     fantasySeconds = approach!.fantasyWalkSeconds + crossing!.fantasyWalkSeconds +
       continuation!.fantasyWalkSeconds;
