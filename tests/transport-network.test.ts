@@ -28,6 +28,7 @@ import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
 import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
+import { planTransportRouteCorridor, ROUTE_CORRIDOR_STATION_LIMIT, sampledCorridorStationPass } from "../src/transport-route-corridor.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import {
   TRANSPORT_LIMITS,
@@ -261,6 +262,64 @@ test("S005 bridge-selected site preview must traverse its actual road rather tha
   } as TransportNetwork);
   assert.equal(transportWalkingRouteThroughEdge(disconnected, "bank-a", selected, ["near-site"]), null,
     "do not silently retrace the selected bridge if the far bank has no other walking way to a site");
+});
+
+test("S005 physical walking-route diagnostic samples actual oriented SEED roads or fails its fixed budget", () => {
+  const makeEdge = (code: string, from: string, to: string, ax: number, bx: number) => ({
+    code, from, to, centerline: [
+      { x: ax, z: 0 }, { x: bx, z: 0 },
+    ],
+  }) as unknown as TransportRoadEdge;
+  const a = makeEdge("road/a", "A", "B", 0, 3),
+    b = makeEdge("road/b", "B", "C", 3, 5),
+    roads = new Map([a, b].map(edge => [edge.code, edge]));
+  const result = planTransportRouteCorridor(
+    { from: "A", edgeCodes: [a.code, b.code] }, roads,
+  );
+  assert.equal(result.status, "ready");
+  assert.deepEqual(result.stations.map(station => [station.x, station.edgeCode]), [
+    [0, "road/a"], [1, "road/a"], [2, "road/a"], [3, "road/a"],
+    [4, "road/b"], [5, "road/b"],
+  ], "shared Y must not duplicate a terminal station and falsely create a zero-grade interval");
+  const reverse = planTransportRouteCorridor(
+    { from: "C", edgeCodes: [b.code, a.code] }, roads,
+  );
+  assert.equal(reverse.status, "ready");
+  assert.deepEqual(reverse.stations.map(station => station.x), [5, 4, 3, 2, 1, 0],
+    "walking direction must reflect the actual source-owned graph sequence");
+  assert.equal(planTransportRouteCorridor({ from: "A", edgeCodes: [b.code] }, roads).status, "invalid",
+    "disconnected abstract codes never construct physical corridor samples");
+  assert.equal(planTransportRouteCorridor({ from: "A", edgeCodes: ["fabricated"] }, roads).status, "invalid");
+  const gap = makeEdge("gap", "B", "C", 4, 5);
+  assert.equal(planTransportRouteCorridor({ from: "A", edgeCodes: [a.code, gap.code] },
+    new Map([a, gap].map(edge => [edge.code, edge]))).status, "invalid",
+  "matching graph nodes cannot hide separated physical source geometry");
+  const huge = makeEdge("huge", "A", "C", 0, ROUTE_CORRIDOR_STATION_LIMIT + 1);
+  const over = planTransportRouteCorridor(
+    { from: "A", edgeCodes: [huge.code] }, new Map([[huge.code, huge]]));
+  assert.equal(over.status, "over-budget");
+  assert.equal(over.stations.length, 0,
+    "oversized diagnostic must reject the route without truncating it into a false positive");
+  assert.deepEqual(planTransportRouteCorridor({ from: "A", edgeCodes: [a.code, b.code] }, roads), result);
+
+  const station = result.stations[0], dry = {
+    walkable: true, traversal: "road", water: { kind: "none" },
+    deckHeight: null, deckOwnerIds: [], contributingModifierIds: [a.code],
+  } as unknown as FinalSurface;
+  assert.equal(sampledCorridorStationPass(station, dry), true);
+  assert.equal(sampledCorridorStationPass(station, {
+    ...dry, contributingModifierIds: ["unrelated-road"],
+  }), false, "dry unrelated roads cannot certify selected source ownership");
+  assert.equal(sampledCorridorStationPass(station, {
+    ...dry, water: { ...dry.water, kind: "river" },
+  }), false, "unbridged water must fail closed");
+  assert.equal(sampledCorridorStationPass(station, {
+    ...dry, water: { ...dry.water, kind: "river" }, traversal: "bridge",
+    deckHeight: 4, deckOwnerIds: [a.code],
+  }), true, "only the actual selected road deck certifies a wet sample");
+  assert.equal(sampledCorridorStationPass(station, {
+    ...dry, walkable: false,
+  }), false, "a contributing road never overrides Simulation walkability");
 });
 
 test("S005 selected site access probe stays bounded and reports sampled physical facts without inventing traversal", () => {
