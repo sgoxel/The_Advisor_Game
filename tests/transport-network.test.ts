@@ -100,18 +100,31 @@ test("S005 preview starts at selected canonical Y/harbor rather than unrelated m
   assert.equal(atRoad?.code, road.from, "selected road takes its own physically nearest endpoint");
   const crossing = network.borderCrossings.find(item => network.roadEdges.some(edge => edge.code === item.roadCode));
   assert.ok(crossing);
-  const parentRoad = network.roadEdges.find(edge => edge.code === crossing!.roadCode)!;
+  const parentRoad = network.roadEdges.find(edge => edge.code === crossing!.roadCode)!,
+    oppositeCamera = parentRoad.centerline.at(-1)!.position,
+    borderOrigin = nearestWalkingRoadEndpoint(parentRoad, nodes, crossing!.position);
+  assert.ok(borderOrigin, "a selected border must resolve a legal crossing bank");
+  for (const camera of [parentRoad.centerline[0].position, oppositeCamera, focus])
+    assert.equal(selectedWalkingPreviewOrigin(
+      { kind: "border", code: crossing!.code }, camera, network, nodes, unrelated,
+    )?.code, borderOrigin.code, "panning cannot flip the selected SEED border's starting bank");
+  const selectedBridge = {
+    code: "SELECTED/BRIDGE/1", roadCode: parentRoad.code, position: parentRoad.centerline[0].position,
+  };
+  for (const camera of [parentRoad.centerline[0].position, oppositeCamera, focus]) {
+    const start = selectedWalkingPreviewOrigin(
+      { kind: "bridge", code: selectedBridge.code }, camera,
+      network, nodes, unrelated, selectedBridge,
+    );
+    assert.equal(start?.code, parentRoad.from,
+      "a selected bridge must start from its SEED-owned bank, not the panned camera");
+  }
   assert.equal(selectedWalkingPreviewOrigin(
-    { kind: "border", code: crossing!.code }, parentRoad.centerline[0].position,
-    network, nodes, unrelated,
-  )?.code, parentRoad.from, "selected border crossing must remain attached to its owning road");
-  assert.equal(selectedWalkingPreviewOrigin(
-    { kind: "bridge", code: "SELECTED/BRIDGE/1" }, parentRoad.centerline[0].position,
-    network, nodes, unrelated, parentRoad.code,
-  )?.code, parentRoad.from, "selected bridge uses the resolved owner, not the focus road");
-  assert.equal(selectedWalkingPreviewOrigin(
-    { kind: "bridge", code: "SELECTED/BRIDGE/1" }, focus, network, nodes, unrelated,
+    { kind: "bridge", code: selectedBridge.code }, focus, network, nodes, unrelated,
   ), undefined, "missing physical bridge owner fails closed");
+  assert.equal(selectedWalkingPreviewOrigin(
+    { kind: "bridge", code: "OTHER/BRIDGE" }, focus, network, nodes, unrelated, selectedBridge,
+  ), undefined, "a different crossing cannot borrow the selected bridge anchor");
   assert.equal(selectedWalkingPreviewOrigin(
     undefined, focus, network, nodes, unrelated,
   )?.code, nearestWalkingRoadEndpoint(unrelated, nodes, focus)?.code,
