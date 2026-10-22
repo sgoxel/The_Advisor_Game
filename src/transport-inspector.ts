@@ -474,9 +474,7 @@ function renderSiteAccessProbe() {
   }
   const grade = siteProbe.maximumGrade === null ? "not measured" :
     Number.isFinite(siteProbe.maximumGrade) ? `${(siteProbe.maximumGrade * 100).toFixed(1)}%` : "invalid";
-  target.innerHTML = `<div class="eyebrow">FINAL-SURFACE SITE APPROACH · ${siteProbe.sampledPass
-    ? siteProbe.terminalGeometryOnly ? "SAMPLED PROFILE OK · TERMINAL OWNER UNVERIFIED" : "SAMPLED PASS"
-    : "NOT CERTIFIED"}</div>
+  target.innerHTML = `<div class="eyebrow">FINAL-SURFACE SITE APPROACH · ${siteProbe.sampledPass ? "SAMPLED PASS" : "NOT CERTIFIED"}</div>
     <dl>
       <dt>Recorded road</dt><dd>${siteProbe.onRecordedRoad ? "Source-owned branch and/or exact parent junction geometry" : "Missing canonical branch/junction evidence"}</dd>
       <dt>Terminal surface evidence</dt><dd>${siteProbe.terminalGeometryOnly ? "SEED parent geometry joins; incident final-surface road owner unverified" : "No geometry-only terminal fallback"}</dd>
