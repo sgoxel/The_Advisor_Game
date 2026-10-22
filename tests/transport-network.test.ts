@@ -26,7 +26,7 @@ import { finalSurfaceAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
-import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
+import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, roadEndpointMeetsTerminal, siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
 import { planTransportRouteCorridor, ROUTE_CORRIDOR_STATION_LIMIT, sampledCorridorStationFailure, sampledCorridorStationPass } from "../src/transport-route-corridor.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
@@ -351,6 +351,40 @@ test("S005 bridge-selected site preview must traverse its actual road rather tha
   } as TransportNetwork);
   assert.equal(transportWalkingRouteThroughEdge(disconnected, "bank-a", selected, ["near-site"]), null,
     "do not silently retrace the selected bridge if the far bank has no other walking way to a site");
+});
+
+test("S005 selected border bridge previews the far-bank country's site rather than retracing the crossing", () => {
+  const bankA = { code: "bank-a", countryCode: "A", continent: 0 } as TransportNode,
+    bankB = { code: "bank-b", countryCode: "B", continent: 0 } as TransportNode,
+    siteA = { code: "site-a", countryCode: "A", continent: 0 } as TransportNode,
+    siteB = { code: "site-b", countryCode: "B", continent: 0 } as TransportNode,
+    nodes = new Map([bankA, bankB, siteA, siteB].map(node => [node.code, node])),
+    network = {
+      nodes: [...nodes.values()],
+      roadEdges: [
+        { code: "bridge", from: bankA.code, to: bankB.code, surfaceLengthM: 10, fantasyWalkSeconds: 100 },
+        { code: "bank-a-access", from: bankA.code, to: siteA.code, surfaceLengthM: 1, fantasyWalkSeconds: 10 },
+        { code: "bank-b-access", from: bankB.code, to: siteB.code, surfaceLengthM: 2, fantasyWalkSeconds: 20 },
+      ],
+    } as TransportNetwork,
+    index = createTransportWalkingIndex(network),
+    bridge = network.roadEdges[0];
+  const forwardBank = selectedBridgePreviewDestinationBank(bankA, bridge, nodes);
+  assert.equal(forwardBank?.countryCode, "B");
+  const forwardSites = [...nodes.values()].filter(node =>
+    node.code.startsWith("site-") && node.countryCode === forwardBank?.countryCode).map(node => node.code);
+  assert.deepEqual(transportWalkingRouteThroughEdge(index, bankA.code, bridge, forwardSites)?.edgeCodes,
+    ["bridge", "bank-b-access"], "route must end on far bank without retracing selected bridge");
+  const reverseBank = selectedBridgePreviewDestinationBank(bankB, bridge, nodes);
+  assert.equal(reverseBank?.countryCode, "A");
+  const reverseSites = [...nodes.values()].filter(node =>
+    node.code.startsWith("site-") && node.countryCode === reverseBank?.countryCode).map(node => node.code);
+  assert.deepEqual(transportWalkingRouteThroughEdge(index, bankB.code, bridge, reverseSites)?.edgeCodes,
+    ["bridge", "bank-a-access"]);
+  assert.equal(selectedBridgePreviewDestinationBank(siteA, bridge, nodes), undefined,
+    "an unrelated graph node cannot invent a far bank");
+  assert.equal(selectedBridgePreviewDestinationBank(bankA, bridge, new Map([[bankA.code, bankA]])), undefined,
+    "an absent canonical far-bank node cannot support a site preview");
 });
 
 test("S005 physical walking-route diagnostic samples actual oriented SEED roads or fails its fixed budget", () => {
