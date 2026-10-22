@@ -90,7 +90,9 @@ export function siteAccessSampleVerdict(
     terminalGeometryOnly = exactParentJoin && !terminalSurfaceOwned,
     onRecordedRoad = full && surfaces.every((surface, index) =>
       index === surfaces.length - 1
-        ? exactParentJoin || surface.contributingModifierIds.some(code =>
+        // A SEED-owned branch cannot substitute an arbitrary incident road
+        // when its specifically recorded parent misses the physical terminal.
+        ? parentCode ? exactParentJoin : surface.contributingModifierIds.some(code =>
             code !== edge.code && junctionRoadCodes.has(code))
         : surface.contributingModifierIds.includes(edge.code));
   let maximumGrade: number | null = null;
