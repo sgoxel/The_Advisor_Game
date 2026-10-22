@@ -75,7 +75,10 @@ export function siteAccessSampleVerdict(
       roadDistanceAt(terminal.x, terminal.z, parentRoad) <= 1e-6,
     onRecordedRoad = full && surfaces.every((surface, index) =>
       index === surfaces.length - 1
-        ? exactParentJoin || surface.contributingModifierIds.some(code =>
+        // Geometry alone is not top-surface ownership: an unrelated road may
+        // cover the exact recorded parent join. Require a real incident owner.
+        ? (exactParentJoin && surface.contributingModifierIds.includes(edge.code)) ||
+          surface.contributingModifierIds.some(code =>
             code !== edge.code && junctionRoadCodes.has(code))
         : surface.contributingModifierIds.includes(edge.code));
   let maximumGrade: number | null = null;
