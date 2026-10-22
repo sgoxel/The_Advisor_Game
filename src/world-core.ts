@@ -1,3 +1,4 @@
+import { roadWidthM, ROAD_SHOULDER_M, MAX_ROAD_SUPPORT_M } from "./road-dimensions.ts";
 import { transportResourceBytesEstimated } from "./transport-network.ts";
 import { nearbyCriticalSites, siteAccessRoads, siteSurfaceSample, siteRegistryBytesEstimated } from "./sites.ts";
 /** World authority. Pure coordinate functions; no RNG, mutable sequence or wall clock. */
@@ -256,11 +257,7 @@ function naturalSurfaceBaseAt(x:number,z:number):SurfaceBase {
 
 // Road cross-sections are physical dimensions. Source units are presentation
 // coordinates (~15.27 canonical metres each) and must never be treated as metres.
-const ROAD_CARRIAGEWAY_HALF_WIDTH_M = 7;
-const ROAD_SHOULDER_HALF_WIDTH_M = 18;
-const ROAD_CARRIAGEWAY_RADIUS = ROAD_CARRIAGEWAY_HALF_WIDTH_M / CANONICAL_METRES_PER_SOURCE_UNIT;
-const ROAD_SUPPORT_RADIUS = ROAD_SHOULDER_HALF_WIDTH_M / CANONICAL_METRES_PER_SOURCE_UNIT;
-const ROAD_FEATHER_WIDTH = ROAD_SUPPORT_RADIUS - ROAD_CARRIAGEWAY_RADIUS;
+const ROAD_SUPPORT_RADIUS = MAX_ROAD_SUPPORT_M / CANONICAL_METRES_PER_SOURCE_UNIT;
 const ROAD_BUCKET_SIZE = 2048;
 const surfaceRoadBuckets = new Map<string, Road[]>();
 const roadBucketKey = (bx: number, bz: number) => `${canonicalRoadBucketX(bx,ROAD_BUCKET_SIZE,WORLD_SIZE)}/${bz}`;
@@ -300,9 +297,14 @@ function surfaceRoadAt(x: number, z: number, clearance = ROAD_SUPPORT_RADIUS) {
     distance = clearance;
   for (const candidate of bucket) {
     const candidateDistance = roadDistanceAt(wrappedX, z, candidate);
+    const endpointAtQuery = (r: Road) => Math.min(
+      Math.hypot(wrapSourceX(wrappedX-r.fromX),z-r.fromZ),
+      Math.hypot(wrapSourceX(wrappedX-r.toX),z-r.toZ)) < 1e-8,
+      tied = Math.abs(candidateDistance-distance) < 1e-8;
     if (
-      candidateDistance < distance ||
-      (candidateDistance === distance && (!road || candidate.code < road.code))
+      candidateDistance < distance-1e-8 ||
+      (tied && (!road || (endpointAtQuery(candidate) && !endpointAtQuery(road)) ||
+        (endpointAtQuery(candidate)===endpointAtQuery(road) && candidate.code < road.code)))
     ) {
       road = candidate;
       distance = candidateDistance;
@@ -426,7 +428,8 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   const road = roadMatch.road;
   if (road) {
     const distance = roadMatch.distance,
-      weight = 1 - smooth(clamp01((distance - ROAD_CARRIAGEWAY_RADIUS) / ROAD_FEATHER_WIDTH)),
+      carriagewayRadius = roadWidthM(road) / (2 * CANONICAL_METRES_PER_SOURCE_UNIT),
+      weight = 1 - smooth(clamp01((distance - carriagewayRadius) / (ROAD_SHOULDER_M / CANONICAL_METRES_PER_SOURCE_UNIT))),
       initialRoadHeight = boundedEarthwork(
         roadProfileHeightAt(x, z, road),
         base.groundHeight,
@@ -457,11 +460,11 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
         priority: WORLD_BUILDING_PRIORITIES.road,
         weight,
         targetGroundHeight: roadHeight,
-        material: "Road",
+        material: distance <= carriagewayRadius ? "Road" : undefined,
         walkable: true,
         vegetationDensityScale: 0,
         reservedUse: road.code,
-        deckHeight: deckHeight !== undefined && deckHeight >= base.groundHeight ? deckHeight : undefined,
+        deckHeight: distance <= carriagewayRadius && deckHeight !== undefined && deckHeight >= base.groundHeight ? deckHeight : undefined,
       });
   }
   return {

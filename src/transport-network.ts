@@ -1,3 +1,4 @@
+import { roadWidthM } from "./road-dimensions.ts";
 import { WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
 import {
   cities,
@@ -654,12 +655,6 @@ function touchBridgeCache(edge: TransportRoadEdge) {
   return bridges;
 }
 
-function roadWidth(roadClass: TransportRoadClass) {
-  if (roadClass === "main") return 8;
-  if (roadClass === "regional") return 6;
-  return 5;
-}
-
 export function wrapRoad(
   road: Road,
   nodeBySourceId: ReadonlyMap<string, TransportNode>,
@@ -691,7 +686,7 @@ export function wrapRoad(
     centerline,
     get bridgeCodes() { return Object.freeze((bridgeCache.get(road.code) ?? []).map((bridge) => bridge.code)); },
     borderCrossingCode: border?.code ?? null,
-    widthM: roadWidth(roadClass),
+    widthM: roadWidthM(road),
     surfaceLengthM: road.surfaceLengthM,
     fantasyWalkSeconds: road.fantasyWalkSeconds,
     routeCandidate: 0,

@@ -407,9 +407,22 @@ test('every generated fork has three separated nonparallel physical approach seg
   const rays=arms.get(j.id)!;assert.equal(rays.length,3,j.id);
   for(let i=0;i<3;i++)for(let k=i+1;k<3;k++){
    const d=azimuth(j.canonicalPosition,rays[i])-azimuth(j.canonicalPosition,rays[k]),angle=Math.abs(Math.atan2(Math.sin(d),Math.cos(d)))*180/Math.PI;
-   assert.ok(angle>=32,`${j.id}: actual first-segment angle ${angle}`);
+   assert.ok(angle>=45,`${j.id}: actual first-segment angle ${angle}`);
   }
  }
- for(let i=0;i<roadJunctions.length;i++)for(let k=i+1;k<roadJunctions.length;k++)assert.ok(greatCircleDistance(roadJunctions[i].canonicalPosition,roadJunctions[k].canonicalPosition)>=300);
+ for(let i=0;i<roadJunctions.length;i++)for(let k=i+1;k<roadJunctions.length;k++)assert.ok(greatCircleDistance(roadJunctions[i].canonicalPosition,roadJunctions[k].canonicalPosition)>=(roadJunctions[i].id.startsWith("J/LOCAL/")||roadJunctions[k].id.startsWith("J/LOCAL/")?1:300));
  assert.ok(roadNetworkTelemetry.maximumForkAttempts<=12);
+});
+
+test('all actual domestic settlement departures share stems below 45 degrees',()=>{
+ const incident=new Map<string,{lon:number;lat:number}[]>(),
+  az=(p:{lon:number;lat:number},q:{lon:number;lat:number})=>Math.atan2(Math.sin(q.lon-p.lon)*Math.cos(q.lat),Math.cos(p.lat)*Math.sin(q.lat)-Math.sin(p.lat)*Math.cos(q.lat)*Math.cos(q.lon-p.lon)),
+  origins=new Map<string,{lon:number;lat:number}>();
+ for(const r of roads.filter(r=>r.code.includes('/macro-roads-v2/')))for(const [id,p,q]of [[r.from,r.centerline[0],r.centerline[1]],[r.to,r.centerline.at(-1)!,r.centerline.at(-2)!]] as const){
+  const rays=incident.get(id)||[];rays.push(q.position);incident.set(id,rays);origins.set(id,p.position);
+ }
+ for(const [id,rays]of incident)for(let i=0;i<rays.length;i++)for(let j=i+1;j<rays.length;j++){
+  const d=az(origins.get(id)!,rays[i])-az(origins.get(id)!,rays[j]),angle=Math.abs(Math.atan2(Math.sin(d),Math.cos(d)))*180/Math.PI;
+  assert.ok(angle>=45-1e-6,`${id}: unmerged actual departure ${angle}`);
+ }
 });

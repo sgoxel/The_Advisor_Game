@@ -1,3 +1,4 @@
+import {roadWidthM,roadNormalSource} from "../src/road-dimensions.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {naturalSurfaceAt} from "../src/hydrology.ts";
@@ -405,10 +406,10 @@ test("final-surface memoization is bounded and exposes deterministic hit/miss te
 test("a legal deck has one cross-road stage instead of separate side profiles", () => {
   const anchors = finalSurfaceEvidenceAnchors();
   const road = roads.find(r => r.code === anchors.roadCode)!;
-  const {x:dx,z:dz}=anchors.bridgeTangent,length=1;
+  const {x:dx,z:dz}=anchors.bridgeTangent,normal=roadNormalSource(dx,dz,anchors.bridge.z,roadWidthM(road)*.4);
   const centre=finalSurfaceAt(anchors.bridge.x,anchors.bridge.z);
   for(const offset of [-1,1]) {
-    const side=finalSurfaceAt(anchors.bridge.x-dz/length*offset,anchors.bridge.z+dx/length*offset);
+    const side=finalSurfaceAt(anchors.bridge.x+normal.x*offset,anchors.bridge.z+normal.z*offset);
     assert.ok(side.deckHeight!==null,"crossing width must retain its explicit deck");
     assert.ok(Math.abs(side.deckHeight!-centre.deckHeight!)<1e-6,"deck stage must agree across its width");
   }

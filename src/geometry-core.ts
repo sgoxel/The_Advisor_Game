@@ -1,3 +1,4 @@
+import { roadWidthM, roadNormalSource } from "./road-dimensions.ts";
 import {elevationToRenderY} from "./render-frame.ts";
 import { metresToSource, sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import { featuresFor, field, type Tile } from "./world.ts";
@@ -589,11 +590,9 @@ export function buildTile(t: Tile, options: {terrainOnly?:boolean} = {}): TileGe
         length = Math.hypot(vx, vz);
       if (!length) continue;
       const segmentCount = Math.max(1, Math.ceil(length / 2)),
-        // Seven canonical metres, not the historical 5-source-unit (~76 m)
-        // ribbon that could visually bridge terrain outside physical support.
-        halfWidth = 7 / CANONICAL_METRES_PER_SOURCE_UNIT,
-        nx = (-vz / length) * halfWidth,
-        nz = (vx / length) * halfWidth;
+        // The same physical class width as the roadbed and transport record.
+        normal = roadNormalSource(vx, vz, (road.fromZ + road.toZ) / 2, roadWidthM(road) / 2),
+        nx = normal.x, nz = normal.z;
       for (const shiftX of [-SOURCE_PRESENTATION_WIDTH, 0, SOURCE_PRESENTATION_WIDTH]) {
         const minX = road.minX + shiftX,
           maxX = road.maxX + shiftX;

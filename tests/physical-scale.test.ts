@@ -1,3 +1,4 @@
+import { roadWidthM, roadNormalSource, ROAD_SHOULDER_M } from "../src/road-dimensions.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { houseDimensionsFor, residentDimensionsFor, sourceUnitsPerMetreAt } from "../src/physical-scale.ts";
@@ -54,4 +55,18 @@ test("actual rendered house walls match their physical foundation after ENU conv
     for (const p of ground) for (const q of ground) { const d = Math.hypot(p[0]-q[0],p[2]-q[2]); if (d>.01) lengths.add(d.toFixed(2)); }
     for (const expected of [home.widthM!,home.depthM!]) assert.ok([...lengths].some(v => Math.abs(Number(v)-expected)<.02), `wall side ${expected} m missing: ${[...lengths]}`);
   }
+});
+
+
+test("road cross sections use metre widths, narrow shoulders and latitude-correct perpendiculars", () => {
+ assert.equal(roadWidthM({code:"seed/ROAD/MAIN/a",networkKind:"trunk"}),8);
+ assert.equal(roadWidthM({code:"rural",networkKind:"link"}),4);
+ assert.equal(roadWidthM({code:"regional",networkKind:"trunk"}),6);
+ assert.equal(ROAD_SHOULDER_M,.5);
+ for(const lat of [0,.5,1.15])for(const [dx,dz] of [[1,0],[0,1],[1,1]]) {
+  const origin=lonLatToSource(0,lat),n=roadNormalSource(dx,dz,origin.z,2),
+   p=sourceToLonLat(origin.x+n.x,origin.z+n.z);
+  assert.ok(Math.abs(greatCircleDistance({lon:0,lat},p)-2)<.001);
+  assert.ok(Math.abs(n.x*Math.cos(lat)*dx*Math.cos(lat)+n.z*dz)<1e-10);
+ }
 });

@@ -2,6 +2,12 @@
 
 Status: MIXED; final validation in progress, not deployed or completed. No roadmap WP was created for this owner follow-up.
 
+### October 22 road correction
+
+The current hard fork minimum is **45 degrees**. After terrain routing, acute actual settlement departures share a single local stem before a degree-three Y split; this also covers the previously unshared end of a logical connection. Local repair stems extend at most 300 m along existing approaches and use at most eight finite size candidates. These short local forks use a 1 m distinct-node minimum; the original coarse fork placement retains its 300 m separation rule. Sub-centimetre duplicate stations are removed before measuring directions. Logical connections reference the shared physical stem, preserving graph/geometry continuity. The older counts and measurements below describe the frozen October 16 candidate.
+
+Road terrain, rendered road/bridge width and transport records now share physical class widths: 4 m access/rural links, 6 m regional trunks and 8 m international main roads, with 0.5 m soil shoulders per side. Soil grading no longer paints the former broad road-colour band. Existing settlement streets retain their individual metre widths.
+
 ## Owner outcome and invariants
 
 Populate viable continent interiors naturally from the SEED. Country/city/village counts and separation are minimums, not fixed quotas or maximum road lengths. This change intentionally introduces settlement recipe `v2`; settlements relocate while the existing continent, country and natural drainage registries remain unchanged. There is no backward-compatibility migration requirement.

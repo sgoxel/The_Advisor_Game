@@ -4,7 +4,7 @@ import {CANONICAL_PLANET_RADIUS, CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDi
 
 export const MACRO_ROAD_VERSION='macro-roads-v2';
 export const MACRO_ROAD_LIMITS=Object.freeze({stages:12,lanes:7,maximumStations:26,junctionGroupsPerPlace:32,junctionDepth:3,corridorAttempts:3});
-export const ROAD_FORK_POLICY=Object.freeze({minimumAngleDegrees:32,preferredMinimumDegrees:45,preferredMaximumDegrees:70,hardNearParallelDegrees:20,separationM:300,maximumRegenerationAttempts:12});
+export const ROAD_FORK_POLICY=Object.freeze({minimumAngleDegrees:45,preferredMinimumDegrees:45,preferredMaximumDegrees:70,hardNearParallelDegrees:20,separationM:300,maximumRegenerationAttempts:12});
 export type RoadNode={id:string;code:string;canonicalPosition:CanonicalPosition;x:number;z:number;continent:number;country:number;kind:'city'|'village'|'junction'};
 export type RoadPoint={x:number;z:number;position:LonLat};
 export type MacroRoadConnection={from:string;to:string;legs:{edgeId:string;reverse:boolean}[]};
@@ -202,6 +202,9 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
    if(start!==a)points.unshift({x:a.x,z:a.z,position:{lon:a.canonicalPosition.lon,lat:a.canonicalPosition.lat}});
    if(finish!==b)points.push({x:b.x,z:b.z,position:{lon:b.canonicalPosition.lon,lat:b.canonicalPosition.lat}});
    const continuous=points.map(p=>({...p,x:a.x+wrapSourceX(p.x-a.x)}));
+   // A coincident route/stub station has no meaningful departure bearing.
+   // Keep exact graph endpoints, remove sub-centimetre duplicate stations.
+   for(let i=continuous.length-2;i>0;i--)if(greatCircleDistance(continuous[i].position,continuous[i+1].position)<.01||greatCircleDistance(continuous[i-1].position,continuous[i].position)<.01)continuous.splice(i,1);
    edges.set(id,{id,from:a,to:b,points:continuous,kind,fallback:result.fallback});
   }
   return {edgeId:id,reverse:!forward};
@@ -213,6 +216,51 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
   legs.push(edge(a.at(-1)!,b.at(-1)!,'link'));
   for(let i=b.length-1;i>0;i--)legs.push(edge(b[i],b[i-1],'trunk'));
   connections.push({from:from.id,to:to.id,legs});
+ }
+ // Terrain routing can introduce acute approaches at the other end of a
+ // logical connection even when the distant coarse fork was legal. Merge those
+ // ACTUAL first segments locally; both routes reference one physical stem.
+ // This bounded pass never reroutes the distant terrain-selected alignment.
+ for (const hub of [...places].sort((a,b)=>a.id.localeCompare(b.id))) {
+  for(let slot=0;slot<8;slot++) {
+   const incident=[...edges.values()].filter(e=>e.from.id===hub.id||e.to.id===hub.id),
+    outward=(e:MacroRoadEdge)=>e.from.id===hub.id?[...e.points]:[...e.points].reverse(),
+    pairs=incident.flatMap((a,i)=>incident.slice(i+1).map(b=>({a,b,angle:angleDifference(bearing(hub.canonicalPosition,outward(a)[1].position),bearing(hub.canonicalPosition,outward(b)[1].position))})))
+     .filter(p=>p.angle<Math.PI/4-1e-8).sort((a,b)=>a.angle-b.angle||a.a.id.localeCompare(b.a.id)||a.b.id.localeCompare(b.b.id));
+   let merged=false;
+   for(const pair of pairs) {
+    const pa=outward(pair.a),pb=outward(pair.b),azA=bearing(hub.canonicalPosition,pa[1].position),azB=bearing(hub.canonicalPosition,pb[1].position),
+     az=Math.atan2(Math.sin(azA)+Math.sin(azB),Math.cos(azA)+Math.cos(azB)),
+     maxD=Math.min(300,greatCircleDistance(hub.canonicalPosition,pa[1].position)*.8,greatCircleDistance(hub.canonicalPosition,pb[1].position)*.8),key=ownerKey(hub);
+    for(let attempt=0;attempt<8&&!merged;attempt++) {
+     const d=maxD*[1,.8,.6,.4,.2,.1,.05,.02][attempt],r=d*(Math.cos(pair.angle/2)-Math.sin(pair.angle/2)/Math.tan(Math.PI/6));
+     if(r<1)continue;
+     const p=destination(hub.canonicalPosition,az,r),a=destination(hub.canonicalPosition,azA,d),b=destination(hub.canonicalPosition,azB,d);
+     if(minimumArmAngle(p,[hub.canonicalPosition,a,b])<45)continue;
+     if(junctions.some(j=>greatCircleDistance(p,j.canonicalPosition)<1))continue;
+     const dryLine=(u:LonLat,v:LonLat)=>lineLegal(u,v,key,8)&&Array.from({length:9},(_,i)=>destination(u,bearing(u,v),greatCircleDistance(u,v)*i/8)).every(q=>!inWater(q,4));
+     if(![hub.canonicalPosition,a,b].every(q=>dryLine(p,q))){
+      continue;
+     }
+     const q=lonLatToSource(p.lon,p.lat),node:RoadNode={...hub,id:`J/LOCAL/${hub.id}/${slot}`,code:`${seed}/${MACRO_ROAD_VERSION}/J/LOCAL/${hub.id}/${slot}`,kind:'junction',canonicalPosition:p,x:q.x,z:q.z},
+      point=(v:LonLat):RoadPoint=>{const q=lonLatToSource(v.lon,v.lat);return {x:hub.x+wrapSourceX(q.x-hub.x),z:q.z,position:v};},
+      stemId=`${hub.id}~${node.id}`;
+     for(const [old,tap] of [[pair.a,a],[pair.b,b]] as const) {
+      const fromHub=old.from.id===hub.id,path=[point(p),point(tap),...outward(old).slice(1)].map(v=>({...v,x:hub.x+wrapSourceX(v.x-hub.x)}));
+      for(const c of connections)c.legs=c.legs.flatMap(leg=>{
+       if(leg.edgeId!==old.id)return [leg];
+       const stem={edgeId:stemId,reverse:!(fromHub!==leg.reverse)};
+       return fromHub!==leg.reverse?[stem,leg]:[leg,stem];
+      });
+      edges.set(old.id,{...old,from:fromHub?node:old.from,to:fromHub?old.to:node,points:fromHub?path:path.reverse()});
+     }
+     edges.set(stemId,{id:stemId,from:hub,to:node,points:[point(hub.canonicalPosition),point(p)],kind:'trunk',fallback:false});
+     junctions.push(node);merged=true;
+    }
+    if(merged)break;
+   }
+   if(!merged)break;
+  }
  }
  const physical=[...edges.values()],bent=physical.filter(e=>e.points.length>2&&e.points.some(p=>{const a=e.points[0],b=e.points.at(-1)!,dx=b.x-a.x,dz=b.z-a.z,t=((p.x-a.x)*dx+(p.z-a.z)*dz)/(dx*dx+dz*dz||1);return Math.hypot(p.x-a.x-dx*t,p.z-a.z-dz*t)*CANONICAL_METRES_PER_SOURCE_UNIT>100;})).length;
  const forkAngles=junctions.map(j=>{const ends=physical.filter(e=>e.from.id===j.id||e.to.id===j.id).map(e=>e.from.id===j.id?e.points[1].position:e.points.at(-2)!.position);return minimumArmAngle(j.canonicalPosition,ends);});

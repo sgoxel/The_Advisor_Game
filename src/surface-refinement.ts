@@ -1,3 +1,4 @@
+import { roadWidthM, roadNormalSource } from "./road-dimensions.ts";
 import {elevationToRenderY} from "./render-frame.ts";
 import type { Geometry, TileGeometry } from "./geometry.ts";
 import { terrainTint } from "./geometry.ts";
@@ -365,8 +366,8 @@ function addRoadAndBridgeRibbons(
     const ux = vx / length,
       uz = vz / length,
       segmentCount = Math.max(1, Math.ceil(length)),
-      bridgeNx = -uz * REFINED_BRIDGE_HALF_WIDTH_SOURCE,
-      bridgeNz = ux * REFINED_BRIDGE_HALF_WIDTH_SOURCE;
+      normal = roadNormalSource(vx, vz, (road.fromZ + road.toZ) / 2, roadWidthM(road) / 2),
+      bridgeNx = normal.x, bridgeNz = normal.z;
     const [first, last] = clippedStationRange(road.fromX + shiftX, road.fromZ, road.toX + shiftX, road.toZ, tile.minX, tile.minZ, tile.size, segmentCount);
     for (let index = first; index < last; index++) {
       const t0 = index / segmentCount,
@@ -388,15 +389,14 @@ function addRoadAndBridgeRibbons(
       // The deck-midpoint test can span a mixed wet/dry bank station. The
       // original narrow road ribbon rejects that entire station on one wet
       // corner, leaving an abrupt pale wedge next to an otherwise legal deck.
-      // Its bank apron uses only 7 m canonical dry carriageway and shares
+      // Its bank apron uses the same physical road width and shares
       // final-surface ownership; no underwater or unowned connecting surface.
       const stationStart = finalSurfaceAt(x0, z0),
         stationEnd = finalSurfaceAt(x1, z1);
       if ([stationStart, middle, stationEnd].some(s =>
         s.water.kind === "river" || selectedRoadBridgeDeck(s, road.code))) {
         addOwnedDryBridgeLanding(tile, ground, road.code, x0, z0, x1, z1,
-          -uz * REFINED_BRIDGE_HALF_WIDTH_SOURCE,
-          ux * REFINED_BRIDGE_HALF_WIDTH_SOURCE);
+          bridgeNx, bridgeNz);
       }
       // A nearby crossing belonging to another road is not this segment's
       // physical bridge. Refined decks and coarse decks use the same owner.
@@ -513,8 +513,8 @@ function addRoadAndBridgeRibbons(
           surface.groundMaterial === "Road" &&
           surface.contributingModifierIds.includes(road.code));
       if (!valid) continue;
-      const roadNx = -uz * REFINED_ROAD_HALF_WIDTH_SOURCE,
-        roadNz = ux * REFINED_ROAD_HALF_WIDTH_SOURCE,
+      const roadNx = normal.x,
+        roadNz = normal.z,
         corners = [
           { x: x0 + roadNx, z: z0 + roadNz },
           { x: x1 + roadNx, z: z1 + roadNz },

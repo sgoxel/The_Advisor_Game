@@ -1408,7 +1408,9 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
     parentRoad = roads.find(road => road.code === parentCode);
   assert.ok(parentRoad && roadEndpointMeetsTerminal(parentRoad, physicalTerminal),
     "the named parent must physically end at the registered site-branch junction");
-  const terminalWinner = surfaces.at(-1)?.contributingModifierIds.find(code => code !== access!.code);
+  // Settlement pads may also contribute at a short, in-settlement Y stem.
+  // Select the road owner, rather than mistaking a city/village pad for a road.
+  const terminalWinner = surfaces.at(-1)?.contributingModifierIds.find(code => code !== access!.code && edgeByCode.has(code));
   assert.ok(terminalWinner && incidentRoadCodes.has(terminalWinner),
     "the final-surface junction winner must be an actual incident SEED graph road");
   assert.ok(edgeByCode.has(terminalWinner),
