@@ -17,7 +17,7 @@ import { planTransportRouteCorridor, sampledCorridorStationFailure } from "./tra
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
-import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
+import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
 import { siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "./world-core.ts";
 
@@ -703,17 +703,25 @@ function chooseNearestSiteRoute() {
       selection, sourceToLonLat(runtime.state.view.x, runtime.state.view.z),
       transportNetwork, transportNodesByCode, fallback, selectedBridge,
     );
-    const sites = from ? siteTargetsFor(from.continent, from.countryCode) : [];
+    const selectedBridgeRoad = selectedBridge
+      ? transportNetwork.roadEdges.find(edge => edge.code === selectedBridge.roadCode)
+      : undefined;
+    const siteTargetBank = selection?.kind === "bridge"
+      ? from && selectedBridgeRoad
+        ? selectedBridgePreviewDestinationBank(from, selectedBridgeRoad, transportNodesByCode)
+        : undefined
+      : from;
+    const sites = siteTargetBank
+      ? siteTargetsFor(siteTargetBank.continent, siteTargetBank.countryCode) : [];
     if (!from) lastSiteRouteStatus = selection?.kind === "ferry"
       ? "selected ferry is maritime, not a walking origin; select a harbor or road"
       : selection ? "selected item has no canonical walking origin"
       : "no canonical road near map focus";
-    else if (!sites.length) lastSiteRouteStatus = "no same-country critical site endpoint";
+    else if (!sites.length) lastSiteRouteStatus = selection?.kind === "bridge"
+      ? "no critical site on the selected bridge's far bank"
+      : "no same-country critical site endpoint";
     else {
       walkingIndex ??= createTransportWalkingIndex(transportNetwork);
-      const selectedBridgeRoad = selectedBridge
-        ? transportNetwork.roadEdges.find(edge => edge.code === selectedBridge.roadCode)
-        : undefined;
       siteRoute = selection?.kind === "bridge"
         ? selectedBridgeRoad
           ? transportWalkingRouteThroughEdge(walkingIndex, from.code, selectedBridgeRoad, sites)
