@@ -31,6 +31,21 @@ export function planTransportRouteCorridor(
 ): Plan {
   if (!route.from || !route.to || !route.edgeCodes.length) return Object.freeze({ status: "invalid", stations: EMPTY });
   const stations: CorridorStation[] = [];
+  // Only registered graph-incident roads whose source endpoints actually meet
+  // the canonical node may own its winning final surface. Shared Y nodes and
+  // selected start/end terminals use exactly the same bounded proof.
+  const ownersAt = (nodeCode: string): readonly string[] | undefined => {
+    const incident = incidentRoads?.get(nodeCode), node = nodes.get(nodeCode);
+    if (!incident || !node) return undefined;
+    return Object.freeze([...new Set(incident.flatMap(step => {
+      const registered = roads.get(step.edge.code);
+      if (!registered || registered.from !== step.edge.from ||
+          registered.to !== step.edge.to || !registered.centerline?.length) return [];
+      const endpoint = registered.from === nodeCode ? registered.centerline[0] :
+        registered.to === nodeCode ? registered.centerline[registered.centerline.length - 1] : null;
+      return physicalMatch(endpoint, node) ? [registered.code] : [];
+    }))].sort());
+  };
   let at = route.from;
   for (const code of route.edgeCodes) {
     const edge = roads.get(code);
@@ -60,16 +75,7 @@ export function planTransportRouteCorridor(
         // Reuse the existing walking index and prove each registered road's
         // actual endpoint meets this exact canonical node. Mere overlap is not
         // a connection. The next station still tests the outgoing route edge.
-        const ownerCodes = incidentRoads?.get(at)?.flatMap(step => {
-          const registered = roads.get(step.edge.code);
-          if (!registered || registered.from !== step.edge.from ||
-              registered.to !== step.edge.to || !registered.centerline?.length)
-            return [];
-          const endpoint = registered.from === at ? registered.centerline[0] :
-            registered.to === at ? registered.centerline[registered.centerline.length - 1] : null;
-          return physicalMatch(endpoint, start) ? [registered.code] : [];
-        });
-        const joinedOwners = ownerCodes && Object.freeze([...new Set(ownerCodes)].sort());
+        const joinedOwners = ownersAt(at);
         if (joinedOwners && (!joinedOwners.includes(stations[last].edgeCode) ||
             !joinedOwners.includes(code)))
           return Object.freeze({ status: "invalid", stations: EMPTY });
@@ -82,17 +88,29 @@ export function planTransportRouteCorridor(
       const additional = steps + (stations.length ? 0 : 1);
       if (!Number.isSafeInteger(steps) || stations.length + additional > ROUTE_CORRIDOR_STATION_LIMIT)
         return Object.freeze({ status: "over-budget", stations: EMPTY });
-      for (let step = stations.length ? 1 : 0; step <= steps; step++)
+      for (let step = stations.length ? 1 : 0; step <= steps; step++) {
+        const first = stations.length === 0, originOwners = first ? ownersAt(at) : undefined;
+        if (originOwners && !originOwners.includes(code))
+          return Object.freeze({ status: "invalid", stations: EMPTY });
         stations.push(Object.freeze({
           x: wrapSourceX(a.x + dx * step / steps),
           z: a.z + dz * step / steps,
           edgeCode: code,
+          ...(originOwners ? { junctionOwnerCodes: originOwners } : {}),
         }));
+      }
     }
     at = endCode;
   }
   // Graph incidence and valid mesh endpoints do not prove the path reaches the requested site.
   if (at !== route.to) return Object.freeze({ status: "invalid", stations: EMPTY });
+  const destinationOwners = ownersAt(at);
+  if (destinationOwners) {
+    const last = stations.length - 1;
+    if (last < 0 || !destinationOwners.includes(stations[last].edgeCode))
+      return Object.freeze({ status: "invalid", stations: EMPTY });
+    stations[last] = Object.freeze({ ...stations[last], junctionOwnerCodes: destinationOwners });
+  }
   return Object.freeze({ status: "ready", stations: Object.freeze(stations) });
 }
 
@@ -102,7 +120,7 @@ export function sampledCorridorStationFailure(
   surface: Pick<FinalSurface, "water" | "walkable" | "traversal" | "deckHeight" | "deckOwnerIds" | "contributingModifierIds">,
 ): string | null {
   const incident = (id: string) => id === station.edgeCode || id === station.joinedEdgeCode ||
-      (station.joinedEdgeCode !== undefined && !!station.junctionOwnerCodes?.includes(id)),
+      !!station.junctionOwnerCodes?.includes(id),
     contributed = (id: string) => surface.contributingModifierIds.includes(id);
   if (!surface.walkable) return "blocked final surface";
   if (!surface.contributingModifierIds.some(incident)) return "selected road modifier absent";
