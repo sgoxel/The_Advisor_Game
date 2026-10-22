@@ -1,6 +1,6 @@
 import { wrapSourceX } from "./planet.ts";
 import type { FinalSurface } from "./final-surface.ts";
-import type { TransportRoadEdge } from "./transport-network.ts";
+import type { TransportNode, TransportRoadEdge } from "./transport-network.ts";
 
 /**
  * Selected-route diagnostic only. Never changes Simulation travel authority.
@@ -10,6 +10,10 @@ import type { TransportRoadEdge } from "./transport-network.ts";
  */
 export const ROUTE_CORRIDOR_STATION_LIMIT = 4096;
 type Edge = Pick<TransportRoadEdge, "code" | "from" | "to" | "centerline">;
+type Node = Pick<TransportNode, "x" | "z">;
+const physicalMatch = (a: { x: number; z: number }, b: Node) =>
+  [a.x, a.z, b.x, b.z].every(Number.isFinite) &&
+  Math.hypot(wrapSourceX(a.x - b.x), a.z - b.z) <= 1e-4;
 export type CorridorStation = Readonly<{ x: number; z: number; edgeCode: string; joinedEdgeCode?: string }>;
 type Plan = Readonly<
   | { status: "invalid"; stations: readonly CorridorStation[] }
@@ -21,6 +25,7 @@ const EMPTY = Object.freeze([] as CorridorStation[]);
 export function planTransportRouteCorridor(
   route: Readonly<{ from: string; edgeCodes: readonly string[] }>,
   roads: ReadonlyMap<string, Edge>,
+  nodes: ReadonlyMap<string, Node>,
 ): Plan {
   if (!route.from || !route.edgeCodes.length) return Object.freeze({ status: "invalid", stations: EMPTY });
   const stations: CorridorStation[] = [];
@@ -31,7 +36,13 @@ export function planTransportRouteCorridor(
       return Object.freeze({ status: "invalid", stations: EMPTY });
     const forward = edge.from === at;
     if (!forward && edge.to !== at) return Object.freeze({ status: "invalid", stations: EMPTY });
-    const points = forward ? edge.centerline : [...edge.centerline].reverse();
+    const points = forward ? edge.centerline : [...edge.centerline].reverse(),
+      start = nodes.get(at), endCode = forward ? edge.to : edge.from,
+      end = nodes.get(endCode);
+    // Graph incidence alone cannot certify a detached single-road polyline.
+    // Check canonical node positions even for routes with only one edge.
+    if (!start || !end || !physicalMatch(points[0], start) || !physicalMatch(points[points.length - 1], end))
+      return Object.freeze({ status: "invalid", stations: EMPTY });
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1], b = points[i];
       if (![a.x, a.z, b.x, b.z].every(Number.isFinite))
@@ -56,7 +67,7 @@ export function planTransportRouteCorridor(
           edgeCode: code,
         }));
     }
-    at = forward ? edge.to : edge.from;
+    at = endCode;
   }
   return Object.freeze({ status: "ready", stations: Object.freeze(stations) });
 }
