@@ -510,11 +510,13 @@ function renderCorridorProbe() {
     target.textContent = siteRoute
       ? "Selected-route physical access: PENDING — final-surface road and bridge passage not yet probed. Graph distance and Fantasy-Time are a preview, not certified traversal; use Probe walking route surface for bounded samples. Character has not moved."
       : lastSiteRouteStatus === "not requested" ? ""
-      : "Selected-route physical access: UNAVAILABLE — no canonical walking route selected. No traversal or character movement certified.";
+      : lastSiteRouteStatus === "world authority pending"
+        ? "Selected-route physical access: PENDING — world authority has not loaded; no graph or physical passage certified. Character has not moved."
+        : "Selected-route physical access: UNAVAILABLE — no canonical walking route selected. No traversal or character movement certified.";
     return;
   }
   target.textContent =
-    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${source}${localGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${(corridorProbeMaximumGrade * 100).toFixed(1)}%`}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms elapsed`}. Map preview only; no uninterrupted passage or character travel certified.`;
+    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus === "checking final surface in bounded frame batches" ? "PENDING — " : ""}${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${source}${localGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${(corridorProbeMaximumGrade * 100).toFixed(1)}%`}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms elapsed`}. Map preview only; no uninterrupted passage or character travel certified.`;
 }
 
 function resetCorridorProbe() {
