@@ -416,7 +416,10 @@ function addRoadAndBridgeRibbons(
           pushQuad(prepared, tile, o1, O1, O0, o0, postSide);
           pushQuad(prepared, tile, i0, I0, O0, o0, postSide);
           pushQuad(prepared, tile, i1, o1, O1, I1, postSide);
-          pushQuad(prepared, tile, I0, I1, O1, O0, postCap);
+          // Reverse the cap winding on the + bank-facing side so BOTH
+          // tops face upward under back-face culling.
+          if (side > 0) pushQuad(prepared, tile, O0, O1, I1, I0, postCap);
+          else pushQuad(prepared, tile, I0, I1, O1, O0, postCap);
         }
         continue;
       }
