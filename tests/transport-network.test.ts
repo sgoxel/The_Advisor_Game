@@ -1140,7 +1140,17 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
   const center = transportBridgeSurfaceAt(bridge!.x, bridge!.z, crossing!.code),
     span = transportBridgeSpanAt(bridge!, crossing!);
   assert.ok(sampledBridgeCrossingPass(center.centerDeckWalkable, span),
-    "selected canonical Y-to-site chain must traverse sampled legal bridge deck and both banks");
+    `selected canonical Y-to-site chain must traverse sampled legal bridge deck and both banks: ${JSON.stringify({
+      centerDeckWalkable: center.centerDeckWalkable,
+      routeStationsTopLegal: span.routeStationsTopLegal,
+      routeFirstUnsafeStation: span.routeFirstUnsafeStation,
+      routeFirstUnsafeCause: span.routeFirstUnsafeCause,
+      approachStationsTopLegal: span.approachStationsTopLegal,
+      approachFirstUnsafeBank: span.approachFirstUnsafeBank,
+      approachFirstUnsafeCause: span.approachFirstUnsafeCause,
+      routeStationsWalkable: span.routeStationsWalkable,
+      routeMaxSampledGrade: span.routeMaxSampledGrade,
+    })}`);
   assert.ok(span.routeStations > 0 && span.routeStations <= 49,
     "source-owned crossing evidence must remain station bounded");
   const parentCode = siteAccessParentRoadCode(access!);
