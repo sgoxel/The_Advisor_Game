@@ -714,6 +714,7 @@ function probeSiteAccess() {
 
 function chooseNearestSiteRoute() {
   // A newer route request supersedes a pending first-road selection.
+  if (pendingNearestRoadOnWorld) lastRoadInspectionStatus = "canceled by site-route request before world readiness";
   pendingNearestRoadOnWorld = false;
   roadRequestedAt = null;
   const started = siteRouteRequestedAt ?? performance.now(), runtime = world();
@@ -916,6 +917,7 @@ function refreshOverlay(force = false) {
 
 function selectEvidence(kind: "bridge" | "border-crossing" | "lake-detour" | "mountain-pass" | "junction" | "harbor" | "ferry") {
   // An explicit new selection cancels an older deferred first-road request.
+  if (pendingNearestRoadOnWorld) lastRoadInspectionStatus = "canceled by evidence selection before world readiness";
   pendingNearestRoadOnWorld = false;
   roadRequestedAt = null;
   // A missing diagnostic target must not silently retain the previous one.
@@ -1018,6 +1020,8 @@ function telemetry() {
 }
 
 panel.querySelector<HTMLButtonElement>("#transport-close")!.onclick = () => {
+  if (pendingNearestRoadOnWorld) lastRoadInspectionStatus = "canceled when inspector closed before world readiness";
+  if (pendingSiteRouteOnWorld) lastSiteRouteStatus = "canceled when inspector closed before world readiness";
   pendingNearestRoadOnWorld = false;
   roadRequestedAt = null;
   pendingSiteRouteOnWorld = false;
@@ -1065,6 +1069,8 @@ panel.querySelector<HTMLButtonElement>("#transport-bridge-closeup")!.onclick = (
 panel.querySelector<HTMLButtonElement>("#transport-bridge-clearview")!.onclick = () => {
   if (!inspectBridgeIn3D()) return;
   // Suspend unrelated route probes and deferred requests in map-only view.
+  if (pendingNearestRoadOnWorld) lastRoadInspectionStatus = "canceled for bridge clear view before world readiness";
+  if (pendingSiteRouteOnWorld) lastSiteRouteStatus = "canceled for bridge clear view before world readiness";
   pendingNearestRoadOnWorld = false;
   roadRequestedAt = null;
   pendingSiteRouteOnWorld = false;
