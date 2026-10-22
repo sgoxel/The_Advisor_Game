@@ -994,7 +994,7 @@ test("S005 selected bridge deck requires both recorded owner and contributing mo
   const edgeCode = "SEED/SELECTED/ROAD", otherCode = "SEED/FOREIGN/ROAD",
     owned = {
       water: { kind: "river" }, walkable: true, traversal: "bridge",
-      deckHeight: 12, deckOwnerIds: [edgeCode],
+      surfaceHeight: 12, deckHeight: 12, deckOwnerIds: [edgeCode],
       contributingModifierIds: [edgeCode],
     } as FinalSurface,
     station = { x: 0, z: 0, edgeCode };
@@ -1011,6 +1011,9 @@ test("S005 selected bridge deck requires both recorded owner and contributing mo
     { ...owned, deckHeight: NaN },
     { ...owned, deckHeight: Infinity },
     { ...owned, deckHeight: -Infinity },
+    { ...owned, surfaceHeight: NaN },
+    { ...owned, surfaceHeight: Infinity },
+    { ...owned, surfaceHeight: -Infinity },
     { ...owned, water: { kind: "lake" } },
   ] as FinalSurface[]) {
     assert.equal(selectedRoadBridgeDeckWalkable(invalid, edgeCode), false,
