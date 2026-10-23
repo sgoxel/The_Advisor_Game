@@ -3,7 +3,7 @@ import { climateSampleAt } from "./climate.ts";
 import { countries, places, type Place } from "./geography.ts";
 import { characterForRole, type CharacterAge, type CharacterSex } from "./characters.ts";
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
-import { digest, finalSurfaceAt, heightAt } from "./world.ts";
+import { digest, finalSurfaceAt, heightAt, resolvedSettlementHomeDoorFor } from "./world.ts";
 import { settlementExteriorFor, settlementHomeFor } from "./settlement-exterior.ts";
 import { activityAt, dailyPlan, moodAt, traitsFor, type ActivityKind, type Mood, type ResidentTraits, type RoutineAnchor } from "./routines.ts";
 import { localDayIndex, localSecondOfDay, localWeekday } from "./clock.ts";
@@ -976,13 +976,12 @@ export class LazySimulation {
       if (!resident || !output) return;
       document.getElementById("travel-panel")?.classList.add("house-focused");
       const place = places.find((entry) => entry.id === resident.settlement),
-        home = place
-          ? legalPosition(place, resident.homeOffset.eastM, resident.homeOffset.northM)
-          : undefined;
+        home = place ? resolvedSettlementHomeDoorFor(place, resident.index) : undefined,
+        door = home ? sourceToLonLat(home.x, home.z) : undefined;
 
       const houseCode = document.getElementById("resident-house-code");
       if (houseCode) houseCode.textContent = `Home: ${resident.homeBuilding} · entrance: ${resident.homeEntrance} · owner: ${resident.homeOwner} · settlement: ${resident.settlement}`;
-      if (home) {
+      if (door) {
         const world = (
           window as typeof window & {
             advisorWorld?: {
@@ -991,10 +990,10 @@ export class LazySimulation {
           }
         ).advisorWorld;
         if (world?.navigation?.setFocus) {
-          world.navigation.setFocus(home.position.lon, home.position.lat);
-          output.textContent = `Assigned home · capacity ${RESIDENTIAL_CAPACITY}. Map focused on canonical entrance. Full identity below.`;
+          world.navigation.setFocus(door.lon, door.lat);
+          output.textContent = `Assigned home · capacity ${RESIDENTIAL_CAPACITY}. Map focused on legally resolved house doorway. Full identity below.`;
         } else output.textContent = `Assigned home · capacity ${RESIDENTIAL_CAPACITY}. Map focus unavailable. Full identity below.`;
-      } else output.textContent = "Assigned home entrance unavailable. Full identity below.";
+      } else output.textContent = "Assigned home has no legally resolved visible doorway; map focus unchanged. Full identity below.";
     });
   }
 
