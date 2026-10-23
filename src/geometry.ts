@@ -202,11 +202,11 @@ function addServiceGeometry(structures: Builder, detail: Builder, service: strin
 export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): TileGeometry {
   if (options.terrainOnly) return buildTerrainOnly(tile);
   const result = coreBuildTile(tile), structures = new Builder(), nature = new Builder(), detail = new Builder(),
-    closeDetail = new Builder(), nightGlow = new Builder(), lampPools = new Builder(),
+    closeDetail = new Builder(), nightGlow = new Builder(), lampPools = new Builder(), streetTrees = new Builder(), canopy = new Builder(),
     originX = tile.minX + tile.size / 2, originZ = tile.minZ + tile.size / 2;
   if (tile.size <= 512) for (const feature of featuresFor(tile) as any[]) {
     const physical = feature.widthM !== undefined || feature.kind === "roadside-tree";
-    for (const builder of [structures, nature, detail, closeDetail, nightGlow, lampPools]) builder.placeAt(feature.x - originX, elevationToRenderY(feature.y), feature.z - originZ, feature.z, physical);
+    for (const builder of [structures, nature, detail, closeDetail, nightGlow, lampPools, streetTrees, canopy]) builder.placeAt(feature.x - originX, elevationToRenderY(feature.y), feature.z - originZ, feature.z, physical);
     const x = 0, z = 0, y = 0, yaw = feature.yawRad || 0,
       width = feature.widthM ?? feature.footprintWidth ?? 8, depth = feature.depthM ?? feature.footprintDepth ?? 8, variant = feature.variant || 0;
     if(tile.size<=8&&["residence","service","keep","guard-post"].includes(feature.kind)&&!["market","merchant"].includes(feature.service)){
@@ -323,15 +323,17 @@ export function buildTile(tile: Tile, options: { terrainOnly?: boolean } = {}): 
       structures.boxYaw(x, y + .018, z, width || 1.5, .075, feature.length || depth || 3, yaw, color(154, 141, 111));
     } else if (feature.kind === "roadside-tree") {
       const h = 6.2 + (variant % 5) * .65, radius = 2 + ((variant >>> 3) % 6) * .18;
-      detail.boxYaw(x, y - .1, z, .62, h * .58, .62, 0, color(82, 62, 42));
-      detail.cone(x, y + h * .3, z, radius, h * .52, color(72 + (variant % 14), 111 + (variant % 17), 63), 7);
-      if (tile.size <= 32) detail.cone(x + radius * .28, y + h * .46, z - radius * .08, radius * .65, h * .3, color(84, 126, 69), 6);
+      streetTrees.boxYaw(x, y - .1, z, .62, h * .58, .62, 0, color(82, 62, 42));
+      streetTrees.cone(x, y + h * .3, z, radius, h * .52, color(72 + (variant % 14), 111 + (variant % 17), 63), 7);
+      if (tile.size <= 32) streetTrees.cone(x + radius * .28, y + h * .46, z - radius * .08, radius * .65, h * .3, color(84, 126, 69), 6);
+      canopy.cone(x,y+.045,z,radius,.001,color(72,111,63),8);
     }
   }
   return {
     terrain: result.terrain,
     structures: mergeGeometry(result.structures, structures.finish()),
     nature: mergeGeometry(result.nature, nature.finish()),
+    streetTrees: streetTrees.finish(), canopy: canopy.finish(),
     detail: mergeGeometry(result.detail, detail.finish()),
     ...(tile.size<=8?{closeDetail:closeDetail.finish(),nightGlow:nightGlow.finish(),lampPools:lampPools.finish()}:{}),
   };

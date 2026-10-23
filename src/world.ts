@@ -1,4 +1,5 @@
 import { mainStreetLampAnchors } from "./street-lighting.ts";
+import { roadWidthM } from "./road-dimensions.ts";
 export * from "./world-core.ts";
 import { buildingName, familyName, gateName, streetNames, wallName, type BuildingKind } from "./names.ts";
 
@@ -81,12 +82,16 @@ function settlementStreetAt(plan: SettlementExteriorPlan, x: number, z: number):
   }
   return best;
 }
-function externalRoadClear(x: number, z: number, radius: number) {
+function externalRoadClear(x: number, z: number, radius: number, includeCarriageway=false) {
   const wrappedX = wrapSourceX(x), bx = Math.floor(wrappedX / ROAD_BUCKET_SIZE), bz = Math.floor(z / ROAD_BUCKET_SIZE),
     reach = Math.max(0, Math.ceil(radius / ROAD_BUCKET_SIZE)), candidates = new Set<(typeof roads)[number]>();
   for (let dz = -reach; dz <= reach; dz++) for (let dx = -reach; dx <= reach; dx++)
     for (const road of externalRoadBuckets.get(roadBucketKey(canonicalRoadBucketX(bx + dx, ROAD_BUCKET_SIZE, WORLD_SIZE), bz + dz)) || []) candidates.add(road);
-  return [...candidates].every((road) => roadDistanceAt(wrappedX, z, road) > radius);
+  return [...candidates].every((road) => roadDistanceAt(wrappedX, z, road) > radius+(includeCarriageway?metresToSource(roadWidthM(road)/2):0));
+}
+function roadsideClear(plan:SettlementExteriorPlan,x:number,z:number,radiusM:number){
+  const radius=metresToSource(radiusM),street=settlementStreetAt(plan,x,z);
+  return (!street||street.distance>street.width/2+radius)&&externalRoadClear(x,z,radius,true);
 }
 function borderClearance(place: Place, plan: SettlementExteriorPlan, x: number, z: number) {
   const qx = wrapSourceX(x - place.x), qz = z - place.z, polygon = plan.border.map((point) => ({ x: wrapSourceX(point.x - place.x), z: point.z - place.z }));
@@ -215,6 +220,7 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
     const plan = settlementExteriorFor(place), resolution = resolveStaticPlan(place, plan), enclosure = enclosureStyleFor(place, plan),
       streetNameList = streetNames(place.code, plan.streets.length, place.kind === "city"), wall = wallName(place.name, place.kind === "city");
     for (let streetIndex = 0; streetIndex < plan.streets.length; streetIndex++) for (let index = 1, street = plan.streets[streetIndex]; index < street.points.length; index++) {
+      if(street.sharedSegments?.includes(index))continue;
       const segments = visibleSettlementStreetSegments(place, plan, street.points[index - 1], street.points[index]);
       for (let part = 0; part < segments.length; part++) {
         const [a, b] = segments[part], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz);
@@ -250,6 +256,7 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
     if(tile.size<=8)for(const lamp of mainStreetLampAnchors(plan)){
       if(!lamp.candidates.some(p=>nearTile(tile,p,metresToSource(1))))continue;
       const point=lamp.candidates.find(p=>{
+        if(!roadsideClear(plan,p.x,p.z,.65))return false;
         if(overlaps(resolution.staticOccupants,p.x,p.z,metresToSource(.3)))return false;
         const metric=sourceUnitsPerMetreAt(p.z),range=metresToSource(16);
         for(const index of settlementHomeIndicesNear(place,p.x-range*metric.x/metric.z,p.x+range*metric.x/metric.z,p.z-range,p.z+range)){
@@ -267,7 +274,7 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
       const value = digest(`${place.code}/ROADSIDE-TREE/${index}`), anchor = mainStreet.points[index], previous = mainStreet.points[index - 1], next = mainStreet.points[index + 1],
         dx = wrapSourceX(next.x - previous.x), dz = next.z - previous.z, length = Math.hypot(dx, dz) || 1, side = (value & 1) === 0 ? -1 : 1,
         offset = mainStreet.width * .5 + metresToSource(4 + ((value >>> 3) % 4)), x = wrapSourceX(anchor.x - dz / length * offset * side), z = anchor.z + dx / length * offset * side;
-      if (plan.gates.some((gate) => Math.hypot(wrapSourceX(x - gate.x), z - gate.z) < metresToSource(20)) || naturalSurfaceAt(x, z).freshwaterDistanceSource < metresToSource(6)) continue;
+      if (!roadsideClear(plan,x,z,3.2)||plan.gates.some((gate) => Math.hypot(wrapSourceX(x - gate.x), z - gate.z) < metresToSource(20)) || naturalSurfaceAt(x, z).freshwaterDistanceSource < metresToSource(6)) continue;
       add("roadside-tree", x, z, value, `${place.id}/roadside-tree/${index}`, { label: "Roadside tree" });
     }
   }

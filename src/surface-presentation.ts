@@ -5,6 +5,7 @@ import { LON_SEGMENTS, LAT_SEGMENTS } from "./globe-view.ts";
 /** Presentation only; never used to choose canonical terrain or feature identity. */
 export const LOD_BLEND_SECONDS = 0.24;
 export const roadVisibleAtScale = (denominator:number) => denominator <= 100;
+export const forestBodiesVisibleAtScale = (denominator:number) => denominator < 1;
 export const roadRepresentationAtScale = (denominator:number):'ground'|'cartographic'|'hidden' => denominator<50?'ground':denominator<=100?'cartographic':'hidden';
 export const SURFACE_PRESENTATION = Object.freeze({
   vertexColorGamma: true,

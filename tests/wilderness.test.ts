@@ -42,6 +42,8 @@ test("forest interiors contain dense metre-scaled trees and subdivide without re
   assert.deepEqual(children.map(p=>p.code).sort(),forest.patches.map(p=>p.code).sort());
   for(const tree of forest.patches){assert.ok(tree.heightM>=9&&tree.heightM<16);assert.ok(tree.radiusM<5);assert.equal(finalSurfaceAt(tree.x,tree.z).water.kind,"none");}
   const mesh=buildVegetationGeometry(t);assert.ok(mesh.geometry.indices.length/3<=8192);assert.equal(mesh.telemetry.forestRepresentation,"trees");
+  assert.ok(mesh.canopyGeometry.indices.length>0&&mesh.canopyGeometry.indices.length<mesh.geometry.indices.length);
+  assert.ok(mesh.canopyGeometry.positions.every(Number.isFinite));
 });
 test("forest canopy stays batched and bounded at overview LOD",()=>{
   const t=forestFixture(),mesh=buildVegetationGeometry(tile(t.minX,t.minZ,128));

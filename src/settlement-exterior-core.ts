@@ -37,6 +37,7 @@ export type SettlementStreetPlan = {
   id: string;
   width: number;
   points: readonly SettlementPoint[];
+  sharedSegments?: readonly number[];
 };
 
 /** `width`/`depth` are metres and `clearanceRadius` is metres in the core plan; candidates are source points. */

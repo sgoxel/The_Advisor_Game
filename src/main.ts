@@ -51,7 +51,7 @@ import { terrainTint } from "./geometry.ts";
 import { macroLakes, mountainSystems } from "./macro-geography.ts";
 import { climateSampleAt } from "./climate.ts";
 import { drainageRecipes, hydrologyTelemetry, hydrologyTopology, freshwaterAccessAt, naturalSurfaceAt } from "./hydrology.ts";
-import { roadRepresentationAtScale, roadVisibleAtScale, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
+import { forestBodiesVisibleAtScale, roadRepresentationAtScale, roadVisibleAtScale, LOD_BLEND_SECONDS, SURFACE_PRESENTATION, createTerrainMaterial, installLodCoverage, localDetailWeight } from "./surface-presentation.ts";
 import { LazySimulation, populationOf } from "./simulation.ts";
 import { FantasyClock } from "./clock.ts";
 import { createRenderer, rendererState } from "./renderer.ts";
@@ -242,6 +242,7 @@ let worker: Worker;
 const layers = { structures: true, nature: true, grid: false };
 let settlementDetailVisible = scaleValueForHalfHeight(view.halfHeight) < SETTLEMENT_ICON_FROM_SCALE;
 let smallDetailsVisible = settlementSmallDetailsVisible(scaleValueForHalfHeight(view.halfHeight));
+let forestBodiesVisible = forestBodiesVisibleAtScale(scaleValueForHalfHeight(view.halfHeight));
 let closeLightingVisible = closeLightingEnabled(scaleValueForHalfHeight(view.halfHeight));
 const pressed = new Set<string>();
 const simulation = new LazySimulation();
@@ -600,10 +601,12 @@ function updateCamera() {
   document.body.classList.toggle("settlement-overview", !showDetails);
   const showSmallDetails = settlementSmallDetailsVisible(scaleValueForHalfHeight(view.halfHeight));
   const showLighting = closeLightingEnabled(scaleValueForHalfHeight(view.halfHeight));
-  if (showDetails !== settlementDetailVisible || showLighting !== closeLightingVisible || showSmallDetails !== smallDetailsVisible) {
+  const showForestBodies = forestBodiesVisibleAtScale(scaleValueForHalfHeight(view.halfHeight));
+  if (showDetails !== settlementDetailVisible || showLighting !== closeLightingVisible || showSmallDetails !== smallDetailsVisible || showForestBodies !== forestBodiesVisible) {
     settlementDetailVisible = showDetails;
     smallDetailsVisible = showSmallDetails;
     closeLightingVisible = showLighting;
+    forestBodiesVisible = showForestBodies;
     setLayers();
   }
   selectionDirty = true;
@@ -719,7 +722,7 @@ function uploadGeometry(
   entity.addComponent("render", {
     meshInstances: [new pc.MeshInstance(mesh, material)],
     layers: coverage ? [coverageTerrainLayer.id] : material === coarseTerrainMaterial ? [coarseTerrainLayer.id] : [pc.LAYERID_WORLD],
-    castShadows: name !== "terrain" && !["closeDetail", "nightGlow", "lampPools"].includes(name),
+    castShadows: name !== "terrain" && !["canopy", "closeDetail", "nightGlow", "lampPools"].includes(name),
     receiveShadows: true,
   });
   parent.addChild(entity);
@@ -728,7 +731,9 @@ function uploadGeometry(
 }
 function tileLayerVisible(name:string):boolean {
   if (name === "terrain") return true;
-  if (name === "nature") return layers.nature;
+  if (name === "nature") return layers.nature && forestBodiesVisible;
+  if (name === "canopy") return layers.nature && !forestBodiesVisible;
+  if (name === "streetTrees") return layers.nature && layers.structures && settlementDetailVisible && smallDetailsVisible && forestBodiesVisible;
   if (name === "detail") return layers.structures && layers.nature && settlementDetailVisible && smallDetailsVisible;
   if (["closeDetail", "nightGlow", "lampPools"].includes(name))
     return layers.structures && settlementDetailVisible && smallDetailsVisible && closeLightingVisible && (name === "closeDetail" || eveningGlow > GLOW_VISIBILITY_EPSILON);
@@ -2128,7 +2133,7 @@ async function start() {
             evaluatedCandidates: simulation.stats.query.evaluatedResidents,
           },
           visibleGeometryTriangles: Object.fromEntries(
-            ["terrain", "structures", "nature", "detail", "closeDetail", "nightGlow", "lampPools"].map(name => [name,
+            ["terrain", "structures", "nature", "canopy", "streetTrees", "detail", "closeDetail", "nightGlow", "lampPools"].map(name => [name,
               [...tileCache.values()].filter(record => record.entity.enabled).reduce((sum,record) =>
                 sum + (record.entity.children as pc.Entity[]).filter(child => child.name === name && child.enabled)
                   .reduce((count,child) => count + (child.render?.meshInstances ?? []).reduce((n,instance) =>
@@ -2136,7 +2141,7 @@ async function start() {
             ]),
           ),
           visibleMeshes: Object.fromEntries(
-            ["terrain", "structures", "nature", "detail", "closeDetail", "nightGlow", "lampPools"].map((name) => [
+            ["terrain", "structures", "nature", "canopy", "streetTrees", "detail", "closeDetail", "nightGlow", "lampPools"].map((name) => [
               name,
               [...tileCache.values()].filter(
                 (r) =>

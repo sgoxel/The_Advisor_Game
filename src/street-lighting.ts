@@ -44,7 +44,7 @@ export function mainStreetLampAnchors(plan:SettlementExteriorPlan):readonly Lamp
      metric=sourceUnitsPerMetreAt(z),side=index%2?1:-1,
      // Stored street width is source units; recover its metre width.
      offset=street.width/metric.z/2+.9,
-     candidates=[0,3,-3].map(shift=>({x:wrapSourceX(x+(-dz/length*side*offset+dx/length*shift)*metric.x),z:z+(dx/length*side*offset+dz/length*shift)*metric.z}));
+     candidates=[0,1.5,3].flatMap(extra=>[0,3,-3].map(shift=>({x:wrapSourceX(x+(-dz/length*side*(offset+extra)+dx/length*shift)*metric.x),z:z+(dx/length*side*(offset+extra)+dz/length*shift)*metric.z})));
     result.push({id:`${street.id}/LAMP/${index}`,yaw:Math.atan2(dx,dz),candidates});index++;next+=28;
    }
    cumulative+=length;

@@ -1,4 +1,5 @@
 import { forestCoverForTile } from "./forest-cover.ts";
+import { finalSurfaceAt } from "./world.ts";
 import { sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import {elevationToRenderY} from "./render-frame.ts";
 import type { ForestFamily, RGB } from "./climate.ts";
@@ -80,6 +81,21 @@ class Builder {
     this.quad([ax, top, az], [ax, top, bz], [bx, top, bz], [bx, top, az], tint);
   }
 
+  groundCanopy(x:number,z:number,radiusM:number,variant:number,originX:number,originZ:number,tint:RGB){
+    const metric=sourceUnitsPerMetreAt(z),angle=variantAngle(variant),ground=(dx:number,dz:number):Point=>{
+      const px=x+dx*metric.x,pz=z+dz*metric.z;
+      return[px-originX,elevationToRenderY(finalSurfaceAt(px,pz).groundHeight+.045),pz-originZ];
+    };
+    // Coordinates already in source/render units. Six terrain-conforming triangles, no trunks, volume or shadows.
+    this.origin={x:0,y:0,z:0,sx:1,sy:1,sz:1};
+    const centre=ground(0,0);
+    for(let i=0;i<6;i++){
+      const a=angle+i*Math.PI/3,b=a+Math.PI/3,r=radiusM*(.88+((variant>>>(i*3))&7)*.025),
+        A=ground(Math.cos(a)*r,Math.sin(a)*r),B=ground(Math.cos(b)*radiusM,Math.sin(b)*radiusM);
+      this.triangle(centre,B,A,tint);
+    }
+  }
+
   cone(
     x: number,
     y: number,
@@ -125,10 +141,11 @@ function variantAngle(variant: number) {
  */
 export function buildVegetationGeometry(tile: Tile): {
   geometry: Geometry;
+  canopyGeometry: Geometry;
   telemetry: VegetationTelemetry;
 } {
   const { features, telemetry } = vegetationForTile(tile),
-    builder = new Builder(),
+    builder = new Builder(), canopy = new Builder(),
     originX = tile.minX + tile.size / 2,
     originZ = tile.minZ + tile.size / 2,
     timber: RGB = [78, 59, 42],
@@ -172,6 +189,7 @@ export function buildVegetationGeometry(tile: Tile): {
     }
 
     const colors=TREE_COLORS["temperate-deciduous-mixed"],h=(7.2+(feature.variant%5))*size,r=2.6*size;
+    canopy.groundCanopy(feature.x,feature.z,r,feature.variant,originX,originZ,colors[0]);
     builder.box(x,y-.05,z,.6*size,h*.5,.6*size,timber);
     builder.cone(x,y+h*.35,z,r,h*.55,colors[0],8,angle);
     builder.cone(x+r*.4,y+h*.5,z,r*.7,h*.45,colors[1],7,angle+.3);
@@ -181,6 +199,7 @@ export function buildVegetationGeometry(tile: Tile): {
   for (const patch of cover.patches) {
     builder.placeAt(patch.x-originX,elevationToRenderY(patch.y),patch.z-originZ,patch.z);
     const colors = TREE_COLORS[patch.family], r = patch.radiusM, h = patch.heightM, angle = variantAngle(patch.variant);
+    canopy.groundCanopy(patch.x,patch.z,r,patch.variant,originX,originZ,colors[0]);
     if (cover.fine) builder.box(0,-.05,0,.48,h*.55,.48,timber);
     if (patch.family === "conifer-boreal" && cover.fine) {
       builder.cone(0,h*.18,0,r,h*.7,colors[0],6,angle);
@@ -198,6 +217,7 @@ export function buildVegetationGeometry(tile: Tile): {
       estimatedVertices * (3 * 4 + 3 * 4 + 4) + triangles * 3 * 4;
   return {
     geometry,
+    canopyGeometry: canopy.finish(),
     telemetry: {
       ...telemetry,
       triangles,

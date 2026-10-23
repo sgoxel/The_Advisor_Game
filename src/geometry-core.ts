@@ -28,6 +28,8 @@ export type TileGeometry = {
   terrain: Geometry;
   structures: Geometry;
   nature: Geometry;
+  canopy?: Geometry;
+  streetTrees?: Geometry;
   detail: Geometry;
   closeDetail?: Geometry;
   nightGlow?: Geometry;
@@ -301,6 +303,13 @@ export function terrainTint(
   // A village reservation clears vegetation but does not paint a bare dirt disc.
   // Its soil retains the natural palette; actual streets are painted separately.
   let result=tint;
+  // The same canopy density colours local ground, coarse coverage and the globe albedo.
+  // Prepared inhabited land and road/water exclusions reduce the forest coverage.
+  if(sample.forestFamily&&surface.water.kind==='none'&&surface.groundMaterial!=='Road'&&!protectedSurface){
+    const forest=sample.forestFamily==='conifer-boreal'?color(43,79,58):sample.forestFamily==='warm-dry-woodland'?color(104,117,69):color(69,116,63),
+      density=smoothstep(.35,.9,surface.vegetationDensityScale);
+    result=blendColor(result,forest,density*(sample.forestFamily==='warm-dry-woodland'?.48:.74));
+  }
   if(surface.groundMaterial==='Riverbank'){
     const natural=naturalSurfaceAt(x,z),bankWeight=Math.max(0,Math.min(1,(.9-natural.vegetationDensityScale)/.56));
     result=blendColor(result,color(151,143,99),bankWeight*.75);

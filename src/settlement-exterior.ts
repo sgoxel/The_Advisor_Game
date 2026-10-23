@@ -1,4 +1,5 @@
 import { compareText } from "./compare-text.ts";
+import { mergeStreetWithRoads, sharedStreetSegments } from "./street-road-merge.ts";
 import { places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
 import { wrapSourceX } from "./planet.ts";
 import { houseDimensionsFor, metresToSource, physicalFootprintRadius, type HouseDimensions } from "./physical-scale.ts";
@@ -444,7 +445,11 @@ export function settlementExteriorFor(place: Place): SettlementExteriorPlan {
   const residentHomeCount = canonicalSettlementPopulation(place), gardenStride = place.kind === "city" ? 48 : 8;
   for (let index = 0; index < residentHomeCount; index += gardenStride) plots.push(gardenFor(place, index));
   const aligned = alignGatesToRoads(place, { ...core, plots, residentHomeCount });
-  return remember({ ...aligned, streets: aligned.streets.map(street => ({ ...street, width: metresToSource(street.width) })) });
+  const nearRoads=roads.filter(road=>roadDistanceAt(place.x,place.z,road)<aligned.radius+metresToSource(30));
+  return remember({ ...aligned, streets: aligned.streets.map(street => {
+    const points=mergeStreetWithRoads(street.points,street.width,nearRoads);
+    return {...street,points,sharedSegments:sharedStreetSegments(points,street.width,nearRoads),width:metresToSource(street.width)};
+  }) });
 }
 export function settlementExteriorCacheSize() { return cache.size; }
 
