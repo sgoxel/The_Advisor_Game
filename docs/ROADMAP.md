@@ -29,25 +29,25 @@ Completed S002 history is listed in docs/ROADMAP_ARCHIVE.md. Remaining continuat
 
 ## STAGE S005 — Transport & Traversal Network
 
-- WP-S005-001-001 — Certify SEED-legal gate→Y→bridge→site walking: unsafe grades, honest previews & four-scale UX
+- WP-S005-001-001 — SEED-legal gate→Y→bridge→site passage: repair grades/banks, truthful route UX & backend proof
 
 ## STAGE S006 — Living World & Usable Buildings
 
-- WP-S006-001-001 — SEED-legal resident door→work/guard travel, accurate building occupancy & Fantasy-Time UX
+- WP-S006-001-001 — SEED-legal resident door→street→work/guard travel: no teleport, stable occupancy & Fantasy-Time UX
 - WP-S006-002-001 — Same-world interior research: legal entry, persistence & responsive UX — COMPLETED and REVIEWED at 2026-10-20
 
 ## STAGE S007 — World Visual Presentation
 
-- WP-S007-001-001 — Research PlayCanvas toon/GLB/2D and semantic zoom: readable visuals, parity & mobile budgets
+- WP-S007-001-001 — Research PlayCanvas toon/GLB/2D art & ten-scale semantic zoom: readability, backend parity, mobile costs
 
 ## STAGE S008 — Player Interface & Accessibility
 
-- WP-S008-001-001 — Seven-viewport accessible atlas: readable UI, 44px touch areas, keyboard/popup focus & safe areas
+- WP-S008-001-001 — Seven-viewport accessible atlas: computed 44px touch, legible panels, keyboard focus & safe areas
 
 ## STAGE S009 — Performance, Stability & Product Conformance
 
-- WP-S009-001-001 — Exact-SHA cold→first answer→settled latency, frame/input p95 & mobile evidence
-- WP-S009-002-001 — Bound canonical picking & idle-frame label, layout and route-overlay work
-- WP-S009-003-001 — Adaptive mobile DPR/shadows, GPU-loss recovery & complete combined CPU+GPU accounting
-- WP-S009-004-001 — README conformance: campaign time/save, Advisor autonomy & truthful atlas UX gap ledger
-- WP-S009-005-001 — Pure-zoom readiness: coherent terrain, authoritative selection, settled 3D & cache reuse
+- WP-S009-001-001 — Exact-SHA performance: cold→coherent→interactive→settled, frame/input p95 & device evidence
+- WP-S009-002-001 — Bounded canonical point picking & revision-driven labels, HUD and route-overlay work
+- WP-S009-003-001 — Adaptive mobile GPU quality, real device-loss recovery & reconciled CPU+GPU memory policy
+- WP-S009-004-001 — README conformance ledger: Advisor autonomy, campaign time/save, atlas copy & unimplemented scope
+- WP-S009-005-001 — Pure-zoom readiness: coherent coverage, first canonical answer, required 3D & warm-cache reuse
