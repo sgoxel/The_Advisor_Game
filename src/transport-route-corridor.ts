@@ -25,6 +25,18 @@ export function corridorUnsafeRoadExclusion(station: CorridorStation): string | 
   return station.joinedEdgeCode || (station.junctionOwnerCodes?.length ?? 0) > 1
     ? null : station.edgeCode;
 }
+/** A failed station was examined but never validated as physically legal.
+ * Keep the on-screen count distinct from both sampled PASS and full passage. */
+export function corridorStationEvidenceProgress(accepted: number, planned: number, firstUnsafe: number | null): string {
+  if (!Number.isSafeInteger(accepted) || !Number.isSafeInteger(planned) || accepted < 0 || planned < 0 ||
+      accepted > planned || (firstUnsafe !== null &&
+      (!Number.isSafeInteger(firstUnsafe) || firstUnsafe !== accepted + 1 || firstUnsafe > planned)))
+    return "invalid station evidence; no physical passage certified";
+  if (!planned) return "no station evidence";
+  const checked = firstUnsafe ?? accepted;
+  return `${checked}/${planned} checked · ${accepted} sampled legal${firstUnsafe === null ? "" : ` · station ${firstUnsafe} rejected`}`;
+}
+
 type Plan = Readonly<
   | { status: "invalid"; reason?: "repeated-road" | "repeated-node" | "source-chain"; edgeCode?: string; stations: readonly CorridorStation[] }
   | { status: "over-budget"; reason: "raw-source-waypoints" | "sample-stations" | "route-stations" | "route-legs"; edgeCode: string; stations: readonly CorridorStation[] }
