@@ -25,6 +25,7 @@ import { roadRepresentationAtScale, roadVisibleAtScale } from "../src/surface-pr
 import { sampledBridgeCrossingPass, sampledBridgeTopFailure, selectedRoadBridgeDeckWalkable, transportRoadIntervalGradeEvidence, transportBridgeSpanAt, transportBridgeSurfaceAt, transportBankApproachGrade, transportRoadArcStations, transportRoadBankApproaches, transportRoadWetStations } from "../src/transport-bridge-surface.ts";
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
+import { createSiteRouteTimings, SITE_ROUTE_MEASURED_SCALES, SITE_ROUTE_TIMING_LIMIT } from "../src/transport-answer-timings.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
 import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteViaRequiredEdge, transportWalkingRequiredBridgeCut, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
@@ -2519,4 +2520,32 @@ test("S005 bridge-bank approach ribbon never paints unowned water and stays dete
       surface.groundMaterial === "Road" && surface.contributingModifierIds.length > 0,
     "bank apron ground vertex must be dry and canonical road-owned");
   }
+});
+
+
+test("S005 first-authoritative-route timing stays bounded by scale and distinguishes display from computation", () => {
+  const timings = createSiteRouteTimings();
+  const unavailable = timings.record("1/50", 6, false);
+  assert.ok(unavailable);
+  timings.markFrame(unavailable, 13);
+  const ready = timings.record("1/50", 4, true);
+  assert.ok(ready);
+  timings.markFrame(ready, 3); // An impossible earlier-frame timestamp must not count.
+  assert.equal(timings.record("≈ 1/50", 1, true), null,
+    "interpolated zoom is not falsely reported as an exact acceptance scale");
+  assert.equal(timings.record("1/250", Infinity, true), null);
+  for (let i = 0; i < SITE_ROUTE_TIMING_LIMIT + 8; i++)
+    timings.record("1/20", i, true);
+  const snap = timings.snapshot();
+  assert.deepEqual(Object.keys(snap), [...SITE_ROUTE_MEASURED_SCALES]);
+  assert.equal(snap["1/20"].samples, SITE_ROUTE_TIMING_LIMIT);
+  assert.equal(snap["1/20"].calculationP95Ms, SITE_ROUTE_TIMING_LIMIT + 6,
+    "nearest-rank p95 must discard old samples and never grow without bound");
+  assert.equal(snap["1/50"].samples, 2);
+  assert.equal(snap["1/50"].ready, 1);
+  assert.equal(snap["1/50"].unavailable, 1);
+  assert.equal(snap["1/50"].displayOpportunities, 1);
+  assert.equal(snap["1/50"].displayFrameOpportunityP95Ms, 13);
+  assert.equal(snap["1/100"].calculationP95Ms, null,
+    "no physical-browser samples must never be mislabeled measured PASS");
 });

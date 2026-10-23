@@ -20,6 +20,7 @@ import { createTransportJunctionLookup } from "./transport-junction-index.ts";
 import { createTransportWalkingIndex, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRequiredBridgeCut, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "./transport-walking-route.ts";
 import { siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "./transport-site-access.ts";
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "./world-core.ts";
+import { createSiteRouteTimings } from "./transport-answer-timings.ts";
 
 type AdvisorWorld = {
   setHalfHeight(height: number): void;
@@ -112,6 +113,7 @@ let lastSiteRouteFrameMs: number | null = null;
 let siteRouteFrameRevision = 0;
 let lastSiteRouteStatus = "not requested";
 let lastSiteRouteAnswerContext: FirstAnswerContext | null = null;
+const siteRouteTimings = createSiteRouteTimings();
 let siteRoute: ReturnType<typeof transportWalkingRouteToNearest> = null;
 // A route requested before the world runtime exists is retried exactly once on readiness.
 let pendingSiteRouteOnWorld = false;
@@ -849,6 +851,8 @@ function chooseNearestSiteRoute() {
   // depending on an unknown map focus remains pending until graphics is ready.
   lastSiteRouteMs = waitingForMapFocus ? null : performance.now() - started;
   lastSiteRouteAnswerContext = runtime ? firstAnswerContext(runtime.state) : null;
+  const timingSample = !waitingForMapFocus && runtime && lastSiteRouteMs !== null
+    ? siteRouteTimings.record(runtime.state.scaleLabel, lastSiteRouteMs, siteRoute !== null) : null;
   if (!waitingForMapFocus) siteRouteRequestedAt = null;
   resetSiteAccessProbe();
   renderSiteRoute();
@@ -863,6 +867,7 @@ function chooseNearestSiteRoute() {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (frameRevision !== siteRouteFrameRevision || panel.hidden) return;
       lastSiteRouteFrameMs = performance.now() - started;
+      siteRouteTimings.markFrame(timingSample, lastSiteRouteFrameMs);
       renderMetrics();
     }));
   }
@@ -1096,6 +1101,7 @@ function telemetry() {
     firstSiteRouteFrameMs: lastSiteRouteFrameMs,
     firstSiteRouteStatus: lastSiteRouteStatus,
     firstSiteRouteContext: lastSiteRouteAnswerContext,
+    fourScaleSiteRouteTimings: siteRouteTimings.snapshot(),
     siteAccessProbeStatus: siteProbeStatus,
     siteAccessProbeStations: siteProbe?.stationCount ?? 0,
     siteAccessProbeMs: siteProbeMs,
