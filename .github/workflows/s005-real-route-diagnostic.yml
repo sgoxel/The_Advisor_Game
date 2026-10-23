@@ -2,7 +2,7 @@ name: S005 real selected-route surface diagnostic
 on:
   workflow_dispatch:
   push:
-    branches: ["agent1/s005-real-route-surface-witness-20261023"]
+    branches: ["agent1/s005-bank-bridge-profile-20261023"]
     paths: [".github/workflows/s005-real-route-diagnostic.yml"]
 permissions:
   contents: read
