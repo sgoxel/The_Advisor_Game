@@ -593,7 +593,9 @@ function probeRouteCorridor() {
         ? `raw source waypoint limit (${ROUTE_CORRIDOR_STATION_LIMIT * 2}) reached at ${plan.edgeCode}; not certified`
         : plan.reason === "route-legs"
           ? `on-demand route limit (${ROUTE_CORRIDOR_LEG_LIMIT} canonical roads) reached at ${plan.edgeCode}; not certified`
-          : `per-road sampled station limit (${ROUTE_CORRIDOR_STATION_LIMIT}) or complete-route ceiling (${ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT}) reached at ${plan.edgeCode}; not certified`
+          : plan.reason === "route-stations"
+            ? `complete-route station limit (${ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT}) reached at ${plan.edgeCode}; not certified`
+            : `per-road sampled station limit (${ROUTE_CORRIDOR_STATION_LIMIT}) reached at ${plan.edgeCode}; not certified`
       : plan.reason === "repeated-road"
         ? `repeated canonical road ${plan.edgeCode}; non-retracing physical passage not certified`
         : plan.reason === "source-chain"
