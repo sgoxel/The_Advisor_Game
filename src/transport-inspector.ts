@@ -127,6 +127,8 @@ let corridorProbeStations = 0;
 let corridorProbePlannedStations = 0;
 let corridorProbeFirstUnsafeRoad: string | null = null;
 let corridorProbeFirstUnsafeStation: number | null = null;
+let corridorProbeFirstUnsafeCause: string | null = null;
+let corridorProbeFirstUnsafeIntervalGrade: number | null = null;
 let corridorProbeFirstUnsafeSource: Readonly<{ x: number; z: number }> | null = null;
 let corridorProbeFirstUnsafeLocalGrade: number | null = null;
 let corridorProbeMaximumGrade: number | null = null;
@@ -538,6 +540,8 @@ function renderCorridorProbe() {
     ? ` · unsafe source x ${corridorProbeFirstUnsafeSource.x.toFixed(5)}, z ${corridorProbeFirstUnsafeSource.z.toFixed(5)}` : "";
   const localGrade = corridorProbeFirstUnsafeLocalGrade === null ? "" :
     ` · first unsafe canonical local slope ${Number.isFinite(corridorProbeFirstUnsafeLocalGrade) ? `${(corridorProbeFirstUnsafeLocalGrade * 100).toFixed(1)}%` : "invalid"}`;
+  const intervalGrade = corridorProbeFirstUnsafeIntervalGrade === null ? "" :
+    ` · first unsafe sampled interval grade ${Number.isFinite(corridorProbeFirstUnsafeIntervalGrade) ? `${(corridorProbeFirstUnsafeIntervalGrade * 100).toFixed(1)}%` : "invalid"}`;
   if (corridorProbeStatus === "not requested") {
     target.textContent = siteRoute
       ? "Selected-route physical access: PENDING — final-surface road and bridge passage not yet probed. Graph distance and Fantasy-Time are a preview, not certified traversal; use Probe walking route surface for bounded samples. Character has not moved."
@@ -548,7 +552,7 @@ function renderCorridorProbe() {
     return;
   }
   target.textContent =
-    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus === "checking final surface in bounded frame batches" ? "PENDING — " : ""}${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${source}${localGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${(corridorProbeMaximumGrade * 100).toFixed(1)}%`}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms elapsed`}. Map preview only; no uninterrupted passage or character travel certified.`;
+    `Selected-route final-surface diagnostic · ${route}: ${corridorProbeStatus === "checking final surface in bounded frame batches" ? "PENDING — " : ""}${corridorProbeStatus}. ${progress}${corridorProbeFirstUnsafeRoad ? ` · first unsafe road ${corridorProbeFirstUnsafeRoad}` : ""}${corridorProbeFirstUnsafeCause ? ` · cause ${corridorProbeFirstUnsafeCause}` : ""}${source}${localGrade}${intervalGrade}${corridorProbeMaximumGrade === null ? "" : ` · sampled maximum grade ${Number.isFinite(corridorProbeMaximumGrade) ? `${(corridorProbeMaximumGrade * 100).toFixed(1)}%` : "invalid"}`}${corridorProbeMs === null ? "" : ` · ${corridorProbeMs.toFixed(2)} ms elapsed`}. Map preview only; no uninterrupted passage or character travel certified.`;
 }
 
 function resetCorridorProbe() {
@@ -559,6 +563,8 @@ function resetCorridorProbe() {
   corridorProbePlannedStations = 0;
   corridorProbeFirstUnsafeRoad = null;
   corridorProbeFirstUnsafeStation = null;
+  corridorProbeFirstUnsafeCause = null;
+  corridorProbeFirstUnsafeIntervalGrade = null;
   corridorProbeFirstUnsafeSource = null;
   corridorProbeFirstUnsafeLocalGrade = null;
   corridorProbeMaximumGrade = null;
@@ -576,6 +582,8 @@ function probeRouteCorridor() {
   corridorProbePlannedStations = plan.status === "ready" ? plan.stations.length : 0;
   corridorProbeFirstUnsafeRoad = null;
   corridorProbeFirstUnsafeStation = null;
+  corridorProbeFirstUnsafeCause = null;
+  corridorProbeFirstUnsafeIntervalGrade = null;
   corridorProbeFirstUnsafeSource = null;
   corridorProbeFirstUnsafeLocalGrade = null;
   corridorProbeMaximumGrade = null;
@@ -615,6 +623,7 @@ function probeRouteCorridor() {
       if (failure !== null) {
         corridorProbeFirstUnsafeRoad = station.edgeCode;
         corridorProbeFirstUnsafeStation = index + 1;
+        corridorProbeFirstUnsafeCause = failure;
         corridorProbeFirstUnsafeSource = Object.freeze({ x: station.x, z: station.z });
         // Only a failing on-demand station incurs this extra canonical gradient.
         if (failure === "unsafe local road slope")
@@ -630,8 +639,11 @@ function probeRouteCorridor() {
         if (!Number.isFinite(grade) || grade > .08) {
           corridorProbeFirstUnsafeRoad = station.edgeCode;
           corridorProbeFirstUnsafeStation = index + 1;
+          corridorProbeFirstUnsafeCause = Number.isFinite(grade)
+            ? "sampled interval grade exceeds 8%" : "invalid sampled interval grade";
+          corridorProbeFirstUnsafeIntervalGrade = grade;
           corridorProbeFirstUnsafeSource = Object.freeze({ x: station.x, z: station.z });
-          corridorProbeStatus = `sampled grade exceeds 8% at station ${index + 1}; not certified`;
+          corridorProbeStatus = `station ${index + 1}: ${corridorProbeFirstUnsafeCause}; not certified`;
           break;
         }
       }
@@ -1042,6 +1054,8 @@ function telemetry() {
     corridorProbePlannedStations,
     corridorProbeFirstUnsafeRoad,
     corridorProbeFirstUnsafeStation,
+    corridorProbeFirstUnsafeCause,
+    corridorProbeFirstUnsafeIntervalGrade,
     corridorProbeFirstUnsafeSource,
     corridorProbeFirstUnsafeLocalGrade,
     corridorProbeMaximumGrade,
