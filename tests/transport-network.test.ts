@@ -2324,7 +2324,8 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     // Cheap routine smoke: the first 32 canonical stations must genuinely
     // be legal under the same local-slope and great-circle interval rules as
     // the interactive diagnostic. A deliberate full-route check is opt-in.
-    const full = process.env.S005_ROUTE_FULL_PROBE === "1";
+    // One-shot ACTIVE S005 acceptance run; return to opt-in before merging.
+    const full = true;
     const limit = full ? segmented.stations.length : Math.min(32, segmented.stations.length);
     let previousHeight: number | null = null, maximumIntervalGrade = 0,
       firstUnsafe: { station: number; road: string; cause: string; x: number; z: number; grade?: number } | null = null;
@@ -2371,6 +2372,8 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
       maximumIntervalGrade, elapsedMs: performance.now() - started,
       caveat: "sampled final surface only; between-station and actor passage not certified",
     }));
+    if (full) assert.equal(firstUnsafe, null,
+      "the complete selected real route must have no unsafe final-surface station or time-budget failure");
   }
   if (segmented.status === "ready") {
     assert.ok(segmented.stations.length > 0 &&
