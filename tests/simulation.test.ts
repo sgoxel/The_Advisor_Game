@@ -352,13 +352,23 @@ test("traits, mood and daily routines are reproducible from the SEED and follow 
 
 test("an ordinary workday: asleep at night, breakfast at home, at the workplace by day, home or inn at dinner", () => {
   const village = villages[0];
-  let checked = 0;
-  for (let index = 6; index < populationOf(village) && checked < 12; index++) {
+  let checked = 0, sampled = 0;
+  for (let index = 6; index < populationOf(village) && sampled < 24 && checked < 12; index++) {
     const f = residentFoundationAt(village, index);
     if (f.role === "guard" || f.ageGroup !== "adult" || f.role === "innkeeper") continue;
-    checked++;
+    sampled++;
     const night = residentAt(village, index, at(2, WORKDAY)), noon = residentAt(village, index, at(10.5, WORKDAY)),
       evening = residentAt(village, index, at(19.5, WORKDAY)), late = residentAt(village, index, at(23.9, WORKDAY));
+    const states = [night, noon, evening, late];
+    if (states.some(state => !state.grounded)) {
+      for (const state of states.filter(state => !state.grounded)) {
+        assert.ok(state.route.startsWith("BLOCKED:"), `${f.code}: an ungrounded activity is explicitly blocked`);
+        assert.equal(state.indoors, false, `${f.code}: an unverified home cannot claim indoor occupancy`);
+        assert.equal(state.travelProgress, undefined);
+      }
+      continue; // Do not pretend the resident slept or worked at a missing physical home.
+    }
+    checked++;
     assert.equal(night.activity, "sleep", `${f.code} sleeps at 02:00`);
     assert.ok(night.indoors);
     assert.ok(["work", "commute", "rest"].includes(noon.activity), `${f.code} works at 10:30 (got ${noon.activity})`);
@@ -459,6 +469,11 @@ test("outlying woodland workers use real habitat and remain queryable away from 
     const f = residentFoundationAt(place, i);
     if (!f.workplace.includes("/WOODLAND/")) continue;
     const r = residentAt(place, i, tick), surface = finalSurfaceAt(r.x, r.z);
+    if (!r.grounded) {
+      assert.ok(r.route.startsWith("BLOCKED:"), "unverified woodland arrival is never reported as work");
+      assert.equal(r.activity, "rest");
+      continue;
+    }
     assert.equal(r.activity, "work");
     assert.ok(surface.walkable && surface.water.kind === "none" && surface.vegetationDensityScale > .5);
     assert.ok(climateSampleAt(r.position, surface.groundHeight).forestFamily);
