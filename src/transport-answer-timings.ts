@@ -2,6 +2,7 @@
 export const SITE_ROUTE_MEASURED_SCALES = ["1/20", "1/50", "1/100", "1/250"] as const;
 export const SITE_ROUTE_TIMING_LIMIT = 32;
 type Sample = {
+  readonly scale: string;
   readonly calculationMs: number;
   readonly ready: boolean;
   displayFrameMs: number | null;
@@ -22,13 +23,16 @@ export function createSiteRouteTimings() {
     record(scale: string, calculationMs: number, ready: boolean): Sample | null {
       const list = samples.get(scale);
       if (!list || !Number.isFinite(calculationMs) || calculationMs < 0) return null;
-      const sample: Sample = { calculationMs, ready, displayFrameMs: null };
+      const sample: Sample = { scale, calculationMs, ready, displayFrameMs: null };
       list.push(sample);
       if (list.length > SITE_ROUTE_TIMING_LIMIT) list.shift();
       return sample;
     },
-    markFrame(sample: Sample | null, elapsedMs: number) {
-      if (sample && Number.isFinite(elapsedMs) && elapsedMs >= sample.calculationMs)
+    markFrame(sample: Sample | null, elapsedMs: number, scaleAtFrame: string) {
+      // A zoom change before the display opportunity cannot count under the
+      // original request scale. Keep the graph calculation sample only.
+      if (sample && sample.scale === scaleAtFrame && Number.isFinite(elapsedMs) &&
+          elapsedMs >= sample.calculationMs)
         sample.displayFrameMs = elapsedMs;
     },
     snapshot() {

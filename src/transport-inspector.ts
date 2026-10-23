@@ -882,8 +882,9 @@ function chooseNearestSiteRoute() {
   // depending on an unknown map focus remains pending until graphics is ready.
   lastSiteRouteMs = waitingForMapFocus ? null : performance.now() - started;
   lastSiteRouteAnswerContext = runtime ? firstAnswerContext(runtime.state) : null;
-  const timingSample = !waitingForMapFocus && runtime && lastSiteRouteMs !== null
-    ? siteRouteTimings.record(runtime.state.scaleLabel, lastSiteRouteMs, siteRoute !== null) : null;
+  const requestScale = runtime?.state.scaleLabel;
+  const timingSample = !waitingForMapFocus && requestScale && lastSiteRouteMs !== null
+    ? siteRouteTimings.record(requestScale, lastSiteRouteMs, siteRoute !== null) : null;
   if (!waitingForMapFocus) siteRouteRequestedAt = null;
   resetSiteAccessProbe();
   renderSiteRoute();
@@ -897,9 +898,10 @@ function chooseNearestSiteRoute() {
     // a display opportunity. This is NOT a measured pixel-paint timestamp,
     // nor a 3D mesh-settling timer. Stale/cancelled views cannot win.
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (frameRevision !== siteRouteFrameRevision || panel.hidden) return;
+      if (frameRevision !== siteRouteFrameRevision || panel.hidden || !requestScale ||
+          world()?.state.scaleLabel !== requestScale) return;
       lastSiteRouteFrameMs = performance.now() - started;
-      siteRouteTimings.markFrame(timingSample, lastSiteRouteFrameMs);
+      siteRouteTimings.markFrame(timingSample, lastSiteRouteFrameMs, requestScale);
       renderMetrics();
     }));
   }
