@@ -1201,33 +1201,47 @@ function setupTravel() {
   };
 }
 /**
- * One material per illustrated character type, created on first use. The
- * picture loads asynchronously; until then the material discards every pixel
- * (alpha test with zero opacity), so a resident never flashes as a blank card.
+ * One material per illustrated character type, created on first use. Textures
+ * are uploaded from a canvas (the same path the old drawn sprites used), which
+ * WebGPU and WebGL2 both accept; until the picture arrives the material shows a
+ * fully transparent placeholder, so a resident never flashes as a blank card.
  */
 const characterMaterials = new Map<string, pc.StandardMaterial>();
+let characterTexturesLoaded = 0;
+function characterTexture(source: HTMLCanvasElement) {
+  const texture = new pc.Texture(app.graphicsDevice, { width: source.width, height: source.height, mipmaps: true, minFilter: pc.FILTER_LINEAR_MIPMAP_LINEAR, magFilter: pc.FILTER_LINEAR, addressU: pc.ADDRESS_CLAMP_TO_EDGE, addressV: pc.ADDRESS_CLAMP_TO_EDGE });
+  texture.setSource(source);
+  return texture;
+}
+function applyCharacterTexture(material: pc.StandardMaterial, texture: pc.Texture) {
+  material.diffuseMap = texture;
+  material.opacityMap = texture;
+  material.opacityMapChannel = "a";
+  material.update();
+}
 function characterMaterialFor(key: string): pc.StandardMaterial {
   const existing = characterMaterials.get(key);
   if (existing) return existing;
-  const material = new pc.StandardMaterial();
-  material.opacity = 0;
+  const material = new pc.StandardMaterial(), placeholder = document.createElement("canvas");
+  placeholder.width = placeholder.height = 4;
   material.alphaTest = 0.4;
   material.cull = pc.CULLFACE_NONE;
-  material.update();
+  applyCharacterTexture(material, characterTexture(placeholder));
   characterMaterials.set(key, material);
-  const image = new Image();
-  image.crossOrigin = "anonymous";
-  image.onload = () => {
-    const texture = new pc.Texture(app.graphicsDevice, { width: image.width, height: image.height, mipmaps: true, minFilter: pc.FILTER_LINEAR_MIPMAP_LINEAR, magFilter: pc.FILTER_LINEAR, addressU: pc.ADDRESS_CLAMP_TO_EDGE, addressV: pc.ADDRESS_CLAMP_TO_EDGE });
-    texture.setSource(image);
-    material.diffuseMap = texture;
-    material.opacityMap = texture;
-    material.opacityMapChannel = "a";
-    material.opacity = 1;
-    material.update();
+  const load = (name: string) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      canvas.getContext("2d")!.drawImage(image, 0, 0);
+      applyCharacterTexture(material, characterTexture(canvas));
+      characterTexturesLoaded++;
+    };
+    image.onerror = () => { if (name !== "default") load("default"); };
+    image.src = new URL(`characters/${name}.webp`, document.baseURI).href;
   };
-  image.onerror = () => { if (key !== "default") { characterMaterials.delete(key); characterMaterials.set(key, characterMaterialFor("default")); } };
-  image.src = new URL(`characters/${key}.webp`, document.baseURI).href;
+  load(key);
   return material;
 }
 async function start() {
@@ -1843,7 +1857,7 @@ async function start() {
             logicalResidents: simulation.stats.logicalResidents,
             pooledActors: actors.length,
             visibleActors: actors.filter(actor => actor.enabled).length,
-            reusableMaterials: characterMaterials.size,
+            reusableMaterials: characterMaterials.size, characterTexturesLoaded, enabledActors: actors.filter(actor => actor.enabled).length, firstActor: (() => { const actor = actors.find(item => item.enabled); return actor ? { position: actor.getPosition().toString(), scale: actor.getLocalScale().toString() } : null; })(),
             physicalHeightsM: actors.filter(actor => actor.enabled).map(actor => actor.getLocalScale().z * CANONICAL_METRES_PER_SOURCE_UNIT),
             worldHeightsM: actors.filter(actor => actor.enabled).map(actor => Math.abs(actor.getRotation().transformVector(new pc.Vec3(0, 0, actor.getLocalScale().z)).y) * CANONICAL_METRES_PER_SOURCE_UNIT),
             activeScheduleRecords: simulation.stats.activeScheduleRecords,
