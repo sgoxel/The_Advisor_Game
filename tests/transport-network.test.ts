@@ -29,7 +29,7 @@ import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
 import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, roadEndpointMeetsTerminal, siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
-import { planTransportRouteCorridor, ROUTE_CORRIDOR_STATION_LIMIT, sampledCorridorStationFailure, sampledCorridorStationPass } from "../src/transport-route-corridor.ts";
+import { planTransportRouteCorridor, planTransportRouteCorridorByLeg, ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, sampledCorridorStationFailure, sampledCorridorStationPass } from "../src/transport-route-corridor.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import {
   TRANSPORT_LIMITS,
@@ -872,6 +872,62 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   assert.equal(sampledCorridorStationPass(station, {
     ...dry, walkable: false,
   }), false, "a contributing road never overrides Simulation walkability");
+});
+
+test("S005 on-demand segmented corridor validates continuous multi-road route within finite budgets", () => {
+  const makeChain = (count: number, span: number) => {
+    const edges = Array.from({ length: count }, (_, i) => ({
+      code: `road/${i}`, from: `N${i}`, to: `N${i + 1}`,
+      centerline: [{ x: 0, z: i * span }, { x: 0, z: (i + 1) * span }],
+    })) as TransportRoadEdge[];
+    const nodes = new Map(Array.from({ length: count + 1 }, (_, i) =>
+      [`N${i}`, { x: 0, z: i * span }] as const));
+    const roads = new Map(edges.map(edge => [edge.code, edge]));
+    const incident = new Map([...nodes.keys()].map(node => [
+      node, edges.filter(edge => edge.from === node || edge.to === node).map(edge => ({ edge })),
+    ] as const));
+    return { edges, nodes, roads, incident,
+      route: { from: "N0", to: `N${count}`, edgeCodes: edges.map(edge => edge.code) } };
+  };
+  const chain = makeChain(9, 600);
+  assert.equal(planTransportRouteCorridor(chain.route, chain.roads, chain.nodes, chain.incident).status,
+    "over-budget", "the existing 4096-station whole-route limit is unchanged");
+  const full = planTransportRouteCorridorByLeg(chain.route, chain.roads, chain.nodes, chain.incident);
+  assert.equal(full.status, "ready", "nine physically joined SEED roads may be probed on demand");
+  assert.equal(full.stations.length, 5401, "each shared Y must be sampled exactly once");
+  assert.equal(full.stations[600].joinedEdgeCode, "road/1");
+  assert.deepEqual(full.stations[600].junctionOwnerCodes, ["road/0", "road/1"]);
+  assert.equal(full.stations.at(-1)?.edgeCode, "road/8");
+  assert.equal(planTransportRouteCorridorByLeg(chain.route, chain.roads, chain.nodes).status, "ready",
+    "an optional walking index cannot fabricate an invalid join on physically matched SEED endpoints");
+  assert.ok(full.stations.every(station => Number.isFinite(station.x) && Number.isFinite(station.z)));
+  const dry = { water: { kind: "none" }, walkable: true, traversal: "road",
+    deckHeight: null, deckOwnerIds: [] } as unknown as FinalSurface;
+  assert.equal(sampledCorridorStationPass(full.stations[600], {
+    ...dry, contributingModifierIds: ["road/1"],
+  }), true, "real SEED shared-junction outgoing owner remains legal");
+  assert.equal(sampledCorridorStationPass(full.stations[601], {
+    ...dry, contributingModifierIds: ["road/0"],
+  }), false, "an incoming road cannot impersonate the outgoing segment");
+  const detached = { ...chain.edges[8], centerline: [
+    { x: 0, z: 8 * 600 + 1 }, { x: 0, z: 9 * 600 },
+  ] } as TransportRoadEdge;
+  assert.equal(planTransportRouteCorridorByLeg(chain.route,
+    new Map([...chain.edges.slice(0, 8), detached].map(edge => [edge.code, edge])),
+    chain.nodes, chain.incident).status, "invalid",
+  "one detached late source-owned road cannot borrow an earlier road's sampled evidence");
+  const tooMany = makeChain(13, 600);
+  assert.deepEqual(planTransportRouteCorridorByLeg(tooMany.route, tooMany.roads,
+    tooMany.nodes, tooMany.incident), { status: "over-budget", reason: "route-legs",
+      edgeCode: "road/12", stations: [] },
+  "more than twelve long legs must fail with no partial certified stations");
+  const tooLong = makeChain(9, 2000);
+  const refused = planTransportRouteCorridorByLeg(tooLong.route, tooLong.roads,
+    tooLong.nodes, tooLong.incident);
+  assert.deepEqual(refused, { status: "over-budget", reason: "sample-stations",
+    edgeCode: "road/8", stations: [] },
+  "extended total remains capped and never truncates the later road to claim physical PASS");
+  assert.equal(ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT * 4);
 });
 
 test("S005 selected site access probe stays bounded and reports sampled physical facts without inventing traversal", () => {
@@ -1796,6 +1852,24 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
       "an actual too-long route must be unavailable rather than a partial physical PASS");
     assert.equal(physicalPlan.stations.length, 0,
       "do not silently truncate over-budget real-route evidence");
+  }
+  // Retry the same real nine-road witness in bounded, on-demand per-road
+  // windows. Station readiness proves a sampling recipe, not legal passage.
+  const segmented = planTransportRouteCorridorByLeg(
+    { from: villageNode!.code, to: site!.code, edgeCodes: chain },
+    edgeByCode, nodeByCode, index.adjacency,
+  );
+  assert.notEqual(segmented.status, "invalid",
+    "segmented physical recipe preserves the same real SEED gate/Y/bridge/site ownership");
+  if (segmented.status === "ready") {
+    assert.ok(segmented.stations.length > 0 &&
+      segmented.stations.length <= ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT);
+    assert.equal(segmented.stations[0].edgeCode, chain[0]);
+    assert.equal(segmented.stations.at(-1)?.edgeCode, chain.at(-1));
+  } else {
+    assert.equal(segmented.status, "over-budget");
+    assert.equal(segmented.stations.length, 0,
+      "oversized individual SEED legs remain unproven, never truncated to a false PASS");
   }
   // Test both endpoint physical probes in the SAME graph chain: a legal bridge
   // alone does not certify a disconnected site, and a site alone does not
