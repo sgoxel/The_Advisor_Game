@@ -1663,6 +1663,17 @@ test("S005 bridge-linked Y to critical-site chain uses one canonical walking gra
     { from: villageNode!.code, to: site!.code, edgeCodes: chain },
     edgeByCode, nodeByCode, index.adjacency,
   );
+  console.log("S005_REAL_FULL_WITNESS " + JSON.stringify({
+    routeEdges: chain.length,
+    from: villageNode!.code, to: site!.code,
+    selectedBridgeRoad: crossing!.code,
+    gateRoad: gateWitness!.edge.code,
+    plannerStatus: physicalPlan.status,
+    plannerReason: physicalPlan.status === "over-budget" ? physicalPlan.reason : null,
+    firstOverBudgetEdge: physicalPlan.status === "over-budget" ? physicalPlan.edgeCode : null,
+    plannedStations: physicalPlan.stations.length,
+    originalSourceWaypoints: chain.reduce((sum, code) => sum + edgeByCode.get(code)!.centerline.length, 0),
+  }));
   assert.notEqual(physicalPlan.status, "invalid",
     "the actual settlement-gate/Y/bridge/site graph path must have complete physical road-to-node continuity");
   if (physicalPlan.status === "ready") {
