@@ -702,6 +702,24 @@ function legalPosition(
   };
 }
 
+/** A resident's indoor state belongs to an authoritative site, not any nearby
+ * footprint. Feature IDs contain the canonical plot ID after their world prefix. */
+export function residentOccupiesBuilding(
+  resident: Pick<Resident, "indoors" | "route" | "homeBuilding" | "homeEntrance" | "workplace">,
+  building: { code: string; kind: string; service?: string },
+): boolean {
+  if (!resident.indoors || resident.route.startsWith("BLOCKED:")) return false;
+  if (building.kind === "residence")
+    return building.code.endsWith(`/${resident.homeBuilding}`) &&
+      (resident.route === resident.homeEntrance || resident.route.startsWith(`${resident.homeBuilding}/`));
+  if (building.kind !== "service" || !building.service) return false;
+  const settlementCode = resident.homeBuilding.split("/RESIDENCE/")[0];
+  if (!building.code.includes(`/${settlementCode}/PLOT/`)) return false;
+  const site = building.service.replaceAll("-", "_").toUpperCase();
+  return resident.route === `${settlementCode}/${site}` ||
+    (resident.route === resident.workplace && resident.workplace === `${settlementCode}/SERVICE/${site}`);
+}
+
 /** Readable site caption for the inspector only. Full SEED identities remain accessible. */
 export function readableResidentSite(code: string): string {
   const parts = code.split("/");
