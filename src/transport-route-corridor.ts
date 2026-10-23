@@ -300,8 +300,10 @@ export function sampledCorridorStationFailure(
   if (surface.water.kind === "river" && surface.deckHeight !== null &&
       !riverBridgeDeckAboveWater(surface))
     return "submerged or invalid river bridge deck";
-  if (!surface.walkable) return "blocked final surface";
+  // Wrong ownership remains the first actionable cause even when the real
+  // road underneath is grade-blocked; never blame an invented selected edge.
   if (!surface.contributingModifierIds.some(incident)) return "selected road modifier absent";
+  if (!surface.walkable) return "blocked final surface";
   // A selected road may contribute lower ground while another overlapping road
   // wins the exposed top material. Only that actual winner is traversable here;
   // at a real Y, the already-proven incident owners may share the junction.
