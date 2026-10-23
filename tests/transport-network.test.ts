@@ -30,7 +30,7 @@ import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
 import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingDetourAfterUnsafeRoad, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteViaRequiredEdge, transportWalkingRequiredBridgeCut, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, roadEndpointMeetsTerminal, siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
-import { planTransportRouteCorridor, planTransportRouteCorridorByLeg, ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, TRANSPORT_PROBE_FRAME_BUDGET_MS, corridorUnsafeRoadExclusion, sampledCorridorStationFailure, sampledCorridorStationPass, transportProbeFrameBudgetReached } from "../src/transport-route-corridor.ts";
+import { planTransportRouteCorridor, planTransportRouteCorridorByLeg, ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, TRANSPORT_PROBE_FRAME_BUDGET_MS, corridorStationEvidenceProgress, corridorUnsafeRoadExclusion, sampledCorridorStationFailure, sampledCorridorStationPass, transportProbeFrameBudgetReached } from "../src/transport-route-corridor.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import {
   TRANSPORT_LIMITS,
@@ -47,6 +47,20 @@ import {
   transportSegmentIntersection,
   transportSurfaceRoads,
 } from "../src/transport-network.ts";
+
+test("S005 on-demand corridor reports checked, legal and rejected stations without false validation", () => {
+  assert.equal(corridorStationEvidenceProgress(0, 0, null), "no station evidence");
+  assert.equal(corridorStationEvidenceProgress(32, 5315, null),
+    "32/5315 checked · 32 sampled legal");
+  assert.equal(corridorStationEvidenceProgress(435, 5315, 436),
+    "436/5315 checked · 435 sampled legal · station 436 rejected");
+  assert.equal(corridorStationEvidenceProgress(5315, 5315, null),
+    "5315/5315 checked · 5315 sampled legal");
+  assert.match(corridorStationEvidenceProgress(435, 5315, 437),
+    /invalid station evidence; no physical passage certified/);
+  assert.match(corridorStationEvidenceProgress(5316, 5315, null),
+    /invalid station evidence; no physical passage certified/);
+});
 
 function adjacency(countryCode?: string) {
   const result = new Map<string, string[]>();
