@@ -14,6 +14,7 @@ import {
   residentFoundationAt,
   legalPosition,
   continuousWalkableOffsetSegment,
+  legalEnclosureSegment,
   timedWalkOnPath,
   lastReachableRoutineStop,
   residentOccupiesBuilding,
@@ -39,6 +40,30 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "an unobstructed straight local segment remains eligible");
   assert.equal(continuousWalkableOffsetSegment(goal, start, point => point.eastM < 5 || point.eastM > 7), false,
     "crossing legality cannot depend on direction");
+});
+
+test("settlement walls admit resident crossings only through SEED gate apertures", () => {
+  const p = (eastM: number, northM: number) => ({ eastM, northM }),
+    border = [p(-20, -20), p(20, -20), p(20, 20), p(-20, 20)],
+    gates = [p(20, 0)];
+  assert.equal(legalEnclosureSegment(p(0, 0), p(40, 0), border, gates), true,
+    "a connected crossing through the real east gate is allowed");
+  assert.equal(legalEnclosureSegment(p(40, 0), p(0, 0), border, gates), true,
+    "a lawful return through the same gate is symmetric");
+  assert.equal(legalEnclosureSegment(p(0, 12), p(40, 12), border, gates), false,
+    "dry endpoints cannot tunnel through the adjacent wall");
+  assert.equal(legalEnclosureSegment(p(40, 12), p(0, 12), border, gates), false,
+    "reversing an illegal trip cannot make a wall traversable");
+  assert.equal(legalEnclosureSegment(p(0, 0), p(-40, 0), border, gates), false,
+    "there is no west-side gate");
+  assert.equal(legalEnclosureSegment(p(0, 0), p(40, 0), border, []), false,
+    "a missing or blocked gate is not a traversable crossing");
+  assert.equal(legalEnclosureSegment(p(20, -18), p(20, 18), border, gates), false,
+    "walking along the solid wall cannot be mistaken for a gate route");
+  assert.equal(legalEnclosureSegment(p(20, -4), p(20, 4), border, gates), true,
+    "the actual nine-metre rendered gate aperture remains available");
+  assert.equal(legalEnclosureSegment(p(-10, -10), p(10, 10), border, gates), true,
+    "valid interior movement does not require exiting through a gate");
 });
 
 test("invalid resident terrain never silently moves the requested point toward town", () => {
