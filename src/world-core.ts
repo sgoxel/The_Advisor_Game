@@ -364,7 +364,7 @@ const boundedEarthwork = (
 // SEED roadbed. Dry sections above the 3 m fill limit remain explicit deck.
 // No camera/cache value may choose the profile; refusal retains unsafe truth.
 const BRIDGE_APPROACH_METRES = 80;
-const BRIDGE_GRADE_LIMIT = .08;
+const BRIDGE_GRADE_LIMIT = .078;
 const bridgeGradeProfiles = new Map<string, { cx:number; cz:number; ux:number; uz:number; metresPerUnit:number; radiusM:number; stations:readonly {s:number; h:number}[]; valid:boolean }>();
 function bridgeGradeProfileAt(
   road: Road,
