@@ -246,6 +246,14 @@ export function transportProbeFrameBudgetReached(completed: number, elapsedMs: n
   return completed > 0 && (!Number.isFinite(elapsedMs) || elapsedMs >= TRANSPORT_PROBE_FRAME_BUDGET_MS);
 }
 
+/** A river bridge is traversable only when its deck clears the canonical water surface. */
+export function riverBridgeDeckAboveWater(surface: Pick<FinalSurface, "water" | "deckHeight">): boolean {
+  return surface.water.kind === "river" &&
+    Number.isFinite(surface.water.level) &&
+    surface.deckHeight !== null && Number.isFinite(surface.deckHeight) &&
+    surface.deckHeight > surface.water.level;
+}
+
 /** One read-only reason for the selected station's actual upper final surface. */
 export function sampledCorridorStationFailure(
   station: CorridorStation,
@@ -273,6 +281,9 @@ export function sampledCorridorStationFailure(
     return "water without owned bridge deck";
   if (surface.deckHeight !== null && surface.water.kind !== "none" && surface.water.kind !== "river")
     return "unsupported water under bridge deck";
+  if (surface.water.kind === "river" && surface.deckHeight !== null &&
+      !riverBridgeDeckAboveWater(surface))
+    return "submerged or invalid river bridge deck";
   if (!surface.walkable) return "blocked final surface";
   if (!surface.contributingModifierIds.some(incident)) return "selected road modifier absent";
   // A selected road may contribute lower ground while another overlapping road

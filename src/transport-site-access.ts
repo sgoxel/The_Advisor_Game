@@ -3,6 +3,7 @@ import { roads, type Road } from "./geography.ts";
 import type { FinalSurface } from "./final-surface.ts";
 import type { TransportRoadEdge } from "./transport-network.ts";
 import { ACCESS_PROFILE_SEGMENT_MAX_M, criticalSites } from "./sites.ts";
+import { riverBridgeDeckAboveWater } from "./transport-route-corridor.ts";
 
 /**
  * On-demand physical evidence for a real critical-site access branch, not a
@@ -87,7 +88,7 @@ export function siteAccessSampleVerdict(
     // Distinguish water under a legal bridge from unsupported wet ground;
     // road/deck ownership is still independently required below.
     supportedWater = full && surfaces.every(surface => surface.water.kind === "none" ||
-      (surface.water.kind === "river" && Number.isFinite(surface.deckHeight))),
+      riverBridgeDeckAboveWater(surface)),
     walkable = full && surfaces.every(surface => surface.walkable),
     parentCode = siteAccessParentRoadCode(edge),
     parentRoad = parentCode && roads.find(road => road.code === parentCode),
@@ -164,6 +165,7 @@ export function siteAccessSampleVerdict(
       ? (surface.traversal === "road" || surface.traversal === "open") &&
         dryRoadTopOwnerLegal(surface, index)
       : Number.isFinite(surface.deckHeight) && surface.surfaceHeight === surface.deckHeight &&
+        (surface.water.kind !== "river" || riverBridgeDeckAboveWater(surface)) &&
         surface.traversal === "bridge" && surface.deckOwnerIds.some(id =>
           (id === edge.code || (index === surfaces.length - 1 && exactParentJoin && id === terminalIncidentRoad)) &&
           surface.contributingModifierIds.includes(id)));
@@ -197,9 +199,12 @@ export function siteAccessSampleVerdict(
             surface.contributingModifierIds.includes(id));
       let cause: string | null = null;
       if (!Number.isFinite(surface.surfaceHeight)) cause = "invalid final-surface height";
+      else if (surface.water.kind === "river" && surface.deckHeight != null &&
+        !riverBridgeDeckAboveWater(surface))
+        cause = "submerged or invalid river bridge deck";
       else if (surface.water.kind !== "none" &&
-        !(surface.water.kind === "river" && Number.isFinite(surface.deckHeight)))
-        cause = !Number.isFinite(surface.deckHeight) ? "wet site-access surface" :
+        !riverBridgeDeckAboveWater(surface))
+        cause = surface.deckHeight == null ? "wet site-access surface" :
           "unsupported water under site-access deck";
       else if (!surface.walkable) cause = "blocked site-access surface";
       else if (!recorded) cause = terminal ? "site branch misses its registered parent junction" : "site branch road modifier absent";
