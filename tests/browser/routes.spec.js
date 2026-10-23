@@ -152,6 +152,9 @@ test("S005 selected route has a bounded first display opportunity at four canoni
         viewportHeight: viewport.height,
       });
       expect(result.firstSiteRouteMs).toBeGreaterThanOrEqual(0);
+      // A newly selected route has no inherited first-unsafe corridor evidence.
+      expect(result.corridorProbeFirstUnsafeCause).toBeNull();
+      expect(result.corridorProbeFirstUnsafeIntervalGrade).toBeNull();
       expect(result.firstSiteRouteFrameMs).toBeGreaterThanOrEqual(result.firstSiteRouteMs);
       expect(result.firstSiteRouteFrameMs).toBeLessThan(10000);
       expect(result.answer).toContain("Measured graph distance");
