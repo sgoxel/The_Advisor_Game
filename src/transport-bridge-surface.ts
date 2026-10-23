@@ -1,7 +1,7 @@
 import { freshwaterCrossingAt } from "./hydrology.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "./world-core.ts";
-import { ROUTE_CORRIDOR_STATION_LIMIT, sampledCorridorStationFailure, sampledCorridorStationPass } from "./transport-route-corridor.ts";
+import { ROUTE_CORRIDOR_STATION_LIMIT, riverBridgeDeckAboveWater, sampledCorridorStationFailure, sampledCorridorStationPass } from "./transport-route-corridor.ts";
 import type { TransportBridge, TransportRoadEdge } from "./transport-network.ts";
 
 /** Bridge and route probes must name the SAME first unsafe canonical surface reason. */
@@ -29,8 +29,8 @@ export function selectedRoadBridgeDeckWalkable(
     "surfaceHeight" | "water" | "deckHeight" | "walkable" | "traversal" | "deckOwnerIds" | "contributingModifierIds">,
   roadCode: string,
 ): boolean {
-  return Number.isFinite(surface.surfaceHeight) && surface.water.kind === "river" &&
-    surface.deckHeight !== null && Number.isFinite(surface.deckHeight) &&
+  return Number.isFinite(surface.surfaceHeight) && riverBridgeDeckAboveWater(surface) &&
+    surface.deckHeight !== null &&
     surface.surfaceHeight === surface.deckHeight && surface.walkable &&
     surface.traversal === "bridge" &&
     surface.deckOwnerIds.includes(roadCode) &&

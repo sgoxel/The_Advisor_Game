@@ -1030,12 +1030,12 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     ...dry, contributingModifierIds: [b.code],
   }), false, "reverse traversal also checks the next separate edge");
   assert.equal(sampledCorridorStationPass(junction, {
-    ...dry, water: { ...dry.water, kind: "river" }, traversal: "bridge",
+    ...dry, water: { ...dry.water, kind: "river", level: 0 }, traversal: "bridge",
     deckHeight: 4, deckOwnerIds: [a.code],
   }), true, "one source-owned top deck is sufficient at a real shared wet endpoint");
   assert.equal(sampledCorridorStationPass(junction, {
     ...dry, contributingModifierIds: [b.code],
-    water: { ...dry.water, kind: "river" }, traversal: "bridge",
+    water: { ...dry.water, kind: "river", level: 0 }, traversal: "bridge",
     deckHeight: 4, deckOwnerIds: [a.code],
   }), false, "the bridge deck must be owned by the SAME contributing incident road");
   assert.equal(sampledCorridorStationPass(junction, {
@@ -1051,7 +1051,7 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     ...dry, water: { ...dry.water, kind: "river" },
   }), false, "unbridged water must fail closed");
   assert.equal(sampledCorridorStationPass(station, {
-    ...dry, water: { ...dry.water, kind: "river" }, traversal: "bridge",
+    ...dry, water: { ...dry.water, kind: "river", level: 0 }, traversal: "bridge",
     deckHeight: 4, deckOwnerIds: [a.code],
   }), true, "only the actual selected road deck certifies a wet sample");
   assert.equal(sampledCorridorStationPass(station, {
@@ -1282,12 +1282,20 @@ test("S005 selected site access probe stays bounded and reports sampled physical
   assert.equal(siteAccessSampleVerdict(edge, deckSample(edge.code), junctionRoadCodes).sampledPass, true,
     "the site branch's own bridge deck is legal when sampled grade remains safe");
   const riverBridge = deckSample(edge.code).map((surface, index) => index === 2
-    ? { ...surface, water: { ...surface.water, kind: "river" as const } } : surface);
+    ? { ...surface, water: { ...surface.water, kind: "river" as const, level: 0 } } : surface);
   const bridged = siteAccessSampleVerdict(edge, riverBridge, junctionRoadCodes);
   assert.equal(bridged.dry, false, "river water remains authoritative below a bridge");
   assert.equal(bridged.supportedWater, true, "the river deck is a supported crossing, not open water");
   assert.equal(bridged.sampledPass, true,
     "the selected road's actual walkable top deck may cross a river at a sampled access station");
+  for (const level of [0.2, 0.3, NaN]) {
+    const submerged = riverBridge.map((surface, index) => index === 2
+      ? { ...surface, water: { ...surface.water, level } } : surface);
+    const verdict = siteAccessSampleVerdict(edge, submerged, junctionRoadCodes);
+    assert.equal(verdict.sampledPass, false, "submerged or invalid river deck is not site access");
+    assert.deepEqual([verdict.firstUnsafeStation, verdict.firstUnsafeCause],
+      [3, "submerged or invalid river bridge deck"]);
+  }
   for (const kind of ["lake", "ocean"] as const) {
     const unsupported = siteAccessSampleVerdict(edge, riverBridge.map((surface, index) => index === 2
       ? { ...surface, water: { ...surface.water, kind } } : surface), junctionRoadCodes);
@@ -1543,7 +1551,7 @@ test("S005 first unsafe bridge interval identifies exact grade station without c
 test("S005 selected bridge deck requires both recorded owner and contributing modifier", () => {
   const edgeCode = "SEED/SELECTED/ROAD", otherCode = "SEED/FOREIGN/ROAD",
     owned = {
-      water: { kind: "river" }, walkable: true, traversal: "bridge",
+      water: { kind: "river", level: 0 }, walkable: true, traversal: "bridge",
       surfaceHeight: 12, deckHeight: 12, deckOwnerIds: [edgeCode],
       contributingModifierIds: [edgeCode],
     } as FinalSurface,
@@ -1581,6 +1589,16 @@ test("S005 selected bridge deck requires both recorded owner and contributing mo
     "bridge and route diagnostics must report the same authoritative top-height contradiction");
   assert.equal(selectedRoadBridgeDeckWalkable(owned, otherCode), false,
     "an unrelated road code cannot claim the same selected deck");
+  for (const level of [12, 12.1, NaN, Infinity]) {
+    const submerged = { ...owned, water: { kind: "river" as const, level } };
+    assert.equal(selectedRoadBridgeDeckWalkable(submerged, edgeCode), false,
+      "wet deck must be strictly above finite authoritative river level");
+    assert.equal(sampledCorridorStationFailure(station, submerged),
+      "submerged or invalid river bridge deck");
+    assert.equal(sampledCorridorStationPass(station, submerged), false);
+    assert.equal(sampledBridgeTopFailure(edgeCode, submerged),
+      "submerged or invalid river bridge deck");
+  }
   assert.equal(sampledCorridorStationFailure(station, { ...owned, deckHeight: NaN }),
     "invalid final-surface bridge deck", "reject invalid selected-bridge height explicitly");
 });
