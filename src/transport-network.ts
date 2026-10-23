@@ -10,10 +10,12 @@ import {
   roadNetworkTelemetry,
   roads as geographyRoads,
   villages,
+  ROAD_NETWORK_FINGERPRINT,
   type Country,
   type Place,
   type Road,
 } from "./geography.ts";
+import extensionCache from "./generated/transport-extensions.json" with { type: "json" };
 import { freshwaterCrossingAt, freshwaterSegmentsAround } from "./hydrology.ts";
 import { macroSampleAt } from "./macro-geography.ts";
 import {
@@ -718,8 +720,23 @@ function installExtensions(extensions: ExtensionBuild) {
   }
 }
 
+/**
+ * Build-time world cache for the transport extensions (international roads, harbours, ferries):
+ * a pure function of the road network and the SEED, ~12 s to route at start-up. Shipped as JSON by
+ * tools/build-world-cache.ts; guarded by a fingerprint chained to the road network's.
+ */
+export const TRANSPORT_EXTENSIONS_FINGERPRINT = `${ROAD_NETWORK_FINGERPRINT}|${NETWORK_CODE}`;
+export function buildTransportExtensionsLive() {
+  return buildExtensions();
+}
+function cachedOrLiveExtensions(): ExtensionBuild {
+  const stored = extensionCache as unknown as { fingerprint: string; extensions: ExtensionBuild | null };
+  if (stored.extensions && stored.fingerprint === TRANSPORT_EXTENSIONS_FINGERPRINT) return stored.extensions;
+  if (typeof console !== "undefined") console.warn(`World cache: transport extensions ${stored.extensions ? "are stale" : "missing"}; routing live (slow start).`);
+  return buildExtensions();
+}
 function createTransportNetwork(install: boolean): TransportNetwork {
-  const extensions = buildExtensions();
+  const extensions = install ? cachedOrLiveExtensions() : buildExtensions();
   if (install) installExtensions(extensions);
   const allRoads = [...BASE_ROADS, ...extensions.roads], nodes = [
     ...places.map(settlementNode),

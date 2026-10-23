@@ -5,6 +5,8 @@ import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES, characterSpriteM } from "./characters.ts";
 import { metresToSource } from "./physical-scale.ts";
+import { nearbyCriticalSites } from "./sites.ts";
+import { settlementHomeFor } from "./settlement-exterior.ts";
 import { daylightAt } from "./daylight.ts";
 import { clockLabel, localSecondOfDay, timeZoneOffsetHours, TIME_SCALE } from "./clock.ts";
 import { hideNpcPopup, npcPopupCode, showBuildingPopup, showNpcPopup, showSettlementPopup, type BuildingInfo } from "./npc-popup.ts";
@@ -725,6 +727,65 @@ function setLayers() {
   for (const { entity } of tileCache.values())
     for (const child of entity.children as pc.Entity[]) child.enabled = tileLayerVisible(child.name);
 }
+/**
+ * Background prefetch: once everything on screen is loaded, the idle worker keeps generating
+ * what the player is likely to need next, nearest first — two same-detail rings around the
+ * view, then the views of the nearest towns and ruins/shrines. It stops at 85% of the cache
+ * trim threshold so prefetching never forces anything already cached out.
+ */
+let prefetchQueue: Tile[] = [], prefetchFingerprint = "", prefetched = 0;
+function prefetchCandidates(): Tile[] {
+  const seen = new Set<string>(), out: { tile: Tile; distance: number }[] = [],
+    push = (tile: Tile | undefined, weight = 1) => {
+      if (!tile || seen.has(tile.key)) return;
+      seen.add(tile.key);
+      out.push({ tile, distance: Math.hypot(wrapSourceX(tile.minX + tile.size / 2 - view.x), tile.minZ + tile.size / 2 - view.z) * weight });
+    };
+  const at = (level: number, x: number, z: number) => {
+    const count = 2 ** level;
+    try { return tileAt(level, ((x % count) + count) % count, z); } catch { return undefined; }
+  };
+  for (const tile of wanted) for (let ring = 1; ring <= 2; ring++)
+    for (let dx = -ring; dx <= ring; dx++) for (let dz = -ring; dz <= ring; dz++)
+      if (Math.max(Math.abs(dx), Math.abs(dz)) === ring) push(at(tile.level, tile.x + dx, tile.z + dz));
+  // Nearby destinations the player can jump to from the town and site cards.
+  const near = (x: number, z: number) => Math.hypot(wrapSourceX(x - view.x), z - view.z);
+  const destinations = [
+    ...places.filter((place) => near(place.x, place.z) < metresToSource(25_000)).sort((a, b) => near(a.x, a.z) - near(b.x, b.z)).slice(0, 4)
+      .map((place) => ({ x: place.x, z: place.z, halfHeight: place.kind === "city" ? 60 : 25 })),
+    ...nearbyCriticalSites(view.x, view.z, metresToSource(30_000), 2).map((site) => ({ x: site.x, z: site.z, halfHeight: 25 })),
+  ];
+  for (const destination of destinations)
+    for (const tile of selectTiles({ ...view, x: destination.x, z: destination.z, halfHeight: Math.min(view.halfHeight, destination.halfHeight) }, 190, 6)) push(tile, 1.5);
+  return out.sort((a, b) => a.distance - b.distance).map((entry) => entry.tile).slice(0, 96);
+}
+function prefetchNext(root: Tile) {
+  void root;
+  const fingerprint = `${wanted.map((tile) => tile.key).join(",")}|${Math.round(view.x)}|${Math.round(view.z)}`;
+  if (fingerprint !== prefetchFingerprint) { prefetchFingerprint = fingerprint; prefetchQueue = prefetchCandidates(); warmSettlements(); }
+  const surfaceBytes = globe ? globe.stats.textureWidth * globe.stats.textureHeight * 4 : 0;
+  if (cachedGeometryBytes + surfaceBytes + continuityCpuBytes() > streamingBudget.cacheTrimStartBytes * .85) return;
+  while (prefetchQueue.length) {
+    const tile = prefetchQueue.shift()!;
+    if (tileCache.has(tile.key) || pending.has(tile.key)) continue;
+    prefetched++;
+    request(tile, "detail");
+    return;
+  }
+}
+/** Pre-build settlement plans, lots and street data for nearby towns in idle main-thread time. */
+let warmedPlaces = new Set<string>();
+function warmSettlements() {
+  const idle = (globalThis as { requestIdleCallback?: (callback: () => void) => number }).requestIdleCallback ?? ((callback: () => void) => setTimeout(callback, 50));
+  const near = (x: number, z: number) => Math.hypot(wrapSourceX(x - view.x), z - view.z),
+    targets = places.filter((place) => !warmedPlaces.has(place.code) && near(place.x, place.z) < metresToSource(20_000)).sort((a, b) => near(a.x, a.z) - near(b.x, b.z)).slice(0, 4);
+  for (const place of targets) idle(() => {
+    if (warmedPlaces.has(place.code)) return;
+    warmedPlaces.add(place.code);
+    if (warmedPlaces.size > 32) warmedPlaces = new Set([...warmedPlaces].slice(-16));
+    settlementHomeFor(place, 0);
+  });
+}
 function request(tile: Tile, kind: TileJobKind = "detail") {
   const job = {tile,kind}, key = tileJobKey(job);
   if (tileCache.has(key) || pending.has(key)) return;
@@ -868,6 +929,8 @@ function processStreaming(material: pc.StandardMaterial) {
   if(inFlight===0 && inFlight+uploads.length<streamingBudget.generationReady){
     const job=nextStreamingJob(root,wanted,coverageTiles,cachedKeys);
     if(job)request(job.tile,job.kind);
+    // Nothing urgent left: keep warming the cache around the player in the background.
+    else if(ready && !lodTransition)prefetchNext(root);
   }
   {
     const surfaceBytes = globe!.stats.textureWidth * globe!.stats.textureHeight * 4;
@@ -2016,7 +2079,7 @@ async function start() {
           levels: [
             ...new Set(activeKeys.map((key) => tileCache.get(key)!.tile.level)),
           ],
-          coverage: {layerDebug:{previewLayerId:coverageTerrainLayer.id,rootLayerId:coarseTerrainLayer.id,valid:app.scene.layers.getLayerById(coverageTerrainLayer.id)===coverageTerrainLayer && coverageTerrainLayer.id!==pc.LAYERID_DEPTH && coverageTerrainLayer.id!==pc.LAYERID_WORLD,meshes:coverageTerrainLayer.meshInstances.length,culled:coverageTerrainLayer.getCulledInstances(camera.camera!.camera).opaque.length},canonicalKeys:coverageTiles.map(t=>t.key),visibleCanonicalKeys:coverageTiles.filter(t=>tileCache.get(coverageKey(t))?.entity.enabled).map(t=>t.key),complete:!selectionDirty && coverageComplete, durationMs:coverageDurationMs, prepared:coverageTiles.filter(t=>tileCache.has(coverageKey(t))).length, wanted:coverageTiles.length, workerStartupMs, lastGenerationTiming},
+          coverage: {layerDebug:{previewLayerId:coverageTerrainLayer.id,rootLayerId:coarseTerrainLayer.id,valid:app.scene.layers.getLayerById(coverageTerrainLayer.id)===coverageTerrainLayer && coverageTerrainLayer.id!==pc.LAYERID_DEPTH && coverageTerrainLayer.id!==pc.LAYERID_WORLD,meshes:coverageTerrainLayer.meshInstances.length,culled:coverageTerrainLayer.getCulledInstances(camera.camera!.camera).opaque.length},canonicalKeys:coverageTiles.map(t=>t.key),visibleCanonicalKeys:coverageTiles.filter(t=>tileCache.get(coverageKey(t))?.entity.enabled).map(t=>t.key),complete:!selectionDirty && coverageComplete, durationMs:coverageDurationMs, prepared:coverageTiles.filter(t=>tileCache.has(coverageKey(t))).length, wanted:coverageTiles.length, workerStartupMs, lastGenerationTiming, prefetchedTiles: prefetched, prefetchQueue: prefetchQueue.length, cachedTiles: tileCache.size, cachedGeometryMB: Math.round(cachedGeometryBytes/1e6)},
           simulation: simulation.stats,
           settled:
             !lodTransition &&

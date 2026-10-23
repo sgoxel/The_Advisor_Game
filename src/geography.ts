@@ -1,3 +1,4 @@
+import { cachedRoadNetwork, roadNetworkFingerprint } from "./road-network-cache.ts";
 import { createMacroRoadNetwork, MACRO_ROAD_VERSION } from "./macro-road-network.ts";
 import { climateSampleAt } from "./climate.ts";
 import { COARSE_GEOGRAPHY_VERSION as WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
@@ -531,7 +532,17 @@ for(const country of countries){
 }
 const backboneEdges:[Place,Place][]=[...villageTradeEdges,...cities.filter(c=>cityParents.has(c.id)).map(c=>[c,placeById.get(cityParents.get(c.id)!)!] as [Place,Place]),
   ...villages.map(v=>[v,placeById.get(v.id.slice(0,v.id.lastIndexOf("/")))!] as [Place,Place])];
-const generatedRoadNetwork=createMacroRoadNetwork(places,backboneEdges,position=>{const c=countryAtPosition(position);return c?`${c.continent}/${c.id}`:undefined;},WORLD_SEED,macroSampleAt,drainageCoarseSegments);
+/**
+ * The macro road network is ~90% of world start-up cost and a pure function of the SEED, the
+ * settlement registry and the generator. It ships precomputed (src/generated/road-network.json,
+ * written by tools/build-world-cache.ts); a fingerprint of the exact inputs guards it, and any
+ * mismatch falls back to routing live, so the world is identical either way.
+ */
+export const ROAD_NETWORK_FINGERPRINT = roadNetworkFingerprint(WORLD_SEED, places, backboneEdges);
+export function generateRoadNetworkLive() {
+  return createMacroRoadNetwork(places,backboneEdges,position=>{const c=countryAtPosition(position);return c?`${c.continent}/${c.id}`:undefined;},WORLD_SEED,macroSampleAt,drainageCoarseSegments);
+}
+const generatedRoadNetwork=cachedRoadNetwork(ROAD_NETWORK_FINGERPRINT) ?? generateRoadNetworkLive();
 export const roadJunctions=generatedRoadNetwork.junctions;
 export const roadConnections=generatedRoadNetwork.connections;
 export const roadNetworkTelemetry=generatedRoadNetwork.telemetry;

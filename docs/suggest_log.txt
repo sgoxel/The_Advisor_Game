@@ -50,3 +50,5 @@
 2026-10-22 | Owner settlement layout (AGENT #2): archetype-specific city street plans (riverside quay, hillside contours, fortified wards) could replace the single radial-ring plan; lots could be generated per chunk to avoid the one-off lot table per city.
 
 2026-10-23 | Owner NPC routines (AGENT #2): households (families sharing a house), a chapel building for clergy, weather/season effects on routines, and road-following walking paths instead of straight corridors.
+
+2026-10-23 | Owner caching (AGENT #2): ship the world-cache JSON once as a shared hashed asset instead of bundling it into the main script and both workers; cache the remaining settlement siting (~9 s) the same way; persist generated tile geometry in IndexedDB keyed by SEED+generator version for instant return visits; split loading-screen progress into map-data and terrain stages.
