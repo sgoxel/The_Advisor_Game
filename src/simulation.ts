@@ -813,6 +813,26 @@ export function readableResidentSite(code: string): string {
   return site.join(" ").replaceAll("_", " ").toLowerCase();
 }
 
+/** Keep the explicitly selected SEED identity across camera/LOD query changes.
+ * Only one off-screen resident is resolved; never scan or rebuild the population. */
+export function residentInspectorSelection<T extends { code: string; index: number }>(
+  visible: readonly T[], selectedCode: string, resolve: (code: string) => T | undefined,
+  limit = 16,
+) {
+  const nearby = [...visible].sort((a, b) => a.index - b.index).slice(0, limit),
+    selectedNearby = nearby.find(resident => resident.code === selectedCode),
+    selectedVisible = visible.find(resident => resident.code === selectedCode),
+    extra = selectedCode && !selectedNearby ? selectedVisible ?? resolve(selectedCode) : undefined,
+    records = extra ? [extra, ...nearby] : nearby,
+    retained = selectedCode || nearby[0]?.code || "";
+  return {
+    records,
+    selectedCode: retained,
+    outsideView: !!extra && !selectedVisible,
+    unavailable: !!selectedCode && !selectedNearby && !extra,
+  };
+}
+
 /** State is reconstructed only from immutable SEED foundation + absolute Fantasy Game Time. */
 export function residentAt(place: Place, index: number, tick: number): Resident {
   const seeded = residentFoundationAt(place, index),
@@ -1125,25 +1145,37 @@ export class LazySimulation {
     if (!this.inspector) this.installInspector();
     const select = document.getElementById("resident-select") as HTMLSelectElement | null;
     if (!select) return;
-    const sample = [...visible].sort((a, b) => a.index - b.index).slice(0, 16),
-      retained = sample.some((resident) => resident.code === this.selectedResidentCode)
-        ? this.selectedResidentCode
-        : sample[0]?.code ?? "";
+    const selection = residentInspectorSelection(visible, this.selectedResidentCode,
+      code => this.residentByCode(code)), retained = selection.selectedCode;
+    const missing = selection.unavailable ? (() => {
+      const option = document.createElement("option");
+      option.value = retained;
+      option.textContent = `Selected resident unavailable · ${retained}`;
+      return [option];
+    })() : [];
     select.replaceChildren(
-      ...sample.map((resident) => {
+      ...missing,
+      ...selection.records.map((resident) => {
         const option = document.createElement("option");
         option.value = resident.code;
-        option.textContent = `${resident.name} · ${resident.role.replaceAll("-", " ")}`;
+        option.textContent = `${resident.name} · ${resident.role.replaceAll("-", " ")}${selection.outsideView && resident.code === retained ? " · off-screen" : ""}`;
         return option;
       }),
     );
     this.selectedResidentCode = retained;
     select.value = retained;
-    const resident = sample.find((entry) => entry.code === retained);
-    if (resident) this.renderInspectorResident(resident);
-    else {
+    const resident = selection.records.find(entry => entry.code === retained);
+    if (resident) {
+      this.renderInspectorResident(resident);
+      if (selection.outsideView) {
+        const shortId = document.getElementById("resident-short-id");
+        if (shortId) shortId.textContent += " · off-screen";
+      }
+    } else {
       const name = document.getElementById("resident-name");
-      if (name) name.textContent = "Zoom closer to inspect inhabitants";
+      if (name) name.textContent = retained
+        ? "Selected resident unavailable — SEED identity retained"
+        : "Zoom closer to inspect inhabitants";
       const button = document.getElementById("resident-home-inspect") as HTMLButtonElement | null;
       if (button) button.disabled = true;
     }
