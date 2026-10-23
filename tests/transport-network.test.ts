@@ -926,9 +926,16 @@ test("S005 on-demand segmented corridor validates continuous multi-road route wi
   const tooLong = makeChain(9, 2000);
   const refused = planTransportRouteCorridorByLeg(tooLong.route, tooLong.roads,
     tooLong.nodes, tooLong.incident);
-  assert.deepEqual(refused, { status: "over-budget", reason: "sample-stations",
+  assert.deepEqual(refused, { status: "over-budget", reason: "route-stations",
     edgeCode: "road/8", stations: [] },
-  "extended total remains capped and never truncates the later road to claim physical PASS");
+  "extended total must name the first excluded road with its distinct whole-route budget");
+  const oneLongLeg = makeChain(2, ROUTE_CORRIDOR_STATION_LIMIT + 2);
+  assert.deepEqual(planTransportRouteCorridorByLeg(oneLongLeg.route, oneLongLeg.roads,
+    oneLongLeg.nodes, oneLongLeg.incident), { status: "over-budget", reason: "sample-stations",
+      edgeCode: "road/0", stations: [] },
+  "individual overlong road keeps the original per-road limit rather than posing as a route-wide failure");
+  assert.equal(refused.stations.length, 0,
+    "complete-route budget refusal cannot leave partial physical approval");
   assert.equal(ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT * 4);
 });
 
