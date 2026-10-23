@@ -13,7 +13,7 @@ import {
 } from "./transport-network.ts";
 import { siteTransportAcceptanceSummary as transportAcceptanceSummary, siteTransportNetwork as transportNetwork, siteTransportRoadsNear as transportRoadsNear } from "./site-transport-network.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat } from "./planet.ts";
-import { ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_LEG_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, planTransportRouteCorridorByLeg, sampledCorridorStationFailure, transportProbeFrameBudgetReached } from "./transport-route-corridor.ts";
+import { ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_LEG_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, corridorUnsafeRoadExclusion, planTransportRouteCorridorByLeg, sampledCorridorStationFailure, transportProbeFrameBudgetReached } from "./transport-route-corridor.ts";
 import { polylineTouchesViewport } from "./transport-viewport.ts";
 import { sampledBridgeCrossingPass, transportBridgeSpanAt, transportBridgeSurfaceAt } from "./transport-bridge-surface.ts";
 import { createTransportJunctionLookup } from "./transport-junction-index.ts";
@@ -658,14 +658,14 @@ function probeRouteCorridor() {
         ? finalSurfaceLocalSlopeAt(station.x, station.z) : undefined;
       const failure = sampledCorridorStationFailure(station, surface, localRoadSlope);
       if (failure !== null) {
-        corridorProbeFirstUnsafeRoad = station.edgeCode;
+        corridorProbeFirstUnsafeRoad = corridorUnsafeRoadExclusion(station);
         corridorProbeFirstUnsafeStation = index + 1;
         corridorProbeFirstUnsafeCause = failure;
         corridorProbeFirstUnsafeSource = Object.freeze({ x: station.x, z: station.z });
         // Only a failing on-demand station incurs this extra canonical gradient.
         if (failure === "unsafe local road slope")
           corridorProbeFirstUnsafeLocalGrade = localRoadSlope ?? finalSurfaceLocalSlopeAt(station.x, station.z);
-        corridorProbeStatus = `station ${index + 1}: ${failure}; not certified`;
+        corridorProbeStatus = `station ${index + 1}: ${failure}${corridorProbeFirstUnsafeRoad ? "" : "; shared canonical node; no single road can be excluded for a detour"}; not certified`;
         break;
       }
       if (previousHeight !== null) {
@@ -674,13 +674,13 @@ function probeRouteCorridor() {
           grade = metres > 0 ? Math.abs(surface.surfaceHeight - previousHeight) / metres : Infinity;
         corridorProbeMaximumGrade = Math.max(corridorProbeMaximumGrade ?? 0, grade);
         if (!Number.isFinite(grade) || grade > .08) {
-          corridorProbeFirstUnsafeRoad = station.edgeCode;
+          corridorProbeFirstUnsafeRoad = corridorUnsafeRoadExclusion(station);
           corridorProbeFirstUnsafeStation = index + 1;
           corridorProbeFirstUnsafeCause = Number.isFinite(grade)
             ? "sampled interval grade exceeds 8%" : "invalid sampled interval grade";
           corridorProbeFirstUnsafeIntervalGrade = grade;
           corridorProbeFirstUnsafeSource = Object.freeze({ x: station.x, z: station.z });
-          corridorProbeStatus = `station ${index + 1}: ${corridorProbeFirstUnsafeCause}; not certified`;
+          corridorProbeStatus = `station ${index + 1}: ${corridorProbeFirstUnsafeCause}${corridorProbeFirstUnsafeRoad ? "" : "; shared canonical node; no single road can be excluded for a detour"}; not certified`;
           break;
         }
       }

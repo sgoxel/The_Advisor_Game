@@ -30,7 +30,7 @@ import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
 import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingDetourAfterUnsafeRoad, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteViaRequiredEdge, transportWalkingRequiredBridgeCut, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, roadEndpointMeetsTerminal, siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
-import { planTransportRouteCorridor, planTransportRouteCorridorByLeg, ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, TRANSPORT_PROBE_FRAME_BUDGET_MS, sampledCorridorStationFailure, sampledCorridorStationPass, transportProbeFrameBudgetReached } from "../src/transport-route-corridor.ts";
+import { planTransportRouteCorridor, planTransportRouteCorridorByLeg, ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, TRANSPORT_PROBE_FRAME_BUDGET_MS, corridorUnsafeRoadExclusion, sampledCorridorStationFailure, sampledCorridorStationPass, transportProbeFrameBudgetReached } from "../src/transport-route-corridor.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
 import {
   TRANSPORT_LIMITS,
@@ -880,6 +880,10 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
   const joined = withOwner.stations[3];
   assert.deepEqual(joined.junctionOwnerCodes, [a.code, b.code, otherIncident.code],
     "shared Y owner candidates require registered source edge, graph incidence and exact endpoint");
+  assert.equal(corridorUnsafeRoadExclusion(station), a.code,
+    "an interior failed sample identifies one source-owned road for a bounded detour");
+  assert.equal(corridorUnsafeRoadExclusion(joined), null,
+    "a shared Y failure must not blame the incoming road or generate a false road exclusion");
   assert.equal(sampledCorridorStationPass(joined, {
     ...dry, contributingModifierIds: [otherIncident.code],
   }), true, "an actual third graph-incident Y winner may own the single sampled junction");
@@ -930,6 +934,10 @@ test("S005 physical walking-route diagnostic samples actual oriented SEED roads 
     "source-owned start/destination checks reuse the same bounded station positions");
   assert.deepEqual(terminalPlan.stations[0].junctionOwnerCodes, [a.code, originRoad.code],
     "start owners require registered graph incidence and exact canonical endpoint geometry");
+  assert.equal(corridorUnsafeRoadExclusion(terminalPlan.stations[0]), null,
+    "a shared origin failure also cannot be assigned to a unique incoming road");
+  assert.equal(corridorUnsafeRoadExclusion(terminalPlan.stations[1]), a.code,
+    "the next ordinary road station keeps its deterministic single-road exclusion");
   assert.deepEqual(terminalPlan.stations.at(-1)?.junctionOwnerCodes, [b.code, destinationRoad.code],
     "destination owners require the identical physical endpoint proof");
   assert.equal(sampledCorridorStationPass(terminalPlan.stations[0], {

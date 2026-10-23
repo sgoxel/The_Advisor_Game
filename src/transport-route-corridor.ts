@@ -17,6 +17,14 @@ const physicalMatch = (a: { x: number; z: number } | null | undefined, b: Node) 
   !!a && [a.x, a.z, b.x, b.z].every(Number.isFinite) &&
   Math.hypot(wrapSourceX(a.x - b.x), a.z - b.z) <= 1e-4;
 export type CorridorStation = Readonly<{ x: number; z: number; edgeCode: string; joinedEdgeCode?: string; junctionOwnerCodes?: readonly string[] }>;
+
+/** A failed sample at a shared SEED node cannot uniquely condemn its incoming
+ * road: either selected leg or another truly incident road may own the top.
+ * Keep the location unsafe without inventing an excluded detour road. */
+export function corridorUnsafeRoadExclusion(station: CorridorStation): string | null {
+  return station.joinedEdgeCode || (station.junctionOwnerCodes?.length ?? 0) > 1
+    ? null : station.edgeCode;
+}
 type Plan = Readonly<
   | { status: "invalid"; reason?: "repeated-road" | "source-chain"; edgeCode?: string; stations: readonly CorridorStation[] }
   | { status: "over-budget"; reason: "raw-source-waypoints" | "sample-stations" | "route-stations" | "route-legs"; edgeCode: string; stations: readonly CorridorStation[] }
