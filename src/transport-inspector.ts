@@ -592,7 +592,9 @@ function probeRouteCorridor() {
       ? plan.reason === "raw-source-waypoints"
         ? `raw source waypoint limit (${ROUTE_CORRIDOR_STATION_LIMIT * 2}) reached at ${plan.edgeCode}; not certified`
         : `sampled station limit (${ROUTE_CORRIDOR_STATION_LIMIT}) reached at ${plan.edgeCode}; not certified`
-      : "invalid source-owned physical path; not certified";
+      : plan.reason === "repeated-road"
+        ? `repeated canonical road ${plan.edgeCode}; non-retracing physical passage not certified`
+        : "invalid source-owned physical path; not certified";
     corridorProbeMs = performance.now() - started;
     renderCorridorProbe();
     renderMetrics();
