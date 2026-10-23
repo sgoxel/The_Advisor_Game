@@ -241,7 +241,7 @@ SCENARIOS: dict[str, str] = {
     "cell": "tap;visible:#cell-panel",
     "a11y-panels": (
         "eval:document.getElementById('open-travel').click();settle;shot:travel-open;"
-        "eval:document.getElementById('close-travel').click();tap;visible:#cell-panel;shot:cell-open"
+        "eval:document.getElementById('close-travel').click();tap;visible:#npc-popup;shot:tap-info"
     ),
     "travel-city": "click:#open-travel;select:#continent-select=1;click:#visit-city",
     # WP-S002-004-008 walking routes. Seeded 6 km road pair (the travel-panel click flow is covered by tests/browser/routes.spec.js).
