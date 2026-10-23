@@ -1005,7 +1005,7 @@ function processStreaming(material: pc.StandardMaterial) {
         : `${activeKeys.length || 1} tiles · ${pending.size ? "refining" : "ready"}`) +
     poleFeedback;
 }
-const CLICKABLE_KINDS = new Set(["residence", "service", "keep", "well", "field", "garden", "gate", "guard-post"]);
+const CLICKABLE_KINDS = new Set(["residence", "service", "keep", "well", "field", "garden", "gate", "guard-post", "park"]);
 /** Centre the view on a source point, keeping the zoom unless it is too far out to see the target. */
 function centreOn(x: number, z: number, maxHalfHeight = view.halfHeight) {
   navigate(x, z, Math.min(view.halfHeight, maxHalfHeight));
