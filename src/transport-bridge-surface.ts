@@ -1,7 +1,7 @@
 import { freshwaterCrossingAt } from "./hydrology.ts";
 import { CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, sourceToLonLat, wrapSourceX } from "./planet.ts";
 import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "./world-core.ts";
-import { sampledCorridorStationFailure, sampledCorridorStationPass } from "./transport-route-corridor.ts";
+import { ROUTE_CORRIDOR_STATION_LIMIT, sampledCorridorStationFailure, sampledCorridorStationPass } from "./transport-route-corridor.ts";
 import type { TransportBridge, TransportRoadEdge } from "./transport-network.ts";
 
 /** Bridge and route probes must name the SAME first unsafe canonical surface reason. */
@@ -54,7 +54,11 @@ export function transportRoadArcStations(
   points: readonly { x: number; z: number }[], x: number, z: number,
   fromMetres: number, toMetres: number, stationCount: number,
 ): readonly { x: number; z: number }[] {
+  // The 49 sampled stations are not a bound on raw source processing.
+  // Share the selected-route diagnostic's finite waypoint budget before
+  // touching any centerline element; oversized inputs remain unverified.
   if (!Array.isArray(points) || points.length < 2 ||
+    points.length > ROUTE_CORRIDOR_STATION_LIMIT * 2 ||
     !Number.isFinite(x) || !Number.isFinite(z) ||
     !Number.isInteger(stationCount) || stationCount < 1 || stationCount > 48 ||
     !Number.isFinite(fromMetres) || !Number.isFinite(toMetres) || fromMetres >= toMetres) return [];
@@ -194,7 +198,12 @@ export function transportRoadBankApproaches(
  */
 export function transportBridgeSpanAt(bridge: TransportBridge, edge: TransportRoadEdge) {
   let nearestMetres = Infinity, direction: {x: number; z: number} | undefined;
-  for (let index = 1; index < edge.centerline.length; index++) {
+  // Reject oversized raw centerlines before the anchor search as well as
+  // the downstream wet/bank samplers. Never truncate a candidate crossing.
+  const boundedCenterline = Array.isArray(edge.centerline) &&
+    edge.centerline.length >= 2 &&
+    edge.centerline.length <= ROUTE_CORRIDOR_STATION_LIMIT * 2;
+  for (let index = 1; boundedCenterline && index < edge.centerline.length; index++) {
     const a = edge.centerline[index - 1], b = edge.centerline[index];
     if (!a || !b || ![bridge.x, bridge.z, a.x, a.z, b.x, b.z].every(Number.isFinite)) {
       direction = undefined;
