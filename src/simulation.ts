@@ -904,7 +904,7 @@ export class LazySimulation {
         home = place
           ? legalPosition(place, resident.homeOffset.eastM, resident.homeOffset.northM)
           : undefined;
-      output.textContent = `Assigned home · capacity ${RESIDENTIAL_CAPACITY}. ${home ? "Map focus set to the home's canonical entrance." : "Entrance unavailable."} Full identity below.`;
+
       const houseCode = document.getElementById("resident-house-code");
       if (houseCode) houseCode.textContent = `Home: ${resident.homeBuilding} · entrance: ${resident.homeEntrance} · owner: ${resident.homeOwner} · settlement: ${resident.settlement}`;
       if (home) {
@@ -915,8 +915,12 @@ export class LazySimulation {
             };
           }
         ).advisorWorld;
-        world?.navigation?.setFocus?.(home.position.lon, home.position.lat);
-      }
+        const focus = world?.navigation?.setFocus;
+        if (focus) {
+          focus(home.position.lon, home.position.lat);
+          output.textContent = `Assigned home · capacity ${RESIDENTIAL_CAPACITY}. Map focused on canonical entrance. Full identity below.`;
+        } else output.textContent = `Assigned home · capacity ${RESIDENTIAL_CAPACITY}. Map focus unavailable. Full identity below.`;
+      } else output.textContent = "Assigned home entrance unavailable. Full identity below.";
     });
   }
 
