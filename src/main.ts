@@ -1,3 +1,5 @@
+import { createWildernessOverlay } from "./wilderness-overlay.ts";
+import { nearbyWilderness } from "./wilderness.ts";
 import { compareText } from "./compare-text.ts";
 import {SETTLEMENT_ICON_FROM_SCALE, settlementSmallDetailsVisible} from "./political-presentation.ts";
 import {closeLightingEnabled, closeLightingWeight, eveningLightWeight} from "./street-lighting.ts";
@@ -10,7 +12,7 @@ import { nearbyCriticalSites } from "./sites.ts";
 import { settlementHomeFor } from "./settlement-exterior.ts";
 import { daylightAt, daylightAtLongitude, advanceDaylight, type Daylight } from "./daylight.ts";
 import { clockLabel, localSecondOfDay, timeZoneOffsetHours, TIME_SCALE } from "./clock.ts";
-import { hideNpcPopup, npcPopupCode, showBuildingPopup, showNpcPopup, showSettlementPopup, type BuildingInfo } from "./npc-popup.ts";
+import { hideNpcPopup, npcPopupCode, showBuildingPopup, showNpcPopup, showSettlementPopup, showWildernessPopup, type BuildingInfo } from "./npc-popup.ts";
 import type { Resident } from "./simulation.ts";
 import { wrapSourceX } from "./planet.ts";
 import "./style.css";
@@ -1029,6 +1031,8 @@ function openGameInfoAt(x: number, z: number) {
     showBuildingPopup(best, settlement, owner, inside);
     return true;
   }
+  const wild = nearbyWilderness(x,z,metresToSource(120),8).find(site=>Math.hypot(wrapSourceX(site.x-x),site.z-z)<metresToSource(site.radiusM));
+  if(wild){showWildernessPopup(wild);return true;}
   if (settlement) {
     openSettlementCard(settlement);
     return true;
@@ -1537,6 +1541,7 @@ async function start() {
   updateCamera();
   simulation.setFocus(villages[0]);
   simulation.advance(clock.tickAt(Date.now()));
+  const updateWilderness = createWildernessOverlay(site=>{centreOn(site.x,site.z,12);showWildernessPopup(site);});
   const actors: pc.Entity[] = [];
   pickResidentAt = (clientX: number, clientY: number) => {
     // Project each visible sprite's feet and head to the screen and test the click against
@@ -1587,6 +1592,7 @@ async function start() {
     const now = Date.now(),
       realSecond = Math.floor(now / 1000);
     const simulationTick = clock.tickAt(now);
+    if(ready)updateWilderness(view.x,view.z,view.halfHeight,scaleValueForHalfHeight(view.halfHeight),projectionTransition,projectTransportGround);
     if (realSecond !== lastSimulationRealSecond || lastResidentDetailVisible !== smallDetailsVisible) {
       lastResidentDetailVisible = smallDetailsVisible;
       if (view.halfHeight < 900)
@@ -1931,6 +1937,7 @@ async function start() {
           storeys: feature.house?.storeys ?? (feature.kind === "keep" ? 3 : feature.service === "inn" ? 2 : 1),
         }));
       },
+      wilderness: { nearby:nearbyWilderness },
       geography: { continents, countries, cities, villages, roads, roadJunctions, roadConnections, roadNetwork: roadNetworkTelemetry, population: macroPopulationSummary },
       continuity: { inspect: inspectRegion, terrainQuery, telemetry: () => ({ ...continuityTelemetry(), worker: continuityWorkerState }), clearDetail: clearContinuityDetail, setOverlay: setContinuityOverlay },
       hydrology: { topology: hydrologyTopology, access: freshwaterAccessAt, lakes: macroLakes, mountains: mountainSystems, anchors: finalSurfaceEvidenceAnchors, recipes: drainageRecipes, sampleSource: naturalSurfaceAt, toLonLat: sourceToLonLat, telemetry: hydrologyTelemetry },

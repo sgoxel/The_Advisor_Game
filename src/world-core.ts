@@ -366,9 +366,11 @@ function surfaceModifiersAt(x: number, z: number, base: SurfaceBase) {
   if (place) {
     const dx = wrapSourceX(x - place.x),
       dz = z - place.z,
-      distance = Math.hypot(dx, dz),
-      radius = place.kind === "city" ? 430 : 90,
-      weight = 1 - smooth(clamp01((distance - radius) / 80)),
+      // Settlement dimensions are metres, not legacy source units (~15 m each).
+      // Keep a conservative inhabited envelope, rather than clearing kilometres of countryside.
+      distance = Math.hypot(dx * Math.cos(place.canonicalPosition.lat), dz) * CANONICAL_METRES_PER_SOURCE_UNIT,
+      radius = place.kind === "city" ? 1400 : 420,
+      weight = 1 - smooth(clamp01((distance - radius) / 180)),
       terraceHeight = boundedEarthwork(
         settlementTerraceHeight(place),
         base.groundHeight,

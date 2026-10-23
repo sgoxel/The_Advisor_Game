@@ -1,0 +1,5 @@
+#wilderness-labels { position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:4; }
+#wilderness-labels[hidden] { display:none; }
+.wilderness-label { position:absolute;top:0;left:0;pointer-events:auto;display:flex;align-items:center;gap:5px;max-width:155px;padding:4px 7px;border:1px solid #a9985b88;border-radius:5px;background:#20372edc;color:#e6d39b;font:12px Georgia,serif;box-shadow:0 2px 5px #0005;cursor:pointer; }
+.wilderness-label svg { width:21px;height:21px;flex-shrink:0; }
+.wilderness-label:hover,.wilderness-label:focus-visible { background:#385140;color:#fff1be;outline:1px solid #d9bf7c; }

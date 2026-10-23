@@ -1,3 +1,5 @@
+import { forestCoverForTile } from "./forest-cover.ts";
+import { sourceUnitsPerMetreAt } from "./physical-scale.ts";
 import {elevationToRenderY} from "./render-frame.ts";
 import type { ForestFamily, RGB } from "./climate.ts";
 import {
@@ -30,12 +32,19 @@ const TREE_COLORS: Readonly<Record<ForestFamily, readonly [RGB, RGB]>> = {
 };
 
 class Builder {
+  private origin = { x: 0, y: 0, z: 0, sx: 1, sy: 1, sz: 1 };
+  placeAt(x: number, y: number, z: number, sourceZ: number) {
+    const metric = sourceUnitsPerMetreAt(sourceZ);
+    this.origin = { x, y, z, sx: metric.x, sy: metric.z, sz: metric.z };
+  }
   private positions: number[] = [];
   private normals: number[] = [];
   private colors: number[] = [];
   private indices: number[] = [];
 
   private triangle(a: Point, b: Point, c: Point, tint: RGB) {
+    const o = this.origin, transform = (p: Point): Point => [o.x+p[0]*o.sx,o.y+p[1]*o.sy,o.z+p[2]*o.sz];
+    [a,b,c] = [transform(a),transform(b),transform(c)];
     const u = b.map((value, index) => value - a[index]),
       v = c.map((value, index) => value - a[index]),
       normal = [
@@ -111,7 +120,7 @@ function variantAngle(variant: number) {
 
 /**
  * Presentation-only mesh variation for canonical vegetation records. Logical
- * positions, ownership, density and exclusion remain in vegetation.ts; this
+ * positions and exclusion remain in vegetation.ts / forest-cover.ts; this
  * layer only changes silhouette using the stable per-feature variant.
  */
 export function buildVegetationGeometry(tile: Tile): {
@@ -126,9 +135,9 @@ export function buildVegetationGeometry(tile: Tile): {
     rock: RGB = [126, 132, 116];
 
   for (const feature of features) {
-    const x = feature.x - originX,
-      z = feature.z - originZ,
-      y = elevationToRenderY(feature.y),
+    if (feature.family) continue; // Forests use dense, physically scaled crowns below.
+    builder.placeAt(feature.x-originX,elevationToRenderY(feature.y),feature.z-originZ,feature.z);
+    const x = 0, z = 0, y = 0,
       size = feature.scale,
       angle = variantAngle(feature.variant),
       dx = Math.cos(angle),
@@ -162,104 +171,26 @@ export function buildVegetationGeometry(tile: Tile): {
       continue;
     }
 
-    const family = feature.family || "temperate-deciduous-mixed",
-      colors = TREE_COLORS[family],
-      h = (7.2 + (feature.variant % 5)) * size,
-      r = (2.2 + ((feature.variant >>> 5) % 7) / 10) * size;
-
-    if (family === "conifer-boreal") {
-      builder.box(x, y - 0.1, z, 0.58 * size, h * 0.5, 0.58 * size, timber);
-      builder.cone(
-        x,
-        y + h * 0.08,
-        z,
-        r,
-        h * 0.72,
-        colors[0],
-        6,
-        angle,
-        dx * r * 0.13,
-        dz * r * 0.13,
-      );
-      builder.cone(
-        x - dx * r * 0.08,
-        y + h * 0.38,
-        z - dz * r * 0.08,
-        r * 0.7,
-        h * 0.5,
-        colors[1],
-        6,
-        angle + 0.52,
-        -dz * r * 0.09,
-        dx * r * 0.09,
-      );
-    } else if (family === "warm-dry-woodland") {
-      builder.box(x, y - 0.1, z, 0.68 * size, h * 0.56, 0.68 * size, [91, 68, 46]);
-      builder.cone(
-        x,
-        y + h * 0.48,
-        z,
-        r * 1.25,
-        h * 0.2,
-        colors[0],
-        7,
-        angle,
-        dx * r * 0.2,
-        dz * r * 0.2,
-      );
-      builder.cone(
-        x + dx * r * 0.5,
-        y + h * 0.5,
-        z + dz * r * 0.5,
-        r * 0.7,
-        h * 0.16,
-        colors[1],
-        6,
-        angle + 0.4,
-        -dz * r * 0.12,
-        dx * r * 0.12,
-      );
-    } else {
-      builder.box(x, y - 0.1, z, 0.72 * size, h * 0.55, 0.72 * size, timber);
-      builder.cone(
-        x,
-        y + h * 0.43,
-        z,
-        r * 0.9,
-        h * 0.27,
-        colors[0],
-        8,
-        angle,
-        dx * r * 0.16,
-        dz * r * 0.16,
-      );
-      builder.cone(
-        x + dx * r * 0.5,
-        y + h * 0.46,
-        z + dz * r * 0.5,
-        r * 0.72,
-        h * 0.23,
-        colors[1],
-        7,
-        angle + 0.34,
-        -dz * r * 0.12,
-        dx * r * 0.12,
-      );
-      builder.cone(
-        x - dz * r * 0.46,
-        y + h * 0.45,
-        z + dx * r * 0.46,
-        r * 0.66,
-        h * 0.22,
-        colors[0],
-        7,
-        angle - 0.41,
-        dx * r * 0.1,
-        dz * r * 0.1,
-      );
-    }
+    const colors=TREE_COLORS["temperate-deciduous-mixed"],h=(7.2+(feature.variant%5))*size,r=2.6*size;
+    builder.box(x,y-.05,z,.6*size,h*.5,.6*size,timber);
+    builder.cone(x,y+h*.35,z,r,h*.55,colors[0],8,angle);
+    builder.cone(x+r*.4,y+h*.5,z,r*.7,h*.45,colors[1],7,angle+.3);
   }
 
+  const cover = forestCoverForTile(tile);
+  for (const patch of cover.patches) {
+    builder.placeAt(patch.x-originX,elevationToRenderY(patch.y),patch.z-originZ,patch.z);
+    const colors = TREE_COLORS[patch.family], r = patch.radiusM, h = patch.heightM, angle = variantAngle(patch.variant);
+    if (cover.fine) builder.box(0,-.05,0,.48,h*.55,.48,timber);
+    if (patch.family === "conifer-boreal" && cover.fine) {
+      builder.cone(0,h*.18,0,r,h*.7,colors[0],6,angle);
+      builder.cone(0,h*.46,0,r*.74,h*.54,colors[1],6,angle+.25);
+    } else {
+      builder.cone(0,cover.fine?h*.4:.05,0,r,cover.fine?h*.5:h*.9,colors[0],7,angle,r*.12,0);
+      builder.cone(r*.4,cover.fine?h*.48:h*.1,r*.15,r*.7,cover.fine?h*.45:h*.83,colors[1],6,angle+.4);
+      builder.cone(-r*.32,cover.fine?h*.45:h*.08,-r*.22,r*.68,cover.fine?h*.42:h*.8,colors[0],6,angle-.3);
+    }
+  }
   const geometry = builder.finish(),
     triangles = geometry.indices.length / 3,
     estimatedVertices = triangles * 3,
@@ -271,6 +202,12 @@ export function buildVegetationGeometry(tile: Tile): {
       ...telemetry,
       triangles,
       estimatedBytes,
+      trees: features.filter(f=>f.kind==="tree"&&!f.family).length + cover.patches.length,
+      visibleInstances: features.filter(f=>!f.family).length + cover.patches.length,
+      maxInstances: Math.max(telemetry.maxInstances, cover.fine ? 320 : 512),
+      maxTriangles: Math.max(telemetry.maxTriangles, 8192),
+      drawCalls: triangles ? 1 : 0, materialCount: triangles ? 1 : 0,
+      forestRepresentation: cover.fine ? "trees" : "canopy",
     },
   };
 }

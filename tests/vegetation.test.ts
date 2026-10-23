@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { cities, nearestPlace } from "../src/geography.ts";
-import { wrapSourceX } from "../src/planet.ts";
+import { CANONICAL_METRES_PER_SOURCE_UNIT, wrapSourceX } from "../src/planet.ts";
 import { buildVegetationGeometry } from "../src/vegetation-render.ts";
 import {
   vegetationForTile,
@@ -133,8 +133,8 @@ test("vegetation respects water, road and settlement exclusion authority", () =>
     assert.ok(surface.vegetationDensityScale > 0, `${feature.code} must survive canonical final-surface vegetation exclusion`);
     const place = nearestPlace(feature.x, feature.z);
     if (!place) continue;
-    const distance = Math.hypot(wrapSourceX(feature.x - place.x), feature.z - place.z),
-      radius = place.kind === "city" ? 445 : 96;
+    const distance = Math.hypot(wrapSourceX(feature.x - place.x)*Math.cos(place.canonicalPosition.lat), feature.z - place.z)*CANONICAL_METRES_PER_SOURCE_UNIT,
+      radius = place.kind === "city" ? 1400 : 420;
     assert.ok(distance > radius, `${feature.code} intrudes into ${place.id}`);
   }
 });
@@ -150,6 +150,7 @@ test("merged runtime vegetation geometry stays inside the tile budget", () => {
   assert.ok(built.telemetry.drawCalls <= 1);
   assert.ok(built.telemetry.materialCount <= 1);
   assert.ok(built.telemetry.estimatedBytes < 1024 * 1024);
-  assert.equal(built.telemetry.visibleInstances, telemetry.visibleInstances);
+  assert.ok(built.telemetry.visibleInstances <= built.telemetry.maxInstances);
+  assert.equal(built.telemetry.forestRepresentation,"canopy");
   assert.equal(built.telemetry.triangles, triangles);
 });

@@ -26,6 +26,7 @@ export type VegetationFeature = {
 };
 
 export type VegetationTelemetry = {
+  forestRepresentation?: "trees" | "canopy";
   candidateCount: number;
   visibleInstances: number;
   trees: number;

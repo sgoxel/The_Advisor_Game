@@ -1,3 +1,4 @@
+import { nearbyWilderness, type WildernessSite } from "./wilderness.ts";
 /**
  * NPC inspector popup: opened by clicking a resident on the map. Shows the
  * seeded identity (picture, name, trade, sex, age, temperament), abilities,
@@ -38,7 +39,7 @@ const bar = (value: number, max: number, hue: string) =>
 let root: HTMLElement | undefined;
 let currentCode = "";
 /** What the popup shows: a resident (refreshed with Fantasy Time), a building or a settlement. */
-let currentKind: "npc" | "building" | "settlement" | "" = "";
+let currentKind: "npc" | "building" | "settlement" | "wilderness" | "" = "";
 
 function placeOf(resident: Resident) {
   return places.find((place) => place.id === resident.settlement);
@@ -76,6 +77,8 @@ function install() {
   root.hidden = true;
   root.addEventListener("click", (event) => {
     if ((event.target as HTMLElement).closest("[data-close]")) hideNpcPopup();
+    const minimize=(event.target as HTMLElement).closest<HTMLButtonElement>("[data-minimize]"),content=root?.querySelector<HTMLElement>("[data-wilderness-content]");
+    if(minimize&&content){content.hidden=!content.hidden;minimize.textContent=content.hidden?"+":"−";minimize.setAttribute("aria-expanded",String(!content.hidden));minimize.setAttribute("aria-label",content.hidden?"Restore window":"Minimize window");}
   });
   document.body.append(root);
   addEventListener("keydown", (event: KeyboardEvent) => { if (event.key === "Escape") hideNpcPopup(); });
@@ -239,7 +242,7 @@ export function showSettlementPopup(place: Place, population: number) {
       .map((plot) => `${named(plot)} <span class="npc-muted">· ${plot.kind === "service" ? (SERVICE_TITLE[plot.service ?? ""] ?? "workshop").toLowerCase() : plot.kind}</span>`),
     fields = plan.plots.filter((plot) => plot.kind === "field"),
     farmland = fields.length ? `${fields.length} fields (${[...new Set(fields.map((field) => field.fieldForm))].join(", ")}) around the walls` : "",
-    sites = nearbyCriticalSites(place.x, place.z, metresToSource(40_000), 6).map((site) => ({
+    sites = [...nearbyCriticalSites(place.x, place.z, metresToSource(40_000), 6), ...nearbyWilderness(place.x,place.z,metresToSource(8000),8).map(site=>({...site,archetype:site.kind}))].map((site) => ({
       text: `${site.name} <span class="npc-muted">· ${site.kind === "ruin" ? "ruins" : site.archetype.replace("-", " ")}</span>`,
       distance: greatCircleDistance(place.canonicalPosition, site.canonicalPosition), dir: direction(place.x, place.z, site.x, site.z),
     })),
@@ -268,4 +271,12 @@ export function showSettlementPopup(place: Place, population: number) {
     <section><h3>Points of interest nearby</h3>${list(sites.map((site) => `${site.text} <span class="npc-muted">· ${km(site.distance)} ${site.dir}</span>`))}</section>
     <section><h3>Neighbouring settlements</h3>${list(neighbours.map(({ other, distance }) => `${escape(other.name)} <span class="npc-muted">· ${other.kind} · ${km(distance)} ${direction(place.x, place.z, other.x, other.z)}${linked.has(other.id) ? " · road" : ""}</span>`))}</section>`;
   root.hidden = false;
+}
+
+
+export function showWildernessPopup(site: WildernessSite) {
+  install();if(!root)return;currentCode=site.code;currentKind="wilderness";
+  root.setAttribute("aria-label",site.name);
+  root.innerHTML=`<div class="npc-head info-head"><div><div class="eyebrow">${escape(site.kind.replaceAll("-"," "))}</div><h2>${escape(site.name)}</h2></div><button class="npc-close" data-minimize aria-label="Minimize window" aria-expanded="true">−</button><button class="npc-close" data-close aria-label="Close">×</button></div><section data-wilderness-content><p>${escape(site.description)}</p><p class="npc-muted">Elevation ${Math.round(site.canonicalPosition.elevation)} m</p></section>`;
+  root.hidden=false;
 }

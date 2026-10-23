@@ -9,7 +9,7 @@ type Tint = readonly [number, number, number];
 
 export const SITE_GEOMETRY_MAX_TILE_SIZE = 128;
 
-class SiteBuilder {
+export class SiteBuilder {
   private readonly p: number[] = [];
   private readonly n: number[] = [];
   private readonly c: number[] = [];
@@ -28,7 +28,7 @@ class SiteBuilder {
     this.i.push(start, start + 1, start + 2);
   }
 
-  private quad(a: Point, b: Point, c: Point, d: Point, tint: Tint) {
+  quad(a: Point, b: Point, c: Point, d: Point, tint: Tint) {
     this.triangle(a, b, c, tint);
     this.triangle(a, c, d, tint);
   }
@@ -56,7 +56,7 @@ class SiteBuilder {
   }
 }
 
-function mergeGeometry(a: Geometry, b: Geometry): Geometry {
+export function mergeGeometry(a: Geometry, b: Geometry): Geometry {
   if (!b.indices.length) return a;
   const positions = new Float32Array(a.positions.length + b.positions.length),
     normals = new Float32Array(a.normals.length + b.normals.length),
