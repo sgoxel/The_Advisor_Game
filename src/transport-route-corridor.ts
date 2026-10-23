@@ -17,7 +17,7 @@ const physicalMatch = (a: { x: number; z: number } | null | undefined, b: Node) 
 export type CorridorStation = Readonly<{ x: number; z: number; edgeCode: string; joinedEdgeCode?: string; junctionOwnerCodes?: readonly string[] }>;
 type Plan = Readonly<
   | { status: "invalid"; stations: readonly CorridorStation[] }
-  | { status: "over-budget"; stations: readonly CorridorStation[] }
+  | { status: "over-budget"; reason: "raw-source-waypoints" | "sample-stations"; edgeCode: string; stations: readonly CorridorStation[] }
   | { status: "ready"; stations: readonly CorridorStation[] }
 >;
 const EMPTY = Object.freeze([] as CorridorStation[]);
@@ -56,7 +56,7 @@ export function planTransportRouteCorridor(
     if (!edge || !edge.centerline || edge.centerline.length < 2)
       return Object.freeze({ status: "invalid", stations: EMPTY });
     if (edge.centerline.length > remainingSourcePoints)
-      return Object.freeze({ status: "over-budget", stations: EMPTY });
+      return Object.freeze({ status: "over-budget", reason: "raw-source-waypoints", edgeCode: code, stations: EMPTY });
     remainingSourcePoints -= edge.centerline.length;
     const forward = edge.from === at;
     if (!forward && edge.to !== at) return Object.freeze({ status: "invalid", stations: EMPTY });
@@ -116,7 +116,7 @@ export function planTransportRouteCorridor(
       }
       const additional = steps + (stations.length ? 0 : 1);
       if (!Number.isSafeInteger(steps) || stations.length + additional > ROUTE_CORRIDOR_STATION_LIMIT)
-        return Object.freeze({ status: "over-budget", stations: EMPTY });
+        return Object.freeze({ status: "over-budget", reason: "sample-stations", edgeCode: code, stations: EMPTY });
       for (let step = stations.length ? 1 : 0; step <= steps; step++) {
         const first = stations.length === 0, originOwners = first ? ownersAt(at) : undefined;
         if (originOwners && !originOwners.includes(code))
