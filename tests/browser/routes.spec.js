@@ -112,3 +112,55 @@ test("phone route preview exposes the map and never labels map focus as travel",
   expect(await page.evaluate(() => window.advisorRoutes.activeId())).toBeTruthy();
   expect(errors).toEqual([]);
 });
+
+
+test("S005 selected route has a bounded first display opportunity at four canonical scales", async ({ page }) => {
+  test.setTimeout(360000);
+  const errors = [];
+  page.on("pageerror", error => errors.push(error.message));
+  // Software WebGL2 emulation, not a physical-device FPS or paint-time proof.
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, "gpu", { value: undefined, configurable: true }));
+  await page.goto("/");
+  await page.waitForFunction(() => window.advisorWorld?.state.ready && window.advisorTransport?.network?.roadEdges?.length);
+  const selected = await page.evaluate(() => window.advisorTransport.selectEvidence("junction"));
+  expect(selected?.kind).toBe("junction");
+
+  let previousRoute = null;
+  for (const viewport of [{ width: 1920, height: 1080 }, { width: 1080, height: 1920 }]) {
+    await page.setViewportSize(viewport);
+    for (const scale of ["20", "50", "100", "250"]) {
+      await page.locator("#transport-close").click();
+      await page.selectOption("#map-scale", scale);
+      await page.waitForFunction(value => window.advisorWorld.state.scaleLabel === `1/${value}`, scale);
+      await page.evaluate(() => window.advisorTransport.open());
+      const focusBefore = await page.evaluate(() => window.advisorWorld.state.navigation.focus);
+      await page.locator("#transport-site-route").click();
+      await page.waitForFunction(() => {
+        const t = window.advisorTransport.telemetry();
+        return t.firstSiteRouteFrameMs !== null;
+      }, null, { timeout: 90000 });
+      const result = await page.evaluate(() => ({
+        ...window.advisorTransport.telemetry(),
+        focus: window.advisorWorld.state.navigation.focus,
+        answer: document.getElementById("transport-site-answer").innerText,
+      }));
+      expect(result.firstSiteRouteStatus).toBe("canonical walking graph preview ready");
+      expect(result.firstSiteRouteContext).toMatchObject({
+        scaleLabel: `1/${scale}`,
+        viewportWidth: viewport.width,
+        viewportHeight: viewport.height,
+      });
+      expect(result.firstSiteRouteMs).toBeGreaterThanOrEqual(0);
+      expect(result.firstSiteRouteFrameMs).toBeGreaterThanOrEqual(result.firstSiteRouteMs);
+      expect(result.firstSiteRouteFrameMs).toBeLessThan(10000);
+      expect(result.answer).toContain("Measured graph distance");
+      expect(result.answer).toContain("Estimated good-road time");
+      expect(result.answer).toContain("character has not moved");
+      expect(result.focus).toEqual(focusBefore);
+      if (previousRoute !== null) expect(result.answer).toBe(previousRoute);
+      previousRoute = result.answer;
+    }
+  }
+  expect(errors).toEqual([]);
+});
