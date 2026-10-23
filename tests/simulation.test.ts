@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { cities, countries, villages } from "../src/geography.ts";
 import { greatCircleDistance } from "../src/planet.ts";
-import { finalSurfaceAt } from "../src/world.ts";
+import { featuresFor, finalSurfaceAt, resolvedSettlementHomeDoorFor, tileForPosition } from "../src/world.ts";
 import {
   LazySimulation,
   RESIDENTIAL_CAPACITY,
@@ -103,6 +103,27 @@ test("building occupancy requires the exact canonical site, not nearby indoor st
   assert.equal(residentOccupiesBuilding({ ...resident, route: `${villages[0].code}/MARKET` }, service), false);
   assert.equal(residentOccupiesBuilding({ ...resident, route: `${cities[0].code}/INN` }, service), false,
     "residents from another settlement do not occupy this inn");
+});
+
+test("house inspection resolves the rendered legal doorway, never an unverified first candidate", () => {
+  let matched = 0;
+  for (const [place, indexes] of [[villages[0], [0, 3, 12]], [cities[0], [0, 6]]] as const)
+    for (const index of indexes) {
+      const resident = residentFoundationAt(place, index),
+        door = resolvedSettlementHomeDoorFor(place, index);
+      assert.deepEqual(resolvedSettlementHomeDoorFor(place, index), door,
+        "house focus must be deterministic without camera or presentation state");
+      if (!door) continue; // A rejected house must not fabricate an entrance.
+      assert.ok(finalSurfaceAt(door.x, door.z).walkable, "resolved doorway must lie on legal terrain");
+      const feature = featuresFor(tileForPosition(door.x, door.z, 12))
+        .find(entry => entry.kind === "residence" && entry.ownerId === resident.code);
+      if (feature) {
+        assert.equal(feature.entranceX, door.x, "inspector focus must match the rendered door X");
+        assert.equal(feature.entranceZ, door.z, "inspector focus must match the rendered door Z");
+        matched++;
+      }
+    }
+  assert.ok(matched > 0, "compare against at least one actually rendered residence");
 });
 
 test("resident captions are short while authoritative site IDs stay unchanged", () => {
