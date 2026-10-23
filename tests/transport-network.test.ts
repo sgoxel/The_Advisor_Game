@@ -27,7 +27,7 @@ import { finalSurfaceAt, finalSurfaceLocalSlopeAt } from "../src/world-core.ts";
 import { createTransportJunctionLookup } from "../src/transport-junction-index.ts";
 import { siteTransportNetwork } from "../src/site-transport-network.ts";
 import { criticalSites } from "../src/sites.ts";
-import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
+import { createTransportWalkingIndex, nearestWalkingRoadEndpoint, selectedWalkingPreviewOrigin, selectedBridgePreviewDestinationBank, transportWalkingRoute, transportWalkingRouteThroughEdge, transportWalkingRouteViaRequiredEdge, transportWalkingRouteToNearest, visibleWalkingPreviewEdgeCodes } from "../src/transport-walking-route.ts";
 import { SITE_ACCESS_STATION_LIMIT, roadEndpointMeetsTerminal, siteAccessBranchOnRoute, siteAccessParentRoadCode, siteAccessRoadStations, siteAccessSampleVerdict } from "../src/transport-site-access.ts";
 import { planTransportRouteCorridor, planTransportRouteCorridorByLeg, ROUTE_CORRIDOR_EXTENDED_STATION_LIMIT, ROUTE_CORRIDOR_STATION_LIMIT, sampledCorridorStationFailure, sampledCorridorStationPass } from "../src/transport-route-corridor.ts";
 import type { FinalSurface } from "../src/final-surface.ts";
@@ -451,6 +451,45 @@ test("S005 unsafe canonical roads can be excluded without inventing a physically
     "unbounded caller-supplied exclusion sets must fail closed before a graph search");
   assert.ok((alternate?.exploredNodes ?? Infinity) <= index.nodeCount,
     "an alternative remains one finite Dijkstra graph preview, not a physical PASS");
+});
+
+test("S005 bounded gate-to-site candidate retains the required bridge without unsafe road retracing", () => {
+  const network = {
+    nodes: ["G", "Y", "L", "R", "S"].map(code => ({ code })),
+    roadEdges: [
+      { code: "gate", from: "G", to: "Y", surfaceLengthM: 1, fantasyWalkSeconds: 10 },
+      { code: "unsafe", from: "Y", to: "L", surfaceLengthM: 1, fantasyWalkSeconds: 10 },
+      { code: "safe", from: "G", to: "L", surfaceLengthM: 7, fantasyWalkSeconds: 70 },
+      { code: "bridge", from: "L", to: "R", surfaceLengthM: 2, fantasyWalkSeconds: 20 },
+      { code: "site", from: "R", to: "S", surfaceLengthM: 1, fantasyWalkSeconds: 10 },
+      { code: "bypass", from: "G", to: "S", surfaceLengthM: 1, fantasyWalkSeconds: 10 },
+    ],
+  } as unknown as TransportNetwork;
+  const index = createTransportWalkingIndex(network), bridge = network.roadEdges[3];
+  assert.deepEqual(transportWalkingRoute(index, "G", "S")?.edgeCodes, ["bypass"],
+    "ordinary shortest graph route may bypass the required owned bridge");
+  assert.deepEqual(transportWalkingRouteViaRequiredEdge(index, "G", "S", bridge)?.edgeCodes,
+    ["gate", "unsafe", "bridge", "site"],
+    "without safety evidence the cheaper constrained graph route can still contain unsafe road");
+  const exclusions = new Set(["unsafe"]);
+  const retained = transportWalkingRouteViaRequiredEdge(index, "G", "S", bridge, exclusions);
+  assert.deepEqual(retained?.edgeCodes, ["safe", "bridge", "site"],
+    "unsafe-road exclusion must still cross the exact requested bridge once");
+  assert.equal(retained?.distanceM, 10);
+  assert.equal(retained?.fantasyWalkSeconds, 100);
+  assert.ok((retained?.exploredNodes ?? Infinity) <= 2 * index.nodeCount);
+  assert.deepEqual(transportWalkingRouteViaRequiredEdge(index, "G", "S", bridge,
+    new Set(["unsafe"])), retained, "graph candidate is stable across repeated immutable exclusions");
+  assert.deepEqual([...exclusions], ["unsafe"], "search must never mutate caller exclusions");
+  assert.equal(transportWalkingRouteViaRequiredEdge(index, "G", "S", bridge,
+    new Set(["bridge"])), null, "excluded mandatory bridge must fail closed");
+  assert.equal(transportWalkingRouteViaRequiredEdge(index, "G", "S", bridge,
+    new Set(["unsafe", "safe"])), null, "no accepted non-retracing required bridge candidate");
+  assert.equal(transportWalkingRouteViaRequiredEdge(index, "G", "S",
+    { ...bridge, code: "fabricated" }), null, "invented bridge identity is not accepted");
+  assert.equal(transportWalkingRouteViaRequiredEdge(index, "G", "S", bridge,
+    new Set(Array.from({ length: 13 }, (_, i) => `unsafe-${i}`))), null,
+    "bridge-constrained attempts preserve existing finite exclusion budget");
 });
 
 test("S005 selected border bridge previews the far-bank country's site rather than retracing the crossing", () => {
@@ -1913,6 +1952,30 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
       offendingRoad: detourPlan.edgeCode } : {}),
     sampledStations: detourPlan?.status === "ready" ? detourPlan.stations.length : 0,
     caveat: "graph/source recipe only; local grades and continuous physical travel unverified",
+  }));
+  const bridgeDetour = transportWalkingRouteViaRequiredEdge(
+    index, villageNode!.code, site!.code, crossing!, new Set([firstUnsafeRoad]));
+  if (bridgeDetour) {
+    assert.equal(bridgeDetour.edgeCodes.filter(code => code === crossing!.code).length, 1,
+      "real bridge-constrained candidate must traverse the selected bridge exactly once");
+    assert.ok(!bridgeDetour.edgeCodes.includes(firstUnsafeRoad),
+      "selected bridge candidate may not silently reuse known unsafe source road");
+    assert.equal(new Set(bridgeDetour.edgeCodes).size, bridgeDetour.edgeCodes.length);
+    assert.ok(bridgeDetour.exploredNodes <= 2 * index.nodeCount);
+  }
+  const bridgeDetourPlan = bridgeDetour ? planTransportRouteCorridorByLeg(
+    bridgeDetour, edgeByCode, nodeByCode, index.adjacency) : null;
+  console.log("S005_REAL_SEED_REQUIRED_BRIDGE_DETOUR", JSON.stringify({
+    excludedRoad: firstUnsafeRoad,
+    graph: bridgeDetour ? "candidate" : "not-found-by-bounded-strategy",
+    roads: bridgeDetour?.edgeCodes.length ?? 0,
+    preservesSelectedY: bridgeDetour?.edgeCodes.includes(witness!.toYEdge.code) ?? false,
+    preservesSelectedBridge: bridgeDetour?.edgeCodes.includes(crossing!.code) ?? false,
+    sourceRecipe: bridgeDetourPlan?.status ?? "not-available",
+    ...(bridgeDetourPlan?.status === "over-budget" ? {
+      reason: bridgeDetourPlan.reason, offendingRoad: bridgeDetourPlan.edgeCode } : {}),
+    sampledStations: bridgeDetourPlan?.status === "ready" ? bridgeDetourPlan.stations.length : 0,
+    caveat: "bounded candidate, not exhaustive; not final-surface or actor passage",
   }));
   // Exercise the SAME real gate road -> Y -> selected river crossing -> site
   // chain in the player-facing physical corridor planner. A too-long route is honestly
