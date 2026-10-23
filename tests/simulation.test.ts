@@ -13,12 +13,13 @@ import {
   residentAt,
   residentFoundationAt,
   continuousWalkableOffsetSegment,
+  timedWalkOnPath,
   lastReachableRoutineStop,
   residentOccupiesBuilding,
   readableResidentSite,
 } from "../src/simulation.ts";
 
-import { localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
+import { localDayIndex, localSecondOfDay, localWeekday, tickAtLocalTime, timeZoneOffsetHours } from "../src/clock.ts";
 import { daylightAt } from "../src/daylight.ts";
 import { dailyPlan, traitsFor } from "../src/routines.ts";
 
@@ -37,6 +38,38 @@ test("continuous walking segments reject interior water or blocked cuts without 
     "an unobstructed straight local segment remains eligible");
   assert.equal(continuousWalkableOffsetSegment(goal, start, point => point.eastM < 5 || point.eastM > 7), false,
     "crossing legality cannot depend on direction");
+});
+
+test("time-bounded legal paths never jump to an unfinished endpoint", () => {
+  const path = [
+    { eastM: 0, northM: 0 }, { eastM: 30, northM: 0 },
+    { eastM: 30, northM: 40 },
+  ];
+  const start = timedWalkOnPath(path, 0), midway = timedWalkOnPath(path, 35),
+    arrived = timedWalkOnPath(path, 70), replay = timedWalkOnPath(path, 35);
+  assert.deepEqual(start.offset, path[0]);
+  assert.deepEqual(midway.offset, { eastM: 30, northM: 5 });
+  assert.deepEqual(arrived.offset, path[2]);
+  assert.equal(midway.progress, .5);
+  assert.deepEqual(midway, replay);
+});
+
+test("sampled daily schedule transitions do not teleport between sites", () => {
+  for (const [place, indices] of [[villages[0], [0, 3, 6, 7]], [cities[0], [3, 6]]] as const)
+    for (const index of indices) {
+      const resident = residentFoundationAt(place, index), lon = place.canonicalPosition.lon,
+        noon = tickAtLocalTime(WORKDAY, 12 * HOUR, lon),
+        weekday = localWeekday(noon, lon), day = localDayIndex(noon, lon),
+        plan = dailyPlan({ code: resident.code, role: resident.role, ageGroup: resident.ageGroup, guardShift: resident.guardShift }, resident.traits, day, weekday);
+      for (let i = 1; i < plan.length; i++) {
+        if (plan[i].anchor === plan[i - 1].anchor) continue;
+        const atStep = tickAtLocalTime(WORKDAY, plan[i].start, lon),
+          before = residentAt(place, index, atStep - 1),
+          after = residentAt(place, index, atStep + 1),
+          travelledM = greatCircleDistance(before.position, after.position);
+        assert.ok(travelledM <= 3, `${resident.code} jumped ${travelledM.toFixed(1)}m at ${plan[i].start}`);
+      }
+    }
 });
 
 test("a blocked leg never becomes the origin of a later resident activity", () => {
