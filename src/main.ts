@@ -2,6 +2,10 @@ import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibl
 import {elevationToRenderY, visibleSurfaceElevation} from "./render-frame.ts";
 import * as pc from "playcanvas";
 import { CHARACTER_TYPES, characterSpriteM } from "./characters.ts";
+import { metresToSource } from "./physical-scale.ts";
+import { hideNpcPopup, npcPopupCode, showNpcPopup } from "./npc-popup.ts";
+import type { Resident } from "./simulation.ts";
+import { wrapSourceX } from "./planet.ts";
 import "./style.css";
 import {
   WORLD_SEED,
@@ -221,6 +225,10 @@ const pressed = new Set<string>();
 const simulation = new LazySimulation();
 const clock = new FantasyClock();
 const actorSources = new Map<pc.Entity, { x: number; z: number }>();
+/** Resident drawn by each actor, for click picking. */
+const actorResidents = new Map<pc.Entity, Resident>();
+/** Set once the renderer exists: the resident whose sprite is under a screen point, if any. */
+let pickResidentAt: ((clientX: number, clientY: number) => Resident | undefined) | undefined;
 let navigationFingerprint = "";
 let rulerState = {
   pixels: 0,
@@ -945,6 +953,16 @@ function inspectCell(screenX: number, screenY: number) {
     selectedCode = canonicalId;
     $("cell-panel").hidden = false;
     $("cell-biome").textContent = surface.material;
+    // Seeded proper name of the nearest named building, street, gate or wall within ~15 m.
+    {
+      const radius = metresToSource(15), named = (featuresFor(tileForPosition(source.x, source.z, 12)) as { name?: string; kind: string; x: number; z: number; service?: string }[])
+        .filter((feature) => feature.name)
+        .map((feature) => ({ feature, distance: Math.hypot(wrapSourceX(feature.x - source.x), feature.z - source.z) }))
+        .filter((entry) => entry.distance <= radius)
+        .sort((a, b) => a.distance - b.distance)[0]?.feature;
+      $("cell-name").hidden = !named;
+      $("cell-name").textContent = named ? `${named.name} · ${(named.service || named.kind).replaceAll("-", " ")}` : "";
+    }
     $("cell-coordinates").textContent =
       `${coordinateLabel(canonical, true)} · ${hierarchy.parent.parent.parent.landform}`;
     $("cell-code").textContent = canonicalId;
@@ -1046,8 +1064,12 @@ function setupControls() {
     } else panScreen(previous.x, previous.y, event.clientX, event.clientY);
   });
   canvas.addEventListener("pointerup", (event) => {
-    if (!moved && pointers.size === 1 && projectionTransition <= 0.001)
-      inspectCell(event.clientX, event.clientY);
+    if (!moved && pointers.size === 1 && projectionTransition <= 0.001) {
+      // A click on a villager opens its character popup; anywhere else inspects the ground.
+      const resident = pickResidentAt?.(event.clientX, event.clientY);
+      if (resident) showNpcPopup(resident, simulation.tick);
+      else { hideNpcPopup(); inspectCell(event.clientX, event.clientY); }
+    }
     pointers.delete(event.pointerId);
     lastPinch = 0;
   });
@@ -1351,6 +1373,27 @@ async function start() {
   simulation.setFocus(villages[0]);
   simulation.advance(clock.tickAt(Date.now()));
   const actors: pc.Entity[] = [];
+  pickResidentAt = (clientX: number, clientY: number) => {
+    // Project each visible sprite's feet and head to the screen and test the click against
+    // that upright rectangle (padded so small, distant villagers stay clickable). Nearest wins.
+    const rect = canvas.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top,
+      lens = camera.camera!, feet = new pc.Vec3(), head = new pc.Vec3();
+    let best: Resident | undefined, bestDistance = Infinity;
+    for (const actor of actors) {
+      const resident = actorResidents.get(actor);
+      if (!actor.enabled || !resident) continue;
+      const scale = actor.getLocalScale(), up = actor.getRotation().transformVector(new pc.Vec3(0, 0, -scale.z)), base = actor.getPosition(),
+        bottom = base.clone().sub(up.clone().mulScalar(.5)), top = base.clone().add(up.clone().mulScalar(.5));
+      lens.worldToScreen(bottom, feet);
+      lens.worldToScreen(top, head);
+      const height = Math.abs(feet.y - head.y), halfWidth = Math.max(10, height * (scale.x / Math.max(1e-6, scale.z)) * .5 + 4),
+        minY = Math.min(feet.y, head.y) - 4, maxY = Math.max(feet.y, head.y) + 4, cx = (feet.x + head.x) * .5;
+      if (x < cx - halfWidth || x > cx + halfWidth || y < Math.min(minY, feet.y - 18) || y > maxY) continue;
+      const distance = Math.hypot(x - cx, y - (feet.y + head.y) * .5);
+      if (distance < bestDistance) { best = resident; bestDistance = distance; }
+    }
+    return best;
+  };
   let lastActorFacingX = Number.NaN,
     lastActorFacingY = Number.NaN,
     lastActorFacingZ = Number.NaN,
@@ -1392,6 +1435,8 @@ async function start() {
         settlementDetailVisible && view.halfHeight < 240
           ? simulation
               .focusedResidents(view.x, view.z, view.halfHeight * 1.5, 96)
+              // People asleep, eating or working inside a building are not standing on the street.
+              .filter((resident) => !resident.indoors)
           : [];
       for (let i = 0; i < visible.length; i++) {
         if (!actors[i]) {
@@ -1414,10 +1459,19 @@ async function start() {
         actors[i].enabled = true;
         orientActor(actors[i]);
         actorSources.set(actors[i], { x: visible[i].x, z: visible[i].z });
+        actorResidents.set(actors[i], visible[i]);
         positionActor(actors[i], visible[i].x, visible[i].z);
       }
-      for (let i = visible.length; i < actors.length; i++)
+      for (let i = visible.length; i < actors.length; i++) {
         actors[i].enabled = false;
+        actorResidents.delete(actors[i]);
+      }
+      // Keep an open character popup in step with Fantasy Time.
+      const popupCode = npcPopupCode();
+      if (popupCode) {
+        const resident = simulation.residentByCode(popupCode);
+        if (resident) showNpcPopup(resident, simulation.tick);
+      }
       $("simulation-status").textContent =
         `${simulation.stats.logicalResidents.toLocaleString()} logical residents · ${visible.length} visible actors · ${actors.length} pooled actors · ${simulation.stats.query.evaluatedResidents.toLocaleString()} spatial candidates evaluated.`;
     }

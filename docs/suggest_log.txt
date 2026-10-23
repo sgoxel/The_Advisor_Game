@@ -48,3 +48,5 @@
 2026-10-20 22:18 +03:00 — WP-S006-002-001, AGENT #1, completion suggestion: When standalone S006 interior implementation WPs are scheduled, retain tests that distinguish first authoritative entry decision, first usable crossing and decorative settle; inspect doorway/roof/2D-resident occlusion and exact focus return on WebGPU and WebGL2. Measure sustained CPU/GPU/memory behavior on physical phone/tablet hardware separately from emulated viewport layout. Suggestions only; no runtime interiors implemented here.
 
 2026-10-22 | Owner settlement layout (AGENT #2): archetype-specific city street plans (riverside quay, hillside contours, fortified wards) could replace the single radial-ring plan; lots could be generated per chunk to avoid the one-off lot table per city.
+
+2026-10-23 | Owner NPC routines (AGENT #2): households (families sharing a house), a chapel building for clergy, weather/season effects on routines, and road-following walking paths instead of straight corridors.

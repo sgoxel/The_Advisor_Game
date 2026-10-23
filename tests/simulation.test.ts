@@ -14,7 +14,14 @@ import {
   residentFoundationAt,
 } from "../src/simulation.ts";
 
+import { fantasySecondOfDay, fantasyWeekday, tickAtFantasyTime } from "../src/clock.ts";
+import { dailyPlan, traitsFor } from "../src/routines.ts";
+
 const HOUR = 3600;
+/** Tick at which calendar day 1 shows this HUD time (routines follow the displayed Fantasy Time). */
+const at = (hour: number, day = 1) => tickAtFantasyTime(day, hour * HOUR);
+/** First calendar day after the origin that is a workday (weekday 0-5). */
+const WORKDAY = [1, 2, 3, 4, 5, 6, 7].find((day) => fantasyWeekday(tickAtFantasyTime(day, 12 * HOUR)) !== 6)!;
 
 test("every resident foundation owns one stable canonical house and entrance", () => {
   assert.equal(RESIDENTIAL_CAPACITY, 1);
@@ -67,7 +74,7 @@ test("every village has required service staff and continuous seeded gate covera
 });
 
 test("resident schedule state is analytical from absolute fantasy time", () => {
-  const village = villages[0], tick = 14 * HOUR + 1234,
+  const village = villages[0], tick = at(14, WORKDAY) + 1234,
     direct = residentAt(village, 3, tick), simulation = new LazySimulation();
   simulation.setFocus(village);
   simulation.advance(1);
@@ -82,7 +89,7 @@ test("resident schedule state is analytical from absolute fantasy time", () => {
 
 test("analytical resident positions stay on walkable final surface", () => {
   const village = villages[0];
-  for (const tick of [2 * HOUR, 6.5 * HOUR, 11 * HOUR, 18.5 * HOUR, 22 * HOUR])
+  for (const tick of [at(2), at(6.5), at(11), at(18.5), at(22)])
     for (const index of [0, 3, 6, 12, 31, 57, 79]) {
       const resident = residentAt(village, index, tick),
         surface = finalSurfaceAt(resident.x, resident.z);
@@ -94,15 +101,16 @@ test("sampled commute states remain walkable and spatially continuous", () => {
   const fixtures = [villages[0], villages[Math.min(7, villages.length - 1)], cities[0]];
   for (const place of fixtures)
     for (const index of [0, 3, 6, Math.min(17, populationOf(place) - 1)])
-      for (const start of [6 * HOUR, 18 * HOUR]) {
+      for (const start of [at(6, WORKDAY), at(18, WORKDAY)]) {
         let previous = residentAt(place, index, start);
         for (let offset = 5 * 60; offset <= HOUR; offset += 5 * 60) {
           const current = residentAt(place, index, start + offset),
             surface = finalSurfaceAt(current.x, current.z),
             stepM = greatCircleDistance(previous.position, current.position);
           assert.ok(surface.walkable, `${current.code} commute sample is not walkable`);
+          // Walking pace: never faster than the canonical good-road speed (1 m/s) between five-minute samples.
           assert.ok(
-            stepM <= 60,
+            stepM <= 1.05 * 5 * 60,
             `${current.code} commute jumped ${stepM.toFixed(1)}m between five-minute samples`,
           );
           previous = current;
@@ -161,4 +169,60 @@ test("unload and revisit reconstruct the same resident from seed and absolute ti
   const replay = simulation.residentByCode(code, tick);
   assert.deepEqual(replay, direct);
   assert.ok(simulation.stats.reconstructionCount >= 2);
+});
+test("traits, mood and daily routines are reproducible from the SEED and follow the fantasy clock", () => {
+  const village = villages[0];
+  for (const index of [0, 3, 9, 25, 61]) {
+    const f = residentFoundationAt(village, index);
+    assert.deepEqual(traitsFor(f.code, f.role, f.ageGroup), f.traits, "traits are a pure function of the seeded code");
+    for (const value of Object.values(f.traits.abilities)) assert.ok(value >= 3 && value <= 18);
+    for (const value of Object.values(f.traits.personality)) assert.ok(value >= 0 && value <= 1);
+    const plan = dailyPlan({ code: f.code, role: f.role, ageGroup: f.ageGroup, guardShift: f.guardShift }, f.traits, 9, 2);
+    assert.deepEqual(dailyPlan({ code: f.code, role: f.role, ageGroup: f.ageGroup, guardShift: f.guardShift }, f.traits, 9, 2), plan);
+    assert.equal(plan[0].start, 0, "every plan starts at midnight");
+    assert.equal(plan[0].anchor, plan[plan.length - 1].anchor, "days join without a jump");
+    for (let i = 1; i < plan.length; i++) assert.ok(plan[i].start >= plan[i - 1].start);
+  }
+  const resident = residentAt(village, 9, at(10)), replay = residentAt(village, 9, at(10));
+  assert.deepEqual(replay, resident);
+  assert.equal(fantasySecondOfDay(at(10)), 10 * HOUR, "simulation time of day equals the HUD clock");
+});
+
+test("an ordinary workday: asleep at night, breakfast at home, at the workplace by day, home or inn at dinner", () => {
+  const village = villages[0];
+  let checked = 0;
+  for (let index = 6; index < populationOf(village) && checked < 12; index++) {
+    const f = residentFoundationAt(village, index);
+    if (f.role === "guard" || f.ageGroup !== "adult" || f.role === "innkeeper") continue;
+    checked++;
+    const night = residentAt(village, index, at(2, WORKDAY)), noon = residentAt(village, index, at(10.5, WORKDAY)),
+      evening = residentAt(village, index, at(19.5, WORKDAY)), late = residentAt(village, index, at(23.9, WORKDAY));
+    assert.equal(night.activity, "sleep", `${f.code} sleeps at 02:00`);
+    assert.ok(night.indoors);
+    assert.ok(["work", "commute"].includes(noon.activity), `${f.code} works at 10:30 (got ${noon.activity})`);
+    assert.ok(["dinner", "commute", "socialise", "work"].includes(evening.activity), `${f.code} at 19:30: ${evening.activity}`);
+    assert.equal(late.activity, "sleep", `${f.code} is in bed before midnight`);
+    const morning = dailyPlan({ code: f.code, role: f.role, ageGroup: f.ageGroup }, f.traits, 0, 1).find((entry) => entry.kind === "breakfast");
+    assert.equal(morning?.anchor, "home", "breakfast is made at home");
+  }
+  assert.ok(checked >= 6);
+});
+
+test("seeded names: stable people, buildings and unique street names per settlement", async () => {
+  const { personName, buildingName, streetNames, familyName } = await import("../src/names.ts");
+  const village = villages[0], f = residentFoundationAt(village, 12);
+  assert.equal(f.name, personName(f.code, f.sex, village.continent), "a resident's name comes from the name generator");
+  assert.equal(residentFoundationAt(village, 12).name, f.name);
+  assert.match(f.name, /^[A-Z][a-z'A-Z]+ [A-Z][A-Za-z' ]+$/);
+  for (const continent of [0, 1, 2]) {
+    const names = new Set(Array.from({ length: 200 }, (_, i) => personName(`TEST/${continent}/${i}`, i % 2 ? "male" : "female", continent)));
+    assert.ok(names.size > 150, `culture ${continent} gives varied names`);
+  }
+  for (const city of [true, false]) {
+    const streets = streetNames(`TEST/STREETS/${city}`, 30, city);
+    assert.equal(new Set(streets).size, streets.length, "street names are unique within a settlement");
+  }
+  assert.equal(buildingName("inn", "PLOT/INN", "Alderwick", 0), buildingName("inn", "PLOT/INN", "Alderwick", 0));
+  assert.match(buildingName("inn", "PLOT/INN", "Alderwick", 0), /^The [A-Z][a-z]+ [A-Z][a-z]+$/);
+  assert.equal(buildingName("house", "PLOT/H", "Alderwick", 0, familyName("OWNER", 0)), `${familyName("OWNER", 0)} House`);
 });

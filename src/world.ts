@@ -1,4 +1,5 @@
 export * from "./world-core.ts";
+import { buildingName, familyName, gateName, streetNames, wallName, type BuildingKind } from "./names.ts";
 
 import {
   featuresFor as coreFeaturesFor,
@@ -42,6 +43,8 @@ type MorphologyFeature = {
   widthM?: number;
   depthM?: number;
   house?: HouseDimensions;
+  /** Seeded proper name (names.ts): "The Gilded Boar", "Tanner's Lane", "Ashford House"… */
+  name?: string;
 };
 type StreetHit = { id: string; width: number; distance: number; x: number; z: number };
 type Resolved = { x: number; z: number } | null;
@@ -194,7 +197,10 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
       // The door sits on the front wall (half the depth towards the street), never inside the footprint.
       edgeOffset = Math.min(distance * .9, plot.kind === "field" ? Math.max(metresToSource(2), Math.min(plot.width, plot.depth) * .42) : plot.depth * .5),
       door = street && distance > 0 ? { x: wrapSourceX(point.x + dx / distance * edgeOffset), z: point.z + dz / distance * edgeOffset } : point;
-    add(kind, point.x, point.z, digest(`${plot.id}/FEATURE`), `${place.id}/${plot.id}`, { service: plot.service, ownerId: plot.ownerId, capacity: plot.capacity, residents: plot.residents, label: plot.service || plot.house?.houseType || plot.kind, entranceX: door.x, entranceZ: door.z, yawRad: plot.yawRad, footprintWidth: plot.width, footprintDepth: plot.depth, widthM: plot.widthM, depthM: plot.depthM, house: plot.house, fieldForm: plot.fieldForm, urban: place.kind === "city" && kind === "residence" });
+    const owner = plot.ownerId ? familyName(plot.ownerId, place.continent) : undefined,
+      buildingKind = (plot.kind === "service" ? plot.service : plot.kind) as BuildingKind,
+      name = buildingName(buildingKind, plot.id, place.name, place.continent, owner, place.kind === "city");
+    add(kind, point.x, point.z, digest(`${plot.id}/FEATURE`), `${place.id}/${plot.id}`, { name, service: plot.service, ownerId: plot.ownerId, capacity: plot.capacity, residents: plot.residents, label: plot.service || plot.house?.houseType || plot.kind, entranceX: door.x, entranceZ: door.z, yawRad: plot.yawRad, footprintWidth: plot.width, footprintDepth: plot.depth, widthM: plot.widthM, depthM: plot.depthM, house: plot.house, fieldForm: plot.fieldForm, urban: place.kind === "city" && kind === "residence" });
     // A short walkway from the door to the street edge (never across the road itself).
     const pathLength = street ? distance - edgeOffset - street.width * .5 : 0;
     if ((kind === "residence" || kind === "service" || kind === "keep") && street && pathLength > metresToSource(1.2) && pathLength < metresToSource(40)) {
@@ -205,19 +211,20 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
   for (const place of localPlaces) {
     const extent = place.kind === "city" ? 76 : 36;
     if (Math.abs(wrapSourceX(place.x - tileCentreX)) > tile.size * .5 + extent || Math.abs(place.z - tileCentreZ) > tile.size * .5 + extent) continue;
-    const plan = settlementExteriorFor(place), resolution = resolveStaticPlan(place, plan), enclosure = enclosureStyleFor(place, plan);
-    for (const street of plan.streets) for (let index = 1; index < street.points.length; index++) {
+    const plan = settlementExteriorFor(place), resolution = resolveStaticPlan(place, plan), enclosure = enclosureStyleFor(place, plan),
+      streetNameList = streetNames(place.code, plan.streets.length, place.kind === "city"), wall = wallName(place.name, place.kind === "city");
+    for (let streetIndex = 0; streetIndex < plan.streets.length; streetIndex++) for (let index = 1, street = plan.streets[streetIndex]; index < street.points.length; index++) {
       const segments = visibleSettlementStreetSegments(place, plan, street.points[index - 1], street.points[index]);
       for (let part = 0; part < segments.length; part++) {
         const [a, b] = segments[part], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz);
-        if (length) add("street", wrapSourceX(a.x + dx * .5), a.z + dz * .5, Math.round(street.width * 10), `${place.id}/street/${index}/${street.id}${segments.length > 1 ? `/part/${part}` : ""}`, { yawRad: Math.atan2(dx, dz), footprintWidth: street.width, footprintDepth: length, length, label: "Street" });
+        if (length) add("street", wrapSourceX(a.x + dx * .5), a.z + dz * .5, Math.round(street.width * 10), `${place.id}/street/${index}/${street.id}${segments.length > 1 ? `/part/${part}` : ""}`, { name: streetNameList[streetIndex], yawRad: Math.atan2(dx, dz), footprintWidth: street.width, footprintDepth: length, length, label: "Street" });
       }
     }
     for (let segment = 0; segment < plan.border.length; segment++) {
       const a = plan.border[segment], b = plan.border[(segment + 1) % plan.border.length], dx = wrapSourceX(b.x - a.x), dz = b.z - a.z, length = Math.hypot(dx, dz), pieces = Math.max(1, Math.ceil(length / metresToSource(10)));
       for (let piece = 0; piece < pieces; piece++) {
         const t = (piece + .5) / pieces, x = wrapSourceX(a.x + dx * t), z = a.z + dz * t, pieceLength = length / pieces;
-        if (!plan.gates.some((gate) => Math.hypot(wrapSourceX(x - gate.x), z - gate.z) < metresToSource(9))) add("border", x, z, enclosure.variant, `${place.id}/border/${segment}/${piece}`, { yawRad: Math.atan2(dx, dz), footprintWidth: metresToSource(enclosure.width), footprintDepth: pieceLength + metresToSource(.4), length: pieceLength + metresToSource(.4), label: enclosure.label });
+        if (!plan.gates.some((gate) => Math.hypot(wrapSourceX(x - gate.x), z - gate.z) < metresToSource(9))) add("border", x, z, enclosure.variant, `${place.id}/border/${segment}/${piece}`, { yawRad: Math.atan2(dx, dz), footprintWidth: metresToSource(enclosure.width), footprintDepth: pieceLength + metresToSource(.4), length: pieceLength + metresToSource(.4), label: enclosure.label, name: wall });
       }
     }
     for (const plot of plan.plots) {
@@ -232,10 +239,11 @@ export function featuresFor(tile: Tile): MorphologyFeature[] {
     }
     for (const gate of plan.gates) {
       const gateYaw = Math.PI / 2 - gate.bearingRad;
-      add("gate", gate.x, gate.z, digest(gate.id), `${place.id}/gate/${gate.id}`, { label: `${place.name} gate`, entranceX: plan.centre.x, entranceZ: plan.centre.z, yawRad: gateYaw, footprintWidth: metresToSource(11), footprintDepth: metresToSource(2), widthM: 11, depthM: 2 });
+      const gateLabel = gateName(gate.bearingRad, place.name, gate.id);
+      add("gate", gate.x, gate.z, digest(gate.id), `${place.id}/gate/${gate.id}`, { name: gateLabel, label: `${place.name} gate`, entranceX: plan.centre.x, entranceZ: plan.centre.z, yawRad: gateYaw, footprintWidth: metresToSource(11), footprintDepth: metresToSource(2), widthM: 11, depthM: 2 });
       for (let index = 0; index < gate.guardPosts.length; index++) {
         const post = gate.guardPosts[index];
-        add("guard-post", post.x, post.z, digest(`${gate.id}/${index}`), `${place.id}/guard-post/${gate.id}/${index}`, { service: "guard-office", capacity: 2, residents: 1, label: "Guard post", entranceX: gate.x, entranceZ: gate.z, yawRad: gateYaw, footprintWidth: metresToSource(4.5), footprintDepth: metresToSource(4.5), widthM: 4.5, depthM: 4.5 });
+        add("guard-post", post.x, post.z, digest(`${gate.id}/${index}`), `${place.id}/guard-post/${gate.id}/${index}`, { name: `${gateLabel} guard post`, service: "guard-office", capacity: 2, residents: 1, label: "Guard post", entranceX: gate.x, entranceZ: gate.z, yawRad: gateYaw, footprintWidth: metresToSource(4.5), footprintDepth: metresToSource(4.5), widthM: 4.5, depthM: 4.5 });
       }
     }
     const mainStreet = plan.streets[0];

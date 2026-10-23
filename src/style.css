@@ -1305,3 +1305,53 @@ body.globe-mode .travel-button {
     grid-row: 2 / 4;
   }
 }
+.cell-name {
+  margin-top: 6px;
+  color: var(--gold);
+  font-size: 13px;
+  font-style: italic;
+}
+/* Character popup (click a villager). */
+#npc-popup {
+  position: absolute;
+  top: 84px;
+  right: 72px;
+  z-index: 15;
+  width: min(430px, calc(100vw - 32px));
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+  padding: 16px 18px 14px;
+  background: rgba(22, 37, 33, 0.97);
+  border: 1px solid #d8b97966;
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  color: #efe6d2;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+#npc-popup h2 { margin: 2px 0 2px; font-size: 21px; color: #f3e3bd; }
+#npc-popup h3 { margin: 12px 0 6px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+.npc-head { display: grid; grid-template-columns: 74px 1fr auto; gap: 12px; align-items: start; }
+.npc-picture { width: 74px; height: 96px; object-fit: contain; object-position: bottom; background: radial-gradient(circle at 50% 70%, #2e4a41, #1b2e29); border-radius: 10px; border: 1px solid #d8b97933; }
+.npc-sub { color: #cdbf9f; text-transform: capitalize; }
+.npc-close { background: none; border: 0; color: #d8b979; font-size: 24px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.npc-now { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); display: grid; gap: 4px; }
+.npc-label { display: inline-block; width: 46px; color: #a99d82; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.npc-muted { color: #a99d82; }
+.npc-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.npc-row { display: grid; grid-template-columns: 78px 1fr 24px; gap: 6px; align-items: center; margin: 3px 0; }
+.npc-row b { text-align: right; color: #f3e3bd; }
+.npc-bar { display: inline-block; height: 7px; border-radius: 99px; background: rgba(255, 255, 255, 0.1); overflow: hidden; vertical-align: middle; width: 100%; min-width: 60px; }
+.npc-now .npc-bar { width: 90px; }
+.npc-bar i { display: block; height: 100%; border-radius: 99px; }
+.npc-routine ol { list-style: none; margin: 0; padding: 0; }
+.npc-routine li { display: grid; grid-template-columns: 44px 1fr auto; gap: 8px; padding: 3px 6px; border-radius: 6px; }
+.npc-routine li.past { color: #8d8572; }
+.npc-routine li.current { background: rgba(216, 185, 121, 0.18); color: #fff3d4; font-weight: 600; }
+.npc-routine time { font-variant-numeric: tabular-nums; color: #d8b979; }
+.npc-routine em { font-style: normal; color: #a99d82; font-size: 11.5px; text-align: right; }
+.npc-code { display: block; margin-top: 10px; font-size: 10px; color: #7f7864; word-break: break-all; }
+@media (max-width: 700px) {
+  #npc-popup { top: auto; right: 16px; left: 16px; bottom: 76px; width: auto; max-height: 62vh; }
+  .npc-columns { grid-template-columns: 1fr; gap: 0; }
+}
