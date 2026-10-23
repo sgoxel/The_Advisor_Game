@@ -199,12 +199,12 @@ export function siteAccessSampleVerdict(
             surface.contributingModifierIds.includes(id));
       let cause: string | null = null;
       if (!Number.isFinite(surface.surfaceHeight)) cause = "invalid final-surface height";
-      else if (surface.water.kind === "river" && surface.deckHeight !== null &&
+      else if (surface.water.kind === "river" && surface.deckHeight != null &&
         !riverBridgeDeckAboveWater(surface))
         cause = "submerged or invalid river bridge deck";
       else if (surface.water.kind !== "none" &&
         !riverBridgeDeckAboveWater(surface))
-        cause = surface.deckHeight === null ? "wet site-access surface" :
+        cause = surface.deckHeight == null ? "wet site-access surface" :
           "unsupported water under site-access deck";
       else if (!surface.walkable) cause = "blocked site-access surface";
       else if (!recorded) cause = terminal ? "site branch misses its registered parent junction" : "site branch road modifier absent";
