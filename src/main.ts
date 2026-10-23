@@ -1,3 +1,4 @@
+import { compareText } from "./compare-text.ts";
 import {SETTLEMENT_ICON_FROM_SCALE} from "./political-presentation.ts";
 import {closeLightingEnabled, closeLightingWeight, eveningLightWeight} from "./street-lighting.ts";
 import {coverageKey, tileJobKey, nextStreamingJob, progressiveDetailKeys, visibleCoverageKeys, type TileJobKind} from "./streaming-coverage.ts";
@@ -951,7 +952,7 @@ function processStreaming(material: pc.StandardMaterial) {
       ]);
       const obsolete = [...tileCache.entries()]
         .filter(([key]) => !protect.has(key))
-        .sort((a, b) => a[1].used - b[1].used || a[0].localeCompare(b[0]));
+        .sort((a, b) => a[1].used - b[1].used || compareText(a[0], b[0]));
       for (const [key, record] of obsolete) {
         if (!overCacheBudget()) break;
         // MeshInstance destruction releases its mesh reference and GPU buffers.

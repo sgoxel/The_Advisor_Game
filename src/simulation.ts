@@ -1,3 +1,4 @@
+import { compareText } from "./compare-text.ts";
 import { countries, places, type Place } from "./geography.ts";
 import { characterForRole, type CharacterAge, type CharacterSex } from "./characters.ts";
 import { politicalSettlementSiteById } from "./political-settlement-access.ts";
@@ -621,7 +622,7 @@ function nearbyPlaces(x: number, z: number, radius: number) {
         bucket = placeBuckets.get(`${bx}/${centerZ + dz}`);
       if (bucket) for (const place of bucket) found.set(place.code, place);
     }
-  return [...found.values()].sort((a, b) => a.code.localeCompare(b.code));
+  return [...found.values()].sort((a, b) => compareText(a.code, b.code));
 }
 function sourceDistance(ax: number, az: number, bx: number, bz: number) {
   return Math.hypot(wrapSourceX(ax - bx), az - bz);

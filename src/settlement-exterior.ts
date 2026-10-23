@@ -1,3 +1,4 @@
+import { compareText } from "./compare-text.ts";
 import { places, roadDistanceAt, roads, type Place, type Road } from "./geography.ts";
 import { wrapSourceX } from "./planet.ts";
 import { houseDimensionsFor, metresToSource, physicalFootprintRadius, type HouseDimensions } from "./physical-scale.ts";
@@ -124,7 +125,7 @@ for (const road of roads) if (road.networkKind !== "detour" && road.centerline &
     roadEdgesByNode.set(nodeId, connected);
   }
 }
-for (const connected of roadEdgesByNode.values()) connected.sort((a, b) => a.code.localeCompare(b.code));
+for (const connected of roadEdgesByNode.values()) connected.sort((a, b) => compareText(a.code, b.code));
 
 function orientedRoadPoints(road: Road, entryNodeId: string) {
   const source = road.centerline!;
@@ -247,7 +248,7 @@ function terminalApproaches(place: Place, plan: SettlementExteriorPlan): Termina
     }
   }
   const distinct: TerminalApproach[] = [];
-  for (const approach of approaches.sort((a, b) => a.road.code.localeCompare(b.road.code))) {
+  for (const approach of approaches.sort((a, b) => compareText(a.road.code, b.road.code))) {
     if (distinct.some((other) => Math.hypot(wrapSourceX(other.x - approach.x), other.z - approach.z) < .1)) continue;
     distinct.push(approach);
   }
@@ -346,7 +347,7 @@ function trimInternalRoadJunctions(place: Place, plan: SettlementExteriorPlan): 
   }
   const ordered = [...junctions.entries()].sort((left, right) => {
     const a = Math.hypot(wrapSourceX(left[1].x - place.x), left[1].z - place.z), b = Math.hypot(wrapSourceX(right[1].x - place.x), right[1].z - place.z);
-    return a - b || left[0].localeCompare(right[0]);
+    return a - b || compareText(left[0], right[0]);
   });
   let border = plan.border.map((point) => ({ ...point }));
   for (const [, junction] of ordered) if (pointInsideBorder(place, border, junction.x, junction.z)) border = clipBorderBeforeJunction(place, border, junction.x, junction.z);
@@ -356,7 +357,7 @@ function trimForeignRoadCrossings(place: Place, plan: SettlementExteriorPlan): S
   if (place.kind !== "village") return plan;
   const localRoadIds = new Set(roads.filter((road) => road.from === place.id || road.to === place.id).map((road) => road.networkId)),
     foreignRoads = roads.filter((road) => road.networkKind !== "detour" && road.centerline && road.centerline.length >= 2 && !localRoadIds.has(road.networkId) && roadDistanceAt(place.x, place.z, road) <= plan.radius * 1.7)
-      .sort((a, b) => a.code.localeCompare(b.code));
+      .sort((a, b) => compareText(a.code, b.code));
   let border = plan.border.map((point) => ({ ...point }));
   for (const road of foreignRoads) {
     const points = road.centerline!;

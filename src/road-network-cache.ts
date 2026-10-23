@@ -31,11 +31,27 @@ export function roadNetworkFingerprint(seed: string, places: readonly Fingerprin
   return `${(a >>> 0).toString(16).padStart(8, "0")}${(b >>> 0).toString(16).padStart(8, "0")}`;
 }
 
-/** The shipped network when it was built from exactly these inputs, otherwise undefined. */
-export function cachedRoadNetwork(fingerprint: string): RoadNetwork | undefined {
-  const stored = cache as { fingerprint: string; network: RoadNetwork | null };
+/** Per-input digests, shipped beside the fingerprint so a stale cache reports which input differs. */
+export function roadNetworkFingerprintParts(seed: string, places: readonly FingerprintPlace[], links: readonly (readonly [FingerprintPlace, FingerprintPlace])[]) {
+  return {
+    seed, version: MACRO_ROAD_VERSION, places: places.length, links: links.length,
+    placesDigest: roadNetworkFingerprint("", places, []), linksDigest: roadNetworkFingerprint("", [], links),
+  };
+}
+type Parts = ReturnType<typeof roadNetworkFingerprintParts>;
+
+/**
+ * The shipped network when it was built from exactly these inputs, otherwise undefined. On a
+ * mismatch the differing digests are logged and the inputs exposed as globalThis.__worldCacheInputs.
+ */
+export function cachedRoadNetwork(fingerprint: string, parts?: Parts, inputs?: () => unknown): RoadNetwork | undefined {
+  const stored = cache as { fingerprint: string; parts?: Parts; network: RoadNetwork | null };
   if (!stored.network || stored.fingerprint !== fingerprint) {
-    if (typeof console !== "undefined") console.warn(`World cache: road network ${stored.network ? "is stale" : "missing"}; routing roads live (slow start).`);
+    if (typeof console !== "undefined") {
+      const differs = parts && stored.parts ? Object.keys(parts).filter(key => (parts as Record<string, unknown>)[key] !== (stored.parts as Record<string, unknown>)[key]) : [];
+      console.warn(`World cache: road network ${stored.network ? "is stale" : "missing"}; routing roads live (slow start).${differs.length ? ` Differs: ${differs.map(key => `${key} ${(stored.parts as Record<string, unknown>)[key]} -> ${(parts as Record<string, unknown>)[key]}`).join(", ")}` : ""}`);
+    }
+    if (inputs) (globalThis as Record<string, unknown>).__worldCacheInputs = inputs();
     return undefined;
   }
   // Fresh arrays per load: geography releases its edge list after deriving roads and the transport

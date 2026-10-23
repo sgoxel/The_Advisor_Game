@@ -1,3 +1,4 @@
+import { compareText } from "./compare-text.ts";
 import {roadBucketCells} from './road-spatial-index.ts';
 import {macroSampleAt} from './macro-geography.ts';
 import {CANONICAL_PLANET_RADIUS, CANONICAL_METRES_PER_SOURCE_UNIT, greatCircleDistance, lonLatToSource, sourceToLonLat, wrapSourceX, type CanonicalPosition, type LonLat} from './planet.ts';
@@ -43,7 +44,7 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
  const canonicalVillageGraph=places.some(p=>p.kind==='city'),
   linkKey=(a:RoadNode,b:RoadNode)=>a.id<b.id?`${a.id}|${b.id}`:`${b.id}|${a.id}`,
   tradeDegree=new Map<string,number>(),selectedTradeLinks=new Set<string>();
- if(canonicalVillageGraph)for(const [a,b] of [...links].filter(([a,b])=>a.kind==='village'&&b.kind==='village').sort((left,right)=>linkKey(left[0],left[1]).localeCompare(linkKey(right[0],right[1])))){
+ if(canonicalVillageGraph)for(const [a,b] of [...links].filter(([a,b])=>a.kind==='village'&&b.kind==='village').sort((left,right)=>compareText(linkKey(left[0],left[1]), linkKey(right[0],right[1])))){
   if((tradeDegree.get(a.id)||0)>=1||(tradeDegree.get(b.id)||0)>=1)continue;
   selectedTradeLinks.add(linkKey(a,b));tradeDegree.set(a.id,1);tradeDegree.set(b.id,1);
  }
@@ -61,8 +62,8 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
  const minimumArmAngle=(p:LonLat,ends:readonly LonLat[])=>Math.min(...ends.flatMap((a,i)=>ends.slice(i+1).map(b=>angleDifference(bearing(p,a),bearing(p,b))*180/Math.PI)));
  const forkChildren=new Map<string,[RoadNode,RoadNode]>();
  const validStub=(p:LonLat,target:LonLat,key:string)=>{const length=greatCircleDistance(p,target),end=destination(p,bearing(p,target),Math.min(ROAD_FORK_POLICY.separationM,length*.25));return lineLegal(p,end,key,4)&&!inWater(end,2);};
- for(const hub of [...places].sort((a,b)=>a.id.localeCompare(b.id))){
-  let groups:Approach[]=[...new Map(neighbours.get(hub.id)!.map(n=>[n.id,n])).values()].sort((a,b)=>a.id.localeCompare(b.id))
+ for(const hub of [...places].sort((a,b)=>compareText(a.id, b.id))){
+  let groups:Approach[]=[...new Map(neighbours.get(hub.id)!.map(n=>[n.id,n])).values()].sort((a,b)=>compareText(a.id, b.id))
    .map(node=>({node,leaves:[node],depth:0,distance:new Map([[node.id,0]])}));
   let slot=0;
   while(slot<MACRO_ROAD_LIMITS.junctionGroupsPerPlace){
@@ -74,7 +75,7 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
     const angle=angleDifference(bearing(hub.canonicalPosition,a.node.canonicalPosition),bearing(hub.canonicalPosition,b.node.canonicalPosition));
     if(angle<65*Math.PI/180)pairs.push({a,b,angle});
    }
-   pairs.sort((a,b)=>a.angle-b.angle||a.a.node.id.localeCompare(b.a.node.id)||a.b.node.id.localeCompare(b.b.node.id));
+   pairs.sort((a,b)=>a.angle-b.angle||compareText(a.a.node.id, b.a.node.id)||compareText(a.b.node.id, b.b.node.id));
    let accepted=false;
    for(const pair of pairs){
     const a=pair.a.node,b=pair.b.node,azA=bearing(hub.canonicalPosition,a.canonicalPosition),azB=bearing(hub.canonicalPosition,b.canonicalPosition),
@@ -114,7 +115,7 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
     const source=lonLatToSource(chosen.lon,chosen.lat),node:RoadNode={continent:hub.continent,country:hub.country,id:`J/${hub.id}/${slot}`,code:`${seed}/${MACRO_ROAD_VERSION}/J/${hub.id}/${slot}`,kind:'junction',canonicalPosition:chosen,x:source.x,z:source.z},distance=new Map<string,number>();
     for(const child of [pair.a,pair.b]){const d=greatCircleDistance(chosen,child.node.canonicalPosition);for(const leaf of child.leaves)distance.set(leaf.id,d+child.distance.get(leaf.id)!);}
     const depth=Math.max(pair.a.depth,pair.b.depth)+1,group:Approach={node,leaves:[...pair.a.leaves,...pair.b.leaves],depth,distance,children:[pair.a,pair.b]};
-    forkChildren.set(node.id,[a,b]);junctions.push(node);groups=groups.filter(g=>g!==pair.a&&g!==pair.b);groups.push(group);groups.sort((a,b)=>a.node.id.localeCompare(b.node.id));
+    forkChildren.set(node.id,[a,b]);junctions.push(node);groups=groups.filter(g=>g!==pair.a&&g!==pair.b);groups.push(group);groups.sort((a,b)=>compareText(a.node.id, b.node.id));
     maximumJunctionDepth=Math.max(maximumJunctionDepth,depth);slot++;accepted=true;break;
    }
    if(!accepted)break;
@@ -221,12 +222,12 @@ export function createMacroRoadNetwork(places:readonly RoadNode[],links:readonly
  // logical connection even when the distant coarse fork was legal. Merge those
  // ACTUAL first segments locally; both routes reference one physical stem.
  // This bounded pass never reroutes the distant terrain-selected alignment.
- for (const hub of [...places].sort((a,b)=>a.id.localeCompare(b.id))) {
+ for (const hub of [...places].sort((a,b)=>compareText(a.id, b.id))) {
   for(let slot=0;slot<8;slot++) {
    const incident=[...edges.values()].filter(e=>e.from.id===hub.id||e.to.id===hub.id),
     outward=(e:MacroRoadEdge)=>e.from.id===hub.id?[...e.points]:[...e.points].reverse(),
     pairs=incident.flatMap((a,i)=>incident.slice(i+1).map(b=>({a,b,angle:angleDifference(bearing(hub.canonicalPosition,outward(a)[1].position),bearing(hub.canonicalPosition,outward(b)[1].position))})))
-     .filter(p=>p.angle<Math.PI/4-1e-8).sort((a,b)=>a.angle-b.angle||a.a.id.localeCompare(b.a.id)||a.b.id.localeCompare(b.b.id));
+     .filter(p=>p.angle<Math.PI/4-1e-8).sort((a,b)=>a.angle-b.angle||compareText(a.a.id, b.a.id)||compareText(a.b.id, b.b.id));
    let merged=false;
    for(const pair of pairs) {
     const pa=outward(pair.a),pb=outward(pair.b),azA=bearing(hub.canonicalPosition,pa[1].position),azB=bearing(hub.canonicalPosition,pb[1].position),

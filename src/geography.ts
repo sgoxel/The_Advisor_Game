@@ -1,4 +1,4 @@
-import { cachedRoadNetwork, roadNetworkFingerprint } from "./road-network-cache.ts";
+import { cachedRoadNetwork, roadNetworkFingerprint, roadNetworkFingerprintParts } from "./road-network-cache.ts";
 import { createMacroRoadNetwork, MACRO_ROAD_VERSION } from "./macro-road-network.ts";
 import { climateSampleAt } from "./climate.ts";
 import { COARSE_GEOGRAPHY_VERSION as WORLD_FOUNDATION_VERSION, WORLD_SEED } from "./config.ts";
@@ -539,10 +539,11 @@ const backboneEdges:[Place,Place][]=[...villageTradeEdges,...cities.filter(c=>ci
  * mismatch falls back to routing live, so the world is identical either way.
  */
 export const ROAD_NETWORK_FINGERPRINT = roadNetworkFingerprint(WORLD_SEED, places, backboneEdges);
+export const ROAD_NETWORK_FINGERPRINT_PARTS = roadNetworkFingerprintParts(WORLD_SEED, places, backboneEdges);
 export function generateRoadNetworkLive() {
   return createMacroRoadNetwork(places,backboneEdges,position=>{const c=countryAtPosition(position);return c?`${c.continent}/${c.id}`:undefined;},WORLD_SEED,macroSampleAt,drainageCoarseSegments);
 }
-const generatedRoadNetwork=cachedRoadNetwork(ROAD_NETWORK_FINGERPRINT) ?? generateRoadNetworkLive();
+const generatedRoadNetwork=cachedRoadNetwork(ROAD_NETWORK_FINGERPRINT,ROAD_NETWORK_FINGERPRINT_PARTS,()=>({places:places.map(p=>p.id),links:backboneEdges.map(([a,b])=>`${a.id}>${b.id}`)})) ?? generateRoadNetworkLive();
 export const roadJunctions=generatedRoadNetwork.junctions;
 export const roadConnections=generatedRoadNetwork.connections;
 export const roadNetworkTelemetry=generatedRoadNetwork.telemetry;

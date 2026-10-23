@@ -1,3 +1,4 @@
+import { compareText } from "./compare-text.ts";
 import {
   cities,
   countries,
@@ -486,7 +487,7 @@ function corridor(from: Place, to: Place, country: Country): readonly CanonicalP
         candidate.id !== from.id &&
         candidate.id !== to.id,
     )
-    .sort((a, b) => a.id.localeCompare(b.id)))
+    .sort((a, b) => compareText(a.id, b.id)))
     if (
       segmentLegal(from.canonicalPosition, via.canonicalPosition, country, 12) &&
       segmentLegal(via.canonicalPosition, to.canonicalPosition, country, 12)
@@ -569,7 +570,7 @@ export const politicalBorderGateways: PoliticalBorderGateway[] = [];
 for (const country of countries) {
   const countryCities = cities
     .filter((city) => city.continent === country.continent && city.country === country.id)
-    .sort((a, b) => a.city - b.city || a.id.localeCompare(b.id));
+    .sort((a, b) => a.city - b.city || compareText(a.id, b.id));
   const backbone = countryCities[0];
   if (!backbone) continue;
   for (const city of countryCities.slice(1)) politicalAccessLinks.push(link(city, backbone, country));

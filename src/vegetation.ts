@@ -1,3 +1,4 @@
+import { compareText } from "./compare-text.ts";
 import { climateSampleAt, type ForestFamily, type RGB } from "./climate.ts";
 import { sourceToLonLat, wrapSourceX } from "./planet.ts";
 import {
@@ -287,7 +288,7 @@ export function vegetationForTile(tile: Tile): { features: VegetationFeature[]; 
       });
     }
 
-  features.sort((a, b) => a.code.localeCompare(b.code));
+  features.sort((a, b) => compareText(a.code, b.code));
   if (features.length > budget.maxInstances) features.length = budget.maxInstances;
   const trees = features.filter((feature) => feature.kind === "tree").length,
     rocks = features.length - trees,
