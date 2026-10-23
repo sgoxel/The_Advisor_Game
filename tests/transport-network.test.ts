@@ -2365,12 +2365,18 @@ test("S005 real non-retracing gate-Y-bridge-site graph chain has exact physical 
     }
     if (!full)
       assert.equal(firstUnsafe, null, "first 32 stations of the real source route must retain legal top-surface passage");
-    else console.log("S005_REAL_ROUTE_FULL_SURFACE", JSON.stringify({
-      canonicalRoads: chain.length, stationCount: segmented.stations.length,
-      checked: firstUnsafe?.station ?? limit, firstUnsafe,
-      maximumIntervalGrade, elapsedMs: performance.now() - started,
-      caveat: "sampled final surface only; between-station and actor passage not certified",
-    }));
+    else {
+      console.log("S005_REAL_ROUTE_FULL_SURFACE", JSON.stringify({
+        canonicalRoads: chain.length, stationCount: segmented.stations.length,
+        checked: firstUnsafe?.station ?? limit, firstUnsafe,
+        maximumIntervalGrade, elapsedMs: performance.now() - started,
+        caveat: "sampled final surface only; between-station and actor passage not certified",
+      }));
+      // The expensive deliberate acceptance probe must FAIL when an actual
+      // station or the finite time budget prevents a full-route legal verdict.
+      assert.equal(firstUnsafe, null,
+        `full selected SEED route is not certified: ${JSON.stringify(firstUnsafe)}`);
+    }
   }
   if (segmented.status === "ready") {
     assert.ok(segmented.stations.length > 0 &&
