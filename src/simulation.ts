@@ -71,6 +71,8 @@ export type ResidentFoundation = {
 };
 
 export type Resident = ResidentFoundation & {
+  /** False when no legal house door or scheduled surface exists; never render or claim travel. */
+  grounded: boolean;
   position: CanonicalPosition;
   x: number;
   z: number;
@@ -710,35 +712,22 @@ function scheduleAt(place: Place, foundation: ResidentFoundation, tick: number) 
     travelProgress: undefined as number | undefined, travelDistanceM: undefined as number | undefined,
   };
 }
-function legalPosition(
+/** Preserve the exact scheduled point. Invalid ground is reported, not
+ * "corrected" by moving a resident radially toward the settlement centre. */
+export function legalPosition(
   place: Place,
   eastM: number,
   northM: number,
-): { position: CanonicalPosition; x: number; z: number } {
-  let scale = 1;
-  for (let attempt = 0; attempt < 7; attempt++) {
-    const candidate = canonicalOffset(place, eastM * scale, northM * scale),
-      presentation = lonLatToSource(candidate.lon, candidate.lat),
-      surface = finalSurfaceAt(presentation.x, presentation.z);
-    if (surface.walkable && heightAt(presentation.x, presentation.z) > 0.1) {
-      const elevation = heightAt(presentation.x, presentation.z);
-      return {
-        position: { lon: candidate.lon, lat: candidate.lat, elevation },
-        x: presentation.x,
-        z: presentation.z,
-      };
-    }
-    scale *= 0.68;
-  }
-  const elevation = heightAt(place.x, place.z);
+): { position: CanonicalPosition; x: number; z: number; grounded: boolean } {
+  const candidate = canonicalOffset(place, eastM, northM),
+    presentation = lonLatToSource(candidate.lon, candidate.lat),
+    surface = finalSurfaceAt(presentation.x, presentation.z),
+    elevation = heightAt(presentation.x, presentation.z);
   return {
-    position: {
-      lon: place.canonicalPosition.lon,
-      lat: place.canonicalPosition.lat,
-      elevation,
-    },
-    x: place.x,
-    z: place.z,
+    position: { lon: candidate.lon, lat: candidate.lat, elevation },
+    x: presentation.x,
+    z: presentation.z,
+    grounded: surface.walkable && elevation > 0.1,
   };
 }
 
@@ -783,23 +772,23 @@ export function residentAt(place: Place, index: number, tick: number): Resident 
     foundation = door ? { ...seeded, homeOffset,
       workOffset: seeded.workOffset === seeded.homeOffset ? homeOffset : seeded.workOffset } : seeded,
     schedule = scheduleAt(place, foundation, tick),
-    location = legalPosition(
-      place,
-      schedule.offset.eastM,
-      schedule.offset.northM,
-    );
+    location = legalPosition(place, schedule.offset.eastM, schedule.offset.northM),
+    grounded = !!door && location.grounded,
+    blockedReason = !door ? "assigned house has no legally resolved doorway"
+      : !location.grounded ? "scheduled position has no legal ground" : undefined;
   return {
     ...foundation,
     ...location,
-    task: schedule.task,
-    route: schedule.route,
-    activity: schedule.activity,
-    indoors: schedule.indoors,
+    grounded,
+    task: blockedReason ? `Blocked: ${blockedReason}` : schedule.task,
+    route: blockedReason ? `BLOCKED: ${blockedReason}` : schedule.route,
+    activity: blockedReason ? "rest" : schedule.activity,
+    indoors: !blockedReason && schedule.indoors,
     mood: schedule.mood,
     activityStart: schedule.activityStart,
     activityEnd: schedule.activityEnd,
     activityProgress: schedule.activityProgress,
-    ...(schedule.travelProgress === undefined ? {} : { travelProgress: schedule.travelProgress, travelDistanceM: schedule.travelDistanceM }),
+    ...(blockedReason || schedule.travelProgress === undefined ? {} : { travelProgress: schedule.travelProgress, travelDistanceM: schedule.travelDistanceM }),
   };
 }
 export function summaryAt(code: string, tick: number): CountryState {
