@@ -461,7 +461,7 @@ function standingSpot(foundation: ResidentFoundation, anchor: RoutineAnchor, bas
 }
 // ---------------------------------------------------------------- street paths
 
-type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; cell: number };
+type StreetGraph = { nodes: Offset[]; edges: number[][]; weights: number[][]; grid: Map<string, number[]>; legalEdges: Map<string, boolean>; border: Offset[]; gates: Offset[]; cell: number };
 const streetGraphs = new Map<string, StreetGraph>();
 /**
  * Walkable street network of a settlement in local metres: every street
@@ -493,7 +493,9 @@ function streetGraphFor(place: Place): StreetGraph {
       previous = id;
     }
   });
-  const graph = { nodes, edges, weights, grid, legalEdges: new Map<string, boolean>(), cell };
+  const graph = { nodes, edges, weights, grid, legalEdges: new Map<string, boolean>(),
+    border: plan.border.map(point => offsetForSource(place, point.x, point.z)),
+    gates: plan.gates.map(point => offsetForSource(place, point.x, point.z)), cell };
   streetGraphs.set(place.code, graph);
   while (streetGraphs.size > 8) streetGraphs.delete(streetGraphs.keys().next().value!);
   return graph;
@@ -525,7 +527,42 @@ export function continuousWalkableOffsetSegment(
   }
   return true;
 }
+/** A resident may cross the visible settlement enclosure only through a
+ * SEED-authored gate aperture. Final-surface walkability alone has no knowledge
+ * of the displayed wall/hedge/palisade segments. This check is symmetric. */
+export function legalEnclosureSegment(
+  from: Offset, to: Offset, border: readonly Offset[], gates: readonly Offset[], gateRadiusM = 9,
+): boolean {
+  const rx = to.eastM - from.eastM, rz = to.northM - from.northM;
+  const throughGate = (eastM: number, northM: number) =>
+    gates.some(gate => Math.hypot(gate.eastM - eastM, gate.northM - northM) <= gateRadiusM);
+  for (let index = 0; index < border.length; index++) {
+    const a = border[index], b = border[(index + 1) % border.length],
+      sx = b.eastM - a.eastM, sz = b.northM - a.northM,
+      qx = a.eastM - from.eastM, qz = a.northM - from.northM,
+      cross = rx * sz - rz * sx;
+    if (Math.abs(cross) < 1e-8) {
+      // A chord along an enclosure is not a legal path around its wall.
+      if (Math.abs(qx * rz - qz * rx) > 1e-6 || rx * rx + rz * rz < 1e-8) continue;
+      const denom = rx * rx + rz * rz,
+        t0 = (qx * rx + qz * rz) / denom,
+        t1 = ((b.eastM - from.eastM) * rx + (b.northM - from.northM) * rz) / denom,
+        lo = Math.max(0, Math.min(t0, t1)), hi = Math.min(1, Math.max(t0, t1));
+      if (hi < lo) continue;
+      for (const t of [lo, (lo + hi) / 2, hi])
+        if (!throughGate(from.eastM + rx * t, from.northM + rz * t)) return false;
+      continue;
+    }
+    const t = (qx * sz - qz * sx) / cross,
+      u = (qx * rz - qz * rx) / cross;
+    if (t < -1e-7 || t > 1 + 1e-7 || u < -1e-7 || u > 1 + 1e-7) continue;
+    if (!throughGate(from.eastM + rx * t, from.northM + rz * t)) return false;
+  }
+  return true;
+}
 function legalStreetSegment(place: Place, from: Offset, to: Offset): boolean {
+  const { border, gates } = streetGraphFor(place);
+  if (!legalEnclosureSegment(from, to, border, gates)) return false;
   return continuousWalkableOffsetSegment(from, to, point => {
     const p = canonicalOffset(place, point.eastM, point.northM),
       source = lonLatToSource(p.lon, p.lat),
