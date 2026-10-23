@@ -196,11 +196,13 @@ export function planTransportRouteCorridorByLeg(
   nodes: ReadonlyMap<string, Node>,
   incidentRoads?: ReadonlyMap<string, readonly { edge: Edge }[]>,
 ): Plan {
-  const whole = planTransportRouteCorridor(route, roads, nodes, incidentRoads);
-  if (whole.status !== "over-budget" || whole.reason !== "sample-stations") return whole;
+  // The full 4096-station fast path must honor the same finite road limit as
+  // segmented probing. Otherwise thirteen short roads incorrectly pass.
   if (route.edgeCodes.length > ROUTE_CORRIDOR_LEG_LIMIT)
     return Object.freeze({ status: "over-budget", reason: "route-legs",
       edgeCode: route.edgeCodes[ROUTE_CORRIDOR_LEG_LIMIT], stations: EMPTY });
+  const whole = planTransportRouteCorridor(route, roads, nodes, incidentRoads);
+  if (whole.status !== "over-budget" || whole.reason !== "sample-stations") return whole;
   const stations: CorridorStation[] = [];
   let at = route.from, remainingRawPoints = ROUTE_CORRIDOR_STATION_LIMIT * 2;
   for (const code of route.edgeCodes) {

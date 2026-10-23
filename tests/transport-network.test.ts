@@ -1115,6 +1115,18 @@ test("S005 on-demand segmented corridor validates continuous multi-road route wi
     tooMany.nodes, tooMany.incident), { status: "over-budget", reason: "route-legs",
       edgeCode: "road/12", stations: [] },
   "more than twelve long legs must fail with no partial certified stations");
+  const shortOverflow = makeChain(13, 2);
+  assert.equal(planTransportRouteCorridor(shortOverflow.route, shortOverflow.roads,
+    shortOverflow.nodes, shortOverflow.incident).status, "ready",
+  "the short-route 4096-station fast path is reachable and exposes this budget regression");
+  assert.deepEqual(planTransportRouteCorridorByLeg(shortOverflow.route, shortOverflow.roads,
+    shortOverflow.nodes, shortOverflow.incident), { status: "over-budget", reason: "route-legs",
+      edgeCode: "road/12", stations: [] },
+  "13 short graph roads must not bypass the on-demand 12-road cap or report a partial physical PASS");
+  const shortBoundary = makeChain(12, 2);
+  assert.equal(planTransportRouteCorridorByLeg(shortBoundary.route, shortBoundary.roads,
+    shortBoundary.nodes, shortBoundary.incident).status, "ready",
+  "exactly 12 short source-owned roads remain inspectable");
   const tooLong = makeChain(9, 2000);
   const refused = planTransportRouteCorridorByLeg(tooLong.route, tooLong.roads,
     tooLong.nodes, tooLong.incident);
