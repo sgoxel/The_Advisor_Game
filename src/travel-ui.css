@@ -22,7 +22,7 @@
   align-items: center;
 }
 .route-block .eyebrow button {
-  font-size: 10px;
+  font-size: 12px;
   padding: 4px 8px;
 }
 .route-list {
@@ -53,13 +53,13 @@
   color: #efece1;
 }
 .route-row .route-meta {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   line-height: 1.4;
 }
 .route-detail {
   margin: 8px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 #route-overlay {

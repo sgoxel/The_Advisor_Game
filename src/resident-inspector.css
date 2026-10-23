@@ -37,6 +37,8 @@
 #resident-inspector .resident-technical dl { margin: 6px 0; }
 #resident-home-inspect { width: 100%; min-height: 44px; margin-top: 5px; }
 #resident-house-details, #resident-performance { margin-top: 9px !important; font-size: 11px !important; line-height: 1.4 !important; overflow-wrap: anywhere; }
+/* House details are player-facing body text; #resident-performance is query telemetry and keeps 11px. */
+#resident-house-details { font-size: 12px !important; }
 #resident-performance { padding-top: 8px; border-top: 1px solid #d8b97920; color: #a9bcb0 !important; }
 .resident-identity { display: grid; grid-template-columns: 52px minmax(0,1fr); gap: 10px; align-items: center; margin-top: 10px; }
 #resident-avatar { --coat:#6d7b5e; --hair:#4b3428; position:relative; width:48px; height:54px; border:1px solid #d8b97955; border-radius:9px; background:linear-gradient(180deg,#233831,#162722); overflow:hidden; }
@@ -86,7 +88,7 @@
      While the house action owns focus, yield the region panel and move the
      inspector to the edge so the canonical entrance anchor stays visible. */
   .travel-panel.house-focused {
-    left: 17px;
+    left: max(17px, calc(env(safe-area-inset-left) + 8px));
     width: 300px;
   }
   body:has(.travel-panel.house-focused:not([hidden])) .region-panel {
@@ -102,8 +104,8 @@
   .travel-panel:has(#resident-inspector) {
     top: auto;
     bottom: calc(82px + env(safe-area-inset-bottom));
-    left: 17px;
-    right: 17px;
+    left: max(17px, calc(env(safe-area-inset-left) + 8px));
+    right: max(17px, calc(env(safe-area-inset-right) + 8px));
     width: auto;
     /* Keep the world focus point above the bottom sheet even before a house
        action is activated. Resident details remain scrollable inside the sheet. */
@@ -143,7 +145,7 @@
     pointer-events: none;
   }
   .travel-panel:has(#resident-inspector) {
-    left: 17px;
+    left: max(17px, calc(env(safe-area-inset-left) + 8px));
     width: 300px;
   }
   .travel-panel.house-focused {
