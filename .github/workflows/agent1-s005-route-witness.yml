@@ -1,0 +1,19 @@
+name: S005 real route witness diagnosis
+on:
+  push:
+    branches: [agent1/s005-full-witness-diagnosis-20261023]
+permissions:
+  contents: read
+jobs:
+  route-witness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Inspect existing real gate-Y-bridge-site chain
+        run: timeout 4m node --experimental-strip-types --test --test-name-pattern="S005 bridge-linked Y to critical-site chain" tests/transport-network.test.ts
